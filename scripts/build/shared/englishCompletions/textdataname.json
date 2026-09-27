@@ -1,0 +1,3422 @@
+{
+ "SN_COS_C_UNICORN": {
+  "english": "Unicorn",
+  "basis": "translated-retail-korean",
+  "source": "유니콘"
+ },
+ "SN_COS_C_WILDPIG": {
+  "english": "Wild Boar",
+  "basis": "translated-retail-korean",
+  "source": "멧돼지"
+ },
+ "SN_COS_P_FOX": {
+  "english": "Fox",
+  "basis": "translated-retail-korean",
+  "source": "여우"
+ },
+ "SN_COS_P_RACCOONDOG": {
+  "english": "Raccoon",
+  "basis": "translated-retail-korean",
+  "source": "너구리"
+ },
+ "SN_COS_T_BEHEMOTH": {
+  "english": "Behemoth",
+  "basis": "translated-retail-korean",
+  "source": "베헤모스"
+ },
+ "SN_COS_T_COW4": {
+  "english": "Dark War God Bull",
+  "basis": "translated-retail-korean",
+  "source": "암흑투신황소"
+ },
+ "SN_COS_T_HORSE4": {
+  "english": "Spirit Heavenly Horse",
+  "basis": "translated-retail-korean",
+  "source": "교령천마"
+ },
+ "SN_COS_T_LIZARD": {
+  "english": "Dark Lizard",
+  "basis": "translated-retail-korean",
+  "source": "암흑도룡"
+ },
+ "SN_ITEM_CH_TRADE_HUNTER_04_TT_DESC": {
+  "english": "A semicircular tablet with three spokes that marks a novice warrior who has only just begun work as a hunter.",
+  "basis": "translated-retail-korean",
+  "source": "세 개의 살이 박힌 반원형의 패로 헌터 일을 시작한지 얼마 안되는 초보무사들의 신분을 상징한다."
+ },
+ "SN_ITEM_CH_TRADE_HUNTER_05_TT_DESC": {
+  "english": "A semicircular tablet with three spokes that marks a novice warrior who has only just begun work as a hunter.",
+  "basis": "translated-retail-korean",
+  "source": "세 개의 살이 박힌 반원형의 패로 헌터 일을 시작한지 얼마 안되는 초보무사들의 신분을 상징한다."
+ },
+ "SN_ITEM_CH_TRADE_HUNTER_06_TT_DESC": {
+  "english": "A semicircular tablet with four spokes that marks a warrior who has finished training and set out in earnest to protect traders.",
+  "basis": "translated-retail-korean",
+  "source": "네 개의 살이 박힌 반원형의 패로 수련을 마치고 본격적으로 상인들의 수호에 나선 무사의 신분을 상징한다."
+ },
+ "SN_ITEM_CH_TRADE_HUNTER_07_TT_DESC": {
+  "english": "A semicircular tablet with four spokes that marks a warrior who has finished training and set out in earnest to protect traders.",
+  "basis": "translated-retail-korean",
+  "source": "네 개의 살이 박힌 반원형의 패로 수련을 마치고 본격적으로 상인들의 수호에 나선 무사의 신분을 상징한다."
+ },
+ "SN_ITEM_CH_TRADE_HUNTER_08_TT_DESC": {
+  "english": "A semicircular tablet with five spokes that marks an outstanding warrior who roams the world punishing the wicked.",
+  "basis": "translated-retail-korean",
+  "source": "다섯 개의 살이 박힌 반원형의 패로 세상을 떠돌며 악한자들을 응징하는 뛰어난 무사의 신분을 상징한다."
+ },
+ "SN_ITEM_CH_TRADE_HUNTER_09_TT_DESC": {
+  "english": "A semicircular tablet with five spokes that marks an outstanding warrior who roams the world punishing the wicked.",
+  "basis": "translated-retail-korean",
+  "source": "다섯 개의 살이 박힌 반원형의 패로 세상을 떠돌며 악한자들을 응징하는 뛰어난 무사의 신분을 상징한다."
+ },
+ "SN_ITEM_CH_TRADE_HUNTER_10_TT_DESC": {
+  "english": "A semicircular tablet with seven spokes that marks the finest warrior, who has given everything for justice on the Silk Road. (To be implemented)",
+  "basis": "translated-retail-korean",
+  "source": "일곱 개의 살이 박힌 반원형의 패로 실크로드의 정의를 위해 자신의 모든 것을 바친 최고 무사의 신분을 상징한다. (추후 구현)"
+ },
+ "SN_ITEM_CH_TRADE_HUNTER_11_TT_DESC": {
+  "english": "A semicircular tablet with seven spokes that marks the finest warrior, who has given everything for justice on the Silk Road. (To be implemented)",
+  "basis": "translated-retail-korean",
+  "source": "일곱 개의 살이 박힌 반원형의 패로 실크로드의 정의를 위해 자신의 모든 것을 바친 최고 무사의 신분을 상징한다. (추후 구현)"
+ },
+ "SN_ITEM_CH_TRADE_THIEF_04_TT_DESC": {
+  "english": "A black full-body suit painted with a devil pattern, used by novice thieves to hide their mistakes.",
+  "basis": "translated-retail-korean",
+  "source": "마귀의 문양이 그려진 검은 전신복으로 초보도적들이 자신의 실수를 감추기 위해 사용한다."
+ },
+ "SN_ITEM_CH_TRADE_THIEF_05_TT_DESC": {
+  "english": "A black full-body suit painted with a devil pattern, used by novice thieves to hide their mistakes.",
+  "basis": "translated-retail-korean",
+  "source": "마귀의 문양이 그려진 검은 전신복으로 초보도적들이 자신의 실수를 감추기 위해 사용한다."
+ },
+ "SN_ITEM_CH_TRADE_THIEF_06_TT_DESC": {
+  "english": "A black full-body suit painted with an asura pattern, used by wicked thieves so their deeds go unnoticed.",
+  "basis": "translated-retail-korean",
+  "source": "수라의 문양이 그려진 검은 전신복으로 악한 도적들이 자신의 행동을 들키지 않기 위해 사용한다."
+ },
+ "SN_ITEM_CH_TRADE_THIEF_07_TT_DESC": {
+  "english": "A black full-body suit painted with an asura pattern, used by wicked thieves so their deeds go unnoticed.",
+  "basis": "translated-retail-korean",
+  "source": "수라의 문양이 그려진 검은 전신복으로 악한 도적들이 자신의 행동을 들키지 않기 위해 사용한다."
+ },
+ "SN_ITEM_CH_TRADE_THIEF_08_TT_DESC": {
+  "english": "A black full-body suit painted with a war god pattern, used by seasoned thieves for quick thievery.",
+  "basis": "translated-retail-korean",
+  "source": "투신의 문양이 그려진 검은 전신복으로 노련한 도적들이 빠른 도적질을 위해 사용한다."
+ },
+ "SN_ITEM_CH_TRADE_THIEF_09_TT_DESC": {
+  "english": "A black full-body suit painted with a war god pattern, used by seasoned thieves for quick thievery.",
+  "basis": "translated-retail-korean",
+  "source": "투신의 문양이 그려진 검은 전신복으로 노련한 도적들이 빠른 도적질을 위해 사용한다."
+ },
+ "SN_ITEM_CH_TRADE_THIEF_10_TT_DESC": {
+  "english": "A splendid black full-body suit painted with the image of the Flame Emperor, worn mostly by the finest thieves to make their abilities known to the world. (To be implemented)",
+  "basis": "translated-retail-korean",
+  "source": "염제의 그림이 그려진 화려한 검은 전신복으로 최고의 도적들이 자신의 능력을 세상에 알리기 위해 주로 입는다. (추후 구현)"
+ },
+ "SN_ITEM_CH_TRADE_THIEF_11_TT_DESC": {
+  "english": "A splendid black full-body suit painted with the image of the Flame Emperor, worn mostly by the finest thieves to make their abilities known to the world. (To be implemented)",
+  "basis": "translated-retail-korean",
+  "source": "염제의 그림이 그려진 화려한 검은 전신복으로 최고의 도적들이 자신의 능력을 세상에 알리기 위해 주로 입는다. (추후 구현)"
+ },
+ "SN_ITEM_CH_TRADE_TRADER_04_TT_DESC": {
+  "english": "A flag with a white band that novice traders use to show which caravan they belong to.",
+  "basis": "translated-retail-korean",
+  "source": "초보상인이 자신이 속한 상단을 표시하기 위해 사용하는 깃발로 백색 띠를 두르고 있다."
+ },
+ "SN_ITEM_CH_TRADE_TRADER_05_TT_DESC": {
+  "english": "A flag with a white band that novice traders use to show which caravan they belong to.",
+  "basis": "translated-retail-korean",
+  "source": "초보상인이 자신이 속한 상단을 표시하기 위해 사용하는 깃발로 백색 띠를 두르고 있다."
+ },
+ "SN_ITEM_CH_TRADE_TRADER_06_TT_DESC": {
+  "english": "A flag made of blue cloth that small-scale traders use to show which caravan they belong to.",
+  "basis": "translated-retail-korean",
+  "source": "소규모 상인이 자신이 속한 상단을 표시하기 위해 사용하는 깃발로 청색 천을 사용하여 만들어졌다."
+ },
+ "SN_ITEM_CH_TRADE_TRADER_07_TT_DESC": {
+  "english": "A flag made of blue cloth that small-scale traders use to show which caravan they belong to.",
+  "basis": "translated-retail-korean",
+  "source": "소규모 상인이 자신이 속한 상단을 표시하기 위해 사용하는 깃발로 청색 천을 사용하여 만들어졌다."
+ },
+ "SN_ITEM_CH_TRADE_TRADER_08_TT_DESC": {
+  "english": "A flag embroidered with gold thread on a red background that well-known traders use to show which caravan they belong to.",
+  "basis": "translated-retail-korean",
+  "source": "이름이 알려진 상인이 자신이 속한 상단을 표시하기 위해 사용하는 깃발로 붉은 바탕에 금실로 수놓여 있다."
+ },
+ "SN_ITEM_CH_TRADE_TRADER_09_TT_DESC": {
+  "english": "A flag embroidered with gold thread on a red background that well-known traders use to show which caravan they belong to.",
+  "basis": "translated-retail-korean",
+  "source": "이름이 알려진 상인이 자신이 속한 상단을 표시하기 위해 사용하는 깃발로 붉은 바탕에 금실로 수놓여 있다."
+ },
+ "SN_ITEM_CH_TRADE_TRADER_10_TT_DESC": {
+  "english": "A flag decorated in splendid gold that the finest traders use to show which caravan they belong to. (To be implemented)",
+  "basis": "translated-retail-korean",
+  "source": "최고의 상인이 자신이 속한 상단을 표시하기 위해 사용하는 깃발로 화려한 금색으로 치장되어 있다. (추후 구현)"
+ },
+ "SN_ITEM_CH_TRADE_TRADER_11_TT_DESC": {
+  "english": "A flag decorated in splendid gold that the finest traders use to show which caravan they belong to. (To be implemented)",
+  "basis": "translated-retail-korean",
+  "source": "최고의 상인이 자신이 속한 상단을 표시하기 위해 사용하는 깃발로 화려한 금색으로 치장되어 있다. (추후 구현)"
+ },
+ "SN_ITEM_COS_C_UNICORN_TT_DESC": {
+  "english": "An item that summons a unicorn",
+  "basis": "translated-retail-korean",
+  "source": "유니콘을 소환하는 아이템"
+ },
+ "SN_ITEM_COS_C_WILDPIG_SCROLL_TT_DESC": {
+  "english": "<sml2>An item that summons a wild boar.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>The COS's HP depends on the user's level.<br><br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>멧돼지를 소환하는 아이템.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>사용자의 레벨에 따라 COS의 HP가 달라진다.<br><br></sml2>"
+ },
+ "SN_ITEM_COS_P_FOX_SCROLL_TT_DESC": {
+  "english": "<sml2>A fox with three tails. It resembles the legendary nine-tailed fox and is mistaken for an evil spirit, but it is gentle and follows people well. Unlike its alluring looks, its attacks are fierce and nimble, so it is trained for hunting.\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>꼬리가 3개 달린 여우. 전설로 전해져 내려오는 구미호와 비슷하여 요물로 오해받고 있으나 성격이 온순하고 사람을 잘 따른다. 요염하게 생긴 외모와 달리 공격이 매섭고 날렵하여 사냥용으로 훈련되고 있다.\n</sml2>"
+ },
+ "SN_ITEM_COS_P_GGLIDER_SCROLL_TT_DESC": {
+  "english": "<sml2>Larger than a squirrel, it got its name because the way it leaps far from tree to tree looks like flying. Having once brought back goods that traders left behind, it now lives under the caravans' protection, following behind them and bringing back items that drop from the rear of the caravan.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>The duration starts the moment you use the scroll, and it can only be used at level 5 or higher.<br><br><strong><font color=\"255,236,219,156\">Conditions</font></strong><br>Cannot be summoned at the same time as another function pet.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>몸집이 다람쥐 보다 큰데다가 나무와 나무 사이를 멀리 점프 하는 모습이 하늘을 나는것 같아 붙여진 이름이다. 상인들이 두고 간 물건을 가져다 준것이 인연이 되어 상단의 보호를 받으며 살고 있으며, 상단의 뒤를 따르다가 상단의 뒤에서 떨어진 물건을 가져다주는 일을 하기도 한다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>주문서를 사용하는 순간부터 시간이 적용되고 5레벨 이상일 때만 사용이 가능합니다.<br><br><strong><font color=\"255,236,219,156\">조건</font></strong><br>다른 기능 펫과 동시에 소환할 수 없습니다.</sml2>"
+ },
+ "SN_ITEM_COS_P_KANGAROO_SCROLL_TT_DESC": {
+  "english": "<sml2>The kangaroo was discovered on a new continent by an adventurer.\nAt first it was raised as a means of transport, but when a caravan was attacked by thieves during a trade run, it showed surprising attack power with its characteristic agility and quick fists and was a great help in defending the caravan. Since then it has been trained to escort caravans and people.\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>캥거루는 모험가에 의해 신대륙에서 발견되었다.\n처음에는 이동 수단으로 활용하기 위해 사육되었지만, 상단의 무역 도중 도적에게 습격을 당하였을 때 특유의 날렵함과 빠른 주먹으로 놀라운 공격력을 선보이며 상단을 지켜내는데 큰 도움을 주게 되었고 그 뒤로 상단 및 사람들을 호위하기 위한 목적으로 훈련시켜 활용되고 있다.\n</sml2>"
+ },
+ "SN_ITEM_COS_P_RACCOONDOG_SCROLL_TT_DESC": {
+  "english": "<sml2>Raccoon fur was so popular that raccoons were once close to extinction, but they are now protected after their mysterious abilities were discovered.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>The duration starts the moment you use the scroll, and it can only be used at level 5 or higher.<br><br><strong><font color=\"255,236,219,156\">Conditions</font></strong><br>Cannot be summoned at the same time as another function pet.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>너구리의 털이 모피로 인기가 높아 한때 멸종위기에 처해 있었으나, 신비로운 능력을 발견하고 보호받고 있다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>주문서를 사용하는 순간부터 시간이 적용되고 5레벨 이상일 때만 사용이 가능합니다.<br><br><strong><font color=\"255,236,219,156\">조건</font></strong><br>다른 기능 펫과 동시에 소환할 수 없습니다.</sml2>"
+ },
+ "SN_ITEM_ETC_100EXP_BASIC_TT_DESC": {
+  "english": "<sml2>Grants 100% extra experience for 60 minutes from the moment the scroll is used.<br>** Time passes regardless of combat time.<br><strong><font color=\"255,236,219,156\">Conditions</font></strong><br>Stacks with the Silver/Gold Time service.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>주문서를 사용하는 순간부터 60분동안 100%의 경험치를 추가로 받습니다.<br>** 전투시간과 관계없이 시간이 흐릅니다.<br><strong><font color=\"255,236,219,156\">조건</font></strong><br>실버/골드 타임 서비스와 중복으로 적용됩니다.</sml2>"
+ },
+ "SN_ITEM_ETC_150EXP_BASIC_TT_DESC": {
+  "english": "<sml2>Grants 150% extra experience for 60 minutes from the moment the scroll is used.<br>** Time passes regardless of combat time.<br><strong><font color=\"255,236,219,156\">Conditions</font></strong><br>Stacks with the Silver/Gold Time service.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>주문서를 사용하는 순간부터 60분동안 150%의 경험치를 추가로 받습니다.<br>** 전투시간과 관계없이 시간이 흐릅니다.<br><strong><font color=\"255,236,219,156\">조건</font></strong><br>실버/골드 타임 서비스와 중복으로 적용됩니다.</sml2>"
+ },
+ "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_ABYSS_TT_DESC": {
+  "english": "<sml2>Grants earrings an attribute that increases defense against combustion status.<br>If the same attribute already exists, the existing value is reset and a new value is granted.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>귀걸이에 연소 상태이상 방어를 증가시키는 속성을 부여한다.<br>동일 속성이 이미 존재하는 경우 기존 능력치는 초기화 되고 새로운 능력치가 부여된다.<br></sml2>"
+ },
+ "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_DEVIL_TT_DESC": {
+  "english": "<sml2>Grants chest armor an attribute that increases HP/MP recovery speed.<br>If the same attribute already exists, the existing value is reset and a new value is granted.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>가슴 방어구에 HP/MP 회복 속도를 증가시키는 속성을 부여한다.<br>동일 속성이 이미 존재하는 경우 기존 능력치는 초기화 되고 새로운 능력치가 부여된다.<br></sml2>"
+ },
+ "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_GUARD_TT_DESC": {
+  "english": "<sml2>Grants a necklace an attribute that increases defense against stun status.<br>If the same attribute already exists, the existing value is reset and a new value is granted.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>목걸이에 기절 상태이상 방어를 증가시키는 속성을 부여한다.<br>동일 속성이 이미 존재하는 경우 기존 능력치는 초기화 되고 새로운 능력치가 부여된다.<br></sml2>"
+ },
+ "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_HEAT_TT_DESC": {
+  "english": "<sml2>Grants a ring an attribute that increases defense against disease status.<br>If the same attribute already exists, the existing value is reset and a new value is granted.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>반지에 질병 상태이상 방어를 증가시키는 속성을 부여한다.<br>동일 속성이 이미 존재하는 경우 기존 능력치는 초기화 되고 새로운 능력치가 부여된다.<br></sml2>"
+ },
+ "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_IRONWALL_TT_DESC": {
+  "english": "<sml2>Grants a shield an attribute that increases blocking ratio.<br>If the same attribute already exists, the existing value is reset and a new value is granted.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>방패에 블록율을 증가시키는 속성을 부여한다.<br>동일 속성이 이미 존재하는 경우 기존 능력치는 초기화 되고 새로운 능력치가 부여된다.<br></sml2>"
+ },
+ "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_SHARP_TT_DESC": {
+  "english": "<sml2>Grants a weapon an attribute that increases critical.<br>If the same attribute already exists, the existing value is reset and a new value is granted.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>무기에 크리티컬을 증가시키는 속성을 부여한다.<br>동일 속성이 이미 존재하는 경우 기존 능력치는 초기화 되고 새로운 능력치가 부여된다.<br></sml2>"
+ },
+ "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_STRONGMIND_TT_DESC": {
+  "english": "<sml2>Grants a ring an attribute that increases defense against fear status.<br>If the same attribute already exists, the existing value is reset and a new value is granted.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>반지에 공포 상태이상 방어를 증가시키는 속성을 부여한다.<br>동일 속성이 이미 존재하는 경우 기존 능력치는 초기화 되고 새로운 능력치가 부여된다.<br></sml2>"
+ },
+ "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_STUPOR_TT_DESC": {
+  "english": "<sml2>Grants earrings an attribute that increases defense against sleep status.<br>If the same attribute already exists, the existing value is reset and a new value is granted.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>귀걸이에 수면 상태이상 방어를 증가시키는 속성을 부여한다.<br>동일 속성이 이미 존재하는 경우 기존 능력치는 초기화 되고 새로운 능력치가 부여된다.<br></sml2>"
+ },
+ "SN_ITEM_ETC_AVATAR_M_GM_UNIFORM_TT_DESC": {
+  "english": "GM Outfit (M)",
+  "basis": "translated-retail-korean",
+  "source": "GM의상 (남)"
+ },
+ "SN_ITEM_ETC_AVATAR_W_GM_UNIFORM_TT_DESC": {
+  "english": "GM Outfit (F)",
+  "basis": "translated-retail-korean",
+  "source": "GM의상 (여)"
+ },
+ "SN_ITEM_ETC_E050918_FRUITPUNCH_TT_DESC": {
+  "english": "A drink of boiled ginger water with sugar or honey, steeped with dried persimmon and cinnamon and topped with pine nuts.",
+  "basis": "translated-retail-korean",
+  "source": "새앙을 달인 물에 설탕이나 꿀을 탄 다음, 곶감과 계피를 담그고 잣을 띄운 음료."
+ },
+ "SN_ITEM_ETC_E050918_MAGICSONGPYON_TT_DESC": {
+  "english": "A rice cake filled with mysterious energy. Instantly restores HP and MP when used.",
+  "basis": "translated-retail-korean",
+  "source": "신비한 기운이 들어있는 송편. 사용하면 hp와 mp가 즉시 회복된다."
+ },
+ "SN_ITEM_ETC_E050918_RICEDRINK_TT_DESC": {
+  "english": "A drink made by fermenting cooked rice in malt water, boiling it with ginger and sugar, cooling it and floating the reserved rice grains on top.",
+  "basis": "translated-retail-korean",
+  "source": "쌀밥에 엿기름 가루를 우린 물을 부어 삭힌 것에, 생강과 설탕을 넣고 끓여 식힌 다음, 건져 둔 밥알을 띄운 음료."
+ },
+ "SN_ITEM_ETC_E050918_SONGPYON_TT_DESC": {
+  "english": "A rice cake made from non-glutinous rice flour dough, filled and shaped like a half moon or shell, then steamed on pine needles.",
+  "basis": "translated-retail-korean",
+  "source": "멥쌀가루를 반죽하여 소를 넣고 반달 또는 조개 모양으로 빚어서 솔잎을 깔아 찐 떡."
+ },
+ "SN_ITEM_ETC_E051003_GARLIC_TT_DESC": {
+  "english": "According to the Dangun myth, a bear ate this garlic and mugwort and became human. It seems good for the body when used.",
+  "basis": "translated-retail-korean",
+  "source": "단군신화에 따르면 곰 한마리가 이 마늘과 쑥을 먹고 사람의 몸이 되었다고 한다. 사용하면 몸에 좋을 것 같다."
+ },
+ "SN_ITEM_ETC_E051003_MUGWORT_TT_DESC": {
+  "english": "According to the Dangun myth, a bear ate this mugwort and garlic and became human. It seems very good for the body when used.",
+  "basis": "translated-retail-korean",
+  "source": "단군신화에 따르면 곰 한마리가 이 쑥과 마늘을 먹고 사람의 몸이 되었다고 한다. 사용하면 몸에 매우 좋을 것 같다."
+ },
+ "SN_ITEM_ETC_E051021_BLACKPEARL_TT_DESC": {
+  "english": "A black pearl, long called a rare jewel.",
+  "basis": "translated-retail-korean",
+  "source": "예로부터 진귀한 보석이라고 불리는 검은빛을 띤 진주이다."
+ },
+ "SN_ITEM_ETC_E051021_BLUEDRAGON_BUNTING_COUPON_TT_DESC": {
+  "english": "A voucher for an Azure Dragon banner. Bring it to Event So-Ok to exchange it for the banner. Be sure to exchange it within the event period.",
+  "basis": "translated-retail-korean",
+  "source": "청룡무늬 휘장을 받을 수 있는 교환권이다. 이벤트 소옥에게 가져다 주면 휘장으로 바꿔준다. 단, 이벤트 기간 내에 반드시 바꾸도록 하자."
+ },
+ "SN_ITEM_ETC_E051021_BLUEDRAGON_BUNTING_F_TT_DESC": {
+  "english": "A banner engraved with a splendid Azure Dragon pattern. It shows a dignified look along with the spirit of the Azure Dragon. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "멋들어진 청룡 무늬가 새겨져 있는 휘장이다. 이 휘장은 청룡의 기운과 함께 기품 있는 모습을 나타낼 수 있다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E051021_BLUEDRAGON_BUNTING_M_TT_DESC": {
+  "english": "A banner engraved with a splendid Azure Dragon pattern. It shows a dignified look along with the spirit of the Azure Dragon. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "멋들어진 청룡 무늬가 새겨져 있는 휘장이다. 이 휘장은 청룡의 기운과 함께 기품 있는 모습을 나타낼 수 있다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E051021_BLUEPEARL_TT_DESC": {
+  "english": "A blue pearl, long called a rare jewel.",
+  "basis": "translated-retail-korean",
+  "source": "예로부터 진귀한 보석이라고 불리는 파란빛을 띤 진주이다."
+ },
+ "SN_ITEM_ETC_E051021_GREENPEARL_TT_DESC": {
+  "english": "A green pearl, long called a rare jewel.",
+  "basis": "translated-retail-korean",
+  "source": "예로부터 진귀한 보석이라고 불리는 초록빛을 띤 진주이다."
+ },
+ "SN_ITEM_ETC_E051021_ORANGEPEARL_TT_DESC": {
+  "english": "An orange pearl, long called a rare jewel.",
+  "basis": "translated-retail-korean",
+  "source": "예로부터 진귀한 보석이라고 불리는 주황빛을 띤 진주이다."
+ },
+ "SN_ITEM_ETC_E051021_PHOENIX_BUNTING_COUPON_TT_DESC": {
+  "english": "A voucher for a Vermilion Bird banner. Bring it to Event So-Ok to exchange it for the banner. Be sure to exchange it within the event period.",
+  "basis": "translated-retail-korean",
+  "source": "주작무늬 휘장을 받을 수 있는 교환권이다. 이벤트 소옥에게 가져다 주면 휘장으로 바꿔준다. 단, 이벤트 기간 내에 반드시 바꾸도록 하자."
+ },
+ "SN_ITEM_ETC_E051021_PHOENIX_BUNTING_F_TT_DESC": {
+  "english": "A banner engraved with a splendid Vermilion Bird pattern. It shows a dignified look along with the spirit of the Vermilion Bird. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "멋들어진 주작 무늬가 새겨져 있는 휘장이다. 이 휘장은 주작의 기운과 함께 기품 있는 모습을 나타낼 수 있다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E051021_PHOENIX_BUNTING_M_TT_DESC": {
+  "english": "A banner engraved with a splendid Vermilion Bird pattern. It shows a dignified look along with the spirit of the Vermilion Bird. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "멋들어진 주작 무늬가 새겨져 있는 휘장이다. 이 휘장은 주작의 기운과 함께 기품 있는 모습을 나타낼 수 있다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E051021_REDPEARL_TT_DESC": {
+  "english": "A reddish pearl, long called a rare jewel.",
+  "basis": "translated-retail-korean",
+  "source": "예로부터 진귀한 보석이라고 불리는 붉은빛을 띤 진주이다."
+ },
+ "SN_ITEM_ETC_E051021_TURTLE_BUNTING_COUPON_TT_DESC": {
+  "english": "A voucher for a Black Tortoise banner. Bring it to Event So-Ok to exchange it for the banner. Be sure to exchange it within the event period.",
+  "basis": "translated-retail-korean",
+  "source": "현무무늬 휘장을 받을 수 있는 교환권이다. 이벤트 소옥에게 가져다 주면 휘장으로 바꿔준다. 단, 이벤트 기간 내에 반드시 바꾸도록 하자."
+ },
+ "SN_ITEM_ETC_E051021_TURTLE_BUNTING_F_TT_DESC": {
+  "english": "A banner engraved with a splendid Black Tortoise pattern. It shows a dignified look along with the spirit of the Black Tortoise. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "멋들어진 현무 무늬가 새겨져 있는 휘장이다. 이 휘장은 현무의 기운과 함께 기품 있는 모습을 나타낼 수 있다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E051021_TURTLE_BUNTING_M_TT_DESC": {
+  "english": "A banner engraved with a splendid Black Tortoise pattern. It shows a dignified look along with the spirit of the Black Tortoise. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "멋들어진 현무 무늬가 새겨져 있는 휘장이다. 이 휘장은 현무의 기운과 함께 기품 있는 모습을 나타낼 수 있다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E051021_VIOLETPEARL_TT_DESC": {
+  "english": "A violet pearl, long called a rare jewel.",
+  "basis": "translated-retail-korean",
+  "source": "예로부터 진귀한 보석이라고 불리는 보라빛을 띤 진주이다."
+ },
+ "SN_ITEM_ETC_E051021_WHITETIGER_BUNTING_COUPON_TT_DESC": {
+  "english": "A voucher for a White Tiger banner. Bring it to Event So-Ok to exchange it for the banner. Be sure to exchange it within the event period.",
+  "basis": "translated-retail-korean",
+  "source": "백호무늬 휘장을 받을 수 있는 교환권이다. 이벤트 소옥에게 가져다 주면 휘장으로 바꿔준다. 단, 이벤트 기간 내에 반드시 바꾸도록 하자."
+ },
+ "SN_ITEM_ETC_E051021_WHITETIGER_BUNTING_F_TT_DESC": {
+  "english": "A banner engraved with a splendid White Tiger pattern. It shows a dignified look along with the spirit of the White Tiger. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "멋들어진 백호 무늬가 새겨져 있는 휘장이다. 이 휘장은 백호의 기운과 함께 기품 있는 모습을 나타낼 수 있다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E051021_WHITETIGER_BUNTING_M_TT_DESC": {
+  "english": "A banner engraved with a splendid White Tiger pattern. It shows a dignified look along with the spirit of the White Tiger. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "멋들어진 백호 무늬가 새겨져 있는 휘장이다. 이 휘장은 백호의 기운과 함께 기품 있는 모습을 나타낼 수 있다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E051021_YELLOWPEARL_TT_DESC": {
+  "english": "A yellow pearl, long called a rare jewel.",
+  "basis": "translated-retail-korean",
+  "source": "예로부터 진귀한 보석이라고 불리는 노란빛을 띤 진주이다."
+ },
+ "SN_ITEM_ETC_E051111_ALMOND_PEPERO_TT_DESC": {
+  "english": "Almond Pepero coated in ground almonds. One bite and you can taste its nutty flavor. Who thought of making Pepero like this...",
+  "basis": "translated-retail-korean",
+  "source": "아몬드를 갈아 과자에 입힌 아몬드 빼빼로다. 한입 먹어보면 고소한 맛이 느껴질 것 같다. 이런 빼빼로를 만들 생각을 하다니…"
+ },
+ "SN_ITEM_ETC_E051111_CHOCO_PEPERO_TT_DESC": {
+  "english": "Pepero made of biscuit sticks coated in chocolate. Eating it seems like it will bring something good.",
+  "basis": "translated-retail-korean",
+  "source": "과자에 초코렛을 입혀 만든 빼빼로이다. 먹으면 어떤 좋은 효과가 나에게 일어날 것 같다."
+ },
+ "SN_ITEM_ETC_E051111_GINSENG_PEPERO_TT_DESC": {
+  "english": "Pepero or not, who thought of coating it in ginseng powder? It feels like a very expensive Pepero. It must taste good, right?",
+  "basis": "translated-retail-korean",
+  "source": "아무리 빼빼로라지만 인삼가루를 입혀 만들 생각을 하다니. 매우 비쌀 것 같은 느낌이 드는 빼빼로다. 맛은 있겠지?"
+ },
+ "SN_ITEM_ETC_E051111_GREENTEA_PEPERO_TT_DESC": {
+  "english": "This is a well-being Pepero coated in green tea powder!! The well-being trend has reached Pepero too. A green tea Pepero that seems to make your body feel lighter.",
+  "basis": "translated-retail-korean",
+  "source": "이것은 빼빼로에 녹차 가루를 씌워 만든 웰빙 빼빼로!! 웰빙 바람이 빼빼로에도 불고 있다. 몸이 가벼워질 것 같은 녹차 빼빼로."
+ },
+ "SN_ITEM_ETC_E051111_STRAWBERRY_PEPERO_TT_DESC": {
+  "english": "An unusual Pepero with a strawberry taste and scent. It looks a little rare; maybe it has a better effect when eaten.",
+  "basis": "translated-retail-korean",
+  "source": "빼빼로 모양을 하고 있는데 딸기맛과 향이 나는 특이한 빼빼로다. 좀 귀해 보이는데 먹으면 더 좋은 효과가 있을까."
+ },
+ "SN_ITEM_ETC_E051111_WHITECHOCO_PEPERO_TT_DESC": {
+  "english": "Pepero made with white chocolate. After seeing only dark Pepero, white Pepero feels different. It is meant to be eaten, so let's try it.",
+  "basis": "translated-retail-korean",
+  "source": "초코렛 중에서도 화이트 초코렛을 이용해서 만든 빼빼로다. 검은 빼빼로만 보다가 흰색 빼빼로를 보니 색다른 기분이 든다. 먹으라고 있는 것이니 일단 먹어보자."
+ },
+ "SN_ITEM_ETC_E0600901_INDEPENDENCE_DAY_RED_FABRIC_TT_DESC": {
+  "english": "A piece of red cloth. \nSo-Ok seemed to say she needs it, so let's bring it to her.",
+  "basis": "translated-retail-korean",
+  "source": "붉은 천 조각이다. \n소옥이가 필요하다고 한 것 같으니 갖다 주자."
+ },
+ "SN_ITEM_ETC_E0600901_INDEPENDENCE_DAY_STAFF_TT_DESC": {
+  "english": "A flagpole made by trimming the spear carried by a Chakji.\nIt looks very sturdy.",
+  "basis": "translated-retail-korean",
+  "source": "착지가 들고 있는 창을 잘 다듬어 만든 깃대.\n매우 튼튼해 보인다."
+ },
+ "SN_ITEM_ETC_E0600901_INDEPENDENCE_DAY_STAR_TT_DESC": {
+  "english": "Painted with a yellow star.",
+  "basis": "translated-retail-korean",
+  "source": "노란색 별 문양이 그려져 있다."
+ },
+ "SN_ITEM_ETC_E0600901_INDEPENDENCE_DAY_YELLOWSTARFLAG_TT_DESC": {
+  "english": "A yellow star painted on red cloth.",
+  "basis": "translated-retail-korean",
+  "source": "붉은 천 위에 노란색 별 문양이 그려져 있다."
+ },
+ "SN_ITEM_ETC_E060125_RICEDUMPLINGSOUP_TT_DESC": {
+  "english": "<sml2>A delicious rice cake soup eaten on New Year's Day. They say eating it makes you a year older, and this one glows as if it has a special effect.<br>\nYou can use it right away or give it to So-Ok as a present.<br><br>\nEffect: Randomly increases HP and MP<br>\nDuration: 10 minutes<br><br>\nCaution: The item effect disappears when using a return scroll or teleport.<br>\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>새해 첫날에 먹는 맛있는 떡국이다. 떡국을 먹으면 한 살을 더 먹는다고 하는데, 이 떡국은 광채가 나는 것이 특별한 효과가 있을 것 같다.<br>\n바로 사용할 수도 있고 소옥이에게 선물로 줄 수도 있다.<br><br>\n효과: HP 및 MP 랜덤 증가<br>\n유지시간: 10분<br><br>\n주의사항: 귀환서 및 텔레포트 이용 시 아이템 효과 사라짐.<br>\n</sml2>"
+ },
+ "SN_ITEM_ETC_E060209_CHOCO_CAKE_TT_DESC": {
+  "english": "A chocolate cake to express love to your sweetheart\nDouble trade profit during the event period",
+  "basis": "translated-retail-korean",
+  "source": "연인에게 사랑을 전하는 초코케이크\n이벤트 기간 동안 무역이익 2배 적용"
+ },
+ "SN_ITEM_ETC_E060209_PINK_DUMPLING_TT_DESC": {
+  "english": "Tasty-looking boiled dumplings\nDouble trade profit during the event period",
+  "basis": "translated-retail-korean",
+  "source": "맛있게 생긴 물만두\n이벤트 기간 동안 무역이익 2배 적용"
+ },
+ "SN_ITEM_ETC_E060209_WHITE_DUMPLING_TT_DESC": {
+  "english": "Xiaolongbao, commonly seen on the streets of Taiwan\nDouble trade profit during the event period",
+  "basis": "translated-retail-korean",
+  "source": "대만의 길거리에서 흔히 볼 수 있는 샤오롱 바오\n이벤트 기간 동안 무역이익 2배 적용"
+ },
+ "SN_ITEM_ETC_E060512_PINK_CARNATION_TT_DESC": {
+  "english": "Pink carnation\nDouble trade profit during the event period",
+  "basis": "translated-retail-korean",
+  "source": "분홍 카네이션\n이벤트 기간 동안 무역이익 2배적용"
+ },
+ "SN_ITEM_ETC_E060512_RED_CARNATION_TT_DESC": {
+  "english": "Red carnation\nDouble trade profit during the event period",
+  "basis": "translated-retail-korean",
+  "source": "빨간 카네이션\n이벤트 기간 동안 무역이익 2배적용"
+ },
+ "SN_ITEM_ETC_E060512_WHITE_CARNATION_TT_DESC": {
+  "english": "White carnation\nDouble trade profit during the event period",
+  "basis": "translated-retail-korean",
+  "source": "흰색 카네이션\n이벤트 기간 동안 무역이익 2배적용"
+ },
+ "SN_ITEM_ETC_E060517_PAPER_PIECE_TT_DESC": {
+  "english": "A piece of paper engraved with strange characters. \nJudging by their shape, they do not seem to be human writing.",
+  "basis": "translated-retail-korean",
+  "source": "특수한 문자가 새겨져 있는 종이조각. \n문자의 모양을 보니 인간의 것이 아닌 것 같다."
+ },
+ "SN_ITEM_ETC_E060607_WORLDCUP_A_TT_DESC": {
+  "english": "An item used in the World Cup event\nCollect the five letters G, O, A, L, ! and go to So-Ok",
+  "basis": "translated-retail-korean",
+  "source": "월드컵 이벤트에 사용되는 아이템\nG, O, A, L, ! 다섯 글자를 모아서 소옥이에게 가자"
+ },
+ "SN_ITEM_ETC_E060607_WORLDCUP_E_TT_DESC": {
+  "english": "An item used in the World Cup event\nCollect the five letters G, O, A, L, ! and go to So-Ok",
+  "basis": "translated-retail-korean",
+  "source": "월드컵 이벤트에 사용되는 아이템\nG, O, A, L, ! 다섯 글자를 모아서 소옥이에게 가자"
+ },
+ "SN_ITEM_ETC_E060607_WORLDCUP_G_TT_DESC": {
+  "english": "An item used in the World Cup event\nCollect the five letters G, O, A, L, ! and go to So-Ok",
+  "basis": "translated-retail-korean",
+  "source": "월드컵 이벤트에 사용되는 아이템\nG, O, A, L, ! 다섯 글자를 모아서 소옥이에게 가자"
+ },
+ "SN_ITEM_ETC_E060607_WORLDCUP_L_TT_DESC": {
+  "english": "An item used in the World Cup event\nCollect the five letters G, O, A, L, ! and go to So-Ok",
+  "basis": "translated-retail-korean",
+  "source": "월드컵 이벤트에 사용되는 아이템\nG, O, A, L, ! 다섯 글자를 모아서 소옥이에게 가자"
+ },
+ "SN_ITEM_ETC_E060607_WORLDCUP_O_TT_DESC": {
+  "english": "An item used in the World Cup event\nCollect the five letters G, O, A, L, ! and go to So-Ok",
+  "basis": "translated-retail-korean",
+  "source": "월드컵 이벤트에 사용되는 아이템\nG, O, A, L, ! 다섯 글자를 모아서 소옥이에게 가자"
+ },
+ "SN_ITEM_ETC_E060614_TAEGUKBUNTING_F_TT_DESC": {
+  "english": "A banner hung with the Taegukgi for cheering on the World Cup. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "월드컵 응원용 태극기가 걸려있는 휘장이다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E060614_TAEGUKBUNTING_M_TT_DESC": {
+  "english": "A banner hung with the Taegukgi for cheering on the World Cup. Can be equipped in the avatar slot.",
+  "basis": "translated-retail-korean",
+  "source": "월드컵 응원용 태극기가 걸려있는 휘장이다. 아바타 슬롯에 장착할 수 있다."
+ },
+ "SN_ITEM_ETC_E060823_FESTIVAL_A_TT_DESC": {
+  "english": "<sml2>An item used in the event<br>\nCollect the 8 letters F, E, S, T, I, V, A, L and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트에 사용되는 아이템<br>\nF, E, S, T, I, V, A, L 8글자를 모아 소옥이 에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_FESTIVAL_E_TT_DESC": {
+  "english": "<sml2>An item used in the event<br>\nCollect the 8 letters F, E, S, T, I, V, A, L and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트에 사용되는 아이템<br>\nF, E, S, T, I, V, A, L 8글자를 모아 소옥이 에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_FESTIVAL_F_TT_DESC": {
+  "english": "<sml2>An item used in the event<br>\nCollect the 8 letters F, E, S, T, I, V, A, L and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트에 사용되는 아이템<br>\nF, E, S, T, I, V, A, L 8글자를 모아 소옥이 에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_FESTIVAL_I_TT_DESC": {
+  "english": "<sml2>An item used in the event<br>\nCollect the 8 letters F, E, S, T, I, V, A, L and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트에 사용되는 아이템<br>\nF, E, S, T, I, V, A, L 8글자를 모아 소옥이 에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_FESTIVAL_L_TT_DESC": {
+  "english": "<sml2>An item used in the event<br>\nCollect the 8 letters F, E, S, T, I, V, A, L and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트에 사용되는 아이템<br>\nF, E, S, T, I, V, A, L 8글자를 모아 소옥이 에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_FESTIVAL_S_TT_DESC": {
+  "english": "<sml2>An item used in the event<br>\nCollect the 8 letters F, E, S, T, I, V, A, L and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트에 사용되는 아이템<br>\nF, E, S, T, I, V, A, L 8글자를 모아 소옥이 에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_FESTIVAL_T_TT_DESC": {
+  "english": "<sml2>An item used in the event<br>\nCollect the 8 letters F, E, S, T, I, V, A, L and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트에 사용되는 아이템<br>\nF, E, S, T, I, V, A, L 8글자를 모아 소옥이 에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_FESTIVAL_V_TT_DESC": {
+  "english": "<sml2>An item used in the event<br>\nCollect the 8 letters F, E, S, T, I, V, A, L and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트에 사용되는 아이템<br>\nF, E, S, T, I, V, A, L 8글자를 모아 소옥이 에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_HP20_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_HP20_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_HP30_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_HP30_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_HP40_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_HP40_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_HP50_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_HP50_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_INT1_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_INT1_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_INT2_2_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_INT2_2_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_INT2_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_INT2_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_INT3_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_INT3_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_MP20_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_MP20_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_MP30_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_MP30_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_MP40_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_MP40_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_MP50_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_MP50_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_STR1_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_STR1_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_STR2_2_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_STR2_2_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_STR2_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_STR2_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_STR3_F_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060823_SATGAT_STR3_M_TT_DESC": {
+  "english": "<sml2>An item that can be equipped in the avatar slot. It has a special ability.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>아바타 슬롯에 장착 할 수 있는 아이템이며, 특별한 능력이 있다.</sml2>"
+ },
+ "SN_ITEM_ETC_E060927_SONGPYON_TT_DESC": {
+  "english": "<sml2>Event item. Go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트 아이템. 소옥이에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E070214_BLACKPIG_TT_DESC": {
+  "english": "<sml2>Event item. Collect lucky pigs of 4 colors and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트 아이템. 4가지 색의 복돼지를 모아 소옥이에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E070214_BLUEPIG_TT_DESC": {
+  "english": "<sml2>Event item. Collect lucky pigs of 4 colors and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트 아이템. 4가지 색의 복돼지를 모아 소옥이에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E070214_REDPIG_TT_DESC": {
+  "english": "<sml2>Event item. Collect lucky pigs of 4 colors and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트 아이템. 4가지 색의 복돼지를 모아 소옥이에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E070214_YELLOWPIG_TT_DESC": {
+  "english": "<sml2>Event item. Collect lucky pigs of 4 colors and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트 아이템. 4가지 색의 복돼지를 모아 소옥이에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E070523_LEFT_HEART_TT_DESC": {
+  "english": "<sml2>Event item. <br>Collect the left and right halves of the broken heart and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트 아이템. <br>반으로 갈라진 하트의 왼쪽과 오른쪽을 모아서 소옥이에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_E070523_RIGHT_HEART_TT_DESC": {
+  "english": "<sml2>Event item. <br>Collect the left and right halves of the broken heart and go to So-Ok!</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>이벤트 아이템. <br>반으로 갈라진 하트의 왼쪽과 오른쪽을 모아서 소옥이에게 가자!</sml2>"
+ },
+ "SN_ITEM_ETC_SECOND_HWAN_SCROLL_01_TT_DESC": {
+  "english": "An essence made from dew holding the clear energy of dawn. It fills the whole body with vitality and raises the ability to control stray thoughts, increasing Pahwan duration by 5 seconds.\nExtra function: While the effect is active, can be used once to fill the Pahwan gauge to 100%\n(After the extra function is used, the Pahwan duration bonus disappears and the Essence of Vitality cannot be used for 20 minutes.)",
+  "basis": "translated-retail-korean",
+  "source": "새벽의 맑은 기운이 담긴 이슬로 만들어낸 정수로 온 몸을 생기로 가득 차게 하여 사념을 제어하는 능력을 높이는데 파환 유지시간을 5초 증가시킬 수 있다.\n부가기능 : 효과가 발동되는 동안 파환 게이지 100% 채워주는 기능 1회 사용 가능\n(부가기능 사용 후 파환 유지시간 증가 효과 사라지고 20분간 생기의 정수를 사용할 수 없다.)"
+ },
+ "SN_ITEM_ETC_SECOND_HWAN_SCROLL_02_TT_DESC": {
+  "english": "An essence made from dew holding the clear energy of dawn. It fills the whole body with vitality and raises the ability to control stray thoughts, increasing Pahwan duration by 8 seconds.\nExtra function: While the effect is active, can be used once to fill the Pahwan gauge to 100%\n(After the extra function is used, the Pahwan duration bonus disappears and the Essence of Vitality cannot be used for 20 minutes.)",
+  "basis": "translated-retail-korean",
+  "source": "새벽의 맑은 기운이 담긴 이슬로 만들어낸 정수로 온 몸을 생기로 가득 차게 하여 사념을 제어하는 능력을 높이는데 파환 유지시간을 8초 증가시킬 수 있다.\n부가기능 : 효과가 발동되는 동안 파환 게이지 100% 채워주는 기능 1회 사용 가능\n(부가기능 사용 후 파환 유지시간 증가 효과 사라지고 20분간 생기의 정수를 사용할 수 없다.)"
+ },
+ "SN_ITEM_ETC_SECOND_HWAN_SCROLL_03_TT_DESC": {
+  "english": "An essence made from dew holding the clear energy of dawn. It fills the whole body with vitality and raises the ability to control stray thoughts, increasing Pahwan duration by 11 seconds.\nExtra function: While the effect is active, can be used once to fill the Pahwan gauge to 100%\n(After the extra function is used, the Pahwan duration bonus disappears and the Essence of Vitality cannot be used for 20 minutes.)",
+  "basis": "translated-retail-korean",
+  "source": "새벽의 맑은 기운이 담긴 이슬로 만들어낸 정수로 온 몸을 생기로 가득 차게 하여 사념을 제어하는 능력을 높이는데 파환 유지시간을 11초 증가시킬 수 있다.\n부가기능 : 효과가 발동되는 동안 파환 게이지 100% 채워주는 기능 1회 사용 가능\n(부가기능 사용 후 파환 유지시간 증가 효과 사라지고 20분간 생기의 정수를 사용할 수 없다.)"
+ },
+ "SN_ITEM_ETC_SECOND_HWAN_SCROLL_04_TT_DESC": {
+  "english": "An essence made from dew holding the clear energy of dawn. It fills the whole body with vitality and raises the ability to control stray thoughts, increasing Pahwan duration by 14 seconds.\nExtra function: While the effect is active, can be used once to fill the Pahwan gauge to 100%\n(After the extra function is used, the Pahwan duration bonus disappears and the Essence of Vitality cannot be used for 20 minutes.)",
+  "basis": "translated-retail-korean",
+  "source": "새벽의 맑은 기운이 담긴 이슬로 만들어낸 정수로 온 몸을 생기로 가득 차게 하여 사념을 제어하는 능력을 높이는데 파환 유지시간을 14초 증가시킬 수 있다.\n부가기능 : 효과가 발동되는 동안 파환 게이지 100% 채워주는 기능 1회 사용 가능\n(부가기능 사용 후 파환 유지시간 증가 효과 사라지고 20분간 생기의 정수를 사용할 수 없다.)"
+ },
+ "SN_ITEM_ETC_SECOND_HWAN_SCROLL_05_TT_DESC": {
+  "english": "An essence made from dew holding the clear energy of dawn. It fills the whole body with vitality and raises the ability to control stray thoughts, increasing Pahwan duration by 17 seconds.\nExtra function: While the effect is active, can be used once to fill the Pahwan gauge to 100%\n(After the extra function is used, the Pahwan duration bonus disappears and the Essence of Vitality cannot be used for 20 minutes.)",
+  "basis": "translated-retail-korean",
+  "source": "새벽의 맑은 기운이 담긴 이슬로 만들어낸 정수로 온 몸을 생기로 가득 차게 하여 사념을 제어하는 능력을 높이는데 파환 유지시간을 17초 증가시킬 수 있다.\n부가기능 : 효과가 발동되는 동안 파환 게이지 100% 채워주는 기능 1회 사용 가능\n(부가기능 사용 후 파환 유지시간 증가 효과 사라지고 20분간 생기의 정수를 사용할 수 없다.)"
+ },
+ "SN_ITEM_ETC_SECOND_HWAN_SCROLL_06_TT_DESC": {
+  "english": "An essence made from dew holding the clear energy of dawn. It fills the whole body with vitality and raises the ability to control stray thoughts, increasing Pahwan duration by 20 seconds.\nExtra function: While the effect is active, can be used once to fill the Pahwan gauge to 100%\n(After the extra function is used, the Pahwan duration bonus disappears and the Essence of Vitality cannot be used for 20 minutes.)",
+  "basis": "translated-retail-korean",
+  "source": "새벽의 맑은 기운이 담긴 이슬로 만들어낸 정수로 온 몸을 생기로 가득 차게 하여 사념을 제어하는 능력을 높이는데 파환 유지시간을 20초 증가시킬 수 있다.\n부가기능 : 효과가 발동되는 동안 파환 게이지 100% 채워주는 기능 1회 사용 가능\n(부가기능 사용 후 파환 유지시간 증가 효과 사라지고 20분간 생기의 정수를 사용할 수 없다.)"
+ },
+ "SN_ITEM_ETC_TAIWAN_50000_GOLD_TT_DESC": {
+  "english": "Bring it to an NPC to exchange it for 50,000 gold.",
+  "basis": "translated-retail-korean",
+  "source": "NPC에게 가져다 주면 5만 골드로 교환해 준다."
+ },
+ "SN_ITEM_ETC_TRADE_AM_01_TT_DESC": {
+  "english": "A beautiful green jewel from Asia Minor.",
+  "basis": "translated-retail-korean",
+  "source": "소아시아에서 나오는 아름다운 녹색의 보석."
+ },
+ "SN_ITEM_ETC_TRADE_AM_02_TT_DESC": {
+  "english": "Fine fabric pirates obtained by seizing Islamic ships.",
+  "basis": "translated-retail-korean",
+  "source": "해적들이 이슬람 선박을 탈취하여 얻은 고급 직물."
+ },
+ "SN_ITEM_ETC_TRADE_AM_03_TT_DESC": {
+  "english": "A brown jewel found mainly on the shores of the Baltic Sea.",
+  "basis": "translated-retail-korean",
+  "source": "발트해 연안에서 주로 나오는 갈색의 보석."
+ },
+ "SN_ITEM_ETC_TRADE_CH_05_TT_DESC": {
+  "english": "A jewel resembling a tiger's eye, found only on Tiger Mountain.",
+  "basis": "translated-retail-korean",
+  "source": "호혈산에서만 나오는 호랑이의 눈을 닮은 보석."
+ },
+ "SN_ITEM_ETC_TRADE_CH_06_TT_DESC": {
+  "english": "Wood trimmed from the beautiful white poplars of Tiger Mountain.",
+  "basis": "translated-retail-korean",
+  "source": "호혈산의 아름다운 백양 나무를 다듬은 것."
+ },
+ "SN_ITEM_ETC_TRADE_CH_07_TT_DESC": {
+  "english": "Luxurious leather made from gathered soft tiger fur.",
+  "basis": "translated-retail-korean",
+  "source": "호랑이의 부드러운 털을 모아 만든 고급스러운 가죽."
+ },
+ "SN_ITEM_ETC_TRADE_TK_01_TT_DESC": {
+  "english": "Sand with mysterious power, formed where the blood of those who died in the desert seeped into it.",
+  "basis": "translated-retail-korean",
+  "source": "사막에서 죽은 사람들이 흘린 피가 모래 속에 스며들어 만들어진 신비한 힘을 가진 모래."
+ },
+ "SN_ITEM_ETC_TRADE_TK_02_TT_DESC": {
+  "english": "Gold dust weathered by the sandstorms of the Taklamakan Desert.",
+  "basis": "translated-retail-korean",
+  "source": "타클라마칸 사막의 모래 바람에 의해 풍화되어 만들어진 금의 가루."
+ },
+ "SN_ITEM_ETC_TRADE_TK_03_TT_DESC": {
+  "english": "An old relic of the Niya civilization that once flourished in the Taklamakan.",
+  "basis": "translated-retail-korean",
+  "source": "과거 타클라마칸에서 번성했던 니야 문명의 오래된 유물."
+ },
+ "SN_ITEM_ETC_TRADE_WC_05_TT_DESC": {
+  "english": "Earth-colored jade formed deep in the barren land of the Tarim Basin.",
+  "basis": "translated-retail-korean",
+  "source": "타림분지의 척박한 땅 속에서 만들어지는 흙빛의 옥."
+ },
+ "SN_ITEM_ETC_TRADE_WC_06_TT_DESC": {
+  "english": "A lump of silver the Black Robbers made by robbing traders.",
+  "basis": "translated-retail-korean",
+  "source": "흑막단이 상인들을 털어 만든 은 덩어리."
+ },
+ "SN_ITEM_ETC_TRADE_WC_07_TT_DESC": {
+  "english": "A lump of gold the Black Robbers made by robbing traders.",
+  "basis": "translated-retail-korean",
+  "source": "흑막단이 상인들을 털어 만든 금 덩어리."
+ },
+ "SN_ITEM_ETC_TREASUREBOX_KEY_CHALLENGE_TT_DESC": {
+  "english": "A key that opens the Box of Challenge, where the First Emperor of Jin once hid rare treasures. But beware: sometimes a hidden mechanism in the box may cause damage..",
+  "basis": "translated-retail-korean",
+  "source": "과거에 진시황제가 진귀한 물건들을 숨겨놓은 도전의 상자를 열 수 있게 해주는 열쇠이다. 하지만 가끔씩은 상자에 숨겨져 있는 기관장치에 의해 피해를 입기도 하니 주의하기를.."
+ },
+ "SN_ITEM_ETC_TREASUREBOX_KEY_COURAGE_TT_DESC": {
+  "english": "A key that opens the Box of Courage, where the First Emperor of Jin once hid rare treasures. But beware: sometimes a hidden mechanism in the box may cause damage..",
+  "basis": "translated-retail-korean",
+  "source": "과거에 진시황제가 진귀한 물건들을 숨겨놓은 용기의 상자를 열 수 있게 해주는 열쇠이다. 하지만 가끔씩은 상자에 숨겨져 있는 기관장치에 의해 피해를 입기도 하니 주의하기를.."
+ },
+ "SN_ITEM_ETC_TREASUREBOX_KEY_HERO_TT_DESC": {
+  "english": "A key that opens the Box of Heroes, where the First Emperor of Jin once hid rare treasures. But beware: sometimes a hidden mechanism in the box may cause damage..",
+  "basis": "translated-retail-korean",
+  "source": "과거에 진시황제가 진귀한 물건들을 숨겨놓은 영웅의 상자를 열 수 있게 해주는 열쇠이다. 하지만 가끔씩은 상자에 숨겨져 있는 기관장치에 의해 피해를 입기도 하니 주의하기를.."
+ },
+ "SN_ITEM_ETC_TREASUREBOX_KEY_TRIAL_TT_DESC": {
+  "english": "A key that opens the Box of Trials, where the First Emperor of Jin once hid rare treasures. But beware: sometimes a hidden mechanism in the box may cause damage..",
+  "basis": "translated-retail-korean",
+  "source": "과거에 진시황제가 진귀한 물건들을 숨겨놓은 시련의 상자를 열 수 있게 해주는 열쇠이다. 하지만 가끔씩은 상자에 숨겨져 있는 기관장치에 의해 피해를 입기도 하니 주의하기를.."
+ },
+ "SN_ITEM_EU_TRADE_HUNTER_01_TT_DESC": {
+  "english": "A cape of old cloth painted with a cross, marking a novice hunter who has only just begun work as a hunter.",
+  "basis": "translated-retail-korean",
+  "source": "오래된 천에 십자가 문양이 그려진 망토로 헌터 일을 시작한지 얼마 안된 초보 헌터들의 신분을 상징한다."
+ },
+ "SN_ITEM_EU_TRADE_HUNTER_02_TT_DESC": {
+  "english": "A cape of old cloth painted with a cross, marking a novice hunter who has only just begun work as a hunter.",
+  "basis": "translated-retail-korean",
+  "source": "오래된 천에 십자가 문양이 그려진 망토로 헌터 일을 시작한지 얼마 안된 초보 헌터들의 신분을 상징한다."
+ },
+ "SN_ITEM_EU_TRADE_HUNTER_03_TT_DESC": {
+  "english": "A cape of fine cloth painted with a cross, marking a hunter who has finished training and set out in earnest to protect traders.",
+  "basis": "translated-retail-korean",
+  "source": "질 좋은 천에 십자가 문양이 그려진 망토로 수련을 마치고 본격적으로 상인들의 수호에 나선 헌터의 신분을 상징한다."
+ },
+ "SN_ITEM_EU_TRADE_HUNTER_04_TT_DESC": {
+  "english": "A cape of fine cloth painted with a cross, marking a hunter who has finished training and set out in earnest to protect traders.",
+  "basis": "translated-retail-korean",
+  "source": "질 좋은 천에 십자가 문양이 그려진 망토로 수련을 마치고 본격적으로 상인들의 수호에 나선 헌터의 신분을 상징한다."
+ },
+ "SN_ITEM_EU_TRADE_HUNTER_05_TT_DESC": {
+  "english": "A cape of beautiful silk engraved with a splendid cross, marking an outstanding hunter who roams the world punishing the wicked.",
+  "basis": "translated-retail-korean",
+  "source": "아름다운 비단에 화려한 십자가 문양을 새겨놓은 망토로 세상을 떠돌며 악한 자들을 응징하는 뛰어난 헌터의 신분을 상징한다."
+ },
+ "SN_ITEM_EU_TRADE_HUNTER_06_TT_DESC": {
+  "english": "A cape of beautiful silk engraved with a splendid cross, marking an outstanding hunter who roams the world punishing the wicked.",
+  "basis": "translated-retail-korean",
+  "source": "아름다운 비단에 화려한 십자가 문양을 새겨놓은 망토로 세상을 떠돌며 악한 자들을 응징하는 뛰어난 헌터의 신분을 상징한다."
+ },
+ "SN_ITEM_EU_TRADE_HUNTER_07_TT_DESC": {
+  "english": "A cape of the finest silk made from fairy wings and engraved with a cross, marking the finest hunter, who has given everything for justice on the Silk Road. (To be revised once the concept art is ready)",
+  "basis": "translated-retail-korean",
+  "source": "요정의 날개로 만든 최고의 비단에 십자가 문양을 새겨놓은 망토로 실크로드의 정의를 위해 자신의 모든 것을 바친 최고 헌터의 신분을 상징한다. (원화가 나온 후 수정)"
+ },
+ "SN_ITEM_EU_TRADE_HUNTER_08_TT_DESC": {
+  "english": "A cape of the finest silk made from fairy wings and engraved with a cross, marking the finest hunter, who has given everything for justice on the Silk Road. (To be revised once the concept art is ready)",
+  "basis": "translated-retail-korean",
+  "source": "요정의 날개로 만든 최고의 비단에 십자가 문양을 새겨놓은 망토로 실크로드의 정의를 위해 자신의 모든 것을 바친 최고 헌터의 신분을 상징한다. (원화가 나온 후 수정)"
+ },
+ "SN_ITEM_EU_TRADE_THIEF_01_TT_DESC": {
+  "english": "A dark full-body suit painted with a pattern of darkness, used by novice thieves to hide their mistakes.",
+  "basis": "translated-retail-korean",
+  "source": "어둠의 문양이 그려진 어두운 색의 전신복으로 초보도적들이 자신의 실수를 감추기 위해 사용한다."
+ },
+ "SN_ITEM_EU_TRADE_THIEF_02_TT_DESC": {
+  "english": "A dark full-body suit painted with a pattern of darkness, used by novice thieves to hide their mistakes.",
+  "basis": "translated-retail-korean",
+  "source": "어둠의 문양이 그려진 어두운 색의 전신복으로 초보도적들이 자신의 실수를 감추기 위해 사용한다."
+ },
+ "SN_ITEM_EU_TRADE_THIEF_03_TT_DESC": {
+  "english": "A dark full-body suit painted with a blood pattern, used by wicked thieves so their deeds go unnoticed.",
+  "basis": "translated-retail-korean",
+  "source": "피의 문양이 그려진 어두운 색의 전신복으로 악한 도적들이 자신의 행동을 들키지 않기 위해 사용한다."
+ },
+ "SN_ITEM_EU_TRADE_THIEF_04_TT_DESC": {
+  "english": "A dark full-body suit painted with a blood pattern, used by wicked thieves so their deeds go unnoticed.",
+  "basis": "translated-retail-korean",
+  "source": "피의 문양이 그려진 어두운 색의 전신복으로 악한 도적들이 자신의 행동을 들키지 않기 위해 사용한다."
+ },
+ "SN_ITEM_EU_TRADE_THIEF_05_TT_DESC": {
+  "english": "A splendid full-body suit painted with a bat pattern, used by seasoned thieves for quick thievery.",
+  "basis": "translated-retail-korean",
+  "source": "박쥐의 문양이 그려진 화려한 전신복으로 노련한 도적들이 빠른 도적질을 위해 사용한다."
+ },
+ "SN_ITEM_EU_TRADE_THIEF_06_TT_DESC": {
+  "english": "A splendid full-body suit painted with a bat pattern, used by seasoned thieves for quick thievery.",
+  "basis": "translated-retail-korean",
+  "source": "박쥐의 문양이 그려진 화려한 전신복으로 노련한 도적들이 빠른 도적질을 위해 사용한다."
+ },
+ "SN_ITEM_EU_TRADE_THIEF_07_TT_DESC": {
+  "english": "A splendid full-body suit painted with an eagle pattern, used by seasoned thieves for quick thievery. (To be revised once the concept art is ready)",
+  "basis": "translated-retail-korean",
+  "source": "독수리의 문양이 그려진 화려한 전신복으로 노련한 도적들이 빠른 도적질을 위해 사용한다. (원화가 나온 후 수정)"
+ },
+ "SN_ITEM_EU_TRADE_THIEF_08_TT_DESC": {
+  "english": "A splendid full-body suit painted with an eagle pattern, used by seasoned thieves for quick thievery. (To be revised once the concept art is ready)",
+  "basis": "translated-retail-korean",
+  "source": "독수리의 문양이 그려진 화려한 전신복으로 노련한 도적들이 빠른 도적질을 위해 사용한다. (원화가 나온 후 수정)"
+ },
+ "SN_ITEM_EU_TRADE_TRADER_01_TT_DESC": {
+  "english": "A trade bag used by novice traders. Made of bronze, it has a plain look.",
+  "basis": "translated-retail-korean",
+  "source": "초보 상인이 이용하는 무역용 가방으로 청동을 이용해 만들어 수수한 느낌이 든다."
+ },
+ "SN_ITEM_EU_TRADE_TRADER_02_TT_DESC": {
+  "english": "A trade bag used by novice traders. Made of bronze, it has a plain look.",
+  "basis": "translated-retail-korean",
+  "source": "초보 상인이 이용하는 무역용 가방으로 청동을 이용해 만들어 수수한 느낌이 든다."
+ },
+ "SN_ITEM_EU_TRADE_TRADER_03_TT_DESC": {
+  "english": "A trade bag used by small-scale traders, made of silver to be light and sturdy.",
+  "basis": "translated-retail-korean",
+  "source": "소규모 상인이 이용하는 무역용 가방으로 은을 이용해 가볍고 튼튼하게 만들었다."
+ },
+ "SN_ITEM_EU_TRADE_TRADER_04_TT_DESC": {
+  "english": "A trade bag used by small-scale traders, made of silver to be light and sturdy.",
+  "basis": "translated-retail-korean",
+  "source": "소규모 상인이 이용하는 무역용 가방으로 은을 이용해 가볍고 튼튼하게 만들었다."
+ },
+ "SN_ITEM_EU_TRADE_TRADER_05_TT_DESC": {
+  "english": "A trade bag used by well-known traders, beautifully made of gold.",
+  "basis": "translated-retail-korean",
+  "source": "이름이 알려진 상인이 이용하는 무역용 가방으로 금을 이용해 아름답게 만들었다."
+ },
+ "SN_ITEM_EU_TRADE_TRADER_06_TT_DESC": {
+  "english": "A trade bag used by well-known traders, beautifully made of gold.",
+  "basis": "translated-retail-korean",
+  "source": "이름이 알려진 상인이 이용하는 무역용 가방으로 금을 이용해 아름답게 만들었다."
+ },
+ "SN_ITEM_EU_TRADE_TRADER_07_TT_DESC": {
+  "english": "A trade bag used by the finest traders, splendidly adorned with jewels so the wearer's status can be recognized even from afar. (To be revised once the concept art is ready)",
+  "basis": "translated-retail-korean",
+  "source": "최고의 상인이 이용하는 무역용 가방으로 보석을 치장하여 화려하게 만들어 먼 곳에서도 착용자의 신분을 알아볼 수 있다. (원화가 나온 후 수정)"
+ },
+ "SN_ITEM_EU_TRADE_TRADER_08_TT_DESC": {
+  "english": "A trade bag used by the finest traders, splendidly adorned with jewels so the wearer's status can be recognized even from afar. (To be revised once the concept art is ready)",
+  "basis": "translated-retail-korean",
+  "source": "최고의 상인이 이용하는 무역용 가방으로 보석을 치장하여 화려하게 만들어 먼 곳에서도 착용자의 신분을 알아볼 수 있다. (원화가 나온 후 수정)"
+ },
+ "SN_ITEM_MALL_AVATAR_M_CH_WEDDING_HAT_TT_DESC": {
+  "english": "A crown worn by Chinese emperors and lords at ceremonies.",
+  "basis": "translated-retail-korean",
+  "source": "중국 황제나 제후들이 예식을 행할 때 쓰는 관."
+ },
+ "SN_ITEM_MALL_AVATAR_M_CH_WEDDING_TT_DESC": {
+  "english": "Wedding robes worn by Chinese emperors and lords.",
+  "basis": "translated-retail-korean",
+  "source": "중국 황제나 제후가 입는 결혼식 예복."
+ },
+ "SN_ITEM_MALL_AVATAR_M_EU_WEDDING_HAT_TT_DESC": {
+  "english": "A brimless hat made in Europe.\nIts value depends on the material, but everyone wears it regardless of status.",
+  "basis": "translated-retail-korean",
+  "source": "유럽에서 만들어진 테두리가 없는 모자.\n재질에 따라 가치가 다르지만, 신분에 상관없이 누구나 즐겨 착용한다."
+ },
+ "SN_ITEM_MALL_AVATAR_M_EU_WEDDING_TT_DESC": {
+  "english": "Men's formal wear made of white silk and cloth.\nWorn mainly by European nobles at ceremonies, soirees and theater outings.",
+  "basis": "translated-retail-korean",
+  "source": "흰색 비단과 천으로 지은 남자용 예복.\n유럽의 귀족들이 의식이나 야회, 관극(觀劇) 등에 주로 착용하는 의상."
+ },
+ "SN_ITEM_MALL_AVATAR_M_FUR_HAT_TT_DESC": {
+  "english": "A hat made of animal hide",
+  "basis": "translated-retail-korean",
+  "source": "동물 가죽으로 만든 모자"
+ },
+ "SN_ITEM_MALL_AVATAR_W_CH_WEDDING_HAT_TT_DESC": {
+  "english": "A crown worn by the Chinese empress.",
+  "basis": "translated-retail-korean",
+  "source": "중국 황후가 쓰는 관."
+ },
+ "SN_ITEM_MALL_AVATAR_W_CH_WEDDING_TT_DESC": {
+  "english": "Wedding robes worn by the Chinese empress.",
+  "basis": "translated-retail-korean",
+  "source": "중국 황후가 입는 결혼식 예복."
+ },
+ "SN_ITEM_MALL_AVATAR_W_EU_WEDDING_HAT_TT_DESC": {
+  "english": "A bride's headdress worn at weddings.",
+  "basis": "translated-retail-korean",
+  "source": "결혼식에서 사용되는 신부의 머리 장식."
+ },
+ "SN_ITEM_MALL_AVATAR_W_EU_WEDDING_TT_DESC": {
+  "english": "The dress a bride wears at her wedding.\nWorn only on special days, it is very luxurious.",
+  "basis": "translated-retail-korean",
+  "source": "결혼식에서 신부가 착용하는 의상.\n특별한 날에만 입는 의상으로 매우 고급스럽다."
+ },
+ "SN_ITEM_MALL_AVATAR_W_FUR_HAT_TT_DESC": {
+  "english": "A hat made of animal hide",
+  "basis": "translated-retail-korean",
+  "source": "동물 가죽으로 만든 모자"
+ },
+ "SN_ITEM_MALL_EQUIP_TRANSGENDER_4_TT_DESC": {
+  "english": "<sml2>Changes the gender of armor up to 12th degree.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>After using the tool, select the armor to convert and the item's gender changes.<br><br><strong><font color=\"255,236,219,156\">Conditions</font></strong><br>Can only be used while the target is in your inventory, and only on armor of 12th degree or lower.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>12차 방어구까지 성별을 전환할 수 있습니다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>도구를 사용한 후 전환시킬 방어구를 선택하면 아이템의 성별이 바뀝니다.<br><br><strong><font color=\"255,236,219,156\">조건</font></strong><br>전환시킬 대상이 인벤토리에 있을 때만 사용 할 수 있으며, 12차이하의 방어구에만 사용 할 수 있습니다.</sml2>"
+ },
+ "SN_ITEM_MALL_FRIEND_RETURN_SCROLL_TT_DESC": {
+  "english": "A scroll that lets you summon a friend or visit their location.",
+  "basis": "translated-retail-korean",
+  "source": "친구를 소환 하거나 상대방의 위치로 방문할 수 있는 스크롤 입니다."
+ },
+ "SN_ITEM_MALL_GACHA_CARD_LOSE_TT_DESC": {
+  "english": "Bring it to the exchange NPC to exchange it for an item.",
+  "basis": "translated-retail-korean",
+  "source": "교환NPC에게 가져다 주면 아이템으로 교환해 준다."
+ },
+ "SN_ITEM_MALL_GACHA_CARD_SILVER_TT_DESC": {
+  "english": "A card used for Magic Pang.\nEach Silver Pang card allows one game of Magic Pang.",
+  "basis": "translated-retail-korean",
+  "source": "요술 팡에 사용되는 카드 입니다.\n실버 팡 카드 1장당 요술 팡 게임 1회를 사용 할 수 있습니다."
+ },
+ "SN_ITEM_MALL_GACHA_CARD_TT_DESC": {
+  "english": "A card used for Magic Pang.\nEach Pang card allows one game of Magic Pang.",
+  "basis": "translated-retail-korean",
+  "source": "요술 팡에 사용되는 카드 입니다.\n팡 카드 1장당 요술 팡 게임 1회를 사용 할 수 있습니다."
+ },
+ "SN_ITEM_MALL_GACHA_CARD_WIN_TT_DESC": {
+  "english": "Bring it to the exchange NPC to exchange it for an item.",
+  "basis": "translated-retail-korean",
+  "source": "교환NPC에게 가져다 주면 아이템으로 교환해 준다."
+ },
+ "SN_ITEM_MALL_HWAN_TT_DESC": {
+  "english": "Applies the Hwan effect when used.\nIf you return or log out while the Hwan item is in effect, \nthe Hwan effect disappears.",
+  "basis": "translated-retail-korean",
+  "source": "사용 시 환 효과가 적용 됩니다.\n환 아이템을 사용한 상태에서 귀환하거나 접속 종료 시 \n환 효과가 소멸됩니다."
+ },
+ "SN_ITEM_MALL_PET_SKILL_COLD_TT_DESC": {
+  "english": "<sml2>Lets a growth pet use Frost Force for a set time.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>Can only be used on growth pets.<br>Takes effect the moment it is used. Can only be used at level 5 or higher.<br><br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>성장 펫이 일정시간 동안 빙결을 사용할 수 있다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>성장펫에만 사용가능.<br>사용하는 순간 적용됩니다. 5레벨 이상일 때만 사용이 가능합니다.<br><br></sml2>"
+ },
+ "SN_ITEM_MALL_PET_SKILL_FIRE_TT_DESC": {
+  "english": "<sml2>Lets a growth pet use Fire Force for a set time.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>Can only be used on growth pets.<br>Takes effect the moment it is used. Can only be used at level 5 or higher.<br><br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>성장 펫이 일정시간 동안 화결을 사용할 수 있다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>성장펫에만 사용가능.<br>사용하는 순간 적용됩니다. 5레벨 이상일 때만 사용이 가능합니다.<br><br></sml2>"
+ },
+ "SN_ITEM_MALL_PET_SKILL_LIGHTNING_TT_DESC": {
+  "english": "<sml2>Lets a growth pet use Lightning Force for a set time.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>Can only be used on growth pets.<br>Takes effect the moment it is used. Can only be used at level 5 or higher.<br><br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>성장 펫이 일정시간 동안 뇌결을 사용할 수 있다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>성장펫에만 사용가능.<br>사용하는 순간 적용됩니다. 5레벨 이상일 때만 사용이 가능합니다.<br><br></sml2>"
+ },
+ "SN_ITEM_MALL_PET_WATCH_AGOL_4W_TT_DESC": {
+  "english": "<sml2>An item that gives a function pet an extra inventory and buff skills. <br>A mysterious watch made by Agol. It enables special functions.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>Can only be used on function pets.<br>Takes effect the moment it is used. Can only be used at level 5 or higher.<br><br><strong><font color=\"255,236,219,156\">Conditions</font></strong><br>Does not extend the pet's usage period.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>기능 펫에 추가로 인벤토리와 버프 스킬을 사용 할 수 있는 아이템. <br>아골이 만든 신비한 시계. 특수한 기능을 사용할 수 있다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>기능펫에만 사용가능.<br>사용하는 순간 적용됩니다. 5레벨 이상일 때만 사용이 가능합니다.<br><br><strong><font color=\"255,236,219,156\">조건</font></strong><br>펫 사용기간 연장 안됨.</sml2>"
+ },
+ "SN_ITEM_MALL_PET_WATCH_AGOL_TT_DESC": {
+  "english": "<sml2>An item that gives a function pet an extra inventory and buff skills. <br>A mysterious watch made by Agol. It enables special functions.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>Can only be used on function pets.<br>Takes effect the moment it is used. Can only be used at level 5 or higher.<br><br><strong><font color=\"255,236,219,156\">Conditions</font></strong><br>Does not extend the pet's usage period.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>기능 펫에 추가로 인벤토리와 버프 스킬을 사용 할 수 있는 아이템. <br>아골이 만든 신비한 시계. 특수한 기능을 사용할 수 있다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>기능펫에만 사용가능.<br>사용하는 순간 적용됩니다. 5레벨 이상일 때만 사용이 가능합니다.<br><br><strong><font color=\"255,236,219,156\">조건</font></strong><br>펫 사용기간 연장 안됨.</sml2>"
+ },
+ "SN_ITEM_MALL_PET_WATCH_CHULHYEN_4W_TT_DESC": {
+  "english": "<sml2>An item that gives a function pet an extra inventory and buff skills. <br>A mysterious watch made by Chulhyen. It enables special functions.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>Can only be used on function pets.<br>Takes effect the moment it is used. Can only be used at level 5 or higher.<br><br><strong><font color=\"255,236,219,156\">Conditions</font></strong><br>Does not extend the pet's usage period.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>기능 펫에 추가로 인벤토리와 버프 스킬을 사용 할 수 있는 아이템. <br>철현이 만든 신비한 시계. 특수한 기능을 사용할 수 있다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>기능펫에만 사용가능.<br>사용하는 순간 적용됩니다. 5레벨 이상일 때만 사용이 가능합니다.<br><br><strong><font color=\"255,236,219,156\">조건</font></strong><br>펫 사용기간 연장 안됨.</sml2>"
+ },
+ "SN_ITEM_MALL_PET_WATCH_CHULHYEN_TT_DESC": {
+  "english": "<sml2>An item that gives a function pet an extra inventory and buff skills. <br>A mysterious watch made by Chulsan. It enables special functions.<br><br><strong><font color=\"255,236,219,156\">How to use</font></strong><br>Can only be used on function pets.<br>Takes effect the moment it is used. Can only be used at level 5 or higher.<br><br><strong><font color=\"255,236,219,156\">Conditions</font></strong><br>Does not extend the pet's usage period.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>기능 펫에 추가로 인벤토리와 버프 스킬을 사용 할 수 있는 아이템. <br>철현이 만든 신비한 시계. 특수한 기능을 사용할 수 있다.<br><br><strong><font color=\"255,236,219,156\">사용방법</font></strong><br>기능펫에만 사용가능.<br>사용하는 순간 적용됩니다. 5레벨 이상일 때만 사용이 가능합니다.<br><br><strong><font color=\"255,236,219,156\">조건</font></strong><br>펫 사용기간 연장 안됨.</sml2>"
+ },
+ "SN_ITEM_MALL_STATS_POINT_RECALL_50LV_TT_DESC": {
+  "english": "Recalls all the stat points you have earned so far.",
+  "basis": "translated-retail-korean",
+  "source": "현재 까지 획득한 스탯 포인트를 모두 회수 합니다."
+ },
+ "SN_ITEM_MALL_STATS_POINT_RECALL_60LV_TT_DESC": {
+  "english": "Recalls all the stat points you have earned so far.",
+  "basis": "translated-retail-korean",
+  "source": "현재 까지 획득한 스탯 포인트를 모두 회수 합니다."
+ },
+ "SN_ITEM_MALL_STATS_POINT_RECALL_70LV_TT_DESC": {
+  "english": "Recalls all the stat points you have earned so far.",
+  "basis": "translated-retail-korean",
+  "source": "현재 까지 획득한 스탯 포인트를 모두 회수 합니다."
+ },
+ "SN_ITEM_MALL_STATS_POINT_RECALL_80LV_TT_DESC": {
+  "english": "Recalls all the stat points you have earned so far.",
+  "basis": "translated-retail-korean",
+  "source": "현재 까지 획득한 스탯 포인트를 모두 회수 합니다."
+ },
+ "SN_ITEM_MALL_STATS_POINT_RECALL_81LV_TT_DESC": {
+  "english": "Recalls all the stat points you have earned so far.",
+  "basis": "translated-retail-korean",
+  "source": "현재 까지 획득한 스탯 포인트를 모두 회수 합니다."
+ },
+ "SN_ITEM_MALL_STATS_POINT_RECALL_TT_DESC": {
+  "english": "Recalls all the stat points you have earned so far.",
+  "basis": "translated-retail-korean",
+  "source": "현재 까지 획득한 스탯 포인트를 모두 회수 합니다."
+ },
+ "SN_ITEM_QNO_RM_ARCHEMY_1_TT_DESC": {
+  "english": "The Roc's sharp claw. The weapon trader in Hotan is looking for one, so let's bring it to him.",
+  "basis": "translated-retail-korean",
+  "source": "괴조로크의 날카로운 발톱. 호탄의 무기 상인이 구하고 있다고 하니 그에게 가져가자."
+ },
+ "SN_ITEM_QNO_RM_ARCHEMY_2_TT_DESC": {
+  "english": "The Roc's blue feather. The armor trader in Hotan is looking for one, so let's bring it to her.",
+  "basis": "translated-retail-korean",
+  "source": "괴조 로크의 푸른 깃털. 호탄의 방어구 상인이 구하고 있다고 하니 그녀에게 가져가자."
+ },
+ "SN_ITEM_QNO_RM_ARCHEMY_3_TT_DESC": {
+  "english": "The Roc's red feather. The jewel lapidary in Hotan is looking for one, so let's bring it to him.",
+  "basis": "translated-retail-korean",
+  "source": "괴조 로크의 붉은 깃털. 호탄의 보석 세공사가 구하고 있다고 하니 그에게 가져가자."
+ },
+ "SN_ITEM_QNO_RM_ARCHEMY_4_TT_DESC": {
+  "english": "The vital energy left behind by Demon God Shaitan. The Nephrite Refiner in Hotan is looking for it, so let's bring it to him.",
+  "basis": "translated-retail-korean",
+  "source": "마신 샤이탄이 남긴 정기. 호탄의 연옥 제련소장이 구하고 있다고 하니 그에게 가져가자."
+ },
+ "SN_ITEM_QNO_RM_ARCHEMY_5_TT_DESC": {
+  "english": "The vital energy left behind by an Undine. The Nephrite Refiner in Hotan is looking for it, so let's bring it to him.",
+  "basis": "translated-retail-korean",
+  "source": "운디네가 남긴 정기. 호탄의 연옥 제련소장이 구하고 있다고 하니 그에게 가져가자."
+ },
+ "SN_ITEM_QNO_RM_ARCHEMY_6_TT_DESC": {
+  "english": "The vital energy left behind by a Salamander. The Nephrite Refiner in Hotan is looking for it, so let's bring it to him.",
+  "basis": "translated-retail-korean",
+  "source": "샐러맨더가 남긴 정기. 호탄의 연옥 제련소장이 구하고 있다고 하니 그에게 가져가자."
+ },
+ "SN_ITEM_QNO_RM_ARCHEMY_7_TT_DESC": {
+  "english": "The vital energy left behind by a Sylph. The Nephrite Refiner in Hotan is looking for it, so let's bring it to him.",
+  "basis": "translated-retail-korean",
+  "source": "실프가 남긴 정기. 호탄의 연옥 제련소장이 구하고 있다고 하니 그에게 가져가자."
+ },
+ "SN_ITEM_QNO_RM_ARCHEMY_8_TT_DESC": {
+  "english": "The vital energy left behind by a Gnome. The Nephrite Refiner in Hotan is looking for it, so let's bring it to him.",
+  "basis": "translated-retail-korean",
+  "source": "놈이 남긴 정기. 호탄의 연옥 제련소장이 구하고 있다고 하니 그에게 가져가자."
+ },
+ "SN_ITEM_QNO_RM_FLYSHIP1_3_01_TT_DESC": {
+  "english": "Bait for capturing Slowantinoke, cooldown 5 minutes",
+  "basis": "translated-retail-korean",
+  "source": "느림보 앤티노크 포획용 먹이, 재사용 시간 5분"
+ },
+ "SN_ITEM_QNO_RM_MEETROC_6_01_TT_DESC": {
+  "english": "A key that lets you pass through the Gate of the Ruler leading to the Roc's nest.",
+  "basis": "translated-retail-korean",
+  "source": "로크의 둥지로 통하는 지배자의 문을 통과할 수 있게 해주는 열쇠이다."
+ },
+ "SN_ITEM_QNO_RM_MEETROC_ECT_01_TT_DESC": {
+  "english": "A token prepared by the villagers of Mt. Roke to defeat the Roc. Earned each time you complete the Roc Expedition 5 quest. Collect 7 or more and visit a Mt. Roke villager to exchange them for an item that helps in battle.",
+  "basis": "translated-retail-korean",
+  "source": "괴조로크를 쓰러뜨리기 위해 로크산 마을 주민들이 준비한 징표. 로크 원정대5 퀘스트를 완료할 때마다 얻을 수 있다. 7개 이상 모으고 로크산 마을 주민에게 찾아가면 전투에 도움이 되는 아이템으로 교환할 수 있다."
+ },
+ "SN_ITEM_QNO_RM_MEETROC_ECT_02_TT_DESC": {
+  "english": "A token prepared by the villagers of Mt. Roke to defeat the Roc. Earned each time you complete the Roc Expedition 5 quest. Collect 10 or more and visit a Mt. Roke villager to exchange them for an item that helps in battle.",
+  "basis": "translated-retail-korean",
+  "source": "괴조로크를 쓰러뜨리기 위해 로크산 마을 주민들이 준비한 징표. 로크 원정대5 퀘스트를 완료할 때마다 얻을 수 있다. 10개 이상 모으고 로크산 마을 주민에게 찾아가면 전투에 도움이 되는 아이템으로 교환할 수 있다."
+ },
+ "SN_ITEM_QNO_RM_MEETROC_ECT_03_TT_DESC": {
+  "english": "A token prepared by the villagers of Mt. Roke to defeat the Roc. Earned each time you complete the Roc Expedition 5 quest. Collect 15 or more and visit a Mt. Roke villager to exchange them for an item that helps in battle.",
+  "basis": "translated-retail-korean",
+  "source": "괴조로크를 쓰러뜨리기 위해 로크산 마을 주민들이 준비한 징표. 로크 원정대5 퀘스트를 완료할 때마다 얻을 수 있다. 15개 이상 모으고 로크산 마을 주민에게 찾아가면 전투에 도움이 되는 아이템으로 교환할 수 있다."
+ },
+ "SN_ITEM_QNO_RM_MEETROC_ECT_2_01_TT_DESC": {
+  "english": "Attack rating +30%, parry ratio +30%, lasts 1 hour",
+  "basis": "translated-retail-korean",
+  "source": "명중률 30% 증가, 회피율 30% 증가, 유효시간 1시간"
+ },
+ "SN_ITEM_QNO_RM_MEETROC_ECT_3_01_TT_DESC": {
+  "english": "Recovers 50% of experience on resurrection.",
+  "basis": "translated-retail-korean",
+  "source": "부활 시 경험치가 50% 회복 됩니다."
+ },
+ "SN_ITEM_QNO_TQ_ORNAMENT_4_04_TT_DESC": {
+  "english": "Quest item\n1. Can only be used in the area while you are the party master.\n2. Even if you are not the party master, holding this item lets you meet Sarin Gi.",
+  "basis": "translated-retail-korean",
+  "source": "퀘스트 아이템\n1. 파티장일 때에만 해당 지역에서 사용 가능합니다.\n2. 파티장이 아니더라도 해당 아이템을 가지고 있으면 사린 기를 만날 수 있습니다."
+ },
+ "SN_ITEM_QNO_TQ_STONEBOARD_4_03_TT_DESC": {
+  "english": "Quest item\n1. Can only be used in the area while you are the party master.\n2. Even if you are not the party master, holding this item lets you meet General Hyeonrang.",
+  "basis": "translated-retail-korean",
+  "source": "퀘스트 아이템\n1. 파티장일 때에만 해당 지역에서 사용 가능합니다.\n2. 파티장이 아니더라도 해당 아이템을 가지고 있으면 장군 현랑을 만날 수 있습니다."
+ },
+ "SN_ITEM_QSP_RM_ARCHEMY_1_TT_DESC": {
+  "english": "A claw that looks extremely sharp and hard.\nA weapon trader near Mt. Roke would be quite pleased to have it.",
+  "basis": "translated-retail-korean",
+  "source": "굉장히 날카롭고 단단해 보이는 발톱입니다.\n로크산 근방의 무기 상인에게 가져가면 상당히 좋아할 것 같습니다."
+ },
+ "SN_ITEM_QSP_RM_ARCHEMY_2_TT_DESC": {
+  "english": "A tough, hard, bluish feather.\nAn armor trader near Mt. Roke would be quite pleased to have it.",
+  "basis": "translated-retail-korean",
+  "source": "푸른빛의 질기고 단단한 깃털입니다.\n로크산 근방의 방어구 상인에게 가져가면 상당히 좋아할 것 같습니다."
+ },
+ "SN_ITEM_QSP_RM_ARCHEMY_3_TT_DESC": {
+  "english": "A reddish feather with a mysterious energy.\nA General shop trader near Mt. Roke would be quite pleased to have it.",
+  "basis": "translated-retail-korean",
+  "source": "붉은빛의 신비한 기운이 느껴지는 깃털입니다.\n로크산 근방의 잡화점 상인에게 가져가면 상당히 좋아할 것 같습니다."
+ },
+ "SN_ITEM_QSP_RM_ARCHEMY_4_TT_DESC": {
+  "english": "A hard jewel with an evil energy.\nA jewel lapidary would be quite pleased to have it.",
+  "basis": "translated-retail-korean",
+  "source": "사악한 기운이 느껴지는 단단한 보석입니다.\n보석세공사에게 가져가면 상당히 좋아할 것 같습니다."
+ },
+ "SN_ITEM_QSP_RM_ARCHEMY_5_TT_DESC": {
+  "english": "A hard jewel with the energy of water.\nA jewel lapidary would be quite pleased to have it.",
+  "basis": "translated-retail-korean",
+  "source": "물의 기운이 느껴지는 단단한 보석입니다.\n보석세공사에게 가져가면 상당히 좋아할 것 같습니다."
+ },
+ "SN_ITEM_QSP_RM_ARCHEMY_6_TT_DESC": {
+  "english": "A hard jewel with the energy of fire.\nA jewel lapidary would be quite pleased to have it.",
+  "basis": "translated-retail-korean",
+  "source": "불의 기운이 느껴지는 단단한 보석입니다.\n보석세공사에게 가져가면 상당히 좋아할 것 같습니다."
+ },
+ "SN_ITEM_QSP_RM_ARCHEMY_7_TT_DESC": {
+  "english": "A hard jewel with the energy of wind.\nA jewel lapidary would be quite pleased to have it.",
+  "basis": "translated-retail-korean",
+  "source": "바람의 기운이 느껴지는 단단한 보석입니다.\n보석세공사에게 가져가면 상당히 좋아할 것 같습니다."
+ },
+ "SN_ITEM_QSP_RM_ARCHEMY_8_TT_DESC": {
+  "english": "A hard jewel with the energy of earth.\nA jewel lapidary would be quite pleased to have it.",
+  "basis": "translated-retail-korean",
+  "source": "땅의 기운이 느껴지는 단단한 보석입니다.\n보석세공사에게 가져가면 상당히 좋아할 것 같습니다."
+ },
+ "SN_MOB_CH_STRONG_MANGNYANG": {
+  "english": "Strong Mangyang",
+  "basis": "translated-retail-korean",
+  "source": "강한 망량"
+ },
+ "SN_MOB_CH_TIGERWOMAN_L2": {
+  "english": "Taebaek-class Tiger Girl",
+  "basis": "translated-retail-korean",
+  "source": "태백급 호녀"
+ },
+ "SN_MOB_CH_TIGERWOMAN_L3": {
+  "english": "Dorothy's Tiger Girl",
+  "basis": "translated-retail-korean",
+  "source": "도로시의 호녀"
+ },
+ "SN_MOB_EV_PUMPKIN": {
+  "english": "Gourd (Event)",
+  "basis": "translated-retail-korean",
+  "source": "박(이벤트)"
+ },
+ "SN_MOB_FM_BUTTERFLYBUG": {
+  "english": "Butterfly Ghost",
+  "basis": "translated-retail-korean",
+  "source": "호접귀"
+ },
+ "SN_MOB_FM_BUTTERFLYBUG_CAPTAIN": {
+  "english": "Butterfly Ghost Leader",
+  "basis": "translated-retail-korean",
+  "source": "호접귀령"
+ },
+ "SN_MOB_FM_COWKING": {
+  "english": "Mighty Bull Demon King",
+  "basis": "translated-retail-korean",
+  "source": "대력우마왕"
+ },
+ "SN_MOB_FM_DRAGONFLYBUG": {
+  "english": "Blue Dragonfly Ghost",
+  "basis": "translated-retail-korean",
+  "source": "청영귀"
+ },
+ "SN_MOB_FM_DRAGONFLYBUG_CAPTAIN": {
+  "english": "Blue Dragonfly Ghost Leader",
+  "basis": "translated-retail-korean",
+  "source": "청영귀령"
+ },
+ "SN_MOB_FM_FANFAIRY": {
+  "english": "Nachal Fairy",
+  "basis": "translated-retail-korean",
+  "source": "나찰선녀"
+ },
+ "SN_MOB_FM_FANFAIRY_CAPTAIN": {
+  "english": "Emerald Cloud Fairy",
+  "basis": "translated-retail-korean",
+  "source": "취운선녀"
+ },
+ "SN_MOB_FM_FANFAIRY_CLON": {
+  "english": "Yaksha Fairy",
+  "basis": "translated-retail-korean",
+  "source": "야차선녀"
+ },
+ "SN_MOB_FM_FANPRINCESS": {
+  "english": "Princess Iron Fan",
+  "basis": "translated-retail-korean",
+  "source": "철선공주"
+ },
+ "SN_MOB_FM_FLAMEBUG": {
+  "english": "Flame Bug Cheol",
+  "basis": "translated-retail-korean",
+  "source": "화염충 철"
+ },
+ "SN_MOB_FM_FLAMEBUG_CAPTAIN": {
+  "english": "Jagged Flame Bug",
+  "basis": "translated-retail-korean",
+  "source": "요철 화염충"
+ },
+ "SN_MOB_FM_FLAMEBUG_CAPTAIN_CLON": {
+  "english": "Ghost Feather Flame Bug",
+  "basis": "translated-retail-korean",
+  "source": "귀우 화염충"
+ },
+ "SN_MOB_FM_FLAMEBUG_CLON": {
+  "english": "Flame Bug U",
+  "basis": "translated-retail-korean",
+  "source": "화염충 우"
+ },
+ "SN_MOB_FM_FLAMEBUG_CLON2": {
+  "english": "Treasure Flame Bug",
+  "basis": "translated-retail-korean",
+  "source": "보물 화염충"
+ },
+ "SN_MOB_FM_FLAMEMAN": {
+  "english": "Storm Feathered Man",
+  "basis": "translated-retail-korean",
+  "source": "폭우인"
+ },
+ "SN_MOB_FM_FLAMEMAN_CAPTAIN": {
+  "english": "Flame Storm Feathered Man",
+  "basis": "translated-retail-korean",
+  "source": "화염 폭우인"
+ },
+ "SN_MOB_FM_FLAMEMAN_CLON": {
+  "english": "Blaze Feathered Man",
+  "basis": "translated-retail-korean",
+  "source": "염우인"
+ },
+ "SN_MOB_FM_FLAMEMAN_CLON2": {
+  "english": "Seop Feathered Man",
+  "basis": "translated-retail-korean",
+  "source": "섭우인"
+ },
+ "SN_MOB_FM_FLAMEMONKEY": {
+  "english": "Seop Ape",
+  "basis": "translated-retail-korean",
+  "source": "섭원"
+ },
+ "SN_MOB_FM_FLAMEMONKEY_CAPTAIN": {
+  "english": "Fire Seop Ape",
+  "basis": "translated-retail-korean",
+  "source": "화섭원"
+ },
+ "SN_MOB_FM_FLAMEMONKEY_CLON": {
+  "english": "Fire Ape",
+  "basis": "translated-retail-korean",
+  "source": "화원"
+ },
+ "SN_MOB_FM_FLAMEMUJIGY": {
+  "english": "Volcano Ujigi",
+  "basis": "translated-retail-korean",
+  "source": "화산 우지기"
+ },
+ "SN_MOB_FM_FLAMEMUJIGY_CAPTAIN": {
+  "english": "Heuksu Jigi",
+  "basis": "translated-retail-korean",
+  "source": "흑수지기"
+ },
+ "SN_MOB_FM_FLAMEMUJIGY_CLON": {
+  "english": "Volcano Mujigi",
+  "basis": "translated-retail-korean",
+  "source": "화산 무지기"
+ },
+ "SN_MOB_FM_FLAMENACHAL": {
+  "english": "Yomang Nachal",
+  "basis": "translated-retail-korean",
+  "source": "요망나찰"
+ },
+ "SN_MOB_FM_FLAMENACHAL_CAPTAIN": {
+  "english": "Nachal Flame Emperor",
+  "basis": "translated-retail-korean",
+  "source": "나찰염제"
+ },
+ "SN_MOB_FM_FLAMENACHAL_CLON": {
+  "english": "Yomae Nachal",
+  "basis": "translated-retail-korean",
+  "source": "요매나찰"
+ },
+ "SN_MOB_FM_FLAMEREDGHOST": {
+  "english": "Strange-Eyed Volcano Demon",
+  "basis": "translated-retail-korean",
+  "source": "괴안화산마"
+ },
+ "SN_MOB_FM_FLAMEREDGHOST_CAPTAIN": {
+  "english": "Fire Demon",
+  "basis": "translated-retail-korean",
+  "source": "화마"
+ },
+ "SN_MOB_FM_FLAMEREDGHOST_CLON": {
+  "english": "Red-Eyed Flame Demon",
+  "basis": "translated-retail-korean",
+  "source": "적안화염마"
+ },
+ "SN_MOB_FM_MONKEYGHOST": {
+  "english": "Battle God Sun Wukong",
+  "basis": "translated-retail-korean",
+  "source": "투신 손오공"
+ },
+ "SN_MOB_FM_MONKEYGHOST_CAPTAIN": {
+  "english": "Great Sage Who Quells Flame",
+  "basis": "translated-retail-korean",
+  "source": "제염대성"
+ },
+ "SN_MOB_FM_MONKEYGHOST_CLON": {
+  "english": "Dark Sun Wukong",
+  "basis": "translated-retail-korean",
+  "source": "암흑 손오공"
+ },
+ "SN_MOB_FM_PIGGHOST": {
+  "english": "Marshal Tianpeng Zhu Bajie",
+  "basis": "translated-retail-korean",
+  "source": "천봉 저팔계"
+ },
+ "SN_MOB_FM_PIGGHOST_CAPTAIN": {
+  "english": "Marshal Tianpeng",
+  "basis": "translated-retail-korean",
+  "source": "천봉원수"
+ },
+ "SN_MOB_FM_PIGGHOST_CLON": {
+  "english": "Jeongdan Zhu Bajie",
+  "basis": "translated-retail-korean",
+  "source": "정단 저팔계"
+ },
+ "SN_MOB_FM_SMALLFLAMEBUG": {
+  "english": "Flame Bug Messenger",
+  "basis": "translated-retail-korean",
+  "source": "화염충 사자"
+ },
+ "SN_MOB_FM_SMALLMONKEYGHOST": {
+  "english": "Sun Wukong Jr.",
+  "basis": "translated-retail-korean",
+  "source": "손오공 Jr."
+ },
+ "SN_MOB_FM_WATERDEMON": {
+  "english": "Battle Sha Wujing",
+  "basis": "translated-retail-korean",
+  "source": "투전 사오정"
+ },
+ "SN_MOB_FM_WATERDEMON_CAPTAIN": {
+  "english": "Curtain-Raising General",
+  "basis": "translated-retail-korean",
+  "source": "권렴대장"
+ },
+ "SN_MOB_FM_WATERDEMON_CLON": {
+  "english": "Flowing River Sha Wujing",
+  "basis": "translated-retail-korean",
+  "source": "유하 사오정"
+ },
+ "SN_MOB_FM_WOLFGHOST": {
+  "english": "Tiger Strength Great Wolf",
+  "basis": "translated-retail-korean",
+  "source": "호력대오"
+ },
+ "SN_MOB_FM_WOLFGHOST_CAPTAIN": {
+  "english": "True Tiger Strength Captain",
+  "basis": "translated-retail-korean",
+  "source": "진 호력대장"
+ },
+ "SN_MOB_FM_WOLFGHOST_CLON": {
+  "english": "Goat Strength Great Wolf",
+  "basis": "translated-retail-korean",
+  "source": "양력대오"
+ },
+ "SN_MOB_FM_WOLFGHOST_CLON2": {
+  "english": "Deer Strength Great Wolf",
+  "basis": "translated-retail-korean",
+  "source": "녹력대오"
+ },
+ "SN_MOB_HUNTER_NPC": {
+  "english": "Hunter",
+  "basis": "translated-retail-korean",
+  "source": "헌터"
+ },
+ "SN_MOB_KK_ISYUTARU_L2": {
+  "english": "Halla-class Isyutaru",
+  "basis": "translated-retail-korean",
+  "source": "한라급 이슈타르"
+ },
+ "SN_MOB_KK_ISYUTARU_L3": {
+  "english": "Sinus's Isyutaru",
+  "basis": "translated-retail-korean",
+  "source": "시누스의 이슈타르"
+ },
+ "SN_MOB_OA_URUCHI_L2": {
+  "english": "Geumgang-class Uruchi",
+  "basis": "translated-retail-korean",
+  "source": "금강급 우르치"
+ },
+ "SN_MOB_OA_URUCHI_L3": {
+  "english": "Minerva's Uruchi",
+  "basis": "translated-retail-korean",
+  "source": "미네르바의 우르치"
+ },
+ "SN_MOB_QT_01_ANTELOPE_CLON_COS": {
+  "english": "Slowantinoke",
+  "basis": "translated-retail-korean",
+  "source": "느림보 앤티노크"
+ },
+ "SN_MOB_QT_CH_CHARGHOST_01": {
+  "english": "Wandering Soul",
+  "basis": "translated-retail-korean",
+  "source": "떠도는 영혼"
+ },
+ "SN_MOB_QT_CH_CHARGHOST_02": {
+  "english": "Soul of the Underworld",
+  "basis": "translated-retail-korean",
+  "source": "명계의 영혼"
+ },
+ "SN_MOB_QT_CH_SOLDIER_01_1": {
+  "english": "Camp Commander",
+  "basis": "translated-retail-korean",
+  "source": "군영의 장수"
+ },
+ "SN_MOB_QT_CH_SOLDIER_01_2": {
+  "english": "Camp Archer",
+  "basis": "translated-retail-korean",
+  "source": "군영의 궁수"
+ },
+ "SN_MOB_QT_CH_SOLDIER_02_1": {
+  "english": "Camp Commander",
+  "basis": "translated-retail-korean",
+  "source": "군영의 장수"
+ },
+ "SN_MOB_QT_CH_SOLDIER_02_2": {
+  "english": "Camp Healer",
+  "basis": "translated-retail-korean",
+  "source": "군영의 치유사"
+ },
+ "SN_MOB_QT_CH_TOMBSTONE_01": {
+  "english": "Old Tombstone Ghost",
+  "basis": "translated-retail-korean",
+  "source": "오래된 비석귀"
+ },
+ "SN_MOB_QT_EU_SOLDIER_01_1": {
+  "english": "Army Officer",
+  "basis": "translated-retail-korean",
+  "source": "군대의 장교"
+ },
+ "SN_MOB_QT_EU_SOLDIER_01_2": {
+  "english": "Army Archer",
+  "basis": "translated-retail-korean",
+  "source": "군대의 궁수"
+ },
+ "SN_MOB_QT_EU_SOLDIER_02_1": {
+  "english": "Army Officer",
+  "basis": "translated-retail-korean",
+  "source": "군대의 장교"
+ },
+ "SN_MOB_QT_EU_SOLDIER_02_2": {
+  "english": "Army Healer",
+  "basis": "translated-retail-korean",
+  "source": "군대의 치유사"
+ },
+ "SN_MOB_QT_TQ_BLACKSNAKE": {
+  "english": "Black Snake Soso",
+  "basis": "translated-retail-korean",
+  "source": "흑사 소소"
+ },
+ "SN_MOB_QT_TQ_EASTGUARDIAN": {
+  "english": "White Tiger Soho",
+  "basis": "translated-retail-korean",
+  "source": "백호 소호"
+ },
+ "SN_MOB_QT_TQ_FLAMEMASTER": {
+  "english": "Sinmu",
+  "basis": "translated-retail-korean",
+  "source": "신무"
+ },
+ "SN_MOB_QT_TQ_NORTHGUARDIAN": {
+  "english": "Black Tortoise Jeonuk",
+  "basis": "translated-retail-korean",
+  "source": "현무 전욱"
+ },
+ "SN_MOB_QT_TQ_SNAKEGENERAL1": {
+  "english": "Sarin Gi",
+  "basis": "translated-retail-korean",
+  "source": "사린 기"
+ },
+ "SN_MOB_QT_TQ_SNAKEGENERAL2": {
+  "english": "Sarin Jeong",
+  "basis": "translated-retail-korean",
+  "source": "사린 정"
+ },
+ "SN_MOB_QT_TQ_SNAKEGENERAL3": {
+  "english": "Sarin Yul",
+  "basis": "translated-retail-korean",
+  "source": "사린 율"
+ },
+ "SN_MOB_QT_TQ_SNAKEGENERAL4": {
+  "english": "Sarin Hyu",
+  "basis": "translated-retail-korean",
+  "source": "사린 휴"
+ },
+ "SN_MOB_QT_TQ_SNAKEMAN": {
+  "english": "Sarin Cheon",
+  "basis": "translated-retail-korean",
+  "source": "사린천"
+ },
+ "SN_MOB_QT_TQ_SOUTHGUARDIAN": {
+  "english": "Vermilion Bird Yeomje",
+  "basis": "translated-retail-korean",
+  "source": "주작 염제"
+ },
+ "SN_MOB_QT_TQ_THIEF_01": {
+  "english": "Thief of the Trader Guild",
+  "basis": "translated-retail-korean",
+  "source": "상인조합의 도둑"
+ },
+ "SN_MOB_QT_TQ_THIEF_01_COS": {
+  "english": "Thief of the Trader Guild",
+  "basis": "translated-retail-korean",
+  "source": "상인조합의 도둑"
+ },
+ "SN_MOB_QT_TQ_THIEF_02": {
+  "english": "Assassin",
+  "basis": "translated-retail-korean",
+  "source": "살수"
+ },
+ "SN_MOB_QT_TQ_TOMBGENERAL1": {
+  "english": "General Hyeonrang",
+  "basis": "translated-retail-korean",
+  "source": "장군 현랑"
+ },
+ "SN_MOB_QT_TQ_TOMBGENERAL2": {
+  "english": "General Bigyeong",
+  "basis": "translated-retail-korean",
+  "source": "장군 비경"
+ },
+ "SN_MOB_QT_TQ_TOMBGENERAL3": {
+  "english": "General Horyu",
+  "basis": "translated-retail-korean",
+  "source": "장군 호류"
+ },
+ "SN_MOB_QT_TQ_TOMBGENERAL4": {
+  "english": "General Jinhu",
+  "basis": "translated-retail-korean",
+  "source": "장군 진후"
+ },
+ "SN_MOB_QT_TQ_WESTGUARDIAN": {
+  "english": "Azure Dragon Taeho",
+  "basis": "translated-retail-korean",
+  "source": "청룡 태호"
+ },
+ "SN_MOB_QT_TQ_WHITESNAKE": {
+  "english": "Baekryeong",
+  "basis": "translated-retail-korean",
+  "source": "백령"
+ },
+ "SN_MOB_RM_DEVILSAYTAN": {
+  "english": "Demon God Shaitan",
+  "basis": "translated-retail-korean",
+  "source": "마신 샤이탄"
+ },
+ "SN_MOB_RM_GUARDROCKY": {
+  "english": "Rocky Javanis",
+  "basis": "translated-retail-korean",
+  "source": "로키 자바니스"
+ },
+ "SN_MOB_RM_GUARDROCKY_LEADER": {
+  "english": "Rocky Malik",
+  "basis": "translated-retail-korean",
+  "source": "로키 말리크"
+ },
+ "SN_MOB_RM_SEALSTONE": {
+  "english": "Seal Stone of Vital Energy",
+  "basis": "translated-retail-korean",
+  "source": "정기의 봉인석"
+ },
+ "SN_MOB_RM_SPIRITS": {
+  "english": "Undine",
+  "basis": "translated-retail-korean",
+  "source": "운디네"
+ },
+ "SN_MOB_RM_SPIRITS_CLON": {
+  "english": "Salamander",
+  "basis": "translated-retail-korean",
+  "source": "샐러맨더"
+ },
+ "SN_MOB_RM_SPIRITS_CLON2": {
+  "english": "Sylph",
+  "basis": "translated-retail-korean",
+  "source": "실프"
+ },
+ "SN_MOB_RM_SPIRITS_CLON3": {
+  "english": "Gnome",
+  "basis": "translated-retail-korean",
+  "source": "놈"
+ },
+ "SN_MOB_RM_TAHOMET_L2": {
+  "english": "Cheonha-class Demon Shaitan",
+  "basis": "translated-retail-korean",
+  "source": "천하급 마인 샤이탄"
+ },
+ "SN_MOB_RM_TAHOMET_L3": {
+  "english": "Aroyang's Demon Shaitan",
+  "basis": "translated-retail-korean",
+  "source": "아로양의 마인 샤이탄"
+ },
+ "SN_MOB_RM_WINGTRIBEDUKE": {
+  "english": "Wing Tribe Duke",
+  "basis": "translated-retail-korean",
+  "source": "윙트라이브 듀크"
+ },
+ "SN_MOB_RM_WINGTRIBEKNIGHT": {
+  "english": "Wing Tribe Knight",
+  "basis": "translated-retail-korean",
+  "source": "윙트라이브 나이트"
+ },
+ "SN_MOB_TK_BONELORD_L2": {
+  "english": "Baekdu-class Lord Yarkan",
+  "basis": "translated-retail-korean",
+  "source": "백두급 로드 야르칸"
+ },
+ "SN_MOB_TK_BONELORD_L3": {
+  "english": "Noah's Lord Yarkan",
+  "basis": "translated-retail-korean",
+  "source": "노아의 로드 야르칸"
+ },
+ "SN_MOB_TQ_BLACKSNAKE": {
+  "english": "Black Snake Soso",
+  "basis": "translated-retail-korean",
+  "source": "흑사 소소"
+ },
+ "SN_MOB_TQ_BLACKSNAKE_L3": {
+  "english": "Hades's Black Snake Soso",
+  "basis": "translated-retail-korean",
+  "source": "하데스의 흑사 소소"
+ },
+ "SN_MOB_TQ_BOMBSTONEGHOST": {
+  "english": "Exploding Stone Ghost",
+  "basis": "translated-retail-korean",
+  "source": "폭멸 석정귀"
+ },
+ "SN_MOB_TQ_EASTGUARDIAN": {
+  "english": "White Tiger Soho",
+  "basis": "translated-retail-korean",
+  "source": "백호 소호"
+ },
+ "SN_MOB_TQ_FLAMEMASTER": {
+  "english": "Flame Master Sinmu",
+  "basis": "translated-retail-korean",
+  "source": "염화객 신무"
+ },
+ "SN_MOB_TQ_NORTHGUARDIAN": {
+  "english": "Black Tortoise Jeonuk",
+  "basis": "translated-retail-korean",
+  "source": "현무 전욱"
+ },
+ "SN_MOB_TQ_QINSHITOMBSTONE": {
+  "english": "Tombstone Ghost Hyeol",
+  "basis": "translated-retail-korean",
+  "source": "비석귀 혈"
+ },
+ "SN_MOB_TQ_QINSHITOMBSTONE_CLON": {
+  "english": "Tombstone Essence Hwa",
+  "basis": "translated-retail-korean",
+  "source": "비석정 화"
+ },
+ "SN_MOB_TQ_QINSHITOMBSTONE_CLON2": {
+  "english": "Tombstone Spirit Gi",
+  "basis": "translated-retail-korean",
+  "source": "비석령 기"
+ },
+ "SN_MOB_TQ_QINSHITRAP1": {
+  "english": "Geon",
+  "basis": "translated-retail-korean",
+  "source": "건"
+ },
+ "SN_MOB_TQ_QINSHITRAP2": {
+  "english": "Tae",
+  "basis": "translated-retail-korean",
+  "source": "태"
+ },
+ "SN_MOB_TQ_QINSHITRAP3": {
+  "english": "Ri",
+  "basis": "translated-retail-korean",
+  "source": "이"
+ },
+ "SN_MOB_TQ_QINSHITRAP4": {
+  "english": "Jin",
+  "basis": "translated-retail-korean",
+  "source": "진"
+ },
+ "SN_MOB_TQ_QINSHITRAP5": {
+  "english": "Son",
+  "basis": "translated-retail-korean",
+  "source": "손"
+ },
+ "SN_MOB_TQ_QINSHITRAP6": {
+  "english": "Gam",
+  "basis": "translated-retail-korean",
+  "source": "감"
+ },
+ "SN_MOB_TQ_ROYALSOLDIER": {
+  "english": "Elite Clay Soldier",
+  "basis": "translated-retail-korean",
+  "source": "정예토병"
+ },
+ "SN_MOB_TQ_ROYALSOLDIER_CLON": {
+  "english": "Guardian Clay Soldier",
+  "basis": "translated-retail-korean",
+  "source": "수호토병"
+ },
+ "SN_MOB_TQ_ROYALSOLDIER_CLON2": {
+  "english": "Escort Clay Soldier",
+  "basis": "translated-retail-korean",
+  "source": "호위토병"
+ },
+ "SN_MOB_TQ_SMALLSTONEGHOST": {
+  "english": "Young Stone Ghost",
+  "basis": "translated-retail-korean",
+  "source": "새끼 석정귀"
+ },
+ "SN_MOB_TQ_SNAKEDEMON": {
+  "english": "Flame Serpent Beast",
+  "basis": "translated-retail-korean",
+  "source": "불꽃의 사령수"
+ },
+ "SN_MOB_TQ_SNAKEDEMON_CLON": {
+  "english": "Wind Serpent Beast",
+  "basis": "translated-retail-korean",
+  "source": "바람의 사령수"
+ },
+ "SN_MOB_TQ_SNAKEDEMON_CLON2": {
+  "english": "Frost Serpent Beast",
+  "basis": "translated-retail-korean",
+  "source": "냉기의 사령수"
+ },
+ "SN_MOB_TQ_SNAKEGENERAL": {
+  "english": "Sarin Gi",
+  "basis": "translated-retail-korean",
+  "source": "사린 기"
+ },
+ "SN_MOB_TQ_SNAKEGENERAL_CLON": {
+  "english": "Sarin Jeong",
+  "basis": "translated-retail-korean",
+  "source": "사린 정"
+ },
+ "SN_MOB_TQ_SNAKEGENERAL_CLON2": {
+  "english": "Sarin Yul",
+  "basis": "translated-retail-korean",
+  "source": "사린 율"
+ },
+ "SN_MOB_TQ_SNAKEGENERAL_CLON3": {
+  "english": "Sarin Hyu",
+  "basis": "translated-retail-korean",
+  "source": "사린 휴"
+ },
+ "SN_MOB_TQ_SNAKEMAN": {
+  "english": "Sarin Cheon",
+  "basis": "translated-retail-korean",
+  "source": "사린천"
+ },
+ "SN_MOB_TQ_SNAKEMAN_CLON": {
+  "english": "Sarin Yeom",
+  "basis": "translated-retail-korean",
+  "source": "사린염"
+ },
+ "SN_MOB_TQ_SNAKEMAN_CLON2": {
+  "english": "Sarin Ho",
+  "basis": "translated-retail-korean",
+  "source": "사린호"
+ },
+ "SN_MOB_TQ_SNAKESLAVE": {
+  "english": "Hwasa",
+  "basis": "translated-retail-korean",
+  "source": "화사"
+ },
+ "SN_MOB_TQ_SNAKESLAVE_CLON": {
+  "english": "Geuksa",
+  "basis": "translated-retail-korean",
+  "source": "극사"
+ },
+ "SN_MOB_TQ_SNAKESLAVE_CLON2": {
+  "english": "Myeongsa",
+  "basis": "translated-retail-korean",
+  "source": "명사"
+ },
+ "SN_MOB_TQ_SNAKETRAP1": {
+  "english": "Geon",
+  "basis": "translated-retail-korean",
+  "source": "건"
+ },
+ "SN_MOB_TQ_SNAKETRAP2": {
+  "english": "Tae",
+  "basis": "translated-retail-korean",
+  "source": "태"
+ },
+ "SN_MOB_TQ_SNAKETRAP3": {
+  "english": "Ri",
+  "basis": "translated-retail-korean",
+  "source": "이"
+ },
+ "SN_MOB_TQ_SNAKETRAP4": {
+  "english": "Jin",
+  "basis": "translated-retail-korean",
+  "source": "진"
+ },
+ "SN_MOB_TQ_SNAKETRAP5": {
+  "english": "Son",
+  "basis": "translated-retail-korean",
+  "source": "손"
+ },
+ "SN_MOB_TQ_SNAKETRAP6": {
+  "english": "Gam",
+  "basis": "translated-retail-korean",
+  "source": "감"
+ },
+ "SN_MOB_TQ_SNAKEWOMAN": {
+  "english": "Yohwa Sarin",
+  "basis": "translated-retail-korean",
+  "source": "요화사린"
+ },
+ "SN_MOB_TQ_SNAKEWOMAN_CLON": {
+  "english": "Dokmu Sarin",
+  "basis": "translated-retail-korean",
+  "source": "독무사린"
+ },
+ "SN_MOB_TQ_SNAKEWOMAN_CLON2": {
+  "english": "Uiseon Sarin",
+  "basis": "translated-retail-korean",
+  "source": "의선사린"
+ },
+ "SN_MOB_TQ_SNAKEWOMAN_CLON3": {
+  "english": "Yohwa Sarin",
+  "basis": "translated-retail-korean",
+  "source": "요화사린"
+ },
+ "SN_MOB_TQ_SOUTHGUARDIAN": {
+  "english": "Vermilion Bird Yeomje",
+  "basis": "translated-retail-korean",
+  "source": "주작 염제"
+ },
+ "SN_MOB_TQ_TOMBARCHER": {
+  "english": "Myeolcheon Clay Archer",
+  "basis": "translated-retail-korean",
+  "source": "멸천 활토병"
+ },
+ "SN_MOB_TQ_TOMBARCHER_CLON": {
+  "english": "Pacheon Clay Archer",
+  "basis": "translated-retail-korean",
+  "source": "파천 활토병"
+ },
+ "SN_MOB_TQ_TOMBARCHER_CLON2": {
+  "english": "Bicheon Clay Archer",
+  "basis": "translated-retail-korean",
+  "source": "비천 활토병"
+ },
+ "SN_MOB_TQ_TOMBBUGGHOST": {
+  "english": "Snake Bug",
+  "basis": "translated-retail-korean",
+  "source": "사충"
+ },
+ "SN_MOB_TQ_TOMBBUGGHOST_CLON": {
+  "english": "Gyo Bug",
+  "basis": "translated-retail-korean",
+  "source": "교충"
+ },
+ "SN_MOB_TQ_TOMBBUGGHOST_CLON2": {
+  "english": "Flying Bug",
+  "basis": "translated-retail-korean",
+  "source": "비충"
+ },
+ "SN_MOB_TQ_TOMBGENERAL": {
+  "english": "General Hyeonrang",
+  "basis": "translated-retail-korean",
+  "source": "장군 현랑"
+ },
+ "SN_MOB_TQ_TOMBGENERAL_CLON": {
+  "english": "General Bigyeong",
+  "basis": "translated-retail-korean",
+  "source": "장군 비경"
+ },
+ "SN_MOB_TQ_TOMBGENERAL_CLON2": {
+  "english": "General Horyu",
+  "basis": "translated-retail-korean",
+  "source": "장군 호류"
+ },
+ "SN_MOB_TQ_TOMBGENERAL_CLON3": {
+  "english": "General Jinhu",
+  "basis": "translated-retail-korean",
+  "source": "장군 진후"
+ },
+ "SN_MOB_TQ_TOMBSOLDIER": {
+  "english": "Imperial Warrior Figure",
+  "basis": "translated-retail-korean",
+  "source": "황궁 무사용"
+ },
+ "SN_MOB_TQ_TOMBSOLDIER_CLON": {
+  "english": "Taegeuk Warrior Figure",
+  "basis": "translated-retail-korean",
+  "source": "태극 무사용"
+ },
+ "SN_MOB_TQ_TOMBSOLDIER_CLON2": {
+  "english": "Palgeuk Warrior Figure",
+  "basis": "translated-retail-korean",
+  "source": "팔극 무사용"
+ },
+ "SN_MOB_TQ_TOMBSTONEGHOST": {
+  "english": "Granite Stone Ghost",
+  "basis": "translated-retail-korean",
+  "source": "화강암정귀"
+ },
+ "SN_MOB_TQ_TOMBSTONEGHOST_CLON": {
+  "english": "Marble Stone Ghost",
+  "basis": "translated-retail-korean",
+  "source": "대리석정귀"
+ },
+ "SN_MOB_TQ_TOMBSTONEGHOST_CLON2": {
+  "english": "Basalt Stone Ghost",
+  "basis": "translated-retail-korean",
+  "source": "현무암정귀"
+ },
+ "SN_MOB_TQ_WESTGUARDIAN": {
+  "english": "Azure Dragon Taeho",
+  "basis": "translated-retail-korean",
+  "source": "청룡 태호"
+ },
+ "SN_MOB_TQ_WHITESNAKE": {
+  "english": "White Snake Baekryeong",
+  "basis": "translated-retail-korean",
+  "source": "백사 백령"
+ },
+ "SN_NPC_CH_GACHA_MACHINE": {
+  "english": "Magic Pang",
+  "basis": "translated-retail-korean",
+  "source": "요술 팡"
+ },
+ "SN_NPC_CH_GACHA_OPERATOR": {
+  "english": "Exchanger Gori",
+  "basis": "translated-retail-korean",
+  "source": "교환원 고리"
+ },
+ "SN_NPC_CH_QT_GENARAL_SP": {
+  "english": "Lee Baekryong",
+  "basis": "translated-retail-korean",
+  "source": "이백룡"
+ },
+ "SN_NPC_FM_FMTREASUREBOX1": {
+  "english": "Crimson Box",
+  "basis": "translated-retail-korean",
+  "source": "진홍의 상자"
+ },
+ "SN_NPC_FM_FMTREASUREBOX2": {
+  "english": "Box of Wrath",
+  "basis": "translated-retail-korean",
+  "source": "분노의 상자"
+ },
+ "SN_NPC_FM_FMTREASUREBOX3": {
+  "english": "Red Flame Box",
+  "basis": "translated-retail-korean",
+  "source": "홍염의 상자"
+ },
+ "SN_NPC_FM_FMTREASUREBOX4": {
+  "english": "Box of Glory",
+  "basis": "translated-retail-korean",
+  "source": "영광의 상자"
+ },
+ "SN_NPC_FM_MONKEYGHOST": {
+  "english": "Sun Wukong",
+  "basis": "translated-retail-korean",
+  "source": "손오공"
+ },
+ "SN_NPC_FM_PIGGHOST": {
+  "english": "Zhu Bajie",
+  "basis": "translated-retail-korean",
+  "source": "저팔계"
+ },
+ "SN_NPC_FM_WARPMONK_KAMAN": {
+  "english": "Mysterious Monk Kaman",
+  "basis": "translated-retail-korean",
+  "source": "신비의 승려 카만"
+ },
+ "SN_NPC_FM_WATERDEMON": {
+  "english": "Sha Wujing",
+  "basis": "translated-retail-korean",
+  "source": "사오정"
+ },
+ "SN_PACKAGE_ITEM_TEST_ARCHEMY": {
+  "english": "Reinforcement Alchemy Set",
+  "basis": "translated-retail-korean",
+  "source": "강화연금 세트"
+ },
+ "SN_PACKAGE_ITEM_TEST_ARCHEMY_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_ACCESSORY": {
+  "english": "Chinese 6th Degree Accessory Set",
+  "basis": "translated-retail-korean",
+  "source": "중국 6차 장신구세트"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_ACCESSORY_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_CLOTHES_M": {
+  "english": "Chinese 6th Degree Garment Set (M)",
+  "basis": "translated-retail-korean",
+  "source": "중국 6차 도복세트(남)"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_CLOTHES_M_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_CLOTHES_W": {
+  "english": "Chinese 6th Degree Garment Set (F)",
+  "basis": "translated-retail-korean",
+  "source": "중국 6차 도복세트(여)"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_CLOTHES_W_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_GUILD1": {
+  "english": "Guild Mercenary Set (Chinese) 1",
+  "basis": "translated-retail-korean",
+  "source": "길드용병세트(중국)1"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_GUILD1_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_GUILD2": {
+  "english": "Guild Mercenary Set (Chinese) 2",
+  "basis": "translated-retail-korean",
+  "source": "길드용병세트(중국)2"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_GUILD2_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_HEAVY_M": {
+  "english": "Chinese 6th Degree Armor Set (M)",
+  "basis": "translated-retail-korean",
+  "source": "중국 6차 갑옷세트(남)"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_HEAVY_M_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_HEAVY_W": {
+  "english": "Chinese 6th Degree Armor Set (F)",
+  "basis": "translated-retail-korean",
+  "source": "중국 6차 갑옷세트(여)"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_HEAVY_W_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_LIGHT_M": {
+  "english": "Chinese 6th Degree Protector Set (M)",
+  "basis": "translated-retail-korean",
+  "source": "중국 6차 호구세트(남)"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_LIGHT_M_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_LIGHT_W": {
+  "english": "Chinese 6th Degree Protector Set (F)",
+  "basis": "translated-retail-korean",
+  "source": "중국 6차 호구세트(여)"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_LIGHT_W_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_SWORD1": {
+  "english": "Chinese 6th Degree Weapon Set 1",
+  "basis": "translated-retail-korean",
+  "source": "중국 6차 무기세트1"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_SWORD1_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_SWORD2": {
+  "english": "Chinese 6th Degree Weapon Set 2",
+  "basis": "translated-retail-korean",
+  "source": "중국 6차 무기세트2"
+ },
+ "SN_PACKAGE_ITEM_TEST_CH_SWORD2_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_ACCESSORY": {
+  "english": "European 6th Degree Accessory Set",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 장신구세트"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_ACCESSORY_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_CLOTHES_M": {
+  "english": "European 6th Degree Robe Set (M)",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 로브세트(남)"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_CLOTHES_M_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_CLOTHES_W": {
+  "english": "European 6th Degree Robe Set (F)",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 로브세트(여)"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_CLOTHES_W_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_GUILD1": {
+  "english": "Guild Mercenary Set (European) 1",
+  "basis": "translated-retail-korean",
+  "source": "길드용병세트(유럽)1"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_GUILD1_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_GUILD2": {
+  "english": "Guild Mercenary Set (European) 2",
+  "basis": "translated-retail-korean",
+  "source": "길드용병세트(유럽)2"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_GUILD2_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_GUILD3": {
+  "english": "Guild Mercenary Set (European) 3",
+  "basis": "translated-retail-korean",
+  "source": "길드용병세트(유럽)3"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_GUILD3_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_HEAVY_M": {
+  "english": "European 6th Degree Heavy Armor Set (M)",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 중갑세트(남)"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_HEAVY_M_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_HEAVY_W": {
+  "english": "European 6th Degree Heavy Armor Set (F)",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 중갑세트(여)"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_HEAVY_W_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_LIGHT_M": {
+  "english": "European 6th Degree Light Armor Set (M)",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 경갑세트(남)"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_LIGHT_M_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_LIGHT_W": {
+  "english": "European 6th Degree Light Armor Set (F)",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 경갑세트(여)"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_LIGHT_W_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_SWORD1": {
+  "english": "European 6th Degree Weapon Set 1",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 무기세트1"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_SWORD1_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_SWORD2": {
+  "english": "European 6th Degree Weapon Set 2",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 무기세트2"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_SWORD2_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_SWORD3": {
+  "english": "European 6th Degree Weapon Set 3",
+  "basis": "translated-retail-korean",
+  "source": "유럽 6차 무기세트3"
+ },
+ "SN_PACKAGE_ITEM_TEST_EU_SWORD3_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_MALL1": {
+  "english": "Gold Time/Pet Package",
+  "basis": "translated-retail-korean",
+  "source": "골드타임/펫 패키지"
+ },
+ "SN_PACKAGE_ITEM_TEST_MALL1_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_MALL2": {
+  "english": "Scroll Package",
+  "basis": "translated-retail-korean",
+  "source": "주문서 패키지"
+ },
+ "SN_PACKAGE_ITEM_TEST_MALL2_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_MALL3": {
+  "english": "Convenience Set",
+  "basis": "translated-retail-korean",
+  "source": "간편 세트"
+ },
+ "SN_PACKAGE_ITEM_TEST_MALL3_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_PACKAGE_ITEM_TEST_POTION": {
+  "english": "Recovery Set (Large)",
+  "basis": "translated-retail-korean",
+  "source": "회복세트 (대)"
+ },
+ "SN_PACKAGE_ITEM_TEST_POTION_TT_DESC": {
+  "english": "An item set prepared for smooth testing.",
+  "basis": "translated-retail-korean",
+  "source": "원활한테스트를 위해 준비한 아이템 세트 입니다."
+ },
+ "SN_SKILL_CH_BOW_AREA_D": {
+  "english": "Calamity Arrow",
+  "basis": "translated-retail-korean",
+  "source": "폭멸전 천괴"
+ },
+ "SN_SKILL_CH_BOW_AREA_E": {
+  "english": "Hell Arrow",
+  "basis": "translated-retail-korean",
+  "source": "폭멸전 지옥"
+ },
+ "SN_SKILL_CH_BOW_AREA_E_STUDY": {
+  "english": "The fifth stage of the Blast Arrow, called Hell, in which the lava of hell, with heat so great its fiery power cannot be measured, erupts violently.",
+  "basis": "translated-retail-korean",
+  "source": "화염의 위력를 가늠할 수 없을 정도로 엄청난 열기를 가진 지옥의 용암이 격심하게 폭발해 오르는 폭멸전의 다섯번째 단계를 지옥이라고 부른다."
+ },
+ "SN_SKILL_CH_BOW_CALL_E": {
+  "english": "Frost Hawk Summon",
+  "basis": "translated-retail-korean",
+  "source": "한조 소환"
+ },
+ "SN_SKILL_CH_BOW_CALL_E_STUDY": {
+  "english": "Born on an eternal snow mountain and holding its chill, the Frost Hawk flies at the enemy and breathes out cold to break their concentration.",
+  "basis": "translated-retail-korean",
+  "source": "만년설산에서 태어나 설산의 냉기를 머금고 있는 한조는 적에게 날아가 한기를 내뿜어 적의 집중력을 흐트러뜨린다."
+ },
+ "SN_SKILL_CH_BOW_CALL_E_TT_DESC": {
+  "english": "Summons a Frost Hawk to disrupt the enemy's vision and raise attack rating.\\nOnly available when using a bow.",
+  "basis": "translated-retail-korean",
+  "source": "한조를 소환하여 적의 시야를 방해해 명중률을 높인다.\\n활을 사용할 때만 가능하다."
+ },
+ "SN_SKILL_CH_BOW_CALL_F": {
+  "english": "Fire Hawk Summon",
+  "basis": "translated-retail-korean",
+  "source": "화조 소환"
+ },
+ "SN_SKILL_CH_BOW_CALL_F_STUDY": {
+  "english": "Said to be made from the flames of hell, the Fire Hawk attacks the enemy with scorching flames from its fierce wingbeats while scattering their concentration.",
+  "basis": "translated-retail-korean",
+  "source": "지옥의 불꽃으로 만들어졌다는 화조는 거센 날갯짓으로 적에게 뜨거운 화염을 안겨 적을 공격함과 동시에 집중력을 분산시킨다."
+ },
+ "SN_SKILL_CH_BOW_CALL_F_TT_DESC": {
+  "english": "Summons a Fire Hawk to attack the enemy and disrupt their vision, raising attack rating.\\nOnly available when using a bow.",
+  "basis": "translated-retail-korean",
+  "source": "화조를 소환하여 적을 공격하며, 시얄르 방해해 명중률을 높인다.\\n활을 사용할 때만 가능하다."
+ },
+ "SN_SKILL_CH_BOW_CHAIN_E": {
+  "english": "Peak Arrow Combo",
+  "basis": "translated-retail-korean",
+  "source": "벽력전 연봉시"
+ },
+ "SN_SKILL_CH_BOW_CHAIN_E_STUDY": {
+  "english": "After finishing training in the 5 Arrow combo, training in the Peak Arrow Combo begins. Six arrows are taken at once and fired rapidly in succession, with energy focused in the fingers drawing the string so they snap hard, like a bee shooting its sharp stinger.",
+  "basis": "translated-retail-korean",
+  "source": "벽력전 오연시의 수련이 끝나면 연봉시 수련을 시작한다. 한 번에 여섯 개의 화살을 집어 빠르게 연달아 발사하는데 시위를 당기는 손가락에 기를 집중하여 벌이 날카로운 독침을 쏘듯 강하게 튕긴다."
+ },
+ "SN_SKILL_CH_BOW_CHAIN_F": {
+  "english": "Emperor Arrow Combo",
+  "basis": "translated-retail-korean",
+  "source": "벽력전 연사황"
+ },
+ "SN_SKILL_CH_BOW_CHAIN_F_STUDY": {
+  "english": "After finishing training in the Peak Arrow Combo, training in the Emperor Arrow Combo begins. A secret art handed down from an ancient emperor of archery: seven arrows are taken at once and fired rapidly in succession, breathing inner strength into the bow and transferring true energy into every arrow as it flies.",
+  "basis": "translated-retail-korean",
+  "source": "벽력전 연봉시의 수련이 끝나면 연사황 수련을 시작한다. 고대 궁술의 황제로부터 전해 내려오는 비법으로 한 번에 일곱 개의 화살을 집어 빠르게 연달아 발사하는데 활에 내력을 불어넣어 화살을 날릴 때마다 화살에 진기를 전이시킨다."
+ },
+ "SN_SKILL_CH_BOW_CRITICAL_E": {
+  "english": "Anti Devil Bow - Destroy",
+  "basis": "translated-retail-korean",
+  "source": "항마궁술 멸"
+ },
+ "SN_SKILL_CH_BOW_CRITICAL_E_STUDY": {
+  "english": "The fifth Anti Devil Bow art: learn Anti Devil Bow - Destroy, which gathers energy carrying the will to destroy the enemy in the hand drawing the string and loads the arrow with powerful killing force.",
+  "basis": "translated-retail-korean",
+  "source": "항마궁술의 다섯 번째는 시위를 당기는 손에 적을 멸하고자 하는 의지를 담은 기를 모아 화살에 강력한 살생력을 싣는 항마궁술 멸을 익힌다."
+ },
+ "SN_SKILL_CH_BOW_CRITICAL_F": {
+  "english": "Anti Devil Bow - Great",
+  "basis": "translated-retail-korean",
+  "source": "항마궁술 태"
+ },
+ "SN_SKILL_CH_BOW_CRITICAL_F_STUDY": {
+  "english": "The sixth Anti Devil Bow art: learn Anti Devil Bow - Great, which loads the arrow with energy as vast as a great mountain, created in harmony with the energy of nature, to deal a fatal blow to the enemy.",
+  "basis": "translated-retail-korean",
+  "source": "항마궁술의 여섯 번째는 자연의 기운과 동화하여 만들어낸 태산과 같은 기를 화살에 실어 적에게 치명적인 타격을 주는 항마궁술 태를 익힌다."
+ },
+ "SN_SKILL_CH_BOW_CRITICAL_G": {
+  "english": "Anti Devil Bow - Master",
+  "basis": "translated-retail-korean",
+  "source": "항마궁술 달"
+ },
+ "SN_SKILL_CH_BOW_CRITICAL_G_STUDY": {
+  "english": "The seventh Anti Devil Bow art: learn Anti Devil Bow - Master, in which bow and body become one, so that all the energy in the body flows freely into the arrow with tremendous destructive power.",
+  "basis": "translated-retail-korean",
+  "source": "항마궁술의 일곱 번째는 활과 몸이 하나가 되어 몸 안에 존재하는 모든 기가 거침없이 화살에 전이되어 가공할 만한 파괴력을 가진 항마궁술 를 익힌다."
+ },
+ "SN_SKILL_CH_BOW_NORMAL_D": {
+  "english": "Phoenix Soul Arrow",
+  "basis": "translated-retail-korean",
+  "source": "파천봉황시"
+ },
+ "SN_SKILL_CH_BOW_NORMAL_E": {
+  "english": "Heaven Earth Soul Arrow",
+  "basis": "translated-retail-korean",
+  "source": "파천건곤시"
+ },
+ "SN_SKILL_CH_BOW_NORMAL_E_STUDY": {
+  "english": "Heaven Earth Soul Arrow, a martial art meaning an arrow that holds the energy of heaven and earth, is the fifth stage of the Soul Arrow.",
+  "basis": "translated-retail-korean",
+  "source": "하늘과 땅의 기를 품고 있는 화살이라는 의미의 무공인 파천건곤시는 파천시의 다섯 번째 단계이다."
+ },
+ "SN_SKILL_CH_BOW_PIERCE_E": {
+  "english": "Autumn Wind - Heaven Demon",
+  "basis": "translated-retail-korean",
+  "source": "추풍섬 천마전"
+ },
+ "SN_SKILL_CH_BOW_PIERCE_E_STUDY": {
+  "english": "The fifth-stage form of the Autumn Wind. When the arrow is shot, it leaves behind the shape of a heavenly horse in flight, which is called Heaven Demon.",
+  "basis": "translated-retail-korean",
+  "source": "추풍섬의 오단계 초식으로 활을 쏘면 화살이 지나간 자리에 천마가 날아가는 듯한 형상이 남는데 이를 천마전이라고 부른다."
+ },
+ "SN_SKILL_CH_BOW_PIERCE_F": {
+  "english": "Autumn Wind - Azure Dragon",
+  "basis": "translated-retail-korean",
+  "source": "추풍섬 창룡전"
+ },
+ "SN_SKILL_CH_BOW_PIERCE_F_STUDY": {
+  "english": "The sixth-stage form of the Autumn Wind. When the arrow is shot, it leaves behind the shape of a dragon kicking off into the sky, which is called Azure Dragon.",
+  "basis": "translated-retail-korean",
+  "source": "추풍섬 육단계 초식으로 활을 쏘면 화살이 지나간 자리에 용이 창공을 박차고 날아가는 듯한 형상이 남는데 이를 창룡전이라고 부른다."
+ },
+ "SN_SKILL_CH_BOW_POWER_D": {
+  "english": "Strong Bow - Will",
+  "basis": "translated-retail-korean",
+  "source": "강궁시 의"
+ },
+ "SN_SKILL_CH_BOW_POWER_E": {
+  "english": "Strong Bow - Chase",
+  "basis": "translated-retail-korean",
+  "source": "강궁시 추"
+ },
+ "SN_SKILL_CH_BOW_POWER_E_STUDY": {
+  "english": "To add enough power to an arrow to fell the enemy, you must open every energy channel in the body and make your inner strength even firmer. Reaching this level is called Chase.",
+  "basis": "translated-retail-korean",
+  "source": "적이 쓰러질 정도로 화살에 위력을 더하기 위해서는 온 몸의 기혈을 막힘 없이 뚫어 내공을 더욱 견고히 해야 하는데 이 경지에 오른 것을 추라 한다."
+ },
+ "SN_SKILL_CH_BOW_SPECIAL_D": {
+  "english": "Mind Bow - Thunder",
+  "basis": "translated-retail-korean",
+  "source": "어화심궁 침뢰"
+ },
+ "SN_SKILL_CH_BOW_SPECIAL_D_STUDY": {
+  "english": "The fourth verse of the Mind Bow. It is called Thunder because five arrows leaving the string look like fierce, striking lightning.",
+  "basis": "translated-retail-korean",
+  "source": "어기출시의 네 번째 구결로 다섯 개의 화살이 시위를 떠나는 모습이 매섭게 내려치는 낙뢰와 같다 하여 침뢰라 부른다."
+ },
+ "SN_SKILL_CH_COLD_BINGBYEOK_E": {
+  "english": "Polar Wall",
+  "basis": "translated-retail-korean",
+  "source": "창극빙벽"
+ },
+ "SN_SKILL_CH_COLD_BINGBYEOK_E_STUDY": {
+  "english": "The Polar Sea Ice Wall, the fifth verse of the Ice Wall Art, raises an ice wall with the cruel cold of the polar regions that allows not a bit of heat.",
+  "basis": "translated-retail-korean",
+  "source": "한 치의 열기도 허락하지 않는 극지의 잔혹한 냉기를 가진 빙벽을 치는, 빙벽신공의 다섯번째 구결인 극해빙벽이다."
+ },
+ "SN_SKILL_CH_COLD_BINGPAN_D": {
+  "english": "Frost nova-Ice Field",
+  "basis": "translated-retail-korean",
+  "source": "한빙 광야결 빙야"
+ },
+ "SN_SKILL_CH_COLD_BINGPAN_E": {
+  "english": "Frost nova-Polar Wind",
+  "basis": "translated-retail-korean",
+  "source": "한빙 광야결 극풍"
+ },
+ "SN_SKILL_CH_COLD_BINGPAN_E_STUDY": {
+  "english": "Polar Wind, the fifth stage of the Frost Nova, is a martial art that raises a gust of intense cold that freezes even breath in front of the user, freezing all enemies.",
+  "basis": "translated-retail-korean",
+  "source": "한빙 광야결의 다섯 번째 결인 극풍은 숨결마저 얼려버리는 강렬한 한기의 돌풍을 자신의 전방에 일으켜 적들을 모두 얼려버리는 무공이다."
+ },
+ "SN_SKILL_CH_COLD_GANGGI_E": {
+  "english": "Solid guard of ice",
+  "basis": "translated-retail-korean",
+  "source": "빙혼결기"
+ },
+ "SN_SKILL_CH_COLD_GANGGI_E_STUDY": {
+  "english": "The fifth verse of the Ice Protection Force is the Solid guard of ice, which covers the body in a skin of ice energy using extreme energy drawn from the lower abdomen. The deeper the training, the more the body grows used to the cold and adapts to the ice energy, creating an even stronger skin of ice.",
+  "basis": "translated-retail-korean",
+  "source": "빙 호신강기의 다섯 번째 구결은 빙혼결기 로서 단전으로부터 끌어낸 극한의 기운으로 신체를 빙기의 피부로 덮어버리는데 수련이 깊어질수록 한기에 익숙해진 신체가 빙기에 적응되어 더욱 강력한 빙기의 피부를 만들어낼 수 있게 된다."
+ },
+ "SN_SKILL_CH_COLD_GIGONGJANG_E": {
+  "english": "Cold Wave - Soul Bind",
+  "basis": "translated-retail-korean",
+  "source": "빙공파 혼박"
+ },
+ "SN_SKILL_CH_COLD_GIGONGJANG_E_STUDY": {
+  "english": "The fifth stage of the Cold Wave is Soul Bind. It fires ice crystals created with energy at the enemy, and the crystals at this stage are so extremely powerful that they freeze even the soul, giving a very high chance of success.",
+  "basis": "translated-retail-korean",
+  "source": "빙공파의 다섯번째 단계는 혼박이다. 기공으로 생성한 얼음 결정을 적에게 발사하는데 이 단계의 결정은 영혼조차 얼려버릴 정도로 극한의 위력을 가지고 있어 매우 높은 확률을 가지고 있다."
+ },
+ "SN_SKILL_CH_COLD_GIGONGSUL_D": {
+  "english": "Snow Storm - Ice Rain",
+  "basis": "translated-retail-korean",
+  "source": "설풍 사결 빙우"
+ },
+ "SN_SKILL_CH_COLD_GIGONGSUL_E": {
+  "english": "Snow Storm - Ice Burst",
+  "basis": "translated-retail-korean",
+  "source": "설풍 오결 빙폭"
+ },
+ "SN_SKILL_CH_COLD_GIGONGSUL_E_STUDY": {
+  "english": "The fifth stage of the Snow Storm gathers crystals of cold on the body to cause a strong cold explosion, dealing severe cold shock and pain to nearby enemies.",
+  "basis": "translated-retail-korean",
+  "source": "설풍 오결은 자신의 몸에 한기의 결정을 모아 강한 냉기 폭발을 일으키는 구결로서 주변에 있는 적들에게 극심한 냉기 충격과 함께 고통을 안겨준다."
+ },
+ "SN_SKILL_CH_COLD_GIGONGTA_E": {
+  "english": "Ice energy force",
+  "basis": "translated-retail-korean",
+  "source": "빙기결"
+ },
+ "SN_SKILL_CH_COLD_GIGONGTA_E_STUDY": {
+  "english": "The fifth stage of the Ice Force Strike is named Ice energy force because its energy is fierce enough to freeze the air like the cold wind blowing from the northern sea. At this stage, the ice energy formed on the weapon is planted in the enemy's body.",
+  "basis": "translated-retail-korean",
+  "source": "빙기공타의 다섯 번째 결은 북해에서 불어오는 찬 바람처럼 대기를 얼려버릴 정도로 기운이 매섭다 하여 빙기결이라 이름지어졌고 무기에 맺힌 빙기를 적의 몸 속에 심는 단계이다."
+ },
+ "SN_SKILL_CH_COLD_GIGONGTA_F": {
+  "english": "Ice pole force",
+  "basis": "translated-retail-korean",
+  "source": "빙극결"
+ },
+ "SN_SKILL_CH_COLD_GIGONGTA_F_STUDY": {
+  "english": "The sixth stage of the Ice Force Strike is named Ice pole force because the strength of its ice energy is unmatched across heaven and earth, the heavens and hell. At this stage, enemies touched by the ice energy suffer extreme pain.",
+  "basis": "translated-retail-korean",
+  "source": "빙기공타의 여섯 번째 결은 빙기의 강함이 하늘과 땅, 천상과 지옥을 아울러 더 이상 이를데가 없다고 하여 빙극결이라 이름지어졌고 빙기에 접한 적들에게 극한의 고통을 안겨주는 단계이다."
+ },
+ "SN_SKILL_CH_COLD_SHIELD_E": {
+  "english": "Snow Shield - Swift",
+  "basis": "translated-retail-korean",
+  "source": "섭설지혼 속"
+ },
+ "SN_SKILL_CH_COLD_SHIELD_E_STUDY": {
+  "english": "In the sixth verse of the Snow Shield, you learn to speed up the circulation of energy in the body so ice energy quickly braces against impact.",
+  "basis": "translated-retail-korean",
+  "source": "섭설지혼의 여섯 번째 구결에서는 체내의 기의 순환을 빠르게 하여 빙기로 재빨리 충격에 대비하는 방법을 익힌다."
+ },
+ "SN_SKILL_CH_COLD_SHIELD_F": {
+  "english": "Snow Shield - Absolute",
+  "basis": "translated-retail-korean",
+  "source": "섭설지혼 절"
+ },
+ "SN_SKILL_CH_COLD_SHIELD_F_STUDY": {
+  "english": "In the fifth verse of the Snow Shield, you learn to gather the crystals of pure energy scattered in the body to remove the limits of cold.",
+  "basis": "translated-retail-korean",
+  "source": "섭설지혼의 다섯 번째 구결에서는 체내에 분산되어 있던 순수한 기의 결정을 모아 냉기의 한계를 없애는 방법을 익힌다."
+ },
+ "SN_SKILL_CH_FIRE_DETECT_B": {
+  "english": "Sunrise Fire Combustion",
+  "basis": "translated-retail-korean",
+  "source": "일출발화"
+ },
+ "SN_SKILL_CH_FIRE_DETECT_B_STUDY": {
+  "english": "Breathe energy that lights the darkness like the rising sun into your eyes to detect unseen enemies.",
+  "basis": "translated-retail-korean",
+  "source": "태양이 뜨는 모습과 같이 어둠을 밝히는 기운을 눈에 불어넣어 보이지 않는 적을 감지한다."
+ },
+ "SN_SKILL_CH_FIRE_GANGGI_E": {
+  "english": "Flawless Fire Protection",
+  "basis": "translated-retail-korean",
+  "source": "화염무결"
+ },
+ "SN_SKILL_CH_FIRE_GANGGI_E_STUDY": {
+  "english": "The fifth stage of the Fire Protection Force transfers the energy in the body to the flame barrier to maintain a flawless barrier of flame.",
+  "basis": "translated-retail-korean",
+  "source": "화 호신강기의 다섯번째는 체내의 기를 화염의 막에 전이시켜 완전무결한 화염의 막을 유지시키는 단계이다."
+ },
+ "SN_SKILL_CH_FIRE_GIGONGSUL_E": {
+  "english": "Flame wave-Flash",
+  "basis": "translated-retail-korean",
+  "source": "열섬 폭염파"
+ },
+ "SN_SKILL_CH_FIRE_GIGONGSUL_F": {
+  "english": "Flame wave-Blaze",
+  "basis": "translated-retail-korean",
+  "source": "염광 폭염파"
+ },
+ "SN_SKILL_CH_FIRE_GIGONGSUL_G": {
+  "english": "Flame wave-Annihilation",
+  "basis": "translated-retail-korean",
+  "source": "멸탄 폭염파"
+ },
+ "SN_SKILL_CH_FIRE_GIGONGSUL_G_STUDY": {
+  "english": "The seventh form of the Flame Wave, with flames so powerful that even the guardians of hell cannot withstand their heat and are annihilated.",
+  "basis": "translated-retail-korean",
+  "source": "지옥의 파수꾼조차 그 열기를 이겨내지 못해 소멸시켜 버리는 강력한 화염을 가진 폭염파의 일곱번째 초식."
+ },
+ "SN_SKILL_CH_FIRE_GIGONGSUL_G_TT_DESC": {
+  "english": "Deals a strong long-range area attack of the fire element.",
+  "basis": "translated-retail-korean",
+  "source": "화계속성의 강한 원거리 범위공격을 가한다."
+ },
+ "SN_SKILL_CH_FIRE_GIGONGTA_E": {
+  "english": "Cloud fire force",
+  "basis": "translated-retail-korean",
+  "source": "화운결"
+ },
+ "SN_SKILL_CH_FIRE_GIGONGTA_E_STUDY": {
+  "english": "The fifth stage of the Fire Force Strike is the Cloud fire force, meaning a cloud made of flame. At this stage, the weapon is wrapped in heat strong enough to cover even the sky, and enemies touched by its energy suffer severe pain, as if they had fallen into the flames of hell.",
+  "basis": "translated-retail-korean",
+  "source": "화기공타의 다섯 번째 결은 화염으로 이루어진 불구름이라는 뜻의 화운결로서 하늘마저 뒤덮을 정도의 강력한 열기로 무기를 휘감아 그 기운이 닿은 적에게 지옥의 불길에 빠진듯한 착각에 빠뜨려 극심한 고통을 안겨주는 단계이다."
+ },
+ "SN_SKILL_CH_FIRE_GIGONGTA_F": {
+  "english": "Sun fire force",
+  "basis": "translated-retail-korean",
+  "source": "화양결"
+ },
+ "SN_SKILL_CH_FIRE_GIGONGTA_F_STUDY": {
+  "english": "The sixth stage of the Fire Force Strike is the Sun fire force, meaning heat strong enough to melt the sun. At this stage, the energy is so powerful that merely brushing the weapon burns the soul with its heat.",
+  "basis": "translated-retail-korean",
+  "source": "화기공타의 여섯 번째 결은 태양을 녹일 정도로 강력한 열기를 가졌다는 뜻의 화양결로서 무기에 스치기만 해도 그 열기에 영혼이 타버릴 정도로 강력한 기운을 발하는 단계이다."
+ },
+ "SN_SKILL_CH_FIRE_GONGUP_E": {
+  "english": "Flame Body - Oneness",
+  "basis": "translated-retail-korean",
+  "source": "화염체 일위"
+ },
+ "SN_SKILL_CH_FIRE_GONGUP_E_STUDY": {
+  "english": "As the energy of fire is expressed outward, the whole body blazes as if on fire, but since it is a fire of energy rather than real fire, the body is not burned. The Flame Body consists of 5 verses, and the fifth stage, Oneness, becomes one with the energy of flame to create the strongest body.",
+  "basis": "translated-retail-korean",
+  "source": "불의 기운이 외부로 표출되면서 온 몸이 불에 붙은 듯 타오르지만 실제 불이 아닌 기의 불이기 때문에 신체가 화상을 입거나 하지는 않는다. 화염체는 총 5개의 구결로 이루어져 있으며 다섯번째 단계인 일위는 화염의 기운과 일체가 되어 극강의 신체를 만들어내는 단계이다."
+ },
+ "SN_SKILL_CH_FIRE_HWABYEOK_D": {
+  "english": "Fire wall-Fortress",
+  "basis": "translated-retail-korean",
+  "source": "염화벽공 옹성"
+ },
+ "SN_SKILL_CH_FIRE_HWABYEOK_E": {
+  "english": "Fire wall-Diamond",
+  "basis": "translated-retail-korean",
+  "source": "염화벽공 금강"
+ },
+ "SN_SKILL_CH_FIRE_HWABYEOK_E_STUDY": {
+  "english": "The fifth technique of the Fire Wall is called Diamond, because the wall of flame is so solid and indestructible that it is like the virtue of Vairocana Buddha.",
+  "basis": "translated-retail-korean",
+  "source": "염화벽공의 다섯 번째 기술은 화염의 벽이 매우 단단하여 파괴되지 않는 대일여래의 지덕과 같다고 하여 금강이라고 부른다."
+ },
+ "SN_SKILL_CH_LIGHTNING_CHUNDUNG_E": {
+  "english": "Slaughter Lion Shout",
+  "basis": "translated-retail-korean",
+  "source": "참살 사자후"
+ },
+ "SN_SKILL_CH_LIGHTNING_CHUNDUNG_F": {
+  "english": "Heaven Destroying Lion Shout",
+  "basis": "translated-retail-korean",
+  "source": "멸천 사자후"
+ },
+ "SN_SKILL_CH_LIGHTNING_GIGONGTA_E": {
+  "english": "Thunderphoenix force",
+  "basis": "translated-retail-korean",
+  "source": "뇌봉결"
+ },
+ "SN_SKILL_CH_LIGHTNING_GIGONGTA_E_STUDY": {
+  "english": "The fifth stage of the Wind Thunder Art is the Thunderphoenix force, meaning a phoenix holding lightning. This stage of training strengthens inner power to amplify the lightning loaded on the weapon.",
+  "basis": "translated-retail-korean",
+  "source": "풍뢰공의 다섯 번째 결은 뇌전을 품은 봉황이라는 뜻의 뇌봉결로서 내력을 강화시켜 무기에 실린 뇌전의 위력을 증폭시키는 단계의 수련이다."
+ },
+ "SN_SKILL_CH_LIGHTNING_GIGONGTA_F": {
+  "english": "Thundercleave force",
+  "basis": "translated-retail-korean",
+  "source": "뇌참결"
+ },
+ "SN_SKILL_CH_LIGHTNING_GIGONGTA_F_STUDY": {
+  "english": "The sixth stage of the Wind Thunder Art is the Thundercleave force, meaning a martial art with force enough to split the sky. This stage of training loads the torrent of energy onto lightning, creating a lightning storm on the weapon to maximize its power.",
+  "basis": "translated-retail-korean",
+  "source": "풍뢰공의 여섯 번째 결은 하늘을 가를 듯한 기세를 가진 무공이라는 뜻의 뇌참결로써 기의 격류를 뇌전에 실어 무기에 뇌전의 폭풍을 만들어내어 위력을 극대화 시키는 단계의 수련이다."
+ },
+ "SN_SKILL_CH_LIGHTNING_GWANTONG_E": {
+  "english": "Extreme-Piercing force",
+  "basis": "translated-retail-korean",
+  "source": "극 관통섬공"
+ },
+ "SN_SKILL_CH_LIGHTNING_GWANTONG_E_STUDY": {
+  "english": "Once you can control the flow of energy freely, you reach a level where you can handle a vast amount of energy beyond your own limits. This stage is called Extreme.",
+  "basis": "translated-retail-korean",
+  "source": "기의 흐름을 자유자재로 조절할 수 있게 되면 자신의 한계를 뛰어넘는 방대한 양의 기를 다룰 수 있는 경지에 이르게 되는데 이 단계를 극이라고 한다."
+ },
+ "SN_SKILL_CH_LIGHTNING_GYEONGGONG_E": {
+  "english": "Grass Walk - Rush",
+  "basis": "translated-retail-korean",
+  "source": "초상비 급"
+ },
+ "SN_SKILL_CH_LIGHTNING_GYEONGGONG_E_STUDY": {
+  "english": "The third stage of the Grass Walk is Rush, moving so fast and swiftly that the eye cannot follow.",
+  "basis": "translated-retail-korean",
+  "source": "초상비의 세 번째 단계는 급으로써 눈이 따라갈 수 없을 정도로 빠르고 신속하게 움직인다."
+ },
+ "SN_SKILL_CH_LIGHTNING_JIPJUNG_E": {
+  "english": "Concentration-5th",
+  "basis": "translated-retail-korean",
+  "source": "정신집중 오성"
+ },
+ "SN_SKILL_CH_LIGHTNING_JIPJUNG_E_STUDY": {
+  "english": "The fifth verse of Concentration is the stage of sensing danger quickly and controlling the flow of energy with inner strength to respond swiftly to danger.",
+  "basis": "translated-retail-korean",
+  "source": "정신집중술의 다섯 번째 구결은 신속하게 위험을 감지하고 내력으로 기의 흐름을 제어하여 위험에 발빠르게 대응하는 단계이다."
+ },
+ "SN_SKILL_CH_LIGHTNING_STORM_D": {
+  "english": "Crane's Thunderbolt",
+  "basis": "translated-retail-korean",
+  "source": "뇌천 만학결"
+ },
+ "SN_SKILL_CH_LIGHTNING_STORM_E": {
+  "english": "Tortoise's Thunderbolt",
+  "basis": "translated-retail-korean",
+  "source": "뇌전 현무결"
+ },
+ "SN_SKILL_CH_LIGHTNING_STORM_E_STUDY": {
+  "english": "Tortoise's Thunderbolt is the fifth verse of the Thunder Force Art, representing a flow that hides a mysterious power whose state cannot be gauged, like the Black Tortoise.",
+  "basis": "translated-retail-korean",
+  "source": "뇌전 현무결은 현무와 같이 그 상태를 가늠할 수 없는 신비한 힘이 숨겨진 흐름을 나타낸 뇌력공의 다섯 번째 구결이다."
+ },
+ "SN_SKILL_CH_SPEAR_CHAIN_F": {
+  "english": "Chain Spear - Phoenix",
+  "basis": "translated-retail-korean",
+  "source": "파륜창 사식 주작"
+ },
+ "SN_SKILL_CH_SPEAR_CHAIN_G": {
+  "english": "Chain Spear - Supreme",
+  "basis": "translated-retail-korean",
+  "source": "파륜창 오식 태상"
+ },
+ "SN_SKILL_CH_SPEAR_CHAIN_G_STUDY": {
+  "english": "Supreme, the fifth and final form of the chain spear art, swings the spear widely with an overwhelming force, like the stern emperor of the immortal realm descending to earth, unleashing 7 consecutive attacks.",
+  "basis": "translated-retail-korean",
+  "source": "파륜창법의 오식이며 마지막 초식인 태상은 선계의 지엄한 황제가 지상에 강림하듯 위압적인 기세로 창을 크게 휘둘러 7번 연속 공격을 퍼붓는다."
+ },
+ "SN_SKILL_CH_SPEAR_CHAIN_G_TT_DESC": {
+  "english": "Applies 7 combo attack.",
+  "basis": "translated-retail-korean",
+  "source": "7연타의 연속공격을 가한다."
+ },
+ "SN_SKILL_CH_SPEAR_FRONTAREA_E": {
+  "english": "Four Limbs Spear",
+  "basis": "translated-retail-korean",
+  "source": "흑살사지창"
+ },
+ "SN_SKILL_CH_SPEAR_FRONTAREA_E_STUDY": {
+  "english": "The fifth form of the Black Slaying Spear Art, with killing power raised enough to bring death even to the yaksha who guard hell.",
+  "basis": "translated-retail-korean",
+  "source": "지옥을 수호하는 야차라 할지라도 죽음에 이르게 할 정도로 살상력을 높인 흑살창술의 다섯번째 초식이다."
+ },
+ "SN_SKILL_CH_SPEAR_FRONTAREA_F": {
+  "english": "Heaven Emperor Spear",
+  "basis": "translated-retail-korean",
+  "source": "흑살천제창"
+ },
+ "SN_SKILL_CH_SPEAR_FRONTAREA_F_STUDY": {
+  "english": "The last form of the Black Slaying Spear Art, strengthened enough to bring even the Heavenly Emperor who rules the sky to his knees.",
+  "basis": "translated-retail-korean",
+  "source": "하늘을 다스리는 천제마저도 무릎 꿇게 할 정도로 그 위력을 강화시킨 흑살창술의 마지막 초식이다."
+ },
+ "SN_SKILL_CH_SPEAR_PIERCE_E": {
+  "english": "Heaven Cloud Spear",
+  "basis": "translated-retail-korean",
+  "source": "멸절결 천운창"
+ },
+ "SN_SKILL_CH_SPEAR_PIERCE_E_STUDY": {
+  "english": "The fifth form of the Annihilation Art, a strong thrust made while bending one knee low. It is named Heaven Cloud because its force is as fierce as piercing the clouds in the sky.",
+  "basis": "translated-retail-korean",
+  "source": "한쪽 무릎을 낮게 구부리면서 강하게 찌르는 초식으로 그 기운이 하늘의 구름을 꿰뚫듯이 거세다 하여 천운이라는 이름이 붙여진 초식으로 멸절결의 다섯번째 초식이다."
+ },
+ "SN_SKILL_CH_SPEAR_PIERCE_F": {
+  "english": "Shura Spear",
+  "basis": "translated-retail-korean",
+  "source": "멸절결 수라창"
+ },
+ "SN_SKILL_CH_SPEAR_PIERCE_F_STUDY": {
+  "english": "The sixth form of the Annihilation Art. The energy in the spear, swung hard while spinning, pierces the enemy's body many times. Its power is as great as the descent of a god of battle, hence the name Shura Spear.",
+  "basis": "translated-retail-korean",
+  "source": "멸절결의 여섯번째 초식으로 몸을 회전시키며 강하게 휘두른 창에 서린 기가 적의 몸을 여러 번 관통하는데 그 위력이 싸움의 신이 강림한 것 처럼 대단하다 하여 수라창이라 이름 붙여졌다."
+ },
+ "SN_SKILL_CH_SPEAR_ROUNDAREA_D": {
+  "english": "Ghost Spear - Black Cloud",
+  "basis": "translated-retail-korean",
+  "source": "창귀술 흑운"
+ },
+ "SN_SKILL_CH_SPEAR_ROUNDAREA_E": {
+  "english": "Ghost Spear - Darkness",
+  "basis": "translated-retail-korean",
+  "source": "창귀술 만암"
+ },
+ "SN_SKILL_CH_SPEAR_ROUNDAREA_E_STUDY": {
+  "english": "The fifth form of the Ghost Spear Art, which overpowers the enemy with the might of vast energy, like ten thousand rocks forming one great mountain.",
+  "basis": "translated-retail-korean",
+  "source": "만개의 바위들이 하나의 태산을 이루는 장대한 모습처럼 거대한 기의 위세로 적을 제압하는 창귀술의 다섯 번째 초식이다."
+ },
+ "SN_SKILL_CH_SPEAR_ROUNDAREA_F": {
+  "english": "Ghost Spear - Dragon King",
+  "basis": "translated-retail-korean",
+  "source": "창귀술 용왕"
+ },
+ "SN_SKILL_CH_SPEAR_ROUNDAREA_F_STUDY": {
+  "english": "The sixth form of the Ghost Spear Art, which makes the enemy yield through overwhelming energy alone, like the majestic presence of the Dragon King revealing his huge body amid the raging waves and storms of the deep sea.",
+  "basis": "translated-retail-korean",
+  "source": "심해의 성난 파도와 폭풍우 속에서 거대한 몸을 드러내는 용왕의 장대한 위용처럼 위압적인 기의 기운만으로도 적을 굴복시키는 창귀술의 여섯 번째 초식이다."
+ },
+ "SN_SKILL_CH_SPEAR_SHOOT_D": {
+  "english": "Flying Dragon - Flash",
+  "basis": "translated-retail-korean",
+  "source": "비룡강하 섬"
+ },
+ "SN_SKILL_CH_SPEAR_SHOOT_E": {
+  "english": "Flying Dragon - Heaven",
+  "basis": "translated-retail-korean",
+  "source": "비룡강하 천"
+ },
+ "SN_SKILL_CH_SPEAR_SHOOT_E_STUDY": {
+  "english": "The fifth form of the Flying Dragon is called Heaven, because it looks as if the flying dragon reveals its majesty and soars freely through heaven and earth.",
+  "basis": "translated-retail-korean",
+  "source": "비룡강하의 다섯번째 초식은 비룡이 그 위용을 드러내어 거침없이 천지를 날아다니듯 보인다 하여 천이라고 한다."
+ },
+ "SN_SKILL_CH_SPEAR_SPIN_E": {
+  "english": "Bloody Doom Storm",
+  "basis": "translated-retail-korean",
+  "source": "혈망풍"
+ },
+ "SN_SKILL_CH_SPEAR_SPIN_E_STUDY": {
+  "english": "Spin the spear hard to create a blood storm. The blood storm spreads so fast that, like a goblin bewitching people, its presence cannot be sensed.",
+  "basis": "translated-retail-korean",
+  "source": "창을 강하게 회전시켜 혈풍을 만들어낸다. 혈풍은 사람을 홀리는 도깨비처럼 그 기척을 알 수 없을 정도로 빠르게 퍼져나간다."
+ },
+ "SN_SKILL_CH_SPEAR_SPIN_F": {
+  "english": "Bloody Flash Storm",
+  "basis": "translated-retail-korean",
+  "source": "혈섬풍"
+ },
+ "SN_SKILL_CH_SPEAR_SPIN_F_STUDY": {
+  "english": "Spin the spear hard to create a blood storm. The blood storm spreads with a ferocious force, like a brave general felling many enemies at once.",
+  "basis": "translated-retail-korean",
+  "source": "창을 강하게 회전시켜 혈풍을 만들어낸다. 혈풍은 용맹한 장수가 일거에 많은 적을 쓰러뜨리는 것 처럼 광포한 기세로 퍼져나간다."
+ },
+ "SN_SKILL_CH_SPEAR_STUN_E": {
+  "english": "Soul Spear - Strike",
+  "basis": "translated-retail-korean",
+  "source": "이혼창 격"
+ },
+ "SN_SKILL_CH_SPEAR_STUN_E_STUDY": {
+  "english": "The fifth form of the Soul Spear, called Strike, swings a spear charged with inner strength hard several times to warp the enemy's soul with a great shock.",
+  "basis": "translated-retail-korean",
+  "source": "내력을 실은 창을 여러 번 강하게 휘둘러 큰 충격으로 적의 혼을 일그러뜨린다는 이혼창의 다섯번째 초식을 격이라고 불렀다."
+ },
+ "SN_SKILL_CH_SPEAR_STUN_F": {
+  "english": "Soul Spear - Wall",
+  "basis": "translated-retail-korean",
+  "source": "이혼창 벽"
+ },
+ "SN_SKILL_CH_SPEAR_STUN_F_STUDY": {
+  "english": "The sixth form of the Soul Spear, called Wall, loads the spear with power great enough to split heaven and earth and destroys the enemy's soul.",
+  "basis": "translated-retail-korean",
+  "source": "하늘과 땅을 가를 정도로 강대한 힘을 창에 실어 적의 영혼을 파멸시킨다는 이혼창의 여섯번째 초식을 벽이라고 한다."
+ },
+ "SN_SKILL_CH_SWORD_CHAIN_G": {
+  "english": "Heavenly Army Chain",
+  "basis": "translated-retail-korean",
+  "source": "연환검 오식 천군"
+ },
+ "SN_SKILL_CH_SWORD_CHAIN_G_STUDY": {
+  "english": "The fifth form of the chain sword, called Heavenly Army, flows into six rapid swings. It is called Heavenly Army because the attack is powerful enough to fell a thousand soldiers.",
+  "basis": "translated-retail-korean",
+  "source": "연환검 오식은 천군이라는 기술로 빠르게 6번 휘두르는 동작으로 이어지는데 천 명의 군사를 쓰러뜨릴 기세의 강력한 공격이라고 하여 천군이라고 불린다."
+ },
+ "SN_SKILL_CH_SWORD_CHAIN_H": {
+  "english": "Heaven Breaker Chain",
+  "basis": "translated-retail-korean",
+  "source": "연환검 육식 파천"
+ },
+ "SN_SKILL_CH_SWORD_CHAIN_H_STUDY": {
+  "english": "The sixth form of the chain sword, called Heaven Breaker, flows into seven rapid swings. Its motion is so fast and fierce that its energy reaches up to the sky, and it is said to be powerful enough to split the heavens, hence the name Heaven Breaker.",
+  "basis": "translated-retail-korean",
+  "source": "연환검 육식은 파천이라는 기술로 빠르게 7번 휘두르는 동작으로 이어지는데 그 동작이 빠르고 거세어 그 기운이 하늘까지 뻗어올라 하늘을 가를정도로 그 위력이 대단하다고 하여 파천이라고 불린다."
+ },
+ "SN_SKILL_CH_SWORD_DOWNATTACK_D": {
+  "english": "Shura Blade",
+  "basis": "translated-retail-korean",
+  "source": "천살수라결"
+ },
+ "SN_SKILL_CH_SWORD_DOWNATTACK_E": {
+  "english": "Sea Cleaving Blade",
+  "basis": "translated-retail-korean",
+  "source": "천살참해결"
+ },
+ "SN_SKILL_CH_SWORD_DOWNATTACK_E_STUDY": {
+  "english": "Sea Cleaving, the fifth swordsmanship of the Heaven Slaying Art, is a technique powerful enough to calm a raging sea. It strikes a fallen enemy twice in quick succession.",
+  "basis": "translated-retail-korean",
+  "source": "천살결의 다섯 번째 검술인 참해결은 성난 바다를 잠재울 정도로 강력한 위력을 가졌다는 의미의 기술로 쓰러진 적을 향하여 빠르게 두 번 찍는 공격을 한다."
+ },
+ "SN_SKILL_CH_SWORD_DOWNATTACK_F": {
+  "english": "Dragon Slaying Blade",
+  "basis": "translated-retail-korean",
+  "source": "천살참룡결"
+ },
+ "SN_SKILL_CH_SWORD_DOWNATTACK_F_STUDY": {
+  "english": "Dragon Slaying, the sixth swordsmanship of the Heaven Slaying Art, means subduing and beheading a raging dragon. It strikes down at a fallen enemy twice in quick succession.",
+  "basis": "translated-retail-korean",
+  "source": "천살결의 여섯 번째 검술인 참룡결은 광폭한 용을 제압하고 참수시킨다는 의미의 기술로 쓰러진 적을 향하여 빠르게 두 번 찍어내리는 공격을 한다."
+ },
+ "SN_SKILL_CH_SWORD_GEOMGI_E": {
+  "english": "God Cut Blade",
+  "basis": "translated-retail-korean",
+  "source": "유신검기"
+ },
+ "SN_SKILL_CH_SWORD_GEOMGI_E_STUDY": {
+  "english": "God Cut Blade, meaning that a spirit of death appears along the sword energy, is a martial art that swings the sword widely to send out three amplified sword energies.",
+  "basis": "translated-retail-korean",
+  "source": "검기를 따라 죽음의 신령이 나타난다는 뜻의 유신검기는 검을 크게 휘둘러 위력을 증폭시킨 검기를 세 번 날리는 무공이다."
+ },
+ "SN_SKILL_CH_SWORD_GEOMGI_F": {
+  "english": "Emperor Cut Blade",
+  "basis": "translated-retail-korean",
+  "source": "유황검기"
+ },
+ "SN_SKILL_CH_SWORD_GEOMGI_F_STUDY": {
+  "english": "Emperor Cut Blade, meaning that the sulfur fire of hell overflows along the sword energy, is a martial art that leaps high, gathers powerful air energy in midair and sends out three powerful sword energies.",
+  "basis": "translated-retail-korean",
+  "source": "검기를 따라 지옥의 유황불이 넘쳐 흐른다는 뜻의 유황검기는 몸을 날려 높이 점프하고 공중에서 강력한 대기의 기를 모아 세 번의 강력한 검기를 날리는 무공이다."
+ },
+ "SN_SKILL_CH_SWORD_KNOCKDOWN_D": {
+  "english": "Torrent Blade Force",
+  "basis": "translated-retail-korean",
+  "source": "비검격류"
+ },
+ "SN_SKILL_CH_SWORD_KNOCKDOWN_E": {
+  "english": "Heaven Pivot Blade Force",
+  "basis": "translated-retail-korean",
+  "source": "비검천추"
+ },
+ "SN_SKILL_CH_SWORD_KNOCKDOWN_E_STUDY": {
+  "english": "Drive into the enemy with a force that seems to pierce the sky, thrust hard at a vital point, then strike the sword sharply upward to knock the enemy down.",
+  "basis": "translated-retail-korean",
+  "source": "하늘을 뚫을 듯한 거센 기세로 강하게 적에게 파고들어 급소를 향해 힘껏 찌른 후 검을 위로 강하게 쳐올려 적을 쓰러뜨린다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELD_E": {
+  "english": "Iron Castle Shield",
+  "basis": "translated-retail-korean",
+  "source": "철성 방패술"
+ },
+ "SN_SKILL_CH_SWORD_SHIELD_E_STUDY": {
+  "english": "The fifth form of the shield art, a martial art that forms an impenetrable barrier like a castle made of steel.",
+  "basis": "translated-retail-korean",
+  "source": "방패술의 다섯 번째 초식으로 강철로 만들어진 성과 같이 뚫을 수 없는 방어막을 형성한다는 뜻의 무공이다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELD_F": {
+  "english": "Sun Shield",
+  "basis": "translated-retail-korean",
+  "source": "태양 방패술"
+ },
+ "SN_SKILL_CH_SWORD_SHIELD_F_STUDY": {
+  "english": "The sixth form of the shield art, a martial art that forms an ultimate, invincible barrier strong enough to block the heat of the blazing sun.",
+  "basis": "translated-retail-korean",
+  "source": "방패술의 여섯번째 초식으로 작열하는 태양의 뜨거운 기운을 막아낼 정도로 궁극무적의 강력한 방어막을 형성한다는 뜻의 무공이다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_A": {
+  "english": "Flying Heaven Art - Ice Flame",
+  "basis": "translated-retail-korean",
+  "source": "빙염 비천신공"
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_A_STUDY": {
+  "english": "Ice Flame, the first form of the Flying Heaven Art, uses the energies of ice and flame to lower the shield's defense and raise attack power.",
+  "basis": "translated-retail-korean",
+  "source": "비천신공의 첫 번째 초식인 빙염은 얼음과 불꽃의 기운을 이용하여 방패의 방어력을 낮추고 공격력을 높이는 신공이다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_A_TT_DESC": {
+  "english": "Lowers the shield's physical defense for a set time while raising physical attack power.",
+  "basis": "translated-retail-korean",
+  "source": "일정 시간동안 방패의 물리방어력을 감소시키면서 물리공격력을 상승시킨다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_B": {
+  "english": "Flying Heaven Art - Wind Cloud",
+  "basis": "translated-retail-korean",
+  "source": "풍운 비천신공"
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_B_STUDY": {
+  "english": "Wind Cloud, the second form of the Flying Heaven Art, uses the energies of cloud and wind  to lower the shield's defense and raise attack power.",
+  "basis": "translated-retail-korean",
+  "source": "비천신공의 두 번째 초식인 풍운은 구름과 바람의  기운을 이용하여 방패의 방어력을 낮추고 공격력을 높이는 신공이다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_B_TT_DESC": {
+  "english": "Lowers the shield's physical defense for a set time while raising physical attack power.",
+  "basis": "translated-retail-korean",
+  "source": "일정 시간동안 방패의 물리방어력을 감소시키면서 물리공격력을 상승시킨다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_C": {
+  "english": "Flying Heaven Art - Hundred Ghosts",
+  "basis": "translated-retail-korean",
+  "source": "백귀 비천신공"
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_C_STUDY": {
+  "english": "Hundred Ghosts, the third form of the Flying Heaven Art, uses the energies of spirits and monsters to lower the shield's defense considerably and gain demon-subduing power.",
+  "basis": "translated-retail-korean",
+  "source": "비천신공의 세 번째 초식인 백귀는 영혼과 요괴의 기운을 이용하여 방패의 방어력을 상당히 낮추고 제마의 힘을 얻게 되는 신공이다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_C_TT_DESC": {
+  "english": "Lowers the shield's physical defense for a set time while raising physical attack power.",
+  "basis": "translated-retail-korean",
+  "source": "일정 시간동안 방패의 물리방어력을 감소시키면서 물리공격력을 상승시킨다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_D": {
+  "english": "Flying Heaven Art - Mountain Sea",
+  "basis": "translated-retail-korean",
+  "source": "산해 비천신공"
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_D_STUDY": {
+  "english": "Mountain Sea, the fourth form of the Flying Heaven Art, uses the energies of mountain and sea to lower the shield's defense by about half and gain the power of raging waves.",
+  "basis": "translated-retail-korean",
+  "source": "비천신공의 네 번째 초식인 산해는 산과 바다의 기운을 이용하여 방패의 방어력을 절반 정도로 낮추고 노도의 힘을 얻게 되는 신공이다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_D_TT_DESC": {
+  "english": "Lowers the shield's physical defense for a set time while raising physical attack power.",
+  "basis": "translated-retail-korean",
+  "source": "일정 시간동안 방패의 물리방어력을 감소시키면서 물리공격력을 상승시킨다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_E": {
+  "english": "Flying Heaven Art - Heaven Earth",
+  "basis": "translated-retail-korean",
+  "source": "건곤 비천신공"
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_E_STUDY": {
+  "english": "Heaven Earth, the fifth form of the Flying Heaven Art, uses the energies of heaven and earth to sacrifice most of the shield's defense and gain heaven-breaking power.",
+  "basis": "translated-retail-korean",
+  "source": "비천신공의 다섯 번째 초식인 건곤은 하늘과 땅의 기운을 이용하여 방패의 방어력 대부분을 희생시켜 파천의 힘을 얻게 되는 신공이다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_E_TT_DESC": {
+  "english": "Lowers the shield's physical defense for a set time while raising physical attack power.",
+  "basis": "translated-retail-korean",
+  "source": "일정 시간동안 방패의 물리방어력을 감소시키면서 물리공격력을 상승시킨다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_F": {
+  "english": "Flying Heaven Art - Sun Moon",
+  "basis": "translated-retail-korean",
+  "source": "일월 비천신공"
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_F_STUDY": {
+  "english": "Sun Moon, the sixth form of the Flying Heaven Art, uses the energies of the sun and moon to spend all of the shield's defense and gain world-destroying energy.",
+  "basis": "translated-retail-korean",
+  "source": "비천신공의 여섯 번째 초식인 일월은 해와 달의 기운을 이용하여 방패의 방어력을 전부 소모시킨 후 멸우의 기운을 얻게 되는 신공이다."
+ },
+ "SN_SKILL_CH_SWORD_SHIELDPD_F_TT_DESC": {
+  "english": "Lowers the shield's physical defense for a set time while raising physical attack power.",
+  "basis": "translated-retail-korean",
+  "source": "일정 시간동안 방패의 물리방어력을 감소시키면서 물리공격력을 상승시킨다."
+ },
+ "SN_SKILL_CH_SWORD_SMASH_E": {
+  "english": "Twin Scale Smash",
+  "basis": "translated-retail-korean",
+  "source": "비천쌍린검"
+ },
+ "SN_SKILL_CH_SWORD_SMASH_E_STUDY": {
+  "english": "A technique that quickly circulates the true energy within the body to overpower the enemy with a huge current of energy. First, two sword swings create a pair of energy currents that subdue the enemy's body as quickly as will-o'-the-wisps; then energy is loaded into the sword's hilt for a finishing downward strike. This swordsmanship deals fatal wounds to the enemy.",
+  "basis": "translated-retail-korean",
+  "source": "몸 안의 진기를 빠르게 순환시켜 거대한 기의 기류로 상대를 제압하는 기술이다. 먼저 두 번 검을 휘둘러 만들어진 한 쌍의 기의 기류로 도깨비 불처럼 빠르게 적의 몸을 제압한 후 검의 손잡이에 기력을 싣고 내려찍어 마무리하는 이 검술은 적에게 치명적인 상처를 안겨준다."
+ },
+ "SN_SKILL_CH_SWORD_SMASH_E_TT_DESC": {
+  "english": "Swings the sword three times to deal a strong blow.",
+  "basis": "translated-retail-korean",
+  "source": "검을 세번 휘둘러 강한 타격을 입힌다."
+ },
+ "SN_SKILL_CH_SWORD_SMASH_F": {
+  "english": "Annihilation Smash",
+  "basis": "translated-retail-korean",
+  "source": "비천절멸검"
+ },
+ "SN_SKILL_CH_SWORD_SMASH_F_STUDY": {
+  "english": "A technique that instantly draws energy up from the lower abdomen and transfers it to the sword. The sword is swung at the opposing enemy with enough force to raze a dense forest, overpowering body and mind, and finally the enemy is destroyed with a blade that splits the air.",
+  "basis": "translated-retail-korean",
+  "source": "단전으로부터 순간적으로 기를 끌어올려 검에 전이시키는 기술이다. 대항하는 적을 향해 울창한 숲을 초토화 시킬 정도의 거센 기세로 검을 휘둘러 적의 신체와 정신을 제압하고 마지막에 대기를 가르는 검날로 적을 멸해버린다."
+ },
+ "SN_SKILL_CH_SWORD_SMASH_F_TT_DESC": {
+  "english": "Swings the sword widely three times to deal a strong blow.",
+  "basis": "translated-retail-korean",
+  "source": "검을 크게 세번 휘둘러 강한 타격을 입힌다."
+ },
+ "SN_SKILL_CH_SWORD_SPECIAL_D": {
+  "english": "Wild Flight Sword Dance",
+  "basis": "translated-retail-korean",
+  "source": "이기어검 난비"
+ },
+ "SN_SKILL_CH_SWORD_SPECIAL_E": {
+  "english": "Sky-Filling Sword Dance",
+  "basis": "translated-retail-korean",
+  "source": "이기어검 만천"
+ },
+ "SN_SKILL_CH_SWORD_SPECIAL_E_STUDY": {
+  "english": "The fifth form of the sword dance. It is called Sky-Filling because five swords fly out twice in a row, shining as if they cover the sky.",
+  "basis": "translated-retail-korean",
+  "source": "이기어검의 다섯 번째 초식으로 다섯개의 검이 2회 연속으로 하늘을 뒤덮듯 광휘를 떨치며 날아간다고 하여 만천이라 불리운다."
+ },
+ "SN_SKILL_CH_WATER_CANCEL_F": {
+  "english": "Vital Spot - Branch",
+  "basis": "translated-retail-korean",
+  "source": "점혈대법 지"
+ },
+ "SN_SKILL_CH_WATER_CANCEL_F_STUDY": {
+  "english": "The stage of injecting energy into the vital spot that governs the target's cranial nerves, splitting their mind and increasing the physical and magical damage they take, is called Branch.",
+  "basis": "translated-retail-korean",
+  "source": "상대의 신체 중 뇌신경을 관장하는 점혈에 기를 주입하여 상대의 정신을 분열시켜 적에게서 받는 물리, 마법 대미지를 증가시키는 단계를 지라고 한다."
+ },
+ "SN_SKILL_CH_WATER_CANCEL_G": {
+  "english": "Vital Spot - Sever",
+  "basis": "translated-retail-korean",
+  "source": "점혈대법 절"
+ },
+ "SN_SKILL_CH_WATER_CANCEL_G_STUDY": {
+  "english": "The state in which strong energy is injected into a vital spot where the target's energy flow is unstable, so that the target cannot withstand the shock and faints, is called Sever.",
+  "basis": "translated-retail-korean",
+  "source": "상대의 신체 중 기의 흐름이 불안정한 점혈에 강한 기를 주입하여 상대가 충격을 견디지 못하여 기절하는 상태를 절이라 한다."
+ },
+ "SN_SKILL_CH_WATER_CURE_E": {
+  "english": "Force cure-Stillness",
+  "basis": "translated-retail-korean",
+  "source": "추궁과혈 오성 정좌"
+ },
+ "SN_SKILL_CH_WATER_CURE_F": {
+  "english": "Force cure-Resolve",
+  "basis": "translated-retail-korean",
+  "source": "추궁과혈 육성 결극"
+ },
+ "SN_SKILL_CH_WATER_CUREAREA_C": {
+  "english": "Cure Therapy - Clear",
+  "basis": "translated-retail-korean",
+  "source": "반해진경 청"
+ },
+ "SN_SKILL_CH_WATER_CUREAREA_C_STUDY": {
+  "english": "Clear, the third stage of the Cure Therapy, is the stage of finding the twisted energy channels in another's body and dispelling the impure energy that has seeped in.",
+  "basis": "translated-retail-korean",
+  "source": "반해진경의 세 번째 단계인 청은 타인의 몸에서 뒤틀린 기혈을 짚어내어 몸 속에 스며든 불순한 기운을 소멸시키는 단계이다."
+ },
+ "SN_SKILL_CH_WATER_HARMONY_D": {
+  "english": "Origin therapy",
+  "basis": "translated-retail-korean",
+  "source": "본원치료술"
+ },
+ "SN_SKILL_CH_WATER_HARMONY_E": {
+  "english": "Transcendent therapy",
+  "basis": "translated-retail-korean",
+  "source": "초월치료술"
+ },
+ "SN_SKILL_CH_WATER_HARMONY_E_STUDY": {
+  "english": "Realize the principles of all things in the universe and become one with it, absorbing vast energy to raise life force while fading your own presence.",
+  "basis": "translated-retail-korean",
+  "source": "우주 삼라만상의 이치를 깨달아 우주와 하나가 되어 거대한 기를 흡수하고 그 기로 생명력을 높임과 동시에 자신의 기척을 사그라뜨린다."
+ },
+ "SN_SKILL_CH_WATER_HEAL_E": {
+  "english": "Heal - Myriad Hand",
+  "basis": "translated-retail-korean",
+  "source": "제황신의경 만수"
+ },
+ "SN_SKILL_CH_WATER_HEAL_E_STUDY": {
+  "english": "The fifth of the six stages of the Heal art, a divine hand that heals the target by borrowing the power of all things under heaven.",
+  "basis": "translated-retail-korean",
+  "source": "여섯단계의 제황신의경 중 다섯번째 단계인 천하만물의 힘을 빌어 상대를 치료하는 신수이다."
+ },
+ "SN_SKILL_CH_WATER_HEAL_F": {
+  "english": "Heal - Heaven Hand",
+  "basis": "translated-retail-korean",
+  "source": "제황신의경 건수"
+ },
+ "SN_SKILL_CH_WATER_HEAL_F_STUDY": {
+  "english": "The sixth of the six stages of the Heal art, a heavenly hand that heals the target by borrowing the power of the Heavenly Emperor who rules the sky.",
+  "basis": "translated-retail-korean",
+  "source": "여섯단계의 제황신의경 중 여섯번째 단계인 하늘을 다스리는 천제의 힘을 빌어 상대를 치료하는 건수이다."
+ },
+ "SN_SKILL_CH_WATER_RESURRECTION_E": {
+  "english": "Revival Rebirth Art",
+  "basis": "translated-retail-korean",
+  "source": "부활심결 귀생술"
+ },
+ "SN_SKILL_CH_WATER_RESURRECTION_E_STUDY": {
+  "english": "The Revival Rebirth Art, said to guide souls wandering the underworld toward the light and bring them back to life",
+  "basis": "translated-retail-korean",
+  "source": "구천을 떠돌고 있는 혼을 빛으로 인도하여 다시 되살릴 수 있다는 귀생술"
+ },
+ "SN_SKILL_CH_WATER_SELFHEAL_E": {
+  "english": "Self energy heal",
+  "basis": "translated-retail-korean",
+  "source": "내가기흡법"
+ },
+ "SN_SKILL_CH_WATER_SELFHEAL_E_STUDY": {
+  "english": "A breathing technique using energy that expels the foul energy of wounds and absorbs pure vital energy to heal the body's external and internal injuries.",
+  "basis": "translated-retail-korean",
+  "source": "기를 이용한 호흡법으로 부상당한 상처의 더러운 기운은 뱉어내고 순수한 정기를 흡수하여 신체의 외상과 내상을 치료한다."
+ },
+ "SN_SKILL_CH_WATER_SELFHEAL_F": {
+  "english": "Self meditation heal",
+  "basis": "translated-retail-korean",
+  "source": "내가명상술"
+ },
+ "SN_SKILL_CH_WATER_SELFHEAL_F_STUDY": {
+  "english": "Calm a mind writhing in pain through meditation, heat the energy in the body from the lower abdomen and heal internal injuries with its warmth.",
+  "basis": "translated-retail-korean",
+  "source": "명상을 통해 고통으로 몸부림치는 정신을 안정시키고 체내의 기를 단전으로부터 뜨겁게 달구어 따뜻한 온기로 신체의 내상을 치료한다."
+ },
+ "SN_SKILL_EU_CLERIC_BLESSA_MAGICAL_B_STUDY": {
+  "english": "Prays that the target gains high resistance to magic attacks.  The target receives a strong spirit from the god, greatly raising magic defense for a set time.",
+  "basis": "translated-retail-korean",
+  "source": "대상을 위해 마법공격에 대한 높은 저항력을 염원하는 기도를 하여  신이 내려준 강한 정신력을 받은 대상은 일정시간 동안 마법방어력이 크게 상승한다."
+ },
+ "SN_SKILL_EU_CLERIC_BLESSA_MAGICAL_B_TT_DESC": {
+  "english": "Prays that the target gains high resistance to magic attacks.  The target receives a strong spirit from the god, greatly raising magic defense for a set time.",
+  "basis": "translated-retail-korean",
+  "source": "대상을 위해 마법공격에 대한 높은 저항력을 염원하는 기도를 하여  신이 내려준 강한 정신력을 받은 대상은 일정시간 동안 마법방어력이 크게 상승한다."
+ },
+ "SN_SKILL_EU_CLERIC_REBIRTHA_GROUP_B_STUDY": {
+  "english": "Borrows the god's power of salvation for the souls of wandering companions, breathing life back into the fallen bodies of party members within a set range to revive them all at once.",
+  "basis": "translated-retail-korean",
+  "source": "헤메이는 동료들의 영혼을 위해 신의 구원의 힘을 빌어 일정범위 안에 있는 파티원들의 죽은 육신에 소생의 숨결을 불어넣어 일제히 부활시킨다."
+ },
+ "SN_SKILL_EU_CLERIC_REBIRTHA_GROUP_B_TT_DESC": {
+  "english": "Borrows the god's power of salvation for the souls of wandering companions, breathing life back into the fallen bodies of party members within a set range to revive them all at once.",
+  "basis": "translated-retail-korean",
+  "source": "헤메이는 동료들의 영혼을 위해 신의 구원의 힘을 빌어 일정범위 안에 있는 파티원들의 죽은 육신에 소생의 숨결을 불어넣어 일제히 부활시킨다."
+ },
+ "SN_SKILL_EU_CLERIC_REBIRTHA_SPECIAL_B_STUDY": {
+  "english": "Awakens the soul of a dead target, offers part of that soul to the god as a sacrifice and revives the target with a warped soul. In return for the sacrifice, the revived target's attack drops for a set time while its defense rises greatly, but its HP and MP fall sharply when it returns to its normal state.",
+  "basis": "translated-retail-korean",
+  "source": "죽어있는 대상의 영혼을 깨워 그 영혼의 일부를 신에게 제물로 바치고 영혼이 일그러진 상태로 부활시킨다. 부활한 존재는 희생의 대가로 일정시간 동안 공격력이 하락하는 대신 방어력이 크게 높아지는데 일반 상태로 돌아올 때 HP와 MP가 급격히 감소한다."
+ },
+ "SN_SKILL_EU_CLERIC_REBIRTHA_SPECIAL_B_TT_DESC": {
+  "english": "Awakens the soul of a dead target, offers part of that soul to the god as a sacrifice and revives the target with a warped soul. In return for the sacrifice, the revived target's attack drops for a set time while its defense rises greatly, but its HP and MP fall sharply when it returns to its normal state.",
+  "basis": "translated-retail-korean",
+  "source": "죽어있는 대상의 영혼을 깨워 그 영혼의 일부를 신에게 제물로 바치고 영혼이 일그러진 상태로 부활시킨다. 부활한 존재는 희생의 대가로 일정시간 동안 공격력이 하락하는 대신 방어력이 크게 높아지는데 일반 상태로 돌아올 때 HP와 MP가 급격히 감소한다."
+ },
+ "SN_SKILL_EU_CLERIC_RECOVERYA_GROUP_B_STUDY": {
+  "english": "A holy spell that, moved by the suffering of companions, periodically shares heavenly warmth with the party member with the lowest HP for a set time to restore them. The magic attack power of the equipped weapon affects the amount recovered.",
+  "basis": "translated-retail-korean",
+  "source": "동료들의 고통에 감응하여 그들을 위해 만들어낸 천상의 온기를 정해진 시간 동안 일정한 주기로 HP가 가장 적은 파티원에게 나누어 주어 회복시키는 성스러운 주문으로서 착용 무기의 마법공격력이 회복양에 영향을 준다."
+ },
+ "SN_SKILL_EU_CLERIC_RECOVERYA_GROUP_B_TT_DESC": {
+  "english": "A holy spell that, moved by the suffering of companions, periodically shares heavenly warmth with the party member with the lowest HP for a set time to restore them. The magic attack power of the equipped weapon affects the amount recovered.",
+  "basis": "translated-retail-korean",
+  "source": "동료들의 고통에 감응하여 그들을 위해 만들어낸 천상의 온기를 정해진 시간 동안 일정한 주기로 HP가 가장 적은 파티원에게 나누어 주어 회복시키는 성스러운 주문으로서 착용 무기의 마법공격력이 회복양에 영향을 준다."
+ },
+ "SN_SKILL_EU_CLERIC_RECOVERYA_QUICK_B_STUDY": {
+  "english": "Turns the heart's cry to save more lives into a prayer, receives heaven's grace of healing from the god and instantly restores the HP of the whole party.",
+  "basis": "translated-retail-korean",
+  "source": "보다 많은 생명을 구하고자 하는 마음의 외침을 기도로 승화시켜 천상의 치유의 은총을 신에게서 부여받아 파티원 전체의 HP를 즉시 회복시킨다."
+ },
+ "SN_SKILL_EU_CLERIC_RECOVERYA_QUICK_B_TT_DESC": {
+  "english": "Turns the heart's cry to save more lives into a prayer, receives heaven's grace of healing from the god and instantly restores the HP of the whole party.",
+  "basis": "translated-retail-korean",
+  "source": "보다 많은 생명을 구하고자 하는 마음의 외침을 기도로 승화시켜 천상의 치유의 은총을 신에게서 부여받아 파티원 전체의 HP를 즉시 회복시킨다."
+ },
+ "SN_SKILL_EVENT_FLAG_BUFF": {
+  "english": "Flag Acquired",
+  "basis": "translated-retail-korean",
+  "source": "깃발획득"
+ },
+ "SN_SKILL_MALL_PET_SKILL_COLD": {
+  "english": "Pet Skill (Frost)",
+  "basis": "translated-retail-korean",
+  "source": "펫 스킬(빙)"
+ },
+ "SN_SKILL_MALL_PET_SKILL_FIRE": {
+  "english": "Pet Skill (Fire)",
+  "basis": "translated-retail-korean",
+  "source": "펫 스킬(화)"
+ },
+ "SN_SKILL_MALL_PET_SKILL_LIGHTNING": {
+  "english": "Pet Skill (Lightning)",
+  "basis": "translated-retail-korean",
+  "source": "펫 스킬(뇌)"
+ },
+ "SN_SKILL_MALL_PET_WATCH_AGOL": {
+  "english": "Agol's Watch",
+  "basis": "translated-retail-korean",
+  "source": "아골의 시계"
+ },
+ "SN_SKILL_MALL_PET_WATCH_CHULHYEN": {
+  "english": "Chulsan's Watch",
+  "basis": "translated-retail-korean",
+  "source": "철현의 시계"
+ },
+ "SN_STORE_ROC_FRONT_GATE": {
+  "english": "Gate of the Roc Audience",
+  "basis": "translated-retail-korean",
+  "source": "로크 알현의 문"
+ },
+ "SN_STORE_TAHOMET_GATE": {
+  "english": "Gate of the Ruler",
+  "basis": "translated-retail-korean",
+  "source": "지배자의 문"
+ },
+ "SN_STORE_TQ_SNAKEGATE": {
+  "english": "Gate of the Sarin Tribe",
+  "basis": "translated-retail-korean",
+  "source": "사린족의 관문"
+ },
+ "SN_ZONE_21012": {
+  "english": "Gate of the Ruler",
+  "basis": "translated-retail-korean",
+  "source": "지배자의 문"
+ },
+ "SN_ZONE_26001": {
+  "english": "Ch'in Tomb 1F",
+  "basis": "translated-retail-korean",
+  "source": "진시황릉 1층"
+ },
+ "SN_ZONE_26002": {
+  "english": "Ch'in Tomb 2F",
+  "basis": "translated-retail-korean",
+  "source": "진시황릉 2층"
+ },
+ "SN_ZONE_26003": {
+  "english": "Ch'in Tomb 3F",
+  "basis": "translated-retail-korean",
+  "source": "진시황릉 3층"
+ },
+ "SN_ZONE_26004": {
+  "english": "Ch'in Tomb 4F",
+  "basis": "translated-retail-korean",
+  "source": "진시황릉 4층"
+ },
+ "SN_ZONE_26005": {
+  "english": "Ch'in Tomb 5F",
+  "basis": "translated-retail-korean",
+  "source": "진시황릉 5층"
+ },
+ "UIIT_STT_MASTERY_GROUP_VI_7": {
+  "english": "Flying Heaven Art line\n\nThe Flying Heaven Art is a martial art created to bring ultimate power to Bicheonmun. It uses the opposing energies scattered across the world to create another balancing power within oneself.\nWith the birth of the Flying Heaven Art, disciples of Bicheonmun became able to use that balancing power to lower their own defense for a set time in exchange for higher attack power, giving them tremendous killing power. \nHowever, the extremely lowered defense brought danger that threatened the user, so the head of Bicheonmun restricted the Flying Heaven Art to use with a shield only.",
+  "basis": "translated-retail-korean",
+  "source": "비천신공 계열\n\n비천신공은 비천문에게 궁극의 힘을 가져다주기 위해 만들어진 무공으로서 세상에 흩어져있는 서로 반대되는 기운을 이용하여 자신에게 또 다른 균형의 힘을 창조하는 신공이다.\n비천신공의 탄생으로 인해 비천문의 제자들은 그 균형의 힘을 이용하여 일정 시간동안 자신의 방어력을 낮추는 대신 공격력을 높일 수 있게 되었으며 그로 인해 막강한 살상 능력을 가지게 되었다. \n그러나 극도로 낮아진 방어력은 오히려 자신을 위협하는 위험을 초래하게 되었고 그로 인해 비천문의 문주는 비천신공을 방패에 한하여 사용하는 것으로 제한하였다."
+ }
+}

@@ -807,7 +807,6 @@ scripts/build/shared/compressionUtils.mjs
 scripts/build/shared/configResources.mjs
 scripts/build/shared/convertImagesRunner.mjs
 scripts/build/shared/dataAssetExport.mjs
-scripts/build/shared/englishCompletions.mjs
 scripts/build/shared/fileHashCache.mjs
 scripts/build/shared/fontResources.mjs
 scripts/build/shared/fsUtils.mjs

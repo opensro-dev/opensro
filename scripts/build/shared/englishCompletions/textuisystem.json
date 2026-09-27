@@ -1,0 +1,1052 @@
+{
+ "DE_UIIT_MSG_STATE_MSKILL_RM_ROC_ATTACK10": {
+  "english": "Worn out by a battle lasting over an hour, the Roc summons its remaining strength to end the fight and drives itself berserk.\nIts attack/defense/attack rating/parry ratio rise by 10% every 10 minutes. One hour after the frenzy begins, the Roc exhausts all its strength and flees its nest.",
+  "basis": "translated-retail-korean",
+  "source": "1시간이 넘는 긴 전투에 지친 로크가 전투를 끝내기 위해 남은 힘을 끌어올려 자신을 광폭한 상태가 되도록 만드는 버프이다.\n공격력/방어력/명중률/회피율이 10분마다 10%씩 증가하며 광폭화가 시작된 뒤 1시간이 지나면 로크는 모든 힘을 소진해서 둥지를 떠나 도망가게 된다."
+ },
+ "FARM0101": {
+  "english": "Farm 01 of Yahoo Division 01",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 01에 속한 팜 01"
+ },
+ "FARM0102": {
+  "english": "Farm 02 of Yahoo Division 01",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 01에 속한 팜 02"
+ },
+ "FARM0103": {
+  "english": "Farm 03 of Yahoo Division 01",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 01에 속한 팜 03"
+ },
+ "FARM0104": {
+  "english": "Farm 04 of Yahoo Division 01",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 01에 속한 팜 04"
+ },
+ "FARM0105": {
+  "english": "Farm 05 of Yahoo Division 01",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 01에 속한 팜 05"
+ },
+ "FARM0201": {
+  "english": "Farm 01 of Yahoo Division 02",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 02에 속한 팜 01"
+ },
+ "FARM0202": {
+  "english": "Farm 02 of Yahoo Division 02",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 02에 속한 팜 02"
+ },
+ "FARM0203": {
+  "english": "Farm 03 of Yahoo Division 02",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 02에 속한 팜 03"
+ },
+ "FARM0204": {
+  "english": "Farm 04 of Yahoo Division 02",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 02에 속한 팜 04"
+ },
+ "FARM0205": {
+  "english": "Farm 05 of Yahoo Division 02",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 02에 속한 팜 05"
+ },
+ "FARM0301": {
+  "english": "Farm 01 of Yahoo Division 03",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 03에 속한 팜 01"
+ },
+ "FARM0302": {
+  "english": "Farm 02 of Yahoo Division 03",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 03에 속한 팜 02"
+ },
+ "FARM0303": {
+  "english": "Farm 03 of Yahoo Division 03",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 03에 속한 팜 03"
+ },
+ "FARM0304": {
+  "english": "Farm 04 of Yahoo Division 03",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 03에 속한 팜 04"
+ },
+ "FARM0305": {
+  "english": "Farm 05 of Yahoo Division 03",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 03에 속한 팜 05"
+ },
+ "FARM0401": {
+  "english": "Farm 01 of Yahoo Division 04",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 04에 속한 팜 01"
+ },
+ "FARM0402": {
+  "english": "Farm 02 of Yahoo Division 04",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 04에 속한 팜 02"
+ },
+ "FARM0403": {
+  "english": "Farm 03 of Yahoo Division 04",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 04에 속한 팜 03"
+ },
+ "FARM0404": {
+  "english": "Farm 04 of Yahoo Division 04",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 04에 속한 팜 04"
+ },
+ "FARM0405": {
+  "english": "Farm 05 of Yahoo Division 04",
+  "basis": "translated-retail-korean",
+  "source": "야후 디비젼 04에 속한 팜 05"
+ },
+ "PARAM_SPD": {
+  "english": "Shield phy. def.",
+  "basis": "translated-retail-korean",
+  "source": "방패물리방어력"
+ },
+ "UIIO_CLIENT_START_CONTENT_FAIL_ACCOUNT_ERR": {
+  "english": "This account cannot be used at the moment.\nPlease try to connect again in a moment.",
+  "basis": "translated-retail-korean",
+  "source": "해당 계정은 현재 사용이 불가능 합니다.\n잠시후에 다시 접속을 시도해 주시기 바랍니다."
+ },
+ "UIIO_CLIENT_START_CONTENT_FAIL_BILLING_FAILED": {
+  "english": "Your usage period has expired, so you cannot connect to the server.",
+  "basis": "translated-retail-korean",
+  "source": "사용기간이 만료되어 서버에 접속할 수 없습니다."
+ },
+ "UIIO_CLIENT_START_CONTENT_FAIL_BILLING_RELATED": {
+  "english": "Cannot connect because of a billing server error.",
+  "basis": "translated-retail-korean",
+  "source": "빌링 서버 에러로 접속할 수 없습니다."
+ },
+ "UIIO_CLIENT_START_CONTENT_FAIL_CONNECT_ERR": {
+  "english": "A problem occurred while connecting to the server.\nPlease try to connect again in a moment.",
+  "basis": "translated-retail-korean",
+  "source": "서버 접속에 문제가 발생하였습니다.\n잠시후에 다시 접속을 시도해 주시기 바랍니다."
+ },
+ "UIIO_SMERR_TEEN_ONLY_SERVER": {
+  "english": "Adult users aged 18 or older cannot connect to this server.",
+  "basis": "translated-retail-korean",
+  "source": "만 18세 이상의 성인 유저는 접속 할 수 없습니다."
+ },
+ "UIIT_CTL_GUILD_NEW_WRITE": {
+  "english": "New Post",
+  "basis": "translated-retail-korean",
+  "source": "새글"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_CLOTHES_1": {
+  "english": "Garment-Head",
+  "basis": "translated-retail-korean",
+  "source": "도복-머리"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_CLOTHES_2": {
+  "english": "Garment-Shoulder",
+  "basis": "translated-retail-korean",
+  "source": "도복-어깨"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_CLOTHES_3": {
+  "english": "Garment-Chest",
+  "basis": "translated-retail-korean",
+  "source": "도복-가슴"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_CLOTHES_4": {
+  "english": "Garment-Legs",
+  "basis": "translated-retail-korean",
+  "source": "도복-다리"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_CLOTHES_5": {
+  "english": "Garment-Hand",
+  "basis": "translated-retail-korean",
+  "source": "도복-손"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_CLOTHES_6": {
+  "english": "Garment-Foot",
+  "basis": "translated-retail-korean",
+  "source": "도복-발"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_HEAVY_1": {
+  "english": "Armor-Head",
+  "basis": "translated-retail-korean",
+  "source": "갑옷-머리"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_HEAVY_2": {
+  "english": "Armor-Shoulder",
+  "basis": "translated-retail-korean",
+  "source": "갑옷-어깨"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_HEAVY_3": {
+  "english": "Armor-Chest",
+  "basis": "translated-retail-korean",
+  "source": "갑옷-가슴"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_HEAVY_4": {
+  "english": "Armor-Legs",
+  "basis": "translated-retail-korean",
+  "source": "갑옷-다리"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_HEAVY_5": {
+  "english": "Armor-Hand",
+  "basis": "translated-retail-korean",
+  "source": "갑옷-손"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_HEAVY_6": {
+  "english": "Armor-Foot",
+  "basis": "translated-retail-korean",
+  "source": "갑옷-발"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_LIGHT_1": {
+  "english": "Protector-Head",
+  "basis": "translated-retail-korean",
+  "source": "호구-머리"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_LIGHT_2": {
+  "english": "Protector-Shoulder",
+  "basis": "translated-retail-korean",
+  "source": "호구-어깨"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_LIGHT_3": {
+  "english": "Protector-Chest",
+  "basis": "translated-retail-korean",
+  "source": "호구-가슴"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_LIGHT_4": {
+  "english": "Protector-Legs",
+  "basis": "translated-retail-korean",
+  "source": "호구-다리"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_LIGHT_5": {
+  "english": "Protector-Hand",
+  "basis": "translated-retail-korean",
+  "source": "호구-손"
+ },
+ "UIIT_CTL_WK_CH_ARMOR_LIGHT_6": {
+  "english": "Protector-Foot",
+  "basis": "translated-retail-korean",
+  "source": "호구-발"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_HEAVY_1": {
+  "english": "Heavy Armor-Head",
+  "basis": "translated-retail-korean",
+  "source": "헤비아머-머리"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_HEAVY_2": {
+  "english": "Heavy Armor-Shoulder",
+  "basis": "translated-retail-korean",
+  "source": "헤비아머-어깨"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_HEAVY_3": {
+  "english": "Heavy Armor-Chest",
+  "basis": "translated-retail-korean",
+  "source": "헤비아머-가슴"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_HEAVY_4": {
+  "english": "Heavy Armor-Legs",
+  "basis": "translated-retail-korean",
+  "source": "헤비아머-다리"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_HEAVY_5": {
+  "english": "Heavy Armor-Hand",
+  "basis": "translated-retail-korean",
+  "source": "헤비아머-손"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_HEAVY_6": {
+  "english": "Heavy Armor-Foot",
+  "basis": "translated-retail-korean",
+  "source": "헤비아머-발"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_LIGHT_1": {
+  "english": "Light Armor-Head",
+  "basis": "translated-retail-korean",
+  "source": "라이트아머-머리"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_LIGHT_2": {
+  "english": "Light Armor-Shoulder",
+  "basis": "translated-retail-korean",
+  "source": "라이트아머-어깨"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_LIGHT_3": {
+  "english": "Light Armor-Chest",
+  "basis": "translated-retail-korean",
+  "source": "라이트아머-가슴"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_LIGHT_4": {
+  "english": "Light Armor-Legs",
+  "basis": "translated-retail-korean",
+  "source": "라이트아머-다리"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_LIGHT_5": {
+  "english": "Light Armor-Hand",
+  "basis": "translated-retail-korean",
+  "source": "라이트아머-손"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_LIGHT_6": {
+  "english": "Light Armor-Foot",
+  "basis": "translated-retail-korean",
+  "source": "라이트아머-발"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_ROBE_1": {
+  "english": "Robe-Head",
+  "basis": "translated-retail-korean",
+  "source": "로브-머리"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_ROBE_2": {
+  "english": "Robe-Shoulder",
+  "basis": "translated-retail-korean",
+  "source": "로브-어깨"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_ROBE_3": {
+  "english": "Robe-Chest",
+  "basis": "translated-retail-korean",
+  "source": "로브-가슴"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_ROBE_4": {
+  "english": "Robe-Legs",
+  "basis": "translated-retail-korean",
+  "source": "로브-다리"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_ROBE_5": {
+  "english": "Robe-Hand",
+  "basis": "translated-retail-korean",
+  "source": "로브-손"
+ },
+ "UIIT_CTL_WK_EU_ARMOR_ROBE_6": {
+  "english": "Robe-Foot",
+  "basis": "translated-retail-korean",
+  "source": "로브-발"
+ },
+ "UIIT_CTL_WK_FORTWAR": {
+  "english": "Fortress War",
+  "basis": "translated-retail-korean",
+  "source": "요새전"
+ },
+ "UIIT_CTL_WK_FORTWAR_ITEM": {
+  "english": "Fortress War Supplies",
+  "basis": "translated-retail-korean",
+  "source": "요새전 용품"
+ },
+ "UIIT_CTL_WK_FORTWAR_WEAPON": {
+  "english": "Fortress Weapons",
+  "basis": "translated-retail-korean",
+  "source": "요새 무기"
+ },
+ "UIIT_DISCUSSION_GAMELEVEL_15": {
+  "english": "This game may only be played by users aged 15 or older",
+  "basis": "translated-retail-korean",
+  "source": "본 게임은 15세 이상의 이용자만 플레이 할 수 있습니다"
+ },
+ "UIIT_DISCUSSION_GAMELEVEL_15_SERVER": {
+  "english": "This server may only be played by users aged 15 or older",
+  "basis": "translated-retail-korean",
+  "source": "현재 서버는 15세 이상의 이용자만 플레이 할 수 있습니다"
+ },
+ "UIIT_DISCUSSION_GAMELEVEL_18": {
+  "english": "This game may only be played by users aged 18 or older",
+  "basis": "translated-retail-korean",
+  "source": "본 게임은 18세 이상의 이용자만 플레이 할 수 있습니다"
+ },
+ "UIIT_DISCUSSION_GAMELEVEL_18_SERVER": {
+  "english": "This server may only be played by users aged 18 or older",
+  "basis": "translated-retail-korean",
+  "source": "현재 서버는 18세 이상의 이용자만 플레이 할 수 있습니다"
+ },
+ "UIIT_MSG_BGM_PLAY_SHINING_STAR": {
+  "english": "<sml2><font color=\"255,255,255,0\">This is the Silkroad theme song Shining Star, sung by Park Jung-ah.</font></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><font color=\"255,255,255,0\">박정아가 부르는 실크로드 주제곡 Shining Star 입니다.</font></sml2>"
+ },
+ "UIIT_MSG_CHINA_PKZONE_ENTRANCE": {
+  "english": "You will be summoned to the PK Zone. Do you accept?",
+  "basis": "translated-retail-korean",
+  "source": "PK Zone으로 소환됩니다. 수락하시겠습니까?"
+ },
+ "UIIT_MSG_CHINA_PKZONE_ENTRANCE_FAIL1": {
+  "english": "You cannot be summoned to the PK Zone while in a free battle or wearing a job suit.",
+  "basis": "translated-retail-korean",
+  "source": "자유대련 및 직업복을 착용하고 있어 PK Zone으로 소환할 수 없습니다."
+ },
+ "UIIT_MSG_CHINA_PKZONE_NOT_USE_ITEM": {
+  "english": "This item cannot be used in the PK Zone.",
+  "basis": "translated-retail-korean",
+  "source": "PK Zone에서는 사용할 수 없는 아이템입니다."
+ },
+ "UIIT_MSG_CHINA_PKZONE_NOT_USE_SKILL": {
+  "english": "This skill cannot be used in the PK Zone.",
+  "basis": "translated-retail-korean",
+  "source": "PK Zone에서는 사용할 수 없는 스킬입니다."
+ },
+ "UIIT_MSG_COS_DONOT_USE_ITEM": {
+  "english": "This item cannot be used for a while. Details on its use will be announced later.",
+  "basis": "translated-retail-korean",
+  "source": "해당 아이템은 일정시간동안 사용할 수 없는 상태입니다. 사용에 관련된 사항은 추후공지 하겠습니다."
+ },
+ "UIIT_MSG_EXCHANGE_DECEPTION_COMPARE": {
+  "english": "The other player is not registered in your guild/union/friend list.",
+  "basis": "translated-retail-korean",
+  "source": "상대방은 길드/동맹/친구목록에 등록되어 있지 않은 플레이어입니다."
+ },
+ "UIIT_MSG_EXCHANGE_DECEPTION_REAFFIRM": {
+  "english": "Please check the other player's ID, gold and equipment details once more.",
+  "basis": "translated-retail-korean",
+  "source": "상대방의 아이디, 골드, 장비의 세부정보를 다시 한 번 확인 바랍니다."
+ },
+ "UIIT_MSG_HWANITEM_CANNOT_USE": {
+  "english": "You cannot use this item because your Pahwan level is too low.",
+  "basis": "translated-retail-korean",
+  "source": "파환 레벨이 충족되지 않아 해당 아이템을 사용할 수 없습니다."
+ },
+ "UIIT_MSG_INTERACTION_FAIL_OUT_OF_REQUIRED_ITEM_FOR_TELEPORT": {
+  "english": "You cannot move because you do not have the required item.",
+  "basis": "translated-retail-korean",
+  "source": "필요 아이템을 소지하고 있지 않아 이동을 할 수 없습니다."
+ },
+ "UIIT_MSG_INTERACTION_FAIL_OUT_OF_REQUIRED_JOB_FOR_TELEPORT": {
+  "english": "You cannot move to that area while in job mode.",
+  "basis": "translated-retail-korean",
+  "source": "직업상태일 때에는 해당 지역으로 이동할 수 없습니다."
+ },
+ "UIIT_MSG_INTERACTION_FAIL_OUT_OF_REQUIRED_NUMBER_FOR_TELEPORT": {
+  "english": "You cannot enter because the area has reached its maximum number of players.",
+  "basis": "translated-retail-korean",
+  "source": "해당 지역의 최대 접속인원을 초과했기 때문에 입장할 수 없습니다."
+ },
+ "UIIT_MSG_IP_OVER": {
+  "english": "The maximum number of players that can connect from this IP has been exceeded.",
+  "basis": "translated-retail-korean",
+  "source": "해당 IP에서 접속할 수 있는 최대 인원을 초과했습니다."
+ },
+ "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_INS": {
+  "english": "You cannot move to this location using this item.",
+  "basis": "translated-retail-korean",
+  "source": "해당 아이템을 사용하여 이동할 수 없는 위치입니다."
+ },
+ "UIIT_MSG_MOTP_BASIC_INFO": {
+  "english": "If you applied for mobile verification, you must enter the verification code to log in. If you are not a mobile verification user, uncheck the verification code box.",
+  "basis": "translated-retail-korean",
+  "source": "휴대폰 인증신청을 한 분은 반드시 인증번호를 입력해야만 로그인할 수 있습니다. 휴대폰 인증 사용자가 아닌 경우 인증번호 체크를 해제하십시오."
+ },
+ "UIIT_MSG_MOTP_PASSWORD_CHECKBOX_OFF": {
+  "english": "Please enter your mobile verification code",
+  "basis": "translated-retail-korean",
+  "source": "휴대폰 인증번호를 입력하십시오"
+ },
+ "UIIT_MSG_MOTP_PASSWORD_CHECKBOX_ON": {
+  "english": "You are not a mobile verification user, or you have not been verified since joining MOTP. Uncheck the verification code box and log in",
+  "basis": "translated-retail-korean",
+  "source": "휴대폰 인증 사용자가 아니거나 MOPT 가입 후 인증 자격을 받지 않은 사용자 입니다. 인증번호 사용 체크박스를 해제하고 로그인 하십시오"
+ },
+ "UIIT_MSG_MOTP_PASSWORD_ERROR": {
+  "english": "Mobile verification code entry: %d of %d attempts failed.",
+  "basis": "translated-retail-korean",
+  "source": "휴대폰 인증번호 입력이 %d회 중 %d회 오류입니다."
+ },
+ "UIIT_MSG_MOTP_SEVER_ERROR": {
+  "english": "MOTP verification server error.",
+  "basis": "translated-retail-korean",
+  "source": "MOTP 인증 서버 오류입니다."
+ },
+ "UIIT_MSG_PCCAFEL_NOT_LOGIN": {
+  "english": "This is a PC cafe item. PC cafe items can only be used at affiliated PC cafes.",
+  "basis": "translated-retail-korean",
+  "source": "PC방 전용 아이템입니다. PC방 전용 아이템은 가맹 PC방에서만 사용이 가능합니다."
+ },
+ "UIIT_MSG_PET_CANNOT_BE_MOVED": {
+  "english": "Cannot be traded or dropped after it is first summoned.",
+  "basis": "translated-retail-korean",
+  "source": "최초 소환 후 부터 교환, 드롭이 불가능 합니다."
+ },
+ "UIIT_MSG_QUEST_GIVEUP_WINDOW_3": {
+  "english": "If you give up this quest, you must start again from [%s]. Do you really want to give up?",
+  "basis": "translated-retail-korean",
+  "source": "이 퀘스트를 포기하면 [%s]부터 다시 시작해야 합니다. 정말로 포기하시겠습니까?"
+ },
+ "UIIT_MSG_QUEST_ROC_APPEAR": {
+  "english": "The Gate of the Ruler of Mt. Roke has opened.",
+  "basis": "translated-retail-korean",
+  "source": "로크산 지배자의 문이 열렸습니다."
+ },
+ "UIIT_MSG_QUEST_ROC_BERSERKER": {
+  "english": "The Roc will go berserk in [%d] minute(s).",
+  "basis": "translated-retail-korean",
+  "source": "[%d] 분 후 괴조 로크의 광폭화가 시작됩니다."
+ },
+ "UIIT_MSG_QUEST_ROC_BERSERKER_START": {
+  "english": "The Roc has gone berserk.",
+  "basis": "translated-retail-korean",
+  "source": "괴조 로크의 광폭화가 시작되었습니다."
+ },
+ "UIIT_MSG_QUEST_ROC_BREAK_STONE": {
+  "english": "The Seal Stones of Vital Energy and all their guardians are gone. The Roc will appear in 10 minutes.",
+  "basis": "translated-retail-korean",
+  "source": "정기의 봉인석과 그의 수호자들이 모두 사라졌습니다. 10분 뒤 괴조 로크가 등장합니다."
+ },
+ "UIIT_MSG_QUEST_ROC_BYEBYE": {
+  "english": "The Roc will leave the peak of Mt. Roke in [%d] minute(s).",
+  "basis": "translated-retail-korean",
+  "source": "괴조 로크가 [%d] 분 후 로크산 정상을 떠납니다."
+ },
+ "UIIT_MSG_QUEST_ROC_CANNOT_ENTRANCE": {
+  "english": "Cannot be used while wearing a job suit, without the Clan Key, or below the required entry level.",
+  "basis": "translated-retail-korean",
+  "source": "직업복 착용, 혈족의 열쇠가 없거나 입장 요구 레벨을 만족하지 않아 사용 할 수 없습니다."
+ },
+ "UIIT_MSG_QUEST_ROC_DISAPPEAR": {
+  "english": "The Gate of the Ruler of Mt. Roke has closed.",
+  "basis": "translated-retail-korean",
+  "source": "로크산 지배자의 문이 닫혔습니다."
+ },
+ "UIIT_MSG_QUEST_ROC_TAHOMETGATE_CLOSE": {
+  "english": "Demon Shaitan answered the call of the Roc and disappeared.",
+  "basis": "translated-retail-korean",
+  "source": "마인 샤이탄이 괴조 로크의 부름을 받고 사라졌습니다."
+ },
+ "UIIT_MSG_SKILL_USE_FAIL_CANT_ATTACK_FORTRESS": {
+  "english": "In a fortress war, an untouchable character can neither attack nor be attacked for 10 seconds.",
+  "basis": "translated-retail-korean",
+  "source": "요새전에서는 언터쳐블 상태에서 10초간 공격을 할 수도 받지도 않는 상태가 됩니다."
+ },
+ "UIIT_MSG_SKILL_USE_FAIL_CANT_USEITEM_IN_RIDESTATE": {
+  "english": "This item cannot be used while riding a mount or transport",
+  "basis": "translated-retail-korean",
+  "source": "이동/운송수단에 탑승 중일 때는 해당 아이템을 사용할 수 없습니다"
+ },
+ "UIIT_MSG_STATE_MSKILL_RM_ROC_ATTACK10": {
+  "english": "Berserk",
+  "basis": "translated-retail-korean",
+  "source": "광폭화"
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_0": {
+  "english": "You are receiving 0% of rewards.",
+  "basis": "translated-retail-korean",
+  "source": "0% 획득 상태입니다."
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_100": {
+  "english": "You are receiving 100% of rewards..",
+  "basis": "translated-retail-korean",
+  "source": "100% 획득 상태입니다.."
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_50": {
+  "english": "You are receiving 50% of rewards.",
+  "basis": "translated-retail-korean",
+  "source": "50% 획득 상태입니다."
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_50_WARNING": {
+  "english": "You have been playing for %d hour(s) %d minute(s). You are receiving 50%% of rewards.",
+  "basis": "translated-retail-korean",
+  "source": "현재 %d시간 %d분째 플레이 중입니다. 50%% 획득 상태입니다."
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_OVERTIME": {
+  "english": "You have been playing for more than %d hour(s).",
+  "basis": "translated-retail-korean",
+  "source": "현재 %d시간 이상 플레이 중입니다."
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_OVERTIME_WARNING": {
+  "english": "You have been playing for more than %d hour(s).",
+  "basis": "translated-retail-korean",
+  "source": "현재 %d시간 이상 플레이 중입니다."
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_PLAYTIME": {
+  "english": "You have been playing for %d hour(s) %d minute(s).",
+  "basis": "translated-retail-korean",
+  "source": "현재 %d시간 %d분째 플레이 중입니다."
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_PLAYTIME_FOR_50": {
+  "english": "You have been playing for %d hour(s) %d minute(s). You are receiving 50%% of rewards.",
+  "basis": "translated-retail-korean",
+  "source": "현재 %d시간 %d분째 플레이 중입니다. 50%% 획득 상태입니다."
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_PLAYTIME_WARNING": {
+  "english": "You have been playing for %d hour(s) %d minute(s).",
+  "basis": "translated-retail-korean",
+  "source": "현재 %d시간 %d분째 플레이 중입니다."
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_TOOLTIP_0": {
+  "english": "Receiving 0% of rewards",
+  "basis": "translated-retail-korean",
+  "source": "0% 획득 상태"
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_TOOLTIP_100": {
+  "english": "Receiving 100% of rewards",
+  "basis": "translated-retail-korean",
+  "source": "100% 획득 상태"
+ },
+ "UIIT_MSG_VIETNAM_MRSYSTEM_TOOLTIP_50": {
+  "english": "Receiving 50% of rewards",
+  "basis": "translated-retail-korean",
+  "source": "50% 획득 상태"
+ },
+ "UIIT_MSG_WINTER_EVENT_060125_LV05": {
+  "english": "“You have reached level 5! Congratulations.\nUp to level 5 you will have learned the basics you need on the Silk Road. How was it? You are now granted the right to use the 60% experience helper item, which will help you on the journey ahead.\n\nOpen your inventory (I) and try the 60% experience item. Move the mouse over the item and press the right button to use it. For 3 hours within 24 hours, the experience you earn fighting monsters increases by 60%. Time only passes while you fight monsters, so use it generously.\nYou do not have to use it now. Use it whenever you need it.\n\n(New characters only)”",
+  "basis": "translated-retail-korean",
+  "source": "“이제 5레벨이 되셨군요!! 축하 드립니다.\n5레벨까지는 실크로드에 몸담기 위해 필요한 기본적인 것들을 확인하셨을 것입니다. 어떻습니까? 앞으로 펼쳐질 실크로드의 여정에 도움이 될 60% 경험치 도우미 아이템을 사용할 수 있는 권한을 드립니다.\n\n인벤토리(I)를 열어 60% 경험치 아이템을 사용해 보십시오. 마우스를 아이템에 가져가서 오른쪽 버튼을 누르면 사용됩니다. 24시간 동안 3시간은 몬스터와 싸워 얻는 경험치가 60% 증가됩니다. 몬스터와 전투할 때에만 시간이 흐르니 넉넉하게 사용하시기 바랍니다.\n지금 사용하지 않으셔도 됩니다. 언제든지 필요할 때 사용하시기 바랍니다.\n\n(새로 만들어진 캐릭터에 한함)”"
+ },
+ "UIIT_MSG_WINTER_EVENT_060125_LV10": {
+  "english": "“You have finally reached level 10! Our sincere congratulations.\nIt seems you are now fully prepared to head out onto the vast Silk Road. It would be good to think ahead about which job to choose on the Silk Road, where hunters, merchants and thieves form their own forces and live side by side.\n\nNow that you are level 10, you are granted the right to use the 100% experience helper item in your inventory. You can use it any time from level 10, in the same way as the 60% experience helper item.\n\nOnward to the adventures of the Silk Road~!\n\n(New characters only)”",
+  "basis": "translated-retail-korean",
+  "source": "“드디어 10레벨이 되셨군요!! 진심으로 축하 드립니다.\n이제 광활한 실크로드에 나가기 위한 모든 준비가 끝난 것 같습니다. 헌터, 상인 그리고 도적이 서로 세력을 이루며 공생하는 실크로드에 어떤 직업을 선택할 지 미리 생각해 두는 것도 좋을 것입니다.\n\n이제 10레벨이 되었으니 인벤토리에 들어있는 100% 경험치 도우미 아이템 사용 권한을 드립니다. 10레벨 이상이면 언제든지 사용할 수 있으며, 사용방법은 60% 경험치 도우미 아이템과 동일합니다.\n\n실크로드의 모험의 세계로~!\n\n(새로 만들어진 캐릭터에 한함)”"
+ },
+ "UIIT_MSG_WINTER_EVENT_060125_LV15": {
+  "english": "You have reached level 15! Congratulations. ^^\nIf you created and raised a new character during the winter event, you are automatically entered for the ‘air pie mini speaker PUMP’ and ‘DMB receiver for PC’ prizes.\nWinners are announced on the homepage every week, so please check the homepage.\n\nAn Apple iPod nano prize awaits you at level 20, so keep going~",
+  "basis": "translated-retail-korean",
+  "source": "15 레벨이 되셨군요!! 축하 드립니다. ^^\n겨울 이벤트가 진행되는 동안에 캐릭터를 새로 만드셔서 키우셨다면, ‘air pie 미니스피커 PUMP’ 와 ‘PC용 DMB 수신기’ 상품에 자동 응모됩니다.\n매주마다 홈페이지를 통해 당첨자를 알려드리고 있으니, 홈페이지를 확인해 주시기 바랍니다.\n\n20레벨이 되면 애플 아이팟 나노 상품이 기다리고 있으니 조금만 더 힘내세요~"
+ },
+ "UIIT_MSG_WINTER_EVENT_060125_LV20": {
+  "english": "You have reached level 20! Congratulations ^^\nIf you created and raised a new character during the winter event, you are automatically entered for the Apple iPod nano prize.\nWinners are announced on the homepage every week, so please check the homepage.\n\nAnother prize awaits at level 30!! An LG Tromm washing machine is ready for you. Keep going~",
+  "basis": "translated-retail-korean",
+  "source": "20 레벨이 되셨군요!! 축하 드립니다 ^^\n겨울 이벤트가 진행되는 동안에 캐릭터를 새로 만드셔서 키우셨다면, 애플 iPod nano 상품에 자동 응모됩니다.\n매주마다 홈페이지를 통해 당첨자를 알려드리고 있으니, 홈페이지를 확인해 주시기 바랍니다.\n\n30레벨이 되면 또 다른 상품!! LG 트롬 세탁기가 준비되어 있습니다. 조금 만 더 힘내세요~"
+ },
+ "UIIT_MSG_WINTER_EVENT_060125_LV30": {
+  "english": "You have reached level 30! Congratulations ^^\nIf you created and raised a new character during the winter event, you are automatically entered for the LG Tromm washing machine prize.\nWinners are announced on the homepage every week, so please check the homepage.\n\nA high-performance notebook and a projection TV await you at level 40, so give it one more try~.",
+  "basis": "translated-retail-korean",
+  "source": "30 레벨이 되셨군요!! 축하 드립니다 ^^\n겨울 이벤트가 진행되는 동안에 캐릭터를 새로 만드셔서 키우셨다면, LG 트롬 세탁기 상품에 자동 응모됩니다.\n매주마다 홈페이지를 통해 당첨자를 알려드리고 있으니, 홈페이지를 확인해 주시기 바랍니다.\n\n40레벨이 되면 고성능 노트북과 프로젝션 TV 상품이 기다리고 있으니 한번 더 도전해 보세요~."
+ },
+ "UIIT_MSG_WINTER_EVENT_060125_LV40": {
+  "english": "You have reached level 40. Our sincere congratulations.\nIf you created and raised a new character during the winter event, you are automatically entered for the Xnote high-performance notebook and LG Xcanvas projection TV prizes.\nThe winners of these prizes will be drawn in the fourth and final week of the winter event. Please check the homepage for the announcement date~",
+  "basis": "translated-retail-korean",
+  "source": "40 레벨이 되셨습니다. 진심으로 축하 드립니다.\n겨울 이벤트가 진행되는 동안에 캐릭터를 새로 만드셔서 키우셨다면, 고성능 노트북 Xnote 상품과 LG Xcanvas 프로젝션 TV 상품에 자동으로 응모됩니다.\n위 상품들은 겨울 이벤트의 마지막인 4주차에 추첨을 통해 당첨자가 가려지게 됩니다. 홈페이지에서 당첨자 발표일을 확인해 주세요~"
+ },
+ "UIIT_MSG_WINTER_EVENT_060125_STARTING": {
+  "english": "“Welcome to Silkroad Online.\nAt the moment you set foot on the vast Silk Road, you already become someone who can shake it. While you are on the Silk Road, nurture your dream of becoming a merchant (trader), an escort warrior (hunter) or a great thief (thief).\n\nTo help your dream come true, check the special items placed in your inventory. You can open the inventory with the I key.\nYou will find a 60% experience helper item and a 100% experience helper item. You cannot use them yet, but you can once you reach level 5.”",
+  "basis": "translated-retail-korean",
+  "source": "“실크로드 온라인에 오신 것을 환영합니다. \n광활한 실크로드에 첫발을 내딛는 중요한 순간 이미 당신은 실크로드를 뒤흔들 수 있는 존재가 됩니다. 실크로드에 몸담고 있는 동안 대상(상인), 호위무사(헌터), 대도(도적)의 꿈을 키워가시기 바랍니다.\n\n당신의 꿈을 이루기 위해 인벤토리에 들어간 특별한 아이템을 확인하십시오. 인벤토리는 단축키 I 로 열 수 있습니다.\n60% 경험치 도우미 아이템과 100% 경험치 도우미 아이템이 있을 것입니다. 지금은 사용할 수 없지만, 5레벨이 되면 사용할 수 있습니다.”"
+ },
+ "UIIT_MSG_WINTER_EVENT_060125_TOOLTIP": {
+  "english": "A delicious rice cake soup eaten on New Year's Day.\\n\\n\nEffect: Randomly increases HP and MP\\n\nCaution: The item effect disappears when using a return scroll or teleport.",
+  "basis": "translated-retail-korean",
+  "source": "새해 첫날에 먹는 맛있는 떡국이다.\\n\\n\n효과: HP 및 MP 랜덤 증가\\n\n주의사항: 귀환서 및 텔레포트 이용 시 아이템 효과 사라짐."
+ },
+ "UIIT_PAG_UNITY_SERVER_GUILD_NAME_CHANGE": {
+  "english": "Change Guild Name",
+  "basis": "translated-retail-korean",
+  "source": "길드이름 변경"
+ },
+ "UIIT_PAG_UNITY_SERVER_ID_CHANGE": {
+  "english": "Change Name",
+  "basis": "translated-retail-korean",
+  "source": "이름변경창"
+ },
+ "UIIT_STT_BIJEOKDAN": {
+  "english": "Bandit",
+  "basis": "translated-retail-korean",
+  "source": "비적단"
+ },
+ "UIIT_STT_COSNEWUI_PICKUP_ASSORTMENT_EXCEPTION": {
+  "english": "Excluded items",
+  "basis": "translated-retail-korean",
+  "source": "제외아이템"
+ },
+ "UIIT_STT_COSNEWUI_PICKUP_BULLET": {
+  "english": "Arrows, bolts",
+  "basis": "translated-retail-korean",
+  "source": "화살,볼트"
+ },
+ "UIIT_STT_COSNEWUI_PICKUP_MATERIAL": {
+  "english": "By-products",
+  "basis": "translated-retail-korean",
+  "source": "부산물"
+ },
+ "UIIT_STT_COUPON_IMPOSSIBLE_INPUT": {
+  "english": "Coupons cannot be entered. Please contact the operations team for details.",
+  "basis": "translated-retail-korean",
+  "source": "쿠폰 입력이 불가능 합니다. 자세한 사항은 운영팀에 문의하시기 바랍니다."
+ },
+ "UIIT_STT_COUPON_NUMBER_ERROR": {
+  "english": "This is not a valid coupon number.",
+  "basis": "translated-retail-korean",
+  "source": "정상적인 쿠폰번호가 아닙니다."
+ },
+ "UIIT_STT_COUPON_NUMBER_INPUT": {
+  "english": "Please enter the coupon number.",
+  "basis": "translated-retail-korean",
+  "source": "쿠폰 번호를 입력 하세요."
+ },
+ "UIIT_STT_COUPON_NUMBER_SUCCESS": {
+  "english": "Processed.",
+  "basis": "translated-retail-korean",
+  "source": "처리되었습니다."
+ },
+ "UIIT_STT_EVILORDER": {
+  "english": "Evil-Order",
+  "basis": "translated-retail-korean",
+  "source": "이블오더"
+ },
+ "UIIT_STT_GACHA_GAME_START": {
+  "english": "Start Game",
+  "basis": "translated-retail-korean",
+  "source": "게임시작"
+ },
+ "UIIT_STT_GACHA_ITEM_CHOICE": {
+  "english": "Choose Item",
+  "basis": "translated-retail-korean",
+  "source": "아이템 선택"
+ },
+ "UIIT_STT_GACHA_WIN_ITEM_CHOICE": {
+  "english": "Choose Prize Item",
+  "basis": "translated-retail-korean",
+  "source": "당첨 아이템 선택"
+ },
+ "UIIT_STT_HEUKMAKDAN": {
+  "english": "Black Robber",
+  "basis": "translated-retail-korean",
+  "source": "흑막단"
+ },
+ "UIIT_STT_PACKAGE_ELEMENT": {
+  "english": "<Item Contents>",
+  "basis": "translated-retail-korean",
+  "source": "<아이템 구성>"
+ },
+ "UIIT_STT_PACKAGE_EXPLAIN": {
+  "english": "<Description>",
+  "basis": "translated-retail-korean",
+  "source": "<설명>"
+ },
+ "UIIT_STT_SILK_POINT_BUY_RECEIVE": {
+  "english": "You received [%d] point(s).",
+  "basis": "translated-retail-korean",
+  "source": "[%d]포인트를 지급받았습니다."
+ },
+ "UIIT_STT_SILK_POINT_USE_RECEIVE": {
+  "english": "You used [%d] point(s).",
+  "basis": "translated-retail-korean",
+  "source": "[%d]포인트를 사용하였습니다."
+ },
+ "UIIT_STT_SILKMALL_BUY_SILK_LINK_01": {
+  "english": "kr.silkroad.yahoo.com/itemmall/silkcharge.asp",
+  "basis": "translated-retail-korean",
+  "source": "kr.silkroad.yahoo.com/itemmall/silkcharge.asp"
+ },
+ "UIIT_STT_SILKMALL_BUY_SILK_LINK_02": {
+  "english": "pmang.sayclub.com/silkroad/silkroad_home.nwz?target=http://silkroad2.sayclub.com/itemmall/silkcharge.asp&log=in&firstlogon=1",
+  "basis": "translated-retail-korean",
+  "source": "pmang.sayclub.com/silkroad/silkroad_home.nwz?target=http://silkroad2.sayclub.com/itemmall/silkcharge.asp&log=in&firstlogon=1"
+ },
+ "UIIT_STT_SILKMALL_COUPON_EXCHANGE_LINK": {
+  "english": "kr.silkroad.yahoo.com/itemmall/silkcouponcharge.asp",
+  "basis": "translated-retail-korean",
+  "source": "kr.silkroad.yahoo.com/itemmall/silkcouponcharge.asp"
+ },
+ "UIIT_STT_SILKMALL_COUPON_EXCHANGE_LINK_01": {
+  "english": "kr.silkroad.yahoo.com/itemmall/silkcouponcharge.asp",
+  "basis": "translated-retail-korean",
+  "source": "kr.silkroad.yahoo.com/itemmall/silkcouponcharge.asp"
+ },
+ "UIIT_STT_SILKMALL_COUPON_EXCHANGE_LINK_02": {
+  "english": "pmang.sayclub.com/silkroad/silkroad_home.nwz?target=http://silkroad2.sayclub.com/itemmall/silkcouponcharge.asp&log=in&firstlogon=1",
+  "basis": "translated-retail-korean",
+  "source": "pmang.sayclub.com/silkroad/silkroad_home.nwz?target=http://silkroad2.sayclub.com/itemmall/silkcouponcharge.asp&log=in&firstlogon=1"
+ },
+ "UIIT_STT_SILKMALL_MAIN_PREMIUM": {
+  "english": "<sml2>You can purchase high-quality items with a variety of functions</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>다양한 기능을 가진 고품격의 아이템을 구입하실 수 있습니다</sml2>"
+ },
+ "UIIT_STT_SILKMALL_POPUP_DATA": {
+  "english": "Sale period:",
+  "basis": "translated-retail-korean",
+  "source": "판매기간 :"
+ },
+ "UIIT_STT_SILKMALL_POPUP_REDUCTION": {
+  "english": "Until March 5 (before server maintenance)",
+  "basis": "translated-retail-korean",
+  "source": "3월 5일 (서버점검전)까지"
+ },
+ "UIIT_STT_SILKMALL_SEND_SILK_LINK": {
+  "english": "kr.silkroad.yahoo.com/itemmall/silkgift.asp",
+  "basis": "translated-retail-korean",
+  "source": "kr.silkroad.yahoo.com/itemmall/silkgift.asp"
+ },
+ "UIIT_STT_SILKMALL_SEND_SILK_LINK_01": {
+  "english": "kr.silkroad.yahoo.com/itemmall/silkgift.asp",
+  "basis": "translated-retail-korean",
+  "source": "kr.silkroad.yahoo.com/itemmall/silkgift.asp"
+ },
+ "UIIT_STT_SILKMALL_SEND_SILK_LINK_02": {
+  "english": "pmang.sayclub.com/silkroad/silkroad_home.nwz?target=http://silkroad2.sayclub.com/itemmall/silkgift.asp&log=in&firstlogon=1",
+  "basis": "translated-retail-korean",
+  "source": "pmang.sayclub.com/silkroad/silkroad_home.nwz?target=http://silkroad2.sayclub.com/itemmall/silkgift.asp&log=in&firstlogon=1"
+ },
+ "UIIT_STT_SOMEONESITEM_GUILD": {
+  "english": "Items of [%s - %s]",
+  "basis": "translated-retail-korean",
+  "source": "[%s - %s]님의 물품"
+ },
+ "UIIT_STT_TARGETTING": {
+  "english": "Target",
+  "basis": "translated-retail-korean",
+  "source": "대상자"
+ },
+ "UIIT_STT_UNITY_SERVER_ANYSERVER_STORAGEROOM": {
+  "english": "Open the storage of the [%s] server.",
+  "basis": "translated-retail-korean",
+  "source": "[%s]서버의 창고를 연다."
+ },
+ "UIIT_STT_UNITY_SERVER_AUTO_CHR_DELETE": {
+  "english": "After the regular maintenance on April 8, 2008, only 4 characters will remain under the merged server rules\\nand the rest will be deleted. Please see the homepage for details.",
+  "basis": "translated-retail-korean",
+  "source": "2008년 4월 8일 정기점검 후, 통합서버 기준에 따라 캐릭터는 4개만 남고\\n삭제되오니, 자세한 사항은 홈페이지를 참고 바랍니다."
+ },
+ "UIIT_STT_UNITY_SERVER_CHANGE_GUILD_NAME": {
+  "english": "New Guild Name",
+  "basis": "translated-retail-korean",
+  "source": "변경 길드명"
+ },
+ "UIIT_STT_UNITY_SERVER_CHANGE_ID": {
+  "english": "Change ID",
+  "basis": "translated-retail-korean",
+  "source": "아이디 변경"
+ },
+ "UIIT_STT_UNITY_SERVER_CHANGE_ID_COMMON": {
+  "english": "[Change ID]",
+  "basis": "translated-retail-korean",
+  "source": "[아이디 변경]"
+ },
+ "UIIT_STT_UNITY_SERVER_COMMON": {
+  "english": "Merged Server Notice",
+  "basis": "translated-retail-korean",
+  "source": "통합서버 관련공지"
+ },
+ "UIIT_STT_UNITY_SERVER_COMMON_CONTENT": {
+  "english": "<sml2>Hello, this is Silkroad Online.<br>The Silkroad Online population adjustment took place on January 13, 2006.<br>With this adjustment, important things such as character names, the character selection screen, storage and guilds<br>have changed.<br>Under the merged server policy you need to adjust your number of characters<br>and sort out your storage items, so we are giving you a one-month grace period to do so.<br><br>Please reduce your characters to 3 or fewer by the server maintenance on February 15, 2006,<br>and move the items kept on your previous server to the merged server storage.<br>When adjusting your characters, please keep in mind<br>that character deletion takes 7 days.<br><br>For details, please see the population adjustment guide on the homepage.<br>Thank you.</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>안녕하세요. 실크로드온라인 입니다.<br>실크로드온라인 인구수 조정이 2006년 1월 13일에 진행되었습니다.<br>인구수 조정으로 캐릭터이름, 캐릭터 선택 화면, 창고, 길드 등<br>중요한 내용들이 변경되었습니다.<br>고객 여러분께서는 통합서버 정책에 따라 캐릭터 개수 조정,<br>창고 물품 정리를 하셔야 하기 때문에 이를 위한 1개월의 유예기간을 드리고 있습니다.<br><br>2006년 2월 15일 서버점검까지 캐릭터 개수를 3개 이하로 조정하시고,<br>기존 서버 보관물품은 통합서버 창고로 옮겨주시길 당부 드립니다.<br>단, 캐릭터 개수를 조정하실 때, 캐릭터 삭제 대기시간이 7일이므로,<br>함께 고려하여 주시길 바랍니다.<br><br>자세한 내용은 홈페이지 인구수 조정 가이드에서 확인해 주십시오.<br>감사합니다.</sml2>"
+ },
+ "UIIT_STT_UNITY_SERVER_DISAPPROVAL_GUILD_NAME": {
+  "english": "The guild name [%s] cannot be used.",
+  "basis": "translated-retail-korean",
+  "source": "해당 길드이름[%s]은 사용할 수 없습니다."
+ },
+ "UIIT_STT_UNITY_SERVER_DISAPPROVAL_ID": {
+  "english": "The ID [%s] cannot be used.",
+  "basis": "translated-retail-korean",
+  "source": "해당 아이디[%s]는 사용할 수 없습니다."
+ },
+ "UIIT_STT_UNITY_SERVER_EXISTING_GUILD_NAME": {
+  "english": "Current Guild Name",
+  "basis": "translated-retail-korean",
+  "source": "기존 길드명"
+ },
+ "UIIT_STT_UNITY_SERVER_EXISTING_ID": {
+  "english": "Current ID",
+  "basis": "translated-retail-korean",
+  "source": "기존 아이디"
+ },
+ "UIIT_STT_UNITY_SERVER_GUILD_NAME_CHANGE_EXPLANATION": {
+  "english": "Under the merged server policy, you must change your guild's name.",
+  "basis": "translated-retail-korean",
+  "source": "통합 서버의 정책에 따라 길드의 이름을 변경해야 합니다."
+ },
+ "UIIT_STT_UNITY_SERVER_ID_CHANGE_EXPLANATION": {
+  "english": "Under the merged server policy, you must change your character's ID.",
+  "basis": "translated-retail-korean",
+  "source": "통합 서버의 정책에 따라 캐릭터의 아이디를 변경해야 합니다."
+ },
+ "UIIT_STT_UNITY_SERVER_INPUT": {
+  "english": "Enter",
+  "basis": "translated-retail-korean",
+  "source": "입력"
+ },
+ "UIIT_STT_UNITY_SERVER_OPEN_ANYSERVER_STORAGEROOM": {
+  "english": "[%s] Server Storage",
+  "basis": "translated-retail-korean",
+  "source": "[%s]서버창고"
+ },
+ "UIIT_STT_UNITY_SERVER_OPEN_TOTAL_STORAGEROOM": {
+  "english": "Open the merged storage.",
+  "basis": "translated-retail-korean",
+  "source": "통합창고를 연다."
+ },
+ "UIIT_STT_UNITY_SERVER_OVERLAP_CONFIRM": {
+  "english": "Check Availability",
+  "basis": "translated-retail-korean",
+  "source": "중복확인"
+ },
+ "UIIT_STT_UNITY_SERVER_STORAGEROOM_REMAIN_TIME": {
+  "english": "Items deleted on February 15, 2006",
+  "basis": "translated-retail-korean",
+  "source": "2006년 2월 15일 물품삭제"
+ },
+ "UIIT_STT_UNITY_SERVER_TOTAL_STORAGEROOM": {
+  "english": "Merged Server Storage",
+  "basis": "translated-retail-korean",
+  "source": "통합서버 창고"
+ },
+ "UIIT_STT_UNITY_SERVER_USE_GUILD_NAME": {
+  "english": "The guild name [%s] is available.",
+  "basis": "translated-retail-korean",
+  "source": "해당 길드이름[%s]은 사용 가능합니다."
+ },
+ "UIIT_STT_UNITY_SERVER_USE_ID": {
+  "english": "The ID [%s] is available.",
+  "basis": "translated-retail-korean",
+  "source": "해당 아이디[%s]는 사용할 수 있는 아이디 입니다."
+ },
+ "UIIT_STT_UNITY_SERVER_WORNING_USE_STORAGEROOM_MESSAGE": {
+  "english": "- Items cannot be stored in the previous server's storage; they can only be moved to the merged server storage.\n- There is no storage fee when moving items from the previous server's storage to the merged server storage.\n- After the regular maintenance on April 8, 2008, all items in the previous server's storage will be deleted, so please move them to the merged server storage in advance.",
+  "basis": "translated-retail-korean",
+  "source": "- 기존서버 창고로는 보관할 수 없으며 통합 서버 창고로 물품 이동만 가능합니다.\n- 기존서버 창고에서 통합서버 창고로 물품을 이동할 때는 창고보관료가 없습니다.\n- 2008년 4월 8일 정기점검이 끝난 후, 기존서버 창고의 물품이 모두 삭제되므로 물품을 미리 통합서버 창고로 옮겨주시길 당부 드립니다."
+ },
+ "UIIT_STT_WITH_OUT_GUILD": {
+  "english": "No guild",
+  "basis": "translated-retail-korean",
+  "source": "소속길드없음"
+ },
+ "UIIT_TOOLTIP_CURSING_STONE_01": {
+  "english": "Damage starts [%d] second(s) after petrification",
+  "basis": "translated-retail-korean",
+  "source": "석화 후 [%d]초부터 피해 시작"
+ },
+ "UIIT_TOOLTIP_CURSING_STONE_02": {
+  "english": "Every [%d] second(s): [%d]%% damage",
+  "basis": "translated-retail-korean",
+  "source": "[%d]초 마다 [%d]%% 대미지"
+ },
+ "UILM_MSG_SELECTED_CHANNEL_EXPLANATION": {
+  "english": "The currently selected channel is [%s].",
+  "basis": "translated-retail-korean",
+  "source": "현재 선택된 채널은 [%s]입니다."
+ },
+ "UILM_MSG_YAHOO_STARTING_HOME": {
+  "english": "The Yahoo Korea homepage has been set as your start page.",
+  "basis": "translated-retail-korean",
+  "source": "야후 코리아 홈페이지가 시작페이지로 설정되었습니다."
+ },
+ "UILM_MSG_YAHOO_TOOLBAR": {
+  "english": "The Yahoo toolbar has been installed.",
+  "basis": "translated-retail-korean",
+  "source": "야후 툴바가 설치되었습니다."
+ },
+ "UILM_STT_CHANNEL_01": {
+  "english": "Yahoo",
+  "basis": "translated-retail-korean",
+  "source": "야후"
+ },
+ "UILM_STT_CHANNEL_02": {
+  "english": "Pmang",
+  "basis": "translated-retail-korean",
+  "source": "피망"
+ },
+ "UILM_STT_CHANNEL_SELECT": {
+  "english": "Select Channel",
+  "basis": "translated-retail-korean",
+  "source": "채널선택"
+ },
+ "UILM_STT_SELECTED_CHANNEL": {
+  "english": "Selected Channel",
+  "basis": "translated-retail-korean",
+  "source": "선택된 채널"
+ },
+ "UIO_CTL_MOTP_PASSWORD": {
+  "english": "Mobile verification",
+  "basis": "translated-retail-korean",
+  "source": "휴대폰인증"
+ },
+ "UIO_MSG_ERROR_ACCOUNT_STOP": {
+  "english": "This account has been blocked under the rules and cannot connect to the game.",
+  "basis": "translated-retail-korean",
+  "source": "현재 계정은 규정에 의해 블럭되어 게임에 접속 할 수 없습니다."
+ },
+ "UIO_MSG_ERROR_CITATION_ID_CHANNEL": {
+  "english": "[%s] user authentication failed.\\nPlease check your ID and password again.",
+  "basis": "translated-retail-korean",
+  "source": "[%s]유저 인증에 실패했습니다.\\n아이디나 패스워드를 다시 확인해 주시기 바랍니다."
+ },
+ "UIO_MSG_ERROR_CITATION_ID_NEW": {
+  "english": "[%s] user authentication failed.\\nPlease check your ID and password again.",
+  "basis": "translated-retail-korean",
+  "source": "[%s]유저 인증에 실패했습니다.\\n아이디나 패스워드를 다시 확인해 주시기 바랍니다."
+ },
+ "UIO_MSG_ERROR_CITATION_NEW": {
+  "english": "Requesting [%s] user authentication...",
+  "basis": "translated-retail-korean",
+  "source": "[%s]유저 인증을 요청중입니다…"
+ },
+ "UIO_MSG_ERROR_CITATION_WEB_CHANNEL": {
+  "english": "[%s] user authentication failed.\\nPlease log in to the homepage and check your personal information.",
+  "basis": "translated-retail-korean",
+  "source": "[%s]유저 인증에 실패했습니다.\\n홈페이지에 로그인하여 개인정보를 확인해 주시기 바랍니다."
+ },
+ "UIO_MSG_ERROR_CITATION_WEB_NEW": {
+  "english": "[%s] user authentication failed.\\nPlease log in to the service provider's homepage and check your personal information.",
+  "basis": "translated-retail-korean",
+  "source": "[%s]유저 인증에 실패했습니다.\\n해당 서비스 업체 홈페이지에 로그인하여 개인정보를 확인해 주시기 바랍니다."
+ },
+ "UIO_MSG_ERROR_THERE_IS_NO_ACCOUNT_INFO_NEW": {
+  "english": "The ID [%s] exists, but required additional information is missing.\\nYou must enter the additional information on the provider's homepage to connect to the game.",
+  "basis": "translated-retail-korean",
+  "source": "[%s]아이디는 존재하지만 추가로 필요한 정보가 없습니다.\\n해당 업체의 홈페이지에서 추가 정보를 입력하셔야 게임에 접속할 수 있습니다."
+ },
+ "UIO_MSG_GOTO_URL_NEW_CHANNEL_01": {
+  "english": "kr.silkroad.yahoo.com/member/member_point.asp",
+  "basis": "translated-retail-korean",
+  "source": "kr.silkroad.yahoo.com/member/member_point.asp"
+ },
+ "UIO_MSG_GOTO_URL_NEW_CHANNEL_02": {
+  "english": "pmang.sayclub.com/silkroad/silkroad_home.nwz?target=http://silkroad2.sayclub.com/member/member_point.asp&log=in&firstlogon=1",
+  "basis": "translated-retail-korean",
+  "source": "pmang.sayclub.com/silkroad/silkroad_home.nwz?target=http://silkroad2.sayclub.com/member/member_point.asp&log=in&firstlogon=1"
+ },
+ "UIO_SECOND_HWAN_CH_NAME_LEVEL_1": {
+  "english": "Lieutenant General",
+  "basis": "translated-retail-korean",
+  "source": "편장군"
+ },
+ "UIO_SECOND_HWAN_CH_NAME_LEVEL_2": {
+  "english": "Shining Martial General",
+  "basis": "translated-retail-korean",
+  "source": "소무장군"
+ },
+ "UIO_SECOND_HWAN_CH_NAME_LEVEL_3": {
+  "english": "Valiant Martial General",
+  "basis": "translated-retail-korean",
+  "source": "분무장군"
+ },
+ "UIO_SECOND_HWAN_CH_NAME_LEVEL_4": {
+  "english": "Rousing Martial General",
+  "basis": "translated-retail-korean",
+  "source": "진무장군"
+ },
+ "UIO_SECOND_HWAN_CH_NAME_LEVEL_5": {
+  "english": "Founding Martial General",
+  "basis": "translated-retail-korean",
+  "source": "건무장군"
+ },
+ "UIO_SECOND_HWAN_CH_NAME_LEVEL_6": {
+  "english": "Nation-Guarding General",
+  "basis": "translated-retail-korean",
+  "source": "보국장군"
+ },
+ "UIO_SECOND_HWAN_EU_NAME_LEVEL_1": {
+  "english": "Knight",
+  "basis": "translated-retail-korean",
+  "source": "나이트"
+ },
+ "UIO_SECOND_HWAN_EU_NAME_LEVEL_2": {
+  "english": "Baronet",
+  "basis": "translated-retail-korean",
+  "source": "배러넷"
+ },
+ "UIO_SECOND_HWAN_EU_NAME_LEVEL_3": {
+  "english": "Baron",
+  "basis": "translated-retail-korean",
+  "source": "바론"
+ },
+ "UIO_SECOND_HWAN_EU_NAME_LEVEL_4": {
+  "english": "Count",
+  "basis": "translated-retail-korean",
+  "source": "카운트"
+ },
+ "UIO_SECOND_HWAN_EU_NAME_LEVEL_5": {
+  "english": "Marquis",
+  "basis": "translated-retail-korean",
+  "source": "마퀴스"
+ },
+ "UIO_SECOND_HWAN_EU_NAME_LEVEL_6": {
+  "english": "Duke",
+  "basis": "translated-retail-korean",
+  "source": "듀크"
+ }
+}

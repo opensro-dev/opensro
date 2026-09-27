@@ -1,0 +1,737 @@
+{
+ "SRO_GGW_AL_CHANGE": {
+  "english": "<sml2>\n<strong>Changing Basic Attributes</strong><br>\nYou can change the basic attributes of equipment items using alchemy.<br>\nTo change a basic attribute, you need an item called an Attribute Stone.<br>\n<br>\n<strong>How to change an attribute</strong><br>\n* Open the alchemy window with the alchemy icon in the action window.<br>  (You can also press the Y shortcut key.)<br>\n* Press the Att.Enhance tab button in the alchemy window to open the Att.Enhance window.<br>\n* Place the equipment item in the left slot of the Att.Enhance window.<br>\n* Place an Attribute Stone that changes the basic attribute you want on the right side of the Att.Enhance window.<br>\n* Press the Fuse button to complete the attribute change.<br>\n<br>\n<strong>Good to know</strong><br>\n* An attribute change can fail. If it fails, only the Attribute Stone disappears.<br>\n* Besides the attribute the stone is meant to change, one magic attribute or basic attribute may change along with it. This is called Attribute Assimilation, and its probability differs for each Attribute Stone.\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong>기본속성 변경</strong><br>\n연금술을 이용하여 장비아이템의 기본속성을 변경할 수 있습니다.<br>\n기본속성을 변경하기 위해서는 속성석이라는 아이템이 필요합니다.<br>\n<br>\n<strong>속성변경 방법</strong><br>\n* 액션창의 연금술 아이콘을 사용하여 연금술 창을 엽니다.<br>  (단축키 Y를 눌어도 됩니다.)<br>\n* 연금술 창의 속성강화 탭 버튼을 눌러 속성강화 창을 엽니다.<br>\n* 속성강화 창의 왼쪽 슬롯에 장비아이템을 올려 놓습니다.<br>\n* 속성강화 창의 오른쪽에는 원하는 기본속성을 변경할 수 있는 속성석을 올려 놓습니다.<br>\n* 조합하기 버튼을 누르면 속성변경이 완료됩니다.<br>\n<br>\n<strong>알아두세요</strong><br>\n* 속성변경은 실패할 수도 있으며 실패할 경우 속성석만 사라집니다.<br>\n* 속성석에서 변경하고자 하는 속성 외에 마법속성이나 기본속성 중 하나가 함께 변경될 수 있습니다. 이런 것을 속성동화라고 하며, 속성동화확률은 속성석마다 다릅니다.\n</sml2>"
+ },
+ "SRO_GGW_AL_DESTROY": {
+  "english": "<sml2>\n<strong>Breaking Down Equipment Items</strong><br>\nBreaking down equipment items gives more Alchemic Elements at once than breaking down Alchemy materials.<br>\nSometimes an Alchemy Stone or Attribute Stone comes out directly instead of Elements.<br>\nThese items can have a higher or lower Attribute Assimilation probability than ones you make yourself.<br>\n<br>\n<strong>How to break down equipment items</strong><br>\n* Open the alchemy window with the alchemy icon in the action window.<br>  (You can also press the Y shortcut key.)<br>\n* Press the Material processing tab button in the alchemy window to open the Material processing window.<br>\n* Place a <strong>Rondo of Destruction</strong> in the left slot of the Material processing window.<br>\n* Place the equipment item on the right side of the Material processing window.<br>\n* Press the Fuse button to get Alchemic Elements.<br>\n<br>\n<strong>Good to know</strong><br>\n* The Rondo of Destruction can be bought at the General shop.<br>\n* Several Rondos of Destruction may be used up at once.<br>\n* High-degree items break down into large amounts, so make sure you have enough inventory space.<br>\n* If you do not have enough Rondos of Ruin, the breakdown will not take place.\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong>장비아이템 분해</strong><br>\n연금재료에 비해 장비아이템을 분해하면 한번에 더 많은 연금원소를 얻을 수 있습니다.<br>\n가끔 원소 이외에 연금석이나 속성석이 직접 나오기도 합니다.<br>\n이 아이템들은 직접 제작된 것보다 속성동화 확률이 더 높거나 더 낮은 것이 나올 수 있습니다.<br>\n<br>\n<strong>장비아이템 분해방법</strong><br>\n* 액션창의 연금술 아이콘을 사용하여 연금술 창을 엽니다.<br>  (단축키 Y를 눌어도 됩니다.)<br>\n* 연금술 창의 재료가공 탭 버튼을 눌러 재료가공 창을 엽니다.<br>\n* 재료가공 창의 왼쪽 슬롯에 <strong>파괴의 론도</strong>를 올려 놓습니다.<br>\n* 재료가공 창의 오른쪽에는 장비아이템을 올려 놓습니다.<br>\n* 조합하기 버튼을 누르면 연금원소를 얻을 수 있습니다.<br>\n<br>\n<strong>알아두세요</strong><br>\n* 파괴의 론도는 잡화점에서 구할 수 있습니다.<br>\n* 파괴의 론도는 한번에 여러 개가 소모될 수 있습니다.<br>\n* 높은 차수의 아이템은 많은 양이 분해되므로 인벤토리 공간을 충분히 확보해 두는 것이 좋습니다.<br>\n* 파멸의 론도가 부족할 경우, 분해가 이루어 지지 않습니다.\n</sml2>"
+ },
+ "SRO_GGW_AL_PRODUCT": {
+  "english": "<sml2>\n<strong>Making Alchemy Stones and Attribute Stones</strong><br>\nAlchemy Stones, which grant magic attributes, and Attribute Stones, which change basic attributes, can all be made yourself with alchemy.<br>\nBoth are made by combining an Alchemy tablet with Alchemic Elements.<br>\n<br>\n<strong>How to make Alchemy Stones and Attribute Stones</strong><br>\n* Open the alchemy window with the alchemy icon in the action window.<br>  (You can also press the Y shortcut key.)<br>\n* Press the Material processing tab button in the alchemy window to open the Material processing window.<br>\n* Place an Alchemy tablet in the left slot of the Material processing window.<br>\n* Place the Alchemic Elements the tablet requires on the right side of the Material processing window.<br>\n* Press the Fuse button to get the Alchemy Stone (or Attribute Stone) named on the tablet.<br>\n<br>\n<strong>Good to know</strong><br>\n* Alchemy tablets can be obtained by hunting monsters.<br>\n* Alchemic Elements are obtained by breaking down monster by-products (Alchemy materials) obtained by hunting monsters.<br>\n* Making Alchemy Stones and Attribute Stones from an Alchemy tablet never fails.\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong>연금석, 속성석 제작</strong><br>\n마법속성을 부여할 수 있는 연금석이나 기본속성을 변경할 수 있는 속성석등은 모두 연금술로 직접 제작할 수 있습니다.<br>\n연금석이나 속성석은 모두 연금서판과 연금원소를 조합하여 만들 수 있습니다.<br>\n<br>\n<strong>연금석, 속성석 제작방법</strong><br>\n* 액션창의 연금술 아이콘을 사용하여 연금술 창을 엽니다.<br>  (단축키 Y를 눌어도 됩니다.)<br>\n* 연금술 창의 재료가공 탭 버튼을 눌러 재료가공 창을 엽니다.<br>\n* 재료가공 창의 왼쪽 슬롯에 연금서판을 올려 놓습니다.<br>\n* 재료가공 창의 오른쪽에는 연금서판이 요구하는 연금원소를 올려 놓습니다.<br>\n* 조합하기 버튼을 누르면 연금서판에 명시된 연금석(혹은 속성석)을 얻을 수 있습니다.<br>\n<br>\n<strong>알아두세요</strong><br>\n* 연금서판은 몬스터를 사냥하여 얻을 수 있습니다.<br>\n* 연금원소는 몬스터를 사냥하여 얻은 몬스터부산물(연금재료)를 분해하여 얻을 수 있습니다.<br>\n* 연금서판으로 연금석, 속성석을 만들 때에는 실패하지 않습니다.\n</sml2>"
+ },
+ "SRO_GGW_EVE_JOBCHOICE_EUROPE": {
+  "english": "<sml2><strong><font color=\"255,255,0,0\">[The thief job is a system available only on adult servers.]</font></strong><br><br>You have finally reached level 20. This is where the fun of Silkroad begins.<br>Why? Because <strong>at level 20 you can choose a job</strong>.<br>Silkroad has three jobs: trader, hunter and thief. Choose the job you want, join its job guild, create an alias and put on a job suit~! and you are ready.<br>Choosing a job once does not mean you must stick with it forever. You can change jobs whenever you like, so do not worry about choosing. Of course, leaving a job guild comes with penalties such as not being able to rejoin for 7 days and having your alias deleted, but that is fair enough, right?<br>You can easily find the job guild members of Constantinople by looking at the picture below. Visit the job guild you want, join it, buy a job suit and dive into the true world of Silkroad. Good luck!<br><img src=\"interface\\image\\eguide_jobchoice_eu.ddj\"></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong><font color=\"255,255,0,0\">[도적 직업은 성인서버에만 적용되는 시스템입니다.]</font></strong><br><br>드디어 레벨 20이 되셨군요. 실크로드의 재미는 이제부터 에요.<br>왜냐구요? <strong>레벨 20이 되면 직업을 선택</strong>할 수 있거든요.<br>실크로드에는 상인, 헌터, 도적의 세가지 직업이 존재하는데 유저가 원하는 직업을 선택하여 직업 조합에 가입하고 가명을 만든 후에 직업복을 착용하면~! 직업 준비가 완료 되요.<br>한번 직업을 선택했다고 계속 그 직업만 해야 하는 것은 아니구요. 언제든지 원할 때 직업을 바꿀 수 있으니 부담 갖지 말고 직업을 선택하세요. 뭐 물론 직업 조합을 탈퇴하면 7일 동안 직업 조합에 재가입이 불가하고 가명이 삭제되는 등의 페널티는 존재하지만 그 정도는 이해해주시겠죠?<br>콘스탄티노플의 직업 조합원들은 아래의 그림을 참조하시면 어렵지 않게 찾으실 수 있을 거에요. 원하는 직업조합을 찾아가 조합에 가입하신 후 직업 복장을 구입하셔서 진정한 실크로드의 세계에 빠져보세요. 파이팅!<br><img src=\"interface\\image\\eguide_jobchoice_eu.ddj\"></sml2>"
+ },
+ "SRO_GGW_EVE_QUEST": {
+  "english": "<sml2>You have talked with an NPC waiting for your help.<br>You can receive rewards by completing the quests they give you.<br>After receiving a quest, you can check the list and details of the quests you are doing in the <strong>quest information window</strong> by pressing <strong>the [q] shortcut key</strong>.<br>Click the arrow to the left of a quest name in the quest information window to see the quest's objectives.<br>Click the open scroll on the left to see detailed information about the quest.<br>A red scroll means a quest above your level, yellow means your level and teal means below your level, so do the quests that suit you.<br><br><img src=\"interface\\image\\eguide_quest.ddj\"><br><br>\nIn the quest information window, normal quests that you can do alone whether or not you are in a party show a blue quest name box, and party quests that can only be done in an experience-sharing / auto-item-distribution party show a green quest name box.<br>\nClick a quest name in the quest information window to see the locations of the NPCs related to the quest on the minimap and world map.<br><img src=\"interface\\image\\eguide_quest_click.ddj\"><br><br>\nIf you want to know which quests you can do or have completed, use the <strong>quest dictionary</strong>. <strong>The quest dictionary shortcut key is [h]</strong>.<br>\nFor more details about quests, see the quest help. <strong>The quest help shortcut key is [h]</strong>.<br><img src=\"interface\\image\\eguide_quest_guide.ddj\"><br>\n<br>\nWe hope you get lost in the hidden stories of the Silk Road through its quests.<br><br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>당신의 도움을 기다리는 NPC와 대화를 하셨군요.<br>그들이 당신에게 준 퀘스트를 수행하면 보상을 받을 수 있어요.<br>퀘스트를 받은 후 자신이 수행하고 있는 퀘스트 목록 또는 정보는 <strong>단축키 [q]</strong>를 눌러 <strong>퀘스트 정보창</strong> 에서 확인할 수 있어요.<br>퀘스트 정보창에서 퀘스트 이름 좌측에 있는 화살표를 클릭하면 자신이 수행해야 할 퀘스트의 목표를 확인할 수 있어요.<br>그리고 좌측의 펼쳐진 두루마리를 클릭하면 해당 퀘스트에 대한 자세한 정보를 확인할 수 있어요.<br>두루마리 색깔이 붉은 색이면 자신보다 높은 레벨, 노란 색이면 자신과 동일한 레벨, 청록색이면 자신보다 낮은 레벨의 퀘스트를 뜻하니 자신에게 맞는 퀘스트를 수행하시면 되요.<br><br><img src=\"interface\\image\\eguide_quest.ddj\"><br><br>\n퀘스트 정보창에서 파티 여부에 관계없이 혼자서 수행할 수 있는 일반 퀘스트는 퀘스트 이름 박스가 파란색으로 보여지고 경험치 공유/ 아이템 자동분배 파티를 했을 때에만 수행 가능한 파티 퀘스트는 퀘스트 이름 박스가 초록색으로 보여져요.<br>\n수행중인 퀘스트에 관련된 NPC의 위치는 퀘스트 정보창에서 퀘스트 이름을 클릭하시면 미니맵과 월드맵에서 확인할 수 있어요.<br><img src=\"interface\\image\\eguide_quest_click.ddj\"><br><br>\n만약 자신이 수행할 수 있는 퀘스트 또는 수행 완료한 퀘스트를 알고 싶다면 <strong>퀘스트 사전</strong>을 이용하시면 되요. <strong>퀘스트 사전의 단축키는 [h]</strong> 에요.<br>\n그 밖에 퀘스트에 대한 자세한 정보는 퀘스트 도움말을 참고하세요. <strong>퀘스트 도움말의 단축키는 [h]</strong> 에요.<br><img src=\"interface\\image\\eguide_quest_guide.ddj\"><br>\n<br>\n퀘스트를 통해 실크로드의 숨겨진 이야기들에 푸욱 빠져보시길 바래요.<br><br></sml2>"
+ },
+ "SRO_GGW_EVE_WEARARMOR_EUROPE": {
+  "english": "<sml2>Congratulations on getting equipment.<br>Equipment only takes effect once you wear it, so here is <strong>how to put on equipment</strong>.<br>The picture will make it clear right away.<br>First open the inventory window~ left-click the equipment you want to wear, move the mouse to the equipment slot and click again~!<br>It finds the right slot for you, so it is very easy.<br>The inventory shortcut key is [i].<br>Whenever you get weapons or armor from now on, wear them and become an even stronger Silkroad adventurer ^^<br>Oh! And one more thing! Whether you can wear armor depends on your mastery, so keep that in mind. <br><br><img src=\"interface\\image\\eguide_weararmor.ddj\"></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>장비를 획득하신걸 축하 드려요.<br>획득한 장비는 착용을 하셔야 효과를 얻을 수 있으니 <strong>장비를 착용하는 방법</strong>을 알려드릴게요.<br>그림을 보시면 이해가 금방 되실 거에요.<br>우선 소지품 창을 여신 후~ 착용하실 장비를 왼쪽 클릭한 후 마우스를 장비 칸으로 움직인 후 다시 클릭~!<br>맞는 위치는 알아서 찾아주니 아주 쉽죠.<br>소지품창의 단축키는 [i]에요.<br>앞으로 무기나 방어구를 획득하시면 착용하셔서 더욱 강한 실크인이 되세요 ^^<br>아! 그리고 하나 더! 방어구는 마스터리에 따라 착용가능 여부가 결정되니 이 점 유의하세요. <br><br><img src=\"interface\\image\\eguide_weararmor.ddj\"></sml2>"
+ },
+ "SRO_GGW_EVE_WELCOME_EUROPE": {
+  "english": "<sml2><strong><img src=\"interface\\guide\\gd_start.ddj\"><br>Welcome to the world of Silkroad.<br><br>The Silk Road is now open to you. Whether you strike it rich through trade, roam the vast lawless continent as a lone wolf, or become a guardian who keeps the peace of the Silk Road is all up to you.<br><br>Go and see <font color=\"255,255,0,0\">Guide Lipria at the north gate of Constantinople</font> or <font color=\"255,255,0,0\">Guide Raffy at the west gate of Constantinople</font>. With their advice, your first steps on the Silk Road will shine all the brighter.<br><br>May the glory of the Silk Road be with you.</strong></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong><img src=\"interface\\guide\\gd_start.ddj\"><br>실크로드의 세상에 접속하신걸 환영합니다.<br><br>이제 실크로드의 길은 열렸습니다. 이 세상에서 무역에 성공해서 큰 돈을 벌 것인지, 광활한 무법천지의 대륙을 누비는 한 마리 늑대가 될 것인지, 혹은 실크로드의 평화를 지키는 수호자가 될 것인지는 모두 당신의 선택에 달려있습니다.<br><br><font color=\"255,255,0,0\">콘스탄티노플 북문에 있는 안내인 리프리아</font> 또는 <font color=\"255,255,0,0\">콘스탄티노플 서문에 있는 안내인 라피</font> 에게 가보십시오. 그들의 조언을 통해 당신이 실크로드에 내딛는 발걸음은 더욱 빛나게 될 것입니다.<br><br>실크로드의 영광이 당신과 함께 하기를.</strong></sml2>"
+ },
+ "SRO_GGW_GDG_GROWTH1": {
+  "english": "<sml2>\n<strong>[Guild Growth]</strong><br><br>\nA guild can grow from level 1 to level 5 through various factors, and the more it grows, the more management benefits and power it gains.<br><br>\n- What a guild needs to grow<br>\n * Gold: the currency of the Silkroad world<br>\n * GP: guild experience, earned in the same amount as the SP (skill points) guild members gain by hunting<br><br>\n- Benefits of guild growth<br>\n[Level 1]<br>\n * More guild members: 15 in total including the master<br>\n * Guild notice<br>\n * Accept members<br>\n * Expel members<br>\n * Disband guild<br>\n * Guild war<br>\n * Grant authority<br>\n * Transfer mastership<br><br>\n[Level 2]<br>\n * More guild members: 20 in total including the master<br>\n * Union<br>\n * Union chat (up to 7 people)<br>\n * Guild storage<br><br>\n[Level 3]<br>\n * More guild members: 25 in total including the master<br>\n * Guild mail<br>\n * Guild storage expansion<br><br>\n[Level 4]<br>\n * More guild members: 35 in total including the master<br>\n * Guild storage expansion<br>\n[Level 5]<br>\n * More guild members: 50 in total including the master<br>\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong>[길드 성장]</strong><br><br>\n길드는 다양한 요소를 통해 레벨1부터 레벨5까지 성장할 수 있으며, 길드는 성장하게 될수록 많은 운영혜택과 힘을 얻게 됩니다.<br><br>\n- 길드를 성장시키기 위해 필요한 요소<br>\n * 골드 : 실크로드 세계의 화폐<br>\n * gp : 길드원들이 사냥을 통해 습득하는 sp (스킬 포인트)만큼 얻을 수 있는 길드 경험치<br><br>\n- 길드 성장이득<br>\n[레벨1]<br>\n * 길드원 인원증가 : 단장 포함 총 15 명<br>\n * 길드공지 기능<br>\n * 조직원 가입가능<br>\n * 조직원 제명가능<br>\n * 길드 해체 가능<br>\n * 길드 전쟁 가능<br>\n * 권한 부여 가능<br>\n * 단장 이임 가능<br><br>\n[레벨2]<br>\n * 길드원 인원증가 : 단장 포함 총 20명<br>\n * 동맹 가능<br>\n * 동맹 채팅 가능 (최대 7명)<br>\n * 길드 창고 사용가능<br><br>\n[레벨3]<br>\n * 길드원 인원증가 : 단장 포함 총 25명<br>\n * 길드메일 사용가능<br>\n * 길드 창고 증설<br><br>\n[레벨4]<br>\n * 길드원 인원증가 : 단장 포함 총 35명<br>\n * 길드 창고 증설<br>\n[레벨5]<br>\n * 길드원 인원증가 : 단장 포함 총 50명<br>\n</sml2>"
+ },
+ "SRO_GGW_MENU_AL_DECOMPOSITION": {
+  "english": "Breaking Down Alchemy Materials",
+  "basis": "translated-retail-korean",
+  "source": "연금재료 분해"
+ },
+ "SRO_GGW_MENU_AL_DESTROY": {
+  "english": "Breaking Down Equipment Items",
+  "basis": "translated-retail-korean",
+  "source": "장비아이템 분해"
+ },
+ "SRO_GGW_MENU_AL_PRODUCT": {
+  "english": "Making Alchemy/Attribute Stones",
+  "basis": "translated-retail-korean",
+  "source": "연금/속성석 제작"
+ },
+ "SRO_GGW_MENU_EVE_QUEST": {
+  "english": "Quests",
+  "basis": "translated-retail-korean",
+  "source": "퀘스트"
+ },
+ "SRO_GGW_MENU_GDG_GROWTH1": {
+  "english": "Guild Growth",
+  "basis": "translated-retail-korean",
+  "source": "길드 성장"
+ },
+ "SRO_GGW_MENU_QCH_CHEF_1": {
+  "english": "Lost Child",
+  "basis": "translated-retail-korean",
+  "source": "사라진 아이"
+ },
+ "SRO_GGW_MENU_QCH_EA1_1": {
+  "english": "Battle with Weasel",
+  "basis": "translated-retail-korean",
+  "source": "교족과의 싸움"
+ },
+ "SRO_GGW_MENU_QCH_SMITH_1": {
+  "english": "Delivering the Weapon List",
+  "basis": "translated-retail-korean",
+  "source": "무기내역서 배달"
+ },
+ "SRO_GGW_MENU_QCH_TUTORIAL": {
+  "english": "Tutorial",
+  "basis": "translated-retail-korean",
+  "source": "튜토리얼"
+ },
+ "SRO_GGW_MENU_QKT_MANAGER_1": {
+  "english": "Bunwang's Highest-Quality Nephrite",
+  "basis": "translated-retail-korean",
+  "source": "분왕의 최상급 연옥"
+ },
+ "SRO_GGW_MENU_QKT_SO1_1": {
+  "english": "Duyun's Revenge",
+  "basis": "translated-retail-korean",
+  "source": "도륜일의 복수"
+ },
+ "SRO_GGW_MENU_QKT_WAREHOUSE_1": {
+  "english": "Clearing Ultra Blood Devil",
+  "basis": "translated-retail-korean",
+  "source": "귀생화 퇴치"
+ },
+ "SRO_GGW_MENU_QQT_MSG": {
+  "english": "Ch'in Tomb",
+  "basis": "translated-retail-korean",
+  "source": "진시황릉"
+ },
+ "SRO_GGW_MENU_QQT_STORY_MSG": {
+  "english": "Baekryeong",
+  "basis": "translated-retail-korean",
+  "source": "백령"
+ },
+ "SRO_GGW_MENU_QRM_MSG": {
+  "english": "Mt. Roke",
+  "basis": "translated-retail-korean",
+  "source": "로크산"
+ },
+ "SRO_GGW_MENU_QRM_ROC_MSG": {
+  "english": "Roc",
+  "basis": "translated-retail-korean",
+  "source": "괴조 로크"
+ },
+ "SRO_GGW_MENU_QUEST_COLLECTION": {
+  "english": "Gathering / Conversion Quests",
+  "basis": "translated-retail-korean",
+  "source": "채집/변환 퀘스트"
+ },
+ "SRO_GGW_MENU_QUEST_DICTIONARY": {
+  "english": "Quest Dictionary",
+  "basis": "translated-retail-korean",
+  "source": "퀘스트 사전"
+ },
+ "SRO_GGW_MENU_QUEST_INS": {
+  "english": "Instant World Quests",
+  "basis": "translated-retail-korean",
+  "source": "인스턴트 월드 퀘스트"
+ },
+ "SRO_GGW_MENU_QUEST_MOB_CATCH": {
+  "english": "Capture / Trap Capture Quests",
+  "basis": "translated-retail-korean",
+  "source": "포획/덫 포획 퀘스트"
+ },
+ "SRO_GGW_MENU_QUEST_MOB_DELIVERY": {
+  "english": "Delivery / Conversation Quests",
+  "basis": "translated-retail-korean",
+  "source": "배달/ 대화 퀘스트"
+ },
+ "SRO_GGW_MENU_QUEST_MSG": {
+  "english": "Quests",
+  "basis": "translated-retail-korean",
+  "source": "퀘스트"
+ },
+ "SRO_GGW_MENU_QUEST_PARTY": {
+  "english": "Normal / Party Quests",
+  "basis": "translated-retail-korean",
+  "source": "일반 /파티 퀘스트"
+ },
+ "SRO_GGW_MENU_QWC_HORSE_1": {
+  "english": "Demon Horse's Malice",
+  "basis": "translated-retail-korean",
+  "source": "귀생마의 원한"
+ },
+ "SRO_GGW_MENU_QWC_POTION_1": {
+  "english": "Ghost Bug's Egg",
+  "basis": "translated-retail-korean",
+  "source": "귀족충의 알"
+ },
+ "SRO_GGW_MENU_QWC_PRIEST1_1": {
+  "english": "Hyungno's Spirit of Vengeance",
+  "basis": "translated-retail-korean",
+  "source": "흉노의 원귀"
+ },
+ "SRO_GGW_MENU_TC_GET_POINTANDITEM": {
+  "english": "Honor Points and Items",
+  "basis": "translated-retail-korean",
+  "source": "명예 포인트와 아이템"
+ },
+ "SRO_GGW_MENU_TC_GRADE": {
+  "english": "Honor Grade and Rank",
+  "basis": "translated-retail-korean",
+  "source": "명예 등급과 순위"
+ },
+ "SRO_GGW_MENU_TC_GRADUATION": {
+  "english": "Academy Graduation",
+  "basis": "translated-retail-korean",
+  "source": "견습소 졸업"
+ },
+ "SRO_GGW_MENU_TC_HELP_SYSTEM": {
+  "english": "Convenience Features",
+  "basis": "translated-retail-korean",
+  "source": "편의 시스템"
+ },
+ "SRO_GGW_MENU_TC_IN_AND_OUT": {
+  "english": "Joining and Leaving an Academy",
+  "basis": "translated-retail-korean",
+  "source": "견습소 가입과 탈퇴"
+ },
+ "SRO_GGW_MENU_TC_MSG": {
+  "english": "Guardian System",
+  "basis": "translated-retail-korean",
+  "source": "후견인 시스템"
+ },
+ "SRO_GGW_MENU_TC_OPEN_AND_DISSOLUTION": {
+  "english": "Opening and Closing an Academy",
+  "basis": "translated-retail-korean",
+  "source": "견습소 개설과 해체"
+ },
+ "SRO_GGW_MENU_TC_REWARD": {
+  "english": "Rewards",
+  "basis": "translated-retail-korean",
+  "source": "보상"
+ },
+ "SRO_GGW_MENU_TC_SYSTEM": {
+  "english": "System Overview",
+  "basis": "translated-retail-korean",
+  "source": "시스템 설명"
+ },
+ "SRO_GGW_MENU_TR2_ALIAS": {
+  "english": "Alias System",
+  "basis": "translated-retail-korean",
+  "source": "가명시스템"
+ },
+ "SRO_GGW_MENU_TR2_BANDIT": {
+  "english": "Thief",
+  "basis": "translated-retail-korean",
+  "source": "도적"
+ },
+ "SRO_GGW_MENU_TR2_HUNTER": {
+  "english": "Hunter",
+  "basis": "translated-retail-korean",
+  "source": "헌터"
+ },
+ "SRO_GGW_MENU_TR2_JOBGUILD": {
+  "english": "Job Guilds",
+  "basis": "translated-retail-korean",
+  "source": "직업 조합"
+ },
+ "SRO_GGW_MENU_TR2_MSG": {
+  "english": "Caravan Trade System",
+  "basis": "translated-retail-korean",
+  "source": "대상무역시스템"
+ },
+ "SRO_GGW_MENU_TR2_RANKING": {
+  "english": "Ranking System",
+  "basis": "translated-retail-korean",
+  "source": "랭킹시스템"
+ },
+ "SRO_GGW_MENU_TR2_STRUCTURE": {
+  "english": "Caravan Trade Structure",
+  "basis": "translated-retail-korean",
+  "source": "대상무역구조"
+ },
+ "SRO_GGW_MENU_TR2_TRADER": {
+  "english": "Trader",
+  "basis": "translated-retail-korean",
+  "source": "상인"
+ },
+ "SRO_GGW_MENU_TR2_TRIANGLE": {
+  "english": "Three-Way Rivalry",
+  "basis": "translated-retail-korean",
+  "source": "삼각대립구조"
+ },
+ "SRO_GGW_QUEST_COLLECTION": {
+  "english": "<sml2><strong>Gathering Quests</strong><br>\n1. Quests in which you use an item in a designated area to obtain a new item.<br>\n2. Using the item brings up a casting bar. Until you cancel it or it disappears, you cannot use skills or move. (You can still drink potions.)<br><br>\n<strong>Item Conversion Quests</strong><br>\n1. Quests in which you click a quest item you picked up to convert it.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>채집 퀘스트</strong><br>\n1. 지정된 지역에서 아이템을 사용하여 새로운 아이템을 얻는 퀘스트를 말합니다.<br>\n2. 해당 아이템을 사용하면 시전바가 생기며 시전바를 취소하거나 시전바가 사라지기 전까지 스킬사용 및 이동불가 상태가 됩니다.(단, 물약은 먹을 수 있습니다.)<br><br>\n<strong>아이템 변환 퀘스트</strong><br>\n1. 습득한 퀘스트 아이템을 클릭하여 변환시키는 퀘스트를 말합니다.<br></sml2>"
+ },
+ "SRO_GGW_QUEST_DICTIONARY": {
+  "english": "<sml2><strong>Quest Dictionary</strong><br>\n1. Shows the quests you can do and the quests you have completed.<br>\n2. Quest names are colored by your level and the quest's level: red for quests above your level, yellow for quests at your level, white for quests below your level and gray for completed quests.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>퀘스트 사전</strong><br>\n1. 자신이 수행할 수 있는 퀘스트와 수행 완료한 퀘스트를 확인할 수 있습니다.<br>\n2. 자신의 레벨과 퀘스트의 레벨에 따라 퀘스트 이름 색상이 다르게 보여집니다. 자신의 레벨보다 높은 퀘스트는 붉은색, 자신의 레벨과 동일한 퀘스트는 노란색, 자신의 레벨보다 낮은 퀘스트는 흰색, 수행 완료한 퀘스트는 회색으로 보여집니다.<br></sml2>"
+ },
+ "SRO_GGW_QUEST_INS": {
+  "english": "<sml2><strong>Instant World Quests</strong><br>\n1. Quests carried out in a separate space rather than the ordinary field.<br>\n2. You cannot move to the space while a trade transport is summoned.<br>\n3. When a set time passes, or when no player doing the quest is left in the instant dungeon, the space is destroyed and you return to where you came from.<br>\n4. For party quests, only the party master doing the quest can authorize the move. When the party master accepts, the party members who meet the conditions move to the space together.<br>\n5. For party quests, the quest is completed even if the player doing it is dead.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>인스턴트 월드 퀘스트</strong><br>\n1. 일반 필드가 아닌 새로운 공간에서 수행하는 퀘스트를 말합니다.<br>\n2. 무역 운송수단을 소환했을 때에는 공간이동을 할 수 없습니다.<br>\n3. 일정 시간이 경과하거나 퀘스트를 수행중인 플레이어가 인스턴트 던전내에 존재하지 않으면 공간이 파괴되어 본래 왔던 곳으로 되돌아 갑니다.<br>\n4. 파티 퀘스트일 경우 퀘스트를 수행중인 파티장만 이동의 권한을 가지게 되고 파티장이 이동을 수락하면 조건에 맞는 파티원들과 함께 공간이동을 하게 됩니다.<br>\n5. 파티 퀘스트일 경우 퀘스트를 수행중인 플레이어가 죽은 상태에서도 퀘스트가 완료됩니다.<br></sml2>"
+ },
+ "SRO_GGW_QUEST_MOB_CATCH": {
+  "english": "<sml2><strong>Capture / Trap Capture Quests</strong><br>\n1. Quests in which you capture monsters.<br>\n2. A monster captured with an ordinary capture item follows the player like a transport.<br>\n3. A monster captured with a trap is stored in the inventory like an item.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>일반 포획/ 덫 포획 퀘스트</strong><br>\n1. 몬스터를 포획하는 퀘스트를 말합니다.<br>\n2. 일반 포획 아이템을 이용하여 포획한 몬스터는 운송수단과 같이 플레이어를 따라다닙니다.<br>\n3. 덫을 이용하여 포획한 몬스터는 인벤토리에 아이템처럼 저장됩니다.<br></sml2>"
+ },
+ "SRO_GGW_QUEST_MOB_DELIVERY": {
+  "english": "<sml2><strong>Delivery / Conversation Quests</strong><br>\n1. Quests in which you deliver an item or pass news on to an NPC.<br>\n2. You cannot use return scrolls or portals while doing the quest.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>배달/ 대화 퀘스트</strong><br>\n1. 물건을 배달하거나 해당 NPC에게 소식을 전해주는 퀘스트를 말합니다.<br>\n2. 퀘스트 수행 중에 귀환서 및 포탈을 사용할 수 없습니다.<br></sml2>"
+ },
+ "SRO_GGW_QUEST_PARTY": {
+  "english": "<sml2><strong>Normal Quests</strong><br>\n1. Quests you can do alone, whether or not you are in a party.<br>\n2. In an experience-sharing / auto-item-distribution party, quest items can drop and hunt counts can be earned even when a player who is not doing the quest does the hunting.<br>\n3. When several party members are doing the same quest, they receive quest items or hunt counts in turn.<br>\n4. Normal quests show a blue quest name box in the quest information window.<br><br>\n<strong>Party Quests</strong><br>\n1. Quests that can only be done in an experience-sharing / auto-item-distribution party.<br>\n2. All party members doing the quest gain hunt counts or items at the same time.<br>\n3. Hunt counts or item drops are earned even when a party member who is not doing the quest does the hunting.<br>\n4. Party quests show a green quest name box in the quest information window.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>일반 퀘스트</strong><br>\n1. 파티 여부에 관계없이 혼자서 수행할 수 있는 퀘스트를 말합니다.<br>\n2. 경험치 공유/ 아이템 자동분배 파티일 때 퀘스트를 수행하고 있지 않은 플레이어가 사냥을 하더라도 퀘스트 아이템이 드랍되거나 사냥 카운트를 획득할 수 있습니다.<br>\n3. 동일한 퀘스트를 수행하고 있는 파티원들이 여럿 있을 때 퀘스트 아이템이나 사냥 카운트를 순서대로 획득하게 됩니다.<br>\n4. 일반 퀘스트는 퀘스트 정보창에서 퀘스트 이름 박스가 파란색으로 보입니다.<br><br>\n<strong>파티 퀘스트</strong><br>\n1. 경험치 공유/ 아이템 자동분배 파티를 했을 때에만 수행 가능한 퀘스트입니다.<br>\n2. 퀘스트를 수행하고 있는 파티원 모두 동시에 사냥 카운트가 올라가거나 동시에 아이템 획득합니다.<br>\n3. 퀘스트를 수행하고 있지 않은 파티원이 사냥하더라도 사냥 카운트 획득 또는 아이템을 드랍합니다.<br>\n4. 파티 퀘스트는 퀘스트 정보창에서 퀘스트 이름 박스가 초록색으로 보입니다.<br></sml2>"
+ },
+ "SRO_GGW_TC_GET_POINTANDITEM": {
+  "english": "<sml2><strong>Honor Points and Honor Items</strong><br><br>- Honor points are accumulated as 40 minus the apprentice's level when first joining.<br>e.g.) If the apprentice joined the academy at level 5, 40 - 5 = 35, so you receive 35 honor points.<br>- Honor points are shown in the character window opened with [C].<br>- Accumulated honor points can be used to buy honor items.<br>- Honor items can be bought from the storage NPC of each town.<br>- Honor items cannot be destroyed, traded, dropped or exchanged.<br>- Honor items can only be repaired a set number of times; once the remaining repairs reach 0, the item can no longer be used.<br>- To increase the number of repairs, you must use a repair-count-increase Alchemy Stone.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>명예 포인트와 명예 아이템</strong><br><br>- 명예 포인트는 40 - 견습생 최초 가입레벨로 계산하여 포인트를 누적합니다.<br>예) 5Lv 에 견습소에 가입하였다면 40 - 5 = 35로 명예 포인트는 35가 됩니다.<br>- 명예 포인트는 [C] 를 누르면 나오는 캐릭터 창에서 볼 수 있습니다.<br>- 누적된 명예 포인트로 명예 아이템을 구입할 수 있습니다.<br>- 명예 아이템은 각 마을 창고 NPC에게 구입할 수 있습니다.<br>- 명예 아이템은 파괴, 거래, 드롭, 교환이 불가능 합니다.<br>- 명예 아이템은 수리가능 횟수가 정해져 있어 수리가능 횟수가 0이 되면 아이템을 사용할 수 없습니다.<br>- 명예 아이템의 수리가능 횟수를 늘리기 위해서는 수리횟수증가 연금석으로 연금을 해야 합니다.<br></sml2>"
+ },
+ "SRO_GGW_TC_GRADE": {
+  "english": "<sml2><strong>Honor Grade and Honor Rank</strong><br><br>- The guardian receives evaluation points as a reward when an apprentice graduates.<br>- Evaluation points are totaled to rank the top 1st to 50th in the Honor Rank.<br>- The Honor Rank can be checked through the storage NPC.<br>- The Honor Rank is updated every day at 00:00.<br>- Extra stats are granted as rewards according to the Honor Rank.<br>- You must have 10 or more evaluation points to be registered in the Honor Rank.<br>- Extra reward stats are shown as a buff icon and stack with similar items and skills.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>명예 등급과 명예 순위</strong><br><br>- 견습생의 졸업에 따른 보상으로 후견인은 평가점수를 얻을 수 있습니다.<br>- 평가점수를 합산하여 상위 1위~50위까지 명예순위를 매기게 됩니다.<br>- 명예 순위는 창고 NPC를 통해 확인할 수 있습니다.<br>- 명예 순위는 매일 00:00시에 갱신됩니다.<br>- 명예순위에 따라 추가 능력치가 보상으로 지급됩니다.<br>- 10포인트 이상의 평가점수를 받아야 하며 명예 순위에 등록이 가능합니다.<br>- 추가 보상 능력치는 버프 아이콘으로 표시되며 유사 아이템, 스킬과 중복 적용됩니다.<br></sml2>"
+ },
+ "SRO_GGW_TC_GRADUATION": {
+  "english": "<sml2><strong>Academy Graduation</strong><br><br>- Apprentices can graduate at level 40 (assistant guardians at level 60).<br>- Press the Graduate button in the academy UI (shortcut key L) to graduate.<br>- During graduation, the guardian evaluation window opens.<br>- Completing the guardian evaluation gives you reward experience.<br>- The guardian receives evaluation points and honor points.<br>- Honor Grades are determined by evaluation points.<br>- Honor points can be used to buy special items.<br>(Assistant guardians separately receive 10% of the honor points the guardian receives.)<br>- Rewards are only given if the apprentice joined at level 30 or lower.<br>- If an apprentice reaches level 41 without graduating, the guardian can force the graduation through the UI.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>견습소 졸업</strong><br><br>- 견습생 레벨 40(보조 후견인 레벨 60)이 되면 졸업이 가능해 집니다.<br>- 견습소 UI(단축키 L)의 졸업 버튼을 누르면 졸업을 할 수 있습니다.<br>- 졸업 처리과정이 진행되면 후견인 평가 창이 열립니다.<br>- 후견인 평가를 완료하면 보상 경험치를 얻게 됩니다.<br>- 후견인은 평가점수와 명예 포인트를 얻게 됩니다.<br>- 평가 점수로 명예등급이 나누어지게 됩니다.<br>- 명예 포인트로는 특수 아이템을 구입할 수 있습니다.<br>(보조 후견인은 후견인이 받는 명예 포인트의 10%를 별개로 지급받습니다.)<br>- 견습생 가입레벨이 30Lv 이하일 경우에만 보상이 주어집니다.<br>- 견습생이 졸업하지 않고 41Lv이 되면, 후견인이 UI를 통해 강제로 졸업을 시킬 수 있습니다.<br></sml2>"
+ },
+ "SRO_GGW_TC_HELP_SYSTEM": {
+  "english": "<sml2><strong>Convenience Features</strong><br>1. Messenger<br>- When you join an academy, a transparent chat window appears.<br>- It is a convenient chat window for academy members, and only members can talk in it.<br><br>2. Guardian matching system<br>- When a new player connects to the game, the matching window opens automatically.<br>- Guardians can take in apprentices by registering for matching.<br>- The guardian matching window shows the guardian's level, race and Honor Grade, and the academy's graduates and current number of apprentices.<br>- If you do not join, a (!) mark appears on the right of the screen.<br>- Pressing the mark opens the matching window, and you can join an academy at any time.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>편의 시스템</strong><br>1. 메신저<br>- 견습소에 가입하면 투명한 채팅 창이 나타납니다.<br>- 견습소 가입자들끼리 편리하게 사용하는 채팅 창으로 가입자끼리만 대화가 가능합니다.<br><br>2. 후견인 매칭 시스템<br>- 신규 유저가 게임을 접속하게 되면 자동으로 매칭 창이 오픈 됩니다.<br>- 후견인은 매칭 등록을 통해 견습생을 받을 수 있습니다.<br>- 후견인 매칭 창에는 후견인의 레벨, 종족, 명예등급과 해당 견습소의 졸업생, 현재 견습생 인원이 표시됩니다.<br>- 가입하지 않을 경우 화면 우측에 (!) 마크가 표시됩니다.<br>- 이 마크를 누르면 매칭 창이 열리게 되고 언제라도 견습소에 가입할 수 있습니다.<br></sml2>"
+ },
+ "SRO_GGW_TC_IN_AND_OUT": {
+  "english": "<sml2><strong>Joining and Leaving an Academy</strong><br>1. Joining an academy<br>- You can join through the academy UI (shortcut key L) or the academy matching system.<br>- When you join an academy, you are registered in the academy UI.<br>- The locations of all academy members are shown as red dots on the world map.<br><br>2. Leaving an academy<br>-  Only apprentices and assistant guardians can leave, starting 24 hours after joining.<br>- After leaving, an apprentice cannot join another academy for 24 hours.<br>- After leaving, an assistant guardian cannot join another academy for 3 days and loses 10 honor points.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>견습소 가입과 탈퇴</strong><br>1. 견습소 가입<br>- 견습소 UI(단축키 L)나 견습소 매칭 시스템을 통해 가입할 수 있습니다.<br>- 견습소에 가입하게 되면 견습소 UI에 등록됩니다.<br>- 전체 견습소 가입 원들의 위치는 월드맵에 빨간색 점으로 표시됩니다.<br><br>2. 견습소 탈퇴<br>-  견습생과 보조 후견인만 탈퇴가 가능하며, 견습소 가입 후 24시간 이후부터 가능합니다.<br>- 견습생은 견습소 탈퇴 후 24시간 동안 다른 견습소 가입이 불가능하게 됩니다.<br>- 보조 후견인은 견습소 탈퇴 후 3일간 다른 견습소 가입이 불가능 하며 명예 포인트가 10점 감소합니다.<br></sml2>"
+ },
+ "SRO_GGW_TC_OPEN_AND_DISSOLUTION": {
+  "english": "<sml2><strong>Opening and Closing an Academy</strong><br>1. Opening an academy<br>- You can open an academy through the storage NPC of each town.<br>- Only players of level 60 or higher can open one, and it costs 100,000 gold.<br>- A guardian can open only one academy, and each academy can take five apprentices (level 39 or lower) and two assistant guardians (level 40 ~ 59).<br><br>2. Closing an academy<br>- Only possible 7 days after the academy was opened.<br>- Registered apprentices (assistant guardians) are withdrawn automatically. (No withdrawal penalty)<br>- On withdrawal, all benefits from the Cumulated Buff, Accumulated Buff, messenger and Honor Grade are lost.<br>- You cannot reopen an academy for 7 days, and your Honor Grade and honor points are reset.<br><br>3. Banishing apprentices<br>- Only the guardian can banish, starting 24 hours after taking in the apprentice.<br>- After banishing an apprentice, you cannot take in any apprentice for 24 hours.<br>(However, banishing an assistant guardian does not incur this penalty.)<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>견습소 개설과 해체</strong><br>1. 견습소 개설<br>- 견습소 개설은 각 마을 창고 NPC를 통해 할 수 있습니다.<br>- 60Lv 이상의 유저만 개설이 가능하며 개설비용으로 10만 골드가 필요합니다.<br>- 후견인은 한 개의 견습소만 개설이 가능하며, 한 개의 견습소에 견습생(레벨 39 이하) 다섯 명과 보조 후견인(레벨 40 ~ 59) 두 명을 받을 수 있습니다.<br><br>2. 견습소 해체<br>- 견습소 개설 후 7일 이후에만 가능합니다.<br>- 가입된 견습생(보조 후견인)은 자동으로 탈퇴 처리 됩니다. (탈퇴 패널티 없음)<br>- 탈퇴되면 누적버프, 적립버프, 메신저, 명예등급에 따른 모든 혜택이 사라집니다.<br>- 7일 이내에 견습소를 재 개설할 수 없고 명예 등급과 명예 포인트가 초기화 됩니다.<br><br>3. 견습생 추방<br>- 추방은 후견인만 가능하며 견습생을 받은 후 24시간 이후부터 가능합니다.<br>- 견습생을 추방하게 되면 견습생 추방 후 24시간 동안 모든 견습생을 받을 수 없습니다.<br>(단, 보조 후견인을 추방 시켰을 경우에는 견습생 가입불가 패널티를 받지 않습니다.)<br></sml2>"
+ },
+ "SRO_GGW_TC_REWARD": {
+  "english": "<sml2><strong>Rewards</strong><br><br>Apprentices bound to a guardian build up an extra experience rate by hunting and share it in the form of buffs. Through these buffs, the guardian and apprentices gain extra experience when hunting.<br><br>1. Cumulated Buff<br>- When apprentices hunt, a buff appears on the left of the screen.<br>- This buff builds up for 24 hours only.<br>- The Cumulated Buff stores the experience rate as points.<br><br>2. Accumulated Buff <br>- One hour after the Cumulated Buff appears, you can hand it over.<br>- Click the Cumulated Buff icon to pass the built-up experience to the guardian.<br>- After handing it over, the guardian and you receive Accumulated Buffs of 20% and 80% respectively.<br>- The Accumulated Buff grants 10% extra experience per monster hunted while using up 10 points each.<br>- When all Accumulated Buff points are used up, the buff disappears.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>보상</strong><br><br>후견인을 맺은 견습생들은 사냥을 통해 추가적인 경험치 비율을 누적하여 버프 형태로 나누어 갖게 됩니다. 이 버프를 통해 후견인과 견습생들은 사냥 시 추가적인 경험치를 획득할 수 있게 됩니다.<br><br>1. 누적 버프<br>- 견습생들이 사냥을 하면 화면 왼쪽에 버프가 생성됩니다.<br>- 이 버프는 24시간 동안만 누적됩니다.<br>- 누적버프는 경험치 비율이 포인트로 누적됩니다.<br><br>2. 적립 버프 <br>- 누적 버프가 생성된 뒤 한시간 후부터 누적버프를 전달할 수 있습니다.<br>- 누적버프 아이콘을 클릭하여 후견인에게 누적된 경험치를 전달합니다.<br>- 전달 후 후견인과 본인에게 각각 20%, 80%씩 적립버프를 받게 됩니다.<br>- 적립버프는 몬스터 사냥 시 마리당 10포인트가 차감되면서 10%의 경험치를 추가로 받습니다.<br>- 적립버프의 포인트를 모두 소모하면 적립버프는 사라집니다.<br></sml2>"
+ },
+ "SRO_GGW_TC_SYSTEM": {
+  "english": "<sml2><strong>Guardian System</strong><br>The guardian system lets a high-level (existing) player recruit new players, pass on information and know-how about the game, and earn honor and rewards in return, while helping new players adapt to the game quickly with what they have learned.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong>후견인 시스템</strong><br>후견인 시스템이란 고 레벨의 유저(기존유저)가 신규 유저를 모집 하여, 게임에 대한 정보와 방법을 전수해주고 그에 따른 명예와 보상을 얻고, 신규 유저는 전수받은 내용을 바탕으로 게임에 빠르게 적응하도록 지원하는 시스템입니다.<br></sml2>"
+ },
+ "SRO_GGW_TR2_ALIAS": {
+  "english": "<sml2>\n<strong><font color=\"255,255,0,0\">[The thief job is a system available only on adult servers.]</font></strong><br><br>\n<strong>Alias System</strong><br>\nIn Silkroad Online, once your character reaches level 20 you can activate a job with job equipment. The alias system was created to keep you anonymous while a job is active.<br><br>\nYou can create an alias through a job guild NPC, and it is only shown during job activity (trader, thief, hunter). To create an alias you must meet the following conditions.<br>\n- Your character must be level 20 or higher.<br>\n- Changing your alias costs 50,000 gold per level.<br><br>\nLike character names, an alias can be 1-6 Korean characters or 2-12 English characters long.<br>\nThe alias is shown in game in the form *alias, everywhere an ID is displayed, including the target window.<br>\nLike a character name, an alias is unique and cannot duplicate another player's name.<br>\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong><font color=\"255,255,0,0\">[도적 직업은 성인서버에만 적용되는 시스템입니다.]</font></strong><br><br>\n<strong>가명 시스템</strong><br>\n실크로드 온라인에서는 캐릭터 레벨 20이 되면, 직업 장비를 통해 직업을 활성화 시킬 수 있습니다. 직업이 활성화 될 때 익명성 보장을 위해 생겨난 시스템이 가명 시스템입니다.<br><br>\n가명은 직업조합 NPC를 통해 지을 수 있으며, 지어진 가명은 직업활동(상인, 도적, 헌터)을 할 때만 표시됩니다. 가명을 짓기 위해서는 다음 조건을 만족해야 합니다.<br>\n- 캐릭터의 레벨이 20이상이어야 한다.<br>\n- 가명을 수정할 때 레벨당 5만 골드가 필요하다.<br><br>\n가명은 캐릭터명과 같이 한글 1~6글자, 영문 2~12글자 내에서 지을 수 있습니다.<br>\n생성된 가명은 *가명 형태로 게임 내에서 표시되며, 타겟창을 포함한 아이디가 표시되는 모든 부분에서 표시됩니다.<br>\n가명은 캐릭터의 이름과 같이 고유하며, 타 유저와 중복된 이름으로 생성할 수 없습니다.<br>\n</sml2>"
+ },
+ "SRO_GGW_TR2_BANDIT": {
+  "english": "<sml2>\n<strong><font color=\"255,255,0,0\">[The thief job is a system available only on adult servers.]</font></strong><br><br>\n<strong>Thief</strong><br>\nThe outcasts of their age who do evil without a thought for others. Thieves raid traders on trade runs and steal their goods to make money, but they always lead a weary life with their lives threatened by hunters.<br><br>\n<strong>Requirements to become a thief</strong><br>\n- Your character must be level 20 or higher.<br>\n- You must join the Thief Guild.<br>\n- You must create an alias after joining the guild.<br>\n- Equipping the thief-only job item activates thief status.<br>\n* Thief items can be bought at the Thief Guild.<br><br>\n<strong>Role of the thief</strong><br>\n1) Removing traders/hunters/transports<br>\n- You can kill players in trader or hunter status and their transports without a PK penalty.<br><br>\n2) Stealing goods<br>\n- You can raid a trader's transport and steal the goods. Stolen goods are sold as loot in Thief Town, and you need a transport to do so.<br><br>\n3) Returning to Thief Town<br>\n- Thieves can return to Thief Town with a Thief Town return scroll, or through Yumi, the courtesan NPC on the tavern street in Jangan.<br><br>\n<strong>Thief growth</strong><br>\n- On the Silk Road, thieves raise their thief grade with the experience earned from killing traders/transports/hunters or from selling stolen goods.<br>\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong><font color=\"255,255,0,0\">[도적 직업은 성인서버에만 적용되는 시스템입니다.]</font></strong><br><br>\n<strong>도적</strong><br>\n남을 의식하지 않고 악행을 일삼는 시대의 패륜아로서 무역중인 상인을 습격하고 물품을 강탈하여 돈을 벌어들이지만, 헌터로부터 언제나 생명을 위협당하는 등 늘 피곤한 생활을 해야 하는 직업입니다.<br><br>\n<strong>도적이 되기 위한 조건</strong><br>\n- 캐릭터 레벨이 20이상이어야 합니다.<br>\n- 도적 조합에 가입해야 합니다.<br>\n- 조합 가입 후 가명을 생성해야 합니다.<br>\n- 도적 전용 직업 아이템을 장착하면 도적상태가 활성화됩니다.<br>\n* 도적 아이템은 도적 조합에서 구입할 수 있습니다.<br><br>\n<strong>도적의 역할</strong><br>\n1) 상인/헌터/운송수단의 제거<br>\n- 상인, 헌터 상태인 유저와 운송수단을 PK페널티에 적용 받지 않고 죽일 수 있습니다.<br><br>\n2) 특산품의 강탈<br>\n- 상인의 운송수단을 습격하여 특산품을 강탈할 수 있습니다. 강탈한 특산품은 도적마을에서 장물로 판매하게 되며, 그러기 위해서는 운송수단이 필요합니다.<br><br>\n3) 도적마을로의 귀환<br>\n- 도적은 도적마을로 귀환할 수 있는 도적마을 귀환서 스크롤을 사용하여 귀환할 수 있고 장안의 주점거리에 있는 유미라는 기녀 NPC를 통해서도 도적마을로 귀환할 수 있습니다.<br><br>\n<strong>도적의 성장</strong><br>\n- 실크로드에서 도적은 상인/운송수단/헌터를 죽여서 얻은 경험치나 강탈한 특산품을 판매하여 얻은 경험치로 도적 등급을 성장시킬 수 있습니다.<br>\n</sml2>"
+ },
+ "SRO_GGW_TR2_HUNTER": {
+  "english": "<sml2>\n<strong><font color=\"255,255,0,0\">[The thief job is a system available only on adult servers.]</font></strong><br><br>\n<strong>Hunter</strong><br>\nA job that protects players from criminals who disturb the order of the game and upholds justice. Hunters escort traders' trade runs and catch thieves, helping to build a peaceful world.<br><br>\n<strong>Requirements to become a hunter</strong><br>\n- Your character must be level 20 or higher.<br>\n- You must join the Hunter Guild.<br>\n- You must create an alias after joining the guild.<br>\n- Equipping the hunter-only job item activates hunter status.<br>\n* Hunter items can be bought at the Hunter Guild.<br><br>\n<strong>Role of the hunter</strong><br>\n1) Protecting goods<br>\n- Hunters protect the traders in their party from thieves. When a hunter picks up goods that fell from a trader's transport, they are returned to the party trader's transport, protecting the trader's goods. In return for this protection, the hunter receives a share of the profit when the trader sells the goods.<br><br>\n2) Removing thieves<br>\n- You receive no PK penalty for killing players in thief status, and you earn job experience.<br><br>\n<strong>Hunter growth</strong><br>\n- On the Silk Road, hunters raise their hunter grade with the experience earned from killing thieves or when an escorted trader sells goods.<br>\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong><font color=\"255,255,0,0\">[도적 직업은 성인서버에만 적용되는 시스템입니다.]</font></strong><br><br>\n<strong>헌터</strong><br>\n게임의 질서를 어지럽히는 범죄자들로부터 유저를 보호하고 정의를 수호하는 직업으로, 상인의 무역을 호위하고 도적들을 검거하여 평화로운 세상을 만들어 나가는데 이바지 합니다.<br><br>\n<strong>헌터가 되기위한 조건</strong><br>\n- 캐릭터 레벨이 20이상이어야 합니다.<br>\n- 헌터 조합에 가입해야 합니다.<br>\n- 조합 가입 후 가명을 생성해야 합니다.<br>\n- 헌터 전용 직업 아이템을 장착하며 헌터 상태가 활성화됩니다.<br>\n* 헌터 아이템은 헌터 조합에서 구입할 수 있습니다.<br><br>\n<strong>헌터의 역할</strong><br>\n1) 특산품의 보호<br>\n- 자신의 파티에 속해있는 상인을 도적으로부터 보호하며, 상인의 운송수단에서 떨어진 특산품을 습득할 경우, 파티 상인의 운송수단으로 돌려보내주어 상인의 특산품을 보호합니다. 보호에 대한 대가로 상인의 특산품 판매 시 일정량의 이익을 얻게 됩니다.<br><br>\n2) 도적 제거<br>\n- 도적상태의 유저를 PK해도 PK페널티를 받지 않으며 직업 경험치를 얻을 수 있습니다.<br><br>\n<strong>헌터의 성장</strong><br>\n- 실크로드에서 헌터는 도적을 죽여서 얻는 경험치나 호위한 상인이 특산품을 판매 시 얻는 경험치로 헌터 등급을 성장시킵니다.<br>\n</sml2>"
+ },
+ "SRO_GGW_TR2_JOBGUILD": {
+  "english": "<sml2>\n<strong><font color=\"255,255,0,0\">[The thief job is a system available only on adult servers.]</font></strong><br><br>\n<strong>Job Guilds</strong><br>\nTo take part in job activities on the Silk Road, you must join the guild for that job. Every city has job guilds except for thieves; the Thief Guild is in Thief Town.<br><br>\n<strong>Joining a Job Guild</strong><br>\n- Joining costs (level-20)*5000 gold.<br>\n- Only players of level 20 or higher can join.<br><br>\n<strong>Leaving a Job Guild</strong><br>\n- All information related to the job is reset.<br>\n- After leaving, you cannot join a job guild for 7 days.<br><br>\n<strong>What you can do at a job guild</strong><br>\n- Buy items for the job.<br>\n- Create an alias.<br>\n- Check the job rankings.<br>\n- Hunters and thieves receive a weekly reward from the guild NPC based on their job activity.<br>\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong><font color=\"255,255,0,0\">[도적 직업은 성인서버에만 적용되는 시스템입니다.]</font></strong><br><br>\n<strong>직업조합</strong><br>\n실크로드에서 직업활동을 하기 위해서는 반드시 각 직업조합에 가입해야 합니다. 직업조합은 도적을 제외하고는 각 도시마다 존재하며, 도적조합은 도적마을에 존재합니다.<br><br>\n<strong>직업조합 가입</strong><br>\n- 조합 가입 시 가입비로 (레벨-20)*5000골드가 필요합니다.<br>\n- 레벨 20 이상의 유저만 가입할 수 있습니다.<br><br>\n<strong>직업조합 탈퇴</strong><br>\n- 해당 직업과 관련된 모든 정보가 초기화됩니다.<br>\n- 탈퇴 시 직업 조합에 7일 이내에 가입할 수 없습니다.<br><br>\n<strong>직업조합에서 할 수 있는 일</strong><br>\n- 해당 직업 아이템을 구입할 수 있습니다.<br>\n- 가명을 생성할 수 있습니다.<br>\n- 직업 랭킹을 확인할 수 있습니다.<br>\n- 헌터/도적의 경우 직업 활동에 따라 매주 조합 NPC를 통해 성과금을 받습니다.<br>\n</sml2>"
+ },
+ "SRO_GGW_TR2_RANKING": {
+  "english": "<sml2>\n<strong><font color=\"255,255,0,0\">[The thief job is a system available only on adult servers.]</font></strong><br><br>\n<strong>Ranking System</strong><br>\nYou can check various rankings based on job activity at the guild NPCs. Rankings are updated once a week, and rewards are paid based on them.<br><br>\n<strong>Job Ranking</strong><br>\n- Applies to traders, hunters and thieves alike, ranked by job level and experience.<br><br>\n<strong>Donation Ranking</strong><br>\n- Traders only, ranked by the amount of donations a trader has made to the Hunter Guild.<br><br>\n<strong>Contribution Ranking</strong><br>\n- Hunters and thieves only, ranked by the job experience earned through job activity.<br>\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong><font color=\"255,255,0,0\">[도적 직업은 성인서버에만 적용되는 시스템입니다.]</font></strong><br><br>\n<strong>랭킹 시스템</strong><br>\n직업 활동에 따른 여러 가지 순위를 조합 NPC에게서 확인할 수 있습니다. 랭킹은 매주 1회 갱신되며, 이 랭킹을 근거로 성과금을 받게 됩니다.<br><br>\n<strong>직업 랭킹</strong><br>\n- 상인, 헌터, 도적 모두에게 적용되며, 직업레벨과 경험치로 순위를 매깁니다.<br><br>\n<strong>기부금 랭킹</strong><br>\n- 상인만 해당되며 상인이 헌터조합에 낸 기부금의 액수로 순위를 매깁니다.<br><br>\n<strong>기여도 랭킹</strong><br>\n- 헌터와 도적만 해당되며 직업 활동에 따란 직업 경험치를 이용해 순위를 매깁니다.<br>\n</sml2>"
+ },
+ "SRO_GGW_TR2_STRUCTURE": {
+  "english": "<sml2><img src=\"interface\\guide\\gd_trade_structure.ddj\"><br><strong>Caravan Trade Structure</strong><br>Caravan trade on the Silk Road has a very simple structure. You buy goods in region A, carry them by transport to region B and sell them there, earning a profit from the price difference between the regions. It is simple and intuitive. Silkroad trade has market prices: a real-time market system lowers the price when a region has plenty of goods in stock and raises it when stock runs low.<br><br><strong>Ordinary Trading Posts</strong><br>Found in every city. Anyone who joins the Trader Guild can trade goods there, with no level limit.<br><br><strong>Special Trading Posts</strong><br>Unlike ordinary trading posts, these are hidden throughout the field, and you must complete a trade quest before you can deal with each one. The goods sold at special trading posts are rarer than those at ordinary ones, so you can earn a larger profit. Special trading posts also do not always sell goods; they open at regular intervals.<br></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><img src=\"interface\\guide\\gd_trade_structure.ddj\"><br><strong>대상무역구조</strong><br>실크로드의 대상무역은 굉장히 단순한 구조로 되어있습니다. 지역 a에서 특산품을 구입하고 구입한 특산품을 운송수단을 통해 지역b로 이동시켜서 팔았을 때 지역간 물품의 가격차이에 의해 이익을 얻게 되는 단순하고 직관적인 형태입니다. 실크로드의 무역에는 시세의 개념이 존재하여, 지역의 특산품 재고가 많이 있을 경우에는 시세가 내려가고 재고가 적어지면 시세가 올라가는 실시간 시세 시스템을 사용하고 있습니다.<br><br><strong>일반 무역소</strong><br>각 도시에 존재하며 레벨제한 없이 상인조합에 가입만 하면 누구나 특산품을 거래할 수 있습니다.<br><br><strong>특가 무역소</strong><br>일반 무역소와 달리 필드 곳곳에 숨겨져 있으며 각 무역소와 거래하기 위해서는 무역 퀘스트를 완료해야만 합니다. 특가 무역소에서 판매되는 특산품은 일반 무역소의 특산품보다 귀하기 때문에 더 많은 이익을 얻을 수 있습니다. 또한 특가 무역소는 항상 특산품을 판매하지 않으며 일정한 시간을 주기로 열립니다.<br></sml2>"
+ },
+ "SRO_GGW_TR2_TRADER": {
+  "english": "<sml2>\n<strong>Trader</strong><br>\nOn the Silk Road, the trader is the job at the very center of trade, a leading figure who drives the economy by hiring hunters and trading goods. It is a job that always needs good information, strong willpower and, more than anyone, the protection of the gods.<br><br>\n<strong>Requirements to become a trader</strong><br>\n- Your character must be level 20 or higher.<br>\n- You must join the Trader Guild.<br>\n- You must create an alias after joining the guild.<br>\n- Equipping the trader-only job item activates trader status.<br><br>\n<strong>Role of the trader</strong><br>\n1) Buying goods<br>\n- You can buy goods at trading posts in towns and in the field.<br>\n2) Selling goods<br>\n- Selling the goods you bought at a different trading post earns a profit and completes the trade.<br><br>\n<strong>Trader growth</strong><br>\n- On the Silk Road, traders raise their trader grade with the experience earned from successful trades.<br>\n</sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2>\n<strong>상인</strong><br>\n실크로드에서의 상인은 무역의 가장 중심적인 역할을 하는 직업으로, 헌터를 고용하고 물품을 교역함으로써 경제를 이끌어가는 중심자적인 역할을 하는 존재입니다. 항상 정보에 능하고, 강인한 정신력과 신의 보살핌이 누구보다 필요한 직업입니다.<br><br>\n<strong>상인이 되기 위한 조건</strong><br>\n- 캐릭터 레벨이 20이상이어야 합니다.<br>\n- 상인 조합에 가입해야 합니다.<br>\n- 조합 가입 후 가명을 생성해야 합니다.<br>\n- 상인 전용 직업 아이템을 장착하면 상인 상태가 활성화됩니다.<br><br>\n<strong>상인의 역할</strong><br>\n1) 특산품의 구입<br>\n- 마을이나 필드의 무역소에서 특산품을 구입할 수 있습니다.<br>\n2) 특산품의 판매<br>\n- 구입했던 특산품을 다른 무역소에 팔게 되면 이익이 생기며 무역이 끝나게 됩니다.<br><br>\n<strong>상인의 성장</strong><br>\n- 실크로드에서 상인은 무역을 성공시켜서 얻는 경험치로 상인등급을 성장시킬 수 있습니다.<br>\n</sml2>"
+ },
+ "SRO_GGW_TR2_TRIANGLE": {
+  "english": "<sml2><strong><font color=\"255,255,0,0\">[The thief job is a system available only on adult servers.]</font></strong><br><br><strong>Three-Way Rivalry</strong><br>Each job on the Silk Road has its own appeal and strengths. Instead of a single fixed job, Silkroad uses a partially restricted free job system in which you choose your job freely by joining a guild. Players can experience each job by joining its guild and wearing the job items.<br><br><br><img src=\"interface\\guide\\gd_trade_job.ddj\"></sml2>",
+  "basis": "translated-retail-korean",
+  "source": "<sml2><strong><font color=\"255,255,0,0\">[도적 직업은 성인서버에만 적용되는 시스템입니다.]</font></strong><br><br><strong>삼각대립구조</strong><br>실크로드의 각 직업만이 가질 수 있는 매력과 장점을 가지고 있으며, 하나로 고정되어 있는 고정 직업형태가 아닌 조합 가입으로 직업을 자유럽게 선택할 수 있는 부분 제한 자유 직업 시스템을 사용하고 있습니다. 실크로드를 플레이하는 유저들은 조합 가입 후 직업 아이템을 착용함으로써 각 직업들은 체험할 수 있습니다.<br><br><br><img src=\"interface\\guide\\gd_trade_job.ddj\"></sml2>"
+ },
+ "SRO_MSGTIP_100": {
+  "english": "[Guide] For a party quest that requires dimensional travel, you cannot do the quest unless the party master is doing it.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 차원이동을 해야 하는 파티퀘스트일 경우 파티장이 해당 퀘스트를 수행 중이 아니면 퀘스트를 수행할 수 없습니다."
+ },
+ "SRO_MSGTIP_101": {
+  "english": "[Guide] For a party quest that requires dimensional travel, the party master holds the authority to move on behalf of the party.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 차원이동을 해야 하는 파티퀘스트일 경우 파티장이 대표로 이동권한을 가집니다."
+ },
+ "SRO_MSGTIP_102": {
+  "english": "[Guide] For a party quest that requires dimensional travel, party members who meet the conditions travel together.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 차원이동을 해야 하는 파티퀘스트인 경우 조건에 맞는 파티원들은 함께 차원이동을 하게 됩니다."
+ },
+ "SRO_MSGTIP_103": {
+  "english": "[Guide] You can capture monsters through quests. A captured monster loses its will and follows the player.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 퀘스트를 통해 몬스터를 포획할 수 있습니다. 포획한 몬스터는 자아를 상실하고 플레이어를 따라다니게 됩니다."
+ },
+ "SRO_MSGTIP_104": {
+  "english": "[Guide] Killing a monster captured by another player puts you into murderer status.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 다른 플레이어가 포획한 몬스터를 죽이면 카오 상태가 됩니다."
+ },
+ "SRO_MSGTIP_105": {
+  "english": "[Guide] COS is the collective name for the mounts, transports and pets that exist in Silkroad.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] COS는 실크로드 내에서 존재하는 이동수단/운송수단/펫을 통틀어서 지칭하는 명칭입니다."
+ },
+ "SRO_MSGTIP_106": {
+  "english": "[Guide] The European race has a style suited to party play.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족은 파티 플레이에 적합한 스타일을 가지고 있습니다."
+ },
+ "SRO_MSGTIP_107": {
+  "english": "[Guide] The European race's potion cooldown is 15 seconds, and its pill cooldown is the same as the Chinese race's.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족의 포션 재 사용시간은 15초이며, 환약 재 사용시간은 중국 종족과 동일합니다."
+ },
+ "SRO_MSGTIP_108": {
+  "english": "[Guide] The European race can gain mastery levels up to character level X 2.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족은 캐릭터 레벨 X 2 만큼 마스터리 레벨을 얻을 수 있습니다."
+ },
+ "SRO_MSGTIP_109": {
+  "english": "[Guide] Some European buff skills lose their effect when you change weapons.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족의 버프 스킬은 무기를 바꾸게 되면 효과가 사라지는 스킬도 존재합니다."
+ },
+ "SRO_MSGTIP_110": {
+  "english": "[Guide] The European Warrior mastery takes the tanker (defensive fighter) role in a party.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족의 워리어 마스터리는 파티에서 탱커(방어형 전사)의 역할을 담당합니다."
+ },
+ "SRO_MSGTIP_111": {
+  "english": "[Guide] The European Rogue mastery takes the puller (luring monsters) role and the physical damage dealer role in a party.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족의 로그 마스터리는 파티에서 풀러(몹을 끌어오는)의 역할과 물리형 데미지 딜러 역할을 담당합니다."
+ },
+ "SRO_MSGTIP_112": {
+  "english": "[Guide] The European Wizard mastery takes the magical damage dealer role in a party.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족의 위저드 마스터리는 파티에서 마법형 대미지 딜러 역할을 담당합니다."
+ },
+ "SRO_MSGTIP_113": {
+  "english": "[Guide] The European Warlock mastery takes the debuffer (curse) role in a party, weakening enemies to make allies relatively stronger.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족의 워락 마스터리는 파티에서 적을 약화 시켜서 상대적으로 아군을 강하게 하는 디버퍼(저주)의 역할을 담당합니다."
+ },
+ "SRO_MSGTIP_114": {
+  "english": "[Guide] The European Bard mastery takes the buffer role in a party, strengthening allies with buffs.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족의 바드 마스터리는 파티에서 아군에게 버프를 주어 강하게 만드는 버퍼의 역할을 담당합니다."
+ },
+ "SRO_MSGTIP_115": {
+  "english": "[Guide] The European Cleric mastery takes the healer role in a party, blessing party members to cure abnormal status and restore HP, as well as the buffer role.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족의 클레릭 마스터리는 파티에서 파티원을 축복하여 상태이상에서 회복시키며 HP를 보충해주는 힐러의 역할과 버프를 주는 버퍼의 역할을 담당합니다."
+ },
+ "SRO_MSGTIP_116": {
+  "english": "[Guide] In a shared-distribution party, each additional party member gives 20% extra experience.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 공동분배 파티에서 파티원이 1인 추가되면 20%의 추가 경험치를 얻습니다."
+ },
+ "SRO_MSGTIP_117": {
+  "english": "[Guide] In a shared-distribution party, hunting monsters 5 or more levels higher gives 30% extra experience.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 공동분배 파티에서 5렙이상 고 레벨의 몬스터를 사냥하면 30% 경험치를 추가로 획득합니다."
+ },
+ "SRO_MSGTIP_118": {
+  "english": "[Guide] In a shared-distribution party, hunting monsters 7 or more levels higher gives 60% extra experience.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 공동분배 파티에서 7렙이상 고 레벨의 몬스터를 사냥하면 60% 경험치를 추가로 획득합니다."
+ },
+ "SRO_MSGTIP_119": {
+  "english": "[Guide] In a shared-distribution party, hunting monsters 9 or more levels higher gives 90% extra experience.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 공동분배 파티에서 9렙이상 고 레벨의 몬스터를 사냥하면 90% 경험치를 추가로 획득합니다."
+ },
+ "SRO_MSGTIP_120": {
+  "english": "[Guide] While hunting in one area with a shared-distribution party, party-type monsters may spawn.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 공동분배 파티로 한 지역에서 사냥을 하다 보면 확률적으로 파티형 몬스터가 리젠됩니다."
+ },
+ "SRO_MSGTIP_121": {
+  "english": "[Guide] Party-type monsters are stronger and have more HP than normal monsters, but their high experience and item drop rates help shared-distribution parties hunt efficiently.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 파티형 몬스터는 일반 몬스터에 비해 강력하고 높은 체력을 가지고 있지만, 경험치와 아이템 드롭률이 높아서 공동분배 파티의 효율적인 사냥을 도와줍니다."
+ },
+ "SRO_MSGTIP_122": {
+  "english": "[Guide] Hunting party-type monsters lower in level than you carries a heavy penalty to experience and item drop rates.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 자신보다 레벨이 낮은 파티형 몬스터를 사냥하면 경험치 및 아이템 드롭 확률에 높은 페널티를 받게 됩니다."
+ },
+ "SRO_MSGTIP_123": {
+  "english": "[Guide] Using an invisibility detection potion lets you detect enemies in Stealth or Invisible status.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 투명감지포션을 사용하면 스텔스, 인비저블 상태의 적을 감지할 수 있게 됩니다."
+ },
+ "SRO_MSGTIP_124": {
+  "english": "[Guide] A Purification Pill randomly cures one abnormal status. However, a low-grade Purification Pill will not remove high-grade abnormal status.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 정화의 환약을 사용하면 상태이상 한가지를 랜덤하게 치유합니다. 단! 사용하는 정화의 환약 등급이 낮으면 높은 등급의 상태이상은 제거되지 않습니다."
+ },
+ "SRO_MSGTIP_125": {
+  "english": "[Guide] Anyone who meets the level requirement can use an Essence of the Dead to transform into a monster.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 망자의 정수는 레벨에 대한 조건만 맞으면 누구나 사용하여 몬스터로 변신 할 수 있습니다."
+ },
+ "SRO_MSGTIP_126": {
+  "english": "[Guide] Equipping a harp increases your total MP by 50%.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 하프를 장착하게 되면 총 마나량이 50% 증가하게 됩니다."
+ },
+ "SRO_MSGTIP_127": {
+  "english": "[Guide] Using a low-level skill on a high-level player or monster lowers the chance of the skill taking effect, and any abnormal status it causes lasts a shorter time.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 저 레벨의 스킬을 고 레벨의 유저나 몬스터에게 사용하게 되면 스킬이 걸릴 확률이 감소하며, 상태이상에 걸리게 되어도 유지 시간이 짧아집니다."
+ },
+ "SRO_MSGTIP_128": {
+  "english": "[Guide] While you hold down the V key, all players, monsters, mounts and transports are hidden.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] V 키를 누르고 있는 동안은 유저, 몬스터, 이동/운송수단을 모두 안 보이게 할 수 있습니다."
+ },
+ "SRO_MSGTIP_129": {
+  "english": "[Guide] Use SPACE + number keys  to quickly use the extra quickslots.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] SPACE + 숫자키  로 추가 퀵슬롯을 빠르게 사용할 수 있습니다."
+ },
+ "SRO_MSGTIP_130": {
+  "english": "[Guide] You can set a view-target key in Options -> Input Settings. Pressing it turns the camera toward your selected target.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 옵션 -> 입력설정 부분에서 타겟보기 키를 지정할 수 있습니다. 타겟보기 키를 누르면 지정된 타겟을 향해 카메라의 시점이 변경됩니다."
+ },
+ "SRO_MSGTIP_131": {
+  "english": "[Guide] You can set a recent-target key in Options -> Input Settings. It targets whatever you attacked most recently.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 옵션 -> 입력설정 부분에서 최근 타겟 선택키를 설정할 수 있습니다. 최근 타겟 선택키를 사용하면 내가 가장 최근에 공격했던 대상을 타겟으로 잡습니다."
+ },
+ "SRO_MSGTIP_132": {
+  "english": "[Guide] You can set a target-support key in Options -> Input Settings. After selecting a target, it switches your target to whatever that target is currently targeting.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 옵션 -> 입력설정 부분에서 대상 타겟 서포트키를 설정할 수 있습니다. 타겟을 잡은 후에 대상 타겟 서포트키를 사용하면 내가 선택한 대상이 현재 잡고 있는 타겟으로 타겟을 전환시켜줍니다."
+ },
+ "SRO_MSGTIP_133": {
+  "english": "[Guide] You can set an auto-target (enemy player) key in Options -> Input Settings. It targets the nearest enemy player. Monsters are not included.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 옵션 -> 입력설정 부분에서 자동타겟(적 유저)키를 설정할 수 있습니다. 자동타겟(적 유저)키를 사용하게 되면 가장 가까운 적 유저를 타겟으로 잡습니다. 몬스터는 해당되지 않습니다."
+ },
+ "SRO_MSGTIP_134": {
+  "english": "[Guide] Only European equipment items drop in Eastern Europe, Asia Minor and Central Asia.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 동유럽, 소아시아, 중앙아시아 지역에서는 유럽의 장비아이템만 드롭됩니다."
+ },
+ "SRO_MSGTIP_135": {
+  "english": "[Guide] Only Chinese equipment items drop in China, the West Region and the Tarim Basin.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 중국, 서역, 타림분지 지역에서는 중국의 장비 아이템만 드롭됩니다."
+ },
+ "SRO_MSGTIP_136": {
+  "english": "[Guide] Monsters of level 40 or higher around Hotan can drop both Chinese and European equipment items.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 호탄을 중심으로 40레벨 이상의 몬스터에게서는 중국과 유럽의 장비 아이템이 모두 드롭 될 수 있습니다."
+ },
+ "SRO_MSGTIP_137": {
+  "english": "[Guide] In party play, be a little more considerate of others and do your best in your own role.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 파티 플레이시에는 조금 더 상대방을 배려하고 자신의 역할을 충실히 하도록 노력해야 합니다."
+ },
+ "SRO_MSGTIP_138": {
+  "english": "[Guide] Quests that require hunting a set number of monsters can be done faster in a shared-distribution party.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 일정 숫자의 몬스터를 사냥하는 퀘스트는 공동분배 파티를 통해서 좀 더 빨리 수행할 수 있게 됩니다."
+ },
+ "SRO_MSGTIP_139": {
+  "english": "[Guide] The European race must hold a weapon that matches a mastery to use that mastery's skills.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족은 마스터리에 맞는 무기를 들어야 해당 마스터리의 스킬을 쓸 수 있습니다."
+ },
+ "SRO_MSGTIP_140": {
+  "english": "[Guide] The European race must raise the matching mastery to wear the armor for that mastery.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족은 직업별 마스터리를 올려야 마스터리에 맞는 방어구를 입을 수 있습니다."
+ },
+ "SRO_MSGTIP_141": {
+  "english": "[Guide] As mastery level increases, some European skills gain a second skill, and the cooldown applies to both when used.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 유럽 종족의 스킬 중 일부는 마스터리 레벨이 증가함에 따라 2차 스킬이 추가 되어 스킬 사용시 재사용 시간이 함께 적용됩니다."
+ },
+ "SRO_MSGTIP_142": {
+  "english": "[Guide] Once a skill's link or connection count is full, you cannot cast the same skill again. However, you can cast it again once a previously cast one wears off.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 스킬의 링크 개수 혹은 연결 개수를 채우면 더 이상 같은 스킬을 걸 수 없는 상태가 됩니다. 단! 이전에 걸었던 스킬이 사라지면 재 사용이 가능해집니다."
+ },
+ "SRO_MSGTIP_143": {
+  "english": "[Guide] Debuff skills or abnormal status that a Universal Pill cannot remove can be cured with a Purification Pill.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 만능 환약으로 제거 할 수 없는 디버프 스킬이나, 상태이상은 정화의 환약을 통해 치료할 수 있습니다."
+ },
+ "SRO_MSGTIP_144": {
+  "english": "[Guide] Press Ctrl + number keys to select a member of your party.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 컨트롤+숫자 키를 누르면, 자신이 속한 파티 원을 선택할 수 있습니다."
+ },
+ "SRO_MSGTIP_145": {
+  "english": "[Guide] Clicking a quest in the quest list shows the related NPC on the minimap and the world map.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 퀘스트 목록에서 해당 퀘스트를 클릭하면 미니맵과 전체지도에 관련 npc가 표시됩니다."
+ },
+ "SRO_MSGTIP_146": {
+  "english": "[Guide] Through party matching, the party master can check the masteries of applicants and build the party they want.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 파티의 파티장은 파티 매칭을 통해 가입하려는 대상의 마스터리를 확인하여 원하는 형태의 파티 구성을 할 수 있습니다."
+ },
+ "SRO_MSGTIP_147": {
+  "english": "[Guide] At character level 41 you can no longer do safe trades with ordinary goods. Bargain-priced special goods can never be traded safely, regardless of character level.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 캐릭터 레벨이 41이 되면 일반 특산품으로 안전무역을 할 수 없습니다. 또한 특가 특산품은 캐릭터 레벨과 관계없이 안전무역이 불가능합니다."
+ },
+ "SRO_MSGTIP_148": {
+  "english": "[Guide] Wearing a full Light Armor set increases movement speed by 10% and reduces MP consumption by 10%.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 경갑옷 세트를 장착하면 이동속도 10% 증가, MP소모량 10% 감소 효과가 있습니다."
+ },
+ "SRO_MSGTIP_149": {
+  "english": "[Guide] Wearing a full Robe set increases movement speed by 20% and reduces MP consumption by 20%.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 로브 세트를 장착하면 이동속도 20%증가, MP소모량 20% 감소 효과가 있습니다."
+ },
+ "SRO_MSGTIP_77": {
+  "english": "[Guide] Press the [F12] key to hide the whole interface; press it again to show it.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] [F12]키를 누르면 모든 인터페이스가 사라지며, 한번 더 누르면 다시 나타납니다."
+ },
+ "SRO_MSGTIP_78": {
+  "english": "[Guide] Press the [E] key to open the party matching window.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 파티매칭 창은 [E]키를 눌러 열 수 있습니다."
+ },
+ "SRO_MSGTIP_79": {
+  "english": "[Guide] A sparkling question mark above a character's head means they want to help someone. You can turn it on in the action window [A].",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 캐릭터 머리 위에 반짝이는 물음표는 누군가에게 도움을 주고 싶다는 표시입니다. 액션 창[A]에서 활성화 시킬 수 있습니다."
+ },
+ "SRO_MSGTIP_80": {
+  "english": "[Guide] The sprout mark next to a character's name is only shown at level 19 or below. You can change this in the options.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 캐릭터 이름 옆 새싹 마크는 19레벨 이하일 때만 붙습니다. 옵션에서 설정할 수 있습니다."
+ },
+ "SRO_MSGTIP_81": {
+  "english": "[Guide] Pets can be bought from the stable NPC of each town.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 펫은 각 마을 마구간 NPC로부터 구입할 수 있습니다."
+ },
+ "SRO_MSGTIP_82": {
+  "english": "[Guide] Elixir items can reinforce equipment items. Use them through alchemy in the action window [A].",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 엘릭시르 아이템은 장비 아이템을 강화시킬 수 있습니다. 액션 창[A]에서 연금술을 통해 사용할 수 있습니다."
+ },
+ "SRO_MSGTIP_83": {
+  "english": "[Guide] Press the [T] key to open the auto potion window. Set the recovery values and the potions to use, and your character will recover automatically.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 물약자동회복 창은 [T]키를 눌러 열수 있습니다. 회복수치와 사용할 물약을 설정하면 자동으로 캐릭터를 회복 시킵니다."
+ },
+ "SRO_MSGTIP_84": {
+  "english": "[Guide] Press the [F10] key to open the item mall.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 아이템몰은 [F10]키를 눌러 열 수 있습니다."
+ },
+ "SRO_MSGTIP_85": {
+  "english": "[Guide] If you log out while wearing a trader suit and carrying trade goods, a 1-minute logout countdown starts.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 상인 직업복을 착용 후, 무역 아이템을 싣고 로그아웃 하면 1분 동안 종료 카운트가 시작됩니다."
+ },
+ "SRO_MSGTIP_86": {
+  "english": "[Guide] Hunting monsters can sometimes drop rare items with a Seal of Star, Moon or Sun option.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 몬스터 사냥 시 때때로 별, 달, 해의 인장 옵션이 붙은 레어아이템이 드롭될 수 있습니다."
+ },
+ "SRO_MSGTIP_87": {
+  "english": "[Guide] The capes sold at the General shop are for free matches; characters wearing capes lose no experience when they kill each other.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 잡화점에서 파는 망토는 자유대련을 위한 것이며, 망토를 착용한 캐릭터끼리는 서로 죽여도 경험치를 잃지 않습니다."
+ },
+ "SRO_MSGTIP_88": {
+  "english": "[Guide] The higher a weapon's reinforcement grade, the more its surface sparkles.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 무기아이템 강화등급이 높을수록 무기 표면이 반짝거립니다."
+ },
+ "SRO_MSGTIP_89": {
+  "english": "[Guide] Press the [Y] key to open the alchemy window.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 연금술 창은 [Y]키를 눌러 열 수 있습니다."
+ },
+ "SRO_MSGTIP_90": {
+  "english": "[Guide] If guild or union crests do not display properly, check your computer's firewall settings. The firewall may be preventing crests from displaying.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 길드나 동맹 문장이 제대로 보이지 않을 경우 컴퓨터의 방화벽 설정을 확인해보시기 바랍니다. 방화벽 때문에 문장이 제대로 보이지 않을 수도 있습니다."
+ },
+ "SRO_MSGTIP_91": {
+  "english": "[Guide] Look in the quest dictionary to see the quests you can do.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 퀘스트 사전을 찾아보면 자신이 수행할 수 있는 퀘스트를 확인할 수 있습니다."
+ },
+ "SRO_MSGTIP_92": {
+  "english": "[Guide] You can check the quest dictionary in the help window by pressing the [H] key.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 퀘스트 사전은 도움말 창 [H]키를 눌러 확인할 수 있습니다."
+ },
+ "SRO_MSGTIP_93": {
+  "english": "[Guide] In an experience-sharing / even-item-distribution party, you can do quests together with your party members.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 경험치 분배/아이템 균등분배 파티에서는 파티원들과 함께 퀘스트를 수행할 수 있습니다."
+ },
+ "SRO_MSGTIP_94": {
+  "english": "[Guide] When players doing the same quest form an experience-sharing / even-item-distribution party, they take turns receiving hunt counts or items.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 동일한 퀘스트를 수행하고 있는 플레이어끼리 경험치 분배/아이템 균등분배 파티를 하고 퀘스트를 수행하면 사냥 또는 아이템을 돌아가면서 획득합니다."
+ },
+ "SRO_MSGTIP_95": {
+  "english": "[Guide] In an experience-sharing / even-item-distribution party, quest items can drop and hunt counts can be earned even when a player who is not doing the quest does the hunting.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 경험치 분배/아이템 균등분배 파티에서 퀘스트를 수행하고 있지 않은 플레이어가 사냥을 하더라도 퀘스트 아이템이 드랍되거나 사냥 카운트를 획득할 수 있습니다."
+ },
+ "SRO_MSGTIP_96": {
+  "english": "[Guide] Monsters with a mark above their heads are quest monsters.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 머리 위에 표시가 있는 몬스터는 퀘스트 몬스터 입니다."
+ },
+ "SRO_MSGTIP_97": {
+  "english": "[Guide] Quest monsters exist only for quests; they only do quest-related things and give less experience than normal monsters.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 퀘스트 몬스터는 퀘스트를 위해 존재하는 몬스터로 퀘스트에 관련된 행위만을 하고 일반 몬스터보다 적은 경험치를 줍니다."
+ },
+ "SRO_MSGTIP_98": {
+  "english": "[Guide] In a party quest, all party members can earn hunt counts or drop items.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 파티퀘스트는 파티원 모두가 사냥카운트 또는 드랍아이템을 획득할 수 있습니다."
+ },
+ "SRO_MSGTIP_99": {
+  "english": "[Guide] Press the [Q] key to check party quests. Party quests are shown in green.",
+  "basis": "translated-retail-korean",
+  "source": "[길잡이] 파티 퀘스트는 [Q]키를 눌러서 확인할 수 있습니다. 파티퀘스트는 녹색으로 표시됩니다."
+ }
+}
