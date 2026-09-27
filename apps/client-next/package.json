@@ -10,6 +10,7 @@
     "check": "node ../../scripts/checks/run_if_changed.mjs client apps/client-next scripts/build scripts/lib scripts/checks/check_asset_delivery.mjs package.json pnpm-lock.yaml @node,--version !.generated/client-public/assets/packs/manifest.json !.generated/client-public/assets/packs/delivery.json -- node apps/client-next/tools/check.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "verify:test-types": "node tools/verify-test-types.mjs",
+    "verify:quick": "pnpm run typecheck && node tools/verify-ownership.mjs && node tools/verify-capabilities.mjs && node tools/generate-execution-map.mjs",
     "verify:ownership": "node tools/verify-ownership.mjs",
     "verify:capabilities": "node tools/verify-capabilities.mjs",
     "verify:execution": "node tools/generate-execution-map.mjs",

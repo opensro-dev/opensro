@@ -60,6 +60,18 @@ declares the probes their page code reads.
 
 | Scope | Command |
 | --- | --- |
+| Inner loop, after every new module or call edge (about 7 s) | `pnpm --filter @sro/client-next verify:quick` |
 | Every client gate | `pnpm --filter @sro/client-next check` |
 | Unit and architecture tests | `pnpm --filter @sro/client-next test` |
 | Browser tests | `pnpm --filter @sro/client-next test:browser` |
+
+`verify:quick` runs the typecheck and the ownership, capability and
+execution-flow gates. A new module, async function, timer, stored callback
+or cross-module call needs an entry in `src/engine/ownership.json`,
+`execution-contract.json` or the owner lists in `tools/verify-capabilities.mjs`;
+design against those before writing the code, not after the gate fails.
+
+Read a gate's own output and exit code. Do not pipe it through a filter such
+as `grep "error TS"`: a command that fails before it reaches the checker
+(an unknown flag, a missing tool) prints nothing the filter matches, and the
+pipe returns the filter's status instead of the gate's.

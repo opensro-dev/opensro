@@ -1,7 +1,13 @@
 {
   "version": 1,
   "capabilities": [
-    {"consumer": "src/engine/runtime/renderer/world/world.ts", "provider": "src/engine/runtime/renderer/device/geometry.ts", "functions": ["characterShadows"]},
+    {
+      "consumer": "src/engine/runtime/renderer/world/world.ts",
+      "provider": "src/engine/runtime/renderer/device/geometry.ts",
+      "functions": [
+        "characterShadows"
+      ]
+    },
     {
       "consumer": "src/engine/runtime/ui/hud/quest-banner.ts",
       "provider": "src/engine/runtime/ui/hud/unique-banner.ts",
@@ -1583,6 +1589,30 @@
       "functions": [
         "guidedArrival"
       ]
+    },
+    {
+      "consumer": "src/engine/runtime/assets/worker/loader.ts",
+      "provider": "src/engine/runtime/assets/worker/install.ts",
+      "functions": [
+        "createBackgroundInstaller",
+        "start",
+        "dispose"
+      ]
+    },
+    {
+      "consumer": "src/engine/runtime/assets/worker/install.ts",
+      "provider": "src/engine/runtime/assets/worker/packs/packs.ts",
+      "functions": [
+        "read",
+        "install"
+      ]
+    },
+    {
+      "consumer": "src/engine/runtime/assets/worker/install.ts",
+      "provider": "src/engine/runtime/assets/worker/loader.ts",
+      "functions": [
+        "callback:createBackgroundInstaller:1"
+      ]
     }
   ],
   "boundaries": [
@@ -1627,6 +1657,34 @@
       "function": "encode",
       "kind": "callback",
       "reason": "Optional device-owned GpuTimingFrame callback for the skeletal compute pass."
+    },
+    {
+      "file": "src/engine/runtime/assets/worker/loader.ts",
+      "expression": "resolve",
+      "function": "wakeIdleWaiters",
+      "kind": "callback",
+      "reason": "Promise resolvers of background-install waiters (worker/install.ts): settled when the last foreground load releases capacity."
+    },
+    {
+      "file": "src/engine/runtime/runtime.ts",
+      "expression": "frameProbe()?.begin",
+      "function": "frame",
+      "kind": "callback",
+      "reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+    },
+    {
+      "file": "src/engine/runtime/runtime.ts",
+      "expression": "frameProbe()?.end",
+      "function": "frame",
+      "kind": "callback",
+      "reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+    },
+    {
+      "file": "src/engine/runtime/runtime.ts",
+      "expression": "frameProbe()?.mark",
+      "function": "markStage",
+      "kind": "callback",
+      "reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
     }
   ],
   "sequences": [
@@ -1663,7 +1721,7 @@
     {
       "file": "src/engine/runtime/runtime.ts",
       "function": "frame",
-      "sourceSha256": "cbfc257943142d5e93c94e22a172b7d18f2620854f2a67c32fab954067462663",
+      "sourceSha256": "387df1fe89fa3b05737adf9d02667d87824e661c8ade85b92bf26d7c1f03f84c",
       "reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
       "evidence": "tests/fixtures/native/bsr-query-native.json",
       "nativeFunction": 11451792,

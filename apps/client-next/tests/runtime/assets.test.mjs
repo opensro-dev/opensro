@@ -41,6 +41,9 @@ test("asset worker transfers exact bytes without retaining the output buffer", a
 	const results = [];
 	let transferred;
 	const loader = createLoader( ( result, transfer ) => {
+		// Progress is time-based telemetry (sent after 150 ms), so a loaded
+		// machine can emit one mid-test; only deliveries are under test.
+		if ( result.kind === "progress" ) return;
 		transferred = result.buffer;
 		results.push( structuredClone( result, { transfer } ) );
 	} );

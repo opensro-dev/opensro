@@ -27,6 +27,7 @@ import { collectAssetPackGroups } from "./build/assetPackGroups.mjs";
 import { buildUiImagePreloadManifest } from "./build/uiImagePreload.mjs";
 import { buildWebAssetManifest } from "./build/webManifest.mjs";
 import { retireUnownedSidecars } from "./build/precompressedSidecars.mjs";
+import { buildBackgroundInstallAsset } from "./build/data/buildBackgroundInstallAsset.mjs";
 import { publicRoot } from "./build/world/paths.mjs";
 import { buildCrowdVatAssets } from "./build/char/buildCrowdVatAssets.mjs";
 import { buildDropModelAssets } from "./build/char/buildDropModelAssets.mjs";
@@ -429,6 +430,9 @@ async function buildSroResources() {
 	// EnterWorld v2 sends semantic ids only. This client projection is generated
 	// after NPC/item builders settle and owns every presentation resource path.
 	const missionPresentation = buildMissionPresentationAsset();
+	// Every producing lane has finished: list what the client installs in the
+	// background after world entry, so it is packed with the other game data.
+	const backgroundInstall = await timed( "backgroundInstall", () => buildBackgroundInstallAsset() );
 	const jsonOptimization = await timed( "jsonOptimization", () => optimizePublicJsonAssets() );
 	// The group list and every sweep/exclusion rule live in build/assetPackGroups.mjs,
 	// shared with rebuild_asset_packs_from_public.mjs so the two entry points cannot
@@ -558,6 +562,9 @@ async function buildSroResources() {
 			} on-demand outdoor files for packs, ` +
 			`indexed ${packGroups.gameModels.length} GLB models for packs, ` +
 			`indexed ${packGroups.gameAudio.length} audio files for packs, ` +
+			`listed ${backgroundInstall.combat} combat + ${
+				backgroundInstall["world-sounds"]
+			} world-sound file(s) for background install, ` +
 			`retired ${sidecarRetirement.retired.length} unowned precompressed sidecar(s), ` +
 			`and packed ${assetPacks.assetCount} assets into ${assetPacks.packCount} browser asset pack(s) ` +
 			`with ${assetPacks.zstdSidecarCount} zstd19/w23 sidecar(s).`

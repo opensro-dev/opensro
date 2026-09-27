@@ -122,7 +122,8 @@
     "src/engine/runtime/renderer/device/character-shadows.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/animation.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/animation-shader.ts": "src/engine/runtime/renderer/device/device.ts",
-    "src/engine/runtime/renderer/device/particle-query.ts": "src/engine/runtime/renderer/device/device.ts"
+    "src/engine/runtime/renderer/device/particle-query.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/assets/worker/install.ts": "src/engine/runtime/assets/worker/loader.ts"
   },
   "workers": {
     "src/engine/runtime/simulation/worker/entry.ts": "src/engine/runtime/simulation/host.ts",

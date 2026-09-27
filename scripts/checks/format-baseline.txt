@@ -1,7 +1,6 @@
 # Files written before dprint was adopted. This ledger may only shrink:
 # format a file, then delete its line. See scripts/checks/check_formatting.mjs.
 apps/client-next/src/bootstrap.ts
-apps/client-next/src/engine/contracts/assets.ts
 apps/client-next/src/engine/contracts/audio.ts
 apps/client-next/src/engine/contracts/camera-script.ts
 apps/client-next/src/engine/contracts/character.ts
@@ -324,19 +323,15 @@ apps/client-next/src/engine/foundation/ui/vertical-spin.ts
 apps/client-next/src/engine/foundation/ui/vital-warning.ts
 apps/client-next/src/engine/foundation/ui/world-cursor.ts
 apps/client-next/src/engine/foundation/ui/world-map.ts
-apps/client-next/src/engine/runtime/assets/assets.ts
 apps/client-next/src/engine/runtime/assets/worker/effects/effects.ts
 apps/client-next/src/engine/runtime/assets/worker/effects/program/program.ts
 apps/client-next/src/engine/runtime/assets/worker/entry.ts
-apps/client-next/src/engine/runtime/assets/worker/loader.ts
 apps/client-next/src/engine/runtime/assets/worker/model/character/character.ts
 apps/client-next/src/engine/runtime/assets/worker/model/model.ts
 apps/client-next/src/engine/runtime/assets/worker/navigation/navigation.ts
 apps/client-next/src/engine/runtime/assets/worker/packs/blocks.ts
 apps/client-next/src/engine/runtime/assets/worker/packs/index/index.ts
 apps/client-next/src/engine/runtime/assets/worker/packs/internal/pack-contract.ts
-apps/client-next/src/engine/runtime/assets/worker/packs/packs.ts
-apps/client-next/src/engine/runtime/assets/worker/packs/persistent.ts
 apps/client-next/src/engine/runtime/assets/worker/world/internal/resource-contract.ts
 apps/client-next/src/engine/runtime/assets/worker/world/resources/resources.ts
 apps/client-next/src/engine/runtime/assets/worker/world/world.ts
@@ -390,7 +385,6 @@ apps/client-next/src/engine/runtime/renderer/surface/surface.ts
 apps/client-next/src/engine/runtime/renderer/weather/weather.ts
 apps/client-next/src/engine/runtime/renderer/world/world.ts
 apps/client-next/src/engine/runtime/runtime-errors.ts
-apps/client-next/src/engine/runtime/runtime.ts
 apps/client-next/src/engine/runtime/simulation/host.ts
 apps/client-next/src/engine/runtime/simulation/worker/clock/clock.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
@@ -634,7 +628,6 @@ apps/client-next/tests/runtime/animation-phase-profiler.test.mjs
 apps/client-next/tests/runtime/authored-animation-bindings.test.mjs
 apps/client-next/tests/runtime/character-info.test.mjs
 apps/client-next/tests/runtime/cpu-summary.test.mjs
-apps/client-next/tests/runtime/frame-profiler.test.mjs
 apps/client-next/tests/runtime/performance-lease.test.mjs
 apps/client-next/tests/runtime/pose-dirty.test.mjs
 apps/client-next/tests/runtime/profile-source-map.test.mjs
@@ -669,7 +662,6 @@ apps/client-next/tools/lib/animation-phase-profiler.mjs
 apps/client-next/tools/lib/character-facing-probe.mjs
 apps/client-next/tools/lib/combat-probe.mjs
 apps/client-next/tools/lib/frame-analysis.mjs
-apps/client-next/tools/lib/frame-profiler.mjs
 apps/client-next/tools/lib/frame-window.mjs
 apps/client-next/tools/lib/guide-ui-probe.mjs
 apps/client-next/tools/lib/inventory-probe.mjs
@@ -695,7 +687,6 @@ apps/client-next/tools/published-pack.mjs
 apps/client-next/tools/summarize-cpu.mjs
 apps/client-next/tools/verify-animation-dispatch.mjs
 apps/client-next/tools/verify-bsr-transforms.mjs
-apps/client-next/tools/verify-capabilities.mjs
 apps/client-next/tools/verify-deferred-alpha.mjs
 apps/client-next/tools/verify-entity-model-publication.mjs
 apps/client-next/tools/verify-execution.mjs
