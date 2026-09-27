@@ -1,0 +1,43 @@
+# OpenSRO HTTPS edge. Nomad and all game listeners stay on loopback.
+opensro.online {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=86400"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	handle /api/* {
+		route {
+			@private_api path /api/development/* /api/debug/*
+			respond @private_api 404
+			uri strip_prefix /api
+			reverse_proxy 127.0.0.1:8787
+		}
+	}
+
+	handle /shards/global-official/transport/* {
+		uri strip_prefix /shards/global-official
+		reverse_proxy 127.0.0.1:8788
+	}
+
+	@client path /play /play/ /index.html /assets/* /favicon.ico
+	handle @client {
+		root * /var/www/opensro/client
+		@play path /play /play/
+		rewrite @play /index.html
+		file_server {
+			precompressed gzip
+		}
+	}
+
+	handle {
+		root * /var/www/opensro
+		file_server
+	}
+}
+
+www.opensro.online {
+	redir https://opensro.online{uri} permanent
+}

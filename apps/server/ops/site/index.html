@@ -1,0 +1,62 @@
+<!doctype html>
+<!--
+===========================================================================
+index.html - the OpenSRO public-test landing page and browser entry point.
+===========================================================================
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>OpenSRO — The Silk Road awaits</title>
+	<meta name="description" content="Silkroad Online v1.150, Legend III, rebuilt for the browser. OpenSRO public test server.">
+	<style>
+		:root {
+			color-scheme: dark;
+			--ink: #f3e6c4;
+			--gold: #d6a84a;
+			--deep: #1a0f08;
+			--muted: #b39b72;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			min-height: 100vh;
+			display: grid;
+			place-items: center;
+			background: radial-gradient(ellipse at 50% 30%, #3a220f 0%, var(--deep) 70%);
+			color: var(--ink);
+			font-family: Georgia, "Times New Roman", serif;
+			text-align: center;
+			padding: 24px;
+		}
+		main { max-width: 620px; }
+		.eyebrow { color: var(--muted); font-size: .75rem; letter-spacing: .22em; text-transform: uppercase; }
+		h1 { margin: 18px 0; font-size: clamp(2.4rem, 8vw, 4.5rem); letter-spacing: .12em; color: var(--gold); }
+		.rule { height: 1px; margin: 24px auto; width: 70%; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+		p { line-height: 1.7; margin: .8em 0; }
+		.subtitle { font-size: 1.4rem; }
+		a { color: var(--gold); }
+		.play { display: inline-block; margin: 24px 0 10px; padding: 15px 38px; border: 1px solid var(--gold); background: #513117; color: var(--ink); font-size: 1.1rem; text-decoration: none; }
+		.play:hover { background: #704620; }
+		a:focus-visible { outline: 2px solid var(--ink); outline-offset: 5px; }
+		.hint { color: var(--muted); font-size: .9rem; }
+		footer { margin-top: 42px; color: var(--muted); font-size: .8rem; line-height: 1.8; }
+	</style>
+</head>
+<body>
+	<main>
+		<p class="eyebrow">Legend III · Public test server</p>
+		<h1>OPENSRO</h1>
+		<div class="rule"></div>
+		<p class="subtitle">The Silk Road awaits.</p>
+		<p>Silkroad Online v1.150, rebuilt for the browser.<br>Begin your journey through an open-source world.</p>
+		<a class="play" href="/play">Play in browser</a>
+		<p class="hint">An invited account and a WebGPU-capable desktop browser are required.</p>
+		<footer>
+			Test progress may be reset.<br>
+			Free software under the AGPL-3.0 · <a href="https://github.com/opensro-dev/opensro">Source code</a>
+		</footer>
+	</main>
+</body>
+</html>

@@ -90,3 +90,12 @@ requests to `127.0.0.1:8788`. Its normal reverse proxy handles WebSocket upgrade
 and forwarded HTTPS metadata. This edge-route deployment uses WebSocket.
 Public WebTransport requires the separate GameWorld TLS deployment described
 in the main operations guide.
+
+`config/Caddyfile.example` keeps the landing page at `/var/www/opensro/index.html`
+and serves the game at `/play`, with `/assets/*` from `/var/www/opensro/client`.
+Install `ops/site/index.html` as the landing page. Point `client` at a verified
+static release directory; never point Caddy at the checkout or the private
+source-map directory. Precompressed gzip sidecars keep compression off the
+small VPS's request path. Validate the Caddy configuration before reloading.
+The landing page requires an already provisioned account; it does not provide
+account signup.
