@@ -1,56 +1,65 @@
-import {authoredAnimationBindings} from './authoredAnimationBindings.mjs';
-import {pickAttachedMotionClips} from './attachedMotionClips.mjs';
-// Bake the mission NPC roster's models to GLB, mirroring buildRoster.mjs for
-// the title-crowd chars: one GLB per NPC model + a manifest keyed by
-// codename. The runtime (ciCharactorDrawVisualSystem.ts, the remote-entity
-// slice) publishes only these authored models; the WIP shadow world stays
-// the data authority (position/yaw/lifecycle), the GLB is twin-side visuals.
-//
-// The monster roster is DERIVED at bake time from the server's spawnable
-// join (sro-evidence spawnable-monsters; see loadSpawnableMobRoster) - the same set the
-// bootstrap refObjSnapshot seeds per session, so bake coverage tracks the
-// server mechanically. NPCs come from sro-evidence spawnable-npcs, which exports
-// the unique RefObj types in mission.LoadNpcWorldRoster instead of requiring a
-// second hand-maintained list. Position duplicates remain runtime instances,
-// not duplicate model builds.
-//
-// NPC resources are media-driven rather than assumed to share one animation
-// shape. Smith and Advice expose state 0 idle, which is exported as "stand";
-// the fixed gacha machine has no animation set and is emitted with an explicit
-// staticPose contract. Mission NPCs remain stationary (movement plan rev. 62).
-//
-// MOB_* .bsr files are DIFFERENT: they carry a full locomotion/combat set
-// (mangnyang.bsr: 15 clips over one "default" animation set — stand01 stateId
-// 0, walk stateId 1, run stateId 7, attacks/damage/die/down; MONSTER-LIVE Q3
-// finding, probe temp/asset-probe-bsr-anim.mjs). Monsters assemble with the
-// native default animation-set state ids now pinned by the complete spawnable
-// BSR census: stand=0, walk=1, run=7. Those exact records select the GLB
-// movement clips and carry their BSR ModDataSound cursor metadata.
-//
-// Output:
-//   .generated/client-public/assets/npc/<native path below res/>.glb
-//   .generated/client-public/assets/npc/manifest.json (codename -> glb + meta)
-//   .generated/client-public/assets/npc/animation-catalog.json (BSR-authored lab data)
-//
-// Textures: .ddj under prim/mtrl are converted by scripts/convert_images.py
-// (same pass buildRoster runs); reuse --skip-textures when they're in.
+/*
+===========================================================================
+
+buildNpcModelAssets.mjs - bake the mission NPC, monster and COS models
+
+Bake the mission NPC roster's models to GLB, mirroring buildRoster.mjs for
+the title-crowd chars: one GLB per NPC model + a manifest keyed by
+codename. The runtime (ciCharactorDrawVisualSystem.ts, the remote-entity
+slice) publishes only these authored models; the WIP shadow world stays
+the data authority (position/yaw/lifecycle), the GLB is twin-side visuals.
+
+The monster roster is DERIVED at bake time from the server's spawnable
+join (sro-evidence spawnable-monsters; see npcModelRoster.mjs) - the same set the
+bootstrap refObjSnapshot seeds per session, so bake coverage tracks the
+server mechanically. NPCs come from sro-evidence spawnable-npcs, which exports
+the unique RefObj types in mission.LoadNpcWorldRoster instead of requiring a
+second hand-maintained list. Position duplicates remain runtime instances,
+not duplicate model builds.
+
+NPC resources are media-driven rather than assumed to share one animation
+shape. Smith and Advice expose state 0 idle, which is exported as "stand";
+the fixed gacha machine has no animation set and is emitted with an explicit
+staticPose contract. Mission NPCs remain stationary (movement plan rev. 62).
+
+MOB_* .bsr files are DIFFERENT: they carry a full locomotion/combat set
+(mangnyang.bsr: 15 clips over one "default" animation set — stand01 stateId
+0, walk stateId 1, run stateId 7, attacks/damage/die/down; MONSTER-LIVE Q3
+finding, probe temp/asset-probe-bsr-anim.mjs). Monsters assemble with the
+native default animation-set state ids now pinned by the complete spawnable
+BSR census: stand=0, walk=1, run=7. Those exact records select the GLB
+movement clips and carry their BSR ModDataSound cursor metadata.
+
+Output:
+  .generated/client-public/assets/npc/<native path below res/>.glb
+  .generated/client-public/assets/npc/manifest.json (codename -> glb + meta)
+  .generated/client-public/assets/npc/animation-catalog.json (BSR-authored lab data)
+
+Textures: .ddj under prim/mtrl are converted by scripts/convert_images.py
+(same pass buildRoster runs); reuse --skip-textures when they're in.
+
+===========================================================================
+*/
+
+import { authoredAnimationBindings } from "./authoredAnimationBindings.mjs";
+import { pickAttachedMotionClips } from "./attachedMotionClips.mjs";
 
 import fs from "node:fs";
-import {characterMaterialVariants} from './materialVariants.mjs';
-import {parseWeatherEvents} from "./weatherEvents.mjs";
+import { characterMaterialVariants } from "./materialVariants.mjs";
+import { parseWeatherEvents } from "./weatherEvents.mjs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
-  findDefaultAnimationState,
-  pickDefaultSetSoundEvents,
-  pickDefaultSetStateTableMetadata,
-  pickAnimationStateTableMetadata
+	findDefaultAnimationState,
+	pickDefaultSetSoundEvents,
+	pickDefaultSetStateTableMetadata,
+	pickAnimationStateTableMetadata
 } from "./animationUtils.mjs";
 import { assembleAvatar, primSlot, NATIVE_IDLE_STATE_CLIPS, NATIVE_EMOTE_STATE_CLIPS } from "./buildAvatar.mjs";
 import { assembleStaticBsrModel } from "./compileBsrVisual.mjs";
 import { avatarToGlb } from "./exportGlb.mjs";
 import { loadCharacterDataRows } from "./resolveCharRoster.mjs";
+import { enabledCosReferences, loadSpawnableMobRoster, loadSpawnableNpcRoster } from "./npcModelRoster.mjs";
 import { parseBan, parseCharacterBsr } from "./formats.mjs";
 import { loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
 import { normalizeAssetPath } from "../shared/assetPaths.mjs";
@@ -62,17 +71,17 @@ import { loadOptionalDataAsset } from "../shared/optionalDataAsset.mjs";
 import { splitTextDataRow } from "../shared/textDataIo.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import {
-  claimResourceOutput,
-  readPreviousResourceGlbPaths,
-  removeSupersededResourceOutputs,
-  resourceGlbOutput
+	claimResourceOutput,
+	readPreviousResourceGlbPaths,
+	removeSupersededResourceOutputs,
+	resourceGlbOutput
 } from "./resourceGlbOutput.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const gameRoot = path.resolve(scriptDir, "..", "..", "..", "..");
-const rebuildRoot = path.join(gameRoot, "rebuild");
-const textdataDir = path.join(gameRoot, "extracted", "Media_extracted", "server_dep", "silkroad", "textdata");
-const publicAssets = path.join(rebuildRoot, ".generated", "client-public", "assets");
+const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
+const gameRoot = path.resolve( scriptDir, "..", "..", "..", ".." );
+const rebuildRoot = path.join( gameRoot, "rebuild" );
+const textdataDir = path.join( gameRoot, "extracted", "Media_extracted", "server_dep", "silkroad", "textdata" );
+const publicAssets = path.join( rebuildRoot, ".generated", "client-public", "assets" );
 
 /*
 ================
@@ -83,12 +92,12 @@ generated public-assets owner. This builder only uses it to validate VAT
 artifacts already referenced by its previous manifest.
 ================
 */
-function publicAssetPathToDisk(publicPath, publicAssetsRoot = publicAssets) {
-  const normalized = String(publicPath ?? "").replaceAll("\\", "/");
-  if (!normalized.startsWith("/assets/") || normalized.includes("..")) {
-    return null;
-  }
-  return path.join(publicAssetsRoot, normalized.slice("/assets/".length));
+function publicAssetPathToDisk( publicPath, publicAssetsRoot = publicAssets ) {
+	const normalized = String( publicPath ?? "" ).replaceAll( "\\", "/" );
+	if ( !normalized.startsWith( "/assets/" ) || normalized.includes( ".." ) ) {
+		return null;
+	}
+	return path.join( publicAssetsRoot, normalized.slice( "/assets/".length ) );
 }
 
 /*
@@ -107,191 +116,100 @@ clip index. A changed GLB or policy deliberately drops its stale reference;
 the VAT builder is the only owner allowed to regenerate it.
 ================
 */
-export function preserveFreshNpcVatReferences(models, previousManifest, options = {}) {
-  const publicAssetsRoot = options.publicAssetsRoot ?? publicAssets;
-  const previousVatContract = previousManifest?.vat;
-  const previousModels = Object.values(previousManifest?.models ?? {});
-  if (!previousVatContract || previousModels.length === 0) {
-    return { contract: null, preserved: 0, stale: 0 };
-  }
+export function preserveFreshNpcVatReferences( models, previousManifest, options = {} ) {
+	const publicAssetsRoot = options.publicAssetsRoot ?? publicAssets;
+	const previousVatContract = previousManifest?.vat;
+	const previousModels = Object.values( previousManifest?.models ?? {} );
+	if ( !previousVatContract || previousModels.length === 0 ) {
+		return { contract: null, preserved: 0, stale: 0 };
+	}
 
-  const previousByGlb = new Map();
-  const ambiguousGlbs = new Set();
-  for (const previous of previousModels) {
-    if (!previous?.glb || !previous?.vat) continue;
-    const prior = previousByGlb.get(previous.glb);
-    if (prior && JSON.stringify(prior.vat) !== JSON.stringify(previous.vat)) {
-      ambiguousGlbs.add(previous.glb);
-      continue;
-    }
-    previousByGlb.set(previous.glb, previous);
-  }
+	const previousByGlb = new Map();
+	const ambiguousGlbs = new Set();
+	for ( const previous of previousModels ) {
+		if ( !previous?.glb || !previous?.vat ) continue;
+		const prior = previousByGlb.get( previous.glb );
+		if ( prior && JSON.stringify( prior.vat ) !== JSON.stringify( previous.vat ) ) {
+			ambiguousGlbs.add( previous.glb );
+			continue;
+		}
+		previousByGlb.set( previous.glb, previous );
+	}
 
-  const jsonByPath = new Map();
-  const statByPath = new Map();
-  const sha256ByPath = new Map();
-  const readJson = (filePath) => {
-    if (!jsonByPath.has(filePath)) jsonByPath.set(filePath, readJsonOrNullSync(filePath));
-    return jsonByPath.get(filePath);
-  };
-  const readStat = (filePath) => {
-    if (!statByPath.has(filePath)) {
-      statByPath.set(filePath, fs.existsSync(filePath) ? fs.statSync(filePath) : null);
-    }
-    return statByPath.get(filePath);
-  };
-  const readSha256 = (filePath) => {
-    if (!sha256ByPath.has(filePath)) {
-      sha256ByPath.set(filePath, sha256Hex(fs.readFileSync(filePath)));
-    }
-    return sha256ByPath.get(filePath);
-  };
+	const jsonByPath = new Map();
+	const statByPath = new Map();
+	const sha256ByPath = new Map();
+	const readJson = ( filePath ) => {
+		if ( !jsonByPath.has( filePath ) ) jsonByPath.set( filePath, readJsonOrNullSync( filePath ) );
+		return jsonByPath.get( filePath );
+	};
+	const readStat = ( filePath ) => {
+		if ( !statByPath.has( filePath ) ) {
+			statByPath.set( filePath, fs.existsSync( filePath ) ? fs.statSync( filePath ) : null );
+		}
+		return statByPath.get( filePath );
+	};
+	const readSha256 = ( filePath ) => {
+		if ( !sha256ByPath.has( filePath ) ) {
+			sha256ByPath.set( filePath, sha256Hex( fs.readFileSync( filePath ) ) );
+		}
+		return sha256ByPath.get( filePath );
+	};
 
-  let preserved = 0;
-  let stale = 0;
-  for (const model of models) {
-    if (!model?.glb) continue;
-    if (ambiguousGlbs.has(model.glb)) {
-      stale += 1;
-      continue;
-    }
-    const previous = previousManifest.models?.[model.codename]?.glb === model.glb
-      ? previousManifest.models[model.codename]
-      : previousByGlb.get(model.glb);
-    const reference = previous?.vat;
-    if (!reference) continue;
+	let preserved = 0;
+	let stale = 0;
+	for ( const model of models ) {
+		if ( !model?.glb ) continue;
+		if ( ambiguousGlbs.has( model.glb ) ) {
+			stale += 1;
+			continue;
+		}
+		const previous = previousManifest.models?.[model.codename]?.glb === model.glb ?
+			previousManifest.models[model.codename] :
+			previousByGlb.get( model.glb );
+		const reference = previous?.vat;
+		if ( !reference ) continue;
 
-    const glbPath = publicAssetPathToDisk(model.glb, publicAssetsRoot);
-    const vatManifestPath = publicAssetPathToDisk(reference.manifest, publicAssetsRoot);
-    const vatBinPath = publicAssetPathToDisk(reference.bin, publicAssetsRoot);
-    const glbStat = glbPath ? readStat(glbPath) : null;
-    const vatBinStat = vatBinPath ? readStat(vatBinPath) : null;
-    const vat = vatManifestPath ? readJson(vatManifestPath) : null;
-    const valid = Boolean(
-      glbPath && vatBinPath && vat &&
-      glbStat?.isFile() && vatBinStat?.isFile() &&
-      vat.format === previousVatContract.format &&
-      vat.version === previousVatContract.version &&
-      vat.compilerVersion === previousVatContract.compilerVersion &&
-      vat.settings?.materialMode === previousVatContract.materialMode &&
-      JSON.stringify(vat.settings?.clipRoles ?? []) ===
-        JSON.stringify(previousVatContract.clipRoles ?? []) &&
-      vat.source?.glb === model.glb &&
-      vat.source?.byteLength === glbStat.size &&
-      vat.source?.sha256 === readSha256(glbPath) &&
-      vat.bin?.path === reference.bin &&
-      vat.bin?.byteLength === vatBinStat.size &&
-      vat.bin?.sha256 === readSha256(vatBinPath) &&
-      reference.bytes === vat.bin.byteLength &&
-      reference.frames === vat.texture?.frameCount &&
-      reference.compilerVersion === vat.compilerVersion &&
-      reference.materialMode === vat.settings.materialMode &&
-      JSON.stringify(reference.clips ?? []) === JSON.stringify(Object.keys(vat.clips ?? {}))
-    );
-    if (!valid) {
-      stale += 1;
-      continue;
-    }
-    model.vat = { ...reference };
-    preserved += 1;
-  }
+		const glbPath = publicAssetPathToDisk( model.glb, publicAssetsRoot );
+		const vatManifestPath = publicAssetPathToDisk( reference.manifest, publicAssetsRoot );
+		const vatBinPath = publicAssetPathToDisk( reference.bin, publicAssetsRoot );
+		const glbStat = glbPath ? readStat( glbPath ) : null;
+		const vatBinStat = vatBinPath ? readStat( vatBinPath ) : null;
+		const vat = vatManifestPath ? readJson( vatManifestPath ) : null;
+		const valid = Boolean(
+			glbPath && vatBinPath && vat &&
+				glbStat?.isFile() && vatBinStat?.isFile() &&
+				vat.format === previousVatContract.format &&
+				vat.version === previousVatContract.version &&
+				vat.compilerVersion === previousVatContract.compilerVersion &&
+				vat.settings?.materialMode === previousVatContract.materialMode &&
+				JSON.stringify( vat.settings?.clipRoles ?? [] ) ===
+					JSON.stringify( previousVatContract.clipRoles ?? [] ) &&
+				vat.source?.glb === model.glb &&
+				vat.source?.byteLength === glbStat.size &&
+				vat.source?.sha256 === readSha256( glbPath ) &&
+				vat.bin?.path === reference.bin &&
+				vat.bin?.byteLength === vatBinStat.size &&
+				vat.bin?.sha256 === readSha256( vatBinPath ) &&
+				reference.bytes === vat.bin.byteLength &&
+				reference.frames === vat.texture?.frameCount &&
+				reference.compilerVersion === vat.compilerVersion &&
+				reference.materialMode === vat.settings.materialMode &&
+				JSON.stringify( reference.clips ?? [] ) === JSON.stringify( Object.keys( vat.clips ?? {} ) )
+		);
+		if ( !valid ) {
+			stale += 1;
+			continue;
+		}
+		model.vat = { ...reference };
+		preserved += 1;
+	}
 
-  return {
-    contract: preserved > 0 ? { ...previousVatContract } : null,
-    preserved,
-    stale
-  };
-}
-
-/**
- * Monster roster: DERIVED from the server's spawnable join, never hand
- * maintained. The retail client has no roster at all - CICMonster spawn
- * (sub_861b00) binds the refObjId to its characterdata record and loads
- * the record's .bsr on demand (LoadVisualModelAndCacheBounds 0x853e70);
- * the offline-bake analog is "bake exactly what the server can ever
- * stream". That set is monsterpop.LoadTemplate().SpawnableRefs() - the
- * npcpos.txt spawn points joined with the binary-pinned CICMonster TypeID
- * gate - exported by server sro-evidence spawnable-monsters and consumed here at bake
- * time. The classifier lives in Go ONLY; duplicating the TypeID gate here
- * was rejected as cross-plane drift risk.
- *
- * History: the previous hand-enumerated list missed MOB_CH_WHITETIGER_CLON
- * and the human saw a permanent peg (monster-live board seq693/695).
- *
- * _CLON rows have NO .bsr of their own: characterdata col[4] links the
- * base codename and col[48] carries the scale percent (tiger 100 vs
- * tiger_clon 80) - resolveNpcModel follows the guarded base chain and the
- * clone's manifest entry reuses the base GLB.
- */
-function loadServerRoster(subcommand, expectedFormat, label) {
-  const serverRoot = path.resolve(
-    process.env.SRO_SERVER_SOURCE_ROOT ??
-      path.join(rebuildRoot, "apps", "server")
-  );
-  const result = spawnSync(
-    "go",
-    ["run", "./cmd/tools/sro-evidence", subcommand, "-textdata-dir", textdataDir],
-    {
-    cwd: serverRoot,
-    env: process.env,
-    encoding: "utf8",
-    maxBuffer: 16 * 1024 * 1024
-    }
-  );
-  if (result.error || result.status !== 0) {
-    throw new Error(
-      `[npc] ${label} roster export failed (go run ./cmd/tools/sro-evidence ${subcommand} in ${serverRoot}): ` +
-        `${result.error ?? ""} ${result.stderr ?? ""}`.trim()
-    );
-  }
-  const roster = JSON.parse(result.stdout);
-  if (
-    roster.format !== expectedFormat ||
-    !Array.isArray(roster.refs) ||
-    roster.refs.length === 0 ||
-    roster.count !== roster.refs.length
-  ) {
-    throw new Error(
-      `[npc] ${label} roster export returned an unexpected shape ` +
-        `(format=${roster.format}, count=${roster.count}, refs=${roster.refs?.length})`
-    );
-  }
-  const codenames = new Set();
-  const refObjIds = new Set();
-  for (const ref of roster.refs) {
-    if (
-      !ref?.codename ||
-      !Number.isInteger(ref.refObjId) ||
-      ref.refObjId <= 0 ||
-      codenames.has(ref.codename) ||
-      refObjIds.has(ref.refObjId)
-    ) {
-      throw new Error(
-        `[npc] ${label} roster contains an invalid or duplicate identity ` +
-          `(codename=${ref?.codename}, refObjId=${ref?.refObjId})`
-      );
-    }
-    codenames.add(ref.codename);
-    refObjIds.add(ref.refObjId);
-  }
-  console.log(`[npc] ${label} roster: ${roster.refs.length} entries from ${roster.source}`);
-  return roster.refs;
-}
-
-export function loadSpawnableMobRoster() {
-  return loadServerRoster(
-    "spawnable-monsters",
-    "sro-spawnable-monster-roster",
-    "spawnable monster"
-  );
-}
-
-export function loadSpawnableNpcRoster() {
-  return loadServerRoster(
-    "spawnable-npcs",
-    "sro-spawnable-npc-roster",
-    "spawnable NPC"
-  );
+	return {
+		contract: preserved > 0 ? { ...previousVatContract } : null,
+		preserved,
+		stale
+	};
 }
 
 /**
@@ -311,560 +229,640 @@ name.  Keep this expansion at the data boundary; consumers must never need to
 know whether a record was authored directly or through the compact form.
 ================
 */
-export {expandCharacterInfoCodenames} from '../shared/characterInfo.mjs';
-import {expandCharacterInfoCodenames} from '../shared/characterInfo.mjs';
+export { expandCharacterInfoCodenames } from "../shared/characterInfo.mjs";
+import { expandCharacterInfoCodenames } from "../shared/characterInfo.mjs";
 
+/*
+================
+loadCharacterInfo
+================
+*/
 function loadCharacterInfo() {
-  const records = new Map();
-  const sourceLines = new Map();
-  const text = fs
-    .readFileSync(path.join(textdataDir, "skilleffect.txt"), "utf16le")
-    .replace(/^\uFEFF/, "");
-  let inCharacterInfo = false;
-  for (const [lineIndex, line] of text.split(/\r?\n/).entries()) {
-    if (line.startsWith("#section")) {
-      inCharacterInfo = /^#section\s+characterInfo\b/i.test(line);
-      continue;
-    }
-    if (!inCharacterInfo || !line || line.startsWith("//")) continue;
-    const cols = splitTextDataRow(line);
-    const codename = cols[0];
-    const soundProfileName = cols[1];
-    if (!codename) continue;
-    const rideTypeName = String(cols[3] ?? "none").trim().toUpperCase();
-    const rideModelPath = normalizeBsrPath(cols[4]);
-    const riderTransformMode = rideTypeName === "RT_FIXED" ? 1 : rideTypeName === "RT_DUMMY" ? 2 : 0;
-    const record = {
-      soundProfileName:
-        soundProfileName && soundProfileName.toLowerCase() !== "none" ? soundProfileName : null,
-      rideModelPath,
-      riderTransformMode
-    };
-    for (const expandedCodename of expandCharacterInfoCodenames(codename)) {
-      const priorLine = sourceLines.get(expandedCodename);
-      if (priorLine !== undefined) {
-        throw new Error(
-          `Duplicate skilleffect characterInfo codename ${expandedCodename}: ` +
-            `lines ${priorLine + 1} and ${lineIndex + 1}`
-        );
-      }
-      records.set(expandedCodename, record);
-      sourceLines.set(expandedCodename, lineIndex);
-    }
-  }
-  return records;
+	const records = new Map();
+	const sourceLines = new Map();
+	const text = fs
+		.readFileSync( path.join( textdataDir, "skilleffect.txt" ), "utf16le" )
+		.replace( /^\uFEFF/, "" );
+	let inCharacterInfo = false;
+	for ( const [lineIndex, line] of text.split( /\r?\n/ ).entries() ) {
+		if ( line.startsWith( "#section" ) ) {
+			inCharacterInfo = /^#section\s+characterInfo\b/i.test( line );
+			continue;
+		}
+		if ( !inCharacterInfo || !line || line.startsWith( "//" ) ) continue;
+		const cols = splitTextDataRow( line );
+		const codename = cols[0];
+		const soundProfileName = cols[1];
+		if ( !codename ) continue;
+		const rideTypeName = String( cols[3] ?? "none" ).trim().toUpperCase();
+		const rideModelPath = normalizeBsrPath( cols[4] );
+		const riderTransformMode = rideTypeName === "RT_FIXED" ? 1 : rideTypeName === "RT_DUMMY" ? 2 : 0;
+		const record = {
+			soundProfileName: soundProfileName && soundProfileName.toLowerCase() !== "none" ? soundProfileName : null,
+			rideModelPath,
+			riderTransformMode
+		};
+		for ( const expandedCodename of expandCharacterInfoCodenames( codename ) ) {
+			const priorLine = sourceLines.get( expandedCodename );
+			if ( priorLine !== undefined ) {
+				throw new Error(
+					`Duplicate skilleffect characterInfo codename ${expandedCodename}: ` +
+						`lines ${priorLine + 1} and ${lineIndex + 1}`
+				);
+			}
+			records.set( expandedCodename, record );
+			sourceLines.set( expandedCodename, lineIndex );
+		}
+	}
+	return records;
 }
 
-function normalizeBsrPath(value) {
-  const normalized = normalizeAssetPath(value);
-  if (!normalized || normalized === "none") return null;
-  return normalized.startsWith("res/") ? normalized : `res/${normalized}`;
+/*
+================
+normalizeBsrPath
+================
+*/
+function normalizeBsrPath( value ) {
+	const normalized = normalizeAssetPath( value );
+	if ( !normalized || normalized === "none" ) return null;
+	return normalized.startsWith( "res/" ) ? normalized : `res/${normalized}`;
 }
 
-/**
- * Publish the complete retail animation surface separately from the runtime
- * behavior whitelist. One BAN can be reached by more than one native state
- * (Mangyang stand01: 0/79, stand02: 8/122), so aliases remain attached to the
- * unique exported GLB clip instead of becoming duplicate AnimationGroups.
- */
-export function buildRetailAnimationCatalog(bsr, clips) {
-  const defaultSet = bsr.animationSets
-    ?.find((set) => set.name.toLowerCase() === "default");
-  const states = defaultSet?.states ?? [];
-  const normalizePath = normalizeAssetPath;
+/*
+================
+buildRetailAnimationCatalog
 
-  return clips.map(({ role, path: clipPath, clip }) => {
-    const normalizedClipPath = normalizePath(clipPath);
-    return {
-      role,
-      durationMs: clip.durationMs,
-      looping: clip.field2 === 1,
-      stateIds: states
-        .filter((state) => normalizePath(state.animationPath) === normalizedClipPath)
-        .map((state) => state.stateId)
-    };
-  });
+Publish the complete retail animation surface separately from the runtime
+behavior whitelist. One BAN can be reached by more than one native state
+(Mangyang stand01: 0/79, stand02: 8/122), so aliases remain attached to the
+unique exported GLB clip instead of becoming duplicate AnimationGroups.
+================
+*/
+export function buildRetailAnimationCatalog( bsr, clips ) {
+	const defaultSet = bsr.animationSets
+		?.find( ( set ) => set.name.toLowerCase() === "default" );
+	const states = defaultSet?.states ?? [];
+	const normalizePath = normalizeAssetPath;
+
+	return clips.map( ( { role, path: clipPath, clip } ) => {
+		const normalizedClipPath = normalizePath( clipPath );
+		return {
+			role,
+			durationMs: clip.durationMs,
+			looping: clip.field2 === 1,
+			stateIds: states
+				.filter( ( state ) => normalizePath( state.animationPath ) === normalizedClipPath )
+				.map( ( state ) => state.stateId )
+		};
+	} );
 }
 
-function resolveNpcModel(codename, rows) {
-  const cols = rows.get(codename);
-  if (!cols) return null;
-  let bsrCols = cols;
-  let baseCodename = null;
-  const visited = new Set([codename]);
-  while (bsrCols.findIndex((value) => /\.bsr$/i.test(value)) < 0) {
-    // _CLON rows carry a base codename at col[4]. Follow the identity chain
-    // defensively: current retail data is one hop, but cycles and missing
-    // links must fail rather than turn into order-dependent unresolved pegs.
-    const link = bsrCols[4];
-    if (!link || visited.has(link)) {
-      throw new Error(
-        `[npc] ${codename}: invalid characterdata base chain at ${link || "<empty>"}`
-      );
-    }
-    const baseRow = rows.get(link);
-    if (!baseRow) {
-      throw new Error(`[npc] ${codename}: characterdata base ${link} is missing`);
-    }
-    visited.add(link);
-    bsrCols = baseRow;
-    baseCodename = link;
-  }
-  const bsrIndex = bsrCols.findIndex((v) => /\.bsr$/i.test(v));
-  if (bsrIndex < 0) return null;
-  const scalePercent = Number(cols[48]);
-  return {
-    codename,
-    refObjId: Number(cols[1]),
-    baseCodename,
-    materialKind: Number(cols[109]),
-    scalePercent: Number.isFinite(scalePercent) && scalePercent > 0 ? scalePercent : 100,
-    bsrPath: `res/${bsrCols[bsrIndex].replaceAll("\\", "/").toLowerCase()}`
-  };
+/*
+================
+resolveNpcModel
+================
+*/
+function resolveNpcModel( codename, rows ) {
+	const cols = rows.get( codename );
+	if ( !cols ) return null;
+	let bsrCols = cols;
+	let baseCodename = null;
+	const visited = new Set( [ codename ] );
+	while ( bsrCols.findIndex( ( value ) => /\.bsr$/i.test( value ) ) < 0 ) {
+		// _CLON rows carry a base codename at col[4]. Follow the identity chain
+		// defensively: current retail data is one hop, but cycles and missing
+		// links must fail rather than turn into order-dependent unresolved pegs.
+		const link = bsrCols[4];
+		if ( !link || visited.has( link ) ) {
+			throw new Error(
+				`[npc] ${codename}: invalid characterdata base chain at ${link || "<empty>"}`
+			);
+		}
+		const baseRow = rows.get( link );
+		if ( !baseRow ) {
+			throw new Error( `[npc] ${codename}: characterdata base ${link} is missing` );
+		}
+		visited.add( link );
+		bsrCols = baseRow;
+		baseCodename = link;
+	}
+	const bsrIndex = bsrCols.findIndex( ( v ) => /\.bsr$/i.test( v ) );
+	if ( bsrIndex < 0 ) return null;
+	const scalePercent = Number( cols[48] );
+	return {
+		codename,
+		refObjId: Number( cols[1] ),
+		baseCodename,
+		materialKind: Number( cols[109] ),
+		scalePercent: Number.isFinite( scalePercent ) && scalePercent > 0 ? scalePercent : 100,
+		bsrPath: `res/${bsrCols[bsrIndex].replaceAll( "\\", "/" ).toLowerCase()}`
+	};
 }
 
+/*
+================
+convertTextures
+================
+*/
 async function convertTextures() {
-  const py = await runConvertImages(["prim/mtrl"]);
-  if (py.status !== 0) console.warn("[npc] texture conversion returned nonzero; continuing (pngs may exist)");
+	const py = await runConvertImages( [ "prim/mtrl" ] );
+	if ( py.status !== 0 ) console.warn( "[npc] texture conversion returned nonzero; continuing (pngs may exist)" );
 }
 
-/**
- * Bake one character BSR resource. Primary RefObj models and secondary
- * CICRide models use the same native resource loader, so they must share one
- * compiler path as well; only the manifest identity differs.
- */
-export async function bakeCharacterResource(bsrPath, output, isMob) {
-  const { publicPath, diskPath } = output;
-  const source = await loadDataAsset(bsrPath);
-  const bsr = parseCharacterBsr(source, bsrPath);
-  const materialSets = characterMaterialVariants(source, bsrPath);
-  const avatar = bsr.skeletonPath
-    ? await assembleAvatar(bsrPath, {
-        noClips: true,
-        materialSetPaths: materialSets.has(0) ? [materialSets.get(0)] : [],
-        rigidUnboundMeshes: true,
-        slotForMesh: (_mp, i) => primSlot(i)
-      })
-    : await assembleStaticBsrModel(bsrPath);
-  const clips = [];
-  const movementRules = isMob
-    ? [
-        ["stand", 0],
-        ["walk", 1],
-        ["attack1", 2],
-        ["hit1", 3],
-        ["death", 4],
-        ["attack2", 5],
-        ["run", 7],
-        ["stand02", 8],
-        ["hit2", 9],
-        ["attack3", 16],
-        ["attack4", 17],
-        ["deathLoop", 36],
-        ["down", 62],
-        ["downwait", 63],
-        ["downdamage", 64],
-        ["wakeup", 65],
-        ["downdie", 66]
-      ]
-    : [["stand", 0]];
-  const animationStates = {};
-  const missingOptionalAnimationPaths = [];
-  for (const [role, stateId] of [...movementRules,...NATIVE_IDLE_STATE_CLIPS.map(({role,stateId})=>[role,stateId]),...NATIVE_EMOTE_STATE_CLIPS.filter(row=>row.stateId===50).map(({role,stateId})=>[role,stateId])]) {
-    const state = findDefaultAnimationState(bsr, stateId);
-    if (!state?.animationPath) {
-      if (stateId === 0 && isMob) {
-        throw new Error(`${bsrPath} has no authored default animation state 0 (stand)`);
-      }
-      continue;
-    }
-    let clip;
-    if (!isMob && stateId === 0) {
-      // Native CPrimAnimation opens BAN resources lazily. A town NPC's BSR
-      // and mesh remain valid when its optional idle archive is absent or
-      // malformed; only that animation lane is unavailable. The previous
-      // build collapsed this leaf failure into a missing world object.
-      const animationBytes = await loadOptionalDataAsset(state.animationPath);
-      try {
-        clip = animationBytes === null
-          ? null
-          : parseBan(animationBytes, state.animationPath);
-      } catch (error) {
-        console.warn(
-          `[npc] optional NPC stand animation unreadable: ${state.animationPath} ` +
-            `(model ${bsrPath} remains valid): ${error instanceof Error ? error.message : String(error)}`
-        );
-        clip = null;
-      }
-      if (clip === null) {
-        missingOptionalAnimationPaths.push(state.animationPath);
-        continue;
-      }
-    } else {
-      clip = parseBan(await loadDataAsset(state.animationPath), state.animationPath);
-    }
-    clips.push({ role, path: state.animationPath, clip });
-    animationStates[role] = {
-      stateId,
-      durationMs: clip.durationMs,
-      soundEvents: pickDefaultSetSoundEvents(bsr, stateId),
-      ...pickDefaultSetStateTableMetadata(bsr, stateId)
-    };
-  }
-  for(const motion of pickAttachedMotionClips(bsr)){const clip=parseBan(await loadDataAsset(motion.path),motion.path);clips.push({role:motion.role,path:motion.path,clip});animationStates[motion.role]={stateId:motion.id,durationMs:clip.durationMs,loop:clip.field2!==0,soundEvents:[],...pickAnimationStateTableMetadata(motion.state)};}
-  const allowedClips = Object.keys(animationStates);
+/*
+================
+bakeCharacterResource
 
-  if (isMob) {
-    // Ship the authored family once. Runtime selection remains constrained to
-    // the state-id-derived allowedClips above; filenames never confer behavior.
-    const usedPaths = new Set(clips.map((clip) => clip.path));
-    for (const animPath of avatar.animationPaths) {
-      if (usedPaths.has(animPath)) continue;
-      usedPaths.add(animPath);
-      const base = path.basename(animPath, ".ban").toLowerCase();
-      const role = base.startsWith(`${path.basename(bsrPath, ".bsr")}_`)
-        ? base.slice(path.basename(bsrPath, ".bsr").length + 1)
-        : base;
-      const roleOwner = clips.find((clip) => clip.role === role);
-      if (roleOwner) {
-        throw new Error(
-          `${bsrPath} maps animation role "${role}" to both ${roleOwner.path} and ${animPath}`
-        );
-      }
-      // Native CPrimAnimation stores every BSR-authored path but opens each
-      // BAN lazily (sub_a6c500 -> sub_a6c2d0). An archive miss returns 0 for
-      // that clip; it does not invalidate the model or its other states. Keep
-      // the required stand/walk/run lane strict above, while preserving that
-      // per-optional-clip failure boundary here. This matters for shipped data
-      // such as bluetiger state 79's authored "stnad01" typo.
-      const animationBytes = await loadOptionalDataAsset(animPath);
-      if (animationBytes === null) {
-        missingOptionalAnimationPaths.push(animPath);
-        console.warn(`[npc] optional animation absent in archive: ${animPath} (model ${bsrPath} remains valid)`);
-        continue;
-      }
-      try {
-        clips.push({ role, path: animPath, clip: parseBan(animationBytes, animPath) });
-      } catch (error) {
-        missingOptionalAnimationPaths.push(animPath);
-        console.warn(
-          `[npc] optional animation unreadable: ${animPath} (model ${bsrPath} remains valid): ` +
-            `${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-  }
+Bake one character BSR resource. Primary RefObj models and secondary
+CICRide models use the same native resource loader, so they must share one
+compiler path as well; only the manifest identity differs.
+================
+*/
+export async function bakeCharacterResource( bsrPath, output, isMob ) {
+	const { publicPath, diskPath } = output;
+	const source = await loadDataAsset( bsrPath );
+	const bsr = parseCharacterBsr( source, bsrPath );
+	const materialSets = characterMaterialVariants( source, bsrPath );
+	const avatar = bsr.skeletonPath ?
+		await assembleAvatar( bsrPath, {
+			noClips: true,
+			materialSetPaths: materialSets.has( 0 ) ? [ materialSets.get( 0 ) ] : [],
+			rigidUnboundMeshes: true,
+			slotForMesh: ( _mp, i ) => primSlot( i )
+		} ) :
+		await assembleStaticBsrModel( bsrPath );
+	const clips = [];
+	const movementRules = isMob ?
+		[
+			[ "stand", 0 ],
+			[ "walk", 1 ],
+			[ "attack1", 2 ],
+			[ "hit1", 3 ],
+			[ "death", 4 ],
+			[ "attack2", 5 ],
+			[ "run", 7 ],
+			[ "stand02", 8 ],
+			[ "hit2", 9 ],
+			[ "attack3", 16 ],
+			[ "attack4", 17 ],
+			[ "deathLoop", 36 ],
+			[ "down", 62 ],
+			[ "downwait", 63 ],
+			[ "downdamage", 64 ],
+			[ "wakeup", 65 ],
+			[ "downdie", 66 ]
+		] :
+		[ [ "stand", 0 ] ];
+	const animationStates = {};
+	const missingOptionalAnimationPaths = [];
+	for (
+		const [role, stateId] of [
+			...movementRules,
+			...NATIVE_IDLE_STATE_CLIPS.map( ( { role, stateId } ) => [ role, stateId ] ),
+			...NATIVE_EMOTE_STATE_CLIPS.filter( row => row.stateId === 50 ).map( (
+				{ role, stateId }
+			) => [ role, stateId ] )
+		]
+	) {
+		const state = findDefaultAnimationState( bsr, stateId );
+		if ( !state?.animationPath ) {
+			if ( stateId === 0 && isMob ) {
+				throw new Error( `${bsrPath} has no authored default animation state 0 (stand)` );
+			}
+			continue;
+		}
+		let clip;
+		if ( !isMob && stateId === 0 ) {
+			// Native CPrimAnimation opens BAN resources lazily. A town NPC's BSR
+			// and mesh remain valid when its optional idle archive is absent or
+			// malformed; only that animation lane is unavailable. The previous
+			// build collapsed this leaf failure into a missing world object.
+			const animationBytes = await loadOptionalDataAsset( state.animationPath );
+			try {
+				clip = animationBytes === null ?
+					null :
+					parseBan( animationBytes, state.animationPath );
+			} catch ( error ) {
+				console.warn(
+					`[npc] optional NPC stand animation unreadable: ${state.animationPath} ` +
+						`(model ${bsrPath} remains valid): ${error instanceof Error ? error.message : String( error )}`
+				);
+				clip = null;
+			}
+			if ( clip === null ) {
+				missingOptionalAnimationPaths.push( state.animationPath );
+				continue;
+			}
+		} else {
+			clip = parseBan( await loadDataAsset( state.animationPath ), state.animationPath );
+		}
+		clips.push( { role, path: state.animationPath, clip } );
+		animationStates[role] = {
+			stateId,
+			durationMs: clip.durationMs,
+			soundEvents: pickDefaultSetSoundEvents( bsr, stateId ),
+			...pickDefaultSetStateTableMetadata( bsr, stateId )
+		};
+	}
+	for ( const motion of pickAttachedMotionClips( bsr ) ) {
+		const clip = parseBan( await loadDataAsset( motion.path ), motion.path );
+		clips.push( { role: motion.role, path: motion.path, clip } );
+		animationStates[motion.role] = {
+			stateId: motion.id,
+			durationMs: clip.durationMs,
+			loop: clip.field2 !== 0,
+			soundEvents: [],
+			...pickAnimationStateTableMetadata( motion.state )
+		};
+	}
+	const allowedClips = Object.keys( animationStates );
 
-  const animationBindings=await authoredAnimationBindings(bsr,clips,loadOptionalDataAsset);
-  for(const binding of animationBindings)if(binding.clip===null&&binding.path&&!missingOptionalAnimationPaths.includes(binding.path))missingOptionalAnimationPaths.push(binding.path);
+	if ( isMob ) {
+		// Ship the authored family once. Runtime selection remains constrained to
+		// the state-id-derived allowedClips above; filenames never confer behavior.
+		const usedPaths = new Set( clips.map( ( clip ) => clip.path ) );
+		for ( const animPath of avatar.animationPaths ) {
+			if ( usedPaths.has( animPath ) ) continue;
+			usedPaths.add( animPath );
+			const base = path.basename( animPath, ".ban" ).toLowerCase();
+			const role = base.startsWith( `${path.basename( bsrPath, ".bsr" )}_` ) ?
+				base.slice( path.basename( bsrPath, ".bsr" ).length + 1 ) :
+				base;
+			const roleOwner = clips.find( ( clip ) => clip.role === role );
+			if ( roleOwner ) {
+				throw new Error(
+					`${bsrPath} maps animation role "${role}" to both ${roleOwner.path} and ${animPath}`
+				);
+			}
+			// Native CPrimAnimation stores every BSR-authored path but opens each
+			// BAN lazily (sub_a6c500 -> sub_a6c2d0). An archive miss returns 0 for
+			// that clip; it does not invalidate the model or its other states. Keep
+			// the required stand/walk/run lane strict above, while preserving that
+			// per-optional-clip failure boundary here. This matters for shipped data
+			// such as bluetiger state 79's authored "stnad01" typo.
+			const animationBytes = await loadOptionalDataAsset( animPath );
+			if ( animationBytes === null ) {
+				missingOptionalAnimationPaths.push( animPath );
+				console.warn(
+					`[npc] optional animation absent in archive: ${animPath} (model ${bsrPath} remains valid)`
+				);
+				continue;
+			}
+			try {
+				clips.push( { role, path: animPath, clip: parseBan( animationBytes, animPath ) } );
+			} catch ( error ) {
+				missingOptionalAnimationPaths.push( animPath );
+				console.warn(
+					`[npc] optional animation unreadable: ${animPath} (model ${bsrPath} remains valid): ` +
+						`${error instanceof Error ? error.message : String( error )}`
+				);
+			}
+		}
+	}
 
-  // Mission PathCtl owns NPC world displacement. Export locomotion as an
-  // in-place pose so the skeleton cannot apply the same travel a second time.
-  // Attack, hit, death, and other authored root motion remain untouched.
-  const glb = avatarToGlb({
-    ...avatar,
-    clips,
-    inPlaceHorizontalRootMotionRoles: ["walk", "run"]
-  });
-  fs.mkdirSync(path.dirname(diskPath), { recursive: true });
-  fs.writeFileSync(diskPath, glb);
-  const materialVariants = {};
-  if (isMob) for (const [slot, materialPath] of materialSets) {
-    if (slot === 0) continue;
-    const materials = await loadMaterialTextures([materialPath], {onWarning: message => {throw Error(message);}});
-    const variant = avatarToGlb({...avatar, materials, clips, inPlaceHorizontalRootMotionRoles: ['walk', 'run']});
-    const suffix = `.material-${slot}.glb`;
-    fs.writeFileSync(diskPath.replace(/\.glb$/, suffix), variant);
-    materialVariants[slot] = publicPath.replace(/\.glb$/, suffix);
-  }
-  return {
-    glb: publicPath,
-    bytes: glb.length,
-    bones: avatar.skeleton.boneCount,
-    clips: clips.map((clip) => clip.role),
-    materials: avatar.materials.size,
-    allowedClips,
-    animationStates,
-    animationBindings,
-    modifierSets:bsr.modifierSets,particleModifiers: bsr.particleModifiers,
-    materialModifiers:bsr.materialModifiers,textureModifiers:bsr.textureModifiers,
-    ...(Object.keys(materialVariants).length ? {materialVariants} : {}),
-    ...(!isMob && allowedClips.length === 0 ? { staticPose: true } : {}),
-    retailAnimationCatalog: buildRetailAnimationCatalog(bsr, clips),
-    ...(missingOptionalAnimationPaths.length > 0 ? { missingOptionalAnimationPaths } : {})
-  };
+	const animationBindings = await authoredAnimationBindings( bsr, clips, loadOptionalDataAsset );
+	for ( const binding of animationBindings ) {
+		if ( binding.clip === null && binding.path && !missingOptionalAnimationPaths.includes( binding.path ) ) {
+			missingOptionalAnimationPaths.push( binding.path );
+		}
+	}
+
+	// Mission PathCtl owns NPC world displacement. Export locomotion as an
+	// in-place pose so the skeleton cannot apply the same travel a second time.
+	// Attack, hit, death, and other authored root motion remain untouched.
+	const glb = avatarToGlb( {
+		...avatar,
+		clips,
+		inPlaceHorizontalRootMotionRoles: [ "walk", "run" ]
+	} );
+	fs.mkdirSync( path.dirname( diskPath ), { recursive: true } );
+	fs.writeFileSync( diskPath, glb );
+	const materialVariants = {};
+	if ( isMob ) {
+		for ( const [slot, materialPath] of materialSets ) {
+			if ( slot === 0 ) continue;
+			const materials = await loadMaterialTextures( [ materialPath ], {
+				onWarning: message => {
+					throw Error( message );
+				}
+			} );
+			const variant = avatarToGlb( {
+				...avatar,
+				materials,
+				clips,
+				inPlaceHorizontalRootMotionRoles: [ "walk", "run" ]
+			} );
+			const suffix = `.material-${slot}.glb`;
+			fs.writeFileSync( diskPath.replace( /\.glb$/, suffix ), variant );
+			materialVariants[slot] = publicPath.replace( /\.glb$/, suffix );
+		}
+	}
+	return {
+		glb: publicPath,
+		bytes: glb.length,
+		bones: avatar.skeleton.boneCount,
+		clips: clips.map( ( clip ) => clip.role ),
+		materials: avatar.materials.size,
+		allowedClips,
+		animationStates,
+		animationBindings,
+		modifierSets: bsr.modifierSets,
+		particleModifiers: bsr.particleModifiers,
+		materialModifiers: bsr.materialModifiers,
+		textureModifiers: bsr.textureModifiers,
+		...(Object.keys( materialVariants ).length ? { materialVariants } : {}),
+		...(!isMob && allowedClips.length === 0 ? { staticPose: true } : {}),
+		retailAnimationCatalog: buildRetailAnimationCatalog( bsr, clips ),
+		...(missingOptionalAnimationPaths.length > 0 ? { missingOptionalAnimationPaths } : {})
+	};
 }
 
-export async function buildNpcModelAssets(options = {}) {
-  const eventRain = parseWeatherEvents(fs.readFileSync(path.join(textdataDir,"skilleffect.txt"),"utf16le"));
-  const skipTextures = options.skipTextures ?? false;
-  if (!skipTextures) await convertTextures();
+/*
+================
+buildNpcModelAssets
+================
+*/
+export async function buildNpcModelAssets( options = {} ) {
+	const eventRain = parseWeatherEvents( fs.readFileSync( path.join( textdataDir, "skilleffect.txt" ), "utf16le" ) );
+	const skipTextures = options.skipTextures ?? false;
+	if ( !skipTextures ) await convertTextures();
 
-  // Runtime rosters, not codename prefixes, decide what is built. Load the
-  // complete RefObjChar identity table so native NPC-band structure rows and
-  // clone base links remain resolvable without a second classifier.
-  const rows = loadCharacterDataRows(textdataDir, { codenamePattern: /./ });
-  const characterInfo = loadCharacterInfo();
-  const npcRoster = loadSpawnableNpcRoster();
-  const mobRoster = loadSpawnableMobRoster();
-  const mobRosterByCodename = new Map(mobRoster.map((ref) => [ref.codename, ref]));
-  // 582110: growth pets and hidden transports route action 1 to state 50.
-  // Publish every enabled reference, sharing the native BSR bake across levels.
-  const cosRoster = [...rows].filter(([,cols])=>Number(cols[0])===1&&Number(cols[9])===1&&Number(cols[10])===2&&Number(cols[11])===3&&[3,4].includes(Number(cols[12]))).map(([codename,cols])=>({codename,refObjId:Number(cols[1]),rideModelPath:characterInfo.get(codename)?.rideModelPath,riderTransformMode:characterInfo.get(codename)?.riderTransformMode}));
-  const cosNames = new Set(cosRoster.map(row=>row.codename));
-  const roster = [...npcRoster, ...mobRoster, ...cosRoster];
-  if (new Set(roster.map((ref) => ref.codename)).size !== roster.length) {
-    throw new Error("[npc] server NPC and monster rosters contain an overlapping codename");
-  }
-  if (new Set(roster.map((ref) => ref.refObjId)).size !== roster.length) {
-    throw new Error("[npc] server NPC and monster rosters contain an overlapping RefObj identity");
-  }
-  const manifestPath = path.join(publicAssets, "npc", "manifest.json");
-  const previousManifest = readJsonOrNullSync(manifestPath);
-  const previousGlbPaths = readPreviousResourceGlbPaths(manifestPath);
-  const models = [];
-  let builtResources = 0;
-  let coveredModels = 0;
-  let reusedModels = 0;
-  /** bsrPath -> policy + baked result, so _CLON codenames reuse the base GLB. */
-  const bakedByBsr = new Map();
-  /** Browser output -> BSR identity, guarding every primary and ride write. */
-  const outputOwners = new Map();
-  /** Full BSR animation metadata stays outside the production-hot model manifest. */
-  const retailAnimationResources = new Map();
-  const retailAnimationModels = new Map();
-  /** Secondary BSR -> the characterInfo records that require it. */
-  const rideResources = new Map();
-  for (const rosterRef of roster) {
-    const { codename } = rosterRef;
-    const model = resolveNpcModel(codename, rows);
-    if (!model) {
-      console.warn(`[npc] ${codename}: no characterdata row / bsr path`);
-      models.push({ codename, error: "unresolved" });
-      continue;
-    }
-    const isCos = cosNames.has(codename);
-    const isMob = mobRosterByCodename.has(codename) || isCos;
-    const output = resourceGlbOutput(model.bsrPath, {
-      namespace: "npc",
-      publicAssetsRoot: publicAssets
-    });
-    claimResourceOutput(outputOwners, model.bsrPath, output.publicPath);
-    const publicPath = output.publicPath;
-    const info = characterInfo.get(codename);
-    const soundProfileName = info?.soundProfileName;
-    if (!soundProfileName && isMob) {
-      throw new Error(`[npc] ${codename}: no skilleffect characterInfo ResourceTypeName`);
-    }
-    if (!soundProfileName) {
-      console.warn(
-        `[npc] ${codename}: no skilleffect characterInfo row; ` +
-          "publishing the visual without an invented sound/action profile"
-      );
-    }
-    const mediaRideModelPath = info?.rideModelPath ?? null;
-    const serverRideModelPath = normalizeBsrPath(rosterRef?.rideModelPath) ?? null;
-    const mediaTransformMode = Number(info?.riderTransformMode ?? 0);
-    const serverTransformMode = Number(rosterRef?.riderTransformMode ?? 0);
-    if (
-      mediaRideModelPath !== serverRideModelPath ||
-      (mediaRideModelPath !== null && mediaTransformMode !== serverTransformMode)
-    ) {
-      throw new Error(
-        `[npc] ${codename}: server/media ride contract drift ` +
-          `(server=${serverRideModelPath ?? "none"}/${serverTransformMode}, ` +
-          `media=${mediaRideModelPath ?? "none"}/${mediaTransformMode})`
-      );
-    }
-    if (serverRideModelPath) {
-      const priorRide = rideResources.get(serverRideModelPath) ?? {
-        bsrPath: serverRideModelPath,
-        requiredBy: [],
-        transformModes: new Set()
-      };
-      priorRide.requiredBy.push(codename);
-      priorRide.transformModes.add(serverTransformMode);
-      rideResources.set(serverRideModelPath, priorRide);
-    }
-    const entry = {
-      codename,
-      refObjId: model.refObjId,
-      eventRain: eventRain.get(codename) ?? eventRain.get(model.baseCodename) ?? false,
-      kind: isCos ? "cos" : isMob ? "monster" : "npc",
-      bsr: model.bsrPath,
-      glb: publicPath,
-      ...(soundProfileName ? { soundProfileName } : {})
-    };
-    if (model.refObjId !== rosterRef.refObjId) {
-      throw new Error(
-        `[npc] ${codename}: server/media RefObj identity drift ` +
-          `(server=${rosterRef.refObjId}, media=${model.refObjId})`
-      );
-    }
-    retailAnimationModels.set(codename, {
-      codename,
-      refObjId: model.refObjId,
-      kind: isCos ? "cos" : isMob ? "monster" : "npc",
-      bsr: model.bsrPath
-    });
-    if (isMob) {
-      // Scale percent from characterdata col[48] (tiger 100 / tiger_clon
-      // 80). Data passthrough only - applying it is the spawn plane's leg.
-      entry.scalePercent = model.scalePercent;
-      entry.materialKind = model.materialKind;
-      if (model.baseCodename) entry.baseCodename = model.baseCodename;
-    }
-    const prior = bakedByBsr.get(model.bsrPath);
-    if (prior) {
-      if (prior.isMob !== isMob) {
-        throw new Error(
-          `[npc] ${model.bsrPath}: shared by NPC and monster consumers with incompatible clip policies`
-        );
-      }
-      Object.assign(entry, prior.baked);
-      coveredModels += 1;
-      reusedModels += 1;
-      console.log(`[npc] OK   ${codename.padEnd(20)} -> ${publicPath} (shared bake)`);
-      models.push(entry);
-      continue;
-    }
-    try {
-      const baked = await bakeCharacterResource(model.bsrPath, output, isMob);
-      const { retailAnimationCatalog, ...missionBaked } = baked;
-      Object.assign(entry, missionBaked);
-      bakedByBsr.set(model.bsrPath, { isMob, baked: missionBaked });
-      retailAnimationResources.set(model.bsrPath, {
-        bsr: model.bsrPath,
-        glb: missionBaked.glb,
-        animations: retailAnimationCatalog
-      });
-      builtResources += 1;
-      coveredModels += 1;
-      console.log(`[npc] OK   ${codename.padEnd(20)} -> ${entry.glb} (${entry.bytes} B, clips=[${entry.clips}])`);
-    } catch (error) {
-      entry.error = String(error?.message ?? error);
-      console.warn(`[npc] FAIL ${codename.padEnd(20)} ${entry.error}`);
-    }
-    models.push(entry);
-  }
+	// Runtime rosters, not codename prefixes, decide what is built. Load the
+	// complete RefObjChar identity table so native NPC-band structure rows and
+	// clone base links remain resolvable without a second classifier.
+	const rows = loadCharacterDataRows( textdataDir, { codenamePattern: /./ } );
+	const characterInfo = loadCharacterInfo();
+	const npcRoster = loadSpawnableNpcRoster();
+	const mobRoster = loadSpawnableMobRoster();
+	const mobRosterByCodename = new Map( mobRoster.map( ( ref ) => [ ref.codename, ref ] ) );
+	// 582110: growth pets and hidden transports route action 1 to state 50.
+	// Publish every enabled reference, sharing the native BSR bake across levels.
+	const cosRoster = enabledCosReferences( rows ).map( ( { codename, refObjId } ) => ({
+		codename,
+		refObjId,
+		rideModelPath: characterInfo.get( codename )?.rideModelPath,
+		riderTransformMode: characterInfo.get( codename )?.riderTransformMode
+	}) );
+	const cosNames = new Set( cosRoster.map( row => row.codename ) );
+	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster ];
+	if ( new Set( roster.map( ( ref ) => ref.codename ) ).size !== roster.length ) {
+		throw new Error( "[npc] server NPC and monster rosters contain an overlapping codename" );
+	}
+	if ( new Set( roster.map( ( ref ) => ref.refObjId ) ).size !== roster.length ) {
+		throw new Error( "[npc] server NPC and monster rosters contain an overlapping RefObj identity" );
+	}
+	const manifestPath = path.join( publicAssets, "npc", "manifest.json" );
+	const previousManifest = readJsonOrNullSync( manifestPath );
+	const previousGlbPaths = readPreviousResourceGlbPaths( manifestPath );
+	const models = [];
+	let builtResources = 0;
+	let coveredModels = 0;
+	let reusedModels = 0;
+	/** bsrPath -> policy + baked result, so _CLON codenames reuse the base GLB. */
+	const bakedByBsr = new Map();
+	/** Browser output -> BSR identity, guarding every primary and ride write. */
+	const outputOwners = new Map();
+	/** Full BSR animation metadata stays outside the production-hot model manifest. */
+	const retailAnimationResources = new Map();
+	const retailAnimationModels = new Map();
+	/** Secondary BSR -> the characterInfo records that require it. */
+	const rideResources = new Map();
+	for ( const rosterRef of roster ) {
+		const { codename } = rosterRef;
+		const model = resolveNpcModel( codename, rows );
+		if ( !model ) {
+			console.warn( `[npc] ${codename}: no characterdata row / bsr path` );
+			models.push( { codename, error: "unresolved" } );
+			continue;
+		}
+		const isCos = cosNames.has( codename );
+		const isMob = mobRosterByCodename.has( codename ) || isCos;
+		const output = resourceGlbOutput( model.bsrPath, {
+			namespace: "npc",
+			publicAssetsRoot: publicAssets
+		} );
+		claimResourceOutput( outputOwners, model.bsrPath, output.publicPath );
+		const publicPath = output.publicPath;
+		const info = characterInfo.get( codename );
+		const soundProfileName = info?.soundProfileName;
+		if ( !soundProfileName && isMob ) {
+			throw new Error( `[npc] ${codename}: no skilleffect characterInfo ResourceTypeName` );
+		}
+		if ( !soundProfileName ) {
+			console.warn(
+				`[npc] ${codename}: no skilleffect characterInfo row; ` +
+					"publishing the visual without an invented sound/action profile"
+			);
+		}
+		const mediaRideModelPath = info?.rideModelPath ?? null;
+		const serverRideModelPath = normalizeBsrPath( rosterRef?.rideModelPath ) ?? null;
+		const mediaTransformMode = Number( info?.riderTransformMode ?? 0 );
+		const serverTransformMode = Number( rosterRef?.riderTransformMode ?? 0 );
+		if (
+			mediaRideModelPath !== serverRideModelPath ||
+			(mediaRideModelPath !== null && mediaTransformMode !== serverTransformMode)
+		) {
+			throw new Error(
+				`[npc] ${codename}: server/media ride contract drift ` +
+					`(server=${serverRideModelPath ?? "none"}/${serverTransformMode}, ` +
+					`media=${mediaRideModelPath ?? "none"}/${mediaTransformMode})`
+			);
+		}
+		if ( serverRideModelPath ) {
+			const priorRide = rideResources.get( serverRideModelPath ) ?? {
+				bsrPath: serverRideModelPath,
+				requiredBy: [],
+				transformModes: new Set()
+			};
+			priorRide.requiredBy.push( codename );
+			priorRide.transformModes.add( serverTransformMode );
+			rideResources.set( serverRideModelPath, priorRide );
+		}
+		const entry = {
+			codename,
+			refObjId: model.refObjId,
+			eventRain: eventRain.get( codename ) ?? eventRain.get( model.baseCodename ) ?? false,
+			kind: isCos ? "cos" : isMob ? "monster" : "npc",
+			bsr: model.bsrPath,
+			glb: publicPath,
+			...(soundProfileName ? { soundProfileName } : {})
+		};
+		if ( model.refObjId !== rosterRef.refObjId ) {
+			throw new Error(
+				`[npc] ${codename}: server/media RefObj identity drift ` +
+					`(server=${rosterRef.refObjId}, media=${model.refObjId})`
+			);
+		}
+		retailAnimationModels.set( codename, {
+			codename,
+			refObjId: model.refObjId,
+			kind: isCos ? "cos" : isMob ? "monster" : "npc",
+			bsr: model.bsrPath
+		} );
+		if ( isMob ) {
+			// Scale percent from characterdata col[48] (tiger 100 / tiger_clon
+			// 80). Data passthrough only - applying it is the spawn plane's leg.
+			entry.scalePercent = model.scalePercent;
+			entry.materialKind = model.materialKind;
+			if ( model.baseCodename ) entry.baseCodename = model.baseCodename;
+		}
+		const prior = bakedByBsr.get( model.bsrPath );
+		if ( prior ) {
+			if ( prior.isMob !== isMob ) {
+				throw new Error(
+					`[npc] ${model.bsrPath}: shared by NPC and monster consumers with incompatible clip policies`
+				);
+			}
+			Object.assign( entry, prior.baked );
+			coveredModels += 1;
+			reusedModels += 1;
+			console.log( `[npc] OK   ${codename.padEnd( 20 )} -> ${publicPath} (shared bake)` );
+			models.push( entry );
+			continue;
+		}
+		try {
+			const baked = await bakeCharacterResource( model.bsrPath, output, isMob );
+			const { retailAnimationCatalog, ...missionBaked } = baked;
+			Object.assign( entry, missionBaked );
+			bakedByBsr.set( model.bsrPath, { isMob, baked: missionBaked } );
+			retailAnimationResources.set( model.bsrPath, {
+				bsr: model.bsrPath,
+				glb: missionBaked.glb,
+				animations: retailAnimationCatalog
+			} );
+			builtResources += 1;
+			coveredModels += 1;
+			console.log(
+				`[npc] OK   ${codename.padEnd( 20 )} -> ${entry.glb} (${entry.bytes} B, clips=[${entry.clips}])`
+			);
+		} catch ( error ) {
+			entry.error = String( error?.message ?? error );
+			console.warn( `[npc] FAIL ${codename.padEnd( 20 )} ${entry.error}` );
+		}
+		models.push( entry );
+	}
 
-  // Secondary models are first-class resource entries keyed by normalized
-  // BSR path. This mirrors ResourceManager lookup at action-effect +0x24 and
-  // avoids inventing a second RefObj/codename identity for packetless rides.
-  for (const ride of rideResources.values()) {
-    const key = ride.bsrPath;
-    const output = resourceGlbOutput(key, {
-      namespace: "npc",
-      publicAssetsRoot: publicAssets
-    });
-    claimResourceOutput(outputOwners, key, output.publicPath);
-    const entry = {
-      codename: key,
-      kind: "ride",
-      bsr: key,
-      requiredBy: ride.requiredBy,
-      riderTransformModes: [...ride.transformModes].sort((a, b) => a - b)
-    };
-    retailAnimationModels.set(key, {
-      codename: key,
-      refObjId: null,
-      kind: "ride",
-      bsr: key
-    });
-    try {
-      const prior = bakedByBsr.get(key);
-      if (prior) {
-        if (!prior.isMob) {
-          throw new Error(`${key}: ride resource collides with an NPC-only stand bake`);
-        }
-        Object.assign(entry, prior.baked);
-        reusedModels += 1;
-      } else {
-        const baked = await bakeCharacterResource(key, output, true);
-        const { retailAnimationCatalog, ...missionBaked } = baked;
-        Object.assign(entry, missionBaked);
-        bakedByBsr.set(key, { isMob: true, baked: missionBaked });
-        retailAnimationResources.set(key, {
-          bsr: key,
-          glb: missionBaked.glb,
-          animations: retailAnimationCatalog
-        });
-        builtResources += 1;
-      }
-      coveredModels += 1;
-      console.log(`[npc] OK   ${key} -> ${entry.glb} (${prior ? "shared bake" : `${entry.bytes} B`})`);
-    } catch (error) {
-      entry.error = String(error?.message ?? error);
-      console.warn(`[npc] FAIL ${key} ${entry.error}`);
-    }
-    models.push(entry);
-  }
+	// Secondary models are first-class resource entries keyed by normalized
+	// BSR path. This mirrors ResourceManager lookup at action-effect +0x24 and
+	// avoids inventing a second RefObj/codename identity for packetless rides.
+	for ( const ride of rideResources.values() ) {
+		const key = ride.bsrPath;
+		const output = resourceGlbOutput( key, {
+			namespace: "npc",
+			publicAssetsRoot: publicAssets
+		} );
+		claimResourceOutput( outputOwners, key, output.publicPath );
+		const entry = {
+			codename: key,
+			kind: "ride",
+			bsr: key,
+			requiredBy: ride.requiredBy,
+			riderTransformModes: [ ...ride.transformModes ].sort( ( a, b ) => a - b )
+		};
+		retailAnimationModels.set( key, {
+			codename: key,
+			refObjId: null,
+			kind: "ride",
+			bsr: key
+		} );
+		try {
+			const prior = bakedByBsr.get( key );
+			if ( prior ) {
+				if ( !prior.isMob ) {
+					throw new Error( `${key}: ride resource collides with an NPC-only stand bake` );
+				}
+				Object.assign( entry, prior.baked );
+				reusedModels += 1;
+			} else {
+				const baked = await bakeCharacterResource( key, output, true );
+				const { retailAnimationCatalog, ...missionBaked } = baked;
+				Object.assign( entry, missionBaked );
+				bakedByBsr.set( key, { isMob: true, baked: missionBaked } );
+				retailAnimationResources.set( key, {
+					bsr: key,
+					glb: missionBaked.glb,
+					animations: retailAnimationCatalog
+				} );
+				builtResources += 1;
+			}
+			coveredModels += 1;
+			console.log( `[npc] OK   ${key} -> ${entry.glb} (${prior ? "shared bake" : `${entry.bytes} B`})` );
+		} catch ( error ) {
+			entry.error = String( error?.message ?? error );
+			console.warn( `[npc] FAIL ${key} ${entry.error}` );
+		}
+		models.push( entry );
+	}
 
-  const preservedVat = preserveFreshNpcVatReferences(models, previousManifest);
-  const manifest = {
-    format: "sro-mission-npc-models",
-    version: 7,
-    source:
-      "server NPC spawn roster + server-exported spawnable monster roster; PathCtl-owned in-place horizontal locomotion, complete native default CResAnimationStateTable event-map/time-warp payloads, BSR ModDataSound cursor tracks, and the unified skilleffect characterInfo sound + CICRide resource contract",
-    count: models.length,
-    builtCount: builtResources,
-    coveredCount: coveredModels,
-    reusedCount: reusedModels,
-    models: Object.fromEntries(models.map((m) => [m.codename, m])),
-    ...(preservedVat.contract ? { vat: preservedVat.contract } : {})
-  };
-  const failures = models.filter((model) => model.error);
-  if (failures.length > 0) {
-    throw new Error(
-      `[npc] required model coverage incomplete; valid manifests were not replaced: ${failures
-        .map((model) => `${model.codename}: ${model.error}`)
-        .join("; ")}`
-    );
-  }
-  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
-  writeJsonIfChangedSync(manifestPath, manifest);
-  console.log(
-    `[npc] covered ${coveredModels}/${models.length} entries from ${builtResources} unique GLBs ` +
-      `(${reusedModels} shared); manifest -> ${path.relative(gameRoot, manifestPath)}`
-  );
-  if (preservedVat.preserved > 0 || preservedVat.stale > 0) {
-    console.log(
-      `[npc] preserved ${preservedVat.preserved} fresh VAT reference(s); ` +
-        `dropped ${preservedVat.stale} stale reference(s)`
-    );
-  }
-  const animationCatalog = {
-    format: "sro-retail-character-animation-catalog",
-    version: 2,
-    source: "native BSR default animation-set state records joined to unique exported GLB clips and BAN loopType",
-    modelCount: retailAnimationModels.size,
-    resourceCount: retailAnimationResources.size,
-    models: Object.fromEntries(retailAnimationModels),
-    resources: Object.fromEntries(retailAnimationResources)
-  };
-  const animationCatalogPath = path.join(publicAssets, "npc", "animation-catalog.json");
-  writeJsonIfChangedSync(animationCatalogPath, animationCatalog);
-  await refreshPrecompressedSidecars([manifestPath, animationCatalogPath], { onlyWhenStale: true });
-  console.log(`[npc] retail animation catalog -> ${path.relative(gameRoot, animationCatalogPath)}`);
-  const removed = removeSupersededResourceOutputs({
-    previousPublicPaths: previousGlbPaths,
-    currentPublicPaths: models.flatMap((model) => [model.glb, ...Object.values(model.materialVariants ?? {})]).filter(Boolean),
-    namespace: "npc",
-    publicAssetsRoot: publicAssets
-  });
-  if (removed.length > 0) {
-    console.log(`[npc] removed ${removed.length} superseded GLB output(s)`);
-  }
-  return {
-    built: builtResources,
-    covered: coveredModels,
-    reused: reusedModels,
-    modelCount: models.length,
-    manifestPath,
-    animationCatalogPath
-  };
+	const preservedVat = preserveFreshNpcVatReferences( models, previousManifest );
+	const manifest = {
+		format: "sro-mission-npc-models",
+		version: 7,
+		source:
+			"server NPC spawn roster + server-exported spawnable monster roster; PathCtl-owned in-place horizontal locomotion, complete native default CResAnimationStateTable event-map/time-warp payloads, BSR ModDataSound cursor tracks, and the unified skilleffect characterInfo sound + CICRide resource contract",
+		count: models.length,
+		builtCount: builtResources,
+		coveredCount: coveredModels,
+		reusedCount: reusedModels,
+		models: Object.fromEntries( models.map( ( m ) => [ m.codename, m ] ) ),
+		...(preservedVat.contract ? { vat: preservedVat.contract } : {})
+	};
+	const failures = models.filter( ( model ) => model.error );
+	if ( failures.length > 0 ) {
+		throw new Error(
+			`[npc] required model coverage incomplete; valid manifests were not replaced: ${
+				failures
+					.map( ( model ) => `${model.codename}: ${model.error}` )
+					.join( "; " )
+			}`
+		);
+	}
+	fs.mkdirSync( path.dirname( manifestPath ), { recursive: true } );
+	writeJsonIfChangedSync( manifestPath, manifest );
+	console.log(
+		`[npc] covered ${coveredModels}/${models.length} entries from ${builtResources} unique GLBs ` +
+			`(${reusedModels} shared); manifest -> ${path.relative( gameRoot, manifestPath )}`
+	);
+	if ( preservedVat.preserved > 0 || preservedVat.stale > 0 ) {
+		console.log(
+			`[npc] preserved ${preservedVat.preserved} fresh VAT reference(s); ` +
+				`dropped ${preservedVat.stale} stale reference(s)`
+		);
+	}
+	const animationCatalog = {
+		format: "sro-retail-character-animation-catalog",
+		version: 2,
+		source: "native BSR default animation-set state records joined to unique exported GLB clips and BAN loopType",
+		modelCount: retailAnimationModels.size,
+		resourceCount: retailAnimationResources.size,
+		models: Object.fromEntries( retailAnimationModels ),
+		resources: Object.fromEntries( retailAnimationResources )
+	};
+	const animationCatalogPath = path.join( publicAssets, "npc", "animation-catalog.json" );
+	writeJsonIfChangedSync( animationCatalogPath, animationCatalog );
+	await refreshPrecompressedSidecars( [ manifestPath, animationCatalogPath ], { onlyWhenStale: true } );
+	console.log( `[npc] retail animation catalog -> ${path.relative( gameRoot, animationCatalogPath )}` );
+	const removed = removeSupersededResourceOutputs( {
+		previousPublicPaths: previousGlbPaths,
+		currentPublicPaths: models.flatMap( (
+			model
+		) => [ model.glb, ...Object.values( model.materialVariants ?? {} ) ] ).filter( Boolean ),
+		namespace: "npc",
+		publicAssetsRoot: publicAssets
+	} );
+	if ( removed.length > 0 ) {
+		console.log( `[npc] removed ${removed.length} superseded GLB output(s)` );
+	}
+	return {
+		built: builtResources,
+		covered: coveredModels,
+		reused: reusedModels,
+		modelCount: models.length,
+		manifestPath,
+		animationCatalogPath
+	};
 }
 
-if (isMainScript(import.meta.url)) {
-  await buildNpcModelAssets({ skipTextures: process.argv.includes("--skip-textures") });
+if ( isMainScript( import.meta.url ) ) {
+	await buildNpcModelAssets( { skipTextures: process.argv.includes( "--skip-textures" ) } );
 }

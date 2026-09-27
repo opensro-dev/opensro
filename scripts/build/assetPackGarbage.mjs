@@ -35,6 +35,9 @@ garbage is archived and emptied folders are removed. `index` is the already
 validated published index, when the caller has it.
 ================
 */
+/**
+ * @param {{ publicRoot: string, apply?: boolean, index?: any }} options
+ */
 export async function collectPackGarbage( { publicRoot, apply = false, index: publishedIndex } ) {
 	const packsRoot = path.join( publicRoot, "assets", "packs" );
 	const indexPath = path.join( packsRoot, "manifest.json" );

@@ -732,7 +732,6 @@ scripts/build/assetDelivery.mjs
 scripts/build/assetPackGroups.mjs
 scripts/build/assetPackIndexValidation.mjs
 scripts/build/assetPackOwnership.mjs
-scripts/build/assetPacks.mjs
 scripts/build/char/animationUtils.mjs
 scripts/build/char/attachedMotionClips.mjs
 scripts/build/char/authoredAnimationBindings.mjs
@@ -744,7 +743,6 @@ scripts/build/char/buildDropModelAssets.mjs
 scripts/build/char/buildEquipmentVisuals.mjs
 scripts/build/char/buildLevelDataAsset.mjs
 scripts/build/char/buildLocomotionBanAssets.mjs
-scripts/build/char/buildNpcModelAssets.mjs
 scripts/build/char/buildNpcVatAssets.mjs
 scripts/build/char/buildRoster.mjs
 scripts/build/char/buildSkillEffectRecords.mjs
@@ -878,7 +876,6 @@ scripts/build/world/paths.mjs
 scripts/build/world/sworld/deriveTitleTerrainSectorCoverage.mjs
 scripts/build/world/sworld/prepareCellTerrainTexture.mjs
 scripts/build_outdoor_world_resources.mjs
-scripts/build_sro_resources.mjs
 scripts/checks/check_asset_delivery.mjs
 scripts/checks/check_asset_pack_integrity.mjs
 scripts/checks/check_compact_assets.mjs
@@ -927,17 +924,14 @@ scripts/tasks/processCommand.mjs
 scripts/tasks/registry.mjs
 scripts/tasks/runner.mjs
 scripts/tasks/tests.mjs
-scripts/test/assets/actorLocomotionRootMotion.test.mjs
 scripts/test/assets/assetDeliveryOwnership.test.mjs
 scripts/test/assets/assetPackIntegrity.test.mjs
 scripts/test/assets/assetPackOwnership.test.mjs
 scripts/test/assets/banTimeline.test.mjs
 scripts/test/assets/bsrParticleModifiers.test.mjs
 scripts/test/assets/buildSharedUtilities.test.mjs
-scripts/test/assets/characterModelAssetContracts.test.mjs
 scripts/test/assets/cifSpriteCatalog.test.mjs
 scripts/test/assets/fontAtlasPublication.test.mjs
-scripts/test/assets/generatedAssetMembership.test.mjs
 scripts/test/assets/jsonAssetCompression.test.mjs
 scripts/test/assets/nativeUiTexture.test.mjs
 scripts/test/assets/npcAnimationContactMarkers.test.mjs
@@ -946,7 +940,6 @@ scripts/test/assets/optionalDataAsset.test.mjs
 scripts/test/assets/publishedAssetBoundary.test.mjs
 scripts/test/assets/pythonRun.test.mjs
 scripts/test/assets/rebuildLockInterop.test.mjs
-scripts/test/assets/resourceBuildGraph.test.mjs
 scripts/test/assets/skillPaneImageReferences.test.mjs
 scripts/test/assets/vatPipeline.test.mjs
 scripts/test/cif/cifResourceContract.test.mjs

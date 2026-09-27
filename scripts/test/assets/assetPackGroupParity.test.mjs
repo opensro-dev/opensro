@@ -283,7 +283,8 @@ test("both entry points refresh JSON sidecars before packing them", async () => 
 	for ( const [label, scriptPath] of Object.entries( entryScriptPaths ) ) {
 		const source = await readFile( scriptPath, "utf8" );
 		const firstRefreshAt = source.indexOf( "optimizePublicJsonAssets()" );
-		const packAt = source.indexOf( "buildAssetPacks({" );
+		// Layout-independent: dprint pads call parentheses.
+		const packAt = source.search( /buildAssetPacks\s*\(\s*\{/ );
 
 		assert.ok( firstRefreshAt >= 0, `${label} must precompress generated JSON` );
 		assert.ok( packAt >= 0, `${label} must build asset packs` );
