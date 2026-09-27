@@ -701,7 +701,6 @@ apps/client-next/tools/publish-dungeon-worlds.mjs
 apps/client-next/tools/publish-flares.mjs
 apps/client-next/tools/publish-minimap-coverage.mjs
 apps/client-next/tools/publish-monster-materials.mjs
-apps/client-next/tools/publish-name-filter.mjs
 apps/client-next/tools/publish-skill-ui.mjs
 apps/client-next/tools/publish-star-rng.mjs
 apps/client-next/tools/publish-weather-assets.mjs

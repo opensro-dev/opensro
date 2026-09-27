@@ -30,6 +30,7 @@ export default {
     "scripts/test/assets/assetPackGroupParity.test.mjs",
     "scripts/test/assets/assetPackOwnership.test.mjs",
     "scripts/test/assets/pythonRun.test.mjs",
-    "scripts/test/assets/optionalDataAsset.test.mjs"
+    "scripts/test/assets/optionalDataAsset.test.mjs",
+    "scripts/test/assets/nameFilterAsset.test.mjs"
   ]
 };

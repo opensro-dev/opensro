@@ -25,7 +25,7 @@ const REFRESH_FAMILIES = [
 // Standalone publishers: `assets build` does not run them, so run `assets publish` after it.
 const PUBLISH_FAMILIES = [
   "dungeon-worlds", "flares", "minimap-coverage", "monster-materials",
-  "name-filter", "skill-ui", "star-rng", "weather-assets"
+  "skill-ui", "star-rng", "weather-assets"
 ];
 
 const PUBLISH_TASK_NAMES = PUBLISH_FAMILIES.map((family) => `assets:publish:${family}`);

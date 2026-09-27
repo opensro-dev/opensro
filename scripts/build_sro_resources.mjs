@@ -29,6 +29,7 @@ import { buildCharacterDataCountryAsset } from "./build/data/buildCharacterDataC
 import { buildGInterfaceSectionsAsset } from "./build/data/buildGInterfaceSectionsAsset.mjs";
 import { buildSiegeFortressDataAsset } from "./build/data/buildSiegeFortressDataAsset.mjs";
 import { buildMissionPresentationAsset } from "./build/data/buildMissionPresentationAsset.mjs";
+import { buildNameFilterAsset } from "./build/data/buildNameFilterAsset.mjs";
 import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
 import {
   computeResourceBuildFingerprint,
@@ -365,6 +366,9 @@ const ginterfaceSections = await buildGInterfaceSectionsAsset();
 // siegeFortressData.json: fortress id -> code name + resolved public emblem
 // image, the sub_914ae0 CrestPath128 sprite map twin). Same placement rules.
 const siegeFortressData = buildSiegeFortressDataAsset();
+// Native character-name filter (textdata/abusefilter.txt, copied byte for
+// byte). The game-data pack group claims it, so it must exist before packing.
+const nameFilter = await buildNameFilterAsset();
 // EnterWorld v2 sends semantic ids only. This client projection is generated
 // after NPC/item builders settle and owns every presentation resource path.
 const missionPresentation = buildMissionPresentationAsset();
@@ -469,6 +473,9 @@ console.log(
     (siegeFortressData.written
       ? `published ${siegeFortressData.rows} siege-fortress emblem row(s), `
       : `skipped siege-fortress emblem rows (no Media_extracted source), `) +
+    (nameFilter.written
+      ? `published the ${nameFilter.bytes}-byte name filter, `
+      : `skipped the name filter (no Media_extracted source), `) +
     `indexed ${packGroups.titleCrowdVat.length} title-crowd VAT files for packs, ` +
     `indexed ${packGroups.gameImages.length} non-UI game images for packs, ` +
     `indexed ${packGroups.compressedJson.length} compressed JSON sidecars + ${packGroups.rawJson.length} small raw JSON files for packs, ` +
