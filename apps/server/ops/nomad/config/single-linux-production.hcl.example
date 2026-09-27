@@ -1,0 +1,56 @@
+# Single-host public test fleet; all control traffic stays on loopback.
+name       = "opensro-single-node"
+data_dir   = "/opt/nomad/data"
+datacenter = "dc1"
+bind_addr  = "127.0.0.1"
+log_level  = "INFO"
+
+advertise {
+  http = "127.0.0.1:4646"
+  rpc  = "127.0.0.1:4647"
+  serf = "127.0.0.1:4648"
+}
+
+server {
+  enabled          = true
+  bootstrap_expect = 1
+  oidc_issuer      = "http://127.0.0.1:4646"
+}
+
+client {
+  enabled          = true
+  servers          = ["127.0.0.1:4647"]
+  max_kill_timeout = "90s"
+
+  meta {
+    sro_agent  = "true"
+    sro_shards = "global-official"
+  }
+
+  host_network "loopback" {
+    cidr = "127.0.0.1/32"
+  }
+}
+
+plugin "raw_exec" {
+  config {
+    enabled = true
+    denied_envvars = [
+      "NOMAD_TOKEN",
+      "NOMAD_LICENSE",
+      "NOMAD_LICENSE_PATH",
+      "CONSUL_*",
+      "VAULT_*",
+      "AWS_*",
+      "AZURE_*",
+      "ARM_*",
+      "GOOGLE_*",
+      "GITHUB_*",
+      "GITLAB_*",
+    ]
+  }
+}
+
+acl {
+  enabled = true
+}

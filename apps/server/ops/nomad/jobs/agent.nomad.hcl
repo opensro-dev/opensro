@@ -1,3 +1,29 @@
+# ===========================================================================
+# agent.nomad.hcl - Nomad lifecycle, placement, and secret delivery for the service.
+# ===========================================================================
+
+variable "node_kernel" {
+  type        = string
+  default     = "windows"
+  description = "attr.kernel.name of the nodes that may run this job (windows or linux)"
+}
+
+variable "task_user" {
+  type        = string
+  default     = ""
+  description = "OS account the task runs as; empty keeps the Nomad client's account"
+}
+
+variable "task_uid" {
+  type    = number
+  default = -1
+}
+
+variable "task_gid" {
+  type    = number
+  default = -1
+}
+
 variable "datacenters" {
   type    = list(string)
   default = ["dc1"]
@@ -71,7 +97,7 @@ job "sro-agent" {
 
   constraint {
     attribute = "${attr.kernel.name}"
-    value     = "windows"
+    value     = var.node_kernel
   }
 
   constraint {
@@ -121,6 +147,9 @@ job "sro-agent" {
 
     task "agent" {
       driver = "raw_exec"
+      # Empty on Windows (the Nomad service account runs the task). On Linux
+      # the deployer names a dedicated unprivileged account.
+      user = var.task_user
 
       config {
         command = var.binary_path
@@ -165,6 +194,8 @@ EOH
         destination = "secrets/agent-session-keys.json"
         change_mode = "noop"
         perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
       }
 
       template {
@@ -175,6 +206,8 @@ EOH
         destination = "secrets/accounts.json"
         change_mode = "restart"
         perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
       }
 
       service {

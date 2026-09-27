@@ -56,7 +56,10 @@ through ordinary gameplay movement.
 ## 2. Nomad topology
 
 The combined `-dev` server/client configuration is local development only.
-Production uses:
+A single Linux public-test host uses the durable, ACL-enabled systemd layout
+in [Single Linux host](../nomad/README.md#single-linux-host), with all Nomad
+listeners on loopback and tasks running as an unprivileged system user.
+It has no node redundancy. Distributed production uses:
 
 - three or five dedicated Nomad server nodes for Raft quorum;
 - separate Windows Nomad client nodes for Agent and GameWorld allocations;

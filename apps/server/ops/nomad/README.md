@@ -98,7 +98,9 @@ be available. Update the GM allowlist if necessary and deploy again. The rename
 keeps the character/account IDs and inventory and updates stored social name
 references in one transaction.
 
-Use three or five Nomad servers and separate Windows clients. Start from:
+For a distributed fleet, use three or five Nomad servers and separate Windows
+clients. A single Linux public-test host behind a local TLS edge uses the
+[single-host layout](#single-linux-host) below. Start distributed deployments from:
 
 ```text
 config/server-production.hcl.example
@@ -123,6 +125,8 @@ token through your normal secret delivery system:
 nomad namespace apply .\ops\nomad\access\sro-namespace.hcl
 nomad acl policy apply sro-deployer `
   .\ops\nomad\access\sro-deployer-policy.hcl
+nomad acl policy apply -namespace sro -job sro-agent -group agent -task agent `
+  sro-agent-accounts .\ops\nomad\access\sro-agent-accounts-policy.hcl
 
 # Run this in a separate administrative shell or secret broker. Do not leave
 # the management token in the environment used by sro-nomad.
@@ -171,6 +175,21 @@ The GameWorld Variable rule names the complete automatic task path
 the validated shard-bearing job ID in this policy shape. GameWorld tasks do
 not inherit the deploy token. Nomad's implicit workload policy independently
 grants each task read/list access to its own exact job/group/task path.
+Account chunks are descendants of that path and require the additional
+`sro-agent-accounts` policy bound to the exact Agent workload. Without it,
+ACL-enabled allocations cannot render `accounts.json` (HTTP 403). Do not
+attach that policy to deployment tokens or GameWorld tasks.
+
+### Single Linux host
+
+The [Linux single-host runbook](LINUX_SINGLE_HOST.md) uses the durable
+`config/single-linux-production.hcl.example` configuration under systemd,
+ACLs, the `sro` namespace, and unprivileged raw-exec tasks. Nomad binds and
+advertises only loopback; Caddy terminates public HTTPS and forwards browser
+WebSockets to the loopback game listener. This topology has no node redundancy.
+It uses the same deployer and jobs as development and the distributed fleet.
+
+### Distributed private network
 
 Deploy on a private named host network:
 

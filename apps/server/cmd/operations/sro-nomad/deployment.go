@@ -1,11 +1,18 @@
+/*
+===========================================================================
+
+deployment.go - deployment inputs and job variables
+
+Resolves the catalog, identity, and game-data contracts before Nomad mutations.
+
+===========================================================================
+*/
 package main
 
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"fmt"
-	"io"
 	"net"
 	"net/url"
 	"os"
@@ -42,6 +49,11 @@ const (
 	developmentGMCharacters = "global-official:asd2"
 )
 
+/*
+================
+deployment
+================
+*/
 type deployment struct {
 	ModuleRoot      string
 	Catalog         string
@@ -60,6 +72,13 @@ type deployment struct {
 	AgentURL        string
 	AgentPort       int
 	PrivateNetwork  bool
+	TaskUser        string
+	TaskUID         int
+	TaskGID         int
+	AgentCPU        int
+	AgentMemoryMB   int
+	GameCPU         int
+	GameMemoryMB    int
 	AgentReleaseID  string
 	GameReleaseID   string
 	AgentSource     string
@@ -71,6 +90,11 @@ type deployment struct {
 	Secrets         clusterSecrets
 }
 
+/*
+================
+shardDeployment
+================
+*/
 type shardDeployment struct {
 	Definition    shard.Definition
 	ControlPort   int
@@ -78,16 +102,30 @@ type shardDeployment struct {
 	AuthorityDir  string
 }
 
+/*
+================
+clusterSecrets
+================
+*/
 type clusterSecrets struct {
 	AccountChunks  []string
 	SessionPrivate string
 	SessionPublic  string
 }
 
+/*
+================
+resolveDeployment
+================
+*/
 func resolveDeployment(
 	options commandOptions,
 	requirePrerequisites bool,
 ) (*deployment, error) {
+	taskUID, taskGID, err := resolveTaskOwner(options.TaskUser)
+	if err != nil {
+		return nil, err
+	}
 	moduleRoot := options.ModuleRoot
 	if moduleRoot == "" {
 		var err error
@@ -135,8 +173,8 @@ func resolveDeployment(
 			return nil, err
 		}
 		for _, name := range []string{
-			"agent.exe",
-			"gameworld.exe",
+			binaryName("agent"),
+			binaryName("gameworld"),
 		} {
 			if err := requireRegularFile(filepath.Join(moduleRoot, name)); err != nil {
 				return nil, err
@@ -150,8 +188,8 @@ func resolveDeployment(
 				return nil, err
 			}
 		}
-		agentSource := filepath.Join(moduleRoot, "agent.exe")
-		gameSource := filepath.Join(moduleRoot, "gameworld.exe")
+		agentSource := filepath.Join(moduleRoot, binaryName("agent"))
+		gameSource := filepath.Join(moduleRoot, binaryName("gameworld"))
 		agentReleaseID, err = releaseID(
 			agentSource,
 			filepath.Join(jobsDir, agentTemplateName),
@@ -322,21 +360,28 @@ func resolveDeployment(
 		AgentURL:        agentURL,
 		AgentPort:       options.AgentPort,
 		PrivateNetwork:  options.PrivateNet,
+		TaskUser:        options.TaskUser,
+		TaskUID:         taskUID,
+		TaskGID:         taskGID,
+		AgentCPU:        options.AgentCPU,
+		AgentMemoryMB:   options.AgentMemoryMB,
+		GameCPU:         options.GameCPU,
+		GameMemoryMB:    options.GameMemoryMB,
 		AgentReleaseID:  agentReleaseID,
 		GameReleaseID:   gameReleaseID,
-		AgentSource:     filepath.Join(moduleRoot, "agent.exe"),
-		GameSource:      filepath.Join(moduleRoot, "gameworld.exe"),
+		AgentSource:     filepath.Join(moduleRoot, binaryName("agent")),
+		GameSource:      filepath.Join(moduleRoot, binaryName("gameworld")),
 		AgentBinary: filepath.Join(
 			releaseDir,
 			"agent",
 			agentReleaseID,
-			"agent.exe",
+			binaryName("agent"),
 		),
 		GameBinary: filepath.Join(
 			releaseDir,
 			"gameworld",
 			gameReleaseID,
-			"gameworld.exe",
+			binaryName("gameworld"),
 		),
 		DataPaths: dataPaths,
 		Shards:    shards,
@@ -344,6 +389,11 @@ func resolveDeployment(
 	}, nil
 }
 
+/*
+================
+loadClusterSecrets
+================
+*/
 func loadClusterSecrets(stateDir string) (clusterSecrets, error) {
 	accountsPath := filepath.Join(stateDir, "accounts.json")
 	if _, err := auth.Load(accountsPath); err != nil {
@@ -384,6 +434,11 @@ func loadClusterSecrets(stateDir string) (clusterSecrets, error) {
 	}, nil
 }
 
+/*
+================
+endpointPort
+================
+*/
 func endpointPort(raw string) (int, error) {
 	endpoint, err := url.Parse(raw)
 	if err != nil {
@@ -404,6 +459,11 @@ func endpointPort(raw string) (int, error) {
 	return port, nil
 }
 
+/*
+================
+absoluteHTTPURL
+================
+*/
 func absoluteHTTPURL(raw string) (*url.URL, error) {
 	endpoint, err := url.Parse(raw)
 	if err != nil ||
@@ -415,6 +475,11 @@ func absoluteHTTPURL(raw string) (*url.URL, error) {
 	return endpoint, nil
 }
 
+/*
+================
+secureIdentityURL
+================
+*/
 func secureIdentityURL(raw string) (*url.URL, error) {
 	parsed, err := absoluteHTTPURL(raw)
 	if err != nil {
@@ -434,10 +499,15 @@ func secureIdentityURL(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
+/*
+================
+buildBinaries
+================
+*/
 func (deployment *deployment) buildBinaries(ctx context.Context) error {
 	commands := [][]string{
-		{"build", "-o", "agent.exe", "./cmd/services/sro-agent"},
-		{"build", "-o", "gameworld.exe", "./cmd/services/sro-gameworld"},
+		{"build", "-o", binaryName("agent"), "./cmd/services/sro-agent"},
+		{"build", "-o", binaryName("gameworld"), "./cmd/services/sro-gameworld"},
 	}
 	for _, arguments := range commands {
 		command := exec.CommandContext(ctx, "go", arguments...)
@@ -455,6 +525,11 @@ func (deployment *deployment) buildBinaries(ctx context.Context) error {
 	return nil
 }
 
+/*
+================
+jobTemplates
+================
+*/
 func (deployment *deployment) jobTemplates() ([]byte, []byte, error) {
 	agentTemplate, err := os.ReadFile(
 		filepath.Join(deployment.JobsDir, agentTemplateName),
@@ -471,8 +546,13 @@ func (deployment *deployment) jobTemplates() ([]byte, []byte, error) {
 	return agentTemplate, gameTemplate, nil
 }
 
+/*
+================
+agentVariables
+================
+*/
 func (deployment *deployment) agentVariables() map[string]any {
-	return map[string]any{
+	return deployment.nodeVariables(deployment.AgentCPU, deployment.AgentMemoryMB, map[string]any{
 		"binary_path":  slashPath(deployment.AgentBinary),
 		"catalog_path": slashPath(deployment.Catalog),
 		"directory_state_path": slashPath(filepath.Join(
@@ -488,13 +568,18 @@ func (deployment *deployment) agentVariables() map[string]any {
 		"allowed_origins":   deployment.AllowedOrigins,
 		"identity_issuer":   deployment.IdentityIssuer,
 		"identity_jwks_url": deployment.IdentityJWKSURL,
-	}
+	})
 }
 
+/*
+================
+gameVariables
+================
+*/
 func (deployment *deployment) gameVariables(
 	game shardDeployment,
 ) map[string]any {
-	return map[string]any{
+	return deployment.nodeVariables(deployment.GameCPU, deployment.GameMemoryMB, map[string]any{
 		"shard_id":                         game.Definition.ID,
 		"binary_path":                      slashPath(deployment.GameBinary),
 		"catalog_path":                     slashPath(deployment.Catalog),
@@ -516,201 +601,14 @@ func (deployment *deployment) gameVariables(
 		"private_network":     boolEnvValue(deployment.PrivateNetwork),
 		"allowed_origins":     deployment.AllowedOrigins,
 		"gm_characters":       deployment.GMCharacters,
-	}
+	})
 }
 
-func releaseID(paths ...string) (string, error) {
-	digest := sha256.New()
-	for _, path := range paths {
-		sum, err := fileSHA256(path)
-		if err != nil {
-			return "", err
-		}
-		_, _ = digest.Write(sum)
-	}
-	return fmt.Sprintf("%x", digest.Sum(nil)), nil
-}
-
-func fileSHA256(path string) ([]byte, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	digest := sha256.New()
-	_, copyErr := io.Copy(digest, file)
-	closeErr := file.Close()
-	if copyErr != nil {
-		return nil, copyErr
-	}
-	if closeErr != nil {
-		return nil, closeErr
-	}
-	return digest.Sum(nil), nil
-}
-
-func (deployment *deployment) stageReleases() error {
-	for _, release := range []struct {
-		source      string
-		destination string
-		template    string
-		identity    string
-	}{
-		{
-			deployment.AgentSource,
-			deployment.AgentBinary,
-			filepath.Join(deployment.JobsDir, agentTemplateName),
-			deployment.AgentReleaseID,
-		},
-		{
-			deployment.GameSource,
-			deployment.GameBinary,
-			filepath.Join(deployment.JobsDir, gameTemplateName),
-			deployment.GameReleaseID,
-		},
-	} {
-		if err := stageRelease(release.source, release.destination); err != nil {
-			return err
-		}
-		stagedIdentity, err := releaseID(
-			release.destination,
-			release.template,
-		)
-		if err != nil {
-			return fmt.Errorf(
-				"verify staged release %s: %w",
-				release.destination,
-				err,
-			)
-		}
-		if stagedIdentity != release.identity {
-			return fmt.Errorf(
-				"release inputs changed while staging %s",
-				release.destination,
-			)
-		}
-	}
-	return nil
-}
-
-func stageRelease(source, destination string) error {
-	sourceDigest, err := fileSHA256(source)
-	if err != nil {
-		return fmt.Errorf("hash release source %s: %w", source, err)
-	}
-	if info, err := os.Lstat(destination); err == nil {
-		if !info.Mode().IsRegular() ||
-			info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf(
-				"immutable release %s is not a regular file",
-				destination,
-			)
-		}
-		destinationDigest, err := fileSHA256(destination)
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(sourceDigest, destinationDigest) {
-			return fmt.Errorf(
-				"immutable release %s differs from source %s",
-				destination,
-				source,
-			)
-		}
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-
-	directory := filepath.Dir(destination)
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return err
-	}
-	info, err := os.Lstat(directory)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf(
-			"release directory %s is not a real directory",
-			directory,
-		)
-	}
-	sourceFile, err := os.Open(source)
-	if err != nil {
-		return err
-	}
-	defer sourceFile.Close()
-	temporary, err := os.CreateTemp(directory, ".release-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	published := false
-	defer func() {
-		temporary.Close()
-		if !published {
-			os.Remove(temporaryPath)
-		}
-	}()
-	if _, err := io.Copy(temporary, sourceFile); err != nil {
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		return err
-	}
-	if err := temporary.Chmod(0o700); err != nil {
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryPath, destination); err != nil {
-		return err
-	}
-	published = true
-	return nil
-}
-
-func (deployment *deployment) pruneReleases(
-	retained map[string]map[string]struct{},
-) error {
-	for _, release := range []struct {
-		role string
-	}{
-		{"agent"},
-		{"gameworld"},
-	} {
-		root := filepath.Join(deployment.ReleaseDir, release.role)
-		entries, err := os.ReadDir(root)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			if _, keep := retained[release.role][entry.Name()]; keep {
-				continue
-			}
-			path := filepath.Join(root, entry.Name())
-			info, err := os.Lstat(path)
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-				return fmt.Errorf(
-					"refusing unexpected release-cache entry %s",
-					path,
-				)
-			}
-			if err := os.RemoveAll(path); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
+/*
+================
+renderGameWorldTemplate
+================
+*/
 func renderGameWorldTemplate(template []byte, shardID string) []byte {
 	return bytes.ReplaceAll(
 		template,
@@ -719,6 +617,11 @@ func renderGameWorldTemplate(template []byte, shardID string) []byte {
 	)
 }
 
+/*
+================
+renderAgentTemplate
+================
+*/
 func renderAgentTemplate(
 	template []byte,
 	chunkCount int,
@@ -756,6 +659,11 @@ func renderAgentTemplate(
 	), nil
 }
 
+/*
+================
+chunkAccountCatalog
+================
+*/
 func chunkAccountCatalog(payload []byte) ([]string, error) {
 	if len(payload) == 0 {
 		return nil, fmt.Errorf("file is empty")
@@ -785,6 +693,11 @@ func chunkAccountCatalog(payload []byte) ([]string, error) {
 	return chunks, nil
 }
 
+/*
+================
+boolEnvValue
+================
+*/
 func boolEnvValue(value bool) string {
 	if value {
 		return "1"
@@ -792,6 +705,11 @@ func boolEnvValue(value bool) string {
 	return "0"
 }
 
+/*
+================
+normalizeHostNetwork
+================
+*/
 func normalizeHostNetwork(name string, private bool) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -811,6 +729,11 @@ func normalizeHostNetwork(name string, private bool) (string, error) {
 
 // Host-owned durable configuration survives deploys launched by another shell.
 // An existing empty file deliberately revokes all grants, including dev defaults.
+/*
+================
+configuredGMCharacters
+================
+*/
 func configuredGMCharacters(raw, hostNetwork, stateDir string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		data, err := os.ReadFile(filepath.Join(stateDir, "gm-characters.txt"))
@@ -828,6 +751,11 @@ func configuredGMCharacters(raw, hostNetwork, stateDir string) (string, error) {
 	return normalizeGMCharacters(raw, hostNetwork)
 }
 
+/*
+================
+normalizeGMCharacters
+================
+*/
 func normalizeGMCharacters(raw string, hostNetwork string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" && hostNetwork == "loopback" {
@@ -839,6 +767,11 @@ func normalizeGMCharacters(raw string, hostNetwork string) (string, error) {
 	return raw, nil
 }
 
+/*
+================
+normalizeAllowedOrigins
+================
+*/
 func normalizeAllowedOrigins(raw string, hostNetwork string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -914,6 +847,11 @@ func normalizeAllowedOrigins(raw string, hostNetwork string) (string, error) {
 	return strings.Join(origins, ","), nil
 }
 
+/*
+================
+requireRegularFile
+================
+*/
 func requireRegularFile(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -925,6 +863,11 @@ func requireRegularFile(path string) error {
 	return nil
 }
 
+/*
+================
+cleanAbsolute
+================
+*/
 func cleanAbsolute(path string) string {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
@@ -933,6 +876,11 @@ func cleanAbsolute(path string) string {
 	return filepath.Clean(absolute)
 }
 
+/*
+================
+slashPath
+================
+*/
 func slashPath(path string) string {
 	return filepath.ToSlash(filepath.Clean(path))
 }

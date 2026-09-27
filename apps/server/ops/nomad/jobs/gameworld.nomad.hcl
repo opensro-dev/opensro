@@ -1,3 +1,29 @@
+# ===========================================================================
+# gameworld.nomad.hcl - Nomad lifecycle, placement, and secret delivery for the service.
+# ===========================================================================
+
+variable "node_kernel" {
+  type        = string
+  default     = "windows"
+  description = "attr.kernel.name of the nodes that may run this job (windows or linux)"
+}
+
+variable "task_user" {
+  type        = string
+  default     = ""
+  description = "OS account the task runs as; empty keeps the Nomad client's account"
+}
+
+variable "task_uid" {
+  type    = number
+  default = -1
+}
+
+variable "task_gid" {
+  type    = number
+  default = -1
+}
+
 variable "datacenters" {
   type    = list(string)
   default = ["dc1"]
@@ -115,7 +141,7 @@ job "sro-gameworld-__SHARD_ID__" {
 
   constraint {
     attribute = "${attr.kernel.name}"
-    value     = "windows"
+    value     = var.node_kernel
   }
 
   # A shard is stateful. Only a node whose operator-owned metadata explicitly
@@ -179,6 +205,9 @@ job "sro-gameworld-__SHARD_ID__" {
 
     task "gameworld" {
       driver = "raw_exec"
+      # Empty on Windows (the Nomad service account runs the task). On Linux
+      # the deployer names a dedicated unprivileged account.
+      user = var.task_user
 
       config {
         command = var.binary_path
@@ -214,7 +243,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_SERVER_GAME_DATA_MANIFEST_DIGEST = var.server_game_data_manifest_digest
         SRO_GAMEWORLD_CONTROL_ADDR         = "${NOMAD_IP_control}:${NOMAD_PORT_control}"
         SRO_GAMEWORLD_PRIVATE_NETWORK      = var.private_network
-        SRO_BENCHMARK_FIXTURE_CONTROL       = var.host_network == "loopback" ? "1" : "0"
+        SRO_BENCHMARK_FIXTURE_CONTROL       = var.host_network == "loopback" && var.nomad_namespace == "default" ? "1" : "0"
         SRO_MOVE_PATH_GUARD                = var.move_path_guard
         SRO_MOVE_CLIENT_CLIP               = var.move_client_clip
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
@@ -237,6 +266,8 @@ EOH
         destination = "secrets/agent-session-public-keys.json"
         change_mode = "noop"
         perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
       }
 
       identity {
@@ -262,6 +293,8 @@ EOH
         env         = true
         change_mode = "restart"
         perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
       }
 
       service {

@@ -1,6 +1,13 @@
-// Command sro-nomad reconciles the declarative Agent and GameWorld Nomad jobs
-// with config/shards.json. It is a stateless deployment client, not a process
-// supervisor: Nomad owns process handles, restart policy, health, and logs.
+/*
+===========================================================================
+
+main.go - the Nomad command entry point
+
+Parses operator choices and dispatches fleet operations. Nomad owns process
+supervision and recovery.
+
+===========================================================================
+*/
 package main
 
 import (
@@ -13,6 +20,11 @@ import (
 	"syscall"
 )
 
+/*
+================
+main
+================
+*/
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -56,6 +68,11 @@ func main() {
 	}
 }
 
+/*
+================
+runValidate
+================
+*/
 func runValidate(ctx context.Context, arguments []string) error {
 	options, err := parseOptions("validate", arguments)
 	if err != nil {
@@ -79,6 +96,11 @@ func runValidate(ctx context.Context, arguments []string) error {
 	return deployment.validateVariables(ctx, client)
 }
 
+/*
+================
+runDeploy
+================
+*/
 func runDeploy(ctx context.Context, arguments []string) error {
 	options, err := parseOptions("deploy", arguments)
 	if err != nil {
@@ -133,6 +155,11 @@ func runDeploy(ctx context.Context, arguments []string) error {
 	)
 }
 
+/*
+================
+runStop
+================
+*/
 func runStop(ctx context.Context, arguments []string) error {
 	options, err := parseOptions("stop", arguments)
 	if err != nil {
@@ -159,6 +186,11 @@ func runStop(ctx context.Context, arguments []string) error {
 	)
 }
 
+/*
+================
+runStatus
+================
+*/
 func runStatus(ctx context.Context, arguments []string) error {
 	options, err := parseOptions("status", arguments)
 	if err != nil {
@@ -176,6 +208,11 @@ func runStatus(ctx context.Context, arguments []string) error {
 	return deployment.status(ctx, client)
 }
 
+/*
+================
+commandOptions
+================
+*/
 type commandOptions struct {
 	ModuleRoot      string
 	Catalog         string
@@ -194,8 +231,18 @@ type commandOptions struct {
 	AgentPort       int
 	PrivateNet      bool
 	Build           bool
+	TaskUser        string
+	AgentCPU        int
+	AgentMemoryMB   int
+	GameCPU         int
+	GameMemoryMB    int
 }
 
+/*
+================
+parseOptions
+================
+*/
 func parseOptions(name string, arguments []string) (commandOptions, error) {
 	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
@@ -262,7 +309,12 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 		false,
 		"acknowledge that a non-loopback host network is private behind TLS ingress",
 	)
-	flags.BoolVar(&options.Build, "build", false, "build agent.exe and gameworld.exe before deploy")
+	flags.BoolVar(&options.Build, "build", false, "build the agent and gameworld binaries before deploy")
+	flags.StringVar(&options.TaskUser, "task-user", "", "OS account the services run as (Linux: a dedicated unprivileged user)")
+	flags.IntVar(&options.AgentCPU, "agent-cpu", 0, "Agent CPU reservation in MHz (default: the job's)")
+	flags.IntVar(&options.AgentMemoryMB, "agent-memory-mb", 0, "Agent memory reservation in MB (default: the job's)")
+	flags.IntVar(&options.GameCPU, "gameworld-cpu", 0, "GameWorld CPU reservation in MHz (default: the job's)")
+	flags.IntVar(&options.GameMemoryMB, "gameworld-memory-mb", 0, "GameWorld memory reservation in MB (default: the job's)")
 	if err := flags.Parse(arguments); err != nil {
 		return commandOptions{}, err
 	}
@@ -277,6 +329,11 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 	return options, nil
 }
 
+/*
+================
+configuredNomadNamespace
+================
+*/
 func configuredNomadNamespace(configured string) (string, error) {
 	namespace := strings.TrimSpace(configured)
 	if namespace == "" {
@@ -305,6 +362,11 @@ func configuredNomadNamespace(configured string) (string, error) {
 	return namespace, nil
 }
 
+/*
+================
+usage
+================
+*/
 func usage() {
 	fmt.Fprintln(
 		os.Stderr,
