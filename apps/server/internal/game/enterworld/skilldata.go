@@ -123,10 +123,11 @@ type SkillAttack struct {
 	AtcaPercent uint32
 }
 
-// SkillRow is one skilldata record's learn-plane fields.
 /*
 ================
 SkillRow
+
+SkillRow is one skilldata record's learn-plane fields.
 ================
 */
 type SkillRow struct {
@@ -429,11 +430,12 @@ type TextdataSkills struct {
 // sharedSkillParses deduplicates identical skill projections per process.
 var sharedSkillParses sharedParses[TextdataSkills]
 
-// NewTextdataSkills returns a lazy loader over dir (skilldata.txt index +
-// shards + skilldata_virtual.txt).
 /*
 ================
 NewTextdataSkills
+
+NewTextdataSkills returns a lazy loader over dir (skilldata.txt index +
+shards + skilldata_virtual.txt).
 ================
 */
 func NewTextdataSkills(dir string) *TextdataSkills {
@@ -454,10 +456,11 @@ func (t *TextdataSkills) Load() error {
 	return t.loadErr
 }
 
-// SkillByID implements SkillDataSource.
 /*
 ================
 SkillByID
+
+SkillByID implements SkillDataSource.
 ================
 */
 func (t *TextdataSkills) SkillByID(id uint32) (SkillRow, bool) {
@@ -484,10 +487,11 @@ func (t *TextdataSkills) SkillByCodename(codename string) (SkillRow, bool) {
 	return t.rows.get(id), true
 }
 
-// Len reports how many skill rows loaded (0 = textdata absent).
 /*
 ================
 Len
+
+Len reports how many skill rows loaded (0 = textdata absent).
 ================
 */
 func (t *TextdataSkills) Len() int {
@@ -786,11 +790,12 @@ func (t *TextdataSkills) parse(shards []string) {
 	log.Infof("bootstrap: skilldata loaded from %s (%d skill row(s))", t.dir, t.rows.len())
 }
 
-// SkillUiRow is a read-only projection of the same table used by training and combat.
-// The client never supplies prices or prerequisites back to the authority.
 /*
 ================
 SkillUiRow
+
+SkillUiRow is a read-only projection of the same table used by training and combat.
+The client never supplies prices or prerequisites back to the authority.
 ================
 */
 type SkillUiRow struct {
@@ -817,20 +822,22 @@ type SkillUiRow struct {
 	Prerequisites      [3]SkillRequirement `json:"prerequisites"`
 }
 
-// SkillUiSpeedBuff is the buff-viewer speed stacking marker (6DE630).
 /*
 ================
 SkillUiSpeedBuff
+
+SkillUiSpeedBuff is the buff-viewer speed stacking marker (6DE630).
 ================
 */
 type SkillUiSpeedBuff struct {
 	Active bool `json:"active"`
 }
 
-// SkillUiStatusLevel is a [mask, level] pair read by 8608A0 / 85CE40.
 /*
 ================
 SkillUiStatusLevel
+
+SkillUiStatusLevel is a [mask, level] pair read by 8608A0 / 85CE40.
 ================
 */
 type SkillUiStatusLevel struct {

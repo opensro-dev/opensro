@@ -727,11 +727,12 @@ func normalizeHostNetwork(name string, private bool) (string, error) {
 	return name, nil
 }
 
-// Host-owned durable configuration survives deploys launched by another shell.
-// An existing empty file deliberately revokes all grants, including dev defaults.
 /*
 ================
 configuredGMCharacters
+
+Host-owned durable configuration survives deploys launched by another shell.
+An existing empty file deliberately revokes all grants, including dev defaults.
 ================
 */
 func configuredGMCharacters(raw, hostNetwork, stateDir string) (string, error) {
