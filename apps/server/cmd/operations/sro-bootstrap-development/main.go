@@ -101,6 +101,10 @@ func main() {
 	if err != nil {
 		fatal("%v", err)
 	}
+	tokenResult, err := clusterprovision.EnsureProvisioningToken(paths.clusterStateDir)
+	if err != nil {
+		fatal("%v", err)
+	}
 	accountResult, err := clusterprovision.EnsureDevelopmentAccount(
 		filepath.Join(paths.clusterStateDir, "accounts.json"),
 		credentials.accountID,
@@ -117,7 +121,7 @@ func main() {
 		fatal("%v", err)
 	}
 	for _, result := range append(
-		[]clusterprovision.FileResult{identityResult, accountResult},
+		[]clusterprovision.FileResult{identityResult, tokenResult, accountResult},
 		shardResults...,
 	) {
 		if result.Created {

@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	// envAccountsPath names the optional seed catalog (accounts.go).
 	envAccountsPath       = "SRO_AGENT_ACCOUNTS_PATH"
 	envSessionKeyRingPath = "SRO_AGENT_SESSION_KEYRING_PATH"
 	envNomadIssuer        = "SRO_NOMAD_IDENTITY_ISSUER"
@@ -64,14 +65,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("agent: shard directory: %v", err)
 	}
-	accountsPath := strings.TrimSpace(os.Getenv(envAccountsPath))
-	if accountsPath == "" {
-		log.Fatalf("agent: %s is required", envAccountsPath)
-	}
-	accounts, err := auth.Load(accountsPath)
+	accounts, err := openAccountAuthority()
 	if err != nil {
-		log.Fatalf("agent: accounts %s: %v", accountsPath, err)
+		log.Fatalf("agent: accounts: %v", err)
 	}
+	defer accounts.Close()
 	sessionSigner, err := auth.NewAgentSessionSigner(
 		strings.TrimSpace(os.Getenv(envSessionKeyRingPath)),
 	)
@@ -136,10 +134,15 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 	}
-	serveErrors := make(chan error, 1)
+	// One slot per listener, so neither goroutine blocks on a failure.
+	serveErrors := make(chan error, 2)
 	go func() {
 		serveErrors <- httpServer.Serve(listener)
 	}()
+	provisioningServer, _, err := startProvisioning(accounts, serveErrors)
+	if err != nil {
+		log.Fatalf("agent: account provisioning: %v", err)
+	}
 	ready.Open()
 	log.Infof(
 		"agent: serving %d account(s) and %d shard definition(s) on http://%s",
@@ -166,8 +169,15 @@ func main() {
 			serveError = err
 		}
 	}
+	if provisioningServer != nil {
+		if err := provisioningServer.Shutdown(shutdown); err != nil {
+			log.Errorf("agent: provisioning shutdown: %v", err)
+		}
+	}
 	cancel()
 	if serveError != nil {
+		// os.Exit skips deferred calls; close the account database first.
+		_ = accounts.Close()
 		os.Exit(1)
 	}
 }

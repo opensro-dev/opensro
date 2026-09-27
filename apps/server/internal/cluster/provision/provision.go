@@ -5,11 +5,14 @@
 package clusterprovision
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -68,6 +71,45 @@ func EnsureIdentity(stateDir string) (FileResult, error) {
 			"protect Agent session key ring: %w",
 			err,
 		)
+	}
+	return FileResult{Path: path, Created: true}, nil
+}
+
+// EnsureProvisioningToken creates the bearer token for the Agent account
+// provisioning API: 32 random bytes, hex encoded. An existing token is
+// validated and preserved, since the website holds a copy of it.
+func EnsureProvisioningToken(stateDir string) (FileResult, error) {
+	path := filepath.Join(stateDir, auth.AgentProvisioningTokenFile)
+	if info, err := os.Lstat(path); err == nil {
+		if !info.Mode().IsRegular() {
+			return FileResult{}, fmt.Errorf("existing provisioning token is not a regular file")
+		}
+		payload, err := os.ReadFile(path)
+		if err != nil {
+			return FileResult{}, err
+		}
+		if len(strings.TrimSpace(string(payload))) < auth.MinProvisioningTokenBytes {
+			return FileResult{}, fmt.Errorf(
+				"existing provisioning token is shorter than %d bytes",
+				auth.MinProvisioningTokenBytes,
+			)
+		}
+		if err := privatepath.ProtectFile(path); err != nil {
+			return FileResult{}, fmt.Errorf("protect existing provisioning token: %w", err)
+		}
+		return FileResult{Path: path}, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return FileResult{}, err
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return FileResult{}, err
+	}
+	if err := store.WriteNewFileAtomic(path, []byte(hex.EncodeToString(secret)+"\n")); err != nil {
+		return FileResult{}, err
+	}
+	if err := privatepath.ProtectFile(path); err != nil {
+		return FileResult{}, fmt.Errorf("protect provisioning token: %w", err)
 	}
 	return FileResult{Path: path, Created: true}, nil
 }

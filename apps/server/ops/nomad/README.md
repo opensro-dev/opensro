@@ -428,6 +428,10 @@ reporter reads the current file for each call. EnterWorld tickets use a random
 key that exists only inside one GameWorld process. Neither mechanism needs an
 operator rotation window.
 
+The account catalog only seeds the Agent's live account database (see
+LINUX_SINGLE_HOST.md, "Accounts and the provisioning API"); accounts created
+through the provisioning API never pass through it.
+
 The account catalog may be as large as the server's one-MiB input limit.
 Nomad Variables limit one variable to 64 KiB, so the deployer divides the
 validated UTF-8 document into ordered 48-KiB workload variables:

@@ -45,6 +45,12 @@ variable "directory_state_path" {
   type = string
 }
 
+# The live account database (internal/security/auth/accounts.go). It must
+# outlive allocations: it is the login authority.
+variable "accounts_db_path" {
+  type = string
+}
+
 variable "host_network" {
   type    = string
   default = "loopback"
@@ -171,17 +177,19 @@ job "sro-agent" {
       }
 
       env {
-        SRO_SHARD_CATALOG_PATH         = var.catalog_path
-        SRO_AGENT_ACCOUNTS_PATH        = "${NOMAD_SECRETS_DIR}/accounts.json"
-        SRO_AGENT_API_ADDR             = "${NOMAD_IP_http}:${NOMAD_PORT_http}"
-        SRO_AGENT_DIRECTORY_STATE_PATH = var.directory_state_path
-        SRO_AGENT_PRIVATE_NETWORK      = var.private_network
-        SRO_AGENT_ALLOWED_ORIGINS      = var.allowed_origins
-        SRO_NOMAD_IDENTITY_ISSUER      = var.identity_issuer
-        SRO_NOMAD_JWKS_URL             = var.identity_jwks_url
-        SRO_NOMAD_NAMESPACE            = var.nomad_namespace
-        SRO_AGENT_SESSION_KEYRING_PATH = "${NOMAD_SECRETS_DIR}/agent-session-keys.json"
-        SRO_RELEASE_ID                 = var.release_id
+        SRO_SHARD_CATALOG_PATH            = var.catalog_path
+        SRO_AGENT_ACCOUNTS_PATH           = "${NOMAD_SECRETS_DIR}/accounts.json"
+        SRO_AGENT_API_ADDR                = "${NOMAD_IP_http}:${NOMAD_PORT_http}"
+        SRO_AGENT_DIRECTORY_STATE_PATH    = var.directory_state_path
+        SRO_AGENT_ACCOUNTS_DB_PATH        = var.accounts_db_path
+        SRO_AGENT_PROVISIONING_TOKEN_PATH = "${NOMAD_SECRETS_DIR}/provisioning-token"
+        SRO_AGENT_PRIVATE_NETWORK         = var.private_network
+        SRO_AGENT_ALLOWED_ORIGINS         = var.allowed_origins
+        SRO_NOMAD_IDENTITY_ISSUER         = var.identity_issuer
+        SRO_NOMAD_JWKS_URL                = var.identity_jwks_url
+        SRO_NOMAD_NAMESPACE               = var.nomad_namespace
+        SRO_AGENT_SESSION_KEYRING_PATH    = "${NOMAD_SECRETS_DIR}/agent-session-keys.json"
+        SRO_RELEASE_ID                    = var.release_id
       }
 
       template {
@@ -193,6 +201,18 @@ EOH
 
         destination = "secrets/agent-session-keys.json"
         change_mode = "noop"
+        perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
+      }
+
+      template {
+        data = <<EOH
+{{ with nomadVar "nomad/jobs/sro-agent/agent/agent" }}{{ .agent_provisioning_token }}{{ end }}
+EOH
+
+        destination = "secrets/provisioning-token"
+        change_mode = "restart"
         perms       = "0600"
         uid         = var.task_uid
         gid         = var.task_gid

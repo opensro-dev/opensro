@@ -247,7 +247,8 @@ func (deployment *deployment) desiredVariables() ([]desiredVariable, error) {
 		jobID: agentJobName,
 		path:  agentVariablePath,
 		items: nomad.VariableItems{
-			"agent_session_keyring": deployment.Secrets.SessionPrivate,
+			"agent_session_keyring":    deployment.Secrets.SessionPrivate,
+			"agent_provisioning_token": deployment.Secrets.ProvisioningToken,
 		},
 	}}
 	for index, chunk := range deployment.Secrets.AccountChunks {

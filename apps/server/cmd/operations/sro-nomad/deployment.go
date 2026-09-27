@@ -108,9 +108,10 @@ clusterSecrets
 ================
 */
 type clusterSecrets struct {
-	AccountChunks  []string
-	SessionPrivate string
-	SessionPublic  string
+	AccountChunks     []string
+	SessionPrivate    string
+	SessionPublic     string
+	ProvisioningToken string
 }
 
 /*
@@ -427,10 +428,25 @@ func loadClusterSecrets(stateDir string) (clusterSecrets, error) {
 	if err != nil {
 		return clusterSecrets{}, fmt.Errorf("%s: %w", keyRingPath, err)
 	}
+	// The website holds a copy of this token; sro-provision-identity creates it.
+	tokenPath := filepath.Join(stateDir, auth.AgentProvisioningTokenFile)
+	tokenPayload, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return clusterSecrets{}, fmt.Errorf("%s: %w (run sro-provision-identity)", tokenPath, err)
+	}
+	provisioningToken := strings.TrimSpace(string(tokenPayload))
+	if len(provisioningToken) < auth.MinProvisioningTokenBytes {
+		return clusterSecrets{}, fmt.Errorf(
+			"%s: token is shorter than %d bytes",
+			tokenPath,
+			auth.MinProvisioningTokenBytes,
+		)
+	}
 	return clusterSecrets{
-		AccountChunks:  accountChunks,
-		SessionPrivate: string(sessionPrivate),
-		SessionPublic:  string(sessionPublic),
+		AccountChunks:     accountChunks,
+		SessionPrivate:    string(sessionPrivate),
+		SessionPublic:     string(sessionPublic),
+		ProvisioningToken: provisioningToken,
 	}, nil
 }
 
@@ -559,6 +575,11 @@ func (deployment *deployment) agentVariables() map[string]any {
 			deployment.StateDir,
 			"agent",
 			"shard-leases.json",
+		)),
+		"accounts_db_path": slashPath(filepath.Join(
+			deployment.StateDir,
+			"agent",
+			"accounts.db",
 		)),
 		"host_network":      deployment.Network,
 		"nomad_namespace":   deployment.Namespace,

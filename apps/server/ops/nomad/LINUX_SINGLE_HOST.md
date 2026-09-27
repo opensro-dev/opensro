@@ -56,6 +56,25 @@ that account with mode `0600`. If this layout is expanded, keep those account
 IDs identical on every eligible node. Keep all credential, authority, and
 server game-data paths outside the public web root.
 
+## Accounts and the provisioning API
+
+The Agent keeps accounts in a live SQLite database,
+`.state/cluster/agent/accounts.db` (owned by the task user, mode `0600`).
+The bcrypt catalog is only a seed: at every start the Agent inserts catalog
+accounts it does not already hold and never overwrites a stored one, so a
+password changed through the provisioning API survives later deploys.
+
+`sro-provision-identity` also creates `.state/cluster/agent-provisioning-token`
+(32 random bytes, hex), and `deploy` refuses to run without it. On a host
+provisioned before this token existed, run `sro-provision-identity` once; it
+preserves the existing signing keys.
+
+The Agent serves the account provisioning API (create, verify, change
+password, disable) on `127.0.0.1:8789`, with that token as a bearer token. It
+is a separate loopback listener, so no edge route can reach it; the website
+on the same host is its only intended caller. Give the website a copy of the
+token file that only the website's service user can read.
+
 ## Deploy and measure
 
 From the module directory, with only the short-lived token in `NOMAD_TOKEN`:

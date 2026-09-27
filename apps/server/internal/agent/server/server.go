@@ -28,8 +28,16 @@ const (
 	maxPasswordBytes       = 72
 )
 
+// AccountAuthority is what the Agent reads from the account authority:
+// the live store (auth.Accounts) in service, a fixed catalog in tests.
+type AccountAuthority interface {
+	PasswordHash(accountID string) ([]byte, bool)
+	IDs() []string
+	Len() int
+}
+
 type Config struct {
-	Accounts                *auth.Catalog
+	Accounts                AccountAuthority
 	Catalog                 *shard.Catalog
 	Directory               *shard.Directory
 	SessionSigner           *auth.AgentSessionSigner
@@ -42,7 +50,7 @@ type Config struct {
 }
 
 type Server struct {
-	accounts                *auth.Catalog
+	accounts                AccountAuthority
 	catalog                 *shard.Catalog
 	directory               *shard.Directory
 	sessionSigner           *auth.AgentSessionSigner
@@ -60,7 +68,7 @@ type Server struct {
 
 func New(config Config) (*Server, error) {
 	if config.Accounts == nil {
-		return nil, fmt.Errorf("agent: global account catalog is required")
+		return nil, fmt.Errorf("agent: global account authority is required")
 	}
 	if config.Catalog == nil || config.Directory == nil {
 		return nil, fmt.Errorf("agent: shard catalog and directory are required")

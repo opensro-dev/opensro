@@ -1,5 +1,6 @@
 // Command sro-provision-identity creates Agent's missing Ed25519 session
-// signing key ring without printing private material. Existing identity is
+// signing key ring and account provisioning token without printing
+// private material. Existing identity is
 // validated and preserved.
 package main
 
@@ -22,14 +23,19 @@ func main() {
 	if flag.NArg() != 0 {
 		fatal("positional arguments are not accepted")
 	}
-	result, err := clusterprovision.EnsureIdentity(*stateDir)
-	if err != nil {
-		fatal("%v", err)
-	}
-	if result.Created {
-		fmt.Printf("created %s\n", result.Path)
-	} else {
-		fmt.Printf("preserved existing %s\n", result.Path)
+	for _, ensure := range []func(string) (clusterprovision.FileResult, error){
+		clusterprovision.EnsureIdentity,
+		clusterprovision.EnsureProvisioningToken,
+	} {
+		result, err := ensure(*stateDir)
+		if err != nil {
+			fatal("%v", err)
+		}
+		if result.Created {
+			fmt.Printf("created %s\n", result.Path)
+		} else {
+			fmt.Printf("preserved existing %s\n", result.Path)
+		}
 	}
 }
 
