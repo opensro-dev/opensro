@@ -117,12 +117,12 @@ func TestValidateNomadVersionOutputRequiresPinnedVersion(t *testing.T) {
 	t.Parallel()
 
 	if err := validateNomadVersionOutput([]byte(
-		"Nomad v2.0.4\nBuildDate 2026-07-07T17:20:59Z\n",
+		"Nomad v2.0.7\nBuildDate 2026-09-17T17:24:03Z\n",
 	)); err != nil {
 		t.Fatalf("validate pinned version: %v", err)
 	}
 	if err := validateNomadVersionOutput([]byte(
-		"Nomad v2.0.3\n",
+		"Nomad v2.0.4\n",
 	)); err == nil {
 		t.Fatal("expected unpinned version refusal")
 	}

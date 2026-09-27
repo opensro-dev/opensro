@@ -39,7 +39,7 @@ The complete first-time setup sequence is in
 [Getting started](../../../../docs/GETTING_STARTED.md#3-server-cluster). The commands
 below are the Nomad-specific summary, not an alternative setup path.
 
-Nomad 2.0.4 is pinned for the current checkout. Start one loopback development
+Nomad 2.0.7 is pinned for the current checkout. Start one loopback development
 agent:
 
 ```powershell

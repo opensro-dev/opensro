@@ -23,7 +23,7 @@ import (
 
 const (
 	developmentNomadAddress = "http://127.0.0.1:4646"
-	developmentNomadVersion = "2.0.4"
+	developmentNomadVersion = "2.0.7"
 	devAgentProbeTimeout    = 2 * time.Second
 	devAgentReadyTimeout    = 15 * time.Second
 )

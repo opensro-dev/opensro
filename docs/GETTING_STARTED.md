@@ -14,7 +14,7 @@ is described in [DEPLOYMENT.md](../apps/server/ops/docs/DEPLOYMENT.md).
 | Node.js | 24 LTS (CI runs it); 22.15 is the oldest supported |
 | pnpm | 12.6.0, the version `package.json` `packageManager` names; through Corepack (`npm install --global corepack` if missing) |
 | Python | 3.12 (`py -3`), used by image and font conversion during the asset build |
-| Nomad | 2.0.4 at `.tools/nomad/2.0.4/nomad.exe` (see below) |
+| Nomad | 2.0.7 at `.tools/nomad/2.0.7/nomad.exe` (see below) |
 | Browser | Current Chrome or Edge with WebGPU |
 
 ```powershell
@@ -28,7 +28,7 @@ pinned binary into the repository's ignored `.tools/` folder, verifying
 HashiCorp's published checksum:
 
 ```powershell
-$Version = '2.0.4'
+$Version = '2.0.7'
 $File = "nomad_${Version}_windows_amd64.zip"
 $Dir = ".tools\nomad\$Version"
 $Zip = Join-Path $env:TEMP $File
@@ -155,9 +155,9 @@ foreach ($Path in 'cluster', 'shards', 'nomad\dev-agent') {
 
 | Symptom | Fix |
 | --- | --- |
-| `nomad.exe` missing | Install it as in step 1, or pass `-nomad-binary <path>` to `dev-agent` (only 2.0.4 is accepted). |
+| `nomad.exe` missing | Install it as in step 1, or pass `-nomad-binary <path>` to `dev-agent` (only 2.0.7 is accepted). |
 | Port 4647 already in use | Another Nomad is running. Stop it from the terminal or service that owns it, then rerun `dev-agent`. |
 | Jobs slow to become healthy after a rebuild | Antivirus may be scanning the new `agent.exe`/`gameworld.exe`. Wait; the jobs allow several minutes. Check with `sro-nomad status`. |
 | Missing game-data or asset file | Rerun `pnpm assets build`, `pnpm assets publish` and `pnpm task build server-game-data`, and clear any `SRO_SERVER_GAME_DATA_*` environment overrides. |
 | `INVALID_CREDENTIALS` at login | Use `tester` / `123123`; rerun `sro-bootstrap-development`. If you changed `dev-account.env`, reset the local world (step 6). |
-| A job keeps restarting | `.tools\nomad\2.0.4\nomad.exe alloc logs <alloc-id> gameworld` (with `NOMAD_ADDR=http://127.0.0.1:4646`), fix the reported prerequisite, then `deploy` again. |
+| A job keeps restarting | `.tools\nomad\2.0.7\nomad.exe alloc logs <alloc-id> gameworld` (with `NOMAD_ADDR=http://127.0.0.1:4646`), fix the reported prerequisite, then `deploy` again. |

@@ -1,6 +1,6 @@
 # Linux single-host public test deployment
 
-Use Nomad 2.0.4 under systemd with
+Use Nomad 2.0.7 under systemd with
 `config/single-linux-production.hcl.example`. This is a durable single-node
 server/client with ACLs, not `-dev`. It has no node redundancy. HTTP, RPC,
 gossip and game/control listeners stay on loopback. Use the distributed TLS
