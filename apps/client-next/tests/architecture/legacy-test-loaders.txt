@@ -2,23 +2,14 @@
 # `path` (legacy, waiting to migrate) or `path # reason`. This ledger only shrinks; see test-loaders.test.mjs.
 tests/architecture/audio-parity-audit.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
 tests/browser/helpers/ui-admission-reference.mjs # bundles a module for the browser page, which cannot load TypeScript itself
-tests/runtime/animation-ceiling.test.mjs # bundles a synthetic entry module from stdin
-tests/runtime/animation-dispatch.test.mjs # bundles a synthetic entry module from stdin
-tests/runtime/animation-phase-profiler.test.mjs # bundles a synthetic entry module from stdin
+tests/runtime/animation-ceiling.test.mjs # rewrites source text through esbuild plugins and a computed stdin entry to instrument the pose and world owners
+tests/runtime/animation-phase-profiler.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
 tests/runtime/asset-handles.test.mjs # compiles with build-time defines that change the module
-tests/runtime/attached-effect-residency.test.mjs # bundles a synthetic entry module from stdin
-tests/runtime/blended-modifiers.test.mjs # bundles a synthetic entry module from stdin
-tests/runtime/body-shape.test.mjs # bundles a synthetic entry module from stdin
-tests/runtime/character-state-plan.test.mjs # bundles a synthetic entry module from stdin
-tests/runtime/deferred-pose.test.mjs # bundles a synthetic entry module from stdin
-tests/runtime/gpu-animation-owner.test.mjs # bundles a synthetic entry module from stdin
-tests/runtime/pose-dirty.test.mjs # bundles a synthetic entry module from stdin
+tests/runtime/pose-dirty.test.mjs # compiles a frozen copy of a source module from tests/fixtures, which the shared loader does not serve
 tests/runtime/profile-source-map.test.mjs # tests source-map handling through esbuild transform
 tests/runtime/published-characters.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
-tests/runtime/published-effect-admission.test.mjs # bundles a synthetic entry module from stdin
 tests/runtime/renderer-diagnostics.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
 tests/runtime/runtime-failures.test.mjs # compiles with build-time defines that change the module
-tests/runtime/shared-palette-gpu.test.mjs # bundles a synthetic entry module from stdin
 tests/runtime/snapshot-age.test.mjs # compiles with build-time defines that change the module
 tests/runtime/ui-cleanup.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
-tests/runtime/world-admission.test.mjs # bundles a synthetic entry module from stdin
+tests/runtime/world-admission.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
