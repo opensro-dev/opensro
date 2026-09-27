@@ -23,6 +23,7 @@ import { createWorldDecoder } from "./world/world";
 import { createModelDecoder } from "./model/model";
 import { createPacks } from "./packs/packs";
 import { createBackgroundInstaller } from "./install";
+import { pageEntryBundle } from "@/engine/foundation/assets/page-entry";
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
 import type { AssetRequest, AssetWorkerMessage } from "@/engine/contracts/assets";
 /*
@@ -398,6 +399,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					}
 					pending.delete( request.id );
 					send( { kind: "image", id: request.id, image }, [ image ] );
+				} else if ( request.decode === "release" ) {
+					// The live page (fetched no-cache): report the entry bundle it names.
+					const html = new TextDecoder( "utf-8" ).decode( bytes );
+					pending.delete( request.id );
+					send( { kind: "release", id: request.id, entry: pageEntryBundle( html, url.origin ) }, [] );
 				} else {
 					pending.delete( request.id );
 					send( { kind: "bytes", id: request.id, buffer: bytes.buffer }, [ bytes.buffer ] );

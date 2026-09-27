@@ -26,6 +26,7 @@ import { createWorldStream } from "./world/world";
 import { createPresentation } from "./presentation/presentation";
 import type { SessionState } from "@/engine/contracts/session";
 import { createAssets } from "./assets/assets";
+import { createReleaseWatch } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
 import { createRenderer } from "./renderer/renderer";
@@ -34,6 +35,9 @@ import type { RuntimeControl } from "@/engine/contracts/runtime";
 
 // The build's ordered background install list (buildBackgroundInstallAsset.mjs).
 const BACKGROUND_INSTALL_LIST = "/assets/delivery/background-install.json";
+
+// The live page a release check compares against (release-watch.ts).
+const RELEASE_PAGE = "/play";
 
 interface FrameProbe {
 	begin( frameId: number ): void;
@@ -338,6 +342,11 @@ export function startRuntime(
 				}
 			)
 		);
+		// Offers a refresh once a newer client release is live (release-watch.ts).
+		const releaseWatch = own(
+			createReleaseWatch( assets, new URL( RELEASE_PAGE, location.origin ).href, platform.runningEntry() )
+		);
+		let releasePhase: string | undefined;
 		let simulationTimeMs = 0;
 		const frameHistory: number[] = [], cpuHistory: number[] = [];
 		let lastFrameAt = 0, lastTelemetry = 0;
@@ -620,6 +629,14 @@ export function startRuntime(
 					// before their first play (worker/install.ts). Runs once per worker.
 					assets.install( new URL( BACKGROUND_INSTALL_LIST, location.origin ).href );
 				}
+				// Check for a newer release when the title opens or the connection
+				// drops (the moments a refresh costs the player nothing), and when
+				// the tab comes back into view.
+				const phase = sessionState?.phase ?? "signed-out";
+				const phaseTrigger = phase !== releasePhase && (phase === "signed-out" || phase === "disconnected");
+				releasePhase = phase;
+				releaseWatch.step( now, phaseTrigger || platform.visibilityReturned() );
+				platform.presentUpdate( releaseWatch.newerAvailable() );
 				markStage( "ui" );
 				const rendered = renderer.frame( platform.readViewport(), now / 1000, frameId );
 				if ( rendered ) await rendered;

@@ -38,6 +38,14 @@ func main() {
 		}
 		return
 	}
+	// Browser releases are files behind the edge, not Nomad jobs.
+	if os.Args[1] == "publish-client" {
+		if err := runPublishClient(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "sro-nomad publish-client: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	ctx, stopSignals := signal.NotifyContext(
 		context.Background(),

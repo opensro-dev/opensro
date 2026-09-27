@@ -1613,6 +1613,16 @@
       "functions": [
         "callback:createBackgroundInstaller:1"
       ]
+    },
+    {
+      "consumer": "src/engine/runtime/release/release-watch.ts",
+      "provider": "src/engine/runtime/assets/assets.ts",
+      "functions": [
+        "request",
+        "take",
+        "available",
+        "cancel"
+      ]
     }
   ],
   "boundaries": [
@@ -1721,7 +1731,7 @@
     {
       "file": "src/engine/runtime/runtime.ts",
       "function": "frame",
-      "sourceSha256": "387df1fe89fa3b05737adf9d02667d87824e661c8ade85b92bf26d7c1f03f84c",
+      "sourceSha256": "7df14073f48d9807ecda6f951787f8e69fe6aafe632dff3ae326b351f8c9e8a1",
       "reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
       "evidence": "tests/fixtures/native/bsr-query-native.json",
       "nativeFunction": 11451792,

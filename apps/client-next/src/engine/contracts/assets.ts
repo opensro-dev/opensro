@@ -44,7 +44,9 @@ export type AssetRequest = {
 		| "world"
 		| "character"
 		| "effects"
-		| "effect";
+		| "effect"
+		// The live page: its entry bundle, for release-skew detection.
+		| "release";
 } | {
 	kind: "cancel";
 	id: number;
@@ -66,6 +68,8 @@ export type AssetResult =
 	}
 	| { kind: "model"; id: number; model: ModelDocument; }
 	| { kind: "image"; id: number; image: ImageBitmap; }
+	// The entry bundle the live page names, or null when it names none.
+	| { kind: "release"; id: number; entry: string | null; }
 	| {
 		kind: "bytes";
 		id: number;
@@ -94,6 +98,7 @@ export interface AssetOwner {
 			| "character"
 			| "effects"
 			| "effect"
+			| "release"
 	): number;
 	take( id: number ): AssetResult | null;
 	cancel( id: number ): void;

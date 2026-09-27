@@ -14,7 +14,8 @@ const factories = {
 	input: "createInput",
 	platform: "createPlatform",
 	renderer: "createRenderer",
-	simulation: "createSimulationHost"
+	simulation: "createSimulationHost",
+	release: "createReleaseWatch"
 };
 const compiled = await build( {
 	entryPoints: [ "src/engine/runtime/runtime.ts" ],
@@ -76,7 +77,13 @@ test("runtime reports idle asset death and frame exceptions, then disposes every
 		} );
 		owners.renderer.setCharacterPreview = () => {};
 		owners.renderer.setSelectionDecal = () => {};
-		Object.assign( owners.platform, { report: value => reports.push( value ) } );
+		Object.assign( owners.platform, {
+			report: value => reports.push( value ),
+			runningEntry: () => null,
+			visibilityReturned: () => false,
+			presentUpdate() {}
+		} );
+		owners.release.newerAvailable = () => false;
 		Object.assign( owners.input, {
 			drain: () => null,
 			error: () => null,
@@ -162,6 +169,7 @@ test("startup rolls back every acquired owner in reverse order at every construc
 			}
 		} ] )
 	);
+	globalThis.__runtimeOwners.platform.runningEntry = () => null;
 	for ( const name of Object.keys( factories ) ) {
 		const owner = globalThis.__runtimeOwners[name];
 		Object.defineProperty( globalThis.__runtimeOwners, name, {
@@ -214,6 +222,7 @@ test("cleanup drains remaining owners when a disposer throws and never runs twic
 				}
 			} ] )
 		);
+	owners.platform.runningEntry = () => null;
 	globalThis.__runtimeOwners = owners;
 	globalThis.location = { search: "", origin: "http://localhost" };
 	globalThis.requestAnimationFrame = () => 1;

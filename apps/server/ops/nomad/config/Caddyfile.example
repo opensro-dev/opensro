@@ -22,11 +22,28 @@ opensro.online {
 		reverse_proxy 127.0.0.1:8788
 	}
 
-	@client path /play /play/ /index.html /assets/* /favicon.ico
+	# The browser client. `sro-nomad publish-client` keeps the current release
+	# at client and the one before it at previous (ops/nomad/LINUX_SINGLE_HOST.md).
+	@client path /play /play/ /index.html /release.json /assets/* /favicon.ico
 	handle @client {
-		root * /var/www/opensro/client
+		# Cache policy. Content-hashed names never change meaning: Vite bundles
+		# (name-<8+ char hash>), packs (name-NNN-<12 hex>) and per-asset
+		# transports (<64 hex>) are immutable for a year. Every other client
+		# path - the page, release.json, the pack index - revalidates on each
+		# use, which costs a 304 when unchanged, so a refresh or a new visit
+		# always sees the current release.
+		@immutable path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin(\.zst)?|packs/transport/[0-9a-f]{64}\.gz)$
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		@revalidate not path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin(\.zst)?|packs/transport/[0-9a-f]{64}\.gz)$
+		header @revalidate Cache-Control "no-cache"
+
+		root * /var/www/opensro
 		@play path /play /play/
 		rewrite @play /index.html
+		# The current release first. The previous release still serves the
+		# hashed files that an open tab or a page loaded before the last
+		# publish references, for one release generation.
+		try_files /client{path} /previous{path}
 		file_server {
 			precompressed gzip
 		}
@@ -34,6 +51,9 @@ opensro.online {
 
 	handle {
 		root * /var/www/opensro
+		# Releases are reachable only through the client routes above.
+		@releases path /releases/* /client/* /previous/*
+		respond @releases 404
 		file_server
 	}
 }

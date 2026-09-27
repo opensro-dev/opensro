@@ -142,6 +142,16 @@ export function createPlatform(
 		}
 	}, { signal: lifetime.signal, passive: false } );
 	const cursor = createCursor();
+	// Release skew: a one-shot "visible again" trigger, and the refresh offer
+	// the page shell carries hidden (index.html #update-notice).
+	let visibleAgain = false;
+	const updateNotice = document.getElementById( "update-notice" );
+	updateNotice?.querySelector( "button" )?.addEventListener( "click", () => location.reload(), {
+		signal: lifetime.signal
+	} );
+	document.addEventListener( "visibilitychange", () => {
+		if ( document.visibilityState === "visible" ) visibleAgain = true;
+	}, { signal: lifetime.signal } );
 	const loading = document.getElementById( "startup-loading" );
 	const loadingLabel = loading?.querySelector( ".sro-boot-loading__label" );
 	const loadingDetail = loading?.querySelector( ".sro-boot-loading__detail" );
@@ -477,6 +487,23 @@ groups ${sample.visibleGroups}`;
 				if ( loadingLabel ) loadingLabel.textContent = "Unable to finish loading";
 				if ( loadingDetail ) loadingDetail.textContent = text;
 			}
+		},
+		runningEntry() {
+			// Only a release build loads a content-hashed entry; a development
+			// server's /src/bootstrap.ts has nothing to compare against.
+			if ( import.meta.env.MODE !== "beta" ) return null;
+			const src = document.querySelector( 'script[type="module"][src]' )?.getAttribute( "src" );
+			return src ? new URL( src, location.origin ).pathname : null;
+		},
+		visibilityReturned() {
+			const returned = visibleAgain;
+			visibleAgain = false;
+			return returned;
+		},
+		presentUpdate( newer ) {
+			// The refresh is the player's choice: reloading on our own would
+			// drop a live session.
+			if ( updateNotice ) updateNotice.hidden = !newer;
 		},
 		dispose() {
 			lifetime.abort();

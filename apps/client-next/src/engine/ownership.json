@@ -12,6 +12,7 @@
     "src/engine/runtime/ui/hud/minimap.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/runtime.ts": "src/bootstrap.ts",
     "src/engine/runtime/platform/platform.ts": "src/engine/runtime/runtime.ts",
+    "src/engine/runtime/release/release-watch.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/renderer/renderer.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/renderer/device/device.ts": "src/engine/runtime/renderer/renderer.ts",
     "src/engine/runtime/renderer/surface/surface.ts": "src/engine/runtime/renderer/renderer.ts",

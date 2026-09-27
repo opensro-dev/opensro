@@ -247,3 +247,44 @@ the boot overlay so start-up frames remain measurable.
 
 .loading-transfer[data-connecting="true"]{bottom:110px;width:min(440px,calc(100vw - 40px))}
 .loading-transfer[data-connecting="true"] .loading-transfer__metrics{display:none}
+
+/*
+The release-skew refresh offer (platform.ts presentUpdate): shown once a newer
+client release is live. It sits above the game, keeps the boot overlay's
+palette, and reloads only when the player clicks.
+*/
+.sro-update-notice {
+	position: fixed;
+	top: 12px;
+	left: 50%;
+	z-index: 20;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	max-width: calc(100vw - 32px);
+	padding: 8px 12px 8px 16px;
+	border: 1px solid rgba(202, 165, 82, 0.48);
+	background: rgba(2, 2, 2, 0.92);
+	box-sizing: border-box;
+	color: #d8c8a7;
+	font: 13px/1.4 "Segoe UI", Arial, sans-serif;
+	transform: translateX(-50%);
+}
+
+.sro-update-notice[hidden] {
+	display: none;
+}
+
+.sro-update-notice button {
+	padding: 4px 12px;
+	border: 1px solid rgba(202, 165, 82, 0.72);
+	background: #1a140a;
+	color: #f0dca8;
+	font: inherit;
+	cursor: pointer;
+}
+
+.sro-update-notice button:hover,
+.sro-update-notice button:focus-visible {
+	background: #2a2010;
+}

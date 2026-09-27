@@ -92,10 +92,39 @@ Public WebTransport requires the separate GameWorld TLS deployment described
 in the main operations guide.
 
 `config/Caddyfile.example` keeps the landing page at `/var/www/opensro/index.html`
-and serves the game at `/play`, with `/assets/*` from `/var/www/opensro/client`.
-Install `ops/site/index.html` as the landing page. Point `client` at a verified
-static release directory; never point Caddy at the checkout or the private
-source-map directory. Precompressed gzip sidecars keep compression off the
-small VPS's request path. Validate the Caddy configuration before reloading.
-The landing page requires an already provisioned account; it does not provide
-account signup.
+and serves the game at `/play`, with `/assets/*` from the current client
+release. Install `ops/site/index.html` as the landing page. Never point Caddy
+at the checkout or the private source-map directory. Precompressed gzip
+sidecars keep compression off the small VPS's request path. Validate the
+Caddy configuration before reloading. The landing page requires an already
+provisioned account; it does not provide account signup.
+
+## Publish a browser release
+
+Build and verify the package with `apps/client-next/tools/beta`, copy it to
+the host, then publish it:
+
+```
+sudo sro-nomad publish-client -package /opt/opensro/client-package -web-root /var/www/opensro
+```
+
+The command verifies every file against the package's `release.json`, writes
+the routes out under `releases/<releaseId>/`, and moves two symlinks with
+atomic renames: `previous` to the release that was live, `client` to the new
+one. It keeps three older releases for rollback (`-keep`). Republishing the
+live release changes nothing, and publishing an older package rolls back.
+The first run adopts an existing `client` symlink as the live release.
+
+The edge serves the current release and falls back to `previous`, so a tab
+opened before the publish still loads the hashed bundles and packs it
+references. Its cache policy (in `Caddyfile.example`):
+
+| Path | Cache-Control | Why |
+| --- | --- | --- |
+| `/play`, `/index.html`, `/release.json`, pack indexes, other stable names | `no-cache` | revalidated on every use (a 304 when unchanged), so a refresh or a new visit sees the new release at once |
+| Content-hashed bundles, packs and transport files | `public, max-age=31536000, immutable` | a new build gives them new names, so they never need rechecking |
+
+A running client checks whether the live page names a different entry bundle
+when the title screen opens, after a disconnect, when its tab becomes visible
+again, and every ten minutes, and then offers a refresh. It never reloads a
+player mid-session on its own.
