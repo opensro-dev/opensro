@@ -515,7 +515,7 @@ the live Raft cluster.
 ## 10. Engineering gates
 
 ```powershell
-go version # must report the toolchain pinned in go.mod (go1.27.0) or a newer patched release
+go version # must report the release go.mod names (go1.27.1) or a newer patched release
 go mod verify
 go mod tidy -diff
 go fmt ./...

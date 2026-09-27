@@ -8,20 +8,20 @@ jobs:
   source-check:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
+      # pnpm comes from package.json packageManager, the one place its version is pinned.
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
       # check:server runs the Go gates: tidy, gofmt, vet, tests, race subset, govulncheck.
-      - uses: actions/setup-go@v5
+      # go.mod names the exact release (no toolchain line), so this installs it directly.
+      - uses: actions/setup-go@v7
         with:
           go-version-file: apps/server/go.mod
           cache-dependency-path: apps/server/go.sum

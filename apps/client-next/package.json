@@ -31,7 +31,6 @@
     "test:beta": "node --test tests/runtime/beta-release.test.mjs"
   },
   "devDependencies": {
-    "@babylonjs/core": "9.18.1",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "typescript": "catalog:"
   }

@@ -10,9 +10,9 @@ is described in [DEPLOYMENT.md](../apps/server/ops/docs/DEPLOYMENT.md).
 
 | Tool | Version |
 | --- | --- |
-| Go | 1.26 or newer. `apps/server/go.mod` pins the toolchain (`toolchain go1.27.0`); an older Go downloads it automatically |
-| Node.js | 22.15 or newer |
-| pnpm | 11.17.0, through Corepack (`npm install --global corepack` if missing) |
+| Go | 1.27.1, the release `apps/server/go.mod` names; an older Go downloads it automatically |
+| Node.js | 24 LTS (CI runs it); 22.15 is the oldest supported |
+| pnpm | 12.6.0, the version `package.json` `packageManager` names; through Corepack (`npm install --global corepack` if missing) |
 | Python | 3.12 (`py -3`), used by image and font conversion during the asset build |
 | Nomad | 2.0.4 at `.tools/nomad/2.0.4/nomad.exe` (see below) |
 | Browser | Current Chrome or Edge with WebGPU |

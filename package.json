@@ -3,7 +3,7 @@
     "version": "0.1.0",
     "private": true,
     "type": "module",
-    "packageManager": "pnpm@11.17.0",
+    "packageManager": "pnpm@12.6.0",
     "engines": {
         "node": ">=22.15"
     },
@@ -20,15 +20,15 @@
         "hooks:install": "node scripts/setup_git_hooks.mjs"
     },
     "devDependencies": {
-        "@babylonjs/core": "9.18.1",
-        "@babylonjs/loaders": "9.18.1",
+        "@babylonjs/core": "9.28.0",
+        "@babylonjs/loaders": "9.28.0",
         "@dprint/typescript": "0.96.1",
-        "@types/node": "^26.1.2",
+        "@types/node": "^26.6.3",
         "dprint": "0.57.4",
-        "esbuild": "^0.28.1",
-        "fast-check": "4.9.0",
-        "playwright-core": "^1.62.0",
+        "esbuild": "^0.28.2",
+        "fast-check": "4.10.2",
+        "playwright-core": "^1.63.0",
         "typescript": "catalog:",
-        "vite": "^8.1.5"
+        "vite": "^8.3.1"
     }
 }

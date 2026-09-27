@@ -1,8 +1,6 @@
 module opensro.online/server/tools/golangci-lint
 
-go 1.26.0
-
-toolchain go1.27.0
+go 1.27.1
 
 tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 

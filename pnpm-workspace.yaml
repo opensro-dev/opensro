@@ -19,6 +19,3 @@ allowBuilds:
   dprint: false
   esbuild: true
 
-# Pinned patch for the asset pipeline's Babylon-based crowd VAT bake.
-patchedDependencies:
-  '@babylonjs/core@9.18.1': patches/@babylonjs__core@9.18.1.patch

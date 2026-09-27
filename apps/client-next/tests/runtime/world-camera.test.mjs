@@ -100,21 +100,44 @@ test("native rolled camera retains its authored up direction", () => {
 	assert.ok( project( m, [ 1, 0, 10 ] )[1] > 0 );
 	assert.ok( project( m, [ 0, -1, 10 ] )[0] > 0 );
 });
-test("camera projection agrees with the old port's left-handed Babylon convention", async () => {
-	const { Matrix, Vector3 } = await import( "@babylonjs/core/Maths/math.vector.js" );
+/*
+================
+leftHandedProjection
+
+The old port's camera convention, written out: a left-handed look-at view
+(z toward the target, x = up × z) and a vertical-FOV perspective with depth in
+[0, 1], z = far/(far-near) - far*near/((far-near)*viewZ). This is exactly what
+Babylon's LookAtLH × PerspectiveFovLH(..., halfZRange) computed; the closed
+form agrees with it to 7e-8 (Babylon's float32 storage).
+================
+*/
+function leftHandedProjection( camera, aspect, point ) {
+	const sub = ( a, b ) => [ a[0] - b[0], a[1] - b[1], a[2] - b[2] ];
+	const dot = ( a, b ) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+	const cross = ( a, b ) => [ a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] ];
+	const normalize = ( a ) => {
+		const length = Math.hypot( ...a );
+		return [ a[0] / length, a[1] / length, a[2] / length ];
+	};
+	const zAxis = normalize( sub( camera.target, camera.eye ) );
+	const xAxis = normalize( cross( camera.up, zAxis ) );
+	const yAxis = normalize( cross( zAxis, xAxis ) );
+	const view = sub( point, camera.eye );
+	const x = dot( xAxis, view ), y = dot( yAxis, view ), z = dot( zAxis, view );
+	const focal = 1 / Math.tan( camera.fov / 2 );
+	const { near, far } = camera;
+	return [ focal / aspect * x / z, focal * y / z, far / (far - near) - far * near / ((far - near) * z) ];
+}
+
+test("camera projection agrees with the old port's left-handed convention", () => {
 	const cameras = [
 		{ eye: [ 50, 40, -80 ], target: [ 10, 5, 20 ], up: [ 0, 1, 0 ], fov: Math.PI / 3, near: 1, far: 3500 },
 		{ eye: [ 50, 40, -80 ], target: [ 10, 5, 20 ], up: [ .2, 1, .3 ], fov: Math.PI / 3, near: 1, far: 3500 }
 	];
 	for ( const camera of cameras ) {
-		const expected = Matrix.LookAtLH(
-			Vector3.FromArray( camera.eye ),
-			Vector3.FromArray( camera.target ),
-			Vector3.FromArray( camera.up )
-		).multiply( Matrix.PerspectiveFovLH( camera.fov, 16 / 9, camera.near, camera.far, true ) );
 		const actual = viewProjection( camera, 16 / 9 );
 		for ( const point of [ [ 10, 5, 20 ], [ 30, 15, 50 ], [ -20, 10, 100 ] ] ) {
-			const reference = Vector3.TransformCoordinates( Vector3.FromArray( point ), expected ).asArray();
+			const reference = leftHandedProjection( camera, 16 / 9, point );
 			const projected = project( actual, point );
 			for ( let i = 0; i < 3; i++ ) assert.ok( Math.abs( projected[i] - reference[i] ) < 1e-5 );
 		}
