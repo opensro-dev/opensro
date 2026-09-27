@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { isPlaceholderText, loadEnglishCompletions } from "../../../../scripts/build/shared/englishCompletions.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -123,9 +124,14 @@ test("published event articles parse without dropping native images, colors or e
 		row[1] === "SRO_GGW_EVE_QUEST"
 	);
 	assert.equal( nativeQuest?.[8], "", "the extracted English quest article is authored empty" );
-	assert.equal( data.eventRowsByState[21].englishContent, "" );
+	// Retail ships this article without English; the product localization
+	// layer (englishCompletions/texthelp.json) supplies it.
+	assert.equal(
+		data.eventRowsByState[21].englishContent,
+		loadEnglishCompletions( "texthelp.txt" ).SRO_GGW_EVE_QUEST?.english
+	);
 	for ( const [id, row] of Object.entries( data.eventRowsByState ) ) {
-		assert.equal( guideTokens( row.englishContent ).length > 0, id !== "21", `article ${id}` );
+		assert.ok( guideTokens( row.englishContent ).length > 0, `article ${id}` );
 	}
 	const first = guideTokens( data.eventRowsByState[1].englishContent );
 	assert.ok( first.some( t => t.kind === "image" && t.path.endsWith( "gd_start.png" ) ) );
@@ -180,11 +186,13 @@ test("published guide resource batch admits completely", async () => {
 	assert.equal( owner.error(), null );
 	assert.equal( owner.data().articles.length, 21 );
 	for ( const article of owner.data().articles ) {
+		// Article 21 has English from the localization layer now, so it shares
+		// the non-European shape: its European branch is its own content.
 		if ( [ 1, 3, 13 ].includes( article.id ) ) assert.notDeepEqual( article.tokens, article.european );
-		else if ( article.id === 21 ) {
-			assert.deepEqual( article.tokens, [] );
-			assert.equal( article.european, null );
-		} else assert.deepEqual( article.tokens, article.european );
+		else {
+			assert.ok( article.tokens.length > 0, `article ${article.id}` );
+			assert.deepEqual( article.tokens, article.european );
+		}
 	}
 	// This extracted media's English European fields are empty. Editing notes
 	// from another column must never become guide text or trigger a seen ack.

@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { isPlaceholderText, loadEnglishCompletions } from "../../../../scripts/build/shared/englishCompletions.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -88,13 +89,17 @@ test("native title statuses preserve packed argument order and every simple mess
 	for ( const status of [ 4, 6, 11, 12, 13, 14, 15, 16 ] ) {
 		assert.equal( titleStatusMessage( status, 0, resolve ), catalog[titleStatusKey( status, 0 )] );
 	}
-	// The branch exists even when the shipped English cell is empty. Do not
-	// fabricate a message or confuse an empty cell with an unsupported subtype.
+	// The branch exists even when the shipped English cell is empty; the
+	// English completion layer supplies the message, so the branch must resolve
+	// it rather than treat the empty retail cell as an unsupported subtype.
 	const stopped = readLocalizedTextDataRowsSync( path.join( textDataDir, "textuisystem.txt" ) ).find( row =>
 		row[1] === "UIO_MSG_ERROR_ACCOUNT_STOP"
 	);
 	assert.equal( stopped?.[8], "" );
-	assert.equal( titleStatusMessage( 3, 1, resolve ), "" );
+	assert.equal(
+		titleStatusMessage( 3, 1, resolve ),
+		loadEnglishCompletions( "textuisystem.txt" ).UIO_MSG_ERROR_ACCOUNT_STOP?.english
+	);
 	for ( const subtype of [ 1, 2, 3, 4 ] ) {
 		const key = titleStatusKey( 3, subtype );
 		assert.ok( key );

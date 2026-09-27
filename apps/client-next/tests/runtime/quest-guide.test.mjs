@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { isPlaceholderText, loadEnglishCompletions } from "../../../../scripts/build/shared/englishCompletions.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -57,6 +58,7 @@ test("raw guide projection matches native capture; published captions apply expl
 	// This oracle comes from ReadProcessMemory of the hash-bound original client.
 	// Never overwrite it with hashes of our generated/localized product output.
 	const raw = {};
+	const rawSource = {};
 	for ( const name of [ "textquest.txt", "texthelp.txt" ] ) {
 		for ( const fields of readLocalizedTextDataRowsSync( path.join( textDataDir, name ) ) ) {
 			const key = fields[1];
@@ -64,6 +66,7 @@ test("raw guide projection matches native capture; published captions apply expl
 				continue;
 			}
 			raw[key] = (fields[8] ?? "").replaceAll( "\\n", "\n" );
+			rawSource[key] = name;
 		}
 	}
 	assert.deepEqual(
@@ -74,7 +77,17 @@ test("raw guide projection matches native capture; published captions apply expl
 		),
 		native.guideTextHashes
 	);
-	assert.deepEqual( data.guideTextEntries, completeGuideTitles( { ...raw } ) );
+	// Published captions: the retail text, then the English completion layer
+	// where retail left the cell as a placeholder, then the guide titles.
+	const localized = Object.fromEntries(
+		Object.entries( raw ).map( ( [key, value] ) => {
+			const completion = isPlaceholderText( value ) ?
+				loadEnglishCompletions( rawSource[key] )[key]?.english :
+				undefined;
+			return [ key, completion === undefined ? value : completion.replaceAll( "\\n", "\n" ) ];
+		} )
+	);
+	assert.deepEqual( data.guideTextEntries, completeGuideTitles( localized ) );
 });
 
 test("guide title completions fill only untranslated cells and never shadow shipped English", () => {

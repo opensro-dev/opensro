@@ -198,7 +198,9 @@ test("native reference names survive admission; malformed numeric fields and bou
 		} ] )
 	);
 });
-test("all 175 English published rich item descriptions preserve native color and emphasis without leaking markup", () => {
+// 175 retail English descriptions plus 71 from the English completion layer
+// (englishCompletions/textdataname.json).
+test("all 246 English published rich item descriptions preserve native color and emphasis without leaking markup", () => {
 	let count = 0;
 	for ( const [key, value] of Object.entries( strings ) ) {
 		if ( !key.includes( "ITEM" ) || !value.startsWith( "<sml2>" ) ) continue;
@@ -207,7 +209,7 @@ test("all 175 English published rich item descriptions preserve native color and
 		assert.ok( rows.length );
 		assert.ok( rows.every( row => !/<[^>]+>/.test( row.value ) ) );
 	}
-	assert.equal( count, 175 );
+	assert.equal( count, 246 );
 	const rows = tooltipDescription(
 		'<sml2><strong><font color="255,236,219,156">Heading</font></strong><br>Body</sml2>'
 	);
