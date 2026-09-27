@@ -858,8 +858,20 @@ func TestShippedTemplateCanary(t *testing.T) {
 			t.Fatalf("unique %d crossing emitted %d appearances", ref, got)
 		}
 	}
-	if got := len(template.SpawnableRefs()); got != 176 {
-		t.Fatalf("spawnable refs = %d, want 176 (two previously unmatched zero-cap families now stay disabled)", got)
+	// 178 includes MOB_DH_SOLDIEREARTHGHOST and its clone: the v1.150 client
+	// places them and QNO_WC_SOLDIER_EA2_1 needs 1,600 kills, while the v1.188
+	// shard backup caps every one of their nests at zero (laterDisabledCodenames).
+	if got := len(template.SpawnableRefs()); got != 178 {
+		t.Fatalf("spawnable refs = %d, want 178", got)
+	}
+	for _, codename := range []string{"MOB_DH_SOLDIEREARTHGHOST", "MOB_DH_SOLDIEREARTHGHOST_CLON"} {
+		found := false
+		for _, ref := range template.SpawnableRefs() {
+			found = found || ref.Codename == codename
+		}
+		if !found {
+			t.Fatalf("%s is a v1.150 quest target and must be spawnable", codename)
+		}
 	}
 	monsterTypes := map[uint8]int{}
 	for _, ref := range template.Refs {
