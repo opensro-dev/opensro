@@ -23,6 +23,10 @@ it into a staging directory renamed into place, then moves previous and
 client with atomic symlink renames, so neither name ever points nowhere.
 Releases beyond -keep are pruned; client and previous never are.
 
+The edge host is Linux. Windows cannot rename a directory symlink over an
+existing one, so there is no atomic switch there: a Windows host verifies a
+package but refuses to activate it.
+
 ===========================================================================
 */
 package main
@@ -41,6 +45,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -129,6 +134,9 @@ func publishClientRelease(packageDir, webRoot string, keep int) (string, error) 
 	manifest, err := verifyClientPackage(packageDir)
 	if err != nil {
 		return "", err
+	}
+	if !atomicSymlinkSwapSupported() {
+		return "", errors.New("publish-client activates releases on a POSIX edge host only: Windows cannot atomically replace a directory symlink")
 	}
 	releases := filepath.Join(webRoot, clientReleasesDir)
 	if err := os.MkdirAll(releases, clientReleaseDirMode); err != nil {
@@ -299,6 +307,18 @@ func materializeClientRelease(packageDir, target string, manifest clientReleaseM
 		return err
 	}
 	return os.Rename(staging, target)
+}
+
+/*
+================
+atomicSymlinkSwapSupported
+
+rename(2) replaces an existing symlink atomically on POSIX. Windows
+MoveFileEx refuses to replace a directory symlink (access denied).
+================
+*/
+func atomicSymlinkSwapSupported() bool {
+	return runtime.GOOS != "windows"
 }
 
 /*

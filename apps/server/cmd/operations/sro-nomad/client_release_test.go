@@ -98,14 +98,14 @@ func writeClientPackage(t *testing.T, tag string) (string, string) {
 ================
 requireSymlinks
 
-Skips on a Windows host that cannot create symlinks without privileges; the
-production host is Linux.
+Skips where publishing cannot activate a release (Windows, see
+atomicSymlinkSwapSupported); the edge host is Linux.
 ================
 */
 func requireSymlinks(t *testing.T) {
 	t.Helper()
-	if err := os.Symlink("target", filepath.Join(t.TempDir(), "link")); err != nil {
-		t.Skipf("symlinks unavailable on this host: %v", err)
+	if !atomicSymlinkSwapSupported() {
+		t.Skip("release activation needs atomic symlink replacement (POSIX edge host)")
 	}
 }
 
