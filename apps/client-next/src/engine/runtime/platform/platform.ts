@@ -1,162 +1,487 @@
-import {defaultExtendedQuickslot,extendedQuickslotOptions,type ExtendedQuickslotOptions} from '@/engine/foundation/ui/extended-quickslot';
-import {chatBlocks} from '@/engine/foundation/gameplay/chat-blocks';
-import {defaultVideoOptions,videoOptions,type VideoOptions} from '@/engine/foundation/rendering/video-options';
-import {defaultInputOptions,inputOptions,virtualKey,type InputOptions} from '@/engine/foundation/ui/input-options';
-import {sightMode,type SightMode} from '@/engine/foundation/rendering/camera-options';
-import {initialAudioOptions,audioOptions,type AudioOptions} from '@/engine/foundation/audio/options';
-import {cameraWheelDelta} from '@/engine/foundation/rendering/camera-wheel';
-import {gameOptions,initialGameOptions,type GameOptions} from '@/engine/foundation/gameplay/game-options';
-import {createUiBridge} from "./ui/ui";
-import {createCursor} from "./ui/cursor";
-import type {UiEvent} from "@/engine/contracts/ui";
+/*
+===========================================================================
+
+platform.ts - the browser page the runtime runs in
+
+Owns everything the runtime touches outside the canvas pixels: raw pointer
+and keyboard input, stored player preferences, the DOM mirror of the GPU
+interface, the cursor, and the boot loading overlay with its one-line
+account of what is loading and how fast.
+
+===========================================================================
+*/
+
+import {
+	defaultExtendedQuickslot,
+	extendedQuickslotOptions,
+	type ExtendedQuickslotOptions
+} from "@/engine/foundation/ui/extended-quickslot";
+import { chatBlocks } from "@/engine/foundation/gameplay/chat-blocks";
+import { defaultVideoOptions, videoOptions, type VideoOptions } from "@/engine/foundation/rendering/video-options";
+import { defaultInputOptions, inputOptions, virtualKey, type InputOptions } from "@/engine/foundation/ui/input-options";
+import { sightMode, type SightMode } from "@/engine/foundation/rendering/camera-options";
+import { initialAudioOptions, audioOptions, type AudioOptions } from "@/engine/foundation/audio/options";
+import { cameraWheelDelta } from "@/engine/foundation/rendering/camera-wheel";
+import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
+import { createUiBridge } from "./ui/ui";
+import { createCursor } from "./ui/cursor";
+import type { UiEvent } from "@/engine/contracts/ui";
 import type { RawInput } from "@/engine/contracts/input";
 import type { Platform } from "@/engine/contracts/runtime";
-export function createPlatform(canvas: HTMLCanvasElement, status: HTMLOutputElement, onClose: () => void, onInput: (event: RawInput) => void,onGesture:()=>void=()=>{},onUi:(event:UiEvent)=>void=()=>{},blocksUi:(x:number,y:number)=>boolean=()=>false,onWorldClick:(x:number,y:number,doubleClick?:boolean)=>void=()=>{},onWorldHover:(point:readonly [number,number]|null)=>void=()=>{}): Platform {
-    const lifetime = new AbortController();
-    const blockKey='sro:v1150:chatting-blocks:1';let localBlocks:readonly string[]=[];
-    try{const stored=localStorage.getItem(blockKey);if(stored!==null)localBlocks=chatBlocks(JSON.parse(stored));}catch(error){status.value='Chatting blocks could not be restored: '+String(error);}
-    onUi({kind:'chat-blocks',value:localBlocks});
-    const preferenceKey='sro:v1150:game-options:1';
-    let preferences=initialGameOptions();
-    try{const stored=localStorage.getItem(preferenceKey);if(stored!==null)preferences=gameOptions(JSON.parse(stored));}catch(error){status.value='Game options could not be restored: '+String(error);}
-    onUi({kind:'preferences',value:preferences});
-    const audioKey='sro:v1150:audio-options:1';let audio=initialAudioOptions();
-    try{const stored=localStorage.getItem(audioKey);if(stored!==null)audio=audioOptions(JSON.parse(stored));}catch(error){status.value='Audio options could not be restored: '+String(error);}
-    onUi({kind:'audio-preferences',value:audio});
-    const cameraKey='sro:v1150:sight-mode:1';let camera:SightMode=0;
-    try{const stored=localStorage.getItem(cameraKey);if(stored!==null)camera=sightMode(JSON.parse(stored));}catch(error){status.value='Camera option could not be restored: '+String(error);}
-    onUi({kind:'camera-preferences',value:camera});
-    const quickslotKey='sro:v1150:extended-quickslot:1';let quickslots=defaultExtendedQuickslot();
-    try{const stored=localStorage.getItem(quickslotKey);if(stored!==null)quickslots=extendedQuickslotOptions(JSON.parse(stored));}catch(error){status.value='Quickslot options could not be restored: '+String(error);}
-    onUi({kind:'quickslot-preferences',value:quickslots});
-    const inputKey='sro:v1150:input-options:1';let bindings=defaultInputOptions();
-    try{const stored=localStorage.getItem(inputKey);if(stored!==null)bindings=inputOptions(JSON.parse(stored));}catch(error){status.value='Input options could not be restored: '+String(error);}
-    onUi({kind:'input-preferences',value:bindings});
-    const videoKey='sro:v1150:video-options:1';let video=defaultVideoOptions();
-    try{const stored=localStorage.getItem(videoKey);if(stored!==null)video=videoOptions(JSON.parse(stored));}catch(error){status.value='Video options could not be restored: '+String(error);}
-    onUi({kind:'video-preferences',value:video});
-    function publishPreferences(next:GameOptions){localStorage.setItem(preferenceKey,JSON.stringify(next));preferences=next;onUi({kind:'preferences',value:next});}
-    // A browser can change display mode only during a user gesture. Apply is
-    // that gesture; restoring preferences at startup must not request fullscreen.
-    let displayRequest=false;
-    const syncDisplay=()=>{if(lifetime.signal.aborted)return;try{publishPreferences({...preferences,windowMode:document.fullscreenElement===null});}catch(error){status.value='Display preference could not be saved: '+String(error);}};
-    document.addEventListener('fullscreenchange',syncDisplay,{signal:lifetime.signal});
-    window.addEventListener('wheel',event=>{const r=canvas.getBoundingClientRect(),x=event.clientX-r.left,y=event.clientY-r.top;if(blocksUi(x,y)){event.preventDefault();onUi({kind:'scroll',x,y,delta:event.deltaY});}},{signal:lifetime.signal,passive:false});
-    const cursor=createCursor();
-    const loading=document.getElementById("startup-loading");
-    const loadingLabel=loading?.querySelector(".sro-boot-loading__label");
-    const loadingDetail=loading?.querySelector(".sro-boot-loading__detail");
-    // Transfer accounting is developer information, not part of native loading art.
-    const transfer=import.meta.env.MODE!=='beta'&&new URLSearchParams(location.search).has('diagnostics')?document.getElementById('loading-transfer'):null;let transferAt=0;
-    const transferFields=new Map(['title','file','bytes','speed','files','cache','queue'].map(key=>[key,transfer?.querySelector(`[data-transfer="${key}"]`)]));
-    function transferText(key:string,text:string){const node=transferFields.get(key);if(node&&node.textContent!==text)node.textContent=text;}
-    status.hidden=import.meta.env.MODE==='beta'||!new URLSearchParams(location.search).has("diagnostics");
-    // The FPS chip: a collapsed toggle that reveals the frame owner's published
-    // sample. Collapsed it publishes nothing, so an unopened chip costs no work.
-    const fpsChip=document.getElementById("fps-chip"),fpsToggle=document.getElementById("fps-toggle"),fpsReadout=document.getElementById("fps-readout");
-    const fpsMs=(value:number)=>`${value.toFixed(value<10?1:0)}ms`;
-    fpsToggle?.addEventListener("click",()=>{
-        if(!fpsReadout)return;
-        const expanded=fpsReadout.hidden;fpsReadout.hidden=!expanded;if(!expanded)fpsReadout.textContent="";
-        const label=expanded?"Hide FPS telemetry":"Show FPS telemetry";
-        fpsChip?.setAttribute("data-expanded",String(expanded));fpsToggle.setAttribute("aria-expanded",String(expanded));
-        fpsToggle.setAttribute("aria-label",label);fpsToggle.title=label;fpsToggle.textContent=expanded?"x":"F";
-    },{signal:lifetime.signal});
-    window.addEventListener("pointerdown",onGesture,{signal:lifetime.signal,capture:true});
-    window.addEventListener("pagehide", onClose, { signal: lifetime.signal });
-    const bridge=createUiBridge(canvas,onUi,()=>onInput({kind:"release",timeMs:performance.timeOrigin+performance.now()}),(code,down)=>{if(virtualKey(code)===bindings.keys[10]||virtualKey(code)===bindings.keys[30])onInput({kind:"key",code,down,timeMs:performance.timeOrigin+performance.now()});});
-    window.addEventListener("pointermove",event=>{const r=canvas.getBoundingClientRect();onWorldHover(event.target===canvas&&r.width>0&&r.height>0?[((event.clientX-r.left)/r.width),((event.clientY-r.top)/r.height)]:null);},{signal:lifetime.signal});
-    window.addEventListener("blur",()=>onWorldHover(null),{signal:lifetime.signal});
-    document.documentElement.addEventListener("pointerleave",()=>onWorldHover(null),{signal:lifetime.signal});
-    let uiPointer=false;
-    const timeMs = () => performance.timeOrigin + performance.now();
-    const pointer = (event: PointerEvent) => {
-        const rect = canvas.getBoundingClientRect();
-        if(uiPointer){if(event.type==="pointerup")uiPointer=false;return;}
-        onInput({ kind: "pointer", x: event.clientX - rect.left, y: event.clientY - rect.top, buttons: event.buttons, timeMs: timeMs() });
-    };
-    // The game owns pointer gestures on its drawing surface, including RMB
-    // camera drag. Browser image menus must not interrupt that gesture.
-    canvas.addEventListener('contextmenu',event=>event.preventDefault(),{signal:lifetime.signal});
-    canvas.addEventListener('dragstart',event=>event.preventDefault(),{signal:lifetime.signal});
-    canvas.addEventListener("pointerdown", event => { onGesture();const r=canvas.getBoundingClientRect();uiPointer=blocksUi(event.clientX-r.left,event.clientY-r.top);if(uiPointer){onInput({kind:"release",timeMs:timeMs()});return;}if(document.activeElement instanceof HTMLElement)document.activeElement.blur();canvas.setPointerCapture(event.pointerId); pointer(event); }, { signal: lifetime.signal });
-    for (const name of ["pointermove", "pointerup"] as const)
-        canvas.addEventListener(name, pointer, { signal: lifetime.signal });
-    // Retail 67CCA0 dispatches movement/selection on WM_LBUTTONDOWN and
-    // engagement separately on WM_LBUTTONDBLCLK. Pointer drift cannot cancel
-    // an already issued command; button-up does not issue another one.
-    // Pointer Events emit pointerdown only for the first held mouse button.
-    // mousedown also reports LMB pressed during an existing RMB camera drag.
-    canvas.addEventListener("mousedown",event=>{const r=canvas.getBoundingClientRect(),x=event.clientX-r.left,y=event.clientY-r.top;if(event.button===2&&bindings.mouseMode===1&&!blocksUi(x,y))onUi({kind:"activate",id:"hotbar:0"});if(event.button===0&&!blocksUi(x,y)&&r.width>0&&r.height>0)onWorldClick(x/r.width,y/r.height);},{signal:lifetime.signal});
-    canvas.addEventListener("dblclick",event=>{const r=canvas.getBoundingClientRect(),x=event.clientX-r.left,y=event.clientY-r.top;if(event.button===0&&!blocksUi(x,y)&&r.width>0&&r.height>0)onWorldClick(x/r.width,y/r.height,true);},{signal:lifetime.signal});
-    canvas.addEventListener("pointercancel", () => {uiPointer=false;onInput({ kind: "release", timeMs: timeMs() });}, { signal: lifetime.signal });
-    window.addEventListener("keydown", event => {
-        if(/^F([1-9]|1[0-2])$/.test(event.code)&&event.code!=='F5'&&event.code!=='F11'&&event.code!=='F12')event.preventDefault();
-    }, { signal: lifetime.signal, capture: true });
-    window.addEventListener("keydown", event => {
-        if(event.isComposing||event.keyCode===229)return;
-        const vk=virtualKey(event.code);if((vk&&bindings.keys.includes(vk))||(/^F([1-9]|1[0-2])$/.test(event.code)&&event.code!=='F5'&&event.code!=='F11'&&event.code!=='F12'))event.preventDefault();
-        if(!event.repeat)onGesture();
-        if(!event.repeat)onUi({kind:"key",code:event.code,shift:event.shiftKey,ctrl:event.ctrlKey});
-        if (!event.repeat)
-            onInput({ kind: "key", code: event.code, down: true, timeMs: timeMs() });
-    }, { signal: lifetime.signal });
-    window.addEventListener("keyup", event => onInput({ kind: "key", code: event.code, down: false, timeMs: timeMs() }), { signal: lifetime.signal });
-    window.addEventListener("blur", () => {uiPointer=false;onInput({ kind: "release", timeMs: timeMs() });}, { signal: lifetime.signal });
-    canvas.addEventListener("wheel", event => { event.preventDefault();const r=canvas.getBoundingClientRect();if(blocksUi(event.clientX-r.left,event.clientY-r.top))return; onInput({ kind: "wheel", delta: cameraWheelDelta(event), timeMs: timeMs() }); }, { signal: lifetime.signal, passive: false });
-    const viewport = { width: 1, height: 1 };
-    return {
-        saveVideoOptions(value:VideoOptions){const next=videoOptions(value);localStorage.setItem(videoKey,JSON.stringify(next));onUi({kind:"video-preferences",value:next});},
-        saveQuickslotOptions(value:ExtendedQuickslotOptions){const next=extendedQuickslotOptions(value);localStorage.setItem(quickslotKey,JSON.stringify(next));onUi({kind:'quickslot-preferences',value:next});},
-        saveInputOptions(value:InputOptions){const next=inputOptions(value);localStorage.setItem(inputKey,JSON.stringify(next));bindings=next;onUi({kind:"input-preferences",value:next});},
-        saveSightMode(value:SightMode){const next=sightMode(value);localStorage.setItem(cameraKey,JSON.stringify(next));onUi({kind:"camera-preferences",value:next});},
-        saveAudioOptions(value:AudioOptions){const next=audioOptions(value);localStorage.setItem(audioKey,JSON.stringify(next));onUi({kind:'audio-preferences',value:next});},
-        saveChatBlocks(value:readonly string[]){const next=chatBlocks(value);localStorage.setItem(blockKey,JSON.stringify(next));onUi({kind:'chat-blocks',value:next});},
-        saveGameOptions(value:GameOptions){
-            const next=gameOptions(value),change=next.windowMode!==preferences.windowMode;
-            publishPreferences(next);
-            if(!change||displayRequest)return;
-            const target=document.documentElement;
-            if(next.windowMode&&!document.fullscreenElement||!next.windowMode&&document.fullscreenElement)return;
-            displayRequest=true;
-            try{
-                const request=next.windowMode?document.exitFullscreen():target.requestFullscreen();
-                void request.catch(error=>{if(!lifetime.signal.aborted)status.value='Display mode could not be changed: '+String(error);}).finally(()=>{displayRequest=false;syncDisplay();});
-            }catch(error){displayRequest=false;status.value='Display mode could not be changed: '+String(error);syncDisplay();}
-        },
-        canvas,presentWorldCursor:cursor.world,presentTelemetry(sample){
-            if(!fpsReadout||fpsReadout.hidden)return;
-            const text=`${Math.round(sample.fps)} FPS
-frame ${fpsMs(sample.frameMs)}/${fpsMs(sample.p95FrameMs)}
-cpu ${fpsMs(sample.cpuMs)}/${fpsMs(sample.p95CpuMs)}
+import type { AssetProgress } from "@/engine/contracts/assets";
+import { loadingDetailText } from "@/engine/foundation/ui/loading-detail";
+
+// How often the loading detail line may change while only its rate moves.
+const LOADING_DETAIL_REFRESH_MS = 250;
+
+/*
+================
+createPlatform
+
+Owns the page: the canvas, raw input, stored preferences, the DOM UI bridge,
+the cursor, the boot loading overlay and the diagnostics chips.
+================
+*/
+export function createPlatform(
+	canvas: HTMLCanvasElement,
+	status: HTMLOutputElement,
+	onClose: () => void,
+	onInput: ( event: RawInput ) => void,
+	onGesture: () => void = () => {},
+	onUi: ( event: UiEvent ) => void = () => {},
+	blocksUi: ( x: number, y: number ) => boolean = () => false,
+	onWorldClick: ( x: number, y: number, doubleClick?: boolean ) => void = () => {},
+	onWorldHover: ( point: readonly [number, number] | null ) => void = () => {}
+): Platform {
+	const lifetime = new AbortController();
+	const blockKey = "sro:v1150:chatting-blocks:1";
+	let localBlocks: readonly string[] = [];
+	try {
+		const stored = localStorage.getItem( blockKey );
+		if ( stored !== null ) localBlocks = chatBlocks( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Chatting blocks could not be restored: " + String( error );
+	}
+	onUi( { kind: "chat-blocks", value: localBlocks } );
+	const preferenceKey = "sro:v1150:game-options:1";
+	let preferences = initialGameOptions();
+	try {
+		const stored = localStorage.getItem( preferenceKey );
+		if ( stored !== null ) preferences = gameOptions( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Game options could not be restored: " + String( error );
+	}
+	onUi( { kind: "preferences", value: preferences } );
+	const audioKey = "sro:v1150:audio-options:1";
+	let audio = initialAudioOptions();
+	try {
+		const stored = localStorage.getItem( audioKey );
+		if ( stored !== null ) audio = audioOptions( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Audio options could not be restored: " + String( error );
+	}
+	onUi( { kind: "audio-preferences", value: audio } );
+	const cameraKey = "sro:v1150:sight-mode:1";
+	let camera: SightMode = 0;
+	try {
+		const stored = localStorage.getItem( cameraKey );
+		if ( stored !== null ) camera = sightMode( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Camera option could not be restored: " + String( error );
+	}
+	onUi( { kind: "camera-preferences", value: camera } );
+	const quickslotKey = "sro:v1150:extended-quickslot:1";
+	let quickslots = defaultExtendedQuickslot();
+	try {
+		const stored = localStorage.getItem( quickslotKey );
+		if ( stored !== null ) quickslots = extendedQuickslotOptions( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Quickslot options could not be restored: " + String( error );
+	}
+	onUi( { kind: "quickslot-preferences", value: quickslots } );
+	const inputKey = "sro:v1150:input-options:1";
+	let bindings = defaultInputOptions();
+	try {
+		const stored = localStorage.getItem( inputKey );
+		if ( stored !== null ) bindings = inputOptions( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Input options could not be restored: " + String( error );
+	}
+	onUi( { kind: "input-preferences", value: bindings } );
+	const videoKey = "sro:v1150:video-options:1";
+	let video = defaultVideoOptions();
+	try {
+		const stored = localStorage.getItem( videoKey );
+		if ( stored !== null ) video = videoOptions( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Video options could not be restored: " + String( error );
+	}
+	onUi( { kind: "video-preferences", value: video } );
+	function publishPreferences( next: GameOptions ) {
+		localStorage.setItem( preferenceKey, JSON.stringify( next ) );
+		preferences = next;
+		onUi( { kind: "preferences", value: next } );
+	}
+	// A browser can change display mode only during a user gesture. Apply is
+	// that gesture; restoring preferences at startup must not request fullscreen.
+	let displayRequest = false;
+	const syncDisplay = () => {
+		if ( lifetime.signal.aborted ) return;
+		try {
+			publishPreferences( { ...preferences, windowMode: document.fullscreenElement === null } );
+		} catch ( error ) {
+			status.value = "Display preference could not be saved: " + String( error );
+		}
+	};
+	document.addEventListener( "fullscreenchange", syncDisplay, { signal: lifetime.signal } );
+	window.addEventListener( "wheel", event => {
+		const r = canvas.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
+		if ( blocksUi( x, y ) ) {
+			event.preventDefault();
+			onUi( { kind: "scroll", x, y, delta: event.deltaY } );
+		}
+	}, { signal: lifetime.signal, passive: false } );
+	const cursor = createCursor();
+	const loading = document.getElementById( "startup-loading" );
+	const loadingLabel = loading?.querySelector( ".sro-boot-loading__label" );
+	const loadingDetail = loading?.querySelector( ".sro-boot-loading__detail" );
+	// The detail line's view of the downloads: the latest progress and when the
+	// byte count last grew, so a stalled transfer reads as waiting, not hung.
+	let assetProgress: AssetProgress | null = null, bytesSeen = -1, bytesGrewAt = 0, detailAt = 0;
+	// Transfer accounting is developer information, not part of native loading art.
+	const transfer = import.meta.env.MODE !== "beta" && new URLSearchParams( location.search ).has( "diagnostics" ) ?
+		document.getElementById( "loading-transfer" ) :
+		null;
+	let transferAt = 0;
+	const transferFields = new Map(
+		[ "title", "file", "bytes", "speed", "files", "cache", "queue" ].map(
+			key => [ key, transfer?.querySelector( `[data-transfer="${key}"]` ) ]
+		)
+	);
+	function transferText( key: string, text: string ) {
+		const node = transferFields.get( key );
+		if ( node && node.textContent !== text ) node.textContent = text;
+	}
+	status.hidden = import.meta.env.MODE === "beta" || !new URLSearchParams( location.search ).has( "diagnostics" );
+	// The FPS chip: a collapsed toggle that reveals the frame owner's published
+	// sample. Collapsed it publishes nothing, so an unopened chip costs no work.
+	const fpsChip = document.getElementById( "fps-chip" ),
+		fpsToggle = document.getElementById( "fps-toggle" ),
+		fpsReadout = document.getElementById( "fps-readout" );
+	const fpsMs = ( value: number ) => `${value.toFixed( value < 10 ? 1 : 0 )}ms`;
+	fpsToggle?.addEventListener( "click", () => {
+		if ( !fpsReadout ) return;
+		const expanded = fpsReadout.hidden;
+		fpsReadout.hidden = !expanded;
+		if ( !expanded ) fpsReadout.textContent = "";
+		const label = expanded ? "Hide FPS telemetry" : "Show FPS telemetry";
+		fpsChip?.setAttribute( "data-expanded", String( expanded ) );
+		fpsToggle.setAttribute( "aria-expanded", String( expanded ) );
+		fpsToggle.setAttribute( "aria-label", label );
+		fpsToggle.title = label;
+		fpsToggle.textContent = expanded ? "x" : "F";
+	}, { signal: lifetime.signal } );
+	window.addEventListener( "pointerdown", onGesture, { signal: lifetime.signal, capture: true } );
+	window.addEventListener( "pagehide", onClose, { signal: lifetime.signal } );
+	const bridge = createUiBridge(
+		canvas,
+		onUi,
+		() => onInput( { kind: "release", timeMs: performance.timeOrigin + performance.now() } ),
+		( code, down ) => {
+			if ( virtualKey( code ) === bindings.keys[10] || virtualKey( code ) === bindings.keys[30] ) {
+				onInput( {
+					kind: "key",
+					code,
+					down,
+					timeMs: performance.timeOrigin + performance.now()
+				} );
+			}
+		}
+	);
+	window.addEventListener( "pointermove", event => {
+		const r = canvas.getBoundingClientRect();
+		onWorldHover(
+			event.target === canvas && r.width > 0 && r.height > 0 ?
+				[ (event.clientX - r.left) / r.width, (event.clientY - r.top) / r.height ] :
+				null
+		);
+	}, { signal: lifetime.signal } );
+	window.addEventListener( "blur", () => onWorldHover( null ), { signal: lifetime.signal } );
+	document.documentElement.addEventListener( "pointerleave", () => onWorldHover( null ), {
+		signal: lifetime.signal
+	} );
+	let uiPointer = false;
+	const timeMs = () => performance.timeOrigin + performance.now();
+	const pointer = ( event: PointerEvent ) => {
+		const rect = canvas.getBoundingClientRect();
+		if ( uiPointer ) {
+			if ( event.type === "pointerup" ) uiPointer = false;
+			return;
+		}
+		onInput( {
+			kind: "pointer",
+			x: event.clientX - rect.left,
+			y: event.clientY - rect.top,
+			buttons: event.buttons,
+			timeMs: timeMs()
+		} );
+	};
+	// The game owns pointer gestures on its drawing surface, including RMB
+	// camera drag. Browser image menus must not interrupt that gesture.
+	canvas.addEventListener( "contextmenu", event => event.preventDefault(), { signal: lifetime.signal } );
+	canvas.addEventListener( "dragstart", event => event.preventDefault(), { signal: lifetime.signal } );
+	canvas.addEventListener( "pointerdown", event => {
+		onGesture();
+		const r = canvas.getBoundingClientRect();
+		uiPointer = blocksUi( event.clientX - r.left, event.clientY - r.top );
+		if ( uiPointer ) {
+			onInput( { kind: "release", timeMs: timeMs() } );
+			return;
+		}
+		if ( document.activeElement instanceof HTMLElement ) document.activeElement.blur();
+		canvas.setPointerCapture( event.pointerId );
+		pointer( event );
+	}, { signal: lifetime.signal } );
+	for ( const name of [ "pointermove", "pointerup" ] as const ) {
+		canvas.addEventListener( name, pointer, { signal: lifetime.signal } );
+	}
+	// Retail 67CCA0 dispatches movement/selection on WM_LBUTTONDOWN and
+	// engagement separately on WM_LBUTTONDBLCLK. Pointer drift cannot cancel
+	// an already issued command; button-up does not issue another one.
+	// Pointer Events emit pointerdown only for the first held mouse button.
+	// mousedown also reports LMB pressed during an existing RMB camera drag.
+	canvas.addEventListener( "mousedown", event => {
+		const r = canvas.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
+		if ( event.button === 2 && bindings.mouseMode === 1 && !blocksUi( x, y ) ) {
+			onUi( { kind: "activate", id: "hotbar:0" } );
+		}
+		if ( event.button === 0 && !blocksUi( x, y ) && r.width > 0 && r.height > 0 ) {
+			onWorldClick( x / r.width, y / r.height );
+		}
+	}, { signal: lifetime.signal } );
+	canvas.addEventListener( "dblclick", event => {
+		const r = canvas.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
+		if ( event.button === 0 && !blocksUi( x, y ) && r.width > 0 && r.height > 0 ) {
+			onWorldClick( x / r.width, y / r.height, true );
+		}
+	}, { signal: lifetime.signal } );
+	canvas.addEventListener( "pointercancel", () => {
+		uiPointer = false;
+		onInput( { kind: "release", timeMs: timeMs() } );
+	}, { signal: lifetime.signal } );
+	window.addEventListener( "keydown", event => {
+		if (
+			/^F([1-9]|1[0-2])$/.test( event.code ) && event.code !== "F5" && event.code !== "F11" &&
+			event.code !== "F12"
+		) event.preventDefault();
+	}, { signal: lifetime.signal, capture: true } );
+	window.addEventListener( "keydown", event => {
+		if ( event.isComposing || event.keyCode === 229 ) return;
+		const vk = virtualKey( event.code );
+		if (
+			(vk && bindings.keys.includes( vk )) ||
+			(/^F([1-9]|1[0-2])$/.test( event.code ) && event.code !== "F5" && event.code !== "F11" &&
+				event.code !== "F12")
+		) event.preventDefault();
+		if ( !event.repeat ) onGesture();
+		if ( !event.repeat ) onUi( { kind: "key", code: event.code, shift: event.shiftKey, ctrl: event.ctrlKey } );
+		if ( !event.repeat ) {
+			onInput( { kind: "key", code: event.code, down: true, timeMs: timeMs() } );
+		}
+	}, { signal: lifetime.signal } );
+	window.addEventListener(
+		"keyup",
+		event => onInput( { kind: "key", code: event.code, down: false, timeMs: timeMs() } ),
+		{ signal: lifetime.signal }
+	);
+	window.addEventListener( "blur", () => {
+		uiPointer = false;
+		onInput( { kind: "release", timeMs: timeMs() } );
+	}, { signal: lifetime.signal } );
+	canvas.addEventListener( "wheel", event => {
+		event.preventDefault();
+		const r = canvas.getBoundingClientRect();
+		if ( blocksUi( event.clientX - r.left, event.clientY - r.top ) ) return;
+		onInput( { kind: "wheel", delta: cameraWheelDelta( event ), timeMs: timeMs() } );
+	}, { signal: lifetime.signal, passive: false } );
+	const viewport = { width: 1, height: 1 };
+	return {
+		saveVideoOptions( value: VideoOptions ) {
+			const next = videoOptions( value );
+			localStorage.setItem( videoKey, JSON.stringify( next ) );
+			onUi( { kind: "video-preferences", value: next } );
+		},
+		saveQuickslotOptions( value: ExtendedQuickslotOptions ) {
+			const next = extendedQuickslotOptions( value );
+			localStorage.setItem( quickslotKey, JSON.stringify( next ) );
+			onUi( { kind: "quickslot-preferences", value: next } );
+		},
+		saveInputOptions( value: InputOptions ) {
+			const next = inputOptions( value );
+			localStorage.setItem( inputKey, JSON.stringify( next ) );
+			bindings = next;
+			onUi( { kind: "input-preferences", value: next } );
+		},
+		saveSightMode( value: SightMode ) {
+			const next = sightMode( value );
+			localStorage.setItem( cameraKey, JSON.stringify( next ) );
+			onUi( { kind: "camera-preferences", value: next } );
+		},
+		saveAudioOptions( value: AudioOptions ) {
+			const next = audioOptions( value );
+			localStorage.setItem( audioKey, JSON.stringify( next ) );
+			onUi( { kind: "audio-preferences", value: next } );
+		},
+		saveChatBlocks( value: readonly string[] ) {
+			const next = chatBlocks( value );
+			localStorage.setItem( blockKey, JSON.stringify( next ) );
+			onUi( { kind: "chat-blocks", value: next } );
+		},
+		saveGameOptions( value: GameOptions ) {
+			const next = gameOptions( value ), change = next.windowMode !== preferences.windowMode;
+			publishPreferences( next );
+			if ( !change || displayRequest ) return;
+			const target = document.documentElement;
+			if ( next.windowMode && !document.fullscreenElement || !next.windowMode && document.fullscreenElement ) {
+				return;
+			}
+			displayRequest = true;
+			try {
+				const request = next.windowMode ? document.exitFullscreen() : target.requestFullscreen();
+				void request.catch( error => {
+					if ( !lifetime.signal.aborted ) {
+						status.value = "Display mode could not be changed: " + String( error );
+					}
+				} ).finally( () => {
+					displayRequest = false;
+					syncDisplay();
+				} );
+			} catch ( error ) {
+				displayRequest = false;
+				status.value = "Display mode could not be changed: " + String( error );
+				syncDisplay();
+			}
+		},
+		canvas,
+		presentWorldCursor: cursor.world,
+		presentTelemetry( sample ) {
+			if ( !fpsReadout || fpsReadout.hidden ) return;
+			const text = `${Math.round( sample.fps )} FPS
+frame ${fpsMs( sample.frameMs )}/${fpsMs( sample.p95FrameMs )}
+cpu ${fpsMs( sample.cpuMs )}/${fpsMs( sample.p95CpuMs )}
 actors ${sample.actors}; draws ${sample.draws}
 groups ${sample.visibleGroups}`;
-            if(fpsReadout.textContent!==text)fpsReadout.textContent=text;
-        },presentUi(state){
-            bridge.present(state);
-            if(fpsChip){const right=state.hudCorner?Math.max(4,canvas.clientWidth-state.hudCorner[0]+6):8,top=state.hudCorner?Math.max(4,state.hudCorner[1]):8;fpsChip.style.right=right+'px';fpsChip.style.top=top+'px';}
-            if(loading){const active=String(!!state.loading),error=String(!!state.loadingError),hidden=String(!state.loading);if(loading.dataset.active!==active)loading.dataset.active=active;if(loading.dataset.error!==error)loading.dataset.error=error;if(loading.getAttribute("aria-hidden")!==hidden)loading.setAttribute("aria-hidden",hidden);}
-            if(loading instanceof HTMLElement&&state.loadingProgress!==undefined){const progress=String(Math.max(0,Math.min(1,state.loadingProgress)));if(loading.style.getPropertyValue('--loading-progress')!==progress)loading.style.setProperty('--loading-progress',progress);}
-            if(loadingLabel&&(state.loading||state.loadingError)){const label=state.loadingError?"Unable to finish loading":"Preparing your journey";if(loadingLabel.textContent!==label)loadingLabel.textContent=label;}
-            if(loadingDetail&&(state.loading||state.loadingError)){const detail=state.loadingError?state.loadingError:state.loadingStatus??"Starting Silkroad Online";if(loadingDetail.textContent!==detail)loadingDetail.textContent=detail;}
-        },
-        presentLoading(state){
-            if(!transfer)return;const changed=transfer.hidden===state.visible;transfer.hidden=!state.visible;
-            const now=performance.now();if(!state.visible||!changed&&now-transferAt<250)return;transferAt=now;
-            transferText('title',state.title);const p=state.progress;transfer.dataset.connecting=String(!p);
-            transferText('file',p?.currentFile?decodeURIComponent(p.currentFile).split('/').at(-1)!:p?'Preparing graphics and checking cached files':'Waiting for the server to accept your connection');
-            transferText('bytes',p?`${(p.bytesReceived/1e6).toFixed(1)} MB`:'—');
-            transferText('speed',p&&p.filesActive&&p.bytesPerSecond>0?`${(p.bytesPerSecond/1e6).toFixed(1)} MB/s`:'—');
-            transferText('files',p?String(p.filesReady):'—');transferText('cache',p?String(p.cacheHits):'—');
-            transferText('queue',p?p.filesActive?`${p.filesActive} files being prepared · more may be discovered`:'Downloads settled · preparing the scene':'Your character stays here until the server is ready');
-        },
-        readViewport() { viewport.width = Math.max(1, Math.round(canvas.clientWidth * devicePixelRatio)); viewport.height = Math.max(1, Math.round(canvas.clientHeight * devicePixelRatio)); return viewport; },
-        report(text,error) { if(status.textContent!==text)status.textContent = text;if(/^(Runtime|Renderer|Simulation) failed/.test(text)){
-            console.error('[SRO runtime] '+text,...(error===undefined?[]:[error]));
-            if(loading){loading.dataset.active="true";loading.dataset.error="true";loading.setAttribute("aria-hidden","false");}
-            if(loadingLabel)loadingLabel.textContent="Unable to finish loading";
-            if(loadingDetail)loadingDetail.textContent=text;
-        } },
-        dispose() { lifetime.abort();bridge.dispose();cursor.dispose(); }
-    };
+			if ( fpsReadout.textContent !== text ) fpsReadout.textContent = text;
+		},
+		presentUi( state ) {
+			bridge.present( state );
+			if ( fpsChip ) {
+				const right = state.hudCorner ? Math.max( 4, canvas.clientWidth - state.hudCorner[0] + 6 ) : 8,
+					top = state.hudCorner ? Math.max( 4, state.hudCorner[1] ) : 8;
+				fpsChip.style.right = right + "px";
+				fpsChip.style.top = top + "px";
+			}
+			if ( loading ) {
+				const active = String( !!state.loading ),
+					error = String( !!state.loadingError ),
+					hidden = String( !state.loading );
+				if ( loading.dataset.active !== active ) loading.dataset.active = active;
+				if ( loading.dataset.error !== error ) loading.dataset.error = error;
+				if ( loading.getAttribute( "aria-hidden" ) !== hidden ) loading.setAttribute( "aria-hidden", hidden );
+			}
+			if ( loading instanceof HTMLElement && state.loadingProgress !== undefined ) {
+				const progress = String( Math.max( 0, Math.min( 1, state.loadingProgress ) ) );
+				if ( loading.style.getPropertyValue( "--loading-progress" ) !== progress ) {
+					loading.style.setProperty( "--loading-progress", progress );
+				}
+			}
+			if ( loadingLabel && (state.loading || state.loadingError) ) {
+				const label = state.loadingError ? "Unable to finish loading" : "Preparing your journey";
+				if ( loadingLabel.textContent !== label ) loadingLabel.textContent = label;
+			}
+			if ( loadingDetail && (state.loading || state.loadingError) ) {
+				const now = performance.now();
+				const detail = state.loadingError ?
+					state.loadingError :
+					loadingDetailText(
+						state.loadingStatus ?? "Starting Silkroad Online",
+						assetProgress,
+						now - bytesGrewAt
+					);
+				// The rate changes every frame; a few updates a second read calmly.
+				if (
+					loadingDetail.textContent !== detail &&
+					(state.loadingError || now - detailAt >= LOADING_DETAIL_REFRESH_MS)
+				) {
+					loadingDetail.textContent = detail;
+					detailAt = now;
+				}
+			}
+		},
+		presentLoading( state ) {
+			const progress = state.progress, now = performance.now();
+			if ( progress && progress.filesActive > 0 && !(assetProgress && assetProgress.filesActive > 0) ) {
+				bytesGrewAt = now;
+			}
+			if ( progress && progress.bytesReceived !== bytesSeen ) {
+				bytesSeen = progress.bytesReceived;
+				bytesGrewAt = now;
+			}
+			assetProgress = progress;
+			if ( !transfer ) return;
+			const changed = transfer.hidden === state.visible;
+			transfer.hidden = !state.visible;
+			if ( !state.visible || !changed && now - transferAt < 250 ) return;
+			transferAt = now;
+			transferText( "title", state.title );
+			const p = state.progress;
+			transfer.dataset.connecting = String( !p );
+			transferText(
+				"file",
+				p?.currentFile ?
+					decodeURIComponent( p.currentFile ).split( "/" ).at( -1 )! :
+					p ?
+					"Preparing graphics and checking cached files" :
+					"Waiting for the server to accept your connection"
+			);
+			transferText( "bytes", p ? `${(p.bytesReceived / 1e6).toFixed( 1 )} MB` : "—" );
+			transferText(
+				"speed",
+				p && p.filesActive && p.bytesPerSecond > 0 ? `${(p.bytesPerSecond / 1e6).toFixed( 1 )} MB/s` : "—"
+			);
+			transferText( "files", p ? String( p.filesReady ) : "—" );
+			transferText( "cache", p ? String( p.cacheHits ) : "—" );
+			transferText(
+				"queue",
+				p ?
+					p.filesActive ?
+						`${p.filesActive} files being prepared · more may be discovered` :
+						"Downloads settled · preparing the scene" :
+					"Your character stays here until the server is ready"
+			);
+		},
+		readViewport() {
+			viewport.width = Math.max( 1, Math.round( canvas.clientWidth * devicePixelRatio ) );
+			viewport.height = Math.max( 1, Math.round( canvas.clientHeight * devicePixelRatio ) );
+			return viewport;
+		},
+		report( text, error ) {
+			if ( status.textContent !== text ) status.textContent = text;
+			if ( /^(Runtime|Renderer|Simulation) failed/.test( text ) ) {
+				console.error( "[SRO runtime] " + text, ...(error === undefined ? [] : [ error ]) );
+				if ( loading ) {
+					loading.dataset.active = "true";
+					loading.dataset.error = "true";
+					loading.setAttribute( "aria-hidden", "false" );
+				}
+				if ( loadingLabel ) loadingLabel.textContent = "Unable to finish loading";
+				if ( loadingDetail ) loadingDetail.textContent = text;
+			}
+		},
+		dispose() {
+			lifetime.abort();
+			bridge.dispose();
+			cursor.dispose();
+		}
+	};
 }

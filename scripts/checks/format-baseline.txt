@@ -360,9 +360,7 @@ apps/client-next/src/engine/runtime/frontend/stage/preload.ts
 apps/client-next/src/engine/runtime/frontend/stage/stage.ts
 apps/client-next/src/engine/runtime/input/input.ts
 apps/client-next/src/engine/runtime/navigation/navigation.ts
-apps/client-next/src/engine/runtime/platform/platform.ts
 apps/client-next/src/engine/runtime/platform/ui/cursor.ts
-apps/client-next/src/engine/runtime/platform/ui/ui.ts
 apps/client-next/src/engine/runtime/presentation/effective-hp.ts
 apps/client-next/src/engine/runtime/presentation/presentation.ts
 apps/client-next/src/engine/runtime/random/random.ts
@@ -440,9 +438,7 @@ apps/client-next/src/engine/runtime/ui/localization/localization.ts
 apps/client-next/src/engine/runtime/ui/resources/resources.ts
 apps/client-next/src/engine/runtime/ui/text/text.ts
 apps/client-next/src/engine/runtime/ui/title/creation.ts
-apps/client-next/src/engine/runtime/ui/title/internal/title-contract.ts
 apps/client-next/src/engine/runtime/ui/title/resources.ts
-apps/client-next/src/engine/runtime/ui/title/title.ts
 apps/client-next/src/engine/runtime/ui/ui.ts
 apps/client-next/src/engine/runtime/world/camera/camera.ts
 apps/client-next/src/engine/runtime/world/world.ts
@@ -534,7 +530,6 @@ apps/client-next/tests/browser/loading-cache.test.mjs
 apps/client-next/tests/browser/loading-feedback.test.mjs
 apps/client-next/tests/browser/loading-presentation.test.mjs
 apps/client-next/tests/browser/loading-resize.test.mjs
-apps/client-next/tests/browser/login-flow.test.mjs
 apps/client-next/tests/browser/mangyang-impact-live.test.mjs
 apps/client-next/tests/browser/matching-empty.test.mjs
 apps/client-next/tests/browser/material-alpha-functions.test.mjs
