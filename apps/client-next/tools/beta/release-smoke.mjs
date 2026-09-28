@@ -121,6 +121,7 @@ async function exercise( page, result, credentials ) {
 		credentials.character,
 		{ timeout: CONTROL_BUDGET_MS }
 	);
+	await page.locator( "#startup-loading" ).waitFor( { state: "hidden" } );
 	recordPhase( result, "world" );
 	result.navigation = "world";
 	await page.keyboard.press( "i" );
@@ -142,6 +143,7 @@ async function exercise( page, result, credentials ) {
 		credentials.character,
 		{ timeout: CONTROL_BUDGET_MS }
 	);
+	await page.locator( "#startup-loading" ).waitFor( { state: "hidden" } );
 	await page.keyboard.press( "i" );
 	await control( "inventory-gold" ).waitFor();
 	await page.keyboard.press( "i" );
