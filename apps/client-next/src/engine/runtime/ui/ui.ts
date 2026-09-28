@@ -32,6 +32,14 @@ import {
 } from "@/engine/foundation/ui/minimap-markers";
 import { createMinimapResources } from "./hud/minimap";
 import { createSkillTrainingCache } from "./hud/skill-training";
+import {
+	createWithdrawalDialog,
+	WITHDRAWAL_CONFIRM_SIZE,
+	WITHDRAWAL_CONFIRM_BUTTON_Y,
+	WITHDRAWAL_CONFIRM_FILL_HEIGHT,
+	WITHDRAWAL_SKILL_FRAME_HEIGHT
+} from "./hud/withdrawal";
+import { isRestorationPotion } from "@/engine/foundation/gameplay/withdrawal";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
 import { academyRank } from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
@@ -430,6 +438,7 @@ export function createUi(
 		questTimers = createQuestTimers();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
+	const withdrawal = createWithdrawalDialog();
 	const gauges = createGaugePresentation();
 	const regionBanner = createRegionBanner();
 	const hudMessages = createHudMessages( chooseTip );
@@ -849,6 +858,7 @@ export function createUi(
 	================
 	*/
 	function resetPanel() {
+		withdrawal.close();
 		blockDialog = null;
 		blockSelected = "";
 		blockInput = "";
@@ -934,6 +944,14 @@ export function createUi(
 	================
 	*/
 	function sendGameplay( command: Extract<SessionCommand, { kind: "gameplay"; }>["command"] ) {
+		if ( command.kind === "item-use" ) {
+			const item = view?.gameplay?.inventory.find( row => row.slot === command.slot );
+			if ( item && isRestorationPotion( item ) ) {
+				withdrawal.open( item.refObjId );
+				dirty = true;
+				return;
+			}
+		}
 		commands( { kind: "gameplay", command } );
 	}
 	/*
@@ -1075,6 +1093,24 @@ export function createUi(
 			}
 			return;
 		}
+		if ( id.startsWith( "withdrawal-" ) ) {
+			if ( id === "withdrawal-close" ) withdrawal.close();
+			else if ( id === "withdrawal-cancel" ) withdrawal.select( "" );
+			else if ( id === "withdrawal-decrease" ) withdrawal.adjust( 1 );
+			else if ( id === "withdrawal-recover" ) withdrawal.adjust( -1 );
+			else if ( id.startsWith( "withdrawal-choice:" ) ) {
+				withdrawal.select( id.slice( "withdrawal-choice:".length ) );
+			} else if ( id === "withdrawal-confirm" && view.gameplay ) {
+				const state = withdrawal.read( view.gameplay, hud.data()?.masteryCosts ?? {} );
+				if ( state.command ) {
+					sendGameplay( state.command );
+					withdrawal.select( "" );
+				}
+			}
+			dirty = true;
+			return;
+		}
+		if ( withdrawal.confirming() ) return;
 		if ( skillConfirm && !id.startsWith( "skill-confirm-" ) ) return;
 		if ( confirmAbandon && !id.startsWith( "quest-abandon-" ) ) return;
 		const phase = view.session?.phase ?? "signed-out";
@@ -2631,6 +2667,19 @@ export function createUi(
 				bindings = inputOptions( event.value );
 				if ( panel !== "Option" ) bindingDraft = inputOptions( bindings );
 				dirty = true;
+				return;
+			}
+			if (
+				event.kind === "key" && withdrawal.active() &&
+				(withdrawal.confirming() || event.code === "Escape")
+			) {
+				if ( event.code === "Escape" ) {
+					if ( withdrawal.confirming() ) withdrawal.select( "" );
+					else withdrawal.close();
+					dirty = true;
+				} else if ( event.code === "Enter" ) {
+					activate( "withdrawal-confirm" );
+				}
 				return;
 			}
 			if ( event.kind === "key" && skillConfirm ) {
@@ -7589,19 +7638,68 @@ export function createUi(
 					}
 					endWindow( admission );
 				}
-				if ( panel === "Skills" && hudData ) {
+				if ( (panel === "Skills" || withdrawal.active()) && hudData ) {
 					const admission = beginWindow(),
 						popup = mainPopupGeometry( "Skills", hudData.windows.ifmainpopup!, w, h, popupPosition ),
-						[px, py] = popup.frame,
-						[ox, oy] = popup.pane;
-					mainPopup( "Skills", popup );
-					const page = hudData.windows.ifskill!,
+						restoring = withdrawal.active(),
+						root = hudData.root.GDR_SKILLWITHDRAWAL!,
+						withdrawalFrame = restoring ?
+							windowOrigin( "withdrawal", [
+								Math.max( 0, (w - root.rect[2]) / 2 ),
+								Math.max( 0, (h - root.rect[3]) / 2 ),
+								root.rect[2],
+								root.rect[3]
+							] ) :
+							popup.frame,
+						[px, py] = withdrawalFrame,
+						child = hudData.windows.ifskillwithdrawal!.GDR_SKILL!,
+						[ox, oy] = restoring ? [ px + child.rect[0], py + child.rect[1] ] : popup.pane,
+						withdrawalState = restoring && game ? withdrawal.read( game, hudData.masteryCosts ) : null;
+					if ( restoring ) {
+						blocks.push( withdrawalFrame );
+						quads.push(
+							...frameRing(
+								withdrawalFrame,
+								FRAME,
+								PARTS.map( p => resources.size( FRAME + p + ".png" ) ),
+								full
+							)
+						);
+						quads.push(
+							...text.quads(
+								hudCopy( root.text ),
+								[ px + 10, py + 12, root.rect[2] - 21, 12 ],
+								full,
+								white,
+								{ hAlign: 1, vAlign: 0 }
+							)
+						);
+						closeButton( px + root.rect[2] - 26, py + 10, "withdrawal-close" );
+					} else mainPopup( "Skills", popup );
+					const page = restoring ? hudData.withdrawalPage : hudData.windows.ifskill!,
 						board = hudData.windows.ifskillboard!,
 						catalog = hudData.skillUi,
 						learned = training,
 						masteries = game?.progression?.masteries ?? [];
+					if ( restoring ) {
+						// Create and Withdrawal both call a different control GDR_SKILL_BG.
+						// Native keeps both IDs (6 and 19); preserve the tab backing too.
+						authoredChrome( hudData.windows.ifskill!.GDR_SKILL_BG!, ox, oy );
+					}
 					for ( const node of authoredPaintOrder( page ) ) {
-						if ( node.name !== "GDR_SKILL_BOARD" && !node.text ) authoredChrome( node, ox, oy );
+						if ( node.name === "GDR_SKILL_BOARD" || node.text ) continue;
+						const chrome = restoring && node.id === 5 ?
+							{
+								...node,
+								rect: [
+									node.rect[0],
+									node.rect[1],
+									node.rect[2],
+									WITHDRAWAL_SKILL_FRAME_HEIGHT
+								] as UiRect
+							} :
+							node;
+						authoredChrome( chrome, ox, oy );
 					}
 					const available = catalog.masteries.filter( m => masteries.some( a => a.id === m.id ) ),
 						tabs = [ ...new Set( available.map( m => m.tab ) ) ];
@@ -7636,7 +7734,14 @@ export function createUi(
 							selected: m.id === selectedMastery
 						} );
 					}
-					authoredChrome( { ...page.GDR_SKILL_BOARD!, type: "CIFFrame" }, ox, oy );
+					authoredChrome(
+						{
+							...page.GDR_SKILL_BOARD!,
+							type: "CIFFrame"
+						},
+						ox,
+						oy
+					);
 					const bx = ox + 6,
 						by = oy + 29,
 						mastery = available.find( m => m.id === selectedMastery ),
@@ -7661,7 +7766,23 @@ export function createUi(
 								kind: "region"
 							} );
 						}
-						if (
+						const removable = withdrawalState?.rows.find( row =>
+							row.kind === "mastery-withdraw" && row.id === mastery.id
+						);
+						if ( restoring && removable && !removable.blocked ) {
+							authoredButton(
+								{
+									...board.GDR_SKILLBOARD_BTNLEVUP!,
+									texture: ROOT + "interface/recycle/rec_setup_button.png"
+								},
+								bx,
+								by,
+								"withdrawal-choice:mastery-withdraw:" + mastery.id,
+								hudCopy( "UIIT_STT_CIRCULATION_WITHDRAW_MASTERY_WND" ),
+								!withdrawalState?.quantity || !!game?.trainingPending
+							);
+						} else if (
+							!restoring &&
 							game?.progression &&
 							!masteryTrainingReason( mastery.id, game.progression, hudData.masteryCosts )
 						) {
@@ -7732,7 +7853,23 @@ export function createUi(
 								}
 							}
 							if ( !entry ) continue;
-							if ( slot.button.kind === "learn" ) {
+							const removable = owned &&
+								withdrawalState?.rows.find( row =>
+									row.kind === "skill-withdraw" && row.id === owned.id
+								);
+							if ( restoring && removable && !removable.blocked ) {
+								authoredButton(
+									{
+										...hudData.windows.ifskill_slot!.GDR_STMS_BTN_LEVELUP!,
+										texture: ROOT + "interface/recycle/rec_set_button.png"
+									},
+									r[0],
+									r[1],
+									"withdrawal-choice:skill-withdraw:" + removable.id,
+									hudCopy( "UIIT_STT_CIRCULATION_WITHDRAW_SKILL" ),
+									!withdrawalState?.quantity || !!game?.trainingPending
+								);
+							} else if ( !restoring && slot.button.kind === "learn" ) {
 								const ref = slot.button.skill,
 									node = {
 										...hudData.windows.ifskill_slot!.GDR_STMS_BTN_LEVELUP!,
@@ -7746,7 +7883,7 @@ export function createUi(
 									"skill-learn:" + ref.id,
 									localization.text( ref.nameSymbol, ref.name )
 								);
-							} else if ( slot.button.kind === "max" ) {
+							} else if ( !restoring && slot.button.kind === "max" ) {
 								const node = {
 									...hudData.windows.ifskill_slot!.GDR_STMS_BTN_LEVELUP!,
 									texture: ROOT + "interface/skill/skl_level_max.png"
@@ -7797,6 +7934,17 @@ export function createUi(
 					for ( const node of Object.values( page ) ) {
 						if ( node.text ) authoredText( node, ox, oy, hudCopy( node.text ) );
 					}
+					if ( restoring && withdrawalState ) {
+						const item = withdrawalState.potion, icon = iconPath( item?.icon );
+						if ( icon ) image( authoredRect( page.GDR_SKILL_ICON_QSP_ALL_POTION!, ox, oy ), icon );
+						authoredText( page.GDR_SKILL_TEXT_QSP_ITEM_NAME!, ox, oy, item?.name ?? "" );
+						authoredText(
+							page.GDR_SKILL_TEXT_QSP_ITEM_NUM!,
+							ox,
+							oy,
+							`${withdrawalState.quantity} ${hudCopy( "UIIT_STT_UNIT" )}`
+						);
+					}
 					authoredText( page.GDR_SKILL_TEXT_SP_NUM!, ox, oy, String( game?.progression?.skillPoints ?? 0 ) );
 					const model = next.entities.find( e => e.gid === game?.localGid )?.refObjId,
 						country = model === undefined ? game?.guide?.country : hudData.countries[model],
@@ -7811,7 +7959,9 @@ export function createUi(
 						oy,
 						masteries.reduce( ( n, m ) => n + m.level, 0 ) + "/" + cap
 					);
-					endWindow( admission );
+					// Restoration coexists with inventory; its cold-resource cache must
+					// never replay the primary popup's controls into this second window.
+					endWindow( admission, restoring ? "withdrawal" : "primary" );
 				}
 				if ( panel === "Quests" && hudData ) {
 					const admission = beginWindow(),
@@ -11251,6 +11401,111 @@ export function createUi(
 					false,
 					6
 				);
+			}
+			if ( worldVisible && game && withdrawal.confirming() && hud.data() ) {
+				const state = withdrawal.read( game, hud.data()?.masteryCosts ?? {} );
+				const page = hud.data()!.windows.ifskillremovalbox!, row = state.choice;
+				const [width, height] = WITHDRAWAL_CONFIRM_SIZE;
+				const px = Math.floor( (w - width) / 2 ), py = Math.floor( (h - height) / 2 );
+				const prefix = ROOT + "interface/messagebox/msgbox2_window_";
+				controls = [];
+				const admission = beginWindow();
+				blocks.push( full );
+				paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
+				quads.push(
+					...frameRing(
+						[ px, py, width, height ],
+						prefix,
+						PARTS.map( part => resources.size( prefix + part + ".png" ) ),
+						full
+					)
+				);
+				for ( const node of authoredPaintOrder( page ) ) {
+					// Mode 3 hides native controls 12/13 and 32..35: gold has no role.
+					if (
+						node.type === "CIFButton" || node.id === 12 || node.id === 13 || node.id >= 32 && node.id <= 35
+					) continue;
+					if ( node.id === 5 ) {
+						authoredChrome(
+							{
+								...node,
+								rect: [ node.rect[0], node.rect[1], node.rect[2], WITHDRAWAL_CONFIRM_FILL_HEIGHT ]
+							},
+							px,
+							py
+						);
+					} else authoredChrome( node, px, py );
+					if ( node.text ) authoredText( node, px, py, hudCopy( node.text ) );
+				}
+				if ( row ) {
+					const mastery = row.kind === "mastery-withdraw" ?
+						hud.data()!.skillUi.masteries.find( m => m.id === row.id ) :
+						undefined;
+					const skill = game.skillCatalog?.find( s => s.id === row.id );
+					const caption = row.kind === "mastery-withdraw" ?
+						"UIIT_STT_CIRCULATION_WITHDRAW_MASTERY_WND" :
+						"UIIT_STT_CIRCULATION_WITHDRAW_SKILL_WND";
+					quads.push(
+						...text.quads(
+							hudCopy( caption ),
+							messageBox( w, h, width, height, [ px, py ] ).title,
+							full,
+							white,
+							{ hAlign: 1, vAlign: 0 }
+						)
+					);
+					authoredText(
+						page.GDR_SKLRB_SKILLNAME!,
+						px,
+						py,
+						mastery ? hudCopy( mastery.name ) : localization.text( row.nameSymbol, row.name )
+					);
+					authoredText( page.GDR_SKLRB_CURRENTLEVEL!, px, py, `Lv ${row.level}` );
+					authoredText( page.GDR_SKLRB_TARGETLEVEL!, px, py, `Lv ${row.rank}` );
+					authoredText( page.GDR_SKLRB_WITHDRAWED_LEVEL!, px, py, String( state.amount ) );
+					authoredText( page.GDR_SKLRB_TOTALPOINT!, px, py, String( row.refund ) );
+					authoredText(
+						page.GDR_SKLRB_WITHDRAW_POTION!,
+						px,
+						py,
+						`${state.potion?.name ?? ""} ${state.quantity} ${hudCopy( "UIIT_STT_UNIT" )}`
+					);
+					const icon = iconPath( mastery?.icon ?? skill?.icon ), potionIcon = iconPath( state.potion?.icon );
+					if ( icon ) image( authoredRect( page.GDR_SKLRB_SKILLICON!, px, py ), icon );
+					if ( potionIcon ) image( authoredRect( page.GDR_SKLRB_WITHDRAWICON!, px, py ), potionIcon );
+				}
+				authoredButton(
+					page.GDR_SKLRB_BTN_DOWNGRADE!,
+					px,
+					py,
+					"withdrawal-decrease",
+					hudCopy( "UIIT_STT_CIRCULATION_WITHDRAW_LEV" ),
+					state.amount >= state.maximum
+				);
+				authoredButton(
+					page.GDR_SKLRB_BTN_RECOVER!,
+					px,
+					py,
+					"withdrawal-recover",
+					hudCopy( "UIIT_STT_CIRCULATION_CANCEL_WITHDRAW" ),
+					state.amount === 0
+				);
+				for (
+					const [node, id] of [ [ page.GDR_SKLRB_BTN_OK!, "withdrawal-confirm" ], [
+						page.GDR_SKLRB_BTN_CANCEL!,
+						"withdrawal-cancel"
+					] ] as const
+				) {
+					authoredLabeledButton(
+						{ ...node, rect: [ node.rect[0], WITHDRAWAL_CONFIRM_BUTTON_Y, node.rect[2], node.rect[3] ] },
+						px,
+						py,
+						id,
+						hudCopy( node.text ),
+						id === "withdrawal-confirm" && !state.command
+					);
+				}
+				endWindow( admission, "withdrawal-confirm" );
 			}
 			if ( worldVisible && carriedShortcut && game ) {
 				const binding = quickSlotDrag( carriedShortcut.id, 0, game ),

@@ -421,6 +421,7 @@ type TextdataSkills struct {
 	// load logs it loud, because a silently ambiguous codename could
 	// mis-seed the creation list.
 	byCodename map[string]uint32
+	byRank     map[skillRankKey]uint32
 	// shared keeps the process-wide parse alive while this loader reads its
 	// resident rows; UseBoundedCache drops it.
 	shared    *TextdataSkills
@@ -522,6 +523,7 @@ func (t *TextdataSkills) load() {
 	})
 	t.shared = parsed
 	t.rows, t.plans, t.byCodename, t.loadErr = parsed.rows, parsed.plans, parsed.byCodename, parsed.loadErr
+	t.indexLearnedRanks()
 }
 
 /*

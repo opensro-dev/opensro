@@ -130,6 +130,7 @@ type Runtime struct {
 	// owner. Standalone runtimes without effects use the static graph below.
 	BaseStats          func(*enterworld.Character) (wire.BaseStats, error)
 	RecoverLevelVitals func(*enterworld.Character) error
+	Withdrawal         WithdrawalHooks
 }
 
 /*

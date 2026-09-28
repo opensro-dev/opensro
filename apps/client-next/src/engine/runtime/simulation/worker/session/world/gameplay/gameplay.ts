@@ -11,6 +11,12 @@ commands and cannot bypass actor eligibility.
 */
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
 import { createPickup } from "./pickup";
+import {
+	withdrawalRequest,
+	withdrawalSkillBindings,
+	SKILL_WITHDRAWAL_RESPONSE,
+	MASTERY_WITHDRAWAL_RESPONSE
+} from "@/engine/foundation/gameplay/withdrawal";
 import { positionSkillRequest } from "@/engine/foundation/gameplay/position-skill";
 import {
 	portalNotice,
@@ -782,6 +788,8 @@ state here before a command can claim a native wire conversation.
 				[
 					"inventory-move",
 					"item-use",
+					"skill-withdraw",
+					"mastery-withdraw",
 					"item-drop",
 					"gold-drop",
 					"shop-open",
@@ -879,6 +887,19 @@ state here before a command can claim a native wire conversation.
 				send( request );
 				if ( command.kind === "social-consent" ) social = { ...social, invitation: null };
 				return request;
+			}
+			if ( command.kind === "skill-withdraw" || command.kind === "mastery-withdraw" ) {
+				const { id, rank } = command;
+				let receiptID = command.id;
+				if ( command.kind === "skill-withdraw" && command.rank > 0 ) {
+					const current = catalog.find( row => row.id === id );
+					const lower = catalog.find( row =>
+						row.group === current?.group && row.level === rank && row.trainable
+					);
+					if ( !lower ) throw Error( "Restoration rank is unavailable" );
+					receiptID = lower.id;
+				}
+				return training.request( withdrawalRequest( command ), receiptID, now );
 			}
 			if ( command.kind === "skill-train" || command.kind === "mastery-train" ) {
 				const id = command.id;
@@ -1405,6 +1426,48 @@ Packet handling must not depend on which HUD panel is currently open.
 					) {
 						send( socialRequest( social, { kind: "social-consent", accept: false, automatic: true } ) );
 						social = { ...social, invitation: null };
+					}
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === SKILL_WITHDRAWAL_RESPONSE || frame.opcode === MASTERY_WITHDRAWAL_RESPONSE ) {
+					if ( !training.accepts( frame.opcode ) ) return true;
+					const payload = frame.payload;
+					if ( payload[0] === 2 && payload.length === 2 ) {
+						training.receipt( frame.opcode );
+						const notice = constantNativeNotice( 8, payload[1]! );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					} else {
+						const mastery = frame.opcode === MASTERY_WITHDRAWAL_RESPONSE;
+						if ( payload[0] !== 1 || payload.length !== (mastery ? 6 : 5) ) {
+							throw Error( "Invalid restoration receipt" );
+						}
+						const id = new DataView( payload.buffer, payload.byteOffset, payload.byteLength ).getUint32(
+							1,
+							true
+						);
+						if ( !training.accepts( frame.opcode, id ) ) throw Error( "Mismatched restoration receipt" );
+						if ( mastery ) {
+							if ( !progression.masteries.some( row => row.id === id && row.level > payload[5]! ) ) {
+								throw Error( "Invalid restored mastery" );
+							}
+							progression = {
+								...progression,
+								masteries: progression.masteries.map( row =>
+									row.id === id ? { ...row, level: payload[5]! } : row
+								)
+							};
+						} else {
+							const nextBindings = withdrawalSkillBindings( bindings, catalog, id );
+							for ( const slot of nextBindings.quickSlots ) {
+								const previous = bindings.quickSlots.find( row => row.slot === slot.slot );
+								if ( previous?.kind !== slot.kind || previous.payload !== slot.payload ) {
+									send( quickSlotPacket( slot ) );
+								}
+							}
+							bindings = nextBindings;
+						}
+						training.receipt( frame.opcode );
 					}
 					dirty = true;
 					return true;

@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+register.go - authenticated progression transport dispatch
+
+All handlers resolve the character bound to the session. The runtime owns
+validation and mutation; this adapter delivers its committed private and
+public frames without trusting a client-supplied character identity.
+
+===========================================================================
+*/
 package progression
 
 import (
@@ -7,24 +18,35 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// Register wires the stat-plane handlers onto the hub: 0x727A/0x7552 stat
-// allocation, 0x7165 mastery training and 0x72CB skill learning. deps
-// MUST be the same instance
-// enterworld.Register ran with - both lanes resolve characters through it,
-// and separate instances would hold separate *Character pointers whose
-// mutations diverge.
+/*
+================
+Register
+
+The dependencies must resolve the same character records as enter-world.
+Independent record copies would let the two owners persist divergent state.
+================
+*/
 func Register(hub *transport.Hub, deps Dependencies) *Runtime {
 	rt := NewRuntime(deps)
 	rt.Register(hub)
 	return rt
 }
 
-// Register wires this runtime's handlers onto the hub.
+/*
+================
+Register
+
+Install composition hooks before exposing the runtime to authenticated
+traffic. Withdrawal refuses if its inventory/effect owners are absent.
+================
+*/
 func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(wire.OpAllocStrRequest, rt.hubHandler(hub, rt.HandleAllocStr))
 	hub.Handle(wire.OpAllocIntRequest, rt.hubHandler(hub, rt.HandleAllocInt))
 	hub.Handle(wire.OpMasteryLevelUpRequest, rt.hubHandler(hub, rt.HandleMasteryLevelUp))
 	hub.Handle(wire.OpSkillLearnRequest, rt.hubHandler(hub, rt.HandleSkillLearn))
+	hub.Handle(wire.OpSkillWithdrawalRequest, rt.hubHandler(hub, rt.HandleSkillWithdrawal))
+	hub.Handle(wire.OpMasteryWithdrawalRequest, rt.hubHandler(hub, rt.HandleMasteryWithdrawal))
 	// The dev exp-grant trigger (0xDE01, NOT a retail opcode - see the
 	// OpDevGrantExp doc) only exists on the hub when explicitly enabled;
 	// when disabled the opcode is simply unregistered and the hub drops
@@ -35,21 +57,24 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	}
 }
 
-// opFunc is one transport-free runtime operation.
+/*
+================
+opFunc
+
+An operation returns committed frames without depending on a socket.
+================
+*/
 type opFunc func(divisionID string, character *enterworld.Character, payload []byte) OpResult
 
-// hubHandler adapts a runtime operation onto the hub: resolve the bound
-// character (never trust client-supplied identity on later frames), run the
-// op, answer the acting session, then fan its public presentation projection
-// to division peers. Ordinary stat/mastery operations have no broadcast;
-// the guarded experience trigger can carry the same gid-only level-up effect
-// as production combat and quest rewards.
-//
-// An UNBOUND session is discarded silently. The retail client cannot
-// compose these frames before enter-world (the buttons live in windows the
-// mission scene owns), and the acks are typed per-request - answering a
-// refusal to a session with no character would invent a conversation the
-// native client never has.
+/*
+================
+hubHandler
+
+Unbound sessions have no progression conversation. Bound sessions receive
+private state first; public presentation excludes the sender and every
+other division. Only operations that return Broadcast participate in it.
+================
+*/
 func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFunc {
 	return func(s *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(rt.deps, s)
@@ -75,6 +100,14 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 	}
 }
 
+/*
+================
+sendFrames
+
+Stop at the first delivery failure so a later receipt cannot overtake the
+state update it acknowledges on this session.
+================
+*/
 func sendFrames(s *transport.Session, frames []wire.Frame) {
 	for _, frame := range frames {
 		if err := s.Send(frame.Opcode, frame.Payload); err != nil {

@@ -334,6 +334,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return fmt.Errorf("quest definitions: %w", err)
 	}
 	stats := progression.NewRuntime(game.deps)
+	stats.Withdrawal = game.items.WithdrawalHooks()
 	stats.BaseStats = game.deps.PlayerBaseStats
 	stats.RecoverLevelVitals = func(character *enterworld.Character) error {
 		return game.items.RecoverLevelVitals(game.divisionID, character)

@@ -41,6 +41,7 @@ HudData
 ================
 */
 interface HudData {
+	readonly withdrawalPage: AuthoredLayout;
 	readonly portals: PortalCatalog;
 	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
 	readonly masteryCosts: Readonly<Record<number, number>>;
@@ -116,6 +117,8 @@ export function createHudResources(
 		"ifnewalchemyreinforce",
 		"ifaction",
 		"ifskillpracticebox",
+		"ifskillremovalbox",
+		"ifskillwithdrawal",
 		"ifquestreward",
 		"ifskill",
 		"ifskillboard",
@@ -193,6 +196,7 @@ export function createHudResources(
 		],
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
+	let withdrawalPage: AuthoredLayout = {};
 	const warm = new Set<string>();
 	return {
 		/*
@@ -217,6 +221,9 @@ export function createHudResources(
 								JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( r.buffer ) );
 							let value: unknown;
 							if ( i < layouts.length ) {
+								if ( layouts[i] === "ifskill" ) {
+									withdrawalPage = decodeAuthoredLayout( raw, [ "Create", "Withdrawal" ] );
+								}
 								value = layouts[i] === "ifextquickslot" ?
 									[ "Type1", "Type2", "Type3", "Type4", "Option" ].map( section =>
 										decodeAuthoredLayout( raw, [ section ] )
@@ -274,6 +281,7 @@ export function createHudResources(
 			if ( !data && states.every( s => s.kind === "ready" ) ) {
 				const values = states.map( s => s.kind === "ready" ? s.value : null );
 				data = {
+					withdrawalPage,
 					portals: values[layouts.length + 13] as PortalCatalog,
 					tooltipMasteries: values[layouts.length + 12] as HudData["tooltipMasteries"],
 					masteryCosts: values[layouts.length + 11] as HudData["masteryCosts"],

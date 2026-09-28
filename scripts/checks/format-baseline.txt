@@ -9,7 +9,6 @@ apps/client-next/src/engine/contracts/effective-hp.ts
 apps/client-next/src/engine/contracts/effects.ts
 apps/client-next/src/engine/contracts/footprint.ts
 apps/client-next/src/engine/contracts/frontend.ts
-apps/client-next/src/engine/contracts/gameplay.ts
 apps/client-next/src/engine/contracts/geometry.ts
 apps/client-next/src/engine/contracts/input.ts
 apps/client-next/src/engine/contracts/item-process.ts
@@ -392,7 +391,6 @@ apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inv
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/npc/npc.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/training/training.ts
 apps/client-next/src/engine/runtime/simulation/worker/simulation.ts
 apps/client-next/src/engine/runtime/ui/hud/messages.ts
 apps/client-next/src/engine/runtime/ui/hud/minimap.ts
@@ -754,7 +752,6 @@ scripts/build/shared/characterMaterialState.mjs
 scripts/build/shared/cifLayoutCatalog.mjs
 scripts/build/shared/cifPreprocessor.mjs
 scripts/build/shared/cifResources.mjs
-scripts/build/shared/cifRuntimeImageCatalog.mjs
 scripts/build/shared/collections.mjs
 scripts/build/shared/compressionUtils.mjs
 scripts/build/shared/configResources.mjs
