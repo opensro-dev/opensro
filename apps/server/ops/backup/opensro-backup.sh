@@ -47,7 +47,7 @@ readonly WEEKLY_DAY="${OPENSRO_BACKUP_WEEKLY_DAY:-7}"
 # load_config
 #
 # backup.conf sets STATE_ROOT, RCLONE_REMOTE, the KEEP_* retention counts,
-# EXTRA_PATHS and POSTGRES_DATABASES. restic reads its password from a file
+# EXTRA_PATHS, SQLITE_PATHS and POSTGRES_DATABASES. restic reads its password from a file
 # so it never appears in the environment of other processes' listings.
 # ================
 load_config() {
@@ -172,6 +172,14 @@ collect() {
 		cp -a "$path" "$STAGING/host$path"
 	done
 
+	# Companion SQLite stores may live outside the game state root. Never
+	# copy a live database and WAL separately through EXTRA_PATHS.
+	for db in ${SQLITE_PATHS:-}; do
+		[[ "$db" == /* && -f "$db" ]] || { log "required companion database missing: $db"; return 1; }
+		copy_sqlite "$db" "$STAGING/host$db"
+		count=$((count + 1))
+	done
+
 	# PostgreSQL databases (custom format, restorable with pg_restore). A
 	# listed database is required: a missing one fails the run rather than
 	# silently leaving the website out of the backup.
@@ -204,7 +212,7 @@ verify_latest() {
 	local db
 	while IFS= read -r -d '' db; do
 		[[ "$(sqlite3 "$db" 'PRAGMA integrity_check;')" == "ok" ]] || { log "restored $db is corrupt"; return 1; }
-	done < <(find "$VERIFY" -type f -name '*.db' -print0)
+	done < <(find "$VERIFY" -type f \( -name '*.db' -o -name '*.sqlite3' \) -print0)
 	rm -rf "$VERIFY"
 }
 

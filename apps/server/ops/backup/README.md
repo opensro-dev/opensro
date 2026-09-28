@@ -108,3 +108,13 @@ To put state back on a host:
 2. Copy `state/` over `STATE_ROOT`, keeping owners (`chown -R sro:sro` on the
    `agent` and `authority` directories).
 3. Deploy.
+
+### Companion services
+
+After deploying the website, set `POSTGRES_DATABASES="opensro_web"`.
+For the Discord bot, set
+`SQLITE_PATHS="/var/lib/opensro-discord-bot/bot.sqlite3"`. These files are
+required, snapshotted through SQLite’s backup API, and restored under
+`host/` with their absolute host path. Keep live SQLite files out of
+`EXTRA_PATHS`; copying a database separately from its WAL is not a snapshot.
+The website and bot configuration directories belong in `EXTRA_PATHS`.

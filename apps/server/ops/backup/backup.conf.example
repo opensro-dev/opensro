@@ -30,3 +30,7 @@ EXTRA_PATHS="/etc/caddy /etc/nomad.d /etc/systemd/system/opensro* /etc/systemd/s
 # PostgreSQL databases dumped with pg_dump. A listed database must exist:
 # add opensro_web once the website is deployed.
 POSTGRES_DATABASES=""
+
+# Companion SQLite stores use online snapshots, never a raw copy of live WAL files.
+# Add /var/lib/opensro-discord-bot/bot.sqlite3 when the bot is deployed.
+SQLITE_PATHS=""
