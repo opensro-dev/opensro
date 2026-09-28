@@ -1,18 +1,45 @@
 /*
 ===========================================================================
 
-release-smoke.test.mjs - distinguish completed scene cancellation from failure.
+release-smoke.test.mjs - preserve failure evidence without exposing credentials.
 
 Browser request bookkeeping can report an abort after the authenticated owner
 has already consumed its response. Only successful phase evidence permits that
 cancellation; unrelated errors must continue to block publication.
+Credential entry failures must not carry Playwright's echoed input arguments.
 
 ===========================================================================
 */
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyRequestFailures } from "../../tools/beta/release-smoke.mjs";
+import { classifyRequestFailures, fillProbeCredentials } from "../../tools/beta/release-smoke.mjs";
+
+/*
+================
+credentialFailurePrivacy
+
+Exercise the real credential boundary with a driver that echoes its argument,
+as Playwright does on input timeout. Both account and password failures are safe.
+================
+*/
+test("credential input failures omit echoed values from reports", async function credentialFailurePrivacy() {
+	for ( const field of [ "account", "password" ] ) {
+		const page = {
+			locator: selector => ({
+				fill: async value => {
+					if ( selector === `[data-ui-id="${field}"]` ) {
+						throw Error( `fill(${JSON.stringify( value )}) timed out` );
+					}
+				}
+			})
+		};
+		await assert.rejects(
+			fillProbeCredentials( page, { username: "scratch-account", password: 'secret"with\ncharacters' } ),
+			{ message: `Unable to fill release probe ${field} field` }
+		);
+	}
+});
 
 /*
 ================

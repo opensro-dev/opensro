@@ -27,6 +27,24 @@ const MAX_NETWORK_ROWS = 4096;
 
 /*
 ================
+fillProbeCredentials
+
+Playwright includes fill arguments in timeout errors. Replace credential-entry
+failures at this boundary so reports and uploaded logs cannot contain a password.
+================
+*/
+export async function fillProbeCredentials( page, credentials ) {
+	for ( const [id, value] of [ [ "account", credentials.username ], [ "password", credentials.password ] ] ) {
+		try {
+			await page.locator( `[data-ui-id="${id}"]` ).fill( value );
+		} catch {
+			throw Error( `Unable to fill release probe ${id} field` );
+		}
+	}
+}
+
+/*
+================
 observeWorld
 
 Attach an observer to the existing Worker surface before application startup.
@@ -71,8 +89,7 @@ async function exercise( page, result, credentials ) {
 	await control( "native:servers" ).click();
 	await control( `server:${credentials.shard}` ).click();
 	await control( "native:server-accept" ).click();
-	await control( "account" ).fill( credentials.username );
-	await control( "password" ).fill( credentials.password );
+	await fillProbeCredentials( page, credentials );
 	const response = page.waitForResponse( row => new URL( row.url() ).pathname.endsWith( "/character/list" ) );
 	result.navigation = "login";
 	await control( "password" ).press( "Enter" );
