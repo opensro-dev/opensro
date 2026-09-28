@@ -28,6 +28,11 @@ export const BACKGROUND_INSTALL_VERSION = 1;
 const INSTALL_LIST_BYTES = 4 << 20;
 const MAX_INSTALL_PATHS = 16384;
 
+/*
+================
+InstallSource
+================
+*/
 export interface InstallSource {
 	read( url: URL, limit: number, signal: AbortSignal, report?: boolean ): Promise<Uint8Array<ArrayBuffer>>;
 	install( url: URL, signal: AbortSignal ): Promise<boolean>;
@@ -79,6 +84,11 @@ export function createBackgroundInstaller( source: InstallSource, foregroundIdle
 	const lifetime = new AbortController();
 	let started = false, fetched = 0, skipped = 0, failed = 0, done = false;
 
+	/*
+================
+run
+================
+	*/
 	async function run( listUrl: URL ) {
 		const bytes = await source.read( listUrl, INSTALL_LIST_BYTES, lifetime.signal, false );
 		const paths = backgroundInstallPaths(
@@ -101,14 +111,25 @@ export function createBackgroundInstaller( source: InstallSource, foregroundIdle
 	}
 
 	return {
+		/*
+================
+start
+================
+		*/
 		start( url: string ) {
-			if ( started ) return;
+			if ( started || lifetime.signal.aborted ) return;
 			started = true;
 			void run( new URL( url ) ).catch( () => {
+				started = false;
 				failed++;
 			} );
 		},
 		stats: () => ({ started, done, fetched, skipped, failed }),
+		/*
+================
+dispose
+================
+		*/
 		dispose() {
 			lifetime.abort();
 		}

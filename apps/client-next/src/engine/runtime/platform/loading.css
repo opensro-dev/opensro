@@ -1,6 +1,12 @@
 /*
-Boot loading shell for index.html. Linked from the HTML entry so styles apply
-before main.tsx loads global.css; do not import this from the module graph.
+===========================================================================
+
+loading.css - startup and native scene loading feedback
+
+Loaded from index.html before the application. Native scene art keeps a
+compact live status strip; startup retains the full loading shell.
+
+===========================================================================
 */
 
 html,
@@ -19,8 +25,7 @@ body,
 	overflow: hidden;
 	place-items: center;
 	padding: 24px;
-	background:
-		radial-gradient(circle at 50% 42%, rgba(116, 88, 31, 0.1), transparent 34%),
+	background: radial-gradient(circle at 50% 42%, rgba(116, 88, 31, 0.1), transparent 34%),
 		#020202;
 	box-sizing: border-box;
 	color: #d8c8a7;
@@ -167,6 +172,7 @@ body,
 }
 
 @keyframes sro-boot-loading-pulse {
+
 	0% {
 		transform: translateX(-120%);
 	}
@@ -176,9 +182,21 @@ body,
 	}
 }
 
-.sro-boot-loading { z-index:1000; transition:opacity 400ms ease,visibility 400ms; }
-.sro-boot-loading[data-active="false"] { opacity:0; visibility:hidden; pointer-events:none; }
-.sro-boot-loading[data-error="true"] .sro-boot-loading__bar-fill { animation:none; filter:saturate(.4); }
+.sro-boot-loading {
+	z-index: 1000;
+	transition: opacity 400ms ease,visibility 400ms;
+}
+
+.sro-boot-loading[data-active="false"] {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.sro-boot-loading[data-error="true"] .sro-boot-loading__bar-fill {
+	animation: none;
+	filter: saturate(.4);
+}
 
 /*
 FPS chip for index.html. The collapsed toggle stays out of the way in the top
@@ -234,25 +252,119 @@ the boot overlay so start-up frames remain measurable.
 }
 
 /* One transfer readout accompanies boot and the native scene artwork. */
-.loading-transfer{position:fixed;z-index:1002;left:50%;bottom:24px;transform:translateX(-50%);width:min(560px,calc(100vw - 40px));box-sizing:border-box;padding:18px 22px;border:1px solid #b59a5c66;border-radius:12px;background:#0b1119ee;box-shadow:0 12px 48px #0008;color:#e9dfc9;font:13px/1.5 "Segoe UI",sans-serif;pointer-events:none}
-.loading-transfer[hidden]{display:none}
-.loading-transfer__header{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:.02em}
-.loading-transfer__pulse{width:7px;height:7px;border-radius:50%;background:#dfbd74;box-shadow:0 0 12px #dfbd7477}
-.loading-transfer__file{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#a7b7c8;margin:7px 0 14px;font-size:12px}
-.loading-transfer__metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:0;padding-top:12px;border-top:1px solid #ffffff12;font-variant-numeric:tabular-nums}
-.loading-transfer__metrics dt{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#9aabbc}
-.loading-transfer__metrics dd{margin:3px 0 0;font-size:18px;font-weight:500;color:#f0dfb7}
-.loading-transfer__queue{margin-top:12px;color:#94a3b5;font-size:11px}
-@media(max-width:420px){.loading-transfer{padding:12px 16px;bottom:12px}.loading-transfer__metrics{gap:8px}.loading-transfer__metrics dd{font-size:15px}.loading-transfer__metrics dt{font-size:9px}}
 
-.loading-transfer[data-connecting="true"]{bottom:110px;width:min(440px,calc(100vw - 40px))}
-.loading-transfer[data-connecting="true"] .loading-transfer__metrics{display:none}
+.loading-transfer {
+	position: fixed;
+	z-index: 1002;
+	left: 50%;
+	bottom: 24px;
+	transform: translateX(-50%);
+	width: min(560px,calc(100vw - 40px));
+	box-sizing: border-box;
+	padding: 18px 22px;
+	border: 1px solid #b59a5c66;
+	border-radius: 12px;
+	background: #0b1119ee;
+	box-shadow: 0 12px 48px #0008;
+	color: #e9dfc9;
+	font: 13px/1.5 "Segoe UI",sans-serif;
+	pointer-events: none;
+}
+
+.loading-transfer[hidden] {
+	display: none;
+}
+
+.loading-transfer__header {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	font-weight: 600;
+	letter-spacing: .02em;
+}
+
+.loading-transfer__pulse {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #dfbd74;
+	box-shadow: 0 0 12px #dfbd7477;
+}
+
+.loading-transfer__file {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #a7b7c8;
+	margin: 7px 0 14px;
+	font-size: 12px;
+}
+
+.loading-transfer__metrics {
+	display: grid;
+	grid-template-columns: repeat(4,1fr);
+	gap: 12px;
+	margin: 0;
+	padding-top: 12px;
+	border-top: 1px solid #ffffff12;
+	font-variant-numeric: tabular-nums;
+}
+
+.loading-transfer__metrics dt {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: .07em;
+	color: #9aabbc;
+}
+
+.loading-transfer__metrics dd {
+	margin: 3px 0 0;
+	font-size: 18px;
+	font-weight: 500;
+	color: #f0dfb7;
+}
+
+.loading-transfer__queue {
+	margin-top: 12px;
+	color: #94a3b5;
+	font-size: 11px;
+}
+
+@media(max-width:420px) {
+
+	.loading-transfer {
+		padding: 12px 16px;
+		bottom: 12px;
+	}
+
+	.loading-transfer__metrics {
+		gap: 8px;
+	}
+
+	.loading-transfer__metrics dd {
+		font-size: 15px;
+	}
+
+	.loading-transfer__metrics dt {
+		font-size: 9px;
+	}
+}
+
+.loading-transfer[data-connecting="true"] {
+	bottom: 110px;
+	width: min(440px,calc(100vw - 40px));
+}
+
+.loading-transfer[data-connecting="true"] .loading-transfer__metrics {
+	display: none;
+}
 
 /*
 The release-skew refresh offer (platform.ts presentUpdate): shown once a newer
 client release is live. It sits above the game, keeps the boot overlay's
 palette, and reloads only when the player clicks.
 */
+
 .sro-update-notice {
 	position: fixed;
 	top: 12px;
@@ -287,4 +399,61 @@ palette, and reloads only when the player clicks.
 .sro-update-notice button:hover,
 .sro-update-notice button:focus-visible {
 	background: #2a2010;
+}
+
+/*
+The native control group uses a bottom-centered 1600 by 1200 canvas.
+Keep status beside Now Loading (x268..520, y1025..1060), below the gauge.
+The same uniform scale as loadingScreenQuads keeps both owners aligned.
+*/
+
+.sro-boot-loading[data-native="true"] {
+	--native-loading-unit: min(calc(100vw / 1600), calc(100vh / 1200));
+	inset: auto;
+	left: calc(50% - 250 * var(--native-loading-unit));
+	top: calc(100vh - 175 * var(--native-loading-unit));
+	width: calc(782 * var(--native-loading-unit));
+	padding: 0;
+	background: transparent;
+	pointer-events: none;
+	overflow: visible;
+}
+
+.sro-boot-loading[data-native="true"] .sro-boot-loading__inner {
+	min-height: 0;
+	width: 100%;
+	background: transparent;
+	border: 0;
+	padding: 0;
+}
+
+.sro-boot-loading[data-native="true"] .sro-boot-loading__logo,
+.sro-boot-loading[data-native="true"] .sro-boot-loading__native-label,
+.sro-boot-loading[data-native="true"] .sro-boot-loading__bar {
+	display: none;
+}
+
+.sro-boot-loading[data-native="true"] .sro-boot-loading__copy {
+	min-height: 0;
+	width: 100%;
+	margin: 0;
+	text-align: right;
+	text-shadow: 0 1px 2px #000;
+}
+
+.sro-boot-loading[data-native="true"] .sro-boot-loading__label {
+	color: #c4af79;
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: clamp(10px, calc(19 * var(--native-loading-unit)), 15px);
+	font-weight: 400;
+	line-height: 1.2;
+}
+
+.sro-boot-loading[data-native="true"] .sro-boot-loading__detail {
+	margin-top: calc(5 * var(--native-loading-unit));
+	color: #a99c7e;
+	font-size: clamp(9px, calc(15 * var(--native-loading-unit)), 12px);
+	font-weight: 400;
+	line-height: 1.2;
+	font-variant-numeric: tabular-nums;
 }

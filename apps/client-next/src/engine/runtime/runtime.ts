@@ -29,6 +29,7 @@ import { createAssets } from "./assets/assets";
 import { createReleaseWatch } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
+import type { RenderFrameProbe } from "@/engine/contracts/runtime";
 import { createRenderer } from "./renderer/renderer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
@@ -46,7 +47,8 @@ FrameProbe
 Development frame timing, including detail spans reported by UI owners.
 ================
 */
-interface FrameProbe extends UiFrameProbe {
+interface FrameProbe extends UiFrameProbe, RenderFrameProbe {
+	sampleDetails(): boolean;
 	begin( frameId: number ): void;
 	mark( stage: string ): void;
 	end(): void;
@@ -64,6 +66,25 @@ calls it explicitly instead of letting the profiler patch this source.
 function frameProbe(): FrameProbe | undefined {
 	if ( !import.meta.env.DEV ) return undefined;
 	return (globalThis as { __worldProbeFrameProfiler?: FrameProbe; }).__worldProbeFrameProfiler;
+}
+/*
+================
+animationProbe
+
+Capture owners are installed before startup. Pass their observers through
+renderer construction so profiling never replaces the pose implementation.
+================
+*/
+function animationProbe(): import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe | undefined {
+	if ( !import.meta.env.DEV ) return undefined;
+	const captures = globalThis as {
+		__worldProbeAnimationCeiling?:
+			import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe["ceiling"];
+		__worldProbeAnimationPhases?:
+			import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe["phases"];
+	};
+	if ( !captures.__worldProbeAnimationCeiling && !captures.__worldProbeAnimationPhases ) return undefined;
+	return { ceiling: captures.__worldProbeAnimationCeiling, phases: captures.__worldProbeAnimationPhases };
 }
 // Frame-timing window for the FPS chip. Two seconds at 60 Hz keeps the readout
 // responsive without letting one stall dominate the published percentile.
@@ -137,7 +158,12 @@ export function startRuntime(
 		);
 		const input = createInput();
 		const simulation = own( createSimulationHost() );
-		const renderer = own( createRenderer( canvas, random, audio.enqueue, diagnostics ) );
+		const renderer = own(
+			createRenderer( canvas, random, audio.enqueue, {
+				...diagnostics,
+				animationPose: diagnostics.animationPose ?? animationProbe()
+			} )
+		);
 		const frontend = own(
 			createFrontend(
 				assets,
@@ -525,8 +551,7 @@ export function startRuntime(
 				const frontendState = frontend?.step(
 					sessionState,
 					now,
-					sessionState?.characters !== undefined &&
-						renderer.characterStats().actors >= Math.min( 4, sessionState.characters.length ),
+					characters.dockReady(),
 					characters.previewReady()
 				);
 				if ( pendingWorldReset && frontendState.phase === "loading-world" ) {
@@ -587,6 +612,7 @@ export function startRuntime(
 				markStage( "input-state-frontend" );
 				world.pumpCameraScripts( now );
 				presentation.step( simulationTimeMs );
+				characters.profile( frameProbe() );
 				characters.step(
 					presentation.entities(),
 					presentation.gameplay(),
@@ -643,21 +669,25 @@ export function startRuntime(
 					worldPresented
 				);
 				audio.prepareUi( frontendState.phase !== "world" );
+				audio.prepareCombat( worldPresented ? presentation.gameplay() : null, presentation.entities() );
 				const worldStats = renderer.worldStats(),
 					localReady = characters.ready( presentation.gameplay()?.localGid ?? 0 ),
-					navReady = navigation.phase() === "ready";
+					navReady = navigation.phase() === "ready",
+					baselineReady = characters.entryReady() && ui.entryReady();
 				const worldReady = world.ready() && worldStats.visibleGroups > 0 && worldStats.pendingGroups === 0 &&
-					worldStats.pendingTextures === 0 && localReady && navReady;
+					worldStats.pendingTextures === 0 && localReady && navReady && audio.ready() && baselineReady;
 				const loadingProgress = sessionState?.phase !== "world" || !presentation.gameplay()?.localGid ?
 					0 :
 					worldReady ?
 					1 :
-					(Number( localReady ) + Number( navReady ) + world.progress()) / 3;
+					(Number( localReady ) + Number( navReady ) + world.progress() + Number( audio.ready() ) +
+						Number( baselineReady )) / 5;
 				markStage( "world-stream" );
 				const semantics = ui.step(
 					{
 						worldError: world.error() ?? navigation.error(),
-						resourceError: !localReady ? characters.error() : null,
+						resourceError: (!localReady || !baselineReady ? characters.error() : null) ??
+							(!audio.ready() ? audio.error() : null),
 						simulationTimeMs,
 						hoveredEntity,
 						dropNamesHeld: input.dropNamesHeld(),
@@ -705,7 +735,7 @@ export function startRuntime(
 				releaseWatch.step( now, phaseTrigger || platform.visibilityReturned() );
 				platform.presentUpdate( releaseWatch.newerAvailable() );
 				markStage( "ui" );
-				const rendered = renderer.frame( platform.readViewport(), now / 1000, frameId );
+				const rendered = renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() );
 				if ( rendered ) await rendered;
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );

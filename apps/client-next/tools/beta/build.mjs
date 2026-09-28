@@ -17,6 +17,10 @@ import { files, inspect, publicIndex, safeName, sha, releaseIdentity, verifyDire
 import { archiveRelease } from "./archive.mjs";
 import { compressRoutes } from "./compression.mjs";
 import { projectPack } from "./public-data.mjs";
+import {
+	backgroundInstallDocument,
+	BACKGROUND_INSTALL_PUBLIC_PATH
+} from "../../../../scripts/build/data/buildBackgroundInstallAsset.mjs";
 const root = path.resolve( import.meta.dirname, "../.." );
 /*
 ================
@@ -293,6 +297,21 @@ export async function buildBeta(
 	if (
 		sha( await readFile( path.join( assetRoot, "assets/packs/manifest.json" ) ) ) !== manifest.assetAuthorityHash
 	) throw Error( "Asset publication changed during freeze; package not accepted" );
+	// Required runtime metadata is derived from this release's routed members.
+	// A loose development sidecar cannot be assumed to survive pack projection.
+	if ( !manifest.routes.some( row => row.url === BACKGROUND_INSTALL_PUBLIC_PATH ) ) {
+		const installBytes = Buffer.from(
+			JSON.stringify( backgroundInstallDocument( manifest.routes.map( row => row.url ) ) )
+		);
+		const installFile = "payload/" + sha( installBytes ) + ".json";
+		await add( installFile, installBytes, "data" );
+		route( {
+			url: BACKGROUND_INSTALL_PUBLIC_PATH,
+			file: installFile,
+			length: installBytes.length,
+			mime: "application/json"
+		} );
+	}
 	await compressRoutes( packageRoot, manifest );
 	manifest.files.sort( ( a, b ) => a.path.localeCompare( b.path ) );
 	manifest.routes.sort( ( a, b ) => a.url.localeCompare( b.url ) );

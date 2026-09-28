@@ -104,7 +104,8 @@
     "src/engine/runtime/ui/hud/quest-banner.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/scroll.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/speech.ts": "src/engine/runtime/ui/ui.ts",
-    "src/engine/runtime/characters/damage-feedback.ts": "src/engine/runtime/characters/characters.ts"
+    "src/engine/runtime/characters/damage-feedback.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/audio/preparation.ts": "src/engine/runtime/audio/audio.ts"
   },
   "internals": {
     "src/engine/runtime/runtime-errors.ts": "src/engine/runtime/runtime.ts",

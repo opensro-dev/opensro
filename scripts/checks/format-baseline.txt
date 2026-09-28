@@ -36,7 +36,6 @@ apps/client-next/src/engine/foundation/animation/animation-activation.ts
 apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
 apps/client-next/src/engine/foundation/animation/animation-emission.ts
 apps/client-next/src/engine/foundation/animation/animation-metadata.ts
-apps/client-next/src/engine/foundation/animation/animation-pose.ts
 apps/client-next/src/engine/foundation/animation/animation-timelines.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
@@ -287,7 +286,6 @@ apps/client-next/src/engine/foundation/ui/notice-dialog.ts
 apps/client-next/src/engine/foundation/ui/notice-text.ts
 apps/client-next/src/engine/foundation/ui/npc-talk.ts
 apps/client-next/src/engine/foundation/ui/overhead-layout.ts
-apps/client-next/src/engine/foundation/ui/party-overlay.ts
 apps/client-next/src/engine/foundation/ui/party-proposal.ts
 apps/client-next/src/engine/foundation/ui/progression-bars.ts
 apps/client-next/src/engine/foundation/ui/quest-guide.ts
@@ -335,9 +333,7 @@ apps/client-next/src/engine/runtime/assets/worker/world/internal/resource-contra
 apps/client-next/src/engine/runtime/assets/worker/world/resources/resources.ts
 apps/client-next/src/engine/runtime/assets/worker/world/world.ts
 apps/client-next/src/engine/runtime/assets/world-lease.ts
-apps/client-next/src/engine/runtime/audio/audio.ts
 apps/client-next/src/engine/runtime/audio/music/music.ts
-apps/client-next/src/engine/runtime/characters/characters.ts
 apps/client-next/src/engine/runtime/characters/damage-feedback.ts
 apps/client-next/src/engine/runtime/characters/effects/effects.ts
 apps/client-next/src/engine/runtime/characters/orbs/orbs.ts
@@ -346,7 +342,6 @@ apps/client-next/src/engine/runtime/characters/resources/resources.ts
 apps/client-next/src/engine/runtime/characters/sounds/sounds.ts
 apps/client-next/src/engine/runtime/characters/state-index.ts
 apps/client-next/src/engine/runtime/frontend/camera/camera.ts
-apps/client-next/src/engine/runtime/frontend/creation/creation.ts
 apps/client-next/src/engine/runtime/frontend/dialog/dialog.ts
 apps/client-next/src/engine/runtime/frontend/flow/flow.ts
 apps/client-next/src/engine/runtime/frontend/frontend.ts
@@ -359,8 +354,6 @@ apps/client-next/src/engine/runtime/presentation/effective-hp.ts
 apps/client-next/src/engine/runtime/presentation/presentation.ts
 apps/client-next/src/engine/runtime/random/random.ts
 apps/client-next/src/engine/runtime/renderer/characters/actor-snapshots.ts
-apps/client-next/src/engine/runtime/renderer/characters/animation/animation.ts
-apps/client-next/src/engine/runtime/renderer/characters/characters.ts
 apps/client-next/src/engine/runtime/renderer/characters/palette-streams.ts
 apps/client-next/src/engine/runtime/renderer/characters/portrait.ts
 apps/client-next/src/engine/runtime/renderer/device/animation-shader.ts
@@ -379,7 +372,6 @@ apps/client-next/src/engine/runtime/renderer/device/ui.ts
 apps/client-next/src/engine/runtime/renderer/frame/frame.ts
 apps/client-next/src/engine/runtime/renderer/internal/gpu-contract.ts
 apps/client-next/src/engine/runtime/renderer/readback/readback.ts
-apps/client-next/src/engine/runtime/renderer/renderer.ts
 apps/client-next/src/engine/runtime/renderer/surface/surface.ts
 apps/client-next/src/engine/runtime/renderer/weather/weather.ts
 apps/client-next/src/engine/runtime/renderer/world/world.ts
@@ -395,20 +387,15 @@ apps/client-next/src/engine/runtime/simulation/worker/session/http/http.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/session.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/core.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/departure.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/entities.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/alchemy/alchemy.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/npc/npc.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/targeting/targeting.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/training/training.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/world.ts
 apps/client-next/src/engine/runtime/simulation/worker/simulation.ts
@@ -618,8 +605,6 @@ apps/client-next/tests/oracles/legacy/packages/runtime/src/world/dungeon/parseDo
 apps/client-next/tests/oracles/legacy/packages/wip-bridge/src/navmesh/nativeObjectNavPayload.ts
 apps/client-next/tests/oracles/legacy/packages/wip-bridge/src/navmesh/navmeshRuntimeTypes.ts
 apps/client-next/tests/oracles/legacy/packages/wip-bridge/src/navmesh/navmeshWireDecode.ts
-apps/client-next/tests/runtime/animation-ceiling.test.mjs
-apps/client-next/tests/runtime/animation-phase-profiler.test.mjs
 apps/client-next/tests/runtime/authored-animation-bindings.test.mjs
 apps/client-next/tests/runtime/character-info.test.mjs
 apps/client-next/tests/runtime/cpu-summary.test.mjs
@@ -649,8 +634,6 @@ apps/client-next/tools/dev/updates-plugin.mjs
 apps/client-next/tools/execution-flow.mjs
 apps/client-next/tools/generate-item-sounds.mjs
 apps/client-next/tools/generate-windows1252.mjs
-apps/client-next/tools/lib/animation-ceiling.mjs
-apps/client-next/tools/lib/animation-phase-profiler.mjs
 apps/client-next/tools/lib/character-facing-probe.mjs
 apps/client-next/tools/lib/combat-probe.mjs
 apps/client-next/tools/lib/frame-analysis.mjs

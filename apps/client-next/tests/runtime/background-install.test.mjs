@@ -159,3 +159,42 @@ test("disposal stops the install between files", async () => {
 	assert.deepEqual( source.calls.filter( ( call ) => call[0] === "install" ), [ [ "install", "/assets/a.wav" ] ] );
 	assert.equal( installer.stats().done, false );
 });
+
+test("failed install-list delivery can be retried without restarting the asset owner", async () => {
+	const source = fakeSource( installList( [ { name: "combat", paths: [ "/assets/a.wav" ] } ] ) );
+	const read = source.read;
+	let attempts = 0;
+	source.read = async ( ...args ) => {
+		if ( ++attempts === 1 ) throw Error( "temporary outage" );
+		return read( ...args );
+	};
+	const installer = createBackgroundInstaller( source, async () => {} );
+	installer.start( ORIGIN + "/assets/delivery/background-install.json" );
+	await settle( installer );
+	assert.equal( installer.stats().started, false );
+	installer.start( ORIGIN + "/assets/delivery/background-install.json" );
+	await settle( installer );
+	assert.equal( installer.stats().done, true );
+	assert.equal( installer.stats().fetched, 1 );
+	assert.equal( attempts, 2 );
+	installer.dispose();
+});
+
+test("the install document lists only actual release routes and omits compressed sidecars", async () => {
+	const { backgroundInstallDocument } = await import(
+		"../../../../scripts/build/data/buildBackgroundInstallAsset.mjs"
+	);
+	const sound = "/assets/audio/sfx/prim/snd/player/swing.wav",
+		monster = "/assets/audio/sfx/prim/snd/monster/hit.wav",
+		model = "/assets/skillfx/hit.glb";
+	const document = backgroundInstallDocument( [
+		monster,
+		sound,
+		model,
+		sound,
+		sound + ".gz",
+		model + ".br",
+		"/assets/music/theme.ogg"
+	] );
+	assert.deepEqual( backgroundInstallPaths( document ), [ sound, model, monster ] );
+});

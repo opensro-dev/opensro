@@ -1,1772 +1,1887 @@
 {
-  "version": 1,
-  "capabilities": [
-    {
-      "consumer": "src/engine/runtime/renderer/world/world.ts",
-      "provider": "src/engine/runtime/renderer/device/geometry.ts",
-      "functions": [
-        "characterShadows"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/hud/quest-banner.ts",
-      "provider": "src/engine/runtime/ui/hud/unique-banner.ts",
-      "functions": [
-        "reset",
-        "step",
-        "value",
-        "alpha"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/notice-text.ts",
-      "provider": "src/engine/runtime/ui/hud/quest-banner.ts",
-      "functions": [
-        "callback:value:0"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/departure.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/departure.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-      "functions": [
-        "notice"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/npc/npc.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/npc-talk.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "copy",
-        "callback:npcTalkLayout:5",
-        "callback:npcTalkLayout:12",
-        "callback:npcChoiceColor:2"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/text-lines.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "callback:npcTalkLayout:4",
-        "callback:noticeDialog:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/notice-dialog.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "callback:noticeDialog:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/notice-text.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "hudCopy"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/unique-banner.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "size"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/retained-layout.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "callback:read:1"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/bar.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "size"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/sounds/sounds.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:flush:1",
-        "soundSource"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/chat-scrollbar.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "size"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/helper-bubble.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "callback:tooltipBubble:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
-      "functions": [
-        "takeFatalities"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
-      "functions": [
-        "constrainDisplacement"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
-      "functions": [
-        "takeCancellations"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/random-idle.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:advanceRandomIdle:5"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/random-idle.ts",
-      "provider": "src/engine/runtime/random/random.ts",
-      "functions": [
-        "range"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
-      "functions": [
-        "takeDisplacements"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/platform.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "callback:createPlatform:8"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/runtime.ts",
-      "provider": "src/engine/runtime/platform/ui/cursor.ts",
-      "functions": [
-        "world"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/sounds/sounds.ts",
-      "provider": "src/engine/runtime/random/random.ts",
-      "functions": [
-        "range"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/characters.ts",
-      "provider": "src/engine/runtime/world/world.ts",
-      "functions": [
-        "soundSurface"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/hud/resources.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "available",
-        "request",
-        "take",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/navigation/region-move.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
-      "functions": [
-        "callback:continueRegionMove:2"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/loader.ts",
-      "provider": "src/engine/runtime/assets/worker/entry.ts",
-      "functions": [
-        "sendToHost"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/packs/packs.ts",
-      "provider": "src/engine/runtime/assets/worker/loader.ts",
-      "functions": [
-        "download",
-        "activity"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/packs/blocks.ts",
-      "provider": "src/engine/runtime/assets/worker/loader.ts",
-      "functions": [
-        "download"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/platform.ts",
-      "provider": "src/engine/runtime/input/input.ts",
-      "functions": [
-        "accept"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/frame/frame.ts",
-      "provider": "src/engine/runtime/renderer/device/device.ts",
-      "functions": [
-        "createBundleEncoder",
-        "createEncoder",
-        "submit",
-        "beginTiming",
-        "prepare"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/frame/frame.ts",
-      "provider": "src/engine/runtime/renderer/device/bloom.ts",
-      "functions": [
-        "encode"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/surface/surface.ts",
-      "provider": "src/engine/runtime/renderer/device/device.ts",
-      "functions": [
-        "configure",
-        "createDepth",
-        "dispose"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/clock/clock.ts",
-      "provider": "src/engine/runtime/simulation/worker/simulation.ts",
-      "functions": [
-        "step",
-        "fail"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/network/network.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/world.ts",
-      "functions": [
-        "onNetworkFailure",
-        "receive"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/simulation.ts",
-      "provider": "src/engine/runtime/simulation/worker/entry.ts",
-      "functions": [
-        "sendToHost"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/platform.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "dispose",
-        "worldClick"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/session.ts",
-      "functions": [
-        "mintWorldToken"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/http/http.ts",
-      "functions": [
-        "loadWorldReferences"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/world/world.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "request",
-        "take",
-        "cancel",
-        "available"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/world/world.ts",
-      "provider": "src/engine/runtime/renderer/renderer.ts",
-      "functions": [
-        "setWorld",
-        "cancelWorldUpdate",
-        "setWorldCamera",
-        "setWorldTexture",
-        "worldStats",
-        "neededWorldTextures",
-        "adoptWorld"
-      ]
-    },
-    {
-      "functions": [
-        "upload",
-        "release",
-        "updateTransform",
-        "updateInstances"
-      ],
-      "provider": "src/engine/runtime/renderer/device/geometry.ts",
-      "consumer": "src/engine/runtime/renderer/renderer.ts"
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/characters/characters.ts",
-      "provider": "src/engine/runtime/renderer/characters/actor-snapshots.ts",
-      "functions": [
-        "createActorSnapshots",
-        "update",
-        "stats",
-        "reset"
-      ]
-    },
-    {
-      "functions": [
-        "upload",
-        "release"
-      ],
-      "provider": "src/engine/runtime/renderer/device/images.ts",
-      "consumer": "src/engine/runtime/renderer/renderer.ts"
-    },
-    {
-      "functions": [
-        "upload",
-        "release",
-        "updateIndices",
-        "updatePositions",
-        "updateInstances",
-        "updateBones",
-        "updateTextureTransform",
-        "updateMaterialColors"
-      ],
-      "provider": "src/engine/runtime/renderer/device/geometry.ts",
-      "consumer": "src/engine/runtime/renderer/world/world.ts"
-    },
-    {
-      "functions": [
-        "upload",
-        "release"
-      ],
-      "provider": "src/engine/runtime/renderer/device/images.ts",
-      "consumer": "src/engine/runtime/renderer/world/world.ts"
-    },
-    {
-      "functions": [
-        "consumeInput"
-      ],
-      "provider": "src/engine/runtime/simulation/worker/simulation.ts",
-      "consumer": "src/engine/runtime/simulation/worker/input/input.ts"
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/world/resources/resources.ts",
-      "provider": "src/engine/runtime/assets/worker/loader.ts",
-      "functions": [
-        "readWorldResource"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/loader.ts",
-      "provider": "src/engine/runtime/assets/worker/world/resources/resources.ts",
-      "functions": [
-        "resolve"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/targeting/targeting.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/loader.ts",
-      "provider": "src/engine/runtime/assets/worker/model/character/character.ts",
-      "functions": [
-        "decode"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/characters/characters.ts",
-      "provider": "src/engine/runtime/renderer/device/geometry.ts",
-      "functions": [
-        "upload",
-        "updateInstances",
-        "updateBones",
-        "release",
-        "updateTransform",
-        "updatePositions",
-        "updateIndices",
-        "updateMaterialColors",
-        "updateTextureTransform",
-        "updateEquipmentGlow"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/characters/characters.ts",
-      "provider": "src/engine/runtime/renderer/device/images.ts",
-      "functions": [
-        "upload",
-        "release"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/resources/resources.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "request",
-        "take",
-        "cancel",
-        "available"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/characters.ts",
-      "provider": "src/engine/runtime/renderer/characters/characters.ts",
-      "functions": [
-        "actors",
-        "assembly",
-        "socket",
-        "matrix",
-        "localMatrix",
-        "particleSnapshot",
-        "particleTime"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/audio/audio.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "available",
-        "request",
-        "take",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/platform.ts",
-      "provider": "src/engine/runtime/audio/audio.ts",
-      "functions": [
-        "unlock"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/characters.ts",
-      "provider": "src/engine/runtime/audio/audio.ts",
-      "functions": [
-        "enqueue"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/resources/resources.ts",
-      "provider": "src/engine/runtime/renderer/characters/characters.ts",
-      "functions": [
-        "animation",
-        "model",
-        "retain"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/sounds/sounds.ts",
-      "provider": "src/engine/runtime/audio/audio.ts",
-      "functions": [
-        "enqueue"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/effects/effects.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "request",
-        "take",
-        "cancel",
-        "available"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/effects/effects.ts",
-      "provider": "src/engine/runtime/audio/audio.ts",
-      "functions": [
-        "enqueue"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/effects/effects.ts",
-      "provider": "src/engine/runtime/characters/resources/resources.ts",
-      "functions": [
-        "ready",
-        "duration"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/loader.ts",
-      "provider": "src/engine/runtime/assets/worker/effects/program/program.ts",
-      "functions": [
-        "decode",
-        "clear"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/runtime.ts",
-      "provider": "src/engine/runtime/renderer/characters/characters.ts",
-      "functions": [
-        "stats"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/platform.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "blocks",
-        "event"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/ui/ui.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "event"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/ui/ui.ts",
-      "provider": "src/engine/runtime/platform/platform.ts",
-      "functions": [
-        "callback",
-        "callback:createUiBridge:2",
-        "callback:createUiBridge:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/runtime.ts",
-      "provider": "src/engine/runtime/platform/ui/ui.ts",
-      "functions": [
-        "present"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/resources/resources.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "cancel",
-        "take",
-        "available",
-        "request"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/resources/resources.ts",
-      "provider": "src/engine/runtime/renderer/renderer.ts",
-      "functions": [
-        "setUiTexture"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/ui.ts",
-      "provider": "src/engine/runtime/renderer/renderer.ts",
-      "functions": [
-        "setUiTexture",
-        "setUi"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/ui.ts",
-      "provider": "src/engine/runtime/simulation/host.ts",
-      "functions": [
-        "session"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/runtime.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "stats"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/frontend.ts",
-      "provider": "src/engine/runtime/renderer/renderer.ts",
-      "functions": [
-        "pickFrontendCharacter",
-        "setWorldCamera",
-        "setWorld",
-        "pickFrontendRace"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/stage/stage.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "request",
-        "cancel",
-        "take",
-        "available"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/stage/preload.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "request",
-        "cancel",
-        "take",
-        "available"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/platform.ts",
-      "provider": "src/engine/runtime/frontend/frontend.ts",
-      "functions": [
-        "pointer"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/stage/stage.ts",
-      "provider": "src/engine/runtime/renderer/renderer.ts",
-      "functions": [
-        "setWorld",
-        "setWorldTexture",
-        "cancelWorldUpdate",
-        "neededWorldTextures",
-        "worldStats",
-        "adoptWorld"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/platform.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "uiEvent"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/platform/ui/ui.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "uiEvent"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/ui.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "sessionCommand",
-        "callback:createUi:8",
-        "callback:createUi:10",
-        "callback:createUi:11",
-        "callback:createUi:12",
-        "callback:createUi:13",
-        "callback:createUi:14",
-        "callback:createUi:15",
-        "callback:createUi:16"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/text/text.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "take",
-        "available",
-        "request",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/title/resources.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "take",
-        "available",
-        "request",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/navigation/navigation.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "available",
-        "request",
-        "take",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/navigation/navigation.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "callback:createNavigationStream:1"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/navigation/navigation.ts",
-      "provider": "src/engine/runtime/assets/worker/loader.ts",
-      "functions": [
-        "callback:resolve:2"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/audio/music/music.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "take",
-        "available",
-        "request",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/runtime.ts",
-      "provider": "src/engine/runtime/audio/music/music.ts",
-      "functions": [
-        "active",
-        "status"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/characters/characters.ts",
-      "provider": "src/engine/runtime/renderer/readback/readback.ts",
-      "functions": [
-        "readPickAlpha"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/world/world.ts",
-      "provider": "src/engine/runtime/renderer/readback/readback.ts",
-      "functions": [
-        "readPickAlpha"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/training/training.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/effects/effects.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:step:6"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/localization/localization.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "take",
-        "available",
-        "request",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/ui.ts",
-      "provider": "src/engine/runtime/audio/audio.ts",
-      "functions": [
-        "uiClick",
-        "uiSound"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/dialog/dialog.ts",
-      "provider": "src/engine/runtime/frontend/frontend.ts",
-      "functions": [
-        "callback"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/dialog/dialog.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "callback:createFrontend:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/creation/creation.ts",
-      "provider": "src/engine/runtime/frontend/frontend.ts",
-      "functions": [
-        "callback"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/creation/creation.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "callback:createFrontend:3",
-        "callback:createFrontend:4"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/creation/creation.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "available",
-        "request",
-        "take",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/frontend.ts",
-      "provider": "src/engine/runtime/renderer/world/world.ts",
-      "functions": [
-        "interfaceCenters"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/frontend.ts",
-      "provider": "src/engine/runtime/renderer/characters/characters.ts",
-      "functions": [
-        "stats"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/frontend/frontend.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "callback:createFrontend:4",
-        "callback:createFrontend:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "functions": [
-        "callback:createGameplay:1",
-        "callback:createGameplay:4"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-      "functions": [
-        "callback:createInventory:1",
-        "callback:createInventory:2"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/orbs/orbs.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:step:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/orbs/orbs.ts",
-      "provider": "src/engine/runtime/audio/audio.ts",
-      "functions": [
-        "enqueue"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/orbs/orbs.ts",
-      "provider": "src/engine/runtime/characters/resources/resources.ts",
-      "functions": [
-        "ready",
-        "duration",
-        "failed"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "functions": [
-        "callback:createGameplay:2"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/audio/audio.ts",
-      "provider": "src/engine/runtime/random/random.ts",
-      "functions": [
-        "range"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/effects/effects.ts",
-      "provider": "src/engine/runtime/random/random.ts",
-      "functions": [
-        "curve",
-        "range"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/world/camera/camera.ts",
-      "provider": "src/engine/runtime/random/random.ts",
-      "functions": [
-        "range"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/orbs/orbs.ts",
-      "provider": "src/engine/runtime/random/random.ts",
-      "functions": [
-        "orb"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/world/world.ts",
-      "provider": "src/engine/runtime/random/random.ts",
-      "functions": [
-        "sky",
-        "flicker"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/assets.ts",
-      "provider": "src/engine/runtime/assets/world-lease.ts",
-      "functions": [
-        "createWorldLease"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/world/world.ts",
-      "provider": "src/engine/runtime/assets/world-lease.ts",
-      "functions": [
-        "takeWorld"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/title-status.ts",
-      "provider": "src/engine/runtime/ui/title/title.ts",
-      "functions": [
-        "catalog"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/runtime.ts",
-      "provider": "src/engine/runtime/frontend/flow/flow.ts",
-      "functions": [
-        "snapshot"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/frame-ring.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "size"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/text/text.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "take",
-        "available",
-        "request",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/weather/weather.ts",
-      "provider": "src/engine/runtime/random/random.ts",
-      "functions": [
-        "range"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/weather/weather.ts",
-      "provider": "src/engine/runtime/renderer/device/geometry.ts",
-      "functions": [
-        "upload",
-        "release",
-        "updatePositions"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/weather/weather.ts",
-      "provider": "src/engine/runtime/renderer/world/world.ts",
-      "functions": [
-        "weatherGround"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/guide/resources.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "available",
-        "request",
-        "take",
-        "cancel"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/guide-content.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "size"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "provider": "src/engine/runtime/simulation/worker/network/network.ts",
-      "functions": [
-        "send"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/weather/weather.ts",
-      "provider": "src/engine/runtime/audio/audio.ts",
-      "functions": [
-        "enqueue"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/rendering/thunder.ts",
-      "provider": "src/engine/runtime/renderer/weather/weather.ts",
-      "functions": [
-        "callback:advanceThunder:4"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/academy-layout.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "size"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/academy-layout.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "callback:academyLayout:7"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/stretch-ring.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "size"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
-      "functions": [
-        "surface"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "functions": [
-        "callback:createEntities:0"
-      ]
-    },
-    {
-      "functions": [
-        "size"
-      ],
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "consumer": "src/engine/foundation/ui/chat-layout.ts"
-    },
-    {
-      "functions": [
-        "callback:chatLayout:10",
-        "callback:chatLayout:15",
-        "hudCopy"
-      ],
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "consumer": "src/engine/foundation/ui/chat-layout.ts"
-    },
-    {
-      "functions": [
-        "hudCopy"
-      ],
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "consumer": "src/engine/foundation/ui/chat-presentation.ts"
-    },
-    {
-      "functions": [
-        "hudCopy"
-      ],
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "consumer": "src/engine/foundation/ui/overhead-layout.ts"
-    },
-    {
-      "functions": [
-        "size"
-      ],
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "consumer": "src/engine/foundation/ui/system-message-layout.ts"
-    },
-    {
-      "functions": [
-        "callback:systemMessageLayout:6"
-      ],
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "consumer": "src/engine/foundation/ui/system-message-layout.ts"
-    },
-    {
-      "functions": [
-        "retain",
-        "actors",
-        "prepare",
-        "borrowModel",
-        "socket",
-        "dispose",
-        "invalidate"
-      ],
-      "provider": "src/engine/runtime/renderer/characters/characters.ts",
-      "consumer": "src/engine/runtime/renderer/characters/portrait.ts"
-    },
-    {
-      "consumer": "src/engine/foundation/ui/target-status.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "hudCopy",
-        "callback:targetStatus:5"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/runtime.ts",
-      "provider": "src/engine/runtime/renderer/world/world.ts",
-      "functions": [
-        "selectionDecal"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
-      "functions": [
-        "pick"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/hud/messages.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "hudCopy",
-        "callback"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/hud/messages.ts",
-      "provider": "src/engine/runtime/runtime.ts",
-      "functions": [
-        "callback:createUi:9"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/text-lines.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "callback:tooltipBubble:3",
-        "callback:textLines:2",
-        "callback:textBoardLines:2",
-        "callback:chatLayout:15",
-        "callback:textLines:2",
-        "callback:systemMessageLayout:10"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/frame/frame.ts",
-      "provider": "src/engine/runtime/renderer/device/timing.ts",
-      "functions": [
-        "pass",
-        "resolve",
-        "submitted"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/session.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-      "functions": [
-        "options",
-        "chatBlocks"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/impact-source.ts",
-      "provider": "src/engine/runtime/characters/effects/effects.ts",
-      "functions": [
-        "callback:impactSource:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/damage-feedback.ts",
-      "provider": "src/engine/runtime/characters/effects/effects.ts",
-      "functions": [
-        "impactIndex"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/assets/read-bytes.ts",
-      "provider": "src/engine/runtime/assets/worker/loader.ts",
-      "functions": [
-        "callback"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/entities/entities.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "functions": [
-        "callback:createEntities:0",
-        "callback:createEntities:1",
-        "callback:recolor:0",
-        "nameContext"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/characters.ts",
-      "provider": "src/engine/runtime/random/random.ts",
-      "functions": [
-        "range"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/combo-box.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "size"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/rendering/scenery-modifiers.ts",
-      "provider": "src/engine/runtime/assets/worker/world/world.ts",
-      "functions": [
-        "callback:sceneryMaterial:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/mastery-tooltip.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "lookup"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/buff-tooltip.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "lookup"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/item-tooltip-recovery.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "lookup"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/item-tooltip.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "lookup"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/item-tooltip-stats.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "lookup"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/skill-tooltip.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "lookup",
-        "callback:skillTooltip:5"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/skill-tooltip-params.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "lookup"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/item-tooltip-magic.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "lookup"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/reference-appearance.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:createReferenceAppearances:0"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/region-banner.ts",
-      "provider": "src/engine/runtime/ui/text/text.ts",
-      "functions": [
-        "quads"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/effects/effects.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:createCharacterEffects:4"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/scenery-emission.ts",
-      "provider": "src/engine/runtime/characters/resources/resources.ts",
-      "functions": [
-        "ready"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/rendering/scenery-particles.ts",
-      "provider": "src/engine/runtime/assets/worker/world/world.ts",
-      "functions": [
-        "callback:sceneryParticles:5"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/characters.ts",
-      "provider": "src/engine/runtime/renderer/world/world.ts",
-      "functions": [
-        "scenery",
-        "footprints"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/gameplay/name-color.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "functions": [
-        "capeTeam"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/gameplay/portal.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "callback:portalMenu:2"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/quest-time.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "hudCopy"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/resource-error.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "callback:resourceErrorLines:2"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/ui/vertical-spin.ts",
-      "provider": "src/engine/runtime/ui/resources/resources.ts",
-      "functions": [
-        "size"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/characters.ts",
-      "provider": "src/engine/runtime/presentation/effective-hp.ts",
-      "functions": [
-        "dead",
-        "impact",
-        "release"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/characters.ts",
-      "provider": "src/engine/runtime/presentation/presentation.ts",
-      "functions": [
-        "finishedCasts"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/damage-feedback.ts",
-      "provider": "src/engine/runtime/presentation/effective-hp.ts",
-      "functions": [
-        "currentResult"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/damage-feedback.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:createDamageFeedback:0"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/runtime.ts",
-      "provider": "src/engine/runtime/presentation/effective-hp.ts",
-      "functions": [
-        "step"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "functions": [
-        "callback:createGameplay:2",
-        "callback:createGameplay:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-      "functions": [
-        "callback"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/hud/minimap.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "available",
-        "cancel",
-        "request",
-        "take"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/ui/hud/quest-banner.ts",
-      "provider": "src/engine/runtime/ui/ui.ts",
-      "functions": [
-        "hudCopy"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/model-emission.ts",
-      "provider": "src/engine/runtime/characters/resources/resources.ts",
-      "functions": [
-        "ready"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/model-material-clock.ts",
-      "provider": "src/engine/runtime/renderer/characters/characters.ts",
-      "functions": [
-        "callback:step:2"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/rendering/scenery-modifiers.ts",
-      "provider": "src/engine/runtime/assets/worker/model/character/character.ts",
-      "functions": [
-        "callback:sceneryMaterial:3"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/frame/frame.ts",
-      "provider": "src/engine/runtime/renderer/renderer.ts",
-      "functions": [
-        "prepare",
-        "finishDeferred"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/renderer/surface/surface.ts",
-      "provider": "src/engine/runtime/renderer/device/device.ts",
-      "functions": [
-        "createColor",
-        "present"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/animation-dispatch.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:step:2"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/characters/characters.ts",
-      "provider": "src/engine/runtime/renderer/renderer.ts",
-      "functions": [
-        "presentationCamera",
-        "presentationNight"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/model-emission.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:step:4"
-      ]
-    },
-    {
-      "consumer": "src/engine/foundation/animation/animation-emission.ts",
-      "provider": "src/engine/runtime/characters/characters.ts",
-      "functions": [
-        "callback:step:5",
-        "callback:step:6",
-        "callback:step:7"
-      ],
-      "reason": "Synchronous animation modifier admission and last-rendered particle snapshot; no new scheduler or asset owner."
-    },
-    {
-      "consumer": "src/engine/foundation/animation/animation-emission.ts",
-      "provider": "src/engine/runtime/characters/resources/resources.ts",
-      "functions": [
-        "ready"
-      ],
-      "reason": "Synchronous animation modifier admission and last-rendered particle snapshot; no new scheduler or asset owner."
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts",
-      "functions": [
-        "castArrival"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-      "provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
-      "functions": [
-        "guidedArrival"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/loader.ts",
-      "provider": "src/engine/runtime/assets/worker/install.ts",
-      "functions": [
-        "createBackgroundInstaller",
-        "start",
-        "dispose"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/install.ts",
-      "provider": "src/engine/runtime/assets/worker/packs/packs.ts",
-      "functions": [
-        "read",
-        "install"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/assets/worker/install.ts",
-      "provider": "src/engine/runtime/assets/worker/loader.ts",
-      "functions": [
-        "callback:createBackgroundInstaller:1"
-      ]
-    },
-    {
-      "consumer": "src/engine/runtime/release/release-watch.ts",
-      "provider": "src/engine/runtime/assets/assets.ts",
-      "functions": [
-        "request",
-        "take",
-        "available",
-        "cancel"
-      ]
-    }
-  ],
-  "boundaries": [
-    {
-      "file": "src/engine/foundation/animation/particle-commands.ts",
-      "expression": "random",
-      "function": "executeParticleCommands",
-      "kind": "callback",
-      "reason": "Particle command random number generator callback parameter."
-    },
-    {
-      "file": "src/engine/runtime/assets/worker/entry.ts",
-      "expression": "port.postMessage",
-      "function": "sendToHost",
-      "kind": "worker-port",
-      "reason": "Typed DedicatedWorker port projection; transferred messages cross the parent/worker boundary."
-    },
-    {
-      "file": "src/engine/runtime/simulation/worker/entry.ts",
-      "expression": "port.postMessage",
-      "function": "sendToHost",
-      "kind": "worker-port",
-      "reason": "Typed DedicatedWorker port projection; transferred messages cross the parent/worker boundary."
-    },
-    {
-      "file": "src/engine/runtime/renderer/characters/characters.ts",
-      "expression": "gpuAnimation",
-      "function": "stats",
-      "kind": "callback",
-      "reason": "Device-owned optional GPU animation telemetry callback, retained from GeometryCommands during prepare."
-    },
-    {
-      "file": "src/engine/runtime/renderer/characters/palette-streams.ts",
-      "expression": "gpu!",
-      "function": "update",
-      "kind": "callback",
-      "reason": "Optional GeometryCommands GPU palette producer; false selects the CPU palette path."
-    },
-    {
-      "file": "src/engine/runtime/renderer/device/animation.ts",
-      "expression": "timing?.pass",
-      "function": "encode",
-      "kind": "callback",
-      "reason": "Optional device-owned GpuTimingFrame callback for the skeletal compute pass."
-    },
-    {
-      "file": "src/engine/runtime/assets/worker/loader.ts",
-      "expression": "resolve",
-      "function": "wakeIdleWaiters",
-      "kind": "callback",
-      "reason": "Promise resolvers of background-install waiters (worker/install.ts): settled when the last foreground load releases capacity."
-    },
-    {
-      "file": "src/engine/runtime/runtime.ts",
-      "expression": "frameProbe()?.begin",
-      "function": "frame",
-      "kind": "callback",
-      "reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
-    },
-    {
-      "file": "src/engine/runtime/runtime.ts",
-      "expression": "frameProbe()?.end",
-      "function": "frame",
-      "kind": "callback",
-      "reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
-    },
-    {
-      "file": "src/engine/runtime/runtime.ts",
-      "expression": "frameProbe()?.mark",
-      "function": "markStage",
-      "kind": "callback",
-      "reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
-    },
-    {
-      "file": "src/engine/runtime/ui/ui.ts",
-      "expression": "probe?.detailBegin",
-      "function": "step",
-      "kind": "callback",
-      "reason": "Optional frame-owned timing observer. Records UI assembly, comparison and publication without changing the product; covered by ui-resource-lifetime.test.mjs. Runtime supplies it only in development."
-    },
-    {
-      "file": "src/engine/runtime/ui/ui.ts",
-      "expression": "probe?.detailEnd",
-      "function": "step",
-      "kind": "callback",
-      "reason": "Optional frame-owned timing observer. Records UI assembly, comparison and publication without changing the product; covered by ui-resource-lifetime.test.mjs. Runtime supplies it only in development."
-    }
-  ],
-  "sequences": [
-    {
-      "file": "src/engine/runtime/runtime.ts",
-      "function": "frame",
-      "calls": [
-        "src/engine/runtime/input/input.ts#drain",
-        "src/engine/runtime/simulation/host.ts#sendInput",
-        "src/engine/runtime/simulation/host.ts#poll",
-        "src/engine/runtime/audio/audio.ts#step",
-        "src/engine/runtime/audio/audio.ts#world",
-        "src/engine/runtime/renderer/renderer.ts#frame",
-        "external:requestAnimationFrame"
-      ]
-    },
-    {
-      "file": "src/engine/runtime/runtime.ts",
-      "function": "frame",
-      "calls": [
-        "src/engine/runtime/world/world.ts#pumpCameraScripts",
-        {
-          "expression": "characters.step",
-          "target": "src/engine/runtime/characters/characters.ts#step"
-        },
-        {
-          "expression": "world.step",
-          "target": "src/engine/runtime/world/world.ts#step"
-        }
-      ]
-    }
-  ],
-  "frameBarriers": [
-    {
-      "file": "src/engine/runtime/runtime.ts",
-      "function": "frame",
-      "sourceSha256": "fae516478ce71c4f150b3cef22849edb63ed4db4cbc5eb80cd2e1d1a66843915",
-      "reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
-      "evidence": "tests/fixtures/native/bsr-query-native.json",
-      "nativeFunction": 11451792,
-      "tests": [
-        "tests/browser/particle-query.test.mjs",
-        "tests/browser/deferred-particles.test.mjs",
-        "tests/runtime/deferred-particles.test.mjs"
-      ]
-    },
-    {
-      "file": "src/engine/runtime/renderer/device/particle-query.ts",
-      "function": "query",
-      "sourceSha256": "1a237d2b2c1c941499abc1a86aac280515b797a1237d57b90a9fca736ca984eb",
-      "reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
-      "evidence": "tests/fixtures/native/bsr-query-native.json",
-      "nativeFunction": 11451792,
-      "tests": [
-        "tests/browser/particle-query.test.mjs",
-        "tests/browser/deferred-particles.test.mjs",
-        "tests/runtime/deferred-particles.test.mjs"
-      ]
-    }
-  ]
+	"version": 1,
+	"capabilities": [
+		{
+			"consumer": "src/engine/runtime/renderer/world/world.ts",
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"functions": [
+				"characterShadows"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-banner.ts",
+			"provider": "src/engine/runtime/ui/hud/unique-banner.ts",
+			"functions": [
+				"reset",
+				"step",
+				"value",
+				"alpha"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/notice-text.ts",
+			"provider": "src/engine/runtime/ui/hud/quest-banner.ts",
+			"functions": [
+				"callback:value:0"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/departure.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/departure.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"notice"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/npc/npc.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/npc-talk.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"copy",
+				"callback:npcTalkLayout:5",
+				"callback:npcTalkLayout:12",
+				"callback:npcChoiceColor:2"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/text-lines.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:npcTalkLayout:4",
+				"callback:noticeDialog:3"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/notice-dialog.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:noticeDialog:3"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/notice-text.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/unique-banner.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/retained-layout.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:read:1"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/bar.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:flush:1",
+				"soundSource"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/chat-scrollbar.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/helper-bubble.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:tooltipBubble:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
+			"functions": [
+				"takeFatalities"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
+			"functions": [
+				"constrainDisplacement"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
+			"functions": [
+				"takeCancellations"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/random-idle.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:advanceRandomIdle:5"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/random-idle.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"range"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
+			"functions": [
+				"takeDisplacements"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/platform.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createPlatform:8"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/platform/ui/cursor.ts",
+			"functions": [
+				"world"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"range"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/world/world.ts",
+			"functions": [
+				"soundSurface"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/resources.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"request",
+				"take",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/navigation/region-move.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"functions": [
+				"callback:continueRegionMove:2"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/loader.ts",
+			"provider": "src/engine/runtime/assets/worker/entry.ts",
+			"functions": [
+				"sendToHost"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/packs/packs.ts",
+			"provider": "src/engine/runtime/assets/worker/loader.ts",
+			"functions": [
+				"download",
+				"activity"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/packs/blocks.ts",
+			"provider": "src/engine/runtime/assets/worker/loader.ts",
+			"functions": [
+				"download"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/platform.ts",
+			"provider": "src/engine/runtime/input/input.ts",
+			"functions": [
+				"accept"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/device.ts",
+			"functions": [
+				"createBundleEncoder",
+				"createEncoder",
+				"submit",
+				"beginTiming",
+				"prepare"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/bloom.ts",
+			"functions": [
+				"encode"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/surface/surface.ts",
+			"provider": "src/engine/runtime/renderer/device/device.ts",
+			"functions": [
+				"configure",
+				"createDepth",
+				"dispose"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/clock/clock.ts",
+			"provider": "src/engine/runtime/simulation/worker/simulation.ts",
+			"functions": [
+				"step",
+				"fail"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/network/network.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"functions": [
+				"onNetworkFailure",
+				"receive"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/simulation.ts",
+			"provider": "src/engine/runtime/simulation/worker/entry.ts",
+			"functions": [
+				"sendToHost"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/platform.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"dispose",
+				"worldClick"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/session.ts",
+			"functions": [
+				"mintWorldToken"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/http/http.ts",
+			"functions": [
+				"loadWorldReferences"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/world/world.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"request",
+				"take",
+				"cancel",
+				"available"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/world/world.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"setWorld",
+				"cancelWorldUpdate",
+				"setWorldCamera",
+				"setWorldTexture",
+				"worldStats",
+				"neededWorldTextures",
+				"adoptWorld"
+			]
+		},
+		{
+			"functions": [
+				"upload",
+				"release",
+				"updateTransform",
+				"updateInstances"
+			],
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"consumer": "src/engine/runtime/renderer/renderer.ts"
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/characters/characters.ts",
+			"provider": "src/engine/runtime/renderer/characters/actor-snapshots.ts",
+			"functions": [
+				"createActorSnapshots",
+				"update",
+				"stats",
+				"reset"
+			]
+		},
+		{
+			"functions": [
+				"upload",
+				"release"
+			],
+			"provider": "src/engine/runtime/renderer/device/images.ts",
+			"consumer": "src/engine/runtime/renderer/renderer.ts"
+		},
+		{
+			"functions": [
+				"upload",
+				"release",
+				"updateIndices",
+				"updatePositions",
+				"updateInstances",
+				"updateBones",
+				"updateTextureTransform",
+				"updateMaterialColors"
+			],
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"consumer": "src/engine/runtime/renderer/world/world.ts"
+		},
+		{
+			"functions": [
+				"upload",
+				"release"
+			],
+			"provider": "src/engine/runtime/renderer/device/images.ts",
+			"consumer": "src/engine/runtime/renderer/world/world.ts"
+		},
+		{
+			"functions": [
+				"consumeInput"
+			],
+			"provider": "src/engine/runtime/simulation/worker/simulation.ts",
+			"consumer": "src/engine/runtime/simulation/worker/input/input.ts"
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/world/resources/resources.ts",
+			"provider": "src/engine/runtime/assets/worker/loader.ts",
+			"functions": [
+				"readWorldResource"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/loader.ts",
+			"provider": "src/engine/runtime/assets/worker/world/resources/resources.ts",
+			"functions": [
+				"resolve"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/targeting/targeting.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/loader.ts",
+			"provider": "src/engine/runtime/assets/worker/model/character/character.ts",
+			"functions": [
+				"decode"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/characters/characters.ts",
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"functions": [
+				"upload",
+				"updateInstances",
+				"updateBones",
+				"release",
+				"updateTransform",
+				"updatePositions",
+				"updateIndices",
+				"updateMaterialColors",
+				"updateTextureTransform",
+				"updateEquipmentGlow"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/characters/characters.ts",
+			"provider": "src/engine/runtime/renderer/device/images.ts",
+			"functions": [
+				"upload",
+				"release"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/resources/resources.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"request",
+				"take",
+				"cancel",
+				"available"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"actors",
+				"assembly",
+				"socket",
+				"matrix",
+				"localMatrix",
+				"particleSnapshot",
+				"particleTime"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/audio/audio.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"request",
+				"take",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/platform.ts",
+			"provider": "src/engine/runtime/audio/audio.ts",
+			"functions": [
+				"unlock"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/audio/audio.ts",
+			"functions": [
+				"enqueue"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/resources/resources.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"animation",
+				"model",
+				"retain"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
+			"provider": "src/engine/runtime/audio/audio.ts",
+			"functions": [
+				"enqueue"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/effects/effects.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"request",
+				"take",
+				"cancel",
+				"available"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/effects/effects.ts",
+			"provider": "src/engine/runtime/audio/audio.ts",
+			"functions": [
+				"enqueue"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/effects/effects.ts",
+			"provider": "src/engine/runtime/characters/resources/resources.ts",
+			"functions": [
+				"ready",
+				"duration"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/loader.ts",
+			"provider": "src/engine/runtime/assets/worker/effects/program/program.ts",
+			"functions": [
+				"decode",
+				"clear"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"stats"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/platform.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"blocks",
+				"event"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"event"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/ui/ui.ts",
+			"provider": "src/engine/runtime/platform/platform.ts",
+			"functions": [
+				"callback",
+				"callback:createUiBridge:2",
+				"callback:createUiBridge:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/platform/ui/ui.ts",
+			"functions": [
+				"present"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/resources/resources.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"cancel",
+				"take",
+				"available",
+				"request"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/resources/resources.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"setUiTexture"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"setUiTexture",
+				"setUi"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/simulation/host.ts",
+			"functions": [
+				"session"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"stats"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/frontend.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"pickFrontendCharacter",
+				"setWorldCamera",
+				"setWorld",
+				"pickFrontendRace"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/stage/stage.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"request",
+				"cancel",
+				"take",
+				"available"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/stage/preload.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"request",
+				"cancel",
+				"take",
+				"available"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/platform.ts",
+			"provider": "src/engine/runtime/frontend/frontend.ts",
+			"functions": [
+				"pointer"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/stage/stage.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"setWorld",
+				"setWorldTexture",
+				"cancelWorldUpdate",
+				"neededWorldTextures",
+				"worldStats",
+				"adoptWorld"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/platform.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"uiEvent"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/ui/ui.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"uiEvent"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"sessionCommand",
+				"callback:createUi:8",
+				"callback:createUi:10",
+				"callback:createUi:11",
+				"callback:createUi:12",
+				"callback:createUi:13",
+				"callback:createUi:14",
+				"callback:createUi:15",
+				"callback:createUi:16"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/text/text.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"take",
+				"available",
+				"request",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/title/resources.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"take",
+				"available",
+				"request",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/navigation/navigation.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"request",
+				"take",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/navigation/navigation.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createNavigationStream:1"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/navigation/navigation.ts",
+			"provider": "src/engine/runtime/assets/worker/loader.ts",
+			"functions": [
+				"callback:resolve:2"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/audio/music/music.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"take",
+				"available",
+				"request",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/audio/music/music.ts",
+			"functions": [
+				"active",
+				"status"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/characters/characters.ts",
+			"provider": "src/engine/runtime/renderer/readback/readback.ts",
+			"functions": [
+				"readPickAlpha"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/world/world.ts",
+			"provider": "src/engine/runtime/renderer/readback/readback.ts",
+			"functions": [
+				"readPickAlpha"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/training/training.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/effects/effects.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:step:6"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/localization/localization.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"take",
+				"available",
+				"request",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/audio/audio.ts",
+			"functions": [
+				"uiClick",
+				"uiSound"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/dialog/dialog.ts",
+			"provider": "src/engine/runtime/frontend/frontend.ts",
+			"functions": [
+				"callback"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/dialog/dialog.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createFrontend:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/creation/creation.ts",
+			"provider": "src/engine/runtime/frontend/frontend.ts",
+			"functions": [
+				"callback"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/creation/creation.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createFrontend:3",
+				"callback:createFrontend:4"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/creation/creation.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"request",
+				"take",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/frontend.ts",
+			"provider": "src/engine/runtime/renderer/world/world.ts",
+			"functions": [
+				"interfaceCenters"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/frontend.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"stats"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/frontend/frontend.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createFrontend:4",
+				"callback:createFrontend:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": [
+				"callback:createGameplay:1",
+				"callback:createGameplay:4"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"callback:createInventory:1",
+				"callback:createInventory:2"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/orbs/orbs.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:step:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/orbs/orbs.ts",
+			"provider": "src/engine/runtime/audio/audio.ts",
+			"functions": [
+				"enqueue"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/orbs/orbs.ts",
+			"provider": "src/engine/runtime/characters/resources/resources.ts",
+			"functions": [
+				"ready",
+				"duration",
+				"failed"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": [
+				"callback:createGameplay:2"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/audio/audio.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"range"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/effects/effects.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"curve",
+				"range"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/world/camera/camera.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"range"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/orbs/orbs.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"orb"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/world/world.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"sky",
+				"flicker"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/assets.ts",
+			"provider": "src/engine/runtime/assets/world-lease.ts",
+			"functions": [
+				"createWorldLease"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/world/world.ts",
+			"provider": "src/engine/runtime/assets/world-lease.ts",
+			"functions": [
+				"takeWorld"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/title-status.ts",
+			"provider": "src/engine/runtime/ui/title/title.ts",
+			"functions": [
+				"catalog"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/frontend/flow/flow.ts",
+			"functions": [
+				"snapshot"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/frame-ring.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/text/text.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"take",
+				"available",
+				"request",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/weather/weather.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"range"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/weather/weather.ts",
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"functions": [
+				"upload",
+				"release",
+				"updatePositions"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/weather/weather.ts",
+			"provider": "src/engine/runtime/renderer/world/world.ts",
+			"functions": [
+				"weatherGround"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/guide/resources.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"request",
+				"take",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/guide-content.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/weather/weather.ts",
+			"provider": "src/engine/runtime/audio/audio.ts",
+			"functions": [
+				"enqueue"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/rendering/thunder.ts",
+			"provider": "src/engine/runtime/renderer/weather/weather.ts",
+			"functions": [
+				"callback:advanceThunder:4"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/academy-layout.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/academy-layout.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:academyLayout:7"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/stretch-ring.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"functions": [
+				"surface"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": [
+				"callback:createEntities:0"
+			]
+		},
+		{
+			"functions": [
+				"size"
+			],
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"consumer": "src/engine/foundation/ui/chat-layout.ts"
+		},
+		{
+			"functions": [
+				"callback:chatLayout:10",
+				"callback:chatLayout:15",
+				"hudCopy"
+			],
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"consumer": "src/engine/foundation/ui/chat-layout.ts"
+		},
+		{
+			"functions": [
+				"hudCopy"
+			],
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"consumer": "src/engine/foundation/ui/chat-presentation.ts"
+		},
+		{
+			"functions": [
+				"hudCopy"
+			],
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"consumer": "src/engine/foundation/ui/overhead-layout.ts"
+		},
+		{
+			"functions": [
+				"size"
+			],
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"consumer": "src/engine/foundation/ui/system-message-layout.ts"
+		},
+		{
+			"functions": [
+				"callback:systemMessageLayout:6"
+			],
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"consumer": "src/engine/foundation/ui/system-message-layout.ts"
+		},
+		{
+			"functions": [
+				"retain",
+				"actors",
+				"prepare",
+				"borrowModel",
+				"socket",
+				"dispose",
+				"invalidate"
+			],
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"consumer": "src/engine/runtime/renderer/characters/portrait.ts"
+		},
+		{
+			"consumer": "src/engine/foundation/ui/target-status.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy",
+				"callback:targetStatus:5"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/renderer/world/world.ts",
+			"functions": [
+				"selectionDecal"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"functions": [
+				"pick"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/messages.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy",
+				"callback"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/messages.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createUi:9"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/text-lines.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:tooltipBubble:3",
+				"callback:textLines:2",
+				"callback:textBoardLines:2",
+				"callback:chatLayout:15",
+				"callback:textLines:2",
+				"callback:systemMessageLayout:10"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/timing.ts",
+			"functions": [
+				"pass",
+				"resolve",
+				"submitted"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/session.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"options",
+				"chatBlocks"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/impact-source.ts",
+			"provider": "src/engine/runtime/characters/effects/effects.ts",
+			"functions": [
+				"callback:impactSource:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/damage-feedback.ts",
+			"provider": "src/engine/runtime/characters/effects/effects.ts",
+			"functions": [
+				"impactIndex"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/assets/read-bytes.ts",
+			"provider": "src/engine/runtime/assets/worker/loader.ts",
+			"functions": [
+				"callback"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/entities/entities.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": [
+				"callback:createEntities:0",
+				"callback:createEntities:1",
+				"callback:recolor:0",
+				"nameContext"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"range"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/combo-box.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/rendering/scenery-modifiers.ts",
+			"provider": "src/engine/runtime/assets/worker/world/world.ts",
+			"functions": [
+				"callback:sceneryMaterial:3"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/mastery-tooltip.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/buff-tooltip.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/item-tooltip-recovery.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/item-tooltip.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/item-tooltip-stats.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/skill-tooltip.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup",
+				"callback:skillTooltip:5"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/skill-tooltip-params.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/item-tooltip-magic.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/reference-appearance.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:createReferenceAppearances:0"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/region-banner.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/effects/effects.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:createCharacterEffects:4"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/scenery-emission.ts",
+			"provider": "src/engine/runtime/characters/resources/resources.ts",
+			"functions": [
+				"ready"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/rendering/scenery-particles.ts",
+			"provider": "src/engine/runtime/assets/worker/world/world.ts",
+			"functions": [
+				"callback:sceneryParticles:5"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/renderer/world/world.ts",
+			"functions": [
+				"scenery",
+				"footprints"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/name-color.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": [
+				"capeTeam"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/portal.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:portalMenu:2"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/quest-time.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/resource-error.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"callback:resourceErrorLines:2"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/vertical-spin.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/presentation/effective-hp.ts",
+			"functions": [
+				"dead",
+				"impact",
+				"release"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/presentation/presentation.ts",
+			"functions": [
+				"finishedCasts"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/damage-feedback.ts",
+			"provider": "src/engine/runtime/presentation/effective-hp.ts",
+			"functions": [
+				"currentResult"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/damage-feedback.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:createDamageFeedback:0"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/presentation/effective-hp.ts",
+			"functions": [
+				"step"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": [
+				"callback:createGameplay:2",
+				"callback:createGameplay:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"callback"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/minimap.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"cancel",
+				"request",
+				"take"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/quest-banner.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/model-emission.ts",
+			"provider": "src/engine/runtime/characters/resources/resources.ts",
+			"functions": [
+				"ready"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/model-material-clock.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"callback:step:2"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/rendering/scenery-modifiers.ts",
+			"provider": "src/engine/runtime/assets/worker/model/character/character.ts",
+			"functions": [
+				"callback:sceneryMaterial:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"prepare",
+				"finishDeferred"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/surface/surface.ts",
+			"provider": "src/engine/runtime/renderer/device/device.ts",
+			"functions": [
+				"createColor",
+				"present"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/animation-dispatch.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:step:2"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"presentationCamera",
+				"presentationNight"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/model-emission.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:step:4"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/animation-emission.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:step:5",
+				"callback:step:6",
+				"callback:step:7"
+			],
+			"reason": "Synchronous animation modifier admission and last-rendered particle snapshot; no new scheduler or asset owner."
+		},
+		{
+			"consumer": "src/engine/foundation/animation/animation-emission.ts",
+			"provider": "src/engine/runtime/characters/resources/resources.ts",
+			"functions": [
+				"ready"
+			],
+			"reason": "Synchronous animation modifier admission and last-rendered particle snapshot; no new scheduler or asset owner."
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts",
+			"functions": [
+				"castArrival"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
+			"functions": [
+				"guidedArrival"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/loader.ts",
+			"provider": "src/engine/runtime/assets/worker/install.ts",
+			"functions": [
+				"createBackgroundInstaller",
+				"start",
+				"dispose"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/install.ts",
+			"provider": "src/engine/runtime/assets/worker/packs/packs.ts",
+			"functions": [
+				"read",
+				"install"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/assets/worker/install.ts",
+			"provider": "src/engine/runtime/assets/worker/loader.ts",
+			"functions": [
+				"callback:createBackgroundInstaller:1"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/release/release-watch.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"request",
+				"take",
+				"available",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/audio/preparation.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"request",
+				"take",
+				"cancel"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/assets/read-bytes.ts",
+			"provider": "src/engine/runtime/assets/worker/loader.ts",
+			"functions": [
+				"callback:readBytes:2"
+			]
+		}
+	],
+	"boundaries": [
+		{
+			"file": "src/engine/foundation/animation/particle-commands.ts",
+			"expression": "random",
+			"function": "executeParticleCommands",
+			"kind": "callback",
+			"reason": "Particle command random number generator callback parameter."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/entry.ts",
+			"expression": "port.postMessage",
+			"function": "sendToHost",
+			"kind": "worker-port",
+			"reason": "Typed DedicatedWorker port projection; transferred messages cross the parent/worker boundary."
+		},
+		{
+			"file": "src/engine/runtime/simulation/worker/entry.ts",
+			"expression": "port.postMessage",
+			"function": "sendToHost",
+			"kind": "worker-port",
+			"reason": "Typed DedicatedWorker port projection; transferred messages cross the parent/worker boundary."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "gpuAnimation",
+			"function": "stats",
+			"kind": "callback",
+			"reason": "Device-owned optional GPU animation telemetry callback, retained from GeometryCommands during prepare."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/palette-streams.ts",
+			"expression": "gpu!",
+			"function": "update",
+			"kind": "callback",
+			"reason": "Optional GeometryCommands GPU palette producer; false selects the CPU palette path."
+		},
+		{
+			"file": "src/engine/runtime/renderer/device/animation.ts",
+			"expression": "timing?.pass",
+			"function": "encode",
+			"kind": "callback",
+			"reason": "Optional device-owned GpuTimingFrame callback for the skeletal compute pass."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/loader.ts",
+			"expression": "resolve",
+			"function": "wakeIdleWaiters",
+			"kind": "callback",
+			"reason": "Promise resolvers of background-install waiters (worker/install.ts): settled when the last foreground load releases capacity."
+		},
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"expression": "frameProbe()?.begin",
+			"function": "frame",
+			"kind": "callback",
+			"reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+		},
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"expression": "frameProbe()?.end",
+			"function": "frame",
+			"kind": "callback",
+			"reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+		},
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"expression": "frameProbe()?.mark",
+			"function": "markStage",
+			"kind": "callback",
+			"reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+		},
+		{
+			"file": "src/engine/runtime/ui/ui.ts",
+			"expression": "probe?.detailBegin",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Optional frame-owned timing observer. Records UI assembly, comparison and publication without changing the product; covered by ui-resource-lifetime.test.mjs. Runtime supplies it only in development."
+		},
+		{
+			"file": "src/engine/runtime/ui/ui.ts",
+			"expression": "probe?.detailEnd",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Optional frame-owned timing observer. Records UI assembly, comparison and publication without changing the product; covered by ui-resource-lifetime.test.mjs. Runtime supplies it only in development."
+		},
+		{
+			"file": "src/engine/foundation/animation/animation-pose.ts",
+			"expression": "probe?.phases?.begin",
+			"function": "materialize",
+			"kind": "callback",
+			"reason": "Optional injected diagnostic timer; observes the same pose evaluation. Compared against unobserved palettes in animation-phase-profiler.test.mjs."
+		},
+		{
+			"file": "src/engine/foundation/animation/animation-pose.ts",
+			"expression": "timer.start",
+			"function": "materialize",
+			"kind": "callback",
+			"reason": "Optional injected diagnostic timer; observes the same pose evaluation. Compared against unobserved palettes in animation-phase-profiler.test.mjs."
+		},
+		{
+			"file": "src/engine/foundation/animation/animation-pose.ts",
+			"expression": "timer.end",
+			"function": "materialize",
+			"kind": "callback",
+			"reason": "Optional injected diagnostic timer; observes the same pose evaluation. Compared against unobserved palettes in animation-phase-profiler.test.mjs."
+		},
+		{
+			"file": "src/engine/foundation/animation/animation-pose.ts",
+			"expression": "probe?.ceiling?.skip",
+			"function": "evaluate",
+			"kind": "callback",
+			"reason": "Diagnostic-only injected warmed-pose replay; animation-ceiling.test.mjs verifies capture lifetime."
+		},
+		{
+			"file": "src/engine/foundation/animation/animation-pose.ts",
+			"expression": "probe?.ceiling?.palette",
+			"function": "palette",
+			"kind": "callback",
+			"reason": "Injected diagnostic palette census; does not change palette output."
+		},
+		{
+			"file": "src/engine/runtime/characters/characters.ts",
+			"expression": "probe?.sampleDetails",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Optional runtime-owned frame observer replaces profiling source rewriting; production supplies no observer."
+		},
+		{
+			"file": "src/engine/runtime/characters/characters.ts",
+			"expression": "probe?.detailBegin",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Optional runtime-owned frame observer replaces profiling source rewriting; production supplies no observer."
+		},
+		{
+			"file": "src/engine/runtime/characters/characters.ts",
+			"expression": "probe?.detailEnd",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Optional runtime-owned frame observer replaces profiling source rewriting; production supplies no observer."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterCount",
+			"function": "poseFor",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterBegin",
+			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterMark",
+			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterCount",
+			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/renderer.ts",
+			"expression": "probe?.renderBegin",
+			"function": "frame",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/renderer.ts",
+			"expression": "probe?.renderMark",
+			"function": "frame",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		}
+	],
+	"sequences": [
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"function": "frame",
+			"calls": [
+				"src/engine/runtime/input/input.ts#drain",
+				"src/engine/runtime/simulation/host.ts#sendInput",
+				"src/engine/runtime/simulation/host.ts#poll",
+				"src/engine/runtime/audio/audio.ts#step",
+				"src/engine/runtime/audio/audio.ts#world",
+				"src/engine/runtime/renderer/renderer.ts#frame",
+				"external:requestAnimationFrame"
+			]
+		},
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"function": "frame",
+			"calls": [
+				"src/engine/runtime/world/world.ts#pumpCameraScripts",
+				{
+					"expression": "characters.step",
+					"target": "src/engine/runtime/characters/characters.ts#step"
+				},
+				{
+					"expression": "world.step",
+					"target": "src/engine/runtime/world/world.ts#step"
+				}
+			]
+		}
+	],
+	"frameBarriers": [
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"function": "frame",
+			"sourceSha256": "eaec005e7f66b526112b8280ca8f48f2c9bc715151a34806aa738c61c727cea4",
+			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
+			"evidence": "tests/fixtures/native/bsr-query-native.json",
+			"nativeFunction": 11451792,
+			"tests": [
+				"tests/browser/particle-query.test.mjs",
+				"tests/browser/deferred-particles.test.mjs",
+				"tests/runtime/deferred-particles.test.mjs"
+			]
+		},
+		{
+			"file": "src/engine/runtime/renderer/device/particle-query.ts",
+			"function": "query",
+			"sourceSha256": "1a237d2b2c1c941499abc1a86aac280515b797a1237d57b90a9fca736ca984eb",
+			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
+			"evidence": "tests/fixtures/native/bsr-query-native.json",
+			"nativeFunction": 11451792,
+			"tests": [
+				"tests/browser/particle-query.test.mjs",
+				"tests/browser/deferred-particles.test.mjs",
+				"tests/runtime/deferred-particles.test.mjs"
+			]
+		}
+	]
 }

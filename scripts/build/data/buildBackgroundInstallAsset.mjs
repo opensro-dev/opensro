@@ -69,9 +69,29 @@ publishes the install list. Returns the per-tier file counts.
 ================
 */
 export async function buildBackgroundInstallAsset( { publicRoot = defaultPublicRoot } = {} ) {
+	const paths = (await listFiles( path.join( publicRoot, "assets" ), { missing: "empty" } )).map( file =>
+		"/" + path.relative( publicRoot, file ).split( path.sep ).join( "/" )
+	);
+	const document = backgroundInstallDocument( paths );
+	const target = path.join( publicRoot, ...BACKGROUND_INSTALL_PUBLIC_PATH.slice( 1 ).split( "/" ) );
+	await mkdir( path.dirname( target ), { recursive: true } );
+	await publishBytesAtomically( target, Buffer.from( JSON.stringify( document ) ), {
+		logLabel: "background-install"
+	} );
+	return Object.fromEntries( document.tiers.map( tier => [ tier.name, tier.paths.length ] ) );
+}
+
+/*
+================
+backgroundInstallDocument
+
+Derive from the actual publication. Pack-only releases have no loose asset
+tree, so their route set is the authority rather than a development sidecar.
+================
+*/
+export function backgroundInstallDocument( paths ) {
 	const tiers = { "combat": [], "world-sounds": [] };
-	for ( const file of await listFiles( path.join( publicRoot, "assets" ), { missing: "empty" } ) ) {
-		const publicPath = "/" + path.relative( publicRoot, file ).split( path.sep ).join( "/" );
+	for ( const publicPath of new Set( paths ) ) {
 		// Precompressed sidecars are served in place of their base file.
 		if ( /\.(?:br|gz|zst)$/i.test( publicPath ) ) continue;
 		const tier = backgroundInstallTier( publicPath.toLowerCase() );
@@ -82,10 +102,5 @@ export async function buildBackgroundInstallAsset( { publicRoot = defaultPublicR
 		version: BACKGROUND_INSTALL_VERSION,
 		tiers: Object.entries( tiers ).map( ( [name, paths] ) => ({ name, paths: paths.sort() }) )
 	};
-	const target = path.join( publicRoot, ...BACKGROUND_INSTALL_PUBLIC_PATH.slice( 1 ).split( "/" ) );
-	await mkdir( path.dirname( target ), { recursive: true } );
-	await publishBytesAtomically( target, Buffer.from( JSON.stringify( document ) ), {
-		logLabel: "background-install"
-	} );
-	return Object.fromEntries( document.tiers.map( ( tier ) => [ tier.name, tier.paths.length ] ) );
+	return document;
 }

@@ -13,13 +13,46 @@ surface. Types only.
 import type { Geometry } from "./geometry";
 import type { SessionCommand, SessionState } from "./session";
 import type { InputBatch } from "./input";
+/*
+================
+RuntimePhase
+================
+*/
 export type RuntimePhase = "starting" | "running" | "failed" | "disposed";
+
+/*
+================
+RenderFrameProbe
+
+Optional synchronous measurements supplied by the frame owner. Renderer
+modules never discover diagnostic globals or require rewritten source.
+================
+*/
+export interface RenderFrameProbe {
+	renderBegin(): void;
+	renderMark( stage: string ): void;
+	characterBegin(): void;
+	characterMark( stage: string ): void;
+	characterCount( name: string, value?: number ): void;
+}
+
+/*
+================
+RuntimeDiagnostics
+================
+*/
 export interface RuntimeDiagnostics {
+	readonly animationPose?: import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe;
 	readonly gpuAnimation?: boolean;
 	readonly gpuTiming?: boolean;
 	readonly hoverPicking?: boolean;
 	readonly stages?: boolean;
 }
+/*
+================
+GpuTimingStats
+================
+*/
 export interface GpuTimingStats {
 	readonly supported: boolean;
 	readonly skipped: number;
@@ -30,9 +63,19 @@ export interface GpuTimingStats {
 		readonly passes: readonly { readonly name: string; readonly ms: number; }[];
 	}[];
 }
+/*
+================
+Disposable
+================
+*/
 export interface Disposable {
 	dispose(): void;
 }
+/*
+================
+Viewport
+================
+*/
 export interface Viewport {
 	width: number;
 	height: number;
@@ -54,6 +97,11 @@ export interface FrameTelemetry {
 	readonly draws: number;
 	readonly visibleGroups: number;
 }
+/*
+================
+Platform
+================
+*/
 export interface Platform extends Disposable {
 	saveVideoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;
 	saveQuickslotOptions( value: import("@/engine/foundation/ui/extended-quickslot").ExtendedQuickslotOptions ): void;
@@ -78,6 +126,11 @@ export interface Platform extends Disposable {
 	readViewport(): Viewport;
 	report( text: string, error?: unknown ): void;
 }
+/*
+================
+Renderer
+================
+*/
 export interface Renderer extends Disposable {
 	scenery(): import("./scenery").SceneryPresentation | null;
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
@@ -124,7 +177,10 @@ export interface Renderer extends Disposable {
 		clip: import("@/engine/foundation/animation/native-clip").NativeClip
 	): number;
 	setTeleportGates( entities: readonly import("./world").EntityState[] ): void;
-	setCharacterActors( actors: readonly import("./character").CharacterActor[] ): void;
+	setCharacterActors(
+		actors: readonly import("./character").CharacterActor[],
+		portraits?: readonly import("./character").CharacterActor[]
+	): void;
 
 	setWorld( scene: import("./scene").WorldScene | null ): void;
 	adoptWorld(
@@ -140,10 +196,15 @@ export interface Renderer extends Disposable {
 	setGeometryTransform( transform: Float32Array ): void;
 	setGeometry( data: Geometry | null ): void;
 	setImage( image: ImageBitmap | null ): void;
-	frame( viewport: Viewport, timeSeconds?: number, frameId?: number ): void | Promise<void>;
+	frame( viewport: Viewport, timeSeconds?: number, frameId?: number, probe?: RenderFrameProbe ): void | Promise<void>;
 	phase(): RuntimePhase;
 	error(): string | null;
 }
+/*
+================
+SimulationHost
+================
+*/
 export interface SimulationHost extends Disposable {
 	pollWorld(): import("./world").WorldBatch | null;
 	ackWorld( sequence: number ): void;
@@ -153,6 +214,11 @@ export interface SimulationHost extends Disposable {
 	poll(): SimulationObservation | null;
 	error(): string | null;
 }
+/*
+================
+SimulationObservation
+================
+*/
 export interface SimulationObservation {
 	clock?: ClockSample;
 	publishedAtMs: number;
@@ -171,11 +237,21 @@ export interface ClockSample {
 	maxStepMs: number;
 	debtMs: number;
 }
+/*
+================
+Clock
+================
+*/
 export interface Clock extends Disposable {
 	sample(): ClockSample;
 	start(): void;
 }
 
+/*
+================
+RuntimeControl
+================
+*/
 export interface RuntimeControl extends Disposable {
 	retryWorld(): void;
 	session( command: SessionCommand ): void;

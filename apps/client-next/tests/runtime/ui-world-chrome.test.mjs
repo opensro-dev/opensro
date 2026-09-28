@@ -97,6 +97,11 @@ test("new published popup resources prepare automatically without a runtime file
 	const future = "/assets/images/Media_extracted/interface/new-published-control.png";
 	const hud = createHudResources( {
 		available: () => 4 - jobs.size,
+		/*
+================
+request
+================
+		*/
 		request( url ) {
 			const path = decodeURIComponent( new URL( url ).pathname );
 			if ( !path.endsWith( ".json" ) ) {
@@ -111,10 +116,18 @@ test("new published popup resources prepare automatically without a runtime file
 			if ( path.endsWith( "/ifmainpopup.json" ) ) {
 				raw.resourcesByDdjPath["new-control.ddj"] = { publicPath: future };
 			}
+			if ( path.endsWith( "/iftw_commonenemy.json" ) ) {
+				raw.resourcesByDdjPath["new-target.ddj"] = { publicPath: future.replace( "control", "target" ) };
+			}
 			const buffer = new TextEncoder().encode( JSON.stringify( raw ) ).buffer;
 			jobs.set( ++serial, { kind: "bytes", buffer } );
 			return serial;
 		},
+		/*
+================
+take
+================
+		*/
 		take( id ) {
 			const value = jobs.get( id );
 			jobs.delete( id );
@@ -126,6 +139,7 @@ test("new published popup resources prepare automatically without a runtime file
 		for ( let i = 0; i < 100 && !hud.data(); i++ ) hud.step();
 		assert.equal( hud.error(), null );
 		assert.ok( defined( hud.data() ).warmPaths.includes( future ) );
+		assert.ok( defined( hud.data() ).warmPaths.includes( future.replace( "control", "target" ) ) );
 		assert.equal( defined( hud.data() ).warmPaths.filter( path => path === future ).length, 1 );
 	} finally {
 		hud.dispose();
@@ -222,6 +236,11 @@ test("world text uses the same published mask/advance contract for caret and gly
 	let next = 0;
 	const owner = createUiText( {
 		available: () => 1,
+		/*
+================
+request
+================
+		*/
 		request() {
 			jobs.set( ++next, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( atlas ) ).buffer } );
 			return next;

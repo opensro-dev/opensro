@@ -7,7 +7,7 @@ createFrameProfiler records per-frame stage timings and draw counts into a
 bounded numeric buffer the probe exports after a capture window.
 instrumentFrameProfiler patches profiler calls into a fixed set of served
 client sources at probe time. That patching is legacy (AGENTS.md: tools do
-not patch source text); runtime.ts and ui.ts call the profiler through
+not patch source text); runtime.ts, ui.ts and the character renderer call the profiler through
 explicit hooks (frameProbe) and is not patched.
 
 ===========================================================================
@@ -344,11 +344,8 @@ instrumentFrameProfiler
 export function instrumentFrameProfiler( source, file ) {
 	if (
 		![
-			"src/engine/runtime/characters/characters.ts",
 			"src/engine/runtime/renderer/frame/frame.ts",
-			"src/engine/runtime/renderer/renderer.ts",
-			"src/engine/runtime/renderer/world/world.ts",
-			"src/engine/runtime/renderer/characters/characters.ts"
+			"src/engine/runtime/renderer/world/world.ts"
 		].includes( file )
 	) return source;
 	source = source.replace( /\r\n/g, "\n" );
@@ -370,25 +367,7 @@ export function instrumentFrameProfiler( source, file ) {
 			"globalThis.__worldProbeFrameProfiler?.draw(frameId,image,geometry,world,ui,preview,flares,thunder,portrait,doll,partyPortraits);"
 		);
 	}
-	if ( file === "src/engine/runtime/renderer/renderer.ts" ) {
-		insert( "frame(viewport,timeSeconds=0,frameId) {", "globalThis.__worldProbeFrameProfiler?.renderBegin();" );
-		insert(
-			"const scene=world.prepare",
-			'globalThis.__worldProbeFrameProfiler?.renderMark("renderer-setup");',
-			false
-		);
-		insert( "pickView=scene.matrix;", 'globalThis.__worldProbeFrameProfiler?.renderMark("world-prepare");', false );
-		insert(
-			"const uiScene=uiProduct?.scene",
-			'globalThis.__worldProbeFrameProfiler?.renderMark("character-prepare");',
-			false
-		);
-		insert( "const deferredPlan=", 'globalThis.__worldProbeFrameProfiler?.renderMark("labels-portraits");', false );
-		insert(
-			"partyDraws,frameId,deferredPass,device.bloom(viewport.width,viewport.height,!preview&&video.records[video.active][11]===1));",
-			'globalThis.__worldProbeFrameProfiler?.renderMark("submit");'
-		);
-	}
+
 	if ( file === "src/engine/runtime/renderer/world/world.ts" ) {
 		/*
 		================
@@ -472,90 +451,6 @@ export function instrumentFrameProfiler( source, file ) {
 			'globalThis.__worldProbeFrameProfiler?.worldMark("world-finalize");'
 		);
 	}
-	if ( file === "src/engine/runtime/characters/characters.ts" ) {
-		insert(
-			"const anchor = gameplay?.pose;",
-			"const __sampleActorDetails=globalThis.__worldProbeFrameProfiler?.sampleDetails();",
-			false
-		);
-		insert(
-			"                    const nativePose = entity.gid",
-			'if(__sampleActorDetails)globalThis.__worldProbeFrameProfiler?.detailBegin("actor-motion");',
-			false
-		);
-		insert(
-			"                    const metadata=resource.animationStates??animationStates.get(resource.codename);",
-			'if(__sampleActorDetails){globalThis.__worldProbeFrameProfiler?.detailEnd("actor-motion");globalThis.__worldProbeFrameProfiler?.detailBegin("actor-sounds");}',
-			false
-		);
-		insert(
-			"                    displayedDependencies.set(entity.gid, dependencies);",
-			'if(__sampleActorDetails){globalThis.__worldProbeFrameProfiler?.detailEnd("actor-sounds");globalThis.__worldProbeFrameProfiler?.detailBegin("actor-record");}',
-			false
-		);
-		insert(
-			"scale: Math.fround(baseScale*appearance.scale) });",
-			'if(__sampleActorDetails)globalThis.__worldProbeFrameProfiler?.detailEnd("actor-record");'
-		);
-		const boundaries = [
-			[ "presentation-selection", "const anchor = gameplay?.pose;" ],
-			[
-				"presentation-events",
-				"const {castByActor,castTokens,vitalsByGid,entitiesByGid}=stateIndex.update(entities,gameplay);"
-			],
-			[
-				"presentation-state",
-				"            for(const entity of entities){\n                if(entity.groundItem)continue;"
-			],
-			[ "presentation-actors", "const appearanceActive=new Set(selected.map(entity=>entity.gid));" ],
-			[ "presentation-finalize", "            for (const gid of states.keys())" ]
-		];
-		for ( let i = 0; i < boundaries.length; i++ ) {
-			const [name, marker] = boundaries[i];
-			insert(
-				marker,
-				(i ? `globalThis.__worldProbeFrameProfiler?.detailEnd("${boundaries[i - 1][0]}");` : "") +
-					`globalThis.__worldProbeFrameProfiler?.detailBegin("${name}");`,
-				false
-			);
-		}
-		insert(
-			"resources.retainWanted([...next.values()].map(actor => actor.model));",
-			'globalThis.__worldProbeFrameProfiler?.detailEnd("presentation-finalize");'
-		);
-	}
-	if ( file === "src/engine/runtime/renderer/characters/characters.ts" ) {
-		insert( "poseCreations++;", 'globalThis.__worldProbeFrameProfiler?.characterCount("pose-created");' );
-		if ( source.split( "if(!needed.has(gid))ownedPoses.delete(gid);" ).length !== 2 ) {
-			throw Error( "Pose retirement boundary changed" );
-		}
-		source = source.replace(
-			"if(!needed.has(gid))ownedPoses.delete(gid);",
-			'if(!needed.has(gid)){ownedPoses.delete(gid);globalThis.__worldProbeFrameProfiler?.characterCount("pose-retired");}'
-		);
-		insert(
-			"frameGroups=grouped.size;",
-			'globalThis.__worldProbeFrameProfiler?.characterCount("pose-evaluations",poseEvaluations);'
-		);
-		insert(
-			"poseRequests=poseEvaluations=poseSharingHits=poseCreations=boneUploadBytes=visibleActors=frameGroups=0;",
-			"globalThis.__worldProbeFrameProfiler?.characterBegin();"
-		);
-		insert(
-			"for (const actor of frameActors) {",
-			'globalThis.__worldProbeFrameProfiler?.characterMark("character-plan");',
-			false
-		);
-		insert(
-			"function actorTransform(actor:CharacterActor)",
-			'globalThis.__worldProbeFrameProfiler?.characterMark("character-poses");',
-			false
-		);
-		insert(
-			"frameGroups=grouped.size;",
-			'globalThis.__worldProbeFrameProfiler?.characterMark("character-upload");',
-			false
-		);
-	}
+
 	return source;
 }

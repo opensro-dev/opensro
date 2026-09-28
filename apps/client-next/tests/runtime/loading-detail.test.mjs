@@ -90,3 +90,12 @@ test("with nothing downloading the line is just the step", () => {
 		"Loading world · interface images"
 	);
 });
+
+test("unfinished streamed files visibly advance without inventing a total percentage", () => {
+	const before = loadingDetailText( "Preparing world", progress( { bytesRead: 1_000_000, bytesPerSecond: 0 } ), 0 );
+	const after = loadingDetailText( "Preparing world", progress( { bytesRead: 1_500_000, bytesPerSecond: 0 } ), 0 );
+	assert.match( before, /1.0 MB read/ );
+	assert.match( after, /1.5 MB read/ );
+	assert.match( after, /3 files ready/ );
+	assert.doesNotMatch( after, /%/ );
+});

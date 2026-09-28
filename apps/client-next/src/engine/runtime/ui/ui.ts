@@ -99,7 +99,7 @@ import { buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
 import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
-import { partyMembers, partyOverlay } from "@/engine/foundation/ui/party-overlay";
+import { partyMembers, partyOverlay, partyPortraitGid } from "@/engine/foundation/ui/party-overlay";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import {
 	admittanceOverlay,
@@ -1410,8 +1410,9 @@ export function createUi(
 			confirmSocial = "";
 		} else if ( id === "social-next" ) socialPage++;
 		else if ( id === "social-prev" ) socialPage = Math.max( 0, socialPage - 1 );
-		else if ( id === "party-leave" && panel === "Party" ) sendGameplay( { kind: "party-leave" } );
-		else if ( id.startsWith( "party-member-kick:" ) ) {
+		else if ( (id === "party-leave" || id === "party-disband") && panel === "Party" ) {
+			sendGameplay( { kind: "party-leave" } );
+		} else if ( id.startsWith( "party-member-kick:" ) ) {
 			sendGameplay( { kind: "party-kick", id: Number( id.slice( 18 ) ) } );
 		} else if ( [ "party-leave", "party-kick", "guild-leave", "guild-dissolve", "guild-kick" ].includes( id ) ) {
 			if ( confirmSocial !== id ) confirmSocial = id;
@@ -2201,6 +2202,18 @@ export function createUi(
 		stats
 		================
 		*/
+		/*
+		================
+		entryReady
+
+		Basic HUD and Help artwork must be decoded before releasing world entry.
+		Visible-window demand remains independent of this stable baseline.
+		================
+		*/
+		entryReady() {
+			const main = hud.data(), guide = guideResources.data();
+			return !!main && !!guide && main.warmPaths.every( resources.has ) && guide.warmPaths.every( resources.has );
+		},
 		stats: () => ({
 			...resources.stats(),
 			layoutRetention: {
@@ -3619,10 +3632,7 @@ export function createUi(
 				dirty = true;
 				layoutResourcesRevision++;
 			}
-			const guideNeeded = next.session?.phase === "world" &&
-				!!(next.gameplay?.guide || next.gameplay?.academy || next.gameplay?.quests?.length ||
-					next.gameplay?.questProgress?.length || panel === "Game Guide" || panel === "Quests" ||
-					next.gameplay?.npcConversation?.phase !== "closed" && next.gameplay?.npcConversation);
+			const guideNeeded = next.session?.phase === "world";
 			if ( guideResources.step( guideNeeded ) ) dirty = true;
 			if ( npcPanel.observe( next.session?.phase === "world" ? next.gameplay?.npcConversation : undefined ) ) {
 				dirty = true;
@@ -5244,15 +5254,15 @@ export function createUi(
 							);
 						}
 						if ( row.leader ) authoredImage( slot.GDR_QPS_PARTY_LEADER!, x, y );
+						quads.push( {
+							portraitGid: partyPortraitGid( row.member.id ),
+							texture: "__portrait",
+							rect: authoredRect( slot.GDR_QPS_PICTURE!, x, y ),
+							uv: [ 0, 0, 1, 1 ],
+							color: white,
+							clip: full
+						} );
 						if ( row.entity ) {
-							quads.push( {
-								portraitGid: row.entity.gid,
-								texture: "__portrait",
-								rect: authoredRect( slot.GDR_QPS_PICTURE!, x, y ),
-								uv: [ 0, 0, 1, 1 ],
-								color: white,
-								clip: full
-							} );
 							const r: UiRect = [ x, y, 122, 40 ];
 							controls.push( {
 								id: "party-target:" + row.entity.gid,
@@ -7168,7 +7178,7 @@ export function createUi(
 									"party-settings" :
 									node.id === 22 ?
 									"open-window:Party Matching" :
-									"party-leave",
+									"party-disband",
 								copy = node.id === 48 ? hudCopy( "UIIT_STT_PARTY_DISSOLVE" ) : hudCopy( node.text );
 							const disabled = node.id === 48 ?
 								!hasParty || social?.self !== social?.leader :
@@ -9093,15 +9103,15 @@ export function createUi(
 							)
 						);
 						const history = game?.chat?.lines.filter( line =>
-							line.channel === chatChannel || (chatChannel === 1 && line.channel === 3)
+							line.channel === chatChannel ||
+							(chatChannel === 1 && (line.channel === 3 || line.channel === 6))
 						) ?? [];
 						chatPage = Math.min( chatPage, Math.max( 0, Math.ceil( history.length / 7 ) - 1 ) );
 						const end = history.length - chatPage * 7,
 							visible = history.slice( Math.max( 0, end - 7 ), end );
 						visible.forEach( ( line, i ) => {
-							const sender = line.name || next.entities.find( e =>
-								e.gid === line.gid
-							)?.name || "Unknown speaker";
+							const sender = line.name || next.entities.find( e => e.gid === line.gid )?.name ||
+								"Unknown speaker";
 							label(
 								`${line.outgoing && line.channel === 2 ? "To " : ""}${sender}: ${line.text}`,
 								px + 22,
@@ -9626,9 +9636,8 @@ export function createUi(
 					} else authoredImage( node, gx, gy );
 				}
 				const sidebarX = gx - (guideSidebar ? 221 : 19),
-					side = ROOT + "interface/guide/gd_side_tab.png",
-					handle = ROOT + "interface/ifcommon/" +
-						(guideSidebar ? "com_side_button.png" : "com_side02_button.png");
+					side = guideData.artwork.side,
+					handle = guideSidebar ? guideData.artwork.expanded : guideData.artwork.collapsed;
 				for (
 					const [path, sx, sy] of [ [ side, sidebarX, gy + 45 ], [ handle, sidebarX + 4, gy + 183 ] ] as const
 				) {
@@ -9669,13 +9678,13 @@ export function createUi(
 						}
 					}
 					for ( const [i, tab] of ([ "general", "events", "quests" ] as const).entries() ) {
-						const skin = ROOT + "interface/ifcommon/com_tab_" + (guideTab === tab ? "on" : "off") + ".png",
+						const skin = guideTab === tab ? guideData.artwork.tabOn : guideData.artwork.tabOff,
 							r: UiRect = [ sx + 14 + i * 62, sy + 12, 60, 24 ],
 							label = guideData
 								.strings[[ "UIIT_STT_GAMEGUIDE", "UIIT_STT_EVENTGUIDE", "UIIT_STT_QUESTGUIDE1" ][i]!]!;
 						paths.push(
-							ROOT + "interface/ifcommon/com_tab_on.png",
-							ROOT + "interface/ifcommon/com_tab_off.png"
+							guideData.artwork.tabOn,
+							guideData.artwork.tabOff
 						);
 						if ( resources.has( skin ) ) rect( r, white, skin );
 						quads.push( ...text.quads( label, r, full, white, { hAlign: 1, vAlign: 1 } ) );
@@ -9702,12 +9711,11 @@ export function createUi(
 								r: UiRect = [ sx + 17, y, 164, 28 ],
 								id = (row.depth === 0 ? "guide-group:" : "guide-article:") + row.id;
 							const titleX = r[0] + (row.depth === 0 ? 28 : guideTab === "events" ? 18 : 43);
-							const skin = ROOT + "interface/guide/" + (row.depth === 0 ?
-								"gd_index" :
+							const skin = row.depth === 0 ?
+								guideData.artwork.group :
 								guideTab === "events" ?
-								"gd_contents_event" :
-								"gd_contents") +
-								".png";
+								guideData.artwork.event :
+								guideData.artwork.article;
 							paths.push( skin );
 							if ( resources.has( skin ) ) {
 								rect( r, white, skin );
@@ -9728,15 +9736,16 @@ export function createUi(
 								)
 							);
 							if ( row.depth === 1 && guideEvent === row.id ) {
-								const lamp = ROOT + "interface/guide/gd_contents_lamp.png";
+								const lamp = guideData.artwork.selected;
 								paths.push( lamp );
 								if ( resources.has( lamp ) ) {
 									rect( [ r[0] + (guideTab === "events" ? 8 : 33), y + 7, 8, 16 ], white, lamp );
 								}
 							}
 							if ( row.depth === 0 ) {
-								const path = ROOT + "interface/guide/gd_index_button_" +
-									(guideGroups.has( row.id ) ? "open" : "close") + ".png";
+								const path = guideGroups.has( row.id ) ?
+									guideData.artwork.groupOpen :
+									guideData.artwork.groupClosed;
 								paths.push( path );
 								if ( resources.has( path ) ) {
 									rect( [ r[0] + 4, y + 4, 24, 24 ], white, path );
@@ -11409,7 +11418,7 @@ export function createUi(
 			// Prewarm decoded authored artwork so hotkeys/sidebar changes stay immediate.
 			// Renderer now derives GPU residency from committed quads; this catalogue
 			// must never again be interpreted as the set of GPU-resident textures.
-			paths.push( ...hud.data()?.warmPaths ?? [] );
+			paths.push( ...hud.data()?.warmPaths ?? [], ...guideResources.data()?.warmPaths ?? [] );
 			for ( const item of game?.inventory ?? [] ) {
 				const path = iconPath( item.icon );
 				if ( path ) paths.push( path );

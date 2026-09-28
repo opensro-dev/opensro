@@ -224,7 +224,8 @@ export function createHudResources(
 									decodeAuthoredLayout( raw, nativeWindowSections( layouts[i]! ) );
 								// The publisher already expands actual frame/button families, including
 								// controls with only two states. Consume its catalogue without guessing URLs.
-								if ( i >= 7 + targetNames.length ) {
+								{
+									// Every admitted layout owns warm artwork, including target gauges.
 									for (
 										const entry of Object.values( raw.resourcesByDdjPath ?? {} ) as {
 											publicPath?: unknown;

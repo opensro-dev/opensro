@@ -19,6 +19,11 @@ import {
 } from "../../../../scripts/lib/publishedAsset.mjs";
 const bytes = p => assetBytes( p, "../../.generated/client-public" ),
 	json = p => assetJson( p, "../../.generated/client-public" );
+/*
+================
+load
+================
+*/
 async function load( path ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
@@ -28,6 +33,11 @@ const { createNavigation } = await load(
 	{ createNavigationResources } = await load( "runtime/assets/worker/navigation/navigation.ts" ),
 	{ createNavigationStream } = await load( "runtime/navigation/navigation.ts" ),
 	{ interpolateMovement, poseDistance } = await load( "foundation/gameplay/native-movement.ts" );
+/*
+================
+mesh
+================
+*/
 function mesh( y = 10 ) {
 	return {
 		vertices: Float32Array.from( [ 0, y, 0, 100, y, 0, 100, y, 100, 0, y, 100 ] ),
@@ -37,6 +47,11 @@ function mesh( y = 10 ) {
 		passThrough: false
 	};
 }
+/*
+================
+product
+================
+*/
 function product( regionId = 257, blocked = false ) {
 	return {
 		regionId,
@@ -327,16 +342,31 @@ test("stream cancels stale completions and reset requires fresh collision admiss
 	const pending = new Map(), sent = [], cancelled = [], requests = [];
 	const assets = {
 		available: () => 4,
+		/*
+================
+request
+================
+		*/
 		request( url, limit, decode ) {
 			requests.push( { url, decode } );
 			pending.set( ++id, null );
 			return id;
 		},
+		/*
+================
+take
+================
+		*/
 		take( id ) {
 			const p = pending.get( id );
 			if ( p ) pending.delete( id );
 			return p;
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel( id ) {
 			cancelled.push( id );
 			pending.delete( id );
@@ -385,7 +415,9 @@ test("asset worker admits and publishes the navigation lane within its request b
 		"fetch",
 		async () => new Response( bytes( "/assets/world/dungeon/dungeon-resources.json" ) )
 	);
-	const loader = createLoader( r => results.push( r ) );
+	const loader = createLoader( r => {
+		if ( r.kind !== "progress" ) results.push( r );
+	} );
 	t.after( () => loader.dispose() );
 	loader.receive( {
 		kind: "load",
@@ -401,6 +433,11 @@ test("asset worker admits and publishes the navigation lane within its request b
 });
 
 const { dungeonLinks, portalCongruent, objectLinks } = await load( "foundation/navigation/topology.ts" );
+/*
+================
+linkedRooms
+================
+*/
 function linkedRooms() {
 	const a = mesh(), b = mesh();
 	a.edges = Uint32Array.from( [ 1, 2, 0, 65535, 8, 0 ] );
@@ -487,6 +524,11 @@ test("dungeon destinations outside admitted triangles reach collision before end
 	assert.equal( nav.clip( from, { ...from, x: 80, z: 80 } ), null );
 });
 
+/*
+================
+portalInterior
+================
+*/
 function portalInterior( p, e, regionId ) {
 	const m = p.mesh,
 		v = m.vertices,

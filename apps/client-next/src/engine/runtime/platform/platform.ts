@@ -117,6 +117,11 @@ export function createPlatform(
 		status.value = "Video options could not be restored: " + String( error );
 	}
 	onUi( { kind: "video-preferences", value: video } );
+	/*
+================
+publishPreferences
+================
+	*/
 	function publishPreferences( next: GameOptions ) {
 		localStorage.setItem( preferenceKey, JSON.stringify( next ) );
 		preferences = next;
@@ -158,6 +163,22 @@ export function createPlatform(
 	// The detail line's view of the downloads: the latest progress and when the
 	// byte count last grew, so a stalled transfer reads as waiting, not hung.
 	let assetProgress: AssetProgress | null = null, bytesSeen = -1, bytesGrewAt = 0, detailAt = 0;
+	let loadingState = { active: false, error: null as string | null, step: "Starting Silkroad Online" };
+	/*
+================
+refreshLoadingDetail
+
+Asset work advances independently of retained UI snapshots. Refresh the
+visible status from both owners so an unchanged screen cannot freeze it.
+================
+	*/
+	function refreshLoadingDetail( now: number, force = false ) {
+		if ( !loadingDetail || (!loadingState.active && !loadingState.error) ) return;
+		if ( !force && now - detailAt < LOADING_DETAIL_REFRESH_MS ) return;
+		const detail = loadingState.error ?? loadingDetailText( loadingState.step, assetProgress, now - bytesGrewAt );
+		if ( loadingDetail.textContent !== detail ) loadingDetail.textContent = detail;
+		detailAt = now;
+	}
 	// Transfer accounting is developer information, not part of native loading art.
 	const transfer = import.meta.env.MODE !== "beta" && new URLSearchParams( location.search ).has( "diagnostics" ) ?
 		document.getElementById( "loading-transfer" ) :
@@ -168,6 +189,11 @@ export function createPlatform(
 			key => [ key, transfer?.querySelector( `[data-transfer="${key}"]` ) ]
 		)
 	);
+	/*
+================
+transferText
+================
+	*/
 	function transferText( key: string, text: string ) {
 		const node = transferFields.get( key );
 		if ( node && node.textContent !== text ) node.textContent = text;
@@ -316,37 +342,72 @@ export function createPlatform(
 	}, { signal: lifetime.signal, passive: false } );
 	const viewport = { width: 1, height: 1 };
 	return {
+		/*
+================
+saveVideoOptions
+================
+		*/
 		saveVideoOptions( value: VideoOptions ) {
 			const next = videoOptions( value );
 			localStorage.setItem( videoKey, JSON.stringify( next ) );
 			onUi( { kind: "video-preferences", value: next } );
 		},
+		/*
+================
+saveQuickslotOptions
+================
+		*/
 		saveQuickslotOptions( value: ExtendedQuickslotOptions ) {
 			const next = extendedQuickslotOptions( value );
 			localStorage.setItem( quickslotKey, JSON.stringify( next ) );
 			onUi( { kind: "quickslot-preferences", value: next } );
 		},
+		/*
+================
+saveInputOptions
+================
+		*/
 		saveInputOptions( value: InputOptions ) {
 			const next = inputOptions( value );
 			localStorage.setItem( inputKey, JSON.stringify( next ) );
 			bindings = next;
 			onUi( { kind: "input-preferences", value: next } );
 		},
+		/*
+================
+saveSightMode
+================
+		*/
 		saveSightMode( value: SightMode ) {
 			const next = sightMode( value );
 			localStorage.setItem( cameraKey, JSON.stringify( next ) );
 			onUi( { kind: "camera-preferences", value: next } );
 		},
+		/*
+================
+saveAudioOptions
+================
+		*/
 		saveAudioOptions( value: AudioOptions ) {
 			const next = audioOptions( value );
 			localStorage.setItem( audioKey, JSON.stringify( next ) );
 			onUi( { kind: "audio-preferences", value: next } );
 		},
+		/*
+================
+saveChatBlocks
+================
+		*/
 		saveChatBlocks( value: readonly string[] ) {
 			const next = chatBlocks( value );
 			localStorage.setItem( blockKey, JSON.stringify( next ) );
 			onUi( { kind: "chat-blocks", value: next } );
 		},
+		/*
+================
+saveGameOptions
+================
+		*/
 		saveGameOptions( value: GameOptions ) {
 			const next = gameOptions( value ), change = next.windowMode !== preferences.windowMode;
 			publishPreferences( next );
@@ -374,6 +435,11 @@ export function createPlatform(
 		},
 		canvas,
 		presentWorldCursor: cursor.world,
+		/*
+================
+presentTelemetry
+================
+		*/
 		presentTelemetry( sample ) {
 			if ( !fpsReadout || fpsReadout.hidden ) return;
 			const text = `${Math.round( sample.fps )} FPS
@@ -383,6 +449,11 @@ actors ${sample.actors}; draws ${sample.draws}
 groups ${sample.visibleGroups}`;
 			if ( fpsReadout.textContent !== text ) fpsReadout.textContent = text;
 		},
+		/*
+================
+presentUi
+================
+		*/
 		presentUi( state ) {
 			bridge.present( state );
 			if ( fpsChip ) {
@@ -392,9 +463,10 @@ groups ${sample.visibleGroups}`;
 				fpsChip.style.top = top + "px";
 			}
 			if ( loading ) {
-				const active = String( !!state.loading ),
+				const active = String( !!(state.loading || state.loadingVisible) ),
 					error = String( !!state.loadingError ),
-					hidden = String( !state.loading );
+					hidden = String( !(state.loading || state.loadingVisible) );
+				loading.dataset.native = String( !state.loading && !!state.loadingVisible );
 				if ( loading.dataset.active !== active ) loading.dataset.active = active;
 				if ( loading.dataset.error !== error ) loading.dataset.error = error;
 				if ( loading.getAttribute( "aria-hidden" ) !== hidden ) loading.setAttribute( "aria-hidden", hidden );
@@ -405,39 +477,33 @@ groups ${sample.visibleGroups}`;
 					loading.style.setProperty( "--loading-progress", progress );
 				}
 			}
-			if ( loadingLabel && (state.loading || state.loadingError) ) {
+			if ( loadingLabel && (state.loading || state.loadingVisible || state.loadingError) ) {
 				const label = state.loadingError ? "Unable to finish loading" : "Preparing your journey";
 				if ( loadingLabel.textContent !== label ) loadingLabel.textContent = label;
 			}
-			if ( loadingDetail && (state.loading || state.loadingError) ) {
-				const now = performance.now();
-				const detail = state.loadingError ?
-					state.loadingError :
-					loadingDetailText(
-						state.loadingStatus ?? "Starting Silkroad Online",
-						assetProgress,
-						now - bytesGrewAt
-					);
-				// The rate changes every frame; a few updates a second read calmly.
-				if (
-					loadingDetail.textContent !== detail &&
-					(state.loadingError || now - detailAt >= LOADING_DETAIL_REFRESH_MS)
-				) {
-					loadingDetail.textContent = detail;
-					detailAt = now;
-				}
-			}
+			loadingState = {
+				active: !!(state.loading || state.loadingVisible),
+				error: state.loadingError ?? null,
+				step: state.loadingStatus ?? "Starting Silkroad Online"
+			};
+			refreshLoadingDetail( performance.now(), true );
 		},
+		/*
+================
+presentLoading
+================
+		*/
 		presentLoading( state ) {
 			const progress = state.progress, now = performance.now();
 			if ( progress && progress.filesActive > 0 && !(assetProgress && assetProgress.filesActive > 0) ) {
 				bytesGrewAt = now;
 			}
-			if ( progress && progress.bytesReceived !== bytesSeen ) {
-				bytesSeen = progress.bytesReceived;
+			if ( progress && (progress.bytesRead ?? progress.bytesReceived) !== bytesSeen ) {
+				bytesSeen = progress.bytesRead ?? progress.bytesReceived;
 				bytesGrewAt = now;
 			}
 			assetProgress = progress;
+			refreshLoadingDetail( now );
 			if ( !transfer ) return;
 			const changed = transfer.hidden === state.visible;
 			transfer.hidden = !state.visible;
@@ -470,11 +536,21 @@ groups ${sample.visibleGroups}`;
 					"Your character stays here until the server is ready"
 			);
 		},
+		/*
+================
+readViewport
+================
+		*/
 		readViewport() {
 			viewport.width = Math.max( 1, Math.round( canvas.clientWidth * devicePixelRatio ) );
 			viewport.height = Math.max( 1, Math.round( canvas.clientHeight * devicePixelRatio ) );
 			return viewport;
 		},
+		/*
+================
+report
+================
+		*/
 		report( text, error ) {
 			if ( status.textContent !== text ) status.textContent = text;
 			if ( /^(Runtime|Renderer|Simulation) failed/.test( text ) ) {
@@ -488,6 +564,11 @@ groups ${sample.visibleGroups}`;
 				if ( loadingDetail ) loadingDetail.textContent = text;
 			}
 		},
+		/*
+================
+runningEntry
+================
+		*/
 		runningEntry() {
 			// Only a release build loads a content-hashed entry; a development
 			// server's /src/bootstrap.ts has nothing to compare against.
@@ -495,16 +576,31 @@ groups ${sample.visibleGroups}`;
 			const src = document.querySelector( 'script[type="module"][src]' )?.getAttribute( "src" );
 			return src ? new URL( src, location.origin ).pathname : null;
 		},
+		/*
+================
+visibilityReturned
+================
+		*/
 		visibilityReturned() {
 			const returned = visibleAgain;
 			visibleAgain = false;
 			return returned;
 		},
+		/*
+================
+presentUpdate
+================
+		*/
 		presentUpdate( newer ) {
 			// The refresh is the player's choice: reloading on our own would
 			// drop a live session.
 			if ( updateNotice ) updateNotice.hidden = !newer;
 		},
+		/*
+================
+dispose
+================
+		*/
 		dispose() {
 			lifetime.abort();
 			bridge.dispose();

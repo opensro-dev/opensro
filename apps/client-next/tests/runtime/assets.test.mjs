@@ -16,6 +16,11 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { defined } from "../helpers/defined.mjs";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( path.join( root, file ) ).href );
 }
@@ -25,9 +30,19 @@ const settle = () => new Promise( resolve => setImmediate( resolve ) );
 test("bounded reader cancels oversized streams and releases their reader", async () => {
 	let cancelled = false;
 	const stream = new ReadableStream( {
+		/*
+================
+start
+================
+		*/
 		start( c ) {
 			c.enqueue( Uint8Array.of( 1, 2, 3 ) );
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel() {
 			cancelled = true;
 		}
@@ -60,7 +75,10 @@ test("asset cancellation rejects late completion even if fetch ignores abort", a
 		signal = options.signal;
 		return new Promise( resolve => resolveRequest = resolve );
 	} );
-	const results = [], loader = createLoader( result => results.push( result ) );
+	const results = [],
+		loader = createLoader( result => {
+			if ( result.kind !== "progress" ) results.push( result );
+		} );
 	loader.receive( { kind: "load", id: 1, url: "http://localhost/asset", limit: 3 } );
 	loader.receive( { kind: "cancel", id: 1 } );
 	assert.ok( defined( signal ).aborted );
@@ -75,7 +93,10 @@ test("asset loader bounds concurrency and aborts every pending request on dispos
 		signals.push( options.signal );
 		return new Promise( () => {} );
 	} );
-	const results = [], loader = createLoader( result => results.push( result ) );
+	const results = [],
+		loader = createLoader( result => {
+			if ( result.kind !== "progress" ) results.push( result );
+		} );
 	for ( let id = 1; id <= 5; id++ ) loader.receive( { kind: "load", id, url: "http://localhost/" + id, limit: 3 } );
 	assert.equal( signals.length, 4 );
 	assert.equal( results[0].id, 5 );
@@ -104,6 +125,11 @@ test("cancelled native decodes retain execution capacity until settlement", asyn
 				resolve( {
 					width: 4096,
 					height: 4096,
+					/*
+================
+close
+================
+					*/
 					close() {
 						closed++;
 					}
@@ -111,7 +137,10 @@ test("cancelled native decodes retain execution capacity until settlement", asyn
 			} )
 		);
 	};
-	const results = [], loader = createLoader( result => results.push( result ) );
+	const results = [],
+		loader = createLoader( result => {
+			if ( result.kind !== "progress" ) results.push( result );
+		} );
 	t.after( () => loader.dispose() );
 	const request = id =>
 		loader.receive( { kind: "load", id, url: "http://localhost/image", limit: 24, decode: "png" } );
@@ -146,7 +175,10 @@ test("cancelled native decodes retain execution capacity until settlement", asyn
 test("cancelled downloads retain capacity even when fetch ignores abort, then recover", async t => {
 	const downloads = [];
 	t.mock.method( globalThis, "fetch", () => new Promise( resolve => downloads.push( resolve ) ) );
-	const results = [], loader = createLoader( r => results.push( r ) );
+	const results = [],
+		loader = createLoader( result => {
+			if ( result.kind !== "progress" ) results.push( result );
+		} );
 	t.after( () => loader.dispose() );
 	const request = id => loader.receive( { kind: "load", id, url: "http://localhost/data", limit: 1 } );
 	for ( let id = 1; id <= 4; id++ ) {

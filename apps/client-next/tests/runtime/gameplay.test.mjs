@@ -17,6 +17,11 @@ import fs from "node:fs";
 import path from "node:path";
 import fc from "fast-check";
 import { root } from "../../tools/project.mjs";
+/*
+================
+load
+================
+*/
 async function load( name ) {
 	return import(
 		sourceFileUrl( path.join( root, "src/engine/runtime/simulation/worker/session/world/gameplay", name + ".ts" ) )
@@ -242,6 +247,11 @@ test("remote movement uses spawn gait, visits active entities only and stops aft
 	m.remove( 7 );
 	assert.deepEqual( m.step( 6016 ), [] );
 });
+/*
+================
+receipt
+================
+*/
 function receipt( id, to, accepted = true ) {
 	return Buffer.from(
 		JSON.stringify( {
@@ -255,6 +265,11 @@ function receipt( id, to, accepted = true ) {
 		} )
 	);
 }
+/*
+================
+bundle
+================
+*/
 function bundle( blockedIndices = [] ) {
 	const blocked = Buffer.alloc( 9216 );
 	for ( const i of blockedIndices ) blocked[i] = 1;
@@ -436,6 +451,11 @@ test("movement lifecycle interleavings cannot restart or time out a corpse", () 
 		{ numRuns: 100, seed: 20260913 }
 	);
 });
+/*
+================
+item
+================
+*/
 function item( ref, quantity ) {
 	const p = Buffer.alloc( 6 );
 	p.writeUInt32LE( ref );
@@ -1277,4 +1297,64 @@ test("Berserk command waits for authoritative points and seeds presentation once
 	assert.equal( game.command( { kind: "berserk" }, 5, undefined, local ), null );
 	assert.throws( () => game.receive( { opcode: 0xb341, payload: Uint8Array.of( 2 ) }, 6 ) );
 	game.dispose();
+});
+
+test("accepted turns preserve current prediction despite an older server start position", () => {
+	const m = createMovement( () => {} );
+	m.seed( pose );
+	m.navigation( pose.regionId, bundle() );
+	m.request( { ...pose, x: 160 }, 0 );
+	m.step( 200 );
+	const turn = { ...pose, x: 70, z: 200 };
+	m.request( turn, 200 );
+	m.step( 300 );
+	const before = m.state().pose;
+	const response = {
+		v: 1,
+		id: 2,
+		gid: 100007,
+		accepted: true,
+		serverTimeMs: 1000,
+		world: { spawn: turn, moveSegment: { from: { ...pose, x: 65 }, startedAtMs: 1000, arrivesAtMs: 3000 } }
+	};
+	m.receive( Buffer.from( JSON.stringify( response ) ), 300 );
+	assert.deepEqual( m.state().pose, before, "an accepted turn cannot rewind to the serialization origin" );
+	m.step( 500 );
+	assert.ok( m.state().pose.z > before.z );
+});
+
+test("a short move completed before acknowledgement does not restart from the server origin", () => {
+	const m = createMovement( () => {} ), to = { ...pose, x: 65 };
+	m.seed( pose );
+	m.navigation( pose.regionId, bundle() );
+	m.request( to, 0 );
+	m.step( 200 );
+	assert.equal( m.state().moving, false );
+	m.receive( receipt( 1, to ), 300 );
+	assert.equal( m.state().pose.x, to.x );
+	assert.equal( m.state().moving, false );
+});
+
+test("closing a target publishes local intent immediately while retaining the release barrier", () => {
+	const sent = [], t = createTargeting( frame => sent.push( frame ) );
+	t.select( 8, 0, "player" );
+	t.release( 100 );
+	assert.equal( t.state().target, 0 );
+	assert.equal( t.state().targetPending, 8 );
+	assert.equal( sent.at( -1 ).opcode, 0x74b3 );
+	assert.throws( () => t.select( 9, 200 ), /pending/ );
+	t.receive( 0xb4b3, Uint8Array.of( 1 ) );
+	assert.equal( t.state().targetPending, 0 );
+	t.select( 9, 300, "player" );
+	assert.equal( t.state().target, 9 );
+});
+
+test("a failed release send preserves the displayed target", () => {
+	const t = createTargeting( frame => {
+		if ( frame.opcode === 0x74b3 ) throw Error( "backpressure" );
+	} );
+	t.select( 8, 0, "player" );
+	assert.throws( () => t.release( 100 ), /backpressure/ );
+	assert.equal( t.state().target, 8 );
+	assert.equal( t.state().targetPending, 0 );
 });

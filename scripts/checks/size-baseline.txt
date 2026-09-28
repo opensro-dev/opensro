@@ -4,7 +4,7 @@
 apps/client-next/src/engine/foundation/ui/skill-tooltip-params.ts # not yet analysed; split on its responsibility boundaries when formatted
 apps/client-next/src/engine/runtime/characters/characters.ts # presentation owner with inline families (appearance, footprints, weather events, dock preview)
 apps/client-next/src/engine/runtime/characters/effects/effects.ts # not yet analysed; split on its responsibility boundaries when formatted
-apps/client-next/src/engine/runtime/renderer/characters/characters.ts # not yet analysed; split on its responsibility boundaries when formatted
+apps/client-next/src/engine/runtime/renderer/characters/characters.ts # synchronous model, pose and draw-batch lifetime owner; shared admission and retirement must stay ordered
 apps/client-next/src/engine/runtime/renderer/world/world.ts # not yet analysed; split on its responsibility boundaries when formatted
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts # not yet analysed; split on its responsibility boundaries when formatted
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts # not yet analysed; split on its responsibility boundaries when formatted
@@ -19,3 +19,4 @@ apps/client-next/tests/runtime/world-renderer.test.mjs # test file; split by fea
 apps/client-next/tests/runtime/world.test.mjs # test file; split by feature
 apps/client-next/tools/profile-world.mjs # not yet analysed; split on its responsibility boundaries when formatted
 scripts/build/shared/cifRuntimeImageCatalog.mjs # not yet analysed; split on its responsibility boundaries when formatted
+apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/entities.ts # one transactional entity packet dispatcher owns spawn, movement, visibility and retirement state

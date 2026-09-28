@@ -17,6 +17,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { defined } from "../helpers/defined.mjs";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( path.join( root, file ) ).href );
 }
@@ -86,6 +91,11 @@ const bootstrap = {
 	localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 25256, x: 1, y: 2, z: 3, angle: 0 } }
 };
 const rows = fixture.packets.map( p => ({ opcode: p.opcode, payload: Buffer.from( p.payloadHex, "hex" ) }) );
+/*
+================
+flush
+================
+*/
 function flush( owner ) {
 	const batch = owner.take();
 	if ( batch ) owner.ack( batch.sequence );
@@ -304,8 +314,18 @@ test("object-list staging rejects oversized chunks before copying and releases i
 	owner.ack( batch.sequence );
 	assert.equal( owner.synchronized(), true );
 });
+/*
+================
+socketHarness
+================
+*/
 function socketHarness( t ) {
 	const sockets = [];
+	/*
+================
+Socket
+================
+	*/
 	class Socket {
 		static OPEN = 1;
 		readyState = 1;
@@ -315,10 +335,25 @@ function socketHarness( t ) {
 			this.url = url;
 			sockets.push( this );
 		}
+		/*
+================
+send
+================
+		*/
 		send( bytes ) {
 			this.sent.push( bytes.slice() );
 		}
+		/*
+================
+close
+================
+		*/
 		close() {}
+		/*
+================
+receive
+================
+		*/
 		receive( op, payload ) {
 			const bytes = new Uint8Array( payload.length + 2 );
 			new DataView( bytes.buffer ).setUint16( 0, op, true );
@@ -332,6 +367,11 @@ function socketHarness( t ) {
 	return sockets;
 }
 const settle = () => new Promise( r => setImmediate( r ) );
+/*
+================
+welcome
+================
+*/
 function welcome( resumed = false ) {
 	const p = new Uint8Array( 27 );
 	p[0] = 2;
@@ -340,6 +380,11 @@ function welcome( resumed = false ) {
 	p.fill( 7, 11 );
 	return p;
 }
+/*
+================
+entered
+================
+*/
 function entered( value = bootstrap ) {
 	const blob = Buffer.from( JSON.stringify( { v: 1, bootstrap: value } ) ), p = Buffer.alloc( 9 + blob.length );
 	p[0] = 1;
@@ -515,6 +560,11 @@ test("COS spawn, ride state and mount despawn preserve reliable rider lifecycle"
 		refObjSnapshot: [ { refObjId: 2023, kind: "npc" }, { refObjId: 2183, kind: "cos", tidWord: 0x11c6 } ]
 	} );
 	flush( owner );
+	/*
+================
+spawn
+================
+	*/
 	function spawn( ref, gid, cos = false ) {
 		const p = Buffer.alloc( cos ? 57 : 49 );
 		p.writeUInt32LE( ref );
@@ -563,6 +613,11 @@ test("motion preserves authoritative gait and mount metadata across ticks and st
 		refObjSnapshot: [ { refObjId: 1, kind: "npc" }, { refObjId: 2, kind: "cos", tidWord: 0x11c6 } ]
 	} );
 	flush( owner );
+	/*
+================
+spawn
+================
+	*/
 	function spawn( ref, gid, cos = false ) {
 		const p = Buffer.alloc( cos ? 57 : 49 );
 		p.writeUInt32LE( ref );
@@ -1065,7 +1120,18 @@ test("reference admission holds native packets until verified data, and cancella
 		signal = options.signal;
 		return new Promise( r => release = r );
 	} );
-	const world = createWorldSession( async () => "ticket", createSessionHttp().references );
+	const http = createSessionHttp();
+	let referenceCompletion = Promise.resolve();
+	const world = createWorldSession( async () => "ticket", ( ...args ) => {
+		const request = http.references( ...args );
+		referenceCompletion = request.then( () => {}, () => {} );
+		return request;
+	} );
+	/*
+================
+begin
+================
+	*/
 	async function begin() {
 		world.enter( "fixture", "shard", "http://localhost:9000" );
 		await settle();
@@ -1100,6 +1166,9 @@ test("reference admission holds native packets until verified data, and cancella
 		world.ack( batch.sequence );
 	}
 	defined( release )( new Response( data ) );
+	// Await the real digest/read operation before advancing the synthetic clock.
+	// A fixed number of event-loop turns cannot bound a native crypto worker.
+	await referenceCompletion;
 	for ( let tick = 5; tick < 55 && world.status().phase !== "world"; tick++ ) {
 		await settle();
 		world.step( tick );

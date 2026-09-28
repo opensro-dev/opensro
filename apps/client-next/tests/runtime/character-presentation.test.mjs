@@ -16,6 +16,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
+/*
+================
+load
+================
+*/
 async function load( entry ) {
 	return import( sourceFileUrl( entry ).href );
 }
@@ -23,6 +28,11 @@ const { createCharacterPresentation } = await load( "src/engine/runtime/characte
 const { createCharacters } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
 const { createPresentationRandom } = await load( "src/engine/runtime/random/random.ts" );
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
+/*
+================
+model
+================
+*/
 function model() {
 	return {
 		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
@@ -229,6 +239,11 @@ test("local body transparency survives settled camera state and stays off the mo
 	assert.equal( f.actors.find( a => a.gid === 2 ).opacity ?? 1, 1 );
 	f.dispose();
 });
+/*
+================
+fixture
+================
+*/
 function fixture(
 	effectCatalog = {},
 	modelCount = 2,
@@ -256,15 +271,30 @@ function fixture(
 	const footprints = [];
 	const assets = {
 		available: () => 4,
+		/*
+================
+request
+================
+		*/
 		request( url, limit, decode ) {
 			const id = ++next;
 			pending.set( id, { url, decode } );
 			requests.push( { url, decode } );
 			return id;
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel( id ) {
 			pending.delete( id );
 		},
+		/*
+================
+take
+================
+		*/
 		take( id ) {
 			const job = pending.get( id );
 			if ( !job || metadataAdmission.blockedPaths?.has( job.url ) ) return null;
@@ -509,6 +539,11 @@ function fixture(
 		}
 	};
 	const renderer = {
+		/*
+================
+setFootprints
+================
+		*/
 		setFootprints( rows ) {
 			footprints.push( rows );
 		},
@@ -518,26 +553,56 @@ function fixture(
 		presentationNight: () => true,
 		characterSocket: () => null,
 		setCharacterModel: characters.model,
+		/*
+================
+setCharacterAssembly
+================
+		*/
 		setCharacterAssembly( id, base, parts ) {
 			assemblies.push( { id, base, parts } );
 			characters.assembly( id, base, parts );
 		},
 		retainCharacterModels: characters.retain,
-		setCharacterActors( value ) {
+		/*
+================
+setCharacterActors
+================
+		*/
+		setCharacterActors( value, portraits = [] ) {
 			actors = value;
-			characters.actors( value );
+			characters.actors( value, portraits );
 		}
 	};
 	const gpu = {
+		/*
+================
+upload
+================
+		*/
 		upload( data ) {
 			instances.push( data.instances.slice() );
 			return {};
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw, value ) {
 			instances.push( value.slice() );
 			return draw;
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones() {},
+		/*
+================
+release
+================
+		*/
 		release() {
 			released++;
 		}
@@ -552,6 +617,7 @@ function fixture(
 	);
 	return {
 		footprints,
+		portraitSource: characters.portraitSource,
 		presentation,
 		renderer,
 		requests,
@@ -568,20 +634,45 @@ function fixture(
 		get released() {
 			return released;
 		},
+		/*
+================
+step
+================
+		*/
 		step( entities, time, gameplay = null ) {
 			presentation.step( entities, gameplay, time );
 			return characters.prepare( gpu, {
+				/*
+================
+upload
+================
+				*/
 				upload() {
 					return {};
 				},
+				/*
+================
+release
+================
+				*/
 				release() {}
 			}, 1 );
 		},
+		/*
+================
+warm
+================
+		*/
 		warm() {
 			for ( let t = 0; t < 30 && actors.length === 0; t++ ) this.step( [ entity( 1 ) ], t / 100 );
 			assert.equal( actors.length, 1 );
 			assert.equal( presentation.error(), null );
 		},
+		/*
+================
+dispose
+================
+		*/
 		dispose() {
 			presentation.dispose();
 			characters.dispose( gpu, null );
@@ -984,14 +1075,29 @@ test("rejected manifest publishes no rows and repaired retry commits completely"
 	});
 	const assets = {
 		available: () => 4,
+		/*
+================
+request
+================
+		*/
 		request( url, limit, decode ) {
 			jobs.set( ++id, { url, decode } );
 			requested.push( url );
 			return id;
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel( id ) {
 			jobs.delete( id );
 		},
+		/*
+================
+take
+================
+		*/
 		take( id ) {
 			const job = jobs.get( id );
 			jobs.delete( id );
@@ -1228,21 +1334,38 @@ test("published gecko starts at the walk-on pose, never at the stand pose, acros
 
 test("customization prepares both genders and swaps every figure without a new request", async () => {
 	const { readFileSync } = await import( "node:fs" );
-	const { initialCreation, creationLoadout } = await load( "src/engine/foundation/ui/character-create.ts" );
+	const { initialCreation, creationLoadout, creationRange } = await load(
+		"src/engine/foundation/ui/character-create.ts"
+	);
 	const roster = readFileSync( "../../.generated/client-public/assets/char/roster.json" ),
 		pending = new Map(),
 		requests = [];
 	let serial = 0, allow = false, actors = [];
 	const assets = {
 		available: () => 4,
+		/*
+================
+request
+================
+		*/
 		request( url, limit, decode ) {
 			pending.set( ++serial, { url, decode } );
 			requests.push( url );
 			return serial;
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel( id ) {
 			pending.delete( id );
 		},
+		/*
+================
+take
+================
+		*/
 		take( id ) {
 			const job = pending.get( id );
 			if ( !job || !allow ) return null;
@@ -1256,9 +1379,29 @@ test("customization prepares both genders and swaps every figure without a new r
 		}
 	};
 	const renderer = {
+		/*
+================
+setCharacterModel
+================
+		*/
 		setCharacterModel() {},
+		/*
+================
+setCharacterAssembly
+================
+		*/
 		setCharacterAssembly() {},
+		/*
+================
+retainCharacterModels
+================
+		*/
 		retainCharacterModels() {},
+		/*
+================
+setCharacterActors
+================
+		*/
 		setCharacterActors( value ) {
 			actors = value;
 		}
@@ -1289,6 +1432,21 @@ test("customization prepares both genders and swaps every figure without a new r
 			const { heightScale, volumeScale, ...assembly } = creationLoadout( selection );
 			assert.equal( actors[0].model, "creation:0:" + JSON.stringify( assembly ) );
 			assert.equal( requests.length, warmed );
+		}
+	}
+	for ( const gender of [ 0, 1 ] ) {
+		selection.gender = gender;
+		const maxWeapon = creationRange( selection, "weapon" )[1];
+		for ( let weapon = 0; weapon <= maxWeapon; weapon++ ) {
+			selection.weapon = weapon;
+			const maxProtector = creationRange( selection, "protector" )[1];
+			for ( let protector = 0; protector <= maxProtector; protector++ ) {
+				selection.protector = protector;
+				step();
+				assert.equal( owner.previewReady(), true, "Every offered wardrobe is resident before reveal" );
+				assert.equal( actors.length, 1 );
+				assert.equal( requests.length, warmed, "Equipment changes never start another download" );
+			}
 		}
 	}
 	const stableModel = actors[0].model;
@@ -2652,4 +2810,167 @@ test("movement animation toe keys respect terrain, missing sockets, sitting and 
 	f.presentation.step( [ entity( 1, { kind: "player", moving: false, movementMode: 4 } ) ], null, 23 );
 	assert.deepEqual( f.footprints.at( -1 ), [] );
 	f.dispose();
+});
+
+/*
+================
+Roster admission regression
+A ready auxiliary actor must never satisfy a blocked character assembly.
+================
+*/
+test("dock admission waits for equipment even when its gecko is already rendered", () => {
+	const blockedPaths = new Set( [ "http://localhost/assets/cold-sword.glb" ] );
+	const roster = {
+		models: [ {
+			refObjId: 1,
+			codename: "Fixture",
+			glb: "/assets/1.glb",
+			clips: [ "stand" ],
+			previewGlb: "/assets/preview.glb",
+			previewClips: [ "stand" ]
+		} ],
+		dress: { sets: {}, weapons: { sword: { glb: "/assets/cold-sword.glb", parts: [ "mesh" ] } } }
+	};
+	const f = fixture(
+		{},
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{ blockedPaths, appearance: { roster, items: {} } }
+	);
+	const rows = [ {
+		id: 77,
+		name: "Fixture",
+		bodyShapeByte: 34,
+		volumeIndex: 2,
+		deletePending: false,
+		visualLoadout: {
+			modelCodename: "Fixture",
+			dressSetKeys: [],
+			weaponSetKeys: [ "sword" ],
+			animationSetName: "punch",
+			heightScale: 1,
+			volumeScale: 1
+		}
+	} ];
+	const step = () => f.presentation.step( [], null, 1, undefined, 0, rows, null, true );
+	try {
+		for ( let i = 0; i < 10; i++ ) f.presentation.step( [], null, 0, undefined, 0, [], null, true );
+		for ( let i = 0; i < 30; i++ ) step();
+		assert.ok(
+			f.actors.some( actor => actor.gid === -1 ),
+			JSON.stringify( { error: f.presentation.error(), actors: f.actors, requests: f.requests } )
+		);
+		assert.equal( f.presentation.dockReady(), false );
+		blockedPaths.clear();
+		for ( let i = 0; i < 30 && !f.presentation.dockReady(); i++ ) step();
+		assert.equal( f.presentation.error(), null );
+		assert.equal( f.presentation.dockReady(), true );
+		assert.ok( f.actors.some( actor => actor.gid === 77 ) );
+		f.presentation.reset();
+		assert.equal( f.presentation.dockReady(), false );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("world entry waits for cold gold fanfare without presenting a ground entity", () => {
+	const blockedPaths = new Set( [ "http://localhost/assets/itemdrop/fanfare.glb" ] );
+	const f = fixture(
+		{},
+		2,
+		true,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{ blockedPaths }
+	);
+	const player = entity( 1, { kind: "player" } );
+	const state = {
+		localGid: 1,
+		inventory: [],
+		casts: [],
+		attachedEffects: [],
+		skills: [],
+		vitals: [],
+		pose: { ...player, angle: player.heading }
+	};
+	try {
+		for ( let i = 0; i < 40; i++ ) f.presentation.step( [ player ], state, i / 60 );
+		assert.equal(
+			f.presentation.ready( 1 ),
+			true,
+			JSON.stringify( { error: f.presentation.error(), actors: f.actors, requests: f.requests } )
+		);
+		assert.equal( f.presentation.entryReady(), false );
+		assert.ok( f.requests.some( request => request.url.endsWith( "/itemdrop/fanfare.glb" ) ) );
+		assert.ok( f.actors.every( actor => !actor.groundItem ) );
+		blockedPaths.clear();
+		for ( let i = 40; i < 80 && !f.presentation.entryReady(); i++ ) {
+			f.presentation.step( [ player ], state, i / 60 );
+		}
+		assert.equal( f.presentation.error(), null );
+		assert.equal( f.presentation.entryReady(), true );
+		f.presentation.reset();
+		assert.equal( f.presentation.entryReady(), false );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("party portraits follow roster models before visibility, after despawn and until leaving", async () => {
+	const { partyPortraitGid } = await load( "src/engine/foundation/ui/party-overlay.ts" );
+	const f = fixture();
+	try {
+		f.warm();
+		const local = entity( 1, { kind: "local-player", name: "me" } );
+		const peer = entity( 2, { kind: "player", name: "peer" } );
+		const gameplay = {
+			localGid: 1,
+			pose: { regionId: 1, x: 10, y: 20, z: 30, angle: 0 },
+			inventory: [],
+			vitals: [],
+			casts: [],
+			social: {
+				localName: "me",
+				leader: 1,
+				members: [ { id: 1, name: "me", model: 1 }, { id: 2, name: "peer", model: 2 } ]
+			}
+		};
+		const gid = partyPortraitGid( 2 );
+		for ( let i = 0; i < 20; i++ ) f.step( [ local ], 1 + i / 10, gameplay );
+		const initial = f.portraitSource( gid );
+		assert.ok( initial, "a party member never seen in the world still has a portrait" );
+		assert.equal( f.actors.some( actor => actor.gid === gid ), false, "portraits never enter world draws" );
+		for ( let i = 0; i < 5; i++ ) f.step( [ local, peer ], 4 + i / 10, gameplay );
+		f.presentation.receiveLifecycle( [ { kind: "despawn", gid: 2 } ] );
+		for ( let i = 0; i < 30; i++ ) f.step( [ local ], 5 + i / 10, gameplay );
+		assert.equal( f.portraitSource( 2 ), null, "the world actor has retired" );
+		assert.equal( f.portraitSource( gid )?.model, initial.model, "roster preview survives visibility retirement" );
+		f.step( [ local ], 9, {
+			...gameplay,
+			social: { ...gameplay.social, members: [ gameplay.social.members[0] ] }
+		} );
+		assert.equal( f.portraitSource( gid ), null, "leaving retires the roster preview" );
+	} finally {
+		f.dispose();
+	}
 });

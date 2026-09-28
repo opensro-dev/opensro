@@ -21,6 +21,22 @@ import { generalGuideArticles, type GuideArticle } from "@/engine/foundation/ui/
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
 import { guideTokens, type GuideToken } from "@/engine/foundation/ui/guide-content";
+const IMAGE_ROOT = "/assets/images/Media_extracted/interface/";
+// These controls are assembled by the native guide at runtime, outside CIF layouts.
+const GUIDE_ARTWORK = {
+	side: IMAGE_ROOT + "guide/gd_side_tab.png",
+	expanded: IMAGE_ROOT + "ifcommon/com_side_button.png",
+	collapsed: IMAGE_ROOT + "ifcommon/com_side02_button.png",
+	tabOn: IMAGE_ROOT + "ifcommon/com_tab_on.png",
+	tabOff: IMAGE_ROOT + "ifcommon/com_tab_off.png",
+	group: IMAGE_ROOT + "guide/gd_index.png",
+	article: IMAGE_ROOT + "guide/gd_contents.png",
+	event: IMAGE_ROOT + "guide/gd_contents_event.png",
+	selected: IMAGE_ROOT + "guide/gd_contents_lamp.png",
+	groupOpen: IMAGE_ROOT + "guide/gd_index_button_open.png",
+	groupClosed: IMAGE_ROOT + "guide/gd_index_button_close.png"
+} as const;
+
 /*
 ================
 Load
@@ -51,6 +67,8 @@ export function createGuideResources(
 	];
 	const states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: {
+			warmPaths: readonly string[];
+			artwork: typeof GUIDE_ARTWORK;
 			questPresentation: QuestPresentation;
 			menu: AuthoredLayout;
 			quests: QuestGuideCatalog;
@@ -163,14 +181,39 @@ export function createGuideResources(
 					if ( Object.values( strings ).some( v => typeof v !== "string" ) ) {
 						throw Error( "Invalid guide text" );
 					}
+					const general = generalGuideArticles( values[1], help.entries );
+					const warm = new Set<string>( Object.values( GUIDE_ARTWORK ) );
+					// Authored controls and article images share the same decoded UI lifetime.
+					for ( const index of [ 0, 4, 5, 7 ] ) {
+						const source = values[index] as {
+							resourcesByDdjPath?: Record<string, { publicPath?: unknown; }>;
+						};
+						for ( const row of Object.values( source.resourcesByDdjPath ?? {} ) ) {
+							if (
+								typeof row.publicPath !== "string" || !row.publicPath.startsWith( "/assets/images/" ) ||
+								!row.publicPath.endsWith( ".png" )
+							) throw Error( "Invalid guide image catalogue" );
+							warm.add( row.publicPath );
+						}
+					}
+					for (
+						const tokens of [
+							...general.map( row => row.tokens ),
+							...articles.flatMap( row => [ row.tokens, row.european ?? [] ] )
+						]
+					) {
+						for ( const token of tokens ) if ( token.kind === "image" ) warm.add( token.path );
+					}
 					data = {
+						warmPaths: [ ...warm ],
+						artwork: GUIDE_ARTWORK,
 						questPresentation: decodeQuestPresentation( values[6] ),
 						menu: decodeAuthoredLayout( values[7] ),
 						quests: decodeQuestGuide( values[1], values[6] ),
 						mentor: decodeAuthoredLayout( values[4] ),
 						mentorSlot: decodeAuthoredLayout( values[5] ),
 						strings,
-						general: generalGuideArticles( values[1], help.entries ),
+						general,
 						caption,
 						layout,
 						articles

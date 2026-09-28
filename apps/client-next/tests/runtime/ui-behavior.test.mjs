@@ -17,6 +17,11 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 const fontBytes = readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json" ),
 	fontAtlas = JSON.parse( fontBytes );
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( file ).href );
 }
@@ -25,15 +30,30 @@ const { createUi } = await load( "src/engine/runtime/ui/ui.ts" );
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createQuests } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts" );
+/*
+================
+assetFixture
+================
+*/
 function assetFixture() {
 	let id = 0;
 	const requests = [], results = new Map(), cancelled = [], published = [];
 	const assets = {
 		available: () => 8,
+		/*
+================
+request
+================
+		*/
 		request( url ) {
 			requests.push( url );
 			return ++id;
 		},
+		/*
+================
+take
+================
+		*/
 		take( id ) {
 			const r = results.get( id );
 			results.delete( id );
@@ -105,6 +125,11 @@ test("released image failures invalidate retained error UI and report attributed
 				results.delete( id );
 				return r;
 			},
+			/*
+================
+cancel
+================
+			*/
 			cancel() {}
 		},
 		() => {},
@@ -172,6 +197,11 @@ test("UI image disposal drains all releases even when cancellation and renderer 
 			results.delete( id );
 			return value;
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel( id ) {
 			cancelled.push( id );
 			if ( id === 3 ) throw Error( "cancel failed" );
@@ -208,6 +238,11 @@ test("UI image dimensions are captured before ownership is transferred to the re
 			result = null;
 			return value;
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel() {}
 	}, ( _path, bitmap ) => {
 		if ( bitmap ) {
@@ -221,6 +256,11 @@ test("UI image dimensions are captured before ownership is transferred to the re
 	assert.deepEqual( owner.size( "/a.png" ), [ 32, 64 ] );
 	owner.dispose();
 });
+/*
+================
+uiFixture
+================
+*/
 function uiFixture(
 	commands = () => {},
 	hold = () => false,
@@ -257,7 +297,15 @@ function uiFixture(
 					else if ( path.endsWith( ".png" ) ) {
 						pending.set( id, {
 							path,
-							image: { width: bytes.readUInt32BE( 16 ), height: bytes.readUInt32BE( 20 ), close() {} }
+							image: {
+								width: bytes.readUInt32BE( 16 ),
+								height: bytes.readUInt32BE( 20 ), /*
+================
+close
+================
+								*/
+								close() {}
+							}
 						} );
 					}
 				} catch {}
@@ -289,6 +337,11 @@ function uiFixture(
 		height: 900,
 		worldReady: true
 	};
+	/*
+================
+hasText
+================
+	*/
 	function hasText( value, font = "0", style = 0 ) {
 		const face = style === 2 ? fontAtlas.fonts[font].styles["2"] : fontAtlas.fonts[font];
 		const pattern = Array.from( value, c => {
@@ -310,6 +363,11 @@ function uiFixture(
 		rawStep: ui.step,
 		ui: {
 			...ui,
+			/*
+================
+step
+================
+			*/
 			step( state, now ) {
 				let result = ui.step( state, now );
 				for ( let i = 0; i < 8 && pending.size; i++ ) result = ui.step( state, now ) ?? result;
@@ -320,6 +378,11 @@ function uiFixture(
 		scenes,
 		textures,
 		state,
+		/*
+================
+dispose
+================
+		*/
 		dispose() {
 			ui.dispose();
 		}
@@ -387,16 +450,31 @@ test("NPC UI uses authored talk bounds and native fonts through option, accept, 
 	/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */ let semantics;
 	let now = 100;
 	game.seed( { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
+	/*
+================
+settle
+================
+	*/
 	function settle() {
 		const state = game.take();
 		if ( state ) f.state.gameplay = state;
 		for ( let i = 0; i < 50; i++ ) semantics = f.ui.step( f.state, now++ ) ?? semantics;
 	}
+	/*
+================
+select
+================
+	*/
 	function select() {
 		game.command( { kind: "select", gid: 7 }, now, npc );
 		game.receive( { opcode: 0xb45a, payload: Buffer.from( "0107000000000200000000", "hex" ) }, now );
 		settle();
 	}
+	/*
+================
+reply
+================
+	*/
 	function reply( kind, prompt, options = [] ) {
 		const str = s => {
 			const b = Buffer.from( s ), n = Buffer.alloc( 2 );
@@ -488,6 +566,11 @@ test("quest objectives repaint native progress, per-node status and color after 
 	};
 	const strings =
 		JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
+	/*
+================
+update
+================
+	*/
 	function update( kind, count ) {
 		const name = Buffer.from( symbol ), p = Buffer.alloc( 5 + 3 + 1 + 1 + 2 + 2 + name.length + 1 + 4 );
 		let o = 0;
@@ -511,9 +594,19 @@ test("quest objectives repaint native progress, per-node status and color after 
 		f.state.gameplay = { ...f.state.gameplay, ...quests.state() };
 	}
 	/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */ let semantics;
+	/*
+================
+settle
+================
+	*/
 	function settle( now ) {
 		for ( let i = 0; i < 100; i++ ) semantics = f.rawStep( { ...f.state }, now + i ) ?? semantics;
 	}
+	/*
+================
+glyphRun
+================
+	*/
 	function glyphRun( value, color ) {
 		const glyphs = f.scenes.at( -1 ).quads.filter( q => q.texture === fontAtlas.image );
 		const expected = Array.from( value, c => {
@@ -1595,7 +1688,7 @@ test("displayed changes redraw without a dependency list and unchanged output st
 		f.dispose();
 	}
 });
-test("Clear reaches targeting, sends the granted gid and waits for server release", () => {
+test("Clear hides the granted target immediately and retains its server release barrier", () => {
 	let blocked = false;
 	const sent = [],
 		game = createGameplay( frame => {
@@ -1623,7 +1716,7 @@ test("Clear reaches targeting, sends the granted gid and waits for server releas
 		assert.equal( sent.at( -1 ).opcode, 0x74b3 );
 		assert.deepEqual( [ ...sent.at( -1 ).payload ], [ 9, 0, 0, 0 ] );
 		const waiting = game.take();
-		assert.equal( waiting.target, 9 );
+		assert.equal( waiting.target, 0 );
 		assert.equal( waiting.targetPending, 9 );
 		assert.throws( () => game.command( { kind: "select", gid: 9 }, 0, target ), /pending/ );
 		game.receive( { opcode: 0xb4b3, payload: Uint8Array.of( 1 ) }, 0 );
@@ -3571,6 +3664,11 @@ test("open Skills and hotbar do not rescan the catalog during camera/hover UI re
 		];
 		let reads = 0;
 		const catalog = new Proxy( rows, {
+			/*
+================
+get
+================
+			*/
 			get( target, key, receiver ) {
 				if ( typeof key === "string" && /^\d+$/.test( key ) ) reads++;
 				return Reflect.get( target, key, receiver );
@@ -4008,6 +4106,61 @@ test("target window carries the native CIFBuffViewer row and diffs it once a sec
 		f.state.entities[1] = { ...monster, kind: "npc" };
 		settle( 1150, 1200 );
 		assert.equal( cells().length, 0, "NPC targets carry no viewer" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("party panel keeps leader and member actions distinct for every local role", () => {
+	const sent = [], f = uiFixture( command => sent.push( command.command ) );
+	try {
+		f.state.gameplay.social = {
+			self: 11,
+			leader: 22,
+			options: 3,
+			members: [ { id: 11, name: "Player", level: 1 }, { id: 22, name: "Leader", level: 1 } ]
+		};
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:Party" } );
+		const memberPanel = f.ui.step( f.state, 100 );
+		const memberIds = memberPanel.controls.map( control => control.id );
+		assert.equal( new Set( memberIds ).size, memberIds.length, "Every visible control has one identity" );
+		assert.equal( memberPanel.controls.find( control => control.id === "party-disband" ).disabled, true );
+		assert.equal( memberPanel.controls.find( control => control.id === "party-leave" ).disabled, false );
+		f.ui.event( { kind: "activate", id: "party-leave" } );
+		assert.deepEqual( sent.pop(), { kind: "party-leave" } );
+		f.state.gameplay.social.leader = 11;
+		const leaderPanel = f.ui.step( f.state, 200 );
+		const leaderIds = leaderPanel.controls.map( control => control.id );
+		assert.equal( new Set( leaderIds ).size, leaderIds.length );
+		assert.equal( leaderPanel.controls.find( control => control.id === "party-disband" ).disabled, false );
+		f.ui.event( { kind: "activate", id: "party-disband" } );
+		assert.deepEqual( sent.pop(), { kind: "party-leave" } );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("quick party portrait stays requested after the peer leaves world visibility", async () => {
+	const { partyPortraitGid } = await load( "src/engine/foundation/ui/party-overlay.ts" );
+	const f = uiFixture();
+	try {
+		f.state.gameplay.social = {
+			localName: "Player",
+			self: 11,
+			leader: 11,
+			options: 3,
+			members: [ { id: 11, name: "Player", model: 1 }, { id: 22, name: "Peer", model: 2, status: 255 } ]
+		};
+		const peer = { ...f.state.entities[0], gid: 22, kind: "player", name: "Peer" };
+		f.state.entities.push( peer );
+		for ( let i = 0; i < 20; i++ ) f.ui.step( f.state, i * 100 );
+		const gid = partyPortraitGid( 22 );
+		assert.ok( f.scenes.at( -1 ).quads.some( quad => quad.portraitGid === gid ) );
+		f.state.entities = f.state.entities.filter( entity => entity.gid !== 22 );
+		const semantic = f.ui.step( f.state, 2100 );
+		assert.ok( f.scenes.at( -1 ).quads.some( quad => quad.portraitGid === gid ) );
+		assert.equal( semantic.controls.some( control => control.id === "party-target:22" ), false );
 	} finally {
 		f.dispose();
 	}

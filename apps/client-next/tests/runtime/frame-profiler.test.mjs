@@ -79,11 +79,8 @@ test("instrumentation binds to current production boundaries and refuses missing
 	assert.equal( instrumentFrameProfiler( html, "index.html" ), html );
 	for (
 		const file of [
-			"src/engine/runtime/characters/characters.ts",
 			"src/engine/runtime/renderer/frame/frame.ts",
-			"src/engine/runtime/renderer/renderer.ts",
-			"src/engine/runtime/renderer/world/world.ts",
-			"src/engine/runtime/renderer/characters/characters.ts"
+			"src/engine/runtime/renderer/world/world.ts"
 		]
 	) {
 		const source = await readFile( file, "utf8" ), instrumented = instrumentFrameProfiler( source, file );
@@ -91,9 +88,17 @@ test("instrumentation binds to current production boundaries and refuses missing
 		assert.match( instrumented, /__worldProbeFrameProfiler/ );
 		assert.throws( () => instrumentFrameProfiler( "", file ), /expected one/ );
 	}
-	// runtime.ts carries explicit profiler hooks and is never patched.
-	const runtime = await readFile( "src/engine/runtime/runtime.ts", "utf8" );
-	assert.equal( instrumentFrameProfiler( runtime, "src/engine/runtime/runtime.ts" ), runtime );
+	// These owners receive explicit profiler hooks and are never patched.
+	for (
+		const file of [
+			"src/engine/runtime/runtime.ts",
+			"src/engine/runtime/renderer/renderer.ts",
+			"src/engine/runtime/renderer/characters/characters.ts"
+		]
+	) {
+		const source = await readFile( file, "utf8" );
+		assert.equal( instrumentFrameProfiler( source, file ), source );
+	}
 });
 
 test("terrain detail spans accumulate across groups without changing parent clocks", () => {

@@ -14,6 +14,11 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+/*
+================
+load
+================
+*/
 async function load( entry ) {
 	return import( sourceFileUrl( entry ).href );
 }
@@ -145,11 +150,21 @@ test("GLB basis conversion is inherited by animated roots and preserves triangle
 	);
 });
 const settle = () => new Promise( resolve => setImmediate( resolve ) );
+/*
+================
+png
+================
+*/
 function png( width, height ) {
 	const bytes = new Uint8Array( 24 ), v = new DataView( bytes.buffer );
 	[ 0x89504e47, 0x0d0a1a0a, 13, 0x49484452, width, height ].forEach( ( n, i ) => v.setUint32( i * 4, n ) );
 	return bytes;
 }
+/*
+================
+glb
+================
+*/
 function glb( images ) {
 	const binary = Buffer.concat( images ),
 		json = {
@@ -198,7 +213,10 @@ test("standalone and embedded PNGs reject oversized dimensions before bitmap all
 	t.mock.method( globalThis, "fetch", async () => new Response( bytes ) );
 	for ( const decode of [ "png", "character" ] ) {
 		bytes = decode === "png" ? png( 8192, 1 ) : glb( [ png( 8192, 1 ) ] );
-		const results = [], loader = createLoader( result => results.push( result ) );
+		const results = [],
+			loader = createLoader( result => {
+				if ( result.kind !== "progress" ) results.push( result );
+			} );
 		loader.receive( { kind: "load", id: 1, url: "http://localhost/model", limit: 1 << 20, decode } );
 		await settle();
 		assert.equal( results[0].kind, "error" );
@@ -209,7 +227,10 @@ test("standalone and embedded PNGs reject oversized dimensions before bitmap all
 });
 test("embedded image budgets apply to the entire model before its first bitmap", async t => {
 	t.mock.method( globalThis, "fetch", async () => new Response( glb( [ png( 4096, 4096 ), png( 4096, 4096 ) ] ) ) );
-	const results = [], loader = createLoader( result => results.push( result ) );
+	const results = [],
+		loader = createLoader( result => {
+			if ( result.kind !== "progress" ) results.push( result );
+		} );
 	loader.receive( { kind: "load", id: 1, url: "http://localhost/model", limit: 1 << 20, decode: "character" } );
 	await settle();
 	assert.equal( results[0].kind, "error" );
@@ -225,6 +246,11 @@ test("failed bitmap transactions close already decoded images", async t => {
 		value: async () => {
 			if ( ++calls === 2 ) throw new Error( "Decode failed" );
 			return {
+				/*
+================
+close
+================
+				*/
 				close() {
 					closed++;
 				}
@@ -236,7 +262,10 @@ test("failed bitmap transactions close already decoded images", async t => {
 		else delete globalThis.createImageBitmap;
 	} );
 	t.mock.method( globalThis, "fetch", async () => new Response( glb( [ png( 32, 32 ), png( 32, 32 ) ] ) ) );
-	const results = [], loader = createLoader( result => results.push( result ) );
+	const results = [],
+		loader = createLoader( result => {
+			if ( result.kind !== "progress" ) results.push( result );
+		} );
 	loader.receive( { kind: "load", id: 1, url: "http://localhost/model", limit: 1 << 20, decode: "character" } );
 	await settle();
 	assert.match( results[0].error, /Decode failed/ );
@@ -262,6 +291,11 @@ const measured = ( images = 0 ) => ({
 	} ]
 });
 const measuredBytes = 3 * 4096 * 4 + 3 * 2048 * 4 + 64;
+/*
+================
+model
+================
+*/
 function model() {
 	return {
 		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
@@ -292,6 +326,11 @@ test("equipment reflection images preserve item ownership through assembly, fade
 			name,
 			width: 1,
 			height: 1,
+			/*
+================
+close
+================
+			*/
 			close() {
 				closed++;
 			}
@@ -304,15 +343,37 @@ test("equipment reflection images preserve item ownership through assembly, fade
 	renderer.assembly( "outfit", "body", [ { model: "weapon", parts: [ "WA" ], covers: [] } ] );
 	const uploads = [],
 		geometry = {
+			/*
+================
+upload
+================
+			*/
 			upload( data, image, offsets, environment ) {
 				uploads.push( { image, environment } );
 				return {};
 			},
+			/*
+================
+updateBones
+================
+			*/
 			updateBones() {},
 			updateInstances: d => d,
+			/*
+================
+release
+================
+			*/
 			release() {}
 		},
-		images = { upload: image => image, release() {} };
+		images = {
+			upload: image => image, /*
+================
+release
+================
+			*/
+			release() {}
+		};
 	const actor = {
 		gid: 1,
 		model: "outfit",
@@ -344,23 +405,53 @@ test("native clip admission updates existing equipment assemblies and retires st
 	renderer.assembly( "equipped", "body", [] );
 	let releases = 0;
 	const geometry = {
+			/*
+================
+upload
+================
+			*/
 			upload( data ) {
 				return { bones: data.bones.slice() };
 			},
+			/*
+================
+updateBones
+================
+			*/
 			updateBones( draw, bones ) {
 				draw.bones = bones.slice();
 			},
+			/*
+================
+updateInstances
+================
+			*/
 			updateInstances( draw ) {
 				return draw;
 			},
+			/*
+================
+release
+================
+			*/
 			release() {
 				releases++;
 			}
 		},
 		images = {
+			/*
+================
+upload
+================
+			*/
 			upload() {
 				return {};
 			},
+			/*
+================
+release
+================
+			*/
 			release() {}
 		};
 	const row = {
@@ -431,21 +522,51 @@ test("shared frame poses remain exact when actors diverge, seek sockets and rejo
 	const renderer = createCharacters();
 	renderer.model( "shared", source, [] );
 	const geometry = {
+			/*
+================
+upload
+================
+			*/
 			upload( data ) {
 				return { bones: data.bones.slice() };
 			},
+			/*
+================
+updateBones
+================
+			*/
 			updateBones( draw, bones ) {
 				draw.bones = bones.slice();
 			},
+			/*
+================
+updateInstances
+================
+			*/
 			updateInstances( draw ) {
 				return draw;
 			},
+			/*
+================
+release
+================
+			*/
 			release() {}
 		},
 		images = {
+			/*
+================
+upload
+================
+			*/
 			upload() {
 				return {};
 			},
+			/*
+================
+release
+================
+			*/
 			release() {}
 		};
 	const oracle = [ createCharacterPose( source ), createCharacterPose( source ), createCharacterPose( source ) ];
@@ -499,26 +620,61 @@ test("stationary animation retains instance buffers while motion and recovery pu
 	renderer.model( "animated", source, [] );
 	let instanceWrites = 0, boneWrites = 0;
 	const geometry = {
+		/*
+================
+upload
+================
+		*/
 		upload( data ) {
 			return { instances: data.instances.slice(), bones: data.bones.slice() };
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones( draw, bones ) {
 			boneWrites++;
 			draw.bones = bones.slice();
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw, instances ) {
 			instanceWrites++;
 			draw.instances = instances.slice();
 			return draw;
 		},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	const images = {
+		/*
+================
+upload
+================
+		*/
 		upload() {
 			return {};
 		},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
+	/*
+================
+frame
+================
+	*/
 	function frame( time, x = 0 ) {
 		renderer.actors( [ { ...actor( "animated" ), clip: "move", time, pose: { ...actor( "" ).pose, x } } ] );
 		return renderer.prepare( geometry, images, 1 )[0];
@@ -550,23 +706,53 @@ test("equipment churn retires assemblies while preserving their base images", ()
 	const characters = createCharacters();
 	let closed = 0, uploads = 0, releases = 0, draws = 0, drawReleases = 0;
 	const images = {
+			/*
+================
+upload
+================
+			*/
 			upload() {
 				uploads++;
 				return {};
 			},
+			/*
+================
+release
+================
+			*/
 			release() {
 				releases++;
 			}
 		},
 		geometry = {
+			/*
+================
+upload
+================
+			*/
 			upload() {
 				draws++;
 				return {};
 			},
+			/*
+================
+updateInstances
+================
+			*/
 			updateInstances( d ) {
 				return d;
 			},
+			/*
+================
+updateBones
+================
+			*/
 			updateBones() {},
+			/*
+================
+release
+================
+			*/
 			release() {
 				drawReleases++;
 			}
@@ -574,6 +760,11 @@ test("equipment churn retires assemblies while preserving their base images", ()
 	characters.model( "base", model(), [ {
 		width: 1,
 		height: 1,
+		/*
+================
+close
+================
+		*/
 		close() {
 			closed++;
 		}
@@ -592,6 +783,11 @@ test("equipment churn retires assemblies while preserving their base images", ()
 	characters.model( "next", model(), [ {
 		width: 1,
 		height: 1,
+		/*
+================
+close
+================
+		*/
 		close() {
 			closed++;
 		}
@@ -608,17 +804,42 @@ test("equipment churn retires assemblies while preserving their base images", ()
 test("residency follows model membership across warm frames, late admission and reused actor publications", () => {
 	const renderer = createCharacters(), closed = [], released = [];
 	const geometry = {
+			/*
+================
+upload
+================
+			*/
 			upload() {
 				return {};
 			},
 			updateInstances: d => d,
+			/*
+================
+updateBones
+================
+			*/
 			updateBones() {},
+			/*
+================
+release
+================
+			*/
 			release() {}
 		},
 		images = {
+			/*
+================
+upload
+================
+			*/
 			upload() {
 				return {};
 			},
+			/*
+================
+release
+================
+			*/
 			release( draw ) {
 				released.push( draw );
 			}
@@ -627,6 +848,11 @@ test("residency follows model membership across warm frames, late admission and 
 		renderer.model( id, model(), [ {
 			width: 1,
 			height: 1,
+			/*
+================
+close
+================
+			*/
 			close() {
 				closed.push( id );
 			}
@@ -673,11 +899,31 @@ test("residency follows model membership across warm frames, late admission and 
 test("residency accounting is released when models leave and rejected images close once", () => {
 	const characters = createCharacters();
 	let closed = 0;
-	const geometry = { release() {} }, images = { release() {} };
+	const geometry = {
+			/*
+================
+release
+================
+			*/
+			release() {}
+		},
+		images = {
+			/*
+================
+release
+================
+			*/
+			release() {}
+		};
 	for ( let i = 0; i < 100; i++ ) {
 		characters.model( String( i ), model(), [ {
 			width: 2048,
 			height: 1024,
+			/*
+================
+close
+================
+			*/
 			close() {
 				closed++;
 			}
@@ -690,6 +936,11 @@ test("residency accounting is released when models leave and rejected images clo
 		characters.model( "large", model(), [ {
 			width: 8192,
 			height: 1,
+			/*
+================
+close
+================
+			*/
 			close() {
 				closed++;
 			}
@@ -738,6 +989,11 @@ test("renderer budgets expanded instances across models and frees old batches be
 	const live = new Set();
 	let held = 0, peak = 0;
 	const gpu = {
+		/*
+================
+upload
+================
+		*/
 		upload( data ) {
 			const draw = { bytes: data.bones.byteLength + data.instances.byteLength };
 			live.add( draw );
@@ -745,19 +1001,44 @@ test("renderer budgets expanded instances across models and frees old batches be
 			peak = Math.max( peak, held );
 			return draw;
 		},
+		/*
+================
+release
+================
+		*/
 		release( draw ) {
 			assert.ok( live.delete( draw ) );
 			held -= draw.bytes;
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw ) {
 			return draw;
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones() {}
 	};
 	const images = {
+		/*
+================
+upload
+================
+		*/
 		upload() {
 			throw new Error( "No textures" );
 		},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	const population =
@@ -790,21 +1071,46 @@ test("cold effects reserve only the active load slot and cannot displace residen
 	let serial = 0;
 	const assets = {
 		available: () => 4,
+		/*
+================
+request
+================
+		*/
 		request( url ) {
 			requests.push( url );
 			pending.set( ++serial, url );
 			return serial;
 		},
+		/*
+================
+take
+================
+		*/
 		take( id ) {
 			if ( !pending.delete( id ) ) return null;
 			return { kind: "character", model: measured(), images: [] };
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel( id ) {
 			pending.delete( id );
 		}
 	};
 	const owner = createCharacterResources( assets, {
+		/*
+================
+setCharacterModel
+================
+		*/
 		setCharacterModel() {},
+		/*
+================
+retainCharacterModels
+================
+		*/
 		retainCharacterModels( ids ) {
 			retentions.push( ids );
 		}
@@ -861,30 +1167,74 @@ test("one source class bounds both the decode and the reservation an undecoded s
 		"src/engine/foundation/animation/character-budget.ts"
 	);
 	assert.throws(
-		() => createCharacters().model( "over", measured( 1 ), [ { width: 2048, height: 2048, close() {} } ] ),
+		() =>
+			createCharacters().model( "over", measured( 1 ), [ {
+				width: 2048,
+				height: 2048, /*
+================
+close
+================
+				*/
+				close() {}
+			} ] ),
 		/budget/,
 		"a source may not decode past the class admission reserves"
 	);
 	const pending = new Map();
 	let serial = 0;
-	const image = { width: 2048, height: 1024, close() {} };
+	const image = {
+		width: 2048,
+		height: 1024, /*
+================
+close
+================
+		*/
+		close() {}
+	};
 	const assets = {
 		available: () => 4,
+		/*
+================
+request
+================
+		*/
 		request() {
 			pending.set( ++serial, true );
 			return serial;
 		},
+		/*
+================
+take
+================
+		*/
 		take( id ) {
 			if ( !pending.delete( id ) ) return null;
 			return { kind: "character", model: measured( 1 ), images: [ image ] };
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel( id ) {
 			pending.delete( id );
 		}
 	};
 	const owner = createCharacterResources(
 		assets,
-		{ setCharacterModel() {}, retainCharacterModels() {} },
+		{
+			/*
+================
+setCharacterModel
+================
+			*/
+			setCharacterModel() {}, /*
+================
+retainCharacterModels
+================
+			*/
+			retainCharacterModels() {}
+		},
 		"http://localhost"
 	);
 	const cost = image.width * image.height * 5 + measuredBytes,
@@ -939,21 +1289,48 @@ test("no interleaving of frames, loads and effects unadmits a decoded source", a
 				let serial = 0;
 				const assets = {
 					available: () => 4,
+					/*
+================
+request
+================
+					*/
 					request( url ) {
 						pending.set( ++serial, url );
 						return serial;
 					},
+					/*
+================
+take
+================
+					*/
 					take( id ) {
 						if ( !pending.delete( id ) ) return null;
 						return { kind: "character", model: measured(), images: [] };
 					},
+					/*
+================
+cancel
+================
+					*/
 					cancel( id ) {
 						pending.delete( id );
 					}
 				};
 				const owner = createCharacterResources(
 					assets,
-					{ setCharacterModel() {}, retainCharacterModels() {} },
+					{
+						/*
+================
+setCharacterModel
+================
+						*/
+						setCharacterModel() {}, /*
+================
+retainCharacterModels
+================
+						*/
+						retainCharacterModels() {}
+					},
 					"http://localhost"
 				);
 				const admitted = new Set();
@@ -986,20 +1363,45 @@ test("inactive character resource cache remains bounded and evicts least recentl
 	const pending = new Set(), requests = [];
 	const owner = createCharacterResources( {
 		available: () => 4,
+		/*
+================
+request
+================
+		*/
 		request( url ) {
 			requests.push( url );
 			pending.add( ++serial );
 			return serial;
 		},
+		/*
+================
+take
+================
+		*/
 		take( id ) {
 			if ( !pending.delete( id ) ) return null;
 			return { kind: "character", model: { nodes: [], primitives: [], images: [], clips: [] }, images: [] };
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel( id ) {
 			pending.delete( id );
 		}
 	}, {
+		/*
+================
+setCharacterModel
+================
+		*/
 		setCharacterModel() {},
+		/*
+================
+retainCharacterModels
+================
+		*/
 		retainCharacterModels( ids ) {
 			retained = ids;
 		}
@@ -1027,23 +1429,53 @@ test("inactive character resource cache remains bounded and evicts least recentl
 test("actor reordering and duplicate-model count changes do not invalidate model residency", () => {
 	const renderer = createCharacters(), closed = [];
 	const geometry = {
+			/*
+================
+upload
+================
+			*/
 			upload() {
 				return {};
 			},
 			updateInstances: d => d,
+			/*
+================
+updateBones
+================
+			*/
 			updateBones() {},
+			/*
+================
+release
+================
+			*/
 			release() {}
 		},
 		images = {
+			/*
+================
+upload
+================
+			*/
 			upload() {
 				return {};
 			},
+			/*
+================
+release
+================
+			*/
 			release() {}
 		};
 	for ( const id of [ "a", "b" ] ) {
 		renderer.model( id, model(), [ {
 			width: 1,
 			height: 1,
+			/*
+================
+close
+================
+			*/
 			close() {
 				closed.push( id );
 			}
@@ -1073,4 +1505,120 @@ test("actor reordering and duplicate-model count changes do not invalidate model
 	step( [] );
 	assert.deepEqual( closed, [ "b", "a" ] );
 	renderer.dispose( geometry, images );
+});
+
+test("injected character profiling observes pose lifetime without changing palette output", () => {
+	const counts = [], stages = [], palettes = [], poseSamples = [];
+	const renderer = createCharacters( {
+		phases: {
+			/*
+================
+begin
+The renderer must pass its observer to real pose materialization.
+================
+		*/
+			begin( model, reason ) {
+				poseSamples.push( reason );
+				return null;
+			}
+		}
+	} );
+	const source = model();
+	source.images = [];
+	source.primitives[0].image = -1;
+	const geometry = {
+		/*
+================
+upload
+================
+		*/
+		upload( data ) {
+			palettes.push( [ ...data.bones ] );
+			return {};
+		},
+		updateInstances: draw => draw, /*
+================
+updateBones
+================
+		*/
+		updateBones( draw, bones ) {
+			palettes.push( [ ...bones ] );
+		}, /*
+================
+release
+================
+		*/
+		release() {}
+	};
+	const images = {
+		/*
+================
+upload
+================
+		*/
+		upload() {
+			return {};
+		}, /*
+================
+release
+================
+		*/
+		release() {}
+	};
+	renderer.model( "body", source, [] );
+	renderer.retain( [ "body" ] );
+	const probe = {
+		/*
+================
+renderBegin
+================
+		*/
+		renderBegin() {}, /*
+================
+renderMark
+================
+		*/
+		renderMark() {}, /*
+================
+characterBegin
+================
+		*/
+		characterBegin() {
+			stages.push( "begin" );
+		}, /*
+================
+characterMark
+================
+		*/
+		characterMark( stage ) {
+			stages.push( stage );
+		}, /*
+================
+characterCount
+================
+		*/
+		characterCount( name, value = 1 ) {
+			counts.push( [ name, value ] );
+		}
+	};
+	try {
+		renderer.profile( probe );
+		renderer.actors( [ actor( "body" ) ] );
+		renderer.prepare( geometry, images, 1 );
+		const observed = palettes.at( -1 );
+		assert.ok( poseSamples.length > 0, "constructor observer reaches pose materialization" );
+		assert.deepEqual( stages, [ "begin", "character-plan", "character-poses", "character-upload" ] );
+		assert.ok( counts.some( ( [name, value] ) => name === "pose-created" && value === 1 ) );
+		renderer.actors( [] );
+		renderer.prepare( geometry, images, 1 );
+		assert.ok( counts.some( ( [name, value] ) => name === "pose-retired" && value === 1 ) );
+		const previous = counts.length;
+		renderer.profile( undefined );
+		renderer.actors( [ actor( "body" ) ] );
+		renderer.prepare( geometry, images, 1 );
+		assert.deepEqual( palettes.at( -1 ), observed );
+		assert.equal( counts.length, previous );
+	} finally {
+		renderer.dispose( geometry, images );
+	}
 });

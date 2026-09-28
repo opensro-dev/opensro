@@ -154,6 +154,10 @@ export function loadingDetailText( step: string, progress: AssetProgress | null 
 	const parts = [ step.replace( /\s*(?:\.{3}|…)$/u, "" ) ];
 	const what = loadingFileLabel( progress.currentFile );
 	if ( what ) parts.push( what );
+	if ( progress.bytesRead !== undefined ) {
+		parts.push( `${(progress.bytesRead / BYTES_PER_MB).toFixed( 1 )} MB read` );
+		parts.push( `${progress.filesReady} files ready` );
+	}
 	if ( quietMs >= LOADING_STALL_MS ) parts.push( "waiting for server" );
 	else if ( progress.bytesPerSecond > 0 ) parts.push( transferRateText( progress.bytesPerSecond ) );
 	return parts.join( " · " );

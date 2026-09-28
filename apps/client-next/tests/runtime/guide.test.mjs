@@ -24,6 +24,11 @@ import {
 } from "../../../../scripts/build/shared/resourceIo.mjs";
 import path from "node:path";
 import { readLocalizedTextDataRowsSync } from "../../../../scripts/build/shared/textDataIo.mjs";
+/*
+================
+load
+================
+*/
 async function load( path ) {
 	return import( sourceFileUrl( path ).href );
 }
@@ -179,12 +184,32 @@ test("published guide resource batch admits completely", async () => {
 		available: () => 4,
 		request: () => ++id,
 		take: i => ({ kind: "bytes", buffer: buffers[i - 1] }),
+		/*
+================
+cancel
+================
+		*/
 		cancel() {}
 	}, "http://fixture.invalid" );
 	owner.step();
 	owner.step();
 	assert.equal( owner.error(), null );
 	assert.equal( owner.data().articles.length, 21 );
+	const data = owner.data();
+	const pictures = [
+		...data.general.map( row => row.tokens ),
+		...data.articles.flatMap( row => [ row.tokens, row.european ?? [] ] )
+	].flat().filter( token => token.kind === "image" );
+	assert.ok( pictures.length > 0 );
+	for ( const image of pictures ) assert.ok( data.warmPaths.includes( image.path ), image.path );
+	for ( const layout of [ data.layout, data.menu, data.mentor, data.mentorSlot ] ) {
+		for ( const node of Object.values( layout ) ) {
+			if ( node.texture?.endsWith( ".png" ) ) {
+				assert.ok( data.warmPaths.includes( node.texture ), node.texture );
+			}
+		}
+	}
+	assert.equal( new Set( data.warmPaths ).size, data.warmPaths.length );
 	for ( const article of owner.data().articles ) {
 		// Article 21 has English from the localization layer now, so it shares
 		// the non-European shape: its European branch is its own content.

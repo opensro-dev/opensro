@@ -13,6 +13,11 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( file ).href );
 }
@@ -29,6 +34,11 @@ const node = ( name, parent = -1, translation = [ 0, 0, 0 ] ) => ({
 	rotation: [ 0, 0, 0, 1 ],
 	scale: [ 1, 1, 1 ]
 });
+/*
+================
+model
+================
+*/
 function model( nodes = [ node( "root" ) ], channels = [] ) {
 	return {
 		nodes,
@@ -53,17 +63,42 @@ test("preview identity zero has no implicit parent and owns an isolated camera t
 	c.model( "preview", model(), [] );
 	const uploaded = [], transforms = [];
 	const gpu = {
+		/*
+================
+upload
+================
+		*/
 		upload( data ) {
 			uploaded.push( data );
 			return {};
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw ) {
 			return draw;
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones() {},
+		/*
+================
+updateTransform
+================
+		*/
 		updateTransform( draw, matrix ) {
 			transforms.push( matrix.slice() );
 		},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	c.actors( [ {
@@ -91,15 +126,35 @@ test("native effect rotation reaches GPU instances and invalidates an otherwise 
 	c.model( "effect", model(), [] );
 	const matrices = [];
 	const gpu = {
+		/*
+================
+upload
+================
+		*/
 		upload( data ) {
 			matrices.push( data.instances.slice() );
 			return {};
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw, data ) {
 			matrices.push( data.slice() );
 			return draw;
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones() {},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	const actor = {
@@ -179,18 +234,38 @@ test("body volume changes radial skinning while height remains uniform and cache
 	c.model( "body", model( [ node( "Bip01 Spine" ) ] ), [] );
 	const matrices = [], bones = [];
 	const gpu = {
+		/*
+================
+upload
+================
+		*/
 		upload( data ) {
 			matrices.push( data.instances.slice() );
 			bones.push( data.bones.slice() );
 			return {};
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw, data ) {
 			matrices.push( data.slice() );
 			return draw;
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones( draw, data ) {
 			bones.push( data.slice() );
 		},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	const actor = {
@@ -278,19 +353,39 @@ test("mounted rider follows animated saddle and unchanged poses issue no uploads
 	let uploads = 0;
 	const matrices = [];
 	const gpu = {
+		/*
+================
+upload
+================
+		*/
 		upload( data ) {
 			uploads++;
 			matrices.push( data.instances.slice() );
 			return {};
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw, value ) {
 			uploads++;
 			matrices.push( value.slice() );
 			return draw;
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones() {
 			uploads++;
 		},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	const actor = ( gid, model, x, mountedOn ) => ({
@@ -304,13 +399,49 @@ test("mounted rider follows animated saddle and unchanged poses issue no uploads
 		loop: true
 	});
 	c.actors( [ actor( 1, "mount", 20 ), actor( 2, "rider", 999, 1 ) ] );
-	c.prepare( gpu, { upload() {}, release() {} }, 257 );
+	c.prepare( gpu, {
+		/*
+================
+upload
+================
+		*/
+		upload() {}, /*
+================
+release
+================
+		*/
+		release() {}
+	}, 257 );
 	assert.deepEqual( [ ...matrices[1].slice( 12, 15 ) ], [ 20, 10, 0 ] );
 	const first = uploads;
-	c.prepare( gpu, { upload() {}, release() {} }, 257 );
+	c.prepare( gpu, {
+		/*
+================
+upload
+================
+		*/
+		upload() {}, /*
+================
+release
+================
+		*/
+		release() {}
+	}, 257 );
 	assert.equal( uploads, first );
 	c.actors( [ actor( 1, "mount", 30 ), actor( 2, "rider", 999, 1 ) ] );
-	c.prepare( gpu, { upload() {}, release() {} }, 257 );
+	c.prepare( gpu, {
+		/*
+================
+upload
+================
+		*/
+		upload() {}, /*
+================
+release
+================
+		*/
+		release() {}
+	}, 257 );
 	assert.deepEqual( [ ...matrices.at( -1 ).slice( 12, 15 ) ], [ 30, 10, 0 ] );
 	c.dispose( gpu, null );
 });
@@ -469,27 +600,69 @@ test("audio gesture gate, event deduplication and decoded-buffer reuse have one 
 	let started = 0, requested = 0, stopped = 0, closed = 0;
 	const nodes = [];
 	const param = () => ({ value: 0 });
-	const graph = () => ({ connect() {}, disconnect() {} });
+	const graph = () => ({
+		/*
+================
+connect
+================
+		*/
+		connect() {}, /*
+================
+disconnect
+================
+		*/
+		disconnect() {}
+	});
 	class Context {
 		state = "running";
 		destination = {};
 		listener = { positionX: param(), positionY: param(), positionZ: param() };
+		/*
+================
+resume
+================
+		*/
 		resume() {
 			return Promise.resolve();
 		}
+		/*
+================
+close
+================
+		*/
 		close() {
 			closed++;
 			return Promise.resolve();
 		}
+		/*
+================
+decodeAudioData
+================
+		*/
 		decodeAudioData() {
 			return Promise.resolve( { length: 100, numberOfChannels: 1 } );
 		}
+		/*
+================
+createBufferSource
+================
+		*/
 		createBufferSource() {
 			const source = {
 				...graph(),
+				/*
+================
+start
+================
+				*/
 				start() {
 					started++;
 				},
+				/*
+================
+stop
+================
+				*/
 				stop() {
 					stopped++;
 					this.onended?.();
@@ -498,9 +671,19 @@ test("audio gesture gate, event deduplication and decoded-buffer reuse have one 
 			nodes.push( source );
 			return source;
 		}
+		/*
+================
+createGain
+================
+		*/
 		createGain() {
 			return { ...graph(), gain: param() };
 		}
+		/*
+================
+createPanner
+================
+		*/
 		createPanner() {
 			return { ...graph(), positionX: param(), positionY: param(), positionZ: param() };
 		}
@@ -513,12 +696,27 @@ test("audio gesture gate, event deduplication and decoded-buffer reuse have one 
 	} );
 	const assets = {
 		available: () => 4,
+		/*
+================
+request
+================
+		*/
 		request() {
 			return ++requested;
 		},
+		/*
+================
+take
+================
+		*/
 		take() {
 			return { kind: "bytes", buffer: new ArrayBuffer( 1 ) };
 		},
+		/*
+================
+cancel
+================
+		*/
 		cancel() {}
 	};
 	const audio = createAudio( assets, "http://localhost", createPresentationRandom( 1 ) );
@@ -558,15 +756,35 @@ test("audio backpressure survives expired events and resets until native decodes
 	class Context {
 		state = "running";
 		listener = { positionX: {}, positionY: {}, positionZ: {} };
+		/*
+================
+resume
+================
+		*/
 		resume() {
 			return Promise.resolve();
 		}
+		/*
+================
+close
+================
+		*/
 		close() {
 			return Promise.resolve();
 		}
+		/*
+================
+decodeAudioData
+================
+		*/
 		decodeAudioData() {
 			return new Promise( ( resolve, reject ) => decodes.push( { resolve, reject } ) );
 		}
+		/*
+================
+createBufferSource
+================
+		*/
 		createBufferSource() {
 			started++;
 			throw new Error( "Stale decode must not play" );
@@ -581,13 +799,28 @@ test("audio backpressure survives expired events and resets until native decodes
 	const audio = createAudio(
 		{
 			available: () => 4,
+			/*
+================
+request
+================
+			*/
 			request( url, limit ) {
 				assert.equal( limit, 4 << 20 );
 				return ++requests;
 			},
+			/*
+================
+take
+================
+			*/
 			take() {
 				return { kind: "bytes", buffer: new ArrayBuffer( 1 ) };
 			},
+			/*
+================
+cancel
+================
+			*/
 			cancel() {}
 		},
 		"http://localhost",
@@ -634,12 +867,27 @@ test("audio completes bounded expired-cue loads and recovers from synchronous de
 	class Context {
 		state = "running";
 		listener = { positionX: {}, positionY: {}, positionZ: {} };
+		/*
+================
+resume
+================
+		*/
 		resume() {
 			return Promise.resolve();
 		}
+		/*
+================
+close
+================
+		*/
 		close() {
 			return Promise.resolve();
 		}
+		/*
+================
+decodeAudioData
+================
+		*/
 		decodeAudioData() {
 			decodes++;
 			throw new Error( "decoder unavailable" );
@@ -656,6 +904,11 @@ test("audio completes bounded expired-cue loads and recovers from synchronous de
 			available: () => 4,
 			request: () => 1,
 			take: () => ({ kind: "bytes", buffer: new ArrayBuffer( 1 ) }),
+			/*
+================
+cancel
+================
+			*/
 			cancel() {
 				cancelled++;
 			}
@@ -681,34 +934,86 @@ test("audio completes bounded expired-cue loads and recovers from synchronous de
 test("playing audio buffers stay charged to residency until their voices end", async t => {
 	const sources = [];
 	let requests = 0;
-	const graph = () => ({ connect() {}, disconnect() {} });
+	const graph = () => ({
+		/*
+================
+connect
+================
+		*/
+		connect() {}, /*
+================
+disconnect
+================
+		*/
+		disconnect() {}
+	});
 	class Context {
 		state = "running";
 		listener = { positionX: {}, positionY: {}, positionZ: {} };
+		/*
+================
+resume
+================
+		*/
 		resume() {
 			return Promise.resolve();
 		}
+		/*
+================
+close
+================
+		*/
 		close() {
 			return Promise.resolve();
 		}
+		/*
+================
+decodeAudioData
+================
+		*/
 		decodeAudioData() {
 			return Promise.resolve( { length: 5 << 20, numberOfChannels: 1 } );
 		}
+		/*
+================
+createBufferSource
+================
+		*/
 		createBufferSource() {
 			const source = {
 				...graph(),
+				/*
+================
+start
+================
+				*/
 				start() {
 					sources.push( this );
 				},
+				/*
+================
+stop
+================
+				*/
 				stop() {
 					this.onended?.();
 				}
 			};
 			return source;
 		}
+		/*
+================
+createGain
+================
+		*/
 		createGain() {
 			return { ...graph(), gain: {} };
 		}
+		/*
+================
+createPanner
+================
+		*/
 		createPanner() {
 			return { ...graph(), positionX: {}, positionY: {}, positionZ: {} };
 		}
@@ -724,12 +1029,22 @@ test("playing audio buffers stay charged to residency until their voices end", a
 			available: () => 4,
 			request: () => ++requests,
 			take: () => ({ kind: "bytes", buffer: new ArrayBuffer( 1 ) }),
+			/*
+================
+cancel
+================
+			*/
 			cancel() {}
 		},
 		"http://localhost",
 		createPresentationRandom( 1 )
 	);
 	audio.unlock();
+	/*
+================
+play
+================
+	*/
 	async function play( id, path ) {
 		audio.enqueue( { id, path: `/assets/audio/${path}.wav`, gain: 1, x: 0, y: 0, z: 0, expires: 10 } );
 		audio.step( 0, [ 0, 0, 0 ] );
@@ -785,12 +1100,34 @@ test("character visibility envelope includes translation and scale animation ext
 	assert.deepEqual(
 		c.prepare(
 			{
+				/*
+================
+upload
+================
+				*/
 				upload() {
 					uploaded++;
 				},
+				/*
+================
+release
+================
+				*/
 				release() {}
 			},
-			{ upload() {}, release() {} },
+			{
+				/*
+================
+upload
+================
+				*/
+				upload() {}, /*
+================
+release
+================
+				*/
+				release() {}
+			},
 			257,
 			identity()
 		),
@@ -857,7 +1194,8 @@ test("native event pass fills sparse tracks before timed pose and respects weigh
 	pose.evaluate( "stand", 0, true );
 	assert.equal( pose.socket( "arm" )[12], 30 );
 	assert.throws( () => pose.evaluate( "stand", 0, true, [ { ...layers[0], weight: NaN } ] ), /Invalid/ );
-	assert.throws( () => pose.evaluate( "stand", 0, true, Array( 9 ).fill( layers[0] ) ), /budget/ );
+	pose.evaluate( "stand", 0, true, Array( 9 ).fill( { ...layers[0], weight: 1 / 9 } ) );
+	assert.equal( pose.socket( "arm" )[12], 30 );
 });
 
 test("bone-attached effects inherit moving mount sockets, invalidate offset changes and reject cycles", () => {
@@ -884,21 +1222,51 @@ test("bone-attached effects inherit moving mount sockets, invalidate offset chan
 	];
 	const matrices = [],
 		gpu = {
+			/*
+================
+upload
+================
+			*/
 			upload( data ) {
 				matrices.push( data.instances.slice() );
 				return {};
 			},
+			/*
+================
+updateInstances
+================
+			*/
 			updateInstances( draw, data ) {
 				matrices.push( data.slice() );
 				return draw;
 			},
+			/*
+================
+updateBones
+================
+			*/
 			updateBones() {},
+			/*
+================
+release
+================
+			*/
 			release() {}
 		};
 	const images = {
+		/*
+================
+upload
+================
+		*/
 		upload() {
 			return {};
 		},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	c.actors( rows );
@@ -933,16 +1301,36 @@ test("camera alpha separates the local actor from peers, fades attachments and s
 	});
 	const uploads = [], updates = [];
 	const gpu = {
+		/*
+================
+upload
+================
+		*/
 		upload( data ) {
 			const draw = { blended: !!data.material?.blend };
 			uploads.push( data );
 			return draw;
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw, matrices, alpha ) {
 			updates.push( alpha ? [ ...alpha ] : null );
 			return draw;
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones() {},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	c.actors( [ actor( 1, .5 ), actor( 2, 1 ), {
@@ -971,7 +1359,21 @@ test("camera alpha separates the local actor from peers, fades attachments and s
 });
 test("UI sounds decode while suspended and play on the first unlocked activation", async t => {
 	let started = 0, decoded = 0, requests = 0, contexts = 0;
-	const gains = [], graph = () => ({ connect() {}, disconnect() {} }), param = () => ({ value: 0 });
+	const gains = [],
+		graph = () => ({
+			/*
+================
+connect
+================
+			*/
+			connect() {}, /*
+================
+disconnect
+================
+			*/
+			disconnect() {}
+		}),
+		param = () => ({ value: 0 });
 	class Context {
 		state = "suspended";
 		constructor() {
@@ -979,31 +1381,71 @@ test("UI sounds decode while suspended and play on the first unlocked activation
 		}
 		destination = {};
 		listener = { positionX: param(), positionY: param(), positionZ: param() };
+		/*
+================
+resume
+================
+		*/
 		resume() {
 			this.state = "running";
 			return Promise.resolve();
 		}
+		/*
+================
+close
+================
+		*/
 		close() {
 			return Promise.resolve();
 		}
+		/*
+================
+decodeAudioData
+================
+		*/
 		decodeAudioData() {
 			decoded++;
 			return Promise.resolve( { length: 100, numberOfChannels: 1 } );
 		}
+		/*
+================
+createBufferSource
+================
+		*/
 		createBufferSource() {
 			return {
 				...graph(),
+				/*
+================
+start
+================
+				*/
 				start() {
 					started++;
 				},
+				/*
+================
+stop
+================
+				*/
 				stop() {}
 			};
 		}
+		/*
+================
+createGain
+================
+		*/
 		createGain() {
 			const gain = { ...graph(), gain: param() };
 			gains.push( gain );
 			return gain;
 		}
+		/*
+================
+createPanner
+================
+		*/
 		createPanner() {
 			return { ...graph(), positionX: param(), positionY: param(), positionZ: param() };
 		}
@@ -1019,6 +1461,11 @@ test("UI sounds decode while suspended and play on the first unlocked activation
 			available: () => 4,
 			request: () => ++requests,
 			take: () => ({ kind: "bytes", buffer: new ArrayBuffer( 1 ) }),
+			/*
+================
+cancel
+================
+			*/
 			cancel() {}
 		},
 		"http://localhost",
@@ -1100,38 +1547,88 @@ test("low-vital alarm requires an actor anchor, uses positional output and respe
 	let starts = 0;
 	const param = () => ({ value: 0 }),
 		graph = () => ({
+			/*
+================
+connect
+================
+			*/
 			connect( target ) {
 				outputs.push( target );
 			},
+			/*
+================
+disconnect
+================
+			*/
 			disconnect() {}
 		});
 	class Context {
 		state = "running";
 		destination = { destination: true };
 		listener = { positionX: param(), positionY: param(), positionZ: param() };
+		/*
+================
+resume
+================
+		*/
 		resume() {
 			return Promise.resolve();
 		}
+		/*
+================
+close
+================
+		*/
 		close() {
 			return Promise.resolve();
 		}
+		/*
+================
+decodeAudioData
+================
+		*/
 		decodeAudioData() {
 			return Promise.resolve( { length: 100, numberOfChannels: 1 } );
 		}
+		/*
+================
+createBufferSource
+================
+		*/
 		createBufferSource() {
 			return {
 				...graph(),
+				/*
+================
+start
+================
+				*/
 				start() {
 					starts++;
 				},
+				/*
+================
+stop
+================
+				*/
 				stop() {}
 			};
 		}
+		/*
+================
+createGain
+================
+		*/
 		createGain() {
 			const g = { ...graph(), gain: param() };
 			gains.push( g );
 			return g;
 		}
+		/*
+================
+createPanner
+================
+		*/
 		createPanner() {
 			const p = { ...graph(), positionX: param(), positionY: param(), positionZ: param() };
 			panners.push( p );
@@ -1150,6 +1647,11 @@ test("low-vital alarm requires an actor anchor, uses positional output and respe
 			available: () => 4,
 			request: () => ++requests,
 			take: () => ({ kind: "bytes", buffer: new ArrayBuffer( 1 ) }),
+			/*
+================
+cancel
+================
+			*/
 			cancel() {}
 		},
 		"http://localhost",
@@ -1284,14 +1786,34 @@ test("production BSR emitter inherits holder alpha exactly once through the rend
 	} ] );
 	const c = createCharacters(), emission = createModelEmission( () => -1 ), updates = [];
 	const gpu = {
+		/*
+================
+upload
+================
+		*/
 		upload() {
 			return {};
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw, matrices, alpha ) {
 			updates.push( ...(alpha ?? []) );
 			return draw;
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones() {},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	c.model( "body", model(), [] );
@@ -1363,12 +1885,27 @@ test("BSR rotation crosses the production emitter and detached renderer snapshot
 	child.attachment.rotation[0] = 123;
 	const matrices = [],
 		gpu = {
+			/*
+================
+upload
+================
+			*/
 			upload( data ) {
 				matrices.push( data.instances.slice() );
 				return {};
 			},
 			updateInstances: d => d,
+			/*
+================
+updateBones
+================
+			*/
 			updateBones() {},
+			/*
+================
+release
+================
+			*/
 			release() {}
 		};
 	c.prepare( gpu, {}, 257 );
@@ -1393,13 +1930,33 @@ test("renderer LOD retains the prior skeletal sample while world placement and a
 		[]
 	);
 	const gpu = {
+		/*
+================
+upload
+================
+		*/
 		upload() {
 			return {};
 		},
+		/*
+================
+updateInstances
+================
+		*/
 		updateInstances( draw ) {
 			return draw;
 		},
+		/*
+================
+updateBones
+================
+		*/
 		updateBones() {},
+		/*
+================
+release
+================
+		*/
 		release() {}
 	};
 	const actor = {

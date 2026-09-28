@@ -48,7 +48,13 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	const active = new Set<AbortController>();
 	let disposed = false, effectBytes: Uint8Array<ArrayBuffer> | null = null;
 	const files = new Map<string, number>(), readyFiles = new Set<string>();
+	let bytesRead = 0;
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
+	/*
+================
+progress
+================
+	*/
 	function progress( force = false ) {
 		const now = performance.now(), elapsed = now - lastProgress;
 		if ( !force && elapsed < 150 ) return;
@@ -62,6 +68,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			send( {
 				kind: "progress",
 				progress: {
+					bytesRead,
 					bytesReceived: received,
 					bytesPerSecond: speed,
 					filesReady: readyFiles.size,
@@ -72,6 +79,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}, [] );
 		}
 	}
+	/*
+================
+activity
+================
+	*/
 	function activity( path: string, event: "start" | "ready" | "end" ) {
 		if ( event === "start" ) files.set( path, (files.get( path ) ?? 0) + 1 );
 		else if ( event === "ready" ) readyFiles.add( path );
@@ -82,6 +94,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		}
 		progress( files.size === 0 );
 	}
+	/*
+================
+download
+================
+	*/
 	async function download(
 		url: string,
 		limit: number,
@@ -115,16 +132,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			await response.body.cancel();
 			throw Error( "Invalid asset range response" );
 		}
-		const bytes = await readBytes(
-			response.body,
-			limit,
-			range ?
-				size => {
-					received += size;
-					progress();
-				} :
-				undefined
-		);
+		const bytes = await readBytes( response.body, limit, size => {
+			bytesRead += size;
+			if ( range ) received += size;
+			progress();
+		} );
 		// Ranges are identity bytes with no HTTP cache. For other responses,
 		// Resource Timing distinguishes compressed transfers from HTTP cache
 		// reads; counting decoded stream chunks would invent warm downloads.
@@ -141,16 +153,37 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	// Background work runs only while no foreground load holds capacity. The
 	// last foreground load to settle wakes it: an event, not a poll.
 	let idleWaiters: (() => void)[] = [];
+	/*
+================
+foregroundIdle
+================
+	*/
 	function foregroundIdle(): Promise<void> {
 		if ( active.size === 0 || disposed ) return Promise.resolve();
 		return new Promise( ( resolve ) => idleWaiters.push( resolve ) );
 	}
+	/*
+================
+wakeIdleWaiters
+================
+	*/
 	function wakeIdleWaiters() {
 		const waiters = idleWaiters;
 		idleWaiters = [];
 		for ( const resolve of waiters ) resolve();
 	}
-	const installer = createBackgroundInstaller( packs, foregroundIdle );
+	// The install list describes this release, like the pack index itself.
+	// It is a release route rather than a member of the packs it enumerates;
+	// each listed asset still passes through packs.install and SHA verification.
+	const installer = createBackgroundInstaller( {
+		read: ( url, limit, signal ) => download( url.href, limit, signal ),
+		install: packs.install
+	}, foregroundIdle );
+	/*
+================
+load
+================
+	*/
 	async function load(
 		request: Extract<AssetRequest, {
 			kind: "load";
@@ -189,6 +222,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					send( { kind: "effects", id: request.id, catalog }, [] );
 				} else if ( (request.decode === "world" || request.decode === "frontend-world") ) {
 					let total = bytes.byteLength;
+					/*
+================
+readWorldResource
+================
+					*/
 					async function readWorldResource( path: string ) {
 						if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) || path.includes( "\\" ) ) {
 							throw new Error( "Invalid world resource path" );
@@ -422,6 +460,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		}
 	}
 	return {
+		/*
+================
+receive
+================
+		*/
 		receive( request: AssetRequest ) {
 			if ( disposed ) {
 				return;
@@ -447,6 +490,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			active.add( controller );
 			void load( request, controller );
 		},
+		/*
+================
+dispose
+================
+		*/
 		dispose() {
 			if ( disposed ) {
 				return;

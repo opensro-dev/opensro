@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+runtime-failures.test.mjs - runtime owner failure and teardown contracts
+
+Injects owners through the synthetic build boundary and verifies failures
+reach the player while each owned lifetime is disposed exactly once.
+
+===========================================================================
+*/
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { build } from "esbuild";
@@ -30,6 +40,11 @@ const compiled = await build( {
 	},
 	plugins: [ {
 		name: "runtime-owners",
+		/*
+================
+setup
+================
+		*/
 		setup( build ) {
 			build.onResolve( { filter: /^\.\// }, args => {
 				const owner = args.path.split( "/" )[1];
@@ -66,7 +81,17 @@ test("runtime reports idle asset death and frame exceptions, then disposes every
 		let callback, frames = 0;
 		const owners = Object.fromEntries(
 			Object.keys( factories ).map( key => [ key, {
+				/*
+================
+step
+================
+				*/
 				step() {},
+				/*
+================
+dispose
+================
+				*/
 				dispose() {
 					closed.push( key );
 				}
@@ -81,6 +106,11 @@ test("runtime reports idle asset death and frame exceptions, then disposes every
 			report: value => reports.push( value ),
 			runningEntry: () => null,
 			visibilityReturned: () => false,
+			/*
+================
+presentUpdate
+================
+			*/
 			presentUpdate() {}
 		} );
 		owners.release.newerAvailable = () => false;
@@ -116,6 +146,10 @@ test("runtime reports idle asset death and frame exceptions, then disposes every
 		owners.frontend.step = () => ({ phase: "loading-title" });
 		owners.navigation.step = () => {};
 		owners.characters.previewReady = () => false;
+		owners.characters.dockReady = () => false;
+		owners.characters.entryReady = () => false;
+		owners.ui.entryReady = () => false;
+		owners.characters.profile = () => {};
 		owners.characters.eventRain = () => false;
 		owners.characters.orbGauge = () => ({ authoritative: 0, displayed: 0, pending: 0 });
 		owners.characters.receiveFeedback = () => {};
@@ -164,6 +198,11 @@ test("startup rolls back every acquired owner in reverse order at every construc
 	let failure = null;
 	globalThis.__runtimeOwners = Object.fromEntries(
 		Object.keys( factories ).map( name => [ name, {
+			/*
+================
+dispose
+================
+			*/
 			dispose() {
 				closed.push( name );
 			}
@@ -173,6 +212,11 @@ test("startup rolls back every acquired owner in reverse order at every construc
 	for ( const name of Object.keys( factories ) ) {
 		const owner = globalThis.__runtimeOwners[name];
 		Object.defineProperty( globalThis.__runtimeOwners, name, {
+			/*
+================
+get
+================
+			*/
 			get() {
 				if ( name === failure ) throw Error( "constructor " + name );
 				order.push( name );
@@ -216,6 +260,11 @@ test("cleanup drains remaining owners when a disposer throws and never runs twic
 	const closed = [],
 		owners = Object.fromEntries(
 			Object.keys( factories ).map( name => [ name, {
+				/*
+================
+dispose
+================
+				*/
 				dispose() {
 					closed.push( name );
 					if ( name === "characters" ) throw Error( "cleanup failure" );

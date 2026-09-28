@@ -11,7 +11,15 @@ loads through.
 */
 
 import type { ModelDocument } from "./model";
+/*
+================
+AssetProgress
+================
+*/
 export interface AssetProgress {
+	// Stream bytes include HTTP-cache reads and decompression. They indicate
+	// activity, not network usage; bytesReceived retains wire accounting.
+	readonly bytesRead?: number;
 	readonly bytesReceived: number;
 	readonly bytesPerSecond: number;
 	readonly filesReady: number;
@@ -19,6 +27,11 @@ export interface AssetProgress {
 	readonly cacheHits: number;
 	readonly currentFile: string;
 }
+/*
+================
+AssetWorkerMessage
+================
+*/
 export type AssetWorkerMessage =
 	| { kind: "progress"; progress: AssetProgress; }
 	| Exclude<AssetResult, { kind: "world"; }>
@@ -29,6 +42,11 @@ export type AssetWorkerMessage =
 		images?: { path: string; image: ImageBitmap; }[];
 	}
 	| { kind: "released"; id: number; };
+/*
+================
+AssetRequest
+================
+*/
 export type AssetRequest = {
 	kind: "load";
 	id: number;
@@ -55,6 +73,11 @@ export type AssetRequest = {
 	kind: "install";
 	url: string;
 };
+/*
+================
+AssetResult
+================
+*/
 export type AssetResult =
 	| { kind: "navigation"; id: number; product: import("./navigation").NavigationProduct; }
 	| { kind: "effects"; id: number; catalog: import("./effects").EffectCatalog; }
@@ -80,6 +103,11 @@ export type AssetResult =
 		id: number;
 		error: string;
 	};
+/*
+================
+AssetOwner
+================
+*/
 export interface AssetOwner {
 	progress(): AssetProgress | null;
 	health(): { phase: "running"; } | { phase: "failed"; error: string; } | { phase: "disposed"; };
