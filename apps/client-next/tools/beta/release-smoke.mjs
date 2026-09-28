@@ -194,6 +194,9 @@ async function main() {
 	const origin = new URL( process.env.RELEASE_ORIGIN ).origin;
 	const url = `${origin}/releases/candidates/${candidate.candidate}/index.html`;
 	const { browser, page } = await launchProbeBrowser( {
+		// Linux software WebGPU needs a real display compositor for visible
+		// canvas evidence. CI supplies Xvfb; application behavior is unchanged.
+		headed: process.env.RELEASE_HEADED === "1",
 		viewport: { width: 1024, height: 768 },
 		...(process.env.RELEASE_CHROME ? { executablePath: process.env.RELEASE_CHROME } : {})
 	} );
