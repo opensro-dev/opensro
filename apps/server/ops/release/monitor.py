@@ -33,12 +33,12 @@ MAX_HEARTBEAT_AGE_SECONDS = 180
 
 
 # ================
-# get_json
+# get_status
 #
 # A bounded public HTTPS request cannot follow a redirect to a private host or
 # hold the monitoring timer indefinitely. HTTP errors are availability failures.
 # ================
-def get_json(url):
+def get_status(url):
 	endpoint = urlsplit(url)
 	if endpoint.scheme != "https" or endpoint.username or endpoint.password or endpoint.fragment:
 		raise ValueError("monitor requires a public HTTPS URL")
@@ -54,7 +54,10 @@ def get_json(url):
 		data = response.read(MAX_RESPONSE_BYTES + 1)
 		if len(data) > MAX_RESPONSE_BYTES:
 			raise RuntimeError("monitor response exceeds limit")
-		return json.loads(data)
+		content_type = response.getheader("Content-Type", "").split(";", 1)[0].strip().lower()
+		if content_type == "application/json":
+			return json.loads(data)
+		return data.decode("utf-8").strip()
 	finally:
 		connection.close()
 
@@ -62,10 +65,12 @@ def get_json(url):
 # ================
 # check
 #
-# Fleet checks require an operating shard. Edge checks require a recent local
+# Fleet checks require both an operating lease and a responsive authority store.
+# A reporter can renew its lease while a gameplay transaction is deadlocked.
+# Edge checks require a recent local
 # heartbeat; an old static status page must never be mistaken for a live check.
 # ================
-def check(config, now, request=get_json):
+def check(config, now, request=get_status):
 	try:
 		value = request(config["url"])
 		if config["kind"] == "fleet":
@@ -73,6 +78,8 @@ def check(config, now, request=get_json):
 				raise RuntimeError("server list is not an array")
 			if not any(row.get("id") == config["shard"] and row.get("operating") is True for row in value):
 				raise RuntimeError("public shard is not operating")
+			if request(config["readiness_url"]) != "ready":
+				raise RuntimeError("public shard is not ready")
 		elif config["kind"] == "edge":
 			age = now - value["checkedAt"]
 			if age < -MAX_HEARTBEAT_AGE_SECONDS or age > MAX_HEARTBEAT_AGE_SECONDS:
@@ -128,7 +135,7 @@ def transition(previous, observation, now, maintenance_until=0):
 # Persist heartbeat before notification delivery, and acknowledgement after it.
 # A failed webhook remains a pending transition for the next timer invocation.
 # ================
-def poll(config, now, request=get_json, notify=announce):
+def poll(config, now, request=get_status, notify=announce):
 	path = Path(config["state"])
 	previous = json.loads(path.read_text()) if path.exists() else {}
 	maintenance_until = 0

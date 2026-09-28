@@ -3,6 +3,10 @@
 
 playerabnormal.go - abnormal states on players and their publication
 
+The division owner admits source facts before the authority transaction.
+Callbacks mutate the target and collect publications without store lookups;
+network publication follows the committed character state.
+
 ===========================================================================
 */
 
@@ -22,6 +26,26 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+const (
+	abnormalMaxHPParam           = 3
+	abnormalMaxMPParam           = 4
+	abnormalDiseaseBonusParam    = 0xa9
+	abnormalFlatResistanceBase   = 0x91
+	abnormalLevelMask            = 0x203f
+	abnormalMaskBits             = 32
+	abnormalWireTimeUnit         = 100
+	abnormalSnapshotOpcode       = 0x36c7
+	abnormalDamageCreditOpcode   = 0x3128
+	abnormalDamageCreditBytes    = 8
+	abnormalSnapshotHeaderBytes  = 4
+	abnormalVitalsHeaderBytes    = 12
+	abnormalVitalsDirtyMask      = 0x100
+	abnormalVitalsChannel        = 4
+	abnormalDamageOverTimeReason = 2
+	abnormalBombReason           = 1
+	abnormalStatusVitalsSource   = 2
+)
+
 /*
 ==================
 playerAbnormalStore
@@ -36,23 +60,50 @@ type playerAbnormalStore struct {
 	blocks map[string]playerAbnormalEntry
 }
 
+/*
+================
+playerAbnormalEntry
+
+An immutable block belongs to one named character in one division.
+================
+*/
 type playerAbnormalEntry struct {
 	division string
 	name     string
 	block    *abnormal.Block
 }
 
+/*
+================
+playerAbnormalKey
+
+Match the authority's case-insensitive character identity across divisions.
+================
+*/
 func playerAbnormalKey(division, name string) string {
 	return strings.ToLower(division) + "\x00" + strings.ToLower(name)
 }
 
-// playerAbnormal returns the character's committed block, or nil.
+/*
+================
+playerAbnormal
+
+Return the committed snapshot. Callers copy it before changing any slot.
+================
+*/
 func (rt *Runtime) playerAbnormal(division, name string) *abnormal.Block {
 	rt.playerAbnormals.mu.Lock()
 	defer rt.playerAbnormals.mu.Unlock()
 	return rt.playerAbnormals.blocks[playerAbnormalKey(division, name)].block
 }
 
+/*
+================
+storePlayerAbnormal
+
+Replace a character's committed block and retire empty blocks from tick work.
+================
+*/
 func (rt *Runtime) storePlayerAbnormal(division, name string, block *abnormal.Block) {
 	rt.playerAbnormals.mu.Lock()
 	defer rt.playerAbnormals.mu.Unlock()
@@ -67,6 +118,13 @@ func (rt *Runtime) storePlayerAbnormal(division, name string, block *abnormal.Bl
 	rt.playerAbnormals.blocks[key] = playerAbnormalEntry{division: division, name: name, block: block}
 }
 
+/*
+================
+playerAbnormalCandidates
+
+Release the registry lock before any tick enters the character transaction.
+================
+*/
 func (rt *Runtime) playerAbnormalCandidates() []playerAbnormalEntry {
 	rt.playerAbnormals.mu.Lock()
 	defer rt.playerAbnormals.mu.Unlock()
@@ -77,8 +135,13 @@ func (rt *Runtime) playerAbnormalCandidates() []playerAbnormalEntry {
 	return out
 }
 
-// PlayerMovementBlocked is 4B0EA0's gate: a ground command is dropped while
-// the mover is frozen, asleep, rooted or stunned (mask C1 | 4000).
+/*
+================
+PlayerMovementBlocked
+
+4B0EA0 drops ground commands while frozen, asleep, rooted or stunned.
+================
+*/
 func (rt *Runtime) PlayerMovementBlocked(division, name string) bool {
 	block := rt.playerAbnormal(division, name)
 	return block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Root.Bit()|abnormal.Stun.Bit()) != 0
@@ -113,6 +176,7 @@ type playerAbnormalOwner struct {
 	c        *enterworld.Character
 	block    *abnormal.Block
 	now      int64
+	sources  map[uint32]abnormalSourceState
 
 	maskBefore   uint32
 	changed      bool
@@ -129,6 +193,13 @@ type playerAbnormalOwner struct {
 	deathTarget  []wire.Frame
 }
 
+/*
+================
+abnormalPlayerHit
+
+Defer damage credit and wire publication until the HP transaction commits.
+================
+*/
 type abnormalPlayerHit struct {
 	source   uint32
 	credited bool
@@ -136,6 +207,14 @@ type abnormalPlayerHit struct {
 	reason   uint8
 }
 
+/*
+================
+newPlayerAbnormalOwner
+
+Copy the committed block without reading other authority records. Source
+facts for admission or ticking must be prepared before the write lock.
+================
+*/
 func (rt *Runtime) newPlayerAbnormalOwner(division string, c *enterworld.Character, now int64) *playerAbnormalOwner {
 	o := &playerAbnormalOwner{rt: rt, division: division, c: c, now: now}
 	if current := rt.playerAbnormal(division, c.Name); current != nil {
@@ -148,18 +227,75 @@ func (rt *Runtime) newPlayerAbnormalOwner(division string, c *enterworld.Charact
 	return o
 }
 
-func (o *playerAbnormalOwner) Alive() bool     { return !o.fatal && enterworld.CharacterAlive(o.c) }
-func (o *playerAbnormalOwner) IsPlayer() bool  { return true }
+/*
+================
+Alive
+
+Honor a lethal hit already applied earlier in this working block.
+================
+*/
+func (o *playerAbnormalOwner) Alive() bool {
+	return !o.fatal && enterworld.CharacterAlive(o.c)
+}
+
+/*
+================
+IsPlayer
+
+Select the player callbacks and player-only status publication rules.
+================
+*/
+func (o *playerAbnormalOwner) IsPlayer() bool { return true }
+
+/*
+================
+IsMonster
+
+Player statuses must not dispatch monster AI events.
+================
+*/
 func (o *playerAbnormalOwner) IsMonster() bool { return false }
+
+/*
+================
+CurrentHP
+
+Clamp persisted HP to the keeper projected with this working status block.
+================
+*/
 func (o *playerAbnormalOwner) CurrentHP() uint32 {
 	return uint32(clampKeeperVital(o.c.CurrentHP, int64(o.MaxHP())))
 }
 
-// MaxHP/MaxMP read the keeper with the working block: 4A5320/4A54A0 apply
-// their factor to param 3/4 before sizing the drain from the new maximum.
-func (o *playerAbnormalOwner) MaxHP() uint32 { return o.keeperMax(3, enterworld.DerivedMaxHP(o.c)) }
-func (o *playerAbnormalOwner) MaxMP() uint32 { return o.keeperMax(4, enterworld.DerivedMaxMP(o.c)) }
+/*
+================
+MaxHP
 
+4A5320 applies the working block's factor before computing its HP drain.
+================
+*/
+func (o *playerAbnormalOwner) MaxHP() uint32 {
+	return o.keeperMax(abnormalMaxHPParam, enterworld.DerivedMaxHP(o.c))
+}
+
+/*
+================
+MaxMP
+
+4A54A0 applies the working block's factor before computing its MP drain.
+================
+*/
+func (o *playerAbnormalOwner) MaxMP() uint32 {
+	return o.keeperMax(abnormalMaxMPParam, enterworld.DerivedMaxMP(o.c))
+}
+
+/*
+================
+keeperMax
+
+Use the derived baseline only when the keeper supplies no positive maximum.
+================
+*/
 func (o *playerAbnormalOwner) keeperMax(param uint16, derived int64) uint32 {
 	if v := o.Param(param); v > 0 {
 		return uint32(v)
@@ -167,7 +303,13 @@ func (o *playerAbnormalOwner) keeperMax(param uint16, derived int64) uint32 {
 	return uint32(derived)
 }
 
-// Param reads the live keeper with the working block's own writes.
+/*
+================
+Param
+
+Project the live character with the working block's own modifier writes.
+================
+*/
 func (o *playerAbnormalOwner) Param(id uint16) float32 {
 	stats, _, err := combat.PlayerStatsWithModifiers(o.c, o.rt.statCatalogs(), o.rt.effects.ModifierWrites(o.division, o.c.Name), o.block)
 	if err != nil {
@@ -178,14 +320,42 @@ func (o *playerAbnormalOwner) Param(id uint16) float32 {
 	return v
 }
 
+/*
+================
+SourceExists
+
+Read admitted values only; a source lookup here would reenter the store lock.
+================
+*/
 func (o *playerAbnormalOwner) SourceExists(gid uint32) bool {
-	return o.rt.abnormalSourceExists(o.division, gid)
+	if gid == enterworld.ObjectIDForCharacter(o.c) {
+		return true
+	}
+	return o.sources[gid].exists
 }
 
+/*
+================
+SourceDead
+
+Self-inflicted statuses observe HP changes already made in this transaction.
+Other sources use the snapshot admitted before the write.
+================
+*/
 func (o *playerAbnormalOwner) SourceDead(gid uint32) bool {
-	return o.rt.abnormalSourceDead(o.division, gid)
+	if gid == enterworld.ObjectIDForCharacter(o.c) {
+		return !o.Alive()
+	}
+	return o.sources[gid].dead
 }
 
+/*
+================
+Roll
+
+Use the owning character's deterministic effect stream for positive chances.
+================
+*/
 func (o *playerAbnormalOwner) Roll(key uint32, chance int32) bool {
 	if chance <= 0 {
 		return false
@@ -194,8 +364,22 @@ func (o *playerAbnormalOwner) Roll(key uint32, chance int32) bool {
 	return err == nil && proc
 }
 
+/*
+================
+Now
+
+Every callback in a committed tick shares the admitted simulation timestamp.
+================
+*/
 func (o *playerAbnormalOwner) Now() int64 { return o.now }
 
+/*
+================
+ParamsChanged
+
+Coalesce keeper and speed publication until all callbacks finish.
+================
+*/
 func (o *playerAbnormalOwner) ParamsChanged(speed bool) {
 	o.statsChanged = true
 	o.speedChanged = o.speedChanged || speed
@@ -212,9 +396,22 @@ The command gates read the mask directly.
 */
 func (o *playerAbnormalOwner) SetMotion(uint8, uint8, float32) {}
 
+/*
+================
+CancelActions
+
+Record cancellation for publication after releasing the authority lock.
+================
+*/
 func (o *playerAbnormalOwner) CancelActions(bool) { o.cancel = true }
 
-// StopMove settles the mover at its live point on its retained cell (+4B0).
+/*
+================
+StopMove
+
+Settle the mover at its live point on its retained cell (+4B0).
+================
+*/
 func (o *playerAbnormalOwner) StopMove() {
 	if o.rt.Worlds == nil {
 		return
@@ -235,11 +432,22 @@ func (o *playerAbnormalOwner) StopMove() {
 	}
 }
 
-// AIEvent is reached only for monster owners (4A4BD0 / 4A4F70 check +28).
+/*
+================
+AIEvent
+
+4A4BD0 and 4A4F70 check the monster discriminator; players have no AI callback.
+================
+*/
 func (o *playerAbnormalOwner) AIEvent(uint8, uint8, uint32) {}
 
-// Hit is vfunc 4FC on the player: the debit commits on the live record, and a
-// lethal tick settles death in the same door.
+/*
+================
+Hit
+
+Vfunc 4FC commits the debit and a possible lethal transition in the same write.
+================
+*/
 func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reason uint8, _ abnormal.Status) {
 	if o.fatal || damage == 0 {
 		return
@@ -256,6 +464,13 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 	}
 }
 
+/*
+================
+ConsumeResources
+
+Resource drains preserve one HP; MP may reach zero without a death transition.
+================
+*/
 func (o *playerAbnormalOwner) ConsumeResources(hp, mp int32, _ uint8) {
 	if hp > 0 {
 		current := int64(o.CurrentHP())
@@ -271,13 +486,25 @@ func (o *playerAbnormalOwner) ConsumeResources(hp, mp int32, _ uint8) {
 	}
 }
 
-// Detonate is 59B300: the bomb's authored damage lands as a reason-1 hit.
+/*
+================
+Detonate
+
+59B300 applies the bomb's authored damage and defers its explosion frame.
+================
+*/
 func (o *playerAbnormalOwner) Detonate(slot abnormal.Slot) {
 	o.detonations = append(o.detonations, slot)
-	o.Hit(slot.SourceGID, true, slot.Damage1C, 1, abnormal.TimeBomb)
+	o.Hit(slot.SourceGID, true, slot.Damage1C, abnormalBombReason, abnormal.TimeBomb)
 }
 
-// commit stores the working block; death clears it (4A59F0).
+/*
+================
+commit
+
+Publish the working block into the registry; death clears it first (4A59F0).
+================
+*/
 func (o *playerAbnormalOwner) commit() {
 	if o.fatal {
 		o.block.ClearAll(o)
@@ -286,56 +513,38 @@ func (o *playerAbnormalOwner) commit() {
 	o.rt.storePlayerAbnormal(o.division, o.c.Name, o.block)
 }
 
-func (rt *Runtime) abnormalSourceExists(division string, gid uint32) bool {
-	if gid == 0 {
-		return false
-	}
-	if rt.Monsters != nil {
-		if _, ok := rt.Monsters.Get(division, gid); ok {
-			return true
-		}
-	}
-	return rt.findCharacterByGid(division, gid) != nil
-}
+/*
+================
+applyHit
 
-func (rt *Runtime) abnormalSourceDead(division string, gid uint32) bool {
-	if rt.Monsters != nil {
-		if instance, ok := rt.Monsters.Get(division, gid); ok {
-			return instance.CurrentHP == 0
-		}
-	}
-	if c := rt.findCharacterByGid(division, gid); c != nil {
-		snapshot := rt.characterSnapshot(division, c)
-		return snapshot == nil || !enterworld.CharacterAlive(snapshot)
-	}
-	return false
-}
-
-// applyPlayerAbnormalInDoor runs a surviving victim's hit consequences inside
-// the HP commit door: the damage breaks first, then the rolled records.
-func (rt *Runtime) applyPlayerAbnormalInDoor(division string, c *enterworld.Character, damaged bool, records []abnormal.Record, now int64) *playerAbnormalOwner {
-	if !damaged && len(records) == 0 {
-		return nil
-	}
-	o := rt.newPlayerAbnormalOwner(division, c, now)
+Run a surviving victim's hit consequences under the authority write lock.
+The caller prepared source facts before entering the transaction.
+================
+*/
+func (o *playerAbnormalOwner) applyHit(damaged bool, records []abnormal.Record) {
 	if damaged && o.block.Mask != 0 {
 		o.changed = o.block.BreakOnHit(o) || o.changed
 	}
 	for _, record := range records {
-		if o.block.Apply(o, record, now) {
+		if o.block.Apply(o, record, o.now) {
 			o.changed = true
 		}
 	}
 	o.commit()
 	if o.statsChanged {
-		hp, mp := rt.clampStoredGaugeToKeeper(division, c)
+		hp, mp := o.rt.clampStoredGaugeToKeeper(o.division, o.c)
 		o.hpChanged = o.hpChanged || hp
 		o.mpChanged = o.mpChanged || mp
 	}
-	return o
 }
 
-// clearPlayerAbnormalInDoor is 4A59F0 for a death committed by another owner.
+/*
+================
+clearPlayerAbnormalInDoor
+
+Apply 4A59F0 when another gameplay owner commits the character's death.
+================
+*/
 func (rt *Runtime) clearPlayerAbnormalInDoor(division string, c *enterworld.Character, now int64) *playerAbnormalOwner {
 	if rt.playerAbnormal(division, c.Name) == nil {
 		return nil
@@ -429,11 +638,15 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 	for _, hit := range o.hits {
 		// 52A33D's 3058 echo, v1.150 3128 (gid, raw damage), to a credited
 		// player source of a damage-over-time tick.
-		if !hit.credited || hit.reason != 2 {
+		if !hit.credited || hit.reason != abnormalDamageOverTimeReason {
 			continue
 		}
 		if source := rt.findCharacterByGid(division, hit.source); source != nil {
-			out.sources = append(out.sources, privateFrames{source.ID, []wire.Frame{{Opcode: 0x3128, Payload: wire.NewWriter(8).U32(gid).U32(hit.damage).Payload()}}})
+			frame := wire.Frame{
+				Opcode:  abnormalDamageCreditOpcode,
+				Payload: wire.NewWriter(abnormalDamageCreditBytes).U32(gid).U32(hit.damage).Payload(),
+			}
+			out.sources = append(out.sources, privateFrames{source.ID, []wire.Frame{frame}})
 		}
 	}
 	for _, slot := range o.detonations {
@@ -441,9 +654,9 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 	}
 	if o.hpChanged || o.mpChanged {
 		values := rt.publishedVitals(division, c)
-		out.actor = append(out.actor, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceFlags(2), values)})
+		out.actor = append(out.actor, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceFlags(abnormalStatusVitalsSource), values)})
 		if o.hpChanged {
-			out.public = append(out.public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid, simulation.VitalsSourceFlags(2), values.CurrentHP)})
+			out.public = append(out.public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid, simulation.VitalsSourceFlags(abnormalStatusVitalsSource), values.CurrentHP)})
 		}
 	}
 	if o.fatal {
@@ -456,7 +669,7 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 	}
 	if o.changed {
 		block := rt.playerAbnormal(division, c.Name)
-		out.actor = append(out.actor, wire.Frame{Opcode: 0x36C7, Payload: playerAbnormalSnapshotPayload(block, o.now)})
+		out.actor = append(out.actor, wire.Frame{Opcode: abnormalSnapshotOpcode, Payload: playerAbnormalSnapshotPayload(block, o.now)})
 		out.public = append(out.public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: abnormalVitalsPayload(gid, block)})
 	}
 	return out
@@ -473,12 +686,12 @@ Server 4A5C60 truncates both divisions under RC=chop.
 ==================
 */
 func playerAbnormalSnapshotPayload(block *abnormal.Block, now int64) []byte {
-	w := wire.NewWriter(4)
+	w := wire.NewWriter(abnormalSnapshotHeaderBytes)
 	if block == nil {
 		return w.U32(0).Payload()
 	}
 	w.U32(block.Mask)
-	for bit := 0; bit < 32; bit++ {
+	for bit := 0; bit < abnormalMaskBits; bit++ {
 		value := uint32(1) << bit
 		if block.Mask&value == 0 {
 			continue
@@ -497,25 +710,30 @@ func playerAbnormalSnapshotPayload(block *abnormal.Block, now int64) []byte {
 		elapsed := uint32(now - slot.StartedAt)
 		var level uint8
 		switch {
-		case value&0x203f != 0:
+		case value&abnormalLevelMask != 0:
 			level = uint8(slot.Level)
 		case value&abnormal.GradeMask != 0:
 			level = slot.Grade
 		}
-		w.U16(uint16(slot.DurationMs / 100)).U16(uint16(elapsed / 100)).U8(level)
+		w.U16(uint16(slot.DurationMs / abnormalWireTimeUnit)).U16(uint16(elapsed / abnormalWireTimeUnit)).U8(level)
 	}
 	return w.Payload()
 }
 
-// abnormalVitalsPayload is the shared 33A6 abnormal channel (flags 4): the
-// mask, then the grade bytes of 017FCFC0 in ascending bit order.
+/*
+================
+abnormalVitalsPayload
+
+The shared abnormal channel carries the mask, then grades in ascending bit order.
+================
+*/
 func abnormalVitalsPayload(gid uint32, block *abnormal.Block) []byte {
 	var mask uint32
 	var grades []uint8
 	if block != nil {
 		mask, grades = block.Mask, block.Grades()
 	}
-	w := wire.NewWriter(12).U32(gid).U16(0x100).U8(4).U32(mask)
+	w := wire.NewWriter(abnormalVitalsHeaderBytes).U32(gid).U16(abnormalVitalsDirtyMask).U8(abnormalVitalsChannel).U32(mask)
 	for _, g := range grades {
 		w.U8(g)
 	}
@@ -544,23 +762,30 @@ func (rt *Runtime) rollMonsterOnPlayer(division string, instance monster.Instanc
 		Params:      params,
 		Blocked:     blocked,
 		TargetLevel: defender.Level,
-		TargetBonus: param(0xa9),
+		TargetBonus: param(abnormalDiseaseBonusParam),
 		CasterLevel: instance.Ref.Level,
 		SourceGID:   instance.Gid,
 		TargetGID:   enterworld.ObjectIDForCharacter(target),
 		Resistance:  defender.StatusResistance,
 	}
-	for i := range in.TargetResist {
-		// Roll order fz fb es bu ps zb reads 1B 1C 1E 1D 1F 20.
-		in.TargetResist[i] = param(0x1b + [...]uint16{0, 1, 3, 2, 4, 5}[i])
-		in.TargetFlat[i] = param(0x91 + uint16(i))
+	resistanceParams := [...]uint16{0x1b, 0x1c, 0x1e, 0x1d, 0x1f, 0x20}
+	for i, resistanceParam := range resistanceParams {
+		// The authored keeper order swaps electric shock and burn.
+		in.TargetResist[i] = param(resistanceParam)
+		in.TargetFlat[i] = param(abnormalFlatResistanceBase + uint16(i))
 	}
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, monster: instance.Gid}}
 	records := abnormal.Roll(in, random)
 	return records, random.err
 }
 
-// advancePlayerAbnormals runs 4A4390 for every character with a block.
+/*
+================
+advancePlayerAbnormals
+
+Run 4A4390 for every retained block without holding the registry lock.
+================
+*/
 func (rt *Runtime) advancePlayerAbnormals(now int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, entry := range rt.playerAbnormalCandidates() {
@@ -569,6 +794,14 @@ func (rt *Runtime) advancePlayerAbnormals(now int64) []simulation.DivisionFrames
 	return out
 }
 
+/*
+================
+advancePlayerAbnormal
+
+Resolve source facts before the write, commit HP and status together, then
+publish. A vanished source must not turn a tick into a recursive store read.
+================
+*/
 func (rt *Runtime) advancePlayerAbnormal(division, name string, now int64) []simulation.DivisionFrames {
 	unlock := rt.lockDivision(division)
 	defer unlock()
@@ -577,12 +810,12 @@ func (rt *Runtime) advancePlayerAbnormal(division, name string, now int64) []sim
 		rt.storePlayerAbnormal(division, name, nil)
 		return nil
 	}
-	var o *playerAbnormalOwner
+	o := rt.newPlayerAbnormalOwner(division, c, now)
+	o.sources = rt.captureAbnormalSources(division, o.block, nil)
 	committed := rt.deps.Update(c, "player-abnormal", func() bool {
 		if c.DeletePending {
 			return false
 		}
-		o = rt.newPlayerAbnormalOwner(division, c, now)
 		if !enterworld.CharacterAlive(c) {
 			o.changed = o.block.ClearAll(o)
 		} else if result := o.block.Update(o, now); result.Changed {
@@ -596,7 +829,7 @@ func (rt *Runtime) advancePlayerAbnormal(division, name string, now int64) []sim
 		}
 		return o.changed || o.hpChanged || o.mpChanged || o.statsChanged || o.halted
 	})
-	if !committed || o == nil {
+	if !committed {
 		return nil
 	}
 	if o.fatal {
@@ -606,6 +839,13 @@ func (rt *Runtime) advancePlayerAbnormal(division, name string, now int64) []sim
 	return playerAbnormalDivisionFrames(division, c.ID, frames)
 }
 
+/*
+================
+playerAbnormalDivisionFrames
+
+Keep shared, victim-only and credited-source publications in separate routes.
+================
+*/
 func playerAbnormalDivisionFrames(division string, actorID int64, frames playerAbnormalFrames) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	convert := func(in []wire.Frame) []simulation.Frame {
@@ -627,8 +867,13 @@ func playerAbnormalDivisionFrames(division string, actorID int64, frames playerA
 	return out
 }
 
-// forgetPlayerAbnormalSource detaches a departing character as a caster from
-// every block, and drops its own block with the actor.
+/*
+================
+forgetPlayerAbnormalSource
+
+Drop the departing actor's block and detach its identity from surviving slots.
+================
+*/
 func (rt *Runtime) forgetPlayerAbnormalSource(division, name string, gid uint32) {
 	rt.playerAbnormals.mu.Lock()
 	defer rt.playerAbnormals.mu.Unlock()

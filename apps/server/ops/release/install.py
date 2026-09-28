@@ -168,6 +168,7 @@ def monitor(version, config):
 	install_file(webhook, Path(config["public_webhook"]).read_bytes(), 0o640)
 	shutil.chown(webhook, user="root", group=name)
 	settings = {"kind": "fleet", "url": config["origin"] + "/api/title/servers", "shard": config["shard"],
+		"readiness_url": config["origin"] + "/shards/" + config["shard"] + "/transport/readyz",
 		"label": "game server", "state": str(health / "fleet.json"), "webhook": str(webhook),
 		"production_state": config["production_state"]}
 	install_file("/etc/opensro-release/monitor.json", (json.dumps(settings, indent=2) + "\n").encode())

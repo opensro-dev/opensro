@@ -1,7 +1,10 @@
 /*
 ===========================================================================
 
-skillcure_test.go - tests for skillcure.go
+skillcure_test.go - authored cure admission, targeting and publication.
+
+Exercise player, party and pet targets through the gameplay owners. Status
+fixtures prepare source facts before mutation, matching production admission.
 
 ===========================================================================
 */
@@ -18,6 +21,13 @@ import (
 	"opensro.online/server/internal/gamedata"
 )
 
+/*
+================
+shippedSkills
+
+Keep retail-data coverage explicit; source-only environments skip this fixture.
+================
+*/
 func shippedSkills(t *testing.T) *enterworld.TextdataSkills {
 	t.Helper()
 	dir, err := gamedata.ResolveTextdataDir()
@@ -27,6 +37,13 @@ func shippedSkills(t *testing.T) *enterworld.TextdataSkills {
 	return enterworld.NewTextdataSkills(dir)
 }
 
+/*
+================
+installShippedSkill
+
+Equip the authored skill and its weapon prerequisite on the detached caster.
+================
+*/
 func installShippedSkill(t *testing.T, rt *Runtime, c *enterworld.Character, id uint32) enterworld.SkillRow {
 	t.Helper()
 	row, ok := shippedSkills(t).SkillByID(id)
@@ -43,17 +60,31 @@ func installShippedSkill(t *testing.T, rt *Runtime, c *enterworld.Character, id 
 	return row
 }
 
+/*
+================
+seedPlayerStatus
+
+Prepare source facts before the fixture transaction, matching game admission.
+================
+*/
 func seedPlayerStatus(rt *Runtime, c *enterworld.Character, status abnormal.Status, duration, now int64, source uint32) {
+	record := abnormal.Record{Status: status, DurationMs: uint32(duration), Level: 1, SourceGID: source}
+	owner := rt.newPlayerAbnormalOwner(testDivision, c, now)
+	owner.sources = rt.captureAbnormalSources(testDivision, owner.block, []abnormal.Record{record})
 	rt.deps.Update(c, "seed-status", func() bool {
-		owner := rt.newPlayerAbnormalOwner(testDivision, c, now)
-		owner.changed = owner.block.Apply(owner, abnormal.Record{
-			Status: status, DurationMs: uint32(duration), Level: 1, SourceGID: source,
-		}, now)
+		owner.changed = owner.block.Apply(owner, record, now)
 		owner.commit()
 		return true
 	})
 }
 
+/*
+================
+TestShippedInnocentCureArms
+
+Verify the shipped cure's admission, effect timing and status publications.
+================
+*/
 func TestShippedInnocentCureArms(t *testing.T) {
 	rt, clock, caster, monster := newCombatTestRuntime(t, 100)
 	row := installShippedSkill(t, rt, caster, 10077)
@@ -122,6 +153,13 @@ every living party member within 300 units (3D, adjacent sectors). curt
 mask 63 covers burn and curl's mask does not, so each cured burn moves back
 by exactly CurtLevel * 750 ms (410B40 burn) and stays active.
 ==================
+*/
+/*
+================
+TestShippedInnocentAreaCuresCasterAndParty
+
+Area resolution must cure eligible party targets and route each private result.
+================
 */
 func TestShippedInnocentAreaCuresCasterAndParty(t *testing.T) {
 	rt, clock, caster, monster := newCombatTestRuntime(t, 100)
@@ -211,6 +249,13 @@ func TestShippedInnocentAreaCuresCasterAndParty(t *testing.T) {
 	}
 }
 
+/*
+================
+TestCureLimitZeroAndHighSlot
+
+Exercise zero-level and high-slot cure boundaries independently of retail rows.
+================
+*/
 func TestCureLimitZeroAndHighSlot(t *testing.T) {
 	block := &abnormal.Block{}
 	block.Slots[abnormal.Freeze].Active = true
@@ -232,6 +277,13 @@ func TestCureLimitZeroAndHighSlot(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedInnocentTargetResolution
+
+Missing targets cannot fall back to the caster; pet cures use the pet block.
+================
+*/
 func TestShippedInnocentTargetResolution(t *testing.T) {
 	rt, clock, caster, monster := newCombatTestRuntime(t, 100)
 	row := installShippedSkill(t, rt, caster, 10077)
@@ -275,12 +327,12 @@ func TestShippedInnocentTargetResolution(t *testing.T) {
 	rt.clearSkillFinalizes(testDivision, caster.Name)
 	const petGID = uint32(9001)
 	caster.ActiveCOS = &enterworld.CharacterCOS{GID: petGID, CurrentHP: 100, Summoned: true}
+	petRecord := abnormal.Record{Status: abnormal.Frostbite, DurationMs: 100000, Level: 1, SourceGID: monster.Gid}
+	petOwner := rt.newCosAbnormalOwner(testDivision, caster, now)
+	petOwner.sources = rt.captureAbnormalSources(testDivision, petOwner.block, []abnormal.Record{petRecord})
 	rt.deps.Update(caster, "seed-pet-status", func() bool {
-		owner := rt.newCosAbnormalOwner(testDivision, caster, now)
-		owner.changed = owner.block.Apply(owner, abnormal.Record{
-			Status: abnormal.Frostbite, DurationMs: 100000, Level: 1, SourceGID: monster.Gid,
-		}, now)
-		owner.commit()
+		petOwner.changed = petOwner.block.Apply(petOwner, petRecord, now)
+		petOwner.commit()
 		return true
 	})
 	pet := rt.HandleTargetInteract(testDivision, caster, wire.SkillAction{
@@ -300,6 +352,13 @@ func TestShippedInnocentTargetResolution(t *testing.T) {
 	}
 }
 
+/*
+================
+TestResuTagAdmitsDeadPartyMember
+
+The resurrection tag changes life-state admission for an eligible party target.
+================
+*/
 func TestResuTagAdmitsDeadPartyMember(t *testing.T) {
 	rt, clock, caster, _ := newCombatTestRuntime(t, 100)
 	row, ok := shippedSkills(t).SkillByID(10256)
@@ -327,6 +386,13 @@ func TestResuTagAdmitsDeadPartyMember(t *testing.T) {
 	}
 }
 
+/*
+================
+hasOpcode
+
+Inspect wire behavior without depending on private helper names.
+================
+*/
 func hasOpcode(frames []wire.Frame, opcode uint16) bool {
 	for _, frame := range frames {
 		if frame.Opcode == opcode {
@@ -337,6 +403,13 @@ func hasOpcode(frames []wire.Frame, opcode uint16) bool {
 }
 
 // hasPetMask finds the 33A6 abnormal channel (flags 4) for one gid.
+/*
+================
+hasPetMask
+
+Require the shared abnormal channel to address the summoned pet's wire ID.
+================
+*/
 func hasPetMask(frames []wire.Frame, gid uint32) bool {
 	for _, f := range frames {
 		if f.Opcode == simulation.OpVitalsUpdate && len(f.Payload) >= 11 && f.Payload[6] == 4 &&

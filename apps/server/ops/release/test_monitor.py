@@ -95,7 +95,49 @@ class MonitorTests(unittest.TestCase):
 		self.assertFalse(check(edge, 400, lambda _url: {"checkedAt": 90})["healthy"])
 		fleet = {"kind": "fleet", "url": "https://example.test/api/title/servers", "shard": "global"}
 		self.assertFalse(check(fleet, 0, lambda _url: [{"id": "global", "operating": False}])["healthy"])
-		self.assertTrue(check(fleet, 0, lambda _url: [{"id": "global", "operating": True}])["healthy"])
+		fleet["readiness_url"] = "https://example.test/shards/global/transport/readyz"
+		self.assertTrue(check(fleet, 0, lambda url: "ready" if url == fleet["readiness_url"] else
+			[{"id": "global", "operating": True}])["healthy"])
+
+	# ================
+	# test_operating_lease_cannot_hide_blocked_gameplay_readiness
+	#
+	# Reproduce the incident's split: the reporter renews its lease while the
+	# authority lock stops readiness. Delivery must follow the failed check.
+	# ================
+	def test_operating_lease_cannot_hide_blocked_gameplay_readiness(self):
+		with tempfile.TemporaryDirectory() as directory:
+			config = {"state": str(Path(directory) / "monitor.json"),
+				"url": "https://example.test/api/title/servers", "kind": "fleet", "shard": "global",
+				"readiness_url": "https://example.test/shards/global/transport/readyz",
+				"label": "game service", "webhook": "fixture"}
+			messages = []
+			blocked = True
+
+			# ================
+			# request
+			# A bounded transport timeout represents the blocked authority lock.
+			# ================
+			def request(url):
+				if url == config["url"]:
+					return [{"id": "global", "operating": True}]
+				self.assertEqual(url, config["readiness_url"])
+				if blocked:
+					raise TimeoutError("gameplay readiness timed out")
+				return "ready"
+
+			notify = lambda _path, message: messages.append(message)
+			poll(config, 0, request=request, notify=notify)
+			state = poll(config, 30, request=request, notify=notify)
+			self.assertEqual(state["phase"], "down")
+			self.assertEqual(len(messages), 1)
+			self.assertIn("readiness timed out", messages[0])
+			blocked = False
+			poll(config, 60, request=request, notify=notify)
+			state = poll(config, 90, request=request, notify=notify)
+			self.assertEqual(state["phase"], "up")
+			self.assertEqual(len(messages), 2)
+			self.assertIn("has recovered", messages[1])
 
 	# ================
 	# test_recovery_does_not_erase_an_outage_with_failed_notification
@@ -116,6 +158,7 @@ class MonitorTests(unittest.TestCase):
 			journal = root / "production.json"
 			journal.write_text(json.dumps({"operation": {"component": "server", "phase": "deploying", "startedAt": 0}}))
 			config = {"state": str(root / "monitor.json"), "url": "https://example.test/api/title/servers",
+				"readiness_url": "https://example.test/shards/global/transport/readyz",
 				"kind": "fleet", "shard": "global", "label": "game service", "webhook": "fixture",
 				"production_state": str(journal)}
 			messages = []
@@ -129,7 +172,7 @@ class MonitorTests(unittest.TestCase):
 				if len(messages) == 1:
 					raise RuntimeError("webhook unavailable")
 
-			request = lambda _url: [{"id": "global", "operating": True}]
+			request = lambda url: "ready" if url == config["readiness_url"] else [{"id": "global", "operating": True}]
 			poll(config, 30, request=request, notify=notify)
 			poll(config, 60, request=request, notify=notify)
 			journal.write_text(json.dumps({"operation": None}))
