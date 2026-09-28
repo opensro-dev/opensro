@@ -1,11 +1,22 @@
+/*
+===========================================================================
+
+targetaction.go - dispatch ownership for the multiplexed 0x72CD command
+
+Classify the family before decoding its body. A malformed request remains
+with its owner and cannot trigger another family's response conversation.
+
+===========================================================================
+*/
 package wire
 
 import "fmt"
 
-// TargetActionLane is the top-level discriminator algebra of the client's
-// multiplexed 0x72CD opcode. It identifies the command owner before any
-// family decoder runs, so malformed skill/attack/structure bytes can never
-// fall through into the pickup conversation.
+/*
+================
+TargetActionLane
+================
+*/
 type TargetActionLane uint8
 
 const (
@@ -13,15 +24,19 @@ const (
 	TargetActionCancel
 	TargetActionBasicAttack
 	TargetActionGroundItemPickup
-	TargetActionActionPaneAttack
+	TargetActionFollow
 	TargetActionSkill
 	TargetActionFortressStructure
 	TargetActionCancelActiveEffect
 )
 
-// ClassifyTargetActionLane classifies by the native family discriminators,
-// not by whichever strict decoder happens to accept first. Exact length and
-// tail validation remain the responsibility of the selected family decoder.
+/*
+================
+ClassifyTargetActionLane
+
+Exact extent and tail validation belong to the selected family decoder.
+================
+*/
 func ClassifyTargetActionLane(payload []byte) TargetActionLane {
 	if len(payload) == 0 {
 		return TargetActionUnknown
@@ -44,8 +59,8 @@ func ClassifyTargetActionLane(payload []byte) TargetActionLane {
 		return TargetActionBasicAttack
 	case targetInteractGroundLeg:
 		return TargetActionGroundItemPickup
-	case targetInteractActionLeg:
-		return TargetActionActionPaneAttack
+	case targetInteractFollowLeg:
+		return TargetActionFollow
 	case skillActionLeg:
 		return TargetActionSkill
 	case 0x05:
@@ -55,17 +70,32 @@ func ClassifyTargetActionLane(payload []byte) TargetActionLane {
 	}
 }
 
-// FortressStructureInteract is sub_692cb0's CICATStruct-only retail form:
-// [02][01][01][gid]. It is intentionally distinct from bare [02] cancel and
-// [01][02][01][gid] ground-item pickup.
+/*
+================
+FortressStructureInteract
+
+Client 692CB0's CICATStruct form is [02 01 01 gid], distinct from bare
+[02] cancellation and [01 02 01 gid] pickup.
+================
+*/
 type FortressStructureInteract struct {
 	TargetGid uint32
 }
 
+/*
+================
+FortressStructureInteract.Encode
+================
+*/
 func (f FortressStructureInteract) Encode() []byte {
 	return NewWriter(7).U8(0x02).U8(0x01).U8(0x01).U32(f.TargetGid).Payload()
 }
 
+/*
+================
+DecodeFortressStructureInteract
+================
+*/
 func DecodeFortressStructureInteract(payload []byte) (FortressStructureInteract, error) {
 	var out FortressStructureInteract
 	r := NewReader(payload)
@@ -93,16 +123,24 @@ func DecodeFortressStructureInteract(payload []byte) (FortressStructureInteract,
 	return out, r.Done()
 }
 
-// CancelActiveEffectRequest is sub_6fd710's cancel-active-effect lane. Upward client
-// DFS (CIFMagicStateBoard and CIFDelayInfo) and the v1.188 server callback
-// sub_4ae520 establish its domain: EffectID resolves a skill/effect record;
-// InstanceToken, when present, narrows cancellation to one active instance.
-// The optional dword is serialized only when its unsigned value is nonzero.
+/*
+================
+CancelActiveEffectRequest
+
+Client 6FD710 and server 4AE520 resolve EffectID as a skill record. The
+optional nonzero InstanceToken narrows cancellation to one active instance.
+================
+*/
 type CancelActiveEffectRequest struct {
 	EffectID      uint32
 	InstanceToken uint32
 }
 
+/*
+================
+CancelActiveEffectRequest.Encode
+================
+*/
 func (a CancelActiveEffectRequest) Encode() []byte {
 	capacity := 7
 	if a.InstanceToken != 0 {
@@ -115,6 +153,11 @@ func (a CancelActiveEffectRequest) Encode() []byte {
 	return w.U8(0x00).Payload()
 }
 
+/*
+================
+DecodeCancelActiveEffectRequest
+================
+*/
 func DecodeCancelActiveEffectRequest(payload []byte) (CancelActiveEffectRequest, error) {
 	var out CancelActiveEffectRequest
 	r := NewReader(payload)

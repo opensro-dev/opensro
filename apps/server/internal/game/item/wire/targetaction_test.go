@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+targetaction_test.go - native command-family dispatch and strict boundaries
+
+Every composer has one owner. These tests prevent semantic aliasing of
+follow, combat, pickup, structures and effect cancellation.
+
+===========================================================================
+*/
 package wire
 
 import (
@@ -5,6 +15,11 @@ import (
 	"testing"
 )
 
+/*
+================
+TestTargetActionLaneCoversEveryNative72CDComposerFamily
+================
+*/
 func TestTargetActionLaneCoversEveryNative72CDComposerFamily(t *testing.T) {
 	forms := []struct {
 		name    string
@@ -14,7 +29,8 @@ func TestTargetActionLaneCoversEveryNative72CDComposerFamily(t *testing.T) {
 		{"cancel", []byte{0x02}, TargetActionCancel},
 		{"basic attack", BasicAttackEngage{TargetGid: 0x11223344}.Encode(), TargetActionBasicAttack},
 		{"pickup", TargetInteract{Gid: 0x11223344}.Encode(), TargetActionGroundItemPickup},
-		{"action pane attack", BasicAttackEngage{TargetGid: 0x11223344, ActionPane: true}.Encode(), TargetActionActionPaneAttack},
+		{"follow", FollowTarget{TargetGid: 0x11223344}.Encode(), TargetActionFollow},
+		{"malformed follow remains follow-owned", []byte{1, 3}, TargetActionFollow},
 		{"skill no target", SkillAction{ActionId: 0x12345678}.Encode(), TargetActionSkill},
 		{"skill entity", SkillAction{ActionId: 0x12345678, HasTarget: true, TargetGid: 0x11223344}.Encode(), TargetActionSkill},
 		{"skill ground", SkillAction{ActionId: 0x12345678, HasGroundTarget: true, Region: 0x62a8, GroundX: 960, GroundY: 20, GroundZ: 458}.Encode(), TargetActionSkill},
@@ -32,6 +48,11 @@ func TestTargetActionLaneCoversEveryNative72CDComposerFamily(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFortressStructureInteractGoldenDoesNotAliasCancelOrPickup
+================
+*/
 func TestFortressStructureInteractGoldenDoesNotAliasCancelOrPickup(t *testing.T) {
 	form := FortressStructureInteract{TargetGid: 0x11223344}
 	want := []byte{0x02, 0x01, 0x01, 0x44, 0x33, 0x22, 0x11}
@@ -47,6 +68,11 @@ func TestFortressStructureInteractGoldenDoesNotAliasCancelOrPickup(t *testing.T)
 	}
 }
 
+/*
+================
+TestCancelActiveEffectGoldensAndNonzeroOptionalGate
+================
+*/
 func TestCancelActiveEffectGoldensAndNonzeroOptionalGate(t *testing.T) {
 	forms := []struct {
 		form CancelActiveEffectRequest

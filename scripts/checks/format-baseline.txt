@@ -153,7 +153,6 @@ apps/client-next/src/engine/foundation/gameplay/position-skill.ts
 apps/client-next/src/engine/foundation/gameplay/progression.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts
 apps/client-next/src/engine/foundation/gameplay/quickslot-inventory.ts
-apps/client-next/src/engine/foundation/gameplay/quickslots.ts
 apps/client-next/src/engine/foundation/gameplay/recall-appointment.ts
 apps/client-next/src/engine/foundation/gameplay/return-scroll.ts
 apps/client-next/src/engine/foundation/gameplay/skill-catalog.ts
@@ -387,7 +386,6 @@ apps/client-next/src/engine/runtime/simulation/worker/session/world/core.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/departure.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/alchemy/alchemy.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts
@@ -415,7 +413,6 @@ apps/client-next/src/engine/runtime/ui/title/creation.ts
 apps/client-next/src/engine/runtime/ui/title/resources.ts
 apps/client-next/src/engine/runtime/world/camera/camera.ts
 apps/client-next/src/engine/runtime/world/world.ts
-apps/client-next/tests/architecture/audio-parity-audit.test.mjs
 apps/client-next/tests/architecture/frame-barriers.test.mjs
 apps/client-next/tests/architecture/ownership-fixtures.test.mjs
 apps/client-next/tests/architecture/ownership.test.mjs

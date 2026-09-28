@@ -202,7 +202,8 @@ import {
 	hotbarSlot,
 	extendedSlot,
 	quickSlotDrag,
-	quickSlotDrop
+	quickSlotDrop,
+	TRACE_ACTION_ID
 } from "@/engine/foundation/gameplay/quickslots";
 import { itemActivation } from "@/engine/foundation/gameplay/item-activation";
 import { iconPath } from "@/engine/foundation/ui/icon";
@@ -838,7 +839,7 @@ export function createUi(
 			if ( game.target ) sendGameplay( { kind: "attack", gid: game.target } );
 			return;
 		}
-		if ( id === 1000 || id === 1001 || id === 5000 || id >= 4000 && id <= 4006 ) {
+		if ( id === 1000 || id === 1001 || id === TRACE_ACTION_ID || id === 5000 || id >= 4000 && id <= 4006 ) {
 			sendGameplay( { kind: "action-command", id } );
 		}
 	}

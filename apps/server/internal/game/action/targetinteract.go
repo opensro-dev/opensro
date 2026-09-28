@@ -34,11 +34,18 @@ func (rt *Runtime) HandleTargetInteract(
 	payload []byte,
 ) OpResult {
 	switch wire.ClassifyTargetActionLane(payload) {
-	case wire.TargetActionBasicAttack, wire.TargetActionActionPaneAttack:
-		// Native double-click/Ctrl+click and the action pane have distinct
-		// exact forms but one server meaning: establish a persistent attack
-		// intent. A malformed attack-family body stays in this lane and fails
-		// silently; it cannot answer or release the pickup latch.
+	case wire.TargetActionFollow:
+		request, err := wire.DecodeFollowTarget(payload)
+		if err != nil {
+			return OpResult{DiagnosticRefusal: "follow-malformed"}
+		}
+		unlock := rt.lockDivision(divisionID)
+		defer unlock()
+		return rt.beginFollow(divisionID, character, request, rt.Now().UnixMilli())
+
+	case wire.TargetActionBasicAttack:
+		// 692CB0 emits family 1 for an attack; family 3 belongs to Trace.
+		// A malformed attack must not answer or release the pickup latch.
 		engage, err := wire.DecodeBasicAttackEngage(payload)
 		if err != nil {
 			return OpResult{DiagnosticRefusal: "basic-attack-malformed"}
@@ -257,9 +264,10 @@ func (rt *Runtime) HandleTargetInteract(
 		// A superseding outcome: release the latch (the client can never
 		// self-clear +0x618) and forget the approach.
 		rt.Pending.Clear(pendingKey)
+		stopped := rt.stopFollowMovement(divisionID, character, snapshot)
 		rt.ClearCombatIntent(divisionID, character.Name)
 		closed := rt.cancelPreparingProjectile(divisionID, character.Name)
-		return OpResult{
+		return prependOpResult(stopped, OpResult{
 			Broadcast: closed,
 			Frames: append(closed, []wire.Frame{
 				{
@@ -267,7 +275,7 @@ func (rt *Runtime) HandleTargetInteract(
 					Payload: wire.ReleaseActionState().Encode(),
 				},
 			}...),
-		}
+		})
 	}
 
 	groundItem, ok := rt.characterGround(divisionID, snapshot, request.Gid)
@@ -316,16 +324,21 @@ func (rt *Runtime) HandleTargetInteract(
 		return pickupRefusal(wire.ErrCodeCannotBePicked)
 	}
 
+	// A valid pickup replaces pursuit. Its own approach is now the sole
+	// movement owner; the next action tick must not steer back to a player.
+	stopped := rt.stopFollowMovement(divisionID, character, snapshot)
+	rt.ClearCombatIntent(divisionID, character.Name)
+
 	worldSnapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
 		return simulation.SeedWorldState(snapshot)
 	})
 	approach := grounditem.PlanApproach(from, groundItem.Position, worldSnapshot.MovementMode)
 	if !approach.InRange {
-		return rt.armApproach(divisionID, worldKey, pendingKey, character, groundItem, approach, now)
+		return prependOpResult(stopped, rt.armApproach(divisionID, worldKey, pendingKey, character, groundItem, approach, now))
 	}
 
 	// In range: a stale pending for another gid is superseded.
 	rt.Pending.Clear(pendingKey)
 
-	return rt.grantPickup(divisionID, worldKey, character, snapshot, groundItem)
+	return prependOpResult(stopped, rt.grantPickup(divisionID, worldKey, character, snapshot, groundItem))
 }

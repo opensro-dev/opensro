@@ -33,11 +33,24 @@ import (
 // (CWorldManager_CollectEntitiesInRadius, 300.0f at 58B31B and 58B988).
 const directionalSearchRadius = 300
 
-// vec3 holds float components the way the native stores them.
+/*
+================
+vec3
+
+Stored native vector components. Arithmetic widens only between explicit
+float stores so directional skills and pursuit share the x87 contract.
+================
+*/
 type vec3 struct{ x, y, z float32 }
 
-// relative is Pos_GetRelative3DOrIncompatibleSentinel: to minus from,
-// across regions.
+/*
+================
+relative
+
+Pos_GetRelative3DOrIncompatibleSentinel: to minus from across regions.
+Callers admit compatible planes before requesting a direction.
+================
+*/
 func relative(from, to simulation.Spawn) vec3 {
 	dx, dz := worldgeom.Delta(
 		worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z},
@@ -46,18 +59,34 @@ func relative(from, to simulation.Spawn) vec3 {
 	return vec3{float32(dx), float32(to.Y - from.Y), float32(dz)}
 }
 
+/*
+================
+vec3.length
+
+405270 stores the squared sum before Math_Sqrt rounds its return value.
+================
+*/
 func (v vec3) length() float32 {
 	x, y, z := float64(v.x), float64(v.y), float64(v.z)
 	return float32(math.Sqrt(float64(float32(x*x + y*y + z*z))))
 }
 
-// normalized is Vec3_NormalizeInPlaceOrZero.
+/*
+================
+vec3.normalized
+
+4328C0 stores the reciprocal length before multiplying each component.
+Independent component division differs by a float32 ULP and can change
+admission at an exact directional boundary.
+================
+*/
 func (v vec3) normalized() vec3 {
 	n := v.length()
 	if n == 0 {
 		return vec3{}
 	}
-	return vec3{v.x / n, v.y / n, v.z / n}
+	inverse := float32(1 / float64(n))
+	return vec3{v.x * inverse, v.y * inverse, v.z * inverse}
 }
 
 /*
@@ -81,7 +110,10 @@ func inDirectionalShape(rel, dir vec3, casterRadius, candidateRadius int32, widt
 	d, r := dir.normalized(), rel.normalized()
 	cosine := float32(float64(d.x)*float64(r.x) + float64(d.y)*float64(r.y) + float64(d.z)*float64(r.z))
 	cosine = max(-1, min(1, cosine))
-	lateral := float32(math.Sin(math.Acos(float64(cosine))) * float64(distance))
+	// 58B0EE stores acos, and 4894B0 stores sin, before scaling by distance.
+	angle := float32(math.Acos(float64(cosine)))
+	sine := float32(math.Sin(float64(angle)))
+	lateral := float32(float64(sine) * float64(distance))
 	return float64(lateral) < float64(uint32(candidateRadius)+width)
 }
 
@@ -136,7 +168,13 @@ func (rt *Runtime) directionalVictims(division string, lease instance.Lease, cas
 	return out
 }
 
-// areaShape is the part of efr kind 1 the directional selectors read.
+/*
+================
+areaShape
+
+The part of efr kind 1 consumed by the directional selectors.
+================
+*/
 type areaShape struct {
 	shape      uint8
 	width      uint32 // efr +8

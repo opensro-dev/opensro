@@ -6,7 +6,7 @@ apps/client-next/src/engine/runtime/characters/characters.ts # presentation owne
 apps/client-next/src/engine/runtime/characters/effects/effects.ts # not yet analysed; split on its responsibility boundaries when formatted
 apps/client-next/src/engine/runtime/renderer/characters/characters.ts # synchronous model, pose and draw-batch lifetime owner; shared admission and retirement must stay ordered
 apps/client-next/src/engine/runtime/renderer/world/world.ts # not yet analysed; split on its responsibility boundaries when formatted
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts # not yet analysed; split on its responsibility boundaries when formatted
+apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts # synchronous composition of gameplay owners; command admission, packet commits and snapshot publication share one frame transaction
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts # not yet analysed; split on its responsibility boundaries when formatted
 apps/client-next/src/engine/runtime/ui/ui.ts # one closure holds state, input and rendering for every window; split per window
 apps/client-next/tests/runtime/character-animation-audio.test.mjs # test file; split by feature

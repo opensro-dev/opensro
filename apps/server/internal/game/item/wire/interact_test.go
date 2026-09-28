@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+interact_test.go - target-action packet boundaries and native goldens
+
+Follow, attack and pickup must remain distinct even when malformed input
+shares their prefix. Round trips alone cannot establish those boundaries.
+
+===========================================================================
+*/
 package wire
 
 import (
@@ -6,9 +16,13 @@ import (
 	"testing"
 )
 
-// The two pinned 0x72CD goldens (bridge serializer @0x698b45): the interact
-// form and the bare cancel. REV-1 pass-14 asked for these as unit pins on
-// top of the runtime integration coverage.
+/*
+================
+TestTargetInteractGoldens
+
+Client 698B45 emits the pickup form and bare cancellation.
+================
+*/
 func TestTargetInteractGoldens(t *testing.T) {
 	interact := TargetInteract{Gid: 300001}
 	got := interact.Encode()
@@ -33,6 +47,11 @@ func TestTargetInteractGoldens(t *testing.T) {
 	}
 }
 
+/*
+================
+TestBasicAttackEngageGoldens
+================
+*/
 func TestBasicAttackEngageGoldens(t *testing.T) {
 	tests := []struct {
 		name string
@@ -43,11 +62,6 @@ func TestBasicAttackEngageGoldens(t *testing.T) {
 			name: "world double-click or control-click",
 			form: BasicAttackEngage{TargetGid: 400001},
 			want: []byte{0x01, 0x01, 0x01, 0x81, 0x1A, 0x06, 0x00},
-		},
-		{
-			name: "action pane",
-			form: BasicAttackEngage{TargetGid: 400001, ActionPane: true},
-			want: []byte{0x01, 0x03, 0x01, 0x81, 0x1A, 0x06, 0x00},
 		},
 	}
 	for _, testCase := range tests {
@@ -67,9 +81,15 @@ func TestBasicAttackEngageGoldens(t *testing.T) {
 	}
 }
 
+/*
+================
+TestBasicAttackEngageRejectsOther72CDLegs
+================
+*/
 func TestBasicAttackEngageRejectsOther72CDLegs(t *testing.T) {
 	for name, payload := range map[string][]byte{
 		"empty":            nil,
+		"follow":           FollowTarget{TargetGid: 400001}.Encode(),
 		"pickup":           {0x01, 0x02, 0x01, 0x81, 0x1A, 0x06, 0x00},
 		"skill":            {0x01, 0x04, 0x02, 0x00, 0x00, 0x00, 0x00},
 		"wrong actor kind": {0x01, 0x01, 0x02, 0x81, 0x1A, 0x06, 0x00},
@@ -84,6 +104,39 @@ func TestBasicAttackEngageRejectsOther72CDLegs(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFollowTargetNativeGoldenAndFamilyIsolation
+================
+*/
+func TestFollowTargetNativeGoldenAndFamilyIsolation(t *testing.T) {
+	form := FollowTarget{TargetGid: 400001}
+	want := []byte{1, 3, 1, 0x81, 0x1A, 6, 0}
+	if !bytes.Equal(form.Encode(), want) {
+		t.Fatalf("follow = % X, want % X", form.Encode(), want)
+	}
+	if got, err := DecodeFollowTarget(want); err != nil || got != form {
+		t.Fatalf("follow round trip = %+v, %v", got, err)
+	}
+	for _, payload := range [][]byte{
+		nil, want[:6], append(append([]byte{}, want...), 0),
+		FollowTarget{}.Encode(), BasicAttackEngage{TargetGid: 400001}.Encode(),
+		TargetInteract{Gid: 400001}.Encode(), {1, 3, 2, 0x81, 0x1A, 6, 0},
+	} {
+		if _, err := DecodeFollowTarget(payload); err == nil {
+			t.Fatalf("follow admitted % X", payload)
+		}
+	}
+	if _, err := DecodeTargetInteract(want); err == nil {
+		t.Fatal("follow entered pickup conversation")
+	}
+}
+
+/*
+================
+TestTargetInteractDecodeRejectsMalformedPayloads
+================
+*/
 func TestTargetInteractDecodeRejectsMalformedPayloads(t *testing.T) {
 	cases := []struct {
 		name    string

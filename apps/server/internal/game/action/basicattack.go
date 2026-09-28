@@ -10,11 +10,11 @@ package action
 
 import (
 	"math"
-	"opensro.online/server/internal/domain"
 	"sort"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -69,8 +69,13 @@ func skillActionReach(skill enterworld.SkillRow, loadout combat.Loadout, caster 
 	return simulation.ActionReach(reach)
 }
 
-// playerActionReach is skillActionReach with the caster's full keeper,
-// effects and abnormal states included.
+/*
+================
+playerActionReach
+
+Resolve range against the complete keeper, including effects and abnormals.
+================
+*/
 func (rt *Runtime) playerActionReach(division string, c *enterworld.Character, skill enterworld.SkillRow, loadout combat.Loadout) simulation.ActionReach {
 	caster, _, err := rt.playerCombatStats(division, c)
 	if err != nil {
@@ -86,11 +91,14 @@ basicAttackIntent
 basicAttackIntent is the authoritative continuation of one native engage
 command. The wire command chooses the target once; subsequent ticks keep
 approaching and striking until a superseding command or invalid state
-clears the intent. A SupportCast intent targets a player instead: it walks
-into reach and runs one support cast (advanceSupportCastIntent).
+clears the intent. SupportCast walks into reach for one support cast.
+FollowTarget instead retains player pursuit without opening combat. All
+three share one slot so a superseding command cannot leave a second owner.
 ==================
 */
 type basicAttackIntent struct {
+	FollowTarget  bool   // persistent player pursuit, with no combat action
+	FollowSession uint64 // prevents a reconnected target inheriting old pursuit
 	SupportCast   bool   // a player-targeted heal, cure or resurrection waiting for reach
 	CaptureCast   bool   // a Monster Mask waiting to reach its corpse
 	SingleCast    bool   // executes the explicit sequence before any authored basic continuation
@@ -150,18 +158,38 @@ func (intent *basicAttackIntent) spendChainLatency(durationMs int64) int64 {
 	return 0
 }
 
+/*
+================
+ClearCombatIntent
+
+Movement, actor teardown and explicit cancellation retire the same command
+slot. Follow shares this lifetime so it cannot resume after a new command.
+================
+*/
 func (rt *Runtime) ClearCombatIntent(divisionID, characterName string) {
 	rt.basicAttackIntentsMu.Lock()
 	delete(rt.basicAttackIntents, simulation.WorldKey(divisionID, characterName))
 	rt.basicAttackIntentsMu.Unlock()
 }
 
+/*
+================
+setCombatIntent
+================
+*/
 func (rt *Runtime) setCombatIntent(intent basicAttackIntent) {
 	rt.basicAttackIntentsMu.Lock()
 	rt.basicAttackIntents[simulation.WorldKey(intent.DivisionID, intent.CharacterName)] = intent
 	rt.basicAttackIntentsMu.Unlock()
 }
 
+/*
+================
+combatIntentIsCurrent
+
+The tick must not resurrect a command replaced after its snapshot.
+================
+*/
 func (rt *Runtime) combatIntentIsCurrent(intent basicAttackIntent) bool {
 	rt.basicAttackIntentsMu.Lock()
 	defer rt.basicAttackIntentsMu.Unlock()
@@ -169,6 +197,11 @@ func (rt *Runtime) combatIntentIsCurrent(intent basicAttackIntent) bool {
 	return ok && current == intent
 }
 
+/*
+================
+combatIntentSnapshot
+================
+*/
 func (rt *Runtime) combatIntentSnapshot() []basicAttackIntent {
 	rt.basicAttackIntentsMu.Lock()
 	out := make([]basicAttackIntent, 0, len(rt.basicAttackIntents))
@@ -185,8 +218,13 @@ func (rt *Runtime) combatIntentSnapshot() []basicAttackIntent {
 	return out
 }
 
-// liveChainOwners lists the actors whose intent will still execute another
-// server-owned chain stage. Their root bracket must not close yet.
+/*
+================
+liveChainOwners
+
+Keep the root bracket open while another server-owned chain stage remains.
+================
+*/
 func (rt *Runtime) liveChainOwners() map[string]struct{} {
 	rt.basicAttackIntentsMu.Lock()
 	defer rt.basicAttackIntentsMu.Unlock()
@@ -199,6 +237,11 @@ func (rt *Runtime) liveChainOwners() map[string]struct{} {
 	return owners
 }
 
+/*
+================
+findCharacter
+================
+*/
 func (rt *Runtime) findCharacter(divisionID, characterName string) *enterworld.Character {
 	if source, ok := rt.deps.(domain.CharacterLookup); ok {
 		return source.CharacterByName(divisionID, characterName)
@@ -265,7 +308,13 @@ func (rt *Runtime) resolveBasicAttack(character *enterworld.Character) (enterwor
 	return zeroSkill, zeroLoadout, "compatible-base-attack-unavailable"
 }
 
-// beginBasicAttack runs the whole transition at the caller's one instant.
+/*
+================
+beginBasicAttack
+
+Run the whole transition at the caller's one simulation instant.
+================
+*/
 func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Character, engage wire.BasicAttackEngage, nowMs int64) OpResult {
 	if character == nil || rt.Monsters == nil || engage.TargetGid == 0 {
 		return OpResult{DiagnosticRefusal: "attack-context-unavailable"}
@@ -294,7 +343,17 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 	return rt.advanceBasicAttackIntent(character, intent, nowMs)
 }
 
+/*
+================
+advanceBasicAttackIntent
+
+Dispatch the command owner before resolving any combat skill or cost.
+================
+*/
 func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64) OpResult {
+	if intent.FollowTarget {
+		return rt.advanceFollowIntent(character, intent, nowMs)
+	}
 	if intent.SupportCast {
 		return rt.advanceSupportCastIntent(character, intent, nowMs)
 	}
@@ -500,6 +559,32 @@ func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Characte
 		// identity latch; the next authoritative tick will sample again.
 		return OpResult{}
 	}
+	return rt.commitIntentMovement(character, snapshot, intentMovement{
+		intent: intent, from: from, target: target, goal: goal, nowMs: nowMs,
+	})
+}
+
+/*
+================
+intentMovement
+
+Combat and follow derive different goals but share navigation admission,
+authoritative movement commits and actor/peer publication.
+================
+*/
+type intentMovement struct {
+	intent             basicAttackIntent
+	from, target, goal simulation.Spawn
+	nowMs              int64
+}
+
+/*
+================
+commitIntentMovement
+================
+*/
+func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Character, move intentMovement) OpResult {
+	intent, from, target, goal, nowMs := move.intent, move.from, move.target, move.goal, move.nowMs
 	worldKey := simulation.WorldKey(intent.DivisionID, character.Name)
 	_, fromOwner := rt.liveNav(worldKey, snapshot, nowMs)
 	goal, walk, refusal := rt.constrainWalk(snapshot.Name, from, fromOwner, goal)
@@ -510,6 +595,7 @@ func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Characte
 		return OpResult{}
 	}
 	var ack []byte
+	var runChanged bool
 	rt.bindResidentRegion(worldKey, nowMs)
 	if !rt.deps.Update(character, "basic-attack-approach", func() bool {
 		if character.DeletePending {
@@ -520,7 +606,12 @@ func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Characte
 			func(world *simulation.WorldState) {
 				request := simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode,
 					RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}
-				result := simulation.ApplyMove(world, enterworld.ObjectIDForCharacter(character), request, world.MovementMode, nowMs)
+				mode := world.MovementMode
+				if intent.FollowTarget && mode != simulation.RunMode {
+					mode = simulation.RunMode
+					runChanged = true
+				}
+				result := simulation.ApplyMove(world, enterworld.ObjectIDForCharacter(character), request, mode, nowMs)
 				if result.LiveBefore == from {
 					world.CommitWalk(walk.Spans, walk.Rest)
 				}
@@ -536,7 +627,14 @@ func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Characte
 	intent.ApproachIssuedAtMs = nowMs
 	intent.HasApproach = true
 	rt.setCombatIntent(intent)
-	return OpResult{Frames: []wire.Frame{{Opcode: simulation.OpMovementAck, Payload: ack}}, Broadcast: []wire.Frame{{Opcode: simulation.OpMovementAck, Payload: ack}}}
+	frames := []wire.Frame{{Opcode: simulation.OpMovementAck, Payload: ack}}
+	if runChanged {
+		// 4B0800 switches a pursuing walker to run after issuing its goal.
+		frames = append(frames, wire.Frame{Opcode: wire.OpObjectStateRefresh, Payload: wire.ObjectStateRefresh{
+			Gid: enterworld.ObjectIDForCharacter(character), StateType: wire.StateChannelMove, Value: simulation.RunMode,
+		}.Encode()})
+	}
+	return OpResult{Frames: frames, Broadcast: frames}
 }
 
 /*
@@ -621,6 +719,14 @@ func prependOpResult(prefix, tail OpResult) OpResult {
 	}
 }
 
+/*
+================
+advanceBasicAttackIntents
+
+The simulation tick advances detached commands under their division lock,
+then routes their results after releasing authority locks.
+================
+*/
 func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[string]bool) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, intent := range rt.combatIntentSnapshot() {

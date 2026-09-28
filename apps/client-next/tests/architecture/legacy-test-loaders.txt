@@ -1,6 +1,5 @@
 # Test files that bundle sources with esbuild instead of loading the shipped modules. Entries are
 # `path` (legacy, waiting to migrate) or `path # reason`. This ledger only shrinks; see test-loaders.test.mjs.
-tests/architecture/audio-parity-audit.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
 tests/browser/helpers/ui-admission-reference.mjs # bundles a module for the browser page, which cannot load TypeScript itself
 tests/runtime/animation-ceiling.test.mjs # rewrites source text through esbuild plugins and a computed stdin entry to instrument the pose and world owners
 tests/runtime/animation-phase-profiler.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
