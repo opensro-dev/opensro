@@ -132,6 +132,7 @@ async function exercise( page, result, credentials ) {
 	result.navigation = "resume";
 	await page.reload( { waitUntil: "commit" } );
 	result.navigation = "world";
+	await page.locator( "#fps-toggle" ).click();
 	await page.waitForFunction(
 		() => document.querySelector( "output" )?.textContent?.includes( "Frontend: world\n" ),
 		null,
@@ -272,6 +273,10 @@ async function main() {
 	} );
 	const progress = setInterval( async () => {
 		console.log( "Release smoke:", await page.locator( "output" ).textContent().catch( () => "loading" ) );
+		console.log(
+			"Release frame timing:",
+			await page.locator( "#fps-readout" ).textContent().catch( () => "loading" )
+		);
 	}, CONTROL_BUDGET_MS );
 	try {
 		await page.addInitScript( observeWorld );
@@ -281,6 +286,9 @@ async function main() {
 		if ( !response || response.status() !== HTTP_OK ) throw Error( "Candidate entry is unavailable" );
 		const digest = createHash( "sha256" ).update( await response.body() ).digest( "hex" );
 		if ( digest !== candidate.entrySha256 ) throw Error( "HTTPS served a different candidate entry" );
+		// Use the player's existing telemetry control; do not install a second
+		// frame loop or modify the renderer to diagnose software GPU stalls.
+		await page.locator( "#fps-toggle" ).click();
 		await exercise( page, result, credentials );
 		const failures = classifyRequestFailures( requestFailures, result.phases );
 		result.errors.push( ...failures.errors );
@@ -295,6 +303,7 @@ async function main() {
 		result.requestFailures = requestFailures;
 		result.finishedAt = Date.now();
 		result.frontend = await page.locator( "output" ).textContent().catch( () => "unavailable" );
+		result.frameTiming = await page.locator( "#fps-readout" ).textContent().catch( () => "unavailable" );
 		result.workerResources = [ ...(result.workerResources ?? []), ...await collectWorkerResources( page ) ];
 		await page.screenshot( { path: path.join( destination, "browser.png" ) } ).catch( () => {} );
 		await writeFile( path.join( destination, "report.json" ), JSON.stringify( result, null, 2 ) );
