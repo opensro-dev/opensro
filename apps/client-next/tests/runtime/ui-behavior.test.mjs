@@ -3242,7 +3242,16 @@ test("GPU merchant menu branches retain all tabs, sparse pages and native purcha
 test("native window sisters retain drag placement, close on ESC and reject retired captures", () => {
 	const f = uiFixture();
 	f.state.gameplay.academy = { rows: [], member: null, request: null };
+	// The pet window follows native admission: a living owned COS must exist.
+	f.state.gameplay.cosRecords = [ { gid: 7, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false } ];
 	/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */ let semantics;
+	/*
+================
+settle
+
+Drain dependent window resources before asserting placement or capture state.
+================
+	*/
 	const settle = () => {
 		for ( let i = 0; i < 50; i++ ) semantics = f.ui.step( f.state, 1000 + i ) ?? semantics;
 	};

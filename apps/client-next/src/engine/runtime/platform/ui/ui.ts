@@ -75,6 +75,13 @@ export function createUiBridge(
 	window.addEventListener( "blur", () => {
 		drag = null;
 	}, { signal: lifetime.signal } );
+	/*
+	================
+	edit
+
+	Publish browser-owned text and selection together, including IME state.
+	================
+	*/
 	function edit( element: HTMLInputElement, id: string ) {
 		emit( {
 			kind: "edit",
@@ -165,7 +172,13 @@ export function createUiBridge(
 		const el = document.activeElement;
 		if ( el instanceof HTMLInputElement && root.contains( el ) ) edit( el, el.dataset.uiId! );
 	}, { signal: lifetime.signal } );
-	// Event delegation resolves current state, never the descriptor from creation.
+	/*
+	================
+	current
+
+	Delegated events resolve current state, never a descriptor from creation.
+	================
+	*/
 	function current( target: EventTarget | null ) {
 		if ( !(target instanceof Element) ) return;
 		const el = target.closest<HTMLElement>( "[data-ui-id]" );
@@ -173,6 +186,18 @@ export function createUiBridge(
 		const slot = controls.get( el.dataset.uiId! );
 		return slot?.element === el ? slot : undefined;
 	}
+	// Drag regions prevent the browser's default pointer-down focus transfer.
+	// Retire the previous control's focus first, including a press on the world,
+	// so a button cannot remain highlighted after the player starts a new action.
+	window.addEventListener( "pointerdown", event => {
+		if ( event.button !== 0 ) return;
+		const active = document.activeElement;
+		if ( !(active instanceof HTMLElement) || !root.contains( active ) ) return;
+		const target = current( event.target );
+		if ( target?.element === active ) return;
+		active.blur();
+		if ( event.target === canvas || target?.value.kind === "region" ) canvas.focus( { preventScroll: true } );
+	}, { capture: true, signal: lifetime.signal } );
 	root.addEventListener( "pointerdown", event => {
 		if ( event.button === 2 ) rightPressed = !!current( event.target )?.value.rightActivate;
 	}, { signal: lifetime.signal } );
@@ -251,6 +276,13 @@ export function createUiBridge(
 			drag = { id: slot.value.id, pointer: event.pointerId, x: event.clientX, y: event.clientY };
 		}
 	}, { signal: lifetime.signal } );
+	/*
+	================
+	retire
+
+	Release capture and focus before removing an obsolete semantic control.
+	================
+	*/
 	function retire( id: string ) {
 		const slot = controls.get( id );
 		if ( !slot ) return;
@@ -264,6 +296,14 @@ export function createUiBridge(
 		controls.delete( id );
 	}
 	return {
+		/*
+		================
+		present
+
+		Validate identities before reconciling the keyed DOM tree. Stable nodes
+		preserve browser selection and accessibility state between GPU frames.
+		================
+		*/
 		present( state: UiSemantics ) {
 			if ( lifetime.signal.aborted ) return;
 			// Identity belongs to the control instance, not its action. Two native
@@ -395,6 +435,13 @@ export function createUiBridge(
 				}
 			}
 		},
+		/*
+		================
+		dispose
+
+		Abort delegated listeners before discarding controls and their state.
+		================
+		*/
 		dispose() {
 			if ( lifetime.signal.aborted ) return;
 			drag = null;

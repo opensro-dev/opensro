@@ -72,22 +72,40 @@ type Stats struct {
 	MagicalAttackMax  float64 // Param 16
 }
 
-// Loadout is the combat-relevant equipment identity alongside Stats.
+/*
+================
+Loadout
+
+Equipment identity used to admit an action beside its detached stat snapshot.
+================
+*/
 type Loadout struct {
 	WeaponKind  uint8
 	ActionRange float64
 	HasWeapon   bool
 }
 
-// Catalogs are the immutable reference sources a player keeper reads.
+/*
+================
+Catalogs
+
+Immutable reference sources read while reconstructing a player's keeper.
+================
+*/
 type Catalogs struct {
 	Items        enterworld.ItemRefSource
 	Skills       enterworld.SkillDataSource
 	MagicOptions enterworld.MagicOptionSource
 }
 
-// Param reads one evaluated player keeper parameter. Monster snapshots and
-// parameters outside the player closure read as absent.
+/*
+================
+Param
+
+Read the evaluated player keeper. Monster snapshots and parameters outside
+the player closure read as absent.
+================
+*/
 func (s Stats) Param(id uint16) (float32, bool) {
 	if s.graph == nil {
 		return 0, false
@@ -267,6 +285,7 @@ func PlayerStatsWithModifiers(
 		applyItemMagicOptions(&contribution, options)
 		source := uint32(1024 + row.Slot)
 		writes = append(writes, statWrites(contribution, source)...)
+		writes = append(writes, equipmentResourceWrites(ref.TypeFlags(), source)...)
 		optionWrites, err := magicOptionWrites(row.Codename, options, source)
 		if err != nil {
 			return Stats{}, Loadout{}, err
@@ -340,8 +359,14 @@ func PlayerBaseStats(character *domain.Character, catalogs Catalogs) (wire.BaseS
 	return PlayerBaseStatsWithModifiers(character, catalogs, nil, nil)
 }
 
-// PlayerBaseStatsWithModifiers publishes the same effect-aware projection used
-// by damage calculations; packet truncation stays solely at this boundary.
+/*
+================
+PlayerBaseStatsWithModifiers
+
+Publish the effect-aware projection used by damage calculations. Packet
+truncation stays at this boundary, after all equipment and effect owners.
+================
+*/
 func PlayerBaseStatsWithModifiers(
 	character *domain.Character,
 	catalogs Catalogs,
@@ -370,6 +395,13 @@ func PlayerBaseStatsWithModifiers(
 	}, nil
 }
 
+/*
+================
+clampDisplayU32
+
+Saturate before converting the keeper's resource and attack values to wire.
+================
+*/
 func clampDisplayU32(value float64) uint32 {
 	if math.IsNaN(value) || value <= 0 {
 		return 0
@@ -380,6 +412,13 @@ func clampDisplayU32(value float64) uint32 {
 	return uint32(math.Trunc(value))
 }
 
+/*
+================
+clampDisplayU16
+
+Keep defense and ratio fields inside their narrower packet representation.
+================
+*/
 func clampDisplayU16(value float64) uint16 {
 	if math.IsNaN(value) || value <= 0 {
 		return 0
@@ -390,7 +429,14 @@ func clampDisplayU16(value float64) uint16 {
 	return uint16(math.Trunc(value))
 }
 
-// MonsterStats translates one pinned RefObjChar row into ParamKeeper 5..12.
+/*
+================
+MonsterStats
+
+Translate a pinned RefObjChar row into the monster's combat parameters.
+An incomplete catalog row must not silently create a defenseless monster.
+================
+*/
 func MonsterStats(ref monster.MonsterRef) (Stats, error) {
 	if !ref.CombatPinned {
 		return Stats{}, fmt.Errorf(
@@ -412,6 +458,13 @@ func MonsterStats(ref monster.MonsterRef) (Stats, error) {
 	}, nil
 }
 
+/*
+================
+requiredLevel
+
+Validate persisted levels before narrowing them to the native byte field.
+================
+*/
 func requiredLevel(name string, value *int64) (uint8, error) {
 	if value == nil || *value < 1 || *value > math.MaxUint8 {
 		return 0, fmt.Errorf("combat: %s is absent or outside 1..255", name)
@@ -419,6 +472,13 @@ func requiredLevel(name string, value *int64) (uint8, error) {
 	return uint8(*value), nil
 }
 
+/*
+================
+requiredStat
+
+Missing persisted attributes are load failures, not zero-valued characters.
+================
+*/
 func requiredStat(name string, value *int64) (float64, error) {
 	if value == nil || *value < 0 || *value > math.MaxUint16 {
 		return 0, fmt.Errorf("combat: %s is absent or outside 0..65535", name)
@@ -426,6 +486,13 @@ func requiredStat(name string, value *int64) (float64, error) {
 	return float64(*value), nil
 }
 
+/*
+================
+clampInt64
+
+Clamp wide persisted values before the item derivation narrows their type.
+================
+*/
 func clampInt64(value, minimum, maximum int64) int64 {
 	if value < minimum {
 		return minimum

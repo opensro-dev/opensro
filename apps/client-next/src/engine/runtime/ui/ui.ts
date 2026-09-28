@@ -90,6 +90,9 @@ import { buffTooltip } from "@/engine/foundation/ui/buff-tooltip";
 import { masteryTooltip } from "@/engine/foundation/ui/mastery-tooltip";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
+import { commerceTooltip } from "@/engine/foundation/ui/commerce-tooltip";
+import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
+import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
 import { tooltipColor, type TooltipRow } from "@/engine/foundation/ui/tooltip-rows";
 import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
@@ -698,6 +701,17 @@ export function createUi(
 	}
 	/*
 	================
+	hudCopy
+
+	Input notifications and rendered dialogs share the system-text catalogue.
+	The display-name catalogue cannot resolve UI messages (native 68D430).
+	================
+	*/
+	function hudCopy( key: string ) {
+		return hud.data()?.strings[key] ?? "";
+	}
+	/*
+	================
 	setPanel
 	================
 	*/
@@ -705,6 +719,11 @@ export function createUi(
 		if ( intent === "toggle" && panel === next ) next = "";
 		if ( panel === next ) return false;
 		if ( !canLeavePanel() ) return false;
+		// Native 6A2350 resolves an owned COS before 69D920 creates its window.
+		// Apply the same admission to hotkeys, menu links and contextual opens.
+		if ( next === "COS inventory" && !view?.gameplay?.cosRecords?.some( r => !r.dead && r.hp > 0 ) ) {
+			return false;
+		}
 		shopOpenRequest = null;
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
@@ -795,7 +814,13 @@ export function createUi(
 			return;
 		}
 		if ( id === 1007 ) {
-			if ( game.target ) sendGameplay( { kind: "party-invite", gid: game.target, options: partyOptions } );
+			if ( game.target ) {
+				sendGameplay( {
+					kind: "party-invite",
+					gid: game.target,
+					options: effectivePartyOptions( game.social, partyOptions )
+				} );
+			}
 			return;
 		}
 		if ( id === 1008 ) {
@@ -1392,7 +1417,11 @@ export function createUi(
 		else if ( id === "invite-accept" || id === "invite-refuse" ) {
 			sendGameplay( { kind: "social-consent", accept: id === "invite-accept" } );
 		} else if ( id === "party-invite" && view.gameplay?.target ) {
-			sendGameplay( { kind: "party-invite", gid: view.gameplay.target, options: partyOptions } );
+			sendGameplay( {
+				kind: "party-invite",
+				gid: view.gameplay.target,
+				options: effectivePartyOptions( view.gameplay.social, partyOptions )
+			} );
 		} else if ( id === "party-settings" ) {
 			partySettings = true;
 			partyDraft = partyOptions;
@@ -1524,7 +1553,7 @@ export function createUi(
 						partyMatchDescending
 					),
 					type = (partyAuto.exp === 0 ? 1 : 0) | (partyAuto.item === 0 ? 2 : 0) |
-						((game?.social?.options ?? partyOptions) & 4),
+						(effectivePartyOptions( game?.social, partyOptions ) & 4),
 					ids = partyAutoCandidates(
 						rows,
 						partyAuto.purpose,
@@ -1544,7 +1573,7 @@ export function createUi(
 						kind: partyDialog === "modify" ? "party-match-modify" : "party-match-register",
 						registration: {
 							party: 0,
-							type: view.gameplay?.social?.options ?? partyOptions,
+							type: effectivePartyOptions( view.gameplay?.social, partyOptions ),
 							purpose: partyForm.purpose,
 							min,
 							max,
@@ -2874,13 +2903,10 @@ export function createUi(
 						if ( item.slot >= equipmentEnd ) {
 							groundDrop = { slot: item.slot, refObjId: item.refObjId };
 							for ( const key of [ "UIIT_MSG_DROP_WARNING_1", "UIIT_MSG_DROP_WARNING_2" ] ) {
-								hudMessages.append( localization.text( key, key ) );
+								hudMessages.append( hudCopy( key ) );
 							}
 						} else {hudMessages.append(
-								localization.text(
-									"UIIT_MSG_STRGERR_CANT_DROP_EQUIPED_ITEM_DIRECTLY",
-									"UIIT_MSG_STRGERR_CANT_DROP_EQUIPED_ITEM_DIRECTLY"
-								)
+								hudCopy( "UIIT_MSG_STRGERR_CANT_DROP_EQUIPED_ITEM_DIRECTLY" )
 							);}
 						dirty = true;
 						return;
@@ -3557,6 +3583,10 @@ export function createUi(
 		step( next: UiView, now = 0, probe?: UiFrameProbe ): UiSemantics | null {
 			quickslotTime = next.simulationTimeMs ?? now;
 			if ( disposed ) return null;
+			if ( panel === "COS inventory" && !next.gameplay?.cosRecords?.some( r => !r.dead && r.hp > 0 ) ) {
+				setPanel( "" );
+				dirty = true;
+			}
 			if ( shopOpenRequest ) {
 				const request = shopOpenRequest, game = next.gameplay;
 				if ( next.session?.phase !== "world" || game?.target !== request.gid ) shopOpenRequest = null;
@@ -3584,12 +3614,6 @@ export function createUi(
 			if ( consolePhase === 1 || consolePhase === 2 ) dirty = true;
 			// Gameplay durations use the worker's fixed clock, not the main thread's
 			// performance origin. Advance retained gauges even with no new packets.
-			/*
-			================
-			hudCopy
-			================
-			*/
-			const hudCopy = ( key: string ) => hud.data()?.strings[key] ?? "";
 			const nextBuffTick = next.session?.phase === "world" &&
 					next.gameplay?.buffSlots?.some( s =>
 						s.state === "departing" || s.effect.remainingMs !== undefined
@@ -7102,7 +7126,7 @@ export function createUi(
 					const leader = social?.members.find( m => m.id === social.leader ),
 						members = social?.members.filter( m => m.id !== social.leader ) ?? [],
 						hasParty = !!social?.leader,
-						displayOptions = hasParty ? social!.options : partyOptions;
+						displayOptions = effectivePartyOptions( social, partyOptions );
 					for ( const node of authoredPaintOrder( layout ) ) {
 						if ( !hasParty && [ 14, 15, 41, 43, 44 ].includes( node.id ) ) continue;
 						if ( !hasParty && (node.id === 52 || node.id === 53) ) {
@@ -9345,6 +9369,24 @@ export function createUi(
 						next.blindHeld && blindableCharacter( entity, game?.localGid )
 					) continue;
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
+					const partyMark = monsterPartyNameplate( entity, [
+						text.run( entity.name ?? "", selected ? 2 : 0 ).width,
+						text.boardHeight()
+					] );
+					if ( partyMark ) {
+						paths.push( partyMark.path );
+						if ( resources.has( partyMark.path ) ) {
+							quads.push( {
+								characterAnchor: entity.gid,
+								rect: partyMark.rect,
+								clip: full,
+								uv: [ 0, 0, 1, 1 ],
+								texture: partyMark.path,
+								color: white,
+								alphaCutoff: 128 / 255
+							} );
+						}
+					}
 					if (
 						!hiddenSilkCos( entity, options.hideSilkCos ) && options.ownName &&
 						[ "local-player", "player" ].includes( entity.kind ) && ((entity.visualFlags ?? 0) & 1)
@@ -10231,7 +10273,7 @@ export function createUi(
 								paths.push( ...out.paths );
 							} else authoredText( node, px, py, value );
 						} else if ( !request && (node.id === 45 || node.id === 47) ) {
-							const opts = game?.social?.options ?? partyOptions;
+							const opts = effectivePartyOptions( game?.social, partyOptions );
 							authoredText(
 								node,
 								px,
@@ -11318,6 +11360,17 @@ export function createUi(
 							tooltip = items.flatMap( item =>
 								itemTooltip( item, game.progression ?? { masteries: [] }, lookup, { country, sex } )
 							);
+						}
+						// Price belongs to the current offer, outside the item-property memo.
+						// A package gets one total even when several item details precede it.
+						if ( item ) {
+							tooltip = [
+								...tooltip,
+								...commerceTooltip( id, game, {
+									price: lookup( "UIIT_STT_PRICE" ),
+									gold: lookup( "UIIT_STT_GOLD" )
+								} )
+							];
 						}
 					}
 				}
