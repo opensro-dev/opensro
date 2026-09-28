@@ -1939,6 +1939,80 @@ test("GPU shop gates merchant capability, affordability and exact sale confirmat
 	}
 });
 
+/*
+================
+merchantQuantityLimit
+
+Exercise the real editor and confirmation path. An oversized draft must be
+corrected visibly before the command is composed, using the offer's limit.
+================
+*/
+test("merchant amount editor clamps to the authored limit before purchase", () => {
+	const sent = [], f = uiFixture( command => sent.push( command.command ) );
+	try {
+		const game = f.state.gameplay;
+		game.target = 17;
+		game.targetCapabilities = 1;
+		game.inventorySlotCount = 45;
+		game.equipmentSlotCount = 13;
+		game.progression = { gold: "10000", masteries: [] };
+		f.state.entities.push( { ...f.state.entities[0], gid: 17, kind: "npc", name: "Merchant" } );
+		let now = 0;
+		/*
+================
+draw
+================
+		*/
+		function draw() {
+			return f.ui.step( f.state, now += 100 );
+		}
+		draw();
+		f.ui.event( { kind: "activate", id: "shop-open" } );
+		draw();
+		sent.length = 0;
+		game.shop = {
+			npc: 17,
+			name: "Merchant",
+			offers: [
+				{ tab: 0, slot: 0, refObjId: 62, name: "Arrow", price: "2", maxStack: 250, purchaseLimit: 250 },
+				{ tab: 0, slot: 1, refObjId: 3630, name: "Potion", price: "60", maxStack: 50, purchaseLimit: 50 },
+				{ tab: 0, slot: 2, refObjId: 100, name: "Package", price: "100", maxStack: 250, purchaseLimit: 5 }
+			]
+		};
+		game.shopCompletionRevision = 1;
+		draw();
+		for ( const [index, maximum] of [ [ 0, 250 ], [ 1, 50 ], [ 2, 5 ] ] ) {
+			f.ui.event( { kind: "activate", id: "shop-offer:" + index } );
+			draw();
+			f.ui.event( { kind: "edit", id: "shop-quantity", value: "1000" } );
+			const output = draw();
+			assert.equal( output.controls.find( control => control.id === "shop-quantity" ).value, String( maximum ) );
+			assert.equal( output.controls.find( control => control.id === "shop-trade" ).disabled, false );
+			f.ui.event( { kind: "activate", id: "shop-trade" } );
+			draw();
+			assert.deepEqual( sent.pop(), { kind: "shop-buy", tab: 0, slot: index, quantity: maximum } );
+		}
+		f.ui.event( { kind: "activate", id: "shop-offer:0" } );
+		draw();
+		for ( const value of [ "", "0", "99", "250" ] ) {
+			f.ui.event( { kind: "edit", id: "shop-quantity", value } );
+			const output = draw();
+			assert.equal( output.controls.find( control => control.id === "shop-quantity" ).value, value );
+			assert.equal( output.controls.find( control => control.id === "shop-trade" ).disabled, !Number( value ) );
+		}
+		game.progression.gold = "499";
+		f.ui.event( { kind: "edit", id: "shop-quantity", value: "1000" } );
+		const unaffordable = draw();
+		assert.equal( unaffordable.controls.find( control => control.id === "shop-quantity" ).value, "250" );
+		assert.equal( unaffordable.controls.find( control => control.id === "shop-trade" ).disabled, true );
+		f.ui.event( { kind: "activate", id: "shop-trade" } );
+		draw();
+		assert.equal( sent.length, 0, "normalization must not bypass the gold check" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("merchant wheel scrolling follows the dragged window and ignores its old location", () => {
 	const f = uiFixture();
 	try {

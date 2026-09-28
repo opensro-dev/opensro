@@ -3424,7 +3424,19 @@ export function createUi(
 				} else if ( event.id === "academy-name" ) academyName = event.value;
 				else if ( event.id === "alchemy-quantity" ) alchemyQuantity = event.value;
 				else if ( event.id === "shop-quantity" ) {
-					shopQuantity = event.value.replace( /[^0-9]/g, "" ).slice( 0, 5 );
+					const game = view?.gameplay;
+					const quote = merchantQuote(
+						shopChoice,
+						game?.shop,
+						game?.inventory ?? [],
+						event.value,
+						game?.progression?.gold
+					);
+					// 6C0540 installs the offer limit; 521A85..521AD1 replaces an
+					// oversized numeric draft with that limit before notifying the
+					// dialog. Keep the displayed amount and the submitted quote equal.
+					const digits = event.value.replace( /[^0-9]/g, "" );
+					if ( quote ) shopQuantity = digits ? String( Math.min( quote.maximum, Number( digits ) ) ) : "";
 				} else if ( event.id === "split-amount" && splitStack ) {
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 5 );
 					splitAmount = raw ? String( Math.min( splitStack.quantity - 1, Number( raw ) ) ) : "";
