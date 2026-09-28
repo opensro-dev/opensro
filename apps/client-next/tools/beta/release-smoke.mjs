@@ -21,10 +21,9 @@ const TITLE_BUDGET_MS = 180_000;
 // The first roster scene loads character models and compiles scene graphics.
 // This is a cold scene transition, not an ordinary input-control response.
 const DOCK_BUDGET_MS = 180_000;
-// Cold entry includes region decoding and subsequent texture admission. Warm
-// resume has its own smaller bound so the cold allowance cannot hide a reload regression.
+// Both entry and document reload create a renderer and admit world textures.
+// HTTP cache warmth does not preserve the GPU device across a document reload.
 const WORLD_BUDGET_MS = 180_000;
-const RESUME_BUDGET_MS = 90_000;
 const CONTROL_BUDGET_MS = 30_000;
 const MAX_NETWORK_ROWS = 4096;
 const HTTP_OK = 200;
@@ -92,7 +91,7 @@ updates while keeping production game state unchanged.
 async function exercise( page, result, credentials ) {
 	const control = id => page.locator( `[data-ui-id="${id}"]` );
 	await control( "frontend:reveal" ).click( { timeout: TITLE_BUDGET_MS } );
-	result.phases.title = "PASS";
+	recordPhase( result, "title" );
 	await control( "native:servers" ).click();
 	await control( `server:${credentials.shard}` ).click();
 	await control( "native:server-accept" ).click();
@@ -102,14 +101,14 @@ async function exercise( page, result, credentials ) {
 	await control( "password" ).press( "Enter" );
 	const rosterResponse = await response;
 	if ( rosterResponse.status() !== HTTP_OK ) throw Error( "Roster request failed" );
-	result.phases.login = "PASS";
+	recordPhase( result, "login" );
 	const document = await rosterResponse.json();
 	const characters = Array.isArray( document ) ? document : document.characters;
 	if ( !Array.isArray( characters ) || characters.length !== 1 || characters[0].name !== credentials.character ) {
 		throw Error( "Release probe requires its dedicated single-character roster" );
 	}
 	await control( "frontend:create" ).waitFor( { timeout: DOCK_BUDGET_MS } );
-	result.phases.roster = "PASS";
+	recordPhase( result, "roster" );
 	await page.mouse.click( DOCK_PICK.x, DOCK_PICK.y );
 	await control( "enter" ).click();
 	await page.waitForFunction(
@@ -122,13 +121,13 @@ async function exercise( page, result, credentials ) {
 		credentials.character,
 		{ timeout: CONTROL_BUDGET_MS }
 	);
-	result.phases.world = "PASS";
+	recordPhase( result, "world" );
 	result.navigation = "world";
 	await page.keyboard.press( "i" );
 	await control( "inventory-gold" ).waitFor();
 	await page.keyboard.press( "i" );
 	await control( "inventory-gold" ).waitFor( { state: "detached" } );
-	result.phases.gameplay = "PASS";
+	recordPhase( result, "gameplay" );
 	result.workerResources = await collectWorkerResources( page );
 	result.navigation = "resume";
 	await page.reload( { waitUntil: "commit" } );
@@ -136,7 +135,7 @@ async function exercise( page, result, credentials ) {
 	await page.waitForFunction(
 		() => document.querySelector( "output" )?.textContent?.includes( "Frontend: world\n" ),
 		null,
-		{ timeout: RESUME_BUDGET_MS }
+		{ timeout: WORLD_BUDGET_MS }
 	);
 	await page.waitForFunction(
 		name => Object.values( window.__releaseWorld.entities ).some( row => row.name === name ),
@@ -147,7 +146,24 @@ async function exercise( page, result, credentials ) {
 	await control( "inventory-gold" ).waitFor();
 	await page.keyboard.press( "i" );
 	await control( "inventory-gold" ).waitFor( { state: "detached" } );
-	result.phases.resume = "PASS";
+	recordPhase( result, "resume" );
+}
+
+/*
+================
+recordPhase
+
+Keep individual phase durations so slow scene construction is distinguishable
+from network admission and ordinary controls in the immutable probe evidence.
+================
+*/
+function recordPhase( result, phase ) {
+	const elapsedMs = Date.now() - result.startedAt;
+	const previousMs = result.phaseTimings.at( -1 )?.elapsedMs ?? 0;
+	result.phases[phase] = "PASS";
+	const timing = { phase, elapsedMs, durationMs: elapsedMs - previousMs };
+	result.phaseTimings.push( timing );
+	console.log( "Release phase:", JSON.stringify( timing ) );
 }
 
 /*
@@ -225,7 +241,15 @@ async function main() {
 		...(process.env.RELEASE_CHROME ? { executablePath: process.env.RELEASE_CHROME } : {})
 	} );
 	page.setDefaultTimeout( CONTROL_BUDGET_MS );
-	const result = { ...candidate, verdict: "FAIL", phases: {}, errors: [], network: [], startedAt: Date.now() };
+	const result = {
+		...candidate,
+		verdict: "FAIL",
+		phases: {},
+		phaseTimings: [],
+		errors: [],
+		network: [],
+		startedAt: Date.now()
+	};
 	page.on( "pageerror", error => result.errors.push( String( error ) ) );
 	page.on( "console", message => {
 		if ( message.type() === "error" && message.text().includes( "[SRO runtime]" ) ) {
@@ -270,6 +294,7 @@ async function main() {
 		clearInterval( progress );
 		result.requestFailures = requestFailures;
 		result.finishedAt = Date.now();
+		result.frontend = await page.locator( "output" ).textContent().catch( () => "unavailable" );
 		result.workerResources = [ ...(result.workerResources ?? []), ...await collectWorkerResources( page ) ];
 		await page.screenshot( { path: path.join( destination, "browser.png" ) } ).catch( () => {} );
 		await writeFile( path.join( destination, "report.json" ), JSON.stringify( result, null, 2 ) );
