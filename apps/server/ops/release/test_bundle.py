@@ -62,6 +62,9 @@ class BundleTests(unittest.TestCase):
 	# test_tampering_writes_nothing
 	# ================
 	def test_tampering_writes_nothing(self):
+		# ================
+		# change
+		# ================
 		def change(entries):
 			member, data = entries[0]
 			entries[0] = (member, b"X" + data[1:])
@@ -74,6 +77,9 @@ class BundleTests(unittest.TestCase):
 	# test_path_escape
 	# ================
 	def test_path_escape(self):
+		# ================
+		# change
+		# ================
 		def change(entries):
 			entries[0][0].name = "../outside"
 		self.rewrite(change)
@@ -85,6 +91,9 @@ class BundleTests(unittest.TestCase):
 	# test_symlink
 	# ================
 	def test_symlink(self):
+		# ================
+		# change
+		# ================
 		def change(entries):
 			member, _ = entries[0]
 			member.type = tarfile.SYMTYPE
@@ -107,6 +116,9 @@ class BundleTests(unittest.TestCase):
 	# test_missing_manifest_file
 	# ================
 	def test_missing_manifest_file(self):
+		# ================
+		# change
+		# ================
 		def change(entries):
 			member, data = entries[-1]
 			manifest = json.loads(data)
