@@ -18,9 +18,10 @@ import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { assertCharacterAllowed } from "../../../../scripts/lib/probeCharacter.mjs";
 
 const TITLE_BUDGET_MS = 180_000;
-// The first roster scene loads character models and compiles scene graphics.
-// This is a cold scene transition, not an ordinary input-control response.
-const DOCK_BUDGET_MS = 180_000;
+// Dock admission retains the previous scene while uploading eight groups per
+// frame. Measured software rendering needed about 3.8 seconds per frame for
+// roughly 800 groups. Allow that bounded work; ordinary controls stay at 30s.
+const DOCK_BUDGET_MS = 600_000;
 // Both entry and document reload create a renderer and admit world textures.
 // HTTP cache warmth does not preserve the GPU device across a document reload.
 const WORLD_BUDGET_MS = 180_000;
