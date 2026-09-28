@@ -27,6 +27,10 @@ const WORLD_BUDGET_MS = 180_000;
 const RESUME_BUDGET_MS = 90_000;
 const CONTROL_BUDGET_MS = 30_000;
 const MAX_NETWORK_ROWS = 4096;
+const HTTP_OK = 200;
+const PROBE_VIEWPORT = { width: 1024, height: 768 };
+// The scratch roster contains one actor at this authored dock hit position.
+const DOCK_PICK = { x: 505, y: 430 };
 
 /*
 ================
@@ -97,7 +101,7 @@ async function exercise( page, result, credentials ) {
 	result.navigation = "login";
 	await control( "password" ).press( "Enter" );
 	const rosterResponse = await response;
-	if ( rosterResponse.status() !== 200 ) throw Error( "Roster request failed" );
+	if ( rosterResponse.status() !== HTTP_OK ) throw Error( "Roster request failed" );
 	result.phases.login = "PASS";
 	const document = await rosterResponse.json();
 	const characters = Array.isArray( document ) ? document : document.characters;
@@ -106,7 +110,7 @@ async function exercise( page, result, credentials ) {
 	}
 	await control( "frontend:create" ).waitFor( { timeout: DOCK_BUDGET_MS } );
 	result.phases.roster = "PASS";
-	await page.mouse.click( 505, 430 );
+	await page.mouse.click( DOCK_PICK.x, DOCK_PICK.y );
 	await control( "enter" ).click();
 	await page.waitForFunction(
 		() => document.querySelector( "output" )?.textContent?.includes( "Frontend: world\n" ),
@@ -217,7 +221,7 @@ async function main() {
 		// Linux software WebGPU needs a real display compositor for visible
 		// canvas evidence. CI supplies Xvfb; application behavior is unchanged.
 		headed: process.env.RELEASE_HEADED === "1",
-		viewport: { width: 1024, height: 768 },
+		viewport: PROBE_VIEWPORT,
 		...(process.env.RELEASE_CHROME ? { executablePath: process.env.RELEASE_CHROME } : {})
 	} );
 	page.setDefaultTimeout( CONTROL_BUDGET_MS );
@@ -250,7 +254,7 @@ async function main() {
 		// The title phase owns application loading. Navigation only admits the
 		// document, so an image cannot consume an unrelated control deadline.
 		const response = await page.goto( url, { waitUntil: "commit" } );
-		if ( !response || response.status() !== 200 ) throw Error( "Candidate entry is unavailable" );
+		if ( !response || response.status() !== HTTP_OK ) throw Error( "Candidate entry is unavailable" );
 		const digest = createHash( "sha256" ).update( await response.body() ).digest( "hex" );
 		if ( digest !== candidate.entrySha256 ) throw Error( "HTTPS served a different candidate entry" );
 		await exercise( page, result, credentials );
