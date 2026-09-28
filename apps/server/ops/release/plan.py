@@ -21,6 +21,7 @@ MAX_ANCESTORS = 4096
 INPUTS = {
 	"client": [
 		"apps/client-next", "scripts/build", "scripts/lib", "package.json", "pnpm-lock.yaml",
+		"pnpm-workspace.yaml", ".npmrc",
 		"apps/server/ops/release",
 	],
 	"server": ["apps/server"],

@@ -67,6 +67,21 @@ class PlanTests(unittest.TestCase):
 			require_current("client", self.original, self.root)
 
 	# ================
+	# test_dependency_policy_changes_invalidate_only_the_client_candidate
+	#
+	# Workspace catalogs and install-script policy can change a build without
+	# modifying client source or the dependency lock. Compare each change alone.
+	# ================
+	def test_dependency_policy_changes_invalidate_only_the_client_candidate(self):
+		for name in ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc"):
+			with self.subTest(path=name):
+				previous = git(["rev-parse", "HEAD"], self.root)
+				self.commit(name, "dependency policy for " + name)
+				with self.assertRaisesRegex(ValueError, "superseded"):
+					require_current("client", previous, self.root)
+				require_current("server", previous, self.root)
+
+	# ================
 	# test_unmerged_candidate_is_rejected
 	# ================
 	def test_unmerged_candidate_is_rejected(self):
