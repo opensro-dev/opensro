@@ -1,4 +1,8 @@
-# Independent process health checks; no dependency on Agent or GameWorld units.
+# ===========================================================================
+# opensro-monitor.service - independently observe the public fleet.
+# The installer binds this template to one immutable control version. It has no
+# dependency on Agent or GameWorld and cannot change release or database state.
+# ===========================================================================
 [Unit]
 Description=Check public OpenSRO availability
 After=network-online.target
@@ -8,7 +12,7 @@ Wants=network-online.target
 Type=oneshot
 User=opensro-monitor
 Group=opensro-monitor
-ExecStart=/usr/bin/python3 /usr/local/lib/opensro-release-v2/monitor.py /etc/opensro-release/monitor.json
+ExecStart=/usr/bin/python3 @RELEASE_MODULES@/monitor.py /etc/opensro-release/monitor.json
 TimeoutStartSec=45
 NoNewPrivileges=true
 ProtectSystem=strict

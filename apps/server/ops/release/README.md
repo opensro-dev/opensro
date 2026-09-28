@@ -99,11 +99,16 @@ commit, and separate Ed25519 staging and publication public keys:
 ```sh
 python3 install.py --client-manifest /path/to/verified-live-client.json \
   --client-commit FULL_COMMIT --stage-key /path/to/stage.pub \
-  --publish-key /path/to/publish.pub
+  --publish-key /path/to/publish.pub --source-commit CONTROLS_SOURCE_COMMIT
 ```
 
 The installer verifies live application and server hashes before initial ledger
-creation. Reinstallation never resets generations. It installs root-owned forced
+creation. Reinstallation never resets generations. It first installs and hashes
+a complete immutable control version, then binds the root-owned entry points to
+that directory. Existing processes cannot mix old and new module bytes. The
+installed manifest records the source commit and each control file's digest;
+reinstalling that commit rejects drift instead of overwriting it.
+It installs root-owned forced
 commands for `sro-stage` and `sro-release`, private candidate records, the public
 status files, and the unprivileged monitor. Staging cannot publish; publication
 cannot upload replacement bytes or create its own test receipt. The production

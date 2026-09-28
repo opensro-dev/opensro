@@ -16,19 +16,21 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import pwd
 import shutil
 import subprocess
+import tempfile
 
 from bundle import FILES
 from client_bundle import application_files
 from release_state import STATE_FORMAT, identity, write_state
 
-INSTALL = Path("/usr/local/lib/opensro-release-v2")
+INSTALL = Path("/usr/local/lib/opensro-release-controls")
 ROOT = Path("/var/lib/opensro-release")
 CONFIG = Path("/etc/opensro-release/config.json")
 MODULES = ("release_state.py", "plan.py", "bundle.py", "client_bundle.py", "retention.py",
 	"client_deploy.py", "deploy.py", "rollback.py", "monitor.py", "receiver.py")
+CONTROL_FILES = (*MODULES, "install.py", "compatibility.json", "overview.html", "routes.caddy",
+	"opensro-monitor.service", "opensro-monitor.timer")
 
 
 # ================
@@ -47,6 +49,41 @@ def install_file(path, data, mode=0o644):
 		os.fsync(stream.fileno())
 	temporary.chmod(mode)
 	os.replace(temporary, path)
+
+
+# ================
+# install_version
+#
+# Complete an immutable version directory before changing any entry point. An
+# older invocation keeps importing its own version while new invocations start
+# from the replacement wrapper. Reinstalling the same commit verifies its bytes.
+# ================
+def install_version(source, destination, commit):
+	if len(identity(commit)) != 40:
+		raise ValueError("installation requires a full source commit")
+	source, destination = Path(source), Path(destination)
+	payloads = {name: (source / name).read_bytes() for name in CONTROL_FILES}
+	manifest = {"format": "opensro-controls-v1", "commit": commit,
+		"files": {name: hashlib.sha256(data).hexdigest() for name, data in payloads.items()}}
+	version = destination / commit
+	if version.exists():
+		if json.loads((version / "installed.json").read_text()) != manifest:
+			raise ValueError("installed source identity has different control bytes")
+		for name, digest in manifest["files"].items():
+			if hashlib.sha256((version / name).read_bytes()).hexdigest() != digest:
+				raise ValueError("installed control bytes drifted: " + name)
+		return version
+	destination.mkdir(parents=True, exist_ok=True)
+	destination.chmod(0o755)
+	with tempfile.TemporaryDirectory(prefix="install-", dir=destination) as directory:
+		staging = Path(directory) / "version"
+		staging.mkdir(mode=0o755)
+		staging.chmod(0o755)
+		for name, data in payloads.items():
+			install_file(staging / name, data)
+		write_state(staging / "installed.json", manifest)
+		os.rename(staging, version)
+	return version
 
 
 # ================
@@ -89,7 +126,8 @@ def inspect_live(config, manifest, client_commit, contracts):
 # SSH users cannot modify the root-owned receiver, configuration or key policy.
 # A forced command plus a no-arguments sudo rule grants only one capability.
 # ================
-def account(name, role, public_key):
+def account(name, role, public_key, version):
+	import pwd
 	try:
 		pwd.getpwnam(name)
 	except KeyError:
@@ -98,7 +136,7 @@ def account(name, role, public_key):
 	(home / ".ssh").mkdir(parents=True, exist_ok=True)
 	(home / ".ssh").chmod(0o755)
 	wrapper = "/usr/local/sbin/opensro-" + role
-	body = "#!/bin/sh\nexec /usr/bin/python3 /usr/local/lib/opensro-release-v2/receiver.py " + role + "\n"
+	body = "#!/bin/sh\nexec /usr/bin/python3 " + str(version / "receiver.py") + " " + role + "\n"
 	install_file(wrapper, body.encode(), 0o755)
 	policy = name + " ALL=(root) NOPASSWD: " + wrapper + ' ""\n'
 	policy_path = Path("/etc/sudoers.d/opensro-" + role)
@@ -117,7 +155,8 @@ def account(name, role, public_key):
 # The timer can update only its heartbeat directory. It can read the release
 # journal for bounded maintenance suppression but cannot change release state.
 # ================
-def monitor(source, config):
+def monitor(version, config):
+	import pwd
 	name = "opensro-monitor"
 	try:
 		pwd.getpwnam(name)
@@ -133,7 +172,8 @@ def monitor(source, config):
 		"production_state": config["production_state"]}
 	install_file("/etc/opensro-release/monitor.json", (json.dumps(settings, indent=2) + "\n").encode())
 	for name in ("opensro-monitor.service", "opensro-monitor.timer"):
-		install_file(Path("/etc/systemd/system") / name, (source / name).read_bytes())
+		body = (version / name).read_text().replace("@RELEASE_MODULES@", str(version))
+		install_file(Path("/etc/systemd/system") / name, body.encode())
 	subprocess.run(["systemctl", "daemon-reload"], check=True)
 	subprocess.run(["systemctl", "enable", "--now", "opensro-monitor.timer"], check=True)
 
@@ -150,10 +190,12 @@ def main():
 	parser.add_argument("--client-commit", required=True)
 	parser.add_argument("--stage-key", required=True)
 	parser.add_argument("--publish-key", required=True)
+	parser.add_argument("--source-commit", required=True)
 	arguments = parser.parse_args()
 	if os.geteuid() != 0:
 		raise RuntimeError("installation requires root")
 	source = Path(__file__).resolve().parent
+	version = install_version(source, INSTALL, arguments.source_commit)
 	config = json.loads(CONFIG.read_text())
 	manifest = json.loads(Path(arguments.client_manifest).read_bytes())
 	contracts = json.loads((source / "compatibility.json").read_text())
@@ -176,15 +218,13 @@ def main():
 		write_state(state_path, initial)
 		install_file(config["client_manifest"], Path(arguments.client_manifest).read_bytes())
 		write_state(ROOT / "public/candidates.json", {"candidates": []})
-	INSTALL.mkdir(parents=True, exist_ok=True)
-	for name in MODULES:
-		install_file(INSTALL / name, (source / name).read_bytes())
-	install_file(ROOT / "public/index.html", (source / "overview.html").read_bytes())
-	install_file("/etc/caddy/opensro-releases.caddy", (source / "routes.caddy").read_bytes())
+	install_file(ROOT / "public/index.html", (version / "overview.html").read_bytes())
+	install_file("/etc/caddy/opensro-releases.caddy", (version / "routes.caddy").read_bytes())
 	install_file(CONFIG, (json.dumps(config, indent=2) + "\n").encode(), 0o600)
-	account("sro-stage", "stage", Path(arguments.stage_key).read_text())
-	account("sro-release", "publish", Path(arguments.publish_key).read_text())
-	monitor(source, config)
+	account("sro-stage", "stage", Path(arguments.stage_key).read_text(), version)
+	account("sro-release", "publish", Path(arguments.publish_key).read_text(), version)
+	monitor(version, config)
+	write_state(ROOT / "installed-controls.json", json.loads((version / "installed.json").read_text()))
 	print("Release controls installed; live client and server were not published.")
 
 
