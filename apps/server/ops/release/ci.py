@@ -64,6 +64,7 @@ def main():
 	parser.add_argument("component", choices=("client", "server"))
 	parser.add_argument("source")
 	parser.add_argument("--reason")
+	parser.add_argument("--commit", help="Public source commit, independent of the workflow repository")
 	arguments = parser.parse_args()
 	if arguments.role in ("stage", "rollback"):
 		if arguments.role == "rollback":
@@ -86,8 +87,9 @@ def main():
 	elif arguments.role == "evidence":
 		request = {"operation": "client-smoke", "report": json.loads(Path(arguments.source).read_text())}
 	else:
-		commit = os.environ["GITHUB_SHA"]
-		require_current(arguments.component, commit)
+		if not arguments.commit:
+			parser.error("publication requires the explicitly reviewed source --commit")
+		require_current(arguments.component, arguments.commit)
 		request = {"operation": "publish-" + arguments.component, "candidate": identity(arguments.source)}
 	with tempfile.TemporaryDirectory(prefix="release-request-") as directory:
 		path = Path(directory) / "request.json"

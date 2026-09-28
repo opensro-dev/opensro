@@ -20,7 +20,7 @@ import unittest
 from unittest.mock import patch
 
 import client_bundle
-from client_deploy import application_routes, digest, promote, record_smoke, stage
+from client_deploy import application_routes, digest, promote, record_smoke, stage, switch
 from release_state import read_state, write_state
 from rollback import prepare
 from retention import directory as retained_directory
@@ -60,9 +60,10 @@ def manifest_for(entry):
 # ================
 # ClientDeployTests
 #
-# Symlink support is required for publication. Linux CI and the host drill run
-# these cases even when a Windows workstation lacks the creation privilege.
+# Linux publication relies on POSIX directory-symlink replacement. Windows can
+# create symlinks under CI but does not implement that atomic rename contract.
 # ================
+@unittest.skipIf(os.name == "nt", "Linux publication requires POSIX directory-symlink replacement")
 class ClientDeployTests(unittest.TestCase):
 	# ================
 	# setUp
@@ -71,7 +72,7 @@ class ClientDeployTests(unittest.TestCase):
 	def setUp(self):
 		self.directory = tempfile.TemporaryDirectory()
 		self.addCleanup(self.directory.cleanup)
-		self.root = Path(self.directory.name)
+		self.root = Path(self.directory.name).resolve()
 		self.base = manifest_for(b"old browser")
 		self.next = manifest_for(b"new browser")
 		self.config = {
@@ -90,12 +91,7 @@ class ClientDeployTests(unittest.TestCase):
 		(self.live / "assets").mkdir(parents=True)
 		(self.live / "index.html").write_bytes(b"old browser")
 		(self.live / "assets/data.bin").write_bytes(b"verified assets")
-		try:
-			os.symlink(self.live, self.config["client_link"], target_is_directory=True)
-		except OSError as error:
-			if os.name == "nt" and getattr(error, "winerror", None) == 1314:
-				self.skipTest("Windows account lacks symlink privilege; Linux deployment tests are required")
-			raise
+		os.symlink(self.live, self.config["client_link"], target_is_directory=True)
 		state = production()
 		state["client"]["release"] = self.base["releaseId"]
 		write_state(self.config["production_state"], state)
@@ -134,6 +130,32 @@ class ClientDeployTests(unittest.TestCase):
 		new = Path(self.config["client_candidates"]) / staged["candidate"]
 		self.assertEqual((new / "index.html").read_bytes(), b"new browser")
 		self.assertTrue(os.path.samefile(new / "assets/data.bin", self.live / "assets/data.bin"))
+
+	# ================
+	# test_staging_retry_reuses_only_unchanged_bytes
+	# ================
+	def test_staging_retry_reuses_only_unchanged_bytes(self):
+		before = read_state(self.config["production_state"])
+		first = stage(self.config, self.archive)
+		self.assertEqual(stage(self.config, self.archive), first)
+		self.assertEqual(read_state(self.config["production_state"]), before)
+		entry = Path(self.config["client_candidates"]) / first["candidate"] / "index.html"
+		entry.write_bytes(b"corrupted staged browser")
+		with self.assertRaisesRegex(ValueError, "staged application bytes changed"):
+			stage(self.config, self.archive)
+
+	# ================
+	# test_failed_atomic_rename_does_not_block_a_later_recovery
+	# ================
+	def test_failed_atomic_rename_does_not_block_a_later_recovery(self):
+		link = Path(self.config["client_link"])
+		with patch("client_deploy.os.replace", side_effect=OSError("rename refused")):
+			with self.assertRaisesRegex(OSError, "rename refused"):
+				switch(link, self.root / "other")
+		self.assertEqual(link.resolve(), self.live)
+		self.assertFalse(link.with_name(link.name + ".incoming").is_symlink())
+		switch(link, self.live)
+		self.assertEqual(link.resolve(), self.live)
 
 	# ================
 	# test_promotion_requires_complete_browser_evidence

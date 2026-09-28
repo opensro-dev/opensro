@@ -91,12 +91,22 @@ def stage_server(config, archive, scratch):
 	with archive.open("rb") as stream:
 		candidate_id = hashlib.file_digest(stream, "sha256").hexdigest()
 	record = Path(config["candidate_records"]) / candidate_id
+	metadata = {"format": "opensro-server-candidate-v1", "plan": manifest["plan"]}
+	result = {"candidate": candidate_id, "release": manifest["commit"], "commit": manifest["commit"],
+		"mode": manifest["plan"]["mode"]}
+	if record.exists():
+		# A retried CI job must not replace retained bytes or silently accept drift.
+		with (record / "server.tar").open("rb") as stream:
+			if hashlib.file_digest(stream, "sha256").hexdigest() != candidate_id:
+				raise ValueError("retained server archive changed before staging retry")
+		if json.loads((record / "candidate.json").read_text()) != metadata:
+			raise ValueError("retained server plan changed before staging retry")
+		return result
 	record.mkdir(mode=0o700)
 	shutil.copyfile(archive, record / "server.tar")
 	(record / "server.tar").chmod(0o600)
-	write_state(record / "candidate.json", {"format": "opensro-server-candidate-v1", "plan": manifest["plan"]})
-	return {"candidate": candidate_id, "release": manifest["commit"], "commit": manifest["commit"],
-		"mode": manifest["plan"]["mode"]}
+	write_state(record / "candidate.json", metadata)
+	return result
 
 
 # ================

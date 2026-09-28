@@ -1,16 +1,10 @@
 # ===========================================================================
 # Caddyfile.example - HTTPS routing for a standalone OpenSRO edge.
-# Nomad and all game listeners stay on loopback. Browser assets use the measured
-# TCP transport policy; the game connection is a proxied WebSocket.
+# Nomad and all game listeners stay on loopback. Replace the example domain
+# with your own. The game connection is a proxied WebSocket.
 # ===========================================================================
 
-{
-	servers {
-		protocols h1 h2
-	}
-}
-
-opensro.online {
+game.example.com {
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=86400"
@@ -69,6 +63,6 @@ opensro.online {
 	}
 }
 
-www.opensro.online {
-	redir https://opensro.online{uri} permanent
+www.game.example.com {
+	redir https://game.example.com{uri} permanent
 }

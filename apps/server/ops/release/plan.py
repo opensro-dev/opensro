@@ -21,9 +21,9 @@ MAX_ANCESTORS = 4096
 INPUTS = {
 	"client": [
 		"apps/client-next", "scripts/build", "scripts/lib", "package.json", "pnpm-lock.yaml",
-		"apps/server/ops/release", ".github/workflows/release-client.yml",
+		"apps/server/ops/release",
 	],
-	"server": ["apps/server", ".github/workflows/release-server.yml"],
+	"server": ["apps/server"],
 }
 
 

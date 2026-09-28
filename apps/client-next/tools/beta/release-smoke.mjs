@@ -69,7 +69,7 @@ async function exercise( page, result, credentials ) {
 	await control( "frontend:reveal" ).click( { timeout: TITLE_BUDGET_MS } );
 	result.phases.title = "PASS";
 	await control( "native:servers" ).click();
-	await control( "server:global-official" ).click();
+	await control( `server:${credentials.shard}` ).click();
 	await control( "native:server-accept" ).click();
 	await control( "account" ).fill( credentials.username );
 	await control( "password" ).fill( credentials.password );
@@ -107,7 +107,7 @@ async function exercise( page, result, credentials ) {
 	result.phases.gameplay = "PASS";
 	result.workerResources = await collectWorkerResources( page );
 	result.navigation = "resume";
-	await page.reload();
+	await page.reload( { waitUntil: "commit" } );
 	result.navigation = "world";
 	await page.waitForFunction(
 		() => document.querySelector( "output" )?.textContent?.includes( "Frontend: world\n" ),
@@ -185,11 +185,12 @@ async function main() {
 	const candidate = JSON.parse( await readFile( candidatePath, "utf8" ) );
 	const credentials = JSON.parse( process.env.RELEASE_PROBE_ACCOUNT ?? "{}" );
 	assertCharacterAllowed( credentials.character );
-	if ( !credentials.username || !credentials.password || !credentials.character ) {
+	if ( !credentials.username || !credentials.password || !credentials.character || !credentials.shard ) {
 		throw Error( "Missing release probe account" );
 	}
 	await mkdir( destination, { recursive: true } );
-	const origin = process.env.RELEASE_ORIGIN ?? "https://opensro.online";
+	if ( !process.env.RELEASE_ORIGIN ) throw Error( "Missing RELEASE_ORIGIN for the host under test" );
+	const origin = new URL( process.env.RELEASE_ORIGIN ).origin;
 	const url = `${origin}/releases/candidates/${candidate.candidate}/index.html`;
 	const { browser, page } = await launchProbeBrowser( {
 		viewport: { width: 1024, height: 768 },
@@ -222,7 +223,9 @@ async function main() {
 	}, CONTROL_BUDGET_MS );
 	try {
 		await page.addInitScript( observeWorld );
-		const response = await page.goto( url );
+		// The title phase owns application loading. Navigation only admits the
+		// document, so an image cannot consume an unrelated control deadline.
+		const response = await page.goto( url, { waitUntil: "commit" } );
 		if ( !response || response.status() !== 200 ) throw Error( "Candidate entry is unavailable" );
 		const digest = createHash( "sha256" ).update( await response.body() ).digest( "hex" );
 		if ( digest !== candidate.entrySha256 ) throw Error( "HTTPS served a different candidate entry" );

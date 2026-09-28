@@ -20,13 +20,13 @@ Read-only status; GitHub remains the only production approval interface.
 	<body>
 		<h1>OpenSRO releases</h1>
 		<p>Client and server publish independently. A client update takes effect on reload. A server update announces maintenance and restarts game services.</p>
-		<p><a href="https://github.com/opensro-dev/opensro/actions">Review and approve in GitHub Actions</a>. Approve the latest ready candidate for the component you want to update. Each candidate includes earlier merged fixes.</p>
+		<p>Use your operator's private publication workflow to select the latest tested candidate for the component you want to update. Each candidate includes earlier merged fixes. This page cannot publish a release.</p>
 		<p id="status">Loading release status…</p>
 		<table><thead><tr><th>Live component</th><th>Commit</th><th>Generation</th><th>Release</th></tr></thead><tbody id="live"></tbody></table>
 		<table><thead><tr><th>Candidate</th><th>Commit</th><th>State</th><th>Effect</th></tr></thead><tbody id="candidates"></tbody></table>
 		<details>
 			<summary>Retained production history</summary>
-			<p>Use the full release identity in <a href="https://github.com/opensro-dev/opensro/actions/workflows/rollback-production.yml">Roll back a production component</a>. Rollback requires a reason, compatibility checks and production approval. It does not restore the database.</p>
+			<p>Use the full release identity in your operator's rollback preparation workflow. Rollback requires a reason, compatibility checks and explicit publication. It does not restore the database.</p>
 			<table><thead><tr><th>Component</th><th>Commit</th><th>Release identity</th></tr></thead><tbody id="history"></tbody></table>
 		</details>
 		<script type="module">

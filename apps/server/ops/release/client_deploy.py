@@ -143,8 +143,17 @@ def stage(config, archive):
 	candidate_id = digest(archive)
 	record = Path(config["candidate_records"]) / candidate_id
 	destination = Path(config["client_candidates"]) / candidate_id
+	result = {
+		"candidate": candidate_id,
+		"release": manifest["releaseId"],
+		"commit": candidate["plan"]["commit"],
+		"entrySha256": hashlib.sha256(outputs["index.html"]).hexdigest(),
+	}
 	if record.exists() or destination.exists():
-		raise ValueError("candidate already exists; inspect its recorded status")
+		# A browser or network failure may require another preparation attempt.
+		# Reuse only a complete, unchanged candidate; never overwrite its identity.
+		verify_candidate(config, candidate_id)
+		return result
 	with tempfile.TemporaryDirectory(prefix="client-", dir=config["client_candidates"]) as directory:
 		staging = Path(directory) / "site"
 		shutil.copytree(current, staging, copy_function=os.link)
@@ -166,12 +175,7 @@ def stage(config, archive):
 		write_state(record / "candidate.json", candidate)
 		shutil.copyfile(archive, record / "client.tar")
 		(record / "client.tar").chmod(0o600)
-	return {
-		"candidate": candidate_id,
-		"release": manifest["releaseId"],
-		"commit": candidate["plan"]["commit"],
-		"entrySha256": hashlib.sha256(outputs["index.html"]).hexdigest(),
-	}
+	return result
 
 
 # ================
@@ -229,7 +233,11 @@ def switch(link, target):
 	link = Path(link)
 	temporary = link.with_name(link.name + ".incoming")
 	os.symlink(target, temporary, target_is_directory=True)
-	os.replace(temporary, link)
+	try:
+		os.replace(temporary, link)
+	finally:
+		# A failed rename must not leave our temporary link blocking recovery.
+		temporary.unlink(missing_ok=True)
 
 
 # ================

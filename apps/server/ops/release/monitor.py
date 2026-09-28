@@ -166,14 +166,14 @@ def poll(config, now, request=get_json, notify=announce):
 # The Actions runner retains only observation state. Its webhook exists in a
 # private temporary directory for this invocation and is never an artifact.
 # ================
-def observe_edge(root):
+def observe_edge(root, origin):
 	root = Path(root)
 	(root / "edge").mkdir(exist_ok=True)
 	with tempfile.TemporaryDirectory(prefix="monitor-secret-", dir=root) as directory:
 		webhook = Path(directory) / "webhook"
 		webhook.write_text(os.environ["MONITOR_WEBHOOK"], encoding="utf-8")
 		webhook.chmod(0o600)
-		config = {"kind": "edge", "url": "https://opensro.online/releases/health/fleet.json",
+		config = {"kind": "edge", "url": origin.rstrip("/") + "/releases/health/fleet.json",
 			"label": "HTTPS edge or host monitor", "state": str(root / "edge/state.json"), "webhook": str(webhook)}
 		return poll(config, time.time())
 
@@ -188,9 +188,12 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("config")
 	parser.add_argument("--edge-workflow", action="store_true")
+	parser.add_argument("--origin", help="HTTPS origin owned by the operator")
 	arguments = parser.parse_args()
 	if arguments.edge_workflow:
-		state = observe_edge(arguments.config)
+		if not arguments.origin:
+			parser.error("--edge-workflow requires --origin")
+		state = observe_edge(arguments.config, arguments.origin)
 	else:
 		config = json.loads(Path(arguments.config).read_text())
 		state = poll(config, time.time())

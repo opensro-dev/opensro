@@ -128,7 +128,7 @@ def monitor(source, config):
 	webhook = Path("/etc/opensro-release/monitor-webhook")
 	install_file(webhook, Path(config["public_webhook"]).read_bytes(), 0o640)
 	shutil.chown(webhook, user="root", group=name)
-	settings = {"kind": "fleet", "url": config["origin"] + "/api/title/servers", "shard": "global-official",
+	settings = {"kind": "fleet", "url": config["origin"] + "/api/title/servers", "shard": config["shard"],
 		"label": "game server", "state": str(health / "fleet.json"), "webhook": str(webhook),
 		"production_state": config["production_state"]}
 	install_file("/etc/opensro-release/monitor.json", (json.dumps(settings, indent=2) + "\n").encode())
@@ -159,6 +159,7 @@ def main():
 	contracts = json.loads((source / "compatibility.json").read_text())
 	state_path = ROOT / "public/production.json"
 	initial = inspect_live(config, manifest, arguments.client_commit, contracts) if not state_path.exists() else None
+	ROOT.mkdir(parents=True, exist_ok=True)
 	ROOT.chmod(0o755)
 	shutil.chown(ROOT, user="root", group="root")
 	CONFIG.parent.chmod(0o755)
@@ -180,7 +181,6 @@ def main():
 		install_file(INSTALL / name, (source / name).read_bytes())
 	install_file(ROOT / "public/index.html", (source / "overview.html").read_bytes())
 	install_file("/etc/caddy/opensro-releases.caddy", (source / "routes.caddy").read_bytes())
-	install_file("/etc/caddy/opensro-transport.caddy", (source / "transport.caddy").read_bytes())
 	install_file(CONFIG, (json.dumps(config, indent=2) + "\n").encode(), 0o600)
 	account("sro-stage", "stage", Path(arguments.stage_key).read_text())
 	account("sro-release", "publish", Path(arguments.publish_key).read_text())
