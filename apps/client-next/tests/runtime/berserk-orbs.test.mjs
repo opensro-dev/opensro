@@ -1,8 +1,11 @@
 /*
 ===========================================================================
 
-berserk-orbs.test.mjs - tests for random.ts, orb-mover.ts, orbs.ts,
-feedback.ts, ...
+berserk-orbs.test.mjs - Berserk feedback, orb travel and HUD admission tests.
+
+Checks authoritative gauge updates separately from delayed visual arrivals.
+Animation tests pass the projected colors through the real renderer boundary
+so a valid endpoint cannot hide an invalid frame during activation.
 
 Loads the TypeScript sources directly through the shared native loader
 (tests/helpers/native-source-loader.mjs), so the tests exercise the same
@@ -47,6 +50,14 @@ test("native pet EXP loss never demotes and both reward signs publish their noti
 	} ] );
 	assert.throws( () => owner.receive( 0x3508, p.subarray( 0, 12 ), 1, { gid: 9, level: 1, experience: [ 0, 0 ] } ) );
 });
+/*
+================
+mover
+
+Build an independent orb in its draw-in phase. Individual cases override only
+the motion property whose behavior they exercise.
+================
+*/
 function mover( patch = {} ) {
 	return {
 		position: [ 0, 0, 0 ],
@@ -202,6 +213,11 @@ test("persisted Berserk gauge seeds feedback and rejects out-of-range wire value
 	assert.throws( () => f.bootstrap( { character: { berserkPoints: 9 } } ) );
 });
 const { berserkHud, berserkEntryFlash } = await import( "../../src/engine/foundation/ui/berserk-hud.ts" );
+const { createUiPreparation } = await import( "../../src/engine/foundation/ui/ui.ts" );
+
+// ============================================================================
+// HUD animation timing and renderer admission
+
 test("Berserk HUD drains from top every 12 seconds and clears at 60 seconds", () => {
 	assert.deepEqual( berserkHud( 0 ).circles, [ 1, 1, 1, 1, 1 ] );
 	assert.deepEqual( berserkHud( 12500 ).circles, [ .5, 1, 1, 1, 1 ] );
@@ -217,4 +233,48 @@ test("Berserk entry flash peaks after200ms and retires after700ms", () => {
 	assert.equal( berserkEntryFlash( 200 ), 128 / 255 );
 	assert.equal( berserkEntryFlash( 450 ), 64 / 255 );
 	assert.equal( berserkEntryFlash( 700 ), 0 );
+});
+
+test("Berserk glow fades in, holds full opacity, then fades out", () => {
+	const samples = [
+		{ elapsed: 0, opacity: 0 },
+		{ elapsed: 1500, opacity: 0.5 },
+		{ elapsed: 3000, opacity: 1 },
+		{ elapsed: 30000, opacity: 1 },
+		{ elapsed: 60000, opacity: 1 },
+		{ elapsed: 61500, opacity: 0.5 },
+		{ elapsed: 63000, opacity: 0 }
+	];
+
+	for ( const sample of samples ) {
+		assert.equal( berserkHud( sample.elapsed ).glow, sample.opacity, "glow at " + sample.elapsed );
+	}
+});
+
+test("Every Berserk animation frame is admitted by the renderer", () => {
+	const owner = createUiPreparation();
+	const frameIntervalMs = 1000 / 144;
+	const animationEndMs = 64000;
+
+	// Fractional frame times exercise the fade between its exact endpoints.
+	for ( let time = 0; time <= animationEndMs; time += frameIntervalMs ) {
+		const hud = berserkHud( time );
+		const alphas = [ hud.glow, ...hud.circles, ...hud.fire, berserkEntryFlash( time ) ];
+		assert.doesNotThrow(
+			() =>
+				owner.prepare( {
+					revision: Math.floor( time ),
+					width: 100,
+					height: 100,
+					quads: alphas.map( alpha => ({
+						rect: [ 0, 0, 10, 10 ],
+						clip: [ 0, 0, 100, 100 ],
+						uv: [ 0, 0, 1, 1 ],
+						texture: "",
+						color: [ 1, 1, 1, alpha ]
+					}) )
+				} ),
+			"Berserk at " + time
+		);
+	}
 });
