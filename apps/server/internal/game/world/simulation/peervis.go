@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+peervis.go - peer visibility and native appearance publication.
+
+===========================================================================
+*/
 package simulation
 
 import (
@@ -21,6 +28,11 @@ import (
 // value-copied out of the bound enterworld.Character at snapshot time (the
 // SessionSnapshot concurrency contract). Every field traces to persisted
 // character state - no placeholder rows.
+/*
+================
+PeerAppearance
+================
+*/
 type PeerAppearance struct {
 	PVPState  uint8
 	EventTeam *uint8
@@ -71,6 +83,11 @@ const PeerScaleDenom float32 = 100
 // goal - the bug D plane rule). Walk/run ride the char-data 20/50 pair
 // (+0x24c/+0x250 sources), and the appear tail is the drop-in presentation
 // byte 1 (the grounditem 0x30D7 convention).
+/*
+================
+BuildPeerSpawnRow
+================
+*/
 func BuildPeerSpawnRow(appearance PeerAppearance, gid uint32, pose Spawn) []byte {
 	walk, run := appearance.Walk, appearance.Run
 	if walk <= 0 {
@@ -116,6 +133,11 @@ func BuildPeerSpawnRow(appearance PeerAppearance, gid uint32, pose Spawn) []byte
 // (0x36AB, the same 4-byte gid wire the pickup path sends). The local player
 // is never pushed to itself - the client renders self on the local plane and
 // the remote view must never carry it (the wave-3 negative pin).
+/*
+================
+runPeerVisibility
+================
+*/
 func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessions []SessionSnapshot, live map[string]bool) {
 	if !state.peerVisibilityChanged(sessions, nowMs, live) {
 		return
@@ -164,6 +186,7 @@ func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessio
 				)
 			}
 			t.Push.PushToSession(viewer.SessionID, frames)
+			state.rememberPeerPath(viewer.SessionID, gid, peer.World)
 			shown[gid] = true
 		}
 
@@ -178,6 +201,7 @@ func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessio
 				Payload:  despawn.Encode(),
 			}})
 			delete(shown, gid)
+			delete(state.peerPaths[viewer.SessionID], gid)
 		}
 	}
 
@@ -185,11 +209,17 @@ func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessio
 	for sessionID := range state.shownPeers {
 		if !live[sessionID] {
 			delete(state.shownPeers, sessionID)
+			delete(state.peerPaths, sessionID)
 		}
 	}
 	state.peerVisibilityValid = true
 }
 
+/*
+================
+peerPositionVisible
+================
+*/
 func peerPositionVisible(viewer, object Spawn) bool {
 	return worldgeom.InterestVisible(
 		worldgeom.RegionXZ{RegionID: viewer.RegionID, X: viewer.X, Z: viewer.Z},

@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+wiring_runtime.go - long-lived world services and authentication admission.
+
+===========================================================================
+*/
 package main
 
 import (
@@ -26,14 +33,15 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 	// The ticker and bootstrap must see the same NPC roster. Shipped static
 	// rows have Patrol=false; this also prevents the old three-fixture ticker
 	// from broadcasting movements for objects production never spawned.
-	ticker := worldsession.NewTicker(
+	var ticker *simulation.Ticker
+	ticker = worldsession.NewTicker(
 		game.hub,
 		game.items.NpcRoster,
 		game.items.TickHook(),
 		game.questMarkerTick(),
 		func(nowMs int64) []simulation.DivisionFrames {
 			game.parties.ExpireInvitations(nowMs)
-			return nil
+			return game.parties.MemberUpdates(ticker.Source.SnapshotSessions(), nowMs)
 		},
 	)
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
@@ -60,6 +68,11 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 	return ticker
 }
 
+/*
+================
+installEnterWorldVerifier
+================
+*/
 func installEnterWorldVerifier(
 	hub *transport.Hub,
 	ownedShardID string,
@@ -77,6 +90,11 @@ func installEnterWorldVerifier(
 	return nil
 }
 
+/*
+================
+installTransportAdmissionVerifier
+================
+*/
 func installTransportAdmissionVerifier(
 	hub *transport.Hub,
 	ownedShardID string,
@@ -110,6 +128,11 @@ func installTransportAdmissionVerifier(
 	return nil
 }
 
+/*
+================
+enterWorldVerifierForShard
+================
+*/
 func enterWorldVerifierForShard(
 	ownedShardID string,
 	verifier auth.VerifyFunc,

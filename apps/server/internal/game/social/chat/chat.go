@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+chat.go - chat routing, native message composition and beta scope.
+
+===========================================================================
+*/
 package chat
 
 import (
@@ -7,6 +14,13 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/social/party"
 )
+
+// ClosedBetaGlobalChat sends ordinary chat across the shard during beta.
+// Set false to restore visibility-scoped retail All/GM chat.
+const ClosedBetaGlobalChat = true
+
+// ChatTypeGlobal is the native named broadcast channel (client 0x753848).
+const ChatTypeGlobal uint8 = 6
 
 // PresenceView is the live-peer predicate the whisper arm consults.
 type PresenceView interface {
@@ -22,6 +36,11 @@ type PartyView interface {
 // Delivery is one presence-targeted 0x3667 send. The register glue resolves
 // TargetName through the shared live-session directory and drops it silently
 // when the target went offline in between.
+/*
+================
+Delivery
+================
+*/
 type Delivery struct {
 	TargetName string
 	Payload    []byte
@@ -33,6 +52,11 @@ type Delivery struct {
 // answer). Broadcast, when non-nil, is the 0x3667 body for the sender's
 // division cohort EXCLUDING the sender; Deliveries are targeted member/
 // whisper sends. Refusal carries the log-only reason.
+/*
+================
+Outcome
+================
+*/
 type Outcome struct {
 	Ack        []byte
 	Refusal    string
@@ -40,6 +64,11 @@ type Outcome struct {
 	Deliveries []Delivery
 }
 
+/*
+================
+refusedChat
+================
+*/
 func refusedChat(reason string) Outcome {
 	return Outcome{Refusal: reason}
 }
@@ -47,21 +76,8 @@ func refusedChat(reason string) Outcome {
 // HandleChat routes one decoded 0x7367 request. Transport-free: the
 // register glue owns every Send/Broadcast.
 //
-// ALL-CHAT SCOPE - a deliberate deviation from the v1.188 dump, chosen
-// 2026-07-29: the dump scopes All-chat to the speaker's sector/region
-// cohort (sub_484d90 reads regionId and hands the message to that
-// region's world node). This server's peer VISIBILITY is division-wide
-// with no distance filter (internal/game/world/simulation/peervis.go), so the retail
-// invariant worth preserving is "everyone who can SEE you hears your
-// All-chat" - a region-scoped cohort here would make a player you can
-// watch walking next to you inaudible, which no retail client ever
-// observes, while a division cohort only widens delivery to peers the
-// client already renders (and whose gids it can therefore resolve - the
-// 0x3667 type-1 body carries ONLY the sender gid, so a recipient
-// without the sender spawned shows the L"??" placeholder). When peervis
-// gains region scoping, this lane must follow: both cohorts are the
-// SAME predicate, kept in one place (AllChatAccept in register.go) so
-// the change is one function.
+// Beta scope is selected once below. The transport uses observed-object
+// delivery when disabled, so local GID-authored chat cannot escape visibility.
 //
 // NOT built, on purpose:
 //   - the cross-shard whisper forward (the dump's offline arm): no
@@ -75,6 +91,11 @@ func refusedChat(reason string) Outcome {
 //     cap is speculative; ChatErr 0x0D is never composed.
 //   - an abuse/ban-word filter: retail's is config-loaded; no config
 //     exists here.
+/*
+================
+HandleChat
+================
+*/
 func HandleChat(deps Dependencies, presence PresenceView, parties PartyView, divisionID string, sender *enterworld.Character, payload []byte) Outcome {
 	if sender == nil {
 		return refusedChat("characterNotFound")
@@ -93,7 +114,7 @@ func HandleChat(deps Dependencies, presence PresenceView, parties PartyView, div
 
 	switch request.ChatType {
 	case ChatTypeAll, ChatTypeGM:
-		return handleAllChat(request, sender)
+		return handleAllChat(request, sender, ClosedBetaGlobalChat)
 	case ChatTypeWhisper:
 		return handleWhisper(deps, presence, divisionID, sender, request)
 	case ChatTypeParty:
@@ -120,7 +141,16 @@ func HandleChat(deps Dependencies, presence PresenceView, parties PartyView, div
 // CICPlayer+0x1890), 1 for everyone else - a non-GM requesting type 3
 // broadcasts as plain All. The ACK echoes the REQUESTED type untouched
 // (the client's pending-record pop keys on it).
-func handleAllChat(request Request, sender *enterworld.Character) Outcome {
+/*
+================
+handleAllChat
+================
+*/
+func handleAllChat(request Request, sender *enterworld.Character, global bool) Outcome {
+	if global {
+		return Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second), Broadcast: EncodeChatBroadcastNamed(ChatTypeGlobal, sender.Name, request.Message)}
+	}
+
 	broadcastType := ChatTypeAll
 	if sender.GMPrivilege {
 		broadcastType = ChatTypeGM
@@ -147,6 +177,11 @@ func handleAllChat(request Request, sender *enterworld.Character) Outcome {
 // deviation from native's case-sensitive CompareStringA the register
 // path already made; a sensitive compare here would let the identical
 // character through on a casing technicality.
+/*
+================
+handleWhisper
+================
+*/
 func handleWhisper(deps Dependencies, presence PresenceView, divisionID string, sender *enterworld.Character, request Request) Outcome {
 	if request.TargetName == "" {
 		return Outcome{
@@ -193,6 +228,11 @@ func handleWhisper(deps Dependencies, presence PresenceView, divisionID string, 
 // handlePartyChat fans the type-4 line to the sender's party members
 // (presence-targeted; the sender's own line came back on the ack). No
 // party acks ChatErrNotPartyMember (the dump's 0x200A low byte).
+/*
+================
+handlePartyChat
+================
+*/
 func handlePartyChat(parties PartyView, divisionID string, sender *enterworld.Character, request Request) Outcome {
 	var snapshot party.Snapshot
 	inParty := false
@@ -222,6 +262,11 @@ func handlePartyChat(parties PartyView, divisionID string, sender *enterworld.Ch
 // ALWAYS acks ChatErrNoUnion (0x0C): no guild-alliance machinery exists
 // on this server, so no character holds union permission - the same
 // UIIT_CHATERR_ALLIANCE_PERMISSION_DENIED line either way.
+/*
+================
+handleGuildUnionChat
+================
+*/
 func handleGuildUnionChat(deps Dependencies, divisionID string, sender *enterworld.Character, request Request) Outcome {
 	guildID := int64(0)
 	inGuild := false
@@ -263,6 +308,11 @@ func handleGuildUnionChat(deps Dependencies, divisionID string, sender *enterwor
 // case-insensitively - the community lane's lookup, mirrored (theirs is
 // unexported): CreateCharacter refuses case-insensitive duplicates, so
 // the fold is unambiguous.
+/*
+================
+findCharacterByName
+================
+*/
 func findCharacterByName(deps Dependencies, divisionID, name string) *enterworld.Character {
 	for _, candidate := range deps.CharactersForDivision(divisionID) {
 		if candidate != nil && strings.EqualFold(candidate.Name, name) {
@@ -275,6 +325,11 @@ func findCharacterByName(deps Dependencies, divisionID, name string) *enterworld
 // characterSnapshot copies mutable character state while the authority read
 // door is held. Chat decisions must never inspect the live record after the
 // door closes.
+/*
+================
+characterSnapshot
+================
+*/
 func characterSnapshot(
 	deps Dependencies,
 	divisionID string,

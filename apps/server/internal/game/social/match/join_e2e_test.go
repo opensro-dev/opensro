@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+join_e2e_test.go - party matching consent and native roster wire verification.
+
+===========================================================================
+*/
 package match_test
 
 // End-to-end exercise of the match-JOIN owner-approval handshake over
@@ -73,6 +80,11 @@ const (
 	gidKate uint32 = 100003
 )
 
+/*
+================
+joinServer
+================
+*/
 type joinServer struct {
 	srv       *transport.Server
 	authority *store.Store
@@ -88,6 +100,11 @@ type joinServer struct {
 // the pointer-based Registers share it), the presence facade, the match
 // runtime's party/mentor seams pointed at the owning runtimes, and the
 // stale-state purges on OnWorldBound / OnSessionClose.
+/*
+================
+startJoinServer
+================
+*/
 func startJoinServer(t *testing.T, dir string, seeds []*enterworld.Character) joinServer {
 	t.Helper()
 
@@ -183,6 +200,11 @@ func startJoinServer(t *testing.T, dir string, seeds []*enterworld.Character) jo
 }
 
 // joinAnswer renders the sub_6fe370 / sub_6fe690 owner-answer body.
+/*
+================
+joinAnswer
+================
+*/
 func joinAnswer(requestID, entryID uint32, answer uint8) []byte {
 	return concat(u32le(requestID), u32le(entryID), []byte{answer})
 }
@@ -191,6 +213,11 @@ func joinAnswer(requestID, entryID uint32, answer uint8) []byte {
 // China-male seeds (the party e2e's chinaMaleRow with the level
 // parameterized): model 1907 fallback, full vitals 0xAA, the China
 // start profile spawn.
+/*
+================
+chinaRow
+================
+*/
 func chinaRow(gid uint32, name string, level uint8) party.MemberRow {
 	return party.MemberRow{
 		MemberID:      gid,
@@ -202,12 +229,18 @@ func chinaRow(gid uint32, name string, level uint8) party.MemberRow {
 		PosX:          960,
 		PosY:          20,
 		PosZ:          458,
+		War:           domain.DefaultWorldInstance,
 	}
 }
 
 // expectJoinSeed asserts the enter-a-party pair the accepted join
 // commits toward one session: 0xB0D5 result-1 with the receiver's OWN
 // gid, then the 0x35D6 settings+roster bulk.
+/*
+================
+expectJoinSeed
+================
+*/
 func expectJoinSeed(t *testing.T, c *websocket.Conn, ownGid, leaderGid uint32, optionBits uint8, rows []party.MemberRow, what string) {
 	t.Helper()
 	expectExactFrame(t, c, party.OpCreatePartyAck, party.EncodeCreatePartyAckB0D5(ownGid), what+" 0xB0D5 ack")
@@ -216,10 +249,20 @@ func expectJoinSeed(t *testing.T, c *websocket.Conn, ownGid, leaderGid uint32, o
 
 // campRow is the expected 0x3AC5 member wire row for one seed (empty
 // location until a status-13 coord row would update it).
+/*
+================
+campRow
+================
+*/
 func campRow(gid uint32, name string, kind, level uint8) mentor.MemberWireRow {
 	return mentor.MemberWireRow{MemberID: gid, Name: name, Kind: kind, LevelByte58: level, Level: level}
 }
 
+/*
+================
+TestMatchJoinHandshakeEndToEndOverWire
+================
+*/
 func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "authority")
 
@@ -434,6 +477,11 @@ func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 	sendFrame(t, mira2, transport.OpBye, []byte{transport.ByeReasonNormal})
 }
 
+/*
+================
+TestPartyApprovalRevalidatesDeletedAndModifiedListing
+================
+*/
 func TestPartyApprovalRevalidatesDeletedAndModifiedListing(t *testing.T) {
 	seeds := []*enterworld.Character{
 		{Name: e2eMiraName, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: e2eInt64(enterworld.RaceChina), Gender: e2eInt64(enterworld.GenderMale), Level: e2eInt64(60)},

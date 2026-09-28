@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+register.go - chat routing, native message composition and beta scope.
+
+===========================================================================
+*/
 package chat
 
 import (
@@ -17,18 +24,21 @@ type DeliveryPresence interface {
 	SessionByName(divisionID, name string) (*transport.Session, bool)
 }
 
+/*
+================
+Register
+================
+*/
 func Register(hub *transport.Hub, deps Dependencies, presence DeliveryPresence, parties PartyView) {
 	hub.Handle(OpChatRequest, chatHubHandler(hub, deps, presence, parties))
 }
 
-// AllChatAccept is THE All/GM-chat cohort predicate: every bound session
-// of the sender's division except the sender. Deliberately the same
-// cohort as peer visibility (internal/game/world/simulation/peervis.go's same-division
-// walk, the movement fan-out template) - everyone who can see you hears
-// you, and every recipient holds the sender's gid spawned so the
-// client-side registry lookup resolves a real name instead of L"??".
-// When peer visibility gains region scoping, change THIS function with
-// it - the two cohorts must move together (see HandleChat's scope note).
+// AllChatAccept selects other bound sessions in the shard for beta global chat.
+/*
+================
+AllChatAccept
+================
+*/
 func AllChatAccept(origin *transport.Session, divisionID string) func(*transport.Session) bool {
 	return func(peer *transport.Session) bool {
 		if peer.ID == origin.ID {
@@ -46,6 +56,11 @@ func AllChatAccept(origin *transport.Session, divisionID string) func(*transport
 // through the presence facade (a target who went offline between the
 // handler and the send drops silently - the same posture as the letter
 // push). A nil Ack stays silent on the wire (decode refusals only).
+/*
+================
+chatHubHandler
+================
+*/
 func chatHubHandler(hub *transport.Hub, deps Dependencies, presence DeliveryPresence, parties PartyView) transport.HandlerFunc {
 	return func(s *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(deps, s)
@@ -66,7 +81,11 @@ func chatHubHandler(hub *transport.Hub, deps Dependencies, presence DeliveryPres
 			return
 		}
 		if outcome.Broadcast != nil {
-			hub.BroadcastFunc(AllChatAccept(s, divisionID), OpChatBroadcast, outcome.Broadcast)
+			if ClosedBetaGlobalChat {
+				hub.BroadcastFunc(AllChatAccept(s, divisionID), OpChatBroadcast, outcome.Broadcast)
+			} else {
+				hub.BroadcastObserved(divisionID, s.ID, enterworld.ObjectIDForCharacter(character), []transport.Frame{{Opcode: OpChatBroadcast, Payload: outcome.Broadcast}})
+			}
 		}
 		if presence == nil {
 			return

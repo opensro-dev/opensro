@@ -104,12 +104,15 @@ func (rt *Runtime) grantPickup(
 	divisionID, worldKey string,
 	character, characterSnapshot *enterworld.Character,
 	groundItem grounditem.Item,
-) OpResult {
+) (result OpResult) {
+	picker := character
+	character = rt.partyPickupRecipient(divisionID, picker, groundItem, rt.Now().UnixMilli())
+	defer func() { result = routeSharedPickup(result, picker, character) }()
 	snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
 		return simulation.SeedWorldState(characterSnapshot)
 	})
 	anim := wire.PickupAnim{
-		Gid:     enterworld.ObjectIDForCharacter(character),
+		Gid:     enterworld.ObjectIDForCharacter(picker),
 		Heading: wire.HeadingByteFromAngle(snapshot.Spawn.Angle),
 	}
 
@@ -159,7 +162,7 @@ func (rt *Runtime) grantPickup(
 	var grant inventory.PickupGrant
 	var grantedItem inventory.Item
 	var questFrames []wire.Frame
-	result := pickupRefusal(wire.ErrCodeInvalidRequest)
+	result = pickupRefusal(wire.ErrCodeInvalidRequest)
 	if !rt.deps.Update(character, "pickup-item", func() bool {
 		if character.DeletePending {
 			return false
@@ -222,6 +225,11 @@ func (rt *Runtime) grantPickup(
 	}
 }
 
+/*
+================
+updateQuestInventory
+================
+*/
 func (rt *Runtime) updateQuestInventory(character *enterworld.Character) []wire.Frame {
 	if rt.UpdateQuestInventory == nil {
 		return nil

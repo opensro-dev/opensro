@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+chat_test.go - native chat delivery, acknowledgement and privacy regressions.
+
+===========================================================================
+*/
 package chat
 
 // Transport-free pins for the 0x7367 decode and the HandleChat routing:
@@ -20,6 +27,11 @@ const testDivision = "global-official"
 // chatFrame hand-rolls a 0x7367 body: {u8 type, u8 second, [whisper:
 // u16 len + ANSI target], u16 wcharCount + UTF-16LE text}. The text is
 // ASCII/BMP only in these fixtures, so each rune is one code unit.
+/*
+================
+chatFrame
+================
+*/
 func chatFrame(chatType, second uint8, target, message string) []byte {
 	frame := []byte{chatType, second}
 	if chatType == ChatTypeWhisper {
@@ -35,6 +47,11 @@ func chatFrame(chatType, second uint8, target, message string) []byte {
 }
 
 // utf16LE hand-rolls the sized-wide text tail {u16 count, count*2 bytes}.
+/*
+================
+utf16LE
+================
+*/
 func utf16LE(message string) []byte {
 	runes := []rune(message)
 	out := []byte{byte(len(runes)), byte(len(runes) >> 8)}
@@ -46,23 +63,43 @@ func utf16LE(message string) []byte {
 
 type stubPresence map[string]bool
 
+/*
+================
+OnlineByName
+================
+*/
 func (p stubPresence) OnlineByName(_, name string) bool {
 	return p[strings.ToLower(name)]
 }
 
 type stubParties map[string]party.Snapshot
 
+/*
+================
+PartyOf
+================
+*/
 func (p stubParties) PartyOf(_, name string) (party.Snapshot, bool) {
 	snapshot, ok := p[strings.ToLower(name)]
 	return snapshot, ok
 }
 
 // stubGuilds is a one-guild enterworld.GuildStore.
+/*
+================
+stubGuilds
+================
+*/
 type stubGuilds struct {
 	guildID int64
 	members []enterworld.GuildMemberRecord
 }
 
+/*
+================
+Guild
+================
+*/
 func (g stubGuilds) Guild(_ string, guildID int64) (enterworld.GuildRecord, []enterworld.GuildMemberRecord, bool) {
 	if guildID != g.guildID {
 		return enterworld.GuildRecord{}, nil, false
@@ -72,6 +109,11 @@ func (g stubGuilds) Guild(_ string, guildID int64) (enterworld.GuildRecord, []en
 	return enterworld.GuildRecord{}, members, true
 }
 
+/*
+================
+GuildOfCharacter
+================
+*/
 func (g stubGuilds) GuildOfCharacter(_ string, characterID int64) (int64, bool) {
 	for _, member := range g.members {
 		if member.CharID == characterID {
@@ -81,34 +123,74 @@ func (g stubGuilds) GuildOfCharacter(_ string, characterID int64) (int64, bool) 
 	return 0, false
 }
 
+/*
+================
+CreateGuild
+================
+*/
 func (g stubGuilds) CreateGuild(string, enterworld.GuildRecord, enterworld.GuildMemberRecord, *enterworld.Character) (int64, error) {
 	return 0, nil
 }
 
+/*
+================
+UpdateGuildAs
+================
+*/
 func (g stubGuilds) UpdateGuildAs(string, int64, string, enterworld.GuildAuthorization, func(enterworld.GuildRecord, []enterworld.GuildMemberRecord) (enterworld.GuildRecord, []enterworld.GuildMemberRecord, bool)) (enterworld.GuildSnapshot, enterworld.GuildRefusal) {
 	return enterworld.GuildSnapshot{}, enterworld.GuildRefusalUpdateRejected
 }
 
+/*
+================
+AddGuildMemberAs
+================
+*/
 func (g stubGuilds) AddGuildMemberAs(string, int64, int64, uint32, enterworld.GuildMemberRecord) (enterworld.GuildSnapshot, enterworld.GuildRefusal) {
 	return enterworld.GuildSnapshot{}, enterworld.GuildRefusalUpdateRejected
 }
 
+/*
+================
+KickGuildMember
+================
+*/
 func (g stubGuilds) KickGuildMember(string, int64, string, uint32) (enterworld.GuildRemovalResult, enterworld.GuildRefusal) {
 	return enterworld.GuildRemovalResult{}, enterworld.GuildRefusalUpdateRejected
 }
 
+/*
+================
+LeaveGuild
+================
+*/
 func (g stubGuilds) LeaveGuild(string, int64) (enterworld.GuildRemovalResult, enterworld.GuildRefusal) {
 	return enterworld.GuildRemovalResult{}, enterworld.GuildRefusalUpdateRejected
 }
 
+/*
+================
+DissolveGuildAs
+================
+*/
 func (g stubGuilds) DissolveGuildAs(string, int64) (enterworld.GuildSnapshot, enterworld.GuildRefusal) {
 	return enterworld.GuildSnapshot{}, enterworld.GuildRefusalUpdateRejected
 }
 
+/*
+================
+DonateGuildPoints
+================
+*/
 func (g stubGuilds) DonateGuildPoints(string, int64, uint32) (enterworld.GuildDonationResult, enterworld.GuildRefusal) {
 	return enterworld.GuildDonationResult{}, enterworld.GuildRefusalUpdateRejected
 }
 
+/*
+================
+testDeps
+================
+*/
 func testDeps(characters ...*enterworld.Character) *enterworld.Deps {
 	return &enterworld.Deps{
 		Characters: enterworld.StaticCharacterSource{testDivision: characters},
@@ -117,6 +199,11 @@ func testDeps(characters ...*enterworld.Character) *enterworld.Deps {
 
 // ---- 0x7367 decode ----
 
+/*
+================
+TestDecodeChatRequestPerMode
+================
+*/
 func TestDecodeChatRequestPerMode(t *testing.T) {
 	// Every non-whisper client-composable mode carries NO name field.
 	for _, chatType := range []uint8{ChatTypeAll, ChatTypeGM, ChatTypeParty, ChatTypeGuild, ChatTypeUnion} {
@@ -138,6 +225,11 @@ func TestDecodeChatRequestPerMode(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDecodeChatRequestUTF16
+================
+*/
 func TestDecodeChatRequestUTF16(t *testing.T) {
 	// U+6F22 U+5B57 - two BMP code units, LE on the wire.
 	payload := []byte{ChatTypeAll, 0xFF, 0x02, 0x00, 0x22, 0x6F, 0x57, 0x5B}
@@ -150,6 +242,11 @@ func TestDecodeChatRequestUTF16(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDecodeChatRequestRefusals
+================
+*/
 func TestDecodeChatRequestRefusals(t *testing.T) {
 	good := chatFrame(ChatTypeWhisper, 0xFF, "Berk", "hi")
 	cases := map[string][]byte{
@@ -177,6 +274,11 @@ func TestDecodeChatRequestRefusals(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleChatMalformedFrameSilent
+================
+*/
 func TestHandleChatMalformedFrameSilent(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	outcome := HandleChat(testDeps(sender), stubPresence{}, stubParties{}, testDivision, sender, []byte{0x01})
@@ -187,14 +289,19 @@ func TestHandleChatMalformedFrameSilent(t *testing.T) {
 
 // ---- All / GM ----
 
+/*
+================
+TestHandleChatAllBroadcastByteExact
+================
+*/
 func TestHandleChatAllBroadcastByteExact(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	outcome := HandleChat(testDeps(sender), stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeAll, 0xFF, "", "hi"))
 	if !bytes.Equal(outcome.Ack, []byte{0x01, 0x01, 0xFF}) {
 		t.Fatalf("ack = % X, want 01 01 FF", outcome.Ack)
 	}
-	// gid = 100000 + 7 = 0x000186A7 LE.
-	want := append([]byte{0x01, 0xA7, 0x86, 0x01, 0x00}, utf16LE("hi")...)
+	// The beta broadcast is native channel 6 with the authoritative name.
+	want := append([]byte{ChatTypeGlobal, 4, 0, 'A', 'l', 'f', 'a'}, utf16LE("hi")...)
 	if !bytes.Equal(outcome.Broadcast, want) {
 		t.Fatalf("0x3667 = % X, want % X", outcome.Broadcast, want)
 	}
@@ -203,11 +310,15 @@ func TestHandleChatAllBroadcastByteExact(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleChatGMForcesTypeThree
+================
+*/
 func TestHandleChatGMForcesTypeThree(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa", GMPrivilege: true}
-	deps := testDeps(sender)
 	// A GM's no-prefix compose is type 3; the broadcast type byte is 3.
-	outcome := HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeGM, 0xFF, "", "hi"))
+	outcome := handleAllChat(Request{ChatType: ChatTypeGM, Second: 0xFF, Message: "hi"}, sender, false)
 	want := append([]byte{0x03, 0xA7, 0x86, 0x01, 0x00}, utf16LE("hi")...)
 	if !bytes.Equal(outcome.Broadcast, want) {
 		t.Fatalf("GM 0x3667 = % X, want % X", outcome.Broadcast, want)
@@ -217,13 +328,13 @@ func TestHandleChatGMForcesTypeThree(t *testing.T) {
 		t.Fatalf("GM ack = % X, want 01 03 FF", outcome.Ack)
 	}
 	// A privileged speaker requesting type 1 is forced to 3 as well.
-	outcome = HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeAll, 0xFF, "", "hi"))
+	outcome = handleAllChat(Request{ChatType: ChatTypeAll, Second: 0xFF, Message: "hi"}, sender, false)
 	if outcome.Broadcast[0] != 0x03 {
 		t.Fatalf("GM type-1 request broadcast type = 0x%02X, want 0x03", outcome.Broadcast[0])
 	}
 	// A NON-GM requesting type 3 falls into the All arm as type 1.
 	plain := &enterworld.Character{ID: 8, Name: "Bravo"}
-	outcome = HandleChat(testDeps(plain), stubPresence{}, stubParties{}, testDivision, plain, chatFrame(ChatTypeGM, 0xFF, "", "hi"))
+	outcome = handleAllChat(Request{ChatType: ChatTypeGM, Second: 0xFF, Message: "hi"}, plain, false)
 	if outcome.Broadcast[0] != 0x01 {
 		t.Fatalf("non-GM type-3 request broadcast type = 0x%02X, want 0x01", outcome.Broadcast[0])
 	}
@@ -234,6 +345,11 @@ func TestHandleChatGMForcesTypeThree(t *testing.T) {
 
 // ---- Whisper ----
 
+/*
+================
+TestHandleChatWhisperDelivered
+================
+*/
 func TestHandleChatWhisperDelivered(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	target := &enterworld.Character{ID: 8, Name: "Berk"}
@@ -254,6 +370,11 @@ func TestHandleChatWhisperDelivered(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleChatWhisperBlockedAcksSuccessDeliversNothing
+================
+*/
 func TestHandleChatWhisperBlockedAcksSuccessDeliversNothing(t *testing.T) {
 	// Block "Berk" (stored casing), whisper arrives from "berk": the
 	// EqualFold match - consistent with the register path's fold - must
@@ -277,6 +398,11 @@ func TestHandleChatWhisperBlockedAcksSuccessDeliversNothing(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleChatWhisperTargetMissing
+================
+*/
 func TestHandleChatWhisperTargetMissing(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	offline := &enterworld.Character{ID: 8, Name: "Berk"}
@@ -298,6 +424,11 @@ func TestHandleChatWhisperTargetMissing(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleChatWhisperSelf
+================
+*/
 func TestHandleChatWhisperSelf(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	// Success, NO delivery - even with the sender online and the casing
@@ -313,6 +444,11 @@ func TestHandleChatWhisperSelf(t *testing.T) {
 
 // ---- Party / Guild / Union ----
 
+/*
+================
+TestHandleChatPartyMembershipGate
+================
+*/
 func TestHandleChatPartyMembershipGate(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	deps := testDeps(sender)
@@ -340,6 +476,11 @@ func TestHandleChatPartyMembershipGate(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleChatGuildAndUnionGates
+================
+*/
 func TestHandleChatGuildAndUnionGates(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	deps := testDeps(sender)
@@ -376,6 +517,11 @@ func TestHandleChatGuildAndUnionGates(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleChatUncomposableTypeAcksInvalidCommand
+================
+*/
 func TestHandleChatUncomposableTypeAcksInvalidCommand(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	deps := testDeps(sender)
@@ -393,6 +539,11 @@ func TestHandleChatUncomposableTypeAcksInvalidCommand(t *testing.T) {
 
 // The ack echoes the second byte VERBATIM (the client's pending-record
 // pop key) - not just the retail 0xFF.
+/*
+================
+TestHandleChatSecondByteEchoed
+================
+*/
 func TestHandleChatSecondByteEchoed(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	outcome := HandleChat(testDeps(sender), stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeAll, 0x2A, "", "hi"))

@@ -253,21 +253,37 @@ type Ticker struct {
 	once   sync.Once
 }
 
+/*
+================
+divisionTickState
+================
+*/
 type divisionTickState struct {
 	settled             map[string]int64
 	shownPeers          map[string]map[uint32]bool
+	peerPaths           map[string]map[uint32]peerPath
 	peerVisibilityKeys  []peerVisibilityKey
 	peerVisibilityValid bool
 	shownCOS            map[string]map[uint32]shownCOS
 	monsters            *MonsterMoverOps
 }
 
+/*
+================
+divisionTickWork
+================
+*/
 type divisionTickWork struct {
 	divisionID string
 	sessions   []SessionSnapshot
 	state      *divisionTickState
 }
 
+/*
+================
+shardTickBatch
+================
+*/
 type shardTickBatch struct {
 	tick  int64
 	nowMs int64
@@ -277,6 +293,11 @@ type shardTickBatch struct {
 
 // NewTicker wires a Ticker with the production cadence. The composition root
 // must install the same validated NPC roster used by enter-world bootstrap.
+/*
+================
+NewTicker
+================
+*/
 func NewTicker(source SessionSource, push Pusher) *Ticker {
 	return &Ticker{
 		Source:     source,
@@ -289,6 +310,11 @@ func NewTicker(source SessionSource, push Pusher) *Ticker {
 }
 
 // Done closes after Run has stopped and joined every shard worker.
+/*
+================
+Done
+================
+*/
 func (t *Ticker) Done() <-chan struct{} {
 	return t.done
 }
@@ -309,6 +335,11 @@ func (t *Ticker) Run(ctx context.Context) {
 	})
 }
 
+/*
+================
+run
+================
+*/
 func (t *Ticker) run(ctx context.Context) {
 	interval := t.Interval
 	if interval <= 0 {
@@ -343,6 +374,11 @@ func (t *Ticker) run(ctx context.Context) {
 	}
 }
 
+/*
+================
+runShard
+================
+*/
 func (t *Ticker) runShard(ctx context.Context, inbox <-chan shardTickBatch) {
 	for {
 		select {
@@ -392,6 +428,11 @@ func (t *Ticker) RunTick(nowMs int64) {
 	t.runHooks(nowMs, work)
 }
 
+/*
+================
+runScheduledTick
+================
+*/
 func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []chan shardTickBatch) {
 	defer recoverTickPanic("scheduled tick")
 
@@ -429,6 +470,11 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	}
 }
 
+/*
+================
+prepareTick
+================
+*/
 func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 	tick := t.tickIndex
 	t.tickIndex++
@@ -500,6 +546,11 @@ func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 	return tick, work
 }
 
+/*
+================
+tickShardForDivision
+================
+*/
 func tickShardForDivision(divisionID string, shardCount int) int {
 	const (
 		offset = uint32(2166136261)
@@ -513,6 +564,11 @@ func tickShardForDivision(divisionID string, shardCount int) int {
 	return int(hash % uint32(shardCount))
 }
 
+/*
+================
+cloneMonsterMoverOps
+================
+*/
 func cloneMonsterMoverOps(source *MonsterMoverOps) *MonsterMoverOps {
 	if source == nil {
 		return nil
@@ -523,6 +579,11 @@ func cloneMonsterMoverOps(source *MonsterMoverOps) *MonsterMoverOps {
 	return &clone
 }
 
+/*
+================
+runDivision
+================
+*/
 func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	defer recoverTickPanic("division " + work.divisionID)
 
@@ -543,10 +604,20 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	work.state.monsters.RunMonsterLeg(nowMs, work.sessions, t.Push)
 }
 
+/*
+================
+runHooks
+================
+*/
 func (t *Ticker) runHooks(nowMs int64, work []divisionTickWork) {
 	t.runHookList(t.Hooks, nowMs, work)
 }
 
+/*
+================
+runHookList
+================
+*/
 func (t *Ticker) runHookList(hooks []TickHook, nowMs int64, work []divisionTickWork) {
 	for _, hook := range hooks {
 		func() {
@@ -665,6 +736,10 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 		return
 	}
 
+	// Destination admission precedes the source sample: retail 30E3 only
+	// reseeds the path; it cannot start one for an already visible peer.
+	t.publishPeerPath(state, session, nowMs)
+
 	// In flight: the LIVE interpolated position, never the goal (bug D).
 	delete(state.settled, session.SessionID)
 	liveSpawn := session.World.LiveSpawnAt(nowMs)
@@ -683,6 +758,11 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 	})
 }
 
+/*
+================
+pushPeerMovement
+================
+*/
 func (t *Ticker) pushPeerMovement(state *divisionTickState, gid uint32, frames []Frame) {
 	for viewer, shown := range state.shownPeers {
 		if shown[gid] {

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/transport"
 )
@@ -61,25 +62,47 @@ readers, which overstate a +HP member as full.
 */
 type MemberVitals func(divisionID string, character *enterworld.Character) (currentHP, maxHP, currentMP, maxMP int64)
 
+/*
+================
+Runtime
+Owns party membership and its session-scoped collaborators.
+================
+*/
 type Runtime struct {
 	deps         Dependencies
 	presence     Presence
 	registry     *Registry
 	consentArms  []ConsentArm
 	memberVitals MemberVitals
+	updates      memberUpdateState
 }
 
 // NewRuntime builds the lane over a fresh in-memory registry. Construct
 // it over the process-owned deps pointer shared by every lane.
+/*
+================
+NewRuntime
+================
+*/
 func NewRuntime(deps Dependencies, presence Presence) *Runtime {
 	return &Runtime{deps: deps, presence: presence, registry: NewRegistry()}
 }
 
 // Registry exposes the party registry for tests.
+/*
+================
+Registry
+================
+*/
 func (r *Runtime) Registry() *Registry {
 	return r.registry
 }
 
+/*
+================
+sessionByName
+================
+*/
 func (r *Runtime) sessionByName(divisionID, characterName string) (*transport.Session, bool) {
 	if r.presence == nil {
 		return nil, false
@@ -104,6 +127,11 @@ func (r *Runtime) UseMemberVitals(fn MemberVitals) {
 	}
 }
 
+/*
+================
+AddConsentArm
+================
+*/
 func (r *Runtime) AddConsentArm(arm ConsentArm) {
 	if arm != nil {
 		r.consentArms = append(r.consentArms, arm)
@@ -136,6 +164,11 @@ func (r *Runtime) Register(hub *transport.Hub) {
 
 // sessionIdentity resolves the bound character or reports the silent
 // discard (unbound sessions never reach party state).
+/*
+================
+sessionIdentity
+================
+*/
 func (r *Runtime) sessionIdentity(s *transport.Session, opcode uint16) (*enterworld.Character, string, bool) {
 	character, divisionID, bound := enterworld.SessionCharacter(r.deps, s)
 	if !bound {
@@ -218,15 +251,15 @@ memberRowFor
 memberRowFor composes one masked wire row from the live character
 record: gid, name, the model resolve chain the local-player entry
 uses, the persisted level (>=1 floor), the derived-vitals status
-nibbles, and the settled spawn position (the same normalized frame
-the enter-world start profile ships). War dword stays 0 - no
-fortress-war state exists.
+nibbles, and the settled spawn position. The packed world identity must
+match enter-world admission; zero is a real instance, not the overworld.
 ==================
 */
 func (r *Runtime) memberRowFor(divisionID string, character *enterworld.Character) MemberRow {
 	row := MemberRow{
 		MemberID: enterworld.ObjectIDForCharacter(character),
 		Level:    1,
+		War:      domain.CharacterWorldInstance(character),
 	}
 	if character == nil {
 		return row

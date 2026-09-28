@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+registry.go - session-scoped party membership, invitations and loot rotation.
+
+===========================================================================
+*/
 package party
 
 import (
@@ -12,6 +19,11 @@ import (
 // live in - enterworld.ObjectIDForCharacter; there is no second party
 // member-id space) and the character name the presence facade resolves
 // sessions by.
+/*
+================
+Member
+================
+*/
 type Member struct {
 	MemberID uint32
 	Name     string
@@ -20,6 +32,11 @@ type Member struct {
 // Snapshot is one party's state as a handler reads it: value copies
 // taken under the registry lock so fan-out composes without holding it.
 // Members ride in join order with the leader first.
+/*
+================
+Snapshot
+================
+*/
 type Snapshot struct {
 	// ObjectOrder is the process-local object-address order used by native
 	// reward grouping. It is neither a leader ID nor a wire/persistent party ID.
@@ -30,11 +47,17 @@ type Snapshot struct {
 }
 
 // partyState is the live registry record behind the snapshots.
+/*
+================
+partyState
+================
+*/
 type partyState struct {
 	divisionID string
 	leaderID   uint32
 	optionBits uint8
 	members    []Member
+	lootOrder  []uint32
 }
 
 // PendingInviteKind splits the two proposal shapes an invitation prompt
@@ -51,6 +74,11 @@ const (
 // 0x751A proposal sends the 0x3393 prompt, consumed by the target's
 // consent. Everything is re-validated at consent time - the party world
 // may have changed while the prompt was up.
+/*
+================
+PendingInvite
+================
+*/
 type PendingInvite struct {
 	Kind        PendingInviteKind
 	InviterName string
@@ -67,6 +95,11 @@ type PendingInvite struct {
 // partyState behind them; handlers mutate under it, then compose and
 // send from the returned snapshots with no lock held (no Hub call ever
 // runs inside).
+/*
+================
+Registry
+================
+*/
 type Registry struct {
 	mu              sync.Mutex
 	byKey           map[string]*partyState
@@ -74,6 +107,11 @@ type Registry struct {
 }
 
 // NewRegistry builds an empty registry.
+/*
+================
+NewRegistry
+================
+*/
 func NewRegistry() *Registry {
 	return &Registry{
 		byKey:           make(map[string]*partyState),
@@ -84,11 +122,21 @@ func NewRegistry() *Registry {
 // SetPendingInvite records the outstanding invitation for a target. The
 // handlers never call it while any proposal for the target waits
 // (Runtime.proposalPending), so it never replaces a live one.
+/*
+================
+SetPendingInvite
+================
+*/
 func (r *Registry) SetPendingInvite(divisionID, targetName string, invite PendingInvite) {
 	r.SetPendingInviteAt(divisionID, targetName, invite, time.Now().UnixMilli())
 }
 
 // SetPendingInviteAt shares the mission clock's millisecond time domain.
+/*
+================
+SetPendingInviteAt
+================
+*/
 func (r *Registry) SetPendingInviteAt(divisionID, targetName string, invite PendingInvite, nowMs int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -99,6 +147,11 @@ func (r *Registry) SetPendingInviteAt(divisionID, targetName string, invite Pend
 // ExpirePendingInvites retires only records still owned by this lane. Native
 // 46F1E0 expires after, not at, 30 seconds. Replacement starts a fresh clock;
 // accepted/dropped invitations are absent and cannot expire a second time.
+/*
+================
+ExpirePendingInvites
+================
+*/
 func (r *Registry) ExpirePendingInvites(nowMs int64) []PendingInvite {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -115,6 +168,11 @@ func (r *Registry) ExpirePendingInvites(nowMs int64) []PendingInvite {
 // HasPendingInviteFor reports whether an invitation targets the
 // character WITHOUT consuming it - the shared-0x3393 consent router's
 // ownership probe (TakePendingInvite stays the answering path).
+/*
+================
+HasPendingInviteFor
+================
+*/
 func (r *Registry) HasPendingInviteFor(divisionID, name string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -125,6 +183,11 @@ func (r *Registry) HasPendingInviteFor(divisionID, name string) bool {
 // TakePendingInvite consumes the target's outstanding invitation. A
 // consent with no pending record (never invited, already answered, or a
 // duplicate/stale frame) reports false and the caller drops silently.
+/*
+================
+TakePendingInvite
+================
+*/
 func (r *Registry) TakePendingInvite(divisionID, targetName string) (PendingInvite, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -140,6 +203,11 @@ func (r *Registry) TakePendingInvite(divisionID, targetName string) (PendingInvi
 // session-boundary hooks call it: a fresh client shows no prompt, so a
 // consent from the NEW session must never commit a prompt the OLD
 // session received. Reports whether a pending invitation was dropped.
+/*
+================
+DropPendingInviteFor
+================
+*/
 func (r *Registry) DropPendingInviteFor(divisionID, name string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -153,6 +221,11 @@ func (r *Registry) DropPendingInviteFor(divisionID, name string) bool {
 
 // PendingInviteCount reports the number of outstanding invitations (the
 // reboot-empty and leak assertions).
+/*
+================
+PendingInviteCount
+================
+*/
 func (r *Registry) PendingInviteCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -163,11 +236,21 @@ func (r *Registry) PendingInviteCount() int {
 // lowercase(name) - the SAME shape as the hub's exclusive bind key and
 // the presence facade's lookup, so a session and a character name
 // resolve to the same party.
+/*
+================
+memberKey
+================
+*/
 func memberKey(divisionID, name string) string {
 	return divisionID + ":" + strings.ToLower(name)
 }
 
 // snapshotLocked copies the party state; callers hold r.mu.
+/*
+================
+snapshotLocked
+================
+*/
 func snapshotLocked(p *partyState) Snapshot {
 	members := make([]Member, len(p.members))
 	copy(members, p.members)
@@ -176,6 +259,11 @@ func snapshotLocked(p *partyState) Snapshot {
 
 // RewardSnapshots takes one consistent roster view, including parties whose
 // leaders changed. Object identity belongs to partyState for its lifetime.
+/*
+================
+RewardSnapshots
+================
+*/
 func (r *Registry) RewardSnapshots(division string) []Snapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -193,6 +281,11 @@ func (r *Registry) RewardSnapshots(division string) []Snapshot {
 // Count reports the number of live parties (the reboot-empty assertion).
 // The byKey map holds one entry per MEMBER; distinct parties are the
 // distinct states behind them.
+/*
+================
+Count
+================
+*/
 func (r *Registry) Count() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -204,6 +297,11 @@ func (r *Registry) Count() int {
 }
 
 // PartyOf resolves the party a character belongs to.
+/*
+================
+PartyOf
+================
+*/
 func (r *Registry) PartyOf(divisionID, name string) (Snapshot, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -217,6 +315,11 @@ func (r *Registry) PartyOf(divisionID, name string) (Snapshot, bool) {
 // Form creates a two-member party: the 0x70D5 path (the client only
 // composes it with no active party, and the proposal's target must be
 // partyless too). Returns the refusal reason when nothing formed.
+/*
+================
+Form
+================
+*/
 func (r *Registry) Form(divisionID string, leader, second Member, optionBits uint8) (Snapshot, string) {
 	leaderKey := memberKey(divisionID, leader.Name)
 	secondKey := memberKey(divisionID, second.Name)
@@ -245,6 +348,11 @@ func (r *Registry) Form(divisionID string, leader, second Member, optionBits uin
 // Join appends a member to the actor's existing party: the 0x751A path.
 // Re-validates everything under the lock (the handler's pre-checks ran
 // without it). Returns the POST-join snapshot.
+/*
+================
+Join
+================
+*/
 func (r *Registry) Join(divisionID, actorName string, joiner Member) (Snapshot, string) {
 	joinerKey := memberKey(divisionID, joiner.Name)
 	r.mu.Lock()
@@ -265,6 +373,11 @@ func (r *Registry) Join(divisionID, actorName string, joiner Member) (Snapshot, 
 }
 
 // LeaveOutcome is one applied departure (leave, banish, or disconnect).
+/*
+================
+LeaveOutcome
+================
+*/
 type LeaveOutcome struct {
 	// Leaver is the departed member.
 	Leaver Member
@@ -284,6 +397,11 @@ type LeaveOutcome struct {
 // split the client fold notes - 0x704F is empty and the server decides
 // by leadership); a member leaving that would leave fewer than two
 // members dissolves it too (a one-member party is not a party).
+/*
+================
+Leave
+================
+*/
 func (r *Registry) Leave(divisionID, name string) (LeaveOutcome, string) {
 	key := memberKey(divisionID, name)
 	r.mu.Lock()
@@ -314,6 +432,11 @@ func (r *Registry) Leave(divisionID, name string) (LeaveOutcome, string) {
 // the 0x7664 path. Leader-only; the leader cannot banish themselves
 // (the client's slot route never composes it, so a self-banish is a
 // desync or a forged frame). Dissolves below the two-member minimum.
+/*
+================
+Banish
+================
+*/
 func (r *Registry) Banish(divisionID, actorName string, memberID uint32) (LeaveOutcome, string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -358,6 +481,11 @@ func (r *Registry) Banish(divisionID, actorName string, memberID uint32) (LeaveO
 
 // splitMember partitions the roster into the keyed member and everyone
 // else, preserving roster order.
+/*
+================
+splitMember
+================
+*/
 func splitMember(members []Member, key, divisionID string) (Member, []Member) {
 	var target Member
 	others := make([]Member, 0, len(members))

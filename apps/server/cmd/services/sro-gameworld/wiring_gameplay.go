@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+wiring_gameplay.go - gameplay authorities and production runtime composition.
+
+===========================================================================
+*/
 package main
 
 import (
@@ -52,6 +59,11 @@ type gameplayPlane struct {
 	quests        *quest.Runtime
 }
 
+/*
+================
+newGameplayPlane
+================
+*/
 func newGameplayPlane(
 	ts *transport.Server,
 	authorityStore *store.Store,
@@ -159,6 +171,7 @@ func newGameplayPlane(
 
 	parties := party.NewRuntime(deps, presence)
 	parties.UseMemberVitals(items.GameplayVitals)
+	items.NextPartyLootMember = parties.Registry().NextLootMember
 	items.RewardActorPresent = func(division, name string) bool {
 		s, ok := presence.SessionByName(division, name)
 		return ok && s.WorldReady()
@@ -224,6 +237,11 @@ func newGameplayPlane(
 	}, nil
 }
 
+/*
+================
+appendGroundObjectRows
+================
+*/
 func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
 	npcRows := deps.ObjectListRows
 	deps.ObjectListRows = func(
@@ -239,6 +257,11 @@ func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
 	}
 }
 
+/*
+================
+connectInvitationLanes
+================
+*/
 func connectInvitationLanes(
 	parties *party.Runtime,
 	guildInvites *guild.InviteRuntime,
@@ -271,6 +294,11 @@ func connectInvitationLanes(
 	}
 }
 
+/*
+================
+register
+================
+*/
 func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefinitionLoader) error {
 	if err := game.deps.Validate(); err != nil {
 		return fmt.Errorf("bootstrap dependencies: %w", err)

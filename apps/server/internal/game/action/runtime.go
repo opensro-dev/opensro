@@ -41,18 +41,19 @@ barrier.
 ==================
 */
 type Runtime struct {
-	berserkActors      sync.Map // derived expiry index; character store owns state
-	battleActors       sync.Map // battle-state expiry index (battlestate.go)
-	BerserkRoll        combat.Roll32767
-	RewardParties      func(division string) []RewardParty
-	RewardActorPresent func(division, name string) bool
-	returnGeneration   atomic.Uint64
-	returnCasts        sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
-	criticals          criticalHistory
-	deps               Dependencies
-	Ground             *grounditem.Registry
-	Pending            *grounditem.PendingTracker
-	Worlds             *simulation.WorldStore
+	berserkActors       sync.Map // derived expiry index; character store owns state
+	battleActors        sync.Map // battle-state expiry index (battlestate.go)
+	BerserkRoll         combat.Roll32767
+	RewardParties       func(division string) []RewardParty
+	NextPartyLootMember func(division, name string) uint32
+	RewardActorPresent  func(division, name string) bool
+	returnGeneration    atomic.Uint64
+	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	criticals           criticalHistory
+	deps                Dependencies
+	Ground              *grounditem.Registry
+	Pending             *grounditem.PendingTracker
+	Worlds              *simulation.WorldStore
 
 	// effects is the server-owned active character-effect collection behind
 	// 0x72CD cancel-active-effect. It stays private so packet handlers cannot

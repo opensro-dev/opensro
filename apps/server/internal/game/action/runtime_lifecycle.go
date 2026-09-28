@@ -43,6 +43,11 @@ func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 
 // TickHook owns both periodic item-plane jobs on the simulation Ticker's clock:
 // due skill-bracket closes and the rate-limited ground-item TTL sweep.
+/*
+================
+TickHook
+================
+*/
 func (rt *Runtime) TickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
 		rt.advanceResidentRegions(nowMs)
@@ -89,7 +94,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		out = append(out, rt.advanceNaturalRecovery(nowMs)...)
 		out = append(out, rt.advancePets(nowMs)...)
 		rt.advancePetSkillWindows(nowMs)
-		rt.advancePendingPickups(nowMs)
+		out = append(out, rt.advancePendingPickups(nowMs)...)
 		rt.advanceCompoundJobs(nowMs)
 		out = append(out, rt.ReleaseExpiredOwnership(nowMs)...)
 		out = append(out, rt.SweepExpired(nowMs)...)
@@ -97,6 +102,11 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 	}
 }
 
+/*
+================
+pendingPickupDelivery
+================
+*/
 type pendingPickupDelivery struct {
 	divisionID    string
 	characterName string
@@ -116,12 +126,14 @@ per-division operation lock as request-time pickup, then the actor and peer
 packet halves are routed without duplicating the public frames to the actor.
 ==================
 */
-func (rt *Runtime) advancePendingPickups(nowMs int64) {
+func (rt *Runtime) advancePendingPickups(nowMs int64) []simulation.DivisionFrames {
+	var recipients []simulation.DivisionFrames
 	now := time.UnixMilli(nowMs)
 	var deliveries []pendingPickupDelivery
 	for _, pending := range rt.Pending.Due(now) {
 		unlock := rt.lockDivision(pending.DivisionID)
 		result, character := rt.completePendingPickup(pending, now)
+		recipients = append(recipients, recipientDivisionFrames(pending.DivisionID, result.Recipients)...)
 		unlock()
 		if character == nil || (len(result.Frames) == 0 && len(result.Broadcast) == 0) {
 			continue
@@ -141,8 +153,14 @@ func (rt *Runtime) advancePendingPickups(nowMs int64) {
 			rt.PushDivisionPeerFrames(delivery.divisionID, delivery.characterName, delivery.broadcast)
 		}
 	}
+	return recipients
 }
 
+/*
+================
+completePendingPickup
+================
+*/
 func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Time) (OpResult, *enterworld.Character) {
 	character := rt.findCharacter(pending.DivisionID, pending.CharacterName)
 	if character == nil {
@@ -252,6 +270,11 @@ func (rt *Runtime) ForgetCharacter(divisionID, characterName string) {
 
 // ForgetCharacterSession rejects teardown from an owner displaced by a newer
 // logical session. Socket resume keeps the same session and never calls this.
+/*
+================
+ForgetCharacterSession
+================
+*/
 func (rt *Runtime) ForgetCharacterSession(divisionID, characterName string, session uint64) {
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
@@ -272,6 +295,11 @@ func (rt *Runtime) ForgetCharacterSession(divisionID, characterName string, sess
 	rt.forgetCharacterLocked(divisionID, characterName)
 }
 
+/*
+================
+forgetCharacterLocked
+================
+*/
 func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.returnCasts.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))

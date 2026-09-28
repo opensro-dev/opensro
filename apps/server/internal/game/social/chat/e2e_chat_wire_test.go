@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+e2e_chat_wire_test.go - native chat delivery, acknowledgement and privacy regressions.
+
+===========================================================================
+*/
 package chat_test
 
 // End-to-end exercise of the chat lane over the REAL transport with
@@ -7,9 +14,9 @@ package chat_test
 // gameplay wiring, asserting every 0xB367 / 0x3667 body BYTE-EXACT:
 //
 //	A all-chats      -> A gets 0xB367 {01 01 FF}; B and C each get
-//	                    0x3667 {01, gidA, text} (division cohort); A
+//	                    0x3667 {06, sender name, text} (beta cohort); A
 //	                    gets NO 0x3667 (the ack presented A's line);
-//	C (GM) all-chats -> the broadcast type byte is FORCED to 3;
+//	C (GM) all-chats -> the same named beta channel reaches the cohort;
 //	A whispers C     -> C gets 0x3667 {02, "chatAlfa" ANSI, text}, A
 //	                    gets the success ack;
 //	A whispers B     -> B's persisted block list carries "CHATALFA"
@@ -49,6 +56,11 @@ const (
 
 // chatSkillSeeder satisfies the store's unconditional creation-seed
 // invariant; chat never reads skills.
+/*
+================
+chatSkillSeeder
+================
+*/
 func chatSkillSeeder(raceKey string, learned []uint32) ([]uint32, error) {
 	ids := []uint32{1, 2, 40, 70}
 	have := make(map[uint32]bool, len(learned))
@@ -64,8 +76,18 @@ func chatSkillSeeder(raceKey string, learned []uint32) ([]uint32, error) {
 	return missing, nil
 }
 
+/*
+================
+e2eInt64
+================
+*/
 func e2eInt64(v int64) *int64 { return &v }
 
+/*
+================
+chatServer
+================
+*/
 type chatServer struct {
 	srv       *transport.Server
 	authority *store.Store
@@ -76,6 +98,11 @@ type chatServer struct {
 // lanes composed like server.go: one deps pointer, the store door /
 // presence facade assigned before the pointer-based Register shares, the
 // exclusive world bind in OnWorldBound.
+/*
+================
+startChatServer
+================
+*/
 func startChatServer(t *testing.T, dir, divisionID string) chatServer {
 	t.Helper()
 
@@ -148,6 +175,11 @@ func startChatServer(t *testing.T, dir, divisionID string) chatServer {
 // mutateCharacter runs fn on the named live store record through the
 // commit door (the test's stand-in for the 0x766F block mutate and the
 // SRO_GM_CHARACTERS reconcile).
+/*
+================
+mutateCharacter
+================
+*/
 func mutateCharacter(
 	t *testing.T,
 	authority *store.Store,
@@ -165,22 +197,11 @@ func mutateCharacter(
 	t.Fatalf("character %q not in the division", name)
 }
 
-func characterID(
-	t *testing.T,
-	authority *store.Store,
-	divisionID string,
-	name string,
-) int64 {
-	t.Helper()
-	for _, character := range authority.Characters().CharactersForDivision(divisionID) {
-		if character != nil && character.Name == name {
-			return character.ID
-		}
-	}
-	t.Fatalf("character %q not in the division", name)
-	return 0
-}
-
+/*
+================
+dialWS
+================
+*/
 func dialWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	t.Helper()
 	url := fmt.Sprintf("ws://%s%s", srv.WSAddr(), transport.PathWS)
@@ -192,6 +213,11 @@ func dialWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	return c
 }
 
+/*
+================
+sendFrame
+================
+*/
 func sendFrame(t *testing.T, c *websocket.Conn, opcode uint16, payload []byte) {
 	t.Helper()
 	f := transport.Frame{Opcode: opcode, Payload: payload}
@@ -200,6 +226,11 @@ func sendFrame(t *testing.T, c *websocket.Conn, opcode uint16, payload []byte) {
 	}
 }
 
+/*
+================
+nextFrame
+================
+*/
 func nextFrame(t *testing.T, c *websocket.Conn, what string) transport.Frame {
 	t.Helper()
 	c.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -222,6 +253,11 @@ func nextFrame(t *testing.T, c *websocket.Conn, what string) transport.Frame {
 	}
 }
 
+/*
+================
+expectFrame
+================
+*/
 func expectFrame(t *testing.T, c *websocket.Conn, opcode uint16, what string) []byte {
 	t.Helper()
 	f := nextFrame(t, c, what)
@@ -231,6 +267,11 @@ func expectFrame(t *testing.T, c *websocket.Conn, opcode uint16, what string) []
 	return f.Payload
 }
 
+/*
+================
+expectExact
+================
+*/
 func expectExact(t *testing.T, c *websocket.Conn, opcode uint16, want []byte, what string) {
 	t.Helper()
 	got := expectFrame(t, c, opcode, what)
@@ -239,6 +280,11 @@ func expectExact(t *testing.T, c *websocket.Conn, opcode uint16, want []byte, wh
 	}
 }
 
+/*
+================
+helloWS
+================
+*/
 func helloWS(t *testing.T, c *websocket.Conn) {
 	t.Helper()
 	sendFrame(t, c, transport.OpHello, transport.EncodeHello(transport.Hello{AdmissionToken: []byte("test-admission")}))
@@ -250,6 +296,11 @@ func helloWS(t *testing.T, c *websocket.Conn) {
 
 // enterChatWorld performs the 0x0006 bind and consumes the frozen
 // bootstrap sequence (no community seed seam is wired in this harness).
+/*
+================
+enterChatWorld
+================
+*/
 func enterChatWorld(
 	t *testing.T,
 	c *websocket.Conn,
@@ -280,6 +331,11 @@ func enterChatWorld(
 // gameReadyBarrier proves NOTHING is queued on the wire for this
 // session: a transport FIFO barrier surfaces any stray frame (e.g. a whisper
 // that must NOT have been delivered) without replaying world admission.
+/*
+================
+gameReadyBarrier
+================
+*/
 func gameReadyBarrier(t *testing.T, c *websocket.Conn, what string) {
 	t.Helper()
 	wiretest.AssertQueueDrained(t, c, what)
@@ -288,6 +344,11 @@ func gameReadyBarrier(t *testing.T, c *websocket.Conn, what string) {
 // chatRequestFrame hand-rolls the 0x7367 body exactly as the retail
 // composer does: {u8 type, u8 second=0xFF, [whisper: u16 len + ANSI
 // target], u16 wcharCount + UTF-16LE text}.
+/*
+================
+chatRequestFrame
+================
+*/
 func chatRequestFrame(chatType uint8, target, message string) []byte {
 	frame := []byte{chatType, 0xFF}
 	if chatType == chat.ChatTypeWhisper {
@@ -299,6 +360,11 @@ func chatRequestFrame(chatType uint8, target, message string) []byte {
 
 // sizedUTF16LE hand-rolls the sized wide text {u16 count, count*2 bytes}
 // (BMP-only fixtures: one code unit per rune).
+/*
+================
+sizedUTF16LE
+================
+*/
 func sizedUTF16LE(message string) []byte {
 	runes := []rune(message)
 	out := []byte{byte(len(runes)), byte(len(runes) >> 8)}
@@ -308,21 +374,24 @@ func sizedUTF16LE(message string) []byte {
 	return out
 }
 
-// gidBroadcast hand-rolls the 0x3667 gid-authored body {u8 type, u32
-// gid LE, sized wide text}.
-func gidBroadcast(chatType uint8, gid uint32, message string) []byte {
-	body := []byte{chatType, byte(gid), byte(gid >> 8), byte(gid >> 16), byte(gid >> 24)}
-	return append(body, sizedUTF16LE(message)...)
-}
-
 // namedBroadcast hand-rolls the 0x3667 name-authored body {u8 type, u16
 // len + ANSI name, sized wide text}.
+/*
+================
+namedBroadcast
+================
+*/
 func namedBroadcast(chatType uint8, name, message string) []byte {
 	body := []byte{chatType, byte(len(name)), byte(len(name) >> 8)}
 	body = append(body, []byte(name)...)
 	return append(body, sizedUTF16LE(message)...)
 }
 
+/*
+================
+TestChatLaneEndToEndOverWire
+================
+*/
 func TestChatLaneEndToEndOverWire(t *testing.T) {
 	for _, divisionID := range []string{"global-official", "test"} {
 		t.Run(divisionID, func(t *testing.T) {
@@ -331,6 +400,11 @@ func TestChatLaneEndToEndOverWire(t *testing.T) {
 	}
 }
 
+/*
+================
+runChatLaneEndToEndOverWire
+================
+*/
 func runChatLaneEndToEndOverWire(t *testing.T, divisionID string) {
 	server := startChatServer(
 		t,
@@ -348,9 +422,6 @@ func runChatLaneEndToEndOverWire(t *testing.T, divisionID string) {
 	mutateCharacter(t, server.authority, divisionID, e2eChatNameC, func(c *enterworld.Character) {
 		c.GMPrivilege = true
 	})
-
-	gidA := uint32(100000 + characterID(t, server.authority, divisionID, e2eChatNameA))
-	gidC := uint32(100000 + characterID(t, server.authority, divisionID, e2eChatNameC))
 
 	connA := dialWS(t, server.srv)
 	helloWS(t, connA)
@@ -389,16 +460,16 @@ func runChatLaneEndToEndOverWire(t *testing.T, divisionID string) {
 	// ---- All-chat: division cohort, sender excluded ----
 	sendFrame(t, connA, chat.OpChatRequest, chatRequestFrame(chat.ChatTypeAll, "", "hey"))
 	expectExact(t, connA, chat.OpChatAck, []byte{0x01, 0x01, 0xFF}, "all-chat ack to A")
-	expectExact(t, connB, chat.OpChatBroadcast, gidBroadcast(chat.ChatTypeAll, gidA, "hey"), "all-chat to B")
-	expectExact(t, connC, chat.OpChatBroadcast, gidBroadcast(chat.ChatTypeAll, gidA, "hey"), "all-chat to C")
+	expectExact(t, connB, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, "hey"), "all-chat to B")
+	expectExact(t, connC, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, "hey"), "all-chat to C")
 	// A must NOT receive its own broadcast (the ack presented it).
 	gameReadyBarrier(t, connA, "post-all-chat A")
 
 	// ---- GM speaker: the broadcast type byte is FORCED to 3 ----
 	sendFrame(t, connC, chat.OpChatRequest, chatRequestFrame(chat.ChatTypeGM, "", "gm"))
 	expectExact(t, connC, chat.OpChatAck, []byte{0x01, 0x03, 0xFF}, "GM all-chat ack to C")
-	expectExact(t, connA, chat.OpChatBroadcast, gidBroadcast(chat.ChatTypeGM, gidC, "gm"), "GM all-chat to A")
-	expectExact(t, connB, chat.OpChatBroadcast, gidBroadcast(chat.ChatTypeGM, gidC, "gm"), "GM all-chat to B")
+	expectExact(t, connA, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameC, "gm"), "GM all-chat to A")
+	expectExact(t, connB, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameC, "gm"), "GM all-chat to B")
 
 	// ---- Whisper delivered: ANSI sender name + text ----
 	sendFrame(t, connA, chat.OpChatRequest, chatRequestFrame(chat.ChatTypeWhisper, e2eChatNameC, "yo"))

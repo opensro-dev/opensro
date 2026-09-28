@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+e2e_wire_test.go - real-transport party consent, membership and roster delivery.
+
+===========================================================================
+*/
 package party_test
 
 // End-to-end exercise of the PARTY lane over the REAL transport with
@@ -53,6 +60,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	wiretest "opensro.online/server/internal/game/internal"
 	presence "opensro.online/server/internal/game/social"
@@ -79,6 +87,11 @@ const (
 	gidD uint32 = 100004
 )
 
+/*
+================
+e2eServer
+================
+*/
 type e2eServer struct {
 	srv       *transport.Server
 	authority *store.Store
@@ -90,6 +103,11 @@ type e2eServer struct {
 // invariant refuses an unseeded CreateCharacter): the same racial id
 // sets, without a textdata dependency. Party tests never read skills -
 // the seeder exists only to satisfy the store's creation invariant.
+/*
+================
+partySkillSeeder
+================
+*/
 func partySkillSeeder(raceKey string, learned []uint32) ([]uint32, error) {
 	ids := []uint32{1, 7127, 7128, 7129, 7909, 7910, 8454, 9069, 9606, 9970}
 	if raceKey == enterworld.RaceKeyChina {
@@ -115,6 +133,11 @@ func partySkillSeeder(raceKey string, learned []uint32) ([]uint32, error) {
 // bind + party stale-drop in OnWorldBound, and the disconnect hook on
 // OnSessionClose. The party runtime is constructed FRESH - its registry
 // is process-local by design.
+/*
+================
+startPartyServer
+================
+*/
 func startPartyServer(t *testing.T, dir string, createCharacters bool) e2eServer {
 	t.Helper()
 
@@ -190,6 +213,11 @@ func startPartyServer(t *testing.T, dir string, createCharacters bool) e2eServer
 	return e2eServer{srv: srv, authority: authority, runtime: runtime}
 }
 
+/*
+================
+shutdownServer
+================
+*/
 func shutdownServer(t *testing.T, srv *transport.Server) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -197,6 +225,11 @@ func shutdownServer(t *testing.T, srv *transport.Server) {
 	srv.Shutdown(ctx)
 }
 
+/*
+================
+dialWS
+================
+*/
 func dialWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	t.Helper()
 	url := fmt.Sprintf("ws://%s%s", srv.WSAddr(), transport.PathWS)
@@ -208,6 +241,11 @@ func dialWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	return c
 }
 
+/*
+================
+sendFrame
+================
+*/
 func sendFrame(t *testing.T, c *websocket.Conn, opcode uint16, payload []byte) {
 	t.Helper()
 	f := transport.Frame{Opcode: opcode, Payload: payload}
@@ -216,6 +254,11 @@ func sendFrame(t *testing.T, c *websocket.Conn, opcode uint16, payload []byte) {
 	}
 }
 
+/*
+================
+nextFrame
+================
+*/
 func nextFrame(t *testing.T, c *websocket.Conn, what string) transport.Frame {
 	t.Helper()
 	c.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -238,6 +281,11 @@ func nextFrame(t *testing.T, c *websocket.Conn, what string) transport.Frame {
 	}
 }
 
+/*
+================
+expectFrame
+================
+*/
 func expectFrame(t *testing.T, c *websocket.Conn, opcode uint16, what string) []byte {
 	t.Helper()
 	f := nextFrame(t, c, what)
@@ -247,6 +295,11 @@ func expectFrame(t *testing.T, c *websocket.Conn, opcode uint16, what string) []
 	return f.Payload
 }
 
+/*
+================
+expectExactFrame
+================
+*/
 func expectExactFrame(t *testing.T, c *websocket.Conn, opcode uint16, want []byte, what string) {
 	t.Helper()
 	got := expectFrame(t, c, opcode, what)
@@ -255,6 +308,11 @@ func expectExactFrame(t *testing.T, c *websocket.Conn, opcode uint16, want []byt
 	}
 }
 
+/*
+================
+helloWS
+================
+*/
 func helloWS(t *testing.T, c *websocket.Conn) {
 	t.Helper()
 	sendFrame(t, c, transport.OpHello, transport.EncodeHello(transport.Hello{AdmissionToken: []byte("test-admission")}))
@@ -266,6 +324,11 @@ func helloWS(t *testing.T, c *websocket.Conn) {
 
 // enterWorld performs the 0x0006 bind and consumes the frozen bootstrap
 // frame sequence.
+/*
+================
+enterWorld
+================
+*/
 func enterWorld(t *testing.T, c *websocket.Conn, charName string) {
 	t.Helper()
 	sendFrame(t, c, transport.OpEnterWorld, transport.EncodeEnterWorld(
@@ -290,17 +353,37 @@ func enterWorld(t *testing.T, c *websocket.Conn, charName string) {
 
 // gameReadyBarrier proves NOTHING is queued using a non-mutating transport
 // FIFO barrier; it must not replay world admission.
+/*
+================
+gameReadyBarrier
+================
+*/
 func gameReadyBarrier(t *testing.T, c *websocket.Conn, what string) {
 	t.Helper()
 	wiretest.AssertQueueDrained(t, c, what)
 }
 
+/*
+================
+e2eInt64
+================
+*/
 func e2eInt64(v int64) *int64 { return &v }
 
+/*
+================
+u32le
+================
+*/
 func u32le(v uint32) []byte {
 	return []byte{byte(v), byte(v >> 8), byte(v >> 16), byte(v >> 24)}
 }
 
+/*
+================
+concat
+================
+*/
 func concat(chunks ...[]byte) []byte {
 	var out []byte
 	for _, chunk := range chunks {
@@ -314,6 +397,11 @@ func concat(chunks ...[]byte) []byte {
 // empty roster catalog), level 1, full vitals (0xAA against the 0xa/0xa
 // denominators), the China start profile spawn (region 0x62A8, the
 // float coordinates truncated onto the wire int16s).
+/*
+================
+chinaMaleRow
+================
+*/
 func chinaMaleRow(gid uint32, name string) party.MemberRow {
 	return party.MemberRow{
 		MemberID:      gid,
@@ -321,6 +409,7 @@ func chinaMaleRow(gid uint32, name string) party.MemberRow {
 		ModelRefID:    1907,
 		Level:         1,
 		StatusNibbles: 0xAA,
+		War:           domain.DefaultWorldInstance,
 		Region:        0x62A8,
 		PosX:          960,
 		PosY:          20,
@@ -329,11 +418,21 @@ func chinaMaleRow(gid uint32, name string) party.MemberRow {
 }
 
 // inviteFrame renders the sub_6fd830 0x70D5 body.
+/*
+================
+inviteFrame
+================
+*/
 func inviteFrame(targetGid uint32, optionBits uint8) []byte {
 	return concat(u32le(targetGid), []byte{optionBits})
 }
 
 // consentFrame renders native party form acceptance {1,1} or refusal {2,12}.
+/*
+================
+consentFrame
+================
+*/
 func consentFrame(button uint8) []byte {
 	if button == 1 {
 		return []byte{1, 1}
@@ -344,6 +443,11 @@ func consentFrame(button uint8) []byte {
 // expectPartyPrompt asserts the byte-exact S->C 0x3393 prompt: {01,
 // inviterGid} - the frame the sub_7644e0 party arm opens msgbox kind 7
 // from.
+/*
+================
+expectPartyPrompt
+================
+*/
 func expectPartyPrompt(t *testing.T, c *websocket.Conn, inviterGid uint32, what string, kind, options uint8) {
 	t.Helper()
 	expectExactFrame(
@@ -355,12 +459,22 @@ func expectPartyPrompt(t *testing.T, c *websocket.Conn, inviterGid uint32, what 
 
 // expectPartySeed asserts the enter-a-party pair: 0xB0D5 result=1 with
 // the receiver's OWN gid, then the 0x35D6 settings+roster bulk.
+/*
+================
+expectPartySeed
+================
+*/
 func expectPartySeed(t *testing.T, c *websocket.Conn, ownGid, leaderGid uint32, optionBits uint8, rows []party.MemberRow, what string) {
 	t.Helper()
 	expectExactFrame(t, c, party.OpCreatePartyAck, party.EncodeCreatePartyAckB0D5(ownGid), what+" 0xB0D5 ack")
 	expectExactFrame(t, c, party.OpPartyInfo, party.EncodePartyInfo35D6(leaderGid, optionBits, rows), what+" 0x35D6 bulk")
 }
 
+/*
+================
+TestPartyCapacityRefusalsOverWire
+================
+*/
 func TestPartyCapacityRefusalsOverWire(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -398,6 +512,11 @@ func TestPartyCapacityRefusalsOverWire(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPartyInvitationExpirationOverWire
+================
+*/
 func TestPartyInvitationExpirationOverWire(t *testing.T) {
 	for _, kind := range []party.PendingInviteKind{party.PendingInviteForm, party.PendingInviteJoin} {
 		t.Run(fmt.Sprint(kind), func(t *testing.T) {
@@ -430,6 +549,11 @@ func TestPartyInvitationExpirationOverWire(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPartyLaneEndToEndOverWire
+================
+*/
 func TestPartyLaneEndToEndOverWire(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "authority")
 
@@ -634,6 +758,11 @@ func TestPartyLaneEndToEndOverWire(t *testing.T) {
 // the same character) is dropped from their party like a logout - the
 // fresh client holds no party state, so the registry must not carry a
 // ghost membership.
+/*
+================
+TestPartyRebindDropsStaleMembership
+================
+*/
 func TestPartyRebindDropsStaleMembership(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "authority")
 	server := startPartyServer(t, dir, true)
@@ -685,6 +814,11 @@ func TestPartyRebindDropsStaleMembership(t *testing.T) {
 //	                         session finds nothing outstanding;
 //	party dissolved       -> a join-kind accept finds the inviter no
 //	                         longer partied and commits nothing.
+/*
+================
+TestPartyConsentRaceEdges
+================
+*/
 func TestPartyConsentRaceEdges(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "authority")
 	server := startPartyServer(t, dir, true)
@@ -805,6 +939,11 @@ func TestPartyConsentRaceEdges(t *testing.T) {
 // waitForPresenceDrop polls until the character's session binding is gone
 // (the close hook runs on the hub's session teardown, asynchronously to
 // the closing frame).
+/*
+================
+waitForPresenceDrop
+================
+*/
 func waitForPresenceDrop(t *testing.T, server e2eServer, name string) {
 	t.Helper()
 	presence := presence.NewDirectory(server.srv.Hub)
