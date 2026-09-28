@@ -7,12 +7,12 @@
 # mistake, or an attacker) stay here. The copy is encrypted; restoring it
 # needs the restic password (README.md, "Restore").
 #
-#   powershell -ExecutionPolicy Bypass -File pull-backups.ps1 [-Target D:Backupsopensro-restic]
+#   powershell -ExecutionPolicy Bypass -File pull-backups.ps1 [-Target D:\Backups\opensro-restic]
 #
 # ===========================================================================
 param(
 	[string]$Remote = "gdrive:opensro-backups",
-	[string]$Target = "$env:USERPROFILEBackupsopensro-restic"
+	[string]$Target = (Join-Path $env:USERPROFILE "Backups\opensro-restic")
 )
 $ErrorActionPreference = "Stop"
 

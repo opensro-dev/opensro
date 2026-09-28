@@ -52,6 +52,13 @@ posts an alert.
    `drive.file` lets rclone see only the files it created, not the rest
    of the Drive.
 
+   rclone's built-in Google client ID is shared by everyone, rate limited,
+   and being retired during 2026. Create your own (free; see
+   https://rclone.org/drive/#making-your-own-client-id) and add
+   `client_id=... client_secret=...` to the `config create` line above.
+   Re-run step 2 on the server and on the PC with it before the shared one
+   stops working.
+
 3. Alerts (optional): create a webhook in the private staff Discord
    channel (Channel settings → Integrations → Webhooks), then:
 
