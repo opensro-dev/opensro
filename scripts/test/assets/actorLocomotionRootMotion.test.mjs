@@ -257,10 +257,11 @@ test("published Baroi locomotion is horizontally in-place", () => {
 	}
 });
 
-// Reviewed 2026-09-27. COS: the 22 pet models published since every enabled
+// Reviewed 2026-09-28. COS: the 22 pet models published since every enabled
 // COS reference is baked (npcModelRoster.mjs enabledCosReferences), each with
-// walk and run. Actors went 148 -> 147: MOB_DH_SOLDIEREARTHGHOST left the
-// server spawnable roster, which v1.150 npcpos.txt never places.
+// walk and run. Actors: 148, including MOB_DH_SOLDIEREARTHGHOST, which the
+// v1.150 client places and a quest needs; the server keeps it spawnable
+// despite the v1.188 shard's all-zero caps (monster laterDisabledCodenames).
 const COS_LOCOMOTION_RESOURCES = 22;
 const COS_LOCOMOTION_ROLES = 44;
 
@@ -294,7 +295,7 @@ test("every holder-driven actor resource exports in-place locomotion", () => {
 	}
 	assert.deepEqual(
 		census.actor,
-		{ resources: 147, roles: 294 },
+		{ resources: 148, roles: 296 },
 		"the holder-driven actor census changed; review every new or removed locomotion resource"
 	);
 	assert.deepEqual(

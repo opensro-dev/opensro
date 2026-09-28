@@ -170,6 +170,7 @@ func LoadTemplate(textdataDir string) Template {
 	// Evidence joins are compilation inputs. The returned template owns the
 	// runtime projection; retaining these three source indexes duplicates it.
 	populationEvidenceRows := combinePopulationEvidence(mustLoadPopulationEvidence(populationEvidenceTSV), mustLoadPopulationEvidence(populationSupplementTSV))
+	laterDisabled := laterDisabledCodenames(populationEvidenceRows)
 	populationTacticsControls := loadTacticsControls(tacticsControlsJSON)
 	hiveCaps := loadHiveCaps(hiveCapsTSV)
 	refs := LoadMonsterRefs(textdataDir)
@@ -199,6 +200,10 @@ func LoadTemplate(textdataDir string) Template {
 			nest.GenerateRadius = evidence.GenerateRadius
 			nest.ChampionGenPercentage = evidence.ChampionGenPercentage
 			nest.MaxCount = evidence.MaxCount
+			if laterDisabled[ref.Codename] {
+				// v1.150 places and requires this monster; see laterDisabledCodenames.
+				nest.MaxCount = unmatchedAnchorInstanceLimit
+			}
 			nest.RespawnDelayMinSec = evidence.RespawnDelayMinSec
 			nest.RespawnDelayMaxSec = evidence.RespawnDelayMaxSec
 			nest.Respawn = evidence.Respawn
@@ -339,8 +344,12 @@ func (nest NestRow) InstanceLimit() int {
 	if nest.PolicyPinned || nest.RetailEvidence {
 		return nest.MaxCount
 	}
-	return 1
+	return unmatchedAnchorInstanceLimit
 }
+
+// unmatchedAnchorInstanceLimit is the live cap of a v1.150 anchor without a
+// usable evidence cap: one fallback slot.
+const unmatchedAnchorInstanceLimit = 1
 
 /*
 ==================

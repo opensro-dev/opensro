@@ -65,6 +65,40 @@ func combinePopulationEvidence(base, supplement map[populationEvidenceKey]popula
 	return rows
 }
 
+/*
+==================
+laterDisabledCodenames
+
+Returns the monsters whose every evidence row is capped at zero.
+
+The v1.188 evidence comes from one operator's shard backup, not from
+retail. For all but these it agrees with the v1.150 client. For these it
+disables every nest of a monster the v1.150 client still places (npcpos)
+and still requires: MOB_DH_SOLDIEREARTHGHOST, the Donwhang Stone Cave
+target of QNO_WC_SOLDIER_EA2_1 (1,600 kills) and a QNO_WC_PRIEST2_1 drop.
+A grind quest of that size implies a natural population, so a zero cap on
+every nest is a later disable, not the v1.150 rule. LoadTemplate gives
+these nests the unmatched-anchor cap and keeps their other evidence.
+==================
+*/
+func laterDisabledCodenames(rows map[populationEvidenceKey]populationEvidence) map[string]bool {
+	live := make(map[string]bool)
+	for key, row := range rows {
+		if row.MaxCount > 0 {
+			live[key.Codename] = true
+		} else if !live[key.Codename] {
+			live[key.Codename] = false
+		}
+	}
+	disabled := make(map[string]bool)
+	for codename, hasLiveNest := range live {
+		if !hasLiveNest {
+			disabled[codename] = true
+		}
+	}
+	return disabled
+}
+
 // Native Nest coordinates are float32. Client text and recovered SQL rows
 // can print the same float with different decimal precision. Normalize that
 // representation before quantizing; otherwise half-tenth anchors lose both

@@ -442,6 +442,36 @@ func campElicitGuildRefusal(t *testing.T, c *websocket.Conn, what string) {
 	}
 }
 
+// campRoundTrip is an ordering barrier: a session dispatches its frames one at
+// a time in its read loop (transport/session.go readLoop), so the PONG to a
+// PING sent after a request arrives only once that request was handled. It
+// reads raw frames (campNextFrame hides keepalive PING/PONG) and fails on any
+// game frame before its PONG, which also proves the stream carried nothing.
+func campRoundTrip(t *testing.T, c *websocket.Conn, what string) {
+	t.Helper()
+	marker := []byte("barrier")
+	campSendFrame(t, c, transport.OpPing, marker)
+	c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	for {
+		_, data, err := c.ReadMessage()
+		if err != nil {
+			t.Fatalf("%s: PONG never arrived: %v", what, err)
+		}
+		f, err := transport.DecodeFrame(data)
+		if err != nil {
+			t.Fatalf("%s: decoding ws frame: %v", what, err)
+		}
+		switch {
+		case f.Opcode == transport.OpPong && bytes.Equal(f.Payload, marker):
+			return
+		case f.Opcode == transport.OpPing || f.Opcode == transport.OpPong:
+			continue
+		default:
+			t.Fatalf("%s: frame 0x%04X payload % X arrived before the barrier", what, f.Opcode, f.Payload)
+		}
+	}
+}
+
 // campAwaitPending polls the mentor runtime's pending count toward want
 // (the disconnect drop rides the async close hook).
 func campAwaitPending(t *testing.T, invites *mentor.InviteRuntime, want int, what string) {
@@ -747,6 +777,11 @@ func TestMentorInvitePartyGuildOneProposalPerPlayerEndToEnd(t *testing.T) {
 	campSendFrame(t, connH, party.OpPartyInviteRequest, append(campU32(gidI), 0x00))
 	campExpectFrame(t, connI, mentor.OpInvitationProposal, "party prompt")
 	campSendFrame(t, connH, mentor.OpTCInviteRequest, campU32(gidI))
+	// H's requests are handled in order, so an answered barrier on H proves
+	// the TC invite was already dropped. Without it, I's refusal (another
+	// connection) could clear the party proposal first and admit the TC
+	// prompt, which CI observed as 0x3393 type 9 ahead of the refusal ack.
+	campRoundTrip(t, connH, "TC invite processed barrier")
 	if got := server.mentorInv.PendingInviteCount(); got != 0 {
 		t.Fatalf("mentor pendings over a waiting party proposal = %d, want 0", got)
 	}
