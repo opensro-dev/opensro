@@ -122,7 +122,7 @@ runStep
 function runStep( label, command, args, accept ) {
 	const stepStarted = performance.now();
 	return new Promise( ( resolve ) => {
-		const child = spawn( command, args, { cwd: serverRoot, env: goEnvironment } );
+		const child = spawn( command, args, { windowsHide: true, cwd: serverRoot, env: goEnvironment } );
 		let output = "";
 		child.stdout.on( "data", ( chunk ) => {
 			output += chunk;
@@ -155,8 +155,10 @@ function compilerFirstEnvironment() {
 	if ( process.platform !== "win32" ) {
 		return process.env;
 	}
-	const compiler = spawnSync( "go", [ "env", "CC" ], { cwd: serverRoot, encoding: "utf8" } ).stdout?.trim() || "gcc";
-	const located = spawnSync( "where.exe", [ compiler ], { encoding: "utf8" } );
+	const compiler =
+		spawnSync( "go", [ "env", "CC" ], { windowsHide: true, cwd: serverRoot, encoding: "utf8" } ).stdout?.trim() ||
+		"gcc";
+	const located = spawnSync( "where.exe", [ compiler ], { windowsHide: true, encoding: "utf8" } );
 	const compilerPath = located.status === 0 ? located.stdout.split( /\r?\n/ )[0].trim() : "";
 	if ( compilerPath.length === 0 ) {
 		return process.env;

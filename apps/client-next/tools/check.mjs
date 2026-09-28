@@ -54,7 +54,7 @@ runGate
 function runGate( name, args ) {
 	const started = performance.now();
 	return new Promise( ( resolve ) => {
-		const child = spawn( node, args, { cwd: clientRoot } );
+		const child = spawn( node, args, { windowsHide: true, cwd: clientRoot } );
 		let output = "";
 		child.stdout.on( "data", ( chunk ) => {
 			output += chunk;

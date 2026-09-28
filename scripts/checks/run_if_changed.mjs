@@ -42,7 +42,12 @@ Runs a git command in the repository and returns its stdout lines.
 ================
 */
 function git( args ) {
-	const result = spawnSync( "git", args, { cwd: rebuildRoot, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 } );
+	const result = spawnSync( "git", args, {
+		windowsHide: true,
+		cwd: rebuildRoot,
+		encoding: "utf8",
+		maxBuffer: 256 * 1024 * 1024
+	} );
 	if ( result.status !== 0 ) {
 		throw new Error( `git ${args.join( " " )} failed: ${result.stderr}` );
 	}
@@ -80,7 +85,12 @@ function fingerprint( inputs ) {
 	for ( const input of inputs ) {
 		if ( input.startsWith( "@" ) ) {
 			const [command, ...args] = input.slice( 1 ).split( "," );
-			const result = spawnSync( command, args, { cwd: rebuildRoot, encoding: "utf8", shell: false } );
+			const result = spawnSync( command, args, {
+				windowsHide: true,
+				cwd: rebuildRoot,
+				encoding: "utf8",
+				shell: false
+			} );
 			hash.update( `command ${input}\n${result.stdout ?? ""}${result.stderr ?? ""}` );
 		} else if ( input.startsWith( "!" ) ) {
 			const absolute = path.join( rebuildRoot, input.slice( 1 ) );
@@ -121,7 +131,12 @@ async function main() {
 		}
 	}
 
-	const child = spawn( command, args, { cwd: rebuildRoot, stdio: "inherit", shell: process.platform === "win32" } );
+	const child = spawn( command, args, {
+		windowsHide: true,
+		cwd: rebuildRoot,
+		stdio: "inherit",
+		shell: process.platform === "win32"
+	} );
 	const code = await new Promise( ( resolve ) => child.on( "close", resolve ) );
 	if ( code !== 0 ) {
 		process.exit( code ?? 1 );

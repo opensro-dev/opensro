@@ -36,6 +36,7 @@ Runs the test program and returns each test file with its error count.
 */
 function filesWithErrors() {
 	const result = spawnSync( process.execPath, [ TSC, "-p", "tsconfig.tests.json", "--pretty", "false" ], {
+		windowsHide: true,
 		cwd: root,
 		encoding: "utf8",
 		maxBuffer: 64 * 1024 * 1024

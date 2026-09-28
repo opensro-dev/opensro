@@ -59,7 +59,7 @@ function unformattedFiles() {
 	const result = spawnSync(
 		process.execPath,
 		[ dprintLauncher, "check", "--list-different" ],
-		{ cwd: rebuildRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+		{ windowsHide: true, cwd: rebuildRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
 	);
 	if ( result.error ) {
 		throw result.error;

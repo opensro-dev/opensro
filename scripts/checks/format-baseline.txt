@@ -863,7 +863,6 @@ scripts/checks/check_asset_pack_integrity.mjs
 scripts/checks/check_compact_assets.mjs
 scripts/checks/check_precompressed_freshness.mjs
 scripts/checks/lib/methodBlock.mjs
-scripts/checks/run_check_pipeline.mjs
 scripts/clean_release_workspace.mjs
 scripts/compact_sro_assets.mjs
 scripts/lib/chromeTraceCapture.mjs
@@ -904,7 +903,6 @@ scripts/tasks/define.mjs
 scripts/tasks/misc.mjs
 scripts/tasks/processCommand.mjs
 scripts/tasks/registry.mjs
-scripts/tasks/runner.mjs
 scripts/tasks/tests.mjs
 scripts/test/assets/assetDeliveryOwnership.test.mjs
 scripts/test/assets/assetPackIntegrity.test.mjs
@@ -930,7 +928,6 @@ scripts/test/lib/generatedAssetTestMode.mjs
 scripts/test/mission/effectProgramClosure.test.mjs
 scripts/test/mission/minimapArtCoverage.test.mjs
 scripts/test/mission/missionMinimapBuild.test.mjs
-scripts/test/runSuite.mjs
 scripts/test/suites/assets.mjs
 scripts/test/suites/cif.mjs
 scripts/test/suites/index.mjs
