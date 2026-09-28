@@ -1,0 +1,9 @@
+# ===========================================================================
+# opensro-backup-freshness.service - alert when the last good backup is stale
+# ===========================================================================
+[Unit]
+Description=OpenSRO backup freshness check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/opensro-backup check-freshness

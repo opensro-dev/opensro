@@ -1,0 +1,12 @@
+# ===========================================================================
+# opensro-backup-freshness.timer - hourly
+# ===========================================================================
+[Unit]
+Description=OpenSRO backup freshness check
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

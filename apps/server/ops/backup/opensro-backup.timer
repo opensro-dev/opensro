@@ -1,0 +1,14 @@
+# ===========================================================================
+# opensro-backup.timer - nightly at 20:30 UTC (04:30 in UTC+8, the quietest hour)
+# ===========================================================================
+[Unit]
+Description=OpenSRO nightly backup
+
+[Timer]
+OnCalendar=*-*-* 20:30:00 UTC
+RandomizedDelaySec=15min
+# A run missed while the host was down happens at the next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

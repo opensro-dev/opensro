@@ -1,0 +1,15 @@
+# ===========================================================================
+# opensro-backup.service - one nightly backup run (started by the timer)
+# ===========================================================================
+[Unit]
+Description=OpenSRO nightly backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/opensro-backup run
+# Backups yield to the game: lowest CPU and disk priority.
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=2h
