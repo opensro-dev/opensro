@@ -2,6 +2,10 @@ name: Release game server
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release-server.yml
+      - apps/server/ops/release/**
   push:
     tags: ["server-v*"]
 
@@ -9,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: production-game-release
+  group: server-release-${{ github.event_name == 'pull_request' && github.event.number || 'production' }}
   cancel-in-progress: false
 
 jobs:
@@ -22,6 +26,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Require a commit on main
+        if: github.event_name != 'pull_request'
         run: git merge-base --is-ancestor HEAD origin/main
       - uses: actions/setup-go@v7
         with:
@@ -53,6 +58,7 @@ jobs:
           if-no-files-found: error
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
