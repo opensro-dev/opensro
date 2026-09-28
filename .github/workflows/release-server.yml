@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/release-server.yml
       - apps/server/ops/release/**
+      - apps/server/cmd/operations/sro-nomad/**
   push:
     tags: ["server-v*"]
 

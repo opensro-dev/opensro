@@ -67,6 +67,11 @@ stageReleases
 ================
 */
 func (deployment *deployment) stageReleases() error {
+	for _, directory := range []string{deployment.ReleaseDir, filepath.Join(deployment.ReleaseDir, "agent"), filepath.Join(deployment.ReleaseDir, "gameworld")} {
+		if err := prepareReleaseDirectory(directory); err != nil {
+			return err
+		}
+	}
 	for _, release := range []struct {
 		source      string
 		destination string
@@ -120,6 +125,10 @@ func stageRelease(source, destination string) error {
 	if err != nil {
 		return fmt.Errorf("hash release source %s: %w", source, err)
 	}
+	directory := filepath.Dir(destination)
+	if err := prepareReleaseDirectory(directory); err != nil {
+		return err
+	}
 	if info, err := os.Lstat(destination); err == nil {
 		if !info.Mode().IsRegular() ||
 			info.Mode()&os.ModeSymlink != 0 {
@@ -144,20 +153,6 @@ func stageRelease(source, destination string) error {
 		return err
 	}
 
-	directory := filepath.Dir(destination)
-	if err := os.MkdirAll(directory, releaseAccessMode); err != nil {
-		return err
-	}
-	info, err := os.Lstat(directory)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf(
-			"release directory %s is not a real directory",
-			directory,
-		)
-	}
 	sourceFile, err := os.Open(source)
 	if err != nil {
 		return err
@@ -237,4 +232,27 @@ func (deployment *deployment) pruneReleases(
 		}
 	}
 	return nil
+}
+
+/*
+================
+prepareReleaseDirectory
+
+MkdirAll applies the operator's umask. The receiver intentionally uses 077
+for secrets, so public release directories need explicit task access on both
+first publication and reuse. Ancestors outside the release root stay private.
+================
+*/
+func prepareReleaseDirectory(directory string) error {
+	if err := os.MkdirAll(directory, releaseAccessMode); err != nil {
+		return err
+	}
+	info, err := os.Lstat(directory)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("release directory %s is not a real directory", directory)
+	}
+	return os.Chmod(directory, releaseAccessMode)
 }
