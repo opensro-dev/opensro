@@ -412,7 +412,6 @@ apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/tar
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/training/training.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/world.ts
 apps/client-next/src/engine/runtime/simulation/worker/simulation.ts
-apps/client-next/src/engine/runtime/ui/guide/resources.ts
 apps/client-next/src/engine/runtime/ui/hud/messages.ts
 apps/client-next/src/engine/runtime/ui/hud/minimap.ts
 apps/client-next/src/engine/runtime/ui/hud/npc-panel.ts
@@ -420,19 +419,16 @@ apps/client-next/src/engine/runtime/ui/hud/progression-bars.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-timers.ts
 apps/client-next/src/engine/runtime/ui/hud/region-banner.ts
-apps/client-next/src/engine/runtime/ui/hud/resources.ts
 apps/client-next/src/engine/runtime/ui/hud/scroll.ts
 apps/client-next/src/engine/runtime/ui/hud/skill-slot.ts
 apps/client-next/src/engine/runtime/ui/hud/skill-training.ts
 apps/client-next/src/engine/runtime/ui/hud/speech.ts
 apps/client-next/src/engine/runtime/ui/hud/unique-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/window-placement.ts
-apps/client-next/src/engine/runtime/ui/localization/localization.ts
 apps/client-next/src/engine/runtime/ui/resources/resources.ts
 apps/client-next/src/engine/runtime/ui/text/text.ts
 apps/client-next/src/engine/runtime/ui/title/creation.ts
 apps/client-next/src/engine/runtime/ui/title/resources.ts
-apps/client-next/src/engine/runtime/ui/ui.ts
 apps/client-next/src/engine/runtime/world/camera/camera.ts
 apps/client-next/src/engine/runtime/world/world.ts
 apps/client-next/tests/architecture/audio-parity-audit.test.mjs

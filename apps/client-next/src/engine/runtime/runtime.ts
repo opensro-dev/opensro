@@ -19,7 +19,7 @@ import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createNavigationStream } from "./navigation/navigation";
 import { createFrontend } from "./frontend/frontend";
-import { createUi } from "./ui/ui";
+import { createUi, type UiFrameProbe } from "./ui/ui";
 import { createAudio } from "./audio/audio";
 import { createCharacterPresentation } from "./characters/characters";
 import { createWorldStream } from "./world/world";
@@ -39,7 +39,14 @@ const BACKGROUND_INSTALL_LIST = "/assets/delivery/background-install.json";
 // The live page a release check compares against (release-watch.ts).
 const RELEASE_PAGE = "/play";
 
-interface FrameProbe {
+/*
+================
+FrameProbe
+
+Development frame timing, including detail spans reported by UI owners.
+================
+*/
+interface FrameProbe extends UiFrameProbe {
 	begin( frameId: number ): void;
 	mark( stage: string ): void;
 	end(): void;
@@ -55,6 +62,7 @@ calls it explicitly instead of letting the profiler patch this source.
 ================
 */
 function frameProbe(): FrameProbe | undefined {
+	if ( !import.meta.env.DEV ) return undefined;
 	return (globalThis as { __worldProbeFrameProfiler?: FrameProbe; }).__worldProbeFrameProfiler;
 }
 // Frame-timing window for the FPS chip. Two seconds at 60 Hz keeps the readout
@@ -74,12 +82,27 @@ export function startRuntime(
 	let disposed = false, raf = 0, lastReport = 0;
 	let loadingVisible = false, loadingTitle = "Preparing your journey";
 	let pendingWorldReset = false, effectDetail = 2, normalFortressClothes = false;
+	/*
+	================
+	Cleanup
+	================
+	*/
 	type Cleanup = { dispose(): void; previous: Cleanup | null; };
 	let cleanups: Cleanup | null = null;
+	/*
+	================
+	own
+	================
+	*/
 	function own<T extends { dispose(): void; }>( owner: T ): T {
 		cleanups = { dispose: () => owner.dispose(), previous: cleanups };
 		return owner;
 	}
+	/*
+	================
+	dispose
+	================
+	*/
 	function dispose(): void {
 		if ( disposed ) return;
 		disposed = true;
@@ -124,6 +147,11 @@ export function startRuntime(
 				() => audio.uiSound( "message" )
 			)
 		);
+		/*
+		================
+		sessionCommand
+		================
+		*/
 		function sessionCommand( command: import("@/engine/contracts/session").SessionCommand ) {
 			if ( frontend && command.kind === "enter-world" ) {
 				if ( frontend.start() ) simulation.session( command );
@@ -135,6 +163,11 @@ export function startRuntime(
 			}
 			simulation.session( command );
 		}
+		/*
+		================
+		uiEvent
+		================
+		*/
 		function uiEvent( event: import("@/engine/contracts/ui").UiEvent ) {
 			if ( event.kind === "video-preferences" ) {
 				renderer.videoOptions( event.value );
@@ -249,6 +282,11 @@ export function startRuntime(
 			)
 		);
 		let lastDockPick = "none";
+		/*
+		================
+		worldClick
+		================
+		*/
 		function worldClick( x: number, y: number, doubleClick = false ) {
 			if ( doubleClick && frontend.snapshot().phase !== "world" ) return;
 			if ( frontend.isRace() ) {
@@ -352,6 +390,11 @@ export function startRuntime(
 		let lastFrameAt = 0, lastTelemetry = 0;
 		const stageTotals: Record<string, number> = {};
 		let stageAt = 0, stageFrames = 0;
+		/*
+		================
+		markStage
+		================
+		*/
 		function markStage( name: string ) {
 			frameProbe()?.mark( name );
 			if ( !diagnostics.stages ) return;
@@ -359,18 +402,38 @@ export function startRuntime(
 			stageTotals[name] = (stageTotals[name] ?? 0) + at - stageAt;
 			stageAt = at;
 		}
+		/*
+		================
+		sample
+		================
+		*/
 		function sample( history: number[], value: number ): void {
 			history.push( value );
 			if ( history.length > TELEMETRY_SAMPLES ) history.shift();
 		}
+		/*
+		================
+		average
+		================
+		*/
 		function average( history: readonly number[] ): number {
 			return history.reduce( ( total, value ) => total + value, 0 ) / history.length;
 		}
+		/*
+		================
+		percentile
+		================
+		*/
 		function percentile( history: readonly number[], fraction: number ): number {
 			const sorted = [ ...history ].sort( ( first, second ) => first - second );
 			return sorted[Math.min( sorted.length - 1, Math.floor( sorted.length * fraction ) )] ?? 0;
 		}
 		let latestSequence = 0, acceptedInput = 0, frameId = 0;
+		/*
+		================
+		frame
+		================
+		*/
 		async function frame( now: number ): Promise<void> {
 			if ( disposed ) {
 				return;
@@ -591,26 +654,30 @@ export function startRuntime(
 					1 :
 					(Number( localReady ) + Number( navReady ) + world.progress()) / 3;
 				markStage( "world-stream" );
-				const semantics = ui.step( {
-					worldError: world.error() ?? navigation.error(),
-					resourceError: !localReady ? characters.error() : null,
-					simulationTimeMs,
-					hoveredEntity,
-					dropNamesHeld: input.dropNamesHeld(),
-					blindHeld: worldPresented && input.blindHeld(),
-					travel: readySent ? null : presentation.travel(),
-					worldTransitionRegion: world.loadingRegion(),
-					loadingProgress,
-					berserkGauge: characters.orbGauge(),
-					damageText: characters.damageText(),
-					frontend: frontendState,
-					session: sessionState,
-					gameplay: presentation.gameplay(),
-					entities: presentation.entities(),
-					width: canvas.clientWidth,
-					height: canvas.clientHeight,
-					worldReady: readySent || worldReady
-				}, now );
+				const semantics = ui.step(
+					{
+						worldError: world.error() ?? navigation.error(),
+						resourceError: !localReady ? characters.error() : null,
+						simulationTimeMs,
+						hoveredEntity,
+						dropNamesHeld: input.dropNamesHeld(),
+						blindHeld: worldPresented && input.blindHeld(),
+						travel: readySent ? null : presentation.travel(),
+						worldTransitionRegion: world.loadingRegion(),
+						loadingProgress,
+						berserkGauge: characters.orbGauge(),
+						damageText: characters.damageText(),
+						frontend: frontendState,
+						session: sessionState,
+						gameplay: presentation.gameplay(),
+						entities: presentation.entities(),
+						width: canvas.clientWidth,
+						height: canvas.clientHeight,
+						worldReady: readySent || worldReady
+					},
+					now,
+					frameProbe()
+				);
 				if ( semantics ) {
 					platform.presentUi( semantics );
 					loadingVisible = semantics.loadingVisible === true;

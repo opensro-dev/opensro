@@ -4,8 +4,9 @@
 frame-profiler.test.mjs - tests for tools/lib/frame-profiler.mjs
 
 The recorder's stage accounting, and that instrumentation binds to the
-current production boundaries, refuses missing ones, and leaves runtime.ts
-(explicit hooks) unpatched.
+remaining legacy boundaries, refuses missing ones, and leaves explicit
+frame-owner hooks unpatched. UI hook behavior is tested with the real UI
+in ui-resource-lifetime.test.mjs.
 
 ===========================================================================
 */
@@ -53,6 +54,11 @@ test("frame recorder separates nested renderer stages, closes CPU spans and repo
 		t += 1;
 		owner.end();
 	}
+	/*
+	================
+	index
+	================
+	*/
 	const capture = owner.stop(), index = name => capture.columns.indexOf( name );
 	assert.equal( capture.dropped, 1 );
 	assert.equal( capture.rows.length, 2 );
@@ -74,7 +80,6 @@ test("instrumentation binds to current production boundaries and refuses missing
 	for (
 		const file of [
 			"src/engine/runtime/characters/characters.ts",
-			"src/engine/runtime/ui/ui.ts",
 			"src/engine/runtime/renderer/frame/frame.ts",
 			"src/engine/runtime/renderer/renderer.ts",
 			"src/engine/runtime/renderer/world/world.ts",
@@ -108,37 +113,6 @@ test("terrain detail spans accumulate across groups without changing parent cloc
 	assert.equal( row[capture.columns.indexOf( "terrain-seams" )], 4 );
 	assert.equal( row[capture.columns.indexOf( "world-selection" )], 4 );
 	assert.equal( row[capture.columns.indexOf( "cpuMs" )], 4 );
-});
-
-test("UI detail instrumentation preserves unchanged suppression and changed publication", () => {
-	const source =
-		`let nextPoll,view,revision=0;return function(next,lastProduct,publish){const now=0,w=10,h=20,quads=[];const sameUiQuads=()=>next.same,sameUiSemantics=()=>next.same;
- nextPoll=now+100;view=next;
-  const semantics={title:'fixture'};
-  if(lastProduct&&lastProduct.width===w&&lastProduct.height===h&&sameUiQuads(lastProduct.quads,quads)&&sameUiSemantics(lastProduct.semantics,semantics))return null;
- lastProduct={width:w,height:h,quads,semantics};
- publish({revision:++revision,width:w,height:h,quads});return semantics;};`;
-	const plain = new Function( source )(),
-		observed = new Function( instrumentFrameProfiler( source, "src/engine/runtime/ui/ui.ts" ) )();
-	const phases = [];
-	globalThis.__worldProbeFrameProfiler = {
-		detailBegin: name => phases.push( "start:" + name ),
-		detailEnd: name => phases.push( "end:" + name )
-	};
-	try {
-		for ( const same of [ true, false, true ] ) {
-			const a = [], b = [], previous = { width: 10, height: 20, quads: [], semantics: {} };
-			assert.deepEqual(
-				observed( { same }, previous, row => b.push( row ) ),
-				plain( { same }, previous, row => a.push( row ) )
-			);
-			assert.deepEqual( a, b );
-		}
-		assert.equal( phases.filter( p => p === "start:ui-publish" ).length, 1 );
-		assert.equal( phases.filter( p => p === "end:ui-compare" ).length, 3 );
-	} finally {
-		delete globalThis.__worldProbeFrameProfiler;
-	}
 });
 
 test("draw census counts instancing and separate passes without treating shared portrait meshes as duplicates", () => {

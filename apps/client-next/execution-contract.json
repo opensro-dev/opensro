@@ -1695,6 +1695,20 @@
       "function": "markStage",
       "kind": "callback",
       "reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+    },
+    {
+      "file": "src/engine/runtime/ui/ui.ts",
+      "expression": "probe?.detailBegin",
+      "function": "step",
+      "kind": "callback",
+      "reason": "Optional frame-owned timing observer. Records UI assembly, comparison and publication without changing the product; covered by ui-resource-lifetime.test.mjs. Runtime supplies it only in development."
+    },
+    {
+      "file": "src/engine/runtime/ui/ui.ts",
+      "expression": "probe?.detailEnd",
+      "function": "step",
+      "kind": "callback",
+      "reason": "Optional frame-owned timing observer. Records UI assembly, comparison and publication without changing the product; covered by ui-resource-lifetime.test.mjs. Runtime supplies it only in development."
     }
   ],
   "sequences": [
@@ -1731,7 +1745,7 @@
     {
       "file": "src/engine/runtime/runtime.ts",
       "function": "frame",
-      "sourceSha256": "7df14073f48d9807ecda6f951787f8e69fe6aafe632dff3ae326b351f8c9e8a1",
+      "sourceSha256": "fae516478ce71c4f150b3cef22849edb63ed4db4cbc5eb80cd2e1d1a66843915",
       "reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
       "evidence": "tests/fixtures/native/bsr-query-native.json",
       "nativeFunction": 11451792,

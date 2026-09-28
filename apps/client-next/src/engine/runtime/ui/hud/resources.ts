@@ -1,60 +1,384 @@
-import {decodePortalCatalog,type PortalCatalog} from '@/engine/foundation/gameplay/portal';
-import {decodeTooltipMasteries,type TooltipMastery} from '@/engine/foundation/ui/mastery-tooltip';
-import {masteryCosts} from '@/engine/foundation/gameplay/skill-catalog';
-import {nativeWindowSections} from '@/engine/foundation/ui/native-window-sections';
-import {partyCharacterCountries} from '@/engine/foundation/gameplay/party-matching';
-import {decodeTooltipSkills} from '@/engine/foundation/ui/skill-tooltip-catalog';
-import type {TooltipSkillCatalog} from '@/engine/foundation/ui/skill-tooltip-data';
-import {decodeActionSlots,type ActionSlot} from '@/engine/foundation/ui/action-layout';
-import {decodeMapLabels,decodeMapIcons,type MapLabel,type MapIcon} from '@/engine/foundation/ui/world-map';
-import {creationNameRules,type NameRules} from '@/engine/foundation/ui/character-create';
-import {decodeSkillUi,type SkillUi} from '@/engine/foundation/ui/skill-layout';
-import {equipmentSocket} from '@/engine/foundation/ui/inventory-layout';
-import {decodeMessageTips,type MessageTip} from '@/engine/foundation/ui/message-tips';
-import type {AssetOwner} from '@/engine/contracts/assets';
-import {decodeAuthoredLayout,type AuthoredLayout} from '@/engine/foundation/ui/authored-layout';
-type Load={kind:'idle'}|{kind:'loading';id:number}|{kind:'ready';value:unknown}|{kind:'failed';message:string}|{kind:'disposed'};
-interface HudData {readonly portals:PortalCatalog;readonly tooltipMasteries:ReadonlyMap<number,TooltipMastery>;readonly masteryCosts:Readonly<Record<number,number>>;readonly extended:readonly AuthoredLayout[];readonly countries:Readonly<Record<number,number>>;readonly tooltipSkills:TooltipSkillCatalog;readonly mapIcons:readonly MapIcon[];readonly actions:readonly ActionSlot[];readonly mapLabels:readonly MapLabel[];readonly nameRules:NameRules;readonly skillUi:SkillUi;readonly popupArt:{readonly tab:string;readonly blocked:string;readonly portrait:string;readonly sockets:Readonly<Record<number,string>>};readonly warmPaths:readonly string[];readonly windows:Readonly<Record<string,AuthoredLayout>>;readonly tips:readonly MessageTip[];readonly targets:Readonly<Record<string,AuthoredLayout>>;readonly root:AuthoredLayout;readonly player:AuthoredLayout;readonly bar:AuthoredLayout;readonly minimap:AuthoredLayout;readonly map:AuthoredLayout;readonly chat:AuthoredLayout;readonly status:AuthoredLayout;readonly regionCodes:Readonly<Record<string,string>>;readonly zones:Readonly<Record<string,string>>;readonly strings:Readonly<Record<string,string>>;}
+/*
+===========================================================================
+
+resources.ts - HUD metadata admission and lifetime
+
+Owns layout and catalogue requests, decoded HUD data and image warm paths.
+The UI calls step every frame. Demand permits new requests; completions are
+always collected so a hidden HUD cannot retain the shared asset slots.
+Dispose cancels any requests still owned by this module.
+
+===========================================================================
+*/
+
+import { decodePortalCatalog, type PortalCatalog } from "@/engine/foundation/gameplay/portal";
+import { decodeTooltipMasteries, type TooltipMastery } from "@/engine/foundation/ui/mastery-tooltip";
+import { masteryCosts } from "@/engine/foundation/gameplay/skill-catalog";
+import { nativeWindowSections } from "@/engine/foundation/ui/native-window-sections";
+import { partyCharacterCountries } from "@/engine/foundation/gameplay/party-matching";
+import { decodeTooltipSkills } from "@/engine/foundation/ui/skill-tooltip-catalog";
+import type { TooltipSkillCatalog } from "@/engine/foundation/ui/skill-tooltip-data";
+import { decodeActionSlots, type ActionSlot } from "@/engine/foundation/ui/action-layout";
+import { decodeMapLabels, decodeMapIcons, type MapLabel, type MapIcon } from "@/engine/foundation/ui/world-map";
+import { creationNameRules, type NameRules } from "@/engine/foundation/ui/character-create";
+import { decodeSkillUi, type SkillUi } from "@/engine/foundation/ui/skill-layout";
+import { equipmentSocket } from "@/engine/foundation/ui/inventory-layout";
+import { decodeMessageTips, type MessageTip } from "@/engine/foundation/ui/message-tips";
+import type { AssetOwner } from "@/engine/contracts/assets";
+import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
+/*
+================
+Load
+================
+*/
+type Load = { kind: "idle"; } | { kind: "loading"; id: number; } | { kind: "ready"; value: unknown; } | {
+	kind: "failed";
+	message: string;
+} | { kind: "disposed"; };
+/*
+================
+HudData
+================
+*/
+interface HudData {
+	readonly portals: PortalCatalog;
+	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
+	readonly masteryCosts: Readonly<Record<number, number>>;
+	readonly extended: readonly AuthoredLayout[];
+	readonly countries: Readonly<Record<number, number>>;
+	readonly tooltipSkills: TooltipSkillCatalog;
+	readonly mapIcons: readonly MapIcon[];
+	readonly actions: readonly ActionSlot[];
+	readonly mapLabels: readonly MapLabel[];
+	readonly nameRules: NameRules;
+	readonly skillUi: SkillUi;
+	readonly popupArt: {
+		readonly tab: string;
+		readonly blocked: string;
+		readonly portrait: string;
+		readonly sockets: Readonly<Record<number, string>>;
+	};
+	readonly warmPaths: readonly string[];
+	readonly windows: Readonly<Record<string, AuthoredLayout>>;
+	readonly tips: readonly MessageTip[];
+	readonly targets: Readonly<Record<string, AuthoredLayout>>;
+	readonly root: AuthoredLayout;
+	readonly player: AuthoredLayout;
+	readonly bar: AuthoredLayout;
+	readonly minimap: AuthoredLayout;
+	readonly map: AuthoredLayout;
+	readonly chat: AuthoredLayout;
+	readonly status: AuthoredLayout;
+	readonly regionCodes: Readonly<Record<string, string>>;
+	readonly zones: Readonly<Record<string, string>>;
+	readonly strings: Readonly<Record<string, string>>;
+}
 // Polled requests are children of the existing UI/asset lifetime. Layout and text
 // share admission and cancellation; neither can outlive its HUD.
-export function createHudResources(assets:Pick<AssetOwner,'available'|'request'|'take'|'cancel'>,base:string){
- const targetNames=['iftargetwindow','iftw_specialmob','iftw_commonenemy','iftw_player','iftw_jobplayer_trijob2','iftw_fortressstructure'];
- const windowNames=['ifextquickslotoption','if_npcwindow','if_npctalk','ifstore','ifitemmallconfirmbuy','ifitemmallconfirmslot','ifmessagebox','ifcommunity','ifguild','ifguildmemberslot','ifguildnotifywrite','ifguildpointup','ifguildpositiongrant','ifguildgrantpower','ifcos','ifcosinventory','ifcosinfo','ifcossetup','ifnewalchemybox','ifalchemyprocess','ifnewalchemyreinforce','ifaction','ifskillpracticebox','ifquestreward','ifskill','ifskillboard','ifskill_slot','ifskill_mastery','ifquest','ifquestslot','ifquestslotmain','ifquestslotsub','ifpartymatch','ifpartymatchregister','ifpartymatchreqjoin','ifpartyjoinprogress','ifpartymatchauto','ifpartymatchslot','ifsystemwnd','ifmainpopup','ifinventory','ifequipment','ifplayerinfo_trijob2','ifparty','ifapprenticeship','ifapprenticeshipslot','ifpartyslot','ifsetpartymode','ifoption','ifoption_video','ifoption_audio','ifoption_camera','ifoption_input','ifoption_game','ifgameoptionslot','ifkeyoptionslot','ifvideooptionslot','ifautopotion','ifautopotionslot','ifquickstatewnd','ifquickstatehalfwnd','ifquickpartywnd','ifquickpartyslot','ifblocking','ifchattingblocking','ifwhisperblocking','ifchattingblockingslot','ifwhisperblockingslot'];
- const layouts=['ginterface','ifplayerminiinfo','ifunderbar','ifminimap','ifworldmap','ifchatviewer','ifsystemmessage',...targetNames,...windowNames,'ifextquickslot'];
- const paths=[...layouts.map(p=>'/assets/cif/layouts/'+p+'.json'),'/assets/text/textzonename.en.json','/assets/text/textuisystem.en.json','/assets/text/messagetips.en.json','/assets/data/skillUi.json','/assets/textdata/abusefilter.txt','/assets/data/worldmap-localinfo.json','/assets/text/textdataname.en.json','/assets/data/actionwnddata.json','/assets/data/skillData.json','/assets/text/regioncode.json','/assets/data/characterDataCountry.json','/assets/data/levelData.json','/assets/data/skillMasteryData.json','/assets/data/teleportData.json'],states:Load[]=paths.map(()=>({kind:'idle'}));
- let data:HudData|null=null;const warm=new Set<string>();
- return {step(){let changed=false;
-  for(let i=0;i<states.length;i++){const state=states[i]!;
-   if(state.kind==='loading'){const r=assets.take(state.id);if(r){changed=true;try{
-    if(r.kind!=='bytes')throw Error('HUD resource unavailable: '+paths[i]);const raw=i===layouts.length+4?null:JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(r.buffer));let value:unknown;
-    if(i<layouts.length){value=layouts[i]==='ifextquickslot'?['Type1','Type2','Type3','Type4','Option'].map(section=>decodeAuthoredLayout(raw,[section])):decodeAuthoredLayout(raw,nativeWindowSections(layouts[i]!));
-     // The publisher already expands actual frame/button families, including
-     // controls with only two states. Consume its catalogue without guessing URLs.
-     if(i>=7+targetNames.length)for(const entry of Object.values(raw.resourcesByDdjPath??{}) as {publicPath?:unknown}[]){
-      if(typeof entry?.publicPath!=='string'||!entry.publicPath.startsWith('/assets/images/')||!entry.publicPath.endsWith('.png'))throw Error('Invalid HUD image catalogue');
-      warm.add(entry.publicPath);
-     }
-    }
-    else if(i===layouts.length+13)value=decodePortalCatalog(raw);
-    else if(i===layouts.length+12)value=decodeTooltipMasteries(raw);
-    else if(i===layouts.length+11)value=masteryCosts(raw);
-    else if(i===layouts.length+10)value=partyCharacterCountries(raw);
-    else if(i===layouts.length+8)value=decodeTooltipSkills(raw);
-    else if(i===layouts.length+7)value=decodeActionSlots(raw);
-    else if(i===layouts.length+5)value=raw;
-    else if(i===layouts.length+4)value=creationNameRules(r.buffer);
-    else if(i===layouts.length+2)value=decodeMessageTips(raw);
-    else if(i===layouts.length+3)value=decodeSkillUi(raw);
-    else{if(!raw?.entries||typeof raw.entries!=='object'||Array.isArray(raw.entries)||Object.values(raw.entries).some(v=>typeof v!=='string'))throw Error('Invalid HUD text catalog');value=raw.entries;}
-    states[i]={kind:'ready',value};
-   }catch(e){states[i]={kind:'failed',message:String(e)};}}}
-   else if(state.kind==='idle'&&assets.available()>0)states[i]={kind:'loading',id:assets.request(new URL(paths[i]!,base).href,i===layouts.length+8?16<<20:4<<20)};
-  }
-  if(!data&&states.every(s=>s.kind==='ready')){const values=states.map(s=>s.kind==='ready'?s.value:null);data={portals:values[layouts.length+13] as PortalCatalog,tooltipMasteries:values[layouts.length+12] as HudData['tooltipMasteries'],masteryCosts:values[layouts.length+11] as HudData['masteryCosts'],extended:values[layouts.length-1] as readonly AuthoredLayout[],countries:values[layouts.length+10] as HudData['countries'],regionCodes:values[layouts.length+9] as HudData['regionCodes'],tooltipSkills:values[layouts.length+8] as TooltipSkillCatalog,mapIcons:decodeMapIcons(values[layouts.length+5]),actions:values[layouts.length+7] as readonly ActionSlot[],mapLabels:decodeMapLabels(values[layouts.length+5],values[layouts.length+6] as Record<string,string>),nameRules:values[layouts.length+4] as NameRules,skillUi:values[layouts.length+3] as SkillUi,popupArt:{tab:'/assets/images/Media_extracted/interface/ifcommon/com_tab_on.png',blocked:'/assets/images/Media_extracted/interface/pet/pt_block.png',portrait:'/assets/images/Media_extracted/interface/party/pt_face.png',sockets:{}},warmPaths:[],windows:Object.fromEntries(windowNames.map((name,i)=>[name,values[7+targetNames.length+i] as AuthoredLayout])),tips:values[layouts.length+2] as readonly MessageTip[],targets:Object.fromEntries(targetNames.map((name,i)=>[name,values[7+i] as AuthoredLayout])),root:values[0] as AuthoredLayout,player:values[1] as AuthoredLayout,bar:values[2] as AuthoredLayout,minimap:values[3] as AuthoredLayout,map:values[4] as AuthoredLayout,chat:values[5] as AuthoredLayout,status:values[6] as AuthoredLayout,zones:values[layouts.length] as HudData['zones'],strings:{...values[layouts.length+6] as HudData['strings'],...values[layouts.length+1] as HudData['strings']}};
-   const sockets=Object.fromEntries(Object.values(data.windows.ifequipment!).filter(node=>node.id>=100&&node.id<=112).map(node=>[node.id-100,'/assets/images/Media_extracted/interface/equipment/equip_slot_'+equipmentSocket(node.id-100)+'.png']));
-   const popupArt={...data.popupArt,sockets};
-   data={...data,popupArt,warmPaths:[...warm,'/assets/images/Media_extracted/icon/icon_disable.png','/assets/images/Media_extracted/icon/icon_item_broken.png','/assets/images/Media_extracted/icon/icon_item_warning.png',...['','_focus','_press'].map(state=>'/assets/images/Media_extracted/interface/skill/skl_button_up'+state+'.png'),...['h','v'].flatMap(axis=>['','_focus','_press'].map(state=>'/assets/images/Media_extracted/interface/quick_slot/qsl_'+axis+'close_button'+state+'.png')),'/assets/images/Media_extracted/interface/party/pt_hp_disable.png','/assets/images/Media_extracted/interface/party/pt_mp_disable.png',popupArt.tab,popupArt.blocked,popupArt.portrait,...Object.values(sockets)]};changed=true;}
-  return changed;
- },data:()=>data,error:()=>states.find(s=>s.kind==='failed')?.message??null,
- dispose(){for(let i=0;i<states.length;i++){const s=states[i]!;if(s.kind==='loading')assets.cancel(s.id);states[i]={kind:'disposed'};}data=null;warm.clear();}};
+/*
+================
+createHudResources
+================
+*/
+export function createHudResources(
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
+	base: string
+) {
+	const targetNames = [
+		"iftargetwindow",
+		"iftw_specialmob",
+		"iftw_commonenemy",
+		"iftw_player",
+		"iftw_jobplayer_trijob2",
+		"iftw_fortressstructure"
+	];
+	const windowNames = [
+		"ifextquickslotoption",
+		"if_npcwindow",
+		"if_npctalk",
+		"ifstore",
+		"ifitemmallconfirmbuy",
+		"ifitemmallconfirmslot",
+		"ifmessagebox",
+		"ifcommunity",
+		"ifguild",
+		"ifguildmemberslot",
+		"ifguildnotifywrite",
+		"ifguildpointup",
+		"ifguildpositiongrant",
+		"ifguildgrantpower",
+		"ifcos",
+		"ifcosinventory",
+		"ifcosinfo",
+		"ifcossetup",
+		"ifnewalchemybox",
+		"ifalchemyprocess",
+		"ifnewalchemyreinforce",
+		"ifaction",
+		"ifskillpracticebox",
+		"ifquestreward",
+		"ifskill",
+		"ifskillboard",
+		"ifskill_slot",
+		"ifskill_mastery",
+		"ifquest",
+		"ifquestslot",
+		"ifquestslotmain",
+		"ifquestslotsub",
+		"ifpartymatch",
+		"ifpartymatchregister",
+		"ifpartymatchreqjoin",
+		"ifpartyjoinprogress",
+		"ifpartymatchauto",
+		"ifpartymatchslot",
+		"ifsystemwnd",
+		"ifmainpopup",
+		"ifinventory",
+		"ifequipment",
+		"ifplayerinfo_trijob2",
+		"ifparty",
+		"ifapprenticeship",
+		"ifapprenticeshipslot",
+		"ifpartyslot",
+		"ifsetpartymode",
+		"ifoption",
+		"ifoption_video",
+		"ifoption_audio",
+		"ifoption_camera",
+		"ifoption_input",
+		"ifoption_game",
+		"ifgameoptionslot",
+		"ifkeyoptionslot",
+		"ifvideooptionslot",
+		"ifautopotion",
+		"ifautopotionslot",
+		"ifquickstatewnd",
+		"ifquickstatehalfwnd",
+		"ifquickpartywnd",
+		"ifquickpartyslot",
+		"ifblocking",
+		"ifchattingblocking",
+		"ifwhisperblocking",
+		"ifchattingblockingslot",
+		"ifwhisperblockingslot"
+	];
+	const layouts = [
+		"ginterface",
+		"ifplayerminiinfo",
+		"ifunderbar",
+		"ifminimap",
+		"ifworldmap",
+		"ifchatviewer",
+		"ifsystemmessage",
+		...targetNames,
+		...windowNames,
+		"ifextquickslot"
+	];
+	const paths = [
+			...layouts.map( p => "/assets/cif/layouts/" + p + ".json" ),
+			"/assets/text/textzonename.en.json",
+			"/assets/text/textuisystem.en.json",
+			"/assets/text/messagetips.en.json",
+			"/assets/data/skillUi.json",
+			"/assets/textdata/abusefilter.txt",
+			"/assets/data/worldmap-localinfo.json",
+			"/assets/text/textdataname.en.json",
+			"/assets/data/actionwnddata.json",
+			"/assets/data/skillData.json",
+			"/assets/text/regioncode.json",
+			"/assets/data/characterDataCountry.json",
+			"/assets/data/levelData.json",
+			"/assets/data/skillMasteryData.json",
+			"/assets/data/teleportData.json"
+		],
+		states: Load[] = paths.map( () => ({ kind: "idle" }) );
+	let data: HudData | null = null;
+	const warm = new Set<string>();
+	return {
+		/*
+		================
+		step
+
+		Demand gates admission only. Always collect previously admitted work.
+		================
+		*/
+		step( needed = true ) {
+			let changed = false;
+			for ( let i = 0; i < states.length; i++ ) {
+				const state = states[i]!;
+				if ( state.kind === "loading" ) {
+					const r = assets.take( state.id );
+					if ( r ) {
+						changed = true;
+						try {
+							if ( r.kind !== "bytes" ) throw Error( "HUD resource unavailable: " + paths[i] );
+							const raw = i === layouts.length + 4 ?
+								null :
+								JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( r.buffer ) );
+							let value: unknown;
+							if ( i < layouts.length ) {
+								value = layouts[i] === "ifextquickslot" ?
+									[ "Type1", "Type2", "Type3", "Type4", "Option" ].map( section =>
+										decodeAuthoredLayout( raw, [ section ] )
+									) :
+									decodeAuthoredLayout( raw, nativeWindowSections( layouts[i]! ) );
+								// The publisher already expands actual frame/button families, including
+								// controls with only two states. Consume its catalogue without guessing URLs.
+								if ( i >= 7 + targetNames.length ) {
+									for (
+										const entry of Object.values( raw.resourcesByDdjPath ?? {} ) as {
+											publicPath?: unknown;
+										}[]
+									) {
+										if (
+											typeof entry?.publicPath !== "string" ||
+											!entry.publicPath.startsWith( "/assets/images/" ) ||
+											!entry.publicPath.endsWith( ".png" )
+										) throw Error( "Invalid HUD image catalogue" );
+										warm.add( entry.publicPath );
+									}
+								}
+							} else if ( i === layouts.length + 13 ) value = decodePortalCatalog( raw );
+							else if ( i === layouts.length + 12 ) value = decodeTooltipMasteries( raw );
+							else if ( i === layouts.length + 11 ) value = masteryCosts( raw );
+							else if ( i === layouts.length + 10 ) value = partyCharacterCountries( raw );
+							else if ( i === layouts.length + 8 ) value = decodeTooltipSkills( raw );
+							else if ( i === layouts.length + 7 ) value = decodeActionSlots( raw );
+							else if ( i === layouts.length + 5 ) value = raw;
+							else if ( i === layouts.length + 4 ) value = creationNameRules( r.buffer );
+							else if ( i === layouts.length + 2 ) value = decodeMessageTips( raw );
+							else if ( i === layouts.length + 3 ) value = decodeSkillUi( raw );
+							else {
+								if (
+									!raw?.entries || typeof raw.entries !== "object" || Array.isArray( raw.entries ) ||
+									Object.values( raw.entries ).some( v => typeof v !== "string" )
+								) throw Error( "Invalid HUD text catalog" );
+								value = raw.entries;
+							}
+							states[i] = { kind: "ready", value };
+						} catch ( e ) {
+							states[i] = { kind: "failed", message: String( e ) };
+						}
+					}
+				} else if ( needed && state.kind === "idle" && assets.available() > 0 ) {
+					states[i] = {
+						kind: "loading",
+						id: assets.request(
+							new URL( paths[i]!, base ).href,
+							i === layouts.length + 8 ? 16 << 20 : 4 << 20
+						)
+					};
+				}
+			}
+			if ( !data && states.every( s => s.kind === "ready" ) ) {
+				const values = states.map( s => s.kind === "ready" ? s.value : null );
+				data = {
+					portals: values[layouts.length + 13] as PortalCatalog,
+					tooltipMasteries: values[layouts.length + 12] as HudData["tooltipMasteries"],
+					masteryCosts: values[layouts.length + 11] as HudData["masteryCosts"],
+					extended: values[layouts.length - 1] as readonly AuthoredLayout[],
+					countries: values[layouts.length + 10] as HudData["countries"],
+					regionCodes: values[layouts.length + 9] as HudData["regionCodes"],
+					tooltipSkills: values[layouts.length + 8] as TooltipSkillCatalog,
+					mapIcons: decodeMapIcons( values[layouts.length + 5] ),
+					actions: values[layouts.length + 7] as readonly ActionSlot[],
+					mapLabels: decodeMapLabels(
+						values[layouts.length + 5],
+						values[layouts.length + 6] as Record<string, string>
+					),
+					nameRules: values[layouts.length + 4] as NameRules,
+					skillUi: values[layouts.length + 3] as SkillUi,
+					popupArt: {
+						tab: "/assets/images/Media_extracted/interface/ifcommon/com_tab_on.png",
+						blocked: "/assets/images/Media_extracted/interface/pet/pt_block.png",
+						portrait: "/assets/images/Media_extracted/interface/party/pt_face.png",
+						sockets: {}
+					},
+					warmPaths: [],
+					windows: Object.fromEntries(
+						windowNames.map( ( name, i ) => [ name, values[7 + targetNames.length + i] as AuthoredLayout ] )
+					),
+					tips: values[layouts.length + 2] as readonly MessageTip[],
+					targets: Object.fromEntries(
+						targetNames.map( ( name, i ) => [ name, values[7 + i] as AuthoredLayout ] )
+					),
+					root: values[0] as AuthoredLayout,
+					player: values[1] as AuthoredLayout,
+					bar: values[2] as AuthoredLayout,
+					minimap: values[3] as AuthoredLayout,
+					map: values[4] as AuthoredLayout,
+					chat: values[5] as AuthoredLayout,
+					status: values[6] as AuthoredLayout,
+					zones: values[layouts.length] as HudData["zones"],
+					strings: {
+						...values[layouts.length + 6] as HudData["strings"],
+						...values[layouts.length + 1] as HudData["strings"]
+					}
+				};
+				const sockets = Object.fromEntries(
+					Object.values( data.windows.ifequipment! ).filter( node => node.id >= 100 && node.id <= 112 ).map(
+						node => [
+							node.id - 100,
+							"/assets/images/Media_extracted/interface/equipment/equip_slot_" +
+							equipmentSocket( node.id - 100 ) + ".png"
+						]
+					)
+				);
+				const popupArt = { ...data.popupArt, sockets };
+				data = {
+					...data,
+					popupArt,
+					warmPaths: [
+						...warm,
+						"/assets/images/Media_extracted/icon/icon_disable.png",
+						"/assets/images/Media_extracted/icon/icon_item_broken.png",
+						"/assets/images/Media_extracted/icon/icon_item_warning.png",
+						...[ "", "_focus", "_press" ].map( state =>
+							"/assets/images/Media_extracted/interface/skill/skl_button_up" + state + ".png"
+						),
+						...[ "h", "v" ].flatMap( axis =>
+							[ "", "_focus", "_press" ].map( state =>
+								"/assets/images/Media_extracted/interface/quick_slot/qsl_" + axis + "close_button" +
+								state + ".png"
+							)
+						),
+						"/assets/images/Media_extracted/interface/party/pt_hp_disable.png",
+						"/assets/images/Media_extracted/interface/party/pt_mp_disable.png",
+						popupArt.tab,
+						popupArt.blocked,
+						popupArt.portrait,
+						...Object.values( sockets )
+					]
+				};
+				changed = true;
+			}
+			return changed;
+		}, /*
+================
+data
+================
+		*/
+		data: () => data, /*
+================
+error
+================
+		*/
+		error: () => states.find( s => s.kind === "failed" )?.message ?? null,
+		/*
+		================
+		dispose
+
+		Release owned children and pending work before discarding local state.
+		================
+		*/
+		dispose() {
+			for ( let i = 0; i < states.length; i++ ) {
+				const s = states[i]!;
+				if ( s.kind === "loading" ) assets.cancel( s.id );
+				states[i] = { kind: "disposed" };
+			}
+			data = null;
+			warm.clear();
+		}
+	};
 }
