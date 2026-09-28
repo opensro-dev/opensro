@@ -132,7 +132,6 @@ async function exercise( page, result, credentials ) {
 	result.navigation = "resume";
 	await page.reload( { waitUntil: "commit" } );
 	result.navigation = "world";
-	await page.locator( "#fps-toggle" ).click();
 	await page.waitForFunction(
 		() => document.querySelector( "output" )?.textContent?.includes( "Frontend: world\n" ),
 		null,
@@ -272,7 +271,16 @@ async function main() {
 		} );
 	} );
 	const progress = setInterval( async () => {
-		console.log( "Release smoke:", await page.locator( "output" ).textContent().catch( () => "loading" ) );
+		const status = await page.locator( "output" ).textContent().catch( () => "loading" );
+		// The static button exists before its listener. Wait for a real runtime
+		// report before using the player's control, including after document reload.
+		if ( status?.startsWith( "Replacement runtime:" ) ) {
+			const toggle = page.locator( "#fps-toggle" );
+			if ( await toggle.getAttribute( "aria-expanded" ).catch( () => null ) === "false" ) {
+				await toggle.click().catch( () => {} );
+			}
+		}
+		console.log( "Release smoke:", status );
 		console.log(
 			"Release frame timing:",
 			await page.locator( "#fps-readout" ).textContent().catch( () => "loading" )
@@ -286,9 +294,6 @@ async function main() {
 		if ( !response || response.status() !== HTTP_OK ) throw Error( "Candidate entry is unavailable" );
 		const digest = createHash( "sha256" ).update( await response.body() ).digest( "hex" );
 		if ( digest !== candidate.entrySha256 ) throw Error( "HTTPS served a different candidate entry" );
-		// Use the player's existing telemetry control; do not install a second
-		// frame loop or modify the renderer to diagnose software GPU stalls.
-		await page.locator( "#fps-toggle" ).click();
 		await exercise( page, result, credentials );
 		const failures = classifyRequestFailures( requestFailures, result.phases );
 		result.errors.push( ...failures.errors );
