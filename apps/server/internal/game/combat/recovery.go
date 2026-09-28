@@ -14,6 +14,11 @@ package combat
 
 import "math"
 
+const (
+	HPRecoveryReductionParameter uint16 = 0x8f
+	MPRecoveryReductionParameter uint16 = 0x90
+)
+
 /*
 ================
 RecoverVital

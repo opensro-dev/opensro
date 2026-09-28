@@ -243,8 +243,8 @@ func (rt *Runtime) applySkillRecovery(division string, who *enterworld.Character
 	}
 
 	maxHP, maxMP, currentHP, currentMP := rt.playerKeeperVitals(division, who)
-	hpReduction, _ := stats.Param(0x8f)
-	mpReduction, _ := stats.Param(0x90)
+	hpReduction, _ := stats.Param(combat.HPRecoveryReductionParameter)
+	mpReduction, _ := stats.Param(combat.MPRecoveryReductionParameter)
 	nextHP := combat.RecoverVital(currentHP, maxHP, hp, hpReduction)
 	nextMP := combat.RecoverVital(currentMP, maxMP, mp, mpReduction)
 	if nextHP == currentHP && nextMP == currentMP {

@@ -18,9 +18,12 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-const levelRecoverySource uint16 = 0x80
-const vitalsUpdateOpcode uint16 = 0x33a6
-const healthAndManaMask uint8 = 3
+const (
+	levelRecoverySource      uint16 = 0x80
+	vitalsUpdateOpcode       uint16 = 0x33a6
+	healthAndManaMask        uint8  = 3
+	healthAndManaPacketBytes        = 15
+)
 
 /*
 ================
@@ -53,8 +56,8 @@ func (rt *Runtime) recoverLevelVitals(character *enterworld.Character, display w
 	if character.CurrentMP != nil {
 		mp = *character.CurrentMP
 	}
-	hpReduction, _ := stats.Param(0x8f)
-	mpReduction, _ := stats.Param(0x90)
+	hpReduction, _ := stats.Param(combat.HPRecoveryReductionParameter)
+	mpReduction, _ := stats.Param(combat.MPRecoveryReductionParameter)
 	hp = combat.RecoverVital(hp, maxHP, maxHP-hp, hpReduction)
 	mp = combat.RecoverVital(mp, maxMP, maxMP-mp, mpReduction)
 	character.CurrentHP, character.CurrentMP = &hp, &mp
@@ -73,7 +76,7 @@ and before EXP so the HUD observes one completed level transition.
 func levelRecoveryFrame(character *enterworld.Character) wire.Frame {
 	return wire.Frame{
 		Opcode: vitalsUpdateOpcode,
-		Payload: wire.NewWriter(15).
+		Payload: wire.NewWriter(healthAndManaPacketBytes).
 			U32(enterworld.ObjectIDForCharacter(character)).
 			U16(levelRecoverySource).U8(healthAndManaMask).
 			U32(uint32(*character.CurrentHP)).U32(uint32(*character.CurrentMP)).Payload(),
