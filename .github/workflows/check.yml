@@ -1,3 +1,8 @@
+# ===========================================================================
+# check.yml - validate portable source on Windows without retail game assets.
+# The committed lockfile owns both pnpm itself and application dependencies;
+# installation must not quietly repair either part before the source gates run.
+# ===========================================================================
 name: source-check
 
 on:
@@ -31,6 +36,8 @@ jobs:
           cache-dependency-path: apps/server/go.sum
 
       - run: pnpm install --frozen-lockfile
+      - name: Require dependency inputs to remain unchanged
+        run: git diff --exit-code HEAD -- pnpm-lock.yaml pnpm-workspace.yaml package.json ':(glob)apps/*/package.json'
       - run: pnpm check source
 
   # The asset pipeline and asset-dependent suites consume a locally extracted,

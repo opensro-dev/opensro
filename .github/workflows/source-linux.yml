@@ -22,6 +22,8 @@ jobs:
         with:
           runtime: node@24
           require-lockfile: true
+      - name: Require dependency inputs to remain unchanged
+        run: git diff --exit-code HEAD -- pnpm-lock.yaml pnpm-workspace.yaml package.json ':(glob)apps/*/package.json'
       - name: Verify client without generated retail assets
         run: node apps/client-next/tools/check.mjs --source
 
