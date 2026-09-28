@@ -473,6 +473,27 @@ try {
 Never set this switch in a production namespace or a general-purpose shared
 Nomad cluster.
 
+## Maintenance announcements
+
+Before restarting a single-host fleet, send a notice to its active players:
+
+```sh
+sro-nomad notice -state-dir .state/cluster -catalog config/shards.json \
+  -message "Server restart in five minutes. Please find a safe place."
+```
+
+Run this on the host with the operator's private Agent signing ring. Each
+enabled shard receives a signed, shard-bound request valid for one minute.
+The control URL must be literal loopback HTTP; browser requests, proxied
+requests, and ordinary player credentials cannot authorize a notice. The
+command refuses redirects. Retrying the same signed request does not repeat
+the announcement. Text is limited to 100 UTF-16 units without control
+characters, matching the existing game notification encoder.
+
+Acceptance means the running GameWorld queued the notice for active scenes;
+it is not an acknowledgement from every player's browser. Announce the same
+maintenance window through the community channel before deployment.
+
 ## Official references
 
 - [Nomad architecture](https://developer.hashicorp.com/nomad/docs/architecture)

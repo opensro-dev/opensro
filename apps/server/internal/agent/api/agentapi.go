@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+agentapi.go - private character selection and control HTTP surface
+
+===========================================================================
+*/
 // Package agentapi owns one GameWorld process's private character-select
 // control surface. The global Agent authenticates accounts, owns the title
 // server list, and proxies authenticated requests here. This package never
@@ -117,6 +124,11 @@ func DefaultAllowedOrigins() []string {
 }
 
 // Config wires the API to the authority store.
+/*
+================
+Config
+================
+*/
 type Config struct {
 	Store *store.Store
 	// CharacterPresentation projects persisted creation provenance into the
@@ -164,7 +176,13 @@ type Config struct {
 }
 
 // API serves the agent HTTP surface.
+/*
+================
+API
+================
+*/
 type API struct {
+	notices                 *noticePublisher
 	observatory             *observatoryReader
 	monsterQuery            MonsterPositionQuery
 	followFixture           FollowFixtureControl
@@ -191,6 +209,11 @@ type API struct {
 // New builds the API. A configured accounts file that fails to load is a
 // boot refusal (a silent fall-back to open login would be a security
 // downgrade wearing a helpful face).
+/*
+================
+New
+================
+*/
 func New(config Config) (*API, error) {
 	if config.Store == nil {
 		return nil, fmt.Errorf("agentapi: authority store is required")
@@ -256,6 +279,11 @@ func New(config Config) (*API, error) {
 	return api, nil
 }
 
+/*
+================
+buildAllowedOriginSet
+================
+*/
 func buildAllowedOriginSet(configured []string) (map[string]struct{}, error) {
 	origins := configured
 	if origins == nil {
@@ -278,6 +306,11 @@ func buildAllowedOriginSet(configured []string) (map[string]struct{}, error) {
 	return out, nil
 }
 
+/*
+================
+sortedOriginNames
+================
+*/
 func sortedOriginNames(origins map[string]struct{}) []string {
 	names := make([]string, 0, len(origins))
 	for origin := range origins {
@@ -289,8 +322,16 @@ func sortedOriginNames(origins map[string]struct{}) []string {
 
 // Handler builds the HTTP mux with CORS (the browser client is a
 // different origin in every deployment shape).
+/*
+================
+Handler
+================
+*/
 func (api *API) Handler() http.Handler {
 	mux := http.NewServeMux()
+	if api.notices != nil {
+		mux.Handle(NoticePath, api.requireRunning(http.HandlerFunc(api.handleNotice)))
+	}
 	if api.observatory != nil {
 		mux.Handle(ObservatoryPath, api.requireRunning(http.HandlerFunc(api.handleObservatory)))
 	}
@@ -371,6 +412,11 @@ func (api *API) Handler() http.Handler {
 	return api.corsMiddleware(mux)
 }
 
+/*
+================
+handleReady
+================
+*/
 func (api *API) handleReady(w http.ResponseWriter, r *http.Request) {
 	digest, err := api.agentSessionVerifier.Digest()
 	if err != nil {
@@ -404,6 +450,11 @@ const maxGuildMarkBytes int64 = 1 << 20
 // stores only crest REVISION params (the v1.188 _Guild.CurCrestRev
 // lineage), never images, so art is host-supplied: no directory or no
 // file is an honest 404 and the client draws nothing for that crest.
+/*
+================
+handleGuildMark
+================
+*/
 func (api *API) handleGuildMark(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -449,6 +500,11 @@ const maxBodyBytes = 64 << 10
 // allowlist before they can reach a handler. Originless callers (native
 // tools, curl, same-machine probes) remain usable; bearer authentication
 // independently guards every private route.
+/*
+================
+corsMiddleware
+================
+*/
 func (api *API) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -474,6 +530,11 @@ func (api *API) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+/*
+================
+requireSession
+================
+*/
 func (api *API) requireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		const prefix = "Bearer "
@@ -501,6 +562,11 @@ func (api *API) requireSession(next http.Handler) http.Handler {
 	})
 }
 
+/*
+================
+requireRunning
+================
+*/
 func (api *API) requireRunning(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !api.readiness.Ready() {
@@ -516,26 +582,56 @@ func (api *API) requireRunning(next http.Handler) http.Handler {
 	})
 }
 
+/*
+================
+sessionIdentityContextKey
+================
+*/
 type sessionIdentityContextKey struct{}
 
+/*
+================
+sessionIdentity
+================
+*/
 type sessionIdentity struct {
 	accountID string
 	shardID   string
 }
 
+/*
+================
+requestIdentity
+================
+*/
 func requestIdentity(r *http.Request) sessionIdentity {
 	identity, _ := r.Context().Value(sessionIdentityContextKey{}).(sessionIdentity)
 	return identity
 }
 
+/*
+================
+requestAccountID
+================
+*/
 func requestAccountID(r *http.Request) string {
 	return requestIdentity(r).accountID
 }
 
+/*
+================
+requestShardID
+================
+*/
 func requestShardID(r *http.Request) string {
 	return requestIdentity(r).shardID
 }
 
+/*
+================
+writeJSON
+================
+*/
 func writeJSON(w http.ResponseWriter, status int, body interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -546,6 +642,11 @@ func writeJSON(w http.ResponseWriter, status int, body interface{}) {
 	}
 }
 
+/*
+================
+decodeJSONRequest
+================
+*/
 func decodeJSONRequest(body io.Reader, destination interface{}) error {
 	decoder := json.NewDecoder(body)
 	decoder.DisallowUnknownFields()

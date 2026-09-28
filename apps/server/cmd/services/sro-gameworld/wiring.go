@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+wiring.go - GameWorld construction, service ownership and orderly shutdown
+
+===========================================================================
+*/
 package main
 
 import (
@@ -63,6 +70,11 @@ type gameWorldApplication struct {
 	leaseOwned      bool
 }
 
+/*
+================
+newGameWorldApplication
+================
+*/
 func newGameWorldApplication(
 	startupContext context.Context,
 	ts *transport.Server,
@@ -221,6 +233,7 @@ func newGameWorldApplication(
 	authority.agentAPI.InstallPassiveCriticalFixture(gameplay.passiveCriticalReader())
 	installMonsterQuery(authority.agentAPI, gameplay.deps.MonsterState, ownedShard.ID)
 	installObservatory(authority.agentAPI, gameplay.deps.MonsterState, ts.Hub, authority.store, ownedShard.ID)
+	installOperatorNotices(authority.agentAPI, ts.Hub, ownedShard.ID)
 	application.controlErrors, err = authority.agentAPI.Start(controlAddr)
 	if err != nil {
 		return nil, fmt.Errorf("GameWorld control API: %w", err)
@@ -240,6 +253,11 @@ func newGameWorldApplication(
 	return application, nil
 }
 
+/*
+================
+configuredAgentURL
+================
+*/
 func configuredAgentURL() (string, error) {
 	agentURL := strings.TrimSpace(os.Getenv(envAgentURL))
 	if agentURL != "" {
@@ -254,6 +272,11 @@ func configuredAgentURL() (string, error) {
 	return agentapi.DefaultAgentBaseURL, nil
 }
 
+/*
+================
+Run
+================
+*/
 func (application *gameWorldApplication) Run(ctx context.Context) error {
 	runContext, cancelRun := context.WithCancel(ctx)
 	group, groupContext := errgroup.WithContext(runContext)
@@ -311,6 +334,11 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	return errors.Join(runErr, drainErr)
 }
 
+/*
+================
+waitForServeError
+================
+*/
 func waitForServeError(
 	ctx context.Context,
 	name string,
@@ -330,6 +358,11 @@ func waitForServeError(
 	}
 }
 
+/*
+================
+drainNetwork
+================
+*/
 func (application *gameWorldApplication) drainNetwork() error {
 	application.readiness.Close()
 	log.Info("shutdown: draining the game transport and control API")
@@ -359,6 +392,11 @@ func (application *gameWorldApplication) drainNetwork() error {
 	return drains.Wait()
 }
 
+/*
+================
+releaseLease
+================
+*/
 func (application *gameWorldApplication) releaseLease() {
 	if !application.leaseOwned || application.reporter == nil {
 		return
@@ -373,6 +411,11 @@ func (application *gameWorldApplication) releaseLease() {
 	}
 }
 
+/*
+================
+rollback
+================
+*/
 func (application *gameWorldApplication) rollback() {
 	application.readiness.Close()
 	if err := application.drainNetwork(); err != nil &&
@@ -403,6 +446,11 @@ func (application *gameWorldApplication) rollback() {
 	application.leaseOwned = false
 }
 
+/*
+================
+loadOwnedShard
+================
+*/
 func loadOwnedShard() (shard.Definition, error) {
 	catalog, catalogPath, err := shard.LoadFromEnv()
 	if err != nil {
@@ -426,6 +474,11 @@ func loadOwnedShard() (shard.Definition, error) {
 	return ownedShard, nil
 }
 
+/*
+================
+controlListenAddress
+================
+*/
 func controlListenAddress(rawURL string) (string, error) {
 	if override := strings.TrimSpace(os.Getenv("SRO_GAMEWORLD_CONTROL_ADDR")); override != "" {
 		if _, _, err := net.SplitHostPort(override); err != nil {
