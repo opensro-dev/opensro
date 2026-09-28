@@ -3,6 +3,10 @@
 
 wiring_gameplay.go - gameplay authorities and production runtime composition.
 
+Constructs one shard's owners and connects their transaction-safe entry
+points before transport registration. Runtime callbacks capture this shard
+identity rather than resolving characters while another owner holds a lock.
+
 ===========================================================================
 */
 package main
@@ -36,15 +40,15 @@ import (
 )
 
 /*
-================================================================================
-Gameplay composition
+================
+gameplayPlane
 
 The composition root joins concrete authorities to consumer-owned gameplay
 ports. Runtimes retain only the capabilities declared by their packages.
-================================================================================
+================
 */
-
 type gameplayPlane struct {
+	divisionID    string
 	hub           *transport.Hub
 	deps          *enterworld.Deps
 	items         *action.Runtime
@@ -62,6 +66,9 @@ type gameplayPlane struct {
 /*
 ================
 newGameplayPlane
+
+Builds the shard's shared authorities before any gameplay handler is exposed.
+All effect-aware projections refer to the same action runtime.
 ================
 */
 func newGameplayPlane(
@@ -223,6 +230,7 @@ func newGameplayPlane(
 	}
 
 	return &gameplayPlane{
+		divisionID:    ownedShard.ID,
 		hub:           ts.Hub,
 		deps:          deps,
 		items:         items,
@@ -240,6 +248,9 @@ func newGameplayPlane(
 /*
 ================
 appendGroundObjectRows
+
+Adds live ground objects after authored NPC rows while retaining the existing
+bootstrap producer and its visibility decisions.
 ================
 */
 func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
@@ -260,6 +271,9 @@ func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
 /*
 ================
 connectInvitationLanes
+
+Shares the single outstanding-consent rule across party, guild, mentor,
+and resurrection invitations without moving their state ownership.
 ================
 */
 func connectInvitationLanes(
@@ -297,6 +311,10 @@ func connectInvitationLanes(
 /*
 ================
 register
+
+Installs validated cross-owner callbacks before registering transport
+handlers. Progression callbacks operate on the caller's candidate and must
+never acquire another character transaction.
 ================
 */
 func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefinitionLoader) error {
@@ -316,6 +334,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	stats := progression.NewRuntime(game.deps)
 	stats.BaseStats = game.deps.PlayerBaseStats
+	stats.RecoverLevelVitals = func(character *enterworld.Character) error {
+		return game.items.RecoverLevelVitals(game.divisionID, character)
+	}
 	quests, err := quest.NewRuntime(
 		game.deps,
 		definitions,

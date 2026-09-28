@@ -1,56 +1,27 @@
 /*
 ===========================================================================
 
-levelup.go - experience and level-up
+levelup.go - atomic experience, level transitions, and reward packets.
+
+Owns the curve walk and persisted progression fields. Candidate state is
+validated before commit; the recovery adapter supplies installed combat
+effects without acquiring a second character lock.
 
 ===========================================================================
 */
 
 package progression
 
-// The experience / level-up authority core (levelup wave, LANE-1).
+// Native server 4E5250 completes the level transition before SP and EXP.
+// Its upward branch at 4E5065 invokes reduced recovery and level presentation.
+// The v1.150 consumers are independent: 777670 presents the level effect,
+// 75BE90 installs maxima, 77A080 installs current gauges, and 779620 walks EXP.
+// This port sends the completed maxima and recovery inside that transition
+// boundary, before the SP update and EXP tail. Stat points ride only the EXP
+// tail; adding a separate type-3 update would apply that total twice.
 //
-// Until this wave the server had NO level-up path: Character.Level,
-// MaxLevel, Experience and SkillExp persisted but never moved, which
-// silently bounded everything keyed on level (derived HP/MP maxima, the
-// EU total-mastery allowance, mastery training past level 1). This file
-// is the transactional core that finally moves them.
-//
-// WIRE CONTRACT (agreed FABLE-1/FABLE-5 on the levelup-wave board, seq
-// 33/38/55; every address verified in the v1.150 dump):
-//
-//	0x30D2 sub_779620  exp/skill-exp deltas + the DERIVED level-up: the
-//	                   client walks the SAME leveldata curve this core
-//	                   walks and reads a trailing [u16 statPoints]
-//	                   ABSOLUTE only when >= 1 level was crossed.
-//	0x36B0 sub_777670  level-up presentation (SYSTEM_LEVELUP effect +
-//	                   snd_levup) on [u32 gid]. Pure visual; 0x30D2
-//	                   itself never plays it.
-//	0x343C sub_75be90  the post-grant applied STR/INT words and the
-//	                   DERIVED maxima - the only channel that moves them.
-//	0x30B3 type 2      absolute SP, notify=0 - only if SP changed (the
-//	                   skill-exp yield - see skillExpSPYieldEnabled).
-//
-// Success burst order (one grant): 0x36B0 on an upward crossing, then
-// 0x343C for any level transition, then 0x30B3 type 2 if SP changed, and
-// 0x30D2 LAST. This is pinned by the version-contamination-safe semantic
-// producer in the supplied v1.188 GameServer, not by matching opcode
-// numbers: CGObjPC_ApplyExperienceAndSend3056 (0x004e5250) calls the
-// level-transition owner at 0x004e555e; that owner broadcasts its GID-only
-// level-up presentation packet at 0x004e50b4..0x004e50d5 and completes the
-// level/stat graph before returning. The producer then invokes the absolute
-// SP updater at 0x004e5616 and only afterward constructs/sends the EXP packet
-// at 0x004e582d..0x004e590a. In this build 0x343C is the explicit client
-// staging carrier for the level-transition stat graph, so it stays inside
-// that boundary, before the SP and EXP legs. A levelling burst never
-// carries a 0x30B3 type 3 - the 0x30D2 tail already writes the same +0x83c
-// word (the documented double-apply trap family).
-//
-// Live producers: monster kills call ExperienceUpdater at the fatal-hit
-// transaction and quest turn-ins use the same door-free seam. Ordinary
-// monster deaths call DeathPenaltyUpdater inside fatal HP; the v1.188 server
-// rule protects levels <=10 and emits a signed negative 0x30D2 above that.
-// The 0xDE01 dev trigger remains env-gated and is not a gameplay source.
+// Combat and quests call the same door-free updater inside their transaction.
+// The diagnostic opcode is separately admitted at registration and request time.
 
 import (
 	"os"
@@ -137,14 +108,25 @@ const OpDevGrantExp uint16 = 0xDE01
 // EnvDevExpGrant enables the dev trigger's registration when "1".
 const EnvDevExpGrant = "SRO_DEV_EXP_GRANT"
 
-// DevExpGrantEnabled reports the env gate. Read at registration time,
-// never per-frame.
+/*
+================
+DevExpGrantEnabled
+
+The diagnostic opcode is registered only when explicitly enabled at startup.
+================
+*/
 func DevExpGrantEnabled() bool {
 	return os.Getenv(EnvDevExpGrant) == "1"
 }
 
-// HandleDevGrantExp is the 0xDE01 handler body (behind the same
-// hubHandler bound-character gate as every other progression opcode).
+/*
+================
+HandleDevGrantExp
+
+The diagnostic still requires a bound GM character and a complete payload.
+It shares the production grant transaction after admission.
+================
+*/
 func (rt *Runtime) HandleDevGrantExp(divisionID string, character *enterworld.Character, payload []byte) OpResult {
 	if character == nil || !character.GMPrivilege {
 		return OpResult{}
@@ -295,6 +277,13 @@ func ordinaryDeathPenaltyLoss(levels enterworld.LevelDataSource, level int64) (i
 	return loss, true
 }
 
+/*
+================
+applyOrdinaryDeathPenalty
+
+Called inside the fatal-HP transaction; protected levels need no curve row.
+================
+*/
 func (rt *Runtime) applyOrdinaryDeathPenalty(character *enterworld.Character) ([]wire.Frame, bool) {
 	if character == nil || character.DeletePending {
 		return nil, false
@@ -310,8 +299,14 @@ func (rt *Runtime) applyOrdinaryDeathPenalty(character *enterworld.Character) ([
 	return rt.applyExperience(character, -loss, 0, 0)
 }
 
-// applyExperience validates and updates progression on a character already
-// owned by an authority update closure. The bool reports whether state moved.
+/*
+================
+applyExperience
+
+The caller already owns the character transaction. All fallible projection
+runs on a detached candidate before persisted fields or packets are exposed.
+================
+*/
 func (rt *Runtime) applyExperience(
 	character *enterworld.Character,
 	expDelta, skillExpDelta int64,
@@ -376,7 +371,7 @@ func (rt *Runtime) applyExperience(
 	}
 	if walk.levelsGained > 0 {
 		// Materialize absent currents at the pre-level maxima before level
-		// and stats move, preserving the current-value policy.
+		// and stats move, so recovery reductions apply to the whole deficit.
 		if next.CurrentHP == nil {
 			full := keeperOrDerived(rt, next, true)
 			next.CurrentHP = &full
@@ -432,13 +427,19 @@ func (rt *Runtime) applyExperience(
 			return nil, false
 		}
 		statBlock = enterworld.BuildLoginStatBlock(next, display)
+		if walk.levelsGained > 0 {
+			if err := rt.recoverLevelVitals(next, display); err != nil {
+				log.Warnf("progression: level recovery refused - %v", err)
+				return nil, false
+			}
+		}
 	}
 
 	// Preserve the retail semantic producer order. Presentation belongs to
 	// the upward level-transition owner; the explicit v1.150 stat snapshot is
 	// the rest of that transition boundary. SP conversion follows, and the
 	// EXP/skill-EXP delta closes the burst last.
-	frames := make([]wire.Frame, 0, 4)
+	frames := make([]wire.Frame, 0, 5)
 	if walk.levelsGained > 0 {
 		frames = append(frames,
 			wire.Frame{
@@ -454,6 +455,9 @@ func (rt *Runtime) applyExperience(
 		})
 		if gaugeClamped {
 			frames = append(frames, wire.Frame{Opcode: 0x33A6, Payload: clampedGaugePayload(next, rt)})
+		}
+		if walk.levelsGained > 0 && enterworld.CharacterAlive(next) {
+			frames = append(frames, levelRecoveryFrame(next))
 		}
 	}
 	if spChanged {
@@ -511,7 +515,14 @@ func (rt *Runtime) applyExperience(
 	return frames, true
 }
 
-// expWalkResult is one curve walk's outcome.
+/*
+================
+expWalkResult
+
+Carries both the applied wire delta and the level crossings. The requested
+delta may exceed the level cap and must never be echoed as if it committed.
+================
+*/
 type expWalkResult struct {
 	// level / exp are the post-walk character level and WITHIN-LEVEL
 	// experience remainder (the client stores the same remainder - its
@@ -604,8 +615,13 @@ func walkExpCurve(levels enterworld.LevelDataSource, level, exp, delta int64) ex
 	return result
 }
 
-// clampExpDelta holds an update inside the signed 0x30D2 field. Positive
-// grants and negative death losses share this exact carrier.
+/*
+================
+clampExpDelta
+
+Positive grants and death losses share the signed 30D2 delta field.
+================
+*/
 func clampExpDelta(value int64) int64 {
 	if value < -0x80000000 {
 		return -0x80000000
@@ -616,8 +632,13 @@ func clampExpDelta(value int64) int64 {
 	return value
 }
 
-// Skill-exp is a gain-only reward lane. Death loss never touches it, and the
-// client's u32/mod-400 implementation has no signed-loss contract.
+/*
+================
+clampSkillExpDelta
+
+Skill EXP is gain-only. Its unsigned modulo accumulator has no loss contract.
+================
+*/
 func clampSkillExpDelta(value int64) int64 {
 	if value < 0 {
 		return 0

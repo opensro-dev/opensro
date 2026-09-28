@@ -23,7 +23,14 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// healRoutine selects how the heal block's percent words apply.
+/*
+================
+healRoutine
+
+Cast healing raises its flat amount; aura healing takes a share of the
+maximum. Keep this choice explicit before applying common recovery rules.
+================
+*/
 type healRoutine uint8
 
 const (
@@ -133,14 +140,25 @@ func auraHealBase(heal enterworld.SkillHeal, maxHP, maxMP int64) (hp, mp int64) 
 	return hp, mp
 }
 
-// raisedByPercent is flat - ftol(unsigned(flat * percent) / -100), with the
-// product a 32-bit IMUL.
+/*
+================
+raisedByPercent
+
+The native IMUL wraps at 32 bits before its unsigned result reaches ftol.
+================
+*/
 func raisedByPercent(flat int64, percent uint32) int64 {
 	product := uint32(int32(flat) * int32(percent))
 	return flat - crtFtol(float64(product)/-100)
 }
 
-// healScale is ftol((param / 100 + 1) * amount), the 0xAA / 0xAB step.
+/*
+================
+healScale
+
+Applies the recipient's AA/AB amplification before recovery reductions.
+================
+*/
 func healScale(amount int64, param float32) int64 {
 	return crtFtol((float64(param)/100 + 1) * float64(int32(amount)))
 }
@@ -220,22 +238,18 @@ func (rt *Runtime) applySkillRecovery(division string, who *enterworld.Character
 		return wire.Frame{}, false
 	}
 
-	reduce := func(amount int64, param uint16) int64 {
-		if amount == 0 {
-			return 0
-		}
-		reduction, _ := stats.Param(param)
-		return max(0, crtFtol((1-float64(reduction)/100)*float64(int32(amount))))
-	}
-	hp = reduce(hp, 0x8f)
-	mp = reduce(mp, 0x90)
 	if !enterworld.CharacterAlive(who) || hp == 0 && mp == 0 {
 		return wire.Frame{}, true
 	}
 
 	maxHP, maxMP, currentHP, currentMP := rt.playerKeeperVitals(division, who)
-	nextHP := min(maxHP, currentHP+hp)
-	nextMP := min(maxMP, currentMP+mp)
+	hpReduction, _ := stats.Param(combat.HPRecoveryReductionParameter)
+	mpReduction, _ := stats.Param(combat.MPRecoveryReductionParameter)
+	nextHP := combat.RecoverVital(currentHP, maxHP, hp, hpReduction)
+	nextMP := combat.RecoverVital(currentMP, maxMP, mp, mpReduction)
+	if nextHP == currentHP && nextMP == currentMP {
+		return wire.Frame{}, true
+	}
 	who.CurrentHP, who.CurrentMP = &nextHP, &nextMP
 
 	vitals := simulation.Vitals{CurrentHP: uint32(nextHP), CurrentMP: uint32(nextMP)}
