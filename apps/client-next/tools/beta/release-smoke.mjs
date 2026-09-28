@@ -153,9 +153,9 @@ async function collectWorkerResources( page ) {
 ================
 classifyRequestFailures
 
-An aborted title poll or completed login is expected when its owner leaves the
-title scene. Require the corresponding successful phase; a timeout, failed
-login or unrelated asset cancellation must still fail the release gate.
+The session owner aborts the previous title request when starting a new request
+or entering the world. Require the successful replacement phase before admitting
+an obsolete restore or login abort; transport and unrelated asset errors fail.
 ================
 */
 export function classifyRequestFailures( failures, phases ) {
@@ -163,6 +163,7 @@ export function classifyRequestFailures( failures, phases ) {
 	for ( const failure of failures ) {
 		const completed = failure.duringReload ||
 			(failure.path === "/api/title/servers" && phases.title === "PASS") ||
+			(failure.path === "/api/title/session" && phases.login === "PASS") ||
 			(failure.path === "/api/title/login" && phases.login === "PASS");
 		if ( completed && failure.reason === "net::ERR_ABORTED" ) cancelled.push( failure );
 		else errors.push( `Request failed: ${failure.path}: ${failure.reason}` );

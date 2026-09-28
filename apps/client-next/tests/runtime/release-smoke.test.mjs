@@ -22,6 +22,7 @@ completedTitleCancellation
 test("title teardown preserves cancellation evidence after successful login", function completedTitleCancellation() {
 	const failures = [
 		{ path: "/api/title/servers", reason: "net::ERR_ABORTED" },
+		{ path: "/api/title/session", reason: "net::ERR_ABORTED" },
 		{ path: "/api/title/login", reason: "net::ERR_ABORTED" }
 	];
 	const result = classifyRequestFailures( failures, { title: "PASS", login: "PASS" } );
@@ -37,10 +38,11 @@ unrelatedRequestFailure
 test("a failed login and unrelated asset abort remain release failures", function unrelatedRequestFailure() {
 	const result = classifyRequestFailures( [
 		{ path: "/api/title/login", reason: "net::ERR_ABORTED" },
+		{ path: "/api/title/session", reason: "net::ERR_ABORTED" },
 		{ path: "/assets/packs/data.bin", reason: "net::ERR_ABORTED" },
 		{ path: "/api/title/servers", reason: "net::ERR_TIMED_OUT" }
 	], { title: "PASS" } );
-	assert.equal( result.errors.length, 3 );
+	assert.equal( result.errors.length, 4 );
 	assert.deepEqual( result.cancelled, [] );
 });
 
