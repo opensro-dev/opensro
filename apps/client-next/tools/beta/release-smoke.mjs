@@ -18,6 +18,9 @@ import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { assertCharacterAllowed } from "../../../../scripts/lib/probeCharacter.mjs";
 
 const TITLE_BUDGET_MS = 180_000;
+// The first roster scene loads character models and compiles scene graphics.
+// This is a cold scene transition, not an ordinary input-control response.
+const DOCK_BUDGET_MS = 180_000;
 // Cold entry includes region decoding and subsequent texture admission. Warm
 // resume has its own smaller bound so the cold allowance cannot hide a reload regression.
 const WORLD_BUDGET_MS = 180_000;
@@ -101,7 +104,7 @@ async function exercise( page, result, credentials ) {
 	if ( !Array.isArray( characters ) || characters.length !== 1 || characters[0].name !== credentials.character ) {
 		throw Error( "Release probe requires its dedicated single-character roster" );
 	}
-	await control( "frontend:create" ).waitFor();
+	await control( "frontend:create" ).waitFor( { timeout: DOCK_BUDGET_MS } );
 	result.phases.roster = "PASS";
 	await page.mouse.click( 505, 430 );
 	await control( "enter" ).click();
