@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/licensed"
 )
 
@@ -169,6 +170,8 @@ func TestShippedStatItemPrograms(t *testing.T) {
 			"accuracy": effect.Accuracy.Present, "evasion": effect.Evasion.Present,
 			"str": effect.Strength.Present, "int": effect.Intellect.Present,
 			"damage": skill.BuffModifiers.Dru, "absorption": skill.BuffModifiers.Odar,
+			"recovery": effect.Recovery.Present,
+			"gold":     effect.GoldDropPercent != 0,
 		} {
 			families[family] = families[family] || present
 		}
@@ -234,4 +237,53 @@ func TestShippedStatItemPrograms(t *testing.T) {
 		t.Fatal("catalog did not exercise any stat item")
 	}
 	t.Logf("exercised %d shipped stat consumables", count)
+}
+
+/*
+================
+TestRecoveryItemChangesPulsesThroughExpiry
+
+Use the inventory command, then the resident recovery owner. This catches a
+descriptor that installs an icon but never reaches the gameplay consumer.
+================
+*/
+func TestRecoveryItemChangesPulsesThroughExpiry(t *testing.T) {
+	for _, sitting := range []bool{false, true} {
+		rt, clock, c, request := statItemFixture(t, enterworld.SkillTimedEffect{
+			Recovery: enterworld.SkillRecoveryRates{Present: true, HP: 500},
+		})
+		hp, mp := int64(1), int64(1)
+		c.CurrentHP, c.CurrentMP = &hp, &mp
+		if result := rt.HandleItemUse(testDivision, c, request); result.Frames[0].Payload[0] != 1 {
+			t.Fatal("recovery item refused", result)
+		}
+		rt.BindRecoverySession(testDivision, c, 1)
+		rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState {
+			return simulation.SeedWorldState(c)
+		}, func(world *simulation.WorldState) {
+			world.Sitting = sitting
+		})
+		base := standingRecoveryRate
+		if sitting {
+			base = sittingRecoveryRate
+		}
+		clock.Advance(4 * time.Second)
+		if len(rt.advanceNaturalRecovery(clock.NowMs())) != 1 {
+			t.Fatal("missing buffed recovery pulse")
+		}
+		wantHP := 1 + naturalRecoveryAmount(enterworld.DerivedMaxHP(c), float32(float64(base)*6))
+		wantMP := 1 + naturalRecoveryAmount(enterworld.DerivedMaxMP(c), base)
+		if enterworld.CurrentHP(c) != wantHP || enterworld.CurrentMP(c) != wantMP {
+			t.Fatalf("sitting=%v: got %d/%d, want %d/%d", sitting, enterworld.CurrentHP(c), enterworld.CurrentMP(c), wantHP, wantMP)
+		}
+		clock.Advance(6 * time.Second)
+		rt.effects.Expire(clock.NowMs())
+		rt.drainStoppedCharacterEffects()
+		hp, mp = 1, 1
+		c.CurrentHP, c.CurrentMP = &hp, &mp
+		rt.advanceNaturalRecovery(clock.NowMs())
+		if enterworld.CurrentHP(c) != 1+naturalRecoveryAmount(enterworld.DerivedMaxHP(c), base) {
+			t.Fatal("expired recovery item still changes pulses")
+		}
+	}
 }

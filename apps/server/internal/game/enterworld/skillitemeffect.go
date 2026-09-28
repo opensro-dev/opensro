@@ -23,6 +23,8 @@ const (
 	itemEffectAbsorb   = 0x6f646172
 	itemEffectSTR      = 0x73747269
 	itemEffectINT      = 0x696e7469
+	itemEffectRecovery = 0x69726763
+	itemEffectGold     = 0x676472
 )
 
 /*
@@ -95,6 +97,14 @@ func compileTimedItemEffect(fields []string, row SkillRow) (SkillTimedEffect, bo
 			modifiers = true
 		case itemEffectINT:
 			result.Intellect = SkillStatBoost{Present: true, Value: pair.Flat, CapPercent: pair.Percent}
+			modifiers = true
+		case itemEffectRecovery:
+			// 595A33..595A93: independent percent-sum writes to HP/MP
+			// recovery parameters, not flat healing or maximum gauges.
+			result.Recovery = SkillRecoveryRates{Present: true, HP: pair.Flat, MP: pair.Percent}
+			modifiers = true
+		case itemEffectGold:
+			result.GoldDropPercent = op.Arguments[0]
 			modifiers = true
 		case itemEffectDamage, itemEffectAbsorb:
 			// parseSkillOffense already decodes these shared modifier blocks;

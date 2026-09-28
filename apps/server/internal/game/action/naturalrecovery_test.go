@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+naturalrecovery_test.go - resident recovery cadence and authority boundaries
+
+Drive simulation time explicitly. Pulses must obey motion, session lifetime,
+keeper rates and committed gauge publication without wall-clock sleeps.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -10,21 +20,34 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+TestNaturalRecoveryNativeAmounts
+================
+*/
 func TestNaturalRecoveryNativeAmounts(t *testing.T) {
 	for _, tc := range []struct {
 		maximum int64
-		sit     bool
+		rate    float32
 		want    int64
 	}{
-		{1000, false, 8}, {1000, true, 80}, {125, false, 1}, {125, true, 10},
-		{124, false, 1}, {124, true, 9}, {1, false, 0}, {2, true, 1}, {0, true, 0},
+		{1000, standingRecoveryRate, 8}, {1000, sittingRecoveryRate, 80},
+		{125, standingRecoveryRate, 1}, {125, sittingRecoveryRate, 10},
+		{124, standingRecoveryRate, 1}, {124, sittingRecoveryRate, 9},
+		{1, standingRecoveryRate, 0}, {2, sittingRecoveryRate, 1}, {0, sittingRecoveryRate, 0},
+		{1000, 4.8, 48}, {1000, 48, 480}, {1000, 100, 500},
 	} {
-		if got := naturalRecoveryAmount(tc.maximum, tc.sit); got != tc.want {
+		if got := naturalRecoveryAmount(tc.maximum, tc.rate); got != tc.want {
 			t.Fatalf("%+v: got %d", tc, got)
 		}
 	}
 }
 
+/*
+================
+TestNaturalRecoverySessionCadenceAndWire
+================
+*/
 func TestNaturalRecoverySessionCadenceAndWire(t *testing.T) {
 	c := testCharacter()
 	hp, mp := int64(1), int64(1)
@@ -50,7 +73,7 @@ func TestNaturalRecoverySessionCadenceAndWire(t *testing.T) {
 	if f.Opcode != simulation.OpVitalsUpdate || len(p) != 15 || binary.LittleEndian.Uint16(p[4:]) != 0x10 || p[6] != 3 || binary.LittleEndian.Uint32(p[7:]) != uint32(enterworld.CurrentHP(c)) || binary.LittleEndian.Uint32(p[11:]) != uint32(enterworld.CurrentMP(c)) {
 		t.Fatalf("wrong native vitals: %x", p)
 	}
-	if enterworld.CurrentHP(c) != 1+naturalRecoveryAmount(enterworld.DerivedMaxHP(c), false) {
+	if enterworld.CurrentHP(c) != 1+naturalRecoveryAmount(enterworld.DerivedMaxHP(c), standingRecoveryRate) {
 		t.Fatal("wrong standing recovery")
 	}
 	if len(rt.advanceNaturalRecovery(start+4000)) != 0 {
@@ -62,6 +85,11 @@ func TestNaturalRecoverySessionCadenceAndWire(t *testing.T) {
 	}
 }
 
+/*
+================
+TestNaturalRecoveryMovementPostureCombatAndDeath
+================
+*/
 func TestNaturalRecoveryMovementPostureCombatAndDeath(t *testing.T) {
 	for _, mode := range []string{"moving", "transition", "casting", "dead", "deleted", "sitting", "full"} {
 		t.Run(mode, func(t *testing.T) {
@@ -95,7 +123,7 @@ func TestNaturalRecoveryMovementPostureCombatAndDeath(t *testing.T) {
 			}
 			got := rt.advanceNaturalRecovery(now)
 			if mode == "sitting" {
-				if len(got) != 1 || enterworld.CurrentHP(c) != 1+naturalRecoveryAmount(enterworld.DerivedMaxHP(c), true) {
+				if len(got) != 1 || enterworld.CurrentHP(c) != 1+naturalRecoveryAmount(enterworld.DerivedMaxHP(c), sittingRecoveryRate) {
 					t.Fatal("missing sitting bonus")
 				}
 			} else if len(got) != 0 {
@@ -108,6 +136,11 @@ func TestNaturalRecoveryMovementPostureCombatAndDeath(t *testing.T) {
 	}
 }
 
+/*
+================
+TestNaturalRecoveryClampReplacementAndOverrun
+================
+*/
 func TestNaturalRecoveryClampReplacementAndOverrun(t *testing.T) {
 	c := testCharacter()
 	hp, mp := enterworld.DerivedMaxHP(c)-1, enterworld.DerivedMaxMP(c)-1
@@ -133,6 +166,11 @@ func TestNaturalRecoveryClampReplacementAndOverrun(t *testing.T) {
 	}
 }
 
+/*
+================
+TestNaturalRecoveryPublishesOnlyCommittedChanges
+================
+*/
 func TestNaturalRecoveryPublishesOnlyCommittedChanges(t *testing.T) {
 	c := testCharacter()
 	hp := int64(1)

@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+reward_group.go - contribution groups, party shares and kill settlement
+
+Resolve recipients from one live roster and commit their rewards inside the
+damage transaction. The winning contributor supplies loot ownership and gold
+bonuses, independently of the actor whose strike happened to be fatal.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -14,15 +25,25 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// RewardParty is one snapshot of a live party object, independent of leader
-// changes. Order is an unsigned process-local object-address ordering token,
-// like the native temporary tree's pointer key; it is never sent or persisted.
+/*
+================
+RewardParty
+
+Order preserves process-local party identity across leader changes. It models
+the native temporary tree's pointer ordering and is never sent or persisted.
+================
+*/
 type RewardParty struct {
 	Order   uint64
 	Options uint8
 	Members []uint32
 }
 
+/*
+================
+rewardActor
+================
+*/
 type rewardActor struct {
 	world     uint32
 	character *enterworld.Character
@@ -30,14 +51,24 @@ type rewardActor struct {
 	party     *RewardParty
 }
 
+/*
+================
+rewardRoster
+================
+*/
 type rewardRoster struct {
 	actors     map[uint32]rewardActor
 	characters []*enterworld.Character
 }
 
-// The caller already owns the division operation lock. Take party membership
-// in one registry snapshot; source presence comes from the live session owner.
-// Keep the authoritative character pointers for the single UpdateMany door.
+/*
+================
+monsterRewardRoster
+
+The caller owns the division operation lock. Snapshot membership once, retain
+authoritative character pointers, then enter a single UpdateMany transaction.
+================
+*/
 func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Character, now int64) rewardRoster {
 	r := rewardRoster{actors: make(map[uint32]rewardActor)}
 	parties := []RewardParty(nil)
@@ -66,12 +97,25 @@ func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Charac
 	return r
 }
 
+/*
+================
+monsterRewardGroup
+================
+*/
 type monsterRewardGroup struct {
 	order                                        uint64
 	party                                        *RewardParty
 	damage, representative, representativeDamage uint32
 }
 
+/*
+================
+monsterRewardGroups
+
+Group experience-sharing parties while retaining the strongest individual
+contributor as their loot representative.
+================
+*/
 func monsterRewardGroups(rows []simulation.MonsterContribution, actors map[uint32]rewardActor) []monsterRewardGroup {
 	// 4C44A0 visits the source map by unsigned GID. Equal representative
 	// contributions keep the first source, even if input snapshots are shuffled.
@@ -108,8 +152,13 @@ func monsterRewardGroups(rows []simulation.MonsterContribution, actors map[uint3
 	return out
 }
 
-// 5BCC50 calls 430AD0, NOT the 3D 430BA0 helper: Y is explicitly zero.
-// Dungeon deltas use local X/Z without outdoor sector arithmetic.
+/*
+================
+withinPartyRewardRange
+
+5BCC50 calls planar 430AD0 with Y zero. Dungeon deltas use local X/Z.
+================
+*/
 func withinPartyRewardRange(a, b simulation.Spawn) bool {
 	if !worldgeom.SamePlane(a.RegionID, b.RegionID) {
 		return false
@@ -124,6 +173,11 @@ func withinPartyRewardRange(a, b simulation.Spawn) bool {
 	return math.Sqrt(float64(squared)) <= 1000
 }
 
+/*
+================
+rewardLevel
+================
+*/
 func rewardLevel(c *enterworld.Character) int64 {
 	if c.Level == nil || *c.Level < 1 {
 		return 1
@@ -131,7 +185,13 @@ func rewardLevel(c *enterworld.Character) int64 {
 	return *c.Level
 }
 
-// 5BCD43..5BCED7 preserves the float32 spills in the bonus and level shares.
+/*
+================
+partyRewardFactors
+
+5BCD43..5BCED7 spills bonus and level shares independently to float32.
+================
+*/
 func partyRewardFactors(members []rewardActor, target monster.Instance) []float32 {
 	var chinese, other, sum, maxLevel int64
 	for _, a := range members {
@@ -169,11 +229,23 @@ func partyRewardFactors(members []rewardActor, target monster.Instance) []float3
 	return out
 }
 
+/*
+================
+RecipientFrames
+
+Private rewards remain addressed to their owner through publication.
+================
+*/
 type RecipientFrames struct {
 	CharacterID int64
 	Frames      []wire.Frame
 }
 
+/*
+================
+recipientDivisionFrames
+================
+*/
 func recipientDivisionFrames(division string, recipients []RecipientFrames) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, recipient := range recipients {
@@ -186,6 +258,11 @@ func recipientDivisionFrames(division string, recipients []RecipientFrames) []si
 	return out
 }
 
+/*
+================
+monsterSettlement
+================
+*/
 type monsterSettlement struct {
 	actorFrames, public []wire.Frame
 	otherPublic         []wire.Frame
@@ -193,9 +270,14 @@ type monsterSettlement struct {
 	drops               []grounditem.Item
 }
 
-// settleMonsterInsideDoor runs synchronously inside the same UpdateMany as
-// damage/cost. The native distributor pays ALL groups, then returns the
-// representative of the greatest unsigned damage group for loot ownership.
+/*
+================
+settleMonsterInsideDoor
+
+Run inside the damage/cost UpdateMany. Native pays every group, then returns
+the representative of the greatest unsigned damage group for loot ownership.
+================
+*/
 func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Character, roster rewardRoster, impact simulation.MonsterDamageResult, pose monster.Pose, now int64) monsterSettlement {
 	var out monsterSettlement
 	if !impact.Fatal {
@@ -268,6 +350,7 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		// Loot generation's player-level admission and ownership both use the
 		// selected representative, never the actor who supplied the fatal hit.
 		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
+		rt.applyMonsterGoldBonus(division, a.character, planned)
 		planned = append(planned, rt.planQuestKillDrops(a.character, impact.Instance, pose, now)...)
 		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
 		out.drops = drops

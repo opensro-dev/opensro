@@ -5264,6 +5264,9 @@ export function createUi(
 							x,
 							y
 						);
+						// The authored selection image has an opaque interior. Treat it
+						// as row backing so selecting a member cannot cover their data.
+						if ( row.entity && row.entity.gid === game.target ) authoredImage( slot.GDR_QPS_SELECT!, x, y );
 						authoredText( slot.GDR_QPS_TXT_ID!, x, y, row.member.name );
 						authoredGauge(
 							"quick-party-hp:" + row.member.id,
@@ -5309,7 +5312,6 @@ export function createUi(
 								selected: row.entity.gid === game.target
 							} );
 							blocks.push( r );
-							if ( row.entity.gid === game.target ) authoredImage( slot.GDR_QPS_SELECT!, x, y );
 						}
 						// 5BA840 passes no character, so party abnormal cells carry no grade.
 						const buff = authoredRect( slot.GDR_QPS_PARTY_BUFF!, x, y ),

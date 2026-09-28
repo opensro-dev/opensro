@@ -17,12 +17,15 @@ import (
 )
 
 const (
-	itemParamStrength  = 1
-	itemParamIntellect = 2
-	itemParamMaxHP     = 3
-	itemParamMaxMP     = 4
-	itemParamEvasion   = 9
-	itemParamAccuracy  = 11
+	itemParamStrength   = 1
+	itemParamIntellect  = 2
+	itemParamMaxHP      = 3
+	itemParamMaxMP      = 4
+	itemParamEvasion    = 9
+	itemParamAccuracy   = 11
+	itemParamHPRecovery = 25
+	itemParamMPRecovery = 26
+	itemParamGoldDrop   = 0xb6
 )
 
 /*
@@ -38,6 +41,15 @@ func (rt *Runtime) timedItemModifierWrites(division string, character *enterworl
 		return nil, nil
 	}
 	var writes []paramkeeper.Write
+	if effect.GoldDropPercent != 0 {
+		writes = append(writes, paramkeeper.Write{Parameter: itemParamGoldDrop, Value: float32(effect.GoldDropPercent)})
+	}
+	if effect.Recovery.Present {
+		writes = append(writes,
+			paramkeeper.Write{Parameter: itemParamHPRecovery, Channel: paramkeeper.PercentSum, Value: float32(effect.Recovery.HP)},
+			paramkeeper.Write{Parameter: itemParamMPRecovery, Channel: paramkeeper.PercentSum, Value: float32(effect.Recovery.MP)},
+		)
+	}
 	for _, block := range [...]struct {
 		parameter uint16
 		value     enterworld.SkillFlatRate

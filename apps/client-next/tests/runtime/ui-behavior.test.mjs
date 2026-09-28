@@ -4248,3 +4248,34 @@ test("quick party portrait stays requested after the peer leaves world visibilit
 		f.dispose();
 	}
 });
+
+test("selecting a quick party member keeps its name and gauges above the opaque selection backing", () => {
+	const f = uiFixture();
+	try {
+		f.state.gameplay.social = {
+			localName: "Player",
+			self: 11,
+			leader: 11,
+			options: 3,
+			members: [ { id: 11, name: "Player", model: 1 }, { id: 22, name: "Peer", model: 2, status: 255 } ]
+		};
+		f.state.entities.push( { ...f.state.entities[0], gid: 22, kind: "player", name: "Peer" } );
+		f.state.gameplay.target = 22;
+		for ( let i = 0; i < 30; i++ ) f.ui.step( f.state, i * 100 );
+		const quads = f.scenes.at( -1 ).quads;
+		const selection = quads.findIndex( quad => quad.texture.endsWith( "/qpt_grope_select.png" ) );
+		assert.ok( selection >= 0, "selected row draws the shipped selection texture" );
+		const backing = quads[selection].rect;
+		const content = quads.map( ( quad, index ) => ({ quad, index }) ).filter( ( { quad } ) =>
+			quad.rect[0] >= backing[0] && quad.rect[0] < backing[0] + backing[2] &&
+			quad.rect[1] >= backing[1] && quad.rect[1] < backing[1] + backing[3] &&
+			(quad.texture === fontAtlas.image || /\/qpt_(hp|mp)\.png$/.test( quad.texture ))
+		);
+		assert.ok( f.hasText( "Peer" ), "selection preserves the member name" );
+		assert.ok( content.some( ( { quad } ) => quad.texture === fontAtlas.image ) );
+		assert.ok( content.some( ( { quad } ) => quad.texture.endsWith( "/qpt_hp.png" ) ) );
+		assert.ok( content.every( ( { index } ) => index > selection ), "opaque backing cannot occlude row content" );
+	} finally {
+		f.dispose();
+	}
+});

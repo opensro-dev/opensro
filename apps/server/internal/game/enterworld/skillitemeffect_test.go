@@ -41,11 +41,12 @@ func TestTimedItemCompilerAdmitsCompleteCompoundStats(t *testing.T) {
 	fields, row := itemEffectFields(itemEffectOwnerJob, itemEffectDuration, 10000,
 		itemEffectHP, 500, 10, itemEffectMP, 200, 20, itemEffectHit, 0, 30,
 		itemEffectEvasion, 0, 30, itemEffectDamage, 20, 20, itemEffectAbsorb, 15, 20,
-		itemEffectSTR, 3, 0, itemEffectINT, 3, 0)
+		itemEffectSTR, 3, 0, itemEffectINT, 3, 0, itemEffectRecovery, 500, 200)
 	effect, ok := compileTimedItemEffect(fields, row)
 	if !ok || !effect.ItemProgram || !effect.Persistent || !effect.Pinned ||
 		effect.HP.Flat != 500 || effect.HP.Percent != 10 || effect.MP.Flat != 200 ||
-		effect.Accuracy.Percent != 30 || effect.Evasion.Percent != 30 || effect.Strength.Value != 3 || effect.Intellect.Value != 3 {
+		effect.Accuracy.Percent != 30 || effect.Evasion.Percent != 30 || effect.Strength.Value != 3 || effect.Intellect.Value != 3 ||
+		!effect.Recovery.Present || effect.Recovery.HP != 500 || effect.Recovery.MP != 200 {
 		t.Fatalf("compound descriptor: %+v, admitted %v", effect, ok)
 	}
 }

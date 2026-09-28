@@ -3,6 +3,10 @@
 
 parametergraph.go - the player parameter keeper graph (CGObjPC_InitializeParameterGraph 4E3200)
 
+Build a detached graph from native definitions and explicit source writes.
+Combat, recovery and reward consumers read the same modifier arithmetic;
+the effect registry remains the sole owner of effect lifetime.
+
 ===========================================================================
 */
 
@@ -23,6 +27,11 @@ import (
 // ownership, not native allocator pointer ordering.
 const parameterNodeKeyBase uint32 = 0x40000000
 
+/*
+================
+playerParameterDefinitions
+================
+*/
 func playerParameterDefinitions() ([]paramkeeper.NodeDefinition, error) {
 	// The nodes the combat closure, the magic-option switch (498690), the
 	// abnormal-state callbacks and the block chance (410C20: 0x88..0x8B,
@@ -31,7 +40,7 @@ func playerParameterDefinitions() ([]paramkeeper.NodeDefinition, error) {
 		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
 		44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
 		0x80, 0x81, 0x82, 0x83, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96,
-		0xa9, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb7, 0xbc}
+		0xa9, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xbc}
 	definitions := make([]paramkeeper.NodeDefinition, 0, len(ids))
 	for _, id := range ids {
 		d, ok := paramkeeper.NativeDefinition(id)
@@ -131,6 +140,13 @@ func levelGrowthPercent(level uint8) float32 {
 	return float32(float64(float32(result)) * 100)
 }
 
+/*
+================
+statWrites
+
+Translate the contiguous native combat subset without allocating empty sources.
+================
+*/
 func statWrites(stats Stats, source uint32) []paramkeeper.Write {
 	values := []float64{stats.PhysicalDefense, stats.MagicalDefense, stats.ParryRate, stats.MagicalParry,
 		stats.EvasionRate, stats.BlockRate, stats.HitRate, stats.CriticalRate,
@@ -144,6 +160,14 @@ func statWrites(stats Stats, source uint32) []paramkeeper.Write {
 	return writes
 }
 
+/*
+================
+readParameterStats
+
+Materialize convenience fields while retaining the complete graph for other
+consumers. An evaluation error invalidates the snapshot.
+================
+*/
 func readParameterStats(g *paramkeeper.Graph, stats *Stats) error {
 	fields := []*float64{&stats.PhysicalDefense, &stats.MagicalDefense, &stats.ParryRate, &stats.MagicalParry,
 		&stats.EvasionRate, &stats.BlockRate, &stats.HitRate, &stats.CriticalRate,

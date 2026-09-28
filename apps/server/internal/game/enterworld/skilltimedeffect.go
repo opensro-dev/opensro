@@ -21,6 +21,8 @@ SkillTimedEffect
 type SkillTimedEffect struct {
 	ItemProgram                   bool
 	HP, MP, Evasion, Accuracy     SkillFlatRate
+	Recovery                      SkillRecoveryRates
+	GoldDropPercent               uint32
 	Pinned                        bool
 	Persistent                    bool
 	Physical, Magical, CapPercent uint32
@@ -58,6 +60,19 @@ SkillBlockBoost
 type SkillBlockBoost struct {
 	Present     bool
 	Mask, Value uint32
+}
+
+/*
+================
+SkillRecoveryRates
+
+irgc contains separate HP and MP percentage additions. The recovery tick
+supplies the standing or sitting base through the same parameter keeper.
+================
+*/
+type SkillRecoveryRates struct {
+	Present bool
+	HP, MP  uint32
 }
 
 // SkillStatBoost is one stri / inti block.
