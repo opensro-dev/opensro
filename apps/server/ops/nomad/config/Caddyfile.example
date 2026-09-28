@@ -1,4 +1,15 @@
-# OpenSRO HTTPS edge. Nomad and all game listeners stay on loopback.
+# ===========================================================================
+# Caddyfile.example - HTTPS routing for a standalone OpenSRO edge.
+# Nomad and all game listeners stay on loopback. Browser assets use the measured
+# TCP transport policy; the game connection is a proxied WebSocket.
+# ===========================================================================
+
+{
+	servers {
+		protocols h1 h2
+	}
+}
+
 opensro.online {
 	encode zstd gzip
 	header {

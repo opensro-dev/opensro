@@ -1,0 +1,82 @@
+<!doctype html>
+<!--
+===========================================================================
+overview.html - public release identities and approval readiness.
+Read-only status; GitHub remains the only production approval interface.
+===========================================================================
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>OpenSRO releases</title>
+		<style>
+			body { margin: 3rem auto; padding: 0 1.5rem; max-width: 72rem; font: 16px/1.6 system-ui; color: #e3e9ed; background: #111820; }
+			h1 { font-weight: 600; } a { color: #83cfff; } table { width: 100%; border-collapse: collapse; margin: 2rem 0; }
+			th, td { text-align: left; padding: .8rem; border-bottom: 1px solid #334454; } code { overflow-wrap: anywhere; }
+			p { max-width: 55rem; } #status { color: #b7cad6; }
+		</style>
+	</head>
+	<body>
+		<h1>OpenSRO releases</h1>
+		<p>Client and server publish independently. A client update takes effect on reload. A server update announces maintenance and restarts game services.</p>
+		<p><a href="https://github.com/opensro-dev/opensro/actions">Review and approve in GitHub Actions</a>. Approve the latest ready candidate for the component you want to update. Each candidate includes earlier merged fixes.</p>
+		<p id="status">Loading release status…</p>
+		<table><thead><tr><th>Live component</th><th>Commit</th><th>Generation</th><th>Release</th></tr></thead><tbody id="live"></tbody></table>
+		<table><thead><tr><th>Candidate</th><th>Commit</th><th>State</th><th>Effect</th></tr></thead><tbody id="candidates"></tbody></table>
+		<details>
+			<summary>Retained production history</summary>
+			<p>Use the full release identity in <a href="https://github.com/opensro-dev/opensro/actions/workflows/rollback-production.yml">Roll back a production component</a>. Rollback requires a reason, compatibility checks and production approval. It does not restore the database.</p>
+			<table><thead><tr><th>Component</th><th>Commit</th><th>Release identity</th></tr></thead><tbody id="history"></tbody></table>
+		</details>
+		<script type="module">
+			/*
+			================
+			row
+			Public metadata becomes text, never executable HTML.
+			================
+			*/
+			function row( owner, values ) {
+				const element = document.createElement( "tr" );
+				for ( const value of values ) {
+					const cell = document.createElement( "td" );
+					cell.textContent = String( value );
+					element.append( cell );
+				}
+				owner.append( element );
+			}
+
+			/*
+			================
+			refresh
+			Failed fetches remain visible instead of presenting stale data as current.
+			================
+			*/
+			async function refresh() {
+				const status = document.querySelector( "#status" );
+				try {
+					const responses = await Promise.all( [ "production.json", "candidates.json" ].map( name => fetch( name, { cache: "no-store" } ) ) );
+					if ( responses.some( response => !response.ok ) ) throw Error( "Release status is unavailable" );
+					const [ state, candidates ] = await Promise.all( responses.map( response => response.json() ) );
+					const live = document.querySelector( "#live" );
+					const pending = document.querySelector( "#candidates" );
+					const history = document.querySelector( "#history" );
+					live.replaceChildren();
+					pending.replaceChildren();
+					history.replaceChildren();
+					for ( const component of [ "client", "server" ] ) {
+						const value = state[component];
+						row( live, [ component, value.commit.slice( 0, 12 ), value.generation, value.release.slice( 0, 16 ) ] );
+					}
+					for ( const value of candidates.candidates ) row( pending, [ value.component + " " + value.mode, value.commit.slice( 0, 12 ), value.phase, value.restartRequired ? "Server restart" : "Client reload" ] );
+					for ( const value of [ ...(state.history ?? []) ].reverse() ) row( history, [ value.component, value.commit.slice( 0, 12 ), value.release ] );
+					status.textContent = state.operation ? `${state.operation.component}: ${state.operation.phase}` : `Checked ${new Date().toLocaleTimeString()}. No publication in progress.`;
+				} catch ( error ) {
+					status.textContent = String( error );
+				}
+			}
+			await refresh();
+			setInterval( refresh, 30_000 );
+		</script>
+	</body>
+</html>

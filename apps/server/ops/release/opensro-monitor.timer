@@ -1,0 +1,11 @@
+[Unit]
+Description=Observe OpenSRO availability every thirty seconds
+
+[Timer]
+OnBootSec=30
+OnUnitInactiveSec=30
+AccuracySec=1
+Unit=opensro-monitor.service
+
+[Install]
+WantedBy=timers.target

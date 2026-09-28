@@ -1,0 +1,32 @@
+# ===========================================================================
+# routes.caddy - public release metadata and immutable candidate previews.
+# Import before the client handler. Private receipts and uploaded archives live
+# outside all web roots. New hashed application files also serve old open tabs.
+# ===========================================================================
+
+handle_path /releases/candidates/* {
+	root * /var/www/opensro/candidates
+	file_server {
+		precompressed gzip
+	}
+}
+
+handle_path /releases/* {
+	root * /var/lib/opensro-release/public
+	header Cache-Control "no-store"
+	file_server
+}
+
+@release_application {
+	path /assets/*
+	file {
+		root /var/www/opensro/application-assets
+	}
+}
+handle @release_application {
+	root * /var/www/opensro/application-assets
+	header Cache-Control "public, max-age=31536000, immutable"
+	file_server {
+		precompressed gzip
+	}
+}

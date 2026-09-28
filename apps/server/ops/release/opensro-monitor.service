@@ -1,0 +1,21 @@
+# Independent process health checks; no dependency on Agent or GameWorld units.
+[Unit]
+Description=Check public OpenSRO availability
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=opensro-monitor
+Group=opensro-monitor
+ExecStart=/usr/bin/python3 /usr/local/lib/opensro-release-v2/monitor.py /etc/opensro-release/monitor.json
+TimeoutStartSec=45
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/opensro-release/public/health
+UMask=0022
+
+[Install]
+WantedBy=multi-user.target

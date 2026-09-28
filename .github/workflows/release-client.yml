@@ -1,0 +1,111 @@
+# ===========================================================================
+# release-client.yml - build, preview and exercise the browser before approval.
+# Publication changes only the client symlink. The exact staged bytes survive
+# the approval wait; a newer source change or production generation rejects it.
+# ===========================================================================
+name: Release browser client
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - apps/client-next/**
+      - scripts/build/**
+      - scripts/lib/**
+      - apps/server/ops/release/**
+      - package.json
+      - pnpm-lock.yaml
+      - .github/workflows/release-client.yml
+
+permissions:
+  contents: read
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: release-staging
+    concurrency:
+      group: client-build-main
+      cancel-in-progress: true
+    outputs:
+      candidate: ${{ steps.stage.outputs.candidate }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install locked dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+      - name: Verify client and release policy
+        run: |
+          pnpm --filter @sro/client-next check
+          python3 -m unittest discover -s apps/server/ops/release -p 'test_*.py'
+          python3 apps/server/ops/release/plan.py client --check-commit "$GITHUB_SHA"
+      - name: Build over the verified asset base
+        run: |
+          curl --fail --silent --show-error https://opensro.online/releases/production.json -o "$RUNNER_TEMP/production.json"
+          curl --fail --silent --show-error https://opensro.online/releases/client.json -o "$RUNNER_TEMP/client.json"
+          node apps/client-next/tools/beta/candidate.mjs "$RUNNER_TEMP/client.json" "$RUNNER_TEMP/client"
+          python3 apps/server/ops/release/client_bundle.py "$RUNNER_TEMP/client/package" "$RUNNER_TEMP/client.tar" "$RUNNER_TEMP/production.json"
+      - name: Stage immutable browser candidate
+        id: stage
+        env:
+          RELEASE_KEY: ${{ secrets.RELEASE_STAGE_KEY }}
+          RELEASE_HOST: ${{ secrets.RELEASE_HOST }}
+          RELEASE_KNOWN_HOSTS: ${{ secrets.RELEASE_KNOWN_HOSTS }}
+        run: python3 apps/server/ops/release/ci.py stage client "$RUNNER_TEMP/client.tar"
+      - name: Exercise cold HTTPS login, world and gameplay
+        env:
+          RELEASE_PROBE_ACCOUNT: ${{ secrets.RELEASE_PROBE_ACCOUNT }}
+        run: node apps/client-next/tools/beta/release-smoke.mjs candidate.json "$RUNNER_TEMP/browser"
+      - name: Record passing evidence
+        env:
+          RELEASE_KEY: ${{ secrets.RELEASE_STAGE_KEY }}
+          RELEASE_HOST: ${{ secrets.RELEASE_HOST }}
+          RELEASE_KNOWN_HOSTS: ${{ secrets.RELEASE_KNOWN_HOSTS }}
+        run: python3 apps/server/ops/release/ci.py evidence client "$RUNNER_TEMP/browser/report.json"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: client-${{ github.sha }}
+          path: |
+            candidate.json
+            ${{ runner.temp }}/browser
+            ${{ runner.temp }}/client.tar
+          retention-days: 30
+          compression-level: 0
+      - name: Describe approval
+        run: |
+          echo 'Client update: new browser loads receive this client. Game services are not restarted.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Approve only the latest ready client candidate: https://opensro.online/releases/' >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: production-publication
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://opensro.online/releases/
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Publish the approved candidate
+        env:
+          RELEASE_KEY: ${{ secrets.SERVER_DEPLOY_KEY }}
+          RELEASE_HOST: ${{ secrets.SERVER_DEPLOY_HOST }}
+          RELEASE_KNOWN_HOSTS: ${{ secrets.SERVER_DEPLOY_KNOWN_HOSTS }}
+          CANDIDATE: ${{ needs.stage.outputs.candidate }}
+        run: |
+          python3 apps/server/ops/release/ci.py publish client "$CANDIDATE"

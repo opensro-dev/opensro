@@ -13,6 +13,16 @@ them: "source" runs the gates that need no game data (CI and pre-push),
 import { commandTask, pipelineTask, seriesTask } from "./define.mjs";
 
 export const CHECK_TASKS = [
+	commandTask( {
+		name: "check:release",
+		description: "Test release admission, publication recovery and monitoring",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "node",
+		args: [ "scripts/checks/check_release.mjs" ]
+	} ),
 	pipelineTask( {
 		name: "check",
 		description: "Run the complete concurrent repository check pipeline",
@@ -168,6 +178,7 @@ export const CHECK_TASKS = [
 ];
 
 const sourceTasks = [
+	"check:release",
 	"check:source-size",
 	"check:source-encoding",
 	"check:shared-fixtures",
@@ -194,6 +205,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 		{ id: "test-region", task: "test:region", after: [ "build-resources" ] }
 	],
 	full: [
+		{ id: "release", task: "check:release", after: [] },
 		{ id: "server", task: "check:server", after: [] },
 		{ id: "source-size", task: "check:source-size", after: [] },
 		{ id: "source-encoding", task: "check:source-encoding", after: [] },
