@@ -17,14 +17,11 @@ import { pathToFileURL } from "node:url";
 import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { assertCharacterAllowed } from "../../../../scripts/lib/probeCharacter.mjs";
 
-const TITLE_BUDGET_MS = 180_000;
-// Dock admission retains the previous scene while uploading eight groups per
-// frame. Measured software rendering needed about 3.8 seconds per frame for
-// roughly 800 groups. Allow that bounded work; ordinary controls stay at 30s.
-const DOCK_BUDGET_MS = 600_000;
-// Both entry and document reload create a renderer and admit world textures.
-// HTTP cache warmth does not preserve the GPU device across a document reload.
-const WORLD_BUDGET_MS = 180_000;
+// Scene admission is spread over frames. Measured software rendering needed
+// 366 seconds for the dock; reload also recreates GPU, UI and audio resources.
+// This is a bounded functional probe. Keep frame timings as evidence and apply
+// the shorter control deadline only after initialization has completed.
+const SCENE_BUDGET_MS = 600_000;
 const CONTROL_BUDGET_MS = 30_000;
 const MAX_NETWORK_ROWS = 4096;
 const HTTP_OK = 200;
@@ -91,7 +88,7 @@ updates while keeping production game state unchanged.
 */
 async function exercise( page, result, credentials ) {
 	const control = id => page.locator( `[data-ui-id="${id}"]` );
-	await control( "frontend:reveal" ).click( { timeout: TITLE_BUDGET_MS } );
+	await control( "frontend:reveal" ).click( { timeout: SCENE_BUDGET_MS } );
 	recordPhase( result, "title" );
 	await control( "native:servers" ).click();
 	await control( `server:${credentials.shard}` ).click();
@@ -108,14 +105,14 @@ async function exercise( page, result, credentials ) {
 	if ( !Array.isArray( characters ) || characters.length !== 1 || characters[0].name !== credentials.character ) {
 		throw Error( "Release probe requires its dedicated single-character roster" );
 	}
-	await control( "frontend:create" ).waitFor( { timeout: DOCK_BUDGET_MS } );
+	await control( "frontend:create" ).waitFor( { timeout: SCENE_BUDGET_MS } );
 	recordPhase( result, "roster" );
 	await page.mouse.click( DOCK_PICK.x, DOCK_PICK.y );
 	await control( "enter" ).click();
 	await page.waitForFunction(
 		() => document.querySelector( "output" )?.textContent?.includes( "Frontend: world\n" ),
 		null,
-		{ timeout: WORLD_BUDGET_MS }
+		{ timeout: SCENE_BUDGET_MS }
 	);
 	await page.waitForFunction(
 		name => Object.values( window.__releaseWorld.entities ).some( row => row.name === name ),
@@ -137,7 +134,7 @@ async function exercise( page, result, credentials ) {
 	await page.waitForFunction(
 		() => document.querySelector( "output" )?.textContent?.includes( "Frontend: world\n" ),
 		null,
-		{ timeout: WORLD_BUDGET_MS }
+		{ timeout: SCENE_BUDGET_MS }
 	);
 	await page.waitForFunction(
 		name => Object.values( window.__releaseWorld.entities ).some( row => row.name === name ),
