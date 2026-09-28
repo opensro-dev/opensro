@@ -3,6 +3,7 @@
   "root": "src/engine/runtime/runtime.ts",
   "bootstrap": "src/bootstrap.ts",
   "modules": {
+    "src/engine/runtime/simulation/worker/session/world/gameplay/pickup.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/presentation/effective-hp.ts": "src/engine/runtime/presentation/presentation.ts",
     "src/engine/runtime/ui/hud/quest-timers.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/departure.ts": "src/engine/runtime/simulation/worker/session/world/world.ts",

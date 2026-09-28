@@ -1,7 +1,10 @@
 /*
 ===========================================================================
 
-activeeffect.go - installing and retiring character effects (buffs)
+activeeffect.go - installing and retiring character effects and modifiers
+
+The registry owns instance lifetime, parameter contributions and durable job
+checkpoints. Installation and retirement publish from that same state.
 
 ===========================================================================
 */
@@ -85,6 +88,11 @@ func (rt *Runtime) ApplyCharacterEffect(
 
 // Presentation data is distinct from the registry lifecycle state. Native
 // 59AF00 serializes +20/+24, while state eligibility comes from +0c.
+/*
+================
+EffectPresentation
+================
+*/
 type EffectPresentation struct {
 	Phase uint8
 	Rider uint32
@@ -100,6 +108,11 @@ type EffectPresentation struct {
 	DefenseAddend [2]uint32
 }
 
+/*
+================
+ApplyCharacterEffectPresentation
+================
+*/
 func (rt *Runtime) ApplyCharacterEffectPresentation(divisionID, characterName string, skillID, instanceToken uint32, state statuseffect.State, canStop bool, presentation EffectPresentation, nowMs int64) bool {
 	if rt == nil || rt.effects == nil || rt.deps == nil {
 		return false
@@ -147,12 +160,22 @@ func (rt *Runtime) ApplyCharacterEffectPresentation(divisionID, characterName st
 
 // Caller holds the division and character update doors. Item use and direct
 // skills commit through this same effect owner, without nested transactions.
+/*
+================
+commitCharacterEffect
+================
+*/
 func (rt *Runtime) commitCharacterEffect(divisionID string, character *enterworld.Character, row enterworld.SkillRow, instanceToken uint32, state statuseffect.State, canStop bool, presentation EffectPresentation, nowMs int64) ([]wire.Frame, bool) {
 	return rt.commitCharacterEffectWithCheckpoint(divisionID, character, row, instanceToken, state, canStop, presentation, nowMs, true)
 }
 
 // Restoring a batch commits its durable records once, after every installation.
 // An individual installation must not overwrite the jobs still being restored.
+/*
+================
+commitCharacterEffectWithCheckpoint
+================
+*/
 func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, character *enterworld.Character, row enterworld.SkillRow, instanceToken uint32, state statuseffect.State, canStop bool, presentation EffectPresentation, nowMs int64, checkpoint bool) ([]wire.Frame, bool) {
 	persistent := row.TimedJobExecutable()
 	if row.Group == 0 {
@@ -235,6 +258,11 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	var statusFrames []wire.Frame
 	// 594AC0 installs every block the row carries in one pass.
 	writes := buffModifierWrites(row.BuffModifiers)
+	itemWrites, err := rt.timedItemModifierWrites(divisionID, character, row.TimedEffect)
+	if err != nil {
+		return nil, false
+	}
+	writes = append(writes, itemWrites...)
 	if row.TimedEffect.Pinned && row.TimedEffect.Block.Present {
 		writes = append(writes, combat.BlockRateWrites(row.TimedEffect.Block.Mask, row.TimedEffect.Block.Value)...)
 	}
@@ -414,9 +442,20 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 
 // EntrySkills is the bootstrap projection of the same live registry. The local
 // wire and JSON adapter consume this single snapshot; neither recreates effects.
+/*
+================
+EntrySkills
+================
+*/
 func (rt *Runtime) EntrySkills(divisionID, characterName string) []enterworld.EntrySkill {
 	return rt.entrySkillsAt(divisionID, characterName, rt.Now().UnixMilli())
 }
+
+/*
+================
+entrySkillsAt
+================
+*/
 func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) []enterworld.EntrySkill {
 	if rt == nil || rt.deps == nil || rt.effects == nil || rt.deps.SkillData() == nil {
 		return nil
@@ -452,6 +491,11 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 }
 
 // buffModifierWrites is the dru (595A97) and odar (596004) part of 594AC0.
+/*
+================
+buffModifierWrites
+================
+*/
 func buffModifierWrites(m enterworld.SkillBuffModifiers) []paramkeeper.Write {
 	var writes []paramkeeper.Write
 	if m.Dru {

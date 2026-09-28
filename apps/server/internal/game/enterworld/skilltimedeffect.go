@@ -1,9 +1,26 @@
+/*
+===========================================================================
+
+skilltimedeffect.go - complete timed-effect descriptor admission
+
+The compiler consumes the whole program before granting an executable route.
+Ordinary casts and item-owned timed jobs share effect descriptors and lifecycle.
+
+===========================================================================
+*/
 package enterworld
 
 // SkillTimedEffect is an entire category-three, unlinked self program. The
 // instruction compiler must consume every operation before granting a route.
 // Native 5830B0 owns preparation/release; 5951FC..59533C owns defp writes.
+/*
+================
+SkillTimedEffect
+================
+*/
 type SkillTimedEffect struct {
+	ItemProgram                   bool
+	HP, MP, Evasion, Accuracy     SkillFlatRate
 	Pinned                        bool
 	Persistent                    bool
 	Physical, Magical, CapPercent uint32
@@ -33,12 +50,22 @@ type SkillTimedEffect struct {
 }
 
 // SkillBlockBoost is one br block, its mask normalized.
+/*
+================
+SkillBlockBoost
+================
+*/
 type SkillBlockBoost struct {
 	Present     bool
 	Mask, Value uint32
 }
 
 // SkillStatBoost is one stri / inti block.
+/*
+================
+SkillStatBoost
+================
+*/
 type SkillStatBoost struct {
 	Present           bool
 	Value, CapPercent uint32
@@ -47,13 +74,27 @@ type SkillStatBoost struct {
 // SkillEffectLink is lnks {group, max distance, max outgoing, board}. A
 // zero board word keeps the source half off the caster's board (client
 // B5ED); the server installs and announces it either way.
+/*
+================
+SkillEffectLink
+================
+*/
 type SkillEffectLink struct {
 	Present                         bool
 	Group, MaxDistance, MaxOutgoing uint32
 	Board                           uint32
 }
 
+/*
+================
+parseSkillTimedEffect
+================
+*/
 func parseSkillTimedEffect(fields []string, row *SkillRow) {
+	if item, ok := compileTimedItemEffect(fields, *row); ok {
+		row.TimedEffect = item
+		return
+	}
 	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || fields[68] != "3" ||
 		row.ChainNext != 0 || !row.Consumption.Pinned || !row.ActionCastingTimePinned ||
 		!row.ActionDurationPinned || !row.TimingPinned || !row.ReplacementPinned ||
@@ -171,6 +212,11 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 
 // TimedJobExecutable requires a complete producer, not cbuf presence alone.
 // The persistence protocol is shared by all such producers (59B8D0/650E70).
+/*
+================
+TimedJobExecutable
+================
+*/
 func (row SkillRow) TimedJobExecutable() bool {
 	return row.MovementModifier.Supported && row.MovementModifier.Persistent ||
 		row.TimedEffect.Pinned && row.TimedEffect.Persistent ||

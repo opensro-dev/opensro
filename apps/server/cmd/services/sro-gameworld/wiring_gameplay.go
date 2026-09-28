@@ -55,6 +55,7 @@ type gameplayPlane struct {
 	movement      *movement.Runtime
 	water         *movement.WaterValidator
 	presence      *livepresence.Directory
+	chat          *chat.Runtime
 	parties       *party.Runtime
 	guildInvites  *guild.InviteRuntime
 	mentorInvites *mentor.InviteRuntime
@@ -440,7 +441,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	community.Register(hub, game.deps)
 	community.RegisterFriend(hub, game.deps, game.presence)
 	community.RegisterLetter(hub, game.deps, game.presence)
-	chat.Register(hub, game.deps, game.presence, game.parties.Registry())
+	game.chat = chat.Register(hub, game.deps, game.presence, game.parties.Registry())
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)

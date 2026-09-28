@@ -1,7 +1,10 @@
 /*
 ===========================================================================
 
-itemuse.go - using consumables: potions and their recovery
+itemuse.go - inventory admission and atomic consumable dispatch
+
+Validate the authoritative row and its requirements before choosing a family.
+Each family commits its effect and inventory consumption through one update.
 
 ===========================================================================
 */
@@ -11,8 +14,6 @@ package action
 import (
 	"math"
 	"opensro.online/server/internal/game/abnormal"
-	"opensro.online/server/internal/game/item/statuseffect"
-	"sync/atomic"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -21,10 +22,23 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+cosSummonerType
+================
+*/
 func cosSummonerType(typeIDs [4]int64) bool {
 	return typeIDs == [4]int64{3, 3, 3, 2}
 }
 
+/*
+================
+consumeItemUseRow
+
+Replace the inventory slice so published snapshots retain their old values.
+The caller has already validated the slot and positive stack count.
+================
+*/
 func consumeItemUseRow(character *enterworld.Character, rowIndex int) uint16 {
 	row := character.MissionInventory[rowIndex]
 	remaining := uint16(row.StackCount - 1)
@@ -41,6 +55,11 @@ func consumeItemUseRow(character *enterworld.Character, rowIndex int) uint16 {
 	return remaining
 }
 
+/*
+================
+itemUseFailure
+================
+*/
 func itemUseFailure(errorCode uint8) OpResult {
 	return OpResult{Frames: []wire.Frame{{
 		Opcode:  wire.OpItemUseResponse,
@@ -48,6 +67,11 @@ func itemUseFailure(errorCode uint8) OpResult {
 	}}}
 }
 
+/*
+================
+potionType
+================
+*/
 func potionType(typeIDs [4]int64) (uint8, bool) {
 	if typeIDs[0] != 3 || typeIDs[1] != 3 || typeIDs[2] != 1 {
 		return 0, false
@@ -147,36 +171,12 @@ func (rt *Runtime) HandleItemUse(
 		}
 
 		if family == itemUseSkill {
-			source, ok := rt.deps.SkillData().(interface {
-				SkillByCodename(string) (enterworld.SkillRow, bool)
-			})
-			if !ok || ref.AssociatedSkillCodename == "" {
-				result.DiagnosticRefusal = "item-use: missing skill reference prerequisite " + ref.Codename
+			if len(tail) != 0 {
 				return false
 			}
-			skill, found := source.SkillByCodename(ref.AssociatedSkillCodename)
-			// Admit executable descriptor families, never a scroll codename:
-			// a speed scroll, or a detection scroll's own sight (dtt).
-			speed := skill.MovementModifier.Present && skill.MovementModifier.Supported
-			sight := skill.Concealment.Pinned && skill.Concealment.Sight.Present
-			if !found || !speed && !sight || skill.EffectDurationMs == 0 {
-				result.DiagnosticRefusal = "item-use: unsupported skill effect prerequisite " + ref.AssociatedSkillCodename
-				return false
-			}
-			token := atomic.AddUint32(&rt.castTokenCounter, 1)
-			if token == 0 {
-				token = atomic.AddUint32(&rt.castTokenCounter, 1)
-			}
-			frames, applied := rt.commitCharacterEffect(divisionID, character, skill, token, statuseffect.StateActive, false, EffectPresentation{Phase: 2}, nowMs)
-			if !applied {
-				return false
-			}
-			// 493D52: a scroll's indirect skill ends the user's hide.
-			rt.retireHide(divisionID, character, nowMs)
-			remaining := consumeItemUseRow(character, rowIndex)
-			result = OpResult{Frames: append([]wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}, frames...), Broadcast: frames}
-			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
-			return true
+			return rt.useSkillItem(character, skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, &result)
 		}
 
 		if family == itemUseMonsterCapsule {

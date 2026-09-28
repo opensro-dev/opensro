@@ -13,9 +13,8 @@ package chat_test
 // protocol against a loopback transport.Server composed like server.go's
 // gameplay wiring, asserting every 0xB367 / 0x3667 body BYTE-EXACT:
 //
-//	A all-chats      -> A gets 0xB367 {01 01 FF}; B and C each get
-//	                    0x3667 {06, sender name, text} (beta cohort); A
-//	                    gets NO 0x3667 (the ack presented A's line);
+//	A all-chats      -> A receives the named global line before its keyed
+//	                    receipt; B and C receive that same global line.
 //	C (GM) all-chats -> the same named beta channel reaches the cohort;
 //	A whispers C     -> C gets 0x3667 {02, "chatAlfa" ANSI, text}, A
 //	                    gets the success ack;
@@ -152,15 +151,16 @@ func startChatServer(t *testing.T, dir, divisionID string) chatServer {
 	entryauth.NewAuthenticatedSessionFixture(t, srv.Hub)
 
 	presence := presence.NewDirectory(srv.Hub)
+	chatRuntime := chat.Register(srv.Hub, deps, presence, party.NewRegistry())
 	deps.OnWorldBound = func(s *transport.Session, divisionID string, character *enterworld.Character) {
 		key := divisionID + ":" + strings.ToLower(character.Name)
 		if old, replaced := srv.Hub.BindExclusive(key, s); replaced {
 			old.ClearGameplayContext()
 		}
+		chatRuntime.WorldBound(s, divisionID)
 	}
 
 	enterworld.Register(srv.Hub, deps)
-	chat.Register(srv.Hub, deps, presence, party.NewRegistry())
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -457,16 +457,18 @@ func runChatLaneEndToEndOverWire(t *testing.T, divisionID string) {
 	// prove that none of the blocked requests leaked a division/target delivery.
 	sessionA, _ := server.srv.Hub.BoundSession(presence.BindKey(divisionID, e2eChatNameA))
 	sessionA.SetCommandRestriction(transport.CommandRestrictionTrade, [8]uint16{2026, 1, 0, 1, 0, 0, 0, 0})
-	// ---- All-chat: division cohort, sender excluded ----
+	// Every participant sees the authoritative global channel, including its author.
 	sendFrame(t, connA, chat.OpChatRequest, chatRequestFrame(chat.ChatTypeAll, "", "hey"))
+	expectExact(t, connA, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, "hey"), "authoritative own echo")
 	expectExact(t, connA, chat.OpChatAck, []byte{0x01, 0x01, 0xFF}, "all-chat ack to A")
 	expectExact(t, connB, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, "hey"), "all-chat to B")
 	expectExact(t, connC, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, "hey"), "all-chat to C")
-	// A must NOT receive its own broadcast (the ack presented it).
+	// No duplicate line may follow the receipt.
 	gameReadyBarrier(t, connA, "post-all-chat A")
 
-	// ---- GM speaker: the broadcast type byte is FORCED to 3 ----
+	// Beta scope uses Global for privileged speakers too; the receipt stays keyed.
 	sendFrame(t, connC, chat.OpChatRequest, chatRequestFrame(chat.ChatTypeGM, "", "gm"))
+	expectExact(t, connC, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameC, "gm"), "GM own echo")
 	expectExact(t, connC, chat.OpChatAck, []byte{0x01, 0x03, 0xFF}, "GM all-chat ack to C")
 	expectExact(t, connA, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameC, "gm"), "GM all-chat to A")
 	expectExact(t, connB, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameC, "gm"), "GM all-chat to B")

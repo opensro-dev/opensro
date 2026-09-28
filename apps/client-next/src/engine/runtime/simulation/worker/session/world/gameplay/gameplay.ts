@@ -10,6 +10,7 @@ commands and cannot bypass actor eligibility.
 ===========================================================================
 */
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
+import { createPickup } from "./pickup";
 import { positionSkillRequest } from "@/engine/foundation/gameplay/position-skill";
 import {
 	portalNotice,
@@ -155,6 +156,7 @@ export function createGameplay(
 	let selectionDecal: GameplayState["selectionDecal"] = null;
 	let soundClock = 0;
 	const feedback = createFeedback();
+	const pickup = createPickup();
 	const training = createTraining( send );
 	const movement = createMovement( send ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
@@ -167,6 +169,7 @@ sendFrame
 	*/
 	function sendFrame( frame: WireFrame ): WireFrame {
 		send( frame );
+		pickup.sent( frame );
 		return frame;
 	}
 	const cosItemRefs = new Map<number, number>(), cosItemCaps = new Map<number, number>();
@@ -254,6 +257,7 @@ bindings, selected entities, cooldowns or world-entry state.
 		skillGroups.clear();
 		movement.clear();
 		chat.clear();
+		pickup.clear();
 		quests.clear();
 		npcConversation.clear();
 		previousLockedQuestNotice = "";
@@ -328,6 +332,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 ================
 		*/
 		bootstrap( value: unknown ) {
+			pickup.clear();
 			gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
 			returnScroll = undefined;
 			teleportMode = 0;
@@ -561,6 +566,7 @@ Entity removal retires targeting and combat references in the same frame.
 			} else {
 				gateApproach = gateApproachTransition( gateApproach, { kind: "despawn", gid: event.gid } );
 				combat.remove( event.gid, soundClock );
+				pickup.remove( event.gid );
 				targeting.remove( event.gid );
 				const conversation = npcConversation.state();
 				if ( conversation.phase !== "closed" && conversation.gid === event.gid ) npcConversation.clear();
@@ -979,6 +985,7 @@ state here before a command can claim a native wire conversation.
 					throw Error( "Mounted COS authority is unavailable" );
 				}
 				const frame = movement.request( command.destination, now, local?.mountedOn || undefined );
+				pickup.clear();
 				selectionDecal = { kind: "ground", pose: { ...command.destination } };
 				return frame;
 			}
@@ -1081,9 +1088,8 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "pickup" ) {
 				if ( entity.kind !== "ground-item" ) throw new Error( "Target is not a ground item" );
-				const payload = Uint8Array.of( 1, 2, 1, 0, 0, 0, 0 );
-				new DataView( payload.buffer ).setUint32( 3, entity.gid, true );
-				return sendFrame( { opcode: 0x72cd, payload } );
+				const frame = pickup.request( entity.gid );
+				return frame ? sendFrame( frame ) : null;
 			}
 			if ( command.kind === "select" ) {
 				const pose = movement.state().pose;
@@ -1091,6 +1097,7 @@ state here before a command can claim a native wire conversation.
 					const destination = portalApproach( pose, entity );
 					if ( destination ) {
 						const frame = movement.request( destination, now, local?.mountedOn || undefined );
+						pickup.clear();
 						gateApproach = gateApproachTransition( gateApproach, { kind: "begin", gate: entity } );
 						npcConversation.clear();
 						return frame;
@@ -1147,6 +1154,14 @@ Packet handling must not depend on which HUD panel is currently open.
 		receive( frame: WireFrame, now: number, chatSender?: EntityState ) {
 			const inventoryBefore = inventory.state().inventory;
 			try {
+				if ( pickup.receive( frame ) ) {
+					// 75BAA0: kind 3 is the generic action notice; pickup's
+					// inventory refusals still arrive separately on B06D.
+					const notice = frame.payload[0] === 3 ? constantNativeNotice( 0x19, frame.payload[2]! ) : null;
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return true;
+				}
 				const academyAck = academyAcknowledgment( frame );
 				if ( academyAck ) {
 					if ( academyAck.notice ) {
@@ -1966,6 +1981,7 @@ World transfer retires spatial work while retaining character/session data.
 ================
 		*/
 		resetWorld() {
+			pickup.clear();
 			gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
 			returnScroll = undefined;
 			teleportMode = 0;

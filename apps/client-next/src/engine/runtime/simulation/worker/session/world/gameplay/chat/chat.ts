@@ -1,7 +1,11 @@
 /*
 ===========================================================================
 
-chat.ts - Chat composition, acknowledgements and received lines share one lifecycle.
+chat.ts - character-session chat, receipts and received public history
+
+World travel replaces scene data, not the conversation. Character changes and
+session disposal clear it. A server-authored public echo determines the beta
+channel; its later native receipt only releases the outstanding request.
 
 ===========================================================================
 */
@@ -16,6 +20,23 @@ const CHAT_TEXT_LIMIT = 100;
 const CHAT_NAME_LIMIT = 128;
 const CHAT_ACK_TIMEOUT_MS = 10000;
 const CHAT_RECEIPT_KEY = 255;
+const CHAT_GLOBAL_CHANNEL = 6;
+
+/*
+================
+PendingChat
+
+Only one native keyed receipt may be outstanding. A public echo is delivered
+before that receipt, allowing the server's channel to own presentation.
+================
+*/
+interface PendingChat {
+	channel: number;
+	text: string;
+	target: string;
+	deadline: number;
+	echoed: boolean;
+}
 
 // v1.150 social/chat/wire.go: 7367 requests, B367 keyed receipt, 3667 broadcast.
 /*
@@ -25,7 +46,7 @@ createChat
 */
 export function createChat( send: ( frame: WireFrame ) => void ) {
 	let lines: readonly ChatLine[] = [],
-		pending: { channel: number; text: string; target: string; deadline: number; } | null = null,
+		pending: PendingChat | null = null,
 		error: string | null = null,
 		name = "";
 	let localBlocks: readonly string[] = [];
@@ -70,11 +91,14 @@ bootstrap
 			blockPending = false;
 			blockError = null;
 			const b = value as { character?: { name?: string; }; };
-			name = typeof b.character?.name === "string" ? b.character.name : "";
-			lines = [];
-			feedback = [];
-			pending = null;
-			error = null;
+			const nextName = typeof b.character?.name === "string" ? b.character.name : "";
+			if ( !nextName || nextName !== name ) {
+				lines = [];
+				feedback = [];
+				pending = null;
+				error = null;
+			}
+			name = nextName;
 		},
 		/*
 ================
@@ -122,7 +146,7 @@ request
 			o += 2;
 			for ( let i = 0; i < text.length; i++ ) v.setUint16( o + i * 2, text.charCodeAt( i ), true );
 			send( { opcode: 0x7367, payload: p } );
-			pending = { channel, text, target, deadline: now + CHAT_ACK_TIMEOUT_MS };
+			pending = { channel, text, target, deadline: now + CHAT_ACK_TIMEOUT_MS, echoed: false };
 			error = null;
 		},
 		/*
@@ -140,7 +164,7 @@ receive
 				const at = ok ? 1 : 2;
 				if ( !pending || p[at] !== pending.channel || p[at + 1] !== CHAT_RECEIPT_KEY ) return true;
 				if ( ok ) {
-					if ( pending.channel !== 2 || whispers ) {
+					if ( !pending.echoed && (pending.channel !== 2 || whispers) ) {
 						append( {
 							channel: pending.channel,
 							name: pending.channel === 2 ? pending.target : name,
@@ -209,6 +233,18 @@ take
 			const at = take( n * 2 ),
 				text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( at, at + n * 2 ) );
 			if ( o !== p.length ) throw new Error( "Chat trailing bytes" );
+			if ( channel === CHAT_GLOBAL_CHANNEL && sender === name ) {
+				// Native receipts retain the request's channel. The beta server
+				// sends this authoritative echo first, so the receipt must not
+				// invent a second, differently colored line.
+				const outgoing = pending !== null && [ 1, 3 ].includes( pending.channel ) && pending.text === text;
+				if ( outgoing ) {
+					if ( pending!.echoed ) return true;
+					pending!.echoed = true;
+				}
+				append( { channel, name: sender, text, outgoing, gid: outgoing ? localGid : undefined } );
+				return true;
+			}
 			// 752800 filters named incoming channels 1..5 and 11 before any presentation.
 			if (
 				!chatIsBlocked( localBlocks, channel, sender || senderName ) && (channel !== 2 || whispers) &&

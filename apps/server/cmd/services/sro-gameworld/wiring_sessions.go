@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+wiring_sessions.go - admitted character and session teardown ordering
+
+Exclusive binding precedes session-owned gameplay and public chat replay.
+Close hooks release transient state without deleting durable authority.
+
+===========================================================================
+*/
 package main
 
 import (
@@ -11,14 +21,10 @@ import (
 )
 
 /*
-================================================================================
-World-session lifecycle
-
-Exclusive character binding is established before any session-scoped gameplay
-state. Close hooks release transient state but never delete durable authority.
-================================================================================
+================
+installSessionLifecycle
+================
 */
-
 func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authorityStore *store.Store) {
 	game.deps.OnWorldBound = func(
 		session *transport.Session,
@@ -32,6 +38,14 @@ func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authority
 	})
 }
 
+/*
+================
+worldBound
+
+Publish exclusive identity before opening gameplay owners; recheck deletion
+after binding because its reservation is protected by a different lock.
+================
+*/
 func (game *gameplayPlane) worldBound(
 	hub *transport.Hub,
 	authorityStore *store.Store,
@@ -86,8 +100,14 @@ func (game *gameplayPlane) worldBound(
 	game.guildInvites.WorldBound(divisionID, character)
 	game.mentorInvites.WorldBound(session, divisionID, character)
 	game.siege.WorldBound(session)
+	game.chat.WorldBound(session, divisionID)
 }
 
+/*
+================
+sessionClosed
+================
+*/
 func (game *gameplayPlane) sessionClosed(session *transport.Session) {
 	community.FriendSessionClosed(game.deps, game.presence, session)
 	game.parties.SessionClosed(session)
