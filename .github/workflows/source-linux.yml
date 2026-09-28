@@ -1,0 +1,43 @@
+# ===========================================================================
+# source-linux.yml - prove release inputs on a clean Linux checkout.
+# These checks need no extracted game data or deployment credentials. Asset
+# verification remains in the full client check on a licensed asset workspace.
+# ===========================================================================
+name: Validate Linux source
+
+on: [pull_request, push]
+
+permissions:
+  contents: read
+
+jobs:
+  client-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@v3
+        with:
+          runtime: node@24
+          require-lockfile: true
+      - name: Verify client without generated retail assets
+        run: node apps/client-next/tools/check.mjs --source
+
+  server-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - name: Verify Linux server and repeated handshake accounting
+        working-directory: apps/server
+        run: |
+          go test -p 2 ./...
+          go test -race -count=100 -run '^TestTransportMetricsEndpoint$' ./internal/transport
