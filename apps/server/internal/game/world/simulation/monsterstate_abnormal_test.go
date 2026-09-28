@@ -21,14 +21,42 @@ import (
 
 // testAbnormalContext resolves every caster, reports dead only when asked
 // and keeps rolls deterministic.
+/*
+================
+testAbnormalContext
+================
+*/
 type testAbnormalContext struct {
 	dead bool
 	roll bool
 }
 
+/*
+================
+SourceExists
+================
+*/
 func (c testAbnormalContext) SourceExists(string, uint32, string) bool { return true }
-func (c testAbnormalContext) SourceDead(string, uint32, string) bool   { return c.dead }
-func (c testAbnormalContext) Roll(string, uint32, uint32, int32) bool  { return c.roll }
+
+/*
+================
+SourceDead
+================
+*/
+func (c testAbnormalContext) SourceDead(string, uint32, string) bool { return c.dead }
+
+/*
+================
+Roll
+================
+*/
+func (c testAbnormalContext) Roll(string, uint32, uint32, int32) bool { return c.roll }
+
+/*
+================
+Param
+================
+*/
 func (c testAbnormalContext) Param(instance monster.Instance, id uint16) float32 {
 	if id == 8 {
 		return float32(instance.Ref.MagicalParry)
@@ -36,10 +64,15 @@ func (c testAbnormalContext) Param(instance monster.Instance, id uint16) float32
 	return 0
 }
 
+/*
+================
+applyRecords
+================
+*/
 func applyRecords(t *testing.T, s *MonsterState, division string, gid uint32, credit uint32, damage uint32, records ...abnormal.Record) MonsterDamageResult {
 	t.Helper()
 	current, _ := s.Get(division, gid)
-	r := s.ApplyDamageSequence(division, gid, current.CurrentHP, []MonsterDamagePlan{{GID: gid, CreditGID: credit, Damage: damage, Abnormal: records}})
+	r := s.ApplyDamageSequence(division, gid, current.CurrentHP, []MonsterDamagePlan{{GID: gid, CreditGID: credit, Damage: damage, Abnormal: records, AbnormalSources: s.PrepareAbnormalSources(division, records)}})
 	if len(r) != 1 {
 		t.Fatal("impact refused")
 	}
@@ -48,6 +81,11 @@ func applyRecords(t *testing.T, s *MonsterState, division string, gid uint32, cr
 
 // The impact door installs statuses atomically with HP; a stale HP snapshot
 // installs nothing, and a fatal impact never installs.
+/*
+================
+TestAbnormalInstallsAtomicallyWithImpact
+================
+*/
 func TestAbnormalInstallsAtomicallyWithImpact(t *testing.T) {
 	s := damageTestState()
 	s.clock = func() time.Time { return time.UnixMilli(10000) }
@@ -78,6 +116,11 @@ func TestAbnormalInstallsAtomicallyWithImpact(t *testing.T) {
 
 // Burn ticks at most once per 2 s through plan/commit; a stale plan (the
 // block changed in between) cannot commit, and a fatal tick commits once.
+/*
+================
+TestAbnormalUpdatePlanCommitAndStaleness
+================
+*/
 func TestAbnormalUpdatePlanCommitAndStaleness(t *testing.T) {
 	s := damageTestState()
 	s.clock = func() time.Time { return time.UnixMilli(10000) }
@@ -112,6 +155,11 @@ func TestAbnormalUpdatePlanCommitAndStaleness(t *testing.T) {
 
 // The v1.150 vitals mask carries grade bytes in ascending bit order over
 // 017FCFC0 (bleeding 11, curses 19/20; dark 13 carries none).
+/*
+================
+TestAbnormalPayloadGradeOrder
+================
+*/
 func TestAbnormalPayloadGradeOrder(t *testing.T) {
 	s := damageTestState()
 	s.clock = func() time.Time { return time.UnixMilli(10000) }
@@ -131,6 +179,11 @@ func TestAbnormalPayloadGradeOrder(t *testing.T) {
 
 // Root halts an in-flight mover at its live pose, and the navigation
 // door refuses new legs while freeze, sleep, root or stun hold (4B0EA0).
+/*
+================
+TestRootHaltsAndBlocksNavigation
+================
+*/
 func TestRootHaltsAndBlocksNavigation(t *testing.T) {
 	s := damageTestState()
 	s.clock = func() time.Time { return time.UnixMilli(10000) }
@@ -157,6 +210,11 @@ func TestRootHaltsAndBlocksNavigation(t *testing.T) {
 
 // burnTick installs a burn through the impact door and commits one planned
 // update at now; rate 5533 is the level-140 table value.
+/*
+================
+burnTick
+================
+*/
 func burnTick(t *testing.T, s *MonsterState, division string, gid, source uint32, rate uint32, now int64) (MonsterDamageResult, bool) {
 	t.Helper()
 	if s.abnormalContext == nil {

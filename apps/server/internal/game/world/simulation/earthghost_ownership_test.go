@@ -17,6 +17,11 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+/*
+================
+approachSnapshot
+================
+*/
 func approachSnapshot(s *MonsterState, division string, gid uint32) (uint32, monster.ApproachSlots, int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -28,6 +33,11 @@ func approachSnapshot(s *MonsterState, division string, gid uint32) (uint32, mon
 	return target, monster.ApproachSlots{}, 0
 }
 
+/*
+================
+TestEarthGhostHomeBoundaryAndPolicyModes
+================
+*/
 func TestEarthGhostHomeBoundaryAndPolicyModes(t *testing.T) {
 	for _, tc := range []struct {
 		name              string
@@ -114,6 +124,11 @@ func TestEarthGhostDistantHomeRegionAbandonsOnlyBoundedTrace(t *testing.T) {
 
 // 53FD04 installs 549460 instead of 548BE0 for dungeon actors. It steers to
 // the slot point and never applies 548CF1's moving-target center extension.
+/*
+================
+TestDungeonApproachKeepsSlotPointForMovingTarget
+================
+*/
 func TestDungeonApproachKeepsSlotPointForMovingTarget(t *testing.T) {
 	spacing := CombatSpacing{ActorBodyRadius: 3, TargetBodyRadius: 4, ActionReach: 7}
 	for _, region := range []uint16{0x8101, 26007} {
@@ -130,6 +145,11 @@ func TestDungeonApproachKeepsSlotPointForMovingTarget(t *testing.T) {
 	}
 }
 
+/*
+================
+TestEarthGhostHomePlanRejectsChangedNest
+================
+*/
 func TestEarthGhostHomePlanRejectsChangedNest(t *testing.T) {
 	for _, field := range []string{"radius", "center", "detached"} {
 		t.Run(field, func(t *testing.T) {
@@ -171,6 +191,11 @@ func TestEarthGhostHomePlanRejectsChangedNest(t *testing.T) {
 	}
 }
 
+/*
+================
+TestEarthGhostApproachReservationsAreLifecycleOwned
+================
+*/
 func TestEarthGhostApproachReservationsAreLifecycleOwned(t *testing.T) {
 	for _, event := range []string{"target_lost", "retarget", "damage_fatal", "burn_fatal", "despawn", "controller"} {
 		t.Run(event, func(t *testing.T) {
@@ -200,7 +225,7 @@ func TestEarthGhostApproachReservationsAreLifecycleOwned(t *testing.T) {
 			case "burn_fatal":
 				s.SetAbnormalContext(testAbnormalContext{})
 				burn := abnormal.Record{Status: abnormal.Burn, Level: 30, DurationMs: 30 * 750, Rate24: 5533, Scale20: 1, SourceGID: target.Gid, SourceName: "fixture"}
-				if r := s.ApplyDamageSequence(monsterTestDivision, a.Gid, a.CurrentHP, []MonsterDamagePlan{{GID: a.Gid, CreditGID: target.Gid, Abnormal: []abnormal.Record{burn}}}); len(r) != 1 {
+				if r := s.ApplyDamageSequence(monsterTestDivision, a.Gid, a.CurrentHP, []MonsterDamagePlan{{GID: a.Gid, CreditGID: target.Gid, Abnormal: []abnormal.Record{burn}, AbnormalSources: s.PrepareAbnormalSources(monsterTestDivision, []abnormal.Record{burn})}}); len(r) != 1 {
 					t.Fatal("burn not applied")
 				}
 				plan, _ := s.PlanAbnormalUpdate(monsterTestDivision, a.Gid, 10001)
@@ -235,6 +260,11 @@ func TestEarthGhostApproachReservationsAreLifecycleOwned(t *testing.T) {
 	}
 }
 
+/*
+================
+TestEarthGhostApproachAndNavigationCommitTogether
+================
+*/
 func TestEarthGhostApproachAndNavigationCommitTogether(t *testing.T) {
 	for _, event := range []string{"retarget_actor", "move_peer", "retarget_peer", "kill_actor"} {
 		t.Run(event, func(t *testing.T) {
@@ -282,6 +312,11 @@ func TestEarthGhostApproachAndNavigationCommitTogether(t *testing.T) {
 	}
 }
 
+/*
+================
+TestEarthGhostFailedNavigationReleasesOnlyItsReservation
+================
+*/
 func TestEarthGhostFailedNavigationReleasesOnlyItsReservation(t *testing.T) {
 	ops, a, target := earthGhostFixture(t)
 	s := ops.Monsters
@@ -310,6 +345,11 @@ func TestEarthGhostFailedNavigationReleasesOnlyItsReservation(t *testing.T) {
 	}
 }
 
+/*
+================
+TestEarthGhostEightSlotsAreNotAnAttackerCap
+================
+*/
 func TestEarthGhostEightSlotsAreNotAnAttackerCap(t *testing.T) {
 	ops, a, target := earthGhostFixture(t)
 	s := ops.Monsters
@@ -347,6 +387,11 @@ func TestEarthGhostEightSlotsAreNotAnAttackerCap(t *testing.T) {
 	}
 }
 
+/*
+================
+TestEarthGhostApproachGroupsDoNotCrossDivisions
+================
+*/
 func TestEarthGhostApproachGroupsDoNotCrossDivisions(t *testing.T) {
 	ops, a, target := earthGhostFixture(t)
 	s := ops.Monsters

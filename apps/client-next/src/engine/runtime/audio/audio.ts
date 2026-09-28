@@ -35,6 +35,7 @@ import { createMusic } from "./music/music";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SoundEvent } from "@/engine/contracts/audio";
 const MAX_DECODES = 2, SOUND_INPUT_BYTES = 4 << 20, SOUND_RESIDENT_BYTES = 32 << 20;
+const RESIDENCY_RETRY_SECONDS = 2;
 /*
 ================
 createAudio
@@ -341,6 +342,7 @@ prepareCombat
 				admittedGid = gid;
 				admittedSounds = false;
 				preparedPaths.clear();
+				for ( const path of buffers.keys() ) preparedPaths.add( path );
 			}
 			preparation.step( gameplay, entities );
 		},
@@ -348,13 +350,13 @@ prepareCombat
 ================
 ready
 
-World entry is a one-time admission barrier. New nearby entities continue
-preparing sounds without reopening the loading screen during play.
+World entry is a one-time admission barrier. Preparation proves that each sound decodes, not that an unbounded scene fits
+in the resident cache. New nearby entities warm once without reopening entry.
 ================
 		*/
 		ready() {
-			const complete = preparation.ready() && preparation.paths().every( path => buffers.has( path ) ) &&
-				(!uiActive || uiPaths.every( path => buffers.has( path ) ));
+			const complete = preparation.ready() && preparation.paths().every( path => preparedPaths.has( path ) ) &&
+				(!uiActive || uiPaths.every( path => preparedPaths.has( path ) ));
 			if ( admittedGid && complete ) admittedSounds = true;
 			return admittedGid ? admittedSounds : complete;
 		},
@@ -506,8 +508,6 @@ step
 										break;
 									}
 									if (
-										(!admittedSounds && preparation.paths().includes( key )) ||
-										((uiActive || admittedGid !== 0) && uiPaths.includes( key )) ||
 										[ ...voices ].some( source => source.buffer === old )
 									) {
 										continue;
@@ -516,7 +516,10 @@ step
 									buffers.delete( key );
 								}
 								if ( resident + bytes > SOUND_RESIDENT_BYTES ) {
-									reject( "Playing sounds exhaust residency budget" );
+									// Decode succeeded, but live voices own the available capacity.
+									// Remember preparation and retry demand after those voices can end.
+									preparedPaths.add( path );
+									uiRetryAt.set( path, clock + RESIDENCY_RETRY_SECONDS );
 									return;
 								}
 								buffers.set( path, buffer );
@@ -552,7 +555,8 @@ step
 				const buffer = buffers.get( event.path );
 				if ( !buffer ) {
 					if (
-						!job && decoding.size < MAX_DECODES && !decoding.has( event.path ) && assets.available() > 0
+						!job && decoding.size < MAX_DECODES && !decoding.has( event.path ) &&
+						(uiRetryAt.get( event.path ) ?? 0) <= clock && assets.available() > 0
 					) {
 						job = {
 							id: assets.request( new URL( event.path, origin ).href, SOUND_INPUT_BYTES ),
@@ -606,12 +610,38 @@ step
 				source.start();
 			}
 			if ( !job && decoding.size < MAX_DECODES && assets.available() > 0 ) {
-				const candidates = preparation.paths().filter( path => !admittedSounds || !preparedPaths.has( path ) );
-				const path = [ ...candidates, ...(uiActive ? uiPaths : []) ].find( path =>
+				const candidates = preparation.paths().filter( path => !preparedPaths.has( path ) );
+				const path = [
+					...candidates,
+					...(uiActive ? uiPaths.filter( path => !preparedPaths.has( path ) ) : [])
+				].find( path =>
 					!buffers.has( path ) && !decoding.has( path ) && (uiRetryAt.get( path ) ?? 0) <= clock
 				);
 				if ( path ) job = { id: assets.request( new URL( path, origin ).href, SOUND_INPUT_BYTES ), path };
 			}
+		},
+		/*
+================
+snapshot
+================
+		*/
+		snapshot(): import("@/engine/contracts/audio").AudioResidencySnapshot {
+			const required = preparation.paths();
+			return {
+				sampleRate: context?.sampleRate ?? 0,
+				limitBytes: SOUND_RESIDENT_BYTES,
+				residentBytes: resident,
+				admitted: admittedSounds,
+				required: [ ...required ],
+				decoding: [ ...decoding.keys() ],
+				buffers: [ ...buffers ].map( ( [path, buffer] ) => ({
+					path,
+					bytes: buffer.length * buffer.numberOfChannels * 4,
+					playing: [ ...voices ].some( source => source.buffer === buffer ),
+					preparing: !admittedSounds && required.includes( path ),
+					ui: (uiActive || admittedGid !== 0) && uiPaths.includes( path )
+				}) )
+			};
 		},
 		error: () => preparation.error() ?? failure ?? ambientFailure ?? music.error(),
 		/*

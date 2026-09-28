@@ -933,7 +933,7 @@ cancel
 });
 test("playing audio buffers stay charged to residency until their voices end", async t => {
 	const sources = [];
-	let requests = 0;
+	let requests = 0, seconds = 0;
 	const graph = () => ({
 		/*
 ================
@@ -1046,20 +1046,22 @@ play
 ================
 	*/
 	async function play( id, path ) {
-		audio.enqueue( { id, path: `/assets/audio/${path}.wav`, gain: 1, x: 0, y: 0, z: 0, expires: 10 } );
-		audio.step( 0, [ 0, 0, 0 ] );
-		audio.step( 0, [ 0, 0, 0 ] );
+		audio.enqueue( { id, path: `/assets/audio/${path}.wav`, gain: 1, x: 0, y: 0, z: 0, expires: seconds + 10 } );
+		audio.step( seconds, [ 0, 0, 0 ] );
+		audio.step( seconds, [ 0, 0, 0 ] );
 		await new Promise( setImmediate );
-		audio.step( 0, [ 0, 0, 0 ] );
+		audio.step( seconds, [ 0, 0, 0 ] );
 	}
 	await play( "one", "a" );
 	await play( "two", "b" );
 	assert.equal( sources.length, 1 );
-	assert.match( audio.error(), /residency/ );
+	assert.equal( audio.error(), null, "Live residency defers demand without failing the runtime" );
+	assert.equal( audio.snapshot().residentBytes, 20 << 20 );
 	await play( "reuse", "a" );
 	assert.equal( sources.length, 2 );
 	assert.equal( requests, 2, "playing cached buffer cannot be evicted" );
 	for ( const source of sources ) source.onended();
+	seconds = 11; // The blocked cue expired; only fresh demand should play.
 	await play( "after-end", "b" );
 	assert.equal( sources.length, 3 );
 	audio.dispose();

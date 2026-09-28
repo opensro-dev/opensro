@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+e2e_invite_wire_test.go - guild and party invitation transport contracts
+
+Exercises the real authority and ordered wire replies, including cross-session
+barriers where a silent request must complete before another player acts.
+
+===========================================================================
+*/
 package guild_test
 
 // End-to-end exercise of the guild INVITE HANDSHAKE (T55) over the REAL
@@ -53,6 +63,11 @@ const (
 	invE2ENameI = "e2eGldIndia"
 )
 
+/*
+================
+inviteE2EServer
+================
+*/
 type inviteE2EServer struct {
 	srv       *transport.Server
 	authority *store.Store
@@ -66,6 +81,11 @@ type inviteE2EServer struct {
 // consent arm, the cross-lane dismissal points back at the party
 // registry, and both lanes' stale-drop hooks ride OnWorldBound /
 // OnSessionClose.
+/*
+================
+startInviteServer
+================
+*/
 func startInviteServer(t *testing.T, dir string, seeds []*enterworld.Character) inviteE2EServer {
 	t.Helper()
 
@@ -155,6 +175,11 @@ func startInviteServer(t *testing.T, dir string, seeds []*enterworld.Character) 
 }
 
 // invE2EU32 renders one little-endian u32 payload (hand-rolled).
+/*
+================
+invE2EU32
+================
+*/
 func invE2EU32(v uint32) []byte {
 	buf := &bytes.Buffer{}
 	binary.Write(buf, binary.LittleEndian, v)
@@ -163,12 +188,22 @@ func invE2EU32(v uint32) []byte {
 
 // invE2EPartyInvitePayload hand-rolls the 0x70D5 body
 // {u32 targetGid, u8 optionBits}.
+/*
+================
+invE2EPartyInvitePayload
+================
+*/
 func invE2EPartyInvitePayload(targetGid uint32, optionBits uint8) []byte {
 	return append(invE2EU32(targetGid), optionBits)
 }
 
 // invE2EPromptOracle hand-rolls the 0x3393 type-5 prompt
 // {u8 5, u32 inviterGid}.
+/*
+================
+invE2EPromptOracle
+================
+*/
 func invE2EPromptOracle(inviterGid uint32) []byte {
 	return append([]byte{0x05}, invE2EU32(inviterGid)...)
 }
@@ -186,6 +221,11 @@ type invE2EMember struct {
 // 0x3B29-subOp-2 order (level 1 - the seeded e2e characters persist no
 // level - donated 0, dwords 0, empty grantName, refObjId 1907 =
 // CHAR_CH_MAN_ADVENTURER male fallback, fortress 0).
+/*
+================
+invE2EMemberRow
+================
+*/
 func invE2EMemberRow(oracle *oracle32C4, member invE2EMember) {
 	oracle.u32(member.jid)
 	oracle.str(member.name)
@@ -206,6 +246,11 @@ func invE2EMemberRow(oracle *oracle32C4, member invE2EMember) {
 // fields parameterized (the notice-edit elicitation in the flow below
 // mutates them, so the reboot oracle cannot hardcode empties the way
 // mutE2EBlockOracle does).
+/*
+================
+invE2EBlockOracle
+================
+*/
 func invE2EBlockOracle(guildID int64, guildName, subject, contents string, members []invE2EMember) []byte {
 	oracle := &oracle32C4{}
 	oracle.u32(uint32(guildID))
@@ -225,6 +270,11 @@ func invE2EBlockOracle(guildID int64, guildName, subject, contents string, membe
 }
 
 // invE2EJoinOracle hand-rolls the 0x3B29 subOp-2 join push.
+/*
+================
+invE2EJoinOracle
+================
+*/
 func invE2EJoinOracle(member invE2EMember) []byte {
 	oracle := &oracle32C4{}
 	oracle.u8(2)
@@ -234,6 +284,11 @@ func invE2EJoinOracle(member invE2EMember) []byte {
 
 // invE2EAwaitPending polls the invite runtime's pending count toward
 // want (the disconnect drop rides the async close hook).
+/*
+================
+invE2EAwaitPending
+================
+*/
 func invE2EAwaitPending(t *testing.T, invites *guild.InviteRuntime, want int, what string) {
 	t.Helper()
 	wait.Eventually(t, 5*time.Second, fmt.Sprintf("%s: pending invites to reach %d", what, want), func() bool {
@@ -246,6 +301,11 @@ func invE2EAwaitPending(t *testing.T, invites *guild.InviteRuntime, want int, wh
 // {02 16} refuse, the {01 01} accept with both byte-asserted commit
 // frames, the stale-consent no-op, the already-in-a-guild re-invite
 // refusal, and the reboot persistence of the committed membership.
+/*
+================
+TestGuildInviteConsentEndToEndOverWire
+================
+*/
 func TestGuildInviteConsentEndToEndOverWire(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "authority")
 
@@ -406,6 +466,11 @@ func TestGuildInviteConsentEndToEndOverWire(t *testing.T) {
 // guild proposal makes the party invite fail with {2, 2} on B0D5 and
 // B452, and byte-identical {01 01} answers route to the lane that holds
 // the only pending.
+/*
+================
+TestGuildInvitePartyOneProposalPerPlayerEndToEnd
+================
+*/
 func TestGuildInvitePartyOneProposalPerPlayerEndToEnd(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "authority")
 
@@ -437,6 +502,12 @@ func TestGuildInvitePartyOneProposalPerPlayerEndToEnd(t *testing.T) {
 		t.Fatalf("party prompt = % X, want % X", got, want)
 	}
 	guildSendFrame(t, connH, guild.OpGuildInviteRequest, invE2EU32(gidI))
+	// H's silent invite must finish before I can release the party proposal.
+	// WebSocket writes on two sessions do not establish server dispatch order.
+	guildSendFrame(t, connH, guild.OpGuildNoticeEditRequest, mutatorNoticePayload("", "body"))
+	if got := guildExpectFrame(t, connH, guild.OpGuildNoticeEditAck, "H's dispatch barrier"); !bytes.Equal(got, []byte{2, 0x22}) {
+		t.Fatalf("empty notice refusal = % X, want 02 22", got)
+	}
 	if got := server.invites.PendingInviteCount(); got != 0 {
 		t.Fatalf("guild pendings over a waiting party proposal = %d, want 0", got)
 	}

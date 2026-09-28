@@ -838,6 +838,7 @@ World: ${
 		raf = requestAnimationFrame( frame );
 		return {
 			dispose,
+			audioSnapshot: () => audio.snapshot(),
 			retryWorld: () => {
 				world.retry();
 				navigation.retry();

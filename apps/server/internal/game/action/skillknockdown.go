@@ -33,6 +33,11 @@ func knockdownConsequence(from simulation.Spawn, to monster.Pose, recovery, dura
 	return simulation.MonsterKnockdownPlan{Pose: to, UntilMs: now + int64(float64(seconds)*1000)}
 }
 
+/*
+================
+displaceImpactPose
+================
+*/
 func displaceImpactPose(from simulation.Spawn, to monster.Pose, distance uint32) monster.Pose {
 	dx, dz := worldgeom.Delta(worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z}, worldgeom.RegionXZ{RegionID: to.RegionID, X: to.X, Z: to.Z})
 	x, z := float32(dx), float32(dz)
@@ -49,6 +54,11 @@ func displaceImpactPose(from simulation.Spawn, to monster.Pose, distance uint32)
 	return to
 }
 
+/*
+================
+planMonsterImpacts
+================
+*/
 func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, skill enterworld.SkillRow, target monster.Instance, formulas []combat.Result, now int64) ([]simulation.MonsterDamagePlan, bool) {
 	mover, ok := rt.Monsters.Mover(division, target.Gid)
 	if !ok {
@@ -108,6 +118,7 @@ func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, 
 			return nil, false
 		}
 		plan.Abnormal = append(records, imbueRecords...)
+		plan.AbnormalSources = rt.Monsters.PrepareAbnormalSources(division, plan.Abnormal)
 		plans = append(plans, plan)
 		if remaining == 0 {
 			break
@@ -116,6 +127,11 @@ func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, 
 	return plans, true
 }
 
+/*
+================
+committedSkillImpact
+================
+*/
 func committedSkillImpact(formula combat.Result, result simulation.MonsterDamageResult) wire.SkillCastTargetImpact {
 	impact := wire.SkillCastTargetImpact{ResultFlags: formula.ResultFlags, Damage: result.Applied, Fatal: result.Fatal, Blocked: formula.Blocked}
 	if result.Knockdown != nil {
@@ -139,6 +155,11 @@ func committedSkillImpact(formula combat.Result, result simulation.MonsterDamage
 
 // The division operation lock owns this cancellation together with the HP/
 // motion commit. Remove all releases and publish one close per owned token.
+/*
+================
+interruptMonsterCast
+================
+*/
 func (rt *Runtime) interruptMonsterCast(division string, gid uint32) []wire.Frame {
 	rt.pendingSkillFinalizesMu.Lock()
 	defer rt.pendingSkillFinalizesMu.Unlock()

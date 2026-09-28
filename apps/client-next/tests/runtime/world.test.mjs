@@ -1395,3 +1395,84 @@ test("monster LIFE preserves native impact displacement but stops cast-owned rus
 		owner.dispose();
 	}
 });
+
+/*
+================
+admitWaitingWorld
+
+Keep the presentation acknowledgement pending after the complete native
+object bracket arrives. Network progress and rendering progress are distinct.
+================
+*/
+async function admitWaitingWorld( t, complete = true ) {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession( async kind => {
+		mints.push( kind );
+		return "ticket";
+	} );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	socket.receive( 7, entered() );
+	for ( const row of complete ? rows : rows.slice( 0, -1 ) ) socket.receive( row.opcode, row.payload );
+	world.step( 4 );
+	return { world, sockets, socket, mints };
+}
+
+test("complete entry waits for slow presentation without reconnecting or republishing bootstrap", async t => {
+	const { world, sockets, mints } = await admitWaitingWorld( t );
+	const pending = world.take(), original = JSON.stringify( pending );
+	for ( const time of [ 10005, 30005, 60005 ] ) {
+		world.step( time );
+		await settle();
+		assert.equal( world.status().phase, "entering-world" );
+		assert.equal( world.status().error, undefined );
+		assert.equal( world.take(), null );
+	}
+	assert.equal( sockets.length, 1 );
+	assert.deepEqual( mints, [ "transport", "enterworld" ] );
+	assert.equal( JSON.stringify( pending ), original );
+	world.ack( pending.sequence );
+	world.step( 60006 );
+	assert.equal( world.status().phase, "world" );
+	world.ready();
+	assert.equal( world.status().ready, true );
+});
+
+test("incomplete native entry still times out while presentation is pending", async t => {
+	const { world } = await admitWaitingWorld( t, false );
+	world.take();
+	world.step( 10005 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( world.status().error, "World connection timed out" );
+});
+
+test("travel waits for presentation but a later incomplete travel gets a fresh network deadline", async t => {
+	const { world, socket, sockets } = await admitWaitingWorld( t );
+	flush( world );
+	world.step( 5 );
+	world.ready();
+	socket.receive( 0x3369, Uint8Array.of( 0x4f, 0x6b ) );
+	socket.receive( 7, entered() );
+	for ( const row of rows ) socket.receive( row.opcode, row.payload );
+	world.step( 6 );
+	const pending = world.take();
+	world.step( 30006 );
+	assert.equal( world.status().phase, "entering-world" );
+	assert.equal( world.status().error, undefined );
+	assert.equal( sockets.length, 1 );
+	world.ack( pending.sequence );
+	world.step( 30007 );
+	world.ready();
+	socket.receive( 0x3369, Uint8Array.of( 0x4f, 0x6b ) );
+	world.step( 30008 );
+	world.step( 40009 );
+	assert.equal( world.status().error, "World connection timed out" );
+});

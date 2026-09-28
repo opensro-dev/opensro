@@ -253,6 +253,7 @@ RuntimeControl
 ================
 */
 export interface RuntimeControl extends Disposable {
+	audioSnapshot(): import("./audio").AudioResidencySnapshot;
 	retryWorld(): void;
 	session( command: SessionCommand ): void;
 	sessionState(): SessionState | null;

@@ -23,6 +23,11 @@ import (
 	"time"
 )
 
+/*
+================
+TestFlyingStoneShippedChainAndBleedingLifecycle
+================
+*/
 func TestFlyingStoneShippedChainAndBleedingLifecycle(t *testing.T) {
 	dir := os.Getenv("SRO_SKILL_INVENTORY_DATA")
 	if dir == "" {
@@ -133,6 +138,11 @@ func TestFlyingStoneShippedChainAndBleedingLifecycle(t *testing.T) {
 	}
 }
 
+/*
+================
+bleedingSlot
+================
+*/
 func bleedingSlot(instance monster.Instance) abnormal.Slot {
 	if instance.Abnormal == nil {
 		return abnormal.Slot{}
@@ -142,16 +152,26 @@ func bleedingSlot(instance monster.Instance) abnormal.Slot {
 
 // seedDepartedAbnormal installs a status from c through the impact door and
 // then detaches c as a disconnect does: ticks continue uncredited.
+/*
+================
+seedDepartedAbnormal
+================
+*/
 func seedDepartedAbnormal(t *testing.T, rt *Runtime, c *enterworld.Character, gid uint32, record abnormal.Record) {
 	t.Helper()
 	record.SourceGID, record.SourceName = enterworld.ObjectIDForCharacter(c), c.Name
 	current, _ := rt.Monsters.Get(testDivision, gid)
-	if r := rt.Monsters.ApplyDamageSequence(testDivision, gid, current.CurrentHP, []simulation.MonsterDamagePlan{{GID: gid, CreditGID: record.SourceGID, Abnormal: []abnormal.Record{record}}}); len(r) != 1 || r[0].Instance.Abnormal == nil {
+	if r := rt.Monsters.ApplyDamageSequence(testDivision, gid, current.CurrentHP, []simulation.MonsterDamagePlan{{GID: gid, CreditGID: record.SourceGID, Abnormal: []abnormal.Record{record}, AbnormalSources: rt.Monsters.PrepareAbnormalSources(testDivision, []abnormal.Record{record})}}); len(r) != 1 || r[0].Instance.Abnormal == nil {
 		t.Fatal("status admission")
 	}
 	rt.Monsters.ForgetAbnormalSource(testDivision, 0, c.Name)
 }
 
+/*
+================
+actorOf
+================
+*/
 func actorOf(t *testing.T, rt *Runtime) *enterworld.Character {
 	t.Helper()
 	for _, c := range rt.deps.CharactersForDivision(testDivision) {

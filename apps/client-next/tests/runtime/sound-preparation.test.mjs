@@ -118,45 +118,7 @@ test("a missing required catalogue exposes an error instead of declaring readine
 
 test("first attack waits for decode readiness then plays without a new asset request", async t => {
 	const { assets, calls } = fixture(), decodes = [], started = [];
-	const previous = globalThis.AudioContext;
-	const node = () => ({ connect() {}, disconnect() {} });
-	class Context {
-		state = "running";
-		destination = {};
-		listener = { positionX: {}, positionY: {}, positionZ: {} };
-		resume() {
-			return Promise.resolve();
-		}
-		close() {
-			return Promise.resolve();
-		}
-		decodeAudioData() {
-			return new Promise( resolve => decodes.push( resolve ) );
-		}
-		createGain() {
-			return { ...node(), gain: {} };
-		}
-		createPanner() {
-			return { ...node(), positionX: {}, positionY: {}, positionZ: {} };
-		}
-		createBufferSource() {
-			return {
-				...node(),
-				onended: () => {},
-				start() {
-					started.push( this );
-				},
-				stop() {
-					this.onended?.();
-				}
-			};
-		}
-	}
-	Object.defineProperty( globalThis, "AudioContext", { value: Context, writable: true, configurable: true } );
-	t.after( () => {
-		if ( previous ) globalThis.AudioContext = previous;
-		else Reflect.deleteProperty( globalThis, "AudioContext" );
-	} );
+	installAudioContext( t, decodes, started );
 	const audio = createAudio( assets, ROOT, createPresentationRandom( 1 ) );
 	t.after( () => audio.dispose() );
 	audio.unlock();
@@ -196,4 +158,185 @@ test("first attack waits for decode readiness then plays without a new asset req
 	}
 	assert.equal( calls.length, afterPeer, "Evicted speculative warmup does not refill in a loop" );
 	assert.equal( audio.ready(), true );
+});
+
+/*
+================
+installAudioContext
+================
+*/
+function installAudioContext( t, decodes, started ) {
+	const previous = globalThis.AudioContext;
+	const node = () => ({ connect() {}, disconnect() {} });
+	/*
+================
+Context
+================
+	*/
+	class Context {
+		state = "running";
+		destination = {};
+		listener = { positionX: {}, positionY: {}, positionZ: {} };
+		/*
+================
+resume
+================
+		*/
+		resume() {
+			return Promise.resolve();
+		}
+		/*
+================
+close
+================
+		*/
+		close() {
+			return Promise.resolve();
+		}
+		/*
+================
+decodeAudioData
+================
+		*/
+		decodeAudioData() {
+			return new Promise( resolve => decodes.push( resolve ) );
+		}
+		/*
+================
+createGain
+================
+		*/
+		createGain() {
+			return { ...node(), gain: {} };
+		}
+		/*
+================
+createPanner
+================
+		*/
+		createPanner() {
+			return { ...node(), positionX: {}, positionY: {}, positionZ: {} };
+		}
+		/*
+================
+createBufferSource
+================
+		*/
+		createBufferSource() {
+			return {
+				...node(),
+				onended: () => {},
+				start() {
+					started.push( this );
+				},
+				stop() {
+					this.onended?.();
+				}
+			};
+		}
+	}
+	Object.defineProperty( globalThis, "AudioContext", { value: Context, writable: true, configurable: true } );
+	t.after( () => {
+		if ( previous ) globalThis.AudioContext = previous;
+		else Reflect.deleteProperty( globalThis, "AudioContext" );
+	} );
+}
+
+/*
+================
+settleAudioFrame
+================
+*/
+async function settleAudioFrame( state, seconds, bytes ) {
+	for ( const resolve of state.decodes.splice( 0 ) ) {
+		resolve( { length: bytes / 4, numberOfChannels: 1, sampleRate: 96000 } );
+	}
+	await new Promise( setImmediate );
+	state.audio.prepareCombat( gameplay, entities );
+	state.audio.step( seconds, [ 0, 0, 0 ] );
+}
+
+/*
+================
+residencyFixture
+================
+*/
+function residencyFixture( t ) {
+	const { assets, calls } = fixture(), decodes = [], started = [];
+	installAudioContext( t, decodes, started );
+	const audio = createAudio( assets, ROOT, createPresentationRandom( 1 ) );
+	t.after( () => audio.dispose() );
+	audio.unlock();
+	audio.prepareCombat( gameplay, entities );
+	return { audio, calls, decodes, started };
+}
+
+test("a prepared scene larger than the cache admits without endless warmup", async t => {
+	const state = residencyFixture( t );
+	// Four 10 MiB decoded sounds cannot all fit in the 32 MiB cache.
+	for ( let frame = 0; frame < 50 && !state.audio.ready(); frame++ ) {
+		await settleAudioFrame( state, frame / 60, 10 << 20 );
+	}
+	assert.equal( state.audio.ready(), true );
+	assert.equal( state.audio.error(), null );
+	assert.equal( state.started.length, 0 );
+	const snapshot = state.audio.snapshot();
+	assert.ok( snapshot.residentBytes <= snapshot.limitBytes );
+	assert.equal( snapshot.buffers.length, 3 );
+	const warmed = state.calls.length;
+	for ( let frame = 0; frame < 30; frame++ ) await settleAudioFrame( state, 1 + frame / 60, 10 << 20 );
+	assert.equal( state.calls.length, warmed, "Eviction cannot reopen speculative preparation" );
+	const missing = snapshot.required.find( path => !snapshot.buffers.some( buffer => buffer.path === path ) );
+	assert.ok( missing );
+	state.audio.enqueue( { id: "demand", path: missing, gain: 1, x: 0, y: 0, z: 0, expires: 10 } );
+	for ( let frame = 0; frame < 5; frame++ ) await settleAudioFrame( state, 2 + frame / 60, 10 << 20 );
+	assert.equal( state.started.length, 1, "An evicted sound is available on renewed demand" );
+	assert.equal( state.audio.error(), null );
+});
+
+test("active voices keep their residency while blocked demand retries after they end", async t => {
+	const state = residencyFixture( t );
+	for ( let frame = 0; frame < 50 && !state.audio.ready(); frame++ ) {
+		await settleAudioFrame( state, frame / 60, 8 << 20 );
+	}
+	assert.equal( state.audio.ready(), true );
+	for ( const path of [ HIT, SPELL, SWING, VOICE ] ) {
+		state.audio.enqueue( { id: path, path, gain: 1, x: 0, y: 0, z: 0, expires: 10 } );
+	}
+	state.audio.step( 1, [ 0, 0, 0 ] );
+	assert.equal( state.started.length, 4 );
+	const path = "/assets/audio/new-demand.wav";
+	state.audio.enqueue( { id: "waiting", path, gain: 1, x: 0, y: 0, z: 0, expires: 10 } );
+	for ( let frame = 0; frame < 5; frame++ ) await settleAudioFrame( state, 2 + frame / 60, 8 << 20 );
+	assert.equal( state.audio.error(), null, "Capacity pressure is not a corrupt asset" );
+	assert.equal( state.audio.snapshot().residentBytes, 32 << 20 );
+	assert.equal( state.started.length, 4 );
+	const blocked = state.calls.length;
+	for ( let frame = 0; frame < 10; frame++ ) await settleAudioFrame( state, 3 + frame / 60, 8 << 20 );
+	assert.equal( state.calls.length, blocked, "Blocked demand must not decode every frame" );
+	state.started[0].onended();
+	for ( let frame = 0; frame < 5; frame++ ) await settleAudioFrame( state, 5 + frame / 60, 8 << 20 );
+	assert.equal( state.started.length, 5 );
+	assert.equal( state.audio.snapshot().residentBytes, 32 << 20 );
+	assert.equal( state.audio.error(), null );
+});
+
+test("UI and world preparation share a bounded cache without permanently pinning UI", async t => {
+	const state = residencyFixture( t );
+	state.audio.prepareUi( true );
+	for ( let frame = 0; frame < 300 && !state.audio.ready(); frame++ ) {
+		await settleAudioFrame( state, frame / 60, 2 << 20 );
+	}
+	assert.equal( state.audio.ready(), true );
+	assert.equal( state.audio.error(), null );
+	const snapshot = state.audio.snapshot();
+	assert.ok( snapshot.residentBytes <= snapshot.limitBytes );
+	const completed = state.calls.length;
+	for ( let frame = 0; frame < 20; frame++ ) await settleAudioFrame( state, 6 + frame / 60, 2 << 20 );
+	assert.equal( state.calls.length, completed );
+	state.audio.prepareUi( false );
+	state.audio.nativeUi( "SND_BUTTON_CLICK", 7 );
+	for ( let frame = 0; frame < 5; frame++ ) await settleAudioFrame( state, 7 + frame / 60, 2 << 20 );
+	assert.equal( state.started.length, 1 );
+	assert.equal( state.audio.error(), null );
 });

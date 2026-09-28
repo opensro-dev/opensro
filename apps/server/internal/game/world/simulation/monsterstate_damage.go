@@ -43,10 +43,20 @@ func (s *MonsterState) CombatCandidatesForChain(divisionID string, center Spawn,
 	return s.combatCandidates(divisionID, instance.Pack(1, 1), center, reach, nowMs, true)
 }
 
+/*
+================
+CombatCandidatesInWorld
+================
+*/
 func (s *MonsterState) CombatCandidatesInWorld(divisionID string, world instance.ID, center Spawn, reach float64, nowMs int64, nearest bool) []monster.Instance {
 	return s.combatCandidates(divisionID, world, center, reach, nowMs, nearest)
 }
 
+/*
+================
+combatCandidates
+================
+*/
 func (s *MonsterState) combatCandidates(divisionID string, world instance.ID, center Spawn, reach float64, nowMs int64, nearest bool) []monster.Instance {
 	lease, exists := s.PopulationLease(divisionID, world)
 	if !exists {
@@ -55,6 +65,11 @@ func (s *MonsterState) combatCandidates(divisionID string, world instance.ID, ce
 	return s.CombatCandidatesInPopulation(divisionID, lease, center, reach, nowMs, nearest)
 }
 
+/*
+================
+CombatCandidatesInPopulation
+================
+*/
 func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease instance.Lease, center Spawn, reach float64, nowMs int64, nearest bool) []monster.Instance {
 	if reach < 0 || math.IsNaN(reach) || math.IsInf(reach, 0) {
 		return nil
@@ -104,10 +119,17 @@ func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease ins
 	return out
 }
 
+/*
+================
+MonsterDamagePlan
+================
+*/
 type MonsterDamagePlan struct {
 	// Abnormal holds the statuses 590680 rolled for this impact, applied
 	// only if the monster survives it (593F0C after 4FC).
-	Abnormal                []abnormal.Record
+	Abnormal []abnormal.Record
+	// Prepared outside character and population mutation doors; never resolved during commit.
+	AbnormalSources         map[uint32]MonsterAbnormalSource
 	GID, ExpectedHP, Damage uint32
 	// CreditGID is the source after authority-owned attribution (for example,
 	// a COS owner's GID). Zero represents an unattributed hit.
@@ -139,14 +161,14 @@ func (s *MonsterState) ApplyDamageBatch(divisionID string, plans []MonsterDamage
 			return nil, false
 		}
 		asPlanned := instance.CurrentHP != 0 && instance.CurrentHP == plan.ExpectedHP
-		if !asPlanned || !validImpactDisplacement(plan.Knockdown, plan.Knockback) {
+		if !asPlanned || !validImpactDisplacement(plan.Knockdown, plan.Knockback) || !validAbnormalSources(plan) {
 			return nil, false
 		}
 		seen[plan.GID] = true
 	}
 	results := make([]MonsterDamageResult, 0, len(plans))
 	for _, plan := range plans {
-		results = append(results, s.applyDamageLocked(divisionID, state, plan.GID, plan.Damage, plan.CreditGID, plan.Knockdown, plan.Knockback, plan.Abnormal))
+		results = append(results, s.applyDamageLocked(divisionID, state, plan))
 	}
 	return results, true
 }
@@ -178,7 +200,7 @@ func (s *MonsterState) ApplyDamageSequences(divisionID string, sequences [][]Mon
 			return nil, false
 		}
 		for _, plan := range plans {
-			if plan.GID != gid || !validImpactDisplacement(plan.Knockdown, plan.Knockback) {
+			if plan.GID != gid || !validImpactDisplacement(plan.Knockdown, plan.Knockback) || !validAbnormalSources(plan) {
 				return nil, false
 			}
 		}
@@ -188,7 +210,7 @@ func (s *MonsterState) ApplyDamageSequences(divisionID string, sequences [][]Mon
 	for _, plans := range sequences {
 		out := make([]MonsterDamageResult, 0, len(plans))
 		for _, plan := range plans {
-			result := s.applyDamageLocked(divisionID, state, plan.GID, plan.Damage, plan.CreditGID, plan.Knockdown, plan.Knockback, plan.Abnormal)
+			result := s.applyDamageLocked(divisionID, state, plan)
 			out = append(out, result)
 			if result.Fatal {
 				break
@@ -255,5 +277,5 @@ func (s *MonsterState) ApplyDamage(
 	if !ok {
 		return MonsterDamageResult{}, false
 	}
-	return s.applyDamageLocked(divisionID, state, gid, damage, 0, nil, nil, nil), true
+	return s.applyDamageLocked(divisionID, state, MonsterDamagePlan{GID: gid, Damage: damage}), true
 }

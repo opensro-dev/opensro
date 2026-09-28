@@ -25,6 +25,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+shippedOffense
+================
+*/
 func shippedOffense(t *testing.T, code string) enterworld.SkillRow {
 	t.Helper()
 	dir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
@@ -38,6 +43,11 @@ func shippedOffense(t *testing.T, code string) enterworld.SkillRow {
 	return row
 }
 
+/*
+================
+TestAdvancedOffenseCommitsMPCooldownAndDamageOnce
+================
+*/
 func TestAdvancedOffenseCommitsMPCooldownAndDamageOnce(t *testing.T) {
 	rt, clock, c, target := newCombatTestRuntime(t, 100000)
 	skill := shippedOffense(t, "SKILL_CH_SWORD_SMASH_A_01")
@@ -110,6 +120,11 @@ func TestAdvancedOffenseCommitsMPCooldownAndDamageOnce(t *testing.T) {
 
 }
 
+/*
+================
+TestAdvancedSpellUsesAuthoredRangeAndUnrestrictedWeapon
+================
+*/
 func TestAdvancedSpellUsesAuthoredRangeAndUnrestrictedWeapon(t *testing.T) {
 	rt, _, c, target := newCombatTestRuntime(t, 100000)
 	skill := shippedOffense(t, "SKILL_CH_FIRE_GIGONGSUL_A_01")
@@ -137,6 +152,11 @@ func TestAdvancedSpellUsesAuthoredRangeAndUnrestrictedWeapon(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAdvancedRefusalDoesNotSpendOrDamage
+================
+*/
 func TestAdvancedRefusalDoesNotSpendOrDamage(t *testing.T) {
 	for _, mode := range []string{"short-mp", "rng-failure", "unsupported-effect", "unlearned"} {
 		t.Run(mode, func(t *testing.T) {
@@ -181,6 +201,11 @@ func TestAdvancedRefusalDoesNotSpendOrDamage(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAdvancedPursuitCastsOnceAndCanBeCancelled
+================
+*/
 func TestAdvancedPursuitCastsOnceAndCanBeCancelled(t *testing.T) {
 	for _, cancel := range []bool{false, true} {
 		t.Run(fmt.Sprint(cancel), func(t *testing.T) {
@@ -229,6 +254,11 @@ func TestAdvancedPursuitCastsOnceAndCanBeCancelled(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAdvancedPercentageCostUsesMaximumAndFloorsBeforeAdmission
+================
+*/
 func TestAdvancedPercentageCostUsesMaximumAndFloorsBeforeAdmission(t *testing.T) {
 	rt, _, c, _ := newCombatTestRuntime(t, 100)
 	skill := enterworld.SkillRow{Group: 7, CoolTimeMs: 3000, Consumption: enterworld.SkillConsumption{MP: 3, MPPercent: 7, Pinned: true}}
@@ -254,6 +284,11 @@ func TestAdvancedPercentageCostUsesMaximumAndFloorsBeforeAdmission(t *testing.T)
 	}
 }
 
+/*
+================
+TestShippedPierceCarriesAtca
+================
+*/
 func TestShippedPierceCarriesAtca(t *testing.T) {
 	skill := shippedOffense(t, "SKILL_EU_WARRIOR_ONEHANDA_PIERCE_A_01")
 	if skill.OffenseRefusal != "" || !skill.Attack.Atca || skill.Attack.AtcaMask != 16832 || skill.Attack.AtcaPercent != 50 {
@@ -261,6 +296,11 @@ func TestShippedPierceCarriesAtca(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedMPDecreaseKeysArePinned
+================
+*/
 func TestShippedMPDecreaseKeysArePinned(t *testing.T) {
 	wizard := shippedOffense(t, "SKILL_EU_WIZARD_EARTHA_POINT_A_01")
 	if !wizard.DirectOffensePinned || !wizard.Attack.Parameters.Has(enterworld.ParameterWizardMPDecrease) {
@@ -272,6 +312,11 @@ func TestShippedMPDecreaseKeysArePinned(t *testing.T) {
 	}
 }
 
+/*
+================
+TestReqiShieldRequiresSecondaryTID4
+================
+*/
 func TestReqiShieldRequiresSecondaryTID4(t *testing.T) {
 	rt, _, c, target := newCombatTestRuntime(t, 100000)
 	skill := shippedOffense(t, "SKILL_EU_WARRIOR_ONEHANDA_SHIELD_A_01")
@@ -289,6 +334,11 @@ func TestReqiShieldRequiresSecondaryTID4(t *testing.T) {
 	}
 }
 
+/*
+================
+TestReqcDownAttackRequiresMotion8
+================
+*/
 func TestReqcDownAttackRequiresMotion8(t *testing.T) {
 	for _, downed := range []bool{false, true} {
 		t.Run(fmt.Sprint(downed), func(t *testing.T) {
@@ -336,6 +386,11 @@ func TestReqcDownAttackRequiresMotion8(t *testing.T) {
 
 // Advance the actual preparation owner. Return its public and actor-private
 // frames without changing opcodes or synthesizing a successful cast result.
+/*
+================
+releasePreparedSkillForTest
+================
+*/
 func releasePreparedSkillForTest(t *testing.T, rt *Runtime, now int64) OpResult {
 	t.Helper()
 	batches := rt.advanceProjectileCasts(now)
@@ -357,6 +412,11 @@ func releasePreparedSkillForTest(t *testing.T, rt *Runtime, now int64) OpResult 
 	return out
 }
 
+/*
+================
+installMPDecrease
+================
+*/
 func installMPDecrease(rt *Runtime, c *enterworld.Character, slot enterworld.SkillParameter) {
 	id := uint32(910000) + uint32(slot)
 	row := enterworld.SkillRow{ID: id, Group: id, Level: 1, PassiveParameters: enterworld.SkillPassiveParameters{Pinned: true}}
@@ -366,6 +426,11 @@ func installMPDecrease(rt *Runtime, c *enterworld.Character, slot enterworld.Ski
 	c.Skills = append(c.Skills, id)
 }
 
+/*
+================
+mpDecreaseOutcome
+================
+*/
 func mpDecreaseOutcome(t *testing.T, code string, slot enterworld.SkillParameter, cut bool) (spent int64, lost uint32) {
 	t.Helper()
 	rt, clock, c, target := newCombatTestRuntime(t, 100000)
@@ -405,6 +470,11 @@ func mpDecreaseOutcome(t *testing.T, code string, slot enterworld.SkillParameter
 	return prepared, target.CurrentHP - after.CurrentHP
 }
 
+/*
+================
+TestMPDecreaseCutsPreparedCostNotDamage
+================
+*/
 func TestMPDecreaseCutsPreparedCostNotDamage(t *testing.T) {
 	for _, tc := range []struct {
 		code string
@@ -424,6 +494,11 @@ func TestMPDecreaseCutsPreparedCostNotDamage(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAtcaUsesLiveAbnormalMask
+================
+*/
 func TestAtcaUsesLiveAbnormalMask(t *testing.T) {
 	var lost [2]uint32
 	for i, stun := range []bool{false, true} {
@@ -440,8 +515,9 @@ func TestAtcaUsesLiveAbnormalMask(t *testing.T) {
 		mp := int64(50000)
 		c.CurrentMP = &mp
 		if stun {
+			records := []abnormal.Record{{Status: abnormal.Stun, DurationMs: 10000, Level: 1, SourceGID: enterworld.ObjectIDForCharacter(c), SourceName: c.Name}}
 			applied := rt.Monsters.ApplyDamageSequence(testDivision, target.Gid, target.CurrentHP, []simulation.MonsterDamagePlan{{
-				GID: target.Gid, Abnormal: []abnormal.Record{{Status: abnormal.Stun, DurationMs: 10000, Level: 1, SourceGID: enterworld.ObjectIDForCharacter(c), SourceName: c.Name}},
+				GID: target.Gid, Abnormal: records, AbnormalSources: rt.Monsters.PrepareAbnormalSources(testDivision, records),
 			}})
 			if len(applied) != 1 || applied[0].Instance.AbnormalMask()&abnormal.Stun.Bit() == 0 {
 				t.Fatal("stun was not installed")
@@ -462,6 +538,11 @@ func TestAtcaUsesLiveAbnormalMask(t *testing.T) {
 	}
 }
 
+/*
+================
+TestReqcDanceRequiresSelectorBit
+================
+*/
 func TestReqcDanceRequiresSelectorBit(t *testing.T) {
 	guard := shippedOffense(t, "SKILL_EU_BARD_BATTLAA_GUARD_A_01")
 	if guard.SelectorMask != 1 {

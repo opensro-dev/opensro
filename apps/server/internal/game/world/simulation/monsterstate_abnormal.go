@@ -34,6 +34,11 @@ type MonsterAbnormalContext interface {
 }
 
 // SetAbnormalContext installs the runtime context before damage traffic.
+/*
+================
+SetAbnormalContext
+================
+*/
 func (s *MonsterState) SetAbnormalContext(ctx MonsterAbnormalContext) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -42,6 +47,11 @@ func (s *MonsterState) SetAbnormalContext(ctx MonsterAbnormalContext) {
 
 // MonsterAbnormalHit is one vfunc 4FC damage request from a status tick
 // (reason 2) or a time-bomb detonation (reason 1).
+/*
+================
+MonsterAbnormalHit
+================
+*/
 type MonsterAbnormalHit struct {
 	Status     abnormal.Status
 	SourceGID  uint32
@@ -53,6 +63,11 @@ type MonsterAbnormalHit struct {
 
 // MonsterAbnormalEffects are the outward consequences of one block
 // transaction; MonsterState has already committed the state they describe.
+/*
+================
+MonsterAbnormalEffects
+================
+*/
 type MonsterAbnormalEffects struct {
 	// MaskChanged asks the caller to publish the vitals mask (4A5C60 dirty bit).
 	MaskChanged bool
@@ -67,6 +82,11 @@ type MonsterAbnormalEffects struct {
 }
 
 // Merge folds another transaction's consequences into e.
+/*
+================
+Merge
+================
+*/
 func (e *MonsterAbnormalEffects) Merge(other MonsterAbnormalEffects) {
 	e.MaskChanged = e.MaskChanged || other.MaskChanged
 	e.CancelActions = e.CancelActions || other.CancelActions
@@ -78,6 +98,11 @@ func (e *MonsterAbnormalEffects) Merge(other MonsterAbnormalEffects) {
 	e.Detonations = append(e.Detonations, other.Detonations...)
 }
 
+/*
+================
+monsterAIEvent
+================
+*/
 type monsterAIEvent struct {
 	Event, Kind uint8
 	Source      uint32
@@ -85,24 +110,48 @@ type monsterAIEvent struct {
 
 // monsterAbnormalOwner adapts one monster under the population lock. It
 // mutates a private copy of the instance; the caller commits the copy.
-type monsterAbnormalOwner struct {
+/*
+================
+monsterAbnormalInput
+================
+*/
+type monsterAbnormalInput struct {
 	division string
 	ctx      MonsterAbnormalContext
 	state    *divisionMonsterState
 	instance *monster.Instance
-	block    *abnormal.Block
 	now      int64
-	fx       MonsterAbnormalEffects
-	ai       []monsterAIEvent
-	names    map[uint32]string
+	sources  map[uint32]MonsterAbnormalSource
 }
 
-func newMonsterAbnormalOwner(division string, ctx MonsterAbnormalContext, state *divisionMonsterState, instance *monster.Instance, now int64) *monsterAbnormalOwner {
+/*
+================
+monsterAbnormalOwner
+
+Mutates one detached instance while the population door is held. Source
+lookups are already resolved; callbacks cannot re-enter character authority.
+================
+*/
+type monsterAbnormalOwner struct {
+	monsterAbnormalInput
+	block *abnormal.Block
+	fx    MonsterAbnormalEffects
+	ai    []monsterAIEvent
+	names map[uint32]string
+}
+
+/*
+================
+newMonsterAbnormalOwner
+================
+*/
+func newMonsterAbnormalOwner(input monsterAbnormalInput) *monsterAbnormalOwner {
+	instance := input.instance
 	var block abnormal.Block
 	if instance.Abnormal != nil {
 		block = *instance.Abnormal
 	}
-	o := &monsterAbnormalOwner{division: division, ctx: ctx, state: state, instance: instance, block: &block, now: now, names: map[uint32]string{}}
+	o := &monsterAbnormalOwner{monsterAbnormalInput: input, block: &block, names: map[uint32]string{}}
 	instance.Abnormal = o.block
 	for i := range block.Slots {
 		if slot := block.Slots[i]; slot.Active {
@@ -113,40 +162,123 @@ func newMonsterAbnormalOwner(division string, ctx MonsterAbnormalContext, state 
 }
 
 // finish stores the mutated block, or nil once nothing remains.
+/*
+================
+finish
+================
+*/
 func (o *monsterAbnormalOwner) finish() {
 	if !o.block.Active() && o.block.Mask == 0 {
 		o.instance.Abnormal = nil
 	}
 }
 
-func (o *monsterAbnormalOwner) Alive() bool       { return o.instance.CurrentHP > 0 }
-func (o *monsterAbnormalOwner) IsPlayer() bool    { return false }
-func (o *monsterAbnormalOwner) IsMonster() bool   { return true }
+/*
+================
+Alive
+================
+*/
+func (o *monsterAbnormalOwner) Alive() bool { return o.instance.CurrentHP > 0 }
+
+/*
+================
+IsPlayer
+================
+*/
+func (o *monsterAbnormalOwner) IsPlayer() bool { return false }
+
+/*
+================
+IsMonster
+================
+*/
+func (o *monsterAbnormalOwner) IsMonster() bool { return true }
+
+/*
+================
+CurrentHP
+================
+*/
 func (o *monsterAbnormalOwner) CurrentHP() uint32 { return o.instance.CurrentHP }
-func (o *monsterAbnormalOwner) MaxHP() uint32     { return o.instance.EffectiveMaxHP() }
-func (o *monsterAbnormalOwner) MaxMP() uint32     { return 0 }
-func (o *monsterAbnormalOwner) Now() int64        { return o.now }
+
+/*
+================
+MaxHP
+================
+*/
+func (o *monsterAbnormalOwner) MaxHP() uint32 { return o.instance.EffectiveMaxHP() }
+
+/*
+================
+MaxMP
+================
+*/
+func (o *monsterAbnormalOwner) MaxMP() uint32 { return 0 }
+
+/*
+================
+Now
+================
+*/
+func (o *monsterAbnormalOwner) Now() int64 { return o.now }
+
+/*
+================
+Param
+================
+*/
 func (o *monsterAbnormalOwner) Param(id uint16) float32 {
 	if o.ctx == nil {
 		return 0
 	}
 	return o.ctx.Param(*o.instance, id)
 }
+
+/*
+================
+SourceExists
+================
+*/
 func (o *monsterAbnormalOwner) SourceExists(gid uint32) bool {
-	return o.ctx != nil && o.ctx.SourceExists(o.division, gid, o.names[gid])
+	source, ok := o.sources[gid]
+	return ok && source.Name == o.names[gid] && source.Exists
 }
+
+/*
+================
+SourceDead
+================
+*/
 func (o *monsterAbnormalOwner) SourceDead(gid uint32) bool {
-	return o.ctx != nil && o.ctx.SourceDead(o.division, gid, o.names[gid])
+	source, ok := o.sources[gid]
+	return ok && source.Name == o.names[gid] && source.Dead
 }
+
+/*
+================
+Roll
+================
+*/
 func (o *monsterAbnormalOwner) Roll(key uint32, chance int32) bool {
 	return chance > 0 && o.ctx != nil && o.ctx.Roll(o.division, o.instance.Gid, key, chance)
 }
+
+/*
+================
+ParamsChanged
+================
+*/
 func (o *monsterAbnormalOwner) ParamsChanged(speed bool) {
 	o.fx.SpeedChanged = o.fx.SpeedChanged || speed
 }
 
 // SetMotion ports vfunc 55C for the monster's motion hold. State zero falls
 // back to any still-active freeze/stun/sleep (4AAB60).
+/*
+================
+SetMotion
+================
+*/
 func (o *monsterAbnormalOwner) SetMotion(state, next uint8, delay float32) {
 	if state == 0 {
 		switch {
@@ -168,9 +300,20 @@ func (o *monsterAbnormalOwner) SetMotion(state, next uint8, delay float32) {
 	}
 	o.instance.Motion = monster.MotionHold{State: state, UntilMs: o.now + int64(float64(delay)*1000)}
 }
+
+/*
+================
+CancelActions
+================
+*/
 func (o *monsterAbnormalOwner) CancelActions(bool) { o.fx.CancelActions = true }
 
 // StopMove ports 4A9430: only a moving actor stops, at its live pose.
+/*
+================
+StopMove
+================
+*/
 func (o *monsterAbnormalOwner) StopMove() {
 	mover, ok := o.state.movers.lookup(o.instance.Gid)
 	if !ok || !mover.InFlight(o.now) {
@@ -184,17 +327,40 @@ func (o *monsterAbnormalOwner) StopMove() {
 	pose := mover.Pose
 	o.fx.Halted = &pose
 }
+
+/*
+================
+AIEvent
+================
+*/
 func (o *monsterAbnormalOwner) AIEvent(event, kind uint8, source uint32) {
 	o.ai = append(o.ai, monsterAIEvent{event, kind, source})
 }
+
+/*
+================
+Hit
+================
+*/
 func (o *monsterAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reason uint8, status abnormal.Status) {
 	hit := MonsterAbnormalHit{Status: status, SourceGID: source, SourceName: o.names[source], Credited: credited, Damage: damage, Reason: reason}
 	o.fx.Hits = append(o.fx.Hits, hit)
 	o.instance.CurrentHP -= min(o.instance.CurrentHP, damage)
 }
+
+/*
+================
+ConsumeResources
+================
+*/
 func (o *monsterAbnormalOwner) ConsumeResources(int32, int32, uint8) {} // monsters carry no MP pool
 // Detonate ports 59B300: a victim with more HP than the bomb takes the bomb
 // damage (reason 1); otherwise it takes its remaining HP and dies (flag 80).
+/*
+================
+Detonate
+================
+*/
 func (o *monsterAbnormalOwner) Detonate(slot abnormal.Slot) {
 	damage := slot.Damage1C
 	if o.instance.CurrentHP <= damage {
@@ -207,11 +373,17 @@ func (o *monsterAbnormalOwner) Detonate(slot abnormal.Slot) {
 
 // applyAbnormalLocked runs the damage consequences on a surviving monster:
 // root/sleep/stun break on a damaging hit, then the hit's own statuses.
-func (s *MonsterState) applyAbnormalLocked(division string, state *divisionMonsterState, instance *monster.Instance, damaged bool, records []abnormal.Record, now int64) MonsterAbnormalEffects {
+/*
+================
+applyAbnormalLocked
+================
+*/
+func (s *MonsterState) applyAbnormalLocked(input monsterAbnormalInput, damaged bool, records []abnormal.Record) MonsterAbnormalEffects {
+	instance, state, now := input.instance, input.state, input.now
 	if instance.CurrentHP == 0 || !damaged && len(records) == 0 {
 		return MonsterAbnormalEffects{}
 	}
-	o := newMonsterAbnormalOwner(division, s.abnormalContext, state, instance, now)
+	o := newMonsterAbnormalOwner(input)
 	before := o.block.Mask
 	if damaged && o.block.BreakOnHit(o) {
 		o.fx.MaskChanged = true
@@ -229,6 +401,11 @@ func (s *MonsterState) applyAbnormalLocked(division string, state *divisionMonst
 	return o.fx
 }
 
+/*
+================
+trackAbnormal
+================
+*/
 func (state *divisionMonsterState) trackAbnormal(gid uint32, block *abnormal.Block) {
 	if block == nil {
 		delete(state.abnormalActive, gid)
@@ -240,6 +417,11 @@ func (state *divisionMonsterState) trackAbnormal(gid uint32, block *abnormal.Blo
 	state.abnormalActive[gid] = struct{}{}
 }
 
+/*
+================
+queueAIEvents
+================
+*/
 func (state *divisionMonsterState) queueAIEvents(gid uint32, events []monsterAIEvent) {
 	if len(events) == 0 {
 		return
@@ -251,6 +433,11 @@ func (state *divisionMonsterState) queueAIEvents(gid uint32, events []monsterAIE
 }
 
 // takeAIEvents consumes the tactics events queued by fear and confusion.
+/*
+================
+takeAIEvents
+================
+*/
 func (s *MonsterState) takeAIEvents(division string, gid uint32) []monsterAIEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -261,12 +448,22 @@ func (s *MonsterState) takeAIEvents(division string, gid uint32) []monsterAIEven
 }
 
 // MonsterAbnormalCandidate is one monster with an active block.
+/*
+================
+MonsterAbnormalCandidate
+================
+*/
 type MonsterAbnormalCandidate struct {
 	DivisionID string
 	Instance   monster.Instance
 }
 
 // AbnormalCandidates lists monsters whose blocks need 4A4390 this tick.
+/*
+================
+AbnormalCandidates
+================
+*/
 func (s *MonsterState) AbnormalCandidates() []MonsterAbnormalCandidate {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -293,6 +490,11 @@ func (s *MonsterState) AbnormalCandidates() []MonsterAbnormalCandidate {
 
 // MonsterAbnormalPlan is a dry-run of 4A4390 on a detached copy. Commit
 // applies it only while the live block and HP are still the planned inputs.
+/*
+================
+MonsterAbnormalPlan
+================
+*/
 type MonsterAbnormalPlan struct {
 	Division string
 	GID      uint32
@@ -304,19 +506,37 @@ type MonsterAbnormalPlan struct {
 }
 
 // PlanAbnormalUpdate evaluates the update without committing anything.
+/*
+================
+PlanAbnormalUpdate
+================
+*/
 func (s *MonsterState) PlanAbnormalUpdate(division string, gid uint32, now int64) (MonsterAbnormalPlan, bool) {
+	before, ok := s.Get(division, gid)
+	if !ok || before.Abnormal == nil {
+		return MonsterAbnormalPlan{}, false
+	}
+	var records []abnormal.Record
+	for _, slot := range before.Abnormal.Slots {
+		if slot.Active {
+			records = append(records, abnormal.Record{SourceGID: slot.SourceGID, SourceName: slot.SourceName})
+		}
+	}
+	sources := s.PrepareAbnormalSources(division, records)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
 	instance, ok := state.instances.lookup(gid)
-	if !ok || instance.Abnormal == nil {
+	// Resolving source facts released the population door. Reject an
+	// intervening hit or status replacement before evaluating its callbacks.
+	if !ok || instance.Abnormal != before.Abnormal || instance.CurrentHP != before.CurrentHP {
 		return MonsterAbnormalPlan{}, false
 	}
 	plan := MonsterAbnormalPlan{Division: division, GID: gid, before: instance.Abnormal, beforeHP: instance.CurrentHP}
 	copyInstance := instance
 	// The dry run must not mutate the live mover; StopMove is a start-only
 	// callback, so updates never reach it.
-	o := newMonsterAbnormalOwner(division, s.abnormalContext, state, &copyInstance, now)
+	o := newMonsterAbnormalOwner(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, instance: &copyInstance, now: now, sources: sources})
 	if instance.CurrentHP == 0 {
 		o.block.ClearAll(o)
 		o.fx.MaskChanged = true
@@ -400,12 +620,22 @@ func MonsterAbnormalPayload(instance monster.Instance) []byte {
 }
 
 // MonsterSpeedPayload is 376F (research 30D0): the effective movement pair.
+/*
+================
+MonsterSpeedPayload
+================
+*/
 func MonsterSpeedPayload(instance monster.Instance) []byte {
 	return wire.NewWriter(12).U32(instance.Gid).F32(float32(instance.WalkSpeed())).F32(float32(instance.RunSpeed())).Payload()
 }
 
 // ForgetAbnormalSource detaches a departing caster from every block in the
 // division: later ticks run uncredited, and nobody is cured.
+/*
+================
+ForgetAbnormalSource
+================
+*/
 func (s *MonsterState) ForgetAbnormalSource(division string, gid uint32, name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -429,6 +659,11 @@ func (s *MonsterState) ForgetAbnormalSource(division string, gid uint32, name st
 }
 
 // MonsterCorrectionPayload is the B2F5 settle a StopMove publishes.
+/*
+================
+MonsterCorrectionPayload
+================
+*/
 func MonsterCorrectionPayload(gid uint32, pose monster.Pose) []byte {
 	return correctionFrame(gid, pose).Payload
 }

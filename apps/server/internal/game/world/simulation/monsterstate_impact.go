@@ -10,18 +10,27 @@ package simulation
 
 import (
 	"math"
-	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/internal/vitals"
 	"opensro.online/server/internal/game/world/monster"
 )
 
 // MonsterKnockdownPlan is the displacement and motion-timer consequence of
 // one successful KO roll. HP, pose and timer commit under the same owner lock.
+/*
+================
+MonsterKnockdownPlan
+================
+*/
 type MonsterKnockdownPlan struct {
 	Pose    monster.Pose
 	UntilMs int64
 }
 
+/*
+================
+validKnockdownPlan
+================
+*/
 func validKnockdownPlan(plan *MonsterKnockdownPlan) bool {
 	if plan == nil {
 		return true
@@ -32,6 +41,11 @@ func validKnockdownPlan(plan *MonsterKnockdownPlan) bool {
 
 // ApplyDamageSequence validates the original victim once, then commits every
 // authored impact atomically. The first fatal impact ends the sequence.
+/*
+================
+ApplyDamageSequence
+================
+*/
 func (s *MonsterState) ApplyDamageSequence(division string, gid, expectedHP uint32, plans []MonsterDamagePlan) []MonsterDamageResult {
 	if len(plans) == 0 || len(plans) > 255 {
 		return nil
@@ -44,13 +58,13 @@ func (s *MonsterState) ApplyDamageSequence(division string, gid, expectedHP uint
 		return nil
 	}
 	for _, p := range plans {
-		if p.GID != gid || !validImpactDisplacement(p.Knockdown, p.Knockback) {
+		if p.GID != gid || !validImpactDisplacement(p.Knockdown, p.Knockback) || !validAbnormalSources(p) {
 			return nil
 		}
 	}
 	out := make([]MonsterDamageResult, 0, len(plans))
 	for _, p := range plans {
-		result := s.applyDamageLocked(division, state, gid, p.Damage, p.CreditGID, p.Knockdown, p.Knockback, p.Abnormal)
+		result := s.applyDamageLocked(division, state, p)
 		out = append(out, result)
 		if result.Fatal {
 			break
@@ -59,7 +73,14 @@ func (s *MonsterState) ApplyDamageSequence(division string, gid, expectedHP uint
 	return out
 }
 
-func (s *MonsterState) applyDamageLocked(division string, state *divisionMonsterState, gid, damage, creditGID uint32, knockdown, knockback *MonsterKnockdownPlan, records []abnormal.Record) MonsterDamageResult {
+/*
+================
+applyDamageLocked
+================
+*/
+func (s *MonsterState) applyDamageLocked(division string, state *divisionMonsterState, plan MonsterDamagePlan) MonsterDamageResult {
+	gid, damage, creditGID := plan.GID, plan.Damage, plan.CreditGID
+	knockdown, knockback := plan.Knockdown, plan.Knockback
 	nowMs := s.nowMillis()
 	instance := finishSummonAction(state.instances.get(gid), nowMs)
 	before := instance.CurrentHP
@@ -108,7 +129,7 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 	}
 	// 593BEF: a damaging result breaks root/sleep/stun, then 593F0C applies
 	// the statuses this hit rolled, both only on a surviving actor.
-	effects := s.applyAbnormalLocked(division, state, &instance, damage > 0, records, nowMs)
+	effects := s.applyAbnormalLocked(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, instance: &instance, now: nowMs, sources: plan.AbnormalSources}, damage > 0, plan.Abnormal)
 	state.instances.set(gid, instance)
 	result := MonsterDamageResult{Population: state.lease, Instance: instance, BeforeHP: before, CurrentHP: instance.CurrentHP, Applied: applied, Fatal: before > 0 && instance.CurrentHP == 0, Knockdown: committed, Abnormal: effects}
 	if knockback != nil {
@@ -121,6 +142,11 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 	return result
 }
 
+/*
+================
+validImpactDisplacement
+================
+*/
 func validImpactDisplacement(ko, kb *MonsterKnockdownPlan) bool {
 	return !(ko != nil && kb != nil) && validKnockdownPlan(ko) && validKnockdownPlan(kb)
 }
