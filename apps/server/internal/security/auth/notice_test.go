@@ -8,6 +8,7 @@ notice_test.go - notices cannot become player credentials or survive expiry
 package auth
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +62,13 @@ func TestSignedNoticeBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, value := range map[string]string{"session": session, "truncated": token[:len(token)-4], "oversized": strings.Repeat("x", noticeMaxTokenBytes+1)} {
+	parts := strings.Split(strings.TrimPrefix(token, noticeDomain), ".")
+	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := noticeDomain + base64.RawURLEncoding.EncodeToString([]byte(strings.ReplaceAll(string(payload), "Maintenance", "Unauthorized"))) + "." + parts[1]
+	for name, value := range map[string]string{"tampered": tampered, "session": session, "truncated": token[:len(token)-4], "oversized": strings.Repeat("x", noticeMaxTokenBytes+1)} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := verifier.VerifyNotice(value, now); err == nil {
 				t.Fatal("invalid token accepted")

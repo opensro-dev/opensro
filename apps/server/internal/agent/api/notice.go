@@ -72,7 +72,7 @@ func (api *API) handleNotice(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid operator notice", http.StatusUnauthorized)
 		return
 	}
-	if !api.notices.deliver(string(body), claims.Message, claims.Expires, now) {
+	if !api.notices.deliver(claims.KeyID+":"+claims.Nonce, claims.Message, claims.Expires, now) {
 		http.Error(w, "notice capacity reached", http.StatusTooManyRequests)
 		return
 	}
