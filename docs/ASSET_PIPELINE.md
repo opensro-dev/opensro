@@ -9,6 +9,15 @@ Inputs, beside the checkout: `../SRO_Client.exe` and `../extracted/`
 (`Data_extracted`, `Map_extracted`, `Media_extracted`, `Particles_extracted`,
 and so on). Python 3.12 is used for image and font conversion.
 
+Lens mip resources are generated automatically before image conversion, and
+by standalone world builds before copying sky assets. This uses Windows'
+built-in 32-bit PowerShell/.NET and the 32-bit `d3dx9_39.dll` from
+[Microsoft's DirectX End-User Runtime](https://www.microsoft.com/en-us/download/details.aspx?id=35).
+No C++ compiler or DirectX SDK is needed. The fixed runtime and process bitness
+preserve the existing compressed mip bytes. Missing-runtime errors include the
+installation link. Outputs are rebuilt from `Map_extracted/sun/lens1..8.ddj`
+into `.generated/intermediate/images/Map_extracted/sun/`.
+
 | Output | Contents |
 | --- | --- |
 | `.generated/client-public/assets/` | Published browser assets, served at `/assets/...` |

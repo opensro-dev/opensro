@@ -14,6 +14,7 @@ is described in [DEPLOYMENT.md](../apps/server/ops/docs/DEPLOYMENT.md).
 | Node.js | 24 LTS (CI runs it); 22.15 is the oldest supported |
 | pnpm | 12.6.0, the version `package.json` `packageManager` names; through Corepack (`npm install --global corepack` if missing) |
 | Python | 3.12 (`py -3`), used by image and font conversion during the asset build |
+| DirectX End-User Runtime | Install [Microsoft's runtime](https://www.microsoft.com/en-us/download/details.aspx?id=35); lens mip generation uses its 32-bit `d3dx9_39.dll`. Windows' built-in DirectX alone does not supply this library. |
 | Nomad | 2.0.7 at `.tools/nomad/2.0.7/nomad.exe` (see below) |
 | Browser | Current Chrome or Edge with WebGPU |
 

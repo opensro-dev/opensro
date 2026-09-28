@@ -752,7 +752,6 @@ scripts/build/webManifest.mjs
 scripts/build/world/assets/buildDungeonResources.mjs
 scripts/build/world/assets/buildDungeonWorlds.mjs
 scripts/build/world/assets/copyMissionMinimapTileImages.mjs
-scripts/build/world/assets/copySkyImages.mjs
 scripts/build/world/assets/copyTerrainLightmaps.mjs
 scripts/build/world/assets/copyTerrainTileImages.mjs
 scripts/build/world/assets/copyWaterImages.mjs

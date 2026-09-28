@@ -57,6 +57,7 @@ import {
 } from "./build/shared/resourceBuildFingerprint.mjs";
 import { runPython } from "./build/shared/pythonRun.mjs";
 import { runConvertImages } from "./build/shared/convertImagesRunner.mjs";
+import { buildNativeLensResources } from "./build/shared/nativeLensResources.mjs";
 import { mapWithConcurrency } from "./build/shared/asyncUtils.mjs";
 import {
 	buildCharacterSelectInterfaceModels,
@@ -172,6 +173,7 @@ async function buildSroResources() {
 	// tries to publish terrain, UI, model or effect textures. The converter is
 	// incremental, so an ordinary non-compacted rebuild only scans and skips fresh
 	// outputs; convertImagesRunner suppresses the narrower duplicate passes below.
+	await timed( "nativeLensResources", () => buildNativeLensResources() );
 	const sourceImages = await timed( "sourceImages", () => runConvertImages( [] ) );
 	if ( sourceImages.status !== 0 ) {
 		throw new Error( `Source image conversion failed with exit status ${sourceImages.status}.` );
