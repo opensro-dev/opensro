@@ -122,6 +122,35 @@ def application_routes(manifest, payloads):
 
 
 # ================
+# retain_shared_asset
+#
+# Vite names identify decoded application bytes, not their HTTP encoding. gzip
+# can differ by operating-system header or compressor version for the same URL.
+# Keep an existing valid representation unchanged; reject different content and
+# bound decompression by the already-verified identity body's length.
+# ================
+def retain_shared_asset(root, name, outputs):
+	public_parents(root, name)
+	shared = Path(root) / name
+	data = outputs[name]
+	if not shared.exists():
+		atomic_bytes(shared, data)
+		return
+	if digest(shared) == hashlib.sha256(data).hexdigest():
+		return
+	if not name.endswith(".gz"):
+		raise ValueError("hashed application filename collision: " + name)
+	identity_bytes = outputs[name.removesuffix(".gz")]
+	try:
+		with gzip.open(shared, "rb") as stream:
+			retained = stream.read(len(identity_bytes) + 1)
+	except (OSError, EOFError) as error:
+		raise ValueError("stored application encoding is corrupt: " + name) from error
+	if retained != identity_bytes:
+		raise ValueError("hashed application filename collision: " + name)
+
+
+# ================
 # stage
 #
 # Admission happens before copying assets. A candidate is made visible only
@@ -161,13 +190,7 @@ def stage(config, archive):
 			public_parents(staging, name)
 			atomic_bytes(staging / name, data)
 			if name.startswith("assets/"):
-				public_parents(config["application_assets"], name)
-				shared = Path(config["application_assets"]) / name
-				if shared.exists():
-					if digest(shared) != hashlib.sha256(data).hexdigest():
-						raise ValueError("hashed application filename collision")
-				else:
-					atomic_bytes(shared, data)
+				retain_shared_asset(config["application_assets"], name, outputs)
 		staging.chmod(0o755)
 		os.rename(staging, destination)
 		record.mkdir(mode=0o700)

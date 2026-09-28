@@ -11,6 +11,7 @@ remain the same ones used on the production host.
 """
 
 import copy
+import gzip
 import hashlib
 import json
 import os
@@ -130,6 +131,48 @@ class ClientDeployTests(unittest.TestCase):
 		new = Path(self.config["client_candidates"]) / staged["candidate"]
 		self.assertEqual((new / "index.html").read_bytes(), b"new browser")
 		self.assertTrue(os.path.samefile(new / "assets/data.bin", self.live / "assets/data.bin"))
+
+	# ================
+	# test_staging_preserves_candidate_encoding_and_existing_shared_encoding
+	#
+	# The manifest owns the candidate's exact compressed bytes, while the shared
+	# URL owns decoded content. Existing browser tabs keep their original variant.
+	# ================
+	def test_staging_preserves_candidate_encoding_and_existing_shared_encoding(self):
+		body = b"export const value = 'immutable';"
+		encoded = gzip.compress(body, mtime=1)
+		retained = gzip.compress(body, mtime=2)
+		name = "assets/entry-abcdefgh.js"
+		package = self.root / "package"
+		payloads = {"application/" + name: body, "encoded/application.gz": encoded}
+		manifest = copy.deepcopy(self.next)
+		for file, data in payloads.items():
+			path = package / file
+			path.parent.mkdir(parents=True, exist_ok=True)
+			path.write_bytes(data)
+			manifest["files"].append({"path": file, "length": len(data),
+				"sha256": hashlib.sha256(data).hexdigest(), "kind": "application"})
+		manifest["routes"].append({"url": "/" + name, "file": "application/" + name,
+			"offset": 0, "length": len(body), "mime": "text/javascript",
+			"gzip": {"file": "encoded/application.gz", "offset": 0, "length": len(encoded)}})
+		identity = {"source": manifest["sourceHash"], "files": manifest["files"], "routes": manifest["routes"]}
+		manifest["releaseId"] = hashlib.sha256(json.dumps(identity, separators=(",", ":")).encode()).hexdigest()
+		write_state(package / "release.json", manifest)
+		plan = dict(self.plan, release=manifest["releaseId"])
+		with patch.object(client_bundle, "build_plan", return_value=plan):
+			self.archive.unlink()
+			client_bundle.bundle(package, self.archive, read_state(self.config["production_state"]))
+		shared = Path(self.config["application_assets"]) / name
+		shared.parent.mkdir(parents=True)
+		shared.write_bytes(body)
+		compressed = shared.with_name(shared.name + ".gz")
+		compressed.write_bytes(retained)
+		staged = stage(self.config, self.archive)
+		candidate_root = Path(self.config["client_candidates"]) / staged["candidate"]
+		self.assertEqual((candidate_root / (name + ".gz")).read_bytes(), encoded)
+		self.assertEqual(compressed.read_bytes(), retained)
+		self.assertEqual(stage(self.config, self.archive), staged)
+		self.assertEqual(Path(self.config["client_link"]).resolve(), self.live)
 
 	# ================
 	# test_staging_retry_reuses_only_unchanged_bytes
