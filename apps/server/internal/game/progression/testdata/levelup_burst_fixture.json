@@ -1,5 +1,5 @@
 {
-  "comment": "FABLE-1 <-> FABLE-5 levelling-burst drift fixture (levelup-wave board seq 33/41/55), corrected by the v1.188 semantic producer proof. The Go side (progression levelup_fixture_test.go) pins the REAL GrantExperience emitter to these bytes over the SHIPPED leveldata; the harness side drives the SAME bytes through the REAL sub_777670 / sub_75be90 / sub_779620 folds in retail semantic order and asserts the client lands on the same persisted state. Either side drifting = red on that side. Byte layouts: 0x36B0 [u32 gid]; 0x343C wire.BaseStats (24 staging zeros, u32 maxHp, u32 maxMp, u16 strWord, u16 intWord); 0x30D2 [u32 sourceGid][s32 expDelta][s32 skillExpDelta][u8 flags=0](+[u16 statPoints ABSOLUTE] iff crossing). All little-endian, hex lowercase.",
+  "comment": "Level-transition regression fixture over shipped leveldata. SR_GameServer 4E5065..4E50AF invokes reduced HP/MP recovery on an upward crossing; the v1.150 client reads absolute currents through 77A080 (33A6), independently of 343C maxima and 30D2 experience. The burst carries presentation, final maxima, recovered currents with source 0080, then the experience delta and absolute stat-point tail. Values are little-endian; expected bytes are authored independently of the emitter.",
   "playerGid": 100002,
   "leveldataCol1Rows": { "1": 118, "2": 470, "3": 1058 },
   "scenarios": [
@@ -19,6 +19,7 @@
       "frames": [
         { "opcode": "0x36B0", "payloadHex": "a2860100" },
         { "opcode": "0x343C", "payloadHex": "06000000070000000a0000000c000000040006000d000d00e4000000e400000016001600" },
+        { "opcode": "0x33A6", "payloadHex": "a2860100800003e4000000e4000000" },
         { "opcode": "0x30D2", "payloadHex": "000000002602000000000000000700" }
       ],
       "persisted": { "level": 3, "experience": 12, "statPoints": 7, "strength": 22, "intellect": 22, "maxLevel": 3 }

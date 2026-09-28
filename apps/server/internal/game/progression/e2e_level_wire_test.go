@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+e2e_level_wire_test.go - progression through transport and persisted authority.
+
+Three boots exercise disabled diagnostics, real level and stat transactions,
+then restored state. Expected packets are independent byte literals.
+
+===========================================================================
+*/
+
 package progression_test
 
 import (
@@ -15,38 +26,13 @@ import (
 // Levelling lifecycle over the real wire and authority store.
 const e2eLevelCharName = "e2eLvlTester"
 
-// TestLevellingPathEndToEndOverWire drives the LANE-1 levelling burst over
-// the REAL transport against the REAL store - the client half's e2e proof
-// (levelup wave, LANE-5; scenario = the drift fixture's S1/S2, board seq
-// 41/55, over shipped leveldata rows 1-3: 118/470/1058). Three server
-// boots on ONE store dir:
-//
-//	boot A (trigger OFF): 0xDE01 is not registered - the hub drops the
-//	  frame silently and nothing changes (the env gate is player-visible
-//	  security, so it is proven over the wire, not only in unit tests);
-//	boot B (trigger ON):
-//	  S1 +50 exp at L1 (50 < 118): ONE 13-byte 0x30D2, no trailing u16,
-//	     no companion frames;
-//	  S2 +550 exp (50+550 = 600 walks 600-118-470 -> LEVEL 3 remainder
-//	     12, a multi-level single grant): 0x36B0 [playerGid] (the
-//	     SYSTEM_LEVELUP/snd_levup presenter the browser bridge hosts via
-//	     the sub_777670 fold), then 0x343C whose DERIVED maxima GREW to
-//	     trunc(1.02^2 x 22 x 10) = 228, then the 15-byte 0x30D2 whose
-//	     trailing u16 is the ABSOLUTE 7 (seed 1 + 3x2 - an additive
-//	     client or a paired 0x30B3 type-3 would land on 8);
-//	  S3 +STR spends one granted point: maxHP 239 != maxMP 228, so a
-//	     swapped or echoed field cannot pass (cannot-coincide);
-//	  S4 +500 skill exp: 0x30B3 type 2 with the ABSOLUTE SP 1 (the C5
-//	     yield ENABLED per COORD, board seq 202: 500/400 = 1 period),
-//	     then the 13-byte 0x30D2; the mod-400 wrap persists as 100;
-//	  refusal probes (wrong length, both-zero): SILENT, proven by the
-//	     game-ready barrier;
-//	boot C (trigger ON): the walk is PERSISTED state - the store view
-//	  and a fresh EnterWorld's 0x32B3 both carry level 3 / exp 12 /
-//	  statPoints 6 / skillExp 100 (store also skillPoints 1, the
-//	  yielded SP surviving the reboot), the blob carries STR 23 / INT 22,
-//	  the stale maxima keys stay stripped, and one +1 grant proves the
-//	  reopened trigger continues from the persisted remainder.
+/*
+================
+TestLevellingPathEndToEndOverWire
+
+The real transport and store must agree on recovered gauges across restart.
+================
+*/
 func TestLevellingPathEndToEndOverWire(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "authority")
 
@@ -148,6 +134,8 @@ func TestLevellingPathEndToEndOverWire(t *testing.T) {
 	// the auto +1/+1 growth, never the seeded 500/400 decoys.
 	assertStatBlock(t, expectFrame(t, conn, wire.OpBaseStats, "S2 stat block"),
 		uint16(enterworld.BaseStat)+2, uint16(enterworld.BaseStat)+2, 228, 228)
+	wantVitals := append(append([]byte(nil), wantGid...), 0x80, 0, 3, 228, 0, 0, 0, 228, 0, 0, 0)
+	assertBytes(t, expectFrame(t, conn, 0x33a6, "S2 recovered gauges"), wantVitals, "S2 HP/MP recovery")
 	assertBytes(t, expectFrame(t, conn, wire.OpExpUpdate, "S2 exp update"),
 		[]byte{0, 0, 0, 0, 0x26, 0x02, 0, 0, 0, 0, 0, 0, 0, 0x07, 0}, "S2 0x30D2 (15 bytes, absolute statPoints 7)")
 
@@ -193,6 +181,9 @@ func TestLevellingPathEndToEndOverWire(t *testing.T) {
 			t.Fatalf("characters after reboot = %d, want 1", len(characters))
 		}
 		c := characters[0]
+		if c.CurrentHP == nil || c.CurrentMP == nil || *c.CurrentHP != 228 || *c.CurrentMP != 228 {
+			t.Errorf("restored gauges = %v/%v, want recovered 228/228", c.CurrentHP, c.CurrentMP)
+		}
 		if c.Level == nil || *c.Level != 3 {
 			t.Errorf("restored level = %v, want 3", c.Level)
 		}

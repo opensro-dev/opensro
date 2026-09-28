@@ -1,11 +1,15 @@
-package progression
+/*
+===========================================================================
 
-// Tests for the experience / level-up authority core (levelup wave,
-// LANE-1). The scenario constants S1/S2 are the board-agreed drift
-// fixture rows (levelup-wave seq 41/55): shipped leveldata column 1
-// rows 1-3 (118 / 470 / 1058), seed stat points 1 (deliberately not
-// 0/3/6, so the ABSOLUTE trailing u16 cannot coincide with a per-level
-// grant amount - the cannot-coincide rule).
+levelup_test.go - progression state, packet order, and refusal boundaries.
+
+Curve rows 118/470/1058 exercise single and multiple crossings. One seeded
+stat point distinguishes the absolute wire total from a per-level grant.
+
+===========================================================================
+*/
+
+package progression
 
 import (
 	"bytes"
@@ -17,9 +21,13 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// levelupTestCharacter is the fixture seed: fresh CH character, level 1,
-// exp 0, 1 stat point, STR/INT 20/20 (creation base), ID 2 so the
-// player gid is 100002.
+/*
+================
+levelupTestCharacter
+
+Seeds a fresh Chinese character with deliberately nonzero unspent points.
+================
+*/
 func levelupTestCharacter() *enterworld.Character {
 	c := &enterworld.Character{
 		ID:            2,
@@ -35,15 +43,25 @@ func levelupTestCharacter() *enterworld.Character {
 	return c
 }
 
+/*
+================
+frameHex
+
+Displays the emitted bytes without using the encoder under test.
+================
+*/
 func frameHex(t *testing.T, frame wire.Frame) string {
 	t.Helper()
 	return hex.EncodeToString(frame.Payload)
 }
 
-// TestGrantExperienceAccumulatesWithoutCrossing is scenario S1: +50 exp
-// at level 1 (50 < 118) moves ONLY the persisted exp and emits ONLY the
-// 13-byte 0x30D2 frame - no trailing u16, no 0x36B0, no 0x343C, no
-// 0x30B3.
+/*
+================
+TestGrantExperienceAccumulatesWithoutCrossing
+
+A grant below the next threshold changes EXP without a level or recovery.
+================
+*/
 func TestGrantExperienceAccumulatesWithoutCrossing(t *testing.T) {
 	character := levelupTestCharacter()
 	rt := newTestRuntime(character)
@@ -71,13 +89,13 @@ func TestGrantExperienceAccumulatesWithoutCrossing(t *testing.T) {
 	}
 }
 
-// TestGrantExperienceMultiLevelSingleGrant is scenario S2: from level 1
-// / exp 50, +550 exp walks TWO levels in one grant (600-118=482,
-// 482-470=12 -> level 3 remainder 12, the native do/while shape) and
-// the burst is exactly [0x36B0 gid]
-// [0x343C with STR/INT 22/22 and derived maxima 228/228]
-// [0x30D2 15B with absolute statPoints 7]. The presentation/stat
-// transition precedes the EXP delta, matching the v1.188 semantic producer.
+/*
+================
+TestGrantExperienceMultiLevelSingleGrant
+
+Two crossings commit final stats and recovered gauges before the EXP tail.
+================
+*/
 func TestGrantExperienceMultiLevelSingleGrant(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Experience = int64Ptr(50)
@@ -85,8 +103,8 @@ func TestGrantExperienceMultiLevelSingleGrant(t *testing.T) {
 
 	result := rt.GrantExperience(character, 550, 0, 0)
 
-	if len(result.Frames) != 3 {
-		t.Fatalf("frames = %d, want 3 (0x36B0, 0x343C, 0x30D2)", len(result.Frames))
+	if len(result.Frames) != 4 {
+		t.Fatalf("frames = %d, want presentation, maxima, currents, EXP", len(result.Frames))
 	}
 	if result.Frames[0].Opcode != wire.OpLevelUpEffect {
 		t.Fatalf("frame[0] = 0x%04X, want 0x36B0", result.Frames[0].Opcode)
@@ -107,11 +125,11 @@ func TestGrantExperienceMultiLevelSingleGrant(t *testing.T) {
 	if got := frameHex(t, result.Frames[1]); got != wantBlock {
 		t.Errorf("0x343C payload = %s, want %s", got, wantBlock)
 	}
-	if result.Frames[2].Opcode != wire.OpExpUpdate {
-		t.Fatalf("frame[2] = 0x%04X, want 0x30D2", result.Frames[2].Opcode)
+	if result.Frames[2].Opcode != vitalsUpdateOpcode || result.Frames[3].Opcode != wire.OpExpUpdate {
+		t.Fatalf("grant tail = %+v, want currents then EXP", result.Frames[2:])
 	}
 	// [gid=0][+550][0][flags=0][statPoints=7 ABSOLUTE]: 1 seeded + 3x2.
-	if got, want := frameHex(t, result.Frames[2]), "000000002602000000000000000700"; got != want {
+	if got, want := frameHex(t, result.Frames[3]), "000000002602000000000000000700"; got != want {
 		t.Errorf("0x30D2 payload = %s, want %s", got, want)
 	}
 
@@ -127,16 +145,21 @@ func TestGrantExperienceMultiLevelSingleGrant(t *testing.T) {
 	if character.MaxLevel == nil || *character.MaxLevel != 3 {
 		t.Errorf("MaxLevel watermark = %v, want 3", character.MaxLevel)
 	}
-	// LEAVE policy: absent currents were pinned at the PRE-levelup
-	// derived maxima (level 1, stat 20 -> 200), never the raised 228.
-	if character.CurrentHP == nil || *character.CurrentHP != 200 {
-		t.Errorf("CurrentHP = %v, want materialized 200", character.CurrentHP)
+	if character.CurrentHP == nil || *character.CurrentHP != 228 {
+		t.Errorf("CurrentHP = %v, want recovered 228", character.CurrentHP)
 	}
-	if character.CurrentMP == nil || *character.CurrentMP != 200 {
-		t.Errorf("CurrentMP = %v, want materialized 200", character.CurrentMP)
+	if character.CurrentMP == nil || *character.CurrentMP != 228 {
+		t.Errorf("CurrentMP = %v, want recovered 228", character.CurrentMP)
 	}
 }
 
+/*
+================
+TestLevelGrantDoesNotPartiallyCommitWhenCombatGraphFails
+
+An invalid equipped item must refuse the complete candidate transaction.
+================
+*/
 func TestLevelGrantDoesNotPartiallyCommitWhenCombatGraphFails(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Experience = int64Ptr(50)
@@ -159,11 +182,14 @@ func TestLevelGrantDoesNotPartiallyCommitWhenCombatGraphFails(t *testing.T) {
 	}
 }
 
-// TestGrantExperienceEmitsAppliedNotRequestedDelta drives a grant into
-// the level-90 cap: the walk crosses 89->90 and then FREEZES at
-// requirement-1, and the 0x30D2 delta must be the APPLIED amount - the
-// client re-walks the same curve, so emitting the requested amount
-// would walk it past the server's own state.
+/*
+================
+TestGrantExperienceEmitsAppliedNotRequestedDelta
+
+The level cap truncates the grant; the client must receive only the amount
+the server applied or its own curve walk would advance beyond authority.
+================
+*/
 func TestGrantExperienceEmitsAppliedNotRequestedDelta(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Level = int64Ptr(89)
@@ -203,10 +229,13 @@ func TestGrantExperienceEmitsAppliedNotRequestedDelta(t *testing.T) {
 	}
 }
 
-// TestGrantExperienceRefusesWithoutCurveRow: a crossing that needs a
-// missing leveldata row refuses the WHOLE grant - no partial level, no
-// exp movement, no frames (fail closed; the client could not walk the
-// same crossing either).
+/*
+================
+TestGrantExperienceRefusesWithoutCurveRow
+
+Missing curve authority refuses the whole grant before any crossing commits.
+================
+*/
 func TestGrantExperienceRefusesWithoutCurveRow(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Level = int64Ptr(5) // fake table has row 5 but not row 6
@@ -236,13 +265,14 @@ func TestGrantExperienceRefusesWithoutCurveRow(t *testing.T) {
 	}
 }
 
-// TestGrantExperienceSkillExpWrapsAndYieldsSP: the skill-exp
-// accumulator wraps mod 400 exactly like the client's (+0x830, mod
-// 0x190 @0x779b02..0x779b29) - the wrap is UNCHANGED by the yield -
-// and with the yield ENABLED (COORD ruling, board seq 202) each
-// completed period converts to 1 SP, emitted as the ABSOLUTE on 0x30B3
-// type 2 with notify=0. Seed SP 5, so the emitted absolute (6) cannot
-// coincide with the yield delta (1) - the cannot-coincide rule.
+/*
+================
+TestGrantExperienceSkillExpWrapsAndYieldsSP
+
+Seeded SP distinguishes the absolute update from the one-point yield. The
+skill-EXP remainder still follows the client's modulo-400 accumulator.
+================
+*/
 func TestGrantExperienceSkillExpWrapsAndYieldsSP(t *testing.T) {
 	character := levelupTestCharacter()
 	character.SkillExp = int64Ptr(350)
@@ -278,9 +308,13 @@ func TestGrantExperienceSkillExpWrapsAndYieldsSP(t *testing.T) {
 	}
 }
 
-// TestGrantExperienceSkillExpBelowPeriodYieldsNothing: a grant that
-// leaves the accumulator under 400 moves NO SP and rides no 0x30B3 -
-// the yield pays completed periods only.
+/*
+================
+TestGrantExperienceSkillExpBelowPeriodYieldsNothing
+
+An incomplete skill-EXP period changes the remainder without awarding SP.
+================
+*/
 func TestGrantExperienceSkillExpBelowPeriodYieldsNothing(t *testing.T) {
 	character := levelupTestCharacter()
 	character.SkillExp = int64Ptr(100)
@@ -297,11 +331,13 @@ func TestGrantExperienceSkillExpBelowPeriodYieldsNothing(t *testing.T) {
 	}
 }
 
-// TestGrantExperienceSkillExpMultiPeriodSingleGrant is the COORD-ordered
-// quotient pin (board seq 202): ONE grant of 1000 skill exp completes
-// TWO periods in a single conversion - +2 SP, remainder 200 - and the
-// one 0x30B3 carries the post-conversion absolute, not a per-period
-// stream.
+/*
+================
+TestGrantExperienceSkillExpMultiPeriodSingleGrant
+
+Multiple completed periods produce one absolute SP update and one remainder.
+================
+*/
 func TestGrantExperienceSkillExpMultiPeriodSingleGrant(t *testing.T) {
 	character := levelupTestCharacter()
 	character.SkillPoints = int64Ptr(5)
@@ -328,11 +364,13 @@ func TestGrantExperienceSkillExpMultiPeriodSingleGrant(t *testing.T) {
 	}
 }
 
-// TestGrantExperienceFullBurstOrderWithSPChange pins the complete
-// four-frame burst when ONE grant crosses both a level and an SP
-// period: 0x36B0, 0x343C, 0x30B3 type 2, then 0x30D2 last - the
-// v1.188 semantic producer's presentation -> level/stat graph -> SP -> EXP
-// order mapped onto the v1.150 carriers.
+/*
+================
+TestGrantExperienceFullBurstOrderWithSPChange
+
+SP conversion follows the completed level transition and precedes EXP.
+================
+*/
 func TestGrantExperienceFullBurstOrderWithSPChange(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Experience = int64Ptr(50)
@@ -341,7 +379,7 @@ func TestGrantExperienceFullBurstOrderWithSPChange(t *testing.T) {
 
 	result := rt.GrantExperience(character, 550, 400, 0)
 
-	wantOpcodes := []uint16{wire.OpLevelUpEffect, wire.OpBaseStats, wire.OpPointsUpdate, wire.OpExpUpdate}
+	wantOpcodes := []uint16{wire.OpLevelUpEffect, wire.OpBaseStats, vitalsUpdateOpcode, wire.OpPointsUpdate, wire.OpExpUpdate}
 	if len(result.Frames) != len(wantOpcodes) {
 		t.Fatalf("frames = %d, want %d", len(result.Frames), len(wantOpcodes))
 	}
@@ -351,11 +389,11 @@ func TestGrantExperienceFullBurstOrderWithSPChange(t *testing.T) {
 		}
 	}
 	// [gid=0][+550][+400][flags=0][statPoints=7 ABSOLUTE].
-	if got, want := frameHex(t, result.Frames[3]), "000000002602000090010000000700"; got != want {
+	if got, want := frameHex(t, result.Frames[4]), "000000002602000090010000000700"; got != want {
 		t.Errorf("0x30D2 payload = %s, want %s", got, want)
 	}
 	// [type=2][sp=6 ABSOLUTE][notify=0]: 5 + 400/400.
-	if got, want := frameHex(t, result.Frames[2]), "020600000000"; got != want {
+	if got, want := frameHex(t, result.Frames[3]), "020600000000"; got != want {
 		t.Errorf("0x30B3 payload = %s, want %s", got, want)
 	}
 	if *character.Level != 3 || *character.SkillExp != 0 || *character.SkillPoints != 6 {
@@ -364,9 +402,14 @@ func TestGrantExperienceFullBurstOrderWithSPChange(t *testing.T) {
 	}
 }
 
-// TestGrantExperienceRefusesNoOpAndImpossibleInputs. Negative EXP is no
-// longer impossible: it is the native death-loss carrier and is pinned in
-// the dedicated tests below. Negative skill EXP remains unsupported.
+/*
+================
+TestGrantExperienceRefusesNoOpAndImpossibleInputs
+
+Zero grants and invalid recipients have no output. Skill EXP is gain-only;
+ordinary EXP losses are covered by the death-penalty tests below.
+================
+*/
 func TestGrantExperienceRefusesNoOpAndImpossibleInputs(t *testing.T) {
 	character := levelupTestCharacter()
 	rt := newTestRuntime(character)
@@ -390,6 +433,13 @@ func TestGrantExperienceRefusesNoOpAndImpossibleInputs(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOrdinaryDeathPenaltyProtectsThroughLevelTen
+
+The native beginner protection returns before calculating any EXP loss.
+================
+*/
 func TestOrdinaryDeathPenaltyProtectsThroughLevelTen(t *testing.T) {
 	for _, level := range []int64{1, 4, 10} {
 		character := levelupTestCharacter()
@@ -406,6 +456,13 @@ func TestOrdinaryDeathPenaltyProtectsThroughLevelTen(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOrdinaryDeathPenaltyUsesRetailTwoPercentAndCanDelevel
+
+Losing a level changes the current curve position but preserves earned stats.
+================
+*/
 func TestOrdinaryDeathPenaltyUsesRetailTwoPercentAndCanDelevel(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Level = int64Ptr(11)
@@ -444,6 +501,13 @@ func TestOrdinaryDeathPenaltyUsesRetailTwoPercentAndCanDelevel(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOrdinaryDeathPenaltyUsesLeveldataCeiling
+
+At high levels the authored ceiling binds before the two-percent result.
+================
+*/
 func TestOrdinaryDeathPenaltyUsesLeveldataCeiling(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Level = int64Ptr(90)
@@ -462,6 +526,13 @@ func TestOrdinaryDeathPenaltyUsesLeveldataCeiling(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRelevelBelowMaxWatermarkDoesNotDuplicateEarnedStats
+
+Recovering a lost level restores gauges without awarding its stats twice.
+================
+*/
 func TestRelevelBelowMaxWatermarkDoesNotDuplicateEarnedStats(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Level = int64Ptr(10)
@@ -473,8 +544,8 @@ func TestRelevelBelowMaxWatermarkDoesNotDuplicateEarnedStats(t *testing.T) {
 	rt := newTestRuntime(character)
 
 	result := rt.GrantExperience(character, 100, 0, 0)
-	if len(result.Frames) != 3 {
-		t.Fatalf("relevel frames = %d, want 36B0/343C/30D2", len(result.Frames))
+	if len(result.Frames) != 4 {
+		t.Fatalf("relevel frames = %d, want 36B0/343C/33A6/30D2", len(result.Frames))
 	}
 	if *character.Level != 11 || *character.MaxLevel != 11 || *character.Experience != 0 {
 		t.Fatalf("relevel state = level/max/exp %d/%d/%d", *character.Level, *character.MaxLevel, *character.Experience)
@@ -483,13 +554,18 @@ func TestRelevelBelowMaxWatermarkDoesNotDuplicateEarnedStats(t *testing.T) {
 		t.Fatalf("relevel duplicated earned stats: points=%d STR/INT=%d/%d",
 			*character.StatPoints, *character.Strength, *character.Intellect)
 	}
-	if tail := binary.LittleEndian.Uint16(result.Frames[2].Payload[13:15]); tail != 7 {
+	if tail := binary.LittleEndian.Uint16(result.Frames[3].Payload[13:15]); tail != 7 {
 		t.Fatalf("relevel absolute stat-point tail = %d, want unchanged 7", tail)
 	}
 }
 
-// TestGrantExperienceRunsInsideOneDoorClosure: the walk, the writes and
-// the frame encodes all commit as ONE "grant-exp" door closure.
+/*
+================
+TestGrantExperienceRunsInsideOneDoorClosure
+
+The curve walk, recovery, and frame snapshots complete under one transaction.
+================
+*/
 func TestGrantExperienceRunsInsideOneDoorClosure(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Experience = int64Ptr(50)
@@ -517,14 +593,18 @@ func TestGrantExperienceRunsInsideOneDoorClosure(t *testing.T) {
 	if commits != 1 {
 		t.Fatalf("door commits = %d, want exactly 1", commits)
 	}
-	if len(result.Frames) != 3 {
-		t.Fatalf("frames = %d, want 3", len(result.Frames))
+	if len(result.Frames) != 4 {
+		t.Fatalf("frames = %d, want 4", len(result.Frames))
 	}
 }
 
-// TestGrantExperienceMaxLevelWatermarkNeverLowers: an imported record
-// whose MaxLevel already exceeds the new level keeps it (the client's
-// sub_862b50 mirror: max(old, new), never a plain write).
+/*
+================
+TestGrantExperienceMaxLevelWatermarkNeverLowers
+
+An imported historical maximum survives crossings below that watermark.
+================
+*/
 func TestGrantExperienceMaxLevelWatermarkNeverLowers(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Experience = int64Ptr(50)
@@ -541,10 +621,14 @@ func TestGrantExperienceMaxLevelWatermarkNeverLowers(t *testing.T) {
 	}
 }
 
-// TestGrantExperienceLeavesPresentCurrents: the LEAVE policy's other
-// half - currents that EXIST are never touched by a level-up, even
-// though the maxima grew.
-func TestGrantExperienceLeavesPresentCurrents(t *testing.T) {
+/*
+================
+TestGrantExperienceRecoversPresentCurrents
+
+Existing depleted gauges recover just like absent full-at-maximum gauges.
+================
+*/
+func TestGrantExperienceRecoversPresentCurrents(t *testing.T) {
 	character := levelupTestCharacter()
 	character.Experience = int64Ptr(50)
 	character.CurrentHP = int64Ptr(120)
@@ -553,14 +637,18 @@ func TestGrantExperienceLeavesPresentCurrents(t *testing.T) {
 
 	rt.GrantExperience(character, 550, 0, 0)
 
-	if *character.CurrentHP != 120 || *character.CurrentMP != 80 {
-		t.Errorf("currents moved on level-up: %d/%d, want 120/80", *character.CurrentHP, *character.CurrentMP)
+	if *character.CurrentHP != 228 || *character.CurrentMP != 228 {
+		t.Errorf("currents after level-up: %d/%d, want 228/228", *character.CurrentHP, *character.CurrentMP)
 	}
 }
 
-// TestHandleDevGrantExpDecodesAndRefusesSilently: the dev trigger takes
-// exactly [u32 exp][u32 skillExp]; anything else is silently discarded
-// with no state movement.
+/*
+================
+TestHandleDevGrantExpDecodesAndRefusesSilently
+
+The diagnostic requires a complete payload and a privileged bound character.
+================
+*/
 func TestHandleDevGrantExpDecodesAndRefusesSilently(t *testing.T) {
 	for _, payload := range [][]byte{nil, {}, {1, 2, 3}, make([]byte, 7), make([]byte, 9), make([]byte, 12)} {
 		character := levelupTestCharacter()
@@ -595,7 +683,13 @@ func TestHandleDevGrantExpDecodesAndRefusesSilently(t *testing.T) {
 	}
 }
 
-// TestDevExpGrantEnabledReadsTheEnvGate: only the literal "1" enables.
+/*
+================
+TestDevExpGrantEnabledReadsTheEnvGate
+
+Only the explicit startup value "1" exposes the diagnostic opcode.
+================
+*/
 func TestDevExpGrantEnabledReadsTheEnvGate(t *testing.T) {
 	for value, want := range map[string]bool{"": false, "0": false, "true": false, "1": true} {
 		t.Setenv(EnvDevExpGrant, value)
@@ -605,8 +699,13 @@ func TestDevExpGrantEnabledReadsTheEnvGate(t *testing.T) {
 	}
 }
 
-// TestEncodeExpUpdateShapes pins the encoder widths directly: 13 bytes
-// without a crossing, 15 with, and the tail is the absolute u16.
+/*
+================
+TestEncodeExpUpdateShapes
+
+Only a level crossing carries the absolute stat-point tail.
+================
+*/
 func TestEncodeExpUpdateShapes(t *testing.T) {
 	plain := wire.EncodeExpUpdate(7, 100, 25, false, 0xdead)
 	if len(plain) != 13 {

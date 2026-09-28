@@ -115,13 +115,21 @@ type OpResult struct {
 	Broadcast []wire.Frame
 }
 
-// Runtime owns the stat plane. Every mutable decision and response snapshot
-// runs inside the authority commit door.
+/*
+================
+Runtime
+
+Owns progression decisions under the character transaction. Composition
+provides installed-effect projections; callbacks must not open another
+character transaction or publish uncommitted state.
+================
+*/
 type Runtime struct {
 	deps Dependencies
 	// BaseStats is bound once by composition to the shard's installed-effect
 	// owner. Standalone runtimes without effects use the static graph below.
-	BaseStats func(*enterworld.Character) (wire.BaseStats, error)
+	BaseStats          func(*enterworld.Character) (wire.BaseStats, error)
+	RecoverLevelVitals func(*enterworld.Character) error
 }
 
 /*
@@ -137,6 +145,14 @@ func NewRuntime(deps Dependencies) *Runtime {
 	return &Runtime{deps: deps}
 }
 
+/*
+================
+playerBaseStats
+
+Production includes installed effects. Standalone runtimes project the
+static keeper graph through the same wire boundary.
+================
+*/
 func (rt *Runtime) playerBaseStats(character *enterworld.Character) (wire.BaseStats, error) {
 	if rt.BaseStats != nil {
 		return rt.BaseStats(character)
@@ -168,8 +184,14 @@ func keeperOrDerived(rt *Runtime, c *enterworld.Character, hp bool) int64 {
 	return enterworld.DerivedMaxMP(c)
 }
 
-// clampGaugeToProjection writes a stored current down to the keeper maximum
-// after level-down or a stat change. Nil stays nil (full follows the maximum).
+/*
+================
+clampedGaugePayload
+
+Encodes both current gauges after a downward clamp. An absent stored
+current means full at the projected maximum.
+================
+*/
 func clampedGaugePayload(c *enterworld.Character, rt *Runtime) []byte {
 	hp, mp := keeperOrDerived(rt, c, true), keeperOrDerived(rt, c, false)
 	if c.CurrentHP != nil {
@@ -187,6 +209,14 @@ func clampedGaugePayload(c *enterworld.Character, rt *Runtime) []byte {
 	return wire.NewWriter(15).U32(enterworld.ObjectIDForCharacter(c)).U16(0).U8(0x03).U32(uint32(hp)).U32(uint32(mp)).Payload()
 }
 
+/*
+================
+clampGaugeToProjection
+
+Lowering a maximum may discard excess current points but never heals.
+Absent currents retain their full-at-maximum representation.
+================
+*/
 func clampGaugeToProjection(rt *Runtime, c *enterworld.Character) (hp bool, mp bool) {
 	if c == nil {
 		return false, false
@@ -208,7 +238,13 @@ func clampGaugeToProjection(rt *Runtime, c *enterworld.Character) (hp bool, mp b
 	return hp, mp
 }
 
-// statKind selects which stat an allocation raises.
+/*
+================
+statKind
+
+Selects the allocated stat while preserving one shared spending transaction.
+================
+*/
 type statKind int
 
 const (
@@ -216,14 +252,26 @@ const (
 	statIntellect
 )
 
-// ---- 0x727A / 0x7552 stat allocation ----
+//============================================================================
 
-// HandleAllocStr spends one stat point on strength (0x727A -> 0xB27A).
+/*
+================
+HandleAllocStr
+
+Spends one point through the strength request/ack pair, 727A/B27A.
+================
+*/
 func (rt *Runtime) HandleAllocStr(divisionID string, character *enterworld.Character, payload []byte) OpResult {
 	return rt.allocate(character, payload, statStrength, wire.OpAllocStrResponse)
 }
 
-// HandleAllocInt spends one stat point on intellect (0x7552 -> 0xB552).
+/*
+================
+HandleAllocInt
+
+Spends one point through the intellect request/ack pair, 7552/B552.
+================
+*/
 func (rt *Runtime) HandleAllocInt(divisionID string, character *enterworld.Character, payload []byte) OpResult {
 	return rt.allocate(character, payload, statIntellect, wire.OpAllocIntResponse)
 }
@@ -336,6 +384,13 @@ func (rt *Runtime) allocate(character *enterworld.Character, payload []byte, kin
 	return OpResult{Frames: frames}
 }
 
+/*
+================
+mutateLabel
+
+Keeps the persisted transaction label tied to the stat that was requested.
+================
+*/
 func mutateLabel(kind statKind) string {
 	if kind == statIntellect {
 		return "stat-alloc-int"
@@ -515,6 +570,13 @@ func (rt *Runtime) HandleMasteryLevelUp(divisionID string, character *enterworld
 	}}
 }
 
+/*
+================
+masteryRefusal
+
+A refused training request emits only its error acknowledgement.
+================
+*/
 func masteryRefusal(errorCode uint8) OpResult {
 	return OpResult{Frames: []wire.Frame{{
 		Opcode:  wire.OpMasteryLevelUpResponse,
@@ -719,6 +781,13 @@ func (rt *Runtime) learnedGroupLevel(character *enterworld.Character, group uint
 	return best
 }
 
+/*
+================
+skillLearnRefusal
+
+The refusal leaves SP and learned skills unchanged on both ends of the wire.
+================
+*/
 func skillLearnRefusal(errorCode uint8) OpResult {
 	return OpResult{Frames: []wire.Frame{{
 		Opcode:  wire.OpSkillLearnResponse,
@@ -726,9 +795,15 @@ func skillLearnRefusal(errorCode uint8) OpResult {
 	}}}
 }
 
-// ---- coercions ----
+//============================================================================
 
-// coercePoints reads a persisted point pool: absent or negative is zero.
+/*
+================
+coercePoints
+
+Absent or negative persisted pools cannot finance a progression operation.
+================
+*/
 func coercePoints(source *int64) int64 {
 	if source == nil || *source < 0 {
 		return 0
@@ -736,8 +811,13 @@ func coercePoints(source *int64) int64 {
 	return *source
 }
 
-// characterLevel reads the persisted level with the same floor the
-// bootstrap snapshot uses (an absent level reads as 1).
+/*
+================
+characterLevel
+
+Uses the bootstrap level floor when importing an absent persisted value.
+================
+*/
 func characterLevel(c *enterworld.Character) int64 {
 	if c == nil || c.Level == nil || *c.Level < 1 {
 		return 1
@@ -745,8 +825,13 @@ func characterLevel(c *enterworld.Character) int64 {
 	return *c.Level
 }
 
-// clampStatWord holds a raised stat inside the native u16 word the client
-// stores STR/INT in (CICPlayer+0x834/+0x836).
+/*
+================
+clampStatWord
+
+STR and INT must fit the client's unsigned words at player+834/+836.
+================
+*/
 func clampStatWord(value int64) int64 {
 	if value < 0 {
 		return 0
@@ -757,7 +842,13 @@ func clampStatWord(value int64) int64 {
 	return value
 }
 
-// clampSkillPoints holds SP inside the width the char-data wire uses.
+/*
+================
+clampSkillPoints
+
+SP uses the positive signed range shared by persistence and char-data.
+================
+*/
 func clampSkillPoints(value int64) int64 {
 	if value < 0 {
 		return 0
