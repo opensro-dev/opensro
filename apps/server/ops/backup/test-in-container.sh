@@ -14,7 +14,7 @@
 # ===========================================================================
 set -Eeuo pipefail
 
-fail() { echo "FAIL: $*" >&2; exit 1; }
+fail() { echo "FAIL: $*" >&2; echo "--- webhook log:" >&2; cat /tmp/hook.log >&2; exit 1; }
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq >/dev/null
@@ -29,6 +29,9 @@ class Hook(http.server.BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers["Content-Length"]))
         open("/tmp/hook.log", "ab").write(body + b"\n")
         self.send_response(204); self.end_headers()
+    def do_GET(self):
+        open("/tmp/hook.log", "ab").write(b"GET " + self.path.encode() + b"\n")
+        self.send_response(200); self.end_headers()
     def log_message(self, *args): pass
 http.server.HTTPServer(("127.0.0.1", 8765), Hook).serve_forever()
 PY
@@ -49,10 +52,12 @@ sed -e "s|^RCLONE_REMOTE=.*|RCLONE_REMOTE=drive:/backups/repo|" /src/backup.conf
 head -c 32 /dev/urandom | base64 >/etc/opensro-backup/restic-password
 rclone config create drive local --config /etc/opensro-backup/rclone.conf >/dev/null
 echo "http://127.0.0.1:8765/" >/etc/opensro-backup/discord-webhook
+echo "http://127.0.0.1:8765/ping" >/etc/opensro-backup/healthcheck-url
 
 echo "== nightly run (writer active)"
 opensro-backup run
 [[ -s /var/lib/opensro-backup/last-success ]] || fail "no success stamp"
+grep -qx "GET /ping" /tmp/hook.log || fail "no heartbeat ping after success"
 
 echo "== second run, weekly path"
 sqlite3 "$DB" ".timeout 5000" "INSERT INTO items (name) VALUES ('marker');"
@@ -72,6 +77,7 @@ echo "== failure alert"
 mv "$DB" /tmp/db.moved
 if opensro-backup run 2>/dev/null; then fail "run without databases succeeded"; fi
 grep -q "Backup FAILED" /tmp/hook.log || fail "no failure alert posted"
+grep -qx "GET /ping/fail" /tmp/hook.log || fail "no failure heartbeat"
 mv /tmp/db.moved "$DB"
 
 echo "== freshness alert"

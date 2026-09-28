@@ -19,7 +19,8 @@
 #	opensro-backup restore ID DIR   restore snapshot ID (or "latest") into DIR
 #
 # Configuration: /etc/opensro-backup/backup.conf (see backup.conf.example).
-# Secrets live beside it, root-only, never in git.
+# Secrets live beside it, root-only, never in git. An optional outside
+# heartbeat (healthcheck-url) catches the host itself going down.
 #
 # ===========================================================================
 set -Eeuo pipefail
@@ -87,10 +88,25 @@ notify() {
 }
 
 # ================
+# heartbeat
+#
+# Pings the outside dead man's switch (healthchecks.io or compatible) with
+# the given suffix ("" for success, "/fail"). The freshness check below
+# runs on this host and cannot report the host itself being down; the
+# outside service alerts when the success ping stops arriving.
+# ================
+heartbeat() {
+	local url_file="$CONFIG_DIR/healthcheck-url"
+	[[ -s "$url_file" ]] || return 0
+	curl --silent --show-error --max-time 20 --retry 3 "$(cat "$url_file")$1" >/dev/null || log "heartbeat ping failed"
+}
+
+# ================
 # on_error
 # ================
 on_error() {
 	local line="$1"
+	heartbeat /fail
 	notify "❌ Backup FAILED (line $line of opensro-backup). Check: journalctl -u opensro-backup"
 }
 
@@ -156,15 +172,14 @@ collect() {
 		cp -a "$path" "$STAGING/host$path"
 	done
 
-	# Website and other PostgreSQL databases (custom format, restorable
-	# with pg_restore), when PostgreSQL is installed and the database exists.
+	# PostgreSQL databases (custom format, restorable with pg_restore). A
+	# listed database is required: a missing one fails the run rather than
+	# silently leaving the website out of the backup.
 	local database
 	for database in ${POSTGRES_DATABASES:-}; do
-		if command -v psql >/dev/null && sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$database'" | grep -q 1; then
-			# pg_dump runs as postgres; root (this script) writes the file.
-			# shellcheck disable=SC2024
-			sudo -u postgres pg_dump -Fc "$database" >"$STAGING/postgres/$database.dump"
-		fi
+		# pg_dump runs as postgres; root (this script) writes the file.
+		# shellcheck disable=SC2024
+		sudo -u postgres pg_dump -Fc "$database" >"$STAGING/postgres/$database.dump"
 	done
 
 	(cd "$STAGING" && find . -type f -print0 | sort -z | xargs -0 sha256sum >"$WORK_DIR/staging.sha256")
@@ -219,6 +234,7 @@ cmd_run() {
 	fi
 
 	date -u +%s >"$LAST_SUCCESS"
+	heartbeat ""
 	rm -rf "$STAGING"
 	log "backup complete and verified"
 }
