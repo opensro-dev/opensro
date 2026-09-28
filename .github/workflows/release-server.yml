@@ -1,0 +1,84 @@
+name: Release game server
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["server-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-game-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a commit on main
+        run: git merge-base --is-ancestor HEAD origin/main
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - name: Test Linux server and release boundary
+        working-directory: apps/server
+        run: |
+          go test -p 2 ./...
+          python3 -m unittest discover -s ops/release -p 'test_*.py'
+      - name: Build static binaries
+        working-directory: apps/server
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p bin
+          go build -trimpath -o bin/agent ./cmd/services/sro-agent
+          go build -trimpath -o bin/gameworld ./cmd/services/sro-gameworld
+          go build -trimpath -o bin/sro-nomad ./cmd/operations/sro-nomad
+          go build -trimpath -o bin/sro-provision-identity ./cmd/operations/sro-provision-identity
+          python3 ops/release/bundle.py "$RUNNER_TEMP/server.tar"
+          sha256sum "$RUNNER_TEMP/server.tar" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server-${{ github.sha }}
+          path: ${{ runner.temp }}/server.tar
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://opensro.online
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: server-${{ github.sha }}
+          path: ${{ runner.temp }}/release
+      - name: Install the approved release
+        env:
+          DEPLOY_KEY: ${{ secrets.SERVER_DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.SERVER_DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.SERVER_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/release"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            -i "$HOME/.ssh/release" "sro-release@$DEPLOY_HOST" \
+            < "$RUNNER_TEMP/release/server.tar"
+      - name: Check the public fleet
+        run: |
+          curl --fail --silent --show-error --retry 3 https://opensro.online/api/title/servers \
+            | python3 -c 'import json,sys; rows=json.load(sys.stdin); assert any(x["id"] == "global-official" and x["operating"] for x in rows)'

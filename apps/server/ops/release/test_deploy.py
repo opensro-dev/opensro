@@ -1,0 +1,81 @@
+"""
+===========================================================================
+test_deploy.py - failed preflight cannot restart the fleet or retain its token
+===========================================================================
+"""
+
+import json
+from pathlib import Path
+import subprocess
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+from bundle import FILES
+import deploy
+
+
+# ================
+# DeployTests
+# ================
+class DeployTests(unittest.TestCase):
+	# ================
+	# test_preflight_and_token_lifecycle
+	# ================
+	def test_preflight_and_token_lifecycle(self):
+		for failure in (None, "validate", "notice", "deploy"):
+			with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+				root = Path(directory)
+				staging, module = root / "staging", root / "module"
+				(module / ".state/cluster").mkdir(parents=True)
+				for name in FILES:
+					path = staging / name
+					path.parent.mkdir(parents=True, exist_ok=True)
+					path.write_text("fixture")
+				bootstrap = root / "bootstrap.json"
+				bootstrap.write_text(json.dumps({"SecretID": "management-fixture"}))
+				config = {
+					"module": str(module), "game_data": str(root / "server.srogz"),
+					"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
+					"origin": "https://example.test", "agent_memory_mb": 256,
+					"gameworld_memory_mb": 1024, "public_webhook": "public-fixture", "staff_webhook": "staff-fixture",
+				}
+				calls = []
+
+				# ================
+				# execute
+				# ================
+				def execute(arguments, **options):
+					calls.append(arguments)
+					if arguments[:2] == ["nomad", "version"]:
+						return SimpleNamespace(stdout="Nomad v2.0.7\n")
+					if arguments[:4] == ["nomad", "acl", "token", "create"]:
+						self.assertEqual(options["env"]["NOMAD_TOKEN"], "management-fixture")
+						return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped-fixture", "AccessorID": "accessor-fixture"}))
+					if arguments[0].endswith("sro-nomad"):
+						self.assertEqual(options["env"]["NOMAD_TOKEN"], "scoped-fixture")
+						if arguments[1] == failure:
+							raise subprocess.CalledProcessError(1, arguments)
+					return SimpleNamespace(stdout="")
+
+				with patch.object(deploy, "run", side_effect=execute), patch.object(deploy.shutil, "chown"), \
+					patch.object(deploy, "warning", side_effect=RuntimeError("refused") if failure == "notice" else None), \
+					patch.object(deploy, "announce") as announcement, patch.object(deploy, "NOTICE_SECONDS", 0):
+					if failure:
+						with self.assertRaises((RuntimeError, subprocess.CalledProcessError)):
+							deploy.deploy(config, staging, {"commit": "a" * 40})
+					else:
+						deploy.deploy(config, staging, {"commit": "a" * 40})
+					self.assertEqual(calls[-1], ["nomad", "acl", "token", "delete", "accessor-fixture"])
+					deployment_calls = [call for call in calls if len(call) > 1 and call[1] == "deploy"]
+					if failure in ("validate", "notice"):
+						self.assertEqual(deployment_calls, [])
+						announcement.assert_not_called()
+					else:
+						self.assertEqual(len(deployment_calls), 1)
+					self.assertEqual((module / "release.json").exists(), failure is None)
+
+
+if __name__ == "__main__":
+	unittest.main()
