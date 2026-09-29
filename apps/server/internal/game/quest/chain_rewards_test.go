@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+chain_rewards_test.go - quest handoff and reward transaction regressions
+
+Exercise predecessor gates, delivery identity, inventory rollback and repeat
+exchanges through the runtime used by NPC and reward-window requests.
+
+===========================================================================
+*/
 package quest
 
 import (
@@ -9,12 +19,20 @@ import (
 	"testing"
 )
 
+/*
+================
+TestBanditChainCannotSkipPredecessorAndPaysEachRewardOnce
+================
+*/
 func TestBanditChainCannotSkipPredecessorAndPaysEachRewardOnce(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	exp := int64(0)
-	rt.ApplyExperience = func(_ *enterworld.Character, e, s int64, _ uint32) ([]wire.Frame, bool) { exp += e; return nil, true }
+	rt.ApplyExperience = func(_ *enterworld.Character, e, s int64, _ uint32) ([]wire.Frame, bool) {
+		exp += e
+		return nil, true
+	}
 	if rows := rt.OptionsForNpc(c, "NPC_CH_GENARAL_SP"); len(rows) != 0 {
 		t.Fatal("successor offered before predecessor")
 	}
@@ -71,6 +89,11 @@ func TestBanditChainCannotSkipPredecessorAndPaysEachRewardOnce(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRewardFullBagLeavesObjectiveAndScalarsAvailableForRetry
+================
+*/
 func TestRewardFullBagLeavesObjectiveAndScalarsAvailableForRetry(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt := testRuntime(t)
@@ -82,7 +105,10 @@ func TestRewardFullBagLeavesObjectiveAndScalarsAvailableForRetry(t *testing.T) {
 	}
 	before := append([]enterworld.InventoryRow(nil), c.MissionInventory...)
 	paid := 0
-	rt.ApplyExperience = func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) { paid++; return nil, true }
+	rt.ApplyExperience = func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) {
+		paid++
+		return nil, true
+	}
 	result, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename)
 	var localized interface {
 		error
@@ -103,6 +129,11 @@ func TestRewardFullBagLeavesObjectiveAndScalarsAvailableForRetry(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDeliveryRequiresGuardVisitAndConsumesListAtBlacksmith
+================
+*/
 func TestDeliveryRequiresGuardVisitAndConsumesListAtBlacksmith(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt := testRuntime(t)
@@ -133,6 +164,11 @@ func TestDeliveryRequiresGuardVisitAndConsumesListAtBlacksmith(t *testing.T) {
 	}
 }
 
+/*
+================
+TestChainValidationRejectsCyclesAndMissingParents
+================
+*/
 func TestChainValidationRejectsCyclesAndMissingParents(t *testing.T) {
 	licensed.RequireGameData(t)
 	for _, parent := range []uint32{11, 9999} {
@@ -145,6 +181,11 @@ func TestChainValidationRejectsCyclesAndMissingParents(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAbandonDeliveryRemovesItsItemBeforeReacceptance
+================
+*/
 func TestAbandonDeliveryRemovesItsItemBeforeReacceptance(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt := testRuntime(t)
@@ -170,6 +211,14 @@ func TestAbandonDeliveryRemovesItsItemBeforeReacceptance(t *testing.T) {
 	}
 }
 
+/*
+================
+TestResuscitationExchangesHeartsNotPotionsAndCanRepeat
+
+One completion exchanges both full groups; the remaining five hearts seed
+the next acceptance without allowing a replay of the paid reward.
+================
+*/
 func TestResuscitationExchangesHeartsNotPotionsAndCanRepeat(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt := testRuntime(t)
@@ -186,17 +235,15 @@ func TestResuscitationExchangesHeartsNotPotionsAndCanRepeat(t *testing.T) {
 	}
 	c.MissionInventory = append(c.MissionInventory, potionInventory(25)[0])
 	c.MissionInventory[1].Slot = 21
-	for n := 0; n < 2; n++ {
-		rt.NotifyInventoryChanged(c)
-		if _, err := rt.HandleRewardSelect(c, u32le(29)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := rt.HandleRewardSelect(c, u32le(29)); err == nil {
-			t.Fatal("replayed a completed exchange")
-		}
-		if _, err := rt.StartQuest(c, "QSP_ALL_POTION_1"); err != nil {
-			t.Fatal("repeat acceptance refused", err)
-		}
+	rt.NotifyInventoryChanged(c)
+	if _, err := rt.HandleRewardSelect(c, u32le(29)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.HandleRewardSelect(c, u32le(29)); err == nil {
+		t.Fatal("replayed a completed exchange")
+	}
+	if _, err := rt.StartQuest(c, "QSP_ALL_POTION_1"); err != nil {
+		t.Fatal("repeat acceptance refused", err)
 	}
 	hearts, potions := int64(0), int64(0)
 	for _, row := range c.MissionInventory {

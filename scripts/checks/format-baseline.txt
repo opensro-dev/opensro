@@ -25,7 +25,6 @@ apps/client-next/src/engine/contracts/simulation.ts
 apps/client-next/src/engine/contracts/texture.ts
 apps/client-next/src/engine/contracts/ui.ts
 apps/client-next/src/engine/contracts/world-admission.ts
-apps/client-next/src/engine/contracts/world.ts
 apps/client-next/src/engine/foundation/animation/action-refresh.ts
 apps/client-next/src/engine/foundation/animation/action-schedule.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
@@ -293,7 +292,6 @@ apps/client-next/src/engine/foundation/ui/rebirth-dialog.ts
 apps/client-next/src/engine/foundation/ui/region-banner.ts
 apps/client-next/src/engine/foundation/ui/resource-error.ts
 apps/client-next/src/engine/foundation/ui/retained-layout.ts
-apps/client-next/src/engine/foundation/ui/return-scroll.ts
 apps/client-next/src/engine/foundation/ui/skill-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-catalog.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-data.ts
@@ -389,8 +387,6 @@ apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inv
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/npc/npc.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts
 apps/client-next/src/engine/runtime/simulation/worker/simulation.ts
 apps/client-next/src/engine/runtime/ui/hud/messages.ts
 apps/client-next/src/engine/runtime/ui/hud/minimap.ts
@@ -694,12 +690,10 @@ scripts/build/char/buildCrowdVatAssets.mjs
 scripts/build/char/buildDefaultWear.mjs
 scripts/build/char/buildDropModelAssets.mjs
 scripts/build/char/buildEquipmentVisuals.mjs
-scripts/build/char/buildLevelDataAsset.mjs
 scripts/build/char/buildLocomotionBanAssets.mjs
 scripts/build/char/buildNpcVatAssets.mjs
 scripts/build/char/buildRoster.mjs
 scripts/build/char/buildSkillEffectRecords.mjs
-scripts/build/char/buildSkillStageModelAssets.mjs
 scripts/build/char/characterMaterialBindings.mjs
 scripts/build/char/compileBanTimeline.mjs
 scripts/build/char/compileBsrVisual.mjs
@@ -716,7 +710,6 @@ scripts/build/char/native/scriptObjAnimationRegistry.ts
 scripts/build/char/native/skillEffectAnimationRegistry.ts
 scripts/build/char/native/skillEffectSetParseRow.ts
 scripts/build/char/native/skillEffectStage.ts
-scripts/build/char/parseSkillEffect.mjs
 scripts/build/char/publishCharacterMaterials.mjs
 scripts/build/char/publishEntityBsrModifiers.mjs
 scripts/build/char/resolveCharRoster.mjs

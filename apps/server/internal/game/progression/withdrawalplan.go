@@ -50,6 +50,8 @@ type withdrawalPlan struct {
 	Skills        []uint32
 	Masteries     []enterworld.CharacterMastery
 	Refund        int64
+	Gold          int64
+	GoldRanks     []int64
 	PotionCount   uint32
 	PreviousSkill uint32
 	ReceiptID     uint32
@@ -101,6 +103,14 @@ func planSkillWithdrawal(c *enterworld.Character, data withdrawalCatalog, reques
 			return withdrawalPlan{}, withdrawalUnavailable
 		}
 		plan.Refund += removed.SPCost
+		goldRank := int64(0)
+		for _, requirement := range removed.Masteries {
+			if requirement.ID != 0 {
+				goldRank = requirement.Level
+				break
+			}
+		}
+		plan.GoldRanks = append(plan.GoldRanks, goldRank)
 	}
 	if plan.Refund == 0 {
 		return withdrawalPlan{}, withdrawalUnavailable
@@ -161,6 +171,48 @@ func planMasteryWithdrawal(c *enterworld.Character, data enterworld.SkillDataSou
 		}
 	}
 	plan.PotionCount = uint32(current - target)
+	for rank := current; rank > target; rank-- {
+		plan.GoldRanks = append(plan.GoldRanks, rank-1)
+	}
 	plan.ReceiptID = request.LearnedID
 	return plan, 0
+}
+
+/*
+================
+priceResuscitation
+
+410C80/410DF0 round each removed rank's gold charge independently. 410EA0
+and 410F10 deduct the integer 20-percent loss after summing all SP, so small
+refunds round upward. Keep the double intermediate stored by the native code.
+================
+*/
+func priceResuscitation(plan *withdrawalPlan, c *enterworld.Character, levels enterworld.LevelDataSource) uint8 {
+	prices, ok := levels.(interface {
+		WithdrawalGoldBasis(int64) (int64, bool)
+	})
+	if !ok {
+		return withdrawalUnavailable
+	}
+	basis, found := prices.WithdrawalGoldBasis(characterLevel(c))
+	if !found || basis <= 0 {
+		return withdrawalUnavailable
+	}
+	const refundFraction = 0.8
+	const goldMultiplier = 80.0
+	const ranksPerGoldStep = 10.0
+	const lostPointsDivisor = 5
+	scale := float64(basis) / refundFraction * goldMultiplier
+	for _, rank := range plan.GoldRanks {
+		cost := math.Floor((1+float64(rank)/ranksPerGoldStep)*scale + 0.5)
+		if rank < 0 || math.IsInf(cost, 0) || cost < 0 || cost > float64(math.MaxInt32-plan.Gold) {
+			return withdrawalUnavailable
+		}
+		plan.Gold += int64(cost)
+	}
+	plan.Refund -= plan.Refund / lostPointsDivisor
+	if c.Gold == nil || *c.Gold < plan.Gold {
+		return withdrawalGold
+	}
+	return 0
 }

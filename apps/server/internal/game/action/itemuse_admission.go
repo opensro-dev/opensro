@@ -39,11 +39,23 @@ const (
 	itemUsePetCure
 	itemUsePetRevive
 	itemUseMonsterCapsule
+	itemUseQuestTool
 )
 
+/*
+================
+admittedItemUseFamily
+
+Classify the reference family only. Quest tools still require a matching
+active native handler before inventory consumption can be authorized.
+================
+*/
 func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref == nil {
 		return itemUseUnsupported
+	}
+	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
+		return itemUseQuestTool
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 3, 1} && ref.ReturnDestination == "RESURRECT" {
 		return itemUseReturn
@@ -90,6 +102,13 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	return itemUseUnsupported
 }
 
+/*
+================
+itemUseRequirements
+
+The reference's use flag, country and typed requirements admit every family.
+================
+*/
 func itemUseRequirements(character *enterworld.Character, ref *enterworld.ItemRef) uint8 {
 	permission, present := ref.NativeFields.Lookup("canUse")
 	if !present || math.IsNaN(permission) || math.IsInf(permission, 0) ||
@@ -156,6 +175,13 @@ func recoveryCooldownDuration(character *enterworld.Character, absolute bool) (i
 	}
 }
 
+/*
+================
+petSkillWindowHasCapacity
+
+Expiry belongs to the sweep; admission cannot silently evict a live window.
+================
+*/
 func petSkillWindowHasCapacity(character *enterworld.Character, ref *enterworld.ItemRef) bool {
 	// The sweep owns expiry and its removal receipt. Do not silently discard
 	// expired entries here: the client board still needs that publication.

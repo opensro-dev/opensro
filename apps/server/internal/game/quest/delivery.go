@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+delivery.go - selected-NPC quest handoffs and inventory refusals
+
+NPC identity comes from the conversation owner. Delivery grants and progress
+commit together, so retrying a full-bag refusal cannot duplicate quest items.
+
+===========================================================================
+*/
 package quest
 
 import (
@@ -6,17 +16,55 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"strings"
 )
 
+/*
+================
+dialogueRefusal
+
+Carries authored client text alongside the underlying inventory failure.
+================
+*/
 type dialogueRefusal struct {
 	cause  error
 	symbol string
 }
 
-func (e *dialogueRefusal) Error() string          { return e.cause.Error() }
-func (e *dialogueRefusal) Unwrap() error          { return e.cause }
-func (e *dialogueRefusal) DialogueSymbol() string { return e.symbol }
+/*
+================
+Error
+================
+*/
+func (e *dialogueRefusal) Error() string {
+	return e.cause.Error()
+}
 
+/*
+================
+Unwrap
+================
+*/
+func (e *dialogueRefusal) Unwrap() error {
+	return e.cause
+}
+
+/*
+================
+DialogueSymbol
+================
+*/
+func (e *dialogueRefusal) DialogueSymbol() string {
+	return e.symbol
+}
+
+/*
+================
+inventoryRefusal
+
+Use the quest's inventory-full line only for an actual capacity failure.
+================
+*/
 func inventoryRefusal(def *Definition, err error) error {
 	var fault *inventory.Fault
 	if errors.As(err, &fault) && fault.Code == wire.ErrCodeStorageFull && def.InventoryFullSymbol != "" {
@@ -25,9 +73,18 @@ func inventoryRefusal(def *Definition, err error) error {
 	return err
 }
 
-// AdvanceNpcQuest receives the NPC identity from action's selection-bound
-// conversation. The client cannot substitute an intermediate delivery NPC.
+/*
+================
+AdvanceNpcQuest
+
+Uses action's selection-bound NPC identity. The client cannot substitute an
+intermediate delivery NPC or complete a stale tutorial stage.
+================
+*/
 func (rt *Runtime) AdvanceNpcQuest(c *enterworld.Character, code, npc string) (OpResult, error) {
+	if strings.HasPrefix(code, captureSupplyPrefix) {
+		return rt.finishCaptureSupply(c, code, npc)
+	}
 	base, stage, staged := parseStageToken(code)
 	def, ok := rt.Defs.ByCodename(base)
 	if !ok {
@@ -45,12 +102,19 @@ func (rt *Runtime) AdvanceNpcQuest(c *enterworld.Character, code, npc string) (O
 	if def.DeliveryNpcCodename != "" && npc == def.DeliveryNpcCodename {
 		return rt.collectDelivery(c, def)
 	}
-	if npc == "" || npc != def.EndNpcCodename {
+	if !questNpcMatches(def, def.EndNpcCodename, npc) {
 		return OpResult{}, fmt.Errorf("quest %s wrong completion NPC", code)
 	}
 	return rt.CompleteNpcQuest(c, code)
 }
 
+/*
+================
+collectDelivery
+
+Plan the missing delivery items before committing inventory and objectives.
+================
+*/
 func (rt *Runtime) collectDelivery(c *enterworld.Character, def *Definition) (OpResult, error) {
 	if rt.PlanInventory == nil {
 		return OpResult{}, fmt.Errorf("delivery inventory owner unavailable")

@@ -29,6 +29,14 @@ shutdown. Enter-world authentication is installed before listeners start.
 ================================================================================
 */
 
+/*
+================
+newMissionTicker
+
+Compose action, transient-object, quest and party phases before admission.
+All world lifetimes share the coordinator's simulation clock.
+================
+*/
 func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 	// The ticker and bootstrap must see the same NPC roster. Shipped static
 	// rows have Patrol=false; this also prevents the old three-fixture ticker
@@ -38,6 +46,9 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 		game.hub,
 		game.items.NpcRoster,
 		game.items.TickHook(),
+		func(nowMs int64) []simulation.DivisionFrames {
+			return game.items.AdvanceSkillObjects(nowMs, ticker.Source.SnapshotSessions())
+		},
 		game.questMarkerTick(),
 		func(nowMs int64) []simulation.DivisionFrames {
 			game.parties.ExpireInvitations(nowMs)

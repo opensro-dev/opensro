@@ -19,6 +19,14 @@ export const WITHDRAWAL_SKILL_FRAME_HEIGHT = 305;
 export const WITHDRAWAL_CONFIRM_SIZE = [ 300, 208 ] as const;
 export const WITHDRAWAL_CONFIRM_BUTTON_Y = 167;
 export const WITHDRAWAL_CONFIRM_FILL_HEIGHT = 152;
+export const RESUSCITATION_POTION_ID = 3673;
+export const RESUSCITATION_CONFIRM_SIZE = [ 300, 244 ] as const;
+export const RESUSCITATION_CONFIRM_BUTTON_Y = 212;
+export const RESUSCITATION_CONFIRM_FILL_HEIGHT = 188;
+const REFUND_LOSS_DIVISOR = 5;
+const GOLD_REFUND_FRACTION = 0.8;
+const GOLD_MULTIPLIER = 80;
+const RANKS_PER_GOLD_STEP = 10;
 
 /*
 ================
@@ -48,7 +56,24 @@ and available potions. No optimistic mutation or automatic retry spends items.
 */
 export function createWithdrawalDialog() {
 	let potion = 0, selected = "", amount = 0;
+	let observedRevision = 0;
 	return {
+		/*
+		================
+		observe
+
+		Only a new authoritative NPC response opens the quest-potion window.
+		Closing it cannot be undone by the next snapshot of the same receipt.
+		================
+		*/
+		observe( revision: number ) {
+			if ( revision === observedRevision ) return false;
+			observedRevision = revision;
+			potion = revision ? RESUSCITATION_POTION_ID : 0;
+			selected = "";
+			amount = 0;
+			return true;
+		},
 		/*
 		================
 		open
@@ -76,6 +101,14 @@ export function createWithdrawalDialog() {
 		*/
 		active() {
 			return potion !== 0;
+		},
+		/*
+		================
+		boundToNpc
+		================
+		*/
+		boundToNpc() {
+			return potion === RESUSCITATION_POTION_ID;
 		},
 		/*
 		================
@@ -110,7 +143,11 @@ export function createWithdrawalDialog() {
 		move can invalidate a selection while the dialog remains visible.
 		================
 		*/
-		read( game: GameplayState, costs: Readonly<Record<number, number>> ) {
+		read(
+			game: GameplayState,
+			costs: Readonly<Record<number, number>>,
+			goldPrices: Readonly<Record<number, number>> = {}
+		) {
 			const catalog = new Map( game.skillCatalog?.map( row => [ row.id, row ] ) );
 			const learned = (game.skills ?? []).map( id => catalog.get( id ) ).filter( row => row !== undefined );
 			const choices: WithdrawalChoice[] = [];
@@ -169,21 +206,35 @@ export function createWithdrawalDialog() {
 			const source = choices.find( row => `${row.kind}:${row.id}` === selected );
 			const maximum = source ? Math.min( quantity, source.level - source.minimum ) : 0;
 			amount = Math.min( amount, Math.max( 0, maximum ) );
-			let refund = 0, valid = true;
+			const resuscitation = potion === RESUSCITATION_POTION_ID;
+			const basis = goldPrices[game.progression?.level ?? 0];
+			let refund = 0, gold = 0, valid = !resuscitation || basis !== undefined;
 			if ( source ) {
 				for ( let rank = source.level; rank > source.level - amount; rank-- ) {
-					const cost = source.kind === "mastery-withdraw" ?
-						(rank === 1 ? 0 : costs[rank - 1]) :
+					const removed = source.kind === "skill-withdraw" ?
 						game.skillCatalog?.find( row =>
 							row.trainable && row.group === catalog.get( source.id )?.group && row.level === rank
-						)?.spCost;
+						) :
+						undefined;
+					const cost = source.kind === "mastery-withdraw" ?
+						(rank === 1 ? 0 : costs[rank - 1]) :
+						removed?.spCost;
 					if ( cost === undefined ) valid = false;
 					else refund += cost;
+					if ( resuscitation && basis !== undefined ) {
+						const goldRank = source.kind === "mastery-withdraw" ?
+							rank - 1 :
+							removed?.masteries.find( requirement => requirement.ID !== 0 )?.Level ?? 0;
+						const scale = basis / GOLD_REFUND_FRACTION * GOLD_MULTIPLIER;
+						gold += Math.floor( (1 + goldRank / RANKS_PER_GOLD_STEP) * scale + 0.5 );
+					}
 				}
 			}
+			if ( resuscitation ) refund -= Math.floor( refund / REFUND_LOSS_DIVISOR );
 			const choice = source ? { ...source, rank: source.level - amount, refund } : undefined;
 			const command: WithdrawalCommand | null =
-				choice && valid && amount > 0 && !choice.blocked && quantity > 0 && !game.trainingPending &&
+				choice && valid && gold <= Number( game.progression?.gold ?? 0 ) && amount > 0 && !choice.blocked &&
+					quantity > 0 && !game.trainingPending &&
 					!game.inventoryPending ?
 					{ kind: choice.kind, id: choice.id, rank: choice.rank, potion } :
 					null;
@@ -193,6 +244,8 @@ export function createWithdrawalDialog() {
 				choice,
 				command,
 				quantity,
+				gold,
+				resuscitation,
 				potion: game.inventory.find( item => item.refObjId === potion ),
 				amount,
 				maximum

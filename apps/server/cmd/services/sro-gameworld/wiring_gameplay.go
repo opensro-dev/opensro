@@ -265,7 +265,8 @@ func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
 		if npcRows != nil {
 			rows = npcRows(divisionID, character, entry)
 		}
-		return append(rows, enterworld.GroundObjectListRows(items.CharacterGroundItems(divisionID, character))...)
+		rows = append(rows, enterworld.GroundObjectListRows(items.CharacterGroundItems(divisionID, character))...)
+		return append(rows, items.SkillObjectRows(divisionID, character, entry)...)
 	}
 }
 
@@ -353,16 +354,30 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return err
 	}
 	quests.PlanInventory = game.items.PlanQuestInventory
+	quests.SpawnCaptureGuardian = func(character *enterworld.Character) bool {
+		return game.items.SpawnQuestGuardian(game.divisionID, character)
+	}
+	game.items.CanPlaceQuestTrap = quests.CanPlaceTrap
+	game.items.CaptureQuestTrap = quests.CaptureQuestTrap
 	game.items.UpdateQuestInventory = quests.InventoryUpdater()
 	game.items.UpdateQuestKill = quests.KillUpdater()
 	game.items.QuestTravelBlocks = quests.TravelBlocks
 	game.items.AdvanceQuestMinute = quests.AdvanceMinute
+	game.items.AdvanceQuestItem = quests.AdvanceItemUse
+	game.items.ForgetQuestItem = quests.ForgetItemUse
+	game.items.UseQuestItem = quests.BeginItemUse
+	game.items.ReleaseQuestCapturesOnDeath = quests.ReleaseCapturesOnDeath
 	game.items.AdvanceQuestCalendar = quests.AdvanceCalendar
 	game.items.QuestMonsterDrops = quests.MonsterDrops
 	game.items.NpcQuests = action.NpcQuestHooks{
+		Prepare: quests.PrepareNpcQuest,
 		Options: func(divisionID string, character *enterworld.Character, npcCodename string) []action.NpcQuestOption {
 			var rows []quest.NpcOption
-			game.deps.Read(divisionID, func() { rows = quests.OptionsForNpc(character, npcCodename) })
+			var resuscitation bool
+			game.deps.Read(divisionID, func() {
+				rows = quests.OptionsForNpc(character, npcCodename)
+				resuscitation = quest.ResuscitationAvailable(character, npcCodename)
+			})
 			out := make([]action.NpcQuestOption, 0, len(rows))
 			for _, row := range rows {
 				out = append(out, action.NpcQuestOption{
@@ -372,6 +387,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 					Informational: row.Informational,
 				})
 			}
+			if resuscitation {
+				out = append(out, action.NpcQuestOption{
+					Codename: quest.ResuscitationService, TitleSymbol: "SN_TALK_QSP_ALL_POTION_1_07",
+					PromptSymbol: "SN_TALK_QSP_ALL_POTION_1_00", Immediate: true,
+				})
+			}
 			return out
 		},
 		Accept: func(character *enterworld.Character, codename string) ([]wire.Frame, error) {
@@ -379,6 +400,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 			return result.Frames, err
 		},
 		Finish: func(character *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error) {
+			if codename == quest.ResuscitationService {
+				result, err := quests.OpenResuscitation(character, npcCodename)
+				return result.Frames, err
+			}
 			result, err := quests.AdvanceNpcQuest(character, codename, npcCodename)
 			return result.Frames, err
 		},

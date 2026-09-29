@@ -1,7 +1,22 @@
+/*
+===========================================================================
+
+character_clone.go - detached copies of the character authority graph
+
+Copy mutable children while the caller holds the read door. Preserve nil
+versus empty values because bootstrap uses absence to identify unseeded data.
+
+===========================================================================
+*/
 package domain
 
-// cloneCharacter creates a detached record graph while its caller holds the
-// authority read door. It preserves nil-versus-empty slice semantics.
+/*
+================
+cloneCharacter
+
+Every mutable child added to Character must acquire an independent copy here.
+================
+*/
 func cloneCharacter(source *Character) *Character {
 	if source == nil {
 		return nil
@@ -81,6 +96,12 @@ func cloneCharacter(source *Character) *Character {
 		}
 	}
 	clone.ActiveQuests = cloneActiveQuests(source.ActiveQuests)
+	if source.QuestSupplies != nil {
+		clone.QuestSupplies = make(map[uint32]QuestSupplyState, len(source.QuestSupplies))
+		for id, supply := range source.QuestSupplies {
+			clone.QuestSupplies[id] = supply
+		}
+	}
 	clone.TrackedQuests = cloneTrackedQuests(source.TrackedQuests)
 	clone.EnterEventGroupIds = cloneSlice(source.EnterEventGroupIds)
 	clone.BlockedWhisperers = cloneSlice(source.BlockedWhisperers)
@@ -89,6 +110,13 @@ func cloneCharacter(source *Character) *Character {
 	return &clone
 }
 
+/*
+================
+clonePointer
+
+Retain absence while detaching one scalar or shallow record.
+================
+*/
 func clonePointer[T any](source *T) *T {
 	if source == nil {
 		return nil
@@ -97,6 +125,13 @@ func clonePointer[T any](source *T) *T {
 	return &value
 }
 
+/*
+================
+cloneSlice
+
+Detach the backing store without converting a nil slice to an empty one.
+================
+*/
 func cloneSlice[T any](source []T) []T {
 	if source == nil {
 		return nil
@@ -106,6 +141,13 @@ func cloneSlice[T any](source []T) []T {
 	return clone
 }
 
+/*
+================
+cloneInventoryRows
+
+Magic option arrays are mutable children of each inventory row.
+================
+*/
 func cloneInventoryRows(source []InventoryRow) []InventoryRow {
 	clone := cloneSlice(source)
 	for index := range clone {
@@ -115,6 +157,13 @@ func cloneInventoryRows(source []InventoryRow) []InventoryRow {
 	return clone
 }
 
+/*
+================
+cloneCharacterWorld
+
+Detach saved positions and raw movement bytes from the authority snapshot.
+================
+*/
 func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 	if source == nil {
 		return nil
@@ -157,6 +206,13 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 	return &clone
 }
 
+/*
+================
+cloneAvatarInventory
+
+Avatar rows carry the same nested item options as ordinary inventory.
+================
+*/
 func cloneAvatarInventory(source *AvatarInventory) *AvatarInventory {
 	if source == nil {
 		return nil
@@ -167,6 +223,13 @@ func cloneAvatarInventory(source *AvatarInventory) *AvatarInventory {
 	}
 }
 
+/*
+================
+cloneActiveQuests
+
+Each mission owns its objective values independently of the journal envelope.
+================
+*/
 func cloneActiveQuests(source []ActiveQuestRecord) []ActiveQuestRecord {
 	clone := cloneSlice(source)
 	for questIndex := range clone {
@@ -186,6 +249,13 @@ func cloneActiveQuests(source []ActiveQuestRecord) []ActiveQuestRecord {
 	return clone
 }
 
+/*
+================
+cloneTrackedQuests
+
+Preserve opaque tracking bytes without sharing their mutable backing store.
+================
+*/
 func cloneTrackedQuests(source []TrackedQuestRecord) []TrackedQuestRecord {
 	clone := cloneSlice(source)
 	for index := range clone {

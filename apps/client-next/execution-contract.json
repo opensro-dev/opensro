@@ -1381,6 +1381,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/characters/skill-objects.ts",
+			"provider": "src/engine/runtime/characters/resources/resources.ts",
+			"functions": [
+				"ready",
+				"plan"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/rendering/scenery-particles.ts",
 			"provider": "src/engine/runtime/assets/worker/world/world.ts",
 			"functions": [

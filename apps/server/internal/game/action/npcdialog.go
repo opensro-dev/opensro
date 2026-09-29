@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+npcdialog.go - bind native dialog choices to one live NPC conversation
+
+Selection and dialog identity are checked before a quest or service runs.
+The quest owner changes persistent state; this module owns transient choices
+and the response that ends each request, including immediate service windows.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -11,8 +22,14 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// NpcQuestOption is one server-owned row inserted into native kind-4 NPC
-// dialog. Title and prompt are shipped text symbols; Codename is never sent.
+/*
+================
+NpcQuestOption
+
+Symbols are client-localized. Immediate services run through Finish when the
+row is selected; ordinary quests first ask for acceptance or completion.
+================
+*/
 type NpcQuestOption struct {
 	Codename             string
 	TitleSymbol          string
@@ -21,17 +38,28 @@ type NpcQuestOption struct {
 	DenyResponseSymbol   string
 	Informational        bool
 	Complete             bool
+	Immediate            bool
 }
 
-// NpcQuestHooks is the anti-corruption boundary between NPC selection/dialog
-// ownership and quest persistence. The quest runtime never learns selected
-// gids or 0x3773 row numbers; action never mutates quest records itself.
+/*
+================
+NpcQuestHooks
+
+The quest runtime never learns selected GIDs or wire row numbers.
+================
+*/
 type NpcQuestHooks struct {
 	Options func(divisionID string, character *enterworld.Character, npcCodename string) []NpcQuestOption
+	Prepare func(character *enterworld.Character, codename, npcCodename string) (string, error)
 	Accept  func(character *enterworld.Character, codename string) ([]wire.Frame, error)
 	Finish  func(character *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error)
 }
 
+/*
+================
+npcDialogStage
+================
+*/
 type npcDialogStage uint8
 
 const (
@@ -39,6 +67,11 @@ const (
 	npcDialogConfirm
 )
 
+/*
+================
+npcDialogSession
+================
+*/
 type npcDialogSession struct {
 	NpcGID        uint32
 	NpcCode       string
@@ -48,18 +81,33 @@ type npcDialogSession struct {
 	Pending       NpcQuestOption
 }
 
-// NpcDialogStore is an ephemeral character-keyed conversation. It is cleared
-// on selection replacement, target release and mission exit, preventing a
-// delayed one-byte choice from applying to a different NPC.
+/*
+================
+NpcDialogStore
+
+Selection replacement, target release and mission exit clear the conversation
+so a delayed one-byte choice cannot apply to a different NPC.
+================
+*/
 type NpcDialogStore struct {
 	mu          sync.Mutex
 	byCharacter map[string]npcDialogSession
 }
 
+/*
+================
+NewNpcDialogStore
+================
+*/
 func NewNpcDialogStore() *NpcDialogStore {
 	return &NpcDialogStore{byCharacter: make(map[string]npcDialogSession)}
 }
 
+/*
+================
+Put
+================
+*/
 func (s *NpcDialogStore) Put(divisionID, characterName string, session npcDialogSession) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -67,6 +115,11 @@ func (s *NpcDialogStore) Put(divisionID, characterName string, session npcDialog
 	s.byCharacter[selectionKey(divisionID, characterName)] = session
 }
 
+/*
+================
+Get
+================
+*/
 func (s *NpcDialogStore) Get(divisionID, characterName string) (npcDialogSession, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -75,12 +128,22 @@ func (s *NpcDialogStore) Get(divisionID, characterName string) (npcDialogSession
 	return session, ok
 }
 
+/*
+================
+Clear
+================
+*/
 func (s *NpcDialogStore) Clear(divisionID, characterName string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.byCharacter, selectionKey(divisionID, characterName))
 }
 
+/*
+================
+registerNpcDialogResponse
+================
+*/
 func (rt *Runtime) registerNpcDialogResponse(hub *transport.Hub) {
 	hub.Handle(wire.OpNpcDialog, func(session *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(rt.deps, session)
@@ -99,9 +162,14 @@ func (rt *Runtime) registerNpcDialogResponse(hub *transport.Hub) {
 	})
 }
 
-// HandleNpcDialogResponse consumes the exact one-byte native choice. Every
-// choice is rebound to the still-live selected NPC before it can call a quest
-// mutation hook.
+/*
+================
+HandleNpcDialogResponse
+
+Rebind every one-byte choice to the still-live selected NPC before calling
+a quest mutation or service. Clear immediate choices before returning frames.
+================
+*/
 func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterworld.Character, payload []byte) ([]wire.Frame, string) {
 	choice, err := wire.DecodeNpcDialogChoice(payload)
 	if err != nil {
@@ -138,11 +206,38 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			return nil, fmt.Sprintf("choice %d is outside %d option row(s)", choice, len(conversation.Options))
 		}
 		conversation.Pending = conversation.Options[int(choice-5)]
+		if conversation.Pending.Immediate {
+			if rt.NpcQuests.Finish == nil {
+				return nil, "NPC service owner is unavailable"
+			}
+			frames, serviceError := rt.NpcQuests.Finish(character, conversation.Pending.Codename, conversation.NpcCode)
+			rt.NpcDialogs.Clear(divisionID, character.Name)
+			if serviceError != nil {
+				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}, ""
+			}
+			return frames, ""
+		}
 		if conversation.Pending.Informational {
 			rt.NpcDialogs.Clear(divisionID, character.Name)
 			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.Pending.PromptSymbol)}}, ""
 		}
 		conversation.Stage = npcDialogConfirm
+		if rt.NpcQuests.Prepare != nil {
+			prepared, err := rt.NpcQuests.Prepare(character, conversation.Pending.Codename, conversation.NpcCode)
+			if err != nil {
+				rt.NpcDialogs.Clear(divisionID, character.Name)
+				symbol := conversation.DefaultSymbol
+				var localized interface {
+					error
+					DialogueSymbol() string
+				}
+				if errors.As(err, &localized) && localized.DialogueSymbol() != "" {
+					symbol = localized.DialogueSymbol()
+				}
+				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}}, ""
+			}
+			conversation.Pending.Codename = prepared
+		}
 		conversation.Options = nil
 		rt.NpcDialogs.Put(divisionID, character.Name, conversation)
 		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogConfirm(conversation.Pending.PromptSymbol)}}, ""

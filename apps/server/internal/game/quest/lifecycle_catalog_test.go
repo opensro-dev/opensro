@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+lifecycle_catalog_test.go - durable acceptance and reward coverage
+
+Discover quests from the production catalog and drive their actual objective
+owners. Restart the store between transitions so timer and inventory state
+must survive persistence before a reward can be paid.
+
+===========================================================================
+*/
 package quest
 
 import (
@@ -16,9 +27,14 @@ import (
 	"opensro.online/server/internal/game/world/calendar"
 )
 
-// This matrix discovers definitions from production catalogs. Adding a quest
-// must run its lifecycle here without maintaining a second list of test IDs.
-// Unknown mechanics fail explicitly instead of silently taking the talk branch.
+/*
+================
+TestEveryLoadedQuestSurvivesRestartAndCompletesOnce
+
+Unknown mechanics fail explicitly instead of silently taking the talk branch.
+Capture objectives must acquire their item and clock through the capture owner.
+================
+*/
 func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 	licensed.RequireGameData(t)
 	textdata := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
@@ -55,6 +71,7 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					t.Fatal(err)
 				}
 				rt.PlanInventory = action.NewRuntime(deps, nil).PlanQuestInventory
+				rt.CaptureRoll = func() (uint32, error) { return 0, nil }
 				// Calendar boundaries and the shared quota have their own
 				// discriminating production tests. Keep this restart matrix
 				// inside the quest's admitted period.
@@ -77,6 +94,13 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 				model = "CHAR_EU_MAN_NOBLE"
 			}
 			character = &enterworld.Character{Name: "questmatrix", ModelCodename: model, Level: &level, Gold: &gold, Experience: &experience, CompletedQuestIds: append([]uint32(nil), def.RequiredQuestIDs...)}
+			for _, id := range def.RequiredActiveQuestIDs {
+				parent, exists := defs.ByRefID(id)
+				if !exists {
+					t.Fatal("active prerequisite definition missing")
+				}
+				character.ActiveQuests = append(character.ActiveQuests, BuildActiveQuestRecord(parent, 0))
+			}
 			if err := authority.CreateCharacter("global-official", "quest-matrix", character); err != nil {
 				t.Fatal(err)
 			}
@@ -123,7 +147,10 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					}
 				}
 			}
-			authority.UpdateCharacter(character, "test-prerequisites", func() bool { character.CompletedQuestIds = slices.Clone(def.RequiredQuestIDs); return true })
+			authority.UpdateCharacter(character, "test-prerequisites", func() bool {
+				character.CompletedQuestIds = slices.Clone(def.RequiredQuestIDs)
+				return true
+			})
 			assertIneligible := func(reason string) {
 				t.Helper()
 				before := snapshot()
@@ -140,9 +167,17 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 				}
 			}
 			if def.Level > 1 {
-				authority.UpdateCharacter(character, "test-low-level", func() bool { low := int64(def.Level) - 1; character.Level = &low; return true })
+				authority.UpdateCharacter(character, "test-low-level", func() bool {
+					low := int64(def.Level) - 1
+					character.Level = &low
+					return true
+				})
 				assertIneligible("insufficient level")
-				authority.UpdateCharacter(character, "test-restore-level", func() bool { restored := max(int64(60), int64(def.Level)); character.Level = &restored; return true })
+				authority.UpdateCharacter(character, "test-restore-level", func() bool {
+					restored := max(int64(60), int64(def.Level))
+					character.Level = &restored
+					return true
+				})
 			}
 			if def.CountryByte != 3 {
 				authority.UpdateCharacter(character, "test-wrong-country", func() bool {
@@ -153,7 +188,10 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					return true
 				})
 				assertIneligible("wrong country")
-				authority.UpdateCharacter(character, "test-restore-country", func() bool { character.ModelCodename = model; return true })
+				authority.UpdateCharacter(character, "test-restore-country", func() bool {
+					character.ModelCodename = model
+					return true
+				})
 			}
 			if def.AcceptanceUnavailable != "" {
 				assertIneligible("unresolved native prerequisite")
@@ -186,12 +224,18 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 				authority.UpdateCharacter(character, "test-objective-event", func() bool {
 					switch def.Objective {
 					case ObjectiveKill:
-						for recordProgress(character.ActiveQuests[0]) < count {
+						for recordProgress(character.ActiveQuests[activeQuestIndex(character, def.RefID)]) < count {
 							if _, changed := rt.KillUpdater()(character, def.KillMonsterCodenames[0], fixtureKillRank(def)); !changed {
 								t.Fatal("kill did not advance")
 							}
 						}
 					case ObjectiveCollect:
+						if rule, capture := captureRuleForQuest(def.Codename); capture {
+							if _, changed := rt.CaptureQuestTrap(character, rule.skill, rule.monster, func() bool { return true }); !changed {
+								t.Fatal("capture did not grant its item and timer")
+							}
+							break
+						}
 						rows, _, err := rt.PlanInventory(character, nil, []inventory.ItemAmount{{Codename: def.CollectItemCodename, Count: count - heldCollectCount(character, def)}})
 						if err != nil {
 							t.Fatal(err)
@@ -238,12 +282,18 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					authority.UpdateCharacter(character, "test-parallel-objective", func() bool {
 						switch m.Objective {
 						case ObjectiveKill:
-							for recordProgress(missionRecord(character.ActiveQuests[0], m)) < m.KillCount {
+							for recordProgress(missionRecord(character.ActiveQuests[activeQuestIndex(character, def.RefID)], m)) < m.KillCount {
 								if _, changed := rt.KillUpdater()(character, m.KillMonsterCodenames[0], fixtureKillRank(m)); !changed {
 									t.Fatal("parallel kill did not advance")
 								}
 							}
 						case ObjectiveCollect:
+							if rule, capture := captureRuleForQuest(def.Codename); capture && rule.item == m.CollectItemCodename {
+								if _, changed := rt.CaptureQuestTrap(character, rule.skill, rule.monster, func() bool { return true }); !changed {
+									t.Fatal("parallel capture did not grant its item and timer")
+								}
+								break
+							}
 							rows, _, err := rt.PlanInventory(character, nil, []inventory.ItemAmount{{Codename: m.CollectItemCodename, Count: m.CollectCount}})
 							if err != nil {
 								t.Fatal(err)
@@ -283,7 +333,7 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 			if _, err := complete(); err != nil {
 				t.Fatal(err)
 			}
-			if len(character.ActiveQuests) != 0 || !slices.Contains(character.CompletedQuestIds, def.RefID) {
+			if len(character.ActiveQuests) != len(def.RequiredActiveQuestIDs) || activeQuestIndex(character, def.RefID) >= 0 || !slices.Contains(character.CompletedQuestIds, def.RefID) {
 				t.Fatal("completion state missing")
 			}
 			if character.Gold == nil || *character.Gold != 1000+def.RewardGold {
@@ -332,6 +382,13 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 	}
 }
 
+/*
+================
+TestQuestWireCapacityRefusesBeforeMutation
+
+Both login lists have byte-sized counts. Refuse overflow without paying rewards.
+================
+*/
 func TestQuestWireCapacityRefusesBeforeMutation(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt := testRuntime(t)
@@ -373,6 +430,13 @@ func TestQuestWireCapacityRefusesBeforeMutation(t *testing.T) {
 	}
 }
 
+/*
+================
+TestUnimplementedCatalogQuestsArePreservedThroughLogin
+
+Unknown records retain every field through storage, unrelated progress and login.
+================
+*/
 func TestUnimplementedCatalogQuestsArePreservedThroughLogin(t *testing.T) {
 	licensed.RequireGameData(t)
 	textdata := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
@@ -405,7 +469,13 @@ func TestUnimplementedCatalogQuestsArePreservedThroughLogin(t *testing.T) {
 	}
 	dir := t.TempDir()
 	seedCalls := 0
-	options := store.Options{DefaultSkills: rewardTestSkillSeeder, DefaultQuests: func(string) ([]enterworld.ActiveQuestRecord, error) { seedCalls++; return nil, nil }}
+	options := store.Options{
+		DefaultSkills: rewardTestSkillSeeder,
+		DefaultQuests: func(string) ([]enterworld.ActiveQuestRecord, error) {
+			seedCalls++
+			return nil, nil
+		},
+	}
 	authority, err := store.Open(dir, options)
 	if err != nil {
 		t.Fatal(err)
@@ -457,6 +527,13 @@ func TestUnimplementedCatalogQuestsArePreservedThroughLogin(t *testing.T) {
 	t.Logf("catalog=%d executable-definitions=%d unsupported-records-preserved=%d", catalog.Len(), defs.Len(), len(c.ActiveQuests))
 }
 
+/*
+================
+fixtureKillRank
+
+Select an admitted native rank; rank refusal has its own behavioral coverage.
+================
+*/
 func fixtureKillRank(def *Definition) uint8 {
 	if len(def.KillRanks) > 0 {
 		return def.KillRanks[0]

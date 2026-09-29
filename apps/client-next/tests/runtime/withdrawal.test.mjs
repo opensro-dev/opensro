@@ -17,6 +17,9 @@ const {
 	isRestorationPotion
 } = await import( "../../src/engine/foundation/gameplay/withdrawal.ts" );
 const { createWithdrawalDialog } = await import( "../../src/engine/runtime/ui/hud/withdrawal.ts" );
+const { createNpcConversation } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/npc/npc.ts"
+);
 const { createTraining } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/training/training.ts"
 );
@@ -93,6 +96,46 @@ test("restoration requests preserve native identities and absolute target rank",
 	assert.equal( withdrawalRequest( { kind: "mastery-withdraw", potion: 3828, id: 257, rank: 0 } ).opcode, 0x7606 );
 	assert.throws( () => withdrawalRequest( { kind: "skill-withdraw", potion: 0, id: 12, rank: 0 } ) );
 	assert.throws( () => withdrawalRequest( { kind: "skill-withdraw", potion: 3828, id: 12, rank: -1 } ) );
+});
+
+test("resuscitation quotes native gold and total SP loss, and fails closed without prices", () => {
+	const state = game(), dialog = createWithdrawalDialog();
+	const paid = {
+		...state,
+		progression: { ...state.progression, level: 1, gold: "10000" },
+		inventory: [ { ...state.inventory[0], refObjId: 3673, quantity: 3 } ]
+	};
+	dialog.observe( 1 );
+	dialog.select( "skill-withdraw:12" );
+	dialog.adjust( 3 );
+	assert.equal( dialog.read( paid, {} ).command, null );
+	const quote = dialog.read( paid, {}, { 1: 28 } );
+	assert.equal( quote.gold, 9240 );
+	assert.equal( quote.choice?.refund, 18 );
+	assert.deepEqual( quote.command, { kind: "skill-withdraw", potion: 3673, id: 12, rank: 0 } );
+	assert.equal(
+		dialog.read( { ...paid, progression: { ...paid.progression, gold: "9239" } }, {}, { 1: 28 } ).command,
+		null
+	);
+	dialog.close();
+	assert.equal( dialog.observe( 1 ), false );
+	assert.equal( dialog.active(), false );
+});
+
+test("NPC resuscitation receipts open once and reject malformed payloads", () => {
+	const owner = createNpcConversation( () => {} );
+	owner.receive( { opcode: 0x3230, payload: new Uint8Array() } );
+	assert.equal( owner.restorationRevision(), 0 );
+	owner.select( 123 );
+	owner.talk( 0 );
+	owner.receive( { opcode: 0x3230, payload: new Uint8Array() } );
+	assert.equal( owner.restorationRevision(), 1 );
+	assert.equal( owner.state().phase, "closed" );
+	owner.receive( { opcode: 0x3230, payload: new Uint8Array() } );
+	assert.equal( owner.restorationRevision(), 1 );
+	assert.throws( () => owner.receive( { opcode: 0x3230, payload: Uint8Array.of( 1 ) } ) );
+	owner.clear();
+	assert.equal( owner.restorationRevision(), 0 );
 });
 
 test("restoration receipts repair every hotbar and reject upward ranks", () => {

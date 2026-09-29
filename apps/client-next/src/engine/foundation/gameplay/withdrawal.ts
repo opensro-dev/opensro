@@ -22,6 +22,24 @@ export const MASTERY_WITHDRAWAL_RESPONSE = 0xb606;
 
 /*
 ================
+withdrawalGoldPrices
+
+Missing rows remain unavailable. A stale data bundle must never quote a
+gold-priced quest potion as a free mall restoration.
+================
+*/
+export function withdrawalGoldPrices( raw: unknown ): Readonly<Record<number, number>> {
+	const result: Record<number, number> = {};
+	if ( !raw || typeof raw !== "object" ) return result;
+	for ( const [level, row] of Object.entries( raw ) ) {
+		const basis = row?.withdrawalGoldBasis;
+		if ( Number.isSafeInteger( basis ) && basis > 0 ) result[Number( level )] = basis;
+	}
+	return result;
+}
+
+/*
+================
 WithdrawalCommand
 
 Rank is the desired final rank, not the number of potions to spend.

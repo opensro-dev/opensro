@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+time.go - admitted quest-minute pulses and mission-item cleanup
+
+Ordinary timed quests abort at zero. Captured-monster timers instead release
+their item and retain the quest. Both transitions commit under one character
+door and publish only the resulting inventory and journal state.
+
+===========================================================================
+*/
 package quest
 
 import (
@@ -7,16 +18,27 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// 570650 packs hours/minutes, not milliseconds. v1.150 5C2A30 consumes
-// days at bit 10, hours at bit 15 and minutes at bit 20.
+/*
+================
+packQuestMinutes
+
+570650 packs hours/minutes, not milliseconds. v1.150 5C2A30 consumes days
+at bit 10, hours at bit 15 and minutes at bit 20.
+================
+*/
 func packQuestMinutes(minutes uint8) uint32 {
 	return uint32(minutes/60)<<15 | uint32(minutes%60)<<20
 }
 
-// AdvanceMinute runs only from the admitted character's existing action pulse.
-// 922DE0 initializes quest-user +4; 922800 resumes it; 9219A0 decrements
-// once, publishes corrections every ten minutes and aborts at zero. Death
-// does not stop that pulse. Disconnect removes the actor, preserving the byte.
+/*
+================
+AdvanceMinute
+
+Runs from the admitted character's action pulse. 922DE0 initializes +4;
+922800 resumes it; 9219A0 advances ordinary quest time. Disconnect removes
+the actor and preserves remaining minutes instead of spending offline time.
+================
+*/
 func (rt *Runtime) AdvanceMinute(c *enterworld.Character) []wire.Frame {
 	var out []wire.Frame
 	committed := rt.deps.Update(c, "quest-minute", func() bool {
@@ -27,6 +49,21 @@ func (rt *Runtime) AdvanceMinute(c *enterworld.Character) []wire.Frame {
 		for at := 0; at < len(c.ActiveQuests); {
 			record := c.ActiveQuests[at]
 			def, ok := rt.Defs.ByRefID(record.RefID)
+			if ok {
+				if rule, capture := captureRuleForQuest(def.Codename); capture {
+					var frames []wire.Frame
+					var advanced bool
+					if record.RemainingMinutes == 0 && captureItemCount(c, rule.item) > 0 {
+						frames, advanced = rt.releaseCapture(c, at, rule, rule.expired)
+					} else {
+						frames, advanced = rt.advanceCaptureMinute(c, at, rule)
+					}
+					out = append(out, frames...)
+					changed = changed || advanced
+					at++
+					continue
+				}
+			}
 			if !ok || def.TimeLimitMinutes == 0 {
 				at++
 				continue
@@ -86,8 +123,14 @@ func (rt *Runtime) AdvanceMinute(c *enterworld.Character) []wire.Frame {
 	return out
 }
 
-// 923930 removes all stacks of each mission item. Display progress is capped
-// at the objective count; cleanup must use inventory truth, including surplus.
+/*
+================
+planQuestCleanup
+
+923930 removes all stacks of each mission item. Display progress is capped
+at the objective count; cleanup uses inventory truth, including surplus.
+================
+*/
 func (rt *Runtime) planQuestCleanup(c *enterworld.Character, def *Definition) ([]enterworld.InventoryRow, []wire.Frame, error) {
 	codes := make(map[uint32]string)
 	for i := 0; i < missionCount(def); i++ {
@@ -115,6 +158,8 @@ func (rt *Runtime) planQuestCleanup(c *enterworld.Character, def *Definition) ([
 	if def.Objective == ObjectiveDelivery {
 		consume = append(consume, deliveryCleanup(c, def)...)
 	}
+	consume = append(consume, captureSupplyCleanup(c, def)...)
+	consume = append(consume, questToolCleanup(c, def)...)
 	if len(consume) == 0 {
 		return c.MissionInventory, nil, nil
 	}

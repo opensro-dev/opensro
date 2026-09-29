@@ -27,6 +27,7 @@ import (
 const (
 	naturalRecoveryIntervalMs int64   = 4000
 	questMinuteIntervalMs     int64   = 60000
+	questItemIntervalMs       int64   = 1000
 	standingRecoveryRate      float32 = 0.8
 	sittingRecoveryRate       float32 = 8
 	recoveryPostureSource     uint32  = 2
@@ -47,10 +48,11 @@ Replacement sessions start fresh clocks; repeat admission preserves phase.
 ================
 */
 type recoverySession struct {
-	session     uint64
-	character   *enterworld.Character
-	nextMs      int64
-	questNextMs int64
+	session         uint64
+	character       *enterworld.Character
+	nextMs          int64
+	questNextMs     int64
+	questItemNextMs int64
 }
 
 /*
@@ -77,6 +79,7 @@ func (rt *Runtime) BindRecoverySession(division string, c *enterworld.Character,
 	}
 	now := rt.Now().UnixMilli()
 	rt.recoverySessions[key] = &recoverySession{session: session, character: c, nextMs: now + naturalRecoveryIntervalMs, questNextMs: now + questMinuteIntervalMs}
+	rt.recoverySessions[key].questItemNextMs = now + questItemIntervalMs
 }
 
 /*
@@ -88,8 +91,13 @@ The caller holds the division door before taking the collection lock.
 */
 func (rt *Runtime) forgetRecoverySession(division, name string) {
 	rt.recoveryMu.Lock()
-	defer rt.recoveryMu.Unlock()
-	delete(rt.recoverySessions, recoveryKey{division, strings.ToLower(name)})
+	key := recoveryKey{division, strings.ToLower(name)}
+	state := rt.recoverySessions[key]
+	delete(rt.recoverySessions, key)
+	rt.recoveryMu.Unlock()
+	if state != nil && rt.ForgetQuestItem != nil {
+		rt.ForgetQuestItem(state.character)
+	}
 }
 
 /*
@@ -122,7 +130,8 @@ func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFram
 	rt.recoveryMu.Lock()
 	var keys []recoveryKey
 	for key, state := range rt.recoverySessions {
-		if nowMs >= state.nextMs || rt.AdvanceQuestMinute != nil && nowMs >= state.questNextMs {
+		if nowMs >= state.nextMs || rt.AdvanceQuestMinute != nil && nowMs >= state.questNextMs ||
+			rt.AdvanceQuestItem != nil && nowMs >= state.questItemNextMs {
 			keys = append(keys, key)
 		}
 	}
@@ -136,12 +145,41 @@ func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFram
 	var out []simulation.DivisionFrames
 	for _, key := range keys {
 		unlock := rt.lockDivision(key.division)
+		out = append(out, rt.advanceResidentQuestItem(key, nowMs)...)
 		out = append(out, rt.advanceResidentQuestMinute(key, nowMs)...)
 		frames := rt.recoverResident(key, nowMs)
 		out = append(out, frames...)
 		unlock()
 	}
 	return out
+}
+
+/*
+================
+advanceResidentQuestItem
+
+Short tool timers share authenticated residency but keep their one-second
+cadence separate from the capture-minute and natural recovery clocks.
+================
+*/
+func (rt *Runtime) advanceResidentQuestItem(key recoveryKey, nowMs int64) []simulation.DivisionFrames {
+	if rt.AdvanceQuestItem == nil {
+		return nil
+	}
+	rt.recoveryMu.Lock()
+	state := rt.recoverySessions[key]
+	if state == nil || nowMs < state.questItemNextMs {
+		rt.recoveryMu.Unlock()
+		return nil
+	}
+	state.questItemNextMs += questItemIntervalMs
+	c := state.character
+	rt.recoveryMu.Unlock()
+	frames := rt.AdvanceQuestItem(c, nowMs)
+	if len(frames) == 0 {
+		return nil
+	}
+	return []simulation.DivisionFrames{{DivisionID: key.division, OnlyCharacterID: c.ID, Frames: simFrames(frames)}}
 }
 
 /*

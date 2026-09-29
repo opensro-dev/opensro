@@ -18,6 +18,11 @@ import { merchantBranches } from "@/engine/foundation/gameplay/merchant-branches
 import { decodeCharacterSpawn } from "@/engine/foundation/gameplay/character-spawn";
 import { decodeGroundItem } from "@/engine/foundation/gameplay/ground-item";
 import {
+	decodeSkillObject,
+	DYNAMIC_OBJECT_REFERENCE,
+	SKILL_OBJECT_TYPE
+} from "@/engine/foundation/gameplay/skill-object";
+import {
 	decodePeerAppearance,
 	equipmentBand,
 	equipmentSlot,
@@ -219,6 +224,11 @@ spawn
 		const v = new DataView( p.buffer, p.byteOffset, p.byteLength ),
 			refObjId = v.getUint32( 0, true ),
 			ref = refs.get( refObjId );
+		if ( refObjId === DYNAMIC_OBJECT_REFERENCE ) {
+			if ( p.length < 6 ) throw Error( "Truncated dynamic object discriminator" );
+			if ( v.getUint16( 4, true ) !== SKILL_OBJECT_TYPE ) return raw( frame );
+			return { kind: "spawn", entity: decodeSkillObject( p, frame.opcode === 0x30d7 ) };
+		}
 		if ( ref?.kind === "teleport" ) {
 			if ( p.length !== 24 || !ref.teleport ) throw Error( "Invalid teleport gate spawn" );
 			const gid = v.getUint32( 4, true );

@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+definitions.go - validated version-local quest contracts
+
+Shipped media owns identity and advertised rewards. Compiled native scripts
+supply mechanics and NPC relationships; all references resolve before the
+runtime can accept a quest. Research files are never loaded by the server.
+
+===========================================================================
+*/
 package quest
 
 // Version-aware quest definitions. v1.150 questdata/questcontentsdata and
@@ -16,7 +27,13 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// ObjectiveKind classifies the authored objective mechanics.
+/*
+================
+ObjectiveKind
+
+Each kind has one progression owner and an explicit completion predicate.
+================
+*/
 type ObjectiveKind int
 
 const (
@@ -36,17 +53,25 @@ const (
 	ObjectiveDelivery
 )
 
-// RewardItemLead is one _RefQuestRewardItems00 shard row recorded on the
-// definition, codename-joined. The inventory owner must admit the entire
-// reward before any quest/scalar mutation can commit.
+/*
+================
+RewardItemLead
+
+The inventory owner must admit the entire reward before scalar rewards commit.
+================
+*/
 type RewardItemLead struct {
 	ItemCodename string
 	Count        uint32
 }
 
-// QuestSpec is one authored curated entry, keyed by codename. Everything
-// resolvable from shipped media is resolved at load time (Definition);
-// the spec carries only what the media does not know.
+/*
+================
+QuestSpec
+
+Authored mechanics keyed by codename. Definition resolves media-owned fields.
+================
+*/
 type QuestSpec struct {
 	TimeLimitMinutes uint8
 	TimeoutSymbol    string
@@ -63,6 +88,7 @@ type QuestSpec struct {
 	MonsterDrop           *MonsterDropRule
 	Codename              string
 	RequiredQuests        []string
+	RequiredActiveQuests  []string
 	Repeatable            bool
 	// KindByte is the wire u10 the CIFQuestReward content button
 	// switches on (sub_5c26e0): 1/7/8 open the give-up window, 2 opens
@@ -209,8 +235,13 @@ var starterQuestSpecs = []QuestSpec{
 	},
 }
 
-// Definition is one curated spec resolved against the shipped media: the
-// authoritative in-memory quest definition the runtime consults.
+/*
+================
+Definition
+
+Version-local references resolved from one authored spec and shipped media.
+================
+*/
 type Definition struct {
 	deliveryRefs         []uint32
 	requiredEquippedItem string
@@ -231,12 +262,19 @@ type Definition struct {
 	NextQuests     []string
 	// CollectItemRefID resolves CollectItemCodename against the shipped
 	// itemdata (grade A id for the grade-D objective's item).
-	CollectItemRefID uint32
-	TitleSymbol      string
-	RequiredQuestIDs []uint32
+	CollectItemRefID       uint32
+	TitleSymbol            string
+	RequiredQuestIDs       []uint32
+	RequiredActiveQuestIDs []uint32
 }
 
-// Definitions is the loaded, validated definition set.
+/*
+================
+Definitions
+
+Stable source order also owns the one-byte NPC choice order.
+================
+*/
 type Definitions struct {
 	ordered    []*Definition
 	byCodename map[string]*Definition
@@ -255,6 +293,14 @@ type Definitions struct {
 // this checkout) returns an EMPTY definition set instead: the
 // TextdataSkills degradation - the server boots, the quest plane
 // refuses every id, and the load already warned loud.
+/*
+================
+LoadDefinitions
+
+Present catalogs must resolve every contract. An absent catalog admits no
+quests; a partially resolved catalog is an error, never a shortened rule set.
+================
+*/
 func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definitions, error) {
 	defs := &Definitions{
 		byCodename:            map[string]*Definition{},
@@ -348,6 +394,14 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 		if err := validateMonsterDrop(spec); err != nil {
 			return nil, err
 		}
+		if spec.MonsterDrop != nil && spec.MonsterDrop.ItemCodename != "" {
+			if items == nil {
+				return nil, fmt.Errorf("quest %s requires a drop item catalog", spec.Codename)
+			}
+			if ref, exists := items.ItemRefByCodename(spec.MonsterDrop.ItemCodename); !exists || ref == nil {
+				return nil, fmt.Errorf("quest %s has an unresolved tool drop", spec.Codename)
+			}
+		}
 		if err := loadMissions(def, contents.ContentsSymbols, items); err != nil {
 			return nil, err
 		}
@@ -366,6 +420,13 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 		defs.ordered = append(defs.ordered, def)
 	}
 	for _, def := range defs.byCodename {
+		for _, code := range def.RequiredActiveQuests {
+			parent, ok := defs.byCodename[code]
+			if !ok {
+				return nil, fmt.Errorf("quest %s requires unavailable active quest %s", def.Codename, code)
+			}
+			def.RequiredActiveQuestIDs = append(def.RequiredActiveQuestIDs, parent.RefID)
+		}
 		for _, code := range def.RequiredQuests {
 			parent, ok := catalog.QuestByCodename(code)
 			if !ok {
@@ -383,26 +444,46 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 	return defs, nil
 }
 
-// ByCodename resolves a loaded definition by its version-stable key.
+/*
+================
+ByCodename
+
+Resolve the version-stable key used by authored scripts.
+================
+*/
 func (d *Definitions) ByCodename(codename string) (*Definition, bool) {
 	def, ok := d.byCodename[codename]
 	return def, ok
 }
 
-// ByRefID resolves a loaded definition by the wire quest ref id (the
-// 0x71EB/0x729A body value).
+/*
+================
+ByRefID
+
+Resolve the version-local reference carried by native requests.
+================
+*/
 func (d *Definitions) ByRefID(refID uint32) (*Definition, bool) {
 	def, ok := d.byRefID[refID]
 	return def, ok
 }
 
-// Len reports how many definitions loaded.
+/*
+================
+Len
+================
+*/
 func (d *Definitions) Len() int {
 	return len(d.byCodename)
 }
 
-// All returns the definitions in curated source order. Stable order is part
-// of the native kind-4 response contract because row index becomes choice+5.
+/*
+================
+All
+
+Return a detached list in the source order used by NPC choices.
+================
+*/
 func (d *Definitions) All() []*Definition {
 	return append([]*Definition(nil), d.ordered...)
 }

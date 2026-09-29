@@ -3,6 +3,9 @@
 
 character.go - the persisted character record
 
+Character authority owns this graph. Transport projects it into native wire
+records; detached snapshots must copy every mutable child before use.
+
 ===========================================================================
 */
 
@@ -54,8 +57,13 @@ type InventoryRow struct {
 	TransformRefObjID uint32 `json:"transformRefObjId,omitempty"`
 }
 
-// WorldSpawn is the persisted world.spawn record (settled position; the
-// in-flight moveSegment plane belongs to the movement lane).
+/*
+================
+WorldSpawn
+
+Settled position. The movement owner retains the in-flight segment separately.
+================
+*/
 type WorldSpawn struct {
 	RegionID *int64   `json:"regionId"`
 	X        *float64 `json:"x"`
@@ -109,6 +117,13 @@ type CharacterWorld struct {
 	MoveSegment          json.RawMessage `json:"moveSegment,omitempty"`
 }
 
+/*
+================
+SavedReturnLocation
+
+World identity and position saved for native return-location skills.
+================
+*/
 type SavedReturnLocation struct {
 	Definition uint16  `json:"definition"`
 	RegionID   uint16  `json:"regionId"`
@@ -142,6 +157,14 @@ type BuybackEntry struct {
 	Item        InventoryRow `json:"item"`
 }
 
+/*
+================
+Character
+
+One authority transaction owns inventory, progression and quest state together.
+Pointers distinguish absent legacy values from meaningful zero values.
+================
+*/
 type Character struct {
 	// Actor-only teleport state. Character-store snapshots carry it; reconnect
 	// never resurrects a timer belonging to the previous native actor lifetime.
@@ -300,7 +323,8 @@ type Character struct {
 	CompletedQuestIds []uint32 `json:"completedQuestIds,omitempty"`
 	// Completion counts are server-side repeat limits; the native login wire
 	// continues to carry only the unique completed quest IDs.
-	QuestCompletionCounts map[uint32]uint32 `json:"questCompletionCounts,omitempty"`
+	QuestCompletionCounts map[uint32]uint32           `json:"questCompletionCounts,omitempty"`
+	QuestSupplies         map[uint32]QuestSupplyState `json:"questSupplies,omitempty"`
 
 	// ActiveQuests are the in-progress quest records the 0x32B3 quest
 	// block's SECOND section emits (sub_8673d0 section 2: u8 count +
@@ -418,6 +442,13 @@ type PetSkillWindow struct {
 	EndUnixMs int64  `json:"endUnixMs"`
 }
 
+/*
+================
+CharacterCOS
+
+Owned companion state; its inventory commits with the owning character.
+================
+*/
 type CharacterCOS struct {
 	NativeBodyStatus uint8         `json:"-"`
 	Experience       uint64        `json:"experience,omitempty"`
@@ -439,8 +470,13 @@ type CharacterCOS struct {
 	Mounted    bool   `json:"mounted"`
 }
 
-// COS storage is part of its owning character transaction, never a second
-// inventory registry. Capacity comes from admitted COS state, not a request.
+/*
+================
+COSContainer
+
+Capacity comes from admitted companion state, never from a client request.
+================
+*/
 type COSContainer struct {
 	Capacity uint8          `json:"capacity"`
 	Rows     []InventoryRow `json:"rows"`
@@ -464,8 +500,13 @@ type AvatarInventory struct {
 	Rows []InventoryRow `json:"rows,omitempty"`
 }
 
-// TimedSkillJob is the saved online-time job, not an absolute wall deadline.
-// Native CInstanceTimedJob type 0 / CTJ_SkillKeeper checkpoints remaining time.
+/*
+================
+TimedSkillJob
+
+CInstanceTimedJob type 0 checkpoints remaining online time across login.
+================
+*/
 type TimedSkillJob struct {
 	SkillID     uint32 `json:"skillId"`
 	Token       uint32 `json:"token"`

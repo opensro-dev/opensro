@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+chains.go - shared quest prerequisite admission and graph validation
+
+Completed predecessors and currently active companions are distinct native
+conditions. NPC offers, map markers and acceptance use the same predicate.
+
+===========================================================================
+*/
 package quest
 
 import (
@@ -5,6 +15,13 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
+/*
+================
+prerequisitesMet
+
+An active requirement cannot be satisfied by an already completed quest.
+================
+*/
 func prerequisitesMet(c *enterworld.Character, def *Definition) bool {
 	if def.AcceptanceUnavailable != "" {
 		return false
@@ -14,10 +31,21 @@ func prerequisitesMet(c *enterworld.Character, def *Definition) bool {
 			return false
 		}
 	}
+	for _, id := range def.RequiredActiveQuestIDs {
+		if activeQuestIndex(c, id) < 0 {
+			return false
+		}
+	}
 	return true
 }
 
-// Dependencies are checked at load time, not recursively on each NPC click.
+/*
+================
+validateQuestChains
+
+Check both dependency families at load time, never recursively on NPC clicks.
+================
+*/
 func validateQuestChains(defs *Definitions) error {
 	visited := map[uint32]uint8{}
 	var visit func(*Definition) error
@@ -29,7 +57,9 @@ func validateQuestChains(defs *Definitions) error {
 			return nil
 		}
 		visited[def.RefID] = 1
-		for _, id := range def.RequiredQuestIDs {
+		parents := append([]uint32(nil), def.RequiredQuestIDs...)
+		parents = append(parents, def.RequiredActiveQuestIDs...)
+		for _, id := range parents {
 			parent, ok := defs.ByRefID(id)
 			if !ok {
 				if defs.externalPrerequisites[id] {

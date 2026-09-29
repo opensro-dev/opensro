@@ -645,6 +645,10 @@ state here before a command can claim a native wire conversation.
 					sendFrame( { opcode: 0x72dd, payload: new Uint8Array( 0 ) } ) :
 					null;
 			}
+			if ( command.kind === "gathering-cancel" ) {
+				quests.cancelGathering();
+				return null;
+			}
 			if (
 				combat.guidedActive( localGid, now ) &&
 				[ "move", "ground-move", "attack", "skill", "pickup" ].includes( command.kind )
@@ -1365,6 +1369,21 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return frame.opcode === 0x30b3;
 				}
+				if ( frame.opcode === 0xb75d ) {
+					const gathering = quests.state().questGathering;
+					quests.receive( frame, now );
+					// 766950 reports failure only when the cancelled identity owns the row.
+					const key = frame.payload[0] === 2 ?
+						"UIIT_STT_ERR_COMMON_NOT_ACCEPT" :
+						gathering && !quests.state().questGathering ?
+						"UIIT_MSG_QUEST_GET_ITEM_FAILURE" :
+						undefined;
+					if ( key ) {
+						notices = [ ...notices.slice( -99 ), { key, value: 0, sequence: ++noticeSequence } ];
+					}
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === 0xb29a || frame.opcode === 0xb1eb ) {
 					quests.receive( frame ); // Decode and settle the transaction before presentation.
 					const p = frame.payload;
@@ -1546,7 +1565,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( frame.opcode === 0x31ad ) return true;
 				}
 				if (
-					npcConversation.receive( frame ) || quests.receive( frame ) ||
+					npcConversation.receive( frame ) || quests.receive( frame, now ) ||
 					chat.receive( frame, localGid, chatSender?.name )
 				) {
 					dirty = true;
@@ -1836,6 +1855,7 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			flushBindingRepairs();
+			if ( quests.step( now ) ) dirty = true;
 			if ( gateApproach.phase === "moving" ) {
 				const approachingGate = gateApproach.gate;
 				const m = movement.state();
@@ -1971,7 +1991,10 @@ have been collected so consumers never observe half of a packet update.
 			}
 			dirty = false;
 			const m = movement.state(), i = inventory.state(), c = combat.state();
-			const npcState = { npcConversation: npcConversation.state() };
+			const npcState = {
+				npcConversation: npcConversation.state(),
+				restorationRevision: npcConversation.restorationRevision()
+			};
 			const cosVital = activeCos ? c.vitals.find( v => v.gid === activeCos!.gid ) : undefined;
 			const cos = activeCos ?
 				{
@@ -2045,6 +2068,7 @@ World transfer retires spatial work while retaining character/session data.
 		*/
 		resetWorld() {
 			pickup.clear();
+			quests.clearGathering();
 			gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
 			returnScroll = undefined;
 			teleportMode = 0;

@@ -97,8 +97,13 @@ func (rt *Runtime) skillAdmission(division string, c *enterworld.Character, skil
 	return rt.contextSkillAdmission(division, c, skill, now, target, prepared, mask, admitContext{})
 }
 
-// admitContext is what 58D8F0 reads from the action target context
-// beyond the target itself.
+/*
+================
+admitContext
+
+The extra action-context fields read by 58D8F0 beyond the selected target.
+================
+*/
 type admitContext struct {
 	// Indirect is context kind 0x20 (BeginIndirectSkill: an item's skill).
 	// 58DA30 skips the frozen/asleep/stunned gates for it.
@@ -107,6 +112,13 @@ type admitContext struct {
 	TransformRef uint32
 }
 
+/*
+================
+contextSkillAdmission
+
+Preserve native prerequisite order across direct and item-owned skill paths.
+================
+*/
 func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64, target *admitTarget, prepared *pendingProjectileCast, mask admitMask, context admitContext) uint16 {
 	// 58DA3A / 58DAEF: frozen, asleep or stunned, unless the skill has nmf.
 	// The codename exemptions (MOB_RM_SEALSTONE, MSKILL_SD_SETH_ATTACK10)
@@ -303,27 +315,50 @@ CASTER STATE
 ===============================================================================
 */
 
-// casterDisabled is the +0xD34 & 0x4041 test at 58DAEF: freeze, sleep, stun.
+/*
+================
+casterDisabled
+
+58DAEF checks freeze, sleep and stun before ordinary skill admission.
+================
+*/
 func (rt *Runtime) casterDisabled(division string, c *enterworld.Character) bool {
 	block := rt.playerAbnormal(division, c.Name)
 	disabling := abnormal.Freeze.Bit() | abnormal.Sleep.Bit() | abnormal.Stun.Bit()
 	return block != nil && block.Mask&disabling != 0
 }
 
-// casterRooted is the +0xD34 & 0x80 test at 58E010.
+/*
+================
+casterRooted
+
+58E010 checks the native root bit independently of incapacitation.
+================
+*/
 func (rt *Runtime) casterRooted(division string, c *enterworld.Character) bool {
 	block := rt.playerAbnormal(division, c.Name)
 	return block != nil && block.Mask&abnormal.Root.Bit() != 0
 }
 
-// casterAboveLowHP is 58DF8C..58DFC9: current HP (+0x108) above the
-// maximum (+0x110) times the double 0.3f (0xB45CE0), both loaded exactly.
+/*
+================
+casterAboveLowHP
+
+58DF8C compares current HP against maximum HP times the widened float 0.3f.
+================
+*/
 func (rt *Runtime) casterAboveLowHP(division string, c *enterworld.Character) bool {
 	maxHP, _, currentHP, _ := rt.playerKeeperVitals(division, c)
 	return float64(maxHP)*float64(float32(0.3)) < float64(currentHP)
 }
 
-// casterSitting is motion 4 for 58E0BF.
+/*
+================
+casterSitting
+
+58E0BF reads sitting from the current world motion owner.
+================
+*/
 func (rt *Runtime) casterSitting(division string, c *enterworld.Character) bool {
 	if rt.Worlds == nil {
 		return false
@@ -365,17 +400,33 @@ the caster and refuses on the first object that stands too close:
 	skill object (vfunc +0xC0) nearer than the word    0x3037
 	monster (vfunc +0x28) nearer than five times it    0x3038
 
-The distance is the 3D distance; the product is taken in 32 bits. This port
-spawns no skill objects (traps, mines), so only the monster arm refuses.
+Distances are three-dimensional; the product is taken in 32 bits. Both
+object families must be in the caster's current population lifetime.
 ==================
 */
 func (rt *Runtime) qestRefusal(division string, c *enterworld.Character, radius uint32, now int64) uint16 {
+	from := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
+	lease, admitted := rt.EntryPopulationLease(division, c.Name)
+	for _, object := range rt.SkillObjects.Snapshot() {
+		if !admitted || object.Division != division || object.Population != lease {
+			continue
+		}
+		at := simulation.Spawn{RegionID: object.Spawn.Region, X: float64(object.Spawn.X),
+			Y: float64(object.Spawn.Y), Z: float64(object.Spawn.Z)}
+		if simulation.IsDungeonRegion(from.RegionID) == simulation.IsDungeonRegion(at.RegionID) &&
+			distance3D(from, at) < float64(radius) {
+			return 0x3037
+		}
+	}
 	if rt.Monsters == nil {
 		return 0
 	}
-	from := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
 	limit := float64(radius * 5)
-	for _, candidate := range rt.Monsters.CombatCandidatesForChain(division, from, limit, now) {
+	candidates := rt.Monsters.CombatCandidatesForChain(division, from, limit, now)
+	if admitted {
+		candidates = rt.Monsters.CombatCandidatesInPopulation(division, lease, from, limit, now, true)
+	}
+	for _, candidate := range candidates {
 		mover, ok := rt.Monsters.Mover(division, candidate.Gid)
 		if !ok {
 			continue
@@ -418,7 +469,13 @@ func (rt *Runtime) mschRefusal(division string, c *enterworld.Character, mode, t
 	return 0
 }
 
-// reqiRefusal is combat.ReqiRefusal (58D480's reqi walk) for this package.
+/*
+================
+reqiRefusal
+
+Delegate the native reqi walk to the shared equipment contract.
+================
+*/
 func reqiRefusal(c *enterworld.Character, items enterworld.ItemRefSource, req enterworld.SkillReqi) uint16 {
 	return combat.ReqiRefusal(c, items, req)
 }

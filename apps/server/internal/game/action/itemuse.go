@@ -151,6 +151,23 @@ func (rt *Runtime) HandleItemUse(
 			return false
 		}
 		nowMs := rt.Now().UnixMilli()
+		if family == itemUseQuestTool {
+			if len(tail) != 0 || rt.UseQuestItem == nil || character.NativeTeleportMode != 0 {
+				return false
+			}
+			at := rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, nowMs)
+			frames, admitted := rt.UseQuestItem(character, ref.Codename, at, nowMs)
+			if !admitted {
+				result.Frames = append(result.Frames, frames...)
+				return false
+			}
+			remaining := consumeItemUseRow(character, rowIndex)
+			result.Frames = []wire.Frame{{Opcode: wire.OpItemUseResponse,
+				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}
+			result.Frames = append(result.Frames, frames...)
+			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
+			return true
+		}
 		if family == itemUseBerserk {
 			// Native49B710: no recovery cooldown; a full gauge still consumes the item.
 			if character.NativeBodyStatus == 1 {

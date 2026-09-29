@@ -68,6 +68,7 @@ import { concealmentState, concealmentAlpha, seenAlpha } from "@/engine/foundati
 import { skillLookup, type SkillLookup } from "@/engine/foundation/ui/buff-viewer";
 import { createPosePresentation } from "./pose-presentation";
 import { createCharacterStateIndex } from "./state-index";
+import { createSkillObjects, SKILL_OBJECT_MANIFESTS } from "./skill-objects";
 import { monsterScale, monsterMaterialSlot } from "@/engine/foundation/rendering/monster-scale";
 import { skillSoundRoots, weaponSoundLabel } from "@/engine/foundation/animation/sound-selectors";
 import { emoteRoute, emoteAttachments } from "@/engine/foundation/animation/emote";
@@ -398,6 +399,7 @@ SetEntry
 	const modelEmission = createModelEmission( allocateActor );
 	const orbs = createOrbs( play, random, allocateActor ), scenery = createSceneryEmission( allocateActor );
 	const statusOwner = createStatusOwner();
+	const skillObjects = createSkillObjects( allocateActor );
 	const resources = createCharacterResources( assets, renderer, origin ),
 		sounds = createCharacterSounds( play, random.range ),
 		effects = createCharacterEffects(
@@ -661,10 +663,23 @@ step
 				Math.trunc( seconds * 1000 )
 			);
 			const animationDeltaMs = animationDelta( seconds );
+			skillObjects.retain( entities );
 			resources.begin( seconds );
 			failure = null;
 			const result = resources.poll();
-			if ( result ) {
+			const skillObjectResult = result && SKILL_OBJECT_MANIFESTS.some( path => path === result.path );
+			if ( result && skillObjectResult ) {
+				try {
+					skillObjects.catalog(
+						result.path,
+						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) )
+					);
+					resources.accepted( result.path );
+				} catch ( error ) {
+					resources.rejected( result.path, error );
+				}
+			}
+			if ( result && !skillObjectResult ) {
 				try {
 					const decoded = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) );
 					const value = decoded as {
@@ -999,6 +1014,10 @@ step
 			}
 			if ( (entities.length || dock?.length || preview) && manifest < (dock || preview ? 1 : manifests.length) ) {
 				resources.manifest( manifests[manifest]! );
+			}
+			if ( manifest === manifests.length ) {
+				const path = skillObjects.nextManifest( entities );
+				if ( path ) resources.manifest( path );
 			}
 			previewReady = false;
 			dockReady = false;
@@ -1964,6 +1983,17 @@ soundContext
 			for ( const entity of selected ) {
 				active.add( entity.gid );
 				try {
+					if ( entity.skillObject ) {
+						const visual = skillObjects.frame( entity, seconds, resources );
+						if ( visual ) {
+							next.set( entity.gid, visual.actor );
+							displayedDependencies.set( entity.gid, visual.paths );
+							if ( visual.particles.length ) {
+								particleHolders.push( { actor: visual.actor, particles: visual.particles } );
+							}
+						}
+						continue;
+					}
 					if ( entity.groundItem ) {
 						const item = items[String( entity.refObjId )], drop = dropModels[item?.dropModelPath ?? ""];
 						if ( !drop ) {
@@ -3392,6 +3422,7 @@ reset
 ================
 		*/
 		reset() {
+			skillObjects.reset();
 			clearFootprints();
 			animationDelta = createModifierDelta();
 			warmSkills = undefined;
@@ -3450,6 +3481,7 @@ dispose
 ================
 		*/
 		dispose() {
+			skillObjects.dispose();
 			clearFootprints();
 			warmSkills = undefined;
 			warmBody = undefined;

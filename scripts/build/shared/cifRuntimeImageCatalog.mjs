@@ -48,6 +48,8 @@ returnScrollRuntimeImageReferences
 */
 export const returnScrollRuntimeImageReferences = [
 	"interface/ifcommon/com_casting_window.ddj",
+	// 6B1B30 selects collection for kind 1 through code, outside resinfo.
+	"interface/ifcommon/com_casting_gauge_collection.ddj",
 	"interface/ifcommon/com_casting_gauge_return.ddj",
 	"interface/ifcommon/com_casting_gauge_return_bright.ddj"
 ];

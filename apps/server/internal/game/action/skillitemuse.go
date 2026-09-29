@@ -49,6 +49,9 @@ func (rt *Runtime) useSkillItem(character *enterworld.Character, use skillItemUs
 		return false
 	}
 	skill, found := source.SkillByCodename(use.ref.AssociatedSkillCodename)
+	if found && skill.CastGate.QuestTrap.Present {
+		return rt.useQuestTrap(character, use, skill, result)
+	}
 	speed := skill.MovementModifier.Present && skill.MovementModifier.Supported
 	sight := skill.Concealment.Pinned && skill.Concealment.Sight.Present
 	stats := skill.TimedEffect.Pinned && skill.TimedEffect.ItemProgram

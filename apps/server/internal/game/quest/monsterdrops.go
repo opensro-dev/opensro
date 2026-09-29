@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+monsterdrops.go - native personal quest loot admission
+
+Fatal hits plan ground loot; only pickup changes inventory objectives. A
+material quest may drop a tool rather than its final collection item, so the
+drop contract owns its item identity and held-item cap independently.
+
+===========================================================================
+*/
 package quest
 
 import (
@@ -10,7 +21,15 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 )
 
+/*
+================
+MonsterDropRule
+
+An empty ItemCodename retains the ordinary collected-item drop contract.
+================
+*/
 type MonsterDropRule struct {
+	ItemCodename     string
 	MonsterCodenames []string
 	AnyMonster       bool
 	ChancePercent    float32
@@ -21,6 +40,13 @@ type MonsterDropRule struct {
 	MaxHeld              uint32
 }
 
+/*
+================
+validateMonsterDrop
+
+Reject malformed probability and cap contracts before loading the catalog.
+================
+*/
 func validateMonsterDrop(spec QuestSpec) error {
 	rule := spec.MonsterDrop
 	if rule == nil {
@@ -29,7 +55,7 @@ func validateMonsterDrop(spec QuestSpec) error {
 	validChance := func(p float32) bool { return p > 0 && p <= 100 && !math.IsNaN(float64(p)) }
 	if spec.Objective != ObjectiveCollect ||
 		rule.AnyMonster == (len(rule.MonsterCodenames) != 0) ||
-		(rule.MaxHeld != 0 && rule.MaxHeld < spec.CollectCount) {
+		(rule.ItemCodename == "" && rule.MaxHeld != 0 && rule.MaxHeld < spec.CollectCount) {
 		return fmt.Errorf("quest definitions: %s has an invalid monster-drop contract", spec.Codename)
 	}
 	if len(rule.SpeciesChancePercent) == 0 {
@@ -56,9 +82,14 @@ func validateMonsterDrop(spec QuestSpec) error {
 	return nil
 }
 
-// MonsterDrops plans personal ground loot, not inventory grants. The accepted
-// fatal-hit owner commits it with the ordinary loot, and pickup alone advances
-// inventory-derived collection objectives. No quest state changes during RNG.
+/*
+================
+MonsterDrops
+
+The accepted fatal-hit owner commits these personal drops with ordinary loot.
+Random draws never mutate quest state or award inventory directly.
+================
+*/
 func (rt *Runtime) MonsterDrops(c *enterworld.Character, monster string, roll func() (uint32, error)) []inventory.ItemAmount {
 	if c == nil || c.DeletePending || roll == nil {
 		return nil
@@ -80,11 +111,23 @@ func (rt *Runtime) MonsterDrops(c *enterworld.Character, monster string, roll fu
 	return out
 }
 
+/*
+================
+missionMonsterDrops
+
+Held-item admission and drop identity share the same codename. A knife drop
+must not stop because a different stack of collected vines reached its cap.
+================
+*/
 func missionMonsterDrops(c *enterworld.Character, def *Definition, monster string, roll func() (uint32, error)) []inventory.ItemAmount {
 	if def.Objective != ObjectiveCollect || def.MonsterDrop == nil {
 		return nil
 	}
 	rule := def.MonsterDrop
+	code := rule.ItemCodename
+	if code == "" {
+		code = def.CollectItemCodename
+	}
 	if !rule.AnyMonster && !slices.Contains(rule.MonsterCodenames, monster) {
 		return nil
 	}
@@ -93,7 +136,11 @@ func missionMonsterDrops(c *enterworld.Character, def *Definition, monster strin
 	}
 	var held uint64
 	for _, item := range c.MissionInventory {
-		if item.RefObjID == def.CollectItemRefID && item.Slot >= int64(inventory.EquipmentSlotEnd) && item.Slot < int64(inventory.BagSlotEnd) {
+		matches := item.RefObjID == def.CollectItemRefID
+		if rule.ItemCodename != "" {
+			matches = item.Codename == code
+		}
+		if matches && item.Slot >= int64(inventory.EquipmentSlotEnd) && item.Slot < int64(inventory.BagSlotEnd) {
 			held += uint64(max(1, item.StackCount))
 		}
 	}
@@ -116,14 +163,17 @@ func missionMonsterDrops(c *enterworld.Character, def *Definition, monster strin
 	if err != nil || !nativeQuestDropChance(chance, first, second) {
 		return nil
 	}
-	return []inventory.ItemAmount{{Codename: def.CollectItemCodename, Count: 1}}
+	return []inventory.ItemAmount{{Codename: code, Count: 1}}
 }
 
-// SR_GameServer 57be70, IGameServer vtable afa76c slot 40. Two CRT
-// 15-bit outputs form a 30-bit value, then modulo one million. The sample
-// is rounded to float32 BEFORE comparison; zero is rejected and equality
-// succeeds. Preserve these edges for both integral and fractional rates.
-// The port supplies entropy, not the original process-wide CRT RNG stream.
+/*
+================
+nativeQuestDropChance
+
+57BE70 joins two 15-bit draws and rounds the normalized sample to float32
+before comparison. Zero fails and equality succeeds, including fractional rates.
+================
+*/
 func nativeQuestDropChance(chance float32, first, second uint32) bool {
 	value := ((second&0x7fff)<<15 | (first & 0x7fff)) % 1000000
 	sample := float32(float64(value) / 1000000)

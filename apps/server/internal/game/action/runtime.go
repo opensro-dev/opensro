@@ -25,6 +25,7 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/skillobject"
 )
 
 /*
@@ -54,6 +55,9 @@ type Runtime struct {
 	Ground              *grounditem.Registry
 	Pending             *grounditem.PendingTracker
 	Worlds              *simulation.WorldStore
+	SkillObjects        skillobject.Registry
+	CanPlaceQuestTrap   func(*enterworld.Character, string) ([]wire.Frame, bool)
+	CaptureQuestTrap    func(*enterworld.Character, string, string, func() bool) ([]wire.Frame, bool)
 
 	// effects is the server-owned active character-effect collection behind
 	// 0x72CD cancel-active-effect. It stays private so packet handlers cannot
@@ -144,12 +148,16 @@ type Runtime struct {
 	// UpdateQuestInventory is the quest lane's collect-objective updater. It
 	// runs inside the item authority transaction so inventory and derived
 	// quest progress cannot tear across a crash.
-	UpdateQuestInventory func(character *enterworld.Character) ([]wire.Frame, bool)
-	AdvanceQuestMinute   func(character *enterworld.Character) []wire.Frame
-	AdvanceQuestCalendar func(nowMs int64)
-	QuestMonsterDrops    func(*enterworld.Character, string, func() (uint32, error)) []inventory.ItemAmount
-	QuestTravelBlocks    func(*enterworld.Character) uint32
-	UpdateQuestKill      func(
+	UpdateQuestInventory        func(character *enterworld.Character) ([]wire.Frame, bool)
+	AdvanceQuestMinute          func(character *enterworld.Character) []wire.Frame
+	AdvanceQuestItem            func(*enterworld.Character, int64) []wire.Frame
+	ForgetQuestItem             func(*enterworld.Character)
+	UseQuestItem                func(*enterworld.Character, string, simulation.Spawn, int64) ([]wire.Frame, bool)
+	AdvanceQuestCalendar        func(nowMs int64)
+	ReleaseQuestCapturesOnDeath func(*enterworld.Character) ([]wire.Frame, bool)
+	QuestMonsterDrops           func(*enterworld.Character, string, func() (uint32, error)) []inventory.ItemAmount
+	QuestTravelBlocks           func(*enterworld.Character) uint32
+	UpdateQuestKill             func(
 		character *enterworld.Character,
 		monsterCodename string,
 		rarity uint8,

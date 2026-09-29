@@ -30,14 +30,26 @@ type SkillConsumption struct {
 	Pinned               bool
 }
 
-// ammunitionFreeWeapons: the row names a weapon and neither of its kinds is
-// a bow (6) or crossbow (12), the families that load TID 3.3.4 ammunition.
+/*
+==================
+ammunitionFreeWeapons
+
+An explicit weapon family without either bow kind requires no ammunition.
+The unspecified family remains subject to the caller's equipment checks.
+==================
+*/
 func ammunitionFreeWeapons(kinds [2]uint8) bool {
 	return kinds[0] != 255 && kinds[0] != 6 && kinds[0] != 12 && kinds[1] != 6 && kinds[1] != 12
 }
 
-// cnsm is an equipped-item family/count requirement (server 587F57,
-// 58E331..58E3C5), independent of the HP/MP consumption columns.
+/*
+==================
+SkillAmmunition
+
+cnsm is an equipped-item family/count requirement (587F57, 58E331),
+independent of the HP/MP consumption columns.
+==================
+*/
 type SkillAmmunition struct{ TID3, TID4, Count uint32 }
 
 /*
@@ -61,9 +73,18 @@ type SkillOffensiveArea struct {
 	Select uint8
 }
 
+/*
+==================
+parseSkillOffense
+
+Index shared admission before decoding executable programs. A quest trap is
+a world object; decoding its program must not admit it as a combat attack.
+==================
+*/
 func parseSkillOffense(fields []string, row *SkillRow) {
 	noteParameterIndex(fields, row)
 	row.OffenseRefusal = decodeSkillOffense(fields, row)
+	row.CastGate.QuestTrap = compileQuestTrap(fields)
 }
 
 /*
@@ -246,7 +267,14 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 	}
 }
 
-// Shared production admission diagnostic; reporting never reimplements this gate.
+/*
+==================
+decodeSkillOffense
+
+Production and coverage reports share this gate. A partial parameter parse
+must never make an unsupported attack look executable.
+==================
+*/
 func decodeSkillOffense(fields []string, row *SkillRow) string {
 	if len(fields) != 118 {
 		return "offense:invalid-envelope-or-arguments"

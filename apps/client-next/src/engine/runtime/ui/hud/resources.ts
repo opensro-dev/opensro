@@ -14,6 +14,7 @@ Dispose cancels any requests still owned by this module.
 import { decodePortalCatalog, type PortalCatalog } from "@/engine/foundation/gameplay/portal";
 import { decodeTooltipMasteries, type TooltipMastery } from "@/engine/foundation/ui/mastery-tooltip";
 import { masteryCosts } from "@/engine/foundation/gameplay/skill-catalog";
+import { withdrawalGoldPrices } from "@/engine/foundation/gameplay/withdrawal";
 import { nativeWindowSections } from "@/engine/foundation/ui/native-window-sections";
 import { partyCharacterCountries } from "@/engine/foundation/gameplay/party-matching";
 import { decodeTooltipSkills } from "@/engine/foundation/ui/skill-tooltip-catalog";
@@ -45,6 +46,7 @@ interface HudData {
 	readonly portals: PortalCatalog;
 	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
 	readonly masteryCosts: Readonly<Record<number, number>>;
+	readonly withdrawalGoldPrices: Readonly<Record<number, number>>;
 	readonly extended: readonly AuthoredLayout[];
 	readonly countries: Readonly<Record<number, number>>;
 	readonly tooltipSkills: TooltipSkillCatalog;
@@ -197,6 +199,7 @@ export function createHudResources(
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
 	let withdrawalPage: AuthoredLayout = {};
+	let goldPrices: Readonly<Record<number, number>> = {};
 	const warm = new Set<string>();
 	return {
 		/*
@@ -248,8 +251,10 @@ export function createHudResources(
 								}
 							} else if ( i === layouts.length + 13 ) value = decodePortalCatalog( raw );
 							else if ( i === layouts.length + 12 ) value = decodeTooltipMasteries( raw );
-							else if ( i === layouts.length + 11 ) value = masteryCosts( raw );
-							else if ( i === layouts.length + 10 ) value = partyCharacterCountries( raw );
+							else if ( i === layouts.length + 11 ) {
+								value = masteryCosts( raw );
+								goldPrices = withdrawalGoldPrices( raw );
+							} else if ( i === layouts.length + 10 ) value = partyCharacterCountries( raw );
 							else if ( i === layouts.length + 8 ) value = decodeTooltipSkills( raw );
 							else if ( i === layouts.length + 7 ) value = decodeActionSlots( raw );
 							else if ( i === layouts.length + 5 ) value = raw;
@@ -282,6 +287,7 @@ export function createHudResources(
 				const values = states.map( s => s.kind === "ready" ? s.value : null );
 				data = {
 					withdrawalPage,
+					withdrawalGoldPrices: goldPrices,
 					portals: values[layouts.length + 13] as PortalCatalog,
 					tooltipMasteries: values[layouts.length + 12] as HudData["tooltipMasteries"],
 					masteryCosts: values[layouts.length + 11] as HudData["masteryCosts"],

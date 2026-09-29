@@ -65,6 +65,11 @@ type SkillReqi struct {
 	Pairs   [5]SkillReqiPair
 }
 
+/*
+==================
+SkillReqiPair
+==================
+*/
 type SkillReqiPair struct {
 	Kind  uint32
 	Value uint32
@@ -108,4 +113,5 @@ type SkillCastGate struct {
 	HideGatePresent bool
 	HideGateMode    uint32
 	TrapPresent     bool
+	QuestTrap       SkillQuestTrap
 }

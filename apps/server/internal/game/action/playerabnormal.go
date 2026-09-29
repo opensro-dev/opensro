@@ -372,6 +372,10 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 		// transition; packet routing happens after the door closes.
 		progression, _ = rt.ApplyDeathPenalty(c)
 	}
+	if rt.ReleaseQuestCapturesOnDeath != nil {
+		frames, _ := rt.ReleaseQuestCapturesOnDeath(c)
+		progression = append(progression, frames...)
+	}
 	return effects, progression
 }
 

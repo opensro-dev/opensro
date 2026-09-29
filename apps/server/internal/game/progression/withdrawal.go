@@ -81,7 +81,8 @@ func (rt *Runtime) handleWithdrawal(division string, c *enterworld.Character, pa
 	}
 	potion, found := items.ItemRefByID(request.PotionID)
 	if !found || potion == nil || (!strings.EqualFold(potion.Codename, "ITEM_MALL_SKILL_RESTORATION_POTION") &&
-		!strings.EqualFold(potion.Codename, "ITEM_QNO_RM_OLDWOMAN_2_02")) {
+		!strings.EqualFold(potion.Codename, "ITEM_QNO_RM_OLDWOMAN_2_02") &&
+		!strings.EqualFold(potion.Codename, "ITEM_QSP_ALL_POTION_1_01")) {
 		return withdrawalRefusal(opcode, withdrawalUnknown)
 	}
 	unlock := rt.Withdrawal.Lock(division)
@@ -105,6 +106,12 @@ func (rt *Runtime) handleWithdrawal(division string, c *enterworld.Character, pa
 		if refusal != 0 {
 			return false
 		}
+		if strings.EqualFold(potion.Codename, "ITEM_QSP_ALL_POTION_1_01") {
+			refusal = priceResuscitation(&plan, c, rt.deps.LevelData())
+			if refusal != 0 {
+				return false
+			}
+		}
 		available := coercePoints(c.SkillPoints)
 		if available > math.MaxUint32-plan.Refund {
 			refusal = withdrawalUnavailable
@@ -117,6 +124,10 @@ func (rt *Runtime) handleWithdrawal(division string, c *enterworld.Character, pa
 		}
 		next := c.Snapshot()
 		next.MissionInventory = rows
+		if plan.Gold != 0 {
+			gold := *c.Gold - plan.Gold
+			next.Gold = &gold
+		}
 		available += plan.Refund
 		next.SkillPoints = &available
 		if mastery {
@@ -144,6 +155,7 @@ func (rt *Runtime) handleWithdrawal(division string, c *enterworld.Character, pa
 		}
 		c.MissionInventory = next.MissionInventory
 		c.SkillPoints = next.SkillPoints
+		c.Gold = next.Gold
 		c.Masteries = next.Masteries
 		c.Skills = next.Skills
 		c.QuickSlots = next.QuickSlots
@@ -155,6 +167,10 @@ func (rt *Runtime) handleWithdrawal(division string, c *enterworld.Character, pa
 			wire.Frame{Opcode: wire.OpPointsUpdate, Payload: wire.EncodePointsSkillUpdate(uint32(available), false)},
 			wire.Frame{Opcode: wire.OpBaseStats, Payload: enterworld.BuildLoginStatBlock(next, stats)})
 		frames = append(frames, rt.Withdrawal.Finish(division, c, plan.PreviousSkill)...)
+		if plan.Gold != 0 {
+			frames = append(frames, wire.Frame{Opcode: wire.OpGoldRefresh,
+				Payload: wire.GoldRefresh{Balance: uint64(*next.Gold)}.Encode()})
+		}
 		return true
 	})
 	if !committed {

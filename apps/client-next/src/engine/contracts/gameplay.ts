@@ -78,6 +78,19 @@ export interface QuestProgressEvent {
 }
 /*
 ================
+QuestGathering
+
+36BD carries a quest identity and seconds. The worker receipt clock anchors
+the short native collection gauge independently of journal minute timers.
+================
+*/
+export interface QuestGathering {
+	readonly refId: number;
+	readonly startedAtMs: number;
+	readonly durationMs: number;
+}
+/*
+================
 Pose
 
 Coordinates remain local to the native region, with height on the Y axis.
@@ -117,6 +130,7 @@ export type GameplayCommand =
 	| { readonly kind: "berserk"; }
 	| { readonly kind: "recall-appoint"; readonly gid: number; }
 	| { readonly kind: "return-cancel"; }
+	| { readonly kind: "gathering-cancel"; }
 	| { readonly kind: "effect-cancel"; readonly skillId: number; readonly token: number; }
 	| { readonly kind: "minimap-floors"; readonly poses: readonly Pose[]; }
 	| { readonly kind: "avatar-move"; readonly equip: boolean; readonly source: number; readonly destination: number; }
@@ -378,6 +392,7 @@ export interface GameplayState {
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;
 	readonly huntingPoints?: readonly import("@/engine/foundation/gameplay/hunting").HuntingPoint[];
 	readonly npcConversation?: import("@/engine/foundation/gameplay/npc-dialogue").NpcConversation;
+	readonly restorationRevision?: number;
 	readonly buffSlots?: readonly import("@/engine/foundation/gameplay/buff-slots").BuffSlot[];
 	readonly attachedEffects?: readonly import("@/engine/foundation/gameplay/attached-effects").AttachedEffect[];
 	readonly environmentalDamage?: readonly import("./combat-feedback").EnvironmentalDamage[];
@@ -420,6 +435,7 @@ export interface GameplayState {
 	readonly quests?: readonly QuestRecord[];
 	readonly questProgress?: readonly QuestProgressEvent[];
 	readonly questPending?: number;
+	readonly questGathering?: QuestGathering;
 	readonly inventorySlotCount?: number;
 	readonly equipmentSlotCount?: number;
 	readonly chat?: {

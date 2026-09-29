@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+register.go - authenticated quest requests and private result publication
+
+The transport binds the character before entering a quest operation. This
+owner publishes its receipt and only the explicitly public reward effects.
+Client-supplied quest identities never select another character.
+
+===========================================================================
+*/
 package quest
 
 import (
@@ -7,26 +18,28 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// Register wires the quest lane's two inbound handlers onto the hub:
-// 0x71EB give-up and 0x729A reward-select, each registered here and
-// NOWHERE else (hub registration is last-write-wins; the community
-// register.go survey lists every sibling lane's opcodes - neither of
-// these collides). Called from server wiring with the SAME deps pointer
-// every other lane retains.
-//
-// Identity comes from the session bind only (enterworld.SessionCharacter
-// - never a client-supplied name). Refusals return the native acknowledgement
-// to the requester so its transaction can settle. Success answers the acting
-// session with the authoritative 0x31ED update plus
-// any payout burst, then publishes a reward's gid-only level-up presentation
-// to other sessions in the same division.
+/*
+================
+Register
+
+One owner registers each opcode. Quest operations share the same character
+authority used by inventory and combat; gathering cancellation is transient.
+================
+*/
 func Register(hub *transport.Hub, rt *Runtime) {
 	hub.Handle(OpQuestGiveUpRequest, questHubHandler(hub, rt, "0x71EB give-up", rt.HandleGiveUp))
 	hub.Handle(OpQuestRewardRequest, questHubHandler(hub, rt, "0x729A reward-select", rt.HandleRewardSelect))
+	hub.Handle(OpQuestGatherCancel, questHubHandler(hub, rt, "0x775D gathering cancel", rt.HandleGatherCancel))
 }
 
-// questHubHandler adapts one runtime core onto the hub: bind the authority
-// character, answer its private result and fan out only the public projection.
+/*
+================
+questHubHandler
+
+Bind the authority character, answer its private result and fan out only
+the public projection. Refusals settle the matching native transaction.
+================
+*/
 func questHubHandler(hub *transport.Hub, rt *Runtime, label string, op func(*enterworld.Character, []byte) (OpResult, error)) transport.HandlerFunc {
 	return func(s *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(rt.deps, s)
@@ -44,6 +57,9 @@ func questHubHandler(hub *transport.Hub, rt *Runtime, label string, op func(*ent
 			ack := uint16(0xB29A)
 			if opcode == OpQuestGiveUpRequest {
 				ack = 0xB1EB
+			}
+			if opcode == OpQuestGatherCancel {
+				ack = OpQuestGatherCancelReply
 			}
 			sendFrames(s, []wire.Frame{{Opcode: ack, Payload: []byte{2, 0}}})
 			return
@@ -65,6 +81,14 @@ func questHubHandler(hub *transport.Hub, rt *Runtime, label string, op func(*ent
 	}
 }
 
+/*
+================
+sendFrames
+
+Reliable ordering ends at the first failed write; a later receipt must not
+overtake a missing inventory or quest delta.
+================
+*/
 func sendFrames(s *transport.Session, frames []wire.Frame) {
 	for _, frame := range frames {
 		if err := s.Send(frame.Opcode, frame.Payload); err != nil {

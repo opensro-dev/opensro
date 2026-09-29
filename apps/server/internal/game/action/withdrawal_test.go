@@ -29,6 +29,88 @@ type withdrawalSkills struct{ staticSkillSource }
 
 /*
 ================
+withdrawalPricedLevels
+
+Keep the normal level-one combat fixture and add the authored dg price.
+Changing the character level would test a different stats prerequisite.
+================
+*/
+type withdrawalPricedLevels struct{ enterworld.LevelDataSource }
+
+/*
+================
+WithdrawalGoldBasis
+================
+*/
+func (withdrawalPricedLevels) WithdrawalGoldBasis(level int64) (int64, bool) {
+	return 28, level == 1
+}
+
+/*
+================
+TestResuscitationCommitsGoldPotionsAndRefundAtomically
+
+Exercise the actual progression handler and inventory owner, including an
+unaffordable request followed by a funded retry and a stale-rank replay.
+================
+*/
+func TestResuscitationCommitsGoldPotionsAndRefundAtomically(t *testing.T) {
+	c := testCharacter()
+	c.Skills = []uint32{103}
+	items := testItems()
+	potion := &enterworld.ItemRef{RefObjID: 3673, Codename: "ITEM_QSP_ALL_POTION_1_01", TypeIDs: [4]int64{3, 3, 9, 0}}
+	items[potion.Codename] = potion
+	c.MissionInventory = []enterworld.InventoryRow{{Slot: 13, RefObjID: potion.RefObjID,
+		Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 2}}
+	action, _ := newTestRuntime(c, items)
+	deps := action.deps.(*enterworld.Deps)
+	deps.Levels = withdrawalPricedLevels{deps.Levels}
+	deps.Skills = withdrawalSkills{staticSkillSource{
+		101: {ID: 101, Group: 77, Level: 1, SPCost: 2},
+		102: {ID: 102, Group: 77, Level: 2, SPCost: 7},
+		103: {ID: 103, Group: 77, Level: 3, SPCost: 13},
+	}}
+	runtime := progression.NewRuntime(deps)
+	runtime.Withdrawal = action.WithdrawalHooks()
+	request := wire.NewWriter(9).U32(potion.RefObjID).U32(103).U8(1).Payload()
+	before, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runtime.HandleSkillWithdrawal(testDivision, c, request)
+	after, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Frames) != 1 || !bytes.Equal(result.Frames[0].Payload, []byte{2, 4}) || !bytes.Equal(before, after) {
+		t.Fatal("unaffordable restoration changed character", result)
+	}
+	*c.Gold = 10000
+	result = runtime.HandleSkillWithdrawal(testDivision, c, request)
+	if len(c.Skills) != 1 || c.Skills[0] != 101 || len(c.MissionInventory) != 0 ||
+		c.SkillPoints == nil || *c.SkillPoints != 16 || *c.Gold != 4400 {
+		t.Fatal("gold, potion and SP transaction disagreed", result, c)
+	}
+	goldUpdates := 0
+	for _, frame := range result.Frames {
+		if frame.Opcode == wire.OpGoldRefresh {
+			goldUpdates++
+			if !bytes.Equal(frame.Payload, (wire.GoldRefresh{Balance: 4400}).Encode()) {
+				t.Fatal("client received a different gold balance", frame)
+			}
+		}
+	}
+	if goldUpdates != 1 {
+		t.Fatal("missing or duplicate gold refresh", result)
+	}
+	result = runtime.HandleSkillWithdrawal(testDivision, c, request)
+	if len(result.Frames) != 1 || result.Frames[0].Payload[0] != 2 || *c.Gold != 4400 || *c.SkillPoints != 16 {
+		t.Fatal("stale request repeated the transaction", result)
+	}
+}
+
+/*
+================
 SkillByGroupLevel
 ================
 */

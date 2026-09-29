@@ -11,12 +11,49 @@ last rank's price. Refusals must leave every persisted slice unchanged.
 package progression
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
+
+/*
+================
+TestResuscitationPricesEachRankAndDeductsLossAfterSummation
+================
+*/
+func TestResuscitationPricesEachRankAndDeductsLossAfterSummation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "dg.txt"), []byte("1\t28\t42\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	levels := enterworld.NewTextdataLevels(dir)
+	gold := int64(10000)
+	c := &enterworld.Character{Gold: &gold}
+	plan := withdrawalPlan{Refund: 22, GoldRanks: []int64{2, 1, 0}}
+	if code := priceResuscitation(&plan, c, levels); code != 0 || plan.Gold != 9240 || plan.Refund != 18 || gold != 10000 {
+		t.Fatal(plan, code, gold)
+	}
+	gold = 9239
+	plan = withdrawalPlan{Refund: 22, GoldRanks: []int64{2, 1, 0}}
+	if code := priceResuscitation(&plan, c, levels); code != withdrawalGold || gold != 9239 {
+		t.Fatal(plan, code, gold)
+	}
+	gold = 10000
+	for refund := int64(0); refund <= 6; refund++ {
+		plan = withdrawalPlan{Refund: refund, GoldRanks: []int64{0}}
+		if code := priceResuscitation(&plan, c, levels); code != 0 || plan.Refund != refund-refund/5 || plan.Gold != 2800 {
+			t.Fatal(refund, plan, code)
+		}
+	}
+	plan = withdrawalPlan{Refund: 22, GoldRanks: []int64{2}}
+	if code := priceResuscitation(&plan, c, testLevels()); code != withdrawalUnavailable {
+		t.Fatal("missing price authority accepted", code)
+	}
+}
 
 /*
 ================

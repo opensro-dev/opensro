@@ -37,6 +37,9 @@ import {
 	WITHDRAWAL_CONFIRM_SIZE,
 	WITHDRAWAL_CONFIRM_BUTTON_Y,
 	WITHDRAWAL_CONFIRM_FILL_HEIGHT,
+	RESUSCITATION_CONFIRM_SIZE,
+	RESUSCITATION_CONFIRM_BUTTON_Y,
+	RESUSCITATION_CONFIRM_FILL_HEIGHT,
 	WITHDRAWAL_SKILL_FRAME_HEIGHT
 } from "./hud/withdrawal";
 import { isRestorationPotion } from "@/engine/foundation/gameplay/withdrawal";
@@ -1080,6 +1083,10 @@ export function createUi(
 			sendGameplay( { kind: "return-cancel" } );
 			return;
 		}
+		if ( id === "gathering-cancel" ) {
+			sendGameplay( { kind: "gathering-cancel" } );
+			return;
+		}
 		if ( !view ) return;
 		if ( groundDrop ) {
 			if ( id === "ground-drop-cancel" ) {
@@ -1094,14 +1101,20 @@ export function createUi(
 			return;
 		}
 		if ( id.startsWith( "withdrawal-" ) ) {
-			if ( id === "withdrawal-close" ) withdrawal.close();
-			else if ( id === "withdrawal-cancel" ) withdrawal.select( "" );
+			if ( id === "withdrawal-close" ) {
+				if ( withdrawal.boundToNpc() ) sendGameplay( { kind: "npc-close" } );
+				withdrawal.close();
+			} else if ( id === "withdrawal-cancel" ) withdrawal.select( "" );
 			else if ( id === "withdrawal-decrease" ) withdrawal.adjust( 1 );
 			else if ( id === "withdrawal-recover" ) withdrawal.adjust( -1 );
 			else if ( id.startsWith( "withdrawal-choice:" ) ) {
 				withdrawal.select( id.slice( "withdrawal-choice:".length ) );
 			} else if ( id === "withdrawal-confirm" && view.gameplay ) {
-				const state = withdrawal.read( view.gameplay, hud.data()?.masteryCosts ?? {} );
+				const state = withdrawal.read(
+					view.gameplay,
+					hud.data()?.masteryCosts ?? {},
+					hud.data()?.withdrawalGoldPrices
+				);
 				if ( state.command ) {
 					sendGameplay( state.command );
 					withdrawal.select( "" );
@@ -2675,7 +2688,7 @@ export function createUi(
 			) {
 				if ( event.code === "Escape" ) {
 					if ( withdrawal.confirming() ) withdrawal.select( "" );
-					else withdrawal.close();
+					else activate( "withdrawal-close" );
 					dirty = true;
 				} else if ( event.code === "Enter" ) {
 					activate( "withdrawal-confirm" );
@@ -3671,7 +3684,7 @@ export function createUi(
 				Math.floor( (next.simulationTimeMs ?? 0) / 100 ) :
 				-1;
 			const slotTick = (next.gameplay?.skillCooldowns?.length || next.gameplay?.itemCooldowns?.length ||
-					next.gameplay?.returnScroll) ?
+					next.gameplay?.returnScroll || next.gameplay?.questGathering) ?
 				Math.floor( quickslotTime / 16 ) :
 				-1;
 			if ( slotTick !== quickslotTick ) {
@@ -3721,6 +3734,9 @@ export function createUi(
 			const guideNeeded = next.session?.phase === "world";
 			if ( guideResources.step( guideNeeded ) ) dirty = true;
 			if ( npcPanel.observe( next.session?.phase === "world" ? next.gameplay?.npcConversation : undefined ) ) {
+				dirty = true;
+			}
+			if ( withdrawal.observe( next.session?.phase === "world" ? next.gameplay?.restorationRevision ?? 0 : 0 ) ) {
 				dirty = true;
 			}
 			if ( trackedQuest && !next.gameplay?.quests?.some( q => q.refId === trackedQuest ) ) {
@@ -7654,7 +7670,9 @@ export function createUi(
 						[px, py] = withdrawalFrame,
 						child = hudData.windows.ifskillwithdrawal!.GDR_SKILL!,
 						[ox, oy] = restoring ? [ px + child.rect[0], py + child.rect[1] ] : popup.pane,
-						withdrawalState = restoring && game ? withdrawal.read( game, hudData.masteryCosts ) : null;
+						withdrawalState = restoring && game ?
+							withdrawal.read( game, hudData.masteryCosts, hudData.withdrawalGoldPrices ) :
+							null;
 					if ( restoring ) {
 						blocks.push( withdrawalFrame );
 						quads.push(
@@ -10928,18 +10946,42 @@ export function createUi(
 				);
 				button( "ground-drop-cancel", hudCopy( "UIIT_CTL_NO" ), x + (dw >> 1) + 5, y + dh - 37, 76 );
 			}
-			if ( worldVisible && game?.returnScroll ) {
+			const gathering = game?.questGathering;
+			const delayRows = [
+				...(game?.returnScroll ?
+					[ {
+						cast: game.returnScroll,
+						name: game.returnScroll.name,
+						id: "return-cancel",
+						collection: false
+					} ] :
+					[]),
+				...(gathering &&
+						(gathering.durationMs === 0 || quickslotTime < gathering.startedAtMs + gathering.durationMs) ?
+					[ {
+						cast: gathering,
+						name: guideResources.data()?.questPresentation.records[gathering.refId]?.title ?? "",
+						id: "gathering-cancel",
+						collection: true
+					} ] :
+					[])
+			];
+			for ( const [row, delay] of (worldVisible ? delayRows : []).entries() ) {
 				const bar = returnScrollBar(
-					game.returnScroll,
+					delay.cast,
 					w,
 					h,
-					quickslotTime,
-					pressed === "return-cancel",
-					hover === "return-cancel"
+					{
+						now: quickslotTime,
+						row,
+						collection: delay.collection,
+						pressed: pressed === delay.id,
+						focused: hover === delay.id
+					}
 				);
 				blocks.push( bar.frame );
 				controls.push( {
-					id: "return-cancel",
+					id: delay.id,
 					label: hudCopy( "UIIT_CTL_CANCEL" ),
 					kind: "button",
 					rect: bar.cancel
@@ -10948,7 +10990,7 @@ export function createUi(
 					paths.push( q.texture );
 					if ( resources.has( q.texture ) ) quads.push( q );
 				}
-				quads.push( ...text.quads( game.returnScroll.name, bar.name, full, white, { hAlign: 1, vAlign: 0 } ) );
+				quads.push( ...text.quads( delay.name, bar.name, full, white, { hAlign: 1, vAlign: 0 } ) );
 			}
 			if ( worldVisible && splitStack && [ "Inventory", "Shop", "COS inventory" ].includes( panel ) ) {
 				// Native 529E90, MsgBoxDivideCount authored 300x183; edit stays 42x24.
@@ -11403,9 +11445,13 @@ export function createUi(
 				);
 			}
 			if ( worldVisible && game && withdrawal.confirming() && hud.data() ) {
-				const state = withdrawal.read( game, hud.data()?.masteryCosts ?? {} );
+				const state = withdrawal.read( game, hud.data()?.masteryCosts ?? {}, hud.data()?.withdrawalGoldPrices );
 				const page = hud.data()!.windows.ifskillremovalbox!, row = state.choice;
-				const [width, height] = WITHDRAWAL_CONFIRM_SIZE;
+				const [width, height] = state.resuscitation ? RESUSCITATION_CONFIRM_SIZE : WITHDRAWAL_CONFIRM_SIZE;
+				const fillHeight = state.resuscitation ?
+					RESUSCITATION_CONFIRM_FILL_HEIGHT :
+					WITHDRAWAL_CONFIRM_FILL_HEIGHT;
+				const buttonY = state.resuscitation ? RESUSCITATION_CONFIRM_BUTTON_Y : WITHDRAWAL_CONFIRM_BUTTON_Y;
 				const px = Math.floor( (w - width) / 2 ), py = Math.floor( (h - height) / 2 );
 				const prefix = ROOT + "interface/messagebox/msgbox2_window_";
 				controls = [];
@@ -11423,13 +11469,14 @@ export function createUi(
 				for ( const node of authoredPaintOrder( page ) ) {
 					// Mode 3 hides native controls 12/13 and 32..35: gold has no role.
 					if (
-						node.type === "CIFButton" || node.id === 12 || node.id === 13 || node.id >= 32 && node.id <= 35
+						node.type === "CIFButton" ||
+						!state.resuscitation && (node.id === 12 || node.id === 13 || node.id >= 32 && node.id <= 35)
 					) continue;
 					if ( node.id === 5 ) {
 						authoredChrome(
 							{
 								...node,
-								rect: [ node.rect[0], node.rect[1], node.rect[2], WITHDRAWAL_CONFIRM_FILL_HEIGHT ]
+								rect: [ node.rect[0], node.rect[1], node.rect[2], fillHeight ]
 							},
 							px,
 							py
@@ -11464,6 +11511,15 @@ export function createUi(
 					authoredText( page.GDR_SKLRB_TARGETLEVEL!, px, py, `Lv ${row.rank}` );
 					authoredText( page.GDR_SKLRB_WITHDRAWED_LEVEL!, px, py, String( state.amount ) );
 					authoredText( page.GDR_SKLRB_TOTALPOINT!, px, py, String( row.refund ) );
+					if ( state.resuscitation ) {
+						authoredText(
+							page.GDR_SKLRB_CURRENTMONEY!,
+							px,
+							py,
+							BigInt( game.progression?.gold ?? "0" ).toLocaleString( "en-US" )
+						);
+						authoredText( page.GDR_SKLRB_NEEDMONEY!, px, py, state.gold.toLocaleString( "en-US" ) );
+					}
 					authoredText(
 						page.GDR_SKLRB_WITHDRAW_POTION!,
 						px,
@@ -11497,7 +11553,7 @@ export function createUi(
 					] ] as const
 				) {
 					authoredLabeledButton(
-						{ ...node, rect: [ node.rect[0], WITHDRAWAL_CONFIRM_BUTTON_Y, node.rect[2], node.rect[3] ] },
+						{ ...node, rect: [ node.rect[0], buttonY, node.rect[2], node.rect[3] ] },
 						px,
 						py,
 						id,
