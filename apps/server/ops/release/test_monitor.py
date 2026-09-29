@@ -61,6 +61,25 @@ class MonitorTests(unittest.TestCase):
 		self.assertEqual(event, "down")
 
 	# ================
+	# test_restart_outage_that_ends_with_maintenance_is_not_announced
+	#
+	# The 2026-09-29 server publish: the restart failed two checks inside the
+	# window, and the window closed on the first good check. That once posted
+	# "unavailable. available" and then "recovered".
+	# ================
+	def test_restart_outage_that_ends_with_maintenance_is_not_announced(self):
+		bad = {"healthy": False, "detail": "HTTP 502"}
+		good = {"healthy": True, "detail": "available"}
+		state = {"phase": "up", "notified": "up"}
+		state, _ = transition(state, bad, 30, 100)
+		state, event = transition(state, bad, 60, 100)
+		self.assertIsNone(event)
+		state, event = transition(state, good, 120)
+		self.assertIsNone(event)
+		_, event = transition(state, good, 150)
+		self.assertEqual(event, "maintenance-complete")
+
+	# ================
 	# test_failed_delivery_is_retried_without_losing_heartbeat
 	# ================
 	def test_failed_delivery_is_retried_without_losing_heartbeat(self):

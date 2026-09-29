@@ -119,6 +119,12 @@ def transition(previous, observation, now, maintenance_until=0):
 		return state, None
 	acknowledged = previous.get("notified", "unknown")
 	if phase == "down" and acknowledged != "down":
+		# An outage whose alert was suppressed (maintenance, failed delivery)
+		# can still be "down" on the first good check after the suppression
+		# ends. Announcing it then says "unavailable" about a service that
+		# answered; wait for the recovery threshold instead.
+		if healthy:
+			return state, None
 		return state, "down"
 	if phase == "up" and acknowledged == "down":
 		return state, "up"
