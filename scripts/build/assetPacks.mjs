@@ -130,7 +130,7 @@ export async function buildAssetPacks( options = {} ) {
 	const hashCache = await openFileHashCache( options.hashCachePath );
 	const counters = { built: 0, reused: 0 };
 
-	/** @type {{ format: string, version: number, generatedAt: string, targetPackBytes: number, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
+	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
 	const index = {
 		format: "sro-asset-pack-index",
 		version: 1,
