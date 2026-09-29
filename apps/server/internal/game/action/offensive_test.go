@@ -28,6 +28,8 @@ import (
 /*
 ================
 shippedOffense
+
+Resolve authored rows; asset-free environments skip these catalog cases.
 ================
 */
 func shippedOffense(t *testing.T, code string) enterworld.SkillRow {
@@ -46,6 +48,8 @@ func shippedOffense(t *testing.T, code string) enterworld.SkillRow {
 /*
 ================
 TestAdvancedOffenseCommitsMPCooldownAndDamageOnce
+
+Preparation owns cooldown; release owns the resource and damage transaction.
 ================
 */
 func TestAdvancedOffenseCommitsMPCooldownAndDamageOnce(t *testing.T) {
@@ -155,6 +159,8 @@ func TestAdvancedSpellUsesAuthoredRangeAndUnrestrictedWeapon(t *testing.T) {
 /*
 ================
 TestAdvancedRefusalDoesNotSpendOrDamage
+
+Incomplete descriptors and failed admission cannot reach authority mutation.
 ================
 */
 func TestAdvancedRefusalDoesNotSpendOrDamage(t *testing.T) {
@@ -169,13 +175,11 @@ func TestAdvancedRefusalDoesNotSpendOrDamage(t *testing.T) {
 			c.CurrentMP = &mp
 			before := mp
 			if mode == "unsupported-effect" {
-				// tel3 (0x74656C33) is stored at RefSkill+0x2F4 and read by
-				// Skill_ValidatePrerequisitesAndCost and SkillAction_Instant.
-				// Those consumers are not pinned, so the sprint row stays refused.
-				skill = shippedOffense(t, "SKILL_EU_WARRIOR_FRENZYA_TOUNT_SPRINT_A_01")
-				if skill.DirectOffensePinned || skill.OffenseRefusal != "offense:instruction:74656c33" {
-					t.Fatalf("unsupported tel3 silently flattened: %s", skill.OffenseRefusal)
-				}
+				// Exercise the authority contract independently of which retail
+				// families have been implemented. Parameter presence is not
+				// permission to execute an uncompiled program.
+				skill.DirectOffensePinned = false
+				skill.OffensiveStagePinned = false
 			}
 			rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
 			if mode != "unlearned" {
@@ -389,6 +393,8 @@ func TestReqcDownAttackRequiresMotion8(t *testing.T) {
 /*
 ================
 releasePreparedSkillForTest
+
+Advance the real preparation owner and collect its public/private results.
 ================
 */
 func releasePreparedSkillForTest(t *testing.T, rt *Runtime, now int64) OpResult {
@@ -415,6 +421,8 @@ func releasePreparedSkillForTest(t *testing.T, rt *Runtime, now int64) OpResult 
 /*
 ================
 installMPDecrease
+
+Install a learned modifier through the same catalog used by cast costs.
 ================
 */
 func installMPDecrease(rt *Runtime, c *enterworld.Character, slot enterworld.SkillParameter) {
@@ -429,6 +437,8 @@ func installMPDecrease(rt *Runtime, c *enterworld.Character, slot enterworld.Ski
 /*
 ================
 mpDecreaseOutcome
+
+Measure committed resources and HP rather than inspecting compiler flags.
 ================
 */
 func mpDecreaseOutcome(t *testing.T, code string, slot enterworld.SkillParameter, cut bool) (spent int64, lost uint32) {

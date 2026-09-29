@@ -1,15 +1,50 @@
+/*
+===========================================================================
+
+skillposition.go - complete ground travel and target-charge descriptors
+
+Position effects retain their native range independently of cast duration.
+Offensive admission owns the rest of a charge's complete instruction stream.
+
+===========================================================================
+*/
+
 package enterworld
 
-// SkillPositionEffect describes a complete ground-targeted tele program.
-// Server 586460 reads argument 1 as range; 586473 selects travel bit 8.
-// Argument 0 is retained without treating it as Action_ActionDuration.
+const tagPositionCharge = 0x74656c33
+
+/*
+================
+SkillPositionEffect
+
+5862E0 reads argument one as range and selects travel bit eight. Pinned owns
+ground targeting; Charge keeps an offensive target and guided arrival.
+================
+*/
 type SkillPositionEffect struct {
 	Pinned           bool
+	Charge           bool
 	Parameter, Range uint32
 }
 
+/*
+================
+decodeSkillPosition
+
+A charge is enabled only after the whole offensive program was admitted.
+The standalone tele branch continues to require its exact ground envelope.
+================
+*/
 func decodeSkillPosition(fields []string, row SkillRow) SkillPositionEffect {
 	p, err := CompileSkillProgram(fields)
+	if err == nil && row.OffensiveStagePinned && row.CastGate.Tel3 {
+		for index := 0; index < p.Len(); index++ {
+			op := p.Instruction(index)
+			if op.Tag == tagPositionCharge {
+				return SkillPositionEffect{Charge: true, Parameter: op.Arguments[0], Range: op.Arguments[1]}
+			}
+		}
+	}
 	if err != nil || p.Len() != 1 || !row.TimingPinned || !row.Consumption.Pinned ||
 		!row.TargetRequired || row.ChainSub || row.ChainNext != 0 ||
 		row.ActionCastingTimeMs != 0 || row.ActionDurationMs != 0 ||

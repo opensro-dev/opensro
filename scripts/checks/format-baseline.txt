@@ -101,7 +101,6 @@ apps/client-next/src/engine/foundation/audio/terrain-sounds.ts
 apps/client-next/src/engine/foundation/gameplay/abnormal-snapshot.ts
 apps/client-next/src/engine/foundation/gameplay/academy-notices.ts
 apps/client-next/src/engine/foundation/gameplay/academy.ts
-apps/client-next/src/engine/foundation/gameplay/attached-effects.ts
 apps/client-next/src/engine/foundation/gameplay/auto-potion.ts
 apps/client-next/src/engine/foundation/gameplay/buff-slots.ts
 apps/client-next/src/engine/foundation/gameplay/cast-displacement.ts
@@ -109,7 +108,6 @@ apps/client-next/src/engine/foundation/gameplay/cast-results.ts
 apps/client-next/src/engine/foundation/gameplay/character-spawn.ts
 apps/client-next/src/engine/foundation/gameplay/chat-blocks.ts
 apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
-apps/client-next/src/engine/foundation/gameplay/combat-result.ts
 apps/client-next/src/engine/foundation/gameplay/commerce.ts
 apps/client-next/src/engine/foundation/gameplay/concealment.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
@@ -371,7 +369,6 @@ apps/client-next/src/engine/runtime/simulation/worker/network/codec/codec.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/network.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/core.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/departure.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/alchemy/alchemy.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts
@@ -678,7 +675,6 @@ scripts/build/char/compileBsrVisual.mjs
 scripts/build/char/defaultWearPolicy.mjs
 scripts/build/char/entityMaterialMetadata.mjs
 scripts/build/char/equipmentGlowMetadata.mjs
-scripts/build/char/equipmentParticles.mjs
 scripts/build/char/equipmentVisualRecords.mjs
 scripts/build/char/exportGlb.mjs
 scripts/build/char/formats.mjs

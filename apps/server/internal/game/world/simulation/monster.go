@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+monster.go - native monster create rows for bootstrap and live interest
+
+One projection owns scalar state and active skill identities. Late viewers see
+the same recipient tokens that existing viewers received through B419.
+
+===========================================================================
+*/
+
 package simulation
 
 import (
@@ -21,9 +32,17 @@ import (
 // characterdata columns and the independently labelled v1.188 server data.
 // Per-instance rarity and AI inputs are resolved by monster from the
 // evidence-backed server population.
+/*
+================
+MonsterDef
+
+Detached wire projection shared by initial object lists and live scope entry.
+================
+*/
 type MonsterDef struct {
-	SelfEffects monster.SelfEffects
-	RefObjID    uint32
+	LinkedEffects *monster.EffectSnapshot
+	SelfEffects   monster.SelfEffects
+	RefObjID      uint32
 	// TidWord rides the refObjSnapshot mirror row (kind "monster"), not
 	// the create row; the client's sub_851420 cascade classifies on it.
 	TidWord  uint16
@@ -80,6 +99,13 @@ const MonsterSpawnSpeedChannel uint8 = 2
 // monster's characterdata row. The gid comes from the monster registry
 // (the sole allocator for the 400000+ band); the position is the spawn
 // point itself, not the NPC fixture's +8/+5 offset.
+/*
+================
+BuildMonsterCreateRow
+
+Serialize one complete native actor row, including active recipient identities.
+================
+*/
 func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 	x := clampFloat(spawn.X, 0, 0xffff)
 	z := clampFloat(spawn.Z, 0, 0xffff)
@@ -107,19 +133,25 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 		F32(float32(def.WalkSpeed)).
 		F32(float32(def.RunSpeed)).
 		F32(float32(def.ScaleDenom))
-	count := uint8(0)
+	count := def.LinkedEffects.Len()
 	for _, e := range def.SelfEffects {
 		if e.Token != 0 {
 			count++
 		}
 	}
-	w.U8(count)
+	if count > maxMonsterSpawnSkills {
+		panic("monster effect projection exceeds native spawn capacity")
+	}
+	w.U8(uint8(count))
 	// Retail 85FB20 non-local actor: skill + token; these admitted programs
 	// have no status/rider byte and monsters have no remaining-duration word.
 	for _, e := range def.SelfEffects {
 		if e.Token != 0 {
 			w.U32(e.SkillID).U32(e.Token)
 		}
+	}
+	for effect := range def.LinkedEffects.Entries() {
+		w.U32(effect.SkillID).U32(effect.Token)
 	}
 	w.U8(1)
 	name := []byte(def.Name)
@@ -131,6 +163,13 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 // BuildMonsterSpawnSingle encodes the 0x30D7 single-spawn body: the same
 // create row plus the trailing vt+0x68 appear byte (sub_777220 single
 // mode reads it; the list path does not).
+/*
+================
+BuildMonsterSpawnSingle
+
+Only single-spawn packets carry the trailing appearance selector.
+================
+*/
 func BuildMonsterSpawnSingle(def MonsterDef, gid uint32, spawn Spawn) []byte {
 	return append(BuildMonsterCreateRow(def, gid, spawn), MonsterAppearByte)
 }
@@ -138,6 +177,13 @@ func BuildMonsterSpawnSingle(def MonsterDef, gid uint32, spawn Spawn) []byte {
 // MonsterWireDefFromInstance owns the projection shared by bootstrap object
 // lists and live scope entry. A retained corpse is still a published object,
 // but must not deserialize as a standing, living monster for a new viewer.
+/*
+================
+MonsterWireDefFromInstance
+
+Corpses retain identity and position but never advertise live attached effects.
+================
+*/
 func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterDef {
 	ref := instance.Ref
 	def := MonsterDef{
@@ -150,6 +196,7 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 		def.LifeState = wire.LifeStateDead
 		def.MotionState = 0
 	} else {
+		def.LinkedEffects = instance.LinkedEffects
 		for n, e := range instance.SelfEffects {
 			if e.Active(nowMs) {
 				def.SelfEffects[n] = e

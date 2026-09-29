@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+skillhostility.go - committed aggression and monster opponent selection
+
+Damage credit and aggression are independent. Linked threat moves aggression
+to its source without changing HP, reward attribution or transmitted damage.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -7,9 +18,14 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// Each impact contributes to the action's cumulative aggression (5903EC),
-// while HP damage remains a separate amount. Resolve candidates from live
-// authority, then let MonsterState commit the ledger and mover transition.
+/*
+================
+commitSkillHostility
+
+Each impact contributes to the cumulative aggression (5903EC), while damage
+remains separate. Fatal results no longer own a live opponent ledger.
+================
+*/
 func (rt *Runtime) commitSkillHostility(division string, attacker, target uint32, skill enterworld.SkillRow, impacts []simulation.MonsterDamageResult, now int64) {
 	if len(impacts) == 0 || impacts[len(impacts)-1].Fatal {
 		return
@@ -19,6 +35,18 @@ func (rt *Runtime) commitSkillHostility(division string, attacker, target uint32
 		damage += impact.Applied
 		aggression = combat.AccumulateThreat(aggression, impact.Applied, skill.Threat)
 	}
+	rt.commitAggression(division, target, simulation.HostilityEvent{Attacker: attacker, Damage: damage, Aggression: aggression}, now)
+}
+
+/*
+================
+commitAggression
+
+Both damaging hits and taunts share link transfer and live target resolution.
+================
+*/
+func (rt *Runtime) commitAggression(division string, target uint32, event simulation.HostilityEvent, now int64) {
+	attacker, damage, aggression := event.Attacker, event.Damage, event.Aggression
 	if damage == 0 && aggression == 0 {
 		return
 	}
@@ -38,6 +66,13 @@ func (rt *Runtime) commitSkillHostility(division string, attacker, target uint32
 	rt.recordSkillHostility(division, target, events, now)
 }
 
+/*
+================
+recordSkillHostility
+
+Resolve live eligible opponents before the population owner updates its ledger.
+================
+*/
 func (rt *Runtime) recordSkillHostility(division string, target uint32, events []simulation.HostilityEvent, now int64) {
 	instance, ok := rt.Monsters.Get(division, target)
 	if !ok {

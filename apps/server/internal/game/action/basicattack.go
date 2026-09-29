@@ -3,6 +3,9 @@
 
 basicattack.go - basic attacks and the attack intent loop
 
+Own pursuit and linked attack progression so command replacement, range checks,
+and stage execution share one simulation order.
+
 ===========================================================================
 */
 
@@ -35,6 +38,8 @@ const defaultUnarmedActionRange = 6
 // The simulation owns scheduling; this owner only gates goal publication.
 const attackPursuitResteerMinMs = 100
 
+const attackPursuitPositionEpsilon = 0.01
+
 /*
 ==================
 skillActionReach
@@ -58,6 +63,11 @@ func skillActionReach(skill enterworld.SkillRow, loadout combat.Loadout, caster 
 		reach = float32(loadout.ActionRange)
 	default:
 		reach = defaultUnarmedActionRange
+	}
+	// 4AE849..4AE87A adds ru only on the equipment fallback, before getv
+	// bonuses and the range-reduction keeper. It is a distance, not a rate.
+	if skill.ActionRange == 0 && skill.BuffModifiers.Ru {
+		reach = float32(float64(reach) + float64(skill.BuffModifiers.RuRate))
 	}
 	for _, slot := range [...]enterworld.SkillParameter{enterworld.ParameterCrossbowRange, enterworld.ParameterWizardRange} {
 		if skill.Attack.Parameters.Has(slot) {
@@ -200,6 +210,8 @@ func (rt *Runtime) combatIntentIsCurrent(intent basicAttackIntent) bool {
 /*
 ================
 combatIntentSnapshot
+
+Release the intent mutex before callers enter character or world authority.
 ================
 */
 func (rt *Runtime) combatIntentSnapshot() []basicAttackIntent {
@@ -240,6 +252,8 @@ func (rt *Runtime) liveChainOwners() map[string]struct{} {
 /*
 ================
 findCharacter
+
+Prefer indexed authority lookup; the roster fallback serves small test stores.
 ================
 */
 func (rt *Runtime) findCharacter(divisionID, characterName string) *enterworld.Character {
@@ -447,7 +461,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		// pursuit stop distance in the same freshly-resolved loadout snapshot as
 		// the eventual strike; otherwise swapping weapon families while chasing
 		// leaves the approach leg bound to the weapon worn at double-click time.
-		reachChanged := math.Abs(float64(intent.ActionReach-actionReach)) > 0.01
+		reachChanged := math.Abs(float64(intent.ActionReach-actionReach)) > attackPursuitPositionEpsilon
 		intent.ActionReach = actionReach
 		if !reachChanged && !rt.pursuitSteerDue(intent, worldKey, snapshot, targetSpawn, nowMs) {
 			return OpResult{}
@@ -588,7 +602,7 @@ func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Characte
 	worldKey := simulation.WorldKey(intent.DivisionID, character.Name)
 	_, fromOwner := rt.liveNav(worldKey, snapshot, nowMs)
 	goal, walk, refusal := rt.constrainWalk(snapshot.Name, from, fromOwner, goal)
-	if refusal != nil || simulation.WorldDistance2D(from, goal) < 0.01 {
+	if refusal != nil || simulation.WorldDistance2D(from, goal) < attackPursuitPositionEpsilon {
 		// Collision/path ownership can be transient (the target may move
 		// back into reach or open a route). It is not a terminal command
 		// refusal, so preserve the engage state and re-evaluate next tick.

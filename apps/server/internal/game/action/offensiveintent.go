@@ -14,15 +14,26 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
+/*
+================
+resolveOffensiveSkill
+
+Both immediate sequences and persistent attacks use the same learned-skill,
+weapon and approach admission. Their release producers remain separate.
+================
+*/
 func (rt *Runtime) resolveOffensiveSkill(c *enterworld.Character, id uint32) (enterworld.SkillRow, combat.Loadout, string) {
 	if c == nil || !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, id) || rt.deps.SkillData() == nil {
 		return enterworld.SkillRow{}, combat.Loadout{}, "offensive-skill-unavailable"
 	}
-	sequence, ok := enterworld.OffensiveSequence(rt.deps.SkillData(), id)
-	if !ok || sequence[0].Group == 0 {
+	skill, known := rt.deps.SkillData().SkillByID(id)
+	sequence, immediate := enterworld.OffensiveSequence(rt.deps.SkillData(), id)
+	if !known || skill.Group == 0 || (!immediate && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only) {
 		return enterworld.SkillRow{}, combat.Loadout{}, "offensive-shape-unsupported"
 	}
-	skill := sequence[0]
+	if immediate {
+		skill = sequence[0]
+	}
 	_, loadout, err := combat.PlayerStats(c, rt.statCatalogs())
 	if err != nil || !skillWeaponAdmitted(loadout, skill) {
 		return skill, loadout, "offensive-weapon-incompatible"
@@ -30,8 +41,14 @@ func (rt *Runtime) resolveOffensiveSkill(c *enterworld.Character, id uint32) (en
 	return skill, loadout, ""
 }
 
-// Only a server-owned continuation carries rootID. Network sub-row requests
-// still take resolveOffensiveSkill and fail the learned-root gate.
+/*
+================
+resolveOffensiveStage
+
+Only a server-owned continuation carries rootID. Network sub-row requests
+still take resolveOffensiveSkill and fail the learned-root gate.
+================
+*/
 func (rt *Runtime) resolveOffensiveStage(c *enterworld.Character, rootID, stageID uint32) (enterworld.SkillRow, combat.Loadout, string) {
 	root, loadout, refusal := rt.resolveOffensiveSkill(c, rootID)
 	if refusal != "" {
@@ -48,6 +65,13 @@ func (rt *Runtime) resolveOffensiveStage(c *enterworld.Character, rootID, stageI
 	return enterworld.SkillRow{}, loadout, "offensive-continuation-invalid"
 }
 
+/*
+================
+beginOffensiveSkill
+
+Retain the target through approach; release revalidates authority and costs.
+================
+*/
 func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.Character, cast wire.SkillAction) OpResult {
 	if c == nil {
 		return OpResult{}
@@ -72,6 +96,13 @@ func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.
 	return rt.advanceBasicAttackIntent(c, intent, now)
 }
 
+/*
+================
+offensiveAdmissionRefusal
+
+Keep unsupported-program diagnostics distinct from native gameplay refusals.
+================
+*/
 func (rt *Runtime) offensiveAdmissionRefusal(reason string) OpResult {
 	var result OpResult
 	switch reason {

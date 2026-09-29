@@ -364,17 +364,35 @@ func (t Template) NestIndexesInRegion(regionID uint16) []int {
 	return append([]int(nil), t.nestsByRegion[regionID]...)
 }
 
-// HiveNestIndexes returns one overwrite hive's members in native hive order.
+/*
+================
+HiveNestIndexes
+
+Return one overwrite hive's members in native hive order as a detached slice.
+================
+*/
 func (t Template) HiveNestIndexes(key string) []int {
 	return append([]int(nil), t.nestsByHive[key]...)
 }
 
-// HiveNestIndexAt and HiveNestIndexSequence expose immutable scalar values
-// without publishing the catalogue's backing slice to simulation consumers.
+/*
+================
+HiveNestIndexAt
+
+Expose a scalar without publishing the catalog's backing slice.
+================
+*/
 func (t Template) HiveNestIndexAt(key string, ordinal int) int {
 	return t.nestsByHive[key][ordinal]
 }
 
+/*
+================
+HiveNestIndexSequence
+
+Iterate native hive order without lending mutable storage to simulation.
+================
+*/
 func (t Template) HiveNestIndexSequence(key string) iter.Seq[int] {
 	return func(yield func(int) bool) {
 		for _, index := range t.nestsByHive[key] {
@@ -395,6 +413,7 @@ a pointer into authoritative world state.
 ==================
 */
 type Instance struct {
+	LinkedEffects   *EffectSnapshot
 	ConditionalUsed uint8
 	SelfEffects     SelfEffects
 	Help            HelpInbox

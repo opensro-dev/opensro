@@ -1,14 +1,19 @@
+/*
+===========================================================================
+
+loot_lifecycle_test.go - loot behavior and lifecycle verification
+
+===========================================================================
+*/
+
 package action
 
 import (
 	"encoding/json"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
-	"sort"
 	"strconv"
 	"testing"
 
@@ -20,53 +25,22 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// Discover assignments from the production catalogs, including fixed and group
-// rewards. Adding a grade/family must automatically exercise its real item row;
-// a curated list of easy examples cannot establish loot lifecycle coverage.
+// The public inventory includes ordinary, assigned, and native special rewards.
+/*
+================
+publishedLootCodes
+================
+*/
 func publishedLootCodes(t *testing.T) []string {
 	t.Helper()
-	codes := map[string]bool{}
-	for _, name := range []string{"equipment.json", "consumables.json"} {
-		raw, err := os.ReadFile(filepath.Join("..", "item", "loot", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var root any
-		if err := json.Unmarshal(raw, &root); err != nil {
-			t.Fatal(err)
-		}
-		var visit func(any)
-		visit = func(value any) {
-			switch value := value.(type) {
-			case map[string]any:
-				for key, child := range value {
-					if key == "codename" || key == "item" {
-						if code, ok := child.(string); ok && code != "" {
-							codes[code] = true
-						}
-					} else {
-						visit(child)
-					}
-				}
-			case []any:
-				for _, child := range value {
-					visit(child)
-				}
-			}
-		}
-		visit(root)
-	}
-	if len(codes) == 0 {
-		t.Fatal("empty production loot catalog")
-	}
-	result := make([]string, 0, len(codes))
-	for code := range codes {
-		result = append(result, code)
-	}
-	sort.Strings(result)
-	return result
+	return loot.CatalogItemCodenames()
 }
 
+/*
+================
+pickupPublishedLoot
+================
+*/
 func pickupPublishedLoot(t *testing.T, rt *Runtime, c *enterworld.Character, ref *enterworld.ItemRef, count uint16) enterworld.InventoryRow {
 	t.Helper()
 	at := rt.liveSpawn(simulation.WorldKey(testDivision, c.Name), c, rt.Now().UnixMilli())
@@ -112,9 +86,16 @@ func pickupPublishedLoot(t *testing.T, rt *Runtime, c *enterworld.Character, ref
 	return enterworld.InventoryRow{}
 }
 
+/*
+================
+TestPublishedLootPickupAndActivation
+================
+*/
 func TestPublishedLootPickupAndActivation(t *testing.T) {
 	licensed.RequireGameData(t)
-	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
+	textdata := gamedatatest.TextdataDir(t)
+	items := enterworld.NewTextdataItems(textdata)
+	magic := enterworld.NewTextdataMagicOptions(textdata)
 	codes := publishedLootCodes(t)
 	t.Logf("pickup/persistence coverage: %d production loot identities; activation assertions cover equipment and recovery here", len(codes))
 	for _, code := range codes {
@@ -136,6 +117,7 @@ func TestPublishedLootPickupAndActivation(t *testing.T) {
 			}
 			c.ModelCodename = "CHAR_" + race + "_" + sex + "_ADVENTURER"
 			rt, _ := newTestRuntime(c, items)
+			rt.deps.(*enterworld.Deps).MagicOptions = magic
 			rt.DropRoll = func() (uint32, error) { return 0, nil }
 			row := pickupPublishedLoot(t, rt, c, ref, 1)
 			if socket, equip := inventory.EquipSocketForTypeFlags(ref.TypeFlags()); equip {

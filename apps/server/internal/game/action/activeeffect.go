@@ -12,7 +12,10 @@ checkpoints. Installation and retirement publish from that same state.
 package action
 
 import (
+	"sync/atomic"
+
 	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
@@ -20,7 +23,6 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/world/simulation"
-	"sync/atomic"
 )
 
 // Process-wide identity prevents an effect retired in an earlier runtime or
@@ -86,11 +88,12 @@ func (rt *Runtime) ApplyCharacterEffect(
 	return rt.ApplyCharacterEffectPresentation(divisionID, characterName, skillID, instanceToken, state, sourceDescriptorAllowsVoluntaryStop, EffectPresentation{Phase: 2}, rt.Now().UnixMilli())
 }
 
-// Presentation data is distinct from the registry lifecycle state. Native
-// 59AF00 serializes +20/+24, while state eligibility comes from +0c.
 /*
 ================
 EffectPresentation
+
+Presentation is distinct from registry lifecycle state. Native 59AF00
+serializes +20/+24, while state eligibility comes from +0c.
 ================
 */
 type EffectPresentation struct {
@@ -111,6 +114,8 @@ type EffectPresentation struct {
 /*
 ================
 ApplyCharacterEffectPresentation
+
+Validate the live recipient before entering its single effect mutation door.
 ================
 */
 func (rt *Runtime) ApplyCharacterEffectPresentation(divisionID, characterName string, skillID, instanceToken uint32, state statuseffect.State, canStop bool, presentation EffectPresentation, nowMs int64) bool {
@@ -158,22 +163,24 @@ func (rt *Runtime) ApplyCharacterEffectPresentation(divisionID, characterName st
 	return true
 }
 
-// Caller holds the division and character update doors. Item use and direct
-// skills commit through this same effect owner, without nested transactions.
 /*
 ================
 commitCharacterEffect
+
+Caller holds the division and character update doors. Item use and direct
+skills commit through this same effect owner, without nested transactions.
 ================
 */
 func (rt *Runtime) commitCharacterEffect(divisionID string, character *enterworld.Character, row enterworld.SkillRow, instanceToken uint32, state statuseffect.State, canStop bool, presentation EffectPresentation, nowMs int64) ([]wire.Frame, bool) {
 	return rt.commitCharacterEffectWithCheckpoint(divisionID, character, row, instanceToken, state, canStop, presentation, nowMs, true)
 }
 
-// Restoring a batch commits its durable records once, after every installation.
-// An individual installation must not overwrite the jobs still being restored.
 /*
 ================
 commitCharacterEffectWithCheckpoint
+
+Restoring a batch commits its durable records once, after every installation.
+An individual installation must not overwrite the jobs still being restored.
 ================
 */
 func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, character *enterworld.Character, row enterworld.SkillRow, instanceToken uint32, state statuseffect.State, canStop bool, presentation EffectPresentation, nowMs int64, checkpoint bool) ([]wire.Frame, bool) {
@@ -263,6 +270,9 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		return nil, false
 	}
 	writes = append(writes, itemWrites...)
+	if row.TimedEffect.Pinned {
+		writes = append(writes, combat.AttributeEffectWrites(row.TimedEffect.Attributes)...)
+	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Block.Present {
 		writes = append(writes, combat.BlockRateWrites(row.TimedEffect.Block.Mask, row.TimedEffect.Block.Value)...)
 	}
@@ -440,11 +450,12 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 	return out
 }
 
-// EntrySkills is the bootstrap projection of the same live registry. The local
-// wire and JSON adapter consume this single snapshot; neither recreates effects.
 /*
 ================
 EntrySkills
+
+The wire and JSON bootstrap consume this registry snapshot without recreating
+effects or extending their remaining lifetimes.
 ================
 */
 func (rt *Runtime) EntrySkills(divisionID, characterName string) []enterworld.EntrySkill {
@@ -454,6 +465,8 @@ func (rt *Runtime) EntrySkills(divisionID, characterName string) []enterworld.En
 /*
 ================
 entrySkillsAt
+
+Project only live recipient-owned effects at the supplied world instant.
 ================
 */
 func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) []enterworld.EntrySkill {
@@ -490,10 +503,11 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 	return out
 }
 
-// buffModifierWrites is the dru (595A97) and odar (596004) part of 594AC0.
 /*
 ================
 buffModifierWrites
+
+The dru (595A97) and odar (596004) part of 594AC0.
 ================
 */
 func buffModifierWrites(m enterworld.SkillBuffModifiers) []paramkeeper.Write {

@@ -41,11 +41,13 @@ func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 	}
 }
 
-// TickHook owns both periodic item-plane jobs on the simulation Ticker's clock:
-// due skill-bracket closes and the rate-limited ground-item TTL sweep.
 /*
 ================
 TickHook
+
+Owns gameplay lifecycles on one simulation clock. Linked attack pulses settle
+before abnormal-state updates, allowing their newly applied statuses to enter
+the same actor update without another health authority.
 ================
 */
 func (rt *Runtime) TickHook() simulation.TickHook {
@@ -84,6 +86,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		rt.advanceLinkedEffects(nowMs)
 		out = append(out, rt.advancePartyAuras(nowMs)...)
 		out = append(out, rt.advanceWalls(nowMs)...)
+		out = append(out, rt.advancePeriodicEffects(nowMs)...)
 		rt.effects.Expire(nowMs)
 		out = append(out, rt.drainStoppedCharacterEffects()...)
 		// 4A4390 per actor: expiry, damage over time, detonation, mask.
@@ -105,6 +108,8 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 /*
 ================
 pendingPickupDelivery
+
+Packet delivery leaves the division operation lock before touching sessions.
 ================
 */
 type pendingPickupDelivery struct {
@@ -159,6 +164,8 @@ func (rt *Runtime) advancePendingPickups(nowMs int64) []simulation.DivisionFrame
 /*
 ================
 completePendingPickup
+
+Revalidate ownership and live approach range before committing inventory.
 ================
 */
 func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Time) (OpResult, *enterworld.Character) {
@@ -268,11 +275,12 @@ func (rt *Runtime) ForgetCharacter(divisionID, characterName string) {
 	rt.forgetCharacterLocked(divisionID, characterName)
 }
 
-// ForgetCharacterSession rejects teardown from an owner displaced by a newer
-// logical session. Socket resume keeps the same session and never calls this.
 /*
 ================
 ForgetCharacterSession
+
+Reject teardown from an owner displaced by a newer logical session. Socket
+resume keeps the same session and never calls this.
 ================
 */
 func (rt *Runtime) ForgetCharacterSession(divisionID, characterName string, session uint64) {
@@ -298,9 +306,12 @@ func (rt *Runtime) ForgetCharacterSession(divisionID, characterName string, sess
 /*
 ================
 forgetCharacterLocked
+
+Release actor-owned runtime state while the division operation lock is held.
 ================
 */
 func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
+	rt.periodicEffects.StopSource(divisionID, characterName)
 	rt.returnCasts.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))

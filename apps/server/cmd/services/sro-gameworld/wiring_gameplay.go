@@ -94,6 +94,9 @@ func newGameplayPlane(
 		return nil, err
 	}
 	items := action.NewRuntime(deps, deps.MonsterState)
+	if err := items.ValidateLootReferences(); err != nil {
+		return nil, fmt.Errorf("loot catalogue: %w", err)
+	}
 	deps.PlayerBaseStats = func(character *enterworld.Character) (wire.BaseStats, error) {
 		return items.PlayerBaseStats(ownedShard.ID, character)
 	}

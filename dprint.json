@@ -37,6 +37,7 @@
 		"*.{mjs,cjs}"
 	],
 	"excludes": [
+		"apps/server/internal/game/item/loot/.generated/**",
 		"**/node_modules",
 		"**/temp",
 		"**/*.d.ts",

@@ -1,7 +1,23 @@
+/*
+===========================================================================
+
+skillexecutionplan.go - immutable catalog routes for complete skill programs
+
+Compilers admit complete producers. Runtime state stays with action owners;
+recognizing an instruction alone never enables a route.
+
+===========================================================================
+*/
+
 package enterworld
 
-// SkillExecutionKind names an existing authority route, not an effect opcode.
-// A decoded operation is never sufficient to grant a route admission.
+/*
+================
+SkillExecutionKind
+
+An executable authority route, not an individual effect opcode.
+================
+*/
 type SkillExecutionKind uint8
 
 const (
@@ -12,11 +28,16 @@ const (
 	SkillExecutionPassive
 	SkillExecutionTimedEffect
 	SkillExecutionPosition
+	SkillExecutionThreat
 )
 
-// SkillExecutionPlan is immutable after table publication. Each stage carries
-// the shared targeting, cost, timing, damage and effect descriptors already
-// validated by its native-shape compiler. Runtime state stays in action owners.
+/*
+================
+SkillExecutionPlan
+
+Immutable stage descriptors backed by resident catalog storage.
+================
+*/
 type SkillExecutionPlan struct {
 	source *skillStorage
 	ids    []uint32
@@ -24,13 +45,32 @@ type SkillExecutionPlan struct {
 	stages []residentSkill
 }
 
+/*
+================
+Kind
+================
+*/
 func (p SkillExecutionPlan) Kind() SkillExecutionKind { return p.kind }
+
+/*
+================
+Len
+================
+*/
 func (p SkillExecutionPlan) Len() int {
 	if p.source != nil {
 		return len(p.ids)
 	}
 	return len(p.stages)
 }
+
+/*
+================
+Stage
+
+Return a detached row so consumers cannot mutate the published catalog.
+================
+*/
 func (p SkillExecutionPlan) Stage(i int) SkillRow {
 	if p.source != nil {
 		return p.source.get(p.ids[i])
@@ -38,9 +78,27 @@ func (p SkillExecutionPlan) Stage(i int) SkillRow {
 	return p.stages[i].value()
 }
 
+/*
+================
+skillPlanRows
+
+Temporary graph lookup used while building immutable catalog plans.
+================
+*/
 type skillPlanRows map[uint32]SkillRow
 
+/*
+================
+SkillByID
+================
+*/
 func (s skillPlanRows) SkillByID(id uint32) (SkillRow, bool) { r, ok := s[id]; return r, ok }
+
+/*
+================
+SkillByCodename
+================
+*/
 func (s skillPlanRows) SkillByCodename(name string) (SkillRow, bool) {
 	for _, r := range s {
 		if r.Codename == name {
@@ -50,6 +108,13 @@ func (s skillPlanRows) SkillByCodename(name string) (SkillRow, bool) {
 	return SkillRow{}, false
 }
 
+/*
+================
+compileExecutionPlan
+
+Admit the whole offensive graph before considering independent self routes.
+================
+*/
 func compileExecutionPlan(source SkillDataSource, root SkillRow) SkillExecutionPlan {
 	if root.ChainSub {
 		return SkillExecutionPlan{}
@@ -64,6 +129,8 @@ func compileExecutionPlan(source SkillDataSource, root SkillRow) SkillExecutionP
 	}
 	kind := SkillExecutionUnsupported
 	switch {
+	case root.Threat.Only:
+		kind = SkillExecutionThreat
 	case root.PositionEffect.Pinned:
 		kind = SkillExecutionPosition
 	case root.Recovery.SelfFlatPinned:
@@ -81,12 +148,25 @@ func compileExecutionPlan(source SkillDataSource, root SkillRow) SkillExecutionP
 	return SkillExecutionPlan{kind: kind, stages: []residentSkill{compactSkill(root)}}
 }
 
-// ExecutionPlan returns a value backed by private, immutable table storage.
+/*
+================
+ExecutionPlan
+
+Publish only after the catalog's one-time load completes.
+================
+*/
 func (t *TextdataSkills) ExecutionPlan(id uint32) SkillExecutionPlan {
 	t.once.Do(t.load)
 	return t.plans[id]
 }
 
+/*
+================
+compactSkillStages
+
+Intern validated stages without retaining mutable parser rows.
+================
+*/
 func compactSkillStages(rows []SkillRow) []residentSkill {
 	out := make([]residentSkill, len(rows))
 	for i, row := range rows {

@@ -1,11 +1,13 @@
 /*
 ===========================================================================
 
-animation-pose.ts - retained character pose sampling and skin palettes
+animation-pose.ts - retained character pose sampling, skin palettes and sockets
 
 Owns clip sampling, native event-before-timed blending, and lazy CPU palette
 materialization. Layer lifetimes belong to the presentation producers; this
 consumer evaluates every live fade without truncating sparse bone tracks.
+Equipment branches join the socket table without changing explicit private
+bone names (A981A0 searches compound branches in order for a marker).
 
 ===========================================================================
 */
@@ -14,6 +16,8 @@ import type { CharacterModel, CharacterPrimitive, CharacterLayer, CharacterClip 
 import { compose, multiplyDisjoint as multiply, slerp } from "@/engine/foundation/math/pose-math";
 import { paletteBindings } from "./palette-bindings";
 import { bodyBoneScale } from "./body-shape";
+
+const DEFAULT_BODY_VOLUME = 2;
 /*
 ================
 AnimationPoseProbe
@@ -44,7 +48,18 @@ export function createCharacterPose( model: CharacterModel, probe?: AnimationPos
 	const bindings = paletteBindings( model );
 	const ceilingEligible = !!probe?.ceiling && model.primitives.some( p => p.joints.length > 1 ) &&
 		!model.primitives.some( p => p.emission || p.ribbon );
-	let volume = 2, female = false;
+	let volume = DEFAULT_BODY_VOLUME, female = false;
+	// Body nodes precede attached handles. Keep that compound order for
+	// unqualified lookups; explicit branch names stay distinct even when both
+	// weapons carry an identically named marker.
+	const sockets = new Map<string, number>();
+	const equipmentMarker = /^equipment:\d+:[^:]+:(.+)$/;
+	for ( let index = 0; index < model.nodes.length; index++ ) {
+		const name = model.nodes[index]!.name;
+		if ( !sockets.has( name ) ) sockets.set( name, index );
+		const marker = equipmentMarker.exec( name )?.[1];
+		if ( marker && marker !== "$root" && !sockets.has( marker ) ) sockets.set( marker, index );
+	}
 	const thickness = new Float32Array( model.nodes.length ).fill( 1 ), radial = new Float32Array( 16 );
 	const locals = model.nodes.map( () => new Float32Array( 16 ) ),
 		globals = model.nodes.map( () => new Float32Array( 16 ) );
@@ -137,7 +152,8 @@ gpuSample
 	function gpuSample(): { readonly clip: CharacterClip; readonly time: number; } | null {
 		const layer = resolved[0];
 		if (
-			volume !== 2 || resolved.length !== 1 || !layer?.clip || layer.weight !== 1 || !gpuClips.has( layer.clip )
+			volume !== DEFAULT_BODY_VOLUME || resolved.length !== 1 || !layer?.clip || layer.weight !== 1 ||
+			!gpuClips.has( layer.clip )
 		) return null;
 		sampleRequest.clip = layer.clip;
 		sampleRequest.time = layer.time;
@@ -306,7 +322,7 @@ materialize
         bodyVolume
         ================
         */
-		bodyVolume( index = 2, isFemale = false ) {
+		bodyVolume( index = DEFAULT_BODY_VOLUME, isFemale = false ) {
 			if ( volume === index && female === isFemale ) return;
 			volume = index;
 			female = isFemale;
@@ -417,12 +433,15 @@ materialize
 		/*
         ================
         socket
+
+        The first compound marker's sampled matrix, or a named private branch
+        when the caller supplies an explicit equipment handle.
         ================
         */
 		socket( name: string ) {
 			materialize( "socket:" + name );
-			const index = model.nodes.findIndex( node => node.name === name );
-			return index < 0 ? null : globals[index]!.slice();
+			const index = sockets.get( name );
+			return index === undefined ? null : globals[index]!.slice();
 		}
 	};
 }

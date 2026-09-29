@@ -3,6 +3,9 @@
 
 skilloffense.go - skill parameter index and offense admission (SkillGlobal_BuildParameterIndex 587630)
 
+Compile authored rows into executable offensive shapes. A recognized parameter
+alone cannot admit a program whose resource or action lifecycle is unsupported.
+
 ===========================================================================
 */
 
@@ -51,6 +54,11 @@ independent of the HP/MP consumption columns.
 ==================
 */
 type SkillAmmunition struct{ TID3, TID4, Count uint32 }
+
+const (
+	crossbowWeaponKind     = 12
+	maximumAmmunitionStack = 0xffff
+)
 
 /*
 ==================
@@ -295,6 +303,10 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		values[i] = value
 	}
 	row.Consumption = SkillConsumption{uint32(values[0]), uint32(values[1]), uint16(values[2]), uint16(values[3]), true}
+	if taunt := compileSkillTaunt(fields, *row); taunt.Only {
+		row.Threat = taunt
+		return ""
+	}
 	// Admission is by executable shape, never a hand-maintained skill-name list.
 	// Linked casts and additional effect blocks require their own authority
 	// operations; they cannot be silently reduced to one damage result.
@@ -322,14 +334,12 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 					return "offense:invalid-envelope-or-arguments"
 				}
 			}
-			// A projectile is a separate release owner. Do not admit linked or
-			// multi-impact consumption until their lifecycle is implemented; an
-			// area projectile resolves at release (skillarea.go). Ammunition is
-			// either the bow's arrow (cnsm 4 1 1) or none at all: 587F57 debits
-			// only what cnsm names, so the sword's thrown blades
-			// (SKILL_CH_SWORD_SPECIAL_*, weapons 2/3) fly without any. A shot
-			// from a bow or crossbow always spends one, so those rows without
-			// cnsm stay refused.
+			if seen[int64(tagPositionCharge)] && seen[tagEfr] {
+				return "offense:charge-area"
+			}
+			// Crossbow stages own their cnsm debit (585FB6), including
+			// zero-preparation linked shots. Keep other weapon families on
+			// their reviewed envelope; graph validation remains root-owned.
 			// FIXME: routing still keys on the flying speed, so ActionHandler 1
 			// rows at speed 0 (SKILL_CH_SPEAR_SHOOT_*, area shape 4) run the
 			// instant owner. SkillAction_Projectile (5857B0) at speed 0 flies
@@ -337,11 +347,15 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			// position effect, registers no hostile target and hits when the
 			// bow-shot record lands. Only the MP rule follows the handler so far.
 			if row.ProjectileSpeed != 0 || seen[0x636e736d] {
+				crossbow := row.RequiredWeaponKinds == ([2]uint8{crossbowWeaponKind, 255})
 				// Several mc impacts resolve at release together and spend
 				// cnsm count x impacts arrows (585AF0).
-				if row.ProjectileSpeed == 0 || row.ActionCastingTimeMs == 0 || row.ChainSub || row.ChainNext != 0 ||
+				if row.ProjectileSpeed == 0 ||
+					!crossbow && (row.ActionCastingTimeMs == 0 || row.ChainSub || row.ChainNext != 0) ||
 					row.Attack.ImpactCount == 0 ||
 					!(row.Ammunition == (SkillAmmunition{4, 1, 1}) && row.RequiredWeaponKinds == ([2]uint8{6, 255}) ||
+						row.Ammunition.TID3 == 4 && row.Ammunition.TID4 == 2 &&
+							row.Ammunition.Count > 0 && row.Ammunition.Count <= maximumAmmunitionStack && crossbow ||
 						!seen[0x636e736d] && row.Ammunition == (SkillAmmunition{}) && ammunitionFreeWeapons(row.RequiredWeaponKinds)) {
 					return "offense:invalid-envelope-or-arguments"
 				}
@@ -366,6 +380,29 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			continue
 		}
 		switch tag {
+		case 0x7275: // ru: flat weapon-range addend, 4AE849..4AE87A
+			arity = 1
+			if row.RequiredWeaponKinds != ([2]uint8{crossbowWeaponKind, 255}) {
+				return "offense:range-weapon"
+			}
+			if i+arity >= len(fields) {
+				return "offense:range-arguments"
+			}
+			value, valid := textdataInt(fields[i+1])
+			if !valid || value < 0 || value > 0xffffffff {
+				return "offense:range-arguments"
+			}
+		case 0x74656c33: // tel3: instant target charge, planned by 5862E0
+			arity = 2
+			if i+arity >= len(fields) || fields[68] != "0" || row.ChainNext != 0 || row.ChainSub || row.ProjectileSpeed != 0 ||
+				row.ActionCastingTimeMs != 0 || row.ActionDurationMs != 0 || row.Attack.ImpactCount != 1 {
+				return "offense:charge-envelope"
+			}
+			parameter, parameterOK := textdataInt(fields[i+1])
+			rangeWord, rangeOK := textdataInt(fields[i+2])
+			if !parameterOK || parameter < 0 || parameter > 0xffffffff || !rangeOK || rangeWord <= 0 || rangeWord > 0x7fffffff {
+				return "offense:charge-arguments"
+			}
 		case skillPulseTag:
 			arity = 1
 			if i+arity >= len(fields) {

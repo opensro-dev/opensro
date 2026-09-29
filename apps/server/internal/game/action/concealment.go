@@ -56,12 +56,10 @@ RECIPIENTS
 ==================
 concealmentRecipients
 
-The other characters an efr kind 1 program lands on, by
-TargetSelection_AroundSource (58A020) over characters: within the radius
-plus the candidate's body radius (58A40C..58A474), alive, in the caster's
-world. The party joins through select bit 4; every other character
-through bit 2, the caster's party excepted. MaxTargets 0 has no cap
-(58A4ED) and otherwise counts the caster. Order is by GID.
+The other characters an efr kind 1 program lands on. Select 4/5 dispatches
+to TargetSelection_Party (58CB70 -> 58BEF0): center distance, no body-radius
+expansion and no target-cap read. This includes March, Heal Shield and party
+invisibility. Other selections retain the around-source walk (58A020).
 ==================
 */
 func (rt *Runtime) concealmentRecipients(division string, caster *enterworld.Character, area enterworld.SkillRecipientArea, now int64) []*enterworld.Character {
@@ -69,6 +67,7 @@ func (rt *Runtime) concealmentRecipients(division string, caster *enterworld.Cha
 		return nil
 	}
 	party := rt.auraParty(division, caster)
+	partyOnly := area.Select == enterworld.SelectParty || area.Select == enterworld.SelectParty|enterworld.SelectCaster
 	world := domain.CharacterWorldInstance(caster)
 	from := rt.liveSpawn(simulation.WorldKey(division, caster.Name), caster, now)
 	casterGID := enterworld.ObjectIDForCharacter(caster)
@@ -90,20 +89,28 @@ func (rt *Runtime) concealmentRecipients(division string, caster *enterworld.Cha
 		case !member && area.Select&enterworld.SelectCharacter == 0:
 			continue
 		}
-		radius, ok := rt.deps.CharacterBodyRadius(c)
-		if !ok {
-			continue
-		}
 		to := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
-		if !samePlaneAdjacent(from, to) || float32(distance3D(from, to)) > float32(float64(area.Radius)+radius) {
-			continue
+		if partyOnly {
+			// 58C078 compares the unsigned radius with the x87 length;
+			// equality is included, and no body-radius getter is called.
+			if !partyAreaReach(from, to, area.Radius) {
+				continue
+			}
+		} else {
+			if !samePlaneAdjacent(from, to) {
+				continue
+			}
+			radius, ok := rt.deps.CharacterBodyRadius(c)
+			if !ok || float32(distance3D(from, to)) > float32(float64(area.Radius)+radius) {
+				continue
+			}
 		}
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return enterworld.ObjectIDForCharacter(out[i]) < enterworld.ObjectIDForCharacter(out[j])
 	})
-	if area.MaxTargets != 0 {
+	if !partyOnly && area.MaxTargets != 0 {
 		limit := int(area.MaxTargets)
 		if area.Select&enterworld.SelectCaster != 0 {
 			limit-- // the caster was pushed first
@@ -152,8 +159,14 @@ func (rt *Runtime) installRecipientEffects(division string, recipients []*enterw
 	}
 }
 
-// concealmentRider is the STDU milliseconds the caster's passives add to a
-// hide it casts (5833C8); zero for every other row.
+/*
+================
+concealmentRider
+
+STDU milliseconds the caster's passives add to a hide (5833C8). Other timed
+effects carry no duration rider.
+================
+*/
 func (rt *Runtime) concealmentRider(division string, caster *enterworld.Character, skill enterworld.SkillRow) (uint32, bool) {
 	if !skill.Concealment.Pinned || !skill.Concealment.DurationBonus {
 		return 0, true
@@ -165,9 +178,14 @@ func (rt *Runtime) concealmentRider(division string, caster *enterworld.Characte
 	return stats.SkillParameters[enterworld.ParameterStealthDuration], true
 }
 
-// startSkillCast is InitiateSkillCast's event retirement (59B745): every
-// fresh player cast, basic attacks included, before it installs or strikes.
-// The caller holds c's door.
+/*
+================
+startSkillCast
+
+InitiateSkillCast's event retirement (59B745), before a fresh cast installs or
+strikes. Basic attacks share this event; the caller holds the character door.
+================
+*/
 func (rt *Runtime) startSkillCast(division string, c *enterworld.Character, now int64) {
 	rt.retireEffectsOnEvent(division, c, effectEventSkillCast, now)
 }

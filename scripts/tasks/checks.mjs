@@ -14,6 +14,16 @@ import { commandTask, pipelineTask, seriesTask } from "./define.mjs";
 
 export const CHECK_TASKS = [
 	commandTask( {
+		name: "check:loot-catalog",
+		description: "Verify generated loot against committed versioned evidence",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "python",
+		args: [ "-B", "scripts/build/generate_loot_catalog.py", "--check" ]
+	} ),
+	commandTask( {
 		name: "check:release",
 		description: "Test release admission, publication recovery and monitoring",
 		kind: "check",
@@ -179,6 +189,7 @@ export const CHECK_TASKS = [
 
 const sourceTasks = [
 	"check:release",
+	"check:loot-catalog",
 	"check:source-size",
 	"check:source-encoding",
 	"check:shared-fixtures",
@@ -206,6 +217,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 	],
 	full: [
 		{ id: "release", task: "check:release", after: [] },
+		{ id: "loot-catalog", task: "check:loot-catalog", after: [] },
 		{ id: "server", task: "check:server", after: [] },
 		{ id: "source-size", task: "check:source-size", after: [] },
 		{ id: "source-encoding", task: "check:source-encoding", after: [] },

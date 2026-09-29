@@ -3,6 +3,9 @@
 
 skillarea.go - area skills: victim selection around a centre
 
+Plan all victims at release and commit their impacts together. The primary
+target's pre-impact pose also owns the projectile's retained flight time.
+
 ===========================================================================
 */
 
@@ -19,6 +22,13 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+areaVictimPlan
+
+Retain the release-time target and formulas until the whole area commits.
+================
+*/
 type areaVictimPlan struct {
 	target   monster.Instance
 	formulas []combat.Result
@@ -93,8 +103,14 @@ func (rt *Runtime) areaVictims(division string, c *enterworld.Character, primary
 	return out
 }
 
-// areaBaseRange is 58B29B..58B2A9: the row's range word, else the
-// attack-range param truncated to a word (CGObjChar_GetAttackRangeParam).
+/*
+================
+areaBaseRange
+
+58B29B..58B2A9 uses the row's range word or the truncated attack-range
+keeper. Pursuit bonuses do not widen this directional selection geometry.
+================
+*/
 func areaBaseRange(skill enterworld.SkillRow, attacker combat.Stats) float32 {
 	if skill.ActionRange > 0 {
 		return float32(uint16(skill.ActionRange))
@@ -150,7 +166,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 			plan.formulas = append(plan.formulas, formula)
 		}
 		percent = percent * uint64(100-area.ReductionPercent) / 100
-		if total >= uint64(target.CurrentHP) {
+		if total >= uint64(target.CurrentHP) || index == 0 && skill.ProjectileSpeed != 0 {
 			mover, ok := rt.Monsters.Mover(division, target.Gid)
 			if !ok {
 				return OpResult{}, skillCastRefused
@@ -264,14 +280,13 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	} else {
 		success = wire.SkillCastAreaReleaseFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: enterworld.ObjectIDForCharacter(snapshot), InstanceToken: token}, primary.Gid, targets)
 		lifetime = uint64(skill.ActionDurationMs)
-		if skill.ProjectileSpeed != 0 {
-			// Recovery and the bow shot's flight both hold the token (skillcombat.go).
-			if mover, ok := rt.Monsters.Mover(division, primary.Gid); ok {
-				pose := mover.LivePoseAt(nowMs, nil)
-				flight := projectileFlightMs(rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, nowMs), simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}, skill.ProjectileSpeed)
-				lifetime = uint64(max(int64(lifetime), flight+1))
-			}
-		}
+	}
+	if skill.ProjectileSpeed != 0 {
+		// The original target sample determines flight, even when impact
+		// displaces or kills it. Zero-preparation area shots retain it too.
+		pose := plans[0].pose
+		flight := projectileFlightMs(rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, nowMs), simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}, skill.ProjectileSpeed)
+		lifetime = uint64(max(int64(lifetime), flight+1))
 	}
 	rt.queueSkillCastClose(division, snapshot.Name, enterworld.ObjectIDForCharacter(snapshot), token, skill, rootID, nowMs+int64(lifetime))
 	public := append([]wire.Frame{success}, burnFrames...)

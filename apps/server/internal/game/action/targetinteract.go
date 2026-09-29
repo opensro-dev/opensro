@@ -145,6 +145,9 @@ func (rt *Runtime) HandleTargetInteract(
 				if skill.PositionEffect.Pinned {
 					return rt.acceptPositionSkill(divisionID, character, snapshot, cast, skill)
 				}
+				if skill.Threat.Only && !skill.TargetRequired {
+					return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill}, cast)
+				}
 
 				if skill.Recovery.SelfFlatPinned ||
 					(skill.Heal.Present || skill.Abnormal.AdmitDeadParty) && skill.TargetRequired ||

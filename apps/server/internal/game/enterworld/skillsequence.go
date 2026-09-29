@@ -1,9 +1,26 @@
+/*
+===========================================================================
+
+skillsequence.go - admission of complete offensive skill graphs
+
+Column nine links skill records, not impact rows. Every stage must be
+executable before the root can own a resource debit or a cast token.
+
+===========================================================================
+*/
+
 package enterworld
 
-// OffensiveSequence validates the whole authored graph before the first debit.
-// v1.150 column 9 links skill records, not impact rows. Missing links, cycles,
-// foreign groups/levels and unsupported later effects cannot become partial casts.
-// The bound is an input-admission limit, not a truncation of a longer sequence.
+const maximumSkillStages = 32
+
+/*
+================
+OffensiveSequence
+
+Use the immutable catalog plan when available; synthetic sources pass through
+the same graph validator instead of bypassing its completeness checks.
+================
+*/
 func OffensiveSequence(source SkillDataSource, rootID uint32) ([]SkillRow, bool) {
 	if compiled, ok := source.(interface {
 		ExecutionPlan(uint32) SkillExecutionPlan
@@ -21,6 +38,14 @@ func OffensiveSequence(source SkillDataSource, rootID uint32) ([]SkillRow, bool)
 	return validateOffensiveSequence(source, rootID)
 }
 
+/*
+================
+validateOffensiveSequence
+
+Missing links, cycles, foreign groups and unsupported effects refuse the whole
+cast. Guided charges have an arrival-owned lifetime rather than a timed close.
+================
+*/
 func validateOffensiveSequence(source SkillDataSource, rootID uint32) ([]SkillRow, bool) {
 	if source == nil {
 		return nil, false
@@ -32,13 +57,13 @@ func validateOffensiveSequence(source SkillDataSource, rootID uint32) ([]SkillRo
 	seen := map[uint32]bool{}
 	var sequence []SkillRow
 	row := root
-	for len(sequence) < 32 {
+	for len(sequence) < maximumSkillStages {
 		if seen[row.ID] || row.Group != root.Group || row.Level != root.Level ||
 			(!row.OffensiveStagePinned && !(row.DirectOffensePinned && row.ChainNext == 0)) {
 			return nil, false
 		}
 		lifetime, valid := row.ActionLifecycleMs()
-		if !valid || lifetime == 0 {
+		if !valid || lifetime == 0 && !row.PositionEffect.Charge {
 			return nil, false
 		}
 		if len(sequence) > 0 && (!row.ChainSub || row.Consumption.HP != 0 || row.Consumption.MP != 0 ||

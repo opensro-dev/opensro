@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+consumables.go - immutable consumable and assigned reward selection
+
+===========================================================================
+*/
+
 package loot
 
 import (
@@ -8,24 +16,50 @@ import (
 	"sort"
 )
 
-//go:embed consumables.json
+//go:embed .generated/consumables.json
 var consumablesJSON []byte
 
+/*
+================
+DropItem
+================
+*/
 type DropItem struct {
-	Codename string
-	Count    uint16
-	Plus     uint8
+	Codename  string
+	Count     uint16
+	Plus      uint8
+	Special   bool
+	NonRepair bool
+	Assigned  bool
 }
+
+/*
+================
+consumableRef
+================
+*/
 type consumableRef struct {
 	equipmentRef
 	Family int
 }
+
+/*
+================
+assignedDrop
+================
+*/
 type assignedDrop struct {
 	Monster, Item string
 	Plus          uint8
 	Min, Max      uint8
 	Probability   float32
 }
+
+/*
+================
+assignedRandom
+================
+*/
 type assignedRandom struct {
 	Monster     string
 	Group       int
@@ -33,10 +67,22 @@ type assignedRandom struct {
 	Min, Max    uint8
 	Probability float32
 }
+
+/*
+================
+groupDrop
+================
+*/
 type groupDrop struct {
 	Codename    string
 	Probability float32
 }
+
+/*
+================
+consumableSource
+================
+*/
 type consumableSource struct {
 	Version int
 	Items   []consumableRef
@@ -45,6 +91,12 @@ type consumableSource struct {
 	Random  []assignedRandom
 	Groups  map[int][]groupDrop
 }
+
+/*
+================
+consumableCatalog
+================
+*/
 type consumableCatalog struct {
 	families map[int]equipmentCatalog
 	fixed    map[string][]assignedDrop
@@ -54,6 +106,11 @@ type consumableCatalog struct {
 
 var consumables = mustConsumables()
 
+/*
+================
+mustConsumables
+================
+*/
 func mustConsumables() consumableCatalog {
 	var source consumableSource
 	if err := json.Unmarshal(consumablesJSON, &source); err != nil {
@@ -66,7 +123,18 @@ func mustConsumables() consumableCatalog {
 	return c
 }
 
+/*
+================
+probabilityValid
+================
+*/
 func probabilityValid(p float32) bool { return !math.IsNaN(float64(p)) && p >= 0 && p <= 1 }
+
+/*
+================
+compileConsumables
+================
+*/
 func compileConsumables(s consumableSource) (consumableCatalog, error) {
 	c := consumableCatalog{families: map[int]equipmentCatalog{}, fixed: map[string][]assignedDrop{}, random: map[string][]assignedRandom{}, groups: s.Groups}
 	if s.Version != 1 {
@@ -144,7 +212,7 @@ func compileConsumables(s consumableSource) (consumableCatalog, error) {
 		}
 	}
 	for _, r := range s.Random {
-		if r.Monster == "" || r.Min > r.Max || r.Max == 0 || !probabilityValid(r.Probability) || len(s.Groups[r.Group]) == 0 {
+		if r.Monster == "" || r.Min > r.Max || r.Max == 0 || !probabilityValid(r.Probability) || len(s.Groups[r.Group]) == 0 || (r.Distinct && int(r.Max) > len(s.Groups[r.Group])) {
 			return c, fmt.Errorf("invalid monster random group")
 		}
 		c.random[r.Monster] = append(c.random[r.Monster], r)
@@ -154,9 +222,20 @@ func compileConsumables(s consumableSource) (consumableCatalog, error) {
 
 // SelectConsumable shares the native class/weighted/absolute selection rules
 // with equipment, but keeps families and quantities in separate immutable buckets.
+/*
+================
+SelectConsumable
+================
+*/
 func SelectConsumable(family int, level uint8, classRoll uint32, roll func() (uint32, error)) (DropItem, bool) {
 	return consumables.selectConsumable(family, level, classRoll, roll)
 }
+
+/*
+================
+selectConsumable
+================
+*/
 func (c consumableCatalog) selectConsumable(family int, level uint8, classRoll uint32, roll func() (uint32, error)) (DropItem, bool) {
 	e, ok := c.families[family]
 	if !ok || level == 0 || int(level) > len(e.classes[0]) || classRoll >= 1e6 {
@@ -171,6 +250,11 @@ func (c consumableCatalog) selectConsumable(family int, level uint8, classRoll u
 	return DropItem{Codename: r.Codename, Count: r.Count}, ok
 }
 
+/*
+================
+rollMillion
+================
+*/
 func rollMillion(roll func() (uint32, error)) (uint32, bool) {
 	a, e := roll()
 	if e != nil || a > 32767 {
@@ -185,9 +269,20 @@ func rollMillion(roll func() (uint32, error)) (uint32, bool) {
 
 // AssignedDrops handles random groups first, then fixed rows (724e30/724a00).
 // Both are keyed by monster codename. Results are plans, never inventory grants.
+/*
+================
+AssignedDrops
+================
+*/
 func AssignedDrops(monster string, limit int, roll func() (uint32, error)) []DropItem {
 	return consumables.assigned(monster, limit, roll)
 }
+
+/*
+================
+assigned
+================
+*/
 func (c consumableCatalog) assigned(monster string, limit int, roll func() (uint32, error)) []DropItem {
 	if roll == nil || limit <= 0 {
 		return nil
@@ -206,27 +301,18 @@ func (c consumableCatalog) assigned(monster string, limit int, roll func() (uint
 			return out
 		}
 		count := int(r.Min) + int(n%(uint32(r.Max)-uint32(r.Min)+1))
-		pool := append([]groupDrop(nil), c.groups[r.Group]...)
-		// Native repeats rejected candidates. Bound attempts to avoid an
-		// injected/broken RNG hanging the authority; failures grant no item.
-		for attempts := 0; count > 0 && len(pool) > 0 && len(out) < limit && attempts < 4096; attempts++ {
-			v, e := roll()
-			if e != nil {
-				return out
+
+		pool := c.groups[r.Group]
+		selected := make([]bool, len(pool))
+		for count > 0 && len(out) < limit {
+			at, err := selectGroupMember(pool, selected, roll)
+			if err != nil {
+				return nil
 			}
-			at := int(v % uint32(len(pool)))
-			pick := pool[at]
-			chance, ok := rollMillion(roll)
-			if !ok {
-				return out
-			}
-			if chance > uint32(float64(pick.Probability)*1e6) {
-				continue
-			}
-			out = append(out, DropItem{Codename: pick.Codename, Count: 1})
+			out = append(out, DropItem{Codename: pool[at].Codename, Count: 1, Assigned: true})
 			count--
 			if r.Distinct {
-				pool = append(pool[:at], pool[at+1:]...)
+				selected[at] = true
 			}
 		}
 	}
@@ -245,7 +331,7 @@ func (c consumableCatalog) assigned(monster string, limit int, roll func() (uint
 				return out
 			}
 			if chance <= uint32(float64(r.Probability)*1e6) {
-				out = append(out, DropItem{Codename: r.Item, Count: 1, Plus: r.Plus})
+				out = append(out, DropItem{Codename: r.Item, Count: 1, Plus: r.Plus, Assigned: true})
 			}
 		}
 	}
@@ -254,6 +340,11 @@ func (c consumableCatalog) assigned(monster string, limit int, roll func() (uint
 
 // Native 7245c0 sets inventory capacity and category passes; 726a70 sets
 // repeated class-selection attempts within a category, stopping at success.
+/*
+================
+MonsterDropBudget
+================
+*/
 func MonsterDropBudget(rarity uint8, code string) (capacity, passes, attempts int) {
 	capacity, passes, attempts = 8, 1, 1
 	switch rarity & 15 {

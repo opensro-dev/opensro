@@ -10,6 +10,7 @@ package action
 
 import (
 	"math"
+
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -36,6 +37,8 @@ func knockdownConsequence(from simulation.Spawn, to monster.Pose, recovery, dura
 /*
 ================
 displaceImpactPose
+
+Retain native float spills while normalizing outdoor sector coordinates.
 ================
 */
 func displaceImpactPose(from simulation.Spawn, to monster.Pose, distance uint32) monster.Pose {
@@ -57,6 +60,9 @@ func displaceImpactPose(from simulation.Spawn, to monster.Pose, distance uint32)
 /*
 ================
 planMonsterImpacts
+
+Roll outcomes and resolve their sources before entering any character write
+door. The division action lock keeps this admission stable through commit.
 ================
 */
 func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, skill enterworld.SkillRow, target monster.Instance, formulas []combat.Result, now int64) ([]simulation.MonsterDamagePlan, bool) {
@@ -130,6 +136,8 @@ func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, 
 /*
 ================
 committedSkillImpact
+
+Publication is derived from committed HP and displacement, never rolled intent.
 ================
 */
 func committedSkillImpact(formula combat.Result, result simulation.MonsterDamageResult) wire.SkillCastTargetImpact {
@@ -153,11 +161,12 @@ func committedSkillImpact(formula combat.Result, result simulation.MonsterDamage
 	return impact
 }
 
-// The division operation lock owns this cancellation together with the HP/
-// motion commit. Remove all releases and publish one close per owned token.
 /*
 ================
 interruptMonsterCast
+
+The division operation lock owns cancellation with the HP/motion commit.
+Remove all releases and publish one close per owned token.
 ================
 */
 func (rt *Runtime) interruptMonsterCast(division string, gid uint32) []wire.Frame {

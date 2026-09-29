@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+stones.go - alchemy stone application and shared magic value selection
+
+===========================================================================
+*/
+
 package alchemy
 
 import (
@@ -8,6 +16,11 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
+/*
+================
+attributes
+================
+*/
 func attributes(flags uint16) []string {
 	switch category(flags) {
 	case "weapon":
@@ -22,6 +35,11 @@ func attributes(flags uint16) []string {
 	return nil
 }
 
+/*
+================
+magicLimit
+================
+*/
 func (c *Catalog) magicLimit(item inventory.Item) int {
 	n := c.Items[item.Codename].MaxMagic
 	for _, v := range item.MagicOptions {
@@ -38,6 +56,11 @@ func (c *Catalog) magicLimit(item inventory.Item) int {
 
 // 501EA0 selects the minimum of four (rare equipment: five) six-way
 // rolls, then converts the authored percentage table to a five-bit value.
+/*
+================
+varianceValue
+================
+*/
 func (c *Catalog) varianceValue(item inventory.Item, roll Roll) (uint64, error) {
 	n := uint32(c.magicLimit(item))
 	count := 4
@@ -60,12 +83,22 @@ func (c *Catalog) varianceValue(item inventory.Item, roll Roll) (uint64, error) 
 	return percent[n] * 31 / 100, nil
 }
 
+/*
+================
+setVariance
+================
+*/
 func setVariance(item *inventory.Item, index int, value uint64) {
 	shift := uint(index * 5)
 	item.VarianceBits = item.VarianceBits & ^(uint64(31)<<shift) | value<<shift
 }
 
-func magicValue(m Magic, roll Roll) (uint32, error) {
+/*
+================
+RollMagicValue
+================
+*/
+func RollMagicValue(m Magic, roll Roll) (uint32, error) {
 	values := []uint32{}
 	for _, p := range m.Params {
 		for _, v := range []uint32{p >> 16, p & 65535} {
@@ -84,6 +117,11 @@ func magicValue(m Magic, roll Roll) (uint32, error) {
 	return values[n], nil
 }
 
+/*
+================
+findMagic
+================
+*/
 func (c *Catalog) findMagic(item inventory.Item, tag uint32) (int, uint32) {
 	for i, v := range item.MagicOptions {
 		if c.Magic[uint16(v)].Tag == tag {
@@ -93,6 +131,11 @@ func (c *Catalog) findMagic(item inventory.Item, tag uint32) (int, uint32) {
 	return -1, 0
 }
 
+/*
+================
+assimilate
+================
+*/
 func (c *Catalog) assimilate(item *inventory.Item, stone inventory.Item, changedAttribute int, magic bool, oldCount int, roll Roll) error {
 	n, e := draw(roll, 101)
 	if e != nil {
@@ -137,7 +180,7 @@ func (c *Catalog) assimilate(item *inventory.Item, stone inventory.Item, changed
 	case 0x61746861, 0x6c75636b, 0x736f6c69, 0x61737472, 0x64757261, 0x726570:
 		return nil
 	}
-	v, e := magicValue(m, roll)
+	v, e := RollMagicValue(m, roll)
 	if e != nil {
 		return e
 	}
@@ -154,6 +197,11 @@ func (c *Catalog) assimilate(item *inventory.Item, stone inventory.Item, changed
 // Stone applies one attribute or magic stone. Invalid recipes are refused
 // before consuming anything. Assimilation runs only after a successful
 // application, and all its changes belong to the same detached plan.
+/*
+================
+Stone
+================
+*/
 func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus int, roll Roll) (Outcome, error) {
 	var zero Outcome
 	if len(slots) != 2 || slots[0] == slots[1] {
@@ -292,7 +340,7 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 			switch option.Tag {
 			case 0x61746861, 0x6c75636b, 0x736f6c69, 0x61737472, 0x617065, 0x726570:
 			default:
-				value, e = magicValue(option, roll)
+				value, e = RollMagicValue(option, roll)
 				if e != nil {
 					return zero, e
 				}

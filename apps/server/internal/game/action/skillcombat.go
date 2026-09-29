@@ -3,6 +3,9 @@
 
 skillcombat.go - offensive skill casts against monsters
 
+Own single-target release, resource commit, and cast-token retirement. Shared
+action admission precedes mutation; the token outlives the projectile flight.
+
 ===========================================================================
 */
 
@@ -16,9 +19,17 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+pendingSkillFinalize
+
+One delayed control packet retains its actor route independently of damage.
+================
+*/
 type pendingSkillFinalize struct {
 	sourceGID     uint32
 	divisionID    string
@@ -136,10 +147,25 @@ func (rt *Runtime) acceptSkillCastAt(
 	return rt.acceptSkillStageAt(divisionID, character, snapshot, cast, nowMs, 0)
 }
 
+/*
+================
+acceptSkillStageAt
+
+Enter a fresh stage without a prepared execution-cost snapshot.
+================
+*/
 func (rt *Runtime) acceptSkillStageAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32) (OpResult, skillCastDecision) {
 	return rt.acceptSkillStagePhaseAt(divisionID, character, snapshot, cast, nowMs, rootID, nil)
 }
 
+/*
+================
+acceptSkillStagePhaseAt
+
+Share admission, range and preparation before choosing the release producer.
+Persistent attacks install linked pairs; immediate attacks commit their hits.
+================
+*/
 func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32, release *pendingProjectileCast) (OpResult, skillCastDecision) {
 	if character == nil || snapshot == nil || rt.Monsters == nil || !cast.HasTarget ||
 		cast.HasGroundTarget || cast.TargetGid == 0 {
@@ -177,8 +203,8 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	actionLifecycleMs, actionLifecyclePinned := skill.ActionLifecycleMs()
-	if !known || !skill.CombatPinned || !skill.Attack.Present ||
-		!actionLifecyclePinned || actionLifecycleMs == 0 ||
+	if !known || ((!skill.CombatPinned || !skill.Attack.Present) && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only) ||
+		!actionLifecyclePinned || actionLifecycleMs == 0 && !skill.PositionEffect.Charge ||
 		!skill.TargetRequired || (!basic && !advanced) {
 		return OpResult{}, skillCastRefused
 	}
@@ -207,6 +233,15 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	target, ok := rt.characterMonster(divisionID, snapshot, cast.TargetGid)
 	if !ok || target.CurrentHP == 0 {
 		return OpResult{}, skillCastRefused
+	}
+	if d := skill.TimedEffect.Periodic; d.Pinned {
+		code := rt.periodicEffects.Refusal(linkedpulse.Effect{Division: divisionID,
+			SourceGID: enterworld.ObjectIDForCharacter(snapshot), TargetGID: target.Gid,
+			SkillID: skill.ID, LinkGroup: d.Link.Group, MaxPerTarget: d.Link.MaxOutgoing,
+			DurationMs: d.DurationMs, PeriodMs: d.PeriodMs})
+		if code != 0 {
+			return offensiveRefusal(code), skillCastRefused
+		}
 	}
 	defender, err := combat.MonsterInstanceStats(target)
 	defender.MotionState = target.Motion.StateAt(nowMs)
@@ -276,7 +311,15 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		return rt.prepareProjectileCast(divisionID, snapshot, cast, skill, nowMs, rootID), skillCastAccepted
 	}
 
+	if skill.TimedEffect.Periodic.Pinned {
+		return rt.installPeriodicCast(periodicCast{division: divisionID, character: character,
+			snapshot: snapshot, skill: skill, cast: cast, target: target, attacker: attacker, now: nowMs, release: release})
+	}
 	formulas := make([]combat.Result, 0, skill.Attack.ImpactCount)
+	if skill.Threat.Only {
+		return rt.releaseTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot,
+			skill: skill, primary: target, now: nowMs})
+	}
 	if skill.OffensiveArea.Radius != 0 {
 		return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, skill.OffensiveArea, false, true, target, attacker, loadout, consumeAmmo, nowMs, rootID, release)
 	}
@@ -301,6 +344,19 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	damagePlans, planned := rt.planMonsterImpacts(divisionID, snapshot, skill, target, formulas, nowMs)
 	if !planned {
 		return OpResult{}, skillCastRefused
+	}
+	var travel skillTravelPlan
+	if skill.PositionEffect.Charge {
+		from, owner := rt.liveNav(simulation.WorldKey(divisionID, snapshot.Name), snapshot, nowMs)
+		radius, valid := rt.deps.CharacterBodyRadius(snapshot)
+		goal, admitted := chargeSkillGoal(from, targetAt, skill.PositionEffect.Range, radius+target.Ref.BodyRadius)
+		if !valid || !admitted {
+			return OpResult{}, skillCastRefused
+		}
+		travel, planned = rt.planSkillTravel(snapshot.Name, from, owner, goal)
+		if !planned {
+			return OpResult{DiagnosticRefusal: "charge-navigation-refused"}, skillCastRefused
+		}
 	}
 	var killDrops []grounditem.Item
 	roster := rt.monsterRewardRoster(divisionID, character, nowMs)
@@ -344,6 +400,9 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			if advanced && rootID == 0 {
 				rt.commitOffensivePhaseCost(divisionID, character, skill, cost, nowMs, release != nil)
 			}
+			if skill.PositionEffect.Charge {
+				rt.commitSkillTravel(simulation.WorldKey(divisionID, character.Name), character, travel)
+			}
 			if committed[len(committed)-1].Fatal {
 				settlement = rt.settleMonsterInsideDoor(divisionID, character, roster, committed[len(committed)-1], monsterPose, nowMs)
 				killProgressionFrames, killDrops = settlement.actorFrames, settlement.drops
@@ -357,6 +416,9 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	finalImpact := committed[len(committed)-1]
+	if skill.PositionEffect.Charge {
+		rt.bindResidentRegion(simulation.WorldKey(divisionID, character.Name), nowMs)
+	}
 	rt.commitSkillHostility(divisionID, enterworld.ObjectIDForCharacter(snapshot), target.Gid, skill, committed, nowMs)
 
 	var instanceToken uint32
@@ -378,18 +440,28 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		target.Gid,
 		impacts,
 	)
+	if skill.PositionEffect.Charge {
+		wireResult = wire.NewSkillCastSingleTargetResult(wire.SkillCastSuccess{SkillId: skill.ID,
+			CasterGid: enterworld.ObjectIDForCharacter(snapshot), InstanceToken: instanceToken}, target.Gid, impacts, travel.point)
+	}
 	success := wire.SkillCastSingleTargetResultFrame(wireResult)
 	closeAt := nowMs + int64(actionLifecycleMs)
 	if release == nil {
 		rt.queueSkillFinalize(divisionID, snapshot.Name, enterworld.ObjectIDForCharacter(snapshot), nowMs+int64(skill.ActionCastingTimeMs), wire.SkillCastReleaseFrame(instanceToken, target.Gid))
 	} else {
 		success = wire.SkillCastReleaseResultFrame(wireResult)
-		flight := projectileFlightMs(playerPose, simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}, skill.ProjectileSpeed)
-		// Recovery and bow-shot retention are independent obligations of the
-		// same token. Closing it early also cancels the client's effect actor.
-		closeAt = nowMs + max(int64(skill.ActionDurationMs), flight+1)
+		closeAt = nowMs + int64(skill.ActionDurationMs)
 	}
-	rt.queueSkillCastClose(divisionID, snapshot.Name, enterworld.ObjectIDForCharacter(snapshot), instanceToken, skill, rootID, closeAt)
+	if skill.ProjectileSpeed != 0 {
+		flight := projectileFlightMs(playerPose, targetAt, skill.ProjectileSpeed)
+		// 5860D2 retains zero-preparation shots too. A fast shot or linked
+		// stage must not lose its effect actor before the projectile arrives.
+		closeAt = max(closeAt, nowMs+flight+1)
+	}
+	if !skill.PositionEffect.Charge {
+		// Guided travel closes on arrival, just as the standalone tele owner.
+		rt.queueSkillCastClose(divisionID, snapshot.Name, enterworld.ObjectIDForCharacter(snapshot), instanceToken, skill, rootID, closeAt)
+	}
 	if finalImpact.Fatal {
 		// The fatal HP transition owns reward authority AND the resulting wire
 		// burst. Native reward distributors synchronously invoke the player's
@@ -463,6 +535,13 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	}, skillCastAccepted
 }
 
+/*
+================
+isPinnedBaseAttack
+
+Resolve the racial seed catalog instead of inferring base attacks from IDs.
+================
+*/
 func isPinnedBaseAttack(character *enterworld.Character, codename string) bool {
 	for _, candidate := range enterworld.DefaultSkillCodenames(
 		enterworld.ResolveCharacterRaceKey(character),
@@ -487,6 +566,13 @@ func skillWeaponAdmitted(loadout combat.Loadout, skill enterworld.SkillRow) bool
 	return skill.Reqi.Present || loadoutMatchesSkill(loadout, skill.RequiredWeaponKinds)
 }
 
+/*
+================
+loadoutMatchesSkill
+
+The authored two-slot weapon requirement includes the bare-hand sentinel.
+================
+*/
 func loadoutMatchesSkill(loadout combat.Loadout, kinds [2]uint8) bool {
 	if kinds == [2]uint8{0xff, 0xff} {
 		return true
@@ -504,6 +590,13 @@ func loadoutMatchesSkill(loadout combat.Loadout, kinds [2]uint8) bool {
 	return false
 }
 
+/*
+================
+weaponRequiresAmmunition
+
+Only bows and crossbows consume the shared secondary-equipment ammunition.
+================
+*/
 func weaponRequiresAmmunition(kind uint8) bool {
 	// RefItemData TID4 6 is the Chinese bow family; 12 is the European
 	// crossbow family. Inventory's native socket map places TID 3.3.4
@@ -511,6 +604,13 @@ func weaponRequiresAmmunition(kind uint8) bool {
 	return kind == 6 || kind == 12
 }
 
+/*
+================
+queueSkillFinalize
+
+Retain control order until the simulation clock reaches the due time.
+================
+*/
 func (rt *Runtime) queueSkillFinalize(
 	divisionID string,
 	characterName string,
@@ -601,8 +701,14 @@ func (rt *Runtime) chainStageBlocked(divisionID, characterName string) bool {
 	return rt.castingInstanceOpenLocked(simulation.WorldKey(divisionID, characterName))
 }
 
-// actionAdmissionBlocked selects the gate for one action: a chain stage waits
-// only on the casting instance, any other command on every open bracket.
+/*
+================
+actionAdmissionBlocked
+
+A chain stage waits only on the casting instance; another command waits on
+every open bracket so the client observes the previous action's close.
+================
+*/
 func (rt *Runtime) actionAdmissionBlocked(divisionID, characterName string, chainStage bool) bool {
 	if chainStage {
 		return rt.chainStageBlocked(divisionID, characterName)
@@ -610,7 +716,13 @@ func (rt *Runtime) actionAdmissionBlocked(divisionID, characterName string, chai
 	return rt.hasOpenSkillCast(divisionID, characterName)
 }
 
-// Caller holds pendingSkillFinalizesMu.
+/*
+================
+castingInstanceOpenLocked
+
+The caller owns pendingSkillFinalizesMu while inspecting preparation state.
+================
+*/
 func (rt *Runtime) castingInstanceOpenLocked(ownerKey string) bool {
 	if _, current := rt.currentSkillCommands[ownerKey]; current {
 		return true
@@ -623,6 +735,13 @@ func (rt *Runtime) castingInstanceOpenLocked(ownerKey string) bool {
 	return false
 }
 
+/*
+================
+hasOpenSkillCast
+
+Preparation and delayed controls independently retain action ownership.
+================
+*/
 func (rt *Runtime) hasOpenSkillCast(divisionID, characterName string) bool {
 	rt.pendingSkillFinalizesMu.Lock()
 	defer rt.pendingSkillFinalizesMu.Unlock()
@@ -726,6 +845,13 @@ func (rt *Runtime) drainSkillFinalizes(nowMs int64) []simulation.DivisionFrames 
 	return rt.drainSelectedSkillFinalizes(nowMs, false)
 }
 
+/*
+================
+drainSelectedSkillFinalizes
+
+Monster controls may settle before AI while player controls retain tick order.
+================
+*/
 func (rt *Runtime) drainSelectedSkillFinalizes(nowMs int64, monstersOnly bool) []simulation.DivisionFrames {
 	chains := rt.liveChainOwners()
 	rt.pendingSkillFinalizesMu.Lock()

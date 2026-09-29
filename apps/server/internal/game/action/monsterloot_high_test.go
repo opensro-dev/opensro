@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+monsterloot_high_test.go - loot behavior and lifecycle verification
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -12,13 +20,20 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestHigherLevelFatalDropReferencePickupAndRestore
+================
+*/
 func TestHigherLevelFatalDropReferencePickupAndRestore(t *testing.T) {
 	rt, clock, c, target := newCombatTestRuntimeAtLevel(t, 1, 80)
 	ref := &enterworld.ItemRef{RefObjID: 50080, Codename: "ITEM_CH_SWORD_09_B", Name: "Level 80 sword", TypeIDs: [4]int64{3, 1, 6, 2}, MaxDurability: 100, NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 26})}
 	rt.deps.ItemReferences().(staticItemSource)[ref.Codename] = ref
-	rt.DropRoll = repeatedDropRoll(0, 64)
+	rt.DropRoll = constantDropRoll(0)
 	r := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
 	assertOpcodes(t, r.Frames, wire.OpSkillCastResult, wire.OpObjectStateRefresh, opCommerceItemReferences, wire.OpSingleObjectSpawn)
 	assertOpcodes(t, r.Broadcast, wire.OpSkillCastResult, wire.OpObjectStateRefresh, opCommerceItemReferences, wire.OpSingleObjectSpawn)
@@ -90,6 +105,11 @@ func TestHigherLevelFatalDropReferencePickupAndRestore(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGroundReferencesAreBoundedAndDoNotInflateBootstrap
+================
+*/
 func TestGroundReferencesAreBoundedAndDoNotInflateBootstrap(t *testing.T) {
 	rt, _, _, _ := newCombatTestRuntime(t, 1)
 	before := rt.RefItemCodenames(testDivision)
@@ -107,12 +127,15 @@ func TestGroundReferencesAreBoundedAndDoNotInflateBootstrap(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFullEquipmentCatalogMatchesShippedMedia
+================
+*/
 func TestFullEquipmentCatalogMatchesShippedMedia(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
-	if _, err := os.Stat(filepath.Join(dir, "itemdata_5000.txt")); err != nil {
-		t.Skip("shipped media unavailable")
-	}
-	raw, err := os.ReadFile(filepath.Join("..", "item", "loot", "equipment.json"))
+	licensed.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+	raw, err := os.ReadFile(filepath.Join("..", "item", "loot", ".generated", "equipment.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,8 +156,16 @@ func TestFullEquipmentCatalogMatchesShippedMedia(t *testing.T) {
 	items := enterworld.NewTextdataItems(dir)
 	for _, r := range catalog.Items {
 		ref, ok := items.ItemRefByCodename(r.Codename)
-		if !ok || ref == nil || ref.NativeFields.Get("itemClass") != float64(r.Group+1) {
-			t.Fatalf("non-v1.150 assignment: %+v -> %+v", r, ref)
+		if !ok || ref == nil || ref.Country != int64(r.Country) || ref.ReqQuadValues[0] != int64(r.Level) {
+			t.Fatalf("non-v1.150 assignment: %+v", r)
+		}
+		clientGroup := int(ref.NativeFields.Get("itemClass")) - 1
+		if clientGroup != r.Group {
+			// A rare torso whose required level outlives its donor class joins
+			// the next enabled class, while retaining its actual client degree.
+			if ref.NativeFields.Get("rarity") != 2 || r.Group != clientGroup+1 || r.Group/3 != clientGroup/3 {
+				t.Fatalf("assignment changed client degree or nonrare class: %+v", r)
+			}
 		}
 	}
 }

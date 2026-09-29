@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+monsterloot_test.go - loot behavior and lifecycle verification
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -13,6 +21,11 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+/*
+================
+installSmallGoldRef
+================
+*/
 func installSmallGoldRef(rt *Runtime) {
 	items := rt.deps.ItemReferences().(staticItemSource)
 	items[inventory.GoldHeapSmall] = &enterworld.ItemRef{
@@ -21,6 +34,11 @@ func installSmallGoldRef(rt *Runtime) {
 	}
 }
 
+/*
+================
+TestEuropeanCrossbowFatalCommitsAmmoAndOwnedLootTogether
+================
+*/
 func TestEuropeanCrossbowFatalCommitsAmmoAndOwnedLootTogether(t *testing.T) {
 	rt, _, character, target := newCombatTestRuntime(t, 1)
 	*character.RaceIndex = enterworld.RaceEurope
@@ -60,6 +78,11 @@ func TestEuropeanCrossbowFatalCommitsAmmoAndOwnedLootTogether(t *testing.T) {
 	}
 }
 
+/*
+================
+dropRollSequence
+================
+*/
 func dropRollSequence(values ...uint32) func() (uint32, error) {
 	index := 0
 	return func() (uint32, error) {
@@ -69,25 +92,36 @@ func dropRollSequence(values ...uint32) func() (uint32, error) {
 	}
 }
 
+/*
+================
+goldOnlyMonsterDropRoll
+================
+*/
 func goldOnlyMonsterDropRoll(amountRoll, admissionRoll uint32) func() (uint32, error) {
 	// gold chance+amount; ordinary equipment rarity+two-draw class miss;
-	// fourteen class/family draws that reject all consumables; gold admission.
+	// sixteen class/family draws that reject all consumables; gold admission.
 	values := []uint32{0, amountRoll, 0, 32767, 32767}
-	for i := 0; i < 14; i++ {
+	for i := 0; i < 16; i++ {
 		values = append(values, 32767)
 	}
 	values = append(values, admissionRoll, 0, 0, 0)
 	return dropRollSequence(values...)
 }
 
-func repeatedDropRoll(value uint32, count int) func() (uint32, error) {
-	values := make([]uint32, count)
-	for i := range values {
-		values[i] = value
-	}
-	return dropRollSequence(values...)
+/*
+================
+constantDropRoll
+================
+*/
+func constantDropRoll(value uint32) func() (uint32, error) {
+	return func() (uint32, error) { return value, nil }
 }
 
+/*
+================
+TestMonsterGoldTableAndNativeRollBoundaries
+================
+*/
 func TestMonsterGoldTableAndNativeRollBoundaries(t *testing.T) {
 	if min, max, ok := monsterGoldRange(1); !ok || min != 28 || max != 59 {
 		t.Fatalf("level 1 gold = %d..%d/%v, want 28..59", min, max, ok)
@@ -111,6 +145,11 @@ func TestMonsterGoldTableAndNativeRollBoundaries(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFatalHitCommitsOwnedGoldAtMonsterLivePoseAndPublishesOnce
+================
+*/
 func TestFatalHitCommitsOwnedGoldAtMonsterLivePoseAndPublishesOnce(t *testing.T) {
 	rt, _, character, target := newCombatTestRuntime(t, 1)
 	installSmallGoldRef(rt)
@@ -148,12 +187,17 @@ func TestFatalHitCommitsOwnedGoldAtMonsterLivePoseAndPublishesOnce(t *testing.T)
 	}
 }
 
+/*
+================
+TestFatalHitCommitsAndPublishesEveryPreparedDropInNativeOrder
+================
+*/
 func TestFatalHitCommitsAndPublishesEveryPreparedDropInNativeOrder(t *testing.T) {
 	rt, _, character, target := newCombatTestRuntime(t, 1)
 	installSmallGoldRef(rt)
 	// Zero selects gold minimum, ordinary equipment group 1, the first CH
 	// weighted row (sword), +0, zero variance, then admits both rows.
-	rt.DropRoll = repeatedDropRoll(0, 64)
+	rt.DropRoll = constantDropRoll(0)
 
 	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
@@ -182,6 +226,11 @@ func TestFatalHitCommitsAndPublishesEveryPreparedDropInNativeOrder(t *testing.T)
 	}
 }
 
+/*
+================
+TestLowGradeEquipmentCountryBucketsCoverChinaAndEurope
+================
+*/
 func TestLowGradeEquipmentCountryBucketsCoverChinaAndEurope(t *testing.T) {
 	for _, tc := range []struct {
 		country  uint8
@@ -199,7 +248,7 @@ func TestLowGradeEquipmentCountryBucketsCoverChinaAndEurope(t *testing.T) {
 			RefObjID: 90000 + uint32(tc.country), Codename: tc.codename,
 			TypeIDs: tc.types,
 		}
-		rt.DropRoll = repeatedDropRoll(0, 64)
+		rt.DropRoll = constantDropRoll(0)
 		drops := rt.planMonsterKillLoot(character, target, monster.Pose{
 			RegionID: target.Spawn.RegionID,
 			X:        target.Spawn.X,
@@ -212,6 +261,11 @@ func TestLowGradeEquipmentCountryBucketsCoverChinaAndEurope(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMonsterDropBootstrapCatalogResolvesAgainstShippedV1150Media
+================
+*/
 func TestMonsterDropBootstrapCatalogResolvesAgainstShippedV1150Media(t *testing.T) {
 	dir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
 	if _, err := os.Stat(filepath.Join(dir, "itemdata_5000.txt")); err != nil {

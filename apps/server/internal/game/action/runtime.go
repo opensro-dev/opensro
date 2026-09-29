@@ -24,6 +24,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/skillobject"
 )
@@ -63,7 +64,8 @@ type Runtime struct {
 	// 0x72CD cancel-active-effect. It stays private so packet handlers cannot
 	// invent group identity or client-cancelability; ApplyCharacterEffect is
 	// the checked producer boundary.
-	effects *statuseffect.Registry
+	effects         *statuseffect.Registry
+	periodicEffects linkedpulse.Registry
 
 	// partyAuras are open efr-kind-2 contexts (5830B0). The tick owns joins.
 	partyAuras  []partyAura

@@ -10,14 +10,22 @@ package action
 
 import (
 	"math"
+	"sync/atomic"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
-	"sync/atomic"
 )
 
+/*
+================
+positionSkillGoal
+
+Clamp a destination in one compatible coordinate plane before navigation.
+================
+*/
 func positionSkillGoal(from, requested simulation.Spawn, limit uint32) (simulation.Spawn, bool) {
 	if !worldgeom.SamePlane(from.RegionID, requested.RegionID) || worldgeom.IsDungeonRegion(from.RegionID) && from.RegionID != requested.RegionID {
 		return simulation.Spawn{}, false
@@ -38,8 +46,14 @@ func positionSkillGoal(from, requested simulation.Spawn, limit uint32) (simulati
 	return simulation.Spawn{RegionID: p.RegionID, X: p.X, Y: from.Y + dy*fraction, Z: p.Z, Angle: from.Angle}, true
 }
 
-// Called under the division action lock. Native 5862E0 plans and navigates;
-// 593540 commits the destination with the vitals debit before publication.
+/*
+================
+acceptPositionSkill
+
+Called under the division action lock. Native 5862E0 plans and navigates;
+593540 commits the destination with the vitals debit before publication.
+================
+*/
 func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow) OpResult {
 	now := rt.Now().UnixMilli()
 	groundCast := skill.PositionEffect.Pinned && cast.HasGroundTarget && !cast.HasTarget
@@ -83,40 +97,14 @@ func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *ent
 		if !ok {
 			return false
 		}
-		// Native 5862E0 plans the dash with QueryMovement from the caster's
-		// own cell; the destination keeps the cell the walk reached.
-		to, walk, moveErr := rt.constrainWalk(character.Name, from, fromOwner, to)
-		if moveErr != nil {
-			return false
-		}
-		// Authority and publication share the same integer X/Z (the client
-		// dashes to exactly the published point). Height is NOT truncated:
-		// the authority stands on the reached surface's plane, and only the
-		// wire encoder quantizes it. Truncating the stored Y is what put
-		// characters under decks (navowner.go).
-		to.X, to.Z = math.Trunc(to.X), math.Trunc(to.Z)
-		owner := walk.Rest
-		if rt.ResolveNavOwner != nil {
-			if resolved, y, ok := rt.ResolveNavOwner(to, walk.Rest); ok {
-				owner, to.Y = resolved, y
-			}
-		}
-		point, ok = wire.NewSkillCastFacingPoint(to.RegionID, to.X, to.Y, to.Z)
+		plan, ok := rt.planSkillTravel(character.Name, from, fromOwner, to)
 		if !ok {
 			return false
 		}
+		point = plan.point
 		rt.startSkillCast(division, character, now)
 		rt.commitOffensivePhaseCost(division, character, skill, cost, now, false)
-		state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(character) }, func(w *simulation.WorldState) {
-			w.Spawn = to
-			w.MoveSegment = nil
-			w.SetGoalOwner(owner)
-			w.SpawnSet = true
-			w.MovementSourceSeeded = true
-			w.LifeRevision++
-		})
-		writeBackWorld(character, state)
-		character.World.MoveSegment = nil
+		rt.commitSkillTravel(key, character, plan)
 		vitals = wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(division, character))}
 		return true
 	}) {

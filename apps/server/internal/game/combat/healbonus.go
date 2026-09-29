@@ -33,7 +33,30 @@ server keeps floats.
 ==================
 */
 func WeaponMagicalAttack(ref *enterworld.ItemRef, varianceBits uint64, plus uint8) (minimum, maximum float32) {
-	variance := float64(float32(float64(varianceAt(varianceBits, 5)) / 31))
+	return weaponAttackRange(ref.Combat.MagicalAttack, varianceAt(varianceBits, 5), plus)
+}
+
+/*
+================
+WeaponPhysicalAttack
+
+495D60 writes the physical pair at item +1B8/+1BC using variance index four.
+Threat consumes these floats before the combat display rounds them.
+================
+*/
+func WeaponPhysicalAttack(ref *enterworld.ItemRef, varianceBits uint64, plus uint8) (minimum, maximum float32) {
+	return weaponAttackRange(ref.Combat.PhysicalAttack, varianceAt(varianceBits, 4), plus)
+}
+
+/*
+================
+weaponAttackRange
+
+Both weapon lanes share the native plus, spread and final float stores.
+================
+*/
+func weaponAttackRange(attack enterworld.ItemAttackRange, varianceWord, plus uint8) (minimum, maximum float32) {
+	variance := float64(float32(float64(varianceWord) / 31))
 
 	stat := func(r enterworld.ItemStatRange) float32 {
 		lo, hi := float32(r.Min), float32(r.Max)
@@ -42,7 +65,6 @@ func WeaponMagicalAttack(ref *enterworld.ItemRef, varianceBits uint64, plus uint
 		return float32(float64(lo) + float64(spread))
 	}
 
-	attack := ref.Combat.MagicalAttack
 	return stat(attack.Minimum), stat(attack.Maximum)
 }
 

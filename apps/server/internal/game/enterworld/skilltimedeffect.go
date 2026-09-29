@@ -1,24 +1,51 @@
 /*
 ===========================================================================
 
-skilltimedeffect.go - complete timed-effect descriptor admission
+skilltimedeffect.go - complete timed buff programs and their execution routes
 
-The compiler consumes the whole program before granting an executable route.
+Defense, stat blessings and party movement share the native persistent-skill
+handler. Admission consumes the whole program before enabling any modifier.
 Ordinary casts and item-owned timed jobs share effect descriptors and lifecycle.
 
 ===========================================================================
 */
+
 package enterworld
 
-// SkillTimedEffect is an entire category-three, unlinked self program. The
-// instruction compiler must consume every operation before granting a route.
-// Native 5830B0 owns preparation/release; 5951FC..59533C owns defp writes.
+const (
+	tagTimedHaste              = 0x68737465
+	tagTimedOverride           = 0x68737432
+	tagTimedIndependent        = 0x68737433
+	tagTimedDefense            = 0x64656670
+	tagTimedBlock              = 0x6272
+	tagTimedStrength           = 0x73747269
+	tagTimedIntellect          = 0x696e7469
+	tagTimedLink               = 0x6c6e6b73
+	tagTimedRequireNot         = 0x7265716e
+	tagTimedMaxHP              = 0x687069
+	tagTimedAttack             = 0x61706175
+	tagTimedDamagePenalty      = 0x706d6467
+	tagTimedThreat             = 0x746e7432
+	parameterBardMP            = 0x42444d44
+	parameterMusicArea         = 0x4d554552
+	parameterBlessingPhysical  = 0x484c4250
+	parameterBlessingMagical   = 0x484c534d
+	parameterBlessingStrength  = 0x484c4653
+	parameterBlessingIntellect = 0x484c4d49
+)
+
 /*
 ================
 SkillTimedEffect
+
+An entire category-three program. Native 5830B0 owns preparation and release;
+594AC0 installs recipient modifiers. Area instances have independent lifetimes.
 ================
 */
 type SkillTimedEffect struct {
+	// Periodic has a separate execution contract from friendly timed buffs.
+	Periodic SkillPeriodicEffect
+	// ItemProgram marks an item-owned timed job (compileTimedItemEffect).
 	ItemProgram                   bool
 	HP, MP, Evasion, Accuracy     SkillFlatRate
 	Recovery                      SkillRecoveryRates
@@ -29,8 +56,8 @@ type SkillTimedEffect struct {
 	// Targeted rows (Warrior guards, Cleric blessings) install on a player
 	// within column 21's range instead of the caster.
 	Targeted bool
-	// Area is an efr kind 1 selection (Heal Shield): the caster and the
-	// recipients TargetSelection_AroundSource picks each get an instance.
+	// Area is an efr kind 1 selection. Each selected actor gets an instance;
+	// select 4/5 uses the party selector, other masks use around-source.
 	Area SkillRecipientArea
 	// PhysicalAddend and MagicalAddend are getv HLBP / HLSM: the caster's
 	// value joins the recipient's defp (58381F; HLBP wins when both appear).
@@ -47,14 +74,31 @@ type SkillTimedEffect struct {
 	Link SkillEffectLink
 	// Defense marks a defp block; Block is br (+0x278) {lane mask, value}:
 	// the flat block-rate bonus 594AC0 installs (0x595DFD).
-	Defense bool
-	Block   SkillBlockBoost
+	Defense    bool
+	Block      SkillBlockBoost
+	Attributes SkillAttributeBoost
 }
 
-// SkillBlockBoost is one br block, its mask normalized.
+/*
+================
+SkillAttributeBoost
+
+594AC0 installs these keeper contributions for the descriptor's lifetime.
+pmdg mode two is an outgoing-damage multiplier, not an abnormal status.
+================
+*/
+type SkillAttributeBoost struct {
+	MaxHP, Attack, DamagePenalty    bool
+	HPFlat, HPPercent               uint32
+	PhysicalAttack, MagicalAttack   uint32
+	PhysicalPenalty, MagicalPenalty uint32
+}
+
 /*
 ================
 SkillBlockBoost
+
+One br block with its physical/magical lane mask normalized.
 ================
 */
 type SkillBlockBoost struct {
@@ -75,10 +119,11 @@ type SkillRecoveryRates struct {
 	HP, MP  uint32
 }
 
-// SkillStatBoost is one stri / inti block.
 /*
 ================
 SkillStatBoost
+
+One stri or inti block, including the recipient-relative cap.
 ================
 */
 type SkillStatBoost struct {
@@ -86,12 +131,12 @@ type SkillStatBoost struct {
 	Value, CapPercent uint32
 }
 
-// SkillEffectLink is lnks {group, max distance, max outgoing, board}. A
-// zero board word keeps the source half off the caster's board (client
-// B5ED); the server installs and announces it either way.
 /*
 ================
 SkillEffectLink
+
+lnks {group, max distance, max outgoing, board}. A zero board word hides the
+source half from the caster's board; both halves still exist on the server.
 ================
 */
 type SkillEffectLink struct {
@@ -103,11 +148,18 @@ type SkillEffectLink struct {
 /*
 ================
 parseSkillTimedEffect
+
+Qualify the envelope and every instruction together. A movement descriptor is
+enabled only after this complete producer succeeds, never from hste alone.
 ================
 */
 func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	if item, ok := compileTimedItemEffect(fields, *row); ok {
 		row.TimedEffect = item
+		return
+	}
+	if periodic := compileSkillPeriodicEffect(fields, *row); periodic.Pinned {
+		row.TimedEffect = SkillTimedEffect{Periodic: periodic}
 		return
 	}
 	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || fields[68] != "3" ||
@@ -151,7 +203,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			return
 		}
 	}
-	duration, defense := false, false
+	duration, defense, movement, musicParameters := false, false, false, false
+	attributeTags := make(map[uint32]bool)
 	boost := func(b *SkillStatBoost, op SkillInstruction) bool {
 		if b.Present || op.Count != 2 {
 			return false
@@ -162,52 +215,88 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	for i := 0; i < program.Len(); i++ {
 		op := program.Instruction(i)
 		switch op.Tag {
-		case 0x64757261:
+		case tagTimedMaxHP, tagTimedAttack, tagTimedDamagePenalty, tagTimedThreat:
+			if attributeTags[op.Tag] || targeted || result.Area.Present {
+				return
+			}
+			attributeTags[op.Tag] = true
+			a := &result.Attributes
+			switch op.Tag {
+			case tagTimedMaxHP:
+				a.MaxHP, a.HPFlat, a.HPPercent = true, op.Arguments[0], op.Arguments[1]
+			case tagTimedAttack:
+				a.Attack, a.PhysicalAttack, a.MagicalAttack = true, op.Arguments[0], op.Arguments[1]
+			case tagTimedDamagePenalty:
+				if op.Arguments[3] != 2 || op.Arguments[0] != row.EffectDurationMs ||
+					op.Arguments[1] > 100 || op.Arguments[2] > 100 {
+					return
+				}
+				a.DamagePenalty, a.PhysicalPenalty, a.MagicalPenalty = true, op.Arguments[1], op.Arguments[2]
+			case tagTimedThreat:
+				// 5903EC consumes tnt2 only when producing a target hit.
+				// A self buff has no hostile target result; 594AC0 does not
+				// install tnt2 as tant's independent keeper contribution.
+				if op.Arguments[0] != 0 {
+					return
+				}
+			}
+		case tagDura:
 			if duration || op.Count != 1 {
 				return
 			}
 			duration = true
-		case 0x64656670:
+		case tagTimedDefense:
 			if defense || op.Count != 3 {
 				return
 			}
 			defense = true
 			result.Physical, result.Magical, result.CapPercent = op.Arguments[0], op.Arguments[1], op.Arguments[2]
-		case 0x6272: // br: lane mask, value
+		case tagTimedHaste, tagTimedOverride, tagTimedIndependent:
+			if movement || op.Count != 1 || op.Arguments[0] == 0 || !row.MovementModifier.Present ||
+				op.Arguments[0] != row.MovementModifier.Percent {
+				return
+			}
+			movement = true
+		case tagTimedBlock:
 			if result.Block.Present || op.Count != 2 || op.Arguments[1] > 100 {
 				return
 			}
 			result.Block = SkillBlockBoost{Present: true, Mask: normalizeLaneMask(op.Arguments[0]), Value: op.Arguments[1]}
-		case 0x73747269: // stri
+		case tagTimedStrength:
 			if !boost(&result.Strength, op) {
 				return
 			}
-		case 0x696e7469: // inti
+		case tagTimedIntellect:
 			if !boost(&result.Intellect, op) {
 				return
 			}
-		case 0x6c6e6b73: // lnks
+		case tagTimedLink:
 			if result.Link.Present || op.Count != 4 || !targeted || op.Arguments[0] == 0 {
 				return
 			}
 			result.Link = SkillEffectLink{Present: true, Group: op.Arguments[0], MaxDistance: op.Arguments[1], MaxOutgoing: op.Arguments[2], Board: op.Arguments[3]}
-		case 0x6e627566, 0x62627566: // cancellation policy and secondary board, already projected
-		case 0x72657169, 0x7265716e: // reqi/reqn: 58D480 admits, 59F0E0 re-checks on equipment change
+		case tagNbuf, tagBbuf: // cancellation policy and secondary board, already projected
+		case tagReqi, tagTimedRequireNot: // 58D480 admits, 59F0E0 re-checks on equipment change
 		case tagEfr: // read above
 		case tagGetv:
 			switch op.Arguments[0] {
-			case 0x484c4250:
+			case parameterBardMP, parameterMusicArea:
+				// 5832E6 applies BDMD to the prepared cost. MUER is indexed,
+				// but 5830B0 reads it only when creating an efr-kind-2 aura;
+				// the kind-1 March selection keeps its authored radius.
+				musicParameters = true
+			case parameterBlessingPhysical:
 				result.PhysicalAddend = true
-			case 0x484c534d:
+			case parameterBlessingMagical:
 				result.MagicalAddend = true
-			case 0x484c4653:
+			case parameterBlessingStrength:
 				result.StrengthAddend = true
-			case 0x484c4d49:
+			case parameterBlessingIntellect:
 				result.IntellectAddend = true
 			default:
 				return
 			}
-		case 0x63627566: // 59B8D0: cbuf + dura enters the owner timed-job path
+		case tagCbuf: // 59B8D0: cbuf + dura enters the owner timed-job path
 			result.Persistent = true
 		default:
 			return
@@ -219,17 +308,31 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		result.StrengthAddend && !result.Strength.Present || result.IntellectAddend && !result.Intellect.Present {
 		return
 	}
+	partySelection := result.Area.Select == SelectParty || result.Area.Select == SelectParty|SelectCaster
+	if movement && (targeted || !result.Area.Present || !partySelection || result.Persistent || result.Link.Present || row.EffectDurationMs == 0) ||
+		musicParameters && !movement {
+		return
+	}
 	result.Defense = defense
-	result.Pinned = duration && (defense || result.Block.Present || result.Strength.Present || result.Intellect.Present)
+	attributes := result.Attributes.MaxHP || result.Attributes.Attack || result.Attributes.DamagePenalty
+	if len(attributeTags) != 0 && (!attributes || result.Persistent || result.Link.Present || movement || defense ||
+		result.Block.Present || result.Strength.Present || result.Intellect.Present || row.EffectDurationMs == 0) {
+		return
+	}
+	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present || result.Intellect.Present)
 	result.Targeted = targeted
 	row.TimedEffect = result
+	if result.Pinned && movement {
+		row.MovementModifier.Supported = true
+	}
 }
 
-// TimedJobExecutable requires a complete producer, not cbuf presence alone.
-// The persistence protocol is shared by all such producers (59B8D0/650E70).
 /*
 ================
 TimedJobExecutable
+
+Require a complete producer, not cbuf presence alone. Ordinary party buffs do
+not survive logout through the timed-item-job protocol (59B8D0/650E70).
 ================
 */
 func (row SkillRow) TimedJobExecutable() bool {

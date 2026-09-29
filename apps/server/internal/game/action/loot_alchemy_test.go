@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+loot_alchemy_test.go - loot behavior and lifecycle verification
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -13,6 +21,11 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
+/*
+================
+TestPublishedLootAlchemyActivationForAvailableEquipment
+================
+*/
 func TestPublishedLootAlchemyActivationForAvailableEquipment(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
@@ -33,7 +46,6 @@ func TestPublishedLootAlchemyActivationForAvailableEquipment(t *testing.T) {
 	}
 	sort.Slice(equipment, func(i, j int) bool { return equipment[i].ID < equipment[j].ID })
 	covered := 0
-	unavailable := 0
 	for _, code := range codes {
 		material := catalog.Items[code]
 		reinforce := material.Flags == wire.PackTypeFlags(3, 3, 10, 1)
@@ -42,14 +54,8 @@ func TestPublishedLootAlchemyActivationForAvailableEquipment(t *testing.T) {
 		if !reinforce && !magic && !attribute {
 			continue
 		}
-		// The joined data includes future degree 10-12 stones while this
-		// build has loot equipment only through degree 9. These are pickup-covered
-		// by TestPublishedLootPickupAndActivation, NOT usable coverage. Report
-		// the gap separately; never fabricate target equipment or remove loot
-		// just to turn a compatibility gap into a successful activation.
 		if !reinforce && !degrees[int(material.Params[0])] {
-			unavailable++
-			continue
+			t.Fatal("published loot material has no available equipment degree", code)
 		}
 		covered++
 		t.Run(code, func(t *testing.T) {
@@ -156,5 +162,4 @@ func TestPublishedLootAlchemyActivationForAvailableEquipment(t *testing.T) {
 		t.Fatal("no alchemy loot exercised")
 	}
 	t.Logf("exercised %d published reinforcement/stone assignments", covered)
-	t.Logf("UNSUPPORTED: %d assignments have no published loot equipment degree", unavailable)
 }

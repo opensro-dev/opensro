@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+monsterloot.go - monster reward selection and publication order
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -33,6 +41,11 @@ var monsterGoldMaxByLevel = [...]uint16{
 	1014, 1022, 1029, 1036, 1044, 1051, 1058, 1066, 1073, 1080,
 }
 
+/*
+================
+monsterGoldRange
+================
+*/
 func monsterGoldRange(level uint8) (uint32, uint32, bool) {
 	if level == 0 || int(level) > len(monsterGoldMaxByLevel) {
 		return 0, 0, false
@@ -44,6 +57,11 @@ func monsterGoldRange(level uint8) (uint32, uint32, bool) {
 // rollMonsterGoldAmount ports the two reference-table draws that construct
 // the gold heap. Player/monster-level admission belongs to the later common
 // prepared-drop publication boundary, just as it does in the native path.
+/*
+================
+rollMonsterGoldAmount
+================
+*/
 func (rt *Runtime) rollMonsterGoldAmount(monster monster.Instance) (uint32, bool) {
 	minimum, maximum, ok := monsterGoldRange(monster.Ref.Level)
 	if !ok || rt.DropRoll == nil {
@@ -85,6 +103,11 @@ func (rt *Runtime) rollMonsterGoldAmount(monster monster.Instance) (uint32, bool
 // admitMonsterDrop is the publish-side CGObjMob gate. Retail runs it only
 // after the complete prepared-drop list has been generated; keeping it out of
 // the gold builder is what preserves RNG order and permits more than one row.
+/*
+================
+admitMonsterDrop
+================
+*/
 func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance) bool {
 	if rt.DropRoll == nil {
 		return false
@@ -104,6 +127,11 @@ func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance)
 	return err == nil && int32(roll%101) <= threshold
 }
 
+/*
+================
+rollCombinedMillion
+================
+*/
 func (rt *Runtime) rollCombinedMillion() (uint32, bool) {
 	if rt.DropRoll == nil {
 		return 0, false
@@ -120,6 +148,11 @@ func (rt *Runtime) rollCombinedMillion() (uint32, bool) {
 }
 
 // Class probabilities are compiled once from the version-joined native tables.
+/*
+================
+selectEquipmentGroup
+================
+*/
 func (rt *Runtime) selectEquipmentGroup(level uint8, rare bool) (int, bool) {
 	roll, ok := rt.rollCombinedMillion()
 	if !ok {
@@ -128,6 +161,11 @@ func (rt *Runtime) selectEquipmentGroup(level uint8, rare bool) (int, bool) {
 	return loot.EquipmentGroup(level, rare, roll)
 }
 
+/*
+================
+resolveMonsterDropCountry
+================
+*/
 func (rt *Runtime) resolveMonsterDropCountry(country uint8) (uint8, bool) {
 	if country != 3 {
 		return country, loot.HasEquipmentCountry(country)
@@ -148,6 +186,11 @@ var droppedEquipmentPlusCumulative = []float32{
 	0.99999499, 0.99999899, 1.0,
 }
 
+/*
+================
+rollDroppedEquipmentPlus
+================
+*/
 func (rt *Runtime) rollDroppedEquipmentPlus() (uint8, bool) {
 	roll, ok := rt.rollCombinedMillion()
 	if !ok {
@@ -165,22 +208,32 @@ func (rt *Runtime) rollDroppedEquipmentPlus() (uint8, bool) {
 	return 0, true
 }
 
+/*
+================
+equipmentVarianceFieldCount
+================
+*/
 func equipmentVarianceFieldCount(ref *enterworld.ItemRef) int {
 	if ref == nil {
 		return 0
 	}
 	switch ref.TypeIDs[2] {
-	case 4: // shields
+	case 6: // weapons
 		return 7
 	case 5, 12: // CH/EU accessories
 		return 2
-	case 1, 2, 3, 6, 9, 10, 11: // armor and weapons
+	case 1, 2, 3, 4, 9, 10, 11: // armor and shields
 		return 6
 	default:
 		return 0
 	}
 }
 
+/*
+================
+rollLowBiasedVarianceField
+================
+*/
 func (rt *Runtime) rollLowBiasedVarianceField() (uint8, bool) {
 	if rt.DropRoll == nil {
 		return 0, false
@@ -199,6 +252,11 @@ func (rt *Runtime) rollLowBiasedVarianceField() (uint8, bool) {
 	return uint8(float64(minimum) * 31), true
 }
 
+/*
+================
+rollDroppedEquipmentVariance
+================
+*/
 func (rt *Runtime) rollDroppedEquipmentVariance(ref *enterworld.ItemRef) (uint64, uint32, bool) {
 	fieldCount := equipmentVarianceFieldCount(ref)
 	var bits uint64
@@ -234,6 +292,11 @@ func (rt *Runtime) rollDroppedEquipmentVariance(ref *enterworld.ItemRef) (uint64
 	return bits, uint32(durability), true
 }
 
+/*
+================
+prepareEquipmentDrop
+================
+*/
 func (rt *Runtime) prepareEquipmentDrop(
 	monster monster.Instance,
 	at simulation.Spawn,
@@ -257,6 +320,11 @@ func (rt *Runtime) prepareEquipmentDrop(
 	return grounditem.Item{}, false
 }
 
+/*
+================
+prepareEquipmentDropKind
+================
+*/
 func (rt *Runtime) prepareEquipmentDropKind(monster monster.Instance, at simulation.Spawn, droppedBy string, now time.Time, rare bool) (grounditem.Item, bool) {
 	group, selected := rt.selectEquipmentGroup(monster.Ref.Level, rare)
 	if !selected {
@@ -274,34 +342,17 @@ func (rt *Runtime) prepareEquipmentDropKind(monster monster.Instance, at simulat
 	if !ok {
 		return grounditem.Item{}, false
 	}
-	codename := chosen.Codename
-	items := rt.deps.ItemReferences()
-	if items == nil {
-		return grounditem.Item{}, false
-	}
-	ref, ok := items.ItemRefByCodename(codename)
-	if !ok || ref == nil {
-		return grounditem.Item{}, false
-	}
-	variance, durability, ok := rt.rollDroppedEquipmentVariance(ref)
-	if !ok {
-		return grounditem.Item{}, false
-	}
-	planned := PlanItemDrop(inventory.Item{
-		RefObjID:     ref.RefObjID,
-		Codename:     ref.Codename,
-		TypeFlags:    ref.TypeFlags(),
-		Plus:         plus,
-		VarianceBits: variance,
-		Durability:   durability,
-		Quantity:     1,
-	}, 1, at, droppedBy, now)
-	return planned, true
+	return rt.prepareSelectedDrop(loot.DropItem{Codename: chosen.Codename, Count: 1, Plus: plus}, at, droppedBy, now)
 }
 
 // planMonsterKillLoot resolves and rolls the drop before entering the commit
 // door. The caller commits this value together with progression, so a crash
 // cannot persist only one half of a kill reward.
+/*
+================
+planMonsterKillLoot
+================
+*/
 func (rt *Runtime) planMonsterKillLoot(
 	snapshot *enterworld.Character,
 	monster monster.Instance,
@@ -320,8 +371,8 @@ func (rt *Runtime) planMonsterKillLoot(
 	}
 	now := time.UnixMilli(nowMs)
 	capacity, passes, _ := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
-	prepared := make([]grounditem.Item, 0, capacity)
-	for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity, rt.DropRoll) {
+	prepared := rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})
+	for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
 		if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {
 			prepared = append(prepared, item)
 		}
@@ -347,9 +398,11 @@ func (rt *Runtime) planMonsterKillLoot(
 		if equipment, ok := rt.prepareEquipmentDrop(monster, at, snapshot.Name, now); ok {
 			prepared = append(prepared, equipment)
 		}
-		for category := 0; category < 6 && len(prepared) < capacity; category++ {
-			family := [...]int{2, 3, 6, 10, 4, 8}[category]
-			if category >= 4 {
+		for category := 0; category < 7 && len(prepared) < capacity; category++ {
+			family := [...]int{2, 3, 6, 10, 4, 8, 7}[category]
+			// Reconstruction: family 7 follows the native categories so its
+			// authored speed-tablet table is reachable in v1.150.
+			if category == 4 || category == 5 {
 				if rt.DropRoll == nil {
 					return nil
 				}

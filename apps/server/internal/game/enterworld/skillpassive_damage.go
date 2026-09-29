@@ -3,13 +3,22 @@
 
 skillpassive_damage.go - setv / getv parameter slots
 
+Projects native parameter keys into compact values owned by the combat stat
+snapshot. Admission validates the whole passive program before enabling it.
+
 ===========================================================================
 */
 
 package enterworld
 
-// Parameter slots are a by-value projection of native setv/getv dictionary
-// entries consumed by 40DCE0/40DFF0. They are not skill IDs or displayed stats.
+/*
+================
+SkillParameter
+
+By-value slots for the native setv/getv dictionary consumed by 40DCE0/40DFF0.
+These identities are separate from skill IDs and displayed character stats.
+================
+*/
 type SkillParameter uint8
 
 const (
@@ -67,17 +76,46 @@ const (
 	// HLRU +0x558: SkillCombat_ApplySkillEffectsToTargets 59425E adds the
 	// caster's value to both percent words of a heal (Faith).
 	ParameterHealRecoveryUp
+	// DTDR +0x52C extends a linked effect by a percentage of its base
+	// duration (5833EB..583450), independent of DTAT's damage scaling.
+	ParameterDotDuration
 	SkillParameterCount
 )
 
+/*
+================
+SkillParameterMask
+
+Records which parameter values a fully compiled program consumes.
+================
+*/
 type SkillParameterMask uint64
 
+/*
+================
+Has
+================
+*/
 func (m SkillParameterMask) Has(p SkillParameter) bool {
 	return p < SkillParameterCount && m&(SkillParameterMask(1)<<p) != 0
 }
 
+/*
+================
+SkillParameterValues
+
+An actor snapshot owns these values; readers never consult mutable dictionaries.
+================
+*/
 type SkillParameterValues [SkillParameterCount]uint32
 
+/*
+================
+SkillParameterFromKey
+
+Resolve authored four-character keys without accepting unknown parameters.
+================
+*/
 func SkillParameterFromKey(key uint32) (SkillParameter, bool) {
 	switch key {
 	case 0x45325341:
@@ -100,6 +138,8 @@ func SkillParameterFromKey(key uint32) (SkillParameter, bool) {
 		return ParameterLightningPower, true
 	case 0x44544154:
 		return ParameterDotPower, true
+	case 0x44544452:
+		return ParameterDotDuration, true
 	case 0x424c4154:
 		return ParameterBloodPower, true
 	case 0x4d554154:
@@ -150,6 +190,14 @@ func SkillParameterFromKey(key uint32) (SkillParameter, bool) {
 	return 0, false
 }
 
+/*
+================
+SkillPassiveParameters
+
+A complete passive program, including the status resistance instructions that
+may accompany its parameter values.
+================
+*/
 type SkillPassiveParameters struct {
 	Pinned bool
 	Mask   SkillParameterMask
@@ -162,14 +210,33 @@ type SkillPassiveParameters struct {
 	Real SkillPassiveReal
 }
 
+/*
+================
+SkillPassiveReat
+
+Flat status reduction applied to each selected resistance lane.
+================
+*/
 type SkillPassiveReat struct{ Mask, Value uint32 }
 
+/*
+================
+SkillPassiveReal
+
+Grade-specific resistance, kept separate from flat status reduction.
+================
+*/
 type SkillPassiveReal struct{ Mask, Flat, Grade uint32 }
 
-// Native stores up to five three-argument setv blocks. Repeated keys overwrite
-// in source order. reat, real and the reqi/reqn gate (row.Reqi, evaluated by
-// combat.ReqiRefusal as 59F0E0 does) complete the Cleric's Praise passives.
-// Refuse the whole program if any operation lacks execution.
+/*
+================
+encodedPassiveParameters
+
+Native stores up to five three-argument setv blocks. Repeated keys overwrite
+in source order. reat, real and the reqi/reqn gate complete the resistance
+passives. Refuse the whole program if any operation lacks execution.
+================
+*/
 func encodedPassiveParameters(fields []string) SkillPassiveParameters {
 	var out SkillPassiveParameters
 	if len(fields) <= 72 || fields[68] != "4" || fields[8] != "0" || fields[9] != "0" {
@@ -217,8 +284,14 @@ func encodedPassiveParameters(fields []string) SkillPassiveParameters {
 	return out
 }
 
-// Metadata extraction is independent of execution admission. Offense validates
-// every getv key separately; unknown keys cannot silently become neutral buffs.
+/*
+================
+encodedAttackParameters
+
+Metadata extraction is independent of execution admission. Offense validates
+every getv key separately; unknown keys cannot silently become neutral buffs.
+================
+*/
 func encodedAttackParameters(fields []string) SkillParameterMask {
 	var mask SkillParameterMask
 	for i := skilldataColEncodedTail; i < len(fields); {
@@ -243,7 +316,13 @@ func encodedAttackParameters(fields []string) SkillParameterMask {
 	return mask
 }
 
-// Walk program boundaries; values that happen to equal a tag are not programs.
+/*
+================
+encodedTailHasParameter
+
+Walk instruction boundaries; argument values that equal a tag are not programs.
+================
+*/
 func encodedTailHasParameter(fields []string, wantedTag, wantedKey uint32) bool {
 	for i := skilldataColEncodedTail; i < len(fields); {
 		tag, ok := textdataInt(fields[i])
