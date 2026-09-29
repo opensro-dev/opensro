@@ -1,10 +1,13 @@
 /*
 ===========================================================================
+
 nativeLensResources.mjs - own lens mip generation and atomic publication
 
 Full and standalone world builds share this prerequisite. A process generates
 the eight resources once, in a private staging directory, before any sky copy.
-The build entry point owns the generated-asset lock.
+The build entry point owns the generated-asset lock. The 32-bit D3DX runtime
+reproduces the original native-lens-resources.cpp output byte for byte.
+
 ===========================================================================
 */
 import { execFile } from "node:child_process";
@@ -55,7 +58,9 @@ async function compileLensResources( sourceRoot, outputRoot ) {
 
 /*
 ================
-validateLensResource - reject incomplete output before publishing any file
+validateLensResource
+
+Reject incomplete output before publishing any file.
 ================
 */
 export function validateLensResource( data ) {
@@ -87,7 +92,9 @@ export function validateLensResource( data ) {
 
 /*
 ================
-generateNativeLensResources - explicit paths and compiler permit isolated tests
+generateNativeLensResources
+
+Explicit paths and an injected compiler permit isolated tests.
 ================
 */
 export async function generateNativeLensResources( options = {} ) {
@@ -112,7 +119,9 @@ export async function generateNativeLensResources( options = {} ) {
 
 /*
 ================
-buildNativeLensResources - concurrent world consumers share one prerequisite
+buildNativeLensResources
+
+Concurrent world consumers share one prerequisite.
 ================
 */
 export function buildNativeLensResources() {
