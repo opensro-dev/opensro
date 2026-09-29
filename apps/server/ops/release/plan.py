@@ -59,7 +59,7 @@ def require_current(component, commit, root=None):
 # The caller supplies the immutable artifact identity after building it. The
 # plan preserves the production generation read before that build began.
 # ================
-def build_plan(component, release, state, root=None):
+def build_plan(component, release, state, root=None, kind="application"):
 	if root is None:
 		root = Path(git(["rev-parse", "--show-toplevel"]))
 	commit = git(["rev-parse", "HEAD"], root)
@@ -77,6 +77,10 @@ def build_plan(component, release, state, root=None):
 		"mode": "forward",
 		"ancestors": git(["rev-list", "--max-count=" + str(MAX_ANCESTORS), "HEAD"], root).splitlines(),
 	}
+	# A data release carries its own asset data (client_data.py); an
+	# application release reuses the live data and needs no marker.
+	if kind != "application":
+		plan["kind"] = kind
 	admit(state, plan)
 	return plan
 

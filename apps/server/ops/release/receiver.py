@@ -24,6 +24,7 @@ import time
 
 from bundle import unpack as unpack_server
 from client_deploy import promote, record_smoke, stage
+import client_data
 from deploy import deploy_approved, receive
 from release_state import admit, identity, read_state, write_state
 from rollback import prepare as prepare_rollback
@@ -134,6 +135,28 @@ def publish_server(config, candidate_id, scratch):
 
 
 # ================
+# stage_upload
+#
+# A stage-role archive is one of four kinds, named by its declaration member:
+# a batch of data payloads for the store, a data candidate, an application
+# candidate or a server candidate.
+# ================
+def stage_upload(config, archive, scratch):
+	with tarfile.open(archive, "r:") as package:
+		names = package.getnames()
+		declaration = None
+		if "candidate.json" in names:
+			declaration = json.load(package.extractfile("candidate.json")).get("format")
+	if names and names[0] == "payload.json":
+		return client_data.store_payload(config, archive)
+	if declaration == client_data.FORMAT:
+		return client_data.stage(config, archive)
+	if "candidate.json" in names:
+		return stage(config, archive)
+	return stage_server(config, archive, scratch)
+
+
+# ================
 # request
 #
 # A staging key cannot publish by changing a JSON operation name. The forced
@@ -197,9 +220,7 @@ def main():
 			else:
 				if arguments.role != "stage":
 					raise ValueError("production key accepts only an approved candidate identity")
-				with tarfile.open(archive, "r:") as package:
-					is_client = "candidate.json" in package.getnames()
-				result = stage(config, archive) if is_client else stage_server(config, archive, scratch)
+				result = stage_upload(config, archive, scratch)
 			candidate_status(config)
 			print(json.dumps(result, sort_keys=True))
 

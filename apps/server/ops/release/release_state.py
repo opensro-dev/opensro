@@ -137,7 +137,12 @@ def admit(state, plan):
 		raise ValueError("unknown deployment mode")
 
 	candidate = compatibility(plan.get("compatibility"), component)
-	if component == "client" and candidate["assetSchema"] != current["compatibility"]["assetSchema"]:
+	# An application release reuses the live data, so it must read the live
+	# schema; a data release brings the data its schema describes.
+	kind = plan.get("kind", "application")
+	if kind not in ("application", "data") or (kind == "data" and component != "client"):
+		raise ValueError("unknown release kind")
+	if component == "client" and kind == "application" and candidate["assetSchema"] != current["compatibility"]["assetSchema"]:
 		raise ValueError("application update requires the existing verified asset schema")
 	client = candidate if component == "client" else state["client"]["compatibility"]
 	server = candidate if component == "server" else state["server"]["compatibility"]

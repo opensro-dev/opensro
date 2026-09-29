@@ -28,7 +28,7 @@ INSTALL = Path("/usr/local/lib/opensro-release-controls")
 ROOT = Path("/var/lib/opensro-release")
 CONFIG = Path("/etc/opensro-release/config.json")
 MODULES = ("release_state.py", "plan.py", "bundle.py", "client_bundle.py", "retention.py",
-	"client_deploy.py", "deploy.py", "rollback.py", "monitor.py", "receiver.py")
+	"client_deploy.py", "client_data.py", "deploy.py", "rollback.py", "monitor.py", "receiver.py")
 CONTROL_FILES = (*MODULES, "install.py", "compatibility.json", "overview.html", "routes.caddy",
 	"opensro-monitor.service", "opensro-monitor.timer")
 
@@ -121,6 +121,19 @@ def inspect_live(config, manifest, client_commit, contracts):
 
 
 # ================
+# authorized_keys
+#
+# One or more keys (CI, and the operator workstation that stages data
+# releases), each confined to the role's forced command and nothing else.
+# ================
+def authorized_keys(public_key, wrapper):
+	keys = [line.split() for line in public_key.splitlines() if line.strip()]
+	if not keys or any(len(key) < 2 or key[0] != "ssh-ed25519" for key in keys):
+		raise ValueError("release capability requires Ed25519 public keys")
+	return "".join('restrict,command="sudo -n ' + wrapper + '" ' + " ".join(key[:2]) + "\n" for key in keys)
+
+
+# ================
 # account
 #
 # SSH users cannot modify the root-owned receiver, configuration or key policy.
@@ -142,11 +155,7 @@ def account(name, role, public_key, version):
 	policy_path = Path("/etc/sudoers.d/opensro-" + role)
 	install_file(policy_path, policy.encode(), 0o440)
 	subprocess.run(["visudo", "-cf", str(policy_path)], check=True)
-	key = public_key.strip().split()
-	if len(key) < 2 or key[0] != "ssh-ed25519":
-		raise ValueError("release capability requires an Ed25519 public key")
-	line = 'restrict,command="sudo -n ' + wrapper + '" ' + " ".join(key[:2]) + "\n"
-	install_file(home / ".ssh/authorized_keys", line.encode())
+	install_file(home / ".ssh/authorized_keys", authorized_keys(public_key, wrapper).encode())
 
 
 # ================
@@ -209,12 +218,13 @@ def main():
 	for directory in (ROOT / "public", ROOT / "public/health", Path("/var/www/opensro/candidates"), Path("/var/www/opensro/application-assets")):
 		directory.mkdir(parents=True, exist_ok=True)
 		directory.chmod(0o755)
-	(ROOT / "records").mkdir(exist_ok=True)
-	(ROOT / "records").chmod(0o700)
+	for private in (ROOT / "records", ROOT / "payloads"):
+		private.mkdir(exist_ok=True)
+		private.chmod(0o700)
 	config.update(production_state=str(state_path), client_link="/var/www/opensro/client",
 		client_releases="/var/www/opensro/releases", client_candidates="/var/www/opensro/candidates",
 		candidate_records=str(ROOT / "records"), application_assets="/var/www/opensro/application-assets",
-		client_manifest=str(ROOT / "public/client.json"))
+		client_manifest=str(ROOT / "public/client.json"), payload_store=str(ROOT / "payloads"))
 	if initial:
 		write_state(state_path, initial)
 		install_file(config["client_manifest"], Path(arguments.client_manifest).read_bytes())

@@ -25,6 +25,7 @@ import time
 from urllib.parse import urlsplit
 
 from client_bundle import application_files, safe_name, unpack, validate_base
+import client_data
 from release_state import admit, begin, complete, identity, read_state, write_state
 from retention import preserve
 
@@ -294,7 +295,10 @@ def check_entry(origin, expected):
 def promote(config, candidate_id, verify=check_entry):
 	candidate_id = identity(candidate_id)
 	record = Path(config["candidate_records"]) / candidate_id
-	candidate, manifest = verify_candidate(config, candidate_id)
+	# A data candidate brings its own data: it is verified against the served
+	# digests recorded at staging instead of against the live data.
+	data = client_data.is_data_candidate(config, candidate_id)
+	candidate, manifest = client_data.verify(config, candidate_id) if data else verify_candidate(config, candidate_id)
 	plan = candidate["plan"]
 	smoke = json.loads((record / "smoke.json").read_text())
 	record_smoke(config, smoke)
@@ -310,7 +314,8 @@ def promote(config, candidate_id, verify=check_entry):
 	base = json.loads(original_manifest)
 	if base["releaseId"] != state["client"]["release"]:
 		raise ValueError("live client manifest drift requires reconciliation")
-	validate_base(base, manifest)
+	if not data:
+		validate_base(base, manifest)
 	preserve(config, "client", state["client"], old, original_manifest)
 	pending = begin(state, plan, time.time())
 	write_state(config["production_state"], pending)

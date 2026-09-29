@@ -15,7 +15,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from install import CONTROL_FILES, install_version
+from install import CONTROL_FILES, authorized_keys, install_version
 
 
 # ================
@@ -90,3 +90,55 @@ class InstallTests(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+# ================
+# AuthorizedKeysTests
+# ================
+class AuthorizedKeysTests(unittest.TestCase):
+	# ================
+	# test_every_key_is_confined_to_the_forced_command
+	# ================
+	def test_every_key_is_confined_to_the_forced_command(self):
+		text = "ssh-ed25519 AAAAci ci@github\n\nssh-ed25519 AAAAop operator@pc\n"
+		lines = authorized_keys(text, "/usr/local/sbin/opensro-stage").splitlines()
+		self.assertEqual(lines, [
+			'restrict,command="sudo -n /usr/local/sbin/opensro-stage" ssh-ed25519 AAAAci',
+			'restrict,command="sudo -n /usr/local/sbin/opensro-stage" ssh-ed25519 AAAAop',
+		])
+
+	# ================
+	# test_any_other_key_type_or_no_key_is_refused
+	# ================
+	def test_any_other_key_type_or_no_key_is_refused(self):
+		for text in ("", "ssh-rsa AAAA x\n", "ssh-ed25519 AAAAok\nssh-dss AAAA\n"):
+			with self.assertRaisesRegex(ValueError, "Ed25519"):
+				authorized_keys(text, "/usr/local/sbin/opensro-stage")
+
+
+# ================
+# InstalledModuleTests
+# ================
+class InstalledModuleTests(unittest.TestCase):
+	# ================
+	# test_every_release_module_an_installed_module_imports_is_installed
+	#
+	# The host runs only installed files; a module left off the list fails
+	# there at import, after the release was already under way.
+	# ================
+	def test_every_release_module_an_installed_module_imports_is_installed(self):
+		import ast
+		source = Path(__file__).resolve().parent
+		local = {path.stem for path in source.glob("*.py") if not path.name.startswith("test_")}
+		installed = {name.removesuffix(".py") for name in CONTROL_FILES if name.endswith(".py")}
+		for name in sorted(installed):
+			tree = ast.parse((source / (name + ".py")).read_text(encoding="utf-8"))
+			for node in ast.walk(tree):
+				imported = []
+				if isinstance(node, ast.Import):
+					imported = [alias.name for alias in node.names]
+				elif isinstance(node, ast.ImportFrom) and node.module:
+					imported = [node.module]
+				for module in imported:
+					if module in local:
+						self.assertIn(module, installed, f"{name}.py imports {module}, which is not installed")
