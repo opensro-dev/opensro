@@ -2,7 +2,7 @@
 
 This work adds native restoration UI, the herbalist service and the remaining
 quest-trap infrastructure. It continues PR #26. BUG-037 remains open while
-live acceptance is being completed. Trap NPC workflows, Ivy gathering,
+production publication and player verification are pending. Trap NPC workflows, Ivy gathering,
 guardian spawning and service wiring are implemented. No production deployment
 was performed.
 
@@ -162,28 +162,53 @@ GameWorld deployments. An isolated `bug037/TrapProbe` character was created
 through store APIs; the existing four test characters were preserved. Native
 quest definitions and the inventory planner seeded test inputs, while live
 actions remained server-owned. The final herbalist confirmation and clean
-attached-effect rerun remain outstanding at this checkpoint. Maintained
+trap rerun passed after rebuilding the attached-effect catalog. Maintained
 source changes were hand-edited and formatted with gofmt/dprint.
 
-Latest validation: `pnpm check source` passed all eight tasks in 79.4 seconds,
+Latest validation: `pnpm check source` passed all nine tasks in 111.0 seconds,
 including full server tests, race checks, vet, lint and vulnerability checks.
 Focused gathering/return tests passed 5/5; object asset/presentation tests
 passed 3/3. `verify:quick` and test type checking passed. The latest full
-client run passed ten gates and 1964 of 1965 unit tests, but failed with
+client run passed ten gates and 1968 of 1969 unit tests, but failed with
 `Unbound published item /assets/char/weapon/eu_m_darkstaff_01.glb`. Shared
 generated assets contain another chat's newer darkstaff output while its
 matching source changes remain uncommitted in `rebuild`. Those changes and
 assets have been preserved. A current full client pass is still required.
 
 Native annotations were saved with the database API and checked in saved
-`PE/symbols`: client snapshot 193 and server snapshot 259. Every exposed
+`PE/symbols`: client snapshot 194 and server snapshot 259. Every exposed
 unnamed function, including incidental constructors and exception handlers,
 was labeled. Structural labels use a field offset when its narrower semantic
 role is not established. `6FFE50` was corrected from an inaccurate skill-arrival
 name to the delay-cancellation dispatcher after examining instructions.
 
 The shared checkout's validated Nomad 2.0.4 deployer was used. This branch's
-2.0.7 check was not weakened. Temporary node metadata adds `bug037` to local
-placement; retire that grant with the acceptance shard after verification.
+2.0.7 check was not weakened. The temporary `bug037` shard was stopped after
+acceptance and its node-placement grant removed. The ordinary Agent and
+GlobalOfficial GameWorld reached healthy deployment version 3 on this build.
 Evidence is under ignored `.state/bug-batch/`: `gathering-active.png`,
 `trap-live.png`, `quest-live.json`, and the earlier `withdrawal-*` artifacts.
+
+## Final live acceptance
+
+- Herbalist dialogue opened the native mode-2 restoration panel. The visible
+  transaction consumed one resuscitation potion, reduced Warrior mastery
+  from 2 to 1, charged exactly 18,150 gold and refunded one SP. STR/INT stayed
+  at 59/59. The probe recorded no page or console errors; confirmation and
+  result screenshots were inspected. Evidence: `herbalist-live.json`,
+  `herbalist-live.zip`, `herbalist-confirmation.png`.
+- The knife opened the authored ten-second collection gauge. Its visible
+  cancel button retired the operation and produced the native failure notice.
+  The informant trap consumed exactly one item and rendered its native net
+  model with the complete effect catalog and no page or console errors.
+  Capture, random outcome, guardian population, timers and persistence have
+  server integration coverage; a live completed capture is not claimed.
+- Live acceptance exposed a shared stat-packet defect: effect retirement
+  encoded STR/INT as zero after restoration had sent the correct values.
+  The common combat wire projection now populates both words, covering all
+  direct effect, abnormal-state and retirement refresh callers. A regression
+  test checks unequal attributes, zero and the u16 limit on direct and login
+  publication. Client instructions at `75BE90` confirmed offsets 32/34;
+  its incorrect party-page label and both unnamed setters were corrected.
+- The final merged-main build passed full server checks and asset delivery.
+  It is running locally; production approval/publication remains separate.
