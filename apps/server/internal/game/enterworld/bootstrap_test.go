@@ -175,9 +175,10 @@ func TestDescribeNativeAgentError(t *testing.T) {
 }
 
 // TestBuildFirstBootstrapSeedsInventory: the first-ever bootstrap initializes
-// the authoritative inventory from the creation loadout's equip roster, adds
-// the dev starting gold, persists, and the RE-APPLIED overlay leaves the
-// creation weapon rendered (it is now genuinely worn in socket 6).
+// the authoritative inventory from the creation starter items, persists, and
+// the loadout lists what is now worn. A spearman created without armor gets
+// the spear only: the native create request carries item id 0 for the
+// garments (CharacterCreateRequest_Write), so nothing else is granted.
 func TestBuildFirstBootstrapSeedsInventory(t *testing.T) {
 	character := chinaSpearman()
 	character.ID = 7
@@ -199,9 +200,6 @@ func TestBuildFirstBootstrapSeedsInventory(t *testing.T) {
 	rows := character.MissionInventory
 	wantSlots := map[int64]string{
 		6: "ITEM_CH_SPEAR_01_A_DEF",
-		1: "ITEM_CH_M_CLOTHES_01_BA_A_DEF",
-		4: "ITEM_CH_M_CLOTHES_01_LA_A_DEF",
-		5: "ITEM_CH_M_CLOTHES_01_FA_A_DEF",
 	}
 	if len(rows) != len(wantSlots) {
 		t.Fatalf("seeded %d rows (%+v), want %d", len(rows), rows, len(wantSlots))
@@ -217,21 +215,14 @@ func TestBuildFirstBootstrapSeedsInventory(t *testing.T) {
 	}
 
 	loadout := result.LocalPlayerEntry.VisualLoadout
-	if !reflect.DeepEqual(loadout.WeaponSetKeys, []string{"CH_M_SPEAR_01"}) {
-		t.Errorf("first-boot weaponSetKeys = %v, want the now-worn creation spear", loadout.WeaponSetKeys)
-	}
-	if loadout.DressPartFilters == nil {
-		t.Error("first-boot payload lacks dressPartFilters; the overlay was not re-applied after seeding")
-	}
-	if got := loadout.DressPartFilters["CH_M_CLOTHES_01"]; !reflect.DeepEqual(got, []string{"BA", "LA", "FA"}) {
-		t.Errorf("clothes parts = %v, want [BA LA FA]", got)
+	if !reflect.DeepEqual(loadout.Items, []VisualItem{{RefObjID: 3644}}) {
+		t.Errorf("first-boot items = %+v, want the now-worn creation spear", loadout.Items)
 	}
 }
 
-// TestBuildRestoredSessionWornItemsOracle is the end-to-end no-regression
-// proof at the bootstrap level: a restored character wearing the picked-up
-// copper blade and the heavy pants must satisfy BOTH audit-script verdicts
-// off the actual bootstrap response, exactly like the live Node checks.
+// TestBuildRestoredSessionWornItemsOracle: a restored character wearing the
+// picked-up copper blade and the heavy pants is shown with exactly those
+// items, in socket order, off the actual bootstrap response.
 func TestBuildRestoredSessionWornItemsOracle(t *testing.T) {
 	character := chinaSpearman()
 	character.ID = 9
@@ -248,24 +239,9 @@ func TestBuildRestoredSessionWornItemsOracle(t *testing.T) {
 		t.Fatalf("bootstrap failed: %+v", result)
 	}
 	loadout := result.LocalPlayerEntry.VisualLoadout
-
-	// Weapon oracle (audit_worn_weapon_render.py).
-	worn := findRowBySlot(result.Character.MissionInventory, 6)
-	if worn == nil {
-		t.Fatal("response character carries no socket-6 row")
-	}
-	if !weaponAuditMatches(t, worn.Codename, loadout.WeaponSetKeys) {
-		t.Fatalf("weapon audit MISMATCH: worn %s rendered %v", worn.Codename, loadout.WeaponSetKeys)
-	}
-	// Dress oracle (audit_worn_dress_render.py).
-	checked, mismatches := dressAuditVerdict(loadout, result.Character.MissionInventory)
-	if checked != 2 || mismatches != 0 {
-		t.Fatalf("dress audit: %d comparable, %d mismatch (filters %v keys %v)",
-			checked, mismatches, loadout.DressPartFilters, loadout.DressSetKeys)
-	}
-	// The un-gated sibling still names the creation choice.
-	if !reflect.DeepEqual(loadout.WeaponSetKeysWhenWorn, []string{"CH_M_SPEAR_01"}) {
-		t.Errorf("weaponSetKeysWhenWorn = %v, want [CH_M_SPEAR_01]", loadout.WeaponSetKeysWhenWorn)
+	want := []VisualItem{{RefObjID: 11}, {RefObjID: 5049}, {RefObjID: 107}}
+	if !reflect.DeepEqual(loadout.Items, want) {
+		t.Fatalf("restored items = %+v, want the worn rows in socket order %+v", loadout.Items, want)
 	}
 	// A restored session must not touch persisted gold.
 	if character.Gold == nil || *character.Gold != 25000 {
@@ -517,12 +493,13 @@ func TestBuildLocalPlayerEntryPayloadStructure(t *testing.T) {
 	if payload[19] != 0 || payload[20] != 0 {
 		t.Errorf("gold bytes = %#x %#x, want zero", payload[19], payload[20])
 	}
-	// Inventory block: capacity 45 then the seeded row count (4).
+	// Inventory block: capacity 45 then the seeded row count: the spear only,
+	// since a no-armor creation grants no garments.
 	if payload[54] != 45 {
 		t.Errorf("inventory capacity byte = %d, want 45", payload[54])
 	}
-	if payload[55] != 4 {
-		t.Errorf("inventory count byte = %d, want 4 seeded rows", payload[55])
+	if payload[55] != 1 {
+		t.Errorf("inventory count byte = %d, want 1 seeded row", payload[55])
 	}
 	// The character name rides as u16-length + bytes.
 	name := []byte("asd2")

@@ -11,7 +11,7 @@ a still-valid clothing choice when a weapon changes.
 */
 import {
 	initialCreation,
-	creationLoadout,
+	creationModelCodename,
 	creationRange,
 	creationProtectors,
 	creationNameRules,
@@ -264,7 +264,7 @@ step
 						operationId: operation,
 						draft: {
 							characterName: s.name,
-							modelCodename: creationLoadout( s ).modelCodename,
+							modelCodename: creationModelCodename( s ),
 							heightIndex: s.height,
 							volumeIndex: s.volume,
 							weaponIndex: s.weapon,

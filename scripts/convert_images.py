@@ -1,3 +1,14 @@
+"""
+===========================================================================
+
+convert_images.py - DDJ and texture conversion into the image intermediate
+
+Converts the extracted client textures (DDJ, DDS, TGA, BMP) into PNG
+under .generated/intermediate/images and keeps the conversion manifest.
+Roots come from sro_paths.py.
+
+===========================================================================
+"""
 from __future__ import annotations
 
 import csv
@@ -15,11 +26,9 @@ from pathlib import Path
 from PIL import Image
 
 from rebuild_lock import generated_assets_lock
+from sro_paths import EXTRACTED_ROOT, GAME_ROOT, REPO_ROOT
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-GAME_ROOT = REPO_ROOT.parent
-EXTRACTED_ROOT = GAME_ROOT / "extracted"
 SOURCE_ROOTS = [
     "Data_extracted",
     "Map_extracted",
@@ -31,6 +40,9 @@ MANIFEST_PATH = REPO_ROOT / ".generated" / "intermediate" / "image-manifest.csv"
 SUPPORTED_EXTENSIONS = {".ddj", ".tga", ".dat"}
 
 
+# ================
+# ImageAsset
+# ================
 @dataclass(frozen=True)
 class ImageAsset:
     source: Path
@@ -39,6 +51,9 @@ class ImageAsset:
     kind: str
 
 
+# ================
+# main
+# ================
 def main() -> int:
     start = time.monotonic()
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
@@ -102,6 +117,9 @@ def main() -> int:
     return 0
 
 
+# ================
+# output_is_fresh
+# ================
 def output_is_fresh(asset: ImageAsset) -> bool:
     try:
         output_stat = asset.output.stat()
@@ -112,6 +130,9 @@ def output_is_fresh(asset: ImageAsset) -> bool:
         return False
 
 
+# ================
+# discover_assets
+# ================
 def discover_assets(filters: list[str] | None = None) -> list[ImageAsset]:
     candidates: list[Path] = []
     scan_roots = pruned_scan_roots(filters) if filters else None
@@ -142,6 +163,9 @@ def discover_assets(filters: list[str] | None = None) -> list[ImageAsset]:
     return assets
 
 
+# ================
+# pruned_scan_roots
+# ================
 def pruned_scan_roots(filters: list[str]) -> list[Path] | None:
     """Map exact files and subtree filters onto the narrowest safe scan directories.
 
@@ -172,6 +196,9 @@ def pruned_scan_roots(filters: list[str]) -> list[Path] | None:
     return unique
 
 
+# ================
+# build_output_paths
+# ================
 def build_output_paths(paths: list[Path]) -> dict[Path, Path]:
     desired: dict[Path, list[Path]] = {}
     for source in paths:
@@ -191,6 +218,9 @@ def build_output_paths(paths: list[Path]) -> dict[Path, Path]:
     return output_paths
 
 
+# ================
+# is_image_asset
+# ================
 def is_image_asset(path: Path) -> bool:
     suffix = path.suffix.lower()
     if suffix == ".tga":
@@ -211,6 +241,9 @@ def is_image_asset(path: Path) -> bool:
     return False
 
 
+# ================
+# detect_kind
+# ================
 def detect_kind(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix == ".ddj":
@@ -222,6 +255,9 @@ def detect_kind(path: Path) -> str:
     return "unknown"
 
 
+# ================
+# convert_asset
+# ================
 def convert_asset(asset: ImageAsset) -> None:
     asset.output.parent.mkdir(parents=True, exist_ok=True)
     suffix = asset.source.suffix.lower()
@@ -235,6 +271,9 @@ def convert_asset(asset: ImageAsset) -> None:
         raise ValueError(f"unsupported image extension: {suffix}")
 
 
+# ================
+# extract_ddj_payload
+# ================
 def extract_ddj_payload(path: Path) -> bytes:
     data = path.read_bytes()
     if len(data) < 20 or not data.startswith(b"JMXVDDJ "):
@@ -247,6 +286,9 @@ def extract_ddj_payload(path: Path) -> bytes:
     return payload
 
 
+# ================
+# decode_native_rgb16
+# ================
 def decode_native_rgb16(payload: bytes) -> Image.Image | None:
     """Retail A1R5G5B5/R5G6B5 expansion replicates high bits into low bits.
 
@@ -277,6 +319,9 @@ def decode_native_rgb16(payload: bytes) -> Image.Image | None:
     return Image.frombytes("RGBA", (width, height), bytes(pixels))
 
 
+# ================
+# save_image_payload
+# ================
 def save_image_payload(payload: bytes, output: Path, source_for_fallback: Path) -> None:
     native = decode_native_rgb16(payload)
     if native is not None:
@@ -299,6 +344,9 @@ def save_image_payload(payload: bytes, output: Path, source_for_fallback: Path) 
         run_ffmpeg(dds_path, output)
 
 
+# ================
+# save_image_file
+# ================
 def save_image_file(source: Path, output: Path) -> None:
     try:
         with Image.open(source) as image:
@@ -313,6 +361,9 @@ def save_image_file(source: Path, output: Path) -> None:
     run_ffmpeg(source, output)
 
 
+# ================
+# run_ffmpeg
+# ================
 def run_ffmpeg(source: Path, output: Path) -> None:
     result = subprocess.run(
         [

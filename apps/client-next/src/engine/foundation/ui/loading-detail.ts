@@ -32,8 +32,6 @@ An asset pack group (assetPackOwnership.mjs) in player words.
 */
 function packGroupName( group: string ): string {
 	switch ( group ) {
-		case "cosmetic-models":
-			return "costumes";
 		case "developer-labs":
 			return "test content";
 		case "equipment-models":

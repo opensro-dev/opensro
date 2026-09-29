@@ -57,8 +57,6 @@ func cloneCharacter(source *Character) *Character {
 	clone.ExperiencePercent = clonePointer(source.ExperiencePercent)
 	clone.FigureIndex = clonePointer(source.FigureIndex)
 
-	clone.DressSetKeys = cloneSlice(source.DressSetKeys)
-	clone.WeaponSetKeys = cloneSlice(source.WeaponSetKeys)
 	clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
 	clone.Buyback = cloneSlice(source.Buyback)
 	for i := range clone.Buyback {

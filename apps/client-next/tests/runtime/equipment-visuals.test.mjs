@@ -14,7 +14,7 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { selectEquipmentVisuals, selectDefaultWear, previewDefaultWear } = await import(
+const { selectEquipmentVisuals, selectDefaultWear } = await import(
 	sourceFileUrl( "src/engine/foundation/animation/equipment-visuals.ts" ).href
 );
 const rules = {
@@ -70,15 +70,19 @@ test("fortress excludes armor, job and avatars but keeps both weapon handles eli
 	assert.deepEqual( select( all ), [ 3, 6, 7 ] );
 });
 test("ownerless Chinese and European previews fill missing body and legs", () => {
-	assert.deepEqual( previewDefaultWear( [] ), [ "clothes_BA", "clothes_LA" ] );
-	assert.deepEqual( previewDefaultWear( [ { key: "EU_M_HEAVY_01", parts: [ "SA" ] } ] ), [ "light_BA", "light_LA" ] );
-	assert.deepEqual( previewDefaultWear( [ { key: "CH_W_HEAVY_01", parts: [ "BA", "LA" ] } ] ), [] );
+	// Ownerless previews (dock, creation) pass the player gate for both races.
+	const r = {
+		11: { armorClass: 3, thiefSuit: false, visualMask: 0 },
+		12: { armorClass: 3, thiefSuit: false, visualMask: 0 },
+		13: { armorClass: 1, thiefSuit: false, visualMask: 0 }
+	};
+	assert.deepEqual( selectDefaultWear( [], [], r, true ), [ "clothes_BA", "clothes_LA" ] );
+	assert.deepEqual( selectDefaultWear( [ { refObjId: 11, slot: 2 } ], [], r, true ), [ "light_BA", "light_LA" ] );
+	assert.deepEqual( selectDefaultWear( [ { refObjId: 11, slot: 1 }, { refObjId: 12, slot: 4 } ], [], r, true ), [] );
 	assert.deepEqual(
-		previewDefaultWear( [ { key: "EU_W_HEAVY_01", parts: [ "SA" ] }, {
-			key: "EU_W_CLOTHES_01",
-			parts: [ "HA" ]
-		} ] ),
-		[ "clothes_BA", "clothes_LA" ]
+		selectDefaultWear( [ { refObjId: 11, slot: 2 }, { refObjId: 13, slot: 0 } ], [], r, true ),
+		[ "clothes_BA", "clothes_LA" ],
+		"the first armor socket decides the family"
 	);
 });
 

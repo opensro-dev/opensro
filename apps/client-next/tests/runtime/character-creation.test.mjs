@@ -14,12 +14,16 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import path from "node:path";
+import { root } from "../../tools/project.mjs";
 import { defined } from "../helpers/defined.mjs";
 const { createCharacterDialog } = await import( "../../src/engine/runtime/frontend/dialog/dialog.ts" );
 const { createCreation } = await import( "../../src/engine/runtime/frontend/creation/creation.ts" );
-const { creationLoadout, initialCreation, creationRange } = await import(
+const { creationLoadout, creationStarterCodenames, initialCreation, creationRange } = await import(
 	"../../src/engine/foundation/ui/character-create.ts"
 );
+const { createItemCodenameIndex } = await import( "../../src/engine/foundation/animation/equipment-appearance.ts" );
+const { readPublishedAssetJsonSync } = await import( "../../../../scripts/lib/publishedAsset.mjs" );
 test("creation status sounds follow native operations, including repeated validation and silent frame holds", () => {
 	const { owner, commands, sounds } = creation();
 	owner.action( "create:ok" );
@@ -202,21 +206,59 @@ test("cancelled checks cannot affect a new creation session", () => {
 	owner.step( 0, { ...old, status: "failed", nativeErrorCode: 17 } );
 	assert.equal( defined( owner.snapshot() ).phase, "checking" );
 });
+/*
+================
+creation starter items follow the native weapon and protector rules
+
+CPSCharacterCreateEurope_OnProtectorChanged (0x730690) and the creation
+weapon list: Europe choice 6 is the darkstaff, robe only; no protector
+grants no garments.
+================
+*/
+test("creation starter items follow the native weapon and protector rules", () => {
+	const europe = { ...initialCreation( 0 ), gender: 1, figure: 1 };
+	assert.deepEqual( creationStarterCodenames( { ...europe, weapon: 6, protector: 1 } ), [
+		"ITEM_EU_W_CLOTHES_01_BA_A_DEF",
+		"ITEM_EU_W_CLOTHES_01_LA_A_DEF",
+		"ITEM_EU_W_CLOTHES_01_FA_A_DEF",
+		"ITEM_EU_DARKSTAFF_01_A_DEF"
+	] );
+	assert.equal( creationRange( { ...europe, weapon: 6 }, "protector" )[1], 1, "darkstaff takes the robe only" );
+	assert.equal( creationRange( { ...europe, weapon: 9 }, "protector" )[1], 2, "one-hand staff: light or robe" );
+	assert.deepEqual( creationStarterCodenames( { ...europe, weapon: 9, protector: 2 } ).slice( -2 ), [
+		"ITEM_EU_STAFF_01_A_DEF",
+		"ITEM_EU_SHIELD_01_A_DEF"
+	] );
+	const china = { ...initialCreation( 1 ), gender: 0, figure: 1 };
+	assert.deepEqual( creationStarterCodenames( { ...china, weapon: 2, protector: 0 } ), [
+		"ITEM_CH_BLADE_01_A_DEF",
+		"ITEM_CH_SHIELD_01_A_DEF"
+	], "no protector: no garments" );
+});
+
 test("all creation figures and equipment resolve to published native preview resources", () => {
-	const catalog = JSON.parse( readFileSync( "../../.generated/client-public/assets/char/roster.json", "utf8" ) );
-	const models = Object.values( catalog.models );
+	const catalog = readPublishedAssetJsonSync(
+		"/assets/char/roster.json",
+		path.join( root, "../../.generated/client-public" )
+	);
+	const models = Object.values( catalog.models ), itemIds = createItemCodenameIndex( catalog.dress );
 	for ( const race of [ 0, 1 ] ) {
 		for ( const gender of [ 0, 1 ] ) {
+			const body = (race === 0 ? "EU" : "CH") + "_" + (gender === 0 ? "M" : "W");
 			for ( let figure = 1; figure <= 13; figure++ ) {
 				for ( let weapon = 0; weapon <= (race === 0 ? 9 : 5); weapon++ ) {
 					const base = { ...initialCreation( race ), gender, figure, weapon };
 					for ( let protector = 0; protector <= creationRange( base, "protector" )[1]; protector++ ) {
 						const s = { ...base, protector },
-							loadout = creationLoadout( s ),
+							loadout = creationLoadout( s, itemIds ),
 							model = models.find( m => m.codename === loadout.modelCodename );
 						assert.ok( model?.previewGlb, loadout.modelCodename );
-						for ( const key of loadout.dressSetKeys ) assert.ok( catalog.dress.sets[key], key );
-						for ( const key of loadout.weaponSetKeys ) assert.ok( catalog.dress.weapons[key], key );
+						for ( const item of loadout.items ) {
+							assert.ok(
+								catalog.dress.equipment[item.refObjId]?.bodies[body],
+								item.refObjId + " " + body
+							);
+						}
 					}
 				}
 			}

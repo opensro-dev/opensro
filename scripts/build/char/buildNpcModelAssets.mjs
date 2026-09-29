@@ -48,7 +48,6 @@ import fs from "node:fs";
 import { characterMaterialVariants } from "./materialVariants.mjs";
 import { parseWeatherEvents } from "./weatherEvents.mjs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
 	findDefaultAnimationState,
 	pickDefaultSetSoundEvents,
@@ -76,12 +75,10 @@ import {
 	removeSupersededResourceOutputs,
 	resourceGlbOutput
 } from "./resourceGlbOutput.mjs";
+import { gameRoot, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
 
-const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
-const gameRoot = path.resolve( scriptDir, "..", "..", "..", ".." );
-const rebuildRoot = path.join( gameRoot, "rebuild" );
-const textdataDir = path.join( gameRoot, "extracted", "Media_extracted", "server_dep", "silkroad", "textdata" );
-const publicAssets = path.join( rebuildRoot, ".generated", "client-public", "assets" );
+const textdataDir = retailTextdataRoot;
+const publicAssets = publicAssetsRoot;
 
 /*
 ================

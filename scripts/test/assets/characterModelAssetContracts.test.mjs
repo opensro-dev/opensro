@@ -32,18 +32,10 @@ import { parseCharacterBsr, parseSkinnedBms } from "../../build/char/formats.mjs
 import { loadDataAsset } from "../../build/shared/jmxAssetIO.mjs";
 import { sha256Hex } from "../../build/shared/hash.mjs";
 import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../lib/publishedAsset.mjs";
+import { gameRoot, publicAssetsRoot, publicRoot, retailTextdataRoot } from "../../build/world/paths.mjs";
 
-const gameRoot = path.resolve( ".." );
-const publicRoot = path.resolve( ".generated/client-public" );
-const publicAssets = path.join( publicRoot, "assets" );
-const textdataDir = path.join(
-	gameRoot,
-	"extracted",
-	"Media_extracted",
-	"server_dep",
-	"silkroad",
-	"textdata"
-);
+const textdataDir = retailTextdataRoot;
+const publicAssets = publicAssetsRoot;
 
 /*
 ================

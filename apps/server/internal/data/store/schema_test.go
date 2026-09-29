@@ -158,3 +158,31 @@ func TestDecodeCharacterStrictRefusesUnknownField(t *testing.T) {
 		t.Fatalf("refusal must name the unknown field: %v", err)
 	}
 }
+
+/*
+================
+TestDecodeCharacterStrictDropsEmptyRetiredFields
+
+Records written before the item-based loadout, or by a rolled-back release,
+carry empty dressSetKeys/weaponSetKeys. They still load; a populated value
+is data this binary cannot represent and refuses.
+================
+*/
+func TestDecodeCharacterStrictDropsEmptyRetiredFields(t *testing.T) {
+	for _, record := range []string{
+		`{"id":1,"accountId":"test-account","name":"asd2","dressSetKeys":[],"weaponSetKeys":[]}`,
+		`{"id":1,"accountId":"test-account","name":"asd2","dressSetKeys":null,"weaponSetKeys":null}`,
+	} {
+		character, err := decodeCharacterStrict([]byte(record))
+		if err != nil || character.Name != "asd2" {
+			t.Fatalf("retired empty fields must load: %v (%s)", err, record)
+		}
+	}
+	_, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","weaponSetKeys":["CH_M_SPEAR_01"]}`))
+	if err == nil || !strings.Contains(err.Error(), "weaponSetKeys") {
+		t.Fatalf("a populated retired field must refuse by name: %v", err)
+	}
+	if _, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","dressSetKeys":[],"mysteryKey":true}`)); err == nil {
+		t.Fatal("stripping retired fields must not admit other unknown fields")
+	}
+}

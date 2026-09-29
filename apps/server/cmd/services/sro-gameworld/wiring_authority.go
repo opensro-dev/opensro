@@ -61,9 +61,8 @@ func characterPresentationProjector(
 			Gender:            gender,
 			VisualLoadout: agentapi.CharacterVisualLoadout{
 				ModelCodename:    loadout.ModelCodename,
-				DressSetKeys:     append([]string(nil), loadout.DressSetKeys...),
-				DressPartFilters: cloneDressPartFilters(loadout.DressPartFilters),
-				WeaponSetKeys:    append([]string(nil), loadout.WeaponSetKeys...),
+				Items:            characterItems(loadout.Items),
+				Avatars:          characterItems(loadout.Avatars),
 				AnimationSetName: loadout.AnimationSetName,
 				HeightScale:      loadout.HeightScale,
 				VolumeScale:      loadout.VolumeScale,
@@ -72,15 +71,12 @@ func characterPresentationProjector(
 	}
 }
 
-func cloneDressPartFilters(source map[string][]string) map[string][]string {
-	if source == nil {
-		return nil
+func characterItems(items []enterworld.VisualItem) []agentapi.CharacterItem {
+	out := make([]agentapi.CharacterItem, 0, len(items))
+	for _, item := range items {
+		out = append(out, agentapi.CharacterItem{RefObjID: item.RefObjID, Plus: item.Plus})
 	}
-	clone := make(map[string][]string, len(source))
-	for key, parts := range source {
-		clone[key] = append([]string(nil), parts...)
-	}
-	return clone
+	return out
 }
 
 func openAuthorityPlane(

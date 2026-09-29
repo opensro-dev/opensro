@@ -138,7 +138,7 @@ func TestBootstrapReRaisesPetSkillWindowsWithoutASummonedPet(t *testing.T) {
 
 func TestRefItemSnapshotSeedsAPetSkillWindowWhoseStackIsSpent(t *testing.T) {
 	deps, character, _, _ := petSkillFixture(true)
-	snapshot := buildRefItemSnapshot(deps, "global-official", nil, character)
+	snapshot := buildRefItemSnapshot(deps, "global-official", character)
 	for _, row := range snapshot {
 		if row.RefObjID == 24001 {
 			if row.NativeFields.Get("itemParam1_29c") != 1800 {

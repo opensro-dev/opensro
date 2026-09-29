@@ -14,7 +14,7 @@ import { publicIndex, inspect, sha } from "../../tools/beta/policy.mjs";
 import { projectPack } from "../../tools/beta/public-data.mjs";
 
 test("public release drops obsolete reports and retains runtime model groups", () => {
-	const groups = [ "cosmetic-models", "equipment-models", "hwan-models", "mission-cos-models", "developer-labs" ];
+	const groups = [ "equipment-models", "hwan-models", "mission-cos-models", "developer-labs" ];
 	const index = publicIndex( {
 		format: "sro-asset-pack-index",
 		version: 1,

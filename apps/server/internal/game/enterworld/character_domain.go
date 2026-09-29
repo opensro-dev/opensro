@@ -195,15 +195,6 @@ func clampFloat(value, min, max float64) float64 {
 	return value
 }
 
-func copyStrings(values []string) []string {
-	if values == nil {
-		return nil
-	}
-	out := make([]string, len(values))
-	copy(out, values)
-	return out
-}
-
 func derivedVitalMax(level, stat int64) int64 {
 	return charactervitals.DerivedVitalMax(level, stat)
 }

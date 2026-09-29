@@ -1,4 +1,7 @@
-"""Extract cursor resources from SRO_Client.exe into .cur files.
+"""
+===========================================================================
+
+extract_client_cursors.py - the native cursors from SRO_Client.exe
 
 The native cursor manager (sub_a15af0 / CursorManager_SetCursorByParam) calls
 LoadCursorA(hInstance, MAKEINTRESOURCE(param)) - the interaction cursor param
@@ -8,9 +11,12 @@ IS the RT_GROUP_CURSOR resource ordinal. The port serves these as
 hover uses).
 
 Usage: py scripts/extract_client_cursors.py [ids...]
-Defaults to every cursor referenced by the browser client. Run from the
-repository root. SRO_Client.exe is read
-from the repository's parent game directory.
+Defaults to every cursor referenced by the browser client. SRO_Client.exe
+is read from the game root (sro_paths.GAME_ROOT).
+
+Roots come from sro_paths.py.
+
+===========================================================================
 """
 
 import struct
@@ -19,15 +25,18 @@ from pathlib import Path
 
 import pefile
 
+from sro_paths import GAME_ROOT, REPO_ROOT
+
 RT_CURSOR = 1
 RT_GROUP_CURSOR = 12
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-GAME_ROOT = REPO_ROOT.parent
 CLIENT_EXE = GAME_ROOT / "SRO_Client.exe"
 OUT_DIR = REPO_ROOT / ".generated" / "client-public" / "assets" / "cursors"
 
 
+# ================
+# resource_entries
+# ================
 def resource_entries(pe, resource_type):
     for entry in pe.DIRECTORY_ENTRY_RESOURCE.entries:
         if entry.id == resource_type:
@@ -38,10 +47,16 @@ def resource_entries(pe, resource_type):
     return {}
 
 
+# ================
+# read_resource
+# ================
 def read_resource(pe, data_struct) -> bytes:
     return pe.get_data(data_struct.OffsetToData, data_struct.Size)
 
 
+# ================
+# extract_cursor
+# ================
 def extract_cursor(pe, group_id: int) -> bytes | None:
     groups = resource_entries(pe, RT_GROUP_CURSOR)
     cursors = resource_entries(pe, RT_CURSOR)
@@ -99,6 +114,9 @@ def extract_cursor(pe, group_id: int) -> bytes | None:
     return bytes(out)
 
 
+# ================
+# main
+# ================
 def main() -> int:
     ids = [int(arg, 0) for arg in sys.argv[1:]] or [
         0x95,

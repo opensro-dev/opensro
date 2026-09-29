@@ -49,7 +49,7 @@ func TestBuildRefItemSnapshotStocksDivisionPeerEquipment(t *testing.T) {
 		Slot: 6, RefObjID: 107, Codename: "ITEM_CH_BLADE_01_A", TypeFlags: 0x1b2c,
 	}}
 	deps := testDeps(viewer, peer)
-	rows := buildRefItemSnapshot(deps, DefaultDivisionID, nil, viewer)
+	rows := buildRefItemSnapshot(deps, DefaultDivisionID, viewer)
 	found := false
 	for _, row := range rows {
 		if row.RefObjID == 107 {

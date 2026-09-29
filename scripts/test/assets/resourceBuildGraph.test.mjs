@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
 
 const rebuildRoot = path.resolve( "." );
@@ -36,21 +37,22 @@ function collectReachableModules( entryPath ) {
 		// producer graph, not global import completeness.
 		if ( !fs.existsSync( resolvedPath ) ) continue;
 		const source = fs.readFileSync( resolvedPath, "utf8" );
-		for ( const match of source.matchAll( /(?:from\s+|import\s*\()(["'])(\.[^"']+\.mjs)\1/g ) ) {
+		// id layout writes dynamic imports as `import( "./x.mjs" )`.
+		for ( const match of source.matchAll( /(?:from\s+|import\s*\(\s*)(["'])(\.[^"']+\.mjs)\1/g ) ) {
 			pending.push( path.resolve( path.dirname( resolvedPath ), match[2] ) );
 		}
 	}
 	return visited;
 }
 
-test("full resource build reaches every character asset producer and its derived helpers", () => {
+test("full resource build reaches every character asset producer and its derived helpers", async () => {
 	const reachable = collectReachableModules( resourceEntry );
 	for (
 		const relativePath of [
 			"scripts/build/char/buildRoster.mjs",
 			"scripts/build/char/buildLocomotionBanAssets.mjs",
 			"scripts/build/char/buildDropModelAssets.mjs",
-			"scripts/build/char/resolveCrowdDress.mjs"
+			"scripts/build/char/buildEquipmentVisuals.mjs"
 		]
 	) {
 		assert.ok( reachable.has( path.join( rebuildRoot, ...relativePath.split( "/" ) ) ), relativePath );
@@ -74,9 +76,12 @@ test("full resource build reaches every character asset producer and its derived
 			[ "scripts/build/char/buildDropModelAssets.mjs", "buildDropModelAssets" ]
 		]
 	) {
-		const source = fs.readFileSync( path.join( rebuildRoot, ...relativePath.split( "/" ) ), "utf8" );
-		assert.match( source, new RegExp( `export\\s+async\\s+function\\s+${producer}\\b` ) );
-		assert.match( source, /if\s*\(isMainScript\(import\.meta\.url\)\)/ );
+		// Importing a producer exposes its entry point and must not start a
+		// build: its CLI body runs only when it is the main script.
+		const producerModule = await import(
+			pathToFileURL( path.join( rebuildRoot, ...relativePath.split( "/" ) ) ).href
+		);
+		assert.equal( typeof producerModule[producer], "function", producer );
 	}
 });
 

@@ -1359,6 +1359,7 @@ retainCharacterModels
 
 test("inactive character resource cache remains bounded and evicts least recently used sources", async () => {
 	const { createCharacterResources } = await load( "src/engine/runtime/characters/resources/resources.ts" );
+	const { CHARACTER_MODELS } = await load( "src/engine/foundation/animation/character-budget.ts" );
 	let serial = 0, retained = [];
 	const pending = new Set(), requests = [];
 	const owner = createCharacterResources( {
@@ -1406,21 +1407,21 @@ retainCharacterModels
 			retained = ids;
 		}
 	}, "http://localhost" );
-	for ( let i = 0; i < 64; i++ ) {
+	for ( let i = 0; i < CHARACTER_MODELS; i++ ) {
 		owner.begin( i );
 		owner.ready( "/assets/" + i + ".glb" );
 		owner.poll();
 		owner.ready( "/assets/" + i + ".glb" );
 		owner.retainWanted( [] );
-		assert.ok( new Set( retained ).size <= 64 );
+		assert.ok( new Set( retained ).size <= CHARACTER_MODELS );
 	}
-	owner.begin( 64 );
+	owner.begin( CHARACTER_MODELS );
 	assert.equal( owner.ready( "/assets/0.glb" ), true );
 	owner.ready( "/assets/new.glb" );
 	owner.retainWanted( [] );
 	assert.ok( retained.includes( "/assets/0.glb" ) );
 	assert.ok( !retained.includes( "/assets/1.glb" ), "oldest unused source leaves before incoming decode" );
-	assert.ok( new Set( retained ).size <= 64 );
+	assert.ok( new Set( retained ).size <= CHARACTER_MODELS );
 	owner.poll();
 	owner.retainWanted( [] );
 	owner.dispose();

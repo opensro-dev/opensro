@@ -36,9 +36,56 @@ type Meta struct {
 	NextGuildID map[string]int64 `json:"nextGuildId,omitempty"`
 }
 
-// decodeCharacterStrict refuses unknown fields and ownerless records. A
-// current-schema load must never silently discard data on its next commit.
+// retiredCharacterFields are v13 record keys no current field owns. Records
+// written before the item-based loadout carry them, as does anything a
+// rolled-back release writes; both still read as schema 13, so no version
+// bump or rollback hazard is involved. Only an EMPTY value is dropped (all
+// 18 live characters held [] on 2026-09-29): a populated one would be data
+// this binary cannot represent, and fails the load instead.
+var retiredCharacterFields = []string{"dressSetKeys", "weaponSetKeys"}
+
+/*
+================
+stripRetiredCharacterFields
+================
+*/
+func stripRetiredCharacterFields(raw json.RawMessage) (json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+	stripped := false
+	for _, name := range retiredCharacterFields {
+		value, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var values []string
+		if err := json.Unmarshal(value, &values); err != nil || len(values) != 0 {
+			return nil, fmt.Errorf("retired character field %q holds data: %s", name, value)
+		}
+		delete(fields, name)
+		stripped = true
+	}
+	if !stripped {
+		return raw, nil
+	}
+	return json.Marshal(fields)
+}
+
+/*
+================
+decodeCharacterStrict
+
+Refuses unknown fields and ownerless records. A current-schema load must
+never silently discard data on its next commit.
+================
+*/
 func decodeCharacterStrict(raw json.RawMessage) (*domain.Character, error) {
+	raw, err := stripRetiredCharacterFields(raw)
+	if err != nil {
+		return nil, err
+	}
 	character := &domain.Character{}
 	if err := decodeJSONStrict(raw, character); err != nil {
 		return nil, err

@@ -13,7 +13,7 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { chooseReferenceAppearance, createReferenceAppearances, referenceAppearanceParts } = await import(
+const { chooseReferenceAppearance, createReferenceAppearances, referenceAppearanceItems } = await import(
 	sourceFileUrl( "src/engine/foundation/animation/reference-appearance.ts" ).href
 );
 test("reference type-3 appearance uses native ordered CRT draws, cap fallback and independent head selection", () => {
@@ -51,18 +51,34 @@ test("reference model choices are stable, stop restores original without resumin
 	owner.reset();
 });
 test("appearance equipment walks degrees per part and selects only the rolled head", () => {
-	const entry = ( name, parts ) => ({ glb: name, parts, covers: { HA: [ 0 ], BA: [ 2 ] } }),
-		dress = {
-			sets: { CH_M_HEAVY_01: entry( "armor", [ "HA", "BA" ] ) },
-			weapons: { CH_M_BLADE_01: entry( "blade", [ "WA" ] ), CH_M_SHIELD_01: entry( "shield", [ "WA" ] ) }
-		};
-	const base = { race: 0, model: 1, level: 30, armor: 3, weapon: 3, head: "CA" };
-	assert.deepEqual( referenceAppearanceParts( base, true, dress ).map( p => p.model ), [
-		"blade",
-		"armor",
-		"shield"
+	// Level 30 is degree 4; each piece takes the highest degree the catalog holds.
+	const itemIds = new Map( [
+		[ "ITEM_CH_BLADE_01_A", 101 ],
+		[ "ITEM_CH_BLADE_03_A", 103 ],
+		[ "ITEM_CH_M_HEAVY_01_HA_A", 201 ],
+		[ "ITEM_CH_M_HEAVY_02_BA_A", 202 ],
+		[ "ITEM_CH_SHIELD_01_A", 301 ],
+		[ "ITEM_CH_M_HEAVY_05_LA_A", 405 ]
 	] );
-	assert.deepEqual( referenceAppearanceParts( { ...base, head: "HA" }, true, dress, { "0": 5 } )[1].covers, [ 5 ] );
+	const base = { race: 0, model: 1, level: 30, armor: 3, weapon: 3, head: "CA" };
+	assert.deepEqual( referenceAppearanceItems( base, true, itemIds ), [
+		{ slot: 6, refObjId: 103, plus: 0 },
+		{ slot: 1, refObjId: 202, plus: 0 },
+		{ slot: 7, refObjId: 301, plus: 0 }
+	], "a degree above the level's (05 legs) is never taken" );
+	assert.deepEqual(
+		referenceAppearanceItems( { ...base, head: "HA" }, true, itemIds ).map( i => i.slot ),
+		[ 6, 0, 1, 7 ]
+	);
+	assert.deepEqual(
+		referenceAppearanceItems(
+			{ ...base, race: 1, weapon: 10, armor: 1 },
+			false,
+			new Map( [ [ "ITEM_EU_DARKSTAFF_02_A", 9 ] ] )
+		),
+		[ { slot: 6, refObjId: 9, plus: 0 } ],
+		"weapon class 10 is the darkstaff; it takes no shield"
+	);
 });
 test("8DD131: a mask skin shows until an msch instance on its gid ends or stops; a new application shows again", () => {
 	const owner = createReferenceAppearances( () => 0 );

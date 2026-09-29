@@ -1,18 +1,19 @@
-// Package enterworld ports the (retired) Node launcher-api's /mission/bootstrap
-// surface into Go: character/appearance resolution and the dress+weapon
-// visual-loadout derivation.
-//
-// Source of truth AT PORT TIME (the Node source was deleted at the Go
-// cutover): rebuild/apps/launcher-api/src/server.mjs, CURRENT
-// (post-fix) behavior. Two of today's fixes are load-bearing and MUST NOT
-// regress (rebuild/scripts/audit_worn_weapon_render.py and
-// audit_worn_dress_render.py are the behavioral oracles):
-//
-//   - Weapon visual (BJ): weaponSetKeys derive from the equipped item's
-//     identity (refObjId -> codename -> set key), never latched from the
-//     character's creation-time weapon choice.
-//   - Dress visual (BY2): dressSetKeys derive per garment part from each
-//     equipped garment's own item identity, same pattern as weapons.
+/*
+===========================================================================
+
+roster.go - the character model roster the server reads from roster.json
+
+Loads and validates the model rows (codename, RefObjID, body radius) that
+character creation, appearance identity and the entered world resolve
+models against. Appearance itself is item-based (loadout.go): what a
+character wears is its worn items, never a latched creation choice.
+
+===========================================================================
+*/
+
+// Package enterworld owns entering the world: character and appearance
+// resolution, the starter inventory, the item-based visual loadout and the
+// bootstrap packets.
 package enterworld
 
 import (

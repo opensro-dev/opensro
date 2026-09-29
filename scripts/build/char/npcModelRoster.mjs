@@ -19,12 +19,9 @@ manifest against these same functions.
 
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { rebuildRoot as repositoryRoot, retailTextdataRoot } from "../world/paths.mjs";
 
-const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
-const repositoryRoot = path.resolve( scriptDir, "..", "..", ".." );
-const gameRoot = path.resolve( repositoryRoot, ".." );
-const textdataDir = path.join( gameRoot, "extracted", "Media_extracted", "server_dep", "silkroad", "textdata" );
+const textdataDir = retailTextdataRoot;
 
 // characterdata columns for the COS gate: service flag, then TypeID1..4.
 const CHARACTERDATA_SERVICE = 0;
@@ -41,7 +38,7 @@ loadServerRoster
 
 Monster roster: DERIVED from the server's spawnable join, never hand
 maintained. The retail client has no roster at all - CICMonster spawn
-(sub_861b00) binds the refObjId to its characterdata record and loads the
+(CICMonster_DeserializeSpawnPacket 0x861B00) binds the refObjId to its characterdata record and loads the
 record's .bsr on demand (LoadVisualModelAndCacheBounds 0x853e70); the
 offline-bake analog is "bake exactly what the server can ever stream". That
 set is monsterpop.LoadTemplate().SpawnableRefs() - the npcpos.txt spawn
@@ -137,10 +134,6 @@ to state 50, so each enabled reference is published, sharing the native BSR
 bake across levels. `rows` is loadCharacterDataRows' codename -> columns map.
 ================
 */
-/**
- * @param {Map<string, string[]>} rows
- * @returns {{ codename: string, refObjId: number }[]}
- */
 export function enabledCosReferences( rows ) {
 	return [ ...rows ].filter( ( [, cols] ) =>
 		Number( cols[CHARACTERDATA_SERVICE] ) === 1 &&

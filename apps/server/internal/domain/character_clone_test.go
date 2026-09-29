@@ -12,8 +12,8 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 		Name:                  "snapshotOwner",
 		QuestCompletionCounts: map[uint32]uint32{42: 2},
 		Level:                 &level,
-		DressSetKeys:          []string{"dress-a"},
-		WeaponSetKeys:         []string{},
+		BlockedWhisperers:     []string{"whisper-a"},
+		CompletedQuestIds:     []uint32{},
 		MissionInventory: []InventoryRow{{
 			Slot:         6,
 			MagicOptions: []uint64{11},
@@ -48,7 +48,7 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 	}
 
 	*character.Level = 11
-	character.DressSetKeys[0] = "dress-b"
+	character.BlockedWhisperers[0] = "whisper-b"
 	character.MissionInventory[0].MagicOptions[0] = 12
 	*character.World.Spawn.X = 21
 	*character.World.AuthoredAreaReturn.X = 31
@@ -67,8 +67,8 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 	if *snapshot.Level != 10 {
 		t.Errorf("snapshot level = %d, want 10", *snapshot.Level)
 	}
-	if snapshot.DressSetKeys[0] != "dress-a" {
-		t.Errorf("snapshot dress = %q, want dress-a", snapshot.DressSetKeys[0])
+	if snapshot.BlockedWhisperers[0] != "whisper-a" {
+		t.Errorf("snapshot blocked whisperer = %q, want whisper-a", snapshot.BlockedWhisperers[0])
 	}
 	if snapshot.MissionInventory[0].MagicOptions[0] != 11 {
 		t.Errorf(
@@ -108,10 +108,10 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 	if snapshot.PetSkillWindows[0].EndUnixMs != 5000 {
 		t.Errorf("snapshot pet skill window = %+v, want detached deadline 5000", snapshot.PetSkillWindows[0])
 	}
-	if snapshot.WeaponSetKeys == nil || len(snapshot.WeaponSetKeys) != 0 {
+	if snapshot.CompletedQuestIds == nil || len(snapshot.CompletedQuestIds) != 0 {
 		t.Errorf(
 			"snapshot collapsed non-nil empty slice: %#v",
-			snapshot.WeaponSetKeys,
+			snapshot.CompletedQuestIds,
 		)
 	}
 }

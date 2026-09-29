@@ -415,14 +415,13 @@ const character = {
 	visualLoadout: {
 		modelCodename: "CHAR_TEST",
 		animationSetName: "test",
-		dressSetKeys: [ "dress" ],
-		weaponSetKeys: [],
-		dressPartFilters: { dress: [ "body" ] },
+		items: [ { refObjId: 11, plus: 0 }, { refObjId: 3644, plus: 3 } ],
+		avatars: [],
 		heightScale: 1,
 		volumeScale: 1
 	}
 };
-const roster = { characterRosterContractVersion: 1, action: 2, nativeResult: 1, characters: [ character ] };
+const roster = { characterRosterContractVersion: 2, action: 2, nativeResult: 1, characters: [ character ] };
 
 test("restoration validates the remembered character against the roster before ordinary world admission", async t => {
 	let rows = roster;
@@ -585,8 +584,8 @@ test("roster uses the private bearer and preserves one immutable visual contract
 	assert.equal( requests[1].url, "http://localhost:8787/character/list" );
 	assert.equal( requests[1].options.headers.Authorization, "Bearer private-test-token" );
 	assert.deepEqual( JSON.parse( JSON.stringify( state.characters ) ), [ character ] );
-	assert.ok( Object.isFrozen( state.characters[0].visualLoadout.dressSetKeys ) );
-	assert.ok( Object.isFrozen( state.characters[0].visualLoadout.dressPartFilters.dress ) );
+	assert.ok( Object.isFrozen( state.characters[0].visualLoadout.items ) );
+	assert.ok( Object.isFrozen( state.characters[0].visualLoadout.items[1] ) );
 	assert.ok( !JSON.stringify( state ).includes( response.sessionToken ) );
 	session.dispose();
 });
@@ -627,7 +626,16 @@ test("invalid roster version and duplicate character identities fail atomically"
 		async url => Response.json( url.endsWith( "/title/login" ) ? response : payload )
 	);
 	for (
-		const value of [ { ...roster, characterRosterContractVersion: 2 }, {
+		const value of [ { ...roster, characterRosterContractVersion: 1 }, {
+			...roster,
+			characters: [ {
+				...character,
+				visualLoadout: {
+					...character.visualLoadout,
+					items: [ { refObjId: 11, plus: 0 }, { refObjId: 11, plus: 0 } ]
+				}
+			} ]
+		}, {
 			...roster,
 			characters: [ character, character ]
 		}, {
@@ -688,7 +696,7 @@ test("malformed character mutation fails its operation without losing the authen
 					response :
 					url.endsWith( "/character/list" ) ?
 					roster :
-					{ action: 3, nativeResult: 1, characterRosterContractVersion: 1, character: { id: 1 } }
+					{ action: 3, nativeResult: 1, characterRosterContractVersion: 2, character: { id: 1 } }
 			)
 	);
 	const session = createSession();
@@ -782,7 +790,7 @@ test("deletion and recovery preserve roster order and reject a mismatched reply 
 		operationReply = {
 			action,
 			nativeResult: 1,
-			characterRosterContractVersion: 1,
+			characterRosterContractVersion: 2,
 			character: { ...character, deletePending: action === 3 }
 		};
 		session.command( { kind, operationId: index, characterName: "fixture" } );
@@ -796,7 +804,7 @@ test("deletion and recovery preserve roster order and reject a mismatched reply 
 	operationReply = {
 		action: 3,
 		nativeResult: 1,
-		characterRosterContractVersion: 1,
+		characterRosterContractVersion: 2,
 		character: { ...other, deletePending: true }
 	};
 	session.command( { kind: "delete-character", operationId: 3, characterName: "fixture" } );

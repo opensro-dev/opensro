@@ -38,7 +38,7 @@ export function safeName( name ) {
 }
 // This is a security classification of groups, never an asset list. New groups
 // must explicitly choose an audience; adding a file to an existing group is automatic.
-// Dedicated equipment, cosmetic, hwan, and COS groups contain runtime models
+// Dedicated equipment, Hwan and COS groups contain runtime models
 // selected by the published roster and NPC manifest (assetPackOwnership.mjs).
 const audiences = {
 	"developer-labs": "private",
@@ -52,7 +52,6 @@ const audiences = {
 	"outdoor-world": "public",
 	"title-crowd-vat": "public",
 	"equipment-models": "public",
-	"cosmetic-models": "public",
 	"hwan-models": "public",
 	"mission-cos-models": "public"
 };

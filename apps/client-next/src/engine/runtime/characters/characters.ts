@@ -19,10 +19,12 @@ import { validateEquipmentBranches, equipmentSocket } from "@/engine/foundation/
 import { validateEquipmentParticles } from "@/engine/foundation/animation/equipment-particles";
 import { selectAvatarOverride, type AvatarOverrideSelection } from "@/engine/foundation/animation/avatar-override";
 import {
-	selectEquipmentVisuals,
-	selectDefaultWear,
-	previewDefaultWear
-} from "@/engine/foundation/animation/equipment-visuals";
+	assembleEquipmentAppearance,
+	createItemCodenameIndex,
+	type DressCatalog,
+	type SetEntry,
+	wornItemsFromList
+} from "@/engine/foundation/animation/equipment-appearance";
 import { requestCastCancellation } from "@/engine/foundation/gameplay/cast-results";
 import {
 	createAnimationEmission,
@@ -59,7 +61,7 @@ import { damageAnchor } from "@/engine/foundation/animation/damage-anchor";
 import { decodeTooltipSkills } from "@/engine/foundation/ui/skill-tooltip-catalog";
 import {
 	createReferenceAppearances,
-	referenceAppearanceParts
+	referenceAppearanceItems
 } from "@/engine/foundation/animation/reference-appearance";
 import { hawkResult } from "@/engine/foundation/gameplay/attached-effects";
 import { createDamageFeedback } from "./damage-feedback";
@@ -331,43 +333,8 @@ clearFootprints
 			defaultWear?: { resource: Resource; keys: readonly string[]; };
 			fortressIndex?: number;
 		}>();
-	/*
-================
-SetEntry
-================
-	*/
-	type SetEntry = {
-		branches?: readonly import("@/engine/foundation/animation/equipment-sockets").EquipmentBranch[];
-		glb: string;
-		parts: string[];
-		covers?: Record<string, number[]>;
-	};
-	let dress: {
-			sets: Record<string, SetEntry>;
-			weapons: Record<string, SetEntry>;
-			cosmetics?: Record<string, SetEntry>;
-			defaultWear?: Record<string, SetEntry>;
-			fortressWear?: Record<string, SetEntry>;
-			defaultWearLanguage?: number;
-			specialGlows?: Record<string, readonly ModelParticle[]>;
-			avatarVisualOverrides?: Record<string, { animation: string; priority: number; additionalBsr: string; }>;
-			avatarAuxiliary?: Record<string, SetEntry & { bone: string; clips: readonly string[]; }>;
-			equipment?: Record<
-				string,
-				{
-					slot: number | null;
-					avatarSlot?: number;
-					armorClass: number;
-					thiefSuit: boolean;
-					visualMask: number;
-					visualPriority: number;
-					model: string | null;
-					source: number | null;
-					bodies: Record<string, SetEntry | null>;
-				}
-			>;
-			hwan?: Record<string, SetEntry & { clip: string; bone: string; }>;
-		} = { sets: {}, weapons: {} },
+	let dress: DressCatalog = {},
+		itemIds: ReadonlyMap<string, number> = new Map(),
 		items: Record<string, {
 			codename: string;
 			dropModelPath?: string;
@@ -893,9 +860,7 @@ step
 						}
 						for (
 							const entries of [
-								value.dress.sets,
-								value.dress.weapons,
-								value.dress.cosmetics ?? {},
+								value.dress.hwan ?? {},
 								value.dress.defaultWear ?? {},
 								value.dress.fortressWear ?? {},
 								value.dress.avatarAuxiliary ?? {},
@@ -1003,7 +968,10 @@ step
 					for ( const [key, row] of nextMotionUrls ) nativeMotionUrls.set( key, row );
 					soundProfiles.clear();
 					for ( const [key, row] of nextProfiles ) soundProfiles.set( key, row );
-					if ( value.dress ) dress = value.dress;
+					if ( value.dress ) {
+						dress = value.dress;
+						itemIds = createItemCodenameIndex( dress );
+					}
 					if ( value.itemsByRefObjId ) items = value.itemsByRefObjId;
 					dropModels = nextDrops;
 					manifest++;
@@ -1028,12 +996,16 @@ step
 			if ( dock || preview ) {
 				if ( previewDisplay ) resources.plan( previewDisplay.paths );
 				const actors: CharacterActor[] = [];
-				const rows = preview ?
+				// Dock and creation actors are dressed through the item catalog
+				// (roster.json, manifest 0); none exists before it is resident.
+				// The gecko needs no catalog and is admitted meanwhile.
+				const catalogResident = manifest > 0;
+				const rows = !catalogResident ? [] : preview ?
 					[ {
 						id: 0,
 						name: preview.selection.name,
 						deletePending: false,
-						visualLoadout: creationLoadout( preview.selection )
+						visualLoadout: creationLoadout( preview.selection, itemIds )
 					} ] :
 					dock!.slice( 0, 4 );
 				for ( const [index, row] of rows.entries() ) {
@@ -1042,56 +1014,27 @@ step
 							model.codename === row.visualLoadout.modelCodename
 						);
 						if ( !resource ) continue;
-						const parts: import("@/engine/contracts/character").CharacterAttachment[] = [];
-						for ( const key of row.visualLoadout.dressSetKeys ) {
-							const set = dress.sets[key];
-							if ( !set ) throw Error( "Missing dock outfit " + key );
-							const selected = row.visualLoadout.dressPartFilters?.[key] ?? set.parts;
-							parts.push( {
-								model: set.glb,
-								parts: selected,
-								covers: selected.flatMap( part =>
-									(set.covers?.[part] ?? []).map( i => resource.cover?.[String( i )] ).filter( (
-										i
-									): i is number => i !== undefined )
-								)
-							} );
-						}
-						for ( const key of row.visualLoadout.weaponSetKeys ) {
-							const set = dress.weapons[key];
-							if ( !set ) throw Error( "Missing dock weapon " + key );
-							parts.push( { model: set.glb, parts: set.parts, covers: [] } );
-						}
-						const prefix = /^CHAR_(CH|EU)_(MAN|WOMAN)_/.exec( resource.codename );
+						// SCharacterInfo_BuildDisplayActor: the dock is dressed from the row's
+						// items through the same slot visuals as the world. Previews are ownerless.
 						const oldWear = previewWear.get( row.id ),
 							freeze = nativeServerName !== undefined &&
 								defaultWearFrozen( dress.defaultWearLanguage ?? 4, nativeServerName );
-						const wear = prefix ?
-							refreshDefaultWear(
-								oldWear?.resource === resource ? oldWear.keys : [],
-								previewDefaultWear(
-									row.visualLoadout.dressSetKeys.map( key => ({
-										key,
-										parts: row.visualLoadout.dressPartFilters?.[key] ?? dress.sets[key]!.parts
-									}) )
-								),
-								freeze
-							) :
-							[];
-						for ( const key of wear ) {
-							const id = prefix![1] + "_" + (prefix![2] === "MAN" ? "M" : "W") + "_" + key,
-								entry = dress.defaultWear?.[id];
-							if ( !entry ) throw Error( "Missing preview default clothing " + id );
-							parts.push( {
-								model: entry.glb,
-								parts: entry.parts,
-								covers: entry.parts.flatMap( part =>
-									(entry.covers?.[part] ?? []).map( i => resource.cover?.[String( i )] ).filter( (
-										i
-									): i is number => i !== undefined )
-								)
-							} );
-						}
+						const assembly = assembleEquipmentAppearance( {
+							resource,
+							dress,
+							equipment: wornItemsFromList( row.visualLoadout.items, dress ),
+							avatars: row.visualLoadout.avatars,
+							hwanHair: false,
+							mounted: false,
+							weaponHidden: false,
+							attachmentsHidden: false,
+							fortressIndex: -1,
+							player: true,
+							ownerless: true,
+							committedWear: oldWear?.resource === resource ? oldWear.keys : [],
+							freezeWear: freeze
+						} );
+						const parts = assembly.parts, wear = assembly.defaultWear;
 						if ( !resource.previewGlb || !resource.previewClips ) {
 							throw Error( "Missing native dock preview " + resource.codename );
 						}
@@ -1197,7 +1140,7 @@ step
 					if ( preview || !rows.some( row => row.id === id ) ) dockStates.delete( id );
 				}
 				// Count only complete roster assemblies before auxiliary actors enter.
-				dockReady = !preview && actors.length === rows.length;
+				dockReady = catalogResident && !preview && actors.length === rows.length;
 				if ( lizard && !preview ) {
 					const path = "/assets/character-select/interface_lizard.glb";
 					if ( resources.ready( path ) ) {
@@ -1223,7 +1166,7 @@ step
 						} );
 					}
 				} else lizardStarted = null;
-				if ( preview ) {
+				if ( preview && catalogResident ) {
 					// Customization admits the whole selectable wardrobe. Waiting
 					// for only the initial outfit makes the first equipment click
 					// a network operation after the screen has already been revealed.
@@ -1232,7 +1175,7 @@ step
 						const selection = { ...preview.selection, gender };
 						const [firstFigure, lastFigure] = creationRange( selection, "figure" );
 						for ( let figure = firstFigure; figure <= lastFigure; figure++ ) {
-							const codename = creationLoadout( { ...selection, figure } ).modelCodename;
+							const codename = creationLoadout( { ...selection, figure }, itemIds ).modelCodename;
 							const model = [ ...catalog.values() ].find( row => row.codename === codename );
 							if ( model?.previewGlb ) paths.add( model.previewGlb );
 						}
@@ -1241,12 +1184,11 @@ step
 							const equipped = { ...selection, weapon };
 							const [firstProtector, lastProtector] = creationRange( equipped, "protector" );
 							for ( let protector = firstProtector; protector <= lastProtector; protector++ ) {
-								const loadout = creationLoadout( { ...equipped, protector } );
-								for ( const key of loadout.dressSetKeys ) {
-									if ( dress.sets[key] ) paths.add( dress.sets[key]!.glb );
-								}
-								for ( const key of loadout.weaponSetKeys ) {
-									if ( dress.weapons[key] ) paths.add( dress.weapons[key]!.glb );
+								const loadout = creationLoadout( { ...equipped, protector }, itemIds );
+								const body = (selection.race === 0 ? "EU" : "CH") + "_" + (gender === 0 ? "M" : "W");
+								for ( const item of loadout.items ) {
+									const entry = dress.equipment?.[String( item.refObjId )]?.bodies[body];
+									if ( entry ) paths.add( entry.glb );
 								}
 							}
 						}
@@ -2097,12 +2039,28 @@ soundContext
 						if ( skin && !skin.player ) {
 							// 85C060: a monster skin is its own body; the wearer's items are set aside.
 						} else if ( disguise ) {
-							const parts = referenceAppearanceParts(
-									disguise,
-									resource.codename.includes( "_MAN_" ),
+							// CICharactor_EquipReferenceAppearance: the random look's items
+							// go through the ordinary slot visuals and compound refresh.
+							const parts = assembleEquipmentAppearance( {
+									resource,
 									dress,
-									resource.cover
-								),
+									equipment: referenceAppearanceItems(
+										disguise,
+										resource.codename.includes( "_MAN_" ),
+										itemIds
+									),
+									avatars: [],
+									hwanHair: false,
+									mounted: entity.mountedOn !== undefined,
+									weaponHidden: false,
+									attachmentsHidden: false,
+									fortressIndex: -1,
+									player: entity.kind === "player" || entity.kind === "local-player",
+									ownerless: false,
+									committedWear: [],
+									freezeWear: nativeServerName !== undefined &&
+										defaultWearFrozen( dress.defaultWearLanguage ?? 4, nativeServerName )
+								} ).parts,
 								paths = [ resource.glb, ...parts.map( p => p.model ) ];
 							if ( resources.plan( paths ) ) {
 								model = `assembly:disguise:${resource.glb}:${JSON.stringify( parts )}`;
@@ -2148,221 +2106,27 @@ soundContext
 								!appearance || appearance.resource !== resource || appearance.dress !== dress ||
 								appearance.items !== items || appearance.signature !== signature
 							) {
-								const race = /^CHAR_(CH|EU)_(MAN|WOMAN)_/.exec( resource.codename ),
-									prefix = race ? `${race[1]}_${race[2] === "MAN" ? "M" : "W"}` : "";
-								const parts: import("@/engine/contracts/character").CharacterAttachment[] = [];
-								const auxiliary: Auxiliary[] = [],
-									particles: ModelParticle[] = [ ...(resource.ambientParticles ?? []) ];
-								const worn = [
-									...equipment.filter( i => i.slot >= 0 && i.slot < 9 ).map( i => ({
-										slot: i.slot,
-										refObjId: i.refObjId,
-										avatar: false
-									}) ),
-									...avatars.map( i => ({ slot: -1, refObjId: i.refObjId, avatar: true }) )
-								];
-								for ( const item of worn ) {
-									const visual = dress.equipment?.[String( item.refObjId )];
-									if ( !visual ) {
-										throw Error(
-											"Missing native equipment visual catalog/reference " + item.refObjId
-										);
-									}
-									if (
-										item.avatar ?
-											visual.avatarSlot === undefined :
-											visual.slot !== null && visual.slot !== item.slot
-									) throw Error( "Equipment visual socket mismatch " + item.refObjId );
-									if (
-										(visual.slot !== null || item.avatar) && visual.bodies[prefix] === undefined
-									) {
-										throw Error(
-											"Equipment visual body mismatch " + item.refObjId + ": " + prefix
-										);
-									}
-								}
-								const resolvable = new Set(
-									worn.filter( item => {
-										const v = dress.equipment![String( item.refObjId )]!;
-										return (item.avatar || v.slot !== null) && v.bodies[prefix] !== null;
-									} ).map( item => item.refObjId )
-								);
-								const selectedVisuals = selectEquipmentVisuals(
-									worn,
-									dress.equipment ?? {},
-									resolvable,
-									hwanHair,
-									entity.mountedOn !== undefined,
-									fortressIndex >= 0
-								);
-								const equipmentIds = new Set(
-										selectedVisuals.filter( i => !i.avatar ).map( i => i.refObjId )
-									),
-									avatarIds = new Set(
-										selectedVisuals.filter( i => i.avatar ).map( i => i.refObjId )
-									);
 								const committedWear = states.get( entity.gid )?.defaultWear;
-								const defaultWear = refreshDefaultWear(
-									committedWear?.resource === resource ? committedWear.keys : [],
-									fortressIndex >= 0 ?
-										[] :
-										selectDefaultWear(
-											worn,
-											selectedVisuals,
-											dress.equipment ?? {},
-											race?.[1] === "CH" || !player && !!race
-										),
+								const assembly = assembleEquipmentAppearance( {
+									resource,
+									dress,
+									equipment,
+									avatars,
+									hwanHair,
+									mounted: entity.mountedOn !== undefined,
+									weaponHidden,
+									attachmentsHidden: !!idleStates.get( entity.gid )?.attachmentsHidden,
+									fortressIndex,
+									player,
+									ownerless: false,
+									committedWear: committedWear?.resource === resource ? committedWear.keys : [],
 									freezeWear
-								);
-								if ( fortressIndex >= 0 && (!player || race?.[1] === "CH") ) {
-									const entry = dress.fortressWear?.[prefix + "_" + fortressIndex];
-									if ( !entry ) {
-										throw Error(
-											"Missing native fortress clothing " + prefix + "_" + fortressIndex
-										);
-									}
-									parts.push( {
-										model: entry.glb,
-										parts: entry.parts,
-										covers: entry.parts.flatMap( part =>
-											(entry.covers?.[part] ?? []).map( index =>
-												resource.cover?.[String( index )]
-											).filter( ( index ): index is number => index !== undefined )
-										)
-									} );
-								}
-								for ( const key of defaultWear ) {
-									const entry = dress.defaultWear?.[prefix + "_" + key];
-									if ( !entry ) {
-										throw Error( "Missing native default clothing " + prefix + "_" + key );
-									}
-									parts.push( {
-										model: entry.glb,
-										parts: entry.parts,
-										covers: entry.parts.flatMap( part =>
-											(entry.covers?.[part] ?? []).map( index =>
-												resource.cover?.[String( index )]
-											).filter( ( index ): index is number => index !== undefined )
-										)
-									} );
-								}
-
-								for (
-									const item of (entity.gid === gameplay?.localGid ?
-										gameplay!.inventory :
-										entity.equipment ?? [])
-								) {
-									if ( item.slot >= 0 && item.slot < 9 ) {
-										if ( !equipmentIds.has( item.refObjId ) ) continue;
-										if ( item.slot === 6 && weaponHidden ) continue;
-										if ( item.slot >= 6 && idleStates.get( entity.gid )?.attachmentsHidden ) {
-											continue;
-										}
-										if ( !dress.equipment ) {
-											throw Error( "Missing native equipment visual catalog" );
-										}
-										const visual = dress.equipment[String( item.refObjId )];
-										if ( !visual ) {
-											throw Error( `Missing equipment visual reference ${item.refObjId}` );
-										}
-										// Inventory-only categories (jewelry/ammunition) have no compound slot.
-										if ( visual.slot === null ) continue;
-										if ( visual.slot !== item.slot ) {
-											throw Error(
-												`Equipment visual socket mismatch ${item.refObjId}: ${item.slot}/${visual.slot}`
-											);
-										}
-										const entry = visual.bodies[prefix];
-										if ( entry === undefined ) {
-											throw Error( `Equipment visual body mismatch ${item.refObjId}: ${prefix}` );
-										}
-										// Explicit null means BOTH native resource sources are empty. A
-										// missing conversion remains an error, never a fabricated helmet.
-										if ( entry !== null ) {
-											parts.push( {
-												model: entry.glb,
-												parts: entry.parts,
-												...(entry.branches ?
-													{ branches: { slot: item.slot, entries: entry.branches } } :
-													{}),
-												...(item.slot === 6 || item.slot === 7 ?
-													{ equipment: { refObjId: item.refObjId, plus: item.plus } } :
-													{}),
-												covers: entry.parts.flatMap( part =>
-													(entry.covers?.[part] ?? []).map( index =>
-														resource.cover?.[String( index )]
-													).filter( ( index ): index is number => index !== undefined )
-												)
-											} );
-										}
-										if ( entry !== null && (item.slot === 6 || item.slot === 7) ) {
-											for ( const effect of dress.specialGlows?.[item.refObjId] ?? [] ) {
-												for ( const part of entry.parts ) {
-													if (
-														!entry.branches?.find( b => b.part === part )?.nodes.some( n =>
-															n.name === effect.bone
-														)
-													) {
-														throw Error( "Missing published equipment particle socket" );
-													}
-													particles.push( {
-														...effect,
-														source: "equipment",
-														bone: equipmentSocket( item.slot, part, effect.bone )
-													} );
-												}
-											}
-										}
-									}
-								}
-								for ( const item of avatars ) {
-									if ( !avatarIds.has( item.refObjId ) ) continue;
-									const visual = dress.equipment?.[String( item.refObjId )];
-									if ( visual?.avatarSlot === undefined ) {
-										throw Error( `Missing native avatar visual ${item.refObjId}` );
-									}
-									const entry = visual.bodies[prefix];
-									if ( entry === undefined ) {
-										throw Error( `Missing cosmetic attachment ${prefix}/${item.refObjId}` );
-									}
-									if ( entry === null ) continue;
-									const covers = entry.parts.flatMap( part =>
-										(entry.covers?.[part] ?? []).map( index => resource.cover?.[String( index )] )
-											.filter( ( index ): index is number => index !== undefined )
-									);
-									// Native item masks already decide admission. Mesh coverage hides
-									// base-body geometry; it must not remove another accepted item.
-									parts.push( { model: entry.glb, parts: entry.parts, covers } );
-									if ( dress.avatarVisualOverrides?.[item.refObjId]?.additionalBsr ) {
-										const extra = dress.avatarAuxiliary?.[item.refObjId];
-										if ( !extra ) throw Error( "Missing auxiliary avatar " + item.refObjId );
-										auxiliary.push( { id: item.refObjId, entry: extra } );
-										// Reserve resource/coverage with the body transaction. The animated
-										// geometry is published below as a private-skeleton socket child.
-										parts.push( {
-											model: extra.glb,
-											parts: [],
-											covers: extra.parts.flatMap( part =>
-												(extra.covers?.[part] ?? []).map( index =>
-													resource.cover?.[String( index )]
-												).filter( ( index ): index is number => index !== undefined )
-											)
-										} );
-									}
-								}
-								if ( hwanHair ) {
-									const hair = dress.hwan?.[prefix];
-									if ( !hair ) throw new Error( `Missing Hwan hair ${prefix}` );
-									parts.push( {
-										model: hair.glb,
-										parts: [],
-										covers: hair.parts.flatMap( part =>
-											(hair.covers?.[part] ?? []).map( index =>
-												resource.cover?.[String( index )]
-											).filter( ( index ): index is number => index !== undefined )
-										)
-									} );
-								}
+								} );
+								const { parts, auxiliary, defaultWear } = assembly;
+								const particles: ModelParticle[] = [
+									...(resource.ambientParticles ?? []),
+									...assembly.particles
+								];
 								appearance = {
 									resource,
 									dress,
@@ -2372,7 +2136,7 @@ soundContext
 									particles,
 									parts,
 									auxiliary,
-									avatarIds: [ ...avatarIds ],
+									avatarIds: assembly.avatarIds,
 									model: `assembly:${resource.glb}:${JSON.stringify( parts )}`,
 									dependencies: [ resource.glb, ...parts.map( part => part.model ) ]
 								};

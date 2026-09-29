@@ -102,9 +102,8 @@ func testCharacterPresentation(character *domain.Character) CharacterPresentatio
 		Gender:    gender,
 		VisualLoadout: CharacterVisualLoadout{
 			ModelCodename:    loadout.ModelCodename,
-			DressSetKeys:     loadout.DressSetKeys,
-			DressPartFilters: loadout.DressPartFilters,
-			WeaponSetKeys:    loadout.WeaponSetKeys,
+			Items:            characterItemsForTest(loadout.Items),
+			Avatars:          characterItemsForTest(loadout.Avatars),
 			AnimationSetName: loadout.AnimationSetName,
 			HeightScale:      loadout.HeightScale,
 			VolumeScale:      loadout.VolumeScale,
@@ -308,10 +307,7 @@ func requireCharacterRosterContractVersion(t *testing.T, response map[string]any
 }
 
 func TestCharacterVisualLoadoutWireCollectionsAreNeverNull(t *testing.T) {
-	loadout := characterVisualLoadoutForWire(CharacterVisualLoadout{
-		DressPartFilters: map[string][]string{"CH_M_CLOTHES_01": nil},
-	})
-	payload, err := json.Marshal(loadout)
+	payload, err := json.Marshal(characterVisualLoadoutForWire(CharacterVisualLoadout{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,16 +315,24 @@ func TestCharacterVisualLoadoutWireCollectionsAreNeverNull(t *testing.T) {
 	if err := json.Unmarshal(payload, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := decoded["dressSetKeys"].([]any); !ok {
-		t.Fatalf("dressSetKeys = %#v, want JSON array", decoded["dressSetKeys"])
+	for _, key := range []string{"items", "avatars"} {
+		if _, ok := decoded[key].([]any); !ok {
+			t.Fatalf("%s = %#v, want JSON array", key, decoded[key])
+		}
 	}
-	if _, ok := decoded["weaponSetKeys"].([]any); !ok {
-		t.Fatalf("weaponSetKeys = %#v, want JSON array", decoded["weaponSetKeys"])
+}
+
+/*
+================
+characterItemsForTest
+================
+*/
+func characterItemsForTest(items []enterworld.VisualItem) []CharacterItem {
+	out := make([]CharacterItem, 0, len(items))
+	for _, item := range items {
+		out = append(out, CharacterItem{RefObjID: item.RefObjID, Plus: item.Plus})
 	}
-	filters := decoded["dressPartFilters"].(map[string]any)
-	if _, ok := filters["CH_M_CLOTHES_01"].([]any); !ok {
-		t.Fatalf("dressPartFilters entry = %#v, want JSON array", filters["CH_M_CLOTHES_01"])
-	}
+	return out
 }
 
 func TestCharacterLifecycleUsesOwnedShardAndAccount(t *testing.T) {
@@ -388,8 +392,6 @@ func TestCharacterListProjectsOneIdentityForAnInconsistentLegacyRecord(t *testin
 	authority.MutateCharacter(character, "seed inconsistent legacy appearance", func() {
 		wrongRace := int64(domain.RaceEurope)
 		character.RaceIndex = &wrongRace
-		character.DressSetKeys = []string{"EU_M_CLOTHES_01"}
-		character.WeaponSetKeys = []string{"EU_M_DAGGER_01"}
 		character.AnimationSetName = "dagger"
 	})
 
@@ -404,13 +406,6 @@ func TestCharacterListProjectsOneIdentityForAnInconsistentLegacyRecord(t *testin
 	loadout := row["visualLoadout"].(map[string]any)
 	if loadout["modelCodename"] != "CHAR_CH_MAN_ADVENTURER" {
 		t.Fatalf("modelCodename = %v", loadout["modelCodename"])
-	}
-	if got := loadout["dressSetKeys"].([]any); len(got) != 1 || got[0] != "CH_M_CLOTHES_01" {
-		t.Fatalf("dressSetKeys = %v, want canonical China starter set", got)
-	}
-	if got := loadout["weaponSetKeys"].([]any); len(got) != 2 ||
-		got[0] != "CH_M_SWORD_01" || got[1] != "CH_M_SHIELD_01" {
-		t.Fatalf("weaponSetKeys = %v, want canonical China sword and shield", got)
 	}
 	if loadout["animationSetName"] != "sword" {
 		t.Fatalf("animationSetName = %v, want canonical sword", loadout["animationSetName"])

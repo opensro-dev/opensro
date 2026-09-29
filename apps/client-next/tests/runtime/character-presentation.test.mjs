@@ -31,9 +31,12 @@ const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0
 /*
 ================
 model
+
+A minimal decoded character source; positionFloats sizes its geometry so a
+test can charge the residency byte budget.
 ================
 */
-function model() {
+function model( positionFloats = 9 ) {
 	return {
 		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
 		clips: [ "stand", "walk", "run", "pick", "death" ].map( name => ({ name, duration: 1, channels: [] }) ),
@@ -45,7 +48,7 @@ function model() {
 			inverseBind: identity(),
 			image: -1,
 			geometry: {
-				positions: new Float32Array( 9 ),
+				positions: new Float32Array( positionFloats ),
 				indices: new Uint32Array( [ 0, 1, 2 ] ),
 				transform: identity()
 			}
@@ -259,7 +262,8 @@ function fixture(
 	animationAudio = undefined,
 	animationBindings = undefined,
 	stageModels = {},
-	metadataAdmission = {}
+	metadataAdmission = {},
+	options = {}
 ) {
 	const characters = createCharacters(),
 		pending = new Map(),
@@ -322,12 +326,6 @@ take
 					buffer: new TextEncoder().encode( JSON.stringify( {
 						models: [],
 						dress: {
-							sets: {},
-							weapons: {
-								_SWORD_01: { glb: "/assets/sword.glb", parts: [ "mesh" ] },
-								_SHIELD_01: { glb: "/assets/shield.glb", parts: [ "mesh" ] }
-							},
-							cosmetics: {},
 							equipment: {
 								100: { slot: 6, bodies: { "": { glb: "/assets/sword.glb", parts: [ "mesh" ] } } },
 								101: { slot: 7, bodies: { "": { glb: "/assets/shield.glb", parts: [ "mesh" ] } } }
@@ -440,7 +438,7 @@ take
 				};
 			}
 			if ( job.decode === "character" || job.decode === "effect" ) {
-				const value = model();
+				const value = model( options.sourceFloats );
 				if ( metadataAdmission.appearance?.overrideTest ) {
 					value.clips.push( { name: "native:avatar_wing:7", duration: 1, channels: [] } );
 				}
@@ -1250,26 +1248,60 @@ test("a cold attack effect never strips equipment, drops a fighter or refetches 
 	f.dispose();
 });
 
-test("model priority evicts lower priority residents and never starves a late local player", () => {
-	const f = fixture( {}, 65 );
-	const entities = Array.from( { length: 65 }, ( _, i ) => entity( i + 1 ) );
-	for ( let i = 0; i < 100; i++ ) f.step( entities.slice( 0, 64 ), i / 10 );
-	assert.equal( f.actors.length, 64 );
+test("model priority evicts lower priority residents and never starves a late local player", async () => {
+	// Heavy sources make the residency byte budget bind with a handful of
+	// actors. More entities than the budget can hold compete; the local
+	// player arrives last and must still be admitted by eviction.
+	const { CHARACTER_RESIDENT_BYTES, CHARACTER_SOURCE_BYTES } = await load(
+		"src/engine/foundation/animation/character-budget.ts"
+	);
+	const sourceBytes = CHARACTER_SOURCE_BYTES - 1024 * 1024;
+	const most = Math.floor( CHARACTER_RESIDENT_BYTES / sourceBytes );
+	const count = most + 2;
+	const f = fixture(
+		{},
+		count,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{},
+		{ sourceFloats: Math.floor( sourceBytes / 12 ) * 3 }
+	);
+	const entities = Array.from( { length: count }, ( _, i ) => entity( i + 1 ) );
+	const others = entities.slice( 0, count - 1 );
+	let t = 0;
+	for ( let i = 0; i < 4 * count; i++ ) f.step( others, t += .1 );
+	assert.ok( f.actors.length > 0 && f.actors.length < others.length, "the byte budget binds" );
 	const gameplay = {
-		localGid: 65,
+		localGid: count,
 		pose: { regionId: 1, x: 10, y: 20, z: 30, angle: 0 },
 		inventory: [],
 		vitals: [],
 		casts: []
 	};
-	for ( let i = 0; i < 200; i++ ) f.step( entities, 10 + i / 10, gameplay );
-	assert.equal( f.actors.length, 64 );
-	assert.ok( f.actors.some( a => a.gid === 65 ) );
-	assert.equal( f.requests.filter( r => r.url.endsWith( "/65.glb" ) ).length, 1 );
+	for ( let i = 0; i < 4 * count && !f.actors.some( a => a.gid === count ); i++ ) {
+		f.step( entities, t += .1, gameplay );
+	}
+	assert.ok( f.actors.some( a => a.gid === count ), "the late local player is admitted" );
+	assert.ok( f.actors.length <= most, "residency stays within the byte budget" );
+	assert.equal( f.requests.filter( r => r.url.endsWith( `/${count}.glb` ) ).length, 1 );
 	assert.equal( f.presentation.error(), null );
-	gameplay.localGid = 64;
-	for ( let i = 0; i < 10; i++ ) f.step( entities, 31 + i / 10, gameplay );
-	assert.ok( f.actors.some( a => a.gid === 64 ) );
+	const evicted = others.find( e => !f.actors.some( a => a.gid === e.gid ) );
+	assert.ok( evicted, "a lower-priority resident made room" );
+	gameplay.localGid = evicted.gid;
+	for ( let i = 0; i < 4 * count && !f.actors.some( a => a.gid === evicted.gid ); i++ ) {
+		f.step( entities, t += .1, gameplay );
+	}
+	assert.ok( f.actors.some( a => a.gid === evicted.gid ), "a new local player evicts again" );
 	assert.equal( f.presentation.error(), null );
 	f.dispose();
 });
@@ -1423,14 +1455,18 @@ setCharacterActors
 	assert.equal( owner.previewReady(), true );
 	const warmed = requests.length;
 	allow = false;
+	const { createItemCodenameIndex } = await load( "src/engine/foundation/animation/equipment-appearance.ts" );
+	const itemIds = createItemCodenameIndex( JSON.parse( roster.toString( "utf8" ) ).dress );
+	// No protector: the ownerless preview wears the native default clothing.
+	const defaultClothing = ':["clothes_BA","clothes_LA"]';
 	for ( const gender of [ 0, 1, 0 ] ) {
 		for ( let figure = 1; figure <= 13; figure++ ) {
 			Object.assign( selection, { gender, figure } );
 			step();
 			assert.equal( owner.previewReady(), true );
 			assert.equal( actors.length, 1 );
-			const { heightScale, volumeScale, ...assembly } = creationLoadout( selection );
-			assert.equal( actors[0].model, "creation:0:" + JSON.stringify( assembly ) );
+			const { heightScale, volumeScale, ...assembly } = creationLoadout( selection, itemIds );
+			assert.equal( actors[0].model, "creation:0:" + JSON.stringify( assembly ) + defaultClothing );
 			assert.equal( requests.length, warmed );
 		}
 	}
@@ -1445,6 +1481,11 @@ setCharacterActors
 				step();
 				assert.equal( owner.previewReady(), true, "Every offered wardrobe is resident before reveal" );
 				assert.equal( actors.length, 1 );
+				const { heightScale, volumeScale, ...assembly } = creationLoadout( selection, itemIds );
+				assert.ok(
+					actors[0].model.startsWith( "creation:0:" + JSON.stringify( assembly ) ),
+					"Preview wears the choice's items"
+				);
 				assert.equal( requests.length, warmed, "Equipment changes never start another download" );
 			}
 		}
@@ -2829,7 +2870,21 @@ test("dock admission waits for equipment even when its gecko is already rendered
 			previewGlb: "/assets/preview.glb",
 			previewClips: [ "stand" ]
 		} ],
-		dress: { sets: {}, weapons: { sword: { glb: "/assets/cold-sword.glb", parts: [ "mesh" ] } } }
+		dress: {
+			equipment: {
+				3644: {
+					code: "ITEM_CH_SWORD_01_A_DEF",
+					slot: 6,
+					armorClass: 0,
+					thiefSuit: false,
+					visualMask: 0,
+					visualPriority: 90,
+					model: "res/item/china/weapon/sword_01.bsr",
+					source: 3644,
+					bodies: { "": { glb: "/assets/cold-sword.glb", parts: [ "EQ0" ] } }
+				}
+			}
+		}
 	};
 	const f = fixture(
 		{},
@@ -2856,8 +2911,8 @@ test("dock admission waits for equipment even when its gecko is already rendered
 		deletePending: false,
 		visualLoadout: {
 			modelCodename: "Fixture",
-			dressSetKeys: [],
-			weaponSetKeys: [ "sword" ],
+			items: [ { refObjId: 3644, plus: 0 } ],
+			avatars: [],
 			animationSetName: "punch",
 			heightScale: 1,
 			volumeScale: 1

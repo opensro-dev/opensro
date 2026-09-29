@@ -20,7 +20,6 @@ apps/client-next/src/engine/contracts/orb.ts
 apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/contracts/scene.ts
 apps/client-next/src/engine/contracts/scenery.ts
-apps/client-next/src/engine/contracts/session.ts
 apps/client-next/src/engine/contracts/simulation.ts
 apps/client-next/src/engine/contracts/texture.ts
 apps/client-next/src/engine/contracts/ui.ts
@@ -38,7 +37,6 @@ apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
 apps/client-next/src/engine/foundation/animation/character-bounds.ts
-apps/client-next/src/engine/foundation/animation/character-budget.ts
 apps/client-next/src/engine/foundation/animation/character-fade.ts
 apps/client-next/src/engine/foundation/animation/character-hierarchy.ts
 apps/client-next/src/engine/foundation/animation/character-pick-volume.ts
@@ -55,7 +53,6 @@ apps/client-next/src/engine/foundation/animation/emote.ts
 apps/client-next/src/engine/foundation/animation/entity-lod.ts
 apps/client-next/src/engine/foundation/animation/equipment-particles.ts
 apps/client-next/src/engine/foundation/animation/equipment-sockets.ts
-apps/client-next/src/engine/foundation/animation/equipment-visuals.ts
 apps/client-next/src/engine/foundation/animation/fortress-appearance.ts
 apps/client-next/src/engine/foundation/animation/gpu-animation-plan.ts
 apps/client-next/src/engine/foundation/animation/ground-visual.ts
@@ -85,7 +82,6 @@ apps/client-next/src/engine/foundation/animation/preview-idle.ts
 apps/client-next/src/engine/foundation/animation/projectile-curve.ts
 apps/client-next/src/engine/foundation/animation/projectile-time.ts
 apps/client-next/src/engine/foundation/animation/random-idle.ts
-apps/client-next/src/engine/foundation/animation/reference-appearance.ts
 apps/client-next/src/engine/foundation/animation/scenery-emission.ts
 apps/client-next/src/engine/foundation/animation/skill-motion-resolve.ts
 apps/client-next/src/engine/foundation/animation/skill-motion.ts
@@ -232,7 +228,6 @@ apps/client-next/src/engine/foundation/ui/buff-tooltip.ts
 apps/client-next/src/engine/foundation/ui/buff-viewer.ts
 apps/client-next/src/engine/foundation/ui/button-state.ts
 apps/client-next/src/engine/foundation/ui/catalog-message.ts
-apps/client-next/src/engine/foundation/ui/character-create.ts
 apps/client-next/src/engine/foundation/ui/character-labels.ts
 apps/client-next/src/engine/foundation/ui/character-status.ts
 apps/client-next/src/engine/foundation/ui/chat-layout.ts
@@ -375,7 +370,6 @@ apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/input/input.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/codec/codec.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/network.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/decode/decode.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/http/http.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/session.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/core.ts
@@ -402,7 +396,6 @@ apps/client-next/src/engine/runtime/ui/hud/unique-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/window-placement.ts
 apps/client-next/src/engine/runtime/ui/resources/resources.ts
 apps/client-next/src/engine/runtime/ui/text/text.ts
-apps/client-next/src/engine/runtime/ui/title/creation.ts
 apps/client-next/src/engine/runtime/ui/title/resources.ts
 apps/client-next/src/engine/runtime/world/camera/camera.ts
 apps/client-next/src/engine/runtime/world/world.ts
@@ -419,7 +412,6 @@ apps/client-next/tests/browser/attack-blend.test.mjs
 apps/client-next/tests/browser/audio-loop.test.mjs
 apps/client-next/tests/browser/background-resume.test.mjs
 apps/client-next/tests/browser/baroi-moving-target.test.mjs
-apps/client-next/tests/browser/berserk-live.test.mjs
 apps/client-next/tests/browser/beta-performance.test.mjs
 apps/client-next/tests/browser/beta-release-live.test.mjs
 apps/client-next/tests/browser/blocking.test.mjs
@@ -529,7 +521,6 @@ apps/client-next/tests/browser/quest-marker-effects.test.mjs
 apps/client-next/tests/browser/quest-progress.test.mjs
 apps/client-next/tests/browser/quickslot-inventory.test.mjs
 apps/client-next/tests/browser/rebirth-self-selection-live.test.mjs
-apps/client-next/tests/browser/recall-appointment-live.test.mjs
 apps/client-next/tests/browser/region-music-live.test.mjs
 apps/client-next/tests/browser/restart-live.test.mjs
 apps/client-next/tests/browser/return-scroll-live.test.mjs
@@ -598,7 +589,6 @@ apps/client-next/tests/runtime/cpu-summary.test.mjs
 apps/client-next/tests/runtime/performance-lease.test.mjs
 apps/client-next/tests/runtime/pose-dirty.test.mjs
 apps/client-next/tests/runtime/profile-source-map.test.mjs
-apps/client-next/tests/runtime/published-characters.test.mjs
 apps/client-next/tests/runtime/renderer-diagnostics.test.mjs
 apps/client-next/tests/runtime/snapshot-age.test.mjs
 apps/client-next/tests/runtime/ui-cleanup.test.mjs
@@ -675,24 +665,17 @@ apps/server-observatory/tools/item-catalog.mjs
 apps/server-observatory/tools/items-browser-probe.mjs
 apps/server/internal/game/world/simulation/testdata/gen_parity_vectors.mjs
 scripts/build/artifacts/generatedArtifactArchive.mjs
-scripts/build/assetDelivery.mjs
-scripts/build/assetPackGroups.mjs
 scripts/build/assetPackIndexValidation.mjs
-scripts/build/assetPackOwnership.mjs
 scripts/build/char/animationUtils.mjs
 scripts/build/char/attachedMotionClips.mjs
 scripts/build/char/authoredAnimationBindings.mjs
 scripts/build/char/avatarVisualOverrides.mjs
 scripts/build/char/buildAvatar.mjs
 scripts/build/char/buildCrowdVatAssets.mjs
-scripts/build/char/buildDefaultWear.mjs
 scripts/build/char/buildDropModelAssets.mjs
-scripts/build/char/buildEquipmentVisuals.mjs
 scripts/build/char/buildLocomotionBanAssets.mjs
 scripts/build/char/buildNpcVatAssets.mjs
-scripts/build/char/buildRoster.mjs
 scripts/build/char/buildSkillEffectRecords.mjs
-scripts/build/char/characterMaterialBindings.mjs
 scripts/build/char/compileBanTimeline.mjs
 scripts/build/char/compileBsrVisual.mjs
 scripts/build/char/defaultWearPolicy.mjs
@@ -708,10 +691,7 @@ scripts/build/char/native/scriptObjAnimationRegistry.ts
 scripts/build/char/native/skillEffectAnimationRegistry.ts
 scripts/build/char/native/skillEffectSetParseRow.ts
 scripts/build/char/native/skillEffectStage.ts
-scripts/build/char/publishCharacterMaterials.mjs
 scripts/build/char/publishEntityBsrModifiers.mjs
-scripts/build/char/resolveCharRoster.mjs
-scripts/build/char/resolveCrowdDress.mjs
 scripts/build/char/resourceGlbOutput.mjs
 scripts/build/char/vatPipeline.mjs
 scripts/build/char/weatherEvents.mjs
@@ -727,9 +707,7 @@ scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/data/buildTeleportDataAsset.mjs
 scripts/build/effects/buildEffectPrograms.mjs
 scripts/build/effects/parseJmxVisualEffect.mjs
-scripts/build/generatedManifestSidecars.mjs
 scripts/build/jsonAssetCompression.mjs
-scripts/build/server/buildServerGameDataBundle.mjs
 scripts/build/server/serverGameDataArchive.mjs
 scripts/build/shared/assetPaths.mjs
 scripts/build/shared/asyncUtils.mjs
@@ -764,7 +742,6 @@ scripts/build/shared/optionalDataAsset.mjs
 scripts/build/shared/pythonRun.mjs
 scripts/build/shared/questGuideRecords.mjs
 scripts/build/shared/resinfoParser.mjs
-scripts/build/shared/resourceBuildFingerprint.mjs
 scripts/build/shared/resourceIo.mjs
 scripts/build/shared/resourcePipeline.mjs
 scripts/build/shared/skillPaneImageReferences.mjs
@@ -790,7 +767,6 @@ scripts/build/world/assets/index.mjs
 scripts/build/world/buildAuthoredWorldRegionResources.mjs
 scripts/build/world/buildCharacterCreateWorldRegionResources.mjs
 scripts/build/world/buildCharacterSelectInterfaceModels.mjs
-scripts/build/world/buildCharacterSelectLizard.mjs
 scripts/build/world/buildCharacterSelectWorldRegionResources.mjs
 scripts/build/world/buildOutdoorWorldRegionResources.mjs
 scripts/build/world/buildTitleWorldRegionResources.mjs
@@ -815,17 +791,14 @@ scripts/build/world/navmesh/parseNavmesh.mjs
 scripts/build/world/objects/buildTitleSectorObjectResources.mjs
 scripts/build/world/objects/compound.mjs
 scripts/build/world/objects/formats.mjs
-scripts/build/world/paths.mjs
 scripts/build/world/sworld/deriveTitleTerrainSectorCoverage.mjs
 scripts/build/world/sworld/prepareCellTerrainTexture.mjs
 scripts/build_outdoor_world_resources.mjs
 scripts/checks/check_asset_delivery.mjs
 scripts/checks/check_asset_pack_integrity.mjs
-scripts/checks/check_compact_assets.mjs
 scripts/checks/check_precompressed_freshness.mjs
 scripts/checks/lib/methodBlock.mjs
 scripts/clean_release_workspace.mjs
-scripts/compact_sro_assets.mjs
 scripts/lib/chromeTraceCapture.mjs
 scripts/lib/clipOracleWalkPlane.mjs
 scripts/lib/missionMovementFixture.mjs
@@ -867,7 +840,6 @@ scripts/tasks/registry.mjs
 scripts/tasks/tests.mjs
 scripts/test/assets/assetDeliveryOwnership.test.mjs
 scripts/test/assets/assetPackIntegrity.test.mjs
-scripts/test/assets/assetPackOwnership.test.mjs
 scripts/test/assets/banTimeline.test.mjs
 scripts/test/assets/bsrParticleModifiers.test.mjs
 scripts/test/assets/buildSharedUtilities.test.mjs
@@ -896,6 +868,5 @@ scripts/test/suites/region.mjs
 scripts/test/suites/world.mjs
 scripts/test/world/authoredWorldRegionResources.test.mjs
 scripts/test/world/outdoorWorldRegionResources.test.mjs
-scripts/test/world/worldFormats.test.mjs
 scripts/test/world/worldMapImageReferences.test.mjs
 scripts/tools/localization/englishGaps.mjs

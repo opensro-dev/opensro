@@ -214,7 +214,8 @@ func TestEnterWorldOverInjectedSource(t *testing.T) {
 		t.Fatalf("enter world over injected source failed: %+v", outcome.Result)
 	}
 	loadout := outcome.Result.LocalPlayerEntry.VisualLoadout
-	if !weaponAuditMatches(t, "ITEM_CH_BLADE_01_A", loadout.WeaponSetKeys) {
-		t.Fatalf("worn blade not rendered from injected source: %v", loadout.WeaponSetKeys)
+	if worn := findRowBySlot(outcome.Result.Character.MissionInventory, 6); worn == nil ||
+		!reflect.DeepEqual(loadout.Items[len(loadout.Items)-1], VisualItem{RefObjID: worn.RefObjID, Plus: worn.Plus}) {
+		t.Fatalf("worn blade not rendered from injected source: %+v", loadout.Items)
 	}
 }

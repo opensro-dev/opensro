@@ -230,11 +230,7 @@ type Character struct {
 	HeightScale   *float64 `json:"heightScale"`
 	VolumeScale   *float64 `json:"volumeScale"`
 
-	// Explicit persisted visual overrides; when present and non-empty they
-	// win over the creation-derived keys (resolveMissionVisualLoadout).
-	AnimationSetName string   `json:"animationSetName"`
-	DressSetKeys     []string `json:"dressSetKeys"`
-	WeaponSetKeys    []string `json:"weaponSetKeys"`
+	AnimationSetName string `json:"animationSetName"`
 
 	MissionInventory []InventoryRow  `json:"missionInventory"`
 	World            *CharacterWorld `json:"world,omitempty"`

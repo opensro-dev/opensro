@@ -12,20 +12,27 @@ import (
 	"opensro.online/server/internal/security/auth"
 )
 
-const characterRosterContractVersion = 1
+// Roster contract 2: loadouts carry worn and avatar items, not set keys.
+const characterRosterContractVersion = 2
 
-// CharacterVisualLoadout is the server-owned semantic render contract exposed
-// to account-roster presentation. Browser asset URLs are deliberately absent:
-// the client resolves the requested world or interface asset from the one
-// model codename.
+// CharacterItem is one worn or avatar item: native (RefItemID, plus).
+type CharacterItem struct {
+	RefObjID uint32 `json:"refObjId"`
+	Plus     int64  `json:"plus"`
+}
+
+// CharacterVisualLoadout is the server-owned render contract exposed to the
+// account roster. It mirrors the native character-list record
+// (SCharacterInfo_ReadFromPacket): the model, the worn items and the avatar
+// items. Browser asset URLs are deliberately absent; the client resolves
+// every attachment from its item catalog, as it does in the world.
 type CharacterVisualLoadout struct {
-	ModelCodename    string              `json:"modelCodename"`
-	DressSetKeys     []string            `json:"dressSetKeys"`
-	DressPartFilters map[string][]string `json:"dressPartFilters,omitempty"`
-	WeaponSetKeys    []string            `json:"weaponSetKeys"`
-	AnimationSetName string              `json:"animationSetName"`
-	HeightScale      float64             `json:"heightScale"`
-	VolumeScale      float64             `json:"volumeScale"`
+	ModelCodename    string          `json:"modelCodename"`
+	Items            []CharacterItem `json:"items"`
+	Avatars          []CharacterItem `json:"avatars"`
+	AnimationSetName string          `json:"animationSetName"`
+	HeightScale      float64         `json:"heightScale"`
+	VolumeScale      float64         `json:"volumeScale"`
 }
 
 // CharacterPresentation is the canonical account-roster projection. Raw
@@ -524,27 +531,19 @@ func (api *API) createdCharacterJSON(c *domain.Character) map[string]interface{}
 	return out
 }
 
-// characterVisualLoadoutForWire closes Go's nil-slice/JSON-null seam at the
-// HTTP owner. Set-key collections are arrays in the roster contract even when
-// the character has nothing equipped; clients never have to interpret null as
-// a second spelling of an empty collection.
-func characterVisualLoadoutForWire(loadout CharacterVisualLoadout) CharacterVisualLoadout {
-	loadout.DressSetKeys = cloneStringListForWire(loadout.DressSetKeys)
-	loadout.WeaponSetKeys = cloneStringListForWire(loadout.WeaponSetKeys)
-	if loadout.DressPartFilters != nil {
-		filters := make(map[string][]string, len(loadout.DressPartFilters))
-		for setKey, parts := range loadout.DressPartFilters {
-			filters[setKey] = cloneStringListForWire(parts)
-		}
-		loadout.DressPartFilters = filters
-	}
-	return loadout
-}
+/*
+================
+characterVisualLoadoutForWire
 
-func cloneStringListForWire(values []string) []string {
-	cloned := make([]string, len(values))
-	copy(cloned, values)
-	return cloned
+Closes Go's nil-slice/JSON-null seam at the HTTP owner: item lists are
+arrays in the roster contract even when nothing is worn, so clients never
+read null as a second spelling of an empty list.
+================
+*/
+func characterVisualLoadoutForWire(loadout CharacterVisualLoadout) CharacterVisualLoadout {
+	loadout.Items = append(make([]CharacterItem, 0, len(loadout.Items)), loadout.Items...)
+	loadout.Avatars = append(make([]CharacterItem, 0, len(loadout.Avatars)), loadout.Avatars...)
+	return loadout
 }
 
 // characterWorldJSON maps the persisted character.world record onto the

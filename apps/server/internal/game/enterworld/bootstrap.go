@@ -86,7 +86,8 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	if character.MissionInventory == nil {
 		seedEntry := ResolveLocalPlayerEntry(character, deps.Roster)
 		seedRoster := ResolveEquipRoster(
-			seedEntry.VisualLoadout,
+			character,
+			seedEntry.VisualLoadout.ModelCodename,
 			deps.Items,
 			deps.EquipItemsEnabled,
 		)
@@ -172,19 +173,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	eventGuideStateMask := ResolveEventGuideStateMask(character)
 
 	// Inventory, appearance, and wire rows derive from one detached snapshot.
-	equipRoster := ResolveEquipRoster(
-		entry.VisualLoadout,
-		deps.Items,
-		deps.EquipItemsEnabled,
-	)
 	inventoryRows := InventoryWireItems(character.MissionInventory)
-
-	// Re-apply the equipment overlay now that the rows exist (idempotent:
-	// the overlay re-derives the weapon key from its own un-gated sibling).
-	// The roster is passed explicitly - an overlay whose answer depends on
-	// whether some earlier call warmed a cache is exactly the order
-	// dependence the Node comment warns about.
-	entry.VisualLoadout = ApplyEquipmentToVisualLoadout(entry.VisualLoadout, character)
 
 	localPlayerPayload := BuildLocalPlayerEntryPayload(character, &entry, eventGuideStateMask, inventoryRows)
 	objectID := ObjectIDForCharacter(character)
@@ -244,7 +233,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		EventGuideStateMask:  eventGuideStateMask,
 		RefObjSnapshot:       refObjSnapshot,
 		RefSkillSnapshot:     skillSnapshot,
-		RefItemSnapshot:      buildRefItemSnapshot(deps, divisionID, equipRoster, character),
+		RefItemSnapshot:      buildRefItemSnapshot(deps, divisionID, character),
 		MagicOptionSnapshot:  buildMagicOptionSnapshot(deps, character),
 		SiegeItemForgeGroups: DefaultSiegeItemForgeGroups(),
 		SiegeFortressData:    DefaultSiegeFortressDataRows(),
@@ -377,30 +366,22 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	return packets, nil
 }
 
-// buildRefItemSnapshot ports buildMissionRefItemSnapshotWithGroundItems: the
-// equip-roster rows, plus rows for every persisted inventory codename (after
-// an unequip the roster no longer covers the bagged item but the wire still
-// carries it), plus ground-drop codenames from the seam, plus the gold heap
-// tiers (spawnable at ANY time by any live gold drop - without their rows the
-// client's 0x30d7 parse hits the unguarded RefObjData miss).
-func buildRefItemSnapshot(deps *Deps, divisionID string, equipRoster []WireItem, character *Character) []RefItemRow {
-	snapshot := make([]RefItemRow, 0, len(equipRoster)+4)
+/*
+================
+buildRefItemSnapshot
+
+Reference rows for every item the entered world can show: the character's
+own inventories (worn, bag, COS, avatars, pet windows), every persisted
+inventory in the division (peer 0x30D7 rows), ground drops from the seam and
+the gold heap tiers (spawnable at any time; without their rows the client's
+0x30D7 parse hits the unguarded RefObjData miss). The starter roster is a
+first-boot seed only and contributes nothing here: once seeded, the
+character's items are its inventory.
+================
+*/
+func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) []RefItemRow {
+	snapshot := []RefItemRow{}
 	known := map[uint32]bool{}
-	for _, item := range equipRoster {
-		if known[item.RefObjID] {
-			continue
-		}
-		known[item.RefObjID] = true
-		snapshot = append(snapshot, RefItemRow{
-			RefObjID:     item.RefObjID,
-			Icon:         item.Icon,
-			TypeFlags:    item.TypeFlags,
-			Codename:     item.Codename,
-			Kind:         item.Kind,
-			Name:         item.Name,
-			NativeFields: item.NativeFields,
-		})
-	}
 	appendByCodename := func(codename string, typeFlags *uint16) {
 		if codename == "" || deps.Items == nil {
 			return

@@ -10,7 +10,6 @@ package enterworld
 
 import (
 	"strconv"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -214,99 +213,25 @@ type WireItem struct {
 
 /*
 ==================
-equipWeaponKeyToCodename
-
-equipWeaponKeyToCodename strips the gender token: CH_M_BLADE_01 ->
-ITEM_CH_BLADE_01_A_DEF (the visual-set gender is not an itemdata concept).
-The prefix set is closed - (CH|EU)_(M|W)_ - so this is prefix surgery,
-not pattern matching: a key without the prefix answers !ok so the caller
-must handle it EXPLICITLY. The regex this replaces (ReplaceAllString on
-`^(CH|EU)_[MW]_`) returned non-matching keys UNCHANGED, so the malformed
-ITEM_<key>_A_DEF codename went on to miss the itemdata silently.
-==================
-*/
-func equipWeaponKeyToCodename(weaponKey string) (string, bool) {
-	for _, race := range [...]string{"CH", "EU"} {
-		for _, gender := range [...]string{"M", "W"} {
-			if rest, ok := strings.CutPrefix(weaponKey, race+"_"+gender+"_"); ok {
-				return "ITEM_" + race + "_" + rest + "_A_DEF", true
-			}
-		}
-	}
-	return "", false
-}
-
-// missionEquipGarmentPieces maps the dress pieces to their equip slots
-// (MISSION_EQUIP_GARMENT_PIECES).
-var missionEquipGarmentPieces = []struct {
-	Piece string
-	Slot  int64
-}{
-	{Piece: "BA", Slot: 1},
-	{Piece: "LA", Slot: 4},
-	{Piece: "FA", Slot: 5},
-}
-
-/*
-==================
 ResolveEquipRoster
 
-ResolveEquipRoster ports resolveMissionEquipRoster: the wire item roster
-for one character derived from its visual loadout - weapon set key ->
-ITEM_<race>_<kind>_<nn>_A_DEF, dress set key -> the gendered garment rows,
-only the selected starter equipment. Rows missing from itemdata are skipped (the Node
-side warns loudly), never fabricated.
+The wire rows of the starter items a character's creation choice grants
+(CreationStarterItems). Rows missing from itemdata are skipped with a
+warning, never fabricated.
 ==================
 */
-func ResolveEquipRoster(loadout VisualLoadout, items ItemRefSource, equipItemsEnabled bool) []WireItem {
+func ResolveEquipRoster(character *Character, modelCodename string, items ItemRefSource, equipItemsEnabled bool) []WireItem {
 	if !equipItemsEnabled || items == nil {
 		return []WireItem{}
 	}
-	weaponKey := ""
-	if len(loadout.WeaponSetKeys) > 0 {
-		weaponKey = loadout.WeaponSetKeys[0]
-	}
-	dressKey := ""
-	if len(loadout.DressSetKeys) > 0 {
-		dressKey = loadout.DressSetKeys[0]
-	}
-
 	type want struct {
 		codename     string
 		slot         int64
 		varianceBits uint64
 	}
 	wanted := []want{}
-	if weaponKey != "" {
-		if codename, ok := equipWeaponKeyToCodename(weaponKey); ok {
-			wanted = append(wanted, want{
-				codename: codename,
-				slot:     6,
-			})
-		} else {
-			// The Node side warned here too: a key without the race/gender
-			// prefix cannot name an itemdata row, so the wearer gets no
-			// weapon row - loudly, never as a silent lookup miss.
-			log.Warnf("bootstrap: weapon set key %q lacks the (CH|EU)_(M|W)_ prefix; the equip roster carries no weapon row", weaponKey)
-		}
-	}
-	if dressKey != "" {
-		for _, piece := range missionEquipGarmentPieces {
-			wanted = append(wanted, want{
-				codename: "ITEM_" + dressKey + "_" + piece.Piece + "_A_DEF",
-				slot:     piece.Slot,
-			})
-		}
-	}
-	// Creation's off-hand belongs to inventory as well as the preview. The
-	// loadout owner already decides which weapon choices include a shield.
-	for index, key := range loadout.WeaponSetKeys {
-		if index > 0 && strings.HasSuffix(key, "_SHIELD_01") {
-			if code, ok := equipWeaponKeyToCodename(key); ok {
-				wanted = append(wanted, want{codename: code, slot: 7})
-				break
-			}
-		}
+	for _, item := range CreationStarterItems(character, modelCodename) {
+		wanted = append(wanted, want{codename: item.Codename, slot: item.Slot})
 	}
 	// Diagnostic inventory witnesses belong in test fixtures, never starter grants.
 
@@ -314,6 +239,7 @@ func ResolveEquipRoster(loadout VisualLoadout, items ItemRefSource, equipItemsEn
 	for _, entry := range wanted {
 		row, ok := items.ItemRefByCodename(entry.codename)
 		if !ok || row == nil {
+			log.Warnf("bootstrap: starter item %s missing from itemdata", entry.codename)
 			continue
 		}
 		name := row.Name

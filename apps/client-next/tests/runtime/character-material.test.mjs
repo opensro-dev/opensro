@@ -57,17 +57,16 @@ test("all published character parts retain their own native material and modifie
 	const publicRoot = path.join( root, "../../.generated/client-public" );
 	const roster = readPublishedAssetJsonSync( "/assets/char/roster.json", publicRoot );
 	const bindings = await characterMaterialBindings( roster );
-	const expectedAssets = new Set( [
-		...roster.models.flatMap( r => [ r.glb, ...(r.previewGlb ? [ r.previewGlb ] : []) ] ),
-		...Object.values( roster.dress.sets ).map( r => r.glb ),
-		...Object.values( roster.dress.weapons ).map( r => r.glb ),
-		...Object.values( roster.dress.cosmetics ?? {} ).map( r => r.glb ),
-		...Object.values( roster.dress.avatarAuxiliary ?? {} ).map( r => r.glb )
-	] );
+	// Collected independently of the binder: every GLB path the roster names.
+	const expectedAssets = new Set();
+	JSON.stringify( roster, ( key, value ) => {
+		if ( (key === "glb" || key === "previewGlb") && typeof value === "string" ) expectedAssets.add( value );
+		return value;
+	} );
 	assert.deepEqual(
 		[ ...bindings.keys() ].sort(),
 		[ ...expectedAssets ].sort(),
-		"every published body/dress/weapon/cosmetic source is bound"
+		"every published character GLB is bound to its native source"
 	);
 	const seen = new Set();
 	let modified = 0;

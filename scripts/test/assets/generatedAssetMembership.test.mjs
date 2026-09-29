@@ -164,7 +164,7 @@ test("generated pack artifacts are not packed as ordinary assets", async () => {
 test("generated asset families land in their expected pack groups", async () => {
 	const { packIndex, packAssetsByPath, uiPreloadImages } = await loadGeneratedAssetMembership();
 	const mismatches = [];
-	// The dedicated model groups (equipment, cosmetics, hwan, pets) come from
+	// The dedicated model groups (equipment, Hwan, pets) come from
 	// the ownership authority, as in the build; they take precedence there too.
 	const { groups: dedicatedGroups } = await collectDedicatedModelGroups(
 		publicRoot,
