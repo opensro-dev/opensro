@@ -81,10 +81,13 @@ neither can be published alone. After approval:
    `main`, then the host admits the pair together, retains both live
    releases, deploys the server (notice, backup, Nomad health) and switches
    the client. The journal stays open in `verifying`.
-2. The workflow runs the browser smoke against the now-live pair.
-3. `ci.py confirm REPORT` records that evidence and advances both generations;
-   on failure, `ci.py revert --reason REASON` restores the retained client and
-   redeploys the retained server without a notice.
+2. The workflow runs the browser smoke against the now-live pair and records
+   its evidence with the staging key (`ci.py evidence client REPORT`), as for
+   every candidate: the publication key never writes a test receipt.
+3. `ci.py confirm` requires that evidence, recorded after the switch, and
+   advances both generations; on failure, `ci.py revert --reason REASON`
+   restores the retained client and redeploys the retained server without a
+   notice.
 
 Open tabs of the old client are refused with HTTP 426 and told to reload. A
 pair is admitted only when the old server can read what the new one writes, so

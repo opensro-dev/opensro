@@ -173,7 +173,7 @@ def request(config, role, value, scratch):
 	if role == "publish" and operation == "publish-coordinated":
 		return coordinated.publish(config, value, scratch)
 	if role == "publish" and operation == "confirm-coordinated":
-		return coordinated.confirm(config, value["report"])
+		return coordinated.confirm(config)
 	if role == "publish" and operation == "revert-coordinated":
 		return coordinated.revert(config, value.get("reason"))
 	raise ValueError("operation is not allowed for this release key")

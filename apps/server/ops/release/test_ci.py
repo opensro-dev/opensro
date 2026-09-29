@@ -74,14 +74,15 @@ class CiTests(unittest.TestCase):
 		self.assertEqual(json.loads(Path("candidate.json").read_text()), client)
 
 	# ================
-	# test_confirm_and_revert_use_the_publication_key
+	# test_confirm_and_revert_use_the_publication_key_without_evidence
+	#
+	# Evidence goes through the staging key (evidence), never with confirm.
 	# ================
-	def test_confirm_and_revert_use_the_publication_key(self):
-		Path("report.json").write_text(json.dumps({"candidate": CLIENT, "verdict": "PASS"}))
-		self.run_command("confirm", "report.json")
+	def test_confirm_and_revert_use_the_publication_key_without_evidence(self):
+		self.run_command("confirm")
 		self.run_command("revert", "--reason", "smoke failed")
 		self.assertEqual(self.sent, [
-			("publish", {"operation": "confirm-coordinated", "report": {"candidate": CLIENT, "verdict": "PASS"}}),
+			("publish", {"operation": "confirm-coordinated"}),
 			("publish", {"operation": "revert-coordinated", "reason": "smoke failed"}),
 		])
 

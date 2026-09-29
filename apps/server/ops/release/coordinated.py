@@ -12,14 +12,16 @@ own, and published here in one journaled operation:
 	publish  - server first (maintenance notice, backup, Nomad health), then
 	           the client switch and its HTTPS entry check; the journal is
 	           left in "verifying"
-	confirm  - the browser smoke that ran against the live pair passed; both
-	           generations advance together
+	confirm  - the browser smoke that ran against the live pair passed and the
+	           stage key recorded its evidence; both generations advance
 	revert   - restore the retained client, then redeploy the retained server
 
 A client candidate cannot record browser evidence before its server is
 live, so the evidence for this release is taken after the switch, and a
-failure reverts both. The receiver holds the host lock around each step;
-between steps the open journal entry blocks every other publication.
+failure reverts both. The evidence is recorded with the staging key, as for
+every candidate: the publication key cannot write its own test receipt. The
+receiver holds the host lock around each step; between steps the open
+journal entry blocks every other publication.
 
 ===========================================================================
 """
@@ -113,22 +115,25 @@ def publish(config, request, scratch, verify=check_entry):
 # ================
 # confirm
 #
-# The post-switch browser evidence for the live client completes the pair.
-# The live bytes must still be the pair this operation published.
+# The browser evidence the staging key recorded for the live client, taken
+# after the pair went live, completes the pair. The live bytes must still be
+# the pair this operation published.
 # ================
-def confirm(config, report):
+def confirm(config):
 	state = read_state(config["production_state"])
 	operation = open_operation(state)
 	if operation["phase"] != VERIFYING:
 		raise ValueError("the coordinated release is not awaiting confirmation")
 	client_id = operation["client"]["candidate"]
-	if report.get("candidate") != client_id:
-		raise ValueError("browser evidence identifies a different client")
 	link = Path(config["client_link"]).resolve()
 	if link != (Path(config["client_candidates"]) / client_id).resolve():
 		raise RuntimeError("live client changed during verification")
 	if json.loads((Path(config["module"]) / "release.json").read_text())["commit"] != operation["server"]["commit"]:
 		raise RuntimeError("live server changed during verification")
+	evidence = Path(config["candidate_records"]) / client_id / "smoke.json"
+	if not evidence.is_file() or evidence.stat().st_mtime < operation["phaseStartedAt"]:
+		raise ValueError("no browser evidence was recorded for the live pair")
+	report = json.loads(evidence.read_text())
 	record_smoke(config, report)
 	server_plan = plan_of(config, operation["server"]["candidate"])
 	client_plan = plan_of(config, client_id)

@@ -10,7 +10,8 @@ chooses a newer artifact after approval or runs a remote shell command.
 
 A coordinated release (coordinated.py) takes three publication requests:
 coordinate puts the pair live, the workflow runs the browser smoke against
-it, and confirm or revert ends the operation.
+it and records the evidence with the staging key, and confirm or revert ends
+the operation.
 
 ===========================================================================
 """
@@ -137,7 +138,6 @@ def main():
 	command.add_argument("client")
 	command.add_argument("--commit", required=True, help="Public source commit of the server candidate")
 	command = commands.add_parser("confirm")
-	command.add_argument("report")
 	command = commands.add_parser("revert")
 	command.add_argument("--reason", required=True)
 	arguments = parser.parse_args()
@@ -158,7 +158,7 @@ def main():
 		# The browser smoke loads the live client by its candidate identity.
 		Path("candidate.json").write_text(json.dumps(result["client"], indent=2) + "\n", encoding="utf-8")
 	elif arguments.role == "confirm":
-		result = send({"operation": "confirm-coordinated", "report": json.loads(Path(arguments.report).read_text())}, "publish")
+		result = send({"operation": "confirm-coordinated"}, "publish")
 	else:
 		result = send({"operation": "revert-coordinated", "reason": arguments.reason}, "publish")
 	print(json.dumps(result))

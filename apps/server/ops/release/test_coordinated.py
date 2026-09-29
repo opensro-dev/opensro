@@ -183,6 +183,15 @@ class CoordinatedFlowTests(LiveDataFixture, unittest.TestCase):
 			"phases": {name: "PASS" for name in ("title", "login", "roster", "world", "gameplay", "resume")}}
 
 	# ================
+	# record_evidence
+	#
+	# The smoke job records its report with the staging key.
+	# ================
+	def record_evidence(self, report):
+		request = {"operation": "client-smoke", "report": report}
+		return receiver.request(self.config, "stage", request, self.root / "unused")
+
+	# ================
 	# live_client
 	# ================
 	def live_client(self):
@@ -201,7 +210,8 @@ class CoordinatedFlowTests(LiveDataFixture, unittest.TestCase):
 		self.assertEqual(pending["server"], self.state["server"])
 		with self.assertRaisesRegex(ValueError, "reconciliation"):
 			admit(pending, client_plan(release=self.next["releaseId"], baseRelease=self.base["releaseId"]))
-		state = coordinated.confirm(self.config, self.report())
+		self.record_evidence(self.report())
+		state = coordinated.confirm(self.config)
 		self.assertIsNone(state["operation"])
 		self.assertEqual((state["server"]["release"], state["server"]["generation"]), (NEW_COMMIT, 2))
 		self.assertEqual((state["client"]["release"], state["client"]["generation"]), (self.next["releaseId"], 2))
@@ -269,20 +279,28 @@ class CoordinatedFlowTests(LiveDataFixture, unittest.TestCase):
 		self.assertNotIn("entrySha256", rows[self.server])
 
 	# ================
-	# test_confirmation_needs_passing_evidence_for_the_published_client
+	# test_confirmation_needs_evidence_recorded_for_the_live_pair
 	# ================
-	def test_confirmation_needs_passing_evidence_for_the_published_client(self):
+	def test_confirmation_needs_evidence_recorded_for_the_live_pair(self):
 		with self.assertRaisesRegex(ValueError, "no coordinated release"):
-			coordinated.confirm(self.config, self.report())
+			coordinated.confirm(self.config)
 		self.publish()
-		with self.assertRaisesRegex(ValueError, "different client"):
-			coordinated.confirm(self.config, {**self.report(), "candidate": "f" * 64})
+		with self.assertRaisesRegex(ValueError, "no browser evidence"):
+			coordinated.confirm(self.config)
 		failing = self.report()
 		failing["phases"]["world"] = "FAIL"
 		with self.assertRaisesRegex(ValueError, "missing phase"):
-			coordinated.confirm(self.config, failing)
+			self.record_evidence(failing)
+		# Evidence older than the switch cannot describe the live pair.
+		self.record_evidence(self.report())
+		evidence = self.root / "records" / self.client / "smoke.json"
+		started = read_state(self.config["production_state"])["operation"]["phaseStartedAt"]
+		os.utime(evidence, (started - 60, started - 60))
+		with self.assertRaisesRegex(ValueError, "no browser evidence"):
+			coordinated.confirm(self.config)
 		self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], "verifying")
-
+		with self.assertRaisesRegex(ValueError, "not allowed"):
+			receiver.request(self.config, "stage", {"operation": "confirm-coordinated"}, self.root / "unused")
 
 if __name__ == "__main__":
 	unittest.main()
