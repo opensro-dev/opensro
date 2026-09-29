@@ -19,7 +19,6 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
 
 import client_data
 from client_deploy import promote, record_smoke
@@ -43,7 +42,7 @@ def sha(data):
 # a plain and a gzip-encoded route, and a publication file that keeps its
 # name while its bytes change.
 # ================
-def release(root, entry, pack, publication, schema):
+def release(root, entry, pack, publication, contract):
 	root.mkdir(parents=True)
 	encoded = gzip.compress(b'{"catalog":true}', mtime=0)
 	payload = pack + encoded
@@ -58,8 +57,8 @@ def release(root, entry, pack, publication, schema):
 	pack_file = f"payload/{sha(payload)}.bin"
 	manifest = {
 		"format": "sro-beta-release-v1",
-		"protocol": CLIENT_CONTRACT["protocol"],
-		"assetSchema": schema,
+		"protocol": contract["protocol"],
+		"assetSchema": contract["assetSchema"],
 		"sourceHash": sha(entry),
 		"files": [{"path": name, "length": len(data), "sha256": sha(data), "kind": kind}
 			for name, (data, kind) in files.items()],
@@ -83,8 +82,13 @@ def release(root, entry, pack, publication, schema):
 # DataFixture
 #
 # A base release, the next release built from it, and a data plan for it.
+# CONTRACT and INTENT describe the next release; a coordinated fixture
+# changes both.
 # ================
 class DataFixture:
+	CONTRACT = {"protocol": CLIENT_CONTRACT["protocol"], "assetSchema": DATA_SCHEMA}
+	INTENT = {}
+
 	# ================
 	# setUp
 	# ================
@@ -92,20 +96,19 @@ class DataFixture:
 		directory = tempfile.TemporaryDirectory()
 		self.addCleanup(directory.cleanup)
 		self.root = Path(directory.name)
-		self.base = release(self.root / "base", b"old", b"shared pack", b"old publication", CLIENT_CONTRACT["assetSchema"])
-		self.next = release(self.root / "next", b"new", b"shared pack", b"new publication", DATA_SCHEMA)
+		self.base = release(self.root / "base", b"old", b"shared pack", b"old publication", CLIENT_CONTRACT)
+		self.next = release(self.root / "next", b"new", b"shared pack", b"new publication", self.CONTRACT)
 		self.config = {"payload_store": str(self.root / "store")}
 		self.state = production()
 		self.plan = candidate()
-		self.plan.update(kind="data", release=self.next["releaseId"],
-			compatibility={"protocol": CLIENT_CONTRACT["protocol"], "assetSchema": DATA_SCHEMA})
+		self.plan.update(kind="data", release=self.next["releaseId"], baseRelease=self.base["releaseId"],
+			compatibility=dict(self.CONTRACT), **self.INTENT)
 
 	# ================
 	# bundle
 	# ================
 	def bundle(self):
-		with patch("plan.build_plan", return_value=self.plan):
-			return client_data.bundle(self.root / "next", self.base, self.state, self.root / "out")
+		return client_data.bundle(self.root / "next", self.base, self.plan, self.root / "out")
 
 
 
@@ -174,16 +177,16 @@ class AdmissionTests(unittest.TestCase):
 
 
 # ================
-# DataStagingTests
+# LiveDataFixture
 #
-# Staging links into the live tree and publication swaps a directory symlink;
-# both need POSIX link semantics.
+# The base materialized as the live release, as its first publication did,
+# and the next release staged as a data candidate beside it. Staging links
+# into the live tree and publication swaps a directory symlink; both need
+# POSIX link semantics.
 # ================
-@unittest.skipIf(os.name == "nt", "data staging requires POSIX hard links and directory symlinks")
-class DataStagingTests(DataFixture, unittest.TestCase):
+class LiveDataFixture(DataFixture):
 	# ================
 	# setUp
-	# Materialize the base as the live release, as its first publication did.
 	# ================
 	def setUp(self):
 		super().setUp()
@@ -211,11 +214,17 @@ class DataStagingTests(DataFixture, unittest.TestCase):
 		self.state["client"]["release"] = self.base["releaseId"]
 		write_state(self.config["production_state"], self.state)
 		write_state(self.config["client_manifest"], self.base)
-		self.plan.update(baseRelease=self.base["releaseId"])
 		for batch in self.bundle():
 			client_data.store_payload(self.config, batch)
 		self.staged = client_data.stage(self.config, self.root / "out" / "candidate.tar")
 		self.tree = self.root / "candidates" / self.staged["candidate"]
+
+
+# ================
+# DataStagingTests
+# ================
+@unittest.skipIf(os.name == "nt", "data staging requires POSIX hard links and directory symlinks")
+class DataStagingTests(LiveDataFixture, unittest.TestCase):
 
 	# ================
 	# test_unchanged_files_are_the_live_files_and_new_ones_are_written

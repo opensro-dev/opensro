@@ -10,12 +10,12 @@ asset release exactly. An application update cannot quietly change game data.
 ===========================================================================
 """
 
+import argparse
 import hashlib
 import io
 import json
 from pathlib import Path, PurePosixPath
 import re
-import sys
 import tarfile
 
 from plan import build_plan
@@ -129,13 +129,13 @@ def add_bytes(archive, name, data):
 # Bind the application artifact and production generation into one archive.
 # Private source maps and source snapshots are deliberately not members.
 # ================
-def bundle(package, destination, state):
+def bundle(package, destination, state, intent=None):
 	raw = (package / "release.json").read_bytes()
 	if len(raw) > MAX_MANIFEST_BYTES:
 		raise ValueError("client manifest exceeds limit")
 	manifest = json.loads(raw)
 	files = application_files(manifest)
-	plan = build_plan("client", manifest["releaseId"], state)
+	plan = build_plan("client", manifest["releaseId"], state, intent)
 	require_declared_contract(manifest, plan)
 	candidate = {
 		"format": FORMAT,
@@ -208,9 +208,13 @@ def unpack(source):
 # Candidate generation is build-time work; this command never contacts a host.
 # ================
 def main():
-	if len(sys.argv) != 4:
-		raise ValueError("Usage: client_bundle.py PACKAGE OUTPUT_TAR PRODUCTION_STATE_JSON")
-	bundle(Path(sys.argv[1]), Path(sys.argv[2]), read_state(sys.argv[3]))
+	parser = argparse.ArgumentParser()
+	parser.add_argument("package", type=Path)
+	parser.add_argument("archive", type=Path)
+	parser.add_argument("state")
+	parser.add_argument("--coordinated", action="store_true", help="publish only together with a server candidate")
+	arguments = parser.parse_args()
+	bundle(arguments.package, arguments.archive, read_state(arguments.state), {"coordinated": arguments.coordinated})
 
 
 if __name__ == "__main__":

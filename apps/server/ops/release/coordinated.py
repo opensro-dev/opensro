@@ -1,0 +1,179 @@
+"""
+===========================================================================
+
+coordinated.py - publish a server and its client as one release.
+
+A release that changes the browser protocol cannot move one component at a
+time: the new client cannot talk to the old server, and the new server
+refuses the old client (HTTP 426, which tells an open tab to reload). Both
+candidates are built with coordinated plans, staged and verified on their
+own, and published here in one journaled operation:
+
+	publish  - server first (maintenance notice, backup, Nomad health), then
+	           the client switch and its HTTPS entry check; the journal is
+	           left in "verifying"
+	confirm  - the browser smoke that ran against the live pair passed; both
+	           generations advance together
+	revert   - restore the retained client, then redeploy the retained server
+
+A client candidate cannot record browser evidence before its server is
+live, so the evidence for this release is taken after the switch, and a
+failure reverts both. The receiver holds the host lock around each step;
+between steps the open journal entry blocks every other publication.
+
+===========================================================================
+"""
+
+import json
+from pathlib import Path
+import time
+
+from client_deploy import approved_client, check_entry, digest, install_client, live_directory, record_smoke, restore_client
+import deploy
+from release_state import COORDINATED, abandon_pair, begin_pair, complete_pair, identity, read_state, write_state
+from retention import directory, preserve
+
+VERIFYING = "verifying"
+MAX_REASON_CHARS = 512
+
+
+# ================
+# plan_of
+#
+# The approved plan of a staged candidate, from its private record.
+# ================
+def plan_of(config, candidate_id):
+	record = Path(config["candidate_records"]) / identity(candidate_id)
+	return json.loads((record / "candidate.json").read_text())["plan"]
+
+
+# ================
+# open_operation
+#
+# The coordinated journal entry, or a refusal when none is in progress.
+# ================
+def open_operation(state):
+	operation = state.get("operation")
+	if not operation or operation["component"] != COORDINATED:
+		raise ValueError("no coordinated release is in progress")
+	return operation
+
+
+# ================
+# enter
+#
+# Record a phase change durably before acting on it.
+# ================
+def enter(config, state, phase):
+	operation = state["operation"]
+	operation["phase"] = phase
+	operation["phaseStartedAt"] = time.time()
+	write_state(config["production_state"], state)
+
+
+# ================
+# publish
+#
+# Admit the pair, retain both live releases, then replace the server and the
+# client. A server that fails its own health checks leaves the journal
+# "failed" with the client untouched; revert restores the retained server.
+# A client that fails its entry check reverts both at once.
+# ================
+def publish(config, request, scratch, verify=check_entry):
+	server_id = identity(request.get("server"))
+	client_id = identity(request.get("client"))
+	state = read_state(config["production_state"])
+	manifest = deploy.verified_server(config, server_id, scratch)
+	client = approved_client(config, client_id, state)
+	pending = begin_pair(state, manifest["plan"], client["plan"], time.time())
+	deploy.retain_server(config, state)
+	preserve(config, "client", state["client"], client["old"], client["manifest"])
+	entry = digest(client["new"] / "index.html")
+	pending["operation"]["server"]["candidate"] = server_id
+	pending["operation"]["client"].update(candidate=client_id, entrySha256=entry)
+	write_state(config["production_state"], pending)
+	try:
+		warning = deploy.rollout(config, Path(scratch) / "server", manifest)
+	except Exception:
+		enter(config, pending, "failed")
+		deploy.alert_staff(config, "Coordinated release " + manifest["commit"] + " failed in the server rollout. Run the revert workflow.")
+		raise
+	if warning:
+		pending["operation"]["warning"] = warning
+	try:
+		install_client(config, client)
+		verify(config["origin"], entry)
+	except Exception:
+		revert(config, "client publication failed its HTTPS entry check", verify)
+		raise
+	enter(config, pending, VERIFYING)
+	return {"phase": VERIFYING, "server": pending["operation"]["server"], "client": pending["operation"]["client"]}
+
+
+# ================
+# confirm
+#
+# The post-switch browser evidence for the live client completes the pair.
+# The live bytes must still be the pair this operation published.
+# ================
+def confirm(config, report):
+	state = read_state(config["production_state"])
+	operation = open_operation(state)
+	if operation["phase"] != VERIFYING:
+		raise ValueError("the coordinated release is not awaiting confirmation")
+	client_id = operation["client"]["candidate"]
+	if report.get("candidate") != client_id:
+		raise ValueError("browser evidence identifies a different client")
+	link = Path(config["client_link"]).resolve()
+	if link != (Path(config["client_candidates"]) / client_id).resolve():
+		raise RuntimeError("live client changed during verification")
+	if json.loads((Path(config["module"]) / "release.json").read_text())["commit"] != operation["server"]["commit"]:
+		raise RuntimeError("live server changed during verification")
+	record_smoke(config, report)
+	server_plan = plan_of(config, operation["server"]["candidate"])
+	client_plan = plan_of(config, client_id)
+	result = complete_pair(state, server_plan, client_plan, time.time())
+	result["client"]["candidate"] = client_id
+	result["client"]["entrySha256"] = report["entrySha256"]
+	if operation.get("warning"):
+		result["lastWarning"] = operation["warning"]
+	write_state(config["production_state"], result)
+	return result
+
+
+# ================
+# revert
+#
+# Restore the pair the journal still records as production: the client from
+# its retained manifest, then the server from its retained inputs, without a
+# restart notice. Any phase can be reverted, including an interrupted publish
+# and a server rollout that failed its health checks.
+# Both generations advance afterwards, so the reverted approval cannot be
+# replayed. A failed revert stays in the journal for an operator.
+# ================
+def revert(config, reason, verify=check_entry):
+	if not isinstance(reason, str) or not reason.strip() or len(reason) > MAX_REASON_CHARS:
+		raise ValueError("revert requires a bounded reason")
+	state = read_state(config["production_state"])
+	open_operation(state)
+	enter(config, state, "reverting")
+	try:
+		retained_client = directory(config, "client", state["client"]["release"])
+		restore_client(config, {
+			"old": live_directory(config, state["client"]),
+			"manifest": (retained_client / "release.json").read_bytes(),
+		}, verify)
+		retained_server = directory(config, "server", state["server"]["release"])
+		# Always redeploy: a rollout that failed after copying its inputs
+		# still shows the old release record, so the record cannot prove
+		# which jobs Nomad is running.
+		manifest = json.loads((retained_server / "release.json").read_text())
+		deploy.rollout(config, retained_server, manifest, notice=False)
+	except Exception:
+		enter(config, state, "revert-failed")
+		deploy.alert_staff(config, "Coordinated release revert failed. Production needs an operator: check Nomad and the client link.")
+		raise
+	result = abandon_pair(state, time.time(), reason.strip())
+	write_state(config["production_state"], result)
+	deploy.alert_staff(config, "Coordinated release reverted: " + reason.strip())
+	return result

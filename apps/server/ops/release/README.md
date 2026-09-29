@@ -15,7 +15,9 @@ Approve the latest ready candidate for each component you want
 to update: it includes preceding merged fixes, so intermediate releases do not
 need to be deployed. A client-only change does not restart game services. A
 server-only change does not replace the browser entry. Changes to shared release
-controls can prepare both candidates, each with its own approval job.
+controls can prepare both candidates, each with its own approval job. A change
+to the browser protocol is the exception: it publishes both components as one
+coordinated release (below).
 
 The production job checks component inputs against current `main` after approval.
 The host then checks the live generation under one shared deployment lock. Old
@@ -25,7 +27,8 @@ New builds can cancel older builds, but never cancel an active production job.
 ## Candidate verification
 
 The browser candidate builder uses the inspected live asset
-manifest. It cannot change data files, data routes or asset schema. The staging
+manifest. Such an application candidate cannot change data files, data routes or
+asset schema; a data candidate (below) can. The staging
 key creates an immutable preview and shared hashed application files without
 changing `/play`. A cold HTTPS browser must pass title, login, roster, world,
 inventory controls and authenticated reload using a dedicated non-GM account.
@@ -47,6 +50,48 @@ The staging job retains those exact bytes. After approval the receiver:
    failure after successful health checks records a warning without claiming
    that the healthy deployment failed.
 
+## Data releases
+
+A release that changes the asset data (a new `ASSET_SCHEMA` in
+`scripts/build/assetSchema.mjs`, or any new pack content) is a data candidate
+(`client_data.py`). Only the machine holding the licensed asset build can
+produce it, so the operator stages it with `data_release.py`:
+
+```sh
+python data_release.py PACKAGE OUTPUT --origin https://game.example.com   --ssh-target sro-stage@host --identity ~/.ssh/operator-stage [--coordinated]
+```
+
+It reads the live release from the origin and uploads, in payload batches under
+the upload limit, only the content the live release lacks (keyed by sha256).
+The host verifies and stores each batch, then stages the candidate: every
+served file the live release already has is hard-linked, the rest is written
+from the store, and the sha256 of every served file is recorded. Publication
+re-verifies the whole served tree against that record. Interrupted uploads
+resume; stored payloads unused for 14 days are pruned.
+
+## Coordinated releases
+
+A new browser protocol (`releaseprotocol.Current` in the server,
+`RELEASE_PROTOCOL` in the client) cannot move one component at a time. Build
+both candidates with `--coordinated` (`bundle.py`, `client_bundle.py` or
+`data_release.py`); staging checks each half for its own rules only, and
+neither can be published alone. After approval:
+
+1. `ci.py coordinate SERVER CLIENT --commit SHA` checks both sources against
+   `main`, then the host admits the pair together, retains both live
+   releases, deploys the server (notice, backup, Nomad health) and switches
+   the client. The journal stays open in `verifying`.
+2. The workflow runs the browser smoke against the now-live pair.
+3. `ci.py confirm REPORT` records that evidence and advances both generations;
+   on failure, `ci.py revert --reason REASON` restores the retained client and
+   redeploys the retained server without a notice.
+
+Open tabs of the old client are refused with HTTP 426 and told to reload. A
+pair is admitted only when the old server can read what the new one writes, so
+a revert never needs a database restore. A server rollout that fails its own
+health checks leaves the journal `failed`; revert is the recovery. While the
+journal is open, every other publication is refused.
+
 ## Rollback and interrupted operations
 
 Use `ci.py rollback COMPONENT RELEASE --reason REASON` with the staging role.
@@ -55,7 +100,7 @@ rehashes retained production bytes and creates a new plan against today's live
 generation. Client rollback repeats the browser smoke against today's server.
 Publication still requires your approval policy. Database snapshots are
 never restored by this workflow, schema downgrade is rejected, and a server
-cannot abandon protocols accepted by existing browser tabs.
+published alone cannot abandon protocols accepted by existing browser tabs.
 
 Nomad owns per-job health checks and auto-reversion; deployment is not an atomic
 transaction across two services and their databases. A failed or interrupted
@@ -94,7 +139,9 @@ The game transport is a proxied WebSocket.
 ## Host installation
 
 Run the tested installer as root with an inspected live manifest, its source
-commit, and separate Ed25519 staging and publication public keys:
+commit, and separate Ed25519 staging and publication public keys. The staging
+key file may list several keys (CI, and the workstation that stages data
+releases); each is confined to the same forced command:
 
 ```sh
 python3 install.py --client-manifest /path/to/verified-live-client.json \
@@ -189,4 +236,5 @@ Linux CI must run the real symlink and hard-link publication tests. Windows
 skips these POSIX publication cases because its directory-symlink replacement
 semantics differ, even when the account can create symlinks. Coverage includes
 archive tampering, retained-byte rollback, stale approvals, compatibility,
-credential roles, failed edge recovery, maintenance and notification retries.
+credential roles, failed edge recovery, maintenance and notification retries,
+data staging, and coordinated publish, confirm and revert.

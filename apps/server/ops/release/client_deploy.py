@@ -286,6 +286,57 @@ def check_entry(origin, expected):
 
 
 # ================
+# approved_client
+#
+# Reverify a staged candidate and the live tree it replaces. A data candidate
+# brings its own data: it is verified against the served digests recorded at
+# staging instead of against the live data. Returns the publication inputs.
+# ================
+def approved_client(config, candidate_id, state):
+	candidate_id = identity(candidate_id)
+	data = client_data.is_data_candidate(config, candidate_id)
+	candidate, manifest = client_data.verify(config, candidate_id) if data else verify_candidate(config, candidate_id)
+	old = live_directory(config, state["client"])
+	if Path(config["client_link"]).resolve() != old.resolve():
+		raise RuntimeError("live client changed outside the release owner")
+	original = Path(config["client_manifest"]).read_bytes()
+	base = json.loads(original)
+	if base["releaseId"] != state["client"]["release"]:
+		raise ValueError("live client manifest drift requires reconciliation")
+	if not data:
+		validate_base(base, manifest)
+	return {
+		"candidate": candidate_id,
+		"plan": candidate["plan"],
+		"old": old,
+		"new": Path(config["client_candidates"]) / candidate_id,
+		"record": Path(config["candidate_records"]) / candidate_id,
+		"manifest": original,
+	}
+
+
+# ================
+# install_client
+#
+# Publish the candidate: the symlink first, then the manifest that names it.
+# ================
+def install_client(config, client):
+	switch(config["client_link"], client["new"])
+	atomic_bytes(config["client_manifest"], (client["record"] / "release.json").read_bytes())
+
+
+# ================
+# restore_client
+#
+# Put the replaced release back and prove the edge serves its entry again.
+# ================
+def restore_client(config, client, verify=check_entry):
+	switch(config["client_link"], client["old"])
+	atomic_bytes(config["client_manifest"], client["manifest"])
+	verify(config["origin"], digest(client["old"] / "index.html"))
+
+
+# ================
 # promote
 #
 # No compiler or asset generator runs after approval. A failed edge check
@@ -293,51 +344,31 @@ def check_entry(origin, expected):
 # an approval made before this attempted publication cannot be replayed.
 # ================
 def promote(config, candidate_id, verify=check_entry):
-	candidate_id = identity(candidate_id)
-	record = Path(config["candidate_records"]) / candidate_id
-	# A data candidate brings its own data: it is verified against the served
-	# digests recorded at staging instead of against the live data.
-	data = client_data.is_data_candidate(config, candidate_id)
-	candidate, manifest = client_data.verify(config, candidate_id) if data else verify_candidate(config, candidate_id)
-	plan = candidate["plan"]
-	smoke = json.loads((record / "smoke.json").read_text())
-	record_smoke(config, smoke)
 	state = read_state(config["production_state"])
+	client = approved_client(config, candidate_id, state)
+	plan = client["plan"]
+	smoke = json.loads((client["record"] / "smoke.json").read_text())
+	record_smoke(config, smoke)
 	admit(state, plan)
-	old = live_directory(config, state["client"])
-	link = Path(config["client_link"])
-	if link.resolve() != old.resolve():
-		raise RuntimeError("live client changed outside the release owner")
-	new = Path(config["client_candidates"]) / candidate_id
-	manifest_path = Path(config["client_manifest"])
-	original_manifest = manifest_path.read_bytes()
-	base = json.loads(original_manifest)
-	if base["releaseId"] != state["client"]["release"]:
-		raise ValueError("live client manifest drift requires reconciliation")
-	if not data:
-		validate_base(base, manifest)
-	preserve(config, "client", state["client"], old, original_manifest)
+	preserve(config, "client", state["client"], client["old"], client["manifest"])
 	pending = begin(state, plan, time.time())
 	write_state(config["production_state"], pending)
 	try:
-		switch(link, new)
-		atomic_bytes(manifest_path, (record / "release.json").read_bytes())
+		install_client(config, client)
 		verify(config["origin"], smoke["entrySha256"])
 	except Exception:
-		switch(link, old)
-		atomic_bytes(manifest_path, original_manifest)
 		try:
-			verify(config["origin"], digest(old / "index.html"))
+			restore_client(config, client, verify)
 		except Exception:
 			pending["operation"]["phase"] = "rollback-unverified"
 			write_state(config["production_state"], pending)
 			raise
 		state["client"]["generation"] += 1
-		state["lastFailure"] = {"component": "client", "candidate": candidate_id, "at": time.time()}
+		state["lastFailure"] = {"component": "client", "candidate": client["candidate"], "at": time.time()}
 		write_state(config["production_state"], state)
 		raise
 	result = complete(pending, plan, time.time())
-	result["client"]["candidate"] = candidate_id
+	result["client"]["candidate"] = client["candidate"]
 	result["client"]["entrySha256"] = smoke["entrySha256"]
 	write_state(config["production_state"], result)
 	return result

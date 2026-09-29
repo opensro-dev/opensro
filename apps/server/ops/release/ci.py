@@ -8,6 +8,10 @@ GitHub owns approval and credential availability. This module writes temporary
 SSH credentials, pins the host key and streams one bounded request. It never
 chooses a newer artifact after approval or runs a remote shell command.
 
+A coordinated release (coordinated.py) takes three publication requests:
+coordinate puts the pair live, the workflow runs the browser smoke against
+it, and confirm or revert ends the operation.
+
 ===========================================================================
 """
 
@@ -17,9 +21,12 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import urllib.request
 
 from plan import require_current
 from release_state import identity
+
+FETCH_TIMEOUT_SECONDS = 60
 
 
 # ================
@@ -53,48 +60,107 @@ def transfer(source, role):
 
 
 # ================
-# main
+# send
 #
-# Staging records the candidate identifier as a job output. Publication checks
-# main again after approval, then sends only that exact candidate identifier.
+# One JSON request through the given role.
 # ================
-def main():
-	parser = argparse.ArgumentParser()
-	parser.add_argument("role", choices=("stage", "publish", "evidence", "rollback"))
-	parser.add_argument("component", choices=("client", "server"))
-	parser.add_argument("source")
-	parser.add_argument("--reason")
-	parser.add_argument("--commit", help="Public source commit, independent of the workflow repository")
-	arguments = parser.parse_args()
-	if arguments.role in ("stage", "rollback"):
-		if arguments.role == "rollback":
-			request = {"operation": "prepare-rollback", "component": arguments.component,
-				"release": identity(arguments.source), "reason": arguments.reason}
-			with tempfile.TemporaryDirectory(prefix="rollback-request-") as directory:
-				path = Path(directory) / "request.json"
-				path.write_text(json.dumps(request), encoding="utf-8")
-				result = transfer(path, "stage")
-		else:
-			result = transfer(arguments.source, "stage")
-		Path("candidate.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-		with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-			output.write("candidate=" + identity(result["candidate"]) + "\n")
-		if arguments.component == "server":
-			proof = {"verification": "retained-production"} if arguments.role == "rollback" else {"linuxTests": True}
-			request = {"operation": "server-tests", "report": {**result, **proof, "verdict": "PASS"}}
-		else:
-			return
-	elif arguments.role == "evidence":
-		request = {"operation": "client-smoke", "report": json.loads(Path(arguments.source).read_text())}
-	else:
-		if not arguments.commit:
-			parser.error("publication requires the explicitly reviewed source --commit")
-		require_current(arguments.component, arguments.commit)
-		request = {"operation": "publish-" + arguments.component, "candidate": identity(arguments.source)}
+def send(request, role):
 	with tempfile.TemporaryDirectory(prefix="release-request-") as directory:
 		path = Path(directory) / "request.json"
 		path.write_text(json.dumps(request), encoding="utf-8")
-		result = transfer(path, "publish" if arguments.role == "publish" else "stage")
+		return transfer(path, role)
+
+
+# ================
+# staged_client_commit
+#
+# A coordinated client is staged by the operator, not by a preparation run,
+# so its source commit comes from the host's public candidate list. The
+# freshness rule is the same as for every other candidate.
+# ================
+def staged_client_commit(candidate):
+	origin = os.environ["RELEASE_ORIGIN"].rstrip("/")
+	with urllib.request.urlopen(origin + "/releases/candidates.json", timeout=FETCH_TIMEOUT_SECONDS) as response:
+		rows = json.loads(response.read())["candidates"]
+	row = next((row for row in rows if row["candidate"] == candidate), None)
+	if row is None or row["component"] != "client" or not row.get("coordinated"):
+		raise ValueError("the client is not a staged coordinated candidate")
+	return identity(row["commit"])
+
+
+# ================
+# stage
+#
+# Staging records the candidate identifier as a job output; a server also
+# records its Linux evidence (or, for a rollback, its retained provenance).
+# ================
+def stage(component, source, reason=None):
+	if reason is None:
+		result = transfer(source, "stage")
+	else:
+		result = send({"operation": "prepare-rollback", "component": component,
+			"release": identity(source), "reason": reason}, "stage")
+	Path("candidate.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+	with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+		output.write("candidate=" + identity(result["candidate"]) + "\n")
+	if component != "server":
+		return result
+	proof = {"verification": "retained-production"} if reason is not None else {"linuxTests": True}
+	return send({"operation": "server-tests", "report": {**result, **proof, "verdict": "PASS"}}, "stage")
+
+
+# ================
+# main
+#
+# Publication checks main again after approval, then sends only the exact
+# candidate identifiers.
+# ================
+def main():
+	parser = argparse.ArgumentParser()
+	commands = parser.add_subparsers(dest="role", required=True)
+	command = commands.add_parser("stage")
+	command.add_argument("component", choices=("client", "server"))
+	command.add_argument("source")
+	command = commands.add_parser("rollback")
+	command.add_argument("component", choices=("client", "server"))
+	command.add_argument("source")
+	command.add_argument("--reason", required=True)
+	command = commands.add_parser("evidence")
+	command.add_argument("component", choices=("client",))
+	command.add_argument("source")
+	command = commands.add_parser("publish")
+	command.add_argument("component", choices=("client", "server"))
+	command.add_argument("source")
+	command.add_argument("--commit", required=True, help="Public source commit, independent of the workflow repository")
+	command = commands.add_parser("coordinate")
+	command.add_argument("server")
+	command.add_argument("client")
+	command.add_argument("--commit", required=True, help="Public source commit of the server candidate")
+	command = commands.add_parser("confirm")
+	command.add_argument("report")
+	command = commands.add_parser("revert")
+	command.add_argument("--reason", required=True)
+	arguments = parser.parse_args()
+	if arguments.role == "stage":
+		result = stage(arguments.component, arguments.source)
+	elif arguments.role == "rollback":
+		result = stage(arguments.component, arguments.source, arguments.reason)
+	elif arguments.role == "evidence":
+		result = send({"operation": "client-smoke", "report": json.loads(Path(arguments.source).read_text())}, "stage")
+	elif arguments.role == "publish":
+		require_current(arguments.component, arguments.commit)
+		result = send({"operation": "publish-" + arguments.component, "candidate": identity(arguments.source)}, "publish")
+	elif arguments.role == "coordinate":
+		require_current("server", arguments.commit)
+		require_current("client", staged_client_commit(identity(arguments.client)))
+		result = send({"operation": "publish-coordinated", "server": identity(arguments.server),
+			"client": identity(arguments.client)}, "publish")
+		# The browser smoke loads the live client by its candidate identity.
+		Path("candidate.json").write_text(json.dumps(result["client"], indent=2) + "\n", encoding="utf-8")
+	elif arguments.role == "confirm":
+		result = send({"operation": "confirm-coordinated", "report": json.loads(Path(arguments.report).read_text())}, "publish")
+	else:
+		result = send({"operation": "revert-coordinated", "reason": arguments.reason}, "publish")
 	print(json.dumps(result))
 
 

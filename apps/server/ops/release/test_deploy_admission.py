@@ -85,7 +85,7 @@ class DeployAdmissionTests(unittest.TestCase):
 		# healthy_then_cleanup_failure
 		# The durable release marker is written only after Nomad health succeeds.
 		# ================
-		def healthy_then_cleanup_failure(_config, _staging, manifest):
+		def healthy_then_cleanup_failure(_config, _staging, manifest, _notice=True):
 			write_state(self.module / "release.json", manifest)
 			raise RuntimeError("token revocation failed")
 

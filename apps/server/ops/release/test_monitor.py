@@ -14,7 +14,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from monitor import check, poll, transition
+from monitor import MAX_MAINTENANCE_SECONDS, check, maintenance_window, poll, transition
 
 
 # ================
@@ -78,6 +78,19 @@ class MonitorTests(unittest.TestCase):
 		self.assertIsNone(event)
 		_, event = transition(state, good, 150)
 		self.assertEqual(event, "maintenance-complete")
+
+	# ================
+	# test_each_restart_of_a_coordinated_release_opens_its_own_window
+	# ================
+	def test_each_restart_of_a_coordinated_release_opens_its_own_window(self):
+		operation = {"component": "release", "phase": "deploying", "startedAt": 0, "phaseStartedAt": 0}
+		self.assertEqual(maintenance_window(operation), MAX_MAINTENANCE_SECONDS)
+		operation.update(phase="verifying", phaseStartedAt=300)
+		self.assertEqual(maintenance_window(operation), 0)
+		operation.update(phase="reverting", phaseStartedAt=900)
+		self.assertEqual(maintenance_window(operation), 900 + MAX_MAINTENANCE_SECONDS)
+		self.assertEqual(maintenance_window({"component": "client", "phase": "deploying", "startedAt": 0}), 0)
+		self.assertEqual(maintenance_window(None), 0)
 
 	# ================
 	# test_failed_delivery_is_retried_without_losing_heartbeat

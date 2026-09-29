@@ -23,6 +23,7 @@ import time
 import urllib.request
 
 import client_data
+from plan import build_plan
 from release_state import compatibility
 
 ATTEMPTS = 5
@@ -77,13 +78,16 @@ def main():
 	parser.add_argument("--origin", required=True)
 	parser.add_argument("--ssh-target", required=True)
 	parser.add_argument("--identity", type=Path, required=True)
+	parser.add_argument("--coordinated", action="store_true", help="publish only together with a server candidate")
 	arguments = parser.parse_args()
 	state = fetch_json(arguments.origin, "/releases/production.json")
 	base = fetch_json(arguments.origin, "/releases/client.json")
 	if base["releaseId"] != state["client"]["release"]:
 		raise RuntimeError("the origin's live manifest and production state disagree; retry later")
 	compatibility(state["client"]["compatibility"], "client")
-	batches = client_data.bundle(arguments.package, base, state, arguments.output)
+	release = json.loads((arguments.package / "release.json").read_bytes())["releaseId"]
+	plan = build_plan("client", release, state, {"kind": "data", "coordinated": arguments.coordinated})
+	batches = client_data.bundle(arguments.package, base, plan, arguments.output)
 	total = sum(path.stat().st_size for path in batches)
 	print(f"{len(batches)} payload batches, {total / 1048576:.1f} MiB to send", flush=True)
 	for batch in batches:

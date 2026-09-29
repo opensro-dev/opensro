@@ -28,7 +28,7 @@ INSTALL = Path("/usr/local/lib/opensro-release-controls")
 ROOT = Path("/var/lib/opensro-release")
 CONFIG = Path("/etc/opensro-release/config.json")
 MODULES = ("release_state.py", "plan.py", "bundle.py", "client_bundle.py", "retention.py",
-	"client_deploy.py", "client_data.py", "deploy.py", "rollback.py", "monitor.py", "receiver.py")
+	"client_deploy.py", "client_data.py", "coordinated.py", "deploy.py", "rollback.py", "monitor.py", "receiver.py")
 CONTROL_FILES = (*MODULES, "install.py", "compatibility.json", "overview.html", "routes.caddy",
 	"opensro-monitor.service", "opensro-monitor.timer")
 

@@ -367,10 +367,11 @@ def add_bytes(archive, name, data):
 #
 # Operator side: write the data candidate archive for a built release package
 # against the live base, and the payload batches holding exactly the data
-# files the base cannot supply. Returns the batch paths.
+# files the base cannot supply. The caller builds the plan (plan.build_plan
+# with kind "data") against the production state it read with the base.
+# Returns the batch paths.
 # ================
-def bundle(package, base, state, output):
-	from plan import build_plan
+def bundle(package, base, plan, output):
 	package, output = Path(package), Path(output)
 	raw = (package / "release.json").read_bytes()
 	if len(raw) > MAX_MANIFEST_BYTES:
@@ -378,12 +379,13 @@ def bundle(package, base, state, output):
 	manifest = json.loads(raw)
 	files = application_files(manifest)
 	rows = data_rows(manifest)
-	plan = build_plan("client", manifest["releaseId"], state, kind="data")
+	if plan.get("kind") != "data" or plan["release"] != manifest["releaseId"] or plan["baseRelease"] != base["releaseId"]:
+		raise ValueError("the plan does not declare this data release over this base")
 	require_declared_contract(manifest, plan)
 	candidate = {
 		"format": FORMAT,
 		"manifestSha256": hashlib.sha256(raw).hexdigest(),
-		"baseRelease": state["client"]["release"],
+		"baseRelease": plan["baseRelease"],
 		"plan": plan,
 	}
 	output.mkdir(parents=True, exist_ok=False)

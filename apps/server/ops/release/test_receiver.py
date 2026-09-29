@@ -55,12 +55,14 @@ class ReceiverTests(unittest.TestCase):
 	# test_staging_cannot_dispatch_publication
 	# ================
 	def test_staging_cannot_dispatch_publication(self):
-		with patch.object(receiver, "promote") as client, patch.object(receiver, "publish_server") as server:
-			for operation in ("publish-client", "publish-server", "rollback-client", "rollback-server"):
+		with patch.object(receiver, "promote") as client, patch.object(receiver, "publish_server") as server, 			patch.object(receiver, "coordinated") as pair:
+			for operation in ("publish-client", "publish-server", "rollback-client", "rollback-server",
+				"publish-coordinated", "confirm-coordinated", "revert-coordinated"):
 				with self.subTest(operation=operation), self.assertRaisesRegex(ValueError, "not allowed"):
 					receiver.request({}, "stage", {"operation": operation, "candidate": "a" * 64}, Path("unused"))
 			client.assert_not_called()
 			server.assert_not_called()
+			self.assertEqual(pair.mock_calls, [])
 
 	# ================
 	# test_publication_cannot_write_its_own_test_evidence

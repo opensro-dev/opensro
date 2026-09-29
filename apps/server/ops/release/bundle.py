@@ -7,13 +7,13 @@ No state, account catalogs, game data or host configuration enters a release.
 ===========================================================================
 """
 
+import argparse
 import hashlib
 import io
 import json
 from pathlib import Path
 import re
 import subprocess
-import sys
 import tarfile
 
 from plan import build_plan
@@ -123,12 +123,15 @@ def unpack(source, destination):
 # Local working-tree state can never silently stand in for the deployed state.
 # ================
 def main():
-	if len(sys.argv) != 3:
-		raise ValueError("Usage: bundle.py SERVER_TAR PRODUCTION_STATE_JSON")
+	parser = argparse.ArgumentParser()
+	parser.add_argument("archive", type=Path)
+	parser.add_argument("state")
+	parser.add_argument("--coordinated", action="store_true", help="publish only together with a client candidate")
+	arguments = parser.parse_args()
 	module = Path(__file__).resolve().parents[2]
 	commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=module, text=True).strip()
-	plan = build_plan("server", commit, read_state(sys.argv[2]))
-	bundle(module, Path(sys.argv[1]), commit, plan)
+	plan = build_plan("server", commit, read_state(arguments.state), {"coordinated": arguments.coordinated})
+	bundle(module, arguments.archive, commit, plan)
 
 
 if __name__ == "__main__":

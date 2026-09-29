@@ -136,6 +136,22 @@ def transition(previous, observation, now, maintenance_until=0):
 
 
 # ================
+# maintenance_window
+#
+# The end of the announced restart the release journal describes, or 0. A
+# coordinated release restarts the server while deploying and again while
+# reverting; each phase opens its own bounded window. Verification with
+# both new components live is not maintenance.
+# ================
+def maintenance_window(operation):
+	if not operation or operation["component"] not in ("server", "release"):
+		return 0
+	if operation["phase"] not in ("deploying", "reverting"):
+		return 0
+	return operation.get("phaseStartedAt", operation["startedAt"]) + MAX_MAINTENANCE_SECONDS
+
+
+# ================
 # poll
 #
 # Persist heartbeat before notification delivery, and acknowledgement after it.
@@ -147,9 +163,7 @@ def poll(config, now, request=get_status, notify=announce):
 	maintenance_until = 0
 	if config.get("production_state"):
 		production = json.loads(Path(config["production_state"]).read_text())
-		operation = production.get("operation")
-		if operation and operation["component"] == "server" and operation["phase"] == "deploying":
-			maintenance_until = operation["startedAt"] + MAX_MAINTENANCE_SECONDS
+		maintenance_until = maintenance_window(production.get("operation"))
 	state, event = transition(previous, check(config, now, request), now, maintenance_until)
 	if event:
 		state["deliveryPending"] = event

@@ -6,6 +6,9 @@ release_state.py - admission and durable state for approved component releases.
 The receiver holds one deployment lock while reading, admitting and updating
 this state. Candidates bind a component generation, not just a Git commit: an
 intervening deploy followed by a rollback must still invalidate an old approval.
+A release that changes the protocol moves both components in one
+coordinated operation: each candidate is admitted alone for its own rules,
+and the pair is admitted together immediately before publication.
 This module never changes binaries, web roots, databases or remote services.
 
 ===========================================================================
@@ -19,6 +22,7 @@ import re
 STATE_FORMAT = "opensro-production-v1"
 PLAN_FORMAT = "opensro-deployment-v1"
 COMPONENTS = ("client", "server")
+COORDINATED = "release"
 IDENTITY_PATTERN = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 MAX_HISTORY = 32
 
@@ -100,13 +104,13 @@ def write_state(path, state):
 
 
 # ================
-# admit
+# admit_component
 #
-# Compare the candidate with production immediately before mutation. Normal
-# releases move forward; rollback is a separate intent with a required reason.
-# A failed or interrupted rollout requires reconciliation before another one.
+# The rules one candidate must meet whatever it is published with: an
+# untouched journal, the generation it was built against, a forward or
+# recorded rollback identity, and state it can read.
 # ================
-def admit(state, plan):
+def admit_component(state, plan):
 	if plan.get("format") != PLAN_FORMAT or plan.get("component") not in COMPONENTS:
 		raise ValueError("invalid deployment plan")
 	component = plan["component"]
@@ -119,12 +123,16 @@ def admit(state, plan):
 	identity(plan.get("commit"))
 	if plan["release"] == current["release"]:
 		raise ValueError("release is already live")
+	if plan.get("coordinated", True) is not True:
+		raise ValueError("invalid coordination declaration")
 	mode = plan.get("mode")
 	if mode == "forward":
 		ancestors = plan.get("ancestors", [])
 		if not isinstance(ancestors, list) or current["commit"] not in ancestors:
 			raise ValueError("normal deployment cannot move backwards or across branches")
 	elif mode == "rollback":
+		if plan.get("coordinated"):
+			raise ValueError("a rollback restores one recorded component")
 		if not isinstance(plan.get("reason"), str) or not plan["reason"].strip():
 			raise ValueError("rollback requires an operator reason")
 		known = state.get("history", [])
@@ -144,20 +152,69 @@ def admit(state, plan):
 		raise ValueError("unknown release kind")
 	if component == "client" and kind == "application" and candidate["assetSchema"] != current["compatibility"]["assetSchema"]:
 		raise ValueError("application update requires the existing verified asset schema")
-	client = candidate if component == "client" else state["client"]["compatibility"]
-	server = candidate if component == "server" else state["server"]["compatibility"]
-	if not server["protocolMin"] <= client["protocol"] <= server["protocolMax"]:
-		raise ValueError("client and server protocol declarations are incompatible")
 	if component == "server":
 		live = state["server"]["compatibility"]
-		if not server["storeReadMin"] <= live["storeWrite"] <= server["storeReadMax"]:
+		if not candidate["storeReadMin"] <= live["storeWrite"] <= candidate["storeReadMax"]:
 			raise ValueError("candidate cannot read the live database schema")
-		if server["storeWrite"] < live["storeWrite"]:
+		if candidate["storeWrite"] < live["storeWrite"]:
 			raise ValueError("deployment cannot downgrade persisted state")
+	return component
+
+
+# ================
+# require_pair
+# ================
+def require_pair(client, server):
+	if not server["protocolMin"] <= client["protocol"] <= server["protocolMax"]:
+		raise ValueError("client and server protocol declarations are incompatible")
+
+
+# ================
+# admit
+#
+# Compare one candidate with production immediately before mutation. Normal
+# releases move forward; rollback is a separate intent with a required reason.
+# A failed or interrupted rollout requires reconciliation before another one.
+# A coordinated candidate is checked here only for its own rules: its peer is
+# the other candidate of the pair (admit_pair), not the live component.
+# ================
+def admit(state, plan):
+	component = admit_component(state, plan)
+	if plan.get("coordinated"):
+		return component
+	candidate = plan["compatibility"]
+	client = candidate if component == "client" else state["client"]["compatibility"]
+	server = candidate if component == "server" else state["server"]["compatibility"]
+	require_pair(client, server)
+	if component == "server":
+		live = state["server"]["compatibility"]
 		# Existing browser tabs may keep any protocol accepted by the live server.
 		if server["protocolMin"] > live["protocolMin"] or server["protocolMax"] < live["protocolMax"]:
 			raise ValueError("server must retain support for existing browser sessions")
 	return component
+
+
+# ================
+# admit_pair
+#
+# A coordinated release replaces both components together, so the new pair
+# must agree and the server may drop protocols: an open tab of the old client
+# is refused with 426 and told to reload. The live server must be able to
+# read whatever the new one writes, because a failed post-switch check
+# reverts both components without restoring the database.
+# ================
+def admit_pair(state, server_plan, client_plan):
+	if not server_plan.get("coordinated") or not client_plan.get("coordinated"):
+		raise ValueError("both candidates must be built for a coordinated release")
+	if admit_component(state, server_plan) != "server" or admit_component(state, client_plan) != "client":
+		raise ValueError("a coordinated release pairs one server with one client")
+	if server_plan["mode"] != "forward" or client_plan["mode"] != "forward":
+		raise ValueError("a coordinated release moves forward")
+	require_pair(client_plan["compatibility"], server_plan["compatibility"])
+	live = state["server"]["compatibility"]
+	written = server_plan["compatibility"]["storeWrite"]
+	if not live["storeReadMin"] <= written <= live["storeReadMax"]:
+		raise ValueError("the live server could not read the candidate's state after a revert")
 
 
 # ================
@@ -167,6 +224,8 @@ def admit(state, plan):
 # visible to both operators and subsequent deployment attempts.
 # ================
 def begin(state, plan, now):
+	if plan.get("coordinated"):
+		raise ValueError("a coordinated candidate publishes only with its counterpart")
 	component = admit(state, plan)
 	result = json.loads(json.dumps(state))
 	result["operation"] = {
@@ -181,16 +240,33 @@ def begin(state, plan, now):
 
 
 # ================
-# complete
+# begin_pair
 #
-# Advance the generation only after the caller verifies the actual live
-# identity and health. Retain bounded rollback history without saving secrets.
+# One journal entry names both candidates; the phase moves from deploying
+# (server, then client) to verifying (post-switch browser evidence) and ends
+# in confirmation or a revert of both.
 # ================
-def complete(state, plan, now):
-	operation = state.get("operation")
-	if not operation or operation["release"] != plan["release"] or operation["component"] != plan["component"]:
-		raise ValueError("completion does not match the deployment in progress")
+def begin_pair(state, server_plan, client_plan, now):
+	admit_pair(state, server_plan, client_plan)
 	result = json.loads(json.dumps(state))
+	result["operation"] = {
+		"component": COORDINATED,
+		"server": {"release": server_plan["release"], "commit": server_plan["commit"]},
+		"client": {"release": client_plan["release"], "commit": client_plan["commit"]},
+		"mode": "forward",
+		"phase": "deploying",
+		"startedAt": now,
+		"phaseStartedAt": now,
+	}
+	return result
+
+
+# ================
+# advance
+#
+# Record the replaced row in bounded history and install the new one.
+# ================
+def advance(result, plan, now):
 	component = plan["component"]
 	previous = dict(result[component], component=component)
 	result["history"] = (result.get("history", []) + [previous])[-MAX_HISTORY:]
@@ -201,5 +277,56 @@ def complete(state, plan, now):
 		"compatibility": plan["compatibility"],
 		"deployedAt": now,
 	}
+
+
+# ================
+# complete
+#
+# Advance the generation only after the caller verifies the actual live
+# identity and health. Retain bounded rollback history without saving secrets.
+# ================
+def complete(state, plan, now):
+	operation = state.get("operation")
+	if not operation or operation["release"] != plan["release"] or operation["component"] != plan["component"]:
+		raise ValueError("completion does not match the deployment in progress")
+	result = json.loads(json.dumps(state))
+	advance(result, plan, now)
+	result["operation"] = None
+	return result
+
+
+# ================
+# complete_pair
+#
+# Both generations advance together once the pair passed its live checks.
+# ================
+def complete_pair(state, server_plan, client_plan, now):
+	operation = state.get("operation")
+	if not operation or operation["component"] != COORDINATED or operation["phase"] != "verifying":
+		raise ValueError("no coordinated release is awaiting confirmation")
+	if operation["server"]["release"] != server_plan["release"] or operation["client"]["release"] != client_plan["release"]:
+		raise ValueError("confirmation does not match the coordinated release in progress")
+	result = json.loads(json.dumps(state))
+	advance(result, server_plan, now)
+	advance(result, client_plan, now)
+	result["operation"] = None
+	return result
+
+
+# ================
+# abandon_pair
+#
+# After a verified revert the old pair is live again. Both generations still
+# advance, so no approval made for the reverted attempt can be replayed.
+# ================
+def abandon_pair(state, now, reason):
+	operation = state.get("operation")
+	if not operation or operation["component"] != COORDINATED:
+		raise ValueError("no coordinated release is in progress")
+	result = json.loads(json.dumps(state))
+	for component in COMPONENTS:
+		result[component]["generation"] += 1
+	result["lastFailure"] = {"component": COORDINATED, "server": operation["server"], "client": operation["client"],
+		"reason": reason, "at": now}
 	result["operation"] = None
 	return result

@@ -1,28 +1,30 @@
-#!/usr/bin/env python3
 """
 ===========================================================================
-deploy.py - receive an approved server artifact through a forced SSH command
 
-Root owns this script, its configuration and staging directory. The release
-key can invoke only this receiver; it cannot open a shell or forward ports.
-Nomad owns rollout health and job reversion. No live database is copied back.
+deploy.py - replace the running server with verified release inputs.
+
+The receiver (receiver.py) owns the SSH capability and the host lock and
+calls in here: publish_server for a server alone, the coordinated owner
+(coordinated.py) for a server released together with its client. Nomad owns
+rollout health and job reversion. No live database is copied back.
+
 ===========================================================================
 """
 
 import http.client
 import ipaddress
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from urllib.parse import urlsplit
 
 from bundle import FILES, MAX_ARCHIVE_BYTES, unpack
-from release_state import admit, begin, complete, read_state, write_state
+from release_state import admit, begin, complete, identity, read_state, write_state
 from retention import preserve
 
 CONFIG = Path("/etc/opensro-release/config.json")
@@ -141,8 +143,10 @@ def warning(config, module, executable):
 #
 # Back up durable state and validate scoped credentials before the announced
 # maintenance window. Nomad alone owns service replacement and health checks.
+# A revert passes notice=False: it restores the retained server at once, and
+# the release it replaces may not be able to announce anything.
 # ================
-def deploy(config, staging, manifest):
+def deploy(config, staging, manifest, notice=True):
 	module = Path(config["module"])
 	clean_env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root"}
 	version = run(["nomad", "version"], capture=True).stdout.splitlines()[0]
@@ -171,14 +175,15 @@ def deploy(config, staging, manifest):
 		if cache.is_dir():
 			for path in [cache, *cache.rglob("*")]:
 				path.chmod(0o755 if path.is_dir() else 0o644)
-		warning(config, module, executable)
-		announce(config["public_webhook"], "OpenSRO will restart in two minutes for a server update. Please find a safe place.")
-		deadline = time.monotonic() + NOTICE_SECONDS
-		while time.monotonic() < deadline:
-			time.sleep(min(10, max(0, deadline - time.monotonic())))
-		# On the first installation, check again after the warning window.
-		if config.get("bootstrap_notice", False):
+		if notice:
 			warning(config, module, executable)
+			announce(config["public_webhook"], "OpenSRO will restart in two minutes for a server update. Please find a safe place.")
+			deadline = time.monotonic() + NOTICE_SECONDS
+			while time.monotonic() < deadline:
+				time.sleep(min(10, max(0, deadline - time.monotonic())))
+			# On the first installation, check again after the warning window.
+			if config.get("bootstrap_notice", False):
+				warning(config, module, executable)
 		run([executable, "deploy", *arguments], cwd=module, env=environment)
 		run([executable, "status", "-namespace", "sro"], cwd=module, env=environment)
 		write_state(module / "release.json", manifest)
@@ -195,9 +200,86 @@ def deploy(config, staging, manifest):
 
 
 # ================
+# verified_server
+#
+# Reverify a staged server archive and its Linux evidence, and unpack it into
+# scratch/server. Later promotion uses these exact bytes; it never rebuilds
+# binaries or silently picks a newer commit.
+# ================
+def verified_server(config, candidate_id, scratch):
+	candidate_id = identity(candidate_id)
+	record = Path(config["candidate_records"]) / candidate_id
+	archive = record / "server.tar"
+	with archive.open("rb") as stream:
+		if hashlib.file_digest(stream, "sha256").hexdigest() != candidate_id:
+			raise ValueError("server archive changed after approval preparation")
+	manifest = unpack(archive, Path(scratch) / "server")
+	evidence = json.loads((record / "smoke.json").read_text())
+	if evidence.get("candidate") != candidate_id or evidence.get("release") != manifest["commit"]:
+		raise ValueError("server evidence identifies a different artifact")
+	retained = manifest["plan"]["mode"] == "rollback" and evidence.get("verification") == "retained-production"
+	if evidence.get("verdict") != "PASS" or not (evidence.get("linuxTests") is True or retained):
+		raise ValueError("server candidate has not passed Linux verification")
+	return manifest
+
+
+# ================
+# retain_server
+#
+# Keep the live server inputs for rollback before replacing them. The inputs
+# on disk must still be the recorded production release.
+# ================
+def retain_server(config, state):
+	record = Path(config["module"]) / "release.json"
+	if json.loads(record.read_text())["commit"] != state["server"]["commit"]:
+		raise RuntimeError("server release record drift requires reconciliation")
+	return preserve(config, "server", state["server"], config["module"], record.read_bytes())
+
+
+# ================
+# deployed
+#
+# release.json is written only after Nomad deployment and status pass, so a
+# later error (token cleanup) does not undo those completed health checks.
+# ================
+def deployed(config, manifest):
+	return json.loads((Path(config["module"]) / "release.json").read_text()) == manifest
+
+
+# ================
+# rollout
+#
+# deploy, where an error after the health checks passed (token cleanup) is
+# a warning, returned for the journal, not a failed release.
+# ================
+def rollout(config, staging, manifest, notice=True):
+	try:
+		deploy(config, staging, manifest, notice)
+	except Exception as error:
+		if not deployed(config, manifest):
+			raise
+		print("Deployment is healthy; check scoped token cleanup before the one-hour expiry.", file=sys.stderr)
+		return {"component": "server", "detail": "Post-deploy cleanup failed: " + type(error).__name__}
+	return None
+
+
+# ================
+# alert_staff
+#
+# A failed publication tells the staff channel; delivery failure is printed,
+# never allowed to hide the original error.
+# ================
+def alert_staff(config, message):
+	try:
+		announce(config["staff_webhook"], message)
+	except Exception:
+		print("Staff alert could not be delivered.", file=sys.stderr)
+
+
+# ================
 # deploy_approved
 #
-# The lock held by main covers admission, the restart window and the final
+# The receiver's lock covers admission, the restart window and the final
 # health result. A failed operation remains visible and blocks blind retries.
 # ================
 def deploy_approved(config, staging, manifest):
@@ -205,60 +287,32 @@ def deploy_approved(config, staging, manifest):
 	state = read_state(state_path)
 	plan = manifest["plan"]
 	admit(state, plan)
-	actual = json.loads((Path(config["module"]) / "release.json").read_text())
-	if actual["commit"] != state["server"]["commit"]:
-		raise RuntimeError("server release record drift requires reconciliation")
-	preserve(config, "server", state["server"], config["module"],
-		(Path(config["module"]) / "release.json").read_bytes())
+	retain_server(config, state)
 	pending = begin(state, plan, time.time())
 	write_state(state_path, pending)
 	try:
-		deploy(config, staging, manifest)
-	except Exception as error:
-		observed = json.loads((Path(config["module"]) / "release.json").read_text())
-		if observed == manifest:
-			# release.json is written only after deployment and status pass. A
-			# token cleanup error does not undo those completed health checks.
-			result = complete(pending, plan, time.time())
-			result["lastWarning"] = {"component": "server", "detail": "Post-deploy cleanup failed: " + type(error).__name__}
-			write_state(state_path, result)
-			print("Deployment is healthy; check scoped token cleanup before the one-hour expiry.", file=sys.stderr)
-			return
+		warning = rollout(config, staging, manifest)
+	except Exception:
 		pending["operation"]["phase"] = "failed"
 		write_state(state_path, pending)
 		raise
-	write_state(state_path, complete(pending, plan, time.time()))
+	result = complete(pending, plan, time.time())
+	if warning:
+		result["lastWarning"] = warning
+	write_state(state_path, result)
 
 
 # ================
-# main
+# publish_server
 #
-# The forced SSH command accepts only a verified artifact. Shared locking also
-# excludes simultaneous client publications that could change compatibility.
+# Reverify the retained archive and current production generation under the
+# receiver lock, then deploy it.
 # ================
-def main():
-	import fcntl
-	if os.geteuid() != 0 or len(sys.argv) != 1:
-		raise RuntimeError("receiver requires root and no arguments")
-	os.umask(0o077)
-	config = json.loads(CONFIG.read_text())
-	with Path("/run/lock/opensro-release.lock").open("w") as lock:
-		fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-		with tempfile.TemporaryDirectory(prefix="opensro-release-", dir="/var/tmp") as directory:
-			staging = Path(directory)
-			source = staging / "server.tar"
-			receive(sys.stdin.buffer, source)
-			manifest = unpack(source, staging / "files")
-			print("Verified release " + manifest["commit"], flush=True)
-			try:
-				deploy_approved(config, staging / "files", manifest)
-			except Exception:
-				try:
-					announce(config["staff_webhook"], "Server release " + manifest["commit"] + " failed. Check the Actions log and Nomad job status before retrying.")
-				except Exception:
-					print("Staff alert could not be delivered.", file=sys.stderr)
-				raise
-
-
-if __name__ == "__main__":
-	main()
+def publish_server(config, candidate_id, scratch):
+	manifest = verified_server(config, candidate_id, scratch)
+	try:
+		deploy_approved(config, Path(scratch) / "server", manifest)
+	except Exception:
+		alert_staff(config, "Server release " + manifest["commit"] + " failed. Check the Actions log and Nomad job status before retrying.")
+		raise
+	return read_state(config["production_state"])
