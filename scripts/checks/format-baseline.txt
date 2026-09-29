@@ -611,7 +611,6 @@ apps/client-next/tools/audit-bsr-parity.mjs
 apps/client-next/tools/audit-effect-coverage.mjs
 apps/client-next/tools/audit-retail-panels.mjs
 apps/client-next/tools/beta/archive.mjs
-apps/client-next/tools/beta/baseline.mjs
 apps/client-next/tools/beta/compression.mjs
 apps/client-next/tools/beta/serve.mjs
 apps/client-next/tools/beta/symbolicate.mjs

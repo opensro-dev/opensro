@@ -22,6 +22,8 @@ import time
 from urllib.parse import urlsplit
 
 from bundle import FILES, MAX_ARCHIVE_BYTES, unpack
+from release_state import admit, begin, complete, read_state, write_state
+from retention import preserve
 
 CONFIG = Path("/etc/opensro-release/config.json")
 CHUNK_BYTES = 1 << 20
@@ -31,6 +33,8 @@ NOTICE_SECONDS = 120
 
 # ================
 # receive
+#
+# Bound uploads while streaming; no complete archive needs to fit in memory.
 # ================
 def receive(stream, target):
 	total = 0
@@ -65,6 +69,8 @@ def announce(path, message):
 
 # ================
 # run
+#
+# Pass arguments directly to the executable and let failures stop the rollout.
 # ================
 def run(arguments, *, cwd=None, env=None, capture=False):
 	return subprocess.run(arguments, cwd=cwd, env=env, check=True, capture_output=capture, text=True)
@@ -132,6 +138,9 @@ def warning(config, module, executable):
 
 # ================
 # deploy
+#
+# Back up durable state and validate scoped credentials before the announced
+# maintenance window. Nomad alone owns service replacement and health checks.
 # ================
 def deploy(config, staging, manifest):
 	module = Path(config["module"])
@@ -172,20 +181,60 @@ def deploy(config, staging, manifest):
 			warning(config, module, executable)
 		run([executable, "deploy", *arguments], cwd=module, env=environment)
 		run([executable, "status", "-namespace", "sro"], cwd=module, env=environment)
-		(module / "release.json").write_text(json.dumps(manifest, indent=2) + "\n")
+		write_state(module / "release.json", manifest)
 		if config.pop("bootstrap_notice", False):
 			temporary = CONFIG.with_suffix(".incoming")
 			temporary.write_text(json.dumps(config, indent=2) + "\n")
 			temporary.chmod(0o600)
 			os.replace(temporary, CONFIG)
-		announce(config["public_webhook"], "OpenSRO is online again. You can reconnect now.")
-		announce(config["staff_webhook"], "Server release " + manifest["commit"] + " passed Nomad deployment health checks.")
+		# The independent monitor announces recovery after the journal commits.
+		# Discord availability cannot turn a healthy rollout into a failed one.
+		print("Server release " + manifest["commit"] + " passed Nomad deployment health checks.", flush=True)
 	finally:
 		run(["nomad", "acl", "token", "delete", token["AccessorID"]], env=management, capture=True)
 
 
 # ================
+# deploy_approved
+#
+# The lock held by main covers admission, the restart window and the final
+# health result. A failed operation remains visible and blocks blind retries.
+# ================
+def deploy_approved(config, staging, manifest):
+	state_path = Path(config["production_state"])
+	state = read_state(state_path)
+	plan = manifest["plan"]
+	admit(state, plan)
+	actual = json.loads((Path(config["module"]) / "release.json").read_text())
+	if actual["commit"] != state["server"]["commit"]:
+		raise RuntimeError("server release record drift requires reconciliation")
+	preserve(config, "server", state["server"], config["module"],
+		(Path(config["module"]) / "release.json").read_bytes())
+	pending = begin(state, plan, time.time())
+	write_state(state_path, pending)
+	try:
+		deploy(config, staging, manifest)
+	except Exception as error:
+		observed = json.loads((Path(config["module"]) / "release.json").read_text())
+		if observed == manifest:
+			# release.json is written only after deployment and status pass. A
+			# token cleanup error does not undo those completed health checks.
+			result = complete(pending, plan, time.time())
+			result["lastWarning"] = {"component": "server", "detail": "Post-deploy cleanup failed: " + type(error).__name__}
+			write_state(state_path, result)
+			print("Deployment is healthy; check scoped token cleanup before the one-hour expiry.", file=sys.stderr)
+			return
+		pending["operation"]["phase"] = "failed"
+		write_state(state_path, pending)
+		raise
+	write_state(state_path, complete(pending, plan, time.time()))
+
+
+# ================
 # main
+#
+# The forced SSH command accepts only a verified artifact. Shared locking also
+# excludes simultaneous client publications that could change compatibility.
 # ================
 def main():
 	import fcntl
@@ -202,7 +251,7 @@ def main():
 			manifest = unpack(source, staging / "files")
 			print("Verified release " + manifest["commit"], flush=True)
 			try:
-				deploy(config, staging / "files", manifest)
+				deploy_approved(config, staging / "files", manifest)
 			except Exception:
 				try:
 					announce(config["staff_webhook"], "Server release " + manifest["commit"] + " failed. Check the Actions log and Nomad job status before retrying.")

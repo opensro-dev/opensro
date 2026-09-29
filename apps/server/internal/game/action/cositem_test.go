@@ -3,6 +3,9 @@
 
 cositem_test.go - pet potions, cures and revival
 
+Use shipped item rows to verify that pet operations change the summoned COS,
+preserve the owner's player state and publish the correct wire identity.
+
 ===========================================================================
 */
 
@@ -18,6 +21,13 @@ import (
 	"opensro.online/server/internal/gamedata"
 )
 
+/*
+================
+shippedItems
+
+Keep retail-data coverage explicit when the source-only suite has no assets.
+================
+*/
 func shippedItems(t *testing.T) *enterworld.TextdataItems {
 	t.Helper()
 	dir, err := gamedata.ResolveTextdataDir()
@@ -27,6 +37,13 @@ func shippedItems(t *testing.T) *enterworld.TextdataItems {
 	return enterworld.NewTextdataItems(dir)
 }
 
+/*
+================
+equipShippedPet
+
+Install an authored COS with depleted vitals so recovery and clamping are visible.
+================
+*/
 func equipShippedPet(t *testing.T, rt *Runtime, c *enterworld.Character, items *enterworld.TextdataItems, codename string) {
 	t.Helper()
 	ref, ok := items.CharacterRefByCodename(codename)
@@ -41,6 +58,13 @@ func equipShippedPet(t *testing.T, rt *Runtime, c *enterworld.Character, items *
 	rt.deps.(*enterworld.Deps).Items = items
 }
 
+/*
+================
+petUse
+
+Encode the real item-use target: a summoned object or a revival inventory slot.
+================
+*/
 func petUse(c *enterworld.Character, ref *enterworld.ItemRef, gid uint32, reviveSlot int) []byte {
 	body := []byte{21, byte(ref.TypeFlags()), byte(ref.TypeFlags() >> 8)}
 	if reviveSlot >= 0 {
@@ -51,6 +75,13 @@ func petUse(c *enterworld.Character, ref *enterworld.ItemRef, gid uint32, revive
 	return append(body, tail[:]...)
 }
 
+/*
+================
+TestShippedPetPotionHealsThePetNotThePlayer
+
+The shared item-use path must debit the item and heal only its pet target.
+================
+*/
 func TestShippedPetPotionHealsThePetNotThePlayer(t *testing.T) {
 	rt, _, c, _ := newCombatTestRuntime(t, 100)
 	items := shippedItems(t)
@@ -94,6 +125,13 @@ func TestShippedPetPotionHealsThePetNotThePlayer(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedPetCureHitsThePetBlock
+
+The pet cure retires its own status while preserving the owner's player block.
+================
+*/
 func TestShippedPetCureHitsThePetBlock(t *testing.T) {
 	rt, clock, c, m := newCombatTestRuntime(t, 100)
 	items := shippedItems(t)
@@ -102,11 +140,11 @@ func TestShippedPetCureHitsThePetBlock(t *testing.T) {
 		t.Fatalf("shipped pet cure levels %+v", cure)
 	}
 	equipShippedPet(t, rt, c, items, "COS_P_RABBIT")
+	record := abnormal.Record{Status: abnormal.Burn, DurationMs: 1000, Level: 1, SourceGID: m.Gid}
+	owner := rt.newCosAbnormalOwner(testDivision, c, clock.NowMs())
+	owner.sources = rt.captureAbnormalSources(testDivision, owner.block, []abnormal.Record{record})
 	rt.deps.Update(c, "stun", func() bool {
-		owner := rt.newCosAbnormalOwner(testDivision, c, clock.NowMs())
-		owner.changed = owner.block.Apply(owner, abnormal.Record{
-			Status: abnormal.Burn, DurationMs: 1000, Level: 1, SourceGID: m.Gid,
-		}, clock.NowMs())
+		owner.changed = owner.block.Apply(owner, record, clock.NowMs())
 		owner.commit()
 		return true
 	})
@@ -136,6 +174,13 @@ func TestShippedPetCureHitsThePetBlock(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedPetRevivalRestoresRefVitals
+
+Revival restores authored pet vitals once and refuses a second consumption.
+================
+*/
 func TestShippedPetRevivalRestoresRefVitals(t *testing.T) {
 	rt, _, c, _ := newCombatTestRuntime(t, 100)
 	items := shippedItems(t)
@@ -172,6 +217,14 @@ func TestShippedPetRevivalRestoresRefVitals(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMonsterHitRollsStatusOntoThePet
+
+Resolve a summoned target through the real monster attack path and keep the
+rolled status separate from its owning character's block.
+================
+*/
 func TestMonsterHitRollsStatusOntoThePet(t *testing.T) {
 	rt, clock, c, mon := newCombatTestRuntime(t, 100)
 	c.ActiveCOS = &enterworld.CharacterCOS{

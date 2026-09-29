@@ -816,6 +816,7 @@ Input acknowledged: ${acceptedInput}
 Session: ${sessionState?.phase ?? "signed-out"}; entities: ${presentation.count()}
 Frontend: ${frontendState.phase}
 Frontend error: ${frontendState.error ?? "none"}
+Frontend loading: ${frontendState.loadingStatus ?? "none"}; dock ready: ${characters.dockReady()}
 Dock pick: ${lastDockPick}
 Characters: ${renderer.characterStats().actors} actors, ${renderer.characterStats().draws} draws; ${
 						characters.error() ?? "running"
@@ -826,7 +827,8 @@ UI: ${ui.stats().pending} pending images; ${ui.stats().failed.length} failed ima
 World: ${
 						world.error() ??
 							`${renderer.worldStats().visibleGroups} visible groups; ${renderer.worldStats().pendingTextures} pending textures`
-					}` );
+					}
+World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldStats().pendingGroups} pending groups` );
 				}
 				frameProbe()?.end();
 				raf = requestAnimationFrame( frame );

@@ -13,14 +13,20 @@ import unittest
 
 from bundle import FILES, bundle, unpack
 from deploy import receive
+from test_release_state import candidate
 
 
 # ================
 # BundleTests
+#
+# Build real tar artifacts and mutate archive entries, never implementation
+# text, to prove rejection happens before any extraction side effects.
 # ================
 class BundleTests(unittest.TestCase):
 	# ================
 	# setUp
+	#
+	# Give every case a complete private artifact and a fresh extraction target.
 	# ================
 	def setUp(self):
 		self.directory = tempfile.TemporaryDirectory()
@@ -32,10 +38,14 @@ class BundleTests(unittest.TestCase):
 			path.parent.mkdir(parents=True, exist_ok=True)
 			path.write_bytes(("fixture: " + name).encode())
 		self.archive = self.root / "server.tar"
-		bundle(self.module, self.archive, "a" * 40)
+		plan = candidate("server")
+		plan.update(commit="a" * 40, release="a" * 40)
+		bundle(self.module, self.archive, "a" * 40, plan)
 
 	# ================
 	# rewrite
+	#
+	# Repack a modified archive so the production reader must verify its content.
 	# ================
 	def rewrite(self, change):
 		with tarfile.open(self.archive, "r:") as archive:
@@ -47,6 +57,8 @@ class BundleTests(unittest.TestCase):
 
 	# ================
 	# test_round_trip
+	#
+	# Receive and unpack exactly the bytes the builder produced.
 	# ================
 	def test_round_trip(self):
 		destination = self.root / "unpacked"
@@ -60,10 +72,13 @@ class BundleTests(unittest.TestCase):
 
 	# ================
 	# test_tampering_writes_nothing
+	#
+	# A digest mismatch must leave the extraction destination absent.
 	# ================
 	def test_tampering_writes_nothing(self):
 		# ================
 		# change
+		# Corrupt payload bytes without changing their recorded digest.
 		# ================
 		def change(entries):
 			member, data = entries[0]
@@ -75,10 +90,12 @@ class BundleTests(unittest.TestCase):
 
 	# ================
 	# test_path_escape
+	# Reject archive paths before any directory creation.
 	# ================
 	def test_path_escape(self):
 		# ================
 		# change
+		# Attempt to replace a declared member with a parent-relative path.
 		# ================
 		def change(entries):
 			entries[0][0].name = "../outside"
@@ -89,10 +106,12 @@ class BundleTests(unittest.TestCase):
 
 	# ================
 	# test_symlink
+	# Treat every non-regular member as invalid, including empty symlinks.
 	# ================
 	def test_symlink(self):
 		# ================
 		# change
+		# A link must be rejected even when it names an otherwise expected member.
 		# ================
 		def change(entries):
 			member, _ = entries[0]
@@ -106,6 +125,7 @@ class BundleTests(unittest.TestCase):
 
 	# ================
 	# test_duplicate
+	# Duplicate tar names must not override a previously verified member.
 	# ================
 	def test_duplicate(self):
 		self.rewrite(lambda entries: entries.append(entries[0]))
@@ -114,10 +134,12 @@ class BundleTests(unittest.TestCase):
 
 	# ================
 	# test_missing_manifest_file
+	# Every payload must have a corresponding manifest digest.
 	# ================
 	def test_missing_manifest_file(self):
 		# ================
 		# change
+		# Preserve valid JSON while removing one required digest.
 		# ================
 		def change(entries):
 			member, data = entries[-1]

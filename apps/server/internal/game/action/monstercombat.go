@@ -3,6 +3,9 @@
 
 monstercombat.go - monster attacks on players
 
+Admit authored attacks and source facts under the division owner, commit
+target HP and status changes together, then publish the resulting wire frames.
+
 ===========================================================================
 */
 
@@ -11,18 +14,25 @@ package action
 import (
 	"fmt"
 	"math"
-	"opensro.online/server/internal/domain"
-	"opensro.online/server/internal/game/internal/vitals"
 	"sync/atomic"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/internal/vitals"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+monsterOwnsDefaultSkill
+
+Reject retained requests for skills outside the monster's authored attack set.
+================
+*/
 func monsterOwnsDefaultSkill(instance monster.Instance, skillID uint32) bool {
 	for _, candidate := range instance.Ref.DefaultSkillIDs {
 		if candidate == skillID {
@@ -124,6 +134,14 @@ func (rt *Runtime) MonsterBasicAttack(
 	return rt.monsterAttackStage(divisionID, instance, targetGid, skillID, nowMs, nil)
 }
 
+/*
+================
+monsterAttackStage
+
+Resolve all cross-character facts before the target transaction. The division
+lock spans admission, HP/status commit and publication ordering.
+================
+*/
 func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instance, targetGid, skillID uint32, nowMs int64, release *pendingMonsterCast) (result simulation.MonsterAttackResult) {
 	if targetGid == 0 || skillID == 0 || rt.Monsters == nil ||
 		!monsterOwnsDefaultSkill(instance, skillID) {
@@ -267,7 +285,8 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	if len(formulas) == 0 {
 		return result
 	}
-	var abnormalOwner *playerAbnormalOwner
+	abnormalOwner := rt.newPlayerAbnormalOwner(divisionID, character, nowMs)
+	abnormalOwner.sources = rt.captureAbnormalSources(divisionID, abnormalOwner.block, abnormalRecords)
 
 	impacts := make([]wire.SkillCastTargetImpact, 0, len(formulas))
 	var absorbRecords []wire.SkillCastTargetImpact
@@ -309,7 +328,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 			abnormalOwner = rt.clearPlayerAbnormalInDoor(divisionID, character, nowMs)
 		} else {
 			battleFrames = rt.enterBattleState(divisionID, character, nowMs)
-			abnormalOwner = rt.applyPlayerAbnormalInDoor(divisionID, character, true, abnormalRecords, nowMs)
+			abnormalOwner.applyHit(true, abnormalRecords)
 			// 58F72F: a landed hit tests the victim's skc damage masks.
 			rt.cancelEffectsOnDamage(divisionID, character, skill.Attack.Flags, nowMs)
 		}
@@ -409,10 +428,18 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	return result
 }
 
+/*
+================
+findCharacterByGid
+
+Invert ordinary player IDs through the indexed store, preserving the original
+scan for clamped boundary fixtures. This lookup can acquire the store read lock.
+================
+*/
 func (rt *Runtime) findCharacterByGid(divisionID string, gid uint32) *enterworld.Character {
 	// Interior IDs invert exactly. Preserve the legacy clamped-ID lookup for
 	// boundary fixtures rather than guessing which exceptional record owns it.
-	if gid > domain.PlayerGIDBase && gid < domain.PlayerGIDBase+0x7fffffff {
+	if gid > domain.PlayerGIDBase && gid < domain.PlayerGIDBase+math.MaxInt32 {
 		if source, ok := rt.deps.(domain.CharacterLookup); ok {
 			return source.CharacterByID(divisionID, int64(gid-domain.PlayerGIDBase))
 		}

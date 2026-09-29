@@ -3,6 +3,10 @@
 
 cosabnormal.go - abnormal-state blocks of pets (COS)
 
+The division owns each pet's working block. Source facts are captured before
+the owner's character transaction so status callbacks cannot reenter the
+authority store while its write lock is held.
+
 ===========================================================================
 */
 
@@ -22,8 +26,13 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// cosAbnormalEntry is one pet's CGObjChar block. 49D240 cures the COS at
-// +0x34C, which is not the owner's player block.
+/*
+================
+cosAbnormalEntry
+
+49D240 cures the COS block at +0x34C, independently of its owner's statuses.
+================
+*/
 type cosAbnormalEntry struct {
 	division string
 	name     string
@@ -31,21 +40,49 @@ type cosAbnormalEntry struct {
 	block    *abnormal.Block
 }
 
+/*
+================
+cosAbnormalStore
+
+Keep immutable pet blocks separate from the character's player block.
+================
+*/
 type cosAbnormalStore struct {
 	mu     sync.Mutex
 	blocks map[string]cosAbnormalEntry
 }
 
+/*
+================
+cosAbnormalKey
+
+Include the summoned object's identity so a replacement pet inherits no status.
+================
+*/
 func cosAbnormalKey(division, name string, gid uint32) string {
 	return strings.ToLower(division) + "\x00" + strings.ToLower(name) + "\x00" + fmt.Sprint(gid)
 }
 
+/*
+================
+cosAbnormal
+
+Return the committed immutable block for one summoned pet.
+================
+*/
 func (rt *Runtime) cosAbnormal(division, name string, gid uint32) *abnormal.Block {
 	rt.cosAbnormals.mu.Lock()
 	defer rt.cosAbnormals.mu.Unlock()
 	return rt.cosAbnormals.blocks[cosAbnormalKey(division, name, gid)].block
 }
 
+/*
+================
+storeCosAbnormal
+
+Copy on publication so a later callback cannot mutate a committed block.
+================
+*/
 func (rt *Runtime) storeCosAbnormal(division, name string, gid uint32, block *abnormal.Block) {
 	rt.cosAbnormals.mu.Lock()
 	defer rt.cosAbnormals.mu.Unlock()
@@ -61,6 +98,13 @@ func (rt *Runtime) storeCosAbnormal(division, name string, gid uint32, block *ab
 	rt.cosAbnormals.blocks[key] = cosAbnormalEntry{division: division, name: name, gid: gid, block: &copied}
 }
 
+/*
+================
+cosAbnormalCandidates
+
+Release the block registry before entering any character transaction.
+================
+*/
 func (rt *Runtime) cosAbnormalCandidates() []cosAbnormalEntry {
 	rt.cosAbnormals.mu.Lock()
 	defer rt.cosAbnormals.mu.Unlock()
@@ -71,16 +115,31 @@ func (rt *Runtime) cosAbnormalCandidates() []cosAbnormalEntry {
 	return out
 }
 
+/*
+================
+cosAbnormalOwner
+
+Adapt a pet's working block without reading the authority store from callbacks.
+================
+*/
 type cosAbnormalOwner struct {
 	rt       *Runtime
 	division string
 	c        *enterworld.Character
 	block    *abnormal.Block
 	now      int64
+	sources  map[uint32]abnormalSourceState
 	changed  bool
 	fatal    bool
 }
 
+/*
+================
+newCosAbnormalOwner
+
+Copy the active pet's block; source facts are admitted before the write lock.
+================
+*/
 func (rt *Runtime) newCosAbnormalOwner(division string, c *enterworld.Character, now int64) *cosAbnormalOwner {
 	o := &cosAbnormalOwner{rt: rt, division: division, c: c, now: now, block: &abnormal.Block{}}
 	if c == nil || c.ActiveCOS == nil {
@@ -93,6 +152,13 @@ func (rt *Runtime) newCosAbnormalOwner(division string, c *enterworld.Character,
 	return o
 }
 
+/*
+================
+commit
+
+Retire dead pets' statuses before publishing their replacement snapshot.
+================
+*/
 func (o *cosAbnormalOwner) commit() {
 	if o.c == nil || o.c.ActiveCOS == nil {
 		return
@@ -104,36 +170,115 @@ func (o *cosAbnormalOwner) commit() {
 	o.rt.storeCosAbnormal(o.division, o.c.Name, o.c.ActiveCOS.GID, o.block)
 }
 
+/*
+================
+Alive
+
+A missing or depleted pet cannot admit a new status.
+================
+*/
 func (o *cosAbnormalOwner) Alive() bool {
 	return o.c != nil && o.c.ActiveCOS != nil && o.c.ActiveCOS.CurrentHP > 0
 }
-func (o *cosAbnormalOwner) IsPlayer() bool  { return false }
+
+/*
+================
+IsPlayer
+
+Pet statuses do not use the player's private snapshot channel.
+================
+*/
+func (o *cosAbnormalOwner) IsPlayer() bool { return false }
+
+/*
+================
+IsMonster
+
+A summoned pet must not dispatch monster AI callbacks.
+================
+*/
 func (o *cosAbnormalOwner) IsMonster() bool { return false }
+
+/*
+================
+CurrentHP
+
+Expose the pet's vitals, never its owning character's HP.
+================
+*/
 func (o *cosAbnormalOwner) CurrentHP() uint32 {
 	if !o.Alive() {
 		return 0
 	}
 	return o.c.ActiveCOS.CurrentHP
 }
+
+/*
+================
+MaxHP
+
+Retain the COS adapter's current-vital projection for shared status callbacks.
+================
+*/
 func (o *cosAbnormalOwner) MaxHP() uint32 {
 	if o.c == nil || o.c.ActiveCOS == nil {
 		return 0
 	}
 	return o.c.ActiveCOS.CurrentHP
 }
+
+/*
+================
+MaxMP
+
+Read only the active pet's MP within its owner's transaction.
+================
+*/
 func (o *cosAbnormalOwner) MaxMP() uint32 {
 	if o.c == nil || o.c.ActiveCOS == nil {
 		return 0
 	}
 	return o.c.ActiveCOS.CurrentMP
 }
+
+/*
+================
+Param
+
+The COS adapter has no authored player keeper; retain its zero projection.
+================
+*/
 func (o *cosAbnormalOwner) Param(uint16) float32 { return 0 }
+
+/*
+================
+SourceExists
+
+Use values admitted before the authority write, including absent sources.
+================
+*/
 func (o *cosAbnormalOwner) SourceExists(gid uint32) bool {
-	return o.rt.abnormalSourceExists(o.division, gid)
+	return o.sources[gid].exists
 }
+
+/*
+================
+SourceDead
+
+Read the admitted life state without acquiring another store lock.
+================
+*/
 func (o *cosAbnormalOwner) SourceDead(gid uint32) bool {
-	return o.rt.abnormalSourceDead(o.division, gid)
+	return o.sources[gid].dead
 }
+
+/*
+================
+Roll
+
+Pet effects use the owner's deterministic effect stream.
+================
+*/
 func (o *cosAbnormalOwner) Roll(key uint32, chance int32) bool {
 	if chance <= 0 || o.c == nil {
 		return false
@@ -141,17 +286,96 @@ func (o *cosAbnormalOwner) Roll(key uint32, chance int32) bool {
 	proc, err := o.rt.effectOutcome(criticalActor{division: o.division, character: o.c.Name}, key, uint32(chance))
 	return err == nil && proc
 }
-func (o *cosAbnormalOwner) Now() int64                                       { return o.now }
-func (o *cosAbnormalOwner) ParamsChanged(bool)                               {}
-func (o *cosAbnormalOwner) SetMotion(uint8, uint8, float32)                  {}
-func (o *cosAbnormalOwner) CancelActions(bool)                               {}
-func (o *cosAbnormalOwner) StopMove()                                        {}
-func (o *cosAbnormalOwner) AIEvent(uint8, uint8, uint32)                     {}
-func (o *cosAbnormalOwner) Hit(uint32, bool, uint32, uint8, abnormal.Status) {}
-func (o *cosAbnormalOwner) ConsumeResources(int32, int32, uint8)             {}
-func (o *cosAbnormalOwner) Detonate(abnormal.Slot)                           {}
 
-// cosAbnormalPublication is the player 0x36C7 / 33A6 pair with the pet gid.
+/*
+================
+Now
+
+All callbacks share the admitted simulation timestamp.
+================
+*/
+func (o *cosAbnormalOwner) Now() int64 { return o.now }
+
+/*
+================
+ParamsChanged
+
+The existing COS adapter does not publish a player keeper projection.
+================
+*/
+func (o *cosAbnormalOwner) ParamsChanged(bool) {}
+
+/*
+================
+SetMotion
+
+Pet status publication has no independent motion carrier in this adapter.
+================
+*/
+func (o *cosAbnormalOwner) SetMotion(uint8, uint8, float32) {}
+
+/*
+================
+CancelActions
+
+The current COS adapter owns no retained player action queue.
+================
+*/
+func (o *cosAbnormalOwner) CancelActions(bool) {}
+
+/*
+================
+StopMove
+
+The pet follows its owner and has no separate retained movement segment here.
+================
+*/
+func (o *cosAbnormalOwner) StopMove() {}
+
+/*
+================
+AIEvent
+
+Monster-only status events do not apply to COS owners.
+================
+*/
+func (o *cosAbnormalOwner) AIEvent(uint8, uint8, uint32) {}
+
+/*
+================
+Hit
+
+Preserve the existing COS adapter's absence of periodic damage publication.
+Direct monster damage remains owned by monsterHitSummonedCOS.
+================
+*/
+func (o *cosAbnormalOwner) Hit(uint32, bool, uint32, uint8, abnormal.Status) {}
+
+/*
+================
+ConsumeResources
+
+The existing COS adapter has no periodic resource-debit implementation.
+================
+*/
+func (o *cosAbnormalOwner) ConsumeResources(int32, int32, uint8) {}
+
+/*
+================
+Detonate
+
+The existing COS adapter has no time-bomb damage carrier.
+================
+*/
+func (o *cosAbnormalOwner) Detonate(abnormal.Slot) {}
+
+/*
+================
+cosAbnormalPublication
+
+Publish the pet's shared abnormal mask without a player-only private snapshot.
+================
+*/
 func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wire.Frame {
 	if o == nil || o.c == nil || !o.changed {
 		return nil
@@ -164,6 +388,13 @@ func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wir
 	return []wire.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: abnormalVitalsPayload(gid, block)}}
 }
 
+/*
+================
+characterByCosGID
+
+Resolve a currently summoned pet to its owning character before mutation.
+================
+*/
 func (rt *Runtime) characterByCosGID(division string, gid uint32) *enterworld.Character {
 	if gid == 0 || rt.deps == nil {
 		return nil
@@ -176,6 +407,13 @@ func (rt *Runtime) characterByCosGID(division string, gid uint32) *enterworld.Ch
 	return nil
 }
 
+/*
+================
+advanceCosAbnormals
+
+Tick a detached candidate list so registry and authority locks never nest.
+================
+*/
 func (rt *Runtime) advanceCosAbnormals(now int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, entry := range rt.cosAbnormalCandidates() {
@@ -184,6 +422,13 @@ func (rt *Runtime) advanceCosAbnormals(now int64) []simulation.DivisionFrames {
 	return out
 }
 
+/*
+================
+advanceOneCosAbnormal
+
+Admit source facts before the character write, then publish the committed mask.
+================
+*/
 func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []simulation.DivisionFrames {
 	unlock := rt.lockDivision(entry.division)
 	defer unlock()
@@ -192,9 +437,9 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 		rt.storeCosAbnormal(entry.division, entry.name, entry.gid, nil)
 		return nil
 	}
-	var owner *cosAbnormalOwner
+	owner := rt.newCosAbnormalOwner(entry.division, c, now)
+	owner.sources = rt.captureAbnormalSources(entry.division, owner.block, nil)
 	committed := rt.deps.Update(c, "cos-abnormal", func() bool {
-		owner = rt.newCosAbnormalOwner(entry.division, c, now)
 		if c.ActiveCOS.CurrentHP == 0 {
 			owner.changed = owner.block.ClearAll(owner)
 			owner.fatal = true
@@ -204,7 +449,7 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 		owner.commit()
 		return owner.changed
 	})
-	if !committed || owner == nil {
+	if !committed {
 		return nil
 	}
 	frames := rt.cosAbnormalPublication(entry.gid, owner)
@@ -280,7 +525,8 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 		records = append(records, rolled...)
 		damage += formula.Damage
 	}
-	var ownerBlock *cosAbnormalOwner
+	ownerBlock := rt.newCosAbnormalOwner(divisionID, owner, nowMs)
+	ownerBlock.sources = rt.captureAbnormalSources(divisionID, ownerBlock.block, records)
 	var fatal bool
 	var battleFrames []wire.Frame
 	committed := rt.deps.Update(owner, "monster-cos-hit", func() bool {
@@ -299,7 +545,6 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 		} else {
 			live.CurrentHP -= damage
 		}
-		ownerBlock = rt.newCosAbnormalOwner(divisionID, owner, nowMs)
 		if fatal {
 			ownerBlock.changed = ownerBlock.block.ClearAll(ownerBlock)
 			ownerBlock.fatal = true
@@ -342,6 +587,13 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	return result
 }
 
+/*
+================
+rollMonsterOnCOS
+
+Roll the monster's authored status rows against the pet identity and level.
+================
+*/
 func (rt *Runtime) rollMonsterOnCOS(division string, instance monster.Instance, params *abnormal.SkillParams, petGID uint32, defender combat.Stats, blocked bool) ([]abnormal.Record, error) {
 	if params == nil || !params.Present() {
 		return nil, nil

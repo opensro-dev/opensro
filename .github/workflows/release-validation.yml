@@ -1,0 +1,40 @@
+# ===========================================================================
+# release-validation.yml - validate reusable release tools without host access.
+# Production workflows and credentials belong to each operator's infrastructure
+# repository. Pull requests exercise the real Linux filesystem boundary here.
+# ===========================================================================
+name: Validate release tools
+
+on:
+  pull_request:
+    paths:
+      - apps/server/ops/release/**
+      - apps/server/cmd/operations/sro-release-contract/**
+      - .github/workflows/release-validation.yml
+  push:
+    branches: [main]
+    paths:
+      - apps/server/ops/release/**
+      - apps/server/cmd/operations/sro-release-contract/**
+      - .github/workflows/release-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - name: Exercise release admission and filesystem recovery
+        working-directory: apps/server
+        run: |
+          python3 -m unittest discover -s ops/release -p 'test_*.py'
+          go run ./cmd/operations/sro-release-contract | python3 ops/release/verify_contract.py

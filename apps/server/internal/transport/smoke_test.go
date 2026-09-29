@@ -1,3 +1,15 @@
+/*
+===========================================================================
+
+smoke_test.go - real socket contracts for the transport hub
+
+Loopback WebTransport and WebSocket clients share one hub and an echo lane.
+These tests own connection lifetimes, admission fixtures and observable wire
+results. Socket delivery does not imply that the server goroutine has finished
+recording its handshake; asynchronous assertions use the shared wait package.
+
+===========================================================================
+*/
 package transport_test
 
 import (
@@ -17,19 +29,31 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// The smoke suite runs the real server on loopback: WebTransport over a
-// real UDP socket, WebSocket over a real TCP socket, one Hub, and an echo
-// handler standing in for the game lanes: 0x706D in, 0xB06D out. The
-// datagram echo uses the loss-tolerant pair (0x30E3 in, 0xB2F5 out) — the
-// only opcodes the allowlist permits on the unreliable lane.
 const (
-	echoReqOp           uint16 = 0x706D
-	echoRespOp          uint16 = 0xB06D
-	dgramReqOp                 = transport.OpObjectSourceMove
-	dgramRspOp                 = transport.OpObjectSourceCorrection
-	testAdmissionTicket        = "test-smoke-admission-ticket"
+	echoReqOp             uint16 = 0x706D
+	echoRespOp            uint16 = 0xB06D
+	dgramReqOp                   = transport.OpObjectSourceMove
+	dgramRspOp                   = transport.OpObjectSourceCorrection
+	testAdmissionTicket          = "test-smoke-admission-ticket"
+	queuedFrameOp         uint16 = 0x3126
+	testWorldID           uint32 = 0x00A1
+	smokeIOTimeout               = 5 * time.Second
+	smokeLifecycleTimeout        = 3 * time.Second
+	smokeGracePeriod             = 10 * time.Second
+	smokeIdleTimeout             = 30 * time.Second
+	smokeOutboundQueue           = 64
+	smokeDatagramAttempts        = 20
+	smokeDatagramTimeout         = 250 * time.Millisecond
 )
 
+/*
+================
+installSmokeAdmissionVerifier
+
+Use a fixed admission identity so the socket tests do not depend on accounts
+or game storage. Datagram opcodes still pass the production allowlist.
+================
+*/
 func installSmokeAdmissionVerifier(srv *transport.Server) {
 	srv.Hub.SetHelloAuth(func(ticket []byte) (transport.AdmissionIdentity, error) {
 		if string(ticket) != testAdmissionTicket {
@@ -38,21 +62,29 @@ func installSmokeAdmissionVerifier(srv *transport.Server) {
 		return transport.AdmissionIdentity{AccountID: "smoke-account", ShardID: "global-official"}, nil
 	})
 	srv.Hub.SetEnterWorldAuth(func(_ *transport.Session, ew transport.EnterWorld) (bool, uint32) {
-		return len(ew.AuthToken) > 0, 0x00A1
+		return len(ew.AuthToken) > 0, testWorldID
 	})
 }
 
+/*
+================
+startServer
+
+Each test owns ephemeral listeners and certificates. Cleanup waits for shutdown
+so later tests cannot inherit sockets or sessions from this hub.
+================
+*/
 func startServer(t *testing.T) *transport.Server {
 	t.Helper()
 	cfg := transport.Config{
 		WTAddr:            "127.0.0.1:0",
 		WSAddr:            "127.0.0.1:0",
 		CertDir:           t.TempDir(),
-		HelloTimeout:      5 * time.Second,
-		GracePeriod:       10 * time.Second,
-		KeepaliveInterval: 5 * time.Second,
-		IdleTimeout:       30 * time.Second,
-		OutboundQueue:     64,
+		HelloTimeout:      smokeIOTimeout,
+		GracePeriod:       smokeGracePeriod,
+		KeepaliveInterval: smokeIOTimeout,
+		IdleTimeout:       smokeIdleTimeout,
+		OutboundQueue:     smokeOutboundQueue,
 	}
 	srv, err := transport.NewServer(cfg)
 	if err != nil {
@@ -69,15 +101,22 @@ func startServer(t *testing.T) *transport.Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), smokeLifecycleTimeout)
 		defer cancel()
 		srv.Shutdown(ctx)
 	})
 	return srv
 }
 
-// --- WebTransport client helpers -------------------------------------------
+//============================================================================
 
+/*
+================
+dialWT
+
+Trust only this test server's certificate and open its reliable control stream.
+================
+*/
 func dialWT(t *testing.T, srv *transport.Server) (*webtransport.Session, *webtransport.Stream) {
 	t.Helper()
 	pool := x509.NewCertPool()
@@ -85,7 +124,7 @@ func dialWT(t *testing.T, srv *transport.Server) (*webtransport.Session, *webtra
 	d := webtransport.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}
 	t.Cleanup(func() { d.Close() })
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), smokeIOTimeout)
 	defer cancel()
 	url := fmt.Sprintf("https://%s%s", srv.WTAddr(), transport.PathWT)
 	_, sess, err := d.Dial(ctx, url, nil)
@@ -99,11 +138,16 @@ func dialWT(t *testing.T, srv *transport.Server) (*webtransport.Session, *webtra
 	return sess, str
 }
 
-// readWTFrame reads frames off the control stream, skipping transport
-// keepalive, until a internal/game/handshake frame arrives.
+/*
+================
+readWTFrame
+
+Ignore keepalive frames while waiting for the asserted control or game frame.
+================
+*/
 func readWTFrame(t *testing.T, str *webtransport.Stream) transport.Frame {
 	t.Helper()
-	str.SetReadDeadline(time.Now().Add(5 * time.Second))
+	str.SetReadDeadline(time.Now().Add(smokeIOTimeout))
 	for {
 		f, err := transport.ReadStreamFrame(str)
 		if err != nil {
@@ -116,6 +160,13 @@ func readWTFrame(t *testing.T, str *webtransport.Stream) transport.Frame {
 	}
 }
 
+/*
+================
+helloWT
+
+WELCOME proves wire admission; server-side completion counters may follow it.
+================
+*/
 func helloWT(t *testing.T, str *webtransport.Stream, token []byte) transport.Welcome {
 	t.Helper()
 	err := transport.WriteStreamFrame(str, transport.Frame{
@@ -138,8 +189,15 @@ func helloWT(t *testing.T, str *webtransport.Stream, token []byte) transport.Wel
 	return w
 }
 
-// --- WebSocket client helpers ----------------------------------------------
+//============================================================================
 
+/*
+================
+dialWS
+
+Connect to this test's ephemeral TCP listener.
+================
+*/
 func dialWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	t.Helper()
 	url := fmt.Sprintf("ws://%s%s", srv.WSAddr(), transport.PathWS)
@@ -150,9 +208,16 @@ func dialWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	return c
 }
 
+/*
+================
+readWSFrame
+
+Require binary transport frames and ignore keepalive traffic.
+================
+*/
 func readWSFrame(t *testing.T, c *websocket.Conn) transport.Frame {
 	t.Helper()
-	c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	c.SetReadDeadline(time.Now().Add(smokeIOTimeout))
 	for {
 		typ, data, err := c.ReadMessage()
 		if err != nil {
@@ -172,6 +237,13 @@ func readWSFrame(t *testing.T, c *websocket.Conn) transport.Frame {
 	}
 }
 
+/*
+================
+writeWSFrame
+
+Fail at the sending caller when the reliable socket cannot accept a frame.
+================
+*/
 func writeWSFrame(t *testing.T, c *websocket.Conn, f transport.Frame) {
 	t.Helper()
 	if err := c.WriteMessage(websocket.BinaryMessage, f.Encode()); err != nil {
@@ -179,6 +251,13 @@ func writeWSFrame(t *testing.T, c *websocket.Conn, f transport.Frame) {
 	}
 }
 
+/*
+================
+helloWS
+
+Exchange admission or resume tokens through the production WebSocket envelope.
+================
+*/
 func helloWS(t *testing.T, c *websocket.Conn, token []byte) transport.Welcome {
 	t.Helper()
 	writeWSFrame(t, c, transport.Frame{
@@ -198,10 +277,15 @@ func helloWS(t *testing.T, c *websocket.Conn, token []byte) transport.Welcome {
 	return w
 }
 
-// --- The smoke tests --------------------------------------------------------
+//============================================================================
 
-// TestWebTransportRoundTrip is the WT half of the lane's proof: HELLO,
-// WELCOME, one enveloped game frame out, its echo back, PING/PONG, BYE.
+/*
+================
+TestWebTransportRoundTrip
+
+Prove admission, reliable game traffic, keepalive and explicit teardown over UDP.
+================
+*/
 func TestWebTransportRoundTrip(t *testing.T) {
 	srv := startServer(t)
 	sess, str := dialWT(t, srv)
@@ -229,7 +313,7 @@ func TestWebTransportRoundTrip(t *testing.T) {
 	if err := transport.WriteStreamFrame(str, transport.Frame{Opcode: transport.OpPing, Payload: body}); err != nil {
 		t.Fatal(err)
 	}
-	str.SetReadDeadline(time.Now().Add(5 * time.Second))
+	str.SetReadDeadline(time.Now().Add(smokeIOTimeout))
 	for {
 		f, err := transport.ReadStreamFrame(str)
 		if err != nil {
@@ -246,7 +330,13 @@ func TestWebTransportRoundTrip(t *testing.T) {
 	waitSessionGone(t, srv, w.SessionID)
 }
 
-// TestWebSocketRoundTrip is the WebSocket-transport half of the proof.
+/*
+================
+TestWebSocketRoundTrip
+
+Prove the same reliable game contract over the TCP fallback.
+================
+*/
 func TestWebSocketRoundTrip(t *testing.T) {
 	srv := startServer(t)
 	c := dialWS(t, srv)
@@ -268,10 +358,14 @@ func TestWebSocketRoundTrip(t *testing.T) {
 	waitSessionGone(t, srv, w.SessionID)
 }
 
-// TestWebSocketResume proves the session survives a dropped connection:
-// kill the socket without BYE, queue a frame while detached, reconnect with
-// the resume token, and receive WELCOME(resumed) followed by the queued
-// frame.
+/*
+================
+TestWebSocketResume
+
+An abrupt socket loss preserves the session and queued reliable frames. A
+replacement connection receives WELCOME before the retained frame.
+================
+*/
 func TestWebSocketResume(t *testing.T) {
 	srv := startServer(t)
 	c := dialWS(t, srv)
@@ -284,10 +378,10 @@ func TestWebSocketResume(t *testing.T) {
 
 	// Abrupt transport death: no Close frame, just a dead TCP socket.
 	c.NetConn().Close()
-	waitFor(t, 3*time.Second, "session detach", func() bool { return sess.Kind() == "detached" })
+	wait.Eventually(t, smokeLifecycleTimeout, "session detach", func() bool { return sess.Kind() == "detached" })
 
 	queued := []byte{0x60, 0x1D}
-	if err := sess.Send(0x3126, queued); err != nil {
+	if err := sess.Send(queuedFrameOp, queued); err != nil {
 		t.Fatalf("queueing frame on detached session: %v", err)
 	}
 
@@ -301,14 +395,19 @@ func TestWebSocketResume(t *testing.T) {
 		t.Fatalf("resumed session ID %d, want %d", w2.SessionID, w.SessionID)
 	}
 	f := readWSFrame(t, c2)
-	if f.Opcode != 0x3126 || !bytes.Equal(f.Payload, queued) {
+	if f.Opcode != queuedFrameOp || !bytes.Equal(f.Payload, queued) {
 		t.Fatalf("queued frame after resume = op 0x%04X payload % X", f.Opcode, f.Payload)
 	}
 }
 
-// TestWebTransportDatagram exercises the unreliable channel end to end.
-// Datagrams are best-effort even on loopback, so this retries and only
-// skips (never fails) if the environment drops them all.
+/*
+================
+TestWebTransportDatagram
+
+Use only allowlisted unreliable opcodes. Hosts that drop every datagram skip
+this optional lane; the reliable round-trip tests remain required.
+================
+*/
 func TestWebTransportDatagram(t *testing.T) {
 	srv := startServer(t)
 	sess, str := dialWT(t, srv)
@@ -316,11 +415,11 @@ func TestWebTransportDatagram(t *testing.T) {
 	helloWT(t, str, nil)
 
 	payload := []byte{0xD6}
-	for attempt := 0; attempt < 20; attempt++ {
+	for attempt := 0; attempt < smokeDatagramAttempts; attempt++ {
 		if err := sess.SendDatagram((transport.Frame{Opcode: dgramReqOp, Payload: payload}).Encode()); err != nil {
 			t.Fatalf("SendDatagram: %v", err)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), smokeDatagramTimeout)
 		data, err := sess.ReceiveDatagram(ctx)
 		cancel()
 		if err != nil {
@@ -337,8 +436,14 @@ func TestWebTransportDatagram(t *testing.T) {
 	t.Skip("no datagram round-trip on this host; reliable channel covers the contract")
 }
 
-// TestSingleBindEviction verifies that two clients binding the same character
-// the first gets BYE(Replaced) and its resume token dies, the second wins.
+/*
+================
+TestSingleBindEviction
+
+The latest character binding evicts the previous owner and invalidates its
+resume token without disturbing the winning connection.
+================
+*/
 func TestSingleBindEviction(t *testing.T) {
 	srv := startServer(t)
 
@@ -399,9 +504,15 @@ func TestSingleBindEviction(t *testing.T) {
 	}
 }
 
-// TestTransportMetricsEndpoint verifies one WT handshake and one
-// WS handshake are visible on /transport/metrics, so the field ratio of
-// the UDP-blocked WS floor is measurable.
+/*
+================
+TestTransportMetricsEndpoint
+
+The public endpoint must expose both completed transport handshakes. WELCOME
+is sent inside attach before countAttach runs, so wait for server completion
+before checking that the HTTP representation preserves those counters.
+================
+*/
 func TestTransportMetricsEndpoint(t *testing.T) {
 	srv := startServer(t)
 
@@ -413,7 +524,13 @@ func TestTransportMetricsEndpoint(t *testing.T) {
 	defer c.Close()
 	helloWS(t, c, nil)
 
-	resp, err := http.Get(fmt.Sprintf("http://%s%s", srv.WSAddr(), transport.PathMetrics))
+	wait.Eventually(t, smokeLifecycleTimeout, "both handshake counters", func() bool {
+		metrics := srv.Hub.Metrics()
+		return metrics.WTOk == 1 && metrics.WSOK == 1
+	})
+
+	client := http.Client{Timeout: smokeIOTimeout}
+	resp, err := client.Get(fmt.Sprintf("http://%s%s", srv.WSAddr(), transport.PathMetrics))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -427,8 +544,8 @@ func TestTransportMetricsEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := document.Metrics
-	if m.WTOk < 1 || m.WSOK < 1 {
-		t.Fatalf("metrics = %+v, want wt_ok>=1 and ws_ok>=1", m)
+	if m.WTOk != 1 || m.WSOK != 1 {
+		t.Fatalf("metrics = %+v, want wt_ok=1 and ws_ok=1", m)
 	}
 	if m.LiveSessions < 2 {
 		t.Fatalf("live_sessions = %d, want >=2", m.LiveSessions)
@@ -438,12 +555,18 @@ func TestTransportMetricsEndpoint(t *testing.T) {
 	}
 }
 
-// TestCertHashEndpoint proves the serverCertificateHashes bootstrap: the
-// hash served over TCP matches the certificate the UDP listener presents.
+/*
+================
+TestCertHashEndpoint
+
+The TCP bootstrap must identify the certificate presented by the UDP listener.
+================
+*/
 func TestCertHashEndpoint(t *testing.T) {
 	srv := startServer(t)
 	url := fmt.Sprintf("http://%s%s", srv.WSAddr(), transport.PathCertHash)
-	resp, err := http.Get(url)
+	client := http.Client{Timeout: smokeIOTimeout}
+	resp, err := client.Get(url)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,16 +595,18 @@ func TestCertHashEndpoint(t *testing.T) {
 	}
 }
 
-// --- helpers -----------------------------------------------------------------
+//============================================================================
 
-func waitFor(t *testing.T, limit time.Duration, what string, cond func() bool) {
-	t.Helper()
-	wait.Eventually(t, limit, what, cond)
-}
+/*
+================
+waitSessionGone
 
+Explicit BYE and eviction finish on the server goroutine after wire delivery.
+================
+*/
 func waitSessionGone(t *testing.T, srv *transport.Server, id uint64) {
 	t.Helper()
-	waitFor(t, 3*time.Second, fmt.Sprintf("session %d teardown", id), func() bool {
+	wait.Eventually(t, smokeLifecycleTimeout, fmt.Sprintf("session %d teardown", id), func() bool {
 		_, ok := srv.Hub.Session(id)
 		return !ok
 	})
