@@ -16,6 +16,7 @@ up between full builds.
 ===========================================================================
 */
 
+import { ASSET_SCHEMA } from "./assetSchema.mjs";
 import { prepareAssetDelivery } from "./assetDelivery.mjs";
 import { validatePackedFontAtlases } from "./assetPackPublication.mjs";
 import { validateAssetPackIndex } from "./assetPackIndexValidation.mjs";
@@ -133,6 +134,8 @@ export async function buildAssetPacks( options = {} ) {
 	const index = {
 		format: "sro-asset-pack-index",
 		version: 1,
+		// The format of the data this index serves (assetSchema.mjs).
+		assetSchema: ASSET_SCHEMA,
 		generatedAt: new Date().toISOString(),
 		targetPackBytes: defaultTargetBytes,
 		groups: [],

@@ -39,6 +39,7 @@ def manifest_for(entry):
 	manifest = {
 		"format": "sro-beta-release-v1",
 		"protocol": CLIENT_CONTRACT["protocol"],
+		"assetSchema": CLIENT_CONTRACT["assetSchema"],
 		"sourceHash": hashlib.sha256(entry).hexdigest(),
 		"assetAuthorityHash": hashlib.sha256(data).hexdigest(),
 		"files": [
@@ -337,12 +338,13 @@ class ClientProtocolTests(unittest.TestCase):
 	# bundle_with
 	# Bundle a one-file build whose manifest reports `protocol`.
 	# ================
-	def bundle_with(self, protocol):
+	def bundle_with(self, protocol, schema=CLIENT_CONTRACT["assetSchema"]):
 		directory = tempfile.TemporaryDirectory()
 		self.addCleanup(directory.cleanup)
 		root = Path(directory.name)
 		manifest = manifest_for(b"browser")
 		manifest["protocol"] = protocol
+		manifest["assetSchema"] = schema
 		package = root / "package"
 		(package / "application").mkdir(parents=True)
 		(package / "application/index.html").write_bytes(b"browser")
@@ -365,3 +367,11 @@ class ClientProtocolTests(unittest.TestCase):
 		for protocol in (CLIENT_CONTRACT["protocol"] + 1, None, "2"):
 			with self.assertRaisesRegex(ValueError, "release protocol"):
 				self.bundle_with(protocol)
+
+	# ================
+	# test_a_build_packaging_another_asset_schema_is_refused
+	# ================
+	def test_a_build_packaging_another_asset_schema_is_refused(self):
+		for schema in (CLIENT_CONTRACT["assetSchema"] + 1, None):
+			with self.assertRaisesRegex(ValueError, "asset schema"):
+				self.bundle_with(CLIENT_CONTRACT["protocol"], schema)

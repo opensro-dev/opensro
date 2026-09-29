@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { zstdDecompressSync } from "node:zlib";
 import { files, inspect, publicIndex, safeName, sha, releaseIdentity, verifyDirectory } from "./policy.mjs";
-import { RELEASE_PROTOCOL } from "../../src/engine/foundation/release/protocol.ts";
+import { ASSET_SCHEMA, RELEASE_PROTOCOL } from "../../src/engine/foundation/release/protocol.ts";
 import { archiveRelease } from "./archive.mjs";
 import { compressRoutes } from "./compression.mjs";
 import { projectPack } from "./public-data.mjs";
@@ -178,6 +178,7 @@ export async function buildBeta(
 		// The release protocol compiled into this build; release admission
 		// compares it with the declared one (ops/release/client_bundle.py).
 		protocol: RELEASE_PROTOCOL,
+		assetSchema: ASSET_SCHEMA,
 		sourceHash: inputHash,
 		files: [],
 		routes: [],
@@ -222,6 +223,11 @@ export async function buildBeta(
 	const authority = await readFile( path.join( assetRoot, "assets/packs/manifest.json" ) );
 	manifest.assetAuthorityHash = sha( authority );
 	const original = JSON.parse( authority ), index = publicIndex( original );
+	// The client reads one data format; packaging any other would ship a
+	// release whose code and data disagree.
+	if ( original.assetSchema !== ASSET_SCHEMA ) {
+		throw Error( `Asset data is schema ${original.assetSchema}; this client reads ${ASSET_SCHEMA}` );
+	}
 	manifest.excludedGroups = original.groups.filter( g => !index.groups.includes( g ) ).map( g => g.name );
 	// Pack members are inspected even when no loose representation remains.
 	const overrides = new Map();

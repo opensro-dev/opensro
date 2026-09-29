@@ -841,7 +841,6 @@ scripts/test/assets/banTimeline.test.mjs
 scripts/test/assets/bsrParticleModifiers.test.mjs
 scripts/test/assets/buildSharedUtilities.test.mjs
 scripts/test/assets/cifSpriteCatalog.test.mjs
-scripts/test/assets/fontAtlasPublication.test.mjs
 scripts/test/assets/jsonAssetCompression.test.mjs
 scripts/test/assets/nativeUiTexture.test.mjs
 scripts/test/assets/npcAnimationContactMarkers.test.mjs

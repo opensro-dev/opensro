@@ -11,6 +11,7 @@ could load.
 
 ===========================================================================
 */
+import { ASSET_SCHEMA } from "../../build/assetSchema.mjs";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -52,7 +53,7 @@ A minimal pack index naming each group's paths.
 */
 function index( groups ) {
 	const rows = [];
-	const out = { format: "sro-asset-pack-index", version: 1, groups: [], assets: rows };
+	const out = { format: "sro-asset-pack-index", version: 1, assetSchema: ASSET_SCHEMA, groups: [], assets: rows };
 	for ( const [name, paths] of Object.entries( groups ) ) {
 		const packPath = `/assets/packs/${name}.bin`;
 		out.groups.push( {
@@ -185,6 +186,30 @@ test("publication fails closed on a duplicate-owner index and keeps the live man
 	await assert.rejects(
 		publishAssetPackManifest( root, filename, Buffer.from( JSON.stringify( broken ) ) ),
 		/exactly one owning group/
+	);
+	assert.equal( await readFile( filename, "utf8" ), "previous valid publication" );
+});
+
+test("a focused publish never merges into data of another asset schema", () => {
+	const previous = index( { "game-models": [ "/assets/a.glb" ], "equipment-models": [ "/assets/old.glb" ] } );
+	const update = index( { "equipment-models": [ "/assets/new.glb" ] } );
+	for ( const schema of [ ASSET_SCHEMA - 1, undefined ] ) {
+		assert.throws(
+			() =>
+				mergeAssetPackGroupUpdates( { ...previous, assetSchema: schema }, [ update ], [ "equipment-models" ] ),
+			/asset schema/
+		);
+	}
+});
+
+test("the live index is published only with the schema this pipeline writes", async ( t ) => {
+	const root = await tempRoot( t );
+	const filename = path.join( root, "assets", "packs", "manifest.json" );
+	await put( root, "/assets/packs/manifest.json", "previous valid publication" );
+	const stale = { ...index( { "game-models": [] } ), assetSchema: ASSET_SCHEMA - 1 };
+	await assert.rejects(
+		publishAssetPackManifest( root, filename, Buffer.from( JSON.stringify( stale ) ) ),
+		/asset schema/
 	);
 	assert.equal( await readFile( filename, "utf8" ), "previous valid publication" );
 });

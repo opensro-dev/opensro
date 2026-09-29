@@ -1,15 +1,19 @@
 /*
 ===========================================================================
 
-protocol.ts - the release protocol this client build speaks
+protocol.ts - the release identity this client build speaks
 
-A release protocol names the complete set of browser-facing wire contracts
+RELEASE_PROTOCOL names the complete set of browser-facing wire contracts
 (the server owner is apps/server/internal/releaseprotocol). Every request
 to the title and agent services declares it; a server speaking another
 answers 426 Upgrade Required, and the page offers the newer release.
 
-This file imports nothing, so Node tooling (probes, release checks) reads
-the same number the client ships.
+ASSET_SCHEMA is the format of the published asset data this client reads
+(the pipeline owner is scripts/build/assetSchema.mjs). The release build
+refuses to package data of another schema.
+
+This file imports nothing, so Node tooling (probes, the release build and
+checks) reads the same numbers the client ships.
 
 ===========================================================================
 */
@@ -18,3 +22,4 @@ export const RELEASE_PROTOCOL = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";
 // 426 Upgrade Required: the server speaks another release protocol.
 export const RELEASE_OUTDATED_STATUS = 426;
+export const ASSET_SCHEMA = 2;

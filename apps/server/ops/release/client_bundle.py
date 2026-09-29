@@ -96,17 +96,19 @@ def validate_base(base, manifest):
 
 
 # ================
-# require_declared_protocol
+# require_declared_contract
 #
-# The build reports the release protocol compiled into it; the approval plan
-# carries the declared one. They must be the same, as a server's compiled
-# report must match its declaration (verify_contract.py).
+# The build reports the release protocol compiled into it and the asset
+# schema of the data it packaged; the approval plan carries the declared
+# ones. They must be the same, as a server's compiled report must match its
+# declaration (verify_contract.py).
 # ================
-def require_declared_protocol(manifest, plan):
-	built = manifest.get("protocol")
-	declared = plan.get("compatibility", {}).get("protocol")
-	if type(built) is not int or built != declared:
-		raise ValueError(f"client build speaks release protocol {built!r}, its declaration says {declared!r}")
+def require_declared_contract(manifest, plan):
+	declared = plan.get("compatibility", {})
+	for field, name in (("protocol", "release protocol"), ("assetSchema", "asset schema")):
+		built = manifest.get(field)
+		if type(built) is not int or built != declared.get(field):
+			raise ValueError(f"client build has {name} {built!r}, its declaration says {declared.get(field)!r}")
 
 
 # ================
@@ -134,7 +136,7 @@ def bundle(package, destination, state):
 	manifest = json.loads(raw)
 	files = application_files(manifest)
 	plan = build_plan("client", manifest["releaseId"], state)
-	require_declared_protocol(manifest, plan)
+	require_declared_contract(manifest, plan)
 	candidate = {
 		"format": FORMAT,
 		"manifestSha256": hashlib.sha256(raw).hexdigest(),
@@ -188,7 +190,7 @@ def unpack(source):
 		identity(plan.get("commit"))
 		if plan.get("baseRelease") != candidate.get("baseRelease"):
 			raise ValueError("candidate and approval identify different bases")
-		require_declared_protocol(manifest, plan)
+		require_declared_contract(manifest, plan)
 		if names != set(files) | {"candidate.json", "release.json"}:
 			raise ValueError("unlisted or missing application member")
 		payloads = {}

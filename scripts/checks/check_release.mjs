@@ -7,8 +7,10 @@ Python owns the forced SSH receivers. These tests must run even when Go and
 browser compilation are unchanged; Linux CI additionally exercises symlinks.
 
 It also holds the client build to its release declaration: the release
-protocol compiled into the client (foundation/release/protocol.ts) must be
-the one compatibility.json declares, and inside the declared server range.
+protocol and asset schema compiled into the client (foundation/release/
+protocol.ts) must be the ones compatibility.json declares, the protocol
+inside the declared server range, and the asset pipeline must write the
+schema the client reads.
 The Go gate checks the server's compiled report the same way.
 
 ===========================================================================
@@ -16,7 +18,8 @@ The Go gate checks the server's compiled report the same way.
 
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { RELEASE_PROTOCOL } from "../../apps/client-next/src/engine/foundation/release/protocol.ts";
+import { ASSET_SCHEMA, RELEASE_PROTOCOL } from "../../apps/client-next/src/engine/foundation/release/protocol.ts";
+import { ASSET_SCHEMA as PIPELINE_ASSET_SCHEMA } from "../build/assetSchema.mjs";
 
 const COMPATIBILITY = "apps/server/ops/release/compatibility.json";
 
@@ -32,6 +35,12 @@ function checkClientProtocol() {
 	const declared = JSON.parse( readFileSync( COMPATIBILITY, "utf8" ) );
 	if ( declared.client.protocol !== RELEASE_PROTOCOL ) {
 		return `client speaks release protocol ${RELEASE_PROTOCOL}; ${COMPATIBILITY} declares ${declared.client.protocol}`;
+	}
+	if ( declared.client.assetSchema !== ASSET_SCHEMA ) {
+		return `client reads asset schema ${ASSET_SCHEMA}; ${COMPATIBILITY} declares ${declared.client.assetSchema}`;
+	}
+	if ( PIPELINE_ASSET_SCHEMA !== ASSET_SCHEMA ) {
+		return `asset pipeline writes schema ${PIPELINE_ASSET_SCHEMA}; the client reads ${ASSET_SCHEMA}`;
 	}
 	if ( RELEASE_PROTOCOL < declared.server.protocolMin || RELEASE_PROTOCOL > declared.server.protocolMax ) {
 		return `client release protocol ${RELEASE_PROTOCOL} is outside the declared server range ` +

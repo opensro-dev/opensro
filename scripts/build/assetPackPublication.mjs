@@ -11,6 +11,7 @@ merge rule focused publishers use to replace their groups.
 ===========================================================================
 */
 
+import { ASSET_SCHEMA } from "./assetSchema.mjs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -94,11 +95,18 @@ export async function validatePackedFontAtlases( index, publicRoot, { partial = 
 export async function publishAssetPackManifest( publicRoot, filename, bytes, options = {} ) {
 	const index = JSON.parse( bytes.toString( "utf8" ) );
 	validateAssetPackIndex( index );
+	const mainIndex = path.resolve( filename ) === path.resolve( publicRoot, "assets", "packs", "manifest.json" );
+	// The live index names the data's format; clients refuse any other.
+	if ( mainIndex && index.assetSchema !== ASSET_SCHEMA ) {
+		throw Error(
+			`Asset pack index declares asset schema ${index.assetSchema}; this pipeline writes ${ASSET_SCHEMA}`
+		);
+	}
 	await validatePackedFontAtlases( index, publicRoot );
 	const published = await publishBytesAtomically( filename, bytes, options );
 	// Focused publishers write each refresh into fresh slot folders; once the
 	// main index is live, retire the packs it no longer uses so they never pile up.
-	if ( path.resolve( filename ) === path.resolve( publicRoot, "assets", "packs", "manifest.json" ) ) {
+	if ( mainIndex ) {
 		await collectPackGarbage( { publicRoot, apply: true, index } );
 	}
 	return published;
@@ -117,6 +125,14 @@ export function mergeAssetPackGroupUpdates(
 	updates,
 	replacedGroups = updates.flatMap( update => update.groups.map( group => group.name ) )
 ) {
+	// A focused publisher writes today's formats; merged into data of another
+	// schema it would publish a mix no client reads. Rebuild everything instead.
+	if ( previous.assetSchema !== ASSET_SCHEMA ) {
+		throw Error(
+			`Published data is asset schema ${previous.assetSchema}; this pipeline writes ${ASSET_SCHEMA}. ` +
+				"Run the full asset build."
+		);
+	}
 	const replaced = new Set( replacedGroups );
 	for ( const update of updates ) {
 		for ( const group of update.groups ) {
