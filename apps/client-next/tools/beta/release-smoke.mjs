@@ -28,6 +28,19 @@ const HTTP_OK = 200;
 const PROBE_VIEWPORT = { width: 1024, height: 768 };
 // The scratch roster contains one actor at this authored dock hit position.
 const DOCK_PICK = { x: 505, y: 430 };
+// Opt-in performance traces (RELEASE_TRACE_DIR): the phase that just ended ->
+// the phase traced next. These are the two scene constructions that dominate
+// the probe's duration under software rendering.
+const TRACED_PHASES = { login: "roster", gameplay: "resume" };
+const TRACE_CATEGORIES = [
+	"devtools.timeline",
+	"disabled-by-default-devtools.timeline",
+	"disabled-by-default-devtools.timeline.frame",
+	"disabled-by-default-v8.cpu_profiler",
+	"v8.execute",
+	"blink.user_timing",
+	"gpu"
+];
 
 /*
 ================
@@ -86,10 +99,10 @@ dock click. Opening and closing inventory proves keyboard, HUD and frame
 updates while keeping production game state unchanged.
 ================
 */
-async function exercise( page, result, credentials ) {
+async function exercise( page, result, credentials, tracer ) {
 	const control = id => page.locator( `[data-ui-id="${id}"]` );
 	await control( "frontend:reveal" ).click( { timeout: SCENE_BUDGET_MS } );
-	recordPhase( result, "title" );
+	await passPhase( result, tracer, "title" );
 	await control( "native:servers" ).click();
 	await control( `server:${credentials.shard}` ).click();
 	await control( "native:server-accept" ).click();
@@ -99,14 +112,14 @@ async function exercise( page, result, credentials ) {
 	await control( "password" ).press( "Enter" );
 	const rosterResponse = await response;
 	if ( rosterResponse.status() !== HTTP_OK ) throw Error( "Roster request failed" );
-	recordPhase( result, "login" );
+	await passPhase( result, tracer, "login" );
 	const document = await rosterResponse.json();
 	const characters = Array.isArray( document ) ? document : document.characters;
 	if ( !Array.isArray( characters ) || characters.length !== 1 || characters[0].name !== credentials.character ) {
 		throw Error( "Release probe requires its dedicated single-character roster" );
 	}
 	await control( "frontend:create" ).waitFor( { timeout: SCENE_BUDGET_MS } );
-	recordPhase( result, "roster" );
+	await passPhase( result, tracer, "roster" );
 	await page.mouse.click( DOCK_PICK.x, DOCK_PICK.y );
 	await control( "enter" ).click();
 	await page.waitForFunction(
@@ -120,13 +133,13 @@ async function exercise( page, result, credentials ) {
 		{ timeout: CONTROL_BUDGET_MS }
 	);
 	await page.locator( "#startup-loading" ).waitFor( { state: "hidden" } );
-	recordPhase( result, "world" );
+	await passPhase( result, tracer, "world" );
 	result.navigation = "world";
 	await page.keyboard.press( "i" );
 	await control( "inventory-gold" ).waitFor();
 	await page.keyboard.press( "i" );
 	await control( "inventory-gold" ).waitFor( { state: "detached" } );
-	recordPhase( result, "gameplay" );
+	await passPhase( result, tracer, "gameplay" );
 	result.workerResources = await collectWorkerResources( page );
 	result.navigation = "resume";
 	await page.reload( { waitUntil: "commit" } );
@@ -146,7 +159,7 @@ async function exercise( page, result, credentials ) {
 	await control( "inventory-gold" ).waitFor();
 	await page.keyboard.press( "i" );
 	await control( "inventory-gold" ).waitFor( { state: "detached" } );
-	recordPhase( result, "resume" );
+	await passPhase( result, tracer, "resume" );
 }
 
 /*
@@ -164,6 +177,51 @@ function recordPhase( result, phase ) {
 	const timing = { phase, elapsedMs, durationMs: elapsedMs - previousMs };
 	result.phaseTimings.push( timing );
 	console.log( "Release phase:", JSON.stringify( timing ) );
+}
+
+/*
+================
+createPhaseTracer
+
+Chrome performance traces of the slow phases, one file each, when a trace
+directory is configured; otherwise every call is a no-op. Tracing observes
+the page's threads and V8 samples without changing application behavior.
+================
+*/
+function createPhaseTracer( browser, page, directory ) {
+	let active = false;
+	return {
+		async phaseEnded( phase ) {
+			if ( !directory ) return;
+			if ( active ) {
+				await browser.stopTracing();
+				active = false;
+			}
+			const next = TRACED_PHASES[phase];
+			if ( !next ) return;
+			await browser.startTracing( page, {
+				path: path.join( directory, `trace-${next}.json` ),
+				categories: TRACE_CATEGORIES
+			} );
+			active = true;
+		},
+		async close() {
+			if ( active ) await browser.stopTracing().catch( () => {} );
+			active = false;
+		}
+	};
+}
+
+/*
+================
+passPhase
+
+Record a passed phase, then let the tracer close or open its window.
+================
+*/
+async function passPhase( result, tracer, phase ) {
+	recordPhase( result, phase );
+	await tracer.phaseEnded( phase );
 }
 
 /*
@@ -241,6 +299,7 @@ async function main() {
 		...(process.env.RELEASE_CHROME ? { executablePath: process.env.RELEASE_CHROME } : {})
 	} );
 	page.setDefaultTimeout( CONTROL_BUDGET_MS );
+	const tracer = createPhaseTracer( browser, page, process.env.RELEASE_TRACE_DIR );
 	const result = {
 		...candidate,
 		verdict: "FAIL",
@@ -294,7 +353,7 @@ async function main() {
 		if ( !response || response.status() !== HTTP_OK ) throw Error( "Candidate entry is unavailable" );
 		const digest = createHash( "sha256" ).update( await response.body() ).digest( "hex" );
 		if ( digest !== candidate.entrySha256 ) throw Error( "HTTPS served a different candidate entry" );
-		await exercise( page, result, credentials );
+		await exercise( page, result, credentials, tracer );
 		const failures = classifyRequestFailures( requestFailures, result.phases );
 		result.errors.push( ...failures.errors );
 		result.cancelledRequests = failures.cancelled;
@@ -305,6 +364,7 @@ async function main() {
 		process.exitCode = 1;
 	} finally {
 		clearInterval( progress );
+		await tracer.close();
 		result.requestFailures = requestFailures;
 		result.finishedAt = Date.now();
 		result.frontend = await page.locator( "output" ).textContent().catch( () => "unavailable" );
