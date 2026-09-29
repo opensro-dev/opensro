@@ -59,7 +59,7 @@ def candidate_status(config):
 			phase = "live"
 		elif current["generation"] != plan["baseGeneration"]:
 			phase = "superseded"
-		rows.append({
+		row = {
 			"candidate": record.name,
 			"component": plan["component"],
 			"release": plan["release"],
@@ -70,7 +70,13 @@ def candidate_status(config):
 			"createdAt": record.stat().st_mtime,
 			"coordinated": bool(plan.get("coordinated")),
 			"restartRequired": plan["component"] == "server" or bool(plan.get("coordinated")),
-		})
+		}
+		# The browser smoke checks the served entry against this digest; the
+		# host checks the evidence against the staged file itself.
+		entry = Path(config["client_candidates"]) / record.name / "index.html"
+		if plan["component"] == "client" and entry.is_file():
+			row["entrySha256"] = hashlib.sha256(entry.read_bytes()).hexdigest()
+		rows.append(row)
 	for row in rows:
 		if row["phase"] == "live" or row["mode"] == "rollback":
 			continue

@@ -253,6 +253,22 @@ class CoordinatedFlowTests(LiveDataFixture, unittest.TestCase):
 		self.assertIsNone(read_state(self.config["production_state"])["operation"])
 
 	# ================
+	# test_the_public_list_shows_the_pair_ready_with_the_client_entry
+	#
+	# Workflows find a staged client and its entry digest in this list.
+	# ================
+	def test_the_public_list_shows_the_pair_ready_with_the_client_entry(self):
+		receiver.candidate_status(self.config)
+		listing = json.loads((self.root / "candidates.json").read_text())
+		rows = {row["candidate"]: row for row in listing["candidates"]}
+		self.assertEqual(rows[self.client]["phase"], "ready-for-approval")
+		self.assertTrue(rows[self.client]["coordinated"])
+		self.assertEqual(rows[self.client]["entrySha256"], self.staged["entrySha256"])
+		self.assertEqual(rows[self.server]["phase"], "ready-for-approval")
+		self.assertTrue(rows[self.server]["restartRequired"])
+		self.assertNotIn("entrySha256", rows[self.server])
+
+	# ================
 	# test_confirmation_needs_passing_evidence_for_the_published_client
 	# ================
 	def test_confirmation_needs_passing_evidence_for_the_published_client(self):
