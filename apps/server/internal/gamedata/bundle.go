@@ -105,8 +105,15 @@ func Open(root, expectedManifestDigest string) (Bundle, error) {
 		return Bundle{}, fmt.Errorf("resolve root links: %w", err)
 	}
 
-	manifestPath := filepath.Join(realRoot, ManifestFilename)
-	manifestBytes, err := readBoundedRegularFile(realRoot, manifestPath, maxManifestBytes)
+	// Every read goes through one os.Root: the OS refuses a path that
+	// escapes it, symlinks included, so no read resolves links itself.
+	tree, err := os.OpenRoot(realRoot)
+	if err != nil {
+		return Bundle{}, fmt.Errorf("open root: %w", err)
+	}
+	defer func() { _ = tree.Close() }()
+
+	manifestBytes, err := readBoundedRegularFile(tree, ManifestFilename, maxManifestBytes)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("manifest: %w", err)
 	}
@@ -136,8 +143,7 @@ func Open(root, expectedManifestDigest string) (Bundle, error) {
 	described := make(map[string]Descriptor, len(manifest.Files))
 	for _, descriptor := range manifest.Files {
 		described[descriptor.Path] = descriptor
-		filePath := filepath.Join(realRoot, filepath.FromSlash(descriptor.Path))
-		actualDigest, actualSize, err := digestRegularFile(realRoot, filePath, descriptor.Size)
+		actualDigest, actualSize, err := digestRegularFile(tree, filepath.FromSlash(descriptor.Path), descriptor.Size)
 		if err != nil {
 			return Bundle{}, fmt.Errorf("file %s: %w", descriptor.Path, err)
 		}
@@ -148,7 +154,7 @@ func Open(root, expectedManifestDigest string) (Bundle, error) {
 			return Bundle{}, fmt.Errorf("file %s digest %s does not match manifest %s", descriptor.Path, actualDigest, descriptor.Digest)
 		}
 	}
-	if err := validateExactFileSet(realRoot, described); err != nil {
+	if err := validateExactFileSet(tree, described); err != nil {
 		return Bundle{}, err
 	}
 
@@ -285,7 +291,7 @@ func digestBytes(contents []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func digestRegularFile(root, filename string, expectedSize int64) (string, int64, error) {
+func digestRegularFile(root *os.Root, filename string, expectedSize int64) (string, int64, error) {
 	file, err := openVerifiedRegularFile(root, filename)
 	if err != nil {
 		return "", 0, err
@@ -306,7 +312,7 @@ func digestRegularFile(root, filename string, expectedSize int64) (string, int64
 	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), read, nil
 }
 
-func readBoundedRegularFile(root, filename string, limit int64) ([]byte, error) {
+func readBoundedRegularFile(root *os.Root, filename string, limit int64) ([]byte, error) {
 	file, err := openVerifiedRegularFile(root, filename)
 	if err != nil {
 		return nil, err
@@ -329,15 +335,10 @@ func readBoundedRegularFile(root, filename string, limit int64) ([]byte, error) 
 	return contents, nil
 }
 
-func openVerifiedRegularFile(root, filename string) (*os.File, error) {
-	realPath, err := filepath.EvalSymlinks(filename)
-	if err != nil {
-		return nil, err
-	}
-	if err := requireInsideRoot(root, realPath); err != nil {
-		return nil, err
-	}
-	file, err := os.Open(realPath)
+// openVerifiedRegularFile opens a root-relative regular file. os.Root
+// rejects any path, symlinked or not, that resolves outside the root.
+func openVerifiedRegularFile(root *os.Root, filename string) (*os.File, error) {
+	file, err := root.Open(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -353,37 +354,26 @@ func openVerifiedRegularFile(root, filename string) (*os.File, error) {
 	return file, nil
 }
 
-func requireInsideRoot(root, filename string) error {
-	relative, err := filepath.Rel(root, filename)
-	if err != nil || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("path %q escapes bundle root", filename)
-	}
-	return nil
-}
-
-func validateExactFileSet(root string, described map[string]Descriptor) error {
+// validateExactFileSet walks the root and requires exactly the described
+// files: no symlink, no other file type, nothing undescribed.
+func validateExactFileSet(root *os.Root, described map[string]Descriptor) error {
 	actual := make([]string, 0, len(described))
-	err := filepath.WalkDir(root, func(filename string, entry fs.DirEntry, walkErr error) error {
+	err := fs.WalkDir(root.FS(), ".", func(relative string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if filename == root {
+		if relative == "." {
 			return nil
 		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("bundle contains symlink %q", filename)
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("bundle contains symlink %q", relative)
 		}
 		if entry.IsDir() {
 			return nil
 		}
 		if !entry.Type().IsRegular() {
-			return fmt.Errorf("bundle contains non-regular file %q", filename)
+			return fmt.Errorf("bundle contains non-regular file %q", relative)
 		}
-		relative, err := filepath.Rel(root, filename)
-		if err != nil {
-			return err
-		}
-		relative = filepath.ToSlash(relative)
 		if relative != ManifestFilename {
 			actual = append(actual, relative)
 		}

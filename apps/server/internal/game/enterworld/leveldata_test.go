@@ -1,11 +1,10 @@
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"opensro.online/server/internal/gamedata"
 )
 
 // The SP-cost cell is the THIRD column of a leveldata row. Everything
@@ -127,10 +126,7 @@ func TestTextdataLevelsDegradesWhenAbsent(t *testing.T) {
 // the known head of the curve is asserted here.
 func TestTextdataLevelsMatchesShippedCurve(t *testing.T) {
 	t.Parallel()
-	dir, err := gamedata.ResolveTextdataDir()
-	if err != nil {
-		t.Skipf("shipped leveldata.txt not present in this checkout: %v", err)
-	}
+	dir := gamedatatest.TextdataDir(t)
 
 	levels := NewTextdataLevels(dir)
 	for _, testCase := range []struct {

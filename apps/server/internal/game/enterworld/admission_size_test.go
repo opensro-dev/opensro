@@ -7,16 +7,16 @@ import (
 	"io"
 	"net/http/httptest"
 	"opensro.online/server/internal/testsupport/entryauth"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/transport"
-	"path/filepath"
 	"reflect"
 	"testing"
 )
 
 func TestPublishedReferencesLeaveTheLoginEnvelope(t *testing.T) {
 	licensed.RequireGameData(t)
-	source := NewTextdataSkills(filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata"))
+	source := NewTextdataSkills(gamedatatest.TextdataDir(t))
 	rows := spawnSkillSnapshot(source)
 	if len(rows) == 0 {
 		t.Fatal("published skill catalog missing")

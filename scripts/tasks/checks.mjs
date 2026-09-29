@@ -148,7 +148,7 @@ export const CHECK_TASKS = [
 			"apps/server",
 			"scripts/checks/check_go_server.mjs",
 			"@go,version",
-			"!.generated/game-data/1.150/manifest.json",
+			"!apps/server/.generated/game-data/1.150/server/manifest.json",
 			"!.generated/client-public/assets/packs/manifest.json",
 			"--",
 			"node",

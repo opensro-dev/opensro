@@ -3,9 +3,9 @@ package quest
 import (
 	"encoding/hex"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"opensro.online/server/internal/game/action"
@@ -29,7 +29,7 @@ func TestGraespKillProducerMatchesClientFeedbackFixture(t *testing.T) {
 	if err := json.Unmarshal(data, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	textdata := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)
 	if err != nil {

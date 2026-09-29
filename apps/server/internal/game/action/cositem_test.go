@@ -13,12 +13,12 @@ package action
 
 import (
 	"encoding/binary"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"testing"
 
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/gamedata"
 )
 
 /*
@@ -30,10 +30,7 @@ Keep retail-data coverage explicit when the source-only suite has no assets.
 */
 func shippedItems(t *testing.T) *enterworld.TextdataItems {
 	t.Helper()
-	dir, err := gamedata.ResolveTextdataDir()
-	if err != nil {
-		t.Skipf("shipped textdata unavailable: %v", err)
-	}
+	dir := gamedatatest.TextdataDir(t)
 	return enterworld.NewTextdataItems(dir)
 }
 

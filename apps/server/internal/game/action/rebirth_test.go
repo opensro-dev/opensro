@@ -11,8 +11,8 @@ package action
 import (
 	"encoding/binary"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -205,7 +205,7 @@ func TestRecallAppointmentGateCatalogAndPersistence(t *testing.T) {
 	c := rebirthTestCharacter(20, 100)
 	rt, _ := newTestRuntime(c, testItems())
 	rt.NpcSpawn.Enabled = true
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	roster, err := simulation.AppendTeleportGates(dir, simulation.LoadNpcWorldRoster(dir))
 	if err != nil {
 		t.Fatal(err)
@@ -301,7 +301,7 @@ func TestRecallAppointmentSurvivesAuthorityReopen(t *testing.T) {
 	}
 	d.rt.NpcSpawn.Enabled = true
 	d.rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Teleport: &simulation.TeleportGateBounds{Radius: 100, Height: 200}}}
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	if err := d.rt.ConfigurePortals(dir); err != nil {
 		t.Fatal(err)
 	}

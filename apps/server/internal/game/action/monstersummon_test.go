@@ -5,15 +5,15 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestShippedUniqueSummonActionsAcrossAllHealthBands(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
 	skills := enterworld.NewTextdataSkills(dir)
 	rt := NewRuntime(&enterworld.Deps{Skills: skills}, nil)
@@ -187,7 +187,7 @@ func TestShippedUniqueSummonActionsAcrossAllHealthBands(t *testing.T) {
 
 func TestDevelopmentSummonSelectionUsesRequestedAuthoredFamily(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
 	rt := NewRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(refs, nil))

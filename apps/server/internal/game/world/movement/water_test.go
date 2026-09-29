@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/gamedata"
 )
 
 // writeTestAsset drops one file under the synthetic public root.
@@ -547,10 +547,7 @@ func TestConcurrentColdRegionLoadsDoNotSerialize(t *testing.T) {
 // regression after packaging moved to server.srogz.
 func realAuthorityValidator(t *testing.T) *WaterValidator {
 	t.Helper()
-	paths, err := gamedata.Resolve()
-	if err != nil {
-		t.Skipf("verified server movement projection not present (%v)", err)
-	}
+	paths := gamedatatest.Paths(t)
 	return NewAuthorityValidator(paths.WorldAuthorityDir)
 }
 

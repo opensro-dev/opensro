@@ -1,12 +1,12 @@
 package combat
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"testing"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/gamedata"
 )
 
 /*
@@ -21,10 +21,7 @@ at grade 1 - and no weakening-line bucket does.
 ==================
 */
 func TestFaithWorksOnlyInARobeWithAStaff(t *testing.T) {
-	dir, err := gamedata.ResolveTextdataDir()
-	if err != nil {
-		t.Skipf("shipped textdata unavailable: %v", err)
-	}
+	dir := gamedatatest.TextdataDir(t)
 	row, ok := enterworld.NewTextdataSkills(dir).SkillByID(10094)
 	if !ok || !row.PassiveParameters.Pinned || !row.Reqi.Present || !row.Reqi.All {
 		t.Fatalf("Faith not admitted: %+v", row.PassiveParameters)

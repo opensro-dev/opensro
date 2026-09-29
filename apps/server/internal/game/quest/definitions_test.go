@@ -2,10 +2,12 @@ package quest
 
 import (
 	"fmt"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -15,14 +17,27 @@ import (
 // collect item (the shipped itemdata row 3674).
 type fakeItems struct{}
 
-var tutorialFixtureItems = enterworld.NewTextdataItems(filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata"))
+var (
+	tutorialItemsOnce sync.Once
+	tutorialItems     *enterworld.TextdataItems
+)
+
+// tutorialFixtureItems is the shared shipped itemdata loader. It resolves on
+// first use, which is always inside a test: a package-level resolution runs
+// before the test log starts, and Go's test cache would never see the data.
+func tutorialFixtureItems() *enterworld.TextdataItems {
+	tutorialItemsOnce.Do(func() {
+		tutorialItems = enterworld.NewTextdataItems(gamedatatest.TextdataDirOrEmpty())
+	})
+	return tutorialItems
+}
 
 func (fakeItems) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) {
 	if codename == "ITEM_QNO_WC_ARMOR_1" {
-		return tutorialFixtureItems.ItemRefByCodename(codename)
+		return tutorialFixtureItems().ItemRefByCodename(codename)
 	}
 	if codename == "ITEM_CH_M_LIGHT_01_AA_A" || codename == "ITEM_CH_W_LIGHT_01_AA_A" || codename == "ITEM_CH_RING_01_A" {
-		return tutorialFixtureItems.ItemRefByCodename(codename)
+		return tutorialFixtureItems().ItemRefByCodename(codename)
 	}
 	if id, ok := map[string]uint32{"ITEM_QNO_CH_SPECIAL_1_01": 3955, "ITEM_QNO_CH_POTION_3_01": 3958, "ITEM_QNO_CH_GENARAL_BO_2_01": 3961, "ITEM_QNO_CH_FERRY2_1_01": 3966}[codename]; ok {
 		return &enterworld.ItemRef{RefObjID: id, Codename: codename, TypeIDs: [4]int64{3, 3, 8, 0}, NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 250})}, true

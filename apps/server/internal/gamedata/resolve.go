@@ -21,7 +21,10 @@ const (
 	EnvManifestDigest = "SRO_SERVER_GAME_DATA_MANIFEST_DIGEST"
 )
 
-var defaultRoot = filepath.Join("..", "..", ".generated", "game-data", SupportedGameVersion, SupportedProjection)
+// defaultRoot is module-relative: the projection lives inside the module, so
+// its tests read only module files and `go test` validates cached results
+// against it (apps/server/AGENTS.md).
+var defaultRoot = filepath.Join(".generated", "game-data", SupportedGameVersion, SupportedProjection)
 
 type resolveResult struct {
 	ready chan struct{}

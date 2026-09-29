@@ -125,33 +125,38 @@ func newWaterValidator(root, catalogPath, dungeonResourcesPath string) *WaterVal
 }
 
 // boundedMovementAssetReader is the production file boundary for movement
-// authority. Lexical public paths are checked again after resolving symlinks,
-// regular files are required, and a size check happens before allocation and
-// again through a limited reader to cover replacement/growth races.
+// authority. Paths are checked lexically against the root and opened through
+// an os.Root, which refuses any path - symlinked or not - that resolves
+// outside it. Regular files are required, and a size check happens before
+// allocation and again through a limited reader to cover replacement/growth
+// races.
 func boundedMovementAssetReader(root string) func(string) ([]byte, error) {
-	rootAbs, rootAbsErr := filepath.Abs(root)
-	rootReal, rootRealErr := filepath.EvalSymlinks(rootAbs)
+	rootAbs, rootErr := filepath.Abs(root)
 
 	return func(path string) ([]byte, error) {
-		if rootAbsErr != nil {
-			return nil, fmt.Errorf("resolve asset root: %w", rootAbsErr)
+		if rootErr != nil {
+			return nil, fmt.Errorf("resolve asset root %s: %w", root, rootErr)
 		}
-		if rootRealErr != nil {
-			return nil, fmt.Errorf("resolve asset root %s: %w", rootAbs, rootRealErr)
-		}
-		pathReal, err := filepath.EvalSymlinks(path)
+		pathAbs, err := filepath.Abs(path)
 		if err != nil {
 			return nil, err
 		}
-		relative, err := filepath.Rel(rootReal, pathReal)
+		relative, err := filepath.Rel(rootAbs, pathAbs)
 		if err != nil || filepath.IsAbs(relative) ||
 			relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			return nil, fmt.Errorf("movement asset escapes public root: %s", path)
 		}
 
-		file, err := os.Open(pathReal)
+		// The root is opened per read: a held directory handle would pin the
+		// asset tree on Windows against replacement and removal.
+		tree, err := os.OpenRoot(rootAbs)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("open asset root %s: %w", rootAbs, err)
+		}
+		defer func() { _ = tree.Close() }()
+		file, err := tree.Open(relative)
+		if err != nil {
+			return nil, fmt.Errorf("movement asset %s: %w", path, err)
 		}
 		defer func() { _ = file.Close() }()
 		info, err := file.Stat()

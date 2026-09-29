@@ -2,6 +2,7 @@ package enterworld
 
 import (
 	"errors"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +15,7 @@ import (
 func shippedAuthoredAreaCatalog(t *testing.T) *worldarea.Catalog {
 	t.Helper()
 	path := filepath.Join(
-		serverProjectionRoot,
+		gamedatatest.Paths(t).BundleRoot,
 		"world-authority",
 		"areas",
 		"catalog.json",
@@ -25,7 +26,7 @@ func shippedAuthoredAreaCatalog(t *testing.T) *worldarea.Catalog {
 		}
 		t.Fatalf("stat server authored-area projection: %v", err)
 	}
-	catalog, err := worldarea.LoadAuthority(filepath.Join(serverProjectionRoot, "world-authority"))
+	catalog, err := worldarea.LoadAuthority(filepath.Join(gamedatatest.Paths(t).BundleRoot, "world-authority"))
 	if err != nil {
 		t.Fatal(err)
 	}

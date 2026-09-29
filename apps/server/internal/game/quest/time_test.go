@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"path/filepath"
@@ -21,7 +22,7 @@ import (
 
 func TestTimedQuestProductionStoreAndCharacterPulse(t *testing.T) {
 	licensed.RequireGameData(t)
-	textdata := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)
 	if err != nil {

@@ -9,13 +9,13 @@ monstercapture_test.go - Monster Mask on a corpse
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/gamedata"
 )
 
 const monsterMaskA1 = 7995 // SKILL_EU_ROG_TRANSFORMA_MASK_A_01: mcap 20 10364, 52 MP
@@ -41,10 +41,7 @@ monster a retained corpse.
 */
 func corpseFixture(t *testing.T, dead bool, mutate func(*monster.MonsterRef)) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	t.Helper()
-	dir, err := gamedata.ResolveTextdataDir()
-	if err != nil {
-		t.Skipf("shipped textdata unavailable: %v", err)
-	}
+	dir := gamedatatest.TextdataDir(t)
 	rt, clock, c, _ := newCombatTestRuntime(t, 100)
 	ref, _ := rt.Monsters.Reference(1933)
 	mutate(&ref)

@@ -5,7 +5,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/gamedata"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"strconv"
@@ -16,10 +16,7 @@ import (
 // transport. Optional export lets the browser consume the actual received burst.
 func TestAttachedEffectAuthenticatedTransport(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir, err := gamedata.ResolveTextdataDir()
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir := gamedatatest.TextdataDir(t)
 	skills := enterworld.NewTextdataSkills(dir)
 	skillID := uint32(27)
 	if value := os.Getenv("SRO_EFFECT_FIXTURE_SKILL"); value != "" {

@@ -14,6 +14,11 @@
 /.gotmp/
 /hangdemo_tmp/
 
+# The verified server game-data projection, its release archive and
+# extraction cache (scripts/build/server/buildServerGameDataBundle.mjs).
+# Built from a licensed client; never committed.
+/.generated/
+
 # Go and native build outputs.
 *.exe
 *.exe~

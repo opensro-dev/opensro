@@ -9,21 +9,29 @@ shippedtextdata_shared_test.go - shared shipped textdata for this package's test
 package enterworld
 
 import (
-	"os"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"path/filepath"
 	"sync"
 	"testing"
-
-	"opensro.online/server/internal/gamedata"
 )
 
-var serverProjectionRoot = filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server")
+/*
+==================
+realAssetPaths
 
-var realAssetPaths = DevPaths{
-	RosterPath:        filepath.Join(serverProjectionRoot, "character-authority", "catalog.json"),
-	TextdataDir:       filepath.Join(serverProjectionRoot, "textdata"),
-	MissionChatPath:   filepath.Join("..", "..", "..", "config", "mission-chat.json"),
-	EquipItemsEnabled: true,
+The development paths over the verified projection, resolved inside the
+test so Go's test cache sees the data it reads.
+==================
+*/
+func realAssetPaths(t testing.TB) DevPaths {
+	t.Helper()
+	root := gamedatatest.Paths(t).BundleRoot
+	return DevPaths{
+		RosterPath:        filepath.Join(root, "character-authority", "catalog.json"),
+		TextdataDir:       filepath.Join(root, "textdata"),
+		MissionChatPath:   filepath.Join("..", "..", "..", "config", "mission-chat.json"),
+		EquipItemsEnabled: true,
+	}
 }
 
 // The shipped textdata parses dominate this package's test cost (itemdata
@@ -39,7 +47,6 @@ var (
 	sharedShippedItemsInst        *TextdataItems
 	sharedShippedSkillsOnce       sync.Once
 	sharedShippedSkillsInst       *TextdataSkills
-	sharedShippedSkillsErr        error
 	sharedShippedMagicOptionsOnce sync.Once
 	sharedShippedMagicOptionsInst *TextdataMagicOptions
 )
@@ -55,11 +62,9 @@ when this checkout has no media.
 */
 func sharedShippedItems(t *testing.T) *TextdataItems {
 	t.Helper()
-	if _, err := os.Stat(realAssetPaths.TextdataDir); err != nil {
-		t.Skipf("extracted textdata unavailable: %v", err)
-	}
+	dir := realAssetPaths(t).TextdataDir
 	sharedShippedItemsOnce.Do(func() {
-		sharedShippedItemsInst = NewTextdataItems(realAssetPaths.TextdataDir)
+		sharedShippedItemsInst = NewTextdataItems(dir)
 	})
 	return sharedShippedItemsInst
 }
@@ -75,11 +80,9 @@ has no media.
 */
 func sharedShippedMagicOptions(t *testing.T) *TextdataMagicOptions {
 	t.Helper()
-	if _, err := os.Stat(realAssetPaths.TextdataDir); err != nil {
-		t.Skipf("extracted textdata unavailable: %v", err)
-	}
+	dir := realAssetPaths(t).TextdataDir
 	sharedShippedMagicOptionsOnce.Do(func() {
-		sharedShippedMagicOptionsInst = NewTextdataMagicOptions(realAssetPaths.TextdataDir)
+		sharedShippedMagicOptionsInst = NewTextdataMagicOptions(dir)
 	})
 	return sharedShippedMagicOptionsInst
 }
@@ -96,16 +99,9 @@ loops, and each resolution re-identifies the artifact on disk.
 */
 func sharedShippedSkills(t *testing.T) *TextdataSkills {
 	t.Helper()
+	dir := gamedatatest.TextdataDir(t)
 	sharedShippedSkillsOnce.Do(func() {
-		dir, err := gamedata.ResolveTextdataDir()
-		if err != nil {
-			sharedShippedSkillsErr = err
-			return
-		}
 		sharedShippedSkillsInst = NewTextdataSkills(dir)
 	})
-	if sharedShippedSkillsErr != nil {
-		t.Skipf("shipped skilldata not present in this checkout: %v", sharedShippedSkillsErr)
-	}
 	return sharedShippedSkillsInst
 }

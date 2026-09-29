@@ -68,10 +68,10 @@ func TestLoadRosterRejectsMissingBodyRadius(t *testing.T) {
 }
 
 func TestShippedPlayerBodyRadiusStaysPinned(t *testing.T) {
-	if _, err := os.Stat(realAssetPaths.RosterPath); err != nil {
+	if _, err := os.Stat(realAssetPaths(t).RosterPath); err != nil {
 		t.Skipf("server character-authority projection is unavailable: %v", err)
 	}
-	roster, err := LoadRoster(realAssetPaths.RosterPath)
+	roster, err := LoadRoster(realAssetPaths(t).RosterPath)
 	if err != nil {
 		t.Fatalf("load shipped character authority: %v", err)
 	}

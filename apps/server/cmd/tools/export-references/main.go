@@ -20,7 +20,7 @@ import (
 )
 
 func main() {
-	textdataDir := flag.String("textdata", "../../../../../.generated/game-data/1.150/server/textdata", "Verified server textdata directory")
+	textdataDir := flag.String("textdata", "../../../.generated/game-data/1.150/server/textdata", "Verified server textdata directory")
 	outDir := flag.String("out", "../../../../../.generated/transport-references", "Output directory for reference document")
 	flag.Parse()
 

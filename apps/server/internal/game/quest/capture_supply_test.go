@@ -12,7 +12,7 @@ package quest
 
 import (
 	"encoding/json"
-	"path/filepath"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"testing"
 
 	"opensro.online/server/internal/game/action"
@@ -31,7 +31,7 @@ Load the shipped quest and item catalogs, including capture-only references.
 */
 func captureCatalogRuntime(t *testing.T) *Runtime {
 	t.Helper()
-	textdata := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)
 	if err != nil {

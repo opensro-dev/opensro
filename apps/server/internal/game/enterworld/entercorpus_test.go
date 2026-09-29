@@ -790,7 +790,7 @@ func TestEnterCorpusContentPins(t *testing.T) {
 	// (col 0 Service, col 1 id, col 2 codename - the sub_810620 parse
 	// order the buildQuestDataAsset.mjs contract documents).
 	questIDByCodename := map[string]uint32{}
-	for _, fields := range readTextdataFile(filepath.Join(realAssetPaths.TextdataDir, "questdata.txt")) {
+	for _, fields := range readTextdataFile(filepath.Join(realAssetPaths(t).TextdataDir, "questdata.txt")) {
 		if len(fields) < 3 || fields[0] != "1" {
 			continue
 		}
@@ -820,7 +820,7 @@ func TestEnterCorpusContentPins(t *testing.T) {
 	// client minimap quest pass map::at THROWS on a miss once the quest is
 	// tracked, sub_7e1240 @0x007e126d).
 	npcPosFound := false
-	for _, fields := range readTextdataFile(filepath.Join(realAssetPaths.TextdataDir, "npcpos.txt")) {
+	for _, fields := range readTextdataFile(filepath.Join(realAssetPaths(t).TextdataDir, "npcpos.txt")) {
 		if len(fields) >= 1 {
 			if id, ok := textdataInt(fields[0]); ok && uint32(id) == corpusQuestPotionNpcID {
 				npcPosFound = true

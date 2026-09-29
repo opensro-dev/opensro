@@ -63,6 +63,19 @@ export const retailTextdataRoot = path.join( mediaExtractedRoot, "server_dep", "
 export const clientV150ResinfoRoot = path.join( mediaExtractedRoot, "resinfo" );
 
 export const generatedRoot = path.join( rebuildRoot, ".generated" );
+
+// The verified server game-data projection lives inside the Go module: its
+// tests then read only module files, and `go test` validates cached results
+// against the data itself (apps/server/AGENTS.md). Git-ignored there.
+export const serverGameDataRoot = path.join(
+	rebuildRoot,
+	"apps",
+	"server",
+	".generated",
+	"game-data",
+	"1.150",
+	"server"
+);
 export const publicRoot = path.join( generatedRoot, "client-public" );
 export const publicAssetsRoot = path.join( publicRoot, "assets" );
 export const imageSourceRoot = path.join( generatedRoot, "intermediate", "images" );

@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -20,7 +21,6 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/gamedata"
 )
 
 const (
@@ -54,10 +54,7 @@ bag slot 13 holding holding.
 */
 func maskFixture(t *testing.T, maskLevel uint8, holding uint32) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	t.Helper()
-	dir, err := gamedata.ResolveTextdataDir()
-	if err != nil {
-		t.Skipf("shipped textdata unavailable: %v", err)
-	}
+	dir := gamedatatest.TextdataDir(t)
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
 	c.BattleUntilMs = 0
 

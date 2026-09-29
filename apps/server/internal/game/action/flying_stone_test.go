@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,7 @@ TestFlyingStoneShippedChainAndBleedingLifecycle
 func TestFlyingStoneShippedChainAndBleedingLifecycle(t *testing.T) {
 	dir := os.Getenv("SRO_SKILL_INVENTORY_DATA")
 	if dir == "" {
-		dir = filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+		dir = gamedatatest.TextdataDir(t)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "skilldata.txt")); err != nil {
 		t.Skip("v1.150 textdata unavailable")

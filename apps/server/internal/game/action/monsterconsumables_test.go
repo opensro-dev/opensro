@@ -1,8 +1,8 @@
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -26,7 +26,7 @@ func TestUniqueFatalCommitsItsAssignedTableOnlyOnce(t *testing.T) {
 	rt.Monsters.StartDivision(testDivision)
 	rt.Monsters.AdvancePopulation(rt.Monsters.CurrentTimeMillis())
 	target = rt.Monsters.InstancesInRegions(testDivision, []uint16{target.Spawn.RegionID})[0]
-	items := enterworld.NewTextdataItems(filepath.Clean("../../../../../.generated/game-data/1.150/server/textdata"))
+	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	for _, chosen := range loot.AssignedDrops(ref.Codename, 60, func() (uint32, error) { return 0, nil }) {
 		item, ok := items.ItemRefByCodename(chosen.Codename)
 		if !ok {
@@ -112,7 +112,7 @@ func TestAlchemyFatalPublishesReferenceSpawnAndPickup(t *testing.T) {
 
 func TestConsumablePlansKeepActualShippedTypeQuantityAndPersistence(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Clean("../../../../.." + "/.generated/game-data/1.150/server/textdata")
+	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	for _, code := range []string{"ITEM_ETC_HP_POTION_01", "ITEM_ETC_MP_POTION_01", "ITEM_ETC_CURE_ALL_01", "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", "ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01", "ITEM_ETC_ARCHEMY_ATTRSTONE_PA_01", "ITEM_MALL_GLOBAL_CHATTING"} {
 		t.Run(code, func(t *testing.T) {

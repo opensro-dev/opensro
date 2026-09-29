@@ -2,6 +2,7 @@ package movement
 
 import (
 	"math"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 
@@ -10,7 +11,7 @@ import (
 
 func TestPublishedJanganPotionBuildingEntryAndWestwardTrap(t *testing.T) {
 	licensed.RequireGameData(t)
-	v := NewAuthorityValidator("../../../../../../.generated/game-data/1.150/server/world-authority")
+	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
 	inside := simulation.Spawn{RegionID: 25000, X: 1640, Y: 0, Z: 1390}
 	for _, z := range []float64{1250, 1300, 1550} {
 		for _, y := range []float64{0, 8.8, 40} {
@@ -53,7 +54,7 @@ func TestPublishedJanganPotionBuildingEntryAndWestwardTrap(t *testing.T) {
 
 func TestPublishedRebirthBuildingHeightIndependentEntry(t *testing.T) {
 	licensed.RequireGameData(t)
-	v := NewAuthorityValidator("../../../../../../.generated/game-data/1.150/server/world-authority")
+	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
 	for _, y := range []float64{80, 82, 120} {
 		a := simulation.Spawn{RegionID: 27471, X: 1205, Y: y, Z: 396}
 		b := simulation.Spawn{RegionID: 27471, X: 1394, Y: 82, Z: 398}

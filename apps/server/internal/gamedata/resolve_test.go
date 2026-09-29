@@ -72,7 +72,8 @@ func TestResolveSharesOneVerifiedImmutableIdentity(t *testing.T) {
 		}
 	}
 	for paths := range results {
-		if paths.BundleRoot != root || paths.ManifestDigest != manifestDigest {
+		// Resolve returns the root through filepath.Abs, which cleans it.
+		if paths.BundleRoot != filepath.Clean(root) || paths.ManifestDigest != manifestDigest {
 			t.Fatalf("cached paths = %+v, want root %q digest %q", paths, root, manifestDigest)
 		}
 	}

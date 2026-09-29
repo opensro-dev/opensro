@@ -14,6 +14,7 @@ package quest
 import (
 	"bytes"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"path/filepath"
 	"slices"
@@ -37,7 +38,7 @@ Capture objectives must acquire their item and clock through the capture owner.
 */
 func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 	licensed.RequireGameData(t)
-	textdata := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)
 	if err != nil {
@@ -439,7 +440,7 @@ Unknown records retain every field through storage, unrelated progress and login
 */
 func TestUnimplementedCatalogQuestsArePreservedThroughLogin(t *testing.T) {
 	licensed.RequireGameData(t)
-	textdata := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	textdata := gamedatatest.TextdataDir(t)
 	catalog := NewCatalog(textdata)
 	defs, err := LoadDefinitions(catalog, enterworld.NewTextdataItems(textdata))
 	if err != nil {

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -45,11 +45,11 @@ func TestSourceDeliveryInventoryLifecycle(t *testing.T) {
 			// Exercise inventory independently of the intentionally unresolved
 			// travel/chain admission gate; this is not a playable-quest assertion.
 			def.AcceptanceUnavailable = ""
-			if err := loadDelivery(def, tutorialFixtureItems); err != nil {
+			if err := loadDelivery(def, tutorialFixtureItems()); err != nil {
 				t.Fatal(err)
 			}
 			rt.Defs = &Definitions{byRefID: map[uint32]*Definition{900: def}, byCodename: map[string]*Definition{def.Codename: def}, ordered: []*Definition{def}}
-			rt.PlanInventory = action.NewRuntime(&enterworld.Deps{Items: tutorialFixtureItems}, nil).PlanQuestInventory
+			rt.PlanInventory = action.NewRuntime(&enterworld.Deps{Items: tutorialFixtureItems()}, nil).PlanQuestInventory
 			c := questCharacter()
 			snapshot := func() string {
 				b, err := json.Marshal(c)
@@ -169,11 +169,11 @@ func TestSourceDeliveryInventoryLifecycle(t *testing.T) {
 
 func TestDeliveryLoaderRejectsMissingAndCrossObjectiveContracts(t *testing.T) {
 	d := &Definition{QuestSpec: QuestSpec{Objective: ObjectiveDelivery, DeliveryItems: []RewardItemLead{{ItemCodename: "MISSING", Count: 1}}, InventoryFullSymbol: "FULL"}}
-	if err := loadDelivery(d, tutorialFixtureItems); err == nil {
+	if err := loadDelivery(d, tutorialFixtureItems()); err == nil {
 		t.Fatal("unresolved item admitted")
 	}
 	d.Objective = ObjectiveTalk
-	if err := loadDelivery(d, tutorialFixtureItems); err == nil {
+	if err := loadDelivery(d, tutorialFixtureItems()); err == nil {
 		t.Fatal("cross-objective grant admitted")
 	}
 	if !reflect.DeepEqual(deliveryAmounts(&Definition{}), []inventory.ItemAmount{}) {
@@ -189,7 +189,7 @@ func TestSourceDeliveryAuthorityRestart(t *testing.T) {
 		t.Run(spec.Codename, func(t *testing.T) {
 			def := &Definition{QuestSpec: spec, RefID: 900, CountryByte: 3, ContentsSymbol: "DELIVERY"}
 			def.AcceptanceUnavailable = ""
-			if err := loadDelivery(def, tutorialFixtureItems); err != nil {
+			if err := loadDelivery(def, tutorialFixtureItems()); err != nil {
 				t.Fatal(err)
 			}
 			defs := &Definitions{byRefID: map[uint32]*Definition{900: def}, byCodename: map[string]*Definition{def.Codename: def}, ordered: []*Definition{def}}
@@ -203,7 +203,7 @@ func TestSourceDeliveryAuthorityRestart(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				deps := &enterworld.Deps{Items: tutorialFixtureItems, Levels: enterworld.NewTextdataLevels(filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")), Characters: authority.Characters(), UpdateCharacter: authority.UpdateCharacter, MutateCharacter: authority.MutateCharacter}
+				deps := &enterworld.Deps{Items: tutorialFixtureItems(), Levels: enterworld.NewTextdataLevels(gamedatatest.TextdataDir(t)), Characters: authority.Characters(), UpdateCharacter: authority.UpdateCharacter, MutateCharacter: authority.MutateCharacter}
 				rt, err = NewRuntime(deps, defs, progression.NewRuntime(deps).ExperienceUpdater())
 				if err != nil {
 					t.Fatal(err)

@@ -5,14 +5,14 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"testing"
 )
 
 func TestPortalPrimaryCatalogAndQuestAdmission(t *testing.T) {
 	licensed.RequireGameData(t)
-	catalog, err := loadPortalCatalog(filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata"))
+	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func (portalRejectEntry) ReentryPackets(string, string) ([]enterworld.Packet, bo
 func TestPortalSelectedNpcTransactionAndRollback(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 2001, RefObjID: 2011, Codename: "NPC_CH_FERRY", TalkFlags: 2}}
 	rt.NpcSpawn.Enabled = true
 	if err := rt.ConfigurePortals(dir); err != nil {
@@ -103,7 +103,7 @@ func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
 	rt, c, _, _ := returnFixture(t, 30000)
 	rt.NpcSpawn.Enabled = true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}
-	if err := rt.ConfigurePortals(filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")); err != nil {
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
 		t.Fatal(err)
 	}
 	out := rt.HandleObjectSelect(testDivision, c, wire.NewWriter(4).U32(252094).Payload())

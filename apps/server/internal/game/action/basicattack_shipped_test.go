@@ -1,11 +1,11 @@
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"testing"
 
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/gamedata"
 )
 
 // TestShippedEuropeanSwordBaseAttackResolves is the production-data seam that
@@ -15,10 +15,7 @@ import (
 func TestShippedEuropeanSwordBaseAttackResolves(t *testing.T) {
 	t.Parallel()
 
-	textdataDir, err := gamedata.ResolveTextdataDir()
-	if err != nil {
-		t.Skipf("shipped v1.150 textdata is unavailable: %v", err)
-	}
+	textdataDir := gamedatatest.TextdataDir(t)
 	character := &enterworld.Character{
 		Name:          "Test2",
 		RaceIndex:     testInt64(0),

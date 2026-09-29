@@ -17,7 +17,8 @@ func TestMaterializeArchiveRoundTripsVerifiedProjection(t *testing.T) {
 	root, manifestDigest := writeTestBundle(t, nil)
 	archive := filepath.Join(t.TempDir(), "server.srogz")
 	writeTestArchive(t, archive, root)
-	cache := t.TempDir()
+	// materializeArchive returns an absolute, cleaned path; TMP may not be.
+	cache := filepath.Clean(t.TempDir())
 	t.Setenv(EnvCacheRoot, cache)
 
 	materialized, err := materializeArchive(archive)

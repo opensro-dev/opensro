@@ -29,11 +29,11 @@ import {
 	mediaExtractedRoot,
 	publicAssetsRoot,
 	publicRoot,
-	rebuildRoot
+	rebuildRoot,
+	serverGameDataRoot
 } from "./build/world/paths.mjs";
 
 const generatedAssetsRoot = path.join( generatedRoot, "intermediate" );
-const serverGameDataRoot = path.join( generatedRoot, "game-data", "1.150", "server" );
 const serverGameDataArchivePath = `${serverGameDataRoot}.srogz`;
 const serverGameDataCacheRoot = path.join( path.dirname( serverGameDataRoot ), ".game-data-cache" );
 const packManifestPath = path.join( publicAssetsRoot, "packs", "manifest.json" );

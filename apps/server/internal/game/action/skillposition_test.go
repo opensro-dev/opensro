@@ -6,13 +6,14 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "skilldata.txt")); os.IsNotExist(err) {
 		t.Skip("production v1.150 textdata unavailable")
 	}

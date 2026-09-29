@@ -2,8 +2,8 @@ package simulation
 
 import (
 	"bytes"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"testing"
 
 	"opensro.online/server/internal/game/item/wire"
@@ -86,7 +86,7 @@ func TestNpcTravelPublicationLifecycle(t *testing.T) {
 
 func TestEveryAuthoredNpcHasTravelPublication(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	roster, err := AppendTeleportGates(dir, LoadNpcWorldRoster(dir))
 	if err != nil || len(roster) < 150 {
 		t.Fatalf("published roster unavailable: %d %v", len(roster), err)

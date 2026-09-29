@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	dir := flag.String("textdata", "../../.generated/game-data/1.150/server/textdata", "Verified server textdata directory")
+	dir := flag.String("textdata", ".generated/game-data/1.150/server/textdata", "Verified server textdata directory")
 	flag.Parse()
 	source := enterworld.NewTextdataItems(*dir)
 	rows := make([]map[string]any, 0)

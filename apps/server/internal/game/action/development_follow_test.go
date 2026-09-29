@@ -1,8 +1,8 @@
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,7 +14,7 @@ import (
 
 func TestDevelopmentFixtureUsesAuthoredDelayedSummonAndCleansFamily(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
 	skills := enterworld.NewTextdataSkills(dir)
 	var nests []monster.NestRow

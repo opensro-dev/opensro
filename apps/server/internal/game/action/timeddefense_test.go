@@ -9,6 +9,7 @@ timeddefense_test.go - equipment-bound and targeted defense buffs
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"testing"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
-	"opensro.online/server/internal/gamedata"
 )
 
 const (
@@ -28,10 +28,7 @@ const (
 // (its reqi kept), the shipped Chinese shield known, and its monster.
 func shieldFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character, *enterworld.ItemRef, monster.Instance) {
 	t.Helper()
-	dir, err := gamedata.ResolveTextdataDir()
-	if err != nil {
-		t.Skipf("shipped textdata unavailable: %v", err)
-	}
+	dir := gamedatatest.TextdataDir(t)
 	rt, clock, c, mob := newCombatTestRuntime(t, 100000)
 	c.BattleUntilMs = 0
 	row, ok := shippedSkills(t).SkillByID(swordShieldA1)

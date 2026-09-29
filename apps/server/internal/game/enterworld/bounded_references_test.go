@@ -1,15 +1,15 @@
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"reflect"
 	"testing"
 )
 
 func TestBoundedShippedReferencesPreserveEveryRowAndExecutionStage(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	skills := NewTextdataSkills(dir)
 	if err := skills.Load(); err != nil {
 		t.Fatal(err)

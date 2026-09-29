@@ -1,8 +1,8 @@
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
@@ -14,7 +14,7 @@ import (
 
 func TestPublishedLootTabletsProduceAuthoredProduct(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Clean("../../../../../.generated/game-data/1.150/server/textdata")
+	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	catalog, err := alchemy.LoadCatalog(dir, items)
 	if err != nil {
@@ -68,7 +68,7 @@ func TestPublishedLootTabletsProduceAuthoredProduct(t *testing.T) {
 
 func TestPublishedLootAmmunitionPickupEquipAndFire(t *testing.T) {
 	licensed.RequireGameData(t)
-	items := enterworld.NewTextdataItems(filepath.Clean("../../../../../.generated/game-data/1.150/server/textdata"))
+	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	count := 0
 	for _, code := range publishedLootCodes(t) {
 		ref, ok := items.ItemRefByCodename(code)

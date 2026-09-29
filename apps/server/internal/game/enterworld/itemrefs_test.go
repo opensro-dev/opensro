@@ -1,15 +1,15 @@
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestProjectedConsumableNames(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	items := NewTextdataItems(dir)
 	for _, tc := range []struct {
 		codename string
@@ -37,7 +37,7 @@ func TestProjectedConsumableNames(t *testing.T) {
 
 func TestEveryProjectedItemHasDisplayName(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	items := NewTextdataItems(dir)
 	if items.Len() != 8439 {
 		t.Fatalf("item corpus changed: %d", items.Len())

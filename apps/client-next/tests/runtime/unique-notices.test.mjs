@@ -15,6 +15,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
+import path from "node:path";
+import { serverGameDataRoot } from "../../../../scripts/build/world/paths.mjs";
 const { uniqueNotice, uniqueReferences } = await import( "../../src/engine/foundation/gameplay/unique-notices.ts" );
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
@@ -29,13 +31,18 @@ const refObjSnapshot = symbols.map( ( s, i ) => ({
 	name: "Monster " + i
 }) );
 const refs = uniqueReferences( { refObjSnapshot } );
+/*
+================
+packet
+================
+*/
 function packet( kind, id, killer = "asd2" ) {
 	const name = new TextEncoder().encode( killer );
 	return Uint8Array.from( [ kind, id, 0, 0, 0, ...(kind === 6 ? [ name.length, 0, ...name ] : []) ] );
 }
 
 test("every shipped unique reference resolves appearance and death text without a visible entity", async () => {
-	const dir = "../../.generated/game-data/1.150/server/textdata";
+	const dir = path.join( serverGameDataRoot, "textdata" );
 	const names =
 		JSON.parse( await readFile( "../../.generated/client-public/assets/text/textdataname.en.json", "utf8" ) )
 			.entries;

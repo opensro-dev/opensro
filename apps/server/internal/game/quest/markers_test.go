@@ -5,8 +5,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"testing"
 )
 
@@ -67,7 +67,7 @@ func TestMarkerPublicationReplacementRemovalAndReconnect(t *testing.T) {
 
 func TestUnfinishedQuestConversationIsInformational(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
 	if err != nil {
 		t.Fatal(err)
@@ -138,7 +138,7 @@ func TestMarkerGoingStateHonorsEquippedStagePrerequisite(t *testing.T) {
 }
 
 func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
 	if err != nil {
 		t.Fatal(err)

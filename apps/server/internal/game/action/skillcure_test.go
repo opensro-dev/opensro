@@ -12,13 +12,13 @@ fixtures prepare source facts before mutation, matching production admission.
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"testing"
 
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/gamedata"
 )
 
 /*
@@ -30,10 +30,7 @@ Keep retail-data coverage explicit; source-only environments skip this fixture.
 */
 func shippedSkills(t *testing.T) *enterworld.TextdataSkills {
 	t.Helper()
-	dir, err := gamedata.ResolveTextdataDir()
-	if err != nil {
-		t.Skipf("shipped textdata unavailable: %v", err)
-	}
+	dir := gamedatatest.TextdataDir(t)
 	return enterworld.NewTextdataSkills(dir)
 }
 

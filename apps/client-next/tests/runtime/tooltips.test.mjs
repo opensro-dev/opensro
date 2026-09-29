@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { readLocalizedTextDataRowsSync } from "../../../../scripts/build/shared/textDataIo.mjs";
-import { retailTextdataRoot } from "../../../../scripts/build/world/paths.mjs";
+import { retailTextdataRoot, serverGameDataRoot } from "../../../../scripts/build/world/paths.mjs";
 import {
 	ITEM_TEXT_COMPLETIONS,
 	completeItemText,
@@ -27,6 +27,11 @@ import { assertItemNameCoverage } from "../../../../scripts/build/shared/itemNam
 import nameCompletions from "../../../../scripts/build/shared/itemNameCompletions.json" with { type: "json" };
 import { readPublishedAssetJsonSync, readPackedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { defined } from "../helpers/defined.mjs";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( file ).href );
 }
@@ -332,7 +337,7 @@ test("item localization is shared by published descriptions and server inventory
 	const source = readFileSync( path.join( retailTextdataRoot, "textdataname.txt" ) );
 	const projected = completeItemTextProjection( source ), again = completeItemTextProjection( projected );
 	assert.deepEqual(
-		readFileSync( "../../.generated/game-data/1.150/server/textdata/textdataname.txt" ),
+		readFileSync( path.join( serverGameDataRoot, "textdata", "textdataname.txt" ) ),
 		projected,
 		"installed server projection uses the same completion policy"
 	);
@@ -457,7 +462,7 @@ test("all catalog completions carry readable English and source labels; currency
 });
 
 test("X-large potions and all purification pills retain their title, ornament and stack rows", () => {
-	const projected = readFileSync( "../../.generated/game-data/1.150/server/textdata/textdataname.txt", "utf16le" );
+	const projected = readFileSync( path.join( serverGameDataRoot, "textdata", "textdataname.txt" ), "utf16le" );
 	const names = Object.fromEntries(
 		projected.split( /\r\n?/ ).map( r => r.split( "\t" ) ).map( r => [ r[1], r[8]?.trim() ] )
 	);

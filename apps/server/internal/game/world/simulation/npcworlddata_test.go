@@ -1,6 +1,7 @@
 package simulation
 
 import (
+	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"path/filepath"
 	"testing"
@@ -36,7 +37,7 @@ func TestShippedNpcWorldRosterCarriesConversationAndShopAuthority(t *testing.T) 
 
 func TestPublishedMerchantBranchesCoverAllTabs(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	roster := LoadNpcWorldRoster(dir)
 	if len(roster) < 150 {
 		t.Fatal("published merchant roster missing")
@@ -66,7 +67,7 @@ func TestPublishedMerchantBranchesCoverAllTabs(t *testing.T) {
 
 func TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "game-data", "1.150", "server", "textdata")
+	dir := gamedatatest.TextdataDir(t)
 	roster := LoadNpcWorldRoster(dir)
 	text := map[string]bool{}
 	for _, row := range readNpcTabbed(filepath.Join(dir, "textquest.txt")) {

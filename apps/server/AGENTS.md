@@ -37,6 +37,12 @@ this way (see `internal/game/world/movement/runtime.go`); match it.
   the simulation tick or an injected clock. forbidigo enforces it; the only
   exceptions are real-time fault injection and stress runs, each with a
   reasoned `//nolint:forbidigo`. Do not write another local wait helper.
+- The verified game-data projection lives in the module, at
+  `.generated/game-data/1.150/server` (git-ignored). Tests reach it only
+  through `internal/testsupport/gamedatatest` (which gates on
+  `licensed.RequireGameData`), never through a relative path, and never at
+  package initialization: reads before the test log starts are invisible to
+  Go's test cache, which the gate keeps on.
 - Test fixtures in `internal/game/action` use the level-1 leveldata row;
   raising a fixture character's level silently breaks `playerCombatStats`.
 
@@ -78,5 +84,8 @@ toolchain builds it; do not use a globally installed binary. A `//nolint`
 must name its linter and give a reason (nolintlint enforces both). The
 reasons each linter is on or off are in `.golangci.yml`.
 
-`pnpm task check:server` runs the full gate (tidy, gofmt, vet, sharded tests,
-race subset, govulncheck).
+`pnpm task check:server` runs the full gate (tidy, gofmt, vet, tests, race
+subset, govulncheck). Each step is skipped when its inputs match a recorded
+pass, so an unchanged tree checks in about half a second;
+`SRO_CHECK_FORCE=1` runs every step and `SRO_GO_TEST_CACHE=off` reruns every
+test.
