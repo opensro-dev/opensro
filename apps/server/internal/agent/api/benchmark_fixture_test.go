@@ -32,6 +32,7 @@ func postBenchmarkFixtureReset(t *testing.T, handler http.Handler, body any) (*h
 		t.Fatal(err)
 	}
 	request := httptest.NewRequest(http.MethodPost, BenchmarkFixtureResetPath, bytes.NewReader(payload))
+	declareBrowser(request)
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)

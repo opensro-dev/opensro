@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { zstdDecompressSync } from "node:zlib";
 import { files, inspect, publicIndex, safeName, sha, releaseIdentity, verifyDirectory } from "./policy.mjs";
+import { RELEASE_PROTOCOL } from "../../src/engine/foundation/release/protocol.ts";
 import { archiveRelease } from "./archive.mjs";
 import { compressRoutes } from "./compression.mjs";
 import { projectPack } from "./public-data.mjs";
@@ -174,6 +175,9 @@ export async function buildBeta(
 	for ( const [name, map] of maps ) await write( path.join( privateRoot, "maps", name ), map );
 	const manifest = {
 		format: "sro-beta-release-v1",
+		// The release protocol compiled into this build; release admission
+		// compares it with the declared one (ops/release/client_bundle.py).
+		protocol: RELEASE_PROTOCOL,
 		sourceHash: inputHash,
 		files: [],
 		routes: [],

@@ -52,6 +52,7 @@ func TestPrivateRoutesRequireAgentSessionForOwnedShard(t *testing.T) {
 				route.path,
 				strings.NewReader(`{}`),
 			)
+			declareBrowser(request)
 			if authorization != "" {
 				request.Header.Set("Authorization", authorization)
 			}

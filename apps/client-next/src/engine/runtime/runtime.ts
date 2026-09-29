@@ -733,7 +733,8 @@ export function startRuntime(
 				const phaseTrigger = phase !== releasePhase && (phase === "signed-out" || phase === "disconnected");
 				releasePhase = phase;
 				releaseWatch.step( now, phaseTrigger || platform.visibilityReturned() );
-				platform.presentUpdate( releaseWatch.newerAvailable() );
+				// A server's 426 is the same news, learned from a refused request.
+				platform.presentUpdate( releaseWatch.newerAvailable() || sessionState?.releaseOutdated === true );
 				markStage( "ui" );
 				const rendered = renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() );
 				if ( rendered ) await rendered;

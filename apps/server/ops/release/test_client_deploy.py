@@ -25,7 +25,7 @@ from client_deploy import application_routes, digest, promote, record_smoke, sta
 from release_state import read_state, write_state
 from rollback import prepare
 from retention import directory as retained_directory
-from test_release_state import candidate, production
+from test_release_state import CLIENT_CONTRACT, candidate, production
 
 
 # ================
@@ -38,6 +38,7 @@ def manifest_for(entry):
 	data = b"verified assets"
 	manifest = {
 		"format": "sro-beta-release-v1",
+		"protocol": CLIENT_CONTRACT["protocol"],
 		"sourceHash": hashlib.sha256(entry).hexdigest(),
 		"assetAuthorityHash": hashlib.sha256(data).hexdigest(),
 		"files": [
@@ -322,3 +323,45 @@ class ClientDeployTests(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+# ================
+# ClientProtocolTests
+#
+# A client candidate is admitted only when the release protocol compiled into
+# the build equals the one its approval declares. No symlinks are involved,
+# so these run on every platform.
+# ================
+class ClientProtocolTests(unittest.TestCase):
+	# ================
+	# bundle_with
+	# Bundle a one-file build whose manifest reports `protocol`.
+	# ================
+	def bundle_with(self, protocol):
+		directory = tempfile.TemporaryDirectory()
+		self.addCleanup(directory.cleanup)
+		root = Path(directory.name)
+		manifest = manifest_for(b"browser")
+		manifest["protocol"] = protocol
+		package = root / "package"
+		(package / "application").mkdir(parents=True)
+		(package / "application/index.html").write_bytes(b"browser")
+		write_state(package / "release.json", manifest)
+		plan = candidate()
+		plan.update(release=manifest["releaseId"])
+		with patch.object(client_bundle, "build_plan", return_value=plan):
+			return client_bundle.bundle(package, root / "candidate.tar", production())
+
+	# ================
+	# test_a_build_speaking_the_declared_protocol_is_bundled
+	# ================
+	def test_a_build_speaking_the_declared_protocol_is_bundled(self):
+		self.assertEqual(self.bundle_with(CLIENT_CONTRACT["protocol"])["plan"]["compatibility"], CLIENT_CONTRACT)
+
+	# ================
+	# test_a_build_speaking_another_protocol_is_refused
+	# ================
+	def test_a_build_speaking_another_protocol_is_refused(self):
+		for protocol in (CLIENT_CONTRACT["protocol"] + 1, None, "2"):
+			with self.assertRaisesRegex(ValueError, "release protocol"):
+				self.bundle_with(protocol)

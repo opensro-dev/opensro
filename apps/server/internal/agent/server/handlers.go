@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"opensro.online/server/internal/releaseprotocol"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -287,6 +288,8 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	request.Header.Set("Authorization", r.Header.Get("Authorization"))
+	// The shard enforces the release protocol too; the agent already did.
+	request.Header.Set(releaseprotocol.Header, r.Header.Get(releaseprotocol.Header))
 	if contentType := r.Header.Get("Content-Type"); contentType != "" {
 		request.Header.Set("Content-Type", contentType)
 	}

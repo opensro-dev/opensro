@@ -90,7 +90,11 @@ func TestCorePackageBoundaries(t *testing.T) {
 		modulePath + "/internal/platform/readiness":     true,
 		modulePath + "/internal/data/store":             true,
 		modulePath + "/internal/game/world/worldarea":   true,
+		modulePath + "/internal/releaseprotocol":        true,
 	}, true)
+	// The release protocol owns the browser wire contract versions; every
+	// owner imports it, so it imports nothing from the module.
+	checkPackageImports(t, root, modulePath, "internal/releaseprotocol", nil, false)
 }
 
 /*

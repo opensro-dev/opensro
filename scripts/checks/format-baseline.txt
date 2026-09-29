@@ -370,8 +370,6 @@ apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/input/input.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/codec/codec.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/network.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/http/http.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/session.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/core.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/departure.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts
@@ -806,7 +804,6 @@ scripts/lib/npcAnimationContactMarkers.mjs
 scripts/lib/probeBrowser.mjs
 scripts/lib/probeCharacter.mjs
 scripts/lib/probeEndpoints.mjs
-scripts/lib/probeSession.mjs
 scripts/lib/probeTransportProtocol.mjs
 scripts/lib/publishedAsset.mjs
 scripts/rebuildLock.mjs

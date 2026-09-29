@@ -19,6 +19,7 @@ func TestFollowFixtureGateAuthenticationAndOwnership(t *testing.T) {
 	}
 	post := func(h http.Handler) int {
 		r := httptest.NewRequest("POST", FollowFixturePath, strings.NewReader(`{"characterName":"FixtureHero","command":"status"}`))
+		declareBrowser(r)
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)

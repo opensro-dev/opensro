@@ -871,3 +871,46 @@ test("raw native shard name survives login, roster and restoration, and clears o
 		session.dispose();
 	}
 });
+
+const { RELEASE_PROTOCOL, RELEASE_PROTOCOL_HEADER } = await import(
+	sourceFileUrl( path.join( root, "src/engine/foundation/release/protocol.ts" ) ).href
+);
+
+test("every title and agent request declares the release protocol it was built for", async t => {
+	const calls = [];
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		calls.push( { url, options } );
+		return url.endsWith( "/title/session" ) ? Response.json( { ok: false }, { status: 401 } ) : Response.json( [] );
+	} );
+	const session = createSession();
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step();
+	await settle();
+	session.step();
+	assert.ok( calls.length >= 2 );
+	for ( const call of calls ) {
+		assert.equal( call.options.headers[RELEASE_PROTOCOL_HEADER], String( RELEASE_PROTOCOL ), call.url );
+	}
+	session.dispose();
+});
+
+test("a server speaking another release protocol marks the session outdated and names the remedy", async t => {
+	t.mock.method(
+		globalThis,
+		"fetch",
+		async () => Response.json( { error: "client-outdated", protocol: RELEASE_PROTOCOL + 1 }, { status: 426 } )
+	);
+	const session = createSession();
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step();
+	await settle();
+	const state = session.step();
+	assert.equal( state.releaseOutdated, true );
+	assert.match( state.error, /newer version/i );
+	// Every later state keeps saying so: the page must be refreshed.
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step();
+	await settle();
+	assert.equal( session.step().releaseOutdated, true );
+	session.dispose();
+});

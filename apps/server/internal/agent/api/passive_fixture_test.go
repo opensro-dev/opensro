@@ -24,6 +24,7 @@ func testPassiveFixtureAdmission(t *testing.T, name string) {
 	post := func(h http.Handler, name string) int {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("POST", PassiveCriticalFixturePath, strings.NewReader(`{"characterName":"`+name+`","command":"seed"}`))
+		declareBrowser(r)
 		h.ServeHTTP(w, r)
 		return w.Code
 	}

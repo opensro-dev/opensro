@@ -2,6 +2,7 @@ package enterworld
 
 import (
 	"fmt"
+	"opensro.online/server/internal/releaseprotocol"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -13,10 +14,10 @@ import (
 const (
 	// BootstrapMode is the contract tag stamped on successful responses.
 	BootstrapMode = "v150-browser-local-player-race-aware-empty-object-list"
-	// BootstrapProtocolVersion is the semantic EnterWorld DTO contract. It is
-	// intentionally independent of both the Alpha blob wrapper version and the
-	// HELLO/WELCOME transport version.
-	BootstrapProtocolVersion = 2
+	// BootstrapProtocolVersion is the semantic EnterWorld DTO contract, owned
+	// by the release protocol so it cannot change without a new one. It is
+	// independent of the Alpha blob wrapper and HELLO/WELCOME versions.
+	BootstrapProtocolVersion = releaseprotocol.BootstrapContract
 	// DefaultDivisionID is the divisionIdFor fallback.
 	DefaultDivisionID = domain.DefaultDivisionID
 

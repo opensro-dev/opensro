@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"opensro.online/server/internal/releaseprotocol"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -191,6 +193,7 @@ func authenticatedHandler(
 func bearerHandler(next http.Handler, token string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("Authorization", "Bearer "+token)
+		declareBrowser(r)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -435,4 +438,15 @@ func TestConstructionRequiresWorkerIdentityAndSecrets(t *testing.T) {
 			t.Fatalf("incomplete config %d started", index)
 		}
 	}
+}
+
+/*
+================
+declareBrowser
+
+Declares the release protocol, as every browser request does.
+================
+*/
+func declareBrowser(r *http.Request) {
+	r.Header.Set(releaseprotocol.Header, strconv.Itoa(releaseprotocol.Current))
 }

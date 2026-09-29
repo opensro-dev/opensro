@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"opensro.online/server/internal/releaseprotocol"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -343,69 +344,69 @@ func (api *API) Handler() http.Handler {
 	mux.Handle(
 		"/character/list",
 		api.requireRunning(
-			api.requireSession(http.HandlerFunc(api.handleCharacterList)),
+			api.browserSession(http.HandlerFunc(api.handleCharacterList)),
 		),
 	)
 	mux.Handle(
 		"/character/name-overlap",
 		api.requireRunning(
-			api.requireSession(http.HandlerFunc(api.handleNameOverlap)),
+			api.browserSession(http.HandlerFunc(api.handleNameOverlap)),
 		),
 	)
 	mux.Handle(
 		"/character/create",
 		api.requireRunning(
-			api.requireSession(http.HandlerFunc(api.handleCharacterCreate)),
+			api.browserSession(http.HandlerFunc(api.handleCharacterCreate)),
 		),
 	)
 	mux.Handle(
 		"/character/delete-action",
 		api.requireRunning(
-			api.requireSession(http.HandlerFunc(api.handleDeleteAction)),
+			api.browserSession(http.HandlerFunc(api.handleDeleteAction)),
 		),
 	)
 	mux.Handle(
 		"/character/enter-area",
 		api.requireRunning(
-			api.requireSession(http.HandlerFunc(api.handleCharacterEnterArea)),
+			api.browserSession(http.HandlerFunc(api.handleCharacterEnterArea)),
 		),
 	)
 	mux.Handle(
 		"/character/leave-area",
 		api.requireRunning(
-			api.requireSession(http.HandlerFunc(api.handleCharacterLeaveArea)),
+			api.browserSession(http.HandlerFunc(api.handleCharacterLeaveArea)),
 		),
 	)
 	if api.benchmarkFixtureControl {
 		if api.passiveCritical != nil {
-			mux.Handle(PassiveCriticalFixturePath, api.requireRunning(api.requireSession(http.HandlerFunc(api.handlePassiveCriticalFixture))))
+			mux.Handle(PassiveCriticalFixturePath, api.requireRunning(api.browserSession(http.HandlerFunc(api.handlePassiveCriticalFixture))))
 		}
 		if api.followFixture != nil {
-			mux.Handle(FollowFixturePath, api.requireRunning(api.requireSession(http.HandlerFunc(api.handleFollowFixture))))
+			mux.Handle(FollowFixturePath, api.requireRunning(api.browserSession(http.HandlerFunc(api.handleFollowFixture))))
 		}
 		mux.Handle(
 			BenchmarkFixtureResetPath,
 			api.requireRunning(
-				api.requireSession(http.HandlerFunc(api.handleBenchmarkFixtureReset)),
+				api.browserSession(http.HandlerFunc(api.handleBenchmarkFixtureReset)),
 			),
 		)
 	}
 	mux.Handle(
 		"/agent/packet",
 		api.requireRunning(
-			api.requireSession(http.HandlerFunc(api.handleAgentPacket)),
+			api.browserSession(http.HandlerFunc(api.handleAgentPacket)),
 		),
 	)
 	mux.Handle(
 		"/auth/enterworld-token",
 		api.requireRunning(
-			api.requireSession(http.HandlerFunc(api.handleEnterWorldToken)),
+			api.browserSession(http.HandlerFunc(api.handleEnterWorldToken)),
 		),
 	)
 	mux.Handle(
 		"/auth/transport-token",
 		api.requireRunning(
-			api.requireSession(http.HandlerFunc(api.handleTransportAdmissionToken)),
+			api.browserSession(http.HandlerFunc(api.handleTransportAdmissionToken)),
 		),
 	)
 	mux.HandleFunc("/marks/", api.handleGuildMark)
@@ -517,7 +518,7 @@ func (api *API) corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Add("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, "+releaseprotocol.Header)
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -528,6 +529,18 @@ func (api *API) corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+/*
+================
+browserSession
+
+A browser route: it answers only the release protocol this build speaks
+(releaseprotocol.Require), then requires an authenticated session.
+================
+*/
+func (api *API) browserSession(next http.Handler) http.Handler {
+	return releaseprotocol.Require(api.requireSession(next))
 }
 
 /*

@@ -96,6 +96,20 @@ def validate_base(base, manifest):
 
 
 # ================
+# require_declared_protocol
+#
+# The build reports the release protocol compiled into it; the approval plan
+# carries the declared one. They must be the same, as a server's compiled
+# report must match its declaration (verify_contract.py).
+# ================
+def require_declared_protocol(manifest, plan):
+	built = manifest.get("protocol")
+	declared = plan.get("compatibility", {}).get("protocol")
+	if type(built) is not int or built != declared:
+		raise ValueError(f"client build speaks release protocol {built!r}, its declaration says {declared!r}")
+
+
+# ================
 # add_bytes
 #
 # Stable tar metadata keeps an identical candidate byte-for-byte reproducible.
@@ -120,6 +134,7 @@ def bundle(package, destination, state):
 	manifest = json.loads(raw)
 	files = application_files(manifest)
 	plan = build_plan("client", manifest["releaseId"], state)
+	require_declared_protocol(manifest, plan)
 	candidate = {
 		"format": FORMAT,
 		"manifestSha256": hashlib.sha256(raw).hexdigest(),
@@ -173,6 +188,7 @@ def unpack(source):
 		identity(plan.get("commit"))
 		if plan.get("baseRelease") != candidate.get("baseRelease"):
 			raise ValueError("candidate and approval identify different bases")
+		require_declared_protocol(manifest, plan)
 		if names != set(files) | {"candidate.json", "release.json"}:
 			raise ValueError("unlisted or missing application member")
 		payloads = {}

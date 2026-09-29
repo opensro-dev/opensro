@@ -3,6 +3,7 @@ package agentapi
 import (
 	"errors"
 	"net/http"
+	"opensro.online/server/internal/releaseprotocol"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -12,11 +13,10 @@ import (
 	"opensro.online/server/internal/security/auth"
 )
 
-// Roster contract 2: loadouts carry worn and avatar items, not set keys.
-// CharacterRosterContractVersion is the character-list wire contract: 2
-// carries worn items and avatars as (RefItemID, plus). Release admission
-// folds it into the release protocol (cmd/operations/sro-release-contract).
-const CharacterRosterContractVersion = 2
+// CharacterRosterContractVersion is the character-list wire contract, owned
+// by the release protocol so it cannot change without a new one: 2 carries
+// worn items and avatars as (RefItemID, plus).
+const CharacterRosterContractVersion = releaseprotocol.RosterContract
 
 // CharacterItem is one worn or avatar item: native (RefItemID, plus).
 type CharacterItem struct {

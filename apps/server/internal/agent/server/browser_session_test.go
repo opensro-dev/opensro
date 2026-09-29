@@ -29,6 +29,7 @@ func TestBrowserCharacterRequiresMatchingCookieAndSuccessfulAdmission(t *testing
 	for _, row := range []struct{ cookie, accepted, remember bool }{{false, true, false}, {true, false, false}, {true, true, true}} {
 		accepted = row.accepted
 		r := httptest.NewRequest(http.MethodPost, "/auth/enterworld-token", strings.NewReader(`{"characterName":"Test2","divisionId":"alpha"}`))
+		declareBrowser(r)
 		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("Authorization", "Bearer "+cookie.Value)
 		if row.cookie {
@@ -52,6 +53,7 @@ func TestBrowserCharacterRequiresMatchingCookieAndSuccessfulAdmission(t *testing
 		}
 	}
 	r := httptest.NewRequest(http.MethodPost, "/title/session", strings.NewReader(`{}`))
+	declareBrowser(r)
 	r.Header.Set("Content-Type", "application/json")
 	r.AddCookie(cookie)
 	r.AddCookie(hint)
@@ -84,6 +86,7 @@ func TestBrowserSessionRefreshExpiryAndLogout(t *testing.T) {
 	}
 	call := func(path string, c *http.Cookie, origin string, contentType string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+		declareBrowser(r)
 		r.Header.Set("Content-Type", contentType)
 		r.Header.Set("Origin", origin)
 		if c != nil {

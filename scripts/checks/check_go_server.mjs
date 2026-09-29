@@ -170,6 +170,16 @@ await wave( "all", [
 		args: [ "tool", "govulncheck", "./..." ],
 		select: isScannedGo,
 		keys: [ `=vulndb ${vulnerabilityDatabase}`, toolchain, stepEnvironment ]
+	},
+	{
+		// The compiled release protocol and schema must be what
+		// compatibility.json declares; release preparation checks the same.
+		label: "release contract",
+		command: "go",
+		args: [ "run", "./cmd/operations/sro-release-contract" ],
+		accept: matchesDeclaredServerContract,
+		select: ( file ) => isModuleGo( file ) || file === "apps/server/ops/release/compatibility.json",
+		keys: [ toolchain, stepEnvironment ]
 	}
 ] );
 
@@ -217,6 +227,28 @@ async function wave( name, steps ) {
 		} ` +
 			`(wave ${formatSeconds( performance.now() - waveStarted )}s)`
 	);
+}
+
+/*
+================
+matchesDeclaredServerContract
+
+The sro-release-contract report equals the server declaration field for
+field; anything else (extra, missing or different) is a failed step.
+================
+*/
+function matchesDeclaredServerContract( output ) {
+	const declared =
+		JSON.parse( readFileSync( path.join( serverRoot, "ops/release/compatibility.json" ), "utf8" ) ).server;
+	let compiled;
+	try {
+		compiled = JSON.parse( output );
+	} catch {
+		return false;
+	}
+	const keys = Object.keys( declared ).sort();
+	return JSON.stringify( keys ) === JSON.stringify( Object.keys( compiled ).sort() ) &&
+		keys.every( ( key ) => compiled[key] === declared[key] );
 }
 
 /*

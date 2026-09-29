@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"opensro.online/server/internal/releaseprotocol"
 	"strings"
 	"time"
 
@@ -130,18 +131,22 @@ func (server *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(readiness.PathHealth, readiness.HealthHandler)
 	mux.HandleFunc(readiness.PathReady, server.handleReady)
+	// Browser routes answer only the release protocol this build speaks
+	// (releaseprotocol.Require). Health, readiness, cluster-internal routes
+	// and guild-mark images (fetched by <img>, which cannot declare) do not.
+	browser := releaseprotocol.Require
 	mux.Handle(
 		"/title/servers",
-		server.requireRunning(http.HandlerFunc(server.handleServers)),
+		browser(server.requireRunning(http.HandlerFunc(server.handleServers))),
 	)
 	mux.Handle(
 		"/title/login",
-		server.requireRunning(http.HandlerFunc(server.handleLogin)),
+		browser(server.requireRunning(http.HandlerFunc(server.handleLogin))),
 	)
 	mux.HandleFunc("/marks/", server.handleMark)
-	mux.Handle("/title/session", server.requireRunning(http.HandlerFunc(server.handleBrowserSession)))
-	mux.HandleFunc("/title/logout", server.handleBrowserLogout)
-	mux.HandleFunc("/title/character-select", server.handleBrowserCharacterSelect)
+	mux.Handle("/title/session", browser(server.requireRunning(http.HandlerFunc(server.handleBrowserSession))))
+	mux.Handle("/title/logout", browser(http.HandlerFunc(server.handleBrowserLogout)))
+	mux.Handle("/title/character-select", browser(http.HandlerFunc(server.handleBrowserCharacterSelect)))
 	mux.HandleFunc("/internal/cluster/shards/heartbeat", server.handleHeartbeat)
 	mux.HandleFunc("/internal/cluster/shards/release", server.handleLeaseRelease)
 	mux.HandleFunc("/internal/accounts", server.handleAccountDirectory)
@@ -161,9 +166,9 @@ func (server *Server) Handler() http.Handler {
 	} {
 		mux.Handle(
 			path,
-			server.requireRunning(
+			browser(server.requireRunning(
 				http.HandlerFunc(server.handleShardRequest),
-			),
+			)),
 		)
 	}
 	return server.cors(mux)
@@ -212,7 +217,7 @@ func (server *Server) cors(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, "+releaseprotocol.Header)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		}
 		if r.Method == http.MethodOptions {

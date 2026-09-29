@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"opensro.online/server/internal/releaseprotocol"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -196,6 +198,7 @@ func performJSON(
 	t.Helper()
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
+	declareBrowser(request)
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -711,9 +714,21 @@ func TestDecodeJSONRejectsOversizedRequest(t *testing.T) {
 		"/title/login",
 		bytes.NewReader(oversized),
 	)
+	declareBrowser(request)
 	response := httptest.NewRecorder()
 	fixture.handler.ServeHTTP(response, request)
 	if got := decodeObject(t, response)["code"]; got != "BAD_REQUEST" {
 		t.Fatalf("oversized login code = %v", got)
 	}
+}
+
+/*
+================
+declareBrowser
+
+Declares the release protocol, as every browser request does.
+================
+*/
+func declareBrowser(r *http.Request) {
+	r.Header.Set(releaseprotocol.Header, strconv.Itoa(releaseprotocol.Current))
 }

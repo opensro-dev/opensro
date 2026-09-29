@@ -85,6 +85,9 @@ export type SessionState = Readonly<{
 	entityCount?: number;
 	crestPrefix?: number;
 	nativeServerName?: string;
+	// A server answered that it speaks another release protocol (426): this
+	// page must be refreshed into the newer release.
+	releaseOutdated?: boolean;
 	marksBase?: string;
 	divisionId?: string;
 	error?: string;
