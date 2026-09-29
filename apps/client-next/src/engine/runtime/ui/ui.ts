@@ -256,6 +256,7 @@ import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene }
 const ROOT = "/assets/images/Media_extracted/", BUTTON = ROOT + "interface/ifcommon/com_button.png";
 const PARTS = frameParts();
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
+const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
 	BUTTON_DISABLE = BUTTON.replace( ".png", "_disable.png" );
@@ -8531,12 +8532,7 @@ export function createUi(
 					const match = game?.partyMatching,
 						slot = hudData.windows.ifpartymatchslot!,
 						canRegister = !game?.social?.leader || game.social.leader === game.social.self;
-					for (
-						const node of authoredPaintOrder( page ).sort( ( a, b ) =>
-							Number( [ "CIFFrame", "CIFNormalTile", "CIFStretchWnd" ].includes( b.type ) ) -
-							Number( [ "CIFFrame", "CIFNormalTile", "CIFStretchWnd" ].includes( a.type ) )
-						)
-					) {
+					for ( const node of authoredPaintOrder( page ) ) {
 						if ( node.type === "CIFButton" ) {
 							const row = match?.rows.find( r => r.id === partyMatchSelection ),
 								enabled = node.id === 56 || node.id === 55 || node.id >= 60 && node.id <= 67 ||
@@ -8571,6 +8567,9 @@ export function createUi(
 								partySearchDraft[key],
 								key === "name" ? 13 : 3
 							);
+						} else if ( node.id === PARTY_MATCH_RANGE_SEPARATOR_ID ) {
+							// 6374CF installs this caption after creating SearchInfo.
+							authoredText( node, px, py, "~" );
 						} else if ( !node.name.endsWith( "DUMY" ) ) authoredChrome( node, px, py );
 					}
 					const filtered = partyMatchRows(

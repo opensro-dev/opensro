@@ -254,6 +254,47 @@ test("party registration submits formation options even when an empty social sna
 	}
 });
 
+test("matching filter frames paint above the enclosing background and retain native colors", () => {
+	const f = createFixture();
+	try {
+		f.ui.event( { kind: "activate", id: "open-window:Party Matching" } );
+		const semantics = f.step();
+		const quads = f.scene()?.quads ?? [];
+		const name = semantics?.controls.find( c => c.id === "party-search-name" );
+		assert.ok( name );
+		let background = -1;
+		for ( const [index, quad] of quads.entries() ) {
+			if (
+				quad.texture.endsWith( "/com_bg_tile_b.png" ) &&
+				quad.rect[0] <= name.rect[0] && quad.rect[1] <= name.rect[1] &&
+				quad.rect[0] + quad.rect[2] > name.rect[0] &&
+				quad.rect[1] + quad.rect[3] > name.rect[1]
+			) background = index;
+		}
+		assert.ok( background >= 0, "the enclosing filter background must exist" );
+		for ( const id of [ "party-search-name", "party-search-min", "party-search-max" ] ) {
+			const control = semantics?.controls.find( c => c.id === id );
+			assert.ok( control );
+			const frame = quads.findIndex( q =>
+				q.texture.includes( "/com_blacksquare_" ) &&
+				q.rect[0] >= control.rect[0] - 8 && q.rect[0] <= control.rect[0] &&
+				q.rect[1] >= control.rect[1] - 8 && q.rect[1] <= control.rect[1]
+			);
+			assert.ok( frame > background, `${id} border must remain above the background` );
+		}
+		assert.ok( hasText( f.scene(), "~" ), "native initialization supplies the range separator" );
+		assert.ok(
+			quads.some( q =>
+				q.texture === fontAtlas.image &&
+				q.color[0] === 239 / 255 && q.color[1] === 218 / 255 && q.color[2] === 164 / 255
+			),
+			"authored filter captions retain their gold color"
+		);
+	} finally {
+		f.ui.dispose();
+	}
+});
+
 test("ground-drop warnings resolve through the same system catalog as their confirmation", () => {
 	const f = createFixture();
 	try {

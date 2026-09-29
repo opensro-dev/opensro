@@ -275,7 +275,6 @@ apps/client-next/src/engine/foundation/ui/minimap-zoom.ts
 apps/client-next/src/engine/foundation/ui/mission-loading.ts
 apps/client-next/src/engine/foundation/ui/money-presentation.ts
 apps/client-next/src/engine/foundation/ui/name-visibility.ts
-apps/client-next/src/engine/foundation/ui/native-window-sections.ts
 apps/client-next/src/engine/foundation/ui/normal-tile.ts
 apps/client-next/src/engine/foundation/ui/notice-dialog.ts
 apps/client-next/src/engine/foundation/ui/notice-text.ts

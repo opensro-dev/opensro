@@ -13,7 +13,8 @@ up blank. This is a documented product localization layer, NOT native parity.
   the English translates. If Joymax's Korean changes, the build fails as
   stale instead of silently showing an outdated translation.
 - A completion applies only while the retail English is missing, so a
-  shipped translation always wins.
+  shipped translation wins unless englishCorrections.mjs contains an exact,
+  reviewed correction for that symbol and source wording.
 - assertEnglishCompletionCoverage makes an untranslated active row a build
   error, so "every empty English cell is filled" stays true as data changes.
 - The same completion feeds the client catalogs, the quest asset, and the
@@ -24,6 +25,7 @@ up blank. This is a documented product localization layer, NOT native parity.
 
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { correctedEnglish } from "./englishCorrections.mjs";
 
 export const ENGLISH_COMPLETION_FILES = Object.freeze( [
 	"textuisystem.txt",
@@ -114,15 +116,15 @@ export function listEnglishCompletionCatalogs() {
 ================
 completedEnglish
 
-English for one retail row: the shipped English, or the authored completion
+English for one retail row: reviewed shipped English, or the authored completion
 when the shipped cell is missing. Throws when a completion's recorded Korean
 source no longer matches the row (stale translation).
 ================
 */
 export function completedEnglish( fileName, columns ) {
 	const english = columns[8]?.trim() ?? "";
-	if ( !isPlaceholderText( english ) ) return english;
 	const key = columns[1]?.trim();
+	if ( !isPlaceholderText( english ) ) return correctedEnglish( fileName, key, english );
 	const entry = key ? loadEnglishCompletions( fileName )[key] : undefined;
 	if ( !entry ) return english;
 	const korean = columns[2]?.trim() ?? "";
@@ -214,7 +216,7 @@ export function assertEnglishCompletionCoverage( fileName, rows, covered = ( _ke
 ================
 completeEnglishTextProjection
 
-Server projection: rewrites only the English cells of missing rows, keeping
+Server projection: completes missing English and applies reviewed corrections, keeping
 the BOM, record separators and every other column byte-for-byte.
 ================
 */
@@ -225,9 +227,9 @@ export function completeEnglishTextProjection( fileName, bytes ) {
 	const text = bytes.toString( encoding ).replace( /[^\r]+/g, ( record ) => {
 		if ( record.trimStart().startsWith( "//" ) ) return record;
 		const columns = record.split( "\t" );
-		if ( columns.length < 9 || !isPlaceholderText( columns[8] ) ) return record;
+		if ( columns.length < 9 ) return record;
 		const english = completedEnglish( fileName, columns );
-		if ( isPlaceholderText( english ) ) return record;
+		if ( isPlaceholderText( english ) || english === columns[8]?.trim() ) return record;
 		columns[8] = english;
 		return columns.join( "\t" );
 	} );
