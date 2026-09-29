@@ -297,11 +297,11 @@ func createBody(name string) map[string]any {
 
 func requireCharacterRosterContractVersion(t *testing.T, response map[string]any) {
 	t.Helper()
-	if response["characterRosterContractVersion"] != float64(characterRosterContractVersion) {
+	if response["characterRosterContractVersion"] != float64(CharacterRosterContractVersion) {
 		t.Fatalf(
-			"characterRosterContractVersion = %v, want %d",
+			"CharacterRosterContractVersion = %v, want %d",
 			response["characterRosterContractVersion"],
-			characterRosterContractVersion,
+			CharacterRosterContractVersion,
 		)
 	}
 }

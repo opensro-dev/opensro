@@ -13,7 +13,10 @@ import (
 )
 
 // Roster contract 2: loadouts carry worn and avatar items, not set keys.
-const characterRosterContractVersion = 2
+// CharacterRosterContractVersion is the character-list wire contract: 2
+// carries worn items and avatars as (RefItemID, plus). Release admission
+// folds it into the release protocol (cmd/operations/sro-release-contract).
+const CharacterRosterContractVersion = 2
 
 // CharacterItem is one worn or avatar item: native (RefItemID, plus).
 type CharacterItem struct {
@@ -358,7 +361,7 @@ func (api *API) handleDeleteAction(w http.ResponseWriter, r *http.Request) {
 // any response reaches application state, making a mixed client/GameWorld
 // deployment fail at the transport boundary instead of inside React.
 func writeCharacterRosterResponse(w http.ResponseWriter, body map[string]interface{}) {
-	body["characterRosterContractVersion"] = characterRosterContractVersion
+	body["characterRosterContractVersion"] = CharacterRosterContractVersion
 	writeJSON(w, http.StatusOK, body)
 }
 
