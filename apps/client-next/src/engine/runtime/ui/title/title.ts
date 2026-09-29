@@ -710,13 +710,16 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 							}
 							text( display, area, mainAlpha, n.hAlign ?? 0, [ 1, 1, 1, 1 ], area, n, "clip" );
 						}
+						// Only a login attempt locks the server choice. A list refresh
+						// must not: the overlay drops clicks on a disabled control, and
+						// the reveal starts a refresh exactly when players reach LIST.
 						button(
 							"GDR_BTN_SERVER",
 							"native:servers",
 							local( "GDR_BTN_SERVER", login ),
 							mainAlpha,
 							interactive,
-							pending
+							input.credentialsLocked === true
 						);
 						authoredText(
 							nodes!.GDR_STA_SERVER!,
@@ -767,7 +770,9 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 									kind: "button",
 									rect,
 									selected: input.draft === server.id,
-									disabled: !server.operating || pending
+									// Rows from the previous reply stay usable while a refresh
+									// is in flight; the login request validates the server.
+									disabled: !server.operating
 								} );
 							}
 							text( server.name, [ rect[0] + 15, rect[1], 120, 20 ], a );
@@ -804,7 +809,7 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 							local( "GDR_BTN_PREV", slider ),
 							a,
 							serverList,
-							pending,
+							false,
 							offset === 0
 						);
 						button(
@@ -813,7 +818,7 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 							local( "GDR_BTN_NEXT", slider ),
 							a,
 							serverList,
-							pending,
+							false,
 							offset + 13 >= servers.length
 						);
 						picture( "GDR_BTN_THUMB", [
@@ -828,7 +833,7 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 							[ box[0] + 21, box[1] + 350, 91, 40 ],
 							a,
 							serverList,
-							pending,
+							false,
 							!servers.some( s => s.id === input.draft && s.operating )
 						);
 						button(

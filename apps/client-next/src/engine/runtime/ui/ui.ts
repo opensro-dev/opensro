@@ -901,13 +901,13 @@ export function createUi(
 	/*
 	================
 	acceptServer
+
+	Accepts from the rows on screen even while a refresh is in flight: the
+	refresh replaces an unavailable selection, and login validates the server.
 	================
 	*/
 	function acceptServer() {
-		if (
-			serverList && !pending && view?.session?.phase !== "listing-servers" &&
-			servers.some( s => s.id === serverDraft && s.operating )
-		) {
+		if ( serverList && servers.some( s => s.id === serverDraft && s.operating ) ) {
 			selectedServer = serverDraft;
 			closeServer();
 		}
@@ -1938,7 +1938,8 @@ export function createUi(
 			serverList = true;
 			serverDraft = selectedServer;
 			serverOffset = Math.max( 0, servers.findIndex( s => s.id === serverDraft ) - 12 );
-			if ( !pending ) requestServers();
+			// A second request would abort the in-flight one for the same reply.
+			if ( !pending && view?.session?.phase !== "listing-servers" ) requestServers();
 		} else if ( id === "native:server-accept" ) acceptServer();
 		else if ( id === "native:server-cancel" ) closeServer();
 		else if ( id === "native:server-prev" ) serverOffset = Math.max( 0, serverOffset - 1 );
@@ -4989,11 +4990,13 @@ export function createUi(
 				roster.slice( rosterPage * 9, rosterPage * 9 + 9 ).forEach( ( c, i ) =>
 					button(
 						"character:" + c.name,
-						`${c.name} ? Level ${c.level}${c.deletePending ? " ? Deleting" : ""}`,
+						`${c.name} · Level ${c.level}${c.deletePending ? " · Deleting" : ""}`,
 						x + 30,
 						y + 55 + i * 33,
 						320,
-						c.deletePending || pending,
+						// Selecting only moves the highlight; the pending lock belongs
+						// to "enter", which sends the command.
+						c.deletePending,
 						c.name === selectedCharacter
 					)
 				);

@@ -3624,6 +3624,61 @@ test("disconnect confirmation refreshes discovery after cookie restoration skipp
 	}
 });
 
+/*
+================
+server list stays usable while a refresh is in flight
+
+The 2026-09-29 release probe clicked LIST, a row and accept during the refresh
+the login reveal starts. Every server control was disabled for that round trip,
+so the overlay dropped the clicks and the list never opened.
+================
+*/
+test("server list stays usable while a refresh is in flight", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		const state = {
+			...f.state,
+			gameplay: null,
+			entities: [],
+			frontend: { phase: "login", generation: 1, elapsed: 1, alpha: 1, logoAlpha: 0, error: null }
+		};
+		const listed = [ { id: "first", name: "First", operating: true }, {
+			id: "second",
+			name: "Second",
+			operating: true
+		} ];
+		let semantics = f.ui.step( { ...state, session: { phase: "signed-out", revision: 1, servers: listed } }, 0 );
+		f.ui.step( { ...state, session: { phase: "listing-servers", revision: 2 } }, 100 );
+		const refreshing = { ...state, session: { phase: "listing-servers", revision: 2 } };
+		const control = id => defined( semantics ).controls.find( c => c.id === id );
+		semantics = f.ui.step( refreshing, 200 ) ?? semantics;
+		assert.equal( control( "native:servers" )?.disabled, false, "LIST must accept a click during a refresh" );
+		const requests = sent.filter( c => c.kind === "servers" ).length;
+		f.ui.event( { kind: "activate", id: "native:servers" } );
+		assert.equal(
+			sent.filter( c => c.kind === "servers" ).length,
+			requests,
+			"an in-flight refresh is not restarted"
+		);
+		semantics = f.ui.step( refreshing, 300 ) ?? semantics;
+		semantics = f.ui.step( refreshing, 900 ) ?? semantics;
+		assert.equal( control( "server:second" )?.disabled, false, "rows stay selectable during a refresh" );
+		f.ui.event( { kind: "activate", id: "server:second" } );
+		semantics = f.ui.step( refreshing, 1000 ) ?? semantics;
+		assert.equal( control( "native:server-accept" )?.disabled, false );
+		f.ui.event( { kind: "activate", id: "native:server-accept" } );
+		for ( const [id, value] of [ [ "account", "fixture" ], [ "password", "fixture-only" ] ] ) {
+			f.ui.event( { kind: "edit", id, value, start: value.length, end: value.length, composing: false } );
+		}
+		f.ui.step( { ...state, session: { phase: "signed-out", revision: 3, servers: listed } }, 1100 );
+		f.ui.event( { kind: "activate", id: "submit" } );
+		assert.equal( sent.at( -1 ).kind, "login" );
+		assert.equal( sent.at( -1 ).serverId, "second" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("refreshed server list preserves a usable selection and replaces an unavailable one", () => {
 	for ( const operating of [ true, false ] ) {
 		const sent = [], f = uiFixture( command => sent.push( command ) );
