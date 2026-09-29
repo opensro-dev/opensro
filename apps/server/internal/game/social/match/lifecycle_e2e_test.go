@@ -189,6 +189,10 @@ func TestMatchReplacedTabKeepsWinnerRows(t *testing.T) {
 	conn1 := dialWS(t, server.srv)
 	helloWS(t, conn1)
 	enterWorld(t, conn1, e2eHeroName)
+	// The exclusive bind runs in the world-bound tail of the game-ready
+	// handler, after the frames the client holds; wait for it before reading
+	// the hub from the test goroutine.
+	gameReadyBarrier(t, conn1, "first world-bound tail")
 	loser, bound := server.srv.Hub.BoundSession(bindKey)
 	if !bound {
 		t.Fatal("no session bound after the first enter-world")
@@ -200,6 +204,7 @@ func TestMatchReplacedTabKeepsWinnerRows(t *testing.T) {
 	conn2 := dialWS(t, server.srv)
 	helloWS(t, conn2)
 	enterWorld(t, conn2, e2eHeroName)
+	gameReadyBarrier(t, conn2, "winner world-bound tail")
 	winner, bound := server.srv.Hub.BoundSession(bindKey)
 	if !bound || winner == loser {
 		t.Fatal("rebind did not hand the bind key to a new session")

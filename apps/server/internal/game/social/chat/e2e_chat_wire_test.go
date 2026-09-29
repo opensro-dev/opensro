@@ -432,6 +432,10 @@ func runChatLaneEndToEndOverWire(t *testing.T, divisionID string) {
 	connC := dialWS(t, server.srv)
 	helloWS(t, connC)
 	enterChatWorld(t, connC, divisionID, e2eChatNameC)
+	// The exclusive binds run in each session's world-bound tail, after the
+	// frames the client holds; wait for A's and C's before reading the hub.
+	gameReadyBarrier(t, connA, "A world-bound tail")
+	gameReadyBarrier(t, connC, "C world-bound tail")
 
 	// Restriction admission precedes decode, routing, success acknowledgments and
 	// all fan-out. The deliberately old enabled date must not expire locally.

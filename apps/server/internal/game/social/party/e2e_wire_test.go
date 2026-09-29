@@ -349,6 +349,11 @@ func enterWorld(t *testing.T, c *websocket.Conn, charName string) {
 	expectFrame(t, c, enterworld.OpcodeObjectListStart, "bootstrap[5]")
 	expectFrame(t, c, enterworld.OpcodeObjectListFinalize, "bootstrap[6]")
 	wiretest.ActivateWorld(t, c, "enter world "+charName)
+	// The exclusive bind and the world-bound hooks (party WorldBound
+	// included) run at the end of the game-ready handler, after the frames
+	// above. Another session's action or a direct registry read can outrun
+	// that tail, so entering the world waits for it.
+	gameReadyBarrier(t, c, "world-bound tail "+charName)
 }
 
 // gameReadyBarrier proves NOTHING is queued using a non-mutating transport

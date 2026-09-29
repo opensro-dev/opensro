@@ -159,6 +159,7 @@ func enterFriendWorld(t *testing.T, c *websocket.Conn, name string) []byte {
 		t.Fatalf("0xB3CD seed payload = % X, want the empty list [01 00]", got)
 	}
 	wiretest.ActivateWorld(t, c, "enter world "+name)
+	gameReadyBarrier(t, c, "world-bound tail "+name)
 	return roster
 }
 

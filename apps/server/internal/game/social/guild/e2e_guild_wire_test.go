@@ -211,6 +211,9 @@ func guildEnterWorld(t *testing.T, c *websocket.Conn, name string) []byte {
 	guildEnterWorldBootstrap(t, c, name)
 	seed := guildExpectFrame(t, c, guild.OpGuildInfo, "guild info seed")
 	wiretest.ActivateWorld(t, c, "enter world "+name)
+	// The exclusive bind and the world-bound hooks run at the tail of the
+	// game-ready handler; drain it so callers see a bound session.
+	wiretest.AssertQueueDrained(t, c, "world-bound tail "+name)
 	return seed
 }
 
@@ -224,6 +227,7 @@ func guildEnterWorldSeeds(t *testing.T, c *websocket.Conn, name string) {
 	t.Helper()
 	guildEnterWorldBootstrap(t, c, name)
 	wiretest.ActivateWorld(t, c, "enter world "+name)
+	wiretest.AssertQueueDrained(t, c, "world-bound tail "+name)
 }
 
 // guildEnterWorldBootstrap consumes only the common enter-world prefix. The

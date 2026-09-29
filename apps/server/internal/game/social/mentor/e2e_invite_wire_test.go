@@ -310,6 +310,9 @@ func campEnterWorld(t *testing.T, c *websocket.Conn, name string) {
 		entryauth.NewAuthenticatedEntryFixture(t, campE2EDivision, name),
 	))
 	campConsumeEnterWorldTail(t, c, name)
+	// The exclusive bind and the world-bound hooks run at the tail of the
+	// game-ready handler; drain it so callers see a bound session.
+	wiretest.AssertQueueDrained(t, c, "world-bound tail "+name)
 }
 
 // campEnterWorldWithSeed performs the 0x0006 bind for a persisted CAMP
@@ -322,7 +325,10 @@ func campEnterWorldWithSeed(t *testing.T, c *websocket.Conn, name string) []byte
 		entryauth.NewAuthenticatedEntryFixture(t, campE2EDivision, name),
 	))
 	campConsumeEnterWorldTail(t, c, name)
-	return campExpectFrame(t, c, mentor.OpTCStatus, "camp seed for "+name)
+	seed := campExpectFrame(t, c, mentor.OpTCStatus, "camp seed for "+name)
+	// The camp seed is the world-bound hook's own frame; drain after it.
+	wiretest.AssertQueueDrained(t, c, "world-bound tail "+name)
+	return seed
 }
 
 // campE2ECharacter resolves a live store record by name.

@@ -243,6 +243,9 @@ func enterWorld(t *testing.T, c *websocket.Conn) []byte {
 		t.Fatalf("0xB3CD seed payload = % X, want the empty list [01 00]", got)
 	}
 	wiretest.ActivateWorld(t, c, "enter world")
+	// The exclusive bind and the world-bound hooks run at the tail of the
+	// game-ready handler; drain it so callers see a bound session.
+	gameReadyBarrier(t, c, "world-bound tail")
 	return chunk
 }
 

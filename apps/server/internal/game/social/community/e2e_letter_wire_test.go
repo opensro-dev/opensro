@@ -144,6 +144,7 @@ func letterEnterWorld(t *testing.T, c *websocket.Conn, name string) []byte {
 	}
 	letters := expectFrame(t, c, community.OpLetterListAnswer, "letter list seed")
 	wiretest.ActivateWorld(t, c, "enter world "+name)
+	gameReadyBarrier(t, c, "world-bound tail "+name)
 	return letters
 }
 

@@ -16,8 +16,15 @@ import (
 var barrierSequence atomic.Uint64
 
 // ActivateWorld crosses the production character-bound -> world-ready edge
-// and consumes its complete ordered response. E2E scenarios must call it
-// exactly once after the enter-world bootstrap, before sending gameplay.
+// and consumes its fixed core burst (clock, base stats, vitals). E2E
+// scenarios must call it exactly once after the enter-world bootstrap,
+// before sending gameplay.
+//
+// It returns BEFORE the game-ready handler finishes: the exclusive bind and
+// the one-shot world-bound hooks run after the vitals frame is queued, and
+// a hook may send its own frames (the 0x3AC5 camp seed). A scenario that
+// reads bind state or peers' sessions next must first consume any hook
+// frames and then call AssertQueueDrained.
 func ActivateWorld(t *testing.T, conn *websocket.Conn, label string) {
 	t.Helper()
 	sendFrame(t, conn, enterworld.OpcodeGameReady, nil)
