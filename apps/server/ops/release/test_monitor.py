@@ -14,7 +14,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from monitor import MAX_MAINTENANCE_SECONDS, check, maintenance_window, poll, transition
+from monitor import MAX_MAINTENANCE_SECONDS, PROTOCOL_HEADER, check, get_status, maintenance_window, poll, transition
 
 
 # ================
@@ -91,6 +91,50 @@ class MonitorTests(unittest.TestCase):
 		self.assertEqual(maintenance_window(operation), 900 + MAX_MAINTENANCE_SECONDS)
 		self.assertEqual(maintenance_window({"component": "client", "phase": "deploying", "startedAt": 0}), 0)
 		self.assertEqual(maintenance_window(None), 0)
+
+	# ================
+	# test_the_fleet_check_speaks_the_protocol_the_server_announces
+	#
+	# The 2026-09-29 #40 release: the monitor sent no protocol header, every
+	# check got 426, and it announced a false outage for a healthy server.
+	# ================
+	def test_the_fleet_check_speaks_the_protocol_the_server_announces(self):
+		servers = json.dumps([{"id": "global", "operating": True}]).encode()
+		refusal = json.dumps({"error": "client-outdated", "protocol": 3}).encode()
+		seen = []
+
+		# ================
+		# fetch
+		#
+		# The agent refuses a request without the live protocol.
+		# ================
+		def fetch(url, headers):
+			seen.append(dict(headers))
+			if headers.get(PROTOCOL_HEADER) != "3":
+				return 426, "application/json", refusal
+			return 200, "application/json", servers
+
+		self.assertEqual(get_status("https://example.test/api/title/servers", fetch), [{"id": "global", "operating": True}])
+		self.assertEqual(seen, [{}, {PROTOCOL_HEADER: "3"}])
+
+	# ================
+	# test_only_a_handshake_refusal_is_retried
+	# ================
+	def test_only_a_handshake_refusal_is_retried(self):
+		for body, content_type in ((b"upgrade", "text/plain"), (json.dumps({"error": "other"}).encode(), "application/json"),
+			(json.dumps({"error": "client-outdated", "protocol": "3"}).encode(), "application/json"), (b"[]", "application/json")):
+			calls = []
+
+			# ================
+			# fetch
+			# ================
+			def fetch(url, headers, body=body, content_type=content_type):
+				calls.append(headers)
+				return 426, content_type, body
+
+			with self.subTest(body=body), self.assertRaisesRegex(RuntimeError, "HTTP 426"):
+				get_status("https://example.test/api/title/servers", fetch)
+			self.assertEqual(len(calls), 1)
 
 	# ================
 	# test_failed_delivery_is_retried_without_losing_heartbeat

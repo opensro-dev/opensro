@@ -30,15 +30,19 @@ FAILURE_THRESHOLD = 2
 RECOVERY_THRESHOLD = 2
 MAX_MAINTENANCE_SECONDS = 600
 MAX_HEARTBEAT_AGE_SECONDS = 180
+# The release protocol handshake (internal/releaseprotocol): a request without
+# the live protocol is refused with 426 and a body naming the protocol.
+PROTOCOL_HEADER = "X-OpenSRO-Protocol"
+UPGRADE_REQUIRED = 426
 
 
 # ================
-# get_status
+# fetch
 #
 # A bounded public HTTPS request cannot follow a redirect to a private host or
-# hold the monitoring timer indefinitely. HTTP errors are availability failures.
+# hold the monitoring timer indefinitely. Returns the status and the body.
 # ================
-def get_status(url):
+def fetch(url, headers):
 	endpoint = urlsplit(url)
 	if endpoint.scheme != "https" or endpoint.username or endpoint.password or endpoint.fragment:
 		raise ValueError("monitor requires a public HTTPS URL")
@@ -47,19 +51,58 @@ def get_status(url):
 		path = endpoint.path or "/"
 		if endpoint.query:
 			path += "?" + endpoint.query
-		connection.request("GET", path, headers={"Cache-Control": "no-cache", "User-Agent": "OpenSRO-monitor/1"})
+		connection.request("GET", path, headers={"Cache-Control": "no-cache", "User-Agent": "OpenSRO-monitor/1", **headers})
 		response = connection.getresponse()
-		if response.status != 200:
-			raise RuntimeError("HTTP " + str(response.status))
 		data = response.read(MAX_RESPONSE_BYTES + 1)
 		if len(data) > MAX_RESPONSE_BYTES:
 			raise RuntimeError("monitor response exceeds limit")
 		content_type = response.getheader("Content-Type", "").split(";", 1)[0].strip().lower()
-		if content_type == "application/json":
-			return json.loads(data)
-		return data.decode("utf-8").strip()
+		return response.status, content_type, data
 	finally:
 		connection.close()
+
+
+# ================
+# announced_protocol
+#
+# The protocol a 426 refusal names, or None. Only the handshake's own
+# refusal qualifies; any other 426 remains an availability failure.
+# ================
+def announced_protocol(content_type, data):
+	if content_type != "application/json":
+		return None
+	try:
+		body = json.loads(data)
+	except ValueError:
+		return None
+	if not isinstance(body, dict) or body.get("error") != "client-outdated":
+		return None
+	protocol = body.get("protocol")
+	if type(protocol) is not int or protocol < 1:
+		return None
+	return protocol
+
+
+# ================
+# get_status
+#
+# A liveness check speaks whatever protocol the server announces: during a
+# coordinated release the journal still names the old client while the new
+# server refuses it, so no recorded protocol is reliably current. A handshake
+# refusal proves the agent answered; the retry proves it serves the request.
+# HTTP errors are availability failures.
+# ================
+def get_status(url, fetch=fetch):
+	status, content_type, data = fetch(url, {})
+	if status == UPGRADE_REQUIRED:
+		protocol = announced_protocol(content_type, data)
+		if protocol is not None:
+			status, content_type, data = fetch(url, {PROTOCOL_HEADER: str(protocol)})
+	if status != 200:
+		raise RuntimeError("HTTP " + str(status))
+	if content_type == "application/json":
+		return json.loads(data)
+	return data.decode("utf-8").strip()
 
 
 # ================
