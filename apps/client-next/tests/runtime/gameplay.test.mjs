@@ -995,7 +995,7 @@ test("remote motion consumes the same surface resolver and preserves its sampled
 	assert.deepEqual( m.step( 3000 ), [] );
 });
 
-test("native movement derives all cardinal headings but preserves explicit stop headings", () => {
+test("native movement derives all cardinal headings; an angular heading applies only with a source", () => {
 	const m = createEntityMotion(), entity = { ...pose, gid: 7, heading: 1234, runSpeed: 50 };
 	// 853550 subtracts pi/2 from model yaw before encoding wire heading.
 	// These are wire bearings, not the model-facing angles used by the renderer.
@@ -1010,13 +1010,49 @@ test("native movement derives all cardinal headings but preserves explicit stop 
 		m.receive( p, entity, 0 );
 		assert.equal( m.step( 10 )[0].heading, heading );
 	}
-	const stop = Buffer.alloc( 9 );
-	stop.writeUInt32LE( 7 );
-	stop.writeUInt16LE( 54321, 6 );
-	m.receive( stop, entity, 0 );
-	assert.equal( m.step( 0 )[0].heading, 54321 );
+	// 0x776200 reads the heading into the StartDirectMove arm only: without
+	// the source block an angular acknowledgement leaves motion and facing.
+	const keep = Buffer.alloc( 9 );
+	keep.writeUInt32LE( 7 );
+	keep.writeUInt16LE( 54321, 6 );
+	m.receive( keep, entity, 0 );
+	assert.equal( m.step( 10 )[0].heading, 32767, "the path in progress keeps its heading" );
+	const walk = Buffer.alloc( 19 );
+	walk.writeUInt32LE( 7 );
+	walk.writeUInt16LE( 54321, 6 );
+	walk[8] = 1;
+	walk.writeUInt16LE( pose.regionId, 9 );
+	walk.writeInt16LE( pose.x * 10, 11 );
+	walk.writeFloatLE( pose.y, 13 );
+	walk.writeInt16LE( pose.z * 10, 17 );
+	m.receive( walk, entity, 0 );
+	const row = m.step( 10 )[0];
+	assert.equal( row.heading, 54321 );
+	assert.equal( row.moving, true, "a sourced angular acknowledgement walks the heading" );
 });
 
+test("a ground click during a logout countdown cancels it before walking the ray's direction", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		local = { ...pose, gid: 7, heading: 0, appearanceState: [ 1, 0, 0 ] };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( local );
+	const query = {
+		originRegion: pose.regionId,
+		ray: { start: [ 0, 50, 0 ], delta: [ 1000, 0, 0 ] },
+		terrainDepth: null
+	};
+	game.command( { kind: "ground-move", query, departing: true }, 10, undefined, local );
+	assert.deepEqual( sent.map( f => f.opcode ), [ 0x731f, 9 ] );
+	assert.deepEqual( [ ...sent[1].payload.slice( 5 ) ], [ 0, 1, 0, 0 ], "the miss walks east" );
+	sent.length = 0;
+	game.command( { kind: "ground-move", query }, 20, undefined, local );
+	// Before its acknowledgement the mover is not moving, so native resends
+	// (the 5-degree skip needs the moving bit); no countdown, no 0x731F.
+	assert.deepEqual( sent.map( f => f.opcode ), [ 9 ] );
+	game.dispose();
+});
 test("freeze blocks navigation and a cleared 0x36C7 snapshot releases it; sleep does not", async () => {
 	const { createGameplay } = await load( "gameplay" ),
 		sent = [],

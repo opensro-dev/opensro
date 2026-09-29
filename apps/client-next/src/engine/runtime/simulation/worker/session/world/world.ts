@@ -293,7 +293,12 @@ command
 			if ( phase !== "world" || (!ready && command.kind !== "navigation") ) {
 				throw new Error( "World gameplay is not ready" );
 			}
-			core.command( command, now );
+			// The countdown belongs to this session; a ground click cancels it
+			// (CGInterface_MoveToWorldPoint sends 0x731F while +0x39C is set).
+			const admitted = command.kind === "ground-move" && departure.pending() ?
+				{ ...command, departing: true } :
+				command;
+			core.command( admitted, now );
 		},
 		/*
 ================

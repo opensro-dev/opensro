@@ -161,6 +161,8 @@ func newGameplayPlane(
 	items.LineOfSight = movementRuntime.LineOfSight
 	items.ResolveNavOwner = water.ResolveNavOwner
 	items.MoveCOS = movementRuntime.HandleCOSMove
+	items.SteerCOS = movementRuntime.HandleCOSSteer
+	items.StopCOS = movementRuntime.HandleCOSStop
 	movementRuntime.UsePendingTracker(items.Pending)
 	movementRuntime.ClearCombatIntent = items.ClearCombatIntent
 	movementRuntime.MovementBlocked = items.PlayerMovementBlocked

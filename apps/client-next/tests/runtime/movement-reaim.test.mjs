@@ -90,11 +90,11 @@ for ( const lane of [ "local", "monster" ] ) {
 				`${lane} discarded elapsed time at ${now}: ${defined( p ).x}`
 			);
 		}
-		// The final stop is almost 80 units ahead with the former restart-from-last-tick code.
+		// A source-less angular acknowledgement only enters action state 9
+		// (0x776200): the path in progress keeps running from where it is.
 		receive( packet( 0, undefined, true ), 9616 );
 		assert.ok( Math.abs( defined( step( 9616 ) ).x - 580.8 ) < 1e-7 );
-		const stopped = defined( step( 9616 ) ).x;
-		assert.equal( defined( step( 10000 ) ).x, stopped );
+		assert.ok( Math.abs( defined( step( 10000 ) ).x - 600 ) < 1e-7, "the path continues after a keep" );
 	} );
 }
 for ( const lane of [ "local", "monster" ] ) {

@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+coscommand.go - the 0x769E COS command family and its S->C twins
+
+The strict codec for what a client sends about its summoned COS (movement,
+mount, mounted attack) and the frames the action lane answers with. The
+comment on the opcode block below carries the native provenance.
+
+===========================================================================
+*/
 package wire
 
 import "fmt"
@@ -14,11 +25,15 @@ import "fmt"
 // resolving a nonzero effective-record +0x210.
 //
 // 0x769E is a multi-form FAMILY keyed on the trailing tag byte (C3 verify,
-// server-wave seq 38): 0x01 positional, 0x02 approach, 0x03 heading-snap,
-// 0x04 heading (sub_877540 / CharMovement_SendHeadingIfTurned - rider-only),
-// 0x08 pickup, 0x0B mount. The mount and mounted-attack arms are pinned here;
-// every other tag refuses LOUDLY as unsupported rather than being half-parsed
-// (the moverequest.go unsupported-mode precedent).
+// server-wave seq 38): 0x01 movement, 0x02 approach, 0x03 direction stop,
+// 0x04 steer, 0x08 pickup, 0x0B mount. The mount's movement trio is what
+// CNavigationDeadreckon sends for a vehicle instead of the player opcodes:
+// SendTargetMovePacket (0x877D80) tag 0x01 with the 0x7738 body,
+// SendAngleUpdatePacket (0x8777B0) tag 0x03 [u16 heading] instead of 0x72F5,
+// and SendSteeringUpdate (0x877540) tag 0x04 [u16 heading] instead of 0x72CF.
+// Those, the mount and the mounted attack are decoded here; every other tag
+// refuses LOUDLY as unsupported rather than being half-parsed (the
+// moverequest.go unsupported-mode precedent).
 //
 // S->C twins (emitted by action.HandleCosCommand after authoritative
 // ActiveCOS identity/capability gates):
@@ -52,24 +67,30 @@ const (
 // magic-state board's two-bar COS slot.
 const CosStateRefreshSummonTimer uint8 = 3
 
-// EncodeCosSummonTimer3691 builds the 0x3691 subtype-3 body:
-//
-//	[u8 3][u32 itemRefObjID][u32 remainingSec][u32 packedExtra]
-//
-// sub_775f20 @0x7760FE reads the three u32s and dispatches
-// sub_67A470(gi, 3, id, 0, 0, 0) when both trailing words are zero, otherwise
-// sub_67A470(gi, 3, id, 1, remainingSec, packedExtra). That flag reaches
-// sub_6E6150 as its submit selector: 0 REMOVES the matching row, 1 upserts
-// it, so a zero pair is the native retirement rather than an empty window.
-//
-// sub_6E6E00 kind 3 resolves the ITEM record through sub_7EFE70 and seeds the
-// row from its +0x29C duration: the limit is duration*1000 and the elapsed
-// accumulator is limit - remainingSec*1000, which sub_6E6AA0 then draws as
-// (limit - elapsed) / limit. The third word is what is LEFT, never what has
-// run; kinds 6, 7 and 8 subtract their own arg from a fixed cap identically.
-// The +0x2A4 aux is the second bar's limit and the packed extra's low u16 is
-// its own remaining, in seconds. The id is the SUMMONING ITEM's ref id, not
-// the COS character's.
+/*
+================
+EncodeCosSummonTimer3691
+
+EncodeCosSummonTimer3691 builds the 0x3691 subtype-3 body:
+
+	[u8 3][u32 itemRefObjID][u32 remainingSec][u32 packedExtra]
+
+sub_775f20 @0x7760FE reads the three u32s and dispatches
+sub_67A470(gi, 3, id, 0, 0, 0) when both trailing words are zero, otherwise
+sub_67A470(gi, 3, id, 1, remainingSec, packedExtra). That flag reaches
+sub_6E6150 as its submit selector: 0 REMOVES the matching row, 1 upserts
+it, so a zero pair is the native retirement rather than an empty window.
+
+sub_6E6E00 kind 3 resolves the ITEM record through sub_7EFE70 and seeds the
+row from its +0x29C duration: the limit is duration*1000 and the elapsed
+accumulator is limit - remainingSec*1000, which sub_6E6AA0 then draws as
+(limit - elapsed) / limit. The third word is what is LEFT, never what has
+run; kinds 6, 7 and 8 subtract their own arg from a fixed cap identically.
+The +0x2A4 aux is the second bar's limit and the packed extra's low u16 is
+its own remaining, in seconds. The id is the SUMMONING ITEM's ref id, not
+the COS character's.
+================
+*/
 func EncodeCosSummonTimer3691(itemRefObjID, remainingSec, packedExtra uint32) []byte {
 	return NewWriter(13).
 		U8(CosStateRefreshSummonTimer).
@@ -79,8 +100,14 @@ func EncodeCosSummonTimer3691(itemRefObjID, remainingSec, packedExtra uint32) []
 		Payload()
 }
 
-// EncodeCosSummonTimerRetire3691 is the zero pair sub_6E6150 treats as its
-// remove selector. It retires the board row without expiring its window.
+/*
+================
+EncodeCosSummonTimerRetire3691
+
+EncodeCosSummonTimerRetire3691 is the zero pair sub_6E6150 treats as its
+remove selector. It retires the board row without expiring its window.
+================
+*/
 func EncodeCosSummonTimerRetire3691(itemRefObjID uint32) []byte {
 	return EncodeCosSummonTimer3691(itemRefObjID, 0, 0)
 }
@@ -95,23 +122,48 @@ const CosCommandAttackTag uint8 = 0x02
 // sub_877d80 -> sub_877cc0: COS gid, tag 1, ordinary native move body.
 const CosCommandMovementTag uint8 = 0x01
 
+// CosCommandStopTag is the vehicle's direction stop (0x8777B0), the twin of
+// 0x72F5: [u32 gid][u8 0x03][u16 heading].
+const CosCommandStopTag uint8 = 0x03
+
+// CosCommandSteerTag is the vehicle's steer (0x877540), the twin of 0x72CF:
+// [u32 gid][u8 0x04][u16 heading].
+const CosCommandSteerTag uint8 = 0x04
+
+// CosHeadingRequestSize is the stop/steer body size: gid + tag + heading.
+const CosHeadingRequestSize = 7
+
 // CosCommandRequestSize is the mount arm's exact body size: u32 gid + u8 tag.
 const CosCommandRequestSize = 5
 
 // CosAttackRequestSize is mount gid + tag + target gid.
 const CosAttackRequestSize = 9
 
-// CosCommand is the strictly decoded subset of the 0x769E tagged family
-// for which v1.150 client bytes are proven.
+/*
+================
+CosCommand
+
+CosCommand is the strictly decoded subset of the 0x769E tagged family
+for which v1.150 client bytes are proven.
+================
+*/
 type CosCommand struct {
 	Tag       uint8
 	CosGid    uint32
 	TargetGid uint32
 	Movement  []byte
+	// Heading is the stop/steer arms' heading word.
+	Heading uint16
 }
 
-// DecodeCosCommand parses the two proven 0x769E forms without treating the
-// family as one fixed-size packet. Length is selected by the in-band tag.
+/*
+================
+DecodeCosCommand
+
+DecodeCosCommand parses the decoded 0x769E forms without treating the
+family as one fixed-size packet. Length is selected by the in-band tag.
+================
+*/
 func DecodeCosCommand(payload []byte) (CosCommand, error) {
 	var out CosCommand
 	if len(payload) < CosCommandRequestSize {
@@ -135,6 +187,15 @@ func DecodeCosCommand(payload []byte) (CosCommand, error) {
 		}
 		out.Movement = append([]byte(nil), body...)
 		return out, nil
+	case CosCommandStopTag, CosCommandSteerTag:
+		if len(payload) != CosHeadingRequestSize {
+			return CosCommand{}, fmt.Errorf("wire: 0x769E heading body %d bytes, want %d", len(payload), CosHeadingRequestSize)
+		}
+		heading, readErr := r.U16()
+		if readErr != nil {
+			return CosCommand{}, readErr
+		}
+		out.Heading = heading
 	case CosCommandMountTag:
 		if len(payload) != CosCommandRequestSize {
 			return CosCommand{}, fmt.Errorf("wire: 0x769E mount body %d bytes, want %d", len(payload), CosCommandRequestSize)
@@ -149,7 +210,7 @@ func DecodeCosCommand(payload []byte) (CosCommand, error) {
 		}
 		out.TargetGid = targetGid
 	default:
-		return CosCommand{}, fmt.Errorf("wire: 0x769E tag 0x%02X unsupported (proven forms: attack 0x02, mount 0x0B)", tag)
+		return CosCommand{}, fmt.Errorf("wire: 0x769E tag 0x%02X unsupported (decoded forms: 0x01 move, 0x02 attack, 0x03 stop, 0x04 steer, 0x0B mount)", tag)
 	}
 	if err := r.Done(); err != nil {
 		return CosCommand{}, err
@@ -157,19 +218,31 @@ func DecodeCosCommand(payload []byte) (CosCommand, error) {
 	return out, nil
 }
 
-// CosMountRequest is one decoded 0x769E mount request.
+/*
+================
+CosMountRequest
+
+CosMountRequest is one decoded 0x769E mount request.
+================
+*/
 type CosMountRequest struct {
 	// CosGid is the COS entity gid the client claims to mount (the active
 	// COS record's +0x04 gid on a retail client - claimed, never trusted).
 	CosGid uint32
 }
 
-// DecodeCosMountRequest parses a 0x769E body, accepting exactly the pinned
-// mount form: [u32le cosGid][u8 0x0B], 5 bytes. Any other length is
-// malformed; a well-formed-length body with a different tag refuses with a
-// DISTINCT reason - those forms exist natively (see the family list above)
-// but their bytes are not pinned here, and half-parsing them would invent a
-// contract.
+/*
+================
+DecodeCosMountRequest
+
+DecodeCosMountRequest parses a 0x769E body, accepting exactly the pinned
+mount form: [u32le cosGid][u8 0x0B], 5 bytes. Any other length is
+malformed; a well-formed-length body with a different tag refuses with a
+DISTINCT reason - those forms exist natively (see the family list above)
+but their bytes are not pinned here, and half-parsing them would invent a
+contract.
+================
+*/
 func DecodeCosMountRequest(payload []byte) (CosMountRequest, error) {
 	var out CosMountRequest
 	command, err := DecodeCosCommand(payload)
@@ -183,7 +256,13 @@ func DecodeCosMountRequest(payload []byte) (CosMountRequest, error) {
 	return out, nil
 }
 
-// EncodeCosRideState builds sub_777f60's mode-1 B4B5 body.
+/*
+================
+EncodeCosRideState
+
+EncodeCosRideState builds sub_777f60's mode-1 B4B5 body.
+================
+*/
 func EncodeCosRideState(riderGid uint32, mounted bool, vehicleGid uint32) []byte {
 	rideState := uint8(0)
 	if mounted {
@@ -192,9 +271,15 @@ func EncodeCosRideState(riderGid uint32, mounted bool, vehicleGid uint32) []byte
 	return NewWriter(10).U8(1).U32(riderGid).U8(rideState).U32(vehicleGid).Payload()
 }
 
-// EncodeCosRecordCreateBand2 builds the 0x3158 record for a TID-band-2
-// transport: [gid][ref][hp][mp][status][dead]. The conditional grammar is
-// selected from the already-seeded characterdata TID word client-side.
+/*
+================
+EncodeCosRecordCreateBand2
+
+EncodeCosRecordCreateBand2 builds the 0x3158 record for a TID-band-2
+transport: [gid][ref][hp][mp][status][dead]. The conditional grammar is
+selected from the already-seeded characterdata TID word client-side.
+================
+*/
 func EncodeCosRecordCreateBand2(gid, refObjID, hp, mp uint32, status uint8, dead bool) []byte {
 	deadWord := uint32(0)
 	if dead {
@@ -210,7 +295,13 @@ func EncodeCosRecordCreateBand2(gid, refObjID, hp, mp uint32, status uint8, dead
 		Payload()
 }
 
-// CosSpawnBand2 is sub_8554e0's plain internal/transport/pet create row.
+/*
+================
+CosSpawnBand2
+
+CosSpawnBand2 is sub_8554e0's plain internal/transport/pet create row.
+================
+*/
 type CosSpawnBand2 struct {
 	// Zero preserves band-2 callers; 3/4 select the verified pet name tail.
 	Band       uint8
@@ -228,9 +319,15 @@ type CosSpawnBand2 struct {
 	State      uint8
 }
 
-// EncodeCosSpawnBand2 builds the exact 0x30D7 single-spawn body proven by
-// cicCosSpawnParity: shared position/movement/scalar block, band-2 name info,
-// owner gid, then vt+0x68 state byte.
+/*
+================
+EncodeCosSpawnBand2
+
+EncodeCosSpawnBand2 builds the exact 0x30D7 single-spawn body proven by
+cicCosSpawnParity: shared position/movement/scalar block, band-2 name info,
+owner gid, then vt+0x68 state byte.
+================
+*/
 func EncodeCosSpawnBand2(row CosSpawnBand2) []byte {
 	name := []byte(row.Name)
 	ownerName := []byte(row.OwnerName)

@@ -120,6 +120,11 @@ import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
 import { createMovement } from "./movement/movement";
+import {
+	logoutCancelRequest,
+	targetActionCancel,
+	worldPointAction
+} from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
 import { createCombat } from "./combat/combat";
 import { createTargeting } from "./targeting/targeting";
@@ -702,6 +707,12 @@ state here before a command can claim a native wire conversation.
 				local?.appearanceState?.[0] === 2 &&
 				[ "move", "ground-move", "attack", "skill", "pickup", "cos-attack" ].includes( command.kind )
 			) return null;
+			// 6932D7..69338D: a ground click cancels a running action and a
+			// logout countdown before the seated and navigation checks.
+			if ( command.kind === "ground-move" ) {
+				if ( pickup.busy() ) sendFrame( targetActionCancel() );
+				if ( command.departing ) sendFrame( logoutCancelRequest() );
+			}
 			// 85C590 freeze leaves action state 9, which disables navigation.
 			// Sleep and stun do not. The mask is the same word 0x36C7 and 0x33A6 write.
 			if (
@@ -997,21 +1008,39 @@ state here before a command can claim a native wire conversation.
 				if ( emote === null ) throw Error( "Action is unavailable" );
 				return sendFrame( { opcode: 0x324b, payload: Uint8Array.of( emote ) } );
 			}
-			if ( command.kind === "ground-move" ) {
-				const destination = movement.pick( command.query ), pose = movement.state().pose;
-				if ( !destination || !pose ) return null;
-				command = { kind: "move", destination: { ...destination, angle: pose.angle } };
-			}
-			if ( command.kind === "move" ) {
+			if ( command.kind === "ground-move" || command.kind === "move" ) {
 				if ( protocol !== 1 ) {
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
 				if ( local?.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) {
 					throw Error( "Mounted COS authority is unavailable" );
 				}
-				const frame = movement.request( command.destination, now, local?.mountedOn || undefined );
+				const cosGid = local?.mountedOn || undefined;
+				let destination = command.kind === "move" ? command.destination : undefined;
+				if ( command.kind === "ground-move" ) {
+					// CGInterface_MoveToWorldPoint: a miss walks the ray's direction.
+					const state = movement.state();
+					if ( !state.pose ) return null;
+					const walking = state.moving && state.directionWalk !== undefined;
+					const action = worldPointAction(
+						state.pose,
+						movement.pick( command.query ),
+						command.query,
+						walking
+					);
+					if ( action.kind === "none" ) return null;
+					if ( action.kind === "walk-direction" ) {
+						const frame = movement.direct( action.heading, now, cosGid );
+						pickup.clear();
+						selectionDecal = null;
+						return frame;
+					}
+					destination = action.destination;
+				}
+				if ( !destination ) return null;
+				const frame = movement.request( destination, now, cosGid );
 				pickup.clear();
-				selectionDecal = { kind: "ground", pose: { ...command.destination } };
+				selectionDecal = { kind: "ground", pose: { ...destination } };
 				return frame;
 			}
 			if ( command.kind === "avatar-move" ) {

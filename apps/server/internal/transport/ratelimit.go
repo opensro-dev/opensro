@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+ratelimit.go - per-session inbound frame rate limiting at the dispatch boundary
+
+One uniform token bucket per session. The comment after the imports is the
+budget's provenance: the measured shape of legitimate inbound traffic.
+
+===========================================================================
+*/
 package transport
 
 import (
@@ -26,13 +36,18 @@ import (
 //     sub_878100 on an accepted tiny-retarget, latch cleared after one
 //     resend in sub_878410) — never a per-frame repeat, so the fastest
 //     sustained rate stays human click-spam at ~8-10/s plus stragglers.
+//   - 0x72CF steer / 0x72F5 stop while a direction walk runs: the drift
+//     correction of CNavigationDeadreckon_UpdateMovementHeading re-arms
+//     every 500 ms (<=2/s), a held Left/Right arrow re-sends only past
+//     45 degrees of turn at pi rad/s (<=4/s), and the stop is one frame per
+//     Up release - about 6/s on top of the walk, which replaces clicking.
 //   - 0x706D item moves, 0x707B guide acks, chat, and the progression
 //     clicks (0x727A/0x7552/0x7165/0x72CB) are all user-driven at a few
 //     per second at most; EnterWorld/0x3012 arrive once per bind.
 //
-// Worst plausible legitimate aggregate is therefore ~12-13 frames/s, and
-// the default budget of 25/s sustained with a burst of 75 gives ~2x
-// headroom over the fastest producible human input while still shedding
+// Worst plausible legitimate aggregate is therefore ~12-19 frames/s, and
+// the default budget of 25/s sustained with a burst of 75 keeps headroom
+// over the fastest producible human input while still shedding
 // 97%+ of a hostile 1000/s empty-payload flood (the progression opcodes
 // are empty frames, so flooding them is free for the attacker and burns
 // handler CPU + refusal log volume per frame server-side).
@@ -45,9 +60,15 @@ import (
 // log cannot itself become the flood the limiter exists to stop.
 const clampLogInterval = 5 * time.Second
 
-// frameLimiter is one session's inbound token bucket. It has its own tiny
-// mutex, held only for the token arithmetic — never across a handler call
-// and never nested with h.mu or s.mu.
+/*
+================
+frameLimiter
+
+frameLimiter is one session's inbound token bucket. It has its own tiny
+mutex, held only for the token arithmetic — never across a handler call
+and never nested with h.mu or s.mu.
+================
+*/
 type frameLimiter struct {
 	mu     sync.Mutex
 	perSec float64
@@ -63,7 +84,13 @@ type frameLimiter struct {
 	now func() time.Time
 }
 
-// newFrameLimiter builds a full bucket from positive, validated inputs.
+/*
+================
+newFrameLimiter
+
+newFrameLimiter builds a full bucket from positive, validated inputs.
+================
+*/
 func newFrameLimiter(perSec, burst int) *frameLimiter {
 	return &frameLimiter{
 		perSec: float64(perSec),
@@ -73,15 +100,27 @@ func newFrameLimiter(perSec, burst int) *frameLimiter {
 	}
 }
 
-// admit spends one token. It remains the test and small-frame convenience
-// path; live dispatch uses admitCost so large requests pay for their bytes.
+/*
+================
+frameLimiter.admit
+
+admit spends one token. It remains the test and small-frame convenience
+path; live dispatch uses admitCost so large requests pay for their bytes.
+================
+*/
 func (l *frameLimiter) admit() (ok bool, dropped uint64, warn bool) {
 	return l.admitCost(1)
 }
 
-// admitCost spends cost tokens if available. On refusal it also answers
-// whether the caller should emit the rate-limited clamp warning and how many
-// frames were dropped since the last one, resetting that window.
+/*
+================
+frameLimiter.admitCost
+
+admitCost spends cost tokens if available. On refusal it also answers
+whether the caller should emit the rate-limited clamp warning and how many
+frames were dropped since the last one, resetting that window.
+================
+*/
 func (l *frameLimiter) admitCost(cost float64) (ok bool, dropped uint64, warn bool) {
 	if cost < 1 {
 		cost = 1
@@ -110,14 +149,20 @@ func (l *frameLimiter) admitCost(cost float64) (ok bool, dropped uint64, warn bo
 	return false, 0, false
 }
 
-// admitFrame is the dispatch-boundary gate: true means the frame may be
-// dispatched. A refusal drops the frame (never the session — a legitimate
-// client sharing a machine with a runaway script must survive), counts it
-// in the hub metrics, and warns at most once per clampLogInterval per
-// session. The limiter lives on the Session, so its state dies with the
-// session and cannot leak across churn. The nil case is defensive for
-// package-level tests and partially constructed sessions; production config
-// always installs a limiter.
+/*
+================
+Session.admitFrame
+
+admitFrame is the dispatch-boundary gate: true means the frame may be
+dispatched. A refusal drops the frame (never the session — a legitimate
+client sharing a machine with a runaway script must survive), counts it
+in the hub metrics, and warns at most once per clampLogInterval per
+session. The limiter lives on the Session, so its state dies with the
+session and cannot leak across churn. The nil case is defensive for
+package-level tests and partially constructed sessions; production config
+always installs a limiter.
+================
+*/
 func (s *Session) admitFrame(opcode uint16, encodedBytes int) bool {
 	if s.limiter == nil {
 		return true

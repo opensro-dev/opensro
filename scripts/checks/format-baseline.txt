@@ -133,7 +133,6 @@ apps/client-next/src/engine/foundation/gameplay/item-state-delta.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
 apps/client-next/src/engine/foundation/gameplay/name-color.ts
-apps/client-next/src/engine/foundation/gameplay/native-movement.ts
 apps/client-next/src/engine/foundation/gameplay/native-notice.ts
 apps/client-next/src/engine/foundation/gameplay/npc-dialogue.ts
 apps/client-next/src/engine/foundation/gameplay/party-matching.ts
@@ -368,7 +367,6 @@ apps/client-next/src/engine/runtime/simulation/worker/input/input.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/codec/codec.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/network.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/core.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/departure.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/alchemy/alchemy.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts

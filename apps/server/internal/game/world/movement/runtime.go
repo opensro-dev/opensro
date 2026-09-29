@@ -4,9 +4,11 @@
 runtime.go - the movement lane: ground clicks and peer appearance
 
 Package movement wires the movement lane onto the transport Hub: the
-0x7738 ground-click handler (-> simulation.ApplyMove -> 0xB738 ack), the
-deep-water destination gate, and the enter-world session glue that makes
-a player visible to the simulation tick (SnapshotProvider + division keys).
+0x7738 handler (a ground click -> simulation.ApplyMove -> 0xB738 ack, or a
+direction walk, direction.go), the 0x72CF/0x72F5 steer and stop pair
+(steer.go), the deep-water destination gate, and the enter-world session
+glue that makes a player visible to the simulation tick (SnapshotProvider +
+division keys).
 
 The world plane is SHARED with the item lane: both read and write the
 same simulation.WorldStore states, so a mid-move gold drop lands under the
@@ -91,6 +93,8 @@ type Runtime struct {
 	npcsAtPlayer bool
 
 	operations characterOperationLocks
+	// directions is the registry of direction walks (direction.go).
+	directions directionWalks
 }
 
 /*
@@ -140,11 +144,19 @@ func (rt *Runtime) ValidateSecurityPolicy() error {
 	return nil
 }
 
-// Register wires the 0x7738 movement handler and the 0x7017 motion-state
-// handler (motionstate.go) onto the hub.
+/*
+==================
+Register
+
+Wires the 0x7738 movement handler, the 0x7017 motion-state handler
+(motionstate.go) and the 0x72CF/0x72F5 direction pair (steer.go) onto the
+hub.
+==================
+*/
 func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerPredictedMovement(hub)
 	rt.registerMotionState(hub)
+	rt.registerDirectionCommands(hub)
 	hub.Handle(simulation.OpClientMovementRequest, func(s *transport.Session, _ uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(rt.deps, s)
 		if !bound {
@@ -193,6 +205,11 @@ type MoveOutcome struct {
 	Result *simulation.MoveResult
 }
 
+/*
+==================
+refusedMove
+==================
+*/
 func refusedMove(err *simulation.MoveError) MoveOutcome {
 	return MoveOutcome{Refusal: err}
 }
@@ -231,14 +248,33 @@ func (rt *Runtime) HandleMove(divisionID string, character *enterworld.Character
 	return rt.handleMove(divisionID, character, payload, 0)
 }
 
-// HandleCOSMove shares validation, collision, persistence and delivery with ordinary moves.
-// Recheck the claimed owner while holding the movement operation lock.
+/*
+==================
+HandleCOSMove
+
+The 0x769E tag-1 mount move shares validation, collision, persistence and
+delivery with ordinary moves. The claimed owner is rechecked while holding
+the movement operation lock.
+==================
+*/
 func (rt *Runtime) HandleCOSMove(divisionID string, character *enterworld.Character, gid uint32, payload []byte) []wire.Frame {
 	if gid == 0 {
 		return nil
 	}
 	return rt.handleMove(divisionID, character, payload, gid).Frames
 }
+
+/*
+==================
+handleMove
+
+The shared body of HandleMove and HandleCOSMove: admission, the command
+latches, decode, then one of the three 0x7738 arms - a direction walk
+(direction.go), a ground destination (deep-water gate, geometry, commit) or
+a turn in place. Any accepted command other than a direction walk ends the
+mover's direction walk.
+==================
+*/
 func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character, payload []byte, cosGID uint32) (outcome MoveOutcome) {
 	if character == nil {
 		return refusedMove(&simulation.MoveError{NativeErrorCode: simulation.NativeErrorUnknownCharacter, Reason: "characterNotFound"})
@@ -253,35 +289,11 @@ func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character
 		})
 	}()
 
-	// Admission and its lifecycle fence must be captured in the same read.
-	// The movement operation lock does not serialize the action/death lane.
-	worldKey := simulation.WorldKey(divisionID, character.Name)
-	var snapshot *enterworld.Character
-	var admittedWorld simulation.WorldState
-	rt.deps.Read(divisionID, func() {
-		snapshot = character.Snapshot()
-		admittedWorld = rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(character) })
-	})
-	riding := snapshot != nil && snapshot.ActiveCOS != nil && snapshot.ActiveCOS.GID == cosGID &&
-		snapshot.ActiveCOS.Mounted && snapshot.ActiveCOS.Summoned && snapshot.ActiveCOS.CurrentHP != 0
-	if cosGID != 0 && !riding {
-		return refusedMove(&simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "invalidCosOwner"})
+	admission, refusal := rt.admitMove(divisionID, character, cosGID)
+	if refusal != nil {
+		return refusedMove(refusal)
 	}
-	if snapshot == nil || snapshot.DeletePending {
-		return refusedMove(&simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "deletePending"})
-	}
-	if snapshot.NativeTeleportMode == 1 {
-		return refusedMove(&simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "teleportCasting"})
-	}
-	if !enterworld.CharacterAlive(snapshot) {
-		// Native never serializes 0x7738 while motion state 1 (death) is set.
-		// Mirror the same rule at authority so an older/stale client cannot
-		// move a persisted corpse before its LIFE-dead replay arrives.
-		return refusedMove(&simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "characterDead"})
-	}
-	if rt.MovementBlocked != nil && rt.MovementBlocked(divisionID, character.Name) {
-		return refusedMove(&simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "abnormalState"})
-	}
+	worldKey := admission.worldKey
 
 	// A new ground move supersedes any pickup approach in flight (native:
 	// the target-move latch clears on the next click command, sub_67b0e0).
@@ -297,6 +309,9 @@ func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character
 	request, decodeErr := simulation.DecodeClientMovementRequest(payload)
 	if decodeErr != nil {
 		return refusedMove(decodeErr)
+	}
+	if request.IsDirectionWalk() {
+		return rt.startDirectionWalk(divisionID, character, cosGID, admission, request)
 	}
 
 	// The deep-water gate (retail agent-server authority): refuse mode-1
@@ -314,9 +329,9 @@ func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character
 	// would interpolate: liveBefore -> normalized goal, the exact segment
 	// ApplyMove builds below. Action can end a life during geometry work;
 	// the commit fence below rejects that old request, even after revival.
-	// Angular turns (mode 0) carry no
-	// destination and never reach the guard. Production always enforces;
-	// observe exists only for explicit diagnostics.
+	// Turns in place carry no destination and never reach the guard.
+	// Production always enforces; observe exists only for explicit
+	// diagnostics.
 	// walk is the surface ownership of the committed chord, walked from the
 	// live position's retained owner (native source pNavCell). It is
 	// committed with the move below so the next move starts from it.
@@ -362,62 +377,21 @@ func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character
 		request.X, request.Y, request.Z = committed.X, committed.Y, committed.Z
 	}
 
-	// The live-plane move and the record's goal write commit as one unit
-	// (ADR-1 S1: every ACCEPTED click persists the goal plane; WorldStore.mu
-	// nests under store.mu per the lock table).
 	var result simulation.MoveResult
-	var committedWorld simulation.WorldState
-	deadAtCommit := false
-	castingAtCommit := false
-	lifeChangedAtCommit := false
-	if !rt.deps.Update(character, "move", func() bool {
-		if character.DeletePending {
-			return false
+	committedWorld, refusal := rt.commitMove(character, admission, func(world *simulation.WorldState) {
+		result = simulation.ApplyMove(world, enterworld.ObjectIDForCharacter(character), request, 0, nowMs)
+		// The walk was resolved from the admission-time live point; the
+		// commit re-samples the same clock, so it departs from the same
+		// point. Anything else leaves ownership to the teleport rule rather
+		// than attaching spans to a different chord.
+		if walked && result.LiveBefore == walkFrom {
+			world.CommitWalk(walk.Spans, walk.Rest)
 		}
-		if character.NativeTeleportMode == 1 {
-			castingAtCommit = true
-			return false
-		}
-		if !enterworld.CharacterAlive(character) {
-			deadAtCommit = true
-			return false
-		}
-		current := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(character) })
-		if current.LifeRevision != admittedWorld.LifeRevision {
-			lifeChangedAtCommit = true
-			return false
-		}
-		state := rt.Worlds.Update(worldKey,
-			func() simulation.WorldState { return simulation.SeedWorldState(character) },
-			func(world *simulation.WorldState) {
-				result = simulation.ApplyMove(world, enterworld.ObjectIDForCharacter(character), request, 0, nowMs)
-				// The walk was resolved from the admission-time live point;
-				// the commit re-samples the same clock, so it departs from the
-				// same point. Anything else leaves ownership to the teleport
-				// rule rather than attaching spans to a different chord.
-				if walked && result.LiveBefore == walkFrom {
-					world.CommitWalk(walk.Spans, walk.Rest)
-				}
-			})
-		writeBackWorld(character, state)
-		committedWorld = state
-		return true
-	}) {
-		reason := "deletePending"
-		if castingAtCommit {
-			reason = "teleportCasting"
-		}
-		if deadAtCommit {
-			reason = "characterDead"
-		}
-		if lifeChangedAtCommit {
-			reason = "characterLifeChanged"
-		}
-		return refusedMove(&simulation.MoveError{
-			NativeErrorCode: simulation.NativeErrorInvalidRequest,
-			Reason:          reason,
-		})
+	})
+	if refusal != nil {
+		return refusedMove(refusal)
 	}
+	rt.directions.clear(worldKey)
 
 	return MoveOutcome{
 		Frames: []wire.Frame{
@@ -425,6 +399,105 @@ func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character
 		},
 		Result: &result,
 	}
+}
+
+/*
+==================
+moveAdmission
+
+What admitMove captured in one authority read: the character snapshot and
+the world whose LifeRevision fences the commit.
+==================
+*/
+type moveAdmission struct {
+	worldKey string
+	snapshot *enterworld.Character
+	world    simulation.WorldState
+}
+
+/*
+==================
+admitMove
+
+The admission gates every movement command meets before it may touch the
+world plane: the claimed mount, a pending delete, a teleport cast, death
+and the abnormal-state gate. Admission and its lifecycle fence are captured
+in the same read, because the movement operation lock does not serialize
+the action/death lane. The caller holds the character operation lock.
+==================
+*/
+func (rt *Runtime) admitMove(divisionID string, character *enterworld.Character, cosGID uint32) (moveAdmission, *simulation.MoveError) {
+	admission := moveAdmission{worldKey: simulation.WorldKey(divisionID, character.Name)}
+	rt.deps.Read(divisionID, func() {
+		admission.snapshot = character.Snapshot()
+		admission.world = rt.Worlds.Snapshot(admission.worldKey, func() simulation.WorldState { return simulation.SeedWorldState(character) })
+	})
+	snapshot := admission.snapshot
+	riding := snapshot != nil && snapshot.ActiveCOS != nil && snapshot.ActiveCOS.GID == cosGID &&
+		snapshot.ActiveCOS.Mounted && snapshot.ActiveCOS.Summoned && snapshot.ActiveCOS.CurrentHP != 0
+	if cosGID != 0 && !riding {
+		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "invalidCosOwner"}
+	}
+	if snapshot == nil || snapshot.DeletePending {
+		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "deletePending"}
+	}
+	if snapshot.NativeTeleportMode == 1 {
+		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "teleportCasting"}
+	}
+	if !enterworld.CharacterAlive(snapshot) {
+		// Native never serializes 0x7738 while motion state 1 (death) is set.
+		// Mirror the same rule at authority so an older/stale client cannot
+		// move a persisted corpse before its LIFE-dead replay arrives.
+		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "characterDead"}
+	}
+	if rt.MovementBlocked != nil && rt.MovementBlocked(divisionID, character.Name) {
+		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "abnormalState"}
+	}
+	return admission, nil
+}
+
+/*
+==================
+commitMove
+
+Runs apply on the world plane and persists the goal as one unit (ADR-1 S1:
+every ACCEPTED command persists the goal plane; WorldStore.mu nests under
+store.mu per the lock table). The commit re-checks what admission saw: a
+delete, a teleport cast, death, or a death/rebirth since admission refuses
+the old command, even after revival.
+==================
+*/
+func (rt *Runtime) commitMove(character *enterworld.Character, admission moveAdmission, apply func(*simulation.WorldState)) (simulation.WorldState, *simulation.MoveError) {
+	var committedWorld simulation.WorldState
+	reason := "deletePending"
+	committed := rt.deps.Update(character, "move", func() bool {
+		if character.DeletePending {
+			return false
+		}
+		if character.NativeTeleportMode == 1 {
+			reason = "teleportCasting"
+			return false
+		}
+		if !enterworld.CharacterAlive(character) {
+			reason = "characterDead"
+			return false
+		}
+		current := rt.Worlds.Snapshot(admission.worldKey, func() simulation.WorldState { return simulation.SeedWorldState(character) })
+		if current.LifeRevision != admission.world.LifeRevision {
+			reason = "characterLifeChanged"
+			return false
+		}
+		committedWorld = rt.Worlds.Update(admission.worldKey,
+			func() simulation.WorldState { return simulation.SeedWorldState(character) },
+			apply,
+		)
+		writeBackWorld(character, committedWorld)
+		return true
+	})
+	if !committed {
+		return committedWorld, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: reason}
+	}
+	return committedWorld, nil
 }
 
 /*
@@ -502,14 +575,28 @@ func (rt *Runtime) ConstrainMovementFrom(characterName string, from simulation.S
 	if rt.ClientClip != nil {
 		to = rt.ClientClip.ProcessMoveFrom(characterName, from, fromOwner, to)
 	}
+	to, walk := rt.walkOwners(from, fromOwner, to)
+	return to, walk, nil
+}
+
+/*
+==================
+walkOwners
+
+The surface ownership of an already constrained chord: the owner spans
+walked from fromOwner, and the goal lifted onto the surface the walk
+reached. Without a nav authority ownership stays unresolved.
+==================
+*/
+func (rt *Runtime) walkOwners(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (simulation.Spawn, simulation.NavWalk) {
 	if rt.Nav == nil {
-		return to, simulation.NavWalk{}, nil
+		return to, simulation.NavWalk{}
 	}
 	walk := rt.Nav.WalkOwners(from, fromOwner, to)
 	if owner, y, ok := rt.Nav.ResolveNavOwner(to, walk.Rest); ok {
 		to.Y, walk.Rest = y, owner
 	}
-	return to, walk, nil
+	return to, walk
 }
 
 /*
@@ -582,9 +669,16 @@ func writeBackWorld(character *enterworld.Character, state simulation.WorldState
 	character.World = &next
 }
 
-// ---- Tick visibility (SnapshotProvider + division keys) ----
+//============================================================================
+// Tick visibility (SnapshotProvider + division keys)
 
-// SessionWorld is the narrow transport seam the world binder needs.
+/*
+==================
+SessionWorld
+
+The narrow transport seam the world binder needs.
+==================
+*/
 type SessionWorld interface {
 	SetWorldSnapshot(divisionID string, snapshot any)
 }
@@ -715,8 +809,14 @@ type peerAppearanceCapture struct {
 	worn          []wornEquipRow
 }
 
-// wornEquipRow is one equipment-band inventory row narrowed to the fields
-// the spawn appearance emits (slot / refObjId / typeFlags / plus).
+/*
+==================
+wornEquipRow
+
+One equipment-band inventory row narrowed to the fields the spawn
+appearance emits (slot / refObjId / typeFlags / plus).
+==================
+*/
 type wornEquipRow struct {
 	slot      int64
 	refObjID  uint32

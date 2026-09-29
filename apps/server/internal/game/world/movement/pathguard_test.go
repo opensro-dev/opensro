@@ -1,15 +1,22 @@
-package movement
+/*
+===========================================================================
 
-// LANE-6 P-MOVE tests: the path-walkability observer. The fixture is the
-// water_test syntheticHeightRoot tree (region 0x6B4F, sector 79/107, real
-// 96x20 bundle geometry): blocked obstacle tiles x,z in [4,7]; walkable
-// island x,z in [60,62] ringed by the blocked moat x,z in [58,64]; border
-// sliver x in [94,95], z in [0,23] walled at x==93 / z==24 but continuing
-// into the open east neighbor 0x6B50; cell-less tile (10,10).
-//
-// Test inputs deliberately CANNOT COINCIDE with legal outcomes: every
-// blocked case names the exact offending world tile, so a traversal that
-// walks the wrong cells or classifies by the wrong endpoint fails loudly.
+pathguard_test.go - the path-walkability guard and its wiring into ground moves
+
+LANE-6 P-MOVE tests: the path-walkability observer. The fixture is the
+water_test syntheticHeightRoot tree (region 0x6B4F, sector 79/107, real
+96x20 bundle geometry): blocked obstacle tiles x,z in [4,7]; walkable
+island x,z in [60,62] ringed by the blocked moat x,z in [58,64]; border
+sliver x in [94,95], z in [0,23] walled at x==93 / z==24 but continuing
+into the open east neighbor 0x6B50; cell-less tile (10,10).
+
+Test inputs deliberately CANNOT COINCIDE with legal outcomes: every
+blocked case names the exact offending world tile, so a traversal that
+walks the wrong cells or classifies by the wrong endpoint fails loudly.
+
+===========================================================================
+*/
+package movement
 
 import (
 	"encoding/base64"
@@ -21,16 +28,32 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// tile6B4F converts region-local tile coordinates of region 0x6B4F
-// (sector 79, 107) to the world tile grid the reports carry.
+/*
+================
+tile6B4F
+
+tile6B4F converts region-local tile coordinates of region 0x6B4F
+(sector 79, 107) to the world tile grid the reports carry.
+================
+*/
 func tile6B4F(x, z int) (int, int) {
 	return 79*96 + x, 107*96 + z
 }
 
+/*
+================
+spawnAt
+================
+*/
 func spawnAt(regionID uint16, x, z float64) simulation.Spawn {
 	return simulation.Spawn{RegionID: regionID, X: x, Y: 0, Z: z}
 }
 
+/*
+================
+TestValidateMovementPathVerdicts
+================
+*/
 func TestValidateMovementPathVerdicts(t *testing.T) {
 	validator := NewWaterValidator(syntheticHeightRoot(t))
 
@@ -129,16 +152,27 @@ func TestValidateMovementPathVerdicts(t *testing.T) {
 	}
 }
 
-// pinchRoot builds a fixture with a single blocked tile at (5,4). The y=x
-// chord's single-axis DDA (which breaks the corner tie by stepping Z)
-// visits the UPPER neighbors (4,5),(5,6),... but never the LOWER neighbor
-// (5,4); only the supercover corner visit probes (x+stepX, z)=(5,4). So
-// this tile is detected iff the corner visit runs - the clean isolation
-// the witnessed-red pairing needs.
+/*
+================
+pinchRoot
+
+pinchRoot builds a fixture with a single blocked tile at (5,4). The y=x
+chord's single-axis DDA (which breaks the corner tie by stepping Z)
+visits the UPPER neighbors (4,5),(5,6),... but never the LOWER neighbor
+(5,4); only the supercover corner visit probes (x+stepX, z)=(5,4). So
+this tile is detected iff the corner visit runs - the clean isolation
+the witnessed-red pairing needs.
+================
+*/
 func pinchRoot(t *testing.T) string {
 	return pinchRootAt(t, 5, 4)
 }
 
+/*
+================
+pinchRootAt
+================
+*/
 func pinchRootAt(t *testing.T, blockedX, blockedZ int) string {
 	t.Helper()
 	root := t.TempDir()
@@ -169,6 +203,11 @@ func pinchRootAt(t *testing.T, blockedX, blockedZ int) string {
 	return root
 }
 
+/*
+================
+TestValidateMovementPathChecksBothCornerNeighbors
+================
+*/
 func TestValidateMovementPathChecksBothCornerNeighbors(t *testing.T) {
 	validator := NewWaterValidator(pinchRootAt(t, 4, 5))
 	report := validator.ValidateMovementPath(
@@ -184,12 +223,18 @@ func TestValidateMovementPathChecksBothCornerNeighbors(t *testing.T) {
 	}
 }
 
-// TestValidateMovementPathDiagonalCornerSqueeze pins the supercover corner
-// visit (GROK-V6 seq 297 soft note): the y=x chord from tile (2,2)=(50,50)
-// to (7,7)=(150,150) grazes tile (5,4)'s corner. A single-axis DDA never
-// enters (5,4); only the corner visit does. With the visit live the chord
-// classifies B; with it disabled the same chord reads legal (the witnessed
-// red).
+/*
+================
+TestValidateMovementPathDiagonalCornerSqueeze
+
+TestValidateMovementPathDiagonalCornerSqueeze pins the supercover corner
+visit (GROK-V6 seq 297 soft note): the y=x chord from tile (2,2)=(50,50)
+to (7,7)=(150,150) grazes tile (5,4)'s corner. A single-axis DDA never
+enters (5,4); only the corner visit does. With the visit live the chord
+classifies B; with it disabled the same chord reads legal (the witnessed
+red).
+================
+*/
 func TestValidateMovementPathDiagonalCornerSqueeze(t *testing.T) {
 	validator := NewWaterValidator(pinchRoot(t))
 
@@ -213,10 +258,16 @@ func TestValidateMovementPathDiagonalCornerSqueeze(t *testing.T) {
 	}
 }
 
-// TestValidateMovementPathFailsOpenAcrossUncoveredNeighbor: the chord walks
-// west out of the covered region into a neighbor with no bundle. Uncovered
-// tiles skip fail-open (never blocked), so the verdict stays legal with the
-// gap recorded.
+/*
+================
+TestValidateMovementPathFailsOpenAcrossUncoveredNeighbor
+
+TestValidateMovementPathFailsOpenAcrossUncoveredNeighbor: the chord walks
+west out of the covered region into a neighbor with no bundle. Uncovered
+tiles skip fail-open (never blocked), so the verdict stays legal with the
+gap recorded.
+================
+*/
 func TestValidateMovementPathFailsOpenAcrossUncoveredNeighbor(t *testing.T) {
 	validator := NewWaterValidator(syntheticHeightRoot(t))
 
@@ -230,10 +281,16 @@ func TestValidateMovementPathFailsOpenAcrossUncoveredNeighbor(t *testing.T) {
 	}
 }
 
-// TestValidateMovementPathTruncatesHostileLongChord: a wire-legal but
-// absurd destination hundreds of regions away must not walk unbounded
-// inside the movement mutex. The truncated walk stays fail-open (legal
-// verdict, Truncated flag) - length policing is telemetry, not refusal.
+/*
+================
+TestValidateMovementPathTruncatesHostileLongChord
+
+TestValidateMovementPathTruncatesHostileLongChord: a wire-legal but
+absurd destination hundreds of regions away must not walk unbounded
+inside the movement mutex. The truncated walk stays fail-open (legal
+verdict, Truncated flag) - length policing is telemetry, not refusal.
+================
+*/
 func TestValidateMovementPathTruncatesHostileLongChord(t *testing.T) {
 	validator := NewWaterValidator(syntheticHeightRoot(t))
 
@@ -252,12 +309,27 @@ func TestValidateMovementPathTruncatesHostileLongChord(t *testing.T) {
 
 // ---- PathGuard mode semantics ----
 
+/*
+================
+fakePathValidator
+================
+*/
 type fakePathValidator struct{ report PathReport }
 
+/*
+================
+fakePathValidator.ValidateMovementPath
+================
+*/
 func (f fakePathValidator) ValidateMovementPath(_, _ simulation.Spawn) PathReport {
 	return f.report
 }
 
+/*
+================
+TestPathGuardObserveNeverRefuses
+================
+*/
 func TestPathGuardObserveNeverRefuses(t *testing.T) {
 	for _, verdict := range []PathVerdict{
 		PathLegal, PathEndpointBlocked, PathSegmentBlocked,
@@ -273,6 +345,11 @@ func TestPathGuardObserveNeverRefuses(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPathGuardEnforceFailsClosedWithoutCoverage
+================
+*/
 func TestPathGuardEnforceFailsClosedWithoutCoverage(t *testing.T) {
 	refusing := map[PathVerdict]bool{
 		PathEndpointBlocked: true,
@@ -314,6 +391,11 @@ func TestPathGuardEnforceFailsClosedWithoutCoverage(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPathGuardCountsVerdicts
+================
+*/
 func TestPathGuardCountsVerdicts(t *testing.T) {
 	guard := &PathGuard{Mode: PathGuardObserve, Validator: fakePathValidator{PathReport{Verdict: PathSegmentBlocked, Truncated: true}}}
 	guard.InspectMove("Asd", simulation.Spawn{}, simulation.Spawn{})
@@ -327,6 +409,11 @@ func TestPathGuardCountsVerdicts(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPathGuardModeFromEnv
+================
+*/
 func TestPathGuardModeFromEnv(t *testing.T) {
 	cases := []struct {
 		value string
@@ -359,6 +446,11 @@ func TestPathGuardModeFromEnv(t *testing.T) {
 
 // ---- HandleMove integration ----
 
+/*
+================
+TestHandleMovePathGuardObserveLogsButAccepts
+================
+*/
 func TestHandleMovePathGuardObserveLogsButAccepts(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -379,6 +471,11 @@ func TestHandleMovePathGuardObserveLogsButAccepts(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleMovePathGuardEnforceRefusesEndpointNotSegment
+================
+*/
 func TestHandleMovePathGuardEnforceRefusesEndpointNotSegment(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -412,14 +509,21 @@ func TestHandleMovePathGuardEnforceRefusesEndpointNotSegment(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleMoveAngularSkipsPathGuard
+================
+*/
 func TestHandleMoveAngularSkipsPathGuard(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
 	guard := &PathGuard{Mode: PathGuardEnforce, Validator: NewWaterValidator(syntheticHeightRoot(t))}
 	rt.PathGuard = guard
 
-	// Native 4-byte angular body: [u8 0][u8 angularMode][u16 headingWord].
-	outcome := rt.HandleMove("0", character, []byte{0, 1, 0x34, 0x12})
+	// 4-byte angular body without GO: [u8 0][u8 angularMode][u16 headingWord].
+	// A turn in place has no chord; the GO form's leg is inspected after the
+	// clip (direction_test.go).
+	outcome := rt.HandleMove("0", character, []byte{0, 0, 0x34, 0x12})
 	if outcome.Refusal != nil {
 		t.Fatalf("angular move refused: %v", outcome.Refusal)
 	}
@@ -428,9 +532,15 @@ func TestHandleMoveAngularSkipsPathGuard(t *testing.T) {
 	}
 }
 
-// TestHandleMoveWithoutPathGuardUnchanged pins that a nil guard leaves the
-// pre-lane accept path byte-identical (regression guard for every existing
-// move consumer).
+/*
+================
+TestHandleMoveWithoutPathGuardUnchanged
+
+TestHandleMoveWithoutPathGuardUnchanged pins that a nil guard leaves the
+pre-lane accept path byte-identical (regression guard for every existing
+move consumer).
+================
+*/
 func TestHandleMoveWithoutPathGuardUnchanged(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -440,15 +550,21 @@ func TestHandleMoveWithoutPathGuardUnchanged(t *testing.T) {
 	}
 }
 
-// TestPathGuardFalsePositiveQuantification sweeps REAL exported bundles
-// with stock-like clicks (lattice departures, 8 directions, 200-unit
-// view-range chords) and reports the verdict distribution. The number that
-// matters is the category-B rate among walkable-endpoint chords: that is
-// the geometry-derived floor of the false-positive rate a segment-enforcing
-// gate would inflict on genuine play (the client paths AROUND the walls
-// these chords cut through), and the reason B stays observe-only. Real-play
-// rates come from the deployed observe telemetry; this pins the mechanism
-// and proves enforce accepts every B chord.
+/*
+================
+TestPathGuardFalsePositiveQuantification
+
+TestPathGuardFalsePositiveQuantification sweeps REAL exported bundles
+with stock-like clicks (lattice departures, 8 directions, 200-unit
+view-range chords) and reports the verdict distribution. The number that
+matters is the category-B rate among walkable-endpoint chords: that is
+the geometry-derived floor of the false-positive rate a segment-enforcing
+gate would inflict on genuine play (the client paths AROUND the walls
+these chords cut through), and the reason B stays observe-only. Real-play
+rates come from the deployed observe telemetry; this pins the mechanism
+and proves enforce accepts every B chord.
+================
+*/
 func TestPathGuardFalsePositiveQuantification(t *testing.T) {
 	validator := realAuthorityValidator(t)
 	enforce := &PathGuard{Mode: PathGuardEnforce, Validator: validator}
@@ -500,10 +616,16 @@ func TestPathGuardFalsePositiveQuantification(t *testing.T) {
 	}
 }
 
-// BenchmarkValidateMovementPathWarm pins the hot-path cost of one chord
-// classification with the bundle cache warm (the state every accept after
-// the first sees). The walk runs inside the movement mutex, so this number
-// bounds the per-move overhead the guard adds.
+/*
+================
+BenchmarkValidateMovementPathWarm
+
+BenchmarkValidateMovementPathWarm pins the hot-path cost of one chord
+classification with the bundle cache warm (the state every accept after
+the first sees). The walk runs inside the movement mutex, so this number
+bounds the per-move overhead the guard adds.
+================
+*/
 func BenchmarkValidateMovementPathWarm(b *testing.B) {
 	root := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "client-public")
 	if _, err := os.Stat(filepath.Join(root, "assets", "world", "world-region-catalog.json")); err != nil {
@@ -521,12 +643,18 @@ func BenchmarkValidateMovementPathWarm(b *testing.B) {
 
 // ---- object-nav awareness (the bridge-deck category-A FP kill) ----
 
-// TestValidateMovementPathObjectDeckOverrides drives the guard over the
-// syntheticObjectNavRoot world (objectnav_test.go): an OPEN 40x40 deck at
-// (500, 500) y=10 standing over BLOCKED tiles x,z in [24,25]. Deck moves
-// must classify by the deck plane, while a ground-level click onto the
-// same blocked tiles keeps its category-A verdict (the enforcement teeth
-// stay).
+/*
+================
+TestValidateMovementPathObjectDeckOverrides
+
+TestValidateMovementPathObjectDeckOverrides drives the guard over the
+syntheticObjectNavRoot world (objectnav_test.go): an OPEN 40x40 deck at
+(500, 500) y=10 standing over BLOCKED tiles x,z in [24,25]. Deck moves
+must classify by the deck plane, while a ground-level click onto the
+same blocked tiles keeps its category-A verdict (the enforcement teeth
+stay).
+================
+*/
 func TestValidateMovementPathObjectDeckOverrides(t *testing.T) {
 	validator := NewWaterValidator(syntheticObjectNavRoot(t))
 
@@ -592,10 +720,16 @@ func TestValidateMovementPathObjectDeckOverrides(t *testing.T) {
 	}
 }
 
-// TestValidateMovementPathObjectDataMissingFailsOpen corrupts the object
-// resource index: deck moves must degrade to the OLD tile-only verdicts
-// (never a refusal beyond what the tile plane already said, never a
-// fault).
+/*
+================
+TestValidateMovementPathObjectDataMissingFailsOpen
+
+TestValidateMovementPathObjectDataMissingFailsOpen corrupts the object
+resource index: deck moves must degrade to the OLD tile-only verdicts
+(never a refusal beyond what the tile plane already said, never a
+fault).
+================
+*/
 func TestValidateMovementPathObjectDataMissingFailsOpen(t *testing.T) {
 	root := syntheticObjectNavRoot(t)
 	writeTestAsset(t, root, "assets/world/outdoor/object-resources.json", `not json`)
@@ -612,15 +746,21 @@ func TestValidateMovementPathObjectDataMissingFailsOpen(t *testing.T) {
 	}
 }
 
-// TestValidateMovementPathRealHarborBridgeDeck is THE category-A
-// false-positive kill, pinned on the REAL Constantinople harbor bridge
-// payload (euro_esteuro_port01, asset 1630, region 0x6850): the deck
-// plane sits ~105u above a BLOCKED seabed tile (verified blocked here, so
-// the FP precondition still holds), and a legal deck move over it must
-// classify LEGAL - before object awareness it classified endpointBlocked,
-// the one verdict enforce refuses. A click walking OFF the deck's end
-// onto the seabed keeps its blocked classification (the override's
-// boundary).
+/*
+================
+TestValidateMovementPathRealHarborBridgeDeck
+
+TestValidateMovementPathRealHarborBridgeDeck is THE category-A
+false-positive kill, pinned on the REAL Constantinople harbor bridge
+payload (euro_esteuro_port01, asset 1630, region 0x6850): the deck
+plane sits ~105u above a BLOCKED seabed tile (verified blocked here, so
+the FP precondition still holds), and a legal deck move over it must
+classify LEGAL - before object awareness it classified endpointBlocked,
+the one verdict enforce refuses. A click walking OFF the deck's end
+onto the seabed keeps its blocked classification (the override's
+boundary).
+================
+*/
 func TestValidateMovementPathRealHarborBridgeDeck(t *testing.T) {
 	validator := realAuthorityValidator(t)
 
@@ -660,11 +800,17 @@ func TestValidateMovementPathRealHarborBridgeDeck(t *testing.T) {
 	}
 }
 
-// TestValidateMovementPathRealEuropeBridgeDeckIncident pins the 2026-08-17
-// browser/server disagreement at region 0x6C4F. The browser's reconstructed
-// native picker selected an object-nav deck at this exact endpoint and
-// ValidateMove accepted it; GameWorld must therefore recognize the same deck
-// instead of silently refusing the 0x7738 as endpointBlocked.
+/*
+================
+TestValidateMovementPathRealEuropeBridgeDeckIncident
+
+TestValidateMovementPathRealEuropeBridgeDeckIncident pins the 2026-08-17
+browser/server disagreement at region 0x6C4F. The browser's reconstructed
+native picker selected an object-nav deck at this exact endpoint and
+ValidateMove accepted it; GameWorld must therefore recognize the same deck
+instead of silently refusing the 0x7738 as endpointBlocked.
+================
+*/
 func TestValidateMovementPathRealEuropeBridgeDeckIncident(t *testing.T) {
 	validator := realAuthorityValidator(t)
 	from := simulation.Spawn{RegionID: 0x6C4F, X: 1249, Y: 2.324, Z: 201}
@@ -686,11 +832,17 @@ func TestValidateMovementPathRealEuropeBridgeDeckIncident(t *testing.T) {
 	}
 }
 
-// TestValidateMovementPathRealAssets drives the guard over the REAL
-// exported bundles at points with known walkability: the Europe start
-// plateau (every enter-world click must classify legal - THE false-positive
-// floor) and the 0x60A0 blocked mountain-face tile from the live stranded
-// incident (a destination the stock client could never compose).
+/*
+================
+TestValidateMovementPathRealAssets
+
+TestValidateMovementPathRealAssets drives the guard over the REAL
+exported bundles at points with known walkability: the Europe start
+plateau (every enter-world click must classify legal - THE false-positive
+floor) and the 0x60A0 blocked mountain-face tile from the live stranded
+incident (a destination the stock client could never compose).
+================
+*/
 func TestValidateMovementPathRealAssets(t *testing.T) {
 	validator := realAuthorityValidator(t)
 

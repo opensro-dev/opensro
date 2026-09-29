@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+coscommand.go - the action lane's 0x769E COS command dispatch
+
+===========================================================================
+*/
 package action
 
 import (
@@ -7,9 +14,17 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// HandleCosCommand owns the complete proven 0x769E subset. Both forms first
-// bind the claimed GID to the character's persisted active COS and its
-// characterdata record; the wire can never nominate an arbitrary entity.
+/*
+================
+Runtime.HandleCosCommand
+
+HandleCosCommand owns the decoded 0x769E subset. Every form first binds
+the claimed GID to the character's persisted active COS and its
+characterdata record; the wire can never nominate an arbitrary entity.
+Movement, steer and stop go to the movement owner (MoveCOS, SteerCOS,
+StopCOS); mount and mounted attack stay here.
+================
+*/
 func (rt *Runtime) HandleCosCommand(
 	divisionID string,
 	character *enterworld.Character,
@@ -48,6 +63,21 @@ func (rt *Runtime) HandleCosCommand(
 		}
 		rt.bindResidentRegion(simulation.WorldKey(divisionID, character.Name), rt.Now().UnixMilli())
 		return OpResult{Frames: rt.MoveCOS(divisionID, character, command.CosGid, command.Movement)}
+	case wire.CosCommandSteerTag, wire.CosCommandStopTag:
+		// The vehicle's steer/stop pair belongs to the same movement owner
+		// as its moves; only the mounted, living vehicle can walk.
+		if !snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 {
+			return OpResult{}
+		}
+		handle := rt.SteerCOS
+		if command.Tag == wire.CosCommandStopTag {
+			handle = rt.StopCOS
+		}
+		if handle == nil {
+			return OpResult{}
+		}
+		frames, broadcast := handle(divisionID, character, command.CosGid, command.Heading)
+		return OpResult{Frames: frames, Broadcast: broadcast}
 	case wire.CosCommandMountTag:
 		if snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 {
 			return OpResult{}

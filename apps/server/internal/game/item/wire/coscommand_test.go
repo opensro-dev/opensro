@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+coscommand_test.go - codec falsifiers for the 0x769E COS command family
+
+These pin the decoded VALUES; the handler tests cover the same bytes
+through the refusal plane, and a handler test that only checks "refused"
+cannot see a byte-swapped gid.
+
+===========================================================================
+*/
 package wire
 
 import (
@@ -5,11 +16,11 @@ import (
 	"testing"
 )
 
-// W5 direct codec falsifiers for the 0x769E mount-arm decode; the handler
-// tests in internal/game/world/movement/cosmount_test.go cover the same bytes through the
-// refusal plane, this file pins the decoded VALUE (a handler test that only
-// checks "refused" cannot see a byte-swapped gid).
-
+/*
+================
+TestDecodeCosMountRequestPinsTheClientBytes
+================
+*/
 func TestDecodeCosMountRequestPinsTheClientBytes(t *testing.T) {
 	// The exact frame the client-side harness proves the REAL sub_695420
 	// mount arm builds (actionPaneEmitChainParity: COS gid 0x00C05001 ->
@@ -23,6 +34,11 @@ func TestDecodeCosMountRequestPinsTheClientBytes(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDecodeCosCommandPinsMountedAttackBytes
+================
+*/
 func TestDecodeCosCommandPinsMountedAttackBytes(t *testing.T) {
 	request, err := DecodeCosCommand([]byte{
 		0x01, 0x50, 0xC0, 0x00,
@@ -45,6 +61,41 @@ func TestDecodeCosCommandPinsMountedAttackBytes(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDecodeCosCommandPinsSteerAndStopBytes
+
+The vehicle's stop (tag 0x03, SendAngleUpdatePacket 0x8777B0) and steer
+(tag 0x04, SendSteeringUpdate 0x877540) carry one little-endian heading
+word after the tag, and nothing else.
+================
+*/
+func TestDecodeCosCommandPinsSteerAndStopBytes(t *testing.T) {
+	for _, tag := range []uint8{CosCommandStopTag, CosCommandSteerTag} {
+		request, err := DecodeCosCommand([]byte{0x01, 0x50, 0xC0, 0x00, tag, 0x34, 0x12})
+		if err != nil {
+			t.Fatalf("tag 0x%02X refused: %v", tag, err)
+		}
+		if request.Tag != tag || request.CosGid != 0x00C05001 || request.Heading != 0x1234 {
+			t.Fatalf("tag 0x%02X = %+v", tag, request)
+		}
+		for _, payload := range [][]byte{
+			{0x01, 0x50, 0xC0, 0x00, tag},
+			{0x01, 0x50, 0xC0, 0x00, tag, 0x34},
+			{0x01, 0x50, 0xC0, 0x00, tag, 0x34, 0x12, 0x00},
+		} {
+			if _, err := DecodeCosCommand(payload); err == nil {
+				t.Errorf("malformed % X accepted", payload)
+			}
+		}
+	}
+}
+
+/*
+================
+TestCosServerPayloadsPinWidthsAndOrdering
+================
+*/
 func TestCosServerPayloadsPinWidthsAndOrdering(t *testing.T) {
 	if got := EncodeCosRecordCreateBand2(0x00C00003, 3914, 87829, 0, 0, false); len(got) != 21 {
 		t.Fatalf("3158 len = %d, want 21", len(got))
@@ -56,6 +107,11 @@ func TestCosServerPayloadsPinWidthsAndOrdering(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDecodeCosMountRequestSplitsMalformedFromUnsupported
+================
+*/
 func TestDecodeCosMountRequestSplitsMalformedFromUnsupported(t *testing.T) {
 	// Wrong LENGTH is malformed...
 	for _, payload := range [][]byte{{}, {0x0B}, {0x01, 0x50, 0xC0, 0x00}, {0x01, 0x50, 0xC0, 0x00, 0x0B, 0x00}} {
@@ -64,8 +120,8 @@ func TestDecodeCosMountRequestSplitsMalformedFromUnsupported(t *testing.T) {
 		}
 	}
 	// ...while a 5-byte body with a NON-MOUNT family tag is a distinct
-	// unsupported-form refusal (the tags exist natively: 01 positional,
-	// 02 approach, 03/04 heading, 08 pickup - none pinned here).
+	// not-a-mount refusal (01 move, 02 attack, 03 stop and 04 steer have
+	// their own lengths; 08 pickup is not decoded).
 	for _, tag := range []uint8{0x01, 0x02, 0x03, 0x04, 0x08, 0x00, 0xFF} {
 		if _, err := DecodeCosMountRequest([]byte{0x01, 0x50, 0xC0, 0x00, tag}); err == nil {
 			t.Errorf("tag 0x%02X accepted, want unsupported-form error", tag)
@@ -73,8 +129,14 @@ func TestDecodeCosMountRequestSplitsMalformedFromUnsupported(t *testing.T) {
 	}
 }
 
-// The 0x3691 subtype-3 body sub_775f20 @0x7760FE reads as three u32s after
-// the subtype byte, little-endian, with no tail.
+/*
+================
+TestCosSummonTimer3691PinsSubtypeAndWidths
+
+The 0x3691 subtype-3 body sub_775f20 @0x7760FE reads as three u32s after
+the subtype byte, little-endian, with no tail.
+================
+*/
 func TestCosSummonTimer3691PinsSubtypeAndWidths(t *testing.T) {
 	got := EncodeCosSummonTimer3691(0x00003039, 40320, 0x000A0005)
 	want := []byte{

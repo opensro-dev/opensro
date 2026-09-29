@@ -3,6 +3,10 @@
 
 motion.ts - Remote movement owns sampled paths and authoritative progress; only settlement ends travel.
 
+A remote walking a direction (0xB738 mode 0 with a source) has no arrival:
+its path is renewed leg by leg along the heading until a correction
+(0xB2F5) or a new path replaces it. 0xB2CF turns it.
+
 ===========================================================================
 */
 import type { SurfaceCursor, SurfaceResolver } from "@/engine/contracts/navigation";
@@ -19,6 +23,7 @@ import {
 import type { EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { displacementSegment } from "@/engine/foundation/gameplay/cast-displacement";
+import { directionLegEnd } from "@/engine/foundation/gameplay/direction-movement";
 // Motion owns sampled pose and path activity. Entity metadata remains owned by
 // createEntities; presentation must not infer path completion from packet gaps.
 /*
@@ -68,8 +73,27 @@ resolve
 	}
 	const active = new Map<
 		number,
-		(MovementSegment & { previous?: Pose; castToken?: number; fixedTiming?: boolean; })
+		(MovementSegment & { previous?: Pose; castToken?: number; fixedTiming?: boolean; direction?: number; })
 	>();
+	/*
+================
+directionLeg
+
+The next leg of a direction walk from pose. Remote walks are not clipped
+locally; the owner's correction stops them where the server did.
+================
+	*/
+	function directionLeg( entity: EntityState, pose: Pose, heading: number, now: number ) {
+		const to = directionLegEnd( pose, heading );
+		return {
+			from: pose,
+			to,
+			start: now,
+			duration: duration( pose, to, entity ),
+			direction: heading,
+			previous: pose
+		};
+	}
 	return {
 		/*
 ================
@@ -206,11 +230,49 @@ receive
 			// at reception time, not the previous journal sample: otherwise
 			// every source-less chase refresh discards one tick of travel.
 			const current = previous ? sample( previous, now ) : published;
-			const decoded = decodeNativeMovement( p, current ),
-				from = resolve( entity.gid, decoded.from, previous?.previous ?? published ),
-				to = decoded.to;
+			const decoded = decodeNativeMovement( p, current );
+			// A source-less angular acknowledgement changes nothing in motion.
+			if ( decoded.kind === "keep" ) {
+				return previous ? { from: previous.from, to: previous.to } : { from: published, to: published };
+			}
+			const from = resolve( entity.gid, decoded.from, previous?.previous ?? published );
+			if ( decoded.kind === "direction" ) {
+				const leg = directionLeg( entity, from, decoded.heading!, now );
+				active.set( entity.gid, leg );
+				return { from, to: leg.to };
+			}
+			const to = decoded.to;
 			active.set( entity.gid, { from, to, start: now, duration: duration( from, to, entity ) } );
 			return { from, to };
+		},
+		/*
+================
+steer
+
+0xB2CF (CPSMission_OnEntityUpdateAngle0xB2CF 0x775A90): the target yaw of
+another mover. A direction walk continues from where it is along the new
+heading (CNavigationController_SetTargetYaw rewrites the walk vector); an
+idle mover turns where it stands. A destination walk keeps its own facing.
+================
+		*/
+		steer( entity: EntityState, heading: number, now: number ): MotionUpdate | null {
+			const segment = active.get( entity.gid );
+			if ( segment?.direction !== undefined ) {
+				const pose = resolve( entity.gid, sample( segment, now ), segment.previous ?? segment.from );
+				const leg = directionLeg( entity, pose, heading, now );
+				active.set( entity.gid, leg );
+				return { ...update( entity.gid, pose, true ), heading, movementPath: { from: pose, to: leg.to } };
+			}
+			if ( segment ) return null;
+			return {
+				...update( entity.gid, {
+					regionId: entity.regionId,
+					x: entity.x,
+					y: entity.y,
+					z: entity.z,
+					angle: heading
+				} )
+			};
 		},
 		/*
 ================
@@ -261,8 +323,9 @@ mode
 			const speed = (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0;
 			const next = movementModeTransition( segment, entity.movementMode ?? 3, speed, now );
 			const pose = resolve( entity.gid, next.pose, segment.previous ?? segment.from );
-			if ( next.segment ) active.set( entity.gid, { ...next.segment, from: pose, previous: pose } );
-			else active.delete( entity.gid );
+			if ( next.segment ) {
+				active.set( entity.gid, { ...next.segment, from: pose, previous: pose, direction: segment.direction } );
+			} else active.delete( entity.gid );
 			return update( entity.gid, pose, !!next.segment );
 		},
 		/*
@@ -279,7 +342,25 @@ step
 					...update( gid, pose, now < segment.start + segment.duration ),
 					movementPath: { from: segment.from, to: segment.to }
 				} );
-				if ( now >= segment.start + segment.duration ) active.delete( gid );
+				if ( now < segment.start + segment.duration ) continue;
+				// A direction walk has no arrival; its next leg starts here at
+				// the speed the finished leg was timed with.
+				if ( segment.direction !== undefined ) {
+					const speed = segment.duration ?
+						poseDistance( segment.from, segment.to ) / segment.duration * 1000 :
+						0;
+					const to = directionLegEnd( pose, segment.direction );
+					active.set( gid, {
+						from: pose,
+						to,
+						start: now,
+						duration: speed > 0 ? poseDistance( pose, to ) / speed * 1000 : 0,
+						direction: segment.direction,
+						previous: pose
+					} );
+					continue;
+				}
+				active.delete( gid );
 			}
 			return changed;
 		},

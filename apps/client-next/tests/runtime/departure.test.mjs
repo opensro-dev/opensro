@@ -58,3 +58,23 @@ test("refusal clears the pending request and publishes recovered native errors",
 		assert.throws( () => d.receive( { opcode: 0xb0b7, payload: Uint8Array.from( p ) }, 0 ) );
 	}
 });
+test("a cancelled countdown stops its notices and a stray cancel refusal stays silent", () => {
+	const notices = [], d = createDeparture( () => {}, n => notices.push( n ) );
+	assert.equal( d.pending(), false );
+	d.request( 1 );
+	d.receive( { opcode: 0xb0b7, payload: Uint8Array.of( 1, 5, 1 ) }, 0 );
+	assert.equal( d.pending(), true );
+	assert.equal( d.receive( { opcode: 0xb31f, payload: Uint8Array.of( 1 ) }, 500 ), 0 );
+	assert.equal( d.pending(), false );
+	d.step( 5000 );
+	assert.deepEqual( notices.map( n => n.key ), [
+		"UIIT_MSG_LOGOUT_REMAIN_TIME",
+		"UIIT_MSG_LOGOUT_REMAIN_TIME_CANCLE"
+	] );
+	assert.throws( () => d.receive( { opcode: 0x315a, payload: new Uint8Array() }, 6000 ), /Unexpected/ );
+	assert.equal( d.receive( { opcode: 0xb31f, payload: Uint8Array.of( 2, 0 ) }, 7000 ), 0 );
+	assert.equal( notices.length, 2, "code 0 has no notice" );
+	for ( const p of [ [ 1, 0 ], [ 2 ], [ 3 ] ] ) {
+		assert.throws( () => d.receive( { opcode: 0xb31f, payload: Uint8Array.from( p ) }, 0 ) );
+	}
+});

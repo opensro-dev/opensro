@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+move_test.go - the 0x7738 handler: ground destinations, turns, refusals
+
+===========================================================================
+*/
 package movement
 
 import (
@@ -15,10 +22,20 @@ import (
 
 const testStartMs = int64(1_784_000_000_000)
 
+/*
+================
+testCharacter
+================
+*/
 func testCharacter() *enterworld.Character {
 	return &enterworld.Character{ID: 7, Name: "Asd", ModelCodename: "CHAR_EU_MAN1"}
 }
 
+/*
+================
+testRuntime
+================
+*/
 func testRuntime(character *enterworld.Character) *Runtime {
 	deps := &enterworld.Deps{Characters: enterworld.StaticCharacterSource{"0": {character}}}
 	rt := NewRuntime(deps, simulation.NewWorldStore())
@@ -31,8 +48,14 @@ func testRuntime(character *enterworld.Character) *Runtime {
 	return rt
 }
 
-// encodeMoveBody builds the native 9-byte 0x7738 body (height in the
-// middle i16, the RE-pinned order).
+/*
+================
+encodeMoveBody
+
+encodeMoveBody builds the native 9-byte 0x7738 body (height in the
+middle i16, the RE-pinned order).
+================
+*/
 func encodeMoveBody(mode uint8, regionID uint16, x, y, z int16) []byte {
 	out := make([]byte, 9)
 	out[0] = mode
@@ -43,6 +66,11 @@ func encodeMoveBody(mode uint8, regionID uint16, x, y, z int16) []byte {
 	return out
 }
 
+/*
+================
+TestHandleMoveAcksAndUpdatesWorld
+================
+*/
 func TestHandleMoveAcksAndUpdatesWorld(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -113,6 +141,11 @@ func TestHandleMoveAcksAndUpdatesWorld(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleMoveRefusalsAreSilentOnTheWire
+================
+*/
 func TestHandleMoveRefusalsAreSilentOnTheWire(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -144,6 +177,11 @@ func TestHandleMoveRefusalsAreSilentOnTheWire(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleMoveChecksAccessAfterCanonicalizingDestination
+================
+*/
 func TestHandleMoveChecksAccessAfterCanonicalizingDestination(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -166,10 +204,16 @@ func TestHandleMoveChecksAccessAfterCanonicalizingDestination(t *testing.T) {
 	}
 }
 
-// TestHandleMoveClearsPickupLatchBeforeCoercion pins the reference order:
-// the pending-pickup latch clears BEFORE the movement body is coerced, so a
-// malformed move still releases it - but a deletePending character never
-// reaches the clear.
+/*
+================
+TestHandleMoveClearsPickupLatchBeforeCoercion
+
+TestHandleMoveClearsPickupLatchBeforeCoercion pins the reference order:
+the pending-pickup latch clears BEFORE the movement body is coerced, so a
+malformed move still releases it - but a deletePending character never
+reaches the clear.
+================
+*/
 func TestHandleMoveClearsPickupLatchBeforeCoercion(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -202,19 +246,35 @@ func TestHandleMoveClearsPickupLatchBeforeCoercion(t *testing.T) {
 	}
 }
 
+/*
+================
+recordedWorld
+================
+*/
 type recordedWorld struct {
 	divisionID string
 	snapshot   any
 }
 
+/*
+================
+recordedWorld.SetWorldSnapshot
+================
+*/
 func (world *recordedWorld) SetWorldSnapshot(divisionID string, snapshot any) {
 	world.divisionID = divisionID
 	world.snapshot = snapshot
 }
 
-// TestWorldBoundInstallsTickGlue proves the enter-world glue: division key +
-// SnapshotProvider land on the session, and the provider snapshot carries
-// the SHARED world plane at the live segment.
+/*
+================
+TestWorldBoundInstallsTickGlue
+
+TestWorldBoundInstallsTickGlue proves the enter-world glue: division key +
+SnapshotProvider land on the session, and the provider snapshot carries
+the SHARED world plane at the live segment.
+================
+*/
 func TestWorldBoundInstallsTickGlue(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -255,33 +315,69 @@ func TestWorldBoundInstallsTickGlue(t *testing.T) {
 	}
 }
 
+/*
+================
+divisionPush
+================
+*/
 type divisionPush struct {
 	divisionID string
 	frames     []simulation.Frame
 	except     string
 }
 
+/*
+================
+recordingPusher
+================
+*/
 type recordingPusher struct {
 	toSession  []simulation.Frame
 	toDivision []divisionPush
 }
 
+/*
+================
+recordingPusher.PushToSession
+================
+*/
 func (p *recordingPusher) PushToSession(sessionID string, frames []simulation.Frame) {
 	p.toSession = append(p.toSession, frames...)
 }
 
+/*
+================
+recordingPusher.PushToDivision
+================
+*/
 func (p *recordingPusher) PushToDivision(divisionID string, frames []simulation.Frame, exceptSessionID string) {
 	p.toDivision = append(p.toDivision, divisionPush{divisionID, frames, exceptSessionID})
 }
 
+/*
+================
+staticSource
+================
+*/
 type staticSource struct{ snapshots []simulation.SessionSnapshot }
 
+/*
+================
+staticSource.SnapshotSessions
+================
+*/
 func (s *staticSource) SnapshotSessions() []simulation.SessionSnapshot { return s.snapshots }
 
-// TestMoveThenTickBroadcastsLivePosition is the proof chain the resume
-// brief asks for: client 0x7738 -> WorldState mover updated -> the tick
-// broadcasts the mover's interpolated 0x30E3 (never the goal) and settles
-// with one 0xB2F5.
+/*
+================
+TestMoveThenTickBroadcastsLivePosition
+
+TestMoveThenTickBroadcastsLivePosition is the proof chain the resume
+brief asks for: client 0x7738 -> WorldState mover updated -> the tick
+broadcasts the mover's interpolated 0x30E3 (never the goal) and settles
+with one 0xB2F5.
+================
+*/
 func TestMoveThenTickBroadcastsLivePosition(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -351,11 +447,17 @@ func TestMoveThenTickBroadcastsLivePosition(t *testing.T) {
 	}
 }
 
-// TestHandleMoveDungeonRegionSameNineByteForm pins the dungeon behavior end
-// to end: v1.150's client serializer (sub_877cc0) has NO s32 dungeon arm -
-// dungeon clicks ride the SAME 9-byte i16 form - so the handler must accept
-// a dungeon-region body, ack it byte-identically, and interpolate the live
-// plane with the dungeon bit intact, including across a sector crossing.
+/*
+================
+TestHandleMoveDungeonRegionSameNineByteForm
+
+TestHandleMoveDungeonRegionSameNineByteForm pins the dungeon behavior end
+to end: v1.150's client serializer (sub_877cc0) has NO s32 dungeon arm -
+dungeon clicks ride the SAME 9-byte i16 form - so the handler must accept
+a dungeon-region body, ack it byte-identically, and interpolate the live
+plane with the dungeon bit intact, including across a sector crossing.
+================
+*/
 func TestHandleMoveDungeonRegionSameNineByteForm(t *testing.T) {
 	dungeonRegion := uint16(0x8000) | simulation.EuropeStartProfile().RegionID // 0xEB4F
 
@@ -423,6 +525,11 @@ func TestHandleMoveDungeonRegionSameNineByteForm(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleMoveCannotForgeOutdoorDungeonTransition
+================
+*/
 func TestHandleMoveCannotForgeOutdoorDungeonTransition(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -442,8 +549,14 @@ func TestHandleMoveCannotForgeOutdoorDungeonTransition(t *testing.T) {
 	}
 }
 
-// encodeTurnBody builds the native 4-byte angular 0x7738 body
-// (sub_877cc0's mode-0 arm: [u8 0][u8 angularMode][u16 headingWord LE]).
+/*
+================
+encodeTurnBody
+
+encodeTurnBody builds the native 4-byte angular 0x7738 body
+(sub_877cc0's mode-0 arm: [u8 0][u8 angularMode][u16 headingWord LE]).
+================
+*/
 func encodeTurnBody(angularMode uint8, headingWord uint16) []byte {
 	out := make([]byte, 4)
 	out[0] = 0x00
@@ -452,17 +565,24 @@ func encodeTurnBody(angularMode uint8, headingWord uint16) []byte {
 	return out
 }
 
-// TestHandleMoveAngularTurnInPlace drives the implemented turn lane end to
-// end: the native 4-byte angular body (mode 0, the form sub_877f30 /
-// CharMovement_RequestTurnInPlace produces with angularMode=1) is accepted,
-// acked on 0xB738 with the angular arm sub_776170 parses, and the heading
-// lands on the settled plane without starting any travel.
+/*
+================
+TestHandleMoveAngularTurnInPlace
+
+TestHandleMoveAngularTurnInPlace drives the stationary angular arm end to
+end: a 4-byte angular body WITHOUT AngularFlagGo (the SetCommand arm that
+latches the angle but not the moving flag) is accepted, acked on 0xB738
+with the angular arm sub_776170 parses, and the heading lands on the
+settled plane without starting any travel. The GO form walks instead
+(direction_test.go).
+================
+*/
 func TestHandleMoveAngularTurnInPlace(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
 	start := simulation.EuropeStartProfile()
 
-	outcome := rt.HandleMove("0", character, encodeTurnBody(1, 0x4000))
+	outcome := rt.HandleMove("0", character, encodeTurnBody(0, 0x4000))
 	if outcome.Refusal != nil {
 		t.Fatalf("angular turn refused: %v", outcome.Refusal)
 	}
@@ -470,14 +590,12 @@ func TestHandleMoveAngularTurnInPlace(t *testing.T) {
 		t.Fatalf("frames = %+v, want one 0xB738", outcome.Frames)
 	}
 
-	// First-ever move: the ack carries the one-shot source block (the
-	// client's mode-0 yaw apply is gated on it - sub_776200 runs
-	// PathCtl_SetSourceGoalAndYaw only under sourcePositionFlag == 1).
+	// First-ever move: the ack carries the one-shot source block.
 	gid := enterworld.ObjectIDForCharacter(character)
 	source := simulation.MovementSourceFromSpawn(start)
 	wantAck := simulation.BuildMovementAckPayload(
 		gid,
-		simulation.MovementRequest{Mode: 0, AngularMode: 1, HeadingWord: 0x4000},
+		simulation.MovementRequest{Mode: 0, AngularMode: 0, HeadingWord: 0x4000},
 		&source,
 	)
 	if !bytes.Equal(outcome.Frames[0].Payload, wantAck) {
@@ -486,7 +604,7 @@ func TestHandleMoveAngularTurnInPlace(t *testing.T) {
 	// Raw wire-shape pin, independent of the builder: [u32 gid][u8 0]
 	// [u8 angularMode][u16 headingWord][u8 srcFlag=1]... - exactly what
 	// sub_776170's mode-0 read consumes.
-	head := []byte{byte(gid), byte(gid >> 8), byte(gid >> 16), byte(gid >> 24), 0x00, 0x01, 0x00, 0x40, 0x01}
+	head := []byte{byte(gid), byte(gid >> 8), byte(gid >> 16), byte(gid >> 24), 0x00, 0x00, 0x00, 0x40, 0x01}
 	if !bytes.HasPrefix(outcome.Frames[0].Payload, head) {
 		t.Errorf("ack head\n got % X\nwant prefix % X", outcome.Frames[0].Payload, head)
 	}
@@ -494,8 +612,7 @@ func TestHandleMoveAngularTurnInPlace(t *testing.T) {
 		t.Error("first accepted turn must ship the one-shot source block")
 	}
 
-	// The settled plane holds the facing; position untouched; NO segment
-	// (motion state 9 = settled, sub_776200's mode-0 contract).
+	// The settled plane holds the facing; position untouched; NO segment.
 	key := simulation.WorldKey("0", character.Name)
 	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(character) })
 	if world.Spawn.Angle != 0x4000 {
@@ -524,7 +641,7 @@ func TestHandleMoveAngularTurnInPlace(t *testing.T) {
 
 	// Second turn: the source latch is consumed - the ack is the bare
 	// angular echo. Boundary word 0xFFFF (the full-circle top) stores raw.
-	second := rt.HandleMove("0", character, encodeTurnBody(1, 0xFFFF))
+	second := rt.HandleMove("0", character, encodeTurnBody(0, 0xFFFF))
 	if second.Refusal != nil {
 		t.Fatalf("second turn refused: %v", second.Refusal)
 	}
@@ -533,7 +650,7 @@ func TestHandleMoveAngularTurnInPlace(t *testing.T) {
 	}
 	wantSecond := simulation.BuildMovementAckPayload(
 		gid,
-		simulation.MovementRequest{Mode: 0, AngularMode: 1, HeadingWord: 0xFFFF},
+		simulation.MovementRequest{Mode: 0, AngularMode: 0, HeadingWord: 0xFFFF},
 		nil,
 	)
 	if !bytes.Equal(second.Frames[0].Payload, wantSecond) {
@@ -545,11 +662,16 @@ func TestHandleMoveAngularTurnInPlace(t *testing.T) {
 	}
 }
 
-// TestHandleMoveAngularTurnMidMoveSettlesAtLivePoint pins the mode-0 apply
-// contract against native (sub_776200: PathCtl_SetSourceGoalAndYaw sets
-// source AND goal to the SAME point): a turn arriving mid-travel settles the
-// character at the interpolated live point - the bug-D plane - facing the
-// new heading, and clears the in-flight segment.
+/*
+================
+TestHandleMoveAngularTurnMidMoveSettlesAtLivePoint
+
+TestHandleMoveAngularTurnMidMoveSettlesAtLivePoint pins the stationary
+angular arm mid-travel: a turn without GO settles the character at the
+interpolated live point - the bug-D plane - facing the new heading, and
+clears the in-flight segment.
+================
+*/
 func TestHandleMoveAngularTurnMidMoveSettlesAtLivePoint(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -562,7 +684,7 @@ func TestHandleMoveAngularTurnMidMoveSettlesAtLivePoint(t *testing.T) {
 
 	// 1s into the 4000ms run (200u at 50 u/s): live x = start.X + 50.
 	rt.Now = func() time.Time { return time.UnixMilli(testStartMs + 1000) }
-	turn := rt.HandleMove("0", character, encodeTurnBody(1, 0x8000))
+	turn := rt.HandleMove("0", character, encodeTurnBody(0, 0x8000))
 	if turn.Refusal != nil {
 		t.Fatalf("mid-move turn refused: %v", turn.Refusal)
 	}
@@ -584,11 +706,17 @@ func TestHandleMoveAngularTurnMidMoveSettlesAtLivePoint(t *testing.T) {
 	}
 }
 
-// TestHandleMoveAngularMalformedAndUnknownModesStayDistinct preserves the
-// deliberate refusal split now that the turn lane is real: a WRONG-LENGTH
-// angular body is a malformed frame, a mode byte the client serializer
-// cannot emit (sub_877cc0 produces only 0/1) is the loud unsupported-mode
-// refusal, and both stay wire-silent without touching the world plane.
+/*
+================
+TestHandleMoveAngularMalformedAndUnknownModesStayDistinct
+
+TestHandleMoveAngularMalformedAndUnknownModesStayDistinct preserves the
+deliberate refusal split now that the turn lane is real: a WRONG-LENGTH
+angular body is a malformed frame, a mode byte the client serializer
+cannot emit (sub_877cc0 produces only 0/1) is the loud unsupported-mode
+refusal, and both stay wire-silent without touching the world plane.
+================
+*/
 func TestHandleMoveAngularMalformedAndUnknownModesStayDistinct(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -627,9 +755,15 @@ func TestHandleMoveAngularMalformedAndUnknownModesStayDistinct(t *testing.T) {
 	}
 }
 
-// TestHandleMoveDeepWaterRefusal wires a stub validator to prove the gate
-// sits in the accepted-move path (the asset-backed validator has its own
-// suite in water_test.go).
+/*
+================
+TestHandleMoveDeepWaterRefusal
+
+TestHandleMoveDeepWaterRefusal wires a stub validator to prove the gate
+sits in the accepted-move path (the asset-backed validator has its own
+suite in water_test.go).
+================
+*/
 func TestHandleMoveDeepWaterRefusal(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
@@ -650,8 +784,18 @@ func TestHandleMoveDeepWaterRefusal(t *testing.T) {
 	}
 }
 
+/*
+================
+stubValidator
+================
+*/
 type stubValidator struct{ refuse bool }
 
+/*
+================
+stubValidator.ValidateMovement
+================
+*/
 func (s stubValidator) ValidateMovement(simulation.MovementRequest) *simulation.MoveError {
 	if s.refuse {
 		return &simulation.MoveError{NativeErrorCode: 0x02, Reason: "deepWaterDestination"}
@@ -659,6 +803,11 @@ func (s stubValidator) ValidateMovement(simulation.MovementRequest) *simulation.
 	return nil
 }
 
+/*
+================
+recordedPeerMovement
+================
+*/
 func recordedPeerMovement(p *recordingPusher) []simulation.Frame {
 	var out []simulation.Frame
 	for _, f := range p.toSession {

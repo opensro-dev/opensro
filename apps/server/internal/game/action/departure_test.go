@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+departure_test.go - the logout/restart countdown on the production transport
+
+===========================================================================
+*/
 package action
 
 import (
@@ -7,6 +14,11 @@ import (
 	"time"
 )
 
+/*
+================
+TestDepartureUsesNativeCountdownAndCompletionOnProductionTransport
+================
+*/
 func TestDepartureUsesNativeCountdownAndCompletionOnProductionTransport(t *testing.T) {
 	for _, kind := range []byte{1, 2} {
 		t.Run(string(rune('0'+kind)), func(t *testing.T) {
@@ -49,6 +61,11 @@ func TestDepartureUsesNativeCountdownAndCompletionOnProductionTransport(t *testi
 	}
 }
 
+/*
+================
+TestDepartureRefusesUnreadyAndMalformedRequestsWithoutClosing
+================
+*/
 func TestDepartureRefusesUnreadyAndMalformedRequestsWithoutClosing(t *testing.T) {
 	c := testCharacter()
 	rt, _ := newTestRuntime(c, testItems())
@@ -67,6 +84,11 @@ func TestDepartureRefusesUnreadyAndMalformedRequestsWithoutClosing(t *testing.T)
 	}
 }
 
+/*
+================
+TestDepartureCannotCloseReplacementCharacterSession
+================
+*/
 func TestDepartureCannotCloseReplacementCharacterSession(t *testing.T) {
 	c := testCharacter()
 	rt, _ := newTestRuntime(c, testItems())
@@ -92,6 +114,11 @@ func TestDepartureCannotCloseReplacementCharacterSession(t *testing.T) {
 	second.expectFrame(t, 0xb0b7, []byte{1, 5, 1})
 }
 
+/*
+================
+TestDetachedDepartureAllowsSynchronousGameplayCleanup
+================
+*/
 func TestDetachedDepartureAllowsSynchronousGameplayCleanup(t *testing.T) {
 	c := testCharacter()
 	rt, _ := newTestRuntime(c, testItems())
@@ -122,4 +149,42 @@ func TestDetachedDepartureAllowsSynchronousGameplayCleanup(t *testing.T) {
 		t.Fatal("cleanup did not complete")
 	}
 	rt.TickHook()(6001)
+}
+
+/*
+================
+TestDepartureCancelEndsTheCountdown
+
+A ground click during the countdown sends the empty 0x731F: the countdown
+ends with [1] and the tick no longer closes the session. A cancel with no
+countdown is the error [2][0].
+================
+*/
+func TestDepartureCancelEndsTheCountdown(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, testItems())
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	srv := wireStartServer(t, rt)
+	client := wireConnect(t, srv, testDivision, c.Name)
+	session, _ := srv.Hub.Session(client.sessionID)
+	session.TryMarkWorldReady()
+
+	client.send(t, opDepartureCancelRequest, nil)
+	client.expectFrame(t, opDepartureCancelResponse, []byte{departureResultError, departureCancelNotPending})
+
+	client.send(t, opDepartureRequest, []byte{1})
+	client.expectFrame(t, opDepartureResponse, []byte{departureResultOK, departureSeconds, 1})
+	client.send(t, opDepartureCancelRequest, nil)
+	client.expectFrame(t, opDepartureCancelResponse, []byte{departureResultOK})
+	rt.TickHook()(6000)
+	select {
+	case <-session.Done():
+		t.Fatal("a cancelled countdown closed the session")
+	default:
+	}
+	rt.departureMu.Lock()
+	defer rt.departureMu.Unlock()
+	if len(rt.departures) != 0 {
+		t.Fatal("cancelled countdown retained")
+	}
 }

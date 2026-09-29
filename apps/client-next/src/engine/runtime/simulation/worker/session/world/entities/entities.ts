@@ -885,6 +885,28 @@ receive
 					return;
 				}
 			}
+			// 0xB2CF [u32 gid][u16 heading] (0x775A90): another mover's steer.
+			// The client ignores its own gid; its walk already turned.
+			if ( frame.opcode === 0xb2cf ) {
+				if ( p.length !== 6 ) throw new Error( "Invalid entity steer" );
+				const source = entities.get( v.getUint32( 0, true ) );
+				if ( !source || source.kind === "local-player" || source.appearanceState?.[0] === 2 ) return;
+				// CCharactor_GetActiveMoverEntity (0x85E000): a rider steers its mount.
+				const entity = source.mountedOn ? entities.get( source.mountedOn ) : source;
+				if ( !entity ) return;
+				const steered = motion.steer( entity, v.getUint16( 4, true ), now );
+				if ( steered ) {
+					apply( {
+						kind: "state",
+						entity: Object.freeze( {
+							...entity,
+							...steered,
+							movementRevision: (entity.movementRevision ?? 0) + 1
+						} )
+					} );
+				}
+				return;
+			}
 			if ( frame.opcode === 0x30e3 || frame.opcode === 0xb2f5 ) {
 				if ( p.length !== 20 ) {
 					throw new Error( "Invalid entity position" );

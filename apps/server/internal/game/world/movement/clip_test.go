@@ -1,14 +1,21 @@
-package movement
+/*
+===========================================================================
 
-// clipreplicate-wave clip tests. Fixture: the water_test syntheticHeightRoot
-// tree (region 0x6B4F, sector 79/107, real 96x20 bundle geometry): blocked
-// obstacle tiles x,z in [4,7]; cell-less tile (10,10); sliver wall x==93;
-// open east neighbor 0x6B50.
-//
-// Inputs deliberately CANNOT COINCIDE with legal outcomes: every blocked
-// case asserts the exact offending world tile AND the exact rest coordinate
-// (the pullback boundary is a constant, so a clip that stops at the wrong
-// boundary, on the wrong side, or not at all fails loudly).
+clip_test.go - the client-clip replica and its wiring into ground moves
+
+clipreplicate-wave clip tests. Fixture: the water_test syntheticHeightRoot
+tree (region 0x6B4F, sector 79/107, real 96x20 bundle geometry): blocked
+obstacle tiles x,z in [4,7]; cell-less tile (10,10); sliver wall x==93;
+open east neighbor 0x6B50.
+
+Inputs deliberately CANNOT COINCIDE with legal outcomes: every blocked
+case asserts the exact offending world tile AND the exact rest coordinate
+(the pullback boundary is a constant, so a clip that stops at the wrong
+boundary, on the wrong side, or not at all fails loudly).
+
+===========================================================================
+*/
+package movement
 
 import (
 	"math"
@@ -22,6 +29,11 @@ import (
 
 const clipCoordEps = 1e-9
 
+/*
+================
+TestClipMovementPathOutcomes
+================
+*/
 func TestClipMovementPathOutcomes(t *testing.T) {
 	validator := NewWaterValidator(syntheticHeightRoot(t))
 
@@ -160,13 +172,19 @@ func TestClipMovementPathOutcomes(t *testing.T) {
 
 // ---- object-nav awareness (clip object class + deck overrides) ----
 
-// TestClipMovementPathObjectAware drives the clip over the
-// syntheticObjectNavRoot world (objectnav_test.go): an OPEN deck at
-// (500,500) y=10 over BLOCKED tiles (one open east outline edge at
-// x=520, 0x3 rails elsewhere) and a SEALED deck at (100,100) y=10 over
-// walkable terrain. Every rest coordinate is pinned exactly - a contact
-// on the wrong edge, at the wrong parameter, or on the wrong side fails
-// loudly.
+/*
+================
+TestClipMovementPathObjectAware
+
+TestClipMovementPathObjectAware drives the clip over the
+syntheticObjectNavRoot world (objectnav_test.go): an OPEN deck at
+(500,500) y=10 over BLOCKED tiles (one open east outline edge at
+x=520, 0x3 rails elsewhere) and a SEALED deck at (100,100) y=10 over
+walkable terrain. Every rest coordinate is pinned exactly - a contact
+on the wrong edge, at the wrong parameter, or on the wrong side fails
+loudly.
+================
+*/
 func TestClipMovementPathObjectAware(t *testing.T) {
 	validator := NewWaterValidator(syntheticObjectNavRoot(t))
 
@@ -255,10 +273,16 @@ func TestClipMovementPathObjectAware(t *testing.T) {
 	}
 }
 
-// TestClipMovementPathObjectDataMissingFailsOpen corrupts the object
-// resource index: the object plane vanishes and the clip degrades to the
-// OLD tile-only outcomes (a deck departure over blocked tiles goes back
-// to startBlocked; the rail chord loses its contact) - never a fault.
+/*
+================
+TestClipMovementPathObjectDataMissingFailsOpen
+
+TestClipMovementPathObjectDataMissingFailsOpen corrupts the object
+resource index: the object plane vanishes and the clip degrades to the
+OLD tile-only outcomes (a deck departure over blocked tiles goes back
+to startBlocked; the rail chord loses its contact) - never a fault.
+================
+*/
 func TestClipMovementPathObjectDataMissingFailsOpen(t *testing.T) {
 	root := syntheticObjectNavRoot(t)
 	writeTestAsset(t, root, "assets/world/outdoor/object-resources.json", `not json`)
@@ -272,14 +296,20 @@ func TestClipMovementPathObjectDataMissingFailsOpen(t *testing.T) {
 	}
 }
 
-// TestClipMovementPathRealJanganVerandaRail pins the object clip on the
-// REAL Jangan walkway payload (region 0x61A7, the cj_pub03_floor sealed
-// veranda of the enter-world incident, deck y~3.04 over terrain y=0):
-// chords east and north off the deck cross 0x3 rail outline edges and
-// must hard-stop OBJECT-class at the rail (a bit0 clip STOPS the native
-// walk - the chord never continues onto the walkable terrain beyond).
-// The tile plane under the whole veranda is WALKABLE, so any contact
-// here is object evidence alone.
+/*
+================
+TestClipMovementPathRealJanganVerandaRail
+
+TestClipMovementPathRealJanganVerandaRail pins the object clip on the
+REAL Jangan walkway payload (region 0x61A7, the cj_pub03_floor sealed
+veranda of the enter-world incident, deck y~3.04 over terrain y=0):
+chords east and north off the deck cross 0x3 rail outline edges and
+must hard-stop OBJECT-class at the rail (a bit0 clip STOPS the native
+walk - the chord never continues onto the walkable terrain beyond).
+The tile plane under the whole veranda is WALKABLE, so any contact
+here is object evidence alone.
+================
+*/
 func TestClipMovementPathRealJanganVerandaRail(t *testing.T) {
 	validator := realAuthorityValidator(t)
 
@@ -310,10 +340,16 @@ func TestClipMovementPathRealJanganVerandaRail(t *testing.T) {
 	}
 }
 
-// BenchmarkClipMovementPathWarm pins the warm per-move cost of the clip
-// INCLUDING the object plane (the resolved placement sets and meshes are
-// cached after the first chord) on a real region. Runs inside the
-// movement mutex in production, so this bounds the added per-move cost.
+/*
+================
+BenchmarkClipMovementPathWarm
+
+BenchmarkClipMovementPathWarm pins the warm per-move cost of the clip
+INCLUDING the object plane (the resolved placement sets and meshes are
+cached after the first chord) on a real region. Runs inside the
+movement mutex in production, so this bounds the added per-move cost.
+================
+*/
 func BenchmarkClipMovementPathWarm(b *testing.B) {
 	root := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "client-public")
 	if _, err := os.Stat(filepath.Join(root, "assets", "world", "world-region-catalog.json")); err != nil {
@@ -329,9 +365,15 @@ func BenchmarkClipMovementPathWarm(b *testing.B) {
 	}
 }
 
-// BenchmarkClipMovementPathWarmBridge is the worst-shape warm cost: a
-// deck chord over blocked tiles (object contact + deck overrides firing)
-// on the real Constantinople harbor bridge.
+/*
+================
+BenchmarkClipMovementPathWarmBridge
+
+BenchmarkClipMovementPathWarmBridge is the worst-shape warm cost: a
+deck chord over blocked tiles (object contact + deck overrides firing)
+on the real Constantinople harbor bridge.
+================
+*/
 func BenchmarkClipMovementPathWarmBridge(b *testing.B) {
 	root := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "client-public")
 	if _, err := os.Stat(filepath.Join(root, "assets", "world", "world-region-catalog.json")); err != nil {
@@ -349,16 +391,31 @@ func BenchmarkClipMovementPathWarmBridge(b *testing.B) {
 
 // ---- ProcessMove mode semantics over a fake validator ----
 
+/*
+================
+fakeClipValidator
+================
+*/
 type fakeClipValidator struct {
 	report ClipReport
 	calls  int
 }
 
+/*
+================
+fakeClipValidator.ClipMovementPath
+================
+*/
 func (f *fakeClipValidator) ClipMovementPath(from, to simulation.Spawn) ClipReport {
 	f.calls++
 	return f.report
 }
 
+/*
+================
+TestProcessMoveObserveNeverMovesAnybody
+================
+*/
 func TestProcessMoveObserveNeverMovesAnybody(t *testing.T) {
 	from := spawnAt(0x6B4F, 30, 110)
 	to := spawnAt(0x6B4F, 190, 110)
@@ -376,6 +433,11 @@ func TestProcessMoveObserveNeverMovesAnybody(t *testing.T) {
 	}
 }
 
+/*
+================
+TestProcessMoveApplyCommitsTheClippedRest
+================
+*/
 func TestProcessMoveApplyCommitsTheClippedRest(t *testing.T) {
 	from := spawnAt(0x6B4F, 30, 110)
 	to := spawnAt(0x6B4F, 190, 110)
@@ -391,6 +453,11 @@ func TestProcessMoveApplyCommitsTheClippedRest(t *testing.T) {
 	}
 }
 
+/*
+================
+TestProcessMoveApplyPassesLegalMovesThrough
+================
+*/
 func TestProcessMoveApplyPassesLegalMovesThrough(t *testing.T) {
 	to := spawnAt(0x6B4F, 700, 700)
 	fake := &fakeClipValidator{report: ClipReport{Outcome: ClipArrived, Rest: to}}
@@ -403,6 +470,11 @@ func TestProcessMoveApplyPassesLegalMovesThrough(t *testing.T) {
 	}
 }
 
+/*
+================
+TestNilClientClipIsInert
+================
+*/
 func TestNilClientClipIsInert(t *testing.T) {
 	var clip *ClientClip
 	to := spawnAt(0x6B4F, 190, 110)
@@ -411,6 +483,11 @@ func TestNilClientClipIsInert(t *testing.T) {
 	}
 }
 
+/*
+================
+TestClipModeFromEnv
+================
+*/
 func TestClipModeFromEnv(t *testing.T) {
 	cases := []struct {
 		value string
@@ -432,8 +509,14 @@ func TestClipModeFromEnv(t *testing.T) {
 
 // ---- end-to-end HandleMove: the Q6 amendment-3 observe invariant ----
 
-// clipTestCharacter starts the character in region 0x6B4F at (30, 0, 110):
-// walkable, due west of the obstacle wall at x=80.
+/*
+================
+clipTestCharacter
+
+clipTestCharacter starts the character in region 0x6B4F at (30, 0, 110):
+walkable, due west of the obstacle wall at x=80.
+================
+*/
 func clipTestCharacter() *enterworld.Character {
 	character := testCharacter()
 	regionID := int64(0x6B4F)
@@ -446,6 +529,11 @@ func clipTestCharacter() *enterworld.Character {
 	return character
 }
 
+/*
+================
+TestHandleMoveObserveClipDoesNotChangeCommit
+================
+*/
 func TestHandleMoveObserveClipDoesNotChangeCommit(t *testing.T) {
 	character := clipTestCharacter()
 	rt := testRuntime(character)
@@ -475,6 +563,11 @@ func TestHandleMoveObserveClipDoesNotChangeCommit(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleMoveApplyClipCommitsShortOfTheWall
+================
+*/
 func TestHandleMoveApplyClipCommitsShortOfTheWall(t *testing.T) {
 	character := clipTestCharacter()
 	rt := testRuntime(character)
@@ -500,13 +593,20 @@ func TestHandleMoveApplyClipCommitsShortOfTheWall(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleMoveAngularTurnBypassesClip
+================
+*/
 func TestHandleMoveAngularTurnBypassesClip(t *testing.T) {
 	character := clipTestCharacter()
 	rt := testRuntime(character)
 	fake := &fakeClipValidator{report: ClipReport{Outcome: ClipBlocked}}
 	rt.ClientClip = &ClientClip{Mode: ClipApply, Validator: fake}
 
-	outcome := rt.HandleMove("0", character, encodeTurnBody(1, 0x4000))
+	// The stationary angular arm (no GO) has no chord to clip. The GO form
+	// is clipped along its leg (direction_test.go).
+	outcome := rt.HandleMove("0", character, encodeTurnBody(0, 0x4000))
 	if outcome.Refusal != nil {
 		t.Fatalf("turn refused: %v", outcome.Refusal)
 	}
@@ -515,11 +615,17 @@ func TestHandleMoveAngularTurnBypassesClip(t *testing.T) {
 	}
 }
 
-// assertUnclippedRest is the unclipped-rest contract. Fail-open outcomes pass
-// the goal through untouched. Every walked outcome keeps the goal's region,
-// X, Z and facing but stands on the surface the walk reached: Rest.Y is that
-// surface's height (native walk results are cell-plane heights, never the
-// request's int16 Y) and RestOwner names it.
+/*
+================
+assertUnclippedRest
+
+assertUnclippedRest is the unclipped-rest contract. Fail-open outcomes pass
+the goal through untouched. Every walked outcome keeps the goal's region,
+X, Z and facing but stands on the surface the walk reached: Rest.Y is that
+surface's height (native walk results are cell-plane heights, never the
+request's int16 Y) and RestOwner names it.
+================
+*/
 func assertUnclippedRest(t *testing.T, v *WaterValidator, report ClipReport, to simulation.Spawn) {
 	t.Helper()
 	if report.Outcome == ClipNoCoverage || report.Outcome == ClipDungeonExempt {

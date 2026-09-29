@@ -7,6 +7,11 @@ Owns movement intent, admitted navigation and receipt ordering. Accepted
 endpoints retain valid progress made during transport; clipping, rejection
 and native corrections remain authoritative.
 
+A direction walk (a click that missed the ground, direction-movement.ts)
+has no endpoint: the walker renews its leg along the heading until the
+local clip blocks it or the server corrects it, and reconciles toward the
+server's walk every 500 ms (directionDrift).
+
 ===========================================================================
 */
 import { positionSkillGoal } from "@/engine/foundation/gameplay/position-skill";
@@ -24,8 +29,38 @@ import {
 import { createNavigation } from "./navigation/navigation";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { displacementSegment } from "@/engine/foundation/gameplay/cast-displacement";
+import {
+	DRIFT_PERIOD_MS,
+	directionDrift,
+	directionLegBlocked,
+	directionLegEnd,
+	directionMoveBody,
+	directionPoint
+} from "@/engine/foundation/gameplay/direction-movement";
 const ENDPOINT_EPSILON = .01;
 const DUNGEON_HEIGHT_EPSILON = 2;
+// Opcode of the replacement client's predicted-movement envelope
+// (transport.OpPredictedMove): [u8 1|2][u32 id] then the native body.
+const OP_PREDICTED_MOVE = 9;
+const ENVELOPE_PLAYER = 1;
+const ENVELOPE_COS = 2;
+// 0x769E tag 1 carries the vehicle's 0x7738 body.
+const COS_MOVEMENT_TAG = 1;
+
+/*
+================
+DirectionReference
+
+Where the server's direction walk is: it left `from` at `start` along
+heading and stops after limit units (Infinity until a leg ended blocked).
+================
+*/
+interface DirectionReference {
+	from: Pose;
+	start: number;
+	heading: number;
+	limit: number;
+}
 
 /*
 ================
@@ -43,8 +78,14 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 				owners?: readonly NavOwnerSpan[];
 				castToken?: number;
 				fixedTiming?: boolean;
+				// A leg of a direction walk; blocked legs end the walk.
+				direction?: { heading: number; blocked: boolean; };
 			})
 			| null = null;
+	// The direction walk in progress: its heading, the drift speed factor,
+	// the next reconciliation and the server walk it reconciles toward.
+	let walk: { heading: number; factor: number; nextDrift: number; reference: DirectionReference | null; } | null =
+		null;
 	let navigationRequestId: number | undefined;
 	let navigationFailure: { region: number; requestId?: number; error: string; } | undefined;
 	let navigationRegion: number | undefined, owner: NavOwner | undefined;
@@ -57,6 +98,7 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 		to: Pose;
 		sent: number;
 		predictedEnd: Pose | null;
+		direction?: number;
 	}>();
 	/*
 ================
@@ -111,6 +153,66 @@ bindOwners
 	}
 	/*
 ================
+directionSegment
+
+The next leg of a direction walk from `from`, clipped by local navigation
+at the first blocking contact (the native move test that stops nav state 2).
+Without complete coverage there is nothing to clip against: a first leg is
+not predicted (predictOnly, the request rule), while a walk already under
+way runs its full leg and the server's correction stops it where the
+server did.
+================
+	*/
+	function directionSegment( from: Pose, heading: number, now: number, factor = 1, predictOnly = false ) {
+		const end = directionLegEnd( from, heading );
+		const query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; } = {
+			slide: false,
+			sourceOwner: owner
+		};
+		const clipped = navigation.clip( from, end, query ), to = clipped ?? end;
+		if ( !clipped && predictOnly ) return null;
+		const travelled = poseDistance( from, to );
+		return {
+			from,
+			to: { ...to, angle: heading },
+			start: now,
+			timing: "speed" as const,
+			duration: travelled / (speed * factor) * 1000,
+			owners: clipped ? query.owners : undefined,
+			direction: { heading, blocked: !!clipped && directionLegBlocked( travelled ) }
+		};
+	}
+	/*
+================
+referenceAt
+================
+	*/
+	function referenceAt( reference: DirectionReference, now: number ): Pose {
+		const travelled = Math.min( reference.limit, Math.max( 0, now - reference.start ) * speed / 1000 );
+		return directionPoint( reference.from, reference.heading, travelled );
+	}
+	/*
+================
+driftWalk
+
+Every DRIFT_PERIOD_MS of a direction walk, re-aim the local walker toward
+the server's walk (directionDrift). A changed aim or speed factor starts a
+new leg from the live pose; the walk's own heading is kept for later legs.
+================
+	*/
+	function driftWalk( now: number ) {
+		if ( !walk?.reference || !segment?.direction || now < walk.nextDrift ) return;
+		walk.nextDrift = now + DRIFT_PERIOD_MS;
+		const local = sampleMovement( segment, now );
+		const drift = directionDrift( local, referenceAt( walk.reference, now ), walk.heading, speed );
+		if ( drift.heading === segment.direction.heading && drift.factor === walk.factor ) return;
+		walk.factor = drift.factor;
+		owner = liveOwner( now );
+		pose = navigation.surface( local, pose ?? local, owner, surfaceCursor );
+		segment = directionSegment( pose, drift.heading, now, drift.factor );
+	}
+	/*
+================
 liveOwner
 ================
 	*/
@@ -141,6 +243,7 @@ life
 			if ( segment ) pose = navigation.surface( sampleMovement( segment, now ), pose ?? segment.from, owner );
 			authoritative = pose;
 			segment = null;
+			walk = null;
 			acknowledged = nextId;
 			pending.clear();
 			error = null;
@@ -163,6 +266,7 @@ displace
 			acknowledged = nextId;
 			pending.clear();
 			surfaceCursor = {};
+			walk = null;
 			pose = authoritative = navigation.surface( next.from, from, owner );
 			segment = next.duration ?
 				bindOwners( {
@@ -256,10 +360,16 @@ mode
 			const next = movementModeTransition( segment, value, speed, now, segment.timing === "server" );
 			pose = navigation.surface( next.pose, pose ?? next.pose, owner );
 			if ( segment.timing === "server" || !next.segment ) authoritative = pose;
+			if ( !next.segment ) walk = null;
 			segment = next.segment ?
 				(segment.timing === "server" ?
 					segment :
-					bindOwners( { ...next.segment, from: pose, timing: segment.timing } )) :
+					bindOwners( {
+						...next.segment,
+						from: pose,
+						timing: segment.timing,
+						direction: segment.direction
+					} )) :
 				null;
 		},
 		/*
@@ -295,9 +405,23 @@ native
 			if ( decoded.gid !== gid ) {
 				return;
 			}
+			// A source-less angular acknowledgement leaves the path running.
+			if ( decoded.kind === "keep" ) return;
 			movementRevision++;
 			authoritative = reconcile( decoded.from );
 			pose = authoritative;
+			if ( decoded.kind === "direction" ) {
+				const heading = decoded.heading!;
+				walk = {
+					heading,
+					factor: 1,
+					nextDrift: now + DRIFT_PERIOD_MS,
+					reference: { from: pose, start: now, heading, limit: Infinity }
+				};
+				segment = directionSegment( pose, heading, now );
+				return;
+			}
+			walk = null;
 			segment = bindOwners( {
 				from: pose,
 				to: decoded.to,
@@ -355,6 +479,7 @@ seed
 			acknowledged = nextId;
 			pose = authoritative = navigation.surface( admit( value ) );
 			segment = null;
+			walk = null;
 			pending.clear();
 			error = null;
 		},
@@ -371,6 +496,7 @@ correct
 			pose = authoritative = reconcile( admit( value ) );
 			surfaceCursor = {};
 			segment = null;
+			walk = null;
 			acknowledged = nextId;
 			pending.clear();
 			error = null;
@@ -394,10 +520,10 @@ request
 			const offset = cosGid === undefined ? 0 : 5,
 				payload = new Uint8Array( 14 + offset ),
 				v = new DataView( payload.buffer );
-			payload[0] = cosGid === undefined ? 1 : 2;
+			payload[0] = cosGid === undefined ? ENVELOPE_PLAYER : ENVELOPE_COS;
 			if ( cosGid !== undefined ) {
 				v.setUint32( 5, cosGid, true );
-				payload[9] = 1;
+				payload[9] = COS_MOVEMENT_TAG;
 			}
 			v.setUint32( 1, id, true );
 			payload[5 + offset] = 1;
@@ -412,12 +538,13 @@ request
 				sourceOwner: owner
 			};
 			const clipped = navigation.clip( pose, to, query );
-			const frame = { opcode: 9, payload };
+			const frame = { opcode: OP_PREDICTED_MOVE, payload };
 			send( frame );
 			nextId = id;
 			movementRevision++;
 			pending.set( id, { to, sent: now, predictedEnd: clipped } );
 			error = null;
+			walk = null;
 			if ( clipped ) {
 				segment = {
 					from: pose,
@@ -428,6 +555,52 @@ request
 					owners: query.owners
 				};
 			}
+			return frame;
+		},
+		/*
+================
+direct
+
+The ground-pick miss of CGInterface_MoveToWorldPoint (0x6932A0): a 0x7738
+mode-0 GO command along heading (or 0x769E tag 1 for the ridden vehicle),
+and the local walk starts at once. Like request, the leg is predicted only
+over complete navigation coverage; otherwise the receipt starts the walk.
+================
+		*/
+		direct( heading: number, now: number, cosGid?: number ) {
+			if ( life === "dead" ) throw new Error( "Movement while dead" );
+			if ( !pose || pending.size >= 32 || nextId === 0xffffffff ) {
+				throw new Error( "Movement command capacity exceeded or player absent" );
+			}
+			if ( cosGid !== undefined && (!Number.isInteger( cosGid ) || cosGid < 1 || cosGid > 0xffffffff) ) {
+				throw Error( "Invalid COS owner" );
+			}
+			const body = directionMoveBody( heading ),
+				id = nextId + 1,
+				offset = cosGid === undefined ? 0 : 5,
+				payload = new Uint8Array( 5 + offset + body.length ),
+				v = new DataView( payload.buffer );
+			payload[0] = cosGid === undefined ? ENVELOPE_PLAYER : ENVELOPE_COS;
+			v.setUint32( 1, id, true );
+			if ( cosGid !== undefined ) {
+				v.setUint32( 5, cosGid, true );
+				payload[9] = COS_MOVEMENT_TAG;
+			}
+			payload.set( body, 5 + offset );
+			const frame = { opcode: OP_PREDICTED_MOVE, payload };
+			send( frame );
+			nextId = id;
+			movementRevision++;
+			const leg = directionSegment( pose, heading, now, 1, true );
+			pending.set( id, {
+				to: leg?.to ?? directionLegEnd( pose, heading ),
+				sent: now,
+				predictedEnd: leg?.to ?? null,
+				direction: heading
+			} );
+			error = null;
+			walk = { heading, factor: 1, nextDrift: now + DRIFT_PERIOD_MS, reference: null };
+			if ( leg ) segment = leg;
 			return frame;
 		},
 		/*
@@ -496,6 +669,39 @@ receive
 				for ( const id of pending.keys() ) if ( id <= r.id ) pending.delete( id );
 				return;
 			}
+			if ( command.direction !== undefined && r.accepted && walk ) {
+				// The server walks from its live point; its first leg is the
+				// reference the local walk reconciles toward. A leg shorter than
+				// a full one ended on a contact and stops the reference there.
+				const heading = command.direction, start = replacement?.from ?? to;
+				const blocked = !s || directionLegBlocked( poseDistance( admit( s.from ), to ) );
+				walk.reference = {
+					from: start,
+					start: now,
+					heading,
+					limit: blocked ? poseDistance( start, to ) : Infinity
+				};
+				const walkingOwner = owner;
+				authoritative = reconcile( start );
+				if ( segment?.direction ) owner = walkingOwner;
+				else {
+					// Nothing was predicted: follow the server's leg.
+					pose = authoritative;
+					segment = replacement ?
+						bindOwners( { ...replacement, from: pose, direction: { heading, blocked } } ) :
+						null;
+					if ( !replacement ) {
+						pose = authoritative = { ...pose, angle: heading };
+						walk = null;
+					}
+				}
+				movementRevision++;
+				acknowledged = r.id;
+				for ( const id of pending.keys() ) if ( id <= r.id ) pending.delete( id );
+				error = null;
+				return;
+			}
+			if ( command.direction !== undefined ) walk = null;
 			const predictedOwner = owner;
 			authoritative = reconcile( replacement?.from ?? to );
 			// A receipt confirms an endpoint, not the client's old frame. Turning
@@ -543,6 +749,7 @@ step
 			if ( pending.size && now - pending.values().next().value!.sent > 10000 ) {
 				throw new Error( "Movement receipt timed out; resynchronize session" );
 			}
+			driftWalk( now );
 			if ( !segment ) {
 				return false;
 			}
@@ -561,7 +768,12 @@ step
 			owner = surfaceCursor.owner ?? owner;
 			if ( t === 1 ) {
 				authoritative = pose;
+				const direction = segment.direction;
 				segment = null;
+				// A direction walk renews its leg until one ends blocked.
+				if ( direction && !direction.blocked && walk ) {
+					segment = directionSegment( pose, direction.heading, now, walk.factor );
+				} else if ( direction ) walk = null;
 			}
 			return true;
 		},
@@ -584,6 +796,8 @@ state
 				navigationBlock: navigation.block( pose, owner ),
 				navigationOwner: owner ? { ...owner } : undefined,
 				moving: !!segment && segment.duration > 0,
+				// The heading of the direction walk in progress, if any.
+				directionWalk: walk ? walk.heading : undefined,
 				pose,
 				authoritativePose: authoritative,
 				pendingMoves: pending.size,
@@ -607,6 +821,7 @@ clear
 			owner = undefined;
 			pose = authoritative = null;
 			segment = null;
+			walk = null;
 			pending.clear();
 			error = null;
 			navigation.clear();

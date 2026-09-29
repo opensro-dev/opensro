@@ -128,6 +128,11 @@ type Runtime struct {
 
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame
+	// SteerCOS and StopCOS delegate the vehicle's 0x769E steer (tag 0x04)
+	// and direction stop (tag 0x03) to the same owner. They return the
+	// acting session's frames and the observers' frames.
+	SteerCOS func(string, *enterworld.Character, uint32, uint16) ([]wire.Frame, []wire.Frame)
+	StopCOS  func(string, *enterworld.Character, uint32, uint16) ([]wire.Frame, []wire.Frame)
 
 	// GachaRoll returns a uniform value in [0,10000). Tests replace it;
 	// production uses crypto/rand so concurrent rolls share no mutable PRNG.

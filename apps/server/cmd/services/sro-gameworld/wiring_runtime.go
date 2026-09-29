@@ -46,6 +46,8 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 		game.hub,
 		game.items.NpcRoster,
 		game.items.TickHook(),
+		// Direction walks continue leg by leg on the mission clock.
+		game.movement.DirectionTickHook(),
 		func(nowMs int64) []simulation.DivisionFrames {
 			return game.items.AdvanceSkillObjects(nowMs, ticker.Source.SnapshotSessions())
 		},

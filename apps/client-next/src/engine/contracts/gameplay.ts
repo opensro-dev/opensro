@@ -144,7 +144,12 @@ export type GameplayCommand =
 		readonly settings: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
 	}
 	| { readonly kind: "rebirth"; readonly choice: 1 | 2; }
-	| { readonly kind: "ground-move"; readonly query: import("./navigation").GroundPickQuery; }
+	| {
+		readonly kind: "ground-move";
+		readonly query: import("./navigation").GroundPickQuery;
+		// Set by the world session while a logout/restart countdown runs.
+		readonly departing?: boolean;
+	}
 	| import("@/engine/foundation/gameplay/academy").AcademyCommand
 	| import("@/engine/foundation/gameplay/travel").GateCommand
 	| { readonly kind: "cos-pickup"; readonly gid: number; readonly target: number; }
