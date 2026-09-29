@@ -251,3 +251,31 @@ test("offline HTTP variants preserve identity, negotiate exclusions and revalida
 	await writeFile( path.join( f.packageRoot, "release.json" ), JSON.stringify( f.m ) );
 	await assert.rejects( () => verifyDirectory( f.packageRoot ), /differs from identity/ );
 });
+
+/*
+================
+native asset URLs
+
+Only files the browser loads itself get a URL of their own; a page or
+stylesheet naming any other asset would 404 once members are pack-only.
+================
+*/
+test("a release publishes a URL only for declared browser-loaded assets", async () => {
+	const { documentAssetUrls, requireNativeAssets } = await import( "../../tools/beta/build.mjs" );
+	const native = new Set( [ "/assets/cursors/a.cur" ] );
+	const members = new Set( [ "/assets/cursors/a.cur", "/assets/images/b.png" ] );
+	const application = new Map( [
+		[ "index.html", '<link href="/assets/index-abc12345.css"><img src="/assets/cursors/a.cur">' ],
+		[ "assets/index-abc12345.css", "" ],
+		[ "assets/entry-abc12345.js", 'read("/assets/images/b.png")' ]
+	] );
+	assert.deepEqual( documentAssetUrls( "assets/entry-abc12345.js", 'x("/assets/images/b.png")' ), [] );
+	requireNativeAssets( application, native, members );
+	application.set( "assets/index-abc12345.css", '.bar{background:url("/assets/images/b.png")}' );
+	assert.throws( () => requireNativeAssets( application, native, members ), /loads \/assets\/images\/b\.png/ );
+	application.set( "assets/index-abc12345.css", "" );
+	assert.throws(
+		() => requireNativeAssets( application, native, new Set( [ "/assets/images/b.png" ] ) ),
+		/not a published member/
+	);
+});

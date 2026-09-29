@@ -6,6 +6,10 @@ build.mjs - verified browser release assembly
 Freezes application inputs and projects public assets before creating the
 release archive. Private maps remain outside the deployable package.
 
+Assets are served as packs: the client reads every asset through its verified
+pack reader. Only the few files the browser loads by URL itself
+(foundation/assets/native-assets.ts) also get a URL of their own.
+
 ===========================================================================
 */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -15,6 +19,7 @@ import { build } from "vite";
 import { zstdDecompressSync } from "node:zlib";
 import { files, inspect, publicIndex, safeName, sha, releaseIdentity, verifyDirectory } from "./policy.mjs";
 import { ASSET_SCHEMA, RELEASE_PROTOCOL } from "../../src/engine/foundation/release/protocol.ts";
+import { nativeAssetUrls } from "../../src/engine/foundation/assets/native-assets.ts";
 import { archiveRelease } from "./archive.mjs";
 import { compressRoutes } from "./compression.mjs";
 import { projectPack } from "./public-data.mjs";
@@ -152,6 +157,39 @@ export async function buildApplication( { base = root, directory, source, mode =
 }
 /*
 ================
+documentAssetUrls
+
+The asset URLs a built page or stylesheet makes the browser load itself.
+Script literals are not listed: scripts read assets through the pack reader.
+================
+*/
+export function documentAssetUrls( name, text ) {
+	if ( !name.endsWith( ".html" ) && !name.endsWith( ".css" ) ) return [];
+	return [ ...text.matchAll( /\/assets\/[A-Za-z0-9_.\/-]+/g ) ].map( match => match[0] );
+}
+/*
+================
+requireNativeAssets
+
+Every asset URL the built application loads by itself must be declared
+native, and every declared native asset must be a published member.
+================
+*/
+export function requireNativeAssets( applicationFiles, native, members ) {
+	for ( const [name, text] of applicationFiles ) {
+		for ( const url of documentAssetUrls( name, text ) ) {
+			if ( applicationFiles.has( url.slice( 1 ) ) ) continue;
+			if ( !native.has( url ) ) {
+				throw Error( `${name} loads ${url} by URL; declare it in foundation/assets/native-assets.ts` );
+			}
+		}
+	}
+	for ( const url of native ) {
+		if ( !members.has( url ) ) throw Error( "Native asset is not a published member: " + url );
+	}
+}
+/*
+================
 buildBeta
 ================
 */
@@ -205,8 +243,10 @@ export async function buildBeta(
 		safeName( url.slice( 1 ) );
 		manifest.routes.push( { url, file, offset, length, mime, ...(encoding ? { encoding } : {}) } );
 	};
+	const applicationFiles = new Map();
 	for ( const name of await files( applicationRoot ) ) {
 		const bytes = await readFile( path.join( applicationRoot, name ) );
+		applicationFiles.set( name, bytes.toString( "utf8" ) );
 		manifest.files.push( {
 			path: "application/" + name,
 			length: bytes.length,
@@ -229,6 +269,8 @@ export async function buildBeta(
 		throw Error( `Asset data is schema ${original.assetSchema}; this client reads ${ASSET_SCHEMA}` );
 	}
 	manifest.excludedGroups = original.groups.filter( g => !index.groups.includes( g ) ).map( g => g.name );
+	const native = new Set( nativeAssetUrls() );
+	requireNativeAssets( applicationFiles, native, new Set( index.assets.map( a => a.path ) ) );
 	// Pack members are inspected even when no loose representation remains.
 	const overrides = new Map();
 	for ( const group of index.groups ) {
@@ -267,18 +309,9 @@ export async function buildBeta(
 				if ( !e || e.offset !== a.offset || e.length !== a.length || e.sha256 !== a.sha256 ) {
 					throw Error( "Pack index drift " + a.path );
 				}
-				route( { url: a.path, file, length: a.length, mime: a.mime, offset: start + a.offset } );
-				if (
-					a.path.endsWith( ".json.gz" ) && !index.assets.some( other => other.path === a.path.slice( 0, -3 ) )
-				) {
-					route( {
-						url: a.path.slice( 0, -3 ),
-						file,
-						length: a.length,
-						mime: "application/json",
-						offset: start + a.offset,
-						encoding: "gzip"
-					} );
+				// Members are read from the pack; only browser-loaded files get a URL.
+				if ( native.has( a.path ) ) {
+					route( { url: a.path, file, length: a.length, mime: a.mime, offset: start + a.offset } );
 				}
 			}
 		}
@@ -307,11 +340,11 @@ export async function buildBeta(
 	if (
 		sha( await readFile( path.join( assetRoot, "assets/packs/manifest.json" ) ) ) !== manifest.assetAuthorityHash
 	) throw Error( "Asset publication changed during freeze; package not accepted" );
-	// Required runtime metadata is derived from this release's routed members.
+	// Required runtime metadata is derived from this release's published members.
 	// A loose development sidecar cannot be assumed to survive pack projection.
 	if ( !manifest.routes.some( row => row.url === BACKGROUND_INSTALL_PUBLIC_PATH ) ) {
 		const installBytes = Buffer.from(
-			JSON.stringify( backgroundInstallDocument( manifest.routes.map( row => row.url ) ) )
+			JSON.stringify( backgroundInstallDocument( index.assets.map( a => a.path ) ) )
 		);
 		const installFile = "payload/" + sha( installBytes ) + ".json";
 		await add( installFile, installBytes, "data" );

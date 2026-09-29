@@ -337,7 +337,6 @@ apps/client-next/src/engine/runtime/frontend/stage/preload.ts
 apps/client-next/src/engine/runtime/frontend/stage/stage.ts
 apps/client-next/src/engine/runtime/input/input.ts
 apps/client-next/src/engine/runtime/navigation/navigation.ts
-apps/client-next/src/engine/runtime/platform/ui/cursor.ts
 apps/client-next/src/engine/runtime/presentation/effective-hp.ts
 apps/client-next/src/engine/runtime/presentation/presentation.ts
 apps/client-next/src/engine/runtime/random/random.ts
