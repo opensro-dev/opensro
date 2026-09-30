@@ -167,7 +167,9 @@ test("published retail routing has a renderable independent payload for every en
 		] )
 	);
 
-	for ( const resource of objectIndex.bsr ) {
+	// A compound root carries no render section of its own: each of its
+	// branches is a complete BSR resource.
+	for ( const resource of objectIndex.bsr.flatMap( ( root ) => root.branches ?? [ root ] ) ) {
 		const meshPaths = new Set( [
 			...resource.meshPaths,
 			...resource.renderMeshSection.paths,
