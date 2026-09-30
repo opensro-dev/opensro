@@ -5,7 +5,6 @@ apps/client-next/src/engine/contracts/camera-script.ts
 apps/client-next/src/engine/contracts/combat-feedback.ts
 apps/client-next/src/engine/contracts/damage-text.ts
 apps/client-next/src/engine/contracts/effective-hp.ts
-apps/client-next/src/engine/contracts/effects.ts
 apps/client-next/src/engine/contracts/footprint.ts
 apps/client-next/src/engine/contracts/frontend.ts
 apps/client-next/src/engine/contracts/geometry.ts
@@ -305,7 +304,6 @@ apps/client-next/src/engine/runtime/assets/worker/world/world.ts
 apps/client-next/src/engine/runtime/assets/world-lease.ts
 apps/client-next/src/engine/runtime/audio/music/music.ts
 apps/client-next/src/engine/runtime/characters/damage-feedback.ts
-apps/client-next/src/engine/runtime/characters/effects/effects.ts
 apps/client-next/src/engine/runtime/characters/orbs/orbs.ts
 apps/client-next/src/engine/runtime/characters/sounds/sounds.ts
 apps/client-next/src/engine/runtime/characters/state-index.ts

@@ -19,6 +19,7 @@ const { createPresentationRandom } = await import( "../../src/engine/runtime/ran
 const { createEffectPrograms } = await import( "../../src/engine/runtime/assets/worker/effects/program/program.ts" );
 const { createEffectDecoder } = await import( "../../src/engine/runtime/assets/worker/effects/effects.ts" );
 const { createCharacterEffects } = await import( "../../src/engine/runtime/characters/effects/effects.ts" );
+const { nativeHeadingYaw } = await import( "../../src/engine/foundation/math/angles.ts" );
 const encode = value => new TextEncoder().encode( JSON.stringify( value ) );
 function catalog() {
 	return {
@@ -468,7 +469,7 @@ test("multi-target callbacks fan out victim effects once and retain one caster e
 	assert.equal( new Set( sounds.map( sound => sound.id ) ).size, 3 );
 	effects.dispose();
 });
-function effectFixture( answer ) {
+function effectFixture( answer, others = [] ) {
 	let id = 0;
 	const jobs = new Map(), requests = [];
 	const stage = action => ({
@@ -519,7 +520,7 @@ function effectFixture( answer ) {
 		requests,
 		step: now =>
 			effects.step(
-				[ entity ],
+				[ ...others, entity ],
 				gameplay,
 				now,
 				() => true,
@@ -528,6 +529,21 @@ function effectFixture( answer ) {
 			)
 	};
 }
+test("a hit effect following its victim keeps the caster's facing, not the victim's", () => {
+	// 8DB770 -> 8D5440: the victim's effect copies the caster's model matrix.
+	const caster = { gid: 1, refObjId: 1, regionId: 257, x: 0, y: 20, z: 30, heading: 16384 };
+	const f = effectFixture( undefined, [ caster ] );
+	f.gameplay.localGid = 99;
+	f.gameplay.casts = [ { token: 1, caster: 1, target: 2, skill: 1 } ];
+	let actors = [];
+	for ( let i = 0; i < 12 && !actors.length; i++ ) actors = f.step( i / 10 );
+	f.gameplay.casts = [ { token: 2, caster: 1, target: 2, skill: 1 } ];
+	actors = f.step( 1.5 );
+	const follow = actors.find( actor => actor.attachment?.root && actor.attachment.gid === f.entity.gid );
+	assert.ok( follow, "the follow stage attaches to the victim's root" );
+	assert.equal( follow.attachment.facing, nativeHeadingYaw( caster.heading ) );
+	assert.notEqual( follow.attachment.facing, nativeHeadingYaw( f.entity.heading ) );
+});
 test("effect catalogs recover with backoff and admit queued callbacks exactly once", () => {
 	const f = effectFixture( ( decode, requests ) =>
 		requests.length === 1 ?
