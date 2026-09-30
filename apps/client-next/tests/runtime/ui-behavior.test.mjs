@@ -3901,6 +3901,8 @@ test("minimap zoom advances while world inputs are unchanged and resets on exit"
 		assert.ok( width() < 179.2 && width() > 160 );
 		f.ui.step( { ...f.state, session: { phase: "signed-out", revision: 2 } }, 4420 );
 		f.ui.step( f.state, 4500 );
+		// Returning from title loading presents its completed frame before the HUD.
+		f.ui.step( f.state, 4601 );
 		assert.equal( width(), 160 );
 	} finally {
 		f.dispose();

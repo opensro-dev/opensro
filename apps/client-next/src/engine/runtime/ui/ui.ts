@@ -686,7 +686,6 @@ export function createUi(
 		cosPlayerPage = 0,
 		cosGid = 0,
 		serverPage = 0,
-		rosterPage = 0,
 		pending = false,
 		rosterRequested = false,
 		lastPhase = "",
@@ -1982,7 +1981,6 @@ export function createUi(
 			commands( { kind: "login", apiBase: endpoint, id: account, password, serverId: selectedServer } );
 		} else if ( id === "servers" && !pending ) requestServers();
 		else if ( id.startsWith( "server:" ) ) serverDraft = id.slice( 7 );
-		else if ( id.startsWith( "character:" ) ) selectedCharacter = id.slice( 10 );
 		else if ( id === "dock:back" ) selectedCharacter = "";
 		else if ( id === "enter" && !pending && selectedCharacter ) {
 			pending = true;
@@ -2270,8 +2268,6 @@ export function createUi(
 		else if ( id === "doll-reset" ) dollYaw = .100000001;
 		else if ( id === "server-next" ) serverPage++;
 		else if ( id === "server-prev" ) serverPage = Math.max( 0, serverPage - 1 );
-		else if ( id === "roster-next" ) rosterPage++;
-		else if ( id === "roster-prev" ) rosterPage = Math.max( 0, rosterPage - 1 );
 		dirty = true;
 	}
 	/*
@@ -3944,7 +3940,9 @@ export function createUi(
 			if ( stableWorld && !dirty ) return null;
 			if (
 				!loading && !next.frontend && !dirty && now < nextPoll && view?.resourceError === next.resourceError &&
-				view?.worldError === next.worldError && view?.session === next.session &&
+				view?.worldError === next.worldError && view?.worldReady === next.worldReady &&
+				view?.travel === next.travel && view?.worldTransitionRegion === next.worldTransitionRegion &&
+				view?.session === next.session &&
 				view?.berserkGauge?.displayed === next.berserkGauge?.displayed && view?.gameplay === next.gameplay &&
 				view?.entities === next.entities && view?.width === next.width && view?.height === next.height
 			) return null;
@@ -4910,16 +4908,16 @@ export function createUi(
 				"";
 			const titlePending = pending || next.frontend?.entryPending === true || phase === "listing-servers" ||
 				phase === "authenticating";
-			const admittingWorld = phase === "entering-world" && !!next.frontend &&
+			// CPSMission 7292E0 creates the artwork and gauge as one screen;
+			// 728E10 retires them only at load completion. Session diagnostics do
+			// not end this lifetime. Resume can precede the frontend snapshot.
+			const missionFrontend = !next.frontend ||
 				[ "world", "loading-world" ].includes( next.frontend.phase );
-			// The frontend may reach "world" before the world owner finishes resource
-			// admission (including recovery). Keep the native loading presentation alive
-			// across that boundary instead of exposing the old diagnostic window.
-			const awaitingWorldResources = (phase === "entering-world" || phase === "world" && !next.worldReady) &&
-				(!next.frontend || [ "world", "loading-world" ].includes( next.frontend.phase ));
-			const missionLoading =
-				(admittingWorld || awaitingWorldResources || next.frontend?.phase === "loading-world" ||
-					next.worldTransitionRegion !== undefined || !!next.travel) && phase !== "disconnected";
+			const awaitingWorldResources = missionFrontend && !retainedWorld &&
+				([ "connecting", "entering-world", "reconnecting" ].includes( phase ) ||
+					phase === "world" && !next.worldReady);
+			const missionLoading = (awaitingWorldResources || next.frontend?.phase === "loading-world" ||
+				next.worldTransitionRegion !== undefined || !!next.travel) && phase !== "disconnected";
 			// World load end (683B40) calls 575D10(worldMap, 1): every completed load,
 			// teleports included, re-arms AUTO MOVE.
 			if ( missionLoading ) mapWorldLoading = true;
@@ -4969,11 +4967,26 @@ export function createUi(
 					status: "Loading world assets"
 				};
 			}
+			// Browser inference: the frontend owns dock/title controls. A missing
+			// snapshot waits on native transition art; transport state alone must
+			// not construct a second roster/login interface.
+			if ( !request && !next.frontend && !retainedWorld && phase !== "world" && phase !== "disconnected" ) {
+				const dock = phase === "character-select" || phase === "loading-roster";
+				request = {
+					key: dock ? "awaiting-dock" : "awaiting-title",
+					background: ROOT + "interface/loading/loading_charactercustom_europe.png",
+					progress: 0,
+					complete: false,
+					startup: !dock,
+					status: "Loading scene assets"
+				};
+			}
+
 			loading = loadingPresentation(
 				loading,
 				request,
 				now,
-				phase === "disconnected" || next.frontend?.phase === "failed" || !!next.session?.error
+				phase === "disconnected" || next.frontend?.phase === "failed"
 			);
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
@@ -5022,7 +5035,7 @@ export function createUi(
 					quads.push( ...output );
 					paths.push( ...output.map( q => q.texture ).filter( Boolean ) );
 				}
-			} else if ( next.frontend && ![ "world", "loading-world" ].includes( next.frontend.phase ) ) {
+			} else if ( next.frontend && ![ "world", "loading-world", "failed" ].includes( next.frontend.phase ) ) {
 				const output = title.render(
 					next.frontend,
 					w,
@@ -5054,39 +5067,9 @@ export function createUi(
 					blocks.push( ...output.controls.map( control => control.rect ) );
 				} else blocks.push( full );
 				for ( const row of output.labels ) label( row.value, row.x, row.y, [ 1, 1, 1, row.alpha ] );
-			} else if ( phase === "character-select" || phase === "loading-roster" ) {
-				windowBox( "Select character", x, y, 380, 520 );
-				roster.slice( rosterPage * 9, rosterPage * 9 + 9 ).forEach( ( c, i ) =>
-					button(
-						"character:" + c.name,
-						`${c.name} · Level ${c.level}${c.deletePending ? " · Deleting" : ""}`,
-						x + 30,
-						y + 55 + i * 33,
-						320,
-						// Selecting only moves the highlight; the pending lock belongs
-						// to "enter", which sends the command.
-						c.deletePending,
-						c.name === selectedCharacter
-					)
-				);
-				button( "enter", "Enter world", x + 30, y + 412, 150, pending || !selectedCharacter );
-				button( "logout", "Sign out", x + 198, y + 412, 150 );
-				if ( roster.length > 9 ) {
-					button( "roster-prev", "Previous", x + 30, y + 370, 150, rosterPage === 0 );
-					button( "roster-next", "Next", x + 198, y + 370, 150, (rosterPage + 1) * 9 >= roster.length );
-				}
-				if ( !roster.length ) {
-					label(
-						phase === "loading-roster" ? "Loading characters..." : "No characters available.",
-						x + 30,
-						y + 65
-					);
-				}
-			} else if ( !retainedWorld && phase !== "disconnected" && (phase !== "world" || !next.worldReady) ) {
-				windowBox( "Loading world", x, y + 120, 380, 220 );
-				label( next.session?.character ?? "", x + 30, y + 168, gold );
-				label( phase === "world" ? "Preparing world resources..." : phase, x + 30, y + 195 );
-				button( "logout", "Sign out", x + 198, y + 252, 150 );
+			} else if ( !worldVisible && !retainedWorld ) {
+				blocks.push( full );
+				rect( full, [ 0, 0, 0, 1 ] );
 			} else {
 				const gauge = next.berserkGauge;
 				const character = roster.find( c => c.name === next.session?.character ), hudData = hud.data();
@@ -11349,7 +11332,8 @@ export function createUi(
 					);
 				}
 			}
-			const fatalAssetFailure = next.resourceError ?? hud.error() ?? text.error() ?? guideResources.error() ??
+			const fatalAssetFailure = next.frontend?.error ?? next.resourceError ?? hud.error() ?? text.error() ??
+				guideResources.error() ??
 				minimapResources.error();
 			const assetFailure = next.worldError ?? fatalAssetFailure ?? resources.error();
 			let nativeLoadError = false;
