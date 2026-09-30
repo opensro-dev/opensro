@@ -86,7 +86,8 @@ runs beside the headless flow; neither waits for the other.
 async function bootInBrowser( url, result ) {
 	const started = Date.now();
 	const { browser, page } = await launchProbeBrowser( {
-		headed: process.env.RELEASE_HEADED === "1",
+		// Booting needs no visible compositor surface; headless starts faster.
+		headed: false,
 		viewport: PROBE_VIEWPORT,
 		...(process.env.RELEASE_CHROME ? { executablePath: process.env.RELEASE_CHROME } : {})
 	} );
