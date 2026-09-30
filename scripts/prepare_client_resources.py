@@ -63,6 +63,7 @@ MUSIC_ENCODER_ARGS = ["-codec:a", "libmp3lame", "-q:a", "0"]
 # Characters Windows refuses in a file name; ":" would open an alternate stream.
 INVALID_NAME_CHARACTERS = set('<>:"|?*') | {chr(n) for n in range(32)}
 HASH_CHUNK = 1 << 20
+PROGRESS_EVERY = 5000
 
 
 def log(message):
@@ -135,7 +136,7 @@ def extract_archive(archive_path, output):
 			if not (target.is_file() and target.stat().st_size == entry.size and file_digest(target) == sro_pk2.digest(stored)):
 				write_atomically(target, stored)
 				written += 1
-			if number % 5000 == 0:
+			if number % PROGRESS_EVERY == 0:
 				log(f"  {number}/{len(entries)} files checked, {written} written")
 		return len(entries), written, archive_hash
 
@@ -145,19 +146,23 @@ def ffmpeg_version(ffmpeg):
 	return result.stdout.splitlines()[0]
 
 
-def prepare_music(archive_path, output, previous):
+def find_ffmpeg():
+	"""The ffmpeg that converts the music, refused before any record changes."""
+	ffmpeg = shutil.which("ffmpeg")
+	if not ffmpeg:
+		raise SystemExit("ffmpeg is not on PATH; it converts the Music.pk2 tracks (see docs/GETTING_STARTED.md)")
+	return ffmpeg
+
+
+def prepare_music(archive_path, output, previous, ffmpeg):
 	"""
 	Convert the ASCII-named OGG tracks to MP3. A track whose source hash,
 	encoder and ffmpeg are unchanged since the last run, and whose MP3 still
 	exists, is kept.
 	"""
-	ffmpeg = shutil.which("ffmpeg")
-	if not ffmpeg:
-		raise SystemExit("ffmpeg is not on PATH; it converts the Music.pk2 tracks (see docs/GETTING_STARTED.md)")
 	version = ffmpeg_version(ffmpeg)
-	previous_tracks = previous.get("tracks", {}) if previous.get("ffmpeg") == version and previous.get(
-		"encoder"
-	) == MUSIC_ENCODER_ARGS else {}
+	same_encoder = previous.get("ffmpeg") == version and previous.get("encoder") == MUSIC_ENCODER_ARGS
+	previous_tracks = previous.get("tracks", {}) if same_encoder else {}
 	with open(archive_path, "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
 		archive_hash = hashlib.sha256(data).hexdigest()
 		entries = [e for e in sro_pk2.read_directory(data) if e.path.lower().endswith(".ogg") and e.path.isascii()]
@@ -212,6 +217,8 @@ def main():
 	missing = [f"{name}.pk2" for name in selected if not (GAME_ROOT / f"{name}.pk2").is_file()]
 	if missing:
 		raise SystemExit(f"Game root {GAME_ROOT} lacks {', '.join(missing)}. Set SRO_GAME_ROOT to the client folder.")
+	# A missing encoder fails before any archive work or record change.
+	ffmpeg = find_ffmpeg() if MUSIC_ARCHIVE in selected else None
 	extracted = GAME_ROOT / "extracted"
 	extracted.mkdir(exist_ok=True)
 	manifest = read_manifest(extracted)
@@ -234,7 +241,7 @@ def main():
 		previous = manifest.get("music", {})
 		manifest.pop("music", None)
 		write_manifest(extracted, manifest)
-		record, converted = prepare_music(GAME_ROOT / f"{MUSIC_ARCHIVE}.pk2", extracted / MUSIC_FOLDER, previous)
+		record, converted = prepare_music(GAME_ROOT / f"{MUSIC_ARCHIVE}.pk2", extracted / MUSIC_FOLDER, previous, ffmpeg)
 		manifest["music"] = record
 		write_manifest(extracted, manifest)
 		log(f"  {len(record['tracks'])} tracks, {converted} converted")

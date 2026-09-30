@@ -601,7 +601,6 @@ apps/client-next/tools/profile-world.mjs
 apps/client-next/tools/publish-dungeon-worlds.mjs
 apps/client-next/tools/publish-flares.mjs
 apps/client-next/tools/publish-minimap-coverage.mjs
-apps/client-next/tools/publish-monster-materials.mjs
 apps/client-next/tools/publish-skill-ui.mjs
 apps/client-next/tools/publish-star-rng.mjs
 apps/client-next/tools/published-assets.mjs
@@ -697,7 +696,6 @@ scripts/build/shared/fileHashCache.mjs
 scripts/build/shared/fontResources.mjs
 scripts/build/shared/fsUtils.mjs
 scripts/build/shared/guideImageReferences.mjs
-scripts/build/shared/hash.mjs
 scripts/build/shared/itemNameCoverage.mjs
 scripts/build/shared/itemTextCompletions.mjs
 scripts/build/shared/jmxAssetIO.mjs

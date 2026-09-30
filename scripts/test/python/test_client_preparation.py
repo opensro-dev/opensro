@@ -7,13 +7,16 @@ Builds small synthetic PK2 archives with the client's directory cipher, so
 the reader (scripts/sro_pk2.py) and the extractor
 (scripts/prepare_client_resources.py) are tested without game data:
 nested folders, CP949 names with ASCII-only case folding, directory guards,
-path containment, and repair of a damaged extraction.
+path containment, and repair of a damaged extraction. The doctor runs as a
+process against scratch game roots.
 
 	py -3 -B -m unittest discover -s scripts/test/python
 
 ===========================================================================
 """
+import os
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -62,10 +65,11 @@ class ArchiveBuilder:
 				row[0] = kind
 				row[1:1 + len(name)] = name
 				resolved = start if kind == sro_pk2.ENTRY_FOLDER else payload_base + start
-				struct.pack_into("<QIQ", row, 106, resolved, size, 0)
+				struct.pack_into("<QIQ", row, sro_pk2.ENTRY_EXTENT_OFFSET, resolved, size, 0)
 				block[index * sro_pk2.ENTRY_BYTES:(index + 1) * sro_pk2.ENTRY_BYTES] = row
 			if offset in chains:
-				struct.pack_into("<Q", block, 19 * sro_pk2.ENTRY_BYTES + 118, chains[offset])
+				last = (sro_pk2.ENTRIES_PER_BLOCK - 1) * sro_pk2.ENTRY_BYTES
+				struct.pack_into("<Q", block, last + sro_pk2.ENTRY_CHAIN_OFFSET, chains[offset])
 			data += _swap(cipher.encrypt(_swap(bytes(block))))
 		data += self.payloads
 		return bytes(data)
@@ -155,6 +159,42 @@ class ExtractionTests(unittest.TestCase):
 				with self.assertRaises(ValueError, msg=name):
 					prepare.safe_target(root, name)
 			self.assertEqual(prepare.safe_target(root, "a/b.txt"), root / "a" / "b.txt")
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+EXTRACTED_FOLDERS = ("Media_extracted", "Data_extracted", "Map_extracted", "Particles_extracted", "Music_mp3")
+
+
+def run_doctor(game_root):
+	env = dict(os.environ, SRO_GAME_ROOT=str(game_root))
+	return subprocess.run(["node", "scripts/assets_doctor.mjs"], cwd=REPO_ROOT, env=env, capture_output=True, text=True)
+
+
+class DoctorTests(unittest.TestCase):
+	"""The doctor and the builds' preflight (scripts/build/shared/clientInputs.mjs)."""
+
+	def test_an_empty_root_lists_every_missing_input(self):
+		with tempfile.TemporaryDirectory() as root:
+			result = run_doctor(root)
+			self.assertEqual(result.returncode, 1)
+			for name in ("SRO_Client.exe", "Particles.pk2", *EXTRACTED_FOLDERS):
+				self.assertIn(name, result.stdout)
+
+	def test_a_complete_root_passes_the_build_inputs(self):
+		with tempfile.TemporaryDirectory() as root:
+			for name in ("SRO_Client.exe", "Particles.pk2"):
+				(Path(root) / name).write_bytes(b"x")
+			for folder in EXTRACTED_FOLDERS:
+				(Path(root) / "extracted" / folder).mkdir(parents=True)
+				(Path(root) / "extracted" / folder / "file").write_bytes(b"x")
+			result = run_doctor(root)
+			self.assertRegex(result.stdout, r"ok\s+build inputs")
+			self.assertNotIn("build input  ", result.stdout.replace("build inputs", ""))
+
+	def test_an_empty_folder_counts_as_missing(self):
+		with tempfile.TemporaryDirectory() as root:
+			(Path(root) / "extracted" / "Music_mp3").mkdir(parents=True)
+			self.assertIn("extracted/Music_mp3 is missing or empty", run_doctor(root).stdout)
 
 
 if __name__ == "__main__":

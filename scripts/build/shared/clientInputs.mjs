@@ -28,6 +28,15 @@ export const EXTRACTED_FOLDERS = [
 	"Music_mp3"
 ];
 export const PREPARATION_MANIFEST = path.join( extractedRoot, ".opensro-preparation.json" );
+// The Python modules of requirements-build.txt: import name, pip name, and
+// whether the resource build itself imports it (Crypto serves only prepare).
+export const PYTHON_BUILD_MODULES = [
+	{ module: "PIL", pip: "Pillow", build: true },
+	{ module: "fontTools", pip: "fontTools", build: true },
+	{ module: "pefile", pip: "pefile", build: true },
+	{ module: "Crypto", pip: "pycryptodome", build: false }
+];
+export const PYTHON_INSTALL_HINT = "py -3 -m pip install -r requirements-build.txt";
 const PREPARE_HINT = "run `pnpm assets prepare` (see docs/GETTING_STARTED.md)";
 
 /*

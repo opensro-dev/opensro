@@ -30,6 +30,10 @@ BLOCK_BYTES = 2560
 ENTRY_BYTES = 128
 ENTRIES_PER_BLOCK = 20
 NAME_BYTES = 81
+# Entry fields after the name: <QIQ start, size, next-block chain. Only the
+# last entry's chain links the folder's next directory block.
+ENTRY_EXTENT_OFFSET = 106
+ENTRY_CHAIN_OFFSET = ENTRY_EXTENT_OFFSET + 8 + 4
 ENTRY_EMPTY, ENTRY_FOLDER, ENTRY_FILE = 0, 1, 2
 
 
@@ -81,7 +85,7 @@ def read_directory(data, blocks=None):
 				row = block[index * ENTRY_BYTES:(index + 1) * ENTRY_BYTES]
 				kind = row[0]
 				raw_name = row[1:1 + NAME_BYTES].split(b"\0")[0]
-				start, size, chain = struct.unpack_from("<QIQ", row, 106)
+				start, size, chain = struct.unpack_from("<QIQ", row, ENTRY_EXTENT_OFFSET)
 				if kind not in (ENTRY_EMPTY, ENTRY_FOLDER, ENTRY_FILE):
 					raise ValueError(f"Invalid entry type {kind}")
 				if index == ENTRIES_PER_BLOCK - 1:

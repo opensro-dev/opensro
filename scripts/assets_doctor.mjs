@@ -13,8 +13,7 @@ any required one is missing:
 
 ===========================================================================
 */
-import { createHash } from "node:crypto";
-import { createReadStream, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { extractedRoot, gameRoot, rebuildRoot } from "./build/world/paths.mjs";
@@ -22,34 +21,14 @@ import {
 	BUILD_CLIENT_FILES,
 	CLIENT_ARCHIVES,
 	missingClientInputs,
+	PYTHON_BUILD_MODULES,
+	PYTHON_INSTALL_HINT,
 	readPreparationManifest
 } from "./build/shared/clientInputs.mjs";
+import { sha256File } from "./build/shared/hash.mjs";
 import { runPython } from "./build/shared/pythonRun.mjs";
 
-// Python modules the build and preparation import, with their pip names.
-const PYTHON_MODULES = [
-	[ "PIL", "Pillow" ],
-	[ "fontTools", "fontTools" ],
-	[ "pefile", "pefile" ],
-	[ "Crypto", "pycryptodome" ]
-];
-const PIP_HINT = "py -3 -m pip install -r requirements-build.txt";
 const D3DX_RUNTIME = "d3dx9_39.dll";
-
-/*
-================
-sha256File
-================
-*/
-function sha256File( file ) {
-	return new Promise( ( resolve, reject ) => {
-		const hash = createHash( "sha256" );
-		createReadStream( file ).on( "data", chunk => hash.update( chunk ) ).on( "error", reject ).on(
-			"end",
-			() => resolve( hash.digest( "hex" ) )
-		);
-	} );
-}
 
 /*
 ================
@@ -61,7 +40,13 @@ unverified.
 ================
 */
 async function checkPreparation( report ) {
-	const manifest = readPreparationManifest();
+	let manifest;
+	try {
+		manifest = readPreparationManifest();
+	} catch ( error ) {
+		report.fail( "extraction record", `unreadable (${error.message}); run \`pnpm assets prepare\`` );
+		return;
+	}
 	if ( !manifest ) {
 		report.warn( "extraction record", "no .opensro-preparation.json; run `pnpm assets prepare` to verify it" );
 		return;
@@ -89,16 +74,14 @@ checkPython
 */
 async function checkPython( report ) {
 	const probe = "import importlib.util, json, sys; print(json.dumps({'version': sys.version.split()[0], 'missing': " +
-		`[m for m in ${JSON.stringify( PYTHON_MODULES.map( ( [module] ) => module ) )} ` +
+		`[m for m in ${JSON.stringify( PYTHON_BUILD_MODULES.map( row => row.module ) )} ` +
 		"if importlib.util.find_spec(m) is None]}))";
 	try {
 		const result = await runPython( [ "-c", probe ], { task: "[doctor] Python probe" } );
 		const { version, missing } = JSON.parse( result.stdout );
 		if ( missing.length ) {
-			const packages = PYTHON_MODULES.filter( ( [module] ) => missing.includes( module ) ).map( ( [, pip] ) =>
-				pip
-			);
-			report.fail( "Python modules", `missing ${packages.join( ", " )}; ${PIP_HINT}` );
+			const packages = PYTHON_BUILD_MODULES.filter( row => missing.includes( row.module ) ).map( row => row.pip );
+			report.fail( "Python modules", `missing ${packages.join( ", " )}; ${PYTHON_INSTALL_HINT}` );
 		} else report.pass( "Python modules", `${result.command} ${version}` );
 	} catch ( error ) {
 		report.fail( "Python", `no usable Python 3 interpreter (${String( error ).split( "\n" )[0]})` );
