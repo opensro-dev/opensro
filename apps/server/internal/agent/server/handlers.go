@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+handlers.go - the Agent's shard listing, login and shard control routes
+
+===========================================================================
+*/
 package agentserver
 
 import (
@@ -25,6 +32,11 @@ type serverInfo struct {
 	TransportURL   string `json:"transportUrl"`
 }
 
+/*
+================
+handleServers
+================
+*/
 func (server *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -49,6 +61,11 @@ func (server *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rows)
 }
 
+/*
+================
+handleLogin
+================
+*/
 func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -133,7 +150,9 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	hash, found := server.accounts.PasswordHash(request.ID)
+	// The session carries the stored id, which owns the characters, whatever
+	// case the player typed.
+	accountID, hash, found := server.accounts.Credential(request.ID)
 	if !found {
 		hash = server.dummyHash
 	}
@@ -144,7 +163,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	server.passwordFailures.update(clientIP(r), request.ID, server.now(), false, true)
 
 	token, err := server.sessionSigner.Mint(
-		request.ID,
+		accountID,
 		definition.ID,
 		server.now().Add(auth.AgentSessionLifetime),
 	)
@@ -166,6 +185,11 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+================
+handleHeartbeat
+================
+*/
 func (server *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -194,6 +218,11 @@ func (server *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+/*
+================
+handleAccountDirectory
+================
+*/
 func (server *Server) handleAccountDirectory(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -211,6 +240,11 @@ func (server *Server) handleAccountDirectory(
 	})
 }
 
+/*
+================
+handleLeaseRelease
+================
+*/
 func (server *Server) handleLeaseRelease(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -244,6 +278,11 @@ func (server *Server) handleLeaseRelease(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+/*
+================
+handleShardRequest
+================
+*/
 func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request) {
 	claims, ok := server.bearerClaims(r)
 	if !ok {
@@ -312,6 +351,11 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 	_, _ = w.Write(responseBody)
 }
 
+/*
+================
+shardRequestURL
+================
+*/
 func shardRequestURL(controlURL string, request *http.Request) (string, error) {
 	if strings.Contains(request.URL.Path, "..") {
 		return "", fmt.Errorf("unsafe route path")

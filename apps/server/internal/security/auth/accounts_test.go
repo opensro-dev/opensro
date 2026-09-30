@@ -228,3 +228,38 @@ func TestOpenAccountsRefusesSymlinks(t *testing.T) {
 		t.Fatal("opened a symlinked account database")
 	}
 }
+
+/*
+================
+TestAccountsCredentialIgnoresCaseAndReturnsStoredID
+
+The website stores "demiurgs"; a player typing "Demiurgs" in game must reach
+the same account, and the session must carry the stored id that owns the
+characters. A disabled account resolves to nothing.
+================
+*/
+func TestAccountsCredentialIgnoresCaseAndReturnsStoredID(t *testing.T) {
+	ctx := context.Background()
+	accounts, _ := openTestAccounts(t)
+	if _, err := accounts.Create(ctx, "demiurgs", "password1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, typed := range []string{"demiurgs", "Demiurgs", "DEMIURGS"} {
+		id, hash, found := accounts.Credential(typed)
+		if !found || id != "demiurgs" {
+			t.Fatalf("Credential(%q) = %q, %v", typed, id, found)
+		}
+		if bcrypt.CompareHashAndPassword(hash, []byte("password1")) != nil {
+			t.Fatalf("Credential(%q) returned another hash", typed)
+		}
+	}
+	if _, _, found := accounts.Credential("demiurg"); found {
+		t.Fatal("a different id resolved")
+	}
+	if err := accounts.SetDisabled(ctx, "demiurgs", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, found := accounts.Credential("Demiurgs"); found {
+		t.Fatal("disabled account resolved")
+	}
+}

@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+catalog.go - the deploy-time account catalog
+
+A strict JSON file of account ids and bcrypt hashes: the seed the live
+store (accounts.go) inserts from, and the authority tests read. Ids that
+differ only in ASCII case are one login and are refused together.
+
+===========================================================================
+*/
 // The account catalog is the global login credential authority.
 package auth
 
@@ -18,11 +29,19 @@ const (
 	MaxBcryptCost       = 12
 )
 
-// Catalog is an immutable account-id to bcrypt-hash index.
+// Catalog is an immutable account-id to bcrypt-hash index. ids maps each
+// folded id (domain.FoldAccountID) to the id as written, so a login resolves
+// case-insensitively like the live store (Accounts.Credential).
 type Catalog struct {
 	hashes map[string][]byte
+	ids    map[string]string
 }
 
+/*
+================
+Load
+================
+*/
 // Load reads a strict regular-file account catalog. Symlinks and file swaps
 // are refused because this file is the global login authority.
 func Load(path string) (*Catalog, error) {
@@ -74,6 +93,7 @@ func Load(path string) (*Catalog, error) {
 	}
 
 	hashes := make(map[string][]byte, len(rows))
+	ids := make(map[string]string, len(rows))
 	for _, row := range rows {
 		if !domain.AccountIDValid(row.ID) {
 			return nil, fmt.Errorf("account id %q is invalid", row.ID)
@@ -81,8 +101,9 @@ func Load(path string) (*Catalog, error) {
 		if row.ID == domain.ReservedAccountID {
 			return nil, fmt.Errorf("account id %q is reserved", row.ID)
 		}
-		if _, duplicate := hashes[row.ID]; duplicate {
-			return nil, fmt.Errorf("duplicate account id %q", row.ID)
+		// Ids differing only in case are one login (the store's folded index).
+		if existing, duplicate := ids[domain.FoldAccountID(row.ID)]; duplicate {
+			return nil, fmt.Errorf("duplicate account id %q (already %q)", row.ID, existing)
 		}
 		hash := []byte(row.PasswordHash)
 		cost, err := bcrypt.Cost(hash)
@@ -99,13 +120,19 @@ func Load(path string) (*Catalog, error) {
 			)
 		}
 		hashes[row.ID] = append([]byte(nil), hash...)
+		ids[domain.FoldAccountID(row.ID)] = row.ID
 	}
 	if len(hashes) == 0 {
 		return nil, fmt.Errorf("no accounts in file")
 	}
-	return &Catalog{hashes: hashes}, nil
+	return &Catalog{hashes: hashes, ids: ids}, nil
 }
 
+/*
+================
+PasswordHash
+================
+*/
 // PasswordHash returns a detached bcrypt hash for login comparison.
 func (catalog *Catalog) PasswordHash(accountID string) ([]byte, bool) {
 	if catalog == nil {
@@ -115,6 +142,29 @@ func (catalog *Catalog) PasswordHash(accountID string) ([]byte, bool) {
 	return append([]byte(nil), hash...), ok
 }
 
+/*
+================
+Credential
+================
+*/
+// Credential resolves a typed login id to the catalog id and its hash,
+// ignoring ASCII case as Accounts.Credential does.
+func (catalog *Catalog) Credential(typedID string) (string, []byte, bool) {
+	if catalog == nil {
+		return "", nil, false
+	}
+	id, ok := catalog.ids[domain.FoldAccountID(typedID)]
+	if !ok {
+		return "", nil, false
+	}
+	return id, append([]byte(nil), catalog.hashes[id]...), true
+}
+
+/*
+================
+IDs
+================
+*/
 // IDs returns detached account IDs for shard-state audits.
 func (catalog *Catalog) IDs() []string {
 	if catalog == nil {
@@ -128,6 +178,11 @@ func (catalog *Catalog) IDs() []string {
 	return ids
 }
 
+/*
+================
+Len
+================
+*/
 // Len returns the number of configured global accounts.
 func (catalog *Catalog) Len() int {
 	if catalog == nil {

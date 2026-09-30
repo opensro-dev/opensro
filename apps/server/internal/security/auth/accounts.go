@@ -240,6 +240,31 @@ func (accounts *Accounts) PasswordHash(accountID string) ([]byte, bool) {
 
 /*
 ================
+Credential
+
+Resolves the id a player typed at login to the stored account and its login
+hash. The match ignores ASCII case, as the accounts_folded_id index already
+makes ids unique that way, so the website's lowercase "demiurgs" and a typed
+"Demiurgs" are one account. The stored id is returned: characters are
+owned by it, so the session must carry it, never the typed spelling.
+A missing or disabled account, or a database error, reports false.
+================
+*/
+func (accounts *Accounts) Credential(typedID string) (string, []byte, bool) {
+	var id string
+	var hash []byte
+	err := accounts.db.QueryRow(
+		`SELECT id, password_hash FROM accounts WHERE lower(id) = lower(?) AND disabled = 0`,
+		typedID,
+	).Scan(&id, &hash)
+	if err != nil {
+		return "", nil, false
+	}
+	return id, hash, true
+}
+
+/*
+================
 IDs
 
 Every account id, disabled ones included: GameWorld uses the set to prove

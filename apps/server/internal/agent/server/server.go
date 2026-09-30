@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+server.go - the global Agent/Login control plane
+
+Owns accounts and shard routing, but no character or world state.
+
+===========================================================================
+*/
 // Package agentserver implements the global Agent/Login control plane.
 //
 // It owns accounts and shard routing, but no character or world state.
@@ -32,6 +41,9 @@ const (
 // AccountAuthority is what the Agent reads from the account authority:
 // the live store (auth.Accounts) in service, a fixed catalog in tests.
 type AccountAuthority interface {
+	// Credential resolves the id typed at login (ASCII case ignored) to the
+	// stored id and its hash; PasswordHash checks a stored id exactly.
+	Credential(typedID string) (string, []byte, bool)
 	PasswordHash(accountID string) ([]byte, bool)
 	IDs() []string
 	Len() int
@@ -67,6 +79,11 @@ type Server struct {
 	readiness               *readiness.Gate
 }
 
+/*
+================
+New
+================
+*/
 func New(config Config) (*Server, error) {
 	if config.Accounts == nil {
 		return nil, fmt.Errorf("agent: global account authority is required")
@@ -127,6 +144,11 @@ func New(config Config) (*Server, error) {
 	}, nil
 }
 
+/*
+================
+Handler
+================
+*/
 func (server *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(readiness.PathHealth, readiness.HealthHandler)
@@ -174,6 +196,11 @@ func (server *Server) Handler() http.Handler {
 	return server.cors(mux)
 }
 
+/*
+================
+handleReady
+================
+*/
 func (server *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	digest, digestErr := server.sessionSigner.Digest()
 	activeKeyID, activeErr := server.sessionSigner.ActiveKeyID()
@@ -190,6 +217,11 @@ func (server *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	server.readiness.ReadyHandler(w, r)
 }
 
+/*
+================
+requireRunning
+================
+*/
 func (server *Server) requireRunning(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !server.readiness.Ready() {
@@ -205,6 +237,11 @@ func (server *Server) requireRunning(next http.Handler) http.Handler {
 	})
 }
 
+/*
+================
+cors
+================
+*/
 func (server *Server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -228,6 +265,11 @@ func (server *Server) cors(next http.Handler) http.Handler {
 	})
 }
 
+/*
+================
+clientIP
+================
+*/
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -252,12 +294,22 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+/*
+================
+writeJSON
+================
+*/
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+/*
+================
+decodeJSON
+================
+*/
 func decodeJSON(r *http.Request, destination any) error {
 	payload, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBytes+1))
 	if err != nil {
@@ -281,6 +333,11 @@ func decodeJSON(r *http.Request, destination any) error {
 	return nil
 }
 
+/*
+================
+bearerClaims
+================
+*/
 func (server *Server) bearerClaims(r *http.Request) (auth.AgentSessionClaims, bool) {
 	scheme, token, found := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
 	if !found || !strings.EqualFold(scheme, "Bearer") {
@@ -290,6 +347,11 @@ func (server *Server) bearerClaims(r *http.Request) (auth.AgentSessionClaims, bo
 	return claims, err == nil
 }
 
+/*
+================
+authorizedControlShard
+================
+*/
 func (server *Server) authorizedControlShard(
 	r *http.Request,
 ) (string, bool) {

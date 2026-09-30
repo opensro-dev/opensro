@@ -1,8 +1,20 @@
+/*
+===========================================================================
+
+password_failures.go - the per-client, per-account failure budget
+
+Only failed credential checks consume it; success or expiry resets it.
+Accounts are keyed by their folded id, so case changes share one budget.
+
+===========================================================================
+*/
 package agentserver
 
 import (
 	"sync"
 	"time"
+
+	"opensro.online/server/internal/domain"
 )
 
 // Local gateway policy, not a claim about Joymax's server implementation.
@@ -21,10 +33,17 @@ type passwordFailures struct {
 	entries map[passwordFailureKey]passwordFailureState
 }
 
+/*
+================
+update
+================
+*/
 func (failures *passwordFailures) update(client, account string, now time.Time, failed, success bool) (uint32, bool) {
 	failures.mu.Lock()
 	defer failures.mu.Unlock()
-	key := passwordFailureKey{loginClientKey(client), account}
+	// Keyed by the folded id: "Bob" and "bob" are one login, so changing case
+	// must not open a fresh failure budget.
+	key := passwordFailureKey{loginClientKey(client), domain.FoldAccountID(account)}
 	if success {
 		delete(failures.entries, key)
 		return 0, true
