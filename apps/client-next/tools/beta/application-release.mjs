@@ -15,6 +15,7 @@ import path from "node:path";
 import { buildApplication } from "./build.mjs";
 import { compressRoutes } from "./compression.mjs";
 import { files, releaseIdentity, sha } from "./policy.mjs";
+import { ASSET_SCHEMA, RELEASE_PROTOCOL } from "../../src/engine/foundation/release/protocol.ts";
 
 /*
 ================
@@ -27,6 +28,9 @@ only new application routes; the inherited data inventory stays byte-identical.
 export async function buildApplicationRelease( { manifest, source, destination, mode = "beta" } ) {
 	if ( manifest.releaseId !== releaseIdentity( manifest ) ) {
 		throw Error( "Asset base manifest identity mismatch" );
+	}
+	if ( manifest.assetSchema !== ASSET_SCHEMA ) {
+		throw Error( "Asset base schema differs from the compiled client; build a data release" );
 	}
 	await mkdir( destination, { recursive: false } );
 	const packageRoot = path.join( destination, "package" );
@@ -51,6 +55,10 @@ export async function buildApplicationRelease( { manifest, source, destination, 
 	await compressRoutes( packageRoot, application );
 	const result = {
 		...manifest,
+		// The wire contract belongs to the new application. Only the asset
+		// schema belongs to the retained data; a coordinated release can change
+		// the protocol without changing those bytes.
+		protocol: RELEASE_PROTOCOL,
 		sourceHash: sha( JSON.stringify( source ) ),
 		privateMaps: maps.size,
 		files: [ ...manifest.files.filter( row => row.kind !== "application" ), ...application.files ],
