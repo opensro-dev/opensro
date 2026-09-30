@@ -87,6 +87,11 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 	if before > 0 {
 		state.recordContribution(gid, creditGID, damage)
 	}
+	// Native 585664 packs the full hit; 52A240 separately clamps the HP debit.
+	// A corpse accepts no new hit even if a caller still holds its identity.
+	if before == 0 {
+		damage = 0
+	}
 	applied := vitals.HitDebit(before, damage)
 	instance.CurrentHP -= applied
 	instance.DamageSinceSummon += applied
@@ -131,7 +136,7 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 	// the statuses this hit rolled, both only on a surviving actor.
 	effects := s.applyAbnormalLocked(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, instance: &instance, now: nowMs, sources: plan.AbnormalSources}, damage > 0, plan.Abnormal)
 	state.instances.set(gid, instance)
-	result := MonsterDamageResult{Population: state.lease, Instance: instance, BeforeHP: before, CurrentHP: instance.CurrentHP, Applied: applied, Fatal: before > 0 && instance.CurrentHP == 0, Knockdown: committed, Abnormal: effects}
+	result := MonsterDamageResult{Population: state.lease, Instance: instance, BeforeHP: before, CurrentHP: instance.CurrentHP, Damage: damage, Applied: applied, Fatal: before > 0 && instance.CurrentHP == 0, Knockdown: committed, Abnormal: effects}
 	if knockback != nil {
 		result.Knockback = committed
 		result.Knockdown = nil

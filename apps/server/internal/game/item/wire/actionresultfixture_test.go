@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+actionresultfixture_test.go - shared committed hit and HP fixture
+
+Generate wire packets from the simulation owner so the browser tests consume
+the full hit while independently checking the clamped HP outcome.
+
+===========================================================================
+*/
+
 package wire_test
 
 import (
@@ -15,18 +26,28 @@ import (
 
 // This fixture joins two real owners rather than reimplementing either side:
 // simulation.MonsterState commits CurrentHP, then wire serializes the committed
-// Applied/Fatal outcome. The browser harness reads the same bytes through the
+// Damage/Fatal outcome. The browser harness reads the same bytes through the
 // real B245 -> 8e0440 -> 8e0190 -> 8e1710 -> 8db770 -> 8d5440 chain.
 //
 // Regenerate:
 //
 //	UPDATE_SKILL_ACTION_RESULT_FIXTURE=1 go test ./internal/game/item/wire -run TestSkillActionResultFixturePinned
+/*
+================
+actionResultFixture
+================
+*/
 type actionResultFixture struct {
 	Comment   []string                      `json:"comment"`
 	Expect    actionResultFixtureExpect     `json:"expect"`
 	Scenarios []actionResultFixtureScenario `json:"scenarios"`
 }
 
+/*
+================
+actionResultFixtureExpect
+================
+*/
 type actionResultFixtureExpect struct {
 	SkillID            uint32 `json:"skillId"`
 	CasterGid          uint32 `json:"casterGid"`
@@ -45,6 +66,11 @@ type actionResultFixtureExpect struct {
 	NonFatalResultFlag uint8  `json:"nonFatalResultFlags"`
 }
 
+/*
+================
+actionResultFixtureScenario
+================
+*/
 type actionResultFixtureScenario struct {
 	Name            string `json:"name"`
 	RequestedDamage uint32 `json:"requestedDamage"`
@@ -57,6 +83,11 @@ type actionResultFixtureScenario struct {
 	PayloadHex      string `json:"payloadHex"`
 }
 
+/*
+================
+buildActionResultFixture
+================
+*/
 func buildActionResultFixture(t *testing.T) actionResultFixture {
 	t.Helper()
 
@@ -123,7 +154,7 @@ func buildActionResultFixture(t *testing.T) actionResultFixture {
 				},
 				target.Gid,
 				[]wire.SkillCastTargetImpact{{
-					Damage: committed.Applied,
+					Damage: committed.Damage,
 					Fatal:  committed.Fatal,
 				}},
 				facingPoint,
@@ -145,7 +176,7 @@ func buildActionResultFixture(t *testing.T) actionResultFixture {
 	return actionResultFixture{
 		Comment: []string{
 			"GENERATED + PINNED by internal/game/item/wire/actionresultfixture_test.go.",
-			"MonsterState.ApplyDamage owns the sole monster CurrentHP mutation; its committed Applied/Fatal result",
+			"MonsterState.ApplyDamage owns the sole monster CurrentHP mutation; its committed Damage/Fatal result",
 			"is serialized by SkillCastSingleTargetResult as one B245 impact row by one target column.",
 			"The same live target pose is appended as the B245 bit-3 steering point, which owns local holder facing.",
 			"The browser verifier consumes these exact bytes through the real 776830/8e0440/8e0190/8e1710/8db770/8d5440 chain.",
@@ -171,6 +202,11 @@ func buildActionResultFixture(t *testing.T) actionResultFixture {
 	}
 }
 
+/*
+================
+TestSkillActionResultFixturePinned
+================
+*/
 func TestSkillActionResultFixturePinned(t *testing.T) {
 	path := filepath.Join("testdata", "skill_action_result_fixture.json")
 	fresh := buildActionResultFixture(t)

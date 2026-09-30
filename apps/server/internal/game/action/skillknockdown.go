@@ -137,11 +137,12 @@ func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, 
 ================
 committedSkillImpact
 
-Publication is derived from committed HP and displacement, never rolled intent.
+Publication uses the committed hit amount, HP outcome and displacement. Native
+585664 packs full damage; clamping the display to HP would hide killing blows.
 ================
 */
 func committedSkillImpact(formula combat.Result, result simulation.MonsterDamageResult) wire.SkillCastTargetImpact {
-	impact := wire.SkillCastTargetImpact{ResultFlags: formula.ResultFlags, Damage: result.Applied, Fatal: result.Fatal, Blocked: formula.Blocked}
+	impact := wire.SkillCastTargetImpact{ResultFlags: formula.ResultFlags, Damage: result.Damage, Fatal: result.Fatal, Blocked: formula.Blocked}
 	if result.Knockdown != nil {
 		pose := result.Knockdown.Pose
 		point, ok := wire.NewSkillCastFacingPoint(pose.RegionID, pose.X, pose.Y, pose.Z)

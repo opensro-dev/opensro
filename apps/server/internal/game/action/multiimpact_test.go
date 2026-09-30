@@ -72,7 +72,7 @@ func TestAreaCarriesEveryImpactPerVictim(t *testing.T) {
 				at += 9
 			}
 			after, _ := rt.Monsters.Get(testDivision, gid)
-			if hp-after.CurrentHP != sum {
+			if hp-after.CurrentHP != min(hp, sum) {
 				t.Fatalf("victim %d lost %d, records sum %d", victim, hp-after.CurrentHP, sum)
 			}
 		}
@@ -83,6 +83,11 @@ func TestAreaCarriesEveryImpactPerVictim(t *testing.T) {
 }
 
 // bowChainFixture arms the combat fixture with a bow and a stack of arrows.
+/*
+================
+bowChainFixture
+================
+*/
 func bowChainFixture(t *testing.T, arrows int64) (*Runtime, *enterworld.Character, enterworld.SkillRow, uint32) {
 	t.Helper()
 	rt, targets := areaFixture(t, 100000)
@@ -110,6 +115,11 @@ func bowChainFixture(t *testing.T, arrows int64) (*Runtime, *enterworld.Characte
 	return rt, c, skill, targets[0].Gid
 }
 
+/*
+================
+arrowStack
+================
+*/
 func arrowStack(c *enterworld.Character) (int64, bool) {
 	for _, row := range c.MissionInventory {
 		if row.Slot == 7 {

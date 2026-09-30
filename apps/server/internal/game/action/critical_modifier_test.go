@@ -51,6 +51,11 @@ func TestCriticalModifierDirectMultiImpactWireAndHP(t *testing.T) {
 	}
 }
 
+/*
+================
+TestCriticalModifierAreaUsesOneActorSkillHistoryAcrossVictims
+================
+*/
 func TestCriticalModifierAreaUsesOneActorSkillHistoryAcrossVictims(t *testing.T) {
 	for _, physical := range []bool{true, false} {
 		rt, targets := areaFixture(t, 100000)
@@ -84,6 +89,11 @@ func TestCriticalModifierAreaUsesOneActorSkillHistoryAcrossVictims(t *testing.T)
 	}
 }
 
+/*
+================
+TestCriticalModifierAuthoredMonsterSkillReachesWire
+================
+*/
 func TestCriticalModifierAuthoredMonsterSkillReachesWire(t *testing.T) {
 	rt, clock, c, instance := newCombatTestRuntime(t, 100000)
 	skill := shippedOffense(t, "MSKILL_QT_01_HUNARCHER_CLON_ATTACK01")
@@ -121,11 +131,16 @@ func TestCriticalModifierAuthoredMonsterSkillReachesWire(t *testing.T) {
 	for i := 0; i < int(skill.Attack.ImpactCount); i++ {
 		damage += int64(binary.LittleEndian.Uint32(p[offset+i*9:]) >> 8)
 	}
-	if beforeHP-*c.CurrentHP != damage {
-		t.Fatal("monster packet differs from player HP")
+	if beforeHP-*c.CurrentHP != min(beforeHP, damage) {
+		t.Fatal("full monster hit does not account for the clamped HP debit")
 	}
 }
 
+/*
+================
+TestCriticalModifierComboReadsEachExecutingStage
+================
+*/
 func TestCriticalModifierComboReadsEachExecutingStage(t *testing.T) {
 	rt, clock, c, target := newCombatTestRuntime(t, 100000)
 	root := installSwordCombo(t, rt, c)

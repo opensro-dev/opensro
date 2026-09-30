@@ -239,7 +239,9 @@ type MonsterDamageResult struct {
 	Instance      monster.Instance
 	BeforeHP      uint32
 	CurrentHP     uint32
-	Applied       uint32
+	// Damage retains the committed hit for feedback; Applied is only the HP debit.
+	Damage  uint32
+	Applied uint32
 	// Fatal is true only for the hit that transitions a live monster from
 	// positive HP to zero. Population removal remains an explicit Defeat
 	// lifecycle step so the combat lane can publish the death result first.
@@ -256,7 +258,7 @@ ApplyDamage
 
 ApplyDamage subtracts damage from the one authoritative CurrentHP field
 while holding the population lock. Concurrent hits therefore observe one
-ordered HP history, overkill reports only the HP actually removed, and
+ordered HP history, Applied records only the HP actually removed, and
 exactly one hit can own the fatal transition.
 
 The method deliberately does not call Defeat. Combat must first send the

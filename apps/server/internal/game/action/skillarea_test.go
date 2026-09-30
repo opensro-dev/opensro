@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+skillarea_test.go - authoritative combat behavior and state transitions
+
+Exercise the production combat lane, including its committed HP and wire results.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -11,6 +21,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+areaFixture
+================
+*/
 func areaFixture(t *testing.T, hp uint32) (*Runtime, []monster.Instance) {
 	t.Helper()
 	rt, clock, _, primary := newCombatTestRuntime(t, hp)
@@ -33,6 +48,11 @@ func areaFixture(t *testing.T, hp uint32) (*Runtime, []monster.Instance) {
 	return rt, rt.Monsters.InstancesInRegions(testDivision, []uint16{primary.Spawn.RegionID})
 }
 
+/*
+================
+TestAreaFalloffAndFatalRewardOwnership
+================
+*/
 func TestAreaFalloffAndFatalRewardOwnership(t *testing.T) {
 	for _, fatal := range []bool{false, true} {
 		hp := uint32(100000)
@@ -61,10 +81,11 @@ func TestAreaFalloffAndFatalRewardOwnership(t *testing.T) {
 		for i, percent := range []uint32{100, 65, 42} {
 			damage := binary.LittleEndian.Uint32(payload[26+i*13:30+i*13]) >> 8
 			if fatal {
-				if damage != 1 || payload[25+i*13] != 128 {
-					t.Fatal("fatal not clamped/published")
+				if damage <= hp || payload[25+i*13] != 128 {
+					t.Fatal("fatal hit lost its full damage or fatal flag")
 				}
-			} else if damage != uint32(uint64(first)*uint64(percent)/100) {
+			}
+			if damage != uint32(uint64(first)*uint64(percent)/100) {
 				t.Fatalf("falloff %d: %d first %d", i, damage, first)
 			}
 		}
@@ -82,6 +103,11 @@ func TestAreaFalloffAndFatalRewardOwnership(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAreaCastCommitsThreeVictimsWithOneCostAndToken
+================
+*/
 func TestAreaCastCommitsThreeVictimsWithOneCostAndToken(t *testing.T) {
 	rt, targets := areaFixture(t, 100000)
 	c := rt.findCharacter(testDivision, "asd2")
@@ -116,6 +142,11 @@ func TestAreaCastCommitsThreeVictimsWithOneCostAndToken(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAreaPlanningFailureDoesNotPartiallyCommit
+================
+*/
 func TestAreaPlanningFailureDoesNotPartiallyCommit(t *testing.T) {
 	rt, targets := areaFixture(t, 100000)
 	c := rt.findCharacter(testDivision, "asd2")
@@ -144,6 +175,11 @@ func TestAreaPlanningFailureDoesNotPartiallyCommit(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAreaBatchRefusesStaleAndDuplicateVictimsBeforeMutation
+================
+*/
 func TestAreaBatchRefusesStaleAndDuplicateVictimsBeforeMutation(t *testing.T) {
 	for _, duplicate := range []bool{false, true} {
 		rt, targets := areaFixture(t, 100)

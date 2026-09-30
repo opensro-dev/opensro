@@ -304,14 +304,15 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		}
 		_, _, remaining, _ := rt.playerKeeperVitals(divisionID, character)
 		for _, formula := range formulas {
-			damage := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
-			remaining -= damage
+			debit := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
+			remaining -= debit
 			fatal = remaining == 0
 			impacts = append(impacts, wire.SkillCastTargetImpact{
 				ResultFlags: formula.ResultFlags,
-				Damage:      uint32(damage),
-				Fatal:       fatal,
-				Blocked:     formula.Blocked,
+				// Native 585664 serializes the full hit independently of HP.
+				Damage:  formula.Damage,
+				Fatal:   fatal,
+				Blocked: formula.Blocked,
 			})
 			if fatal {
 				break

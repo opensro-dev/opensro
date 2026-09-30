@@ -1,7 +1,7 @@
 {
   "comment": [
     "GENERATED + PINNED by internal/game/item/wire/actionresultfixture_test.go.",
-    "MonsterState.ApplyDamage owns the sole monster CurrentHP mutation; its committed Applied/Fatal result",
+    "MonsterState.ApplyDamage owns the sole monster CurrentHP mutation; its committed Damage/Fatal result",
     "is serialized by SkillCastSingleTargetResult as one B245 impact row by one target column.",
     "The same live target pose is appended as the B245 bit-3 steering point, which owns local holder facing.",
     "The browser verifier consumes these exact bytes through the real 776830/8e0440/8e0190/8e1710/8db770/8d5440 chain.",
@@ -45,7 +45,7 @@
       "fatal": true,
       "instanceToken": 2,
       "opcode": 45637,
-      "payloadHex": "010001000000a386010002000000811a0600090101811a060080002f000000000000aa622c034b008801"
+      "payloadHex": "010001000000a386010002000000811a0600090101811a06008000e8030000000000aa622c034b008801"
     }
   ]
 }
