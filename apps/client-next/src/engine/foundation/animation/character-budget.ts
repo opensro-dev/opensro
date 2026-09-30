@@ -100,7 +100,10 @@ decode exceeds the limits.
 export function characterBytes( model: CharacterModel, images: readonly { width: number; height: number; }[] ): number {
 	if (
 		model.nodes.length > 1024 || model.primitives.length > CHARACTER_PRIMITIVES ||
-		model.images.length > CHARACTER_IMAGES || images.length !== model.images.length
+		model.images.length > CHARACTER_IMAGES || images.length !== model.images.length ||
+		images.some( ( image, index ) =>
+			image.width !== model.images[index]!.width || image.height !== model.images[index]!.height
+		)
 	) {
 		throw new Error( "Character structure exceeds budget" );
 	}
@@ -159,7 +162,6 @@ export function characterBytes( model: CharacterModel, images: readonly { width:
 			buffers.add( channel.values.buffer );
 		}
 	}
-	for ( const image of model.images ) buffers.add( image.bytes.buffer );
 	const bytes = characterMaterialClockBytes( model ) + graphBytes +
 		model.primitives.reduce( ( sum, p ) => sum + (p.emission?.births.length ?? 0) * 8, 0 ) +
 		[ ...buffers ].reduce( ( sum, buffer ) => sum + buffer.byteLength, 0 );

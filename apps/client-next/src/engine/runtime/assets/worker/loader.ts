@@ -337,7 +337,7 @@ readWorldResource
 					send( { kind: "world", id: request.id, prepared }, transfer );
 					pending.delete( request.id );
 				} else if ( request.decode === "character" || request.decode === "effect" ) {
-					let model: import("@/engine/contracts/character").CharacterModel;
+					let model: import("@/engine/contracts/character").CharacterSource;
 					if ( request.decode === "effect" ) {
 						effectBytes = bytes;
 						const decoded = effects.model( bytes, decodeURIComponent( url.hash.slice( 1 ) ) ), raw = [];
@@ -391,9 +391,14 @@ readWorldResource
 								transfers.add( channel.values.buffer as ArrayBuffer );
 							}
 						}
-						for ( const image of model.images ) transfers.add( image.bytes.buffer as ArrayBuffer );
+						// The PNG bytes stay here and are collected: the page draws the
+						// bitmaps and keeps only their sizes.
+						const delivered: import("@/engine/contracts/character").CharacterModel = {
+							...model,
+							images: images.map( bitmap => ({ width: bitmap.width, height: bitmap.height }) )
+						};
 						pending.delete( request.id );
-						send( { kind: "character", id: request.id, model, images }, [ ...transfers ] );
+						send( { kind: "character", id: request.id, model: delivered, images }, [ ...transfers ] );
 					} catch ( error ) {
 						for ( const image of images ) image.close();
 						throw error;

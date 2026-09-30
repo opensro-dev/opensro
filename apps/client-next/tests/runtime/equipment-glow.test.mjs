@@ -104,7 +104,7 @@ test("real assembly applies both handles, owns clocks, replaces enhancement and 
 	}, [] );
 	owner.model( "weapon", {
 		nodes: [ root ],
-		images: images.map( () => ({ bytes: new Uint8Array(), mime: "image/png" }) ),
+		images: images.map( ( { width, height } ) => ({ width, height }) ),
 		clips: [],
 		primitives: [ primitive( "part:WA" ), primitive( "part:WL" ) ],
 		equipmentGlows: { 1: [ row, { ...row, threshold: 9, gain: 1 } ] }

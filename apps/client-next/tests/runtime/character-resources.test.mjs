@@ -237,6 +237,32 @@ test("embedded image budgets apply to the entire model before its first bitmap",
 	assert.match( results[0].error, /Character images exceed/ );
 	loader.dispose();
 });
+test("a delivered character carries image sizes, never its encoded PNG bytes", async t => {
+	const prior = Object.getOwnPropertyDescriptor( globalThis, "createImageBitmap" );
+	Object.defineProperty( globalThis, "createImageBitmap", {
+		configurable: true,
+		writable: true,
+		value: async () => ({ width: 32, height: 16, close() {} })
+	} );
+	t.after( () => {
+		if ( prior ) Object.defineProperty( globalThis, "createImageBitmap", prior );
+		else delete globalThis.createImageBitmap;
+	} );
+	t.mock.method( globalThis, "fetch", async () => new Response( glb( [ png( 32, 16 ), png( 32, 16 ) ] ) ) );
+	const results = [],
+		loader = createLoader( ( result, transfer ) => {
+			if ( result.kind !== "progress" ) results.push( { result, transfer } );
+		} );
+	loader.receive( { kind: "load", id: 1, url: "http://localhost/model", limit: 1 << 20, decode: "character" } );
+	await settle();
+	const { result, transfer } = results[0];
+	assert.equal( result.kind, "character" );
+	assert.deepEqual( result.model.images, [ { width: 32, height: 16 }, { width: 32, height: 16 } ] );
+	// Only the bitmaps and geometry/animation buffers cross; a PNG-sized
+	// buffer (24 bytes per fixture image) would mean the bytes still travel.
+	assert.ok( transfer.every( item => !(item instanceof ArrayBuffer) || item.byteLength !== 24 ) );
+	loader.dispose();
+});
 test("failed bitmap transactions close already decoded images", async t => {
 	let calls = 0, closed = 0;
 	const prior = Object.getOwnPropertyDescriptor( globalThis, "createImageBitmap" );
@@ -273,10 +299,10 @@ close
 	loader.dispose();
 });
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
-const measured = ( images = 0 ) => ({
+const measured = ( images = [] ) => ({
 	nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
 	clips: [],
-	images: Array.from( { length: images }, () => ({ bytes: new Uint8Array( 0 ), mime: "image/png" }) ),
+	images: images.map( ( { width, height } ) => ({ width, height }) ),
 	primitives: [ {
 		name: "mesh",
 		node: 0,
@@ -300,7 +326,7 @@ function model() {
 	return {
 		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
 		clips: [],
-		images: [ { bytes: png( 1, 1 ), mime: "image/png" } ],
+		images: [ { width: 1, height: 1 } ],
 		primitives: [ {
 			name: "mesh",
 			node: 0,
@@ -318,7 +344,7 @@ function model() {
 
 test("equipment reflection images preserve item ownership through assembly, fade and device restoration", () => {
 	const renderer = createCharacters(), body = model(), weapon = model();
-	weapon.images.push( { bytes: png( 1, 1 ), mime: "image/png" } );
+	weapon.images.push( { width: 1, height: 1 } );
 	weapon.primitives[0].name = "part:WA";
 	weapon.primitives[0].environmentImage = 1;
 	let closed = 0;
@@ -916,7 +942,7 @@ release
 			release() {}
 		};
 	for ( let i = 0; i < 100; i++ ) {
-		characters.model( String( i ), model(), [ {
+		characters.model( String( i ), { ...model(), images: [ { width: 2048, height: 1024 } ] }, [ {
 			width: 2048,
 			height: 1024,
 			/*
@@ -933,7 +959,7 @@ close
 	}
 	assert.equal( closed, 100 );
 	assert.throws( () =>
-		characters.model( "large", model(), [ {
+		characters.model( "large", { ...model(), images: [ { width: 8192, height: 1 } ] }, [ {
 			width: 8192,
 			height: 1,
 			/*
@@ -1168,7 +1194,7 @@ test("one source class bounds both the decode and the reservation an undecoded s
 	);
 	assert.throws(
 		() =>
-			createCharacters().model( "over", measured( 1 ), [ {
+			createCharacters().model( "over", measured( [ { width: 2048, height: 2048 } ] ), [ {
 				width: 2048,
 				height: 2048, /*
 ================
@@ -1209,7 +1235,7 @@ take
 		*/
 		take( id ) {
 			if ( !pending.delete( id ) ) return null;
-			return { kind: "character", model: measured( 1 ), images: [ image ] };
+			return { kind: "character", model: measured( [ image ] ), images: [ image ] };
 		},
 		/*
 ================
