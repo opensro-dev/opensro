@@ -1,70 +1,57 @@
-"""Read-only v1.150 PK2 directory and extracted-EFP verification.
+"""
+===========================================================================
 
-No basename guessing: complete chained directory walk, range/cycle/duplicate
-guards, archive and entry hashes, and byte comparison with every extracted EFP.
-Requires pycryptodome; never executes the original client or modifies its PK2.
+verify_particle_archive.py - certify Particles.pk2 against the extraction
+
+Read-only v1.150 PK2 directory and extracted-EFP verification. No basename
+guessing: a complete chained directory walk with range, cycle and duplicate
+guards (scripts/sro_pk2.py), archive and entry hashes, and a byte comparison
+with every extracted EFP. The certificate it prints must equal the committed
+scripts/build/reference/particle-archive.json; --write re-freezes it. It never
+executes the original client or modifies its PK2. Paths come from
+scripts/sro_paths.py.
+
+===========================================================================
 """
 import argparse
 import hashlib
 import json
-import struct
+import sys
 from pathlib import Path
-from Crypto.Cipher import Blowfish
 
-ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import sro_pk2  # noqa: E402
+from sro_paths import EXTRACTED_ROOT, GAME_ROOT, REPO_ROOT as ROOT  # noqa: E402
 
+# ================
+# digest
+# ================
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
+# ================
+# inventory
+#
+# Files keyed by ASCII-folded archive path, and the directory blocks.
+# ================
 def inventory(data):
-    if not data.startswith(b'JoyMax File Manager!\n'):
-        raise ValueError('Invalid PK2 signature')
-    cipher = Blowfish.new(bytes.fromhex('32cedd7cbca8'), Blowfish.MODE_ECB)
-    def swap(value):
-        return b''.join(value[i:i+4][::-1] for i in range(0, len(value), 4))
-    seen, files, blocks = set(), {}, []
-    def walk(offset, prefix):
-        while offset:
-            if offset in seen or not 256 <= offset <= len(data)-2560:
-                raise ValueError(f'Invalid or cyclic directory block {offset}')
-            seen.add(offset)
-            raw = data[offset:offset+2560]
-            block = swap(cipher.decrypt(swap(raw)))
-            blocks.append({'offset': offset, 'sha256': digest(raw)})
-            following = 0
-            for i in range(20):
-                row = block[i*128:(i+1)*128]
-                kind = row[0]
-                # Latin-1 preserves all filename bytes, including Korean names.
-                name = row[1:82].split(b'\0')[0].decode('latin1')
-                start, size, chain = struct.unpack_from('<QIQ', row, 106)
-                if kind not in (0, 1, 2):
-                    raise ValueError(f'Invalid entry type {kind}')
-                if i == 19:
-                    following = chain
-                if not kind or name in ('.', '..'):
-                    continue
-                if not name or '/' in name or '\\' in name:
-                    raise ValueError('Invalid archive filename')
-                key = (prefix+name).lower()
-                if kind == 1:
-                    walk(start, key+'/')
-                else:
-                    if start+size > len(data) or key in files:
-                        raise ValueError('Invalid or duplicate archive file '+key)
-                    files[key] = {'offset': start, 'size': size, 'sha256': digest(data[start:start+size])}
-            offset = following
-    walk(256, '')
+    blocks = []
+    entries = sro_pk2.read_directory(data, blocks)
+    files = {sro_pk2.fold_ascii(e.path): {'offset': e.offset, 'size': e.size,
+        'sha256': digest(sro_pk2.payload(data, e))} for e in entries}
     return files, blocks
 
+# ================
+# main
+# ================
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--write', action='store_true')
     args = parser.parse_args()
-    archive = ROOT.parent/'Particles.pk2'
+    archive = GAME_ROOT/'Particles.pk2'
     data = archive.read_bytes()
     files, blocks = inventory(data)
-    extracted = ROOT.parent/'extracted/Particles_extracted'
+    extracted = EXTRACTED_ROOT/'Particles_extracted'
     mismatches = []
     for name, row in files.items():
         if not name.endswith('.efp'):

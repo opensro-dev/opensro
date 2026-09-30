@@ -572,7 +572,6 @@ apps/client-next/tests/runtime/world-admission.test.mjs
 apps/client-next/tests/runtime/world-replay.test.mjs
 apps/client-next/tools/audit-bsr-parity.mjs
 apps/client-next/tools/audit-effect-coverage.mjs
-apps/client-next/tools/audit-retail-panels.mjs
 apps/client-next/tools/beta/archive.mjs
 apps/client-next/tools/beta/compression.mjs
 apps/client-next/tools/beta/serve.mjs
@@ -605,7 +604,6 @@ apps/client-next/tools/publish-minimap-coverage.mjs
 apps/client-next/tools/publish-monster-materials.mjs
 apps/client-next/tools/publish-skill-ui.mjs
 apps/client-next/tools/publish-star-rng.mjs
-apps/client-next/tools/publish-weather-assets.mjs
 apps/client-next/tools/published-assets.mjs
 apps/client-next/tools/published-delivery.mjs
 apps/client-next/tools/published-pack.mjs
@@ -676,7 +674,6 @@ scripts/build/data/buildSiegeFortressDataAsset.mjs
 scripts/build/data/buildSkillDataAsset.mjs
 scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/data/buildTeleportDataAsset.mjs
-scripts/build/effects/buildEffectPrograms.mjs
 scripts/build/effects/parseJmxVisualEffect.mjs
 scripts/build/jsonAssetCompression.mjs
 scripts/build/server/serverGameDataArchive.mjs
@@ -762,7 +759,6 @@ scripts/build/world/objects/compound.mjs
 scripts/build/world/objects/formats.mjs
 scripts/build/world/sworld/deriveTitleTerrainSectorCoverage.mjs
 scripts/build/world/sworld/prepareCellTerrainTexture.mjs
-scripts/build_outdoor_world_resources.mjs
 scripts/checks/check_asset_delivery.mjs
 scripts/checks/check_asset_pack_integrity.mjs
 scripts/checks/check_precompressed_freshness.mjs
@@ -799,7 +795,6 @@ scripts/refresh_world_map_asset_packs.mjs
 scripts/refresh_world_map_marker_asset_packs.mjs
 scripts/setup_git_hooks.mjs
 scripts/task.mjs
-scripts/tasks/assets.mjs
 scripts/tasks/build.mjs
 scripts/tasks/define.mjs
 scripts/tasks/misc.mjs

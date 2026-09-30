@@ -24,6 +24,16 @@ export const CHECK_TASKS = [
 		args: [ "-B", "scripts/build/generate_loot_catalog.py", "--check" ]
 	} ),
 	commandTask( {
+		name: "check:client-preparation",
+		description: "Test the PK2 reader and the client preparation tool on synthetic archives",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "python",
+		args: [ "-B", "-m", "unittest", "discover", "-s", "scripts/test/python" ]
+	} ),
+	commandTask( {
 		name: "check:release",
 		description: "Test release admission, publication recovery and monitoring",
 		kind: "check",
@@ -190,6 +200,7 @@ export const CHECK_TASKS = [
 const sourceTasks = [
 	"check:release",
 	"check:loot-catalog",
+	"check:client-preparation",
 	"check:source-size",
 	"check:source-encoding",
 	"check:shared-fixtures",
@@ -218,6 +229,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 	full: [
 		{ id: "release", task: "check:release", after: [] },
 		{ id: "loot-catalog", task: "check:loot-catalog", after: [] },
+		{ id: "client-preparation", task: "check:client-preparation", after: [] },
 		{ id: "server", task: "check:server", after: [] },
 		{ id: "source-size", task: "check:source-size", after: [] },
 		{ id: "source-encoding", task: "check:source-encoding", after: [] },

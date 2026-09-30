@@ -29,4 +29,4 @@ in JavaScript.
 | Scripts typecheck allowlist | `pnpm task check:scripts` |
 | Formatting | `pnpm task check:format` |
 | One outdoor region | `pnpm assets build world-outdoor -- --region=0x6a48 --force --jobs=1`, then `pnpm assets refresh outdoor` |
-| Full asset build (about 42 minutes) | `pnpm assets build` |
+| Full asset build (about 42 minutes) | `pnpm assets build full` |

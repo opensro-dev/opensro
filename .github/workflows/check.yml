@@ -36,6 +36,8 @@ jobs:
           cache-dependency-path: apps/server/go.sum
 
       - run: pnpm install --frozen-lockfile
+      # check:client-preparation reads synthetic PK2 archives (pycryptodome).
+      - run: python -m pip install --disable-pip-version-check -r requirements-build.txt
       - name: Require dependency inputs to remain unchanged
         run: git diff --exit-code HEAD -- pnpm-lock.yaml pnpm-workspace.yaml package.json ':(glob)apps/*/package.json'
       - run: pnpm check source

@@ -13,7 +13,8 @@ is described in [DEPLOYMENT.md](../apps/server/ops/docs/DEPLOYMENT.md).
 | Go | 1.27.1, the release `apps/server/go.mod` names; an older Go downloads it automatically |
 | Node.js | 24 LTS (CI runs it); 22.15 is the oldest supported |
 | pnpm | 12.6.0, the version `package.json` `packageManager` names; through Corepack (`npm install --global corepack` if missing) |
-| Python | 3.12 (`py -3`), used by image and font conversion during the asset build |
+| Python | 3.12 (`py -3`) with `py -3 -m pip install -r requirements-build.txt`: client extraction, image and font conversion, cursor extraction |
+| ffmpeg | Any current build on `PATH`; `assets prepare` converts the client's OGG music to MP3 with it |
 | DirectX End-User Runtime | Install [Microsoft's runtime](https://www.microsoft.com/en-us/download/details.aspx?id=35); lens mip generation uses its 32-bit `d3dx9_39.dll`. Windows' built-in DirectX alone does not supply this library. |
 | Nomad | 2.0.7 at `.tools/nomad/2.0.7/nomad.exe` (see below) |
 | Browser | Current Chrome or Edge with WebGPU |
@@ -44,30 +45,52 @@ Expand-Archive $Zip -DestinationPath $Dir -Force
 
 ## 2. Game data
 
-Retail game media is not in this repository. You need a licensed Silkroad
-Online v1.150 (Legend III) client, extracted next to the checkout:
+Retail game media is not in this repository. You need your own licensed
+Silkroad Online v1.150 (Legend III) client. The tools below extract and
+convert it on your machine; nothing is uploaded. The asset build runs on
+Windows only (32-bit D3DX lens mips, the GDI font atlas).
+
+The **game root** is the client folder. By default it is the folder that
+contains this checkout; to keep the client elsewhere, set `SRO_GAME_ROOT` to
+it (the folder holding `SRO_Client.exe`, not `extracted`):
 
 ```text
-<workspace>\
+<game root>\
   SRO_Client.exe
-  extracted\
-    Data_extracted\  Map_extracted\  Media_extracted\  Particles_extracted\ ...
-  rebuild\           <- this repository
+  Media.pk2  Data.pk2  Map.pk2  Particles.pk2  Music.pk2
+  extracted\          <- written by `assets prepare`
+  <this checkout>\    <- any name, when it lives here
 ```
 
-Then, from `rebuild`:
+Then, from the checkout:
 
 ```powershell
+$env:SRO_GAME_ROOT = 'D:\Games\Silkroad-v1.150'   # only if the client is elsewhere
 corepack pnpm install --frozen-lockfile
-corepack pnpm assets build              # full build, roughly 40 minutes
+py -3 -m pip install -r requirements-build.txt
+corepack pnpm assets prepare            # extract the archives, convert the music (a few minutes)
+corepack pnpm assets doctor             # every input and tool, with the fix for each problem
+corepack pnpm assets build full         # outdoor world, then everything else; roughly 40 minutes
 corepack pnpm assets publish            # families the full build does not produce yet
 corepack pnpm task build server-game-data
 corepack pnpm assets check integrity
 ```
 
+`assets prepare` writes `extracted\Media_extracted`, `Data_extracted`,
+`Map_extracted`, `Particles_extracted` and `Music_mp3`, byte for byte from
+your archives. Running it again repairs missing or damaged files and leaves
+correct ones alone. `assets doctor` only reads; run it whenever a build
+refuses to start. The first build must be `assets build full`: plain
+`assets build` reuses the outdoor world of an earlier full build and has
+none on a fresh machine.
+
 The results land in the ignored `.generated/` folder: browser assets in
 `.generated/client-public/assets/`, the server projection in
 `.generated/game-data/1.150/`. See [ASSET_PIPELINE.md](ASSET_PIPELINE.md).
+
+This prepares data for the browser client and the Go server. The original
+`SRO_Client.exe` does not connect to this server: the server speaks to
+browsers over WebTransport/WebSocket.
 
 ## 3. Server cluster
 
@@ -159,6 +182,6 @@ foreach ($Path in 'cluster', 'shards', 'nomad\dev-agent') {
 | `nomad.exe` missing | Install it as in step 1, or pass `-nomad-binary <path>` to `dev-agent` (only 2.0.7 is accepted). |
 | Port 4647 already in use | Another Nomad is running. Stop it from the terminal or service that owns it, then rerun `dev-agent`. |
 | Jobs slow to become healthy after a rebuild | Antivirus may be scanning the new `agent.exe`/`gameworld.exe`. Wait; the jobs allow several minutes. Check with `sro-nomad status`. |
-| Missing game-data or asset file | Rerun `pnpm assets build`, `pnpm assets publish` and `pnpm task build server-game-data`, and clear any `SRO_SERVER_GAME_DATA_*` environment overrides. |
+| Missing game-data or asset file | Run `pnpm assets doctor`, then rerun `pnpm assets build full`, `pnpm assets publish` and `pnpm task build server-game-data`, and clear any `SRO_SERVER_GAME_DATA_*` environment overrides. |
 | `INVALID_CREDENTIALS` at login | Use `tester` / `123123`; rerun `sro-bootstrap-development`. If you changed `dev-account.env`, reset the local world (step 6). |
 | A job keeps restarting | `.tools\nomad\2.0.7\nomad.exe alloc logs <alloc-id> gameworld` (with `NOMAD_ADDR=http://127.0.0.1:4646`), fix the reported prerequisite, then `deploy` again. |

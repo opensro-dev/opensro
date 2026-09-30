@@ -5,7 +5,8 @@ licensed.go - gate tests that need data derived from a licensed client
 
 Many tests check the port against the real game data: the verified server
 projection (apps/server/.generated/game-data), the raw client extraction
-(../extracted) or the published browser assets. That data is built locally from a client
+(extracted/ in the game root: SRO_GAME_ROOT or beside the main checkout)
+or the published browser assets. That data is built locally from a client
 the developer is permitted to use; it is never in the repository, so a
 fresh clone and CI do not have it.
 
@@ -29,8 +30,10 @@ package licensed
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -108,13 +111,17 @@ func missingGameData() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	gameRoot, err := resolveGameRoot(repository)
+	if err != nil {
+		return nil, err
+	}
 	projection := os.Getenv("SRO_SERVER_GAME_DATA_ROOT")
 	if projection == "" {
 		projection = filepath.Join(repository, "apps", "server", ".generated", "game-data", "1.150", "server", "manifest.json")
 	}
 	required := []string{
 		projection,
-		filepath.Join(repository, "..", "extracted", "Media_extracted"),
+		filepath.Join(gameRoot, "extracted", "Media_extracted"),
 		filepath.Join(repository, ".generated", "client-public", "assets", "packs", "manifest.json"),
 	}
 	var missing []string
@@ -124,6 +131,42 @@ func missingGameData() ([]string, error) {
 		}
 	}
 	return missing, nil
+}
+
+/*
+==================
+resolveGameRoot
+
+The directory holding extracted/, by the rule of scripts/build/world/paths.mjs
+and scripts/sro_paths.py: SRO_GAME_ROOT when set, else the parent of the main
+checkout. A linked worktree's .git is a file naming
+<main>/.git/worktrees/<name>.
+==================
+*/
+func resolveGameRoot(repository string) (string, error) {
+	if configured := strings.TrimSpace(os.Getenv("SRO_GAME_ROOT")); configured != "" {
+		return filepath.Abs(configured)
+	}
+	dotGit := filepath.Join(repository, ".git")
+	info, err := os.Stat(dotGit)
+	if err != nil || info.IsDir() {
+		return filepath.Join(repository, ".."), nil
+	}
+	link, err := os.ReadFile(dotGit)
+	if err != nil {
+		return "", err
+	}
+	for line := range strings.SplitSeq(string(link), "\n") {
+		if target, ok := strings.CutPrefix(strings.TrimSpace(line), "gitdir:"); ok {
+			worktreeGitDir := strings.TrimSpace(target)
+			if !filepath.IsAbs(worktreeGitDir) {
+				worktreeGitDir = filepath.Join(repository, worktreeGitDir)
+			}
+			// <main>/.git/worktrees/<name> -> <main>/.. is the game root.
+			return filepath.Join(worktreeGitDir, "..", "..", "..", ".."), nil
+		}
+	}
+	return "", fmt.Errorf("unreadable worktree link %s", dotGit)
 }
 
 /*

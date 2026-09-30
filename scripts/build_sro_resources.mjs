@@ -75,6 +75,7 @@ import {
 	loadOutdoorWorldRegionResourceGroup
 } from "./build/world/index.mjs";
 import { rebuildRoot } from "./build/world/paths.mjs";
+import { assertClientInputs } from "./build/shared/clientInputs.mjs";
 
 const RETAIL_CURSOR_IDS = [ "0x95", "0x97", "0x98", "0x99", "0x9a", "0xa0", "0xa1", "0xa3" ];
 const DEFAULT_RESOURCE_BUILD_LANES = 2;
@@ -113,12 +114,13 @@ Fail before publication when required image or font dependencies are missing.
 ================
 */
 async function checkPythonBuildDeps() {
-	const probeScript = "import PIL, fontTools; print(f'Pillow {PIL.__version__}, fontTools {fontTools.version}')";
+	const probeScript =
+		"import PIL, fontTools, pefile; print(f'Pillow {PIL.__version__}, fontTools {fontTools.version}, pefile {pefile.__version__}')";
 	const probe = await runPython( [ "-c", probeScript ], {
 		task: "[resource-preflight] Python build-dependency check",
 		context: [
-			"The resource build needs Python 3 with Pillow + fontTools " +
-			"(convert_images.py image conversion and the font atlas/repair steps)."
+			"The resource build needs Python 3 with requirements-build.txt installed: Pillow + fontTools " +
+			"(image conversion, font atlas and repair) and pefile (cursors from SRO_Client.exe)."
 		]
 	} );
 	console.log( `[resource-preflight] ${probe.command}: ${probe.stdout.trim()}` );
@@ -600,6 +602,7 @@ async function buildSroResources() {
 }
 
 await withGeneratedAssetsLock( "SRO resource build", async () => {
+	assertClientInputs( "asset build" );
 	// Skip the whole pipeline when nothing it reads or writes has changed since
 	// the last successful build. The fingerprint is stat-level (path, size,
 	// mtime) over inputs AND outputs, recorded only after a build completes, so

@@ -1,20 +1,15 @@
-# Python dependencies for the build pipeline and one-off tools.
-# Provision from the repo root with:  bootstrap-re.cmd
-# Run repository Python tools through: re-python.cmd <script> [arguments]
+# Python dependencies for the build pipeline and the reverse-engineering tools.
+# Install with:  py -3 -m pip install -r requirements.txt
+# Building assets needs only requirements-build.txt.
 #
-# Pillow    - scripts/convert_images.py (DDS->PNG on the resource build hot
-#             path) and scripts/build/native_ui_font_atlas.py (font atlas).
-# fontTools - font repair step embedded in scripts/build/shared/fontResources.mjs.
-# pefile    - scripts/extract_client_cursors.py (manual one-off extraction).
+# The asset build's own modules are in requirements-build.txt (included below).
 # pydantic - strict, versioned contracts for durable reverse-engineering artifacts.
 # libclang - C++ AST gate for evidence-backed inheritance, members, and layouts.
 # hypothesis - generative invariant tests for PE/RTTI/planner policy.
 # lief      - independent PE reader used to cross-check handwritten mapping code.
 # iced-x86  - independent x86 decoder used to validate exact intervals and calls.
 # cosmic-ray - focused mutation testing of evidence-policy modules.
-Pillow==12.3.0
-fontTools==4.63.0
-pefile==2024.8.26
+-r requirements-build.txt
 pydantic==2.13.5
 libclang==18.1.1
 hypothesis==6.165.10

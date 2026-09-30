@@ -18,6 +18,7 @@ import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { build } from "esbuild";
 import { itemSoundSource } from "./generate-item-sounds.mjs";
+import { gameRoot } from "../../../scripts/build/world/paths.mjs";
 export const root = path.resolve( import.meta.dirname, ".." );
 const hash = b => createHash( "sha256" ).update( b ).digest( "hex" );
 const read = p => fs.readFileSync( path.join( root, p ) );
@@ -287,7 +288,7 @@ export async function audit(
 		const nativeRun = spawnSync( process.env.SRO_PYTHON ?? (process.platform === "win32" ? "py.exe" : "python3"), [
 			"tools/verify-native-audio.py",
 			"--binary",
-			path.resolve( root, "../../../SRO_Client.exe" ),
+			path.join( gameRoot, "SRO_Client.exe" ),
 			"--output",
 			"temp/artifacts/audio-parity/native-validation.json"
 		], { cwd: root, encoding: "utf8", timeout: 120000, windowsHide: true } );

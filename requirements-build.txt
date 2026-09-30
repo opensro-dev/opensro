@@ -1,0 +1,11 @@
+# Python dependencies of the asset build and client preparation.
+# Install with:  py -3 -m pip install -r requirements-build.txt
+#
+# Pillow       - scripts/convert_images.py (DDS->PNG) and the native font atlas.
+# fontTools    - font repair step embedded in scripts/build/shared/fontResources.mjs.
+# pefile       - scripts/extract_client_cursors.py (cursors from SRO_Client.exe, run by the build).
+# pycryptodome - scripts/sro_pk2.py (PK2 directory decryption for `pnpm assets prepare`).
+Pillow==12.3.0
+fontTools==4.63.0
+pefile==2024.8.26
+pycryptodome==3.23.0

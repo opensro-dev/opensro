@@ -5,9 +5,17 @@ browser client and server load. Nothing it produces is committed.
 
 ## Inputs and outputs
 
-Inputs, beside the checkout: `../SRO_Client.exe` and `../extracted/`
-(`Data_extracted`, `Map_extracted`, `Media_extracted`, `Particles_extracted`,
-and so on). Python 3.12 is used for image and font conversion.
+Inputs, in the game root (`SRO_GAME_ROOT`, else the folder containing the
+checkout): `SRO_Client.exe`, `Particles.pk2` and `extracted/` (`Media_extracted`,
+`Data_extracted`, `Map_extracted`, `Particles_extracted`, `Music_mp3`).
+`pnpm assets prepare` (`scripts/prepare_client_resources.py`) produces
+`extracted/` from the client's own PK2 archives, byte for byte, and converts
+the ASCII-named `Music.pk2` tracks with `ffmpeg -codec:a libmp3lame -q:a 0`.
+The CP949-named tracks are referenced only by the legacy `resinfo` sound table
+the port does not read. `pnpm assets doctor` checks every input and tool; the
+builds refuse to start while an input is missing
+(`scripts/build/shared/clientInputs.mjs`). Python 3.12 with
+`requirements-build.txt` is used for extraction, image and font conversion.
 
 Lens mip resources are generated automatically before image conversion, and
 by standalone world builds before copying sky assets. This uses Windows'
@@ -52,7 +60,10 @@ client together as a data release.
 
 | Command | Use |
 | --- | --- |
-| `pnpm assets build` | Full build of the browser projection (roughly 40 minutes) |
+| `pnpm assets prepare` | Extract the client archives into `extracted/` and convert the music; reruns repair |
+| `pnpm assets doctor` | Read-only report of every input and tool, with the fix for each problem |
+| `pnpm assets build full` | Full build: every outdoor region, then the browser projection (roughly 40 minutes) |
+| `pnpm assets build` | The browser projection, reusing the outdoor world of the last full build |
 | `pnpm assets publish [<family>]` | Standalone publishers the full build does not run yet (skill UI data, dungeon worlds, flares, and others); run after `assets build` |
 | `pnpm task build server-game-data` | Server game-data projection and `server.srogz` |
 | `pnpm assets build world-outdoor -- --region=0x6a48 --force --jobs=1` | Rebuild one outdoor region |

@@ -34,7 +34,9 @@ extraction next to the checkout; see
 | Command | Does |
 | --- | --- |
 | `pnpm dev` | Client development server on <http://127.0.0.1:5180> |
-| `pnpm assets build` | Full asset build from the licensed extraction |
+| `pnpm assets prepare` | Extract your licensed client into `extracted/` |
+| `pnpm assets doctor` | Check the game root, extraction and build tools |
+| `pnpm assets build full` | Full asset build, outdoor world included; `assets build` reuses the last outdoor world |
 | `pnpm check source` | CI gate; needs no game data |
 | `pnpm check` | Every gate, including asset-dependent suites |
 | `pnpm task list` | Every task with its prerequisites |

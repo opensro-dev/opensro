@@ -54,6 +54,8 @@ const ENV_KNOBS = [
 const FINGERPRINT_ROOTS = [
 	{ label: "extracted", absolutePath: extractedRoot },
 	{ label: "client-executable", absolutePath: path.join( gameRoot, "SRO_Client.exe" ) },
+	// The effects builder checks the archive itself against its evidence.
+	{ label: "particle-archive", absolutePath: path.join( gameRoot, "Particles.pk2" ) },
 	{ label: "server-go-mod", absolutePath: path.join( serverSourceRoot, "go.mod" ) },
 	{ label: "server-go-sum", absolutePath: path.join( serverSourceRoot, "go.sum" ) },
 	{
