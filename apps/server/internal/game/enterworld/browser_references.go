@@ -39,9 +39,13 @@ type BrowserReferences struct {
 	itemIDs map[uint32]bool
 }
 
-// maxPublicReferenceRows bounds each published table (the browser's
-// REFERENCE_ROWS_LIMIT).
-const maxPublicReferenceRows = 65536
+// The browser refuses a reference file past these bounds (http.ts
+// REFERENCE_ROWS_LIMIT per table, REFERENCE_BYTES_LIMIT decoded), so the
+// server refuses to publish one.
+const (
+	maxPublicReferenceRows  = 65536
+	maxPublicReferenceBytes = 32 << 20
+)
 
 // BrowserReferenceSources are the immutable tables one reference file holds.
 type BrowserReferenceSources struct {
@@ -69,6 +73,9 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 	if sources.ItemCommands != nil {
 		commandRows = sources.ItemCommands.ItemCommandReferences()
 	}
+	if len(commandRows) > maxPublicReferenceRows {
+		return nil, fmt.Errorf("invalid public item command catalogue size: %d", len(commandRows))
+	}
 	itemRows := sources.StaticItems
 	if itemRows == nil {
 		itemRows = []RefItemRow{}
@@ -90,7 +97,7 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > 32<<20 {
+	if len(data) > maxPublicReferenceBytes {
 		return nil, fmt.Errorf("public references exceed decoded resource budget: %d", len(data))
 	}
 	digest := sha256.Sum256(data)

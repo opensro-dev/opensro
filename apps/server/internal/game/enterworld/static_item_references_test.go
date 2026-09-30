@@ -139,3 +139,25 @@ func equalIDs(a, b []uint32) bool {
 	}
 	return true
 }
+
+// manyCommands is an item command source past the browser's row limit.
+type manyCommands int
+
+func (n manyCommands) ItemCommandReferences() []ItemCommandReference {
+	return make([]ItemCommandReference, int(n))
+}
+
+/*
+================
+TestReferenceFileRefusesTablesTheBrowserRefuses
+================
+*/
+func TestReferenceFileRefusesTablesTheBrowserRefuses(t *testing.T) {
+	_, err := NewBrowserReferences(BrowserReferenceSources{
+		Skills:       oneSkillCatalogue{},
+		ItemCommands: manyCommands(maxPublicReferenceRows + 1),
+	})
+	if err == nil {
+		t.Fatal("an item command table past the browser's row limit was published")
+	}
+}

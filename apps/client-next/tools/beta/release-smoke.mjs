@@ -10,12 +10,19 @@ application sources or runtime state. Evidence belongs to one immutable entry.
 ===========================================================================
 */
 
-import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
-import { assertCharacterAllowed } from "../../../../scripts/lib/probeCharacter.mjs";
+import {
+	assertCandidateEntry,
+	createProbeResult,
+	HTTP_OK,
+	PROBE_VIEWPORT,
+	readProbeInputs,
+	recordPhase,
+	watchRuntimeErrors
+} from "./release-probe.mjs";
 
 // Scene admission is spread over frames. Measured software rendering needed
 // 366 seconds for the dock; reload also recreates GPU, UI and audio resources.
@@ -24,8 +31,6 @@ import { assertCharacterAllowed } from "../../../../scripts/lib/probeCharacter.m
 const SCENE_BUDGET_MS = 600_000;
 const CONTROL_BUDGET_MS = 30_000;
 const MAX_NETWORK_ROWS = 4096;
-const HTTP_OK = 200;
-const PROBE_VIEWPORT = { width: 1024, height: 768 };
 // The scratch roster contains one actor at this authored dock hit position.
 const DOCK_PICK = { x: 505, y: 430 };
 // Opt-in performance traces (RELEASE_TRACE_DIR): the phase that just ended ->
@@ -164,23 +169,6 @@ async function exercise( page, result, credentials, tracer ) {
 
 /*
 ================
-recordPhase
-
-Keep individual phase durations so slow scene construction is distinguishable
-from network admission and ordinary controls in the immutable probe evidence.
-================
-*/
-function recordPhase( result, phase ) {
-	const elapsedMs = Date.now() - result.startedAt;
-	const previousMs = result.phaseTimings.at( -1 )?.elapsedMs ?? 0;
-	result.phases[phase] = "PASS";
-	const timing = { phase, elapsedMs, durationMs: elapsedMs - previousMs };
-	result.phaseTimings.push( timing );
-	console.log( "Release phase:", JSON.stringify( timing ) );
-}
-
-/*
-================
 createPhaseTracer
 
 Chrome performance traces of the slow phases, one file each, when a trace
@@ -279,18 +267,7 @@ never written to the public report or uploaded diagnostic artifacts.
 ================
 */
 async function main() {
-	const [candidatePath, destination] = process.argv.slice( 2 );
-	if ( !candidatePath || !destination ) throw Error( "Usage: release-smoke.mjs CANDIDATE_JSON OUTPUT_DIRECTORY" );
-	const candidate = JSON.parse( await readFile( candidatePath, "utf8" ) );
-	const credentials = JSON.parse( process.env.RELEASE_PROBE_ACCOUNT ?? "{}" );
-	assertCharacterAllowed( credentials.character );
-	if ( !credentials.username || !credentials.password || !credentials.character || !credentials.shard ) {
-		throw Error( "Missing release probe account" );
-	}
-	await mkdir( destination, { recursive: true } );
-	if ( !process.env.RELEASE_ORIGIN ) throw Error( "Missing RELEASE_ORIGIN for the host under test" );
-	const origin = new URL( process.env.RELEASE_ORIGIN ).origin;
-	const url = `${origin}/releases/candidates/${candidate.candidate}/index.html`;
+	const { candidate, credentials, origin, destination, entryUrl: url } = await readProbeInputs( "release-smoke.mjs" );
 	const { browser, page } = await launchProbeBrowser( {
 		// Linux software WebGPU needs a real display compositor for visible
 		// canvas evidence. CI supplies Xvfb; application behavior is unchanged.
@@ -300,21 +277,8 @@ async function main() {
 	} );
 	page.setDefaultTimeout( CONTROL_BUDGET_MS );
 	const tracer = createPhaseTracer( browser, page, process.env.RELEASE_TRACE_DIR );
-	const result = {
-		...candidate,
-		verdict: "FAIL",
-		phases: {},
-		phaseTimings: [],
-		errors: [],
-		network: [],
-		startedAt: Date.now()
-	};
-	page.on( "pageerror", error => result.errors.push( String( error ) ) );
-	page.on( "console", message => {
-		if ( message.type() === "error" && message.text().includes( "[SRO runtime]" ) ) {
-			result.errors.push( message.text() );
-		}
-	} );
+	const result = createProbeResult( candidate, { network: [] } );
+	watchRuntimeErrors( page, result.errors );
 	page.on( "requestfinished", request => {
 		if ( result.network.length >= MAX_NETWORK_ROWS ) return;
 		const endpoint = new URL( request.url() );
@@ -351,8 +315,7 @@ async function main() {
 		// document, so an image cannot consume an unrelated control deadline.
 		const response = await page.goto( url, { waitUntil: "commit" } );
 		if ( !response || response.status() !== HTTP_OK ) throw Error( "Candidate entry is unavailable" );
-		const digest = createHash( "sha256" ).update( await response.body() ).digest( "hex" );
-		if ( digest !== candidate.entrySha256 ) throw Error( "HTTPS served a different candidate entry" );
+		assertCandidateEntry( await response.body(), candidate );
 		await exercise( page, result, credentials, tracer );
 		const failures = classifyRequestFailures( requestFailures, result.phases );
 		result.errors.push( ...failures.errors );

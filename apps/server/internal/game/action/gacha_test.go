@@ -9,6 +9,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/gacha"
+	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -150,6 +151,22 @@ func TestGachaRewardsAreAdmittedToWorldReferences(t *testing.T) {
 		if counts[name] != 1 {
 			t.Fatalf("reward %s admitted %d times", name, counts[name])
 		}
+	}
+}
+
+func TestPublishedRewardsSendNoGroundReferenceDelta(t *testing.T) {
+	rt, _, _ := gachaFixture(t)
+	rewards := rt.GachaCatalog.RewardCodenames()
+	if len(rewards) == 0 {
+		t.Fatal("fixture has no rewards")
+	}
+	published := grounditem.Item{RefObjID: 70001, Codename: rewards[0], TypeFlags: wire.PackTypeFlags(3, 3, 1, 1)}
+	if frames := rt.groundReferences([]grounditem.Item{published}); len(frames) != 0 {
+		t.Fatalf("published reward resent as %d reference frames", len(frames))
+	}
+	unpublished := grounditem.Item{RefObjID: 50080, Codename: "ITEM_CH_SWORD_09_B", TypeFlags: wire.PackTypeFlags(3, 1, 6, 2)}
+	if frames := rt.groundReferences([]grounditem.Item{unpublished}); len(frames) != 1 {
+		t.Fatalf("unpublished drop produced %d reference frames, want 1", len(frames))
 	}
 }
 

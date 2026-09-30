@@ -20,16 +20,22 @@ The report has the phases and shape the host records as browser evidence
 
 ===========================================================================
 */
-import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
-import { assertCharacterAllowed } from "../../../../scripts/lib/probeCharacter.mjs";
+import {
+	assertCandidateEntry,
+	createProbeResult,
+	HTTP_OK,
+	PROBE_VIEWPORT,
+	readProbeInputs,
+	recordPhase,
+	watchRuntimeErrors
+} from "./release-probe.mjs";
 import { bootstrapSource, simulationWorkerPath, startHeadlessSimulation } from "./headless-simulation.mjs";
 
 const GATE_FORMAT = "headless-gate-v1";
-const HTTP_OK = 200;
 // The whole gate, and each of its waits, is bounded. A release that cannot
 // boot, log in, enter the world and act within these is not ready.
 const GATE_BUDGET_MS = 30_000;
@@ -39,21 +45,6 @@ const MOVE_BUDGET_MS = 8_000;
 // A short, server-confirmed move and back: small enough to stay walkable in
 // the probe's town, large enough to be a real movement.
 const MOVE_DISTANCE = 4;
-const PROBE_VIEWPORT = { width: 1024, height: 768 };
-
-/*
-================
-passPhase
-================
-*/
-function passPhase( result, phase ) {
-	const elapsedMs = Date.now() - result.startedAt;
-	const previousMs = result.phaseTimings.at( -1 )?.elapsedMs ?? 0;
-	result.phases[phase] = "PASS";
-	const timing = { phase, elapsedMs, durationMs: elapsedMs - previousMs };
-	result.phaseTimings.push( timing );
-	console.log( "Release phase:", JSON.stringify( timing ) );
-}
 
 /*
 ================
@@ -67,9 +58,7 @@ async function readEntry( url, candidate ) {
 	const response = await fetch( url, { headers: { "Cache-Control": "no-cache" } } );
 	if ( response.status !== HTTP_OK ) throw Error( "Candidate entry is unavailable" );
 	const entry = Buffer.from( await response.arrayBuffer() );
-	if ( createHash( "sha256" ).update( entry ).digest( "hex" ) !== candidate.entrySha256 ) {
-		throw Error( "HTTPS served a different candidate entry" );
-	}
+	assertCandidateEntry( entry, candidate );
 	const script = /src="([^"]+\.js)"/.exec( entry.toString( "utf8" ) )?.[1];
 	if ( !script ) throw Error( "Candidate entry names no application script" );
 	return new URL( script, url ).href;
@@ -92,10 +81,7 @@ async function bootInBrowser( url, result ) {
 		...(process.env.RELEASE_CHROME ? { executablePath: process.env.RELEASE_CHROME } : {})
 	} );
 	const errors = [];
-	page.on( "pageerror", error => errors.push( String( error ) ) );
-	page.on( "console", message => {
-		if ( message.type() === "error" && message.text().includes( "[SRO runtime]" ) ) errors.push( message.text() );
-	} );
+	watchRuntimeErrors( page, errors );
 	result.boot = { launchMs: Date.now() - started };
 	try {
 		const response = await page.goto( url, { waitUntil: "commit", timeout: BOOT_BUDGET_MS } );
@@ -205,15 +191,14 @@ async function moveAndConfirm( simulation, destination ) {
 exercise
 ================
 */
-async function exercise( candidate, credentials, origin, result, directory ) {
-	const url = `${origin}/releases/candidates/${candidate.candidate}/index.html`;
-	const script = await readEntry( url, candidate );
-	const boot = bootInBrowser( url, result ).then( () => passPhase( result, "title" ) );
+async function exercise( inputs, result ) {
+	const script = await readEntry( inputs.entryUrl, inputs.candidate );
+	const boot = bootInBrowser( inputs.entryUrl, result ).then( () => recordPhase( result, "title" ) );
 	// Report the flow's failure first; a boot failure fails an otherwise
 	// passing gate.
 	let failure = null;
 	try {
-		await flow( candidate, credentials, origin, result, directory, script );
+		await flow( inputs, result, script );
 	} catch ( error ) {
 		failure = error;
 	}
@@ -232,11 +217,12 @@ flow
 The game flow through the release's own simulation worker, headless.
 ================
 */
-async function flow( candidate, credentials, origin, result, directory, script ) {
-	const worker = await prepareWorker( origin, script, directory );
+async function flow( inputs, result, script ) {
+	const { credentials, origin } = inputs;
+	const worker = await prepareWorker( origin, script, inputs.destination );
 	result.simulationWorker = worker.workerPath;
 	const apiBase = origin + "/api";
-	let simulation = await startHeadlessSimulation( { origin, ...worker } );
+	let simulation = await startHeadlessSimulation( { origin, ...worker } ), reloaded = false;
 	try {
 		simulation.session( { kind: "servers", apiBase } );
 		await simulation.waitFor(
@@ -252,7 +238,7 @@ async function flow( candidate, credentials, origin, result, directory, script )
 			serverId: credentials.shard
 		} );
 		await simulation.waitFor( state => state.session?.phase === "character-select", STEP_BUDGET_MS, "login" );
-		passPhase( result, "login" );
+		recordPhase( result, "login" );
 		// As the page does: character-select without characters asks for them.
 		if ( !simulation.state.session?.characters ) simulation.session( { kind: "roster" } );
 		const characters = await simulation.waitFor(
@@ -269,11 +255,11 @@ async function flow( candidate, credentials, origin, result, directory, script )
 					characters.map( row => row.name ).join( ", " )
 			);
 		}
-		passPhase( result, "roster" );
+		recordPhase( result, "roster" );
 
 		simulation.session( { kind: "enter-world", character: credentials.character } );
 		const spawned = await enterWorld( simulation, credentials.character, "world" );
-		passPhase( result, "world" );
+		recordPhase( result, "world" );
 
 		// Start from the pose the server has accepted for us.
 		const accepted = await simulation.waitFor(
@@ -282,29 +268,32 @@ async function flow( candidate, credentials, origin, result, directory, script )
 			"gameplay pose"
 		);
 		const home = { ...accepted, angle: accepted.angle ?? spawned.heading ?? 0 };
-		let moved = null;
+		// Try the other direction when the first is blocked; the second
+		// attempt's failure is the gate's.
 		for ( const dx of [ MOVE_DISTANCE, -MOVE_DISTANCE ] ) {
 			try {
-				moved = await moveAndConfirm( simulation, { ...home, x: home.x + dx } );
+				await moveAndConfirm( simulation, { ...home, x: home.x + dx } );
 				break;
 			} catch ( error ) {
 				if ( dx < 0 ) throw error;
 			}
 		}
-		if ( !moved ) throw Error( "gameplay move was not confirmed" );
 		await moveAndConfirm( simulation, home );
-		passPhase( result, "gameplay" );
+		recordPhase( result, "gameplay" );
 
 		// A reload: a new worker with the same cookies restores the session.
 		result.sessionTimeline = simulation.state.timeline;
+		reloaded = true;
 		const cookies = simulation.cookies();
 		await simulation.stop();
 		simulation = await startHeadlessSimulation( { origin, ...worker, cookies } );
 		simulation.session( { kind: "servers", apiBase } );
 		await enterWorld( simulation, credentials.character, "resume" );
-		passPhase( result, "resume" );
-		result.resumeTimeline = simulation.state.timeline;
+		recordPhase( result, "resume" );
 	} finally {
+		// Keep the timeline of whichever worker was running, especially one
+		// that failed: it shows where that entry stopped.
+		result[reloaded ? "resumeTimeline" : "sessionTimeline"] = simulation.state.timeline;
 		result.session = simulation.state.session?.phase ?? null;
 		result.worldEvents = simulation.state.events;
 		await simulation.stop().catch( () => {} );
@@ -317,26 +306,8 @@ main
 ================
 */
 async function main() {
-	const [candidatePath, destination] = process.argv.slice( 2 );
-	if ( !candidatePath || !destination ) throw Error( "Usage: release-gate.mjs CANDIDATE_JSON OUTPUT_DIRECTORY" );
-	const candidate = JSON.parse( await readFile( candidatePath, "utf8" ) );
-	const credentials = JSON.parse( process.env.RELEASE_PROBE_ACCOUNT ?? "{}" );
-	assertCharacterAllowed( credentials.character );
-	if ( !credentials.username || !credentials.password || !credentials.character || !credentials.shard ) {
-		throw Error( "Missing release probe account" );
-	}
-	if ( !process.env.RELEASE_ORIGIN ) throw Error( "Missing RELEASE_ORIGIN for the host under test" );
-	const origin = new URL( process.env.RELEASE_ORIGIN ).origin;
-	await mkdir( destination, { recursive: true } );
-	const result = {
-		...candidate,
-		gate: GATE_FORMAT,
-		verdict: "FAIL",
-		phases: {},
-		phaseTimings: [],
-		errors: [],
-		startedAt: Date.now()
-	};
+	const inputs = await readProbeInputs( "release-gate.mjs" );
+	const result = createProbeResult( inputs.candidate, { gate: GATE_FORMAT } );
 	try {
 		let watchdog;
 		const expired = new Promise( ( _, reject ) => {
@@ -346,7 +317,7 @@ async function main() {
 			);
 		} );
 		try {
-			await Promise.race( [ exercise( candidate, credentials, origin, result, destination ), expired ] );
+			await Promise.race( [ exercise( inputs, result ), expired ] );
 		} finally {
 			clearTimeout( watchdog );
 		}
@@ -357,7 +328,7 @@ async function main() {
 		process.exitCode = 1;
 	} finally {
 		result.finishedAt = Date.now();
-		await writeFile( path.join( destination, "report.json" ), JSON.stringify( result, null, 2 ) );
+		await writeFile( path.join( inputs.destination, "report.json" ), JSON.stringify( result, null, 2 ) );
 		console.log( JSON.stringify( {
 			verdict: result.verdict,
 			totalMs: result.finishedAt - result.startedAt,

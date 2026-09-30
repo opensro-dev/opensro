@@ -388,7 +388,6 @@ published row carries the same flags a login row would.
 */
 func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) []RefItemRow {
 	collector := newRefItemCollector(deps)
-	appendByCodename := collector.add
 	if deps.BrowserReferences != nil {
 		for id := range deps.BrowserReferences.itemIDs {
 			collector.known[id] = true
@@ -397,18 +396,18 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 	if character != nil {
 		for _, row := range character.MissionInventory {
 			flags := row.TypeFlags
-			appendByCodename(row.Codename, &flags)
+			collector.add(row.Codename, &flags)
 		}
 		if character.ActiveCOS != nil && character.ActiveCOS.Container != nil {
 			for _, row := range character.ActiveCOS.Container.Rows {
 				flags := row.TypeFlags
-				appendByCodename(row.Codename, &flags)
+				collector.add(row.Codename, &flags)
 			}
 		}
 		// A window outlives the stack that raised it; its reference must still
 		// reach the browser or the re-raised row has no icon or limit.
 		for _, window := range character.PetSkillWindows {
-			appendByCodename(window.Codename, nil)
+			collector.add(window.Codename, nil)
 		}
 		if character.AvatarInventory != nil {
 			// Avatar rows ride the SAME snapshot: the client's entered
@@ -418,7 +417,7 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 			// avatar-band word ((typeFlags & 0x780) == 0x680).
 			for _, row := range character.AvatarInventory.Rows {
 				flags := row.TypeFlags
-				appendByCodename(row.Codename, &flags)
+				collector.add(row.Codename, &flags)
 			}
 		}
 	}
@@ -436,13 +435,13 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 			}
 			for _, row := range peer.MissionInventory {
 				flags := row.TypeFlags
-				appendByCodename(row.Codename, &flags)
+				collector.add(row.Codename, &flags)
 			}
 		}
 	}
 	if deps.ExtraRefItemCodenames != nil {
 		for _, codename := range deps.ExtraRefItemCodenames(divisionID) {
-			appendByCodename(codename, nil)
+			collector.add(codename, nil)
 		}
 	}
 	if deps.BrowserReferences == nil {
