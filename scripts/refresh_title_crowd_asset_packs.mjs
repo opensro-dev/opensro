@@ -1,4 +1,14 @@
-import {publishAssetPackManifest} from './build/assetPackPublication.mjs';
+/*
+===========================================================================
+
+refresh_title_crowd_asset_packs.mjs - republish the title-crowd VAT packs
+
+Repacks the title-crowd VAT artifacts sparsely and reconciles game-data from
+its loose authority (the roster), then archives the packs they superseded.
+
+===========================================================================
+*/
+import { mergeAssetPackGroupUpdates, publishAssetPackManifest } from "./build/assetPackPublication.mjs";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,14 +48,19 @@ await withGeneratedAssetsLock( "title-crowd asset-pack refresh", async () => {
 	for ( const delta of deltas ) {
 		const previousGroup = requirePopulatedGroup( previous, delta.groupName );
 		const refreshed = await timed(
-			delta.reconcileAuthority ? `authoritative ${delta.groupName} reconciliation` : `sparse ${delta.groupName} refresh`,
-			() => ( delta.reconcileAuthority ? reconcileAssetPackGroupFromLooseAuthority : patchAssetPackGroupFromLooseFiles )( {
-				publicRoot,
-				outputRoot: path.join( refreshRoot, delta.groupName ),
-				previousIndex: previous,
-				groupName: delta.groupName,
-				...( delta.reconcileAuthority ? {} : { looseFiles: delta.looseFiles } )
-			} )
+			delta.reconcileAuthority ?
+				`authoritative ${delta.groupName} reconciliation` :
+				`sparse ${delta.groupName} refresh`,
+			() =>
+				(delta.reconcileAuthority ?
+					reconcileAssetPackGroupFromLooseAuthority :
+					patchAssetPackGroupFromLooseFiles)( {
+						publicRoot,
+						outputRoot: path.join( refreshRoot, delta.groupName ),
+						previousIndex: previous,
+						groupName: delta.groupName,
+						...(delta.reconcileAuthority ? {} : { looseFiles: delta.looseFiles })
+					} )
 		);
 		if ( refreshed.assets.length !== previousGroup.assetCount ) {
 			throw new Error(
@@ -56,30 +71,18 @@ await withGeneratedAssetsLock( "title-crowd asset-pack refresh", async () => {
 		refreshedByGroup.set( delta.groupName, refreshed );
 	}
 
-	const replacedGroups = new Set( refreshedByGroup.keys() );
-	const mergedCandidate = {
-		...previous,
-		groups: [
-			...previous.groups.filter( group => !replacedGroups.has( group.name ) ),
-			...[ ...refreshedByGroup.values() ].flatMap( refreshed => refreshed.groups )
-		].sort( ( left, right ) => left.name.localeCompare( right.name ) ),
-		assets: [
-			...previous.assets.filter( asset => !replacedGroups.has( asset.group ) ),
-			...[ ...refreshedByGroup.values() ].flatMap( refreshed => refreshed.assets )
-		].sort( ( left, right ) => left.path.localeCompare( right.path ) )
-	};
-	const changed = JSON.stringify( mergedCandidate ) !== JSON.stringify( previous );
-	const merged = changed ? { ...mergedCandidate, generatedAt: new Date().toISOString() } : previous;
+	const merged = mergeAssetPackGroupUpdates( previous, [ ...refreshedByGroup.values() ] );
+	const changed = merged !== previous;
 
 	validateClosure( merged, deltas );
 	await mkdir( packsRoot, { recursive: true } );
 	if ( changed ) {
-		await publishAssetPackManifest(publicRoot, packManifestPath, Buffer.from( JSON.stringify( merged ), "utf8" ), {
+		await publishAssetPackManifest( publicRoot, packManifestPath, Buffer.from( JSON.stringify( merged ), "utf8" ), {
 			logLabel: "title-crowd-pack-overlay"
 		} );
 	}
 
-	for ( const [ groupName, refreshed ] of refreshedByGroup ) {
+	for ( const [groupName, refreshed] of refreshedByGroup ) {
 		await retireReplacedPacks( requirePopulatedGroup( previous, groupName ), refreshed.groups[0] );
 	}
 
@@ -91,15 +94,14 @@ await withGeneratedAssetsLock( "title-crowd asset-pack refresh", async () => {
 			brotliQuality: 4,
 			gzipLevel: 3,
 			zstdLevel: 3
-		} )
-	);
+		} ) );
 
-	const totals = [ ...refreshedByGroup.values() ].reduce( ( sum, refreshed ) => ( {
+	const totals = [ ...refreshedByGroup.values() ].reduce( ( sum, refreshed ) => ({
 		built: sum.built + refreshed.builtPackCount,
 		reused: sum.reused + refreshed.reusedPackCount,
 		changed: sum.changed + refreshed.changedAssetCount,
 		hydrated: sum.hydrated + refreshed.hydratedAssetCount
-	} ), { built: 0, reused: 0, changed: 0, hydrated: 0 } );
+	}), { built: 0, reused: 0, changed: 0, hydrated: 0 } );
 	console.log(
 		`Title-crowd closure OK: ${totals.built} pack(s) rebuilt, ${totals.reused} reused, ` +
 			`${totals.changed} asset delta(s), ${totals.hydrated} member(s) hydrated; ` +
@@ -108,6 +110,11 @@ await withGeneratedAssetsLock( "title-crowd asset-pack refresh", async () => {
 	);
 } );
 
+/*
+================
+requirePopulatedGroup
+================
+*/
 function requirePopulatedGroup( index, groupName ) {
 	const group = index.groups?.find( candidate => candidate.name === groupName );
 	if ( !group || group.assetCount === 0 || group.packs?.length === 0 ) {
@@ -116,6 +123,11 @@ function requirePopulatedGroup( index, groupName ) {
 	return group;
 }
 
+/*
+================
+validateClosure
+================
+*/
 function validateClosure( index, deltas ) {
 	const assets = new Map( index.assets.map( asset => [ asset.path.toLowerCase(), asset ] ) );
 	for ( const delta of deltas ) {
@@ -128,11 +140,18 @@ function validateClosure( index, deltas ) {
 	}
 }
 
+/*
+================
+retireReplacedPacks
+================
+*/
 async function retireReplacedPacks( previousGroup, refreshedGroup ) {
 	const currentPaths = new Set(
-		refreshedGroup.packs.flatMap( pack => [ pack.path, pack.zstdPath ]
-			.filter( Boolean )
-			.map( normalizePublicPath ) )
+		refreshedGroup.packs.flatMap( pack =>
+			[ pack.path, pack.zstdPath ]
+				.filter( Boolean )
+				.map( normalizePublicPath )
+		)
 	);
 	for ( const pack of previousGroup.packs ) {
 		for ( const publicPath of [ pack.path, pack.zstdPath ].filter( Boolean ) ) {
@@ -145,6 +164,11 @@ async function retireReplacedPacks( previousGroup, refreshedGroup ) {
 	}
 }
 
+/*
+================
+resolvePackFile
+================
+*/
 function resolvePackFile( publicPath ) {
 	const resolved = path.resolve( publicRoot, normalizePublicPath( publicPath ).replace( /^\/+/, "" ) );
 	const relative = path.relative( packsRoot, resolved );
@@ -154,19 +178,33 @@ function resolvePackFile( publicPath ) {
 	return resolved;
 }
 
+/*
+================
+normalizePublicPath
+================
+*/
 function normalizePublicPath( value ) {
 	return `/${String( value ).replaceAll( "\\", "/" ).replace( /^\/+/, "" )}`.replace( /\/{2,}/g, "/" );
 }
 
+/*
+================
+timed
+================
+*/
 async function timed( label, task ) {
 	const startedAt = performance.now();
 	console.log( `[title-crowd-refresh] ${label}: start` );
 	try {
 		const result = await task();
-		console.log( `[title-crowd-refresh] ${label}: done (${( ( performance.now() - startedAt ) / 1000 ).toFixed( 1 )}s)` );
+		console.log(
+			`[title-crowd-refresh] ${label}: done (${((performance.now() - startedAt) / 1000).toFixed( 1 )}s)`
+		);
 		return result;
 	} catch ( error ) {
-		console.error( `[title-crowd-refresh] ${label}: failed after ${( ( performance.now() - startedAt ) / 1000 ).toFixed( 1 )}s` );
+		console.error(
+			`[title-crowd-refresh] ${label}: failed after ${((performance.now() - startedAt) / 1000).toFixed( 1 )}s`
+		);
 		throw error;
 	}
 }

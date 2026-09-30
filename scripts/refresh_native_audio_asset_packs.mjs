@@ -1,20 +1,19 @@
-import {readFile} from 'node:fs/promises';
-import path from 'node:path';
-import {withGeneratedAssetsLock} from './rebuildLock.mjs';
-import {buildNativeDirectSoundResources} from './build/shared/audioResources.mjs';
-import {patchAssetPackGroupFromLooseFiles} from './build/sparseAssetPackGroupRefresh.mjs';
-import {publishAssetPackManifest} from './build/assetPackPublication.mjs';
-import {buildWebAssetManifest} from './build/webManifest.mjs';
-import {refreshGeneratedManifestSidecars} from './build/generatedManifestSidecars.mjs';
-import {publicRoot} from './build/world/paths.mjs';
-await withGeneratedAssetsLock('Native direct audio publication',async()=>{
- const catalog=await buildNativeDirectSoundResources(),files=[...new Set(catalog.rows.map(r=>r.publicPath))];
- const target=path.join(publicRoot,'assets/packs/manifest.json'),previous=JSON.parse(await readFile(target,'utf8'));
- const groupName='game-audio';
- const update=await patchAssetPackGroupFromLooseFiles({publicRoot,previousIndex:previous,groupName,looseFiles:files,outputRoot:path.join(publicRoot,'assets/packs/incremental/native-audio',groupName)});
- const next={...previous,generatedAt:new Date().toISOString(),groups:[...previous.groups.filter(r=>r.name!==groupName),...update.groups],assets:[...previous.assets.filter(r=>r.group!==groupName),...update.assets].sort((a,b)=>a.path.localeCompare(b.path))};
- for(const file of files)if(next.assets.filter(r=>r.path===file).length!==1)throw Error('Native audio pack closure: '+file);
- await publishAssetPackManifest(publicRoot,target,Buffer.from(JSON.stringify(next)),{logLabel:'native-audio-packs'});
- await buildWebAssetManifest();await refreshGeneratedManifestSidecars({publicRoot,onlyWhenStale:true});
- console.log('Published '+files.length+' native direct sounds through asset packs.');
-});
+/*
+===========================================================================
+
+refresh_native_audio_asset_packs.mjs - publish the native direct sounds
+
+Rebuilds the direct-sound catalog and packs every sound it names.
+
+===========================================================================
+*/
+import { buildNativeDirectSoundResources } from "./build/shared/audioResources.mjs";
+import { publishLooseFamily } from "./build/shared/looseFamilyPublication.mjs";
+import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
+
+await withGeneratedAssetsLock( "Native direct audio publication", async () => {
+	const catalog = await buildNativeDirectSoundResources();
+	const files = [ ...new Set( catalog.rows.map( row => row.publicPath ) ) ];
+	await publishLooseFamily( { name: "native-audio", files, defaultGroup: "game-audio" } );
+	console.log( `Published ${files.length} native direct sounds through asset packs.` );
+} );

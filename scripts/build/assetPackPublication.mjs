@@ -118,7 +118,8 @@ export async function publishAssetPackManifest( publicRoot, filename, bytes, opt
  * rows out of a group it does not rebuild. Removing rows from an untouched
  * pack would break its entry count, so cross-group ownership is decided up
  * front by assetPackOwnership.mjs and enforced at publication by
- * validateAssetPackIndex.
+ * validateAssetPackIndex. An update that changes nothing returns previous
+ * itself, so a caller can skip republishing an identical index.
  */
 export function mergeAssetPackGroupUpdates(
 	previous,
@@ -141,16 +142,32 @@ export function mergeAssetPackGroupUpdates(
 			}
 		}
 	}
-	return {
+	const merged = sortedIndex( {
 		...previous,
-		generatedAt: new Date().toISOString(),
 		groups: [
 			...previous.groups.filter( group => !replaced.has( group.name ) ),
 			...updates.flatMap( update => update.groups )
-		].sort( ( a, b ) => a.name.localeCompare( b.name ) ),
+		],
 		assets: [
 			...previous.assets.filter( asset => !replaced.has( asset.group ) ),
 			...updates.flatMap( update => update.assets )
-		].sort( ( a, b ) => a.path.localeCompare( b.path ) )
+		]
+	} );
+	if ( JSON.stringify( merged ) === JSON.stringify( sortedIndex( previous ) ) ) return previous;
+	return { ...merged, generatedAt: new Date().toISOString() };
+}
+
+/*
+================
+sortedIndex
+
+The published order: groups by name, assets by path.
+================
+*/
+function sortedIndex( index ) {
+	return {
+		...index,
+		groups: [ ...index.groups ].sort( ( a, b ) => a.name.localeCompare( b.name ) ),
+		assets: [ ...index.assets ].sort( ( a, b ) => a.path.localeCompare( b.path ) )
 	};
 }

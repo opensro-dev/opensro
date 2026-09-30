@@ -61,7 +61,14 @@ const PUBLISH_FAMILIES = [
 	"weather-assets"
 ];
 
-const PUBLISH_TASK_NAMES = PUBLISH_FAMILIES.map( ( family ) => `assets:publish:${family}` );
+// A fresh tree needs the focused families too: the full build does not
+// produce the code-selected images and data they publish (party status icons,
+// RGB16 window art, restriction text and the rest), and each is idempotent.
+const PUBLISH_TASK_NAMES = [
+	...PUBLISH_FAMILIES.map( ( family ) => `assets:publish:${family}` ),
+	...REFRESH_FAMILIES.map( ( family ) => `assets:refresh:${family}` ),
+	"assets:refresh:world-map-markers"
+];
 
 export const ASSET_TASKS = [
 	...REFRESH_FAMILIES.map( ( family ) =>
@@ -102,7 +109,7 @@ export const ASSET_TASKS = [
 	} ),
 	seriesTask( {
 		name: "assets:publish",
-		description: "Run every standalone publisher after the full build",
+		description: "Run every standalone publisher and focused family after the full build",
 		kind: "assets",
 		ci: false,
 		requires: [ "licensed-client-extraction", "generated-assets" ],

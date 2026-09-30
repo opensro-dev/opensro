@@ -64,7 +64,7 @@ client together as a data release.
 | `pnpm assets doctor` | Read-only report of every input and tool, with the fix for each problem |
 | `pnpm assets build full` | Full build: every outdoor region, then the browser projection (roughly 40 minutes) |
 | `pnpm assets build` | The browser projection, reusing the outdoor world of the last full build |
-| `pnpm assets publish [<family>]` | Standalone publishers the full build does not run yet (skill UI data, dungeon worlds, flares, and others); run after `assets build` |
+| `pnpm assets publish [<family>]` | Standalone publishers and focused families the full build does not run yet (skill UI data, dungeon worlds, flares, party status icons, native window art, and others); run after `assets build` |
 | `pnpm task build server-game-data` | Server game-data projection and `server.srogz` |
 | `pnpm assets build world-outdoor -- --region=0x6a48 --force --jobs=1` | Rebuild one outdoor region |
 | `pnpm assets refresh <family>` | Re-publish one family into an existing tree (`pnpm task list --kind assets` lists them) |

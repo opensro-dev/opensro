@@ -1,19 +1,40 @@
-import {publishAssetPackManifest} from './build/assetPackPublication.mjs';
-import {readFile,copyFile,mkdir} from 'node:fs/promises';
-import path from 'node:path';
-import {withGeneratedAssetsLock} from './rebuildLock.mjs';
-import {patchAssetPackGroupFromLooseFiles} from './build/sparseAssetPackGroupRefresh.mjs';
-import {buildWebAssetManifest} from './build/webManifest.mjs';
-import {refreshGeneratedManifestSidecars} from './build/generatedManifestSidecars.mjs';
-import {quickslotRuntimeImageReferences} from './build/shared/cifRuntimeImageCatalog.mjs';
-const root=path.resolve(import.meta.dirname,'..'),publicRoot=path.join(root,'.generated/client-public');
-await withGeneratedAssetsLock('Native quickslot texture publication',async()=>{
- const refs=[...quickslotRuntimeImageReferences,...['','_focus','_press'].map(state=>'interface/skill/skl_button_up'+state+'.ddj'),...['h','v'].flatMap(axis=>['','_focus','_press'].map(state=>`interface/quick_slot/qsl_${axis}close_button${state}.ddj`))],files=[];
- for(const ref of refs){const relative='assets/images/Media_extracted/'+ref.replace('.ddj','.png');await mkdir(path.dirname(path.join(publicRoot,relative)),{recursive:true});await copyFile(path.join(root,relative),path.join(publicRoot,relative));files.push('/'+relative);}
- const manifestPath=path.join(publicRoot,'assets/packs/manifest.json'),previous=JSON.parse(await readFile(manifestPath,'utf8')),deltas=new Map();
- for(const file of files){const group=previous.assets.find(a=>a.path===file)?.group??'native-ui';const rows=deltas.get(group)??[];rows.push(file);deltas.set(group,rows);}
- const updates=[];for(const [groupName,looseFiles]of deltas)updates.push(await patchAssetPackGroupFromLooseFiles({publicRoot,previousIndex:previous,groupName,looseFiles,outputRoot:path.join(publicRoot,'assets/packs/incremental/quickslots',groupName)}));
- const next={...previous,generatedAt:new Date().toISOString(),groups:[...previous.groups.filter(r=>!deltas.has(r.name)),...updates.flatMap(r=>r.groups)],assets:[...previous.assets.filter(r=>!deltas.has(r.group)),...updates.flatMap(r=>r.assets)].sort((a,b)=>a.path.localeCompare(b.path))};
- for(const file of files)if(next.assets.filter(r=>r.path===file).length!==1)throw Error('Quickslot publication closure: '+file);
- await publishAssetPackManifest(publicRoot, manifestPath,Buffer.from(JSON.stringify(next)),{logLabel:'quickslot-packs'});await buildWebAssetManifest();await refreshGeneratedManifestSidecars({publicRoot,onlyWhenStale:true});console.log('Published '+files.length+' native quickslot textures.');
-});
+/*
+===========================================================================
+
+refresh_quickslot_asset_packs.mjs - publish the native quickslot textures
+
+The quickslot bar, its skill-page button and the close buttons of both bar
+orientations, in every button state.
+
+===========================================================================
+*/
+import { imagePublicPath } from "./build/shared/cifResources.mjs";
+import { quickslotRuntimeImageReferences } from "./build/shared/cifRuntimeImageCatalog.mjs";
+import { publishConvertedImage } from "./build/shared/convertedImages.mjs";
+import { publishLooseFamily } from "./build/shared/looseFamilyPublication.mjs";
+import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
+
+// The CIFButton state family (sub_5419c0); none of these ships a _disable.
+const BUTTON_STATES = [ "", "_focus", "_press" ];
+
+/*
+================
+buttonStates
+================
+*/
+function buttonStates( stem ) {
+	return BUTTON_STATES.map( state => `${stem}${state}.ddj` );
+}
+
+await withGeneratedAssetsLock( "Native quickslot texture publication", async () => {
+	const references = [
+		...quickslotRuntimeImageReferences,
+		...buttonStates( "interface/skill/skl_button_up" ),
+		...buttonStates( "interface/quick_slot/qsl_hclose_button" ),
+		...buttonStates( "interface/quick_slot/qsl_vclose_button" )
+	];
+	const files = [];
+	for ( const reference of references ) files.push( await publishConvertedImage( imagePublicPath( reference ) ) );
+	await publishLooseFamily( { name: "quickslots", files, defaultGroup: "native-ui" } );
+	console.log( `Published ${files.length} native quickslot textures.` );
+} );

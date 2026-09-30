@@ -175,6 +175,14 @@ test("the shared merge replaces only declared groups and refuses undeclared upda
 	);
 });
 
+test("the shared merge returns the previous index when an update changes nothing", () => {
+	const previous = index( { "game-models": [ "/assets/a.glb" ], "equipment-models": [ "/assets/old.glb" ] } );
+	const same = index( { "equipment-models": [ "/assets/old.glb" ] } );
+	assert.equal( mergeAssetPackGroupUpdates( previous, [ same ], [ "equipment-models" ] ), previous );
+	const changed = index( { "equipment-models": [ "/assets/new.glb" ] } );
+	assert.notEqual( mergeAssetPackGroupUpdates( previous, [ changed ], [ "equipment-models" ] ), previous );
+});
+
 test("publication fails closed on a duplicate-owner index and keeps the live manifest", async ( t ) => {
 	const root = await tempRoot( t );
 	const filename = path.join( root, "assets", "packs", "manifest.json" );
