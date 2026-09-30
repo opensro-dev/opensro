@@ -23,6 +23,7 @@ import {
 	completeItemTextProjection,
 	completeItemReferenceProjection
 } from "../../../../scripts/build/shared/itemTextCompletions.mjs";
+import { completeEnglishTextProjection } from "../../../../scripts/build/shared/englishCompletions.mjs";
 import { assertItemNameCoverage } from "../../../../scripts/build/shared/itemNameCoverage.mjs";
 import nameCompletions from "../../../../scripts/build/shared/itemNameCompletions.json" with { type: "json" };
 import { readPublishedAssetJsonSync, readPackedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
@@ -475,9 +476,11 @@ const { createInventory } = await load(
 test("item localization is shared by published descriptions and server inventory references", () => {
 	const source = readFileSync( path.join( retailTextdataRoot, "textdataname.txt" ) );
 	const projected = completeItemTextProjection( source ), again = completeItemTextProjection( projected );
+	// The server bundle applies the item names first, then the authored English
+	// completions for every other untranslated row (buildServerGameDataBundle).
 	assertSameBytes(
 		readFileSync( path.join( serverGameDataRoot, "textdata", "textdataname.txt" ) ),
-		projected,
+		completeEnglishTextProjection( "textdataname.txt", projected ),
 		"installed server projection uses the same completion policy (rebuild it with pnpm task build server-game-data)"
 	);
 	assertSameBytes( again, projected, "rebuilding must be idempotent" );
