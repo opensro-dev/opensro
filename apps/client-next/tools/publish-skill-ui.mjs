@@ -1,20 +1,34 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import {withGeneratedAssetsLock} from '../../../scripts/rebuildLock.mjs';
-import {runPython} from '../../../scripts/build/shared/pythonRun.mjs';
-import {refreshPrecompressedSidecars} from '../../../scripts/build/generatedManifestSidecars.mjs';
-import {patchAssetPackGroupFromLooseFiles} from '../../../scripts/build/sparseAssetPackGroupRefresh.mjs';
-import {buildWebAssetManifest} from '../../../scripts/build/webManifest.mjs';
-import {publishBytesAtomically} from '../../../scripts/build/shared/atomicPublish.mjs';
-const publicRoot=path.resolve(import.meta.dirname,'../../../.generated/client-public');
-await withGeneratedAssetsLock('native skill UI publication',async()=>{
- await runPython([path.join(import.meta.dirname,'build-skill-ui.py')],{task:'Native skill UI projection'});
- const asset=path.join(publicRoot,'assets/data/skillUi.json');await refreshPrecompressedSidecars([asset],{onlyWhenStale:true});
- const packPath=path.join(publicRoot,'assets/packs/manifest.json'),previous=JSON.parse(await fs.readFile(packPath,'utf8'));
- const group=previous.assets.find(r=>r.path.toLowerCase()==='/assets/data/skillmasterydata.json.gz')?.group;
- if(!group)throw Error('Skill mastery pack owner absent');
- const update=await patchAssetPackGroupFromLooseFiles({publicRoot,outputRoot:path.join(publicRoot,'assets/packs/incremental/skill-ui',group),previousIndex:previous,groupName:group,looseFiles:['/assets/data/skillUi.json.gz']});
- const merged={...previous,groups:[...previous.groups.filter(r=>r.name!==group),...update.groups].sort((a,b)=>a.name.localeCompare(b.name)),assets:[...previous.assets.filter(r=>r.group!==group),...update.assets].sort((a,b)=>a.path.localeCompare(b.path))};
- await publishBytesAtomically(packPath,Buffer.from(JSON.stringify(merged)),{logLabel:'skill UI pack manifest'});
- await buildWebAssetManifest();await refreshPrecompressedSidecars([packPath,path.join(publicRoot,'assets/manifest.json')],{onlyWhenStale:true});
-});
+/*
+===========================================================================
+
+publish-skill-ui.mjs - the native skill window projection
+
+build-skill-ui.py projects the skill window data into assets/data/
+skillUi.json, outside the full build. It is packed beside the skill mastery
+data it is read with, unless a group already owns it.
+
+===========================================================================
+*/
+import path from "node:path";
+import { refreshPrecompressedSidecars } from "../../../scripts/build/generatedManifestSidecars.mjs";
+import { publishLooseFamily } from "../../../scripts/build/shared/looseFamilyPublication.mjs";
+import { runPython } from "../../../scripts/build/shared/pythonRun.mjs";
+import { publicRoot } from "../../../scripts/build/world/paths.mjs";
+import { withGeneratedAssetsLock } from "../../../scripts/rebuildLock.mjs";
+
+const MASTERY_DATA = "/assets/data/skillmasterydata.json.gz";
+
+await withGeneratedAssetsLock( "native skill UI publication", async () => {
+	await runPython( [ path.join( import.meta.dirname, "build-skill-ui.py" ) ], {
+		task: "Native skill UI projection"
+	} );
+	await refreshPrecompressedSidecars( [ path.join( publicRoot, "assets", "data", "skillUi.json" ) ], {
+		onlyWhenStale: true
+	} );
+	await publishLooseFamily( {
+		name: "skill-ui",
+		files: [ "/assets/data/skillUi.json.gz" ],
+		defaultGroup: ( file, previous ) =>
+			previous.assets.find( row => row.path.toLowerCase() === MASTERY_DATA )?.group
+	} );
+} );

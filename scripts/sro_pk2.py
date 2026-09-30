@@ -42,6 +42,16 @@ def fold_ascii(name):
 	return "".join(chr(ord(c) + 32) if "A" <= c <= "Z" else c for c in name)
 
 
+def directory_cipher():
+	"""
+	The PK2 directory-block cipher. This is the retail archive format, not a
+	security choice: the v1.150 client obfuscates directory blocks with
+	Blowfish in ECB mode under a key every client carries, and reading (or,
+	in tests, writing) the user's own archive must match it byte for byte.
+	"""
+	return Blowfish.new(DIRECTORY_KEY, Blowfish.MODE_ECB)
+
+
 def _swap_words(value):
 	return b"".join(value[i:i + 4][::-1] for i in range(0, len(value), 4))
 
@@ -68,7 +78,7 @@ def read_directory(data, blocks=None):
 	"""
 	if data[:len(SIGNATURE)] != SIGNATURE:
 		raise ValueError("Invalid PK2 signature")
-	cipher = Blowfish.new(DIRECTORY_KEY, Blowfish.MODE_ECB)
+	cipher = directory_cipher()
 	seen, folded, files = set(), set(), []
 
 	def walk(offset, prefix):

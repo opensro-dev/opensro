@@ -597,11 +597,6 @@ apps/client-next/tools/lib/status-notice-probe.mjs
 apps/client-next/tools/lib/ui-product-probe.mjs
 apps/client-next/tools/lib/ui-window-probe.mjs
 apps/client-next/tools/profile-world.mjs
-apps/client-next/tools/publish-dungeon-worlds.mjs
-apps/client-next/tools/publish-flares.mjs
-apps/client-next/tools/publish-minimap-coverage.mjs
-apps/client-next/tools/publish-skill-ui.mjs
-apps/client-next/tools/publish-star-rng.mjs
 apps/client-next/tools/published-assets.mjs
 apps/client-next/tools/published-delivery.mjs
 apps/client-next/tools/published-pack.mjs

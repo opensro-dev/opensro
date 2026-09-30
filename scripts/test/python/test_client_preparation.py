@@ -22,7 +22,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from Crypto.Cipher import Blowfish
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import prepare_client_resources as prepare  # noqa: E402
@@ -57,7 +56,7 @@ class ArchiveBuilder:
 		chains = chains or {}
 		payload_base = self.next_block
 		data = bytearray(sro_pk2.SIGNATURE.ljust(HEADER_BYTES, b"\0"))
-		cipher = Blowfish.new(sro_pk2.DIRECTORY_KEY, Blowfish.MODE_ECB)
+		cipher = sro_pk2.directory_cipher()
 		for offset in sorted(self.blocks):
 			block = bytearray(sro_pk2.BLOCK_BYTES)
 			for index, (kind, name, start, size) in enumerate(self.blocks[offset]):
