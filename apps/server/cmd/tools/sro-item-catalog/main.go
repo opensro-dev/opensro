@@ -1,4 +1,15 @@
-// Export the same item references used by the server and GM command composer.
+/*
+===========================================================================
+
+main.go - sro-item-catalog: export the server's item references as JSON
+
+Exports the same item references the server and the GM command composer
+use, for the operations dashboard (apps/server-observatory). The textdata
+comes from the verified server game-data projection (gamedata.Resolve,
+which also opens the packed .srogz), unless -textdata names a directory.
+
+===========================================================================
+*/
 package main
 
 import (
@@ -9,12 +20,39 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/gamedata"
 )
 
+/*
+================
+textdataDir
+================
+*/
+func textdataDir(override string) (string, error) {
+	if override != "" {
+		return override, nil
+	}
+	paths, err := gamedata.Resolve()
+	if err != nil {
+		return "", fmt.Errorf("server game data: %w", err)
+	}
+	return paths.TextdataDir, nil
+}
+
+/*
+================
+main
+================
+*/
 func main() {
-	dir := flag.String("textdata", ".generated/game-data/1.150/server/textdata", "Verified server textdata directory")
+	override := flag.String("textdata", "", "Server textdata directory (default: the verified game-data projection)")
 	flag.Parse()
-	source := enterworld.NewTextdataItems(*dir)
+	dir, err := textdataDir(*override)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	source := enterworld.NewTextdataItems(dir)
 	rows := make([]map[string]any, 0)
 	for _, command := range source.ItemCommandReferences() {
 		item, ok := source.ItemRefByCodename(command.Codename)

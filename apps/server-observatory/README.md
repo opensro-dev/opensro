@@ -28,11 +28,12 @@ npm start         # http://localhost:5190
 
 ## Item catalog
 
-`npm run catalog` runs the server's own item loader through
-`go run ./cmd/tools/sro-item-catalog` and writes `temp/artifacts/items.json`
-from the verified `apps/server/.generated/game-data/1.150/server/textdata`
-projection (path relative to the repository root).
-Rerun it after rebuilding server game data. Artwork comes from the published
+`pnpm task build server-game-data` builds the server game-data projection and
+then runs `tools/item-catalog.mjs`, which runs the server's own item loader
+(`go run ./cmd/tools/sro-item-catalog`) over the verified
+`apps/server/.generated/game-data/1.150/server/textdata` projection and writes
+`.generated/observatory/items.json` (paths relative to the repository root).
+`npm run catalog` reruns only the export. Artwork comes from the published
 client assets.
 
 To use a command: open the in-game GM console with Shift + Backquote, paste, press

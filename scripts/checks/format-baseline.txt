@@ -622,7 +622,6 @@ apps/server-observatory/public/items.js
 apps/server-observatory/public/model.js
 apps/server-observatory/public/operations.js
 apps/server-observatory/public/view.js
-apps/server-observatory/server/items.mjs
 apps/server-observatory/server/main.mjs
 apps/server-observatory/server/security.mjs
 apps/server-observatory/server/source.mjs
@@ -631,7 +630,6 @@ apps/server-observatory/tests/model.test.mjs
 apps/server-observatory/tests/operations.test.mjs
 apps/server-observatory/tests/security.test.mjs
 apps/server-observatory/tools/browser-probe.mjs
-apps/server-observatory/tools/item-catalog.mjs
 apps/server-observatory/tools/items-browser-probe.mjs
 apps/server/internal/game/world/simulation/testdata/gen_parity_vectors.mjs
 scripts/build/artifacts/generatedArtifactArchive.mjs
@@ -775,7 +773,6 @@ scripts/rebuild_asset_packs_from_public.mjs
 scripts/refresh_asset_delivery.mjs
 scripts/setup_git_hooks.mjs
 scripts/task.mjs
-scripts/tasks/build.mjs
 scripts/tasks/define.mjs
 scripts/tasks/misc.mjs
 scripts/tasks/processCommand.mjs

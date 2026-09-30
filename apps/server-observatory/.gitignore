@@ -1,4 +1,4 @@
-# App-local scratch and generated output (items.json catalog, probe captures).
+# App-local scratch (probe captures). The item catalog lives in .generated/observatory/.
 /temp/
 # Legacy location, superseded by temp/artifacts/.
 /.artifacts/
