@@ -161,38 +161,40 @@ One server-confirmed move: the server's echo of our entity must carry a new
 movement toward the requested destination.
 ================
 */
-async function moveAndConfirm( simulation, name, destination ) {
-	const events = simulation.state.events;
+async function moveAndConfirm( simulation, destination ) {
+	const acknowledged = simulation.state.gameplay?.acknowledgedMove ?? 0,
+		batches = simulation.state.batches;
 	simulation.session( { kind: "gameplay", command: { kind: "move", destination } } );
 	try {
+		// The server acknowledges the move by id and answers with the pose it
+		// accepted (the request carries whole units).
 		return await simulation.waitFor(
-			() => {
-				// The server's echo of our own entity carries its new position (it
-				// has no movement revision); reaching the destination confirms it.
-				const entity = simulation.entityNamed( name );
-				if ( !entity ) return null;
-				const at = entity.movementPath?.to ?? entity;
-				return Math.hypot( at.x - destination.x, at.z - destination.z ) < MOVE_DISTANCE / 4 ? entity : null;
+			state => {
+				const gameplay = state.gameplay;
+				if ( gameplay?.error ) throw Error( "gameplay error: " + gameplay.error );
+				if ( !gameplay || gameplay.acknowledgedMove <= acknowledged ) return null;
+				const at = gameplay.authoritativePose;
+				return at && Math.hypot( at.x - Math.trunc( destination.x ), at.z - Math.trunc( destination.z ) ) < 1 ?
+					gameplay :
+					null;
 			},
 			MOVE_BUDGET_MS,
 			"gameplay move"
 		);
 	} catch ( error ) {
-		const entity = simulation.entityNamed( name );
-		const seen = entity ?
+		const gameplay = simulation.state.gameplay;
+		const seen = gameplay ?
 			{
-				regionId: entity.regionId,
-				x: entity.x,
-				y: entity.y,
-				z: entity.z,
-				movementRevision: entity.movementRevision,
-				movementPath: entity.movementPath,
-				movementMode: entity.movementMode
+				acknowledgedMove: gameplay.acknowledgedMove,
+				pendingMoves: gameplay.pendingMoves,
+				authoritativePose: gameplay.authoritativePose,
+				pose: gameplay.pose,
+				error: gameplay.error
 			} :
 			null;
 		throw Error(
-			`${error.message}; destination ${JSON.stringify( destination )}; entity ${JSON.stringify( seen )}; ` +
-				`${simulation.state.events - events} world events since the request`
+			`${error.message}; destination ${JSON.stringify( destination )}; gameplay ${JSON.stringify( seen )}; ` +
+				`${simulation.state.batches - batches} world batches since the request`
 		);
 	}
 }
@@ -272,24 +274,24 @@ async function flow( candidate, credentials, origin, result, directory, script )
 		const spawned = await enterWorld( simulation, credentials.character, "world" );
 		passPhase( result, "world" );
 
-		const home = {
-			regionId: spawned.regionId,
-			x: spawned.x,
-			y: spawned.y,
-			z: spawned.z,
-			angle: spawned.heading ?? 0
-		};
+		// Start from the pose the server has accepted for us.
+		const accepted = await simulation.waitFor(
+			state => state.gameplay?.authoritativePose ?? null,
+			STEP_BUDGET_MS,
+			"gameplay pose"
+		);
+		const home = { ...accepted, angle: accepted.angle ?? spawned.heading ?? 0 };
 		let moved = null;
 		for ( const dx of [ MOVE_DISTANCE, -MOVE_DISTANCE ] ) {
 			try {
-				moved = await moveAndConfirm( simulation, credentials.character, { ...home, x: home.x + dx } );
+				moved = await moveAndConfirm( simulation, { ...home, x: home.x + dx } );
 				break;
 			} catch ( error ) {
 				if ( dx < 0 ) throw error;
 			}
 		}
 		if ( !moved ) throw Error( "gameplay move was not confirmed" );
-		await moveAndConfirm( simulation, credentials.character, home );
+		await moveAndConfirm( simulation, home );
 		passPhase( result, "gameplay" );
 
 		// A reload: a new worker with the same cookies restores the session.

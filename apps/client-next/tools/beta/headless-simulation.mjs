@@ -96,8 +96,17 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 		workerData: { origin, workerUrl, cookies, jarPort: jarChannel.port2 },
 		transferList: [ jarChannel.port2 ]
 	} );
-	/** @type {{ session: any, sessions: any[], failures: string[], entities: Map<number, any>, events: number, exited: boolean }} */
-	const state = { session: null, sessions: [], failures: [], entities: new Map(), events: 0, exited: false };
+	/** @type {{ session: any, sessions: any[], failures: string[], entities: Map<number, any>, gameplay: any, batches: number, events: number, exited: boolean }} */
+	const state = {
+		session: null,
+		sessions: [],
+		failures: [],
+		entities: new Map(),
+		gameplay: null,
+		batches: 0,
+		events: 0,
+		exited: false
+	};
 	/** @type {(value?: unknown) => void} */
 	let ready = () => {};
 	const started = new Promise( ( resolve, reject ) => {
@@ -127,8 +136,10 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 			return;
 		}
 		if ( message.kind === "world" ) {
+			state.batches++;
 			for ( const event of message.batch.events ) {
 				state.events++;
+				if ( event.kind === "gameplay" ) state.gameplay = event.state;
 				if ( event.kind === "spawn" || event.kind === "state" ) {
 					state.entities.set( event.entity.gid, event.entity );
 				} else if ( event.kind === "despawn" ) state.entities.delete( event.gid );
