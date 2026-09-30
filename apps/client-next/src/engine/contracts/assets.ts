@@ -9,11 +9,14 @@ loads through.
 
 ===========================================================================
 */
+import type { WorldTexture } from "@/engine/contracts/texture";
 
 import type { ModelDocument } from "./model";
 /*
 ================
 AssetProgress
+
+Observable installation progress; it never owns a foreground request slot.
 ================
 */
 export interface AssetProgress {
@@ -30,6 +33,8 @@ export interface AssetProgress {
 /*
 ================
 AssetWorkerMessage
+
+Worker replies transfer decoded resources or acknowledge released capacity.
 ================
 */
 export type AssetWorkerMessage =
@@ -45,6 +50,8 @@ export type AssetWorkerMessage =
 /*
 ================
 AssetRequest
+
+Every load carries its byte limit and optional decoder identity.
 ================
 */
 export type AssetRequest = {
@@ -76,12 +83,14 @@ export type AssetRequest = {
 /*
 ================
 AssetResult
+
+The consumer owns delivered resources, including bitmap closure or native mip retention.
 ================
 */
 export type AssetResult =
 	| { kind: "navigation"; id: number; product: import("./navigation").NavigationProduct; }
 	| { kind: "effects"; id: number; catalog: import("./effects").EffectCatalog; }
-	| { kind: "character"; id: number; model: import("./character").CharacterModel; images: ImageBitmap[]; }
+	| { kind: "character"; id: number; model: import("./character").CharacterModel; images: WorldTexture[]; }
 	| {
 		kind: "world";
 		id: number;
@@ -106,6 +115,8 @@ export type AssetResult =
 /*
 ================
 AssetOwner
+
+The runtime asset owner grants bounded handles with explicit cancellation and disposal.
 ================
 */
 export interface AssetOwner {

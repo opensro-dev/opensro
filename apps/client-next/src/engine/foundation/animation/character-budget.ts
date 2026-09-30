@@ -10,18 +10,18 @@ budgets bound memory; the structural limits reject malformed sources.
 ===========================================================================
 */
 import type { CharacterModel } from "@/engine/contracts/character";
+import type { NativeTexture } from "@/engine/contracts/texture";
+import { validateNativeTexture } from "@/engine/foundation/assets/native-texture";
 import { DECODED_IMAGE_BYTES, imageBytes } from "@/engine/foundation/assets/image-budget";
 // Retail colored fireworks contain 100 parent particles with 50 children each.
 export const CHARACTER_PARTICLE_BIRTHS = 8192;
 export const CHARACTER_PRIMITIVES = 1024;
 export const CHARACTER_IMAGES = 64;
-// A count guard only: CHARACTER_RESIDENT_BYTES bounds residency. Native
-// refcounts item resources with no count limit, and every worn item is its
-// own source (CCObjCharacter_SetEquipSlotVisual), so the guard is sized so
-// the byte budget binds first. Measured over all 1714 published character
-// sources (2026-09-30), a source is charged 1.04 MB at the median and
-// 1.36 MB on average, so 256 MiB holds about 200-260 of them. 64 could not
-// hold one creation wardrobe (72 Europe sources).
+// A structural count guard; the byte budget governs retained sources. Native
+// equipment shares refcounted resources rather than copying each actor's items.
+// With native mip resources, the 1714-source catalog has a 212768-byte median
+// and a 429613-byte mean charge (2026-09-30). A dense population still requires
+// scene measurement: the catalog is not one simultaneously resident scene.
 export const CHARACTER_MODELS = 1024;
 // Borrowed and assembled views (an equipped actor's merged body), which
 // share their sources' bytes and so need their own count bound.
@@ -29,11 +29,11 @@ export const CHARACTER_ASSEMBLIES = 1024;
 export const CHARACTER_ACTORS = 512;
 export const CHARACTER_MODEL_BYTES = 67108864;
 export const CHARACTER_RESIDENT_BYTES = 268435456;
-// One admitted source, geometry plus decoded pixels. Admission reserves this
+// One admitted source, geometry plus retained bitmap pixels or native mip blocks. Admission reserves this
 // class for a source it has never decoded, so the class must bound the decode
-// rather than the decoder's structural guards: the largest published character
-// source is 5.1 MiB (npc/mob/asiam/ivy.glb) and the largest effect program is
-// 2.7 MiB (monster/rm_tahomet_spell_ready.efp).
+// rather than the decoder's structural guards. The 2026-09-30 native-texture
+// census measured the largest character source at 3242004 bytes
+// (npc/mob/karakoram/isyutaru.glb); keep headroom for future source revisions.
 export const CHARACTER_SOURCE_BYTES = 16777216;
 // Additional renderer storage, separate from decoded source residency. Includes
 // CPU poses/palettes and GPU copies, padded instances and expanded draw geometry.
@@ -41,6 +41,8 @@ export const CHARACTER_RENDER_BYTES = 67108864;
 /*
 ================
 characterPoseBytes
+
+Charge pose evaluation storage separately from immutable source data.
 ================
 */
 export function characterPoseBytes( model: CharacterModel ): number {
@@ -54,6 +56,8 @@ export function characterPoseBytes( model: CharacterModel ): number {
 /*
 ================
 characterMaterialClockBytes
+
+Reserve per-material modifier clocks and authored timeline storage.
 ================
 */
 export function characterMaterialClockBytes( model: CharacterModel ): number {
@@ -71,6 +75,8 @@ export function characterMaterialClockBytes( model: CharacterModel ): number {
 /*
 ================
 characterBatchBytes
+
+Charge retained batch capacity rather than only this frame's visible population.
 ================
 */
 export function characterBatchBytes( model: CharacterModel, count: number ): number {
@@ -102,7 +108,10 @@ The resident bytes of one decoded source; throws when its structure or
 decode exceeds the limits.
 ================
 */
-export function characterBytes( model: CharacterModel, images: readonly { width: number; height: number; }[] ): number {
+export function characterBytes(
+	model: CharacterModel,
+	images: readonly (NativeTexture | { width: number; height: number; })[]
+): number {
 	if (
 		model.nodes.length > 1024 || model.primitives.length > CHARACTER_PRIMITIVES ||
 		model.images.length > CHARACTER_IMAGES || images.length !== model.images.length ||
@@ -170,8 +179,13 @@ export function characterBytes( model: CharacterModel, images: readonly { width:
 	const bytes = characterMaterialClockBytes( model ) + graphBytes +
 		model.primitives.reduce( ( sum, p ) => sum + (p.emission?.births.length ?? 0) * 8, 0 ) +
 		[ ...buffers ].reduce( ( sum, buffer ) => sum + buffer.byteLength, 0 );
-	const pixels = images.reduce( ( sum, image ) => sum + imageBytes( image.width, image.height ), 0 );
-	const total = bytes + pixels + images.reduce( ( sum, image ) => sum + image.width * image.height, 0 );
+	const pixels = images.reduce(
+		( sum, image ) =>
+			sum + ("kind" in image ? validateNativeTexture( image ) : imageBytes( image.width, image.height )),
+		0
+	);
+	const total = bytes + pixels +
+		images.reduce( ( sum, image ) => sum + ("kind" in image ? 0 : image.width * image.height), 0 );
 	if ( bytes > CHARACTER_MODEL_BYTES || pixels > DECODED_IMAGE_BYTES || total > CHARACTER_SOURCE_BYTES ) {
 		throw new Error( "Character decoded bytes exceed budget" );
 	}

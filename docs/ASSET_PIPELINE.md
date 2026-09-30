@@ -18,6 +18,29 @@ preserve the existing compressed mip bytes. Missing-runtime errors include the
 installation link. Outputs are rebuilt from `Map_extracted/sun/lens1..8.ddj`
 into `.generated/intermediate/images/Map_extracted/sun/`.
 
+Character base materials, environment reflections and equipment glows share
+`scripts/build/shared/nativeCharacterTextures.mjs`. Before model publication,
+the full build generates complete native mip resources using that same D3DX
+loader. The source DDS blocks are copied verbatim; only missing mip levels come
+from D3DX. Each cached resource is bound to both its source bytes and generator
+code and checked against every authored level before use.
+
+Asset schema **3** allows embedded `application/x-sro-texture` images in the
+character model container. These carry BC1 (DXT1), BC2 (DXT3) or BC3 (DXT5)
+mips. Uncompressed images, premultiplied DXT2 lightmaps and non-power-of-two
+building images retain their existing PNG path. The worker transfers native
+mip buffers once; the renderer keeps them for device restoration. A GPU without
+BC support receives temporary RGBA uploads from the shared block decoder.
+Terrain DDS fallback uses that decoder too.
+
+For a standalone character publisher after changing retail texture inputs,
+first run `node scripts/build/shared/nativeCharacterTextures.mjs`. Both this
+prerequisite and the full build acquire the generated-asset lock. The cache
+lives in `.generated/intermediate/images/native-character/`. A missing or
+mismatched entry fails publication rather than silently switching formats.
+An older client cannot consume schema 3; ship rebuilt data and the matching
+client together as a data release.
+
 | Output | Contents |
 | --- | --- |
 | `.generated/client-public/assets/` | Published browser assets, served at `/assets/...` |

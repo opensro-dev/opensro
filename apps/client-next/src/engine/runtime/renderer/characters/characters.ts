@@ -5,6 +5,7 @@ characters.ts - characters.ts - admitted character models, world batches and sep
 
 ===========================================================================
 */
+import type { WorldTexture } from "@/engine/contracts/texture";
 import { shadowProjection, SHADOW_LIMIT, SHADOW_DISTANCE } from "@/engine/foundation/rendering/character-shadow";
 import { appendEquipmentSockets } from "@/engine/foundation/animation/equipment-sockets";
 import { selectEquipmentGlow } from "@/engine/foundation/rendering/equipment-glow";
@@ -57,6 +58,8 @@ import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from ".
 /*
 ================
 createCharacters
+
+Own source resources separately from borrowed assemblies and per-frame draw batches.
 ================
 */
 export function createCharacters(
@@ -66,7 +69,7 @@ export function createCharacters(
 	const models = new Map<string, {
 		model: CharacterModel;
 		plan: ReturnType<typeof createCharacterRenderPlan>;
-		images: ImageBitmap[];
+		images: WorldTexture[];
 		textures: ImageDraw[];
 		owned: boolean;
 		bytes: number;
@@ -78,7 +81,7 @@ export function createCharacters(
 	let hasDeferred = false, deferredVisible = new Set<number>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
 	const volumes = new WeakMap<CharacterModel, PickBounds>();
-	const textures = new Map<ImageBitmap, ImageDraw>();
+	const textures = new Map<WorldTexture, ImageDraw>();
 	const poses = new Map<number, {
 		model: string;
 		pose: ReturnType<typeof createCharacterPose>;
@@ -143,9 +146,11 @@ export function createCharacters(
 		visibleActors = 0,
 		frameGroups = 0;
 	/*
-================
-poseFor
-================
+	================
+	poseFor
+
+	Reuse one actor pose evaluation across geometry, attachment and socket consumers.
+	================
 	*/
 	function poseFor( actor: CharacterActor ) {
 		poseRequests++;
@@ -195,9 +200,11 @@ poseFor
 		return state.pose;
 	}
 	/*
-================
-transformFor
-================
+	================
+	transformFor
+
+	Compose mount and attachment transforms before applying the actor placement.
+	================
 	*/
 	function transformFor(
 		actor: CharacterActor,
@@ -318,17 +325,21 @@ transformFor
 	}
 	return {
 		/*
-================
-labelAnchors
-================
+		================
+		labelAnchors
+
+		Project retained actor anchors through the same world view used by rendering.
+		================
 		*/
 		profile( value: import("@/engine/contracts/runtime").RenderFrameProbe | undefined ) {
 			probe = value;
 		},
 		/*
-================
-labelAnchors
-================
+		================
+		labelAnchors
+
+		Project retained actor anchors through the same world view used by rendering.
+		================
 		*/
 		labelAnchors( origin: number, view: Float32Array, width: number, height: number, gids: ReadonlySet<number> ) {
 			const rows = snapshots.index,
@@ -366,44 +377,54 @@ labelAnchors
 			return result;
 		},
 		/*
-================
-particleSnapshot
-================
+		================
+		particleSnapshot
+
+		Expose the retained emitter snapshot without advancing its simulation clock.
+		================
 		*/
 		particleSnapshot( gid: number ) {
 			const row = particleSnapshots.get( gid );
 			return row ? { matrix: row.matrix.slice(), regionId: row.regionId } : null;
 		},
 		/*
-================
-particleTime
-================
+		================
+		particleTime
+
+		Report the emitter clock belonging to this actor lifetime.
+		================
 		*/
 		particleTime( gid: number ) {
 			return deferred.sample( gid )?.time;
 		},
 		/*
-================
-localMatrix
-================
+		================
+		localMatrix
+
+		Resolve a bone transform from the current actor pose.
+		================
 		*/
 		localMatrix( rows: readonly CharacterActor[], gid: number, bone: string ) {
 			const actor = rows.find( a => a.gid === gid );
 			return actor ? poseFor( actor )?.socket( bone ) ?? null : null;
 		},
 		/*
-================
-matrix
-================
+		================
+		matrix
+
+		Resolve an actor placement through its mount and attachment hierarchy.
+		================
 		*/
 		matrix( rows: readonly CharacterActor[], gid: number ) {
 			const index = new Map( rows.map( a => [ a.gid, a ] ) ), actor = index.get( gid );
 			return actor ? transformFor( actor, index, actor.pose.regionId, new Map() ) : null;
 		},
 		/*
-================
-socket
-================
+		================
+		socket
+
+		Combine a local bone offset with the actor world transform.
+		================
 		*/
 		socket(
 			rows: readonly CharacterActor[],
@@ -425,9 +446,11 @@ socket
 			return { ...actor.pose, x: point[0]!, y: point[1]!, z: point[2]! };
 		},
 		/*
-================
-pickFrontend
-================
+		================
+		pickFrontend
+
+		Pick only the supplied frontend actors against their authored volumes.
+		================
 		*/
 		pickFrontend( ray: PickRay, ids: readonly number[] ) {
 			const current = snapshots.index;
@@ -453,9 +476,11 @@ pickFrontend
 			return null;
 		},
 		/*
-================
-pick
-================
+		================
+		pick
+
+		Resolve world selection against visible actor volumes in ray order.
+		================
 		*/
 		pick( rays: readonly PickRay[], excluded: number, blindHeld = false ) {
 			let result: { gid: number; depth: number; ray: number; } | null = null, bestDistance = Infinity;
@@ -498,9 +523,11 @@ pick
 			return result;
 		},
 		/*
-================
-portraitSource
-================
+		================
+		portraitSource
+
+		Borrow the same retained model and textures used by the world actor.
+		================
 		*/
 		portraitSource( gid: number ) {
 			const actor = portraitSnapshots.index.get( gid ) ?? actors.find( a => a.gid === gid ),
@@ -508,11 +535,13 @@ portraitSource
 			return actor && resource ? { actor, model: resource.model, images: resource.images } : null;
 		},
 		/*
-================
-borrowModel
-================
+		================
+		borrowModel
+
+		Retain a borrowed source without taking ownership of its image lifetime.
+		================
 		*/
-		borrowModel( id: string, model: CharacterModel, images: readonly ImageBitmap[] ) {
+		borrowModel( id: string, model: CharacterModel, images: readonly WorldTexture[] ) {
 			if ( disposed || models.has( id ) ) throw Error( "Invalid borrowed character resource" );
 			models.set( id, {
 				model,
@@ -526,9 +555,11 @@ borrowModel
 			residencyDirty = true;
 		},
 		/*
-================
-shadowCandidates
-================
+		================
+		shadowCandidates
+
+		Select shadow geometry from the existing visible draw submissions.
+		================
 		*/
 		shadowCandidates( draws: readonly GeometryDraw[], eye: readonly number[], mode: number ) {
 			if ( mode === 0 ) return [];
@@ -594,9 +625,11 @@ shadowCandidates
 			} );
 		},
 		/*
-================
-stats
-================
+		================
+		stats
+
+		Report owned sources, assemblies and retained byte charges independently.
+		================
 		*/
 		stats() {
 			return {
@@ -622,9 +655,11 @@ stats
 			};
 		},
 		/*
-================
-retain
-================
+		================
+		retain
+
+		Record the sources and assemblies that must survive the next prepare pass.
+		================
 		*/
 		retain( ids: readonly string[] ) {
 			retainedScratch.clear();
@@ -637,9 +672,11 @@ retain
 			}
 		},
 		/*
-================
-animation
-================
+		================
+		animation
+
+		Admit a native clip and update the retained source charge before binding it.
+		================
 		*/
 		animation( id: string, name: string, source: NativeClip ) {
 			const base = models.get( id );
@@ -678,14 +715,16 @@ animation
 			return bytes;
 		},
 		/*
-================
-model
-================
+		================
+		model
+
+		Admit source bytes once; every rejection releases only owned bitmap resources.
+		================
 		*/
-		model( id: string, model: CharacterModel, images: ImageBitmap[] ) {
+		model( id: string, model: CharacterModel, images: WorldTexture[] ) {
 			if ( disposed || models.has( id ) ) {
 				for ( const image of images ) {
-					image.close();
+					if ( !("kind" in image) ) image.close();
 				}
 				if ( disposed ) {
 					throw new Error( "Characters disposed" );
@@ -715,15 +754,17 @@ model
 				residencyDirty = true;
 			} catch ( error ) {
 				for ( const image of images ) {
-					image.close();
+					if ( !("kind" in image) ) image.close();
 				}
 				throw error;
 			}
 		},
 		/*
-================
-assembly
-================
+		================
+		assembly
+
+		Compose equipment from resident sources without duplicating their image ownership.
+		================
 		*/
 		assembly(
 			id: string,
@@ -803,17 +844,19 @@ assembly
 			residencyDirty = true;
 		},
 		/*
-================
-currentActors
+		================
+		currentActors
 
-The retained actor snapshots, for read-only observation.
-================
+		The retained actor snapshots, for read-only observation.
+		================
 		*/
 		currentActors: (): readonly CharacterActor[] => actors,
 		/*
-================
-actors
-================
+		================
+		actors
+
+		Publish the frame actor lists used by poses, picking and rendering.
+		================
 		*/
 		actors( value: readonly CharacterActor[], portraitActors: readonly CharacterActor[] = [] ) {
 			const portraitRevision = portraitSnapshots.modelRevision();
@@ -828,9 +871,11 @@ actors
 			if ( snapshots.modelRevision() !== revision ) residencyDirty = true;
 		},
 		/*
-================
-deferredPlan
-================
+		================
+		deferredPlan
+
+		Build deferred effect queries from the current actor and particle state.
+		================
 		*/
 		deferredPlan( origin: number, camera: readonly number[], enabled = true, night = true ) {
 			if ( !hasDeferred ) return null;
@@ -870,9 +915,11 @@ deferredPlan
 		},
 		completeDeferred: deferred.complete,
 		/*
-================
-prepare
-================
+		================
+		prepare
+
+		Retire unwanted resources, evaluate visible actors and reuse bounded GPU batches.
+		================
 		*/
 		prepare(
 			geometry: GeometryCommands,
@@ -956,7 +1003,7 @@ prepare
 							batches.delete( id );
 							if ( resource.owned ) {
 								for ( const image of resource.images ) {
-									image.close();
+									if ( !("kind" in image) ) image.close();
 								}
 								ownedModels--;
 							}
@@ -1202,9 +1249,11 @@ prepare
 			}
 			probe?.characterMark( "character-poses" );
 			/*
-================
-actorTransform
-================
+			================
+			actorTransform
+
+			Resolve the frame-local actor matrix after hierarchy evaluation.
+			================
 			*/
 			function actorTransform( actor: CharacterActor ): Float32Array | null {
 				// Null only when the owner actor is gone. A missing bone is
@@ -1705,9 +1754,11 @@ actorTransform
 			return output;
 		},
 		/*
-================
-invalidate
-================
+		================
+		invalidate
+
+		Drop device-bound handles while retaining CPU sources for restoration.
+		================
 		*/
 		invalidate() {
 			batches.clear();
@@ -1717,9 +1768,11 @@ invalidate
 			}
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+
+		Retire GPU batches and owned images; borrowed sources remain with their owner.
+		================
 		*/
 		dispose( geometry: GeometryCommands | null, images: ImageCommands | null ) {
 			if ( disposed ) {
@@ -1737,7 +1790,7 @@ dispose
 			for ( const resource of models.values() ) {
 				if ( resource.owned ) {
 					for ( const image of resource.images ) {
-						image.close();
+						if ( !("kind" in image) ) image.close();
 					}
 				}
 			}

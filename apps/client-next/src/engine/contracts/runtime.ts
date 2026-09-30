@@ -9,6 +9,7 @@ surface. Types only.
 
 ===========================================================================
 */
+import type { WorldTexture } from "@/engine/contracts/texture";
 
 import type { Geometry } from "./geometry";
 import type { SessionCommand, SessionState } from "./session";
@@ -16,6 +17,8 @@ import type { InputBatch } from "./input";
 /*
 ================
 RuntimePhase
+
+Every runtime owner exposes its explicit startup, running and retirement phase.
 ================
 */
 export type RuntimePhase = "starting" | "running" | "failed" | "disposed";
@@ -39,6 +42,8 @@ export interface RenderFrameProbe {
 /*
 ================
 RuntimeDiagnostics
+
+A read-only snapshot of runtime failures and bounded resource statistics.
 ================
 */
 export interface RuntimeDiagnostics {
@@ -51,6 +56,8 @@ export interface RuntimeDiagnostics {
 /*
 ================
 GpuTimingStats
+
+Completed GPU timing samples; pending queries stay with the device owner.
 ================
 */
 export interface GpuTimingStats {
@@ -66,6 +73,8 @@ export interface GpuTimingStats {
 /*
 ================
 Disposable
+
+The owner releases its resources explicitly at the end of its lifetime.
 ================
 */
 export interface Disposable {
@@ -74,6 +83,8 @@ export interface Disposable {
 /*
 ================
 Viewport
+
+Dimensions shared by surface allocation, projection and input mapping.
 ================
 */
 export interface Viewport {
@@ -100,6 +111,8 @@ export interface FrameTelemetry {
 /*
 ================
 Platform
+
+Browser services granted to the runtime by the platform boundary.
 ================
 */
 export interface Platform extends Disposable {
@@ -129,6 +142,8 @@ export interface Platform extends Disposable {
 /*
 ================
 Renderer
+
+The runtime grants scene and resource commands without exposing device ownership.
 ================
 */
 export interface Renderer extends Disposable {
@@ -170,7 +185,7 @@ export interface Renderer extends Disposable {
 	retainCharacterModels( ids: readonly string[] ): void;
 	setCharacterAssembly( id: string, base: string, parts: readonly import("./character").CharacterAttachment[] ): void;
 	characterStats(): { actors: number; draws: number; };
-	setCharacterModel( id: string, model: import("./character").CharacterModel, images: ImageBitmap[] ): void;
+	setCharacterModel( id: string, model: import("./character").CharacterModel, images: WorldTexture[] ): void;
 	setCharacterAnimation(
 		id: string,
 		name: string,
@@ -205,6 +220,8 @@ export interface Renderer extends Disposable {
 /*
 ================
 SimulationHost
+
+The simulation worker capability owns its message channel and lifecycle.
 ================
 */
 export interface SimulationHost extends Disposable {
@@ -219,6 +236,8 @@ export interface SimulationHost extends Disposable {
 /*
 ================
 SimulationObservation
+
+Read-only state published by the simulation to presentation owners.
 ================
 */
 export interface SimulationObservation {
@@ -242,6 +261,8 @@ export interface ClockSample {
 /*
 ================
 Clock
+
+The frame owner supplies time through one visible runtime clock.
 ================
 */
 export interface Clock extends Disposable {
@@ -252,6 +273,8 @@ export interface Clock extends Disposable {
 /*
 ================
 RuntimeControl
+
+External controls enter through the runtime owner rather than mutating subsystems.
 ================
 */
 export interface RuntimeControl extends Disposable {

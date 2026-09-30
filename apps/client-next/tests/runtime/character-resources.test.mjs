@@ -17,6 +17,8 @@ import { readFileSync } from "node:fs";
 /*
 ================
 load
+
+Import the production source through the registered TypeScript loader.
 ================
 */
 async function load( entry ) {
@@ -153,6 +155,8 @@ const settle = () => new Promise( resolve => setImmediate( resolve ) );
 /*
 ================
 png
+
+Build only the PNG header needed to exercise pre-allocation image admission.
 ================
 */
 function png( width, height ) {
@@ -163,9 +167,11 @@ function png( width, height ) {
 /*
 ================
 glb
+
+Embed fixture images in an aligned model container with an explicit MIME contract.
 ================
 */
-function glb( images ) {
+function glb( images, mimeType = "image/png" ) {
 	const binary = Buffer.concat( images ),
 		json = {
 			asset: { version: "2.0" },
@@ -177,7 +183,7 @@ function glb( images ) {
 				byteOffset: images.slice( 0, i ).reduce( ( n, b ) => n + b.length, 0 ),
 				byteLength: bytes.length
 			}) ),
-			images: images.map( ( _, bufferView ) => ({ bufferView, mimeType: "image/png" }) )
+			images: images.map( ( _, bufferView ) => ({ bufferView, mimeType }) )
 		};
 	const text = Buffer.from( JSON.stringify( json ) ),
 		length = Math.ceil( text.length / 4 ) * 4,
@@ -273,9 +279,11 @@ test("failed bitmap transactions close already decoded images", async t => {
 			if ( ++calls === 2 ) throw new Error( "Decode failed" );
 			return {
 				/*
-================
-close
-================
+				================
+				close
+
+				Expose bitmap retirement to the fixture without creating a browser resource.
+				================
 				*/
 				close() {
 					closed++;
@@ -320,6 +328,8 @@ const measuredBytes = 3 * 4096 * 4 + 3 * 2048 * 4 + 64;
 /*
 ================
 model
+
+Supply the fixture model through the same resource-owner interface.
 ================
 */
 function model() {
@@ -353,9 +363,11 @@ test("equipment reflection images preserve item ownership through assembly, fade
 			width: 1,
 			height: 1,
 			/*
-================
-close
-================
+			================
+			close
+
+			Expose bitmap retirement to the fixture without creating a browser resource.
+			================
 			*/
 			close() {
 				closed++;
@@ -370,25 +382,31 @@ close
 	const uploads = [],
 		geometry = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload( data, image, offsets, environment ) {
 				uploads.push( { image, environment } );
 				return {};
 			},
 			/*
-================
-updateBones
-================
+			================
+			updateBones
+
+			Accept palette updates through the geometry capability under test.
+			================
 			*/
 			updateBones() {},
 			updateInstances: d => d,
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		},
@@ -396,6 +414,8 @@ release
 			upload: image => image, /*
 ================
 release
+
+Represent GPU retirement without granting the fixture device ownership.
 ================
 			*/
 			release() {}
@@ -432,33 +452,41 @@ test("native clip admission updates existing equipment assemblies and retires st
 	let releases = 0;
 	const geometry = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload( data ) {
 				return { bones: data.bones.slice() };
 			},
 			/*
-================
-updateBones
-================
+			================
+			updateBones
+
+			Accept palette updates through the geometry capability under test.
+			================
 			*/
 			updateBones( draw, bones ) {
 				draw.bones = bones.slice();
 			},
 			/*
-================
-updateInstances
-================
+			================
+			updateInstances
+
+			Accept instance updates through the geometry capability under test.
+			================
 			*/
 			updateInstances( draw ) {
 				return draw;
 			},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {
 				releases++;
@@ -466,17 +494,21 @@ release
 		},
 		images = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload() {
 				return {};
 			},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		};
@@ -549,49 +581,61 @@ test("shared frame poses remain exact when actors diverge, seek sockets and rejo
 	renderer.model( "shared", source, [] );
 	const geometry = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload( data ) {
 				return { bones: data.bones.slice() };
 			},
 			/*
-================
-updateBones
-================
+			================
+			updateBones
+
+			Accept palette updates through the geometry capability under test.
+			================
 			*/
 			updateBones( draw, bones ) {
 				draw.bones = bones.slice();
 			},
 			/*
-================
-updateInstances
-================
+			================
+			updateInstances
+
+			Accept instance updates through the geometry capability under test.
+			================
 			*/
 			updateInstances( draw ) {
 				return draw;
 			},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		},
 		images = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload() {
 				return {};
 			},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		};
@@ -647,26 +691,32 @@ test("stationary animation retains instance buffers while motion and recovery pu
 	let instanceWrites = 0, boneWrites = 0;
 	const geometry = {
 		/*
-================
-upload
-================
+		================
+		upload
+
+		Stand in for GPU upload so the fixture can observe allocation and reuse.
+		================
 		*/
 		upload( data ) {
 			return { instances: data.instances.slice(), bones: data.bones.slice() };
 		},
 		/*
-================
-updateBones
-================
+		================
+		updateBones
+
+		Accept palette updates through the geometry capability under test.
+		================
 		*/
 		updateBones( draw, bones ) {
 			boneWrites++;
 			draw.bones = bones.slice();
 		},
 		/*
-================
-updateInstances
-================
+		================
+		updateInstances
+
+		Accept instance updates through the geometry capability under test.
+		================
 		*/
 		updateInstances( draw, instances ) {
 			instanceWrites++;
@@ -674,32 +724,40 @@ updateInstances
 			return draw;
 		},
 		/*
-================
-release
-================
+		================
+		release
+
+		Represent GPU retirement without granting the fixture device ownership.
+		================
 		*/
 		release() {}
 	};
 	const images = {
 		/*
-================
-upload
-================
+		================
+		upload
+
+		Stand in for GPU upload so the fixture can observe allocation and reuse.
+		================
 		*/
 		upload() {
 			return {};
 		},
 		/*
-================
-release
-================
+		================
+		release
+
+		Represent GPU retirement without granting the fixture device ownership.
+		================
 		*/
 		release() {}
 	};
 	/*
-================
-frame
-================
+	================
+	frame
+
+	Advance one test frame through the resource admission lifecycle.
+	================
 	*/
 	function frame( time, x = 0 ) {
 		renderer.actors( [ { ...actor( "animated" ), clip: "move", time, pose: { ...actor( "" ).pose, x } } ] );
@@ -733,18 +791,22 @@ test("equipment churn retires assemblies while preserving their base images", ()
 	let closed = 0, uploads = 0, releases = 0, draws = 0, drawReleases = 0;
 	const images = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload() {
 				uploads++;
 				return {};
 			},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {
 				releases++;
@@ -752,32 +814,40 @@ release
 		},
 		geometry = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload() {
 				draws++;
 				return {};
 			},
 			/*
-================
-updateInstances
-================
+			================
+			updateInstances
+
+			Accept instance updates through the geometry capability under test.
+			================
 			*/
 			updateInstances( d ) {
 				return d;
 			},
 			/*
-================
-updateBones
-================
+			================
+			updateBones
+
+			Accept palette updates through the geometry capability under test.
+			================
 			*/
 			updateBones() {},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {
 				drawReleases++;
@@ -787,9 +857,11 @@ release
 		width: 1,
 		height: 1,
 		/*
-================
-close
-================
+		================
+		close
+
+		Expose bitmap retirement to the fixture without creating a browser resource.
+		================
 		*/
 		close() {
 			closed++;
@@ -810,9 +882,11 @@ close
 		width: 1,
 		height: 1,
 		/*
-================
-close
-================
+		================
+		close
+
+		Expose bitmap retirement to the fixture without creating a browser resource.
+		================
 		*/
 		close() {
 			closed++;
@@ -831,40 +905,50 @@ test("residency follows model membership across warm frames, late admission and 
 	const renderer = createCharacters(), closed = [], released = [];
 	const geometry = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload() {
 				return {};
 			},
 			updateInstances: d => d,
 			/*
-================
-updateBones
-================
+			================
+			updateBones
+
+			Accept palette updates through the geometry capability under test.
+			================
 			*/
 			updateBones() {},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		},
 		images = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload() {
 				return {};
 			},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release( draw ) {
 				released.push( draw );
@@ -875,9 +959,11 @@ release
 			width: 1,
 			height: 1,
 			/*
-================
-close
-================
+			================
+			close
+
+			Expose bitmap retirement to the fixture without creating a browser resource.
+			================
 			*/
 			close() {
 				closed.push( id );
@@ -927,17 +1013,21 @@ test("residency accounting is released when models leave and rejected images clo
 	let closed = 0;
 	const geometry = {
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		},
 		images = {
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		};
@@ -946,9 +1036,11 @@ release
 			width: 2048,
 			height: 1024,
 			/*
-================
-close
-================
+			================
+			close
+
+			Expose bitmap retirement to the fixture without creating a browser resource.
+			================
 			*/
 			close() {
 				closed++;
@@ -963,9 +1055,11 @@ close
 			width: 8192,
 			height: 1,
 			/*
-================
-close
-================
+			================
+			close
+
+			Expose bitmap retirement to the fixture without creating a browser resource.
+			================
 			*/
 			close() {
 				closed++;
@@ -1016,9 +1110,11 @@ test("renderer budgets expanded instances across models and frees old batches be
 	let held = 0, peak = 0;
 	const gpu = {
 		/*
-================
-upload
-================
+		================
+		upload
+
+		Stand in for GPU upload so the fixture can observe allocation and reuse.
+		================
 		*/
 		upload( data ) {
 			const draw = { bytes: data.bones.byteLength + data.instances.byteLength };
@@ -1028,42 +1124,52 @@ upload
 			return draw;
 		},
 		/*
-================
-release
-================
+		================
+		release
+
+		Represent GPU retirement without granting the fixture device ownership.
+		================
 		*/
 		release( draw ) {
 			assert.ok( live.delete( draw ) );
 			held -= draw.bytes;
 		},
 		/*
-================
-updateInstances
-================
+		================
+		updateInstances
+
+		Accept instance updates through the geometry capability under test.
+		================
 		*/
 		updateInstances( draw ) {
 			return draw;
 		},
 		/*
-================
-updateBones
-================
+		================
+		updateBones
+
+		Accept palette updates through the geometry capability under test.
+		================
 		*/
 		updateBones() {}
 	};
 	const images = {
 		/*
-================
-upload
-================
+		================
+		upload
+
+		Stand in for GPU upload so the fixture can observe allocation and reuse.
+		================
 		*/
 		upload() {
 			throw new Error( "No textures" );
 		},
 		/*
-================
-release
-================
+		================
+		release
+
+		Represent GPU retirement without granting the fixture device ownership.
+		================
 		*/
 		release() {}
 	};
@@ -1098,9 +1204,11 @@ test("cold effects reserve only the active load slot and cannot displace residen
 	const assets = {
 		available: () => 4,
 		/*
-================
-request
-================
+		================
+		request
+
+		Reserve a fixture handle while preserving the production request contract.
+		================
 		*/
 		request( url ) {
 			requests.push( url );
@@ -1108,18 +1216,22 @@ request
 			return serial;
 		},
 		/*
-================
-take
-================
+		================
+		take
+
+		Transfer the fixture result out of its simulated request slot.
+		================
 		*/
 		take( id ) {
 			if ( !pending.delete( id ) ) return null;
 			return { kind: "character", model: measured(), images: [] };
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+
+		Observe cancellation through the asset capability rather than changing worker source.
+		================
 		*/
 		cancel( id ) {
 			pending.delete( id );
@@ -1127,15 +1239,19 @@ cancel
 	};
 	const owner = createCharacterResources( assets, {
 		/*
-================
-setCharacterModel
-================
+		================
+		setCharacterModel
+
+		Admit the completed fixture model through the renderer boundary.
+		================
 		*/
 		setCharacterModel() {},
 		/*
-================
-retainCharacterModels
-================
+		================
+		retainCharacterModels
+
+		Observe the source membership requested by the resource owner.
+		================
 		*/
 		retainCharacterModels( ids ) {
 			retentions.push( ids );
@@ -1199,6 +1315,8 @@ test("one source class bounds both the decode and the reservation an undecoded s
 				height: 2048, /*
 ================
 close
+
+Expose bitmap retirement to the fixture without creating a browser resource.
 ================
 				*/
 				close() {}
@@ -1213,6 +1331,8 @@ close
 		height: 1024, /*
 ================
 close
+
+Expose bitmap retirement to the fixture without creating a browser resource.
 ================
 		*/
 		close() {}
@@ -1220,27 +1340,33 @@ close
 	const assets = {
 		available: () => 4,
 		/*
-================
-request
-================
+		================
+		request
+
+		Reserve a fixture handle while preserving the production request contract.
+		================
 		*/
 		request() {
 			pending.set( ++serial, true );
 			return serial;
 		},
 		/*
-================
-take
-================
+		================
+		take
+
+		Transfer the fixture result out of its simulated request slot.
+		================
 		*/
 		take( id ) {
 			if ( !pending.delete( id ) ) return null;
 			return { kind: "character", model: measured( [ image ] ), images: [ image ] };
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+
+		Observe cancellation through the asset capability rather than changing worker source.
+		================
 		*/
 		cancel( id ) {
 			pending.delete( id );
@@ -1250,13 +1376,17 @@ cancel
 		assets,
 		{
 			/*
-================
-setCharacterModel
-================
+			================
+			setCharacterModel
+
+			Admit the completed fixture model through the renderer boundary.
+			================
 			*/
 			setCharacterModel() {}, /*
 ================
 retainCharacterModels
+
+Observe the source membership requested by the resource owner.
 ================
 			*/
 			retainCharacterModels() {}
@@ -1316,27 +1446,33 @@ test("no interleaving of frames, loads and effects unadmits a decoded source", a
 				const assets = {
 					available: () => 4,
 					/*
-================
-request
-================
+					================
+					request
+
+					Reserve a fixture handle while preserving the production request contract.
+					================
 					*/
 					request( url ) {
 						pending.set( ++serial, url );
 						return serial;
 					},
 					/*
-================
-take
-================
+					================
+					take
+
+					Transfer the fixture result out of its simulated request slot.
+					================
 					*/
 					take( id ) {
 						if ( !pending.delete( id ) ) return null;
 						return { kind: "character", model: measured(), images: [] };
 					},
 					/*
-================
-cancel
-================
+					================
+					cancel
+
+					Observe cancellation through the asset capability rather than changing worker source.
+					================
 					*/
 					cancel( id ) {
 						pending.delete( id );
@@ -1346,13 +1482,17 @@ cancel
 					assets,
 					{
 						/*
-================
-setCharacterModel
-================
+						================
+						setCharacterModel
+
+						Admit the completed fixture model through the renderer boundary.
+						================
 						*/
 						setCharacterModel() {}, /*
 ================
 retainCharacterModels
+
+Observe the source membership requested by the resource owner.
 ================
 						*/
 						retainCharacterModels() {}
@@ -1391,9 +1531,11 @@ test("inactive character resource cache remains bounded and evicts least recentl
 	const owner = createCharacterResources( {
 		available: () => 4,
 		/*
-================
-request
-================
+		================
+		request
+
+		Reserve a fixture handle while preserving the production request contract.
+		================
 		*/
 		request( url ) {
 			requests.push( url );
@@ -1401,33 +1543,41 @@ request
 			return serial;
 		},
 		/*
-================
-take
-================
+		================
+		take
+
+		Transfer the fixture result out of its simulated request slot.
+		================
 		*/
 		take( id ) {
 			if ( !pending.delete( id ) ) return null;
 			return { kind: "character", model: { nodes: [], primitives: [], images: [], clips: [] }, images: [] };
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+
+		Observe cancellation through the asset capability rather than changing worker source.
+		================
 		*/
 		cancel( id ) {
 			pending.delete( id );
 		}
 	}, {
 		/*
-================
-setCharacterModel
-================
+		================
+		setCharacterModel
+
+		Admit the completed fixture model through the renderer boundary.
+		================
 		*/
 		setCharacterModel() {},
 		/*
-================
-retainCharacterModels
-================
+		================
+		retainCharacterModels
+
+		Observe the source membership requested by the resource owner.
+		================
 		*/
 		retainCharacterModels( ids ) {
 			retained = ids;
@@ -1457,40 +1607,50 @@ test("actor reordering and duplicate-model count changes do not invalidate model
 	const renderer = createCharacters(), closed = [];
 	const geometry = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload() {
 				return {};
 			},
 			updateInstances: d => d,
 			/*
-================
-updateBones
-================
+			================
+			updateBones
+
+			Accept palette updates through the geometry capability under test.
+			================
 			*/
 			updateBones() {},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		},
 		images = {
 			/*
-================
-upload
-================
+			================
+			upload
+
+			Stand in for GPU upload so the fixture can observe allocation and reuse.
+			================
 			*/
 			upload() {
 				return {};
 			},
 			/*
-================
-release
-================
+			================
+			release
+
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		};
@@ -1499,9 +1659,11 @@ release
 			width: 1,
 			height: 1,
 			/*
-================
-close
-================
+			================
+			close
+
+			Expose bitmap retirement to the fixture without creating a browser resource.
+			================
 			*/
 			close() {
 				closed.push( id );
@@ -1539,11 +1701,11 @@ test("injected character profiling observes pose lifetime without changing palet
 	const renderer = createCharacters( {
 		phases: {
 			/*
-================
-begin
-The renderer must pass its observer to real pose materialization.
-================
-		*/
+			================
+			begin
+			The renderer must pass its observer to real pose materialization.
+			================
+			*/
 			begin( model, reason ) {
 				poseSamples.push( reason );
 				return null;
@@ -1555,9 +1717,11 @@ The renderer must pass its observer to real pose materialization.
 	source.primitives[0].image = -1;
 	const geometry = {
 		/*
-================
-upload
-================
+		================
+		upload
+
+		Stand in for GPU upload so the fixture can observe allocation and reuse.
+		================
 		*/
 		upload( data ) {
 			palettes.push( [ ...data.bones ] );
@@ -1566,6 +1730,8 @@ upload
 		updateInstances: draw => draw, /*
 ================
 updateBones
+
+Accept palette updates through the geometry capability under test.
 ================
 		*/
 		updateBones( draw, bones ) {
@@ -1573,21 +1739,27 @@ updateBones
 		}, /*
 ================
 release
+
+Represent GPU retirement without granting the fixture device ownership.
 ================
 		*/
 		release() {}
 	};
 	const images = {
 		/*
-================
-upload
-================
+		================
+		upload
+
+		Stand in for GPU upload so the fixture can observe allocation and reuse.
+		================
 		*/
 		upload() {
 			return {};
 		}, /*
 ================
 release
+
+Represent GPU retirement without granting the fixture device ownership.
 ================
 		*/
 		release() {}
@@ -1596,18 +1768,24 @@ release
 	renderer.retain( [ "body" ] );
 	const probe = {
 		/*
-================
-renderBegin
-================
+		================
+		renderBegin
+
+		Start the injected render profiling observation.
+		================
 		*/
 		renderBegin() {}, /*
 ================
 renderMark
+
+Observe a render phase without changing frame behavior.
 ================
 		*/
 		renderMark() {}, /*
 ================
 characterBegin
+
+Start the injected character profiling observation.
 ================
 		*/
 		characterBegin() {
@@ -1615,6 +1793,8 @@ characterBegin
 		}, /*
 ================
 characterMark
+
+Observe a character phase without changing pose behavior.
 ================
 		*/
 		characterMark( stage ) {
@@ -1622,6 +1802,8 @@ characterMark
 		}, /*
 ================
 characterCount
+
+Record a profiling counter through the injected observer.
 ================
 		*/
 		characterCount( name, value = 1 ) {
@@ -1648,4 +1830,45 @@ characterCount
 	} finally {
 		renderer.dispose( geometry, images );
 	}
+});
+
+test("native mips transfer once and retain compressed residency across renderer retirement", async context => {
+	const native = new Uint8Array( 44 ), view = new DataView( native.buffer );
+	[ 0x3158544e, 4, 4, 0x31545844, 3 ].forEach( ( value, index ) => view.setUint32( index * 4, value, true ) );
+	native.fill( 0x39, 20 );
+	context.mock.method(
+		globalThis,
+		"fetch",
+		async () => new Response( glb( [ native ], "application/x-sro-texture" ) )
+	);
+	const deliveries = [];
+	const loader = createLoader( ( message, transfer = [] ) => {
+		if ( message.kind !== "character" ) return;
+		deliveries.push( structuredClone( message, { transfer } ) );
+		assert.ok(
+			message.images.every( image => "kind" in image && image.levels.every( level => level.byteLength === 0 ) )
+		);
+	} );
+	context.after( () => loader.dispose() );
+	loader.receive( {
+		kind: "load",
+		id: 71,
+		url: "http://localhost/native-model",
+		limit: 1048576,
+		decode: "character"
+	} );
+	await settle();
+	assert.equal( deliveries.length, 1 );
+	const result = deliveries[0];
+	assert.deepEqual( result.model.images, [ { width: 4, height: 4 } ] );
+	assert.equal( result.images[0].kind, "native-texture" );
+	assert.deepEqual( result.images[0].levels.map( level => level.byteLength ), [ 8, 8, 8 ] );
+	const { characterBytes } = await load( "src/engine/foundation/animation/character-budget.ts" );
+	assert.equal( characterBytes( result.model, result.images ), 24 );
+	assert.equal( characterBytes( result.model, [ { width: 4, height: 4 } ] ), 80 );
+	const characters = createCharacters();
+	characters.model( "native", result.model, result.images );
+	characters.invalidate();
+	characters.dispose( null, null );
+	assert.equal( result.images[0].levels[0].byteLength, 8 );
 });

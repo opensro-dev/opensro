@@ -1,6 +1,6 @@
 /*
 ===========================================================================
-NativeLensResources.cs - D3DX lens resource generation without a C++ SDK
+NativeLensResources.cs - shared D3DX texture generation without a C++ SDK
 
 Run in 32-bit Windows PowerShell with d3dx9_39.dll to preserve the compressed
 mip bytes produced by tools/native-lens-resources.cpp. The caller owns the
@@ -24,7 +24,9 @@ public static class NativeLensResources {
 	const uint D3DCREATE_FPU_PRESERVE = 0x02;
 	const uint D3DLOCK_READONLY = 0x10;
 	const uint D3DFMT_A8R8G8B8 = 21;
+	const uint D3DFMT_DXT1 = 0x31545844;
 	const uint D3DFMT_DXT3 = 0x33545844;
+	const uint D3DFMT_DXT5 = 0x35545844;
 	const uint NTX_MAGIC = 0x3158544e;
 	const int DDJ_HEADER_SIZE = 20;
 	const int MAX_DDJ_BYTES = 16 * 1024 * 1024;
@@ -103,6 +105,8 @@ public static class NativeLensResources {
 	/*
 	================
 	Check
+
+	Convert failed HRESULTs into an operation-specific build failure.
 	================
 	*/
 	static void Check(int result, string operation) {
@@ -114,6 +118,8 @@ public static class NativeLensResources {
 	/*
 	================
 	Release
+
+	Release only the COM reference acquired by the current owner.
 	================
 	*/
 	static void Release(IntPtr instance) {
@@ -150,8 +156,9 @@ public static class NativeLensResources {
 		var unlockRect = Method<UnlockRectMethod>(texture, 20);
 		SurfaceDesc desc;
 		Check(getDesc(texture, 0, out desc), "GetLevelDesc");
-		if ( desc.Format != D3DFMT_A8R8G8B8 && desc.Format != D3DFMT_DXT3 ) {
-			throw new InvalidDataException("Unsupported lens format: " + desc.Format);
+		if ( desc.Format != D3DFMT_A8R8G8B8 && desc.Format != D3DFMT_DXT1 &&
+			desc.Format != D3DFMT_DXT3 && desc.Format != D3DFMT_DXT5 ) {
+			throw new InvalidDataException("Unsupported native texture format: " + desc.Format);
 		}
 		uint levels = Method<GetLevelCountMethod>(texture, 13)(texture);
 		using ( var stream = new MemoryStream() ) {
@@ -166,9 +173,10 @@ public static class NativeLensResources {
 					LockedRect rect;
 					Check(lockRect(texture, level, out rect, IntPtr.Zero, D3DLOCK_READONLY), "LockRect");
 					try {
-						bool compressed = desc.Format == D3DFMT_DXT3;
+						bool compressed = desc.Format != D3DFMT_A8R8G8B8;
+						uint blockBytes = desc.Format == D3DFMT_DXT1 ? 8u : 16u;
 						uint rows = compressed ? (desc.Height + 3) / 4 : desc.Height;
-						int stride = checked((int)(compressed ? ((desc.Width + 3) / 4) * 16 : desc.Width * 4));
+						int stride = checked((int)(compressed ? ((desc.Width + 3) / 4) * blockBytes : desc.Width * 4));
 						if ( rect.Pitch < stride || rect.Bits == IntPtr.Zero ) {
 							throw new InvalidDataException("Invalid lens texture row pitch or pointer");
 						}
@@ -192,11 +200,34 @@ public static class NativeLensResources {
 	================
 	*/
 	public static void Build(string sourceRoot, string outputRoot) {
-		if ( IntPtr.Size != 4 ) {
-			throw new InvalidOperationException("Lens conversion must run in 32-bit Windows PowerShell.");
+		var sources = new string[LENS_COUNT];
+		var targets = new string[LENS_COUNT];
+		for ( int index = 0; index < LENS_COUNT; index++ ) {
+			string name = "lens" + (index + 1);
+			sources[index] = Path.Combine(sourceRoot, name + ".ddj");
+			targets[index] = Path.Combine(outputRoot, name + ".texture");
 		}
-		Directory.CreateDirectory(outputRoot);
-		IntPtr window = CreateWindowExW(0, "STATIC", "Lens resource build", WS_POPUP,
+		BuildFiles(sources, targets);
+	}
+
+	/*
+	================
+	BuildFiles
+
+	Share one device across the batch. Existing authored levels stay compressed;
+	D3DX fills only the absent suffix of the mip chain (client 0x924a19).
+	Each texture is released before admitting the next source.
+	================
+	*/
+	public static void BuildFiles(string[] sources, string[] targets) {
+		if ( sources.Length != targets.Length ) {
+			throw new ArgumentException("Native texture source/target counts differ.");
+		}
+		if ( IntPtr.Size != 4 ) {
+			throw new InvalidOperationException("Native texture conversion must run in 32-bit Windows PowerShell.");
+		}
+
+		IntPtr window = CreateWindowExW(0, "STATIC", "Native texture build", WS_POPUP,
 			0, 0, 64, 64, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
 		if ( window == IntPtr.Zero ) {
 			throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
@@ -215,13 +246,14 @@ public static class NativeLensResources {
 			Check(Method<CreateDeviceMethod>(api, 16)(api, 0, D3DDEVTYPE_HAL, window,
 				D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE,
 				ref parameters, out device), "CreateDevice");
-			for ( int index = 1; index <= LENS_COUNT; index++ ) {
-				string name = "lens" + index;
-				byte[] data = ReadDds(Path.Combine(sourceRoot, name + ".ddj"));
+			for ( int index = 0; index < sources.Length; index++ ) {
+				string name = sources[index];
+				Directory.CreateDirectory(Path.GetDirectoryName(targets[index]));
+				byte[] data = ReadDds(name);
 				IntPtr texture = IntPtr.Zero;
 				try {
 					Check(D3DXCreateTextureFromFileInMemory(device, data, (uint)data.Length, out texture), name);
-					File.WriteAllBytes(Path.Combine(outputRoot, name + ".texture"), SerializeTexture(texture));
+					File.WriteAllBytes(targets[index], SerializeTexture(texture));
 				} finally {
 					Release(texture);
 				}

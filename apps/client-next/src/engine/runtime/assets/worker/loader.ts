@@ -18,6 +18,12 @@ import { prepareWorldScene, worldSceneTransfers } from "@/engine/foundation/rend
 import { createNavigationResources } from "./navigation/navigation";
 import { decodeDxt1 } from "@/engine/foundation/assets/dds";
 import { createEffectDecoder } from "./effects/effects";
+import {
+	decodeNativeTexture,
+	NATIVE_TEXTURE_MIME,
+	validateNativeTexture
+} from "@/engine/foundation/assets/native-texture";
+import type { WorldTexture } from "@/engine/contracts/texture";
 import { pngBytes, DECODED_IMAGE_BYTES } from "@/engine/foundation/assets/image-budget";
 import { createWorldDecoder } from "./world/world";
 import { createModelDecoder } from "./model/model";
@@ -29,6 +35,8 @@ import type { AssetRequest, AssetWorkerMessage } from "@/engine/contracts/assets
 /*
 ================
 createLoader
+
+Own decoders, foreground requests and the background installation scheduler.
 ================
 */
 export function createLoader( send: ( result: AssetWorkerMessage, transfer: Transferable[] ) => void ) {
@@ -51,9 +59,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	let bytesRead = 0;
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
 	/*
-================
-progress
-================
+	================
+	progress
+
+	Publish installation progress through the worker message contract.
+	================
 	*/
 	function progress( force = false ) {
 		const now = performance.now(), elapsed = now - lastProgress;
@@ -80,9 +90,11 @@ progress
 		}
 	}
 	/*
-================
-activity
-================
+	================
+	activity
+
+	Track foreground activity so installation cannot compete with an active load.
+	================
 	*/
 	function activity( path: string, event: "start" | "ready" | "end" ) {
 		if ( event === "start" ) files.set( path, (files.get( path ) ?? 0) + 1 );
@@ -95,9 +107,11 @@ activity
 		progress( files.size === 0 );
 	}
 	/*
-================
-download
-================
+	================
+	download
+
+	Read a bounded asset through the shared pack and network owner.
+	================
 	*/
 	async function download(
 		url: string,
@@ -154,18 +168,22 @@ download
 	// last foreground load to settle wakes it: an event, not a poll.
 	let idleWaiters: (() => void)[] = [];
 	/*
-================
-foregroundIdle
-================
+	================
+	foregroundIdle
+
+	Wait until no foreground owner holds a request slot.
+	================
 	*/
 	function foregroundIdle(): Promise<void> {
 		if ( active.size === 0 || disposed ) return Promise.resolve();
 		return new Promise( ( resolve ) => idleWaiters.push( resolve ) );
 	}
 	/*
-================
-wakeIdleWaiters
-================
+	================
+	wakeIdleWaiters
+
+	Release installation waiters only after foreground work has settled.
+	================
 	*/
 	function wakeIdleWaiters() {
 		const waiters = idleWaiters;
@@ -180,9 +198,11 @@ wakeIdleWaiters
 		install: packs.install
 	}, foregroundIdle );
 	/*
-================
-load
-================
+	================
+	load
+
+	Decode a bounded request and transfer resource ownership exactly once.
+	================
 	*/
 	async function load(
 		request: Extract<AssetRequest, {
@@ -223,9 +243,11 @@ load
 				} else if ( (request.decode === "world" || request.decode === "frontend-world") ) {
 					let total = bytes.byteLength;
 					/*
-================
-readWorldResource
-================
+					================
+					readWorldResource
+
+					Resolve authored world dependencies through the same bounded asset reader.
+					================
 					*/
 					async function readWorldResource( path: string ) {
 						if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) || path.includes( "\\" ) ) {
@@ -353,24 +375,38 @@ readWorldResource
 						}
 						model = { ...decoded.model, images: raw };
 					} else model = models.character( models.decode( bytes ) );
-					const images: ImageBitmap[] = [];
+					const images: WorldTexture[] = [];
 					try {
-						const decoded = model.images.reduce( ( sum, image ) => sum + pngBytes( image.bytes ), 0 );
+						const nativeImages = model.images.map( image =>
+							image.mime === NATIVE_TEXTURE_MIME ? decodeNativeTexture( image.bytes ) : null
+						);
+						const decoded = model.images.reduce(
+							( sum, image, index ) =>
+								sum + (nativeImages[index] ?
+									validateNativeTexture( nativeImages[index]! ) :
+									pngBytes( image.bytes )),
+							0
+						);
 						if ( decoded > DECODED_IMAGE_BYTES ) {
 							throw new Error( "Character images exceed decoded image budget" );
 						}
-						for ( const image of model.images ) {
-							const bitmap = await createImageBitmap(
-								new Blob( [ image.bytes.buffer as ArrayBuffer ], { type: image.mime } ),
+						for ( const [index, image] of model.images.entries() ) {
+							const bitmap = nativeImages[index] ?? await createImageBitmap(
+								new Blob( [ image.bytes as Uint8Array<ArrayBuffer> ], { type: image.mime } ),
 								{ premultiplyAlpha: "none", colorSpaceConversion: "none" }
 							);
 							images.push( bitmap );
 							if ( disposed || controller.signal.aborted ) {
-								for ( const bitmap of images ) bitmap.close();
+								for ( const bitmap of images ) if ( !("kind" in bitmap) ) bitmap.close();
 								return;
 							}
 						}
-						const transfers = new Set<Transferable>( images );
+						const transfers = new Set<Transferable>();
+						for ( const image of images ) {
+							if ( "kind" in image ) {
+								for ( const level of image.levels ) transfers.add( level.buffer as ArrayBuffer );
+							} else transfers.add( image );
+						}
 						for ( const p of model.primitives ) {
 							for (
 								const a of [
@@ -391,8 +427,8 @@ readWorldResource
 								transfers.add( channel.values.buffer as ArrayBuffer );
 							}
 						}
-						// The PNG bytes stay here and are collected: the page draws the
-						// bitmaps and keeps only their sizes.
+						// The page retains either native mip blocks or decoded bitmaps.
+						// Encoded PNGs stay in the worker and become collectible.
 						const delivered: import("@/engine/contracts/character").CharacterModel = {
 							...model,
 							images: images.map( bitmap => ({ width: bitmap.width, height: bitmap.height }) )
@@ -400,7 +436,7 @@ readWorldResource
 						pending.delete( request.id );
 						send( { kind: "character", id: request.id, model: delivered, images }, [ ...transfers ] );
 					} catch ( error ) {
-						for ( const image of images ) image.close();
+						for ( const image of images ) if ( !("kind" in image) ) image.close();
 						throw error;
 					}
 				} else if ( request.decode === "glb" ) {
@@ -466,9 +502,11 @@ readWorldResource
 	}
 	return {
 		/*
-================
-receive
-================
+		================
+		receive
+
+		Dispatch load, cancellation and installation messages to their owning state.
+		================
 		*/
 		receive( request: AssetRequest ) {
 			if ( disposed ) {
@@ -496,9 +534,11 @@ receive
 			void load( request, controller );
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+
+		Abort requests and release decoder state before terminating the worker.
+		================
 		*/
 		dispose() {
 			if ( disposed ) {

@@ -18,6 +18,8 @@ import type { AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "
 /*
 ================
 createAssets
+
+Own bounded request slots and fail outstanding handles if the worker becomes unusable.
 ================
 */
 export function createAssets(): AssetOwner {
@@ -35,17 +37,43 @@ export function createAssets(): AssetOwner {
 	}>();
 	let progress: import("@/engine/contracts/assets").AssetProgress | null = null;
 	let nextId = 0, disposed = false, failure: string | null = null;
+
+	/*
+	================
+	close
+
+	Release bitmap results that never transfer to a consumer; native arrays are collectible.
+	================
+	*/
 	const close = ( result: AssetResult | AssetWorkerMessage | null ) => {
 		if ( result?.kind === "world" ) { for ( const row of result.images ?? [] ) row.image.close(); }
 		if ( result?.kind === "image" ) result.image.close();
-		if ( result?.kind === "character" ) { for ( const image of result.images ) image.close(); }
+		if ( result?.kind === "character" ) {
+			for ( const image of result.images ) if ( !("kind" in image) ) image.close();
+		}
 	};
+
+	/*
+	================
+	send
+
+	A failed worker submission terminates the channel and all outstanding handles.
+	================
+	*/
 	function send( message: AssetRequest ) {
 		try {
 			worker.postMessage( message );
 		} catch ( error ) {
 			// An unusable worker channel is terminal, not ordinary backpressure.
 			// Fail every owned handle so callers never wait on work not submitted.
+
+			/*
+			================
+			fail
+
+			Retire the worker and convert every pending handle into an observable error.
+			================
+			*/
 			fail( "Asset worker submission failed: " + String( error ) );
 			throw error;
 		}
@@ -59,6 +87,14 @@ export function createAssets(): AssetOwner {
 			job.result = { kind: "error", id, error: message };
 		}
 	};
+
+	/*
+	================
+	checkDeadline
+
+	Enforce one deadline for both active loads and cancellation acknowledgements.
+	================
+	*/
 	function checkDeadline() {
 		if ( disposed || failure ) return;
 		const now = performance.now();
@@ -134,6 +170,14 @@ export function createAssets(): AssetOwner {
 				{ phase: "running" };
 		},
 		available: () => disposed || failure ? 0 : 4 - jobs.size,
+
+		/*
+		================
+		request
+
+		Reserve a bounded handle before submitting work to the asset worker.
+		================
+		*/
 		request( value, limit = 16 << 20, decode ) {
 			if ( disposed || failure ) {
 				throw new Error( failure ?? "Assets disposed" );
@@ -155,6 +199,14 @@ export function createAssets(): AssetOwner {
 			}
 			return id;
 		},
+
+		/*
+		================
+		take
+
+		Transfer ownership of a completed result and release its request slot.
+		================
+		*/
 		take( id ) {
 			const job = jobs.get( id );
 			if ( job?.cancelled || !job?.result ) {
@@ -163,6 +215,14 @@ export function createAssets(): AssetOwner {
 			jobs.delete( id );
 			return job.result;
 		},
+
+		/*
+		================
+		cancel
+
+		Retain an in-flight slot until the worker acknowledges cancellation.
+		================
+		*/
 		cancel( id ) {
 			const job = jobs.get( id );
 			if ( !job || job.cancelled ) {
@@ -176,10 +236,26 @@ export function createAssets(): AssetOwner {
 			job.cancelled = true;
 			send( { kind: "cancel", id } );
 		},
+
+		/*
+		================
+		install
+
+		Start background installation without consuming a foreground request slot.
+		================
+		*/
 		install( listUrl ) {
 			if ( disposed || failure ) return;
 			send( { kind: "install", url: new URL( listUrl ).href } );
 		},
+
+		/*
+		================
+		dispose
+
+		Detach worker callbacks and release all unclaimed results.
+		================
+		*/
 		dispose() {
 			if ( disposed ) {
 				return;

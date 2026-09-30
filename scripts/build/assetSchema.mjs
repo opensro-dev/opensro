@@ -12,8 +12,9 @@ merges into an index of another schema: it would mix formats.
 History:
   1  crowd dress, weapon and cosmetic tables (roster catalog version 2)
   2  one per-item catalog keyed by RefItemID with codes (catalog version 3)
+  3  character GLBs can embed original BC1/BC2/BC3 mip resources
 
 ===========================================================================
 */
 
-export const ASSET_SCHEMA = 2;
+export const ASSET_SCHEMA = 3;

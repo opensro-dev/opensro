@@ -20,7 +20,6 @@ apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/contracts/scene.ts
 apps/client-next/src/engine/contracts/scenery.ts
 apps/client-next/src/engine/contracts/simulation.ts
-apps/client-next/src/engine/contracts/texture.ts
 apps/client-next/src/engine/contracts/ui.ts
 apps/client-next/src/engine/contracts/world-admission.ts
 apps/client-next/src/engine/foundation/animation/action-refresh.ts
@@ -87,9 +86,7 @@ apps/client-next/src/engine/foundation/animation/skill-motion.ts
 apps/client-next/src/engine/foundation/animation/sound-selectors.ts
 apps/client-next/src/engine/foundation/animation/status-presentation.ts
 apps/client-next/src/engine/foundation/assets/asset-budget.ts
-apps/client-next/src/engine/foundation/assets/dds.ts
 apps/client-next/src/engine/foundation/assets/image-budget.ts
-apps/client-next/src/engine/foundation/assets/native-texture.ts
 apps/client-next/src/engine/foundation/assets/read-bytes.ts
 apps/client-next/src/engine/foundation/audio/environment.ts
 apps/client-next/src/engine/foundation/audio/item-sounds.ts
@@ -321,7 +318,6 @@ apps/client-next/src/engine/runtime/characters/damage-feedback.ts
 apps/client-next/src/engine/runtime/characters/effects/effects.ts
 apps/client-next/src/engine/runtime/characters/orbs/orbs.ts
 apps/client-next/src/engine/runtime/characters/pose-presentation.ts
-apps/client-next/src/engine/runtime/characters/resources/resources.ts
 apps/client-next/src/engine/runtime/characters/sounds/sounds.ts
 apps/client-next/src/engine/runtime/characters/state-index.ts
 apps/client-next/src/engine/runtime/frontend/camera/camera.ts
@@ -337,15 +333,12 @@ apps/client-next/src/engine/runtime/presentation/presentation.ts
 apps/client-next/src/engine/runtime/random/random.ts
 apps/client-next/src/engine/runtime/renderer/characters/actor-snapshots.ts
 apps/client-next/src/engine/runtime/renderer/characters/palette-streams.ts
-apps/client-next/src/engine/runtime/renderer/characters/portrait.ts
 apps/client-next/src/engine/runtime/renderer/device/animation-shader.ts
 apps/client-next/src/engine/runtime/renderer/device/animation.ts
 apps/client-next/src/engine/runtime/renderer/device/bloom.ts
 apps/client-next/src/engine/runtime/renderer/device/character-shadows.ts
-apps/client-next/src/engine/runtime/renderer/device/device.ts
 apps/client-next/src/engine/runtime/renderer/device/flares.ts
 apps/client-next/src/engine/runtime/renderer/device/geometry.ts
-apps/client-next/src/engine/runtime/renderer/device/images.ts
 apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
 apps/client-next/src/engine/runtime/renderer/device/pipelines.ts
 apps/client-next/src/engine/runtime/renderer/device/thunder.ts
@@ -443,7 +436,6 @@ apps/client-next/tests/browser/geometry.test.mjs
 apps/client-next/tests/browser/glb-compression.test.mjs
 apps/client-next/tests/browser/gm-item-live.test.mjs
 apps/client-next/tests/browser/gpu-animation.test.mjs
-apps/client-next/tests/browser/ground-item-alpha.test.mjs
 apps/client-next/tests/browser/ground-item-input.test.mjs
 apps/client-next/tests/browser/ground-item-label.test.mjs
 apps/client-next/tests/browser/guide-parity.test.mjs
@@ -664,9 +656,7 @@ scripts/build/char/compileBanTimeline.mjs
 scripts/build/char/compileBsrVisual.mjs
 scripts/build/char/defaultWearPolicy.mjs
 scripts/build/char/entityMaterialMetadata.mjs
-scripts/build/char/equipmentGlowMetadata.mjs
 scripts/build/char/equipmentVisualRecords.mjs
-scripts/build/char/exportGlb.mjs
 scripts/build/char/formats.mjs
 scripts/build/char/materialVariants.mjs
 scripts/build/char/native/animationSetNames.ts
@@ -698,7 +688,6 @@ scripts/build/shared/atomicPublish.mjs
 scripts/build/shared/audioResources.mjs
 scripts/build/shared/binaryUtils.mjs
 scripts/build/shared/bsrModifiers.mjs
-scripts/build/shared/characterEnvironment.mjs
 scripts/build/shared/characterInfo.mjs
 scripts/build/shared/characterMaterialState.mjs
 scripts/build/shared/cifLayoutCatalog.mjs
@@ -841,7 +830,6 @@ scripts/test/lib/generatedAssetTestMode.mjs
 scripts/test/mission/effectProgramClosure.test.mjs
 scripts/test/mission/minimapArtCoverage.test.mjs
 scripts/test/mission/missionMinimapBuild.test.mjs
-scripts/test/suites/assets.mjs
 scripts/test/suites/cif.mjs
 scripts/test/suites/index.mjs
 scripts/test/suites/region.mjs

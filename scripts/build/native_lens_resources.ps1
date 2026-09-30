@@ -7,8 +7,9 @@ Windows includes Add-Type; no Visual Studio or DirectX SDK is required.
 ===========================================================================
 #>
 param(
-	[Parameter(Mandatory=$true)][string]$SourceRoot,
-	[Parameter(Mandatory=$true)][string]$OutputRoot
+	[string]$SourceRoot,
+	[string]$OutputRoot,
+	[string]$Manifest
 )
 $ErrorActionPreference = 'Stop'
 if ([IntPtr]::Size -ne 4) {
@@ -18,4 +19,10 @@ if (-not (Test-Path -LiteralPath "$env:WINDIR\SysWOW64\d3dx9_39.dll")) {
 	throw 'Missing 32-bit d3dx9_39.dll. Install Microsoft DirectX End-User Runtime: https://www.microsoft.com/en-us/download/details.aspx?id=35 then rerun pnpm assets build.'
 }
 Add-Type -Path (Join-Path $PSScriptRoot 'NativeLensResources.cs')
-[NativeLensResources]::Build($SourceRoot, $OutputRoot)
+if ($Manifest) {
+ $jobs = Get-Content -LiteralPath $Manifest -Raw -Encoding UTF8 | ConvertFrom-Json
+ [NativeLensResources]::BuildFiles([string[]]@($jobs.source), [string[]]@($jobs.target))
+} else {
+ if (-not $SourceRoot -or -not $OutputRoot) { throw 'Supply source/output roots or a batch manifest.' }
+ [NativeLensResources]::Build($SourceRoot, $OutputRoot)
+}

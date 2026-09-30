@@ -9,6 +9,7 @@ them into ImageBitmaps and hands the page only their sizes.
 
 ===========================================================================
 */
+import { NATIVE_TEXTURE_MIME } from "@/engine/foundation/assets/native-texture";
 import { validateEquipmentGlows } from "@/engine/foundation/rendering/equipment-glow";
 import { sceneryMaterial, type SceneryModifiers } from "@/engine/foundation/rendering/scenery-modifiers";
 import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
@@ -416,8 +417,10 @@ export function createCharacterDecoder() {
 			}
 			const images = (j.images ?? []).map( image => {
 				const view = image.bufferView === undefined ? undefined : j.bufferViews[image.bufferView];
-				if ( !view || image.uri || image.mimeType !== "image/png" ) {
-					throw new Error( "Character texture must be embedded PNG" );
+				if (
+					!view || image.uri || (image.mimeType !== "image/png" && image.mimeType !== NATIVE_TEXTURE_MIME)
+				) {
+					throw new Error( "Character texture must be embedded PNG or native mips" );
 				}
 				reserve( view.byteLength );
 				return {

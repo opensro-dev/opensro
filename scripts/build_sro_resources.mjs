@@ -58,6 +58,7 @@ import {
 import { runPython } from "./build/shared/pythonRun.mjs";
 import { runConvertImages } from "./build/shared/convertImagesRunner.mjs";
 import { buildNativeLensResources } from "./build/shared/nativeLensResources.mjs";
+import { buildNativeCharacterTextures } from "./build/shared/nativeCharacterTextures.mjs";
 import { mapWithConcurrency } from "./build/shared/asyncUtils.mjs";
 import {
 	buildCharacterSelectInterfaceModels,
@@ -81,6 +82,8 @@ const DEFAULT_RESOURCE_BUILD_LANES = 2;
 /*
 ================
 resourceBuildLaneCount
+
+Bound parallel build lanes using the explicit resource-build setting.
 ================
 */
 function resourceBuildLaneCount() {
@@ -105,6 +108,8 @@ function resourceBuildLaneCount() {
 /*
 ================
 checkPythonBuildDeps
+
+Fail before publication when required image or font dependencies are missing.
 ================
 */
 async function checkPythonBuildDeps() {
@@ -122,6 +127,8 @@ async function checkPythonBuildDeps() {
 /*
 ================
 extractRetailCursors
+
+Extract cursor resources through the shared retail source paths.
 ================
 */
 async function extractRetailCursors() {
@@ -143,6 +150,8 @@ async function extractRetailCursors() {
 /*
 ================
 buildSroResources
+
+Build shared prerequisites before running independent publication lanes.
 ================
 */
 async function buildSroResources() {
@@ -174,6 +183,7 @@ async function buildSroResources() {
 	// incremental, so an ordinary non-compacted rebuild only scans and skips fresh
 	// outputs; convertImagesRunner suppresses the narrower duplicate passes below.
 	await timed( "nativeLensResources", () => buildNativeLensResources() );
+	await timed( "nativeCharacterTextures", () => buildNativeCharacterTextures() );
 	const sourceImages = await timed( "sourceImages", () => runConvertImages( [] ) );
 	if ( sourceImages.status !== 0 ) {
 		throw new Error( `Source image conversion failed with exit status ${sourceImages.status}.` );

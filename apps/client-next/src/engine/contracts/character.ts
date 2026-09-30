@@ -4,13 +4,20 @@
 character.ts - the character model, actor and attachment contracts
 
 What the asset worker delivers for a character, item or effect source
-(CharacterModel, with its textures as ImageBitmaps beside it) and what the
+(CharacterModel, with retained bitmaps or native mip blocks beside it) and what the
 page asks the renderer to draw (CharacterActor). CharacterSource is the
-worker-only form that still holds the encoded PNGs.
+worker-only form that still holds encoded image containers.
 
 ===========================================================================
 */
 import type { Geometry } from "./geometry";
+/*
+================
+CharacterNode
+
+Authored skeleton hierarchy and local rest transforms.
+================
+*/
 export interface CharacterNode {
 	readonly name: string;
 	readonly parent: number;
@@ -19,6 +26,13 @@ export interface CharacterNode {
 	readonly scale: readonly number[];
 	readonly matrix?: readonly number[];
 }
+/*
+================
+CharacterChannel
+
+One typed animation channel targeting an authored skeleton node.
+================
+*/
 export interface CharacterChannel {
 	readonly node: number;
 	readonly path: "translation" | "rotation" | "scale";
@@ -26,11 +40,25 @@ export interface CharacterChannel {
 	readonly times: Float32Array;
 	readonly values: Float32Array;
 }
+/*
+================
+CharacterClip
+
+A named set of channels sharing the authored clip duration.
+================
+*/
 export interface CharacterClip {
 	readonly name: string;
 	readonly duration: number;
 	readonly channels: readonly CharacterChannel[];
 }
+/*
+================
+CharacterPrimitive
+
+Geometry and native material bindings for one skinned or effect primitive.
+================
+*/
 export interface CharacterPrimitive {
 	readonly modifierSource?: {
 		readonly material: import("./scene").WorldMaterial;
@@ -63,6 +91,13 @@ export interface CharacterPrimitive {
 	readonly environmentImage?: number;
 	readonly equipmentGlow?: import("@/engine/foundation/rendering/equipment-glow").EquipmentGlow;
 }
+/*
+================
+CharacterModel
+
+Immutable scene data delivered separately from its owned texture resources.
+================
+*/
 export interface CharacterModel {
 	readonly equipmentGlows?: Record<
 		string,
@@ -72,22 +107,43 @@ export interface CharacterModel {
 	readonly nodes: readonly CharacterNode[];
 	readonly primitives: readonly CharacterPrimitive[];
 	readonly clips: readonly CharacterClip[];
-	// The textures arrive beside the model as ImageBitmaps; the model keeps
-	// only their sizes. The encoded bytes never leave the asset worker.
+	// Textures arrive beside the model as bitmaps or native mip resources.
+	// Only dimensions live here; encoded PNGs never leave the asset worker.
 	readonly images: readonly CharacterImage[];
 }
+/*
+================
+CharacterImage
+
+Dimensions retained for admission checks without retaining encoded PNG bytes.
+================
+*/
 export interface CharacterImage {
 	readonly width: number;
 	readonly height: number;
 }
 // A decoded GLB or effect program inside the asset worker, before its
-// embedded PNGs become ImageBitmaps.
+// embedded images become bitmaps or transferable native mip levels.
+/*
+================
+CharacterSource
+
+Worker-local model data before image decoding and ownership transfer.
+================
+*/
 export interface CharacterSource extends Omit<CharacterModel, "images"> {
 	readonly images: readonly {
 		readonly bytes: Uint8Array;
 		readonly mime: string;
 	}[];
 }
+/*
+================
+CharacterLayer
+
+An event or timed animation layer with explicit activation and blend weight.
+================
+*/
 export interface CharacterLayer {
 	readonly rate?: number;
 	readonly clip: string;
@@ -97,6 +153,13 @@ export interface CharacterLayer {
 	readonly lane: "event" | "timed";
 	readonly activation?: import("@/engine/foundation/animation/animation-activation").AnimationActivation;
 }
+/*
+================
+CharacterPointLight
+
+Native actor-light inputs projected into the scene region.
+================
+*/
 export interface CharacterPointLight {
 	readonly pose: { readonly regionId: number; readonly x: number; readonly y: number; readonly z: number; };
 	readonly ambient: readonly [number, number, number];
@@ -104,6 +167,13 @@ export interface CharacterPointLight {
 	readonly attenuation: number;
 	readonly range: number;
 }
+/*
+================
+CharacterActor
+
+Per-instance render state referencing a resident model rather than owning one.
+================
+*/
 export interface CharacterActor {
 	/** Native reference field +0x110; absent for non-character effects/items. */
 	readonly shadowSize?: number;
@@ -162,6 +232,13 @@ export interface CharacterActor {
 	readonly loop: boolean;
 	readonly scale: number;
 }
+/*
+================
+CharacterAttachment
+
+Equipment assembly references and the slots or branches they replace.
+================
+*/
 export interface CharacterAttachment {
 	readonly branches?: {
 		readonly slot: number;
