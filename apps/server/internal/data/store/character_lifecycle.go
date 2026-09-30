@@ -142,6 +142,12 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 			c.ActiveQuests = seeded
 		}
 	}
+	// The starter items and gold of the creation choice (retail _AddNewChar
+	// inserts them with the record), so the list shows the new character
+	// dressed. Unwired, the first enter-world bootstrap grants the same set.
+	if c.MissionInventory == nil && s.defaultInventory != nil {
+		s.defaultInventory(c)
+	}
 	id := s.meta.NextCharID[divisionID]
 	if id < 1 {
 		id = s.maxCharIDLocked(divisionID) + 1

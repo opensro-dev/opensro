@@ -84,34 +84,14 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 		return Failure(nativeErrorInvalidRequest, "areaAccessDenied")
 	}
 
+	// Creation grants the starter inventory (store.Options.DefaultInventory);
+	// a record created before that seed existed gets the same grant here.
 	if character.MissionInventory == nil {
-		seedEntry := ResolveLocalPlayerEntry(character, deps.Roster)
-		seedRoster := ResolveEquipRoster(
-			character,
-			seedEntry.VisualLoadout.ModelCodename,
-			deps.Items,
-			deps.EquipItemsEnabled,
-		)
+		starter := StarterEquipRoster(character, deps.Roster, deps.Items, deps.EquipItemsEnabled)
 		deps.Mutate(liveCharacter, "bootstrap-seed", func() {
 			// A concurrent enter-world can seed between the snapshot and
-			// this door. Recheck under the authority write lock.
-			if liveCharacter.MissionInventory != nil {
-				return
-			}
-			EnsureMissionInventory(liveCharacter, seedRoster)
-			gold := int64(0)
-			if liveCharacter.Gold != nil {
-				gold = coerceInt(
-					liveCharacter.Gold,
-					0,
-					1<<53-1,
-					0,
-				)
-			}
-			if gold == 0 {
-				gold = defaultStartingGold
-			}
-			liveCharacter.Gold = &gold
+			// this door; the grant rechecks under the authority write lock.
+			GrantStarterInventory(liveCharacter, starter)
 		})
 
 		character = readCharacterSnapshot(

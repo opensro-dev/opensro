@@ -341,6 +341,58 @@ func EnsureMissionInventory(character *Character, equipRoster []WireItem) []Inve
 
 /*
 ==================
+StarterEquipRoster
+
+The starter item rows of a character's creation choice, for its resolved
+model. Reads only the roster and itemdata, so callers resolve it outside
+the authority write lock.
+==================
+*/
+func StarterEquipRoster(character *Character, roster *Roster, items ItemRefSource, equipItemsEnabled bool) []WireItem {
+	entry := ResolveLocalPlayerEntry(character, roster)
+	return ResolveEquipRoster(character, entry.VisualLoadout.ModelCodename, items, equipItemsEnabled)
+}
+
+/*
+==================
+GrantStarterInventory
+
+The creation grant: the starter items as the authoritative inventory and
+the starting gold when the record holds none. It applies once; a character
+that already has an inventory is left unchanged.
+==================
+*/
+func GrantStarterInventory(character *Character, starter []WireItem) {
+	if character.MissionInventory != nil {
+		return
+	}
+	EnsureMissionInventory(character, starter)
+	gold := int64(0)
+	if character.Gold != nil {
+		gold = coerceInt(character.Gold, 0, 1<<53-1, 0)
+	}
+	if gold == 0 {
+		gold = defaultStartingGold
+	}
+	character.Gold = &gold
+}
+
+/*
+==================
+StarterInventorySeeder
+
+The store's creation seed (store.Options.DefaultInventory), so a new
+character is dressed in the character list before its first entry.
+==================
+*/
+func StarterInventorySeeder(roster *Roster, items ItemRefSource, equipItemsEnabled bool) func(*Character) {
+	return func(character *Character) {
+		GrantStarterInventory(character, StarterEquipRoster(character, roster, items, equipItemsEnabled))
+	}
+}
+
+/*
+==================
 copyMagicOptions
 
 copyMagicOptions returns an owned copy, nil staying nil (empty and absent

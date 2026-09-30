@@ -74,7 +74,16 @@ type Options struct {
 	// wired seeder that fails still refuses creation rather than installing a
 	// partial set.
 	DefaultQuests QuestSeedFunc
+	// DefaultInventory grants the creation choice's starter items and the
+	// starting gold (the retail _AddNewChar item insert), so the character
+	// list shows a new character dressed before its first world entry. It is
+	// optional: without it the first enter-world bootstrap grants them.
+	DefaultInventory InventorySeedFunc
 }
+
+// InventorySeedFunc installs the starter inventory and gold on a character
+// that has none. It resolves item references only; it cannot fail.
+type InventorySeedFunc func(c *domain.Character)
 
 // QuestSeedFunc answers the racial creation active-quest records (the
 // retail _RefCharDefault_Quest shape, codename-resolved by internal/game/quest).
@@ -201,6 +210,8 @@ type Store struct {
 	defaultSkills SkillSeedFunc
 	// defaultQuests is Options.DefaultQuests and is used only at creation.
 	defaultQuests QuestSeedFunc
+	// defaultInventory is Options.DefaultInventory, used only at creation.
+	defaultInventory InventorySeedFunc
 
 	// requireStore is Options.RequireStore (the production posture);
 	// CreateCharacter's unseeded-creation refusal keys off it.
@@ -258,11 +269,12 @@ func Open(dir string, opts Options) (*Store, error) {
 		ground: groundState{
 			loadedRecords: map[string][]domain.GroundItemRecord{},
 		},
-		defaultSkills: opts.DefaultSkills,
-		defaultQuests: opts.DefaultQuests,
-		requireStore:  opts.RequireStore,
-		now:           now,
-		writeFile:     writeFileAtomic,
+		defaultSkills:    opts.DefaultSkills,
+		defaultQuests:    opts.DefaultQuests,
+		defaultInventory: opts.DefaultInventory,
+		requireStore:     opts.RequireStore,
+		now:              now,
+		writeFile:        writeFileAtomic,
 	}
 
 	// The claim comes FIRST: everything after it mutates the directory

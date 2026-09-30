@@ -155,11 +155,10 @@ func newGameWorldApplication(
 		ownedShard,
 		accountIDs,
 		application.readiness,
-		dataPaths.TextdataDir,
+		devPaths,
 		characterRoster,
 		sessionVerifier,
 		enterWorldSecret,
-		authoredAreas,
 	)
 	if err != nil {
 		return nil, err

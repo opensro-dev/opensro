@@ -14,7 +14,6 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/quest"
-	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -84,18 +83,23 @@ func openAuthorityPlane(
 	ownedShard shard.Definition,
 	accountIDs []string,
 	ready *readiness.Gate,
-	textdataDir string,
+	devPaths enterworld.DevPaths,
 	characterRoster *enterworld.Roster,
 	sessionVerifier *auth.AgentSessionVerifier,
 	enterWorldSecret []byte,
-	authoredAreas *worldarea.Catalog,
 ) (authorityPlane, error) {
+	textdataDir := devPaths.TextdataDir
 	textdata, err := enterworld.LoadTextdataCatalogs(textdataDir)
 	if err != nil {
 		return authorityPlane{}, err
 	}
 	options := store.OptionsFromEnv()
 	options.DefaultSkills = enterworld.DefaultSkillSeeder(textdata.Skills)
+	options.DefaultInventory = enterworld.StarterInventorySeeder(
+		characterRoster,
+		textdata.Items,
+		devPaths.EquipItemsEnabled,
+	)
 
 	questCatalog := quest.NewCatalog(textdataDir)
 	loadQuests := sync.OnceValues(func() (*quest.Definitions, error) {
@@ -145,7 +149,7 @@ func openAuthorityPlane(
 		Readiness:               ready,
 		EnterWorldAuthSecret:    enterWorldSecret,
 		MarksDir:                os.Getenv(agentapi.EnvMarksDir),
-		AuthoredAreas:           authoredAreas,
+		AuthoredAreas:           devPaths.AuthoredAreas,
 		BenchmarkFixtureControl: os.Getenv(agentapi.EnvBenchmarkFixtureControl) == "1",
 	}
 	config.CharacterInPlay = func(divisionID, characterName string) bool {
