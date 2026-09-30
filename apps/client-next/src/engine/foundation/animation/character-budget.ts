@@ -18,9 +18,14 @@ export const CHARACTER_IMAGES = 64;
 // A count guard only: CHARACTER_RESIDENT_BYTES bounds residency. Native
 // refcounts item resources with no count limit, and every worn item is its
 // own source (CCObjCharacter_SetEquipSlotVisual), so the guard is sized so
-// the byte budget binds first: 256 MiB over the ~133 KiB median item GLB.
-// 64 could not hold one creation wardrobe (72 Europe sources).
+// the byte budget binds first. Measured over all 1714 published character
+// sources (2026-09-30), a source is charged 1.04 MB at the median and
+// 1.36 MB on average, so 256 MiB holds about 200-260 of them. 64 could not
+// hold one creation wardrobe (72 Europe sources).
 export const CHARACTER_MODELS = 1024;
+// Borrowed and assembled views (an equipped actor's merged body), which
+// share their sources' bytes and so need their own count bound.
+export const CHARACTER_ASSEMBLIES = 1024;
 export const CHARACTER_ACTORS = 512;
 export const CHARACTER_MODEL_BYTES = 67108864;
 export const CHARACTER_RESIDENT_BYTES = 268435456;

@@ -37,6 +37,7 @@ import { type PickBounds, type PickRay } from "@/engine/foundation/rendering/pic
 import { faceEffectPlate, faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import { characterRadius } from "@/engine/foundation/animation/character-bounds";
 import {
+	CHARACTER_ASSEMBLIES,
 	CHARACTER_MODELS,
 	characterBytes,
 	CHARACTER_ACTORS,
@@ -120,7 +121,9 @@ export function createCharacters(
 		appearances: (Float32Array | undefined)[];
 		poseKey?: string;
 	}>();
-	let residentBytes = 0, renderBytes = 0, deferredActors = 0;
+	// ownedModels counts the owned entries of models (decoded sources); the
+	// rest are borrowed or assembled views, so their count is the difference.
+	let residentBytes = 0, ownedModels = 0, renderBytes = 0, deferredActors = 0;
 	let retained: Set<string> | null = null, retainedScratch = new Set<string>();
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
@@ -692,7 +695,7 @@ model
 			try {
 				const bytes = characterBytes( model, images );
 				if (
-					[ ...models.values() ].filter( resource => resource.owned ).length >= CHARACTER_MODELS ||
+					ownedModels >= CHARACTER_MODELS ||
 					residentBytes + bytes > CHARACTER_RESIDENT_BYTES
 				) {
 					throw new Error( "Character model residency exceeds budget" );
@@ -708,6 +711,7 @@ model
 					radius: characterRadius( model )
 				} );
 				residentBytes += bytes;
+				ownedModels++;
 				residencyDirty = true;
 			} catch ( error ) {
 				for ( const image of images ) {
@@ -732,7 +736,7 @@ assembly
 			if ( models.has( id ) ) {
 				return;
 			}
-			if ( [ ...models.values() ].filter( resource => !resource.owned ).length >= 1024 ) {
+			if ( models.size - ownedModels >= CHARACTER_ASSEMBLIES ) {
 				throw new Error( "Character assembly residency exceeds budget" );
 			}
 			const body = models.get( base );
@@ -954,6 +958,7 @@ prepare
 								for ( const image of resource.images ) {
 									image.close();
 								}
+								ownedModels--;
 							}
 							models.delete( id );
 							residentBytes -= resource.bytes;
@@ -1723,6 +1728,7 @@ dispose
 			disposed = true;
 			framePoses = null;
 			residentBytes = 0;
+			ownedModels = 0;
 			for ( const batch of batches.values() ) {
 				for ( const draw of batch.draws ) {
 					geometry?.release( draw );

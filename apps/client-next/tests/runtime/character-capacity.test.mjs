@@ -17,6 +17,9 @@ import assert from "node:assert/strict";
 const { createCharacters } = await import(
 	sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
 );
+const { CHARACTER_MODELS } = await import(
+	sourceFileUrl( "src/engine/foundation/animation/character-budget.ts" ).href
+);
 const I = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
 const model = {
 	nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
@@ -118,6 +121,24 @@ test("sharing a pose does not discard an actors reusable evaluation storage", ()
 		assert.equal( f.owner.stats().poseCreations, 0, "device recovery preserves live CPU poses" );
 	} finally {
 		f.owner.dispose( f.gpu, null );
+	}
+});
+test("the owned model count follows admission, eviction and disposal", () => {
+	const { gpu } = fixture(), owner = createCharacters();
+	const admit = ( from, to ) => {
+		for ( let i = from; i < to; i++ ) owner.model( "m" + i, model, [] );
+	};
+	try {
+		admit( 0, CHARACTER_MODELS );
+		assert.throws( () => owner.model( "extra", model, [] ), /residency exceeds budget/ );
+		// Evict all but one; the freed count admits a full budget again.
+		owner.retain( [ "m0" ] );
+		owner.actors( [] );
+		owner.prepare( gpu, {}, 257 );
+		admit( CHARACTER_MODELS, 2 * CHARACTER_MODELS - 1 );
+		assert.throws( () => owner.model( "extra", model, [] ), /residency exceeds budget/ );
+	} finally {
+		owner.dispose( gpu, null );
 	}
 });
 test("capacity changes retire obsolete batches before allocating replacement bands", () => {
