@@ -14,7 +14,7 @@ Before tagging a release:
    ignored, and nothing generated as tracked.
 5. `pnpm assets compact` and `pnpm assets check compact`. Publish the compact
    browser pack set from `.generated/client-public/assets/` and
-   `.generated/game-data/1.150/server.srogz`, not loose duplicates. The compact
+   `apps/server/.generated/game-data/1.150/server.srogz`, not loose duplicates. The compact
    check enforces a combined client-plus-server ceiling of 80% of the original
    PK2 payload and verifies the archive is lossless and manifest-consistent.
 6. With the loose server projection absent, `pnpm check server` proves

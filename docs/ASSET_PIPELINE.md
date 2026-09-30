@@ -46,7 +46,7 @@ client together as a data release.
 | `.generated/client-public/assets/` | Published browser assets, served at `/assets/...` |
 | `.generated/client-public/assets/packs/` | `manifest.json` plus content-addressed `<group>-NNN-<hash>.bin` packs |
 | `.generated/intermediate/` | Converted source images and their manifest, inputs to packing |
-| `.generated/game-data/1.150/server/` and `server.srogz` | Verified server projection and its lossless archive |
+| `apps/server/.generated/game-data/1.150/server/` and sibling `server.srogz` | Verified server projection and its lossless archive, inside the Go module |
 
 ## Commands
 
