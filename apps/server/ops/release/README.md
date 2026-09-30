@@ -30,9 +30,14 @@ The browser candidate builder uses the inspected live asset
 manifest. Such an application candidate cannot change data files, data routes or
 asset schema; a data candidate (below) can. The staging
 key creates an immutable preview and shared hashed application files without
-changing `/play`. A cold HTTPS browser must pass title, login, roster, world,
-inventory controls and authenticated reload using a dedicated non-GM account.
-Its report identifies the exact archive and entry hash. Publication rehashes the
+changing `/play`. The release gate (`apps/client-next/tools/beta/release-gate.mjs`)
+must pass within 30 seconds using a dedicated non-GM account: a browser boots
+the staged candidate (title), and the release's own simulation worker runs
+headlessly through login, roster, world entry, a server-confirmed move
+(gameplay) and a session-restoring reload (resume). No scene is rendered, so
+the gate needs no GPU and does not slow down as players come into view. The
+rendered browser flow (`release-smoke.mjs`) remains a diagnostic probe for
+machines with a GPU. The report identifies the exact archive and entry hash. Publication rehashes the
 actual staged bytes, switches the client symlink atomically and checks `/play`
 through HTTPS. A failed check restores and verifies the previous entry while
 advancing the generation to invalidate the failed approval.
