@@ -361,15 +361,17 @@ the boot overlay so start-up frames remain measurable.
 
 /*
 The release-skew refresh offer (platform.ts presentUpdate): shown once a newer
-client release is live. It sits above the game, keeps the boot overlay's
-palette, and reloads only when the player clicks.
+client release is live. It sits above the game and above every loading
+layer (1000-1002): a stale page is refused before its scene can finish, so
+the offer must be visible on the loading screen. It keeps the boot overlay's
+palette and reloads only when the player clicks.
 */
 
 .sro-update-notice {
 	position: fixed;
 	top: 12px;
 	left: 50%;
-	z-index: 20;
+	z-index: 1003;
 	display: flex;
 	align-items: center;
 	gap: 12px;

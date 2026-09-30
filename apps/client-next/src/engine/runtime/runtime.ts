@@ -713,9 +713,12 @@ export function startRuntime(
 					loadingVisible = semantics.loadingVisible === true;
 					loadingTitle = semantics.loadingStatus ?? "Preparing your journey";
 				}
+				// A refused release protocol stops every request, so the scene can
+				// never finish: name the remedy instead of showing scene progress.
+				const outdatedTitle = sessionState?.releaseOutdated === true ? sessionState.error : undefined;
 				platform.presentLoading( {
 					visible: loadingVisible || frontendState.entryPending === true,
-					title: frontendState.entryPending ? "Connecting to server" : loadingTitle,
+					title: outdatedTitle ?? (frontendState.entryPending ? "Connecting to server" : loadingTitle),
 					progress: frontendState.entryPending ? null : assets.progress()
 				} );
 				if ( worldReady && sessionState?.phase === "world" && !readySent ) {
