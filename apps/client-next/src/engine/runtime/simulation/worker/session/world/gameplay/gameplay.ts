@@ -1051,7 +1051,25 @@ state here before a command can claim a native wire conversation.
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
 				if ( localCastHolds() ) {
-					moveReservation.hold( command );
+					// Resolve the click now, not when the cast releases: its ray belongs
+					// to the camera at click time, and the destination marker appears
+					// when the player clicks. A direction walk keeps its query.
+					let held: typeof command = command;
+					if ( command.kind === "ground-move" ) {
+						const state = movement.state();
+						if ( !state.pose ) return null;
+						const action = worldPointAction(
+							state.pose,
+							movement.pick( command.query ),
+							command.query,
+							false
+						);
+						if ( action.kind === "none" ) return null;
+						if ( action.kind === "walk-to" ) held = { kind: "move", destination: action.destination };
+					}
+					moveReservation.hold( held );
+					selectionDecal = held.kind === "move" ? { kind: "ground", pose: { ...held.destination } } : null;
+					dirty = true;
 					return null;
 				}
 				if ( local?.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) {
@@ -1939,7 +1957,11 @@ before take assembles the presentation snapshot.
 			// death forfeits it.
 			if ( moveReservation.holding() && !localCastHolds() ) {
 				const held = moveReservation.take()!;
-				if ( local && local.appearanceState?.[0] !== 2 ) {
+				if ( !local || local.appearanceState?.[0] === 2 ) {
+					// A forfeited click takes its marker with it.
+					if ( held.kind === "move" && selectionDecal?.kind === "ground" ) selectionDecal = null;
+					dirty = true;
+				} else {
 					try {
 						api.command( held, now, undefined, local );
 					} catch ( error ) {

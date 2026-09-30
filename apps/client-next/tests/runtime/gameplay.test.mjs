@@ -1438,6 +1438,8 @@ test("a ground click during the local cast walks once the cast releases", async 
 	assert.equal( game.command( { kind: "move", destination: { ...pose, x: 80 } }, 11, undefined, local ), null );
 	game.command( { kind: "move", destination: { ...pose, x: 90 } }, 12, undefined, local );
 	assert.equal( sent.length, 0 );
+	// The marker shows the newest click at once, not when the cast releases.
+	assert.equal( game.take()?.selectionDecal?.pose?.x, 90 );
 	game.receive( { opcode: 0xb505, payload: Uint8Array.of( 2, 0, 1, 0, 0, 0 ) }, 13 );
 	for ( let now = 14; now < 2000 && !sent.length; now += 50 ) game.step( now, local );
 	assert.equal( sent.length, 1, "the newest held click walks after the release" );
