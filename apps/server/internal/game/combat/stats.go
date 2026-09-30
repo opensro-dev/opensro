@@ -285,6 +285,7 @@ func PlayerStatsWithModifiers(
 		applyItemMagicOptions(&contribution, options)
 		source := uint32(1024 + row.Slot)
 		writes = append(writes, statWrites(contribution, source)...)
+		writes = append(writes, equipmentReinforcementWrites(ref, varianceBits)...)
 		writes = append(writes, equipmentResourceWrites(ref.TypeFlags(), source)...)
 		optionWrites, err := magicOptionWrites(row.Codename, options, source)
 		if err != nil {

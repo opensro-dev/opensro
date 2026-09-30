@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+skillcast.go - native cast brackets and committed impact packets
+
+Keep hit magnitude separate from HP bookkeeping. This wire owner encodes the
+full committed impact, its fatal flag and optional displacement/absorption.
+
+===========================================================================
+*/
+
 package wire
 
 import "math"
@@ -37,6 +48,11 @@ const (
 //	[ownerOrTargetGid u32]
 //
 // Length must be EXACT - leftover bytes trip the client's 0xed assert.
+/*
+================
+SkillCastSuccess
+================
+*/
 type SkillCastSuccess struct {
 	// BtResult must be 0 or 2 - the client accepts exactly {0,2} and both
 	// jump to the same label 0x776940, so they are indistinguishable;
@@ -64,6 +80,11 @@ type SkillCastSuccess struct {
 	OwnerOrTargetGid uint32
 }
 
+/*
+================
+writePrefix
+================
+*/
 func (s SkillCastSuccess) writePrefix(writer *Writer) *Writer {
 	return writer.
 		U8(0x01).
@@ -75,11 +96,21 @@ func (s SkillCastSuccess) writePrefix(writer *Writer) *Writer {
 }
 
 // No-target native action: no invented damage row or movement steering.
+/*
+================
+SkillCastUntargetedFrame
+================
+*/
 func SkillCastUntargetedFrame(cast SkillCastSuccess) Frame {
 	return Frame{Opcode: OpSkillCastResult, Payload: cast.writePrefix(NewWriter(19)).U8(0).Payload()}
 }
 
 // Native tele has a position payload without a fabricated damage target.
+/*
+================
+SkillCastTravelFrame
+================
+*/
 func SkillCastTravelFrame(cast SkillCastSuccess, destination SkillCastFacingPoint) Frame {
 	return Frame{Opcode: OpSkillCastResult, Payload: destination.writeTo(cast.writePrefix(NewWriter(27)).U8(8)).Payload()}
 }
@@ -98,6 +129,11 @@ const (
 // bit 3 is set. It starts the effect's target-point leg and synchronously faces
 // the holder toward that point. Coordinates use the client's cvttsd2si
 // semantics (truncate toward zero) before the signed-16-bit wire admission.
+/*
+================
+SkillCastFacingPoint
+================
+*/
 type SkillCastFacingPoint struct {
 	regionID uint16
 	x        int16
@@ -109,6 +145,11 @@ type SkillCastFacingPoint struct {
 // NewSkillCastFacingPoint admits one authoritative live target pose to the
 // B245 steering domain. Invalid/non-finite or unrepresentable coordinates fail
 // closed so an action producer cannot silently wrap the facing destination.
+/*
+================
+NewSkillCastFacingPoint
+================
+*/
 func NewSkillCastFacingPoint(regionID uint16, x, y, z float64) (SkillCastFacingPoint, bool) {
 	quantize := func(value float64) (int16, bool) {
 		if math.IsNaN(value) || math.IsInf(value, 0) {
@@ -136,6 +177,11 @@ func NewSkillCastFacingPoint(regionID uint16, x, y, z float64) (SkillCastFacingP
 	}, true
 }
 
+/*
+================
+writeTo
+================
+*/
 func (p SkillCastFacingPoint) writeTo(writer *Writer) *Writer {
 	if !p.valid {
 		panic("wire: single-target skill result has no admitted facing point")
@@ -156,6 +202,11 @@ const MaxSkillActionDamage uint32 = 0x00FFFFFF
 // action. Multi-impact actions carry several of these under the SAME cast
 // token; they are not several casts and therefore do not own independent
 // cooldown/finalize lifecycles.
+/*
+================
+SkillCastTargetImpact
+================
+*/
 type SkillCastTargetImpact struct {
 	ResultFlags     uint8
 	Damage          uint32
@@ -174,6 +225,11 @@ type SkillCastTargetImpact struct {
 // SkillCastAbsorb is the rest of a type-7 record (5855F0): the pool left
 // once this impact's absorbed damage is counted, and the authored pool.
 // Broken (tag bit 7) marks the impact that emptied it.
+/*
+================
+SkillCastAbsorb
+================
+*/
 type SkillCastAbsorb struct {
 	Remaining, Max uint16
 	Broken         bool
@@ -195,8 +251,14 @@ type SkillCastAbsorb struct {
 //
 // tag bit 7 is the stop/death transition and its low seven bits are the result
 // kind (zero here). packedResult keeps result flags in its low byte and each
-// applied HP damage in its high 24 bits. Every Damage must be the mutation
-// door's committed Applied value, not an unclamped request.
+// full hit damage in its high 24 bits (native 585664). Damage must come from
+// a committed hit; its magnitude may exceed the victim's remaining HP. The
+// HP owner clamps its debit separately from this feedback value.
+/*
+================
+SkillCastSingleTargetResult
+================
+*/
 type SkillCastSingleTargetResult struct {
 	stationary bool
 	cast       SkillCastSuccess
@@ -212,6 +274,11 @@ type SkillCastSingleTargetResult struct {
 
 // WithAbsorb returns the result carrying the defender's wall group, one
 // record per impact.
+/*
+================
+WithAbsorb
+================
+*/
 func (r SkillCastSingleTargetResult) WithAbsorb(impacts []SkillCastTargetImpact) SkillCastSingleTargetResult {
 	if len(impacts) != len(r.impacts) {
 		panic("wire: wall records must match the impact count")
@@ -222,18 +289,33 @@ func (r SkillCastSingleTargetResult) WithAbsorb(impacts []SkillCastTargetImpact)
 
 // NewStationarySkillCastSingleTargetResult retains target/result ownership without bit 3. In 8e0440 that
 // bit starts a 500-unit/s movement controller; it is not a facing-only hint.
+/*
+================
+NewStationarySkillCastSingleTargetResult
+================
+*/
 func NewStationarySkillCastSingleTargetResult(cast SkillCastSuccess, target uint32, impacts []SkillCastTargetImpact) SkillCastSingleTargetResult {
 	return SkillCastSingleTargetResult{cast: cast, targetGid: target, impacts: append([]SkillCastTargetImpact(nil), impacts...), stationary: true}
 }
 
 // SkillCastReleaseFrame is 8e2c90 mode 1 followed by 8e0440's no-steering
 // target/flags record. It releases WAIT through 8df180 without moving the actor.
+/*
+================
+SkillCastReleaseFrame
+================
+*/
 func SkillCastReleaseFrame(token, target uint32) Frame {
 	return Frame{Opcode: OpSkillEffectControl, Payload: NewWriter(10).U8(1).U32(token).U32(target).U8(0).Payload()}
 }
 
 // The release packet uses the SAME target/impact grammar as B245, after
 // [mode=1][token]. Keep one encoder so delayed hits cannot drift from starts.
+/*
+================
+SkillCastReleaseResultFrame
+================
+*/
 func SkillCastReleaseResultFrame(result SkillCastSingleTargetResult) Frame {
 	payload := result.Encode()
 	writer := NewWriter(len(payload) - 9).U8(1).U32(result.cast.InstanceToken)
@@ -243,6 +325,11 @@ func SkillCastReleaseResultFrame(result SkillCastSingleTargetResult) Frame {
 // NewSkillCastSingleTargetResult constructs the movement-steered variant.
 // Its point starts native actor movement as well as setting the facing.
 // Ordinary stationary attacks use NewStationarySkillCastSingleTargetResult.
+/*
+================
+NewSkillCastSingleTargetResult
+================
+*/
 func NewSkillCastSingleTargetResult(
 	cast SkillCastSuccess,
 	targetGid uint32,
@@ -259,6 +346,11 @@ func NewSkillCastSingleTargetResult(
 
 // Encode returns the exact single-target B245 result payload. Internal
 // producers must provide 1..255 impacts, matching the wire's u8 impact count.
+/*
+================
+Encode
+================
+*/
 func (r SkillCastSingleTargetResult) Encode() []byte {
 	if len(r.impacts) == 0 || len(r.impacts) > 0xff {
 		panic("wire: skill action impact count is outside 1..255")
@@ -301,11 +393,21 @@ func (r SkillCastSingleTargetResult) Encode() []byte {
 //
 // A token miss is a SILENT consume-and-return (sub_8e2bc0) - the bracket
 // never closes - so the token must echo the success frame's exactly.
+/*
+================
+SkillCastFinalize
+================
+*/
 type SkillCastFinalize struct {
 	InstanceToken uint32
 }
 
 // Encode returns the 0xB505 mode-2 payload (6 bytes).
+/*
+================
+Encode
+================
+*/
 func (f SkillCastFinalize) Encode() []byte {
 	return NewWriter(6).
 		U8(0x02).
@@ -316,11 +418,21 @@ func (f SkillCastFinalize) Encode() []byte {
 
 // SkillCastSingleTargetResultFrame opens one accepted cast bracket and
 // carries the committed single-target HP result in the same B245 payload.
+/*
+================
+SkillCastSingleTargetResultFrame
+================
+*/
 func SkillCastSingleTargetResultFrame(result SkillCastSingleTargetResult) Frame {
 	return Frame{Opcode: OpSkillCastResult, Payload: result.Encode()}
 }
 
 // SkillCastFinalizeFrame closes the bracket identified by instanceToken.
+/*
+================
+SkillCastFinalizeFrame
+================
+*/
 func SkillCastFinalizeFrame(instanceToken uint32) Frame {
 	return Frame{Opcode: OpSkillEffectControl, Payload: SkillCastFinalize{
 		InstanceToken: instanceToken,
@@ -329,6 +441,11 @@ func SkillCastFinalizeFrame(instanceToken uint32) Frame {
 
 // Types 4 and 5 append the displaced pose to the packed damage payload
 // (v1.150 8e177b and 8e17f6). Both area and single-target casts use this encoder.
+/*
+================
+writeTo
+================
+*/
 func (impact SkillCastTargetImpact) writeTo(writer *Writer) {
 	if impact.Skipped {
 		writer.U8(8)

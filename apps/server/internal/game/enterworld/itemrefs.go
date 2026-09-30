@@ -50,11 +50,21 @@ type TextdataItems struct {
 
 // NewTextdataItems returns a lazy loader over dir (itemdata*.txt +
 // textdataname.txt).
+/*
+================
+NewTextdataItems
+================
+*/
 func NewTextdataItems(dir string) *TextdataItems {
 	return &TextdataItems{dir: dir}
 }
 
 // ItemRefByCodename implements ItemRefSource.
+/*
+================
+ItemRefByCodename
+================
+*/
 func (t *TextdataItems) ItemRefByCodename(codename string) (*ItemRef, bool) {
 	t.once.Do(t.load)
 	if t.archive != nil {
@@ -68,6 +78,11 @@ func (t *TextdataItems) ItemRefByCodename(codename string) (*ItemRef, bool) {
 	return row, ok
 }
 
+/*
+================
+ItemRefByID
+================
+*/
 func (t *TextdataItems) ItemRefByID(id uint32) (*ItemRef, bool) {
 	t.once.Do(t.load)
 	if t.archive != nil {
@@ -82,6 +97,11 @@ func (t *TextdataItems) ItemRefByID(id uint32) (*ItemRef, bool) {
 }
 
 // Public immutable item identity/type data used by the native GM composer.
+/*
+================
+ItemCommandReference
+================
+*/
 type ItemCommandReference struct {
 	RefObjID  uint32 `json:"refObjId"`
 	Codename  string `json:"codename"`
@@ -89,6 +109,11 @@ type ItemCommandReference struct {
 	MaxStack  uint16 `json:"maxStack"`
 }
 
+/*
+================
+ItemCommandReferences
+================
+*/
 func (t *TextdataItems) ItemCommandReferences() []ItemCommandReference {
 	t.once.Do(t.load)
 	rows := make([]ItemCommandReference, 0, t.Len())
@@ -107,6 +132,11 @@ func (t *TextdataItems) ItemCommandReferences() []ItemCommandReference {
 }
 
 // CharacterRefByCodename implements CharacterRefSource.
+/*
+================
+CharacterRefByCodename
+================
+*/
 func (t *TextdataItems) CharacterRefByCodename(codename string) (*CharacterRef, bool) {
 	t.once.Do(t.load)
 	row, ok := t.charactersByCodename[codename]
@@ -115,12 +145,22 @@ func (t *TextdataItems) CharacterRefByCodename(codename string) (*CharacterRef, 
 
 // SummonableCharacterRefs implements CharacterRefSource. The returned slice
 // is detached so callers cannot mutate the shared media cache.
+/*
+================
+SummonableCharacterRefs
+================
+*/
 func (t *TextdataItems) SummonableCharacterRefs() []CharacterRef {
 	t.once.Do(t.load)
 	return append([]CharacterRef(nil), t.summonableCharacters...)
 }
 
 // Len reports how many itemdata rows loaded (0 = textdata absent).
+/*
+================
+Len
+================
+*/
 func (t *TextdataItems) Len() int {
 	t.once.Do(t.load)
 	if t.archive != nil {
@@ -129,6 +169,11 @@ func (t *TextdataItems) Len() int {
 	return len(t.byCodename)
 }
 
+/*
+================
+load
+================
+*/
 func (t *TextdataItems) load() {
 	t.byCodename = map[string]*ItemRef{}
 	t.byID = map[uint32]*ItemRef{}
@@ -208,6 +253,11 @@ func (t *TextdataItems) load() {
 	log.Infof("bootstrap: textdata loaded from %s (%d item row(s), %d character row(s), %d summonable COS row(s))", t.dir, rows, characterRows, len(t.summonableCharacters))
 }
 
+/*
+================
+characterTidWord
+================
+*/
 func characterTidWord(fields []string) (uint16, bool) {
 	if len(fields) <= 11 {
 		return 0, false
@@ -226,6 +276,11 @@ func characterTidWord(fields []string) (uint16, bool) {
 	return word, true
 }
 
+/*
+================
+buildCharacterRef
+================
+*/
 func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 	const lastRequiredColumn = 88
 	if len(fields) <= lastRequiredColumn || strings.TrimSpace(fields[0]) != "1" {
@@ -399,6 +454,11 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 // column (varianceIntMax1c4).
 const itemdataMaxDurabilityColumn = 64
 
+/*
+================
+buildItemRef
+================
+*/
 func buildItemRef(fields []string, names map[string]string) *ItemRef {
 	if len(fields) < 13 {
 		return nil
@@ -570,9 +630,11 @@ func buildItemCombatRef(fields []string) *ItemCombatRef {
 		74, 75,
 		76, 77, 78,
 		79, 80, 81,
+		82, 83, 84, 85,
 		94,
 		95, 96, 97, 98, 99,
 		100, 101, 102, 103, 104,
+		105, 106, 107, 108, 109, 110, 111, 112,
 		113, 114, 115,
 		116, 117,
 	} {
@@ -599,23 +661,40 @@ func buildItemCombatRef(fields []string) *ItemCombatRef {
 			},
 		}
 	}
+	// The v1.150 table stores reinforcement in permille and has no
+	// reinforcement-per-plus columns. Keep the native float32 row parse.
+	reinforcement := func(first int) ItemStatRange {
+		return ItemStatRange{
+			Min: float64(float32(values[first] / 1000)),
+			Max: float64(float32(values[first+1] / 1000)),
+		}
+	}
 	return &ItemCombatRef{
-		ActionRange:     values[94],
-		PhysicalDefense: stat(65, 66, 67),
-		EvasionRate:     stat(68, 69, 70),
-		ParryRate:       stat(71, 72, 73),
-		BlockRate:       stat(74, 75, -1),
-		MagicalDefense:  stat(76, 77, 78),
-		MagicalParry:    stat(79, 80, 81),
-		PhysicalAttack:  attack(95, 96, 97, 98, 99),
-		MagicalAttack:   attack(100, 101, 102, 103, 104),
-		HitRate:         stat(113, 114, 115),
-		CriticalRate:    stat(116, 117, -1),
+		ActionRange:                  values[94],
+		PhysicalReinforcement:        ItemAttackRange{Minimum: reinforcement(105), Maximum: reinforcement(107)},
+		MagicalReinforcement:         ItemAttackRange{Minimum: reinforcement(109), Maximum: reinforcement(111)},
+		PhysicalDefenseReinforcement: reinforcement(82),
+		MagicalDefenseReinforcement:  reinforcement(84),
+		PhysicalDefense:              stat(65, 66, 67),
+		EvasionRate:                  stat(68, 69, 70),
+		ParryRate:                    stat(71, 72, 73),
+		BlockRate:                    stat(74, 75, -1),
+		MagicalDefense:               stat(76, 77, 78),
+		MagicalParry:                 stat(79, 80, 81),
+		PhysicalAttack:               attack(95, 96, 97, 98, 99),
+		MagicalAttack:                attack(100, 101, 102, 103, 104),
+		HitRate:                      stat(113, 114, 115),
+		CriticalRate:                 stat(116, 117, -1),
 	}
 }
 
 // buildItemNativeFields renders the finite numeric RefItemData projection.
 // Non-finite or absent source cells stay absent instead of fabricating PK2 data.
+/*
+================
+buildItemNativeFields
+================
+*/
 func buildItemNativeFields(fields []string) NativeFields {
 	values := make(map[string]float64, len(itemdataRecordColumns)+1)
 	for _, column := range itemdataRecordColumns {
@@ -654,6 +733,11 @@ func buildItemNativeFields(fields []string) NativeFields {
 }
 
 // textdataInt ports referenceData's toInt: Number(value) must be an integer.
+/*
+================
+textdataInt
+================
+*/
 func textdataInt(value string) (int64, bool) {
 	// Plain decimal cells dominate the shipped tables (27k skill rows x 118
 	// cells). Parse them directly; within +-2^53 the result is exactly what
@@ -670,6 +754,11 @@ func textdataInt(value string) (int64, bool) {
 
 // plainDecimal accepts [+-]digits with no surrounding space and a magnitude
 // of at most 2^53, the range where float64 represents every integer.
+/*
+================
+plainDecimal
+================
+*/
 func plainDecimal(value string) (int64, bool) {
 	s := value
 	negative := false
@@ -699,6 +788,11 @@ func plainDecimal(value string) (int64, bool) {
 
 // textdataFloat ports the Number(value)/isFinite reads ("42.0" is a legal
 // integer cell in the media text).
+/*
+================
+textdataFloat
+================
+*/
 func textdataFloat(value string) (float64, bool) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -752,6 +846,11 @@ func readTextdataFile(path string) [][]string {
 	return rows
 }
 
+/*
+================
+decodeTextdata
+================
+*/
 func decodeTextdata(buffer []byte) string {
 	if len(buffer) >= 2 && buffer[0] == 0xff && buffer[1] == 0xfe {
 		return decodeUTF16LE(buffer[2:])
@@ -772,6 +871,11 @@ func decodeTextdata(buffer []byte) string {
 	return string(buffer)
 }
 
+/*
+================
+decodeUTF16LE
+================
+*/
 func decodeUTF16LE(buffer []byte) string {
 	units := make([]uint16, 0, len(buffer)/2)
 	for i := 0; i+1 < len(buffer); i += 2 {

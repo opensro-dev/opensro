@@ -1,8 +1,6 @@
-package enterworld
-
 /*
 ================================================================================
-Item combat reference data
+itemcombatref.go - typed v1.150 item ranges for the shared combat projection
 
 These values are the v1.150 itemdata inputs consumed by
 CSOItem_ApplyOneVarianceStat. They are reference ranges, not live character
@@ -11,7 +9,14 @@ bits and plus value.
 ================================================================================
 */
 
+package enterworld
+
 // ItemStatRange is one RefItemData minimum/maximum/per-plus triplet.
+/*
+================
+ItemStatRange
+================
+*/
 type ItemStatRange struct {
 	Min     float64
 	Max     float64
@@ -21,6 +26,11 @@ type ItemStatRange struct {
 // ItemAttackRange holds the two independently-derived ends of an attack
 // interval. Minimum derives from the first itemdata pair, Maximum from the
 // second pair, and both use PerPlus.
+/*
+================
+ItemAttackRange
+================
+*/
 type ItemAttackRange struct {
 	Minimum ItemStatRange
 	Maximum ItemStatRange
@@ -30,6 +40,11 @@ type ItemAttackRange struct {
 // variance-stat dispatcher for combat. A nil *ItemCombatRef means the row did
 // not carry a complete numeric source and combat must refuse rather than
 // derive a partial item.
+/*
+================
+ItemCombatRef
+================
+*/
 type ItemCombatRef struct {
 	ActionRange float64
 
@@ -44,4 +59,9 @@ type ItemCombatRef struct {
 	MagicalAttack  ItemAttackRange
 	HitRate        ItemStatRange
 	CriticalRate   ItemStatRange
+
+	PhysicalReinforcement        ItemAttackRange
+	MagicalReinforcement         ItemAttackRange
+	PhysicalDefenseReinforcement ItemStatRange
+	MagicalDefenseReinforcement  ItemStatRange
 }
