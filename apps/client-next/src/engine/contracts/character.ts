@@ -217,7 +217,7 @@ export interface CharacterActor {
 		readonly offset: readonly [number, number, number];
 		readonly rootIfMissing?: boolean;
 		readonly root?: boolean;
-		readonly basis?: "native" | "bsr";
+		readonly basis?: "native" | "bsr" | "compound";
 		readonly modelScale?: number;
 		readonly rotation?: Float32Array;
 	};

@@ -231,10 +231,15 @@ export function createCharacters(
 			let holder = owner;
 			let socket = actor.attachment?.root ?
 				identity() :
-				poseFor( holder )?.socket( actor.attachment?.bone ?? "saddle" ) ?? null;
+				poseFor( holder )?.socket(
+					actor.attachment?.bone ?? "saddle",
+					actor.attachment?.basis === "compound"
+				) ?? null;
 			if ( !socket && actor.attachment && !actor.attachment.root && holder.mountedOn !== undefined ) {
 				const mount = rows.get( holder.mountedOn );
-				const mountSocket = mount ? poseFor( mount )?.socket( actor.attachment.bone ) ?? null : null;
+				const mountSocket = mount ?
+					poseFor( mount )?.socket( actor.attachment.bone, actor.attachment.basis === "compound" ) ?? null :
+					null;
 				if ( mount && mountSocket ) {
 					holder = mount;
 					socket = mountSocket;

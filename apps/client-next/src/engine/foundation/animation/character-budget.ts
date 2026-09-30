@@ -46,9 +46,9 @@ Charge pose evaluation storage separately from immutable source data.
 ================
 */
 export function characterPoseBytes( model: CharacterModel ): number {
-	// Local/global matrices, mutable and retained rest TRS, blend scratch,
+	// Local/global and attachment bind matrices, mutable and retained rest TRS, blend scratch,
 	// weights, sample and one exact palette per primitive/pose revision.
-	return model.nodes.length * ((16 + 16 + 3 + 4 + 3 + 10 + 10 + 6) * 4 + 2) + 16 +
+	return model.nodes.length * ((16 + 16 + 16 + 3 + 4 + 3 + 10 + 10 + 6) * 4 + 2) + 16 +
 		model.primitives.reduce( ( bytes, primitive ) => bytes + primitive.joints.length * 64, 0 ) +
 		model.clips.reduce( ( bytes, clip ) => bytes + clip.channels.length * 80, 0 ) +
 		model.clips.reduce( ( max, clip ) => Math.max( max, clip.channels.length ), 0 ) * 32;

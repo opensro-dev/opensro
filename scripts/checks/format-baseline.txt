@@ -50,7 +50,6 @@ apps/client-next/src/engine/foundation/animation/effect-script.ts
 apps/client-next/src/engine/foundation/animation/emote.ts
 apps/client-next/src/engine/foundation/animation/entity-lod.ts
 apps/client-next/src/engine/foundation/animation/equipment-particles.ts
-apps/client-next/src/engine/foundation/animation/equipment-sockets.ts
 apps/client-next/src/engine/foundation/animation/fortress-appearance.ts
 apps/client-next/src/engine/foundation/animation/gpu-animation-plan.ts
 apps/client-next/src/engine/foundation/animation/ground-visual.ts

@@ -11,6 +11,7 @@ bone names (A981A0 searches compound branches in order for a marker).
 
 ===========================================================================
 */
+import { createAttachmentBindPose } from "./equipment-sockets";
 import { createAnimationTimelines } from "./animation-timelines";
 import type { CharacterModel, CharacterPrimitive, CharacterLayer, CharacterClip } from "@/engine/contracts/character";
 import { compose, multiplyDisjoint as multiply, slerp } from "@/engine/foundation/math/pose-math";
@@ -46,6 +47,7 @@ createCharacterPose
 */
 export function createCharacterPose( model: CharacterModel, probe?: AnimationPoseProbe ) {
 	const bindings = paletteBindings( model );
+	const attachmentBind = createAttachmentBindPose( model.nodes );
 	const ceilingEligible = !!probe?.ceiling && model.primitives.some( p => p.joints.length > 1 ) &&
 		!model.primitives.some( p => p.emission || p.ribbon );
 	let volume = DEFAULT_BODY_VOLUME, female = false;
@@ -438,10 +440,22 @@ materialize
         when the caller supplies an explicit equipment handle.
         ================
         */
-		socket( name: string ) {
+		socket( name: string, compound = false ) {
 			materialize( "socket:" + name );
 			const index = sockets.get( name );
-			return index === undefined ? null : globals[index]!.slice();
+			if ( index === undefined ) return null;
+			const current = globals[index]!;
+			if ( !compound ) return current.slice();
+			// AB58C5..AB5924 cancels bind rotation but copies current world position.
+			// The child resource supplies its own import adapter exactly once.
+			const rest = attachmentBind( index ), result = current.slice();
+			for ( let c = 0; c < 3; c++ ) {
+				for ( let r = 0; r < 3; r++ ) {
+					result[c * 4 + r] = current[r]! * rest[c]! + current[4 + r]! * rest[4 + c]! +
+						current[8 + r]! * rest[8 + c]!;
+				}
+			}
+			return result;
 		}
 	};
 }

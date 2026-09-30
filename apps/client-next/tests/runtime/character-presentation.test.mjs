@@ -2473,6 +2473,11 @@ test("auxiliary avatar wings keep independent tracks and retire across cold repl
 			}
 		};
 		step( ids[0] );
+		assert.equal(
+			children()[0].attachment.basis,
+			"compound",
+			"private avatar skeleton uses native attach-root space"
+		);
 		const committed = children()[0];
 		blockedPaths.add( "http://localhost" + roster.dress.avatarAuxiliary[ids[1]].glb );
 		step( ids[1] );
@@ -3026,6 +3031,108 @@ test("party portraits follow roster models before visibility, after despawn and 
 		} );
 		assert.equal( f.portraitSource( gid ), null, "leaving retires the roster preview" );
 	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
+Berserk hair publication
+
+Exercise local and remote actors with both Chinese skeletons. Appearance owns
+admission and lifetime; the renderer owns the compound attachment transform.
+================
+*/
+test("berserk hair publishes compound attachments only after the resource is ready", () => {
+	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
+	for ( const prefix of [ "CH_M", "CH_W" ] ) {
+		const hair = roster.dress.hwan[prefix];
+		const blockedPaths = new Set( [ "http://localhost" + hair.glb ] );
+		const appearance = {
+			items: {},
+			roster: {
+				models: [ {
+					refObjId: 1,
+					codename: `CHAR_CH_${prefix === "CH_M" ? "MAN" : "WOMAN"}_TEST`,
+					glb: "/assets/1.glb",
+					clips: [ "stand" ]
+				} ],
+				dress: roster.dress
+			}
+		};
+		const f = fixture(
+			{},
+			2,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			{ appearance, blockedPaths }
+		);
+		let now = 0;
+		/*
+================
+step
+================
+		*/
+		function step( active ) {
+			for ( let i = 0; i < 30; i++ ) {
+				f.presentation.step(
+					[
+						entity( 1, {
+							kind: "local-player",
+							equipment: [],
+							appearanceState: [ 1, 0, Number( active ) ]
+						} ),
+						entity( 2, {
+							kind: "player",
+							refObjId: 1,
+							equipment: [],
+							appearanceState: [ 1, 0, Number( active ) ]
+						} )
+					],
+					null,
+					now += .01
+				);
+			}
+		}
+		/*
+================
+children
+================
+		*/
+		function children() {
+			return f.actors.filter( a => a.model === hair.glb );
+		}
+		step( false );
+		step( true );
+		assert.equal( children().length, 0, "cold hair must not publish an unattached actor" );
+		blockedPaths.clear();
+		step( true );
+		assert.equal( f.presentation.error(), null );
+		assert.equal( children().length, 2, prefix );
+		for ( const child of children() ) {
+			assert.deepEqual( child.attachment, {
+				gid: child.attachment.gid,
+				bone: hair.bone,
+				offset: [ 0, 0, 0 ],
+				basis: "compound"
+			} );
+		}
+		step( false );
+		assert.equal( children().length, 0, "expiry removes both hair actors" );
+		step( true );
+		assert.equal( children().length, 2 );
+		f.presentation.step( [], null, now + 1 );
+		assert.equal( children().length, 0, "despawn retires private skeletons" );
 		f.dispose();
 	}
 });

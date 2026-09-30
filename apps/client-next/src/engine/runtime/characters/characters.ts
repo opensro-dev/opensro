@@ -2887,8 +2887,8 @@ soundContext
 					state = { gid: allocateActor(), started: seconds };
 					hwanHairActors.set( entity.gid, state );
 				}
-				// AB68C0 copies the parent matrix when the attach timer has elapsed.
-				// A missing hair bone stays on that parent; it does not drop the actor.
+				// AB5870 cancels the parent bind rotation and keeps its sampled position.
+				// A missing hair marker retains the renderer's existing parent fallback.
 				next.set( state.gid, {
 					shadowAttachment: true,
 					gid: state.gid,
@@ -2899,7 +2899,7 @@ soundContext
 					loop: true,
 					scale: 1,
 					pickable: false,
-					attachment: { gid: entity.gid, bone: hair.bone, offset: [ 0, 0, 0 ] }
+					attachment: { gid: entity.gid, bone: hair.bone, offset: [ 0, 0, 0 ], basis: "compound" }
 				} );
 			}
 			for ( const gid of hwanHairActors.keys() ) if ( !hairOwners.has( gid ) ) hwanHairActors.delete( gid );
@@ -2948,7 +2948,7 @@ soundContext
 					}
 					const layers = locomotionLayers( child.motion, seconds );
 					if ( next.size >= CHARACTER_ACTORS ) continue;
-					// Same AB68C0 parent-matrix keep as hwan hair. A missing auxiliary bone stays attached.
+					// Auxiliary BSR skeletons use the same AB5870 attach-root frame as Hwan hair.
 					next.set( child.gid, {
 						shadowAttachment: true,
 						gid: child.gid,
@@ -2960,7 +2960,7 @@ soundContext
 						layers,
 						scale: 1,
 						pickable: false,
-						attachment: { gid: entity.gid, bone: entry.bone, offset: [ 0, 0, 0 ] }
+						attachment: { gid: entity.gid, bone: entry.bone, offset: [ 0, 0, 0 ], basis: "compound" }
 					} );
 				}
 				for ( const id of children.keys() ) if ( !alive.has( id ) ) children.delete( id );
