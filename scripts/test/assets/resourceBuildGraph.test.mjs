@@ -101,6 +101,7 @@ test("resource fingerprint reports every ownership root independently", async ()
 		[
 			"extracted",
 			"client-executable",
+			"particle-archive",
 			"server-go-mod",
 			"server-go-sum",
 			"server-roster-exporter",

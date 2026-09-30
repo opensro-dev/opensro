@@ -39,47 +39,36 @@ test("CIF preprocessor preserves lines and rejects malformed directive ownership
   assert.throws(() => applyCifPreprocessor("#ifdef OPEN", {}), /unterminated/);
 } );
 
-test("every shipped resinfo source has a published layout and a truthful catalog path", async () => {
-  const [sourceFiles, publishedFiles, catalogSource] = await Promise.all([
+test("every shipped resinfo source has a published layout", async () => {
+  const [sourceFiles, publishedFiles] = await Promise.all([
     discoverCifLayouts(resinfoDir),
-    readdir(layoutOutputDir),
-    readFile(path.join(publicRoot, "assets", "cif", "cif-class-catalog.json"), "utf8")
+    readdir(layoutOutputDir)
   ]);
   const jsonFiles = publishedFiles
     .filter((name) => name.endsWith(".json"))
     .sort((left, right) => left.localeCompare(right));
   const expectedJsonFiles = sourceFiles.map((name) => name.replace(/\.txt$/i, ".json"));
-  const catalog = JSON.parse(catalogSource.replace(/^\uFEFF/, ""));
 
   assert.equal(sourceFiles.length, 231);
   assert.deepEqual(jsonFiles, expectedJsonFiles);
-  for (const row of catalog.resinfoIndex) {
-    assert.ok(row.layoutPublicPath, `${row.file} has no public layout path`);
-    assert.ok(
-      jsonFiles.includes(path.basename(row.layoutPublicPath)),
-      `${row.file} advertises missing ${row.layoutPublicPath}`
-    );
-  }
 } );
 
-test("generated layout and catalog parse the same live macro branch", async () => {
-  const [raw, defines, generatedSource, catalogSource] = await Promise.all([
+// cif-class-catalog.json was a one-off reverse-engineering export; no build
+// step produces it, so the layout is checked against a fresh parse instead.
+test("the generated layout parses the same live macro branch as its source", async () => {
+  const [raw, defines, generatedSource] = await Promise.all([
     readText(path.join(resinfoDir, "ginterface.txt")),
     loadCifDefines(),
-    readFile(path.join(layoutOutputDir, "ginterface.json"), "utf8"),
-    readFile(path.join(publicRoot, "assets", "cif", "cif-class-catalog.json"), "utf8")
+    readFile(path.join(layoutOutputDir, "ginterface.json"), "utf8")
   ]);
   const parsed = parseCifLayout(
     applyCifPreprocessor(raw, defines),
     path.join(resinfoDir, "ginterface.txt")
   );
   const generated = JSON.parse(generatedSource.replace(/^\uFEFF/, ""));
-  const catalog = JSON.parse(catalogSource.replace(/^\uFEFF/, ""));
-  const catalogRow = catalog.resinfoIndex.find((row) => row.file === "ginterface.txt");
 
   assert.deepEqual(
     generated.sections.map((section) => section.name),
     parsed.sections.map((section) => section.name)
   );
-  assert.deepEqual(catalogRow.sections, parsed.sections.map((section) => section.name));
 } );
