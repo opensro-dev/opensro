@@ -149,7 +149,7 @@ Tell the server this client is ready as soon as the session is in the world
 */
 async function enterWorld( simulation, name, label ) {
 	await simulation.waitFor( state => state.session?.phase === "world", STEP_BUDGET_MS, label );
-	simulation.session( { kind: "world-ready", travelRevision: 0 } );
+	simulation.ready();
 	return simulation.waitFor( () => simulation.entityNamed( name ), STEP_BUDGET_MS, label + " spawn" );
 }
 

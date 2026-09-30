@@ -96,13 +96,15 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 		workerData: { origin, workerUrl, cookies, jarPort: jarChannel.port2 },
 		transferList: [ jarChannel.port2 ]
 	} );
-	/** @type {{ session: any, sessions: any[], failures: string[], entities: Map<number, any>, gameplay: any, batches: number, events: number, exited: boolean }} */
+	/** @type {{ session: any, sessions: any[], failures: string[], entities: Map<number, any>, gameplay: any, travelRevision: number, readyRequested: boolean, batches: number, events: number, exited: boolean }} */
 	const state = {
 		session: null,
 		sessions: [],
 		failures: [],
 		entities: new Map(),
 		gameplay: null,
+		travelRevision: 0,
+		readyRequested: false,
 		batches: 0,
 		events: 0,
 		exited: false
@@ -140,6 +142,17 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 			for ( const event of message.batch.events ) {
 				state.events++;
 				if ( event.kind === "gameplay" ) state.gameplay = event.state;
+				// The page reports readiness for the travel it presented; a newer
+				// travel needs a new report (world.ts ignores a stale revision).
+				if ( event.kind === "travel" && event.travel.revision !== state.travelRevision ) {
+					state.travelRevision = event.travel.revision;
+					if ( state.readyRequested ) {
+						worker.postMessage( {
+							kind: "session",
+							command: { kind: "world-ready", travelRevision: state.travelRevision }
+						} );
+					}
+				}
 				if ( event.kind === "spawn" || event.kind === "state" ) {
 					state.entities.set( event.entity.gid, event.entity );
 				} else if ( event.kind === "despawn" ) state.entities.delete( event.gid );
@@ -154,6 +167,13 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 		state,
 		session( command ) {
 			worker.postMessage( { kind: "session", command } );
+		},
+		ready() {
+			state.readyRequested = true;
+			worker.postMessage( {
+				kind: "session",
+				command: { kind: "world-ready", travelRevision: state.travelRevision }
+			} );
 		},
 		entityNamed( name ) {
 			for ( const entity of state.entities.values() ) if ( entity.name === name ) return entity;
