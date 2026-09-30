@@ -186,7 +186,8 @@ async function exercise( candidate, credentials, origin, result, directory ) {
 		} );
 		await simulation.waitFor( state => state.session?.phase === "character-select", STEP_BUDGET_MS, "login" );
 		passPhase( result, "login" );
-		// Login reports character-select before the roster arrives with it.
+		// As the page does: character-select without characters asks for them.
+		if ( !simulation.state.session?.characters ) simulation.session( { kind: "roster" } );
 		const characters = await simulation.waitFor(
 			state =>
 				state.session?.phase === "character-select" && Array.isArray( state.session.characters ) ?
