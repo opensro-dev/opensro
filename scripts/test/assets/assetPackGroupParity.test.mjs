@@ -3,11 +3,10 @@
 
 assetPackGroupParity.test.mjs - asset-pack group membership and packing
 
-Checks the shared pack-group collector and the two build entry points that
-use it: the canonical group set and sweep exclusions, where native name
-filters and mip textures land, that a skipped outdoor lane leaks nothing,
-that both entry points refresh JSON sidecars before packing, and that the
-packed mission boot catalog matches its loose gzip authority byte for byte.
+Checks the shared pack-group collector: the canonical group set and sweep
+exclusions, where native name filters and mip textures land, that a skipped
+outdoor lane leaks nothing, and that the packed mission boot catalog matches
+its loose gzip authority byte for byte.
 
 ===========================================================================
 */
@@ -39,46 +38,28 @@ function groupFiles( groups, name ) {
 	return group.files;
 }
 
-// Parity guard for the two asset-pack entry points:
-//   scripts/build_sro_resources.mjs           (full pipeline tail)
-//   scripts/rebuild_asset_packs_from_public.mjs (standalone pack rebuild)
+// The canonical pack-group definition for both full pack builds.
 //
-// Both once carried their own inline copy of the pack-group list and sweep
-// exclusions, and they drifted: the mission-npc-vat group (plus its json-sweep
-// exclusions) was added to the pipeline only, so standalone rebuilds silently
-// produced packs missing that group. The fix was to extract the whole definition
-// into build/assetPackGroups.mjs; this file pins both halves of that fix:
+// The full build and the standalone repack once each carried an inline copy of
+// the pack-group list and its sweep exclusions, and they drifted: the
+// mission-npc-vat group was added to the pipeline only, so standalone rebuilds
+// silently produced packs missing that group. Both now pack through one tail,
+// packPublicTree.mjs, which calls the one collector in build/assetPackGroups.mjs;
+// scripts/test/pipeline/packPublicTree.test.mjs runs that tail's order. This
+// file runs the collector against a fixture tree covering every group and every
+// exclusion rule, so editing the shared module cannot silently drop either.
 //
-// 1. BEHAVIOR: collectAssetPackGroups() is run against a fixture tree covering
-//    every group and every exclusion rule, and its effective group array is
-//    deep-compared against the expected shape. Editing the shared module cannot
-//    silently drop a group or an exclusion.
-// 2. ROUTING: both entry scripts are statically parsed (neither exports anything --
-//    both are top-level programs that take the generated-assets lock and run a
-//    build on import, so importing them here is not an option). Each must import
-//    collectAssetPackGroups, must not call listPublicAssetFiles itself, must not
-//    pass an inline `groups: [...]` literal to buildAssetPacks, and must keep the
-//    buildWebAssetManifest -> optimizePublicJsonAssets sidecar-refresh tail.
+// Legitimate per-caller inputs: the full build passes includeOutdoorWorld only
+// when its world lane produced an outdoor group, and each caller supplies its
+// ui-preload image list and minimap tile list.
 //
-// Legitimate per-caller differences (do NOT assert them away):
-// - the pipeline passes includeOutdoorWorld: Boolean(outdoorWorldRegion) because
-//   its world lane may legitimately produce no outdoor region group; the
-//   standalone rebuild always packs what is on disk and uses the default (true);
-// - the ui-preload image list and minimap tile list are runtime inputs produced
-//   by each caller, not part of the shared definition.
-//
-// scripts/refresh_outdoor_asset_packs.mjs is deliberately OUTSIDE this contract:
+// scripts/refresh_outdoor_asset_packs.mjs is deliberately outside this contract:
 // it is an incremental refresh that rebuilds only game-data/game-images/
-// outdoor-world, takes their membership and load modes from the PREVIOUS pack
+// outdoor-world, takes their membership and load modes from the previous pack
 // manifest rather than a fresh sweep, and merges into the manifest the full
-// builds wrote -- it never defines the canonical group set.
+// builds wrote. It never defines the canonical group set.
 
 const testDir = path.dirname( fileURLToPath( import.meta.url ) );
-const scriptsDir = path.resolve( testDir, "..", ".." );
-const entryScriptPaths = {
-	pipeline: path.join( scriptsDir, "build_sro_resources.mjs" ),
-	standalone: path.join( scriptsDir, "rebuild_asset_packs_from_public.mjs" )
-};
 
 test("native name filtering ships through the canonical game-data pack group", async () => {
 	const fixture = await mkdtemp( path.join( os.tmpdir(), "sro-name-filter-pack-" ) );
@@ -226,73 +207,6 @@ test("a skipped outdoor lane empties the outdoor group without leaking outdoor f
 	// the outdoor-world group must go empty while the outdoor files on disk STILL stay
 	// out of game-images/game-data (the generated-asset membership contract).
 	assert.deepEqual( collected.groups, expectedGroups( { outdoorFiles: [] } ) );
-});
-
-test("both entry points route their pack groups through the shared collector", async () => {
-	for ( const [label, scriptPath] of Object.entries( entryScriptPaths ) ) {
-		const source = await readFile( scriptPath, "utf8" );
-
-		assert.match(
-			source,
-			/import\s*\{\s*collectAssetPackGroups\s*\}\s*from\s*"\.\/build\/assetPackGroups\.mjs"/,
-			`${label} must import collectAssetPackGroups from ./build/assetPackGroups.mjs`
-		);
-		assert.match(
-			source,
-			/uiImagePreloadPaths\s*:/,
-			`${label} must feed its ui-preload image list into the shared collector`
-		);
-		assert.match(
-			source,
-			/missionMinimapTilePaths\s*:/,
-			`${label} must feed its minimap tile list into the shared collector`
-		);
-		assert.match(
-			source,
-			/groups\s*:\s*\w+\.groups/,
-			`${label} must pass the collector's groups array to buildAssetPacks`
-		);
-		assert.doesNotMatch(
-			source,
-			/groups\s*:\s*\[/,
-			`${label} reintroduced an inline pack-group literal; the group list must live only in build/assetPackGroups.mjs`
-		);
-		assert.doesNotMatch(
-			source,
-			/listPublicAssetFiles/,
-			`${label} lists public assets itself; per-script sweeps are how the mission-npc-vat drift happened`
-		);
-	}
-});
-
-test("both entry points keep the manifest-then-sidecar-refresh tail", async () => {
-	for ( const [label, scriptPath] of Object.entries( entryScriptPaths ) ) {
-		const source = await readFile( scriptPath, "utf8" );
-		const manifestAt = source.indexOf( "buildWebAssetManifest()" );
-		const finalRefreshAt = source.lastIndexOf( "optimizePublicJsonAssets()" );
-
-		assert.ok( manifestAt >= 0, `${label} must rebuild the web asset manifest` );
-		assert.ok(
-			finalRefreshAt > manifestAt,
-			`${label} must refresh precompressed sidecars (optimizePublicJsonAssets) AFTER regenerating the manifests`
-		);
-	}
-});
-
-test("both entry points refresh JSON sidecars before packing them", async () => {
-	for ( const [label, scriptPath] of Object.entries( entryScriptPaths ) ) {
-		const source = await readFile( scriptPath, "utf8" );
-		const firstRefreshAt = source.indexOf( "optimizePublicJsonAssets()" );
-		// Layout-independent: dprint pads call parentheses.
-		const packAt = source.search( /buildAssetPacks\s*\(\s*\{/ );
-
-		assert.ok( firstRefreshAt >= 0, `${label} must precompress generated JSON` );
-		assert.ok( packAt >= 0, `${label} must build asset packs` );
-		assert.ok(
-			firstRefreshAt < packAt,
-			`${label} must refresh .json.gz before buildAssetPacks; otherwise the pack can hide a newer loose manifest behind stale bytes`
-		);
-	}
 });
 
 test("the packed mission boot catalog is byte-identical to its current loose gzip authority", async ( t ) => {

@@ -1,0 +1,123 @@
+/*
+===========================================================================
+
+packPublicTree.test.mjs - the ordered pack tail, run with recording steps
+
+Both full pack builds end in packPublicTree. These tests run that exact
+sequence with stub steps: sidecars refresh before packing and again after
+the web manifest, the collector's groups reach the pack builder, missing
+pack files fail the build, and only a full build retires sidecars.
+
+===========================================================================
+*/
+import assert from "node:assert/strict";
+import path from "node:path";
+import test from "node:test";
+import { missingPackFiles, packPublicTree } from "../../build/packPublicTree.mjs";
+
+const PUBLIC_ROOT = path.resolve( "fixture-public" );
+const GROUPS = [ { name: "game-data", files: [ "/assets/data/a.json.gz" ] } ];
+const PACKS = {
+	groups: [ { name: "game-data", packs: [ { path: "/assets/packs/game-data-001-abcdefabcdef.bin" } ] } ]
+};
+
+/*
+================
+recordingSteps
+
+Stub steps that record each call in order. present decides which pack files
+exist.
+================
+*/
+function recordingSteps( present = () => true ) {
+	const calls = [];
+	const steps = {
+		optimizeJson: async () => {
+			calls.push( [ "optimizeJson" ] );
+			return { pass: calls.length };
+		},
+		collectGroups: async ( inputs ) => {
+			calls.push( [ "collectGroups", inputs ] );
+			return { groups: GROUPS };
+		},
+		buildPacks: async ( request ) => {
+			calls.push( [ "buildPacks", request ] );
+			return PACKS;
+		},
+		packFileExists: present,
+		retireSidecars: async ( request ) => {
+			calls.push( [ "retireSidecars", request ] );
+			return { retired: [] };
+		},
+		buildWebManifest: async () => {
+			calls.push( [ "buildWebManifest" ] );
+			return { files: [] };
+		}
+	};
+	return { calls, steps };
+}
+
+/*
+================
+TestFullBuildTailOrder
+================
+*/
+test("a full build refreshes, collects, packs, retires, registers, then refreshes again", async () => {
+	const { calls, steps } = recordingSteps();
+	const inputs = { uiImagePreloadPaths: [ "/a.png" ], missionMinimapTilePaths: [], includeOutdoorWorld: true };
+	const result = await packPublicTree(
+		{ publicRoot: PUBLIC_ROOT, retireSidecars: true, groupInputs: inputs },
+		steps
+	);
+	assert.deepEqual( calls.map( ( call ) => call[0] ), [
+		"optimizeJson",
+		"collectGroups",
+		"buildPacks",
+		"retireSidecars",
+		"buildWebManifest",
+		"optimizeJson"
+	] );
+	assert.equal( calls[1][1], inputs, "the caller's group inputs reach the shared collector" );
+	assert.equal( calls[2][1].groups, GROUPS, "the pack builder receives the collector's groups" );
+	assert.deepEqual( calls[3][1], { publicRoot: PUBLIC_ROOT, apply: true } );
+	assert.equal( result.assetPacks, PACKS );
+});
+
+/*
+================
+TestRepackNeverRetires
+================
+*/
+test("a repack never retires sidecars (a compacted tree drops loose bases on purpose)", async () => {
+	const { calls, steps } = recordingSteps();
+	const result = await packPublicTree( { publicRoot: PUBLIC_ROOT, retireSidecars: false, groupInputs: {} }, steps );
+	assert.ok( !calls.some( ( call ) => call[0] === "retireSidecars" ) );
+	assert.equal( result.sidecarRetirement, null );
+});
+
+/*
+================
+TestMissingPackFails
+================
+*/
+test("a pack the index names but the tree lacks fails before the web manifest", async () => {
+	const { calls, steps } = recordingSteps( () => false );
+	await assert.rejects(
+		packPublicTree( { publicRoot: PUBLIC_ROOT, retireSidecars: true, groupInputs: {} }, steps ),
+		/missing pack file\(s\): \/assets\/packs\/game-data-001-abcdefabcdef\.bin/
+	);
+	assert.ok( !calls.some( ( call ) => call[0] === "buildWebManifest" ) );
+});
+
+/*
+================
+TestZstdOnlyPackCounts
+================
+*/
+test("a zstd-only pack (the compact profile) counts as present", () => {
+	const zstd = path.join( PUBLIC_ROOT, "assets/packs/game-data-001-abcdefabcdef.bin.zst" );
+	assert.deepEqual( missingPackFiles( PACKS, PUBLIC_ROOT, ( file ) => file === zstd ), [] );
+	assert.deepEqual( missingPackFiles( PACKS, PUBLIC_ROOT, () => false ), [
+		"/assets/packs/game-data-001-abcdefabcdef.bin"
+	] );
+});

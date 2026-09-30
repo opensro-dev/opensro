@@ -682,7 +682,6 @@ scripts/build/shared/cifResources.mjs
 scripts/build/shared/collections.mjs
 scripts/build/shared/compressionUtils.mjs
 scripts/build/shared/configResources.mjs
-scripts/build/shared/convertImagesRunner.mjs
 scripts/build/shared/dataAssetExport.mjs
 scripts/build/shared/fileHashCache.mjs
 scripts/build/shared/fontResources.mjs
@@ -724,7 +723,6 @@ scripts/build/world/buildAuthoredWorldRegionResources.mjs
 scripts/build/world/buildCharacterCreateWorldRegionResources.mjs
 scripts/build/world/buildCharacterSelectInterfaceModels.mjs
 scripts/build/world/buildCharacterSelectWorldRegionResources.mjs
-scripts/build/world/buildOutdoorWorldRegionResources.mjs
 scripts/build/world/buildTitleWorldRegionResources.mjs
 scripts/build/world/buildWorldAnimatedObjects.mjs
 scripts/build/world/buildWorldRegionCatalog.mjs
@@ -764,7 +762,6 @@ scripts/lib/probeEndpoints.mjs
 scripts/lib/probeTransportProtocol.mjs
 scripts/lib/publishedAsset.mjs
 scripts/rebuildLock.mjs
-scripts/rebuild_asset_packs_from_public.mjs
 scripts/refresh_asset_delivery.mjs
 scripts/setup_git_hooks.mjs
 scripts/task.mjs

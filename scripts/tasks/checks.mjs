@@ -35,6 +35,16 @@ export const CHECK_TASKS = [
 		args: [ "-B", "-m", "unittest", "discover", "-s", "scripts/test/python" ]
 	} ),
 	commandTask( {
+		name: "check:pipeline-contracts",
+		description: "Run the asset pipeline's ordering contracts with stub steps (no game data)",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "node",
+		args: [ "--test", "scripts/test/pipeline/*.test.mjs" ]
+	} ),
+	commandTask( {
 		name: "check:release",
 		description: "Test release admission, publication recovery and monitoring",
 		kind: "check",
@@ -202,6 +212,7 @@ const sourceTasks = [
 	"check:release",
 	"check:loot-catalog",
 	"check:client-preparation",
+	"check:pipeline-contracts",
 	"check:source-size",
 	"check:source-encoding",
 	"check:shared-fixtures",
@@ -236,6 +247,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 		{ id: "release", task: "check:release", after: [] },
 		{ id: "loot-catalog", task: "check:loot-catalog", after: [] },
 		{ id: "client-preparation", task: "check:client-preparation", after: [] },
+		{ id: "pipeline-contracts", task: "check:pipeline-contracts", after: [] },
 		{ id: "source-size", task: "check:source-size", after: [] },
 		{ id: "source-encoding", task: "check:source-encoding", after: [] },
 		{ id: "shared-fixtures", task: "check:shared-fixtures", after: [] },

@@ -1,11 +1,12 @@
 /*
 ===========================================================================
 
-resourceBuildGraph.test.mjs - the full build's producer graph and ordering
+resourceBuildGraph.test.mjs - producer entry points and the build fingerprint
 
-Walks the imports of build_sro_resources.mjs to prove every character
-asset producer is reachable, and checks that image staging exists before
-the lanes that consume it.
+Character producers expose their entry points without starting a build on
+import, and the resource fingerprint records every ownership root. The full
+build's dependency order is run with stub steps in
+scripts/test/pipeline/resourceBuildOrder.test.mjs.
 
 ===========================================================================
 */
@@ -17,63 +18,14 @@ import { pathToFileURL } from "node:url";
 import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
 
 const rebuildRoot = path.resolve( "." );
-const resourceEntry = path.join( rebuildRoot, "scripts", "build_sro_resources.mjs" );
 
-/*
-================
-collectReachableModules
-================
-*/
-function collectReachableModules( entryPath ) {
-	const pending = [ entryPath ];
-	const visited = new Set();
-	while ( pending.length > 0 ) {
-		const filePath = pending.pop();
-		const resolvedPath = path.resolve( filePath );
-		if ( visited.has( resolvedPath ) ) continue;
-		visited.add( resolvedPath );
-		// Other build lanes may be under active development in the shared
-		// workspace; this contract is scoped to reachability of the character
-		// producer graph, not global import completeness.
-		if ( !fs.existsSync( resolvedPath ) ) continue;
-		const source = fs.readFileSync( resolvedPath, "utf8" );
-		// id layout writes dynamic imports as `import( "./x.mjs" )`.
-		for ( const match of source.matchAll( /(?:from\s+|import\s*\(\s*)(["'])(\.[^"']+\.mjs)\1/g ) ) {
-			pending.push( path.resolve( path.dirname( resolvedPath ), match[2] ) );
-		}
-	}
-	return visited;
-}
-
-test("full resource build reaches every character asset producer and its derived helpers", async () => {
-	const reachable = collectReachableModules( resourceEntry );
-	for (
-		const relativePath of [
-			"scripts/build/char/buildRoster.mjs",
-			"scripts/build/char/buildLocomotionBanAssets.mjs",
-			"scripts/build/char/buildDropModelAssets.mjs",
-			"scripts/build/char/buildEquipmentVisuals.mjs"
-		]
-	) {
-		assert.ok( reachable.has( path.join( rebuildRoot, ...relativePath.split( "/" ) ) ), relativePath );
-	}
-
-	const entrySource = fs.readFileSync( resourceEntry, "utf8" );
-	for (
-		const producer of [
-			"buildRoster",
-			"buildLocomotionBanAssets",
-			"buildDropModelAssets"
-		]
-	) {
-		assert.match( entrySource, new RegExp( `\\b${producer}\\(` ), producer );
-	}
-
+test("character producers expose their entry points without starting a build", async () => {
 	for (
 		const [relativePath, producer] of [
 			[ "scripts/build/char/buildRoster.mjs", "buildRoster" ],
 			[ "scripts/build/char/buildLocomotionBanAssets.mjs", "buildLocomotionBanAssets" ],
-			[ "scripts/build/char/buildDropModelAssets.mjs", "buildDropModelAssets" ]
+			[ "scripts/build/char/buildDropModelAssets.mjs", "buildDropModelAssets" ],
+			[ "scripts/build/char/buildEquipmentVisuals.mjs", "buildEquipmentVisuals" ]
 		]
 	) {
 		// Importing a producer exposes its entry point and must not start a
@@ -122,24 +74,4 @@ test("resource fingerprint reports every ownership root independently", async ()
 		assert.match( root.hash, /^[a-f0-9]{64}$/ );
 		assert.ok( root.fileCount >= 1, `${root.label} should record a file or an explicit absence` );
 	}
-});
-
-test("full resource build recreates compacted image staging before parallel consumers", () => {
-	const entrySource = fs.readFileSync( resourceEntry, "utf8" );
-	// Layout-independent: dprint pads call parentheses.
-	const conversionIndex = entrySource.search( /runConvertImages\s*\(\s*\[\s*\]\s*\)/ );
-	const firstConsumerIndex = entrySource.indexOf( "const interfaceImagesLane" );
-
-	assert.ok( conversionIndex >= 0, "full build must own the unfiltered image conversion pass" );
-	assert.ok(
-		firstConsumerIndex > conversionIndex,
-		"the staging cache must exist before UI/world/model lanes consume converted images"
-	);
-
-	const runnerSource = fs.readFileSync(
-		path.join( rebuildRoot, "scripts", "build", "shared", "convertImagesRunner.mjs" ),
-		"utf8"
-	);
-	assert.match( runnerSource, /fullConversionComplete\s*&&\s*args\.length\s*>\s*0/ );
-	assert.match( runnerSource, /args\.length\s*===\s*0\s*&&\s*result\.status\s*===\s*0/ );
 });
