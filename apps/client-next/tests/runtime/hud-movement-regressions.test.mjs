@@ -214,24 +214,22 @@ test("chat hover draws native text-width highlight and clears on exit", async ()
 		JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifchatviewer.json", "utf8" ) )
 	);
 	const draw = hover =>
-		chatLayout(
+		chatLayout( {
 			layout,
-			1024,
-			768,
-			2,
-			0,
-			"",
-			[],
-			"Welcome",
-			x => x,
-			() => [ 16, 16 ],
-			() => [],
+			width: 1024,
+			height: 768,
+			rows: 2,
+			tab: 0,
+			input: "",
+			lines: [],
+			welcome: "Welcome",
+			copy: x => x,
+			size: () => [ 16, 16 ],
+			text: () => [],
 			hover,
-			null,
-			0,
-			false,
-			s => s.length * 7
-		);
+			pressed: null,
+			measure: s => s.length * 7
+		} );
 	const cold = draw( null ), hot = draw( "chat-line:0" );
 	assert.ok( cold.controls.some( c => c.id === "chat-line:0" ) );
 	const highlight = hot.quads.find( q => q.texture === "" && q.color[3] === 102 / 255 );

@@ -960,6 +960,44 @@ export function createUi(
 	}
 	/*
 	================
+	beginWhisper
+
+	6AC0F0 replaces the draft with "$name " and rejects the local name.
+	6ACD90 and 6B8600 focus the same editor after selecting a recipient.
+	================
+	*/
+	function beginWhisper( name: string ) {
+		if ( !name || name === view?.session?.character || /\s/.test( name ) ) return;
+		chatTarget = name;
+		chatChannel = 2;
+		whispersOpen = false;
+		chatText = "$" + name + " ";
+		focusAtEnd( "chat-text", chatText );
+		dirty = true;
+	}
+	/*
+	================
+	executeSkill
+
+	The learned skill board and both shortcut bars share cooldown admission.
+	The worker and server remain responsible for target and actor eligibility.
+	================
+	*/
+	function executeSkill( id: number ) {
+		const game = view?.gameplay;
+		if ( !game?.skills?.includes( id ) || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
+		if (
+			skillCooldown(
+				game.skillCooldowns ?? [],
+				id,
+				game.skillCatalog?.find( row => row.id === id )?.cooldownGroup ?? 0,
+				quickslotTime
+			)
+		) return;
+		sendGameplay( { kind: "skill", skillId: id, ...(game.target ? { gid: game.target } : {}) } );
+	}
+	/*
+	================
 	useInventorySlot
 	================
 	*/
@@ -1543,9 +1581,7 @@ export function createUi(
 		} else if ( id === "party-match:16" ) {
 			const row = view.gameplay?.partyMatching?.rows.find( r => r.id === partyMatchSelection );
 			if ( row ) {
-				chatTarget = row.name;
-				chatChannel = 2;
-				focus = "chat-text";
+				beginWhisper( row.name );
 			}
 		} else if ( id === "party-match:55" ) {
 			const min = Math.max( 1, Number( partySearchDraft.min ) || 1 ), max = Number( partySearchDraft.max ) || 90;
@@ -1722,9 +1758,7 @@ export function createUi(
 		} else if ( id === "academy-whisper" ) {
 			const row = view.gameplay?.academy?.rows.find( r => r.id === academySelection );
 			if ( row ) {
-				chatTarget = row.name;
-				chatChannel = 2;
-				setPanel( "Chat" );
+				beginWhisper( row.name );
 			}
 		} else if ( id.startsWith( "academy-combo:" ) ) {
 			const n = Number( id.slice( 14 ) );
@@ -1774,11 +1808,10 @@ export function createUi(
 		else if ( id === "chat-hide" ) chatHidden = !chatHidden;
 		else if ( id === "chat-whispers" ) whispersOpen = !whispersOpen;
 		else if ( id.startsWith( "whisper-name:" ) ) {
-			chatTarget = id.slice( 13 );
-			chatChannel = 2;
-			whispersOpen = false;
-			chatText = "$" + chatTarget + " ";
-			focusAtEnd( "chat-text", chatText );
+			beginWhisper( id.slice( 13 ) );
+		} else if ( id.startsWith( "chat-line:" ) ) {
+			const recipient = controls.find( control => control.id === id && !control.disabled )?.whisperTarget;
+			if ( recipient ) beginWhisper( recipient );
 		} else if ( id === "status-filter" ) statusFilterOpen = !statusFilterOpen;
 		else if ( id.startsWith( "status-filter:" ) ) {
 			const key = id.slice( 14 );
@@ -1862,15 +1895,10 @@ export function createUi(
 					dirty = true;
 					return;
 				}
-				if (
-					binding?.kind === 0x49 &&
-					skillCooldown(
-						game?.skillCooldowns ?? [],
-						binding.payload,
-						game?.skillCatalog?.find( r => r.id === binding.payload )?.cooldownGroup ?? 0,
-						quickslotTime
-					)
-				) return;
+				if ( binding?.kind === 0x49 ) {
+					executeSkill( binding.payload );
+					return;
+				}
 				if ( binding?.kind === 0x4a ) {
 					executeAction( binding.payload & 0xffffff );
 					return;
@@ -2315,6 +2343,12 @@ export function createUi(
 		*/
 		event( event: UiEvent ) {
 			if ( disposed ) return;
+			if ( event.kind === "whisper-target" ) {
+				const gid = event.gid;
+				const entity = view?.entities.find( row => row.gid === gid && row.kind === "player" );
+				if ( view?.session?.phase !== "world" || !entity ) return;
+				event = { kind: "activate", id: "whisper-name:" + entity.name };
+			}
 			// 681428..68147F: dead self-selection creates type 3 only when absent.
 			// Explicit selection does not wait for the automatic death-state timer.
 			if ( event.kind === "world-select" ) {
@@ -2562,7 +2596,8 @@ export function createUi(
 			if (
 				partyProgressVisible && !view?.gameplay?.partyMatching?.request &&
 				(event.kind === "key" || event.kind === "activate" || event.kind === "double-activate" ||
-					event.kind === "drag" || event.kind === "drag-end" || event.kind === "scroll" ||
+					event.kind === "right-activate" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "scroll" ||
 					event.kind === "edit")
 			) return;
 			if ( splitStack ) {
@@ -3435,6 +3470,39 @@ export function createUi(
 					view?.session?.phase !== "world" || !view.gameplay ||
 					!controls.some( c => c.id === event.id && c.rightActivate && !c.disabled )
 				) return;
+				// 564030 cancels an active carry before dispatching the pressed icon.
+				if ( carriedItem || carriedShortcut || clearHotbar ) {
+					carriedItem = null;
+					carriedShortcut = null;
+					clearHotbar = false;
+					dirty = true;
+					return;
+				}
+				if ( event.id.startsWith( "action:" ) ) {
+					executeAction( Number( event.id.slice( 7 ) ) );
+					return;
+				}
+				if ( event.id.startsWith( "skill:" ) ) {
+					executeSkill( Number( event.id.slice( 6 ) ) );
+					return;
+				}
+				if ( event.id.startsWith( "hotbar:" ) ) {
+					activate( event.id );
+					return;
+				}
+				if ( event.id.startsWith( "slot:" ) ) {
+					const item = view.gameplay.inventory.find( row => row.slot === Number( event.id.slice( 5 ) ) );
+					if ( item && (item.typeFlags & 0x7fe) === 0x6ac ) moveAvatar( true, item.slot );
+					else if ( item && useInventorySlot( item.slot ) ) dirty = true;
+					return;
+				}
+				if ( event.id.startsWith( "avatar:" ) ) {
+					const item = view.gameplay.avatarInventory?.find( row =>
+						row.typeFlags >>> 11 === Number( event.id.slice( 7 ) )
+					);
+					if ( item ) moveAvatar( false, item.slot );
+					return;
+				}
 				const cancel = buffBoard( view.gameplay, view.simulationTimeMs ?? 0 ).find( row => row.id === event.id )
 					?.cancel;
 				if ( !cancel ) return;
@@ -4723,6 +4791,7 @@ export function createUi(
 					kind: "button",
 					disabled,
 					selected,
+					rightActivate: !!item && id.startsWith( "slot:" ),
 					draggable: !!item
 				} );
 				itemCount( item, r );
@@ -5425,24 +5494,24 @@ export function createUi(
 					const output = chatLayoutCache.read(
 						key,
 						() =>
-							chatLayout(
-								hudData.chat,
-								w,
-								h,
-								chatRows,
-								chatTab,
-								chatText,
+							chatLayout( {
+								layout: hudData.chat,
+								width: w,
+								height: h,
+								rows: chatRows,
+								tab: chatTab,
+								input: chatText,
 								lines,
-								hudCopy( "UIIT_STT_STARTING_MSG" ),
-								hudCopy,
-								resources.size,
-								( value, r, c, color, style ) => text.quads( value, r, c, color, style ),
+								welcome: hudCopy( "UIIT_STT_STARTING_MSG" ),
+								copy: hudCopy,
+								size: resources.size,
+								text: ( value, r, c, color, style ) => text.quads( value, r, c, color, style ),
 								hover,
 								pressed,
-								chatScroll.offset(),
-								chatHidden,
-								value => text.run( value ).width,
-								{
+								offset: chatScroll.offset(),
+								hidden: chatHidden,
+								measure: value => text.run( value ).width,
+								editState: {
 									caretVisible,
 									caretHeight: text.height() + 2,
 									focused: focus === "chat-text",
@@ -5450,7 +5519,7 @@ export function createUi(
 									end: selection[1] ?? 0,
 									composing
 								}
-							)
+							} )
 					);
 					chatScroll.geometry( output.scrolling );
 					quads.push( ...output.quads );
@@ -5794,7 +5863,13 @@ export function createUi(
 				quickSlotCell
 				================
 				*/
-				function quickSlotCell( slot: number, r: UiRect, label: string, locked = false, iconAlpha = 1 ) {
+				function quickSlotCell(
+					slot: number,
+					r: UiRect,
+					label: string,
+					options: { locked?: boolean; iconAlpha?: number; } = {}
+				) {
+					const { locked = false, iconAlpha = 1 } = options;
 					const binding = game?.quickSlots?.find( row => row.slot === slot ),
 						skill = binding?.kind === 0x49 ? training.skill( binding.payload ) : undefined;
 					const item = binding ?
@@ -5819,6 +5894,7 @@ export function createUi(
 						label: label + ": " + name,
 						kind: "button",
 						rect: r,
+						rightActivate: !!binding,
 						draggable: !!binding && !locked
 					} );
 					blocks.push( r );
@@ -5893,8 +5969,7 @@ export function createUi(
 									extendedSlot( node.id - 100 ),
 									authoredRect( node, ex, ey ),
 									String( node.id - 99 ),
-									extSlotLock,
-									alpha
+									{ locked: extSlotLock, iconAlpha: alpha }
 								);
 							}
 							continue;
@@ -7480,6 +7555,7 @@ export function createUi(
 							kind: "button",
 							disabled: !enabled || !!game?.inventoryPending,
 							selected: inventorySlot === slot,
+							rightActivate: !!item,
 							draggable: !!item
 						} );
 						if ( enabled && item ) {
@@ -7575,6 +7651,7 @@ export function createUi(
 								rect: r,
 								kind: "button",
 								disabled: !!game?.inventoryPending,
+								rightActivate: !!item,
 								draggable: !!item
 							} );
 						}
@@ -7650,6 +7727,7 @@ export function createUi(
 						controls.push( {
 							id,
 							label: hudCopy( action.name ),
+							rightActivate: true,
 							rect: r,
 							kind: "button",
 							draggable: true,
@@ -7918,6 +7996,8 @@ export function createUi(
 								label: localization.text( entry.name, "" ),
 								rect: r,
 								kind: "button",
+								rightActivate: !restoring && !!owned &&
+									(hudData.tooltipSkills.get( entry.id )?.basicActivity ?? 0) !== 0,
 								draggable: !!owned && (hudData.tooltipSkills.get( entry.id )?.basicActivity ?? 0) !== 0,
 								selected: entry.id === selectedSkill
 							} );
@@ -11840,6 +11920,7 @@ export function createUi(
 			admittedWindows.clear();
 			lastProduct = null;
 			if ( disposed ) return;
+
 			disposed = true;
 			password = "";
 			account = "";

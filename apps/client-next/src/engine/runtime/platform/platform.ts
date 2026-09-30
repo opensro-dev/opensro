@@ -50,7 +50,7 @@ export function createPlatform(
 	onGesture: () => void = () => {},
 	onUi: ( event: UiEvent ) => void = () => {},
 	blocksUi: ( x: number, y: number ) => boolean = () => false,
-	onWorldClick: ( x: number, y: number, doubleClick?: boolean ) => void = () => {},
+	onWorldClick: ( x: number, y: number, doubleClick?: boolean, shift?: boolean ) => void = () => {},
 	onWorldHover: ( point: readonly [number, number] | null ) => void = () => {}
 ): Platform {
 	const lifetime = new AbortController();
@@ -292,13 +292,13 @@ transferText
 			onUi( { kind: "activate", id: "hotbar:0" } );
 		}
 		if ( event.button === 0 && !blocksUi( x, y ) && r.width > 0 && r.height > 0 ) {
-			onWorldClick( x / r.width, y / r.height );
+			onWorldClick( x / r.width, y / r.height, false, event.shiftKey );
 		}
 	}, { signal: lifetime.signal } );
 	canvas.addEventListener( "dblclick", event => {
 		const r = canvas.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
 		if ( event.button === 0 && !blocksUi( x, y ) && r.width > 0 && r.height > 0 ) {
-			onWorldClick( x / r.width, y / r.height, true );
+			onWorldClick( x / r.width, y / r.height, true, event.shiftKey );
 		}
 	}, { signal: lifetime.signal } );
 	canvas.addEventListener( "pointercancel", () => {

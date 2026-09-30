@@ -1130,8 +1130,8 @@
 		},
 		{
 			"functions": [
-				"callback:chatLayout:10",
-				"callback:chatLayout:15",
+				"text",
+				"measure",
 				"hudCopy"
 			],
 			"provider": "src/engine/runtime/ui/ui.ts",
@@ -1222,7 +1222,7 @@
 				"callback:tooltipBubble:3",
 				"callback:textLines:2",
 				"callback:textBoardLines:2",
-				"callback:chatLayout:15",
+				"measure",
 				"callback:textLines:2",
 				"callback:systemMessageLayout:10"
 			]
@@ -1876,7 +1876,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "ae7c6f7df1a1f81ef8b23da0517d29b05e2a49b552c21cd4c03ca2779b630965",
+			"sourceSha256": "36561a7226ad943eeff22f0d4ba8fb9e7f65265299137d12d577a47cdda12597",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

@@ -45,7 +45,7 @@ export function createUiBridge(
 	let composing = false;
 	let drag: { id: string; pointer: number; x: number; y: number; moved?: boolean; } | null = null, focusRevision = -1;
 	let suppressClick: string | null = null;
-	let rightPressed = false;
+	let rightPressed: { element: Element; pointer: number; } | null = null;
 	window.addEventListener( "pointermove", event => {
 		if ( !drag || event.pointerId !== drag.pointer ) return;
 		const current = controls.get( drag.id )?.value;
@@ -59,6 +59,7 @@ export function createUiBridge(
 		emit( { kind: "drag", id: drag.id, dx, dy } );
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointerup", event => {
+		if ( event.button !== 0 ) return;
 		if ( drag && event.pointerId !== drag.pointer ) return;
 		const completed = drag;
 		drag = null;
@@ -144,7 +145,7 @@ export function createUiBridge(
 		heldKey( event.code, false );
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointerup", event => {
-		if ( !drag || event.pointerId === drag.pointer ) emit( { kind: "press", id: null } );
+		if ( event.button === 0 && (!drag || event.pointerId === drag.pointer) ) emit( { kind: "press", id: null } );
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "blur", () => {
 		emit( { kind: "press", id: null } );
@@ -199,22 +200,71 @@ export function createUiBridge(
 		if ( event.target === canvas || target?.value.kind === "region" ) canvas.focus( { preventScroll: true } );
 	}, { capture: true, signal: lifetime.signal } );
 	root.addEventListener( "pointerdown", event => {
-		if ( event.button === 2 ) rightPressed = !!current( event.target )?.value.rightActivate;
-	}, { signal: lifetime.signal } );
-	window.addEventListener( "pointerup", event => {
 		if ( event.button !== 2 ) return;
-		const armed = rightPressed;
-		rightPressed = false;
 		const slot = current( event.target );
-		if ( armed && slot?.value.rightActivate && !slot.value.disabled ) {
-			emit( { kind: "right-activate", id: slot.value.id } );
+		rightPressed = slot?.value.rightActivate && !slot.value.disabled ?
+			{ element: slot.element, pointer: event.pointerId } :
+			null;
+	}, { signal: lifetime.signal } );
+	// Browsers omit pointerdown/up for intermediate buttons in a mouse chord.
+	// Keep that native cancel gesture reachable while a left drag owns capture.
+	root.addEventListener( "mousedown", event => {
+		if ( event.button !== 2 || !drag || rightPressed ) return;
+		const slot = current( event.target );
+		if ( slot?.value.rightActivate && !slot.value.disabled ) {
+			rightPressed = { element: slot.element, pointer: drag.pointer };
 		}
 	}, { signal: lifetime.signal } );
+	/*
+	================
+	finishRightPress
+
+	Release must hit the same live control even while another button captures
+	the pointer. Mouseup is the chord fallback; clearing the press deduplicates it.
+	================
+	*/
+	function finishRightPress( event: MouseEvent ) {
+		if ( event.button !== 2 || !rightPressed ) return;
+		if ( event instanceof PointerEvent && event.pointerId !== rightPressed.pointer ) return;
+		const armed = rightPressed;
+		rightPressed = null;
+		const slot = current( document.elementFromPoint( event.clientX, event.clientY ) );
+		// 5650A0 uses the pressed control and admits release only inside it.
+		if ( slot?.element === armed.element && slot.value.rightActivate && !slot.value.disabled ) {
+			emit( {
+				kind: "right-activate",
+				id: slot.value.id,
+				shift: event.shiftKey,
+				ctrl: event.ctrlKey,
+				alt: event.altKey
+			} );
+			if ( drag ) {
+				const element = controls.get( drag.id )?.element;
+				if ( element?.hasPointerCapture( drag.pointer ) ) element.releasePointerCapture( drag.pointer );
+				suppressClick = drag.id;
+				drag = null;
+				emit( { kind: "press", id: null } );
+			}
+		}
+	}
+	window.addEventListener( "pointerup", finishRightPress, { signal: lifetime.signal } );
+	window.addEventListener( "mouseup", finishRightPress, { signal: lifetime.signal } );
+	root.addEventListener( "pointermove", event => {
+		// A captured left press suppresses compatibility mouse events. Pointer
+		// events encode subsequent button changes as moves with button == 2.
+		if ( event.button !== 2 || !drag ) return;
+		if ( event.buttons & 2 ) {
+			const slot = current( event.target );
+			if ( slot?.value.rightActivate && !slot.value.disabled ) {
+				rightPressed = { element: slot.element, pointer: event.pointerId };
+			}
+		} else finishRightPress( event );
+	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointercancel", () => {
-		rightPressed = false;
+		rightPressed = null;
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "blur", () => {
-		rightPressed = false;
+		rightPressed = null;
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "click", event => {
 		const slot = current( event.target ), suppressed = suppressClick;
@@ -286,6 +336,7 @@ export function createUiBridge(
 	function retire( id: string ) {
 		const slot = controls.get( id );
 		if ( !slot ) return;
+		if ( rightPressed?.element === slot.element ) rightPressed = null;
 		if ( drag?.id === id ) {
 			if ( slot.element.hasPointerCapture( drag.pointer ) ) slot.element.releasePointerCapture( drag.pointer );
 			drag = null;
@@ -445,6 +496,7 @@ export function createUiBridge(
 		dispose() {
 			if ( lifetime.signal.aborted ) return;
 			drag = null;
+			rightPressed = null;
 			composing = false;
 			lifetime.abort();
 			root.remove();

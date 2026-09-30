@@ -20,7 +20,6 @@ apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/contracts/scene.ts
 apps/client-next/src/engine/contracts/scenery.ts
 apps/client-next/src/engine/contracts/simulation.ts
-apps/client-next/src/engine/contracts/ui.ts
 apps/client-next/src/engine/contracts/world-admission.ts
 apps/client-next/src/engine/foundation/animation/action-refresh.ts
 apps/client-next/src/engine/foundation/animation/action-schedule.ts
@@ -222,7 +221,6 @@ apps/client-next/src/engine/foundation/ui/button-state.ts
 apps/client-next/src/engine/foundation/ui/catalog-message.ts
 apps/client-next/src/engine/foundation/ui/character-labels.ts
 apps/client-next/src/engine/foundation/ui/character-status.ts
-apps/client-next/src/engine/foundation/ui/chat-layout.ts
 apps/client-next/src/engine/foundation/ui/chat-presentation.ts
 apps/client-next/src/engine/foundation/ui/chat-scrollbar.ts
 apps/client-next/src/engine/foundation/ui/combo-box.ts
