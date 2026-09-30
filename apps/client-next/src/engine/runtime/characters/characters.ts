@@ -162,11 +162,9 @@ const GOLD_DROP_MODELS = [
 /*
 ================
 createCharacterPresentation
-================
-*/
-/*
-================
-createCharacterPresentation
+
+Own character catalog admission and actor assembly across the dock, creation
+preview and world. An active empty dock still needs its catalog admitted.
 ================
 */
 export function createCharacterPresentation(
@@ -980,7 +978,9 @@ step
 					resources.rejected( result.path, error );
 				}
 			}
-			if ( (entities.length || dock?.length || preview) && manifest < (dock || preview ? 1 : manifests.length) ) {
+			// An empty roster is an active dock: it must admit the catalog before
+			// dockReady can reveal the button that opens character creation.
+			if ( (entities.length || dock || preview) && manifest < (dock || preview ? 1 : manifests.length) ) {
 				resources.manifest( manifests[manifest]! );
 			}
 			if ( manifest === manifests.length ) {
