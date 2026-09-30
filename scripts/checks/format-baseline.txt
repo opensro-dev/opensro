@@ -282,7 +282,6 @@ apps/client-next/src/engine/foundation/ui/skill-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-catalog.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-data.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-params.ts
-apps/client-next/src/engine/foundation/ui/skill-tooltip.ts
 apps/client-next/src/engine/foundation/ui/sound-catalog.ts
 apps/client-next/src/engine/foundation/ui/stretch-ring.ts
 apps/client-next/src/engine/foundation/ui/system-menu.ts

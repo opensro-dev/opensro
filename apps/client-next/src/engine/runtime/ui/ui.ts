@@ -11654,10 +11654,12 @@ export function createUi(
 							tooltip = item ?
 								itemTooltip( item, game.progression ?? { masteries: [] }, lookup, { country, sex } ) :
 								skillTooltip(
-									skill,
-									hudData.tooltipSkills,
-									game.skills ?? [],
-									game.progression ?? { masteries: [] },
+									{
+										id: skill,
+										catalog: hudData.tooltipSkills,
+										learned: game.skills ?? [],
+										progression: game.progression ?? { masteries: [] }
+									},
 									lookup,
 									id => lookup( hudData.skillUi.masteries.find( m => m.id === id )?.name ?? "" )
 								);

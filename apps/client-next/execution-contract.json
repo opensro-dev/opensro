@@ -1336,7 +1336,7 @@
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"lookup",
-				"callback:skillTooltip:5"
+				"callback:skillTooltip:2"
 			]
 		},
 		{

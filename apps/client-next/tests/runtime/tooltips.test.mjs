@@ -55,7 +55,16 @@ test("all published skill tooltips compose without unresolved prerequisite or pa
 	let descriptions = 0;
 	for ( const row of catalog.values() ) {
 		if ( !row.masteryId || !row.reqLearnSp ) continue;
-		const rows = skillTooltip( row.id, catalog, [], progression, text, id => String( id ) );
+		const rows = skillTooltip(
+			{
+				id: row.id,
+				catalog,
+				learned: [],
+				progression
+			},
+			text,
+			id => String( id )
+		);
 		assert.ok( rows.length > 1 );
 		if ( row.tooltipDescriptionSymbol && text( row.tooltipDescriptionSymbol ) ) descriptions++;
 	}
@@ -67,20 +76,134 @@ test("learning requirements change color at the authoritative threshold; learned
 		!r.reqGroups.some( q => q.groupId && q.groupId !== r.groupId )
 	);
 	assert.ok( row );
-	const low = skillTooltip( row.id, catalog, [], { skillPoints: 0, masteries: [] }, text, () => "Mastery" );
+	const low = skillTooltip(
+		{
+			id: row.id,
+			catalog,
+			learned: [],
+			progression: { skillPoints: 0, masteries: [] }
+		},
+		text,
+		() => "Mastery"
+	);
 	assert.ok( low.some( r => r.color === 0xffff4a4a ) );
 	assert.ok( low.some( r => r.value === text( "PARAM_CONDITION_OF_LEARN" ) ) );
 	const high = skillTooltip(
-		row.id,
-		catalog,
-		[ row.id ],
-		{ skillPoints: 1000000, masteries: [ { id: row.masteryId, level: 120 } ] },
+		{
+			id: row.id,
+			catalog,
+			learned: [ row.id ],
+			progression: { skillPoints: 1000000, masteries: [ { id: row.masteryId, level: 120 } ] }
+		},
 		text,
 		() => "Mastery"
 	);
 	assert.ok( !high.some( r => r.value === text( "PARAM_CONDITION_OF_LEARN" ) ) );
 	assert.ok( high.some( r => r.value === text( "PARAM_CONDITION_OF_NEXT_LEVEL" ) ) );
 });
+test("unlearned passive tooltips describe first acquisition instead of the successor", () => {
+	for ( const id of [ 69, 8485 ] ) {
+		const row = defined( catalog.get( id ) );
+		const next = defined( catalog.groups.get( row.groupId + ":2" ) );
+		const rows = skillTooltip(
+			{
+				id,
+				catalog,
+				learned: [],
+				progression: { skillPoints: 0, masteries: [] }
+			},
+			text,
+			() => "Mastery"
+		);
+		assert.equal( row.basicActivity, 0 );
+		assert.ok( rows.some( r => r.value === text( "PARAM_CONDITION_OF_LEARN" ) ) );
+		assert.ok(
+			rows.some( r => r.value === text( "PARAM_MASTERY_LEVEL" ) + " : Mastery Lv " + row.reqMasteryLevel )
+		);
+		assert.ok( rows.some( r => r.value === text( "PARAM_REQ_SP" ) + " : " + row.reqLearnSp ) );
+		assert.ok( !rows.some( r => r.value === text( "PARAM_CONDITION_OF_NEXT_LEVEL" ) ) );
+		assert.ok( !rows.some( r => r.value === text( "PARAM_REQ_SP" ) + " : " + next.reqLearnSp ) );
+	}
+});
+
+test("unlearned active tooltips do not combine acquisition and next-rank requirements", () => {
+	const row = defined(
+		[ ...catalog.values() ].find( r =>
+			r.basicActivity === 1 && r.basicLevel === 1 && r.masteryId && r.reqLearnSp > 0 &&
+			catalog.groups.has( r.groupId + ":2" )
+		)
+	);
+	const rows = skillTooltip(
+		{
+			id: row.id,
+			catalog,
+			learned: [],
+			progression: { skillPoints: 0, masteries: [] }
+		},
+		text,
+		() => "Mastery"
+	);
+	assert.ok( rows.some( r => r.value === text( "PARAM_CONDITION_OF_LEARN" ) ) );
+	assert.ok( !rows.some( r => r.value === text( "PARAM_CONDITION_OF_NEXT_LEVEL" ) ) );
+});
+
+test("published first ranks select acquisition independently of activity or civilization", () => {
+	let count = 0;
+	for ( const row of catalog.values() ) {
+		if ( row.basicLevel !== 1 || !row.masteryId || !row.reqLearnSp ) continue;
+		const rows = skillTooltip(
+			{
+				id: row.id,
+				catalog,
+				learned: [],
+				progression: { masteries: [] }
+			},
+			text,
+			() => "Mastery"
+		);
+		assert.ok( rows.some( r => r.value === text( "PARAM_CONDITION_OF_LEARN" ) ), String( row.id ) );
+		assert.ok( !rows.some( r => r.value === text( "PARAM_CONDITION_OF_NEXT_LEVEL" ) ), String( row.id ) );
+		count++;
+	}
+	assert.ok( count > 100 );
+});
+
+test("learned passive groups use successor requirements and terminal ranks have none", () => {
+	for ( const id of [ 69, 8485 ] ) {
+		const first = defined( catalog.get( id ) );
+		const second = defined( catalog.groups.get( first.groupId + ":2" ) );
+		const terminal = [ ...catalog.values() ].filter( r => r.groupId === first.groupId )
+			.sort( ( a, b ) => b.basicLevel - a.basicLevel )[0];
+		assert.ok( terminal );
+		for ( const learned of [ [ first.id ], [ second.id ] ] ) {
+			const rows = skillTooltip(
+				{
+					id,
+					catalog,
+					learned,
+					progression: { masteries: [] }
+				},
+				text,
+				() => "Mastery"
+			);
+			assert.ok( !rows.some( r => r.value === text( "PARAM_CONDITION_OF_LEARN" ) ) );
+			assert.ok( rows.some( r => r.value === text( "PARAM_REQ_SP" ) + " : " + second.reqLearnSp ) );
+		}
+		const rows = skillTooltip(
+			{
+				id: terminal.id,
+				catalog,
+				learned: [ terminal.id ],
+				progression: { masteries: [] }
+			},
+			text,
+			() => "Mastery"
+		);
+		assert.ok( !rows.some( r => r.value === text( "PARAM_CONDITION_OF_LEARN" ) ) );
+		assert.ok( !rows.some( r => r.value === text( "PARAM_CONDITION_OF_NEXT_LEVEL" ) ) );
+	}
+});
+
 test("weapon variance, opt level and broken durability use native display rules", () => {
 	const fields = {};
 	for (
