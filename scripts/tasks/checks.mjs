@@ -5,7 +5,8 @@ checks.mjs - repository check tasks and pipelines
 
 CHECK_TASKS registers each gate with the task runner. CHECK_PIPELINES orders
 them: "source" runs the gates that need no game data (CI and pre-push),
-"full" adds the asset build and every asset-dependent suite.
+"full" adds the asset build, the focused publishers, the server projection
+and every suite that reads them.
 
 ===========================================================================
 */
@@ -221,28 +222,39 @@ export const CHECK_PIPELINES = Object.freeze( {
 	}) ),
 	tests: [
 		{ id: "build-resources", task: "assets:build:full", after: [] },
-		{ id: "test-assets", task: "test:assets", after: [ "build-resources" ] },
-		{ id: "test-cif", task: "test:cif", after: [ "build-resources" ] },
-		{ id: "test-world", task: "test:world", after: [ "build-resources" ] },
-		{ id: "test-region", task: "test:region", after: [ "build-resources" ] }
+		// The full build does not produce the focused families (assets.mjs), and
+		// the server projection and the dashboard catalog read the published tree:
+		// every reader waits for the complete tree, never a half-built one.
+		{ id: "publish-resources", task: "assets:publish", after: [ "build-resources" ] },
+		{ id: "server-game-data", task: "build:server-game-data", after: [ "publish-resources" ] },
+		{ id: "test-assets", task: "test:assets", after: [ "publish-resources" ] },
+		{ id: "test-cif", task: "test:cif", after: [ "publish-resources" ] },
+		{ id: "test-world", task: "test:world", after: [ "publish-resources" ] },
+		{ id: "test-region", task: "test:region", after: [ "publish-resources" ] }
 	],
 	full: [
 		{ id: "release", task: "check:release", after: [] },
 		{ id: "loot-catalog", task: "check:loot-catalog", after: [] },
 		{ id: "client-preparation", task: "check:client-preparation", after: [] },
-		{ id: "server", task: "check:server", after: [] },
 		{ id: "source-size", task: "check:source-size", after: [] },
 		{ id: "source-encoding", task: "check:source-encoding", after: [] },
 		{ id: "shared-fixtures", task: "check:shared-fixtures", after: [] },
 		{ id: "format", task: "check:format", after: [] },
-		{ id: "typecheck-packages", task: "workspace:check", after: [] },
 		{ id: "typecheck-scripts", task: "check:scripts", after: [] },
 		{ id: "typecheck-scripts-tests", task: "check:scripts-tests", after: [] },
 		{ id: "build-resources", task: "assets:build:full", after: [] },
-		{ id: "test-assets", task: "test:assets", after: [ "build-resources" ] },
-		{ id: "asset-pack-integrity", task: "assets:check:integrity", after: [ "build-resources" ] },
-		{ id: "test-cif", task: "test:cif", after: [ "build-resources" ] },
-		{ id: "test-world", task: "test:world", after: [ "build-resources" ] },
-		{ id: "test-region", task: "test:region", after: [ "build-resources" ] }
+		// The full build does not produce the focused families (assets.mjs), and
+		// the server projection and the dashboard catalog read the published tree:
+		// every reader waits for the complete tree, never a half-built one.
+		{ id: "publish-resources", task: "assets:publish", after: [ "build-resources" ] },
+		{ id: "server-game-data", task: "build:server-game-data", after: [ "publish-resources" ] },
+		// The Go tests and the package checks read the server projection.
+		{ id: "server", task: "check:server", after: [ "server-game-data" ] },
+		{ id: "typecheck-packages", task: "workspace:check", after: [ "server-game-data" ] },
+		{ id: "test-assets", task: "test:assets", after: [ "publish-resources" ] },
+		{ id: "asset-pack-integrity", task: "assets:check:integrity", after: [ "publish-resources" ] },
+		{ id: "test-cif", task: "test:cif", after: [ "publish-resources" ] },
+		{ id: "test-world", task: "test:world", after: [ "publish-resources" ] },
+		{ id: "test-region", task: "test:region", after: [ "publish-resources" ] }
 	]
 } );
