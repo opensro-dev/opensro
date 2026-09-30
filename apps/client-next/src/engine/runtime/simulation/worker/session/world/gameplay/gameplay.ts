@@ -1157,8 +1157,13 @@ state here before a command can claim a native wire conversation.
 						return frame;
 					}
 				}
-				const frame = targeting.select( entity.gid, now, entity.kind, !!entity.teleport?.fortressId );
-				npcConversation.clear();
+				const frame = targeting.select( entity.gid, now, entity.kind, {
+					fortress: !!entity.teleport?.fortressId,
+					reopen: npcConversation.state().phase === "closed"
+				} );
+				// A coalesced click has no reply coming to rebuild this conversation.
+				// Preserve its menu, dialogue and interaction lock until a new request.
+				if ( frame ) npcConversation.clear();
 				selectionDecal = {
 					kind: "target",
 					gid: entity.gid,
@@ -1891,7 +1896,10 @@ before take assembles the presentation snapshot.
 				if ( !local || local.appearanceState?.[0] === 2 ) {
 					gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
 				} else if ( m.pose && !portalApproach( m.pose, approachingGate ) && !targeting.state().targetPending ) {
-					targeting.select( approachingGate.gid, now, "teleport", !!approachingGate.teleport?.fortressId );
+					targeting.select( approachingGate.gid, now, "teleport", {
+						fortress: !!approachingGate.teleport?.fortressId,
+						reopen: npcConversation.state().phase === "closed"
+					} );
 					gateApproach = gateApproachTransition( gateApproach, { kind: "arrived" } );
 					dirty = true;
 				} else if ( !m.moving && !m.pendingMoves ) {

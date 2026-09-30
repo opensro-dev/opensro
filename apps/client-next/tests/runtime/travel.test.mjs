@@ -70,6 +70,11 @@ const bootstrap = {
 	refObjSnapshot: [],
 	localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 0x694f, x: 10, y: 20, z: 30, angle: 0 } }
 };
+/*
+================
+state
+================
+*/
 const state = ( gid, channel, value ) => {
 	const p = Buffer.alloc( 6 );
 	p.writeUInt32LE( gid );
@@ -77,12 +82,22 @@ const state = ( gid, channel, value ) => {
 	p[5] = value;
 	return { opcode: 0x3122, payload: p };
 };
+/*
+================
+item
+================
+*/
 const item = ( word, result = 1 ) => {
 	const p = Buffer.alloc( result === 1 ? 6 : 2 );
 	p[0] = result;
 	if ( result === 1 ) p.writeUInt16LE( word, 4 );
 	return { opcode: 0xb5bd, payload: p };
 };
+/*
+================
+drain
+================
+*/
 function drain( owner ) {
 	const batch = owner.take();
 	if ( batch ) owner.ack( batch.sequence );
@@ -310,7 +325,7 @@ test("city gates decode native 24-byte structures, retain authored bounds, and r
 test("gate selection consumes capabilities without NPC mask and reads tax only for fortress-bound references", () => {
 	for ( const fortress of [ false, true ] ) {
 		const t = createTargeting( () => {} );
-		t.select( 252094, 0, "teleport", fortress );
+		t.select( 252094, 0, "teleport", { fortress } );
 		const p = Buffer.alloc( fortress ? 11 : 9 );
 		p[0] = 1;
 		p.writeUInt32LE( 252094, 1 );
@@ -323,7 +338,7 @@ test("gate selection consumes capabilities without NPC mask and reads tax only f
 		assert.equal( t.state().targetTaxRate, 0 );
 	}
 	const t = createTargeting( () => {} );
-	t.select( 1, 0, "teleport", true );
+	t.select( 1, 0, "teleport", { fortress: true } );
 	assert.throws( () => t.receive( 0xb45a, Buffer.from( [ 1, 1, 0, 0, 0, 128, 0, 0, 0 ] ) ), /teleport grant/ );
 });
 test("gate approach uses native 800 range and 640 stopping distance across region boundaries", () => {

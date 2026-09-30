@@ -16,6 +16,15 @@ Pending
 ================
 */
 type Pending = { kind: "select" | "release"; gid: number; deadline: number; family?: string; fortress?: boolean; };
+/*
+================
+SelectionOptions
+
+The conversation owner supplies whether its pane has closed while a service
+still retains the target. Reopening requires a fresh authoritative grant.
+================
+*/
+type SelectionOptions = { fortress?: boolean; reopen?: boolean; };
 const REPLY_TIMEOUT_MS = 10_000;
 
 /*
@@ -44,20 +53,29 @@ request
 select
 ================
 		*/
-		select( gid: number, now = 0, kind = "npc", fortress = false ) {
+		select( gid: number, now = 0, kind = "npc", options: SelectionOptions = {} ) {
 			if ( !Number.isInteger( gid ) || gid <= 0 || gid > 0xffffffff ) {
 				throw new Error( "Invalid target identity" );
 			}
-			// Repeated selection still reaches the gameplay decal owner, but
-			// must not create another grant transaction or restart its timeout.
-			if ( pending?.kind === "select" && pending.gid === gid || !pending && target === gid ) return null;
+			// 692BC8..692BEC suppresses the same NPC only while its talk pane
+			// is visible. Pending grants still coalesce without extending timeouts.
+			const reopen = options.reopen && (kind === "npc" || kind === "teleport");
+			if ( pending?.kind === "select" && pending.gid === gid || !pending && target === gid && !reopen ) {
+				return null;
+			}
 			if ( pending ) throw new Error( "Target request pending" );
 			const frame = request( 0x745a, gid );
 			error = null;
 			// NPCs, monsters and gates have distinct native grants. Other objects
 			// have a local selection intent, not an invented server acknowledgement.
 			if ( kind === "npc" || kind === "monster" || kind === "teleport" ) {
-				pending = { kind: "select", gid, deadline: now + REPLY_TIMEOUT_MS, family: kind, fortress };
+				pending = {
+					kind: "select",
+					gid,
+					deadline: now + REPLY_TIMEOUT_MS,
+					family: kind,
+					fortress: options.fortress
+				};
 			} else {
 				target = gid;
 				capabilities = 0;
