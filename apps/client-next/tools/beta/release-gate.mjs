@@ -30,9 +30,12 @@ import { bootstrapSource, simulationWorkerPath, startHeadlessSimulation } from "
 
 const GATE_FORMAT = "headless-gate-v1";
 const HTTP_OK = 200;
-const BOOT_BUDGET_MS = 180_000;
-const STEP_BUDGET_MS = 60_000;
-const MOVE_BUDGET_MS = 20_000;
+// The whole gate, and each of its waits, is bounded. A release that cannot
+// boot, log in, enter the world and act within these is not ready.
+const GATE_BUDGET_MS = 30_000;
+const BOOT_BUDGET_MS = 30_000;
+const STEP_BUDGET_MS = 15_000;
+const MOVE_BUDGET_MS = 8_000;
 // A short, server-confirmed move and back: small enough to stay walkable in
 // the probe's town, large enough to be a real movement.
 const MOVE_DISTANCE = 4;
@@ -54,14 +57,34 @@ function passPhase( result, phase ) {
 
 /*
 ================
-bootInBrowser
+readEntry
 
-The candidate's entry must be the approved bytes, and its runtime must start
-in a real browser without page or runtime errors. Returns the application
-script the page loaded.
+The staged entry, fetched over HTTPS, must be the approved bytes. Returns the
+application script it names.
 ================
 */
-async function bootInBrowser( url, candidate ) {
+async function readEntry( url, candidate ) {
+	const response = await fetch( url, { headers: { "Cache-Control": "no-cache" } } );
+	if ( response.status !== HTTP_OK ) throw Error( "Candidate entry is unavailable" );
+	const entry = Buffer.from( await response.arrayBuffer() );
+	if ( createHash( "sha256" ).update( entry ).digest( "hex" ) !== candidate.entrySha256 ) {
+		throw Error( "HTTPS served a different candidate entry" );
+	}
+	const script = /src="([^"]+\.js)"/.exec( entry.toString( "utf8" ) )?.[1];
+	if ( !script ) throw Error( "Candidate entry names no application script" );
+	return new URL( script, url ).href;
+}
+
+/*
+================
+bootInBrowser
+
+The runtime must start in a real browser without page or runtime errors. It
+runs beside the headless flow; neither waits for the other.
+================
+*/
+async function bootInBrowser( url, result ) {
+	const started = Date.now();
 	const { browser, page } = await launchProbeBrowser( {
 		headed: process.env.RELEASE_HEADED === "1",
 		viewport: PROBE_VIEWPORT,
@@ -72,22 +95,20 @@ async function bootInBrowser( url, candidate ) {
 	page.on( "console", message => {
 		if ( message.type() === "error" && message.text().includes( "[SRO runtime]" ) ) errors.push( message.text() );
 	} );
+	result.boot = { launchMs: Date.now() - started };
 	try {
-		const response = await page.goto( url, { waitUntil: "commit" } );
-		if ( !response || response.status() !== HTTP_OK ) throw Error( "Candidate entry is unavailable" );
-		const entry = await response.body();
-		if ( createHash( "sha256" ).update( entry ).digest( "hex" ) !== candidate.entrySha256 ) {
-			throw Error( "HTTPS served a different candidate entry" );
+		const response = await page.goto( url, { waitUntil: "commit", timeout: BOOT_BUDGET_MS } );
+		result.boot.commitMs = Date.now() - started;
+		if ( !response || response.status() !== HTTP_OK ) {
+			throw Error( "Candidate entry is unavailable in the browser" );
 		}
 		await page.waitForFunction(
 			() => document.querySelector( "output" )?.textContent?.startsWith( "Replacement runtime: running" ),
 			null,
 			{ timeout: BOOT_BUDGET_MS }
 		);
+		result.boot.runningMs = Date.now() - started;
 		if ( errors.length ) throw Error( "Runtime errors while booting: " + errors.join( "; " ) );
-		const script = /src="([^"]+\.js)"/.exec( entry.toString( "utf8" ) )?.[1];
-		if ( !script ) throw Error( "Candidate entry names no application script" );
-		return new URL( script, url ).href;
 	} finally {
 		await browser.close();
 	}
@@ -141,16 +162,17 @@ movement toward the requested destination.
 ================
 */
 async function moveAndConfirm( simulation, name, destination ) {
-	const before = simulation.entityNamed( name );
-	const revision = before?.movementRevision ?? -1, events = simulation.state.events;
+	const events = simulation.state.events;
 	simulation.session( { kind: "gameplay", command: { kind: "move", destination } } );
 	try {
 		return await simulation.waitFor(
 			() => {
+				// The server's echo of our own entity carries its new position (it
+				// has no movement revision); reaching the destination confirms it.
 				const entity = simulation.entityNamed( name );
-				if ( !entity || (entity.movementRevision ?? -1) === revision ) return null;
-				const to = entity.movementPath?.to ?? entity;
-				return Math.hypot( to.x - destination.x, to.z - destination.z ) < MOVE_DISTANCE / 2 ? entity : null;
+				if ( !entity ) return null;
+				const at = entity.movementPath?.to ?? entity;
+				return Math.hypot( at.x - destination.x, at.z - destination.z ) < MOVE_DISTANCE / 4 ? entity : null;
 			},
 			MOVE_BUDGET_MS,
 			"gameplay move"
@@ -182,11 +204,34 @@ exercise
 */
 async function exercise( candidate, credentials, origin, result, directory ) {
 	const url = `${origin}/releases/candidates/${candidate.candidate}/index.html`;
-	const script = await bootInBrowser( url, candidate );
+	const script = await readEntry( url, candidate );
+	const boot = bootInBrowser( url, result ).then( () => passPhase( result, "title" ) );
+	// Report the flow's failure first; a boot failure fails an otherwise
+	// passing gate.
+	let failure = null;
+	try {
+		await flow( candidate, credentials, origin, result, directory, script );
+	} catch ( error ) {
+		failure = error;
+	}
+	try {
+		await boot;
+	} catch ( error ) {
+		failure ??= error;
+	}
+	if ( failure ) throw failure;
+}
+
+/*
+================
+flow
+
+The game flow through the release's own simulation worker, headless.
+================
+*/
+async function flow( candidate, credentials, origin, result, directory, script ) {
 	const worker = await prepareWorker( origin, script, directory );
 	result.simulationWorker = worker.workerPath;
-	passPhase( result, "title" );
-
 	const apiBase = origin + "/api";
 	let simulation = await startHeadlessSimulation( { origin, ...worker } );
 	try {
@@ -288,7 +333,18 @@ async function main() {
 		startedAt: Date.now()
 	};
 	try {
-		await exercise( candidate, credentials, origin, result, destination );
+		let watchdog;
+		const expired = new Promise( ( _, reject ) => {
+			watchdog = setTimeout(
+				() => reject( Error( `Release gate exceeded ${GATE_BUDGET_MS / 1000} s` ) ),
+				GATE_BUDGET_MS
+			);
+		} );
+		try {
+			await Promise.race( [ exercise( candidate, credentials, origin, result, destination ), expired ] );
+		} finally {
+			clearTimeout( watchdog );
+		}
 		result.verdict = "PASS";
 	} catch ( error ) {
 		result.failure = String( error );
@@ -297,8 +353,18 @@ async function main() {
 	} finally {
 		result.finishedAt = Date.now();
 		await writeFile( path.join( destination, "report.json" ), JSON.stringify( result, null, 2 ) );
-		console.log( JSON.stringify( { verdict: result.verdict, phases: result.phases, failure: result.failure } ) );
+		console.log( JSON.stringify( {
+			verdict: result.verdict,
+			totalMs: result.finishedAt - result.startedAt,
+			boot: result.boot,
+			phases: result.phaseTimings,
+			failure: result.failure
+		} ) );
 	}
 }
 
-if ( process.argv[1] && import.meta.url === pathToFileURL( path.resolve( process.argv[1] ) ).href ) await main();
+if ( process.argv[1] && import.meta.url === pathToFileURL( path.resolve( process.argv[1] ) ).href ) {
+	await main();
+	// A watchdog failure can leave the browser or worker thread running.
+	process.exit( process.exitCode ?? 0 );
+}
