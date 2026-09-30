@@ -8,20 +8,18 @@ gc_asset_packs.mjs - `pnpm assets gc`: retire unused asset-pack outputs
 
 Retired files move to temp/archives/generated-artifacts/ with their original
 path and a provenance record (see assetPackGarbage.mjs); nothing is deleted.
+The web manifest is rebuilt after anything is archived.
 Emptying temp/ is always safe. Runs under the generated-assets lock, so it
 never races a publisher.
 
 ===========================================================================
 */
 
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { collectPackGarbage } from "./build/assetPackGarbage.mjs";
+import { buildWebAssetManifest } from "./build/webManifest.mjs";
+import { publicRoot } from "./build/world/paths.mjs";
 import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
 
-const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
-const publicRoot = path.join( rebuildRoot, ".generated", "client-public" );
 const apply = process.argv.includes( "--apply" );
 
 await withGeneratedAssetsLock( "retire unused asset packs", async () => {
@@ -32,4 +30,8 @@ await withGeneratedAssetsLock( "retire unused asset packs", async () => {
 	if ( !apply && garbage.length > 0 ) {
 		console.log( "run with --apply to move them to temp/archives/generated-artifacts/" );
 	}
+	// The web manifest lists every published file; rebuild it so it no longer
+	// names what was just archived (publishers collect inside publication,
+	// before their manifest rebuild, so they need no second pass).
+	if ( apply && garbage.length > 0 ) await buildWebAssetManifest();
 } );

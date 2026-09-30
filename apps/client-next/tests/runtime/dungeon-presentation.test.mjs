@@ -65,7 +65,10 @@ test( "all shipped water objects resolve their real BSR/BMS provider geometry", 
 				n.endsWith( ".dof" ) && n !== "dunhwang_cv1.dof"
 			)
 		) {
-			const projection = readDofPresentation( fs.readFileSync( join( dataExtractedRoot, "dungeon", dir, name ) ), name );
+			const projection = readDofPresentation(
+				fs.readFileSync( join( dataExtractedRoot, "dungeon", dir, name ) ),
+				name
+			);
 			const surfaces = await resolveDungeonWater(
 				projection,
 				async path => parseJmxResourceBsr( read( path ), path ),
