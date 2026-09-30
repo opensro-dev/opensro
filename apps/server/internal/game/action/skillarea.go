@@ -292,7 +292,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	public := append([]wire.Frame{success}, burnFrames...)
 	public = append(public, rt.groundReferences(drops)...)
 	for _, drop := range drops {
-		public = append(public, wire.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: drop.SpawnRow(true).Encode()})
+		public = append(public, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
 	}
 	actor := append([]wire.Frame{}, public...)
 	private := wire.ProgressionPrivateFrames(progression)

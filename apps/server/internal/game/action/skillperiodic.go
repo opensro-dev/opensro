@@ -313,7 +313,7 @@ func (rt *Runtime) applyPeriodicPulse(effect linkedpulse.Effect, c, snapshot *en
 		public = append(public, monsterLifeDeadFrame(target.Gid))
 		public = append(public, rt.groundReferences(settlement.drops)...)
 		for _, drop := range settlement.drops {
-			public = append(public, wire.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: drop.SpawnRow(true).Encode()})
+			public = append(public, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
 		}
 		public = append(public, settlement.public...)
 		rt.queueMonsterDefeat(effect.Division, target.Gid, now+monsterDeathPresentationRetention.Milliseconds())

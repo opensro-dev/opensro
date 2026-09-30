@@ -494,12 +494,11 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		actorFrames = append(actorFrames, references...)
 		broadcastFrames = append(broadcastFrames, references...)
 		for _, killDrop := range killDrops {
-			spawn := wire.Frame{
-				Opcode:  wire.OpSingleObjectSpawn,
-				Payload: killDrop.SpawnRow(true).Encode(),
-			}
-			actorFrames = append(actorFrames, spawn)
-			broadcastFrames = append(broadcastFrames, spawn)
+			// Admit the same spawn to each session's scope so later ownership
+			// release and expiry can reach every viewer of the earned loot.
+			spawn := wire.DropBroadcastFrames(killDrop.SpawnRow(true))
+			actorFrames = append(actorFrames, spawn...)
+			broadcastFrames = append(broadcastFrames, spawn...)
 		}
 	}
 	if consumeAmmo {

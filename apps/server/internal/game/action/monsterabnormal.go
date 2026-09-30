@@ -3,6 +3,10 @@
 
 monsterabnormal.go - abnormal states on monsters
 
+Resolve caster authority, advance periodic effects, and publish committed damage
+and rewards. Loot uses the shared scene publisher so its later lifecycle remains
+addressable to every session that received the spawn.
+
 ===========================================================================
 */
 
@@ -29,6 +33,13 @@ per-actor probability streams and parameters that include self effects.
 */
 type monsterAbnormalContext struct{ rt *Runtime }
 
+/*
+================
+caster
+
+Resolve a player source by durable name, then reject a stale runtime GID.
+================
+*/
 func (c monsterAbnormalContext) caster(division string, gid uint32, name string) *enterworld.Character {
 	if name == "" {
 		return nil
@@ -40,6 +51,13 @@ func (c monsterAbnormalContext) caster(division string, gid uint32, name string)
 	return character
 }
 
+/*
+================
+SourceExists
+
+Abnormal effects can retain either a player caster or a live monster source.
+================
+*/
 func (c monsterAbnormalContext) SourceExists(division string, gid uint32, name string) bool {
 	if character := c.caster(division, gid, name); character != nil {
 		return true
@@ -51,6 +69,13 @@ func (c monsterAbnormalContext) SourceExists(division string, gid uint32, name s
 	return false
 }
 
+/*
+================
+SourceDead
+
+Read source life state from its authority before assigning periodic damage credit.
+================
+*/
 func (c monsterAbnormalContext) SourceDead(division string, gid uint32, name string) bool {
 	if character := c.caster(division, gid, name); character != nil {
 		snapshot := c.rt.characterSnapshot(division, character)
@@ -63,6 +88,13 @@ func (c monsterAbnormalContext) SourceDead(division string, gid uint32, name str
 	return false
 }
 
+/*
+================
+Roll
+
+Use the actor-owned probability stream so status checks share combat ordering.
+================
+*/
 func (c monsterAbnormalContext) Roll(division string, owner, key uint32, chance int32) bool {
 	if chance <= 0 {
 		return false
@@ -71,8 +103,14 @@ func (c monsterAbnormalContext) Roll(division string, owner, key uint32, chance 
 	return err == nil && proc
 }
 
-// Param reads the monster's keeper value through the same projection combat
-// uses (RefObjChar base, self effects, abnormal writes).
+/*
+================
+Param
+
+Param reads the monster's keeper value through the same projection combat
+uses (RefObjChar base, self effects, abnormal writes).
+================
+*/
 func (c monsterAbnormalContext) Param(instance monster.Instance, id uint16) float32 {
 	if id >= 5 && id <= 12 {
 		stats, err := combat.MonsterInstanceStats(instance)
@@ -107,14 +145,27 @@ func (c monsterAbnormalContext) Param(instance monster.Instance, id uint16) floa
 	return value
 }
 
-// abnormalRandom is the caster's CZoeZoeRnd stream (keyed by ECX) and the
-// process rand() the time bomb draws.
+/*
+================
+abnormalRandom
+
+abnormalRandom is the caster's CZoeZoeRnd stream (keyed by ECX) and the
+process rand() the time bomb draws.
+================
+*/
 type abnormalRandom struct {
 	rt    *Runtime
 	actor criticalActor
 	err   error
 }
 
+/*
+================
+Chance
+
+Remember the first random-source error while evaluating one abnormal application.
+================
+*/
 func (r *abnormalRandom) Chance(key uint32, chance int32) bool {
 	if chance <= 0 || r.err != nil {
 		return false
@@ -126,6 +177,13 @@ func (r *abnormalRandom) Chance(key uint32, chance int32) bool {
 	return proc
 }
 
+/*
+================
+Rand
+
+Provide the native fifteen-bit random draw used by time-bomb damage.
+================
+*/
 func (r *abnormalRandom) Rand() int32 {
 	if r.err != nil {
 		return 0
@@ -138,7 +196,13 @@ func (r *abnormalRandom) Rand() int32 {
 	return int32(value & 0x7fff)
 }
 
-// rollPlayerOnMonster ports 590680 for a player's hit on a monster target.
+/*
+================
+rollPlayerOnMonster
+
+rollPlayerOnMonster ports 590680 for a player's hit on a monster target.
+================
+*/
 func (rt *Runtime) rollPlayerOnMonster(division string, c *enterworld.Character, params *abnormal.SkillParams, target monster.Instance, blocked bool) ([]abnormal.Record, error) {
 	if params == nil || !params.Present() {
 		return nil, nil
@@ -201,8 +265,14 @@ func (rt *Runtime) monsterAbnormalFrames(division string, instance monster.Insta
 	return frames
 }
 
-// advanceMonsterAbnormals runs 4A4390 for every monster with an active block:
-// expiry, damage-over-time ticks, time-bomb detonation and mask publication.
+/*
+================
+advanceMonsterAbnormals
+
+advanceMonsterAbnormals runs 4A4390 for every monster with an active block:
+expiry, damage-over-time ticks, time-bomb detonation and mask publication.
+================
+*/
 func (rt *Runtime) advanceMonsterAbnormals(nowMs int64) []simulation.DivisionFrames {
 	if rt.Monsters == nil {
 		return nil
@@ -214,6 +284,13 @@ func (rt *Runtime) advanceMonsterAbnormals(nowMs int64) []simulation.DivisionFra
 	return out
 }
 
+/*
+================
+advanceMonsterAbnormal
+
+Commit periodic damage and rewards together, then publish the resulting life, loot and status changes.
+================
+*/
 func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int64) []simulation.DivisionFrames {
 	unlock := rt.lockDivision(division)
 	defer unlock()
@@ -289,7 +366,7 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 		public = append(public, monsterLifeDeadFrame(gid))
 		public = append(public, rt.groundReferences(settlement.drops)...)
 		for _, drop := range settlement.drops {
-			public = append(public, wire.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: drop.SpawnRow(true).Encode()})
+			public = append(public, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
 		}
 		public = append(public, settlement.public...)
 		if character != nil {
@@ -319,13 +396,26 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 	return append(out, recipientDivisionFrames(division, recipients)...)
 }
 
+/*
+================
+privateFrames
+
+Keep each character's progression packets separate from the public monster update.
+================
+*/
 type privateFrames struct {
 	id     int64
 	frames []wire.Frame
 }
 
-// timeBombFrame is 59B300's detonation broadcast (research B0BC), v1.150
-// B3C6 type 4 (7756D0): flags (80 fatal), victim gid, u16 damage.
+/*
+================
+timeBombFrame
+
+timeBombFrame is 59B300's detonation broadcast (research B0BC), v1.150
+B3C6 type 4 (7756D0): flags (80 fatal), victim gid, u16 damage.
+================
+*/
 func timeBombFrame(gid, damage uint32, fatal bool) wire.Frame {
 	flags := uint8(0)
 	if fatal {
