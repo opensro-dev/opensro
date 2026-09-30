@@ -308,7 +308,6 @@ apps/client-next/src/engine/runtime/audio/music/music.ts
 apps/client-next/src/engine/runtime/characters/damage-feedback.ts
 apps/client-next/src/engine/runtime/characters/effects/effects.ts
 apps/client-next/src/engine/runtime/characters/orbs/orbs.ts
-apps/client-next/src/engine/runtime/characters/pose-presentation.ts
 apps/client-next/src/engine/runtime/characters/sounds/sounds.ts
 apps/client-next/src/engine/runtime/characters/state-index.ts
 apps/client-next/src/engine/runtime/frontend/camera/camera.ts
@@ -342,7 +341,6 @@ apps/client-next/src/engine/runtime/renderer/surface/surface.ts
 apps/client-next/src/engine/runtime/renderer/weather/weather.ts
 apps/client-next/src/engine/runtime/renderer/world/world.ts
 apps/client-next/src/engine/runtime/runtime-errors.ts
-apps/client-next/src/engine/runtime/simulation/worker/clock/clock.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/input/input.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/codec/codec.ts

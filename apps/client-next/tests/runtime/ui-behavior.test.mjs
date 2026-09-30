@@ -2472,6 +2472,31 @@ test("Input binding capture removes conflicts, rejects reserved keys and commits
 	}
 });
 
+test("the screen size combo opens and its choice is applied", () => {
+	const saved = [],
+		f = uiFixture( () => {}, () => false, () => {}, () => {}, () => {}, v => saved.push( v ) );
+	try {
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:Option" } );
+		let result;
+		// A retained frame returns null; keep the last published controls.
+		for ( let i = 1; i < 15; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		const combo = result.controls.find( c => c.id === "option-video-combo:-1" );
+		assert.ok( combo, "screen size combo is rendered" );
+		assert.ok( !combo.disabled, "screen size combo accepts the pointer" );
+		f.ui.event( { kind: "activate", id: combo.id } );
+		result = f.ui.step( f.state, 1600 ) ?? result;
+		const choice = result.controls.find( c => c.id === "option-video-choice:-1:1" );
+		assert.ok( choice && !choice.disabled, "the open list offers enabled sizes" );
+		f.ui.event( { kind: "activate", id: choice.id } );
+		f.ui.event( { kind: "activate", id: "option-apply" } );
+		assert.equal( saved.length, 1 );
+		assert.ok( saved[0].displayHeight > 0, "the chosen height is saved" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("Video Apply commits only video and keeps the Options window open", () => {
 	const saved = [],
 		bindings = [],

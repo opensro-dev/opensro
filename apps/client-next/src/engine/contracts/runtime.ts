@@ -261,6 +261,10 @@ export interface ClockSample {
 	wakeMs: number;
 	maxStepMs: number;
 	debtMs: number;
+	/** Epoch milliseconds (timeOrigin + now) of simulation time zero. Each step runs
+	 * for a fixed deadline, so a simulation time maps to wall time by this origin
+	 * even when a late wake executes several steps at once. */
+	originMs: number;
 }
 /*
 ================

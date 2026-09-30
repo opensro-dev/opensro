@@ -37,14 +37,32 @@ const EnvBetaStarterKit = "SRO_BETA_STARTER_KIT"
 ================
 betaStarterKitCodenames
 
-The ordinary return scroll (30 s recall, itemdata 61) and the +100% movement
-speed scroll (SKILL_MALL_MOVE_SPEED_UP_100_01, the largest speed value any
-v1.150 speed item carries).
+The ordinary return scroll (30 s recall, itemdata 61) and the Beginner's
+movement scroll (SKILL_ETC_SPEED_UP_BASIC_01: +100%, the largest speed value
+any v1.150 speed item carries). Its skilleffectset row
+SKILL_ETC_SPEED_UP_BASIC_01 names lightning_gyeonggong_keep_b.efp, so the
+buff shows the green keep loop. The mall +100% scroll has the same speed
+but its effect row is keyed by the group name SKILL_MALL_MOVE_SPEED_UP_100;
+91E720 resolves that through FindOrRegisterSkillIdByName to a new named
+record, never skill 5411, so the original client shows no buff VFX for it.
 ================
 */
 var betaStarterKitCodenames = []string{
 	"ITEM_ETC_SCROLL_RETURN_01",
-	"ITEM_MALL_MOVE_SPEED_UP_100",
+	"ITEM_ETC_SPEED_UP_BASIC",
+}
+
+/*
+================
+betaStarterKitRetired
+
+Kit items an earlier kit handed out, keyed by the item that replaces them.
+GrantStarterKit swaps a retired row in place (same slot) instead of adding
+a second scroll.
+================
+*/
+var betaStarterKitRetired = map[string]string{
+	"ITEM_ETC_SPEED_UP_BASIC": "ITEM_MALL_MOVE_SPEED_UP_100",
 }
 
 /*
@@ -136,6 +154,10 @@ func GrantStarterKit(character *Character, kit []WireItem) int {
 		if holdsItem(character, item.RefObjID) {
 			continue
 		}
+		if replaceRetiredKitItem(character, item) {
+			granted++
+			continue
+		}
 		slot, ok := firstFreeBagSlot(character)
 		if !ok {
 			log.Warnf("bootstrap: %s has no free bag slot for starter kit item %s", character.Name, item.Codename)
@@ -153,6 +175,37 @@ func GrantStarterKit(character *Character, kit []WireItem) int {
 		granted++
 	}
 	return granted
+}
+
+/*
+================
+replaceRetiredKitItem
+
+Rewrites the row holding the item this kit item retired, keeping its slot.
+================
+*/
+func replaceRetiredKitItem(character *Character, item WireItem) bool {
+	retired, ok := betaStarterKitRetired[item.Codename]
+	if !ok {
+		return false
+	}
+	for i, row := range character.MissionInventory {
+		if row.Codename != retired || row.StackCount <= 0 {
+			continue
+		}
+		rows := append([]InventoryRow(nil), character.MissionInventory...)
+		rows[i] = InventoryRow{
+			Slot:         row.Slot,
+			RefObjID:     item.RefObjID,
+			Codename:     item.Codename,
+			TypeFlags:    item.TypeFlags,
+			VarianceBits: "0",
+			StackCount:   1,
+		}
+		character.MissionInventory = rows
+		return true
+	}
+	return false
 }
 
 /*

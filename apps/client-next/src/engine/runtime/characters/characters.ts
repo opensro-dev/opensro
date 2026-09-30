@@ -631,6 +631,16 @@ step
 			skillObjects.retain( entities );
 			resources.begin( seconds );
 			failure = null;
+			posePresentation.local(
+				gameplay?.pose && gameplay.poseAtMs !== undefined ?
+					{
+						gid: gameplay.localGid,
+						atMs: gameplay.poseAtMs,
+						moving: !!gameplay.moving,
+						...(gameplay.movementPath ? { to: gameplay.movementPath.to } : {})
+					} :
+					null
+			);
 			const result = resources.poll();
 			const skillObjectResult = result && SKILL_OBJECT_MANIFESTS.some( path => path === result.path );
 			if ( result && skillObjectResult ) {
@@ -3180,6 +3190,17 @@ profile
 		orbGauge: () => orbs.gauge(),
 		damageText: () => damageTexts as readonly import("@/engine/contracts/damage-text").DamageText[],
 		error: () => failure ?? resources.error() ?? effects.error(),
+		/*
+================
+simulationOrigin
+
+Frame-clock milliseconds of simulation time zero; local poses carry their
+simulation time (GameplayState.poseAtMs).
+================
+		*/
+		simulationOrigin( ms: number ) {
+			posePresentation.origin( ms );
+		},
 		/*
 ================
 reset

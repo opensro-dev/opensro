@@ -494,6 +494,8 @@ export interface GameplayState {
 	readonly movementPath?: { readonly from: import("./gameplay").Pose; readonly to: import("./gameplay").Pose; };
 	readonly movementRevision?: number;
 	readonly moving?: boolean;
+	/** Simulation time (ms) at which pose was sampled; ClockSample.originMs maps it to wall time. */
+	readonly poseAtMs?: number;
 	readonly authoritativePose: Pose | null;
 	readonly pendingMoves: number;
 	readonly acknowledgedMove: number;

@@ -92,6 +92,8 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 	let surfaceCursor: import("@/engine/contracts/navigation").SurfaceCursor = {};
 	let speed = 50, walkSpeed = 20, runSpeed = 50, mode = 3;
 	let movementRevision = 0;
+	// Simulation time of the last stepped pose; presentation extrapolates from it.
+	let poseAtMs = 0;
 	let nextId = 0, acknowledged = 0, error: string | null = null;
 	let life: "alive" | "dead" = "alive";
 	const pending = new Map<number, {
@@ -765,6 +767,7 @@ step
 			// Acquire and retain an object owner as each step enters its surface,
 			// just as remote motion does, instead of reselecting nearest terrain Y.
 			pose = navigation.surface( sampleMovement( segment, now ), previous, owner, surfaceCursor );
+			poseAtMs = now;
 			owner = surfaceCursor.owner ?? owner;
 			if ( t === 1 ) {
 				authoritative = pose;
@@ -799,6 +802,7 @@ state
 				// The heading of the direction walk in progress, if any.
 				directionWalk: walk ? walk.heading : undefined,
 				pose,
+				poseAtMs,
 				authoritativePose: authoritative,
 				pendingMoves: pending.size,
 				acknowledgedMove: acknowledged,

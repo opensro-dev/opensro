@@ -6845,7 +6845,7 @@ export function createUi(
 								"option-video-combo:" + combo.slot,
 								combo.label,
 								entryText( combo.entries[combo.selected] ?? "" ),
-								combo.slot < 0
+								combo.disabled && combo.slot < 0
 							);
 						}
 						// Native reverse child traversal paints the label after its combo sibling.

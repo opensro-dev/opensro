@@ -525,6 +525,11 @@ export function startRuntime(
 					latestSequence = snapshot.sequence;
 					simulationTimeMs = snapshot.timeMs;
 					acceptedInput = snapshot.acceptedInputSequence;
+					// Main-clock milliseconds of simulation time zero: poses carry their
+					// simulation time, and presentation needs it on the frame clock.
+					if ( snapshot.clock?.originMs ) {
+						characters.simulationOrigin( snapshot.clock.originMs - performance.timeOrigin );
+					}
 				}
 				const simulationError = simulation.error();
 				if ( simulationError ) {
