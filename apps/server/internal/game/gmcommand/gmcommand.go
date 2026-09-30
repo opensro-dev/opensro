@@ -26,6 +26,9 @@ type PresenceView interface {
 type Outcome struct {
 	Ack     []byte
 	Refusal string
+	// PrivilegeDenied marks a command from a character without GMPrivilege:
+	// silent on the wire, but an operator audit event (register.go).
+	PrivilegeDenied bool
 }
 
 func refused(reason string) Outcome {
@@ -56,7 +59,9 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		// The privilege boundary: refuse SILENTLY and do nothing. A
 		// non-GM cannot distinguish this from the command not existing,
 		// and no retail refusal bytes for a privilege denial are pinned.
-		return refused(fmt.Sprintf("gmcommand: 0x75B6 from non-GM %s refused (no privilege)", sender.Name))
+		denied := refused(fmt.Sprintf("gmcommand: 0x75B6 from non-GM %s refused (no privilege)", sender.Name))
+		denied.PrivilegeDenied = true
+		return denied
 	}
 	request, err := DecodeGmCommand(payload)
 	if err != nil {

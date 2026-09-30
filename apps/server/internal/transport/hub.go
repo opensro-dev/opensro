@@ -36,6 +36,12 @@ type Hub struct {
 	bindingKeys map[uint64]string
 	controls    map[string]uint64
 
+	// Account index: admission account -> its live sessions, and the
+	// reverse for cleanup. Bounds what one account can hold
+	// (Config.MaxSessionsPerAccount).
+	accountSessions map[string]map[uint64]*Session
+	sessionAccount  map[uint64]string
+
 	// Division index: EFFECTIVE division -> live member sessions, so a
 	// division push touches only its members instead of scanning every
 	// session (O(sessions) per push was the scaling ceiling). sessionDiv
@@ -87,16 +93,18 @@ func (h *Hub) helloAuthFn() HelloAuthFunc {
 
 func newHub(cfg Config) *Hub {
 	return &Hub{
-		cfg:            cfg,
-		sessions:       make(map[uint64]*Session),
-		byToken:        make(map[[ResumeTokenLen]byte]*Session),
-		bindings:       make(map[string]*Session),
-		bindingKeys:    make(map[uint64]string),
-		controls:       make(map[string]uint64),
-		divisions:      make(map[string]map[uint64]*Session),
-		sessionDiv:     make(map[uint64]string),
-		handlers:       newHandlerRegistry(),
-		handshakeSlots: make(chan struct{}, cfg.MaxPendingHandshakes),
+		cfg:             cfg,
+		sessions:        make(map[uint64]*Session),
+		byToken:         make(map[[ResumeTokenLen]byte]*Session),
+		bindings:        make(map[string]*Session),
+		bindingKeys:     make(map[uint64]string),
+		controls:        make(map[string]uint64),
+		accountSessions: make(map[string]map[uint64]*Session),
+		sessionAccount:  make(map[uint64]string),
+		divisions:       make(map[string]map[uint64]*Session),
+		sessionDiv:      make(map[uint64]string),
+		handlers:        newHandlerRegistry(),
+		handshakeSlots:  make(chan struct{}, cfg.MaxPendingHandshakes),
 	}
 }
 
@@ -447,6 +455,7 @@ func (h *Hub) AcceptConn(conn Conn) {
 		_ = conn.Close("admission identity install failed")
 		return
 	}
+	h.admitAccountSession(admissionIdentity.AccountID, sess)
 	if err := sess.attach(conn, false); err != nil {
 		h.closeSession(sess, err)
 		_ = conn.Close(err.Error())
@@ -594,6 +603,13 @@ func (h *Hub) closeSession(s *Session, cause error) {
 		delete(h.sessionDiv, s.ID)
 		h.dropFromDivisionLocked(div, s.ID)
 	}
+	if account, ok := h.sessionAccount[s.ID]; ok {
+		delete(h.sessionAccount, s.ID)
+		delete(h.accountSessions[account], s.ID)
+		if len(h.accountSessions[account]) == 0 {
+			delete(h.accountSessions, account)
+		}
+	}
 	h.mu.Unlock()
 
 	h.metrics.sessClosed.Add(1)
@@ -617,6 +633,59 @@ func (h *Hub) closeSession(s *Session, cause error) {
 			defer recoverHookPanic(s, "OnSessionClose")
 			fn(s, cause)
 		}()
+	}
+}
+
+/*
+================
+admitAccountSession
+
+Records a fresh session under its admission account and, when the account
+now holds more than MaxSessionsPerAccount, evicts its oldest sessions the
+way single-bind replacement does: lame duck first, then BYE Replaced and
+teardown once drained. Sessions are ordered by ID, which only increases.
+================
+*/
+func (h *Hub) admitAccountSession(account string, s *Session) {
+	var evict []*Session
+	h.mu.Lock()
+	owned := h.accountSessions[account]
+	if owned == nil {
+		owned = make(map[uint64]*Session)
+		h.accountSessions[account] = owned
+	}
+	owned[s.ID] = s
+	h.sessionAccount[s.ID] = account
+	// Sessions already evicted stay indexed until their drain finishes; only
+	// the ones still live count against the limit.
+	live := 0
+	for _, candidate := range owned {
+		if !candidate.evicted.Load() {
+			live++
+		}
+	}
+	for ; live > h.cfg.MaxSessionsPerAccount; live-- {
+		var oldest *Session
+		for id, candidate := range owned {
+			if id == s.ID || candidate.evicted.Load() {
+				continue
+			}
+			if oldest == nil || id < oldest.ID {
+				oldest = candidate
+			}
+		}
+		if oldest == nil {
+			break
+		}
+		oldest.markEvicted()
+		evict = append(evict, oldest)
+	}
+	h.mu.Unlock()
+	for _, victim := range evict {
+		h.metrics.accountSessionEvictions.Add(1)
+		log.WithFields(log.Fields{"account": account, "old": victim.ID, "new": s.ID, "limit": h.cfg.MaxSessionsPerAccount}).
+			Warn("transport: account session limit reached, evicting its oldest session")
+		victim.CloseWhenDrained(ByeReasonReplaced)
 	}
 }
 

@@ -23,6 +23,7 @@ const (
 	KeyRateLimitPerSec = "transport.rate_limit_per_sec"
 	KeyRateLimitBurst  = "transport.rate_limit_burst"
 	KeyMaxSessions     = "transport.max_sessions"
+	KeyMaxAccountSess  = "transport.max_sessions_per_account"
 	KeyMaxHandshakes   = "transport.max_pending_handshakes"
 	KeyPprof           = "transport.pprof"
 )
@@ -84,6 +85,13 @@ type Config struct {
 	// session still owns state and goroutines, so it counts until final
 	// teardown. 0 takes the default.
 	MaxSessions int
+	// MaxSessionsPerAccount caps the live sessions one account holds. Every
+	// session costs an admission ticket the account can mint at will, so
+	// without it one account could fill MaxSessions and lock every other
+	// player out. A new session evicts the account's oldest instead of being
+	// refused, so a player reloading faster than resume grace expires is
+	// never locked out. 0 takes the default.
+	MaxSessionsPerAccount int
 	// MaxPendingHandshakes caps connections concurrently waiting for HELLO.
 	// Excess connections are rejected immediately instead of consuming a
 	// goroutine for the full HelloTimeout. 0 takes the default.
@@ -96,24 +104,29 @@ type Config struct {
 	EnablePprof bool
 }
 
+// DefaultMaxSessionsPerAccount allows a few browser tabs plus the sessions
+// a reload leaves in resume grace; a player needs one.
+const DefaultMaxSessionsPerAccount = 4
+
 // DefaultConfig is the library/test baseline. The GameWorld composition
 // replaces unconfigured listener addresses with its owned shard's catalog
 // transport URL before constructing the server.
 func DefaultConfig() Config {
 	return Config{
-		WTAddr:               "127.0.0.1:8788",
-		WSAddr:               "127.0.0.1:8788",
-		CertDir:              filepath.Join(".state", "cluster", "dev-certs"),
-		HelloTimeout:         10 * time.Second,
-		GracePeriod:          30 * time.Second,
-		KeepaliveInterval:    20 * time.Second,
-		IdleTimeout:          60 * time.Second,
-		OutboundQueue:        8192,
-		OutboundQueueBytes:   32 << 20,
-		RateLimitPerSec:      25,
-		RateLimitBurst:       75,
-		MaxSessions:          5000,
-		MaxPendingHandshakes: 256,
+		WTAddr:                "127.0.0.1:8788",
+		WSAddr:                "127.0.0.1:8788",
+		CertDir:               filepath.Join(".state", "cluster", "dev-certs"),
+		HelloTimeout:          10 * time.Second,
+		GracePeriod:           30 * time.Second,
+		KeepaliveInterval:     20 * time.Second,
+		IdleTimeout:           60 * time.Second,
+		OutboundQueue:         8192,
+		OutboundQueueBytes:    32 << 20,
+		RateLimitPerSec:       25,
+		RateLimitBurst:        75,
+		MaxSessions:           5000,
+		MaxSessionsPerAccount: DefaultMaxSessionsPerAccount,
+		MaxPendingHandshakes:  256,
 	}
 }
 
@@ -155,6 +168,9 @@ func (c *Config) applyDefaults() {
 	if c.MaxSessions == 0 {
 		c.MaxSessions = d.MaxSessions
 	}
+	if c.MaxSessionsPerAccount == 0 {
+		c.MaxSessionsPerAccount = d.MaxSessionsPerAccount
+	}
 	if c.MaxPendingHandshakes == 0 {
 		c.MaxPendingHandshakes = d.MaxPendingHandshakes
 	}
@@ -176,6 +192,7 @@ func RegisterViperDefaults() {
 	viper.SetDefault(KeyRateLimitPerSec, d.RateLimitPerSec)
 	viper.SetDefault(KeyRateLimitBurst, d.RateLimitBurst)
 	viper.SetDefault(KeyMaxSessions, d.MaxSessions)
+	viper.SetDefault(KeyMaxAccountSess, d.MaxSessionsPerAccount)
 	viper.SetDefault(KeyMaxHandshakes, d.MaxPendingHandshakes)
 	viper.SetDefault(KeyPprof, false)
 
@@ -191,6 +208,7 @@ func RegisterViperDefaults() {
 	_ = viper.BindEnv(KeyRateLimitPerSec, "TRANSPORT_RATE_LIMIT_PER_SEC")
 	_ = viper.BindEnv(KeyRateLimitBurst, "TRANSPORT_RATE_LIMIT_BURST")
 	_ = viper.BindEnv(KeyMaxSessions, "TRANSPORT_MAX_SESSIONS")
+	_ = viper.BindEnv(KeyMaxAccountSess, "TRANSPORT_MAX_SESSIONS_PER_ACCOUNT")
 	_ = viper.BindEnv(KeyMaxHandshakes, "TRANSPORT_MAX_PENDING_HANDSHAKES")
 	_ = viper.BindEnv(KeyPprof, "TRANSPORT_PPROF")
 }
@@ -211,6 +229,7 @@ func ConfigFromViper() Config {
 	cfg.RateLimitPerSec = viper.GetInt(KeyRateLimitPerSec)
 	cfg.RateLimitBurst = viper.GetInt(KeyRateLimitBurst)
 	cfg.MaxSessions = viper.GetInt(KeyMaxSessions)
+	cfg.MaxSessionsPerAccount = viper.GetInt(KeyMaxAccountSess)
 	cfg.MaxPendingHandshakes = viper.GetInt(KeyMaxHandshakes)
 	cfg.EnablePprof = viper.GetBool(KeyPprof)
 	cfg.applyDefaults()

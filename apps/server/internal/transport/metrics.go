@@ -15,6 +15,7 @@ type hubMetrics struct {
 	rlDropped atomic.Uint64
 
 	handshakeBusy             atomic.Uint64
+	accountSessionEvictions   atomic.Uint64
 	handshakeHelloTimeout     atomic.Uint64
 	handshakeReadFailed       atomic.Uint64
 	handshakeProtocolRejected atomic.Uint64
@@ -74,6 +75,7 @@ type Metrics struct {
 	OutboundQueueHighWater uint64 `json:"outbound_queue_high_water"`
 
 	HandshakeRejectedBusy     uint64  `json:"handshake_rejected_busy"`
+	AccountSessionEvictions   uint64  `json:"account_session_evictions"`
 	HandshakeHelloTimeout     uint64  `json:"handshake_hello_timeout"`
 	HandshakeReadFailed       uint64  `json:"handshake_read_failed"`
 	HandshakeProtocolRejected uint64  `json:"handshake_protocol_rejected"`
@@ -162,6 +164,7 @@ func (h *Hub) Metrics() Metrics {
 		OutboundQueueHighWater: h.metrics.queueHighWater.Load(),
 
 		HandshakeRejectedBusy:     h.metrics.handshakeBusy.Load(),
+		AccountSessionEvictions:   h.metrics.accountSessionEvictions.Load(),
 		HandshakeHelloTimeout:     h.metrics.handshakeHelloTimeout.Load(),
 		HandshakeReadFailed:       h.metrics.handshakeReadFailed.Load(),
 		HandshakeProtocolRejected: h.metrics.handshakeProtocolRejected.Load(),

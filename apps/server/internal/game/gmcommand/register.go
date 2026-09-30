@@ -1,6 +1,8 @@
 package gmcommand
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/transport"
@@ -21,6 +23,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence PresenceView, stat
 // with the 0xB5B6 ack. A nil Ack stays silent on the wire (an unprivileged
 // sender, a decode refusal, or a bound-character miss).
 func gmCommandHubHandler(deps Dependencies, presence PresenceView, status ...BodyStatusCommands) transport.HandlerFunc {
+	audit := newPrivilegeAudit()
 	return func(s *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(deps, s)
 		if !bound {
@@ -28,7 +31,9 @@ func gmCommandHubHandler(deps Dependencies, presence PresenceView, status ...Bod
 			return
 		}
 		outcome := HandleGmCommand(deps, presence, divisionID, character, payload, status...)
-		if outcome.Refusal != "" {
+		if outcome.PrivilegeDenied {
+			audit.deny(divisionID, character.Name, s.ID, len(payload), time.Now())
+		} else if outcome.Refusal != "" {
 			log.Debugf("gmcommand: 0x75B6 refused for %s: %s", character.Name, outcome.Refusal)
 		}
 		if outcome.Ack != nil {

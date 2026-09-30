@@ -15,7 +15,7 @@ game.example.com {
 
 	handle /api/* {
 		route {
-			@private_api path /api/development/* /api/debug/*
+			@private_api path /api/development/* /api/debug/* /api/internal/*
 			respond @private_api 404
 			uri strip_prefix /api
 			reverse_proxy 127.0.0.1:8787

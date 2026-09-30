@@ -175,6 +175,9 @@ func NewServer(cfg Config) (*Server, error) {
 	if cfg.MaxSessions <= 0 {
 		return nil, fmt.Errorf("transport: max_sessions must be positive")
 	}
+	if cfg.MaxSessionsPerAccount <= 0 {
+		return nil, fmt.Errorf("transport: max_sessions_per_account must be positive")
+	}
 	if cfg.MaxPendingHandshakes <= 0 {
 		return nil, fmt.Errorf("transport: max_pending_handshakes must be positive")
 	}
