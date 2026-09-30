@@ -317,7 +317,7 @@ export function startRuntime(
 		worldClick
 		================
 		*/
-		function worldClick( x: number, y: number, doubleClick = false ) {
+		function worldClick( x: number, y: number, doubleClick = false, shift = false ) {
 			if ( doubleClick && frontend.snapshot().phase !== "world" ) return;
 			if ( frontend.isRace() ) {
 				const race = renderer.pickFrontendRace( x, y );
@@ -348,6 +348,10 @@ export function startRuntime(
 			const gid = renderer.pickEntity( x, y, game.localGid, input.blindHeld() ),
 				entity = gid === null ? null : presentation.read( gid );
 			if ( entity ) {
+				// 698924 retains VK_SHIFT; 698BFD gates whisper prefill after selection.
+				if ( shift && !doubleClick && entity.kind === "player" ) {
+					ui.event( { kind: "whisper-target", gid: entity.gid } );
+				}
 				// Native 67AA60 reactivates the shared decal even for the same GID.
 				// The targeting owner deduplicates the wire request, not the click.
 				if ( entity.kind !== "ground-item" && !game.targetPending ) {

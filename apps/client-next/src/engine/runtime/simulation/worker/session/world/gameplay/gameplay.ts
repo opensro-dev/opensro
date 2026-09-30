@@ -766,6 +766,12 @@ state here before a command can claim a native wire conversation.
 					(command.kind === "party-match-register" || command.kind === "party-match-modify") &&
 					!partyPurposeAllowed( partyActiveJob( inventory.state().inventory ), command.registration.purpose )
 				) return null;
+				// Expiry or a replacement request may win the worker queue race.
+				if (
+					command.kind === "party-match-answer" &&
+					(!partyMatching.request || partyMatching.request.a !== command.a ||
+						partyMatching.request.b !== command.b)
+				) return null;
 				const next = partyMatchRequest( partyMatching, command, now );
 				if ( next.frame ) send( next.frame );
 				partyMatching = next.state;
@@ -928,6 +934,8 @@ state here before a command can claim a native wire conversation.
 					dirty = true;
 					return null;
 				}
+				// The worker may retire a prompt before its queued UI click arrives.
+				if ( command.kind === "social-consent" && !social.invitation ) return null;
 				const request = socialRequest( social, command as SocialCommand );
 				send( request );
 				if ( command.kind === "social-consent" ) social = { ...social, invitation: null };

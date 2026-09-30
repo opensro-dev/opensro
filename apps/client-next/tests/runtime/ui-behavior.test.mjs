@@ -3901,6 +3901,8 @@ test("minimap zoom advances while world inputs are unchanged and resets on exit"
 		assert.ok( width() < 179.2 && width() > 160 );
 		f.ui.step( { ...f.state, session: { phase: "signed-out", revision: 2 } }, 4420 );
 		f.ui.step( f.state, 4500 );
+		// Returning from title loading presents its completed frame before the HUD.
+		f.ui.step( f.state, 4601 );
 		assert.equal( width(), 160 );
 	} finally {
 		f.dispose();
@@ -4330,6 +4332,178 @@ test("selecting a quick party member keeps its name and gauges above the opaque 
 		assert.ok( content.some( ( { quad } ) => quad.texture === fontAtlas.image ) );
 		assert.ok( content.some( ( { quad } ) => quad.texture.endsWith( "/qpt_hp.png" ) ) );
 		assert.ok( content.every( ( { index } ) => index > selection ), "opaque backing cannot occlude row content" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("right-click action and inventory icons use shared commands without changing single-click selection", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			inventorySlotCount: 58,
+			equipmentSlotCount: 13,
+			inventory: [ { slot: 13, refObjId: 1, typeFlags: 0x6c, quantity: 3, name: "Potion" } ],
+			quickSlots: [ { slot: 1, kind: 0x4a, payload: 1000 } ]
+		};
+		for ( let time = 0; time < 1200; time += 100 ) f.ui.step( f.state, time );
+		f.ui.event( { kind: "key", code: "KeyA" } );
+		let scene = f.ui.step( f.state, 1300 );
+		assert.ok( scene.controls.find( c => c.id === "action:1000" )?.rightActivate );
+		sent.length = 0;
+		f.ui.event( { kind: "activate", id: "action:1000" } );
+		assert.equal( sent.length, 0 );
+		f.ui.event( { kind: "right-activate", id: "action:1000" } );
+		assert.deepEqual( sent.pop(), { kind: "gameplay", command: { kind: "action-command", id: 1000 } } );
+		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
+		assert.deepEqual( sent.pop(), { kind: "gameplay", command: { kind: "action-command", id: 1000 } } );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		scene = f.ui.step( f.state, 1400 );
+		assert.ok( scene.controls.find( c => c.id === "slot:13" )?.rightActivate );
+		sent.length = 0;
+		f.ui.event( { kind: "activate", id: "slot:13" } );
+		assert.equal( sent.length, 0 );
+		f.ui.event( { kind: "right-activate", id: "slot:13" } );
+		assert.deepEqual( sent.pop(), { kind: "gameplay", command: { kind: "item-use", slot: 13 } } );
+		f.ui.event( { kind: "activate", id: "slot:13", shift: true } );
+		f.ui.step( f.state, 1500 );
+		sent.length = 0;
+		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
+		assert.equal( sent.length, 0, "split-stack modal blocks underlying right clicks" );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		f.ui.step( f.state, 1600 );
+		f.ui.event( { kind: "drag", id: "slot:13", dx: 5, dy: 5 } );
+		sent.length = 0;
+		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
+		assert.equal( sent.length, 0, "right click cancels a carried item before using an icon" );
+		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
+		assert.deepEqual( sent.pop(), { kind: "gameplay", command: { kind: "action-command", id: 1000 } } );
+		f.state.gameplay = { ...f.state.gameplay, inventoryPending: true };
+		f.ui.step( f.state, 1700 );
+		sent.length = 0;
+		f.ui.event( { kind: "right-activate", id: "slot:13" } );
+		assert.equal( sent.length, 0, "pending inventory requests cannot be duplicated" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("chat rows and world whisper selection prepare the same draft without sending it", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		f.state.entities.push( { ...f.state.entities[0], gid: 2, name: "Peer" } );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			chat: {
+				lines: [
+					{ channel: 1, name: "Peer", text: "OtherName: " + "a long wrapped message ".repeat( 5 ) },
+					{ channel: 1, name: "Player", text: "my own message" },
+					{ channel: 7, name: "Notice", text: "system message" }
+				]
+			}
+		};
+		let scene;
+		for ( let time = 0; time < 1200; time += 100 ) scene = f.ui.step( f.state, time ) ?? scene;
+		const peerRows = scene.controls.filter( c => c.whisperTarget === "Peer" );
+		assert.ok( peerRows.length > 1, "wrapped rows preserve their actual sender" );
+		assert.ok( peerRows.every( c => c.kind === "button" ) );
+		assert.ok( !scene.controls.some( c => c.whisperTarget === "Notice" ) );
+		sent.length = 0;
+		f.ui.event( { kind: "activate", id: peerRows.at( -1 ).id } );
+		scene = f.ui.step( f.state, 1300 );
+		assert.equal( scene.controls.find( c => c.id === "chat-text" ).value, "$Peer " );
+		assert.equal( scene.focusRequest.id, "chat-text" );
+		assert.equal( scene.focusRequest.caret, 6 );
+		assert.equal( sent.length, 0 );
+		const self = scene.controls.find( c => c.whisperTarget === "Player" );
+		f.ui.event( { kind: "activate", id: self.id } );
+		scene = f.ui.step( f.state, 1400 ) ?? scene;
+		assert.equal(
+			scene.controls.find( c => c.id === "chat-text" ).value,
+			"$Peer ",
+			"self click preserves the existing draft"
+		);
+		f.ui.event( { kind: "edit", id: "chat-text", value: "unsent text", start: 11, end: 11, composing: false } );
+		f.ui.event( { kind: "whisper-target", gid: 2 } );
+		scene = f.ui.step( f.state, 1500 );
+		assert.equal( scene.controls.find( c => c.id === "chat-text" ).value, "$Peer " );
+		f.ui.event( { kind: "whisper-target", gid: 1 } );
+		f.ui.event( { kind: "whisper-target", gid: 999 } );
+		assert.equal( sent.length, 0, "prefill never sends a chat packet" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("learned skill icons and shortcut bars share casting and cooldown admission", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		const skill = {
+			id: 3,
+			group: 3,
+			level: 1,
+			skillPoint: 1,
+			spCost: 1,
+			trainable: true,
+			targetRequired: true,
+			cooldownMs: 3000,
+			masteries: [ { ID: 257, Level: 1 }, { ID: 0, Level: 0 } ],
+			prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+		};
+		f.state.gameplay = {
+			...f.state.gameplay,
+			skills: [ 3 ],
+			skillCatalog: [ skill ],
+			target: 2,
+			quickSlots: [ { slot: 1, kind: 0x49, payload: 3 }, { slot: 41, kind: 0x49, payload: 3 } ],
+			progression: { level: 10, skillPoints: 10, masteries: [ { id: 257, level: 7 } ] }
+		};
+		for ( let time = 0; time < 1200; time += 100 ) f.ui.step( f.state, time );
+		f.ui.event( { kind: "key", code: "KeyS" } );
+		let scene = f.ui.step( f.state, 1300 );
+		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
+		f.ui.event( { kind: "activate", id: "skill-mastery:257" } );
+		scene = f.ui.step( f.state, 1400 ) ?? scene;
+		assert.ok( scene.controls.find( c => c.id === "skill:3" )?.rightActivate );
+		sent.length = 0;
+		f.ui.event( { kind: "activate", id: "skill:3" } );
+		assert.equal( sent.length, 0 );
+		f.ui.event( { kind: "right-activate", id: "skill:3" } );
+		assert.deepEqual( sent.pop(), { kind: "gameplay", command: { kind: "skill", skillId: 3, gid: 2 } } );
+		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
+		assert.deepEqual( sent.pop(), { kind: "gameplay", command: { kind: "skill", skillId: 3, gid: 2 } } );
+		if ( !scene.controls.some( c => c.id === "hotbar:41" ) ) {
+			f.ui.event( { kind: "activate", id: "ext-open" } );
+			scene = f.ui.step( f.state, 1450 ) ?? scene;
+		}
+		assert.ok( scene.controls.find( c => c.id === "hotbar:41" )?.rightActivate );
+		f.ui.event( { kind: "right-activate", id: "hotbar:41" } );
+		assert.deepEqual( sent.pop(), { kind: "gameplay", command: { kind: "skill", skillId: 3, gid: 2 } } );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			skillCooldowns: [ { skill: 3, group: 0, startedAtMs: 1400, durationMs: 3000 } ]
+		};
+		f.ui.step( f.state, 1500 );
+		sent.length = 0;
+		f.ui.event( { kind: "right-activate", id: "skill:3" } );
+		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
+		f.ui.event( { kind: "activate", id: "hotbar:1" } );
+		assert.equal( sent.length, 0, "board and shortcuts reject the same active cooldown" );
+		f.state.gameplay = { ...f.state.gameplay, skills: [], skillCooldowns: [] };
+		f.ui.step( f.state, 1600 );
+		f.ui.event( { kind: "right-activate", id: "skill:3" } );
+		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
+		assert.equal( sent.length, 0, "unlearned skills remain ineligible even with stale bindings" );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			skills: [ 69 ],
+			quickSlots: [ { slot: 1, kind: 0x49, payload: 69 } ]
+		};
+		f.ui.step( f.state, 1700 );
+		f.ui.event( { kind: "activate", id: "hotbar:1" } );
+		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
+		assert.equal( sent.length, 0, "passive bindings cannot be cast with either mouse button" );
 	} finally {
 		f.dispose();
 	}
