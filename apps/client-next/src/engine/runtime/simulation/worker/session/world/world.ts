@@ -33,7 +33,7 @@ export function createWorldSession(
 		value: unknown,
 		base: string,
 		signal: AbortSignal
-	) => Promise<{ refSkillSnapshot: unknown[]; }>
+	) => Promise<{ refSkillSnapshot: unknown[]; refItemSnapshot: unknown[]; }>
 ) {
 	let failure: string | null = null, epoch = 0, disposed = false, controller: AbortController | null = null;
 	/*
@@ -169,7 +169,13 @@ receive
 				deadline = now + REFERENCE_TIMEOUT_MS;
 				loadWorldReferences( wrapper.references, transport, controller.signal ).then( refs => {
 					if ( !disposed && epoch === current ) {
-						references = { kind: "ready", bootstrap: { ...bootstrap, ...refs } };
+						// The published item rows and the login's own rows are disjoint
+						// (the server skips published ids); the catalog rejects a repeat.
+						const own = (bootstrap as { refItemSnapshot?: unknown[]; }).refItemSnapshot ?? [];
+						references = {
+							kind: "ready",
+							bootstrap: { ...bootstrap, ...refs, refItemSnapshot: [ ...refs.refItemSnapshot, ...own ] }
+						};
 					}
 				}, error => {
 					if ( !disposed && epoch === current ) references = { kind: "failed", error: String( error ) };

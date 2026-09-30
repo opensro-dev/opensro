@@ -380,37 +380,32 @@ func (rt *Runtime) GroundRefItemCodenames(divisionID string) []string {
 
 /*
 ==================
-RefItemCodenames
+StaticRefItemCodenames
 
-RefItemCodenames extends the ground-drop snapshot seam with every reference
-needed at admission: actual ground items, the small starter drop seed and
-all three v1.150 Magic Pop ticket states. Higher-level loot is introduced by
-immutable reference deltas before live spawn, not by preloading its catalog.
+StaticRefItemCodenames names the item references every viewer needs whatever
+the division holds: the small starter drop seed, the alchemy outputs, the
+Magic Pop rewards and all three v1.150 Magic Pop ticket states. They are
+published once in the content-addressed browser references
+(Deps.StaticRefItemCodenames), not repeated in every login. Higher-level
+loot is introduced by immutable reference deltas before live spawn, not by
+preloading its catalog.
 ==================
 */
-func (rt *Runtime) RefItemCodenames(divisionID string) []string {
-	out := rt.GroundRefItemCodenames(divisionID)
-	monsterDrops := loot.MonsterDropRefItemCodenames()
-	monsterDrops = append(monsterDrops, rt.alchemyOutputCodenames()...)
-	monsterDrops = append(monsterDrops, rt.GachaCatalog.RewardCodenames()...)
-	seen := make(map[string]bool, len(out)+len(monsterDrops)+3)
-	for _, codename := range out {
-		seen[codename] = true
+func (rt *Runtime) StaticRefItemCodenames() []string {
+	candidates := loot.MonsterDropRefItemCodenames()
+	candidates = append(candidates, rt.alchemyOutputCodenames()...)
+	candidates = append(candidates, rt.GachaCatalog.RewardCodenames()...)
+	if catalog := rt.GachaCatalog; catalog != nil {
+		candidates = append(candidates, catalog.Card.Codename, catalog.WinCard.Codename, catalog.LoseCard.Codename)
 	}
-	for _, codename := range monsterDrops {
+	seen := make(map[string]bool, len(candidates))
+	out := make([]string, 0, len(candidates))
+	for _, codename := range candidates {
 		if seen[codename] {
 			continue
 		}
 		seen[codename] = true
 		out = append(out, codename)
-	}
-	if catalog := rt.GachaCatalog; catalog != nil {
-		for _, codename := range []string{catalog.Card.Codename, catalog.WinCard.Codename, catalog.LoseCard.Codename} {
-			if !seen[codename] {
-				seen[codename] = true
-				out = append(out, codename)
-			}
-		}
 	}
 	return out
 }

@@ -441,7 +441,7 @@ test("reset clears old instance identity and policy; preserved references retain
 });
 test("HTTP admission refuses old immutable reference schema and accepts versioned lifecycle authority", async t => {
 	const http = createSessionHttp();
-	let data = JSON.stringify( { refSkillSnapshot: refs } );
+	let data = JSON.stringify( { refSkillSnapshot: refs, refItemSnapshot: [] } );
 	t.mock.method( globalThis, "fetch", async () => new Response( data ) );
 	async function load() {
 		const bytes = new TextEncoder().encode( data ),
@@ -453,7 +453,12 @@ test("HTTP admission refuses old immutable reference schema and accepts versione
 		);
 	}
 	await assert.rejects( load(), /rebuild the server/ );
-	data = JSON.stringify( { skillLifecycleVersion: 1, refSkillSnapshot: refs } );
+	data = JSON.stringify( {
+		referencesVersion: 2,
+		skillLifecycleVersion: 1,
+		refSkillSnapshot: refs,
+		refItemSnapshot: []
+	} );
 	const loaded = await load();
 	assert.deepEqual( loaded.refSkillSnapshot, refs );
 });

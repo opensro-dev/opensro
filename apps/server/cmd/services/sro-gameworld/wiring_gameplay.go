@@ -124,7 +124,8 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
-	deps.ExtraRefItemCodenames = items.RefItemCodenames
+	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
+	deps.StaticRefItemCodenames = items.StaticRefItemCodenames
 	deps.ExtraMagicOptionIDs = items.AlchemyMagicOptionIDs
 	items.Ground.Restore(authorityStore.GroundSnapshotForRestore())
 	authorityStore.AttachGround(items.Ground)

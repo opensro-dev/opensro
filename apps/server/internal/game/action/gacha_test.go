@@ -143,7 +143,7 @@ func TestGachaOpeningUsesWorldAdmission(t *testing.T) {
 func TestGachaRewardsAreAdmittedToWorldReferences(t *testing.T) {
 	rt, _, _ := gachaFixture(t)
 	counts := map[string]int{}
-	for _, name := range rt.RefItemCodenames(testDivision) {
+	for _, name := range rt.StaticRefItemCodenames() {
 		counts[name]++
 	}
 	for _, name := range rt.GachaCatalog.RewardCodenames() {

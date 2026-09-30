@@ -13,6 +13,7 @@ session's release outdated, which the page shows as the update notice.
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
 import {
 	RELEASE_OUTDATED_STATUS,
+	REFERENCES_CONTRACT,
 	RELEASE_PROTOCOL,
 	RELEASE_PROTOCOL_HEADER
 } from "@/engine/foundation/release/protocol";
@@ -138,13 +139,17 @@ The HTTP cache owns reference bytes across reloads; the current world
 admission owns the fetch and its abort signal. No module-global promise may
 outlive its session. References are content-addressed static files beside
 the transport, so they carry no release declaration.
+
+refItemSnapshot here is the static item catalogue (every drop, alchemy
+output and gacha reward). The login blob carries only the rows that depend
+on the division's players and ground, disjoint from these.
 ================
 */
 async function loadWorldReferences(
 	value: unknown,
 	base: string,
 	signal: AbortSignal
-): Promise<{ refSkillSnapshot: unknown[]; itemCommandReferences?: unknown[]; }> {
+): Promise<{ refSkillSnapshot: unknown[]; refItemSnapshot: unknown[]; itemCommandReferences?: unknown[]; }> {
 	const ref = value as { path?: unknown; sha256?: unknown; bytes?: unknown; };
 	if (
 		!ref || typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test( ref.sha256 ) ||
@@ -169,19 +174,30 @@ async function loadWorldReferences(
 	if ( digest !== ref.sha256 ) throw Error( "World references digest mismatch" );
 	signal.throwIfAborted();
 	const parsed = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) ) as {
+		referencesVersion?: unknown;
 		skillLifecycleVersion?: unknown;
 		refSkillSnapshot?: unknown;
+		refItemSnapshot?: unknown;
 		itemCommandReferences?: unknown;
 	};
 	if (
 		!parsed ||
 		Object.keys( parsed ).some( key =>
-			key !== "refSkillSnapshot" && key !== "itemCommandReferences" && key !== "skillLifecycleVersion"
+			key !== "referencesVersion" && key !== "skillLifecycleVersion" && key !== "refSkillSnapshot" &&
+			key !== "refItemSnapshot" && key !== "itemCommandReferences"
 		) ||
 		!Array.isArray( parsed.refSkillSnapshot ) || parsed.refSkillSnapshot.length > REFERENCE_ROWS_LIMIT
 	) throw Error( "Invalid world references" );
 	if ( parsed.skillLifecycleVersion !== 1 ) {
-		throw Error( "World references lack native skill lifecycle metadata; rebuild the server/reference exporter" );
+		throw Error( "World references lack native skill lifecycle metadata; rebuild the server" );
+	}
+	if ( parsed.referencesVersion !== REFERENCES_CONTRACT ) {
+		throw Error(
+			`World references contract ${String( parsed.referencesVersion )}, expected ${REFERENCES_CONTRACT}`
+		);
+	}
+	if ( !Array.isArray( parsed.refItemSnapshot ) || parsed.refItemSnapshot.length > REFERENCE_ROWS_LIMIT ) {
+		throw Error( "Invalid item references" );
 	}
 	if (
 		parsed.itemCommandReferences !== undefined &&
@@ -189,6 +205,7 @@ async function loadWorldReferences(
 	) throw Error( "Invalid item command references" );
 	return {
 		refSkillSnapshot: parsed.refSkillSnapshot,
+		refItemSnapshot: parsed.refItemSnapshot,
 		...(parsed.itemCommandReferences === undefined ?
 			{} :
 			{ itemCommandReferences: parsed.itemCommandReferences as unknown[] })

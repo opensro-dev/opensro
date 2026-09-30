@@ -34,23 +34,28 @@ const Header = "X-OpenSRO-Protocol"
 
 // Contracts are the browser-facing wire contracts one protocol fixes.
 type Contracts struct {
-	Bootstrap int // the EnterWorld DTO
-	Roster    int // the character list
+	Bootstrap  int // the EnterWorld DTO
+	Roster     int // the character list
+	References int // the public reference file beside the transport
 }
 
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current           = 3
+	Current           = 4
 	BootstrapContract = 2 // the EnterWorld DTO
 	RosterContract    = 2 // the character list: worn items as (RefItemID, plus)
+	// The reference file: 2 publishes the static item rows a login used to
+	// repeat (refItemSnapshot); 1 held skills and item commands only.
+	ReferencesContract = 2
 )
 
 // history names every protocol a release has shipped. A browser and a
 // server agree only when they speak the same one.
 var history = map[int]Contracts{
-	2:       {Bootstrap: 2, Roster: 1},
-	Current: {Bootstrap: BootstrapContract, Roster: RosterContract},
+	2:       {Bootstrap: 2, Roster: 1, References: 1},
+	3:       {Bootstrap: 2, Roster: 2, References: 1},
+	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract},
 }
 
 /*

@@ -17,7 +17,12 @@ import assert from "node:assert/strict";
 const { createSessionHttp } = await import(
 	sourceFileUrl( "src/engine/runtime/simulation/worker/session/http/http.ts" ).href
 );
-const data = JSON.stringify( { skillLifecycleVersion: 1, refSkillSnapshot: [] } ),
+const data = JSON.stringify( {
+		referencesVersion: 2,
+		skillLifecycleVersion: 1,
+		refSkillSnapshot: [],
+		refItemSnapshot: [ { refObjId: 7 } ]
+	} ),
 	bytes = new TextEncoder().encode( data ),
 	hash = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
 const identity = { path: `/transport/references/${hash}.json`, sha256: hash, bytes: bytes.length };
@@ -30,7 +35,10 @@ test("immutable public references require bounded bytes, matching content identi
 		assert.equal( options.credentials, "omit" );
 		return response;
 	} );
-	assert.deepEqual( await http.references( identity, base, signal ), { refSkillSnapshot: [] } );
+	assert.deepEqual( await http.references( identity, base, signal ), {
+		refSkillSnapshot: [],
+		refItemSnapshot: [ { refObjId: 7 } ]
+	} );
 	assert.equal( requested, base + identity.path );
 	response = new Response( data );
 	await http.references( identity, base + "/shards/a", signal );
@@ -49,4 +57,18 @@ test("immutable public references require bounded bytes, matching content identi
 	);
 	await assert.rejects( http.references( { ...identity, bytes: 33 << 20 }, base, signal ), /identity/ );
 	await assert.rejects( http.references( identity, "wss://fixture.invalid", signal ), /transport base/ );
+});
+test("references of the previous contract are refused", async t => {
+	const legacy = JSON.stringify( { skillLifecycleVersion: 1, refSkillSnapshot: [] } ),
+		legacyBytes = new TextEncoder().encode( legacy ),
+		legacyHash = Buffer.from( await crypto.subtle.digest( "SHA-256", legacyBytes ) ).toString( "hex" );
+	t.mock.method( globalThis, "fetch", async () => new Response( legacy ) );
+	await assert.rejects(
+		createSessionHttp().references(
+			{ path: `/transport/references/${legacyHash}.json`, sha256: legacyHash, bytes: legacyBytes.length },
+			"https://fixture.invalid",
+			new AbortController().signal
+		),
+		/contract undefined, expected 2/
+	);
 });

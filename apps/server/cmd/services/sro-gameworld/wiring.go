@@ -200,7 +200,13 @@ func newGameWorldApplication(
 		return nil, fmt.Errorf("terrain height cache: %w", err)
 	}
 	application.heightCache = gameplay.water
-	references, err := enterworld.NewBrowserReferences(gameplay.deps.Skills, authority.textdata.Items)
+	// Built after gameplay construction: the static item rows name the
+	// alchemy and Magic Pop catalogues it configures.
+	references, err := enterworld.NewBrowserReferences(enterworld.BrowserReferenceSources{
+		Skills:       gameplay.deps.Skills,
+		ItemCommands: authority.textdata.Items,
+		StaticItems:  enterworld.StaticRefItemRows(gameplay.deps),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("browser references: %w", err)
 	}

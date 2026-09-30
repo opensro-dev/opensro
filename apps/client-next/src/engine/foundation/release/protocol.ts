@@ -18,7 +18,9 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
-export const RELEASE_PROTOCOL = 3;
+export const RELEASE_PROTOCOL = 4;
+// The public reference file's contract (releaseprotocol.ReferencesContract).
+export const REFERENCES_CONTRACT = 2;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";
 // 426 Upgrade Required: the server speaks another release protocol.
 export const RELEASE_OUTDATED_STATUS = 426;

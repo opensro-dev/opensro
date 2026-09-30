@@ -17,7 +17,7 @@ var seededDropReferences = func() map[string]bool {
 
 // Reference deltas precede every newly introduced ground type for both the
 // actor and observers. Do not put all possible loot into world bootstrap.
-// Re-entry separately seeds actual Ground contents through RefItemCodenames.
+// Re-entry separately seeds actual Ground contents through GroundRefItemCodenames.
 func (rt *Runtime) groundReferences(drops []grounditem.Item) []wire.Frame {
 	rows := []inventory.Item{}
 	seen := map[uint32]bool{}

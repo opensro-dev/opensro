@@ -1111,7 +1111,12 @@ test("transport loss retains the admitted inventory and entities until explicit 
 test("reference admission holds native packets until verified data, and cancellation retires the fetch", async t => {
 	const sockets = socketHarness( t );
 	let release, signal;
-	const data = JSON.stringify( { skillLifecycleVersion: 1, refSkillSnapshot: [] } ),
+	const data = JSON.stringify( {
+			referencesVersion: 2,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [],
+			refItemSnapshot: []
+		} ),
 		bytes = new TextEncoder().encode( data ),
 		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
 	t.mock.method( globalThis, "fetch", async ( url, options ) => {
@@ -1187,9 +1192,80 @@ begin
 	world.dispose();
 });
 
+test("published static item rows join the login's own rows before the world is admitted", async t => {
+	const sockets = socketHarness( t ), presentation = createPresentation();
+	const data = JSON.stringify( {
+			referencesVersion: 2,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [],
+			refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ]
+		} ),
+		bytes = new TextEncoder().encode( data ),
+		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
+	t.mock.method( globalThis, "fetch", async () => new Response( data ) );
+	const http = createSessionHttp();
+	let referenceCompletion = Promise.resolve();
+	const world = createWorldSession( async () => "ticket", ( ...args ) => {
+		const request = http.references( ...args );
+		referenceCompletion = request.then( () => {}, () => {} );
+		return request;
+	} );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets.at( -1 );
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	const blob = Buffer.from(
+			JSON.stringify( {
+				v: 2,
+				bootstrap: {
+					...bootstrap,
+					inventorySlotCount: 45,
+					equipmentSlotCount: 13,
+					refItemSnapshot: [ { refObjId: 2, typeFlags: 0x6c, icon: "item/etc/mp_potion_01.ddj" } ],
+					equipItems: [ { slot: 13, refObjId: 1, body: [ 1, 0, 0, 0, 3, 0 ] }, {
+						slot: 14,
+						refObjId: 2,
+						body: [ 2, 0, 0, 0, 3, 0 ]
+					} ]
+				},
+				references: { path: `/transport/references/${digest}.json`, sha256: digest, bytes: bytes.length }
+			} )
+		),
+		p = Buffer.alloc( 9 + blob.length );
+	p[0] = 1;
+	p.writeUInt32LE( blob.length, 5 );
+	blob.copy( p, 9 );
+	socket.receive( 7, p );
+	for ( const row of rows ) socket.receive( row.opcode, row.payload );
+	await referenceCompletion;
+	for ( let tick = 4; tick < 55 && world.status().phase !== "world"; tick++ ) {
+		await settle();
+		world.step( tick );
+		let batch;
+		while ( (batch = world.take()) ) {
+			presentation.apply( batch );
+			world.ack( batch.sequence );
+		}
+	}
+	assert.equal( world.status().phase, "world" );
+	assert.deepEqual( presentation.gameplay()?.inventory.map( item => item.refObjId ).sort(), [ 1, 2 ] );
+	world.dispose();
+	presentation.dispose();
+});
+
 test("an edge-routed transport base carries its route to the socket and the reference fetch", async t => {
 	const sockets = socketHarness( t ), requested = [];
-	const data = JSON.stringify( { skillLifecycleVersion: 1, refSkillSnapshot: [] } ),
+	const data = JSON.stringify( {
+			referencesVersion: 2,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [],
+			refItemSnapshot: []
+		} ),
 		bytes = new TextEncoder().encode( data ),
 		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
 	t.mock.method( globalThis, "fetch", async url => {

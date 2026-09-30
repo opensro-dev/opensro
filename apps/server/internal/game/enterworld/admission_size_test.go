@@ -21,7 +21,7 @@ func TestPublishedReferencesLeaveTheLoginEnvelope(t *testing.T) {
 	if len(rows) == 0 {
 		t.Fatal("published skill catalog missing")
 	}
-	refs, err := NewBrowserReferences(source)
+	refs, err := NewBrowserReferences(BrowserReferenceSources{Skills: source})
 	if err != nil {
 		t.Fatal(err)
 	}

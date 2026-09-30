@@ -69,7 +69,7 @@ func TestHigherLevelFatalDropReferencePickupAndRestore(t *testing.T) {
 	if restored, _ := rt.Ground.Get(testDivision, row.Gid); !reflect.DeepEqual(stored, restored) {
 		t.Fatal("restart lost drop fields")
 	}
-	if !slices.Contains(rt.RefItemCodenames(testDivision), ref.Codename) {
+	if !slices.Contains(rt.GroundRefItemCodenames(testDivision), ref.Codename) {
 		t.Fatal("rejoining viewer has no item reference")
 	}
 	if rows := enterworld.GroundObjectListRows(rt.Ground.All(testDivision)); len(rows) != 1 {
@@ -112,7 +112,7 @@ TestGroundReferencesAreBoundedAndDoNotInflateBootstrap
 */
 func TestGroundReferencesAreBoundedAndDoNotInflateBootstrap(t *testing.T) {
 	rt, _, _, _ := newCombatTestRuntime(t, 1)
-	before := rt.RefItemCodenames(testDivision)
+	before := append(rt.StaticRefItemCodenames(), rt.GroundRefItemCodenames(testDivision)...)
 	drop := grounditem.Item{RefObjID: 50080, Codename: "ITEM_CH_SWORD_09_B", TypeFlags: wire.PackTypeFlags(3, 1, 6, 2)}
 	frames := rt.groundReferences([]grounditem.Item{drop, drop})
 	if len(frames) != 1 {
@@ -122,7 +122,8 @@ func TestGroundReferencesAreBoundedAndDoNotInflateBootstrap(t *testing.T) {
 	if err := json.Unmarshal(frames[0].Payload, &body); err != nil || len(body.Items) != 1 {
 		t.Fatal("duplicate metadata")
 	}
-	if !reflect.DeepEqual(before, rt.RefItemCodenames(testDivision)) || slices.Contains(before, drop.Codename) {
+	after := append(rt.StaticRefItemCodenames(), rt.GroundRefItemCodenames(testDivision)...)
+	if !reflect.DeepEqual(before, after) || slices.Contains(before, drop.Codename) {
 		t.Fatal("possible loot bloated bootstrap")
 	}
 }

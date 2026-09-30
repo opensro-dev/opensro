@@ -1,3 +1,15 @@
+/*
+===========================================================================
+
+browser_references.go - the public reference file beside the transport
+
+The skill catalogue, the item command table and the static item rows are
+the same for every viewer, so they live in one immutable, content-addressed
+file the browser caches, not in each EnterWorld result. A login names the
+file; its own blob carries only what depends on the character and division.
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -10,6 +22,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"opensro.online/server/internal/releaseprotocol"
 )
 
 // BrowserReferences is immutable process-owned public data, compiled once from
@@ -21,22 +35,58 @@ type BrowserReferences struct {
 	SHA256   string `json:"sha256"`
 	Bytes    int    `json:"bytes"`
 	gzipData []byte
+	// itemIDs are the published item rows; a login skips them.
+	itemIDs map[uint32]bool
 }
 
-func NewBrowserReferences(source SkillDataSource, items ...interface{ ItemCommandReferences() []ItemCommandReference }) (*BrowserReferences, error) {
-	rows := spawnSkillSnapshot(source)
-	if len(rows) == 0 || len(rows) > 65536 {
+// maxPublicReferenceRows bounds each published table (the browser's
+// REFERENCE_ROWS_LIMIT).
+const maxPublicReferenceRows = 65536
+
+// BrowserReferenceSources are the immutable tables one reference file holds.
+type BrowserReferenceSources struct {
+	Skills SkillDataSource
+	// ItemCommands may be nil.
+	ItemCommands interface{ ItemCommandReferences() []ItemCommandReference }
+	// StaticItems are the item rows every viewer needs (StaticRefItemRows).
+	StaticItems []RefItemRow
+}
+
+/*
+================
+NewBrowserReferences
+================
+*/
+func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, error) {
+	rows := spawnSkillSnapshot(sources.Skills)
+	if len(rows) == 0 || len(rows) > maxPublicReferenceRows {
 		return nil, fmt.Errorf("invalid public skill catalogue size: %d", len(rows))
 	}
-	var itemRows []ItemCommandReference
-	if len(items) > 0 && items[0] != nil {
-		itemRows = items[0].ItemCommandReferences()
+	if len(sources.StaticItems) > maxPublicReferenceRows {
+		return nil, fmt.Errorf("invalid public item catalogue size: %d", len(sources.StaticItems))
+	}
+	var commandRows []ItemCommandReference
+	if sources.ItemCommands != nil {
+		commandRows = sources.ItemCommands.ItemCommandReferences()
+	}
+	itemRows := sources.StaticItems
+	if itemRows == nil {
+		itemRows = []RefItemRow{}
+	}
+	itemIDs := make(map[uint32]bool, len(itemRows))
+	for _, row := range itemRows {
+		if itemIDs[row.RefObjID] {
+			return nil, fmt.Errorf("public item catalogue repeats %d", row.RefObjID)
+		}
+		itemIDs[row.RefObjID] = true
 	}
 	data, err := json.Marshal(struct {
+		ReferencesVersion     int                    `json:"referencesVersion"`
 		SkillLifecycleVersion int                    `json:"skillLifecycleVersion"`
 		RefSkillSnapshot      []SpawnSkillRow        `json:"refSkillSnapshot"`
+		RefItemSnapshot       []RefItemRow           `json:"refItemSnapshot"`
 		ItemCommandReferences []ItemCommandReference `json:"itemCommandReferences,omitempty"`
-	}{1, rows, itemRows})
+	}{releaseprotocol.ReferencesContract, 1, rows, itemRows, commandRows})
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +103,13 @@ func NewBrowserReferences(source SkillDataSource, items ...interface{ ItemComman
 	if err = writer.Close(); err != nil {
 		return nil, err
 	}
-	return &BrowserReferences{Path: "/transport/references/" + hash + ".json", SHA256: hash, Bytes: len(data), gzipData: compressed.Bytes()}, nil
+	return &BrowserReferences{
+		Path:     "/transport/references/" + hash + ".json",
+		SHA256:   hash,
+		Bytes:    len(data),
+		gzipData: compressed.Bytes(),
+		itemIDs:  itemIDs,
+	}, nil
 }
 
 func (r *BrowserReferences) ServeHTTP(w http.ResponseWriter, q *http.Request) {

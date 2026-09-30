@@ -374,38 +374,25 @@ buildRefItemSnapshot
 Reference rows for every item the entered world can show: the character's
 own inventories (worn, bag, COS, avatars, pet windows), every persisted
 inventory in the division (peer 0x30D7 rows), ground drops from the seam and
-the gold heap tiers (spawnable at any time; without their rows the client's
-0x30D7 parse hits the unguarded RefObjData miss). The starter roster is a
-first-boot seed only and contributes nothing here: once seeded, the
-character's items are its inventory.
+the static set (StaticRefItemRows). The starter roster is a first-boot seed
+only and contributes nothing here: once seeded, the character's items are
+its inventory.
+
+With published BrowserReferences the static set is not repeated: every login
+used to resend it (4.6 MB of JSON, BUG-035), and the browser already holds
+it from the cached reference file. Rows the file publishes are skipped, so
+the two lists stay disjoint, which the browser's item catalog requires.
+Persisted TypeFlags are the itemdata word (the avatar note below), so the
+published row carries the same flags a login row would.
 ================
 */
 func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) []RefItemRow {
-	snapshot := []RefItemRow{}
-	known := map[uint32]bool{}
-	appendByCodename := func(codename string, typeFlags *uint16) {
-		if codename == "" || deps.Items == nil {
-			return
+	collector := newRefItemCollector(deps)
+	appendByCodename := collector.add
+	if deps.BrowserReferences != nil {
+		for id := range deps.BrowserReferences.itemIDs {
+			collector.known[id] = true
 		}
-		row, ok := deps.Items.ItemRefByCodename(codename)
-		if !ok || row == nil || known[row.RefObjID] {
-			return
-		}
-		known[row.RefObjID] = true
-		flags := row.TypeFlags()
-		if typeFlags != nil {
-			flags = *typeFlags
-		}
-		name := row.Name
-		snapshot = append(snapshot, RefItemRow{
-			RefObjID:     row.RefObjID,
-			Icon:         row.Icon,
-			TypeFlags:    flags,
-			Codename:     row.Codename,
-			Kind:         "equipment",
-			Name:         name,
-			NativeFields: row.NativeFields,
-		})
 	}
 	if character != nil {
 		for _, row := range character.MissionInventory {
@@ -458,33 +445,127 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 			appendByCodename(codename, nil)
 		}
 	}
+	if deps.BrowserReferences == nil {
+		// Detached callers (fixtures, tools) publish no reference file.
+		collector.addStatic()
+	}
+	return collector.finish()
+}
+
+/*
+================
+StaticRefItemRows
+
+The item references every viewer needs whatever the division holds: the
+runtime's static set (Deps.StaticRefItemCodenames) and the gold heap tiers
+(spawnable at any time; without their rows the client's 0x30D7 parse hits
+the unguarded RefObjData miss). The composition root publishes these once in
+BrowserReferences.
+================
+*/
+func StaticRefItemRows(deps *Deps) []RefItemRow {
+	collector := newRefItemCollector(deps)
+	collector.addStatic()
+	return collector.finish()
+}
+
+// refItemCollector accumulates item reference rows unique by RefObjID, the
+// first request for an id deciding its flags.
+type refItemCollector struct {
+	deps  *Deps
+	rows  []RefItemRow
+	known map[uint32]bool
+}
+
+/*
+================
+newRefItemCollector
+================
+*/
+func newRefItemCollector(deps *Deps) *refItemCollector {
+	return &refItemCollector{deps: deps, rows: []RefItemRow{}, known: map[uint32]bool{}}
+}
+
+/*
+================
+refItemCollector.add
+
+Adds the itemdata row for codename; typeFlags, when given, is the persisted
+word of the row that asked for it.
+================
+*/
+func (c *refItemCollector) add(codename string, typeFlags *uint16) {
+	if codename == "" || c.deps.Items == nil {
+		return
+	}
+	row, ok := c.deps.Items.ItemRefByCodename(codename)
+	if !ok || row == nil || c.known[row.RefObjID] {
+		return
+	}
+	c.known[row.RefObjID] = true
+	flags := row.TypeFlags()
+	if typeFlags != nil {
+		flags = *typeFlags
+	}
+	c.rows = append(c.rows, RefItemRow{
+		RefObjID:     row.RefObjID,
+		Icon:         row.Icon,
+		TypeFlags:    flags,
+		Codename:     row.Codename,
+		Kind:         "equipment",
+		Name:         row.Name,
+		NativeFields: row.NativeFields,
+	})
+}
+
+/*
+================
+refItemCollector.addStatic
+================
+*/
+func (c *refItemCollector) addStatic() {
+	if c.deps.StaticRefItemCodenames != nil {
+		for _, codename := range c.deps.StaticRefItemCodenames() {
+			c.add(codename, nil)
+		}
+	}
 	for _, goldCodename := range []string{
 		goldHeapSmallCodename,
 		goldHeapMediumCodename,
 		goldHeapLargeCodename,
 	} {
-		appendByCodename(goldCodename, nil)
+		c.add(goldCodename, nil)
 	}
-	// Native 59edb0 follows the item's associated character before deciding
-	// between riding and transport tutorials. Do not infer it from item names.
-	if characters, ok := deps.Items.(CharacterRefSource); ok {
-		for i := range snapshot {
-			item, found := deps.Items.ItemRefByCodename(snapshot[i].Codename)
-			if !found || item == nil || item.AssociatedCharacterCodename == "" {
-				continue
-			}
-			if ref, found := characters.CharacterRefByCodename(item.AssociatedCharacterCodename); found && ref != nil {
-				flags := ref.TidWord
-				snapshot[i].SummonedCharacterTypeFlags = &flags
-			}
+}
+
+/*
+================
+refItemCollector.finish
+
+Completes each row from its itemdata record. Native 59edb0 follows the
+item's associated character before deciding between riding and transport
+tutorials, so the summoned type word is resolved, never inferred from names.
+================
+*/
+func (c *refItemCollector) finish() []RefItemRow {
+	items := c.deps.Items
+	if items == nil {
+		return c.rows
+	}
+	characters, _ := items.(CharacterRefSource)
+	for i := range c.rows {
+		item, found := items.ItemRefByCodename(c.rows[i].Codename)
+		if !found || item == nil {
+			continue
+		}
+		c.rows[i].DescriptionSymbol = item.DescriptionSymbol
+		if characters == nil || item.AssociatedCharacterCodename == "" {
+			continue
+		}
+		if ref, found := characters.CharacterRefByCodename(item.AssociatedCharacterCodename); found && ref != nil {
+			flags := ref.TidWord
+			c.rows[i].SummonedCharacterTypeFlags = &flags
 		}
 	}
-	if deps.Items != nil {
-		for i := range snapshot {
-			if ref, ok := deps.Items.ItemRefByCodename(snapshot[i].Codename); ok && ref != nil {
-				snapshot[i].DescriptionSymbol = ref.DescriptionSymbol
-			}
-		}
-	}
-	return snapshot
+	return c.rows
 }

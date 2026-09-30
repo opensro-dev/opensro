@@ -49,7 +49,11 @@ type Deps struct {
 	ObjectListRows         func(divisionID string, character *Character, entry *LocalPlayerEntry) []Packet
 	MonsterState           *simulation.MonsterState
 	RefObjSnapshot         func() []RefObjRow
+	// ExtraRefItemCodenames names the division-dependent item references a
+	// login carries (the ground). StaticRefItemCodenames names the fixed set
+	// every viewer needs; it is published once in BrowserReferences.
 	ExtraRefItemCodenames  func(divisionID string) []string
+	StaticRefItemCodenames func() []string
 	// Now is the bootstrap's clock. The server wiring points it at the action
 	// runtime's clock so both agree on every pet-skill deadline; nil falls
 	// back to the wall clock.
@@ -262,6 +266,7 @@ func (d *Deps) Validate() error {
 	require("TrainingCamps", d.TrainingCamps == nil)
 	require("ObjectListRows", d.ObjectListRows == nil)
 	require("ExtraRefItemCodenames", d.ExtraRefItemCodenames == nil)
+	require("StaticRefItemCodenames", d.StaticRefItemCodenames == nil)
 	require("TrackTimedWindows", d.TrackTimedWindows == nil)
 	require("SpawnTerrainHeight", d.SpawnTerrainHeight == nil)
 	require("SpawnSurfaceHeight", d.SpawnSurfaceHeight == nil)
