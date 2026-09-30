@@ -44,7 +44,7 @@ const OUTDOOR_WORLD_SHARED_RENDER_PATH = publicPathToFile( OUTDOOR_WORLD_SHARED_
 // can never be "current" while the images it names are missing; a region
 // this ledger does not know yet is read from its bundle once.
 const TERRAIN_TILE_LEDGER_PATH = path.join( generatedRoot, "intermediate", "outdoor-terrain-tiles.json" );
-const TERRAIN_TILE_LEDGER_VERSION = 1;
+const TERRAIN_TILE_LEDGER_VERSION = 2;
 
 /*
 ================
