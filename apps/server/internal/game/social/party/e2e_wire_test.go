@@ -805,7 +805,7 @@ func TestPartyRebindDropsStaleMembership(t *testing.T) {
 }
 
 // TestPartyConsentRaceEdges proves the consent handshake's races over the
-// real transport, all SILENT on the wire:
+// real transport, with terminal failures delivered to surviving participants:
 //
 //	inviter logged off    -> the accept resolves no live inviter session
 //	                         and commits nothing;
@@ -840,14 +840,15 @@ func TestPartyConsentRaceEdges(t *testing.T) {
 
 	rowC := chinaMaleRow(gidC, e2eNameC)
 
-	// ---- inviter logs off before the consent: the accept drops ----
+	// ---- inviter logs off before consent: the remaining peer gets 0E ----
 	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x00))
 	expectPartyPrompt(t, connB, gidA, "B's proposal from A", 2, 0)
 	sendFrame(t, connA, transport.OpBye, []byte{transport.ByeReasonNormal})
 	connA.Close()
 	waitForPresenceDrop(t, server, e2eNameA)
 	sendFrame(t, connB, party.OpInvitationProposal, consentFrame(1))
-	gameReadyBarrier(t, connB, "B after accepting a dead inviter's proposal")
+	expectExactFrame(t, connB, party.OpPartyJoinAck, []byte{2, 0x0e}, "missing inviter refusal")
+	gameReadyBarrier(t, connB, "B after missing inviter refusal")
 	if got := server.runtime.Registry().Count(); got != 0 {
 		t.Fatalf("registry count after dead-inviter accept = %d, want 0", got)
 	}
@@ -891,6 +892,8 @@ func TestPartyConsentRaceEdges(t *testing.T) {
 	expectExactFrame(t, connA2, party.OpPartyUpdate, party.EncodePartyBroken3E58(), "A's dissolve BROKEN")
 	expectExactFrame(t, connC, party.OpPartyUpdate, party.EncodePartyBroken3E58(), "C's dissolve BROKEN")
 	sendFrame(t, connB, party.OpInvitationProposal, consentFrame(1))
+	expectExactFrame(t, connB, party.OpPartyJoinAck, []byte{2, 2}, "dissolved party refusal")
+	expectExactFrame(t, connA2, party.OpPartyJoinInviteAck, []byte{2, 2}, "dissolved party proposer refusal")
 	gameReadyBarrier(t, connB, "B after accepting into a dissolved party")
 	if got := server.runtime.Registry().Count(); got != 0 {
 		t.Fatalf("registry count after dissolved-party accept = %d, want 0", got)
@@ -907,8 +910,10 @@ func TestPartyConsentRaceEdges(t *testing.T) {
 	pairCA := []party.MemberRow{rowC, rowA}
 	expectPartySeed(t, connC, gidC, gidC, 0x00, pairCA, "C's form")
 	expectPartySeed(t, connA2, gidA, gidC, 0x00, pairCA, "A's form")
-	// B's stale accept: the inviter A is already partied - silent.
+	// B's stale accept: report the failed formation to both peers.
 	sendFrame(t, connB, party.OpInvitationProposal, consentFrame(1))
+	expectExactFrame(t, connB, party.OpPartyJoinAck, []byte{2, 2}, "partied inviter refusal")
+	expectExactFrame(t, connA2, party.OpCreatePartyAck, []byte{2, 2}, "failed formation proposer refusal")
 	gameReadyBarrier(t, connB, "B after accepting a partied inviter's proposal")
 	if got := server.runtime.Registry().Count(); got != 1 {
 		t.Fatalf("registry count after partied-inviter accept = %d, want 1", got)
