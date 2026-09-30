@@ -78,11 +78,15 @@ async function writeTerrainTileLedger( tilesByRegion ) {
 ================
 bundleTerrainTiles
 
-The terrain tiles a region bundle references.
+The terrain tiles a region bundle references, reduced to what
+copyReferencedTerrainTileImages reads: the ledger stays small.
 ================
 */
 function bundleTerrainTiles( bundle ) {
-	return bundle.terrainTextures?.tileCatalog?.referencedTiles ?? [];
+	return (bundle.terrainTextures?.tileCatalog?.referencedTiles ?? []).map( ( tile ) => ({
+		ddjFileName: tile.ddjFileName,
+		sourcePath: tile.sourcePath
+	}) );
 }
 
 /*
