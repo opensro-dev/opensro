@@ -15,6 +15,10 @@ an Origin header on same-origin requests and WebSocket upgrades, and a
 cookie jar that stores cookies from credentialed responses and sends them on
 credentialed requests. The jar outlives a worker, as a page reload keeps it.
 
+The owner also keeps a timeline of the session phase changes, the requests
+and the first messages on each socket, so a report shows where world entry
+spends its time.
+
 ===========================================================================
 */
 import { MessageChannel, Worker } from "node:worker_threads";
@@ -22,11 +26,16 @@ import { MessageChannel, Worker } from "node:worker_threads";
 // HostMessage "start" version (contracts/simulation.ts PROTOCOL_VERSION).
 export const SIMULATION_PROTOCOL = 3;
 const POLL_MS = 50;
+// Socket messages timed per connection: the entry burst, not the game tick.
+const TRACED_SOCKET_MESSAGES = 12;
 
 // The worker thread's side: installed before the release's module loads.
 const BOOTSTRAP = `
 import { parentPort, workerData } from "node:worker_threads";
-const { origin, workerUrl, jarPort } = workerData;
+const { origin, workerUrl, jarPort, tracedSocketMessages } = workerData;
+function trace( event ) {
+	parentPort.postMessage( { kind: "__trace", event, at: Date.now() } );
+}
 const jar = new Map( workerData.cookies );
 function cookieHeader() {
 	return [ ...jar ].map( ( [ name, value ] ) => name + "=" + value ).join( "; " );
@@ -52,6 +61,7 @@ globalThis.fetch = async ( input, init = {} ) => {
 	if ( sameOrigin ) headers.set( "Origin", origin );
 	if ( credentialed && jar.size ) headers.set( "Cookie", cookieHeader() );
 	const response = await nativeFetch( url, { ...init, headers } );
+	trace( "fetch " + url.pathname + " " + response.status + " " + ( response.headers.get( "content-length" ) ?? "?" ) + "B" );
 	if ( credentialed ) {
 		const set = response.headers.getSetCookie();
 		if ( set.length ) store( set );
@@ -65,6 +75,13 @@ globalThis.WebSocket = class extends NativeWebSocket {
 		const headers = { Origin: origin };
 		if ( jar.size ) headers.Cookie = cookieHeader();
 		super( target, { protocols, headers } );
+		let messages = 0;
+		this.addEventListener( "open", () => trace( "socket open" ) );
+		this.addEventListener( "message", event => {
+			if ( messages++ >= tracedSocketMessages ) return;
+			const data = event.data;
+			trace( "socket message " + ( data.byteLength ?? data.size ?? data.length ) + "B" );
+		} );
 	}
 };
 globalThis.postMessage = ( message, transfer ) => parentPort.postMessage( message, transfer );
@@ -94,14 +111,20 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 	} );
 	jarChannel.port1.unref();
 	const worker = new Worker( bootstrapUrl, {
-		workerData: { origin, workerUrl, cookies, jarPort: jarChannel.port2 },
+		workerData: {
+			origin,
+			workerUrl,
+			cookies,
+			jarPort: jarChannel.port2,
+			tracedSocketMessages: TRACED_SOCKET_MESSAGES
+		},
 		transferList: [ jarChannel.port2 ]
 	} );
-	/** @type {{ session: any, sessions: any[], timeline: { phase: string, atMs: number }[], failures: string[], entities: Map<number, any>, gameplay: any, travelRevision: number, readyRequested: boolean, batches: number, events: number, exited: boolean }} */
+	/** @type {{ session: any, sessions: any[], timeline: { event: string, atMs: number }[], failures: string[], entities: Map<number, any>, gameplay: any, travelRevision: number, readyRequested: boolean, batches: number, events: number, exited: boolean }} */
 	const state = {
 		session: null,
 		sessions: [],
-		// Session phase changes with their time since this worker started.
+		// Phase changes, requests and socket messages, in ms since the start.
 		timeline: [],
 		failures: [],
 		entities: new Map(),
@@ -127,13 +150,17 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 			ready();
 			return;
 		}
+		if ( message.kind === "__trace" ) {
+			state.timeline.push( { event: message.event, atMs: message.at - startedAt } );
+			return;
+		}
 		if ( message.kind === "snapshot" ) {
 			worker.postMessage( { kind: "recycle", buffer: message.buffer }, [ message.buffer ] );
 			return;
 		}
 		if ( message.kind === "session" ) {
 			if ( message.state.phase !== state.session?.phase ) {
-				state.timeline.push( { phase: message.state.phase, atMs: Date.now() - startedAt } );
+				state.timeline.push( { event: "session " + message.state.phase, atMs: Date.now() - startedAt } );
 			}
 			state.session = message.state;
 			state.sessions.push( message.state );
