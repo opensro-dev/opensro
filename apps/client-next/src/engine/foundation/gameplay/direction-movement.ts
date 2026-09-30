@@ -20,7 +20,7 @@ and wire helpers; the local and remote movers own the walks.
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { GroundPickQuery } from "@/engine/contracts/navigation";
 import type { WireFrame } from "@/engine/contracts/network";
-import { movementHeading } from "./native-movement";
+import { HEADING_SCALE, REGION_SIZE, movementHeading } from "./native-movement";
 
 // One planned leg. INFERENCE (shared with the server): the ground pick's
 // own ray cap (SWorld_PickGroundTerrainAndNavigation 0x88D340), the distance
@@ -36,8 +36,6 @@ export const DIRECTION_TURN_EPSILON = 0.0872664600610733;
 // 0x6934E0: Vec3_NormalizeAndCalculateYaw keeps the seeded yaw below this
 // horizontal length.
 const PICK_YAW_MIN_LENGTH = 9.99999997e-7;
-const REGION_SIZE = 1920;
-const HEADING_SCALE = 65535;
 const TWO_PI = 6.283185307179586;
 const QUARTER_TURN = 1.5707963267948966;
 // A leg shorter than this against its full length ended on a contact.

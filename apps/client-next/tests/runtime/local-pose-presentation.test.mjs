@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-local-pose-presentation.test.mjs - the local player is drawn on the frame clock
+local-pose-presentation.test.mjs - sampled characters are drawn on the frame clock
 
 A walk sampled every 16 ms by the worker but delivered in bursts must still
 advance evenly per frame, and a small server correction must glide rather
@@ -45,7 +45,7 @@ function drive( presentation, deliveredAt, endSeconds ) {
 	for ( let now = .5; now < endSeconds; now += FRAME ) {
 		let latest = 0;
 		for ( let ms = 0; ms <= now * 1000; ms += STEP_MS ) if ( deliveredAt( ms ) <= now ) latest = ms;
-		presentation.local( { gid: GID, atMs: latest, moving: true, to: walkAt( 4000 ) } );
+		presentation.samples( new Map( [ [ GID, { atMs: latest, moving: true, to: walkAt( 4000 ) } ] ] ) );
 		drawn.push( presentation.pose( GID, walkAt( latest ), now ).x );
 	}
 	return drawn;
@@ -87,14 +87,14 @@ test("a small stop correction glides back instead of snapping", () => {
 	let now = 0;
 	for ( let ms = 0; ms <= 1000; ms += STEP_MS ) {
 		now = ms / 1000;
-		presentation.local( { gid: GID, atMs: ms, moving: true, to: walkAt( 4000 ) } );
+		presentation.samples( new Map( [ [ GID, { atMs: ms, moving: true, to: walkAt( 4000 ) } ] ] ) );
 		presentation.pose( GID, walkAt( ms ), now );
 	}
 	const before = presentation.pose( GID, walkAt( 1000 ), now ).x;
 	// The server stops the player 3 units behind where the client walked.
 	const corrected = { ...walkAt( 1000 ), x: walkAt( 1000 ).x - 3 };
 	now += FRAME;
-	presentation.local( { gid: GID, atMs: 1000 + STEP_MS, moving: false } );
+	presentation.samples( new Map( [ [ GID, { atMs: 1000 + STEP_MS, moving: false } ] ] ) );
 	const first = presentation.pose( GID, corrected, now ).x;
 	assert.ok( Math.abs( first - before ) < 1, `jumped ${first - before} in one frame` );
 	for ( let i = 0; i < 30; i++ ) {
@@ -111,9 +111,37 @@ test("a small stop correction glides back instead of snapping", () => {
 test("a relocation beyond the smoothing range snaps at once", () => {
 	const presentation = createPosePresentation();
 	presentation.origin( 0 );
-	presentation.local( { gid: GID, atMs: 0, moving: false } );
+	presentation.samples( new Map( [ [ GID, { atMs: 0, moving: false } ] ] ) );
 	presentation.pose( GID, walkAt( 0 ), 0 );
 	const moved = { ...walkAt( 0 ), x: walkAt( 0 ).x + 150 };
-	presentation.local( { gid: GID, atMs: STEP_MS, moving: false } );
+	presentation.samples( new Map( [ [ GID, { atMs: STEP_MS, moving: false } ] ] ) );
 	assert.equal( presentation.pose( GID, moved, FRAME ).x, moved.x );
+});
+
+test("a remote walker with timed samples is drawn as evenly as the local player", () => {
+	const presentation = createPosePresentation(), REMOTE = 99;
+	presentation.origin( 0 );
+	const late = ms => ms / 1000 + .005 + (Math.floor( ms / 48 ) % 3) * .015;
+	const drawn = [];
+	for ( let now = .5; now < 2; now += FRAME ) {
+		let latest = 0;
+		for ( let ms = 0; ms <= now * 1000; ms += STEP_MS ) if ( late( ms ) <= now ) latest = ms;
+		presentation.samples( new Map( [ [ REMOTE, { atMs: latest, moving: true, to: walkAt( 4000 ) } ] ] ) );
+		drawn.push( presentation.pose( REMOTE, walkAt( latest ), now ).x );
+	}
+	const expected = SPEED * FRAME;
+	for ( const delta of steps( drawn ).slice( 40 ) ) {
+		assert.ok( Math.abs( delta - expected ) < expected * .05, `frame step ${delta}` );
+	}
+});
+
+test("a character without timed samples keeps delivery interpolation", () => {
+	const presentation = createPosePresentation();
+	presentation.origin( 0 );
+	presentation.samples( new Map() );
+	const first = presentation.pose( 5, walkAt( 0 ), 0 );
+	assert.equal( first.x, walkAt( 0 ).x );
+	// Without timed samples the pose bridges toward a new target, never past it.
+	const next = presentation.pose( 5, walkAt( 100 ), .05 );
+	assert.ok( next.x >= walkAt( 0 ).x && next.x <= walkAt( 100 ).x );
 });

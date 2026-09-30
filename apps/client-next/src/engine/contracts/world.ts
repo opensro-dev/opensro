@@ -124,6 +124,8 @@ export interface EntityState {
 	readonly movementPath?: { readonly from: Pose; readonly to: Pose; };
 	readonly movementRevision?: number;
 	readonly moving?: boolean;
+	/** Simulation time (ms) of the last stepped path sample; ClockSample.originMs maps it to wall time. */
+	readonly poseAtMs?: number;
 	readonly movementMode?: number;
 	readonly walkSpeed?: number;
 	readonly runSpeed?: number;

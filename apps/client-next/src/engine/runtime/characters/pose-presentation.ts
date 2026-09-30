@@ -4,33 +4,34 @@
 pose-presentation.ts - the rendered pose of every character, camera included
 
 The simulation worker owns logical poses; this module owns what is drawn.
-Remote characters bridge observed delivery intervals between samples.
 
-The local player is drawn on the frame clock instead: each sample carries
-the simulation time it was taken at, so the pose is extrapolated along the
-sampled velocity to the frame's own time (never past the path end). Busy
-frames that deliver samples late or in bursts therefore no longer slow the
-walk down and then fast-forward it.
+A character whose samples carry the simulation time they were taken at (the
+local player, and every entity walking a path) is drawn on the frame clock:
+the pose is extrapolated along the velocity of its last two samples to the
+frame's own time, never past the end of the leg. Busy frames that deliver
+samples late or in bursts therefore no longer slow a walk down and then
+fast-forward it. Characters without sample times bridge the observed
+delivery interval between samples instead.
 
-Small jumps between consecutive local models (a server correction when a
-cast or pickup stops the player, a leg turn) become a visual offset that
-decays in CORRECTION_TAU_SECONDS, so the body and the camera glide instead
-of snapping. This smoothing is presentation only and a deliberate deviation
-from the original client, which snaps; logical poses stay authoritative.
+Small jumps between consecutive models of a sampled character (a server
+correction when a cast or pickup stops the player, a leg turn, a monster's
+halt) become a visual offset that decays in CORRECTION_TAU_SECONDS, so the
+body and the camera glide instead of snapping. This smoothing is
+presentation only and a deliberate deviation from the original client,
+which snaps; logical poses stay authoritative.
 
 ===========================================================================
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
-import { interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
+import { REGION_SIZE, interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
-const REGION_SIZE = 1920;
 // A discontinuity is a teleport, not motion: no interpolation or smoothing.
 const DISCONTINUITY_DISTANCE = 192;
 // Samples further apart than this do not define a velocity.
 const MAX_SAMPLE_GAP_SECONDS = 0.25;
-// Bounded extrapolation: a stalled worker parks the player, never runs it on.
+// Bounded extrapolation: a stalled worker parks a walker, never runs it on.
 const MAX_EXTRAPOLATION_SECONDS = 0.1;
 // Correction offsets decay with this time constant (about 95% gone in 0.2 s).
 const CORRECTION_TAU_SECONDS = 0.07;
@@ -39,6 +40,13 @@ const MIN_CORRECTION_DISTANCE = 0.01;
 // Offsets larger than this are real relocations and snap.
 const MAX_CORRECTION_DISTANCE = 96;
 
+/*
+================
+Track
+
+A character without sample times: delivery-interval interpolation.
+================
+*/
 interface Track {
 	target: Pose;
 	from: Pose;
@@ -52,37 +60,43 @@ interface Track {
 
 /*
 ================
-LocalSample
+Sample
 
-The local player's latest logical pose and the frame-clock time it was
-sampled at (seconds), with the destination of the leg being walked.
+A logical pose and the frame-clock time (seconds) it was sampled at.
 ================
 */
-interface LocalSample {
+interface Sample {
 	readonly pose: Pose;
 	readonly at: number;
 }
 
-interface LocalTrack {
-	previous?: LocalSample;
-	latest: LocalSample;
+/*
+================
+SampleTrack
+
+A character drawn on the frame clock from its timed samples.
+================
+*/
+interface SampleTrack {
+	previous?: Sample;
+	latest: Sample;
 	moving: boolean;
 	to?: Pose;
 	offset: [number, number, number];
 	last: number;
 	angle: number;
-	drawn: boolean;
 }
 
 /*
 ================
-LocalInput
+SampleInput
 
-What characters publishes each frame for the local player.
+What characters publishes each frame for a character with timed samples:
+the simulation time of its latest pose, whether it is walking, and the end
+of the leg being walked.
 ================
 */
-export interface LocalInput {
-	readonly gid: number;
+export interface SampleInput {
 	readonly atMs: number;
 	readonly moving: boolean;
 	readonly to?: Pose;
@@ -144,10 +158,12 @@ function worldVector( a: Pose, b: Pose ): [number, number, number] | null {
 ================
 displace
 
-The pose moved by a world vector, renormalized into its region.
+The pose moved by a world vector, renormalized into its region. A zero
+vector returns the pose untouched, preserving its exact coordinates.
 ================
 */
 function displace( pose: Pose, v: readonly [number, number, number] ): Pose {
+	if ( v[0] === 0 && v[1] === 0 && v[2] === 0 ) return pose;
 	if ( pose.regionId & 0x8000 ) return { ...pose, x: pose.x + v[0], y: pose.y + v[1], z: pose.z + v[2] };
 	const wx = pose.x + v[0] + (pose.regionId & 255) * REGION_SIZE,
 		wz = pose.z + v[2] + (pose.regionId >>> 8) * REGION_SIZE,
@@ -158,14 +174,14 @@ function displace( pose: Pose, v: readonly [number, number, number] ): Pose {
 
 /*
 ================
-localModel
+sampledModel
 
-The local pose at frame time now: the latest sample, advanced along the
-velocity of the last two samples. Walking is piecewise linear at constant
-speed, so within a leg this is exact; the leg end bounds it.
+The pose at frame time now: the latest sample, advanced along the velocity
+of the last two samples. Walking is piecewise linear at constant speed, so
+within a leg this is exact; the leg end bounds it.
 ================
 */
-function localModel( row: LocalTrack, now: number ): Pose {
+function sampledModel( row: SampleTrack, now: number ): Pose {
 	const latest = row.latest, previous = row.previous;
 	if ( !row.moving || !previous ) return latest.pose;
 	const gap = latest.at - previous.at;
@@ -179,6 +195,7 @@ function localModel( row: LocalTrack, now: number ): Pose {
 		const rest = worldVector( row.to, latest.pose );
 		if ( rest ) ahead = Math.min( ahead, Math.hypot( rest[0], rest[2] ) / stepped );
 	}
+	if ( ahead === 0 ) return latest.pose;
 	return {
 		...displace( latest.pose, [ span[0] * ahead, span[1] * ahead, span[2] * ahead ] ),
 		angle: latest.pose.angle
@@ -190,25 +207,24 @@ function localModel( row: LocalTrack, now: number ): Pose {
 createPosePresentation
 
 The worker journal is backpressured and can deliver several fixed steps in
-one batch. Remote rows bridge observed delivery intervals, not a fictitious
-16ms cadence. Never extrapolate beyond admitted navigation; the camera
-shares this sample.
+one batch. Never extrapolate beyond admitted navigation; the camera shares
+this sample.
 ================
 */
 export function createPosePresentation() {
-	const rows = new Map<number, Track>();
-	let local: LocalTrack | null = null, localInput: LocalInput | null = null;
+	const rows = new Map<number, Track>(), tracks = new Map<number, SampleTrack>();
+	let inputs: ReadonlyMap<number, SampleInput> = new Map();
 	// Frame-clock milliseconds of simulation time zero (ClockSample.originMs).
 	let originMs: number | null = null;
 
 	/*
 	================
-	localPose
+	sampledPose
 	================
 	*/
-	function localPose( input: LocalInput, target: Pose, now: number ): Pose {
+	function sampledPose( gid: number, input: SampleInput, target: Pose, now: number ): Pose {
 		const at = (originMs! + input.atMs) / 1000;
-		let row = local;
+		let row = tracks.get( gid );
 		if (
 			!row || now < row.last || now - row.last > MAX_SAMPLE_GAP_SECONDS ||
 			discontinuity( row.latest.pose, target )
@@ -219,45 +235,38 @@ export function createPosePresentation() {
 				to: input.to,
 				offset: [ 0, 0, 0 ],
 				last: now,
-				angle: target.angle,
-				drawn: false
+				angle: target.angle
 			};
-			local = row;
-		} else {
+			tracks.set( gid, row );
+		} else if ( now !== row.last ) {
 			const decay = Math.exp( -(now - row.last) / CORRECTION_TAU_SECONDS );
 			row.offset = [ row.offset[0] * decay, row.offset[1] * decay, row.offset[2] * decay ];
+			if ( Math.hypot( row.offset[0], row.offset[1], row.offset[2] ) < MIN_CORRECTION_DISTANCE ) {
+				row.offset = [ 0, 0, 0 ];
+			}
 			row.angle = turn( row.angle, target.angle, now - row.last );
 			row.last = now;
-			const latest = row.latest.pose;
-			const changed = at !== row.latest.at || latest.regionId !== target.regionId || latest.x !== target.x ||
-				latest.y !== target.y || latest.z !== target.z;
-			if ( changed || row.moving !== input.moving || row.to !== input.to ) {
-				const before = localModel( row, now );
-				if ( changed ) {
-					// Keep the previous sample only when this one is strictly newer;
-					// a correction at the same time replaces the model outright.
-					if ( at > row.latest.at ) row.previous = row.latest;
-					else row.previous = undefined;
-					row.latest = { pose: { ...target }, at };
-				}
-				row.moving = input.moving;
-				row.to = input.to;
-				const jump = worldVector( before, localModel( row, now ) );
-				if ( jump ) {
-					row.offset = [ row.offset[0] + jump[0], row.offset[1] + jump[1], row.offset[2] + jump[2] ];
-				}
-				if ( !jump || Math.hypot( row.offset[0], row.offset[1], row.offset[2] ) > MAX_CORRECTION_DISTANCE ) {
-					row.offset = [ 0, 0, 0 ];
-				}
+		}
+		const latest = row.latest.pose;
+		const changed = at !== row.latest.at || latest.regionId !== target.regionId || latest.x !== target.x ||
+			latest.y !== target.y || latest.z !== target.z;
+		if ( changed || row.moving !== input.moving || row.to !== input.to ) {
+			const before = sampledModel( row, now );
+			if ( changed ) {
+				// Keep the previous sample only when this one is strictly newer;
+				// a correction at the same time replaces the model outright.
+				row.previous = at > row.latest.at ? row.latest : undefined;
+				row.latest = { pose: { ...target }, at };
+			}
+			row.moving = input.moving;
+			row.to = input.to;
+			const jump = worldVector( before, sampledModel( row, now ) );
+			if ( jump ) row.offset = [ row.offset[0] + jump[0], row.offset[1] + jump[1], row.offset[2] + jump[2] ];
+			if ( !jump || Math.hypot( row.offset[0], row.offset[1], row.offset[2] ) > MAX_CORRECTION_DISTANCE ) {
+				row.offset = [ 0, 0, 0 ];
 			}
 		}
-		const model = localModel( row, now ), drawn = displace( model, row.offset );
-		// A decaying correction is a glide, not a walk: animation follows the
-		// logical movement flag. Residues below a hundredth of a unit clear.
-		if ( Math.hypot( row.offset[0], row.offset[1], row.offset[2] ) < MIN_CORRECTION_DISTANCE ) {
-			row.offset = [ 0, 0, 0 ];
-		}
-		row.drawn = input.moving;
+		const drawn = displace( sampledModel( row, now ), row.offset );
 		// Pose carries a native heading word. Keep sub-word precision internally,
 		// but do not pass fractional words to the model's strict angle decoder.
 		return { ...drawn, angle: Math.round( row.angle ) % 65536 };
@@ -274,14 +283,15 @@ export function createPosePresentation() {
 		},
 		/*
 		================
-		local
+		samples
 
-		The local player's sample for this frame, or null when none is known.
+		This frame's timed samples by character. A character missing from the
+		map is drawn by delivery interpolation and its sampled track retires.
 		================
 		*/
-		local( input: LocalInput | null ) {
-			localInput = input;
-			if ( !input ) local = null;
+		samples( next: ReadonlyMap<number, SampleInput> ) {
+			inputs = next;
+			for ( const gid of tracks.keys() ) if ( !next.has( gid ) ) tracks.delete( gid );
 		},
 		/*
 		================
@@ -289,9 +299,12 @@ export function createPosePresentation() {
 		================
 		*/
 		pose( gid: number, target: Pose, now: number, settledTranslation = false ): Pose {
-			if ( localInput?.gid === gid && originMs !== null && !settledTranslation ) {
-				return localPose( localInput, target, now );
+			const input = inputs.get( gid );
+			if ( input && originMs !== null && !settledTranslation ) {
+				rows.delete( gid );
+				return sampledPose( gid, input, target, now );
 			}
+			tracks.delete( gid );
 			let row = rows.get( gid );
 			// Death navigation is already settled by the world owner. Do not spend an
 			// additional delivery interpolation interval sliding a falling corpse.
@@ -354,10 +367,14 @@ export function createPosePresentation() {
 		/*
 		================
 		moving
+
+		A decaying correction is a glide, not a walk: a sampled character's
+		animation follows its logical movement flag.
 		================
 		*/
 		moving( gid: number ) {
-			if ( localInput?.gid === gid && local ) return local.drawn;
+			const track = tracks.get( gid );
+			if ( track ) return track.moving;
 			return rows.get( gid )?.moving ?? false;
 		},
 		/*
@@ -367,7 +384,7 @@ export function createPosePresentation() {
 		*/
 		retain( gids: ReadonlySet<number> ) {
 			for ( const gid of rows.keys() ) if ( !gids.has( gid ) ) rows.delete( gid );
-			if ( localInput && !gids.has( localInput.gid ) ) local = null;
+			for ( const gid of tracks.keys() ) if ( !gids.has( gid ) ) tracks.delete( gid );
 		},
 		/*
 		================
@@ -376,8 +393,8 @@ export function createPosePresentation() {
 		*/
 		reset() {
 			rows.clear();
-			local = null;
-			localInput = null;
+			tracks.clear();
+			inputs = new Map();
 		}
 	};
 }

@@ -11,8 +11,10 @@ sample, so predicted and received movement share one set of transitions.
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 
-const REGION_SIZE = 1920;
-const HEADING_SCALE = 65535;
+// World units per region side; region-local x/z span [0, REGION_SIZE).
+export const REGION_SIZE = 1920;
+// Heading words per full turn on the movement wire.
+export const HEADING_SCALE = 65535;
 // CPSMission_OnSkillNavResponse0xB738 (0x776200) divides the source-block
 // X/Z words by 10.0.
 const SOURCE_SCALE = 10;

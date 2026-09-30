@@ -631,16 +631,35 @@ step
 			skillObjects.retain( entities );
 			resources.begin( seconds );
 			failure = null;
-			posePresentation.local(
-				gameplay?.pose && gameplay.poseAtMs !== undefined ?
-					{
-						gid: gameplay.localGid,
-						atMs: gameplay.poseAtMs,
-						moving: !!gameplay.moving,
-						...(gameplay.movementPath ? { to: gameplay.movementPath.to } : {})
-					} :
-					null
-			);
+			/*
+			================
+			logicalPose
+
+			The worker's latest pose of a character: the local movement owner's for
+			the local player (its entity row can still hold the spawn position),
+			else the entity row. Presentation draws from it via posePresentation.
+			================
+			*/
+			const logicalPose = ( entity: EntityState ): import("@/engine/contracts/gameplay").Pose =>
+				entity.gid === gameplay?.localGid && gameplay.pose ?
+					gameplay.pose :
+					{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
+			// Timed samples draw on the frame clock: the local player from its
+			// movement owner, every other character from its stepped path.
+			// Entity rows and the local movement state publish the same three fields.
+			type Sampled = Pick<EntityState, "poseAtMs" | "moving" | "movementPath">;
+			const samples = new Map<number, import("./pose-presentation").SampleInput>();
+			const sample = ( gid: number, source: Sampled ) => {
+				if ( source.poseAtMs === undefined ) return;
+				samples.set( gid, {
+					atMs: source.poseAtMs,
+					moving: !!source.moving,
+					...(source.movementPath ? { to: source.movementPath.to } : {})
+				} );
+			};
+			for ( const entity of entities ) if ( entity.gid !== gameplay?.localGid ) sample( entity.gid, entity );
+			if ( gameplay?.pose ) sample( gameplay.localGid, gameplay );
+			posePresentation.samples( samples );
 			const result = resources.poll();
 			const skillObjectResult = result && SKILL_OBJECT_MANIFESTS.some( path => path === result.path );
 			if ( result && skillObjectResult ) {
@@ -1490,9 +1509,7 @@ soundContext
 					at = simulationMs === undefined ? seconds : seconds + (event.atMs - simulationMs) / 1000;
 				if ( !target || seconds - at >= 1 ) continue;
 				if ( damageTexts.length >= 2048 ) throw Error( "Damage text capacity exceeded" );
-				const native = target.gid === gameplay?.localGid && gameplay.pose ?
-					gameplay.pose :
-					{ regionId: target.regionId, x: target.x, y: target.y, z: target.z, angle: target.heading };
+				const native = logicalPose( target );
 				const anchor = posePresentation.pose( target.gid, native, seconds );
 				// 77A080 -> 8E2840 -> 8D4DD0: environmental feedback is a
 				// victim label, with no attack animation or invented impact sound.
@@ -1511,11 +1528,24 @@ soundContext
 				number,
 				{ token: string; at: number; damage: number; critical: boolean; downAt?: number; }
 			>();
+			// Effects anchor to what is drawn: a walking character's frame-clock pose,
+			// not the worker's latest sample, or entity-attached effects jitter
+			// against the body. pose() is idempotent within one frame time.
+			let drawnLocal: import("@/engine/contracts/gameplay").Pose | null = null;
+			const effectEntities = entities.map( entity => {
+				const local = entity.gid === gameplay?.localGid && !!gameplay.pose;
+				if ( !samples.has( entity.gid ) || !local && !entity.moving ) return entity;
+				const drawn = posePresentation.pose( entity.gid, logicalPose( entity ), seconds );
+				if ( local ) {
+					drawnLocal = { ...gameplay!.pose!, regionId: drawn.regionId, x: drawn.x, y: drawn.y, z: drawn.z };
+				}
+				return { ...entity, regionId: drawn.regionId, x: drawn.x, y: drawn.y, z: drawn.z };
+			} );
 			// Sample sockets from the admitted models at the current mechanical pose
 			// and authored callback cursor; flight ownership precedes hit feedback.
 			const effectActors = effects.step(
-				entities,
-				gameplay,
+				effectEntities,
+				gameplay && drawnLocal ? { ...gameplay, pose: drawnLocal } : gameplay,
 				seconds,
 				resources.ready,
 				resources.duration,
@@ -1528,17 +1558,7 @@ soundContext
 						phase?.definition.trackEvents.filter( row => row.eventCode === 1 )[trigger.event - 1]?.cursorMs;
 					const rows = [ ...displayed.values() ].map( actor => {
 						const entity = entitiesByGid.get( actor.gid ),
-							native = entity ?
-								(entity.gid === gameplay?.localGid && gameplay.pose ?
-									gameplay.pose :
-									{
-										regionId: entity.regionId,
-										x: entity.x,
-										y: entity.y,
-										z: entity.z,
-										angle: entity.heading
-									}) :
-								undefined;
+							native = entity ? logicalPose( entity ) : undefined;
 						const sampled = native ? posePresentation.pose( actor.gid, native, seconds ) : undefined;
 						const currentPose = sampled ?
 							{
@@ -1585,7 +1605,7 @@ soundContext
 				const entity = entitiesByGid.get( event.gid ),
 					resource = entity ? catalog.get( appearanceRef( entity ) ) : undefined;
 				if ( entity && resource ) {
-					const pose = entity.gid === gameplay?.localGid && gameplay.pose ? gameplay.pose : entity;
+					const pose = logicalPose( entity );
 					sounds.emit(
 						`activate:${event.gid}:${event.skill}:${event.at}`,
 						resource.soundProfileName ?? soundProfiles.get( resource.codename ) ?? resource.codename,
@@ -1659,9 +1679,7 @@ soundContext
 				// Local movement owns gameplay.pose; the entity row can still
 				// contain the spawn position. Admission and text placement must
 				// use the same current victim position.
-				const native = target.gid === gameplay?.localGid && observer ?
-					observer :
-					{ regionId: target.regionId, x: target.x, y: target.y, z: target.z, angle: target.heading };
+				const native = logicalPose( target );
 				const dx = observer ?
 					native.x - observer.x + ((native.regionId & 255) - (observer.regionId & 255)) * 1920 :
 					Infinity;
@@ -1703,16 +1721,7 @@ soundContext
 					const shown = [ ...displayed.values() ].map( actor => {
 							const entity = entitiesByGid.get( actor.gid );
 							if ( !entity ) return actor;
-							const native = entity.gid === gameplay?.localGid && gameplay.pose ?
-									gameplay.pose :
-									{
-										regionId: entity.regionId,
-										x: entity.x,
-										y: entity.y,
-										z: entity.z,
-										angle: entity.heading
-									},
-								pose = posePresentation.pose( actor.gid, native, seconds );
+							const pose = posePresentation.pose( actor.gid, logicalPose( entity ), seconds );
 							return {
 								...actor,
 								pose: {
@@ -1818,7 +1827,7 @@ soundContext
 				if ( entity.groundItem ) continue;
 				const resource = catalog.get( appearanceRef( entity ) );
 				if ( !resource ) continue;
-				const pose = entity.gid === gameplay?.localGid && gameplay.pose ? gameplay.pose : entity;
+				const pose = logicalPose( entity );
 				let entry = idleStates.get( entity.gid );
 				if ( !entry ) {
 					entry = {
@@ -2178,9 +2187,7 @@ soundContext
 						model = fallback();
 					}
 					if ( sampleActorDetails ) probe?.detailBegin( "actor-motion" );
-					const nativePose = entity.gid === gameplay?.localGid && gameplay.pose ?
-						gameplay.pose :
-						{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
+					const nativePose = logicalPose( entity );
 
 					let state = states.get( entity.gid );
 					if ( !state ) {

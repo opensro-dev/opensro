@@ -31,7 +31,10 @@ import { directionLegEnd } from "@/engine/foundation/gameplay/direction-movement
 MotionUpdate
 ================
 */
-type MotionUpdate = Pick<EntityState, "gid" | "regionId" | "x" | "y" | "z" | "heading" | "moving" | "movementPath">;
+type MotionUpdate = Pick<
+	EntityState,
+	"gid" | "regionId" | "x" | "y" | "z" | "heading" | "moving" | "movementPath" | "poseAtMs"
+>;
 /*
 ================
 duration
@@ -340,7 +343,9 @@ step
 				segment.previous = pose;
 				changed.push( {
 					...update( gid, pose, now < segment.start + segment.duration ),
-					movementPath: { from: segment.from, to: segment.to }
+					movementPath: { from: segment.from, to: segment.to },
+					// Presentation draws the path on the frame clock from sample times.
+					poseAtMs: now
 				} );
 				if ( now < segment.start + segment.duration ) continue;
 				// A direction walk has no arrival; its next leg starts here at
