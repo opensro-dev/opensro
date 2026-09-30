@@ -52,16 +52,6 @@ test( "live Dimensional Gate exposes recall and acknowledges appointment", { tim
 		({ browser, page } = await launchProbeBrowser());
 		page.on( "pageerror", e => evidence.errors.push( String( e ) ) );
 		await installPursuitRecorder( page, [ 0xb45a, 0xb20d ] );
-		await page.route( "**/src/engine/runtime/ui/ui.ts*", async route => {
-			const response = await route.fetch(), source = await response.text();
-			assert.ok( source.includes( "export function createUi(" ) );
-			await route.fulfill( {
-				response,
-				body: source.replace( "export function createUi(", "function createObservedUi(" ) +
-					"\nexport function createUi(...args){const owner=createObservedUi(...args);return {...owner,step(view,now){globalThis.__recallView=view;return owner.step(view,now);}};}",
-				contentType: "application/javascript"
-			} );
-		} );
 		console.log( "[recall] authenticated mission boot" );
 		await bootPlayableSession( page, character );
 		const dead = await page.evaluate( () => {
@@ -84,12 +74,12 @@ test( "live Dimensional Gate exposes recall and acknowledges appointment", { tim
 			);
 		}
 		await page.waitForFunction(
-			() => globalThis.__recallView?.entities.some( e => e.kind === "teleport" && e.refObjId === 2094 ),
+			() => globalThis.__playableRuntime.entities().some( e => e.kind === "teleport" && e.refObjId === 2094 ),
 			null,
 			{ timeout: 20000 }
 		);
 		const gate = await page.evaluate( () =>
-			__recallView.entities.find( e => e.kind === "teleport" && e.refObjId === 2094 )
+			__playableRuntime.entities().find( e => e.kind === "teleport" && e.refObjId === 2094 )
 		);
 		evidence.gate = gate;
 		console.log( "[recall] select live gate" );

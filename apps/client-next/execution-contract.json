@@ -562,6 +562,7 @@
 			"consumer": "src/engine/runtime/runtime.ts",
 			"provider": "src/engine/runtime/renderer/characters/characters.ts",
 			"functions": [
+				"currentActors",
 				"stats"
 			]
 		},
@@ -1875,7 +1876,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "a92f8baf085546f008777e17f34c627ed57e6d1fd4d51b120b3b24f55855287e",
+			"sourceSha256": "dec35cf31caf56053e059b8ad31fa708c3132a89635b54673cec75b9d5335507",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

@@ -16,8 +16,6 @@ they are ad hoc views of runtime state, not a contract.
 declare module "/src/*";
 
 declare var __arrowActors: any;
-declare var __berserkActors: any;
-declare var __berserkView: any;
 declare var __castActors: any;
 declare var __castRenderer: any;
 declare var __cerberusEnvironment: any;
@@ -63,7 +61,6 @@ declare var __pursuit: any;
 declare var __rebirthAnimation: any;
 declare var __rebirthCommands: any;
 declare var __rebirthPick: any;
-declare var __recallView: any;
 declare var __refreshActors: any;
 declare var __refreshError: any;
 declare var __refreshFeet: any;

@@ -181,6 +181,8 @@ export interface Renderer extends Disposable {
 		actors: readonly import("./character").CharacterActor[],
 		portraits?: readonly import("./character").CharacterActor[]
 	): void;
+	/** The actor snapshots the last setCharacterActors retained (read-only). */
+	characterActors(): readonly import("./character").CharacterActor[];
 
 	setWorld( scene: import("./scene").WorldScene | null ): void;
 	adoptWorld(
@@ -259,6 +261,12 @@ export interface RuntimeControl extends Disposable {
 	sessionState(): SessionState | null;
 	entity( gid: number ): import("./world").EntityState | undefined;
 	gameplay(): import("./gameplay").GameplayState | null;
+	/** The presented entities, as the UI receives them each frame. */
+	entities(): readonly import("./world").EntityState[];
+	/** The Berserk orb gauge the UI presents. */
+	berserkGauge(): import("./orb").BerserkGauge | undefined;
+	/** The actors the renderer draws this frame. */
+	characterActors(): readonly import("./character").CharacterActor[];
 	/** Read-only orbit camera the input owner holds (yaw/pitch/distance). */
 	camera(): import("./input").CameraInput;
 	takeNative(): import("./world").WorldEvent[];

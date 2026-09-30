@@ -54,30 +54,6 @@ test( "live complete armor, Berserk potion, Tab, appearance and server expiry", 
 			if ( m.type() === "error" && m.text().includes( "[SRO runtime]" ) ) evidence.errors.push( m.text() );
 		} );
 		await installPursuitRecorder( page, [ 0x30b3, 0x3122, 0x376f, 0xb341, 0xb5bd ] );
-		await page.route( "**/src/engine/runtime/ui/ui.ts*", async route => {
-			const response = await route.fetch(), source = await response.text();
-			assert.ok( source.includes( "export function createUi(" ) );
-			await route.fulfill( {
-				response,
-				body: source.replace( "export function createUi(", "function createObservedUi(" ) +
-					"\nexport function createUi(...args){const owner=createObservedUi(...args);return {...owner,step(view,now){globalThis.__berserkView=view;return owner.step(view,now);}};}",
-				contentType: "application/javascript"
-			} );
-		} );
-		await page.route( "**/src/engine/runtime/renderer/renderer.ts*", async route => {
-			const response = await route.fetch(),
-				source = await response.text(),
-				pattern = /setCharacterActors:\s*characters\.actors/;
-			assert.match( source, pattern );
-			await route.fulfill( {
-				response,
-				body: source.replace(
-					pattern,
-					"setCharacterActors: (actors)=>{globalThis.__berserkActors=actors;characters.actors(actors);}"
-				),
-				contentType: "application/javascript"
-			} );
-		} );
 		console.log( "[berserk] authenticated scratch boot" );
 		await bootPlayableSession( page, character );
 		if (
@@ -93,8 +69,8 @@ test( "live complete armor, Berserk potion, Tab, appearance and server expiry", 
 			} );
 		}
 		evidence.before = await page.evaluate( () => ({
-			gauge: __berserkView.berserkGauge,
-			entity: __berserkView.entities.find( e => e.gid === __berserkView.gameplay.localGid )
+			gauge: __playableRuntime.berserkGauge(),
+			entity: __playableRuntime.entities().find( e => e.gid === __playableRuntime.gameplay().localGid )
 		}) );
 		evidence.originalEquipment = await page.evaluate( () =>
 			__playableRuntime.gameplay().inventory.filter( i => i.slot < 6 ).map( i => ({
@@ -143,12 +119,12 @@ test( "live complete armor, Berserk potion, Tab, appearance and server expiry", 
 				code
 			);
 			await page.waitForFunction(
-				id => __berserkView.entities.some( e => e.kind === "ground-item" && e.refObjId === id ),
+				id => __playableRuntime.entities().some( e => e.kind === "ground-item" && e.refObjId === id ),
 				refObjId,
 				{ timeout: 10000 }
 			);
 			const gid = await page.evaluate(
-				id => __berserkView.entities.find( e => e.kind === "ground-item" && e.refObjId === id ).gid,
+				id => __playableRuntime.entities().find( e => e.kind === "ground-item" && e.refObjId === id ).gid,
 				refObjId
 			);
 			await page.evaluate(
@@ -168,7 +144,9 @@ test( "live complete armor, Berserk potion, Tab, appearance and server expiry", 
 		}
 		await page.waitForFunction(
 			() => {
-				const actor = __berserkActors.find( a => a.gid === __berserkView.gameplay.localGid );
+				const actor = __playableRuntime.characterActors().find( a =>
+					a.gid === __playableRuntime.gameplay().localGid
+				);
 				return actor?.model.includes( "ch_m_heavy_01" ) && actor.model.includes( "FA" );
 			},
 			null,
@@ -176,7 +154,7 @@ test( "live complete armor, Berserk potion, Tab, appearance and server expiry", 
 		);
 		evidence.equipped = await page.evaluate( () => ({
 			inventory: __playableRuntime.gameplay().inventory.filter( i => i.slot < 6 ),
-			actor: __berserkActors.find( a => a.gid === __berserkView.gameplay.localGid )
+			actor: __playableRuntime.characterActors().find( a => a.gid === __playableRuntime.gameplay().localGid )
 		}) );
 		await page.screenshot( { path: out + "/full-armor.png" } );
 		console.log( "[berserk] create and pick up native potion" );
@@ -187,12 +165,12 @@ test( "live complete armor, Berserk potion, Tab, appearance and server expiry", 
 			} )
 		);
 		await page.waitForFunction(
-			() => __berserkView.entities.some( e => e.kind === "ground-item" && e.refObjId === 23274 ),
+			() => __playableRuntime.entities().some( e => e.kind === "ground-item" && e.refObjId === 23274 ),
 			null,
 			{ timeout: 15000 }
 		);
 		const gid = await page.evaluate( () =>
-			__berserkView.entities.find( e => e.kind === "ground-item" && e.refObjId === 23274 ).gid
+			__playableRuntime.entities().find( e => e.kind === "ground-item" && e.refObjId === 23274 ).gid
 		);
 		await page.evaluate(
 			gid => __playableRuntime.session( { kind: "gameplay", command: { kind: "pickup", gid } } ),
@@ -210,26 +188,31 @@ test( "live complete armor, Berserk potion, Tab, appearance and server expiry", 
 			slot => __playableRuntime.session( { kind: "gameplay", command: { kind: "item-use", slot } } ),
 			slot
 		);
-		await page.waitForFunction( () => __berserkView.berserkGauge?.displayed === 5, null, { timeout: 10000 } );
+		await page.waitForFunction( () => __playableRuntime.berserkGauge()?.displayed === 5, null, { timeout: 10000 } );
 		await page.locator( '[data-ui-id="berserk"]' ).waitFor();
 		await page.screenshot( { path: out + "/ready.png" } );
 		console.log( "[berserk] activate through Tab" );
 		await page.keyboard.press( "Tab" );
 		await page.waitForFunction(
 			() =>
-				__berserkView.entities.find( e => e.gid === __berserkView.gameplay.localGid )?.appearanceState?.[2] ===
+				__playableRuntime.entities().find( e => e.gid === __playableRuntime.gameplay().localGid )
+					?.appearanceState?.[2] ===
 					1,
 			null,
 			{ timeout: 10000 }
 		);
-		await page.waitForFunction( () => __berserkActors?.some( a => a.model.includes( "/char/hwan/" ) ), null, {
-			timeout: 15000
-		} );
+		await page.waitForFunction(
+			() => __playableRuntime.characterActors().some( a => a.model.includes( "/char/hwan/" ) ),
+			null,
+			{
+				timeout: 15000
+			}
+		);
 		evidence.active = await page.evaluate( () => ({
-			gauge: __berserkView.berserkGauge,
-			entity: __berserkView.entities.find( e => e.gid === __berserkView.gameplay.localGid ),
-			actors: __berserkActors.filter( a =>
-				a.gid === __berserkView.gameplay.localGid || a.model.includes( "/char/hwan/" )
+			gauge: __playableRuntime.berserkGauge(),
+			entity: __playableRuntime.entities().find( e => e.gid === __playableRuntime.gameplay().localGid ),
+			actors: __playableRuntime.characterActors().filter( a =>
+				a.gid === __playableRuntime.gameplay().localGid || a.model.includes( "/char/hwan/" )
 			).map( a => ({
 				gid: a.gid,
 				model: a.model,
@@ -246,17 +229,22 @@ test( "live complete armor, Berserk potion, Tab, appearance and server expiry", 
 		console.log( "[berserk] wait for authoritative expiry" );
 		await page.waitForFunction(
 			() =>
-				__berserkView.entities.find( e => e.gid === __berserkView.gameplay.localGid )?.appearanceState?.[2] ===
+				__playableRuntime.entities().find( e => e.gid === __playableRuntime.gameplay().localGid )
+					?.appearanceState?.[2] ===
 					0,
 			null,
 			{ timeout: 65000 }
 		);
-		await page.waitForFunction( () => !__berserkActors.some( a => a.model.includes( "/char/hwan/" ) ), null, {
-			timeout: 5000
-		} );
+		await page.waitForFunction(
+			() => !__playableRuntime.characterActors().some( a => a.model.includes( "/char/hwan/" ) ),
+			null,
+			{
+				timeout: 5000
+			}
+		);
 		evidence.after = await page.evaluate( () => ({
-			gauge: __berserkView.berserkGauge,
-			entity: __berserkView.entities.find( e => e.gid === __berserkView.gameplay.localGid )
+			gauge: __playableRuntime.berserkGauge(),
+			entity: __playableRuntime.entities().find( e => e.gid === __playableRuntime.gameplay().localGid )
 		}) );
 		assert.equal( evidence.after.entity.runSpeed, 50 );
 		assert.notEqual( evidence.after.entity.appearanceState?.[0], 2, "death is not timer expiry" );

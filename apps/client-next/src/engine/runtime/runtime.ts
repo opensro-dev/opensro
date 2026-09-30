@@ -850,6 +850,9 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 			sessionState: () => sessionState,
 			entity: gid => presentation.read( gid ),
 			gameplay: () => presentation.gameplay(),
+			entities: () => presentation.entities(),
+			berserkGauge: () => characters.orbGauge(),
+			characterActors: () => renderer.characterActors(),
 			camera: () => input.camera(),
 			takeNative: () => presentation.takeNative()
 		};

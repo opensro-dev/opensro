@@ -800,6 +800,14 @@ assembly
 		},
 		/*
 ================
+currentActors
+
+The retained actor snapshots, for read-only observation.
+================
+		*/
+		currentActors: (): readonly CharacterActor[] => actors,
+		/*
+================
 actors
 ================
 		*/

@@ -234,6 +234,7 @@ setUiTexture
 		setCharacterModel: characters.model,
 		setCharacterAnimation: characters.animation,
 		setCharacterActors: characters.actors,
+		characterActors: characters.currentActors,
 		cancelWorldUpdate: () => world.cancelPending(),
 		setWorld: scene => world.scene( scene ),
 		adoptWorld: ( lease, detail ) => world.adopt( lease, detail ),
