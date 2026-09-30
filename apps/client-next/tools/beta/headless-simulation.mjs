@@ -86,6 +86,7 @@ has loaded and received "start".
  * @param {{ workerUrl: string, origin: string, bootstrapUrl: URL, cookies?: [string, string][] }} options
  */
 export async function startHeadlessSimulation( { workerUrl, origin, cookies = [], bootstrapUrl } ) {
+	const startedAt = Date.now();
 	const jarChannel = new MessageChannel();
 	let jar = cookies;
 	jarChannel.port1.on( "message", value => {
@@ -96,10 +97,12 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 		workerData: { origin, workerUrl, cookies, jarPort: jarChannel.port2 },
 		transferList: [ jarChannel.port2 ]
 	} );
-	/** @type {{ session: any, sessions: any[], failures: string[], entities: Map<number, any>, gameplay: any, travelRevision: number, readyRequested: boolean, batches: number, events: number, exited: boolean }} */
+	/** @type {{ session: any, sessions: any[], timeline: { phase: string, atMs: number }[], failures: string[], entities: Map<number, any>, gameplay: any, travelRevision: number, readyRequested: boolean, batches: number, events: number, exited: boolean }} */
 	const state = {
 		session: null,
 		sessions: [],
+		// Session phase changes with their time since this worker started.
+		timeline: [],
 		failures: [],
 		entities: new Map(),
 		gameplay: null,
@@ -129,6 +132,9 @@ export async function startHeadlessSimulation( { workerUrl, origin, cookies = []
 			return;
 		}
 		if ( message.kind === "session" ) {
+			if ( message.state.phase !== state.session?.phase ) {
+				state.timeline.push( { phase: message.state.phase, atMs: Date.now() - startedAt } );
+			}
 			state.session = message.state;
 			state.sessions.push( message.state );
 			return;

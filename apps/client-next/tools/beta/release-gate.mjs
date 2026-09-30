@@ -296,12 +296,14 @@ async function flow( candidate, credentials, origin, result, directory, script )
 		passPhase( result, "gameplay" );
 
 		// A reload: a new worker with the same cookies restores the session.
+		result.sessionTimeline = simulation.state.timeline;
 		const cookies = simulation.cookies();
 		await simulation.stop();
 		simulation = await startHeadlessSimulation( { origin, ...worker, cookies } );
 		simulation.session( { kind: "servers", apiBase } );
 		await enterWorld( simulation, credentials.character, "resume" );
 		passPhase( result, "resume" );
+		result.resumeTimeline = simulation.state.timeline;
 	} finally {
 		result.session = simulation.state.session?.phase ?? null;
 		result.worldEvents = simulation.state.events;
