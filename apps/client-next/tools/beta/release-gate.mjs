@@ -142,18 +142,37 @@ movement toward the requested destination.
 */
 async function moveAndConfirm( simulation, name, destination ) {
 	const before = simulation.entityNamed( name );
-	const revision = before?.movementRevision ?? -1;
+	const revision = before?.movementRevision ?? -1, events = simulation.state.events;
 	simulation.session( { kind: "gameplay", command: { kind: "move", destination } } );
-	return simulation.waitFor(
-		() => {
-			const entity = simulation.entityNamed( name );
-			if ( !entity || (entity.movementRevision ?? -1) === revision ) return null;
-			const to = entity.movementPath?.to ?? entity;
-			return Math.hypot( to.x - destination.x, to.z - destination.z ) < MOVE_DISTANCE / 2 ? entity : null;
-		},
-		MOVE_BUDGET_MS,
-		"gameplay move"
-	);
+	try {
+		return await simulation.waitFor(
+			() => {
+				const entity = simulation.entityNamed( name );
+				if ( !entity || (entity.movementRevision ?? -1) === revision ) return null;
+				const to = entity.movementPath?.to ?? entity;
+				return Math.hypot( to.x - destination.x, to.z - destination.z ) < MOVE_DISTANCE / 2 ? entity : null;
+			},
+			MOVE_BUDGET_MS,
+			"gameplay move"
+		);
+	} catch ( error ) {
+		const entity = simulation.entityNamed( name );
+		const seen = entity ?
+			{
+				regionId: entity.regionId,
+				x: entity.x,
+				y: entity.y,
+				z: entity.z,
+				movementRevision: entity.movementRevision,
+				movementPath: entity.movementPath,
+				movementMode: entity.movementMode
+			} :
+			null;
+		throw Error(
+			`${error.message}; destination ${JSON.stringify( destination )}; entity ${JSON.stringify( seen )}; ` +
+				`${simulation.state.events - events} world events since the request`
+		);
+	}
 }
 
 /*
