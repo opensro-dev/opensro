@@ -480,13 +480,20 @@ frame
 						{ target: device.portraitTarget( "__portrait" + (i + 1) ), depth: portraitDepth!.view, draws };
 				} ).filter( ( r ): r is NonNullable<typeof r> => r !== null );
 				const dollInput = uiProduct?.doll;
-				const dollDraws = doll.prepare(
-					dollInput ? characters.portraitSource( dollInput.gid ) : null,
-					device.geometry()!,
-					device.images()!,
-					dollInput?.yaw,
-					timeSeconds
-				);
+				// A hidden doll stays borrowed and warm for the local character, so
+				// the inventory's first open does not prepare a model (portrait.warm).
+				if ( !dollInput && portraitGid !== undefined ) {
+					doll.warm( characters.portraitSource( portraitGid ), device.geometry()!, device.images()! );
+				}
+				const dollDraws = dollInput ?
+					doll.prepare(
+						characters.portraitSource( dollInput.gid ),
+						device.geometry()!,
+						device.images()!,
+						dollInput.yaw,
+						timeSeconds
+					) :
+					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", 176, 318 ) : undefined;
 				if ( dollTarget && !dollDepth ) dollDepth = device.surfaceCommands()!.createDepth( 176, 318 );
 				probe?.renderMark( "labels-portraits" );

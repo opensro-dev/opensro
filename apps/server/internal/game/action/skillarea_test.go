@@ -96,6 +96,18 @@ func TestAreaFalloffAndFatalRewardOwnership(t *testing.T) {
 		if kills != wantKills {
 			t.Fatalf("kill credits %d", kills)
 		}
+		// 4A9C80: every killed victim publishes LIFE dead, or the client keeps
+		// moving its corpse through the death animation.
+		dead := map[uint32]bool{}
+		for _, frame := range result.Frames {
+			if frame.Opcode == wire.OpObjectStateRefresh && len(frame.Payload) == 6 && frame.Payload[4] == wire.StateChannelLife &&
+				frame.Payload[5] == wire.LifeStateDead {
+				dead[binary.LittleEndian.Uint32(frame.Payload)] = true
+			}
+		}
+		if len(dead) != wantKills {
+			t.Fatalf("LIFE dead published for %d victims, want %d", len(dead), wantKills)
+		}
 		rt.HandleTargetInteract(testDivision, c, request)
 		if kills != wantKills || rt.castTokenCounter != 1 {
 			t.Fatal("replay duplicated area rewards")

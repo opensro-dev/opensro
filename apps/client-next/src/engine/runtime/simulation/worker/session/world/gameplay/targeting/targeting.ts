@@ -194,6 +194,19 @@ clear
 			error = null;
 		},
 		error: () => error,
+		/*
+================
+selectionIntent
+
+The object the player last chose: a selection still awaiting its grant,
+else the granted target, and nothing while a release is in flight. A skill
+request names its own target (the server does not read the selection), so
+a press right after a click aims at the clicked monster instead of waiting
+for the B45A grant or reusing the previous target. Inferred: retail's
+target window lags the grant too, yet an immediate press casts.
+================
+		*/
+		selectionIntent: () => pending?.kind === "select" ? pending.gid : pending ? 0 : target,
 		state: () => ({
 			targetTaxRate: taxRate,
 			target,

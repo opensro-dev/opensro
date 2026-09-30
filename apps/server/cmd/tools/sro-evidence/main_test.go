@@ -9,6 +9,7 @@ import (
 func TestEvidenceCommandCatalog(t *testing.T) {
 	want := []string{
 		"moveclip-oracle",
+		"navsweep",
 		"performance-ring",
 		"spawnable-npcs",
 		"spawnable-monsters",

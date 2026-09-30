@@ -59,6 +59,10 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 	)
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
 	ticker.BeforeHooks = []simulation.TickHook{game.items.MonsterActionTickHook()}
+	ticker.PlayerMap = simulation.BetaPlayerMapEnabled()
+	if ticker.PlayerMap {
+		log.Infof("simulation: beta world map roster ON (%s)", simulation.EnvBetaPlayerMap)
+	}
 	if game.deps.MonsterState != nil {
 		ticker.Monsters = &simulation.MonsterMoverOps{
 			Monsters:       game.deps.MonsterState,

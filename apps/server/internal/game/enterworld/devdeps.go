@@ -38,6 +38,7 @@ type DevPaths struct {
 	TextdataDir       string
 	MissionChatPath   string
 	EquipItemsEnabled bool
+	StarterKitEnabled bool
 	NpcSpawns         NpcSpawnConfig
 	MonsterSpawns     MonsterSpawnConfig
 	AuthoredAreas     *worldarea.Catalog
@@ -51,6 +52,7 @@ func DevPathsFromEnv(characterAuthorityDir, textdataDir string) DevPaths {
 		TextdataDir:       textdataDir,
 		MissionChatPath:   os.Getenv(EnvMissionChatPath),
 		EquipItemsEnabled: os.Getenv(EnvMissionEquipItems) != "0",
+		StarterKitEnabled: BetaStarterKitEnabled(),
 		NpcSpawns:         NpcSpawnConfigFromEnv(),
 		MonsterSpawns:     MonsterSpawnConfigFromEnv(),
 	}
@@ -199,6 +201,10 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			}
 			return append(rows, monsterSpawns.MonsterRefObjSnapshot(monsters)...)
 		},
+	}
+	if paths.StarterKitEnabled {
+		deps.StarterKit = ResolveStarterKit(items)
+		log.Infof("bootstrap: beta starter kit ON (%s): %d items, backfilled on entry and never spent", EnvBetaStarterKit, len(deps.StarterKit))
 	}
 	// Object-list rows: the NPC and monster legs are env-gated here; the
 	// server wiring APPENDS the division ground drops from the item

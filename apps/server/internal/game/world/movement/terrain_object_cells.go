@@ -72,3 +72,59 @@ func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement) er
 	}
 	return nil
 }
+
+/*
+==================
+terrainVisitKey
+
+The chord fraction at which native CRTNavMeshTerrain_Move (404510) first
+stands in a terrain cell this placement is registered in, and so steps it
+(CRTNavMeshTerrain_StepPlacedObject 403FB0 -> CRTNavMeshObj_EnterFromOutside
+428300) against the rest of the chord. x0..z1 are the chord in the anchor
+region's frame, the frame the cell rectangles use. +Inf when the chord never
+enters a registered cell; 0 for a placement without registration data (every
+object is then visited from the start, the pre-registration behaviour).
+==================
+*/
+func terrainVisitKey(cells *[][4]float32, x0, z0, x1, z1 float64) float64 {
+	if cells == nil {
+		return 0
+	}
+	best := math.Inf(1)
+	for _, r := range *cells {
+		if t, ok := chordRectEntry(x0, z0, x1, z1, float64(r[0]), float64(r[1]), float64(r[2]), float64(r[3])); ok && t < best {
+			best = t
+		}
+	}
+	return best
+}
+
+/*
+==================
+chordRectEntry
+
+Slab clip of the chord x0,z0 -> x1,z1 (t in [0,1]) against a closed
+rectangle: the first t inside it.
+==================
+*/
+func chordRectEntry(x0, z0, x1, z1, minX, minZ, maxX, maxZ float64) (float64, bool) {
+	lo, hi := 0.0, 1.0
+	for _, axis := range [2][4]float64{{x0, x1, minX, maxX}, {z0, z1, minZ, maxZ}} {
+		p, q, a, b := axis[0], axis[1]-axis[0], axis[2], axis[3]
+		if math.Abs(q) < 1e-12 {
+			if p < a || p > b {
+				return 0, false
+			}
+			continue
+		}
+		t0, t1 := (a-p)/q, (b-p)/q
+		if t0 > t1 {
+			t0, t1 = t1, t0
+		}
+		lo, hi = math.Max(lo, t0), math.Min(hi, t1)
+		if lo > hi {
+			return 0, false
+		}
+	}
+	return lo, true
+}

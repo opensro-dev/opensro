@@ -1656,6 +1656,13 @@
 			"functions": [
 				"callback:readBytes:2"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/ui/ui.ts",
+			"provider": "src/engine/runtime/platform/platform.ts",
+			"functions": [
+				"displayScale"
+			]
 		}
 	],
 	"boundaries": [
@@ -1840,6 +1847,13 @@
 			"function": "frame",
 			"kind": "callback",
 			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/simulation/host.ts",
+			"expression": "resolve",
+			"function": "wake",
+			"kind": "callback",
+			"reason": "Settles delivery() promises on each worker message. Worker messages reach a hidden tab unthrottled, so the runtime paces hidden frames from them (it gets no animation frames)."
 		}
 	],
 	"sequences": [
@@ -1876,7 +1890,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "ae7c6f7df1a1f81ef8b23da0517d29b05e2a49b552c21cd4c03ca2779b630965",
+			"sourceSha256": "4ebf7000f88a9f2696df09fa64d618143cf9e522eb03aaec69c62afb5e887060",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

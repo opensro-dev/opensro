@@ -160,6 +160,19 @@ export function createPortrait(
 				true
 			);
 		},
+		/*
+		================
+		warm
+
+		Borrow and upload a model before its window first shows it, so opening
+		that window (the inventory doll) costs no model preparation. A model
+		already borrowed is left alone; the draws are discarded.
+		================
+		*/
+		warm( value: PortraitSource | null, geometry: GeometryCommands, images: ImageCommands ) {
+			if ( !value || source === value.model ) return;
+			this.prepare( value, geometry, images, DEFAULT_PREVIEW_YAW, 0 );
+		},
 		invalidate() {
 			preview.invalidate();
 		},

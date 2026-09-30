@@ -4,6 +4,9 @@
   "bootstrap": "src/bootstrap.ts",
   "modules": {
     "src/engine/runtime/ui/hud/withdrawal.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/simulation/worker/session/world/gameplay/beta-map/beta-map.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/admission.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+    "src/engine/runtime/ui/warm/window-warm.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/pickup.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/presentation/effective-hp.ts": "src/engine/runtime/presentation/presentation.ts",
     "src/engine/runtime/ui/hud/quest-timers.ts": "src/engine/runtime/ui/ui.ts",
@@ -46,6 +49,7 @@
     "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/targeting/targeting.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/simulation/worker/session/world/gameplay/reservation/reservation.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
     "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts": "src/engine/runtime/simulation/worker/session/world/entities/entities.ts",
     "src/engine/runtime/renderer/world/world.ts": "src/engine/runtime/renderer/renderer.ts",

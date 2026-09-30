@@ -134,6 +134,7 @@ import {
 	defaultVideoOptions,
 	videoOptions,
 	videoRows,
+	displayHeights,
 	changeVideo,
 	resetVideoRecord,
 	type VideoOptions
@@ -227,6 +228,7 @@ import { createUiAssets } from "./resources/resources";
 import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
 import { normalTile } from "@/engine/foundation/ui/normal-tile";
 import { createHudResources } from "./hud/resources";
+import { createWindowWarm, skillWindowIcons } from "./warm/window-warm";
 import {
 	authoredRect,
 	authoredClientRect,
@@ -253,6 +255,8 @@ import { guideTokens } from "@/engine/foundation/ui/guide-content";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/contracts/session";
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
+// No video option combo is open (slot -1 is the screen-size combo).
+const VIDEO_COMBO_CLOSED = -99;
 const ROOT = "/assets/images/Media_extracted/", BUTTON = ROOT + "interface/ifcommon/com_button.png";
 const PARTS = frameParts();
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
@@ -303,7 +307,7 @@ export function createUi(
 ) {
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
 	let consoleRows: string[] = [], consoleHistory: string[] = [], consoleHistoryIndex = 0;
-	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = -1;
+	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
 	let audioSaved = initialAudioOptions(), audioDraft = audioSaved;
@@ -452,6 +456,7 @@ export function createUi(
 		guideResources = createGuideResources( assets, base ),
 		minimapResources = createMinimapResources( assets, base );
 	const npcPanel = createNpcPanel(), windowPlacement = createWindowPlacement();
+	const windowWarm = createWindowWarm();
 
 	let guideThumbTravel = 0, guideScrollMax = 0, guideIndexMax = 0;
 	let guideX: number | null = null, guideY: number | null = null;
@@ -726,10 +731,39 @@ export function createUi(
 	}
 	/*
 	================
+	skillWindowWarmPaths
+
+	Every icon the skill window can show for the player's masteries, with the
+	focus variant its group rows swap to on hover (see the Skills draw).
+	================
+	*/
+	function skillWindowWarmPaths(): string[] {
+		const catalog = hud.data()?.skillUi, masteries = view?.gameplay?.progression?.masteries ?? [];
+		if ( !catalog ) return [];
+		const { icons, groups } = skillWindowIcons( catalog, masteries.map( m => m.id ) );
+		const out: string[] = [];
+		for ( const icon of icons ) {
+			const path = iconPath( icon );
+			if ( path ) out.push( path );
+		}
+		for ( const icon of groups ) {
+			const path = iconPath( icon );
+			if ( path ) out.push( path, path.replace( ".png", "_focus.png" ) );
+		}
+		return out;
+	}
+	/*
+	================
 	setPanel
 	================
 	*/
-	function setPanel( next: string, intent: "open" | "toggle" | "select" = "open" ) {
+	function setPanel( next: string, intent: "open" | "toggle" | "select" | "warm" = "open" ) {
+		// An unseen warm build (window-warm.ts) switches the drawn window only:
+		// no enter/leave hooks, sounds or transient resets.
+		if ( intent === "warm" ) {
+			panel = next;
+			return true;
+		}
 		if ( intent === "toggle" && panel === next ) next = "";
 		if ( panel === next ) return false;
 		if ( !canLeavePanel() ) return false;
@@ -770,7 +804,7 @@ export function createUi(
 		if ( next === "Option" ) {
 			videoDraft = videoOptions( video );
 			videoScroll = 0;
-			videoCombo = -1;
+			videoCombo = VIDEO_COMBO_CLOSED;
 			bindingDraft = inputOptions( bindings );
 			bindingSelected = -1;
 			bindingScroll = 0;
@@ -1291,7 +1325,7 @@ export function createUi(
 			if ( Number.isInteger( index ) && index >= 0 && index < 5 ) {
 				optionTab = index;
 				bindingSelected = -1;
-				videoCombo = -1;
+				videoCombo = VIDEO_COMBO_CLOSED;
 			}
 		} else if ( id.startsWith( "option-toggle:" ) ) {
 			const key = gameOption( id.slice( 14 ) );
@@ -1300,18 +1334,25 @@ export function createUi(
 			const active = Number( id.slice( 20 ) );
 			if ( active === 0 || active === 1 ) {
 				videoDraft = { ...videoDraft, active };
-				videoCombo = -1;
+				videoCombo = VIDEO_COMBO_CLOSED;
 			}
 		} else if ( id.startsWith( "option-video-combo:" ) ) {
 			const n = Number( id.slice( 19 ) );
-			if ( videoRows().some( r => r.slot === n ) ) videoCombo = videoCombo === n ? -1 : n;
+			if ( n === -1 || videoRows().some( r => r.slot === n ) ) {
+				videoCombo = videoCombo === n ?
+					VIDEO_COMBO_CLOSED :
+					n;
+			}
 		} else if ( id.startsWith( "option-video-choice:" ) ) {
 			const [, slot, value] = id.split( ":" );
-			videoDraft = changeVideo( videoDraft, Number( slot ), Number( value ) );
-			videoCombo = -1;
+			if ( Number( slot ) === -1 ) {
+				const height = displayHeights()[Number( value )];
+				if ( height !== undefined ) videoDraft = { ...videoDraft, displayHeight: height };
+			} else videoDraft = changeVideo( videoDraft, Number( slot ), Number( value ) );
+			videoCombo = VIDEO_COMBO_CLOSED;
 		} else if ( id === "option-video-up" || id === "option-video-down" ) {
 			videoScroll = Math.max( 0, Math.min( 9, videoScroll + (id.endsWith( "up" ) ? -1 : 1) ) );
-			videoCombo = -1;
+			videoCombo = VIDEO_COMBO_CLOSED;
 		} else if ( id.startsWith( "option-bind:" ) ) {
 			const n = Number( id.slice( 12 ) );
 			if ( Number.isInteger( n ) && n >= 0 && n < 34 ) bindingSelected = n;
@@ -1338,7 +1379,7 @@ export function createUi(
 		} else if ( id === "option-default" ) {
 			if ( optionTab === 0 ) {
 				videoDraft = resetVideoRecord( videoDraft );
-				videoCombo = -1;
+				videoCombo = VIDEO_COMBO_CLOSED;
 			} else if ( optionTab === 1 ) updateAudioDraft( defaultAudioOptions() );
 			else if ( optionTab === 2 ) {
 				sightDraft = 0;
@@ -3030,7 +3071,7 @@ export function createUi(
 			}
 			if ( event.kind === "drag" && event.id === "option-video-thumb" && panel === "Option" && optionTab === 0 ) {
 				videoScroll = Math.max( 0, Math.min( 9, videoScroll + event.dy * 9 / 129 ) );
-				videoCombo = -1;
+				videoCombo = VIDEO_COMBO_CLOSED;
 				dirty = true;
 				return;
 			}
@@ -3292,7 +3333,7 @@ export function createUi(
 					if ( event.x >= x && event.x < x + node.rect[2] && event.y >= y && event.y < y + node.rect[3] ) {
 						if ( optionTab === 0 ) {
 							videoScroll = Math.max( 0, Math.min( 9, videoScroll + Math.sign( event.delta ) ) );
-							videoCombo = -1;
+							videoCombo = VIDEO_COMBO_CLOSED;
 						} else bindingScroll = Math.max( 0, Math.min( 12, bindingScroll + Math.sign( event.delta ) ) );
 						dirty = true;
 					}
@@ -4908,6 +4949,17 @@ export function createUi(
 			);
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
+			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
+			// One unseen window build per idle frame; see window-warm.ts.
+			const warming = windowWarm.begin(
+				worldVisible && !!hud.data() && !!game?.progression && panel === "" && !carriedItem && !shopOpenRequest
+			);
+			// The unseen build sets the panel directly: no enter/leave hooks, no
+			// transient resets (setPanel would cancel a pending shop open).
+			if ( warming !== null ) {
+				setPanel( warming, "warm" );
+				if ( warming === "Skills" ) windowWarm.add( skillWindowWarmPaths() );
+			}
 			if ( worldVisible && hud.data() ) {
 				for ( const notice of game?.chat?.feedback ?? [] ) {
 					if ( notice.sequence > chatFeedbackObserved ) {
@@ -6015,6 +6067,18 @@ export function createUi(
 							path: ROOT + "interface/worldmap/wmap_sign_huntingpoint.png"
 						} );
 					}
+					// Beta operator roster (port-only, beta-map.ts): every other online
+					// player, drawn before the party pass so party signs stay on top.
+					for ( const player of game?.betaPlayers ?? [] ) {
+						if ( player.gid === game?.localGid ) continue;
+						mapMarkers.push( {
+							regionId: player.regionId,
+							x: player.x,
+							z: player.z,
+							rotation: 0,
+							path: ROOT + "interface/minimap/mm_sign_otherplayer.png"
+						} );
+					}
 					for ( const row of rosterPositions( pose, game ?? null, next.entities ) ) {
 						mapMarkers.push( {
 							regionId: row.regionId,
@@ -6658,14 +6722,19 @@ export function createUi(
 								selected: videoDraft.active === i
 							} );
 						}
-						// Browser presentation size and hardware gamma are not D3D display modes.
+						// Screen size: the page stays full screen; the scene and interface render
+						// at the chosen height with the window's aspect (platform displayScale).
+						// Hardware gamma is not a browser display mode.
+						const aspect = view?.width && view.height ? view.width / view.height : 16 / 9;
 						combos.push( {
 							slot: -1,
 							r: authoredRect( page.GDR_OPT_VIDEO_CB_SS!, ox, oy ),
-							entries: [ w + " x " + h ],
-							selected: 0,
+							entries: displayHeights().map( height =>
+								height === 0 ? "Native" : Math.round( height * aspect ) + " x " + height
+							),
+							selected: Math.max( 0, displayHeights().indexOf( videoDraft.displayHeight ?? 0 ) ),
 							label: hudCopy( page.GDR_OPT_VIDEO_ST_SS!.text ),
-							disabled: true
+							disabled: false
 						}, {
 							slot: -2,
 							r: authoredRect( page.GDR_OPT_VIDEO_SP_BR!, ox, oy ),
@@ -6733,7 +6802,7 @@ export function createUi(
 								hudCopy( row.key )
 							);
 						}
-						const open = combos.find( c => c.slot === videoCombo && c.slot >= 0 );
+						const open = combos.find( c => c.slot === videoCombo && c.slot >= -1 );
 						if ( open ) {
 							const r = open.r, list: UiRect = [ r[0], r[1] + 20, r[2], open.entries.length * 18 ];
 							rect( list, [ 0, 0, 0, 1 ] );
@@ -11802,12 +11871,22 @@ export function createUi(
 			// Renderer now derives GPU residency from committed quads; this catalogue
 			// must never again be interpreted as the set of GPU-resident textures.
 			paths.push( ...hud.data()?.warmPaths ?? [], ...guideResources.data()?.warmPaths ?? [] );
+			paths.push( ...windowWarm.paths() );
 			for ( const item of game?.inventory ?? [] ) {
 				const path = iconPath( item.icon );
 				if ( path ) paths.push( path );
 			}
 			dirty = resources.step( paths, now );
 			if ( dirty ) layoutResourcesRevision++;
+			if ( windowWarm.active() ) {
+				// Keep the demand, publish nothing, and close the unseen window.
+				windowWarm.end( paths );
+				setPanel( "", "warm" );
+				admittedWindows.clear();
+				gauges.end();
+				dirty = true;
+				return null;
+			}
 			gauges.end();
 			quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );

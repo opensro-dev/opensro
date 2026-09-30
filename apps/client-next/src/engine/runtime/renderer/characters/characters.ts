@@ -1616,7 +1616,15 @@ export function createCharacters(
 									}
 								}
 								if ( primitive.billboard ) {
-									faceEffectMesh( batch.palettes[p]!, offset, transform, view!, primitive.billboard );
+									// ViewVBillboard follows the element's velocity (CEFEffect_Render b1556c).
+									faceEffectMesh(
+										batch.palettes[p]!,
+										offset,
+										transform,
+										view!,
+										primitive.billboard,
+										particle?.velocity
+									);
 								}
 								if ( particle ) placeParticle( particle, batch.palettes[p]!, offset, true );
 								particleTimes.push( age );

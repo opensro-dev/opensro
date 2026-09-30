@@ -13,9 +13,10 @@ function audit(source){
    let owner=node.parent;while(owner&&!ts.isFunctionLike(owner))owner=owner.parent;
    if(!owner?.name||!['setPanel','resetPanel'].includes(owner.name.text))errors.push('panel assignment bypasses transition owner');
   }
+  // 'warm' is the unseen first build of a window (window-warm.ts): no hooks or resets.
   if(ts.isCallExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text==='setPanel'){
    const intent=node.arguments[1];
-   if(node.arguments.length<1||node.arguments.length>2||intent&&(!ts.isStringLiteral(intent)||!['open','toggle','select'].includes(intent.text)))errors.push('invalid panel intent');
+   if(node.arguments.length<1||node.arguments.length>2||intent&&(!ts.isStringLiteral(intent)||!['open','toggle','select','warm'].includes(intent.text)))errors.push('invalid panel intent');
   }
  });return errors;
 }

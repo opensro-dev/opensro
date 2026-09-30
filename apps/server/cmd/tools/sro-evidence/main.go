@@ -18,6 +18,7 @@ type evidenceCommand struct {
 
 var evidenceCommands = []evidenceCommand{
 	{name: "moveclip-oracle", summary: "run shared movement chords through the server clipper", run: runMoveclipOracle},
+	{name: "navsweep", summary: "find traps, pockets and one-way edges around a point", run: runNavSweep},
 	{name: "performance-ring", summary: "measure worst-case scoped monster population", run: runPerformanceRing},
 	{name: "spawnable-npcs", summary: "emit the evidence-filtered NPC asset roster", run: runSpawnableNPCs},
 	{name: "spawnable-monsters", summary: "emit the evidence-filtered monster asset roster", run: runSpawnableMonsters},

@@ -107,6 +107,17 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 		}
 	}
 
+	// The beta starter kit backfills every character on entry (starterkit.go).
+	if len(deps.StarterKit) > 0 && StarterKitMissing(character, deps.StarterKit) {
+		deps.Mutate(liveCharacter, "starter-kit", func() {
+			GrantStarterKit(liveCharacter, deps.StarterKit)
+		})
+		character = readCharacterSnapshot(deps, divisionID, liveCharacter)
+		if character == nil {
+			return Failure(nativeErrorCharacter, "characterNotFound")
+		}
+	}
+
 	if deps.NormalizeEntryQuests != nil {
 		if err := deps.NormalizeEntryQuests(character); err != nil {
 			return Failure(nativeErrorInvalidRequest, "invalidQuestState: "+err.Error())

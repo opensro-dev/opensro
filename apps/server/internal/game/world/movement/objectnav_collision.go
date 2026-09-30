@@ -151,6 +151,10 @@ type objectContactOptions struct {
 	// puts the walker on another surface, this mesh's edges are not in the
 	// walker's way (it is on a different deck, or on this one's terrain).
 	walk *navWalk
+	// walkerAt is the chord fraction the terrain walker stood at when it
+	// stepped this object (native visit or its last exit back onto terrain).
+	// 428300's blocked branch nudges that position, not the chord start.
+	walkerAt func(t float64) float64
 }
 
 /*
@@ -241,7 +245,12 @@ func objectEdgeGroupChordContactDetail(
 		bestT = t
 		found = true
 		if response != nil {
-			*response = nativeObjectContact(mesh, edges, i, originSide*srcSide > 0, x0, z0, y0, x1, z1, reflection)
+			ox, oz := x0, z0
+			if !owned && opts.walkerAt != nil {
+				at := opts.walkerAt(t)
+				ox, oz = x0+(x1-x0)*at, z0+(z1-z0)*at
+			}
+			*response = nativeObjectContact(mesh, edges, i, originSide*srcSide > 0, ox, oz, y0, x1, z1, reflection)
 			response.outline = outline
 		}
 	}
@@ -287,7 +296,7 @@ const objectAnchorSearchRadiusSectors = 1
 // object-nav placements anchored on the chord or in an adjacent sector. The
 // candidate sectors come from a supercover walk rather than the chord's whole
 // bounding rectangle, keeping diagonal requests linear and bounded.
-func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, toWZ, toY float64, walk *navWalk) (float64, bool, objectContactPoint) {
+func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, toWZ, toY float64, walk *navWalk) (float64, float64, bool, objectContactPoint) {
 	start := globalTile{
 		x: int(math.Floor(fromWX / simulation.NativeRegionSize)),
 		z: int(math.Floor(fromWZ / simulation.NativeRegionSize)),
@@ -312,7 +321,7 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 	)
 
 	checked := make(map[objectNavSetKey]struct{}, len(chordSectors)*9)
-	bestT := math.Inf(1)
+	bestT, bestKey := math.Inf(1), math.Inf(1)
 	var rest objectContactPoint
 	found := false
 	probe := func(surface *groundSurface, anchorX, anchorZ int) {
@@ -345,22 +354,31 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 			oz1 := -sinYaw*(lx1-placement.x) + cosYaw*(lz1-placement.z)
 			oy0 := fromY - placement.y
 			oy1 := toY - placement.y
+			// Native visit order (404510): a terrain walker steps this placement
+			// once it stands in a cell the placement is registered in, against the
+			// rest of the chord; the earliest visit wins over later ones, whatever
+			// their crossing parameters.
+			visit := terrainVisitKey(placement.terrainCells, lx0, lz0, lx1, lz1)
 			var terrainEntry func(float64) bool
 			if placement.terrainCells != nil {
-				terrainEntry = func(t float64) bool {
-					x, z := lx0+(lx1-lx0)*t, lz0+(lz1-lz0)*t
-					for _, r := range *placement.terrainCells {
-						if x >= float64(r[0]) && x <= float64(r[2]) && z >= float64(r[1]) && z <= float64(r[3]) {
-							return true
-						}
-					}
-					return false
-				}
+				terrainEntry = func(t float64) bool { return t >= visit-1e-9 }
 			}
 			for _, mesh := range set[i].meshes {
 				var local objectContactPoint
 				path := walk.pathForMesh(mesh, float64(anchorX)*simulation.NativeRegionSize, float64(anchorZ)*simulation.NativeRegionSize, placement.ordinal)
-				if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, bestT, func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk}); ok {
+				if path == nil && math.IsInf(visit, 1) {
+					continue
+				}
+				walkerAt := func(t float64) float64 { return math.Max(visit, walk.lastExitBefore(t)) }
+				if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, walkerAt: walkerAt}); ok {
+					key := visit
+					if path != nil {
+						key = t // an owned mesh is walked cell by cell: its own contact order
+					}
+					if key > bestKey || key == bestKey && t >= bestT {
+						continue
+					}
+					bestKey = key
 					rest = local
 					if rest.valid {
 						rest.x = contactF32(cosYaw*local.x-sinYaw*local.z+placement.x) + float64(anchorX)*simulation.NativeRegionSize
@@ -393,7 +411,7 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 			}
 		}
 	}
-	return bestT, found, rest
+	return bestT, bestKey, found, rest
 }
 
 // spawnObjectDeckVerdict is the verdict RelocateStrandedSpawn consults:

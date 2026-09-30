@@ -116,6 +116,19 @@ variable "move_client_clip" {
   default = "apply"
 }
 
+# Beta operator switches ("on" or "off"). beta_starter_kit gives every
+# character an unlimited return scroll and +100% speed scroll (backfilled on
+# entry); beta_player_map shows every online player on the world map (M).
+variable "beta_starter_kit" {
+  type    = string
+  default = "on"
+}
+
+variable "beta_player_map" {
+  type    = string
+  default = "on"
+}
+
 variable "cpu" {
   type    = number
   default = 2000
@@ -246,6 +259,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BENCHMARK_FIXTURE_CONTROL       = var.host_network == "loopback" && var.nomad_namespace == "default" ? "1" : "0"
         SRO_MOVE_PATH_GUARD                = var.move_path_guard
         SRO_MOVE_CLIENT_CLIP               = var.move_client_clip
+        SRO_BETA_STARTER_KIT               = var.beta_starter_kit
+        SRO_BETA_PLAYER_MAP                = var.beta_player_map
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                 = var.cert_dir

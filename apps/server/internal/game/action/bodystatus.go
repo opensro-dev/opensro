@@ -9,6 +9,10 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+// untouchableBodyStatus is body mode 2 (CGObjChar_GetBodyMode, vtable
+// +0x100): CGObjChar_CheckTargetAttackable (5291D0) refuses an attacker in it.
+const untouchableBodyStatus uint8 = 2
+
 func bodyStatusFrame(gid uint32, value uint8) wire.Frame {
 	return wire.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelBody, Value: value}).Encode()}
 }

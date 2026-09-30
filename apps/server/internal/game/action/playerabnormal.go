@@ -148,6 +148,21 @@ func (rt *Runtime) PlayerMovementBlocked(division, name string) bool {
 }
 
 /*
+================
+PlayerAttackLocked
+
+CGObjChar_IsAttackLocked (4AAB40): true while the casting instance at
+char+C08 is set, i.e. a skill action has not yet released its positive-time
+step. CGObjPC_IsMotionChangeLocked (4EF880) feeds it to
+CGObjChar_HandleMoveCommand (4B0EA0), which drops a ground command in that
+state instead of queueing it: a player cannot walk out of a cast.
+================
+*/
+func (rt *Runtime) PlayerAttackLocked(division, name string) bool {
+	return rt.chainStageBlocked(division, name)
+}
+
+/*
 ==================
 playerCastBlocked
 

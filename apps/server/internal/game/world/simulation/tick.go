@@ -242,6 +242,8 @@ type Ticker struct {
 	// nil only under the MISSION_SPAWN_MONSTERS=0 kill switch (then the
 	// leg costs nothing).
 	Monsters *MonsterMoverOps
+	// PlayerMap enables the beta world map roster leg (playermap.go).
+	PlayerMap bool
 
 	// tickIndex is the coordinator-owned server-clock tick counter fed to
 	// the patrol function.
@@ -266,6 +268,7 @@ type divisionTickState struct {
 	peerVisibilityValid bool
 	shownCOS            map[string]map[uint32]shownCOS
 	monsters            *MonsterMoverOps
+	playerMapDueMs      int64
 }
 
 /*
@@ -593,6 +596,7 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	}
 	t.runPeerVisibility(work.state, nowMs, work.sessions, live)
 	t.runPeerCOSVisibility(work.state, nowMs, work.sessions, live)
+	t.runPlayerMap(work.state, nowMs, work.sessions)
 	for _, session := range work.sessions {
 		t.runSessionLegs(work.state, session, tick, nowMs)
 	}

@@ -181,6 +181,37 @@ func (v *WaterValidator) ResolveNavOwner(p simulation.Spawn, hint simulation.Nav
 // no data) and callers keep their legacy behaviour for that plane.
 type navWalk struct {
 	paths []*objectOwnedPath // ascending, non-overlapping global-t spans
+	// bridges are the [visit, crossing] fractions an outline entry skips
+	// (CRTNavMeshObj_EnterFromOutside places the walker at the crossing).
+	bridges [][2]float64
+}
+
+// lastExitBefore is the chord fraction at which the walker last left an
+// object back onto terrain at or before t (0 when it never did).
+func (w *navWalk) lastExitBefore(t float64) float64 {
+	last := 0.0
+	if w == nil {
+		return last
+	}
+	for _, path := range w.paths {
+		if n := len(path.spans); n > 0 && path.spans[n-1].to <= t+1e-9 && path.spans[n-1].to > last {
+			last = path.spans[n-1].to
+		}
+	}
+	return last
+}
+
+// bridged reports whether chord fraction t lies on terrain an entry skipped.
+func (w *navWalk) bridged(t float64) bool {
+	if w == nil {
+		return false
+	}
+	for _, b := range w.bridges {
+		if t >= b[0]-1e-9 && t <= b[1]+1e-9 {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *navWalk) objectAt(t float64) (*objectOwnedPath, int, bool) {
@@ -305,10 +336,13 @@ func (v *WaterValidator) ownerWalk(from simulation.Spawn, fromOwner simulation.N
 			stand = nil
 			continue
 		}
-		entered, at := v.terrainOutlineEntry(a.X, a.Z, b.X, b.Z, t)
+		entered, at, visit := v.terrainOutlineEntry(a.X, a.Z, b.X, b.Z, t)
 		if entered == nil {
 			break
 		}
+		// 428300 moves the walker straight to the outline crossing: the terrain
+		// between the visit and the crossing is never walked.
+		walk.bridges = append(walk.bridges, [2]float64{visit, at})
 		stand, t = entered, at
 	}
 	return walk
@@ -319,7 +353,7 @@ func (v *WaterValidator) ownerWalk(from simulation.Spawn, fromOwner simulation.N
 // carry neither side-block bit 0x01 nor 0x10 (the same admission client-next
 // ports as terrainOwnerPath, 404510 -> 403FB0 -> 428300). The entered cell is
 // the edge's source cell; the object's own walk then owns the chord.
-func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*objectDeckStand, float64) {
+func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*objectDeckStand, float64, float64) {
 	const eps = 1e-9
 	start := globalTile{x: int(math.Floor(ax / simulation.NativeRegionSize)), z: int(math.Floor(az / simulation.NativeRegionSize))}
 	end := globalTile{x: int(math.Floor(bx / simulation.NativeRegionSize)), z: int(math.Floor(bz / simulation.NativeRegionSize))}
@@ -330,7 +364,7 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 	})
 	checked := map[objectNavSetKey]struct{}{}
 	var best *objectDeckStand
-	bestT := math.Inf(1)
+	bestT, bestKey := math.Inf(1), math.Inf(1)
 	probe := func(surface *groundSurface, anchorX, anchorZ int) {
 		if surface == nil {
 			return
@@ -343,7 +377,14 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 		}
 		checked[key] = struct{}{}
 		set := v.objectNavSetForOffset(surface, dx, dz)
+		baseX, baseZ := float64(anchorX)*simulation.NativeRegionSize, float64(anchorZ)*simulation.NativeRegionSize
 		for i := range set {
+			// Native visit order (404510): the placement is stepped once the
+			// walker stands in one of its registered terrain cells.
+			visit := math.Max(tMin, terrainVisitKey(set[i].placement.terrainCells, ax-baseX, az-baseZ, bx-baseX, bz-baseZ))
+			if math.IsInf(visit, 1) || visit > bestKey {
+				continue
+			}
 			for meshIndex, mesh := range set[i].meshes {
 				candidate := &objectDeckStand{set: set, objectIndex: i, mesh: mesh, placement: set[i].placement,
 					anchorX: float64(anchorX) * simulation.NativeRegionSize, anchorZ: float64(anchorZ) * simulation.NativeRegionSize,
@@ -369,7 +410,10 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 					}
 					t := ((exX-x0)*sz - (exZ-z0)*sx) / den
 					u := ((exX-x0)*rz - (exZ-z0)*rx) / den
-					if t <= tMin+eps || t >= 1 || t >= bestT || u < 0 || u > 1 {
+					if t <= tMin+eps || t < visit-eps || t >= 1 || u < 0 || u > 1 {
+						continue
+					}
+					if visit == bestKey && t >= bestT {
 						continue
 					}
 					src := int(edges.srcCell[e])
@@ -382,7 +426,7 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 					if origin*inside > 0 {
 						continue // chord starts on the cell side: an exit, not an entry
 					}
-					best, bestT = candidate.withCell(src), t
+					best, bestT, bestKey = candidate.withCell(src), t, visit
 				}
 			}
 		}
@@ -404,9 +448,9 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 		}
 	}
 	if best == nil {
-		return nil, 0
+		return nil, 0, 0
 	}
-	return best, bestT
+	return best, bestT, bestKey
 }
 
 // NavAuthority is the surface-ownership seam the movement runtime consumes.

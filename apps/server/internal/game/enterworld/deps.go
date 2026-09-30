@@ -31,6 +31,8 @@ type Deps struct {
 	Skills            SkillDataSource
 	MagicOptions      MagicOptionSource
 	EquipItemsEnabled bool
+	// StarterKit is the beta starter kit (starterkit.go); empty when disabled.
+	StarterKit []WireItem
 	// NpcSpawns is the shared static-world NPC policy consumed by bootstrap,
 	// selection and the simulation ticker. One composition-owned value prevents
 	// the old env/default roster split from creating objects no action lane

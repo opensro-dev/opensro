@@ -64,6 +64,97 @@ setup
 const { startRuntime } = await import(
 	"data:text/javascript;base64," + Buffer.from( compiled.outputFiles[0].contents ).toString( "base64" )
 );
+/*
+================
+frameOwners
+
+Owners whose first frame reaches characters.step; failure selects which
+owner fails it ("assets" dies idle, "characters" throws from its step).
+================
+*/
+function frameOwners( failure, closed, reports, sounds ) {
+	const owners = Object.fromEntries(
+		Object.keys( factories ).map( key => [ key, {
+			/*
+================
+step
+================
+			*/
+			step() {},
+			/*
+================
+dispose
+================
+			*/
+			dispose() {
+				closed.push( key );
+			}
+		} ] )
+	);
+	Object.assign( owners.assets, {
+		health: () => failure === "assets" ? { phase: "failed", error: "worker died" } : { phase: "running" }
+	} );
+	owners.renderer.setCharacterPreview = () => {};
+	owners.renderer.setSelectionDecal = () => {};
+	Object.assign( owners.platform, {
+		report: value => reports.push( value ),
+		runningEntry: () => null,
+		visibilityReturned: () => false,
+		/*
+================
+presentUpdate
+================
+		*/
+		presentUpdate() {}
+	} );
+	owners.release.newerAvailable = () => false;
+	Object.assign( owners.input, {
+		drain: () => null,
+		error: () => null,
+		camera: () => ({ yaw: 0, pitch: 0, distance: 80 })
+	} );
+	Object.assign( owners.simulation, {
+		// Never settles: these frames are driven by the fake RAF alone.
+		delivery: () => new Promise( () => {} ),
+		pollSession: () => null,
+		pollWorld: () => null,
+		poll: () => ({ timeMs: 1000, sequence: 1, acceptedInputSequence: 0 }),
+		error: () => null,
+		camera: () => null
+	} );
+	owners.audio.world = () => {};
+	owners.audio.nativeUi = ( handle, at ) => sounds.push( { handle, at } );
+	owners.audio.nativeItem = ( cue, at ) => sounds.push( { ...cue, at } );
+	Object.assign( owners.presentation, {
+		gameplay: () => null,
+		entities: () => [],
+		takeFeedback: () => [],
+		takeSounds: () => [ { kind: "ui-sound", handle: "SND_POTION", at: 950 }, {
+			kind: "item-sound",
+			cue: { handle: "SND_EQUIP", typeFlags: 0x132c },
+			at: 900
+		} ]
+	} );
+	owners.world.step = () => {};
+	owners.renderer.setWorldClock = () => {};
+	owners.renderer.setWeather = () => {};
+	owners.world.pumpCameraScripts = () => {};
+	owners.frontend.step = () => ({ phase: "loading-title" });
+	owners.navigation.step = () => {};
+	owners.characters.previewReady = () => false;
+	owners.characters.dockReady = () => false;
+	owners.characters.entryReady = () => false;
+	owners.ui.entryReady = () => false;
+	owners.characters.profile = () => {};
+	owners.characters.eventRain = () => false;
+	owners.characters.orbGauge = () => ({ authoritative: 0, displayed: 0, pending: 0 });
+	owners.characters.receiveFeedback = () => {};
+	owners.characters.step = () => {
+		throw new Error( "injected presentation failure" );
+	};
+	return owners;
+}
+
 test("runtime reports idle asset death and frame exceptions, then disposes every owner once", t => {
 	const previous = new Map(
 		[ "__runtimeOwners", "requestAnimationFrame", "cancelAnimationFrame", "location" ].map(
@@ -79,83 +170,7 @@ test("runtime reports idle asset death and frame exceptions, then disposes every
 	for ( const failure of [ "assets", "characters" ] ) {
 		const closed = [], reports = [], sounds = [];
 		let callback, frames = 0;
-		const owners = Object.fromEntries(
-			Object.keys( factories ).map( key => [ key, {
-				/*
-================
-step
-================
-				*/
-				step() {},
-				/*
-================
-dispose
-================
-				*/
-				dispose() {
-					closed.push( key );
-				}
-			} ] )
-		);
-		Object.assign( owners.assets, {
-			health: () => failure === "assets" ? { phase: "failed", error: "worker died" } : { phase: "running" }
-		} );
-		owners.renderer.setCharacterPreview = () => {};
-		owners.renderer.setSelectionDecal = () => {};
-		Object.assign( owners.platform, {
-			report: value => reports.push( value ),
-			runningEntry: () => null,
-			visibilityReturned: () => false,
-			/*
-================
-presentUpdate
-================
-			*/
-			presentUpdate() {}
-		} );
-		owners.release.newerAvailable = () => false;
-		Object.assign( owners.input, {
-			drain: () => null,
-			error: () => null,
-			camera: () => ({ yaw: 0, pitch: 0, distance: 80 })
-		} );
-		Object.assign( owners.simulation, {
-			pollSession: () => null,
-			pollWorld: () => null,
-			poll: () => ({ timeMs: 1000, sequence: 1, acceptedInputSequence: 0 }),
-			error: () => null,
-			camera: () => null
-		} );
-		owners.audio.world = () => {};
-		owners.audio.nativeUi = ( handle, at ) => sounds.push( { handle, at } );
-		owners.audio.nativeItem = ( cue, at ) => sounds.push( { ...cue, at } );
-		Object.assign( owners.presentation, {
-			gameplay: () => null,
-			entities: () => [],
-			takeFeedback: () => [],
-			takeSounds: () => [ { kind: "ui-sound", handle: "SND_POTION", at: 950 }, {
-				kind: "item-sound",
-				cue: { handle: "SND_EQUIP", typeFlags: 0x132c },
-				at: 900
-			} ]
-		} );
-		owners.world.step = () => {};
-		owners.renderer.setWorldClock = () => {};
-		owners.renderer.setWeather = () => {};
-		owners.world.pumpCameraScripts = () => {};
-		owners.frontend.step = () => ({ phase: "loading-title" });
-		owners.navigation.step = () => {};
-		owners.characters.previewReady = () => false;
-		owners.characters.dockReady = () => false;
-		owners.characters.entryReady = () => false;
-		owners.ui.entryReady = () => false;
-		owners.characters.profile = () => {};
-		owners.characters.eventRain = () => false;
-		owners.characters.orbGauge = () => ({ authoritative: 0, displayed: 0, pending: 0 });
-		owners.characters.receiveFeedback = () => {};
-		owners.characters.step = () => {
-			throw new Error( "injected presentation failure" );
-		};
+		const owners = frameOwners( failure, closed, reports, sounds );
 		globalThis.location = { search: "", origin: "http://localhost" };
 		globalThis.__runtimeOwners = owners;
 		globalThis.requestAnimationFrame = fn => {
@@ -179,6 +194,38 @@ presentUpdate
 		runtime.dispose();
 		defined( callback )( 2 );
 		assert.equal( closed.length, Object.keys( factories ).length - 1 );
+	}
+});
+
+test("a hidden tab runs frames from worker deliveries; a visible one waits for its RAF", async t => {
+	const keys = [ "__runtimeOwners", "requestAnimationFrame", "cancelAnimationFrame", "location", "document" ];
+	const previous = new Map( keys.map( key => [ key, Object.getOwnPropertyDescriptor( globalThis, key ) ] ) );
+	t.after( () => {
+		for ( const [key, value] of previous ) {
+			if ( value ) Object.defineProperty( globalThis, key, value );
+			else delete globalThis[key];
+		}
+	} );
+	for ( const visibilityState of [ "visible", "hidden" ] ) {
+		const closed = [], reports = [], sounds = [];
+		const owners = frameOwners( "characters", closed, reports, sounds );
+		// Deliveries arrive on the worker's own clock, never from a RAF.
+		owners.simulation.delivery = () => new Promise( resolve => setTimeout( resolve, 20 ) );
+		let rafs = 0, cancelled = 0;
+		globalThis.document = { visibilityState };
+		globalThis.location = { search: "", origin: "http://localhost" };
+		globalThis.__runtimeOwners = owners;
+		globalThis.requestAnimationFrame = () => ++rafs;
+		globalThis.cancelAnimationFrame = () => cancelled++;
+		const runtime = startRuntime( {}, {} );
+		await new Promise( resolve => setTimeout( resolve, 400 ) );
+		if ( visibilityState === "hidden" ) {
+			// The frame ran (and hit the injected failure) with no RAF callback.
+			assert.equal( reports.length, 1 );
+			assert.match( reports[0], /injected presentation failure/ );
+			assert.equal( cancelled >= 1, true, "the pending RAF is retired" );
+		} else assert.equal( reports.length, 0, "a visible tab never frames off a delivery" );
+		runtime.dispose();
 	}
 });
 
@@ -209,6 +256,7 @@ dispose
 		} ] )
 	);
 	globalThis.__runtimeOwners.platform.runningEntry = () => null;
+	globalThis.__runtimeOwners.simulation.delivery = () => new Promise( () => {} );
 	for ( const name of Object.keys( factories ) ) {
 		const owner = globalThis.__runtimeOwners[name];
 		Object.defineProperty( globalThis.__runtimeOwners, name, {
@@ -272,6 +320,7 @@ dispose
 			} ] )
 		);
 	owners.platform.runningEntry = () => null;
+	owners.simulation.delivery = () => new Promise( () => {} );
 	globalThis.__runtimeOwners = owners;
 	globalThis.location = { search: "", origin: "http://localhost" };
 	globalThis.requestAnimationFrame = () => 1;

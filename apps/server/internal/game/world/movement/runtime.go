@@ -80,6 +80,10 @@ type Runtime struct {
 	// MovementBlocked is the abnormal-state gate of 4B0EA0: a frozen, asleep,
 	// rooted or stunned mover's command is dropped silently. Nil admits.
 	MovementBlocked func(divisionID, characterName string) bool
+	// AttackLocked is 4EF880's attack lock in the same gate: while a skill
+	// action holds the casting instance (char+C08) the command is dropped,
+	// not queued. Nil admits.
+	AttackLocked func(divisionID, characterName string) bool
 	// AdvanceResidentRegion commits a crossed live region before this command
 	// replaces the segment. The population owner owns the saved-return effect.
 	AdvanceResidentRegion func(divisionID, characterName string, nowMs int64)
@@ -452,6 +456,9 @@ func (rt *Runtime) admitMove(divisionID string, character *enterworld.Character,
 	}
 	if rt.MovementBlocked != nil && rt.MovementBlocked(divisionID, character.Name) {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "abnormalState"}
+	}
+	if rt.AttackLocked != nil && rt.AttackLocked(divisionID, character.Name) {
+		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "attackLocked"}
 	}
 	return admission, nil
 }

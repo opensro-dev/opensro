@@ -74,7 +74,7 @@ func (rt *Runtime) useSkillItem(character *enterworld.Character, use skillItemUs
 	if !applied {
 		return false
 	}
-	remaining := consumeItemUseRow(character, use.row)
+	remaining := rt.consumeItemUseRow(character, use.row)
 	*result = OpResult{
 		Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
 			Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}},

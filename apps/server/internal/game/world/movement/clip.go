@@ -259,7 +259,7 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 		if walkable {
 			return false
 		}
-		if _, _, owned := walk.objectAt(t); owned {
+		if _, _, owned := walk.objectAt(t); owned || walk.bridged(t) {
 			report.ObjectDeckOverrides++
 			return false
 		}
@@ -280,7 +280,7 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 	// move can still cross a deck rail). Composition below is
 	// nearest-wins: the native walk stops at its first clip on either
 	// plane and never continues past it (sub_428930 bit0 semantics).
-	objectT, objectFound, objectPoint := v.objectChordFirstContact(fromWX, fromWZ, from.Y, toWX, toWZ, to.Y, walk)
+	objectT, objectKey, objectFound, objectPoint := v.objectChordFirstContact(fromWX, fromWZ, from.Y, toWX, toWZ, to.Y, walk)
 
 	if startTile == endTile {
 		if covered == 0 {
@@ -305,7 +305,9 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 		report.Truncated = true
 		return report
 	}
-	if objectFound && (!blocked || objectT < contact.t) {
+	// Native 404510 steps a cell's placed objects before it leaves the cell:
+	// an object visited at or before the blocking terrain crossing wins.
+	if objectFound && (!blocked || objectKey <= contact.t) {
 		return v.clipObjectRest(report, walk, from, to, fromWX, fromWZ, toWX, toWZ, objectT, objectPoint)
 	}
 	if !blocked {

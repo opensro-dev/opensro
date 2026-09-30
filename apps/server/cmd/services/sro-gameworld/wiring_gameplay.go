@@ -94,6 +94,7 @@ func newGameplayPlane(
 		return nil, err
 	}
 	items := action.NewRuntime(deps, deps.MonsterState)
+	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
 		return nil, fmt.Errorf("loot catalogue: %w", err)
 	}
@@ -167,6 +168,7 @@ func newGameplayPlane(
 	movementRuntime.UsePendingTracker(items.Pending)
 	movementRuntime.ClearCombatIntent = items.ClearCombatIntent
 	movementRuntime.MovementBlocked = items.PlayerMovementBlocked
+	movementRuntime.AttackLocked = items.PlayerAttackLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.PetPresentation = items.PetPresentation
 	deps.SpawnTerrainHeight = water.TerrainHeightAt

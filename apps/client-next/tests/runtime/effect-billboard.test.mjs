@@ -14,7 +14,8 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
-const { faceEffectPlate, faceEffectMesh } = await import( "../../src/engine/foundation/rendering/effect-billboard.ts" );
+const effectBillboard = await import( "../../src/engine/foundation/rendering/effect-billboard.ts" );
+const { faceEffectPlate, faceEffectMesh } = effectBillboard;
 const { identity, placement, viewProjection, cameraBasis } = await import(
 	"../../src/engine/foundation/rendering/world-math.ts"
 );
@@ -228,4 +229,56 @@ test("faceEffectMesh handles mesh billboard orientations and axial Y constraint"
 	const vZeroPalette = identity();
 	faceEffectMesh( vZeroPalette, 0, instance, zeroView, "v" );
 	assert.ok( Number.isFinite( vZeroPalette[0] ) );
+});
+
+test("ViewVBillboard follows velocity, never the camera (CEFEffect_Render b1556c)", () => {
+	const { velocityBasis } = effectBillboard;
+	const view = viewProjection( camera, 1.5 ), instance = identity();
+	// A ring with no velocity keeps its authored orientation on world axes,
+	// wherever the camera is: flat rings stay flat.
+	for ( const velocity of [ undefined, [ 0, 0, 0 ], [ 0, 5, 0 ] ] ) {
+		const palette = identity();
+		palette[0] = 2;
+		palette[5] = 3;
+		palette[10] = 4;
+		faceEffectMesh( palette, 0, instance, view, "v", velocity );
+		assert.deepEqual(
+			Array.from( palette.slice( 0, 11 ) ).map( v => Math.round( v * 1e5 ) / 1e5 ),
+			[ 2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4 ],
+			`velocity ${JSON.stringify( velocity )}`
+		);
+	}
+	// A still element keeps its own rotation (here 90 degrees about X, a ring
+	// stood up by SetRotation) on world axes: the instance's yaw drops out.
+	const tilted = identity();
+	tilted[5] = 0;
+	tilted[6] = 1;
+	tilted[9] = -1;
+	tilted[10] = 0;
+	const yawed = identity();
+	yawed[0] = 0;
+	yawed[2] = -1;
+	yawed[8] = 1;
+	yawed[10] = 0;
+	faceEffectMesh( tilted, 0, yawed, view, "v" );
+	const world = new Float32Array( 16 );
+	for ( let col = 0; col < 3; col++ ) {
+		for ( let row = 0; row < 3; row++ ) {
+			for ( let k = 0; k < 3; k++ ) world[col * 4 + row] += yawed[k * 4 + row] * tilted[col * 4 + k];
+		}
+	}
+	assert.deepEqual(
+		[ world[0], world[1], world[2], world[4], world[5], world[6], world[8], world[9], world[10] ].map( v =>
+			Math.round( v * 1e5 ) / 1e5 + 0
+		),
+		[ 1, 0, 0, 0, 0, 1, 0, -1, 0 ]
+	);
+	// Moving along +X: Y follows v, Z = normalize(v x up), X = normalize(v x Z).
+	const [x, y, z] = velocityBasis( [ 7, 0, 0 ] );
+	assert.deepEqual( y, [ 1, 0, 0 ] );
+	assert.deepEqual( z.map( v => Math.round( v * 1e6 ) / 1e6 + 0 ), [ 0, 0, 1 ] );
+	assert.deepEqual( x.map( v => Math.round( v * 1e6 ) / 1e6 + 0 ), [ 0, -1, 0 ] );
+	const moving = identity();
+	faceEffectMesh( moving, 0, instance, view, "v", [ 7, 0, 0 ] );
+	assert.ok( Math.abs( moving[4] - 1 ) < 1e-6 && Math.abs( moving[5] ) < 1e-6, "element Y turns onto the velocity" );
 });
