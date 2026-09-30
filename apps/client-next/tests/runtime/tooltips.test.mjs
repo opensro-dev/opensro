@@ -453,18 +453,34 @@ test("reported beginner speed scroll uses native effect level and measured toolt
 	assert.equal( bubble.lines[0].rect[0], x );
 });
 
+/*
+================
+assertSameBytes
+
+Byte equality for multi-megabyte files. assert.deepEqual on two large
+Buffers renders a byte-wise diff on failure, which runs for minutes and dies
+with "Array buffer allocation failed" instead of reporting the mismatch.
+================
+*/
+function assertSameBytes( actual, expected, message ) {
+	if ( actual.equals( expected ) ) return;
+	let offset = 0;
+	while ( offset < actual.length && offset < expected.length && actual[offset] === expected[offset] ) offset++;
+	assert.fail( `${message}: ${actual.length} bytes vs ${expected.length}, first difference at byte ${offset}` );
+}
+
 const { createInventory } = await load(
 	"src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts"
 );
 test("item localization is shared by published descriptions and server inventory references", () => {
 	const source = readFileSync( path.join( retailTextdataRoot, "textdataname.txt" ) );
 	const projected = completeItemTextProjection( source ), again = completeItemTextProjection( projected );
-	assert.deepEqual(
+	assertSameBytes(
 		readFileSync( path.join( serverGameDataRoot, "textdata", "textdataname.txt" ) ),
 		projected,
-		"installed server projection uses the same completion policy"
+		"installed server projection uses the same completion policy (rebuild it with pnpm task build server-game-data)"
 	);
-	assert.deepEqual( again, projected, "rebuilding must be idempotent" );
+	assertSameBytes( again, projected, "rebuilding must be idempotent" );
 	const before = source.toString( "utf16le" ).split( /\r\n?/ ),
 		after = projected.toString( "utf16le" ).split( /\r\n?/ );
 	assert.equal( after.length - before.length, 17, "only the absent name records are appended" );
