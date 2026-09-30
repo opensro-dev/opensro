@@ -14,7 +14,8 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join } from "node:path";
+import { mediaExtractedRoot } from "../../../../scripts/build/world/paths.mjs";
 import { pathToFileURL } from "node:url";
 await mkdir( "temp/artifacts/crests-war-buffs", { recursive: true } );
 async function load( path, name ) {
@@ -59,9 +60,7 @@ const war = (
 ];
 const packet = ( s, op, p ) => socialPacket( s, { opcode: op, payload: Uint8Array.from( p ) } );
 test("native palette indices are opaque RGB and vertically inverted exactly once", async () => {
-	const native = await readFile( "../../../extracted/Media_extracted/silk.dat" ).catch( () =>
-		readFile( "../../../../extracted/Media_extracted/silk.dat" )
-	);
+	const native = await readFile( join( mediaExtractedRoot, "silk.dat" ) );
 	const bytes = Uint8Array.from( { length: 256 }, ( _, i ) => i ), rgba = decodeGuildCrest( bytes );
 	for ( let y = 0; y < 16; y++ ) {
 		for ( let x = 0; x < 16; x++ ) {

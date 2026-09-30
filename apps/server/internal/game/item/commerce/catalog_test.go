@@ -1,15 +1,29 @@
+/*
+===========================================================================
+
+catalog_test.go - the shipped commerce catalog
+
+The NPC shop catalog loads from the shipped tables.
+
+===========================================================================
+*/
 package commerce
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestShippedCatalog
+================
+*/
 func TestShippedCatalog(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	dir := licensed.RetailTextdataDir(t)
 	if _, e := os.Stat(dir); e != nil {
 		t.Skip("original media unavailable")
 	}

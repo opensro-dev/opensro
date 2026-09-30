@@ -1,8 +1,19 @@
-"""Bounded execution of the original AD05F0 and native CRT trigonometry.
+"""
+===========================================================================
+
+verify-native-bsr-transforms.py - Bounded execution of the original AD05F0 and native CRT trigonometry
+
 The candidate is frozen in the input artifact before executing original bytes.
+
+SRO_Client.exe is read from the game root (scripts/sro_paths.py).
+
+===========================================================================
 """
 import hashlib,json,struct
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
+from sro_paths import GAME_ROOT  # noqa: E402  (SRO_GAME_ROOT or beside the main checkout)
 import pefile
 from unicorn import Uc,UC_ARCH_X86,UC_MODE_32,UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_ESP,UC_X86_REG_ECX,UC_X86_REG_EIP,UC_X86_REG_FPCW,UC_X86_REG_EAX
@@ -10,7 +21,7 @@ ROOT=Path(__file__).resolve().parents[1]
 candidate=ROOT/'src/engine/foundation/animation/bsr-particle-transform.ts'
 frozen=json.loads((ROOT/'temp/artifacts/bsr-parity/rotation-candidates.json').read_text())
 assert frozen['sourceSha256']==hashlib.sha256(candidate.read_bytes()).hexdigest()
-raw=(ROOT.parents[2]/'SRO_Client.exe').read_bytes()
+raw=(GAME_ROOT/'SRO_Client.exe').read_bytes()
 assert hashlib.sha256(raw).hexdigest()=='375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a'
 pe=pefile.PE(data=raw);base=pe.OPTIONAL_HEADER.ImageBase
 m=Uc(UC_ARCH_X86,UC_MODE_32);m.mem_map(base,(pe.OPTIONAL_HEADER.SizeOfImage+4095)&~4095);m.mem_write(base,pe.get_memory_mapped_image())

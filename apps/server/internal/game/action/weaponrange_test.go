@@ -1,18 +1,32 @@
+/*
+===========================================================================
+
+weaponrange_test.go - basic weapon ranges
+
+Authored basic-attack ranges, caster pursuit and reach parameters.
+
+===========================================================================
+*/
 package action
 
 import (
+	"testing"
+
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
-	"testing"
 )
 
+/*
+================
+TestAuthoredBasicWeaponRangesAndCasterPursuit
+================
+*/
 func TestAuthoredBasicWeaponRangesAndCasterPursuit(t *testing.T) {
 	licensed.RequireGameData(t)
-	source := enterworld.NewTextdataSkills(filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata"))
+	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))
 	for _, tc := range []struct {
 		code       string
 		kind       uint8
@@ -71,6 +85,11 @@ func TestAuthoredBasicWeaponRangesAndCasterPursuit(t *testing.T) {
 	}
 }
 
+/*
+================
+TestReachAddsCasterRangeParameters
+================
+*/
 // 4ADAB8: a row that asks for CBRA or WIRU adds the caster's value; a row
 // that does not ignores it. The shipped passives set exactly those values.
 func TestReachAddsCasterRangeParameters(t *testing.T) {

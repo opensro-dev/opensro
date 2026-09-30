@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+levelup_fixture_test.go - the level-up burst fixture
+
+The level-up burst fixture pins the real emitter's bytes.
+
+===========================================================================
+*/
 package progression
 
 // The FABLE-1 <-> FABLE-5 drift fixture (levelup-wave board seq 33/41/
@@ -19,6 +28,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
 type burstFixture struct {
@@ -51,13 +61,18 @@ type burstScenario struct {
 	Persisted map[string]int64 `json:"persisted"`
 }
 
+/*
+================
+TestLevelUpBurstFixturePinsRealEmitterBytes
+================
+*/
 // TestLevelUpBurstFixturePinsRealEmitterBytes runs every fixture
 // scenario through the production emitter over the SHIPPED leveldata
 // (skipped when the extracted tree is absent, the e2e posture - a
 // substitute table would exercise a different server than the one
 // deployed) and compares every frame byte and every persisted field.
 func TestLevelUpBurstFixturePinsRealEmitterBytes(t *testing.T) {
-	textdataDir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	textdataDir := licensed.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(textdataDir, "leveldata.txt")); err != nil {
 		t.Skipf("shipped textdata not present in this checkout: %v", err)
 	}

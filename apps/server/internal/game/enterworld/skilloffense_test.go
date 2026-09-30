@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+skilloffense_test.go - direct offense and projectile admission
+
+Coverage of the shipped direct offense skills and the complete shapes their
+admission requires.
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -6,10 +16,17 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestShippedDirectOffenseCoverage
+================
+*/
 func TestShippedDirectOffenseCoverage(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	dir := licensed.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "skilldata.txt")); err != nil {
 		t.Skip("shipped media unavailable")
 	}
@@ -48,6 +65,11 @@ func TestShippedDirectOffenseCoverage(t *testing.T) {
 	t.Logf("Complete supported player combo roots: %d; linked stages: %d", comboRoots, comboStages)
 }
 
+/*
+================
+TestDirectOffenseRequiresCompleteSupportedShape
+================
+*/
 func TestDirectOffenseRequiresCompleteSupportedShape(t *testing.T) {
 	for _, mode := range []string{"direct", "unknown-tail", "duplicate-attack", "chain", "hp-cost", "malformed-cost", "negative-mp", "shared-reuse", "trailing-data"} {
 		t.Run(mode, func(t *testing.T) {
@@ -90,6 +112,11 @@ func TestDirectOffenseRequiresCompleteSupportedShape(t *testing.T) {
 	}
 }
 
+/*
+================
+TestProjectileAdmissionRequiresCompleteSingleArrowShape
+================
+*/
 func TestProjectileAdmissionRequiresCompleteSingleArrowShape(t *testing.T) {
 	for _, branch := range []string{"arrow", "zero-count", "multi-arrow", "wrong-family", "zero-speed", "bad-speed", "overflow-speed", "combo", "area", "multi-impact", "missing-cnsm", "thrown-blade", "thrown-blade-with-bow", "extra-effect"} {
 		t.Run(branch, func(t *testing.T) {

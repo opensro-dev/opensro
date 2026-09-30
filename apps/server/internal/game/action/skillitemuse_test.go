@@ -11,7 +11,6 @@ restoration and expiry with the same owners as normal gameplay.
 package action
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -149,7 +148,7 @@ at expiry. A parser-only test cannot catch a missing runtime producer.
 */
 func TestShippedStatItemPrograms(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	dir := licensed.RetailTextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	skills := enterworld.NewTextdataSkills(dir)
 	count := 0

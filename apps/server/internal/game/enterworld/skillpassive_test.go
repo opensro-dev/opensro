@@ -1,11 +1,25 @@
+/*
+===========================================================================
+
+skillpassive_test.go - passive critical programs
+
+Whole-program admission of the passive critical family as authored.
+
+===========================================================================
+*/
 package enterworld
 
 import (
-	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestPassiveCriticalAdmissionIsWholeProgram
+================
+*/
 func TestPassiveCriticalAdmissionIsWholeProgram(t *testing.T) {
 	base := func() []string {
 		f := criticalFields("25458", "2", "0", "1919250793", "6", "8", "0")
@@ -41,9 +55,14 @@ func TestPassiveCriticalAdmissionIsWholeProgram(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAuthoredPassiveCriticalFamily
+================
+*/
 func TestAuthoredPassiveCriticalFamily(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	dir := licensed.RetailTextdataDir(t)
 	source := NewTextdataSkills(dir)
 	if err := source.Load(); err != nil {
 		t.Fatal(err)

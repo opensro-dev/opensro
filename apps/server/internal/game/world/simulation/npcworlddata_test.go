@@ -1,14 +1,30 @@
+/*
+===========================================================================
+
+npcworlddata_test.go - the shipped NPC world roster
+
+Conversation and shop authority, merchant tabs and quest greetings of the
+shipped NPC roster.
+
+===========================================================================
+*/
 package simulation
 
 import (
-	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"path/filepath"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestShippedNpcWorldRosterCarriesConversationAndShopAuthority
+================
+*/
 func TestShippedNpcWorldRosterCarriesConversationAndShopAuthority(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	dir := licensed.RetailTextdataDir(t)
 	roster := LoadNpcWorldRoster(dir)
 	if len(roster) < 150 {
 		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))
@@ -35,6 +51,11 @@ func TestShippedNpcWorldRosterCarriesConversationAndShopAuthority(t *testing.T) 
 	}
 }
 
+/*
+================
+TestPublishedMerchantBranchesCoverAllTabs
+================
+*/
 func TestPublishedMerchantBranchesCoverAllTabs(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
@@ -65,6 +86,11 @@ func TestPublishedMerchantBranchesCoverAllTabs(t *testing.T) {
 	}
 }
 
+/*
+================
+TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS
+================
+*/
 func TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)

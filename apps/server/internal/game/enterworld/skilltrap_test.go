@@ -11,7 +11,6 @@ target lists remain valid objects, with no invented capture target.
 package enterworld
 
 import (
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -105,7 +104,7 @@ pass merely because the isolated program decoder works.
 */
 func TestShippedQuestTrapPrograms(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	dir := licensed.RetailTextdataDir(t)
 	source := NewTextdataSkills(dir)
 	for _, expected := range []struct {
 		id, target, duration uint32

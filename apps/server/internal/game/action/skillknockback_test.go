@@ -1,17 +1,32 @@
+/*
+===========================================================================
+
+skillknockback_test.go - knockback skills
+
+Bash release and area variants own their damage, displacement, recovery and
+cost; every authored knockback family is complete.
+
+===========================================================================
+*/
 package action
 
 import (
 	"encoding/binary"
 	"fmt"
+	"testing"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
-	"testing"
 )
 
+/*
+================
+TestBashReleaseOwnsDamageDisplacementAndRecovery
+================
+*/
 func TestBashReleaseOwnsDamageDisplacementAndRecovery(t *testing.T) {
 	for _, branch := range []string{"proc", "immune", "fatal", "cancel"} {
 		t.Run(branch, func(t *testing.T) {
@@ -101,6 +116,11 @@ func TestBashReleaseOwnsDamageDisplacementAndRecovery(t *testing.T) {
 	}
 }
 
+/*
+================
+TestBashAreaCommitsPerVictimKnockbackAndOneCost
+================
+*/
 func TestBashAreaCommitsPerVictimKnockbackAndOneCost(t *testing.T) {
 	rt, targets := areaFixture(t, 100000)
 	c := rt.findCharacter(testDivision, "asd2")
@@ -179,9 +199,14 @@ func TestBashAreaCommitsPerVictimKnockbackAndOneCost(t *testing.T) {
 	}
 }
 
+/*
+================
+TestKnockbackCompleteAuthoredFamilies
+================
+*/
 func TestKnockbackCompleteAuthoredFamilies(t *testing.T) {
 	licensed.RequireGameData(t)
-	source := enterworld.NewTextdataSkills(filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata"))
+	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))
 	for family, count := range map[string]int{"SKILL_EU_WARRIOR_TWOHANDA_DASH_A": 22, "SKILL_CH_SPEAR_ROUNDAREA_B": 9, "SKILL_CH_SPEAR_ROUNDAREA_C": 9, "SKILL_CH_SPEAR_ROUNDAREA_D": 3} {
 		for rank := 1; rank <= count; rank++ {
 			code := fmt.Sprintf("%s_%02d", family, rank)

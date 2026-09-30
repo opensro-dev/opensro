@@ -1,17 +1,32 @@
+/*
+===========================================================================
+
+passive_defense_native_test.go - passive defense against the native writer
+
+Native writer vectors for passive defense, and passives following their
+equipment requirement.
+
+===========================================================================
+*/
 package combat
 
 import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"testing"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/licensed"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
+/*
+================
+TestPassiveDefenseNativeWriterVectors
+================
+*/
 func TestPassiveDefenseNativeWriterVectors(t *testing.T) {
 	licensed.RequireGameData(t)
 	b, err := os.ReadFile("testdata/native-defp-vectors.json")
@@ -35,7 +50,7 @@ func TestPassiveDefenseNativeWriterVectors(t *testing.T) {
 	if report.Schema != "sro-native-defp-vectors-v1" || len(report.Cases) != 43 {
 		t.Fatal("invalid native observations")
 	}
-	source := enterworld.NewTextdataSkills(filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata"))
+	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))
 	if err := source.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +79,11 @@ func TestPassiveDefenseNativeWriterVectors(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPassiveDefenseFollowsItsEquipment
+================
+*/
 // 59F0E0: a passive defense with reqi contributes only while the equipment
 // passes the walk - here a staff (primary TID4 15) in slot 6.
 func TestPassiveDefenseFollowsItsEquipment(t *testing.T) {

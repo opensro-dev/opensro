@@ -135,6 +135,31 @@ func missingGameData() ([]string, error) {
 
 /*
 ==================
+RetailTextdataDir
+
+The raw client textdata of the extraction
+(<game root>/extracted/Media_extracted/server_dep/silkroad/textdata), for
+tests that check the port against the shipped tables rather than the
+verified server projection. The caller keeps its own skip or
+RequireGameData check; this only names the folder, the one rule every tool
+uses to find the game root.
+==================
+*/
+func RetailTextdataDir(t testing.TB) string {
+	t.Helper()
+	repository, err := repositoryRoot()
+	if err != nil {
+		t.Fatalf("locate the repository: %v", err)
+	}
+	gameRoot, err := resolveGameRoot(repository)
+	if err != nil {
+		t.Fatalf("locate the game root: %v", err)
+	}
+	return filepath.Join(gameRoot, "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+}
+
+/*
+==================
 resolveGameRoot
 
 The directory holding extracted/, by the rule of scripts/build/world/paths.mjs

@@ -1,11 +1,21 @@
-"""Execute original AEC0D0. No fader arithmetic is substituted."""
+"""
+===========================================================================
+
+native-deferred-alpha.py - Execute original AEC0D0. No fader arithmetic is substituted
+
+SRO_Client.exe is read from the game root (scripts/sro_paths.py).
+
+===========================================================================
+"""
 import json,struct,sys,hashlib
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
+from sro_paths import GAME_ROOT  # noqa: E402  (SRO_GAME_ROOT or beside the main checkout)
 import pefile
 from unicorn import Uc,UC_ARCH_X86,UC_MODE_32,UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_ESP,UC_X86_REG_ECX,UC_X86_REG_FPCW,UC_X86_REG_EAX,UC_X86_REG_EIP
 root=Path(__file__).resolve().parents[1]
-raw=(root.parents[2]/'SRO_Client.exe').read_bytes()
+raw=(GAME_ROOT/'SRO_Client.exe').read_bytes()
 assert hashlib.sha256(raw).hexdigest()=='375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a'
 pe=pefile.PE(data=raw);base=pe.OPTIONAL_HEADER.ImageBase
 m=Uc(UC_ARCH_X86,UC_MODE_32);m.mem_map(base,(pe.OPTIONAL_HEADER.SizeOfImage+4095)&~4095);m.mem_write(base,pe.get_memory_mapped_image())
@@ -14,6 +24,12 @@ write=lambda at,v:m.mem_write(at,struct.pack('<I',v))
 read=lambda at:struct.unpack('<I',m.mem_read(at,4))[0]
 out=[]
 calls=[]
+# ================
+# hook
+#
+# Unicorn code hook: with --routes, stub the boundaries the fader calls (the
+# allocator, tick and deferred receivers) and record the calls it makes.
+# ================
 def hook(machine,at,size,user):
  if '--routes' not in sys.argv:return
  result=None;cleanup=0

@@ -1,11 +1,26 @@
+/*
+===========================================================================
+
+skillpassive_damage_test.go - passive damage programs
+
+Whole-program admission of passive damage and the authored two-hand power
+ranks with their consumers.
+
+===========================================================================
+*/
 package enterworld
 
 import (
-	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestPassiveDamageWholeProgramAdmission
+================
+*/
 func TestPassiveDamageWholeProgramAdmission(t *testing.T) {
 	base := func() []string {
 		f := criticalFields("1936028790", "1160926017", "27", "0", "0")
@@ -45,9 +60,14 @@ func TestPassiveDamageWholeProgramAdmission(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAuthoredTwoHandPowerRanksAndConsumers
+================
+*/
 func TestAuthoredTwoHandPowerRanksAndConsumers(t *testing.T) {
 	licensed.RequireGameData(t)
-	s := NewTextdataSkills(filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata"))
+	s := NewTextdataSkills(licensed.RetailTextdataDir(t))
 	if err := s.Load(); err != nil {
 		t.Fatal(err)
 	}

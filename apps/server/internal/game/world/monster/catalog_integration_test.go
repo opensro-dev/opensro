@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+catalog_integration_test.go - the monster catalog and registry
+
+Rarity HP, gid bands, per-region materialization, division separation and
+spawnable references of the monster registry.
+
+===========================================================================
+*/
 package monster_test
 
 import (
@@ -10,8 +20,14 @@ import (
 
 	. "opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+testTemplate
+================
+*/
 func testTemplate() Template {
 	refs := map[uint32]MonsterRef{
 		1933: {RefObjID: 1933, TidWord: 0x00C6, Codename: "MOB_CH_MANGNYANG", NameStrID: "SN_MOB_CH_MANGNYANG", Name: "Mangyang", Level: 1, MaxHP: 54, WalkSpeed: 8, RunSpeed: 22, ScaleDenom: 100},
@@ -25,10 +41,20 @@ func testTemplate() Template {
 	return TemplateFromParts(refs, nests)
 }
 
+/*
+================
+newMonsterState
+================
+*/
 func newMonsterState(template Template) *simulation.MonsterState {
 	return simulation.NewMonsterState(template)
 }
 
+/*
+================
+crtWords
+================
+*/
 // crtWords scripts the population PRNG in the native rand() domain: each
 // sample projects to exactly the listed word, and drawing past the script
 // fails the test, so a script also pins the native draw count.
@@ -44,6 +70,11 @@ func crtWords(t *testing.T, words ...uint32) func() float64 {
 	}
 }
 
+/*
+================
+TestEffectiveMaxHPMatchesTheClientRarityTable
+================
+*/
 func TestEffectiveMaxHPMatchesTheClientRarityTable(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -75,6 +106,11 @@ func TestEffectiveMaxHPMatchesTheClientRarityTable(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRegistryGidBand
+================
+*/
 // Gids come from the 400000 band, above every existing band (players
 // 100000+, NPCs 200000+, ground drops 300000+), and the registry is the
 // sole allocator.
@@ -103,6 +139,11 @@ func TestRegistryGidBand(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRegistryMaterializesPerRegionOnce
+================
+*/
 // Materialization is per-region on demand and memoized: re-requesting a
 // region returns the SAME gids (a viewer re-entering must not respawn a
 // parallel population), and an untouched region allocates nothing until
@@ -138,6 +179,11 @@ func TestRegistryMaterializesPerRegionOnce(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRegistryDivisionsAreSeparate
+================
+*/
 // Divisions are separate populations: the same template row gets a
 // DIFFERENT gid per division (division-keyed ownership), never a shared
 // one.
@@ -157,6 +203,11 @@ func TestRegistryDivisionsAreSeparate(t *testing.T) {
 	}
 }
 
+/*
+================
+TestSpawnableRefs
+================
+*/
 // SpawnableRefs is the full-roster snapshot source: every distinct
 // spawnable refObjID exactly once, ordered.
 func TestSpawnableRefs(t *testing.T) {
@@ -166,6 +217,11 @@ func TestSpawnableRefs(t *testing.T) {
 	}
 }
 
+/*
+================
+TestNestPromotionProducesChampionAndGiantRarity
+================
+*/
 func TestNestPromotionProducesChampionAndGiantRarity(t *testing.T) {
 	const region = uint16(25258)
 	refs := map[uint32]MonsterRef{
@@ -214,6 +270,11 @@ func TestNestPromotionProducesChampionAndGiantRarity(t *testing.T) {
 	}
 }
 
+/*
+================
+TestNestWithoutChampionTacticsIsNeverPromoted
+================
+*/
 func TestNestWithoutChampionTacticsIsNeverPromoted(t *testing.T) {
 	const region = uint16(25258)
 	refs := map[uint32]MonsterRef{1933: {RefObjID: 1933, TidWord: 0x00C6, Codename: "MOB_CH_MANGNYANG", MonsterType: 0}}
@@ -234,6 +295,11 @@ func TestNestWithoutChampionTacticsIsNeverPromoted(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOrdinarySpawnKeepsNestTacticsBesideChampionRow
+================
+*/
 func TestOrdinarySpawnKeepsNestTacticsBesideChampionRow(t *testing.T) {
 	const region = uint16(25258)
 	refs := map[uint32]MonsterRef{1933: {RefObjID: 1933, TidWord: 0x00C6, Codename: "MOB_CH_MANGNYANG", MonsterType: 0}}
@@ -258,6 +324,11 @@ func TestOrdinarySpawnKeepsNestTacticsBesideChampionRow(t *testing.T) {
 	}
 }
 
+/*
+================
+TestStaticSpecialMonsterTypeIsNeverPromoted
+================
+*/
 func TestStaticSpecialMonsterTypeIsNeverPromoted(t *testing.T) {
 	const region = uint16(25258)
 	refs := map[uint32]MonsterRef{
@@ -286,6 +357,11 @@ func TestStaticSpecialMonsterTypeIsNeverPromoted(t *testing.T) {
 	}
 }
 
+/*
+================
+TestResolveTacticsKeepsUnmatchedMobileMonstersPassiveButWandering
+================
+*/
 func TestResolveTacticsKeepsUnmatchedMobileMonstersPassiveButWandering(t *testing.T) {
 	unmatched := ResolveTactics(Instance{
 		Ref:  MonsterRef{WalkSpeed: 8},
@@ -313,6 +389,11 @@ func TestResolveTacticsKeepsUnmatchedMobileMonstersPassiveButWandering(t *testin
 	}
 }
 
+/*
+================
+TestEvidenceBackedDensityAndZeroCap
+================
+*/
 func TestEvidenceBackedDensityAndZeroCap(t *testing.T) {
 	const region = uint16(25258)
 	refs := map[uint32]MonsterRef{
@@ -354,6 +435,11 @@ func TestEvidenceBackedDensityAndZeroCap(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGeneratedSpawnNormalizesRegionAndUsesGroundAuthority
+================
+*/
 func TestGeneratedSpawnNormalizesRegionAndUsesGroundAuthority(t *testing.T) {
 	const west = uint16(0x6B4F)
 	east := uint16(0x6B50)
@@ -392,6 +478,11 @@ func TestGeneratedSpawnNormalizesRegionAndUsesGroundAuthority(t *testing.T) {
 	}
 }
 
+/*
+================
+TestStaticSpawnUsesWorldSurfaceAuthority
+================
+*/
 func TestStaticSpawnUsesWorldSurfaceAuthority(t *testing.T) {
 	const region = uint16(0x5CA0)
 	refs := map[uint32]MonsterRef{
@@ -441,6 +532,11 @@ func TestStaticSpawnUsesWorldSurfaceAuthority(t *testing.T) {
 	}
 }
 
+/*
+================
+TestStaticSpawnWaitsForWorldSurfaceCoverage
+================
+*/
 func TestStaticSpawnWaitsForWorldSurfaceCoverage(t *testing.T) {
 	const region = uint16(0x5CA0)
 	now := time.UnixMilli(1_784_000_000_000)
@@ -477,6 +573,11 @@ func TestStaticSpawnWaitsForWorldSurfaceCoverage(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPopulationNeverFallsBackToBlockedAnchor
+================
+*/
 func TestPopulationNeverFallsBackToBlockedAnchor(t *testing.T) {
 	const region = uint16(25258)
 	base := time.UnixMilli(1_784_000_000_000)
@@ -518,6 +619,11 @@ func TestPopulationNeverFallsBackToBlockedAnchor(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDefeatSchedulesSlotAndRespawnsWithNewIdentity
+================
+*/
 func TestDefeatSchedulesSlotAndRespawnsWithNewIdentity(t *testing.T) {
 	const region = uint16(25258)
 	base := time.UnixMilli(1_784_000_000_000)
@@ -566,6 +672,11 @@ func TestDefeatSchedulesSlotAndRespawnsWithNewIdentity(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRejectedRespawnPlacementRetriesWithoutLosingTheSlot
+================
+*/
 func TestRejectedRespawnPlacementRetriesWithoutLosingTheSlot(t *testing.T) {
 	const region = uint16(25258)
 	base := time.UnixMilli(1_784_000_000_000)
@@ -624,6 +735,11 @@ func TestRejectedRespawnPlacementRetriesWithoutLosingTheSlot(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLoadMonsterRefsClassification
+================
+*/
 // The classification filter is the arbiter-confirmed binary admit set
 // (RZ seq234, closing the A8 dispute): rows with (TID1=1, TID2=2, TID3=1)
 // pack to 0x00C6 and are monsters; TID3=2 is the NPC subtype; col12/TID4
@@ -688,6 +804,11 @@ func TestLoadMonsterRefsClassification(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLoadMonsterRefsJoinsCharacterInfoRideContract
+================
+*/
 func TestLoadMonsterRefsJoinsCharacterInfoRideContract(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(
@@ -718,6 +839,11 @@ func TestLoadMonsterRefsJoinsCharacterInfoRideContract(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLoadSpawnPointsParsesDungeonRegions
+================
+*/
 // npcpos rows parse both mainland (unsigned) and dungeon (signed
 // 0x8000-bit) region ids; the signed form silently dropped every dungeon
 // spawn before the seq186 canary red.
@@ -742,6 +868,11 @@ func TestLoadSpawnPointsParsesDungeonRegions(t *testing.T) {
 	}
 }
 
+/*
+================
+row
+================
+*/
 // row builds one synthetic characterdata line with the consumed columns
 // placed at their real indices.
 func row(service int, id int, codename string, tid1, tid2, tid3, col12 int, walk, run, scale string) string {
@@ -767,6 +898,11 @@ func row(service int, id int, codename string, tid1, tid2, tid3, col12 int, walk
 	return line + "\n"
 }
 
+/*
+================
+rowWithMetadata
+================
+*/
 func rowWithMetadata(id int, codename, level, maxHP string) string {
 	line := row(1, id, codename, 1, 2, 1, 1, "8", "22", "100")
 	cols := strings.Split(strings.TrimSuffix(line, "\n"), "\t")
@@ -775,6 +911,11 @@ func rowWithMetadata(id int, codename, level, maxHP string) string {
 	return strings.Join(cols, "\t") + "\n"
 }
 
+/*
+================
+itoa
+================
+*/
 func itoa(v int) string {
 	if v == 0 {
 		return "0"
@@ -787,6 +928,11 @@ func itoa(v int) string {
 	return digits
 }
 
+/*
+================
+TestShippedTemplateCanary
+================
+*/
 // Canary against the REAL shipped v1.150 textdata (the leveldata canary
 // posture): the counts under the ARBITER-CONFIRMED classification (RZ
 // seq234) are pinned exactly, so a media re-extraction or a packing
@@ -795,7 +941,7 @@ func itoa(v int) string {
 func TestShippedTemplateCanary(t *testing.T) {
 	dir := ""
 	for _, candidate := range []string{
-		filepath.Join("..", "..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata"),
+		licensed.RetailTextdataDir(t),
 	} {
 		if _, err := os.Stat(filepath.Join(candidate, "npcpos.txt")); err == nil {
 			dir = candidate

@@ -14,6 +14,8 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { join } from "node:path";
+import { dataExtractedRoot } from "../../../../scripts/build/world/paths.mjs";
 import { readDofPresentation } from "../../../../scripts/build/world/assets/buildDungeonResources.mjs";
 import { dungeonWaterVertices, resolveDungeonWater } from "../../../../scripts/build/world/assets/dungeonWater.mjs";
 import { parseJmxResourceBsr, parseJmxBmsStaticMesh } from "../../../../scripts/build/world/objects/formats.mjs";
@@ -55,8 +57,7 @@ test("dungeon water fan follows shared-face order and the provider keeps the las
 });
 
 test( "all shipped water objects resolve their real BSR/BMS provider geometry", { timeout: 30000 }, async () => {
-	const data = "../../../extracted/Data_extracted/",
-		read = path => fs.readFileSync( data + path.replaceAll( "\\", "/" ).toLowerCase() );
+	const read = path => fs.readFileSync( join( dataExtractedRoot, path.replaceAll( "\\", "/" ).toLowerCase() ) );
 	let count = 0, blocks = 0;
 	for ( const dir of [ "china", "wchina" ] ) {
 		for (
@@ -90,11 +91,11 @@ test("all twelve well-formed retail DOFs retain exact water ownership, transform
 	let count = 0, water = 0;
 	for ( const dir of [ "china", "wchina" ] ) {
 		for (
-			const name of fs.readdirSync( "../../../extracted/Data_extracted/dungeon/" + dir ).filter( n =>
+			const name of fs.readdirSync( join( dataExtractedRoot, "dungeon", dir ) ).filter( n =>
 				n.endsWith( ".dof" )
 			)
 		) {
-			const file = "../../../extracted/Data_extracted/dungeon/" + dir + "/" + name,
+			const file = join( dataExtractedRoot, "dungeon", dir, name ),
 				bytes = fs.readFileSync( file );
 			if ( name === "dunhwang_cv1.dof" ) {
 				assert.throws( () => readDofPresentation( bytes, file ) );

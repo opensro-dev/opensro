@@ -1,16 +1,26 @@
-"""Verify original BSR machine evidence and the bounded EFP admission branches.
+"""
+===========================================================================
+
+verify-native-bsr.py - Verify original BSR machine evidence and the bounded EFP admission branches
 
 Unicorn executes original B1F270/AFF730 bytes. Allocator, archive I/O and parser
 are explicit boundary stubs; this is not whole-client equivalence.
+
+SRO_Client.exe is read from the game root (scripts/sro_paths.py).
+
+===========================================================================
 """
 import hashlib, json, struct
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
+from sro_paths import GAME_ROOT  # noqa: E402  (SRO_GAME_ROOT or beside the main checkout)
 import pefile
 from unicorn import Uc, UC_ARCH_X86, UC_MODE_32, UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_ESP, UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_EIP
 
 ROOT=Path(__file__).resolve().parents[1]
-raw=(ROOT.parents[2]/'SRO_Client.exe').read_bytes()
+raw=(GAME_ROOT/'SRO_Client.exe').read_bytes()
 evidence=json.loads((ROOT/'tests/fixtures/native/bsr-native.json').read_text())
 assert hashlib.sha256(raw).hexdigest()==evidence['binarySha256']
 pe=pefile.PE(data=raw);base=pe.OPTIONAL_HEADER.ImageBase

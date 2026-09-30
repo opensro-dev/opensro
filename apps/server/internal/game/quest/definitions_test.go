@@ -1,9 +1,17 @@
+/*
+===========================================================================
+
+definitions_test.go - quest definitions
+
+The curated definition table loads, fails loudly when broken, and resolves
+against the shipped media.
+
+===========================================================================
+*/
 package quest
 
 import (
 	"fmt"
-	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +19,8 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
 // fakeItems is an ItemRefSource stand-in resolving exactly the curated
@@ -22,6 +32,11 @@ var (
 	tutorialItems     *enterworld.TextdataItems
 )
 
+/*
+================
+tutorialFixtureItems
+================
+*/
 // tutorialFixtureItems is the shared shipped itemdata loader. It resolves on
 // first use, which is always inside a test: a package-level resolution runs
 // before the test log starts, and Go's test cache would never see the data.
@@ -32,6 +47,11 @@ func tutorialFixtureItems() *enterworld.TextdataItems {
 	return tutorialItems
 }
 
+/*
+================
+ItemRefByCodename
+================
+*/
 func (fakeItems) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) {
 	if codename == "ITEM_QNO_WC_ARMOR_1" {
 		return tutorialFixtureItems().ItemRefByCodename(codename)
@@ -63,6 +83,11 @@ func (fakeItems) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) 
 	return nil, false
 }
 
+/*
+================
+writeTestCatalog
+================
+*/
 // writeTestCatalog writes a minimal UTF-8 questdata/questcontentsdata
 // pair carrying the curated rows (the shipped column shapes; the reader
 // tolerates UTF-8 - enterworld.ReadTextdataFile).
@@ -110,6 +135,11 @@ func writeTestCatalog(t *testing.T, withContents bool) *Catalog {
 	return NewCatalog(dir)
 }
 
+/*
+================
+loadTestDefinitions
+================
+*/
 // loadTestDefinitions is the shared fixture loader for the runtime and
 // seed suites.
 func loadTestDefinitions(t *testing.T) *Definitions {
@@ -121,6 +151,11 @@ func loadTestDefinitions(t *testing.T) *Definitions {
 	return defs
 }
 
+/*
+================
+TestLoadDefinitionsResolvesTheCuratedTable
+================
+*/
 func TestLoadDefinitionsResolvesTheCuratedTable(t *testing.T) {
 	licensed.RequireGameData(t)
 	t.Parallel()
@@ -154,6 +189,11 @@ func TestLoadDefinitionsResolvesTheCuratedTable(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLoadDefinitionsFailsLoud
+================
+*/
 func TestLoadDefinitionsFailsLoud(t *testing.T) {
 	t.Parallel()
 	t.Run("missing questcontentsdata refuses", func(t *testing.T) {
@@ -182,6 +222,11 @@ func TestLoadDefinitionsFailsLoud(t *testing.T) {
 	})
 }
 
+/*
+================
+TestLoadDefinitionsAgainstShippedMedia
+================
+*/
 // Canary against the REAL shipped media (the leveldata_test posture):
 // if a re-extraction ever moves the questdata/questcontentsdata columns
 // or renames a curated codename, the definitions would silently drift,
@@ -189,7 +234,7 @@ func TestLoadDefinitionsFailsLoud(t *testing.T) {
 // has no media.
 func TestLoadDefinitionsAgainstShippedMedia(t *testing.T) {
 	t.Parallel()
-	devDefault := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	devDefault := licensed.RetailTextdataDir(t)
 	dir := ""
 	for _, candidate := range []string{devDefault, filepath.Join("..", devDefault), filepath.Join("..", "..", devDefault)} {
 		if _, err := os.Stat(filepath.Join(candidate, "questdata.txt")); err == nil {

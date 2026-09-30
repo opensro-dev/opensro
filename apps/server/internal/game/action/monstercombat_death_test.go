@@ -1,8 +1,17 @@
+/*
+===========================================================================
+
+monstercombat_death_test.go - monster attack plans and fatal monster attacks
+
+Shipped attack plans are runnable with their casting and recovery phases,
+and a fatal monster attack publishes the death and its progression.
+
+===========================================================================
+*/
 package action
 
 import (
 	"encoding/binary"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,13 +19,16 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestShippedMangnyangAttackPlanIsRunnable
+================
+*/
 func TestShippedMangnyangAttackPlanIsRunnable(t *testing.T) {
-	dir := filepath.Join(
-		"..", "..", "..", "..",
-		"extracted", "Media_extracted", "server_dep", "silkroad", "textdata",
-	)
+	dir := licensed.RetailTextdataDir(t)
 	ref, ok := monster.LoadMonsterRefs(dir)[1933]
 	if !ok {
 		t.Skip("shipped characterdata is unavailable")
@@ -29,11 +41,13 @@ func TestShippedMangnyangAttackPlanIsRunnable(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedMoviaAttackPlanIncludesCastingAndRecoveryPhases
+================
+*/
 func TestShippedMoviaAttackPlanIncludesCastingAndRecoveryPhases(t *testing.T) {
-	dir := filepath.Join(
-		"..", "..", "..", "..",
-		"extracted", "Media_extracted", "server_dep", "silkroad", "textdata",
-	)
+	dir := licensed.RetailTextdataDir(t)
 	ref, ok := monster.LoadMonsterRefs(dir)[5850]
 	if !ok {
 		t.Skip("shipped characterdata is unavailable")
@@ -49,6 +63,11 @@ func TestShippedMoviaAttackPlanIncludesCastingAndRecoveryPhases(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMonsterAttackFinalizeWaitsForCastingPlusRecovery
+================
+*/
 func TestMonsterAttackFinalizeWaitsForCastingPlusRecovery(t *testing.T) {
 	rt, clock, character, monster := newCombatTestRuntime(t, 100)
 	monster.Ref.DefaultSkillIDs[0] = 2
@@ -92,6 +111,11 @@ func TestMonsterAttackFinalizeWaitsForCastingPlusRecovery(t *testing.T) {
 	assertSkillCastClose(t, rt.MonsterActionTickHook()(clock.At(2001*time.Millisecond).UnixMilli()), testDivision, token)
 }
 
+/*
+================
+TestMonsterAttackTreatsAbsentCurrentHPAsFullAndMaterializesDamage
+================
+*/
 func TestMonsterAttackTreatsAbsentCurrentHPAsFullAndMaterializesDamage(t *testing.T) {
 	rt, clock, character, instance := newCombatTestRuntime(t, 100)
 	character.CurrentHP = nil
@@ -118,6 +142,11 @@ func TestMonsterAttackTreatsAbsentCurrentHPAsFullAndMaterializesDamage(t *testin
 	}
 }
 
+/*
+================
+TestFatalMonsterAttackPublishesLifeDead
+================
+*/
 func TestFatalMonsterAttackPublishesLifeDead(t *testing.T) {
 	rt, clock, character, monster := newCombatTestRuntime(t, 100)
 	monster.Ref.DefaultSkillIDs[0] = 2
@@ -160,6 +189,11 @@ func TestFatalMonsterAttackPublishesLifeDead(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFatalMonsterAttackCommitsAndReturnsDeathProgression
+================
+*/
 func TestFatalMonsterAttackCommitsAndReturnsDeathProgression(t *testing.T) {
 	rt, clock, character, monster := newCombatTestRuntime(t, 100)
 	monster.Ref.DefaultSkillIDs[0] = 2

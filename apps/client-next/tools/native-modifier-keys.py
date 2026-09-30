@@ -1,10 +1,20 @@
-"""Execute original AE0380/ADF890 with a bounded authored key tree."""
+"""
+===========================================================================
+
+native-modifier-keys.py - Execute original AE0380/ADF890 with a bounded authored key tree
+
+SRO_Client.exe is read from the game root (scripts/sro_paths.py).
+
+===========================================================================
+"""
 import hashlib,json,struct,sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
+from sro_paths import GAME_ROOT  # noqa: E402  (SRO_GAME_ROOT or beside the main checkout)
 import pefile
 from unicorn import Uc,UC_ARCH_X86,UC_MODE_32,UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_ESP,UC_X86_REG_ECX,UC_X86_REG_EIP
-raw=(Path(__file__).resolve().parents[4]/'SRO_Client.exe').read_bytes()
+raw=(GAME_ROOT/'SRO_Client.exe').read_bytes()
 assert hashlib.sha256(raw).hexdigest()=='375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a'
 pe=pefile.PE(data=raw);base=pe.OPTIONAL_HEADER.ImageBase;out=[]
 for case in json.load(sys.stdin):

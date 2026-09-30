@@ -1,6 +1,19 @@
+/*
+===========================================================================
+
+skilljobs_test.go - timed skill jobs across restore, checkpoint and session changes
+
+Restored jobs keep their lifetimes and native casting states, unknown
+producers survive, and a stale session close cannot erase a newer effect.
+
+===========================================================================
+*/
 package action
 
 import (
+	"testing"
+	"time"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
@@ -8,11 +21,13 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
+/*
+================
+TestTimedJobRestoreDoesNotSkipMissingJobsOrRewriteResidentLifetime
+================
+*/
 func TestTimedJobRestoreDoesNotSkipMissingJobsOrRewriteResidentLifetime(t *testing.T) {
 	row := enterworld.SkillRow{ID: 100, Group: 9, EffectDurationMs: 10000,
 		MovementModifier: enterworld.SkillMovementModifier{Present: true, Supported: true, Percent: 50, Persistent: true}}
@@ -49,6 +64,11 @@ func TestTimedJobRestoreDoesNotSkipMissingJobsOrRewriteResidentLifetime(t *testi
 	}
 }
 
+/*
+================
+TestTimedJobUnknownProducerSurvivesRestoreAndCheckpoint
+================
+*/
 func TestTimedJobUnknownProducerSurvivesRestoreAndCheckpoint(t *testing.T) {
 	rt, c := newActiveEffectTestRuntime(t, staticSkillSource{})
 	job := domain.TimedSkillJob{SkillID: 999999, Token: 51, RemainingMs: 123000}
@@ -63,6 +83,11 @@ func TestTimedJobUnknownProducerSurvivesRestoreAndCheckpoint(t *testing.T) {
 	}
 }
 
+/*
+================
+TestTimedJobFailedInstallationRetainsRecordForRetry
+================
+*/
 func TestTimedJobFailedInstallationRetainsRecordForRetry(t *testing.T) {
 	row := enterworld.SkillRow{ID: 100, Group: 9, EffectDurationMs: 10000,
 		MovementModifier: enterworld.SkillMovementModifier{Present: true, Supported: true, Persistent: true, Percent: 50}}
@@ -89,9 +114,14 @@ func TestTimedJobFailedInstallationRetainsRecordForRetry(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedSkillConsumableLifecycle
+================
+*/
 func TestShippedSkillConsumableLifecycle(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	dir := licensed.RetailTextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	skills := enterworld.NewTextdataSkills(dir)
 	for _, code := range []string{"ITEM_ETC_SPEED_UP_BASIC", "ITEM_MALL_MOVE_SPEED_UP_50", "ITEM_MALL_MOVE_SPEED_UP_100"} {
@@ -170,6 +200,12 @@ func TestShippedSkillConsumableLifecycle(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestTimedJobRestoresNativeCastingStates
+================
+*/
 func TestTimedJobRestoresNativeCastingStates(t *testing.T) {
 	row := enterworld.SkillRow{ID: 100, Group: 9, EffectDurationMs: 3600000,
 		MovementModifier:  enterworld.SkillMovementModifier{Present: true, Supported: true, Percent: 100, Persistent: true},
@@ -201,6 +237,11 @@ func TestTimedJobRestoresNativeCastingStates(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOrdinaryRecipientEffectStateOperations
+================
+*/
 func TestOrdinaryRecipientEffectStateOperations(t *testing.T) {
 	for _, ovl := range []bool{false, true} {
 		row := enterworld.SkillRow{ID: 100, Group: 9, EffectDurationMs: 1000,
@@ -226,6 +267,11 @@ func TestOrdinaryRecipientEffectStateOperations(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMovementEffectCancellationRetimesRemainingTravel
+================
+*/
 func TestMovementEffectCancellationRetimesRemainingTravel(t *testing.T) {
 	rt, c := newActiveEffectTestRuntime(t, staticSkillSource{100: {ID: 100, Group: 9, EffectDurationMs: 3600000, MovementModifier: enterworld.SkillMovementModifier{Present: true, Supported: true, Percent: 100, Persistent: true}}})
 	clock := &fakeClock{now: time.UnixMilli(1000000)}
@@ -247,6 +293,11 @@ func TestMovementEffectCancellationRetimesRemainingTravel(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDelayedPreviousSessionCloseCannotEraseAdmittedSpeedScroll
+================
+*/
 func TestDelayedPreviousSessionCloseCannotEraseAdmittedSpeedScroll(t *testing.T) {
 	rt, c := newActiveEffectTestRuntime(t, staticSkillSource{100: {ID: 100, Group: 9, SpawnStatus: true, EffectDurationMs: 3600000, MovementModifier: enterworld.SkillMovementModifier{Present: true, Supported: true, Percent: 100, Persistent: true}}})
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(nil, nil))
@@ -300,12 +351,23 @@ type namedMovementSkills struct {
 	code string
 }
 
+/*
+================
+SkillByCodename
+================
+*/
 func (s namedMovementSkills) SkillByCodename(code string) (enterworld.SkillRow, bool) {
 	if code != s.code {
 		return enterworld.SkillRow{}, false
 	}
 	return s.SkillByID(100)
 }
+
+/*
+================
+TestSkillConsumableAdmissionIsDescriptorDrivenAndAtomic
+================
+*/
 func TestSkillConsumableAdmissionIsDescriptorDrivenAndAtomic(t *testing.T) {
 	for _, supported := range []bool{true, false} {
 		c := testCharacter()

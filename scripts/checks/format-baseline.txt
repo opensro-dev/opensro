@@ -529,7 +529,6 @@ apps/client-next/tests/browser/ui-specialized.test.mjs
 apps/client-next/tests/browser/ui.test.mjs
 apps/client-next/tests/browser/window-chrome-live.test.mjs
 apps/client-next/tests/browser/world-admission.test.mjs
-apps/client-next/tests/browser/world-audio.test.mjs
 apps/client-next/tests/browser/world-character-lighting.test.mjs
 apps/client-next/tests/browser/world-chat.test.mjs
 apps/client-next/tests/browser/world-cursor.test.mjs
@@ -826,6 +825,5 @@ scripts/test/suites/index.mjs
 scripts/test/suites/region.mjs
 scripts/test/suites/world.mjs
 scripts/test/world/authoredWorldRegionResources.test.mjs
-scripts/test/world/outdoorWorldRegionResources.test.mjs
 scripts/test/world/worldMapImageReferences.test.mjs
 scripts/tools/localization/englishGaps.mjs

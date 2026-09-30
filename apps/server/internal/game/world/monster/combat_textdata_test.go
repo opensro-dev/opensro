@@ -1,16 +1,29 @@
+/*
+===========================================================================
+
+combat_textdata_test.go - shipped monster combat columns
+
+Pins the Mangnyang combat columns and the Baroi body radius read from the
+shipped tables.
+
+===========================================================================
+*/
 package monster
 
 import (
-	"path/filepath"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestShippedMangnyangCombatColumnsStayPinned
+================
+*/
 func TestShippedMangnyangCombatColumnsStayPinned(t *testing.T) {
 	t.Parallel()
-	dir := filepath.Join(
-		"..", "..", "..", "..",
-		"extracted", "Media_extracted", "server_dep", "silkroad", "textdata",
-	)
+	dir := licensed.RetailTextdataDir(t)
 	refs := LoadMonsterRefs(dir)
 	ref, ok := refs[1933]
 	if !ok {
@@ -31,12 +44,14 @@ func TestShippedMangnyangCombatColumnsStayPinned(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedBaroiBodyRadiusStaysPinned
+================
+*/
 func TestShippedBaroiBodyRadiusStaysPinned(t *testing.T) {
 	t.Parallel()
-	dir := filepath.Join(
-		"..", "..", "..", "..",
-		"extracted", "Media_extracted", "server_dep", "silkroad", "textdata",
-	)
+	dir := licensed.RetailTextdataDir(t)
 	refs := LoadMonsterRefs(dir)
 	ref, ok := refs[5858]
 	if !ok {

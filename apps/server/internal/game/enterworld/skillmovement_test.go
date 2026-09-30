@@ -1,13 +1,28 @@
+/*
+===========================================================================
+
+skillmovement_test.go - movement skill admission
+
+Native branch precedence, descriptor admission and the envelope boundaries
+of the shipped direct movement skills.
+
+===========================================================================
+*/
 package enterworld
 
 import (
-	"opensro.online/server/internal/game/item/statuseffect"
-	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"strconv"
 	"testing"
+
+	"opensro.online/server/internal/game/item/statuseffect"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestMovementNativeBranchPrecedence
+================
+*/
 func TestMovementNativeBranchPrecedence(t *testing.T) {
 	for _, tc := range []struct {
 		tail      []uint32
@@ -35,6 +50,11 @@ func TestMovementNativeBranchPrecedence(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMovementDescriptorAdmission
+================
+*/
 func TestMovementDescriptorAdmission(t *testing.T) {
 	for _, tc := range []struct {
 		tail                  []uint32
@@ -58,9 +78,14 @@ func TestMovementDescriptorAdmission(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedDirectMovementAdmissionAndEnvelopeBoundaries
+================
+*/
 func TestShippedDirectMovementAdmissionAndEnvelopeBoundaries(t *testing.T) {
 	licensed.RequireGameData(t)
-	source := NewTextdataSkills(filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata"))
+	source := NewTextdataSkills(licensed.RetailTextdataDir(t))
 	if err := source.Load(); err != nil {
 		t.Fatal(err)
 	}

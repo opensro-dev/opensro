@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { parseCompound } from "../../../../scripts/build/world/objects/compound.mjs";
+import { dataExtractedRoot } from "../../../../scripts/build/world/paths.mjs";
 
 const { createWorldDecoder } = await import(
 	sourceFileUrl( path.join( root, "src/engine/runtime/assets/worker/world/world.ts" ) ).href
@@ -24,7 +25,7 @@ const { createWorldDecoder } = await import(
 
 test("installed waterfall CPD retains all five ordered BSR children and rejects damaged offsets", () => {
 	const bytes = fs.readFileSync(
-		path.resolve( root, "../../../extracted/Data_extracted/compound/particle/cj_waterfall01.cpd" )
+		path.join( dataExtractedRoot, "compound/particle/cj_waterfall01.cpd" )
 	);
 	const parsed = parseCompound( bytes );
 	assert.equal( parsed.branches.length, 5 );

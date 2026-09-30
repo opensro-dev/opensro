@@ -1,15 +1,30 @@
+/*
+===========================================================================
+
+skillimbue_test.go - imbue skill programs
+
+The shipped fire force program is admitted whole; partial or unknown imbue
+programs are refused.
+
+===========================================================================
+*/
 package enterworld
 
 import (
-	"opensro.online/server/internal/testsupport/licensed"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestShippedFireForceWholeProgram
+================
+*/
 func TestShippedFireForceWholeProgram(t *testing.T) {
 	licensed.RequireGameData(t)
-	dir := filepath.Join("..", "..", "..", "..", "..", "..", "extracted", "Media_extracted", "server_dep", "silkroad", "textdata")
+	dir := licensed.RetailTextdataDir(t)
 	source := NewTextdataSkills(dir)
 	if err := source.Load(); err != nil {
 		t.Fatal(err)
@@ -32,6 +47,12 @@ func TestShippedFireForceWholeProgram(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestImbueRefusesPartialAndUnknownPrograms
+================
+*/
 func TestImbueRefusesPartialAndUnknownPrograms(t *testing.T) {
 	fields := make([]string, 118)
 	for i := range fields {

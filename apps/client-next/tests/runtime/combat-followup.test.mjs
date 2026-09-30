@@ -16,6 +16,8 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { characterMaterialVariants } from "../../../../scripts/build/char/materialVariants.mjs";
 import { convertedTexturePath } from "../../../../scripts/build/shared/jmxAssetIO.mjs";
+import { dataExtractedRoot } from "../../../../scripts/build/world/paths.mjs";
+import path from "node:path";
 async function load( path ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
@@ -74,7 +76,7 @@ test("native grade chooses material slots independently of motion and enlargemen
 	}
 	assert.equal( monsterMaterialSlot( 1, 0x10c6, 4 ), 0 );
 	const p = "res/mob/china/chakji.bsr",
-		sets = characterMaterialVariants( readFileSync( "../../../extracted/Data_extracted/" + p ), p );
+		sets = characterMaterialVariants( readFileSync( path.join( dataExtractedRoot, p ) ), p );
 	assert.deepEqual( [ ...sets.keys() ], [ 0, 1, 2 ] );
 	assert.match( sets.get( 2 ), /chakji_champ\.bmt$/ );
 	assert.match( convertedTexturePath( "prim/mtrl/mob/oasis/redeyeghost_champ.ddj" ), /redeyeghost_champ\.ddj\.png$/ );
