@@ -184,15 +184,22 @@ async function exercise( candidate, credentials, origin, result, directory ) {
 			password: credentials.password,
 			serverId: credentials.shard
 		} );
-		const select = await simulation.waitFor(
-			state => state.session?.phase === "character-select" ? state.session : null,
-			STEP_BUDGET_MS,
-			"login"
-		);
+		await simulation.waitFor( state => state.session?.phase === "character-select", STEP_BUDGET_MS, "login" );
 		passPhase( result, "login" );
-		const characters = select.characters ?? [];
+		// Login reports character-select before the roster arrives with it.
+		const characters = await simulation.waitFor(
+			state =>
+				state.session?.phase === "character-select" && Array.isArray( state.session.characters ) ?
+					state.session.characters :
+					null,
+			STEP_BUDGET_MS,
+			"roster"
+		);
 		if ( characters.length !== 1 || characters[0].name !== credentials.character ) {
-			throw Error( "Release probe requires its dedicated single-character roster" );
+			throw Error(
+				`Release probe requires its dedicated single-character roster; got ${characters.length}: ` +
+					characters.map( row => row.name ).join( ", " )
+			);
 		}
 		passPhase( result, "roster" );
 
