@@ -1339,7 +1339,8 @@ state here before a command can claim a native wire conversation.
 				return inventory.use( command.slot, now, {
 					records: [ ...cosRecords.values() ],
 					selectedGid: command.companionGid,
-					revivalSlot: command.revivalSlot
+					revivalSlot: command.revivalSlot,
+					summonerSlot: command.summonerSlot
 				} );
 			}
 			if ( command.kind === "cancel" ) {
@@ -1924,6 +1925,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( !cosRecords.has( record.gid ) && cosRecords.size >= 64 ) {
 						throw new Error( "COS record capacity exceeded" );
 					}
+					inventory.bindCompanion( record );
 					cosRecords.set( record.gid, record );
 					if ( record.band === 1 || record.band === 2 ) activeCos = record;
 					dirty = true;

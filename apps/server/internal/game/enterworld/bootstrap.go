@@ -186,6 +186,11 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 
 	// Inventory, appearance, and wire rows derive from one detached snapshot.
 	inventoryRows := InventoryWireItems(character.MissionInventory)
+	for _, row := range inventoryRows {
+		if len(BuildItemBody(row)) == 0 {
+			return Failure(nativeErrorInvalidRequest, "invalidPersistentItem")
+		}
+	}
 
 	localPlayerPayload := BuildLocalPlayerEntryPayload(character, &entry, eventGuideStateMask, inventoryRows)
 	objectID := ObjectIDForCharacter(character)
@@ -303,18 +308,23 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 		NewPacket(OpcodeMyCharacterFlush, nil),
 		NewPacket(OpcodeServerClockGidLatch, BuildServerClockGidLatchPayload(objectID)),
 	}
-	var activeCOSRow *Packet
+	var activeCOSRows []Packet
 	var activeCOSRide *Packet
-	if character.ActiveCOS != nil && character.ActiveCOS.Summoned {
+	for _, cos := range character.Companions() {
+		if !cos.Summoned {
+			continue
+		}
 		characters, ok := deps.Items.(CharacterRefSource)
 		ref, found := (*CharacterRef)(nil), false
 		if ok {
-			ref, found = characters.CharacterRefByCodename(character.ActiveCOS.Codename)
+			ref, found = characters.CharacterRefByCodename(cos.Codename)
 		}
 		expectedGID, gidOK := CosObjectIDForCharacter(character)
-		cos := character.ActiveCOS
+		if cos != character.ActiveCOS && ref != nil {
+			expectedGID, gidOK = PersistentCOSObjectID(character, ref.TidWord>>11)
+		}
 		if !found || ref == nil || ref.RefObjID != cos.RefObjID || (ref.TidWord>>11 < 1 || ref.TidWord>>11 > 4) ||
-			!gidOK || cos.GID != expectedGID {
+			!gidOK || cos.GID != expectedGID || character.CompanionByGID(cos.GID) != cos {
 			return nil, fmt.Errorf("active COS failed authoritative media/identity validation")
 		} else {
 			record, recordErr := BuildCOSRecord(cos, ref, deps.Items)
@@ -346,7 +356,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 				OwnerGid:  objectID,
 			})
 			row := NewPacket(OpcodeObjectListChunk, spawnPayload[:len(spawnPayload)-1])
-			activeCOSRow = &row
+			activeCOSRows = append(activeCOSRows, row)
 			if cos.Mounted {
 				ride := NewPacket(wire.OpCosRideState, wire.EncodeCosRideState(objectID, true, cos.GID))
 				activeCOSRide = &ride
@@ -357,9 +367,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	if deps.ObjectListRows != nil {
 		rows = deps.ObjectListRows(divisionID, character, entry)
 	}
-	if activeCOSRow != nil {
-		rows = append(rows, *activeCOSRow)
-	}
+	rows = append(rows, activeCOSRows...)
 	// The object-list start count is a LE u16 in the native protocol (the
 	// same encoding mission/monstertick.go's despawn bracket writes); the
 	// old hardcoded 0x00 high byte desynced the client past 255 rows
@@ -423,8 +431,11 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 			flags := row.TypeFlags
 			collector.add(row.Codename, &flags)
 		}
-		if character.ActiveCOS != nil && character.ActiveCOS.Container != nil {
-			for _, row := range character.ActiveCOS.Container.Rows {
+		for _, pet := range character.Companions() {
+			if pet.Container == nil {
+				continue
+			}
+			for _, row := range pet.Container.Rows {
 				flags := row.TypeFlags
 				collector.add(row.Codename, &flags)
 			}

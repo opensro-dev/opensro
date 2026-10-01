@@ -25,12 +25,12 @@ handleCosFollowCommand
 */
 func (rt *Runtime) handleCosFollowCommand(division string, c *enterworld.Character, gid uint32) OpResult {
 	snapshot, ref := rt.commandCOSSnapshot(division, c, gid)
-	if snapshot == nil || snapshot.ActiveCOS.Mounted ||
+	if snapshot == nil || snapshot.CompanionByGID(gid).Mounted ||
 		(ref.TidWord>>11 != 3 && ref.TidWord>>11 != 4) {
 		return OpResult{}
 	}
 	rt.petMu.Lock()
-	state := rt.petSessions[petOwnerKey{division, strings.ToLower(c.Name)}]
+	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: gid}]
 	rt.petMu.Unlock()
 	if state == nil || state.character != c || state.follower == nil || state.follower.GID() != gid {
 		return OpResult{}

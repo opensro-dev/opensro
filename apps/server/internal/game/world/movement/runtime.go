@@ -85,7 +85,8 @@ type Runtime struct {
 	AdvanceResidentRegion func(divisionID, characterName string, nowMs int64)
 	// PetPresentation copies the independent pet plane outside the character
 	// read door, preserving action -> character lock ordering.
-	PetPresentation func(divisionID, characterName string) *simulation.PeerCOS
+	PetPresentation        func(divisionID, characterName string) *simulation.PeerCOS
+	CompanionPresentations func(divisionID, characterName string) []*simulation.PeerCOS
 	// SpawnSkills is the character's active effect projection (the same one
 	// the local entry snapshot carries); peer spawn rows publish it.
 	SpawnSkills func(divisionID, characterName string) []enterworld.EntrySkill

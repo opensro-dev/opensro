@@ -10,6 +10,7 @@ package action
 
 import (
 	"math"
+	"opensro.online/server/internal/domain"
 	"time"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -163,6 +164,7 @@ func (rt *Runtime) grantPickup(
 		}
 	}
 
+	groundItem.Summon.RefreshRentalTimes(rt.Now().Unix())
 	stackCap := rt.maxStackFor(groundItem.TypeFlags, groundItem.Codename)
 	stack := groundItem.StackCount
 	if stack == 0 {
@@ -193,7 +195,7 @@ func (rt *Runtime) grantPickup(
 			Durability:        groundItem.Durability,
 			Quantity:          stack,
 			MagicOptions:      groundItem.MagicOptions,
-			TransformRefObjID: groundItem.TransformRefObjID,
+			TransformRefObjID: groundItem.TransformRefObjID, Summon: domain.CloneCOS(groundItem.Summon),
 		}, stackCap)
 		if fault != nil {
 			result = pickupRefusal(fault.Code)
@@ -231,7 +233,7 @@ func (rt *Runtime) grantPickup(
 		VarianceBits:      grantedItem.VarianceBits,
 		Durability:        grantedItem.Durability,
 		MagicOptions:      grantedItem.MagicOptions,
-		TransformRefObjID: grantedItem.TransformRefObjID,
+		TransformRefObjID: grantedItem.TransformRefObjID, Summon: domain.CloneCOS(grantedItem.Summon),
 	}
 	return OpResult{
 		Frames:    append(wire.PickupItemGrantFrames(anim, grant.DestSlot, body, groundItem.Gid, grant.GroundRemainder), questFrames...),

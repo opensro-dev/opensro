@@ -124,6 +124,7 @@ Adapt a pet's working block without reading the authority store from callbacks.
 ================
 */
 type cosAbnormalOwner struct {
+	pet                                *enterworld.CharacterCOS
 	rt                                 *Runtime
 	division                           string
 	c                                  *enterworld.Character
@@ -136,6 +137,7 @@ type cosAbnormalOwner struct {
 	died                               bool
 	ref                                *enterworld.CharacterRef
 	hpChanged, mpChanged, speedChanged bool
+	private                            []wire.Frame
 	public                             []wire.Frame
 	hits                               []abnormalHit
 	detonations                        []abnormal.Slot
@@ -149,15 +151,31 @@ Copy the active pet's block; source facts are admitted before the write lock.
 ================
 */
 func (rt *Runtime) newCosAbnormalOwner(division string, c *enterworld.Character, now int64) *cosAbnormalOwner {
-	o := &cosAbnormalOwner{rt: rt, division: division, c: c, now: now, block: &abnormal.Block{}}
-	if c == nil || c.ActiveCOS == nil {
+	var pet *enterworld.CharacterCOS
+	if c != nil {
+		pet = c.ActiveCOS
+	}
+	return rt.newCosAbnormalOwnerForPet(division, c, pet, now)
+}
+
+/*
+================
+newCosAbnormalOwnerForPet
+
+The authority transaction supplies the selected canonical companion. Source
+snapshots and write callbacks therefore never change a sister companion.
+================
+*/
+func (rt *Runtime) newCosAbnormalOwnerForPet(division string, c *enterworld.Character, pet *enterworld.CharacterCOS, now int64) *cosAbnormalOwner {
+	o := &cosAbnormalOwner{rt: rt, division: division, c: c, pet: pet, now: now, block: &abnormal.Block{}}
+	if c == nil || pet == nil {
 		return o
 	}
-	o.aliveBefore = c.ActiveCOS.CurrentHP > 0
-	if ref, valid := rt.cosCharacterRef(c); valid {
+	o.aliveBefore = pet.CurrentHP > 0
+	if ref, valid := rt.cosReference(pet); valid {
 		o.ref = ref
 	}
-	if current := rt.cosAbnormal(division, c.Name, c.ActiveCOS.GID); current != nil {
+	if current := rt.cosAbnormal(division, c.Name, pet.GID); current != nil {
 		copied := *current
 		o.block = &copied
 	}
@@ -172,17 +190,19 @@ Retire dead pets' statuses before publishing their replacement snapshot.
 ================
 */
 func (o *cosAbnormalOwner) commit() {
-	if o.c == nil || o.c.ActiveCOS == nil {
+	if o.c == nil || o.pet == nil {
 		return
 	}
-	if o.fatal || o.c.ActiveCOS.CurrentHP == 0 {
-		pet := o.c.ActiveCOS
+	if o.fatal || o.pet.CurrentHP == 0 {
+		pet := o.pet
 		if o.aliveBefore && !o.died {
 			o.died = true
+			o.rt.cancelCompanionCasts(o.division, o.c, pet.GID)
 			o.StopMove()
 			// The port's persisted summon flag must agree with native LIFE=2
 			// (529DE0 -> 490210), or the revival item rejects the dead pet.
 			pet.StateFlags &^= 1
+			o.private = append(o.private, companionItemStateFrames(o.c, pet)...)
 			if pet.Mounted {
 				pet.Mounted = false
 				o.public = append(o.public, wire.Frame{Opcode: wire.OpCosRideState,
@@ -193,7 +213,7 @@ func (o *cosAbnormalOwner) commit() {
 		o.changed = o.block.ClearAll(o) || o.changed
 		o.fatal = true
 	}
-	o.rt.storeCosAbnormal(o.division, o.c.Name, o.c.ActiveCOS.GID, o.block)
+	o.rt.storeCosAbnormal(o.division, o.c.Name, o.pet.GID, o.block)
 }
 
 /*
@@ -204,7 +224,7 @@ A missing or depleted pet cannot admit a new status.
 ================
 */
 func (o *cosAbnormalOwner) Alive() bool {
-	return o.c != nil && o.c.ActiveCOS != nil && o.c.ActiveCOS.CurrentHP > 0
+	return o.c != nil && o.pet != nil && o.pet.CurrentHP > 0
 }
 
 /*
@@ -236,7 +256,7 @@ func (o *cosAbnormalOwner) CurrentHP() uint32 {
 	if !o.Alive() {
 		return 0
 	}
-	return o.c.ActiveCOS.CurrentHP
+	return o.pet.CurrentHP
 }
 
 /*
@@ -269,7 +289,7 @@ Evaluate the pet's own RefObjChar keeper and independent abnormal writes.
 ================
 */
 func (o *cosAbnormalOwner) Param(id uint16) float32 {
-	return cosParameter(o.ref, o.c.ActiveCOS, o.block, id)
+	return cosParameter(o.ref, o.pet, o.block, id)
 }
 
 /*
@@ -331,7 +351,7 @@ func (o *cosAbnormalOwner) ParamsChanged(speed bool) {
 	if !o.Alive() || o.ref == nil {
 		return
 	}
-	pet := o.c.ActiveCOS
+	pet := o.pet
 	hp, mp := min(pet.CurrentHP, o.MaxHP()), min(pet.CurrentMP, o.MaxMP())
 	o.hpChanged = o.hpChanged || hp != pet.CurrentHP
 	o.mpChanged = o.mpChanged || mp != pet.CurrentMP
@@ -365,7 +385,7 @@ movement owner. Both paths settle once and collect the native correction.
 ================
 */
 func (o *cosAbnormalOwner) StopMove() {
-	o.public = append(o.public, o.rt.stopCosMovement(o.division, o.c, o.now)...)
+	o.public = append(o.public, o.rt.stopCompanionMovement(o.division, o.c, o.pet, o.now)...)
 }
 
 /*
@@ -389,7 +409,7 @@ func (o *cosAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reas
 	if !o.Alive() || damage == 0 {
 		return
 	}
-	pet := o.c.ActiveCOS
+	pet := o.pet
 	if credited && source == pet.GID {
 		return
 	}
@@ -415,7 +435,7 @@ func (o *cosAbnormalOwner) ConsumeResources(hp, mp int32, _ uint8) {
 	if !o.Alive() {
 		return
 	}
-	pet := o.c.ActiveCOS
+	pet := o.pet
 	if hp > 0 {
 		pet.CurrentHP = uint32(max(int64(pet.CurrentHP)-int64(hp), 1))
 		o.hpChanged = true
@@ -446,7 +466,7 @@ Publish the pet's shared abnormal mask without a player-only private snapshot.
 ================
 */
 func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wire.Frame {
-	if o == nil || o.c == nil || o.c.ActiveCOS == nil {
+	if o == nil || o.c == nil || o.pet == nil {
 		return nil
 	}
 	// 4A5C60 sends the state snapshot (server 30D2, v1.150 0x36C7) only when
@@ -455,7 +475,7 @@ func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wir
 	// channel (dirty bit 0x100 -> 33A6) alone.
 	frames := append([]wire.Frame(nil), o.public...)
 	if o.hpChanged || o.mpChanged {
-		pet := o.c.ActiveCOS
+		pet := o.pet
 		frames = append(frames, wire.Frame{Opcode: simulation.OpVitalsUpdate,
 			Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceFlags(abnormalStatusVitalsSource),
 				simulation.Vitals{CurrentHP: pet.CurrentHP, CurrentMP: pet.CurrentMP})})
@@ -491,7 +511,7 @@ func (rt *Runtime) characterByCosGID(division string, gid uint32) *enterworld.Ch
 		return nil
 	}
 	for _, character := range rt.deps.CharactersForDivision(division) {
-		if character != nil && character.ActiveCOS != nil && character.ActiveCOS.Summoned && character.ActiveCOS.GID == gid {
+		if character != nil && character.CompanionByGID(gid) != nil {
 			return character
 		}
 	}
@@ -524,14 +544,14 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 	unlock := rt.lockDivision(entry.division)
 	defer unlock()
 	c := rt.findCharacter(entry.division, entry.name)
-	if c == nil || c.ActiveCOS == nil || c.ActiveCOS.GID != entry.gid {
+	if c == nil || c.CompanionByGID(entry.gid) == nil {
 		rt.storeCosAbnormal(entry.division, entry.name, entry.gid, nil)
 		return nil
 	}
-	owner := rt.newCosAbnormalOwner(entry.division, c, now)
+	owner := rt.newCosAbnormalOwnerForPet(entry.division, c, c.CompanionByGID(entry.gid), now)
 	owner.sources = rt.captureAbnormalSources(entry.division, owner.block, nil)
 	committed := rt.deps.Update(c, "cos-abnormal", func() bool {
-		if c.ActiveCOS.CurrentHP == 0 {
+		if owner.pet.CurrentHP == 0 {
 			owner.changed = owner.block.ClearAll(owner)
 			owner.fatal = true
 		} else if result := owner.block.Update(owner, now); result.Changed {
@@ -544,7 +564,7 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 		return nil
 	}
 	frames := rt.cosAbnormalPublication(entry.gid, owner)
-	publication := playerAbnormalFrames{actor: frames, public: frames}
+	publication := playerAbnormalFrames{actor: append(append([]wire.Frame(nil), frames...), owner.private...), public: frames}
 	// 52A1E0 delegates COS hits to the NPC/character hit owner. A player
 	// source receives its private echo; the pet's rider is not the victim PC.
 	for _, hit := range owner.hits {
@@ -569,8 +589,9 @@ COS (529929 -> PC+0x1CD8). The independent COS reference, keeper and movement
 owner supply admission; the rider's equipment cannot shield or weaken a pet.
 ==================
 */
-func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Instance, owner *enterworld.Character, skillID uint32, nowMs int64, release *pendingMonsterCast) (result simulation.MonsterAttackResult) {
-	pet := owner.ActiveCOS
+func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Instance, recipient monsterCastRecipient, skillID uint32, nowMs int64, release *pendingMonsterCast) (result simulation.MonsterAttackResult) {
+	owner := recipient.character
+	pet := owner.CompanionByGID(recipient.gid)
 	if pet == nil || !pet.Summoned || pet.CurrentHP == 0 || skillID == 0 {
 		return result
 	}
@@ -583,14 +604,14 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 		return result
 	}
 	snapshot := rt.characterSnapshot(divisionID, owner)
-	if snapshot == nil || snapshot.ActiveCOS == nil || snapshot.ActiveCOS.GID != pet.GID || snapshot.DeletePending {
+	if snapshot == nil || snapshot.CompanionByGID(pet.GID) == nil || snapshot.DeletePending {
 		return result
 	}
 	if _, sameWorld := rt.characterMonster(divisionID, snapshot, instance.Gid); !sameWorld {
 		return result
 	}
 	result.TargetAlive = true
-	ref, validRef := rt.cosCharacterRef(snapshot)
+	ref, validRef := rt.cosReference(snapshot.CompanionByGID(pet.GID))
 	if !validRef {
 		return result
 	}
@@ -599,7 +620,7 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 		return result
 	}
 	monsterPose := mover.LivePoseAt(nowMs, nil)
-	petPose := rt.cosLiveSpawn(divisionID, snapshot, nowMs)
+	petPose := rt.companionLiveSpawn(divisionID, snapshot, snapshot.CompanionByGID(recipient.gid), nowMs)
 	spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(instance.Ref.BodyRadius),
 		TargetBodyRadius: simulation.BodyRadius(ref.Parameters.BodyRadius), ActionReach: rt.monsterActionReach(instance, skill)}
 	if !spacing.Valid() || simulation.IsDungeonRegion(monsterPose.RegionID) != simulation.IsDungeonRegion(petPose.RegionID) {
@@ -613,7 +634,7 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	if err != nil {
 		return result
 	}
-	ownerBlock := rt.newCosAbnormalOwner(divisionID, owner, nowMs)
+	ownerBlock := rt.newCosAbnormalOwnerForPet(divisionID, owner, pet, nowMs)
 	defender, err := cosCombatStats(ref, pet, ownerBlock.block)
 	if err != nil {
 		return result
@@ -645,7 +666,7 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	var battleFrames []wire.Frame
 	hitContext := abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
 	committed := rt.deps.Update(owner, "monster-cos-hit", func() bool {
-		live := owner.ActiveCOS
+		live := owner.CompanionByGID(pet.GID)
 		if live == nil || live.GID != pet.GID || live.CurrentHP == 0 {
 			return false
 		}
@@ -707,13 +728,16 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	result.Frames = []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}}
 	result.Frames = append(result.Frames, simulation.Frame{
 		Opcode:  simulation.OpVitalsUpdate,
-		Payload: simulation.HPRefreshPayload(pet.GID, 0, owner.ActiveCOS.CurrentHP),
+		Payload: simulation.HPRefreshPayload(pet.GID, 0, pet.CurrentHP),
 	})
 	for _, published := range rt.cosAbnormalPublication(pet.GID, ownerBlock) {
 		result.Frames = append(result.Frames, simulation.Frame{Opcode: published.Opcode, Payload: published.Payload})
 	}
 	for _, f := range battleFrames {
 		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload})
+	}
+	for _, frame := range ownerBlock.private {
+		result.TargetFrames = append(result.TargetFrames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 	}
 	result.Accepted = true
 	result.TargetAlive = !fatal
@@ -731,7 +755,7 @@ func (rt *Runtime) rollMonsterOnCOS(input cosAbnormalRoll) ([]abnormal.Record, e
 	if input.params == nil || !input.params.Present() || input.target.ref == nil {
 		return nil, nil
 	}
-	pet := input.target.c.ActiveCOS
+	pet := input.target.pet
 	in := abnormal.RollInput{
 		Params:      input.params,
 		TargetLevel: pet.Level,

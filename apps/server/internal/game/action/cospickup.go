@@ -90,11 +90,11 @@ GID can bypass the same ownership and inventory checks as manual pet pickup.
 func (rt *Runtime) handleCosPickupCommand(division string, c *enterworld.Character, command wire.CosCommand) OpResult {
 	refused := OpResult{Frames: []wire.Frame{cosPickupAcknowledgement(command, cosPickupUnavailable)}}
 	snapshot, ref := rt.commandCOSSnapshot(division, c, command.CosGid)
-	if snapshot == nil || snapshot.ActiveCOS.Mounted || command.TargetGid == 0 || ref.TidWord>>11 != 4 {
+	if snapshot == nil || snapshot.CompanionByGID(command.CosGid).Mounted || command.TargetGid == 0 || ref.TidWord>>11 != 4 {
 		return refused
 	}
 	rt.petMu.Lock()
-	session := rt.petSessions[petOwnerKey{division, strings.ToLower(c.Name)}]
+	session := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: command.CosGid}]
 	rt.petMu.Unlock()
 	if session == nil || session.character != c || session.pickup != nil {
 		return refused

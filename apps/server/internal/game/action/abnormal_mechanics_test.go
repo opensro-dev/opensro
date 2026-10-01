@@ -359,7 +359,7 @@ func TestMonsterMyopiaChangesPursuitAndBothVictimKinds(t *testing.T) {
 		var result simulation.MonsterAttackResult
 		if petTarget {
 			equipCombatTestPet(t, rt, c, 4)
-			result = rt.monsterHitSummonedCOS(testDivision, m, c, 2, clock.NowMs(), nil)
+			result = rt.monsterHitSummonedCOS(testDivision, m, monsterCastRecipient{c, c.ActiveCOS.GID}, 2, clock.NowMs(), nil)
 		} else {
 			result = rt.MonsterBasicAttack(testDivision, m, enterworld.ObjectIDForCharacter(c), 2, clock.NowMs())
 		}

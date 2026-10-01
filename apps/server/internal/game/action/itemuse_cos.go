@@ -87,7 +87,7 @@ livePet
 ================
 */
 func (rt *Runtime) livePet(character *enterworld.Character, gid uint32) bool {
-	pet := character.ActiveCOS
+	pet := character.CompanionByGID(gid)
 	return pet != nil && pet.Summoned && pet.CurrentHP > 0 && pet.GID == gid && pet.GID != 0
 }
 
@@ -111,7 +111,7 @@ func (rt *Runtime) applyPetCure(
 		*result = itemUseFailure(wire.ErrCodeCosRefused)
 		return false
 	}
-	owner := rt.newCosAbnormalOwner(divisionID, character, nowMs)
+	owner := rt.newCosAbnormalOwnerForPet(divisionID, character, character.CompanionByGID(gid), nowMs)
 	stored := [6]int32{}
 	for i := range ref.CureLevels {
 		stored[i] = int32(ref.CureLevels[i])
@@ -125,7 +125,7 @@ func (rt *Runtime) applyPetCure(
 	}
 	owner.commit()
 	remaining := rt.consumeItemUseRow(character, rowIndex)
-	published := rt.cosAbnormalPublication(character.ActiveCOS.GID, owner)
+	published := rt.cosAbnormalPublication(gid, owner)
 	frames := []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}
 	frames = append(frames, published...)
 	*result = OpResult{Frames: frames, Broadcast: published}
@@ -150,8 +150,20 @@ func (rt *Runtime) applyPetRevival(
 		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
 		return false
 	}
-	pet := character.ActiveCOS
-	if pet == nil || pet.InventorySlot != tail[0] {
+	var pet *enterworld.CharacterCOS
+	for i := range character.MissionInventory {
+		row := &character.MissionInventory[i]
+		if row.Slot == int64(tail[0]) {
+			if pet != nil {
+				return false
+			}
+			pet = row.Summon
+		}
+	}
+	if pet == nil && character.ActiveCOS != nil && character.ActiveCOS.InventorySlot == tail[0] {
+		pet = character.ActiveCOS
+	}
+	if pet == nil {
 		*result = itemUseFailure(wire.ErrCodeCosRefused)
 		return false
 	}
@@ -180,8 +192,16 @@ func (rt *Runtime) applyPetRevival(
 	gid := pet.GID
 	*result = OpResult{Frames: []wire.Frame{
 		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
-		{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(gid, simulation.Vitals{CurrentHP: pet.CurrentHP, CurrentMP: pet.CurrentMP})},
 	}}
+	// Dormant pets may retain a GID now used by another summoner of the same
+	// family. Only the currently live actor owns a world-vitals publication.
+	if pet.Summoned && character.CompanionByGID(gid) == pet {
+		vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(gid, simulation.Vitals{CurrentHP: pet.CurrentHP, CurrentMP: pet.CurrentMP})}
+		life := wire.Frame{Opcode: wire.OpObjectStateRefresh, Payload: wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelLife, Value: wire.LifeStateAlive}.Encode()}
+		result.Frames = append(result.Frames, vitals, life)
+		result.Broadcast = []wire.Frame{vitals, life}
+	}
+	result.Frames = append(result.Frames, companionItemStateFrames(character, pet)...)
 	result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 	return true
 }
@@ -229,8 +249,8 @@ func (rt *Runtime) applyPetPotion(
 		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
 		return false
 	}
-	pet := character.ActiveCOS
-	owner := rt.newCosAbnormalOwner(divisionID, character, nowMs)
+	pet := character.CompanionByGID(gid)
+	owner := rt.newCosAbnormalOwnerForPet(divisionID, character, character.CompanionByGID(gid), nowMs)
 	if owner.ref == nil {
 		return false
 	}
@@ -266,6 +286,7 @@ func (rt *Runtime) applyPetPotion(
 		owner.commit()
 		public = rt.cosAbnormalPublication(gid, owner)
 		frames = append(frames, public...)
+		frames = append(frames, owner.private...)
 	}
 	frames = append(frames, rt.updateQuestInventory(character)...)
 	*result = OpResult{Frames: frames, Broadcast: public}

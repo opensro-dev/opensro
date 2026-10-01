@@ -57,9 +57,8 @@ func BuildCOSRecord(cos *CharacterCOS, ref *CharacterRef, items ItemRefSource) (
 			if !ok || r == nil || r.RefObjID != row.RefObjID || r.TypeFlags() != row.TypeFlags || row.Slot < 0 || row.Slot >= int64(bag.Capacity) || seen[row.Slot] || row.StackCount < 1 || row.StackCount > 65535 || len(row.MagicOptions) > 12 || row.Plus < 0 || row.Plus > 255 || row.Durability < 0 || row.Durability > 0xffffffff || varianceErr != nil && row.VarianceBits != "" {
 				return nil, fmt.Errorf("invalid COS container row")
 			}
-			// The current durable InventoryRow represents equipment and plain
-			// expendables; do not silently encode a summon record as equipment.
-			if row.TypeFlags&0x60 != 0x20 && row.TypeFlags&0x60 != 0x60 {
+			// Every container shares the reference-selected persistent item grammar.
+			if row.TypeFlags&0x60 != 0x20 && row.TypeFlags&0x60 != 0x60 && !wire.IsCosSummoner(row.TypeFlags) && !wire.IsMonsterCapsule(row.TypeFlags) {
 				return nil, fmt.Errorf("unsupported COS item body")
 			}
 			group := row.TypeFlags & 0x780
@@ -67,7 +66,11 @@ func BuildCOSRecord(cos *CharacterCOS, ref *CharacterRef, items ItemRefSource) (
 				return nil, fmt.Errorf("COS item requires a wider or labeled durable body")
 			}
 			seen[row.Slot] = true
-			w.U8(uint8(row.Slot)).Bytes(BuildItemBody(InventoryWireItems([]InventoryRow{row})[0]))
+			body := BuildItemBody(InventoryWireItems([]InventoryRow{row})[0])
+			if len(body) == 0 {
+				return nil, fmt.Errorf("invalid COS summoner body")
+			}
+			w.U8(uint8(row.Slot)).Bytes(body)
 		}
 	}
 	dead := uint32(0)

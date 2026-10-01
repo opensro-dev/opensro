@@ -13,6 +13,7 @@ package action
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -426,7 +427,12 @@ func (rt *Runtime) shopInventoryRows(items []inventory.Item, before []inventory.
 		if unchanged {
 			continue
 		}
-		body := item.Body().Encode()
+		bodyValue := item.Body()
+		bodyValue.Summon.RefreshRentalTimes(rt.Now().Unix())
+		body := bodyValue.Encode()
+		if len(body) == 0 {
+			return nil, fmt.Errorf("invalid shop item body in slot %d", item.Slot)
+		}
 		bytes := make([]int, len(body))
 		for i, b := range body {
 			bytes[i] = int(b)

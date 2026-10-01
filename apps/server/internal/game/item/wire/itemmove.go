@@ -1,6 +1,16 @@
+/*
+===========================================================================
+
+itemmove.go - encodes and decodes reference-selected item movement bodies
+
+===========================================================================
+*/
 package wire
 
-import "fmt"
+import (
+	"fmt"
+	"opensro.online/server/internal/domain"
+)
 
 // ItemBodySize is the encoded size of a CSOItem equipment body carrying NO
 // magic options (the header: u32 + u8 + u64 + u32 + the count byte). The
@@ -24,7 +34,13 @@ const MaxMagicOptionsPerItem = 12
 //
 // A zero TypeFlags retains the historical equipment default for old callers
 // and fixtures. New code must always supply the real word.
+/*
+================
+ItemBody
+================
+*/
 type ItemBody struct {
+	Summon       *domain.CharacterCOS
 	RefObjID     uint32
 	TypeFlags    uint16
 	Plus         uint8
@@ -39,6 +55,11 @@ type ItemBody struct {
 }
 
 // EncodedSize is the body's variable wire length.
+/*
+================
+EncodedSize
+================
+*/
 func (b ItemBody) EncodedSize() int {
 	options := len(b.MagicOptions)
 	if options > MaxMagicOptionsPerItem {
@@ -48,7 +69,8 @@ func (b ItemBody) EncodedSize() int {
 		return 4 + 4
 	}
 	if IsCosSummoner(b.TypeFlags) {
-		return 4 + 1
+		body, _ := encodeCosSummoner(b.TypeFlags, b.Summon)
+		return 4 + len(body)
 	}
 	if b.TypeFlags != 0 && IsEtcBand(b.TypeFlags) {
 		size := 4 + 2
@@ -64,6 +86,11 @@ func (b ItemBody) EncodedSize() int {
 }
 
 // Encode returns the CSOItem body bytes (EncodedSize long).
+/*
+================
+Encode
+================
+*/
 func (b ItemBody) Encode() []byte {
 	options := b.MagicOptions
 	if len(options) > MaxMagicOptionsPerItem {
@@ -74,7 +101,11 @@ func (b ItemBody) Encode() []byte {
 		return w.U32(b.TransformRefObjID).Payload()
 	}
 	if IsCosSummoner(b.TypeFlags) {
-		return w.U8(cosSummonerNoRecord).Payload()
+		body, err := encodeCosSummoner(b.TypeFlags, b.Summon)
+		if err != nil {
+			return nil
+		}
+		return w.Bytes(body).Payload()
 	}
 	if b.TypeFlags != 0 && IsEtcBand(b.TypeFlags) {
 		quantity := b.Quantity
@@ -103,6 +134,11 @@ func (b ItemBody) Encode() []byte {
 	return w.Payload()
 }
 
+/*
+================
+readItemBody
+================
+*/
 func readItemBody(r *Reader, typeFlags uint16) (ItemBody, error) {
 	var out ItemBody
 	out.TypeFlags = typeFlags
@@ -119,10 +155,7 @@ func readItemBody(r *Reader, typeFlags uint16) (ItemBody, error) {
 	}
 	if IsCosSummoner(typeFlags) {
 		out.Quantity = 1
-		state, err := r.U8()
-		if err == nil && state != cosSummonerNoRecord {
-			err = fmt.Errorf("wire: COS summoner record state %d is not modelled", state)
-		}
+		out.Summon, err = readCosSummoner(r, typeFlags)
 		return out, err
 	}
 	if typeFlags != 0 && IsEtcBand(typeFlags) {
@@ -195,6 +228,11 @@ func readItemBody(r *Reader, typeFlags uint16) (ItemBody, error) {
 // same five back (sub_759a30 @0x00759b04). A plain slot-to-slot move carries
 // none; they appear when one logical operation touches several slots, such as
 // a stack merge spilling across rows.
+/*
+================
+SubMove
+================
+*/
 type SubMove struct {
 	// MovementType echoes the parent operation's type byte.
 	MovementType uint8
@@ -206,10 +244,20 @@ type SubMove struct {
 // SubMoveSize is the encoded size of one sub-move row.
 const SubMoveSize = 5
 
+/*
+================
+encodeInto
+================
+*/
 func (s SubMove) encodeInto(w *Writer) {
 	w.U8(s.MovementType).U8(s.SourceSlot).U8(s.DestSlot).U16(s.Quantity)
 }
 
+/*
+================
+readSubMove
+================
+*/
 func readSubMove(r *Reader) (SubMove, error) {
 	var out SubMove
 
@@ -247,6 +295,11 @@ func readSubMove(r *Reader) (SubMove, error) {
 const MoveTypeAvatarToPlayer uint8 = 0x23
 const MoveTypePlayerToAvatar uint8 = 0x24
 
+/*
+================
+ItemMoveRequest
+================
+*/
 type ItemMoveRequest struct {
 	NpcGID       uint32
 	CosGID       uint32
@@ -267,11 +320,21 @@ type ItemMoveRequest struct {
 // at the rest would be worse than refusing.
 type ErrUnsupportedMovementType uint8
 
+/*
+================
+Error
+================
+*/
 func (e ErrUnsupportedMovementType) Error() string {
 	return fmt.Sprintf("wire: movement type 0x%02X has no established layout", uint8(e))
 }
 
 // Encode returns the 0x706D payload: [u8 movementType] then the per-type body.
+/*
+================
+Encode
+================
+*/
 func (q ItemMoveRequest) Encode() ([]byte, error) {
 	w := NewWriter(16).U8(q.MovementType)
 
@@ -339,6 +402,11 @@ func (q ItemMoveRequest) Encode() ([]byte, error) {
 // A type-0x00 body may or may not carry the sub-move count: the serializer
 // only emits it on the branch where the operation has rows to describe, so a
 // payload that ends after the quantity is well-formed and yields no SubMoves.
+/*
+================
+DecodeItemMoveRequest
+================
+*/
 func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 	var out ItemMoveRequest
 	r := NewReader(payload)
@@ -482,6 +550,11 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 //	                   PickupGoldSlot) or Item
 //	MoveTypeGroundDrop SourceSlot
 //	MoveTypeGoldDrop   GoldAmount
+/*
+================
+ItemMoveResult
+================
+*/
 type ItemMoveResult struct {
 	Result       uint8
 	ErrorCode    uint8
@@ -497,6 +570,11 @@ type ItemMoveResult struct {
 
 // IsGoldPickup reports whether a successful pickup granted gold rather than an
 // item, which the native signals with the PickupGoldSlot sentinel.
+/*
+================
+IsGoldPickup
+================
+*/
 func (r ItemMoveResult) IsGoldPickup() bool {
 	return r.Result == ResultSuccess &&
 		r.MovementType == MoveTypePickup &&
@@ -504,12 +582,22 @@ func (r ItemMoveResult) IsGoldPickup() bool {
 }
 
 // EncodeItemMoveError returns a failed 0xB06D payload: [0x02][errorCode].
+/*
+================
+EncodeItemMoveError
+================
+*/
 func EncodeItemMoveError(errorCode uint8) []byte {
 	return NewWriter(2).U8(ResultError).U8(errorCode).Payload()
 }
 
 // EncodeInventoryMoveResult returns a successful type-0x00 payload:
 // [0x01][0x00][src][dst][qty u16][subMoveCount].
+/*
+================
+EncodeInventoryMoveResult
+================
+*/
 func EncodeInventoryMoveResult(sourceSlot, destSlot uint8, quantity uint16, subMoves []SubMove) []byte {
 	w := NewWriter(7 + len(subMoves)*SubMoveSize).
 		U8(ResultSuccess).
@@ -526,12 +614,22 @@ func EncodeInventoryMoveResult(sourceSlot, destSlot uint8, quantity uint16, subM
 
 // EncodeGroundDropResult returns a successful type-0x07 payload:
 // [0x01][0x07][src].
+/*
+================
+EncodeGroundDropResult
+================
+*/
 func EncodeGroundDropResult(sourceSlot uint8) []byte {
 	return NewWriter(3).U8(ResultSuccess).U8(MoveTypeGroundDrop).U8(sourceSlot).Payload()
 }
 
 // EncodeGoldDropResult returns a successful type-0x0A payload:
 // [0x01][0x0A][amount u32]. The amount is clamped to the native ceiling.
+/*
+================
+EncodeGoldDropResult
+================
+*/
 func EncodeGoldDropResult(amount uint32) []byte {
 	return NewWriter(6).
 		U8(ResultSuccess).
@@ -542,6 +640,11 @@ func EncodeGoldDropResult(amount uint32) []byte {
 
 // EncodePickupItemResult returns a successful type-0x06 item grant:
 // [0x01][0x06][slot][CSOItem body].
+/*
+================
+EncodePickupItemResult
+================
+*/
 func EncodePickupItemResult(slot uint8, item ItemBody) []byte {
 	return NewWriter(3 + item.EncodedSize()).
 		U8(ResultSuccess).
@@ -553,6 +656,11 @@ func EncodePickupItemResult(slot uint8, item ItemBody) []byte {
 
 // EncodePickupGoldResult returns a successful type-0x06 gold grant:
 // [0x01][0x06][0xFE][amount u32].
+/*
+================
+EncodePickupGoldResult
+================
+*/
 func EncodePickupGoldResult(amount uint32) []byte {
 	return NewWriter(7).
 		U8(ResultSuccess).
@@ -565,6 +673,11 @@ func EncodePickupGoldResult(amount uint32) []byte {
 // DecodeItemMoveResult parses a 0xB06D payload. pickupTypeFlags is the
 // authoritative RefObj/itemdata type word for a non-gold type-0x06 body; the
 // wire does not carry this discriminator. It is ignored for every other shape.
+/*
+================
+DecodeItemMoveResult
+================
+*/
 func DecodeItemMoveResult(payload []byte, pickupTypeFlags uint16) (ItemMoveResult, error) {
 	var out ItemMoveResult
 	r := NewReader(payload)

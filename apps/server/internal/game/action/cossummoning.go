@@ -1,0 +1,206 @@
+/*
+===========================================================================
+
+cossummoning.go - persistent item-owned companion activation
+
+The summoner item retains the complete companion while its world actor is
+absent. Creation, resummoning and cancellation use one character transaction;
+the summoner is never consumed and never becomes a second copy of the pet.
+
+===========================================================================
+*/
+package action
+
+import (
+	"math"
+	"strings"
+
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/simulation"
+)
+
+const (
+	minimumPersistentSummonLevel        = 5
+	cosSummonMinimumLevel        uint8  = 0x6c
+	cosSummonUnavailable         uint8  = 0xa4
+	cosSummonPetLevel            uint8  = 0xa5
+	cosSummonDuplicateFamily     uint8  = 0xa9
+	cosSummonCancelDistance      uint8  = 0x97
+	cosItemStateOpcode           uint16 = 0x3645
+	cosItemStateMask             uint8  = 0x40
+	cosItemLeaseMask             uint8  = 0x80
+)
+
+/*
+================
+persistentSummonUse
+================
+*/
+type persistentSummonUse struct {
+	division  string
+	character *enterworld.Character
+	ref       *enterworld.ItemRef
+	row       int
+	request   wire.ItemUseRequest
+	nowMs     int64
+}
+
+/*
+================
+usePersistentSummoner
+
+493100 validates the retained record and lease; 4E8F20 creates the first
+record and 4E8FC0 toggles the existing actor. Family admission is 4FCEF0.
+================
+*/
+func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResult) bool {
+	c, row := use.character, &use.character.MissionInventory[use.row]
+	if row.StackCount != 1 || c.NativeTeleportMode != 0 || rt.PlayerAttackLocked(use.division, c.Name) || rt.objectActionCommitted(use.division, c.Name) {
+		return false
+	}
+	if inBattleState(c, use.nowMs) {
+		*result = itemUseFailure(cosSummonInBattle)
+		return false
+	}
+	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
+	if !ok {
+		return false
+	}
+	code := use.ref.AssociatedCharacterCodename
+	if row.Summon != nil {
+		code = row.Summon.Codename
+	}
+	ref, ok := refs.CharacterRefByCodename(code)
+	if !ok || ref == nil || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 != uint16(use.ref.TypeIDs[3]+2) {
+		return false
+	}
+	if (&characterEquipRequirements{character: c}).characterLevel() < minimumPersistentSummonLevel || (&characterEquipRequirements{character: c}).characterLevel() < int64(ref.Level) {
+		*result = itemUseFailure(cosSummonMinimumLevel)
+		return false
+	}
+	pet := domain.CloneCOS(row.Summon)
+	if pet != nil {
+		if pet.RefObjID != ref.RefObjID || pet.StateFlags&1 == 0 || pet.CurrentHP == 0 {
+			*result = itemUseFailure(cosSummonUnavailable)
+			return false
+		}
+		if pet.Level > 0 && (&characterEquipRequirements{character: c}).characterLevel() < int64(pet.Level) {
+			*result = itemUseFailure(cosSummonPetLevel)
+			return false
+		}
+		if ref.TidWord>>11 == 4 && (pet.RentalExpiresAtUnix <= use.nowMs/1000) {
+			*result = itemUseFailure(cosSummonUnavailable)
+			return false
+		}
+		if pet.Summoned {
+			return rt.togglePersistentCompanion(use, row.Summon, result)
+		}
+	}
+	for _, other := range c.Companions() {
+		otherRef, valid := rt.cosReference(other)
+		if other.Summoned && valid && otherRef.TidWord == ref.TidWord {
+			*result = itemUseFailure(cosSummonDuplicateFamily)
+			return false
+		}
+	}
+	gid, ok := enterworld.PersistentCOSObjectID(c, ref.TidWord>>11)
+	if !ok {
+		return false
+	}
+	if pet == nil {
+		pet = &domain.CharacterCOS{RefObjID: ref.RefObjID, Codename: ref.Codename, Level: ref.Level, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, Satiety: 10000, StateFlags: 1}
+		if ref.InventoryCapacity != 0 {
+			pet.Container = &domain.COSContainer{Capacity: ref.InventoryCapacity}
+		}
+		if ref.TidWord>>11 == 4 {
+			minutes, present := use.ref.NativeFields.Lookup("itemParam1_29c")
+			if !present || math.IsNaN(minutes) || math.IsInf(minutes, 0) || minutes <= 0 || minutes > math.MaxInt32/60 || math.Trunc(minutes) != minutes {
+				return false
+			}
+			pet.RentalExpiresAtUnix = use.nowMs/1000 + int64(minutes)*60
+		}
+	}
+	if pet.SummonGeneration == math.MaxUint64 {
+		return false
+	}
+	pet.SummonGeneration++
+	pet.GID, pet.InventorySlot = gid, use.request.Slot
+	pet.Summoned, pet.Mounted = true, false
+	pet.StateFlags |= cosStateSummoned
+	pet.NativeBodyStatus = domain.InitialCOSBodyStatus(c.NativeBodyStatus)
+	pet.RefreshRentalTimes(use.nowMs / 1000)
+	record, err := enterworld.BuildCOSRecord(pet, ref, rt.deps.ItemReferences())
+	if err != nil {
+		return false
+	}
+	row.Summon = pet
+	rt.petMu.Lock()
+	owner := rt.petSessions[petOwnerKey{division: use.division, name: strings.ToLower(c.Name)}]
+	rt.petMu.Unlock()
+	if owner != nil {
+		rt.bindCompanionSession(use.division, owner, pet)
+	}
+	pose := rt.liveSpawn(simulation.WorldKey(use.division, c.Name), c, use.nowMs)
+	spawn := wire.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
+		Band: uint8(ref.TidWord >> 11), RefObjID: ref.RefObjID, Gid: gid, BodyStatus: pet.NativeBodyStatus,
+		Position: wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle},
+		Walk:     ref.WalkSpeed, Run: ref.RunSpeed, Scale: ref.Scale, Name: pet.Name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c),
+	})}
+	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, 1, use.request.TypeWord)}, {Opcode: wire.OpCosRecordCreate, Payload: record}, spawn}, Broadcast: []wire.Frame{spawn}}
+	result.Frames = append(result.Frames, companionItemStateFrames(c, pet)...)
+	return true
+}
+
+/*
+================
+togglePersistentCompanion
+
+The item-use handler already holds both authority locks. Entering the public
+cancellation handler here would acquire the division lock a second time.
+================
+*/
+func (rt *Runtime) togglePersistentCompanion(use persistentSummonUse, pet *domain.CharacterCOS, result *OpResult) bool {
+	owner := rt.liveSpawn(simulation.WorldKey(use.division, use.character.Name), use.character, use.nowMs)
+	pose := rt.companionLiveSpawn(use.division, use.character, pet, use.nowMs)
+	if pet.Mounted || !worldgeom.SamePlane(owner.RegionID, pose.RegionID) || !(simulation.WorldDistance2D(owner, pose) < cosCancelRange) {
+		*result = itemUseFailure(cosSummonCancelDistance)
+		return false
+	}
+	pet.RefreshRentalTimes(use.nowMs / 1000)
+	pet.Summoned = false
+	pet.StateFlags &^= cosStateSummoned
+	frames := rt.retireCosRuntime(use.division, use.character, pet.GID)
+	despawn := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: pet.GID}.Encode()}
+	frames = append(frames, wire.Frame{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, 1, use.request.TypeWord)}, despawn)
+	*result = OpResult{Frames: append(frames, companionItemStateFrames(use.character, pet)...), Broadcast: []wire.Frame{despawn}}
+	return true
+}
+
+/*
+================
+companionItemStateFrames
+
+7654B0 mask 0x40 forwards the state byte to 59C290/54FC80 and the
+summoner's rent-state field. Only the owning inventory receives this packet.
+================
+*/
+func companionItemStateFrames(c *enterworld.Character, pet *domain.CharacterCOS) []wire.Frame {
+	for i := range c.MissionInventory {
+		row := &c.MissionInventory[i]
+		if row.Summon == pet && row.Slot >= 13 && row.Slot <= 255 {
+			mask := cosItemStateMask
+			if pet.RentalExpiresAtUnix != 0 {
+				mask |= cosItemLeaseMask
+			}
+			writer := wire.NewWriter(7).U8(uint8(row.Slot)).U8(mask).U8(domain.COSItemState(pet))
+			if mask&cosItemLeaseMask != 0 {
+				writer.U32(uint32(pet.RentalRemainingSeconds))
+			}
+			return []wire.Frame{{Opcode: cosItemStateOpcode, Payload: writer.Payload()}}
+		}
+	}
+	return nil
+}

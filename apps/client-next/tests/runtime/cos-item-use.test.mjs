@@ -8,7 +8,9 @@ cos-item-use.test.mjs - pet item wire targets and satiety publication
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { cosItemUseTail } = await import( "../../src/engine/foundation/gameplay/cos-item-use.ts" );
+const { cosItemUseTail, companionItemTargetCommand } = await import(
+	"../../src/engine/foundation/gameplay/cos-item-use.ts"
+);
 
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
@@ -103,4 +105,32 @@ test("native satiety publication updates only the named attack-pet record", () =
 	assert.throws( () => gameplay.receive( { opcode: 0x3508, payload: invalid }, 2 ), /satiety value/ );
 	assert.equal( gameplay.take(), null, "invalid packets do not publish a changed record" );
 	gameplay.dispose();
+});
+
+test("renewal and revival drag targets use owned summoner slots", () => {
+	const source = {
+		slot: 25,
+		refObjId: 998,
+		typeFlags: flags( 13, 12 ),
+		quantity: 1,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: []
+	};
+	const target = { ...source, slot: 24, typeFlags: 0x10cc, summon: { state: 4, rentals: [] } };
+	assert.deepEqual( companionItemTargetCommand( source, target ), { kind: "item-use", slot: 25, summonerSlot: 24 } );
+	assert.deepEqual( cosItemUseTail( source.typeFlags, [ target ] ), Uint8Array.of( 24 ) );
+	assert.throws( () => cosItemUseTail( source.typeFlags, [ target, { ...target, slot: 26 } ] ) );
+	assert.deepEqual(
+		cosItemUseTail( source.typeFlags, [ target, { ...target, slot: 26 } ], { records: [], summonerSlot: 26 } ),
+		Uint8Array.of( 26 )
+	);
+	assert.equal( companionItemTargetCommand( source, { ...target, typeFlags: 0x08cc } ), null );
+	assert.equal( companionItemTargetCommand( source, { ...target, summon: { state: 1, rentals: [] } } ), null );
+	assert.deepEqual( companionItemTargetCommand( { ...source, typeFlags: flags( 1, 6 ) }, target ), {
+		kind: "item-use",
+		slot: 25,
+		revivalSlot: 24
+	} );
 });

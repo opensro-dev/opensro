@@ -175,7 +175,7 @@ func newGameplayPlane(
 	movementRuntime.MovementBlocked = items.PlayerMovementBlocked
 	movementRuntime.AttackLocked = items.PlayerAttackLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
-	movementRuntime.PetPresentation = items.PetPresentation
+	movementRuntime.CompanionPresentations = items.CompanionPresentations
 	movementRuntime.SpawnSkills = items.EntrySkills
 	deps.SpawnTerrainHeight = water.TerrainHeightAt
 	deps.SpawnSurfaceHeight = water.WalkableSpawnHeightAt

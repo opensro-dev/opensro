@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+registry.go - owns registry behavior and its checked data boundaries
+
+===========================================================================
+*/
 // Package grounditem holds the server-authoritative registry of items lying on
 // the ground, plus the distance and approach rules that decide when a pickup
 // may execute.
@@ -42,7 +49,13 @@ const (
 )
 
 // Item is one item lying on the ground.
+/*
+================
+Item
+================
+*/
 type Item struct {
+	Summon     *domain.CharacterCOS
 	RecordID   uint64 // item record identity, separate from ground runtime Gid
 	Population Population
 	Gid        uint32
@@ -82,6 +95,11 @@ type Item struct {
 }
 
 // IsGold reports whether this entry is a gold heap rather than an item.
+/*
+================
+IsGold
+================
+*/
 func (i Item) IsGold() bool {
 	return i.GoldAmount > 0
 }
@@ -89,6 +107,11 @@ func (i Item) IsGold() bool {
 // SpawnRow builds the CIItem spawn row for this entry. withAppearTail selects
 // the single-object 0x30D7 form, which a fresh drop uses; object-list chunks
 // omit the tail.
+/*
+================
+SpawnRow
+================
+*/
 func (i Item) SpawnRow(withAppearTail bool) wire.GroundItemRow {
 	row := wire.GroundItemRow{
 		RefObjID:   i.RefObjID,
@@ -124,6 +147,11 @@ func (i Item) SpawnRow(withAppearTail bool) wire.GroundItemRow {
 // registry calls inside the store commit door; the store reads Snapshot
 // under the documented lock order and writes the character and ground rows
 // in one transaction. There is no registry-local write path.
+/*
+================
+Registry
+================
+*/
 type Registry struct {
 	mu         sync.Mutex
 	byDivision map[string]map[uint32]Item
@@ -137,6 +165,11 @@ type Registry struct {
 
 // Revision reports the mutation counter. Two equal reads with no
 // mutation in between guarantee identical Snapshot content.
+/*
+================
+Revision
+================
+*/
 func (r *Registry) Revision() uint64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -144,12 +177,22 @@ func (r *Registry) Revision() uint64 {
 }
 
 // NewRegistry returns an empty Registry.
+/*
+================
+NewRegistry
+================
+*/
 func NewRegistry() *Registry {
 	return &Registry{byDivision: make(map[string]map[uint32]Item)}
 }
 
 // division returns the division's map, creating it on first use. Callers must
 // hold the lock.
+/*
+================
+division
+================
+*/
 func (r *Registry) division(divisionID string) map[uint32]Item {
 	items, ok := r.byDivision[divisionID]
 	if !ok {
@@ -162,6 +205,11 @@ func (r *Registry) division(divisionID string) map[uint32]Item {
 // Add registers a drop, assigns it the next entity id and returns the stored
 // entry. Any Gid already set on item is ignored - the registry is the sole
 // allocator, so two concurrent drops cannot collide.
+/*
+================
+Add
+================
+*/
 func (r *Registry) Add(divisionID string, item Item) Item {
 	if !item.Population.Valid() {
 		return Item{}
@@ -176,18 +224,26 @@ func (r *Registry) Add(divisionID string, item Item) Item {
 	r.revision++
 	item.Gid = GidBase + r.counter
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
+	item.Summon = domain.CloneCOS(item.Summon)
 	r.division(divisionID)[item.Gid] = item
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
+	item.Summon = domain.CloneCOS(item.Summon)
 	return item
 }
 
 // Get returns the entry with the given entity id.
+/*
+================
+Get
+================
+*/
 func (r *Registry) Get(divisionID string, gid uint32) (Item, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	item, ok := r.byDivision[divisionID][gid]
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
+	item.Summon = domain.CloneCOS(item.Summon)
 	return item, ok
 }
 
@@ -196,6 +252,11 @@ func (r *Registry) Get(divisionID string, gid uint32) (Item, bool) {
 // The second result is false when the entry was already gone, which is the
 // signal to answer the native "cannot be picked" notice: two players racing
 // for the same drop both reach here, and only one gets true.
+/*
+================
+Remove
+================
+*/
 func (r *Registry) Remove(divisionID string, gid uint32) (Item, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -217,6 +278,11 @@ func (r *Registry) Remove(divisionID string, gid uint32) (Item, bool) {
 // over-cap pickup leaves the remainder on the ground: the heap keeps its gid
 // and its rendered entity, so no despawn or respawn is involved. The result
 // is false when the entry is gone.
+/*
+================
+SetStackCount
+================
+*/
 func (r *Registry) SetStackCount(divisionID string, gid uint32, count uint16) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -240,6 +306,11 @@ func (r *Registry) SetStackCount(divisionID string, gid uint32, count uint16) bo
 // caller emits one 0x36AB despawn per returned entry, exactly like the pickup
 // path. Entries without a timestamp never expire. Results are ordered by
 // entity id so the despawn burst is deterministic.
+/*
+================
+ExpireItems
+================
+*/
 func (r *Registry) ExpireItems(divisionID string, now time.Time, lifetime time.Duration) []Item {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -263,6 +334,11 @@ func (r *Registry) ExpireItems(divisionID string, now time.Time, lifetime time.D
 // ReleaseExpiredOwners makes reserved drops public at the native 30-second
 // boundary without replacing their entity identity. The caller broadcasts
 // 0x31E2 for each returned row; subsequent calls return nothing.
+/*
+================
+ReleaseExpiredOwners
+================
+*/
 func (r *Registry) ReleaseExpiredOwners(divisionID string, now time.Time, lifetime time.Duration) []Item {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -276,6 +352,7 @@ func (r *Registry) ReleaseExpiredOwners(divisionID string, now time.Time, lifeti
 		item.OwnerJID = 0
 		items[gid] = item
 		item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
+		item.Summon = domain.CloneCOS(item.Summon)
 		released = append(released, item)
 	}
 	if len(released) > 0 {
@@ -287,6 +364,11 @@ func (r *Registry) ReleaseExpiredOwners(divisionID string, now time.Time, lifeti
 
 // DivisionIDs returns every division that currently holds entries, sorted,
 // so the sweep can walk them deterministically.
+/*
+================
+DivisionIDs
+================
+*/
 func (r *Registry) DivisionIDs() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -304,6 +386,11 @@ func (r *Registry) DivisionIDs() []string {
 
 // All returns the division's entries ordered by entity id, so an object list
 // built from them is deterministic.
+/*
+================
+All
+================
+*/
 func (r *Registry) All(divisionID string) []Item {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -312,6 +399,7 @@ func (r *Registry) All(divisionID string) []Item {
 	out := make([]Item, 0, len(items))
 	for _, item := range items {
 		item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
+		item.Summon = domain.CloneCOS(item.Summon)
 		out = append(out, item)
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].Gid < out[b].Gid })
@@ -319,6 +407,11 @@ func (r *Registry) All(divisionID string) []Item {
 }
 
 // Count reports how many entries a division holds.
+/*
+================
+Count
+================
+*/
 func (r *Registry) Count(divisionID string) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -327,6 +420,11 @@ func (r *Registry) Count(divisionID string) int {
 }
 
 // Clear drops every entry of a division.
+/*
+================
+Clear
+================
+*/
 func (r *Registry) Clear(divisionID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -340,6 +438,11 @@ func (r *Registry) Clear(divisionID string) {
 // PendingKey is the key a pending pickup approach is tracked under. The
 // character name is folded to lower case because the fixture matches character
 // names case-insensitively.
+/*
+================
+PendingKey
+================
+*/
 func PendingKey(divisionID, characterName string) string {
 	return divisionID + ":" + strings.ToLower(characterName)
 }

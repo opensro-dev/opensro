@@ -66,23 +66,26 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 	if snapshot == nil || (ref.TidWord>>11 != 3 && ref.TidWord>>11 != 4) {
 		return cosCancelResult(3)
 	}
-	if snapshot.NativeTeleportMode != 0 || snapshot.ActiveCOS.Mounted {
+	if snapshot.NativeTeleportMode != 0 || snapshot.CompanionByGID(gid).Mounted {
 		return cosCancelResult(0x0D)
 	}
 	now := rt.Now().UnixMilli()
 	owner := rt.liveSpawn(simulation.WorldKey(division, c.Name), snapshot, now)
-	pet := rt.cosLiveSpawn(division, snapshot, now)
+	pet := rt.companionLiveSpawn(division, snapshot, snapshot.CompanionByGID(gid), now)
 	if !worldgeom.SamePlane(owner.RegionID, pet.RegionID) ||
 		!(simulation.WorldDistance2D(owner, pet) < cosCancelRange) {
 		return cosCancelResult(4)
 	}
+	var cancelled *enterworld.CharacterCOS
 	if !rt.deps.Update(c, "cos-cancel", func() bool {
-		cos := c.ActiveCOS
+		cos := c.CompanionByGID(gid)
 		if c.DeletePending || cos == nil || !cos.Summoned || cos.GID != gid || cos.Mounted {
 			return false
 		}
+		cos.RefreshRentalTimes(now / 1000)
 		cos.Summoned = false
 		cos.StateFlags &^= cosStateSummoned
+		cancelled = cos
 		return true
 	}) {
 		return cosCancelResult(2)
@@ -92,6 +95,7 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 	despawn := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()}
 	result.Frames = append(result.Frames, despawn)
 	result.Broadcast = []wire.Frame{despawn}
+	result.Frames = append(result.Frames, companionItemStateFrames(c, cancelled)...)
 	return result
 }
 
@@ -107,7 +111,7 @@ The caller holds the division operation lock.
 func (rt *Runtime) retireCosRuntime(division string, c *enterworld.Character, gid uint32) []wire.Frame {
 	var frames []wire.Frame
 	rt.petMu.Lock()
-	state := rt.petSessions[petOwnerKey{division, strings.ToLower(c.Name)}]
+	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: gid}]
 	rt.petMu.Unlock()
 	if state != nil {
 		if state.pickup != nil {
@@ -120,6 +124,7 @@ func (rt *Runtime) retireCosRuntime(division string, c *enterworld.Character, gi
 		state.public = nil
 		state.generation++
 	}
+	rt.cancelCompanionCasts(division, c, gid)
 	rt.storeCosAbnormal(division, c.Name, gid, nil)
 
 	return frames

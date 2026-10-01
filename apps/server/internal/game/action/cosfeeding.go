@@ -58,12 +58,12 @@ func (rt *Runtime) applyPetFeed(use petFeedUse, result *OpResult) bool {
 		*result = itemUseFailure(wire.ErrCodeCosRefused)
 		return false
 	}
-	petRef, valid := rt.cosCharacterRef(c)
+	petRef, valid := rt.cosReference(c.CompanionByGID(gid))
 	if !valid || petRef.TidWord>>11 != 3 {
 		*result = itemUseFailure(wire.ErrCodeCosRefused)
 		return false
 	}
-	pet := c.ActiveCOS
+	pet := c.CompanionByGID(gid)
 	if pet.Satiety >= cosFeedingRefusalThreshold {
 		*result = itemUseFailure(cosFeedingFullError)
 		return false

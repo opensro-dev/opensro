@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"opensro.online/server/internal/domain"
 )
 
 /*
@@ -155,5 +157,74 @@ WHEN NEW.key = 'layoutVersion' BEGIN SELECT RAISE(ABORT, 'injected failure'); EN
 		if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&tables); err != nil || tables != 0 {
 			t.Fatalf("failed upgrade retained a partial %s table: %d %v", table, tables, err)
 		}
+	}
+}
+
+/*
+================
+TestCompanionUpgradePreservesExistingWarehouseAndBackup
+
+Schema 14 already owns the account tables. The upgrade must preserve their
+contents, validate the existing graph, and only advance the record version.
+================
+*/
+func TestCompanionUpgradePreservesExistingWarehouseAndBackup(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	c := seededCharacter()
+	if err := s.CreateCharacter(testDivision, "account'; --", c); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.TransactStorage(c, func(next *domain.Character, storage *domain.AccountStorage) error {
+		row := next.MissionInventory[0]
+		row.Slot = 0
+		storage.Rows = []domain.InventoryRow{row}
+		next.MissionInventory = next.MissionInventory[1:]
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	db, err := connectDB(filepath.Join(dir, DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preCompanionVersion, metaKeySchemaVersion); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(filepath.Join(dir, DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backup, err := UpgradeAuthority(dir, false); err != nil || backup != "" {
+		t.Fatal("dry run", backup, err)
+	}
+	after, err := os.ReadFile(filepath.Join(dir, DBFileName))
+	if err != nil || string(before) != string(after) {
+		t.Fatal("dry run rewrote schema 14", err)
+	}
+	backup, err := UpgradeAuthority(dir, true)
+	if err != nil || backup == "" {
+		t.Fatal("upgrade", backup, err)
+	}
+	old, err := connectDB(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	if _, err := loadDB(old, preCompanionVersion, CurrentLayoutVersion); err != nil {
+		t.Fatal("backup invalid", err)
+	}
+	reopened := openTest(t, dir, newTestClock())
+	characters := reopened.Characters().CharactersForDivision(testDivision)
+	if len(characters) != 1 {
+		t.Fatal("character missing")
+	}
+	storage, err := reopened.AccountStorage(characters[0])
+	if err != nil || len(storage.Rows) != 1 || storage.Rows[0].Slot != 0 {
+		t.Fatal("warehouse lost", storage, err)
 	}
 }

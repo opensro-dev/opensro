@@ -9,6 +9,7 @@ equiproster.go - item references and the equipment roster
 package enterworld
 
 import (
+	"opensro.online/server/internal/domain"
 	"strconv"
 
 	"opensro.online/server/internal/game/world/monster"
@@ -178,7 +179,8 @@ type CharacterRef struct {
 	MaxMP                      uint32
 	MountedAttackCapability210 uint32
 	// RefObjChar parameter 4: minutes per percentage point of attack-pet HGP.
-	SatietyMinutes uint32
+	SatietyMinutes    uint32
+	InventoryCapacity uint8
 	// Client column 72, server RefObjCommon+8C bit 0x400: vehicle use permission.
 	CanRide bool
 }
@@ -208,6 +210,7 @@ binary writer, plus the semantic item identity and stat record.
 ==================
 */
 type WireItem struct {
+	Summon       *domain.CharacterCOS
 	Icon         string
 	Slot         int64
 	RefObjID     uint32
@@ -345,7 +348,7 @@ func EnsureMissionInventory(character *Character, equipRoster []WireItem) []Inve
 				Durability:        coercePlainInt(item.Durability, 0, 0xffffffff),
 				StackCount:        stackCount,
 				MagicOptions:      copyMagicOptions(item.MagicOptions),
-				TransformRefObjID: item.TransformRefObjID,
+				TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon),
 			})
 		}
 		character.MissionInventory = rows
@@ -467,7 +470,7 @@ func InventoryWireItems(rows []InventoryRow) []WireItem {
 			Durability:        row.Durability,
 			StackCount:        row.StackCount,
 			MagicOptions:      copyMagicOptions(row.MagicOptions),
-			TransformRefObjID: row.TransformRefObjID,
+			TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
 		})
 	}
 	return out

@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+wire.go - projects authoritative game state into native protocol records
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -26,6 +33,11 @@ const (
 // Packet is one {nativeOpcode, payload} bootstrap packet. Payload marshals as
 // a JSON number array exactly like the Node side (never base64, which is what
 // encoding/json would do to a []byte).
+/*
+================
+Packet
+================
+*/
 type Packet struct {
 	Scope        []domain.ObjectScopeChange `json:"-"`
 	NativeOpcode uint16                     `json:"nativeOpcode"`
@@ -33,6 +45,11 @@ type Packet struct {
 }
 
 // NewPacket ports buildMissionBootstrapPacket.
+/*
+================
+NewPacket
+================
+*/
 func NewPacket(nativeOpcode uint16, payload []byte) Packet {
 	body := make([]int, len(payload))
 	for index, value := range payload {
@@ -43,6 +60,11 @@ func NewPacket(nativeOpcode uint16, payload []byte) Packet {
 
 // writeWireString appends the NativePacketWriter.string layout: u16 length +
 // UTF-8 bytes.
+/*
+================
+writeWireString
+================
+*/
 func writeWireString(w *wire.Writer, value string) {
 	bytes := []byte(value)
 	w.U16(uint16(len(bytes)))
@@ -51,6 +73,11 @@ func writeWireString(w *wire.Writer, value string) {
 
 // ObjectIDForCharacter ports missionObjectIdForCharacter: player entity ids
 // live in the 100000+ band.
+/*
+================
+ObjectIDForCharacter
+================
+*/
 func ObjectIDForCharacter(c *Character) uint32 {
 	id := int64(0)
 	if c != nil {
@@ -68,6 +95,11 @@ func ObjectIDForCharacter(c *Character) uint32 {
 // CosObjectIDForCharacter returns the stable one-active-COS identity for a
 // persisted owner. IDs outside the reserved COS band fail closed instead of
 // truncating two owners onto one entity GID.
+/*
+================
+CosObjectIDForCharacter
+================
+*/
 func CosObjectIDForCharacter(c *Character) (uint32, bool) {
 	if c == nil || c.ID < 0 || uint64(c.ID) > uint64(domain.MaxCOSOwnerID) {
 		return 0, false
@@ -91,6 +123,11 @@ const AvatarCapacityDefault int64 = 5
 // CSOItem_ParseFromStream/sub_78c830. Equipment rows retain the historical
 // 18-byte base. ETC rows carry a u16 stack count and, for TID 3.3.14.2 Gacha
 // result cards, the native indexed two-u64 reward parameters.
+/*
+================
+BuildItemBody
+================
+*/
 func BuildItemBody(row WireItem) []byte {
 	refObjID := row.RefObjID
 	if refObjID == 0 {
@@ -126,7 +163,7 @@ func BuildItemBody(row WireItem) []byte {
 		Durability:        uint32(durability),
 		Quantity:          uint16(quantity),
 		MagicOptions:      magicOptions,
-		TransformRefObjID: row.TransformRefObjID,
+		TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
 	}.Encode()
 }
 
@@ -134,6 +171,11 @@ func BuildItemBody(row WireItem) []byte {
 // capacity byte and the worn avatar rows re-armed for the binary writer. A
 // character without a persisted avatar inventory answers the byte-identical
 // empty block the composer always emitted (AvatarCapacityDefault, no rows).
+/*
+================
+AvatarWireItems
+================
+*/
 func AvatarWireItems(character *Character) (int64, []WireItem) {
 	if character == nil || character.AvatarInventory == nil {
 		return AvatarCapacityDefault, nil
@@ -153,13 +195,29 @@ func AvatarWireItems(character *Character) (int64, []WireItem) {
 }
 
 // Both native clock packets sample the shared calendar, never a login epoch.
+/*
+================
+BuildServerClockGidLatchPayload
+================
+*/
 func BuildServerClockGidLatchPayload(objectID uint32) []byte {
 	return wire.NewWriter(8).U32(objectID).Bytes(calendar.Current().Payload()).Payload()
 }
+
+/*
+================
+BuildGameTimePayload
+================
+*/
 func BuildGameTimePayload() []byte { return calendar.Current().Payload() }
 
 // BuildVitalsRefreshPayload ports buildV150VitalsRefreshPayload: 0x33A6 u32
 // objectId, u16 stateFlags, u8 updateMask 0x03, u32 hp, u32 mp.
+/*
+================
+BuildVitalsRefreshPayload
+================
+*/
 func BuildVitalsRefreshPayload(c *Character) []byte {
 	// Maxima are DERIVED (charactervitals/vitals.go); currents are persisted state,
 	// clamped into [0, max] at emission only (the LEAVE policy: a moved
@@ -180,6 +238,11 @@ func BuildVitalsRefreshPayload(c *Character) []byte {
 // sub_863880 CICPlayer_BindRecords reconstruction; see the Node builder for
 // the per-field provenance comments. Bytes must not drift - REV-1 diffs this
 // against the Node output.
+/*
+================
+BuildLocalPlayerEntryPayload
+================
+*/
 func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry, eventGuideStateMask uint32, equipRoster []WireItem) []byte {
 	if entry == nil || !validEntrySkills(entry.SpawnSkills) {
 		return nil
@@ -554,6 +617,11 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 // mode 7, u8 count, then count x {u8 slot, u8 kind, u32 payload}. Persisted
 // rows are normalized by slot so a hand-edited duplicate cannot produce two
 // competing writes to one CIFUnderBar control during reveal.
+/*
+================
+buildQuickSlotHudStatePayload
+================
+*/
 func buildQuickSlotHudStatePayload(character *Character) []byte {
 	rowsBySlot := make(map[uint8]QuickSlotBinding, domain.QuickSlotCount)
 	if character != nil {
@@ -590,6 +658,11 @@ func buildQuickSlotHudStatePayload(character *Character) []byte {
 	return writer.Payload()
 }
 
+/*
+================
+charLevel
+================
+*/
 func charLevel(c *Character) *int64 {
 	if c == nil {
 		return nil
@@ -597,6 +670,11 @@ func charLevel(c *Character) *int64 {
 	return c.Level
 }
 
+/*
+================
+charMaxLevel
+================
+*/
 func charMaxLevel(c *Character) *int64 {
 	if c == nil {
 		return nil
@@ -604,6 +682,11 @@ func charMaxLevel(c *Character) *int64 {
 	return c.MaxLevel
 }
 
+/*
+================
+charSkillPoints
+================
+*/
 func charSkillPoints(c *Character) *int64 {
 	if c == nil {
 		return nil
@@ -611,6 +694,11 @@ func charSkillPoints(c *Character) *int64 {
 	return c.SkillPoints
 }
 
+/*
+================
+charStatPoints
+================
+*/
 func charStatPoints(c *Character) *int64 {
 	if c == nil {
 		return nil
@@ -618,6 +706,11 @@ func charStatPoints(c *Character) *int64 {
 	return c.StatPoints
 }
 
+/*
+================
+charGold
+================
+*/
 func charGold(c *Character) *int64 {
 	if c == nil {
 		return nil
@@ -625,6 +718,11 @@ func charGold(c *Character) *int64 {
 	return c.Gold
 }
 
+/*
+================
+charExperience
+================
+*/
 func charExperience(c *Character) *int64 {
 	if c == nil {
 		return nil
@@ -632,9 +730,36 @@ func charExperience(c *Character) *int64 {
 	return c.Experience
 }
 
+/*
+================
+charSkillExp
+================
+*/
 func charSkillExp(c *Character) *int64 {
 	if c == nil {
 		return nil
 	}
 	return c.SkillExp
+}
+
+/*
+================
+PersistentCOSObjectID
+
+Separate owner-scoped bands prevent a horse, attack pet and pickup pet from
+sharing a world identity. References and inventory slots are not actor IDs.
+================
+*/
+func PersistentCOSObjectID(c *Character, band uint16) (uint32, bool) {
+	if c == nil || c.ID <= 0 || uint64(c.ID) > uint64(domain.MaxCOSOwnerID) {
+		return 0, false
+	}
+	switch band {
+	case 3:
+		return domain.AttackPetGIDBase + uint32(c.ID), true
+	case 4:
+		return domain.PickupPetGIDBase + uint32(c.ID), true
+	default:
+		return 0, false
+	}
 }

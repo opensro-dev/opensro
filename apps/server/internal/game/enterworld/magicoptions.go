@@ -86,11 +86,21 @@ type TextdataMagicOptions struct {
 }
 
 // NewTextdataMagicOptions returns a lazy loader over dir (magicoption.txt).
+/*
+================
+NewTextdataMagicOptions
+================
+*/
 func NewTextdataMagicOptions(dir string) *TextdataMagicOptions {
 	return &TextdataMagicOptions{dir: dir}
 }
 
 // MagicOptionByParamID implements MagicOptionSource.
+/*
+================
+MagicOptionByParamID
+================
+*/
 func (t *TextdataMagicOptions) MagicOptionByParamID(paramID uint32) (*MagicOptionRow, bool) {
 	t.once.Do(t.load)
 	row, ok := t.byParamID[paramID]
@@ -136,6 +146,11 @@ func (t *TextdataMagicOptions) AllMagicOptions() []MagicOptionRow {
 }
 
 // Len reports how many magicoption rows loaded (0 = textdata absent).
+/*
+================
+Len
+================
+*/
 func (t *TextdataMagicOptions) Len() int {
 	t.once.Do(t.load)
 	return len(t.byParamID)
@@ -253,8 +268,10 @@ func buildMagicOptionSnapshot(deps *Deps, character *Character) []MagicOptionRow
 		}
 	}
 	collect(character.MissionInventory)
-	if character.ActiveCOS != nil && character.ActiveCOS.Container != nil {
-		collect(character.ActiveCOS.Container.Rows)
+	for _, pet := range character.Companions() {
+		if pet.Container != nil {
+			collect(pet.Container.Rows)
+		}
 	}
 	if character.AvatarInventory != nil {
 		collect(character.AvatarInventory.Rows)

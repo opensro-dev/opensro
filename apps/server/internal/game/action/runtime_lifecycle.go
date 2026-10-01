@@ -298,7 +298,7 @@ func (rt *Runtime) ForgetCharacterSession(divisionID, characterName string, sess
 		return
 	}
 	rt.petMu.Lock()
-	state := rt.petSessions[petOwnerKey{divisionID, strings.ToLower(characterName)}]
+	state := rt.petSessions[petOwnerKey{division: divisionID, name: strings.ToLower(characterName)}]
 	stale := state != nil && state.session != session
 	rt.petMu.Unlock()
 	if stale {
@@ -340,8 +340,11 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 			if rows := rt.effects.Snapshot(divisionID, characterName); len(rows) > 0 {
 				changed = rt.checkpointSkillJobs(c, rows, rt.Now().UnixMilli()) || changed
 			}
-			if c.ActiveCOS != nil && c.ActiveCOS.NativeBodyStatus != 0 {
-				c.ActiveCOS.NativeBodyStatus = 0
+			for _, pet := range c.Companions() {
+				if pet.NativeBodyStatus == 0 {
+					continue
+				}
+				pet.NativeBodyStatus = 0
 				changed = true
 			}
 			return changed

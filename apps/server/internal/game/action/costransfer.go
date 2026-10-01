@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+costransfer.go - owns costransfer behavior and its checked data boundaries
+
+===========================================================================
+*/
 package action
 
 import (
@@ -9,6 +16,11 @@ import (
 
 // Both inventories belong to the same character authority transaction. Caller
 // holds the division action lock; failed validation changes neither inventory.
+/*
+================
+applyCosTransfer
+================
+*/
 func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	var questFrames []wire.Frame
 	committed := rt.deps.Update(c, "player-cos-transfer", func() bool {
@@ -30,7 +42,7 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		}
 		// Check publication representability before committing the stronger COS
 		// record contract. This excludes bodies the durable row cannot preserve.
-		candidate := *c.ActiveCOS
+		candidate := *c.CompanionByGID(q.CosGID)
 		candidate.Container = &domain.COSContainer{Capacity: bag.Capacity, Rows: rowsFromInvItems(cos.Items())}
 		refs := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
 		ref, found := refs.CharacterRefByCodename(candidate.Codename)
@@ -40,8 +52,16 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		if _, err := enterworld.BuildCOSRecord(&candidate, ref, rt.deps.ItemReferences()); err != nil {
 			return false
 		}
-		c.MissionInventory = rowsFromInvItems(player.Items())
-		bag.Rows = candidate.Container.Rows
+		// Rebuilding the player inventory detaches its summoner records. Commit
+		// the bag through that new canonical pet, not the old row's pointer.
+		next := *c
+		next.MissionInventory = rowsFromInvItems(player.Items())
+		retained := next.CompanionByGID(q.CosGID)
+		if retained == nil {
+			return false
+		}
+		retained.Container = candidate.Container
+		c.MissionInventory = next.MissionInventory
 		questFrames = rt.updateQuestInventory(c)
 		return true
 	})

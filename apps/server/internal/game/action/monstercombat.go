@@ -176,7 +176,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		// COS, the target object becomes PC+0x1CD8. A hit addressed to that
 		// gid lands on the pet, including the 590680 status roll.
 		if owner := rt.characterByCosGID(divisionID, targetGid); owner != nil {
-			return rt.monsterHitSummonedCOS(divisionID, instance, owner, skillID, nowMs, release)
+			return rt.monsterHitSummonedCOS(divisionID, instance, monsterCastRecipient{owner, targetGid}, skillID, nowMs, release)
 		}
 		return result
 	}

@@ -22,6 +22,8 @@ const (
 	COSGIDLimit         uint32 = 0x00FFFFFF
 	SkillObjectGIDBase  uint32 = 0x01000000
 	SkillObjectGIDLimit uint32 = 0x01ffffff
+	AttackPetGIDBase    uint32 = 0x02000000
+	PickupPetGIDBase    uint32 = 0x02400000
 )
 
 const (

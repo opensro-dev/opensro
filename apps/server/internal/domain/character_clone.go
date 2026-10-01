@@ -60,14 +60,11 @@ func cloneCharacter(source *Character) *Character {
 	clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
 	clone.Buyback = cloneSlice(source.Buyback)
 	for i := range clone.Buyback {
+		clone.Buyback[i].Item.Summon = CloneCOS(source.Buyback[i].Item.Summon)
 		clone.Buyback[i].Item.MagicOptions = cloneSlice(source.Buyback[i].Item.MagicOptions)
 	}
 	clone.World = cloneCharacterWorld(source.World)
-	clone.ActiveCOS = clonePointer(source.ActiveCOS)
-	if clone.ActiveCOS != nil && source.ActiveCOS.Container != nil {
-		clone.ActiveCOS.Container = clonePointer(source.ActiveCOS.Container)
-		clone.ActiveCOS.Container.Rows = cloneInventoryRows(source.ActiveCOS.Container.Rows)
-	}
+	clone.ActiveCOS = CloneCOS(source.ActiveCOS)
 	clone.PetSkillWindows = cloneSlice(source.PetSkillWindows)
 	clone.ParamJobs = cloneSlice(source.ParamJobs)
 	if source.ItemGroupCooldowns != nil {
@@ -156,6 +153,7 @@ Magic option arrays are mutable children of each inventory row.
 func cloneInventoryRows(source []InventoryRow) []InventoryRow {
 	clone := cloneSlice(source)
 	for index := range clone {
+		clone[index].Summon = CloneCOS(source[index].Summon)
 		clone[index].MagicOptions =
 			cloneSlice(source[index].MagicOptions)
 	}

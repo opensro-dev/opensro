@@ -11,6 +11,7 @@ Visibility gates new requests, never collection of outstanding work.
 ===========================================================================
 */
 
+import { companionItemTargetCommand } from "@/engine/foundation/gameplay/cos-item-use";
 import {
 	createStoragePanel,
 	firstFreeSlot,
@@ -1018,6 +1019,13 @@ export function createUi(
 	================
 	*/
 	function sendGameplay( command: Extract<SessionCommand, { kind: "gameplay"; }>["command"] ) {
+		if ( command.kind === "inventory-move" ) {
+			const inventory = view?.gameplay?.inventory ?? [];
+			const { source: sourceSlot, destination: destinationSlot } = command;
+			const source = inventory.find( row => row.slot === sourceSlot );
+			const target = inventory.find( row => row.slot === destinationSlot );
+			if ( source && target ) command = companionItemTargetCommand( source, target ) ?? command;
+		}
 		if ( command.kind === "item-use" ) {
 			const item = view?.gameplay?.inventory.find( row => row.slot === command.slot );
 			if ( item && isRestorationPotion( item ) ) {

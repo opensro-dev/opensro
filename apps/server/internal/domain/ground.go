@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+ground.go - owns ground behavior and its checked data boundaries
+
+===========================================================================
+*/
 // Package domain owns persisted world records shared by gameplay and storage.
 package domain
 
@@ -23,8 +30,14 @@ const (
 
 // GroundItemRecord is one ground item in persisted form. VarianceBits is a
 // decimal string so the JSON shape remains exact across languages.
+/*
+================
+GroundItemRecord
+================
+*/
 type GroundItemRecord struct {
-	RecordID uint64 `json:"recordId,omitempty,string"`
+	Summon   *CharacterCOS `json:"summon,omitempty"`
+	RecordID uint64        `json:"recordId,omitempty,string"`
 	// PopulationWorld identifies the owning world. Process-local population
 	// generations are deliberately excluded from persistence.
 	PopulationWorld uint32   `json:"populationWorld,omitempty"`
@@ -52,6 +65,11 @@ type GroundItemRecord struct {
 
 // GroundSnapshot is the complete ground registry at one instant, including
 // the allocation watermark that prevents entity-id reuse after restart.
+/*
+================
+GroundSnapshot
+================
+*/
 type GroundSnapshot struct {
 	Version    int                           `json:"version"`
 	GidCounter uint32                        `json:"gidCounter"`
@@ -59,6 +77,11 @@ type GroundSnapshot struct {
 }
 
 // ItemCount returns the number of records across all divisions.
+/*
+================
+ItemCount
+================
+*/
 func (s GroundSnapshot) ItemCount() int {
 	total := 0
 	for _, rows := range s.Divisions {

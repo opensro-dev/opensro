@@ -44,6 +44,11 @@ const errCodeInvalidStorageTarget uint8 = 0x43
 // storageRefusal carries the native notice code of a refused transfer.
 type storageRefusal uint8
 
+/*
+================
+Error
+================
+*/
 func (r storageRefusal) Error() string { return fmt.Sprintf("storage refused 0x%02X", uint8(r)) }
 
 /*
@@ -155,7 +160,14 @@ storageListPayload
 func (rt *Runtime) storageListPayload(storage domain.AccountStorage) ([]byte, error) {
 	rows := make([]wire.StorageListRow, 0, len(storage.Rows))
 	for _, item := range invItemsFromRowsWithin(storage.Rows, storage.Capacity) {
-		rows = append(rows, wire.StorageListRow{Slot: item.Slot, Body: item.Body().Encode()})
+		if item.Summon != nil {
+			item.Summon.RefreshRentalTimes(rt.Now().Unix())
+		}
+		body := item.Body().Encode()
+		if len(body) == 0 {
+			return nil, fmt.Errorf("storage: invalid persistent item in slot %d", item.Slot)
+		}
+		rows = append(rows, wire.StorageListRow{Slot: item.Slot, Body: body})
 	}
 	if len(rows) != len(storage.Rows) || len(rows) > 255 {
 		return nil, fmt.Errorf("storage: %d rows cannot be listed", len(storage.Rows))

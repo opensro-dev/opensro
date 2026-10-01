@@ -43,6 +43,8 @@ type pendingMonsterCast struct {
 	cosTarget     bool
 	cosRefID      uint32
 	cosSlot       uint8
+	cosGeneration uint64
+	cancelled     bool
 }
 
 /*
@@ -76,8 +78,9 @@ func (rt *Runtime) prepareMonsterCast(division string, instance monster.Instance
 	p := pendingMonsterCast{division: division, instance: instance, target: recipient.gid, characterID: target.ID, characterName: target.Name, skill: skill.ID, token: atomic.AddUint32(&rt.castTokenCounter, 1), releaseAtMs: now + int64(skill.ActionCastingTimeMs) + 1}
 	p.selfEffect = skill.MonsterSelfEffect.Pinned
 	p.cosTarget = recipient.gid != enterworld.ObjectIDForCharacter(target)
-	if p.cosTarget && target.ActiveCOS != nil {
-		p.cosRefID, p.cosSlot = target.ActiveCOS.RefObjID, target.ActiveCOS.InventorySlot
+	if pet := target.CompanionByGID(recipient.gid); p.cosTarget && pet != nil {
+		p.cosRefID, p.cosSlot = pet.RefObjID, pet.InventorySlot
+		p.cosGeneration = pet.SummonGeneration
 	}
 	rt.pendingMonsterCasts = append(rt.pendingMonsterCasts, p)
 	frame := wire.SkillCastUntargetedFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: instance.Gid, InstanceToken: p.token, OwnerOrTargetGid: p.target})
@@ -106,11 +109,11 @@ func (rt *Runtime) advanceMonsterCasts(now int64) []simulation.DivisionFrames {
 		if target != nil && target.ID == p.characterID {
 			snapshot = rt.characterSnapshot(p.division, target)
 		}
-		valid := exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0 && snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
+		valid := !p.cancelled && exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0 && snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
 		if p.cosTarget && valid {
-			pet := snapshot.ActiveCOS
+			pet := snapshot.CompanionByGID(p.target)
 			valid = pet != nil && pet.Summoned && pet.GID == p.target && pet.CurrentHP > 0 &&
-				pet.RefObjID == p.cosRefID && pet.InventorySlot == p.cosSlot
+				pet.RefObjID == p.cosRefID && pet.InventorySlot == p.cosSlot && pet.SummonGeneration == p.cosGeneration
 		}
 		if p.selfEffect {
 			valid = exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0
@@ -127,6 +130,9 @@ func (rt *Runtime) advanceMonsterCasts(now int64) []simulation.DivisionFrames {
 		rt.pendingSkillFinalizesMu.Lock()
 		for i, row := range rt.pendingMonsterCasts {
 			if row.token == p.token {
+				// Retirement may have won after the queue snapshot but before
+				// this division lock. Revalidate the canonical cancellation bit.
+				valid = valid && !row.cancelled
 				rt.pendingMonsterCasts = append(rt.pendingMonsterCasts[:i], rt.pendingMonsterCasts[i+1:]...)
 				owned = true
 				break
@@ -168,3 +174,25 @@ monsterCastOwner
 ================
 */
 func monsterCastOwner(gid uint32) string { return fmt.Sprintf("@monster:%d", gid) }
+
+/*
+================
+cancelCompanionCasts
+
+Retirement and death invalidate incoming casts immediately. The regular cast
+sweep still owns the one closing publication to the caster's observers.
+================
+*/
+func (rt *Runtime) cancelCompanionCasts(division string, c *enterworld.Character, gid uint32) {
+	// GIDs identify a family, not an item lifetime. A different summoner can
+	// reuse both the slot and its initial generation before the next tick.
+	// Keep the cast bracket until the normal sweep publishes its cancellation.
+	rt.pendingSkillFinalizesMu.Lock()
+	for i := range rt.pendingMonsterCasts {
+		pending := &rt.pendingMonsterCasts[i]
+		if pending.division == division && pending.characterID == c.ID && pending.cosTarget && pending.target == gid && !pending.selfEffect {
+			pending.cancelled = true
+		}
+	}
+	rt.pendingSkillFinalizesMu.Unlock()
+}

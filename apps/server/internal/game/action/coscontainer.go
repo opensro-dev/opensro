@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+coscontainer.go - validates the selected companion and owns its inventory transactions
+
+===========================================================================
+*/
 package action
 
 import (
@@ -9,6 +16,11 @@ import (
 
 // Caller holds the division operation lock. Both COS identity and its bag
 // are checked again inside the character authority door.
+/*
+================
+applyCosContainerMove
+================
+*/
 func (rt *Runtime) applyCosContainerMove(c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	result := failureResult(wire.ErrCodeInvalidRequest)
 	committed := rt.deps.Update(c, "cos-container-move", func() bool {
@@ -34,10 +46,15 @@ func (rt *Runtime) applyCosContainerMove(c *enterworld.Character, q wire.ItemMov
 }
 
 // Must run inside the character authority door. Used by storage and commerce.
+/*
+================
+ownedCOSContainer
+================
+*/
 func (rt *Runtime) ownedCOSContainer(c *enterworld.Character, gid uint32) (*domain.COSContainer, *inventory.Inventory, bool) {
-	cos := c.ActiveCOS
-	expected, valid := enterworld.CosObjectIDForCharacter(c)
-	if c.DeletePending || !valid || cos == nil || !cos.Summoned || cos.CurrentHP == 0 || cos.GID != gid || gid != expected || cos.Container == nil {
+	cos := c.CompanionByGID(gid)
+
+	if c.DeletePending || cos == nil || !cos.Summoned || cos.CurrentHP == 0 || cos.Container == nil {
 		return nil, nil, false
 	}
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)

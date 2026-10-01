@@ -115,8 +115,12 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 		nativeBodyStatus = p.character.NativeBodyStatus
 		worldInstance = domain.CharacterWorldInstance(p.character)
 	})
+	var companions []*simulation.PeerCOS
+	if p.rt.CompanionPresentations != nil {
+		companions = p.rt.CompanionPresentations(p.divisionID, captured.name)
+	}
 	var cos *simulation.PeerCOS
-	if p.rt.PetPresentation != nil {
+	if p.rt.CompanionPresentations == nil && p.rt.PetPresentation != nil {
 		cos = p.rt.PetPresentation(p.divisionID, captured.name)
 	}
 	appearance := peerAppearance(p.rt.deps.GuildAuthority(), p.divisionID, captured)
@@ -136,6 +140,7 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 		NpcsEnabled:      p.rt.npcsEnabled,
 		Appearance:       appearance,
 		COS:              cos,
+		Companions:       companions,
 	}
 }
 

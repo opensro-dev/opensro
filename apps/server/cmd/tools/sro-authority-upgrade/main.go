@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-main.go - explicit offline authority upgrade (schema 13 / layout 4 to current)
+main.go - explicit offline authority upgrade (schemas 13/14 to current)
 
 Defaults to validation. Stop the game server before using -commit; the store
 lock enforces this requirement. The upgrade preserves all existing records.
@@ -37,8 +37,8 @@ run
 ================
 */
 func run() error {
-	dir := flag.String("authority-dir", "", "existing authority directory (schema 13, layout 4)")
-	commit := flag.Bool("commit", false, "retain a backup and commit the layout-5 upgrade")
+	dir := flag.String("authority-dir", "", "existing authority directory (schema 13/layout 4 or schema 14/layout 5)")
+	commit := flag.Bool("commit", false, "retain a backup and commit the current authority schema")
 	flag.Parse()
 	if *dir == "" || flag.NArg() != 0 {
 		return fmt.Errorf("usage: sro-authority-upgrade -authority-dir PATH [-commit]")

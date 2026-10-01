@@ -101,6 +101,7 @@ type SessionSnapshot struct {
 	// else here). nil = the session never spawns on other clients.
 	Appearance *PeerAppearance
 	COS        *PeerCOS
+	Companions []*PeerCOS
 }
 
 /*
@@ -122,6 +123,11 @@ func CloneWorldState(w WorldState) WorldState {
 
 // SessionSource lists the sessions a tick serves. Implemented by GO-1's
 // session registry; must return safe copies (see SessionSnapshot).
+/*
+================
+SessionSource
+================
+*/
 type SessionSource interface {
 	SnapshotSessions() []SessionSnapshot
 }

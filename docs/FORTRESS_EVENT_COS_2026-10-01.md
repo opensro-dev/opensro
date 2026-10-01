@@ -134,18 +134,17 @@ an instruction comment and was verified by reading the snapshot back.
 
 ## Outstanding implementation
 
-- Complete COS panel command presentation and summoner-item lifecycle.
+- Complete the remaining COS panel combat/name command presentation.
   Cancellation transport and basic retirement are implemented, but native
   pet-combat refusal must be connected when independent attack AI exists.
 - Pet-owned attack/AI, including owner target rules, independent stats and
   movement. Mounted rider attacks do not establish attack-pet parity.
-- Pet summon/resummon persistence, naming, inventory growth, experience
+- Pet naming, inventory growth, experience
   distribution and owner movement tethers mapped above. Online hunger and
   feeding are now implemented; this is not complete pet progression.
 - Finish job/world-specific mount and summon admission and level-suffixed
   transport reference resolution. Riding horses, automatic binding, reconnect,
-  distance, posture, action locks and horse retirement are implemented; the
-  single-COS ownership model still prevents native concurrent companions.
+  distance, posture, action locks and horse retirement are implemented; concurrent item-owned companions are now implemented (see below).
 - Finer server pickup refusal classes, reservation-refresh reacquisition,
   and any remaining native local busy-state branches.
 - Fortress manager requests/UI, persistent ownership/tax/treasury, guild
@@ -157,34 +156,68 @@ an instruction comment and was verified by reading the snapshot back.
   the existing quest owner. Do not activate later-version content merely
   because the later server contains a registration.
 
-## Shared ownership dependency found on 2026-10-02
+## Item-owned summoning and persistence completed on 2026-10-02
 
-`Character.ActiveCOS` currently stores a single companion, and
-`CosObjectIDForCharacter` derives one COS GID per player. The native manager
-keeps separate containers and admits attack/pickup pets by family (`4FCEF0`).
-The client also retains multiple records and can select among command
-classes (`6F2340`, `82EEC0`). Adding pet summoners to the current transport
-assignment would overwrite an existing companion. Before completing
-resummoning and combat, replace that single-record assumption across command
-lookup, inventory persistence, snapshots, movement, peer visibility and
-target authority. Dormant pet data must travel with its summoner item through
-all inventory/storage/drop/transfer paths; an item wire state of "no record"
-must not overwrite a populated companion.
+The single-record dependency identified earlier in this investigation is now
+resolved. `Character.ActiveCOS` owns the consumable vehicle/legacy migration
+record. Each persistent summoner's `InventoryRow.Summon` owns its companion.
+Attack and pickup pets have separate bounded owner-derived GID ranges, so a
+vehicle, attack pet and pickup pet coexist without replacing one another.
+Commands, feeding/cures, abnormal effects, monster targets, movement and peer
+visibility resolve the selected companion; dormant records never own a live
+GID. Presentation is wired through the production GameWorld service.
 
-Server `492D20` maps persistent state flags to item wire states: 2 means
-alive and summoned, 3 means alive and dormant, and 4 means dead. The serializer
-at `492D40` emits state 1 only when the pet record is absent. It also writes
-the pet reference, name, pickup-pet remaining rental time and rental-job list.
-The current item encoder always emits state 1; the complete inventory-body
-contract therefore needs extension before persistent pet summoners can ship.
-Server snapshot 319 saves these additional helper labels and they were read
-back after the save.
+Native `493100` is `CGItemCOSSummoner_Use` (an earlier database name incorrectly
+called it a record reader). First use creates the retained record without
+consuming the summoner. Use again dismisses the actor; subsequent use preserves
+HP/MP, name, level, EXP, hunger, command state, bag and rentals. Explicit cancel,
+reconnect, ordinary return/portal and GM relocation use the same ownership.
+Native `4FA430` restores only alive summoned records; dead and expired pickup
+records remain on their item. Legacy pets migrate only when their matching
+summoner slot exists; no missing item is fabricated.
 
-The 2026-10-02 native investigation labelled exposed COS database, command,
-container, caravan and UI helpers. Server snapshot 318 and client snapshot
-260 were saved and representative labels were read back. Standard tree/list
-helpers map to the port language's containers; their presence is not evidence
-that independent pet or caravan gameplay is implemented.
+`492D20`/`492D40` now drive the complete item-body contract: 1 absent, 2 alive
+summoned, 3 alive dormant, 4 dead, followed by reference/name, pickup remaining
+lease and rental jobs (kinds 0/5). The client binds `3158` records to the owned
+slot and applies `3645` state/lease deltas without discarding retained data.
+Names and statistics are preserved; this does not add the separate pet-naming
+command or pet experience producer.
+
+All item copies carry detached retained state through inventory, warehouse,
+COS bags, drops/pickup, merchant buyback and database snapshots. A summoner
+cannot split/stack or leave a container while its actor is live. The latter is
+a recorded ownership inference: allowing an active actor to cross ownership
+would leave commands and world visibility attached to the wrong character.
+Refused inventory operations and failed warehouse commits retain the original
+record. No new SQL strings accept client values; the store retains its existing
+parameterized persistence boundary.
+
+Pickup leases use absolute deadlines, including offline time. `49D8F0` targets
+an existing pickup summoner and renews it from max(expiry, now), using the
+reference's minute value. The lease is saved and projected into native remaining
+seconds; expiry dismisses only that actor. Drag/click-carry renewal and revival
+select the actual summoner slot. A revived live corpse receives ordered vitals
+and LIFE-alive publication; a dormant revival never publishes a stale GID that
+may now identify a different pet. Retirement/death invalidates prepared monster
+casts before any family GID can be reused.
+
+Native evidence for this continuation includes server `4E8F20`, `4E8FC0`,
+`4FCEF0`, `4FA430`, `492D20`, `492D40`, `493100`, `49D8F0`; client `59C2E0`,
+`59C290`, `54FC80`, `6961B0`, `7654B0`, `830EC0`. Exposed helper labels were
+saved and read back through Binary Ninja's existing database connection:
+server snapshot 331, client snapshot 268. Characterdata column 67 is recorded
+as the inferred bag-capacity source and tested against shipped companion rows.
+
+Release protocol is now 5 on both client and server. Authority schema is 15;
+table layout remains 5. The offline upgrade validates and backs up either
+schema 13/layout 4 (adding the existing account tables) or schema 14/layout 5
+(preserving those tables and their contents). Runtime startup never upgrades
+implicitly. Publish the client/server pair together through coordinated release
+admission; an older binary cannot read the new retained records. No live
+release or database upgrade was performed in this continuation.
+
+This finishes the item-owned summon/persistence slice, not the separately
+listed attack AI, naming, progression, fortress or event work above.
 
 ## Verification log
 
@@ -245,3 +278,36 @@ client test initially failed `Property 'band' does not exist` on the narrow
 active-COS view; it now asserts that view's GID contract. Final reruns passed
 after those corrections. No live-browser validation, full asset build or
 production deployment was performed for this continuation.
+
+### Summoning/persistence validation on 2026-10-02
+
+Final `pnpm check source`: all 12 tasks passed in 159.2 seconds. The server
+gate included tidy, gofmt, vet, lint, tests, race subset, vulnerability scan
+and release-contract checks. Final full client check: all 11 gates passed in
+147.7 seconds. The upgrade CLI compiled after its final help-text correction.
+
+Coverage includes all 13 shipped attack/pickup summoners, first use, item-use
+and explicit dismissal, resummon, restart restoration, concurrent family
+visibility, online/offline lease expiry, renewal, revival, stale-GID item
+selection, prepared-cast retirement, actual pet-bag deposit/withdrawal,
+detached ground snapshots, and warehouse commit failure plus database reopen.
+Schema-13 and schema-14 offline upgrades validate preserved records and their
+backups; schema-14 account tables are retained rather than recreated. Client
+tests cover native item-body states, 3158 binding, 3645 state/time deltas and
+explicit inventory targets for renewal/revival.
+
+Earlier attempts reported `const cosSummonerNoRecord is unused (unused)`,
+`resolve server game-data projection: identify server game-data artifact`,
+`undefined: fmt`, and `itemUsePetExtension ... is not used`; these were fixed
+by using the existing state constant, configuring the licensed-data projection,
+and correcting the new imports/dispatch. The client initially reported
+`Property 'source' does not exist on type 'GameplayCommand'` and later
+`tests/runtime/cos-item-use.test.mjs (9)` type errors. The intent is now narrowed
+before its callbacks, and fixtures carry complete inventory records. An
+expired-renewal test initially used an invalid bag row, which correctly caused
+`summon refused`; it now retains an authored potion row. Final reruns passed
+without weakening the authority checks or removing tests.
+
+No live-browser parity run, full asset rebuild, production database upgrade,
+or deployment was performed. The implementation remains on the isolated
+`codex/fortress-event-cos` branch until merged/released.

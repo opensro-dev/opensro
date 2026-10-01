@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+persist.go - owns persist behavior and its checked data boundaries
+
+===========================================================================
+*/
 package grounditem
 
 // Ground snapshot conversion: live registry entries to neutral domain values.
@@ -15,27 +22,32 @@ import (
 	"opensro.online/server/internal/domain"
 )
 
+/*
+================
+persistedFromItem
+================
+*/
 func persistedFromItem(item Item) domain.GroundItemRecord {
 	row := domain.GroundItemRecord{
 		RecordID:          item.RecordID,
 		PopulationWorld:   item.Population.World,
 		MagicOptions:      append([]uint64(nil), item.MagicOptions...),
-		TransformRefObjID: item.TransformRefObjID,
-		Gid:               item.Gid,
-		RefObjID:          item.RefObjID,
-		Codename:          item.Codename,
-		TypeFlags:         item.TypeFlags,
-		GoldAmount:        item.GoldAmount,
-		Plus:              item.Plus,
-		Durability:        item.Durability,
-		StackCount:        item.StackCount,
-		RegionID:          item.Position.RegionID,
-		X:                 item.Position.X,
-		Y:                 item.Y,
-		Z:                 item.Position.Z,
-		Heading:           item.Heading,
-		OwnerJID:          item.OwnerJID,
-		DroppedBy:         item.DroppedBy,
+		TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon),
+		Gid:        item.Gid,
+		RefObjID:   item.RefObjID,
+		Codename:   item.Codename,
+		TypeFlags:  item.TypeFlags,
+		GoldAmount: item.GoldAmount,
+		Plus:       item.Plus,
+		Durability: item.Durability,
+		StackCount: item.StackCount,
+		RegionID:   item.Position.RegionID,
+		X:          item.Position.X,
+		Y:          item.Y,
+		Z:          item.Position.Z,
+		Heading:    item.Heading,
+		OwnerJID:   item.OwnerJID,
+		DroppedBy:  item.DroppedBy,
 	}
 	if item.VarianceBits != 0 {
 		row.VarianceBits = strconv.FormatUint(item.VarianceBits, 10)
@@ -46,6 +58,11 @@ func persistedFromItem(item Item) domain.GroundItemRecord {
 	return row
 }
 
+/*
+================
+itemFromPersisted
+================
+*/
 func itemFromPersisted(row domain.GroundItemRecord) Item {
 	// An unparseable variance re-arms as 0, matching the character-row
 	// bridging (action invItemsFromRows).
@@ -56,21 +73,21 @@ func itemFromPersisted(row domain.GroundItemRecord) Item {
 	item := Item{
 		RecordID:          row.RecordID,
 		MagicOptions:      append([]uint64(nil), row.MagicOptions...),
-		TransformRefObjID: row.TransformRefObjID,
-		Gid:               row.Gid,
-		RefObjID:          row.RefObjID,
-		Codename:          row.Codename,
-		TypeFlags:         row.TypeFlags,
-		GoldAmount:        row.GoldAmount,
-		Plus:              row.Plus,
-		VarianceBits:      variance,
-		Durability:        row.Durability,
-		StackCount:        row.StackCount,
-		Position:          Point{RegionID: row.RegionID, X: row.X, Z: row.Z},
-		Y:                 row.Y,
-		Heading:           row.Heading,
-		OwnerJID:          row.OwnerJID,
-		DroppedBy:         row.DroppedBy,
+		TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
+		Gid:          row.Gid,
+		RefObjID:     row.RefObjID,
+		Codename:     row.Codename,
+		TypeFlags:    row.TypeFlags,
+		GoldAmount:   row.GoldAmount,
+		Plus:         row.Plus,
+		VarianceBits: variance,
+		Durability:   row.Durability,
+		StackCount:   row.StackCount,
+		Position:     Point{RegionID: row.RegionID, X: row.X, Z: row.Z},
+		Y:            row.Y,
+		Heading:      row.Heading,
+		OwnerJID:     row.OwnerJID,
+		DroppedBy:    row.DroppedBy,
 	}
 	// The ORIGINAL drop timestamp comes back so the fixture TTL continues
 	// across a restart as if it never happened (witnessed red: without this
@@ -83,6 +100,11 @@ func itemFromPersisted(row domain.GroundItemRecord) Item {
 
 // Snapshot returns a deep value copy of the whole registry, ordered
 // deterministically (items by gid) so the state file is diff-stable.
+/*
+================
+Snapshot
+================
+*/
 func (r *Registry) Snapshot() domain.GroundSnapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -91,6 +113,11 @@ func (r *Registry) Snapshot() domain.GroundSnapshot {
 }
 
 // snapshotLocked builds the Snapshot. Callers hold the lock.
+/*
+================
+snapshotLocked
+================
+*/
 func (r *Registry) snapshotLocked() domain.GroundSnapshot {
 	divisions := make(map[string][]domain.GroundItemRecord, len(r.byDivision))
 	for divisionID, items := range r.byDivision {
@@ -114,6 +141,11 @@ func (r *Registry) snapshotLocked() domain.GroundSnapshot {
 // counter is bumped past every restored gid - a live gid must never be
 // handed to a second drop. Boot rehydration is not a mutation: nothing
 // is committed by a Restore.
+/*
+================
+Restore
+================
+*/
 func (r *Registry) Restore(s domain.GroundSnapshot) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -1,7 +1,15 @@
+/*
+===========================================================================
+
+storage_reconstruction.go - copies and splits portable item records without mutable aliases
+
+===========================================================================
+*/
 package inventory
 
 import (
 	"fmt"
+	"opensro.online/server/internal/domain"
 
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -12,6 +20,11 @@ import (
 // Checks whether the target slot can merge an incoming item.
 // Native 0x004B9D40 specifically checks record+20/+24 != 0 (target.RecordID != 0).
 // If RecordID == 0, returns 0 even if other fields match.
+/*
+================
+GetSplitEligibility
+================
+*/
 func (inv *Inventory) GetSplitEligibility(slot int32, incoming *Item, stackCap uint16) int32 {
 	if inv == nil || incoming == nil || slot < 0 || slot >= int32(inv.slotEnd) {
 		return 0
@@ -21,7 +34,7 @@ func (inv *Inventory) GetSplitEligibility(slot int32, incoming *Item, stackCap u
 		return 0
 	}
 	// Native 004B9D40 check: record+20/+24 != 0
-	if target.RecordID == 0 {
+	if target.RecordID == 0 || wire.IsCosSummoner(target.TypeFlags) || wire.IsCosSummoner(incoming.TypeFlags) || target.Summon != nil || incoming.Summon != nil {
 		return 0
 	}
 	if target.RefObjID != incoming.RefObjID {
@@ -43,12 +56,23 @@ func (inv *Inventory) GetSplitEligibility(slot int32, incoming *Item, stackCap u
 
 // splitInventoryRow projects native 4B9C60's zero record identity onto a new
 // portable row. Mutable options must not alias the source record.
+/*
+================
+cloneInventoryRow
+================
+*/
 func cloneInventoryRow(source Item) Item {
 	row := source
 	row.MagicOptions = append([]uint64(nil), source.MagicOptions...)
+	row.Summon = domain.CloneCOS(source.Summon)
 	return row
 }
 
+/*
+================
+splitInventoryRow
+================
+*/
 func splitInventoryRow(source Item, slot uint8, quantity uint16) Item {
 	row := cloneInventoryRow(source)
 	row.Slot, row.Quantity, row.RecordID = slot, quantity, 0
@@ -59,6 +83,11 @@ func splitInventoryRow(source Item, slot uint8, quantity uint16) Item {
 // Splits quantity from sourceSlot into empty destSlot with rollback protection.
 // Newly split item in native Silkroad starts with RecordID == 0 (unpersisted in DB)
 // until assigned by the persistence layer or an optional identity allocator.
+/*
+================
+SplitItem
+================
+*/
 func (inv *Inventory) SplitItem(sourceSlot, destSlot uint8, quantity uint16, idGen func() uint64) (*Item, *Fault) {
 	if inv == nil || !inv.bagSlot(sourceSlot) || !inv.bagSlot(destSlot) {
 		return nil, newFault(wire.ErrCodeInvalidRequest, "slotOutOfRange")
@@ -74,6 +103,9 @@ func (inv *Inventory) SplitItem(sourceSlot, destSlot uint8, quantity uint16, idG
 		return nil, newFault(wire.ErrCodeInvalidRequest, "destSlotOccupied")
 	}
 	srcItem := inv.items[srcIdx]
+	if wire.IsCosSummoner(srcItem.TypeFlags) || srcItem.Summon != nil {
+		return nil, newFault(wire.ErrCodeInvalidRequest, "summonerCannotSplit")
+	}
 	if srcItem.Quantity <= quantity {
 		return nil, newFault(wire.ErrCodeInputFewerThanRemain, "splitQuantityOverRemain")
 	}
@@ -93,6 +125,11 @@ func (inv *Inventory) SplitItem(sourceSlot, destSlot uint8, quantity uint16, idG
 }
 
 // CosParamEntry represents an entry evaluated during COS param reconciliation.
+/*
+================
+CosParamEntry
+================
+*/
 type CosParamEntry struct {
 	ID           uint32
 	IsEngaged    bool
@@ -100,21 +137,41 @@ type CosParamEntry struct {
 	Valid        bool
 }
 
+/*
+================
+Validate
+================
+*/
 func (e *CosParamEntry) Validate() bool {
 	return e != nil && e.Valid
 }
 
+/*
+================
+Reset
+================
+*/
 func (e *CosParamEntry) Reset() {
 	if e != nil {
 		e.ResetCounter++
 	}
 }
 
+/*
+================
+CosParamTable
+================
+*/
 type CosParamTable struct {
 	Entries   []*CosParamEntry
 	Finalized bool
 }
 
+/*
+================
+Finalize
+================
+*/
 func (t *CosParamTable) Finalize() {
 	if t != nil {
 		t.Finalized = true
@@ -143,6 +200,11 @@ type CosSubtypeProducer func(item *Item, table *CosParamTable)
 //   - Reads entry count after producers execute.
 //   - Only resets unengaged entries (IsEngaged == false).
 //   - Finalizes table via sub_431550.
+/*
+================
+ReconcileCosParamEntries
+================
+*/
 func ReconcileCosParamEntries(
 	inv *Inventory,
 	storageKind int32,

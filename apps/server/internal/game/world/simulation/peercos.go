@@ -92,7 +92,23 @@ runPeerCOSVisibility
 ================
 */
 func (t *Ticker) runPeerCOSVisibility(state *divisionTickState, nowMs int64, sessions []SessionSnapshot, live map[string]bool) {
-	index := buildPeerInterestIndex(sessions, nowMs, true)
+	var actors []SessionSnapshot
+	for _, session := range sessions {
+		pets := session.Companions
+		if pets == nil && session.COS != nil {
+			pets = []*PeerCOS{session.COS}
+		}
+		for _, pet := range pets {
+			if pet == nil {
+				continue
+			}
+			actor := session
+			actor.COS = pet
+			actor.Companions = nil
+			actors = append(actors, actor)
+		}
+	}
+	index := buildPeerInterestIndex(actors, nowMs, true)
 	var candidates []int
 	present := make(map[uint32]bool)
 	if state.shownCOS == nil {
@@ -107,7 +123,7 @@ func (t *Ticker) runPeerCOSVisibility(state *divisionTickState, nowMs int64, ses
 		clear(present)
 		candidates = index.candidates(&viewer, viewer.World.LiveSpawnAt(nowMs), candidates)
 		for _, ownerIndex := range candidates {
-			owner := &sessions[ownerIndex]
+			owner := &actors[ownerIndex]
 			p := owner.COS
 			if owner.SessionID == viewer.SessionID {
 				continue

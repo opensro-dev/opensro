@@ -21,6 +21,7 @@ import (
 	"sync"
 	"unicode/utf16"
 
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 
 	log "github.com/sirupsen/logrus"
@@ -235,10 +236,17 @@ func (t *TextdataItems) load() {
 
 	summonable := make(map[string]struct{})
 	for _, item := range t.byCodename {
-		if item == nil || item.TypeIDs != [4]int64{3, 3, 3, 2} || item.AssociatedCharacterCodename == "" {
+		if item == nil || (item.TypeIDs != [4]int64{3, 3, 3, 2} && !wire.IsCosSummoner(item.TypeFlags())) || item.AssociatedCharacterCodename == "" {
 			continue
 		}
 		summonable[item.AssociatedCharacterCodename] = struct{}{}
+	}
+	// Retained pets advance to later characterdata rows. Their item still
+	// names the initial row, so publish the whole supported pet family.
+	for code, ref := range t.charactersByCodename {
+		if ref.TidWord&0x7fe == 0x1c6 && (ref.TidWord>>11 == 3 || ref.TidWord>>11 == 4) {
+			summonable[code] = struct{}{}
+		}
 	}
 	keys := make([]string, 0, len(summonable))
 	for codename := range summonable {
@@ -325,8 +333,17 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 		}
 		satietyMinutes = uint32(minutes)
 	}
+	// INFERENCE: characterdata's inventory-size column supplies the retained
+	// COS bag capacity; the native 3158 packet carries this authored byte.
+	// Keep it on the character reference so every summon/restoration agrees.
+	const inventoryCapacityColumn = 67
+	capacity, capacityOK := textdataInt(fields[inventoryCapacityColumn])
+	if !capacityOK || capacity < 0 || capacity > 140 {
+		return nil
+	}
 	nameStrID := strings.TrimSpace(fields[5])
 	return &CharacterRef{
+		InventoryCapacity:          uint8(capacity),
 		SatietyMinutes:             satietyMinutes,
 		CanRide:                    canRide != 0,
 		Parameters:                 monster.CharacterParameters(fields),

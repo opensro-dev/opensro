@@ -258,6 +258,15 @@ func (rt *Runtime) HandleItemUse(
 			return true
 		}
 
+		if family == itemUsePetExtension {
+			return rt.extendCompanionLease(companionLeaseUse{character: character, ref: ref, row: rowIndex, request: request, tail: tail, nowUnix: nowMs / 1000}, &result)
+		}
+		if family == itemUsePersistentSummoner {
+			if len(tail) != 0 {
+				return false
+			}
+			return rt.usePersistentSummoner(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, &result)
+		}
 		if family == itemUseSummoner {
 			if len(tail) != 0 {
 				return false

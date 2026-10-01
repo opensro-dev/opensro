@@ -3,12 +3,11 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings an UpgradeFromVersion authority (record schema 13, table layout 4) to
-the current format (schema 14, layout 5). Takes the same exclusive authority
-lock as the game server, validates every existing record, keeps an
-independent backup, and adds only the two account tables layout 5
-introduces: the mall currency and the NPC warehouse. No record is rewritten:
-schema 14 only adds optional character fields that schema 13 servers reject.
+Brings schemas 13/14 to schema 15. Takes the same exclusive authority lock
+as the game server, validates every existing record and keeps an independent
+backup. Schema 13 also gains the two account tables from layout 5; schema 14
+already owns those tables and their records must survive unchanged. The new
+record fields are optional, so neither path rewrites existing JSON.
 This operation is never called by server startup or a network request.
 
 ===========================================================================
@@ -23,12 +22,12 @@ import (
 	"time"
 )
 
-// UpgradeFromVersion is the record schema the offline upgrade converts, with
-// layout preMallLayoutVersion. The release contract reports it so admission
-// knows this server can take over a database written by a schema 13 server.
+// UpgradeFromVersion is the oldest schema the offline upgrade converts.
+// Release admission treats it as an inclusive lower bound, not one version.
 const UpgradeFromVersion = 13
 
 const preMallLayoutVersion = 4
+const preCompanionVersion = 14
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -85,23 +84,33 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		}
 		return "", ErrAuthorityCurrent
 	}
-	if _, err := loadDB(db, UpgradeFromVersion, preMallLayoutVersion); err != nil {
+	sourceLayout := CurrentLayoutVersion
+	switch schema {
+	case UpgradeFromVersion:
+		sourceLayout = preMallLayoutVersion
+	case preCompanionVersion:
+	default:
+		return "", fmt.Errorf("authority upgrade: unsupported source schema %d", schema)
+	}
+	if _, err := loadDB(db, schema, sourceLayout); err != nil {
 		return "", fmt.Errorf("authority upgrade: source validation: %w", err)
 	}
-	for _, table := range []string{"mall_accounts", "account_storage"} {
-		var existing int
-		if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&existing); err != nil {
-			return "", err
-		}
-		if existing != 0 {
-			return "", fmt.Errorf("authority upgrade: layout 4 unexpectedly contains %s", table)
+	if sourceLayout == preMallLayoutVersion {
+		for _, table := range []string{"mall_accounts", "account_storage"} {
+			var existing int
+			if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&existing); err != nil {
+				return "", err
+			}
+			if existing != 0 {
+				return "", fmt.Errorf("authority upgrade: layout 4 unexpectedly contains %s", table)
+			}
 		}
 	}
 	if !commit {
 		return "", nil
 	}
 	// A unique, restrictive file prevents replacing any prior recovery copy.
-	backup, err := os.CreateTemp(dir, "state.before-mall-*.db")
+	backup, err := os.CreateTemp(dir, "state.before-upgrade-*.db")
 	if err != nil {
 		return "", err
 	}
@@ -135,8 +144,10 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		return backupPath, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.Exec(mallAccountsSchema + accountStorageSchema); err != nil {
-		return backupPath, err
+	if sourceLayout == preMallLayoutVersion {
+		if _, err := tx.Exec(mallAccountsSchema + accountStorageSchema); err != nil {
+			return backupPath, err
+		}
 	}
 	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprint(CurrentLayoutVersion)); err != nil {
 		return backupPath, err

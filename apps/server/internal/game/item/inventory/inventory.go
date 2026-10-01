@@ -1,7 +1,15 @@
+/*
+===========================================================================
+
+inventory.go - owns portable item rows and atomic slot operations
+
+===========================================================================
+*/
 package inventory
 
 import (
 	"fmt"
+	"opensro.online/server/internal/domain"
 
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -12,6 +20,11 @@ import (
 // Operations return *Fault rather than error so that a nil result is
 // unambiguously "allowed" - a typed nil in an error interface would compare
 // non-nil and silently invert every check.
+/*
+================
+Fault
+================
+*/
 type Fault struct {
 	// Code is the byte sent as [0x02][Code].
 	Code uint8
@@ -20,22 +33,43 @@ type Fault struct {
 	Reason string
 }
 
+/*
+================
+Error
+================
+*/
 func (f *Fault) Error() string {
 	return fmt.Sprintf("inventory: %s (0xB06D error 0x%02X)", f.Reason, f.Code)
 }
 
 // NewFault builds a refusal for gate implementations living outside this
 // package (the action equip-requirement checker).
+/*
+================
+NewFault
+================
+*/
 func NewFault(code uint8, reason string) *Fault {
 	return newFault(code, reason)
 }
 
+/*
+================
+newFault
+================
+*/
 func newFault(code uint8, reason string) *Fault {
 	return &Fault{Code: code, Reason: reason}
 }
 
 // Item is one inventory row.
+/*
+================
+Item
+================
+*/
 type Item struct {
+	Summon *domain.CharacterCOS
 	// Slot is the wire slot the row currently occupies.
 	Slot         uint8
 	RefObjID     uint32
@@ -60,6 +94,11 @@ type Item struct {
 
 // Body returns the CSOItem body for this row, the remainder of a type-0x06
 // pickup grant.
+/*
+================
+Body
+================
+*/
 func (i Item) Body() wire.ItemBody {
 	return wire.ItemBody{
 		RefObjID:          i.RefObjID,
@@ -69,7 +108,7 @@ func (i Item) Body() wire.ItemBody {
 		Durability:        i.Durability,
 		Quantity:          i.Quantity,
 		MagicOptions:      append([]uint64(nil), i.MagicOptions...),
-		TransformRefObjID: i.TransformRefObjID,
+		TransformRefObjID: i.TransformRefObjID, Summon: domain.CloneCOS(i.Summon),
 	}
 }
 
@@ -78,6 +117,11 @@ func (i Item) Body() wire.ItemBody {
 // Rows are held in a slice keyed by their Slot field rather than a fixed
 // array, matching the fixture's persisted shape, where absent slots simply
 // have no row.
+/*
+================
+Inventory
+================
+*/
 type Inventory struct {
 	items             []Item
 	bagStart, slotEnd uint8
@@ -90,6 +134,11 @@ type Inventory struct {
 }
 
 // New returns an Inventory holding a copy of items.
+/*
+================
+New
+================
+*/
 func New(items []Item) *Inventory {
 	owned := make([]Item, len(items))
 	for n := range items {
@@ -100,6 +149,11 @@ func New(items []Item) *Inventory {
 
 // NewContainer shares transfer arithmetic with player bags while declaring
 // that slot zero is storage, not an equipment socket.
+/*
+================
+NewContainer
+================
+*/
 func NewContainer(items []Item, capacity uint8) (*Inventory, *Fault) {
 	return newBoundedContainer(items, capacity, cosContainerMaxSlots)
 }
@@ -130,7 +184,7 @@ func newBoundedContainer(items []Item, capacity uint8, maxSlots int) (*Inventory
 	}
 	seen := make(map[uint8]bool, len(items))
 	for _, row := range items {
-		if row.Slot >= capacity || seen[row.Slot] || row.Quantity == 0 {
+		if row.Slot >= capacity || seen[row.Slot] || row.Quantity == 0 || summonerTransferFault(row) != nil {
 			return nil, newFault(wire.ErrCodeInvalidRequest, "invalidContainerRows")
 		}
 		seen[row.Slot] = true
@@ -140,11 +194,21 @@ func newBoundedContainer(items []Item, capacity uint8, maxSlots int) (*Inventory
 	return inv, nil
 }
 
+/*
+================
+validSlot
+================
+*/
 func (inv *Inventory) validSlot(n uint8) bool     { return n < inv.slotEnd }
 func (inv *Inventory) equipmentSlot(n uint8) bool { return n < inv.bagStart }
 func (inv *Inventory) bagSlot(n uint8) bool       { return n >= inv.bagStart && n < inv.slotEnd }
 
 // Items returns a copy of the rows.
+/*
+================
+Items
+================
+*/
 func (inv *Inventory) Items() []Item {
 	out := make([]Item, len(inv.items))
 	for n := range inv.items {
@@ -154,11 +218,21 @@ func (inv *Inventory) Items() []Item {
 }
 
 // Len reports how many rows are occupied.
+/*
+================
+Len
+================
+*/
 func (inv *Inventory) Len() int {
 	return len(inv.items)
 }
 
 // At returns the row occupying a wire slot.
+/*
+================
+At
+================
+*/
 func (inv *Inventory) At(wireSlot uint8) (Item, bool) {
 	if index := inv.indexOf(wireSlot); index >= 0 {
 		return cloneInventoryRow(inv.items[index]), true
@@ -166,6 +240,11 @@ func (inv *Inventory) At(wireSlot uint8) (Item, bool) {
 	return Item{}, false
 }
 
+/*
+================
+indexOf
+================
+*/
 func (inv *Inventory) indexOf(wireSlot uint8) int {
 	for index := range inv.items {
 		if inv.items[index].Slot == wireSlot {
@@ -177,6 +256,11 @@ func (inv *Inventory) indexOf(wireSlot uint8) int {
 
 // FirstFreeBagSlot returns the lowest unoccupied bag wire slot. The second
 // result is false when the bag is full.
+/*
+================
+FirstFreeBagSlot
+================
+*/
 func (inv *Inventory) FirstFreeBagSlot() (uint8, bool) {
 	slot, ok := inv.FirstEmpty(int32(inv.bagStart))
 	if !ok {
@@ -186,6 +270,11 @@ func (inv *Inventory) FirstFreeBagSlot() (uint8, bool) {
 }
 
 // MoveResult describes an applied type-0x00 move.
+/*
+================
+MoveResult
+================
+*/
 type MoveResult struct {
 	SourceSlot uint8
 	DestSlot   uint8
@@ -198,6 +287,11 @@ type MoveResult struct {
 // with the full equip gates. It is Transfer with the swap leg forced (cap 1);
 // stackable rows go through Transfer with their real cap so the merge and
 // split legs can run.
+/*
+================
+Move
+================
+*/
 func (inv *Inventory) Move(sourceSlot, destSlot uint8) (MoveResult, *Fault) {
 	var out MoveResult
 
@@ -235,6 +329,11 @@ const (
 )
 
 // TransferResult describes an applied type-0x00 transfer.
+/*
+================
+TransferResult
+================
+*/
 type TransferResult struct {
 	SourceSlot uint8
 	DestSlot   uint8
@@ -278,6 +377,11 @@ type TransferResult struct {
 // DEVIATION: sourceSlot == destSlot is refused. The native client cannot
 // compose it (a drag onto itself is a no-op), and the reference fixture's
 // merge leg would eat the row.
+/*
+================
+Transfer
+================
+*/
 func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stackCap uint16) (TransferResult, *Fault) {
 	var out TransferResult
 
@@ -345,6 +449,17 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 		}
 	}
 
+	if fault := summonerTransferFault(inv.items[sourceIndex]); fault != nil {
+		return out, fault
+	}
+	if destIndex >= 0 {
+		if fault := summonerTransferFault(inv.items[destIndex]); fault != nil {
+			return out, fault
+		}
+	}
+	if wire.IsCosSummoner(inv.items[sourceIndex].TypeFlags) || (destIndex >= 0 && wire.IsCosSummoner(inv.items[destIndex].TypeFlags)) {
+		stackCap = 1
+	}
 	bothInBag := inv.bagSlot(sourceSlot) && inv.bagSlot(destSlot)
 	cap := stackCap
 	if !bothInBag || cap < 1 {
@@ -445,6 +560,11 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 
 // SocketVisual is the post-move occupancy of one equipment socket a type-0x00
 // move touched: what the doll and the world model must now show.
+/*
+================
+SocketVisual
+================
+*/
 type SocketVisual struct {
 	Socket uint8
 	// Worn is false when the socket ended up empty, which the wire clears
@@ -462,6 +582,11 @@ type SocketVisual struct {
 // up holding, then push one 0x3314 per worn entry and one 0x377C clear per
 // vacated entry behind the 0xB06D result - without them the containers would
 // update but the doll would keep wearing the old item (the M1 chain).
+/*
+================
+EquipVisualChanges
+================
+*/
 func (inv *Inventory) EquipVisualChanges(sourceSlot, destSlot uint8) []SocketVisual {
 	var out []SocketVisual
 	seen := map[uint8]bool{}
@@ -486,6 +611,11 @@ func (inv *Inventory) EquipVisualChanges(sourceSlot, destSlot uint8) []SocketVis
 // cannot express "drop N of a stack" - the whole row always goes. This is
 // that native whole-row drop; the fixture's out-of-band partial drop is
 // DropQuantity.
+/*
+================
+Drop
+================
+*/
 func (inv *Inventory) Drop(sourceSlot uint8) (Item, *Fault) {
 	if !inv.validSlot(sourceSlot) {
 		return Item{}, newFault(wire.ErrCodeInvalidRequest, "slotOutOfRange")
@@ -506,6 +636,9 @@ func (inv *Inventory) Drop(sourceSlot uint8) (Item, *Fault) {
 		return Item{}, newFault(wire.ErrCodeInvalidRequest, "sourceSlotEmpty")
 	}
 
+	if fault := summonerTransferFault(inv.items[sourceIndex]); fault != nil {
+		return Item{}, fault
+	}
 	dropped := inv.items[sourceIndex]
 	inv.items = append(inv.items[:sourceIndex], inv.items[sourceIndex+1:]...)
 	return dropped, nil
@@ -520,6 +653,11 @@ func (inv *Inventory) Drop(sourceSlot uint8) (Item, *Fault) {
 // stackCount - count behind in the same slot and returns a copy carrying
 // count. The bounds check runs on the raw request - a zero must refuse, not
 // clamp up to 1 and silently drop a unit.
+/*
+================
+DropQuantity
+================
+*/
 func (inv *Inventory) DropQuantity(sourceSlot uint8, count uint16) (Item, *Fault) {
 	if !inv.validSlot(sourceSlot) {
 		return Item{}, newFault(wire.ErrCodeInvalidRequest, "slotOutOfRange")
@@ -535,6 +673,9 @@ func (inv *Inventory) DropQuantity(sourceSlot uint8, count uint16) (Item, *Fault
 		return Item{}, newFault(wire.ErrCodeInvalidRequest, "sourceSlotEmpty")
 	}
 
+	if fault := summonerTransferFault(inv.items[sourceIndex]); fault != nil {
+		return Item{}, fault
+	}
 	stack := inv.items[sourceIndex].Quantity
 	if stack == 0 {
 		stack = 1
@@ -569,7 +710,15 @@ func (inv *Inventory) DropQuantity(sourceSlot uint8, count uint16) (Item, *Fault
 // Grant is the plain occupy-a-free-slot leg; the pickup path proper is
 // GrantStack, which also merges onto an existing stack and computes the
 // over-cap ground remainder.
+/*
+================
+Grant
+================
+*/
 func (inv *Inventory) Grant(item Item) (uint8, *Fault) {
+	if fault := summonerTransferFault(item); fault != nil {
+		return 0, fault
+	}
 	destSlot, ok := inv.FirstFreeBagSlot()
 	if !ok {
 		return 0, newFault(wire.ErrCodeStorageFull, "inventoryFull")
@@ -588,6 +737,11 @@ func (inv *Inventory) Grant(item Item) (uint8, *Fault) {
 // wins, not row order - the persisted row order is an artifact of past moves,
 // and the destination must be reproducible. The second result is false when
 // no mergeable row exists.
+/*
+================
+MergeTargetSlot
+================
+*/
 func (inv *Inventory) MergeTargetSlot(refObjID uint32, stackCap uint16) (uint8, bool) {
 	best := -1
 	for index := range inv.items {
@@ -613,6 +767,11 @@ func (inv *Inventory) MergeTargetSlot(refObjID uint32, stackCap uint16) (uint8, 
 }
 
 // PickupGrant describes an applied ground-item grant.
+/*
+================
+PickupGrant
+================
+*/
 type PickupGrant struct {
 	// DestSlot is the bag wire slot the grant landed in.
 	DestSlot uint8
@@ -641,8 +800,19 @@ type PickupGrant struct {
 // UIIT_MSG_STRGERR_INVENTORY_FULL. The destination can never be an
 // already-at-cap row, so the counts-swap arm of TransferSlotStack is
 // unreachable from a pickup, exactly like native.
+/*
+================
+GrantStack
+================
+*/
 func (inv *Inventory) GrantStack(item Item, stackCap uint16) (PickupGrant, *Fault) {
 	var out PickupGrant
+	if fault := summonerTransferFault(item); fault != nil {
+		return out, fault
+	}
+	if wire.IsCosSummoner(item.TypeFlags) {
+		stackCap = 1
+	}
 
 	if stackCap < 1 {
 		stackCap = 1
@@ -688,4 +858,23 @@ func (inv *Inventory) GrantStack(item Item, stackCap uint16) (PickupGrant, *Faul
 	out.PostMergeCount = granted
 	out.GroundRemainder = groundStack - granted
 	return out, nil
+}
+
+/*
+================
+summonerTransferFault
+
+Inference from single-record ownership: an active actor cannot cross an item
+container boundary, and a persistent record cannot split or merge. This gate
+belongs to the shared inventory owner so warehouse, sale and drop agree.
+================
+*/
+func summonerTransferFault(item Item) *Fault {
+	if !wire.IsCosSummoner(item.TypeFlags) && item.Summon == nil {
+		return nil
+	}
+	if !wire.IsCosSummoner(item.TypeFlags) || item.Quantity != 1 || (item.Summon != nil && item.Summon.Summoned) || wire.ValidateCOSItem(item.TypeFlags, item.Summon) != nil {
+		return newFault(wire.ErrCodeInvalidRequest, "summonerOwnershipConflict")
+	}
+	return nil
 }

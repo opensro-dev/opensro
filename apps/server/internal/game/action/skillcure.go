@@ -54,7 +54,7 @@ func (rt *Runtime) applySkillCure(division string, caster *enterworld.Character,
 			private, shared := rt.cureCharacter(division, player, skill, now)
 			route(player, private, shared)
 		} else if owner := rt.characterByCosGID(division, gid); owner != nil {
-			public = append(public, rt.curePet(division, owner, skill, now)...)
+			public = append(public, rt.curePet(division, monsterCastRecipient{owner, gid}, skill, now)...)
 		}
 	}
 	return actor, public, recipients
@@ -137,6 +137,11 @@ func (rt *Runtime) partyCureTargets(division string, caster *enterworld.Characte
 }
 
 // partyAreaReach is 430CE0 followed by the relative 3D length test.
+/*
+================
+partyAreaReach
+================
+*/
 func partyAreaReach(from, to simulation.Spawn, radius uint32) bool {
 	return samePlaneAdjacent(from, to) && distance3D(from, to) <= float64(radius)
 }
@@ -164,12 +169,22 @@ func samePlaneAdjacent(from, to simulation.Spawn) bool {
 }
 
 // distance3D is Vec3_Length of Pos_GetRelative3DOrIncompatibleSentinel.
+/*
+================
+distance3D
+================
+*/
 func distance3D(from, to simulation.Spawn) float64 {
 	planar := simulation.WorldDistance2D(from, to)
 	dy := to.Y - from.Y
 	return math.Sqrt(planar*planar + dy*dy)
 }
 
+/*
+================
+cureCharacter
+================
+*/
 func (rt *Runtime) cureCharacter(division string, target *enterworld.Character, skill enterworld.SkillRow, now int64) (actor, public []wire.Frame) {
 	owner := rt.newPlayerAbnormalOwner(division, target, now)
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, character: target.Name}}
@@ -183,17 +198,28 @@ func (rt *Runtime) cureCharacter(division string, target *enterworld.Character, 
 }
 
 // curePet returns the pet's shared mask frame; a COS has no private snapshot.
-func (rt *Runtime) curePet(division string, ownerCharacter *enterworld.Character, skill enterworld.SkillRow, now int64) []wire.Frame {
-	owner := rt.newCosAbnormalOwner(division, ownerCharacter, now)
+/*
+================
+curePet
+================
+*/
+func (rt *Runtime) curePet(division string, recipient monsterCastRecipient, skill enterworld.SkillRow, now int64) []wire.Frame {
+	ownerCharacter := recipient.character
+	owner := rt.newCosAbnormalOwnerForPet(division, ownerCharacter, ownerCharacter.CompanionByGID(recipient.gid), now)
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, character: ownerCharacter.Name}}
 	owner.changed = owner.block.Cure(owner, nil, skillLevelCure(skill), skillPill(skill), skillCureLimit(skill), random.Rand)
 	if random.err != nil {
 		return nil
 	}
 	owner.commit()
-	return rt.cosAbnormalPublication(ownerCharacter.ActiveCOS.GID, owner)
+	return rt.cosAbnormalPublication(recipient.gid, owner)
 }
 
+/*
+================
+skillLevelCure
+================
+*/
 func skillLevelCure(skill enterworld.SkillRow) *abnormal.SkillLevelCure {
 	if !skill.Abnormal.Curt {
 		return nil
@@ -201,6 +227,11 @@ func skillLevelCure(skill enterworld.SkillRow) *abnormal.SkillLevelCure {
 	return &abnormal.SkillLevelCure{Mask: skill.Abnormal.CurtMask, Level: skill.Abnormal.CurtLevel}
 }
 
+/*
+================
+skillPill
+================
+*/
 func skillPill(skill enterworld.SkillRow) *[3]int32 {
 	if !skill.Abnormal.Curl {
 		return nil
@@ -209,6 +240,11 @@ func skillPill(skill enterworld.SkillRow) *[3]int32 {
 	return &stored
 }
 
+/*
+================
+skillCureLimit
+================
+*/
 func skillCureLimit(skill enterworld.SkillRow) int {
 	if !skill.Abnormal.RcurSet {
 		return -1

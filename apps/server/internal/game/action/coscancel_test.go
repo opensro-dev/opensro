@@ -34,7 +34,7 @@ func TestCosCancellationPreservesDurablePetAndRetiresPickup(t *testing.T) {
 		Name: "Companion", InventorySlot: 17, Container: &domain.COSContainer{Capacity: 28}}
 	rt.BindPetSession(testDivision, c, 101)
 	rt.advancePets(clock.NowMs())
-	state := rt.petSessions[petOwnerKey{testDivision, strings.ToLower(c.Name)}]
+	state := rt.petSessions[petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: c.ActiveCOS.GID}]
 	state.pickup = &wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: 44}
 	state.pickupCommand = true
 	payload := wire.NewWriter(4).U32(gid).Payload()

@@ -68,6 +68,10 @@ func (s *Store) TransactStorage(character *domain.Character, mutate func(next *d
 	next := character.Snapshot()
 	storage := current
 	storage.Rows = append([]domain.InventoryRow(nil), current.Rows...)
+	for i := range storage.Rows {
+		storage.Rows[i].Summon = domain.CloneCOS(current.Rows[i].Summon)
+		storage.Rows[i].MagicOptions = append([]uint64(nil), current.Rows[i].MagicOptions...)
+	}
 	if err := mutate(next, &storage); err != nil {
 		return current, err
 	}

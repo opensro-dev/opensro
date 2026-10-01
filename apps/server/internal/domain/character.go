@@ -26,6 +26,7 @@ reads it). varianceBits persists as a decimal string because JSON has no
 ==================
 */
 type InventoryRow struct {
+	Summon *CharacterCOS `json:"summon,omitempty"`
 	// Portable persistence for an already supplied native +20/+24 identity.
 	// This is not a serial allocator or a native SQL column declaration.
 	RecordID     uint64 `json:"recordId,omitempty,string"`
@@ -472,19 +473,23 @@ Owned companion state; its inventory commits with the owning character.
 ================
 */
 type CharacterCOS struct {
-	NativeBodyStatus uint8         `json:"-"`
-	Experience       uint64        `json:"experience,omitempty"`
-	Level            uint8         `json:"level,omitempty"`
-	Satiety          uint16        `json:"satiety,omitempty"`
-	InventorySlot    uint8         `json:"inventorySlot,omitempty"`
-	Container        *COSContainer `json:"container,omitempty"`
-	CommandMode      uint32        `json:"commandMode,omitempty"`
-	GID              uint32        `json:"gid"`
-	RefObjID         uint32        `json:"refObjId"`
-	Codename         string        `json:"codename"`
-	Name             string        `json:"name,omitempty"`
-	CurrentHP        uint32        `json:"currentHp"`
-	CurrentMP        uint32        `json:"currentMp"`
+	SummonGeneration       uint64        `json:"summonGeneration,omitempty"`
+	RentalExpiresAtUnix    int64         `json:"rentalExpiresAtUnix,omitempty"`
+	RentalRemainingSeconds int32         `json:"rentalRemainingSeconds,omitempty"`
+	Rentals                []COSRental   `json:"rentals,omitempty"`
+	NativeBodyStatus       uint8         `json:"-"`
+	Experience             uint64        `json:"experience,omitempty"`
+	Level                  uint8         `json:"level,omitempty"`
+	Satiety                uint16        `json:"satiety,omitempty"`
+	InventorySlot          uint8         `json:"inventorySlot,omitempty"`
+	Container              *COSContainer `json:"container,omitempty"`
+	CommandMode            uint32        `json:"commandMode,omitempty"`
+	GID                    uint32        `json:"gid"`
+	RefObjID               uint32        `json:"refObjId"`
+	Codename               string        `json:"codename"`
+	Name                   string        `json:"name,omitempty"`
+	CurrentHP              uint32        `json:"currentHp"`
+	CurrentMP              uint32        `json:"currentMp"`
 	// StateFlags bit 0 is CCOSData+0x38 (49D240): revival refuses while it
 	// is set and sets it when the revive succeeds.
 	StateFlags uint32 `json:"stateFlags,omitempty"`

@@ -18,7 +18,8 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
-export const RELEASE_PROTOCOL = 4;
+// Protocol 5 adds populated persistent summoners and concurrent COS lifetimes.
+export const RELEASE_PROTOCOL = 5;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 2;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

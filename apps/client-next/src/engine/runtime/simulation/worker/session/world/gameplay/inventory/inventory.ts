@@ -296,6 +296,34 @@ transfer
 	return {
 		/*
 ================
+bindCompanion
+
+830EC0 -> 59C2E0 binds the private COS record to its summoner inventory
+slot. The separate 3645 receipt owns the native active/dead state byte.
+================
+ */
+		bindCompanion( record: import("@/engine/contracts/gameplay").CosRecord ) {
+			if ( record.inventorySlot === undefined ) return;
+			const previous = slots.get( record.inventorySlot );
+			// Native 59C2E0 ignores an absent slot; it does not create an item.
+			if ( !previous ) return;
+			if ( (previous.typeFlags & 0x7fe) !== 0xcc ) {
+				throw Error( "Companion record has no summoner item" );
+			}
+			slots.set( record.inventorySlot, {
+				...previous,
+				summon: {
+					...previous.summon,
+					state: record.dead ? 4 : 2,
+					refObjId: record.refObjId,
+					name: record.name,
+					rentals: previous.summon?.rentals ?? []
+				}
+			} );
+			published = null;
+		},
+		/*
+================
 openMall
 ================
 		*/

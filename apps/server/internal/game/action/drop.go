@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+drop.go - owns drop behavior and its checked data boundaries
+
+===========================================================================
+*/
 // Package action plans the position-dependent item operations: it turns an
 // inventory mutation plus the dropper's LIVE position into the ground-item
 // registry entry the division sees.
@@ -14,6 +21,7 @@ package action
 
 import (
 	"math"
+	"opensro.online/server/internal/domain"
 	"time"
 
 	"opensro.online/server/internal/game/item/grounditem"
@@ -24,6 +32,11 @@ import (
 
 // clampDropCoordinate mirrors the fixture's clampFiniteNumber(value, -0x8000,
 // 0xffff) on the drop legs: a non-finite value reads as 0 first.
+/*
+================
+clampDropCoordinate
+================
+*/
 func clampDropCoordinate(value float64) float64 {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		value = 0
@@ -38,6 +51,11 @@ func clampDropCoordinate(value float64) float64 {
 }
 
 // placementFor expands a live spawn into the ground-item placement fields.
+/*
+================
+placementFor
+================
+*/
 func placementFor(at simulation.Spawn) (grounditem.Point, float32, uint16) {
 	point := grounditem.Point{
 		RegionID: at.RegionID,
@@ -54,6 +72,11 @@ func placementFor(at simulation.Spawn) (grounditem.Point, float32, uint16) {
 // at is the dropper's LIVE position (WorldState.LiveSpawnAt) - see the
 // package contract. The returned entry carries no Gid; the registry's Add is
 // the sole allocator.
+/*
+================
+PlanItemDrop
+================
+*/
 func PlanItemDrop(dropped inventory.Item, dropCount uint16, at simulation.Spawn, droppedBy string, now time.Time) grounditem.Item {
 	if dropCount == 0 {
 		dropCount = 1
@@ -68,19 +91,24 @@ func PlanItemDrop(dropped inventory.Item, dropCount uint16, at simulation.Spawn,
 		VarianceBits:      dropped.VarianceBits,
 		Durability:        dropped.Durability,
 		MagicOptions:      append([]uint64(nil), dropped.MagicOptions...),
-		TransformRefObjID: dropped.TransformRefObjID,
-		StackCount:        dropCount,
-		Position:          point,
-		Y:                 y,
-		Heading:           heading,
-		DroppedBy:         droppedBy,
-		DroppedAt:         now,
+		TransformRefObjID: dropped.TransformRefObjID, Summon: domain.CloneCOS(dropped.Summon),
+		StackCount: dropCount,
+		Position:   point,
+		Y:          y,
+		Heading:    heading,
+		DroppedBy:  droppedBy,
+		DroppedAt:  now,
 	}
 }
 
 // GoldHeapRef is the itemdata row of a gold-heap tier
 // (inventory.GoldHeapTier names the codename; the caller resolves the row
 // from its reference data).
+/*
+================
+GoldHeapRef
+================
+*/
 type GoldHeapRef struct {
 	RefObjID uint32
 	Codename string
@@ -91,6 +119,11 @@ type GoldHeapRef struct {
 }
 
 // TypeFlags packs the heap's RefItemData type word.
+/*
+================
+TypeFlags
+================
+*/
 func (r GoldHeapRef) TypeFlags() uint16 {
 	return wire.PackTypeFlags(r.Tid1, r.Tid2, r.Tid3, r.Tid4)
 }
@@ -102,6 +135,11 @@ func (r GoldHeapRef) TypeFlags() uint16 {
 // at is the dropper's LIVE position (WorldState.LiveSpawnAt) - the wave-9
 // bug-D repro was exactly this leg reading the goal. The returned entry
 // carries no Gid; the registry's Add is the sole allocator.
+/*
+================
+PlanGoldDrop
+================
+*/
 func PlanGoldDrop(ref GoldHeapRef, amount uint32, at simulation.Spawn, droppedBy string, now time.Time) grounditem.Item {
 	point, y, heading := placementFor(at)
 	return grounditem.Item{
@@ -121,6 +159,11 @@ func PlanGoldDrop(ref GoldHeapRef, amount uint32, at simulation.Spawn, droppedBy
 // independent angle, radius and heading draws after admission. The server
 // reference is v1.188; it is mechanism evidence, not a v1.150 pixel proof.
 // Rejected geometry falls back to the live death position, never the move goal.
+/*
+================
+scatterMonsterDrop
+================
+*/
 func (rt *Runtime) scatterMonsterDrop(item grounditem.Item, at simulation.Spawn, rarity uint8) grounditem.Item {
 	minRadius, maxRadius := float32(8), float32(20)
 	switch rarity {

@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+character_access.go - exposes store snapshots and character authority operations
+
+===========================================================================
+*/
 package store
 
 import (
@@ -9,15 +16,30 @@ import (
 
 // Character access and mutation doors. These methods own lock acquisition,
 // copy boundaries, dirty tracking, and the one-commit-per-operation contract.
+/*
+================
+Characters
+================
+*/
 func (s *Store) Characters() domain.CharacterSource {
 	return storeCharacterSource{s: s}
 }
 
+/*
+================
+storeCharacterSource
+================
+*/
 type storeCharacterSource struct{ s *Store }
 
 // ReadState is the allocation-free authority door for callers that already
 // hold a character identity. fn may read fields only while this lock is held,
 // must not mutate them, and must not re-enter Store methods.
+/*
+================
+ReadState
+================
+*/
 func (s *Store) ReadState(fn func()) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -40,6 +62,11 @@ func (s *Store) ReadState(fn func()) {
 // rewrite it), the same guarantee CharactersForDivision gives. FIELD
 // reads are still only synchronized inside fn - no field read may be
 // trusted after fn returns; read fields back under a door.
+/*
+================
+ReadCharacters
+================
+*/
 func (s *Store) ReadCharacters(divisionID string, fn func(characters []*domain.Character)) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -51,6 +78,11 @@ func (s *Store) ReadCharacters(divisionID string, fn func(characters []*domain.C
 
 // CharactersForDivision returns the division's live records (fresh slice,
 // same pointers - append-safe against concurrent CreateCharacter).
+/*
+================
+CharactersForDivision
+================
+*/
 func (src storeCharacterSource) CharactersForDivision(divisionID string) []*domain.Character {
 	src.s.mu.RLock()
 	defer src.s.mu.RUnlock()
@@ -63,6 +95,11 @@ func (src storeCharacterSource) CharactersForDivision(divisionID string) []*doma
 // GroundSnapshotSource is the store-owned port for a live ground registry.
 // The gameplay implementation owns locking and entity lifecycle; the store
 // only observes revisions and immutable value snapshots at its commit door.
+/*
+================
+GroundSnapshotSource
+================
+*/
 type GroundSnapshotSource interface {
 	Revision() uint64
 	Snapshot() domain.GroundSnapshot
@@ -70,6 +107,11 @@ type GroundSnapshotSource interface {
 
 // AttachGround installs the live ground snapshot source for later commits.
 // Wire it after action constructs the registry and before transport starts.
+/*
+================
+AttachGround
+================
+*/
 func (s *Store) AttachGround(source GroundSnapshotSource) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -79,6 +121,11 @@ func (s *Store) AttachGround(source GroundSnapshotSource) {
 // GroundSnapshotForRestore rebuilds the loaded ground state in the
 // registry's snapshot shape; boot passes it to Registry.Restore (original
 // DroppedAt - the TTL deadline continues across the restart).
+/*
+================
+GroundSnapshotForRestore
+================
+*/
 func (s *Store) GroundSnapshotForRestore() domain.GroundSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -88,6 +135,7 @@ func (s *Store) GroundSnapshotForRestore() domain.GroundSnapshot {
 		copy(out, rows)
 		for i := range out {
 			out[i].MagicOptions = append([]uint64(nil), out[i].MagicOptions...)
+			out[i].Summon = domain.CloneCOS(out[i].Summon)
 		}
 		divisions[divisionID] = out
 	}
@@ -97,6 +145,11 @@ func (s *Store) GroundSnapshotForRestore() domain.GroundSnapshot {
 // DeletedCharactersSnapshot returns byte-preserved soft-deleted records for
 // offline inspection. Gameplay never decodes or mutates these archival
 // records.
+/*
+================
+DeletedCharactersSnapshot
+================
+*/
 func (s *Store) DeletedCharactersSnapshot() map[string][]json.RawMessage {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -120,6 +173,11 @@ func (s *Store) DeletedCharactersSnapshot() map[string][]json.RawMessage {
 // This unscoped door does not know WHICH records fn touched, so it
 // conservatively persists all of them. Gameplay paths use MutateCharacter
 // for O(delta).
+/*
+================
+Mutate
+================
+*/
 func (s *Store) Mutate(label string, fn func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -135,6 +193,11 @@ func (s *Store) Mutate(label string, fn func()) {
 // commit detects by revision). This is the gameplay hot path - the
 // commit transaction carries one character row instead of the world.
 // A nil character declares a ground-only operation (TTL sweeps).
+/*
+================
+MutateCharacter
+================
+*/
 func (s *Store) MutateCharacter(c *domain.Character, label string, fn func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -164,6 +227,11 @@ func (s *Store) MutateCharacter(c *domain.Character, label string, fn func()) {
 // state. Keeping the decision and the write in one critical section prevents a
 // stale snapshot from overwriting a concurrent quest reward, deletion
 // reservation, or movement update.
+/*
+================
+UpdateCharacter
+================
+*/
 func (s *Store) UpdateCharacter(c *domain.Character, label string, update func() bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -204,6 +272,11 @@ func (s *Store) UpdateCharacter(c *domain.Character, label string, update func()
 // follows the door's fail-open-loud rule: every dirty flag is RETAINED,
 // so the next successful commit heals both records together - never
 // one without the other.
+/*
+================
+MutateCharacters
+================
+*/
 func (s *Store) MutateCharacters(cs []*domain.Character, label string, fn func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -231,6 +304,11 @@ func (s *Store) MutateCharacters(cs []*domain.Character, label string, fn func()
 // UpdateCharacters is the conditional multi-record door. Every declared
 // record must still belong to this store before the callback runs. A callback
 // refusal returns false without dirty state or a database transaction.
+/*
+================
+UpdateCharacters
+================
+*/
 func (s *Store) UpdateCharacters(cs []*domain.Character, label string, update func() bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -258,6 +336,11 @@ func (s *Store) UpdateCharacters(cs []*domain.Character, label string, update fu
 }
 
 // mailboxKey identifies one character's letter mailbox in the dirty set.
+/*
+================
+mailboxKey
+================
+*/
 type mailboxKey struct {
 	division string
 	charID   int64
@@ -265,6 +348,11 @@ type mailboxKey struct {
 
 // guildKey identifies one guild - the row plus its whole member set, the
 // guild plane's dirty unit - in the dirty set.
+/*
+================
+guildKey
+================
+*/
 type guildKey struct {
 	division string
 	guildID  int64
@@ -272,6 +360,11 @@ type guildKey struct {
 
 // campKey identifies one training camp - the row plus its whole member
 // set, the camp plane's dirty unit - in the dirty set (guildKey's twin).
+/*
+================
+campKey
+================
+*/
 type campKey struct {
 	division string
 	campID   int64
@@ -279,14 +372,29 @@ type campKey struct {
 
 // Letters returns the letter-mailbox door (domain.LetterStore over the
 // memos table). Same lifetime contract as Characters().
+/*
+================
+Letters
+================
+*/
 func (s *Store) Letters() domain.LetterStore {
 	return storeLetterDoor{s: s}
 }
 
+/*
+================
+storeLetterDoor
+================
+*/
 type storeLetterDoor struct{ s *Store }
 
 // Mailbox returns a copy of the character's persisted mailbox in list
 // order (empty when the character has no rows).
+/*
+================
+Mailbox
+================
+*/
 func (door storeLetterDoor) Mailbox(divisionID string, characterID int64) []domain.LetterRecord {
 	door.s.mu.RLock()
 	defer door.s.mu.RUnlock()
@@ -296,6 +404,11 @@ func (door storeLetterDoor) Mailbox(divisionID string, characterID int64) []doma
 	return out
 }
 
+/*
+================
+DeliverLetter
+================
+*/
 func (door storeLetterDoor) DeliverLetter(
 	divisionID string,
 	senderID, receiverID int64,
@@ -329,6 +442,11 @@ func (door storeLetterDoor) DeliverLetter(
 	return true
 }
 
+/*
+================
+UpdateMailbox
+================
+*/
 func (door storeLetterDoor) UpdateMailbox(
 	divisionID string,
 	characterID int64,

@@ -42,6 +42,8 @@ const (
 	itemUseMonsterCapsule
 	itemUseQuestTool
 	itemUseComposite
+	itemUsePersistentSummoner
+	itemUsePetExtension
 )
 
 /*
@@ -72,6 +74,9 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 1, 8} {
 		return itemUseBerserk
 	}
+	if ref.TypeIDs == [4]int64{3, 3, 13, 12} {
+		return itemUsePetExtension
+	}
 	// 49F590: the composite scroll (UIU1 param jobs).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {
 		return itemUseComposite
@@ -100,6 +105,9 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	}
 	if _, ok := potionType(ref.TypeIDs); ok {
 		return itemUseRecovery
+	}
+	if wire.IsCosSummoner(ref.TypeFlags()) && (ref.TypeIDs[3] == 1 || ref.TypeIDs[3] == 2) {
+		return itemUsePersistentSummoner
 	}
 	if cosSummonerType(ref.TypeIDs) {
 		return itemUseSummoner

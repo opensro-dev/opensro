@@ -33,12 +33,26 @@ func (rt *Runtime) cosCharacterRef(character *enterworld.Character) (*enterworld
 	if character == nil || character.ActiveCOS == nil {
 		return nil, false
 	}
+	return rt.cosReference(character.ActiveCOS)
+}
+
+/*
+================
+cosReference
+
+Resolve the selected canonical companion without assuming it is the rider.
+================
+*/
+func (rt *Runtime) cosReference(pet *enterworld.CharacterCOS) (*enterworld.CharacterRef, bool) {
+	if pet == nil {
+		return nil, false
+	}
 	source, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
 	if !ok {
 		return nil, false
 	}
-	ref, exists := source.CharacterRefByCodename(character.ActiveCOS.Codename)
-	return ref, exists && ref != nil && ref.RefObjID == character.ActiveCOS.RefObjID
+	ref, exists := source.CharacterRefByCodename(pet.Codename)
+	return ref, exists && ref != nil && ref.RefObjID == pet.RefObjID
 }
 
 /*

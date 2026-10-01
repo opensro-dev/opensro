@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+cosbehavior.go - owns cosbehavior behavior and its checked data boundaries
+
+===========================================================================
+*/
 package action
 
 import (
@@ -7,6 +14,11 @@ import (
 
 // Behavior state belongs to the same character transaction as the COS
 // lifecycle. A response is emitted only after that transaction commits.
+/*
+================
+HandleCosBehavior
+================
+*/
 func (rt *Runtime) HandleCosBehavior(division string, c *enterworld.Character, p []byte) OpResult {
 	q, err := wire.DecodeCosBehavior(p)
 	if c == nil || err != nil {
@@ -19,9 +31,9 @@ func (rt *Runtime) HandleCosBehavior(division string, c *enterworld.Character, p
 		return OpResult{}
 	}
 	committed := rt.deps.Update(c, "cos-behavior", func() bool {
-		cos := c.ActiveCOS
-		gid, valid := enterworld.CosObjectIDForCharacter(c)
-		if c.DeletePending || !valid || cos == nil || !cos.Summoned || cos.CurrentHP == 0 || cos.GID != gid || cos.GID != q.GID {
+		cos := c.CompanionByGID(q.GID)
+
+		if c.DeletePending || cos == nil || !cos.Summoned || cos.CurrentHP == 0 || cos.GID != q.GID {
 			return false
 		}
 		ref, found := refs.CharacterRefByCodename(cos.Codename)

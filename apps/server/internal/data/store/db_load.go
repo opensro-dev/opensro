@@ -30,14 +30,14 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 		return nil, err
 	}
 	if version != current {
-		return nil, fmt.Errorf("database character schema version %d, binary requires exactly %d: %w; preserve the authority; schema %d (layout 4) is validated and upgraded offline with sro-authority-upgrade", version, current, errIncompatibleSchema, UpgradeFromVersion)
+		return nil, fmt.Errorf("database character schema version %d, binary requires exactly %d: %w; preserve the authority; schemas %d through the previous version are validated and upgraded offline with sro-authority-upgrade", version, current, errIncompatibleSchema, UpgradeFromVersion)
 	}
 	layout, err := readMetaInt(db, metaKeyLayoutVersion, 0)
 	if err != nil {
 		return nil, err
 	}
 	if layout != currentLayout {
-		return nil, fmt.Errorf("database layout version %d, binary requires exactly %d: %w; preserve the authority; layout 4 (schema %d) is validated and upgraded offline with sro-authority-upgrade", layout, currentLayout, errIncompatibleSchema, UpgradeFromVersion)
+		return nil, fmt.Errorf("database layout version %d, binary requires exactly %d: %w; preserve the authority; supported schemas starting at %d are validated and upgraded offline with sro-authority-upgrade", layout, currentLayout, errIncompatibleSchema, UpgradeFromVersion)
 	}
 
 	// Only the offline upgrader requests layout 4. Runtime callers require

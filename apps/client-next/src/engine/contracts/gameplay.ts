@@ -243,6 +243,7 @@ export type GameplayCommand =
 		readonly slot: number;
 		readonly companionGid?: number;
 		readonly revivalSlot?: number;
+		readonly summonerSlot?: number;
 	}
 	| {
 		readonly kind: "navigation";

@@ -33,7 +33,13 @@ import (
 const Header = "X-OpenSRO-Protocol"
 
 // Contracts are the browser-facing wire contracts one protocol fixes.
+/*
+================
+Contracts
+================
+*/
 type Contracts struct {
+	Companions int // native populated summoner items and concurrent COS lifetimes
 	Bootstrap  int // the EnterWorld DTO
 	Roster     int // the character list
 	References int // the public reference file beside the transport
@@ -42,9 +48,10 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current           = 4
-	BootstrapContract = 2 // the EnterWorld DTO
-	RosterContract    = 2 // the character list: worn items as (RefItemID, plus)
+	Current            = 5
+	CompanionsContract = 1
+	BootstrapContract  = 2 // the EnterWorld DTO
+	RosterContract     = 2 // the character list: worn items as (RefItemID, plus)
 	// The reference file: 2 publishes the static item rows a login used to
 	// repeat (refItemSnapshot); 1 held skills and item commands only.
 	ReferencesContract = 2
@@ -55,7 +62,8 @@ const (
 var history = map[int]Contracts{
 	2:       {Bootstrap: 2, Roster: 1, References: 1},
 	3:       {Bootstrap: 2, Roster: 2, References: 1},
-	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract},
+	4:       {Bootstrap: 2, Roster: 2, References: 2},
+	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract},
 }
 
 /*

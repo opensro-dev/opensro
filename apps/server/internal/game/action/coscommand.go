@@ -51,7 +51,7 @@ func (rt *Runtime) HandleCosCommand(
 
 	switch command.Tag {
 	case wire.CosCommandMovementTag:
-		if !snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 || rt.MoveCOS == nil || rt.cosMovementBlocked(divisionID, snapshot) {
+		if !snapshot.CompanionByGID(command.CosGid).Mounted || snapshot.CompanionByGID(command.CosGid).CurrentHP == 0 || rt.MoveCOS == nil || rt.cosMovementBlocked(divisionID, snapshot) {
 			return OpResult{}
 		}
 		rt.bindResidentRegion(simulation.WorldKey(divisionID, character.Name), rt.Now().UnixMilli())
@@ -59,7 +59,7 @@ func (rt *Runtime) HandleCosCommand(
 	case wire.CosCommandSteerTag, wire.CosCommandStopTag:
 		// The vehicle's steer/stop pair belongs to the same movement owner
 		// as its moves; only the mounted, living vehicle can walk.
-		if !snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 {
+		if !snapshot.CompanionByGID(command.CosGid).Mounted || snapshot.CompanionByGID(command.CosGid).CurrentHP == 0 {
 			return OpResult{}
 		}
 		if command.Tag == wire.CosCommandSteerTag && rt.cosMovementBlocked(divisionID, snapshot) {
@@ -78,7 +78,7 @@ func (rt *Runtime) HandleCosCommand(
 		return rt.changeCosRide(divisionID, character, snapshot, true)
 
 	case wire.CosCommandAttackTag:
-		if !snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 ||
+		if !snapshot.CompanionByGID(command.CosGid).Mounted || snapshot.CompanionByGID(command.CosGid).CurrentHP == 0 ||
 			ref.MountedAttackCapability210 == 0 || command.TargetGid == 0 {
 			return OpResult{}
 		}
@@ -107,7 +107,7 @@ The caller holds the division operation lock for the entire command.
 */
 func (rt *Runtime) commandCOSSnapshot(division string, c *enterworld.Character, gid uint32) (*enterworld.Character, *enterworld.CharacterRef) {
 	snapshot, ref := rt.ownedCOSSnapshot(division, c, gid)
-	if snapshot == nil || snapshot.ActiveCOS.CurrentHP == 0 {
+	if snapshot == nil || snapshot.CompanionByGID(gid).CurrentHP == 0 {
 		return nil, nil
 	}
 	return snapshot, ref
@@ -126,9 +126,9 @@ func (rt *Runtime) ownedCOSSnapshot(division string, c *enterworld.Character, gi
 	if snapshot == nil || snapshot.DeletePending || enterworld.CurrentHP(snapshot) == 0 {
 		return nil, nil
 	}
-	cos := snapshot.ActiveCOS
-	expected, valid := enterworld.CosObjectIDForCharacter(snapshot)
-	if !valid || cos == nil || !cos.Summoned || cos.GID != gid || gid != expected {
+	cos := snapshot.CompanionByGID(gid)
+
+	if cos == nil || !cos.Summoned || cos.GID != gid {
 		return nil, nil
 	}
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)

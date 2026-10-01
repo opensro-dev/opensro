@@ -458,7 +458,7 @@ func invItemsFromRowsWithin(rows []enterworld.InventoryRow, slotEnd int64) []inv
 			Durability:        uint32(clampInt64(row.Durability, 0, 0xFFFFFFFF)),
 			Quantity:          uint16(quantity),
 			MagicOptions:      append([]uint64(nil), row.MagicOptions...),
-			TransformRefObjID: row.TransformRefObjID,
+			TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
 		})
 	}
 
@@ -488,7 +488,7 @@ func rowsFromInvItems(items []inventory.Item) []enterworld.InventoryRow {
 			Durability:        int64(item.Durability),
 			StackCount:        int64(item.Quantity),
 			MagicOptions:      append([]uint64(nil), item.MagicOptions...),
-			TransformRefObjID: item.TransformRefObjID,
+			TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon),
 		})
 	}
 

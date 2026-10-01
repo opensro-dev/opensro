@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+schema.go - strict authority record versions and character decoding
+
+A version identifies the retained value graph, not just SQL tables. Older
+binaries must refuse new record fields instead of losing them on a write.
+
+===========================================================================
+*/
 package store
 
 import (
@@ -11,13 +21,18 @@ import (
 
 var errIncompatibleSchema = errors.New("authority database schema is incompatible with this binary")
 
+/*
+================
+isVersionMismatch
+================
+*/
 func isVersionMismatch(err error) bool {
 	return errors.Is(err, errIncompatibleSchema)
 }
 
 // CurrentVersion identifies the only authority-record schema this pre-release
-// server accepts. Incompatible pre-release databases are discarded and
-// recreated explicitly; production startup never rewrites them in place.
+// server accepts. Supported older databases are upgraded explicitly offline;
+// production startup never rewrites them in place.
 //
 // Version 13 replaces world.dungeonMinimap's presentation prefix/label object
 // with the semantic-only world.dungeonFloorIndex. The browser resolves all
@@ -27,14 +42,27 @@ func isVersionMismatch(err error) bool {
 // timedSkillJobs, skillActionRecoveryUntilMs) and comes with table layout 5.
 // Records decode strictly, so a schema 13 server cannot read a character that
 // carries them; sro-authority-upgrade converts a schema 13 authority offline.
-const CurrentVersion = 14
+// Version 15 retains item-owned companions in player/warehouse/ground rows,
+// including independent leases and summon generations. Table layout stays 5.
+// The offline upgrader preserves schema 13 and 14 records and their backups.
+const CurrentVersion = 15
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
+/*
+================
+SkillSeedFunc
+================
+*/
 type SkillSeedFunc func(raceKey string, learned []uint32) ([]uint32, error)
 
 // Meta carries persisted counters that are not owned by an individual
 // gameplay record.
+/*
+================
+Meta
+================
+*/
 type Meta struct {
 	GidCounter  uint32           `json:"gidCounter"`
 	NextCharID  map[string]int64 `json:"nextCharId,omitempty"`

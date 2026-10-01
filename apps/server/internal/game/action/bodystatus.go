@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+bodystatus.go - owns bodystatus behavior and its checked data boundaries
+
+===========================================================================
+*/
 package action
 
 import (
@@ -13,12 +20,22 @@ import (
 // +0x100): CGObjChar_CheckTargetAttackable (5291D0) refuses an attacker in it.
 const untouchableBodyStatus uint8 = 2
 
+/*
+================
+bodyStatusFrame
+================
+*/
 func bodyStatusFrame(gid uint32, value uint8) wire.Frame {
 	return wire.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelBody, Value: value}).Encode()}
 }
 
 // Native 51DE90 command 7 -> CGObjPC vtable+254 (4AA680): create a
 // ground item at the actor. Inventory admission remains the pickup owner's job.
+/*
+================
+MakeGMItem
+================
+*/
 func (rt *Runtime) MakeGMItem(division, name string, id uint32, amount uint8) bool {
 	if rt == nil || rt.deps == nil || rt.Ground == nil {
 		return false
@@ -81,6 +98,11 @@ func (rt *Runtime) MakeGMItem(division, name string, id uint32, amount uint8) bo
 
 // ToggleGMBodyStatus is called by the authenticated GM dispatcher. Rechecking
 // privilege inside Update closes the gap between dispatch and mutation.
+/*
+================
+ToggleGMBodyStatus
+================
+*/
 func (rt *Runtime) ToggleGMBodyStatus(division, name string, requested uint8) bool {
 	if rt == nil || rt.deps == nil {
 		return false
@@ -104,9 +126,11 @@ func (rt *Runtime) ToggleGMBodyStatus(division, name string, requested uint8) bo
 			frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), next))
 			frames = append(frames, rt.refreshMovementEffects(division, c, rt.Now().UnixMilli())...)
 		}
-		// 4FD840 propagates to existing owned COS. This port has one active
-		// companion; it does not manufacture the native absent collections.
-		if cos := c.ActiveCOS; cos != nil && cos.Summoned && cos.NativeBodyStatus != next {
+		// 4FD840 propagates to every existing owned companion.
+		for _, cos := range c.Companions() {
+			if !cos.Summoned || cos.NativeBodyStatus == next {
+				continue
+			}
 			cos.NativeBodyStatus = next
 			frames = append(frames, bodyStatusFrame(cos.GID, next))
 		}
@@ -119,6 +143,11 @@ func (rt *Runtime) ToggleGMBodyStatus(division, name string, requested uint8) bo
 }
 
 // Enqueue before releasing the action lock, after leaving the store door.
+/*
+================
+publishBodyStatus
+================
+*/
 func (rt *Runtime) publishBodyStatus(division, name string, frames []wire.Frame) {
 	if len(frames) == 0 {
 		return
