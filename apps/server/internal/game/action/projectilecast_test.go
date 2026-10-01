@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+projectilecast_test.go - projectile preparation, commitment and interruption tests
+
+Exercise the production action owner and its native packet lifecycle.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -9,6 +18,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+arrowFixture
+================
+*/
 func arrowFixture(t *testing.T) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
 	t.Helper()
 	rt, clock, c, target := newCombatTestRuntime(t, 100000)
@@ -31,6 +45,11 @@ func arrowFixture(t *testing.T) (*Runtime, *enterworld.Character, uint32, enterw
 	return rt, c, target.Gid, skill, clock.NowMs()
 }
 
+/*
+================
+TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical
+================
+*/
 func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
@@ -89,6 +108,11 @@ func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 	}
 }
 
+/*
+================
+TestCriticalArrowRefusalAndCancellationHaveNoCost
+================
+*/
 func TestCriticalArrowRefusalAndCancellationHaveNoCost(t *testing.T) {
 	for _, branch := range []string{"missing-ammo", "wrong-ammo", "cancel", "target-death", "caster-death", "forget", "ammo-removed", "mp-removed", "weapon-swap"} {
 		t.Run(branch, func(t *testing.T) {
@@ -112,7 +136,17 @@ func TestCriticalArrowRefusalAndCancellationHaveNoCost(t *testing.T) {
 			}
 			switch branch {
 			case "cancel":
-				rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Cancel: true}.Encode())
+				cancel := rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Cancel: true}.Encode())
+				assertOpcodes(t, cancel.Frames, wire.OpActionState)
+				if cancel.Frames[0].Payload[0] != wire.ActionStateKindNotice || cancel.Frames[0].Payload[1] != 1 {
+					t.Fatal("committed skill did not refuse voluntary cancellation", cancel)
+				}
+				// 4ACC40 protects the committed skill. Forced interruption is a
+				// different owner and remains covered by the other branches.
+				if len(rt.advanceProjectileCasts(now+1000)) == 0 {
+					t.Fatal("refused cancellation prevented the committed release")
+				}
+				return
 			case "forget":
 				rt.ForgetCharacter(testDivision, c.Name)
 			case "target-death":
@@ -153,6 +187,11 @@ func TestCriticalArrowRefusalAndCancellationHaveNoCost(t *testing.T) {
 	}
 }
 
+/*
+================
+TestProjectileFlightUsesThreeDimensionalReleaseSample
+================
+*/
 func TestProjectileFlightUsesThreeDimensionalReleaseSample(t *testing.T) {
 	a := simulation.Spawn{RegionID: 0x60a5, X: 1900, Y: 100, Z: 100}
 	b := simulation.Spawn{RegionID: 0x60a6, X: 280, Y: 500, Z: 100}
@@ -164,6 +203,11 @@ func TestProjectileFlightUsesThreeDimensionalReleaseSample(t *testing.T) {
 	}
 }
 
+/*
+================
+TestCriticalArrowRepeatedCastConsumesLastArrowOnlyOnce
+================
+*/
 func TestCriticalArrowRepeatedCastConsumesLastArrowOnlyOnce(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
 	rt.CombatRoll = func() (uint32, error) { return 100, nil }
@@ -198,6 +242,11 @@ func TestCriticalArrowRepeatedCastConsumesLastArrowOnlyOnce(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPreparedOffenseRejectedCooldownCommitPublishesNothing
+================
+*/
 func TestPreparedOffenseRejectedCooldownCommitPublishesNothing(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
 	rt.deps.(*enterworld.Deps).UpdateCharacter = func(*enterworld.Character, string, func() bool) bool { return false }

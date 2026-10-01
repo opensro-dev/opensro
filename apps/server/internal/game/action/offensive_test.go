@@ -66,6 +66,7 @@ func TestAdvancedOffenseCommitsMPCooldownAndDamageOnce(t *testing.T) {
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target.Gid}.Encode()
 	acceptedAt := clock.NowMs()
 	r := rt.HandleTargetInteract(testDivision, c, cast)
+	r = assertAndSeparateActionSession(t, r)
 	assertOpcodes(t, r.Frames, wire.OpSkillCastResult)
 	if *c.CurrentMP != 19 {
 		t.Fatal("preparation charged MP")
@@ -221,6 +222,7 @@ func TestAdvancedPursuitCastsOnceAndCanBeCancelled(t *testing.T) {
 			c.CurrentMP = testInt64(100)
 			*c.World.Spawn.X = 900
 			result := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target.Gid}.Encode())
+			result = assertAndSeparateActionSession(t, result)
 			if len(result.Frames) != 1 || result.Frames[0].Opcode != simulation.OpMovementAck {
 				t.Fatalf("no pursuit: %+v", result)
 			}

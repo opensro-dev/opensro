@@ -58,6 +58,7 @@ func TestBowAreaShotsResolveAtReleaseAndSpendOneArrow(t *testing.T) {
 			rt.CombatRoll = func() (uint32, error) { return 10, nil }
 
 			start := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: targets[0].Gid}.Encode())
+			start = assertAndSeparateActionSession(t, start)
 			if len(start.Frames) != 1 || start.Frames[0].Opcode != wire.OpSkillCastResult {
 				t.Fatalf("cast refused: %+v", start)
 			}
@@ -133,6 +134,7 @@ func TestThrownBladesResolveAtReleaseWithoutAmmunition(t *testing.T) {
 			rt.CombatRoll = func() (uint32, error) { return 10, nil }
 
 			start := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: targets[0].Gid}.Encode())
+			start = assertAndSeparateActionSession(t, start)
 			if len(start.Frames) != 1 || start.Frames[0].Opcode != wire.OpSkillCastResult || start.Frames[0].Payload[0] != 1 {
 				t.Fatalf("cast refused: %+v", start)
 			}

@@ -144,6 +144,7 @@ func TestBowChainSpendsAnArrowPerImpact(t *testing.T) {
 	}{{5, 3}, {1, 0}} {
 		rt, c, skill, target := bowChainFixture(t, tc.arrows)
 		start := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}.Encode())
+		start = assertAndSeparateActionSession(t, start)
 		if len(start.Frames) != 1 || start.Frames[0].Payload[0] != 1 {
 			t.Fatalf("%d arrows: cast refused %+v", tc.arrows, start)
 		}

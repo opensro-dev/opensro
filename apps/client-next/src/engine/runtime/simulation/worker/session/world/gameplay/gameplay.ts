@@ -13,6 +13,7 @@ import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createStorageRoom } from "@/engine/foundation/gameplay/storage-room";
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
 import { createPickup } from "./pickup";
+import { createActionSession } from "./action-session";
 import {
 	withdrawalRequest,
 	withdrawalSkillBindings,
@@ -209,6 +210,7 @@ export function createGameplay(
 	let soundClock = 0;
 	const feedback = createFeedback();
 	const pickup = createPickup();
+	const actionSession = createActionSession();
 	const training = createTraining( send );
 	const movement = createMovement( send ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
@@ -224,7 +226,22 @@ sendFrame
 	function sendFrame( frame: WireFrame ): WireFrame {
 		send( frame );
 		pickup.sent( frame );
+		if ( frame.opcode === 0x72cd && frame.payload[0] === 1 ) moveReservation.clear();
 		return frame;
+	}
+	/*
+================
+cancelActionForMovement
+
+Cancel continuation before waiting on presentation. Otherwise a new basic
+attack can arrive in the same batch as the previous close and starve the walk.
+================
+	*/
+	function cancelActionForMovement() {
+		const cancel = actionSession.cancelForMovement();
+		if ( !cancel ) return;
+		sendFrame( cancel );
+		actionSession.sentCancellation();
 	}
 	const cosItemRefs = new Map<number, number>(), cosItemCaps = new Map<number, number>();
 	const cosRefs = new Map<number, number>(),
@@ -283,14 +300,6 @@ fails; retry persistence without restoring stale slot occupancy.
 	let localGid = 0, revision = 0, dirty = false, protocol = 0, localCountry: number | undefined;
 	/*
 ================
-clearState
-
-Retire all session facts together so a later character cannot inherit
-bindings, selected entities, cooldowns or world-entry state.
-================
-	*/
-	/*
-================
 localCastHolds
 
 The local player's own cast is live (not cancelled): the server's attack
@@ -300,16 +309,6 @@ lock (4AAB40) drops ground commands until it releases.
 	function localCastHolds(): boolean {
 		return combat.state().casts.some( c => c.caster === localGid && c.cancelledAtMs === undefined );
 	}
-	/*
-================
-selectEntity
-
-Request the select of an entity in reach (0x745A), from a click or at the
-end of an interaction approach. A coalesced click has no reply coming to
-rebuild the conversation, so its menu, dialogue and interaction lock stay
-until a new request.
-================
-	*/
 	/*
 ================
 withMemberCountries
@@ -352,6 +351,14 @@ and a refusal walks it back (movement.predictApproach).
 			now
 		);
 	}
+	/*
+================
+selectEntity
+
+Request selection in reach or after approach. A coalesced click has no reply
+coming, so retain its menu, dialogue and lock until a new request.
+================
+	*/
 	function selectEntity( entity: EntityState, now: number ) {
 		const frame = targeting.select( entity.gid, now, entity.kind, {
 			fortress: !!entity.teleport?.fortressId,
@@ -365,7 +372,16 @@ and a refusal walks it back (movement.predictApproach).
 		};
 		return frame;
 	}
+	/*
+================
+clearState
+
+Retire session facts together so a later character cannot inherit bindings,
+selected entities, cooldowns or world-entry state.
+================
+	*/
 	function clearState() {
+		actionSession.clear();
 		moveReservation.clear();
 		betaMap.clear();
 		partyMatching = emptyPartyMatching();
@@ -875,9 +891,9 @@ state here before a command can claim a native wire conversation.
 			) return null;
 			// 6932D7..69338D: a ground click cancels a running action and a
 			// logout countdown before the seated and navigation checks.
-			if ( command.kind === "ground-move" ) {
-				if ( pickup.busy() ) sendFrame( targetActionCancel() );
-				if ( command.departing ) sendFrame( logoutCancelRequest() );
+			if ( command.kind === "ground-move" || command.kind === "move" ) {
+				cancelActionForMovement();
+				if ( command.kind === "ground-move" && command.departing ) sendFrame( logoutCancelRequest() );
 			}
 			// 85C590 freeze leaves action state 9, which disables navigation.
 			// Sleep and stun do not. The mask is the same word 0x36C7 and 0x33A6 write.
@@ -1284,7 +1300,8 @@ state here before a command can claim a native wire conversation.
 				return inventory.use( command.slot, now );
 			}
 			if ( command.kind === "cancel" ) {
-				return sendFrame( { opcode: 0x72cd, payload: Uint8Array.of( 2 ) } );
+				moveReservation.clear();
+				return sendFrame( targetActionCancel() );
 			}
 			if ( command.kind === "release-target" ) {
 				const frame = targeting.release( now );
@@ -1410,10 +1427,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( pickup.receive( frame ) ) {
-					// A release before the walk's acknowledgement is a refusal: the
-					// server never moved, so the predicted run-up walks back.
-					if ( frame.payload[1] === 0 && movement.predicting() ) movement.endPrediction( now );
+				if ( actionSession.receive( frame ) ) {
+					pickup.receive( frame );
+					// B2CD releases the action queue, not a movement prediction. The
+					// movement acknowledgement owns acceptance/refusal of the walk.
 					// 75BAA0: kind 3 is the generic action notice; pickup's
 					// inventory refusals still arrive separately on B06D.
 					const notice = frame.payload[0] === 3 ? constantNativeNotice( 0x19, frame.payload[2]! ) : null;
@@ -2139,6 +2156,14 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			flushBindingRepairs();
+			if ( moveReservation.holding() && (!local || local.appearanceState?.[0] === 2) ) {
+				moveReservation.clear();
+				if ( selectionDecal?.kind === "ground" ) selectionDecal = null;
+				dirty = true;
+			}
+			if ( moveReservation.holding() && local && local.appearanceState?.[0] !== 2 ) {
+				cancelActionForMovement();
+			}
 			// A click held through the cast walks as soon as the cast releases;
 			// death forfeits it.
 			if ( moveReservation.holding() && !localCastHolds() ) {
@@ -2394,6 +2419,7 @@ World transfer retires spatial work while retaining character/session data.
 ================
 		*/
 		resetWorld() {
+			actionSession.clear();
 			pickup.clear();
 			moveReservation.clear();
 			quests.clearGathering();

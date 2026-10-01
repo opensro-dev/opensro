@@ -107,6 +107,7 @@ pickupKillReward
 */
 func pickupKillReward(t *testing.T, rt *Runtime, c *enterworld.Character, clock *fakeClock, drop grounditem.Item) enterworld.InventoryRow {
 	t.Helper()
+	finishTestCast(t, rt, clock, c)
 	rt.Ground.Restore(rt.Ground.Snapshot())
 	result := rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: drop.Gid}.Encode())
 	if result.Pending != nil {

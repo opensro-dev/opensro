@@ -93,6 +93,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		out = append(out, rt.advanceMonsterAbnormals(nowMs)...)
 		out = append(out, rt.advancePlayerAbnormals(nowMs)...)
 		out = append(out, rt.advanceCosAbnormals(nowMs)...)
+		out = append(out, rt.advanceQueuedActionSessions()...)
 		out = append(out, rt.advanceBasicAttackIntents(nowMs, openActionOwners)...)
 		out = append(out, rt.advanceNaturalRecovery(nowMs)...)
 		out = append(out, rt.advancePets(nowMs)...)
@@ -103,6 +104,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		rt.advanceCompoundJobs(nowMs)
 		out = append(out, rt.ReleaseExpiredOwnership(nowMs)...)
 		out = append(out, rt.SweepExpired(nowMs)...)
+		out = append(out, rt.retireActionSessions()...)
 		return coalesceDivisionFrames(out)
 	}
 }

@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+loot_process_test.go - shipped loot pickup, equipment and consumption tests
+
+Exercise the production action owner and its native packet lifecycle.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -12,6 +21,11 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
+/*
+================
+TestPublishedLootTabletsProduceAuthoredProduct
+================
+*/
 func TestPublishedLootTabletsProduceAuthoredProduct(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
@@ -66,6 +80,11 @@ func TestPublishedLootTabletsProduceAuthoredProduct(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPublishedLootAmmunitionPickupEquipAndFire
+================
+*/
 func TestPublishedLootAmmunitionPickupEquipAndFire(t *testing.T) {
 	licensed.RequireGameData(t)
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
@@ -98,6 +117,7 @@ func TestPublishedLootAmmunitionPickupEquipAndFire(t *testing.T) {
 				t.Fatalf("ammo equip failed: %+v", frames)
 			}
 			result := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+			result = assertAndSeparateActionSession(t, result)
 			if len(result.Frames) != 2 || result.Frames[1].Opcode != wire.OpAvatarInventorySlot7StackCount || !reflect.DeepEqual(result.Frames[1].Payload, []byte{1, 0}) {
 				t.Fatalf("shot did not spend one dropped ammo: %+v", result.Frames)
 			}

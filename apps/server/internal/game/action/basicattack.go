@@ -118,13 +118,14 @@ three share one slot so a superseding command cannot leave a second owner.
 ==================
 */
 type basicAttackIntent struct {
-	FollowTarget  bool   // persistent player pursuit, with no combat action
-	FollowSession uint64 // prevents a reconnected target inheriting old pursuit
-	SupportCast   bool   // a player-targeted heal, cure or resurrection waiting for reach
-	CaptureCast   bool   // a Monster Mask waiting to reach its corpse
-	SingleCast    bool   // executes the explicit sequence before any authored basic continuation
-	ResumeBasic   bool   // transition resolves the current weapon after the explicit action closes
-	ComboRootID   uint32 // nonzero only after a root stage commits; never supplied by the client
+	Deferred      *deferredObjectAction // immutable command admitted behind a committed cast
+	FollowTarget  bool                  // persistent player pursuit, with no combat action
+	FollowSession uint64                // prevents a reconnected target inheriting old pursuit
+	SupportCast   bool                  // a player-targeted heal, cure or resurrection waiting for reach
+	CaptureCast   bool                  // a Monster Mask waiting to reach its corpse
+	SingleCast    bool                  // executes the explicit sequence before any authored basic continuation
+	ResumeBasic   bool                  // transition resolves the current weapon after the explicit action closes
+	ComboRootID   uint32                // nonzero only after a root stage commits; never supplied by the client
 	DivisionID    string
 	CharacterName string
 	TargetGid     uint32
@@ -188,6 +189,19 @@ slot. Follow shares this lifetime so it cannot resume after a new command.
 ================
 */
 func (rt *Runtime) ClearCombatIntent(divisionID, characterName string) {
+	rt.finishCombatIntent(divisionID, characterName)
+	rt.discardQueuedAction(divisionID, characterName)
+}
+
+/*
+================
+finishCombatIntent
+
+Retire the executing front without discarding an independently queued next
+command. The action-session owner promotes it after the current cast closes.
+================
+*/
+func (rt *Runtime) finishCombatIntent(divisionID, characterName string) {
 	rt.basicAttackIntentsMu.Lock()
 	delete(rt.basicAttackIntents, simulation.WorldKey(divisionID, characterName))
 	rt.basicAttackIntentsMu.Unlock()
@@ -376,6 +390,10 @@ Dispatch the command owner before resolving any combat skill or cost.
 ================
 */
 func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64) OpResult {
+	if intent.Deferred != nil {
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
+		return rt.handleTargetInteractLocked(intent.DivisionID, character, intent.Deferred.payload)
+	}
 	if intent.FollowTarget {
 		return rt.advanceFollowIntent(character, intent, nowMs)
 	}
@@ -387,7 +405,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	}
 	snapshot := rt.characterSnapshot(intent.DivisionID, character)
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
-		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}
 	}
 	// Admission must precede pursuit and the movement-to-combat handoff. The
@@ -395,14 +413,14 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	// but reaching it only after approach would let a seated double-click move
 	// the character before the eventual cast refusal.
 	if rt.skillCastPostureBlocked(intent.DivisionID, snapshot, nowMs) {
-		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}
 	}
 	// CGObjChar_CheckTargetAttackable (5291D0), reached from
 	// CGObjPC_CanAttackTarget (52BF90, vtable +0x62C): an untouchable attacker
 	// (body mode 2) may not attack anything.
 	if snapshot.NativeBodyStatus == untouchableBodyStatus {
-		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return offensiveRefusal(0x3020)
 	}
 	var skill enterworld.SkillRow
@@ -416,7 +434,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		// its weapon/learned row now, never repeat or re-charge the old skill.
 		basic, _, why := rt.resolveBasicAttack(snapshot)
 		if why != "" {
-			rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+			rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 			return OpResult{DiagnosticRefusal: why}
 		}
 		intent.SingleCast, intent.ResumeBasic = false, false
@@ -431,7 +449,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		}
 		if refusal == "" && intent.ComboRootID == 0 {
 			if _, code := rt.offensiveCost(intent.DivisionID, snapshot, skill, nowMs); code != 0 {
-				rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+				rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 				return offensiveRefusal(code)
 			}
 		}
@@ -440,7 +458,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		skill, loadout, refusal = rt.resolveBasicAttack(snapshot)
 	}
 	if refusal != "" || skill.ID != intent.SkillID {
-		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		if refusal == "" {
 			refusal = "base-attack-changed"
 		}
@@ -451,12 +469,12 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	}
 	target, ok := rt.characterMonster(intent.DivisionID, snapshot, intent.TargetGid)
 	if !ok || target.CurrentHP == 0 {
-		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}
 	}
 	mover, ok := rt.Monsters.Mover(intent.DivisionID, target.Gid)
 	if !ok {
-		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}
 	}
 	targetPose := mover.LivePoseAt(nowMs, nil)
@@ -466,13 +484,13 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	actionReach := rt.playerActionReach(intent.DivisionID, snapshot, skill, loadout)
 	spacing, spacingOK := rt.playerToMonsterCombatSpacing(snapshot, target, actionReach)
 	if !spacingOK {
-		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{DiagnosticRefusal: "combat-spacing-unavailable"}
 	}
 	if !spacing.Contains(live, targetSpawn) {
 		if intent.ComboRootID != 0 {
 			// A broken combo does not pursue and resume an old attack later.
-			rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+			rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 			return OpResult{}
 		}
 		// Equipment is an authority input for every continuation tick. Keep the
@@ -498,7 +516,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		nowMs,
 	)
 	if !transitioned {
-		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}
 	}
 	intent.HasApproach = false
@@ -515,7 +533,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		// the target intent; the next simulation tick re-evaluates the live poses.
 		return prependOpResult(combatTransition, result)
 	case skillCastRefused:
-		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return prependOpResult(combatTransition, result)
 	}
 	intent.ActionReach = actionReach
@@ -538,7 +556,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 			intent.NextActionMs = nowMs + int64(lifetime) + intent.ChainLatencyUsedMs
 			rt.setCombatIntent(intent)
 		} else {
-			rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+			rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		}
 		return prependOpResult(combatTransition, result)
 	}

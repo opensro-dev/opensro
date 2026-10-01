@@ -21,140 +21,6 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-const testDivision = "global-official"
-
-// staticItemSource is a test enterworld.ItemRefSource.
-type staticItemSource map[string]*enterworld.ItemRef
-
-func (s staticItemSource) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) {
-	ref, ok := s[codename]
-	return ref, ok
-}
-
-func testItems() staticItemSource {
-	return staticItemSource{
-		"ITEM_ETC_GOLD_02": {
-			RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", TypeIDs: [4]int64{3, 3, 5, 2},
-		},
-		"ITEM_ETC_HP_POTION_01": {
-			RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01", TypeIDs: [4]int64{3, 3, 1, 1},
-			NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50, "canUse": 1}), RecoveryHP: 120,
-		},
-		"ITEM_CH_SWORD_01_A_RARE": {
-			RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE", TypeIDs: [4]int64{3, 1, 6, 2},
-			Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1},
-			Combat: &enterworld.ItemCombatRef{
-				PhysicalAttack: enterworld.ItemAttackRange{
-					Minimum: enterworld.ItemStatRange{Min: 15, Max: 16, PerPlus: 2.4},
-					Maximum: enterworld.ItemStatRange{Min: 16, Max: 18, PerPlus: 2.4},
-				},
-				MagicalAttack: enterworld.ItemAttackRange{
-					Minimum: enterworld.ItemStatRange{Min: 25, Max: 26, PerPlus: 4.1},
-					Maximum: enterworld.ItemStatRange{Min: 28, Max: 31, PerPlus: 4.1},
-				},
-				HitRate: enterworld.ItemStatRange{Min: 24, Max: 30},
-			},
-		},
-		"ITEM_CH_SWORD_02_A_RARE": {
-			RefObjID: 11460, Codename: "ITEM_CH_SWORD_02_A_RARE", TypeIDs: [4]int64{3, 1, 6, 2},
-			Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1},
-			Combat: &enterworld.ItemCombatRef{},
-		},
-	}
-}
-
-func testCharacter() *enterworld.Character {
-	gold := int64(5000)
-	level := int64(1)
-	base := int64(enterworld.BaseStat)
-	return &enterworld.Character{
-		ID:            3,
-		Name:          "asd2",
-		ModelCodename: "CHAR_CH_MAN_ADVENTURER",
-		Gold:          &gold,
-		Level:         &level,
-		MaxLevel:      &level,
-		Strength:      &base,
-		Intellect:     &base,
-		MissionInventory: []enterworld.InventoryRow{
-			{Slot: 20, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE",
-				TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), VarianceBits: "9223372036854775808",
-				Durability: 96, StackCount: 1},
-		},
-	}
-}
-
-func newTestRuntime(character *enterworld.Character, items enterworld.ItemRefSource) (*Runtime, *fakeClock) {
-	deps := &enterworld.Deps{
-		Characters: enterworld.StaticCharacterSource{testDivision: {character}},
-		Items:      items,
-		NpcSpawns:  enterworld.NpcSpawnConfig{Roster: simulation.DefaultNpcRoster()},
-	}
-	rt := NewRuntime(deps, nil)
-	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
-	rt.BerserkRoll = func() (uint32, error) { return 9999, nil }
-	rt.Now = clock.Now
-	return rt, clock
-}
-
-type fakeClock struct{ now time.Time }
-
-func (c *fakeClock) Now() time.Time                    { return c.now }
-func (c *fakeClock) Advance(d time.Duration)           { c.now = c.now.Add(d) }
-func (c *fakeClock) NowMs() int64                      { return c.now.UnixMilli() }
-func (c *fakeClock) At(offset time.Duration) time.Time { return c.now.Add(offset) }
-
-// installMidMove puts the character halfway through a 100u eastward run:
-// from X=960 toward X=1060 over 2s, sampled at +1s => live X ~1010.
-func installMidMove(rt *Runtime, character *enterworld.Character, clock *fakeClock) (goal simulation.Spawn) {
-	from := simulation.Spawn{RegionID: 0x62A8, X: 960, Y: 20, Z: 458, Angle: 300}
-	goal = simulation.Spawn{RegionID: 0x62A8, X: 1060, Y: 20, Z: 458, Angle: 300}
-	startedAtMs := clock.NowMs() - 1000
-
-	segment := simulation.MoveSegmentForTravel(from, goal, simulation.RunMode, startedAtMs)
-	key := simulation.WorldKey(testDivision, character.Name)
-	rt.Worlds.Update(key,
-		func() simulation.WorldState { return simulation.SeedWorldState(character) },
-		func(world *simulation.WorldState) {
-			world.Spawn = goal
-			world.MoveSegment = segment
-			world.MovementMode = simulation.RunMode
-			world.SpawnSet = true
-			world.MovementSourceSeeded = true
-		})
-	return goal
-}
-
-func opcodesOf(frames []wire.Frame) []uint16 {
-	out := make([]uint16, len(frames))
-	for index, frame := range frames {
-		out[index] = frame.Opcode
-	}
-	return out
-}
-
-func assertOpcodes(t *testing.T, frames []wire.Frame, want ...uint16) {
-	t.Helper()
-	got := opcodesOf(frames)
-	if len(got) != len(want) {
-		t.Fatalf("frames = %04X, want %04X", got, want)
-	}
-	for index := range want {
-		if got[index] != want[index] {
-			t.Fatalf("frames = %04X, want %04X", got, want)
-		}
-	}
-}
-
-func encodeMove(t *testing.T, request wire.ItemMoveRequest) []byte {
-	t.Helper()
-	payload, err := request.Encode()
-	if err != nil {
-		t.Fatalf("encode request: %v", err)
-	}
-	return payload
-}
-
 /*
 ==================
 TestHandlerGroundDropMidMoveLandsUnderfoot
@@ -205,6 +71,11 @@ func TestHandlerGroundDropMidMoveLandsUnderfoot(t *testing.T) {
 
 // The 0x0A twin at handler level: gold lands underfoot and the burst carries
 // the debited balance.
+/*
+================
+TestHandlerGoldDropMidMoveLandsUnderfoot
+================
+*/
 func TestHandlerGoldDropMidMoveLandsUnderfoot(t *testing.T) {
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
@@ -306,6 +177,11 @@ func TestPickupReachMeasuresFromLivePosition(t *testing.T) {
 	})
 }
 
+/*
+================
+TestPickupApproachCompletesOnServerTickWithoutClientReplay
+================
+*/
 func TestPickupApproachCompletesOnServerTickWithoutClientReplay(t *testing.T) {
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
@@ -438,6 +314,11 @@ func TestPickupApproachMaturesIntoGrant(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPickupRefusesCrossWorldTarget
+================
+*/
 func TestPickupRefusesCrossWorldTarget(t *testing.T) {
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
@@ -469,6 +350,11 @@ func TestPickupRefusesCrossWorldTarget(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPickupMaturityRechecksAuthoritativeDistance
+================
+*/
 func TestPickupMaturityRechecksAuthoritativeDistance(t *testing.T) {
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
@@ -509,6 +395,11 @@ func TestPickupMaturityRechecksAuthoritativeDistance(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPickupApproachCannotBypassMovementConstraint
+================
+*/
 func TestPickupApproachCannotBypassMovementConstraint(t *testing.T) {
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
@@ -538,6 +429,11 @@ func TestPickupApproachCannotBypassMovementConstraint(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPickupCancelReleasesTheLatch
+================
+*/
 func TestPickupCancelReleasesTheLatch(t *testing.T) {
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
@@ -552,8 +448,8 @@ func TestPickupCancelReleasesTheLatch(t *testing.T) {
 	rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: heap.Gid}.Encode())
 
 	cancel := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Cancel: true}.Encode())
-	assertOpcodes(t, cancel.Frames, wire.OpActionState)
-	if got := cancel.Frames[0].Payload; got[0] != 0x02 || got[1] != 0x00 {
+	assertOpcodes(t, cancel.Frames, wire.OpObjectSourceCorrection, wire.OpActionState)
+	if got := cancel.Frames[1].Payload; got[0] != 0x02 || got[1] != 0x00 {
 		t.Fatalf("cancel latch frame = % X, want the 02 00 release", got)
 	}
 	if _, armed := rt.Pending.Peek(simulation.WorldKey(testDivision, character.Name)); armed {
@@ -679,6 +575,11 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 	})
 }
 
+/*
+================
+TestFramesFromSocketVisualsUnit
+================
+*/
 func TestFramesFromSocketVisualsUnit(t *testing.T) {
 	word := wire.PackTypeFlags(3, 1, 6, 2)
 	frames := FramesFromSocketVisuals(100003, []inventory.SocketVisual{
@@ -699,6 +600,11 @@ func TestFramesFromSocketVisualsUnit(t *testing.T) {
 
 // Over-cap pickup: the heap keeps its gid with the remainder and the despawn
 // is withheld on both the burst and the broadcast.
+/*
+================
+TestPickupOverCapLeavesRemainderOnGround
+================
+*/
 func TestPickupOverCapLeavesRemainderOnGround(t *testing.T) {
 	character := testCharacter()
 	character.MissionInventory = nil
@@ -734,6 +640,11 @@ func TestPickupOverCapLeavesRemainderOnGround(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPickupFullBagRefuses
+================
+*/
 func TestPickupFullBagRefuses(t *testing.T) {
 	character := testCharacter()
 	character.MissionInventory = nil
@@ -763,6 +674,11 @@ func TestPickupFullBagRefuses(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPickupMissingItemAnswersCannotBePicked
+================
+*/
 func TestPickupMissingItemAnswersCannotBePicked(t *testing.T) {
 	character := testCharacter()
 	rt, _ := newTestRuntime(character, testItems())
@@ -778,6 +694,11 @@ func TestPickupMissingItemAnswersCannotBePicked(t *testing.T) {
 
 // The TTL sweep through the tick hook: expired drops despawn per division
 // with the same 0x36AB the pickup path uses.
+/*
+================
+TestSweepExpiredEmitsDespawnFrames
+================
+*/
 func TestSweepExpiredEmitsDespawnFrames(t *testing.T) {
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
@@ -890,6 +811,11 @@ func TestIdleSweepPeeksWithoutRuntimeMutex(t *testing.T) {
 }
 
 // Row bridging keeps identity: variance survives the string round trip.
+/*
+================
+TestInventoryRowRoundTrip
+================
+*/
 func TestInventoryRowRoundTrip(t *testing.T) {
 	rows := []enterworld.InventoryRow{
 		{Slot: 6, RefObjID: 107, Codename: "ITEM_CH_BLADE_01_A",
@@ -906,6 +832,11 @@ func TestInventoryRowRoundTrip(t *testing.T) {
 	}
 }
 
+/*
+================
+TestCommerceLayoutsDoNotBypassTransactionAuthority
+================
+*/
 func TestCommerceLayoutsDoNotBypassTransactionAuthority(t *testing.T) {
 	character := testCharacter()
 	rt, _ := newTestRuntime(character, testItems())

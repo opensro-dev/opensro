@@ -110,6 +110,7 @@ func TestBasicAttackFreshEngageReplacesAReleasedPursuit(t *testing.T) {
 	engage := wire.BasicAttackEngage{TargetGid: target.Gid}.Encode()
 
 	first := rt.HandleTargetInteract(testDivision, character, engage)
+	first = assertAndSeparateActionSession(t, first)
 	if len(first.Frames) != 1 || first.Frames[0].Opcode != simulation.OpMovementAck {
 		t.Fatalf("first engage = %04X, want one B738 pursuit", opcodesOf(first.Frames))
 	}
@@ -163,6 +164,7 @@ func TestBasicAttackTransitionCommitsFacingBeforeB245(t *testing.T) {
 
 	result := rt.HandleTargetInteract(testDivision, character,
 		wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	result = assertAndSeparateActionSession(t, result)
 	if len(result.Frames) != 2 || result.Frames[0].Opcode != wire.OpObjectSourceCorrection ||
 		result.Frames[1].Opcode != wire.OpSkillCastResult {
 		t.Fatalf("wrong-facing attack frames = %04X, want B2F5 before B245", opcodesOf(result.Frames))
@@ -218,6 +220,7 @@ func TestBasicAttackTransitionUsesRegionAwareTargetBearing(t *testing.T) {
 
 	result := rt.HandleTargetInteract(testDivision, character,
 		wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	result = assertAndSeparateActionSession(t, result)
 	if len(result.Frames) != 2 || result.Frames[0].Opcode != wire.OpObjectSourceCorrection ||
 		result.Frames[1].Opcode != wire.OpSkillCastResult {
 		t.Fatalf("cross-region player attack frames = %04X, want B2F5 before B245", opcodesOf(result.Frames))
@@ -247,6 +250,7 @@ func TestBasicAttackEngageApproachesBeforeStriking(t *testing.T) {
 
 	approach := rt.HandleTargetInteract(testDivision, character,
 		wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	approach = assertAndSeparateActionSession(t, approach)
 	if len(approach.Frames) != 1 || approach.Frames[0].Opcode != simulation.OpMovementAck {
 		t.Fatalf("out-of-range engage = %+v, want authoritative B738 approach", approach)
 	}
@@ -294,6 +298,7 @@ func TestBasicAttackPursuitKeepsOneLegAndResteersOnBoundedTargetDrift(t *testing
 
 	first := rt.HandleTargetInteract(testDivision, character,
 		wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	first = assertAndSeparateActionSession(t, first)
 	if len(first.Frames) != 1 || first.Frames[0].Opcode != simulation.OpMovementAck {
 		t.Fatalf("first pursuit = %+v, want one movement goal", first)
 	}
@@ -319,7 +324,7 @@ func TestBasicAttackPursuitKeepsOneLegAndResteersOnBoundedTargetDrift(t *testing
 		t.Fatalf("young pursuit emitted %+v, want no restarted goal", routed)
 	}
 
-	// At the floor, re-author from the target's new live pose—not its endpoint.
+	// At the floor, re-author from the target's new live poseâ€”not its endpoint.
 	routed := rt.TickHook()(clock.Now().Add(100 * time.Millisecond).UnixMilli())
 	if len(routed) != 1 || len(routed[0].Frames) != 1 || routed[0].Frames[0].Opcode != simulation.OpMovementAck {
 		t.Fatalf("bounded pursuit re-aim = %+v, want one movement goal", routed)
@@ -403,6 +408,7 @@ func TestBasicAttackPursuitDoesNotWaitAtFutureTargetDestination(t *testing.T) {
 
 	result := rt.HandleTargetInteract(testDivision, character,
 		wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	result = assertAndSeparateActionSession(t, result)
 	if len(result.Frames) != 1 || result.Frames[0].Opcode != simulation.OpMovementAck {
 		t.Fatalf("moving-target engage emitted %+v, want approach toward its live pose", result.Frames)
 	}
@@ -446,6 +452,7 @@ func TestBasicAttackBlockedApproachDefersWithoutDiscardingEngage(t *testing.T) {
 
 	blocked := rt.HandleTargetInteract(testDivision, character,
 		wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	blocked = assertAndSeparateActionSession(t, blocked)
 	if len(blocked.Frames) != 0 {
 		t.Fatalf("no-progress constrained approach = %04X, want no fabricated response", opcodesOf(blocked.Frames))
 	}
@@ -565,6 +572,7 @@ func TestSkillActionCastCommitsAuthoritativeDamageAndTimedBracket(t *testing.T) 
 	}.Encode()
 
 	result := rt.HandleTargetInteract(testDivision, character, payload)
+	result = assertAndSeparateActionSession(t, result)
 	if len(result.Frames) != 1 || len(result.Frames[0].Payload) < 21 || result.Frames[0].Payload[19] != 2 {
 		t.Fatalf("sword base result did not preserve its two retail impact stages: %+v", result.Frames)
 	}
@@ -593,9 +601,8 @@ func TestSkillActionCastCommitsAuthoritativeDamageAndTimedBracket(t *testing.T) 
 		t.Fatalf("post-hit retaliation mover = %+v/%v, want armed chase of attacker", mover, ok)
 	}
 	duplicate := rt.HandleTargetInteract(testDivision, character, payload)
-	if len(duplicate.Frames) != 0 || len(duplicate.Broadcast) != 0 {
-		t.Fatalf("second cast entered while the first bracket was open: %+v", duplicate)
-	}
+	assertQueuedAction(t, duplicate)
+	rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Cancel: true}.Encode())
 	stillCommitted, ok := rt.Monsters.Get(testDivision, target.Gid)
 	if !ok || stillCommitted.CurrentHP != committed.CurrentHP {
 		t.Fatalf("refused overlapping cast changed HP: %+v/%v", stillCommitted, ok)
@@ -799,6 +806,7 @@ func TestRangedBasicAttackConsumesRetailAmmunitionSocketAtomically(t *testing.T)
 	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
 	}.Encode())
+	result = assertAndSeparateActionSession(t, result)
 	if len(result.Frames) != 2 || result.Frames[1].Opcode != wire.OpAvatarInventorySlot7StackCount ||
 		!bytes.Equal(result.Frames[1].Payload, []byte{1, 0}) {
 		t.Fatalf("ranged actor frames = %+v, want B245 then private 3752 count=1", result.Frames)

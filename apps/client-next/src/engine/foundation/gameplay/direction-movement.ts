@@ -291,10 +291,9 @@ export function worldPointAction(
 ================
 targetActionCancel
 
-0x6932D7..0x69337B: while an action is still running (the last 0xB2CD type
-is 2 or more, CGInterface_CanCastSkill false) a ground click first sends
-0x72CD [u8 2]. CGInterface_SetTargetMoveActive( 1 ) beside it arms a 20 s
-approach timeout this client has no counterpart for.
+6932D7..69337B checks a nonzero command count, then 67D140 returns false
+only below two. Exactly one queued action therefore sends 72CD [u8 2].
+The action-session owner applies that condition before staging movement.
 ================
 */
 export function targetActionCancel(): WireFrame {

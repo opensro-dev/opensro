@@ -54,6 +54,7 @@ func TestBattleStateEnteredByStrike(t *testing.T) {
 	c.BattleUntilMs = 0
 	now := clock.NowMs()
 	first := rt.HandleTargetInteract(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	first = assertAndSeparateActionSession(t, first)
 	if _, damage, _ := assertSkillDamageOpen(t, first.Frames, 2, enterworld.ObjectIDForCharacter(c), target.Gid); damage == 0 {
 		t.Fatal("no strike")
 	}

@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+skilltimedeffect_test.go - timed skill preparation, installation and retirement tests
+
+Exercise the production action owner and its native packet lifecycle.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -9,6 +18,11 @@ import (
 	"time"
 )
 
+/*
+================
+TestPersistentDefenseProducerReconnectAndRetirement
+================
+*/
 func TestPersistentDefenseProducerReconnectAndRetirement(t *testing.T) {
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
 	skill := shippedOffense(t, "SKILL_CH_COLD_GANGGI_A_01")
@@ -64,6 +78,11 @@ func TestPersistentDefenseProducerReconnectAndRetirement(t *testing.T) {
 	}
 }
 
+/*
+================
+TestTimedDefenseCompletePrepareReleaseRetirement
+================
+*/
 func TestTimedDefenseCompletePrepareReleaseRetirement(t *testing.T) {
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
 	skill := shippedOffense(t, "SKILL_CH_COLD_GANGGI_A_01")
@@ -79,6 +98,7 @@ func TestTimedDefenseCompletePrepareReleaseRetirement(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
+	start = assertAndSeparateActionSession(t, start)
 	assertOpcodes(t, start.Frames, wire.OpSkillCastResult)
 	castToken := binary.LittleEndian.Uint32(start.Frames[0].Payload[10:])
 	if len(rt.effects.Snapshot(testDivision, c.Name)) != 0 || *c.CurrentMP != mpBefore {
@@ -125,6 +145,11 @@ func TestTimedDefenseCompletePrepareReleaseRetirement(t *testing.T) {
 	}
 }
 
+/*
+================
+TestTimedDefensePreparationInvalidation
+================
+*/
 func TestTimedDefensePreparationInvalidation(t *testing.T) {
 	for _, reason := range []string{"death", "cost", "unlearned", "cancel", "disconnect", "weapon"} {
 		t.Run(reason, func(t *testing.T) {
@@ -135,6 +160,7 @@ func TestTimedDefensePreparationInvalidation(t *testing.T) {
 			c.Skills = append(c.Skills, skill.ID)
 			c.CurrentMP = testInt64(1000)
 			start := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
+			start = assertAndSeparateActionSession(t, start)
 			assertOpcodes(t, start.Frames, wire.OpSkillCastResult)
 			switch reason {
 			case "death":

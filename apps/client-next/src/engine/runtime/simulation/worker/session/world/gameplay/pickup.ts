@@ -10,9 +10,8 @@ This is an intentional reliability improvement over native burst throttling.
 There is no guessed delay: release, replacement, despawn and world reset own
 the lifetime. Server ownership and range checks remain authoritative.
 
-The same reply carries the action type CPSMission_OnActionResponse0xB2CD
-stores through CGInterface_SetActiveActionType (+0x618); a ground click
-cancels an action of type 2 or more first (busy).
+The generic command count belongs to action-session.ts. Pickup only uses
+its terminal release to retire the outstanding ground-target request.
 
 ===========================================================================
 */
@@ -22,9 +21,6 @@ const OP_TARGET_ACTION = 0x72cd;
 const OP_ACTION_STATE = 0xb2cd;
 const ACTION_PICKUP = 2;
 const ACTION_NOTICE = 3;
-// CGInterface_CanCastSkill (0x67D140): action types below 2 leave the
-// interface free.
-const ACTION_BUSY_TYPE = 2;
 
 /*
 ================
@@ -32,7 +28,7 @@ createPickup
 ================
 */
 export function createPickup() {
-	let target = 0, actionType = 0;
+	let target = 0;
 	return {
 		/*
 ================
@@ -75,19 +71,8 @@ receive
 			if ( payload.length !== (payload[0] === ACTION_NOTICE ? 3 : 2) ) {
 				throw new Error( "Invalid object action state" );
 			}
-			actionType = payload[1]!;
 			if ( payload[1] === 0 ) target = 0;
 			return true;
-		},
-		/*
-================
-busy
-
-Whether the last 0xB2CD left an action running (type 2 or more).
-================
-		*/
-		busy() {
-			return actionType >= ACTION_BUSY_TYPE;
 		},
 		/*
 ================
@@ -104,7 +89,6 @@ clear
 		*/
 		clear() {
 			target = 0;
-			actionType = 0;
 		}
 	};
 }

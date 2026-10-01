@@ -38,6 +38,7 @@ func TestSelfRecoveryCommitsHealingCostAndCompleteBracket(t *testing.T) {
 	request := wire.SkillAction{ActionId: skill.ID}.Encode()
 
 	result := rt.HandleTargetInteract(testDivision, c, request)
+	result = assertAndSeparateActionSession(t, result)
 	assertOpcodes(t, result.Frames, wire.OpSkillCastResult)
 	if *c.CurrentHP != 1 || *c.CurrentMP != int64(skill.Consumption.MP) {
 		t.Fatal("cast start applied healing or cost")
@@ -80,7 +81,9 @@ func TestSelfRecoveryCommitsHealingCostAndCompleteBracket(t *testing.T) {
 	}
 
 	token := binary.LittleEndian.Uint32(result.Frames[0].Payload[10:])
-	if len(rt.HandleTargetInteract(testDivision, c, request).Frames) != 0 || *c.CurrentHP != 90 {
+	assertQueuedAction(t, rt.HandleTargetInteract(testDivision, c, request))
+	rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Cancel: true}.Encode())
+	if *c.CurrentHP != 90 {
 		t.Fatal("busy cast recovered twice")
 	}
 
@@ -96,6 +99,7 @@ func TestSelfRecoveryCommitsHealingCostAndCompleteBracket(t *testing.T) {
 	c.CurrentHP = testInt64(enterworld.DerivedMaxHP(c) - 1)
 
 	result = rt.HandleTargetInteract(testDivision, c, request)
+	result = assertAndSeparateActionSession(t, result)
 	if len(result.Frames) != 1 {
 		t.Fatal("second preparation", result)
 	}
@@ -175,6 +179,7 @@ func TestRecoveryReleaseDoorRefusalCannotPublishHealingOrSpend(t *testing.T) {
 		c,
 		wire.SkillAction{ActionId: skill.ID}.Encode(),
 	)
+	result = assertAndSeparateActionSession(t, result)
 	if len(result.Frames) != 1 {
 		t.Fatal("prepare failed", result)
 	}
@@ -217,6 +222,7 @@ func TestSelfRecoveryPreparationCanBeInvalidated(t *testing.T) {
 				c,
 				wire.SkillAction{ActionId: skill.ID}.Encode(),
 			)
+			start = assertAndSeparateActionSession(t, start)
 			if len(start.Frames) != 1 {
 				t.Fatal("start", start)
 			}
@@ -284,6 +290,7 @@ func TestZeroCastingRecoveryRemainsImmediate(t *testing.T) {
 		c,
 		wire.SkillAction{ActionId: skill.ID}.Encode(),
 	)
+	result = assertAndSeparateActionSession(t, result)
 	assertOpcodes(t, result.Frames, wire.OpSkillCastResult, simulation.OpVitalsUpdate)
 	if *c.CurrentHP != 90 || *c.CurrentMP != 0 || len(rt.pendingProjectileCasts) != 0 {
 		t.Fatal("zero cast acquired a preparation wait")
@@ -417,6 +424,11 @@ type supportPair struct {
 	c, m  *enterworld.Character
 }
 
+/*
+================
+newSupportPair
+================
+*/
 func newSupportPair(t *testing.T, skills ...enterworld.SkillRow) supportPair {
 	t.Helper()
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
@@ -456,6 +468,11 @@ func newSupportPair(t *testing.T, skills ...enterworld.SkillRow) supportPair {
 }
 
 // placeMate stands the mate dx along X from the caster.
+/*
+================
+placeMate
+================
+*/
 func (p supportPair) placeMate(dx float64) {
 	origin := p.rt.liveSpawn(simulation.WorldKey(testDivision, p.c.Name), p.c, p.clock.NowMs())
 	p.rt.Worlds.Update(
@@ -468,6 +485,11 @@ func (p supportPair) placeMate(dx float64) {
 	)
 }
 
+/*
+================
+cast
+================
+*/
 func (p supportPair) cast(skillID uint32) OpResult {
 	return p.rt.HandleTargetInteract(testDivision, p.c, wire.SkillAction{
 		ActionId:  skillID,
@@ -477,6 +499,11 @@ func (p supportPair) cast(skillID uint32) OpResult {
 }
 
 // finishCast releases a cast with a casting time.
+/*
+================
+finishCast
+================
+*/
 func (p supportPair) finishCast(skill enterworld.SkillRow) {
 	if skill.ActionCastingTimeMs > 0 {
 		p.rt.advanceProjectileCasts(p.clock.NowMs() + int64(skill.ActionCastingTimeMs) + 1)
@@ -534,6 +561,11 @@ func TestShippedTargetHealWalksIntoReach(t *testing.T) {
 }
 
 // A new command supersedes the walk: the heal never lands.
+/*
+================
+TestSupportIntentSupersededByCommand
+================
+*/
 func TestSupportIntentSupersededByCommand(t *testing.T) {
 	heal := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_TARGET_A_01")
 	p := newSupportPair(t, heal)

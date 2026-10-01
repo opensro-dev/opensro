@@ -35,6 +35,7 @@ func TestHigherLevelFatalDropReferencePickupAndRestore(t *testing.T) {
 	rt.deps.ItemReferences().(staticItemSource)[ref.Codename] = ref
 	rt.DropRoll = constantDropRoll(0)
 	r := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+	r = assertAndSeparateActionSession(t, r)
 	assertOpcodes(t, r.Frames, wire.OpSkillCastResult, wire.OpObjectStateRefresh, opCommerceItemReferences, wire.OpSingleObjectSpawn)
 	assertOpcodes(t, r.Broadcast, wire.OpSkillCastResult, wire.OpObjectStateRefresh, opCommerceItemReferences, wire.OpSingleObjectSpawn)
 	if !reflect.DeepEqual(r.Frames[2], r.Broadcast[2]) {
@@ -75,6 +76,7 @@ func TestHigherLevelFatalDropReferencePickupAndRestore(t *testing.T) {
 	if rows := enterworld.GroundObjectListRows(rt.Ground.All(testDivision)); len(rows) != 1 {
 		t.Fatal("rejoining viewer has no spawn")
 	}
+	finishTestCast(t, rt, clock, c)
 	pick := rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: row.Gid}.Encode())
 	// Scattered loot can require an approach; advance the real pending movement.
 	if pick.Pending == nil {

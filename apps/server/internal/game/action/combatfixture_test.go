@@ -27,6 +27,7 @@ assertSkillCastClose
 */
 func assertSkillCastClose(t *testing.T, routed []simulation.DivisionFrames, divisionID string, token uint32) {
 	t.Helper()
+	routed = assertAndSeparateActionReleases(t, routed)
 	if len(routed) != 1 {
 		t.Fatalf("due tick routed %d division bursts, want 1", len(routed))
 	}
@@ -59,6 +60,11 @@ func assertSkillCastClose(t *testing.T, routed []simulation.DivisionFrames, divi
 	}
 }
 
+/*
+================
+staticSkillSource
+================
+*/
 type staticSkillSource map[uint32]enterworld.SkillRow
 
 // The synthetic sword row below mirrors SKILL_CH_SWORD_BASE_01 col 13.

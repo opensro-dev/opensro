@@ -1,22 +1,23 @@
+/*
+===========================================================================
+
+actionstate.go - the native object-command queue response
+
+75BAA0 reads kind, queued count and the kind-three error byte. 6932D7 and
+67D140 cancel on a ground click only when that count is exactly one. Combat,
+Trace and pickup share this contract; it is not a pickup-specific latch.
+
+===========================================================================
+*/
 package wire
 
-// OpActionState is the 0xB2CD action-state latch write (handler sub_75baa0).
-//
-// The server owns the client's generic object-action session latch. Pickup is
-// one user: it arms an out-of-range approach and releases every terminal
-// outcome. Cancel-active-effect is another: it closes the short action
-// session independently of the later effect-retirement packet. A missed
-// release wedges client action ownership.
 const OpActionState uint16 = 0xB2CD
 
 // Action-state kinds shared by the native object-action session.
 const (
-	// ActionStateKindArm arms the approach latch (State 1 = pending,
-	// cancellable: the client may still click away, which fires the bare
-	// 0x72CD [2] cancel once +0x618 == 1).
+	// Arm reports the count after accepting an executing or queued command.
 	ActionStateKindArm uint8 = 0x01
-	// ActionStateKindRelease is the plain terminal release (State 0) that
-	// leads every grant and refusal burst.
+	// Release reports the remaining count, which need not be zero.
 	ActionStateKindRelease uint8 = 0x02
 	// ActionStateKindNotice is the refusal-notice form; it is the only kind
 	// that carries the trailing error byte. Pickup errors do NOT use it -
@@ -25,16 +26,25 @@ const (
 	ActionStateKindNotice uint8 = 0x03
 )
 
-// ActionState is one 0xB2CD payload: [u8 kind][u8 actionState], plus
-// [u8 errorCode] only when Kind is ActionStateKindNotice.
+/*
+================
+ActionState
+
+State is the command count, not the kind or a boolean. The v1.150 notice
+reader consumes one error byte; v1.188's two-byte error is a different wire.
+================
+*/
 type ActionState struct {
 	Kind      uint8
 	State     uint8
 	ErrorCode uint8
 }
 
-// Encode returns the 0xB2CD payload. The error byte is only present on the
-// kind-3 notice form, mirroring buildMissionActionStatePacket.
+/*
+================
+Encode
+================
+*/
 func (a ActionState) Encode() []byte {
 	w := NewWriter(3).U8(a.Kind).U8(a.State)
 	if a.Kind == ActionStateKindNotice {
@@ -43,7 +53,11 @@ func (a ActionState) Encode() []byte {
 	return w.Payload()
 }
 
-// DecodeActionState parses a 0xB2CD payload.
+/*
+================
+DecodeActionState
+================
+*/
 func DecodeActionState(payload []byte) (ActionState, error) {
 	var out ActionState
 	r := NewReader(payload)
@@ -67,19 +81,35 @@ func DecodeActionState(payload []byte) (ActionState, error) {
 	return out, r.Done()
 }
 
-// ReleaseActionState returns the terminal release used by completed generic
-// object actions (including pickup outcomes and cancel-active-effect).
+/*
+================
+ReleaseActionState
+
+Use zero for a terminal release. Owners retaining a command set its count.
+================
+*/
 func ReleaseActionState() ActionState {
 	return ActionState{Kind: ActionStateKindRelease, State: 0}
 }
 
-// NoticeActionState is the kind-3 refusal: state is the actor's queued
-// command count, code the notice the client shows under category 0x19.
+/*
+================
+NoticeActionState
+
+The client shows code under category 0x19 and retains the reported count.
+================
+*/
 func NoticeActionState(state, code uint8) ActionState {
 	return ActionState{Kind: ActionStateKindNotice, State: state, ErrorCode: code}
 }
 
-// ArmActionState returns the approach arm an out-of-range pickup answers with.
+/*
+================
+ArmActionState
+
+The common single-command admission; a queued replacement reports two.
+================
+*/
 func ArmActionState() ActionState {
 	return ActionState{Kind: ActionStateKindArm, State: 1}
 }

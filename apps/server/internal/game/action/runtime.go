@@ -291,6 +291,9 @@ type Runtime struct {
 	// the simulation tick.
 	basicAttackIntentsMu sync.Mutex
 	basicAttackIntents   map[string]basicAttackIntent
+	// actionSessions owns the pending back command and private B2CD count.
+	// Existing continuation and cast owners execute and commit gameplay.
+	actionSessions sync.Map
 
 	// resurrections holds the unanswered resurrection proposals, one per
 	// dead player (resurrection.go).

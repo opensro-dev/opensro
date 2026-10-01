@@ -33,14 +33,35 @@ func (rt *Runtime) HandleTargetInteract(
 	character *enterworld.Character,
 	payload []byte,
 ) OpResult {
+	unlock := rt.lockDivision(divisionID)
+	defer unlock()
+	if queued, accepted := rt.queueObjectAction(divisionID, character, payload); accepted {
+		return queued
+	}
+	previous := rt.captureActionSession(divisionID, character)
+	result := rt.handleTargetInteractLocked(divisionID, character, payload)
+	switch wire.ClassifyTargetActionLane(payload) {
+	case wire.TargetActionBasicAttack, wire.TargetActionFollow, wire.TargetActionSkill:
+		return rt.publishActionSession(divisionID, character, result, previous)
+	}
+	return result
+}
+
+/*
+================
+handleTargetInteractLocked
+
+Keep admission, continuation replacement and the private action-state reply
+inside the same division transaction.
+================
+*/
+func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *enterworld.Character, payload []byte) OpResult {
 	switch wire.ClassifyTargetActionLane(payload) {
 	case wire.TargetActionFollow:
 		request, err := wire.DecodeFollowTarget(payload)
 		if err != nil {
 			return OpResult{DiagnosticRefusal: "follow-malformed"}
 		}
-		unlock := rt.lockDivision(divisionID)
-		defer unlock()
 		return rt.beginFollow(divisionID, character, request, rt.Now().UnixMilli())
 
 	case wire.TargetActionBasicAttack:
@@ -50,9 +71,6 @@ func (rt *Runtime) HandleTargetInteract(
 		if err != nil {
 			return OpResult{DiagnosticRefusal: "basic-attack-malformed"}
 		}
-
-		unlock := rt.lockDivision(divisionID)
-		defer unlock()
 
 		snapshot := rt.characterSnapshot(divisionID, character)
 		if snapshot == nil || snapshot.DeletePending || snapshot.NativeTeleportMode == 1 {
@@ -69,16 +87,13 @@ func (rt *Runtime) HandleTargetInteract(
 		return rt.beginBasicAttack(divisionID, character, engage, nowMs)
 
 	case wire.TargetActionSkill:
-		// sub_6fcd50 flags 00/01 and sub_878100 flag 02 share this
+		// 6FCD50 flags 00/01 and 878100 flag 02 share this
 		// discriminator. Malformed 0x04-family bytes remain skill-owned and
 		// fail closed without emitting pickup frames.
 		cast, err := wire.DecodeSkillAction(payload)
 		if err != nil {
 			return OpResult{}
 		}
-
-		unlock := rt.lockDivision(divisionID)
-		defer unlock()
 
 		snapshot := rt.characterSnapshot(divisionID, character)
 		if snapshot == nil || snapshot.DeletePending || snapshot.NativeTeleportMode == 1 {
@@ -187,7 +202,7 @@ func (rt *Runtime) HandleTargetInteract(
 		return rt.acceptSkillCast(divisionID, character, snapshot, cast)
 
 	case wire.TargetActionFortressStructure:
-		// sub_692cb0's CICATStruct [02][01][01][gid] form is retail-valid,
+		// 692CB0's CICATStruct [02][01][01][gid] form is retail-valid,
 		// but this gateway does not yet own spawned siege-structure HP/action
 		// state. Keep it isolated and silent rather than aliasing bare cancel
 		// or pickup. Decode here so the exact wire remains exercised.
@@ -207,9 +222,6 @@ func (rt *Runtime) HandleTargetInteract(
 			return OpResult{}
 		}
 
-		unlock := rt.lockDivision(divisionID)
-		defer unlock()
-
 		snapshot := rt.characterSnapshot(divisionID, character)
 		if snapshot == nil || snapshot.DeletePending {
 			return OpResult{}
@@ -224,14 +236,16 @@ func (rt *Runtime) HandleTargetInteract(
 			}
 		}
 
-		// The action-session response closes independently of whether a live
-		// matching row was found; actual effect teardown is the next tick's
-		// character-effect update, which emits 0xB6A0.
+		// This command completes independently of the retained combat queue.
+		// 4AD270 reports that queue's actual count; effect teardown later emits
+		// B6A0. Zero here would make an unrelated buff cancel hide auto-attack.
+		state := wire.ReleaseActionState()
+		state.State = rt.actionQueueCount(divisionID, snapshot.Name)
 		return OpResult{
 			Frames: []wire.Frame{
 				{
 					Opcode:  wire.OpActionState,
-					Payload: wire.ReleaseActionState().Encode(),
+					Payload: state.Encode(),
 				},
 			},
 		}
@@ -253,9 +267,6 @@ func (rt *Runtime) HandleTargetInteract(
 		return pickupRefusal(wire.ErrCodeInvalidRequest)
 	}
 
-	unlock := rt.lockDivision(divisionID)
-	defer unlock()
-
 	snapshot := rt.characterSnapshot(divisionID, character)
 	if snapshot == nil || snapshot.DeletePending || snapshot.NativeTeleportMode == 1 {
 		return pickupRefusal(wire.ErrCodeInvalidRequest)
@@ -264,21 +275,8 @@ func (rt *Runtime) HandleTargetInteract(
 	pendingKey := grounditem.PendingKey(divisionID, character.Name)
 
 	if request.Cancel {
-		// A superseding outcome: release the latch (the client can never
-		// self-clear +0x618) and forget the approach.
 		rt.Pending.Clear(pendingKey)
-		stopped := rt.stopFollowMovement(divisionID, character, snapshot)
-		rt.ClearCombatIntent(divisionID, character.Name)
-		closed := rt.cancelPreparingProjectile(divisionID, character.Name)
-		return prependOpResult(stopped, OpResult{
-			Broadcast: closed,
-			Frames: append(closed, []wire.Frame{
-				{
-					Opcode:  wire.OpActionState,
-					Payload: wire.ReleaseActionState().Encode(),
-				},
-			}...),
-		})
+		return rt.cancelObjectAction(divisionID, character, snapshot)
 	}
 
 	groundItem, ok := rt.characterGround(divisionID, snapshot, request.Gid)
@@ -331,6 +329,9 @@ func (rt *Runtime) HandleTargetInteract(
 	// movement owner; the next action tick must not steer back to a player.
 	stopped := rt.stopFollowMovement(divisionID, character, snapshot)
 	rt.ClearCombatIntent(divisionID, character.Name)
+	// Pickup already owns its arm/release replies. Transfer publication as
+	// well as pursuit so combat retirement cannot release an active pickup.
+	rt.actionSessions.Delete(worldKey)
 
 	worldSnapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
 		return simulation.SeedWorldState(snapshot)

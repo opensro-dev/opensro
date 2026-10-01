@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+questdrops_test.go - quest drop reference publication and pickup tests
+
+Exercise the production action owner and its native packet lifecycle.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -9,6 +18,11 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
+/*
+================
+TestFatalQuestDropPublishesReferenceBeforeSpawnAndSurvivesPickup
+================
+*/
 func TestFatalQuestDropPublishesReferenceBeforeSpawnAndSurvivesPickup(t *testing.T) {
 	rt, clock, c, target := newCombatTestRuntime(t, 1)
 	ref := &enterworld.ItemRef{RefObjID: 2201, Codename: "ITEM_QNO_CH_CHEF_1", TypeIDs: [4]int64{3, 3, 8, 0}, NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1})}
@@ -24,11 +38,13 @@ func TestFatalQuestDropPublishesReferenceBeforeSpawnAndSurvivesPickup(t *testing
 		return []inventory.ItemAmount{{Codename: ref.Codename, Count: 1}}
 	}
 	r := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+	r = assertAndSeparateActionSession(t, r)
 	assertOpcodes(t, r.Frames, wire.OpSkillCastResult, wire.OpObjectStateRefresh, opCommerceItemReferences, wire.OpSingleObjectSpawn)
 	drops := rt.Ground.All(testDivision)
 	if called != 1 || len(drops) != 1 || drops[0].Codename != ref.Codename || drops[0].OwnerJID != enterworld.ObjectIDForCharacter(c) {
 		t.Fatalf("quest drops: %+v calls=%d", drops, called)
 	}
+	finishTestCast(t, rt, clock, c)
 	pick := rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: drops[0].Gid}.Encode())
 	// Scattered loot can require an approach; advance the real pending movement.
 	if pick.Pending == nil {
@@ -52,6 +68,11 @@ func TestFatalQuestDropPublishesReferenceBeforeSpawnAndSurvivesPickup(t *testing
 	}
 }
 
+/*
+================
+TestLivingMonsterDoesNotRollQuestLoot
+================
+*/
 func TestLivingMonsterDoesNotRollQuestLoot(t *testing.T) {
 	rt, _, c, target := newCombatTestRuntime(t, 1000000)
 	rt.QuestMonsterDrops = func(*enterworld.Character, string, func() (uint32, error)) []inventory.ItemAmount {

@@ -69,6 +69,7 @@ func TestEuropeanCrossbowFatalCommitsAmmoAndOwnedLootTogether(t *testing.T) {
 	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
 	}.Encode())
+	result = assertAndSeparateActionSession(t, result)
 	assertOpcodes(t, result.Frames, wire.OpSkillCastResult, wire.OpObjectStateRefresh, wire.OpSingleObjectSpawn, wire.OpAvatarInventorySlot7StackCount)
 	if !bytes.Equal(result.Frames[3].Payload, []byte{1, 0}) {
 		t.Fatalf("EU fatal ammo = %v, want 1", result.Frames[3].Payload)
@@ -159,6 +160,7 @@ func TestFatalHitCommitsOwnedGoldAtMonsterLivePoseAndPublishesOnce(t *testing.T)
 	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
 	}.Encode())
+	result = assertAndSeparateActionSession(t, result)
 	assertSkillDamageOpen(t, result.Frames, 2, enterworld.ObjectIDForCharacter(character), target.Gid)
 	if len(result.Frames) != 3 || result.Frames[1].Opcode != wire.OpObjectStateRefresh || result.Frames[2].Opcode != wire.OpSingleObjectSpawn ||
 		len(result.Broadcast) != 3 || result.Broadcast[1].Opcode != wire.OpObjectStateRefresh || result.Broadcast[2].Opcode != wire.OpSingleObjectSpawn {
@@ -183,7 +185,8 @@ func TestFatalHitCommitsOwnedGoldAtMonsterLivePoseAndPublishesOnce(t *testing.T)
 	again := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
 	}.Encode())
-	if len(again.Frames) != 0 || rt.Ground.Count(testDivision) != 1 {
+	assertQueuedAction(t, again)
+	if rt.Ground.Count(testDivision) != 1 {
 		t.Fatalf("post-fatal replay = %+v ground=%d, want no duplicate", again, rt.Ground.Count(testDivision))
 	}
 }
@@ -203,6 +206,7 @@ func TestFatalHitCommitsAndPublishesEveryPreparedDropInNativeOrder(t *testing.T)
 	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
 	}.Encode())
+	result = assertAndSeparateActionSession(t, result)
 	if len(result.Frames) != 4 || len(result.Broadcast) != 4 ||
 		result.Frames[0].Opcode != wire.OpSkillCastResult ||
 		result.Frames[1].Opcode != wire.OpObjectStateRefresh ||

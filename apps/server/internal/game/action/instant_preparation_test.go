@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+instant_preparation_test.go - prepared instant casts and resource admission tests
+
+Exercise the production action owner and its native packet lifecycle.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -10,6 +19,11 @@ import (
 
 // 586C92 validates before 586CE3 reads the clock. These tests distinguish
 // cancellation during preparation from a release-only resource check.
+/*
+================
+TestPreparingCastResourceShortageCancelsBeforeTimer
+================
+*/
 func TestPreparingCastResourceShortageCancelsBeforeTimer(t *testing.T) {
 	for _, kind := range []string{"self-recovery", "projectile"} {
 		for _, checkAt := range []string{"before-boundary", "at-boundary", "after-boundary"} {
@@ -24,6 +38,7 @@ func TestPreparingCastResourceShortageCancelsBeforeTimer(t *testing.T) {
 					cast = wire.SkillAction{ActionId: skill.ID}
 				}
 				start := rt.HandleTargetInteract(testDivision, c, cast.Encode())
+				start = assertAndSeparateActionSession(t, start)
 				if len(start.Frames) != 1 || len(rt.pendingProjectileCasts) != 1 {
 					t.Fatal("preparation failed", start)
 				}
@@ -62,6 +77,11 @@ func TestPreparingCastResourceShortageCancelsBeforeTimer(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPreparingInstantExactManaStillWaitsAtEquality
+================
+*/
 func TestPreparingInstantExactManaStillWaitsAtEquality(t *testing.T) {
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
 	skill := shippedOffense(t, "SKILL_CH_WATER_SELFHEAL_A_01")
@@ -70,6 +90,7 @@ func TestPreparingInstantExactManaStillWaitsAtEquality(t *testing.T) {
 	c.CurrentHP = testInt64(1)
 	c.CurrentMP = testInt64(int64(skill.Consumption.MP))
 	start := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
+	start = assertAndSeparateActionSession(t, start)
 	if len(start.Frames) != 1 {
 		t.Fatal("preparation failed", start)
 	}

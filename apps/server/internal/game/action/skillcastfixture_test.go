@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+skillcastfixture_test.go - shared native cast packet capture generation and validation
+
+Exercise the production action owner and its native packet lifecycle.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -27,12 +36,22 @@ import (
 // Regenerate:
 //
 //	UPDATE_SKILL_CAST_FIXTURE=1 go test ./internal/game/action -run TestSkillCastAcceptFixturePinned
+/*
+================
+skillCastFixture
+================
+*/
 type skillCastFixture struct {
 	Comment   []string                   `json:"comment"`
 	Expect    skillCastFixtureExpect     `json:"expect"`
 	Scenarios []skillCastFixtureScenario `json:"scenarios"`
 }
 
+/*
+================
+skillCastFixtureExpect
+================
+*/
 type skillCastFixtureExpect struct {
 	CasterGid        uint32 `json:"casterGid"`
 	BtResult         uint8  `json:"btResult"`
@@ -50,6 +69,11 @@ type skillCastFixtureExpect struct {
 	FinalizeAfterMs  int64  `json:"finalizeAfterMs"`
 }
 
+/*
+================
+skillCastFixtureScenario
+================
+*/
 type skillCastFixtureScenario struct {
 	Name              string                   `json:"name"`
 	SkillID           uint32                   `json:"skillId"`
@@ -60,11 +84,21 @@ type skillCastFixtureScenario struct {
 	FinalizeBroadcast []skillCastFixturePacket `json:"finalizeBroadcast"`
 }
 
+/*
+================
+skillCastFixturePacket
+================
+*/
 type skillCastFixturePacket struct {
 	Opcode     uint16 `json:"opcode"`
 	PayloadHex string `json:"payloadHex"`
 }
 
+/*
+================
+skillCastPacketsOf
+================
+*/
 func skillCastPacketsOf(frames []wire.Frame) []skillCastFixturePacket {
 	out := make([]skillCastFixturePacket, 0, len(frames))
 	for _, frame := range frames {
@@ -76,6 +110,11 @@ func skillCastPacketsOf(frames []wire.Frame) []skillCastFixturePacket {
 	return out
 }
 
+/*
+================
+skillCastMissionPacketsOf
+================
+*/
 func skillCastMissionPacketsOf(frames []simulation.Frame) []skillCastFixturePacket {
 	out := make([]skillCastFixturePacket, 0, len(frames))
 	for _, frame := range frames {
@@ -90,6 +129,11 @@ func skillCastMissionPacketsOf(frames []simulation.Frame) []skillCastFixturePack
 // buildSkillCastFixture drives the REAL authoritative base-attack path. The
 // former visual-only no-target/ground scenarios are deliberately absent:
 // unsupported casts now fail closed before B245.
+/*
+================
+buildSkillCastFixture
+================
+*/
 func buildSkillCastFixture(t *testing.T) skillCastFixture {
 	t.Helper()
 	rt, clock, character, target := newCombatTestRuntime(t, 100)
@@ -100,6 +144,7 @@ func buildSkillCastFixture(t *testing.T) skillCastFixture {
 		TargetGid: target.Gid,
 	}.Encode()
 	result := rt.HandleTargetInteract(testDivision, character, request)
+	result = assertAndSeparateActionSession(t, result)
 	token, damage, fatal := assertSkillDamageOpen(
 		t,
 		result.Frames,
@@ -109,6 +154,7 @@ func buildSkillCastFixture(t *testing.T) skillCastFixture {
 	)
 	assertOnlySkillReleases(t, rt.TickHook()(clock.NowMs()))
 	routed := rt.TickHook()(clock.At(testBasicAttackActionDuration).UnixMilli())
+	routed = assertAndSeparateActionReleases(t, routed)
 	if len(routed) != 1 || routed[0].DivisionID != testDivision {
 		t.Fatal("skill-cast fixture: due finalize did not produce one division route")
 	}
@@ -167,6 +213,11 @@ func buildSkillCastFixture(t *testing.T) skillCastFixture {
 
 // TestSkillCastAcceptFixturePinned regenerates the fixture through the REAL
 // accept path and requires the checked-in file to match byte for byte.
+/*
+================
+TestSkillCastAcceptFixturePinned
+================
+*/
 func TestSkillCastAcceptFixturePinned(t *testing.T) {
 	path := filepath.Join("testdata", "skill_cast_accept_fixture.json")
 	fresh := buildSkillCastFixture(t)

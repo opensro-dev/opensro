@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+monsterconsumables_test.go - monster consumable drops and persistence tests
+
+Exercise the production action owner and its native packet lifecycle.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -14,6 +23,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+TestUniqueFatalCommitsItsAssignedTableOnlyOnce
+================
+*/
 func TestUniqueFatalCommitsItsAssignedTableOnlyOnce(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt, _, c, target := newCombatTestRuntimeAtLevel(t, 1, 20)
@@ -67,6 +81,11 @@ func TestUniqueFatalCommitsItsAssignedTableOnlyOnce(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAlchemyFatalPublishesReferenceSpawnAndPickup
+================
+*/
 func TestAlchemyFatalPublishesReferenceSpawnAndPickup(t *testing.T) {
 	rt, clock, c, target := newCombatTestRuntimeAtLevel(t, 1, 80)
 	chosen, ok := loot.SelectConsumable(8, 80, 0, func() (uint32, error) { return 0, nil })
@@ -77,6 +96,7 @@ func TestAlchemyFatalPublishesReferenceSpawnAndPickup(t *testing.T) {
 	rt.deps.ItemReferences().(staticItemSource)[ref.Codename] = ref
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	r := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+	r = assertAndSeparateActionSession(t, r)
 	assertOpcodes(t, r.Frames, wire.OpSkillCastResult, wire.OpObjectStateRefresh, opCommerceItemReferences, wire.OpSingleObjectSpawn)
 	assertOpcodes(t, r.Broadcast, wire.OpSkillCastResult, wire.OpObjectStateRefresh, opCommerceItemReferences, wire.OpSingleObjectSpawn)
 	row, err := wire.DecodeGroundItemRow(r.Frames[3].Payload, ref.TypeFlags(), true)
@@ -84,6 +104,7 @@ func TestAlchemyFatalPublishesReferenceSpawnAndPickup(t *testing.T) {
 		t.Fatalf("ground row=%+v/%v", row, err)
 	}
 	rt.Ground.Restore(rt.Ground.Snapshot())
+	finishTestCast(t, rt, clock, c)
 	r = rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: row.Gid}.Encode())
 	// Scattered loot can require an approach; advance the real pending movement.
 	if r.Pending == nil {
@@ -110,6 +131,11 @@ func TestAlchemyFatalPublishesReferenceSpawnAndPickup(t *testing.T) {
 	}
 }
 
+/*
+================
+TestConsumablePlansKeepActualShippedTypeQuantityAndPersistence
+================
+*/
 func TestConsumablePlansKeepActualShippedTypeQuantityAndPersistence(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)

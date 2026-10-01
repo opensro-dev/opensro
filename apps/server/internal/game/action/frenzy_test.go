@@ -85,6 +85,7 @@ func TestFrenzyAttributeReleaseAndRetirement(t *testing.T) {
 			}
 			hp, mp := enterworld.CurrentHP(c), enterworld.CurrentMP(c)
 			out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
+			out = assertAndSeparateActionSession(t, out)
 			assertOpcodes(t, out.Frames, wire.OpSkillCastResult)
 			if len(rt.effects.Snapshot(testDivision, c.Name)) != 0 || enterworld.CurrentMP(c) != mp {
 				t.Fatal("preparation installed or charged")

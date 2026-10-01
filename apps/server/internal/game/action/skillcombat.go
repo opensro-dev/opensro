@@ -769,6 +769,9 @@ retaining it can block a quick reconnect and later broadcast a stale close.
 ==================
 */
 func (rt *Runtime) clearSkillFinalizes(divisionID, characterName string) {
+	// Every re-entry path resets the client's action latch. Forget the old
+	// publication here so the first action in the new world must arm it again.
+	rt.actionSessions.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.pendingSkillFinalizesMu.Lock()
 	defer rt.pendingSkillFinalizesMu.Unlock()
 

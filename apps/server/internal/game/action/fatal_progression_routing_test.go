@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+fatal_progression_routing_test.go - ordered public damage and private progression tests
+
+Exercise the production action owner and its native packet lifecycle.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -8,6 +17,11 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
+/*
+================
+TestFatalSkillRewardCommitsAtHitAndPublishesBeforeFinalize
+================
+*/
 func TestFatalSkillRewardCommitsAtHitAndPublishesBeforeFinalize(t *testing.T) {
 	rt, clock, character, target := newCombatTestRuntime(t, 1)
 	type rewardCall struct {
@@ -31,6 +45,7 @@ func TestFatalSkillRewardCommitsAtHitAndPublishesBeforeFinalize(t *testing.T) {
 	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
 	}.Encode())
+	result = assertAndSeparateActionSession(t, result)
 	token, _, fatal := assertSkillDamageOpen(
 		t, result.Frames, 2, enterworld.ObjectIDForCharacter(character), target.Gid,
 	)
@@ -76,6 +91,11 @@ func TestFatalSkillRewardCommitsAtHitAndPublishesBeforeFinalize(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFatalSkillLevelUpBurstKeepsNativePublicThenPrivateOrder
+================
+*/
 func TestFatalSkillLevelUpBurstKeepsNativePublicThenPrivateOrder(t *testing.T) {
 	rt, _, character, target := newCombatTestRuntime(t, 1)
 	const actorGid = uint32(100001)
@@ -98,6 +118,7 @@ func TestFatalSkillLevelUpBurstKeepsNativePublicThenPrivateOrder(t *testing.T) {
 	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
 	}.Encode())
+	result = assertAndSeparateActionSession(t, result)
 	wantActor := []uint16{
 		wire.OpSkillCastResult,
 		wire.OpObjectStateRefresh,

@@ -29,6 +29,11 @@ func burnSlot(m monster.Instance) abnormal.Slot {
 	return m.Abnormal.Slots[abnormal.Burn]
 }
 
+/*
+================
+installFireImbue
+================
+*/
 func installFireImbue(t *testing.T, rt *Runtime, c *enterworld.Character) enterworld.SkillRow {
 	t.Helper()
 	row := shippedOffense(t, "SKILL_CH_FIRE_GIGONGTA_A_01")
@@ -40,6 +45,12 @@ func installFireImbue(t *testing.T, rt *Runtime, c *enterworld.Character) enterw
 	c.CurrentMP = testInt64(1000)
 	return row
 }
+
+/*
+================
+TestWeaponImbueProductionActivationDamageAndExpiry
+================
+*/
 func TestWeaponImbueProductionActivationDamageAndExpiry(t *testing.T) {
 	rt, clock, c, target := newCombatTestRuntime(t, 100000)
 	row := installFireImbue(t, rt, c)
@@ -77,6 +88,12 @@ func TestWeaponImbueProductionActivationDamageAndExpiry(t *testing.T) {
 		t.Fatal("expiry/snapshot ownership")
 	}
 }
+
+/*
+================
+TestWeaponImbueRefusalsAndCancelReplacement
+================
+*/
 func TestWeaponImbueRefusalsAndCancelReplacement(t *testing.T) {
 	for _, mode := range []string{"unlearned", "dead", "mp", "target", "cancel", "disconnect", "death"} {
 		t.Run(mode, func(t *testing.T) {
@@ -143,6 +160,12 @@ func TestWeaponImbueRefusalsAndCancelReplacement(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestImbueBurnProductionTickAndNonRefreshingReproc
+================
+*/
 func TestImbueBurnProductionTickAndNonRefreshingReproc(t *testing.T) {
 	rt, clock, c, target := newCombatTestRuntime(t, 100000)
 	row := installFireImbue(t, rt, c)
@@ -185,6 +208,12 @@ func TestImbueBurnProductionTickAndNonRefreshingReproc(t *testing.T) {
 		t.Fatal("burn outlived its own duration")
 	}
 }
+
+/*
+================
+TestImbueFormulaFailureDoesNotCommitBurnOrSpend
+================
+*/
 func TestImbueFormulaFailureDoesNotCommitBurnOrSpend(t *testing.T) {
 	rt, _, c, target := newCombatTestRuntime(t, 100000)
 	row := installFireImbue(t, rt, c)
@@ -197,6 +226,12 @@ func TestImbueFormulaFailureDoesNotCommitBurnOrSpend(t *testing.T) {
 		t.Fatal("failed plan mutated authority")
 	}
 }
+
+/*
+================
+TestSmashTransfersAfterCloseWithoutSpendingAgain
+================
+*/
 func TestSmashTransfersAfterCloseWithoutSpendingAgain(t *testing.T) {
 	rt, clock, c, target := newCombatTestRuntime(t, 100000)
 	skill := shippedOffense(t, "SKILL_CH_SWORD_SMASH_A_01")
@@ -233,6 +268,11 @@ func TestSmashTransfersAfterCloseWithoutSpendingAgain(t *testing.T) {
 	}
 }
 
+/*
+================
+TestImbueAdmissionRechecksAuthorityAndCategory
+================
+*/
 func TestImbueAdmissionRechecksAuthorityAndCategory(t *testing.T) {
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
 	row := installFireImbue(t, rt, c)
@@ -271,6 +311,12 @@ func TestImbueAdmissionRechecksAuthorityAndCategory(t *testing.T) {
 		t.Fatal("old retirement removed new imbue", rows)
 	}
 }
+
+/*
+================
+TestBurnProductionSourceDepartureAndFatalPublication
+================
+*/
 func TestBurnProductionSourceDepartureAndFatalPublication(t *testing.T) {
 	for _, departed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "credited", true: "departed"}[departed], func(t *testing.T) {
@@ -319,6 +365,11 @@ func TestBurnProductionSourceDepartureAndFatalPublication(t *testing.T) {
 	}
 }
 
+/*
+================
+TestImbueProjectileConsumesReleaseTimeEffect
+================
+*/
 func TestImbueProjectileConsumesReleaseTimeEffect(t *testing.T) {
 	for _, mode := range []string{"active", "cancelled", "expired"} {
 		t.Run(mode, func(t *testing.T) {
@@ -354,6 +405,11 @@ func TestImbueProjectileConsumesReleaseTimeEffect(t *testing.T) {
 	}
 }
 
+/*
+================
+TestInstantImbuePreservesOpenAttackAndContinuation
+================
+*/
 func TestInstantImbuePreservesOpenAttackAndContinuation(t *testing.T) {
 	for _, mode := range []string{"accepted", "unlearned", "mp", "target"} {
 		t.Run(mode, func(t *testing.T) {
@@ -363,6 +419,7 @@ func TestInstantImbuePreservesOpenAttackAndContinuation(t *testing.T) {
 			rt.deps.SkillData().(staticSkillSource)[smash.ID] = smash
 			c.Skills = append(c.Skills, smash.ID)
 			open := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: smash.ID, HasTarget: true, TargetGid: target.Gid}.Encode())
+			open = assertAndSeparateActionSession(t, open)
 			if len(open.Frames) != 1 || len(open.Frames[0].Payload) != 19 {
 				t.Fatal("missing cast preparation")
 			}
