@@ -122,3 +122,32 @@ func TestPackagePurchaseLimitPreservesAuthoredData(t *testing.T) {
 		t.Fatalf("multi-item package: %d", got)
 	}
 }
+
+/*
+================
+TestShopPurchaseRefusalsNameTheirCause
+
+A refused purchase answers the native code the client turns into a notice:
+0x0F without the gold, 0xD4 for an honor package (no Training Camp honor).
+================
+*/
+func TestShopPurchaseRefusalsNameTheirCause(t *testing.T) {
+	rt, c := merchantFixture(t)
+	setGold(c, 0)
+	rows := len(c.MissionInventory)
+	q := wire.ItemMoveRequest{MovementType: 8, NpcGID: 17, ShopSlot: 2, Quantity: 1}
+	r := trade(t, rt, c, q)
+	if len(r.Frames) != 1 || !reflect.DeepEqual(r.Frames[0].Payload, wire.EncodeItemMoveError(wire.ErrCodeNotEnoughGold)) {
+		t.Fatalf("gold refusal: %+v", r)
+	}
+	offer := rt.Commerce.Tabs[1][0]
+	offer.Currency = commerce.PaymentHonor
+	rt.Commerce.Tabs[1] = []commerce.Offer{offer}
+	r = trade(t, rt, c, q)
+	if len(r.Frames) != 1 || !reflect.DeepEqual(r.Frames[0].Payload, wire.EncodeItemMoveError(wire.ErrCodeNotEnoughHonor)) {
+		t.Fatalf("honor refusal: %+v", r)
+	}
+	if goldOf(c) != 0 || len(c.MissionInventory) != rows {
+		t.Fatalf("a refused purchase changed the character: gold %d rows %d", goldOf(c), len(c.MissionInventory))
+	}
+}
