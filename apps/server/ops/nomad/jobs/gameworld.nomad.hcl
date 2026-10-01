@@ -141,6 +141,11 @@ variable "beta_skill_exp_rate" {
   default = "100"
 }
 
+variable "beta_drop_rate" {
+  type    = string
+  default = "5"
+}
+
 variable "cpu" {
   type    = number
   default = 2000
@@ -275,6 +280,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_PLAYER_MAP                = var.beta_player_map
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
+        SRO_BETA_DROP_RATE                 = var.beta_drop_rate
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                 = var.cert_dir

@@ -280,8 +280,8 @@ displace
 			// steps through navigation; the server's QueryMovement walks from the
 			// stored source cell). Keep the owner: clearing it here re-guessed the
 			// start surface from height and could drop a dash off a deck.
-			acknowledged = nextId;
-			pending.clear();
+			// Requests already sent stay pending: the server still answers each
+			// one after the displacement, and its receipt owns the outcome.
 			surfaceCursor = {};
 			walk = null;
 			pose = authoritative = navigation.surface( next.from, from, owner );
@@ -523,7 +523,7 @@ seed
 correct
 ================
 		*/
-		correct( value: Pose ) {
+		correct( value: Pose, now?: number ) {
 			movementRevision++;
 			// A live source correction ends motion, but is not a new spawn.
 			// Resolve its surface through the existing navigation owner before
@@ -533,9 +533,32 @@ correct
 			surfaceCursor = {};
 			segment = null;
 			walk = null;
-			acknowledged = nextId;
-			pending.clear();
 			error = null;
+			// The server processes requests in order and answers each one. A
+			// request still pending was sent before this correction reached us
+			// but runs after it (a click's cancel stop, then the click's walk),
+			// so keep it and resume its walk from the corrected pose. Dropping
+			// it marked the server's walk stale: the character froze locally
+			// while the server walked it on.
+			const latest = pending.get( nextId );
+			if ( latest && latest.direction === undefined && now !== undefined ) {
+				const query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; } = {
+					slide: false,
+					sourceOwner: owner
+				};
+				const clipped = navigation.clip( pose, latest.to, query );
+				pending.set( nextId, { ...latest, predictedEnd: clipped } );
+				if ( clipped ) {
+					segment = {
+						from: pose,
+						to: { ...clipped, angle: movementHeading( pose, clipped ) },
+						start: now,
+						timing: "speed",
+						duration: poseDistance( pose, clipped ) / speed * 1000,
+						owners: query.owners
+					};
+				}
+			}
 		},
 		/*
 ================

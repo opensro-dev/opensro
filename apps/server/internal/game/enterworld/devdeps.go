@@ -204,7 +204,8 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 	}
 	if paths.StarterKitEnabled {
 		deps.StarterKit = ResolveStarterKit(items)
-		log.Infof("bootstrap: beta starter kit ON (%s): %d items, backfilled on entry and never spent", EnvBetaStarterKit, len(deps.StarterKit))
+		deps.StarterRefills = ResolveStarterRefills(items)
+		log.Infof("bootstrap: beta starter kit ON (%s): %d items, backfilled on entry and never spent; %d potion families refilled to a full stack on entry", EnvBetaStarterKit, len(deps.StarterKit), len(deps.StarterRefills))
 	}
 	// Object-list rows: the NPC and monster legs are env-gated here; the
 	// server wiring APPENDS the division ground drops from the item

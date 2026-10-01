@@ -249,3 +249,45 @@ test("a remote direction walk renews its legs and turns on 0xB2CF", () => {
 	assert.deepEqual( idle.step( 1000 ), [], "a keep starts nothing" );
 	assert.equal( idle.steer( still, SOUTH, 0 )?.heading, SOUTH, "an idle mover turns in place" );
 });
+
+/*
+================
+a correction keeps the click it overtook
+
+An approach walk is cancelled by a ground click: the server answers the
+cancel with a stop correction, then the click's own receipt. The receipt
+must still drive the walk; it was dropped as stale and the character froze
+locally while the server walked it on.
+================
+*/
+test("a correction keeps the click it overtook", () => {
+	const m = createMovement( () => {} );
+	m.seed( pose );
+	const target = { ...pose, x: 500 };
+	m.request( target, 0 );
+	const stopped = { ...pose, x: 120 };
+	m.correct( stopped, 10 );
+	assert.equal( m.state().pendingMoves, 1, "the click is still in flight" );
+	m.receive( receipt( 1, target, { from: stopped, startedAtMs: 0, arrivesAtMs: 8000 } ), 20, GID );
+	for ( let now = 100; now <= 9000; now += 100 ) m.step( now );
+	const walked = defined( m.state().pose );
+	assert.ok( Math.abs( walked.x - 500 ) < 1e-6, "walked to " + walked.x + ", want the clicked 500" );
+	assert.equal( m.state().pendingMoves, 0 );
+});
+
+/*
+================
+a correction with nothing in flight still ends motion
+================
+*/
+test("a correction with nothing in flight still ends motion", () => {
+	const m = createMovement( () => {} );
+	m.seed( pose );
+	m.request( { ...pose, x: 500 }, 0 );
+	m.receive( receipt( 1, { ...pose, x: 500 }, { from: pose, startedAtMs: 0, arrivesAtMs: 8000 } ), 0, GID );
+	m.step( 2000 );
+	const at = defined( m.state().pose );
+	m.correct( at, 2000 );
+	m.step( 6000 );
+	assert.equal( defined( m.state().pose ).x, at.x, "a correction ends the acknowledged walk" );
+});

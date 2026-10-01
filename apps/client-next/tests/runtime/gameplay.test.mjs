@@ -1434,14 +1434,17 @@ test("a ground click during the local cast walks once the cast releases", async 
 	game.seed( local );
 	const row = fixture.scenarios[0];
 	game.receive( { opcode: row.opcode, payload: Buffer.from( row.payloadHex, "hex" ) }, 10 );
+	// The server publishes the accepted command with every cast (B2CD count 1).
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 10 );
 	// 4B0EA0 drops a ground command during the cast: the click is held, not sent.
 	assert.equal( game.command( { kind: "move", destination: { ...pose, x: 80 } }, 11, undefined, local ), null );
 	game.command( { kind: "move", destination: { ...pose, x: 90 } }, 12, undefined, local );
-	assert.equal( sent.length, 0 );
+	// 6932D7: the click cancels the single running command once; the walk is held.
+	assert.deepEqual( sent.map( frame => [ frame.opcode, ...frame.payload ] ), [ [ 0x72cd, 2 ] ] );
 	// The marker shows the newest click at once, not when the cast releases.
 	assert.equal( game.take()?.selectionDecal?.pose?.x, 90 );
 	game.receive( { opcode: 0xb505, payload: Uint8Array.of( 2, 0, 1, 0, 0, 0 ) }, 13 );
-	for ( let now = 14; now < 2000 && !sent.length; now += 50 ) game.step( now, local );
-	assert.equal( sent.length, 1, "the newest held click walks after the release" );
+	for ( let now = 14; now < 2000 && sent.length < 2; now += 50 ) game.step( now, local );
+	assert.equal( sent.length, 2, "the newest held click walks after the release" );
 	game.dispose();
 });

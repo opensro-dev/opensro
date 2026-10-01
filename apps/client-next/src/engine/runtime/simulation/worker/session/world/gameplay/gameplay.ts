@@ -689,9 +689,9 @@ Bind the admitted local actor and initialize its authoritative movement.
 correct
 ================
 		*/
-		correct( entity: EntityState ) {
+		correct( entity: EntityState, now?: number ) {
 			if ( entity.gid !== localGid ) throw Error( "Correction references non-local entity" );
-			movement.correct( { ...entity, angle: entity.heading } );
+			movement.correct( { ...entity, angle: entity.heading }, now );
 			dirty = true;
 		},
 		/*
@@ -1202,7 +1202,7 @@ state here before a command can claim a native wire conversation.
 				if ( protocol !== 1 ) {
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
-				if ( localCastHolds() ) {
+				if ( localCastHolds() && !actionSession.released() ) {
 					// Resolve the click now, not when the cast releases: its ray belongs
 					// to the camera at click time, and the destination marker appears
 					// when the player clicks. A direction walk keeps its query.
@@ -2181,7 +2181,7 @@ before take assembles the presentation snapshot.
 			}
 			// A click held through the cast walks as soon as the cast releases;
 			// death forfeits it.
-			if ( moveReservation.holding() && !localCastHolds() ) {
+			if ( moveReservation.holding() && (!localCastHolds() || actionSession.released()) ) {
 				const held = moveReservation.take()!;
 				if ( !local || local.appearanceState?.[0] === 2 ) {
 					// A forfeited click takes its marker with it.

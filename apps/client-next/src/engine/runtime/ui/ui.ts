@@ -1200,7 +1200,8 @@ export function createUi(
 			dirty = true;
 			return;
 		}
-		if ( id === "item-mall-close" ) {
+		// The frame's X and the window's own Close button (node 8) both close it.
+		if ( id === "item-mall-close" || id === "item-mall-close-button" ) {
 			itemMall.close();
 			dirty = true;
 			return;
@@ -12071,7 +12072,8 @@ export function createUi(
 				// through CIFButton_SetEnabled(false), even in the retail client.
 				for ( const node of Object.values( root ) ) {
 					if ( node.type !== "CIFButton" ) continue;
-					const id = node.id === 8 ? "item-mall-close" : node.id === 3 ?
+					// Control ids are unique: the frame X already owns "item-mall-close".
+					const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
 						"item-mall-home" :
 						"item-mall-root:" + node.id;
 					authoredLabeledButton(

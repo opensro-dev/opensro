@@ -66,6 +66,19 @@ Advance only after transport accepts the request, so backpressure can retry.
 		},
 		/*
 ================
+released
+
+The server reports no queued command: a cancelled basic attack is over even
+while its swing's cast has not formally closed. CGObjPC_IsMotionChangeLocked
+(server 4EF880) refuses movement only for a committed front command, so a
+held move may go now; a committed skill keeps the count and holds the move.
+================
+		*/
+		released(): boolean {
+			return count === 0;
+		},
+		/*
+================
 clear
 ================
 		*/
