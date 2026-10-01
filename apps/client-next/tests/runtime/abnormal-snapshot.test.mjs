@@ -10,17 +10,19 @@ modules the client ships, not a per-test bundle.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
-import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-async function load( path ) {
-	return import( sourceFileUrl( path ).href );
-}
-const snap = await load( "src/engine/foundation/gameplay/abnormal-snapshot.ts" );
-const { buffBoard } = await load( "src/engine/foundation/ui/buff-board.ts" );
-const { buffTooltip } = await load( "src/engine/foundation/ui/buff-tooltip.ts" );
+const snap = await import( "../../src/engine/foundation/gameplay/abnormal-snapshot.ts" );
+const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
+const { buffTooltip } = await import( "../../src/engine/foundation/ui/buff-tooltip.ts" );
+
+/*
+================
+payload
+
+Build the native duration, elapsed and power-or-grade records in mask order.
+================
+*/
 function payload( mask, rows ) {
 	const body = new Uint8Array( 4 + rows.length * 5 );
 	const view = new DataView( body.buffer );
@@ -59,6 +61,17 @@ test("77C110 records levels, grades and the zero byte, and 6841C0 announces both
 });
 test("6E6AA0 bar uses the snapshot clock and the tooltip reads the record", () => {
 	const game = {
+		revision: 1,
+		pose: null,
+		authoritativePose: null,
+		pendingMoves: 0,
+		acknowledgedMove: 0,
+		target: 0,
+		targetPending: 0,
+		inventory: [],
+		inventoryPending: false,
+		casts: [],
+		error: null,
 		localGid: 7,
 		vitals: [ { gid: 7, abnormal: 8 } ],
 		abnormalRecords: [ { bit: 3, level: 6, grade: 0, durationMs: 3000, elapsedMs: 0, receivedAtMs: 1000 } ],
@@ -66,8 +79,12 @@ test("6E6AA0 bar uses the snapshot clock and the tooltip reads the record", () =
 		notices: []
 	};
 	const row = buffBoard( game, 2500 ).find( item => item.id === "abnormal:3" );
+	assert.ok( row );
 	assert.equal( row.fraction, 1500 / 3000 );
 	const text = key => key;
-	const tip = buffTooltip( { kind: "abnormal", gid: 7, bit: 3 }, game, 2500, new Map(), text );
-	assert.equal( tip[0].value, "PARAM_BU 6UIIT_STT_GRADE" );
+	const catalog = Object.assign( new Map(), { groups: new Map() } );
+	const tip = buffTooltip( { kind: "abnormal", gid: 7, bit: 3 }, game, 2500, catalog, text );
+	assert.equal( tip[0].value, "PARAM_BU" );
+	assert.ok( tip.some( row => row.value === "\nPARAM_POWER 6" ) );
+	assert.ok( tip.some( row => row.value === "\nUIIT_STT_REMAIN_TIME 1PARAM_SECOND" ) );
 });

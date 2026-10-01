@@ -1,15 +1,18 @@
 /*
 ===========================================================================
 
-commerce.go - Package action.
+commerce.go - NPC shop projections and authoritative gold transactions
+
+Package decoding and delivery are shared with the mall. Selected NPC, tax,
+buyback and gold policy stay in this merchant transaction owner.
 
 ===========================================================================
 */
-
 package action
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -275,58 +278,14 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if len(contents) == 0 {
 				contents = []commerce.Content{{Ref: offer.Ref, Stack: offer.Stack}}
 			}
-			dest := []uint8{}
-			for _, template := range contents {
-				units := uint64(q.Quantity)
-				stackable := inventory.IsEtcStackableTypeFlags(template.Ref.TypeFlags())
-				if stackable && template.Data > 0 {
-					units *= uint64(template.Data)
-				}
-				// Bound expanded packages before granting; COS and player bags have
-				// different capacities. Multiply in uint64 so malformed data cannot wrap.
-				capacity := uint64(inventory.BagSlotEnd - inventory.EquipmentSlotEnd)
-				if container != nil {
-					capacity = uint64(container.Capacity)
-				}
-				maxUnits := capacity
-				if stackable {
-					maxUnits *= uint64(template.Stack)
-				}
-				if units > maxUnits {
-					refusal = wire.ErrCodeStorageFull
-					return false
-				}
-				for units > 0 {
-					quantity := uint16(1)
-					if stackable {
-						n := units
-						if n > 65535 {
-							n = 65535
-						}
-						quantity = uint16(n)
-					}
-					item := inventory.Item{RefObjID: template.Ref.RefObjID, Codename: template.Ref.Codename, TypeFlags: template.Ref.TypeFlags(), Plus: template.Plus, VarianceBits: template.Variance, Durability: template.Data, MagicOptions: append([]uint64(nil), template.Magic...), Quantity: quantity}
-					if stackable {
-						grant, fault := inv.GrantStack(item, template.Stack)
-						if fault != nil {
-							refusal = wire.ErrCodeStorageFull
-							return false
-						}
-						dest = append(dest, grant.DestSlot)
-						units -= uint64(quantity - grant.GroundRemainder)
-					} else {
-						slot, fault := inv.Grant(item)
-						if fault != nil {
-							refusal = wire.ErrCodeStorageFull
-							return false
-						}
-						dest = append(dest, slot)
-						units--
-					}
-					if len(dest) > 255 {
-						return false
-					}
-				}
+			capacity := uint16(inventory.BagSlotEnd - inventory.EquipmentSlotEnd)
+			if container != nil {
+				capacity = uint16(container.Capacity)
+			}
+			dest, grantErr := commerce.GrantPackage(inv, contents, q.Quantity, capacity)
+			if grantErr != nil {
+				refusal = commerceFailureCode(grantErr)
+				return false
 			}
 			balance -= cost
 			w := wire.NewWriter(7 + len(dest)).U8(1).U8(8).U8(q.ShopTab).U8(q.ShopSlot).U8(uint8(len(dest)))
@@ -359,6 +318,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				return false
 			}
 			if _, fault := inv.DropQuantity(q.SourceSlot, q.Quantity); fault != nil {
+				refusal = commerceFailureCode(fault)
 				return false
 			}
 			if !commerceNoBuyback(item.TypeFlags, item.Codename) {
@@ -500,4 +460,35 @@ func (rt *Runtime) shopInventory(items []inventory.Item, before []inventory.Item
 		Items    []shopInventoryRow `json:"items"`
 	}{q.CosGID, 1, q.NpcGID, q.ShopTab, q.ShopSlot, q.Quantity, rows})
 	return wire.Frame{Opcode: opShopInventory, Payload: payload}, e
+}
+
+/*
+================
+commerceFailure
+
+Package placement and currency refusals keep their native UI categories.
+Other failures disclose no storage details to the requesting client.
+================
+*/
+func commerceFailure(err error) OpResult {
+	return failureResult(commerceFailureCode(err))
+}
+
+/*
+================
+commerceFailureCode
+
+The native refusal code commerceFailure answers with.
+================
+*/
+func commerceFailureCode(err error) uint8 {
+	var fault *inventory.Fault
+	if errors.As(err, &fault) {
+		return fault.Code
+	}
+	var insufficient domain.MallInsufficientCurrency
+	if errors.As(err, &insufficient) {
+		return wire.ErrCodeMallInsufficientCurrency
+	}
+	return wire.ErrCodeInvalidRequest
 }

@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+db_load.go - validate the complete durable authority graph before adoption
+
+===========================================================================
+*/
 package store
 
 import (
@@ -12,20 +19,33 @@ import (
 
 // Database loading validates the complete authority graph before Store adopts
 // it. Invalid ownership or social/group references fail boot closed.
+/*
+================
+loadDB
+================
+*/
 func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	version, err := readMetaInt(db, metaKeySchemaVersion, 0)
 	if err != nil {
 		return nil, err
 	}
 	if version != current {
-		return nil, fmt.Errorf("database character schema version %d, binary requires exactly %d: %w; initialize a fresh pre-release authority store", version, current, errIncompatibleSchema)
+		return nil, fmt.Errorf("database character schema version %d, binary requires exactly %d: %w; preserve the authority and use a compatible binary or a reviewed offline upgrade", version, current, errIncompatibleSchema)
 	}
 	layout, err := readMetaInt(db, metaKeyLayoutVersion, 0)
 	if err != nil {
 		return nil, err
 	}
 	if layout != currentLayout {
-		return nil, fmt.Errorf("database layout version %d, binary requires exactly %d: %w; initialize a fresh pre-release authority store", layout, currentLayout, errIncompatibleSchema)
+		return nil, fmt.Errorf("database layout version %d, binary requires exactly %d: %w; preserve the authority; layout 4 can be validated and upgraded offline with sro-authority-upgrade", layout, currentLayout, errIncompatibleSchema)
+	}
+
+	// Only the offline upgrader requests layout 4. Runtime callers require
+	// CurrentLayoutVersion and never mutate an older authority during boot.
+	if currentLayout >= 5 {
+		if err := validateMallAccounts(db); err != nil {
+			return nil, fmt.Errorf("validating mall accounts: %w", err)
+		}
 	}
 
 	out := &loadedDB{
@@ -316,6 +336,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 // permissive interpretation: a dangling FK, orphan row, duplicate
 // membership, missing leader/master, or delete-pending group member is
 // corruption and must take the normal quarantine/bak/refusal ladder.
+/*
+================
+validateLoadedAuthorityGraph
+================
+*/
 func validateLoadedAuthorityGraph(loaded *loadedDB) error {
 	for divisionID, rows := range loaded.ground {
 		for index, row := range rows {
@@ -557,6 +582,11 @@ func validateLoadedAuthorityGraph(loaded *loadedDB) error {
 }
 
 // readMeta reads one meta value; ok=false when the key is absent.
+/*
+================
+readMeta
+================
+*/
 func readMeta(db *sql.DB, key string) (string, bool, error) {
 	var value string
 	err := db.QueryRow("SELECT value FROM meta WHERE key = ?", key).Scan(&value)
@@ -570,6 +600,11 @@ func readMeta(db *sql.DB, key string) (string, bool, error) {
 }
 
 // readMetaInt reads an integer meta value with a caller-selected default.
+/*
+================
+readMetaInt
+================
+*/
 func readMetaInt(db *sql.DB, key string, absent int) (int, error) {
 	value, ok, err := readMeta(db, key)
 	if err != nil || !ok {
@@ -584,6 +619,11 @@ func readMetaInt(db *sql.DB, key string, absent int) (int, error) {
 
 // readMetaInt64 keeps persisted counters independent of the host's int
 // width. Schema/layout versions use readMetaInt because they are tiny.
+/*
+================
+readMetaInt64
+================
+*/
 func readMetaInt64(db *sql.DB, key string, absent int64) (int64, error) {
 	value, ok, err := readMeta(db, key)
 	if err != nil || !ok {

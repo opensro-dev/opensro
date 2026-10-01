@@ -1,10 +1,16 @@
+/*
+===========================================================================
+
+persistence.go - durable authority commits, write health and backups
+
+===========================================================================
+*/
 package store
 
 import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -13,6 +19,11 @@ import (
 
 // Persistence is the store's single SQLite commit boundary. Domain mutation
 // files only mark dirty state and enter this door while holding Store.mu.
+/*
+================
+commitLocked
+================
+*/
 func (s *Store) commitLocked(label string) {
 	if err := s.commitOnceLocked(); err != nil {
 		s.recordWriteFailureLocked(label, err)
@@ -23,6 +34,11 @@ func (s *Store) commitLocked(label string) {
 }
 
 // commitOnceLocked performs one transactional commit attempt.
+/*
+================
+commitOnceLocked
+================
+*/
 func (s *Store) commitOnceLocked() error {
 	if s.commitFail != nil {
 		return s.commitFail
@@ -197,6 +213,11 @@ func (s *Store) commitOnceLocked() error {
 
 // recordWriteFailureLocked implements D5's fail-open-loud: first failure
 // logs at Error, repeats rate-limit, Health carries the degradation.
+/*
+================
+recordWriteFailureLocked
+================
+*/
 func (s *Store) recordWriteFailureLocked(label string, err error) {
 	if s.health.FailedWrites == 0 {
 		s.health.FailingSince = s.now()
@@ -205,12 +226,17 @@ func (s *Store) recordWriteFailureLocked(label string, err error) {
 	s.health.LastError = fmt.Sprintf("%s: %v", label, err)
 	if s.health.FailedWrites == 1 || s.now().Sub(s.lastFailLogAt) >= failureLogInterval {
 		s.lastFailLogAt = s.now()
-		log.Errorf("store: PERSIST FAILING (%d failure(s) since %s) - op %q applied in memory but NOT on disk; state older than %s is what a restart will see: %v",
-			s.health.FailedWrites, s.health.FailingSince.Format(time.RFC3339), label, s.health.FailingSince.Format(time.RFC3339), err)
+		log.Errorf("store: PERSIST FAILING (%d failure(s) since %s) - op %q failed to commit; earlier failed mutations may remain in memory: %v",
+			s.health.FailedWrites, s.health.FailingSince.Format(time.RFC3339), label, err)
 	}
 }
 
 // recordWriteSuccessLocked heals the Health record after an outage.
+/*
+================
+recordWriteSuccessLocked
+================
+*/
 func (s *Store) recordWriteSuccessLocked() {
 	if s.health.FailedWrites > 0 {
 		log.Infof("store: persist recovered after %d failed write(s); the on-disk state is current again", s.health.FailedWrites)
@@ -225,6 +251,11 @@ func (s *Store) recordWriteSuccessLocked() {
 // COMMITTED generation to path (VACUUM INTO: compact, checkpointed, no
 // sidecars). Operator backups and the acceptance suite's generation
 // witnesses both ride this. Never call from inside a Mutate closure.
+/*
+================
+BackupTo
+================
+*/
 func (s *Store) BackupTo(path string) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -234,13 +265,18 @@ func (s *Store) BackupTo(path string) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	_, err := s.db.Exec("VACUUM INTO '" + strings.ReplaceAll(path, "'", "''") + "'")
+	_, err := s.db.Exec("VACUUM INTO ?", path)
 	return err
 }
 
 // FailCommits injects a commit failpoint (nil clears): every commit fails
 // with err while set, exercising the D5 fail-open path. TEST SEAM for the
 // cross-package acceptance suite; production never calls it.
+/*
+================
+FailCommits
+================
+*/
 func (s *Store) FailCommits(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -253,6 +289,11 @@ func (s *Store) FailCommits(err error) {
 // after the ticker, transport, and HTTP API have stopped, so no writer can
 // race the final checkpoint. Tests and migration tools also use it to release
 // Windows file handles. Close is terminal for this Store instance.
+/*
+================
+Close
+================
+*/
 func (s *Store) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -272,6 +313,11 @@ func (s *Store) Close() {
 }
 
 // DivisionIDs lists divisions with live characters, sorted (boot logs).
+/*
+================
+DivisionIDs
+================
+*/
 func (s *Store) DivisionIDs() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

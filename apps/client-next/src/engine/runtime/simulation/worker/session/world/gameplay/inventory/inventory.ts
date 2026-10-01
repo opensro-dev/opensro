@@ -1,18 +1,15 @@
 /*
 ===========================================================================
 
-inventory.ts - the local inventory, its one outstanding item operation and
-the NPC commerce that rides on it
+inventory.ts - inventory authority publications and serialized item commands
 
-Owns the bag and equipment slot map, the avatar slots, item cooldowns and
-the single pending item transaction: native replies carry no transaction
-ID, so every move, drop, use, trade, buyback and COS transfer shares one
-outstanding request and its deadline. Alchemy and Magic Pop are child
-owners. A late reply after a timeout cannot be matched, so the owner stops
-and asks for a reconnect instead of guessing.
+Owns player and avatar slots, reference projections and pending native moves.
+Child owners handle process-specific state while this owner commits item rows.
 
 ===========================================================================
 */
+import { createMall } from "./mall/mall";
+import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 import {
 	itemCooldown,
 	recoveryCategory,
@@ -43,9 +40,6 @@ import type { InventoryItem } from "@/engine/contracts/gameplay";
 /*
 ================
 createInventory
-
-Create the inventory owner. send carries requests; play and playItem
-receive UI and item sound cues.
 ================
 */
 export function createInventory(
@@ -53,7 +47,8 @@ export function createInventory(
 	play: ( handle: import("@/engine/foundation/ui/sound-catalog").UiSoundHandle ) => void = () => {},
 	playItem: ( cue: import("@/engine/contracts/audio").ItemSoundRequest ) => void = () => {}
 ) {
-	const alchemy = createAlchemy(), gacha = createGacha();
+	const alchemy = createAlchemy(), gacha = createGacha(), mall = createMall();
+	let mallDelivery: { prepared: ReturnType<typeof decodeShopItems>; slots: number[]; } | null = null;
 	let avatars = new Map<number, InventoryItem>();
 	let slots = new Map<number, InventoryItem>(),
 		pending: {
@@ -80,11 +75,9 @@ export function createInventory(
 	let shopCompletionRevision = 0;
 	let shopSource: typeof shop, shopPresentation: typeof shop;
 	/*
-	================
-	preview
-
-	A commerce preview row as an inventory item with its tooltip reference.
-	================
+================
+preview
+================
 	*/
 	function preview( row: import("@/engine/foundation/gameplay/commerce").CommercePreview ): InventoryItem {
 		const bytes = Uint8Array.from( row.body ), types = new Map( refs );
@@ -97,11 +90,9 @@ export function createInventory(
 		return { ...decoded.item, name: row.name };
 	}
 	/*
-	================
-	presentShop
-
-	The published shop with every offer, preview and buyback row resolved.
-	================
+================
+presentShop
+================
 	*/
 	function presentShop() {
 		if ( !shop ) {
@@ -136,11 +127,9 @@ export function createInventory(
 	let magicRefs = itemMagicReferences( undefined );
 	let presentations = new WeakMap<InventoryItem, InventoryItem>();
 	/*
-	================
-	present
-
-	An inventory item with its reference name, icon and tooltip attached.
-	================
+================
+present
+================
 	*/
 	function present( item: InventoryItem ): InventoryItem {
 		const cached = presentations.get( item );
@@ -173,11 +162,9 @@ export function createInventory(
 	}
 	let inventorySlotCount: number | undefined, equipmentSlotCount: number | undefined;
 	/*
-	================
-	slot
-
-	Validate a bag or equipment slot index.
-	================
+================
+slot
+================
 	*/
 	function slot( n: number ) {
 		if ( !Number.isInteger( n ) || n < 0 || n > 255 ) {
@@ -186,11 +173,9 @@ export function createInventory(
 		return n;
 	}
 	/*
-	================
-	body
-
-	Decode one inventory item body from a native reply at index.
-	================
+================
+body
+================
 	*/
 	function body( p: Uint8Array, index: number ): InventoryItem | null {
 		const { item, next } = decodeInventoryItem( p, index, refs, objRefs );
@@ -199,11 +184,9 @@ export function createInventory(
 	}
 
 	/*
-	================
-	decodeShopItems
-
-	Decode the item rows a commerce reply grants or removes.
-	================
+================
+decodeShopItems
+================
 	*/
 	function decodeShopItems(
 		items: unknown,
@@ -238,11 +221,9 @@ export function createInventory(
 		return { next, nextRefs, nextNames };
 	}
 	/*
-	================
-	applyShopItems
-
-	Write decoded commerce rows into the slot map.
-	================
+================
+applyShopItems
+================
 	*/
 	function applyShopItems( items: unknown ) {
 		const { next, nextRefs, nextNames } = decodeShopItems( items );
@@ -254,22 +235,18 @@ export function createInventory(
 		published = null;
 	}
 	/*
-	================
-	busy
-
-	True while an item operation or a child owner holds the inventory.
-	================
+================
+busy
+================
 	*/
 	function busy() {
-		return pending !== null || timedOut || alchemy.state().pending ||
+		return pending !== null || mall.pending() || timedOut || alchemy.state().pending ||
 			[ "rolling", "waiting" ].includes( gacha.state().phase );
 	}
 	/*
-	================
-	transfer
-
-	Move or merge quantity between two slots of a slot map copy.
-	================
+================
+transfer
+================
 	*/
 	function transfer( next: Map<number, InventoryItem>, source: number, destination: number, quantity: number ) {
 		if ( source === destination ) {
@@ -306,11 +283,31 @@ export function createInventory(
 	}
 	return {
 		/*
-		================
-		takeBindingMoves
-
-		Hand the queued quick-slot rebinds to the caller once.
-		================
+================
+openMall
+================
+		*/
+		openMall( now: number ) {
+			if ( busy() ) throw Error( "Inventory command unavailable" );
+			const frame = mall.open( now );
+			send( frame );
+			return frame;
+		},
+		/*
+================
+purchaseMall
+================
+		*/
+		purchaseMall( request: MallPurchase, now: number ) {
+			if ( busy() ) throw Error( "Inventory command unavailable" );
+			const frame = mall.purchase( request, now );
+			send( frame );
+			return frame;
+		},
+		/*
+================
+takeBindingMoves
+================
 		*/
 		takeBindingMoves() {
 			const result = bindingMoves;
@@ -318,32 +315,26 @@ export function createInventory(
 			return result;
 		},
 		/*
-		================
-		nameItem
-
-		The name lookup used by notices.
-		================
+================
+nameItem
+================
 		*/
 		nameItem() {
 			const row = slots.get( 8 );
 			return row ? { refObjId: row.refObjId, typeFlags: row.typeFlags } : undefined;
 		},
 		/*
-		================
-		useType
-
-		The type flags of the item in a slot, if any.
-		================
+================
+useType
+================
 		*/
 		useType( slot: number ) {
 			return slots.get( slot )?.typeFlags;
 		},
 		/*
-		================
-		useCooldown
-
-		The running cooldown that blocks using the item in a slot.
-		================
+================
+useCooldown
+================
 		*/
 		useCooldown( slot: number ) {
 			const item = slots.get( slot );
@@ -351,11 +342,9 @@ export function createInventory(
 		},
 		present,
 		/*
-		================
-		references
-
-		Install item references published with a commerce reply.
-		================
+================
+references
+================
 		*/
 		references( rows: readonly import("@/engine/foundation/gameplay/commerce").CommerceItemReference[] ) {
 			for ( const row of rows ) {
@@ -374,11 +363,9 @@ export function createInventory(
 			shopSource = undefined;
 		},
 		/*
-		================
-		bootstrap
-
-		Seed the slot map, avatars and cooldowns from world entry.
-		================
+================
+bootstrap
+================
 		*/
 		bootstrap( value: unknown ) {
 			bindingMoves = [];
@@ -386,6 +373,8 @@ export function createInventory(
 			presentations = new WeakMap();
 			alchemy.reset();
 			gacha.reset();
+			mall.reset();
+			mallDelivery = null;
 			tooltipRefs.clear();
 			magicRefs = itemMagicReferences( (value as { magicOptionSnapshot?: unknown; }).magicOptionSnapshot );
 			const b = value as {
@@ -472,11 +461,9 @@ export function createInventory(
 			published = null;
 		},
 		/*
-		================
-		process
-
-		Route an alchemy or Magic Pop command to its child owner.
-		================
+================
+process
+================
 		*/
 		process( command: ItemProcessCommand, now: number ) {
 			if ( command.kind === "alchemy-open" ) {
@@ -507,11 +494,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		cosTrade
-
-		Buy into or sell from an active COS inventory at a merchant.
-		================
+================
+cosTrade
+================
 		*/
 		cosTrade(
 			record: import("@/engine/contracts/gameplay").CosRecord,
@@ -559,11 +544,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		cosShopSnapshot
-
-		Apply the COS inventory snapshot that opens its shop view.
-		================
+================
+cosShopSnapshot
+================
 		*/
 		cosShopSnapshot( record: import("@/engine/contracts/gameplay").CosRecord, p: Uint8Array ) {
 			const r = commerceJson( p );
@@ -585,11 +568,9 @@ export function createInventory(
 			return { ...record, inventory: [ ...next.values() ] };
 		},
 		/*
-		================
-		cosPurchase
-
-		Apply a COS purchase reply.
-		================
+================
+cosPurchase
+================
 		*/
 		cosPurchase( p: Uint8Array ) {
 			if ( p.length < 11 || p[0] !== 1 || p[1] !== 19 || p.length !== 11 + p[8]! ) {
@@ -610,11 +591,9 @@ export function createInventory(
 			error = null;
 		},
 		/*
-		================
-		cosSold
-
-		Apply a COS sale reply.
-		================
+================
+cosSold
+================
 		*/
 		cosSold( gid: number, slot: number, quantity: number, npc: number ) {
 			if ( !pending ) return; // Retain authoritative sale publications with no local intent.
@@ -626,11 +605,9 @@ export function createInventory(
 			error = null;
 		},
 		/*
-		================
-		transferCos
-
-		Request a move between the player and a COS inventory.
-		================
+================
+transferCos
+================
 		*/
 		transferCos(
 			record: import("@/engine/contracts/gameplay").CosRecord,
@@ -665,11 +642,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		cosTransferred
-
-		Apply a player/COS transfer reply.
-		================
+================
+cosTransferred
+================
 		*/
 		cosTransferred(
 			record: import("@/engine/contracts/gameplay").CosRecord,
@@ -701,11 +676,9 @@ export function createInventory(
 			return next.cos;
 		},
 		/*
-		================
-		cosGround
-
-		Request a drop from a COS inventory.
-		================
+================
+cosGround
+================
 		*/
 		cosGround( frame: import("@/engine/contracts/network").WireFrame, now: number ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
@@ -725,11 +698,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		cosGrounded
-
-		Apply a COS drop reply.
-		================
+================
+cosGrounded
+================
 		*/
 		cosGrounded( p: Uint8Array ) {
 			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
@@ -741,11 +712,9 @@ export function createInventory(
 			error = null;
 		},
 		/*
-		================
-		cosMove
-
-		Request a move inside a COS inventory.
-		================
+================
+cosMove
+================
 		*/
 		cosMove( frame: import("@/engine/contracts/network").WireFrame, now: number ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
@@ -767,11 +736,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		cosMoved
-
-		Apply a COS move reply.
-		================
+================
+cosMoved
+================
 		*/
 		cosMoved( p: Uint8Array ) {
 			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
@@ -783,11 +750,9 @@ export function createInventory(
 			error = null;
 		},
 		/*
-		================
-		avatarMove
-
-		Request an avatar equip or unequip move.
-		================
+================
+avatarMove
+================
 		*/
 		avatarMove( equip: boolean, source: number, destination: number, now: number ) {
 			if ( busy() ) throw Error( "Inventory is busy" );
@@ -808,11 +773,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		move
-
-		Request a bag or equipment move, merge or split.
-		================
+================
+move
+================
 		*/
 		move( source: number, destination: number, quantity: number, now = 0 ) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
@@ -838,11 +801,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		drop
-
-		Request dropping an item to the ground.
-		================
+================
+drop
+================
 		*/
 		drop( n: number, now = 0 ) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
@@ -855,11 +816,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		dropGold
-
-		Request dropping gold to the ground.
-		================
+================
+dropGold
+================
 		*/
 		dropGold( amount: number, now = 0 ) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
@@ -876,12 +835,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		openShop
-
-		Ask the selected merchant to open its shop (0x7338 mask 1). The
-		catalogue reply, or a 0xB338 refusal, completes the request.
-		================
+================
+openShop
+================
 		*/
 		openShop( gid: number, now: number ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
@@ -896,11 +852,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		trade
-
-		Request buying from or selling to the open shop.
-		================
+================
+trade
+================
 		*/
 		trade( buy: boolean, n: number, quantity: number, tab: number, now: number ) {
 			if ( busy() || !shop || shop.error ) throw Error( "Shop is unavailable" );
@@ -937,11 +891,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		buyback
-
-		Request buying back a sold item.
-		================
+================
+buyback
+================
 		*/
 		buyback( id: number, now: number ) {
 			if ( busy() || !shop || shop.error || !shop.buyback?.some( e => e.id === id ) ) {
@@ -967,11 +919,9 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		use
-
-		Request using the item in a slot (0x75BD).
-		================
+================
+use
+================
 		*/
 		use( n: number, now = 0 ) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
@@ -990,14 +940,38 @@ export function createInventory(
 			return frame;
 		},
 		/*
-		================
-		receive
-
-		Apply one server frame. Returns true when it belonged to this owner.
-		================
+================
+receive
+================
 		*/
 		receive( op: number, p: Uint8Array, now = 0, recovery?: { country: number | undefined; abnormal: number; } ) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
+			if ( op === 15 ) {
+				const items = mall.projection( p );
+				if ( items !== undefined ) {
+					const prepared = decodeShopItems( items );
+					const received = (items as { slot: number; }[]).map( row => row.slot );
+					if ( received.some( slot => slot < (equipmentSlotCount ?? 13) ) ) {
+						throw Error( "Mall delivery references equipment" );
+					}
+					mallDelivery = { prepared, slots: received };
+				}
+				return true;
+			}
+			if ( op === 0xb06d && p[0] === 1 && p[1] === 0x18 ) {
+				if ( !mallDelivery ) throw Error( "Mall receipt lacks delivery" );
+				mall.acknowledge( p, mallDelivery.slots );
+				const { next, nextRefs, nextNames } = mallDelivery.prepared;
+				slots = next;
+				refs.clear();
+				for ( const [id, flags] of nextRefs ) refs.set( id, flags );
+				names.clear();
+				for ( const [id, name] of nextNames ) names.set( id, name );
+				published = null;
+				mallDelivery = null;
+				return true;
+			}
+			if ( op === 0xb06d && p[0] === 2 && mall.reject( p ) ) return true;
 			if ( op === 0xb338 ) {
 				// 75AE50 kind 2: the NPC refused the function request (category 13,
 				// e.g. code 4 too far). No catalogue follows a refused shop open, so
@@ -1408,13 +1382,12 @@ export function createInventory(
 			return true;
 		},
 		/*
-		================
-		step
-
-		Advance cooldowns, child owners and the pending deadline.
-		================
+================
+step
+================
 		*/
 		step( now: number ) {
+			mall.step( now );
 			const active = itemCooldowns.filter( row => now < row.startedAtMs + row.durationMs ),
 				expired = active.length !== itemCooldowns.length;
 			if ( expired ) itemCooldowns = active;
@@ -1441,14 +1414,13 @@ export function createInventory(
 			return unlocked || expired;
 		},
 		/*
-		================
-		state
-
-		The published inventory snapshot.
-		================
+================
+state
+================
 		*/
 		state() {
 			return {
+				itemMall: mall.state(),
 				itemCooldowns,
 				avatarInventory: [ ...avatars.values() ].map( present ),
 				alchemy: alchemy.state(),
@@ -1458,17 +1430,15 @@ export function createInventory(
 				inventorySlotCount,
 				equipmentSlotCount,
 				inventory: published ?? (published = [ ...slots.values() ].map( present )),
-				inventoryPending: pending !== null || alchemy.state().pending ||
+				inventoryPending: pending !== null || mall.pending() || alchemy.state().pending ||
 					[ "rolling", "waiting" ].includes( gacha.state().phase ),
 				error
 			};
 		},
 		/*
-		================
-		clear
-
-		Forget all inventory state, for a session reset.
-		================
+================
+clear
+================
 		*/
 		clear() {
 			bindingMoves = [];
@@ -1479,6 +1449,8 @@ export function createInventory(
 			magicRefs = itemMagicReferences( undefined );
 			alchemy.reset();
 			gacha.reset();
+			mall.reset();
+			mallDelivery = null;
 			shop = undefined;
 			timedOut = false;
 			objRefs.clear();

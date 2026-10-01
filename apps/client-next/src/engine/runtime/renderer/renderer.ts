@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-renderer.ts - renderer.ts - GPU resource lifetime and ordered scene, character and UI passes
+renderer.ts - GPU resource lifetime and ordered scene, character and UI passes
 
 ===========================================================================
 */
@@ -26,6 +26,9 @@ import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw } from "./internal/gpu-contract";
+const INVENTORY_DOLL_WIDTH = 176;
+const INVENTORY_DOLL_HEIGHT = 318;
+
 /*
 ================
 createRenderer
@@ -45,6 +48,7 @@ export function createRenderer(
 		() => createPortrait( createCharacters( diagnostics.animationPose ) )
 	);
 	const doll = createPortrait( createCharacters( diagnostics.animationPose ) );
+	let dollWidth = 0, dollHeight = 0;
 	let dollDepth: import("./internal/gpu-contract").DepthTarget | null = null;
 	const uiPreparation = createUiPreparation();
 	let uiProduct: ReturnType<typeof prepareUi> | null = null;
@@ -489,17 +493,24 @@ frame
 				if ( !dollInput && portraitGid !== undefined ) {
 					doll.warm( characters.portraitSource( portraitGid ), device.geometry()!, device.images()! );
 				}
+				const dollRect = uiProduct?.scene.quads.find( quad => quad.doll )?.rect;
+				const width = Math.max( 1, Math.ceil( dollRect?.[2] ?? INVENTORY_DOLL_WIDTH ) );
+				const height = Math.max( 1, Math.ceil( dollRect?.[3] ?? INVENTORY_DOLL_HEIGHT ) );
 				const dollDraws = dollInput ?
 					doll.prepare(
 						characters.portraitSource( dollInput.gid ),
 						device.geometry()!,
 						device.images()!,
-						dollInput.yaw,
-						timeSeconds
+						{ yaw: dollInput.yaw, seconds: timeSeconds, aspect: width / height }
 					) :
 					[];
-				const dollTarget = dollInput ? device.portraitTarget( "__doll", 176, 318 ) : undefined;
-				if ( dollTarget && !dollDepth ) dollDepth = device.surfaceCommands()!.createDepth( 176, 318 );
+				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;
+				if ( dollTarget && (!dollDepth || dollWidth !== width || dollHeight !== height) ) {
+					dollDepth?.dispose();
+					dollDepth = device.surfaceCommands()!.createDepth( width, height );
+					dollWidth = width;
+					dollHeight = height;
+				}
 				probe?.renderMark( "labels-portraits" );
 				const deferredPlan = preview ?
 						null :

@@ -180,6 +180,11 @@ export type GameplayCommand =
 	| { readonly kind: "cos-behavior"; readonly gid: number; readonly mode: number; }
 	| { readonly kind: "shop-buyback"; readonly id: number; }
 	| import("./item-process").ItemProcessCommand
+	| { readonly kind: "mall-open"; }
+	| {
+		readonly kind: "mall-buy";
+		readonly request: import("@/engine/foundation/gameplay/item-mall-wire").MallPurchase;
+	}
 	| { readonly kind: "shop-open"; readonly gid: number; }
 	| { readonly kind: "shop-buy"; readonly tab: number; readonly slot: number; readonly quantity: number; }
 	| { readonly kind: "shop-sell"; readonly slot: number; readonly quantity: number; }
@@ -408,6 +413,7 @@ export interface BetaMapPlayer {
 	readonly name: string;
 }
 export interface GameplayState {
+	readonly itemMall?: import("./item-mall").MallState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	/** RefObjIDs the server never spends (the beta starter kit), drawn as unlimited. */
 	readonly unlimitedItems?: readonly number[];

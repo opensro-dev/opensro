@@ -46,6 +46,19 @@ import { isRestorationPotion } from "@/engine/foundation/gameplay/withdrawal";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
 import { academyRank } from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
+import { createItemMall } from "./hud/item-mall";
+import {
+	mallControl,
+	mallCategories,
+	mallDescription,
+	mallMenuControl,
+	mallMenuArtwork,
+	mallTabControl,
+	mallCategoryIcon,
+	mallPageLayout,
+	mallCurrencyRows,
+	mallQuestionLayout
+} from "@/engine/foundation/ui/item-mall-layout";
 import {
 	quickslotCooldownQuads,
 	quickslotItemCooldownQuads,
@@ -99,6 +112,7 @@ import { createRegionBanner } from "./hud/region-banner";
 import { regionBannerQuads } from "@/engine/foundation/ui/region-banner";
 import { buffTooltip } from "@/engine/foundation/ui/buff-tooltip";
 import { masteryTooltip } from "@/engine/foundation/ui/mastery-tooltip";
+import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
 import { commerceTooltip } from "@/engine/foundation/ui/commerce-tooltip";
@@ -462,6 +476,7 @@ export function createUi(
 		guideResources = createGuideResources( assets, base ),
 		minimapResources = createMinimapResources( assets, base );
 	const npcPanel = createNpcPanel(), windowPlacement = createWindowPlacement();
+	const itemMall = createItemMall();
 	const windowWarm = createWindowWarm();
 
 	let guideThumbTravel = 0, guideScrollMax = 0, guideIndexMax = 0;
@@ -1157,6 +1172,128 @@ export function createUi(
 	================
 	*/
 	function activate( id: string ) {
+		if ( id === "item-mall" ) {
+			if ( view?.gameplay && !view.gameplay.inventoryPending ) sendGameplay( { kind: "mall-open" } );
+			itemMall.open();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-close" ) {
+			itemMall.close();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-home" ) {
+			itemMall.browse( -1 );
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-category:" ) ) {
+			itemMall.browse( Number( id.slice( "item-mall-category:".length ) ) );
+			dirty = true;
+			return;
+		}
+
+		if ( id.startsWith( "item-mall-tab:" ) && view?.gameplay ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			itemMall.browse( state.category, Number( id.slice( "item-mall-tab:".length ) ) );
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-buy:" ) && view?.gameplay?.itemMall ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			const offer = state.offers[Number( id.slice( "item-mall-buy:".length ) )];
+			if ( offer && !view.gameplay.inventoryPending ) itemMall.choose( offer );
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-page:" ) && view?.gameplay ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			itemMall.paginate( Number( id.slice( "item-mall-page:".length ) ), state.count );
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-bag-page:" ) && view?.gameplay ) {
+			const game = view.gameplay;
+			const slots = inventorySlots( 0, 0, game.inventorySlotCount ?? 0, game.equipmentSlotCount ?? 13, 0 );
+			itemMall.selectBagPage( Number( id.slice( "item-mall-bag-page:".length ) ), slots.pages );
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-reserve:" ) && view?.gameplay?.itemMall ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			const offer = state.offers[Number( id.slice( "item-mall-reserve:".length ) )];
+			if ( offer && !view.gameplay.inventoryPending ) itemMall.askReserve( offer );
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-wear:" ) && view?.gameplay?.itemMall ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			const offer = state.offers[Number( id.slice( "item-mall-wear:".length ) )];
+			if ( offer && itemMall.wearEnabled( offer, view.gameplay.itemMall ) ) {
+				if ( itemMall.canWear( offer, view.gameplay.itemMall ) ) itemMall.wear( offer, view.gameplay.itemMall );
+				else hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_EQUIPITEM" ), 0xffff7070 );
+			}
+			dirty = true;
+			return;
+		}
+		if ( (id === "item-mall-root:4" || id === "item-mall-buy-all") && view?.gameplay?.itemMall ) {
+			itemMall.askBatch( id === "item-mall-root:4" ? "worn" : "basket", view.gameplay.itemMall );
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-question-confirm" && view?.gameplay?.itemMall ) {
+			if ( !view.gameplay.inventoryPending ) itemMall.confirmQuestion( view.gameplay.itemMall );
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-question-cancel" ) {
+			itemMall.cancelQuestion();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-root:5" ) {
+			itemMall.takeOff();
+			dirty = true;
+			return;
+		}
+
+		if ( id === "item-mall-points" ) {
+			itemMall.showPoints();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-points-close" ) {
+			itemMall.closePoints();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-points-apply" && view?.gameplay?.itemMall ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			itemMall.edit( state.quantity, state.pointDraft, view.gameplay.itemMall );
+			itemMall.closePoints();
+			dirty = true;
+			return;
+		}
+
+		if ( id === "item-mall-purchase" && view?.gameplay?.itemMall ) {
+			const request = itemMall.purchase( view.gameplay.itemMall );
+			if ( request && !view.gameplay.inventoryPending ) sendGameplay( { kind: "mall-buy", request } );
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-cancel" ) {
+			itemMall.cancel();
+			dirty = true;
+			return;
+		}
+		if ( (id === "item-mall-quantity-up" || id === "item-mall-quantity-down") && view?.gameplay?.itemMall ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			itemMall.edit( state.quantity + (id.endsWith( "-up" ) ? 1 : -1), state.points, view.gameplay.itemMall );
+			dirty = true;
+			return;
+		}
+
 		if ( id === "return-cancel" ) {
 			sendGameplay( { kind: "return-cancel" } );
 			return;
@@ -2336,6 +2473,22 @@ export function createUi(
 	return {
 		/*
 		================
+		mallPreview
+		================
+		*/
+		mallPreview() {
+			return itemMall.previewRequest();
+		},
+		/*
+		================
+		mallPreviewState
+		================
+		*/
+		mallPreviewState( value: import("@/engine/contracts/item-mall").MallPreviewState ) {
+			if ( itemMall.previewState( value ) ) dirty = true;
+		},
+		/*
+		================
 		runtimeError
 		================
 		*/
@@ -2388,6 +2541,41 @@ export function createUi(
 		*/
 		event( event: UiEvent ) {
 			if ( disposed ) return;
+			if ( itemMall.read().visible ) {
+				if ( event.kind === "edit" && view?.gameplay?.itemMall ) {
+					const state = itemMall.read( view.gameplay.itemMall );
+					if ( event.id === "item-mall-point-value" && /^\d{0,10}$/.test( event.value ) ) {
+						itemMall.editPointDraft( Number( event.value ), view.gameplay.itemMall );
+					}
+					if ( event.id === "item-mall-quantity" && /^\d{0,5}$/.test( event.value ) ) {
+						itemMall.edit( Number( event.value ), state.points, view.gameplay.itemMall );
+					}
+					dirty = true;
+					return;
+				}
+
+				if ( event.kind === "key" && event.code === "Escape" ) {
+					activate(
+						itemMall.read().pointDialog ?
+							"item-mall-points-close" :
+							itemMall.read().question ?
+							"item-mall-question-cancel" :
+							itemMall.read().selected ?
+							"item-mall-cancel" :
+							"item-mall-close"
+					);
+					return;
+				}
+				if ( event.kind === "activate" && event.id.startsWith( "item-mall" ) ) {
+					activate( event.id );
+					return;
+				}
+				if (
+					event.kind === "key" || event.kind === "activate" || event.kind === "double-activate" ||
+					event.kind === "right-activate" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "world-select" || event.kind === "whisper-target"
+				) return;
+			}
 			if ( event.kind === "whisper-target" ) {
 				const gid = event.gid;
 				const entity = view?.entities.find( row => row.gid === gid && row.kind === "player" );
@@ -3694,6 +3882,14 @@ export function createUi(
 						dirty = true;
 						return;
 					}
+					// The underbar button's own tooltip, UIIT_STT_SILKMALL_SHORT_KEY,
+					// reads "Item Mall(F10)". The native dispatch of that system key was
+					// not located (it is not in Game_OnKeyDown or the binding table), so
+					// F10 opens the mall exactly as the button does (ItemMallEvent_OpenItemMall).
+					if ( binding < 0 && event.code === "F10" ) {
+						activate( "item-mall" );
+						return;
+					}
 					if ( binding < 0 && event.code === "Enter" ) {
 						focusAtEnd( "chat-text", chatText );
 						dirty = true;
@@ -3761,6 +3957,12 @@ export function createUi(
 		step( next: UiView, now = 0, probe?: UiFrameProbe ): UiSemantics | null {
 			quickslotTime = next.simulationTimeMs ?? now;
 			if ( disposed ) return null;
+			// 0x366A reset -> CGInterface_CloseTransientWindowsOnReset (685400) destroys
+			// the ItemMall section. A world transfer starting is that reset here.
+			if ( next.travel && !view?.travel && itemMall.read().visible ) {
+				itemMall.close();
+				dirty = true;
+			}
 			if ( panel === "COS inventory" && !next.gameplay?.cosRecords?.some( r => !r.dead && r.hp > 0 ) ) {
 				setPanel( "" );
 				dirty = true;
@@ -4150,6 +4352,7 @@ export function createUi(
 				}
 				if ( phase !== "world" && !retainedWorld ) {
 					windowPlacement.reset();
+					itemMall.reset();
 					carriedShortcut = null;
 					if ( panel === "Option" ) audioPreference( audioSaved, false );
 					chatFeedbackObserved = -1;
@@ -4249,6 +4452,11 @@ export function createUi(
 				local = game?.vitals.find( v => v.gid === game.localGid ),
 				target = next.entities.find( e => e.gid === game?.target );
 			const training = skillTraining.read( game?.skillCatalog, game?.skills );
+			itemMall.observe( game?.itemMall );
+			if ( game?.itemMall && !game.inventoryPending ) {
+				const request = itemMall.takeNextPurchase( game.itemMall );
+				if ( request ) sendGameplay( { kind: "mall-buy", request } );
+			}
 			dirty = false;
 			windowMissing = [];
 			gauges.begin();
@@ -7055,7 +7263,10 @@ export function createUi(
 								if ( resources.has( arrow ) ) rect( a, white, arrow );
 								controls.push( {
 									id: "option-audio-step:" + key + ":" + delta,
-									label: hudCopy( caption.text ) + (delta < 0 ? " Ã¢Ë†â€™" : " +"),
+									label: hudCopy( caption.text ) +
+										(delta < 0 ?
+											" ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢" :
+											" +"),
 									kind: "button",
 									rect: a,
 									disabled: delta < 0 ? audioDraft[key] === 0 : audioDraft[key] === 100
@@ -11641,6 +11852,583 @@ export function createUi(
 					6
 				);
 			}
+			if ( worldVisible && game && itemMall.read().visible && hud.data() ) {
+				const data = hud.data()!;
+				const state = itemMall.read( game.itemMall );
+				const root = data.windows.ifitemmall!;
+				const frame = data.root.GDR_ITEM_MALL!;
+				const ox = Math.floor( (w - frame.rect[2]) / 2 );
+				const oy = Math.floor( (h - frame.rect[3]) / 2 );
+				// Native mall is a modal owner; underlying windows retain state but
+				// cannot receive input through its scene or child controls.
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...mallMenuArtwork() );
+				nativeFrame( frame, ox, oy, hudCopy( frame.text ), "item-mall-close" );
+				nativePage( root, ox, oy );
+				// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
+				// through CIFButton_SetEnabled(false), even in the retail client.
+				for ( const node of Object.values( root ) ) {
+					if ( node.type !== "CIFButton" ) continue;
+					const id = node.id === 8 ? "item-mall-close" : node.id === 3 ?
+						"item-mall-home" :
+						"item-mall-root:" + node.id;
+					authoredLabeledButton(
+						node,
+						ox,
+						oy,
+						id,
+						hudCopy( node.text ),
+						node.id === 4 || node.id === 5 ?
+							state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
+							node.id !== 8 && node.id !== 3
+					);
+				}
+				for ( let index = 0; index < 8; index++ ) {
+					const category = mallCategories()[index]!;
+					const disabled = category.key !== "basket" &&
+						!game.itemMall?.tabs.some( row => row.category === category.key );
+					const node = mallMenuControl( mallControl( root, 8 ), index, state.category === index, disabled );
+					authoredLabeledButton( node, ox, oy, node.name, hudCopy( node.text ), disabled );
+					authoredImage( mallCategoryIcon( node, index, disabled ), ox, oy );
+				}
+				const infoOrigin = mallControl( root, 90 ).rect;
+				const info = data.windows.ifitemmallmyinfo!;
+				nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [ 10, 11, 12, 14, 18 ] );
+				for ( const id of [ 7, 9 ] ) {
+					const node = mallControl( info, id );
+					authoredLabeledButton(
+						node,
+						ox + infoOrigin[0],
+						oy + infoOrigin[1],
+						"item-mall-funding:" + id,
+						hudCopy( node.text ),
+						true
+					);
+				}
+				if ( game.localGid ) {
+					quads.push( {
+						portraitGid: game.localGid,
+						texture: "__portrait",
+						rect: authoredRect( mallControl( info, 4 ), ox + infoOrigin[0], oy + infoOrigin[1] ),
+						uv: [ 0, 0, 1, 1 ],
+						color: white,
+						clip: full
+					}, {
+						doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
+						texture: "__doll",
+						rect: (() => {
+							const [x, y, width, height] = authoredRect( mallControl( root, 9 ), ox, oy );
+							// 6BB5BA applies the native viewport insets before its 30-degree camera.
+							return [ x + 2, y + 15, width - 2, height - 37 ];
+						})(),
+						uv: [ 0, 0, 1, 1 ],
+						color: white,
+						clip: full
+					} );
+				}
+				for (
+					const [id, value] of [
+						[ 10, next.session?.character ],
+						[ 11, game.progression?.level ],
+						[ 12, game.itemMall?.silk ],
+						[ 14, game.itemMall?.giftSilk ],
+						[ 18, game.itemMall?.points ]
+					] as const
+				) {
+					authoredText(
+						mallControl( info, id ),
+						ox + infoOrigin[0],
+						oy + infoOrigin[1],
+						String( value ?? "" )
+					);
+				}
+				const trunkOrigin = mallControl( root, 102 ).rect;
+				const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
+				nativePage( data.windows.ifitemmalltrunk!, tx, ty );
+				nativePage( data.windows.ifitemmallinventory!, tx, ty );
+				// 6CD535 creates 32x32 cells at (17,19), using the inventory's
+				// ordinary 32-slot pages and 36-pixel pitch. Share slot admission.
+				const mallBag = inventorySlots(
+					tx - 1,
+					ty + 6,
+					game.inventorySlotCount ?? 0,
+					game.equipmentSlotCount ?? 13,
+					state.bagPage
+				);
+				for ( const cell of mallBag.slots ) {
+					const item = game.inventory.find( row => row.slot === cell.slot );
+					const path = cell.enabled ? item && iconPath( item.icon ) : data.popupArt.blocked;
+					if ( path ) image( cell.rect, path );
+					if ( cell.enabled && item ) {
+						equipmentOverlay( item, cell.rect );
+						itemCount( item, cell.rect );
+						controls.push( {
+							id: "item-mall-slot:" + cell.slot,
+							label: item.name ?? "",
+							rect: cell.rect,
+							kind: "button"
+						} );
+					}
+				}
+				const selector = mallControl( data.windows.ifitemmallinventory!, 12 );
+				const expansion = data.windows.ifitemmalltrunkexpbar!;
+				for ( let index = 0; index < 3; index++ ) {
+					const position = mallControl( data.windows.ifitemmallinventory!, 51 + index ).rect;
+					const count = Math.max(
+						0,
+						Math.min(
+							32,
+							(game.inventorySlotCount ?? 0) -
+								(game.equipmentSlotCount ?? 13) - 32 * index
+						)
+					);
+					const ex = tx + position[0], ey = ty + position[1];
+					nativePage( expansion, ex, ey );
+					authoredImage(
+						{
+							...mallControl( expansion, 2 ),
+							texture: ROOT + "interface/mall/mall_inven_icon" + (count > 0 ? "" : "_disable") + ".png"
+						},
+						ex,
+						ey
+					);
+					authoredText(
+						mallControl( expansion, 3 ),
+						ex,
+						ey,
+						count > 0 ?
+							hudCopy( "UIIT_STT_SILKMALL_REMAIN_INVENTORY" ).replace( "%d", String( count ) ) :
+							hudCopy( "UIIT_STT_NONE" )
+					);
+				}
+				const spin = data.windows.ifspincontrol!;
+				const spinX = tx + selector.rect[0], spinY = ty + selector.rect[1];
+				authoredText( mallControl( spin, 0 ), spinX, spinY, String( mallBag.page + 1 ) );
+				for ( const [id, delta] of [ [ 1, -1 ], [ 2, 1 ] ] as const ) {
+					const page = mallBag.page + delta;
+					authoredButton(
+						mallControl( spin, id ),
+						spinX,
+						spinY,
+						"item-mall-bag-page:" + page,
+						"",
+						page < 0 || page >= mallBag.pages
+					);
+				}
+				const shopOrigin = mallControl( root, 50 ).rect;
+				const shop = data.windows.ifitemmallshop!;
+				for ( const node of authoredPaintOrder( shop ) ) {
+					if ( node.creationSection === 0 || state.category === -1 && node.creationSection === 2 ) {
+						authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
+					}
+				}
+
+				const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
+				const currentTab = state.tabs[state.tab];
+				const description = state.category === -1 ?
+					"UIIT_STT_SILKMALL_MAIN_INTRO" :
+					state.category === 7 ?
+					"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
+					currentTab ?
+					mallDescription( currentTab.category, currentTab.tab ) :
+					"";
+				authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+				if ( state.category === -1 ) {
+					authoredChrome( { ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" }, sx, sy );
+				}
+				if ( state.category === 7 ) {
+					const tab = mallTabControl( mallControl( root, 8 ), 0, true );
+					authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
+					const buyAll = mallControl( shop, 42 );
+					authoredLabeledButton(
+						buyAll,
+						sx,
+						sy,
+						"item-mall-buy-all",
+						hudCopy( buyAll.text ),
+						state.count === 0 || state.batchPending || !!game.inventoryPending
+					);
+				}
+				if ( state.category >= 0 ) {
+					for ( let index = 0; index < state.tabs.length; index++ ) {
+						const tab = state.tabs[index]!;
+						const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
+						authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
+					}
+					const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
+					if ( manager.count > 0 ) {
+						const template = {
+							...mallControl( data.windows.ifpagemanager!, 10 ),
+							client: [ 0, 0, 0, 0 ] as UiRect,
+							hAlign: 1,
+							vAlign: 1
+						};
+						authoredText(
+							{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
+							sx,
+							sy,
+							"["
+						);
+						authoredText(
+							{
+								...template,
+								rect: [ manager.x + manager.count * manager.width, manager.y, 4, manager.height ]
+							},
+							sx,
+							sy,
+							"]"
+						);
+						for ( let index = 0; index < manager.count; index++ ) {
+							const page = manager.first + index;
+							const control = {
+								...template,
+								rect: [
+									manager.x + index * manager.width,
+									manager.y,
+									manager.width,
+									manager.height
+								] as UiRect
+							};
+							authoredText( control, sx, sy, String( page + 1 ) );
+							controls.push( {
+								id: "item-mall-page:" + page,
+								label: String( page + 1 ),
+								rect: authoredRect( control, sx, sy ),
+								kind: "button"
+							} );
+						}
+						if ( manager.previous >= 0 ) {
+							const node = mallControl( data.windows.ifpagemanager!, 1 );
+							authoredButton(
+								{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
+								sx,
+								sy,
+								"item-mall-page:" + manager.previous,
+								""
+							);
+						}
+						if ( manager.next < manager.pages ) {
+							const node = mallControl( data.windows.ifpagemanager!, 2 );
+							authoredButton(
+								{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
+								sx,
+								sy,
+								"item-mall-page:" + manager.next,
+								""
+							);
+						}
+					}
+
+					const row = data.windows.ifitemmallshopslot!;
+					for ( let index = 0; index < state.offers.length; index++ ) {
+						const offer = state.offers[index]!;
+						const origin = mallControl( shop, 61 + index ).rect;
+						const rx = sx + origin[0], ry = sy + origin[1];
+						nativePage( row, rx, ry, [ 8, 10, 11 ] );
+						authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
+						authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
+						authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
+						const icon = iconPath( offer.icon );
+						if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
+						controls.push( {
+							id: "item-mall-offer:" + offer.packageId,
+							label: hudCopy( offer.name ),
+							rect: authoredRect( mallControl( row, 1 ), rx, ry ),
+							kind: "button"
+						} );
+						for ( const node of Object.values( row ) ) {
+							if ( node.type !== "CIFButton" ) continue;
+							const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
+								"item-mall-buy:" + index :
+								node.id === 6 ?
+								"item-mall-reserve:" + index :
+								"item-mall-row:" + index + ":" + node.id;
+							authoredLabeledButton(
+								node,
+								rx,
+								ry,
+								action,
+								hudCopy( node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text ),
+								(node.id === 3 ?
+									!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
+									node.id !== 4 && node.id !== 6) || !!game.inventoryPending || state.batchPending
+							);
+						}
+					}
+				}
+				if ( state.selected && game.itemMall ) {
+					const page = data.windows.ifitemmallconfirmbuy!;
+					const row = data.windows.ifitemmallconfirmslot!;
+					const currencyLayout = mallCurrencyRows( state.selected, state.quantity, state.points );
+					const currencies = currencyLayout.rows;
+					const dialogWidth = 327, height = currencyLayout.height;
+					const mx = Math.floor( (w - dialogWidth) / 2 ), my = Math.floor( (h - height) / 2 );
+					controls = [];
+					const prefix = ROOT + "interface/messagebox/msgbox2_window_";
+					paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
+					quads.push(
+						...frameRing(
+							[ mx, my, dialogWidth, height ],
+							prefix,
+							PARTS.map( part => resources.size( prefix + part + ".png" ) ),
+							full
+						)
+					);
+					const background = mallControl( page, 4 );
+					authoredChrome(
+						{
+							...background,
+							rect: [
+								background.rect[0],
+								background.rect[1],
+								background.rect[2],
+								background.rect[3] + currencyLayout.growth
+							]
+						},
+						mx,
+						my
+					);
+					// The fill belongs behind the authored controls.
+					for ( const node of authoredPaintOrder( page ) ) {
+						if ( [ 4, 11, 40, 42, 50, 51, 61, 62 ].includes( node.id ) ) continue;
+						authoredChrome( node, mx, my );
+						if ( node.text ) authoredText( node, mx, my, hudCopy( node.text ) );
+					}
+					authoredText( mallControl( page, 40 ), mx, my, hudCopy( state.selected.name ) );
+					authoredText( mallControl( page, 42 ), mx, my, String( state.quantity ) );
+					const icon = iconPath( state.selected.icon );
+					if ( icon ) authoredImage( { ...mallControl( page, 11 ), texture: icon }, mx, my );
+					for ( let index = 0; index < currencies.length; index++ ) {
+						const currency = currencies[index]!, cy = my + currency.y;
+						nativePage( row, mx, cy, [ 3, 4, 5, 10 ] );
+						authoredText( mallControl( row, 3 ), mx, cy, String( currency.amount ) );
+						authoredText( mallControl( row, 4 ), mx, cy, hudCopy( currency.label ) );
+					}
+					controls.push( {
+						id: "item-mall-quantity",
+						label: hudCopy( "UIIT_STT_AMOUNT" ),
+						rect: authoredRect( mallControl( page, 42 ), mx, my ),
+						kind: "text",
+						value: String( state.quantity ),
+						maxLength: 5,
+						disabled: game.inventoryPending
+					} );
+					if ( state.selected.allowsPoints ) {
+						authoredLabeledButton(
+							mallControl( row, 10 ),
+							mx,
+							my + currencies.find( row => row.points )!.y,
+							"item-mall-points",
+							hudCopy( "UIIT_STT_SILKMALL_USE_POINT" ),
+							game.inventoryPending
+						);
+					}
+
+					for (
+						const [id, name, delta] of [ [ 50, "item-mall-quantity-up", 1 ], [
+							51,
+							"item-mall-quantity-down",
+							-1
+						] ] as const
+					) {
+						authoredButton(
+							mallControl( page, id ),
+							mx,
+							my,
+							name,
+							"",
+							game.inventoryPending || state.quantity + delta < 1 ||
+								state.quantity + delta > state.selected.purchaseLimit
+						);
+					}
+					authoredLabeledButton(
+						{ ...mallControl( page, 61 ), rect: [ 82, height - 40, 0, 0 ] },
+						mx,
+						my,
+						"item-mall-purchase",
+						hudCopy( "UIIT_STT_BUY" ),
+						game.inventoryPending || !itemMall.purchase( game.itemMall )
+					);
+					authoredLabeledButton(
+						{ ...mallControl( page, 62 ), rect: [ 170, height - 40, 0, 0 ] },
+						mx,
+						my,
+						"item-mall-cancel",
+						hudCopy( "UIIT_CTL_CANCEL" ),
+						game.inventoryPending
+					);
+				}
+				if ( state.question && game.itemMall ) {
+					const question = state.question;
+					const layout = mallQuestionLayout( question.kind, question.offers.length );
+					const mx = Math.floor( (w - layout.width) / 2 ), my = Math.floor( (h - layout.height) / 2 );
+					const page = data.windows.ifmessagebox!;
+					const store = Object.fromEntries(
+						Object.entries( page ).filter( ( [, node] ) => node.creationSection === 1 )
+					);
+					const template = mallControl( data.windows.ifitemmallconfirmbuy!, 5 );
+					controls = [];
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...normalTile(
+							[ mx + 16, my + 40, layout.width - 32, layout.height - 56 ],
+							MESSAGE_TILE,
+							resources.size( MESSAGE_TILE ),
+							full
+						),
+						...frameRing(
+							[ mx, my, layout.width, layout.height ],
+							MESSAGE_FRAME,
+							PARTS.map( part => resources.size( MESSAGE_FRAME + part + ".png" ) ),
+							full
+						)
+					);
+					authoredText(
+						{ ...template, rect: [ 16, 12, layout.width - 32, 14 ] },
+						mx,
+						my,
+						hudCopy( layout.caption )
+					);
+					authoredChrome(
+						{ ...template, type: "CIFPML", rect: [ ...layout.messageRect ], text: layout.message },
+						mx,
+						my
+					);
+					if ( question.kind === "reserve" || question.kind === "remove" ) {
+						const offer = question.offers[0]!;
+						authoredImage( mallControl( store, 10 ), mx, my );
+						authoredImage( mallControl( store, 1 ), mx, my );
+						authoredText( mallControl( store, 1 ), mx, my, hudCopy( offer.name ) );
+						const icon = iconPath( offer.icon );
+						if ( icon ) authoredImage( { ...mallControl( store, 12 ), texture: icon }, mx, my );
+					} else {
+						const total = question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ) - state.points;
+						if ( question.kind === "worn" ) {
+							for ( let index = 0; index < question.offers.length; index++ ) {
+								const offer = question.offers[index]!, y = layout.rowStart + layout.rowPitch * index;
+								authoredText(
+									{ ...template, rect: [ 70, y, 100, 16 ], hAlign: 2 },
+									mx,
+									my,
+									hudCopy( offer.name )
+								);
+								authoredText(
+									{ ...template, rect: [ 165, y, 40, 16 ], hAlign: 2 },
+									mx,
+									my,
+									`${offer.silk} ${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}`
+								);
+							}
+						}
+						authoredText(
+							{
+								...mallControl( store, 8 ),
+								rect: [ question.kind === "basket" ? 91 : 121, layout.totalY, 50, 14 ],
+								hAlign: 2
+							},
+							mx,
+							my,
+							hudCopy( "UIIT_STT_PRICE" )
+						);
+						authoredText(
+							{
+								...mallControl( store, 2 ),
+								color: tooltipColor( 0xffffcc26 ),
+								rect: [
+									question.kind === "basket" ? 143 : 166,
+									layout.totalY,
+									question.kind === "basket" ? 40 : 28,
+									14
+								],
+								hAlign: 2
+							},
+							mx,
+							my,
+							String( total )
+						);
+						authoredText(
+							{
+								...mallControl( store, 7 ),
+								rect: [ question.kind === "basket" ? 183 : 188, layout.totalY, 26, 14 ]
+							},
+							mx,
+							my,
+							hudCopy( "UIIT_STT_SILKMALL_SILK" )
+						);
+						if ( state.pointLimit > 0 ) {
+							for ( const id of [ 50, 51 ] ) {
+								const node = mallControl( store, id );
+								authoredText(
+									{ ...node, rect: [ node.rect[0], layout.pointY, node.rect[2], node.rect[3] ] },
+									mx,
+									my,
+									id === 51 ? String( state.points ) : hudCopy( node.text )
+								);
+							}
+							const button = mallControl( store, 52 );
+							authoredLabeledButton(
+								{ ...button, rect: [ button.rect[0], layout.pointY, button.rect[2], button.rect[3] ] },
+								mx,
+								my,
+								"item-mall-points",
+								hudCopy( button.text ),
+								!!game.inventoryPending
+							);
+						}
+					}
+					authoredLabeledButton(
+						{ ...mallControl( store, 215 ), rect: [ layout.buttonX, layout.buttonY, 76, 22 ] },
+						mx,
+						my,
+						"item-mall-question-confirm",
+						hudCopy( layout.confirm ),
+						!!game.inventoryPending || !state.questionReady
+					);
+					authoredLabeledButton(
+						{ ...mallControl( store, 216 ), rect: [ layout.buttonX + 80, layout.buttonY, 76, 22 ] },
+						mx,
+						my,
+						"item-mall-question-cancel",
+						hudCopy( "UIIT_CTL_CANCEL" )
+					);
+				}
+				if ( state.pointDialog && game.itemMall ) {
+					const prefix = ROOT + "interface/messagebox/msgbox2_window_";
+					const pointPage = data.windows.ifitemmallusepoint!;
+					const pointWidth = 233, pointHeight = 177;
+					const px = Math.floor( (w - pointWidth) / 2 ), py = Math.floor( (h - pointHeight) / 2 );
+					controls = [];
+					quads.push(
+						...frameRing(
+							[ px, py, pointWidth, pointHeight ],
+							prefix,
+							PARTS.map( part => resources.size( prefix + part + ".png" ) ),
+							full
+						)
+					);
+					nativePage( pointPage, px, py, [ 40, 41 ] );
+					authoredText( mallControl( pointPage, 40 ), px, py, String( game.itemMall.points ) );
+					authoredText( mallControl( pointPage, 41 ), px, py, String( state.pointDraft ) );
+					controls.push( {
+						id: "item-mall-point-value",
+						label: hudCopy( "UIIT_STT_SILKMALL_P_POINT" ),
+						rect: authoredRect( mallControl( pointPage, 41 ), px, py ),
+						kind: "text",
+						value: String( state.pointDraft ),
+						maxLength: 10,
+						disabled: game.inventoryPending
+					} );
+					authoredLabeledButton(
+						mallControl( pointPage, 50 ),
+						px,
+						py,
+						"item-mall-points-apply",
+						hudCopy( mallControl( pointPage, 50 ).text ),
+						game.inventoryPending
+					);
+				}
+			}
 			if ( worldVisible && game && withdrawal.confirming() && hud.data() ) {
 				const state = withdrawal.read( game, hud.data()?.masteryCosts ?? {}, hud.data()?.withdrawalGoldPrices );
 				const page = hud.data()!.windows.ifskillremovalbox!, row = state.choice;
@@ -11807,6 +12595,17 @@ export function createUi(
 								"" :
 								localization.text( symbol, "" ) || hudData.strings[symbol] || "";
 					const items = tooltipItems( id, game, cosGid ), item = items[0];
+					if ( id.startsWith( "item-mall-offer:" ) ) {
+						const offer = game.itemMall?.offers.find( row =>
+							row.packageId === Number( id.slice( "item-mall-offer:".length ) )
+						);
+						if ( offer ) {
+							tooltip = [
+								{ value: lookup( offer.name ), color: 0xffffffff, heading: true },
+								...tooltipDescription( lookup( offer.description ) )
+							];
+						}
+					}
 					if ( control.helpSource ) {
 						tooltip = buffTooltip(
 							control.helpSource,
@@ -12040,6 +12839,7 @@ export function createUi(
 		================
 		*/
 		dispose() {
+			itemMall.reset();
 			skillTraining.reset();
 			gauges.reset();
 			tooltipMemo = null;

@@ -61,6 +61,19 @@ test("missing images produce no white primitives and late residency restores the
 		const replaced = ui.prepare( masked );
 		assert.equal( replaced.length, 1 );
 		assert.notEqual( replaced[0].binding, first[0].binding, "replacement binds the new mask resource" );
+		ui.portraitTarget( "__doll", 176, 318 );
+		const portraitScene = { ...scene, quads: [ q( "__doll" ) ] };
+		const inventory = ui.prepare( portraitScene );
+		ui.portraitTarget( "__doll", 176, 318 );
+		assert.equal( ui.prepare( portraitScene ), inventory, "unchanged viewport retains GPU bindings" );
+		ui.portraitTarget( "__doll", 88, 168 );
+		const mall = ui.prepare( portraitScene );
+		assert.notEqual( mall[0].binding, inventory[0].binding, "mall viewport replaces the inventory target" );
+		assert.throws( () => ui.portraitTarget( "__doll", 0, 168 ), /Invalid portrait extent/ );
+		assert.throws( () => ui.portraitTarget( "__doll", 8192, 8192 ), /Invalid portrait extent/ );
+		assert.equal( ui.prepare( portraitScene ), mall, "invalid replacement leaves the admitted target intact" );
+		ui.portraitTarget( "__doll", 176, 318 );
+		assert.notEqual( ui.prepare( portraitScene )[0].binding, mall[0].binding );
 	} finally {
 		ui.dispose();
 		globalThis.GPUBufferUsage = oldBuffer;

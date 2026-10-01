@@ -86,19 +86,19 @@ test("inventory doll advances its own idle and resets on replacement without inh
 		invalidate() {},
 		dispose() {}
 	} );
-	p.prepare( source, {}, {}, .1, 10 );
-	p.prepare( source, {}, {}, .2, 11 );
+	p.prepare( source, {}, {}, { yaw: .1, seconds: 10 } );
+	p.prepare( source, {}, {}, { yaw: .2, seconds: 11 } );
 	assert.equal( actors[0].time, 1 );
 	assert.equal( actors[0].clip, "preview-state0-sword" );
 	assert.equal( actors[0].loop, true );
 	assert.equal( actors[0].opacity, 1 );
 	assert.equal( actors[0].layers, undefined );
-	p.prepare( { ...source, model: { clips: [ { name: "stand" } ] } }, {}, {}, .2, 12 );
+	p.prepare( { ...source, model: { clips: [ { name: "stand" } ] } }, {}, {}, { yaw: .2, seconds: 12 } );
 	assert.equal( actors[0].time, 0 );
-	p.prepare( null, {}, {}, undefined, 20 );
-	p.prepare( source, {}, {}, .1, 30 );
+	p.prepare( null, {}, {}, { yaw: undefined, seconds: 20 } );
+	p.prepare( source, {}, {}, { yaw: .1, seconds: 30 } );
 	assert.equal( actors[0].time, 0 );
-	p.prepare( source, {}, {}, undefined, 31 );
+	p.prepare( source, {}, {}, { yaw: undefined, seconds: 31 } );
 	assert.equal( actors[0].time, 0 );
 	assert.equal( actors[0].clip, "stand" );
 });

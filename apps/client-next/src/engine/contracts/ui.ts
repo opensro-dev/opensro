@@ -76,7 +76,13 @@ export type UiHelpSource = {
 	readonly token: number;
 	readonly skill: number;
 	readonly viewer?: boolean;
-} | { readonly kind: "abnormal"; readonly gid: number; readonly bit: number; readonly unlevelled?: boolean; };
+} | {
+	readonly kind: "abnormal";
+	readonly gid: number;
+	readonly bit: number;
+	readonly viewer?: boolean;
+	readonly unlevelled?: boolean;
+};
 /*
 ================
 UiControl

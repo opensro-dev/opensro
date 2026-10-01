@@ -101,6 +101,7 @@ test("every admitted item-container route resolves its instance, including dupli
 	for (
 		const [id, item] of [
 			[ "slot:13", bag ],
+			[ "item-mall-slot:13", bag ],
 			[ "slot:6", equipment ],
 			[ "avatar:1", avatar ],
 			[ "cos-player:13", bag ],
