@@ -1,3 +1,15 @@
+/*
+===========================================================================
+
+variables.go - the Nomad variables a deployment owns
+
+Secrets reach the jobs only as Nomad variables (the Agent's signing ring,
+provisioning token, account catalog chunks and, when configured, the bug
+report webhook; each GameWorld's public verifier ring). Writes use
+check-and-set so two deployers never silently overwrite each other.
+
+===========================================================================
+*/
 package main
 
 import (
@@ -16,22 +28,38 @@ const (
 	gameWorldVariablePrefix  = "nomad/jobs/"
 	gameWorldVariableSuffix  = "/gameworld/gameworld"
 	accountChunkVariableItem = "payload"
+	bugReportWebhookItem     = "bug_report_discord_webhook"
 	nomadVariablePathBytes   = 128
 	nomadVariableItemsBytes  = 64 << 10
 )
 
+/*
+================
+desiredVariable
+================
+*/
 type desiredVariable struct {
 	jobID string
 	path  string
 	items nomad.VariableItems
 }
 
+/*
+================
+variablePlan
+================
+*/
 type variablePlan struct {
 	desired            []desiredVariable
 	current            map[string]*nomad.Variable
 	staleAccountChunks []*nomad.VariableMetadata
 }
 
+/*
+================
+putVariables
+================
+*/
 func (deployment *deployment) putVariables(
 	ctx context.Context,
 	client *nomadClient,
@@ -97,6 +125,11 @@ func (deployment *deployment) putVariables(
 	return nil
 }
 
+/*
+================
+validateVariables
+================
+*/
 func (deployment *deployment) validateVariables(
 	ctx context.Context,
 	client *nomadClient,
@@ -112,6 +145,11 @@ func (deployment *deployment) validateVariables(
 	return nil
 }
 
+/*
+================
+planVariables
+================
+*/
 func (deployment *deployment) planVariables(
 	ctx context.Context,
 	client *nomadClient,
@@ -180,6 +218,11 @@ func (deployment *deployment) planVariables(
 	}, nil
 }
 
+/*
+================
+validateDesiredVariables
+================
+*/
 func validateDesiredVariables(variables []desiredVariable) error {
 	seen := make(map[string]struct{}, len(variables))
 	for _, variable := range variables {
@@ -214,6 +257,11 @@ func validateDesiredVariables(variables []desiredVariable) error {
 	return nil
 }
 
+/*
+================
+validateNomadVariablePath
+================
+*/
 func validateNomadVariablePath(path string) error {
 	if len(path) < 1 || len(path) > nomadVariablePathBytes {
 		return fmt.Errorf(
@@ -242,14 +290,25 @@ func validateNomadVariablePath(path string) error {
 	return nil
 }
 
+/*
+================
+desiredVariables
+================
+*/
 func (deployment *deployment) desiredVariables() ([]desiredVariable, error) {
+	agentItems := nomad.VariableItems{
+		"agent_session_keyring":    deployment.Secrets.SessionPrivate,
+		"agent_provisioning_token": deployment.Secrets.ProvisioningToken,
+	}
+	// Absent, not empty, when bug reports are off: the job template renders
+	// SRO_BUG_REPORT_DISCORD_WEBHOOK only when the item exists.
+	if webhook := deployment.BugReports.WebhookURL; webhook != "" {
+		agentItems[bugReportWebhookItem] = webhook
+	}
 	desired := []desiredVariable{{
 		jobID: agentJobName,
 		path:  agentVariablePath,
-		items: nomad.VariableItems{
-			"agent_session_keyring":    deployment.Secrets.SessionPrivate,
-			"agent_provisioning_token": deployment.Secrets.ProvisioningToken,
-		},
+		items: agentItems,
 	}}
 	for index, chunk := range deployment.Secrets.AccountChunks {
 		desired = append(desired, desiredVariable{
@@ -274,6 +333,11 @@ func (deployment *deployment) desiredVariables() ([]desiredVariable, error) {
 	return desired, nil
 }
 
+/*
+================
+accountChunkVariablePath
+================
+*/
 func accountChunkVariablePath(index int) string {
 	return accountChunkPathPrefix + fmt.Sprintf(
 		"%0*d",
@@ -282,6 +346,11 @@ func accountChunkVariablePath(index int) string {
 	)
 }
 
+/*
+================
+staleAccountChunkVariables
+================
+*/
 func (client *nomadClient) staleAccountChunkVariables(
 	ctx context.Context,
 	desiredPaths map[string]struct{},
@@ -305,6 +374,11 @@ func (client *nomadClient) staleAccountChunkVariables(
 	return stale, nil
 }
 
+/*
+================
+managedAccountChunkPath
+================
+*/
 func managedAccountChunkPath(path string) bool {
 	index := strings.TrimPrefix(path, accountChunkPathPrefix)
 	if index == path || len(index) != accountChunkIndexDigits {
@@ -314,6 +388,11 @@ func managedAccountChunkPath(path string) bool {
 	return err == nil
 }
 
+/*
+================
+stringMapsEqual
+================
+*/
 func stringMapsEqual(
 	left map[string]string,
 	right map[string]string,
@@ -329,6 +408,11 @@ func stringMapsEqual(
 	return true
 }
 
+/*
+================
+deleteDisabledGameWorldVariables
+================
+*/
 func (client *nomadClient) deleteDisabledGameWorldVariables(
 	ctx context.Context,
 	enabled map[string]struct{},
@@ -368,6 +452,11 @@ func (client *nomadClient) deleteDisabledGameWorldVariables(
 	return nil
 }
 
+/*
+================
+managedGameWorldVariableJobID
+================
+*/
 func managedGameWorldVariableJobID(path string) (string, bool) {
 	if !strings.HasPrefix(path, gameWorldVariablePrefix) ||
 		!strings.HasSuffix(path, gameWorldVariableSuffix) {

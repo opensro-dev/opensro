@@ -1,0 +1,163 @@
+/*
+===========================================================================
+
+bugreport.go - in-game bug reports: operator configuration
+
+Package bugreport accepts the bug reports players send from the browser
+client (a description, client context and an optional replay clip or
+screenshot) and posts them to a Discord channel through a webhook.
+
+The feature is off unless the operator configures it. Three environment
+variables control it; a missing or invalid webhook leaves it disabled
+rather than failing the Agent, because bug reporting is never worth an
+outage. The webhook URL is a credential (anyone holding it can post to the
+channel): it is never logged and never sent to clients.
+
+===========================================================================
+*/
+package bugreport
+
+import (
+	"fmt"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+const (
+	// EnvDiscordWebhook turns the feature on and names the receiving channel.
+	EnvDiscordWebhook = "SRO_BUG_REPORT_DISCORD_WEBHOOK"
+	// EnvReplayDefault is the replay recording state ("on" or "off") for
+	// players who have not changed it in the Options window.
+	EnvReplayDefault = "SRO_BUG_REPORT_REPLAY_DEFAULT"
+	// EnvMaxBytes caps one report's attachment. Discord accepts 10 MiB per
+	// file on servers without boosts and more on boosted ones.
+	EnvMaxBytes = "SRO_BUG_REPORT_MAX_BYTES"
+
+	DefaultMaxBytes int64 = 10 << 20
+	minMaxBytes     int64 = 1 << 20
+	maxMaxBytes     int64 = 500 << 20
+
+	// ReplaySeconds is the length of the rolling replay the client keeps.
+	ReplaySeconds = 60
+)
+
+// Official Discord hosts only: the Agent must not become a relay that posts
+// player uploads to an arbitrary URL through a mistyped variable.
+var webhookPattern = regexp.MustCompile(
+	`^https://(?:(?:canary|ptb)\.)?discord(?:app)?\.com/api(?:/v\d+)?/webhooks/\d{15,22}/[A-Za-z0-9_-]{20,128}$`,
+)
+
+/*
+================
+Config
+
+Operator settings. An empty WebhookURL means the feature is disabled.
+================
+*/
+type Config struct {
+	WebhookURL    string
+	ReplayDefault bool
+	MaxBytes      int64
+}
+
+/*
+================
+Settings
+
+What the client needs to know; never includes the webhook.
+================
+*/
+type Settings struct {
+	Enabled       bool  `json:"enabled"`
+	ReplayDefault bool  `json:"replayDefault"`
+	MaxBytes      int64 `json:"maxBytes"`
+	ReplaySeconds int   `json:"replaySeconds"`
+}
+
+/*
+================
+DisabledSettings
+================
+*/
+func DisabledSettings() Settings {
+	return Settings{Enabled: false, ReplayDefault: false, MaxBytes: 0, ReplaySeconds: ReplaySeconds}
+}
+
+/*
+================
+LoadConfig
+
+Reads the three variables through getenv (os.Getenv in service). Every
+problem becomes a warning and a safe value: an invalid webhook disables the
+feature, an invalid default or size falls back to the documented default.
+The warnings never contain the webhook itself.
+================
+*/
+func LoadConfig(getenv func(string) string) (Config, []string) {
+	var warnings []string
+	config := Config{ReplayDefault: true, MaxBytes: DefaultMaxBytes}
+
+	webhook := strings.TrimSpace(getenv(EnvDiscordWebhook))
+	if webhook != "" {
+		if ValidWebhookURL(webhook) {
+			config.WebhookURL = webhook
+		} else {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s is not a Discord webhook URL (https://discord.com/api/webhooks/<id>/<token>); bug reports are disabled",
+				EnvDiscordWebhook,
+			))
+		}
+	}
+
+	if raw := strings.TrimSpace(getenv(EnvReplayDefault)); raw != "" {
+		value, ok := parseSwitch(raw)
+		if ok {
+			config.ReplayDefault = value
+		} else {
+			warnings = append(warnings, fmt.Sprintf("%s=%q is not on/off; using on", EnvReplayDefault, raw))
+		}
+	}
+
+	if raw := strings.TrimSpace(getenv(EnvMaxBytes)); raw != "" {
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err == nil && value >= minMaxBytes && value <= maxMaxBytes {
+			config.MaxBytes = value
+		} else {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s=%q must be a byte count between %d and %d; using %d",
+				EnvMaxBytes, raw, minMaxBytes, maxMaxBytes, DefaultMaxBytes,
+			))
+		}
+	}
+	return config, warnings
+}
+
+/*
+================
+ValidWebhookURL
+================
+*/
+func ValidWebhookURL(raw string) bool {
+	if !webhookPattern.MatchString(raw) {
+		return false
+	}
+	parsed, err := url.Parse(raw)
+	return err == nil && parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == ""
+}
+
+/*
+================
+parseSwitch
+================
+*/
+func parseSwitch(raw string) (bool, bool) {
+	switch strings.ToLower(raw) {
+	case "on", "true", "1", "yes":
+		return true, true
+	case "off", "false", "0", "no":
+		return false, true
+	}
+	return false, false
+}
