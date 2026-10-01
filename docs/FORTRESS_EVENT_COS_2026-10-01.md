@@ -2,9 +2,10 @@
 
 Status: summoning/persistence and its shared placement corrections are implemented
 and have passed authenticated browser lifecycle checks on the isolated
-`codex/fortress-event-cos` checkout, which includes main through `85eb9c2`.
-Release preparation is in progress; the broader fortress/event work remains
-incomplete. This is not a production-release claim. The user
+checkout, including main's #89/#93/#95 integrations. The implementation merged
+in [PR #97](https://github.com/opensro-dev/opensro/pull/97). Publication identities
+and current deployment state are recorded in the private operations log; the
+broader fortress/event work remains incomplete. The user
 explicitly expanded the abnormal-status audit to include these systems.
 The v1.150 content boundary still applies; the later server supplies rules.
 
@@ -334,6 +335,15 @@ were rebuilt and redeployed over the existing populated authority. The same
 authenticated companion browser test passed again in 37.3 seconds, including
 the retained bag, both families, cancellation/resummon, withdrawal and reload.
 Evidence is under `apps/client-next/temp/artifacts/companion-persistence-main-integration/`.
+
+The final #95 integration passed the full source pipeline (12 tasks, 85.8
+seconds) and full client pipeline (11 gates, 93.4 seconds). The archive test
+initially failed with `spawnSync unzip ENOENT`; adding the already-installed
+Git unzip executable to that check process's PATH resolved the workstation
+dependency without editing the test. After rebuilding and redeploying both
+isolated services, the populated-authority browser lifecycle passed in 50.415
+seconds. Its report has `verdict: PASS` and no errors; artifacts are under
+`apps/client-next/temp/artifacts/companion-persistence-final-main/`.
 
 One Windows CI run then exposed ambient loot randomness in the shared combat
 fixture: `TestFatalSkillRewardCommitsAtHitAndPublishesBeforeFinalize` received
