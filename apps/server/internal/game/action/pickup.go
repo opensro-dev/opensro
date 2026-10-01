@@ -137,31 +137,51 @@ func (rt *Runtime) grantPickup(
 		// the Get in HandleTargetInteract through to here and the TTL sweep
 		// owns the maintenance barrier), but the refusal arm stays defensive; its
 		// commit is a no-op by content.
+		// The rotation chose character; its party may split the heap.
+		shares := rt.partyGoldShares(divisionID, character, groundItem.GoldAmount, rt.Now().UnixMilli())
+		split := shares != nil
+		if !split {
+			shares = []goldShare{{character, groundItem.GoldAmount}}
+		}
+		credited := make([]*enterworld.Character, len(shares))
+		for i, s := range shares {
+			credited[i] = s.character
+		}
 		removed := false
-		var balance uint64
-		rt.deps.Update(character, "pickup-gold", func() bool {
-			if character.DeletePending {
-				return false
-			}
-			// The durable character stores signed-64 gold. Refuse before removing
-			// the heap rather than publishing a balance that persistence clamps.
-			if goldOf(character) > uint64(math.MaxInt64)-uint64(groundItem.GoldAmount) {
-				return false
+		balances := make([]uint64, len(shares))
+		rt.deps.UpdateMany(credited, "pickup-gold", func() bool {
+			for _, s := range shares {
+				// The durable character stores signed-64 gold. Refuse before removing
+				// the heap rather than publishing a balance that persistence clamps.
+				if s.character.DeletePending || goldOf(s.character) > uint64(math.MaxInt64)-uint64(s.amount) {
+					return false
+				}
 			}
 			if _, removed = rt.Ground.Remove(divisionID, groundItem.Gid); !removed {
 				return false
 			}
-			balance = inventory.PickupGold(goldOf(character), groundItem.GoldAmount)
-			setGold(character, balance)
+			for i, s := range shares {
+				balances[i] = inventory.PickupGold(goldOf(s.character), s.amount)
+				setGold(s.character, balances[i])
+			}
 			return true
 		})
 		if !removed {
 			return pickupRefusal(wire.ErrCodeCannotBePicked)
 		}
-		return OpResult{
-			Frames:    wire.PickupGoldGrantFrames(anim, groundItem.GoldAmount, balance, groundItem.Gid),
-			Broadcast: wire.PickupBroadcastFrames(anim, groundItem.Gid, 0),
+		result := OpResult{Broadcast: wire.PickupBroadcastFrames(anim, groundItem.Gid, 0)}
+		for i, s := range shares {
+			if s.character == character {
+				result.Frames = wire.PickupGoldGrantFrames(anim, groundItem.GoldAmount, balances[i], groundItem.Gid, split)
+				continue
+			}
+			// Each other share: AddGold(share, reason 0x17, send 1, notify 1).
+			result.Recipients = append(result.Recipients, RecipientFrames{CharacterID: s.character.ID, Frames: []wire.Frame{{
+				Opcode:  wire.OpPointsUpdate,
+				Payload: wire.GoldRefresh{Balance: balances[i], Notify: true}.Encode(),
+			}}})
 		}
+		return result
 	}
 
 	groundItem.Summon.RefreshRentalTimes(rt.Now().Unix())

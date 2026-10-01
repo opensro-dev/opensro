@@ -127,27 +127,34 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			}
 		}
 
+		// 4ACED4 admits a command with mask 0x37 (no targets) before it
+		// replaces anything: a refused skill (cooldown, MP, range) leaves the
+		// running basic attack and its continuation untouched. A command that
+		// arrives mid-action waits, so a busy caster is left to the action
+		// owners below.
+		if source := rt.deps.SkillData(); source != nil {
+			if skill, ok := source.SkillByID(cast.ActionId); ok &&
+				!isPinnedBaseAttack(snapshot, skill.Codename) &&
+				!rt.hasOpenSkillCast(divisionID, snapshot.Name) {
+				if code := rt.skillAdmission(
+					divisionID,
+					snapshot,
+					skill,
+					rt.Now().UnixMilli(),
+					nil,
+					nil,
+					admitCommand,
+				); code != 0 {
+					return offensiveRefusal(code)
+				}
+			}
+		}
+
 		rt.ClearCombatIntent(divisionID, snapshot.Name)
 
 		if source := rt.deps.SkillData(); source != nil {
 			if skill, ok := source.SkillByID(cast.ActionId); ok &&
 				!isPinnedBaseAttack(snapshot, skill.Codename) {
-				// 4ACED4 admits a command with mask 0x37 (no targets) when the
-				// actor dequeues it. A command that arrives mid-action waits,
-				// so a busy caster is left to the action owners below.
-				if !rt.hasOpenSkillCast(divisionID, snapshot.Name) {
-					if code := rt.skillAdmission(
-						divisionID,
-						snapshot,
-						skill,
-						rt.Now().UnixMilli(),
-						nil,
-						nil,
-						admitCommand,
-					); code != 0 {
-						return offensiveRefusal(code)
-					}
-				}
 
 				if skill.Duplicate.Pinned {
 					return rt.acceptDuplicate(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())

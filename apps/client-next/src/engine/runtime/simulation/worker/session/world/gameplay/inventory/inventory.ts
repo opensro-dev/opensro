@@ -1426,7 +1426,8 @@ receive
 			} else if ( p[1] === 6 && p[2] === 254 ) {
 				if ( p.length !== 7 ) throw Error( "Invalid gold pickup result" );
 				// Amount granted, not a bag slot or the absolute balance.
-				// 3126 owns balance; ANI_PICK owns sound, avoiding duplicates.
+				// 30B3 type 1 owns the balance; gameplay prints the gain notice;
+				// ANI_PICK owns sound, avoiding duplicates.
 			} else if ( p[1] === 6 && p[2] !== 254 ) {
 				const n = slot( p[2]! );
 				if ( n < (equipmentSlotCount ?? 13) || n >= (inventorySlotCount ?? 256) ) {

@@ -2903,7 +2903,7 @@ soundContext
 					);
 					modelAnimation = holder.selection.step( dispatch, metadata.bindings, metadata.selectors );
 				}
-				next.set( actor.gid, { ...actor, model, modelAnimation } );
+				next.set( actor.gid, { ...actor, model, modelAnimation, effectEntity: true } );
 				if ( metadata?.particles.length ) {
 					animationHolders.push( { actor: next.get( actor.gid )!, sets: metadata.particles } );
 				}

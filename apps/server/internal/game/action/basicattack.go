@@ -378,6 +378,10 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 		DivisionID: divisionID, CharacterName: snapshot.Name,
 		TargetGid: engage.TargetGid, SkillID: skill.ID,
 		ActionReach: rt.playerActionReach(divisionID, snapshot, skill, loadout), CooldownMs: int64(rt.playerSkillCooldown(divisionID, snapshot, skill)),
+		// A swing cancelled for movement leaves its cooldown running. A new
+		// attack command waits it out (the repeating-attack gate below) rather
+		// than being refused with 0x3005 and dropped.
+		NextActionMs: skillCooldownDeadline(snapshot, skill),
 	}
 	rt.setCombatIntent(intent)
 	return rt.advanceBasicAttackIntent(character, intent, nowMs)

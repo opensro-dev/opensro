@@ -125,11 +125,7 @@ import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
 import { createMovement } from "./movement/movement";
-import {
-	logoutCancelRequest,
-	targetActionCancel,
-	worldPointAction
-} from "@/engine/foundation/gameplay/direction-movement";
+import { logoutCancelRequest, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
 import { createCombat } from "./combat/combat";
 import { createTargeting } from "./targeting/targeting";
@@ -693,9 +689,9 @@ Bind the admitted local actor and initialize its authoritative movement.
 correct
 ================
 		*/
-		correct( entity: EntityState ) {
+		correct( entity: EntityState, now?: number ) {
 			if ( entity.gid !== localGid ) throw Error( "Correction references non-local entity" );
-			movement.correct( { ...entity, angle: entity.heading } );
+			movement.correct( { ...entity, angle: entity.heading }, now );
 			dirty = true;
 		},
 		/*
@@ -1241,7 +1237,7 @@ state here before a command can claim a native wire conversation.
 				if ( protocol !== 1 ) {
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
-				if ( localCastHolds() ) {
+				if ( localCastHolds() && !actionSession.released() ) {
 					// Resolve the click now, not when the cast releases: its ray belongs
 					// to the camera at click time, and the destination marker appears
 					// when the player clicks. A direction walk keeps its query.
@@ -1342,10 +1338,6 @@ state here before a command can claim a native wire conversation.
 					revivalSlot: command.revivalSlot,
 					summonerSlot: command.summonerSlot
 				} );
-			}
-			if ( command.kind === "cancel" ) {
-				moveReservation.clear();
-				return sendFrame( targetActionCancel() );
 			}
 			if ( command.kind === "release-target" ) {
 				const frame = targeting.release( now );
@@ -2161,6 +2153,21 @@ Packet handling must not depend on which HUD panel is currently open.
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
 				if ( item && cast ) returnScroll = cast;
+				// A pickup into the gold slot (0xFE) prints the whole heap: pickup types
+				// 6/0x1C resolve to window 0x46 with slot 0xFE (7653D0), and that branch
+				// of CPSMission_ApplyInventoryOperation reads the u32 and prints
+				// UIIT_MSG_STATE_GAIN_GOLD (7571E1). The balance itself rides 0x30B3.
+				if (
+					item && frame.opcode === 0xb06d && frame.payload.length === 7 && frame.payload[0] === 1 &&
+					frame.payload[1] === 6 && frame.payload[2] === 254
+				) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_STATE_GAIN_GOLD",
+						value: new DataView( frame.payload.buffer, frame.payload.byteOffset, 7 ).getUint32( 3, true ),
+						nativeType: 1,
+						sequence: ++noticeSequence
+					} ];
+				}
 				if (
 					frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 11 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 ).getUint32( 0, true ) === localGid
@@ -2269,7 +2276,7 @@ before take assembles the presentation snapshot.
 			}
 			// A click held through the cast walks as soon as the cast releases;
 			// death forfeits it.
-			if ( moveReservation.holding() && !localCastHolds() ) {
+			if ( moveReservation.holding() && (!localCastHolds() || actionSession.released()) ) {
 				const held = moveReservation.take()!;
 				if ( !local || local.appearanceState?.[0] === 2 ) {
 					// A forfeited click takes its marker with it.

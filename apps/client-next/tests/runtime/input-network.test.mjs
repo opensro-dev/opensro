@@ -22,16 +22,14 @@ const { createInput } = await load( "src/engine/runtime/input/input.ts" );
 const { createSimulationInput } = await load( "src/engine/runtime/simulation/worker/input/input.ts" );
 const { createCodec } = await load( "src/engine/runtime/simulation/worker/network/codec/codec.ts" );
 const { createNetwork } = await load( "src/engine/runtime/simulation/worker/network/network.ts" );
-test("Escape is delivered to gameplay before acknowledgement and repeats are suppressed", () => {
-	const host = createInput(), worker = createSimulationInput(), actions = [];
+test("Escape is acknowledged without a gameplay action", () => {
+	// CGInterface_HandleEscapeKey (69F450) closes windows or opens the system
+	// menu; it never cancels the running action.
+	const host = createInput(), worker = createSimulationInput();
 	host.accept( { kind: "key", code: "Escape", down: true, timeMs: 1 } );
 	host.accept( { kind: "key", code: "Escape", down: true, timeMs: 2 } );
 	worker.receive( host.drain() );
-	worker.commit( action => {
-		assert.equal( worker.lastAccepted(), 0 );
-		actions.push( action );
-	} );
-	assert.deepEqual( actions, [ { kind: "cancel" } ] );
+	assert.equal( worker.commit(), 2 );
 	assert.equal( worker.lastAccepted(), 2 );
 });
 test("input preserves press/release order and acknowledges only committed batches", () => {

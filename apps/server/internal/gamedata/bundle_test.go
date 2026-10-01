@@ -89,9 +89,26 @@ func TestOpenRefusesUnsafeDescriptorPath(t *testing.T) {
 	}
 }
 
+/*
+================
+realTempDir
+
+t.TempDir with symlinks resolved. Open and Resolve report the real root, and
+macOS TMPDIR lives under /var, a symlink to /private/var.
+================
+*/
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func writeTestBundle(t *testing.T, mutate func(*Manifest)) (string, string) {
 	t.Helper()
-	root := t.TempDir()
+	root := realTempDir(t)
 	paths := append([]string(nil), requiredServerFiles...)
 	paths = append(paths, "textdata/characterdata_5000.txt")
 	sort.Strings(paths)

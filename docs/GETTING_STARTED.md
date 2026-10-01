@@ -3,8 +3,9 @@
 From a fresh checkout to playing locally: build the game data, run the server
 cluster, run the browser client, log in.
 
-Local development targets one Windows 10/11 workstation. Production deployment
-is described in [DEPLOYMENT.md](../apps/server/ops/docs/DEPLOYMENT.md).
+Local development targets one Windows 10/11 workstation; macOS (Apple Silicon)
+also works, see [Developing on macOS](#developing-on-macos). Production
+deployment is described in [DEPLOYMENT.md](../apps/server/ops/docs/DEPLOYMENT.md).
 
 ## 1. Prerequisites
 
@@ -47,8 +48,9 @@ Expand-Archive $Zip -DestinationPath $Dir -Force
 
 Retail game media is not in this repository. You need your own licensed
 Silkroad Online v1.150 (Legend III) client. The tools below extract and
-convert it on your machine; nothing is uploaded. The asset build runs on
-Windows only (32-bit D3DX lens mips, the GDI font atlas).
+convert it on your machine; nothing is uploaded. On Windows the asset build
+reproduces the original lens mips (32-bit D3DX) and font atlas (GDI) byte for
+byte; on macOS portable generators produce equivalent output.
 
 The **game root** is the client folder. By default it is the folder that
 contains this checkout; to keep the client elsewhere, set `SRO_GAME_ROOT` to
@@ -174,6 +176,53 @@ foreach ($Path in 'cluster', 'shards', 'nomad\dev-agent') {
   if (Test-Path $Full) { Move-Item $Full $Backup }
 }
 ```
+
+## Developing on macOS
+
+The same steps work on an Apple Silicon Mac, with these differences.
+
+**Tools.** Install Go, Node.js (Corepack), ffmpeg and Python 3.12, for example
+with Homebrew and [uv](https://docs.astral.sh/uv/):
+
+```sh
+brew install go node ffmpeg uv unar
+corepack enable --install-directory ~/.local/bin pnpm
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-build.txt
+export SRO_PYTHON="$PWD/.venv/bin/python"   # used by every asset build step
+```
+
+There is no `py` launcher outside Windows: build steps run `SRO_PYTHON`, then
+`python3`, then `python`. A licensed client shipped as a `.rar` extracts with
+`unar`.
+
+**Assets.** No DirectX runtime is needed. `scripts/build/native_texture_mips.py`
+generates the lens and character mip resources (authored levels are copied,
+missing levels are box-filtered; not byte-identical to D3DX), and the font
+atlas is rasterized with FreeType from the system Arial (`SRO_FONT_ARIAL` and
+`SRO_FONT_ARIAL_BOLD` override the faces). `pnpm assets doctor` reports the
+platform as a warning, not a failure. Character mip caches are keyed by
+generator, so Windows and macOS builds never share entries.
+
+**Nomad.** Install the pinned darwin build where the Windows binary lives;
+`dev-agent` prefers it over `PATH`:
+
+```sh
+V=2.0.7 F=nomad_${V}_darwin_arm64.zip
+mkdir -p .tools/nomad/$V
+curl -fsSLO https://releases.hashicorp.com/nomad/$V/$F
+curl -fsSL https://releases.hashicorp.com/nomad/$V/nomad_${V}_SHA256SUMS | grep " $F\$" | shasum -a 256 -c
+unzip -o $F -d .tools/nomad/$V && rm $F
+```
+
+On Apple Silicon `dev-agent` also writes and loads
+`apps/server/.state/nomad/dev-agent-platform.hcl`: Nomad fingerprints those
+cores at a few MHz, so it declares the real core count at a nominal per-core
+compute; without it no job can be placed (`cannot place task groups`, CPU
+exhausted).
+
+**Known gaps.** Native verification tools that execute the retail PE
+(`apps/client-next/tools/verify-*`, `audit-*`) still need Windows, and
+`ui-glyphs` parity tests compare against GDI glyph metrics.
 
 ## 7. Troubleshooting
 

@@ -21,6 +21,7 @@ filtered passes after it are skipped.
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pythonAttempts } from "./pythonRun.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", "..", ".." );
 const CONVERT_IMAGES_SCRIPT = path.join( rebuildRoot, "scripts", "convert_images.py" );
@@ -34,7 +35,8 @@ One convert_images.py process with the given CLI filters.
 */
 function spawnConvertImages( args ) {
 	return new Promise( ( resolve ) => {
-		const child = spawn( "py", [ CONVERT_IMAGES_SCRIPT, ...args ], { stdio: "inherit" } );
+		const [{ command, args: prefix }] = pythonAttempts( [] );
+		const child = spawn( command, [ ...prefix, CONVERT_IMAGES_SCRIPT, ...args ], { stdio: "inherit" } );
 		let settled = false;
 		const settle = ( status ) => {
 			if ( settled ) return;

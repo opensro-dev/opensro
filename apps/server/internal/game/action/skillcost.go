@@ -109,15 +109,26 @@ deadline itself is already available.
 ==================
 */
 func skillCoolingDown(c *enterworld.Character, skill enterworld.SkillRow, nowMs int64) bool {
-	// 64C1CD bypasses both maps for an authored zero duration. A shared
-	// group selects its own map; it does not also consult the skill map.
+	return skillCooldownDeadline(c, skill) > nowMs
+}
+
+/*
+==================
+skillCooldownDeadline
+
+When the skill's cooldown entry expires (0 when none applies). 64C1CD
+bypasses both maps for an authored zero duration; a shared group selects
+its own map and does not also consult the skill map.
+==================
+*/
+func skillCooldownDeadline(c *enterworld.Character, skill enterworld.SkillRow) int64 {
 	if skill.CoolTimeMs == 0 {
-		return false
+		return 0
 	}
 	if skill.CoolTimeGroup != 0 {
-		return c.SharedSkillCooldowns[skill.CoolTimeGroup] > nowMs
+		return c.SharedSkillCooldowns[skill.CoolTimeGroup]
 	}
-	return c.OffensiveSkillCooldowns[skill.Group] > nowMs
+	return c.OffensiveSkillCooldowns[skill.Group]
 }
 
 /*

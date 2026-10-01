@@ -160,6 +160,11 @@ type Runtime struct {
 	// this native rand() domain in order.
 	DropRoll combat.Roll32767
 
+	// DropPassRate multiplies a kill's drop passes (gold, equipment and
+	// consumable rolls), still bounded by the monster's native drop
+	// capacity. 0 or 1 is native; the closed-beta growth switch raises it.
+	DropPassRate int
+
 	// Now abstracts the clock for deterministic tests.
 	Now         func() time.Time
 	departureMu sync.Mutex

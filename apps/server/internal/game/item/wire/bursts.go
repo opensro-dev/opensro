@@ -99,14 +99,17 @@ func PickupApproachArmFrame() Frame {
 //	[0xB2CD release][0x35C7 anim][0xB06D [1][6][0xFE][amount]]
 //	[0x30B3 type 1 balance][0x36AB despawn]
 //
-// A gold heap is always consumed whole, so the despawn is unconditional.
-func PickupGoldGrantFrames(anim PickupAnim, amount uint32, balance uint64, itemGid uint32) []Frame {
+// A gold heap is always consumed whole, so the despawn is unconditional. The
+// 0xFE result already prints UIIT_MSG_STATE_GAIN_GOLD for the whole heap
+// (client CPSMission_ApplyInventoryOperation), so a solo credit refreshes
+// the balance silently (server 4EAD12 pushes notify 0). notify is set only
+// when a party split credited this recipient (CParty_DistributeGold).
+func PickupGoldGrantFrames(anim PickupAnim, amount uint32, balance uint64, itemGid uint32, notify bool) []Frame {
 	return []Frame{
 		{Opcode: OpActionState, Payload: ReleaseActionState().Encode()},
 		{Opcode: OpPickupAnim, Payload: anim.Encode()},
 		{Opcode: OpItemMoveResponse, Payload: EncodePickupGoldResult(amount)},
-		// A pickup is a gain: the client prints UIIT_MSG_STATE_GAIN_GOLD.
-		{Opcode: OpPointsUpdate, Payload: GoldRefresh{Balance: balance, Notify: true}.Encode()},
+		{Opcode: OpPointsUpdate, Payload: GoldRefresh{Balance: balance, Notify: notify}.Encode()},
 		{Opcode: OpObjectDespawn, Payload: ObjectDespawn{Gid: itemGid}.Encode(), Scope: []domain.ObjectScopeChange{{GID: itemGid}}},
 	}
 }

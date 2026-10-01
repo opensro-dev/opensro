@@ -41,8 +41,7 @@ export interface InputOwner {
 }
 export interface SimulationInput {
     receive(batch: InputBatch): void;
-    commit(consume?: (action: InputAction) => void): number;
+    commit(): number;
     lastAccepted(): number;
 }
 export interface CameraInput {readonly yaw:number;readonly pitch:number;readonly distance:number;}
-export type InputAction = {readonly kind:'cancel'};

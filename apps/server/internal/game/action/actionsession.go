@@ -277,7 +277,15 @@ func (rt *Runtime) retireActionSessions() []simulation.DivisionFrames {
 		if value, exists := rt.actionSessions.Load(key); exists && !rt.hasOpenSkillCast(session.division, session.name) {
 			current := value.(actionSessionPublication)
 			state := wire.ReleaseActionState()
-			if intent {
+			if current.queued && current.pending != nil {
+				// 4AD390: the executing front finished (or was cancelled) in
+				// this tick; the pending back entry becomes the new front.
+				// Dropping it here lost an attack clicked during a swing.
+				rt.setCombatIntent(*current.pending)
+				current.queued, current.pending = false, nil
+				rt.actionSessions.Store(key, current)
+				state.State = singleActionCount
+			} else if intent {
 				if !current.queued {
 					unlock()
 					continue

@@ -170,7 +170,37 @@ export function classifyPythonFailure(attempt) {
 }
 
 /**
- * Run a Python payload, `py -3` first and plain `python` as the fallback -
+ * The interpreter a plain `python` command means on this host: SRO_PYTHON,
+ * else `python` on Windows and `python3` elsewhere (no bare `python` on macOS).
+ * @returns {string}
+ */
+export function pythonExecutable() {
+  return process.env.SRO_PYTHON || (process.platform === "win32" ? "python" : "python3");
+}
+
+/**
+ * Interpreter candidates in order: SRO_PYTHON when set, then `py -3` and
+ * `python` on Windows, or `python3` and `python` elsewhere (macOS and Linux
+ * ship no `py` launcher).
+ * @param {string[]} pythonArgs
+ * @returns {{ label: string, command: string, args: string[] }[]}
+ */
+export function pythonAttempts(pythonArgs) {
+  const attempts = [];
+  if (process.env.SRO_PYTHON) {
+    attempts.push({ label: "SRO_PYTHON", command: process.env.SRO_PYTHON, args: [...pythonArgs] });
+  }
+  if (process.platform === "win32") {
+    attempts.push({ label: "py -3", command: "py", args: ["-3", ...pythonArgs] });
+  } else {
+    attempts.push({ label: "python3", command: "python3", args: [...pythonArgs] });
+  }
+  attempts.push({ label: "python", command: "python", args: [...pythonArgs] });
+  return attempts;
+}
+
+/**
+ * Run a Python payload, the first candidate of pythonAttempts() first and the rest as fallbacks -
  * but ONLY for environment-class failures. An operation failure (interpreter
  * and imports fine, the work itself died) throws immediately with that
  * attempt's evidence front and center.
@@ -179,15 +209,12 @@ export function classifyPythonFailure(attempt) {
  *   names the operation for messages; `context` lines carry caller-specific
  *   stakes; `cwd` defaults to the current working directory
  * @returns {Promise<{ command: string, stdout: string, stderr: string }>} the
- *   winning attempt's label ("py -3" or "python") and captured output
+ *   winning attempt's label (see pythonAttempts) and captured output
  */
 export async function runPython(pythonArgs, options) {
   const context = options.context ?? [];
   const cwd = options.cwd ?? process.cwd();
-  const attempts = [
-    { label: "py -3", command: "py", args: ["-3", ...pythonArgs] },
-    { label: "python", command: "python", args: [...pythonArgs] }
-  ];
+  const attempts = pythonAttempts(pythonArgs);
 
   /** @type {{ label: string, classification: PythonFailureClassification, stdout: string, stderr: string }[]} */
   const environmentFailures = [];

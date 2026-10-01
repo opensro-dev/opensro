@@ -351,7 +351,8 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	stats := progression.NewRuntime(game.deps)
 	stats.Growth = progression.BetaGrowthFromEnv()
 	if stats.Growth.Enabled {
-		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP x%d", progression.EnvBetaGrowth, 3, stats.Growth.SkillExpRate)
+		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP x%d, drop passes x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate)
+		game.items.DropPassRate = stats.Growth.DropRate
 	}
 	stats.Withdrawal = game.items.WithdrawalHooks()
 	stats.BaseStats = game.deps.PlayerBaseStats

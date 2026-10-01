@@ -25,13 +25,12 @@ export function createSimulationInput(): SimulationInput {
             pending.push(...batch.commands);
             received = batch.last;
         },
-        commit(consume) {
+        commit() {
             for (const command of pending) {
                 if (command.kind === "release") {
                     keys.clear();
                 }
                 else if (command.kind === "key") {
-                    if(command.down&&!keys.has(command.code)&&command.code==='Escape')consume?.({kind:'cancel'});
                     if (command.down)
                         keys.add(command.code);
                     else

@@ -144,12 +144,13 @@ test("a refused skill cancellation retries on its handoff to basic attack", () =
 	game.dispose();
 });
 
-test("explicit cancel and world transfer discard held movement", () => {
-	for ( const outcome of [ "cancel", "travel", "death" ] ) {
+test("world transfer and death discard held movement", () => {
+	for ( const outcome of [ "travel", "death" ] ) {
 		const { game, local, sent } = movementFixture();
 		openCast( game, 1, 10 );
+		// The server publishes the accepted command with every cast.
+		game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 10 );
 		game.command( { kind: "move", destination: { ...local, x: 140, angle: 0 } }, 11, undefined, local );
-		if ( outcome === "cancel" ) game.command( { kind: "cancel" }, 12, undefined, local );
 		if ( outcome === "travel" ) game.resetWorld();
 		if ( outcome === "death" ) local.appearanceState[0] = 2;
 		if ( outcome !== "travel" ) closeCast( game, 1, 13 );
@@ -157,4 +158,45 @@ test("explicit cancel and world transfer discard held movement", () => {
 		assert.ok( sent.every( frame => frame.opcode !== OP_PREDICTED_MOVE ), outcome );
 		game.dispose();
 	}
+});
+
+/*
+================
+basic attack cancel releases a held move before the swing closes
+
+CGObjPC_IsMotionChangeLocked (server 4EF880) blocks movement only for a
+committed front command. A cancelled basic attack reports count 0 at once,
+so the held move goes without waiting for the swing's cast to close.
+================
+*/
+test("basic attack cancel releases a held move before the swing closes", () => {
+	const { game, local, sent } = movementFixture();
+	openCast( game, 1, 10 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 10 );
+	game.command( { kind: "move", destination: { ...local, x: 140, angle: 0 } }, 11, undefined, local );
+	assert.deepEqual( sent.map( frame => frame.opcode ), [ 0x72cd ], "movement sends only the cancel first" );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 2, 0 ) }, 12 );
+	game.step( 13, local );
+	assert.deepEqual(
+		sent.map( frame => frame.opcode ),
+		[ 0x72cd, OP_PREDICTED_MOVE ],
+		"the move goes with the cast still open"
+	);
+	game.dispose();
+});
+
+/*
+================
+committed skill keeps the move held until its cast closes
+================
+*/
+test("committed skill keeps the move held until its cast closes", () => {
+	const { game, local, sent } = movementFixture();
+	openCast( game, 1, 10 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 10 );
+	game.command( { kind: "move", destination: { ...local, x: 140, angle: 0 } }, 11, undefined, local );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 3, 1, 4 ) }, 12 );
+	game.step( 13, local );
+	assert.ok( sent.every( frame => frame.opcode !== OP_PREDICTED_MOVE ), "a refused cancel keeps holding" );
+	game.dispose();
 });

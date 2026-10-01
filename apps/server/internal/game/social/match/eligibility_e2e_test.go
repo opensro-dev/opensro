@@ -32,7 +32,7 @@ func TestLiveRegistrationAndModifyEnforceEveryJobPurpose(t *testing.T) {
 			request := partyRequest(0, 0, 3, purpose, 1, 90, "Eligibility")
 			sendFrame(t, connection, match.OpPartyRegisterRequest, request)
 			if !allowed {
-				expectExactFrame(t, connection, match.OpPartyRegisterAck, []byte{2, 2}, "incompatible registration")
+				expectExactFrame(t, connection, match.OpPartyRegisterAck, []byte{2, 0x23}, "incompatible registration")
 				continue
 			}
 			entryID++
@@ -43,7 +43,7 @@ func TestLiveRegistrationAndModifyEnforceEveryJobPurpose(t *testing.T) {
 				if valid {
 					expectExactFrame(t, connection, match.OpPartyModifyAck, concat([]byte{1}, partyRequest(entryID, 0, 3, other, 1, 90, "Modified")), "eligible modification")
 				} else {
-					expectExactFrame(t, connection, match.OpPartyModifyAck, []byte{2, 2}, "incompatible modification")
+					expectExactFrame(t, connection, match.OpPartyModifyAck, []byte{2, 0x23}, "incompatible modification")
 				}
 			}
 			// A suit change after opening a form must be read from live authority.
@@ -56,7 +56,7 @@ func TestLiveRegistrationAndModifyEnforceEveryJobPurpose(t *testing.T) {
 				}
 			})
 			sendFrame(t, connection, match.OpPartyModifyRequest, partyRequest(entryID, 0, 3, purpose, 1, 90, "Stale"))
-			expectExactFrame(t, connection, match.OpPartyModifyAck, []byte{2, 2}, "stale job rejected")
+			expectExactFrame(t, connection, match.OpPartyModifyAck, []byte{2, 0x23}, "stale job rejected")
 			server.authority.MutateCharacter(character, "test restore job", func() { character.MissionInventory = saved })
 			sendFrame(t, connection, match.OpPartyDeleteRequest, u32le(entryID))
 			expectExactFrame(t, connection, match.OpPartyDeleteAck, concat([]byte{1}, u32le(entryID)), "delete fixture")

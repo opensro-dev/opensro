@@ -245,6 +245,10 @@ export async function buildItemSetGlb( { tag, key, donor, donorSkel, pieces, out
 		return null;
 	}
 	const survivingParts = [ ...new Set( avatar.parts.map( ( p ) => partByMesh.get( p.meshPath ) ) ) ];
+	// Equipment never widens a character's pick box (A9E310 skips the union
+	// under a kind-0 body), so an item set carries none of its own; the donor
+	// body's box would only mislead.
+	avatar.aggregateBox = null;
 	const glb = avatarToGlb( avatar );
 	fs.mkdirSync( path.dirname( diskPath ), { recursive: true } );
 	fs.writeFileSync( diskPath, glb );

@@ -37,8 +37,8 @@ const questAlchemyPrefix = "ITEM_QNO_RM_ARCHEMY"
 ================
 partyPickupRecipient
 
-Server 525F5F..52606F: item-share bit, rotating member, same packed world,
-3D distance <= 1000; fallback is the picker. Quest items stay personal,
+Server 525F5F..52606F: item-share bit, rotating member alive (life byte 1,
+525FAE), same packed world, 3D distance <= 1000; fallback is the picker. Quest items stay personal,
 except the native alchemy prefix. Rotation advances even on a later refusal.
 ================
 */
@@ -60,7 +60,8 @@ func (rt *Runtime) partyPickupRecipient(division string, picker *enterworld.Char
 	for range origin.party.Members {
 		gid := rt.NextPartyLootMember(division, picker.Name)
 		candidate, found := roster.actors[gid]
-		if !found || candidate.party == nil || candidate.party.Order != origin.party.Order || candidate.world != origin.world {
+		if !found || candidate.party == nil || candidate.party.Order != origin.party.Order || candidate.world != origin.world ||
+			!enterworld.CharacterAlive(candidate.character) {
 			continue
 		}
 		to := monster.Pose{RegionID: candidate.pose.RegionID, X: candidate.pose.X, Y: candidate.pose.Y, Z: candidate.pose.Z}
@@ -71,6 +72,85 @@ func (rt *Runtime) partyPickupRecipient(division string, picker *enterworld.Char
 		}
 	}
 	return picker
+}
+
+/*
+================
+goldShare
+================
+*/
+type goldShare struct {
+	character *enterworld.Character
+	amount    uint32
+}
+
+/*
+================
+partyGoldShares
+
+CGObjPC_CreditPickedUpGold (4EACA0) and CParty_DistributeGold (5BC7F0): with
+the item-share option set, the heap the rotation handed to recipient is split
+among the recipient and every party member, in party-list order, who is
+online, in the recipient's world and within 1000 of the recipient
+(CParty_IsWithinShareRange: 3D, float32 sum of squares, <= 1000.0). Life is
+not checked. share = amount / n and the recipient also takes amount % n;
+when share is 0 the recipient takes the whole heap. Returns nil when no
+split applies (no party, option clear).
+================
+*/
+func (rt *Runtime) partyGoldShares(division string, recipient *enterworld.Character, amount uint32, nowMs int64) []goldShare {
+	roster := rt.monsterRewardRoster(division, recipient, nowMs)
+	self := enterworld.ObjectIDForCharacter(recipient)
+	origin, found := roster.actors[self]
+	if !found || origin.party == nil || origin.party.Options&sharedLootOption == 0 {
+		return nil
+	}
+	from := monster.Pose{RegionID: origin.pose.RegionID, X: origin.pose.X, Y: origin.pose.Y, Z: origin.pose.Z}
+	var eligible []*enterworld.Character
+	for _, gid := range origin.party.Members {
+		member, ok := roster.actors[gid]
+		if !ok || member.character == nil {
+			continue
+		}
+		if gid != self {
+			to := monster.Pose{RegionID: member.pose.RegionID, X: member.pose.X, Y: member.pose.Y, Z: member.pose.Z}
+			if member.world != origin.world || !withinGoldShareRange(from, to) {
+				continue
+			}
+		}
+		eligible = append(eligible, member.character)
+	}
+	n := uint32(len(eligible))
+	if n == 0 {
+		return []goldShare{{recipient, amount}}
+	}
+	share, remainder := amount/n, amount%n
+	if share == 0 {
+		return []goldShare{{recipient, amount}}
+	}
+	out := make([]goldShare, 0, n)
+	for _, c := range eligible {
+		credit := share
+		if c == recipient {
+			credit += remainder
+		}
+		out = append(out, goldShare{c, credit})
+	}
+	return out
+}
+
+/*
+================
+withinGoldShareRange
+
+CParty_IsWithinShareRange (5BDB30): the squared distance is stored as
+float32 before the square root, and an unordered result is refused.
+================
+*/
+func withinGoldShareRange(from, to monster.Pose) bool {
+	x, y, z := monster.NativeActorRelative(from, to)
+	squared := float32(float64(x)*float64(x) + float64(y)*float64(y) + float64(z)*float64(z))
+	return math.Sqrt(float64(squared)) <= sharedLootRange
 }
 
 /*

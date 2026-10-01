@@ -436,6 +436,11 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
 
   return {
     bsrAssetPath,
+    // CResObject box1 (+0x280) of the base resource: the compound's pick
+    // box. CCompound_AttachResourceWithMaterialSet (A9E310) unions later
+    // attachments only when part 1 is not kind 0, so a character body's box
+    // stands alone under its equipment.
+    aggregateBox: options.aggregateBox ?? bsrResource.aggregateBox,
     name: options.name ?? bsr.name,
     skeleton,
     parts,

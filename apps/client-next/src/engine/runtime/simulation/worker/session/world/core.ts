@@ -199,7 +199,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			const v = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
 			const e = entities.read( v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ) );
 			if ( e?.kind === "local-player" ) {
-				gameplay.correct( e );
+				gameplay.correct( e, now );
 			}
 		}
 		if ( frame.opcode === 0x35c7 ) {

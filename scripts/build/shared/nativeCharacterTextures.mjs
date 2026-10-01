@@ -20,6 +20,7 @@ import { imageSourceRoot, rebuildRoot } from "../world/paths.mjs";
 import { listFiles, isMainScript } from "./fsUtils.mjs";
 import { publishFileFromTemp } from "./atomicPublish.mjs";
 import { withGeneratedAssetsLock } from "../../rebuildLock.mjs";
+import { runPython } from "./pythonRun.mjs";
 
 const execute = promisify( execFile );
 const DDJ_HEADER = 20;
@@ -33,10 +34,14 @@ const MAX_DIMENSION = 8192;
 const NATIVE_MIME = "application/x-sro-texture";
 const cacheRoot = path.join( imageSourceRoot, "native-character" );
 // Source bytes and generator code both govern generated mip cache identity.
-const GENERATOR_HASH = createHash( "sha256" )
-	.update( fs.readFileSync( path.join( rebuildRoot, "scripts/build/NativeLensResources.cs" ) ) )
-	.update( fs.readFileSync( path.join( rebuildRoot, "scripts/build/native_lens_resources.ps1" ) ) )
-	.digest( "hex" );
+// Windows (D3DX) and other hosts (native_texture_mips.py) never share entries.
+const GENERATOR_FILES = process.platform === "win32" ?
+	[ "scripts/build/NativeLensResources.cs", "scripts/build/native_lens_resources.ps1" ] :
+	[ "scripts/build/native_texture_mips.py" ];
+const GENERATOR_HASH = GENERATOR_FILES.reduce(
+	( hash, file ) => hash.update( fs.readFileSync( path.join( rebuildRoot, file ) ) ),
+	createHash( "sha256" )
+).digest( "hex" );
 
 /*
 ================
@@ -193,6 +198,40 @@ export function readCharacterTexture( gamePath, pngPath ) {
 
 /*
 ================
+generateMips
+
+One native device session for the whole batch on Windows (32-bit D3DX through
+PowerShell); the portable generator elsewhere. Both write NTX1 resources.
+================
+*/
+async function generateMips( manifest ) {
+	if ( process.platform !== "win32" ) {
+		await runPython( [ path.join( rebuildRoot, "scripts/build/native_texture_mips.py" ), "-Manifest", manifest ], {
+			task: "native character texture mip generation"
+		} );
+		return;
+	}
+	const powershell = path.join(
+		process.env.SystemRoot ?? "C:\\Windows",
+		"SysWOW64",
+		"WindowsPowerShell",
+		"v1.0",
+		"powershell.exe"
+	);
+	await execute( powershell, [
+		"-NoProfile",
+		"-NonInteractive",
+		"-ExecutionPolicy",
+		"Bypass",
+		"-File",
+		path.join( rebuildRoot, "scripts/build/native_lens_resources.ps1" ),
+		"-Manifest",
+		manifest
+	], { windowsHide: true } );
+}
+
+/*
+================
 buildNativeCharacterTextures
 
 Generate missing content-addressed entries in one native device session.
@@ -220,23 +259,7 @@ export async function buildNativeCharacterTextures() {
 		if ( !jobs.length ) return;
 		const manifest = path.join( staging, "jobs.json" );
 		await fs.promises.writeFile( manifest, JSON.stringify( jobs ) );
-		const powershell = path.join(
-			process.env.SystemRoot ?? "C:\\Windows",
-			"SysWOW64",
-			"WindowsPowerShell",
-			"v1.0",
-			"powershell.exe"
-		);
-		await execute( powershell, [
-			"-NoProfile",
-			"-NonInteractive",
-			"-ExecutionPolicy",
-			"Bypass",
-			"-File",
-			path.join( rebuildRoot, "scripts/build/native_lens_resources.ps1" ),
-			"-Manifest",
-			manifest
-		], { windowsHide: true } );
+		await generateMips( manifest );
 		for ( const job of jobs ) {
 			const source = await fs.promises.readFile( job.source );
 			const output = preserveAuthoredMips( source, await fs.promises.readFile( job.target ) );

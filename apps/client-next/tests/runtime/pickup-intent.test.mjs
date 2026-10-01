@@ -60,12 +60,11 @@ test("repeated pickup intent is coalesced before reply and during approach", () 
 	game.dispose();
 });
 
-test("cancel, despawn, replacement and scene lifecycle retire pickup intent", () => {
-	for ( const reason of [ "cancel", "move", "despawn", "replacement", "travel", "bootstrap" ] ) {
+test("move, despawn, replacement and scene lifecycle retire pickup intent", () => {
+	for ( const reason of [ "move", "despawn", "replacement", "travel", "bootstrap" ] ) {
 		const { game, local, item, sent } = pickupFixture();
 		const request = { kind: /** @type {const} */ ("pickup"), gid: item.gid };
 		game.command( request, 0, item, local );
-		if ( reason === "cancel" ) game.command( { kind: "cancel" }, 1, undefined, local );
 		if ( reason === "move" ) {
 			game.command( { kind: "move", destination: { ...local, x: 120, angle: 0 } }, 1, undefined, local );
 		}

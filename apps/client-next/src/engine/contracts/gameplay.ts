@@ -230,9 +230,6 @@ export type GameplayCommand =
 		readonly gid?: number;
 	}
 	| {
-		readonly kind: "cancel";
-	}
-	| {
 		readonly kind: "inventory-move";
 		readonly source: number;
 		readonly destination: number;

@@ -8,16 +8,20 @@ closed beta the operator can turn on faster growth with one environment
 variable; unset, every grant is native. Nothing persists the rate: switching
 back is unsetting the variable and restarting the game world.
 
-EXP: every level costs about as many at-level kills as level 3 does. The
+EXP: every level costs about as many at-level kills as level 1 does. The
 level table gives both the EXP a level needs (ExpRequired) and the EXP an
 at-level monster yields (MonsterExpBasis, GUST_Mob_Exp), so their ratio is
 the native kill count for that level. A gain at level L is multiplied by
-kills(L) / kills(3), never below 1, so early levels stay native and later
-levels compress to the level-3 pace. Every source scales the same way:
+kills(L) / kills(1), never below 1, so every level after the first
+compresses to the level-1 pace (one level costs what 1 -> 2 costs). Every source scales the same way:
 kills, party shares and quest rewards all pass through applyExperience.
 
 SP: skill EXP gains are multiplied by a flat rate so testers can train and
 try skills freely.
+
+Drops: a kill rolls its drop passes DropRate times over (each pass rolls
+gold, equipment and consumables), still bounded by the monster's native
+drop capacity, so more and richer loot falls without inventing items.
 
 ===========================================================================
 */
@@ -37,11 +41,20 @@ const EnvBetaGrowth = "SRO_BETA_GROWTH"
 // EnvBetaSkillExpRate overrides the beta skill-EXP multiplier.
 const EnvBetaSkillExpRate = "SRO_BETA_SKILL_EXP_RATE"
 
-// betaReferenceLevel is the level whose kill pace every level is held to.
-const betaReferenceLevel = 3
+// EnvBetaDropRate overrides the beta drop-pass multiplier.
+const EnvBetaDropRate = "SRO_BETA_DROP_RATE"
+
+// BetaReferenceLevel is the level whose kill pace every level is held to.
+const BetaReferenceLevel = 1
 
 // betaSkillExpRateDefault makes skill training generous for testers.
 const betaSkillExpRateDefault = 100
+
+// betaDropRateDefault rolls each kill's drop passes five times over.
+const betaDropRateDefault = 5
+
+// maxBetaDropRate bounds an operator override; capacity bounds the drops.
+const maxBetaDropRate = 100
 
 /*
 ================
@@ -53,6 +66,7 @@ The multipliers applied to positive gains. The zero value is native.
 type GrowthRates struct {
 	Enabled      bool
 	SkillExpRate int64
+	DropRate     int
 }
 
 /*
@@ -66,10 +80,15 @@ func BetaGrowthFromEnv() GrowthRates {
 	default:
 		return GrowthRates{}
 	}
-	rates := GrowthRates{Enabled: true, SkillExpRate: betaSkillExpRateDefault}
+	rates := GrowthRates{Enabled: true, SkillExpRate: betaSkillExpRateDefault, DropRate: betaDropRateDefault}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaSkillExpRate)); text != "" {
 		if n, err := strconv.ParseInt(text, 10, 64); err == nil && n >= 1 {
 			rates.SkillExpRate = n
+		}
+	}
+	if text := strings.TrimSpace(os.Getenv(EnvBetaDropRate)); text != "" {
+		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaDropRate {
+			rates.DropRate = n
 		}
 	}
 	return rates
@@ -108,7 +127,7 @@ func (g GrowthRates) scale(levels enterworld.LevelDataSource, level, expDelta, s
 	}
 	if expDelta > 0 && levels != nil {
 		kills, ok := levelKills(levels, level)
-		reference, refOK := levelKills(levels, betaReferenceLevel)
+		reference, refOK := levelKills(levels, BetaReferenceLevel)
 		if ok && refOK && kills > reference {
 			// clampExpDelta bounds the result to the wire's signed dword.
 			expDelta = int64(min(float64(expDelta)*kills/reference, float64(1<<62)))

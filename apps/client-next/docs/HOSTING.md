@@ -81,6 +81,16 @@ For warning-free access, create a pair with mkcert covering the addresses you
 use, install its CA on those devices, and set `SRO_DEV_TLS_CERT` and
 `SRO_DEV_TLS_KEY` in `.env.local`.
 
+A tunnel such as Cloudflare Tunnel or ngrok can also publish the edge: it
+terminates TLS, so the page is a secure context, and forwards plain HTTP.
+List its public host names in `SRO_DEV_TUNNEL_HOSTS` (comma-separated, no
+scheme or port). They pass Vite's host check, and for those hosts only the
+edge takes the page's scheme from `X-Forwarded-Proto`, so its own HTTPS pages
+are still recognised and relayed without `Origin`. Requests to any other host
+ignore the header. Serve the tunnel from `vite preview` of a built client
+rather than `pnpm dev`, whose per-module requests quickly exhaust tunnel rate
+limits. Anyone who reaches the tunnel reaches the development cluster.
+
 ## Session restoration
 
 Login restoration retains the existing signed session's twelve-hour expiry;

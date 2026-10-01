@@ -215,9 +215,9 @@ func (r *Runtime) handlePartyRegister(s *transport.Session, opcode uint16, paylo
 		_ = s.Send(opcode+0x4000, []byte{2, 2})
 		return
 	}
-	request, valid := r.preparePartyRegistration(divisionID, character, request)
-	if !valid {
-		_ = s.Send(opcode+0x4000, []byte{2, 2})
+	request, refusal := r.preparePartyRegistration(divisionID, character, request)
+	if refusal != 0 {
+		_ = s.Send(opcode+0x4000, []byte{2, refusal})
 		return
 	}
 	entry, ok := r.board.RegisterParty(divisionID, ownerKey(divisionID, character.Name), r.partyEntryFromRequest(divisionID, character, request))
@@ -243,9 +243,9 @@ func (r *Runtime) handlePartyModify(s *transport.Session, opcode uint16, payload
 		_ = s.Send(opcode+0x4000, []byte{2, 2})
 		return
 	}
-	request, valid := r.preparePartyRegistration(divisionID, character, request)
-	if !valid {
-		_ = s.Send(opcode+0x4000, []byte{2, 2})
+	request, refusal := r.preparePartyRegistration(divisionID, character, request)
+	if refusal != 0 {
+		_ = s.Send(opcode+0x4000, []byte{2, refusal})
 		return
 	}
 	entry, ok := r.board.ModifyParty(ownerKey(divisionID, character.Name), r.partyEntryFromRequest(divisionID, character, request))
@@ -417,20 +417,51 @@ func (r *Runtime) SessionClosed(s *transport.Session) {
 	r.dropJoinRequestsFor(divisionID, character.Name)
 }
 
-// Retail 63BBA0/63C010 validate the form; authority independently enforces it.
-func (r *Runtime) preparePartyRegistration(division string, character *domain.Character, request PartyMatchRequest) (PartyMatchRequest, bool) {
+// Party-matching refusal codes (category 2), from the server register
+// precheck sub_514170 and its purpose test sub_5BF240 (0x2C0A, 0x2C1D,
+// 0x2C23); the v1.150 client shows them as UIIT_MSG_PARTYERR_* /
+// UIIT_MSG_PARTYMATCH_RECORD_ERROR_* through the 0x200 notice table.
+const (
+	partyMatchErrUnknown        uint8 = 0x02
+	partyMatchErrCreatorLevel   uint8 = 0x0A
+	partyMatchErrNotPartyLeader uint8 = 0x1D
+	partyMatchErrPurpose        uint8 = 0x23
+)
+
+// minPartyCreatorLevel is the level a partyless registrant needs: sub_514170
+// refuses level < 5 with 0x2C0A when the character has no party.
+const minPartyCreatorLevel = 5
+
+/*
+================
+preparePartyRegistration
+
+Retail 63BBA0/63C010 validate the form; authority independently enforces
+it. A party member who is not the master is refused (0x1D), a partyless
+registrant below level 5 too (0x0A); a party's listing takes the party's
+options. Returns the refusal code, 0 when admitted.
+================
+*/
+func (r *Runtime) preparePartyRegistration(division string, character *domain.Character, request PartyMatchRequest) (PartyMatchRequest, uint8) {
 	titleLength := len(utf16.Encode([]rune(request.Title)))
-	if request.TypeBits&^7 != 0 || !partyPurposeAllowed(activePartyJob(character), request.Purpose) || request.MinLevel < 1 || request.MaxLevel > 90 || request.MinLevel > request.MaxLevel || titleLength == 0 || titleLength > 50 {
-		return request, false
+	if request.TypeBits&^7 != 0 || request.MinLevel < 1 || request.MaxLevel > 90 || request.MinLevel > request.MaxLevel || titleLength == 0 || titleLength > 50 {
+		return request, partyMatchErrUnknown
 	}
+	partied, leader, options := false, false, uint8(0)
 	if r.PartyListingAuthority != nil {
-		options, partied, leader := r.PartyListingAuthority(division, character.Name)
-		if partied && !leader {
-			return request, false
-		}
-		if partied {
-			request.TypeBits = options
-		}
+		options, partied, leader = r.PartyListingAuthority(division, character.Name)
 	}
-	return request, true
+	if partied && !leader {
+		return request, partyMatchErrNotPartyLeader
+	}
+	if !partied && characterLevel(character) < minPartyCreatorLevel {
+		return request, partyMatchErrCreatorLevel
+	}
+	if !partyPurposeAllowed(activePartyJob(character), request.Purpose) {
+		return request, partyMatchErrPurpose
+	}
+	if partied {
+		request.TypeBits = options
+	}
+	return request, 0
 }

@@ -113,6 +113,10 @@ func openDoorRuntime(t *testing.T, dir string, seed *enterworld.Character) *door
 		// The server wiring's scoped door (ADR-2).
 		authority.MutateCharacter(c, label, fn)
 	}
+	// Multi-character invariants (a party gold split) use the same
+	// authority transaction as production wiring_authority.go.
+	deps.MutateCharacters = authority.MutateCharacters
+	deps.UpdateCharacters = authority.UpdateCharacters
 	rt := NewRuntime(deps, nil)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
 	rt.Now = clock.Now
@@ -502,6 +506,18 @@ func TestTwoPlaneOpsNeverTearOnDisk(t *testing.T) {
 			t.Fatalf("op %q generation snapshot: %v", label, err)
 		}
 		commits = append(commits, generation)
+	}
+	// A multi-character door commits once too, and is witnessed the same way.
+	deps.UpdateCharacters = func(cs []*enterworld.Character, label string, update func() bool) bool {
+		changed := authority.UpdateCharacters(cs, label, update)
+		if changed {
+			generation := filepath.Join(generationsDir, fmt.Sprintf("gen-%d.db", len(commits)))
+			if err := authority.BackupTo(generation); err != nil {
+				t.Fatalf("op %q generation snapshot: %v", label, err)
+			}
+			commits = append(commits, generation)
+		}
+		return changed
 	}
 	rt := NewRuntime(deps, nil)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}

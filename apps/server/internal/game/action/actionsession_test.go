@@ -452,3 +452,27 @@ func TestQueuedActionPublishesSingleCountAfterExecutingCastCloses(t *testing.T) 
 		t.Fatalf("single-count transitions = %d, want one", count)
 	}
 }
+
+/*
+================
+TestAttackAfterMovementCancelResumesAttacking
+
+A double-click, a quick ground click and a second double-click: the second
+attack arrives while the cancelled swing is still open and must still run.
+================
+*/
+func TestAttackAfterMovementCancelResumesAttacking(t *testing.T) {
+	rt, clock, c, target := newCombatTestRuntime(t, 100000)
+	request := wire.BasicAttackEngage{TargetGid: target.Gid}.Encode()
+	rt.HandleTargetInteract(testDivision, c, request)
+	rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Cancel: true}.Encode())
+	struck, _ := rt.Monsters.Get(testDivision, target.Gid)
+	rt.HandleTargetInteract(testDivision, c, request)
+	for step := int64(1); step <= 40; step++ {
+		rt.TickHook()(clock.At(testBasicAttackActionDuration * time.Duration(step) / 4).UnixMilli())
+	}
+	after, _ := rt.Monsters.Get(testDivision, target.Gid)
+	if after.CurrentHP >= struck.CurrentHP {
+		t.Fatalf("second attack never struck: hp %d -> %d", struck.CurrentHP, after.CurrentHP)
+	}
+}

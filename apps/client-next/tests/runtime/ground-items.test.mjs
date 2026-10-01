@@ -265,10 +265,11 @@ test("gold grant and balance refresh reach gameplay without an unhandled packet 
 	core.receive( { opcode: 0x30b3, payload: balance }, 2 );
 	core.step( 2 );
 	const events = defined( flush() ).events;
-	assert.equal(
-		defined( defined( events.find( e => e.kind === "gameplay" ) ).state.progression ).gold,
-		"9007199254740993"
-	);
+	const gameplay = defined( events.find( e => e.kind === "gameplay" ) ).state;
+	assert.equal( defined( gameplay.progression ).gold, "9007199254740993" );
+	// The 0xFE receipt announces the heap once; the silent refresh adds nothing.
+	const gains = defined( gameplay.notices ).filter( n => n.key === "UIIT_MSG_STATE_GAIN_GOLD" );
+	assert.deepEqual( gains.map( n => n.value ), [ 1500 ] );
 	assert.ok( !events.some( e => e.kind === "native" || e.kind === "ui-sound" ) );
 	for ( let n = 1; n < 10; n++ ) {
 		assert.throws( () => core.receive( { opcode: 0x30b3, payload: balance.subarray( 0, n ) }, 3 ), /gold/ );

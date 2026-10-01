@@ -2,7 +2,8 @@
 #
 # native_ui_font_atlas.py - deterministic native Arial glyph publication
 #
-# Win32 GDI owns glyph shape and metrics, matching the v1.150 text renderer.
+# Win32 GDI owns glyph shape and metrics, matching the v1.150 text renderer
+# (FreeType stands in on other hosts, see render_style_freetype).
 # This generator owns coverage, packing and the descriptor/pixel digest pair.
 # fontResources.mjs supplies temporary destinations and publishes both files.
 #
@@ -12,11 +13,12 @@ import ctypes
 import ctypes.wintypes as win
 import hashlib
 import json
+import os
 import sys
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageFont
 
 
 GDI_ERROR = 0xFFFFFFFF
@@ -256,6 +258,79 @@ def render_style(gdi, font_record, style):
 
 
 # ================
+# render_style_freetype
+# Non-Windows hosts have no GDI: FreeType (through Pillow) rasterizes the same
+# Arial faces monochrome and reports GDI-style metrics. Glyph pixels follow
+# FreeType hinting, so they are close to, not identical with, the GDI atlas.
+# SRO_FONT_ARIAL / SRO_FONT_ARIAL_BOLD override the face files.
+# ================
+# GDI FW_NORMAL / FW_BOLD, reported as TEXTMETRIC tmWeight.
+FW_NORMAL = 400
+FW_BOLD = 700
+FREETYPE_FACES = {
+	"normal": ("SRO_FONT_ARIAL", (
+		"/System/Library/Fonts/Supplemental/Arial.ttf",
+		"/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+		"/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+	)),
+	"bold": ("SRO_FONT_ARIAL_BOLD", (
+		"/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+		"/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+		"/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+	)),
+}
+
+
+# ================
+# freetype_face
+# The first existing face file for a style, the environment override first.
+# ================
+def freetype_face(style_name):
+	variable, candidates = FREETYPE_FACES[style_name]
+	override = os.environ.get(variable)
+	for candidate in ((override,) if override else ()) + candidates:
+		if Path(candidate).is_file():
+			return candidate
+	raise SystemExit(f"No Arial face for style {style_name!r}; set {variable} to a .ttf file.")
+
+
+def render_style_freetype(font_record, style):
+	pixel_height = native_gdi_pixel_height(font_record["recordHeight"])
+	font = ImageFont.truetype(freetype_face(style["name"]), pixel_height)
+	font.fontmode = "1"
+	ascent, descent = font.getmetrics()
+	glyphs = {}
+	for batch in COVERAGE_BATCHES:
+		for codepoint in batch:
+			char = chr(codepoint)
+			mask, (left, top) = font.getmask2(char, mode="1", anchor="ls")
+			width, height = mask.size
+			pixels = [(x, y) for y in range(height) for x in range(width) if mask.getpixel((x, y))]
+			if pixels:
+				xs = [x for x, _ in pixels]
+				ys = [y for _, y in pixels]
+				x0, y0 = min(xs), min(ys)
+				pixels = [(x - x0, y - y0) for x, y in pixels]
+				width, height = max(xs) - x0 + 1, max(ys) - y0 + 1
+				left, top = left + x0, top + y0
+			else:
+				width = height = 1
+				left, top = 0, 0
+			glyphs[str(codepoint)] = {
+				"width": width, "height": height, "originX": left, "originY": -top,
+				"advanceX": round(font.getlength(char)), "pixels": pixels,
+			}
+	advances = [glyph["advanceX"] for glyph in glyphs.values()]
+	return {
+		"recordHeight": font_record["recordHeight"], "pixelHeight": pixel_height,
+		"metricsHeight": ascent + descent, "ascent": ascent, "descent": descent,
+		"aveCharWidth": glyphs[str(ord("x"))]["advanceX"], "maxCharWidth": max(advances),
+		"weight": FW_BOLD if style["name"] == "bold" else FW_NORMAL,
+		"styleSlot": style["slot"], "styleName": style["name"], "glyphs": glyphs,
+	}
+
+
+# ================
 # pack_glyphs
 # Append coverage by whole-font batches. Appending glyphs inside each style
 # would shift the following style's old coordinates, defeating stable packing.
@@ -307,18 +382,18 @@ def write_if_changed(target, data):
 # Build every style, pack once, and bind the descriptor to the exact PNG bytes.
 # ================
 def main():
-	if sys.platform != "win32":
-		raise SystemExit("native_ui_font_atlas.py requires Win32 GDI.")
 	if len(sys.argv) != 3:
 		raise SystemExit("usage: native_ui_font_atlas.py <atlas.json> <atlas.png>")
 	json_path = Path(sys.argv[1])
 	image_path = Path(sys.argv[2])
-	gdi = configure_gdi()
+	gdi = configure_gdi() if sys.platform == "win32" else None
 	fonts = {}
 	for record in FONT_RECORDS:
 		styles = {}
 		for style in STYLE_SLOTS:
-			styles[str(style["slot"])] = render_style(gdi, record, style)
+			styles[str(style["slot"])] = (
+				render_style(gdi, record, style) if gdi else render_style_freetype(record, style)
+			)
 		normal = styles["0"]
 		fonts[str(record["fontIndex"])] = {
 			key: value for key, value in normal.items() if key not in ("styleSlot", "styleName")

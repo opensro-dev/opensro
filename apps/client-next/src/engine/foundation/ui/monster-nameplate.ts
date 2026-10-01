@@ -21,6 +21,17 @@ const NATIVE_BOARD_OFFSET = 1.5;
 
 /*
 ================
+hasMonsterPartyMark
+
+Whether a monster carries the party mark (CICMonster+771 == 1).
+================
+*/
+export function hasMonsterPartyMark( entity: EntityState ): boolean {
+	return entity.kind === "monster" && entity.rarityAuxIcon === PARTY_AUXILIARY_FLAG;
+}
+
+/*
+================
 monsterPartyNameplate
 
 862060 kind 4 tests CICMonster+771 == 1 and draws a 16-pixel mark twenty
@@ -29,7 +40,7 @@ so placement consumes the measured width rather than a guessed name length.
 ================
 */
 export function monsterPartyNameplate( entity: EntityState, nameSize: readonly [number, number] ) {
-	if ( entity.kind !== "monster" || entity.rarityAuxIcon !== PARTY_AUXILIARY_FLAG || nameSize[1] <= 0 ) return null;
+	if ( !hasMonsterPartyMark( entity ) || nameSize[1] <= 0 ) return null;
 	const rect: UiRect = [
 		-(nameSize[0] >> 1) - NATIVE_BOARD_OFFSET - ICON_NAME_OFFSET,
 		-(nameSize[1] >> 1) - NATIVE_BOARD_OFFSET,

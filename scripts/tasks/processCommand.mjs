@@ -1,11 +1,15 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { pythonExecutable } from "../build/shared/pythonRun.mjs";
 
 let cachedPnpmCli;
 
 export function resolveProcessCommand(command, args) {
   if (command === "node") {
     return { executable: process.execPath, args };
+  }
+  if (command === "python") {
+    return { executable: pythonExecutable(), args };
   }
   if (command === "pnpm" && process.platform === "win32") {
     return { executable: process.execPath, args: [resolvePnpmCli(), ...args] };
