@@ -149,7 +149,7 @@ class CoordinatedFlowTests(LiveDataFixture, unittest.TestCase):
 	# Nomad: record what was rolled out and write the release record, as a
 	# healthy rollout does.
 	# ================
-	def fake_deploy(self, _config, staging, manifest, notice=True):
+	def fake_deploy(self, _config, staging, manifest, notice=True, _upgrade=False):
 		self.rollouts.append((manifest["commit"], notice, (Path(staging) / "agent").read_bytes()))
 		write_state(self.module / "release.json", manifest)
 
