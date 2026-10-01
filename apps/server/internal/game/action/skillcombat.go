@@ -362,7 +362,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	roster := rt.monsterRewardRoster(divisionID, character, nowMs)
 	var settlement monsterSettlement
 	committed := make([]simulation.MonsterDamageResult, 0, len(formulas))
-	var ammoCount uint16
+	var ammo ammunitionResult
 	var killProgressionFrames []wire.Frame
 	var battleFrames []wire.Frame
 	var refusal uint16
@@ -395,7 +395,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			}
 			battleFrames = rt.enterBattleState(divisionID, character, nowMs)
 			if consumeAmmo {
-				ammoCount = applyAmmunitionDebit(character, debit)
+				ammo = applyAmmunitionDebit(character, debit)
 			}
 			if advanced && rootID == 0 {
 				rt.commitOffensivePhaseCost(divisionID, character, skill, cost, nowMs, release != nil)
@@ -502,7 +502,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	if consumeAmmo {
-		actorFrames = append(actorFrames, wire.AvatarInventorySlot7StackCountFrame(ammoCount))
+		actorFrames = append(actorFrames, ammunitionFrames(ammo)...)
 	}
 	// The actor sees the same fatal B245/drop prefix first, then the complete
 	// native progression burst. Peers see only its gid-bearing level-up
@@ -510,7 +510,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	// repeat-attack path, which has no synchronous request session to answer.
 	privateFrames := wire.ProgressionPrivateFrames(killProgressionFrames)
 	if consumeAmmo {
-		privateFrames = append([]wire.Frame{wire.AvatarInventorySlot7StackCountFrame(ammoCount)}, privateFrames...)
+		privateFrames = append(ammunitionFrames(ammo), privateFrames...)
 	}
 	if advanced && rootID == 0 {
 		vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(enterworld.ObjectIDForCharacter(character), rt.publishedVitals(divisionID, character))}

@@ -100,3 +100,41 @@ func routeSharedPickup(result OpResult, picker, recipient *enterworld.Character)
 	}
 	return result
 }
+
+/*
+================
+partyLootNotice
+
+CParty_BroadcastLootNotice (5BDC80): after a granted pickup in a party
+whose item-share option is set, every member learns what the recipient got.
+Gold never announces: CPlayer_ExecuteGroundPickup keeps the object's
+is-gold slot (vtable +0x7C, stored at 5262AA) and skips the call when it
+is set (5263C8).
+================
+*/
+func (rt *Runtime) partyLootNotice(division string, picker, recipient *enterworld.Character, item grounditem.Item, nowMs int64) []RecipientFrames {
+	if item.IsGold() {
+		return nil
+	}
+	roster := rt.monsterRewardRoster(division, picker, nowMs)
+	origin, found := roster.actors[enterworld.ObjectIDForCharacter(picker)]
+	if !found || origin.party == nil || origin.party.Options&sharedLootOption == 0 {
+		return nil
+	}
+	amount := uint32(max(item.StackCount, 1))
+	// A member that never saw the drop has no reference for it; the native
+	// client reads its own item table, so send the reference first.
+	frames := append(rt.groundReferences([]grounditem.Item{item}), wire.Frame{
+		Opcode:  wire.OpPartyLootNotice,
+		Payload: wire.EncodePartyLootNotice(enterworld.ObjectIDForCharacter(recipient), item.RefObjID, item.TypeFlags, amount),
+	})
+	var out []RecipientFrames
+	for _, gid := range origin.party.Members {
+		member, ok := roster.actors[gid]
+		if !ok || member.character == nil {
+			continue
+		}
+		out = append(out, RecipientFrames{CharacterID: member.character.ID, Frames: frames})
+	}
+	return out
+}

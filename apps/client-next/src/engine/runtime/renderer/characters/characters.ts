@@ -287,11 +287,15 @@ export function createCharacters(
 						actor.attachment.modelScale ?? owner.scale,
 						actor.attachment.rotation
 					);
-				} else if ( actor.attachment.basis === "native" ) {
+				} else if ( actor.attachment.basis === "native" || actor.attachment.basis === "native-bsr" ) {
 					// A894F0 returns the compound WORLD matrix, not a skeletal
 					// root. Undo the imported body's Ry(PI) for a root effect;
 					// a named imported socket instead has one remaining Sz(-1).
-					for ( const c of actor.attachment.root ? [ 0, 2 ] : [ 2 ] ) {
+					// A compiled BSR mesh is itself Z-flipped, so it keeps one
+					// more Sz(-1): its third column toggles back.
+					const bsr = actor.attachment.basis === "native-bsr";
+					const columns = actor.attachment.root ? (bsr ? [ 0 ] : [ 0, 2 ]) : (bsr ? [] : [ 2 ]);
+					for ( const c of columns ) {
 						for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n] = -matrix[c * 4 + n]!;
 					}
 					// 8D6880 rotates the offset by the holder matrix, separately
@@ -1737,15 +1741,25 @@ export function createCharacters(
 						paletteOffsets = stream?.offsets.subarray( 0, rows.length );
 					let draw = batch.draws[p];
 					if ( !draw ) {
+						const authored = modifierClocks?.[p]?.material ?? primitive.geometry.material,
+							base = authored!;
 						draw = geometry.upload(
 							{
 								...primitive.geometry,
 								world: !preview,
 								material: {
-									...(modifierClocks?.[p]?.material ?? primitive.geometry.material!),
+									...base,
 									...(rows[0]!.deferredParticle ? { deferredParticle: true } : {}),
 									instanceMaterialTint: !!rows[0]!.materialTint,
-									...(fading ? { blend: true, instanceFade: true } : {}),
+									// A fading opaque body becomes alpha blended but keeps writing
+									// depth. An already blended material (every effect program) keeps
+									// its own blend and never writes depth: a fading effect must not
+									// hide what is behind it, such as a name board.
+									...(fading ?
+										authored?.blend ?
+											{ instanceFade: true, depthWrite: false } :
+											{ blend: true, instanceFade: true } :
+										{}),
 									...(preview ? { fogDisabled: true } : {})
 								},
 								instances: emitted ?? batch.instances,

@@ -153,6 +153,26 @@ func loadTestDefinitions(t *testing.T) *Definitions {
 
 /*
 ================
+loadShippedDefinitions
+
+The shipped v1.150 quest catalog and the items it references, for tests
+that need a quest the small fixture catalog does not carry.
+================
+*/
+func loadShippedDefinitions(t *testing.T) (*Definitions, *enterworld.TextdataItems) {
+	t.Helper()
+	licensed.RequireGameData(t)
+	textdata := gamedatatest.TextdataDir(t)
+	items := enterworld.NewTextdataItems(textdata)
+	defs, err := LoadDefinitions(NewCatalog(textdata), items)
+	if err != nil {
+		t.Fatalf("LoadDefinitions: %v", err)
+	}
+	return defs, items
+}
+
+/*
+================
 TestLoadDefinitionsResolvesTheCuratedTable
 ================
 */

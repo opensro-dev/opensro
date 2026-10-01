@@ -1,9 +1,31 @@
 package quest
 
-// v1.150 questdata/questcontents chain and SN_TALK/SN_PAYCON contracts.
-// Quest 7 has no localized dialogue/content in this release; it is deliberately
-// not made into a blank NPC quest. The visible tutorial ends at quest 6.
+/*
+===========================================================================
+
+european_tutorial.go - the European tutorial
+
+QTUTORIAL_EU is the tutorial v1.150 presents: Guide Lipria offers it (_01,
+accept _70, deny _71), the game guide's "Europe Tutorial" article tracks it,
+and its stages live in europeanTutorialStages. The QNO_EU_TUTORIAL_1..6
+chain is an earlier revision of the same route with diverging dialogue and
+no guide article; it no longer opens for new characters, but a character
+already inside it can still finish it. Quest 7 of that chain has no
+localized dialogue/content in this release and is not made into a blank NPC
+quest.
+
+===========================================================================
+*/
+
+// qnoTutorialSuperseded closes new acceptance of the earlier chain.
+const qnoTutorialSuperseded = "superseded by QTUTORIAL_EU, the tutorial v1.150's guide presents"
+
 var europeanTutorialSpecs = []QuestSpec{
+	{Codename: "QTUTORIAL_EU", KindByte: 1, Objective: ObjectiveTalk,
+		StartNpcCodename: "NPC_EU_ADVICE", EndNpcCodename: "NPC_EU_ADVICE",
+		OfferPromptSymbol: "SN_TALK_QTUTORIAL_EU_01", AcceptResponseSymbol: "SN_TALK_QTUTORIAL_EU_70",
+		DenyResponseSymbol: "SN_TALK_QTUTORIAL_EU_71", CompletePromptSymbol: "SN_TALK_QTUTORIAL_EU_51",
+		Stages: europeanTutorialStages()},
 	{Codename: "QNO_EU_TUTORIAL_2", KindByte: 1, Objective: ObjectiveTalk,
 		RequiredQuests:   []string{"QNO_EU_TUTORIAL_1"},
 		StartNpcCodename: "NPC_EU_ARMOR", EndNpcCodename: "NPC_EU_ARMOR",
@@ -29,5 +51,8 @@ var europeanTutorialSpecs = []QuestSpec{
 		StartNpcCodename: "NPC_EU_SMITH", EndNpcCodename: "NPC_EU_ADVICE",
 		KillCount: 20, KillMonsterCodenames: []string{"MOB_EU_MOVOI", "MOB_EU_MOVOI_CLON"},
 		OfferPromptSymbol: "SN_TALK_QNO_EU_TUTORIAL_5_07", CompletePromptSymbol: "SN_TALK_QNO_EU_TUTORIAL_6_03", InventoryFullSymbol: "SN_TALK_QNO_EU_TUTORIAL_6_04",
-		RewardExp: 350, RewardItems: []RewardItemLead{{ItemCodename: "ITEM_QTUTORIAL_EU_2_01", Count: 1}}},
+		// INFERENCE (no surviving script): _05 is the quest's only "hunt
+		// complete, report to Lipria" line, the ACHIEVED_NOW role.
+		AchievedNowSymbol: "SN_TALK_QNO_EU_TUTORIAL_6_05",
+		RewardExp:         350, RewardItems: []RewardItemLead{{ItemCodename: "ITEM_QTUTORIAL_EU_2_01", Count: 1}}},
 }

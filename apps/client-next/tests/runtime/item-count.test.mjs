@@ -45,3 +45,32 @@ test("timed-service quantity suppression consumes the reference flag only for it
 		}
 	}
 });
+
+// A return scroll: expendable type 3/3 (0x6c family).
+const scroll = { quantity: 1, typeFlags: 0x6c };
+const slot = [ 100, 200, 32, 32 ];
+
+test("a single expendable unit draws its digit sprite", () => {
+	const quads = itemCountQuads( scroll, slot, slot );
+	assert.deepEqual( quads.map( q => q.texture ), [
+		"/assets/images/Media_extracted/interface/item_number/item_number_1.png"
+	] );
+});
+
+test("an unlimited item draws the infinity sign instead of its stack", () => {
+	const quads = itemCountQuads( scroll, slot, slot, true );
+	assert.ok( quads.length > 1 );
+	assert.ok( quads.every( q => q.texture === "" ), "drawn with solid quads, no asset" );
+	const [backing, ...glyph] = quads;
+	assert.deepEqual( backing.rect, [ 101, 202, 8, 5 ] );
+	assert.deepEqual( backing.color, [ 0, 0, 0, 1 ] );
+	// Every white run stays inside the backing.
+	for ( const q of glyph ) {
+		assert.deepEqual( q.color, [ 1, 1, 1, 1 ] );
+		assert.ok( q.rect[0] >= 101 && q.rect[0] + q.rect[2] <= 109 && q.rect[1] >= 202 && q.rect[1] < 207 );
+	}
+});
+
+test("items that show no count stay blank even when unlimited", () => {
+	assert.deepEqual( itemCountQuads( { quantity: 1, typeFlags: 0x332c }, slot, slot, true ), [] );
+});

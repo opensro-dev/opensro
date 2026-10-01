@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+commerce.go - Package action.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -18,6 +26,11 @@ import (
 const opShopCatalog uint16 = 11
 const opShopInventory uint16 = 12
 
+/*
+================
+ConfigureCommerce
+================
+*/
 func (rt *Runtime) ConfigureCommerce(dir string) error {
 	c, e := commerce.Load(dir, rt.deps.ItemReferences())
 	if e == nil {
@@ -27,12 +40,23 @@ func (rt *Runtime) ConfigureCommerce(dir string) error {
 	return e
 }
 
+/*
+================
+shopContent
+================
+*/
 type shopContent struct {
 	Ref      uint32 `json:"refObjId"`
 	Name     string `json:"name"`
 	Quantity uint32 `json:"quantity"`
 	Plus     uint8  `json:"plus"`
 }
+
+/*
+================
+shopOffer
+================
+*/
 type shopOffer struct {
 	PurchaseLimit uint16             `json:"purchaseLimit"`
 	Previews      []shopInventoryRow `json:"previews"`
@@ -42,13 +66,26 @@ type shopOffer struct {
 	Ref           uint32             `json:"refObjId"`
 	Name          string             `json:"name"`
 	Price         string             `json:"price"`
-	Stack         uint16             `json:"maxStack"`
+	// Currency is the refpricepolicyofitem payment type: 1 gold, 32 honor.
+	Currency uint8  `json:"currency"`
+	Stack    uint16 `json:"maxStack"`
 }
 
+/*
+================
+shopTabPresentation
+================
+*/
 type shopTabPresentation struct {
 	Index       uint8  `json:"index"`
 	LabelSymbol string `json:"labelSymbol"`
 }
+
+/*
+================
+shopProjection
+================
+*/
 type shopProjection struct {
 	SaleQuotes []shopSaleQuote       `json:"saleQuotes"`
 	Tabs       []shopTabPresentation `json:"tabs"`
@@ -60,23 +97,35 @@ type shopProjection struct {
 	Error      string                `json:"error,omitempty"`
 }
 
+/*
+================
+commerceNpc
+
+The merchant a trade may use: the selected, live, authored shop NPC whose
+shop function an in-range request opened (npcrange.go). Native trades check
+that function state (CGObjPC +0xC+6 == 5), never distance, so a shop that
+opened validly keeps trading until the selection is released or replaced.
+================
+*/
 func (rt *Runtime) commerceNpc(division string, c *enterworld.Character, gid uint32) (simulation.NpcDef, bool) {
 	if c == nil || rt.Commerce == nil {
 		return simulation.NpcDef{}, false
 	}
-	selected, ok := rt.Selected.Get(division, c.Name)
-	if !ok || selected != gid {
+	if !rt.Selected.FunctionOpen(division, c.Name, gid) {
 		return simulation.NpcDef{}, false
 	}
 	npc, ok := rt.npcForCurrentViewer(division, c, gid)
 	if !ok || npc.TalkFlags&simulation.NpcTalkFlagShop == 0 || !npc.AuthoredSpawn || npc.Patrol {
 		return npc, false
 	}
-	live := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, rt.Now().UnixMilli())
-	distance := simulation.WorldDistance2D(live, npc.Spawn)
-	// Explicit rebuild service policy, not an original-server distance proof.
-	return npc, !math.IsNaN(distance) && !math.IsInf(distance, 0) && distance <= 150
+	return npc, true
 }
+
+/*
+================
+eachShopOffer
+================
+*/
 func (rt *Runtime) eachShopOffer(npc simulation.NpcDef, visit func(uint8, commerce.Offer)) {
 	index := 0
 	for _, group := range npc.NpcTalkStoreGroups {
@@ -91,6 +140,12 @@ func (rt *Runtime) eachShopOffer(npc simulation.NpcDef, visit func(uint8, commer
 		}
 	}
 }
+
+/*
+================
+shopCatalog
+================
+*/
 func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uint32) wire.Frame {
 	p := shopProjection{Version: 1, Npc: gid, Offers: []shopOffer{}, Tabs: []shopTabPresentation{}}
 	snapshot := rt.characterSnapshot(division, c)
@@ -110,7 +165,7 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 		p.SaleQuotes = rt.shopSaleQuotes(division, snapshot, npc.RefObjID)
 		tax := rt.commerceTax(division, npc.RefObjID, snapshot)
 		rt.eachShopOffer(npc, func(tab uint8, o commerce.Offer) {
-			price, valid := commerce.AdjustPrice(o.Price, tax, true)
+			price, valid := offerUnitPrice(o, tax)
 			if !valid {
 				return
 			}
@@ -138,12 +193,18 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 			if len(templates) == 1 && inventory.IsEtcStackableTypeFlags(templates[0].Ref.TypeFlags()) && templates[0].Data == 0 {
 				purchaseLimit = templates[0].Stack
 			}
-			p.Offers = append(p.Offers, shopOffer{PurchaseLimit: purchaseLimit, Previews: previews, Contents: contents, Tab: tab, Slot: o.Slot, Ref: o.Ref.RefObjID, Name: o.Ref.Name, Price: strconv.FormatUint(price, 10), Stack: o.Stack})
+			p.Offers = append(p.Offers, shopOffer{PurchaseLimit: purchaseLimit, Previews: previews, Contents: contents, Tab: tab, Slot: o.Slot, Ref: o.Ref.RefObjID, Name: o.Ref.Name, Price: strconv.FormatUint(price, 10), Currency: o.Currency, Stack: o.Stack})
 		})
 	}
 	b, _ := json.Marshal(p)
 	return wire.Frame{Opcode: opShopCatalog, Payload: b}
 }
+
+/*
+================
+applyCommerce
+================
+*/
 func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	snapshot := rt.characterSnapshot(division, c)
 	npc, ok := rt.commerceNpc(division, snapshot, q.NpcGID)
@@ -160,6 +221,9 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		}
 	}
 	result := failureResult(wire.ErrCodeInvalidRequest)
+	// refusal names the native cause of an uncommitted trade; the silent
+	// generic code covers requests the retail client cannot compose.
+	refusal := wire.ErrCodeInvalidRequest
 	committed := rt.deps.Update(c, "shop-transaction", func() bool {
 		if c.DeletePending {
 			return false
@@ -191,12 +255,20 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if offer == nil || q.Quantity == 0 {
 				return false
 			}
-			unit, valid := commerce.AdjustPrice(offer.Price, rt.commerceTax(division, npc.RefObjID, c), true)
+			unit, valid := offerUnitPrice(*offer, rt.commerceTax(division, npc.RefObjID, c))
 			if !valid || unit > math.MaxInt64/uint64(q.Quantity) {
 				return false
 			}
 			cost := unit * uint64(q.Quantity)
-			if cost > balance {
+			if offer.Currency == commerce.PaymentHonor {
+				if cost > honorPoints(c) {
+					refusal = wire.ErrCodeNotEnoughHonor
+					return false
+				}
+				// Paid in honor: the gold balance is untouched.
+				cost = 0
+			} else if cost > balance {
+				refusal = wire.ErrCodeNotEnoughGold
 				return false
 			}
 			contents := offer.Contents
@@ -221,6 +293,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 					maxUnits *= uint64(template.Stack)
 				}
 				if units > maxUnits {
+					refusal = wire.ErrCodeStorageFull
 					return false
 				}
 				for units > 0 {
@@ -236,6 +309,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 					if stackable {
 						grant, fault := inv.GrantStack(item, template.Stack)
 						if fault != nil {
+							refusal = wire.ErrCodeStorageFull
 							return false
 						}
 						dest = append(dest, grant.DestSlot)
@@ -243,6 +317,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 					} else {
 						slot, fault := inv.Grant(item)
 						if fault != nil {
+							refusal = wire.ErrCodeStorageFull
 							return false
 						}
 						dest = append(dest, slot)
@@ -327,11 +402,44 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		return true
 	})
 	if !committed {
-		return failureResult(wire.ErrCodeInvalidRequest)
+		return failureResult(refusal)
 	}
 	return result
 }
 
+/*
+================
+offerUnitPrice
+
+Gold prices carry the town tax; honor prices are the authored points.
+================
+*/
+func offerUnitPrice(o commerce.Offer, tax commerce.Tax) (uint64, bool) {
+	if o.Currency == commerce.PaymentHonor {
+		return o.Price, o.Price > 0
+	}
+	return commerce.AdjustPrice(o.Price, tax, true)
+}
+
+/*
+================
+honorPoints
+
+Training Camp honor is the only source of honor points (client
+UIIT_STT_TC_HONOR_POINT). INFERENCE: the server has no Training Camp
+authority, so no character has earned any and every honor package refuses
+with the native lack-of-honor notice instead of trading.
+================
+*/
+func honorPoints(c *enterworld.Character) uint64 {
+	return 0
+}
+
+/*
+================
+shopInventoryRow
+================
+*/
 type shopInventoryRow struct {
 	Slot uint8  `json:"slot"`
 	Ref  uint32 `json:"refObjId"`
@@ -340,6 +448,11 @@ type shopInventoryRow struct {
 	Body []int  `json:"body"`
 }
 
+/*
+================
+shopInventoryRows
+================
+*/
 func (rt *Runtime) shopInventoryRows(items []inventory.Item, before []inventory.Item) ([]shopInventoryRow, error) {
 	rows := []shopInventoryRow{}
 	for _, item := range items {
@@ -366,6 +479,12 @@ func (rt *Runtime) shopInventoryRows(items []inventory.Item, before []inventory.
 	}
 	return rows, nil
 }
+
+/*
+================
+shopInventory
+================
+*/
 func (rt *Runtime) shopInventory(items []inventory.Item, before []inventory.Item, q wire.ItemMoveRequest) (wire.Frame, error) {
 	rows, e := rt.shopInventoryRows(items, before)
 	if e != nil {

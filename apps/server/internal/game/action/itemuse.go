@@ -188,6 +188,12 @@ func (rt *Runtime) HandleItemUse(
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
 		}
+		if family == itemUseComposite {
+			if len(tail) != 0 {
+				return false
+			}
+			return rt.useCompositeScroll(divisionID, character, ref, rowIndex, request, nowMs, &result)
+		}
 		if family == itemUseReturn {
 			return rt.beginReturnScroll(divisionID, character, ref, rowIndex, request, nowMs, &result)
 		}

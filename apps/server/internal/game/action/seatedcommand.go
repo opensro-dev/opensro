@@ -29,38 +29,71 @@ import (
 
 /*
 ==================
-standForSeatedCommand
+standOutcome
 
-Reports whether the press met a seat. A settled seat stands, and the
-stand reaches the player and every observer as the 0x3122 motion push the
-sit toggle sends; a press during the sit/stand transition is dropped.
+What a stand request met: no seat, a sit/stand transition still running
+(the request is dropped), or a seat the player rose from.
 ==================
 */
-func (rt *Runtime) standForSeatedCommand(division string, c *enterworld.Character, nowMs int64) (OpResult, bool) {
+type standOutcome uint8
+
+const (
+	standNotSeated standOutcome = iota
+	standInTransition
+	standStood
+)
+
+/*
+==================
+standUp
+
+The one stand mechanic every caller shares (a seated press, a landed hit):
+a settled seat stands, and the stand reaches the player and every observer
+as the 0x30BF move-channel push the sit toggle sends.
+==================
+*/
+func (rt *Runtime) standUp(division string, c *enterworld.Character, nowMs int64) (wire.Frame, standOutcome) {
 	if rt.Worlds == nil {
-		return OpResult{}, false
+		return wire.Frame{}, standNotSeated
 	}
 	key := simulation.WorldKey(division, c.Name)
 	seed := func() simulation.WorldState { return simulation.SeedWorldState(c) }
 	world := rt.Worlds.Snapshot(key, seed)
 	if !world.Sitting && nowMs >= world.PostureTransitionUntilMs {
-		return OpResult{}, false
+		return wire.Frame{}, standNotSeated
 	}
-
 	stood := false
 	rt.Worlds.Update(key, seed, func(w *simulation.WorldState) {
 		stood = w.StandUp(nowMs)
 	})
 	if !stood {
-		return OpResult{DiagnosticRefusal: "posture-transition"}, true
+		return wire.Frame{}, standInTransition
 	}
-	push := wire.Frame{
+	return wire.Frame{
 		Opcode: wire.OpObjectStateRefresh,
 		Payload: wire.ObjectStateRefresh{
 			Gid:       enterworld.ObjectIDForCharacter(c),
 			StateType: wire.StateChannelMove,
 			Value:     wire.MoveStateStand,
 		}.Encode(),
+	}, standStood
+}
+
+/*
+==================
+standForSeatedCommand
+
+Reports whether the press met a seat. A settled seat stands; a press during
+the sit/stand transition is dropped.
+==================
+*/
+func (rt *Runtime) standForSeatedCommand(division string, c *enterworld.Character, nowMs int64) (OpResult, bool) {
+	push, outcome := rt.standUp(division, c, nowMs)
+	switch outcome {
+	case standNotSeated:
+		return OpResult{}, false
+	case standInTransition:
+		return OpResult{DiagnosticRefusal: "posture-transition"}, true
 	}
 	return OpResult{Frames: []wire.Frame{push}, Broadcast: []wire.Frame{push}}, true
 }

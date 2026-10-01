@@ -420,8 +420,15 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 		if active && len(def.Stages) > 0 {
 			record := character.ActiveQuests[activeQuestIndex(character, def.RefID)]
 			current, ok := definitionAtStage(def, record.Stage)
-			if ok && current.EndNpcCodename == npcCodename && stageObjectiveMet(character, current, record) {
+			if !ok || current.EndNpcCodename != npcCodename {
+				continue
+			}
+			if stageObjectiveMet(character, current, record) {
 				completes = append(completes, NpcOption{Codename: stageToken(def.Codename, record.Stage), TitleSymbol: def.TitleSymbol, PromptSymbol: current.CompletePromptSymbol, Complete: true})
+			} else if current.NotAchievedSymbol != "" {
+				// The stage's own BASIC_MENUSTRING_NOT_ACHIEVED line, as an
+				// unstaged quest shows its own below.
+				completes = append(completes, NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: current.NotAchievedSymbol, Informational: true})
 			}
 			continue
 		}
@@ -824,10 +831,7 @@ func (rt *Runtime) applyInventoryChange(character *enterworld.Character) ([]wire
 			continue
 		}
 		character.ActiveQuests[index] = updated
-		frames = append(frames, wire.Frame{
-			Opcode:  OpQuestUpdate,
-			Payload: encodeMissionProgress(record, updated),
-		})
+		frames = append(frames, missionProgressFrames(def, record, updated)...)
 	}
 	return frames, len(frames) > 0
 }

@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+gacha.go - Package action.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -16,9 +24,15 @@ import (
 
 const gachaRollDenominator uint32 = 10000
 
-// ConfigureGacha loads the authoritative v1.150 Gacha tables and card refs.
-// Construction fails rather than registering a ticket-consuming opcode over
-// incomplete data.
+/*
+================
+ConfigureGacha
+
+ConfigureGacha loads the authoritative v1.150 Gacha tables and card refs.
+Construction fails rather than registering a ticket-consuming opcode over
+incomplete data.
+================
+*/
 func (rt *Runtime) ConfigureGacha(textdataDir string) error {
 	catalog, err := gacha.LoadCatalog(textdataDir, rt.deps.ItemReferences())
 	if err != nil {
@@ -28,6 +42,11 @@ func (rt *Runtime) ConfigureGacha(textdataDir string) error {
 	return nil
 }
 
+/*
+================
+secureGachaRoll
+================
+*/
 func secureGachaRoll() (uint32, error) {
 	value, err := rand.Int(rand.Reader, big.NewInt(1<<15))
 	if err != nil {
@@ -38,6 +57,11 @@ func secureGachaRoll() (uint32, error) {
 	return uint32(value.Uint64()) % gachaRollDenominator, nil
 }
 
+/*
+================
+registerGacha
+================
+*/
 func (rt *Runtime) registerGacha(hub *transport.Hub) {
 	hub.Handle(gacha.OpRoll, func(
 		session *transport.Session,
@@ -58,9 +82,15 @@ func (rt *Runtime) registerGacha(hub *transport.Hub) {
 	})
 }
 
-// HandleGachaNpcAction accepts only the exact action-0x27 native composition:
-// 0x7338 [boundGid][0x10000]. It must name the actor's currently selected,
-// live roster NPC and that NPC must occur in gachanpcmap.txt.
+/*
+================
+HandleGachaNpcAction
+
+HandleGachaNpcAction accepts only the exact action-0x27 native composition:
+0x7338 [boundGid][0x10000]. It must name the actor's currently selected,
+live roster NPC and that NPC must occur in gachanpcmap.txt.
+================
+*/
 func (rt *Runtime) HandleGachaNpcAction(
 	divisionID string,
 	character *enterworld.Character,
@@ -92,17 +122,26 @@ func (rt *Runtime) HandleGachaNpcAction(
 	if !rt.GachaCatalog.HasNpc(npc.RefObjID) {
 		return nil, fmt.Sprintf("NPC RefObjID %d has no v1.150 Gacha set", npc.RefObjID)
 	}
+	if !rt.npcWithinHitRange(divisionID, character, npc) {
+		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
+	}
 	return []wire.Frame{{
 		Opcode:  gacha.OpInteractionState,
 		Payload: gacha.EncodeOpenInteraction(),
 	}}, ""
 }
 
-// HandleGachaRoll applies one atomic Magic Pop transaction. The exact
-// v1.150 request binds all three authorities: selected machine gid, selected
-// gachaitemset entry id and ticket inventory slot. On commit the ticket row
-// becomes a native win/loss result card; 0x3645 reaches the client before
-// B053 so CIFGhaCha_ApplyResult observes the new ref and reward map.
+/*
+================
+HandleGachaRoll
+
+HandleGachaRoll applies one atomic Magic Pop transaction. The exact
+v1.150 request binds all three authorities: selected machine gid, selected
+gachaitemset entry id and ticket inventory slot. On commit the ticket row
+becomes a native win/loss result card; 0x3645 reaches the client before
+B053 so CIFGhaCha_ApplyResult observes the new ref and reward map.
+================
+*/
 func (rt *Runtime) HandleGachaRoll(
 	divisionID string,
 	character *enterworld.Character,
@@ -219,6 +258,11 @@ func (rt *Runtime) HandleGachaRoll(
 	return frames, ""
 }
 
+/*
+================
+gachaNpcForGID
+================
+*/
 func (rt *Runtime) gachaNpcForGID(
 	divisionID string,
 	character *enterworld.Character,

@@ -241,7 +241,12 @@ type Character struct {
 	// must match this exact GID and never trust a client-proposed vehicle.
 	ActiveCOS       *CharacterCOS    `json:"activeCos,omitempty"`
 	PetSkillWindows []PetSkillWindow `json:"petSkillWindows,omitempty"`
-	TimedSkillJobs  []TimedSkillJob  `json:"timedSkillJobs,omitempty"`
+	// ParamJobs are the live item parameter jobs (CTJ_CharParamKeeper):
+	// EXP/skill-EXP scroll bonuses with an absolute deadline.
+	ParamJobs []ParamJob `json:"paramJobs,omitempty"`
+	// ItemGroupCooldowns maps an item COOLTIME group to its absolute end.
+	ItemGroupCooldowns map[uint32]int64 `json:"itemGroupCooldowns,omitempty"`
+	TimedSkillJobs     []TimedSkillJob  `json:"timedSkillJobs,omitempty"`
 
 	// AvatarInventory is the persisted costume inventory. Rows reuse the
 	// equipment item body and occupy native avatar slots 0..3. Every row's
@@ -436,6 +441,24 @@ type PetSkillWindow struct {
 	// which is otherwise seeded only from what the character still carries.
 	Codename  string `json:"codename"`
 	EndUnixMs int64  `json:"endUnixMs"`
+}
+
+/*
+================
+ParamJob
+
+One live CTJ_CharParamKeeper (SR_GameServer 654F30): an internal param item
+(TID 3/3/3/10) writes Value to ParamKeeper parameter Param until EndUnixMs.
+The internal item's reference id is the client board row's identity
+(UpdateMagicStateSlot kind 4).
+================
+*/
+type ParamJob struct {
+	ItemRefObjID uint32 `json:"itemRefObjId"`
+	Codename     string `json:"codename"`
+	Param        uint16 `json:"param"`
+	Value        int64  `json:"value"`
+	EndUnixMs    int64  `json:"endUnixMs"`
 }
 
 /*

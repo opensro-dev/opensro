@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+npcaction.go - Package action.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -11,8 +19,14 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// registerNpcAction owns the shared 0x7338 registration. Feature children
-// return frames through this dispatcher; none may overwrite the hub handler.
+/*
+================
+registerNpcAction
+
+registerNpcAction owns the shared 0x7338 registration. Feature children
+return frames through this dispatcher; none may overwrite the hub handler.
+================
+*/
 func (rt *Runtime) registerNpcAction(hub *transport.Hub) {
 	hub.Handle(wire.OpNpcActionRequest, func(session *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(rt.deps, session)
@@ -37,16 +51,22 @@ func (rt *Runtime) registerNpcAction(hub *transport.Hub) {
 			frames, refusal = rt.HandleNpcAction(divisionID, character, payload)
 		}
 		if refusal != "" {
+			// A typed refusal (0xB338 kind 2) still answers the client.
 			log.Debugf("npcaction: 0x7338 mask 0x%X refused for %s: %s", mask, character.Name, refusal)
-			return
 		}
 		sendFrames(session, frames)
 	})
 }
 
-// HandleNpcAction applies the ordinary talk/shop subset whose server and
-// client contracts are both closed. Other masks fail closed; a visible menu
-// action is never acknowledged by an unrelated feature.
+/*
+================
+HandleNpcAction
+
+HandleNpcAction applies the ordinary talk/shop subset whose server and
+client contracts are both closed. Other masks fail closed; a visible menu
+action is never acknowledged by an unrelated feature.
+================
+*/
 func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Character, payload []byte) ([]wire.Frame, string) {
 	if character == nil {
 		return nil, "characterNotFound"
@@ -77,6 +97,11 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	}
 	if capabilities&requiredCapability == 0 {
 		return nil, fmt.Sprintf("NPC %s does not grant action mask 0x%X", npc.Codename, mask)
+	}
+	// 510250 runs 4A8E10 before any NPC function; a dialog the client kept
+	// open while walking away is refused here with the "too far" notice.
+	if !rt.npcWithinHitRange(divisionID, character, npc) {
+		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
 	}
 
 	switch mask {
@@ -114,6 +139,8 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		}}, ""
 	case simulation.NpcTalkFlagShop, 0x800:
 		if rt.Commerce != nil {
+			// 510250 sets the shop function state (5); trades check it.
+			rt.Selected.OpenFunction(divisionID, character.Name, gid)
 			return []wire.Frame{rt.shopCatalog(divisionID, character, gid)}, ""
 		}
 		return []wire.Frame{{
@@ -125,6 +152,11 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	}
 }
 
+/*
+================
+npcForCurrentViewer
+================
+*/
 func (rt *Runtime) npcForCurrentViewer(divisionID string, character *enterworld.Character, gid uint32) (simulation.NpcDef, bool) {
 	if character == nil || !rt.NpcSpawn.Enabled {
 		return simulation.NpcDef{}, false

@@ -27,7 +27,7 @@ func TestNpcReselectionRenewsGrantAndRetiresDialogue(t *testing.T) {
 	character := testCharacter()
 	runtime := selectTestRuntime(character)
 	setSelectCharacters(t, runtime, enterworld.StaticCharacterSource{testDivision: {character}})
-	runtime.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+	runtime.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 	npc := runtime.NpcRoster[0]
 
 	for _, phase := range []string{"first selection", "retained selection", "released selection"} {

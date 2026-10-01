@@ -35,8 +35,10 @@ import (
 // codename join self-filters them, the extract_shard_bak.py precedent.
 //
 // Europe seeds NOTHING (grade B negative: no race-1 row survives the
-// join; v1.150 ships no QTUTORIAL_EU row at all - the European tutorial
-// era shipped without a creation quest in this table).
+// join). v1.150 does ship QTUTORIAL_EU (id 210), but as an offer: Guide
+// Lipria asks "Would you like my help?" (SN_TALK_QTUTORIAL_EU_01) with
+// accept/deny branches, so it is an NPC-offered quest
+// (european_tutorial.go), not a creation seed.
 //
 // NO MIGRATION BACKFILL (declared choice, unlike the skills seed's
 // v5->v6): ActiveQuests already persists with omitempty and absent =

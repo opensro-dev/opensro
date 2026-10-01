@@ -90,7 +90,7 @@ func TestObjectSelectNpcGidsFollowTheSpawnGate(t *testing.T) {
 		t.Error("NPC gid accepted while MISSION_SPAWN_NPCS is off")
 	}
 
-	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 	if outcome := rt.HandleObjectSelect(testDivision, character, selectBody(npcGid)); outcome.Refusal != "" {
 		t.Errorf("NPC gid refused while roster enabled: %s", outcome.Refusal)
 	}
@@ -236,7 +236,7 @@ func TestObjectSelectAcceptsTheLiveNativeTraceBytes(t *testing.T) {
 	character := &enterworld.Character{ID: 1, Name: "asd2", ModelCodename: "CHAR_CH_MAN_ADVENTURER"}
 	rt := selectTestRuntime(character)
 	setSelectCharacters(t, rt, enterworld.StaticCharacterSource{testDivision: {character}})
-	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 
 	outcome := rt.HandleObjectSelect(testDivision, character, []byte{0x41, 0x0D, 0x03, 0x00})
 	if outcome.Refusal != "" {
@@ -337,7 +337,7 @@ func TestObjectSelectNpcGrantAnswersTheTalkGrant(t *testing.T) {
 	character := testCharacter()
 	rt := selectTestRuntime(character)
 	setSelectCharacters(t, rt, enterworld.StaticCharacterSource{testDivision: {character}})
-	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 
 	npcGid := rt.NpcRoster[0].ObjectID
 	outcome := rt.HandleObjectSelect(testDivision, character, selectBody(npcGid))
@@ -409,7 +409,7 @@ func TestObjectSelectUnknownCodenameNpcStillRefreshesBinding(t *testing.T) {
 	})
 
 	setSelectCharacters(t, rt, enterworld.StaticCharacterSource{testDivision: {character}})
-	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 
 	unseededGid := rt.NpcRoster[savedLength].ObjectID
 	outcome := rt.HandleObjectSelect(testDivision, character, selectBody(unseededGid))

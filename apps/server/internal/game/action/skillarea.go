@@ -187,7 +187,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	var refusal uint16
 	roster := rt.monsterRewardRoster(division, character, nowMs)
 	var settlements monsterSettlement
-	var ammoCount uint16
+	var ammo ammunitionResult
 	if !rt.deps.UpdateMany(roster.characters, "player-area-attack", func() bool {
 		var cost skillCharge
 		if charged && rootID == 0 {
@@ -214,7 +214,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		}
 		battleFrames = rt.enterBattleState(division, character, nowMs)
 		if consumeAmmo {
-			ammoCount = applyAmmunitionDebit(character, debit)
+			ammo = applyAmmunitionDebit(character, debit)
 		}
 		if charged && rootID == 0 {
 			rt.commitOffensivePhaseCost(division, character, skill, cost, nowMs, release != nil)
@@ -306,9 +306,9 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		private = append(private, vitals)
 	}
 	if consumeAmmo {
-		slot7 := wire.AvatarInventorySlot7StackCountFrame(ammoCount)
-		actor = append(actor, slot7)
-		private = append([]wire.Frame{slot7}, private...)
+		frames := ammunitionFrames(ammo)
+		actor = append(actor, frames...)
+		private = append(frames, private...)
 	}
 	actor = append(actor, progression...)
 	public = append(public, settlements.public...)

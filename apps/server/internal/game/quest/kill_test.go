@@ -31,8 +31,17 @@ func TestKillQuestCountsOnlyTargetsAndPaysNativeV150RewardOnce(t *testing.T) {
 	}
 	for i := 0; i < 40; i++ {
 		frames, changed := update(character, []string{"MOB_CH_GYO", "MOB_CH_GYO_CLON"}[i%2], 0)
-		if !changed || len(frames) != 1 || frames[0].Opcode != OpQuestUpdate {
+		// The fortieth kill completes the objective and also carries the
+		// script's ACHIEVED_NOW report banner, once.
+		want := 1
+		if i == 39 {
+			want = 2
+		}
+		if !changed || len(frames) != want || frames[0].Opcode != OpQuestUpdate {
 			t.Fatalf("kill %d: %v/%v", i, frames, changed)
+		}
+		if want == 2 && (frames[1].Opcode != questNotificationOpcode || string(frames[1].Payload[2:]) != "SN_TALK_QNO_CH_SOLDIER_EA1_1_06") {
+			t.Fatalf("completion banner: %v", frames[1])
 		}
 	}
 	if frames, changed := update(character, "MOB_CH_GYO", 0); changed || len(frames) != 0 {

@@ -719,7 +719,7 @@ test("frameless selections never block a following NPC selection", async () => {
 		assert.equal( state.targetPending, 0 );
 		assert.equal( state.target, 2 );
 	}
-	assert.doesNotThrow( () => game.command( { kind: "select", gid: 3 }, 86400000, { gid: 3, kind: "npc" } ) );
+	assert.doesNotThrow( () => game.command( { kind: "select", gid: 3 }, 86400000, { ...pose, gid: 3, kind: "npc" } ) );
 	assert.equal( game.take().targetPending, 3 );
 	assert.equal( sent.length, 2, "same-GID reselection does not send another grant request" );
 	game.dispose();
@@ -729,7 +729,7 @@ test("silent selection refusal expires, ignores late grants and permits a new in
 	const { createGameplay } = await load( "gameplay" ), game = createGameplay( () => {} );
 	game.bootstrap( {} );
 	game.seed( { ...pose, gid: 1, heading: 0 } );
-	game.command( { kind: "select", gid: 2 }, 100, { gid: 2, kind: "npc" } );
+	game.command( { kind: "select", gid: 2 }, 100, { ...pose, gid: 2, kind: "npc" } );
 	game.take();
 	game.step( 10099 );
 	assert.equal( game.take(), null );
@@ -1118,7 +1118,7 @@ test("one decal is published with native target categories, ground replacement a
 test("same-target clicks restore the shared marker without duplicate grants, including pending and stopped movement", async () => {
 	const { createGameplay } = await load( "gameplay" );
 	for ( const kind of [ "monster", "cos", "player", "npc" ] ) {
-		const sent = [], game = createGameplay( f => sent.push( f ) ), entity = { gid: 8, kind };
+		const sent = [], game = createGameplay( f => sent.push( f ) ), entity = { ...pose, gid: 8, kind };
 		game.bootstrap( { simulationProtocolVersion: 1 } );
 		game.seed( { ...pose, gid: 7, heading: 0 } );
 		game.command( { kind: "select", gid: 8 }, 0, entity );

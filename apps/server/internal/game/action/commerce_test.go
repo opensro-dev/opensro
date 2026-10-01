@@ -37,6 +37,8 @@ func merchantFixture(t *testing.T) (*Runtime, *enterworld.Character) {
 	rt.NpcSpawn.Enabled = true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 17, RefObjID: 100, TalkFlags: simulation.NpcTalkFlagShop, AuthoredSpawn: true, Spawn: spawn, NpcTalkStoreGroups: []simulation.NpcTalkStoreGroup{{StoreGroupID: 100, Tabs: []simulation.NpcTalkStoreTab{{TabID: 1}}}}}}
 	rt.Selected.Set(testDivision, c.Name, 17)
+	// An in-range shop request opened the merchant (npcrange.go).
+	rt.Selected.OpenFunction(testDivision, c.Name, 17)
 	rt.Commerce = &commerce.Catalog{Tabs: map[int32][]commerce.Offer{1: {{Slot: 2, Ref: ref, Price: 60, Stack: 50}}}}
 	return rt, c
 }

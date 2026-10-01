@@ -65,8 +65,9 @@ func TestDesignatedRebirthRestoresWorldVitalsAndLife(t *testing.T) {
 	rt, _ := newTestRuntime(character, testItems())
 
 	result := rt.HandleLocalRebirth(testDivision, character, []byte{1})
-	if len(result.Frames) < 8 || len(result.Broadcast) != 2 {
-		t.Fatalf("rebirth burst = %d private/%d broadcast, want reset corpus + LIFE / 2", len(result.Frames), len(result.Broadcast))
+	// Peers see the position, LIFE and the 4DF2E0 untouchable body mode.
+	if len(result.Frames) < 8 || len(result.Broadcast) != 3 {
+		t.Fatalf("rebirth burst = %d private/%d broadcast, want reset corpus + LIFE / 3", len(result.Frames), len(result.Broadcast))
 	}
 	if result.Frames[0].Opcode != enterworld.OpcodeResetClient ||
 		len(result.Frames[0].Payload) != 2 ||
@@ -162,9 +163,11 @@ func TestPresentPositionRebirthIsLevelGated(t *testing.T) {
 	low := rebirthTestCharacter(10, 0)
 	lowRuntime, _ := newTestRuntime(low, testItems())
 	result := lowRuntime.HandleLocalRebirth(testDivision, low, []byte{2})
+	// Correction, vitals, LIFE, then the 4DF2E0 untouchable body mode.
 	wantPrivate := []uint16{
 		wire.OpObjectSourceCorrection,
 		enterworld.OpcodeVitalsUpdate,
+		wire.OpObjectStateRefresh,
 		wire.OpObjectStateRefresh,
 	}
 	if got := opcodesOf(result.Frames); len(got) != len(wantPrivate) {
@@ -176,9 +179,9 @@ func TestPresentPositionRebirthIsLevelGated(t *testing.T) {
 			}
 		}
 	}
-	if len(result.Broadcast) != 2 || result.Broadcast[0].Opcode != wire.OpObjectSourceCorrection ||
-		result.Broadcast[1].Opcode != wire.OpObjectStateRefresh {
-		t.Fatalf("present-position peer frames = %+v, want correction + LIFE", opcodesOf(result.Broadcast))
+	if len(result.Broadcast) != 3 || result.Broadcast[0].Opcode != wire.OpObjectSourceCorrection ||
+		result.Broadcast[1].Opcode != wire.OpObjectStateRefresh || result.Broadcast[2].Opcode != wire.OpObjectStateRefresh {
+		t.Fatalf("present-position peer frames = %+v, want correction + LIFE + body mode", opcodesOf(result.Broadcast))
 	}
 	for _, frame := range result.Frames {
 		if frame.Opcode == enterworld.OpcodeResetClient {
@@ -197,6 +200,10 @@ func TestPresentPositionRebirthIsLevelGated(t *testing.T) {
 	life, err := wire.DecodeObjectStateRefresh(result.Frames[2].Payload)
 	if err != nil || life.StateType != wire.StateChannelLife || life.Value != wire.LifeStateAlive {
 		t.Fatalf("present-position LIFE frame = %+v / %v", life, err)
+	}
+	body, err := wire.DecodeObjectStateRefresh(result.Frames[3].Payload)
+	if err != nil || body.StateType != wire.StateChannelBody || body.Value != untouchableBodyStatus {
+		t.Fatalf("present-position body mode frame = %+v / %v, want untouchable", body, err)
 	}
 }
 

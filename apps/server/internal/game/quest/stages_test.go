@@ -14,7 +14,12 @@ import (
 
 func verifyStagedQuestLifecycle(t *testing.T, defs *Definitions, items enterworld.ItemRefSource, root *Definition) {
 	t.Helper()
-	for _, model := range []string{"CHAR_CH_MAN_ADVENTURER", "CHAR_CH_WOMAN_ADVENTURER"} {
+	// Both genders of the race the quest admits (country byte 1 is Europe).
+	models := []string{"CHAR_CH_MAN_ADVENTURER", "CHAR_CH_WOMAN_ADVENTURER"}
+	if root.CountryByte == 1 {
+		models = []string{"CHAR_EU_MAN_ADVENTURER", "CHAR_EU_WOMAN_ADVENTURER"}
+	}
+	for _, model := range models {
 		c := questCharacter()
 		c.ModelCodename = model
 		deps := &enterworld.Deps{Items: items}

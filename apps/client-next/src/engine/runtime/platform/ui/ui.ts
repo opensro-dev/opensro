@@ -46,6 +46,19 @@ export function createUiBridge(
 	let composing = false;
 	let drag: { id: string; pointer: number; x: number; y: number; moved?: boolean; } | null = null, focusRevision = -1;
 	let suppressClick: string | null = null;
+	/*
+	================
+	uiPoint
+
+	A pointer position in UI pixels. Drag deltas and drop points are UI
+	coordinates: CSS client pixels relative to the canvas, divided by the
+	chosen screen size's display scale (the inverse of the control layout).
+	================
+	*/
+	function uiPoint( event: { clientX: number; clientY: number; } ): [number, number] {
+		const box = canvas.getBoundingClientRect(), scale = displayScale();
+		return [ (event.clientX - box.left) / scale, (event.clientY - box.top) / scale ];
+	}
 	let rightPressed: { element: Element; pointer: number; } | null = null;
 	window.addEventListener( "pointermove", event => {
 		if ( !drag || event.pointerId !== drag.pointer ) return;
@@ -55,8 +68,8 @@ export function createUiBridge(
 			emit( { kind: "press", id: null } );
 			return;
 		}
-		const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
-		drag = { ...drag, x: event.clientX, y: event.clientY, moved: drag.moved || dx !== 0 || dy !== 0 };
+		const [x, y] = uiPoint( event ), dx = x - drag.x, dy = y - drag.y;
+		drag = { ...drag, x, y, moved: drag.moved || dx !== 0 || dy !== 0 };
 		emit( { kind: "drag", id: drag.id, dx, dy } );
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointerup", event => {
@@ -66,7 +79,8 @@ export function createUiBridge(
 		drag = null;
 		if ( completed?.moved ) {
 			suppressClick = completed.id;
-			emit( { kind: "drag-end", id: completed.id, x: event.clientX, y: event.clientY } );
+			const [x, y] = uiPoint( event );
+			emit( { kind: "drag-end", id: completed.id, x, y } );
 		}
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointercancel", () => {
@@ -355,7 +369,8 @@ export function createUiBridge(
 			event.preventDefault();
 			release();
 			slot.element.setPointerCapture( event.pointerId );
-			drag = { id: slot.value.id, pointer: event.pointerId, x: event.clientX, y: event.clientY };
+			const [x, y] = uiPoint( event );
+			drag = { id: slot.value.id, pointer: event.pointerId, x, y };
 		}
 	}, { signal: lifetime.signal } );
 	/*

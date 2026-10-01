@@ -192,7 +192,13 @@ import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout } from "@/engine/foundation/ui/chat-layout";
-import { worldMapPageAt, worldMapPages, worldMapPresentation, type MapMarker } from "@/engine/foundation/ui/world-map";
+import {
+	worldMapImagePaths,
+	worldMapPageAt,
+	worldMapPages,
+	worldMapPresentation,
+	type MapMarker
+} from "@/engine/foundation/ui/world-map";
 import { experienceReadout, minimapCoordinates, minimapRotation } from "@/engine/foundation/ui/hud-readouts";
 import { tooltipBubble, hudTooltipKey } from "@/engine/foundation/ui/helper-bubble";
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
@@ -1431,26 +1437,23 @@ export function createUi(
 			}
 		} else if ( id === "option-cancel" ) setPanel( "" );
 		else if ( id === "option-apply" || id === "option-ok" ) {
+			// Apply commits every tab, as OK does; only OK also closes. Returning
+			// after the video tab left game options and the beginner mark unsent.
 			video = videoOptions( videoDraft );
 			saveVideo( video );
-			if ( id === "option-apply" ) {
-				dirty = true;
-				return;
-			}
 			saveOptions( optionDraft );
 			const local = view.entities.find( e => e.gid === view?.gameplay?.localGid );
 			if ( local && !!((local.visualFlags ?? 0) & 1) !== beginnerDraft ) {
 				sendGameplay( { kind: "beginner-mark", enabled: beginnerDraft } );
 			}
-			if ( id === "option-ok" ) {
-				bindings = inputOptions( bindingDraft );
-				saveBindings( bindings );
-				sight = sightDraft;
-				saveSight( sight );
-				audioSaved = { ...audioDraft };
-				audioPreference( audioSaved, true );
-				setPanel( "" );
-			}
+			bindings = inputOptions( bindingDraft );
+			saveBindings( bindings );
+			sight = sightDraft;
+			saveSight( sight );
+			audioSaved = { ...audioDraft };
+			audioPreference( audioSaved, true );
+			if ( id === "option-ok" ) setPanel( "" );
+			else dirty = true;
 		} else if ( id.startsWith( "option-scroll:" ) ) {
 			const [group, delta] = id.slice( 14 ).split( ":" ).map( Number );
 			if ( group === 0 || group === 1 ) {
@@ -2045,6 +2048,11 @@ export function createUi(
 		} else if ( id === "close" || id === "companion-close" || id === "potion-cancel" ) {
 			confirmDrop = "";
 			confirmAbandon = false;
+			// Closing the shop, or the inventory beside it, ends the NPC
+			// interaction: CIFWnd_OnInventoryOrStorageClose (5B0D20) and the
+			// store's own close (53D4BC) call CGInterface_SetNpcShopVisible( 0 ),
+			// which hides the talk menus and releases the NPC target (69FB95).
+			if ( panel === "Shop" ) sendGameplay( { kind: "npc-close" } );
 			setPanel( "" );
 			inventorySlot = -1;
 		} else if ( id === "select-window:Character-stats" ) setPanel( "Character", "select" );
@@ -3963,6 +3971,9 @@ export function createUi(
 				berserkFrame = nextBerserkFrame;
 				dirty = true;
 			}
+			// The full-screen entry flash (8CEF20) fades continuously; redrawing it
+			// only on the 50 ms atlas frame stepped its brightness into a flicker.
+			if ( berserkActor && berserkEntryFlash( now - berserkStarted ) > 0 ) dirty = true;
 			const stableWorld = next.session?.phase === "world" && next.frontend?.phase === "world" &&
 				view?.frontend?.phase === "world" &&
 				!loading && !next.travel && next.worldTransitionRegion === undefined && next.worldReady &&
@@ -4038,7 +4049,9 @@ export function createUi(
 				consoleRows = [];
 				consoleHistory = [];
 				consoleHistoryIndex = 0;
-				if ( phase !== "world" ) gmObserved = 0;
+				// Leaving the world rebaselines (-1) rather than rewinds: retained
+				// replies must not be shown again on re-entry or after a teleport.
+				if ( phase !== "world" ) gmObserved = -1;
 			}
 			if ( consolePhase === 1 ) {
 				consoleY = Math.min( 0, consoleY + Math.trunc( consoleDelta * 400 ) );
@@ -4139,7 +4152,7 @@ export function createUi(
 					windowPlacement.reset();
 					carriedShortcut = null;
 					if ( panel === "Option" ) audioPreference( audioSaved, false );
-					chatFeedbackObserved = 0;
+					chatFeedbackObserved = -1;
 					focusRequest = undefined;
 					speech.reset();
 					academyWasVisible = false;
@@ -4556,6 +4569,7 @@ export function createUi(
 				] );
 			}
 
+			if ( gmObserved < 0 ) gmObserved = Math.max( 0, ...(game?.gmReplies ?? []).map( reply => reply.sequence ) );
 			for ( const reply of game?.gmReplies ?? [] ) {
 				if ( reply.sequence > gmObserved ) {
 					gmObserved = reply.sequence;
@@ -4841,10 +4855,18 @@ export function createUi(
 			================
 			*/
 			function itemCount(
-				item: { readonly quantity?: number; readonly typeFlags?: number; } | undefined,
+				item:
+					| { readonly quantity?: number; readonly typeFlags?: number; readonly refObjId?: number; }
+					| undefined,
 				r: UiRect
 			) {
-				for ( const q of itemCountQuads( item, r, full ) ) {
+				const unlimited = item?.refObjId !== undefined && !!game?.unlimitedItems?.includes( item.refObjId );
+				for ( const q of itemCountQuads( item, r, full, unlimited ) ) {
+					// The infinity sign is solid quads; digit sprites are resources.
+					if ( !q.texture ) {
+						quads.push( q );
+						continue;
+					}
 					paths.push( q.texture );
 					if ( resources.has( q.texture ) ) quads.push( q );
 				}
@@ -5041,8 +5063,16 @@ export function createUi(
 			if ( warming !== null ) {
 				setPanel( warming, "warm" );
 				if ( warming === "Skills" ) windowWarm.add( skillWindowWarmPaths() );
+				// A map drag reaches tiles outside the warm build's view.
+				if ( warming === "Map" ) windowWarm.add( worldMapImagePaths( hud.data()?.mapIcons ) );
 			}
 			if ( worldVisible && hud.data() ) {
+				if ( chatFeedbackObserved < 0 ) {
+					chatFeedbackObserved = Math.max(
+						0,
+						...(game?.chat?.feedback ?? []).map( notice => notice.sequence )
+					);
+				}
 				for ( const notice of game?.chat?.feedback ?? [] ) {
 					if ( notice.sequence > chatFeedbackObserved ) {
 						chatFeedbackObserved = notice.sequence;
@@ -5457,7 +5487,7 @@ export function createUi(
 							y,
 							row.mp
 						);
-						const race = row.entity?.countryByte9c;
+						const race = row.member.country ?? row.entity?.countryByte9c;
 						if ( race === 0 || race === 1 ) {
 							authoredImage(
 								slot.GDR_QPS_PARTY_RACE_MARK!,
@@ -7363,7 +7393,7 @@ export function createUi(
 						}
 						if ( node.id === 45 ) {
 							authoredText(
-								{ ...node, color: tooltipColor( 0xffa79b7a ) },
+								{ ...node, color: leader?.guild ? white : tooltipColor( 0xff999999 ) },
 								ox,
 								oy,
 								leader?.guild || hudCopy( "UIIT_STT_NO_GUILD" )
@@ -7448,6 +7478,30 @@ export function createUi(
 								}
 								if ( child.name === "GDR_PTYSLOT_STATIC_LEVEL_DATA" ) {
 									authoredText( child, sx, sy, String( member.level ) );
+								}
+								// 5B93A0: the member's guild in white, or the grey no-guild text.
+								if ( child.name === "GDR_PTYSLOT_STATIC_GUILD" ) {
+									authoredText(
+										member.guild ?
+											{ ...child, color: white } :
+											{ ...child, color: tooltipColor( 0xff999999 ) },
+										sx,
+										sy,
+										member.guild || hudCopy( "UIIT_STT_NO_GUILD" )
+									);
+								}
+								// 5B93A0 -> 81D5B0: the kindred mark of the member's own reference.
+								if (
+									child.name === "GDR_PTYSLOT_RACE" && (member.country === 0 || member.country === 1)
+								) {
+									authoredImage(
+										child,
+										sx,
+										sy,
+										ROOT + "interface/ifcommon/com_kindred_" +
+											(member.country === 0 ? "china" : "europe") +
+											"16.png"
+									);
 								}
 								if ( child.type === "CIFGauge" ) {
 									const hp = child.texture.includes( "pt_hp" ),
@@ -11827,7 +11881,9 @@ export function createUi(
 								...tooltip,
 								...commerceTooltip( id, game, {
 									price: lookup( "UIIT_STT_PRICE" ),
-									gold: lookup( "UIIT_STT_GOLD" )
+									gold: lookup( "UIIT_STT_GOLD" ),
+									honor: lookup( "UIIT_STT_TC_HONOR_POINT" ),
+									point: lookup( "UIIT_STT_SILKMALL_P_POINT" )
 								} )
 							];
 						}
@@ -11944,6 +12000,9 @@ export function createUi(
 			// must never again be interpreted as the set of GPU-resident textures.
 			paths.push( ...hud.data()?.warmPaths ?? [], ...guideResources.data()?.warmPaths ?? [] );
 			paths.push( ...windowWarm.paths() );
+			// An open map wants every tile a drag can reveal, even when it opened
+			// before its warm build ran.
+			if ( panel === "Map" ) paths.push( ...worldMapImagePaths( hud.data()?.mapIcons ) );
 			for ( const item of game?.inventory ?? [] ) {
 				const path = iconPath( item.icon );
 				if ( path ) paths.push( path );

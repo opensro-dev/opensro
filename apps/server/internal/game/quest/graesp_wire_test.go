@@ -59,8 +59,17 @@ func TestGraespKillProducerMatchesClientFeedbackFixture(t *testing.T) {
 				t.Fatalf("kill %d lost", i)
 			}
 		}
-		if len(frames) != 1 || frames[0].Opcode != OpQuestUpdate || hex.EncodeToString(frames[0].Payload) != row.PayloadHex {
+		// The completing kill also carries the script's ACHIEVED_NOW banner;
+		// the client fixture records only the quest update.
+		want := 1
+		if i == len(fixture.Frames)-1 {
+			want = 2
+		}
+		if len(frames) != want || frames[0].Opcode != OpQuestUpdate || hex.EncodeToString(frames[0].Payload) != row.PayloadHex {
 			t.Fatalf("count %d wire mismatch: %+v", i, frames)
+		}
+		if want == 2 && (frames[1].Opcode != questNotificationOpcode || string(frames[1].Payload[2:]) != "SN_TALK_QNO_EU_CONS_1_07") {
+			t.Fatalf("completion banner: %+v", frames[1])
 		}
 		if c.ActiveQuests[0].Contents[0].ObjectiveValues[0] != row.Count {
 			t.Fatal("persisted count differs")

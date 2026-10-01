@@ -14,7 +14,7 @@ type fullQuestBag struct{}
 func TestUnfinishedQuestDialogueCannotMutateQuest(t *testing.T) {
 	c := testCharacter()
 	rt := selectTestRuntime(c)
-	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 	npc := rt.NpcRoster[0]
 	rt.Selected.Set(testDivision, c.Name, npc.ObjectID)
 	rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, Stage: npcDialogOptions, Options: []NpcQuestOption{{Codename: "QUEST", PromptSymbol: "ONGOING", Informational: true}}})
@@ -35,7 +35,7 @@ func TestQuestAcceptanceAndDenialUseAuthoredResponses(t *testing.T) {
 	for _, choice := range []byte{2, 3} {
 		c := testCharacter()
 		rt := selectTestRuntime(c)
-		rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+		rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 		npc := rt.NpcRoster[0]
 		rt.Selected.Set(testDivision, c.Name, npc.ObjectID)
 		rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE", Stage: npcDialogConfirm, Pending: NpcQuestOption{Codename: "QUEST", AcceptResponseSymbol: "ACCEPT", DenyResponseSymbol: "DENY"}})
@@ -58,7 +58,7 @@ func TestQuestAcceptanceAndDenialUseAuthoredResponses(t *testing.T) {
 func TestNpcEligibilityRefusalConfirmClosesAndReselectionRefreshesOffers(t *testing.T) {
 	c := testCharacter()
 	rt := selectTestRuntime(c)
-	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 	rt.NpcRoster[0].TalkFlags |= simulation.NpcTalkFlagTalk
 	rt.NpcRoster[0].BaseSpeechSymbol = "NPC_BS"
 	npc := rt.NpcRoster[0]
@@ -120,7 +120,7 @@ func (fullQuestBag) DialogueSymbol() string { return "SN_TALK_QNO_CH_POTION_1_05
 func TestNpcRewardRefusalUsesAuthoredTextAndReopenCanRetry(t *testing.T) {
 	c := testCharacter()
 	rt := selectTestRuntime(c)
-	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 	rt.NpcRoster[0].TalkFlags |= simulation.NpcTalkFlagTalk
 	npc := rt.NpcRoster[0]
 	rt.Selected.Set(testDivision, c.Name, npc.ObjectID)
@@ -155,7 +155,7 @@ func npcActionBody(gid, mask uint32) []byte {
 func TestNpcDialogQuestSessionIsSelectionBound(t *testing.T) {
 	character := testCharacter()
 	rt := selectTestRuntime(character)
-	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true}
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
 	rt.NpcRoster[0].BaseSpeechSymbol = "NPC_BS"
 	rt.NpcRoster[0].QuestSpeechSymbol = "NPC_PS"
 	rt.NpcRoster[0].TalkFlags |= simulation.NpcTalkFlagTalk

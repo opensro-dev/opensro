@@ -212,6 +212,10 @@ type PlayerSpawnRow struct {
 	WalkSpeed  float32
 	RunSpeed   float32
 	ScaleDenom float32
+	// SpawnSkills is the active effect list 85FB20 reads after the scale
+	// (g_aSpawnBuffSkillIds): the peer's buffs, so a player who comes into
+	// view already buffed shows them.
+	SpawnSkills []SpawnSkillEntry
 	// Name is the display name sub_869df0 reads at @0x00869e77 (sub_4b1710
 	// wire shape: u16 length + `length` single bytes) into CICUser +0x108.
 	Name string
@@ -382,16 +386,14 @@ func (p PlayerSpawnRow) Encode() []byte {
 	// to 0 like the NPC create row. 85FFA1 promotes +460 through the body
 	// setter; the peer visibility owner replays nonzero runtime body state
 	// after spawn. Next are walk/run speeds, the FLOAT scale
-	// denominator (@0x0085fba5 fld dword), then mastery count 0 (the port
-	// carries no peer mastery rows - each entry would need a client-side
-	// skilldata record resolve).
+	// denominator (@0x0085fba5 fld dword), then the active effect list.
 	w.U8(0)
 	w.U8(0)
 	w.U8(0)
 	w.F32(p.WalkSpeed)
 	w.F32(p.RunSpeed)
 	w.F32(p.ScaleDenom)
-	w.U8(0)
+	writeSpawnSkills(w, p.SpawnSkills)
 
 	// sub_869df0 @0x00869e77: display name -> +0x108 (sub_4b1710). The
 	// local-player-only +0x1898 label read (@0x00869ece) never rides a
@@ -458,6 +460,19 @@ func (p PlayerSpawnRow) Encode() []byte {
 // through tidByRef, the same words the encoder used (the client's own
 // itemdata lookup on each refObjId). withAppearTail selects the 0x30D7 form.
 func DecodePlayerSpawnRow(payload []byte, tidByRef map[uint32]uint16, withAppearTail bool) (PlayerSpawnRow, error) {
+	return DecodePlayerSpawnRowWithSkills(payload, tidByRef, withAppearTail, nil)
+}
+
+/*
+================
+DecodePlayerSpawnRowWithSkills
+
+DecodePlayerSpawnRow for a row that carries effects: an entry's token and
+status bytes depend on its skill record, which skillShape answers. Without
+it only an empty effect list decodes.
+================
+*/
+func DecodePlayerSpawnRowWithSkills(payload []byte, tidByRef map[uint32]uint16, withAppearTail bool, skillShape SpawnSkillShape) (PlayerSpawnRow, error) {
 	var out PlayerSpawnRow
 	out.WithAppearTail = withAppearTail
 
@@ -552,7 +567,7 @@ func DecodePlayerSpawnRow(payload []byte, tidByRef map[uint32]uint16, withAppear
 	if out.ScaleDenom, err = r.F32(); err != nil {
 		return out, err
 	}
-	if _, err = r.U8(); err != nil { // mastery count
+	if out.SpawnSkills, err = readSpawnSkills(r, skillShape); err != nil {
 		return out, err
 	}
 

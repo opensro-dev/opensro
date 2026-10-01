@@ -45,7 +45,8 @@ func TestFatalMovementSettlesBeforeDelayedPresentRebirthAndReconnect(t *testing.
 			}
 			clock.Advance(delay)
 			reborn := rt.HandleLocalRebirth(testDivision, c, []byte{2})
-			if len(reborn.Frames) != 3 {
+			// Correction, vitals, LIFE and the untouchable body mode.
+			if len(reborn.Frames) != 4 {
 				t.Fatalf("rebirth: %+v", reborn)
 			}
 			correction, err := wire.DecodeObjectSourceCorrection(reborn.Frames[0].Payload)

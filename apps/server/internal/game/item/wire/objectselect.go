@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+objectselect.go - Package wire.
+
+===========================================================================
+*/
+
 package wire
 
 import "fmt"
@@ -36,7 +44,13 @@ const (
 // ObjectSelectRequestSize is the exact 0x745A body size: one u32 gid.
 const ObjectSelectRequestSize = 4
 
-// DecodeObjectSelectRequest parses a 0x745A body: exactly [u32le gid].
+/*
+================
+DecodeObjectSelectRequest
+
+DecodeObjectSelectRequest parses a 0x745A body: exactly [u32le gid].
+================
+*/
 func DecodeObjectSelectRequest(payload []byte) (uint32, error) {
 	if len(payload) != ObjectSelectRequestSize {
 		return 0, fmt.Errorf("wire: 0x745A body %d bytes, want exactly %d", len(payload), ObjectSelectRequestSize)
@@ -49,29 +63,48 @@ func DecodeObjectSelectRequest(payload []byte) (uint32, error) {
 	return gid, nil
 }
 
-// EncodeNpcObjectSelectResult composes the S->C 0xB45A grant body for a
-// live roster NPC, in the folded sub_764c60 field order. A live CICNPC
-// dynamic-casts to CICharactor (CICNPC -> CICNonuser -> CICharactor), so
-// the read takes the CHARACTER arm and the vitals-mask byte IS present:
-//
-//	{u8 result=1}{u32le gid}{u8 vitalsMask=0}{u32le capabilityFlags}{u8 npcExtra}
-//
-// The bytes must stay identical to the client-side oracle
-// devComposeSyntheticB45A for the same inputs - the harness parity suite consumes
-// exactly this shape. Deliberate omissions, all pinned by the fold:
-//
-//   - vitalsMask stays 0. Bit 1 would append an HP dword this server has
-//     no vitals plane to source, and bits 2/4 (VITAL_INFO_MP /
-//     VITAL_INFO_ABNORMAL) are ASSERT-FATAL client-side - mirrored as
-//     throws in the fold, so they must never ride the wire.
-//   - capabilityFlags must not carry 0x40000000: that bit appends a u16
-//     job-transport tail the client correctly expects, but this server has no
-//     authority value to encode for roster NPCs (the caller's table
-//     guarantees the bit stays clear).
-//   - npcExtra 0 appends no menu row; a nonzero value forces the 0x38
-//     talkbox row (sub_5d3630). DECISION: the roster emits 0 - no roster
-//     NPC has evidence for the 0x38 row, and forcing it would put a menu
-//     action on screen that retail never granted these NPCs.
+/*
+================
+EncodeObjectSelectRefusal
+
+EncodeObjectSelectRefusal is the 0xB45A refusal [u8 result=2][u8 code]
+(7651F1 consumes it without granting a target; only code 7 shows text).
+================
+*/
+func EncodeObjectSelectRefusal(code uint8) []byte {
+	return NewWriter(2).U8(2).U8(code).Payload()
+}
+
+/*
+================
+EncodeNpcObjectSelectResult
+
+EncodeNpcObjectSelectResult composes the S->C 0xB45A grant body for a
+live roster NPC, in the folded sub_764c60 field order. A live CICNPC
+dynamic-casts to CICharactor (CICNPC -> CICNonuser -> CICharactor), so
+the read takes the CHARACTER arm and the vitals-mask byte IS present:
+
+	{u8 result=1}{u32le gid}{u8 vitalsMask=0}{u32le capabilityFlags}{u8 npcExtra}
+
+The bytes must stay identical to the client-side oracle
+devComposeSyntheticB45A for the same inputs - the harness parity suite consumes
+exactly this shape. Deliberate omissions, all pinned by the fold:
+
+  - vitalsMask stays 0. Bit 1 would append an HP dword this server has
+    no vitals plane to source, and bits 2/4 (VITAL_INFO_MP /
+    VITAL_INFO_ABNORMAL) are ASSERT-FATAL client-side - mirrored as
+    throws in the fold, so they must never ride the wire.
+  - capabilityFlags must not carry 0x40000000: that bit appends a u16
+    job-transport tail the client correctly expects, but this server has no
+    authority value to encode for roster NPCs (the caller's table
+    guarantees the bit stays clear).
+  - npcExtra 0 appends no menu row; a nonzero value forces the 0x38
+    talkbox row (sub_5d3630). DECISION: the roster emits 0 - no roster
+    NPC has evidence for the 0x38 row, and forcing it would put a menu
+    action on screen that retail never granted these NPCs.
+
+================
+*/
 func EncodeNpcObjectSelectResult(gid, capabilityFlags uint32, npcExtra uint8) []byte {
 	w := NewWriter(11)
 	w.U8(1).
@@ -82,14 +115,20 @@ func EncodeNpcObjectSelectResult(gid, capabilityFlags uint32, npcExtra uint8) []
 	return w.Payload()
 }
 
-// EncodeMonsterObjectSelectResult composes the non-CICUser character arm
-// used when a live monster is selected:
-//
-//	{u8 result=1}{u32le gid}{u8 vitalsMask=1}{u32le currentHP}{u32le flags=0}
-//
-// Exact CICMonster is not CICNPC, so there is no npcExtra byte. Flags zero
-// keeps the @0x00765054 talk-window branch closed while the common
-// sub_6813e0/sub_67aeb0 selection tail rebuilds the target HUD.
+/*
+================
+EncodeMonsterObjectSelectResult
+
+EncodeMonsterObjectSelectResult composes the non-CICUser character arm
+used when a live monster is selected:
+
+	{u8 result=1}{u32le gid}{u8 vitalsMask=1}{u32le currentHP}{u32le flags=0}
+
+Exact CICMonster is not CICNPC, so there is no npcExtra byte. Flags zero
+keeps the @0x00765054 talk-window branch closed while the common
+sub_6813e0/sub_67aeb0 selection tail rebuilds the target HUD.
+================
+*/
 func EncodeMonsterObjectSelectResult(gid, currentHP uint32) []byte {
 	w := NewWriter(14)
 	w.U8(1).

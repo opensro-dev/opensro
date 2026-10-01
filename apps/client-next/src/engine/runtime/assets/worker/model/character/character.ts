@@ -111,8 +111,22 @@ interface Document {
 		}[];
 	}[];
 }
+
+/*
+================
+createCharacterDecoder
+
+The worker-side glTF character decoder: skins, meshes and clips into one
+CharacterSource the renderer uploads.
+================
+*/
 export function createCharacterDecoder() {
 	return {
+		/*
+================
+decode
+================
+		*/
 		decode( document: ModelDocument ): CharacterSource {
 			const j = document.json as unknown as Document, buffer = new DataView( document.binary );
 			// Native particle-only BSRs have a skeleton but no mesh section.
@@ -328,7 +342,12 @@ export function createCharacterDecoder() {
 								stageFactor: 2,
 								objectLight: 1,
 								ambient: actorAmbient,
-								color: [ color[0]!, color[1]!, color[2]!, color[3]! ],
+								// BMT diffuse alpha never gates coverage: eleven shipped
+								// subsets (the Inn Master's body, the Witch of Sunset,
+								// Bandit, Bogy) author 0 and retail draws them whole.
+								// Every other material authors 1, so coverage is the
+								// texture's alpha test alone.
+								color: [ color[0]!, color[1]!, color[2]!, 1 ],
 								alphaCutoff: mat?.alphaMode === "MASK" ? mat.alphaCutoff ?? 0.5 : 0,
 								blend: mat?.alphaMode === "BLEND",
 								textureAlpha: mat?.alphaMode === "MASK" || mat?.alphaMode === "BLEND",

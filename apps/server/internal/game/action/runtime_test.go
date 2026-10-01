@@ -924,3 +924,31 @@ func TestCommerceLayoutsDoNotBypassTransactionAuthority(t *testing.T) {
 		}
 	}
 }
+
+/*
+==================
+TestPickupApproachMaturesAtTheWalksOwnSpeed
+
+A character faster than the base run speed (a speed scroll) reaches the
+drop sooner; the pickup must mature when its walk arrives, not when a
+base-speed estimate of it would.
+==================
+*/
+func TestPickupApproachMaturesAtTheWalksOwnSpeed(t *testing.T) {
+	character := testCharacter()
+	rt, clock := newTestRuntime(character, testItems())
+	worldKey := simulation.WorldKey(testDivision, character.Name)
+	rt.Worlds.Update(worldKey,
+		func() simulation.WorldState { return simulation.SeedWorldState(character) },
+		func(world *simulation.WorldState) { world.Walk, world.Run = 20, 100 })
+	start := simulation.SeedWorldState(character).Spawn
+	heap := rt.Ground.Add(testDivision, PlanGoldDrop(
+		GoldHeapRef{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", Tid1: 3, Tid2: 3, Tid3: 5, Tid4: 2},
+		1000,
+		simulation.Spawn{RegionID: start.RegionID, X: start.X + 100, Y: start.Y, Z: start.Z},
+		"someone", clock.Now()))
+	armed := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: heap.Gid}.Encode())
+	if armed.Pending == nil || armed.Pending.Eta != time.Second {
+		t.Fatalf("pending = %+v, want the 1s walk at 100 units/s", armed.Pending)
+	}
+}

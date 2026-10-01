@@ -132,6 +132,10 @@ const (
 	// ErrCodeNotEnoughGold is UIIT_MSG_STRGERR_NOT_ENOUGH_GOLD (01:0f,
 	// banner + guide): the request exceeds the carried balance.
 	ErrCodeNotEnoughGold uint8 = 0x0F
+	// ErrCodeNotEnoughHonor is UIIT_MSG_TC_LACK_HONOR_POINT (01:D4,
+	// CGInterface_ShowSystemNotification 689CDE: table index 0xD1 + 3): an
+	// honor-priced package the character's honor points cannot pay.
+	ErrCodeNotEnoughHonor uint8 = 0xD4
 	// ErrCodeLevelRequired is UIIT_MSG_STRGERR_HIGHER_LEVEL_REQUIRED
 	// (01:10, banner + guide): the character level is below the item's
 	// RequiredLevel floor (native full-mask sub_789c60 bit 0x020, level

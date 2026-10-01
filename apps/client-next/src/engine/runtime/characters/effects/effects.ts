@@ -61,6 +61,19 @@ import { nativeHeadingYaw, radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
 /*
 ================
+stageAttachmentBasis
+
+CIDecoSkill_ComputeSocketTransformMatrix 8D9EC0 resolves every attached
+stage object, .efp program or .bsr mesh (arrows, weapons), through the same
+8D6880 holder matrix, then applies the authored rotation in object space.
+Only the asset space differs: compiled BSR vertices are Z-flipped.
+================
+*/
+function stageAttachmentBasis( resource: string ): "native" | "native-bsr" {
+	return resource.endsWith( ".efp" ) ? "native" : "native-bsr";
+}
+/*
+================
 createCharacterEffects
 Creates the effect owner. The caller supplies the asset owner, sound
 sink, presentation randomness and item reference lookup.
@@ -907,11 +920,11 @@ export function createCharacterEffects(
 											gid: owner.gid,
 											bone: overhead ? "" : stage.bone ?? "",
 											root: overhead || !stage.bone,
-											basis: stage.resource.endsWith( ".efp" ) ? "native" : undefined,
+											basis: stageAttachmentBasis( stage.resource ),
 											offset: [
 												stage.offset[0],
 												stage.offset[1] + (overhead ? owner.height! : 0),
-												stage.offset[2] * (stage.resource.endsWith( ".efp" ) ? 1 : -1)
+												stage.offset[2]
 											]
 										}
 									} );
@@ -1474,13 +1487,8 @@ export function createCharacterEffects(
 													gid: entity.gid,
 													bone: stage.bone ?? "",
 													root: !stage.bone,
-													basis: stage.resource.endsWith( ".efp" ) ? "native" : undefined,
-													offset: [
-														stage.offset[0],
-														stage.offset[1],
-														stage.offset[2] *
-														(stage.resource.endsWith( ".efp" ) ? 1 : -1)
-													],
+													basis: stageAttachmentBasis( stage.resource ),
+													offset: [ stage.offset[0], stage.offset[1], stage.offset[2] ],
 													...(victimFacing !== undefined && !stage.bone ?
 														{ facing: victimFacing } :
 														{})
@@ -1650,12 +1658,8 @@ export function createCharacterEffects(
 											gid: event.source.gid,
 											bone,
 											root: !bone,
-											basis: stage.resource.endsWith( ".efp" ) ? "native" as const : undefined,
-											offset: [
-												offset[0],
-												offset[1],
-												offset[2] * (stage.resource.endsWith( ".efp" ) ? 1 : -1)
-											] as const
+											basis: stageAttachmentBasis( stage.resource ),
+											offset: [ offset[0], offset[1], offset[2] ] as const
 										}
 									} :
 									{})

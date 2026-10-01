@@ -78,3 +78,32 @@ func petSkillWindowPackets(deps *Deps, character *Character, nowMs int64) []Pack
 	}
 	return packets
 }
+
+/*
+================
+paramJobPackets
+
+0x32AF (76F750) re-raises every live param job after the board reset, the
+same way the pet-skill windows above are re-raised. A job whose internal
+item no longer resolves is not announced; the action sweep retires it.
+================
+*/
+func paramJobPackets(deps *Deps, character *Character, nowMs int64) []Packet {
+	if character == nil || len(character.ParamJobs) == 0 || deps == nil || deps.Items == nil {
+		return nil
+	}
+	owner := ObjectIDForCharacter(character)
+	var packets []Packet
+	for _, job := range character.ParamJobs {
+		remaining := PetSkillWindowRemaining(job.EndUnixMs, nowMs)
+		if remaining == 0 {
+			continue
+		}
+		ref, ok := deps.Items.ItemRefByCodename(job.Codename)
+		if !ok || ref == nil || ref.RefObjID != job.ItemRefObjID {
+			continue
+		}
+		packets = append(packets, NewPacket(wire.OpParamJobResume, wire.EncodeParamJobRow(owner, remaining, job.ItemRefObjID)))
+	}
+	return packets
+}

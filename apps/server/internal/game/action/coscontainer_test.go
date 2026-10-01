@@ -19,6 +19,7 @@ func TestCOSShopUsesContainerAndSharedGoldTransaction(t *testing.T) {
 	withCOS.NpcSpawn = rt.NpcSpawn
 	withCOS.Commerce = rt.Commerce
 	withCOS.Selected.Set(testDivision, c.Name, 17)
+	withCOS.Selected.OpenFunction(testDivision, c.Name, 17)
 	rt = withCOS
 	gid, _ := enterworld.CosObjectIDForCharacter(c)
 	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true, Container: &domain.COSContainer{Capacity: 1, Rows: []domain.InventoryRow{}}}

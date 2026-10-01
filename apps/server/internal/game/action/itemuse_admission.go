@@ -40,6 +40,7 @@ const (
 	itemUsePetRevive
 	itemUseMonsterCapsule
 	itemUseQuestTool
+	itemUseComposite
 )
 
 /*
@@ -69,6 +70,10 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 1, 8} {
 		return itemUseBerserk
+	}
+	// 49F590: the composite scroll (UIU1 param jobs).
+	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {
+		return itemUseComposite
 	}
 	// 49D240, and the v1.150 client appends the COS gid for TID4 4/5/7
 	// (6963CF) and for the TID3 2 TID4 7 cure (696336). TID4 6 is the

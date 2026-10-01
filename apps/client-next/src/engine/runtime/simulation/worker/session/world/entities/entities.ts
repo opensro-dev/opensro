@@ -273,6 +273,29 @@ recolor
 	}
 	return {
 		recolor,
+		/*
+================
+characterCountry
+
+The country byte (+0x9C) of a character reference: 0 China, 1 Europe.
+Party windows resolve a member's race mark from it whether or not the
+member is in view (5B93A0 reads GetCharCosDataById(member ref)+0x9C).
+================
+		*/
+		characterCountry( refObjId: number ): number | undefined {
+			return refs.get( refObjId )?.countryByte9c;
+		},
+		/*
+================
+itemReference
+
+An item reference's flags and display name, as ground drops resolve them.
+================
+		*/
+		itemReference( refObjId: number ): { typeFlags: number; name: string; } | undefined {
+			const typeFlags = itemRefs.get( refObjId );
+			return typeFlags === undefined ? undefined : { typeFlags, name: itemNames.get( refObjId ) ?? "" };
+		},
 		// Spawn initialization uses nearest terrain/object height (85FF38 ->
 		// 86D5C0 -> 403D20); late navigation admission repeats that lookup
 		// at the current pose, without restarting an active movement segment.

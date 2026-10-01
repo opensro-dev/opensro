@@ -42,6 +42,10 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 			gid => entities.read( gid ),
 			( cue, at ) => entities.publish( { kind: "item-sound", cue, at } )
 		);
+	gameplay.bindReferences( {
+		country: refObjId => entities.characterCountry( refObjId ),
+		item: refObjId => entities.itemReference( refObjId )
+	} );
 
 	const capeTeams = new Map<number, number>();
 	let nameTimer: number | undefined, nameClock = 0;

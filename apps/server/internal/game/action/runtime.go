@@ -91,6 +91,9 @@ type Runtime struct {
 	NpcDialogs *NpcDialogStore
 	NpcQuests  NpcQuestHooks
 
+	// bodyRestores holds the timed body-mode restores (spawnprotection.go).
+	bodyRestores *BodyRestoreQueue
+
 	// Monsters is the shared division-keyed population authority. It is nil
 	// only when the composition root's explicit monster kill switch is on.
 	Monsters *simulation.MonsterState
@@ -122,6 +125,7 @@ type Runtime struct {
 	recoveryMu            sync.Mutex
 	recoverySessions      map[recoveryKey]*recoverySession
 	petSkillWindows       petSkillWindowIndex
+	paramJobOwners        petSkillWindowIndex
 	commercePolicyMu      sync.RWMutex
 	commerceTaxes         map[merchantTaxKey]merchantTax
 	commerceReferenceSeed []wire.Frame
@@ -318,6 +322,7 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 		effects:            statuseffect.NewRegistry(),
 		Selected:           NewSelectionStore(),
 		NpcDialogs:         NewNpcDialogStore(),
+		bodyRestores:       NewBodyRestoreQueue(),
 		Monsters:           monsters,
 		NpcSpawn:           npcSpawns,
 		NpcRoster:          append([]simulation.NpcDef(nil), npcSpawns.Roster...),

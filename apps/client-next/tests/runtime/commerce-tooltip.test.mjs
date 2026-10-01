@@ -15,7 +15,7 @@ import test from "node:test";
 const { commerceTooltip } = await import( "../../src/engine/foundation/ui/commerce-tooltip.ts" );
 
 // Independent translated labels catch accidental raw-symbol output.
-const copy = { price: "Price", gold: "Gold" };
+const copy = { price: "Price", gold: "Gold", honor: "Honor point", point: " point(s)" };
 
 /*
 ================
@@ -68,4 +68,10 @@ test("unrelated, missing and failed contexts do not invent prices", () => {
 		commerceTooltip( "shop-offer:0", { ...game, shop: { ...game.shop, error: "Closed" } }, copy ),
 		[]
 	);
+});
+
+test("an honor package prints its points in the native honor row", () => {
+	const game = fixture();
+	game.shop = { ...game.shop, offers: [ { ...game.shop.offers[0], price: "1500", currency: 32 } ] };
+	assert.equal( commerceTooltip( "shop-offer:0", game, copy ).at( -1 )?.value, "Honor point : 1500 point(s)" );
 });

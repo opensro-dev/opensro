@@ -48,7 +48,10 @@ func TestQuestMonsterDropsRequireAcceptedQuestTargetAndPickup(t *testing.T) {
 	}
 	def, _ := rt.Defs.ByCodename("QNO_CH_CHEF_1")
 	c.MissionInventory = []enterworld.InventoryRow{{Slot: 13, RefObjID: def.CollectItemRefID, Codename: def.CollectItemCodename, StackCount: 1}}
-	if frames := rt.NotifyInventoryChanged(c); len(frames) != 1 {
+	// The held shoe completes the only mission: the update and its
+	// ACHIEVED_NOW banner.
+	if frames := rt.NotifyInventoryChanged(c); len(frames) != 2 || frames[0].Opcode != OpQuestUpdate ||
+		frames[1].Opcode != questNotificationOpcode || string(frames[1].Payload[2:]) != "SN_TALK_QNO_CH_CHEF_1_06" {
 		t.Fatalf("pickup update: %v", frames)
 	}
 	calls = 0

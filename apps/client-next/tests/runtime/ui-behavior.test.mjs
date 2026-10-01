@@ -414,6 +414,30 @@ test("retail GM prefix colors player names gold without granting permission", ()
 	}
 });
 
+test("the berserk entry flash fades every frame, not in 50 ms steps", () => {
+	const f = uiFixture();
+	try {
+		f.ui.step( f.state, 1000 );
+		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 0, 0, 1 ] } ];
+		f.state = { ...f.state };
+		const flash = () =>
+			f.scenes.at( -1 )?.quads.find( q =>
+				!q.texture && q.rect[2] === 1600 && q.rect[3] === 900 &&
+				q.color[0] === 1 && q.color[1] === 1 && q.color[2] === 1
+			)?.color[3];
+		const seen = [];
+		// 60 Hz frames through the 700 ms flash: each one must publish a new opacity.
+		for ( let i = 1; i <= 40; i++ ) {
+			f.ui.step( f.state, 1000 + i * 16 );
+			seen.push( flash() );
+		}
+		const distinct = new Set( seen.filter( alpha => alpha !== undefined ) ).size;
+		assert.ok( distinct >= 30, `only ${distinct} distinct flash opacities across 40 frames` );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("window hotkeys sound on retarget, close once, and preserve sidebar click-only selection", () => {
 	const f = uiFixture();
 	f.ui.step( f.state, 1000 );
@@ -2497,7 +2521,7 @@ test("the screen size combo opens and its choice is applied", () => {
 	}
 });
 
-test("Video Apply commits only video and keeps the Options window open", () => {
+test("Apply commits every tab, as OK does, and keeps the Options window open", () => {
 	const saved = [],
 		bindings = [],
 		f = uiFixture( () => {}, () => false, () => {}, () => {}, v => bindings.push( v ), v => saved.push( v ) );
@@ -2511,7 +2535,8 @@ test("Video Apply commits only video and keeps the Options window open", () => {
 		assert.equal( saved.length, 1 );
 		assert.equal( saved[0].records[0][8], 0 );
 		assert.equal( saved[0].records[0][9], 0 );
-		assert.equal( bindings.length, 0 );
+		// The input tab is committed with the rest.
+		assert.equal( bindings.length, 1 );
 		const result = f.ui.step( f.state, 1700 );
 		assert.ok( result.controls.some( c => c.id === "option-apply" ) );
 		f.ui.event( { kind: "activate", id: "option-video-record:1" } );

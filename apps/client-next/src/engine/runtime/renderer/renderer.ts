@@ -443,6 +443,10 @@ frame
 				);
 				probe?.renderMark( "character-prepare" );
 				const uiScene = uiProduct?.scene ?? null, anchored = uiProduct?.anchors;
+				// Anchors are UI scene pixels, like the world anchors projected
+				// beside them. The GPU viewport is the backing store (CSS size
+				// times devicePixelRatio); projecting into it put every name at
+				// 1.25x its actor under 125% display scaling (BUG-043).
 				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors) ?
 					projectCharacterLabels(
 						uiScene,
@@ -451,8 +455,8 @@ frame
 							characters.labelAnchors(
 								scene.originRegion,
 								scene.matrix,
-								viewport.width,
-								viewport.height,
+								uiScene.width,
+								uiScene.height,
 								anchored!
 							),
 						preview ? undefined : { origin: scene.originRegion, matrix: scene.matrix }

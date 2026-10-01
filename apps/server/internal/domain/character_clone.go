@@ -69,6 +69,13 @@ func cloneCharacter(source *Character) *Character {
 		clone.ActiveCOS.Container.Rows = cloneInventoryRows(source.ActiveCOS.Container.Rows)
 	}
 	clone.PetSkillWindows = cloneSlice(source.PetSkillWindows)
+	clone.ParamJobs = cloneSlice(source.ParamJobs)
+	if source.ItemGroupCooldowns != nil {
+		clone.ItemGroupCooldowns = make(map[uint32]int64, len(source.ItemGroupCooldowns))
+		for group, until := range source.ItemGroupCooldowns {
+			clone.ItemGroupCooldowns[group] = until
+		}
+	}
 	clone.TimedSkillJobs = cloneSlice(source.TimedSkillJobs)
 	clone.AvatarInventory = cloneAvatarInventory(source.AvatarInventory)
 	clone.Masteries = cloneSlice(source.Masteries)

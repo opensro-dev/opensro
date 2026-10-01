@@ -9,6 +9,7 @@ commands and cannot bypass actor eligibility.
 
 ===========================================================================
 */
+import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
 import { createPickup } from "./pickup";
 import {
@@ -18,12 +19,12 @@ import {
 	MASTERY_WITHDRAWAL_RESPONSE
 } from "@/engine/foundation/gameplay/withdrawal";
 import { positionSkillRequest } from "@/engine/foundation/gameplay/position-skill";
+import { portalNotice } from "@/engine/foundation/gameplay/portal";
 import {
-	portalNotice,
-	portalApproach,
-	gateApproachTransition,
-	type GateApproachState
-} from "@/engine/foundation/gameplay/portal";
+	interactionApproach,
+	interactionApproachTransition,
+	type InteractionApproachState
+} from "@/engine/foundation/gameplay/interaction-approach";
 import { targetNotice } from "@/engine/foundation/gameplay/target-notices";
 import { constantNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import { skillNotice } from "@/engine/foundation/gameplay/skill-notices";
@@ -106,6 +107,7 @@ import { actionEmote, quickSlotItemSlot, quickSlot, TRACE_ACTION_ID } from "@/en
 import { reconcileQuickslotInventory } from "@/engine/foundation/gameplay/quickslot-inventory";
 import { createTraining } from "./training/training";
 import { emptySocial, socialPacket, socialRequest, type SocialCommand } from "@/engine/foundation/gameplay/social";
+import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
 import {
 	skillCatalog,
 	skillTrainingReason,
@@ -133,6 +135,40 @@ import { createBetaPlayerMap } from "./beta-map/beta-map";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import type { WireFrame } from "@/engine/contracts/network";
+/*
+================
+unlimitedItemIds
+
+The bootstrap's optional unlimitedItems list: positive integer RefObjIDs.
+A malformed list is a server defect, not something to guess around.
+================
+*/
+function unlimitedItemIds( value: unknown ): readonly number[] {
+	const list = (value as { unlimitedItems?: unknown; }).unlimitedItems;
+	if ( list === undefined ) return [];
+	if ( !Array.isArray( list ) || list.some( id => !Number.isInteger( id ) || id < 1 || id > 0xffffffff ) ) {
+		throw new Error( "Invalid bootstrap unlimited item list" );
+	}
+	return list as number[];
+}
+
+/*
+================
+WorldReferences
+
+The world catalog lookups gameplay reads but does not own (entities owns
+the catalog): a character reference's country and an item reference.
+================
+*/
+interface WorldReferences {
+	readonly country: ( refObjId: number ) => number | undefined;
+	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
+}
+
+// grounditem.ExecuteRange: a pickup closer than this is granted in place;
+// farther away the server walks the player to the item first.
+const PICKUP_EXECUTE_RANGE = 10;
+
 /*
 ================
 createGameplay
@@ -167,6 +203,8 @@ export function createGameplay(
 	let guide: GameplayState["guide"];
 	let academy: GameplayState["academy"];
 	let selectionDecal: GameplayState["selectionDecal"] = null;
+	// The bootstrap's unlimited-item ids (beta starter kit); empty without one.
+	let unlimitedItems: readonly number[] = [];
 	let soundClock = 0;
 	const feedback = createFeedback();
 	const pickup = createPickup();
@@ -199,6 +237,8 @@ sendFrame
 	const skillGroups = new Map<number, { group: number; level: number; }>();
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
 	let social = emptySocial();
+	// The world catalog's lookups, bound by the composition root (core).
+	let worldReferences: WorldReferences = { country: () => undefined, item: () => undefined };
 	let bindings = skillBindings( {} );
 	let catalog: readonly SkillMetadata[] = [];
 	const bindingRepairs = new Map<number, import("@/engine/foundation/gameplay/quickslots").QuickSlot>();
@@ -224,12 +264,14 @@ fails; retry persistence without restoring stale slot occupancy.
 	let environment = entryEnvironment( {} ).state;
 	let cosError: string | null = null;
 	let rebirthPending = false;
-	let gateApproach: GateApproachState = { phase: "idle" };
+	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	let activeCos: GameplayState["activeCos"], cosResult: GameplayState["cosResult"];
 	// 6E6150 keys a kind-3 row by its item id, so distinct items stack.
 	let cosWindows: readonly CosItemWindow[] = [];
 	const cosItemRefs2 = new Map<number, CosItemWindowReference>();
+	// Kind-4 board rows of the EXP/SP scroll jobs (param-job.ts).
+	const paramJobs = createParamJobs();
 	let abnormalRecords: readonly AbnormalRecord[] = [];
 	let abnormalMask = 0;
 	const chat = createChat( send ), quests = createQuests( send );
@@ -254,6 +296,71 @@ lock (4AAB40) drops ground commands until it releases.
 	*/
 	function localCastHolds(): boolean {
 		return combat.state().casts.some( c => c.caster === localGid && c.cancelledAtMs === undefined );
+	}
+	/*
+================
+selectEntity
+
+Request the select of an entity in reach (0x745A), from a click or at the
+end of an interaction approach. A coalesced click has no reply coming to
+rebuild the conversation, so its menu, dialogue and interaction lock stay
+until a new request.
+================
+	*/
+	/*
+================
+withMemberCountries
+
+Stamp each party member with its model's country once per party packet,
+so the race marks never depend on the member being in view.
+================
+	*/
+	function withMemberCountries<
+		T extends { readonly members: readonly import("@/engine/foundation/gameplay/social").PartyMember[]; }
+	>( value: T ): T {
+		if ( !value.members.some( member => member.country === undefined ) ) return value;
+		return {
+			...value,
+			members: value.members.map( member => {
+				const country = member.country ?? worldReferences.country( member.model );
+				return country === undefined ? member : { ...member, country };
+			} )
+		};
+	}
+	/*
+================
+predictPickupRunUp
+
+A pickup beyond reach is a walk the server drives: it answers 0x72CD with
+a movement acknowledgement toward the item (grounditem.PlanApproach). Start
+that walk now so the click answers at once; the acknowledgement adopts it
+and a refusal walks it back (movement.predictApproach).
+================
+	*/
+	function predictPickupRunUp( entity: EntityState, local: EntityState | undefined, now: number ) {
+		const pose = movement.state().pose;
+		if ( !pose || localCastHolds() || local?.mountedOn || local?.appearanceState?.[0] === 2 ) return;
+		const dx = entity.x - pose.x + ((entity.regionId & 255) - (pose.regionId & 255)) * 1920,
+			dz = entity.z - pose.z + ((entity.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
+		if ( (entity.regionId | pose.regionId) & 0x8000 && entity.regionId !== pose.regionId ) return;
+		if ( Math.hypot( dx, dz ) <= PICKUP_EXECUTE_RANGE ) return;
+		movement.predictApproach(
+			{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: pose.angle },
+			now
+		);
+	}
+	function selectEntity( entity: EntityState, now: number ) {
+		const frame = targeting.select( entity.gid, now, entity.kind, {
+			fortress: !!entity.teleport?.fortressId,
+			reopen: npcConversation.state().phase === "closed"
+		} );
+		if ( frame ) npcConversation.clear();
+		selectionDecal = {
+			kind: "target",
+			gid: entity.gid,
+			slot: entity.kind === "monster" || entity.kind === "cos" ? 3 : entity.kind === "player" ? 2 : 1
+		};
+		return frame;
 	}
 	function clearState() {
 		moveReservation.clear();
@@ -289,7 +396,7 @@ lock (4AAB40) drops ground commands until it releases.
 		quests.clear();
 		npcConversation.clear();
 		previousLockedQuestNotice = "";
-		gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
+		approach = interactionApproachTransition( approach, { kind: "cancel" } );
 		returnScroll = undefined;
 		teleportMode = 0;
 		inventory.clear();
@@ -305,6 +412,7 @@ lock (4AAB40) drops ground commands until it releases.
 		cosItemCaps.clear();
 		cosItemRefs2.clear();
 		cosWindows = [];
+		paramJobs.reset();
 		abnormalRecords = [];
 		abnormalMask = 0;
 		worldClock = undefined;
@@ -361,13 +469,14 @@ packets own subsequent mutations; bootstrap owns only initial state.
 		*/
 		bootstrap( value: unknown ) {
 			pickup.clear();
-			gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
+			approach = interactionApproachTransition( approach, { kind: "cancel" } );
 			returnScroll = undefined;
 			teleportMode = 0;
 			partyMatching = emptyPartyMatching();
 			bindingRepairs.clear();
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
+			unlimitedItems = unlimitedItemIds( value );
 			const entryEvents = entryEnvironment( value );
 			warnings = [ false, false ];
 			autoPotion = autoPotionBootstrap( value );
@@ -482,6 +591,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			}
 			cosItemRefs2.clear();
 			cosWindows = [];
+			paramJobs.reset();
 			for (
 				const row of (value as {
 					refItemSnapshot?: ({ refObjId: number; } & Parameters<typeof cosTimerReference>[0])[];
@@ -489,6 +599,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			) {
 				const reference = cosTimerReference( row );
 				if ( reference ) cosItemRefs2.set( row.refObjId, reference );
+				paramJobs.reference( row );
 			}
 			protocol = (value as {
 				simulationProtocolVersion?: number;
@@ -592,7 +703,7 @@ Entity removal retires targeting and combat references in the same frame.
 			if ( event.kind === "spawn" ) {
 				combat.seedEffects( event.entity.gid, event.entity.spawnSkills ?? [], soundClock );
 			} else {
-				gateApproach = gateApproachTransition( gateApproach, { kind: "despawn", gid: event.gid } );
+				approach = interactionApproachTransition( approach, { kind: "despawn", gid: event.gid } );
 				combat.remove( event.gid, soundClock );
 				pickup.remove( event.gid );
 				targeting.remove( event.gid );
@@ -693,7 +804,7 @@ state here before a command can claim a native wire conversation.
 			) return null;
 			if (
 				[ "move", "ground-move", "select", "npc-close", "attack", "skill", "pickup" ].includes( command.kind )
-			) gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
+			) approach = interactionApproachTransition( approach, { kind: "cancel" } );
 			if ( command.kind === "recall-appoint" ) {
 				const target = targeting.state(), conversation = npcConversation.state();
 				if (
@@ -1021,7 +1132,7 @@ state here before a command can claim a native wire conversation.
 					const payload = Uint8Array.of( 1, 3, 1, 0, 0, 0, 0 );
 					new DataView( payload.buffer ).setUint32( 3, target.gid, true );
 					const frame = sendFrame( { opcode: 0x72cd, payload } );
-					gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
+					approach = interactionApproachTransition( approach, { kind: "cancel" } );
 					return frame;
 				}
 				if ( command.id === 1001 ) {
@@ -1203,33 +1314,25 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "pickup" ) {
 				if ( entity.kind !== "ground-item" ) throw new Error( "Target is not a ground item" );
 				const frame = pickup.request( entity.gid );
-				return frame ? sendFrame( frame ) : null;
+				if ( !frame ) return null;
+				predictPickupRunUp( entity, local, now );
+				return sendFrame( frame );
 			}
 			if ( command.kind === "select" ) {
 				const pose = movement.state().pose;
-				if ( entity.kind === "teleport" && pose ) {
-					const destination = portalApproach( pose, entity );
+				// 698740: an NPC or gate out of reach is walked to first; the
+				// select follows when the walk ends (the arrival block below).
+				if ( pose ) {
+					const destination = interactionApproach( pose, entity );
 					if ( destination ) {
 						const frame = movement.request( destination, now, local?.mountedOn || undefined );
 						pickup.clear();
-						gateApproach = gateApproachTransition( gateApproach, { kind: "begin", gate: entity } );
+						approach = interactionApproachTransition( approach, { kind: "begin", target: entity } );
 						npcConversation.clear();
 						return frame;
 					}
 				}
-				const frame = targeting.select( entity.gid, now, entity.kind, {
-					fortress: !!entity.teleport?.fortressId,
-					reopen: npcConversation.state().phase === "closed"
-				} );
-				// A coalesced click has no reply coming to rebuild this conversation.
-				// Preserve its menu, dialogue and interaction lock until a new request.
-				if ( frame ) npcConversation.clear();
-				selectionDecal = {
-					kind: "target",
-					gid: entity.gid,
-					slot: entity.kind === "monster" || entity.kind === "cos" ? 3 : entity.kind === "player" ? 2 : 1
-				};
-				return frame;
+				return selectEntity( entity, now );
 			}
 			if ( command.kind === "attack" && entity.kind !== "monster" ) {
 				throw new Error( "Target is not attackable" );
@@ -1250,6 +1353,9 @@ references
 			for ( const row of rows ) {
 				cosItemRefs.set( row.refObjId, row.typeFlags );
 				if ( row.maxStack !== undefined ) cosItemCaps.set( row.refObjId, row.maxStack );
+				paramJobs.reference(
+					row as typeof row & { readonly nativeFields?: { readonly itemParam1_29c?: number; }; }
+				);
 			}
 		},
 		surface: movement.surface,
@@ -1278,6 +1384,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if ( pickup.receive( frame ) ) {
+					// A release before the walk's acknowledgement is a refusal: the
+					// server never moved, so the predicted run-up walks back.
+					if ( frame.payload[1] === 0 && movement.predicting() ) movement.endPrediction( now );
 					// 75BAA0: kind 3 is the generic action notice; pickup's
 					// inventory refusals still arrive separately on B06D.
 					const notice = frame.payload[0] === 3 ? constantNativeNotice( 0x19, frame.payload[2]! ) : null;
@@ -1293,8 +1402,22 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					return true;
 				}
+				if ( frame.opcode === 0x317d ) {
+					const notice = partyLootNotice( frame.payload, {
+						item: worldReferences.item,
+						memberName: gid => social.members.find( member => member.id === gid )?.name,
+						localGid
+					} );
+					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === 0xb338 ) {
 					npcConversation.interaction( frame.payload, targeting.state().targetCapabilities ?? 0 );
+					// 75AE50 kind 2 -> 689420 category 13: a refused NPC function shows
+					// its reason (code 4, UIIT_MSG_INTERACTION_FAIL_TOO_FAR).
+					const refusal = frame.payload[0] === 2 ? constantNativeNotice( 13, frame.payload[1]! ) : null;
+					if ( refusal ) notices = [ ...notices.slice( -99 ), { ...refusal, sequence: ++noticeSequence } ];
 					dirty = true;
 				}
 				if ( frame.opcode === 0xb5b6 ) {
@@ -1395,6 +1518,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( localGid ) combat.seed( localGid, { abnormal: abnormalMask } );
 					dirty = true;
 					return false;
+				}
+				if ( paramJobs.receive( frame, now ) ) {
+					dirty = true;
+					return true;
 				}
 				const windowUpdate = cosTimerPacket( frame, now );
 				if ( windowUpdate ) {
@@ -1535,7 +1662,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( nextSocial.notice ) {
 						notices = [ ...notices.slice( -99 ), { ...nextSocial.notice, sequence: ++noticeSequence } ];
 					}
-					social = nextSocial.notice ? { ...nextSocial, notice: undefined } : nextSocial;
+					social = withMemberCountries(
+						nextSocial.notice ? { ...nextSocial, notice: undefined } : nextSocial
+					);
 					if (
 						social.invitation &&
 						((social.invitation.type === 1 && !options.exchangeRequests) ||
@@ -1971,20 +2100,21 @@ before take assembles the presentation snapshot.
 				}
 			}
 			if ( quests.step( now ) ) dirty = true;
-			if ( gateApproach.phase === "moving" ) {
-				const approachingGate = gateApproach.gate;
+			if ( approach.phase === "moving" ) {
+				const approachingTarget = approach.target;
 				const m = movement.state();
 				if ( !local || local.appearanceState?.[0] === 2 ) {
-					gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
-				} else if ( m.pose && !portalApproach( m.pose, approachingGate ) && !targeting.state().targetPending ) {
-					targeting.select( approachingGate.gid, now, "teleport", {
-						fortress: !!approachingGate.teleport?.fortressId,
-						reopen: npcConversation.state().phase === "closed"
-					} );
-					gateApproach = gateApproachTransition( gateApproach, { kind: "arrived" } );
+					approach = interactionApproachTransition( approach, { kind: "cancel" } );
+				} else if (
+					!targeting.state().targetPending &&
+					(m.pose && !interactionApproach( m.pose, approachingTarget ) || !m.moving && !m.pendingMoves)
+				) {
+					// 693AD0 via CNavigationDeadreckon_OnTick: the pending select is
+					// dispatched once in reach or when the walk ends, wherever that is;
+					// the server's 4A8E10 range check decides.
+					selectEntity( approachingTarget, now );
+					approach = interactionApproachTransition( approach, { kind: "arrived" } );
 					dirty = true;
-				} else if ( !m.moving && !m.pendingMoves ) {
-					gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
 				}
 			}
 			if ( npcConversation.step( now ) ) dirty = true;
@@ -2103,6 +2233,24 @@ Publish only after mutation. Clear the dirty flag once all owner snapshots
 have been collected so consumers never observe half of a packet update.
 ================
 		*/
+		/*
+================
+bindReferences
+
+The composition root hands over the world catalog's lookups.
+================
+		*/
+		bindReferences( references: WorldReferences ) {
+			worldReferences = references;
+			social = withMemberCountries( social );
+		},
+		/*
+================
+take
+
+The published plane when something changed since the last take, else null.
+================
+		*/
 		take(): GameplayState | null {
 			if ( !dirty ) {
 				return null;
@@ -2136,6 +2284,7 @@ have been collected so consumers never observe half of a packet update.
 				partyMatching,
 				academy,
 				guide,
+				paramJobs: paramJobs.state(),
 				cosWindows: cosWindows.filter( row => cosItemRefs2.has( row.itemRefObjId ) ).map( row => ({
 					...row,
 					reference: cosItemRefs2.get( row.itemRefObjId )!
@@ -2170,6 +2319,7 @@ have been collected so consumers never observe half of a packet update.
 				...c,
 				...targeting.state(),
 				betaPlayers: betaMap.players(),
+				unlimitedItems,
 				error: m.error ?? i.error ?? c.error ?? targeting.error() ?? progression.error ??
 					training.state().trainingError ?? social.error ?? cosError ?? moveReservation.error() ?? null
 			};
@@ -2189,11 +2339,12 @@ World transfer retires spatial work while retaining character/session data.
 			pickup.clear();
 			moveReservation.clear();
 			quests.clearGathering();
-			gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
+			approach = interactionApproachTransition( approach, { kind: "cancel" } );
 			returnScroll = undefined;
 			teleportMode = 0;
 			npcConversation.clear();
 			cosWindows = [];
+			paramJobs.clear();
 			const vital = combat.state().vitals.find( row => row.gid === localGid );
 			if ( vital ) {
 				entryVitals = {

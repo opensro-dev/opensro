@@ -97,6 +97,19 @@ func (rt *Runtime) TrackPetSkillWindows(divisionID, characterName string) {
 	rt.petSkillWindows.track(divisionID, characterName)
 }
 
+/*
+================
+TrackTimedWindows
+
+World entry hands a character with any timed row to every sweep that owns
+one: pet-skill windows and param jobs (paramjob.go).
+================
+*/
+func (rt *Runtime) TrackTimedWindows(divisionID, characterName string) {
+	rt.petSkillWindows.track(divisionID, characterName)
+	rt.paramJobOwners.track(divisionID, characterName)
+}
+
 // advancePetSkillWindows retires each spent row with the native zero pair,
 // which sub_775F20 turns into sub_6E6150's remove selector. An exhausted
 // window is not self-retiring on the client: sub_6E6AA0 holds the row at zero

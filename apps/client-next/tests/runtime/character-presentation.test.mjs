@@ -2192,7 +2192,8 @@ test("quest marker waits for character metadata admission without reporting a mi
 		assert.ok( !f.presentation.error()?.includes( "Missing native effect anchor height" ), f.presentation.error() );
 	}
 	assert.equal( f.presentation.error(), null );
-	assert.deepEqual( f.actors.find( a => a.attachment?.gid === 1 )?.attachment.offset, [ 0, 25, -0 ] );
+	// Stage offsets keep their authored sign for every resource kind.
+	assert.deepEqual( f.actors.find( a => a.attachment?.gid === 1 )?.attachment.offset, [ 0, 25, 0 ] );
 	f.dispose();
 });
 

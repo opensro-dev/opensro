@@ -212,6 +212,7 @@ func (rt *Runtime) HandleLocalRebirth(
 		}
 		destination = prepared.Spawn
 	}
+	var untouchable []wire.Frame
 	accepted := rt.deps.Update(character, "local-rebirth", func() bool {
 		current := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(character) })
 		// Packet preparation occurs outside the store door. Refuse stale input;
@@ -232,6 +233,7 @@ func (rt *Runtime) HandleLocalRebirth(
 		character.World.MoveSegment = nil
 		character.CurrentHP, character.CurrentMP = &restoredHP, &restoredMP
 		character.LastExpLoss = 0 // CGObjPC_TeleportToTown 4DF2E8
+		untouchable = rt.grantReviveUntouchable(divisionID, character, rt.Now().UnixMilli())
 		return true
 	})
 	if !accepted {
@@ -244,8 +246,8 @@ func (rt *Runtime) HandleLocalRebirth(
 	correction, vitals, life := rebirthFrames(gid, destination, enterworld.BuildVitalsRefreshPayload(character))
 	if choice == wire.RebirthAtPresentPoint {
 		return OpResult{
-			Frames:    []wire.Frame{correction, vitals, life},
-			Broadcast: []wire.Frame{correction, life},
+			Frames:    append([]wire.Frame{correction, vitals, life}, untouchable...),
+			Broadcast: append([]wire.Frame{correction, life}, untouchable...),
 		}
 	}
 	rt.retireReturnForReentry(divisionID, character)
@@ -258,7 +260,7 @@ func (rt *Runtime) HandleLocalRebirth(
 	frames = append(frames, life)
 	return OpResult{
 		Frames:    frames,
-		Broadcast: []wire.Frame{correction, life},
+		Broadcast: append([]wire.Frame{correction, life}, untouchable...),
 	}
 }
 

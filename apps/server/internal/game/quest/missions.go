@@ -6,6 +6,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/wire"
 )
 
 // MissionSpec describes simultaneous counters within one acceptance/reward
@@ -231,6 +232,42 @@ func encodeMissionProgress(previous, next enterworld.ActiveQuestRecord) []byte {
 		}
 	}
 	return EncodeQuestUpdateUpdate(next)
+}
+
+/*
+================
+missionProgressFrames
+
+The journal update for one refreshed record, then the quest's ACHIEVED_NOW
+banner on the publication where every mission first stands complete. The
+completion edge is the same one encodeMissionProgress marks with kind 2;
+collection completion is sticky, so dropping and regaining an item does
+not repeat the banner.
+================
+*/
+func missionProgressFrames(def *Definition, previous, next enterworld.ActiveQuestRecord) []wire.Frame {
+	frames := []wire.Frame{{Opcode: OpQuestUpdate, Payload: encodeMissionProgress(previous, next)}}
+	if def.AchievedNowSymbol != "" && !allMissionsReached(previous) && allMissionsReached(next) {
+		frames = append(frames, questNotification(def.AchievedNowSymbol))
+	}
+	return frames
+}
+
+/*
+================
+allMissionsReached
+================
+*/
+func allMissionsReached(record enterworld.ActiveQuestRecord) bool {
+	if len(record.Contents) == 0 {
+		return false
+	}
+	for _, node := range record.Contents {
+		if !missionCompletionReached(node) {
+			return false
+		}
+	}
+	return true
 }
 
 // Native 91bc82..91bc9b indexes the rank by the matching species, and

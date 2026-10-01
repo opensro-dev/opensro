@@ -36,7 +36,7 @@ func (rt *Runtime) KillUpdater() func(*enterworld.Character, string, uint8) ([]w
 				continue
 			}
 			character.ActiveQuests[i] = updated
-			frames = append(frames, wire.Frame{Opcode: OpQuestUpdate, Payload: encodeMissionProgress(record, updated)})
+			frames = append(frames, missionProgressFrames(def, record, updated)...)
 		}
 		return frames, len(frames) > 0
 	}

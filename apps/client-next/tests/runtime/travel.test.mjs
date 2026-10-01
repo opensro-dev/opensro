@@ -19,8 +19,11 @@ const { travelMode, resetTravelRegion, gateRequest } = await import( "../../src/
 const { travelLoadingQuads } = await import( "../../src/engine/foundation/ui/mission-loading.ts" );
 const { createWorldCore } = await import( "../../src/engine/runtime/simulation/worker/session/world/core.ts" );
 const { createPresentation } = await import( "../../src/engine/runtime/presentation/presentation.ts" );
-const { decodePortalCatalog, portalMenu, portalNotice, portalApproach, gateApproachTransition } = await import(
+const { decodePortalCatalog, portalMenu, portalNotice } = await import(
 	"../../src/engine/foundation/gameplay/portal.ts"
+);
+const { interactionApproach, interactionApproachTransition } = await import(
+	"../../src/engine/foundation/gameplay/interaction-approach.ts"
 );
 test("primary portal menu resolves selected reference and authored destination IDs", () => {
 	const raw = JSON.parse( readFileSync( "../../.generated/client-public/assets/data/teleportData.json", "utf8" ) ),
@@ -342,17 +345,29 @@ test("gate selection consumes capabilities without NPC mask and reads tax only f
 	assert.throws( () => t.receive( 0xb45a, Buffer.from( [ 1, 1, 0, 0, 0, 128, 0, 0, 0 ] ) ), /teleport grant/ );
 });
 test("gate approach uses native 800 range and 640 stopping distance across region boundaries", () => {
-	const gate = { regionId: 25000, x: 1254, y: -6, z: 1374 };
+	const gate = { kind: "teleport", regionId: 25000, x: 1254, y: -6, z: 1374 };
 	const pose = { regionId: 25256, x: 960, y: 20, z: 458, angle: 0 };
-	const next = portalApproach( pose, gate );
+	const next = interactionApproach( pose, gate );
 	assert.ok( next );
 	assert.ok(
 		Math.abs(
 			Math.hypot( next.x - gate.x, next.z - gate.z + (next.regionId - gate.regionId) / 256 * 1920 ) - 640
 		) < 1e-8
 	);
-	assert.equal( portalApproach( next, gate ), null );
-	assert.equal( portalApproach( { ...gate, angle: 0, x: gate.x + 800 }, gate ), null );
+	assert.equal( interactionApproach( next, gate ), null );
+	assert.equal( interactionApproach( { ...gate, angle: 0, x: gate.x + 800 }, gate ), null );
+});
+test("an NPC is selected inside 240 units and approached to 240 from farther away", () => {
+	const npc = { kind: "npc", regionId: 25000, x: 1000, y: 0, z: 1000 };
+	assert.equal( interactionApproach( { regionId: 25000, x: 1240, y: 0, z: 1000, angle: 0 }, npc ), null );
+	const next = interactionApproach( { regionId: 25000, x: 1600, y: 0, z: 1000, angle: 0 }, npc );
+	assert.ok( next );
+	assert.ok( Math.abs( Math.hypot( next.x - npc.x, next.z - npc.z ) - 240 ) < 1e-8 );
+	// Monsters and players are selected wherever they stand.
+	assert.equal(
+		interactionApproach( { regionId: 25000, x: 1900, y: 0, z: 1000, angle: 0 }, { ...npc, kind: "monster" } ),
+		null
+	);
 });
 test("native I64 fee strings resolve the full integer format and shared tax calculation", () => {
 	const catalog = decodePortalCatalog(
@@ -363,11 +378,11 @@ test("native I64 fee strings resolve the full integer format and shared tax calc
 	assert.ok( rows.every( row => !row.label.includes( "%" ) ) );
 });
 
-test("gate approach retires on cancellation, arrival or matching despawn, never another entity", () => {
-	const idle = { phase: "idle" }, gate = { gid: 252094 };
-	const moving = gateApproachTransition( idle, { kind: "begin", gate } );
-	assert.equal( gateApproachTransition( moving, { kind: "despawn", gid: 9 } ), moving );
+test("an interaction approach retires on cancellation, arrival or matching despawn, never another entity", () => {
+	const idle = { phase: "idle" }, target = { gid: 252094 };
+	const moving = interactionApproachTransition( idle, { kind: "begin", target } );
+	assert.equal( interactionApproachTransition( moving, { kind: "despawn", gid: 9 } ), moving );
 	for ( const event of [ { kind: "cancel" }, { kind: "arrived" }, { kind: "despawn", gid: 252094 } ] ) {
-		assert.deepEqual( gateApproachTransition( moving, event ), idle );
+		assert.deepEqual( interactionApproachTransition( moving, event ), idle );
 	}
 });

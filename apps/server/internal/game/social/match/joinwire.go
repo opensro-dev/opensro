@@ -91,10 +91,10 @@ const (
 // queue clear, 0 -> UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED guide, 2 ->
 // UIIT_MSG_PARTYMATCH_JOIN_NOREPLY guide; sub_769ca0 mirrors with the
 // TC strings (TC_MACHING_COMPLETE / TC_JOIN_CANCEL / TC_JOIN_NOREPLY).
-// The outer==2 error arm (category 2 / 0x1D code byte) is NEVER
-// composed - the code tables are unpinned vs retail (the lane's
-// do-not-invent posture), so every refusal answers the PINNED outer-1
-// detail arms instead.
+// The outer==2 error arm carries a category-2 code byte; its keys are the
+// client's own notice table (EncodeJoinError), so refusals with a named
+// reason (level, duplicate, no party) use it and the rest answer the
+// outer-1 refused detail.
 const (
 	JoinAckRefused  uint8 = 0
 	JoinAckComplete uint8 = 1
@@ -211,4 +211,18 @@ detail-byte constants above).
 */
 func EncodeJoinAck(detail uint8) []byte {
 	return wire.NewWriter(2).U8(1).U8(detail).Payload()
+}
+
+// Join refusal codes of the outer-2 arm: the client's own category-2 notice
+// table (constantNativeNotice(2, code), 6895xx), pinned in the client data.
+const (
+	JoinErrorCantFindParty uint8 = 0x1C // UIIT_MSG_PARTYERR_CANT_FIND_PARTY
+	JoinErrorLevel         uint8 = 0x1E // UIIT_MSG_PARTYMATCH_JOIN_ERROR_LEVEL
+	JoinErrorDuplicate     uint8 = 0x1F // UIIT_MSG_PARTYMATCH_JOIN_ERROR_DUPLE
+)
+
+// EncodeJoinError is the outer-2 arm {u8 2, u8 code}: sub_75ebd0 shows the
+// code's category-2 notice instead of the generic refusal.
+func EncodeJoinError(code uint8) []byte {
+	return wire.NewWriter(2).U8(2).U8(code).Payload()
 }

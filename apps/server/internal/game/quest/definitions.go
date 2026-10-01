@@ -129,8 +129,12 @@ type QuestSpec struct {
 	NotAchievedSymbol       string
 	CompletePromptSymbol    string
 	InventoryFullSymbol     string
-	DeliveryNpcCodename     string
-	DeliveryPromptSymbol    string
+	// AchievedNowSymbol is BASIC_MENUSTRING_ACHIEVED_NOW: the banner sent
+	// when the objective first stands complete ("... report to <NPC>").
+	// Script-backed quests take it from achieved_now_generated.json.
+	AchievedNowSymbol    string
+	DeliveryNpcCodename  string
+	DeliveryPromptSymbol string
 }
 
 // curatedQuestSpecs is the curated table. SMALL BY DESIGN: the starter
@@ -144,14 +148,15 @@ var starterQuestSpecs = []QuestSpec{
 		// Shipped EU starter quest 143. The display row, chain edge and
 		// dialogue symbols are v1.150 media; ordinary NPC choices ride the
 		// v1.188 Lua/session mechanism reconstructed through 0x3773.
-		Codename:             "QNO_EU_TUTORIAL_1",
-		RewardExp:            60,
-		KindByte:             1,
-		Objective:            ObjectiveTalk,
-		StartNpcCodename:     "NPC_EU_ADVICE",
-		EndNpcCodename:       "NPC_EU_ADVICE",
-		OfferPromptSymbol:    "SN_TALK_QNO_EU_TUTORIAL_1_01",
-		CompletePromptSymbol: "SN_TALK_QNO_EU_TUTORIAL_1_04",
+		Codename:              "QNO_EU_TUTORIAL_1",
+		AcceptanceUnavailable: qnoTutorialSuperseded,
+		RewardExp:             60,
+		KindByte:              1,
+		Objective:             ObjectiveTalk,
+		StartNpcCodename:      "NPC_EU_ADVICE",
+		EndNpcCodename:        "NPC_EU_ADVICE",
+		OfferPromptSymbol:     "SN_TALK_QNO_EU_TUTORIAL_1_01",
+		CompletePromptSymbol:  "SN_TALK_QNO_EU_TUTORIAL_1_04",
 	},
 	{
 		// The Chinese tutorial (shipped id 2). Creation-seeded (the

@@ -13,6 +13,7 @@ package main
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"strings"
 	"time"
 
@@ -108,7 +109,7 @@ func newGameplayPlane(
 	// so a swapped clock reaches both; world entry hands re-raised pet-skill
 	// windows to the same sweep that retires them.
 	deps.Now = func() time.Time { return items.Now() }
-	deps.TrackTimedWindows = items.TrackPetSkillWindows
+	deps.TrackTimedWindows = items.TrackTimedWindows
 	deps.RestoreEntryEffects = items.RestoreTimedSkillJobs
 	deps.AdmitCharacterSession = items.AdmitCharacterSession
 	deps.RetireCharacterSession = items.ForgetCharacterSession
@@ -171,6 +172,7 @@ func newGameplayPlane(
 	movementRuntime.AttackLocked = items.PlayerAttackLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.PetPresentation = items.PetPresentation
+	movementRuntime.SpawnSkills = items.EntrySkills
 	deps.SpawnTerrainHeight = water.TerrainHeightAt
 	deps.SpawnSurfaceHeight = water.WalkableSpawnHeightAt
 	deps.RelocateStrandedSpawn = water.RelocateStrandedSpawn
@@ -343,6 +345,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return fmt.Errorf("quest definitions: %w", err)
 	}
 	stats := progression.NewRuntime(game.deps)
+	stats.Growth = progression.BetaGrowthFromEnv()
+	if stats.Growth.Enabled {
+		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP x%d", progression.EnvBetaGrowth, 3, stats.Growth.SkillExpRate)
+	}
 	stats.Withdrawal = game.items.WithdrawalHooks()
 	stats.BaseStats = game.deps.PlayerBaseStats
 	stats.RecoverLevelVitals = func(character *enterworld.Character) error {

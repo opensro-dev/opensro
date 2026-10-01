@@ -19,19 +19,31 @@ type Content struct {
 }
 
 type Offer struct {
-	Slot     uint8
-	Ref      *enterworld.ItemRef
+	Slot uint8
+	Ref  *enterworld.ItemRef
+	// Price is in Currency: PaymentGold or PaymentHonor.
 	Price    uint64
+	Currency uint8
 	Stack    uint16
 	Contents []Content
 }
+
+// refpricepolicyofitem payment types. 2/4/8/16 are the Item Mall's silk
+// currencies and stay out of NPC shops.
+const (
+	PaymentGold uint8 = 1
+	// PaymentHonor is Training Camp honor (GROUP_STORE_*_HONOR packages;
+	// client 689CDE UIIT_MSG_TC_LACK_HONOR_POINT).
+	PaymentHonor uint8 = 32
+)
+
 type Catalog struct {
 	Tabs  map[int32][]Offer
 	Magic enterworld.MagicOptionSource
 }
 
-// Load admits authored gold packages and preserves every item template.
-// Conditional and multi-currency policies still require their own authorities.
+// Load admits authored gold and honor packages and preserves every item
+// template. Conditional and silk policies still require their own authorities.
 func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 	tables := map[string][][]string{}
 	for _, name := range []string{"refshoptab", "refshopgoods", "refscrapofpackageitem", "refpricepolicyofitem", "refconditiontosellpackageitem", "refrewardpolicytosellpackageitem"} {
@@ -62,16 +74,18 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 			}
 		}
 	}
-	prices := map[string]uint64{}
+	prices, currencies := map[string]uint64{}, map[string]uint8{}
 	for _, r := range tables["refpricepolicyofitem"] {
 		if len(r) < 5 || r[0] != "1" {
 			continue
 		}
 		n, e := strconv.ParseUint(r[4], 10, 32)
-		if e != nil || r[3] != "1" || n == 0 || prices[r[2]] != 0 {
+		currency, ce := strconv.ParseUint(r[3], 10, 8)
+		// One price per package, in a currency an NPC shop takes.
+		if e != nil || ce != nil || uint8(currency) != PaymentGold && uint8(currency) != PaymentHonor || n == 0 || prices[r[2]] != 0 {
 			blocked[r[2]] = true
 		}
-		prices[r[2]] = n
+		prices[r[2]], currencies[r[2]] = n, uint8(currency)
 	}
 	scraps := map[string][][]string{}
 	for _, r := range tables["refscrapofpackageitem"] {
@@ -153,7 +167,7 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 			continue
 		}
 		first := contents[0]
-		c.Tabs[tab] = append(c.Tabs[tab], Offer{Slot: uint8(slot), Ref: first.Ref, Price: prices[r[3]], Stack: first.Stack, Contents: contents})
+		c.Tabs[tab] = append(c.Tabs[tab], Offer{Slot: uint8(slot), Ref: first.Ref, Price: prices[r[3]], Currency: currencies[r[3]], Stack: first.Stack, Contents: contents})
 
 	}
 	return c, nil

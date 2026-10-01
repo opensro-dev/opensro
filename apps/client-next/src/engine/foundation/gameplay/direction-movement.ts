@@ -195,7 +195,9 @@ reference the walk keeps its heading at speed factor 1. Farther away:
     0.9 when it lies behind, 1 otherwise;
   - the lookahead is factor * (speed * factor) * 500 / 1000, or 1.8 times
     the drift when the drift is longer;
-  - the walker aims at the reference moved that lookahead along the walk.
+  - native aims at the reference moved that lookahead along the walk; the
+    port aims that lookahead ahead of the walker plus the sideways part of
+    the drift (see the inference in the body).
 
 INFERENCE: native aims its nav mover at a point ahead of the character and
 also sends that aim as 0x72CF. The port's server walks exactly the heading
@@ -214,7 +216,16 @@ export function directionDrift( local: Pose, reference: Pose, heading: number, s
 	const factor = ahead < 0 ? DRIFT_SLOW : ahead > DRIFT_AHEAD_COS ? DRIFT_FAST : 1;
 	let lookahead = factor * speed * factor * DRIFT_LOOKAHEAD_MS / 1000;
 	if ( distance > lookahead ) lookahead = distance * DRIFT_FAR_SCALE;
-	const aimX = dx + ux * lookahead, aimZ = dz + uz * lookahead;
+	// INFERENCE: native aims at the reference moved the lookahead along the
+	// walk. The predicted walker leads the server's walk by the transport
+	// delay, so with latency that point falls almost on the walker and a
+	// fraction of a unit sideways swings the heading by tens of degrees, then
+	// back at the next drift: a visible tick. Aim the lookahead ahead of the
+	// walker instead and correct only the sideways error: the walk keeps its
+	// heading on the server's line and still bends onto a line beside it. The
+	// speed factor above still closes the gap along the line.
+	const along = dx * ux + dz * uz, lateralX = dx - ux * along, lateralZ = dz - uz * along;
+	const aimX = lateralX + ux * lookahead, aimZ = lateralZ + uz * lookahead;
 	return { heading: movementHeading( local, { ...local, x: local.x + aimX, z: local.z + aimZ } ), factor };
 }
 

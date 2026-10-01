@@ -118,7 +118,8 @@ func startSelectServer(t *testing.T, dir string, seeds []*enterworld.Character) 
 	deps.Letters = authority.Letters()
 	deps.Guilds = authority.Guilds()
 
-	npcSpawns := enterworld.NpcSpawnConfig{Enabled: true, Roster: simulation.DefaultNpcRoster()}
+	// The fixture roster stands at the player, inside the native hit range.
+	npcSpawns := enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true, Roster: simulation.DefaultNpcRoster()}
 	deps.NpcSpawns = npcSpawns
 	deps.ObjectListRows = func(divisionID string, character *enterworld.Character, entry *enterworld.LocalPlayerEntry) []enterworld.Packet {
 		return npcSpawns.NpcObjectListRows(entry)

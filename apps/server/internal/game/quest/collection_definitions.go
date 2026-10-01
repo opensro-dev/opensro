@@ -15,6 +15,9 @@ var collectionQuestSpecs = []QuestSpec{
 		RewardExp: 75000, RewardGold: 13500,
 		StartNpcCodename: "NPC_WC_ARMOR", EndNpcCodename: "NPC_WC_ARMOR",
 		OfferPromptSymbol: "SN_TALK_QNO_WC_ARMOR_1_01", CompletePromptSymbol: "SN_TALK_QNO_WC_ARMOR_1_05",
+		// INFERENCE (no surviving script): _06 "gained all the red shells,
+		// get them to Yeolbia" is the ACHIEVED_NOW role.
+		AchievedNowSymbol:    "SN_TALK_QNO_WC_ARMOR_1_06",
 		AcceptResponseSymbol: "SN_TALK_QNO_WC_ARMOR_1_02", DenyResponseSymbol: "SN_TALK_QNO_WC_ARMOR_1_03", NotAchievedSymbol: "SN_TALK_QNO_WC_ARMOR_1_04",
 	},
 	{

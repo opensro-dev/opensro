@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+bootstrap.go - Package enterworld.
+
+===========================================================================
+*/
+
 package enterworld
 
 import (
@@ -38,12 +46,18 @@ const (
 	goldHeapLargeCodename  = "ITEM_ETC_GOLD_03"
 )
 
-// Build ports buildMissionBootstrap. The visual loadout is derived, the
-// inventory seeded, and the overlay RE-APPLIED after seeding so a first-ever
-// and a restored session carry the same payload shape (the Node comment
-// documents why: a payload whose SHAPE depends on how many times a character
-// has logged in makes the client take different branches on the same code
-// path).
+/*
+================
+Build
+
+Build ports buildMissionBootstrap. The visual loadout is derived, the
+inventory seeded, and the overlay RE-APPLIED after seeding so a first-ever
+and a restored session carry the same payload shape (the Node comment
+documents why: a payload whose SHAPE depends on how many times a character
+has logged in makes the client take different branches on the same code
+path).
+================
+*/
 func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	divisionID := request.DivisionID
 	if deps.ResolveDivisionID != nil {
@@ -134,9 +148,15 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	return buildCharacterProjection(deps, divisionID, character)
 }
 
-// buildCharacterProjection assembles an already-admitted detached actor. It
-// never seeds or mutates the live character, so re-entry can be prepared before
-// an authoritative relocation/revival commits.
+/*
+================
+buildCharacterProjection
+
+buildCharacterProjection assembles an already-admitted detached actor. It
+never seeds or mutates the live character, so re-entry can be prepared before
+an authoritative relocation/revival commits.
+================
+*/
 func buildCharacterProjection(deps *Deps, divisionID string, character *Character) *BootstrapResult {
 	entry := ResolveLocalPlayerEntry(character, deps.Roster)
 	if deps.EntryPopulationLease != nil {
@@ -237,12 +257,19 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		ChatMessages:         []string{},
 		SystemMessages:       systemMessages,
 		Packets:              packets,
+		UnlimitedItems:       StarterKitRefObjIDs(deps.StarterKit),
 	}
 }
 
-// readCharacterSnapshot detaches the full record while the authority read door
-// is held. Wire assembly then neither retains mutable store-owned fields nor
-// holds the store lock during catalog and packet work.
+/*
+================
+readCharacterSnapshot
+
+readCharacterSnapshot detaches the full record while the authority read door
+is held. Wire assembly then neither retains mutable store-owned fields nor
+holds the store lock during catalog and packet work.
+================
+*/
 func readCharacterSnapshot(
 	deps *Deps,
 	divisionID string,
@@ -255,12 +282,18 @@ func readCharacterSnapshot(
 	return snapshot
 }
 
-// buildBootstrapPackets assembles the packet sequence in the exact Node
-// order: SR_RESET_CLIENT (region LE u16 - retail sends it ahead of the
-// char-data sequence and the handler reads the loading-screen rebuild key
-// off it), the char-data begin/chunk/flush triplet, the server-clock gid
-// latch (after the flush so the local player exists before CICPlayer_SetGID
-// re-latches), then the object list.
+/*
+================
+buildBootstrapPackets
+
+buildBootstrapPackets assembles the packet sequence in the exact Node
+order: SR_RESET_CLIENT (region LE u16 - retail sends it ahead of the
+char-data sequence and the handler reads the loading-screen rebuild key
+off it), the char-data begin/chunk/flush triplet, the server-clock gid
+latch (after the flush so the local player exists before CICPlayer_SetGID
+re-latches), then the object list.
+================
+*/
 func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, entry *LocalPlayerEntry, localPlayerPayload []byte, objectID uint32) ([]Packet, error) {
 	regionID := entry.StartProfile.RegionID
 	packets := []Packet{
@@ -352,7 +385,8 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	// re-entry restores it the same way. Any window, live or spent, hands the
 	// character to the tick sweep, which owns retirement.
 	packets = append(packets, petSkillWindowPackets(deps, character, deps.clock().UnixMilli())...)
-	if len(character.PetSkillWindows) > 0 && deps.TrackTimedWindows != nil {
+	packets = append(packets, paramJobPackets(deps, character, deps.clock().UnixMilli())...)
+	if (len(character.PetSkillWindows) > 0 || len(character.ParamJobs) > 0) && deps.TrackTimedWindows != nil {
 		deps.TrackTimedWindows(divisionID, character.Name)
 	}
 	return packets, nil
@@ -399,6 +433,10 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 		// reach the browser or the re-raised row has no icon or limit.
 		for _, window := range character.PetSkillWindows {
 			collector.add(window.Codename, nil)
+		}
+		// A param job's board row resolves its icon from the internal item.
+		for _, job := range character.ParamJobs {
+			collector.add(job.Codename, nil)
 		}
 		if character.AvatarInventory != nil {
 			// Avatar rows ride the SAME snapshot: the client's entered
@@ -459,8 +497,14 @@ func StaticRefItemRows(deps *Deps) []RefItemRow {
 	return collector.finish()
 }
 
-// refItemCollector accumulates item reference rows unique by RefObjID, the
-// first request for an id deciding its flags.
+/*
+================
+refItemCollector
+
+refItemCollector accumulates item reference rows unique by RefObjID, the
+first request for an id deciding its flags.
+================
+*/
 type refItemCollector struct {
 	deps  *Deps
 	rows  []RefItemRow

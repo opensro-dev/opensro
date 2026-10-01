@@ -70,6 +70,9 @@ type PeerAppearance struct {
 	// 0x32C4 member loop carries at +0x5c for the local player. The
 	// six-mark fortress-war gate needs it in {1 Commander, 2 Deputy}.
 	FortSiegeAuthority uint8
+	// SpawnSkills is the peer's active effect list (85FB20), so a buff the
+	// peer already had shows when it comes into view.
+	SpawnSkills []wire.SpawnSkillEntry
 }
 
 // PeerScaleDenom is the +0x4d8 scale denominator for a player row: an
@@ -121,6 +124,7 @@ func BuildPeerSpawnRow(appearance PeerAppearance, gid uint32, pose Spawn) []byte
 		GuildGrantName:     appearance.GuildGrantName,
 		CrestParamA:        appearance.CrestParam,
 		FortSiegeAuthority: appearance.FortSiegeAuthority,
+		SpawnSkills:        appearance.SpawnSkills,
 		WithAppearTail:     true,
 		AppearFlag:         1,
 	}

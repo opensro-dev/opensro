@@ -173,6 +173,19 @@ func refuseJoin(s *transport.Session, ackOpcode uint16, detail uint8, joiner, ca
 	log.Debugf("match: join from %s refused (detail %d): %s", joiner, detail, cause)
 }
 
+/*
+================
+refuseJoinWithCode
+
+A refusal whose reason the client names: the outer-2 arm with its
+category-2 code, so the joiner sees why (level, duplicate, no party).
+================
+*/
+func refuseJoinWithCode(s *transport.Session, ackOpcode uint16, code uint8, joiner, cause string) {
+	_ = s.Send(ackOpcode, EncodeJoinError(code))
+	log.Debugf("match: join from %s refused (code 0x%02X): %s", joiner, code, cause)
+}
+
 // ackDisplaced answers a displaced request's joiner with detail-2 when
 // they are still online (their pane sits in no-reply limbo otherwise).
 func (r *Runtime) ackDisplaced(displaced pendingJoin) {
@@ -214,7 +227,7 @@ func (r *Runtime) handlePartyJoin(s *transport.Session, opcode uint16, payload [
 		return
 	}
 	if r.joins.hasJoiner(divisionID, character.Name) {
-		refuseJoin(s, OpPartyJoinAck, JoinAckRefused, character.Name, "a join request is already outstanding")
+		refuseJoinWithCode(s, OpPartyJoinAck, JoinErrorDuplicate, character.Name, "a join request is already outstanding")
 		return
 	}
 	if r.PartyJoinPrecheck == nil || r.CommitPartyJoin == nil || r.PartyMemberInfoFor == nil {
@@ -226,12 +239,12 @@ func (r *Runtime) handlePartyJoin(s *transport.Session, opcode uint16, payload [
 		return
 	}
 	if level := characterLevel(character); level < entry.MinLevel || level > entry.MaxLevel {
-		refuseJoin(s, OpPartyJoinAck, JoinAckRefused, character.Name, "outside listing level range")
+		refuseJoinWithCode(s, OpPartyJoinAck, JoinErrorLevel, character.Name, "outside listing level range")
 		return
 	}
 	ownerSession, online := r.sessionByName(divisionID, entry.MasterName)
 	if !online {
-		refuseJoin(s, OpPartyJoinAck, JoinAckRefused, character.Name, "listing owner offline")
+		refuseJoinWithCode(s, OpPartyJoinAck, JoinErrorCantFindParty, character.Name, "listing owner offline")
 		return
 	}
 	// ShardManager 44FAB7 -> 44F7F0 gates applicant job vs purpose;

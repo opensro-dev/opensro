@@ -140,6 +140,7 @@ func TestBuybackIsCharacterWideAcrossAdmittedMerchants(t *testing.T) {
 	other.RefObjID = 101
 	rt.NpcRoster = append(rt.NpcRoster, other)
 	rt.Selected.Set(testDivision, c.Name, 18)
+	rt.Selected.OpenFunction(testDivision, c.Name, 18)
 	if len(rt.buybackOffers(c, 101)) != 1 {
 		t.Fatal("merchant switch hides retained sale")
 	}

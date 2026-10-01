@@ -249,7 +249,9 @@ func monsterRelativeLevelBonus(playerLevel, monsterLevel int64) float32 {
 	if steps > 13 {
 		steps = 13
 	}
-	bonus := float32(1) + float32(steps)*0.03
+	// 4100BE..4100CC: the step count times the double 0.03 (float32 .03
+	// widened) adds to 1 on the x87 stack; only the sum is stored to float32.
+	bonus := float32(1 + float64(steps)*float64(float32(.03)))
 	if bonus < 1 {
 		return 1
 	}

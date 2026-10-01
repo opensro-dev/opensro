@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+response.go - Package enterworld.
+
+===========================================================================
+*/
+
 package enterworld
 
 import (
@@ -7,14 +15,26 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// ChatPermissions describes the chat lanes available to the character.
+/*
+================
+ChatPermissions
+
+ChatPermissions describes the chat lanes available to the character.
+================
+*/
 type ChatPermissions struct {
 	CanPartyChat bool `json:"canPartyChat"`
 	CanGuildChat bool `json:"canGuildChat"`
 	CanUnionChat bool `json:"canUnionChat"`
 }
 
-// RefObjRow is one refObjSnapshot row.
+/*
+================
+RefObjRow
+
+RefObjRow is one refObjSnapshot row.
+================
+*/
 type RefObjRow struct {
 	Teleport  *simulation.TeleportGateBounds `json:"teleport,omitempty"`
 	RefObjID  uint32                         `json:"refObjId"`
@@ -39,7 +59,13 @@ type RefObjRow struct {
 	NpcTalkStoreGroups *[]simulation.NpcTalkStoreGroup `json:"npcTalkStoreGroups,omitempty"`
 }
 
-// RefItemRow is one refItemSnapshot row.
+/*
+================
+RefItemRow
+
+RefItemRow is one refItemSnapshot row.
+================
+*/
 type RefItemRow struct {
 	DescriptionSymbol          string       `json:"descriptionSymbol,omitempty"`
 	Icon                       string       `json:"icon,omitempty"`
@@ -52,24 +78,42 @@ type RefItemRow struct {
 	NativeFields               NativeFields `json:"nativeFields,omitempty"`
 }
 
-// EquipItemRow is one equipped item's browser view.
+/*
+================
+EquipItemRow
+
+EquipItemRow is one equipped item's browser view.
+================
+*/
 type EquipItemRow struct {
 	RefObjID uint32 `json:"refObjId"`
 	Slot     int64  `json:"slot"`
 	Body     []int  `json:"body"`
 }
 
-// SiegeItemForgeGroupRow is one v1.150 siegefortressitemforge.txt group.
-// The two vectors are the exact sub_64b440 (+0x00) and sub_64b450 (+0x10)
-// projections consumed by the fortress NPC manager-hire menu.
+/*
+================
+SiegeItemForgeGroupRow
+
+SiegeItemForgeGroupRow is one v1.150 siegefortressitemforge.txt group.
+The two vectors are the exact sub_64b440 (+0x00) and sub_64b450 (+0x10)
+projections consumed by the fortress NPC manager-hire menu.
+================
+*/
 type SiegeItemForgeGroupRow struct {
 	GroupID         uint32   `json:"groupId"`
 	SmithItemRefs   []uint32 `json:"smithItemRefs"`
 	TrainerItemRefs []uint32 `json:"trainerItemRefs"`
 }
 
-// SiegeFortressDataRow is the native case-0x36 siegefortress.txt projection
-// consumed by the fortress-id/name/NPC-code lookup family at manager+0x488.
+/*
+================
+SiegeFortressDataRow
+
+SiegeFortressDataRow is the native case-0x36 siegefortress.txt projection
+consumed by the fortress-id/name/NPC-code lookup family at manager+0x488.
+================
+*/
 type SiegeFortressDataRow struct {
 	Icon            string `json:"icon"`
 	FortressID      uint32 `json:"fortressId"`
@@ -78,21 +122,39 @@ type SiegeFortressDataRow struct {
 	OfficialNpcCode string `json:"officialNpcCode"`
 }
 
-// GameWorldDataRow is the case-0x38 gameworlddata.txt projection consumed by
-// manager+0x4d0's id/code/first-war-name lookup family.
+/*
+================
+GameWorldDataRow
+
+GameWorldDataRow is the case-0x38 gameworlddata.txt projection consumed by
+manager+0x4d0's id/code/first-war-name lookup family.
+================
+*/
 type GameWorldDataRow struct {
 	GameWorldID uint16 `json:"gameWorldId"`
 	CodeName    string `json:"codeName"`
 	WarName     string `json:"warName"`
 }
 
-// BootstrapRequest is the /mission/bootstrap request body.
+/*
+================
+BootstrapRequest
+
+BootstrapRequest is the /mission/bootstrap request body.
+================
+*/
 type BootstrapRequest struct {
 	DivisionID    string
 	CharacterName string
 }
 
-// UnmarshalJSON accepts divisionId as either a string or a number.
+/*
+================
+UnmarshalJSON
+
+UnmarshalJSON accepts divisionId as either a string or a number.
+================
+*/
 func (r *BootstrapRequest) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		DivisionID    json.RawMessage `json:"divisionId"`
@@ -120,7 +182,13 @@ func (r *BootstrapRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// BootstrapResult is the /mission/bootstrap response.
+/*
+================
+BootstrapResult
+
+BootstrapResult is the /mission/bootstrap response.
+================
+*/
 type BootstrapResult struct {
 	NativeResult    int
 	NativeErrorCode int
@@ -145,8 +213,16 @@ type BootstrapResult struct {
 	ChatMessages         []string
 	SystemMessages       interface{}
 	Packets              []Packet
+	// UnlimitedItems are the RefObjIDs the beta starter kit never spends, so
+	// the client can show them as unlimited rather than a stack of one.
+	UnlimitedItems []uint32
 }
 
+/*
+================
+bootstrapFailureView
+================
+*/
 type bootstrapFailureView struct {
 	NativeResult    int               `json:"nativeResult"`
 	NativeErrorCode int               `json:"nativeErrorCode"`
@@ -155,6 +231,11 @@ type bootstrapFailureView struct {
 	Reason          string            `json:"reason,omitempty"`
 }
 
+/*
+================
+bootstrapSuccessView
+================
+*/
 type bootstrapSuccessView struct {
 	InventorySlotCount        uint8                    `json:"inventorySlotCount"`
 	EquipmentSlotCount        uint8                    `json:"equipmentSlotCount"`
@@ -180,16 +261,29 @@ type bootstrapSuccessView struct {
 	ChatMessages              []string                 `json:"chatMessages"`
 	SystemMessages            interface{}              `json:"systemMessages"`
 	Packets                   []Packet                 `json:"packets"`
+	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
 }
 
-// characterSnapshotView adds derived values without polluting persistence.
+/*
+================
+characterSnapshotView
+
+characterSnapshotView adds derived values without polluting persistence.
+================
+*/
 type characterSnapshotView struct {
 	*Character
 	MaxHP int64 `json:"maxHp"`
 	MaxMP int64 `json:"maxMp"`
 }
 
-// MarshalJSON emits the native failure or success envelope.
+/*
+================
+MarshalJSON
+
+MarshalJSON emits the native failure or success envelope.
+================
+*/
 func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 	if r.NativeResult == nativeResultFailure {
 		return json.Marshal(bootstrapFailureView{
@@ -234,10 +328,17 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		ChatMessages:              r.ChatMessages,
 		SystemMessages:            r.SystemMessages,
 		Packets:                   r.Packets,
+		UnlimitedItems:            r.UnlimitedItems,
 	})
 }
 
-// Failure builds a failed bootstrap result.
+/*
+================
+Failure
+
+Failure builds a failed bootstrap result.
+================
+*/
 func Failure(nativeErrorCode int, reason string) *BootstrapResult {
 	errorCode := nativeErrorCode & 0xff
 	described := DescribeNativeAgentError(errorCode)

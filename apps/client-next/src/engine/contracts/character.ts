@@ -217,7 +217,9 @@ export interface CharacterActor {
 		readonly offset: readonly [number, number, number];
 		readonly rootIfMissing?: boolean;
 		readonly root?: boolean;
-		readonly basis?: "native" | "bsr" | "compound";
+		/** native: the 8D6880 holder matrix for an .efp program; native-bsr: the
+		 * same matrix for a compiled (Z-flipped) BSR mesh. */
+		readonly basis?: "native" | "native-bsr" | "bsr" | "compound";
 		readonly modelScale?: number;
 		readonly rotation?: Float32Array;
 		/** Root attachments only: a fixed world yaw replacing the owner's rotation

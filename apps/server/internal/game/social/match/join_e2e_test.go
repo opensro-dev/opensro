@@ -517,7 +517,8 @@ func TestPartyApprovalRevalidatesDeletedAndModifiedListing(t *testing.T) {
 		gameReadyBarrier(t, joiner, "no joiner roster mutation")
 	}
 	sendFrame(t, joiner, match.OpPartyJoinRequest, u32le(2))
-	expectExactFrame(t, joiner, match.OpPartyJoinAck, []byte{1, 0}, "out-of-band level refuses before prompt")
+	// The level gate names its reason: UIIT_MSG_PARTYMATCH_JOIN_ERROR_LEVEL.
+	expectExactFrame(t, joiner, match.OpPartyJoinAck, match.EncodeJoinError(match.JoinErrorLevel), "out-of-band level refuses before prompt")
 	if server.runtime.PendingJoinCount() != 0 {
 		t.Fatal("refused approvals retained pending joins")
 	}

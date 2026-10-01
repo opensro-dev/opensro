@@ -409,6 +409,8 @@ export interface BetaMapPlayer {
 }
 export interface GameplayState {
 	readonly betaPlayers?: readonly BetaMapPlayer[];
+	/** RefObjIDs the server never spends (the beta starter kit), drawn as unlimited. */
+	readonly unlimitedItems?: readonly number[];
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;
 	readonly huntingPoints?: readonly import("@/engine/foundation/gameplay/hunting").HuntingPoint[];
 	readonly npcConversation?: import("@/engine/foundation/gameplay/npc-dialogue").NpcConversation;
@@ -423,6 +425,9 @@ export interface GameplayState {
 	readonly autoPotion?: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
 	readonly cosWindows?: readonly (import("@/engine/foundation/gameplay/cos-timer").CosItemWindow & {
 		readonly reference: import("@/engine/foundation/gameplay/cos-timer").CosItemWindowReference;
+	})[];
+	readonly paramJobs?: readonly (import("@/engine/foundation/gameplay/param-job").ParamJobRow & {
+		readonly reference: import("@/engine/foundation/gameplay/param-job").ParamJobReference;
 	})[];
 	readonly abnormalRecords?: readonly import("@/engine/foundation/gameplay/abnormal-snapshot").AbnormalRecord[];
 	readonly rebirthPending?: boolean;

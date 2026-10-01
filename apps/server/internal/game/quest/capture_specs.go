@@ -22,7 +22,10 @@ var captureQuestSpecs = []QuestSpec{
 		OfferPromptSymbol: "SN_TALK_QNO_EU_IVY_2_01", AcceptResponseSymbol: "SN_TALK_QNO_EU_IVY_2_02",
 		DenyResponseSymbol: "SN_TALK_QNO_EU_IVY_2_03", NotAchievedSymbol: "SN_TALK_QNO_EU_IVY_2_04",
 		CompletePromptSymbol: "SN_TALK_QNO_EU_IVY_2_07", InventoryFullSymbol: "SN_TALK_QNO_EU_IVY_2_06",
-		RewardExp: 60000, RewardGold: 15000, RewardSkillExp: 8000,
+		// INFERENCE (no surviving script): _08 "Vine Stalk collect is
+		// completed. Report to Demetri." is the ACHIEVED_NOW role.
+		AchievedNowSymbol: "SN_TALK_QNO_EU_IVY_2_08",
+		RewardExp:         60000, RewardGold: 15000, RewardSkillExp: 8000,
 		RewardItems: []RewardItemLead{{ItemCodename: "ITEM_QNO_EU_IVY_2_01", Count: 5}},
 		MonsterDrop: &MonsterDropRule{ItemCodename: "ITEM_QNO_EU_IVY_2_03",
 			MonsterCodenames: []string{"MOB_AM_SOLDIER"}, ChancePercent: 25, MaxHeld: 500},
@@ -63,7 +66,12 @@ var captureQuestSpecs = []QuestSpec{
 		OfferPromptSymbol: "SN_TALK_QNO_EU_IVY_1_01", AcceptResponseSymbol: "SN_TALK_QNO_EU_IVY_1_02",
 		DenyResponseSymbol: "SN_TALK_QNO_EU_IVY_1_03", NotAchievedSymbol: "SN_TALK_QNO_EU_IVY_1_04",
 		CompletePromptSymbol: "SN_TALK_QNO_EU_IVY_1_06", InventoryFullSymbol: "SN_TALK_QNO_EU_IVY_1_05",
-		RewardExp: 24000, RewardSkillExp: 2800,
+		// INFERENCE (no surviving script): _16 "completed capture and hunt,
+		// report to Ratchel" is the ACHIEVED_NOW role. The single-capture
+		// quests carry none: their capture success line (captureRules)
+		// already is the report banner.
+		AchievedNowSymbol: "SN_TALK_QNO_EU_IVY_1_16",
+		RewardExp:         24000, RewardSkillExp: 2800,
 		RewardItems: []RewardItemLead{{ItemCodename: "ITEM_QNO_EU_IVY_1_02", Count: 5}},
 	},
 	{

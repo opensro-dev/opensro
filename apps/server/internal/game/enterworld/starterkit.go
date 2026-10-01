@@ -125,6 +125,25 @@ func StarterKitCodenames(kit []WireItem) map[string]bool {
 
 /*
 ================
+StarterKitRefObjIDs
+
+The kit's item ids, for the bootstrap's unlimited-item list; nil when the
+kit is disabled.
+================
+*/
+func StarterKitRefObjIDs(kit []WireItem) []uint32 {
+	if len(kit) == 0 {
+		return nil
+	}
+	ids := make([]uint32, 0, len(kit))
+	for _, item := range kit {
+		ids = append(ids, item.RefObjID)
+	}
+	return ids
+}
+
+/*
+================
 StarterKitMissing
 
 True when the character holds none of some kit item, anywhere in its

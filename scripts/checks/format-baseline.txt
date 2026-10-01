@@ -101,7 +101,6 @@ apps/client-next/src/engine/foundation/gameplay/cast-results.ts
 apps/client-next/src/engine/foundation/gameplay/character-spawn.ts
 apps/client-next/src/engine/foundation/gameplay/chat-blocks.ts
 apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
-apps/client-next/src/engine/foundation/gameplay/commerce.ts
 apps/client-next/src/engine/foundation/gameplay/concealment.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
 apps/client-next/src/engine/foundation/gameplay/cos-container.ts
@@ -131,7 +130,6 @@ apps/client-next/src/engine/foundation/gameplay/npc-dialogue.ts
 apps/client-next/src/engine/foundation/gameplay/party-notices.ts
 apps/client-next/src/engine/foundation/gameplay/peer-appearance.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
-apps/client-next/src/engine/foundation/gameplay/portal.ts
 apps/client-next/src/engine/foundation/gameplay/position-skill.ts
 apps/client-next/src/engine/foundation/gameplay/progression.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts
@@ -141,7 +139,6 @@ apps/client-next/src/engine/foundation/gameplay/return-scroll.ts
 apps/client-next/src/engine/foundation/gameplay/skill-catalog.ts
 apps/client-next/src/engine/foundation/gameplay/skill-cooldowns.ts
 apps/client-next/src/engine/foundation/gameplay/skill-notices.ts
-apps/client-next/src/engine/foundation/gameplay/social.ts
 apps/client-next/src/engine/foundation/gameplay/spawn-skills.ts
 apps/client-next/src/engine/foundation/gameplay/system-notices.ts
 apps/client-next/src/engine/foundation/gameplay/target-notices.ts
@@ -208,7 +205,6 @@ apps/client-next/src/engine/foundation/ui/action-layout.ts
 apps/client-next/src/engine/foundation/ui/alchemy-selection.ts
 apps/client-next/src/engine/foundation/ui/authored-layout.ts
 apps/client-next/src/engine/foundation/ui/bar.ts
-apps/client-next/src/engine/foundation/ui/buff-board.ts
 apps/client-next/src/engine/foundation/ui/buff-tooltip.ts
 apps/client-next/src/engine/foundation/ui/buff-viewer.ts
 apps/client-next/src/engine/foundation/ui/button-state.ts
@@ -232,7 +228,6 @@ apps/client-next/src/engine/foundation/ui/hud-readouts.ts
 apps/client-next/src/engine/foundation/ui/icon.ts
 apps/client-next/src/engine/foundation/ui/input-options.ts
 apps/client-next/src/engine/foundation/ui/inventory-layout.ts
-apps/client-next/src/engine/foundation/ui/item-count.ts
 apps/client-next/src/engine/foundation/ui/item-equipment-overlay.ts
 apps/client-next/src/engine/foundation/ui/item-tooltip-magic.ts
 apps/client-next/src/engine/foundation/ui/item-tooltip-recovery.ts
@@ -243,7 +238,6 @@ apps/client-next/src/engine/foundation/ui/loading-presentation.ts
 apps/client-next/src/engine/foundation/ui/main-popup.ts
 apps/client-next/src/engine/foundation/ui/mastery-tooltip.ts
 apps/client-next/src/engine/foundation/ui/matching-slots.ts
-apps/client-next/src/engine/foundation/ui/merchant.ts
 apps/client-next/src/engine/foundation/ui/message-box.ts
 apps/client-next/src/engine/foundation/ui/message-tips.ts
 apps/client-next/src/engine/foundation/ui/minimap-catalog.ts
@@ -289,7 +283,6 @@ apps/client-next/src/engine/foundation/ui/unique-banner.ts
 apps/client-next/src/engine/foundation/ui/vertical-spin.ts
 apps/client-next/src/engine/foundation/ui/vital-warning.ts
 apps/client-next/src/engine/foundation/ui/world-cursor.ts
-apps/client-next/src/engine/foundation/ui/world-map.ts
 apps/client-next/src/engine/runtime/assets/worker/effects/effects.ts
 apps/client-next/src/engine/runtime/assets/worker/effects/program/program.ts
 apps/client-next/src/engine/runtime/assets/worker/entry.ts
@@ -345,7 +338,6 @@ apps/client-next/src/engine/runtime/simulation/worker/network/network.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/alchemy/alchemy.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts
 apps/client-next/src/engine/runtime/simulation/worker/simulation.ts
 apps/client-next/src/engine/runtime/ui/hud/messages.ts
 apps/client-next/src/engine/runtime/ui/hud/minimap.ts
@@ -357,7 +349,6 @@ apps/client-next/src/engine/runtime/ui/hud/region-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/scroll.ts
 apps/client-next/src/engine/runtime/ui/hud/skill-slot.ts
 apps/client-next/src/engine/runtime/ui/hud/skill-training.ts
-apps/client-next/src/engine/runtime/ui/hud/speech.ts
 apps/client-next/src/engine/runtime/ui/hud/unique-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/window-placement.ts
 apps/client-next/src/engine/runtime/ui/resources/resources.ts

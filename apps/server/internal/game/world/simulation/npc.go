@@ -264,6 +264,29 @@ func ComputeNpcPatrolState(anchor Spawn, tick int64) PatrolState {
 	}
 }
 
+/*
+================
+NpcStation
+
+Where a roster NPC is published: its npcpos.txt position, or for the
+synthetic fixture roster a few units from the anchor (the same +8/+5 base
+the patrol A-point uses) plus the row's reviewed station offset. Every
+consumer that places or measures an NPC goes through here.
+================
+*/
+func NpcStation(npc NpcDef, anchor Spawn) Spawn {
+	if npc.AuthoredSpawn {
+		return npc.Spawn
+	}
+	return Spawn{
+		RegionID: anchor.RegionID,
+		X:        clampFloat(anchor.X+8+npc.SpawnOffsetX, 0, 0xffff),
+		Y:        anchor.Y,
+		Z:        clampFloat(anchor.Z+5+npc.SpawnOffsetZ, 0, 0xffff),
+		Angle:    anchor.Angle,
+	}
+}
+
 // BuildNpcCreateRow encodes one object-list create row (sub_777220 ->
 // CICNPC sub_8625f0), byte-for-byte the reference buildV150NpcCreateRow:
 // RefObjID, the shared sub_85fb20 object block (object id, region, xyz,
@@ -271,20 +294,9 @@ func ComputeNpcPatrolState(anchor Spawn, tick int64) PatrolState {
 // mask + name. Rides the 0x3417 object-list chunk (bootstrap) - the
 // consumer wraps it.
 func BuildNpcCreateRow(npc NpcDef, anchor Spawn) []byte {
-	// A few units from the anchor so it is visibly separate but in the same
-	// region (the same +8/+5 base the patrol A-point uses), plus the roster
-	// entry's reviewed station offset.
-	x := clampFloat(anchor.X+8+npc.SpawnOffsetX, 0, 0xffff)
-	y := anchor.Y
-	z := clampFloat(anchor.Z+5+npc.SpawnOffsetZ, 0, 0xffff)
-	heading := anchor.Angle
-	if npc.AuthoredSpawn {
-		anchor.RegionID = npc.Spawn.RegionID
-		x = npc.Spawn.X
-		y = npc.Spawn.Y
-		z = npc.Spawn.Z
-		heading = npc.Spawn.Angle
-	}
+	station := NpcStation(npc, anchor)
+	anchor.RegionID = station.RegionID
+	x, y, z, heading := station.X, station.Y, station.Z, station.Angle
 	walkSpeed := npc.WalkSpeed
 	runSpeed := npc.RunSpeed
 	scaleDenom := npc.ScaleDenom

@@ -41,18 +41,24 @@ func (c NpcSpawnConfig) roster() []simulation.NpcDef {
 	return c.Roster
 }
 
-// npcSpawnAnchor ports resolveMissionNpcSpawnAnchor.
-func (c NpcSpawnConfig) npcSpawnAnchor(entry *LocalPlayerEntry) simulation.Spawn {
+// Anchor ports resolveMissionNpcSpawnAnchor: the player's start placement
+// with AtPlayer, else the fixed Constantinople shop anchor.
+func (c NpcSpawnConfig) Anchor(start simulation.Spawn) simulation.Spawn {
 	if c.AtPlayer {
-		return simulation.Spawn{
-			RegionID: uint16(entry.StartProfile.RegionID),
-			X:        entry.StartProfile.X,
-			Y:        entry.StartProfile.Y,
-			Z:        entry.StartProfile.Z,
-			Angle:    uint16(entry.StartProfile.Angle),
-		}
+		return start
 	}
 	return simulation.NpcShopSpawn()
+}
+
+// npcSpawnAnchor is Anchor for the entry's start profile.
+func (c NpcSpawnConfig) npcSpawnAnchor(entry *LocalPlayerEntry) simulation.Spawn {
+	return c.Anchor(simulation.Spawn{
+		RegionID: uint16(entry.StartProfile.RegionID),
+		X:        entry.StartProfile.X,
+		Y:        entry.StartProfile.Y,
+		Z:        entry.StartProfile.Z,
+		Angle:    uint16(entry.StartProfile.Angle),
+	})
 }
 
 // NpcObjectListRows builds the 0x3417 NPC create rows for the roster.

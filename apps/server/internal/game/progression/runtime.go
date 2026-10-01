@@ -131,6 +131,8 @@ type Runtime struct {
 	BaseStats          func(*enterworld.Character) (wire.BaseStats, error)
 	RecoverLevelVitals func(*enterworld.Character) error
 	Withdrawal         WithdrawalHooks
+	// Growth is the closed-beta rate switch (growth.go); zero is native.
+	Growth GrowthRates
 }
 
 /*

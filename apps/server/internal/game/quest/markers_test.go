@@ -12,26 +12,34 @@ import (
 
 func TestMarkerStatesFollowAuthoritativeQuestLifecycle(t *testing.T) {
 	licensed.RequireGameData(t)
-	rt, err := NewRuntime(&enterworld.Deps{}, loadTestDefinitions(t), func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) { return nil, true })
+	defs, items := loadShippedDefinitions(t)
+	rt, err := NewRuntime(&enterworld.Deps{Items: items}, defs, func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) { return nil, true })
 	if err != nil {
 		t.Fatal(err)
 	}
 	race, level := int64(enterworld.RaceEurope), int64(1)
 	c := &enterworld.Character{Name: "Marker", RaceIndex: &race, Level: &level}
-	if m := rt.MarkerStates(c)[143]; m.State != 1 || m.Codename != "NPC_EU_ADVICE" {
+	// Lipria offers the European tutorial; the superseded chain shows nothing.
+	tutorial, _ := rt.Defs.ByCodename("QTUTORIAL_EU")
+	if m := rt.MarkerStates(c)[tutorial.RefID]; m.State != 1 || m.Codename != "NPC_EU_ADVICE" {
 		t.Fatal(m)
-	}
-	if _, err := rt.StartQuest(c, "QNO_EU_TUTORIAL_1"); err != nil {
-		t.Fatal(err)
-	}
-	if m := rt.MarkerStates(c)[143]; m.State != 3 {
-		t.Fatal(m)
-	}
-	if _, err := rt.CompleteTalkQuest(c, "QNO_EU_TUTORIAL_1"); err != nil {
-		t.Fatal(err)
 	}
 	if _, ok := rt.MarkerStates(c)[143]; ok {
-		t.Fatal("completed quest remains offered")
+		t.Fatal("superseded QNO_EU_TUTORIAL_1 still offered")
+	}
+	if _, err := rt.StartQuest(c, "QTUTORIAL_EU"); err != nil {
+		t.Fatal(err)
+	}
+	// Stage 1 is a talk with Lipria herself: ready to report at once.
+	if m := rt.MarkerStates(c)[tutorial.RefID]; m.State != 3 || m.Codename != "NPC_EU_ADVICE" {
+		t.Fatal(m)
+	}
+	if _, err := rt.AdvanceNpcQuest(c, stageToken("QTUTORIAL_EU", 0), "NPC_EU_ADVICE"); err != nil {
+		t.Fatal(err)
+	}
+	// Stage 2 moves the marker to Jatomo.
+	if m := rt.MarkerStates(c)[tutorial.RefID]; m.Codename != "NPC_EU_ARMOR" {
+		t.Fatal(m)
 	}
 	c.DeletePending = true
 	if len(rt.MarkerStates(c)) != 0 {

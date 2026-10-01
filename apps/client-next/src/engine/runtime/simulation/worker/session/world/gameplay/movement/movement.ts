@@ -96,6 +96,9 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 	let poseAtMs = 0;
 	let nextId = 0, acknowledged = 0, error: string | null = null;
 	let life: "alive" | "dead" = "alive";
+	// A server-driven walk started locally before its acknowledgement (a
+	// pickup run-up): where it leaves from and the goal the server will walk.
+	let predicted: { from: Pose; to: Pose; } | null = null;
 	const pending = new Map<number, {
 		to: Pose;
 		sent: number;
@@ -119,6 +122,18 @@ admit
 			throw new Error( "Invalid movement pose" );
 		}
 		return Object.freeze( { ...p } );
+	}
+	/*
+================
+samePredictedGoal
+
+The server's walk goal matches a predicted goal: the wire carries whole
+units, so compare within one unit on the same region.
+================
+	*/
+	function samePredictedGoal( goal: Pose, to: Pose | undefined ): boolean {
+		return !!to && to.regionId === goal.regionId && Math.abs( to.x - goal.x ) <= 1 &&
+			Math.abs( to.z - goal.z ) <= 1;
 	}
 	/*
 ================
@@ -410,7 +425,25 @@ native
 			// A source-less angular acknowledgement leaves the path running.
 			if ( decoded.kind === "keep" ) return;
 			movementRevision++;
+			const adopt = predicted !== null && decoded.kind !== "direction" &&
+				samePredictedGoal( predicted.to, decoded.to );
+			predicted = null;
 			authoritative = reconcile( decoded.from );
+			if ( adopt ) {
+				// The predicted run-up is the walk the server just started from
+				// the same place: keep the progress made while the request was in
+				// flight instead of stepping back to the server's start.
+				walk = null;
+				pose = current;
+				segment = bindOwners( {
+					from: current,
+					to: decoded.to,
+					start: now,
+					timing: "speed",
+					duration: poseDistance( current, decoded.to ) / speed * 1000
+				} );
+				return;
+			}
 			pose = authoritative;
 			if ( decoded.kind === "direction" ) {
 				const heading = decoded.heading!;
@@ -496,6 +529,7 @@ correct
 			// Resolve its surface through the existing navigation owner before
 			// retiring the segment; server endpoint Y can be below a hill/deck.
 			pose = authoritative = reconcile( admit( value ) );
+			predicted = null;
 			surfaceCursor = {};
 			segment = null;
 			walk = null;
@@ -547,6 +581,7 @@ request
 			pending.set( id, { to, sent: now, predictedEnd: clipped } );
 			error = null;
 			walk = null;
+			predicted = null;
 			if ( clipped ) {
 				segment = {
 					from: pose,
@@ -558,6 +593,70 @@ request
 				};
 			}
 			return frame;
+		},
+		/*
+================
+predictApproach
+
+Start a walk the server drives (a pickup run-up: 0x72CD answered by a
+movement ack toward the item) the moment it is requested, rather than one
+round trip later. Only from rest or an acknowledged path, and only over
+complete navigation coverage, like request. The acknowledgement adopts the
+walk (native); a refusal ends it (endPrediction).
+================
+		*/
+		predictApproach( value: Pose, now: number ): boolean {
+			if ( !pose || life === "dead" || walk || pending.size || predicted ) return false;
+			const current = segment ? sampleMovement( segment, now ) : pose,
+				to = admit( value ),
+				query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; } = {
+					slide: false,
+					sourceOwner: owner
+				};
+			const clipped = navigation.clip( current, to, query );
+			if ( !clipped || poseDistance( clipped, to ) >= ENDPOINT_EPSILON ) return false;
+			movementRevision++;
+			predicted = { from: current, to };
+			pose = current;
+			segment = {
+				from: current,
+				to: { ...clipped, angle: movementHeading( current, clipped ) },
+				start: now,
+				timing: "speed",
+				duration: poseDistance( current, clipped ) / speed * 1000,
+				owners: query.owners
+			};
+			return true;
+		},
+		/*
+================
+endPrediction
+
+The server refused the walk it was predicted to drive: it never left the
+start, so walk back there.
+================
+		*/
+		endPrediction( now: number ) {
+			if ( !predicted || !pose ) return;
+			const from = predicted.from, current = segment ? sampleMovement( segment, now ) : pose;
+			predicted = null;
+			movementRevision++;
+			pose = current;
+			segment = bindOwners( {
+				from: current,
+				to: { ...from, angle: movementHeading( current, from ) },
+				start: now,
+				timing: "speed",
+				duration: poseDistance( current, from ) / speed * 1000
+			} );
+		},
+		/*
+================
+predicting
+================
+		*/
+		predicting(): boolean {
+			return predicted !== null;
 		},
 		/*
 ================
@@ -826,6 +925,7 @@ clear
 			pose = authoritative = null;
 			segment = null;
 			walk = null;
+			predicted = null;
 			pending.clear();
 			error = null;
 			navigation.clear();

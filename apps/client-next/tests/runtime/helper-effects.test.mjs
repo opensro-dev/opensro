@@ -107,7 +107,7 @@ test("helper lifetime survives casts, slow assets and movement; clears on flag, 
 		particle = first.find( a => a.model.includes( "programs.json" ) );
 	assert.equal( parent.attachment.gid, 10 );
 	assert.equal( parent.attachment.root, true );
-	assert.deepEqual( parent.attachment.offset, [ 0, 33, -0 ] );
+	assert.deepEqual( parent.attachment.offset, [ 0, 33, 0 ] );
 	assert.equal( particle.attachment.gid, parent.gid );
 	assert.deepEqual( particle.attachment.offset, [ 0, 3, -0 ] );
 	assert.equal( particle.time, 0 );
@@ -223,7 +223,7 @@ test("quest marker registry renders every authored family and retires replacemen
 		assert.ok( actors.every( a => !old.includes( a.gid ) ), "state replacement retires the preceding family" );
 		old = actors.map( a => a.gid );
 		const parent = actors.find( a => a.model.includes( name ) );
-		assert.deepEqual( parent.attachment.offset, [ 0, 25, -0 ] );
+		assert.deepEqual( parent.attachment.offset, [ 0, 25, 0 ] );
 	}
 	gameplay.questMarkers = [ { refId: 2, flags: 2, valueA: 3, optional: 10 }, {
 		refId: 1,

@@ -316,6 +316,7 @@ func (rt *Runtime) applyExperience(
 		return nil, false
 	}
 	next := character.Snapshot()
+	expDelta, skillExpDelta = rt.Growth.scale(rt.deps.LevelData(), characterLevel(next), expDelta, skillExpDelta)
 	expDelta = clampExpDelta(expDelta)
 	skillExpDelta = clampSkillExpDelta(skillExpDelta)
 	if expDelta == 0 && skillExpDelta == 0 {

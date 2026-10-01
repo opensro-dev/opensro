@@ -129,6 +129,18 @@ variable "beta_player_map" {
   default = "on"
 }
 
+# beta_growth holds every level to the level-3 kill pace and multiplies skill
+# EXP by beta_skill_exp_rate. "off" restores the native rates.
+variable "beta_growth" {
+  type    = string
+  default = "on"
+}
+
+variable "beta_skill_exp_rate" {
+  type    = string
+  default = "100"
+}
+
 variable "cpu" {
   type    = number
   default = 2000
@@ -261,6 +273,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOVE_CLIENT_CLIP               = var.move_client_clip
         SRO_BETA_STARTER_KIT               = var.beta_starter_kit
         SRO_BETA_PLAYER_MAP                = var.beta_player_map
+        SRO_BETA_GROWTH                    = var.beta_growth
+        SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                 = var.cert_dir

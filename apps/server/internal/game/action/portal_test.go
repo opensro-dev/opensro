@@ -101,7 +101,8 @@ func TestPortalSelectedNpcTransactionAndRollback(t *testing.T) {
 func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
-	rt.NpcSpawn.Enabled = true
+	// The fixture gate stands at the player, inside its hit range.
+	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}
 	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
 		t.Fatal(err)

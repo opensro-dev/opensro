@@ -35,6 +35,10 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 	// table).
 	var ackPayload []byte
 	var constrained bool
+	// The walk's own arrival: the character's live speed (scrolls, buffs,
+	// walk mode) along the committed path. A fixed run-speed estimate made a
+	// faster character stand on the drop until the estimate ran out.
+	arrivesAtMs := now.Add(approach.Travel).UnixMilli()
 	if !rt.deps.Update(character, "pickup-approach", func() bool {
 		if character.DeletePending {
 			return false
@@ -60,6 +64,9 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 				result := simulation.ApplyMove(world, enterworld.ObjectIDForCharacter(character), request, world.MovementMode, now.UnixMilli())
 				world.CommitWalk(walk.Spans, walk.Rest)
 				ackPayload = result.AckPayload
+				if result.Segment != nil && result.Segment.Valid() {
+					arrivesAtMs = result.Segment.ArrivesAtMs
+				}
 			})
 		if constrained {
 			return false
@@ -74,16 +81,17 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 		return pickupRefusal(wire.ErrCodeInvalidRequest)
 	}
 
+	arrivesAt := time.UnixMilli(arrivesAtMs)
 	rt.Pending.ArmOwned(
 		pendingKey,
 		divisionID,
 		character.Name,
 		groundItem.Gid,
-		now.Add(approach.Travel),
+		arrivesAt,
 	)
 
 	return OpResult{
-		Pending: &PendingPickup{ItemGid: groundItem.Gid, Eta: approach.Travel},
+		Pending: &PendingPickup{ItemGid: groundItem.Gid, Eta: arrivesAt.Sub(now)},
 		Frames: []wire.Frame{
 			wire.PickupApproachArmFrame(),
 			{Opcode: simulation.OpMovementAck, Payload: ackPayload},
@@ -107,7 +115,13 @@ func (rt *Runtime) grantPickup(
 ) (result OpResult) {
 	picker := character
 	character = rt.partyPickupRecipient(divisionID, picker, groundItem, rt.Now().UnixMilli())
-	defer func() { result = routeSharedPickup(result, picker, character) }()
+	defer func() {
+		result = routeSharedPickup(result, picker, character)
+		// A granted pickup publishes its scoop; only then does the party learn of it.
+		if len(result.Broadcast) > 0 {
+			result.Recipients = append(result.Recipients, rt.partyLootNotice(divisionID, picker, character, groundItem, rt.Now().UnixMilli())...)
+		}
+	}()
 	snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
 		return simulation.SeedWorldState(characterSnapshot)
 	})

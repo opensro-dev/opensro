@@ -294,6 +294,9 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	var deathProgressionFrames []wire.Frame
 	var deathEffectFrames []wire.Frame
 	var battleFrames []wire.Frame
+	// 593AE8: a record a standing wall absorbs (+0x10) skips the recipient
+	// branch; any other landed record reaches it.
+	struck := false
 	committed := rt.deps.Update(character, "monster-basic-attack", func() bool {
 		// The detached admission snapshot can predate a status transition.
 		// Revalidate under the same mutation door that commits HP. Do not
@@ -319,10 +322,12 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 			}
 		}
 		character.CurrentHP = &remaining
+		struck = len(impacts) > 0
 		if walled && !skill.WallBypass {
 			var absorbed uint32
 			absorbRecords, absorbed = wallRecords(wall, splits, len(impacts))
 			rt.drainWall(divisionID, character.Name, wall.token, absorbed)
+			struck = !allWallAbsorbed(absorbRecords)
 		}
 		if fatal {
 			deathEffectFrames, deathProgressionFrames = rt.settlePlayerDeathInDoor(divisionID, character, nowMs)
@@ -416,6 +421,11 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		})
 	}
 	// Entering battle (4E1DF0, from ProcessNormalHit) follows the hit.
+	if struck && !fatal {
+		for _, f := range rt.offensiveResultRecipient(divisionID, character, nowMs) {
+			result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload})
+		}
+	}
 	for _, f := range battleFrames {
 		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload})
 	}
