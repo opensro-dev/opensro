@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import config from "../../vite.config.mjs";
-import { relaySameOrigin } from "../../tools/dev/edge.mjs";
+import { relaySameOrigin, sameOriginRelay } from "../../tools/dev/edge.mjs";
 import { defined } from "../helpers/defined.mjs";
 
 // Restores the listed variables after the test; returns a setter for them.
@@ -93,6 +93,47 @@ test("the edge relays its own pages without Origin and forwards foreign origins 
 		forward( "proxyReq", h1( "http://192.168.1.20:5180", "192.168.1.20:5180", true ) ),
 		"http://192.168.1.20:5180",
 		"scheme is part of the origin"
+	);
+});
+
+test("declared tunnel hosts pass the host check and their forwarded HTTPS scheme is believed", t => {
+	const env = isolateEnv( t, [ "SRO_DEV_TUNNEL_HOSTS" ] );
+	env( { SRO_DEV_TUNNEL_HOSTS: undefined } );
+	let value = config( { mode: "development" } );
+	assert.equal( defined( value.server ).allowedHosts, undefined, "no tunnel keeps Vite's default host check" );
+	env( { SRO_DEV_TUNNEL_HOSTS: " Play.Example.com , tunnel.example.net," } );
+	value = config( { mode: "development" } );
+	assert.deepEqual( defined( value.server ).allowedHosts, [ "play.example.com", "tunnel.example.net" ] );
+	assert.deepEqual( defined( value.preview ).allowedHosts, [ "play.example.com", "tunnel.example.net" ] );
+
+	const forwardWith = relay => {
+		const proxy = new EventEmitter();
+		relay( proxy );
+		return ( origin, host, proto ) => {
+			const headers = { origin };
+			const req = { headers: { origin, host, "x-forwarded-proto": proto }, socket: { encrypted: false } };
+			proxy.emit( "proxyReqWs", { removeHeader: name => delete headers[name] }, req );
+			return headers.origin;
+		};
+	};
+	const tunneled = forwardWith( sameOriginRelay( [ "play.example.com" ] ) );
+	assert.equal( tunneled( "https://play.example.com", "play.example.com", "https" ), undefined );
+	assert.equal( tunneled( "https://play.example.com", "play.example.com", "https, http" ), undefined );
+	assert.equal(
+		tunneled( "https://play.example.com", "play.example.com", "http" ),
+		"https://play.example.com",
+		"a plain-HTTP forward is not the HTTPS page"
+	);
+	assert.equal(
+		tunneled( "https://192.168.1.20:5180", "192.168.1.20:5180", "https" ),
+		"https://192.168.1.20:5180",
+		"X-Forwarded-Proto is ignored for undeclared hosts"
+	);
+	const direct = forwardWith( relaySameOrigin );
+	assert.equal(
+		direct( "https://play.example.com", "play.example.com", "https" ),
+		"https://play.example.com",
+		"without tunnel hosts the header is never believed"
 	);
 });
 
