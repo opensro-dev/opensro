@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
 )
 
@@ -62,6 +64,12 @@ func TestPartyConsentInvalidationFeedback(t *testing.T) {
 				sendFrame(t, a, transport.OpBye, []byte{transport.ByeReasonNormal})
 				a.Close()
 				waitForPresenceDrop(t, server, e2eNameA)
+				// The unbind and the close hook's party drop are separate steps:
+				// count the parties only once A's membership is gone.
+				wait.Eventually(t, 5*time.Second, "the offline inviter's party to dissolve", func() bool {
+					_, joined := registry.PartyOf(e2eDivision, e2eNameA)
+					return !joined
+				})
 				code = 14
 			case "join-privilege":
 				if _, reason := registry.Leave(e2eDivision, e2eNameA); reason != "" {
