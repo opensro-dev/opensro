@@ -20,7 +20,7 @@ import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
 import { createNavigationStream } from "./navigation/navigation";
 import { createFrontend } from "./frontend/frontend";
-import { createUi, type UiFrameProbe } from "./ui/ui";
+import { createUi } from "./ui/ui";
 import { createAudio } from "./audio/audio";
 import { createCharacterPresentation } from "./characters/characters";
 import { createWorldStream } from "./world/world";
@@ -32,7 +32,7 @@ import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
 import { createBugReport } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
-import type { RenderFrameProbe } from "@/engine/contracts/runtime";
+import { animationProbe, frameProbe } from "./frame-probes";
 import { createRenderer } from "./renderer/renderer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
@@ -43,102 +43,6 @@ const BACKGROUND_INSTALL_LIST = "/assets/delivery/background-install.json";
 // The live page a release check compares against (release-watch.ts).
 const RELEASE_PAGE = "/play";
 
-/*
-================
-FrameProbe
-
-Development frame timing, including detail spans reported by UI owners.
-================
-*/
-interface FrameProbe extends UiFrameProbe, Omit<RenderFrameProbe, "detailBegin" | "detailEnd"> {
-	sampleDetails(): boolean;
-	begin( frameId: number ): void;
-	mark( stage: string ): void;
-	end(): void;
-}
-
-/*
-================
-PROFILING_BUILD
-
-Development, or a profile build of the release (tools/lib/release-profile.mjs
-defines __SRO_PROFILE_BUILD__). A production build defines neither. The typeof
-guard keeps the constant safe where no bundler defines it (tests, tools).
-================
-*/
-declare const __SRO_PROFILE_BUILD__: boolean | undefined;
-const PROFILING_BUILD = import.meta.env.DEV ||
-	(typeof __SRO_PROFILE_BUILD__ !== "undefined" && __SRO_PROFILE_BUILD__ === true);
-
-/*
-================
-idleFrameProbe
-
-Stands in for the frame profiler when only the ceiling or pick census is
-installed, so the frame owners still have one probe to call.
-================
-*/
-const idleFrameProbe: FrameProbe = Object.freeze( {
-	detailBegin() {},
-	detailEnd() {},
-	renderBegin() {},
-	renderMark() {},
-	characterBegin() {},
-	characterMark() {},
-	characterCount() {},
-	sampleDetails: () => false,
-	begin() {},
-	mark() {},
-	end() {}
-} );
-
-/*
-================
-frameProbe
-
-The world probe's frame profiler (tools/lib/frame-profiler.mjs), installed
-on globalThis by probe runs only; production leaves it undefined. The frame
-calls it explicitly instead of letting the profiler patch this source. The
-animation ceiling's world replay and the pick census join it when installed.
-================
-*/
-function frameProbe(): FrameProbe | undefined {
-	if ( !PROFILING_BUILD ) return undefined;
-	const installed = globalThis as {
-		__worldProbeFrameProfiler?: FrameProbe;
-		__worldProbeAnimationCeiling?: { worldReplay?( hasView: boolean ): boolean; };
-		__worldProbePickCensus?: ( row: import("@/engine/contracts/runtime").WorldPickSample ) => void;
-	};
-	const frame = installed.__worldProbeFrameProfiler,
-		ceiling = installed.__worldProbeAnimationCeiling,
-		pickCensus = installed.__worldProbePickCensus;
-	if ( !ceiling?.worldReplay && !pickCensus ) return frame;
-	return {
-		...(frame ?? idleFrameProbe),
-		// The capture's methods close over their own state (no this binding).
-		...(ceiling?.worldReplay ? { worldReplay: ceiling.worldReplay } : {}),
-		...(pickCensus ? { pickCensus } : {})
-	};
-}
-/*
-================
-animationProbe
-
-Capture owners are installed before startup. Pass their observers through
-renderer construction so profiling never replaces the pose implementation.
-================
-*/
-function animationProbe(): import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe | undefined {
-	if ( !PROFILING_BUILD ) return undefined;
-	const captures = globalThis as {
-		__worldProbeAnimationCeiling?:
-			import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe["ceiling"];
-		__worldProbeAnimationPhases?:
-			import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe["phases"];
-	};
-	if ( !captures.__worldProbeAnimationCeiling && !captures.__worldProbeAnimationPhases ) return undefined;
-	return { ceiling: captures.__worldProbeAnimationCeiling, phases: captures.__worldProbeAnimationPhases };
-}
 // Frame-timing window for the FPS chip. Two seconds at 60 Hz keeps the readout
 // responsive without letting one stall dominate the published percentile.
 const TELEMETRY_SAMPLES = 120, TELEMETRY_INTERVAL_MS = 500;
