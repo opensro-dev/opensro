@@ -25,6 +25,7 @@ import { bsrParticleAttachment } from "@/engine/foundation/animation/bsr-particl
 import { createPaletteStreams } from "./palette-streams";
 import { createCharacterRenderPlan } from "@/engine/foundation/animation/character-render-plan";
 import { createCharacterHierarchy } from "@/engine/foundation/animation/character-hierarchy";
+import { attachedOpacity } from "@/engine/foundation/animation/character-fade";
 import { characterPickVolume } from "@/engine/foundation/animation/character-pick-volume";
 import { meshUnderRays, selectPickCandidate, type PickCandidate } from "@/engine/foundation/animation/character-pick";
 import { pickVolume, pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
@@ -1233,9 +1234,16 @@ export function createCharacters(
 				history.time = actor.time;
 			}
 			// Deferred draws retain bounded simulation history; only actor retirement releases it.
+			// A fade reaches the owner's model parts, not its effects (character-fade.ts).
 			const opacity = ( actor: CharacterActor ): number => {
 				const parent = actor.attachment ? byGid.get( actor.attachment.gid ) : undefined;
-				return (actor.opacity ?? 1) * (parent ? opacity( parent ) : 1);
+				if ( !parent ) return actor.opacity ?? 1;
+				return attachedOpacity(
+					actor.opacity ?? 1,
+					opacity( parent ),
+					// An effect's own emitters share its alpha; a model fade stops at the effect.
+					!actor.effectEntity || !!parent.effectEntity
+				);
 			};
 			const frustum = view ? prepareViewFrustum( view ) : undefined;
 			const visible = frameActors.filter( actor => {

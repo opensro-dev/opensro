@@ -186,7 +186,13 @@ import {
 import { chatScrollbar } from "@/engine/foundation/ui/chat-scrollbar";
 import { overheadLayout } from "@/engine/foundation/ui/overhead-layout";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
-import { nameVisible, hiddenSilkCos, blindableCharacter, nameInRange } from "@/engine/foundation/ui/name-visibility";
+import {
+	beginnerMarkShown,
+	blindableCharacter,
+	hiddenSilkCos,
+	nameInRange,
+	overheadBoardVisible
+} from "@/engine/foundation/ui/name-visibility";
 import { chatBlocks, chatBlockError } from "@/engine/foundation/gameplay/chat-blocks";
 import {
 	gameOptionRows,
@@ -9993,6 +9999,9 @@ export function createUi(
 						entity => [ entity.gid, game ? overheadLayout( entity, local, game, options, hudCopy ) : null ]
 					)
 				);
+				// Characters whose guild line, fortress mark or quick status bars show;
+				// overheadBoardVisible shows their names with them.
+				const overlaid = new Set<number>();
 				if ( game && hud.data() ) {
 					for ( const entity of next.entities ) {
 						if (
@@ -10000,12 +10009,11 @@ export function createUi(
 							next.blindHeld && blindableCharacter( entity, game?.localGid )
 						) continue;
 						const overlay = overheads.get( entity.gid );
-						// The guild line, marks and quick status bars belong to the name
-						// board: they share its range (hover exempt), never floating alone.
 						if (
 							!overlay ||
 							entity.gid !== next.hoveredEntity && !nameInRange( entity, local, game.pose )
 						) continue;
+						if ( overlay.fortressMark || overlay.guildText || overlay.status ) overlaid.add( entity.gid );
 						if ( overlay.fortressMark ) {
 							const mark = overlay.fortressMark;
 							paths.push( mark.path );
@@ -10139,10 +10147,10 @@ export function createUi(
 						next.blindHeld && blindableCharacter( entity, game?.localGid )
 					) continue;
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
-					// 862060 draws the party mark as part of the name board: it shares the
-					// name's distance and option visibility, never showing on its own.
+					// One decision for the name and every overhead icon: an icon never
+					// shows without its name (name-visibility.ts header).
 					const named = !hiddenSilkCos( entity, options.hideSilkCos ) &&
-						nameVisible( entity, local, hovered, options, game?.pose );
+						overheadBoardVisible( entity, local, hovered, options, game?.pose, overlaid.has( entity.gid ) );
 					const partyMark = named ?
 						monsterPartyNameplate( entity, [
 							text.run( entity.name ?? "", selected ? 2 : 0 ).width,
@@ -10163,10 +10171,7 @@ export function createUi(
 							} );
 						}
 					}
-					if (
-						!hiddenSilkCos( entity, options.hideSilkCos ) && options.ownName &&
-						[ "local-player", "player" ].includes( entity.kind ) && ((entity.visualFlags ?? 0) & 1)
-					) {
+					if ( named && beginnerMarkShown( entity, options ) ) {
 						const name = entity.name ?? (entity.gid === game?.localGid ? next.session?.character : "") ??
 								"",
 							width = text.run( name, selected ? 2 : 0 ).width,

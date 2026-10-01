@@ -30,6 +30,8 @@ export interface WorldMaterial {
  // On this path unlit means native NOLIGHT (white), not material diffuse tint.
  readonly objectLight?:number;
  readonly stageFactor?:number;readonly unlit?:boolean;readonly terrain?:boolean;readonly order?:number;
+ /** Native stage-0 colour/alpha ops (effects, CEFEffect_Render B153A0). */
+ readonly textureStage?:import("@/engine/foundation/rendering/texture-stage").TextureStage;
 }
 export interface TerrainRange {/** Admission-owned [vertex index, 17x17 height index] pairs. */ readonly seamVertices?:Uint32Array;readonly bounds?:readonly [number,number,number,number,number,number];readonly water?:{readonly type:number;readonly waveType:number;readonly height:number};readonly cell:readonly [number,number];readonly lod:number;readonly indexStart:number;readonly indexCount:number;readonly vertexStart:number;readonly vertexCount:number;readonly center:readonly [number,number,number];readonly radius:number;readonly heights:readonly number[];}
 export interface WorldGroup {

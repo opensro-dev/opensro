@@ -53,6 +53,13 @@ test( "nested particle raster equals an independently positioned quad, including
 					srcBlend: 5,
 					dstBlend: 6,
 					backFaceType: 1,
+					// Native default stage 0: MODULATE(TEXTURE, DIFFUSE) for colour and alpha.
+					srcTextureArg1: 2,
+					srcTextureArg2: 0,
+					srcTextureOp: 4,
+					dstTextureArg1: 2,
+					dstTextureArg2: 0,
+					dstTextureOp: 4,
 					meshes: [ { path: "", textures: [ "white.ddj" ] } ]
 				}
 			};

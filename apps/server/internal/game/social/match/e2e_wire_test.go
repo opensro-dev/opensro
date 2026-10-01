@@ -345,12 +345,14 @@ func TestMatchLaneEndToEndOverWire(t *testing.T) {
 			ModelCodename: "CHAR_CH_MAN_ADVENTURER",
 			RaceIndex:     e2eInt64(enterworld.RaceChina),
 			Gender:        e2eInt64(enterworld.GenderMale),
+			Level:         e2eInt64(10),
 		},
 		{
 			Name:          e2eAliceName,
 			ModelCodename: "CHAR_CH_WOMAN_ADVENTURER",
 			RaceIndex:     e2eInt64(enterworld.RaceChina),
 			Gender:        e2eInt64(enterworld.GenderFemale),
+			Level:         e2eInt64(10),
 		},
 	}
 
@@ -458,8 +460,8 @@ func TestMatchLaneEndToEndOverWire(t *testing.T) {
 	sendFrame(t, hero, match.OpMentorPageRequest, []byte{1})
 	mentorListing := concat(
 		[]byte{1, 1, 1, 2},
-		mentorRow(3, 1, "hero camp", 7, 1, heroModel, e2eHeroName),
-		mentorRow(4, 2, "alice camp", 8, 1, aliceModel, e2eAliceName),
+		mentorRow(3, 1, "hero camp", 7, 10, heroModel, e2eHeroName),
+		mentorRow(4, 2, "alice camp", 8, 10, aliceModel, e2eAliceName),
 	)
 	expectExactFrame(t, hero, match.OpMentorListingPage, mentorListing, "mentor listing")
 
@@ -471,7 +473,7 @@ func TestMatchLaneEndToEndOverWire(t *testing.T) {
 	expectExactFrame(t, hero, match.OpMentorDeleteAck, concat([]byte{1}, u32le(3)), "mentor delete ack")
 
 	sendFrame(t, hero, match.OpMentorPageRequest, []byte{1})
-	afterMentorDelete := concat([]byte{1, 1, 1, 1}, mentorRow(4, 2, "alice camp", 8, 1, aliceModel, e2eAliceName))
+	afterMentorDelete := concat([]byte{1, 1, 1, 1}, mentorRow(4, 2, "alice camp", 8, 10, aliceModel, e2eAliceName))
 	expectExactFrame(t, hero, match.OpMentorListingPage, afterMentorDelete, "mentor listing after delete")
 
 	// ---- the join handlers WITHOUT their wiring.go seams: a live

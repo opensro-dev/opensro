@@ -51,6 +51,13 @@ function catalog() {
 						srcBlend: 5,
 						dstBlend: 2,
 						backFaceType: 1,
+						// Native default stage 0: MODULATE(TEXTURE, DIFFUSE) for colour and alpha.
+						srcTextureArg1: 2,
+						srcTextureArg2: 0,
+						srcTextureOp: 4,
+						dstTextureArg1: 2,
+						dstTextureArg2: 0,
+						dstTextureOp: 4,
 						meshes: [ { path: "mesh.bms", textures: [ "texture.ddj" ] } ]
 					}
 				}

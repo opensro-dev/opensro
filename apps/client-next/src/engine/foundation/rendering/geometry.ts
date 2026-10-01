@@ -1,3 +1,4 @@
+import {validTextureStage} from './texture-stage';
 import {validateMaterialTimeline} from './material-timeline';
 import {validateTextureAtlas} from './texture-atlas';
 import type { Geometry } from '@/engine/contracts/geometry';
@@ -16,6 +17,7 @@ export function copyMaterial(material: WorldMaterial): WorldMaterial {
         material.ambient !== undefined && (material.ambient.length!==3||!material.ambient.every(Number.isFinite)) ||
         material.objectLight !== undefined && (!Number.isFinite(material.objectLight) || material.objectLight < 0 || material.objectLight > 1) ||
         material.stageFactor !== undefined && !Number.isFinite(material.stageFactor) ||
+        material.textureStage !== undefined && !validTextureStage(material.textureStage) ||
         material.order !== undefined && !Number.isFinite(material.order) ||
         material.fogDisabled !== undefined && typeof material.fogDisabled !== 'boolean' ||
         material.textureAlpha !== undefined && typeof material.textureAlpha !== 'boolean' ||

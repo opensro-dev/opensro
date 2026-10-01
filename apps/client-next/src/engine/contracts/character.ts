@@ -210,6 +210,9 @@ export interface CharacterActor {
 	readonly pickable?: boolean;
 	readonly bodyVolume?: { readonly index: number; readonly female: boolean; };
 	readonly opacity?: number;
+	/** A skill/orb effect entity: its owner's model fades do not reach it
+	 * (character-fade.ts attachedOpacity). */
+	readonly effectEntity?: boolean;
 	readonly layers?: readonly CharacterLayer[];
 	readonly attachment?: {
 		readonly gid: number;
