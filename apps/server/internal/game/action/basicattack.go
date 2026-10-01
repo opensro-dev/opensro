@@ -374,6 +374,14 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 	if target.CurrentHP == 0 {
 		return OpResult{DiagnosticRefusal: "target-dead"}
 	}
+	// Command acceptance runs phase 0x37 (4ACED4) with the ammo bit 0x20
+	// (58E32D): an empty bow is refused at the double-click, before the
+	// approach. A transformed strike is the monster's and spends nothing.
+	if rt.transformAttackSkill(snapshot) == 0 && weaponRequiresAmmunition(loadout.WeaponKind) {
+		if _, valid := rt.planEquippedAmmunition(snapshot, loadout.WeaponKind, ammunitionSpent(skill, false)); !valid {
+			return offensiveRefusal(0x300e)
+		}
+	}
 	intent := basicAttackIntent{
 		DivisionID: divisionID, CharacterName: snapshot.Name,
 		TargetGid: engage.TargetGid, SkillID: skill.ID,
@@ -818,18 +826,19 @@ func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[s
 			}
 			continue
 		}
+		// A result that declares an actor-only tail has said what is public;
+		// only a result with neither portion publishes its whole burst.
 		frames := result.Broadcast
-		if len(frames) == 0 {
+		if len(frames) == 0 && len(result.ActorPrivate) == 0 {
 			frames = result.Frames
 		}
-		if len(frames) == 0 {
-			continue
+		if len(frames) > 0 {
+			routed := simulation.DivisionFrames{DivisionID: intent.DivisionID, SourceGID: enterworld.ObjectIDForCharacter(character)}
+			for _, frame := range frames {
+				routed.Frames = append(routed.Frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope})
+			}
+			out = append(out, routed)
 		}
-		routed := simulation.DivisionFrames{DivisionID: intent.DivisionID, SourceGID: enterworld.ObjectIDForCharacter(character)}
-		for _, frame := range frames {
-			routed.Frames = append(routed.Frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope})
-		}
-		out = append(out, routed)
 		out = append(out, recipientDivisionFrames(intent.DivisionID, result.Recipients)...)
 		if character != nil && len(result.ActorPrivate) > 0 {
 			private := simulation.DivisionFrames{

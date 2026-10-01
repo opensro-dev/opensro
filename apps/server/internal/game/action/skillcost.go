@@ -315,9 +315,14 @@ func registerOffensiveCooldown(c *enterworld.Character, skill enterworld.SkillRo
 offensiveRefusal
 
 offensiveRefusal is the cast result (wire.OpSkillCastResult) {2, code}.
+It is the actor's alone, so it is also the ActorPrivate tail: a refusal
+produced by the simulation tick (a pursuit that arrives in range, then fails
+admission) reaches the actor beside the tick's public frames instead of
+being dropped or published to peers.
 ================
 */
 func offensiveRefusal(code uint16) OpResult {
 	payload := wire.NewWriter(2).U8(2).U8(uint8(code)).Payload()
-	return OpResult{Frames: []wire.Frame{{Opcode: wire.OpSkillCastResult, Payload: payload}}}
+	frame := wire.Frame{Opcode: wire.OpSkillCastResult, Payload: payload}
+	return OpResult{Frames: []wire.Frame{frame}, ActorPrivate: []wire.Frame{frame}}
 }
