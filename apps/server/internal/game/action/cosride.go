@@ -30,6 +30,8 @@ const (
 	cosRideUnknownActor   uint8 = 7
 	cosRideNotUsable      uint8 = 8
 	cosRideInvalidPosture uint8 = 12
+	// UIIT_MSG_COSERR_COS_CAN_NOT_RIDE_BATTLE.
+	cosRideInBattle uint8 = 11
 )
 
 /*
@@ -58,6 +60,14 @@ func (rt *Runtime) HandleCosRide(division string, c *enterworld.Character, paylo
 	}
 	unlock := rt.lockDivision(division)
 	defer unlock()
+	// 5119FA reads the rider's battle state (+0x30 +0xD) before 4EC640 looks
+	// at the vehicle: a fighting player cannot mount any COS. Dismount is
+	// never refused for battle.
+	if payload[0] == 1 {
+		if rider := rt.characterSnapshot(division, c); rider != nil && inBattleState(rider, rt.Now().UnixMilli()) {
+			return cosRideFailure(cosRideInBattle)
+		}
+	}
 	snapshot, ref := rt.commandCOSSnapshot(division, c, binary.LittleEndian.Uint32(payload[1:]))
 	if snapshot == nil || (ref.TidWord>>11 != 1 && ref.TidWord>>11 != 2) {
 		return cosRideFailure(cosRideUnknownActor)

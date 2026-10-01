@@ -117,7 +117,9 @@ func TestCosMountCommandSharesPostureRefusal(t *testing.T) {
 TestCosMountCannotInterruptCommittedAttack
 
 The real skill owner supplies the busy state; no test-only mount flag can
-stand in for the casting instance checked by the native manager.
+stand in for the casting instance checked by the native manager. The
+attack also starts the battle state, which the 74B5 door (5119FA) refuses
+first with 0xB; it is cleared here so both doors reach the busy check.
 ================
 */
 func TestCosMountCannotInterruptCommittedAttack(t *testing.T) {
@@ -136,6 +138,7 @@ func TestCosMountCannotInterruptCommittedAttack(t *testing.T) {
 		if !rt.PlayerAttackLocked(testDivision, c.Name) {
 			t.Fatal("fixture did not open a casting instance", started)
 		}
+		c.BattleUntilMs = 0
 		before := c.Snapshot()
 		var result OpResult
 		if panel {
@@ -146,5 +149,44 @@ func TestCosMountCannotInterruptCommittedAttack(t *testing.T) {
 		if !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideBusy).Frames) || len(result.Broadcast) != 0 || !reflect.DeepEqual(before, c.Snapshot()) || !rt.PlayerAttackLocked(testDivision, c.Name) {
 			t.Fatal("mount interrupted committed attack", panel, result)
 		}
+	}
+}
+
+/*
+================
+TestCosMountRefusedInBattle
+
+5119FA: a rider in battle state is refused with 0xB before the vehicle is
+examined; the same request mounts once the battle state lapses, and getting
+off is never refused for battle.
+================
+*/
+func TestCosMountRefusedInBattle(t *testing.T) {
+	c := testCharacter()
+	rt, clock := newTestRuntime(c, testCosSource(testItems()))
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3",
+		CurrentHP: 100, Summoned: true}
+	rt.BindPetSession(testDivision, c, 1)
+	mount := wire.NewWriter(5).U8(1).U32(gid).Payload()
+
+	c.BattleUntilMs = clock.Now().UnixMilli() + battleStateMs
+	before := c.Snapshot()
+	result := rt.HandleCosRide(testDivision, c, mount)
+	if !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideInBattle).Frames) || len(result.Broadcast) != 0 ||
+		!reflect.DeepEqual(before, c.Snapshot()) {
+		t.Fatal("mount in battle was not refused with 0xB", result)
+	}
+
+	c.BattleUntilMs = 0
+	assertOpcodes(t, rt.HandleCosRide(testDivision, c, mount).Frames,
+		wire.OpObjectSourceCorrection, wire.OpCosRideState, movementSpeedOpcode)
+	if !c.ActiveCOS.Mounted {
+		t.Fatal("mount after battle refused")
+	}
+
+	c.BattleUntilMs = clock.Now().UnixMilli() + battleStateMs
+	if result := rt.HandleCosRide(testDivision, c, wire.NewWriter(5).U8(0).U32(gid).Payload()); c.ActiveCOS.Mounted || len(result.Broadcast) == 0 {
+		t.Fatal("dismount in battle refused", result)
 	}
 }
