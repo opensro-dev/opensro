@@ -175,6 +175,19 @@ func withinPartyRewardRange(a, b simulation.Spawn) bool {
 
 /*
 ================
+isPartyMonster
+
+CGObjMob_IsPartyMonster (4C0DD0): the rarity byte's high nibble is exactly
+1. Formulae_GetLevelDiffScale (410FD0) then halves EXP (0.5f at 0xB45B68)
+when the monster's level is below the receiver's (or the party average).
+================
+*/
+func isPartyMonster(instance monster.Instance) bool {
+	return instance.Rarity()&0xF0 == 0x10
+}
+
+/*
+================
 rewardLevel
 ================
 */
@@ -214,7 +227,7 @@ func partyRewardFactors(members []rewardActor, target monster.Instance) []float3
 		bonus = float32(1 + float64(chinese-1)*float64(float32(.1)))
 	}
 	penalty := float32(1)
-	if target.Rarity()>>4 != 0 && int64(target.Ref.Level) < sum/int64(len(members)) {
+	if isPartyMonster(target) && int64(target.Ref.Level) < sum/int64(len(members)) {
 		penalty = .5
 	}
 	var out []float32
@@ -316,7 +329,7 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 			if a.party != nil {
 				factor = float32(1 + float64(len(a.party.Members)-1)*float64(float32(.03)))
 			}
-			if impact.Instance.Rarity()>>4 != 0 && int64(impact.Instance.Ref.Level) < rewardLevel(a.character) {
+			if isPartyMonster(impact.Instance) && int64(impact.Instance.Ref.Level) < rewardLevel(a.character) {
 				factor *= .5
 			}
 			factors = []float32{factor}

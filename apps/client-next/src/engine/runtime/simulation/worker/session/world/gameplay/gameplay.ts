@@ -2070,6 +2070,21 @@ Packet handling must not depend on which HUD panel is currently open.
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
 				if ( item && cast ) returnScroll = cast;
+				// A pickup into the gold slot (0xFE) prints the whole heap: pickup types
+				// 6/0x1C resolve to window 0x46 with slot 0xFE (7653D0), and that branch
+				// of CPSMission_ApplyInventoryOperation reads the u32 and prints
+				// UIIT_MSG_STATE_GAIN_GOLD (7571E1). The balance itself rides 0x30B3.
+				if (
+					item && frame.opcode === 0xb06d && frame.payload.length === 7 && frame.payload[0] === 1 &&
+					frame.payload[1] === 6 && frame.payload[2] === 254
+				) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_STATE_GAIN_GOLD",
+						value: new DataView( frame.payload.buffer, frame.payload.byteOffset, 7 ).getUint32( 3, true ),
+						nativeType: 1,
+						sequence: ++noticeSequence
+					} ];
+				}
 				if (
 					frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 11 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 ).getUint32( 0, true ) === localGid

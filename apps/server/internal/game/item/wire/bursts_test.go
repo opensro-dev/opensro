@@ -35,7 +35,7 @@ func assertOpcodeOrder(t *testing.T, frames []Frame, want []uint16) {
 // them.
 func TestPickupGoldGrantBurstOrder(t *testing.T) {
 	anim := PickupAnim{Gid: 100001, Heading: 42}
-	frames := PickupGoldGrantFrames(anim, 1500, 99_000, 300007)
+	frames := PickupGoldGrantFrames(anim, 1500, 99_000, 300007, false)
 
 	assertOpcodeOrder(t, frames, []uint16{
 		OpActionState, OpPickupAnim, OpItemMoveResponse, OpPointsUpdate, OpObjectDespawn,
