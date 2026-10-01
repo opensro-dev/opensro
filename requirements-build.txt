@@ -1,5 +1,6 @@
 # Python dependencies of the asset build and client preparation.
 # Install with:  py -3 -m pip install -r requirements-build.txt
+# (macOS/Linux:  a venv selected through SRO_PYTHON, see docs/GETTING_STARTED.md)
 #
 # Pillow       - scripts/convert_images.py (DDS->PNG) and the native font atlas.
 # fontTools    - font repair step embedded in scripts/build/shared/fontResources.mjs.

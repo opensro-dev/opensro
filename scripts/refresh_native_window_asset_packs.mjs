@@ -13,11 +13,14 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { publishLooseFamily } from "./build/shared/looseFamilyPublication.mjs";
 import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
+import { pythonExecutable } from "./build/shared/pythonRun.mjs";
 
 const IMAGE_SCRIPT = path.join( import.meta.dirname, "tools", "refresh_native_window_images.py" );
 
 await withGeneratedAssetsLock( "Native window texture publication", async () => {
-	const files = JSON.parse( execFileSync( "python", [ IMAGE_SCRIPT ], { encoding: "utf8", env: process.env } ) );
+	const files = JSON.parse(
+		execFileSync( pythonExecutable(), [ IMAGE_SCRIPT ], { encoding: "utf8", env: process.env } )
+	);
 	await publishLooseFamily( { name: "native-window", files, defaultGroup: "native-ui" } );
 	console.log( `Published ${files.length} native RGB16 window textures.` );
 } );
