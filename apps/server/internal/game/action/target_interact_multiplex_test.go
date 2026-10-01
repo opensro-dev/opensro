@@ -27,7 +27,7 @@ func TestPickupPayloadsStillReachThePickupDecoderAfterTheAcceptLanding(t *testin
 		wire.TargetInteract{Gid: heap.Gid}.Encode())
 	assertOpcodes(t, grant.Frames,
 		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpGoldRefresh, wire.OpObjectDespawn)
+		wire.OpPointsUpdate, wire.OpObjectDespawn)
 	if rt.Ground.Count(testDivision) != 0 {
 		t.Fatal("underfoot pickup did not consume the heap")
 	}
@@ -78,5 +78,5 @@ func TestNonPickup72CDFamiliesNeverFallThroughToPickup(t *testing.T) {
 	grant := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: heap.Gid}.Encode())
 	assertOpcodes(t, grant.Frames,
 		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpGoldRefresh, wire.OpObjectDespawn)
+		wire.OpPointsUpdate, wire.OpObjectDespawn)
 }

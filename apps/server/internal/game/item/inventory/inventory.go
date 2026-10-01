@@ -101,7 +101,31 @@ func New(items []Item) *Inventory {
 // NewContainer shares transfer arithmetic with player bags while declaring
 // that slot zero is storage, not an equipment socket.
 func NewContainer(items []Item, capacity uint8) (*Inventory, *Fault) {
-	if capacity == 0 || capacity > 140 {
+	return newBoundedContainer(items, capacity, cosContainerMaxSlots)
+}
+
+// cosContainerMaxSlots bounds a COS bag.
+const cosContainerMaxSlots = 140
+
+/*
+================
+NewStorageRoom
+
+The account warehouse: a slot-0-based container whose capacity is the
+storage list's byte (up to 255 slots).
+================
+*/
+func NewStorageRoom(items []Item, capacity uint8) (*Inventory, *Fault) {
+	return newBoundedContainer(items, capacity, 255)
+}
+
+/*
+================
+newBoundedContainer
+================
+*/
+func newBoundedContainer(items []Item, capacity uint8, maxSlots int) (*Inventory, *Fault) {
+	if capacity == 0 || int(capacity) > maxSlots {
 		return nil, newFault(wire.ErrCodeInvalidRequest, "absentContainer")
 	}
 	seen := make(map[uint8]bool, len(items))

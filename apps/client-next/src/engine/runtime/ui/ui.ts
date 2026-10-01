@@ -11,6 +11,20 @@ Visibility gates new requests, never collection of outstanding work.
 ===========================================================================
 */
 
+import {
+	createStoragePanel,
+	firstFreeSlot,
+	storagePages,
+	storageSlotControlId
+} from "@/engine/foundation/ui/storage-panel";
+import {
+	STORAGE_GOLD_DEPOSIT,
+	STORAGE_GOLD_WITHDRAW,
+	STORAGE_MOVE_DEPOSIT,
+	STORAGE_MOVE_ROOM,
+	STORAGE_MOVE_WITHDRAW,
+	STORAGE_PAGE_SLOTS
+} from "@/engine/foundation/gameplay/storage-room";
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
@@ -476,6 +490,8 @@ export function createUi(
 		guideResources = createGuideResources( assets, base ),
 		minimapResources = createMinimapResources( assets, base );
 	const npcPanel = createNpcPanel(), windowPlacement = createWindowPlacement();
+	// The warehouse window's page (storage-panel.ts).
+	const storagePanel = createStoragePanel();
 	const itemMall = createItemMall();
 	const windowWarm = createWindowWarm();
 
@@ -625,7 +641,7 @@ export function createUi(
 		socialPage = 0,
 		confirmSocial = "",
 		partyOptions = 4;
-	let goldAmount = "", confirmDrop = "", goldDialog = false;
+	let goldAmount = "", confirmDrop = "", goldDialog: false | "drop" | "deposit" | "withdraw" = false;
 	let groundDrop: { slot: number; refObjId: number; } | null = null;
 	let splitStack: { slot: number; refObjId: number; quantity: number; } | null = null, splitAmount = "1";
 	let shopOpenRequest: { gid: number; tab: number; revision: number; } | null = null;
@@ -2185,11 +2201,11 @@ export function createUi(
 		} else if ( id === "close" || id === "companion-close" || id === "potion-cancel" ) {
 			confirmDrop = "";
 			confirmAbandon = false;
-			// Closing the shop, or the inventory beside it, ends the NPC
-			// interaction: CIFWnd_OnInventoryOrStorageClose (5B0D20) and the
+			// Closing the shop or the warehouse, or the inventory beside either,
+			// ends the NPC interaction: CIFWnd_OnInventoryOrStorageClose (5B0D20) and the
 			// store's own close (53D4BC) call CGInterface_SetNpcShopVisible( 0 ),
 			// which hides the talk menus and releases the NPC target (69FB95).
-			if ( panel === "Shop" ) sendGameplay( { kind: "npc-close" } );
+			if ( panel === "Shop" || panel === "Storage" ) sendGameplay( { kind: "npc-close" } );
 			setPanel( "" );
 			inventorySlot = -1;
 		} else if ( id === "select-window:Character-stats" ) setPanel( "Character", "select" );
@@ -2285,12 +2301,34 @@ export function createUi(
 				inventorySlot = -1;
 			}
 		} else if ( id === "inventory-gold" ) {
-			goldDialog = true;
+			// With the warehouse open the inventory's money button deposits.
+			goldDialog = panel === "Storage" ? "deposit" : "drop";
 			goldAmount = "0";
 			focusAndSelect( "gold-amount", 0, 1 );
 		} else if ( id === "gold-cancel" ) {
 			goldDialog = false;
 			focus = null;
+		} else if ( id === "drop-gold" && view.gameplay && goldDialog !== "drop" && goldDialog !== false ) {
+			const amount = Number( goldAmount ),
+				balance = goldDialog === "withdraw" ? view.gameplay.storage?.gold : view.gameplay.progression?.gold;
+			if (
+				!view.gameplay.inventoryPending && /^\d+$/.test( goldAmount ) && Number.isSafeInteger( amount ) &&
+				amount > 0 && amount <= 0xffffffff && balance !== undefined && BigInt( amount ) <= BigInt( balance )
+			) {
+				sendGameplay( {
+					kind: "storage-move",
+					move: {
+						type: goldDialog === "withdraw" ? STORAGE_GOLD_WITHDRAW : STORAGE_GOLD_DEPOSIT,
+						source: 0,
+						destination: 0,
+						quantity: 0,
+						gold: amount
+					}
+				} );
+				goldDialog = false;
+				focus = null;
+				goldAmount = "";
+			}
 		} else if ( id === "drop-gold" && view.gameplay ) {
 			const amount = Number( goldAmount ), balance = view.gameplay.progression?.gold;
 			if (
@@ -2302,6 +2340,17 @@ export function createUi(
 				focus = null;
 				goldAmount = "";
 			}
+		} else if ( id === "storage-open" && view.gameplay?.target ) {
+			if ( !canLeavePanel() ) return;
+			sendGameplay( { kind: "storage-open", gid: view.gameplay.target } );
+			storagePanel.reset();
+			setPanel( "Storage" );
+		} else if ( (id === "storage-prev" || id === "storage-next") && view.gameplay?.storage ) {
+			storagePanel.turn( id === "storage-next" ? 1 : -1, view.gameplay.storage.capacity );
+		} else if ( id === "storage-gold" && view.gameplay?.storage?.phase === "open" ) {
+			goldDialog = "withdraw";
+			goldAmount = "0";
+			focusAndSelect( "gold-amount", 0, 1 );
 		} else if ( (id === "shop-open" || id.startsWith( "shop-group:" )) && view.gameplay?.target ) {
 			if ( !canLeavePanel() ) return;
 			const branches = view.entities.find( e => e.gid === view?.gameplay?.target )?.merchantBranches,
@@ -3130,6 +3179,41 @@ export function createUi(
 			}
 			if ( event.kind === "drag-end" ) {
 				if (
+					panel === "Storage" && event.id.startsWith( "storage-slot:" ) && view?.gameplay?.storage &&
+					!view.gameplay.inventoryPending
+				) {
+					const target = topmostControlAt( controls, event.x, event.y ),
+						source = Number( event.id.slice( 13 ) ),
+						item = view.gameplay.storage.items.find( r => r.slot === source );
+					if ( item && target && !target.disabled ) {
+						if ( target.id.startsWith( "slot:" ) ) {
+							sendGameplay( {
+								kind: "storage-move",
+								move: {
+									type: STORAGE_MOVE_WITHDRAW,
+									source,
+									destination: Number( target.id.slice( 5 ) ),
+									quantity: 0,
+									gold: 0
+								}
+							} );
+						} else if ( target.id.startsWith( "storage-slot:" ) && target.id !== event.id ) {
+							sendGameplay( {
+								kind: "storage-move",
+								move: {
+									type: STORAGE_MOVE_ROOM,
+									source,
+									destination: Number( target.id.slice( 13 ) ),
+									quantity: item.quantity,
+									gold: 0
+								}
+							} );
+						}
+					}
+					dirty = true;
+					return;
+				}
+				if (
 					panel === "COS inventory" && event.id.startsWith( "cos-slot:" ) && view?.gameplay &&
 					!view.gameplay.inventoryPending
 				) {
@@ -3165,7 +3249,7 @@ export function createUi(
 				if (
 					carried &&
 					(carried.avatar ? event.id.startsWith( "avatar:" ) : event.id === "slot:" + carried.slot) &&
-					[ "Inventory", "Shop", "Alchemy", "COS inventory" ].includes( panel ) &&
+					[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel ) &&
 					view?.session?.phase === "world" && !view.gameplay?.inventoryPending && controls.some( c =>
 						c.id === event.id && c.draggable && !c.disabled
 					)
@@ -3184,6 +3268,35 @@ export function createUi(
 						item && target && !target.disabled && panel === "Alchemy" && target.id.startsWith( "alchemy-" )
 					) {
 						activate( "alchemy-slot:" + item.slot );
+						return;
+					}
+					const room = view?.gameplay?.storage;
+					if (
+						item && target && !target.disabled && panel === "Storage" && room?.phase === "open" &&
+						target.id.startsWith( "storage-slot:" )
+					) {
+						// 5B0BF0: an occupied target lands on the page's first free slot.
+						const slot = Number( target.id.slice( 13 ) ),
+							start = slot - slot % STORAGE_PAGE_SLOTS,
+							destination = room.items.some( r => r.slot === slot ) ?
+								firstFreeSlot(
+									room.items,
+									start,
+									Math.min( room.capacity, start + STORAGE_PAGE_SLOTS )
+								) :
+								slot;
+						if ( destination !== null ) {
+							sendGameplay( {
+								kind: "storage-move",
+								move: {
+									type: STORAGE_MOVE_DEPOSIT,
+									source: item.slot,
+									destination,
+									quantity: 0,
+									gold: 0
+								}
+							} );
+						}
 						return;
 					}
 					if (
@@ -3331,7 +3444,7 @@ export function createUi(
 			}
 			if (
 				event.kind === "drag" && (event.id.startsWith( "slot:" ) || event.id.startsWith( "avatar:" )) &&
-				[ "Inventory", "Shop", "Alchemy", "COS inventory" ].includes( panel )
+				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
 				if ( !node ) return;
@@ -3663,7 +3776,7 @@ export function createUi(
 				}
 				if (
 					event.shift && event.id.startsWith( "slot:" ) &&
-					[ "Inventory", "Shop", "COS inventory" ].includes( panel )
+					[ "Inventory", "Shop", "COS inventory", "Storage" ].includes( panel )
 				) {
 					const game = view?.gameplay,
 						item = game?.inventory.find( i => i.slot === Number( event.id.slice( 5 ) ) );
@@ -3722,6 +3835,35 @@ export function createUi(
 				if ( event.id.startsWith( "hotbar:" ) ) {
 					activate( event.id );
 					return;
+				}
+				const room = view.gameplay.storage;
+				if ( panel === "Storage" && room?.phase === "open" && !view.gameplay.inventoryPending ) {
+					if ( event.id.startsWith( "slot:" ) ) {
+						const source = Number( event.id.slice( 5 ) ),
+							destination = firstFreeSlot( room.items, 0, room.capacity );
+						if ( destination !== null ) {
+							sendGameplay( {
+								kind: "storage-move",
+								move: { type: STORAGE_MOVE_DEPOSIT, source, destination, quantity: 0, gold: 0 }
+							} );
+						}
+						return;
+					}
+					if ( event.id.startsWith( "storage-slot:" ) ) {
+						const source = Number( event.id.slice( 13 ) ),
+							destination = firstFreeSlot(
+								view.gameplay.inventory,
+								view.gameplay.equipmentSlotCount ?? 13,
+								view.gameplay.inventorySlotCount ?? 13
+							);
+						if ( destination !== null ) {
+							sendGameplay( {
+								kind: "storage-move",
+								move: { type: STORAGE_MOVE_WITHDRAW, source, destination, quantity: 0, gold: 0 }
+							} );
+						}
+						return;
+					}
 				}
 				if ( event.id.startsWith( "slot:" ) ) {
 					const item = view.gameplay.inventory.find( row => row.slot === Number( event.id.slice( 5 ) ) );
@@ -3964,6 +4106,11 @@ export function createUi(
 				dirty = true;
 			}
 			if ( panel === "COS inventory" && !next.gameplay?.cosRecords?.some( r => !r.dead && r.hp > 0 ) ) {
+				setPanel( "" );
+				dirty = true;
+			}
+			// The worker closed the room (NPC released, travel, world leave).
+			if ( panel === "Storage" && !next.gameplay?.storage ) {
 				setPanel( "" );
 				dirty = true;
 			}
@@ -5052,7 +5199,7 @@ export function createUi(
 					kind: "button",
 					disabled,
 					selected,
-					rightActivate: !!item && id.startsWith( "slot:" ),
+					rightActivate: !!item && (id.startsWith( "slot:" ) || id.startsWith( "storage-slot:" )),
 					draggable: !!item
 				} );
 				itemCount( item, r );
@@ -7805,7 +7952,7 @@ export function createUi(
 						blocks.push( full );
 					}
 				}
-				if ( [ "Inventory", "Shop", "Alchemy", "COS inventory" ].includes( panel ) && hudData ) {
+				if ( [ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel ) && hudData ) {
 					const admission = beginWindow();
 					const popup = mainPopupGeometry( "Inventory", hudData.windows.ifmainpopup!, w, h, popupPosition ),
 						[px, py] = popup.frame,
@@ -9092,28 +9239,30 @@ export function createUi(
 					*/
 					const copy = ( symbol: string ) =>
 						guideResources.data()!.questPresentation.text[symbol] ?? hudCopy( symbol );
-					const output = npcTalkLayout(
-						game.npcConversation,
+					const capabilities = game.targetCapabilities ?? 0;
+					const output = npcTalkLayout( {
+						state: game.npcConversation,
 						layout,
 						origin,
 						copy,
-						value => text.run( value, 0 ).width,
-						( value, r, c, color ) =>
+						measure: value => text.run( value, 0 ).width,
+						draw: ( value, r, c, color ) =>
 							text.quads( value, r, c, color, { fontIndex: 0, hAlign: 0, vAlign: 0 } ),
-						resources.size,
+						size: resources.size,
 						hover,
 						pressed,
-						npcPanel.top(),
-						!!((game.targetCapabilities ?? 0) & 1),
-						target?.merchantBranches,
-						symbol =>
+						top: npcPanel.top(),
+						// NPC capability bits: 1 shop, 2 talk, 4 storage, 0x40 recall, 0x80 teleport.
+						canShop: !!(capabilities & 1),
+						branches: target?.merchantBranches,
+						choiceColor: symbol =>
 							npcChoiceColor(
 								symbol,
 								game.progression?.level ?? 0,
 								code => guideResources.data()!.quests.records.find( row => row.symbol === code )?.level
 							),
-						!!((game.targetCapabilities ?? 0) & 0x80),
-						npcPanel.destinations() ?
+						canPortal: !!(capabilities & 0x80),
+						portalRows: npcPanel.destinations() ?
 							portalMenu(
 								hudData.portals,
 								target?.refObjId ?? 0,
@@ -9121,10 +9270,11 @@ export function createUi(
 								game.targetTaxRate ?? 0
 							) :
 							null,
-						!!((game.targetCapabilities ?? 0) & 2),
-						target?.kind === "teleport" ? target.name : "",
-						!!((game.targetCapabilities ?? 0) & 0x40)
-					);
+						canTalk: !!(capabilities & 2),
+						prompt: target?.kind === "teleport" ? target.name : "",
+						canRecall: !!(capabilities & 0x40),
+						canStorage: !!(capabilities & 4)
+					} );
 					npcPanel.geometry( output );
 					quads.push( ...output.quads );
 					controls.push( ...output.controls );
@@ -9305,6 +9455,51 @@ export function createUi(
 					const edit = page.GDR_AB_MANUFACTURING_EDIT_COUNT;
 					if ( edit ) partyEdit( edit, px, py + 150, "alchemy-quantity", alchemyQuantity, 10 );
 					endWindow( admission, "service:Alchemy" );
+				}
+				if ( panel === "Storage" && hudData && hudData.windows.ifstorageroom ) {
+					const admission = beginWindow(),
+						root = hudData.root.GDR_STORAGEROOM!,
+						[px, py] = windowOrigin( "Storage", [
+							Math.max( 0, w - 388 - root.rect[2] - 8 ),
+							Math.max( 0, h - 478 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						layout = hudData.windows.ifstorageroom,
+						nodes = Object.values( layout ),
+						room = game?.storage,
+						capacity = room?.capacity ?? 0,
+						busy = !!game?.inventoryPending || room?.phase !== "open",
+						page = storagePanel.page( capacity ),
+						slotIds = Array.from( { length: STORAGE_PAGE_SLOTS }, ( _, i ) => storageSlotControlId( i ) );
+					nativeFrame( root, px, py, hudCopy( root.text ) );
+					// Slots, the spinner, the gold amount and the money button are live.
+					nativePage( layout, px, py, [ ...slotIds, 10, 11, 13 ] );
+					for ( let i = 0; i < STORAGE_PAGE_SLOTS; i++ ) {
+						const node = nodes.find( n => n.id === storageSlotControlId( i ) );
+						if ( !node ) continue;
+						const slot = page * STORAGE_PAGE_SLOTS + i;
+						nativeItem(
+							"storage-slot:" + slot,
+							room?.items.find( r => r.slot === slot ),
+							authoredRect( node, px, py ),
+							busy || slot >= capacity
+						);
+					}
+					const spin = nodes.find( n => n.id === 13 );
+					if ( spin ) {
+						nativeSpin( spin, px, py, "storage-prev", "storage-next", page, storagePages( capacity ) );
+					}
+					const moneyButton = nodes.find( n => n.id === 11 );
+					if ( moneyButton ) {
+						authoredButton( moneyButton, px, py, "storage-gold", hudCopy( "UIIT_STT_GOLD" ), busy );
+					}
+					const money = nodes.find( n => n.id === 10 );
+					if ( money && room ) {
+						const shown = moneyPresentation( room.gold );
+						authoredText( { ...money, color: shown.color }, px, py, shown.text );
+					}
+					endWindow( admission, "service:Storage" );
 				}
 				if ( panel === "COS inventory" && hudData ) {
 					const admission = beginWindow(),
@@ -11399,7 +11594,7 @@ export function createUi(
 				}
 				quads.push( ...text.quads( delay.name, bar.name, full, white, { hAlign: 1, vAlign: 0 } ) );
 			}
-			if ( worldVisible && splitStack && [ "Inventory", "Shop", "COS inventory" ].includes( panel ) ) {
+			if ( worldVisible && splitStack && [ "Inventory", "Shop", "COS inventory", "Storage" ].includes( panel ) ) {
 				// Native 529E90, MsgBoxDivideCount authored 300x183; edit stays 42x24.
 				const layout = messageBox( w, h, 300, 183 ),
 					[x, y] = layout.frame,
@@ -11501,7 +11696,7 @@ export function createUi(
 				);
 				button( "split-cancel", hudCopy( "UIIT_CTL_CANCEL" ), x + 151, y + 143, 76, false, false, 6 );
 			}
-			if ( worldVisible && goldDialog && panel === "Inventory" ) {
+			if ( worldVisible && goldDialog && (panel === "Inventory" || panel === "Storage") ) {
 				const layout = messageBox( w, h, 308, 148 ), [x, y] = layout.frame;
 				controls = [];
 				blocks = [ full ];
@@ -11575,7 +11770,8 @@ export function createUi(
 				button( "gold-cancel", hudCopy( "UIIT_CTL_CANCEL" ), x + 203, y + 101, 76 );
 			}
 			if (
-				worldVisible && carriedItem && [ "Inventory", "Shop", "Alchemy", "COS inventory" ].includes( panel )
+				worldVisible && carriedItem &&
+				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
 			) {
 				const item = (carriedItem.avatar ? game?.avatarInventory : game?.inventory)?.find( i =>
 						i.slot === carriedItem!.slot

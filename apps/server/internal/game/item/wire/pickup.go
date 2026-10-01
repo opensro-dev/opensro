@@ -1,5 +1,7 @@
 package wire
 
+import "fmt"
+
 // PickupAnim is the 0x35C7 pickup-animation trigger.
 //
 // Handler sub_7780f0 reads the two fields (@0x007780ff a 4-byte gid,
@@ -80,33 +82,60 @@ func DecodeObjectDespawn(payload []byte) (ObjectDespawn, error) {
 	return out, nil
 }
 
-// GoldRefresh is the 0x3126 gold balance refresh that the money board and the
-// inventory gold strip read (handler sub_777720).
+/*
+================
+GoldRefresh
+
+The character's gold balance: 0x30B3 type 1 (CPSMission_OnPointUpdate30B3
+case 0) [u8 1][u64 balance][u8 notify]. With notify set and the balance
+grown, the client prints UIIT_MSG_STATE_GAIN_GOLD with the difference before
+it stores the balance. Gold rides OpPointsUpdate (statwire.go); 0x3126 is
+the warehouse's gold (CIFStorageRoom, storage.go).
+================
+*/
 type GoldRefresh struct {
 	Balance uint64
+	Notify  bool
 }
 
-// GoldRefreshSize is the encoded size of a 0x3126 payload.
-const GoldRefreshSize = 8
+// GoldRefreshSize is the encoded size of a gold refresh payload.
+const GoldRefreshSize = 10
 
-// Encode returns the 0x3126 payload: [u64 balance].
+/*
+================
+GoldRefresh.Encode
+================
+*/
 func (g GoldRefresh) Encode() []byte {
-	return NewWriter(GoldRefreshSize).U64(g.Balance).Payload()
+	notify := uint8(0)
+	if g.Notify {
+		notify = 1
+	}
+	return NewWriter(GoldRefreshSize).U8(PointsTypeGold).U64(g.Balance).U8(notify).Payload()
 }
 
-// DecodeGoldRefresh parses a 0x3126 payload.
+/*
+================
+DecodeGoldRefresh
+================
+*/
 func DecodeGoldRefresh(payload []byte) (GoldRefresh, error) {
 	var out GoldRefresh
 	r := NewReader(payload)
-
-	balance, err := r.U64()
+	kind, err := r.U8()
 	if err != nil {
 		return out, err
 	}
-	if err := r.Done(); err != nil {
+	if kind != PointsTypeGold {
+		return out, fmt.Errorf("gold refresh: subtype %d", kind)
+	}
+	if out.Balance, err = r.U64(); err != nil {
 		return out, err
 	}
-
-	out.Balance = balance
-	return out, nil
+	notify, err := r.U8()
+	if err != nil {
+		return out, err
+	}
+	out.Notify = notify != 0
+	return out, r.Done()
 }

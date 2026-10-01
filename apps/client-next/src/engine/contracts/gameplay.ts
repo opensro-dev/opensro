@@ -155,6 +155,9 @@ export type GameplayCommand =
 	| { readonly kind: "cos-pickup"; readonly gid: number; readonly target: number; }
 	| { readonly kind: "cos-drop"; readonly gid: number; readonly slot: number; }
 	| { readonly kind: "guide-event"; readonly event: number; }
+	| { readonly kind: "storage-open"; readonly gid: number; }
+	| { readonly kind: "storage-close"; }
+	| { readonly kind: "storage-move"; readonly move: import("@/engine/foundation/gameplay/storage-room").StorageMove; }
 	| {
 		readonly kind: "cos-transfer";
 		readonly gid: number;
@@ -429,6 +432,7 @@ export interface GameplayState {
 	readonly eventGroups?: Readonly<Record<number, number>>;
 	readonly eligibility?: { readonly gm: boolean; readonly pcRoomEvent: boolean; };
 	readonly autoPotion?: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
+	readonly storage?: import("@/engine/foundation/gameplay/storage-room").StorageRoom | null;
 	readonly cosWindows?: readonly (import("@/engine/foundation/gameplay/cos-timer").CosItemWindow & {
 		readonly reference: import("@/engine/foundation/gameplay/cos-timer").CosItemWindowReference;
 	})[];

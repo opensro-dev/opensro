@@ -85,7 +85,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			}
 			setGold(c, goldOf(c)+uint64(item.GoldAmount))
 			receipt = wire.NewWriter(11).U8(1).U8(wire.MoveTypeCosPickup).U32(q.CosGID).U8(wire.PickupGoldSlot).U32(item.GoldAmount).Payload()
-			gold = &wire.Frame{Opcode: wire.OpGoldRefresh, Payload: (wire.GoldRefresh{Balance: goldOf(c)}).Encode()}
+			gold = &wire.Frame{Opcode: wire.OpPointsUpdate, Payload: (wire.GoldRefresh{Balance: goldOf(c), Notify: true}).Encode()}
 		} else {
 			count := item.StackCount
 			if count == 0 {

@@ -85,6 +85,10 @@ func (rt *Runtime) HandleItemMove(
 	case wire.MoveTypeGoldDrop:
 		return rt.applyGoldDrop(divisionID, worldKey, character, request.GoldAmount)
 
+	case wire.MoveTypeStorage, wire.MoveTypeStorageDeposit, wire.MoveTypeStorageWithdraw,
+		wire.MoveTypeStorageGoldWithdraw, wire.MoveTypeStorageGoldDeposit:
+		return rt.applyStorageMove(divisionID, character, request)
+
 	default:
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}

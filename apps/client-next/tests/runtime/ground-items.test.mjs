@@ -258,9 +258,11 @@ test("gold grant and balance refresh reach gameplay without an unhandled packet 
 	} );
 	flush();
 	core.receive( { opcode: 0xb06d, payload: Buffer.from( [ 1, 6, 254, 0xdc, 5, 0, 0 ] ) }, 1 );
-	const balance = Buffer.alloc( 8 );
-	balance.writeBigUInt64LE( 9007199254740993n );
-	core.receive( { opcode: 0x3126, payload: balance }, 2 );
+	// 30B3 type 1: [u8 1][u64 balance][u8 notify] (0x3126 is the warehouse).
+	const balance = Buffer.alloc( 10 );
+	balance[0] = 1;
+	balance.writeBigUInt64LE( 9007199254740993n, 1 );
+	core.receive( { opcode: 0x30b3, payload: balance }, 2 );
 	core.step( 2 );
 	const events = defined( flush() ).events;
 	assert.equal(
@@ -268,8 +270,8 @@ test("gold grant and balance refresh reach gameplay without an unhandled packet 
 		"9007199254740993"
 	);
 	assert.ok( !events.some( e => e.kind === "native" || e.kind === "ui-sound" ) );
-	for ( let n = 0; n < 8; n++ ) {
-		assert.throws( () => core.receive( { opcode: 0x3126, payload: balance.subarray( 0, n ) }, 3 ), /balance/ );
+	for ( let n = 1; n < 10; n++ ) {
+		assert.throws( () => core.receive( { opcode: 0x30b3, payload: balance.subarray( 0, n ) }, 3 ), /gold/ );
 	}
 	core.dispose();
 });

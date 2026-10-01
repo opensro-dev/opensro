@@ -103,10 +103,8 @@ apps/client-next/src/engine/foundation/gameplay/chat-blocks.ts
 apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
 apps/client-next/src/engine/foundation/gameplay/concealment.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
-apps/client-next/src/engine/foundation/gameplay/cos-container.ts
 apps/client-next/src/engine/foundation/gameplay/cos-record.ts
 apps/client-next/src/engine/foundation/gameplay/cos-timer.ts
-apps/client-next/src/engine/foundation/gameplay/cos-transfer.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
 apps/client-next/src/engine/foundation/gameplay/event-environment.ts
 apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
@@ -131,7 +129,6 @@ apps/client-next/src/engine/foundation/gameplay/party-notices.ts
 apps/client-next/src/engine/foundation/gameplay/peer-appearance.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
 apps/client-next/src/engine/foundation/gameplay/position-skill.ts
-apps/client-next/src/engine/foundation/gameplay/progression.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts
 apps/client-next/src/engine/foundation/gameplay/quickslot-inventory.ts
 apps/client-next/src/engine/foundation/gameplay/recall-appointment.ts
@@ -247,7 +244,6 @@ apps/client-next/src/engine/foundation/ui/money-presentation.ts
 apps/client-next/src/engine/foundation/ui/normal-tile.ts
 apps/client-next/src/engine/foundation/ui/notice-dialog.ts
 apps/client-next/src/engine/foundation/ui/notice-text.ts
-apps/client-next/src/engine/foundation/ui/npc-talk.ts
 apps/client-next/src/engine/foundation/ui/overhead-layout.ts
 apps/client-next/src/engine/foundation/ui/party-proposal.ts
 apps/client-next/src/engine/foundation/ui/progression-bars.ts
@@ -417,14 +413,12 @@ apps/client-next/tests/browser/helpers/playable-session.mjs
 apps/client-next/tests/browser/helpers/prepare-critical-arrow.mjs
 apps/client-next/tests/browser/helpers/pursuit-recorder.mjs
 apps/client-next/tests/browser/helpers/ui-admission-reference.mjs
-apps/client-next/tests/browser/herbalist-tooltips.test.mjs
 apps/client-next/tests/browser/hit-light.test.mjs
 apps/client-next/tests/browser/hud-readouts.test.mjs
 apps/client-next/tests/browser/ice-ground-pick.test.mjs
 apps/client-next/tests/browser/inventory-split.test.mjs
 apps/client-next/tests/browser/karakoram-ice-live.test.mjs
 apps/client-next/tests/browser/live-champion-aggro.test.mjs
-apps/client-next/tests/browser/live-commerce.test.mjs
 apps/client-next/tests/browser/live-pursuit.test.mjs
 apps/client-next/tests/browser/live-sight-aggro.test.mjs
 apps/client-next/tests/browser/live-summon-follow.test.mjs

@@ -97,7 +97,7 @@ func PickupApproachArmFrame() Frame {
 // PickupGoldGrantFrames is a successful gold pickup:
 //
 //	[0xB2CD release][0x35C7 anim][0xB06D [1][6][0xFE][amount]]
-//	[0x3126 balance][0x36AB despawn]
+//	[0x30B3 type 1 balance][0x36AB despawn]
 //
 // A gold heap is always consumed whole, so the despawn is unconditional.
 func PickupGoldGrantFrames(anim PickupAnim, amount uint32, balance uint64, itemGid uint32) []Frame {
@@ -105,7 +105,8 @@ func PickupGoldGrantFrames(anim PickupAnim, amount uint32, balance uint64, itemG
 		{Opcode: OpActionState, Payload: ReleaseActionState().Encode()},
 		{Opcode: OpPickupAnim, Payload: anim.Encode()},
 		{Opcode: OpItemMoveResponse, Payload: EncodePickupGoldResult(amount)},
-		{Opcode: OpGoldRefresh, Payload: GoldRefresh{Balance: balance}.Encode()},
+		// A pickup is a gain: the client prints UIIT_MSG_STATE_GAIN_GOLD.
+		{Opcode: OpPointsUpdate, Payload: GoldRefresh{Balance: balance, Notify: true}.Encode()},
 		{Opcode: OpObjectDespawn, Payload: ObjectDespawn{Gid: itemGid}.Encode(), Scope: []domain.ObjectScopeChange{{GID: itemGid}}},
 	}
 }
@@ -145,7 +146,7 @@ func PickupBroadcastFrames(anim PickupAnim, itemGid uint32, groundRemainder uint
 
 // GoldDropFrames is a successful type-0x0A gold ground drop:
 //
-//	[0xB06D [1][0x0A][amount]][0x3126 balance][0x30D7 spawn]
+//	[0xB06D [1][0x0A][amount]][0x30B3 type 1 balance][0x30D7 spawn]
 //
 // The spawn row is forced onto the single-object form: a fresh drop always
 // rides 0x30D7 with the appear tail that drives the drop-in presentation.
@@ -154,7 +155,7 @@ func GoldDropFrames(amount uint32, balance uint64, spawnRow GroundItemRow) []Fra
 	spawnRow.AppearFlag = 1
 	return []Frame{
 		{Opcode: OpItemMoveResponse, Payload: EncodeGoldDropResult(amount)},
-		{Opcode: OpGoldRefresh, Payload: GoldRefresh{Balance: balance}.Encode()},
+		{Opcode: OpPointsUpdate, Payload: GoldRefresh{Balance: balance}.Encode()},
 		{Opcode: OpSingleObjectSpawn, Payload: spawnRow.Encode(), Scope: []domain.ObjectScopeChange{{GID: spawnRow.Gid, Visible: true}}},
 	}
 }

@@ -40,7 +40,7 @@ func TestOwnedPickupAllowsSelfAndItemSharingPartyOnly(t *testing.T) {
 		drop := ownedGoldAtPlayer(t, rt, clock, character, enterworld.ObjectIDForCharacter(character))
 		result := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: drop.Gid}.Encode())
 		assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpPickupAnim,
-			wire.OpItemMoveResponse, wire.OpGoldRefresh, wire.OpObjectDespawn)
+			wire.OpItemMoveResponse, wire.OpPointsUpdate, wire.OpObjectDespawn)
 	})
 
 	t.Run("item-sharing party grants", func(t *testing.T) {
@@ -52,7 +52,7 @@ func TestOwnedPickupAllowsSelfAndItemSharingPartyOnly(t *testing.T) {
 		}
 		result := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: drop.Gid}.Encode())
 		assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpPickupAnim,
-			wire.OpItemMoveResponse, wire.OpGoldRefresh, wire.OpObjectDespawn)
+			wire.OpItemMoveResponse, wire.OpPointsUpdate, wire.OpObjectDespawn)
 	})
 }
 

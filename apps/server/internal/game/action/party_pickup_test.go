@@ -77,7 +77,8 @@ func TestSharedGoldRotatesWholePilesAndPrivateReceipts(t *testing.T) {
 				t.Fatal("missing recipient receipt", result.Recipients)
 			}
 			for _, frame := range result.Frames {
-				if frame.Opcode == wire.OpGoldRefresh || frame.Opcode == wire.OpItemMoveResponse {
+				gold := frame.Opcode == wire.OpPointsUpdate && frame.Payload[0] == wire.PointsTypeGold
+				if gold || frame.Opcode == wire.OpItemMoveResponse {
 					t.Fatal("peer's gold leaked into picker's private receipt")
 				}
 			}

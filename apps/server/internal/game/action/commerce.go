@@ -347,7 +347,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		if isCOS {
 			response = append(wire.NewWriter(6).U8(1).U8(nativeType).U32(q.CosGID).Payload(), response[2:]...)
 		}
-		frames = append(frames, wire.Frame{Opcode: wire.OpItemMoveResponse, Payload: response}, wire.Frame{Opcode: wire.OpGoldRefresh, Payload: wire.GoldRefresh{Balance: balance}.Encode()})
+		frames = append(frames, wire.Frame{Opcode: wire.OpItemMoveResponse, Payload: response}, wire.Frame{Opcode: wire.OpPointsUpdate, Payload: wire.GoldRefresh{Balance: balance}.Encode()})
 		if isCOS {
 			container.Rows = rowsFromInvItems(inv.Items())
 		} else {

@@ -147,6 +147,13 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 			Opcode:  wire.OpNpcInteractionAck,
 			Payload: wire.EncodeNpcInteractionAck(mask),
 		}}, ""
+	case simulation.NpcTalkFlagStorage:
+		// The room list (0x72C3) already reached the client; B338 [1][4]
+		// opens it beside the inventory (SetNpcShopVisible( 5 )).
+		if rt.storageAuthority == nil {
+			return nil, "storage authority is not configured"
+		}
+		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	default:
 		return nil, fmt.Sprintf("action mask 0x%X has no reconstructed gameplay owner", mask)
 	}

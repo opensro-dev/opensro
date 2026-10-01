@@ -245,7 +245,7 @@ func TestEveryMutationSiteSurvivesRestart(t *testing.T) {
 		result := d.rt.HandleItemMove(testDivision, d.character, encodeMove(t, wire.ItemMoveRequest{
 			MovementType: wire.MoveTypeGoldDrop, GoldAmount: 1500,
 		}))
-		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpGoldRefresh, wire.OpSingleObjectSpawn)
+		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpPointsUpdate, wire.OpSingleObjectSpawn)
 
 		r := d.reboot(t)
 		if got := goldOfT(t, r.character); got != 3500 {
@@ -270,7 +270,7 @@ func TestEveryMutationSiteSurvivesRestart(t *testing.T) {
 		grant := d.rt.HandleTargetInteract(testDivision, d.character, wire.TargetInteract{Gid: heap.Gid}.Encode())
 		assertOpcodes(t, grant.Frames,
 			wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-			wire.OpGoldRefresh, wire.OpObjectDespawn)
+			wire.OpPointsUpdate, wire.OpObjectDespawn)
 
 		r := d.reboot(t)
 		if got := goldOfT(t, r.character); got != 5000 {

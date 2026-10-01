@@ -124,6 +124,7 @@ export function createHudResources(
 		"ifcosinventory",
 		"ifcosinfo",
 		"ifcossetup",
+		"ifstorageroom",
 		"ifnewalchemybox",
 		"ifalchemyprocess",
 		"ifnewalchemyreinforce",

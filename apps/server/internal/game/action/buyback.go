@@ -173,7 +173,7 @@ func (rt *Runtime) handleBuyback(division string, c *enterworld.Character, npcID
 		c.MissionInventory = rowsFromInvItems(inv.Items())
 		c.Buyback = entries
 		setGold(c, balance-e.Price)
-		result = OpResult{Broadcast: []wire.Frame{reference}, Frames: []wire.Frame{reference, rt.buybackFrame(c, npcID, npc.RefObjID, id, rows, ""), {Opcode: wire.OpGoldRefresh, Payload: wire.GoldRefresh{Balance: balance - e.Price}.Encode()}}}
+		result = OpResult{Broadcast: []wire.Frame{reference}, Frames: []wire.Frame{reference, rt.buybackFrame(c, npcID, npc.RefObjID, id, rows, ""), {Opcode: wire.OpPointsUpdate, Payload: wire.GoldRefresh{Balance: balance - e.Price}.Encode()}}}
 		if ordinal != nil {
 			restore := wire.Frame{Opcode: wire.OpItemMoveResponse, Payload: wire.NewWriter(6).U8(1).U8(0x22).U8(rows[0].Slot).U8(*ordinal).U16(uint16(e.Item.StackCount)).Payload()}
 			result.Frames = append(result.Frames[:2], append([]wire.Frame{restore}, result.Frames[2:]...)...)

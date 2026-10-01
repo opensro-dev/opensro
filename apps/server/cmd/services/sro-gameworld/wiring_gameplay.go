@@ -125,6 +125,7 @@ func newGameplayPlane(
 	if err := items.ConfigureCommerce(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
+	items.ConfigureStorage(authorityStore)
 	if err := items.ConfigureMall(devPaths.TextdataDir, authorityStore); err != nil {
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}

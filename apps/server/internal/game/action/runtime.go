@@ -120,8 +120,10 @@ type Runtime struct {
 	Commerce      *commerce.Catalog
 	mallCatalog   *commerce.MallCatalog
 	mallAuthority domain.MallAuthority
-	petMu         sync.Mutex
-	petSessions   map[petOwnerKey]*petSession
+	// storageAuthority owns the account warehouse (storage.go).
+	storageAuthority domain.StorageAuthority
+	petMu            sync.Mutex
+	petSessions      map[petOwnerKey]*petSession
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
 	characterAdmissions   sync.Map // simulation.WorldKey -> populationAdmission

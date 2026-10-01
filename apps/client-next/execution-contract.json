@@ -66,8 +66,8 @@
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"copy",
-				"callback:npcTalkLayout:5",
-				"callback:npcTalkLayout:12",
+				"draw",
+				"choiceColor",
 				"callback:npcChoiceColor:2"
 			]
 		},
@@ -75,7 +75,6 @@
 			"consumer": "src/engine/foundation/ui/text-lines.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
-				"callback:npcTalkLayout:4",
 				"callback:noticeDialog:3"
 			]
 		},
@@ -1699,6 +1698,13 @@
 			"functions": [
 				"item",
 				"memberName"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/storage-room.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
 			]
 		}
 	],

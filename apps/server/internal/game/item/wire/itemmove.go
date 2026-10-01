@@ -318,9 +318,15 @@ func (q ItemMoveRequest) Encode() ([]byte, error) {
 	case MoveTypeGroundDrop:
 		// sub_697e80 @0x006980d0
 		w.U8(q.SourceSlot)
-	case MoveTypeGoldDrop:
+	case MoveTypeGoldDrop, MoveTypeStorageGoldWithdraw, MoveTypeStorageGoldDeposit:
 		// sub_697e80 @0x006984cb, amount pre-clamped at @0x00697eb5
 		w.U32(ClampGold(uint64(q.GoldAmount)))
+	case MoveTypeStorage:
+		// ItemMoveRequest_Serialize case 1: [src][dst][u16 count][u32 npc].
+		w.U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity).U32(q.NpcGID)
+	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw:
+		// Cases 2 and 3: [src][dst][u32 npc], no count.
+		w.U8(q.SourceSlot).U8(q.DestSlot).U32(q.NpcGID)
 	default:
 		return nil, ErrUnsupportedMovementType(q.MovementType)
 	}
@@ -428,8 +434,31 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 		if out.SourceSlot, err = r.U8(); err != nil {
 			return out, err
 		}
-	case MoveTypeGoldDrop:
+	case MoveTypeGoldDrop, MoveTypeStorageGoldWithdraw, MoveTypeStorageGoldDeposit:
 		if out.GoldAmount, err = r.U32(); err != nil {
+			return out, err
+		}
+	case MoveTypeStorage:
+		if out.SourceSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.DestSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.Quantity, err = r.U16(); err != nil {
+			return out, err
+		}
+		if out.NpcGID, err = r.U32(); err != nil {
+			return out, err
+		}
+	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw:
+		if out.SourceSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.DestSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+		if out.NpcGID, err = r.U32(); err != nil {
 			return out, err
 		}
 	default:

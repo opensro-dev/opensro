@@ -93,7 +93,7 @@ func TestResuscitationCommitsGoldPotionsAndRefundAtomically(t *testing.T) {
 	}
 	goldUpdates := 0
 	for _, frame := range result.Frames {
-		if frame.Opcode == wire.OpGoldRefresh {
+		if frame.Opcode == wire.OpPointsUpdate && frame.Payload[0] == wire.PointsTypeGold {
 			goldUpdates++
 			if !bytes.Equal(frame.Payload, (wire.GoldRefresh{Balance: 4400}).Encode()) {
 				t.Fatal("client received a different gold balance", frame)

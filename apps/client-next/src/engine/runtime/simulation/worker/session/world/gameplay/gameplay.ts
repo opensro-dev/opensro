@@ -10,6 +10,7 @@ commands and cannot bypass actor eligibility.
 ===========================================================================
 */
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
+import { createStorageRoom } from "@/engine/foundation/gameplay/storage-room";
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
 import { createPickup } from "./pickup";
 import {
@@ -276,6 +277,8 @@ fails; retry persistence without restoring stale slot occupancy.
 	let abnormalMask = 0;
 	const chat = createChat( send ), quests = createQuests( send );
 	const npcConversation = createNpcConversation( send );
+	// The NPC warehouse (storage-room.ts).
+	const storage = createStorageRoom( send );
 	let previousLockedQuestNotice = "";
 	let localGid = 0, revision = 0, dirty = false, protocol = 0, localCountry: number | undefined;
 	/*
@@ -413,6 +416,7 @@ and a refusal walks it back (movement.predictApproach).
 		cosItemRefs2.clear();
 		cosWindows = [];
 		paramJobs.reset();
+		storage.reset();
 		abnormalRecords = [];
 		abnormalMask = 0;
 		worldClock = undefined;
@@ -817,7 +821,28 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "npc-close" ) {
 				const frame = targeting.release( now );
 				npcConversation.clear();
+				storage.close();
 				return frame;
+			}
+			if ( command.kind === "storage-open" ) {
+				const target = targeting.state();
+				// The storage row exists only on a selected warehouse NPC (0x4).
+				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 4) ) {
+					throw Error( "Select a warehouse NPC" );
+				}
+				storage.open( command.gid );
+				dirty = true;
+				return null;
+			}
+			if ( command.kind === "storage-close" ) {
+				storage.close();
+				dirty = true;
+				return null;
+			}
+			if ( command.kind === "storage-move" ) {
+				const room = storage.state();
+				if ( !room ) throw Error( "Storage room is not open" );
+				return inventory.storageMove( room, command.move, now, cosItemCaps );
 			}
 			if ( command.kind === "npc-talk" || command.kind === "npc-choice" ) {
 				const target = targeting.state(), conversation = npcConversation.state();
@@ -1414,6 +1439,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( storage.receive( frame, cosItemRefs ) && frame.opcode !== 0xb338 ) {
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === 0xb338 ) {
 					npcConversation.interaction( frame.payload, targeting.state().targetCapabilities ?? 0 );
 					// 75AE50 kind 2 -> 689420 category 13: a refused NPC function shows
@@ -1721,6 +1750,22 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				const nextProgression = progressionPacket( progression, frame.opcode, frame.payload );
+				// 30B3 type 1 with its notify byte set prints the gain before it
+				// stores the balance (CPSMission_OnPointUpdate30B3 case 0).
+				if (
+					nextProgression && frame.opcode === 0x30b3 && frame.payload[0] === 1 && frame.payload[9] !== 0 &&
+					progression.gold !== undefined && nextProgression.gold !== undefined
+				) {
+					const gain = BigInt( nextProgression.gold ) - BigInt( progression.gold );
+					if ( gain > 0n ) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_STATE_GAIN_GOLD",
+							value: Number( gain > 0x7fffffffn ? 0x7fffffffn : gain ),
+							nativeType: 1,
+							sequence: ++noticeSequence
+						} ];
+					}
+				}
 				if ( nextProgression ) {
 					if ( frame.opcode === 0xb165 && frame.payload[0] === 2 ) {
 						const notice = constantNativeNotice( 7, frame.payload[1]! );
@@ -1992,6 +2037,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					undefined;
 				const cast = used ? returnScrollCast( used, now ) : undefined;
 				const mallRequest = inventory.state().itemMall?.pending === true;
+				const room = storage.state();
+				if ( frame.opcode === 0xb06d && room ) {
+					const next = inventory.storageSettle( room, frame.payload, cosItemCaps );
+					if ( next ) {
+						storage.apply( next );
+						dirty = true;
+						return true;
+					}
+				}
 				const item = inventory.receive( frame.opcode, frame.payload, now, {
 						country: localCountry,
 						abnormal: potionFacts.abnormal
@@ -2288,6 +2342,7 @@ The published plane when something changed since the last take, else null.
 				academy,
 				guide,
 				paramJobs: paramJobs.state(),
+				storage: storage.state(),
 				cosWindows: cosWindows.filter( row => cosItemRefs2.has( row.itemRefObjId ) ).map( row => ({
 					...row,
 					reference: cosItemRefs2.get( row.itemRefObjId )!
@@ -2346,6 +2401,7 @@ World transfer retires spatial work while retaining character/session data.
 			returnScroll = undefined;
 			teleportMode = 0;
 			npcConversation.clear();
+			storage.close();
 			cosWindows = [];
 			paramJobs.clear();
 			const vital = combat.state().vitals.find( row => row.gid === localGid );

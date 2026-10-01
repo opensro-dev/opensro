@@ -95,21 +95,19 @@ test("NPC long choice keeps one action across bitmap-wrapped lines and authored 
 	};
 	const choice = "A deliberately long quest choice ".repeat( 45 ), color = [ 1, 74 / 255, 74 / 255, 1 ];
 	const render = ( top, hover = null, pressed = null ) =>
-		npcTalkLayout(
+		npcTalkLayout( {
 			state,
 			layout,
-			[ 100, 200 ],
-			key => key === "prompt" ? "Prompt" : choice,
+			origin: [ 100, 200 ],
+			copy: key => key === "prompt" ? "Prompt" : choice,
 			measure,
 			draw,
-			() => [ 16, 16 ],
+			size: () => [ 16, 16 ],
 			hover,
 			pressed,
 			top,
-			false,
-			[],
-			() => color
-		);
+			choiceColor: () => color
+		} );
 	const first = render( 0 );
 	assert.deepEqual( first.bounds, [ 123, 223, 302, 343 ] );
 	assert.equal( first.travel, 320 );

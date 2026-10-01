@@ -76,9 +76,10 @@ func TestDecodeObjectDespawnRejectsTrailingBytes(t *testing.T) {
 }
 
 func TestGoldRefreshIsLittleEndianU64(t *testing.T) {
-	got := GoldRefresh{Balance: 8800}.Encode()
+	got := GoldRefresh{Balance: 8800, Notify: true}.Encode()
 
-	want := []byte{0x60, 0x22, 0, 0, 0, 0, 0, 0} // 8800
+	// [u8 type 1][u64 8800][u8 notify]
+	want := []byte{1, 0x60, 0x22, 0, 0, 0, 0, 0, 0, 1}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("payload = % X, want % X", got, want)
 	}
@@ -88,7 +89,7 @@ func TestGoldRefreshIsLittleEndianU64(t *testing.T) {
 }
 
 func TestGoldRefreshRoundTrip(t *testing.T) {
-	want := GoldRefresh{Balance: 0x0011223344556677}
+	want := GoldRefresh{Balance: 0x0011223344556677, Notify: true}
 
 	got, err := DecodeGoldRefresh(want.Encode())
 	if err != nil {
@@ -126,11 +127,11 @@ func TestPickupOpcodesCarryEncoderPayloads(t *testing.T) {
 			want:    []byte{0xE1, 0x93, 0x04, 0x00},
 		},
 		{
-			name:    "0x3126 gold refresh",
-			got:     OpGoldRefresh,
-			opcode:  0x3126,
+			name:    "0x30B3 gold refresh",
+			got:     OpPointsUpdate,
+			opcode:  0x30B3,
 			payload: GoldRefresh{Balance: 1}.Encode(),
-			want:    []byte{1, 0, 0, 0, 0, 0, 0, 0},
+			want:    []byte{1, 1, 0, 0, 0, 0, 0, 0, 0, 0},
 		},
 		{
 			name:    "0xB06D error",

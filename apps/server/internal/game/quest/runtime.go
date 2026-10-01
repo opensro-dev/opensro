@@ -720,8 +720,8 @@ func (rt *Runtime) completeRewardAt(character *enterworld.Character, def *Defini
 			balance := creditGold(character.Gold, def.RewardGold)
 			character.Gold = &balance
 			goldFrame = &wire.Frame{
-				Opcode:  wire.OpGoldRefresh,
-				Payload: wire.GoldRefresh{Balance: uint64(balance)}.Encode(),
+				Opcode:  wire.OpPointsUpdate,
+				Payload: wire.GoldRefresh{Balance: uint64(balance), Notify: true}.Encode(),
 			}
 		}
 		return true

@@ -22,6 +22,15 @@ import {
 	type ItemTooltipReference
 } from "@/engine/foundation/gameplay/item-tooltip-reference";
 import { planCosTransfer, cosTransferRequest } from "@/engine/foundation/gameplay/cos-transfer";
+import {
+	storageMoveRequest,
+	storageMoveResult,
+	STORAGE_MOVE_ROOM,
+	STORAGE_MOVE_DEPOSIT,
+	STORAGE_MOVE_WITHDRAW,
+	type StorageMove,
+	type StorageRoom
+} from "@/engine/foundation/gameplay/storage-room";
 import { createAlchemy } from "./alchemy/alchemy";
 import { createGacha } from "./gacha/gacha";
 import { itemStateDelta } from "@/engine/foundation/gameplay/item-state-delta";
@@ -64,6 +73,8 @@ export function createInventory(
 			quantity?: number;
 			snapshot?: boolean;
 			buybackId?: number;
+			// A warehouse move (storage-room.ts); settled by storageSettle.
+			storage?: boolean;
 			buybackIndex?: number;
 			deadline: number;
 		} | null = null,
@@ -603,6 +614,77 @@ cosSold
 			) throw Error( "Unmatched COS sale result" );
 			pending = null;
 			error = null;
+		},
+		/*
+================
+storageMove
+
+Plan the move against the current bag and room before it reaches the wire,
+so an impossible request never leaves the client.
+================
+		*/
+		storageMove( room: StorageRoom, move: StorageMove, now: number, caps: ReadonlyMap<number, number> ) {
+			if ( busy() ) throw Error( "Inventory command unavailable" );
+			if ( room.phase !== "open" ) throw Error( "Storage room is not open" );
+			const bagMove = move.type === STORAGE_MOVE_DEPOSIT || move.type === STORAGE_MOVE_WITHDRAW;
+			const bagSlot = move.type === STORAGE_MOVE_DEPOSIT ? move.source : move.destination;
+			if (
+				bagMove && (bagSlot < equipmentSlotCount! || bagSlot >= inventorySlotCount!) ||
+				move.type !== STORAGE_MOVE_ROOM && !bagMove && move.gold < 1
+			) throw Error( "Invalid storage move" );
+			storageMoveResult(
+				{ opcode: 0xb06d, payload: Uint8Array.of( 1, move.type ) },
+				room,
+				[ ...slots.values() ],
+				move,
+				caps
+			);
+			const frame = storageMoveRequest( room.npc, move );
+			send( frame );
+			pending = {
+				opcode: 0xb06d,
+				movementType: move.type,
+				source: move.source,
+				destination: move.destination,
+				quantity: move.quantity,
+				amount: move.gold,
+				npc: room.npc,
+				storage: true,
+				deadline: now + 10000
+			};
+			error = null;
+			return frame;
+		},
+		/*
+================
+storageSettle
+
+The room after the pending warehouse move's success echo, or null when the
+frame is not that echo (a rejection takes the generic receive path).
+================
+		*/
+		storageSettle( room: StorageRoom, p: Uint8Array, caps: ReadonlyMap<number, number> ): StorageRoom | null {
+			if ( !pending?.storage || p[0] !== 1 || p[1] !== pending.movementType ) return null;
+			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+			const echo = pending.movementType === STORAGE_MOVE_ROOM ?
+				p.length === 6 && p[2] === pending.source && p[3] === pending.destination &&
+				v.getUint16( 4, true ) === pending.quantity :
+				pending.movementType === STORAGE_MOVE_DEPOSIT || pending.movementType === STORAGE_MOVE_WITHDRAW ?
+				p.length === 4 && p[2] === pending.source && p[3] === pending.destination :
+				p.length === 6 && v.getUint32( 2, true ) === pending.amount;
+			if ( !echo ) throw Error( "Unmatched storage move result" );
+			const move: StorageMove = {
+				type: pending.movementType!,
+				source: pending.source,
+				destination: pending.destination ?? 0,
+				quantity: pending.quantity ?? 0,
+				gold: pending.amount ?? 0
+			};
+			const next = storageMoveResult( { opcode: 0xb06d, payload: p }, room, [ ...slots.values() ], move, caps )!;
+			slots = new Map( next.bag.map( row => [ row.slot, row ] ) );
+			published = null;
+			pending = null;
+			return next.room;
 		},
 		/*
 ================

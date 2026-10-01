@@ -325,7 +325,7 @@ func TestGroundDropDeliversLiveSpawnOverTransport(t *testing.T) {
 
 // TestGoldDropDeliversLiveSpawnOverTransport is the type-0x0A twin:
 //
-//	dropper: [0xB06D [01][0A][amount u32]] [0x3126 u64 balance] [0x30D7 gold row]
+//	dropper: [0xB06D [01][0A][amount u32]] [0x30B3 [01][u64 balance][00]] [0x30D7 gold row]
 //	division peer: [0x30D7 gold row]
 //
 // The gold row carries the heap tier's refObjId and the u32 amount (gold
@@ -351,7 +351,7 @@ func TestGoldDropDeliversLiveSpawnOverTransport(t *testing.T) {
 	goldRow := (&oracle{}).u32(62).u32(1500).oracleRowTail(gid)
 
 	dropper.expectFrame(t, wire.OpItemMoveResponse, (&oracle{}).u8(0x01).u8(0x0A).u32(1500).buf)
-	dropper.expectFrame(t, wire.OpGoldRefresh, (&oracle{}).u64(3500).buf)
+	dropper.expectFrame(t, wire.OpPointsUpdate, (&oracle{}).u8(0x01).u64(3500).u8(0x00).buf)
 	dropper.expectFrame(t, wire.OpSingleObjectSpawn, goldRow)
 
 	peer.expectFrame(t, wire.OpSingleObjectSpawn, goldRow)

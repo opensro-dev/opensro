@@ -53,8 +53,6 @@ const (
 	OpGroundOwnershipExpired uint16 = 0x31E2
 	// OpObjectListChunk carries object-list entity rows. Handler sub_77bdc0.
 	OpObjectListChunk uint16 = 0x3417
-	// OpGoldRefresh carries the character's gold balance. Handler sub_777720.
-	OpGoldRefresh uint16 = 0x3126
 	// OpObjectSourceMove repositions a remote entity. Handler sub_775cb0.
 	OpObjectSourceMove uint16 = 0x30E3
 	// OpObjectSourceCorrection hard-corrects a remote entity's position.

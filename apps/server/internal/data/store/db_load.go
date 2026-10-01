@@ -43,6 +43,9 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	// Only the offline upgrader requests layout 4. Runtime callers require
 	// CurrentLayoutVersion and never mutate an older authority during boot.
 	if currentLayout >= 5 {
+		if err := validateAccountStorages(db); err != nil {
+			return nil, err
+		}
 		if err := validateMallAccounts(db); err != nil {
 			return nil, fmt.Errorf("validating mall accounts: %w", err)
 		}

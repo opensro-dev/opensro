@@ -70,6 +70,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	// registered exactly once even when Gacha content is unavailable: talk,
 	// shop and storage are independent actions on the same opcode.
 	rt.registerNpcAction(hub)
+	rt.registerStorage(hub)
 	rt.registerNpcDialogResponse(hub)
 	hub.Handle(wire.OpRebirthPointAppointRequest, rt.hubHandler(hub, rt.HandleRebirthPointAppointment))
 	// Gacha's roll request shares this runtime's selected NPC, inventory

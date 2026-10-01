@@ -38,7 +38,7 @@ func TestPickupGoldGrantBurstOrder(t *testing.T) {
 	frames := PickupGoldGrantFrames(anim, 1500, 99_000, 300007)
 
 	assertOpcodeOrder(t, frames, []uint16{
-		OpActionState, OpPickupAnim, OpItemMoveResponse, OpGoldRefresh, OpObjectDespawn,
+		OpActionState, OpPickupAnim, OpItemMoveResponse, OpPointsUpdate, OpObjectDespawn,
 	})
 
 	if !bytes.Equal(frames[0].Payload, []byte{0x02, 0x00}) {
@@ -177,7 +177,7 @@ func TestGoldDropBurstOrderAndSpawnTail(t *testing.T) {
 	}
 
 	frames := GoldDropFrames(1500, 42_000, row)
-	assertOpcodeOrder(t, frames, []uint16{OpItemMoveResponse, OpGoldRefresh, OpSingleObjectSpawn})
+	assertOpcodeOrder(t, frames, []uint16{OpItemMoveResponse, OpPointsUpdate, OpSingleObjectSpawn})
 
 	result, err := DecodeItemMoveResult(frames[0].Payload, 0)
 	if err != nil || result.MovementType != MoveTypeGoldDrop || result.GoldAmount != 1500 {

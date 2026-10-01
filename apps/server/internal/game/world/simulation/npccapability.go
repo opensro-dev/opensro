@@ -46,10 +46,12 @@ const (
 	// v1.188 registration table below remains the evidence catalogue, but a
 	// retail row must not be advertised to the client until its gameplay
 	// owner exists: otherwise CIFNPCTalk renders a button that can only be
-	// rejected by HandleNpcAction. Storage, repair-adjacent action 0x0b and
-	// guild management therefore stay fail-closed at the media boundary.
+	// rejected by HandleNpcAction. Repair-adjacent action 0x0b and guild
+	// management therefore stay fail-closed at the media boundary; storage
+	// has its owner (action/storage.go).
 	NpcTalkImplementedFlags uint32 = NpcTalkFlagShop |
 		NpcTalkFlagTalk |
+		NpcTalkFlagStorage |
 		NpcTalkFlagRecallPoint |
 		NpcTalkFlagGachaMachine
 )

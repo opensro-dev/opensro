@@ -216,7 +216,7 @@ func TestHandlerGoldDropMidMoveLandsUnderfoot(t *testing.T) {
 	}))
 
 	assertOpcodes(t, result.Frames,
-		wire.OpItemMoveResponse, wire.OpGoldRefresh, wire.OpSingleObjectSpawn)
+		wire.OpItemMoveResponse, wire.OpPointsUpdate, wire.OpSingleObjectSpawn)
 
 	refresh, err := wire.DecodeGoldRefresh(result.Frames[1].Payload)
 	if err != nil || refresh.Balance != 3500 {
@@ -268,7 +268,7 @@ func TestPickupReachMeasuresFromLivePosition(t *testing.T) {
 
 		assertOpcodes(t, result.Frames,
 			wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-			wire.OpGoldRefresh, wire.OpObjectDespawn)
+			wire.OpPointsUpdate, wire.OpObjectDespawn)
 		if character.Gold == nil || *character.Gold != 5777 {
 			t.Fatalf("gold = %v, want 5000+777", character.Gold)
 		}
@@ -345,7 +345,7 @@ func TestPickupApproachCompletesOnServerTickWithoutClientReplay(t *testing.T) {
 	}
 	assertOpcodes(t, private,
 		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpGoldRefresh, wire.OpObjectDespawn)
+		wire.OpPointsUpdate, wire.OpObjectDespawn)
 	assertOpcodes(t, peers, wire.OpPickupAnim, wire.OpObjectDespawn)
 	if character.Gold == nil || *character.Gold != 6000 {
 		t.Fatalf("gold = %v, want 5000+1000", character.Gold)
@@ -432,7 +432,7 @@ func TestPickupApproachMaturesIntoGrant(t *testing.T) {
 	granted := rt.HandleTargetInteract(testDivision, character, interact)
 	assertOpcodes(t, granted.Frames,
 		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpGoldRefresh, wire.OpObjectDespawn)
+		wire.OpPointsUpdate, wire.OpObjectDespawn)
 	if character.Gold == nil || *character.Gold != 6000 {
 		t.Fatalf("gold = %v, want 5000+1000", character.Gold)
 	}

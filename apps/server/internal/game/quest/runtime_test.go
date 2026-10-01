@@ -225,7 +225,7 @@ func TestHandleRewardSelectPaysEvidencedRewards(t *testing.T) {
 	if len(result.Frames) != 7 {
 		t.Fatalf("frames = %+v, want op-3 + gold refresh + exp burst + success cue", result.Frames)
 	}
-	if result.Frames[4].Opcode != wire.OpGoldRefresh {
+	if result.Frames[4].Opcode != wire.OpPointsUpdate {
 		t.Fatalf("frame 1 opcode = 0x%04X, want the 0x3126 gold refresh", result.Frames[1].Opcode)
 	}
 	refresh, err := wire.DecodeGoldRefresh(result.Frames[4].Payload)

@@ -357,6 +357,9 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// 808AD0 reads token 17 into RefObjData+A5; 5B6D22 tests this byte
 	// before merchant sale. Shop membership is not a sale permission.
 	{17, "canSell", "int"},
+	// Token 19 (RefObjData+0xA7): bit 0x80 admits the item to the warehouse
+	// (CIFStorage_OnSlotTransfer; 0 refuses with notice 1:0x43).
+	{19, "canBorrow", "int"},
 	// Authored CanUse flags: bit 0 admits direct activation; other bits
 	// describe additional behavior (pet skill rows carry 129, not just 1).
 	{24, "canUse", "int"},
@@ -366,6 +369,8 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// the extra charge when current durability is zero.
 	{27, "repairCostB4", "int"},
 	{28, "reviveCostB8", "int"},
+	// Token 30: the per-unit gold a warehouse deposit charges.
+	{30, "keepingFee", "int"},
 	{31, "sellPrice", "int"},
 	{32, "reqLevelType1", "int"},
 	{33, "requiredLevel", "int"},

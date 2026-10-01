@@ -168,7 +168,7 @@ func (rt *Runtime) handleWithdrawal(division string, c *enterworld.Character, pa
 			wire.Frame{Opcode: wire.OpBaseStats, Payload: enterworld.BuildLoginStatBlock(next, stats)})
 		frames = append(frames, rt.Withdrawal.Finish(division, c, plan.PreviousSkill)...)
 		if plan.Gold != 0 {
-			frames = append(frames, wire.Frame{Opcode: wire.OpGoldRefresh,
+			frames = append(frames, wire.Frame{Opcode: wire.OpPointsUpdate,
 				Payload: wire.GoldRefresh{Balance: uint64(*next.Gold)}.Encode()})
 		}
 		return true

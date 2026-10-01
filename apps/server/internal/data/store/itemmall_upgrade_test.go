@@ -30,7 +30,7 @@ func makePreMallAuthority(t *testing.T, dir string) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec("DROP TABLE mall_accounts"); err != nil {
+	if _, err := db.Exec("DROP TABLE mall_accounts; DROP TABLE account_storage"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preMallLayoutVersion, metaKeyLayoutVersion); err != nil {
@@ -145,8 +145,10 @@ WHEN NEW.key = 'layoutVersion' BEGIN SELECT RAISE(ABORT, 'injected failure'); EN
 	if _, err := loadDB(db, CurrentVersion, preMallLayoutVersion); err != nil {
 		t.Fatal("failed upgrade changed the original authority", err)
 	}
-	var tables int
-	if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", "mall_accounts").Scan(&tables); err != nil || tables != 0 {
-		t.Fatalf("failed upgrade retained a partial currency table: %d %v", tables, err)
+	for _, table := range []string{"mall_accounts", "account_storage"} {
+		var tables int
+		if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&tables); err != nil || tables != 0 {
+			t.Fatalf("failed upgrade retained a partial %s table: %d %v", table, tables, err)
+		}
 	}
 }
