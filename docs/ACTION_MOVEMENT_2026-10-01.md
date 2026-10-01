@@ -51,6 +51,7 @@ while retaining the active count.
 | --- | --- |
 | One basic attack / approach / Trace | Movement requests cancellation before waiting or predicting travel. |
 | One committed skill or combo | Voluntary cancellation is refused; its normal close releases the latest held move. |
+| Skill automatically returns to basic attack | Publishes the new command lifetime even when the count stays one, allowing a previously refused movement cancellation to retry. |
 | Two commands | Cancellation drops only the pending back entry. A held move reacts when the server reports one. |
 | New command during a cast | Basic attack, skill, heal, buff, Trace and pickup use one pending slot; replacing it preserves the executing combo. |
 | Instant imbue | Uses its existing immediate owner; does not replace the active queue. |
@@ -75,6 +76,8 @@ Regression coverage includes batched close/open packets, latest-destination
 movement, counts zero/one/two, cancellation coalescing, committed projectiles,
 combo preservation, pending replacement, rejected admission, queued heal/buff/
 Trace/pickup, independent effect cancellation, forced cancellation and re-entry.
+The skill-to-basic regression also batches the old close with the next basic
+cast, proving that the count transition releases a previously refused cancel.
 
 Loot tests that assumed pickup could run before the killing cast closed now
 drive the real simulation clock to its close. A dedicated test exercises
@@ -97,9 +100,9 @@ Screenshots, bounded Playwright traces and semantic/wire records are retained
 in the worktree's ignored `.state/attack-movement-before`,
 `.state/attack-movement-after` and `.state/attack-movement` directories.
 
-Final source verification passed all 12 tasks (61.2 seconds), including Go
+Source verification passed all 12 tasks, including Go
 tests, race checks, lint, formatting, encoding and vulnerability scanning.
-Complete client verification passed all 11 gates (106.6 seconds), including
+Complete client verification passed all 11 gates, including
 the new runtime regression suite and test typing.
 
 This change requires both client and server code in the next release, with no

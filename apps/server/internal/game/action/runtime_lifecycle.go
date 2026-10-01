@@ -93,7 +93,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		out = append(out, rt.advanceMonsterAbnormals(nowMs)...)
 		out = append(out, rt.advancePlayerAbnormals(nowMs)...)
 		out = append(out, rt.advanceCosAbnormals(nowMs)...)
-		out = append(out, rt.advanceQueuedActionSessions()...)
+		out = append(out, rt.advanceQueuedActionSessions(nowMs)...)
 		out = append(out, rt.advanceBasicAttackIntents(nowMs, openActionOwners)...)
 		out = append(out, rt.advanceNaturalRecovery(nowMs)...)
 		out = append(out, rt.advancePets(nowMs)...)

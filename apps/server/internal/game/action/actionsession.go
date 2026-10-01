@@ -347,9 +347,11 @@ advanceQueuedActionSessions
 4AD390 retires the executing front before the pending command may run. Keep
 the existing cast/chain owner active until its final close, then install the
 replacement through the normal continuation owner and publish count one.
+4AED19's authored skill-to-basic handoff is also a new command. Publish its
+release so a movement cancellation refused by the skill can cancel the basic.
 ================
 */
-func (rt *Runtime) advanceQueuedActionSessions() []simulation.DivisionFrames {
+func (rt *Runtime) advanceQueuedActionSessions(nowMs int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, session := range rt.actionSessionSnapshot() {
 		key := simulation.WorldKey(session.division, session.name)
@@ -360,7 +362,20 @@ func (rt *Runtime) advanceQueuedActionSessions() []simulation.DivisionFrames {
 			continue
 		}
 		session = latest.(actionSessionPublication)
-		if !session.queued || session.pending == nil || rt.hasOpenSkillCast(session.division, session.name) {
+		if rt.hasOpenSkillCast(session.division, session.name) {
+			unlock()
+			continue
+		}
+		if !session.queued {
+			intent, retained := rt.combatIntentFor(session.division, session.name)
+			if !retained || !intent.ResumeBasic || intent.ResumeNotified || nowMs <= intent.NextActionMs {
+				unlock()
+				continue
+			}
+			intent.ResumeNotified = true
+			session.pending = &intent
+		}
+		if session.pending == nil {
 			unlock()
 			continue
 		}

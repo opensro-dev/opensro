@@ -124,6 +124,26 @@ test("a queued pair draining to one cancels while movement is still held", () =>
 	game.dispose();
 });
 
+test("a refused skill cancellation retries on its handoff to basic attack", () => {
+	const { game, local, sent } = movementFixture();
+	openCast( game, 1, 10 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 10 );
+	game.command( { kind: "move", destination: { ...local, x: 140, angle: 0 } }, 11, undefined, local );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 3, 1, 4 ) }, 12 );
+	game.step( 13, local );
+	assert.equal( sent.length, 1 );
+	closeCast( game, 1, 14 );
+	openCast( game, 2, 14 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 2, 1 ) }, 14 );
+	game.step( 15, local );
+	assert.deepEqual( sent.map( frame => [ frame.opcode, ...frame.payload ] ), [ [ 0x72cd, 2 ], [ 0x72cd, 2 ] ] );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 2, 0 ) }, 16 );
+	closeCast( game, 2, 17 );
+	for ( let now = 18; now < 3000 && sent.length < 3; now += 50 ) game.step( now, local );
+	assert.deepEqual( sent.map( frame => frame.opcode ), [ 0x72cd, 0x72cd, OP_PREDICTED_MOVE ] );
+	game.dispose();
+});
+
 test("explicit cancel and world transfer discard held movement", () => {
 	for ( const outcome of [ "cancel", "travel", "death" ] ) {
 		const { game, local, sent } = movementFixture();

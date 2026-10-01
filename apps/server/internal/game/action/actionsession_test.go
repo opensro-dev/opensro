@@ -43,6 +43,54 @@ func assertQueuedAction(t *testing.T, result OpResult) {
 
 /*
 ================
+TestCommittedSkillPublishesBasicHandoffForHeldMovement
+
+An initially refused cancel must become retryable when the authored skill
+hands its target to a basic command, even if the remaining count stays one.
+================
+*/
+func TestCommittedSkillPublishesBasicHandoffForHeldMovement(t *testing.T) {
+	rt, clock, c, target := newCombatTestRuntime(t, 100000)
+	skill := shippedOffense(t, "SKILL_CH_SWORD_SMASH_A_01")
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c.Skills = append(c.Skills, skill.ID)
+	c.CurrentMP = testInt64(10000)
+	rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target.Gid}.Encode())
+	request := wire.TargetInteract{Cancel: true}.Encode()
+	refusal := rt.HandleTargetInteract(testDivision, c, request)
+	if len(refusal.Frames) != 1 || !bytes.Equal(refusal.Frames[0].Payload, []byte{3, 1, 4}) {
+		t.Fatal("committed skill did not retain its native count", refusal)
+	}
+	transition := false
+	for tick := 0; tick < 100 && !transition; tick++ {
+		clock.Advance(100 * time.Millisecond)
+		for _, burst := range rt.TickHook()(clock.NowMs()) {
+			for _, frame := range burst.Frames {
+				if frame.Opcode == wire.OpActionState && bytes.Equal(frame.Payload, []byte{2, 1}) {
+					if burst.OnlyCharacterID != c.ID {
+						t.Fatal("skill-to-basic handoff leaked to peers")
+					}
+					transition = true
+				}
+			}
+		}
+	}
+	if !transition {
+		t.Fatal("authored basic continuation never released the refused cancel")
+	}
+	rt.HandleTargetInteract(testDivision, c, request)
+	tokens := rt.castTokenCounter
+	for tick := 0; tick < 20; tick++ {
+		clock.Advance(100 * time.Millisecond)
+		rt.TickHook()(clock.NowMs())
+	}
+	if rt.castTokenCounter != tokens || rt.actionQueueCount(testDivision, c.Name) != 0 {
+		t.Fatal("held movement cancellation failed to stop authored repetition")
+	}
+}
+
+/*
+================
 finishTestCast
 
 Loot-specific fixtures begin after the fatal action's normal close. Drive

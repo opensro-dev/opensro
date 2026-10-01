@@ -118,21 +118,22 @@ three share one slot so a superseding command cannot leave a second owner.
 ==================
 */
 type basicAttackIntent struct {
-	Deferred      *deferredObjectAction // immutable command admitted behind a committed cast
-	FollowTarget  bool                  // persistent player pursuit, with no combat action
-	FollowSession uint64                // prevents a reconnected target inheriting old pursuit
-	SupportCast   bool                  // a player-targeted heal, cure or resurrection waiting for reach
-	CaptureCast   bool                  // a Monster Mask waiting to reach its corpse
-	SingleCast    bool                  // executes the explicit sequence before any authored basic continuation
-	ResumeBasic   bool                  // transition resolves the current weapon after the explicit action closes
-	ComboRootID   uint32                // nonzero only after a root stage commits; never supplied by the client
-	DivisionID    string
-	CharacterName string
-	TargetGid     uint32
-	SkillID       uint32
-	ActionReach   simulation.ActionReach
-	CooldownMs    int64
-	NextActionMs  int64
+	Deferred       *deferredObjectAction // immutable command admitted behind a committed cast
+	FollowTarget   bool                  // persistent player pursuit, with no combat action
+	FollowSession  uint64                // prevents a reconnected target inheriting old pursuit
+	SupportCast    bool                  // a player-targeted heal, cure or resurrection waiting for reach
+	CaptureCast    bool                  // a Monster Mask waiting to reach its corpse
+	SingleCast     bool                  // executes the explicit sequence before any authored basic continuation
+	ResumeBasic    bool                  // transition resolves the current weapon after the explicit action closes
+	ResumeNotified bool                  // the skill-to-basic count transition has reached the actor
+	ComboRootID    uint32                // nonzero only after a root stage commits; never supplied by the client
+	DivisionID     string
+	CharacterName  string
+	TargetGid      uint32
+	SkillID        uint32
+	ActionReach    simulation.ActionReach
+	CooldownMs     int64
+	NextActionMs   int64
 	// ChainLatencyConsumedMs is how much of the command's native 500 ms chain
 	// latency budget (record+28, reset by CActionRecord_Release 4AC954) the
 	// chain steps have consumed. ChainLatencyUsedMs mirrors record+2C, which
@@ -438,6 +439,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 			return OpResult{DiagnosticRefusal: why}
 		}
 		intent.SingleCast, intent.ResumeBasic = false, false
+		intent.ResumeNotified = false
 		intent.ComboRootID, intent.SkillID = 0, basic.ID
 		intent.ChainLatencyConsumedMs, intent.ChainLatencyUsedMs = 0, 0
 	}
