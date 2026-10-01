@@ -12,3 +12,4 @@
 | [apps/server/ops/docs/ACCEPTED_ADVISORIES.md](../apps/server/ops/docs/ACCEPTED_ADVISORIES.md) | Reviewed vulnerability-scanner findings |
 | [RELEASE.md](../RELEASE.md) | Release checklist |
 | [AGENTS.md](../AGENTS.md) | Code style (id Software) and working rules for contributors and coding agents |
+| [NPC_FACING_2026-10-01.md](NPC_FACING_2026-10-01.md) | NPC heading recovery, inferred relocations and complete placement coverage |
