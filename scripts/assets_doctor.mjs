@@ -98,7 +98,11 @@ function checkTools( report ) {
 	if ( ffmpeg.status === 0 ) report.pass( "ffmpeg", ffmpeg.stdout.split( "\n" )[0] );
 	else report.fail( "ffmpeg", "not on PATH; `assets prepare` converts the music with it" );
 	if ( process.platform !== "win32" ) {
-		report.fail( "platform", "the full asset build needs Windows (32-bit D3DX lens mips, GDI font atlas)" );
+		// Portable paths: native_texture_mips.py (no D3DX) and the FreeType font atlas.
+		report.warn(
+			"platform",
+			`${process.platform}: portable mip and font generators (equivalent output, not Windows byte-identical)`
+		);
 		return;
 	}
 	const runtime = path.join( process.env.WINDIR ?? "C:\\Windows", "SysWOW64", D3DX_RUNTIME );

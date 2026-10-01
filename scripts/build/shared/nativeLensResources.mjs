@@ -5,8 +5,9 @@ nativeLensResources.mjs - own lens mip generation and atomic publication
 
 Full and standalone world builds share this prerequisite. A process generates
 the eight resources once, in a private staging directory, before any sky copy.
-The build entry point owns the generated-asset lock. The 32-bit D3DX runtime
-reproduces the original native-lens-resources.cpp output byte for byte.
+The build entry point owns the generated-asset lock. On Windows the 32-bit D3DX runtime
+reproduces the original native-lens-resources.cpp output byte for byte;
+elsewhere native_texture_mips.py generates equivalent mips.
 
 ===========================================================================
 */
@@ -18,6 +19,7 @@ import { extractedRoot, imageSourceRoot, rebuildRoot } from "../world/paths.mjs"
 import { publishFileFromTemp } from "./atomicPublish.mjs";
 import { isMainScript } from "./fsUtils.mjs";
 import { withGeneratedAssetsLock } from "../../rebuildLock.mjs";
+import { runPython } from "./pythonRun.mjs";
 
 const executeFile = promisify( execFile );
 const LENS_COUNT = 8;
@@ -34,7 +36,15 @@ compileLensResources
 */
 async function compileLensResources( sourceRoot, outputRoot ) {
 	if ( process.platform !== "win32" ) {
-		throw new Error( "Native lens generation requires Windows and the DirectX End-User Runtime." );
+		// No D3DX off Windows: the portable generator writes the same container.
+		await runPython( [
+			path.join( rebuildRoot, "scripts", "build", "native_texture_mips.py" ),
+			"-SourceRoot",
+			sourceRoot,
+			"-OutputRoot",
+			outputRoot
+		], { task: "native lens mip generation" } );
+		return;
 	}
 	const windowsRoot = process.env.SystemRoot ?? "C:\\Windows";
 	const powershell = path.join( windowsRoot, "SysWOW64", "WindowsPowerShell", "v1.0", "powershell.exe" );
