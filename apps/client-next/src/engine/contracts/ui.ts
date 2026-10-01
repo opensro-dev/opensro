@@ -152,6 +152,8 @@ export type UiEvent =
 	| { kind: "audio-preferences"; value: import("@/engine/foundation/audio/options").AudioOptions; }
 	| { kind: "preferences"; value: import("@/engine/foundation/gameplay/game-options").GameOptions; }
 	| { kind: "drag-end"; id: string; x: number; y: number; }
+	// The bridge abandoned the drag or click-carry that `id` started.
+	| { kind: "drag-cancel"; id: string; }
 	| { kind: "drag"; id: string; dx: number; dy: number; }
 	| { kind: "scroll"; x: number; y: number; delta: number; }
 	| {

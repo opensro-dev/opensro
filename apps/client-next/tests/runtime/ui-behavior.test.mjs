@@ -2200,7 +2200,10 @@ test("inventory drag submits one current-slot move and cancels across modal, clo
 		// that old source when the user next clicks another inventory slot.
 		f.ui.event( { kind: "activate", id: "slot:13" } );
 		drag();
+		// The bridge reports an abandoned carry as drag-cancel; press null is
+		// only the visual release and must not drop a carried item.
 		f.ui.event( { kind: "press", id: null } );
+		f.ui.event( { kind: "drag-cancel", id: "slot:13" } );
 		drop();
 		assert.deepEqual( sent, [] );
 		f.ui.event( { kind: "activate", id: "slot:14" } );
@@ -2677,6 +2680,7 @@ test("party matching native form, local filters and owner approval are actionabl
 			auto: []
 		};
 		f.state.gameplay.social = { localName: "Player", self: 1, leader: 0, options: 3, members: [] };
+		f.state.gameplay.progression = { level: 10, masteries: [] };
 		for ( let t = 0; t < 1600; t += 100 ) f.ui.step( f.state, t );
 		f.ui.event( { kind: "key", code: "KeyE" } );
 		let scene = f.ui.step( f.state, 1700 );
@@ -2926,7 +2930,8 @@ test("matching form derives job from live equipment and refuses a stale job choi
 				result: null,
 				auto: []
 			},
-			social: { localName: "Player", self: 1, leader: 0, options: 3, members: [] }
+			social: { localName: "Player", self: 1, leader: 0, options: 3, members: [] },
+			progression: { level: 10, masteries: [] }
 		};
 		let now = 0;
 		const step = () => f.ui.step( { ...f.state }, ++now );
@@ -4374,6 +4379,31 @@ test("quick party portrait stays requested after the peer leaves world visibilit
 		const semantic = f.ui.step( f.state, 2100 );
 		assert.ok( f.scenes.at( -1 ).quads.some( quad => quad.portraitGid === gid ) );
 		assert.equal( semantic.controls.some( control => control.id === "party-target:22" ), false );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the party window shows the leader's and every member's portrait", async () => {
+	// GDR_PTY_PICTURE and GDR_PTYSLOT_PICTURE are picture clips: rendered head
+	// shots, reported missing when the window drew only the empty frame.
+	const { partyPortraitGid } = await load( "src/engine/foundation/ui/party-overlay.ts" );
+	const f = uiFixture();
+	try {
+		f.state.gameplay.social = {
+			localName: "Player",
+			self: 11,
+			leader: 11,
+			options: 3,
+			members: [ { id: 11, name: "Player", model: 1 }, { id: 22, name: "Peer", model: 2, status: 255 } ]
+		};
+		const count = gid => f.scenes.at( -1 ).quads.filter( quad => quad.portraitGid === gid ).length;
+		f.ui.step( f.state, 100 );
+		const local = f.state.gameplay.localGid, peer = partyPortraitGid( 22 );
+		const closed = [ count( local ), count( peer ) ];
+		f.ui.event( { kind: "activate", id: "open-window:Party" } );
+		f.ui.step( f.state, 200 );
+		assert.deepEqual( [ count( local ), count( peer ) ], [ closed[0] + 1, closed[1] + 1 ] );
 	} finally {
 		f.dispose();
 	}

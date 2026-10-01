@@ -113,6 +113,7 @@ import {
 import { moneyPresentation } from "@/engine/foundation/ui/money-presentation";
 import { groundItemName, groundItemNameVisible } from "@/engine/foundation/ui/ground-item-label";
 import {
+	partyMatchButtons,
 	partyMatchRows,
 	partyAutoCandidates,
 	partyActiveJob,
@@ -2621,6 +2622,13 @@ export function createUi(
 		*/
 		event( event: UiEvent ) {
 			if ( disposed ) return;
+			// Ahead of every modal gate: an abandoned carry must always clear.
+			if ( event.kind === "drag-cancel" ) {
+				if ( carriedItem?.source === event.id ) carriedItem = null;
+				if ( carriedShortcut?.id === event.id ) carriedShortcut = null;
+				dirty = true;
+				return;
+			}
 			if ( itemMall.read().visible ) {
 				if ( event.kind === "edit" && view?.gameplay?.itemMall ) {
 					const state = itemMall.read( view.gameplay.itemMall );
@@ -3503,10 +3511,7 @@ export function createUi(
 				dirty = true;
 				return;
 			}
-			if ( event.kind === "press" && event.id === null && carriedItem ) {
-				carriedItem = null;
-				dirty = true;
-			}
+
 			// Retired controls must not keep a captured drag alive behind a modal.
 			if (
 				event.kind === "drag" && (event.id === "npc-drag" || event.id.startsWith( "window-drag:" )) &&
@@ -7755,6 +7760,28 @@ export function createUi(
 						members = social?.members.filter( m => m.id !== social.leader ) ?? [],
 						hasParty = !!social?.leader,
 						displayOptions = effectivePartyOptions( social, partyOptions );
+					/*
+					================
+					memberPortrait
+
+					GDR_PTY_PICTURE and GDR_PTYSLOT_PICTURE are CIFStaticWithPictureClip:
+					no texture of their own, a rendered head shot of the member. The
+					identities are the ones the HUD already renders (the local player's
+					gid, partyPortraitGid for the others), so the window adds none.
+					================
+					*/
+					const memberPortrait = ( memberId: number, rect: UiRect ) => {
+						const gid = memberId === social?.self ? game?.localGid : partyPortraitGid( memberId );
+						if ( !gid ) return;
+						quads.push( {
+							portraitGid: gid,
+							texture: "__portrait",
+							rect,
+							uv: [ 0, 0, 1, 1 ],
+							color: white,
+							clip: full
+						} );
+					};
 					for ( const node of authoredPaintOrder( layout ) ) {
 						if ( !hasParty && [ 14, 15, 41, 43, 44 ].includes( node.id ) ) continue;
 						if ( !hasParty && (node.id === 52 || node.id === 53) ) {
@@ -7798,7 +7825,10 @@ export function createUi(
 								leader?.guild || hudCopy( "UIIT_STT_NO_GUILD" )
 							);
 						}
-						if ( node.id === 41 ) authoredImage( { ...node, texture: hudData.popupArt.portrait }, ox, oy );
+						if ( node.id === 41 ) {
+							authoredImage( { ...node, texture: hudData.popupArt.portrait }, ox, oy );
+							if ( leader ) memberPortrait( leader.id, authoredRect( node, ox, oy ) );
+						}
 						if ( node.type === "CIFGauge" && !hasParty ) {
 							authoredImage(
 								{ ...node, texture: node.texture.replace( ".png", "_disable.png" ) },
@@ -7844,10 +7874,12 @@ export function createUi(
 									"open-window:Party Matching" :
 									"party-disband",
 								copy = node.id === 48 ? hudCopy( "UIIT_STT_PARTY_DISSOLVE" ) : hudCopy( node.text );
+							// 75E3A0 / 75B220 -> CIFParty_SetMatchingButtonEnabled (5B7A20):
+							// settings lock while an own listing exists.
 							const disabled = node.id === 48 ?
 								!hasParty || social?.self !== social?.leader :
 								node.id === 21 ?
-								hasParty :
+								hasParty || !!game?.partyMatching?.own :
 								false;
 							authoredButton( node, ox, oy, id, copy, disabled );
 							authoredText(
@@ -7874,6 +7906,9 @@ export function createUi(
 								authoredChrome( child, sx, sy );
 								if ( child.name === "GDR_PTYSLOT_STATIC_NAME" ) {
 									authoredText( child, sx, sy, member.name );
+								}
+								if ( child.name === "GDR_PTYSLOT_PICTURE" ) {
+									memberPortrait( member.id, authoredRect( child, sx, sy ) );
 								}
 								if ( child.name === "GDR_PTYSLOT_STATIC_LEVEL_DATA" ) {
 									authoredText( child, sx, sy, String( member.level ) );
@@ -9121,17 +9156,23 @@ export function createUi(
 					closeButton( px + 759, py + 10 );
 					const match = game?.partyMatching,
 						slot = hudData.windows.ifpartymatchslot!,
-						canRegister = !game?.social?.leader || game.social.leader === game.social.self;
+						social = game?.social,
+						localName = social?.localName ?? next.session?.character ?? "",
+						buttons = partyMatchButtons( {
+							own: match?.own ?? null,
+							ownName: match?.own ? localName : "",
+							localName,
+							inParty: !!social?.leader,
+							leader: !!social?.leader && social.leader === social.self,
+							members: Math.max( 1, social?.members.length ?? 0 ),
+							options: social?.options ?? 0,
+							level: game?.progression?.level ?? 0,
+							rows: match?.rows.length ?? 0
+						} );
 					for ( const node of authoredPaintOrder( page ) ) {
 						if ( node.type === "CIFButton" ) {
-							const row = match?.rows.find( r => r.id === partyMatchSelection ),
-								enabled = node.id === 56 || node.id === 55 || node.id >= 60 && node.id <= 67 ||
-									node.id === 16 && row ||
-									node.id === 15 && row && row.name !== next.session?.character &&
-										!game?.social?.leader ||
-									node.id === 17 && !game?.social?.leader ||
-									node.id === 18 && canRegister && !match?.own ||
-									(node.id === 19 || node.id === 20) && canRegister && match?.own;
+							const enabled = node.id === 56 || node.id === 55 || node.id >= 60 && node.id <= 67 ||
+								node.id >= 15 && node.id <= 20 && buttons[node.id as 15];
 							authoredLabeledButton(
 								node,
 								px,

@@ -739,18 +739,8 @@ func TestCombatAdmissionFailsClosedBeforeHPMutation(t *testing.T) {
 		"unpinned item option": func(_ *Runtime, character *enterworld.Character) {
 			character.MissionInventory[0].MagicOptions = []uint64{1}
 		},
-		"ammo-dependent weapon": func(rt *Runtime, character *enterworld.Character) {
-			items := rt.deps.ItemReferences().(staticItemSource)
-			weapon := items[character.MissionInventory[0].Codename]
-			weapon.TypeIDs[3] = 6
-			character.MissionInventory[0].TypeFlags = weapon.TypeFlags()
-
-			skills := rt.deps.SkillData().(staticSkillSource)
-			skill := skills[2]
-			skill.Codename = "SKILL_CH_BOW_BASE_01"
-			skill.RequiredWeaponKinds = [2]uint8{6, 0xff}
-			skills[2] = skill
-		},
+		// An empty ammunition weapon is not silent: 58E32D answers 0x300E
+		// (TestBasicAttackWithoutAmmunitionReportsTheNotice).
 	}
 	for name, arrange := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -853,12 +843,85 @@ func TestWrongRangedAmmunitionRefusesBeforeDamageOrDebit(t *testing.T) {
 	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
 	}.Encode())
-	if len(result.Frames) != 0 || character.MissionInventory[1].StackCount != 2 {
-		t.Fatalf("wrong ammunition admitted or debited: frames=%+v inventory=%+v", result.Frames, character.MissionInventory)
+	// 58E32D: the basic attack's cnsm requirement refuses 0x300E, the
+	// out-of-ammunition notice, before any damage or debit.
+	assertAmmunitionRefusal(t, result)
+	if character.MissionInventory[1].StackCount != 2 {
+		t.Fatalf("wrong ammunition debited: %+v", character.MissionInventory)
 	}
 	after, ok := rt.Monsters.Get(testDivision, target.Gid)
 	if !ok || after.CurrentHP != target.CurrentHP {
 		t.Fatalf("wrong ammunition changed HP: %+v/%v", after, ok)
+	}
+}
+
+/*
+================
+TestBasicAttackWithoutAmmunitionReportsTheNotice
+
+Players saw no notice when a double-click attacked with an empty bow while
+a skill did; native refuses both with 0x300E.
+================
+*/
+func TestBasicAttackWithoutAmmunitionReportsTheNotice(t *testing.T) {
+	for _, ranged := range []struct {
+		name  string
+		kind  int64
+		skill string
+		race  int64
+	}{
+		{"bow", 6, "SKILL_CH_BOW_BASE_01", enterworld.RaceChina},
+		{"crossbow", 12, "SKILL_EU_CROSSBOW_BASE_01", enterworld.RaceEurope},
+	} {
+		t.Run(ranged.name, func(t *testing.T) {
+			rt, _, character, target := newCombatTestRuntime(t, 100)
+			// The basic attack is the race's own: bolts are European.
+			character.ModelCodename = ""
+			character.RaceIndex = testInt64(ranged.race)
+			items := rt.deps.ItemReferences().(staticItemSource)
+			weapon := items[character.MissionInventory[0].Codename]
+			weapon.TypeIDs[3] = ranged.kind
+			weapon.Combat.ActionRange = 180
+			character.MissionInventory[0].TypeFlags = weapon.TypeFlags()
+			skills := rt.deps.SkillData().(staticSkillSource)
+			skill := skills[2]
+			skill.Codename = ranged.skill
+			skill.RequiredWeaponKinds = [2]uint8{uint8(ranged.kind), 0xff}
+			skills[2] = skill
+
+			result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
+				ActionId: 2, HasTarget: true, TargetGid: target.Gid,
+			}.Encode())
+			assertAmmunitionRefusal(t, result)
+			after, ok := rt.Monsters.Get(testDivision, target.Gid)
+			if !ok || after.CurrentHP != target.CurrentHP {
+				t.Fatalf("an empty %s changed HP: %+v/%v", ranged.name, after, ok)
+			}
+		})
+	}
+}
+
+/*
+================
+assertAmmunitionRefusal
+
+The result carries exactly one B070 refusal with code 0x0E (0x300E).
+================
+*/
+func assertAmmunitionRefusal(t *testing.T, result OpResult) {
+	t.Helper()
+	var refusals int
+	for _, frame := range result.Frames {
+		if frame.Opcode == wire.OpSkillCastResult && bytes.Equal(frame.Payload, []byte{2, 0x0e}) {
+			refusals++
+			continue
+		}
+		if frame.Opcode == wire.OpSkillCastResult {
+			t.Fatalf("unexpected cast result %x", frame.Payload)
+		}
+	}
+	if refusals != 1 {
+		t.Fatalf("ammunition refusal frames = %+v, want one B070 {2, 0x0E}", result.Frames)
 	}
 }
 
