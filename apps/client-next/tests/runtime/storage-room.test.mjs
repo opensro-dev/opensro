@@ -91,3 +91,11 @@ test("the owner lists once, opens, and applies acknowledged moves", () => {
 	owner.open( 17 );
 	assert.equal( sent.at( -1 ).opcode, 0x7338, "a loaded room asks for the function directly" );
 });
+
+test("a refused open releases the room and leaves the notice to the caller", () => {
+	const owner = room.createStorageRoom( () => {} );
+	owner.open( 17 );
+	const handled = owner.receive( { opcode: 0xb338, payload: Uint8Array.from( [ 2, 4 ] ) }, refs );
+	assert.equal( handled, false, "the gameplay owner still shows the too-far notice" );
+	assert.equal( owner.state(), null );
+});

@@ -153,6 +153,8 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		if rt.storageAuthority == nil {
 			return nil, "storage authority is not configured"
 		}
+		// The storage function state, which warehouse moves check.
+		rt.Selected.OpenFunction(divisionID, character.Name, gid)
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	default:
 		return nil, fmt.Sprintf("action mask 0x%X has no reconstructed gameplay owner", mask)

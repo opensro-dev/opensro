@@ -260,6 +260,11 @@ True when the frame belonged to the warehouse.
 				if ( room?.phase === "opening" ) room = { ...room, phase: "open" };
 				return true;
 			}
+			// 75AE50 kind 2: the warehouse refused (code 4, too far). A room that
+			// never opened is released; the caller still shows the notice.
+			if ( frame.opcode === OP_NPC_INTERACTION && frame.payload[0] === 2 && room && room.phase !== "open" ) {
+				room = null;
+			}
 			return false;
 		},
 		/*

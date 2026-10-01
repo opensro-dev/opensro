@@ -140,3 +140,28 @@ func TestStorageRefusesUnstorableItemsAndOverdrafts(t *testing.T) {
 		t.Fatalf("overdraft = %v room %d", r.Frames[0].Payload, authority.room.Gold)
 	}
 }
+
+/*
+================
+TestStorageFollowsTheNpcRangeAndFunctionState
+
+The room list takes the 4A8E10 range gate and answers too far; moves need
+the storage function an in-range request opened, as trades do.
+================
+*/
+func TestStorageFollowsTheNpcRangeAndFunctionState(t *testing.T) {
+	rt, c, authority := storageFixture(t)
+	slot := uint8(potionRow(t, c).Slot)
+	// A fresh selection has no function open: the deposit is refused.
+	rt.Selected.Set(testDivision, c.Name, 17)
+	r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageDeposit, SourceSlot: slot, DestSlot: 0, NpcGID: 17})
+	if r.Frames[0].Payload[0] != 2 || len(authority.room.Rows) != 0 {
+		t.Fatalf("deposit before the room opened = %+v", r)
+	}
+	moveMerchantAway(rt, npcHitRange+10)
+	frames, refusal := rt.HandleStorageList(testDivision, c, wire.NewWriter(5).U32(17).U8(0).Payload())
+	if refusal == "" || len(frames) != 1 || frames[0].Opcode != wire.OpNpcInteractionAck ||
+		string(frames[0].Payload) != string([]byte{2, hitRangeTooFar}) {
+		t.Fatalf("far list = %+v / %q", frames, refusal)
+	}
+}

@@ -4,7 +4,8 @@
 itemmall_upgrade.go - offline, preserving layout 4 to 5 authority upgrade
 
 Takes the same exclusive authority lock as the game server. Validates every
-existing record, keeps an independent backup and adds only the currency table.
+existing record, keeps an independent backup and adds only the two account
+tables layout 5 introduces: the mall currency and the NPC warehouse.
 This operation is never called by server startup or a network request.
 
 ===========================================================================

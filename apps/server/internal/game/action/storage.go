@@ -68,8 +68,8 @@ func (rt *Runtime) registerStorage(hub *transport.Hub) {
 		}
 		frames, refusal := rt.HandleStorageList(divisionID, character, payload)
 		if refusal != "" {
+			// A typed refusal (0xB338 kind 2, too far) still answers the client.
 			log.Debugf("storage: 0x%04X refused for %s: %s", opcode, character.Name, refusal)
-			return
 		}
 		sendFrames(session, frames)
 	})
@@ -92,6 +92,20 @@ func (rt *Runtime) storageNpc(divisionID string, character *enterworld.Character
 
 /*
 ================
+openStorageNpc
+
+The warehouse a move may use: the one whose storage function an in-range
+request opened (npcaction.go). As with trades, moves check that function
+state, not distance.
+================
+*/
+func (rt *Runtime) openStorageNpc(divisionID string, character *enterworld.Character, gid uint32) bool {
+	_, ok := rt.storageNpc(divisionID, character, gid)
+	return ok && rt.Selected.FunctionOpen(divisionID, character.Name, gid)
+}
+
+/*
+================
 HandleStorageList
 
 0x72C3 -> 0x3126 gold, 0x321A list.
@@ -107,8 +121,14 @@ func (rt *Runtime) HandleStorageList(divisionID string, character *enterworld.Ch
 	}
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
-	if _, ok := rt.storageNpc(divisionID, character, gid); !ok {
+	npc, ok := rt.storageNpc(divisionID, character, gid)
+	if !ok {
 		return nil, "the selected object is not a warehouse NPC"
+	}
+	// INFERENCE: the list request is the storage row's first step, so it
+	// takes the same 4A8E10 range gate as the function request that follows.
+	if !rt.npcWithinHitRange(divisionID, character, npc) {
+		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
 	}
 	storage, err := rt.storageAuthority.AccountStorage(character)
 	if err != nil {
@@ -189,13 +209,12 @@ func (rt *Runtime) applyStorageMove(divisionID string, character *enterworld.Cha
 	if rt.storageAuthority == nil {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
-	if q.MovementType == wire.MoveTypeStorage || q.MovementType == wire.MoveTypeStorageDeposit || q.MovementType == wire.MoveTypeStorageWithdraw {
-		if _, ok := rt.storageNpc(divisionID, character, q.NpcGID); !ok {
-			return failureResult(wire.ErrCodeInvalidRequest)
-		}
-	} else if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok {
-		return failureResult(wire.ErrCodeInvalidRequest)
-	} else if _, ok := rt.storageNpc(divisionID, character, selected); !ok {
+	// Item moves name the NPC; gold moves use the selection.
+	gid := q.NpcGID
+	if q.MovementType != wire.MoveTypeStorage && q.MovementType != wire.MoveTypeStorageDeposit && q.MovementType != wire.MoveTypeStorageWithdraw {
+		gid, _ = rt.Selected.Get(divisionID, character.Name)
+	}
+	if !rt.openStorageNpc(divisionID, character, gid) {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 	var questFrames []wire.Frame
