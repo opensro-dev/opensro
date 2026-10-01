@@ -15,6 +15,7 @@ import (
 	"encoding/binary"
 	"strings"
 
+	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
@@ -87,22 +88,39 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 		return cosCancelResult(2)
 	}
 	result := cosCancelResult(1)
+	result.Frames = append(result.Frames, rt.retireCosRuntime(division, c, gid)...)
+	despawn := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()}
+	result.Frames = append(result.Frames, despawn)
+	result.Broadcast = []wire.Frame{despawn}
+	return result
+}
+
+/*
+================
+retireCosRuntime
+
+Retire the actor's transient work after the durable cancellation or horse
+removal commits. A later actor reusing its GID must not inherit old effects.
+The caller holds the division operation lock.
+================
+*/
+func (rt *Runtime) retireCosRuntime(division string, c *enterworld.Character, gid uint32) []wire.Frame {
+	var frames []wire.Frame
 	rt.petMu.Lock()
 	state := rt.petSessions[petOwnerKey{division, strings.ToLower(c.Name)}]
 	rt.petMu.Unlock()
 	if state != nil {
 		if state.pickup != nil {
 			pending := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
-			result.Frames = append(result.Frames, pending.Frames...)
+			frames = append(frames, pending.Frames...)
 		}
+		state.satiety = companion.SatietyClock{}
 		state.follower = nil
 		state.transportCOS = nil
 		state.public = nil
 		state.generation++
 	}
 	rt.storeCosAbnormal(division, c.Name, gid, nil)
-	despawn := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()}
-	result.Frames = append(result.Frames, despawn)
-	result.Broadcast = []wire.Frame{despawn}
-	return result
+
+	return frames
 }

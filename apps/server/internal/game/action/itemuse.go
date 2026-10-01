@@ -24,6 +24,12 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+const (
+	cosSummonBusy     uint8 = 5
+	cosSummonInBattle uint8 = 0x78
+	cosSummonPosture  uint8 = 0x7a
+)
+
 /*
 ================
 cosSummonerType
@@ -253,6 +259,21 @@ func (rt *Runtime) HandleItemUse(
 		}
 
 		if family == itemUseSummoner {
+			if len(tail) != 0 {
+				return false
+			}
+			if character.NativeBodyStatus == 6 || character.NativeBodyStatus == 7 {
+				result = itemUseFailure(cosSummonPosture) // 49C0B6: posture admission precedes actor creation.
+				return false
+			}
+			if rt.PlayerAttackLocked(divisionID, character.Name) || rt.objectActionCommitted(divisionID, character.Name) {
+				result = itemUseFailure(cosSummonBusy) // 49BE65 -> 49BCDB: shared motion-change lock.
+				return false
+			}
+			if inBattleState(character, nowMs) {
+				result = itemUseFailure(cosSummonInBattle) // 49B9F0: riding and transport summons refuse battle.
+				return false
+			}
 			// v1.188 49B9F0 checks teleport mode before creating the companion.
 			if character.NativeTeleportMode == 1 {
 				result = itemUseFailure(0x69) // 49BB2B; v1.150 consumes this byte silently.
@@ -268,7 +289,7 @@ func (rt *Runtime) HandleItemUse(
 			}
 			cosRef, found := characters.CharacterRefByCodename(ref.AssociatedCharacterCodename)
 			if !found || cosRef == nil || cosRef.RefObjID == 0 || cosRef.Codename != ref.AssociatedCharacterCodename ||
-				cosRef.TidWord>>11 != 2 || cosRef.MaxHP == 0 {
+				(cosRef.TidWord>>11 != 1 && cosRef.TidWord>>11 != 2) || !cosRef.CanRide || cosRef.MaxHP == 0 {
 				return false
 			}
 			gid, gidOK := enterworld.CosObjectIDForCharacter(character)
@@ -284,9 +305,7 @@ func (rt *Runtime) HandleItemUse(
 			if name == "" {
 				name = cosRef.Codename
 			}
-			// 49BE8F: summoning a COS ends the transform (any word but 4).
-			rt.endTransform(divisionID, character, rt.Now().UnixMilli())
-			character.ActiveCOS = &domain.CharacterCOS{
+			pet := &domain.CharacterCOS{
 				NativeBodyStatus: domain.InitialCOSBodyStatus(character.NativeBodyStatus),
 				GID:              gid,
 				RefObjID:         cosRef.RefObjID,
@@ -295,10 +314,22 @@ func (rt *Runtime) HandleItemUse(
 				CurrentHP:        cosRef.MaxHP,
 				CurrentMP:        cosRef.MaxMP,
 				Summoned:         true,
+				Mounted:          true,
+				StateFlags:       3,
 			}
+			// Validate the complete private record before inventory debit. Native
+			// 4FB2C0 automatically binds both riding and transport vehicles.
+			record, recordErr := enterworld.BuildCOSRecord(pet, cosRef, rt.deps.ItemReferences())
+			if recordErr != nil {
+				return false
+			}
+			// 49BE8F: the admitted summon retires the transform before binding.
+			rt.endTransform(divisionID, character, nowMs)
+			character.ActiveCOS = pet
 			remaining := rt.consumeItemUseRow(character, rowIndex)
 			spawn := wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
 				BodyStatus: character.ActiveCOS.NativeBodyStatus,
+				Band:       uint8(cosRef.TidWord >> 11),
 				RefObjID:   cosRef.RefObjID,
 				Gid:        gid,
 				Position: wire.Position{
@@ -319,16 +350,22 @@ func (rt *Runtime) HandleItemUse(
 			result = OpResult{
 				Frames: []wire.Frame{
 					{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
-					{Opcode: wire.OpCosRecordCreate, Payload: wire.EncodeCosRecordCreateBand2(gid, cosRef.RefObjID, cosRef.MaxHP, cosRef.MaxMP, 0, false)},
+					{Opcode: wire.OpCosRecordCreate, Payload: record},
 					{Opcode: wire.OpSingleObjectSpawn, Payload: spawn},
 				},
 				Broadcast: []wire.Frame{{Opcode: wire.OpSingleObjectSpawn, Payload: spawn}},
 			}
+			ride := wire.Frame{Opcode: wire.OpCosRideState, Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(character), true, gid)}
+			result.Frames = append(result.Frames, ride)
+			result.Broadcast = append(result.Broadcast, ride)
+			speeds := rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(divisionID, character, nowMs))
+			result.Frames = append(result.Frames, speeds...)
+			result.Broadcast = append(result.Broadcast, speeds...)
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
 		}
 
-		if family == itemUsePetPotion || family == itemUsePetCure || family == itemUsePetRevive {
+		if family == itemUsePetPotion || family == itemUsePetCure || family == itemUsePetRevive || family == itemUsePetFeed {
 			return rt.applyCosItemUse(divisionID, character, ref, family, rowIndex, request, tail, nowMs, &result)
 		}
 		if len(tail) != 0 {

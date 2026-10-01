@@ -37,7 +37,7 @@ func TestCosRideSharesMountRangeAndPreservesDismountedVehicle(t *testing.T) {
 		{RegionID: initial.RegionID, X: initial.X, Y: initial.Y + 31, Z: initial.Z},
 	} {
 		rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) { w.Spawn = pose })
-		if result := rt.HandleCosRide(testDivision, c, mount); len(result.Frames) != 0 || c.ActiveCOS.Mounted {
+		if result := rt.HandleCosRide(testDivision, c, mount); !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideOutOfRange).Frames) || len(result.Broadcast) != 0 || c.ActiveCOS.Mounted {
 			t.Fatal("out-of-range mount accepted", pose, result)
 		}
 	}
@@ -56,7 +56,7 @@ func TestCosRideSharesMountRangeAndPreservesDismountedVehicle(t *testing.T) {
 	if saved := simulation.SeedWorldState(c); saved.Spawn != initial {
 		t.Fatal("mount relocation was not persisted", saved.Spawn)
 	}
-	if result := rt.HandleCosRide(testDivision, c, mount); len(result.Frames) != 0 {
+	if result := rt.HandleCosRide(testDivision, c, mount); !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideInvalidState).Frames) || len(result.Broadcast) != 0 {
 		t.Fatal("repeated mount changed state", result)
 	}
 	dismount := wire.NewWriter(5).U8(0).U32(gid).Payload()
@@ -77,6 +77,74 @@ func TestCosRideSharesMountRangeAndPreservesDismountedVehicle(t *testing.T) {
 		rt.HandleCosRide(testDivision, c, bad)
 		if !reflect.DeepEqual(before, c.Snapshot()) {
 			t.Fatal("malformed or foreign request mutated character", bad)
+		}
+	}
+}
+
+/*
+================
+TestCosMountCommandSharesPostureRefusal
+
+Both native composers must reject the same posture without publishing a
+ride change or relocating the owner.
+================
+*/
+func TestCosMountCommandSharesPostureRefusal(t *testing.T) {
+	for _, posture := range []uint8{6, 7} {
+		for _, panel := range []bool{false, true} {
+			c := testCharacter()
+			rt, _ := newTestRuntime(c, testCosSource(testItems()))
+			gid, _ := enterworld.CosObjectIDForCharacter(c)
+			c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true}
+			c.NativeBodyStatus = posture
+			rt.BindPetSession(testDivision, c, 1)
+			before := c.Snapshot()
+			var result OpResult
+			if panel {
+				result = rt.HandleCosRide(testDivision, c, wire.NewWriter(5).U8(1).U32(gid).Payload())
+			} else {
+				result = rt.HandleCosCommand(testDivision, c, wire.NewWriter(5).U32(gid).U8(wire.CosCommandMountTag).Payload())
+			}
+			if !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideInvalidPosture).Frames) || len(result.Broadcast) != 0 || !reflect.DeepEqual(before, c.Snapshot()) {
+				t.Fatalf("posture %d panel %v changed state: %+v", posture, panel, result)
+			}
+		}
+	}
+}
+
+/*
+================
+TestCosMountCannotInterruptCommittedAttack
+
+The real skill owner supplies the busy state; no test-only mount flag can
+stand in for the casting instance checked by the native manager.
+================
+*/
+func TestCosMountCannotInterruptCommittedAttack(t *testing.T) {
+	for _, panel := range []bool{false, true} {
+		rt, _, c, target := newCombatTestRuntime(t, 100000)
+		originalItems := rt.deps.ItemReferences().(staticItemSource)
+		equipCombatTestPet(t, rt, c, 2)
+		refs := rt.deps.ItemReferences().(cosTestItemSource)
+		refs.staticItemSource = originalItems
+		rt.deps.(*enterworld.Deps).Items = refs
+		skill := shippedOffense(t, "SKILL_CH_SWORD_SMASH_A_01")
+		rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+		c.Skills = append(c.Skills, skill.ID)
+		c.CurrentMP = testInt64(10000)
+		started := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target.Gid}.Encode())
+		if !rt.PlayerAttackLocked(testDivision, c.Name) {
+			t.Fatal("fixture did not open a casting instance", started)
+		}
+		before := c.Snapshot()
+		var result OpResult
+		if panel {
+			result = rt.HandleCosRide(testDivision, c, wire.NewWriter(5).U8(1).U32(c.ActiveCOS.GID).Payload())
+		} else {
+			result = rt.HandleCosCommand(testDivision, c, wire.NewWriter(5).U32(c.ActiveCOS.GID).U8(wire.CosCommandMountTag).Payload())
+		}
+		if !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideBusy).Frames) || len(result.Broadcast) != 0 || !reflect.DeepEqual(before, c.Snapshot()) || !rt.PlayerAttackLocked(testDivision, c.Name) {
+			t.Fatal("mount interrupted committed attack", panel, result)
 		}
 	}
 }

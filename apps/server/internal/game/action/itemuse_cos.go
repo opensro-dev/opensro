@@ -72,6 +72,8 @@ func (rt *Runtime) applyCosItemUse(
 		return rt.applyPetCure(divisionID, character, ref, rowIndex, request, tail, nowMs, result)
 	case itemUsePetRevive:
 		return rt.applyPetRevival(character, ref, rowIndex, request, tail, result)
+	case itemUsePetFeed:
+		return rt.applyPetFeed(petFeedUse{character: character, ref: ref, row: rowIndex, request: request, tail: tail}, result)
 	case itemUsePetPotion:
 		return rt.applyPetPotion(divisionID, character, ref, rowIndex, request, tail, nowMs, result)
 	default:

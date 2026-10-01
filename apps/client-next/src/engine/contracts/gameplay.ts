@@ -241,6 +241,8 @@ export type GameplayCommand =
 	| {
 		readonly kind: "item-use";
 		readonly slot: number;
+		readonly companionGid?: number;
+		readonly revivalSlot?: number;
 	}
 	| {
 		readonly kind: "navigation";

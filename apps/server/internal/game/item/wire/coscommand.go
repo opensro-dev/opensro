@@ -311,7 +311,7 @@ CosSpawnBand2 is sub_8554e0's plain internal/transport/pet create row.
 ================
 */
 type CosSpawnBand2 struct {
-	// Zero preserves band-2 callers; 3/4 select the verified pet name tail.
+	// Zero preserves band-2 callers; band 1 omits ownership, 3/4 add pet names.
 	Band       uint8
 	RefObjID   uint32
 	Gid        uint32
@@ -367,6 +367,11 @@ func EncodeCosSpawnBand2(row CosSpawnBand2) []byte {
 		U8(1).
 		U16(uint16(len(name))).
 		Bytes(name)
+	// 854FA0 and 8554E0 omit both the owner-name tail and owner GID for
+	// ordinary riding horses. The private COS record binds their owner.
+	if row.Band == 1 {
+		return w.U8(row.State).Payload()
+	}
 	if row.Band == 3 || row.Band == 4 {
 		w.U16(uint16(len(name))).Bytes(name)
 	}

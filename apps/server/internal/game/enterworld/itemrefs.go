@@ -306,14 +306,29 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 	maxHP, maxHPOK := textdataInt(fields[59])
 	maxMP, maxMPOK := textdataInt(fields[60])
 	capability, capabilityOK := textdataInt(fields[88])
-	if !walkOK || !runOK || !scaleOK || walk < 0 || run < 0 || scale <= 0 ||
+	canRide, canRideOK := textdataInt(fields[72])
+	if !canRideOK || canRide < 0 || canRide > 255 || !walkOK || !runOK || !scaleOK || walk < 0 || run < 0 || scale <= 0 ||
 		!levelOK || level < 0 || level > 0xff || !maxHPOK || maxHP <= 0 || maxHP > int64(^uint32(0)) ||
 		!maxMPOK || maxMP < 0 || maxMP > int64(^uint32(0)) ||
 		!capabilityOK || capability < 0 || capability > int64(^uint32(0)) {
 		return nil
 	}
+	var satietyMinutes uint32
+	if tidWord&0x7fe == 0x1c6 && tidWord>>11 == 3 {
+		const satietyMinutesColumn = 113
+		if len(fields) <= satietyMinutesColumn {
+			return nil
+		}
+		minutes, valid := textdataInt(fields[satietyMinutesColumn])
+		if !valid || minutes <= 0 || minutes > int64(^uint32(0))/60 {
+			return nil
+		}
+		satietyMinutes = uint32(minutes)
+	}
 	nameStrID := strings.TrimSpace(fields[5])
 	return &CharacterRef{
+		SatietyMinutes:             satietyMinutes,
+		CanRide:                    canRide != 0,
 		Parameters:                 monster.CharacterParameters(fields),
 		RefObjID:                   uint32(refObjID),
 		TidWord:                    tidWord,

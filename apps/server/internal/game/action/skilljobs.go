@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+skilljobs.go - online timed-effect checkpoints and actor admission
+
+Persistent duration advances on the simulation clock and survives reconnect.
+Admission restores companion binding and effects before bootstrap projection.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -10,6 +20,11 @@ import (
 	"sync/atomic"
 )
 
+/*
+================
+checkpointSkillJobs
+================
+*/
 func (rt *Runtime) checkpointSkillJobs(c *enterworld.Character, effects []statuseffect.Effect, now int64) bool {
 	var jobs []domain.TimedSkillJob
 	// Job ownership is independent of effect installation. An absent effect
@@ -47,6 +62,12 @@ func (rt *Runtime) checkpointSkillJobs(c *enterworld.Character, effects []status
 	}
 	return changed
 }
+
+/*
+================
+retireSkillJobs
+================
+*/
 func (rt *Runtime) retireSkillJobs(c *enterworld.Character, ended []statuseffect.Effect) bool {
 	jobs := make([]domain.TimedSkillJob, 0, len(c.TimedSkillJobs))
 	for _, job := range c.TimedSkillJobs {
@@ -70,6 +91,11 @@ func (rt *Runtime) retireSkillJobs(c *enterworld.Character, ended []statuseffect
 
 // Called under the division lock before serializing entry. Duplicate bootstrap
 // reads retain existing deadlines and tokens; reconnect cannot refresh duration.
+/*
+================
+restoreSkillJobs
+================
+*/
 func (rt *Runtime) restoreSkillJobs(division, name string) {
 	c := rt.findCharacter(division, name)
 	if c == nil || rt.deps.SkillData() == nil {
@@ -125,6 +151,11 @@ func (rt *Runtime) restoreSkillJobs(division, name string) {
 	})
 }
 
+/*
+================
+restorableSkillJob
+================
+*/
 func (rt *Runtime) restorableSkillJob(skillID uint32) (enterworld.SkillRow, bool) {
 	if rt.deps.SkillData() == nil {
 		return enterworld.SkillRow{}, false
@@ -135,6 +166,11 @@ func (rt *Runtime) restorableSkillJob(skillID uint32) (enterworld.SkillRow, bool
 
 // Native keeper commits each 300 online seconds and on actor teardown. An
 // abnormal process loss can recover the last checkpoint, as in that protocol.
+/*
+================
+checkpointOnlineSkillJobs
+================
+*/
 func (rt *Runtime) checkpointOnlineSkillJobs(now int64) {
 	rt.maintenance.Lock()
 	defer rt.maintenance.Unlock()
@@ -146,6 +182,12 @@ func (rt *Runtime) checkpointOnlineSkillJobs(now int64) {
 		}
 	}
 }
+
+/*
+================
+EntryMovementSpeeds
+================
+*/
 func (rt *Runtime) EntryMovementSpeeds(division, name string) (float32, float32) {
 	c := rt.characterSnapshot(division, rt.findCharacter(division, name))
 	if c == nil {
@@ -156,20 +198,32 @@ func (rt *Runtime) EntryMovementSpeeds(division, name string) (float32, float32)
 }
 
 // New authenticated admission restores jobs; in-world resets only project them.
+/*
+================
+RestoreTimedSkillJobs
+================
+*/
 func (rt *Runtime) RestoreTimedSkillJobs(division, name string) {
 	unlock := rt.lockDivision(division)
 	defer unlock()
+	rt.restoreCharacterCOS(division, name)
 	rt.restoreSkillJobs(division, name)
 }
 
 // Claim runtime lifetime before projecting entry effects/speeds. A displaced
 // socket can close while the replacement is still loading, before pet binding.
+/*
+================
+AdmitCharacterSession
+================
+*/
 func (rt *Runtime) AdmitCharacterSession(division, name string, session uint64) error {
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	if err := rt.admitPopulationSession(division, name, session); err != nil {
 		return err
 	}
+	rt.restoreCharacterCOS(division, name)
 	rt.restoreSkillJobs(division, name)
 	return nil
 }

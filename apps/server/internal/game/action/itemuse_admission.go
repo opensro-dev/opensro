@@ -38,6 +38,7 @@ const (
 	itemUsePetPotion
 	itemUsePetCure
 	itemUsePetRevive
+	itemUsePetFeed
 	itemUseMonsterCapsule
 	itemUseQuestTool
 	itemUseComposite
@@ -84,6 +85,8 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 			return itemUsePetPotion
 		case 6:
 			return itemUsePetRevive
+		case 9:
+			return itemUsePetFeed
 		}
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 2, 7} {

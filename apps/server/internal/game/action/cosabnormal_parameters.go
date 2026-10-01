@@ -16,8 +16,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
+	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -49,7 +49,7 @@ The RefObjChar keeper and abnormal algebra are shared with monsters. Recovery
 reductions and disease begin at zero; movement/action speed have explicit bases.
 ================
 */
-func cosParameter(ref *enterworld.CharacterRef, block *abnormal.Block, id uint16) float32 {
+func cosParameter(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, block *abnormal.Block, id uint16) float32 {
 	var base float32
 	if ref != nil {
 		switch {
@@ -72,14 +72,11 @@ func cosParameter(ref *enterworld.CharacterRef, block *abnormal.Block, id uint16
 	if id == 0x8c {
 		base = 100
 	}
-	if block == nil || !block.Touches(id) {
-		return base
+	satiety := uint16(companion.MaximumSatiety)
+	if pet != nil && ref != nil && ref.TidWord>>11 == 3 {
+		satiety = pet.Satiety
 	}
-	definition, exists := paramkeeper.NativeDefinition(id)
-	if !exists {
-		return base
-	}
-	value, err := block.Evaluate(id, definition, base)
+	value, err := companion.Parameter(id, base, satiety, block)
 	if err != nil {
 		log.WithError(err).WithField("param", id).Error("COS abnormal parameter projection failed")
 		return 0
@@ -98,5 +95,25 @@ and incoming-damage status modifiers. Catalog validation precedes admission.
 func cosCombatStats(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, block *abnormal.Block) (combat.Stats, error) {
 	base := ref.Parameters
 	base.RefObjID, base.Codename, base.Level = ref.RefObjID, ref.Codename, pet.Level
-	return combat.MonsterInstanceStats(monster.Instance{Ref: base, Abnormal: block})
+	stats, err := combat.MonsterInstanceStats(monster.Instance{Ref: base, Abnormal: block})
+	if err != nil || ref.TidWord>>11 != 3 {
+		return stats, err
+	}
+	for _, entry := range []struct {
+		id    uint16
+		value *float64
+		base  float64
+	}{
+		{5, &stats.PhysicalDefense, base.PhysicalDefense},
+		{6, &stats.MagicalDefense, base.MagicalDefense},
+		{9, &stats.EvasionRate, base.EvasionRate},
+		{11, &stats.HitRate, base.HitRate},
+	} {
+		value, err := companion.Parameter(entry.id, float32(entry.base), pet.Satiety, block)
+		if err != nil {
+			return combat.Stats{}, err
+		}
+		*entry.value = float64(value)
+	}
+	return stats, nil
 }

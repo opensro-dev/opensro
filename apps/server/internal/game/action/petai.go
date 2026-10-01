@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -32,6 +33,7 @@ petSession
 ================
 */
 type petSession struct {
+	satiety   companion.SatietyClock
 	session   uint64
 	character *enterworld.Character
 	refObjID  uint32
@@ -118,7 +120,8 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, key := range keys {
 		unlock := rt.lockDivision(key.division)
-		frames := rt.advancePet(key, nowMs)
+		frames := rt.advancePetSatiety(key, nowMs)
+		frames = append(frames, rt.advancePet(key, nowMs)...)
 		rt.petMu.Lock()
 		state := rt.petSessions[key]
 		rt.petMu.Unlock()
@@ -201,7 +204,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		return state.follower.Stop(nowMs)
 	}
 	block := rt.cosAbnormal(key.division, snapshot.Name, cos.GID)
-	walk, run := cosParameter(ref, block, movementWalkParameter), cosParameter(ref, block, movementRunParameter)
+	walk, run := cosParameter(ref, cos, block, movementWalkParameter), cosParameter(ref, cos, block, movementRunParameter)
 	state.follower.SetMovementSpeeds(walk, run, nowMs)
 	var constraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
 	if rt.ConstrainMovement != nil {
@@ -266,12 +269,12 @@ func (rt *Runtime) PetPresentation(division, name string) *simulation.PeerCOS {
 		}
 		ref, ok := refs.CharacterRefByCodename(cos.Codename)
 		gid, valid := enterworld.CosObjectIDForCharacter(c)
-		if !ok || ref == nil || !valid || gid != cos.GID || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 2 || ref.TidWord>>11 > 4 {
+		if !ok || ref == nil || !valid || gid != cos.GID || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 1 || ref.TidWord>>11 > 4 {
 			return
 		}
 		var world simulation.WorldState
 		var revision uint64
-		if ref.TidWord>>11 == 2 || cos.Mounted {
+		if ref.TidWord>>11 <= 2 || cos.Mounted {
 			if state.transportCOS != cos {
 				state.transportCOS = cos
 				state.transportWorld = simulation.WorldState{Spawn: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, rt.Now().UnixMilli())}
@@ -294,7 +297,7 @@ func (rt *Runtime) PetPresentation(division, name string) *simulation.PeerCOS {
 		block := rt.cosAbnormal(division, c.Name, cos.GID)
 		result = &simulation.PeerCOS{Mounted: cos.Mounted, NativeBodyStatus: cos.NativeBodyStatus, World: world, Revision: revision, Session: state.session, Generation: state.generation,
 			Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
-				Walk: cosParameter(ref, block, movementWalkParameter), Run: cosParameter(ref, block, movementRunParameter),
+				Walk: cosParameter(ref, cos, block, movementWalkParameter), Run: cosParameter(ref, cos, block, movementRunParameter),
 				Scale: ref.Scale, Name: name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c)}}
 		if block != nil && block.Mask != 0 {
 			result.AbnormalVitals = abnormalVitalsPayload(cos.GID, block)

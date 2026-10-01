@@ -45,7 +45,7 @@ func (rt *Runtime) HandleCosCommand(
 	}
 
 	snapshot, ref := rt.commandCOSSnapshot(divisionID, character, command.CosGid)
-	if snapshot == nil || ref.TidWord>>11 != 2 {
+	if snapshot == nil || (ref.TidWord>>11 != 1 && ref.TidWord>>11 != 2) {
 		return OpResult{}
 	}
 

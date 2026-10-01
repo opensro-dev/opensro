@@ -268,7 +268,9 @@ Param
 Evaluate the pet's own RefObjChar keeper and independent abnormal writes.
 ================
 */
-func (o *cosAbnormalOwner) Param(id uint16) float32 { return cosParameter(o.ref, o.block, id) }
+func (o *cosAbnormalOwner) Param(id uint16) float32 {
+	return cosParameter(o.ref, o.c.ActiveCOS, o.block, id)
+}
 
 /*
 ================

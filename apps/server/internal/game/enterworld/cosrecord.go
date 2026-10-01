@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+cosrecord.go - owner-private companion records
+
+Character references select the native wire grammar. Riding horses omit the
+persistent death word; pet records additionally carry progression and slot.
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -6,14 +16,20 @@ import (
 	"strconv"
 )
 
-// BuildCOSRecord publishes the same durable COS owner that behavior and
-// storage commands mutate. Native 830EC0 selects the grammar from characterdata.
+/*
+================
+BuildCOSRecord
+
+830EC0 selects the grammar from characterdata. The record and world actor
+must describe the same canonical companion before either is published.
+================
+*/
 func BuildCOSRecord(cos *CharacterCOS, ref *CharacterRef, items ItemRefSource) ([]byte, error) {
 	if cos == nil || ref == nil || cos.RefObjID != ref.RefObjID || cos.GID == 0 || ref.TidWord&0x7fe != 0x1c6 {
 		return nil, fmt.Errorf("invalid COS record identity")
 	}
 	band := ref.TidWord >> 11
-	if band < 2 || band > 4 || len([]byte(cos.Name)) > 65535 {
+	if band < 1 || band > 4 || len([]byte(cos.Name)) > 65535 {
 		return nil, fmt.Errorf("unsupported COS record family or name")
 	}
 	w := wire.NewWriter(64).U32(cos.GID).U32(cos.RefObjID).U32(cos.CurrentHP).U32(cos.CurrentMP)
@@ -58,7 +74,9 @@ func BuildCOSRecord(cos *CharacterCOS, ref *CharacterRef, items ItemRefSource) (
 	if cos.CurrentHP == 0 {
 		dead = 1
 	}
-	w.U32(dead)
+	if band != 1 {
+		w.U32(dead)
+	}
 	if band == 3 || band == 4 {
 		w.U8(cos.InventorySlot)
 	}

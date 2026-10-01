@@ -1074,8 +1074,9 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "cos-ride" ) {
 				const record = cosRecords.get( command.gid );
 				if (
-					!record || record.dead || record.hp === 0 || record.band !== 2 ||
-					entity?.gid !== record.gid || entity.kind !== "cos" || entity.ownerGid !== localGid ||
+					!record || record.dead || record.hp === 0 || ![ 1, 2 ].includes( record.band ) ||
+					entity?.gid !== record.gid || entity.kind !== "cos" ||
+					(record.band !== 1 && entity.ownerGid !== localGid) ||
 					entity.refObjId !== record.refObjId || command.mounted === (local?.mountedOn === record.gid)
 				) throw Error( "Invalid owned COS ride transition" );
 				const payload = new Uint8Array( 5 );
@@ -1335,7 +1336,11 @@ state here before a command can claim a native wire conversation.
 				return inventory.dropGold( command.amount, now );
 			}
 			if ( command.kind === "item-use" ) {
-				return inventory.use( command.slot, now );
+				return inventory.use( command.slot, now, {
+					records: [ ...cosRecords.values() ],
+					selectedGid: command.companionGid,
+					revivalSlot: command.revivalSlot
+				} );
 			}
 			if ( command.kind === "cancel" ) {
 				moveReservation.clear();
@@ -1639,6 +1644,19 @@ Packet handling must not depend on which HUD panel is currently open.
 					return false;
 				}
 				if ( fortressNext ) return true;
+				if ( frame.opcode === 0x3508 && frame.payload[4] === 4 ) {
+					const p = frame.payload;
+					if ( p.length !== 7 ) throw Error( "Invalid COS satiety update" );
+					const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+					const gid = v.getUint32( 0, true ), satiety = v.getUint16( 5, true );
+					if ( !gid || satiety > 10000 ) throw Error( "Invalid COS satiety value" );
+					const record = cosRecords.get( gid );
+					if ( record?.band === 3 ) {
+						cosRecords.set( gid, { ...record, satiety } );
+						dirty = true;
+					}
+					return true;
+				}
 				const feedbackResult = feedback.receive(
 					frame.opcode,
 					frame.payload,
@@ -1907,7 +1925,19 @@ Packet handling must not depend on which HUD panel is currently open.
 						throw new Error( "COS record capacity exceeded" );
 					}
 					cosRecords.set( record.gid, record );
-					if ( record.band === 2 ) activeCos = record;
+					if ( record.band === 1 || record.band === 2 ) activeCos = record;
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === 0xb4b5 ) {
+					const payload = frame.payload;
+					if ( payload[0] === 1 ) {
+						if ( payload.length !== 10 || payload[5]! > 1 ) throw Error( "Invalid COS ride result" );
+						return false;
+					}
+					if ( payload[0] !== 2 || payload.length !== 2 ) throw Error( "Invalid COS ride result" );
+					const notice = constantNativeNotice( 14, payload[1]! );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;
 				}
@@ -2318,7 +2348,7 @@ before take assembles the presentation snapshot.
 					slot === null || inventory.state().inventoryPending ||
 					!inventory.state().inventory.some( row => row.slot === slot )
 				) continue;
-				inventory.use( slot, now );
+				inventory.use( slot, now, { records: [ ...cosRecords.values() ] } );
 				dirty = true;
 			}
 			const combatChanged = combat.step( now ), inventoryChanged = inventory.step( now );

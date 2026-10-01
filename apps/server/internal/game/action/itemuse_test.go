@@ -68,7 +68,7 @@ func testCosSource(items staticItemSource) cosTestItemSource {
 		characters: map[string]*enterworld.CharacterRef{
 			"COS_T_DHORSE3": {
 				RefObjID: 3914, TidWord: 0x11C6, Codename: "COS_T_DHORSE3",
-				Name: "Red Horse", WalkSpeed: 20, RunSpeed: 40, Scale: 100,
+				Name: "Red Horse", WalkSpeed: 20, RunSpeed: 40, Scale: 100, CanRide: true,
 				Level: 105, MaxHP: 87829, MountedAttackCapability210: 3000,
 			},
 		},
@@ -235,10 +235,12 @@ func TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn(t *testing.T) {
 		wire.OpItemUseResponse,
 		wire.OpCosRecordCreate,
 		wire.OpSingleObjectSpawn,
+		wire.OpCosRideState,
+		movementSpeedOpcode,
 	)
-	assertOpcodes(t, result.Broadcast, wire.OpSingleObjectSpawn)
+	assertOpcodes(t, result.Broadcast, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode)
 	if character.ActiveCOS == nil || character.ActiveCOS.GID != 0x00C00003 ||
-		character.ActiveCOS.RefObjID != 3914 || !character.ActiveCOS.Summoned || character.ActiveCOS.Mounted {
+		character.ActiveCOS.RefObjID != 3914 || !character.ActiveCOS.Summoned || !character.ActiveCOS.Mounted {
 		t.Fatalf("active COS = %+v", character.ActiveCOS)
 	}
 	if got := binary.LittleEndian.Uint32(result.Frames[1].Payload[0:4]); got != character.ActiveCOS.GID {
@@ -354,25 +356,18 @@ TestCosSummonDoesNotFabricateABoardWindow
 func TestCosSummonDoesNotFabricateABoardWindow(t *testing.T) {
 	character := testCharacter()
 	source := testCosSource(testItems())
-	source.staticItemSource["ITEM_COS_P_RABBIT_SCROLL"] = &enterworld.ItemRef{
-		RefObjID: 12345, Codename: "ITEM_COS_P_RABBIT_SCROLL",
-		TypeIDs:                     [4]int64{3, 3, 3, 2},
-		AssociatedCharacterCodename: "COS_P_RABBIT",
-		NativeFields:                enterworld.NewNativeFields(map[string]float64{"itemParam1_29c": 40320, "canUse": 1}),
-	}
-	source.characters["COS_P_RABBIT"] = &enterworld.CharacterRef{
-		RefObjID: 12346, TidWord: 0x11C6, Codename: "COS_P_RABBIT",
-		Name: "Rabbit", WalkSpeed: 20, RunSpeed: 40, Scale: 100, Level: 1, MaxHP: 100,
-	}
+	item := source.staticItemSource["ITEM_COS_T_DHORSE3"]
+	// Summon admission must not interpret a summoner parameter as a timed
+	// pet-skill window. Use an actual transport family, not a rabbit with
+	// a fabricated transport type word.
+	item.NativeFields = enterworld.NewNativeFields(map[string]float64{"itemParam1_29c": 40320, "canUse": 1})
 	character.MissionInventory = append(character.MissionInventory, enterworld.InventoryRow{
-		Slot: 23, RefObjID: 12345, Codename: "ITEM_COS_P_RABBIT_SCROLL",
-		TypeFlags: wire.PackTypeFlags(3, 3, 3, 2), StackCount: 1,
+		Slot: 23, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags(), StackCount: 1,
 	})
 	rt, _ := newTestRuntime(character, source)
-
-	for _, frame := range rt.HandleItemUse(testDivision, character, []byte{23, 0xEC, 0x11}).Frames {
+	for _, frame := range rt.HandleItemUse(testDivision, character, []byte{23, 0xec, 0x11}).Frames {
 		if frame.Opcode == wire.OpCosStateRefresh {
-			t.Fatal("summon fabricated a kind-3 window from a minutes-valued summoner")
+			t.Fatal("summon fabricated a kind-3 window")
 		}
 	}
 	if character.ActiveCOS == nil || !character.ActiveCOS.Summoned {
@@ -380,8 +375,7 @@ func TestCosSummonDoesNotFabricateABoardWindow(t *testing.T) {
 	}
 }
 
-// ITEM_MALL_PET_SKILL_* is the family whose Param1 is authored in SECONDS
-// (1800, Ã¬â€šÂ¬Ã­â€¢â„¢Ã¬â€šÂ¬Ã¬Å¡Â©Ã¬â€¹Å“ÃªÂ°â€ž), which is what sub_6E6E00's x1000 expects.
+// ITEM_MALL_PET_SKILL_* authors Param1 in seconds, as 6E6E00 expects.
 /*
 ================
 petSkillSource

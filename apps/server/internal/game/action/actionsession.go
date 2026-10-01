@@ -300,6 +300,21 @@ func (rt *Runtime) retireActionSessions() []simulation.DivisionFrames {
 
 /*
 ================
+objectActionCommitted
+
+4ACC10 reads the executing front command's commitment flag. Cancellation
+and mount admission must retain the same linked-skill lifetime, including
+intervals between positive-time stages.
+================
+*/
+func (rt *Runtime) objectActionCommitted(division, name string) bool {
+	intent, exists := rt.combatIntentFor(division, name)
+	open := rt.hasOpenSkillCast(division, name)
+	return (!exists && open) || (intent.SingleCast && (intent.NextActionMs != 0 || intent.ComboRootID != 0) && open)
+}
+
+/*
+================
 cancelObjectAction
 
 4ACC40 permits cancelling a normal attack but preserves a skill once its
@@ -321,9 +336,7 @@ func (rt *Runtime) cancelObjectAction(division string, character, snapshot *ente
 			return OpResult{Frames: []wire.Frame{{Opcode: wire.OpActionState, Payload: state.Encode()}}}
 		}
 	}
-	intent, exists := rt.combatIntentFor(division, snapshot.Name)
-	open := rt.hasOpenSkillCast(division, snapshot.Name)
-	if (!exists && open) || (intent.SingleCast && (intent.NextActionMs != 0 || intent.ComboRootID != 0) && open) {
+	if rt.objectActionCommitted(division, snapshot.Name) {
 		// Inference across versions: preserve 0x4004's low error byte for
 		// 75BAF5's one-byte category-0x19 reader. Code 4 is silent in v1.150.
 		const committedActionNotice = 4

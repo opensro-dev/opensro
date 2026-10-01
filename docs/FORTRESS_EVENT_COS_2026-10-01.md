@@ -38,6 +38,45 @@ The v1.150 content boundary still applies; the later server supplies rules.
   end messages reactivated war. The browser already preserves this native
   rule; the server emitter must publish each transition exactly once.
 
+## 2026-10-02 riding and hunger continuation
+
+- Ordinary riding horses (COS band 1) now enter the summon, private record,
+  spawn, movement, reconnect, ride-toggle and peer-visibility paths. Their
+  record omits the death word and their spawn omits owner-name/GID tails.
+  Client command ownership comes from the owner-private companion record.
+- Consumable vehicle summoning binds the rider automatically. New actor
+  restoration binds saved usable vehicles before bootstrap and initializes
+  their movement speeds; repeated admission of a resident actor preserves a
+  parked transport. Dismount retires band-1 horses; band-2 transports remain.
+- Reference column 72 supplies ride permission. Mounts reject the shared
+  committed-action/cast lock, posture and distance failures. Both native
+  request composers return the same category-14 refusal. Summoning rejects
+  trailing request bytes, battle, blocked posture and the shared action lock.
+- Pet food consumes Param1, recovers HGP and sends v1.150 `3508/4`. The client
+  composes native target tails for pet potions, cures, food and revival, with
+  explicit selection required when several eligible records exist.
+- Online attack-pet hunger retains fractional float32 drain. Reference
+  parameter 4 (column 113) gives minutes per one percent; shipped wolves use
+  five minutes. HGP below 3000 applies the native factor through the existing
+  parameter keeper. Defensive combat stats use it now; the independent pet
+  attack producer remains outstanding. Starvation uses shared death cleanup.
+  Cancellation/horse retirement clear transient commands, abnormal state and
+  hunger clocks so a new actor cannot inherit them.
+
+Native checks: server `4D5E00` hunger, `4D60A0` eight affected parameters,
+`6A602E` rate derivation, `49D240` food, `4FB2C0`/`4FA430` automatic mounting,
+`4EC750` horse retirement, `483F40` reference permission. Server `482840`
+was misleadingly labelled as an attack-pet test: the raw mask checks band 1.
+It is now `CGObj_IsRidingHorseCOS`; snapshot 327 was saved and the label read
+back. Client snapshot 264 retains the inspected hunger gauge label.
+
+Pet EXP has been traced, **not implemented**. `410110` uses the pet's own
+level and no player mastery-gap factor; `4D6370` caps positive EXP below the
+next level when the pet has reached its owner's level. `4D6210`/`4EFD10`
+follow the authored next-reference chain, restore vitals/HGP, and publish a
+reference change before EXP feedback. Do not credit player EXP to a pet or
+pretend a level counter implements this lifecycle.
+
 ## Native evidence
 
 Claims were checked against raw instructions, including the original scalar
@@ -100,10 +139,13 @@ an instruction comment and was verified by reading the snapshot back.
   pet-combat refusal must be connected when independent attack AI exists.
 - Pet-owned attack/AI, including owner target rules, independent stats and
   movement. Mounted rider attacks do not establish attack-pet parity.
-- Pet summon/resummon persistence, naming, satiety transitions, inventory
-  growth, experience distribution and owner movement tethers mapped above.
-- Finish the remaining mount admission branches. Owner-to-vehicle relocation
-  (`4FC643`) is implemented; this does not establish complete ride parity.
+- Pet summon/resummon persistence, naming, inventory growth, experience
+  distribution and owner movement tethers mapped above. Online hunger and
+  feeding are now implemented; this is not complete pet progression.
+- Finish job/world-specific mount and summon admission and level-suffixed
+  transport reference resolution. Riding horses, automatic binding, reconnect,
+  distance, posture, action locks and horse retirement are implemented; the
+  single-COS ownership model still prevents native concurrent companions.
 - Finer server pickup refusal classes, reservation-refresh reacquisition,
   and any remaining native local busy-state branches.
 - Fortress manager requests/UI, persistent ownership/tax/treasury, guild
@@ -183,3 +225,23 @@ nullable assertions in the new cancellation test, and stale generated NPC/
 attachment packs. The projection, ownership map and assertions were corrected;
 the concurrent asset rebuild completed before the final client run. No test
 was removed or weakened to bypass these failures. No production deployment.
+
+### Riding/hunger validation on 2026-10-02
+
+Final source pipeline: all 12 tasks passed in 67.9 seconds, including server
+vet, lint, tests, race subset and vulnerability checks. The full client check
+passed all 11 gates in 121.7 seconds. Focused Go tests cover the shipped horse
+item, automatic binding, both mount request paths, reconnect speed, retirement
+and GM body-status inheritance. The client COS suite passed all eight tests,
+including horse ownership without a public owner tail. Hunger/feeding tests
+cover fractional drain, feeding recovery, the hungry-stat threshold and shared
+starvation cleanup.
+
+Earlier source attempts failed with `frames = [B5BD 3158 30D7 B4B5 376F],
+want [B5BD 3158 30D7]` and `the summon itself must still succeed`. The first
+fixture now exercises automatic mounting before parking; the second uses a
+transport rather than a rabbit with a fabricated transport type. The new
+client test initially failed `Property 'band' does not exist` on the narrow
+active-COS view; it now asserts that view's GID contract. Final reruns passed
+after those corrections. No live-browser validation, full asset build or
+production deployment was performed for this continuation.

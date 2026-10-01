@@ -177,6 +177,10 @@ type CharacterRef struct {
 	MaxHP                      uint32
 	MaxMP                      uint32
 	MountedAttackCapability210 uint32
+	// RefObjChar parameter 4: minutes per percentage point of attack-pet HGP.
+	SatietyMinutes uint32
+	// Client column 72, server RefObjCommon+8C bit 0x400: vehicle use permission.
+	CanRide bool
 }
 
 /*

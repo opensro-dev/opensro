@@ -118,6 +118,11 @@ test("ride toggle keeps native state-byte ordering and waits for server authorit
 	gameplay.command( { ...command, kind: "cos-ride" }, 0, f.pet, f.frame.local );
 	assert.deepEqual( sent, [ { opcode: 0x74b5, payload: Uint8Array.of( 1, 2, 0, 0, 0 ) } ] );
 	assert.equal( f.frame.local.mountedOn, undefined );
+	assert.equal( gameplay.receive( { opcode: 0xb4b5, payload: Uint8Array.of( 2, 4 ) }, 1 ), true );
+	assert.equal( gameplay.take()?.cosRecords?.[0]?.gid, 2 );
+	for ( const payload of [ Uint8Array.of( 2 ), Uint8Array.of( 2, 4, 0 ), Uint8Array.of( 3, 4 ) ] ) {
+		assert.throws( () => gameplay.receive( { opcode: 0xb4b5, payload }, 1 ), /ride result/ );
+	}
 	assert.throws( () => gameplay.command( { kind: "cos-ride", gid: 2, mounted: false }, 0, f.pet, f.frame.local ) );
 	gameplay.command( { kind: "cos-ride", gid: 2, mounted: false }, 1, f.pet, { ...f.frame.local, mountedOn: 2 } );
 	assert.deepEqual( sent[1], { opcode: 0x74b5, payload: Uint8Array.of( 0, 2, 0, 0, 0 ) } );
@@ -232,4 +237,29 @@ test("dead, moving, disabled and foreign pets do not issue pickup; reset retires
 	f.owner.clear();
 	f.entities.set( 2, { ...f.pet, ownerGid: 1 } );
 	assert.deepEqual( f.owner.step( f.frame ), [] );
+});
+
+test("ordinary riding horse uses its private record without a public owner tail", () => {
+	const f = fixture();
+	const sent = [];
+	const gameplay = createGameplay( frame => sent.push( frame ) );
+	gameplay.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x9c6 } ] } );
+	gameplay.seed( f.frame.local );
+	const horse = { ...f.pet, ownerGid: undefined };
+	const record = new Uint8Array( 17 );
+	const view = new DataView( record.buffer );
+	view.setUint32( 0, 2, true );
+	view.setUint32( 4, 9, true );
+	view.setUint32( 8, 100, true );
+	assert.throws( () =>
+		gameplay.command( { kind: "cos-ride", gid: 2, mounted: false }, 0, horse, { ...f.frame.local, mountedOn: 2 } )
+	);
+	gameplay.receive( { opcode: 0x3158, payload: record }, 0 );
+	gameplay.command( { kind: "cos-ride", gid: 2, mounted: false }, 1, horse, { ...f.frame.local, mountedOn: 2 } );
+	assert.deepEqual( sent, [ { opcode: 0x74b5, payload: Uint8Array.of( 0, 2, 0, 0, 0 ) } ] );
+	assert.equal( gameplay.take()?.activeCos?.gid, 2 );
+	gameplay.receive( { opcode: 0x36ab, payload: Uint8Array.of( 2, 0, 0, 0 ) }, 2 );
+	assert.equal( gameplay.take()?.cosRecords?.length, 0 );
+	assert.throws( () => gameplay.command( { kind: "cos-ride", gid: 2, mounted: true }, 3, horse, f.frame.local ) );
+	gameplay.dispose();
 });

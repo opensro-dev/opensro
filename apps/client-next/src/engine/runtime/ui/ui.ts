@@ -4060,7 +4060,9 @@ export function createUi(
 					if ( binding === 15 ) {
 						const game = view.gameplay;
 						const local = view.entities.find( entity => entity.gid === game?.localGid );
-						const record = game?.cosRecords?.find( r => r.band === 2 && !r.dead && r.hp > 0 );
+						const record = game?.cosRecords?.find( r =>
+							(r.band === 1 || r.band === 2) && !r.dead && r.hp > 0
+						);
 						if ( record && local ) {
 							sendGameplay( {
 								kind: "cos-ride",

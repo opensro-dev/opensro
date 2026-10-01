@@ -51,7 +51,7 @@ func equipCombatTestPet(t *testing.T, rt *Runtime, character *enterworld.Charact
 	if !valid {
 		t.Fatal("fixture has no COS identity")
 	}
-	ref := &enterworld.CharacterRef{RefObjID: 9, Codename: "PET", TidWord: band<<11 | 0x1c6,
+	ref := &enterworld.CharacterRef{RefObjID: 9, Codename: "PET", TidWord: band<<11 | 0x1c6, CanRide: band == 1 || band == 2,
 		Level: 1, MaxHP: 1_000_000, MaxMP: 600, WalkSpeed: 20, RunSpeed: 80,
 		Parameters: monster.MonsterRef{CombatPinned: true, BodyRadius: 10, HitRate: 10}}
 	items := cosTestItemSource{staticItemSource: testItems(), characters: map[string]*enterworld.CharacterRef{ref.Codename: ref}}
