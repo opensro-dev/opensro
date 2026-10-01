@@ -31,6 +31,9 @@ func (rt *Runtime) HandleItemMove(
 	character *enterworld.Character,
 	payload []byte,
 ) OpResult {
+	if len(payload) > 0 && payload[0] == wire.MoveTypeMallBuy {
+		return rt.HandleMallPurchase(divisionID, character, payload)
+	}
 	request, err := wire.DecodeItemMoveRequest(payload)
 	if err != nil {
 		// Unsupported movement types and malformed bodies both answer the

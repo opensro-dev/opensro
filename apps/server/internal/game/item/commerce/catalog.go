@@ -1,4 +1,13 @@
-// Package commerce owns merchandise admission. Action owns live transactions.
+/*
+===========================================================================
+
+catalog.go - authored gold merchandise admission and package definitions
+
+NPC and mall catalogues share template decoding. Their independent currency
+and purchase policies remain in the respective catalogue owners.
+
+===========================================================================
+*/
 package commerce
 
 import (
@@ -9,6 +18,11 @@ import (
 	"strconv"
 )
 
+/*
+================
+Content
+================
+*/
 type Content struct {
 	Ref      *enterworld.ItemRef
 	Stack    uint16
@@ -18,6 +32,11 @@ type Content struct {
 	Magic    []uint64
 }
 
+/*
+================
+Offer
+================
+*/
 type Offer struct {
 	Slot     uint8
 	Ref      *enterworld.ItemRef
@@ -25,6 +44,12 @@ type Offer struct {
 	Stack    uint16
 	Contents []Content
 }
+
+/*
+================
+Catalog
+================
+*/
 type Catalog struct {
 	Tabs  map[int32][]Offer
 	Magic enterworld.MagicOptionSource
@@ -32,6 +57,11 @@ type Catalog struct {
 
 // Load admits authored gold packages and preserves every item template.
 // Conditional and multi-currency policies still require their own authorities.
+/*
+================
+Load
+================
+*/
 func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 	tables := map[string][][]string{}
 	for _, name := range []string{"refshoptab", "refshopgoods", "refscrapofpackageitem", "refpricepolicyofitem", "refconditiontosellpackageitem", "refrewardpolicytosellpackageitem"} {
@@ -102,54 +132,19 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		if blocked[r[3]] || len(rows) == 0 || prices[r[3]] == 0 || refs == nil {
 			continue
 		}
-		contents := []Content{}
-		valid := true
-		for _, scrap := range rows {
-			ref, ok := refs.ItemRefByCodename(scrap[3])
-			if !ok || ref == nil || ref.TypeIDs[0] != 3 || (ref.TypeIDs[1] != 1 && ref.TypeIDs[1] != 3) || ref.TypeIDs[1] == 3 && (ref.TypeIDs[2] == 5 || ref.TypeIDs[2] == 8) {
-				valid = false
-				break
-			}
-			plus, e1 := strconv.ParseUint(scrap[4], 10, 8)
-			variance, e2 := strconv.ParseUint(scrap[5], 10, 64)
-			data, e3 := strconv.ParseUint(scrap[6], 10, 32)
-			count, e4 := strconv.ParseUint(scrap[7], 10, 8)
-			if e1 != nil || e2 != nil || e3 != nil || e4 != nil || count > 12 {
-				valid = false
-				break
-			}
-			magic := []uint64{}
-			for i := 0; i < 12; i++ {
-				n, e := strconv.ParseUint(scrap[8+i], 10, 64)
-				if e != nil || i >= int(count) && n != 0 {
-					valid = false
-					break
-				}
-				if i < int(count) {
-					magic = append(magic, n)
-				}
-			}
-			if !valid {
-				break
-			}
-			stack := uint16(1)
-			if ref.TypeIDs[1] == 3 {
-				max := ref.NativeFields.Get("maxStack")
-				if max < 1 || max > 65535 || max != float64(uint16(max)) || data > 65535 || plus != 0 || variance != 0 || count != 0 {
-					valid = false
-					break
-				}
-				stack = uint16(max)
-			} else if data == 0 {
-				if ref.VarianceIntMin1c0 == nil || *ref.VarianceIntMin1c0 < 0 || *ref.VarianceIntMin1c0 > 0xffffffff {
-					valid = false
-					break
-				}
-				data = uint64(*ref.VarianceIntMin1c0)
-			}
-			contents = append(contents, Content{Ref: ref, Stack: stack, Plus: uint8(plus), Variance: variance, Data: uint32(data), Magic: magic})
+		contents, err := packageContents(rows, refs)
+		if err != nil {
+			continue
 		}
-		if !valid || len(contents) == 0 || len(contents) > 96 {
+		admitted := true
+		for _, content := range contents {
+			ref := content.Ref
+			if (ref.TypeIDs[1] != 1 && ref.TypeIDs[1] != 3) || ref.TypeIDs[1] == 3 && (ref.TypeIDs[2] == 5 || ref.TypeIDs[2] == 8) {
+				admitted = false
+				break
+			}
+		}
+		if !admitted {
 			continue
 		}
 		first := contents[0]

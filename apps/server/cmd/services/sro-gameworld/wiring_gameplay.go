@@ -123,6 +123,9 @@ func newGameplayPlane(
 	if err := items.ConfigureCommerce(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
+	if err := items.ConfigureMall(devPaths.TextdataDir, authorityStore); err != nil {
+		return nil, fmt.Errorf("mall catalogue: %w", err)
+	}
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
 	deps.StaticRefItemCodenames = items.StaticRefItemCodenames

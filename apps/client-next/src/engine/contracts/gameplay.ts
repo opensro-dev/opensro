@@ -180,6 +180,11 @@ export type GameplayCommand =
 	| { readonly kind: "cos-behavior"; readonly gid: number; readonly mode: number; }
 	| { readonly kind: "shop-buyback"; readonly id: number; }
 	| import("./item-process").ItemProcessCommand
+	| { readonly kind: "mall-open"; }
+	| {
+		readonly kind: "mall-buy";
+		readonly request: import("@/engine/foundation/gameplay/item-mall-wire").MallPurchase;
+	}
 	| { readonly kind: "shop-open"; readonly gid: number; }
 	| { readonly kind: "shop-buy"; readonly tab: number; readonly slot: number; readonly quantity: number; }
 	| { readonly kind: "shop-sell"; readonly slot: number; readonly quantity: number; }
@@ -394,6 +399,7 @@ committed state to consumers without sharing mutable owner collections.
 ================
 */
 export interface GameplayState {
+	readonly itemMall?: import("./item-mall").MallState;
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;
 	readonly huntingPoints?: readonly import("@/engine/foundation/gameplay/hunting").HuntingPoint[];
 	readonly npcConversation?: import("@/engine/foundation/gameplay/npc-dialogue").NpcConversation;

@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-characters.ts - characters.ts - admitted character models, world batches and separate portrait sources
+characters.ts - admitted character models, world batches and separate portrait sources
 
 ===========================================================================
 */
@@ -20,6 +20,7 @@ import {
 } from "@/engine/foundation/animation/particle-graph";
 import { bindNativeClip, type NativeClip } from "@/engine/foundation/animation/native-clip";
 import { createActorSnapshots } from "./actor-snapshots";
+import type { PortraitPart, PortraitSource } from "@/engine/contracts/portrait";
 import { bsrParticleAttachment } from "@/engine/foundation/animation/bsr-particle-transform";
 import { createPaletteStreams } from "./palette-streams";
 import { createCharacterRenderPlan } from "@/engine/foundation/animation/character-render-plan";
@@ -534,10 +535,27 @@ export function createCharacters(
 		Borrow the same retained model and textures used by the world actor.
 		================
 		*/
-		portraitSource( gid: number ) {
+		portraitSource( gid: number ): PortraitSource | null {
 			const actor = portraitSnapshots.index.get( gid ) ?? actors.find( a => a.gid === gid ),
 				resource = actor && models.get( actor.model );
-			return actor && resource ? { actor, model: resource.model, images: resource.images } : null;
+			if ( !actor || !resource ) return null;
+			const candidates = portraitSnapshots.index.has( gid ) ? [ ...portraitSnapshots.index.values() ] : actors;
+			const children: PortraitPart[] = [];
+			const parents = new Set( [ gid ] );
+			// Preserve nested private-skeleton attachments without borrowing unrelated actors.
+			for ( let previous = -1; previous !== parents.size; ) {
+				previous = parents.size;
+				for ( const child of candidates ) {
+					if ( parents.has( child.gid ) || !child.attachment || !parents.has( child.attachment.gid ) ) {
+						continue;
+					}
+					const childResource = models.get( child.model );
+					if ( !childResource ) continue;
+					children.push( { actor: child, model: childResource.model, images: childResource.images } );
+					parents.add( child.gid );
+				}
+			}
+			return { actor, model: resource.model, images: resource.images, children };
 		},
 		/*
 		================

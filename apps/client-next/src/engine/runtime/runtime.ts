@@ -617,6 +617,7 @@ export function startRuntime(
 				world.pumpCameraScripts( now );
 				presentation.step( simulationTimeMs );
 				characters.profile( frameProbe() );
+				characters.mallOutfit( worldPresented ? ui.mallPreview() : null );
 				characters.step(
 					presentation.entities(),
 					presentation.gameplay(),
@@ -635,6 +636,7 @@ export function startRuntime(
 					normalFortressClothes
 				);
 				markStage( "character-presentation" );
+				ui.mallPreviewState( characters.mallPreviewState() );
 				const eventRain = characters.eventRain();
 				renderer.setWeather(
 					worldPresented ?

@@ -1,7 +1,18 @@
+/*
+===========================================================================
+
+commerce.go - NPC shop projections and authoritative gold transactions
+
+Package decoding and delivery are shared with the mall. Selected NPC, tax,
+buyback and gold policy stay in this merchant transaction owner.
+
+===========================================================================
+*/
 package action
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -18,6 +29,11 @@ import (
 const opShopCatalog uint16 = 11
 const opShopInventory uint16 = 12
 
+/*
+================
+ConfigureCommerce
+================
+*/
 func (rt *Runtime) ConfigureCommerce(dir string) error {
 	c, e := commerce.Load(dir, rt.deps.ItemReferences())
 	if e == nil {
@@ -27,12 +43,23 @@ func (rt *Runtime) ConfigureCommerce(dir string) error {
 	return e
 }
 
+/*
+================
+shopContent
+================
+*/
 type shopContent struct {
 	Ref      uint32 `json:"refObjId"`
 	Name     string `json:"name"`
 	Quantity uint32 `json:"quantity"`
 	Plus     uint8  `json:"plus"`
 }
+
+/*
+================
+shopOffer
+================
+*/
 type shopOffer struct {
 	PurchaseLimit uint16             `json:"purchaseLimit"`
 	Previews      []shopInventoryRow `json:"previews"`
@@ -45,10 +72,21 @@ type shopOffer struct {
 	Stack         uint16             `json:"maxStack"`
 }
 
+/*
+================
+shopTabPresentation
+================
+*/
 type shopTabPresentation struct {
 	Index       uint8  `json:"index"`
 	LabelSymbol string `json:"labelSymbol"`
 }
+
+/*
+================
+shopProjection
+================
+*/
 type shopProjection struct {
 	SaleQuotes []shopSaleQuote       `json:"saleQuotes"`
 	Tabs       []shopTabPresentation `json:"tabs"`
@@ -60,6 +98,11 @@ type shopProjection struct {
 	Error      string                `json:"error,omitempty"`
 }
 
+/*
+================
+commerceNpc
+================
+*/
 func (rt *Runtime) commerceNpc(division string, c *enterworld.Character, gid uint32) (simulation.NpcDef, bool) {
 	if c == nil || rt.Commerce == nil {
 		return simulation.NpcDef{}, false
@@ -77,6 +120,12 @@ func (rt *Runtime) commerceNpc(division string, c *enterworld.Character, gid uin
 	// Explicit rebuild service policy, not an original-server distance proof.
 	return npc, !math.IsNaN(distance) && !math.IsInf(distance, 0) && distance <= 150
 }
+
+/*
+================
+eachShopOffer
+================
+*/
 func (rt *Runtime) eachShopOffer(npc simulation.NpcDef, visit func(uint8, commerce.Offer)) {
 	index := 0
 	for _, group := range npc.NpcTalkStoreGroups {
@@ -91,6 +140,12 @@ func (rt *Runtime) eachShopOffer(npc simulation.NpcDef, visit func(uint8, commer
 		}
 	}
 }
+
+/*
+================
+shopCatalog
+================
+*/
 func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uint32) wire.Frame {
 	p := shopProjection{Version: 1, Npc: gid, Offers: []shopOffer{}, Tabs: []shopTabPresentation{}}
 	snapshot := rt.characterSnapshot(division, c)
@@ -144,6 +199,12 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 	b, _ := json.Marshal(p)
 	return wire.Frame{Opcode: opShopCatalog, Payload: b}
 }
+
+/*
+================
+applyCommerce
+================
+*/
 func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	snapshot := rt.characterSnapshot(division, c)
 	npc, ok := rt.commerceNpc(division, snapshot, q.NpcGID)
@@ -197,61 +258,21 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			}
 			cost := unit * uint64(q.Quantity)
 			if cost > balance {
+				result = failureResult(wire.ErrCodeNotEnoughGold)
 				return false
 			}
 			contents := offer.Contents
 			if len(contents) == 0 {
 				contents = []commerce.Content{{Ref: offer.Ref, Stack: offer.Stack}}
 			}
-			dest := []uint8{}
-			for _, template := range contents {
-				units := uint64(q.Quantity)
-				stackable := inventory.IsEtcStackableTypeFlags(template.Ref.TypeFlags())
-				if stackable && template.Data > 0 {
-					units *= uint64(template.Data)
-				}
-				// Bound expanded packages before granting; COS and player bags have
-				// different capacities. Multiply in uint64 so malformed data cannot wrap.
-				capacity := uint64(inventory.BagSlotEnd - inventory.EquipmentSlotEnd)
-				if container != nil {
-					capacity = uint64(container.Capacity)
-				}
-				maxUnits := capacity
-				if stackable {
-					maxUnits *= uint64(template.Stack)
-				}
-				if units > maxUnits {
-					return false
-				}
-				for units > 0 {
-					quantity := uint16(1)
-					if stackable {
-						n := units
-						if n > 65535 {
-							n = 65535
-						}
-						quantity = uint16(n)
-					}
-					item := inventory.Item{RefObjID: template.Ref.RefObjID, Codename: template.Ref.Codename, TypeFlags: template.Ref.TypeFlags(), Plus: template.Plus, VarianceBits: template.Variance, Durability: template.Data, MagicOptions: append([]uint64(nil), template.Magic...), Quantity: quantity}
-					if stackable {
-						grant, fault := inv.GrantStack(item, template.Stack)
-						if fault != nil {
-							return false
-						}
-						dest = append(dest, grant.DestSlot)
-						units -= uint64(quantity - grant.GroundRemainder)
-					} else {
-						slot, fault := inv.Grant(item)
-						if fault != nil {
-							return false
-						}
-						dest = append(dest, slot)
-						units--
-					}
-					if len(dest) > 255 {
-						return false
-					}
-				}
+			capacity := uint16(inventory.BagSlotEnd - inventory.EquipmentSlotEnd)
+			if container != nil {
+				capacity = uint16(container.Capacity)
+			}
+			dest, grantErr := commerce.GrantPackage(inv, contents, q.Quantity, capacity)
+			if grantErr != nil {
+				result = commerceFailure(grantErr)
+				return false
 			}
 			balance -= cost
 			w := wire.NewWriter(7 + len(dest)).U8(1).U8(8).U8(q.ShopTab).U8(q.ShopSlot).U8(uint8(len(dest)))
@@ -284,6 +305,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				return false
 			}
 			if _, fault := inv.DropQuantity(q.SourceSlot, q.Quantity); fault != nil {
+				result = commerceFailure(fault)
 				return false
 			}
 			if !commerceNoBuyback(item.TypeFlags, item.Codename) {
@@ -332,6 +354,11 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	return result
 }
 
+/*
+================
+shopInventoryRow
+================
+*/
 type shopInventoryRow struct {
 	Slot uint8  `json:"slot"`
 	Ref  uint32 `json:"refObjId"`
@@ -340,6 +367,11 @@ type shopInventoryRow struct {
 	Body []int  `json:"body"`
 }
 
+/*
+================
+shopInventoryRows
+================
+*/
 func (rt *Runtime) shopInventoryRows(items []inventory.Item, before []inventory.Item) ([]shopInventoryRow, error) {
 	rows := []shopInventoryRow{}
 	for _, item := range items {
@@ -366,6 +398,12 @@ func (rt *Runtime) shopInventoryRows(items []inventory.Item, before []inventory.
 	}
 	return rows, nil
 }
+
+/*
+================
+shopInventory
+================
+*/
 func (rt *Runtime) shopInventory(items []inventory.Item, before []inventory.Item, q wire.ItemMoveRequest) (wire.Frame, error) {
 	rows, e := rt.shopInventoryRows(items, before)
 	if e != nil {
@@ -381,4 +419,24 @@ func (rt *Runtime) shopInventory(items []inventory.Item, before []inventory.Item
 		Items    []shopInventoryRow `json:"items"`
 	}{q.CosGID, 1, q.NpcGID, q.ShopTab, q.ShopSlot, q.Quantity, rows})
 	return wire.Frame{Opcode: opShopInventory, Payload: payload}, e
+}
+
+/*
+================
+commerceFailure
+
+Package placement and currency refusals keep their native UI categories.
+Other failures disclose no storage details to the requesting client.
+================
+*/
+func commerceFailure(err error) OpResult {
+	var fault *inventory.Fault
+	if errors.As(err, &fault) {
+		return failureResult(fault.Code)
+	}
+	var insufficient domain.MallInsufficientCurrency
+	if errors.As(err, &insufficient) {
+		return failureResult(wire.ErrCodeMallInsufficientCurrency)
+	}
+	return failureResult(wire.ErrCodeInvalidRequest)
 }

@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+register.go - session-bound gameplay transport registration and publication
+
+All action lanes resolve the same authenticated character authority before
+calling gameplay handlers and publish complete ordered response batches.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -29,8 +39,14 @@ import (
 //	deps.ExtraRefItemCodenames = actions.GroundRefItemCodenames
 //	enterworld.Register(ts.Hub, deps)
 //	actions.Register(ts.Hub)
+/*
+================
+Register
+================
+*/
 func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerDeparture(hub)
+	rt.registerMall(hub)
 	hub.Handle(0x7341, rt.hubHandler(hub, rt.HandleBerserk))
 	hub.Handle(0x7495, rt.hubHandler(hub, rt.HandlePortal))
 	hub.Handle(0x72dd, rt.hubHandler(hub, rt.HandleReturnCancel))
@@ -70,12 +86,22 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 }
 
 // opFunc is one transport-free runtime operation.
+/*
+================
+opFunc
+================
+*/
 type opFunc func(divisionID string, character *enterworld.Character, payload []byte) OpResult
 
 // hubHandler adapts a runtime operation onto the hub: resolve the bound
 // character (never trust client-supplied names on later frames), run the op,
 // answer the acting session, and fan the broadcast frames to source observers
 // - the origin excluded, it already holds its own burst.
+/*
+================
+hubHandler
+================
+*/
 func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFunc {
 	return func(s *transport.Session, opcode uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(rt.deps, s)
@@ -108,6 +134,11 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 	}
 }
 
+/*
+================
+BroadcastObservedFrames
+================
+*/
 func BroadcastObservedFrames(hub *transport.Hub, division string, exceptSession uint64, sourceGID uint32, frames []wire.Frame) {
 	batch := make([]transport.Frame, len(frames))
 	for i, f := range frames {
@@ -118,6 +149,11 @@ func BroadcastObservedFrames(hub *transport.Hub, division string, exceptSession 
 
 // SendFrames publishes a complete action result, including scene replacement,
 // as one transaction. Re-entry must share the initial admission's atomicity.
+/*
+================
+SendFrames
+================
+*/
 func SendFrames(s *transport.Session, frames []wire.Frame) {
 	batch := make([]transport.Frame, len(frames))
 	for i, f := range frames {
@@ -133,4 +169,10 @@ func SendFrames(s *transport.Session, frames []wire.Frame) {
 		log.Debugf("action: send batch to session %d failed: %v", s.ID, err)
 	}
 }
+
+/*
+================
+sendFrames
+================
+*/
 func sendFrames(s *transport.Session, frames []wire.Frame) { SendFrames(s, frames) }

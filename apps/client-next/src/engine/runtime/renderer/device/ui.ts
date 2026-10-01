@@ -1,85 +1,380 @@
-import type {UiScene,UiQuad} from "@/engine/contracts/ui";
-import type {UiDraw} from "@/engine/runtime/renderer/internal/gpu-contract";
+/*
+===========================================================================
+
+ui.ts - device-owned UI textures, instance storage and draw bindings
+
+Stable buffers and bundles survive data edits. Texture replacement advances
+resourceRevision so no retained bind group can refer to a retired texture.
+
+===========================================================================
+*/
+import type { UiScene, UiQuad } from "@/engine/contracts/ui";
+import type { UiDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
 // Device-owned UI resources. Stable instance storage and draw bundles survive data edits.
-export function createUiResources(device:GPUDevice,format:GPUTextureFormat){
- const shader=device.createShaderModule({label:"ui-quads",code:`
- struct Quad {rect:vec4f,uv:vec4f,color:vec4f,clip:vec4f,maskRect:vec4f,effects:vec4f,rightColor:vec4f};
- @group(0) @binding(0) var<storage,read> quads:array<Quad>;
- @group(0) @binding(1) var<uniform> viewport:vec4f;
- @group(0) @binding(2) var tex:texture_2d<f32>;
- @group(0) @binding(3) var samp:sampler;
- @group(0) @binding(4) var maskTex:texture_2d<f32>;
- struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) color:vec4f,@location(2) point:vec2f,@location(3) @interpolate(flat) clip:vec4f,@location(4) maskUv:vec2f,@location(5) @interpolate(flat) cutoff:f32};
- @vertex fn vs(@builtin(vertex_index) v:u32,@builtin(instance_index) i:u32)->Out{
- let corners=array<vec2f,6>(vec2f(0,0),vec2f(1,0),vec2f(0,1),vec2f(0,1),vec2f(1,0),vec2f(1,1));let c=corners[v];let q=quads[i];let local=(c-0.5)*q.rect.zw;let angle=q.effects.z;let p=q.rect.xy+q.rect.zw*0.5+vec2f(local.x*cos(angle)-local.y*sin(angle),local.x*sin(angle)+local.y*cos(angle));var o:Out;
- o.position=vec4f(p.x/viewport.x*2-1,1-p.y/viewport.y*2,q.effects.w,1);var uv=c;if(q.effects.x==1){uv=vec2f(c.y,1-c.x);}else if(q.effects.x==2){uv=1-c;}else if(q.effects.x==3){uv=vec2f(1-c.y,c.x);}o.uv=q.uv.xy+uv*q.uv.zw;o.cutoff=q.effects.y;o.color=mix(q.color,q.rightColor,c.x);o.point=p;o.clip=q.clip;o.maskUv=(p-q.maskRect.xy)/q.maskRect.zw;return o;}
- @fragment fn fs(i:Out)->@location(0) vec4f {if(any(i.point<i.clip.xy)||any(i.point>=i.clip.xy+i.clip.zw)){discard;}let color=textureSample(tex,samp,i.uv)*i.color;if(color.a<i.cutoff){discard;}return vec4f(color.rgb,color.a*textureSample(maskTex,samp,i.maskUv).a);}`});
- const layout=device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}},{binding:1,visibility:GPUShaderStage.VERTEX,buffer:{type:'uniform'}},{binding:2,visibility:GPUShaderStage.FRAGMENT,texture:{}},{binding:3,visibility:GPUShaderStage.FRAGMENT,sampler:{}},{binding:4,visibility:GPUShaderStage.FRAGMENT,texture:{}}]});
- let pipeline:GPURenderPipeline|null=null,worldPipeline:GPURenderPipeline|null=null,disposed=false;
- const descriptor=(depthCompare:GPUCompareFunction):GPURenderPipelineDescriptor=>({label:"gpu-ui",layout:device.createPipelineLayout({bindGroupLayouts:[layout]}),vertex:{module:shader,entryPoint:"vs"},fragment:{module:shader,entryPoint:"fs",targets:[{format,blend:{color:{srcFactor:"src-alpha",dstFactor:"one-minus-src-alpha",operation:"add"},alpha:{srcFactor:"one",dstFactor:"one-minus-src-alpha",operation:"add"}}}]},primitive:{topology:"triangle-list"},depthStencil:{format:"depth24plus",depthWriteEnabled:false,depthCompare}});
- const ready=Promise.all([device.createRenderPipelineAsync(descriptor("always")),device.createRenderPipelineAsync(descriptor("less-equal"))]).then(([overlay,world])=>{if(!disposed){pipeline=overlay;worldPipeline=world;}});
- const storage=device.createBuffer({label:"ui-instances",size:8192*112,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
- const viewport=device.createBuffer({size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
- const sampler=device.createSampler({magFilter:"linear",minFilter:"linear"});
- const nearestSampler=device.createSampler({magFilter:"nearest",minFilter:"nearest"});
- const textures=new Map<string,{texture:GPUTexture;width:number;height:number}>();
- const bindings=new Map<string,Map<string,GPUBindGroup>>();
- const packed:(UiQuad|undefined)[]=[];
- let values=new Float32Array(0),uploaded=new Float32Array(0);
- const viewportValues=new Float32Array(4),noMask=[0,0,1,1] as const;
- let last:UiScene|null=null,draws:readonly UiDraw[]=[],resourceRevision=0,recordedResources=-1;
- function texture(id:string,image:ImageBitmap|ImageData|null){
-  if(disposed)return;
-  if(!image){textures.get(id)?.texture.destroy();if(textures.delete(id))resourceRevision++;return;}
-  if(image.width>4096||image.height>4096)throw new Error("UI texture budget exceeded");
-  let slot=textures.get(id);
-  if(!slot||slot.width!==image.width||slot.height!==image.height){
-   // Native HUD + Inventory + modal demand exceeds 256 small sprites (the
-   // disconnect capture hit that cap at 26.3 MiB). Reserve 512 descriptors
-   // for composed windows while retaining the independent 64 MiB limit.
-   const resident=[...textures.values()].reduce((sum,row)=>sum+row.width*row.height*4,0)-(slot?slot.width*slot.height*4:0);
-   if((!slot&&textures.size>=512)||resident+image.width*image.height*4>(64<<20))throw new Error("UI texture residency budget exceeded: count="+textures.size+" bytes="+(resident+image.width*image.height*4)+" path="+id);
-   slot?.texture.destroy();slot={texture:device.createTexture({label:"ui:"+id,size:[image.width,image.height],format:"rgba8unorm",usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT}),width:image.width,height:image.height};textures.set(id,slot);resourceRevision++;
-  }
-  if("data" in image)device.queue.writeTexture({texture:slot.texture},image.data,{bytesPerRow:image.width*4},[image.width,image.height]);
-  else device.queue.copyExternalImageToTexture({source:image,flipY:false},{texture:slot.texture},[image.width,image.height]);
- }
- texture("",{data:new Uint8ClampedArray([255,255,255,255]),width:1,height:1,colorSpace:"srgb"});
- return {ready,texture,portraitTarget(id='__portrait',width=128,height=128){let slot=textures.get(id);if(!slot){slot={texture:device.createTexture({label:id,size:[width,height],format,usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.RENDER_ATTACHMENT}),width,height};textures.set(id,slot);resourceRevision++;}return slot.texture.createView();},prepare(scene:UiScene|null):readonly UiDraw[]{
-  if(!pipeline||!scene)return [];
-  if(last===scene&&recordedResources===resourceRevision)return draws;
-  if(scene.quads.length>8192)throw new Error("UI quad budget exceeded");
-  if(recordedResources!==resourceRevision)bindings.clear();
-  const needed=scene.quads.length*28;
-  if(values.length<needed){const capacity=2**Math.ceil(Math.log2(Math.max(1,scene.quads.length)))*28,next=new Float32Array(capacity);next.set(uploaded);uploaded=next;values=new Float32Array(capacity);values.set(uploaded);}
-  const next:UiDraw[]=[];
-  let first=needed,lastChanged=-1;
-  let previous:GPUBindGroup|null=null;
-  scene.quads.forEach((quad,index)=>{
-   // An absent image is not a solid-color primitive. Keep its draw absent until
-   // the texture arrives; resourceRevision rebuilds the command list then.
-   const maskKey=quad.mask?.texture??'',slot=textures.get(quad.texture),mask=textures.get(maskKey);
-   if(!slot||!mask){packed[index]=undefined;previous=null;return;}
-   let textureBindings=bindings.get(quad.texture);if(!textureBindings){textureBindings=new Map();bindings.set(quad.texture,textureBindings);}
-   const bindingKey=(quad.sampling??"linear")+"\0"+maskKey;
-   let binding=textureBindings.get(bindingKey);if(!binding){binding=device.createBindGroup({layout:pipeline!.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:storage}},{binding:1,resource:{buffer:viewport}},{binding:2,resource:slot.texture.createView()},{binding:3,resource:quad.sampling==="nearest"?nearestSampler:sampler},{binding:4,resource:mask.texture.createView()}]});textureBindings.set(bindingKey,binding);}
-   // UiQuad is an immutable publication. Projected labels replace only their
-   // own records; retained HUD records keep the already packed GPU bytes.
-   if(packed[index]!==quad){
-    const at=index*28;
-    values.set(quad.rect,at);values.set(quad.uv,at+4);values.set(quad.color,at+8);values.set(quad.clip,at+12);values.set(quad.mask?.rect??noMask,at+16);
-    values[at+20]=quad.uvTurn??0;values[at+21]=quad.alphaCutoff??0;values[at+22]=quad.rotation??0;values[at+23]=quad.depth??0;values.set(quad.rightColor??quad.color,at+24);
-    for(let i=at;i<at+28;i++)if(values[i]!==uploaded[i]){first=Math.min(first,i);lastChanged=i;}
-    packed[index]=quad;
-   }
-   const layer=quad.depth!==undefined?"world":quad.layer,selectedPipeline=quad.depth!==undefined&&quad.occlusion!=="none"?worldPipeline!:pipeline!;
-   if(binding===previous&&layer===next[next.length-1]!.layer&&selectedPipeline===next[next.length-1]!.pipeline)next[next.length-1]!.count++;else next.push({pipeline:selectedPipeline,binding,first:index,count:1,layer});previous=binding;
-  });
-  packed.length=scene.quads.length;
-  if(lastChanged>=first){const changed=values.subarray(first,lastChanged+1);device.queue.writeBuffer(storage,first*4,changed);uploaded.set(changed,first);}
-  if(viewportValues[0]!==scene.width||viewportValues[1]!==scene.height){viewportValues[0]=scene.width;viewportValues[1]=scene.height;device.queue.writeBuffer(viewport,0,viewportValues);}
-  // Equal command topology keeps the existing bundle even when positions/text change.
-  if(next.length!==draws.length||next.some((d,i)=>d.pipeline!==draws[i]!.pipeline||d.layer!==draws[i]!.layer||d.binding!==draws[i]!.binding||d.first!==draws[i]!.first||d.count!==draws[i]!.count))draws=next;
-  last=scene;recordedResources=resourceRevision;return draws;
- },dispose(){disposed=true;for(const slot of textures.values())slot.texture.destroy();textures.clear();bindings.clear();storage.destroy();viewport.destroy();draws=[];packed.length=0;last=null;}};
+/*
+================
+createUiResources
+================
+*/
+export function createUiResources( device: GPUDevice, format: GPUTextureFormat ) {
+	const shader = device.createShaderModule( {
+		label: "ui-quads",
+		code: `
+/*
+================
+Quad
+================
+*/
+struct Quad {
+	rect: vec4f,
+	uv: vec4f,
+	color: vec4f,
+	clip: vec4f,
+	maskRect: vec4f,
+	effects: vec4f,
+	rightColor: vec4f
+};
+@group(0) @binding(0) var<storage, read> quads: array<Quad>;
+@group(0) @binding(1) var<uniform> viewport: vec4f;
+@group(0) @binding(2) var tex: texture_2d<f32>;
+@group(0) @binding(3) var samp: sampler;
+@group(0) @binding(4) var maskTex: texture_2d<f32>;
+
+/*
+================
+Out
+================
+*/
+struct Out {
+	@builtin(position) position: vec4f,
+	@location(0) uv: vec2f,
+	@location(1) color: vec4f,
+	@location(2) point: vec2f,
+	@location(3) @interpolate(flat) clip: vec4f,
+	@location(4) maskUv: vec2f,
+	@location(5) @interpolate(flat) cutoff: f32
+};
+
+/*
+================
+vs
+================
+*/
+@vertex fn vs( @builtin(vertex_index) v: u32, @builtin(instance_index) i: u32 ) -> Out {
+	let corners = array<vec2f, 6>(
+		vec2f( 0, 0 ), vec2f( 1, 0 ), vec2f( 0, 1 ),
+		vec2f( 0, 1 ), vec2f( 1, 0 ), vec2f( 1, 1 )
+	);
+	let c = corners[v];
+	let q = quads[i];
+	let local = ( c - 0.5 ) * q.rect.zw;
+	let angle = q.effects.z;
+	let p = q.rect.xy + q.rect.zw * 0.5 + vec2f(
+		local.x * cos( angle ) - local.y * sin( angle ),
+		local.x * sin( angle ) + local.y * cos( angle )
+	);
+	var o: Out;
+	o.position = vec4f( p.x / viewport.x * 2 - 1, 1 - p.y / viewport.y * 2, q.effects.w, 1 );
+	var uv = c;
+	if ( q.effects.x == 1 ) {
+		uv = vec2f( c.y, 1 - c.x );
+	} else if ( q.effects.x == 2 ) {
+		uv = 1 - c;
+	} else if ( q.effects.x == 3 ) {
+		uv = vec2f( 1 - c.y, c.x );
+	}
+	o.uv = q.uv.xy + uv * q.uv.zw;
+	o.cutoff = q.effects.y;
+	o.color = mix( q.color, q.rightColor, c.x );
+	o.point = p;
+	o.clip = q.clip;
+	o.maskUv = ( p - q.maskRect.xy ) / q.maskRect.zw;
+	return o;
+}
+
+/*
+================
+fs
+================
+*/
+@fragment fn fs( i: Out ) -> @location(0) vec4f {
+	if ( any( i.point < i.clip.xy ) || any( i.point >= i.clip.xy + i.clip.zw ) ) {
+		discard;
+	}
+	let color = textureSample( tex, samp, i.uv ) * i.color;
+	if ( color.a < i.cutoff ) {
+		discard;
+	}
+	return vec4f( color.rgb, color.a * textureSample( maskTex, samp, i.maskUv ).a );
+}
+`
+	} );
+	const layout = device.createBindGroupLayout( {
+		entries: [
+			{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "read-only-storage" } },
+			{ binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } },
+			{ binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+			{ binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+			{ binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: {} }
+		]
+	} );
+	let pipeline: GPURenderPipeline | null = null, worldPipeline: GPURenderPipeline | null = null, disposed = false;
+	/*
+ ================
+ descriptor
+ ================
+ */
+	const descriptor = ( depthCompare: GPUCompareFunction ): GPURenderPipelineDescriptor => ({
+		label: "gpu-ui",
+		layout: device.createPipelineLayout( { bindGroupLayouts: [ layout ] } ),
+		vertex: { module: shader, entryPoint: "vs" },
+		fragment: {
+			module: shader,
+			entryPoint: "fs",
+			targets: [ {
+				format,
+				blend: {
+					color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+					alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" }
+				}
+			} ]
+		},
+		primitive: { topology: "triangle-list" },
+		depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare }
+	});
+	const ready = Promise.all( [
+		device.createRenderPipelineAsync( descriptor( "always" ) ),
+		device.createRenderPipelineAsync( descriptor( "less-equal" ) )
+	] ).then( ( [overlay, world] ) => {
+		if ( !disposed ) {
+			pipeline = overlay;
+			worldPipeline = world;
+		}
+	} );
+	const storage = device.createBuffer( {
+		label: "ui-instances",
+		size: 8192 * 112,
+		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+	} );
+	const viewport = device.createBuffer( { size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST } );
+	const sampler = device.createSampler( { magFilter: "linear", minFilter: "linear" } );
+	const nearestSampler = device.createSampler( { magFilter: "nearest", minFilter: "nearest" } );
+	const textures = new Map<string, { texture: GPUTexture; width: number; height: number; }>();
+	const bindings = new Map<string, Map<string, GPUBindGroup>>();
+	const packed: (UiQuad | undefined)[] = [];
+	let values = new Float32Array( 0 ), uploaded = new Float32Array( 0 );
+	const viewportValues = new Float32Array( 4 ), noMask = [ 0, 0, 1, 1 ] as const;
+	let last: UiScene | null = null, draws: readonly UiDraw[] = [], resourceRevision = 0, recordedResources = -1;
+	/*
+ ================
+ texture
+ ================
+ */
+	function texture( id: string, image: ImageBitmap | ImageData | null ) {
+		if ( disposed ) return;
+		if ( !image ) {
+			textures.get( id )?.texture.destroy();
+			if ( textures.delete( id ) ) resourceRevision++;
+			return;
+		}
+		if ( image.width > 4096 || image.height > 4096 ) throw new Error( "UI texture budget exceeded" );
+		let slot = textures.get( id );
+		if ( !slot || slot.width !== image.width || slot.height !== image.height ) {
+			// Native HUD + Inventory + modal demand exceeds 256 small sprites (the
+			// disconnect capture hit that cap at 26.3 MiB). Reserve 512 descriptors
+			// for composed windows while retaining the independent 64 MiB limit.
+			const resident = [ ...textures.values() ].reduce( ( sum, row ) => sum + row.width * row.height * 4, 0 ) -
+				(slot ? slot.width * slot.height * 4 : 0);
+			if ( (!slot && textures.size >= 512) || resident + image.width * image.height * 4 > (64 << 20) ) {
+				throw new Error(
+					"UI texture residency budget exceeded: count=" + textures.size + " bytes=" +
+						(resident + image.width * image.height * 4) + " path=" + id
+				);
+			}
+			slot?.texture.destroy();
+			slot = {
+				texture: device.createTexture( {
+					label: "ui:" + id,
+					size: [ image.width, image.height ],
+					format: "rgba8unorm",
+					usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST |
+						GPUTextureUsage.RENDER_ATTACHMENT
+				} ),
+				width: image.width,
+				height: image.height
+			};
+			textures.set( id, slot );
+			resourceRevision++;
+		}
+		if ( "data" in image ) {
+			device.queue.writeTexture( { texture: slot.texture }, image.data, { bytesPerRow: image.width * 4 }, [
+				image.width,
+				image.height
+			] );
+		} else {device.queue.copyExternalImageToTexture( { source: image, flipY: false }, { texture: slot.texture }, [
+				image.width,
+				image.height
+			] );}
+	}
+	texture( "", { data: new Uint8ClampedArray( [ 255, 255, 255, 255 ] ), width: 1, height: 1, colorSpace: "srgb" } );
+	return {
+		ready,
+		texture,
+		/*
+ ================
+ portraitTarget
+
+ Inventory and mall have different native viewports. Retire both the target
+ and its cached bindings when switching owners, before encoding any draws.
+ ================
+ */
+		portraitTarget( id = "__portrait", width = 128, height = 128 ) {
+			if (
+				!Number.isInteger( width ) || !Number.isInteger( height ) || width < 1 || height < 1 || width > 4096 ||
+				height > 4096
+			) throw Error( "Invalid portrait extent" );
+			let slot = textures.get( id );
+			if ( !slot || slot.width !== width || slot.height !== height ) {
+				slot?.texture.destroy();
+				slot = {
+					texture: device.createTexture( {
+						label: id,
+						size: [ width, height ],
+						format,
+						usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+					} ),
+					width,
+					height
+				};
+				textures.set( id, slot );
+				resourceRevision++;
+			}
+			return slot.texture.createView();
+		},
+		/*
+ ================
+ prepare
+ ================
+ */
+		prepare( scene: UiScene | null ): readonly UiDraw[] {
+			if ( !pipeline || !scene ) return [];
+			if ( last === scene && recordedResources === resourceRevision ) return draws;
+			if ( scene.quads.length > 8192 ) throw new Error( "UI quad budget exceeded" );
+			if ( recordedResources !== resourceRevision ) bindings.clear();
+			const needed = scene.quads.length * 28;
+			if ( values.length < needed ) {
+				const capacity = 2 ** Math.ceil( Math.log2( Math.max( 1, scene.quads.length ) ) ) * 28,
+					next = new Float32Array( capacity );
+				next.set( uploaded );
+				uploaded = next;
+				values = new Float32Array( capacity );
+				values.set( uploaded );
+			}
+			const next: UiDraw[] = [];
+			let first = needed, lastChanged = -1;
+			let previous: GPUBindGroup | null = null;
+			scene.quads.forEach( ( quad, index ) => {
+				// An absent image is not a solid-color primitive. Keep its draw absent until
+				// the texture arrives; resourceRevision rebuilds the command list then.
+				const maskKey = quad.mask?.texture ?? "",
+					slot = textures.get( quad.texture ),
+					mask = textures.get( maskKey );
+				if ( !slot || !mask ) {
+					packed[index] = undefined;
+					previous = null;
+					return;
+				}
+				let textureBindings = bindings.get( quad.texture );
+				if ( !textureBindings ) {
+					textureBindings = new Map();
+					bindings.set( quad.texture, textureBindings );
+				}
+				const bindingKey = (quad.sampling ?? "linear") + "\0" + maskKey;
+				let binding = textureBindings.get( bindingKey );
+				if ( !binding ) {
+					binding = device.createBindGroup( {
+						layout: pipeline!.getBindGroupLayout( 0 ),
+						entries: [
+							{ binding: 0, resource: { buffer: storage } },
+							{ binding: 1, resource: { buffer: viewport } },
+							{ binding: 2, resource: slot.texture.createView() },
+							{ binding: 3, resource: quad.sampling === "nearest" ? nearestSampler : sampler },
+							{ binding: 4, resource: mask.texture.createView() }
+						]
+					} );
+					textureBindings.set( bindingKey, binding );
+				}
+				// UiQuad is an immutable publication. Projected labels replace only their
+				// own records; retained HUD records keep the already packed GPU bytes.
+				if ( packed[index] !== quad ) {
+					const at = index * 28;
+					values.set( quad.rect, at );
+					values.set( quad.uv, at + 4 );
+					values.set( quad.color, at + 8 );
+					values.set( quad.clip, at + 12 );
+					values.set( quad.mask?.rect ?? noMask, at + 16 );
+					values[at + 20] = quad.uvTurn ?? 0;
+					values[at + 21] = quad.alphaCutoff ?? 0;
+					values[at + 22] = quad.rotation ?? 0;
+					values[at + 23] = quad.depth ?? 0;
+					values.set( quad.rightColor ?? quad.color, at + 24 );
+					for ( let i = at; i < at + 28; i++ ) {
+						if ( values[i] !== uploaded[i] ) {
+							first = Math.min( first, i );
+							lastChanged = i;
+						}
+					}
+					packed[index] = quad;
+				}
+				const layer = quad.depth !== undefined ? "world" : quad.layer,
+					selectedPipeline = quad.depth !== undefined && quad.occlusion !== "none" ?
+						worldPipeline! :
+						pipeline!;
+				if (
+					binding === previous && layer === next[next.length - 1]!.layer &&
+					selectedPipeline === next[next.length - 1]!.pipeline
+				) next[next.length - 1]!.count++;
+				else next.push( { pipeline: selectedPipeline, binding, first: index, count: 1, layer } );
+				previous = binding;
+			} );
+			packed.length = scene.quads.length;
+			if ( lastChanged >= first ) {
+				const changed = values.subarray( first, lastChanged + 1 );
+				device.queue.writeBuffer( storage, first * 4, changed );
+				uploaded.set( changed, first );
+			}
+			if ( viewportValues[0] !== scene.width || viewportValues[1] !== scene.height ) {
+				viewportValues[0] = scene.width;
+				viewportValues[1] = scene.height;
+				device.queue.writeBuffer( viewport, 0, viewportValues );
+			}
+			// Equal command topology keeps the existing bundle even when positions/text change.
+			if (
+				next.length !== draws.length ||
+				next.some( ( d, i ) =>
+					d.pipeline !== draws[i]!.pipeline || d.layer !== draws[i]!.layer ||
+					d.binding !== draws[i]!.binding || d.first !== draws[i]!.first || d.count !== draws[i]!.count
+				)
+			) draws = next;
+			last = scene;
+			recordedResources = resourceRevision;
+			return draws;
+		},
+		/*
+ ================
+ dispose
+ ================
+ */
+		dispose() {
+			disposed = true;
+			for ( const slot of textures.values() ) slot.texture.destroy();
+			textures.clear();
+			bindings.clear();
+			storage.destroy();
+			viewport.destroy();
+			draws = [];
+			packed.length = 0;
+			last = null;
+		}
+	};
 }

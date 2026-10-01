@@ -145,6 +145,8 @@ presentUpdate
 		owners.world.pumpCameraScripts = () => {};
 		owners.frontend.step = () => ({ phase: "loading-title" });
 		owners.navigation.step = () => {};
+		Object.assign( owners.characters, { mallOutfit: () => {}, mallPreviewState: () => ({ wearable: [] }) } );
+		Object.assign( owners.ui, { mallPreview: () => null, mallPreviewState: () => {} } );
 		owners.characters.previewReady = () => false;
 		owners.characters.dockReady = () => false;
 		owners.characters.entryReady = () => false;

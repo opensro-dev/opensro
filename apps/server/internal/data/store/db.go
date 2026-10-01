@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -63,7 +62,16 @@ const (
 
 // dbSchema creates a fresh current-layout database. Existing databases must
 // already match CurrentLayoutVersion exactly and are never altered at boot.
-const dbSchema = `
+const mallAccountsSchema = `
+CREATE TABLE IF NOT EXISTS mall_accounts (
+  account_id TEXT PRIMARY KEY,
+  silk INTEGER NOT NULL CHECK (silk BETWEEN 0 AND 4294967295),
+  gift_silk INTEGER NOT NULL CHECK (gift_silk BETWEEN 0 AND 4294967295),
+  points INTEGER NOT NULL CHECK (points BETWEEN 0 AND 4294967295)
+) WITHOUT ROWID;
+`
+
+const dbSchema = mallAccountsSchema + `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -145,8 +153,9 @@ const (
 // CurrentLayoutVersion identifies the only physical table layout accepted by
 // this binary. It is independent from CurrentVersion, which identifies the
 // JSON character-record schema. Adding a table bumps this value and requires an
-// offline database rebuild before deployment.
-const CurrentLayoutVersion = 4
+// reviewed offline upgrade before deployment. sro-authority-upgrade preserves
+// layout-4 records while adding the empty mall currency table for layout 5.
+const CurrentLayoutVersion = 5
 
 /*
 ==================
@@ -172,6 +181,11 @@ func connectDB(path string) (*sql.DB, error) {
 
 // configureDB applies the runtime durability settings after a database has
 // proven current and internally coherent.
+/*
+================
+configureDB
+================
+*/
 func configureDB(db *sql.DB) error {
 	pragmas := []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=" + sqliteSynchronous()}
 	if !flushToMedia() {
@@ -189,6 +203,11 @@ func configureDB(db *sql.DB) error {
 
 // openDB creates a runtime-configured handle for a new database or an
 // already-validated one.
+/*
+================
+openDB
+================
+*/
 func openDB(path string) (*sql.DB, error) {
 	db, err := connectDB(path)
 	if err != nil {
@@ -202,6 +221,11 @@ func openDB(path string) (*sql.DB, error) {
 }
 
 // ensureSchema applies the idempotent schema.
+/*
+================
+ensureSchema
+================
+*/
 func ensureSchema(db *sql.DB) error {
 	_, err := db.Exec(dbSchema)
 	return err
@@ -209,6 +233,11 @@ func ensureSchema(db *sql.DB) error {
 
 // quickCheck runs SQLite's integrity probe; any answer but "ok" is
 // corruption.
+/*
+================
+quickCheck
+================
+*/
 func quickCheck(db *sql.DB) error {
 	var verdict string
 	if err := db.QueryRow("PRAGMA quick_check(1)").Scan(&verdict); err != nil {
@@ -234,6 +263,11 @@ func dbSidecars(path string) []string {
 }
 
 // quarantineDB renames the database AND its sidecars aside.
+/*
+================
+quarantineDB
+================
+*/
 func quarantineDB(path string, now time.Time) (string, error) {
 	dest, err := quarantine(path, now)
 	if err != nil {
@@ -251,6 +285,11 @@ func quarantineDB(path string, now time.Time) (string, error) {
 
 // removeDBSidecars deletes stale sidecars (used before restoring a bak
 // copy into place: the bak is a compact checkpointed image with no WAL).
+/*
+================
+removeDBSidecars
+================
+*/
 func removeDBSidecars(path string) {
 	for _, sidecar := range dbSidecars(path) {
 		os.Remove(sidecar)
@@ -270,11 +309,18 @@ func refreshDBBak(db *sql.DB, bakPath string) error {
 	if err := os.Remove(bakPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	_, err := db.Exec("VACUUM INTO '" + strings.ReplaceAll(bakPath, "'", "''") + "'")
+	_, err := db.Exec("VACUUM INTO ?", bakPath)
 	return err
 }
 
 // loadedDB is the in-memory result of a validated current-schema read.
+/*
+================
+loadedDB
+
+Validated database records adopted together during startup.
+================
+*/
 type loadedDB struct {
 	characters   map[string][]*domain.Character
 	deleted      map[string][]json.RawMessage

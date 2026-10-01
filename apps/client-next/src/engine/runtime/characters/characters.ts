@@ -100,6 +100,7 @@ import {
 import { createCharacterEffects } from "./effects/effects";
 import { createCharacterSounds, type SoundRule } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
+import { createMallPreview } from "./mall-preview";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import { radians, previewYaw } from "@/engine/foundation/math/angles";
 import { creationLoadout, creationRange } from "@/engine/foundation/ui/character-create";
@@ -200,6 +201,7 @@ export function createCharacterPresentation(
 		return concealmentLookup;
 	};
 	const entityLod = createEntityLod();
+	const mallPreview = createMallPreview();
 	let animationDelta = createModifierDelta();
 	let footprints: import("@/engine/contracts/footprint").Footprint[] = [], footprintSequence = 0;
 	/*
@@ -508,6 +510,22 @@ Auxiliary
 	let manifest = 0, failure: string | null = null, displayed = new Map<number, CharacterActor>();
 	let hideSilkCos = false;
 	return {
+		/*
+		================
+		mallOutfit / mallPreviewState
+		================
+		*/
+		mallOutfit( items: readonly number[] | null ) {
+			mallPreview.request( items );
+		},
+		/*
+		================
+		mallPreviewState
+		================
+		*/
+		mallPreviewState() {
+			return mallPreview.state();
+		},
 		/*
 ================
 options
@@ -3133,6 +3151,21 @@ soundContext
 			// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
 			// It remains admitted even when no world entity exists for that member.
 			const portraits: CharacterActor[] = [];
+			const mallResource = local && catalog.get( local.refObjId );
+			if ( mallResource && local && gameplay && manifest >= 3 ) {
+				portraits.push( ...mallPreview.step(
+					{
+						resource: mallResource,
+						dress,
+						equipment: gameplay.inventory,
+						avatars: local.avatars ?? [],
+						seconds,
+						source: next.get( local.gid )
+					},
+					resources,
+					renderer
+				) );
+			}
 			for ( const member of gameplay ? partyMembers( gameplay ) : [] ) {
 				const resource = catalog.get( member.model );
 				if ( !resource || !resources.ready( resource.glb ) ) continue;
@@ -3186,6 +3219,7 @@ reset
 ================
 		*/
 		reset() {
+			mallPreview.reset();
 			skillObjects.reset();
 			clearFootprints();
 			animationDelta = createModifierDelta();
@@ -3245,6 +3279,7 @@ dispose
 ================
 		*/
 		dispose() {
+			mallPreview.reset();
 			skillObjects.dispose();
 			clearFootprints();
 			warmSkills = undefined;

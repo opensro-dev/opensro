@@ -19,9 +19,23 @@ owners admit only the sections their native constructor creates together.
 */
 export function nativeWindowSections( name: string ): readonly string[] | undefined {
 	switch ( name ) {
+		case "ifitemmall":
+			return [ "Create", "ShopList", "MyInfo", "Trunk" ]; // 6BBFA0.
+		case "ifitemmallshop":
+			return [ "Create", "ShopDescription", "ShopMain", "ShopSlot", "PageManager", "ShopZzimBtn" ];
+		case "ifitemmallshopslot":
+			return [ "Create", "ShopSlotIcon" ]; // 6C9F80; package icons share this rectangle.
+		case "ifitemmallmyinfo":
+			return [ "Create" ];
+		case "ifitemmalltrunk":
+			return [ "Create", "Inventory" ];
+		case "ifitemmallinventory":
+			return [ "Create", "ExpandInven" ];
+
 		case "ifitemmallconfirmbuy":
+			return [ "Create" ];
 		case "ifitemmallconfirmslot":
-			return [ "Create" ]; // 6C0540 / 6BF320.
+			return [ "Create", "PointButton" ]; // 6BD350 constructs the button; currency type owns visibility.
 		case "ifmessagebox":
 			// 528430 / 52A2D0; rendering admits one modal branch.
 			return [ "Create", "MsgBoxStore", "MsgBoxStoreConfirm" ];

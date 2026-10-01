@@ -229,7 +229,6 @@ apps/client-next/src/engine/foundation/ui/extended-quickslot.ts
 apps/client-next/src/engine/foundation/ui/frame-ring.ts
 apps/client-next/src/engine/foundation/ui/ground-item-label.ts
 apps/client-next/src/engine/foundation/ui/guide-catalog.ts
-apps/client-next/src/engine/foundation/ui/guide-content.ts
 apps/client-next/src/engine/foundation/ui/guild-crest.ts
 apps/client-next/src/engine/foundation/ui/helper-bubble.ts
 apps/client-next/src/engine/foundation/ui/hit-test.ts
@@ -286,9 +285,7 @@ apps/client-next/src/engine/foundation/ui/system-message-layout.ts
 apps/client-next/src/engine/foundation/ui/target-status.ts
 apps/client-next/src/engine/foundation/ui/text-lines.ts
 apps/client-next/src/engine/foundation/ui/title-status.ts
-apps/client-next/src/engine/foundation/ui/tooltip-description.ts
 apps/client-next/src/engine/foundation/ui/tooltip-rows.ts
-apps/client-next/src/engine/foundation/ui/tooltip-target.ts
 apps/client-next/src/engine/foundation/ui/ui-equality.ts
 apps/client-next/src/engine/foundation/ui/ui.ts
 apps/client-next/src/engine/foundation/ui/unique-banner.ts
@@ -338,7 +335,6 @@ apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
 apps/client-next/src/engine/runtime/renderer/device/pipelines.ts
 apps/client-next/src/engine/runtime/renderer/device/thunder.ts
 apps/client-next/src/engine/runtime/renderer/device/timing.ts
-apps/client-next/src/engine/runtime/renderer/device/ui.ts
 apps/client-next/src/engine/runtime/renderer/frame/frame.ts
 apps/client-next/src/engine/runtime/renderer/internal/gpu-contract.ts
 apps/client-next/src/engine/runtime/renderer/readback/readback.ts
@@ -356,7 +352,6 @@ apps/client-next/src/engine/runtime/simulation/worker/session/world/core.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/alchemy/alchemy.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts
 apps/client-next/src/engine/runtime/simulation/worker/simulation.ts
 apps/client-next/src/engine/runtime/ui/hud/messages.ts

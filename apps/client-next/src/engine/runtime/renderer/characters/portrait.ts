@@ -9,6 +9,7 @@ import type { WorldTexture } from "@/engine/contracts/texture";
 import { viewProjection } from "@/engine/foundation/rendering/world-math";
 import { previewYaw } from "@/engine/foundation/math/angles";
 import type { CharacterActor, CharacterModel } from "@/engine/contracts/character";
+import type { PortraitPart, PortraitSource } from "@/engine/contracts/portrait";
 import type { GeometryCommands, ImageCommands, GeometryDraw } from "../internal/gpu-contract";
 
 const DEFAULT_PREVIEW_YAW = 0.100000001;
@@ -18,18 +19,6 @@ const PREVIEW_NEAR = 0.01;
 const PREVIEW_FAR = 500000;
 const DOLL_ASPECT = 176 / 318;
 
-/*
-================
-PortraitSource
-
-Borrow immutable model and image resources; the world character owner retains their lifetime.
-================
-*/
-export interface PortraitSource {
-	readonly actor: CharacterActor;
-	readonly model: CharacterModel;
-	readonly images: readonly WorldTexture[];
-}
 // Synchronous GPU projection. Model/bitmap lifetime stays with world characters;
 // this owner owns only its pose, preview geometry and texture uploads.
 
@@ -87,28 +76,46 @@ export function createPortrait(
 	}
 ) {
 	let source: CharacterModel | null = null, started = 0, identity: number | undefined;
+	let borrowed: readonly PortraitPart[] = [];
 	preview.retain( [] );
 	return {
+		/*
+		================
+		prepare
+		================
+		*/
 		prepare(
 			value: PortraitSource | null,
 			geometry: GeometryCommands,
 			images: ImageCommands,
-			dollYaw?: number,
-			seconds = 0
+			frame: { readonly yaw?: number; readonly seconds?: number; readonly aspect?: number; } = {}
 		) {
+			const dollYaw = frame.yaw, seconds = frame.seconds ?? 0;
 			if ( !value ) {
 				preview.actors( [] );
 				source = null;
 				identity = undefined;
+				borrowed = [];
 				return preview.prepare( geometry, images, 0 );
 			}
-			if ( source !== value.model || identity !== value.actor.gid ) {
+			const parts = [ value, ...(value.children ?? []) ];
+			const changed = parts.length !== borrowed.length ||
+				parts.some( ( part, index ) =>
+					part.model !== borrowed[index]?.model || part.actor.model !== borrowed[index]?.actor.model
+				);
+			if ( changed || source !== value.model || identity !== value.actor.gid ) {
 				started = seconds;
 				identity = value.actor.gid;
-				if ( source !== value.model ) {
+				if ( changed || source !== value.model ) {
 					preview.actors( [] );
 					preview.prepare( geometry, images, 0 );
-					preview.borrowModel( value.actor.model, value.model, value.images );
+					const models = new Set<string>();
+					for ( const part of parts ) {
+						if ( models.has( part.actor.model ) ) continue;
+						preview.borrowModel( part.actor.model, part.model, part.images );
+						models.add( part.actor.model );
+					}
+					borrowed = parts;
 					source = value.model;
 				}
 			}
@@ -127,8 +134,20 @@ export function createPortrait(
 				loop: true,
 				scale: 1
 			};
+			const actors = [
+				actor,
+				...(value.children ?? []).map( child => ({
+					...child.actor,
+					pose: actor.pose,
+					time: actor.time,
+					opacity: 1,
+					layers: undefined,
+					animationLod: undefined,
+					modelAnimation: undefined
+				}) )
+			];
 			if ( dollYaw !== undefined ) {
-				preview.actors( [ actor ] );
+				preview.actors( actors );
 				return preview.prepare(
 					geometry,
 					images,
@@ -139,7 +158,7 @@ export function createPortrait(
 						fov: Math.PI / 6,
 						near: PREVIEW_NEAR,
 						far: PREVIEW_FAR
-					}, DOLL_ASPECT ),
+					}, frame.aspect ?? DOLL_ASPECT ),
 					true
 				);
 			}
@@ -151,7 +170,7 @@ export function createPortrait(
 					head.y + Math.sin( PORTRAIT_PITCH ) * PORTRAIT_DISTANCE,
 					head.z - Math.cos( PORTRAIT_PITCH ) * PORTRAIT_DISTANCE
 				] as const;
-			preview.actors( [ actor ] );
+			preview.actors( actors );
 			return preview.prepare(
 				geometry,
 				images,
@@ -160,12 +179,23 @@ export function createPortrait(
 				true
 			);
 		},
+		/*
+		================
+		invalidate
+		================
+		*/
 		invalidate() {
 			preview.invalidate();
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose( geometry: GeometryCommands | null, images: ImageCommands | null ) {
 			preview.dispose( geometry, images );
 			source = null;
+			borrowed = [];
 		}
 	};
 }

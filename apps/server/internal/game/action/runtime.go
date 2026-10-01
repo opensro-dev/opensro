@@ -10,6 +10,7 @@ package action
 
 import (
 	"math"
+	"opensro.online/server/internal/domain"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -108,14 +109,16 @@ type Runtime struct {
 
 	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
 	// The composition root installs it before Register admits 0x7338/0x7053.
-	GachaCatalog *gacha.Catalog
-	Alchemy      *alchemy.Catalog
-	AlchemyRoll  alchemy.Roll
-	compoundMu   sync.Mutex
-	compoundJobs map[compoundKey]compoundJob
-	Commerce     *commerce.Catalog
-	petMu        sync.Mutex
-	petSessions  map[petOwnerKey]*petSession
+	GachaCatalog  *gacha.Catalog
+	Alchemy       *alchemy.Catalog
+	AlchemyRoll   alchemy.Roll
+	compoundMu    sync.Mutex
+	compoundJobs  map[compoundKey]compoundJob
+	Commerce      *commerce.Catalog
+	mallCatalog   *commerce.MallCatalog
+	mallAuthority domain.MallAuthority
+	petMu         sync.Mutex
+	petSessions   map[petOwnerKey]*petSession
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
 	characterAdmissions   sync.Map // simulation.WorldKey -> populationAdmission

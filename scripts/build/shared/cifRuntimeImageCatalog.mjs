@@ -218,13 +218,44 @@ export const quickslotRuntimeImageReferences = [
 ];
 /*
 ================
-runtimeCifImageReferences
+itemMallRuntimeImageReferences
 
-Shared control artwork and complete native image families. Publication
-deduplicates paths; repeated provenance does not create another owner.
+Category controls created by the native Item Mall constructor.
+================
+*/
+export const itemMallRuntimeImageReferences = [
+	// CIFItemMall_OnCreate 6BBFA0 creates these controls outside resinfo.
+	"interface/mall/mall_tab_on.ddj",
+	"interface/mall/mall_tab_off.ddj",
+	"interface/mall/mall_tab_disable.ddj",
+	"interface/mall/mall_tab2_on.ddj",
+	"interface/mall/mall_tab2_off.ddj",
+	"interface/mall/mall_hot_icon.ddj",
+	"interface/mall/mall_hot_icon_disable.ddj",
+	"interface/mall/mall_consum_icon.ddj",
+	"interface/mall/mall_consum_icon_disable.ddj",
+	"interface/mall/mall_avatar_icon.ddj",
+	"interface/mall/mall_avatar_icon_disable.ddj",
+	"interface/mall/mall_pet_icon.ddj",
+	"interface/mall/mall_pet_icon_disable.ddj",
+	"interface/mall/mall_bundle_icon.ddj",
+	"interface/mall/mall_bundle_icon_disable.ddj",
+	"interface/mall/mall_premium_icon.ddj",
+	"interface/mall/mall_premium_icon_disable.ddj",
+	"interface/mall/mall_alchemy_icon.ddj",
+	"interface/mall/mall_alchemy_icon_disable.ddj",
+	"interface/mall/mall_choicelist_icon.ddj",
+	"interface/mall/mall_inven_icon.ddj",
+	"interface/mall/mall_inven_icon_disable.ddj"
+];
+
+/*
+================
+runtimeCifImageReferences
 ================
 */
 export const runtimeCifImageReferences = [
+	...itemMallRuntimeImageReferences,
 	// CIFDelayInfo 6B14E0 / 6B1B30 assigns these outside resinfo.
 	...returnScrollRuntimeImageReferences,
 	...quickslotRuntimeImageReferences,
