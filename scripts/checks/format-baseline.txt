@@ -280,7 +280,6 @@ apps/client-next/src/engine/runtime/assets/worker/world/internal/resource-contra
 apps/client-next/src/engine/runtime/assets/worker/world/resources/resources.ts
 apps/client-next/src/engine/runtime/assets/worker/world/world.ts
 apps/client-next/src/engine/runtime/assets/world-lease.ts
-apps/client-next/src/engine/runtime/audio/music/music.ts
 apps/client-next/src/engine/runtime/characters/damage-feedback.ts
 apps/client-next/src/engine/runtime/characters/orbs/orbs.ts
 apps/client-next/src/engine/runtime/characters/sounds/sounds.ts

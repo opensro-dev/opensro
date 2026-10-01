@@ -1716,6 +1716,35 @@
 			"functions": [
 				"send"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/bug-report/bug-report.ts",
+			"functions": [
+				"reportsEnabled",
+				"open",
+				"replayDraft",
+				"toggleReplayDraft",
+				"resetReplayDraft",
+				"defaultReplayDraft",
+				"applyReplayDraft",
+				"chat"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/bug-report/bug-report.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"context",
+				"state"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/bug-report/recorder.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"sound"
+			]
 		}
 	],
 	"boundaries": [
@@ -1907,6 +1936,20 @@
 			"function": "wake",
 			"kind": "callback",
 			"reason": "Settles delivery() promises on each worker message. Worker messages reach a hidden tab unthrottled, so the runtime paces hidden frames from them (it gets no animation frames)."
+		},
+		{
+			"file": "src/engine/runtime/audio/audio.ts",
+			"expression": "tappable.captureStream",
+			"function": "tapMusic",
+			"kind": "callback",
+			"reason": "HTMLMediaElement.captureStream (outside TypeScript's DOM library) taps the music element for the bug reporter's replay without changing playback."
+		},
+		{
+			"file": "src/engine/runtime/bug-report/recorder.ts",
+			"expression": "MediaStreamTrackProcessor",
+			"function": "listen",
+			"kind": "callback",
+			"reason": "Chrome's MediaStreamTrackProcessor (outside TypeScript's DOM library) reads the captured game sound as AudioData for the replay's AAC track."
 		}
 	],
 	"sequences": [
@@ -1943,7 +1986,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "f338cee25f9cdc021b629ac7ca08c99fceb50d603293b88883eb5e81f6d2cc65",
+			"sourceSha256": "179676f98ff09cd54c2aee4282d1a65ec74d37433f6faf669b8f9078758375af",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

@@ -26,6 +26,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	agentapi "opensro.online/server/internal/agent/api"
+	"opensro.online/server/internal/agent/bugreport"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
@@ -38,8 +39,14 @@ const (
 	maxPasswordBytes       = 72
 )
 
-// AccountAuthority is what the Agent reads from the account authority:
-// the live store (auth.Accounts) in service, a fixed catalog in tests.
+/*
+================
+AccountAuthority
+
+What the Agent reads from the account authority: the live store
+(auth.Accounts) in service, a fixed catalog in tests.
+================
+*/
 type AccountAuthority interface {
 	// Credential resolves the id typed at login (ASCII case ignored) to the
 	// stored id and its hash; PasswordHash checks a stored id exactly.
@@ -49,6 +56,11 @@ type AccountAuthority interface {
 	Len() int
 }
 
+/*
+================
+Config
+================
+*/
 type Config struct {
 	Accounts                AccountAuthority
 	Catalog                 *shard.Catalog
@@ -60,8 +72,15 @@ type Config struct {
 	HTTPClient              *http.Client
 	Now                     func() time.Time
 	Readiness               *readiness.Gate
+	// BugReports is nil when the operator has not configured bug reports.
+	BugReports *bugreport.Service
 }
 
+/*
+================
+Server
+================
+*/
 type Server struct {
 	accounts                AccountAuthority
 	catalog                 *shard.Catalog
@@ -77,6 +96,7 @@ type Server struct {
 	loginAttempts           *loginLimiter
 	passwordFailures        passwordFailures
 	readiness               *readiness.Gate
+	bugReports              *bugreport.Service
 }
 
 /*
@@ -141,6 +161,7 @@ func New(config Config) (*Server, error) {
 		passwordSlots:           make(chan struct{}, 16),
 		loginAttempts:           newLoginLimiter(now),
 		readiness:               config.Readiness,
+		bugReports:              config.BugReports,
 	}, nil
 }
 
@@ -169,6 +190,7 @@ func (server *Server) Handler() http.Handler {
 	mux.Handle("/title/session", browser(server.requireRunning(http.HandlerFunc(server.handleBrowserSession))))
 	mux.Handle("/title/logout", browser(http.HandlerFunc(server.handleBrowserLogout)))
 	mux.Handle("/title/character-select", browser(http.HandlerFunc(server.handleBrowserCharacterSelect)))
+	mux.Handle(bugReportPath, browser(server.requireRunning(http.HandlerFunc(server.handleBugReport))))
 	mux.HandleFunc("/internal/cluster/shards/heartbeat", server.handleHeartbeat)
 	mux.HandleFunc("/internal/cluster/shards/release", server.handleLeaseRelease)
 	mux.HandleFunc("/internal/accounts", server.handleAccountDirectory)

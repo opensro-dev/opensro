@@ -25,7 +25,8 @@ const factories = {
 	platform: "createPlatform",
 	renderer: "createRenderer",
 	simulation: "createSimulationHost",
-	release: "createReleaseWatch"
+	release: "createReleaseWatch",
+	"bug-report": "createBugReport"
 };
 const compiled = await build( {
 	entryPoints: [ "src/engine/runtime/runtime.ts" ],
@@ -53,9 +54,9 @@ setup
 			build.onLoad(
 				{ filter: /.*/, namespace: "owner" },
 				args => ({
-					contents: `export function ${
-						factories[args.path]
-					}(){return globalThis.__runtimeOwners.${args.path};}`
+					contents: `export function ${factories[args.path]}(){return globalThis.__runtimeOwners[${
+						JSON.stringify( args.path )
+					}];}`
 				})
 			);
 		}

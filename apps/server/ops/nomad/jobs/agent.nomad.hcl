@@ -82,6 +82,18 @@ variable "identity_jwks_url" {
   type = string
 }
 
+# In-game bug reports (internal/agent/bugreport). The webhook that turns
+# them on is a secret and arrives through the Nomad variable, not here.
+variable "bug_report_replay_default" {
+  type    = string
+  default = "1"
+}
+
+variable "bug_report_max_bytes" {
+  type    = string
+  default = "10485760"
+}
+
 variable "cpu" {
   type    = number
   default = 500
@@ -190,6 +202,8 @@ job "sro-agent" {
         SRO_NOMAD_NAMESPACE               = var.nomad_namespace
         SRO_AGENT_SESSION_KEYRING_PATH    = "${NOMAD_SECRETS_DIR}/agent-session-keys.json"
         SRO_RELEASE_ID                    = var.release_id
+        SRO_BUG_REPORT_REPLAY_DEFAULT     = var.bug_report_replay_default
+        SRO_BUG_REPORT_MAX_BYTES          = var.bug_report_max_bytes
       }
 
       template {
@@ -212,6 +226,21 @@ EOH
 EOH
 
         destination = "secrets/provisioning-token"
+        change_mode = "restart"
+        perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
+      }
+
+      # SRO_BUG_REPORT_DISCORD_WEBHOOK exists only when the deployer set it:
+      # without the item the file is empty and bug reports stay off.
+      template {
+        data = <<EOH
+{{ with nomadVar "nomad/jobs/sro-agent/agent/agent" }}{{ range $name, $value := . }}{{ if eq $name "bug_report_discord_webhook" }}SRO_BUG_REPORT_DISCORD_WEBHOOK={{ $value }}{{ end }}{{ end }}{{ end }}
+EOH
+
+        destination = "secrets/bug-report.env"
+        env         = true
         change_mode = "restart"
         perms       = "0600"
         uid         = var.task_uid
