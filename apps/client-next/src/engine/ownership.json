@@ -20,6 +20,7 @@
     "src/engine/runtime/ui/hud/skill-training.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/resources.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/minimap.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/map-teleport.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/runtime.ts": "src/bootstrap.ts",
     "src/engine/runtime/platform/platform.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/release/release-watch.ts": "src/engine/runtime/runtime.ts",

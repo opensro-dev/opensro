@@ -448,6 +448,35 @@ function worldMapFrame( pageId: number, clip: UiRect, pan: readonly [number, num
 
 /*
 ================
+worldMapPoint
+
+The inverse of the marker projection. The
+outdoor region and region-local x/z under a view point, or null off-page.
+Reuses worldMapFrame so the pick always agrees with the painted page.
+================
+*/
+export function worldMapPoint(
+	pageId: number,
+	clip: UiRect,
+	pan: readonly [number, number],
+	center: Pose,
+	sx: number,
+	sy: number
+): { regionId: number; x: number; z: number; } | null {
+	const f = worldMapFrame( pageId, clip, pan, center );
+	const mx = sx - f.ox,
+		my = sy - f.oy;
+	if ( mx < 0 || my < 0 || mx >= f.width || my >= f.height ) return null;
+	const u = f.left + (mx / f.width) * (f.right - f.left),
+		v = f.top - (my / f.height) * (f.top - f.bottom);
+	const rx = Math.floor( u / 192 ),
+		rz = Math.floor( v / 192 );
+	if ( rx < 0 || rx > 255 || rz < 0 || rz > 127 ) return null;
+	return { regionId: (rz << 8) | rx, x: (u - rx * 192) * 10, z: (v - rz * 192) * 10 };
+}
+
+/*
+================
 inClip
 
 The sprite test of worldMapPresentation: rect overlaps clip.

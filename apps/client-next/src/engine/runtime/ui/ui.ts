@@ -59,6 +59,7 @@ import {
 	WITHDRAWAL_SKILL_FRAME_HEIGHT
 } from "./hud/withdrawal";
 import { isRestorationPotion } from "@/engine/foundation/gameplay/withdrawal";
+import { createMapTeleport } from "./hud/map-teleport";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
 import { academyRank } from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
@@ -566,6 +567,7 @@ export function createUi(
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
 	const withdrawal = createWithdrawalDialog();
+	const mapTeleport = createMapTeleport();
 	const gauges = createGaugePresentation();
 	const regionBanner = createRegionBanner();
 	const hudMessages = createHudMessages( chooseTip );
@@ -3029,6 +3031,37 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			// Map teleport: confirmation modal, then the GM warp.
+			const teleportTarget = mapTeleport.pending();
+			if ( teleportTarget ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "map-teleport-cancel"
+				) {
+					mapTeleport.clear();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "map-teleport-confirm"
+				) {
+					mapTeleport.clear();
+					dirty = true;
+					if ( view?.session?.phase === "world" && view.gameplay?.eligibility?.gm ) {
+						sendGameplay( { kind: "gm-command", line: mapTeleport.command( teleportTarget ) } );
+					}
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if (
+				event.kind === "region-double" && event.id === "map-pan" &&
+				view?.session?.phase === "world" && view.gameplay?.eligibility?.gm
+			) {
+				if ( mapTeleport.pick( event.x, event.y ) ) dirty = true;
+				return;
 			}
 			if ( buffDismiss ) {
 				if (
@@ -7120,6 +7153,17 @@ export function createUi(
 				// glyphs (the largest allocation of a HUD step) and click hits are built
 				// while it is open. The font atlas is demanded either way.
 				const mapOpen = panel === "Map";
+				// The teleport's inverse pick must track the painted projection: it
+				// is only valid while the map is open and a pose exists, so record the
+				// frame under the same condition that builds the projection.
+				if ( mapOpen && pose ) {
+					mapTeleport.view(
+						mapPage,
+						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapPan,
+						mapCenter ?? pose
+					);
+				}
 				const mapProjection = pose && mapOpen ?
 					worldMapPresentation(
 						pose,
@@ -12280,6 +12324,40 @@ export function createUi(
 				);
 				button(
 					"cos-clean-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
+			const teleportShown = mapTeleport.pending();
+			if ( worldVisible && teleportShown ) {
+				// Map teleport: the recall-appoint message box geometry.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					)
+				);
+				const region = String( teleportShown.regionId ),
+					place = hud.data()?.zones[region] ?? "Region " + region;
+				quads.push(
+					...text.quads( "Teleport", layout.title, full, white, { hAlign: 1 } ),
+					...text.quads( place, layout.name, full, white, { hAlign: 1 } ),
+					...text.quads( "Teleport here?", layout.question, full, white, { hAlign: 1 } )
+				);
+				button(
+					"map-teleport-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"map-teleport-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
