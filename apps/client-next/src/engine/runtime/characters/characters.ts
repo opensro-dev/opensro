@@ -1610,7 +1610,7 @@ soundContext
 						}
 						return shifted;
 					} );
-					return renderer.characterSocket( rows, gid, bone, offset );
+					return renderer.characterSocket( rows, gid, { name: bone, fallback: "mount-root" }, offset );
 				},
 				[ ...displayed.values() ],
 				effectDetail,

@@ -458,22 +458,43 @@ export function createCharacters(
 		================
 		socket
 
-		Combine a local bone offset with the actor world transform.
+		Combine a local bone offset with the actor world transform. Effect queries
+		use 8D6330's mount/root fallback; strict geometry queries keep a missing
+		marker distinct from a real socket (for example, footstep contact).
 		================
 		*/
 		socket(
 			rows: readonly CharacterActor[],
 			gid: number,
-			bone: string,
+			bone: string | { name: string; fallback: "mount-root"; },
 			offset: readonly [number, number, number]
 		) {
 			const byGid = new Map( rows.map( actor => [ actor.gid, actor ] ) ), actor = byGid.get( gid );
 			if ( !actor ) return null;
-			const socket = poseFor( actor )?.socket( bone ),
-				matrix = transformFor( actor, byGid, actor.pose.regionId, new Map() );
-			if ( !socket || !matrix ) return null;
+			const fallback = typeof bone !== "string", name = fallback ? bone.name : bone;
+			let holder = actor, pose = poseFor( holder );
+			// A cold model is not evidence that an authored marker is absent.
+			if ( !pose ) return null;
+			let socket = pose.socket( name );
+			const visited = new Set<number>( [ holder.gid ] );
+			while ( !socket && fallback && holder.mountedOn !== undefined ) {
+				const mount = byGid.get( holder.mountedOn );
+				if ( !mount ) return null;
+				if ( visited.has( mount.gid ) ) throw new Error( "Cyclic character socket mount" );
+				visited.add( mount.gid );
+				holder = mount;
+				pose = poseFor( holder );
+				if ( !pose ) return null;
+				socket = pose.socket( name );
+			}
+			if ( !socket && !fallback ) return null;
+			const matrix = transformFor( holder, byGid, actor.pose.regionId, new Map() );
+			if ( !matrix ) return null;
 			const world = new Float32Array( 16 );
-			multiply( matrix, socket, world );
+			// 8D64E7..8D656C: after the last mount misses, retain its root
+			// matrix and still apply the offset through the holder's basis.
+			if ( socket ) multiply( matrix, socket, world );
+			else world.set( matrix );
 			const [x, y, z] = offset, point = [ 0, 0, 0 ];
 			for ( let n = 0; n < 3; n++ ) {
 				point[n] = world[12 + n]! + matrix[n]! * x + matrix[4 + n]! * y + matrix[8 + n]! * z;

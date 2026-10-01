@@ -176,7 +176,7 @@ export interface Renderer extends Disposable {
 	characterSocket(
 		actors: readonly import("./character").CharacterActor[],
 		gid: number,
-		bone: string,
+		bone: string | { name: string; fallback: "mount-root"; },
 		offset: readonly [number, number, number]
 	): import("./character").CharacterActor["pose"] | null;
 	pickEntity( x: number, y: number, excluded: number, blindHeld?: boolean ): number | null;

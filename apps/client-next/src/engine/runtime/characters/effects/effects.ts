@@ -1169,10 +1169,25 @@ export function createCharacterEffects(
 									(!Number.isInteger( stage.count ) || stage.count < 1 || stage.count > 128 ||
 										(!distributed && !radial && !returning && !targetLocal && stage.count !== 1))
 								) {
+									// Keep resource support separate from runtime endpoint failures.
+									// A report must identify the failing actor, not just the skill.
+									const details = [
+										!model ? `missing-model:${resource}` : null,
+										flying && !targetLocal && stage.bone && !sourceSocket ?
+											`source-socket:${entity.gid}/${stage.bone}` :
+											null,
+										flying && !radial && !targetLocal && stage.targetBone && !targetSocket ?
+											`target-socket:${target?.gid ?? targetGid}/${stage.targetBone}` :
+											null,
+										flying && !target ? `missing-target:${targetGid}` : null,
+										flying && target && !projectileSpace( pose.regionId, target.regionId ) ?
+											`region-space:${pose.regionId}/${target.regionId}` :
+											null
+									].filter( value => value !== null );
 									unsupported.add(
 										`${cast.skill}/${trigger.phase}/${trigger.event}/${index}: ${stage.action}/${stage.move}/${
 											script.kind === "unsupported" ? script.operation : script.kind
-										} (${stage.resource})`
+										} (${stage.resource})${details.length ? ` [${details.join( ", " )}]` : ""}`
 									);
 									continue;
 								}
