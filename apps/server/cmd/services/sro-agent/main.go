@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+main.go - sro-agent, the global Agent/Login control-plane process
+
+Reads its configuration from the environment Nomad renders, builds the
+Agent server and serves it until a termination signal.
+
+===========================================================================
+*/
 // Command sro-agent runs the global Agent/Login control-plane process.
 package main
 
@@ -14,6 +24,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/agent/api"
+	"opensro.online/server/internal/agent/bugreport"
 	"opensro.online/server/internal/agent/server"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
@@ -37,6 +48,11 @@ const (
 	defaultDirectoryPath  = ".state/agent/shard-leases.json"
 )
 
+/*
+================
+main
+================
+*/
 func main() {
 	logging.InstallFormat()
 	config.Initialize()
@@ -88,6 +104,10 @@ func main() {
 	if nomadNamespace == "" {
 		log.Fatalf("agent: %s is required", envNomadNamespace)
 	}
+	bugReports, err := openBugReports()
+	if err != nil {
+		log.Fatalf("agent: bug reports: %v", err)
+	}
 	ready := readiness.NewGate()
 	server, err := agentserver.New(agentserver.Config{
 		Accounts:                accounts,
@@ -98,6 +118,7 @@ func main() {
 		ControlNamespace:        nomadNamespace,
 		AllowedOrigins:          splitCSV(os.Getenv(envOrigins)),
 		Readiness:               ready,
+		BugReports:              bugReports,
 	})
 	if err != nil {
 		log.Fatalf("agent: construction: %v", err)
@@ -182,10 +203,49 @@ func main() {
 	}
 }
 
+/*
+================
+openBugReports
+
+The three SRO_BUG_REPORT_* variables. Anything missing or invalid leaves
+bug reports off with a warning; it never stops the Agent.
+================
+*/
+func openBugReports() (*bugreport.Service, error) {
+	config, warnings := bugreport.LoadConfig(os.Getenv)
+	for _, warning := range warnings {
+		log.Warnf("agent: %s", warning)
+	}
+	if config.WebhookURL == "" {
+		log.Infof("agent: bug reports disabled (no valid %s)", bugreport.EnvDiscordWebhook)
+		return nil, nil
+	}
+	service, err := bugreport.New(config, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	log.Infof(
+		"agent: bug reports enabled (replay default %t, max %d bytes)",
+		config.ReplayDefault,
+		config.MaxBytes,
+	)
+	return service, nil
+}
+
+/*
+================
+agentListenAllowed
+================
+*/
 func agentListenAllowed(address string, privateNetwork bool) bool {
 	return loopbackAddress(address) || privateNetwork
 }
 
+/*
+================
+loopbackAddress
+================
+*/
 func loopbackAddress(address string) bool {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
@@ -198,6 +258,11 @@ func loopbackAddress(address string) bool {
 	return strings.EqualFold(host, "localhost")
 }
 
+/*
+================
+splitCSV
+================
+*/
 func splitCSV(raw string) []string {
 	if strings.TrimSpace(raw) == "" {
 		return agentapi.DefaultAllowedOrigins()

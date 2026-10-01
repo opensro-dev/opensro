@@ -23,6 +23,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"opensro.online/server/internal/agent/bugreport"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
 	"opensro.online/server/internal/data/store"
@@ -88,6 +89,9 @@ type deployment struct {
 	DataPaths       gamedata.Paths
 	Shards          []shardDeployment
 	Secrets         clusterSecrets
+	// BugReports comes from the deployer's SRO_BUG_REPORT_* environment;
+	// its webhook travels only as a Nomad variable item.
+	BugReports bugreport.Config
 }
 
 /*
@@ -256,6 +260,10 @@ func resolveDeployment(
 	if err != nil {
 		return nil, fmt.Errorf("GM allowlist: %w", err)
 	}
+	bugReports, warnings := bugreport.LoadConfig(os.Getenv)
+	for _, warning := range warnings {
+		fmt.Printf("Bug reports: %s\n", warning)
+	}
 	identityIssuer := strings.TrimSuffix(
 		strings.TrimSpace(options.IdentityIssuer),
 		"/",
@@ -384,9 +392,10 @@ func resolveDeployment(
 			gameReleaseID,
 			binaryName("gameworld"),
 		),
-		DataPaths: dataPaths,
-		Shards:    shards,
-		Secrets:   secrets,
+		DataPaths:  dataPaths,
+		Shards:     shards,
+		Secrets:    secrets,
+		BugReports: bugReports,
 	}, nil
 }
 
@@ -589,6 +598,13 @@ func (deployment *deployment) agentVariables() map[string]any {
 		"allowed_origins":   deployment.AllowedOrigins,
 		"identity_issuer":   deployment.IdentityIssuer,
 		"identity_jwks_url": deployment.IdentityJWKSURL,
+		"bug_report_replay_default": boolEnvValue(
+			deployment.BugReports.ReplayDefault,
+		),
+		"bug_report_max_bytes": strconv.FormatInt(
+			deployment.BugReports.MaxBytes,
+			10,
+		),
 	})
 }
 

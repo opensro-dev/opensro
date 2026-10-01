@@ -28,7 +28,16 @@ const ASYNC_OWNERS = [
 	runtime + "assets/worker/world/resources/resources.ts",
 	runtime + "assets/worker/navigation/navigation.ts",
 	// Background install of the combat presentation set; worker-only I/O.
-	runtime + "assets/worker/install.ts"
+	runtime + "assets/worker/install.ts",
+	// The bug reporter: its settings and upload, the capture stream's
+	// playback and the report window's send (issue #90).
+	runtime + "bug-report/bug-report.ts",
+	runtime + "bug-report/recorder.ts",
+	runtime + "bug-report/dialog.ts",
+	runtime + "bug-report/trimmer.ts",
+	runtime + "bug-report/transcode.ts",
+	runtime + "bug-report/archive.ts",
+	runtime + "bug-report/journal.ts"
 ];
 const device = runtime + "renderer/device/device.ts",
 	frame = runtime + "renderer/frame/frame.ts",
@@ -38,6 +47,12 @@ const pipelines = runtime + "renderer/device/pipelines.ts",
 	geometry = runtime + "renderer/device/geometry.ts";
 const ui = runtime + "renderer/device/ui.ts", uiBridge = runtime + "platform/ui/ui.ts";
 const flares = runtime + "renderer/device/flares.ts";
+const bugReport = runtime + "bug-report/bug-report.ts",
+	bugRecorder = runtime + "bug-report/recorder.ts",
+	bugDialog = runtime + "bug-report/dialog.ts",
+	bugTrimmer = runtime + "bug-report/trimmer.ts",
+	bugTranscode = runtime + "bug-report/transcode.ts",
+	bugJournal = runtime + "bug-report/journal.ts";
 const thunder = runtime + "renderer/device/thunder.ts";
 const timing = runtime + "renderer/device/timing.ts";
 const bloom = runtime + "renderer/device/bloom.ts";
@@ -64,8 +79,8 @@ export const rules = {
 	mapAsync: [ timing ],
 	getMappedRange: [ timing ],
 	Audio: [ runtime + "audio/music/music.ts" ],
-	createElement: [ uiBridge, runtime + "platform/ui/cursor.ts" ],
-	OffscreenCanvas: [ runtime + "renderer/readback/readback.ts" ],
+	createElement: [ uiBridge, runtime + "platform/ui/cursor.ts", bugRecorder, bugDialog, bugTrimmer ],
+	OffscreenCanvas: [ runtime + "renderer/readback/readback.ts", bugRecorder ],
 	AudioContext: [ runtime + "audio/audio.ts" ],
 	decodeAudioData: [ runtime + "audio/audio.ts" ],
 	createPanner: [ runtime + "audio/audio.ts" ],
@@ -89,7 +104,7 @@ export const rules = {
 	submit: [ frame, device ],
 	createImageBitmap: [ runtime + "assets/worker/loader.ts" ],
 	createSampler: [ device ],
-	getContext: [ surface, runtime + "renderer/readback/readback.ts" ],
+	getContext: [ surface, runtime + "renderer/readback/readback.ts", bugRecorder, bugTrimmer ],
 	createBuffer: [ device ],
 	createTexture: [ device ],
 	createBindGroup: [ device ],
@@ -106,10 +121,21 @@ export const rules = {
 	pushErrorScope: [ device ],
 	popErrorScope: [ device ],
 	getCurrentTexture: [ surface ],
-	configure: [ surface, device ],
+	// The recorder and transcoder configure WebCodecs, not a canvas.
+	configure: [ surface, device, bugRecorder, bugTranscode ],
 	unconfigure: [ surface ],
-	addEventListener: [ runtime + "platform/platform.ts", device, uiBridge, runtime + "platform/ui/cursor.ts" ],
-	fetch: [ runtime + "simulation/worker/session/http/http.ts", runtime + "assets/worker/loader.ts" ],
+	addEventListener: [
+		runtime + "platform/platform.ts",
+		device,
+		uiBridge,
+		runtime + "platform/ui/cursor.ts",
+		bugReport,
+		bugDialog,
+		bugTrimmer,
+		bugTranscode,
+		bugJournal
+	],
+	fetch: [ runtime + "simulation/worker/session/http/http.ts", runtime + "assets/worker/loader.ts", bugReport ],
 	WebSocket: [ runtime + "simulation/worker/network/network.ts" ],
 	WebTransport: [],
 	Worker: [ runtime + "simulation/host.ts", runtime + "assets/assets.ts" ]

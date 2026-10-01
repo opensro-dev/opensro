@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+server_test.go - the Agent's title, routing and session flows
+
+Shared fixtures for the package's tests (a two-division catalog, a fixed
+clock, test signing keys) and the end-to-end login and routing cases.
+
+===========================================================================
+*/
 package agentserver
 
 import (
@@ -38,8 +48,18 @@ var testSessionKeyID = fmt.Sprintf(
 	sha256.Sum256(testSessionPublicKey),
 )[:32]
 
+/*
+================
+testWorkloadVerifier
+================
+*/
 type testWorkloadVerifier struct{}
 
+/*
+================
+Verify
+================
+*/
 func (testWorkloadVerifier) Verify(
 	_ context.Context,
 	token string,
@@ -56,6 +76,11 @@ func (testWorkloadVerifier) Verify(
 	}, nil
 }
 
+/*
+================
+testSessionSigner
+================
+*/
 func testSessionSigner(t *testing.T) *auth.AgentSessionSigner {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "session-keys.json")
@@ -75,6 +100,11 @@ func testSessionSigner(t *testing.T) *auth.AgentSessionSigner {
 	return signer
 }
 
+/*
+================
+agentFixture
+================
+*/
 type agentFixture struct {
 	handler   http.Handler
 	directory *shard.Directory
@@ -82,10 +112,16 @@ type agentFixture struct {
 	now       *time.Time
 }
 
+/*
+================
+newAgentFixture
+================
+*/
 func newAgentFixture(
 	t *testing.T,
 	firstWorker http.Handler,
 	secondWorker http.Handler,
+	configure ...func(*Config),
 ) agentFixture {
 	t.Helper()
 	first := httptest.NewServer(firstWorker)
@@ -125,7 +161,7 @@ func newAgentFixture(
 	accounts := loadTestAccounts(t)
 	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	ready := readiness.NewGate()
-	server, err := New(Config{
+	config := Config{
 		Accounts:                accounts,
 		Catalog:                 catalog,
 		Directory:               directory,
@@ -134,7 +170,11 @@ func newAgentFixture(
 		ControlNamespace:        "sro",
 		Now:                     func() time.Time { return now },
 		Readiness:               ready,
-	})
+	}
+	for _, apply := range configure {
+		apply(&config)
+	}
+	server, err := New(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,6 +187,11 @@ func newAgentFixture(
 	}
 }
 
+/*
+================
+loadTestAccounts
+================
+*/
 func loadTestAccounts(t *testing.T) *auth.Catalog {
 	t.Helper()
 	hash, err := bcrypt.GenerateFromPassword([]byte("123123"), bcrypt.DefaultCost)
@@ -168,6 +213,11 @@ func loadTestAccounts(t *testing.T) *auth.Catalog {
 	return accounts
 }
 
+/*
+================
+publishFixtureLease
+================
+*/
 func publishFixtureLease(
 	t *testing.T,
 	fixture agentFixture,
@@ -187,6 +237,11 @@ func publishFixtureLease(
 	}
 }
 
+/*
+================
+performJSON
+================
+*/
 func performJSON(
 	t *testing.T,
 	handler http.Handler,
@@ -207,6 +262,11 @@ func performJSON(
 	return response
 }
 
+/*
+================
+performControlJSON
+================
+*/
 func performControlJSON(
 	t *testing.T,
 	handler http.Handler,
@@ -225,6 +285,11 @@ func performControlJSON(
 	return response
 }
 
+/*
+================
+decodeObject
+================
+*/
 func decodeObject(t *testing.T, response *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var body map[string]any
@@ -234,6 +299,11 @@ func decodeObject(t *testing.T, response *httptest.ResponseRecorder) map[string]
 	return body
 }
 
+/*
+================
+TestReadinessStopsNewAgentRequests
+================
+*/
 func TestReadinessStopsNewAgentRequests(t *testing.T) {
 	fixture := newAgentFixture(
 		t,
@@ -307,6 +377,11 @@ func TestReadinessStopsNewAgentRequests(t *testing.T) {
 	}
 }
 
+/*
+================
+TestServerListUsesFreshWorkerLease
+================
+*/
 func TestServerListUsesFreshWorkerLease(t *testing.T) {
 	fixture := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
 
@@ -341,6 +416,11 @@ func TestServerListUsesFreshWorkerLease(t *testing.T) {
 	}
 }
 
+/*
+================
+TestClientsReceivePublicTransportRoute
+================
+*/
 func TestClientsReceivePublicTransportRoute(t *testing.T) {
 	fixture := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
 	publishFixtureLease(t, fixture, "alpha", "worker-a", 1, 0)
@@ -366,6 +446,11 @@ func TestClientsReceivePublicTransportRoute(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLoginRefusesDisabledShardExplicitly
+================
+*/
 func TestLoginRefusesDisabledShardExplicitly(t *testing.T) {
 	catalog, err := shard.NewCatalog([]shard.Definition{{
 		ID:             "disabled",
@@ -416,6 +501,11 @@ func TestLoginRefusesDisabledShardExplicitly(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLoginBindsProxyRoutingToSelectedShard
+================
+*/
 func TestLoginBindsProxyRoutingToSelectedShard(t *testing.T) {
 	var alphaCalls, betaCalls int
 	worker := func(name string, calls *int) http.Handler {
@@ -557,6 +647,11 @@ func TestLoginBindsProxyRoutingToSelectedShard(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLoginRefusesOfflineAndFullShard
+================
+*/
 func TestLoginRefusesOfflineAndFullShard(t *testing.T) {
 	fixture := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
 	loginBody := `{"id":"tester","password":"123123","serverId":"alpha"}`
@@ -587,6 +682,11 @@ func TestLoginRefusesOfflineAndFullShard(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHeartbeatRequiresControlSecret
+================
+*/
 func TestHeartbeatRequiresControlSecret(t *testing.T) {
 	fixture := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
 	payload := `{"ShardID":"alpha","InstanceID":"worker-a",` +
@@ -660,6 +760,11 @@ func TestHeartbeatRequiresControlSecret(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAccountDirectoryExposesIDsOnlyToGameWorldControl
+================
+*/
 func TestAccountDirectoryExposesIDsOnlyToGameWorldControl(
 	t *testing.T,
 ) {
@@ -706,6 +811,11 @@ func TestAccountDirectoryExposesIDsOnlyToGameWorldControl(
 	}
 }
 
+/*
+================
+TestDecodeJSONRejectsOversizedRequest
+================
+*/
 func TestDecodeJSONRejectsOversizedRequest(t *testing.T) {
 	fixture := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
 	oversized := bytes.Repeat([]byte("x"), int(maxRequestBytes)+1)

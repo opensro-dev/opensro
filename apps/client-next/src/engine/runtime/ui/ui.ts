@@ -29,6 +29,7 @@ import {
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
+import type { BugReportControl } from "@/engine/contracts/bug-report";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
 import { itemEquipmentOverlay, equipmentWarningUv } from "@/engine/foundation/ui/item-equipment-overlay";
 import { itemCountQuads } from "@/engine/foundation/ui/item-count";
@@ -308,6 +309,11 @@ const ROOT = "/assets/images/Media_extracted/", BUTTON = ROOT + "interface/ifcom
 const PARTS = frameParts();
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
+// The bug reporter (issue #90): its chat command and its Option window row.
+const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
+const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
+const BUG_REPLAY_OPTION = "option-bug-replay";
+const BUG_REPLAY_LABEL = "Record bug replay";
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
 const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
@@ -352,7 +358,8 @@ export function createUi(
 	saveBindings: ( value: InputOptions ) => void = () => {},
 	saveVideo: ( value: VideoOptions ) => void = () => {},
 	saveBlocks: ( value: readonly string[] ) => void = () => {},
-	saveQuickslots: ( value: ExtendedQuickslotOptions ) => void = () => {}
+	saveQuickslots: ( value: ExtendedQuickslotOptions ) => void = () => {},
+	bugReport: BugReportControl | null = null
 ) {
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
 	let consoleRows: string[] = [], consoleHistory: string[] = [], consoleHistoryIndex = 0;
@@ -887,6 +894,7 @@ export function createUi(
 			optionDraft = { ...options };
 			optionScroll = [ 0, 0 ];
 			beginnerDraft = !!((view?.entities.find( e => e.gid === view?.gameplay?.localGid )?.visualFlags ?? 0) & 1);
+			bugReport?.resetReplayDraft();
 		}
 		if ( next === "COS inventory" ) {
 			cosSlot = -1;
@@ -1607,6 +1615,7 @@ export function createUi(
 			bindingScroll = Math.max( 0, Math.min( 12, bindingScroll + (id.endsWith( "up" ) ? -1 : 1) ) );
 		} else if ( id.startsWith( "option-sight:" ) ) sightDraft = sightMode( Number( id.slice( 13 ) ) );
 		else if ( id === "option-beginner" ) beginnerDraft = !beginnerDraft;
+		else if ( id === BUG_REPLAY_OPTION ) bugReport?.toggleReplayDraft();
 		else if ( id.startsWith( "option-mute:" ) ) {
 			const key = id.slice( 12 );
 			if ( key === "muteBgm" || key === "muteEffects" || key === "muteEnvironment" ) {
@@ -1635,6 +1644,7 @@ export function createUi(
 			} else if ( optionTab === 4 ) {
 				optionDraft = defaultGameOptions();
 				beginnerDraft = (view.gameplay?.progression?.maxLevel ?? view.gameplay?.progression?.level ?? 1) <= 19;
+				bugReport?.defaultReplayDraft();
 			}
 		} else if ( id === "option-cancel" ) setPanel( "" );
 		else if ( id === "option-apply" || id === "option-ok" ) {
@@ -1653,6 +1663,7 @@ export function createUi(
 			saveSight( sight );
 			audioSaved = { ...audioDraft };
 			audioPreference( audioSaved, true );
+			bugReport?.applyReplayDraft();
 			if ( id === "option-ok" ) setPanel( "" );
 			else dirty = true;
 		} else if ( id.startsWith( "option-scroll:" ) ) {
@@ -2177,6 +2188,18 @@ export function createUi(
 		else if ( id === "quest-reward" ) {
 			sendGameplay( { kind: "quest-reward", refId: selectedQuest } );
 			questDetails = false;
+		} else if (
+			id === "chat-send" && BUG_COMMAND.test( chatText.slice( chatTabPrefix( chatTab ).length ) )
+		) {
+			// /bug opens the bug reporter (issue #90); it is never sent as chat.
+			const text = chatText.slice( chatTabPrefix( chatTab ).length ).trim().replace( BUG_COMMAND, "" );
+			if ( !bugReport?.open( text ) ) hudMessages.append( BUG_REPORTS_DISABLED );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
 		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
 				panel === "Chat" ?
@@ -7524,6 +7547,16 @@ export function createUi(
 									enabled: optionDraft[key],
 									disabled: false
 								}) );
+							// Not a native option: the bug reporter's replay switch, shown
+							// only while the server has bug reports enabled.
+							if ( group === 1 && bugReport?.reportsEnabled() ) {
+								rows.push( {
+									key: BUG_REPLAY_OPTION,
+									text: "",
+									enabled: bugReport.replayDraft(),
+									disabled: false
+								} );
+							}
 							if ( group === 0 ) {
 								rows.splice( 5, 0, {
 									key: "beginner",
@@ -7548,9 +7581,10 @@ export function createUi(
 								if ( resources.has( skin ) ) rect( [ sx, sy, 156, 28 ], white, skin );
 								paths.push( path );
 								if ( resources.has( path ) ) rect( r, row.disabled ? [ .5, .5, .5, 1 ] : white, path );
+								const caption = row.key === BUG_REPLAY_OPTION ? BUG_REPLAY_LABEL : hudCopy( row.text );
 								quads.push(
 									...text.quads(
-										hudCopy( row.text ),
+										caption,
 										[
 											sx + labelNode.rect[0],
 											sy + labelNode.rect[1] + labelNode.client[1],
@@ -7562,8 +7596,12 @@ export function createUi(
 									)
 								);
 								controls.push( {
-									id: row.key === "beginner" ? "option-beginner" : "option-toggle:" + row.key,
-									label: hudCopy( row.text ),
+									id: row.key === "beginner" ?
+										"option-beginner" :
+										row.key === BUG_REPLAY_OPTION ?
+										BUG_REPLAY_OPTION :
+										"option-toggle:" + row.key,
+									label: caption,
 									rect: r,
 									kind: "button",
 									selected: row.enabled,
@@ -10345,6 +10383,7 @@ export function createUi(
 					}
 				}
 				const speakers = next.entities.filter( e => e.kind === "local-player" || e.kind === "player" );
+				bugReport?.chat( game?.chat?.lines ?? [] );
 				for ( const [gid, row] of speech.step( game?.chat?.lines ?? [], speakers, now ) ) {
 					const lines = textBoardLines( row.text, 200, value => text.run( value ).width ),
 						lineHeight = text.boardHeight(),

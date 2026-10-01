@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+variables_test.go - which secrets reach which Nomad variables
+
+===========================================================================
+*/
 package main
 
 import (
@@ -7,9 +14,15 @@ import (
 	"testing"
 
 	nomad "github.com/hashicorp/nomad/api"
+	"opensro.online/server/internal/agent/bugreport"
 	"opensro.online/server/internal/cluster/shard"
 )
 
+/*
+================
+TestNomadVariablePeekDistinguishesForbiddenFromMissing
+================
+*/
 func TestNomadVariablePeekDistinguishesForbiddenFromMissing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(
 		func(response http.ResponseWriter, request *http.Request) {
@@ -63,6 +76,11 @@ func TestNomadVariablePeekDistinguishesForbiddenFromMissing(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDesiredVariablesExposeOnlyPublicKeysToGameWorlds
+================
+*/
 func TestDesiredVariablesExposeOnlyPublicKeysToGameWorlds(t *testing.T) {
 	privateRing := `{"activeKeyId":"private"}`
 	publicRing := `{"keys":[{"id":"public"}]}`
@@ -100,6 +118,37 @@ func TestDesiredVariablesExposeOnlyPublicKeysToGameWorlds(t *testing.T) {
 	} {
 		if _, found := global[forbidden]; found {
 			t.Fatalf("GameWorld variable exposes %s", forbidden)
+		}
+	}
+}
+
+/*
+================
+TestDesiredVariablesCarryBugReportWebhookOnlyWhenSet
+
+The webhook is a credential: it reaches the Agent's variable when the
+deployer configured it, is absent otherwise, and never reaches a GameWorld.
+================
+*/
+func TestDesiredVariablesCarryBugReportWebhookOnlyWhenSet(t *testing.T) {
+	const webhook = "https://discord.com/api/webhooks/1/token"
+	for _, configured := range []bool{false, true} {
+		deployment := deployment{
+			Shards: []shardDeployment{{Definition: shard.Definition{ID: "global-official"}}},
+		}
+		if configured {
+			deployment.BugReports = bugreport.Config{WebhookURL: webhook, ReplayDefault: true, MaxBytes: 1 << 20}
+		}
+		variables, err := deployment.desiredVariables()
+		if err != nil {
+			t.Fatal(err)
+		}
+		value, found := variables[0].items[bugReportWebhookItem]
+		if found != configured || (configured && value != webhook) {
+			t.Fatalf("configured=%t: Agent item found=%t value=%q", configured, found, value)
+		}
+		if _, leaked := variables[1].items[bugReportWebhookItem]; leaked {
+			t.Fatal("GameWorld variable exposes the bug report webhook")
 		}
 	}
 }
