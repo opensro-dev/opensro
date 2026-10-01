@@ -11,8 +11,17 @@ export function ribbonSpline(input:readonly RibbonPoint[]):RibbonPoint[]{
   result.push({position:[0,1,2].map(axis=>w.reduce((sum,weight,j)=>sum+controls[i+j]!.position[axis]!*weight,0)),color:a.color.map((v,j)=>Math.trunc((v*(1-t)+b.color[j]!*t)*255)/255),width:a.width*(1-t)+b.width*t});
  }result.push(points.at(-1)!);return result;
 }
+// AF8E80 (LinkDPipe) / AF73A0 (LinkObj): the raw element chain, dropping a
+// point only when no axis moved by 1e-6 or more; no spline.
+export function ribbonPolyline(input:readonly RibbonPoint[]):RibbonPoint[]{
+ const points:RibbonPoint[]=[];
+ for(const point of input){const previous=points.at(-1);if(!previous||point.position.some((v,i)=>Math.abs(v-previous.position[i]!)>=1e-6))points.push(point);}
+ return points.length<2?[]:points;
+}
 // AF80E0: projected neighbour tangent, camera-space perpendicular, world-space
 // half-width. Rizin AF8103..AF811E confirms UV step = 1/(pointCount-1).
+// The tangent is NDC, not pixels: AF80E0 calls D3DXVec3Project with a NULL
+// viewport, which stops at normalized device coordinates.
 export function ribbonStrip(points:readonly RibbonPoint[],view:Float32Array){
  const positions=new Float32Array(points.length*6),colors=new Float32Array(points.length*8),uvs=new Float32Array(points.length*4),indices=new Uint32Array(Math.max(0,points.length-1)*6);
  const right=[view[0]!,view[4]!,view[8]!],up=[view[1]!,view[5]!,view[9]!];

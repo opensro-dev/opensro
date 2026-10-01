@@ -193,14 +193,16 @@ test("completed idle keeps its 200ms exit without rolling another motion", () =>
 	assert.ok( s.remaining > 14 && s.remaining < 15 );
 });
 
-test("local and remote forced movement cancel only cast-owned travel and reject old prediction receipts", () => {
+test("local and remote forced movement cancel only cast-owned travel and keep in-flight requests", () => {
 	const m = createMovement( () => {} ), pose = { regionId: 0x5c87, x: 100, y: 0, z: 100, angle: 0 };
 	m.seed( pose );
 	m.request( { ...pose, x: 150 }, 0 );
 	const command = { gid: 1, token: 9, kind: 8, destination: { ...pose, x: 300 } };
 	m.displace( command, 0 );
-	assert.equal( m.state().pendingMoves, 0 );
-	assert.equal( m.state().acknowledgedMove, 1 );
+	// The request was not yet answered when the displacement arrived, so the
+	// server handles it after the dash: its receipt still owns the outcome.
+	assert.equal( m.state().pendingMoves, 1 );
+	assert.equal( m.state().acknowledgedMove, 0 );
 	m.step( 100 );
 	assert.equal( defined( m.state().pose ).x, 150 );
 	m.cancelCast( 8, 100 );

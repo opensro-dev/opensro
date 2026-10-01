@@ -41,12 +41,14 @@ func lifecycleSeeds() []*enterworld.Character {
 			ModelCodename: "CHAR_CH_MAN_ADVENTURER",
 			RaceIndex:     e2eInt64(enterworld.RaceChina),
 			Gender:        e2eInt64(enterworld.GenderMale),
+			Level:         e2eInt64(10),
 		},
 		{
 			Name:          e2eAliceName,
 			ModelCodename: "CHAR_CH_WOMAN_ADVENTURER",
 			RaceIndex:     e2eInt64(enterworld.RaceChina),
 			Gender:        e2eInt64(enterworld.GenderFemale),
+			Level:         e2eInt64(10),
 		},
 	}
 }

@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 async function load( file ) {
 	return import( sourceFileUrl( "src/engine/foundation/" + file ).href );
 }
-const { ribbonSpline, ribbonStrip } = await load( "rendering/particle-ribbon.ts" );
+const { ribbonPolyline, ribbonSpline, ribbonStrip } = await load( "rendering/particle-ribbon.ts" );
 const { particleProgram, initializeParticle, advanceParticle } = await load( "animation/particle-program.ts" );
 const point = ( x, width = 1 ) => ({ position: [ x, 0, 0 ], width, color: [ 1, .5, 0, 1 ] });
 test("linked trails require distinct neighbours and use uniform B-spline endpoint weights", () => {
@@ -204,4 +204,13 @@ test("SetConePos samples conical spawn displacement and offsets initial position
 	assert.ok( Math.abs( transformed.state.position[0] - (10 - 5) ) < 1e-6 );
 	assert.ok( Math.abs( transformed.state.position[1] - 20 ) < 1e-6 );
 	assert.ok( Math.abs( transformed.state.position[2] - 30 ) < 1e-6 );
+});
+
+test("LinkDPipe keeps the raw chain: no spline points, only exact repeats dropped", () => {
+	const point = ( x, y = 0 ) => ({ position: [ x, y, 0 ], color: [ 1, 1, 1, 1 ], width: 2 });
+	const chain = [ point( 0 ), point( 0 ), point( 10, 5 ), point( 10, 5 + 1e-7 ), point( 20 ) ];
+	const raw = ribbonPolyline( chain );
+	assert.deepEqual( raw.map( p => p.position[0] ), [ 0, 10, 20 ], "AF8E80 drops only sub-1e-6 repeats" );
+	assert.ok( ribbonSpline( chain ).length > raw.length, "LinkPipe's AF9020 spline adds points" );
+	assert.deepEqual( ribbonPolyline( [ point( 0 ) ] ), [] );
 });

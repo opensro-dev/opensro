@@ -30,8 +30,15 @@ const nativeCharacterLighting:bool=${NATIVE_CHARACTER_LIGHTING};
 @group(0) @binding(0) var<uniform> transform:mat4x4f;
 struct Instance {matrix:mat4x4f,opacity:vec4f,color:vec4f,window:vec4f,pointPosition:vec4f,pointAmbient:vec4f,pointDiffuse:vec4f}
 @group(0) @binding(1) var<storage,read> instances:array<Instance>;
-struct Material {color:vec4f,options:vec4f,skin:vec4f,window:vec4f,lighting:vec4f,policy:vec4f,localFog:vec4f,localFogSettings:vec4f,ambient:vec4f,uvU:vec4f,uvV:vec4f,reflection:vec4f,equipmentColor:vec4f,equipmentUV:vec4f}
+struct Material {color:vec4f,options:vec4f,skin:vec4f,window:vec4f,lighting:vec4f,policy:vec4f,localFog:vec4f,localFogSettings:vec4f,ambient:vec4f,uvU:vec4f,uvV:vec4f,reflection:vec4f,equipmentColor:vec4f,equipmentUV:vec4f,stage:vec4f}
 @group(0) @binding(2) var<uniform> material:Material;
+// texture-stage.ts: one native stage-0 op over TEXTURE (2) and DIFFUSE.
+fn stageArgument(arg:u32,texel:vec4f,diffuse:vec4f)->vec4f {return select(diffuse,texel,arg==2u);}
+fn stageOp(op:u32,a:vec4f,b:vec4f,diffuse:vec4f)->vec4f {
+ var value=a*b;
+ switch(op){case 1u:{value=diffuse;} case 2u:{value=a;} case 3u:{value=b;} case 5u:{value=a*b*2.0;} case 6u:{value=a*b*4.0;} default:{}}
+ return clamp(value,vec4f(0),vec4f(1));
+}
 @group(0) @binding(3) var textureSampler:sampler;
 @group(0) @binding(4) var albedo:texture_2d_array<f32>;
 @group(0) @binding(5) var<uniform> env:Environment;
@@ -106,9 +113,18 @@ var light=vec4f(1);if(material.skin.y>0.5){light=textureSampleBias(albedo,textur
  let distant=env.terrainBand.w>0.5&&dot(cellDelta,cellDelta)>env.terrainBand.z;
  if(distant&&material.skin.y>0.5){discard;}
  if(distant&&material.options.z>0.5){return vec4f(env.fog.rgb,1);}
-let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);let color=vec4f(tex.rgb,select(select(tex.a,tex.a*tex.a,material.reflection.z>0.5),1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
+let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(select(tex.a,tex.a*tex.a,material.reflection.z>0.5),1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
+ // B153A0: effects evaluate the resource's own stage-0 colour and alpha ops.
+ if(material.stage.x>0.0){
+  let diffuse=material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
+  let colorArgs=u32(material.stage.y);let alphaArgs=u32(material.stage.w);
+  let rgb=stageOp(u32(material.stage.x),stageArgument(colorArgs/16u,tex,diffuse),stageArgument(colorArgs%16u,tex,diffuse),diffuse).rgb;
+  let alpha=stageOp(u32(material.stage.z),stageArgument(alphaArgs/16u,tex,diffuse),stageArgument(alphaArgs%16u,tex,diffuse),diffuse).a;
+  color=vec4f(rgb,alpha);
+ }
  let fading=material.lighting.z>0.5&&input.opacity<1.0;
- let fadeAlpha=select(tex.a,1.0,material.lighting.w>0.5)*input.opacity;
+ // An effect fades its own stage alpha (diffuse animation included).
+ let fadeAlpha=select(select(tex.a,1.0,material.lighting.w>0.5),color.a,material.stage.x>0.0)*input.opacity;
  let cutoff=select(material.options.x,floor(material.options.x*255.0*round(input.opacity*255.0)/256.0)/255.0,fading);
  // D3D9 HAL alpha-test conversion: truncate to 12 fractional bits, then
  // nearest UNORM8 with half-way values down. Keep blending alpha unmodified.

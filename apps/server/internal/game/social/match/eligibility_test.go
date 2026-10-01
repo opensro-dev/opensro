@@ -62,7 +62,8 @@ func TestPartyJobEveryTypeWordAndEquippedSlot(t *testing.T) {
 
 func TestPartyRegistrationRevalidatesChangedSuitForEveryPurpose(t *testing.T) {
 	r := &Runtime{}
-	c := &domain.Character{Name: "Applicant"}
+	level := int64(10)
+	c := &domain.Character{Name: "Applicant", Level: &level}
 	for job := uint8(1); job <= 4; job++ {
 		c.MissionInventory = nil
 		if job != 4 {
@@ -70,10 +71,48 @@ func TestPartyRegistrationRevalidatesChangedSuitForEveryPurpose(t *testing.T) {
 		}
 		for purpose := uint8(0); purpose < 4; purpose++ {
 			request := PartyMatchRequest{Purpose: purpose, MinLevel: 1, MaxLevel: 90, Title: "Party"}
-			_, ok := r.preparePartyRegistration("fixture", c, request)
-			if ok != partyPurposeAllowed(job, purpose) {
+			_, refusal := r.preparePartyRegistration("fixture", c, request)
+			if ok := refusal == 0; ok != partyPurposeAllowed(job, purpose) {
 				t.Fatalf("job %d purpose %d admitted %v", job, purpose, ok)
 			}
+		}
+	}
+}
+
+/*
+================
+TestPartyRegistrationRefusalCodesAreNative
+
+sub_514170: a party member who is not the master gets 0x1D, a partyless
+registrant below level 5 gets 0x0A; a level 4 member of a party may not
+list it either, and the master lists at any level with the party's options.
+================
+*/
+func TestPartyRegistrationRefusalCodesAreNative(t *testing.T) {
+	type standing struct {
+		partied, leader bool
+		level           int64
+		want            uint8
+	}
+	for _, c := range []standing{
+		{partied: true, leader: false, level: 40, want: partyMatchErrNotPartyLeader},
+		{partied: true, leader: false, level: 1, want: partyMatchErrNotPartyLeader},
+		{partied: false, level: 4, want: partyMatchErrCreatorLevel},
+		{partied: false, level: 5, want: 0},
+		{partied: true, leader: true, level: 1, want: 0},
+	} {
+		r := &Runtime{PartyListingAuthority: func(string, string) (uint8, bool, bool) {
+			return 3, c.partied, c.leader
+		}}
+		level := c.level
+		character := &domain.Character{Name: "Applicant", Level: &level}
+		request := PartyMatchRequest{TypeBits: 0, Purpose: 0, MinLevel: 1, MaxLevel: 90, Title: "Party"}
+		got, refusal := r.preparePartyRegistration("fixture", character, request)
+		if refusal != c.want {
+			t.Fatalf("%+v: refusal 0x%02X, want 0x%02X", c, refusal, c.want)
+		}
+		if refusal == 0 && c.partied && got.TypeBits != 3 {
+			t.Fatalf("%+v: listing kept type bits %d, want the party's 3", c, got.TypeBits)
 		}
 	}
 }

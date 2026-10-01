@@ -97,6 +97,9 @@ export interface UiControl {
 	readonly helpText?: string;
 	readonly captureKeys?: boolean;
 	readonly draggable?: boolean;
+	// A click lifts the control's item onto the cursor and the next press
+	// places it, as the retail inventory does; a drag still works too.
+	readonly carry?: boolean;
 	readonly min?: number;
 	readonly max?: number;
 	readonly maxLength?: number;

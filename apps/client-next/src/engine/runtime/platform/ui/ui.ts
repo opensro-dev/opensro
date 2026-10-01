@@ -46,6 +46,16 @@ export function createUiBridge(
 	let composing = false;
 	let drag: { id: string; pointer: number; x: number; y: number; moved?: boolean; } | null = null, focusRevision = -1;
 	let suppressClick: string | null = null;
+	// Click-carry: a click on a carry control lifts its item onto the cursor;
+	// pointer moves report as that control's drag, and the next left press
+	// reports its drag-end at the press point and is consumed whole, so it
+	// neither re-presses a control nor reaches the world. A press back on the
+	// source puts the item down and passes through (its double-click still
+	// fires); right press or Escape cancels. swallowClick eats the consumed
+	// press's click; suppressCarry stops a put-back click lifting it again.
+	let carry: { id: string; x: number; y: number; } | null = null,
+		swallowClick = false,
+		suppressCarry: string | null = null;
 	/*
 	================
 	uiPoint
@@ -90,6 +100,7 @@ export function createUiBridge(
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "blur", () => {
 		drag = null;
+		cancelCarry();
 	}, { signal: lifetime.signal } );
 	/*
 	================
@@ -282,8 +293,9 @@ export function createUiBridge(
 		rightPressed = null;
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "click", event => {
-		const slot = current( event.target ), suppressed = suppressClick;
+		const slot = current( event.target ), suppressed = suppressClick, putBack = suppressCarry;
 		suppressClick = null;
+		suppressCarry = null;
 		if ( slot?.value.kind === "button" && !slot.value.disabled && slot.value.id !== suppressed ) {
 			emit( {
 				kind: "activate",
@@ -292,8 +304,79 @@ export function createUiBridge(
 				ctrl: event.ctrlKey,
 				alt: event.altKey
 			} );
+			// Keyboard activation (detail 0) never lifts an item.
+			if ( slot.value.carry && slot.value.draggable && !carry && event.detail > 0 && putBack !== slot.value.id ) {
+				const [x, y] = uiPoint( event );
+				carry = { id: slot.value.id, x, y };
+				emit( { kind: "drag", id: carry.id, dx: 0, dy: 0 } );
+			}
 		}
 	}, { signal: lifetime.signal } );
+	/*
+	================
+	carrying
+
+	The live carry, dropped silently once its control no longer carries.
+	================
+	*/
+	function carrying() {
+		const value = carry ? controls.get( carry.id )?.value : undefined;
+		if ( carry && (!value?.carry || value.disabled) ) {
+			carry = null;
+			emit( { kind: "press", id: null } );
+		}
+		return carry;
+	}
+	/*
+	================
+	cancelCarry
+	================
+	*/
+	function cancelCarry() {
+		if ( !carry ) return;
+		carry = null;
+		emit( { kind: "press", id: null } );
+	}
+	window.addEventListener( "pointermove", event => {
+		const live = drag ? null : carrying();
+		if ( !live ) return;
+		const [x, y] = uiPoint( event ), dx = x - live.x, dy = y - live.y;
+		carry = { ...live, x, y };
+		if ( dx !== 0 || dy !== 0 ) emit( { kind: "drag", id: live.id, dx, dy } );
+	}, { signal: lifetime.signal } );
+	window.addEventListener( "pointerdown", event => {
+		swallowClick = false;
+		const live = carrying();
+		if ( !live ) return;
+		if ( event.button === 0 && current( event.target )?.value.id === live.id ) {
+			suppressCarry = live.id;
+			cancelCarry();
+			return;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		carry = null;
+		swallowClick = true;
+		if ( event.button !== 0 ) {
+			emit( { kind: "press", id: null } );
+			return;
+		}
+		const [x, y] = uiPoint( event );
+		emit( { kind: "drag-end", id: live.id, x, y } );
+	}, { capture: true, signal: lifetime.signal } );
+	for ( const name of [ "mousedown", "click", "dblclick", "contextmenu" ] as const ) {
+		window.addEventListener( name, event => {
+			if ( !swallowClick ) return;
+			event.preventDefault();
+			event.stopPropagation();
+		}, { capture: true, signal: lifetime.signal } );
+	}
+	window.addEventListener( "keydown", event => {
+		if ( event.code !== "Escape" || !carry ) return;
+		event.preventDefault();
+		event.stopPropagation();
+		cancelCarry();
+	}, { capture: true, signal: lifetime.signal } );
 	root.addEventListener( "dblclick", event => {
 		const slot = current( event.target );
 		if ( slot?.value.kind === "button" && !slot.value.disabled ) {
@@ -384,6 +467,7 @@ export function createUiBridge(
 		const slot = controls.get( id );
 		if ( !slot ) return;
 		if ( rightPressed?.element === slot.element ) rightPressed = null;
+		if ( carry?.id === id ) cancelCarry();
 		if ( drag?.id === id ) {
 			if ( slot.element.hasPointerCapture( drag.pointer ) ) slot.element.releasePointerCapture( drag.pointer );
 			drag = null;
@@ -546,6 +630,7 @@ export function createUiBridge(
 		dispose() {
 			if ( lifetime.signal.aborted ) return;
 			drag = null;
+			carry = null;
 			rightPressed = null;
 			composing = false;
 			lifetime.abort();

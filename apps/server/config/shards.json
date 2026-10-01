@@ -2,7 +2,7 @@
   "shards": [
     {
       "id": "global-official",
-      "name": "GlobalOfficial",
+      "name": "OpenSRO",
       "nativeServerId": 1,
       "nativeFarmId": 0,
       "capacity": 1000,

@@ -1,3 +1,4 @@
+import {validTextureStage} from '@/engine/foundation/rendering/texture-stage';
 import {particleCommandFrames} from '@/engine/foundation/animation/particle-command-frames';
 import type {ParticleEmitter} from '@/engine/foundation/animation/particle-graph';
 import {particleProgram} from '@/engine/foundation/animation/particle-program';
@@ -37,6 +38,13 @@ type Node = {
         srcBlend: number;
         dstBlend: number;
         backFaceType: number;
+        // B153A0 stage 0: src* is COLORARG1/2/COLOROP, dst* is ALPHAARG1/2/ALPHAOP.
+        srcTextureArg1: number;
+        srcTextureArg2: number;
+        srcTextureOp: number;
+        dstTextureArg1: number;
+        dstTextureArg2: number;
+        dstTextureOp: number;
         meshes: {
             path: string;
             textures: string[];
@@ -212,6 +220,8 @@ export function createEffectPrograms() {
                                        (resource.srcBlend === 1 && resource.dstBlend === 6) || (resource.srcBlend === 3 && resource.dstBlend === 6);
                     if (!validBlend)
                         throw new Error('Unsupported native effect blend');
+                    if (!validTextureStage({ colorOp: resource.srcTextureOp, colorArg1: resource.srcTextureArg1, colorArg2: resource.srcTextureArg2, alphaOp: resource.dstTextureOp, alphaArg1: resource.dstTextureArg1, alphaArg2: resource.dstTextureArg2 }))
+                        throw new Error('Unsupported native effect texture stage');
                     for (const mesh of resource.meshes) {
                         const data = ['RenderPlate', 'RenderLinkPipe', 'RenderLinkDPipe', 'RenderLinkObj'].includes(render) ? plate : catalog!.meshes[normalize(mesh.path)];
                         if (!data || mesh.textures.length !== 1)
@@ -250,7 +260,7 @@ export function createEffectPrograms() {
                             const uv = windows[Math.min(windows.length - 1, Math.floor(age * windows.length))] ?? [0, 0, 1, 1];
                             frameWindows.set([uv[2]!, uv[3]!, uv[0]!, uv[1]!], i * 4);
                         }
-                        primitives.push({ particleEmitter:emitterIndex,ribbon:['RenderLinkPipe', 'RenderLinkDPipe', 'RenderLinkObj'].includes(render)?{widths:Float32Array.from(scales.map(row=>row[0]!)),fps:20}:undefined,particleProgram:program,emission:{loop:node.lifeCommand.name==='NormalTimeLoop',births:births.map(frame=>frame/catalog!.framesPerSecond),lifetime:life,follow:!general}, billboard:node.viewCommand.name === 'ViewBillboard'?'camera':node.viewCommand.name === 'ViewYBillboard'?'y':node.viewCommand.name === 'ViewVBillboard'?'v':undefined, name: node.name, node: index, joints: [index], inverseBind: identity(), image, materialFrames: { sampling:"step",fps: (frames - 1) / life, colors: frameColors, windows: frameWindows }, geometry: { positions: Float32Array.from(data.positions), indices: Uint32Array.from(data.indices), normals: Float32Array.from(data.normals), uvs: Float32Array.from(data.uvs), joints: new Uint32Array(count * 4), weights, transform: identity(), material: { color: [1, 1, 1, 1], alphaCutoff: 0, blend: true, additive: resource.dstBlend === 2, sourceColorBlend:resource.srcBlend===3&&resource.dstBlend===6,inverseSourceColorBlend:resource.srcBlend===4&&resource.dstBlend===6, doubleSided: resource.backFaceType === 1, unlit: true } } });
+                        primitives.push({ particleEmitter:emitterIndex,ribbon:['RenderLinkPipe', 'RenderLinkDPipe', 'RenderLinkObj'].includes(render)?{widths:Float32Array.from(scales.map(row=>row[0]!)),fps:20,spline:render==='RenderLinkPipe'}:undefined,particleProgram:program,emission:{loop:node.lifeCommand.name==='NormalTimeLoop',births:births.map(frame=>frame/catalog!.framesPerSecond),lifetime:life,follow:!general}, billboard:node.viewCommand.name === 'ViewBillboard'?'camera':node.viewCommand.name === 'ViewYBillboard'?'y':node.viewCommand.name === 'ViewVBillboard'?'v':undefined, name: node.name, node: index, joints: [index], inverseBind: identity(), image, materialFrames: { sampling:"step",fps: (frames - 1) / life, colors: frameColors, windows: frameWindows }, geometry: { positions: Float32Array.from(data.positions), indices: Uint32Array.from(data.indices), normals: Float32Array.from(data.normals), uvs: Float32Array.from(data.uvs), joints: new Uint32Array(count * 4), weights, transform: identity(), material: { color: [1, 1, 1, 1], alphaCutoff: 0, blend: true, additive: resource.dstBlend === 2, sourceColorBlend:resource.srcBlend===3&&resource.dstBlend===6,inverseSourceColorBlend:resource.srcBlend===4&&resource.dstBlend===6, doubleSided: resource.backFaceType === 1, unlit: true, textureStage: { colorOp: resource.srcTextureOp, colorArg1: resource.srcTextureArg1, colorArg2: resource.srcTextureArg2, alphaOp: resource.dstTextureOp, alphaArg1: resource.dstTextureArg1, alphaArg2: resource.dstTextureArg2 } } } });
                     }
                 }
                 for (const child of node.children)

@@ -363,9 +363,15 @@ test("party-monster mark is published beside its owner and removed when the spaw
 		assert.deepEqual( mark.rect.slice( 2 ), [ 16, 16 ] );
 		f.setEntities( [ local, { ...monster, rarityAuxIcon: 0 } ] );
 		assert.equal( f.scene()?.quads.some( q => q.texture.endsWith( "/europe_partymob.png" ) ), false );
-		// The mark belongs to the name board: beyond name range neither shows.
+		// Natively the icon pass (85F5FD) outlives the 300-unit name range. Owner's
+		// call: an icon never shows alone, so beyond the range both show.
 		f.setEntities( [ local, { ...monster, x: 400 } ] );
-		assert.equal( f.scene()?.quads.some( q => q.texture.endsWith( "/europe_partymob.png" ) ), false );
+		const far = f.scene()?.quads ?? [];
+		assert.equal( far.some( q => q.texture.endsWith( "/europe_partymob.png" ) ), true );
+		assert.ok(
+			far.some( q => q.characterAnchor === monster.gid && q.texture === "" ),
+			"the far party monster's name board is drawn with its mark"
+		);
 	} finally {
 		f.ui.dispose();
 	}

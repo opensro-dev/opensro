@@ -186,7 +186,13 @@ import {
 import { chatScrollbar } from "@/engine/foundation/ui/chat-scrollbar";
 import { overheadLayout } from "@/engine/foundation/ui/overhead-layout";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
-import { nameVisible, hiddenSilkCos, blindableCharacter, nameInRange } from "@/engine/foundation/ui/name-visibility";
+import {
+	beginnerMarkShown,
+	blindableCharacter,
+	hiddenSilkCos,
+	nameInRange,
+	overheadBoardVisible
+} from "@/engine/foundation/ui/name-visibility";
 import { chatBlocks, chatBlockError } from "@/engine/foundation/gameplay/chat-blocks";
 import {
 	gameOptionRows,
@@ -295,6 +301,8 @@ const ROOT = "/assets/images/Media_extracted/", BUTTON = ROOT + "interface/ifcom
 const PARTS = frameParts();
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
+// Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
+const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
 	BUTTON_DISABLE = BUTTON.replace( ".png", "_disable.png" );
@@ -602,7 +610,29 @@ export function createUi(
 		sex: number | undefined;
 		rows: readonly TooltipRow[];
 	} | null = null;
-	let carriedItem: { slot: number; x: number; y: number; avatar?: boolean; } | null = null;
+	// The item riding the cursor, by the slot control it left (slot:, avatar:,
+	// storage-slot:, cos-slot:). A drag or a click-carry (the bridge's carry)
+	// both move it; the release or the next press places it.
+	let carriedItem: { source: string; slot: number; x: number; y: number; avatar?: boolean; } | null = null;
+	/*
+	================
+	carriedRow
+
+	The item row a carry shows, read from the container its source names.
+	================
+	*/
+	function carriedRow(
+		carried: NonNullable<typeof carriedItem>,
+		game: UiView["gameplay"] | undefined
+	) {
+		if ( carried.source.startsWith( "storage-slot:" ) ) {
+			return game?.storage?.items.find( row => row.slot === carried.slot );
+		}
+		if ( carried.source.startsWith( "cos-slot:" ) ) {
+			return game?.cosRecords?.find( r => r.gid === cosGid )?.inventory?.find( row => row.slot === carried.slot );
+		}
+		return (carried.avatar ? game?.avatarInventory : game?.inventory)?.find( row => row.slot === carried.slot );
+	}
 	const localization = createLocalization( assets, base );
 	let titleNotice: { status?: number; argument?: number; until: number; } | null = null, uiNow = 0;
 	let nextPoll = 0,
@@ -1194,7 +1224,8 @@ export function createUi(
 			dirty = true;
 			return;
 		}
-		if ( id === "item-mall-close" ) {
+		// The frame's X and the window's own Close button (node 8) both close it.
+		if ( id === "item-mall-close" || id === "item-mall-close-button" ) {
 			itemMall.close();
 			dirty = true;
 			return;
@@ -3179,6 +3210,13 @@ export function createUi(
 			}
 			if ( event.kind === "drag-end" ) {
 				if (
+					carriedItem?.source === event.id && !event.id.startsWith( "slot:" ) &&
+					!event.id.startsWith( "avatar:" )
+				) {
+					carriedItem = null;
+					dirty = true;
+				}
+				if (
 					panel === "Storage" && event.id.startsWith( "storage-slot:" ) && view?.gameplay?.storage &&
 					!view.gameplay.inventoryPending
 				) {
@@ -3443,7 +3481,7 @@ export function createUi(
 				return;
 			}
 			if (
-				event.kind === "drag" && (event.id.startsWith( "slot:" ) || event.id.startsWith( "avatar:" )) &&
+				event.kind === "drag" && ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) ) &&
 				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
@@ -3453,12 +3491,14 @@ export function createUi(
 						view?.gameplay?.avatarInventory?.find( i =>
 							i.typeFlags >>> 11 === Number( event.id.slice( 7 ) )
 						)?.slot :
-						Number( event.id.slice( 5 ) );
+						Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) );
 				if ( slot === undefined ) return;
 				// Pointer carry replaces click selection; cancel/drop must not leave a second source armed.
 				inventorySlot = -1;
 				confirmDrop = "";
-				const prior = carriedItem ?? { slot, avatar, x: node.rect[0] + 16, y: node.rect[1] + 16 };
+				const prior = carriedItem?.source === event.id ?
+					carriedItem :
+					{ source: event.id, slot, avatar, x: node.rect[0] + 16, y: node.rect[1] + 16 };
 				carriedItem = { ...prior, x: prior.x + event.dx, y: prior.y + event.dy };
 				dirty = true;
 				return;
@@ -5200,7 +5240,8 @@ export function createUi(
 					disabled,
 					selected,
 					rightActivate: !!item && (id.startsWith( "slot:" ) || id.startsWith( "storage-slot:" )),
-					draggable: !!item
+					draggable: !!item,
+					carry: !!item && ITEM_SLOT_PREFIXES.some( prefix => id.startsWith( prefix ) )
 				} );
 				itemCount( item, r );
 			}
@@ -8020,7 +8061,8 @@ export function createUi(
 							disabled: !enabled || !!game?.inventoryPending,
 							selected: inventorySlot === slot,
 							rightActivate: !!item,
-							draggable: !!item
+							draggable: !!item,
+							carry: !!item
 						} );
 						if ( enabled && item ) {
 							for (
@@ -8116,7 +8158,8 @@ export function createUi(
 								kind: "button",
 								disabled: !!game?.inventoryPending,
 								rightActivate: !!item,
-								draggable: !!item
+								draggable: !!item,
+								carry: !!item
 							} );
 						}
 					}
@@ -9993,6 +10036,9 @@ export function createUi(
 						entity => [ entity.gid, game ? overheadLayout( entity, local, game, options, hudCopy ) : null ]
 					)
 				);
+				// Characters whose guild line, fortress mark or quick status bars show;
+				// overheadBoardVisible shows their names with them.
+				const overlaid = new Set<number>();
 				if ( game && hud.data() ) {
 					for ( const entity of next.entities ) {
 						if (
@@ -10000,12 +10046,11 @@ export function createUi(
 							next.blindHeld && blindableCharacter( entity, game?.localGid )
 						) continue;
 						const overlay = overheads.get( entity.gid );
-						// The guild line, marks and quick status bars belong to the name
-						// board: they share its range (hover exempt), never floating alone.
 						if (
 							!overlay ||
 							entity.gid !== next.hoveredEntity && !nameInRange( entity, local, game.pose )
 						) continue;
+						if ( overlay.fortressMark || overlay.guildText || overlay.status ) overlaid.add( entity.gid );
 						if ( overlay.fortressMark ) {
 							const mark = overlay.fortressMark;
 							paths.push( mark.path );
@@ -10139,10 +10184,10 @@ export function createUi(
 						next.blindHeld && blindableCharacter( entity, game?.localGid )
 					) continue;
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
-					// 862060 draws the party mark as part of the name board: it shares the
-					// name's distance and option visibility, never showing on its own.
+					// One decision for the name and every overhead icon: an icon never
+					// shows without its name (name-visibility.ts header).
 					const named = !hiddenSilkCos( entity, options.hideSilkCos ) &&
-						nameVisible( entity, local, hovered, options, game?.pose );
+						overheadBoardVisible( entity, local, hovered, options, game?.pose, overlaid.has( entity.gid ) );
 					const partyMark = named ?
 						monsterPartyNameplate( entity, [
 							text.run( entity.name ?? "", selected ? 2 : 0 ).width,
@@ -10163,10 +10208,7 @@ export function createUi(
 							} );
 						}
 					}
-					if (
-						!hiddenSilkCos( entity, options.hideSilkCos ) && options.ownName &&
-						[ "local-player", "player" ].includes( entity.kind ) && ((entity.visualFlags ?? 0) & 1)
-					) {
+					if ( named && beginnerMarkShown( entity, options ) ) {
 						const name = entity.name ?? (entity.gid === game?.localGid ? next.session?.character : "") ??
 								"",
 							width = text.run( name, selected ? 2 : 0 ).width,
@@ -11773,10 +11815,7 @@ export function createUi(
 				worldVisible && carriedItem &&
 				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
 			) {
-				const item = (carriedItem.avatar ? game?.avatarInventory : game?.inventory)?.find( i =>
-						i.slot === carriedItem!.slot
-					),
-					path = iconPath( item?.icon );
+				const item = carriedRow( carriedItem, game ), path = iconPath( item?.icon );
 				if ( path ) {
 					paths.push( path );
 					if ( resources.has( path ) ) {
@@ -12066,7 +12105,8 @@ export function createUi(
 				// through CIFButton_SetEnabled(false), even in the retail client.
 				for ( const node of Object.values( root ) ) {
 					if ( node.type !== "CIFButton" ) continue;
-					const id = node.id === 8 ? "item-mall-close" : node.id === 3 ?
+					// Control ids are unique: the frame X already owns "item-mall-close".
+					const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
 						"item-mall-home" :
 						"item-mall-root:" + node.id;
 					authoredLabeledButton(

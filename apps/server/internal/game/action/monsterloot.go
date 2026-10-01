@@ -371,6 +371,9 @@ func (rt *Runtime) planMonsterKillLoot(
 	}
 	now := time.UnixMilli(nowMs)
 	capacity, passes, _ := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
+	if rt.DropPassRate > 1 {
+		passes *= rt.DropPassRate
+	}
 	prepared := rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})
 	for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
 		if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {

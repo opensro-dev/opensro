@@ -163,7 +163,8 @@ function createGltf() {
 	 *   animations: any[],
 	 *   images?: { bufferView: number, mimeType: string }[],
 	 *   samplers?: { magFilter: number, minFilter: number, wrapS: number, wrapT: number }[],
-	 *   textures?: { source: number, sampler: number }[]
+	 *   textures?: { source: number, sampler: number }[],
+	 *   extras?: { sroAggregateBox?: number[] }
 	 * }}
 	 */
 	const json = {
@@ -655,6 +656,13 @@ export function avatarToGlb( avatar ) {
 			channels.push( { sampler: samplers.length - 1, target: { node, path: "translation" } } );
 		}
 		g.json.animations.push( { name: role, channels, samplers } );
+	}
+	// The base resource's authored pick box (CResObject +0x280); see
+	// assembleAvatar. Mirrored on Z like every exported position.
+	if ( avatar.aggregateBox ) {
+		const [minX, minY, minZ, maxX, maxY, maxZ] = avatar.aggregateBox;
+		g.json.extras ??= {};
+		g.json.extras.sroAggregateBox = [ minX, minY, -maxZ, maxX, maxY, -minZ ];
 	}
 
 	return g.build();

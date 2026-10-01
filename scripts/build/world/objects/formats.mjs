@@ -27,6 +27,7 @@ export function parseJmxResourceBsr(buffer, sourcePath = "<memory>") {
   const headerOffsets = readUInt32Array(buffer, 0x0c, 13);
   const metadata = readBsrMetadata(buffer, sourcePath);
   const primaryMeshPath = readOptionalCountedPath(buffer, headerOffsets[7], sourcePath);
+  const authoredBoxes = readBsrAuthoredBoxes(buffer, headerOffsets[7]);
   const materials = readBsrMaterialSection(buffer, headerOffsets[0], sourcePath);
   const renderMeshes = readBsrMeshSection(buffer, headerOffsets[1], sourcePath);
   const meshPaths = uniqueNormalizedPaths([primaryMeshPath, ...renderMeshes.paths].filter(Boolean));
@@ -39,6 +40,10 @@ export function parseJmxResourceBsr(buffer, sourcePath = "<memory>") {
     metadata,
     modifiers:headerOffsets[6]?parseModDataSection(buffer,headerOffsets[6]):undefined,
     primaryMeshPath: primaryMeshPath ? normalizeAssetPath(primaryMeshPath) : null,
+    // CResObject_LoadFromArchive (client A4FF00): box1 -> +0x280 is the box a
+    // compound unions into its aggregate pick box; box2 -> +0x298.
+    aggregateBox: authoredBoxes?.box1 ?? null,
+    secondaryBox: authoredBoxes?.box2 ?? null,
     materialSection: {
       byteOffset: headerOffsets[0],
       count: materials.count,
@@ -441,6 +446,20 @@ function readBmsNativePayloads(buffer, headerOffsets, sourcePath) {
       evidenceSource: "JMXVBMS0110_BMS_static_mesh_layout"
     }
   ];
+}
+
+// A4FF00 seeks to header offset[7], reads the counted primary-mesh path,
+// then two boxes of six floats (min xyz, max xyz).
+function readBsrAuthoredBoxes(buffer, offset) {
+  if (!offset || offset + 4 > buffer.length) {
+    return null;
+  }
+  const start = offset + 4 + buffer.readUInt32LE(offset);
+  if (start + 48 > buffer.length) {
+    return null;
+  }
+  const box = at => Array.from({ length: 6 }, (_, i) => cleanFloat(buffer.readFloatLE(at + i * 4)));
+  return { box1: box(start), box2: box(start + 24) };
 }
 
 function readOptionalCountedPath(buffer, offset, sourcePath) {

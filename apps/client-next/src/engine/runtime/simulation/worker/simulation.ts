@@ -18,7 +18,9 @@ export function createSimulation(send: (message: WorkerMessage, transfer: Transf
         if(batch)send({kind:"world",batch},[]);
         if (sessionState)
             send({ kind: "session", state: sessionState }, []);
-        const acceptedInputSequence = input.commit(function consumeInput(action){if(session.isWorldReady())session.command({kind:'gameplay',command:action});});
+        // Escape is UI-only, as CGInterface_HandleEscapeKey (69F450) is: it closes
+        // windows or opens the system menu and never cancels the action.
+        const acceptedInputSequence = input.commit();
         timeMs += SIMULATION_STEP_MS;
         sequence++;
         const buffer = pool.pop();
