@@ -221,6 +221,7 @@ test("a bard dance leaves the bard free to walk", () => {
 		}
 		return Uint8Array.from( out );
 	};
+	/** @type {[number, number[]][]} */
 	const frames = [
 		[ 0xb245, [ 1, 0, 6, 38, 0, 0, 163, 134, 1, 0, 1, 0, 0, 0, 163, 134, 1, 0, 0 ] ],
 		[ 0x33a6, [ 163, 134, 1, 0, 4, 0, 3, 100, 0, 0, 0, 170, 0, 0, 0 ] ],

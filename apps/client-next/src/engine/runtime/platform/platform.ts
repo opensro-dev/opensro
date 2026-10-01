@@ -121,16 +121,48 @@ export function createPlatform(
 ================
 displayScale
 
-CSS pixels per UI pixel. A chosen display height (the Option window's
-screen size) renders the scene and lays out the interface at that height,
-stretched to fill the page; native keeps one UI pixel per CSS pixel at the
-device's full resolution. The page stays full screen either way.
+CSS pixels per UI pixel. One, as in native window mode, unless a chosen
+screen size is larger than the page: then the game area shrinks to fit.
 ================
 	*/
 	function displayScale(): number {
-		const height = video.displayHeight ?? 0, css = canvas.clientHeight;
-		return height > 0 && css > 0 ? css / height : 1;
+		const size = video.displaySize, css = canvas.clientWidth;
+		return size && css > 0 ? css / size[0] : 1;
 	}
+	/*
+================
+layoutCanvas
+
+A chosen screen size is the game area itself, centred on the full-screen
+page with black around it, not a stretched low-resolution image: the
+interface keeps its native pixel size and stays sharp. Without one the
+canvas fills the page.
+================
+	*/
+	function layoutCanvas() {
+		const size = video.displaySize, style = canvas.style;
+		if ( !size ) {
+			style.position =
+				style.left =
+				style.top =
+				style.width =
+				style.height =
+					"";
+			document.body.style.background = "";
+			return;
+		}
+		const scale = Math.min( 1, innerWidth / size[0], innerHeight / size[1] ),
+			width = size[0] * scale,
+			height = size[1] * scale;
+		style.position = "absolute";
+		style.left = (innerWidth - width) / 2 + "px";
+		style.top = (innerHeight - height) / 2 + "px";
+		style.width = width + "px";
+		style.height = height + "px";
+		document.body.style.background = "#000";
+	}
+	layoutCanvas();
+	addEventListener( "resize", layoutCanvas, { signal: lifetime.signal } );
 	/*
 ================
 uiPoint
@@ -377,6 +409,7 @@ saveVideoOptions
 			const next = videoOptions( value );
 			localStorage.setItem( videoKey, JSON.stringify( next ) );
 			video = next;
+			layoutCanvas();
 			onUi( { kind: "video-preferences", value: next } );
 		},
 		/*
@@ -570,14 +603,10 @@ readViewport
 ================
 		*/
 		readViewport() {
-			const height = video.displayHeight ?? 0;
-			if ( height > 0 && canvas.clientHeight > 0 ) {
-				viewport.height = height;
-				viewport.width = Math.max( 1, Math.round( canvas.clientWidth * height / canvas.clientHeight ) );
-			} else {
-				viewport.width = Math.max( 1, Math.round( canvas.clientWidth * devicePixelRatio ) );
-				viewport.height = Math.max( 1, Math.round( canvas.clientHeight * devicePixelRatio ) );
-			}
+			// Always the device pixels the canvas covers: a chosen screen size
+			// changes the canvas's CSS box (layoutCanvas), never its sharpness.
+			viewport.width = Math.max( 1, Math.round( canvas.clientWidth * devicePixelRatio ) );
+			viewport.height = Math.max( 1, Math.round( canvas.clientHeight * devicePixelRatio ) );
 			return viewport;
 		},
 		/*

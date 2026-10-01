@@ -2541,7 +2541,7 @@ test("the screen size combo opens and its choice is applied", () => {
 		f.ui.event( { kind: "activate", id: choice.id } );
 		f.ui.event( { kind: "activate", id: "option-apply" } );
 		assert.equal( saved.length, 1 );
-		assert.ok( saved[0].displayHeight > 0, "the chosen height is saved" );
+		assert.ok( saved[0].displaySize?.[0] > 0 && saved[0].displaySize[1] > 0, "the chosen mode is saved" );
 	} finally {
 		f.dispose();
 	}

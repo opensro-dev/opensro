@@ -13,7 +13,7 @@ const { createBetaPlayerMap, OP_BETA_PLAYER_MAP } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/beta-map/beta-map.ts"
 );
 const { createWindowWarm, skillWindowIcons } = await import( "../../src/engine/runtime/ui/warm/window-warm.ts" );
-const { videoOptions, defaultVideoOptions, displayHeights } = await import(
+const { videoOptions, defaultVideoOptions, displaySizes } = await import(
 	"../../src/engine/foundation/rendering/video-options.ts"
 );
 
@@ -96,11 +96,12 @@ test("the skill window warm covers every owned mastery, not only the open tab", 
 	assert.deepEqual( groups.sort(), [ "g1", "g2" ] );
 });
 
-test("screen size accepts only the offered heights and round-trips", () => {
+test("screen size accepts only the offered modes, round-trips and drops the retired height", () => {
 	const base = defaultVideoOptions();
-	for ( const height of displayHeights() ) {
-		const value = videoOptions( { ...base, displayHeight: height } );
-		assert.equal( value.displayHeight ?? 0, height );
+	for ( const size of displaySizes().slice( 1 ) ) {
+		assert.deepEqual( videoOptions( { ...base, displaySize: size } ).displaySize, size );
 	}
-	assert.throws( () => videoOptions( { ...base, displayHeight: 1234 } ), /display height/ );
+	assert.throws( () => videoOptions( { ...base, displaySize: [ 1234, 567 ] } ), /display size/ );
+	// The stretched height-only setting is dropped instead of failing a load.
+	assert.equal( videoOptions( { ...base, displayHeight: 1080 } ).displaySize, undefined );
 });

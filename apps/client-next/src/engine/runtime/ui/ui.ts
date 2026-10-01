@@ -163,7 +163,8 @@ import {
 	defaultVideoOptions,
 	videoOptions,
 	videoRows,
-	displayHeights,
+	displaySizes,
+	displaySizeIndex,
 	changeVideo,
 	resetVideoRecord,
 	type VideoOptions
@@ -1574,8 +1575,11 @@ export function createUi(
 		} else if ( id.startsWith( "option-video-choice:" ) ) {
 			const [, slot, value] = id.split( ":" );
 			if ( Number( slot ) === -1 ) {
-				const height = displayHeights()[Number( value )];
-				if ( height !== undefined ) videoDraft = { ...videoDraft, displayHeight: height };
+				const size = displaySizes()[Number( value )];
+				if ( size ) {
+					const { displaySize: _previous, ...rest } = videoDraft;
+					videoDraft = size[0] ? { ...rest, displaySize: size } : rest;
+				}
 			} else videoDraft = changeVideo( videoDraft, Number( slot ), Number( value ) );
 			videoCombo = VIDEO_COMBO_CLOSED;
 		} else if ( id === "option-video-up" || id === "option-video-down" ) {
@@ -7211,17 +7215,16 @@ export function createUi(
 								selected: videoDraft.active === i
 							} );
 						}
-						// Screen size: the page stays full screen; the scene and interface render
-						// at the chosen height with the window's aspect (platform displayScale).
-						// Hardware gamma is not a browser display mode.
-						const aspect = view?.width && view.height ? view.width / view.height : 16 / 9;
+						// Screen size: the game area is the chosen mode, centred on the page
+						// at one UI pixel per CSS pixel (platform displayScale). Hardware
+						// gamma is not a browser display mode.
 						combos.push( {
 							slot: -1,
 							r: authoredRect( page.GDR_OPT_VIDEO_CB_SS!, ox, oy ),
-							entries: displayHeights().map( height =>
-								height === 0 ? "Native" : Math.round( height * aspect ) + " x " + height
+							entries: displaySizes().map( ( [width, height] ) =>
+								width === 0 ? "Native" : width + " x " + height
 							),
-							selected: Math.max( 0, displayHeights().indexOf( videoDraft.displayHeight ?? 0 ) ),
+							selected: displaySizeIndex( videoDraft.displaySize ),
 							label: hudCopy( page.GDR_OPT_VIDEO_ST_SS!.text ),
 							disabled: false
 						}, {
