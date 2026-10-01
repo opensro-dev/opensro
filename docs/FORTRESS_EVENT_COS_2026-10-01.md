@@ -23,6 +23,10 @@ The v1.150 content boundary still applies; the later server supplies rules.
   coordinate planes (`4FC5D9`). Dismount parks the transport
   at its live position and restores the rider's movement parameters. Options
   binding 15 now reaches the ride command.
+- Fortress begin/end publication is now idempotent and ordered with entering
+  players' state seeds. Client `7E2100` disables flags by XOR, so duplicate
+  end messages reactivated war. The browser already preserves this native
+  rule; the server emitter must publish each transition exactly once.
 
 ## Native evidence
 
@@ -62,14 +66,19 @@ family admission (`4FCEF0`), summon cancellation (`4FAAB0`), database completion
 (`4FC960`), experience (`4FCB00`, `4FCDA0`) and movement tethers (`4FD1D0`).
 Snapshot 307 saves `CGObjCOS_DispatchOwnedCommand` (`4D2200`): attack enters
 the pet AI through event `19`, follow through `17`, and pickup through `1C`.
-Representative symbols and the command-dispatch comment were read back from
-the saved snapshots. These labels establish evidence, not implementation.
+All 27 COS manager labels and the command-dispatch comment were read back
+from the saved snapshots. These labels establish evidence, not implementation.
 
 Client snapshot 248 saves the fortress request composer. Snapshot 250 saves
 and verifies `CPSMission_OnCosSummonCancelB56C` (`778340`): cancellation uses
 `756C` plus a GID; success is `[1]`, failure is `[2,error]` with notice category
 `0C`. Despawn retires the scene object independently. Cancellation still needs
 the durable summoning-item lifecycle; merely hiding the object is incomplete.
+
+Client snapshot 251 saves and verifies the exposed fortress flag/list/alliance
+and crest helpers, the COS record reader, the item magic-option reader and
+the UTF-16 string reader. The flag helper's OR/XOR distinction is saved as
+an instruction comment and was verified by reading the snapshot back.
 
 ## Outstanding implementation
 
@@ -108,3 +117,11 @@ passed all 11 gates in 133.0 seconds. After the coordinate-plane mount guard,
 the focused COS ride/command/pickup Go tests passed again with `-count=1`.
 No browser, full asset build,
 deployment or fortress/event gameplay validation has been performed here.
+
+The subsequent fortress publication fix passed `go test -race
+./internal/game/siege -count=1`, including duplicate transitions from both
+initial states and concurrent begin/end callers replayed with native XOR
+semantics. The final source rerun passed all 12 tasks in 76.6 seconds. The
+existing client fortress/crest/music suites passed all 20 tests; they include
+the native XOR end arm, relation colors, owner deltas and music transition
+ordering. Those checks do not establish complete fortress gameplay.

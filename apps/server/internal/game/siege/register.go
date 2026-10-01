@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+register.go - fortress state publication and session admission ordering
+
+One lock orders war transitions with entering players' complete state seeds.
+The optional seed emitter is not the persistent fortress gameplay authority.
+
+===========================================================================
+*/
 package siege
 
 import (
@@ -11,12 +21,28 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// Runtime owns the fortress-war emitter. It registers NO C->S handler
-// (retail war scheduling is unpinned); its only outputs are the pinned
-// 0x3887 frames. A nil *Runtime is the INERT default - every method is
-// nil-safe and does nothing, so the wiring can call unconditionally.
+/*
+================
+warPublisher
+
+The transport hub owns delivery; this boundary also permits wire-level tests.
+================
+*/
+type warPublisher interface {
+	Broadcast(uint16, []byte)
+}
+
+/*
+================
+Runtime
+
+Owns the optional fortress-state emitter, including the 3887 state list and
+341E alliance seed. Request authority and persistent scheduling remain in
+the expanded implementation scope. Nil runtimes safely omit publication.
+================
+*/
 type Runtime struct {
-	hub  *transport.Hub
+	hub  warPublisher
 	seed []WarRow
 	mu   sync.RWMutex
 	// warActive mirrors whether the seeded war list should arrive
@@ -59,6 +85,11 @@ const AlliesEnvVar = "SRO_FORTRESS_WAR_ALLIES"
 // not retail data): one war row with zero stats and no optional u32s
 // (their meanings are unproven - nothing is invented), fortress list id
 // = the war id.
+/*
+================
+devSeedFixture
+================
+*/
 func devSeedFixture() []WarRow {
 	return []WarRow{{WarID: 1, Name: "FORTRESS_WAR_DEV"}}
 }
@@ -66,6 +97,11 @@ func devSeedFixture() []WarRow {
 // NewRuntimeFromEnv builds the lane from the environment: nil (inert)
 // unless SeedEnvVar is set. A malformed row spec refuses loudly at boot
 // (the deps.Validate posture: a half-wired lane is not diagnosable).
+/*
+================
+NewRuntimeFromEnv
+================
+*/
 func NewRuntimeFromEnv(hub *transport.Hub) (*Runtime, error) {
 	spec := strings.TrimSpace(os.Getenv(SeedEnvVar))
 	if spec == "" {
@@ -107,6 +143,11 @@ func NewRuntimeFromEnv(hub *transport.Hub) (*Runtime, error) {
 // parseGuildSpec parses the comma-separated u32 guild-id list.
 // Id 0 is refused at boot: the client-side insert rejects it silently
 // (sub_829580 @0x829588), so shipping one is always a config mistake.
+/*
+================
+parseGuildSpec
+================
+*/
 func parseGuildSpec(spec string) ([]uint32, error) {
 	var ids []uint32
 	for _, part := range strings.Split(spec, ",") {
@@ -125,6 +166,11 @@ func parseGuildSpec(spec string) ([]uint32, error) {
 // parseAllySpec parses the comma-separated id:name ally rows. The
 // unnamed row fields (flag/masterName/refObjId/byte44) stay zero - their
 // semantics are unproven and nothing is invented.
+/*
+================
+parseAllySpec
+================
+*/
 func parseAllySpec(spec string) ([]AllianceRow, error) {
 	var rows []AllianceRow
 	for _, part := range strings.Split(spec, ",") {
@@ -142,6 +188,11 @@ func parseAllySpec(spec string) ([]AllianceRow, error) {
 }
 
 // parseSeedSpec parses the comma-separated id:name row list.
+/*
+================
+parseSeedSpec
+================
+*/
 func parseSeedSpec(spec string) ([]WarRow, error) {
 	var rows []WarRow
 	for _, part := range strings.Split(spec, ",") {
@@ -159,9 +210,13 @@ func parseSeedSpec(spec string) ([]WarRow, error) {
 }
 
 // seedGlobalFlags derives the subtype-0 trailing flags byte.
+/*
+================
+seedGlobalFlags
+================
+*/
 func (rt *Runtime) seedGlobalFlags() uint8 {
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
+	// WorldBound holds the read lock through the entire seed publication.
 	if rt.warActive {
 		return WarFlagSiegeWar
 	}
@@ -176,10 +231,17 @@ func (rt *Runtime) seedGlobalFlags() uint8 {
 // 0xc9/0xca), and - when configured - the 0x341E siege-relation list
 // (the +0x94 map, the 0xcb ally leg). Nil-safe: the inert default sends
 // nothing and existing enter-world behavior is untouched.
+/*
+================
+WorldBound
+================
+*/
 func (rt *Runtime) WorldBound(s *transport.Session) {
 	if rt == nil || s == nil {
 		return
 	}
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
 	_ = s.Send(OpFortressWarState, EncodeWarList3887(rt.seed, rt.seedGlobalFlags(), rt.fortressListID))
 	// The echo dword is parsed then discarded by the client (@0x76e3e5);
 	// 0 matches the other subtypes' inert "mgrPtr" convention.
@@ -195,24 +257,48 @@ func (rt *Runtime) WorldBound(s *transport.Session) {
 // latches the active state for later joiners' seeds. The war state is
 // global on the client (sub_7e2100 walks the WHOLE map), so a hub
 // broadcast is the faithful fan-out.
+/*
+================
+BroadcastWarBegin
+================
+*/
 func (rt *Runtime) BroadcastWarBegin() {
-	if rt == nil {
-		return
-	}
-	rt.mu.Lock()
-	rt.warActive = true
-	rt.mu.Unlock()
-	rt.hub.Broadcast(OpFortressWarState, EncodeWarBegin3887())
+	rt.setWarActive(true)
 }
 
 // BroadcastWarEnd pushes the subtype-6 WAR_END to every session and
 // clears the active latch.
+/*
+================
+BroadcastWarEnd
+================
+*/
 func (rt *Runtime) BroadcastWarEnd() {
+	rt.setWarActive(false)
+}
+
+/*
+================
+setWarActive
+
+Client 7E2148 XORs a disabled flag. Repeated end messages would re-enable
+war, so only real transitions may reach the wire. Hold the same lock through
+publication and entry seeding to prevent an older seed following a newer end.
+================
+*/
+func (rt *Runtime) setWarActive(active bool) {
 	if rt == nil {
 		return
 	}
 	rt.mu.Lock()
-	rt.warActive = false
-	rt.mu.Unlock()
-	rt.hub.Broadcast(OpFortressWarState, EncodeWarEnd3887())
+	defer rt.mu.Unlock()
+	if rt.warActive == active {
+		return
+	}
+	rt.warActive = active
+	payload := EncodeWarEnd3887()
+	if active {
+		payload = EncodeWarBegin3887()
+	}
+	rt.hub.Broadcast(OpFortressWarState, payload)
 }
