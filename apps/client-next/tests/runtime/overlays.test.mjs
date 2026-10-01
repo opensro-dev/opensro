@@ -17,6 +17,11 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 await mkdir( "temp/artifacts/overlay-tests", { recursive: true } );
+/*
+================
+load
+================
+*/
 async function load( path, name ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
@@ -91,7 +96,7 @@ test("party slot viewer: bbuf and phase-1 effects, one row per list, abnormal bi
 	assert.deepEqual( icons.map( i => i.y ), [ 0, 0, 0, 0, 0, 0, 17, 17, 17, 17 ] );
 	assert.match( icons[8].path, /s_freeze_icon/ );
 	assert.match( icons[9].path, /s_poisoning_icon/ );
-	assert.deepEqual( icons[9].helpSource, { kind: "abnormal", gid: 2, bit: 4, unlevelled: true } );
+	assert.deepEqual( icons[9].helpSource, { kind: "abnormal", gid: 2, bit: 4, unlevelled: true, viewer: true } );
 	const row = partyOverlay( { ...game, vitals: [] }, [ local, peer ], 900, 4, 137, true )[0];
 	assert.equal( row.entity, peer );
 	assert.equal( partyOverlay( game, [ local ], 900, 4, 137, true )[0].entity, undefined );

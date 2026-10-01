@@ -4284,7 +4284,7 @@ test("target window carries the native CIFBuffViewer row and diffs it once a sec
 			[ "buff:8", [ left, top + 25, 20, 20 ] ],
 			[ "abnormal:3", [ left + 23, top + 25, 20, 20 ] ]
 		] );
-		assert.deepEqual( cells()[2].helpSource, { kind: "abnormal", gid: 9, bit: 3 } );
+		assert.deepEqual( cells()[2].helpSource, { kind: "abnormal", gid: 9, bit: 3, viewer: true } );
 		game.attachedEffects = [ { gid: 9, skill: 7, token: 20, phase: 1 } ];
 		game.vitals = [ { gid: 9, hp: 50, abnormal: 0x8 } ];
 		settle( 450, 950 );

@@ -209,8 +209,6 @@ apps/client-next/src/engine/foundation/ui/alchemy-selection.ts
 apps/client-next/src/engine/foundation/ui/authored-layout.ts
 apps/client-next/src/engine/foundation/ui/bar.ts
 apps/client-next/src/engine/foundation/ui/buff-board.ts
-apps/client-next/src/engine/foundation/ui/buff-tooltip.ts
-apps/client-next/src/engine/foundation/ui/buff-viewer.ts
 apps/client-next/src/engine/foundation/ui/button-state.ts
 apps/client-next/src/engine/foundation/ui/catalog-message.ts
 apps/client-next/src/engine/foundation/ui/character-labels.ts
