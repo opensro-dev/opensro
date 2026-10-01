@@ -130,7 +130,6 @@ apps/client-next/src/engine/foundation/gameplay/quest.ts
 apps/client-next/src/engine/foundation/gameplay/quickslot-inventory.ts
 apps/client-next/src/engine/foundation/gameplay/recall-appointment.ts
 apps/client-next/src/engine/foundation/gameplay/return-scroll.ts
-apps/client-next/src/engine/foundation/gameplay/skill-catalog.ts
 apps/client-next/src/engine/foundation/gameplay/skill-cooldowns.ts
 apps/client-next/src/engine/foundation/gameplay/skill-notices.ts
 apps/client-next/src/engine/foundation/gameplay/spawn-skills.ts
@@ -292,7 +291,6 @@ apps/client-next/src/engine/runtime/frontend/stage/stage.ts
 apps/client-next/src/engine/runtime/input/input.ts
 apps/client-next/src/engine/runtime/navigation/navigation.ts
 apps/client-next/src/engine/runtime/presentation/effective-hp.ts
-apps/client-next/src/engine/runtime/presentation/presentation.ts
 apps/client-next/src/engine/runtime/random/random.ts
 apps/client-next/src/engine/runtime/renderer/characters/actor-snapshots.ts
 apps/client-next/src/engine/runtime/renderer/characters/palette-streams.ts
@@ -332,7 +330,6 @@ apps/client-next/src/engine/runtime/ui/hud/skill-training.ts
 apps/client-next/src/engine/runtime/ui/hud/unique-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/window-placement.ts
 apps/client-next/src/engine/runtime/ui/resources/resources.ts
-apps/client-next/src/engine/runtime/ui/text/text.ts
 apps/client-next/src/engine/runtime/ui/title/resources.ts
 apps/client-next/src/engine/runtime/world/camera/camera.ts
 apps/client-next/src/engine/runtime/world/world.ts

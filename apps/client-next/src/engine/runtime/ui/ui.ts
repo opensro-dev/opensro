@@ -81,7 +81,11 @@ import {
 } from "@/engine/foundation/ui/quickslot-cooldown";
 import { extendedQuickslotOptions, type ExtendedQuickslotOptions } from "@/engine/foundation/ui/extended-quickslot";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
-import { masteryTrainingReason, skillTrainingReason } from "@/engine/foundation/gameplay/skill-catalog";
+import {
+	masteryTrainingReason,
+	skillMetadataById,
+	skillTrainingReason
+} from "@/engine/foundation/gameplay/skill-catalog";
 import { alchemySelection, alchemySlotCapacity } from "@/engine/foundation/ui/alchemy-selection";
 import { npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
 import {
@@ -1090,7 +1094,7 @@ export function createUi(
 			skillCooldown(
 				game.skillCooldowns ?? [],
 				id,
-				game.skillCatalog?.find( row => row.id === id )?.cooldownGroup ?? 0,
+				skillMetadataById( game, id )?.cooldownGroup ?? 0,
 				quickslotTime
 			)
 		) return;
@@ -1942,7 +1946,7 @@ export function createUi(
 		} else if ( id.startsWith( "skill-learn:" ) ) skillConfirm = Number( id.slice( 12 ) );
 		else if ( id === "skill-confirm-cancel" ) skillConfirm = 0;
 		else if ( id === "skill-confirm-ok" ) {
-			const game = view.gameplay, row = game?.skillCatalog?.find( r => r.id === skillConfirm );
+			const game = view.gameplay, row = game ? skillMetadataById( game, skillConfirm ) : undefined;
 			if (
 				row && game?.progression && !game.trainingPending &&
 				!skillTrainingReason( row, game.skills ?? [], game.skillCatalog ?? [], game.progression )
@@ -12709,7 +12713,7 @@ export function createUi(
 					const mastery = row.kind === "mastery-withdraw" ?
 						hud.data()!.skillUi.masteries.find( m => m.id === row.id ) :
 						undefined;
-					const skill = game.skillCatalog?.find( s => s.id === row.id );
+					const skill = skillMetadataById( game, row.id );
 					const caption = row.kind === "mastery-withdraw" ?
 						"UIIT_STT_CIRCULATION_WITHDRAW_MASTERY_WND" :
 						"UIIT_STT_CIRCULATION_WITHDRAW_SKILL_WND";
@@ -12787,7 +12791,7 @@ export function createUi(
 			if ( worldVisible && carriedShortcut && game ) {
 				const binding = quickSlotDrag( carriedShortcut.id, 0, game ),
 					skill = binding?.kind === 0x49 ?
-						game.skillCatalog?.find( r => r.id === binding.payload ) :
+						skillMetadataById( game, binding.payload ) :
 						undefined,
 					action = binding?.kind === 0x4a ?
 						hud.data()?.actions.find( r => r.id === (binding.payload & 0xffffff) ) :

@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+geometry.ts - GPU geometry resources
+
+Uploads meshes to GPU buffers and bind groups and owns their updates
+(instances, bones, indices, positions) and release. Only meshes uploaded
+with dynamicVertices keep a CPU mirror for position updates.
+
+===========================================================================
+*/
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { createCharacterShadows } from "./character-shadows";
 import type { createGpuAnimationResources } from "./animation";

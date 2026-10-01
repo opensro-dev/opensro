@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+weather.ts - the native weather particle renderer
+
+Emits and draws rain and snow batches; batches rewrite their vertices
+every update, so they are uploaded with dynamicVertices.
+
+===========================================================================
+*/
 import { initialThunder, advanceThunder } from "@/engine/foundation/rendering/thunder";
 import type { SoundEvent } from "@/engine/contracts/audio";
 import type { WeatherOptions } from "@/engine/foundation/gameplay/weather";

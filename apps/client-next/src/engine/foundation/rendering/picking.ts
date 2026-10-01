@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+picking.ts - segment tests against meshes
+
+The intersection kernel for picking, occlusion and camera collision:
+skinned or static, with optional alpha and winding rules (PickSurface) or
+bare block culling (pickGeometryBlocks).
+
+===========================================================================
+*/
 import type { Geometry } from "@/engine/contracts/geometry";
 type Point = readonly number[];
 export type PickRay = { readonly start: Point; readonly delta: Point; };

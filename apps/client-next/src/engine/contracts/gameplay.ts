@@ -457,6 +457,9 @@ export interface GameplayState {
 	readonly musicMode?: number;
 	readonly social?: import("@/engine/foundation/gameplay/social").SocialState;
 	readonly skillCatalog?: readonly import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata[];
+	// skillCatalog by id. Main thread only: presentation builds it once per
+	// catalog, because per-frame UI looked rows up by scanning ~3800 skills.
+	readonly skillIndex?: ReadonlyMap<number, import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata>;
 	readonly progression?: import("@/engine/foundation/gameplay/progression").Progression;
 	readonly skills?: readonly number[];
 	readonly quickSlots?: readonly import("@/engine/foundation/gameplay/quickslots").QuickSlot[];

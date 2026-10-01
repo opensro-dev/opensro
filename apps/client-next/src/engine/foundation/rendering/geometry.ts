@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+geometry.ts - validation and ownership copies of renderer geometry
+
+validateGeometry bounds every stream; copyGeometry takes the private copy
+the renderer owns, handling every Geometry field explicitly.
+
+===========================================================================
+*/
 import { validTextureStage } from "./texture-stage";
 import { validateMaterialTimeline } from "./material-timeline";
 import { validateTextureAtlas } from "./texture-atlas";

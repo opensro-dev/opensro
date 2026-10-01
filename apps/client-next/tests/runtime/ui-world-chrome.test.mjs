@@ -266,6 +266,21 @@ request
 			titleGlyphs( font, value, [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] )
 		);
 	}
+	// The layout memo: a repeat is equal, each caller owns its array, and the
+	// shared quads cannot be edited.
+	const first = owner.quads( "Inventory", [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] );
+	first.push( { marker: true } );
+	const again = owner.quads( "Inventory", [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] );
+	assert.notEqual( again, first );
+	assert.deepEqual(
+		again,
+		titleGlyphs( font, "Inventory", [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] )
+	);
+	assert.ok( again.every( quad => Object.isFrozen( quad ) ) );
+	assert.notDeepEqual(
+		owner.quads( "Inventory", [ 11, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] ),
+		again
+	);
 	for ( let i = 0; i < 2300; i++ ) {
 		const value = "Glyph " + i;
 		const expected = Array.from(

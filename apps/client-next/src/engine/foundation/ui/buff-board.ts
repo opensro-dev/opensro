@@ -16,6 +16,7 @@ import { effectRemainingMs } from "@/engine/foundation/gameplay/attached-effects
 import { cosTimerBars } from "@/engine/foundation/gameplay/cos-timer";
 import { paramJobFraction } from "@/engine/foundation/gameplay/param-job";
 import { iconPath } from "./icon";
+import { skillMetadataById } from "@/engine/foundation/gameplay/skill-catalog";
 export const buffTimerRoot = "/assets/images/Media_extracted/icon/stateodd/";
 
 /*
@@ -32,7 +33,7 @@ export function buffBoard( game: GameplayState, timeMs: number, suppressed: Read
 	for ( const slot of game.buffSlots ?? [] ) {
 		const effect = slot.effect;
 		if ( effect.gid !== game.localGid ) continue;
-		const skill = game.skillCatalog?.find( s => s.id === effect.skill ), path = iconPath( skill?.icon );
+		const skill = skillMetadataById( game, effect.skill ), path = iconPath( skill?.icon );
 		if ( !path ) continue;
 		if ( slot.state === "departing" ) {
 			const departure = buffDepartureFrame( slot, timeMs );

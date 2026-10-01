@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+follow-camera.ts - the native follow camera and its collision
+
+Builds camera collision parts from a world scene (with an acceleration
+tree), and resolves the follow camera segment against them.
+
+===========================================================================
+*/
 import type { WorldCamera, WorldScene } from "@/engine/contracts/scene";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { characterRadius } from "@/engine/foundation/animation/character-bounds";

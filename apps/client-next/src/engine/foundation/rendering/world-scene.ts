@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+world-scene.ts - world scene admission and copies
+
+Validates, prepares and copies world scenes for the renderer, including
+terrain seam plans and which groups rewrite their vertices.
+
+===========================================================================
+*/
 import { characterBytes, characterPoseBytes } from "@/engine/foundation/animation/character-budget";
 import type { WorldScene } from "@/engine/contracts/scene";
 import { copyMaterial, copyGeometry, validateGeometry } from "@/engine/foundation/rendering/geometry";
