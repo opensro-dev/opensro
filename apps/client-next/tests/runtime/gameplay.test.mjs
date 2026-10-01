@@ -963,7 +963,9 @@ test("live correction settles on the hill immediately and retires prediction", (
 	assert.equal( m.state().authoritativePose.y, 30 );
 	assert.equal( m.state().pose.angle, 1234 );
 	assert.equal( m.state().moving, false );
-	assert.equal( m.state().pendingMoves, 0 );
+	// The server answers the in-flight request after the correction; its
+	// receipt, not the correction, settles it.
+	assert.equal( m.state().pendingMoves, 1 );
 	assert.equal( m.step( 1000 ), false );
 	assert.equal( m.state().pose.y, 30 );
 });

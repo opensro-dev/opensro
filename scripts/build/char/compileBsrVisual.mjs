@@ -61,6 +61,7 @@ export async function assembleStaticBsrModel(bsrAssetPath) {
     parentIndex: -1
   };
   return {
+    aggregateBox: bsr.aggregateBox,
     skeleton: { boneCount: 1, bones: [rootBone], byName: new Map([["root", 0]]) },
     parts,
     materials,

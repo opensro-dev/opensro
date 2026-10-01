@@ -124,11 +124,7 @@ import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
 import { createMovement } from "./movement/movement";
-import {
-	logoutCancelRequest,
-	targetActionCancel,
-	worldPointAction
-} from "@/engine/foundation/gameplay/direction-movement";
+import { logoutCancelRequest, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
 import { createCombat } from "./combat/combat";
 import { createTargeting } from "./targeting/targeting";
@@ -1298,10 +1294,6 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "item-use" ) {
 				return inventory.use( command.slot, now );
-			}
-			if ( command.kind === "cancel" ) {
-				moveReservation.clear();
-				return sendFrame( targetActionCancel() );
 			}
 			if ( command.kind === "release-target" ) {
 				const frame = targeting.release( now );

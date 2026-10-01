@@ -144,14 +144,13 @@ test("a refused skill cancellation retries on its handoff to basic attack", () =
 	game.dispose();
 });
 
-test("explicit cancel and world transfer discard held movement", () => {
-	for ( const outcome of [ "cancel", "travel", "death" ] ) {
+test("world transfer and death discard held movement", () => {
+	for ( const outcome of [ "travel", "death" ] ) {
 		const { game, local, sent } = movementFixture();
 		openCast( game, 1, 10 );
 		// The server publishes the accepted command with every cast.
 		game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 10 );
 		game.command( { kind: "move", destination: { ...local, x: 140, angle: 0 } }, 11, undefined, local );
-		if ( outcome === "cancel" ) game.command( { kind: "cancel" }, 12, undefined, local );
 		if ( outcome === "travel" ) game.resetWorld();
 		if ( outcome === "death" ) local.appearanceState[0] = 2;
 		if ( outcome !== "travel" ) closeCast( game, 1, 13 );

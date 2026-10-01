@@ -367,6 +367,8 @@ receive
 	return sockets;
 }
 const settle = () => new Promise( r => setImmediate( r ) );
+// Wall-clock bound for asynchronous admission work (digests, decoding).
+const WORLD_ADMISSION_BUDGET_MS = 10000;
 /*
 ================
 welcome
@@ -473,8 +475,10 @@ test("fresh admission on reconnect; WELCOME cannot reuse an old bootstrap barrie
 		last: 1,
 		commands: [ { kind: "key", code: "Escape", down: true, timeMs: 5, sequence: 1 } ]
 	} );
-	input.commit( action => world.command( action ) );
-	assert.deepEqual( [ ...first.sent.at( -1 ) ], [ 0xcd, 0x72, 2 ] );
+	const beforeEscape = first.sent.length;
+	input.commit();
+	// Escape is UI-only (69F450): no action cancel reaches the wire.
+	assert.equal( first.sent.length, beforeEscape );
 	assert.equal( input.lastAccepted(), 1 );
 	world.disconnect();
 	world.reconnect();
@@ -1284,7 +1288,11 @@ test("published static item rows join the login's own rows before the world is a
 	socket.receive( 7, p );
 	for ( const row of rows ) socket.receive( row.opcode, row.payload );
 	await referenceCompletion;
-	for ( let tick = 4; tick < 55 && world.status().phase !== "world"; tick++ ) {
+	// The references digest runs on the crypto thread pool, so admission
+	// waits on its completion, not on a count of event-loop turns: a loaded
+	// machine needs more turns. Simulated time stays within the old range.
+	const deadline = Date.now() + WORLD_ADMISSION_BUDGET_MS;
+	for ( let tick = 4; world.status().phase !== "world" && Date.now() < deadline; tick = Math.min( tick + 1, 54 ) ) {
 		await settle();
 		world.step( tick );
 		let batch;

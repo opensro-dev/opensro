@@ -33,9 +33,7 @@ apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
 apps/client-next/src/engine/foundation/animation/character-bounds.ts
-apps/client-next/src/engine/foundation/animation/character-fade.ts
 apps/client-next/src/engine/foundation/animation/character-hierarchy.ts
-apps/client-next/src/engine/foundation/animation/character-pick-volume.ts
 apps/client-next/src/engine/foundation/animation/character-render-plan.ts
 apps/client-next/src/engine/foundation/animation/character-selection.ts
 apps/client-next/src/engine/foundation/animation/combat-stance.ts
@@ -268,7 +266,6 @@ apps/client-next/src/engine/foundation/ui/target-status.ts
 apps/client-next/src/engine/foundation/ui/text-lines.ts
 apps/client-next/src/engine/foundation/ui/title-status.ts
 apps/client-next/src/engine/foundation/ui/tooltip-rows.ts
-apps/client-next/src/engine/foundation/ui/ui-equality.ts
 apps/client-next/src/engine/foundation/ui/ui.ts
 apps/client-next/src/engine/foundation/ui/unique-banner.ts
 apps/client-next/src/engine/foundation/ui/vertical-spin.ts

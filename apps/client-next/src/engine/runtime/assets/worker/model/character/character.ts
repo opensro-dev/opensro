@@ -22,8 +22,10 @@ import type {
 	CharacterPrimitive
 } from "@/engine/contracts/character";
 import { identity } from "@/engine/foundation/rendering/world-math";
+import type { PickBounds } from "@/engine/foundation/rendering/picking";
 interface Document {
 	extras?: {
+		sroAggregateBox?: readonly number[];
 		sroEquipmentGlows?: Record<
 			string,
 			readonly import("@/engine/foundation/rendering/equipment-glow").EquipmentGlow[]
@@ -468,7 +470,29 @@ decode
 				}
 			}
 			validateEquipmentGlows( j.extras?.sroEquipmentGlows, images.length );
-			return { nodes, primitives, clips, images, equipmentGlows: j.extras?.sroEquipmentGlows };
+			return {
+				nodes,
+				primitives,
+				clips,
+				images,
+				equipmentGlows: j.extras?.sroEquipmentGlows,
+				aggregateBox: aggregateBox( j.extras?.sroAggregateBox )
+			};
 		}
 	};
+}
+
+/*
+================
+aggregateBox
+
+The base resource's authored pick box (CResObject +0x280), carried in glTF
+axes, moved into model space through the same Sx(-1) as the
+__gltf_left_handed__ root.
+================
+*/
+function aggregateBox( box: readonly number[] | undefined ): PickBounds | undefined {
+	if ( box === undefined ) return undefined;
+	if ( box.length !== 6 || !box.every( Number.isFinite ) ) throw new Error( "Character aggregate box is malformed" );
+	return [ -box[3]!, box[1]!, box[2]!, -box[0]!, box[4]!, box[5]! ];
 }

@@ -20,7 +20,7 @@ const { overheadBoardVisible, beginnerMarkShown, nameVisible } = await import(
 );
 
 const options = defaultGameOptions(),
-	local = { gid: 1, kind: "local-player", name: "Me", heading: 0, regionId: 257, x: 0, y: 0, z: 0 },
+	local = { gid: 1, refObjId: 1907, kind: "local-player", name: "Me", heading: 0, regionId: 257, x: 0, y: 0, z: 0 },
 	far = { ...local, gid: 2, kind: "player", name: "Lacrimosa", x: 1000 };
 
 test("a far beginner shows the name with the sprout", () => {

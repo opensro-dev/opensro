@@ -66,7 +66,9 @@ export interface CharacterPrimitive {
 		readonly modifiers: import("@/engine/foundation/rendering/scenery-modifiers").SceneryModifiers;
 	};
 	readonly particleEmitter?: number;
-	readonly ribbon?: { readonly widths: Float32Array; readonly fps: number; };
+	/** spline: only RenderLinkPipe smooths its chain (AF9020); LinkDPipe
+	 * (AF8E80) and LinkObj (AF73A0) draw the raw chain. */
+	readonly ribbon?: { readonly widths: Float32Array; readonly fps: number; readonly spline: boolean; };
 	readonly emission?: {
 		readonly capacity?: number;
 		readonly loop?: boolean;
@@ -99,6 +101,9 @@ Immutable scene data delivered separately from its owned texture resources.
 ================
 */
 export interface CharacterModel {
+	// The base resource's authored box (CResObject +0x280) in model space:
+	// the native pick box. Absent on models with no resource (effects).
+	readonly aggregateBox?: import("@/engine/foundation/rendering/picking").PickBounds;
 	readonly equipmentGlows?: Record<
 		string,
 		readonly import("@/engine/foundation/rendering/equipment-glow").EquipmentGlow[]

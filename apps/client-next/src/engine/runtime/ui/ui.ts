@@ -301,6 +301,8 @@ const ROOT = "/assets/images/Media_extracted/", BUTTON = ROOT + "interface/ifcom
 const PARTS = frameParts();
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
+// Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
+const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
 	BUTTON_DISABLE = BUTTON.replace( ".png", "_disable.png" );
@@ -608,7 +610,29 @@ export function createUi(
 		sex: number | undefined;
 		rows: readonly TooltipRow[];
 	} | null = null;
-	let carriedItem: { slot: number; x: number; y: number; avatar?: boolean; } | null = null;
+	// The item riding the cursor, by the slot control it left (slot:, avatar:,
+	// storage-slot:, cos-slot:). A drag or a click-carry (the bridge's carry)
+	// both move it; the release or the next press places it.
+	let carriedItem: { source: string; slot: number; x: number; y: number; avatar?: boolean; } | null = null;
+	/*
+	================
+	carriedRow
+
+	The item row a carry shows, read from the container its source names.
+	================
+	*/
+	function carriedRow(
+		carried: NonNullable<typeof carriedItem>,
+		game: UiView["gameplay"] | undefined
+	) {
+		if ( carried.source.startsWith( "storage-slot:" ) ) {
+			return game?.storage?.items.find( row => row.slot === carried.slot );
+		}
+		if ( carried.source.startsWith( "cos-slot:" ) ) {
+			return game?.cosRecords?.find( r => r.gid === cosGid )?.inventory?.find( row => row.slot === carried.slot );
+		}
+		return (carried.avatar ? game?.avatarInventory : game?.inventory)?.find( row => row.slot === carried.slot );
+	}
 	const localization = createLocalization( assets, base );
 	let titleNotice: { status?: number; argument?: number; until: number; } | null = null, uiNow = 0;
 	let nextPoll = 0,
@@ -3186,6 +3210,13 @@ export function createUi(
 			}
 			if ( event.kind === "drag-end" ) {
 				if (
+					carriedItem?.source === event.id && !event.id.startsWith( "slot:" ) &&
+					!event.id.startsWith( "avatar:" )
+				) {
+					carriedItem = null;
+					dirty = true;
+				}
+				if (
 					panel === "Storage" && event.id.startsWith( "storage-slot:" ) && view?.gameplay?.storage &&
 					!view.gameplay.inventoryPending
 				) {
@@ -3450,7 +3481,7 @@ export function createUi(
 				return;
 			}
 			if (
-				event.kind === "drag" && (event.id.startsWith( "slot:" ) || event.id.startsWith( "avatar:" )) &&
+				event.kind === "drag" && ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) ) &&
 				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
@@ -3460,12 +3491,14 @@ export function createUi(
 						view?.gameplay?.avatarInventory?.find( i =>
 							i.typeFlags >>> 11 === Number( event.id.slice( 7 ) )
 						)?.slot :
-						Number( event.id.slice( 5 ) );
+						Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) );
 				if ( slot === undefined ) return;
 				// Pointer carry replaces click selection; cancel/drop must not leave a second source armed.
 				inventorySlot = -1;
 				confirmDrop = "";
-				const prior = carriedItem ?? { slot, avatar, x: node.rect[0] + 16, y: node.rect[1] + 16 };
+				const prior = carriedItem?.source === event.id ?
+					carriedItem :
+					{ source: event.id, slot, avatar, x: node.rect[0] + 16, y: node.rect[1] + 16 };
 				carriedItem = { ...prior, x: prior.x + event.dx, y: prior.y + event.dy };
 				dirty = true;
 				return;
@@ -5207,7 +5240,8 @@ export function createUi(
 					disabled,
 					selected,
 					rightActivate: !!item && (id.startsWith( "slot:" ) || id.startsWith( "storage-slot:" )),
-					draggable: !!item
+					draggable: !!item,
+					carry: !!item && ITEM_SLOT_PREFIXES.some( prefix => id.startsWith( prefix ) )
 				} );
 				itemCount( item, r );
 			}
@@ -8027,7 +8061,8 @@ export function createUi(
 							disabled: !enabled || !!game?.inventoryPending,
 							selected: inventorySlot === slot,
 							rightActivate: !!item,
-							draggable: !!item
+							draggable: !!item,
+							carry: !!item
 						} );
 						if ( enabled && item ) {
 							for (
@@ -8123,7 +8158,8 @@ export function createUi(
 								kind: "button",
 								disabled: !!game?.inventoryPending,
 								rightActivate: !!item,
-								draggable: !!item
+								draggable: !!item,
+								carry: !!item
 							} );
 						}
 					}
@@ -11779,10 +11815,7 @@ export function createUi(
 				worldVisible && carriedItem &&
 				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
 			) {
-				const item = (carriedItem.avatar ? game?.avatarInventory : game?.inventory)?.find( i =>
-						i.slot === carriedItem!.slot
-					),
-					path = iconPath( item?.icon );
+				const item = carriedRow( carriedItem, game ), path = iconPath( item?.icon );
 				if ( path ) {
 					paths.push( path );
 					if ( resources.has( path ) ) {

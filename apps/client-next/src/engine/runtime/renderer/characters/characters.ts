@@ -26,10 +26,15 @@ import { createPaletteStreams } from "./palette-streams";
 import { createCharacterRenderPlan } from "@/engine/foundation/animation/character-render-plan";
 import { createCharacterHierarchy } from "@/engine/foundation/animation/character-hierarchy";
 import { attachedOpacity } from "@/engine/foundation/animation/character-fade";
-import { characterPickVolume } from "@/engine/foundation/animation/character-pick-volume";
+import { characterBindBounds, characterPickVolume } from "@/engine/foundation/animation/character-pick-volume";
 import { meshUnderRays, selectPickCandidate, type PickCandidate } from "@/engine/foundation/animation/character-pick";
 import { pickVolume, pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
-import { ribbonSpline, ribbonStrip, type RibbonPoint } from "@/engine/foundation/rendering/particle-ribbon";
+import {
+	ribbonPolyline,
+	ribbonSpline,
+	ribbonStrip,
+	type RibbonPoint
+} from "@/engine/foundation/rendering/particle-ribbon";
 import {
 	particleRandomTable,
 	initializeParticle,
@@ -83,7 +88,36 @@ export function createCharacters(
 	const particleSnapshots = new Map<number, { matrix: Float32Array; regionId: number; }>();
 	let hasDeferred = false, deferredVisible = new Set<number>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
-	const volumes = new WeakMap<CharacterModel, PickBounds>();
+	// Per admitted model: the native pick box, and the bind bounds that size
+	// labels and shadows. Both are immutable for the model's lifetime.
+	const pickVolumes = new WeakMap<CharacterModel, PickBounds>(),
+		bindBounds = new WeakMap<CharacterModel, PickBounds>();
+	/*
+	================
+	pickVolumeOf
+	================
+	*/
+	const pickVolumeOf = ( model: CharacterModel ) => {
+		let bounds = pickVolumes.get( model );
+		if ( !bounds ) {
+			bounds = characterPickVolume( model );
+			pickVolumes.set( model, bounds );
+		}
+		return bounds;
+	};
+	/*
+	================
+	bindBoundsOf
+	================
+	*/
+	const bindBoundsOf = ( model: CharacterModel ) => {
+		let bounds = bindBounds.get( model );
+		if ( !bounds ) {
+			bounds = characterBindBounds( model );
+			bindBounds.set( model, bounds );
+		}
+		return bounds;
+	};
 	// Scratch evaluators for mesh-refined picks, one per admitted model.
 	const pickPoses = new WeakMap<CharacterModel, ReturnType<typeof createCharacterPose>>();
 	const textures = new Map<WorldTexture, ImageDraw>();
@@ -389,11 +423,7 @@ export function createCharacters(
 				if ( !body ) continue;
 				const resource = models.get( body.model );
 				if ( !resource ) continue;
-				let bounds = volumes.get( resource.model );
-				if ( !bounds ) {
-					bounds = characterPickVolume( resource.model );
-					volumes.set( resource.model, bounds );
-				}
+				const bounds = bindBoundsOf( resource.model );
 				const matrix = transformFor( body, rows, origin, transforms );
 				if ( !matrix || !Number.isFinite( bounds[4] ) ) continue;
 				const lift = actor.mountedOn !== undefined ? 7 : 2;
@@ -520,11 +550,7 @@ export function createCharacters(
 				for ( const batch of batches.values() ) {
 					const index = batch.gids.indexOf( gid );
 					if ( index < 0 ) continue;
-					let bounds = volumes.get( resource.model );
-					if ( !bounds ) {
-						bounds = characterPickVolume( resource.model );
-						volumes.set( resource.model, bounds );
-					}
+					const bounds = pickVolumeOf( resource.model );
 					if ( pickVolume( ray, bounds, batch.instances.subarray( index * 16, index * 16 + 16 ) ) ) {
 						return gid;
 					}
@@ -556,11 +582,7 @@ export function createCharacters(
 					blindHeld && actor.blindable || gid === excluded || gid === ride || actor.attachment ||
 					(actor.opacity ?? 1) <= 0 || actor.pickable === false || !matrix || !resource
 				) continue;
-				let bounds = volumes.get( resource.model );
-				if ( !bounds ) {
-					bounds = characterPickVolume( resource.model );
-					volumes.set( resource.model, bounds );
-				}
+				const bounds = pickVolumeOf( resource.model );
 				const hits: { ray: number; depth: number; distance: number; }[] = [];
 				for ( let r = 0; r < rays.length; r++ ) {
 					const depth = pickVolumeDepth( rays[r]!, bounds, matrix );
@@ -708,11 +730,7 @@ export function createCharacters(
 				mode !== 2 || r.distance <= SHADOW_DISTANCE
 			).slice( 0, SHADOW_LIMIT ).flatMap( ( { gid, point } ) => {
 				const actor = byId.get( gid )!, resource = models.get( actor.model )!;
-				let b = volumes.get( resource.model );
-				if ( !b ) {
-					b = characterPickVolume( resource.model );
-					volumes.set( resource.model, b );
-				}
+				const b = bindBoundsOf( resource.model );
 				if ( mode === 1 && actor.shadowSize === 0 ) return [];
 				return [ {
 					projection: shadowProjection( point, (b[4] - b[1]) * actor.scale ),
@@ -1625,7 +1643,10 @@ export function createCharacters(
 								} );
 							}
 							for ( const group of groups.values() ) {
-								const strip = ribbonStrip( ribbonSpline( group ), view! );
+								const strip = ribbonStrip(
+									primitive.ribbon.spline ? ribbonSpline( group ) : ribbonPolyline( group ),
+									view!
+								);
 								positions.set( strip.positions, vertex * 3 );
 								colors.set( strip.colors, vertex * 4 );
 								uvs.set( strip.uvs, vertex * 2 );

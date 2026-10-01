@@ -15,6 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
+import { avatarToGlb } from "../../../../scripts/build/char/exportGlb.mjs";
 
 const load = async path => import( sourceFileUrl( path ).href );
 const { selectPickCandidate, meshUnderRays } = await load( "src/engine/foundation/animation/character-pick.ts" );
@@ -30,8 +31,16 @@ model
 ================
 */
 function model( path ) {
-	const bytes = readPublishedAssetBytesSync( path, publicRoot ),
-		end = 20 + bytes.readUInt32LE( 12 ),
+	return decodeGlb( readPublishedAssetBytesSync( path, publicRoot ) );
+}
+
+/*
+================
+decodeGlb
+================
+*/
+function decodeGlb( bytes ) {
+	const end = 20 + bytes.readUInt32LE( 12 ),
 		binary = bytes.subarray( end + 8 );
 	const source = createCharacterDecoder().decode( {
 		json: JSON.parse( bytes.subarray( 20, end ) ),
@@ -77,4 +86,24 @@ test("a giant's empty rest-pose box does not confirm its mesh; its body does", (
 	// Straight down through the model origin meets the torso.
 	const torso = downRay( 0, 0 );
 	assert.equal( meshUnderRays( candidate(), [ torso ], pose ), true );
+});
+
+test("the pick box is the base resource's authored box, carried into model space", () => {
+	// Native (x, y, z) exports as glTF (x, y, -z); the decoder's Sx(-1) root
+	// makes it (-x, y, -z). The box must land where the vertices do.
+	const glb = avatarToGlb( {
+		name: "box-fixture",
+		aggregateBox: [ -9, 0, -2, 8, 18, 1 ],
+		parts: [],
+		materials: new Map(),
+		clips: [],
+		skeleton: {
+			boneCount: 1,
+			byName: new Map( [ [ "root", 0 ] ] ),
+			bones: [ { name: "root", parentIndex: -1, local: { q: [ 0, 0, 0, 1 ], t: [ 0, 0, 0 ] } } ]
+		}
+	} );
+	const decoded = decodeGlb( Buffer.from( glb ) );
+	assert.deepEqual( decoded.aggregateBox, [ -8, 0, -1, 9, 18, 2 ] );
+	assert.deepEqual( characterPickVolume( decoded ), [ -8, 0, -1, 9, 18, 2 ] );
 });
