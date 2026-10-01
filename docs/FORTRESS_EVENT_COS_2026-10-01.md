@@ -2,7 +2,7 @@
 
 Status: summoning/persistence and its shared placement corrections are implemented
 and have passed authenticated browser lifecycle checks on the isolated
-`codex/fortress-event-cos` checkout, which includes main through `263b645`.
+`codex/fortress-event-cos` checkout, which includes main through `85eb9c2`.
 Release preparation is in progress; the broader fortress/event work remains
 incomplete. This is not a production-release claim. The user
 explicitly expanded the abnormal-status audit to include these systems.
@@ -322,6 +322,18 @@ without weakening the authority checks or removing tests.
 No live-browser parity run, full asset rebuild, production database upgrade,
 or deployment was performed. The implementation remains on the isolated
 `codex/fortress-event-cos` branch until merged/released.
+
+### Main integration acceptance, 2026-10-02
+
+The branch also integrates the merged drifted-double-click and frame-delivery
+changes (#89 and #93), including session-bound delivery that avoids taking a
+character-store read lock inside a character write door. On this combined tree,
+`pnpm check source` passed all 12 tasks in 164.2 seconds and the full client
+check passed all 11 gates in 144.7 seconds. The isolated Agent and GameWorld
+were rebuilt and redeployed over the existing populated authority. The same
+authenticated companion browser test passed again in 37.3 seconds, including
+the retained bag, both families, cancellation/resummon, withdrawal and reload.
+Evidence is under `apps/client-next/temp/artifacts/companion-persistence-main-integration/`.
 
 ## Deeper first-summon audit, 2026-10-02
 
