@@ -63,9 +63,21 @@ func testCosSource(items staticItemSource) cosTestItemSource {
 		AssociatedCharacterCodename: "COS_T_DHORSE3",
 		NativeFields:                enterworld.NewNativeFields(map[string]float64{"canUse": 1}),
 	}
+	// A riding horse: same summoner item TIDs, character band 1 (TID4 1).
+	items["ITEM_COS_C_HORSE1"] = &enterworld.ItemRef{
+		RefObjID: 3906, Codename: "ITEM_COS_C_HORSE1",
+		TypeIDs:                     [4]int64{3, 3, 3, 2},
+		AssociatedCharacterCodename: "COS_C_HORSE1",
+		NativeFields:                enterworld.NewNativeFields(map[string]float64{"canUse": 1}),
+	}
 	return cosTestItemSource{
 		staticItemSource: items,
 		characters: map[string]*enterworld.CharacterRef{
+			"COS_C_HORSE1": {
+				RefObjID: 3915, TidWord: 1<<11 | 0x1c6, Codename: "COS_C_HORSE1",
+				Name: "Horse", WalkSpeed: 20, RunSpeed: 60, Scale: 100,
+				Level: 10, MaxHP: 1500,
+			},
 			"COS_T_DHORSE3": {
 				RefObjID: 3914, TidWord: 0x11C6, Codename: "COS_T_DHORSE3",
 				Name: "Red Horse", WalkSpeed: 20, RunSpeed: 40, Scale: 100,

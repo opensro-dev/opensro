@@ -317,7 +317,10 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 		}
 		expectedGID, gidOK := CosObjectIDForCharacter(character)
 		cos := character.ActiveCOS
-		if !found || ref == nil || ref.RefObjID != cos.RefObjID || (ref.TidWord>>11 < 2 || ref.TidWord>>11 > 4) ||
+		// Bands 1-4: a riding horse is restored like the transport it shares
+		// the ride machinery with (inferred; the v1.188 restore 4FA553 rebinds
+		// whichever ride actor was loaded).
+		if !found || ref == nil || ref.RefObjID != cos.RefObjID || (ref.TidWord>>11 < 1 || ref.TidWord>>11 > 4) ||
 			!gidOK || cos.GID != expectedGID {
 			return nil, fmt.Errorf("active COS failed authoritative media/identity validation")
 		} else {

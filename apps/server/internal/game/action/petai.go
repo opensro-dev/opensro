@@ -265,12 +265,14 @@ func (rt *Runtime) PetPresentation(division, name string) *simulation.PeerCOS {
 		}
 		ref, ok := refs.CharacterRefByCodename(cos.Codename)
 		gid, valid := enterworld.CosObjectIDForCharacter(c)
-		if !ok || ref == nil || !valid || gid != cos.GID || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 2 || ref.TidWord>>11 > 4 {
+		if !ok || ref == nil || !valid || gid != cos.GID || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 1 || ref.TidWord>>11 > 4 {
 			return
 		}
 		var world simulation.WorldState
 		var revision uint64
-		if ref.TidWord>>11 == 2 || cos.Mounted {
+		// A rideable COS stands where it was summoned until ridden, then moves
+		// with its rider; pets (3, 4) follow their own AI.
+		if rideableCOSBand(ref.TidWord>>11) || cos.Mounted {
 			if state.transportCOS != cos {
 				state.transportCOS = cos
 				state.transportWorld = simulation.WorldState{Spawn: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, rt.Now().UnixMilli())}

@@ -29,3 +29,29 @@ func TestCOSPetRestorationIncludesBehaviorAndSummonSlot(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestCOSRideRecordOmitsLifeOnlyForHorses
+
+A riding horse (band 1) record ends after the inventory capacity; a
+transport (band 2) carries the life word (client decodeCosRecord).
+================
+*/
+func TestCOSRideRecordOmitsLifeOnlyForHorses(t *testing.T) {
+	for _, band := range []uint16{1, 2} {
+		cos := &CharacterCOS{GID: 0x00C00003, RefObjID: 3914, CurrentHP: 0, CurrentMP: 0}
+		ref := &CharacterRef{RefObjID: 3914, TidWord: band<<11 | 0x1c6}
+		got, e := BuildCOSRecord(cos, ref, nil)
+		if e != nil {
+			t.Fatal(e)
+		}
+		want := wire.NewWriter(21).U32(0x00C00003).U32(3914).U32(0).U32(0).U8(0)
+		if band == 2 {
+			want.U32(1)
+		}
+		if !bytes.Equal(got, want.Payload()) {
+			t.Fatalf("band %d record = % x, want % x", band, got, want.Payload())
+		}
+	}
+}

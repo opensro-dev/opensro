@@ -268,7 +268,7 @@ func (rt *Runtime) HandleItemUse(
 			}
 			cosRef, found := characters.CharacterRefByCodename(ref.AssociatedCharacterCodename)
 			if !found || cosRef == nil || cosRef.RefObjID == 0 || cosRef.Codename != ref.AssociatedCharacterCodename ||
-				cosRef.TidWord>>11 != 2 || cosRef.MaxHP == 0 {
+				!rideableCOSBand(cosRef.TidWord>>11) || cosRef.MaxHP == 0 {
 				return false
 			}
 			gid, gidOK := enterworld.CosObjectIDForCharacter(character)
@@ -286,6 +286,7 @@ func (rt *Runtime) HandleItemUse(
 			}
 			// 49BE8F: summoning a COS ends the transform (any word but 4).
 			rt.endTransform(divisionID, character, rt.Now().UnixMilli())
+			previousCOS := character.ActiveCOS
 			character.ActiveCOS = &domain.CharacterCOS{
 				NativeBodyStatus: domain.InitialCOSBodyStatus(character.NativeBodyStatus),
 				GID:              gid,
@@ -296,9 +297,17 @@ func (rt *Runtime) HandleItemUse(
 				CurrentMP:        cosRef.MaxMP,
 				Summoned:         true,
 			}
+			// One record grammar for summon and re-entry (BuildCOSRecord): a riding
+			// horse (band 1) carries no life word. Built before the row is spent.
+			record, recordErr := enterworld.BuildCOSRecord(character.ActiveCOS, cosRef, rt.deps.ItemReferences())
+			if recordErr != nil {
+				character.ActiveCOS = previousCOS
+				return false
+			}
 			remaining := rt.consumeItemUseRow(character, rowIndex)
 			spawn := wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
 				BodyStatus: character.ActiveCOS.NativeBodyStatus,
+				Band:       uint8(cosRef.TidWord >> 11),
 				RefObjID:   cosRef.RefObjID,
 				Gid:        gid,
 				Position: wire.Position{
@@ -319,7 +328,7 @@ func (rt *Runtime) HandleItemUse(
 			result = OpResult{
 				Frames: []wire.Frame{
 					{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
-					{Opcode: wire.OpCosRecordCreate, Payload: wire.EncodeCosRecordCreateBand2(gid, cosRef.RefObjID, cosRef.MaxHP, cosRef.MaxMP, 0, false)},
+					{Opcode: wire.OpCosRecordCreate, Payload: record},
 					{Opcode: wire.OpSingleObjectSpawn, Payload: spawn},
 				},
 				Broadcast: []wire.Frame{{Opcode: wire.OpSingleObjectSpawn, Payload: spawn}},

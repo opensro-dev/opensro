@@ -48,7 +48,9 @@ func (rt *Runtime) HandleCosCommand(
 		return OpResult{}
 	}
 	ref, ok := characters.CharacterRefByCodename(snapshot.ActiveCOS.Codename)
-	if !ok || ref == nil || ref.RefObjID != snapshot.ActiveCOS.RefObjID || ref.TidWord>>11 != 2 {
+	// The vehicle forms serve whatever the rider sits on: a riding horse moves
+	// with the same trio as a transport (rideableCOSBand).
+	if !ok || ref == nil || ref.RefObjID != snapshot.ActiveCOS.RefObjID || !rideableCOSBand(ref.TidWord>>11) {
 		return OpResult{}
 	}
 	expectedGID, ok := enterworld.CosObjectIDForCharacter(snapshot)

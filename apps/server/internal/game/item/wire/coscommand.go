@@ -273,37 +273,14 @@ func EncodeCosRideState(riderGid uint32, mounted bool, vehicleGid uint32) []byte
 
 /*
 ================
-EncodeCosRecordCreateBand2
-
-EncodeCosRecordCreateBand2 builds the 0x3158 record for a TID-band-2
-transport: [gid][ref][hp][mp][status][dead]. The conditional grammar is
-selected from the already-seeded characterdata TID word client-side.
-================
-*/
-func EncodeCosRecordCreateBand2(gid, refObjID, hp, mp uint32, status uint8, dead bool) []byte {
-	deadWord := uint32(0)
-	if dead {
-		deadWord = 1
-	}
-	return NewWriter(21).
-		U32(gid).
-		U32(refObjID).
-		U32(hp).
-		U32(mp).
-		U8(status).
-		U32(deadWord).
-		Payload()
-}
-
-/*
-================
 CosSpawnBand2
 
 CosSpawnBand2 is sub_8554e0's plain internal/transport/pet create row.
 ================
 */
 type CosSpawnBand2 struct {
-	// Zero preserves band-2 callers; 3/4 select the verified pet name tail.
+	// Zero preserves band-2 callers; 1 drops the owner block; 3/4 select
+	// the verified pet name tail.
 	Band       uint8
 	RefObjID   uint32
 	Gid        uint32
@@ -359,6 +336,11 @@ func EncodeCosSpawnBand2(row CosSpawnBand2) []byte {
 		U8(1).
 		U16(uint16(len(name))).
 		Bytes(name)
+	// A riding horse (band 1) carries no owner block and no owner gid
+	// (sub_8554e0 reads them for bands 2-6 only).
+	if row.Band == 1 {
+		return w.U8(row.State).Payload()
+	}
 	if row.Band == 3 || row.Band == 4 {
 		w.U16(uint16(len(name))).Bytes(name)
 	}

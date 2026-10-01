@@ -57,6 +57,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(wire.OpTargetInteract, rt.hubHandler(hub, rt.HandleTargetInteract))
 	hub.Handle(wire.OpItemUseRequest, rt.hubHandler(hub, rt.HandleItemUse))
 	hub.Handle(wire.OpCosCommandRequest, rt.hubHandler(hub, rt.HandleCosCommand))
+	hub.Handle(wire.OpCosRideToggleRequest, rt.hubHandler(hub, rt.HandleCosRideToggle))
 	hub.Handle(wire.OpLocalRebirthRequest, rt.hubHandler(hub, rt.HandleLocalRebirth))
 	hub.Handle(wire.OpVisualFlagsRequest, rt.hubHandler(hub, rt.HandleVisualFlags))
 	// 0x745A object select/interact rides its own glue (select.go): its

@@ -97,9 +97,6 @@ TestCosServerPayloadsPinWidthsAndOrdering
 ================
 */
 func TestCosServerPayloadsPinWidthsAndOrdering(t *testing.T) {
-	if got := EncodeCosRecordCreateBand2(0x00C00003, 3914, 87829, 0, 0, false); len(got) != 21 {
-		t.Fatalf("3158 len = %d, want 21", len(got))
-	}
 	wantRide := []byte{1, 0xA3, 0x86, 0x01, 0x00, 1, 3, 0, 0xC0, 0}
 	gotRide := EncodeCosRideState(100003, true, 0x00C00003)
 	if string(gotRide) != string(wantRide) {
@@ -154,5 +151,29 @@ func TestCosSummonTimer3691PinsSubtypeAndWidths(t *testing.T) {
 	// The zero pair is sub_6E6150's REMOVE selector, not an empty window.
 	if retire := EncodeCosSummonTimerRetire3691(0x00003039); !bytes.Equal(retire, []byte{3, 0x39, 0x30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) {
 		t.Fatalf("retire = % X", retire)
+	}
+}
+
+/*
+================
+TestCosSpawnRidingHorseOmitsOwnerBlock
+
+sub_8554e0 reads the owner name, hold, PvP state and owner gid for COS
+bands 2-6 only: a riding horse's spawn ends with its name and the state
+byte, while a transport carries the full owner tail.
+================
+*/
+func TestCosSpawnRidingHorseOmitsOwnerBlock(t *testing.T) {
+	row := CosSpawnBand2{RefObjID: 3915, Gid: 7, Name: "Horse", OwnerName: "Rider", OwnerGid: 9, State: 3}
+	row.Band = 1
+	horse := EncodeCosSpawnBand2(row)
+	if !bytes.HasSuffix(horse, append([]byte{5, 0}, append([]byte("Horse"), 3)...)) {
+		t.Fatalf("band-1 tail = % x", horse[len(horse)-8:])
+	}
+	row.Band = 2
+	transport := EncodeCosSpawnBand2(row)
+	// Owner name (2+5), hold byte, PvP byte and owner gid (4).
+	if len(transport)-len(horse) != 2+5+1+1+4 {
+		t.Fatalf("band-2 spawn is %d bytes, band-1 %d", len(transport), len(horse))
 	}
 }

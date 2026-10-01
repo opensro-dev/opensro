@@ -13,7 +13,7 @@ func BuildCOSRecord(cos *CharacterCOS, ref *CharacterRef, items ItemRefSource) (
 		return nil, fmt.Errorf("invalid COS record identity")
 	}
 	band := ref.TidWord >> 11
-	if band < 2 || band > 4 || len([]byte(cos.Name)) > 65535 {
+	if band < 1 || band > 4 || len([]byte(cos.Name)) > 65535 {
 		return nil, fmt.Errorf("unsupported COS record family or name")
 	}
 	w := wire.NewWriter(64).U32(cos.GID).U32(cos.RefObjID).U32(cos.CurrentHP).U32(cos.CurrentMP)
@@ -54,11 +54,15 @@ func BuildCOSRecord(cos *CharacterCOS, ref *CharacterRef, items ItemRefSource) (
 			w.U8(uint8(row.Slot)).Bytes(BuildItemBody(InventoryWireItems([]InventoryRow{row})[0]))
 		}
 	}
-	dead := uint32(0)
-	if cos.CurrentHP == 0 {
-		dead = 1
+	// A riding horse (band 1) carries no life word (decodeCosRecord; the
+	// client reads it for bands 2-4 only).
+	if band != 1 {
+		dead := uint32(0)
+		if cos.CurrentHP == 0 {
+			dead = 1
+		}
+		w.U32(dead)
 	}
-	w.U32(dead)
 	if band == 3 || band == 4 {
 		w.U8(cos.InventorySlot)
 	}
