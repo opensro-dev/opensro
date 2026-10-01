@@ -83,13 +83,18 @@ type QuestSpec struct {
 	// Blocks new acceptance when the native prerequisite branch is unresolved.
 	// Existing active quests keep their objective and reward contract.
 	AcceptanceUnavailable string
-	MaxCompletions        uint32
-	Stages                []QuestStage
-	MonsterDrop           *MonsterDropRule
-	Codename              string
-	RequiredQuests        []string
-	RequiredActiveQuests  []string
-	Repeatable            bool
+	// CompletedBy names the quest whose completion also completes this one:
+	// the last quest of a superseded chain that covered the same route. A
+	// character who finished that chain is neither offered this quest again
+	// nor shown it as undone.
+	CompletedBy          []string
+	MaxCompletions       uint32
+	Stages               []QuestStage
+	MonsterDrop          *MonsterDropRule
+	Codename             string
+	RequiredQuests       []string
+	RequiredActiveQuests []string
+	Repeatable           bool
 	// KindByte is the wire u10 the CIFQuestReward content button
 	// switches on (sub_5c26e0): 1/7/8 open the give-up window, 2 opens
 	// the REWARD window (its action button composes 0x729A - the
@@ -270,6 +275,7 @@ type Definition struct {
 	CollectItemRefID       uint32
 	TitleSymbol            string
 	RequiredQuestIDs       []uint32
+	CompletedByIDs         []uint32
 	RequiredActiveQuestIDs []uint32
 }
 
@@ -431,6 +437,13 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 				return nil, fmt.Errorf("quest %s requires unavailable active quest %s", def.Codename, code)
 			}
 			def.RequiredActiveQuestIDs = append(def.RequiredActiveQuestIDs, parent.RefID)
+		}
+		for _, code := range def.CompletedBy {
+			predecessor, ok := defs.byCodename[code]
+			if !ok {
+				return nil, fmt.Errorf("quest %s is completed by unavailable quest %s", def.Codename, code)
+			}
+			def.CompletedByIDs = append(def.CompletedByIDs, predecessor.RefID)
 		}
 		for _, code := range def.RequiredQuests {
 			parent, ok := catalog.QuestByCodename(code)

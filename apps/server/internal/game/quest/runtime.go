@@ -714,6 +714,8 @@ func (rt *Runtime) completeRewardAt(character *enterworld.Character, def *Defini
 				completed = append(completed, refID)
 			}
 			character.CompletedQuestIds = completed
+			// Finishing a superseded chain completes the quest that replaced it.
+			creditPredecessorCompletions(character, rt.Defs)
 		}
 		objectiveFrames, _ = rt.applyInventoryChange(character)
 		if def.RewardGold > 0 {

@@ -25,7 +25,10 @@ var europeanTutorialSpecs = []QuestSpec{
 		StartNpcCodename: "NPC_EU_ADVICE", EndNpcCodename: "NPC_EU_ADVICE",
 		OfferPromptSymbol: "SN_TALK_QTUTORIAL_EU_01", AcceptResponseSymbol: "SN_TALK_QTUTORIAL_EU_70",
 		DenyResponseSymbol: "SN_TALK_QTUTORIAL_EU_71", CompletePromptSymbol: "SN_TALK_QTUTORIAL_EU_51",
-		Stages: europeanTutorialStages()},
+		// INFERENCE: the QNO chain walks the same route with the same rewards,
+		// so a character who finished it has done the European tutorial.
+		CompletedBy: []string{"QNO_EU_TUTORIAL_6"},
+		Stages:      europeanTutorialStages()},
 	{Codename: "QNO_EU_TUTORIAL_2", KindByte: 1, Objective: ObjectiveTalk,
 		RequiredQuests:   []string{"QNO_EU_TUTORIAL_1"},
 		StartNpcCodename: "NPC_EU_ARMOR", EndNpcCodename: "NPC_EU_ARMOR",

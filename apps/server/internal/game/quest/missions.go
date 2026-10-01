@@ -125,7 +125,11 @@ func missionRecord(record enterworld.ActiveQuestRecord, def *Definition) enterwo
 // NormalizeEntryRecords operates on the detached bootstrap snapshot. Legacy
 // tag-1 siblings must be repaired before the client's tag-keyed merge sees
 // them, not deferred until the next kill. No acceptance or reward is replayed.
+// A character who finished a superseded chain before its replacement existed
+// is shown the replacement as done (CompletedBy); the server's own gates read
+// the same rule, so nothing is persisted here.
 func (rt *Runtime) NormalizeEntryRecords(c *enterworld.Character) error {
+	creditPredecessorCompletions(c, rt.Defs)
 	for i, record := range c.ActiveQuests {
 		root, ok := rt.Defs.ByRefID(record.RefID)
 		if !ok {

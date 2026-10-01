@@ -14,7 +14,49 @@ func canAcceptAgain(c *enterworld.Character, def *Definition) bool {
 	if def.Repeatable {
 		return true
 	}
-	return completionCount(c, def.RefID) < max(1, def.MaxCompletions)
+	count := completionCount(c, def.RefID)
+	if count == 0 && completedThroughPredecessor(c, def) {
+		count = 1
+	}
+	return count < max(1, def.MaxCompletions)
+}
+
+/*
+================
+completedThroughPredecessor
+
+True when a quest named by def.CompletedBy is complete.
+================
+*/
+func completedThroughPredecessor(c *enterworld.Character, def *Definition) bool {
+	for _, id := range def.CompletedByIDs {
+		if questCompleted(c, id) {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+creditPredecessorCompletions
+
+Adds every quest a completed predecessor also completes to the completed
+list, once. Returns whether the list changed.
+================
+*/
+func creditPredecessorCompletions(c *enterworld.Character, defs *Definitions) bool {
+	changed := false
+	for _, def := range defs.All() {
+		if questCompleted(c, def.RefID) || !completedThroughPredecessor(c, def) {
+			continue
+		}
+		completed := make([]uint32, 0, len(c.CompletedQuestIds)+1)
+		completed = append(completed, c.CompletedQuestIds...)
+		c.CompletedQuestIds = append(completed, def.RefID)
+		changed = true
+	}
+	return changed
 }
 
 func recordCompletion(c *enterworld.Character, id uint32) {
