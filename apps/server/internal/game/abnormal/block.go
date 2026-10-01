@@ -10,6 +10,11 @@ package abnormal
 
 // Slot is one 0x70-byte slot of the owner block (block+0C, stride 0x70):
 // the admitted record (+00..+5F) and its runtime state.
+/*
+================
+Slot
+================
+*/
 type Slot struct {
 	Record
 	Active     bool  // +60
@@ -46,6 +51,11 @@ const MaxModifiers = 48
 
 // Block is tagAbnormalStateBlock. It is a plain value: owners store it in
 // their snapshot and copy it without aliasing.
+/*
+================
+Block
+================
+*/
 type Block struct {
 	Slots [SlotCount]Slot
 	Mask  uint32 // +04
@@ -56,6 +66,11 @@ type Block struct {
 }
 
 // Active reports whether any slot is active.
+/*
+================
+Active
+================
+*/
 func (b *Block) Active() bool {
 	for i := range b.Slots {
 		if b.Slots[i].Active {
@@ -66,8 +81,18 @@ func (b *Block) Active() bool {
 }
 
 // Has reports an active slot for one status.
+/*
+================
+Has
+================
+*/
 func (b *Block) Has(s Status) bool { return b.Slots[s].Active }
 
+/*
+================
+applyModifier
+================
+*/
 func (b *Block) applyModifier(param uint16, channel uint8, source uint32, value float32) {
 	free := -1
 	for i := range b.Modifiers {
@@ -87,6 +112,11 @@ func (b *Block) applyModifier(param uint16, channel uint8, source uint32, value 
 }
 
 // removeModifier removes every channel entry of one source (4B31A0).
+/*
+================
+removeModifier
+================
+*/
 func (b *Block) removeModifier(param uint16, source uint32) bool {
 	removed := false
 	for i := range b.Modifiers {
@@ -100,6 +130,11 @@ func (b *Block) removeModifier(param uint16, source uint32) bool {
 }
 
 // ModifiersFor returns the block's writes to one parameter in table order.
+/*
+================
+ModifiersFor
+================
+*/
 func (b *Block) ModifiersFor(param uint16) []Modifier {
 	var out []Modifier
 	for _, m := range b.Modifiers {
@@ -149,6 +184,11 @@ func (b *Block) Apply(o Owner, r Record, now int64) bool {
 }
 
 // Result reports what one update changed for the caller's publication.
+/*
+================
+Result
+================
+*/
 type Result struct {
 	Changed bool   // publish the mask (4A4540)
 	Mask    uint32 // the recomputed mask
@@ -210,6 +250,11 @@ func (b *Block) Update(o Owner, now int64) Result {
 }
 
 // SkillLevelCure is RefSkill+0x40C (curt): one mask and one shared level.
+/*
+================
+SkillLevelCure
+================
+*/
 type SkillLevelCure struct {
 	Mask  uint32
 	Level uint16
@@ -319,6 +364,11 @@ func (b *Block) Cure(o Owner, levels *[6]int32, skill *SkillLevelCure, mask *[3]
 }
 
 // Clear ports 4A5660: retire one slot as a cure/break (+61 = 1).
+/*
+================
+Clear
+================
+*/
 func (b *Block) Clear(o Owner, s Status) bool {
 	slot := &b.Slots[s]
 	if !slot.Active {
@@ -337,6 +387,11 @@ func (b *Block) Clear(o Owner, s Status) bool {
 }
 
 // ClearAll ports 4A59F0 (death and town teleport).
+/*
+================
+ClearAll
+================
+*/
 func (b *Block) ClearAll(o Owner) bool {
 	changed := false
 	for i := range b.Slots {
@@ -354,21 +409,34 @@ func (b *Block) ClearAll(o Owner) bool {
 }
 
 /*
+================
+HitContext
+
+The magical lane releases Root at 58F491. The execution selector admits
+Sleep/Stun retirement at 5939D8, independently of shield-blocked damage.
+================
+*/
+type HitContext struct {
+	Magical bool
+	Attack  bool
+}
+
+/*
 ==================
 BreakOnHit
 
-BreakOnHit ports the damage consequences of 58F491 and 593BEF: damage
-frees root; a damaging result then wakes sleep (motion reset) and breaks
+BreakOnHit ports the separate consequences of 58F491 and 593BEF: magical
+damage frees root; an attack result wakes sleep (motion reset) and breaks
 stun with a 25 % roll, unless a time bomb is attached. It runs before the
 hit's own statuses are applied.
 ==================
 */
-func (b *Block) BreakOnHit(o Owner) bool {
+func (b *Block) BreakOnHit(o Owner, hit HitContext) bool {
 	changed := false
-	if b.Mask&Root.Bit() != 0 {
+	if hit.Magical && b.Mask&Root.Bit() != 0 {
 		changed = b.Clear(o, Root) || changed
 	}
-	if b.Mask&TimeBomb.Bit() == 0 {
+	if hit.Attack && b.Mask&TimeBomb.Bit() == 0 {
 		if b.Mask&Sleep.Bit() != 0 {
 			changed = b.Clear(o, Sleep) || changed
 			o.SetMotion(0, 0xff, 0)
@@ -382,6 +450,11 @@ func (b *Block) BreakOnHit(o Owner) bool {
 
 // Grades returns the vitals grade bytes following the mask, ascending bit
 // order over GradeMask (client 77A080).
+/*
+================
+Grades
+================
+*/
 func (b *Block) Grades() []uint8 {
 	var out []uint8
 	for bit := 0; bit < 32; bit++ {
@@ -400,10 +473,20 @@ func (b *Block) Grades() []uint8 {
 }
 
 // elapsed is the native unsigned GetTickCount difference.
+/*
+================
+elapsed
+================
+*/
 func elapsed(now, since int64) uint32 { return uint32(now - since) }
 
 // ForgetSource detaches a caster identity without curing the victim: a
 // disconnected source no longer resolves through ObjMgr (its GID is gone).
+/*
+================
+ForgetSource
+================
+*/
 func (b *Block) ForgetSource(gid uint32, name string) bool {
 	changed := false
 	for i := range b.Slots {
@@ -416,6 +499,11 @@ func (b *Block) ForgetSource(gid uint32, name string) bool {
 	return changed
 }
 
+/*
+================
+equalFold
+================
+*/
 func equalFold(a, b string) bool {
 	if len(a) != len(b) {
 		return false

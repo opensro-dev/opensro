@@ -13,11 +13,13 @@ package action
 
 import (
 	"math"
-	"opensro.online/server/internal/game/abnormal"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/recovery"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -398,17 +400,30 @@ func (rt *Runtime) HandleItemUse(
 			return false
 		}
 		nextHP, nextMP := currentHP, currentMP
-		if amount.hp > 0 {
+		block := rt.playerAbnormal(divisionID, character.Name)
+		zombie := block != nil && block.Mask&abnormal.Zombie.Bit() != 0
+		credit := recovery.Amount{HP: amount.hp, MP: amount.mp}
+		if !zombie {
+			credit = rt.admitPotionRecovery(divisionID, character, recovery.Admission{
+				Current: recovery.Amount{HP: currentHP, MP: currentMP},
+				Maximum: recovery.Amount{HP: maxHP, MP: maxMP}, Credit: credit, Absolute: amount.absolute,
+			}, nowMs)
+		}
+		if credit.HP > 0 {
 			// Mask bit 0x20 deals the whole HP amount through vfunc +308 with
 			// reason 0x20 instead of healing; MP still recovers.
-			if block := rt.playerAbnormal(divisionID, character.Name); block != nil && block.Mask&abnormal.Zombie.Bit() != 0 {
+			if zombie {
 				nextHP = max(currentHP-amount.hp, 0)
 			} else {
-				nextHP = min(currentHP+amount.hp, max(maxHP, currentHP))
+				// 49A5B0 routes potion steps through the same 4A86A0 recovery
+				// reduction as skills. Panic applies after potion sizing.
+				reduction, _ := stats.Param(combat.HPRecoveryReductionParameter)
+				nextHP = combat.RecoverVital(currentHP, maxHP, credit.HP, reduction)
 			}
 		}
-		if amount.mp > 0 {
-			nextMP = min(currentMP+amount.mp, max(maxMP, currentMP))
+		if credit.MP > 0 {
+			reduction, _ := stats.Param(combat.MPRecoveryReductionParameter)
+			nextMP = combat.RecoverVital(currentMP, maxMP, credit.MP, reduction)
 		}
 
 		character.CurrentHP = &nextHP
@@ -439,6 +454,10 @@ func (rt *Runtime) HandleItemUse(
 		// A lethal zombie potion dies through the shared death path; every
 		// observer sees the retired effects, the zero baseline and 0x3122.
 		var public []wire.Frame
+		if nextHP > 0 && nextHP != currentHP {
+			public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate,
+				Payload: simulation.HPRefreshPayload(enterworld.ObjectIDForCharacter(character), 0, uint32(nextHP))})
+		}
 		if nextHP == 0 {
 			effects, progression := rt.settlePlayerDeathInDoor(divisionID, character, nowMs)
 			public = append(public, effects...)

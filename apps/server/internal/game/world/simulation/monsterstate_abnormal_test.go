@@ -54,6 +54,39 @@ func (c testAbnormalContext) Roll(string, uint32, uint32, int32) bool { return c
 
 /*
 ================
+RetiresSkill
+
+Fixture self effects are ordinary buffs; selection metadata is covered by
+the gameplay adapter and authored SkillRow policy tests.
+================
+*/
+func (c testAbnormalContext) RetiresSkill(uint32, bool) bool { return true }
+
+/*
+================
+TestFatalPeriodicSlotDoesNotCreditLaterTicks
+================
+*/
+func TestFatalPeriodicSlotDoesNotCreditLaterTicks(t *testing.T) {
+	s := damageTestState()
+	s.clock = func() time.Time { return time.UnixMilli(10000) }
+	s.SetAbnormalContext(testAbnormalContext{})
+	m := firstDamageTestMonster(t, s, "abnormal")
+	applyRecords(t, s, "abnormal", m.Gid, 9, 0,
+		abnormal.Record{Status: abnormal.Burn, Level: 1, DurationMs: 10000, Rate24: 1000000, Scale20: 1, SourceGID: 9},
+		abnormal.Record{Status: abnormal.Bleeding, Grade: 1, DurationMs: 10000, PeriodMs: 2000, Param38: 7, SourceGID: 10})
+	plan, ok := s.PlanAbnormalUpdate("abnormal", m.Gid, 12001)
+	if !ok || len(plan.Effects.Hits) != 1 || plan.Effects.Hits[0].SourceGID != 9 {
+		t.Fatalf("dead monster received later tick credit: %+v", plan.Effects.Hits)
+	}
+	result, ok := s.CommitAbnormalUpdate(plan, 12001)
+	if !ok || !result.Fatal || result.CurrentHP != 0 {
+		t.Fatalf("fatal periodic update did not commit: %+v", result)
+	}
+}
+
+/*
+================
 Param
 ================
 */

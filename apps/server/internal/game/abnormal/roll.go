@@ -10,8 +10,14 @@ package abnormal
 
 import "math"
 
-// Record is tagSkillStatusEffect (5AA450 initialises +05/+06/+08). Offsets
-// name the native fields each consumer reads.
+/*
+================
+Record
+
+Record is tagSkillStatusEffect (5AA450 initialises +05/+06/+08). Offsets
+name the native fields each consumer reads.
+================
+*/
 type Record struct {
 	Status     Status
 	DurationMs uint32  // +0C
@@ -50,16 +56,23 @@ type Resistance struct {
 	Flat, Grade, Percent int32
 }
 
-// RollInput is everything 590680 reads besides its random source.
+/*
+================
+RollInput
+
+RollInput is everything 590680 reads besides its random source.
+================
+*/
 type RollInput struct {
 	Params *SkillParams
 	// SkipGroup is hit-group+05 == 2, which never rolls.
 	SkipGroup bool
 	// TargetImmune is target vfunc+34 (attack COS) or +3E0 (fortress structure).
 	TargetImmune bool
-	// Blocked is hit-flags bit 8. A blocked hit rolls only when the skill
-	// also carries st (tagRefSkill+450).
-	Blocked     bool
+	// WallMask is the optional pw context at RefSkill+2B4, not hit-result
+	// flags. 590735 reads its lane mask; 591E7C excludes stun whenever
+	// the context is present. A shield-blocked hit is SkipGroup instead.
+	WallMask    *uint32
 	TargetLevel uint8
 	// TargetBonus is target parameter 0xA9 (raised by disease), truncated.
 	TargetBonus float32
@@ -79,8 +92,14 @@ type RollInput struct {
 	SourceName           string
 }
 
-// Random is the caster's CZoeZoeRnd stream (CSkillManager_RollProbability,
-// keyed by ECX) and the process rand() consumed by the time bomb.
+/*
+================
+Random
+
+Random is the caster's CZoeZoeRnd stream (CSkillManager_RollProbability,
+keyed by ECX) and the process rand() consumed by the time bomb.
+================
+*/
 type Random interface {
 	Chance(key uint32, chance int32) bool
 	Rand() int32
@@ -102,7 +121,13 @@ func durationPerLevel(status Status, level uint16) uint32 {
 	return uint32(level) * [...]uint32{97, 250, 750, 500, 1000, 750}[status]
 }
 
-// burnDamage is C63C94: a uint32 table read by level at 590BF2.
+/*
+================
+burnDamage
+
+burnDamage is C63C94: a uint32 table read by level at 590BF2.
+================
+*/
 func burnDamage(level uint32) uint32 {
 	if level >= uint32(len(burnDamageTable)) {
 		return 0
@@ -110,6 +135,12 @@ func burnDamage(level uint32) uint32 {
 	return uint32(burnDamageTable[level])
 }
 
+/*
+================
+ftol
+
+================
+*/
 func ftol(v float64) int32 {
 	if math.IsNaN(v) || v >= 2147483648 || v < -2147483648 {
 		return math.MinInt32
@@ -117,13 +148,19 @@ func ftol(v float64) int32 {
 	return int32(v)
 }
 
-// Roll ports 590680. Returned records are in native list order.
+/*
+================
+Roll
+
+Roll ports 590680. Returned records are in native list order.
+================
+*/
 func Roll(in RollInput, random Random) []Record {
 	p := in.Params
 	if p == nil || in.SkipGroup || in.TargetImmune {
 		return nil
 	}
-	if in.Blocked && !p.Stun() {
+	if in.WallMask != nil && *in.WallMask&8 != 0 && !p.Stun() {
 		return nil
 	}
 	bonus := ftol(float64(in.TargetBonus))
@@ -188,6 +225,9 @@ func Roll(in RollInput, random Random) []Record {
 	}
 	for index := 6; index < SourceCount; index++ {
 		source, param := Sources[index], p.Params[index]
+		if source.Status == Stun && in.WallMask != nil {
+			continue
+		}
 		if !param.Present {
 			continue
 		}

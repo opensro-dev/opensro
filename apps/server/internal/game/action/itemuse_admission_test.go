@@ -22,6 +22,11 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
+/*
+================
+recoveryFixture
+================
+*/
 func recoveryFixture(tid int64) (*enterworld.Character, staticItemSource, []byte) {
 	c := testCharacter()
 	hp, mp := int64(1), int64(1)
@@ -44,6 +49,11 @@ func recoveryFixture(tid int64) (*enterworld.Character, staticItemSource, []byte
 	return c, items, wire.NewWriter(3).U8(21).U16(ref.TypeFlags()).Payload()
 }
 
+/*
+================
+assertItemUseRefusedUnchanged
+================
+*/
 func assertItemUseRefusedUnchanged(t *testing.T, rt *Runtime, c *enterworld.Character, body []byte, expected ...uint8) {
 	t.Helper()
 	code := wire.ErrCodeInvalidRequest
@@ -61,6 +71,11 @@ func assertItemUseRefusedUnchanged(t *testing.T, rt *Runtime, c *enterworld.Char
 	}
 }
 
+/*
+================
+TestItemUseRecoveryCooldownLanesAndExactExpiry
+================
+*/
 func TestItemUseRecoveryCooldownLanesAndExactExpiry(t *testing.T) {
 	for _, race := range []string{"CHAR_CH_MAN_ADVENTURER", "CHAR_EU_MAN_ADVENTURER"} {
 		for _, percent := range []bool{false, true} {
@@ -106,6 +121,11 @@ func TestItemUseRecoveryCooldownLanesAndExactExpiry(t *testing.T) {
 	}
 }
 
+/*
+================
+TestItemUseIndependentRecoveryLanesAndConcurrentReplay
+================
+*/
 func TestItemUseIndependentRecoveryLanesAndConcurrentReplay(t *testing.T) {
 	c, items, body := recoveryFixture(1)
 	rt, _ := newTestRuntime(c, items)
@@ -140,6 +160,11 @@ func TestItemUseIndependentRecoveryLanesAndConcurrentReplay(t *testing.T) {
 	}
 }
 
+/*
+================
+TestItemUseCooldownSurvivesStoreRebootAndSnapshotMutation
+================
+*/
 func TestItemUseCooldownSurvivesStoreRebootAndSnapshotMutation(t *testing.T) {
 	c, _, body := recoveryFixture(1)
 	d := openDoorRuntime(t, t.TempDir(), c)
@@ -156,8 +181,9 @@ func TestItemUseCooldownSurvivesStoreRebootAndSnapshotMutation(t *testing.T) {
 	d = d.reboot(t)
 	d.rt.deps.(*enterworld.Deps).UpdateCharacter = d.authority.UpdateCharacter
 	// ITEM_ETC_HP_POTION_01 (Param1 120) at level 1, STR 20:
-	// ftol((20/416+1) * 1.02^0 * 120) = 125, so HP 1 -> 126.
-	if d.character.ItemUseCooldowns[0] != deadline || *d.character.CurrentHP != 126 ||
+	// The 125 HP potion credits 25 now. Queued pulses are session-only;
+	// reboot preserves the committed HP 26, inventory debit and reuse lock.
+	if d.character.ItemUseCooldowns[0] != deadline || *d.character.CurrentHP != 26 ||
 		bagRowByCodename(d.character, "ITEM_ETC_HP_POTION_01").StackCount != 19 {
 		t.Fatal("disk restoration lost part of the item-use transaction")
 	}
@@ -168,6 +194,11 @@ func TestItemUseCooldownSurvivesStoreRebootAndSnapshotMutation(t *testing.T) {
 	}
 }
 
+/*
+================
+TestItemUseRefusesDeadRestrictedAndMalformedRecovery
+================
+*/
 func TestItemUseRefusesDeadRestrictedAndMalformedRecovery(t *testing.T) {
 	for name, change := range map[string]func(*enterworld.Character, *enterworld.ItemRef){
 		"dead":        func(c *enterworld.Character, _ *enterworld.ItemRef) { *c.CurrentHP = 0 },
@@ -209,6 +240,11 @@ func TestItemUseRefusesDeadRestrictedAndMalformedRecovery(t *testing.T) {
 	}
 }
 
+/*
+================
+TestItemUseUnsupportedFamiliesCannotBorrowRecoveryEffects
+================
+*/
 func TestItemUseUnsupportedFamiliesCannotBorrowRecoveryEffects(t *testing.T) {
 	for _, tids := range [][4]int64{
 		// Pet potions/cures (TID4 4 / 2.7) are the COS family and have their
@@ -227,6 +263,11 @@ func TestItemUseUnsupportedFamiliesCannotBorrowRecoveryEffects(t *testing.T) {
 	}
 }
 
+/*
+================
+TestItemUsePermissionIsIndependentOfFamilyAndSalePermission
+================
+*/
 func TestItemUsePermissionIsIndependentOfFamilyAndSalePermission(t *testing.T) {
 	for _, value := range []float64{0, 2, 128, -1, 256, 1.5, math.NaN(), math.Inf(1)} {
 		t.Run(fmt.Sprint(value), func(t *testing.T) {
@@ -252,6 +293,11 @@ func TestItemUsePermissionIsIndependentOfFamilyAndSalePermission(t *testing.T) {
 	}
 }
 
+/*
+================
+TestItemUsePetSkillRejectsDeadPetBadIdentityDurationAndFullBoard
+================
+*/
 func TestItemUsePetSkillRejectsDeadPetBadIdentityDurationAndFullBoard(t *testing.T) {
 	for _, scenario := range []string{"dead-owner", "dead-pet", "wrong-gid", "wrong-ref", "fractional", "nan", "overflow", "full"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -291,6 +337,11 @@ func TestItemUsePetSkillRejectsDeadPetBadIdentityDurationAndFullBoard(t *testing
 	}
 }
 
+/*
+================
+TestItemUseDeathDoesNotResetCooldownOrAdmitSummoning
+================
+*/
 func TestItemUseDeathDoesNotResetCooldownOrAdmitSummoning(t *testing.T) {
 	c, items, body := recoveryFixture(1)
 	source := testCosSource(items)
@@ -327,6 +378,11 @@ func TestItemUseDeathDoesNotResetCooldownOrAdmitSummoning(t *testing.T) {
 }
 
 // The native server's lock deliberately outlasts the client icon by 100ms.
+/*
+================
+TestMPRecoveryServerGuardAfterClientIconExpiry
+================
+*/
 func TestMPRecoveryServerGuardAfterClientIconExpiry(t *testing.T) {
 	c, items, body := recoveryFixture(2)
 	c.ModelCodename = "CHAR_CH_MAN_ADVENTURER"
@@ -346,6 +402,11 @@ func TestMPRecoveryServerGuardAfterClientIconExpiry(t *testing.T) {
 
 // 49D240: without a live COS, a pet potion refuses with 0x1871 and a pet
 // cure with 3; neither borrows the player's recovery or cure.
+/*
+================
+TestPetItemRefusalCodes
+================
+*/
 func TestPetItemRefusalCodes(t *testing.T) {
 	for _, tc := range []struct {
 		tids [4]int64

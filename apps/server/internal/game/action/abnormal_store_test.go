@@ -69,7 +69,7 @@ func TestAbnormalTicksUseAuthorityStore(t *testing.T) {
 testCosAbnormalStoreTick
 
 The sibling COS callback must also finish when its source has despawned.
-This preserves existing pet damage semantics while exercising its real lock.
+The pet's HP debit must survive a restart, not merely advance a slot timestamp.
 ================
 */
 func testCosAbnormalStoreTick(t *testing.T) {
@@ -94,6 +94,14 @@ func testCosAbnormalStoreTick(t *testing.T) {
 	}
 	if health := d.authority.Health(); health.FailedWrites != 0 {
 		t.Fatalf("store health after pet tick: %+v", health)
+	}
+	wantHP := uint32(abnormalStoreHP - abnormalStoreDamage)
+	if d.character.ActiveCOS.CurrentHP != wantHP {
+		t.Fatalf("pet poison HP %d, want %d", d.character.ActiveCOS.CurrentHP, wantHP)
+	}
+	reopened := d.reboot(t)
+	if reopened.character.ActiveCOS.CurrentHP != wantHP {
+		t.Fatalf("persisted pet poison HP %d, want %d", reopened.character.ActiveCOS.CurrentHP, wantHP)
 	}
 }
 
@@ -187,7 +195,11 @@ func testAbnormalStoreTicks(t *testing.T) {
 			d.rt.storePlayerAbnormal(testDivision, d.character.Name, block)
 			frames := d.rt.advancePlayerAbnormals(now)
 			wantHP := int64(abnormalStoreHP - abnormalStoreDamage)
-			if got := enterworld.CurrentHP(d.character); got != wantHP || len(frames) == 0 {
+			if sourceState == "self" {
+				// 52A288 rejects a live source that is the victim itself.
+				wantHP = abnormalStoreHP
+			}
+			if got := enterworld.CurrentHP(d.character); got != wantHP || (len(frames) == 0) != (sourceState == "self") {
 				t.Fatalf("status tick: HP %d, want %d; publications %d", got, wantHP, len(frames))
 			}
 			block = d.rt.playerAbnormal(testDivision, d.character.Name)

@@ -305,35 +305,7 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 				!monsterTypeOK || monsterType > 0x0f {
 				continue
 			}
-			var physicalDefense, magicalDefense, parryRate, magicalParry float64
-			var evasionRate, blockRate, hitRate, criticalRate float64
-			combatPinned := false
-			if len(cols) > colCriticalRate {
-				var combatOK bool
-				physicalDefense, combatOK = nonNegativeColumnFloat(cols, colPhysicalDef)
-				if combatOK {
-					magicalDefense, combatOK = nonNegativeColumnFloat(cols, colMagicalDef)
-				}
-				if combatOK {
-					parryRate, combatOK = nonNegativeColumnFloat(cols, colParryRate)
-				}
-				if combatOK {
-					magicalParry, combatOK = nonNegativeColumnFloat(cols, colMagicalParry)
-				}
-				if combatOK {
-					evasionRate, combatOK = nonNegativeColumnFloat(cols, colEvasionRate)
-				}
-				if combatOK {
-					blockRate, combatOK = nonNegativeColumnFloat(cols, colBlockRate)
-				}
-				if combatOK {
-					hitRate, combatOK = nonNegativeColumnFloat(cols, colHitRate)
-				}
-				if combatOK {
-					criticalRate, combatOK = nonNegativeColumnFloat(cols, colCriticalRate)
-				}
-				combatPinned = combatOK
-			}
+			parameters := CharacterParameters(cols)
 			var expToGive, creepType, knockdown, koRecoverMs uint32
 			var defaultSkillIDs [10]uint32
 			rewardActionPinned := len(cols) > colDefaultSkillN
@@ -377,16 +349,16 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 				Level:              uint8(level),
 				MaxHP:              maxHP,
 				Country:            uint8(country),
-				CombatPinned:       combatPinned,
-				PhysicalDefense:    physicalDefense,
-				MagicalDefense:     magicalDefense,
-				ParryRate:          parryRate,
-				MagicalParry:       magicalParry,
-				EvasionRate:        evasionRate,
-				BlockRate:          blockRate,
-				HitRate:            hitRate,
-				CriticalRate:       criticalRate,
-				ElementResist:      elementResist(cols),
+				CombatPinned:       parameters.CombatPinned,
+				PhysicalDefense:    parameters.PhysicalDefense,
+				MagicalDefense:     parameters.MagicalDefense,
+				ParryRate:          parameters.ParryRate,
+				MagicalParry:       parameters.MagicalParry,
+				EvasionRate:        parameters.EvasionRate,
+				BlockRate:          parameters.BlockRate,
+				HitRate:            parameters.HitRate,
+				CriticalRate:       parameters.CriticalRate,
+				ElementResist:      parameters.ElementResist,
 				RewardActionPinned: rewardActionPinned,
 				ExpToGive:          expToGive,
 				CreepType:          creepType,
@@ -404,6 +376,11 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 	return refs
 }
 
+/*
+================
+monsterRideMetadata
+================
+*/
 type monsterRideMetadata struct {
 	modelPath     string
 	transformMode uint8
@@ -492,6 +469,11 @@ func (ref MonsterRef) DisplayName() string {
 	return strings.TrimSpace(ref.Codename)
 }
 
+/*
+================
+columnUint
+================
+*/
 func columnUint(cols []string, index int) (uint16, bool) {
 	v, err := strconv.ParseUint(strings.TrimSpace(cols[index]), 10, 16)
 	if err != nil {
@@ -500,6 +482,11 @@ func columnUint(cols []string, index int) (uint16, bool) {
 	return uint16(v), true
 }
 
+/*
+================
+columnUint32
+================
+*/
 func columnUint32(cols []string, index int) (uint32, bool) {
 	v, err := strconv.ParseUint(strings.TrimSpace(cols[index]), 10, 32)
 	if err != nil {
@@ -508,6 +495,11 @@ func columnUint32(cols []string, index int) (uint32, bool) {
 	return uint32(v), true
 }
 
+/*
+================
+columnFloat
+================
+*/
 func columnFloat(cols []string, index int) (float64, bool) {
 	v, err := strconv.ParseFloat(strings.TrimSpace(cols[index]), 64)
 	if err != nil {
@@ -516,6 +508,11 @@ func columnFloat(cols []string, index int) (float64, bool) {
 	return v, true
 }
 
+/*
+================
+nonNegativeColumnFloat
+================
+*/
 func nonNegativeColumnFloat(cols []string, index int) (float64, bool) {
 	value, ok := columnFloat(cols, index)
 	if !ok || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
@@ -554,6 +551,11 @@ func readTabbedFile(path string) [][]string {
 	return rows
 }
 
+/*
+================
+decodeTextdata
+================
+*/
 func decodeTextdata(buffer []byte) string {
 	if len(buffer) >= 2 && buffer[0] == 0xff && buffer[1] == 0xfe {
 		return decodeUTF16LE(buffer[2:])
@@ -574,6 +576,11 @@ func decodeTextdata(buffer []byte) string {
 	return string(buffer)
 }
 
+/*
+================
+decodeUTF16LE
+================
+*/
 func decodeUTF16LE(buffer []byte) string {
 	units := make([]uint16, 0, len(buffer)/2)
 	for i := 0; i+1 < len(buffer); i += 2 {
@@ -584,6 +591,11 @@ func decodeUTF16LE(buffer []byte) string {
 
 // elementResist returns the roll-ordered element resists. Columns are
 // frozen, frostbite, burn, shock, poison, zombie; burn and shock swap.
+/*
+================
+elementResist
+================
+*/
 func elementResist(cols []string) [6]uint8 {
 	var out [6]uint8
 	if len(cols) <= colResistFrozen+5 {

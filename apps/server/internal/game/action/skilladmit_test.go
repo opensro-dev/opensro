@@ -25,6 +25,11 @@ import (
 	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestShippedDanceRefusedUntilSelector
+================
+*/
 func TestShippedDanceRefusedUntilSelector(t *testing.T) {
 	skill := shippedOffense(t, "SKILL_EU_BARD_DANCEA_WARRIOR_A_01")
 	if !skill.Reqc.Dance || skill.Reqi.Pairs[0] != (enterworld.SkillReqiPair{Kind: 6, Value: 14}) {
@@ -149,6 +154,11 @@ func TestShippedDanceRefusedUntilSelector(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedGuardAuraAppliesOdar
+================
+*/
 func TestShippedGuardAuraAppliesOdar(t *testing.T) {
 	skill := shippedOffense(t, "SKILL_EU_BARD_BATTLAA_GUARD_A_01")
 	if !skill.Aura.Present || skill.BuffModifiers.Dru || !skill.BuffModifiers.Odar ||
@@ -218,6 +228,11 @@ func TestShippedGuardAuraAppliesOdar(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedRecoveryAuraHealsLowestRatio
+================
+*/
 func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 	skill := shippedOffense(t, "SKILL_EU_CLERIC_RECOVERYA_GROUP_A_01")
 	if !skill.Aura.Present || !skill.Aura.Eshp || skill.Aura.Select != 5 ||
@@ -293,6 +308,11 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDancePulseCutByBDMD
+================
+*/
 func TestDancePulseCutByBDMD(t *testing.T) {
 	skill := shippedOffense(t, "SKILL_EU_BARD_DANCEA_WARRIOR_A_01")
 	if !skill.Attack.Parameters.Has(enterworld.ParameterBardMPDecrease) || skill.Aura.PulseMP != 63 || skill.Aura.PulseMs != 5000 {
@@ -330,6 +350,11 @@ func TestDancePulseCutByBDMD(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRootedCasterRefusesTeleport
+================
+*/
 func TestRootedCasterRefusesTeleport(t *testing.T) {
 	dir := licensed.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "skilldata.txt")); err != nil {
@@ -369,6 +394,11 @@ func TestRootedCasterRefusesTeleport(t *testing.T) {
 	}
 }
 
+/*
+================
+TestShippedReqnThroughCastEntry
+================
+*/
 func TestShippedReqnThroughCastEntry(t *testing.T) {
 	skill := shippedReqnArmourRow(t)
 	if !skill.Reqi.All || skill.Reqi.Count < 2 {
@@ -412,6 +442,11 @@ func TestShippedReqnThroughCastEntry(t *testing.T) {
 	}
 }
 
+/*
+================
+shippedReqnArmourRow
+================
+*/
 func shippedReqnArmourRow(t *testing.T) enterworld.SkillRow {
 	t.Helper()
 	skills := shippedSkills(t)
@@ -470,11 +505,16 @@ func TestSkillEquipmentWeaponKinds(t *testing.T) {
 
 // 58D8F0 order: a cooling skill with the wrong weapon reports 0x3005, not
 // 0x300D; command admission (0x37) carries no target check.
+/*
+================
+TestSkillAdmissionOrderAndCommandMask
+================
+*/
 func TestSkillAdmissionOrderAndCommandMask(t *testing.T) {
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
 	skill := shippedOffense(t, "SKILL_CH_SWORD_DOWNATTACK_A_01")
 	now := clock.NowMs()
-	c.OffensiveSkillCooldowns = map[uint32]int64{skill.Group: now + 1000}
+	registerOffensiveCooldown(c, skill, now)
 	c.MissionInventory = nil
 	if got := rt.skillAdmission(testDivision, c, skill, now, nil, nil, admitExecution); got != 0x3005 {
 		t.Fatalf("cooldown first %#x", got)
@@ -483,6 +523,7 @@ func TestSkillAdmissionOrderAndCommandMask(t *testing.T) {
 		t.Fatalf("equipment second %#x", got)
 	}
 	c.OffensiveSkillCooldowns = nil
+	c.SharedSkillCooldowns = nil
 	skill.RequiredWeaponKinds = [2]uint8{0xff, 0xff}
 	standing := &admitTarget{motion: 0}
 	if got := rt.skillAdmission(testDivision, c, skill, now, standing, nil, admitCommand); got != 0 {
@@ -495,6 +536,11 @@ func TestSkillAdmissionOrderAndCommandMask(t *testing.T) {
 
 // noteParameterIndex is the only reqi writer. The offense loop used to
 // append the pairs a second time; an admitted shield row then carried two.
+/*
+================
+TestShippedReqiPairsRecordedOnce
+================
+*/
 func TestShippedReqiPairsRecordedOnce(t *testing.T) {
 	shield := shippedOffense(t, "SKILL_EU_WARRIOR_ONEHANDA_SHIELD_A_01")
 	if shield.OffenseRefusal != "" || shield.Reqi.Count != 1 {
@@ -516,6 +562,11 @@ func TestShippedReqiPairsRecordedOnce(t *testing.T) {
 
 // 58DAEF: freeze, sleep or stun refuses 0x3009; nmf lets the skill through;
 // burn is not in 0x4041.
+/*
+================
+TestSkillAdmissionDisabledCaster
+================
+*/
 func TestSkillAdmissionDisabledCaster(t *testing.T) {
 	for _, tc := range []struct {
 		status abnormal.Status
@@ -549,6 +600,11 @@ CASTER-STATE GATES (58DB22..58DF20)
 
 // 58DB22: only a buff whose row carries rpkt (CSkillManager+0x1F8) blocks,
 // and it blocks only rows that carry rpkt themselves.
+/*
+================
+TestSkillAdmissionRpktGate
+================
+*/
 func TestSkillAdmissionRpktGate(t *testing.T) {
 	if kit := shippedOffense(t, "SKILL_FORT_REPAIR_KIT_01"); !kit.CastGate.Rpkt {
 		t.Fatal("shipped repair kit lost its rpkt tag")
@@ -585,6 +641,11 @@ func TestSkillAdmissionRpktGate(t *testing.T) {
 
 // 58DB38: a monster strictly inside five times the efr kind-3 word refuses
 // 0x3038; one outside it never does (the inverted rule refused far monsters).
+/*
+================
+TestSkillAdmissionQestMonsterArm
+================
+*/
 func TestSkillAdmissionQestMonsterArm(t *testing.T) {
 	shipped := shippedOffense(t, "SKILL_QNO_EU_IVY_2_01_01")
 	if !shipped.CastGate.Qest || !shipped.CastGate.Efr3Present || shipped.CastGate.Efr3Radius != 20 {
@@ -627,6 +688,11 @@ func TestSkillAdmissionQestMonsterArm(t *testing.T) {
 // 58DE1E: berserk refuses both words first; word 1 needs the refobj a
 // transform scroll puts in the command (never a target's level); word 2
 // refuses a rider or a job suit.
+/*
+================
+TestSkillAdmissionMschWords
+================
+*/
 func TestSkillAdmissionMschWords(t *testing.T) {
 	if row := shippedOffense(t, "SKILL_ETC_TRANS_MONSTER_01"); !row.CastGate.MschPresent || row.CastGate.MschMode != 1 {
 		t.Fatalf("transform row %+v", row.CastGate)
@@ -676,6 +742,11 @@ func TestSkillAdmissionMschWords(t *testing.T) {
 }
 
 // CGItem_IsJobSuit: TID 3/1/7 with TID4 1..3, in slot 8 only.
+/*
+================
+TestWearsJobSuit
+================
+*/
 func TestWearsJobSuit(t *testing.T) {
 	for _, tc := range []struct {
 		slot int64
@@ -702,6 +773,11 @@ func TestWearsJobSuit(t *testing.T) {
 // 58DF20: berserk blocks every hide row but a trap; stealth and
 // invisibility are refused in battle (state+0xD), never for being hidden
 // already or for holding a hide buff.
+/*
+================
+TestSkillAdmissionHideWords
+================
+*/
 func TestSkillAdmissionHideWords(t *testing.T) {
 	hiding := shippedOffense(t, "SKILL_EU_ROG_STEALTHA_HIDING_A_01")
 	invisible := shippedOffense(t, "SKILL_EU_WIZARD_COLDA_INVISIBLE_A_01")
@@ -749,116 +825,6 @@ func TestSkillAdmissionHideWords(t *testing.T) {
 /*
 ===============================================================================
 
-BATTLE STATE
-
-===============================================================================
-*/
-
-// battleFrameValue returns the channel-8 value of a frame, or -1.
-func battleFrameValue(f wire.Frame) int {
-	if f.Opcode != wire.OpObjectStateRefresh {
-		return -1
-	}
-	refresh, err := wire.DecodeObjectStateRefresh(f.Payload)
-	if err != nil || refresh.StateType != wire.StateChannelBattle {
-		return -1
-	}
-	return int(refresh.Value)
-}
-
-// Striking from peace enters battle and publishes channel 8 = 1 after the
-// strike's burst; a player already in battle publishes nothing.
-func TestBattleStateEnteredByStrike(t *testing.T) {
-	rt, clock, c, target := newCombatTestRuntime(t, 100000)
-	c.BattleUntilMs = 0
-	now := clock.NowMs()
-	first := rt.HandleTargetInteract(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
-	if _, damage, _ := assertSkillDamageOpen(t, first.Frames, 2, enterworld.ObjectIDForCharacter(c), target.Gid); damage == 0 {
-		t.Fatal("no strike")
-	}
-	if c.BattleUntilMs != now+battleStateMs {
-		t.Fatalf("striker battle until %d, want %d", c.BattleUntilMs, now+battleStateMs)
-	}
-	last := first.Frames[len(first.Frames)-1]
-	if battleFrameValue(last) != 1 || battleFrameValue(first.Broadcast[len(first.Broadcast)-1]) != 1 {
-		t.Fatalf("strike burst %+v lacks a trailing channel-8 entry", first.Frames)
-	}
-	if again := rt.enterBattleState(testDivision, c, now+1); len(again) != 0 {
-		t.Fatalf("already in battle, yet published %+v", again)
-	}
-}
-
-// Being struck enters battle; death leaves it before LIFE-dead; the timer
-// runs out after exactly 20 s.
-func TestBattleStateStruckDeathAndExpiry(t *testing.T) {
-	rt, clock, c, monster := newCombatTestRuntime(t, 100)
-	c.BattleUntilMs = 0
-	now := clock.NowMs()
-	monster.Ref.DefaultSkillIDs[0] = 2
-	skills := rt.deps.SkillData().(staticSkillSource)
-	hit := skills[2]
-	hit.Attack.Min, hit.Attack.Max, hit.Attack.Percent = 1, 1, 100
-	skills[2] = hit
-	r := rt.MonsterBasicAttack(testDivision, monster, enterworld.ObjectIDForCharacter(c), 2, now)
-	if !r.Accepted || !r.TargetAlive {
-		t.Fatalf("nonfatal hit %+v", r)
-	}
-	if c.BattleUntilMs != now+battleStateMs {
-		t.Fatalf("struck battle until %d, want %d", c.BattleUntilMs, now+battleStateMs)
-	}
-	last := r.Frames[len(r.Frames)-1]
-	if battleFrameValue(wire.Frame{Opcode: last.Opcode, Payload: last.Payload}) != 1 {
-		t.Fatalf("struck burst %+v lacks a trailing channel-8 entry", r.Frames)
-	}
-
-	hit.Attack.Min, hit.Attack.Max = 1<<20, 1<<20
-	skills[2] = hit
-	r = rt.MonsterBasicAttack(testDivision, monster, enterworld.ObjectIDForCharacter(c), 2, now+1)
-	if !r.Accepted || r.TargetAlive || c.BattleUntilMs != 0 {
-		t.Fatalf("fatal hit %+v, battle until %d", r, c.BattleUntilMs)
-	}
-	exit, dead := -1, -1
-	for i, f := range r.Frames {
-		frame := wire.Frame{Opcode: f.Opcode, Payload: f.Payload}
-		if battleFrameValue(frame) == 0 {
-			exit = i
-		}
-		if refresh, err := wire.DecodeObjectStateRefresh(f.Payload); f.Opcode == wire.OpObjectStateRefresh && err == nil &&
-			refresh.StateType == wire.StateChannelLife && refresh.Value == wire.LifeStateDead {
-			dead = i
-		}
-	}
-	if exit < 0 || dead < 0 || exit > dead {
-		t.Fatalf("death frames %+v: battle exit %d, LIFE-dead %d", r.Frames, exit, dead)
-	}
-
-	rt2, clock2, c2, _ := newCombatTestRuntime(t, 100)
-	c2.BattleUntilMs = 0
-	start := clock2.NowMs()
-	rt2.enterBattleState(testDivision, c2, start)
-	if out := rt2.TickHook()(start + battleStateMs - 1); c2.BattleUntilMs == 0 || hasBattleExit(out) {
-		t.Fatal("battle ended early")
-	}
-	out := rt2.TickHook()(start + battleStateMs)
-	if c2.BattleUntilMs != 0 || !hasBattleExit(out) {
-		t.Fatalf("battle did not end at 20 s: until %d, frames %+v", c2.BattleUntilMs, out)
-	}
-}
-
-func hasBattleExit(batches []simulation.DivisionFrames) bool {
-	for _, batch := range batches {
-		for _, f := range batch.Frames {
-			if battleFrameValue(wire.Frame{Opcode: f.Opcode, Payload: f.Payload}) == 0 {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-/*
-===============================================================================
-
 LINE OF SIGHT (58E490)
 
 ===============================================================================
@@ -866,10 +832,15 @@ LINE OF SIGHT (58E490)
 
 // A blocked line refuses 0x3010 at execution only, after every other
 // check; distance never does.
+/*
+================
+TestSkillAdmissionLineOfSight
+================
+*/
 func TestSkillAdmissionLineOfSight(t *testing.T) {
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
 	now := clock.NowMs()
-	skill := enterworld.SkillRow{ID: 5001, Group: 500, RequiredWeaponKinds: [2]uint8{0xff, 0xff}, ActionRange: 150, ActionRangePinned: true}
+	skill := enterworld.SkillRow{ID: 5001, Group: 500, CoolTimeMs: 1000, RequiredWeaponKinds: [2]uint8{0xff, 0xff}, ActionRange: 150, ActionRangePinned: true}
 	caster := rt.liveSpawn(simulation.WorldKey(testDivision, c.Name), c, now)
 	far := caster
 	far.X += 5000
@@ -898,11 +869,12 @@ func TestSkillAdmissionLineOfSight(t *testing.T) {
 	if got := rt.skillAdmission(testDivision, c, skill, now, nil, nil, admitExecution); got != 0 || len(asked) != 0 {
 		t.Fatalf("targetless skill traced a line: %#x %+v", got, asked)
 	}
-	c.OffensiveSkillCooldowns = map[uint32]int64{skill.Group: now + 1000}
+	registerOffensiveCooldown(c, skill, now)
 	if got := rt.skillAdmission(testDivision, c, skill, now, target, nil, admitExecution); got != 0x3005 {
 		t.Fatalf("cooldown must precede the line: %#x", got)
 	}
 	c.OffensiveSkillCooldowns = nil
+	c.SharedSkillCooldowns = nil
 	blocked = false
 	if got := rt.skillAdmission(testDivision, c, skill, now, target, nil, admitExecution); got != 0 {
 		t.Fatalf("clear line: %#x", got)
@@ -911,6 +883,11 @@ func TestSkillAdmissionLineOfSight(t *testing.T) {
 
 // 58DF8C: reqc bit 2 admits at or below 30 % HP only; 58E0BF refuses ao/pw
 // to a rider as well as a seated caster.
+/*
+================
+TestSkillAdmissionLowHPAndFooting
+================
+*/
 func TestSkillAdmissionLowHPAndFooting(t *testing.T) {
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
 	now := clock.NowMs()

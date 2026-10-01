@@ -71,14 +71,14 @@ func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID
 			if !valid || duration == 0 || row.CoolTimeMs == 0 {
 				return zero, false
 			}
-			return simulation.MonsterAttackPlan{SkillID: row.ID, SelfEffect: true, CooldownMs: int64(row.CoolTimeMs), ActionLifecycleMs: int64(duration)}, true
+			return simulation.MonsterAttackPlan{SkillID: row.ID, SelfEffect: true, CooldownMs: int64(row.CooldownDurationMs((monsterAbnormalContext{rt}).Param(instance, actionSpeedParameter))), ActionLifecycleMs: int64(duration)}, true
 		}
 		if exists && row.Summon.Present {
 			duration, valid := row.ActionLifecycleMs()
 			if !valid || !row.TimingPinned || row.CoolTimeMs == 0 {
 				return zero, false
 			}
-			return simulation.MonsterAttackPlan{SkillID: row.ID, Summon: true, CooldownMs: int64(row.CoolTimeMs), ActionLifecycleMs: int64(duration)}, true
+			return simulation.MonsterAttackPlan{SkillID: row.ID, Summon: true, CooldownMs: int64(row.CooldownDurationMs((monsterAbnormalContext{rt}).Param(instance, actionSpeedParameter))), ActionLifecycleMs: int64(duration)}, true
 		}
 	}
 	valid := make([]enterworld.SkillRow, 0, len(instance.Ref.DefaultSkillIDs))
@@ -108,7 +108,7 @@ func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID
 	skill := valid[int(sample*float64(len(valid)))]
 	actionLifecycleMs, _ := skill.ActionLifecycleMs()
 	return simulation.MonsterAttackPlan{
-		SkillID: skill.ID, Reach: simulation.ActionReach(skill.ActionRange), CooldownMs: int64(skill.CoolTimeMs),
+		SkillID: skill.ID, Reach: rt.monsterActionReach(instance, skill), CooldownMs: int64(skill.CooldownDurationMs((monsterAbnormalContext{rt}).Param(instance, actionSpeedParameter))),
 		ActionLifecycleMs: int64(actionLifecycleMs),
 	}, true
 }
@@ -151,19 +151,32 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		return result
 	} else {
 		instance.SelfEffects = live.SelfEffects
+		instance.Abnormal = live.Abnormal
 	}
 	if release != nil {
 		if row, exists := rt.deps.SkillData().SkillByID(skillID); exists && row.MonsterSelfEffect.Pinned {
 			return rt.releaseMonsterSelfEffect(divisionID, instance, row, nowMs, release)
 		}
 	}
+	skill, ok := rt.deps.SkillData().SkillByID(skillID)
+	defer func() {
+		if release == nil && result.Refusal == simulation.MonsterAttackCommandRejected && skill.Summon.Present {
+			rt.Monsters.RejectSummonCommand(divisionID, instance.Gid, nowMs)
+		}
+		if release == nil && result.Accepted {
+			// 5A1A40 reads the live action-speed keeper, including Frostbite
+			// and Slow. The verified helper owns its float32 store boundaries.
+			speed := (monsterAbnormalContext{rt}).Param(instance, 0x8c)
+			rt.Monsters.CompleteMonsterSkillCommand(divisionID, instance.Gid, skill.AICommandDurationMs(speed), nowMs)
+		}
+	}()
 	character := rt.findCharacterByGid(divisionID, targetGid)
 	if character == nil {
 		// 529929: when the mob's hostility byte is set and the player has a
 		// COS, the target object becomes PC+0x1CD8. A hit addressed to that
 		// gid lands on the pet, including the 590680 status roll.
 		if owner := rt.characterByCosGID(divisionID, targetGid); owner != nil {
-			return rt.monsterHitSummonedCOS(divisionID, instance, owner, skillID, nowMs)
+			return rt.monsterHitSummonedCOS(divisionID, instance, owner, skillID, nowMs, release)
 		}
 		return result
 	}
@@ -175,17 +188,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		return result
 	}
 	result.TargetAlive = true
-	skill, ok := rt.deps.SkillData().SkillByID(skillID)
-	defer func() {
-		if release == nil && result.Refusal == simulation.MonsterAttackCommandRejected && skill.Summon.Present {
-			rt.Monsters.RejectSummonCommand(divisionID, instance.Gid, nowMs)
-		}
-		if release == nil && result.Accepted {
-			// The current monster parameter projection has the native baseline
-			// action-speed value (100), not the player's equipment modifiers.
-			rt.Monsters.CompleteMonsterSkillCommand(divisionID, instance.Gid, skill.AICommandDurationMs(100), nowMs)
-		}
-	}()
+
 	if !monster.AllowsTargetStatus(instance.Ref.TidWord, instance.Nest.NativeTacticsFlags, snapshot.NativeBodyStatus) {
 		// 587630 binds ssou to RefSkill+354. The unique completion
 		// side effect is applied by MonsterState even on command refusal.
@@ -209,7 +212,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 			return result
 		}
 		if skill.ActionCastingTimeMs > 0 {
-			return rt.prepareMonsterCast(divisionID, instance, snapshot, skill, nowMs)
+			return rt.prepareMonsterCast(divisionID, instance, monsterCastRecipient{snapshot, enterworld.ObjectIDForCharacter(snapshot)}, skill, nowMs)
 		}
 		return rt.releaseMonsterSelfEffect(divisionID, instance, skill, nowMs, nil)
 	}
@@ -225,7 +228,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	}
 	monsterPose := mover.LivePoseAt(nowMs, nil)
 	playerPose := rt.liveSpawn(simulation.WorldKey(divisionID, snapshot.Name), snapshot, nowMs)
-	spacing, spacingOK := rt.monsterToPlayerCombatSpacing(instance, snapshot, simulation.ActionReach(skill.ActionRange))
+	spacing, spacingOK := rt.monsterToPlayerCombatSpacing(instance, snapshot, rt.monsterActionReach(instance, skill))
 	// SR_GameServer 585C67/585CD1 revalidates an owned cast, not its
 	// AutoCommand approach radius. Target movement after admission cannot
 	// cancel release. Identity, life, status and coordinate plane still apply.
@@ -250,7 +253,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		return result
 	}
 	if release == nil && skill.ActionCastingTimeMs > 0 {
-		return rt.prepareMonsterCast(divisionID, instance, snapshot, skill, nowMs)
+		return rt.prepareMonsterCast(divisionID, instance, monsterCastRecipient{snapshot, enterworld.ObjectIDForCharacter(snapshot)}, skill, nowMs)
 	}
 	formulas := make([]combat.Result, 0, skill.Attack.ImpactCount)
 	// 58EC6C: a defender behind a wall splits every impact. ck / lfst /
@@ -276,7 +279,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		if formula.Blocked {
 			continue // 5905FB: no status roll for a blocked impact
 		}
-		records, rollErr := rt.rollMonsterOnPlayer(divisionID, instance, &skill.Abnormal, snapshot, defender, formula.ResultFlags&8 != 0)
+		records, rollErr := rt.rollMonsterOnPlayer(divisionID, instance, &skill.Abnormal, snapshot, defender, wallRule)
 		if rollErr != nil {
 			return result
 		}
@@ -294,6 +297,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	var deathProgressionFrames []wire.Frame
 	var deathEffectFrames []wire.Frame
 	var battleFrames []wire.Frame
+	hitContext := abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
 	committed := rt.deps.Update(character, "monster-basic-attack", func() bool {
 		// The detached admission snapshot can predate a status transition.
 		// Revalidate under the same mutation door that commits HP. Do not
@@ -304,6 +308,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		}
 		_, _, remaining, _ := rt.playerKeeperVitals(divisionID, character)
 		for _, formula := range formulas {
+			hitContext.Magical = hitContext.Magical || formula.MagicalDamage != 0
 			debit := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
 			remaining -= debit
 			fatal = remaining == 0
@@ -329,7 +334,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 			abnormalOwner = rt.clearPlayerAbnormalInDoor(divisionID, character, nowMs)
 		} else {
 			battleFrames = rt.enterBattleState(divisionID, character, nowMs)
-			abnormalOwner.applyHit(true, abnormalRecords)
+			abnormalOwner.applyHit(hitContext, abnormalRecords)
 			// 58F72F: a landed hit tests the victim's skc damage masks.
 			rt.cancelEffectsOnDamage(divisionID, character, skill.Attack.Flags, nowMs)
 		}

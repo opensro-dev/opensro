@@ -57,7 +57,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 				return false
 			}
 			rt.startSkillCast(division, c, now)
-			registerOffensiveCooldown(c, skill, now)
+			rt.registerPlayerSkillCooldown(division, c, skill, now)
 			return true
 		}) {
 			if refusal != 0 {

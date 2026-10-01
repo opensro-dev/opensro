@@ -12,12 +12,18 @@ import (
 	"encoding/binary"
 
 	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
 // petPotionLane is the 1.1 s lock 49D240 starts on the owner for TID4 4/5/7.
+/*
+================
+petPotionLane
+================
+*/
 func petPotionLane(tid4 int64) (int, bool) {
 	switch tid4 {
 	case 4:
@@ -31,6 +37,11 @@ func petPotionLane(tid4 int64) (int, bool) {
 	}
 }
 
+/*
+================
+readCosGID
+================
+*/
 func readCosGID(tail []byte) (uint32, bool) {
 	if len(tail) != 4 {
 		return 0, false
@@ -40,6 +51,11 @@ func readCosGID(tail []byte) (uint32, bool) {
 
 // applyCosItemUse is 49D240 trimmed to the v1.150 pet UI: potions TID4 4/5/7,
 // revival TID4 6, and the TID3 2 TID4 7 cure. It runs inside the item-use door.
+/*
+================
+applyCosItemUse
+================
+*/
 func (rt *Runtime) applyCosItemUse(
 	divisionID string,
 	character *enterworld.Character,
@@ -63,11 +79,21 @@ func (rt *Runtime) applyCosItemUse(
 	}
 }
 
+/*
+================
+livePet
+================
+*/
 func (rt *Runtime) livePet(character *enterworld.Character, gid uint32) bool {
 	pet := character.ActiveCOS
 	return pet != nil && pet.Summoned && pet.CurrentHP > 0 && pet.GID == gid && pet.GID != 0
 }
 
+/*
+================
+applyPetCure
+================
+*/
 func (rt *Runtime) applyPetCure(
 	divisionID string,
 	character *enterworld.Character,
@@ -105,6 +131,11 @@ func (rt *Runtime) applyPetCure(
 	return true
 }
 
+/*
+================
+applyPetRevival
+================
+*/
 func (rt *Runtime) applyPetRevival(
 	character *enterworld.Character,
 	ref *enterworld.ItemRef,
@@ -153,6 +184,11 @@ func (rt *Runtime) applyPetRevival(
 	return true
 }
 
+/*
+================
+applyPetPotion
+================
+*/
 func (rt *Runtime) applyPetPotion(
 	divisionID string,
 	character *enterworld.Character,
@@ -181,7 +217,7 @@ func (rt *Runtime) applyPetPotion(
 		return false
 	}
 	// 49AA70 reads the item owner's STR/INT/level (PC vfuncs), then
-	// 4EF450 clamps the credit onto the COS maxima.
+	// 4A86A0 applies the COS recovery reductions and effective maxima.
 	maxHP, maxMP, _, _ := rt.playerKeeperVitals(divisionID, character)
 	amount, valid := computePotionAmount(ref, stats.Level, stats.Strength, stats.Intellect, maxHP, maxMP)
 	if !valid {
@@ -191,53 +227,37 @@ func (rt *Runtime) applyPetPotion(
 		*result = itemUseFailure(wire.ErrCodeInvalidRequest)
 		return false
 	}
-	chars, hasRef := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
 	pet := character.ActiveCOS
-	var petMaxHP, petMaxMP uint32
-	if hasRef {
-		if cosRef, exists := chars.CharacterRefByCodename(pet.Codename); exists && cosRef != nil && cosRef.RefObjID == pet.RefObjID {
-			petMaxHP, petMaxMP = cosRef.MaxHP, cosRef.MaxMP
-		}
-	}
-	if petMaxHP == 0 {
-		petMaxHP = pet.CurrentHP
-	}
-	if petMaxMP == 0 {
-		petMaxMP = pet.CurrentMP
-	}
-	nextHP, nextMP := pet.CurrentHP, pet.CurrentMP
 	owner := rt.newCosAbnormalOwner(divisionID, character, nowMs)
+	if owner.ref == nil {
+		return false
+	}
+	beforeHP := pet.CurrentHP
+	nextHP, nextMP := int64(pet.CurrentHP), int64(pet.CurrentMP)
 	zombie := owner.block.Mask&abnormal.Zombie.Bit() != 0
 	if amount.hp > 0 {
 		if zombie {
-			if amount.hp >= int64(nextHP) {
-				nextHP = 0
-			} else {
-				nextHP -= uint32(amount.hp)
-			}
-		} else if uint32(amount.hp) > petMaxHP-nextHP && nextHP < petMaxHP {
-			nextHP = petMaxHP
-		} else if nextHP < petMaxHP {
-			nextHP += uint32(amount.hp)
-		}
-	}
-	if amount.mp > 0 && nextMP < petMaxMP {
-		room := petMaxMP - nextMP
-		if uint32(amount.mp) > room {
-			nextMP = petMaxMP
+			nextHP = max(nextHP-amount.hp, 0)
 		} else {
-			nextMP += uint32(amount.mp)
+			nextHP = combat.RecoverVital(nextHP, int64(owner.MaxHP()), amount.hp, owner.Param(combat.HPRecoveryReductionParameter))
 		}
 	}
-	pet.CurrentHP = nextHP
-	pet.CurrentMP = nextMP
+	if amount.mp > 0 {
+		nextMP = combat.RecoverVital(nextMP, int64(owner.MaxMP()), amount.mp, owner.Param(combat.MPRecoveryReductionParameter))
+	}
+	pet.CurrentHP = uint32(nextHP)
+	pet.CurrentMP = uint32(nextMP)
 	character.PetPotionCooldowns[lane] = nowMs + 1100
 	remaining := rt.consumeItemUseRow(character, rowIndex)
 	frames := []wire.Frame{
 		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
-		{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(gid, simulation.Vitals{CurrentHP: nextHP, CurrentMP: nextMP})},
+		{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(gid, simulation.Vitals{CurrentHP: pet.CurrentHP, CurrentMP: pet.CurrentMP})},
 	}
 	var public []wire.Frame
+	if nextHP > 0 && pet.CurrentHP != beforeHP {
+		public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate,
+			Payload: simulation.HPRefreshPayload(gid, 0, pet.CurrentHP)})
+	}
 	if nextHP == 0 {
 		owner.changed = owner.block.ClearAll(owner)
 		owner.fatal = true

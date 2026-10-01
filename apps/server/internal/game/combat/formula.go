@@ -27,10 +27,20 @@ const (
 
 // Roll32767 returns one value in the same inclusive 0..32767 domain as the
 // CRT rand() calls in the v1.188 helpers.
+/*
+================
+Roll32767
+================
+*/
 type Roll32767 func() (uint32, error)
 
 // SecureRoll32767 is the production RNG. Formula tests inject a deterministic
 // sequence; production does not share a mutable pseudo-random generator.
+/*
+================
+SecureRoll32767
+================
+*/
 func SecureRoll32767() (uint32, error) {
 	var bytes [2]byte
 	for {
@@ -45,12 +55,20 @@ func SecureRoll32767() (uint32, error) {
 }
 
 // Result is one formula evaluation before the monster HP mutation door.
+/*
+================
+Result
+================
+*/
 type Result struct {
 	// Imbue is the active weapon imbue's abnormal authority (its bu block),
 	// rolled per impact after the skill's own statuses (590B24).
-	Imbue       abnormal.SkillParams
-	Damage      uint32
-	ResultFlags uint8
+	Imbue  abnormal.SkillParams
+	Damage uint32
+	// MagicalDamage retains the lane accumulator before total-damage
+	// scaling. 58F491 releases Root only when this accumulator is nonzero.
+	MagicalDamage uint32
+	ResultFlags   uint8
 	// Blocked is a type-2 record (0x58F0EF): no damage, no imbue share, no
 	// status roll, no knockdown (the defender's +0xD2C is never set).
 	Blocked bool
@@ -96,6 +114,11 @@ func ResolveMonster(
 	return resolve(attacker, defender, attack, roll, false, false)
 }
 
+/*
+================
+resolve
+================
+*/
 func resolve(
 	attacker Stats,
 	defender Stats,
@@ -121,6 +144,7 @@ func resolve(
 	}
 
 	var total uint64
+	var magicalDamage uint32
 	if attack.Flags&physicalAttackFlag != 0 {
 		damage, err := resolveLane(attacker, defender, attack, roll, false, applyPlayerBalance, critical)
 		if err != nil {
@@ -133,7 +157,8 @@ func resolve(
 		if err != nil {
 			return Result{}, err
 		}
-		total += uint64(downAttackDamage(damage, defender.MotionState, attack.DownAttack))
+		magicalDamage = downAttackDamage(damage, defender.MotionState, attack.DownAttack)
+		total += uint64(magicalDamage)
 	}
 	// 58F52F: atca scales the summed lane dword by (1 + percent/100) when
 	// its mask shares a bit with the target's abnormal mask (+0xD34).
@@ -150,9 +175,14 @@ func resolve(
 	if attacker.Berserk {
 		flags |= 4
 	}
-	return Result{Damage: uint32(total), ResultFlags: flags}, nil
+	return Result{Damage: uint32(total), MagicalDamage: magicalDamage, ResultFlags: flags}, nil
 }
 
+/*
+================
+resolveLane
+================
+*/
 func resolveLane(
 	attacker Stats,
 	defender Stats,
@@ -278,6 +308,11 @@ func resolveLane(
 	return uint32(math.Trunc(damage)), nil
 }
 
+/*
+================
+hitCenter
+================
+*/
 func hitCenter(attacker, defender Stats) float64 {
 	ratio := 0.0
 	if defender.EvasionRate > 0 {
@@ -289,6 +324,11 @@ func hitCenter(attacker, defender Stats) float64 {
 	return clamp(center, 10, 90)
 }
 
+/*
+================
+levelAdvantage
+================
+*/
 func levelAdvantage(attacker, defender uint8) float64 {
 	if attacker <= defender {
 		return 0
@@ -296,6 +336,11 @@ func levelAdvantage(attacker, defender uint8) float64 {
 	return math.Min(float64(attacker-defender)*0.03, 0.30)
 }
 
+/*
+================
+physicalBalance
+================
+*/
 func physicalBalance(stats Stats) float64 {
 	levelOffset := float64(stats.MaxLevel) - 1
 	numerator := stats.Strength + 16 + 2*levelOffset
@@ -306,6 +351,11 @@ func physicalBalance(stats Stats) float64 {
 	return clamp(numerator/denominator, 0, 1.2)
 }
 
+/*
+================
+magicalBalance
+================
+*/
 func magicalBalance(stats Stats) float64 {
 	levelOffset := float64(stats.MaxLevel) - 1
 	denominator := (5*levelOffset + 40) * 0.8
@@ -315,6 +365,11 @@ func magicalBalance(stats Stats) float64 {
 	return clamp(stats.Intellect/denominator, 0, 1.2)
 }
 
+/*
+================
+minimumOfThreePercentRolls
+================
+*/
 func minimumOfThreePercentRolls(roll Roll32767) (float64, error) {
 	minimum := 100.0
 	for range 3 {
@@ -330,6 +385,11 @@ func minimumOfThreePercentRolls(roll Roll32767) (float64, error) {
 	return minimum, nil
 }
 
+/*
+================
+normalizedRoll
+================
+*/
 func normalizedRoll(roll Roll32767) (float64, error) {
 	value, err := roll()
 	if err != nil {
@@ -341,6 +401,11 @@ func normalizedRoll(roll Roll32767) (float64, error) {
 	return float64(value) / 32767, nil
 }
 
+/*
+================
+clamp
+================
+*/
 func clamp(value, minimum, maximum float64) float64 {
 	if value < minimum {
 		return minimum

@@ -31,6 +31,7 @@ type MonsterAbnormalContext interface {
 	SourceDead(division string, gid uint32, name string) bool
 	Roll(division string, owner, key uint32, chance int32) bool
 	Param(instance monster.Instance, id uint16) float32
+	RetiresSkill(skillID uint32, all bool) bool
 }
 
 // SetAbnormalContext installs the runtime context before damage traffic.
@@ -73,6 +74,7 @@ type MonsterAbnormalEffects struct {
 	MaskChanged bool
 	// CancelActions is vfunc 570: pending monster casts are withdrawn.
 	CancelActions bool
+	EndedSkills   []uint32
 	// Halted is the live pose of a StopMove (B2F5 settle).
 	Halted *monster.Pose
 	// SpeedChanged publishes the effective movement pair (376F).
@@ -90,6 +92,7 @@ Merge
 func (e *MonsterAbnormalEffects) Merge(other MonsterAbnormalEffects) {
 	e.MaskChanged = e.MaskChanged || other.MaskChanged
 	e.CancelActions = e.CancelActions || other.CancelActions
+	e.EndedSkills = append(e.EndedSkills, other.EndedSkills...)
 	e.SpeedChanged = e.SpeedChanged || other.SpeedChanged
 	if other.Halted != nil {
 		e.Halted = other.Halted
@@ -136,10 +139,11 @@ lookups are already resolved; callbacks cannot re-enter character authority.
 */
 type monsterAbnormalOwner struct {
 	monsterAbnormalInput
-	block *abnormal.Block
-	fx    MonsterAbnormalEffects
-	ai    []monsterAIEvent
-	names map[uint32]string
+	block                 *abnormal.Block
+	fx                    MonsterAbnormalEffects
+	ai                    []monsterAIEvent
+	names                 map[uint32]string
+	walkBefore, runBefore float64
 }
 
 /*
@@ -153,7 +157,8 @@ func newMonsterAbnormalOwner(input monsterAbnormalInput) *monsterAbnormalOwner {
 	if instance.Abnormal != nil {
 		block = *instance.Abnormal
 	}
-	o := &monsterAbnormalOwner{monsterAbnormalInput: input, block: &block, names: map[uint32]string{}}
+	o := &monsterAbnormalOwner{monsterAbnormalInput: input, block: &block, names: map[uint32]string{},
+		walkBefore: instance.WalkSpeed(), runBefore: instance.RunSpeed()}
 	instance.Abnormal = o.block
 	for i := range block.Slots {
 		if slot := block.Slots[i]; slot.Active {
@@ -170,9 +175,44 @@ finish
 ================
 */
 func (o *monsterAbnormalOwner) finish() {
+	if o.fx.SpeedChanged {
+		o.refreshMovementSpeed()
+	}
 	if !o.block.Active() && o.block.Mask == 0 {
 		o.instance.Abnormal = nil
 	}
+}
+
+/*
+================
+refreshMovementSpeed
+
+Retiming the full segment preserves its admitted surface path and cell spans.
+Changing From would invalidate that ownership and could place the slowed actor
+on a different floor. The live fraction stays continuous to millisecond precision.
+================
+*/
+func (o *monsterAbnormalOwner) refreshMovementSpeed() {
+	mover, exists := o.state.movers.lookup(o.instance.Gid)
+	if !exists {
+		return
+	}
+	before, after := o.walkBefore, o.instance.WalkSpeed()
+	if mover.Channel == wire.MoveStateRun {
+		before, after = o.runBefore, o.instance.RunSpeed()
+	}
+	if before <= 0 || after <= 0 || before == after {
+		return
+	}
+	if mover.InFlight(o.now) {
+		duration := max(int64(float64(mover.ArriveMs-mover.DepartMs)*before/after), 1)
+		elapsed := int64(float64(o.now-mover.DepartMs) * before / after)
+		mover.DepartMs = o.now - elapsed
+		mover.ArriveMs = mover.DepartMs + duration
+	}
+	_, channel := mover.NavigationMotion()
+	mover.SetNavigationMotion(after, channel)
+	o.state.movers.set(o.instance.Gid, mover)
 }
 
 /*
@@ -215,6 +255,8 @@ func (o *monsterAbnormalOwner) MaxHP() uint32 { return o.instance.EffectiveMaxHP
 MaxMP
 ================
 */
+// 4C382A initializes keeper 4 from RefObjChar MP. All 5,986 enabled monster
+// rows in the v1.150 projection have zero MP; do not invent a mana pool.
 func (o *monsterAbnormalOwner) MaxMP() uint32 { return 0 }
 
 /*
@@ -306,9 +348,24 @@ func (o *monsterAbnormalOwner) SetMotion(state, next uint8, delay float32) {
 /*
 ================
 CancelActions
+
+4AA340 first stops an in-flight mover, then retires pending commands. The
+mask also gates later movement, but cannot settle a segment already issued.
 ================
 */
-func (o *monsterAbnormalOwner) CancelActions(bool) { o.fx.CancelActions = true }
+func (o *monsterAbnormalOwner) CancelActions(all bool) {
+	o.StopMove()
+	o.fx.CancelActions = true
+	if o.ctx == nil {
+		return
+	}
+	for index, effect := range o.instance.SelfEffects {
+		if effect.Token != 0 && o.ctx.RetiresSkill(effect.SkillID, all) {
+			o.fx.EndedSkills = append(o.fx.EndedSkills, effect.Token)
+			o.instance.SelfEffects[index] = monster.SelfEffect{}
+		}
+	}
+}
 
 // StopMove ports 4A9430: only a moving actor stops, at its live pose.
 /*
@@ -345,6 +402,11 @@ Hit
 ================
 */
 func (o *monsterAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reason uint8, status abnormal.Status) {
+	// 52A240 ignores hits after LIFE becomes dead. A later periodic slot in
+	// the same update must not add credit after an earlier slot killed it.
+	if !o.Alive() || damage == 0 || credited && source == o.instance.Gid {
+		return
+	}
 	hit := MonsterAbnormalHit{Status: status, SourceGID: source, SourceName: o.names[source], Credited: credited, Damage: damage, Reason: reason}
 	o.fx.Hits = append(o.fx.Hits, hit)
 	o.instance.CurrentHP -= min(o.instance.CurrentHP, damage)
@@ -368,26 +430,27 @@ func (o *monsterAbnormalOwner) Detonate(slot abnormal.Slot) {
 	if o.instance.CurrentHP <= damage {
 		damage = o.instance.CurrentHP
 	}
-	slot.Damage1C = damage
+	// 59B300 debits remaining HP on a fatal hit, but its B0BC payload still
+	// takes the authored damage word from the original slot.
 	o.fx.Detonations = append(o.fx.Detonations, slot)
 	o.Hit(slot.SourceGID, true, damage, 1, slot.Status)
 }
 
 // applyAbnormalLocked runs the damage consequences on a surviving monster:
-// root/sleep/stun break on a damaging hit, then the hit's own statuses.
+// retire the status-specific hit consequences, then apply the hit's statuses.
 /*
 ================
 applyAbnormalLocked
 ================
 */
-func (s *MonsterState) applyAbnormalLocked(input monsterAbnormalInput, damaged bool, records []abnormal.Record) MonsterAbnormalEffects {
+func (s *MonsterState) applyAbnormalLocked(input monsterAbnormalInput, hit abnormal.HitContext, records []abnormal.Record) MonsterAbnormalEffects {
 	instance, state, now := input.instance, input.state, input.now
-	if instance.CurrentHP == 0 || !damaged && len(records) == 0 {
+	if instance.CurrentHP == 0 || !hit.Magical && !hit.Attack && len(records) == 0 {
 		return MonsterAbnormalEffects{}
 	}
 	o := newMonsterAbnormalOwner(input)
 	before := o.block.Mask
-	if damaged && o.block.BreakOnHit(o) {
+	if o.block.BreakOnHit(o, hit) {
 		o.fx.MaskChanged = true
 	}
 	for _, r := range records {

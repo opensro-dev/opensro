@@ -14,12 +14,24 @@ import (
 	"opensro.online/server/internal/game/paramkeeper"
 )
 
+/*
+================
+scriptedRandom
+
+================
+*/
 type scriptedRandom struct {
 	calls  []string
 	chance map[uint32]bool
 	rand   int32
 }
 
+/*
+================
+Chance
+
+================
+*/
 func (r *scriptedRandom) Chance(key uint32, chance int32) bool {
 	r.calls = append(r.calls, "chance")
 	if chance <= 0 {
@@ -27,8 +39,24 @@ func (r *scriptedRandom) Chance(key uint32, chance int32) bool {
 	}
 	return r.chance[key]
 }
-func (r *scriptedRandom) Rand() int32 { r.calls = append(r.calls, "rand"); return r.rand }
 
+/*
+================
+Rand
+
+================
+*/
+func (r *scriptedRandom) Rand() int32 {
+	r.calls = append(r.calls, "rand")
+	return r.rand
+}
+
+/*
+================
+fakeOwner
+
+================
+*/
 type fakeOwner struct {
 	alive, player, monster bool
 	hp, maxHP, maxMP       uint32
@@ -46,12 +74,60 @@ type fakeOwner struct {
 	drains                 []int32
 }
 
-func (o *fakeOwner) Alive() bool       { return o.alive }
-func (o *fakeOwner) IsPlayer() bool    { return o.player }
-func (o *fakeOwner) IsMonster() bool   { return o.monster }
+/*
+================
+Alive
+
+================
+*/
+func (o *fakeOwner) Alive() bool { return o.alive }
+
+/*
+================
+IsPlayer
+
+================
+*/
+func (o *fakeOwner) IsPlayer() bool { return o.player }
+
+/*
+================
+IsMonster
+
+================
+*/
+func (o *fakeOwner) IsMonster() bool { return o.monster }
+
+/*
+================
+CurrentHP
+
+================
+*/
 func (o *fakeOwner) CurrentHP() uint32 { return o.hp }
-func (o *fakeOwner) MaxHP() uint32     { return o.maxHP }
-func (o *fakeOwner) MaxMP() uint32     { return o.maxMP }
+
+/*
+================
+MaxHP
+
+================
+*/
+func (o *fakeOwner) MaxHP() uint32 { return o.maxHP }
+
+/*
+================
+MaxMP
+
+================
+*/
+func (o *fakeOwner) MaxMP() uint32 { return o.maxMP }
+
+/*
+================
+Param
+
+================
+*/
 func (o *fakeOwner) Param(id uint16) float32 {
 	v, err := o.block.Evaluate(id, paramkeeper.Definition{Maximum: 9999999}, o.params[id])
 	if err != nil {
@@ -59,26 +135,116 @@ func (o *fakeOwner) Param(id uint16) float32 {
 	}
 	return v
 }
+
+/*
+================
+SourceExists
+
+================
+*/
 func (o *fakeOwner) SourceExists(uint32) bool { return !o.sourceGone }
-func (o *fakeOwner) SourceDead(uint32) bool   { return o.sourceDead }
-func (o *fakeOwner) Roll(uint32, int32) bool  { return o.roll }
-func (o *fakeOwner) Now() int64               { return o.now }
-func (o *fakeOwner) ParamsChanged(bool)       {}
+
+/*
+================
+SourceDead
+
+================
+*/
+func (o *fakeOwner) SourceDead(uint32) bool { return o.sourceDead }
+
+/*
+================
+Roll
+
+================
+*/
+func (o *fakeOwner) Roll(uint32, int32) bool { return o.roll }
+
+/*
+================
+Now
+
+================
+*/
+func (o *fakeOwner) Now() int64 { return o.now }
+
+/*
+================
+ParamsChanged
+
+================
+*/
+func (o *fakeOwner) ParamsChanged(bool) {}
+
+/*
+================
+SetMotion
+
+================
+*/
 func (o *fakeOwner) SetMotion(s, n uint8, d float32) {
 	o.motions = append(o.motions, [3]float32{float32(s), float32(n), d})
 }
+
+/*
+================
+CancelActions
+
+================
+*/
 func (o *fakeOwner) CancelActions(all bool) { o.cancels = append(o.cancels, all) }
-func (o *fakeOwner) StopMove()              { o.stops++ }
+
+/*
+================
+StopMove
+
+================
+*/
+func (o *fakeOwner) StopMove() { o.stops++ }
+
+/*
+================
+AIEvent
+
+================
+*/
 func (o *fakeOwner) AIEvent(e, k uint8, s uint32) {
 	o.ai = append(o.ai, [3]uint32{uint32(e), uint32(k), s})
 }
+
+/*
+================
+ConsumeResources
+
+================
+*/
 func (o *fakeOwner) ConsumeResources(_, mp int32, _ uint8) { o.drains = append(o.drains, mp) }
-func (o *fakeOwner) Detonate(Slot)                         { o.detonations++ }
+
+/*
+================
+Detonate
+
+================
+*/
+func (o *fakeOwner) Detonate(Slot) { o.detonations++ }
+
+/*
+================
+Hit
+
+================
+*/
 func (o *fakeOwner) Hit(_ uint32, credited bool, damage uint32, _ uint8, _ Status) {
 	o.hits = append(o.hits, damage)
 	o.credited = append(o.credited, credited)
 }
 
+/*
+================
+params
+
+================
+*/
 func params(tag uint32, args ...uint32) *SkillParams {
 	p := &SkillParams{}
 	i, ok := SourceIndex(tag)
@@ -90,6 +256,12 @@ func params(tag uint32, args ...uint32) *SkillParams {
 	return p
 }
 
+/*
+================
+TestBitsSwapBurnAndShock
+
+================
+*/
 func TestBitsSwapBurnAndShock(t *testing.T) {
 	if Burn.Bit() != 8 || ElectricShock.Bit() != 4 || Stun.Bit() != 0x4000 || TimeBomb.Bit() != 0x1000000 {
 		t.Fatal("g_adwAbnormalStatusBit mapping lost")
@@ -99,8 +271,14 @@ func TestBitsSwapBurnAndShock(t *testing.T) {
 	}
 }
 
-// Element statuses roll first, then scale their level by the target resist
-// and take a rank-multiplied duration (590680 / 410B40).
+/*
+================
+TestElementRollLevelAndDuration
+
+Element statuses roll first, then scale their level by the target resist
+and take a rank-multiplied duration (590680 / 410B40).
+================
+*/
 func TestElementRollLevelAndDuration(t *testing.T) {
 	random := &scriptedRandom{chance: map[uint32]bool{0x04000000: true}}
 	in := RollInput{Params: params(0x6275, 10, 30, 5), TargetResist: [6]float32{3: 20}, TargetFlat: [6]float32{3: 2}}
@@ -123,8 +301,14 @@ func TestElementRollLevelAndDuration(t *testing.T) {
 	}
 }
 
-// Statuses 6+ scale duration by 2.5 % and chance by 5 % per level gap with
-// 50 % and 10 % floors; disease's bonus raises the rank and the chance.
+/*
+================
+TestGradeRollScalesByLevelGap
+
+Statuses 6+ scale duration by 2.5 % and chance by 5 % per level gap with
+50 % and 10 % floors; disease's bonus raises the rank and the chance.
+================
+*/
 func TestGradeRollScalesByLevelGap(t *testing.T) {
 	random := &scriptedRandom{chance: map[uint32]bool{0x0f000000: true}}
 	in := RollInput{Params: params(0x7374, 4000, 60, 3), TargetLevel: 40}
@@ -144,7 +328,13 @@ func TestGradeRollScalesByLevelGap(t *testing.T) {
 	}
 }
 
-// Slow and stun without an authored grade take the caster level / 10.
+/*
+================
+TestSlowGradeFromCasterLevel
+
+Slow and stun without an authored grade take the caster level / 10.
+================
+*/
 func TestSlowGradeFromCasterLevel(t *testing.T) {
 	random := &scriptedRandom{chance: map[uint32]bool{0x09000000: true}}
 	r := Roll(RollInput{Params: params(0x736c, 5000, 50, 0), CasterLevel: 47}, random)
@@ -153,22 +343,54 @@ func TestSlowGradeFromCasterLevel(t *testing.T) {
 	}
 }
 
-// A blocked hit rolls only when the skill carries stun.
-func TestBlockedHitNeedsStun(t *testing.T) {
-	random := &scriptedRandom{chance: map[uint32]bool{0x04000000: true, 0x0f000000: true}}
-	p := params(0x6275, 10, 30, 5)
-	if len(Roll(RollInput{Params: p, Blocked: true}, random)) != 0 {
-		t.Fatal("blocked hit rolled")
-	}
-	i, _ := SourceIndex(0x7374)
-	p.Params[i] = Param{Present: true, Args: [6]uint32{1000, 50, 1}}
-	if len(Roll(RollInput{Params: p, Blocked: true}, random)) != 2 {
-		t.Fatal("stun skill must roll every status on block")
+/*
+================
+TestWallContextSuppressesStunAndMagicalStatusRolls
+
+590680's sixth argument points to the Force wall parameters. Ordinary hit
+flags and the true type-two block branch are independent of that context.
+================
+*/
+func TestWallContextSuppressesStunAndMagicalStatusRolls(t *testing.T) {
+	for _, mask := range []uint32{0, 4, 8, 12} {
+		for _, stun := range []bool{false, true} {
+			random := &scriptedRandom{chance: map[uint32]bool{0x04000000: true, 0x0f000000: true}}
+			p := params(0x6275, 10, 30, 5)
+			if stun {
+				i, _ := SourceIndex(0x7374)
+				p.Params[i] = Param{Present: true, Args: [6]uint32{1000, 50, 1}}
+			}
+			want := 1
+			if mask&8 != 0 && !stun {
+				want = 0
+			}
+			got := Roll(RollInput{Params: p, WallMask: &mask}, random)
+			if len(got) != want {
+				t.Fatalf("wall %x stun %v: %+v", mask, stun, got)
+			}
+			for _, record := range got {
+				if record.Status == Stun {
+					t.Fatal("wall accepted stun")
+				}
+			}
+			if stun && len(Roll(RollInput{Params: p}, random)) != 2 {
+				t.Fatal("unwalled stun was suppressed")
+			}
+			if len(Roll(RollInput{Params: p, SkipGroup: true}, random)) != 0 {
+				t.Fatal("blocked impact rolled statuses")
+			}
+		}
 	}
 }
 
-// The time bomb draws rand() before its probability roll and picks one of
-// the nonzero duration bytes.
+/*
+================
+TestTimeBombDrawsRandBeforeRoll
+
+The time bomb draws rand() before its probability roll and picks one of
+the nonzero duration bytes.
+================
+*/
 func TestTimeBombDrawsRandBeforeRoll(t *testing.T) {
 	random := &scriptedRandom{chance: map[uint32]bool{0x19000000: true}, rand: 4}
 	p := params(0x7462, 0x0000050a, 50, 2, 300)
@@ -182,8 +404,14 @@ func TestTimeBombDrawsRandBeforeRoll(t *testing.T) {
 	}
 }
 
-// 4A4270: an active slot accepts only a strictly stronger level/grade; the
-// refreshed flag is set even when the source then fails to resolve.
+/*
+================
+TestApplyReplacementRule
+
+4A4270: an active slot accepts only a strictly stronger level/grade; the
+refreshed flag is set even when the source then fails to resolve.
+================
+*/
 func TestApplyReplacementRule(t *testing.T) {
 	var b Block
 	o := &fakeOwner{alive: true, monster: true, block: &b, hp: 100, maxHP: 100}
@@ -210,7 +438,13 @@ func TestApplyReplacementRule(t *testing.T) {
 	}
 }
 
-// 4A4390 expires strictly after the duration and republishes the mask.
+/*
+================
+TestUpdateExpiresAfterDuration
+
+4A4390 expires strictly after the duration and republishes the mask.
+================
+*/
 func TestUpdateExpiresAfterDuration(t *testing.T) {
 	var b Block
 	o := &fakeOwner{alive: true, monster: true, block: &b}
@@ -227,8 +461,14 @@ func TestUpdateExpiresAfterDuration(t *testing.T) {
 	}
 }
 
-// Burn ticks immediately, then every strictly-more-than 2000 ms; its damage
-// divides the table value by the magical-parry factor.
+/*
+================
+TestBurnTicks
+
+Burn ticks immediately, then every strictly-more-than 2000 ms; its damage
+divides the table value by the magical-parry factor.
+================
+*/
 func TestBurnTicks(t *testing.T) {
 	var b Block
 	o := &fakeOwner{alive: true, monster: true, block: &b, hp: 1000, params: map[uint16]float32{8: 50}}
@@ -244,8 +484,14 @@ func TestBurnTicks(t *testing.T) {
 	}
 }
 
-// Poison never kills and never credits a dead source; bleeding keeps credit
-// for a dead source only on a lethal tick.
+/*
+================
+TestDamageOverTimeCredit
+
+Poison never kills and never credits a dead source; bleeding keeps credit
+for a dead source only on a lethal tick.
+================
+*/
 func TestDamageOverTimeCredit(t *testing.T) {
 	var b Block
 	o := &fakeOwner{alive: true, monster: true, block: &b, hp: 30, sourceDead: true}
@@ -267,8 +513,14 @@ func TestDamageOverTimeCredit(t *testing.T) {
 	}
 }
 
-// Frostbite owns the movement factors; slow applies only without it and
-// re-applies once frostbite has ended (4A4A90 event 1 with owner 1).
+/*
+================
+TestFrostbiteAndSlowShareMovement
+
+Frostbite owns the movement factors; slow applies only without it and
+re-applies once frostbite has ended (4A4A90 event 1 with owner 1).
+================
+*/
 func TestFrostbiteAndSlowShareMovement(t *testing.T) {
 	var b Block
 	o := &fakeOwner{alive: true, monster: true, block: &b, params: map[uint16]float32{0x17: 20, 0x18: 60, 0x8c: 100}}
@@ -294,15 +546,21 @@ func TestFrostbiteAndSlowShareMovement(t *testing.T) {
 	}
 }
 
-// Damage frees root; a hit wakes sleep and breaks stun at 25 %, unless a
-// time bomb is attached.
+/*
+================
+TestBreakOnHit
+
+Damage frees root; a hit wakes sleep and breaks stun at 25 %, unless a
+time bomb is attached.
+================
+*/
 func TestBreakOnHit(t *testing.T) {
 	var b Block
 	o := &fakeOwner{alive: true, monster: true, block: &b, roll: true}
 	b.Apply(o, Record{Status: Root, Grade: 1, DurationMs: 9000}, 0)
 	b.Apply(o, Record{Status: Sleep, Grade: 1, DurationMs: 9000}, 0)
 	b.Apply(o, Record{Status: TimeBomb, Grade: 1, DurationMs: 9000}, 0)
-	b.BreakOnHit(o)
+	b.BreakOnHit(o, HitContext{Magical: true, Attack: true})
 	if b.Has(Root) || !b.Has(Sleep) {
 		t.Fatal("time bomb must shield sleep but not root")
 	}
@@ -310,13 +568,19 @@ func TestBreakOnHit(t *testing.T) {
 	if b.Slots[TimeBomb].Retired != true || o.detonations != 0 {
 		t.Fatal("cured bomb detonated")
 	}
-	b.BreakOnHit(o)
+	b.BreakOnHit(o, HitContext{Magical: true, Attack: true})
 	if b.Has(Sleep) {
 		t.Fatal("hit did not wake sleep")
 	}
 }
 
-// Grade bytes follow the mask in ascending bit order over 017FCFC0.
+/*
+================
+TestGradesFollowClientMask
+
+Grade bytes follow the mask in ascending bit order over 017FCFC0.
+================
+*/
 func TestGradesFollowClientMask(t *testing.T) {
 	var b Block
 	o := &fakeOwner{alive: true, monster: true, block: &b}
@@ -395,13 +659,38 @@ func TestGradeRollBleedingVectors(t *testing.T) {
 	}
 }
 
+/*
+================
+chanceProbe
+
+================
+*/
 type chanceProbe struct{ record *int32 }
 
-func (c chanceProbe) Chance(_ uint32, chance int32) bool { *c.record = chance; return true }
-func (c chanceProbe) Rand() int32                        { return 0 }
+/*
+================
+Chance
 
-// Vectors carried over from the former combat.CurseParameters port: the
-// Impotent roll shares the grade-shape duration/chance scaling.
+================
+*/
+func (c chanceProbe) Chance(_ uint32, chance int32) bool { *c.record = chance; return true }
+
+/*
+================
+Rand
+
+================
+*/
+func (c chanceProbe) Rand() int32 { return 0 }
+
+/*
+================
+TestCurseRollVectors
+
+Vectors carried over from the former combat.CurseParameters port: the
+Impotent roll shares the grade-shape duration/chance scaling.
+================
+*/
 func TestCurseRollVectors(t *testing.T) {
 	for _, tc := range []struct {
 		level    uint8

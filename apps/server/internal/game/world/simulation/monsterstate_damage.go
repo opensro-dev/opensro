@@ -125,6 +125,7 @@ MonsterDamagePlan
 ================
 */
 type MonsterDamagePlan struct {
+	StatusHit abnormal.HitContext
 	// Abnormal holds the statuses 590680 rolled for this impact, applied
 	// only if the monster survives it (593F0C after 4FC).
 	Abnormal []abnormal.Record

@@ -75,8 +75,19 @@ func skillActionReach(skill enterworld.SkillRow, loadout combat.Loadout, caster 
 		}
 	}
 	cut, _ := caster.Param(0xb7)
-	reach = float32((1 - float64(cut)/100) * float64(reach))
-	return simulation.ActionReach(reach)
+	return reducedActionReach(reach, cut)
+}
+
+/*
+================
+reducedActionReach
+
+4ADAB8..4ADB4E applies Myopia after the skill and keeper range contributions.
+Players, monsters and their COS targets share the same float store boundary.
+================
+*/
+func reducedActionReach(reach, reduction float32) simulation.ActionReach {
+	return simulation.ActionReach(float32((1 - float64(reduction)/100) * float64(reach)))
 }
 
 /*
@@ -351,7 +362,7 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 	intent := basicAttackIntent{
 		DivisionID: divisionID, CharacterName: snapshot.Name,
 		TargetGid: engage.TargetGid, SkillID: skill.ID,
-		ActionReach: rt.playerActionReach(divisionID, snapshot, skill, loadout), CooldownMs: int64(skill.CoolTimeMs),
+		ActionReach: rt.playerActionReach(divisionID, snapshot, skill, loadout), CooldownMs: int64(rt.playerSkillCooldown(divisionID, snapshot, skill)),
 	}
 	rt.setCombatIntent(intent)
 	return rt.advanceBasicAttackIntent(character, intent, nowMs)
@@ -531,7 +542,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		}
 		return prependOpResult(combatTransition, result)
 	}
-	intent.CooldownMs = int64(skill.CoolTimeMs)
+	intent.CooldownMs = int64(rt.playerSkillCooldown(intent.DivisionID, snapshot, skill))
 	intent.NextActionMs = nowMs + intent.CooldownMs
 	rt.setCombatIntent(intent)
 	return prependOpResult(combatTransition, result)

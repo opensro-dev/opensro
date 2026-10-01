@@ -143,9 +143,9 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 		value := *displacement
 		committed = &value
 	}
-	// 593BEF: a damaging result breaks root/sleep/stun, then 593F0C applies
-	// the statuses this hit rolled, both only on a surviving actor.
-	effects := s.applyAbnormalLocked(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, ground: s.ground, instance: &instance, now: nowMs, sources: plan.AbnormalSources}, damage > 0, plan.Abnormal)
+	// Preserve the formula's magical lane and execution selector through
+	// commit; neither can be recovered from the final HP debit (58F491/593BEF).
+	effects := s.applyAbnormalLocked(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, ground: s.ground, instance: &instance, now: nowMs, sources: plan.AbnormalSources}, plan.StatusHit, plan.Abnormal)
 	state.instances.set(gid, instance)
 	result := MonsterDamageResult{Population: state.lease, Instance: instance, BeforeHP: before, CurrentHP: instance.CurrentHP, Damage: damage, Applied: applied, Fatal: before > 0 && instance.CurrentHP == 0, Knockdown: committed, Abnormal: effects}
 	if knockback != nil {

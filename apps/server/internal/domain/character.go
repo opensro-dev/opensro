@@ -283,6 +283,9 @@ type Character struct {
 	OffensiveSkillCooldowns map[uint32]int64 `json:"offensiveSkillCooldowns,omitempty"`
 	// Native nonzero CoolTimeGroup shares one deadline across skill families.
 	SharedSkillCooldowns map[uint8]int64 `json:"sharedSkillCooldowns,omitempty"`
+	// The native reuse manager also retains one action-recovery deadline.
+	// Different skill groups cannot bypass it at the execution phase.
+	SkillActionRecoveryUntilMs int64 `json:"skillActionRecoveryUntilMs,omitempty"`
 
 	// ItemUseCooldowns holds absolute server deadlines for native recovery
 	// categories 1/2/3 (HP/MP/universal), independent of bag slots and item IDs.

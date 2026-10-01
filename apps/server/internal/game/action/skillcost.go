@@ -66,8 +66,14 @@ func hpCostRefusal(currentHP, maxHP int64, skill enterworld.SkillRow) uint16 {
 	return 0
 }
 
-// offensiveResourceCost is the HP check, then resourceCostAt on the
-// caster's keeper maximum (param 4) and stored current MP.
+/*
+================
+offensiveResourceCost
+
+offensiveResourceCost is the HP check, then resourceCostAt on the
+caster's keeper maximum (param 4) and stored current MP.
+================
+*/
 func (rt *Runtime) offensiveResourceCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, uint16) {
 	maxHP, maxMP, currentHP, currentMP := rt.playerKeeperVitals(division, c)
 	if refusal := hpCostRefusal(currentHP, maxHP, skill); refusal != 0 {
@@ -76,7 +82,13 @@ func (rt *Runtime) offensiveResourceCost(division string, c *enterworld.Characte
 	return resourceCostAt(currentMP, maxMP, skill)
 }
 
-// offensiveCost is the full check for a new cast: data, cooldown, then MP.
+/*
+================
+offensiveCost
+
+offensiveCost is the full check for a new cast: data, cooldown, then MP.
+================
+*/
 func (rt *Runtime) offensiveCost(division string, c *enterworld.Character, skill enterworld.SkillRow, nowMs int64) (int64, uint16) {
 	if !skill.Consumption.Pinned || skill.Group == 0 || nowMs < 0 {
 		return 0, 0x3003
@@ -97,11 +109,15 @@ deadline itself is already available.
 ==================
 */
 func skillCoolingDown(c *enterworld.Character, skill enterworld.SkillRow, nowMs int64) bool {
-	if c.OffensiveSkillCooldowns[skill.Group] > nowMs {
-		return true
+	// 64C1CD bypasses both maps for an authored zero duration. A shared
+	// group selects its own map; it does not also consult the skill map.
+	if skill.CoolTimeMs == 0 {
+		return false
 	}
-	shared := skill.CoolTimeMs > 0 && skill.CoolTimeGroup != 0
-	return shared && c.SharedSkillCooldowns[skill.CoolTimeGroup] > nowMs
+	if skill.CoolTimeGroup != 0 {
+		return c.SharedSkillCooldowns[skill.CoolTimeGroup] > nowMs
+	}
+	return c.OffensiveSkillCooldowns[skill.Group] > nowMs
 }
 
 /*
@@ -132,12 +148,24 @@ func (rt *Runtime) offensivePhaseCost(division string, c *enterworld.Character, 
 	return skillCharge{mp: cost, hp: rt.preparedExecutionHPCost(division, c, skill)}, 0
 }
 
-// skillCharge is the prepared snapshot 58312C stores on the context: HP at
-// +0x10, MP at +0x14. Release charges it as prepared.
+/*
+================
+skillCharge
+
+skillCharge is the prepared snapshot 58312C stores on the context: HP at
++0x10, MP at +0x14. Release charges it as prepared.
+================
+*/
 type skillCharge struct{ mp, hp int64 }
 
-// preparedExecutionHPCost is 58312C..5831A9: the flat word plus the percent
-// of CURRENT HP (the admission used maximum HP), truncated.
+/*
+================
+preparedExecutionHPCost
+
+preparedExecutionHPCost is 58312C..5831A9: the flat word plus the percent
+of CURRENT HP (the admission used maximum HP), truncated.
+================
+*/
 func (rt *Runtime) preparedExecutionHPCost(division string, c *enterworld.Character, skill enterworld.SkillRow) int64 {
 	cost := int64(skill.Consumption.HP)
 	if skill.Consumption.HPPercent != 0 {
@@ -187,8 +215,14 @@ CHARGING
 ===============================================================================
 */
 
-// commitOffensivePhaseCost charges a phase: a released cast pays MP only,
-// a fresh cast also starts its cooldown.
+/*
+================
+commitOffensivePhaseCost
+
+commitOffensivePhaseCost charges a phase: a released cast pays MP only,
+a fresh cast also starts its cooldown.
+================
+*/
 func (rt *Runtime) commitOffensivePhaseCost(division string, c *enterworld.Character, skill enterworld.SkillRow, cost skillCharge, now int64, prepared bool) {
 	if prepared {
 		rt.commitOffensiveResources(division, c, cost)
@@ -197,13 +231,25 @@ func (rt *Runtime) commitOffensivePhaseCost(division string, c *enterworld.Chara
 	rt.commitOffensiveCost(division, c, skill, cost, now)
 }
 
+/*
+================
+commitOffensiveCost
+
+================
+*/
 func (rt *Runtime) commitOffensiveCost(division string, c *enterworld.Character, skill enterworld.SkillRow, cost skillCharge, nowMs int64) {
 	rt.commitOffensiveResources(division, c, cost)
-	registerOffensiveCooldown(c, skill, nowMs)
+	rt.registerPlayerSkillCooldown(division, c, skill, nowMs)
 }
 
-// commitOffensiveResources is 593558 -> 4A8770: MP through ConsumeMana, HP
-// clamped to leave 1 (a skill's HP cost never kills).
+/*
+================
+commitOffensiveResources
+
+commitOffensiveResources is 593558 -> 4A8770: MP through ConsumeMana, HP
+clamped to leave 1 (a skill's HP cost never kills).
+================
+*/
 func (rt *Runtime) commitOffensiveResources(division string, c *enterworld.Character, cost skillCharge) {
 	_, maxMP, currentHP, currentMP := rt.playerKeeperVitals(division, c)
 	mp := int64(combat.ConsumeMana(uint32(currentMP), uint32(maxMP), int32(cost.mp)))
@@ -253,7 +299,13 @@ func registerOffensiveCooldown(c *enterworld.Character, skill enterworld.SkillRo
 	}
 }
 
-// offensiveRefusal is the cast result (wire.OpSkillCastResult) {2, code}.
+/*
+================
+offensiveRefusal
+
+offensiveRefusal is the cast result (wire.OpSkillCastResult) {2, code}.
+================
+*/
 func offensiveRefusal(code uint16) OpResult {
 	payload := wire.NewWriter(2).U8(2).U8(uint8(code)).Payload()
 	return OpResult{Frames: []wire.Frame{{Opcode: wire.OpSkillCastResult, Payload: payload}}}

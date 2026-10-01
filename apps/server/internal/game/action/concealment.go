@@ -285,12 +285,28 @@ naming every ended instance. The caller holds c's door.
 ==================
 */
 func (rt *Runtime) publishEndedEffects(division string, c *enterworld.Character, ended []statuseffect.Effect, now int64) {
+	public, actor := rt.finishEndedEffects(division, c, ended, now)
+	rt.publishBodyStatus(division, c.Name, public)
+	if len(actor) != 0 && rt.PushCharacterFrames != nil {
+		rt.PushCharacterFrames(division, c.Name, actor)
+	}
+}
+
+/*
+================
+finishEndedEffects
+
+Commit teardown through existing lifecycle owners and collect its packets.
+Status callbacks call this under the character door, then publish after the
+door closes; event-driven callers retain their existing publication wrapper.
+================
+*/
+func (rt *Runtime) finishEndedEffects(division string, c *enterworld.Character, ended []statuseffect.Effect, now int64) (public, actor []wire.Frame) {
 	if len(ended) == 0 {
-		return
+		return nil, nil
 	}
 	rt.retireSkillJobs(c, ended)
 	gid := enterworld.ObjectIDForCharacter(c)
-	var public []wire.Frame
 	stats := false
 	tokens := make([]uint32, 0, len(ended))
 	for _, e := range ended {
@@ -305,9 +321,9 @@ func (rt *Runtime) publishEndedEffects(division string, c *enterworld.Character,
 	if payload, err := (wire.EndedEffectInstances{InstanceTokens: tokens}).Encode(); err == nil {
 		public = append(public, wire.Frame{Opcode: wire.OpEndedEffectInstances, Payload: payload})
 	}
-	rt.publishBodyStatus(division, c.Name, public)
-	if stats && rt.PushCharacterFrames != nil {
+	if stats {
 		hp, mp := rt.clampStoredGaugeToKeeper(division, c)
-		rt.PushCharacterFrames(division, c.Name, rt.gaugeDropFrames(division, c, hp, mp, true))
+		actor = rt.gaugeDropFrames(division, c, hp, mp, true)
 	}
+	return public, actor
 }

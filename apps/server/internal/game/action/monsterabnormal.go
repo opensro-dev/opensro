@@ -35,6 +35,19 @@ type monsterAbnormalContext struct{ rt *Runtime }
 
 /*
 ================
+monsterActionReach
+
+Use the attacker's live keeper for both pursuit and final hit admission.
+Monster skills author their reach; player equipment cannot contribute to it.
+================
+*/
+func (rt *Runtime) monsterActionReach(instance monster.Instance, skill enterworld.SkillRow) simulation.ActionReach {
+	cut := (monsterAbnormalContext{rt}).Param(instance, 0xb7)
+	return reducedActionReach(float32(skill.ActionRange), cut)
+}
+
+/*
+================
 caster
 
 Resolve a player source by durable name, then reject a stale runtime GID.
@@ -129,7 +142,9 @@ func (c monsterAbnormalContext) Param(instance monster.Instance, id uint16) floa
 	case id == 0x8c:
 		base = 100
 	case id >= 0x1b && id <= 0x20:
-		base = float32(instance.Ref.ElementResist[[...]int{0, 1, 3, 2, 4, 5}[id-0x1b]])
+		// The reference loader already converts authored columns to keeper
+		// order. Swapping again gives burn the shock resistance and vice versa.
+		base = float32(instance.Ref.ElementResist[id-abnormalElementResistBase])
 	}
 	if instance.Abnormal == nil {
 		return base
@@ -143,6 +158,23 @@ func (c monsterAbnormalContext) Param(instance monster.Instance, id uint16) floa
 		return base
 	}
 	return value
+}
+
+/*
+================
+RetiresSkill
+
+Reference data is immutable and can be read under the monster transaction.
+Self effects are installed instances, not the pending current cast; that
+cast is withdrawn by the action owner's cancellation publication.
+================
+*/
+func (c monsterAbnormalContext) RetiresSkill(skillID uint32, all bool) bool {
+	if c.rt.deps.SkillData() == nil {
+		return false
+	}
+	row, exists := c.rt.deps.SkillData().SkillByID(skillID)
+	return exists && row.RetiresForAbnormal(all, false)
 }
 
 /*
@@ -203,19 +235,18 @@ rollPlayerOnMonster
 rollPlayerOnMonster ports 590680 for a player's hit on a monster target.
 ================
 */
-func (rt *Runtime) rollPlayerOnMonster(division string, c *enterworld.Character, params *abnormal.SkillParams, target monster.Instance, blocked bool) ([]abnormal.Record, error) {
+func (rt *Runtime) rollPlayerOnMonster(division string, c *enterworld.Character, params *abnormal.SkillParams, target monster.Instance) ([]abnormal.Record, error) {
 	if params == nil || !params.Present() {
 		return nil, nil
 	}
 	ctx := monsterAbnormalContext{rt}
-	stats, _, err := combat.PlayerStats(c, rt.statCatalogs())
+	stats, _, err := rt.playerCombatStats(division, c)
 	if err != nil {
 		return nil, err
 	}
 	values := stats.SkillParameters
 	in := abnormal.RollInput{
 		Params:      params,
-		Blocked:     blocked,
 		TargetLevel: target.Ref.Level,
 		TargetBonus: ctx.Param(target, 0xa9),
 		CasterLevel: stats.Level,
@@ -252,6 +283,13 @@ func (rt *Runtime) monsterAbnormalFrames(division string, instance monster.Insta
 	var frames []wire.Frame
 	if effects.CancelActions {
 		frames = append(frames, rt.interruptMonsterCast(division, instance.Gid)...)
+	}
+	if len(effects.EndedSkills) != 0 {
+		payload, err := (wire.EndedEffectInstances{InstanceTokens: effects.EndedSkills}).Encode()
+		if err != nil {
+			panic(err)
+		}
+		frames = append(frames, wire.Frame{Opcode: wire.OpEndedEffectInstances, Payload: payload})
 	}
 	if effects.Halted != nil {
 		frames = append(frames, wire.Frame{Opcode: 0xB2F5, Payload: simulation.MonsterCorrectionPayload(instance.Gid, *effects.Halted)})
@@ -351,8 +389,8 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 		// 52A33D emits 3058 privately to the credited source; v1.150's
 		// handler is 3128 -> 74FE80 (gid, raw damage). The detonation has its
 		// own public presentation below.
-		if source := ctx.caster(division, hit.SourceGID, hit.SourceName); source != nil && hit.Credited && hit.Reason == 2 {
-			send(source.ID, wire.Frame{Opcode: 0x3128, Payload: wire.NewWriter(8).U32(gid).U32(hit.Damage).Payload()})
+		if source := ctx.caster(division, hit.SourceGID, hit.SourceName); source != nil && hit.Credited && hit.Reason == abnormalDamageOverTimeReason {
+			send(source.ID, abnormalDamageFrame(gid, hit.Damage))
 		}
 	}
 	for _, slot := range plan.Effects.Detonations {

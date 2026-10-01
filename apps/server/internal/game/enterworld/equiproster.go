@@ -11,10 +11,17 @@ package enterworld
 import (
 	"strconv"
 
+	"opensro.online/server/internal/game/world/monster"
+
 	log "github.com/sirupsen/logrus"
 )
 
 // ItemRef is the typed server projection of one v1.150 itemdata row.
+/*
+================
+ItemRef
+================
+*/
 type ItemRef struct {
 	DescriptionSymbol string
 	Icon              string
@@ -121,6 +128,11 @@ type ItemRef struct {
 
 // TypeFlags packs TypeID1..4 exactly as the native RefItemData word the
 // parser gates on: TID1<<2 | TID2<<5 | TID3<<7 | TID4<<11.
+/*
+================
+TypeFlags
+================
+*/
 func (r *ItemRef) TypeFlags() uint16 {
 	return uint16(((r.TypeIDs[0] << 2) | (r.TypeIDs[1] << 5) | (r.TypeIDs[2] << 7) | (r.TypeIDs[3] << 11)) & 0xffff)
 }
@@ -150,6 +162,9 @@ sub_692cb0 treats a nonzero value as the mounted-attack gate.
 ==================
 */
 type CharacterRef struct {
+	// Parameters shares the RefObjChar tail with monsters, not the rider's
+	// player keeper. The enclosing reference owns identity and movement.
+	Parameters                 monster.MonsterRef
 	RefObjID                   uint32
 	TidWord                    uint16
 	Codename                   string
@@ -409,6 +424,11 @@ func copyMagicOptions(options []uint64) []uint64 {
 	return out
 }
 
+/*
+================
+coercePlainInt
+================
+*/
 func coercePlainInt(value, min, max int64) int64 {
 	if value < min {
 		return min
@@ -421,6 +441,11 @@ func coercePlainInt(value, min, max int64) int64 {
 
 // InventoryWireItems ports missionInventoryWireItems: the persisted rows
 // re-armed for the binary writer (decimal-string variance -> u64).
+/*
+================
+InventoryWireItems
+================
+*/
 func InventoryWireItems(rows []InventoryRow) []WireItem {
 	out := make([]WireItem, 0, len(rows))
 	for _, row := range rows {

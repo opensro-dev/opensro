@@ -46,13 +46,14 @@ The phase argument of 58D8F0:
 type admitMask uint16
 
 const (
-	admitCooldown  admitMask = 0x01 // 58E08C -> 0x3005
-	admitReplace   admitMask = 0x02 // 58E2BC -> 0x300C
-	admitEquipment admitMask = 0x04 // 58E115 -> 58D480
-	admitTargets   admitMask = 0x08 // 58E13E -> 58CC70
-	admitResources admitMask = 0x10 // 58E1AC: HP 0x3013, MP 0x3004
-	admitAmmo      admitMask = 0x20 // 58E32D -> 0x300E, cnsm +0x2A0
-	admitRange     admitMask = 0x40 // 58E3C7: a clear line to each target
+	admitCooldown       admitMask = 0x01 // 58E08C -> 0x3005
+	admitReplace        admitMask = 0x02 // 58E2BC -> 0x300C
+	admitEquipment      admitMask = 0x04 // 58E115 -> 58D480
+	admitTargets        admitMask = 0x08 // 58E13E -> 58CC70
+	admitResources      admitMask = 0x10 // 58E1AC: HP 0x3013, MP 0x3004
+	admitAmmo           admitMask = 0x20 // 58E32D -> 0x300E, cnsm +0x2A0
+	admitRange          admitMask = 0x40 // 58E3C7: a clear line to each target
+	admitActionRecovery admitMask = 0x80 // 64C1A0: the common action-recovery timer
 
 	admitCommand   admitMask = 0x37
 	admitExecution admitMask = 0xffff
@@ -186,6 +187,11 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 	}
 
 	if mask&admitCooldown != 0 && prepared == nil && skillCoolingDown(c, skill, now) {
+		return 0x3005
+	}
+	if mask&(admitCooldown|admitActionRecovery) == admitCooldown|admitActionRecovery && prepared == nil &&
+		skill.CoolTimeMs != 0 && skill.ActionKind == 2 && skill.ActionDurationMs > 0 && skill.ChainNext == 0 &&
+		now < c.SkillActionRecoveryUntilMs {
 		return 0x3005
 	}
 

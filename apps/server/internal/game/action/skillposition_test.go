@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+skillposition_test.go - Ghost Walk destination and recovery admission
+
+Exercise the authority boundary with shipped movement ranks so position
+validation and reuse timing remain part of the same accepted action.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -12,6 +23,11 @@ import (
 	"testing"
 )
 
+/*
+================
+TestGhostWalkShippedRanksAndAuthority
+================
+*/
 func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "skilldata.txt")); os.IsNotExist(err) {
@@ -103,7 +119,7 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 				case "cooldown-group":
 					c.SharedSkillCooldowns = map[uint8]int64{skill.CoolTimeGroup: clock.NowMs() + 5000}
 				case "cooldown":
-					c.OffensiveSkillCooldowns = map[uint32]int64{skill.Group: clock.NowMs() + 5000}
+					registerOffensiveCooldown(c, skill, clock.NowMs())
 				}
 				beforeMP := mp
 				beforeCooldown := c.OffensiveSkillCooldowns[skill.Group]
@@ -138,6 +154,11 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPositionSkillRangeUses3DAndRegionFrames
+================
+*/
 func TestPositionSkillRangeUses3DAndRegionFrames(t *testing.T) {
 	from := simulation.Spawn{RegionID: 0x61a8, X: 1900, Y: 10, Z: 100}
 	to := simulation.Spawn{RegionID: 0x61a9, X: 280, Y: 410, Z: 100}

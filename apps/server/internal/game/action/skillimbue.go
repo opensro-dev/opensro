@@ -20,6 +20,11 @@ import (
 
 // A zero-action-duration skill still owns admission, MP, cooldown, an accepted
 // action and an independently timed effect. Native 5830B0 dispatches category 3.
+/*
+================
+acceptInstantSelfEffect
+================
+*/
 func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow) OpResult {
 	instantShape := (skill.InstantSelfEffectPinned || skill.Imbue.Pinned) && !skill.ChainSub
 	selfOnly := !cast.HasTarget && !cast.HasGroundTarget
@@ -86,6 +91,11 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	return OpResult{Frames: frames, Broadcast: broadcast, ActorPrivate: []wire.Frame{vitals}}
 }
 
+/*
+================
+activeWeaponImbue
+================
+*/
 func (rt *Runtime) activeWeaponImbue(division, name string, nowMs int64) (enterworld.SkillImbue, abnormal.SkillParams) {
 	if rt.effects == nil || rt.deps.SkillData() == nil {
 		return enterworld.SkillImbue{}, abnormal.SkillParams{}
@@ -139,6 +149,8 @@ func (rt *Runtime) resolvePlayerImpact(division, name string, skill enterworld.S
 		return combat.Result{}, err
 	}
 	result.Damage = uint32(min(uint64(wire.MaxSkillActionDamage), uint64(result.Damage)+uint64(uint16(extra.Damage))*uint64(skill.Attack.Value5)/100))
+	// 58F43C adds the imbue's magical word before scaling its damage share.
+	result.MagicalDamage += uint32(uint16(extra.MagicalDamage))
 	// The imbue's bu block is rolled with the hit's statuses in 590680.
 	result.Imbue = imbueAbnormal
 	return result, nil

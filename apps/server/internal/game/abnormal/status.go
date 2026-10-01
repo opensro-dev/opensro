@@ -16,6 +16,11 @@ players through the Owner interface.
 package abnormal
 
 // Status is the native slot index stored at tagSkillStatusEffect+05.
+/*
+================
+Status
+================
+*/
 type Status uint8
 
 const (
@@ -51,6 +56,11 @@ const SlotCount = 32
 
 // Bit is g_adwAbnormalStatusBit (C63EC8): identity except slots 2 and 3,
 // which swap so burn is mask bit 3 and electric shock mask bit 2.
+/*
+================
+Bit
+================
+*/
 func (s Status) Bit() uint32 {
 	switch s {
 	case Burn:
@@ -63,6 +73,11 @@ func (s Status) Bit() uint32 {
 
 // Category is tagSkillStatusEffect+06 (5AA450): 1 for the level-carrying
 // element statuses, 2 for grade-carrying statuses, 0 otherwise.
+/*
+================
+Category
+================
+*/
 func (s Status) Category() uint8 {
 	switch bit := s.Bit(); {
 	case bit&0x3f != 0:
@@ -126,6 +141,11 @@ var Sources = [...]Source{
 const SourceCount = len(Sources)
 
 // SourceIndex maps a skill-parameter tag to its Sources index.
+/*
+================
+SourceIndex
+================
+*/
 func SourceIndex(tag uint32) (int, bool) {
 	for i, s := range Sources {
 		if s.Tag == tag {
@@ -136,6 +156,11 @@ func SourceIndex(tag uint32) (int, bool) {
 }
 
 // Param is one parsed abnormal block: the pointer at its tagRefSkill slot.
+/*
+================
+Param
+================
+*/
 type Param struct {
 	Present bool
 	Args    [6]uint32
@@ -149,6 +174,11 @@ const (
 )
 
 // SkillParams is the skill's complete abnormal authority.
+/*
+================
+SkillParams
+================
+*/
 type SkillParams struct {
 	Params [SourceCount]Param
 	// Pulse is 'puls' (tagRefSkill+384): the tick period copied into
@@ -199,11 +229,21 @@ type EffectArea struct {
 }
 
 // CurePresent reports a curt or curl block. Both null skips 593F50's cure.
+/*
+================
+CurePresent
+================
+*/
 func (p SkillParams) CurePresent() bool {
 	return p.Curt || p.Curl
 }
 
 // Present reports whether the skill carries any abnormal block.
+/*
+================
+Present
+================
+*/
 func (p SkillParams) Present() bool {
 	for _, param := range p.Params {
 		if param.Present {
@@ -213,13 +253,24 @@ func (p SkillParams) Present() bool {
 	return false
 }
 
-// Stun reports tagRefSkill+450, which lets a blocked hit still roll.
+// Stun reports tagRefSkill+450. Its presence bypasses the magical-wall
+// exclusion for other statuses; a wall still excludes Stun itself (591E7C).
+/*
+================
+Stun
+================
+*/
 func (p SkillParams) Stun() bool {
 	i, _ := SourceIndex(0x7374)
 	return p.Params[i].Present
 }
 
 // Param returns the block for one status.
+/*
+================
+Param
+================
+*/
 func (p SkillParams) Param(status Status) (Param, bool) {
 	for i, s := range Sources {
 		if s.Status == status {

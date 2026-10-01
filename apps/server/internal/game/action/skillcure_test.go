@@ -188,6 +188,8 @@ func TestShippedInnocentAreaCuresCasterAndParty(t *testing.T) {
 
 	caster.OffensiveSkillCooldowns = nil
 	caster.SharedSkillCooldowns = nil
+	// Each target-resolution round starts with an independent admission state.
+	caster.SkillActionRecoveryUntilMs = 0
 	caster.CurrentMP = nil
 	rt.clearSkillFinalizes(testDivision, caster.Name)
 	// An equal burn never replaces the shortened one (strictly stronger only),
@@ -303,6 +305,8 @@ func TestShippedInnocentTargetResolution(t *testing.T) {
 
 	caster.OffensiveSkillCooldowns = nil
 	caster.SharedSkillCooldowns = nil
+	// Each target-resolution round starts with an independent admission state.
+	caster.SkillActionRecoveryUntilMs = 0
 	caster.CurrentMP = nil
 	rt.clearSkillFinalizes(testDivision, caster.Name)
 	missing := rt.HandleTargetInteract(testDivision, caster, wire.SkillAction{
@@ -320,6 +324,8 @@ func TestShippedInnocentTargetResolution(t *testing.T) {
 
 	caster.OffensiveSkillCooldowns = nil
 	caster.SharedSkillCooldowns = nil
+	// Each target-resolution round starts with an independent admission state.
+	caster.SkillActionRecoveryUntilMs = 0
 	caster.CurrentMP = nil
 	rt.clearSkillFinalizes(testDivision, caster.Name)
 	const petGID = uint32(9001)
