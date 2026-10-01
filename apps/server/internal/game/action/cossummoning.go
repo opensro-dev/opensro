@@ -24,6 +24,10 @@ import (
 
 const (
 	minimumPersistentSummonLevel        = 5
+	initialAttackCompanionMode   uint32 = 1
+	initialPickupCompanionMode   uint32 = 7
+	initialPickupCompanionSlots  uint8  = 28
+	initialCompanionSatiety      uint16 = 10000
 	cosSummonMinimumLevel        uint8  = 0x6c
 	cosSummonUnavailable         uint8  = 0xa4
 	cosSummonPetLevel            uint8  = 0xa5
@@ -111,11 +115,14 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		return false
 	}
 	if pet == nil {
-		pet = &domain.CharacterCOS{RefObjID: ref.RefObjID, Codename: ref.Codename, Level: ref.Level, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, Satiety: 10000, StateFlags: 1}
-		if ref.InventoryCapacity != 0 {
-			pet.Container = &domain.COSContainer{Capacity: ref.InventoryCapacity}
-		}
+		pet = &domain.CharacterCOS{RefObjID: ref.RefObjID, Codename: ref.Codename, Level: ref.Level, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, Satiety: initialCompanionSatiety, StateFlags: 1, CommandMode: initialAttackCompanionMode}
+		// 440368/440373 initialize pickup/attack modes to 7/1. The database
+		// creation arm overrides reference capacity at 4404B8/4404D1: pickup
+		// pets start with 28 slots, attack pets without a bag. Retained records
+		// bypass this arm so upgrades and player-selected modes survive.
 		if ref.TidWord>>11 == 4 {
+			pet.CommandMode = initialPickupCompanionMode
+			pet.Container = &domain.COSContainer{Capacity: initialPickupCompanionSlots}
 			minutes, present := use.ref.NativeFields.Lookup("itemParam1_29c")
 			if !present || math.IsNaN(minutes) || math.IsInf(minutes, 0) || minutes <= 0 || minutes > math.MaxInt32/60 || math.Trunc(minutes) != minutes {
 				return false
@@ -143,7 +150,7 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	if owner != nil {
 		rt.bindCompanionSession(use.division, owner, pet)
 	}
-	pose := rt.liveSpawn(simulation.WorldKey(use.division, c.Name), c, use.nowMs)
+	pose := rt.companionLiveSpawn(use.division, c, pet, use.nowMs)
 	spawn := wire.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
 		Band: uint8(ref.TidWord >> 11), RefObjID: ref.RefObjID, Gid: gid, BodyStatus: pet.NativeBodyStatus,
 		Position: wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle},

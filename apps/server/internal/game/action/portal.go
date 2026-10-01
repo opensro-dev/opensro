@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+portal.go - authoritative travel and scene re-entry
+
+===========================================================================
+*/
 package action
 
 import (
@@ -13,6 +20,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+portalDestination
+================
+*/
 type portalDestination struct {
 	id, ref  uint32
 	code     string
@@ -20,12 +32,30 @@ type portalDestination struct {
 	recall   bool
 	spawn    simulation.Spawn
 }
+
+/*
+================
+portalCondition
+================
+*/
 type portalCondition struct{ kind, minimum, maximum uint32 }
+
+/*
+================
+portalLink
+================
+*/
 type portalLink struct {
 	source, target uint32
 	fee            int64
 	conditions     []portalCondition
 }
+
+/*
+================
+portalCatalog
+================
+*/
 type portalCatalog struct {
 	destinations map[uint32]portalDestination
 	sources      map[uint32]uint32
@@ -34,6 +64,11 @@ type portalCatalog struct {
 
 // Both tables remain server-owned. The request carries neither a price nor a
 // position. Conditions are the ordered triples consumed by native 513A70.
+/*
+================
+loadPortalCatalog
+================
+*/
 func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	c := &portalCatalog{destinations: map[uint32]portalDestination{}, sources: map[uint32]uint32{}, links: map[[2]uint32]portalLink{}}
 	number := func(s string) (uint32, error) { v, e := strconv.ParseUint(s, 10, 32); return uint32(v), e }
@@ -152,10 +187,20 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	return c, nil
 }
 
+/*
+================
+portalFailure
+================
+*/
 func portalFailure(code byte) OpResult {
 	return OpResult{Frames: []wire.Frame{{Opcode: 0xb495, Payload: []byte{2, code}}}}
 }
 
+/*
+================
+error
+================
+*/
 func (rt *Runtime) ConfigurePortals(dir string) error {
 	catalog, err := loadPortalCatalog(dir)
 	if err != nil {
@@ -179,6 +224,11 @@ func (rt *Runtime) ConfigurePortals(dir string) error {
 // v1.150 6FEF10 sends a runtime source identity and an authored destination
 // id. 75B930 consumes [2,error-byte] refusals. The NPC source must still be
 // selected and resident when the authoritative operation commits.
+/*
+================
+OpResult
+================
+*/
 func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payload []byte) OpResult {
 	if c == nil {
 		return portalFailure(2)
@@ -281,8 +331,10 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(failure)
 	}
 	rt.endTransformForLoading(division, c)
+	previousPets := rt.relocateReturningPet(division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(division, c.Name)
 	if !accepted || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {
+		rt.restoreCompanionRelocation(previousPets)
 		rt.deps.Update(c, "portal-entry-rollback", func() bool {
 			rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
 			c.World = previousWorld
@@ -298,13 +350,17 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 	rt.clearSkillFinalizes(division, c.Name)
 	rt.clearCompoundJob(compoundKey{division, c.Name})
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
-	rt.relocateReturningPet(division, c, destination)
 	return OpResult{Frames: missionReentryFrames(packets), Broadcast: []wire.Frame{{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()}}}
 }
 
 // 4F2D05: the quest bit blocks buildings and the special GATE_TD route;
 // it does not turn ordinary ferries into town gates. 513A70 separately checks
 // the authored transport-COS restriction on ferry links.
+/*
+================
+portalAdmission
+================
+*/
 func portalAdmission(c *enterworld.Character, source portalDestination, link portalLink, questMask uint32, transportCOS bool) byte {
 	if !enterworld.CharacterAlive(c) || c.DeletePending {
 		return 2

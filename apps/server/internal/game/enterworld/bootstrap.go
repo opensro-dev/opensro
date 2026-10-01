@@ -136,11 +136,6 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 		}
 	}
 
-	if deps.NormalizeEntryQuests != nil {
-		if err := deps.NormalizeEntryQuests(character); err != nil {
-			return Failure(nativeErrorInvalidRequest, "invalidQuestState: "+err.Error())
-		}
-	}
 	if deps.PrepareEntry != nil {
 		if err := deps.PrepareEntry(divisionID, character.Name); err != nil {
 			return Failure(nativeErrorInvalidRequest, "worldAdmission: "+err.Error())
@@ -148,6 +143,14 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	}
 	if deps.RestoreEntryEffects != nil {
 		deps.RestoreEntryEffects(divisionID, character.Name)
+	}
+	// Admission can retire an expired item-owned summon. Serialize the committed
+	// inventory and companion state, not the snapshot taken before restoration.
+	character = readCharacterSnapshot(deps, divisionID, liveCharacter)
+	if deps.NormalizeEntryQuests != nil {
+		if err := deps.NormalizeEntryQuests(character); err != nil {
+			return Failure(nativeErrorInvalidRequest, "invalidQuestState: "+err.Error())
+		}
 	}
 	return buildCharacterProjection(deps, divisionID, character)
 }
@@ -340,24 +343,27 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 			if name == "" {
 				name = ref.Name
 			}
+			position := wire.Position{
+				RegionID: uint16(entry.StartProfile.RegionID),
+				X:        float32(entry.StartProfile.X), Y: float32(entry.StartProfile.Y), Z: float32(entry.StartProfile.Z),
+				Heading: uint16(entry.StartProfile.Angle),
+			}
+			if deps.EntryCompanionSpawn != nil {
+				pose := deps.EntryCompanionSpawn(divisionID, character, cos)
+				position = wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle}
+			}
 			spawnPayload := wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
 				BodyStatus: cos.NativeBodyStatus,
 				Band:       uint8(ref.TidWord >> 11),
 				RefObjID:   cos.RefObjID,
 				Gid:        cos.GID,
-				Position: wire.Position{
-					RegionID: uint16(entry.StartProfile.RegionID & 0xffff),
-					X:        float32(entry.StartProfile.X),
-					Y:        float32(entry.StartProfile.Y),
-					Z:        float32(entry.StartProfile.Z),
-					Heading:  uint16(entry.StartProfile.Angle & 0xffff),
-				},
-				Walk:      ref.WalkSpeed,
-				Run:       ref.RunSpeed,
-				Scale:     ref.Scale,
-				Name:      name,
-				OwnerName: character.Name,
-				OwnerGid:  objectID,
+				Position:   position,
+				Walk:       ref.WalkSpeed,
+				Run:        ref.RunSpeed,
+				Scale:      ref.Scale,
+				Name:       name,
+				OwnerName:  character.Name,
+				OwnerGid:   objectID,
 			})
 			row := NewPacket(OpcodeObjectListChunk, spawnPayload[:len(spawnPayload)-1])
 			activeCOSRows = append(activeCOSRows, row)

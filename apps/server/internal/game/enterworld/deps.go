@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+deps.go - bootstrap dependencies and authority composition
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -12,15 +19,30 @@ import (
 )
 
 // StaticCharacterSource is an in-memory CharacterSource.
+/*
+================
+StaticCharacterSource
+================
+*/
 type StaticCharacterSource map[string][]*Character
 
 // CharactersForDivision returns the division's characters.
+/*
+================
+CharactersForDivision
+================
+*/
 func (s StaticCharacterSource) CharactersForDivision(divisionID string) []*Character {
 	return s[divisionID]
 }
 
 // Deps owns bootstrap composition. Other gameplay packages consume narrow,
 // package-owned ports rather than retaining this concrete type.
+/*
+================
+Deps
+================
+*/
 type Deps struct {
 	BrowserReferences *BrowserReferences
 	Roster            *Roster
@@ -50,6 +72,7 @@ type Deps struct {
 	AdmitCharacterSession  func(divisionID, characterName string, session uint64) error
 	RetireCharacterSession func(divisionID, characterName string, session uint64)
 	EntryMovementSpeeds    func(divisionID, characterName string) (float32, float32)
+	EntryCompanionSpawn    func(string, *Character, *CharacterCOS) simulation.Spawn
 	EntrySkills            func(divisionID, characterName string) []EntrySkill
 	ObjectListRows         func(divisionID string, character *Character, entry *LocalPlayerEntry) []Packet
 	MonsterState           *simulation.MonsterState
@@ -66,7 +89,8 @@ type Deps struct {
 	// TrackTimedWindows hands a character with pet-skill windows to the action
 	// runtime's tick sweep, which alone retires spent rows with the native
 	// zero pair. Without it a window re-raised at world entry would sit at
-	// zero on the client, because sub_6E6AA0 never retires a row itself.
+	// zero on the client: CIFMagicStateBoard_OnUpdate (6E6AA0) does not retire
+	// a kind-3 pet-skill window solely because its timer reached zero.
 	TrackTimedWindows func(divisionID, characterName string)
 	// ExtraMagicOptionIDs names options live item producers can create after
 	// bootstrap. Their definitions must precede the first result body.
@@ -110,6 +134,11 @@ type Deps struct {
 // NpcSpawnPolicy exposes the composition-owned static NPC world through a
 // narrow optional port. Itemops type-asserts this method so detached test
 // dependencies do not need to manufacture world data.
+/*
+================
+NpcSpawnConfig
+================
+*/
 func (d *Deps) NpcSpawnPolicy() NpcSpawnConfig {
 	if d == nil {
 		return NpcSpawnConfig{}
@@ -119,6 +148,11 @@ func (d *Deps) NpcSpawnPolicy() NpcSpawnConfig {
 
 // Mutate routes an accepted single-character mutation through its commit
 // door. Detached unit compositions execute in memory.
+/*
+================
+Mutate
+================
+*/
 func (d *Deps) Mutate(character *Character, label string, mutate func()) {
 	if d.MutateCharacter != nil {
 		d.MutateCharacter(character, label, mutate)
@@ -130,6 +164,11 @@ func (d *Deps) Mutate(character *Character, label string, mutate func()) {
 // Update routes a validate-and-change operation through the conditional
 // character commit door. A false callback result is a refusal: no dirty state
 // and no database transaction are produced.
+/*
+================
+bool
+================
+*/
 func (d *Deps) Update(character *Character, label string, update func() bool) bool {
 	if d.UpdateCharacter != nil {
 		return d.UpdateCharacter(character, label, update)
@@ -149,6 +188,11 @@ func (d *Deps) Update(character *Character, label string, update func() bool) bo
 }
 
 // MutateMany routes a multi-character invariant through one atomic door.
+/*
+================
+MutateMany
+================
+*/
 func (d *Deps) MutateMany(characters []*Character, label string, mutate func()) {
 	if d.MutateCharacters != nil {
 		d.MutateCharacters(characters, label, mutate)
@@ -159,6 +203,11 @@ func (d *Deps) MutateMany(characters []*Character, label string, mutate func()) 
 
 // UpdateMany routes a conditional multi-character invariant through one
 // authority transaction.
+/*
+================
+bool
+================
+*/
 func (d *Deps) UpdateMany(characters []*Character, label string, update func() bool) bool {
 	if d.UpdateCharacters != nil {
 		return d.UpdateCharacters(characters, label, update)
@@ -177,6 +226,11 @@ func (d *Deps) UpdateMany(characters []*Character, label string, update func() b
 }
 
 // Read routes mutable character reads through the authority read door.
+/*
+================
+Read
+================
+*/
 func (d *Deps) Read(divisionID string, read func()) {
 	if d.ReadCharacter != nil {
 		d.ReadCharacter(divisionID, read)
@@ -190,6 +244,11 @@ func (d *Deps) Read(divisionID string, read func()) {
 // use this after their authoritative world mutation so the client enters the
 // same loading transition as a retail region reset instead of receiving only
 // an in-world position correction.
+/*
+================
+ReentryPackets
+================
+*/
 func (d *Deps) ReentryPackets(divisionID, characterName string) ([]Packet, bool) {
 	projection := *d
 	projection.RestoreEntryEffects = nil // Caller already owns the live actor transaction.
@@ -203,11 +262,21 @@ func (d *Deps) ReentryPackets(divisionID, characterName string) ([]Packet, bool)
 
 // PreparedReentry couples the packets to the resolved placement they encode.
 // The action owner commits this placement only after preparation succeeds.
+/*
+================
+PreparedReentry
+================
+*/
 type PreparedReentry struct {
 	Packets []Packet
 	Spawn   simulation.Spawn
 }
 
+/*
+================
+PrepareReentry
+================
+*/
 func (d *Deps) PrepareReentry(divisionID string, character *Character) (PreparedReentry, bool) {
 	if character == nil || character.DeletePending || character.MissionInventory == nil {
 		return PreparedReentry{}, false
@@ -229,6 +298,11 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 	}}, true
 }
 
+/*
+================
+encodeReentry
+================
+*/
 func (d *Deps) encodeReentry(result *BootstrapResult) ([]Packet, bool) {
 	if result == nil || result.NativeResult != nativeResultSuccess {
 		return nil, false
@@ -250,6 +324,11 @@ func (d *Deps) encodeReentry(result *BootstrapResult) ([]Packet, bool) {
 }
 
 // Validate rejects incomplete production composition before gameplay starts.
+/*
+================
+error
+================
+*/
 func (d *Deps) Validate() error {
 	var missing []string
 	require := func(name string, absent bool) {
@@ -280,6 +359,7 @@ func (d *Deps) Validate() error {
 	require("PlayerBaseStats", d.PlayerBaseStats == nil)
 	require("CommunitySeedFramesFor", d.CommunitySeedFramesFor == nil)
 	require("OnWorldBound", d.OnWorldBound == nil)
+	require("EntryCompanionSpawn", d.EntryCompanionSpawn == nil)
 	require("SceneReferenceFrames", d.SceneReferenceFrames == nil)
 
 	if len(missing) > 0 {

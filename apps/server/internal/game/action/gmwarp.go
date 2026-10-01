@@ -71,17 +71,18 @@ func (rt *Runtime) WarpGM(division, name string, p wire.Position) bool {
 		return false
 	}
 	rt.endTransformForLoading(division, c)
+	previousPets := rt.relocateReturningPet(division, c, destination)
 	packets, ok := rt.deps.ReentryPackets(division, name)
 	if ok && len(packets) > 0 && packets[0].NativeOpcode == enterworld.OpcodeResetClient {
 		rt.bindResidentRegion(simulation.WorldKey(division, name), rt.Now().UnixMilli())
 		rt.retireReturnForReentry(division, c)
-		rt.relocateReturningPet(division, c, destination)
 		frames := missionReentryFrames(packets)
 		if snapshot := rt.characterSnapshot(division, c); snapshot != nil && snapshot.NativeBodyStatus != 0 {
 			frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), snapshot.NativeBodyStatus))
 		}
 		rt.PushCharacterFrames(division, name, frames)
 	} else {
+		rt.restoreCompanionRelocation(previousPets)
 		// No partial reset may escape. Restore movement if entry construction
 		// refuses; never leave the actor staring at an unfinished loading screen.
 		rt.deps.Update(c, "gm-warp-rollback", func() bool {

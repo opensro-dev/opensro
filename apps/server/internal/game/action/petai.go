@@ -38,6 +38,7 @@ petSession
 type petSession struct {
 	satiety   companion.SatietyClock
 	session   uint64
+	ready     bool
 	character *enterworld.Character
 	refObjID  uint32
 	follower  *simulation.PetFollower
@@ -65,26 +66,45 @@ func (rt *Runtime) BindPetSession(division string, c *enterworld.Character, sess
 	}
 	unlock := rt.lockDivision(division)
 	defer unlock()
+	rt.bindPetSession(division, c, session, true)
+}
+
+/*
+================
+bindPetSession
+
+Admission already owns the division lock. Bind before bootstrap so its
+object list and subsequent peer publication use the same actor positions.
+================
+*/
+func (rt *Runtime) bindPetSession(division string, c *enterworld.Character, session uint64, ready bool) {
 	key := petOwnerKey{division: division, name: strings.ToLower(c.Name)}
 	rt.petMu.Lock()
 	old := rt.petSessions[key]
 	if old != nil && old.session == session && old.character == c {
+		if ready {
+			for childKey, child := range rt.petSessions {
+				if childKey.division == division && childKey.name == key.name {
+					child.ready = true
+				}
+			}
+		}
 		rt.petMu.Unlock()
 		return
 	}
 	if rt.petSessions == nil {
 		rt.petSessions = make(map[petOwnerKey]*petSession)
 	}
-	state := &petSession{session: session, character: c}
+	state := &petSession{session: session, character: c, ready: ready}
 	rt.petSessions[key] = state
 	rt.petMu.Unlock()
-	rt.deps.Read(division, func() {
-		for _, cos := range c.Companions() {
-			if cos.Summoned {
-				rt.bindCompanionSession(division, state, cos)
-			}
+	var companions []*enterworld.CharacterCOS
+	rt.deps.Read(division, func() { companions = c.Companions() })
+	for _, cos := range companions {
+		if cos.Summoned {
+			rt.bindCompanionSession(division, state, cos)
 		}
-	})
+	}
 }
 
 // Called with the division lock held; the map lock never spans a character
@@ -112,8 +132,8 @@ advancePets
 func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 	rt.petMu.Lock()
 	keys := make([]petOwnerKey, 0, len(rt.petSessions))
-	for key := range rt.petSessions {
-		if key.gid != 0 {
+	for key, state := range rt.petSessions {
+		if key.gid != 0 && state.ready {
 			keys = append(keys, key)
 		}
 	}
@@ -278,7 +298,7 @@ func (rt *Runtime) CompanionPresentations(division, name string) []*simulation.P
 	rt.petMu.Lock()
 	owner := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(name)}]
 	rt.petMu.Unlock()
-	if owner == nil {
+	if owner == nil || !owner.ready {
 		return nil
 	}
 	var result []*simulation.PeerCOS
@@ -387,16 +407,18 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 	old := rt.petSessions[key]
 	if old != nil && old.character == owner.character && old.transportCOS == pet {
 		old.session = owner.session
+		old.ready = owner.ready
 		rt.petMu.Unlock()
 		return old
 	}
-	state := &petSession{session: owner.session, character: owner.character, transportCOS: pet, refObjID: pet.RefObjID}
+	state := &petSession{session: owner.session, ready: owner.ready, character: owner.character, transportCOS: pet, refObjID: pet.RefObjID}
 	if old != nil {
 		state.generation = old.generation + 1
 	}
 	rt.petSessions[key] = state
 	rt.petMu.Unlock()
 	pose := rt.liveSpawn(simulation.WorldKey(division, owner.character.Name), owner.character, rt.Now().UnixMilli())
+	pose = rt.companionAdmissionSpawn(pet, pose)
 	state.transportWorld = simulation.WorldState{Spawn: pose}
 	state.follower = simulation.NewPetFollower(pet.GID, pose)
 	return state
@@ -404,28 +426,59 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 
 // Successful owner re-entry retires motion/pickup from the departed world.
 // The persisted pet identity and inventory survive; the new projection starts
-// at the same admitted destination as its owner, before peer publication.
+// around its owner's admitted destination, before bootstrap publication.
 /*
 ================
 relocateReturningPet
 ================
 */
-func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character, destination simulation.Spawn) {
+func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character, destination simulation.Spawn) map[petOwnerKey]petSession {
 	rt.petMu.Lock()
-	defer rt.petMu.Unlock()
+	previous := make(map[petOwnerKey]petSession)
+	keys := make([]petOwnerKey, 0)
 	for key, state := range rt.petSessions {
 		if key.division != division || key.name != strings.ToLower(c.Name) || key.gid == 0 || state.character != c {
 			continue
 		}
+		previous[key] = *state
+		keys = append(keys, key)
+	}
+	rt.petMu.Unlock()
+	sort.Slice(keys, func(i, j int) bool { return keys[i].gid < keys[j].gid })
+	for _, key := range keys {
+		rt.petMu.Lock()
+		state := rt.petSessions[key]
+		rt.petMu.Unlock()
 		state.pickup = nil
 		state.pickupCommand = false
 		state.public = nil
 		state.generation++
 		state.follower = nil
 		if cos := c.CompanionByGID(key.gid); cos != nil {
-			state.follower = simulation.NewPetFollower(cos.GID, destination)
+			pose := rt.companionAdmissionSpawn(cos, destination)
+			state.follower = simulation.NewPetFollower(cos.GID, pose)
 			state.refObjID = cos.RefObjID
-			state.transportWorld = simulation.WorldState{Spawn: destination}
+			state.transportWorld = simulation.WorldState{Spawn: pose}
+		}
+	}
+	return previous
+}
+
+/*
+================
+restoreCompanionRelocation
+
+Projection can refuse after movement preparation. The division lock keeps
+the old followers quiescent, so restoring them also restores pending pickup
+and generation identity without replaying or cancelling an unrelated job.
+================
+*/
+func (rt *Runtime) restoreCompanionRelocation(previous map[petOwnerKey]petSession) {
+	rt.petMu.Lock()
+	defer rt.petMu.Unlock()
+	for key, state := range previous {
+		if current := rt.petSessions[key]; current != nil {
+			*current = state
 		}
 	}
 }

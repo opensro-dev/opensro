@@ -1,7 +1,10 @@
 # Fortress, event and COS extension — 2026-10-01
 
-Status: implementation in progress on `codex/fortress-event-cos`, based on
-`1f452a2` after the 2026-10-02 rebase. This is not a completion or production-release claim. The user
+Status: summoning/persistence and its shared placement corrections are implemented
+and have passed authenticated browser lifecycle checks on the isolated
+`codex/fortress-event-cos` checkout, which includes main through `263b645`.
+Release preparation is in progress; the broader fortress/event work remains
+incomplete. This is not a production-release claim. The user
 explicitly expanded the abnormal-status audit to include these systems.
 The v1.150 content boundary still applies; the later server supplies rules.
 
@@ -32,7 +35,8 @@ The v1.150 content boundary still applies; the later server supplies rules.
   retains HP/MP, level, experience, name and inventory, clears the summoned
   state, retires pending pickup and follower work, and publishes ordinary
   despawn. Retained dead pets can also be cancelled; follow and pickup still
-  require living pets. This does not yet provide summoner-item resummoning.
+  require living pets. Item-owned resummoning is implemented in the later
+  summoning/persistence continuation below.
 - Fortress begin/end publication is now idempotent and ordered with entering
   players' state seeds. Client `7E2100` disables flags by XOR, so duplicate
   end messages reactivated war. The browser already preserves this native
@@ -205,16 +209,23 @@ Native evidence for this continuation includes server `4E8F20`, `4E8FC0`,
 `4FCEF0`, `4FA430`, `492D20`, `492D40`, `493100`, `49D8F0`; client `59C2E0`,
 `59C290`, `54FC80`, `6961B0`, `7654B0`, `830EC0`. Exposed helper labels were
 saved and read back through Binary Ninja's existing database connection:
-server snapshot 331, client snapshot 268. Characterdata column 67 is recorded
-as the inferred bag-capacity source and tested against shipped companion rows.
+server snapshot 331, client snapshot 268. The initial inference that
+characterdata column 67 determines a new pickup pet's bag was corrected by
+the deeper database-creation trace below: it is a reference capacity, not the
+first-summon capacity.
 
 Release protocol is now 5 on both client and server. Authority schema is 15;
 table layout remains 5. The offline upgrade validates and backs up either
 schema 13/layout 4 (adding the existing account tables) or schema 14/layout 5
 (preserving those tables and their contents). Runtime startup never upgrades
-implicitly. Publish the client/server pair together through coordinated release
-admission; an older binary cannot read the new retained records. No live
-release or database upgrade was performed in this continuation.
+implicitly. A coordinated protocol change cannot simultaneously upgrade schema
+14 to 15: the preceding server could not read the new state after a revert.
+`ops/release/release_state.py:admit_pair` intentionally refuses that combination.
+The release sequence is a protocol-5 client/server pair retaining schema 14,
+followed by the complete companion server as a server-only schema-15 upgrade.
+The protocol-ready client retains the existing empty summoner form. Neither
+compatibility declarations nor the coordinated rollback gate are weakened.
+Actual publication identities and status belong in the private operations log.
 
 This finishes the item-owned summon/persistence slice, not the separately
 listed attack AI, naming, progression, fortress or event work above.
@@ -311,3 +322,98 @@ without weakening the authority checks or removing tests.
 No live-browser parity run, full asset rebuild, production database upgrade,
 or deployment was performed. The implementation remains on the isolated
 `codex/fortress-event-cos` branch until merged/released.
+
+## Deeper first-summon audit, 2026-10-02
+
+The continuation merged main through `263b645`. All 12 source checks passed in
+143.8 seconds and all 11 client checks passed in 132.7 seconds before the new
+first-summon correction and browser probe; those changes require fresh checks.
+
+The DFS path `4FA430 -> 4FBAE0 -> 4F9A30` reaches the native action-record
+attachment set. Its allocation, unique insertion, red-black rebalancing,
+predecessor iterator and exception handlers were inspected and named:
+`4F9A30`, `4FDD00`, `4FEFE0`, `500C40`, `4FFB70`, `A92678`, `A20835`.
+These are runtime association/container operations, represented by the port's
+per-companion session ownership rather than a duplicate C++ tree implementation.
+The constructor exception handler at `A2EF73` was also identified. All eight
+names were saved and verified through the existing database connection
+(server snapshots 332 and 333).
+
+The first-use path `4E8F20 -> 440120`, operation 0, supplied missing evidence:
+
+- `440368` initializes pickup command mode to 7; `440373` initializes attack
+  command mode to 1. Both previously defaulted to zero in the port.
+- `44048C` first reads the reference capacity, but `4404B8` overrides it with
+  28 for pickup pets and `4404D1` overrides it with zero for attack pets.
+  The previous 140-slot first-summon expectation was incorrect.
+- Only creation applies these defaults. Cancellation/resummoning preserves
+  player-selected modes and an already expanded bag.
+
+The shared summoner creation owner now applies these native defaults to all
+13 shipped attack/pickup summoners. The real-data regression covers both
+default creation and preservation of changed modes/expanded bags on resummon.
+Focused persistent-summoning tests passed after this correction.
+
+### Shared spawn placement and scene admission
+
+The same depth-first trace reached `5F6EB0 -> 531240 -> 530A00`.
+`Pos_SampleBandedSpawnRadius` and `Pos_ClampSpawnToLoadedRegion` were named,
+saved and read back from server snapshot 334. The existing native banded
+sampler is shared with monster creation; companion radius is 20 game units.
+The newly shared region clamp tests eight alternate positions around the
+generated point in native order, then returns to the origin. Both monster
+nests and companions now use it. The port's map is served as one complete
+authored map; its on-demand surface owner supplies region availability.
+
+Raw instructions at `4FBC34` and `5F7126` distinguish pet creation from nest
+creation: the pet caller supplies no clipped-result output. Pets retain a
+clipped navigation endpoint; native blocked-result bit `0x10000000` returns
+them to the owner's position. The movement owner implements this policy over
+the existing navmesh walker, including dungeon links and surface height.
+Player-request endpoint refusal must not replace this creation contract.
+
+Session admission prepares restored followers before serializing bootstrap,
+but keeps their ticking and peer visibility closed until scene readiness.
+Bootstrap serializes the same owned positions that peers receive. Resume
+retains an existing follower instead of sampling another position. Town
+portals, return scrolls, GM travel and town rebirth prepare companion positions
+before building their new scene; refused preparation restores movement,
+pending pickup and generation state. Bootstrap refreshes its character
+snapshot after restoration so an expired summon cannot leak from an earlier
+snapshot into the new object list or inventory payload.
+
+Focused tests cover first-match region fallback, all eight failed attempts,
+outdoor/dungeon separation, monster integration, clipped/blocked navigation,
+linked dungeon traversal, both pet families, vehicle exclusion, entropy
+failure, sector crossing, owner/peer wire-position equality, failed travel,
+scene readiness and resume. The source pipeline passed all 12 tasks after
+the shared placement change (118.5 seconds).
+
+### Authenticated browser evidence
+
+`apps/client-next/tests/browser/companion-persistence-live.test.mjs` uses the
+repository browser harness and a separate local authority. No production
+account, served-source patch or rewritten response is involved. The real
+gameplay paths validate simultaneous attack/pickup records and render actors,
+item-double-click cancellation, explicit cancellation, sibling preservation,
+resummoning, native initial modes/capacity, and session-restoring reload.
+The lifecycle passed in 51.9 seconds, then again in 39.6 seconds after both
+local services were stopped and restarted.
+
+The expanded bag test passed in 36.5 seconds: a normal inventory transfer
+deposits 50 HP herbs into the rabbit bag, cancellation/resummoning and reload
+preserve them, and withdrawal returns the exact stack before redepositing it
+for the next restart check. Reports, screenshots and traces are retained in
+the ignored `apps/client-next/temp/artifacts/companion-persistence*` folders.
+The populated-bag run then passed again in 43.3 seconds after another complete
+local service stop/start. Its initial entry contains the retained 50-herb bag.
+
+The new harness initially failed an order-only comparison after reload; it
+now compares independent family identities without requiring insertion order.
+Its new globals and report arrays initially failed the test type gate; the
+declarations were fixed and the full client check subsequently passed all
+11 gates in 123.9 seconds. The expanded bag harness also passes its test-type
+gate. No full asset rebuild is required by this application/protocol change.
+The final complete client run passed all 11 gates in 187.4 seconds and the
+source pipeline passed all 12 tasks in 190.1 seconds. The subsequently added
+expired-summon bootstrap regression passed with `-count=1`.

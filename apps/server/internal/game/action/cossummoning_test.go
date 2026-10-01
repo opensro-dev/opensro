@@ -280,16 +280,29 @@ func TestShippedPersistentSummonersCreateAndRetainTheirAuthoredFamily(t *testing
 			}
 			if ref.TypeIDs[3] == 2 {
 				minutes, _ := ref.NativeFields.Lookup("itemParam1_29c")
-				if pet.RentalExpiresAtUnix != rt.Now().Unix()+int64(minutes)*60 || pet.Container == nil || pet.Container.Capacity != 140 {
+				if pet.RentalExpiresAtUnix != rt.Now().Unix()+int64(minutes)*60 || pet.Container == nil || pet.Container.Capacity != 28 || pet.CommandMode != 7 {
 					t.Fatal("incorrect pickup lease or bag", pet)
 				}
+			}
+			if ref.TypeIDs[3] == 1 && (pet.CommandMode != 1 || pet.Container != nil) {
+				t.Fatal("incorrect attack mode or bag", pet)
+			}
+			// Resummoning must not reapply creation defaults after an upgrade or
+			// a player choice. Exercise both persistent families through this path.
+			pet.CommandMode = 0
+			if pet.Container != nil {
+				pet.Container.Capacity = 56
 			}
 			useSummonerFixture(t, rt, c, 23, ref)
 			if pet.Summoned {
 				t.Fatal("toggle did not dismiss retained companion")
 			}
 			useSummonerFixture(t, rt, c, 23, ref)
-			if c.MissionInventory[0].Summon.SummonGeneration != 2 {
+			retained := c.MissionInventory[0].Summon
+			if retained.CommandMode != 0 || retained.Container != nil && retained.Container.Capacity != 56 {
+				t.Fatal("resummon reset retained mode or upgraded bag", retained)
+			}
+			if retained.SummonGeneration != 2 {
 				t.Fatal("resummon did not retain its lifetime")
 			}
 		})

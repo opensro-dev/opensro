@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+monsterstate_lifecycle.go - native hive and nest population lifecycle
+
+===========================================================================
+*/
 package simulation
 
 import (
@@ -30,6 +37,11 @@ import (
 // create monsters; observing a region never fast-forwards or retries spawns.
 
 // nestRuntime is one nest's CAIHive +1C timer entry plus CNest +30.
+/*
+================
+nestRuntime
+================
+*/
 type nestRuntime struct {
 	lastMs     int64   // +00 last spawn or restart
 	intervalMs uint32  // +04 after the spawn-speed reduction
@@ -45,17 +57,32 @@ type nestRuntime struct {
 	scheduled int64
 }
 
+/*
+================
+bool
+================
+*/
 func (n *nestRuntime) elapsed(nowMs int64) bool {
 	return nowMs >= n.lastMs+int64(n.intervalMs)
 }
 
 // ordinaryEligible is 55EB0F..55EB43 without the elapsed-timer test.
+/*
+================
+bool
+================
+*/
 func (n *nestRuntime) ordinaryEligible(limit int) bool {
 	return n.enabled && (n.respawn || n.remaining > 0) && n.live < limit
 }
 
 // hiveRuntime is an overwrite hive's +28 callback tick, +30 live count and
 // +3C selected nest (-1 for none).
+/*
+================
+hiveRuntime
+================
+*/
 type hiveRuntime struct {
 	density   monster.HiveDensity
 	ratePct   float32
@@ -66,11 +93,21 @@ type hiveRuntime struct {
 }
 
 // spawnGroup is one hive callback: an overwrite hive, or a single nest.
+/*
+================
+spawnGroup
+================
+*/
 type spawnGroup struct {
 	hive string
 	nest int
 }
 
+/*
+================
+spawnTick
+================
+*/
 type spawnTick struct {
 	dueMs int64
 	group spawnGroup
@@ -78,7 +115,18 @@ type spawnTick struct {
 
 type spawnQueue []spawnTick
 
+/*
+================
+int
+================
+*/
 func (q spawnQueue) Len() int { return len(q) }
+
+/*
+================
+bool
+================
+*/
 func (q spawnQueue) Less(i, j int) bool {
 	if q[i].dueMs != q[j].dueMs {
 		return q[i].dueMs < q[j].dueMs
@@ -88,10 +136,28 @@ func (q spawnQueue) Less(i, j int) bool {
 	}
 	return q[i].group.nest < q[j].group.nest
 }
+
+/*
+================
+Swap
+================
+*/
 func (q spawnQueue) Swap(i, j int) { q[i], q[j] = q[j], q[i] }
+
+/*
+================
+Push
+================
+*/
 func (q *spawnQueue) Push(value any) {
 	*q = append(*q, value.(spawnTick))
 }
+
+/*
+================
+any
+================
+*/
 func (q *spawnQueue) Pop() any {
 	old := *q
 	last := old[len(old)-1]
@@ -101,6 +167,11 @@ func (q *spawnQueue) Pop() any {
 
 // SetTimeSource replaces the population clock. Composition should install it
 // before listeners start; tests use it to drive respawn deterministically.
+/*
+================
+time
+================
+*/
 func (s *MonsterState) SetTimeSource(clock func() time.Time) {
 	if clock == nil {
 		panic("simulation: nil monster time source")
@@ -112,6 +183,11 @@ func (s *MonsterState) SetTimeSource(clock func() time.Time) {
 
 // SetRandomSource replaces the population PRNG. Every population draw is
 // projected into the VC CRT rand() domain; it is always called under s.mu.
+/*
+================
+float64
+================
+*/
 func (s *MonsterState) SetRandomSource(random func() float64) {
 	if random == nil {
 		panic("simulation: nil monster random source")
@@ -121,16 +197,31 @@ func (s *MonsterState) SetRandomSource(random func() float64) {
 	s.random = random
 }
 
+/*
+================
+int64
+================
+*/
 func (s *MonsterState) nowMillis() int64 {
 	return s.clock().UnixMilli()
 }
 
+/*
+================
+uint32
+================
+*/
 func (s *MonsterState) randomWord() uint32 {
 	return monster.SummonRandomWord(s.random())
 }
 
 // nextHiveTick is the first hive callback at or after dueMs; callbacks run
 // once per NestHiveTickMs from the previous one.
+/*
+================
+nextHiveTick
+================
+*/
 func nextHiveTick(tickMs, dueMs int64) int64 {
 	next := tickMs + monster.NestHiveTickMs
 	if dueMs > next {
@@ -142,6 +233,11 @@ func nextHiveTick(tickMs, dueMs int64) int64 {
 
 // schedule keeps one live queue entry per group: the earliest. A popped entry
 // whose time no longer matches the group's is stale and skipped.
+/*
+================
+schedule
+================
+*/
 func (state *divisionMonsterState) schedule(group spawnGroup, scheduled *int64, dueMs int64) {
 	if *scheduled != 0 && *scheduled <= dueMs {
 		return
@@ -150,6 +246,11 @@ func (state *divisionMonsterState) schedule(group spawnGroup, scheduled *int64, 
 	state.due.pushTick(spawnTick{dueMs: dueMs, group: group})
 }
 
+/*
+================
+newNestRuntime
+================
+*/
 func (s *MonsterState) newNestRuntime(index int) *nestRuntime {
 	nest := s.template.Nests[index]
 	n := &nestRuntime{enabled: true, respawn: nest.Respawn, remaining: nest.InstanceLimit()}
@@ -157,6 +258,11 @@ func (s *MonsterState) newNestRuntime(index int) *nestRuntime {
 	return n
 }
 
+/*
+================
+materializeNest
+================
+*/
 func (s *MonsterState) materializeNest(state *divisionMonsterState, index int, nowMs int64) {
 	if _, ok := state.nests[index]; ok {
 		return
@@ -166,6 +272,11 @@ func (s *MonsterState) materializeNest(state *divisionMonsterState, index int, n
 	s.scheduleNest(state, index)
 }
 
+/*
+================
+materializeHive
+================
+*/
 func (s *MonsterState) materializeHive(state *divisionMonsterState, key string, nowMs int64) {
 	if _, ok := state.hives[key]; ok {
 		return
@@ -179,6 +290,11 @@ func (s *MonsterState) materializeHive(state *divisionMonsterState, key string, 
 	s.scheduleHive(state, key)
 }
 
+/*
+================
+scheduleNest
+================
+*/
 func (s *MonsterState) scheduleNest(state *divisionMonsterState, index int) {
 	if key := s.template.Nests[index].HiveKey; key != "" {
 		s.scheduleHive(state, key)
@@ -188,6 +304,11 @@ func (s *MonsterState) scheduleNest(state *divisionMonsterState, index int) {
 	state.schedule(spawnGroup{nest: index}, &n.scheduled, n.tickMs+monster.NestHiveTickMs)
 }
 
+/*
+================
+scheduleHive
+================
+*/
 func (s *MonsterState) scheduleHive(state *divisionMonsterState, key string) {
 	h := state.hives[key]
 	limit := s.template.Nests[s.template.HiveNestIndexAt(key, 0)].HiveMaxCount
@@ -222,6 +343,11 @@ func (s *MonsterState) scheduleHive(state *divisionMonsterState, key string) {
 	}
 }
 
+/*
+================
+runDueHiveTicks
+================
+*/
 func (s *MonsterState) runDueHiveTicks(state *divisionMonsterState, nowMs int64) {
 	for state.due.Len() > 0 && state.due[0].dueMs <= nowMs {
 		tick := state.due.popTick()
@@ -249,6 +375,11 @@ func (s *MonsterState) runDueHiveTicks(state *divisionMonsterState, nowMs int64)
 
 // 55EA90 visits ordinary hive members in the same authored vector order as
 // overwrite hives. A single callback phase owns every member's admission.
+/*
+================
+tickOrdinaryHive
+================
+*/
 func (s *MonsterState) tickOrdinaryHive(state *divisionMonsterState, key string, nowMs int64) {
 	h := state.hives[key]
 	if nowMs-h.tickMs >= monster.NestHiveTickMs {
@@ -264,6 +395,11 @@ func (s *MonsterState) tickOrdinaryHive(state *divisionMonsterState, key string,
 }
 
 // tickNest is 55EA90 for a nest outside an overwrite hive.
+/*
+================
+tickNest
+================
+*/
 func (s *MonsterState) tickNest(state *divisionMonsterState, index int, nowMs int64) {
 	n := state.nests[index]
 	if nowMs-n.tickMs >= monster.NestHiveTickMs {
@@ -276,6 +412,11 @@ func (s *MonsterState) tickNest(state *divisionMonsterState, index int, nowMs in
 }
 
 // tickOverwriteHive is 55EC10.
+/*
+================
+tickOverwriteHive
+================
+*/
 func (s *MonsterState) tickOverwriteHive(state *divisionMonsterState, key string, nowMs int64) {
 	h := state.hives[key]
 	members := s.template.HiveNestIndexes(key)
@@ -311,6 +452,11 @@ const (
 )
 
 // attemptNestSpawn is one 5607B0 call for a materialized nest.
+/*
+================
+bool
+================
+*/
 func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, nowMs int64) bool {
 	n := state.nests[index]
 	nest := s.template.Nests[index]
@@ -368,6 +514,11 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 // placeNativeSpawn is 5F6EB0's position stage: 531240 offsets the float32
 // centre, the navmesh move test from the centre admits the candidate, and a
 // blocked candidate falls back to the centre for promoted grades.
+/*
+================
+placeNativeSpawn
+================
+*/
 func (s *MonsterState) placeNativeSpawn(nest monster.NestRow, ref monster.MonsterRef, grade uint8) (monster.SpawnPoint, spawnPlacement) {
 	centre := nest.SpawnPoint
 	candidate := centre
@@ -382,6 +533,8 @@ func (s *MonsterState) placeNativeSpawn(nest monster.NestRow, ref monster.Monste
 			Y:        nest.Y,
 			Z:        float64(z),
 		})
+		admitted := ClampGeneratedSpawnRegion(spawnPointFrame(centre), spawnPointFrame(candidate), s.spawnRegionAvailable)
+		candidate.RegionID, candidate.X, candidate.Y, candidate.Z = admitted.RegionID, admitted.X, admitted.Y, admitted.Z
 		if s.collide != nil {
 			result := s.collide(spawnPointFrame(centre), spawnPointFrame(candidate))
 			if result&monster.NavResultBlocked != 0 {
@@ -402,6 +555,11 @@ func (s *MonsterState) placeNativeSpawn(nest monster.NestRow, ref monster.Monste
 	return grounded, spawnPlaced
 }
 
+/*
+================
+spawnPointFrame
+================
+*/
 func spawnPointFrame(point monster.SpawnPoint) Spawn {
 	return Spawn{RegionID: point.RegionID, X: point.X, Y: point.Y, Z: point.Z}
 }
@@ -410,6 +568,11 @@ func spawnPointFrame(point monster.SpawnPoint) Spawn {
 // (560D00). A later spawn receives a new gid and a freshly generated
 // position, matching entity lifecycle rather than resurrecting a stale wire
 // identity. Non-population/dev gids are not accepted.
+/*
+================
+bool
+================
+*/
 func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -440,6 +603,11 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 }
 
 // nestDeath is 560D00.
+/*
+================
+nestDeath
+================
+*/
 func (s *MonsterState) nestDeath(state *divisionMonsterState, index int, nowMs int64) {
 	n := state.nests[index]
 	nest := s.template.Nests[index]
@@ -461,6 +629,11 @@ func (s *MonsterState) nestDeath(state *divisionMonsterState, index int, nowMs i
 
 // overwriteHiveDeath is 55EEC0: a hive losing a member while full draws the
 // next location (single-occupant hives only) and restarts every member.
+/*
+================
+overwriteHiveDeath
+================
+*/
 func (s *MonsterState) overwriteHiveDeath(state *divisionMonsterState, key string, nowMs int64) {
 	h := state.hives[key]
 	members := s.template.HiveNestIndexes(key)
@@ -485,6 +658,11 @@ func (s *MonsterState) overwriteHiveDeath(state *divisionMonsterState, key strin
 }
 
 // pendingRefills counts materialized groups waiting for a hive callback.
+/*
+================
+int
+================
+*/
 func (state *divisionMonsterState) pendingRefills() int {
 	pending := 0
 	for _, n := range state.nests {
@@ -500,6 +678,11 @@ func (state *divisionMonsterState) pendingRefills() int {
 	return pending
 }
 
+/*
+================
+removeRegionGid
+================
+*/
 func removeRegionGid(byRegion map[uint16][]uint32, regionID uint16, gid uint32) {
 	gids := byRegion[regionID]
 	for index, candidate := range gids {

@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+returnscroll_test.go - travel admission, cancellation and companion migration
+
+===========================================================================
+*/
 package action
 
 import (
@@ -15,6 +22,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+returnFixture
+================
+*/
 func returnFixture(t *testing.T, duration float64) (*Runtime, *enterworld.Character, *fakeClock, *enterworld.ItemRef) {
 	t.Helper()
 	c := rebirthTestCharacter(20, 100)
@@ -25,10 +37,21 @@ func returnFixture(t *testing.T, duration float64) (*Runtime, *enterworld.Charac
 	rt, clock := newTestRuntime(c, items)
 	return rt, c, clock, ref
 }
+
+/*
+================
+useReturn
+================
+*/
 func useReturn(rt *Runtime, c *enterworld.Character) OpResult {
 	return rt.HandleItemUse(testDivision, c, []byte{21, 0xec, 9})
 }
 
+/*
+================
+TestReturnBlocksMovementAndSummoningUntilServerCancellation
+================
+*/
 func TestReturnBlocksMovementAndSummoningUntilServerCancellation(t *testing.T) {
 	rt, c, clock, ref := returnFixture(t, 30000)
 	items := testItems()
@@ -58,6 +81,12 @@ func TestReturnBlocksMovementAndSummoningUntilServerCancellation(t *testing.T) {
 		t.Fatal("cancel did not release summoning")
 	}
 }
+
+/*
+================
+TestReturnScrollCommitsConsumptionAndServerTimedReentry
+================
+*/
 func TestReturnScrollCommitsConsumptionAndServerTimedReentry(t *testing.T) {
 	for _, duration := range []float64{5000, 15000, 30000} {
 		t.Run(time.Duration(duration).String(), func(t *testing.T) {
@@ -99,6 +128,12 @@ func TestReturnScrollCommitsConsumptionAndServerTimedReentry(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestReturnCancelReplacementStaleTimerAndDisconnect
+================
+*/
 func TestReturnCancelReplacementStaleTimerAndDisconnect(t *testing.T) {
 	rt, c, clock, _ := returnFixture(t, 30000)
 	useReturn(rt, c)
@@ -128,6 +163,12 @@ func TestReturnCancelReplacementStaleTimerAndDisconnect(t *testing.T) {
 		t.Fatal("timer leaked")
 	}
 }
+
+/*
+================
+TestReturnDeathDefersAndEntryFailureRollsBack
+================
+*/
 func TestReturnDeathDefersAndEntryFailureRollsBack(t *testing.T) {
 	rt, c, clock, _ := returnFixture(t, 5000)
 	useReturn(rt, c)
@@ -150,6 +191,12 @@ func TestReturnDeathDefersAndEntryFailureRollsBack(t *testing.T) {
 		t.Fatal("failed entry stranded actor")
 	}
 }
+
+/*
+================
+TestReturnInvalidReferencesNeverConsume
+================
+*/
 func TestReturnInvalidReferencesNeverConsume(t *testing.T) {
 	for _, duration := range []float64{-1, 1.5, math.NaN(), math.Inf(1), 1e20} {
 		rt, c, _, _ := returnFixture(t, duration)
@@ -160,6 +207,11 @@ func TestReturnInvalidReferencesNeverConsume(t *testing.T) {
 	}
 }
 
+/*
+================
+TestReturnCriminalStateComesFromPersistedCharacterAuthority
+================
+*/
 func TestReturnCriminalStateComesFromPersistedCharacterAuthority(t *testing.T) {
 	_, seed, _, ref := returnFixture(t, 30000)
 	seed.PK = &domain.PKRecord{DailyCount: 1, TotalCount: 1, Penalty: 100}
@@ -182,6 +234,11 @@ func TestReturnCriminalStateComesFromPersistedCharacterAuthority(t *testing.T) {
 	}
 }
 
+/*
+================
+TestReturnCompanionBranchesAndNewWorldProjection
+================
+*/
 func TestReturnCompanionBranchesAndNewWorldProjection(t *testing.T) {
 	for _, band := range []uint16{2, 3, 4} {
 		rt, c, clock, ref := returnFixture(t, 5000)
@@ -209,12 +266,17 @@ func TestReturnCompanionBranchesAndNewWorldProjection(t *testing.T) {
 			t.Fatal("pet identity lost")
 		}
 		p := rt.PetPresentation(testDivision, c.Name)
-		if p == nil || p.World.Spawn != missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}) {
+		if p == nil || simulation.WorldDistance2D(p.World.Spawn, missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{})) > float64(companionSpawnRadius) {
 			t.Fatalf("pet left behind: %+v", p)
 		}
 	}
 }
 
+/*
+================
+TestReturnMovingCorrectionPrecedesStateAndConsumption
+================
+*/
 func TestReturnMovingCorrectionPrecedesStateAndConsumption(t *testing.T) {
 	rt, c, clock, _ := returnFixture(t, 5000)
 	installMidMove(rt, c, clock)
@@ -224,6 +286,12 @@ func TestReturnMovingCorrectionPrecedesStateAndConsumption(t *testing.T) {
 		t.Fatal("movement remained active")
 	}
 }
+
+/*
+================
+TestReturnUsesStoreBoundaryAndRuntimeTimerDoesNotResurrectOnReboot
+================
+*/
 func TestReturnUsesStoreBoundaryAndRuntimeTimerDoesNotResurrectOnReboot(t *testing.T) {
 	_, seed, _, ref := returnFixture(t, 30000)
 	d := openDoorRuntime(t, t.TempDir(), seed)
@@ -245,6 +313,11 @@ func TestReturnUsesStoreBoundaryAndRuntimeTimerDoesNotResurrectOnReboot(t *testi
 	}
 }
 
+/*
+================
+TestReturnScrollQuestBlockPrecedesConsumptionAndCasting
+================
+*/
 func TestReturnScrollQuestBlockPrecedesConsumptionAndCasting(t *testing.T) {
 	rt, c, _, _ := returnFixture(t, 30000)
 	rt.QuestTravelBlocks = func(*enterworld.Character) uint32 { return 0x60000 }

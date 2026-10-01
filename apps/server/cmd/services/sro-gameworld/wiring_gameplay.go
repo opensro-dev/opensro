@@ -116,6 +116,7 @@ func newGameplayPlane(
 	deps.EntryPopulationLease = items.EntryPopulationLease
 	deps.EntrySkills = items.EntrySkills
 	deps.EntryMovementSpeeds = items.EntryMovementSpeeds
+	deps.EntryCompanionSpawn = items.EntryCompanionSpawn
 	if err := items.ConfigureAlchemy(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("alchemy catalogue: %w", err)
 	}
@@ -148,6 +149,7 @@ func newGameplayPlane(
 		deps.MonsterState.EnableRegionDormancy()
 		deps.MonsterState.SetSpawnGroundResolver(water.WalkableSpawnHeightAt)
 		deps.MonsterState.SetSpawnCollisionTest(water.SpawnMoveTestResult)
+		deps.MonsterState.SetSpawnRegionAvailability(water.SpawnRegionAvailable)
 		deps.MonsterState.SetPopulationPlayers(items.PopulationPlayers)
 		for _, division := range authorityStore.DivisionIDs() {
 			deps.MonsterState.StartDivision(division)
@@ -164,6 +166,8 @@ func newGameplayPlane(
 		return authoredAreas.CanEnterRegion(regionID, character.GMPrivilege)
 	}
 	items.ConstrainMovement = movementRuntime.ConstrainMovement
+	items.SpawnRegionAvailable = water.SpawnRegionAvailable
+	items.ConstrainCompanionSpawn = water.ConstrainCompanionSpawn
 	items.ConstrainWalk = movementRuntime.ConstrainMovementFrom
 	items.LineOfSight = movementRuntime.LineOfSight
 	items.ResolveNavOwner = water.ResolveNavOwner
@@ -342,6 +346,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	if game.items.ConstrainMovement == nil {
 		return fmt.Errorf("action: pickup movement constraint is required")
+	}
+	if game.items.SpawnRegionAvailable == nil || game.items.ConstrainCompanionSpawn == nil {
+		return fmt.Errorf("action: companion region and collision admission are required")
 	}
 
 	definitions, err := loadQuests()

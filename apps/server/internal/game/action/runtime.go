@@ -155,6 +155,12 @@ type Runtime struct {
 	// exact sequences; production uses an independent cryptographic draw.
 	CombatRoll combat.Roll32767
 
+	// CompanionRoll supplies the shared native spawn-position sampler without
+	// consuming a combat or loot test sequence during actor admission.
+	CompanionRoll           combat.Roll32767
+	SpawnRegionAvailable    func(uint16) bool
+	ConstrainCompanionSpawn func(simulation.Spawn, simulation.Spawn) simulation.Spawn
+
 	// DropRoll is independent from combat formula randomness. Reference-drop
 	// generation and the post-generation player/level admission gate consume
 	// this native rand() domain in order.

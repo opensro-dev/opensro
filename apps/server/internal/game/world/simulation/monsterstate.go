@@ -19,6 +19,11 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+/*
+================
+divisionMonsterState
+================
+*/
 type divisionMonsterState struct {
 	archiveQueue    []uint32
 	archiveQueued   map[uint32]struct{}
@@ -77,18 +82,19 @@ type MonsterState struct {
 	regionDormancy  bool
 	// Installed before listeners. Called outside the population mutex so
 	// character snapshots cannot invert the character -> population lock order.
-	players            func(string, int64) []PopulationPlayer
-	mu                 sync.Mutex
-	template           monster.Template
-	counter            uint32
-	divs               map[string]*divisionMonsterState
-	worldAllocators    map[string]*instance.Registry
-	worldPopulations   map[populationKey]*divisionMonsterState
-	retirementRequests map[populationKey]struct{}
-	ground             MonsterSpawnGroundResolver
-	collide            MonsterSpawnCollisionTest
-	random             func() float64
-	clock              func() time.Time
+	players              func(string, int64) []PopulationPlayer
+	mu                   sync.Mutex
+	template             monster.Template
+	counter              uint32
+	divs                 map[string]*divisionMonsterState
+	worldAllocators      map[string]*instance.Registry
+	worldPopulations     map[populationKey]*divisionMonsterState
+	retirementRequests   map[populationKey]struct{}
+	ground               MonsterSpawnGroundResolver
+	collide              MonsterSpawnCollisionTest
+	spawnRegionAvailable func(uint16) bool
+	random               func() float64
+	clock                func() time.Time
 	// objectLists holds bootstrap object-list gids until the first scope tick.
 	objectLists map[monsterObjectListKey][]uint32
 }
@@ -117,6 +123,11 @@ candidate.
 type MonsterSpawnCollisionTest func(from, to Spawn) uint32
 
 // NewMonsterState builds empty authoritative state over an immutable catalog.
+/*
+================
+NewMonsterState
+================
+*/
 func NewMonsterState(template monster.Template) *MonsterState {
 	return &MonsterState{
 		template: template,
@@ -156,15 +167,43 @@ func (s *MonsterState) SetSpawnCollisionTest(test MonsterSpawnCollisionTest) {
 	s.collide = test
 }
 
+/*
+================
+SetSpawnRegionAvailability
+
+Installed before listeners start, alongside collision and height admission.
+================
+*/
+func (s *MonsterState) SetSpawnRegionAvailability(available func(uint16) bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.spawnRegionAvailable = available
+}
+
 // TemplateSize reports how many monster nest rows the catalog carries.
+/*
+================
+int
+================
+*/
 func (s *MonsterState) TemplateSize() int { return len(s.template.Nests) }
 
 // SpawnableRefs exposes the catalog's spawnable reference roster.
+/*
+================
+SpawnableRefs
+================
+*/
 func (s *MonsterState) SpawnableRefs() []monster.MonsterRef {
 	return s.template.SpawnableRefs()
 }
 
 // Reference reads the immutable catalog, including rows without a nest.
+/*
+================
+Reference
+================
+*/
 func (s *MonsterState) Reference(id uint32) (monster.MonsterRef, bool) {
 	ref, ok := s.template.Refs[id]
 	return ref, ok
@@ -172,6 +211,11 @@ func (s *MonsterState) Reference(id uint32) (monster.MonsterRef, bool) {
 
 // ReferenceByCodename reads only immutable references, including quest-only
 // actors without a world nest. It never touches active or archived actors.
+/*
+================
+ReferenceByCodename
+================
+*/
 func (s *MonsterState) ReferenceByCodename(code string) (monster.MonsterRef, bool) {
 	var found monster.MonsterRef
 	for _, ref := range s.template.Refs {
@@ -186,6 +230,11 @@ func (s *MonsterState) ReferenceByCodename(code string) (monster.MonsterRef, boo
 	return found, found.RefObjID != 0
 }
 
+/*
+================
+division
+================
+*/
 func (s *MonsterState) division(divisionID string) *divisionMonsterState {
 	if state, ok := s.divs[divisionID]; ok {
 		return state
@@ -204,6 +253,11 @@ func (s *MonsterState) division(divisionID string) *divisionMonsterState {
 	return state
 }
 
+/*
+================
+createPopulation
+================
+*/
 func (s *MonsterState) createPopulation(lease instance.Lease, worldCode string) *divisionMonsterState {
 	state := &divisionMonsterState{
 		lease:         lease,
@@ -239,6 +293,11 @@ func (s *MonsterState) createPopulation(lease instance.Lease, worldCode string) 
 
 // StartDivision creates the population owner before world admission. It does
 // not manufacture a pre-filled world or advance elapsed callbacks.
+/*
+================
+StartDivision
+================
+*/
 func (s *MonsterState) StartDivision(division string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -246,6 +305,11 @@ func (s *MonsterState) StartDivision(division string) {
 }
 
 // AdvancePopulation also runs when a world has no connected viewers.
+/*
+================
+AdvancePopulation
+================
+*/
 func (s *MonsterState) AdvancePopulation(nowMs int64) {
 	s.mu.Lock()
 	keys := s.populationKeys()
@@ -280,6 +344,11 @@ func (s *MonsterState) AdvancePopulation(nowMs int64) {
 
 // InstancesInRegions reads the default population. Startup and clock events
 // are explicit owner commands; observing a region never allocates or spawns.
+/*
+================
+InstancesInRegions
+================
+*/
 func (s *MonsterState) InstancesInRegions(divisionID string, regions []uint16) []monster.Instance {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -324,6 +393,11 @@ func (s *MonsterState) MaterializedInstances(divisionID string) []monster.Instan
 }
 
 // Get returns a value snapshot of one live instance.
+/*
+================
+Get
+================
+*/
 func (s *MonsterState) Get(divisionID string, gid uint32) (monster.Instance, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -336,6 +410,11 @@ func (s *MonsterState) Get(divisionID string, gid uint32) (monster.Instance, boo
 	return instance, ok
 }
 
+/*
+================
+resolveSpawnGround
+================
+*/
 func (s *MonsterState) resolveSpawnGround(spawn monster.SpawnPoint, authoredY float64) (monster.SpawnPoint, bool) {
 	if s.ground == nil {
 		return spawn, true
@@ -348,6 +427,11 @@ func (s *MonsterState) resolveSpawnGround(spawn monster.SpawnPoint, authoredY fl
 	return spawn, true
 }
 
+/*
+================
+normalizeGeneratedMonsterSpawn
+================
+*/
 func normalizeGeneratedMonsterSpawn(spawn monster.SpawnPoint) monster.SpawnPoint {
 	position := worldgeom.NormalizeOutdoor(worldgeom.RegionXZ{
 		RegionID: spawn.RegionID,

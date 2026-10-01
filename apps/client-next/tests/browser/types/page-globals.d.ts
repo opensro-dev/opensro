@@ -22,6 +22,7 @@ declare var __cerberusEnvironment: any;
 declare var __championAggro: any;
 declare var __commerceHelpHover: any;
 declare var __commerceHelpScene: any;
+declare var __companionRuntime: any;
 declare var __deathActors: any;
 declare var __deathRenderer: any;
 declare var __deathSamples: any;

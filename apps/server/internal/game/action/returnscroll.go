@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+returnscroll.go - authoritative travel and scene re-entry
+
+===========================================================================
+*/
 package action
 
 import (
@@ -10,6 +17,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+pendingReturn
+================
+*/
 type pendingReturn struct {
 	division, name string
 	character      *enterworld.Character
@@ -17,6 +29,11 @@ type pendingReturn struct {
 	generation     uint64
 }
 
+/*
+================
+teleportState
+================
+*/
 func teleportState(c *enterworld.Character, mode uint8) wire.Frame {
 	return wire.Frame{Opcode: 0x3122, Payload: wire.NewWriter(6).U32(enterworld.ObjectIDForCharacter(c)).U8(11).U8(mode).Payload()}
 }
@@ -24,6 +41,11 @@ func teleportState(c *enterworld.Character, mode uint8) wire.Frame {
 // Inside the item-use character mutation door. v1.188 49B9F0 -> 4A0380
 // selects Param1 duration, Param2 blocking mode and Param3 destination.
 // v1.150 data expresses duration in milliseconds; v1.188 timers use seconds.
+/*
+================
+bool
+================
+*/
 func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, request wire.ItemUseRequest, now int64, result *OpResult) bool {
 	duration, present := ref.NativeFields.Lookup("itemParam1_29c")
 	blocking, hasBlocking := ref.NativeFields.Lookup("itemParam2_2a0")
@@ -96,6 +118,11 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 
 // v1.150 6FFE50 sends an empty 72DD. Success is the public channel-11
 // transition, not a fabricated acknowledgement or a refunded consumable.
+/*
+================
+OpResult
+================
+*/
 func (rt *Runtime) HandleReturnCancel(division string, c *enterworld.Character, payload []byte) OpResult {
 	if c == nil || len(payload) != 0 {
 		return OpResult{}
@@ -123,6 +150,11 @@ func (rt *Runtime) HandleReturnCancel(division string, c *enterworld.Character, 
 // The existing simulation action tick advances the native channel-11 timer.
 // A dead actor postpones completion by 1s (405F70/40614E), rather than
 // teleporting a corpse or inventing a refund/reset on death.
+/*
+================
+advanceReturnScrolls
+================
+*/
 func (rt *Runtime) advanceReturnScrolls(now int64) {
 	var jobs []pendingReturn
 	rt.returnCasts.Range(func(_, value any) bool {
@@ -145,6 +177,11 @@ func (rt *Runtime) advanceReturnScrolls(now int64) {
 	}
 }
 
+/*
+================
+completeReturnScroll
+================
+*/
 func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Frame, []wire.Frame) {
 	key := simulation.WorldKey(job.division, job.name)
 	current, ok := rt.returnCasts.Load(key)
@@ -190,9 +227,11 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	}
 	rt.returnCasts.Delete(key)
 	rt.endTransformForLoading(job.division, c)
+	previousPets := rt.relocateReturningPet(job.division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(job.division, job.name)
 	clear := teleportState(c, 0)
 	if !accepted || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {
+		rt.restoreCompanionRelocation(previousPets)
 		rt.deps.Update(c, "return-scroll-entry-rollback", func() bool {
 			rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
 			c.World = previousWorld
@@ -206,7 +245,6 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	rt.ClearCombatIntent(job.division, job.name)
 	rt.clearSkillFinalizes(job.division, job.name)
 	rt.clearCompoundJob(compoundKey{job.division, job.name})
-	rt.relocateReturningPet(job.division, c, destination)
 	frames := missionReentryFrames(packets)
 	if snapshot := rt.characterSnapshot(job.division, c); snapshot != nil && snapshot.NativeBodyStatus != 0 {
 		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), snapshot.NativeBodyStatus))
@@ -216,6 +254,11 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 
 // 4EC8A0 -> 4FD720 -> COS virtual +30 / 4827F0. Transport COS
 // (1/2/3/2) block ordinary returns; pets are a separate migration branch.
+/*
+================
+bool
+================
+*/
 func (rt *Runtime) hasSummonedTransportCOS(c *enterworld.Character) bool {
 	cos := c.ActiveCOS
 	if cos == nil || !cos.Summoned {
@@ -231,6 +274,11 @@ func (rt *Runtime) hasSummonedTransportCOS(c *enterworld.Character) bool {
 
 // A successful world reconstruction retires the departing actor's timer. Call
 // with the division operation lock held; failed entry keeps the old lifetime.
+/*
+================
+retireReturnForReentry
+================
+*/
 func (rt *Runtime) retireReturnForReentry(division string, c *enterworld.Character) {
 	rt.deps.Update(c, "return-scroll-retire-reentry", func() bool {
 		rt.returnCasts.Delete(simulation.WorldKey(division, c.Name))

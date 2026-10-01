@@ -18,6 +18,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+worldSpawnFromMission
+================
+*/
 func worldSpawnFromMission(spawn simulation.Spawn) *enterworld.WorldSpawn {
 	regionID := int64(spawn.RegionID)
 	x, y, z := spawn.X, spawn.Y, spawn.Z
@@ -25,6 +30,11 @@ func worldSpawnFromMission(spawn simulation.Spawn) *enterworld.WorldSpawn {
 	return &enterworld.WorldSpawn{RegionID: &regionID, X: &x, Y: &y, Z: &z, Angle: &angle}
 }
 
+/*
+================
+missionSpawnFromWorld
+================
+*/
 func missionSpawnFromWorld(spawn *enterworld.WorldSpawn, fallback simulation.Spawn) simulation.Spawn {
 	if spawn == nil || spawn.RegionID == nil || *spawn.RegionID <= 0 || *spawn.RegionID > 0xffff {
 		return fallback
@@ -46,6 +56,11 @@ func missionSpawnFromWorld(spawn *enterworld.WorldSpawn, fallback simulation.Spa
 	return simulation.NormalizeSpawnFrame(result)
 }
 
+/*
+================
+defaultRebirthPoint
+================
+*/
 func defaultRebirthPoint(character *enterworld.Character) simulation.Spawn {
 	if character != nil && strings.HasPrefix(character.ModelCodename, "CHAR_EU") {
 		return simulation.EuropeStartProfile()
@@ -79,6 +94,11 @@ func (rt *Runtime) appointedRebirthPoint(character *enterworld.Character) simula
 	return missionSpawnFromWorld(world.RebirthPoint, fallback)
 }
 
+/*
+================
+missionReentryFrames
+================
+*/
 func missionReentryFrames(packets []enterworld.Packet) []wire.Frame {
 	frames := make([]wire.Frame, 0, len(packets))
 	for _, packet := range packets {
@@ -200,11 +220,19 @@ func (rt *Runtime) HandleLocalRebirth(
 	restoredHP, restoredMP, _, _ := rt.playerKeeperVitals(divisionID, candidate)
 	candidate.CurrentHP, candidate.CurrentMP = &restoredHP, &restoredMP
 	var prepared enterworld.PreparedReentry
+	var previousPets map[petOwnerKey]petSession
+	committed := false
+	defer func() {
+		if !committed {
+			rt.restoreCompanionRelocation(previousPets)
+		}
+	}()
 	if choice == wire.RebirthAtSpecifiedPoint {
 		destination = rt.appointedRebirthPoint(before)
 		preview := corpse
 		preview.Spawn = destination
 		writeBackWorld(candidate, preview)
+		previousPets = rt.relocateReturningPet(divisionID, character, destination)
 		var ok bool
 		prepared, ok = rt.deps.PrepareReentry(divisionID, candidate)
 		if !ok || len(prepared.Packets) == 0 || prepared.Packets[0].NativeOpcode != enterworld.OpcodeResetClient {
@@ -239,6 +267,7 @@ func (rt *Runtime) HandleLocalRebirth(
 	if !accepted {
 		return OpResult{}
 	}
+	committed = true
 	rt.bindResidentRegion(worldKey, rt.Now().UnixMilli())
 	rt.ClearCombatIntent(divisionID, character.Name)
 
