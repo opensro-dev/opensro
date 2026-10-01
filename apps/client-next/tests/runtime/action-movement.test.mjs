@@ -200,3 +200,39 @@ test("committed skill keeps the move held until its cast closes", () => {
 	assert.ok( sent.every( frame => frame.opcode !== OP_PREDICTED_MOVE ), "a refused cancel keeps holding" );
 	game.dispose();
 });
+
+/*
+================
+a bard dance leaves the bard free to walk
+
+Reported: after Moving March the bard could act but not walk. These are
+the server's exact reply frames for SKILL_EU_BARD_SPEEDUPA_MSPEED_A_01
+(movingmarch_test.go) with the caster gid replaced by the fixture's.
+================
+*/
+test("a bard dance leaves the bard free to walk", () => {
+	const { game, local, sent } = movementFixture();
+	const gid = [ 163, 134, 1, 0 ];
+	const own = Array.from( Buffer.from( Uint32Array.of( local.gid ).buffer ) );
+	const swap = bytes => {
+		const out = [ ...bytes ];
+		for ( let i = 0; i + 4 <= out.length; i++ ) {
+			if ( gid.every( ( b, j ) => out[i + j] === b ) ) out.splice( i, 4, ...own );
+		}
+		return Uint8Array.from( out );
+	};
+	const frames = [
+		[ 0xb245, [ 1, 0, 6, 38, 0, 0, 163, 134, 1, 0, 1, 0, 0, 0, 163, 134, 1, 0, 0 ] ],
+		[ 0x33a6, [ 163, 134, 1, 0, 4, 0, 3, 100, 0, 0, 0, 170, 0, 0, 0 ] ],
+		[ 0xb505, [ 1, 1, 0, 0, 0, 0, 0, 0, 0, 0 ] ],
+		// B419's attached visual needs reference data this fixture lacks.
+		[ 0x376f, [ 163, 134, 1, 0, 0, 0, 192, 65, 1, 0, 112, 66 ] ]
+	];
+	for ( const [opcode, bytes] of frames ) game.receive( { opcode, payload: swap( bytes ) }, 10 );
+	for ( let now = 20; now < 3000; now += 50 ) game.step( now, local );
+	sent.length = 0;
+	game.command( { kind: "move", destination: { ...local, x: 160, angle: 0 } }, 3000, undefined, local );
+	for ( let now = 3050; now < 3500; now += 50 ) game.step( now, local );
+	assert.ok( sent.some( frame => frame.opcode === OP_PREDICTED_MOVE ), JSON.stringify( sent.map( f => f.opcode ) ) );
+	game.dispose();
+});
