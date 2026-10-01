@@ -28,6 +28,8 @@ const MICROSECONDS = 1000000;
 const FALLBACK_SAMPLE_US = 33333;
 // An AAC-LC frame always carries 1024 samples per channel.
 const AAC_FRAME_SAMPLES = 1024;
+// Timestamp jitter stays well under half a frame; a larger step is a hole.
+const AUDIO_GAP_FRAMES = 1.5;
 const UNDETERMINED_LANGUAGE = 0x55c4;
 const VIDEO_TRACK_ID = 1;
 const AUDIO_TRACK_ID = 2;
@@ -150,12 +152,21 @@ function videoLayout( samples: readonly Mp4Sample[] ): TrackLayout {
 ================
 audioLayout
 
-AAC frames have a fixed length; their timestamps only place the first one.
+An AAC frame lasts 1024 samples, so timestamps normally only place the
+first one. The recorder skips input when its encoder falls behind, which
+leaves a hole in the timestamps: the frame before a hole lasts until its
+successor, so the audio after it stays in sync instead of playing early.
 ================
 */
 function audioLayout( audio: Mp4Audio, zeroUs: number ): TrackLayout {
-	const durations = audio.samples.map( () => AAC_FRAME_SAMPLES );
-	const mediaDuration = durations.length * AAC_FRAME_SAMPLES;
+	const frameUs = AAC_FRAME_SAMPLES * MICROSECONDS / audio.sampleRate;
+	const durations = audio.samples.map( ( sample, index ) => {
+		const next = audio.samples[index + 1];
+		const gapUs = next ? next.timestampUs - sample.timestampUs : 0;
+		if ( gapUs <= frameUs * AUDIO_GAP_FRAMES ) return AAC_FRAME_SAMPLES;
+		return Math.round( gapUs * audio.sampleRate / MICROSECONDS );
+	} );
+	const mediaDuration = durations.reduce( ( sum, value ) => sum + value, 0 );
 	const delayUs = Math.max( 0, audio.samples[0]!.timestampUs - zeroUs );
 	return {
 		durations,

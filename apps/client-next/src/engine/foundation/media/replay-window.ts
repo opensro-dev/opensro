@@ -21,6 +21,9 @@ const MAX_BITRATE = 5000000;
 // Selections arrive as float seconds; a key frame's own time converted back
 // to microseconds can land just below it and must still select that frame.
 const TIME_EPSILON_US = 1;
+// The recorder's frame bound: Main profile level 3.1 holds 1280x720.
+const REPLAY_MAX_WIDTH = 1280;
+const REPLAY_MAX_HEIGHT = 720;
 
 /*
 ================
@@ -132,15 +135,17 @@ export function replayTrackBytes( track: Mp4Track ): number {
 ================
 replaySize
 
-Encoded size for a canvas: 720 lines high, width by aspect ratio, both even
-(H.264 4:2:0) and the width capped at 1280.
+Encoded size for a canvas: scaled to fit 1280x720 (H.264 level 3.1's
+largest frame) with its aspect ratio kept, both sides even (4:2:0). An
+ultrawide canvas gets fewer lines rather than being squeezed to 16:9.
 ================
 */
 export function replaySize( width: number, height: number ): readonly [number, number] {
-	if ( width <= 0 || height <= 0 ) return [ 1280, 720 ];
-	const h = Math.min( 720, height - height % 2 );
-	const w = Math.min( 1280, Math.round( width / height * h / 2 ) * 2 );
-	return [ Math.max( 2, w ), Math.max( 2, h ) ];
+	if ( width <= 0 || height <= 0 ) return [ REPLAY_MAX_WIDTH, REPLAY_MAX_HEIGHT ];
+	const scale = Math.min( 1, REPLAY_MAX_WIDTH / width, REPLAY_MAX_HEIGHT / height );
+	const h = Math.max( 2, Math.floor( height * scale / 2 ) * 2 );
+	const w = Math.min( REPLAY_MAX_WIDTH, Math.round( width / height * h / 2 ) * 2 );
+	return [ Math.max( 2, w ), h ];
 }
 
 /*

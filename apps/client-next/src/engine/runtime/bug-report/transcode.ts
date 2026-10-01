@@ -83,6 +83,12 @@ async function reencode( track: Mp4Track, bitrate: number, progress: ( fraction:
 	} );
 	const decoder = new VideoDecoder( {
 		output: frame => {
+			// A failed encoder is closed; encoding into it would throw here,
+			// outside the loop that reports the failure.
+			if ( failure ) {
+				frame.close();
+				return;
+			}
 			const keyFrame = frame.timestamp - lastKeyUs >= KEY_FRAME_US;
 			if ( keyFrame ) lastKeyUs = frame.timestamp;
 			encoder.encode( frame, { keyFrame } );

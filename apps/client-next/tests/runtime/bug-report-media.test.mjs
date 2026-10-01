@@ -105,11 +105,13 @@ test("replayBitrate keeps a full minute under the upload cap", () => {
 	assert.equal( replayBitrate( 500 * 1024 * 1024, 60 ), 5000000 );
 });
 
-test("replaySize is 720 lines high, even, and capped", () => {
+test("replaySize fits 1280x720, keeps the aspect ratio and stays even", () => {
 	assert.deepEqual( replaySize( 1920, 1080 ), [ 1280, 720 ] );
 	assert.deepEqual( replaySize( 1120, 720 ), [ 1120, 720 ] );
 	assert.deepEqual( replaySize( 1024, 768 ), [ 960, 720 ] );
-	assert.deepEqual( replaySize( 3440, 1440 ), [ 1280, 720 ] );
+	assert.deepEqual( replaySize( 3440, 1440 ), [ 1276, 534 ] );
+	assert.deepEqual( replaySize( 4000, 100 ), [ 1280, 32 ] );
+	assert.deepEqual( replaySize( 640, 360 ), [ 640, 360 ] );
 	assert.deepEqual( replaySize( 801, 451 ), [ 800, 450 ] );
 });
 
@@ -271,4 +273,31 @@ test("replayClip keeps the selected key frame when its time comes back from floa
 			`clip at ${key} starts on its own key frame`
 		);
 	}
+});
+
+test("muxMp4 keeps audio after a skipped frame on its own time", async () => {
+	const video = samples( 90, 30 ), config = Uint8Array.of( 0x11, 0x90 );
+	// Frames 0-9, then 5 skipped by the recorder, then 10 more.
+	const frames = audioFrames( 25 ).filter( ( _, index ) => index < 10 || index >= 15 );
+	const bytes = muxMp4( {
+		width: 1280,
+		height: 720,
+		avcC: Uint8Array.of( 1, 0x4d, 0, 0x1f, 0xff, 0xe0, 0 ),
+		samples: video,
+		audio: { sampleRate: 48000, channels: 2, config, samples: frames }
+	} );
+	const [, moovAt, moovSize] = find( bytes, "moov" );
+	const [, audioTrakAt, audioTrakSize] = boxes( bytes, moovAt + 8, moovAt + moovSize )
+		.filter( ( [type] ) => type === "trak" )[1];
+	const sub = bytes.subarray( audioTrakAt, audioTrakAt + audioTrakSize );
+	const view = new DataView( sub.buffer, sub.byteOffset );
+	const [, mdhdAt] = find( sub, "trak/mdia/mdhd" );
+	assert.equal( view.getUint32( mdhdAt + 24 ), 25 * 1024, "the track spans the hole" );
+	const [, sttsAt] = find( sub, "trak/mdia/minf/stbl/stts" );
+	/** @type {[number, number][]} */
+	const runs = [];
+	for ( let index = 0; index < view.getUint32( sttsAt + 12 ); index++ ) {
+		runs.push( [ view.getUint32( sttsAt + 16 + index * 8 ), view.getUint32( sttsAt + 20 + index * 8 ) ] );
+	}
+	assert.deepEqual( runs, [ [ 9, 1024 ], [ 1, 6 * 1024 ], [ 10, 1024 ] ] );
 });
