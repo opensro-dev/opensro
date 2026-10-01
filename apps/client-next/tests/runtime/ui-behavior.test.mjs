@@ -414,6 +414,29 @@ test("retail GM prefix colors player names gold without granting permission", ()
 	}
 });
 
+test("F10 opens the Item Mall and a world transfer closes it, as the native reset does", () => {
+	const f = uiFixture();
+	try {
+		f.ui.step( f.state, 1000 );
+		const open = () => {
+			let result;
+			// A retained frame returns null; keep the last published controls.
+			for ( let i = 0; i < 20; i++ ) result = f.ui.step( f.state, 1100 + i * 50 ) ?? result;
+			return !!result?.controls.some( control => control.id === "item-mall-close" );
+		};
+		assert.equal( open(), false );
+		f.ui.event( { kind: "key", code: "F10" } );
+		assert.equal( open(), true, "UIIT_STT_SILKMALL_SHORT_KEY: Item Mall(F10)" );
+		// Windows are hidden while the transfer loads; the mall must stay closed after it.
+		f.state.travel = { mode: 1, region: 25000 };
+		open();
+		f.state.travel = null;
+		assert.equal( open(), false, "0x366A reset closes the ItemMall section" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("window hotkeys sound on retarget, close once, and preserve sidebar click-only selection", () => {
 	const f = uiFixture();
 	f.ui.step( f.state, 1000 );

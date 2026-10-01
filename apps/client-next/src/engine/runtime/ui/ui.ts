@@ -3874,6 +3874,14 @@ export function createUi(
 						dirty = true;
 						return;
 					}
+					// The underbar button's own tooltip, UIIT_STT_SILKMALL_SHORT_KEY,
+					// reads "Item Mall(F10)". The native dispatch of that system key was
+					// not located (it is not in Game_OnKeyDown or the binding table), so
+					// F10 opens the mall exactly as the button does (ItemMallEvent_OpenItemMall).
+					if ( binding < 0 && event.code === "F10" ) {
+						activate( "item-mall" );
+						return;
+					}
 					if ( binding < 0 && event.code === "Enter" ) {
 						focusAtEnd( "chat-text", chatText );
 						dirty = true;
@@ -3941,6 +3949,12 @@ export function createUi(
 		step( next: UiView, now = 0, probe?: UiFrameProbe ): UiSemantics | null {
 			quickslotTime = next.simulationTimeMs ?? now;
 			if ( disposed ) return null;
+			// 0x366A reset -> CGInterface_CloseTransientWindowsOnReset (685400) destroys
+			// the ItemMall section. A world transfer starting is that reset here.
+			if ( next.travel && !view?.travel && itemMall.read().visible ) {
+				itemMall.close();
+				dirty = true;
+			}
 			if ( panel === "COS inventory" && !next.gameplay?.cosRecords?.some( r => !r.dead && r.hp > 0 ) ) {
 				setPanel( "" );
 				dirty = true;
