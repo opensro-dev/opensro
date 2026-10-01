@@ -129,6 +129,15 @@ target authority. Dormant pet data must travel with its summoner item through
 all inventory/storage/drop/transfer paths; an item wire state of "no record"
 must not overwrite a populated companion.
 
+Server `492D20` maps persistent state flags to item wire states: 2 means
+alive and summoned, 3 means alive and dormant, and 4 means dead. The serializer
+at `492D40` emits state 1 only when the pet record is absent. It also writes
+the pet reference, name, pickup-pet remaining rental time and rental-job list.
+The current item encoder always emits state 1; the complete inventory-body
+contract therefore needs extension before persistent pet summoners can ship.
+Server snapshot 319 saves these additional helper labels and they were read
+back after the save.
+
 The 2026-10-02 native investigation labelled exposed COS database, command,
 container, caravan and UI helpers. Server snapshot 318 and client snapshot
 260 were saved and representative labels were read back. Standard tree/list
