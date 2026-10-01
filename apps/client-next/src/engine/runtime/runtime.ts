@@ -30,6 +30,8 @@ import { createAssets } from "./assets/assets";
 import { createReleaseWatch } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
+import { createBugReport } from "./bug-report/bug-report";
+import type { BugReportField } from "@/engine/contracts/bug-report";
 import type { RenderFrameProbe } from "@/engine/contracts/runtime";
 import { createRenderer } from "./renderer/renderer";
 import { createSimulationHost } from "./simulation/host";
@@ -153,6 +155,7 @@ export function startRuntime(
 		const random = createPresentationRandom( presentationSeed );
 		const runtimeErrors = createRuntimeErrors( message => {
 			console.error( "[SRO runtime] " + message );
+			bugReport.note( message );
 			ui.runtimeError( message );
 		} );
 		const presentation = own( createPresentation() );
@@ -288,6 +291,40 @@ export function startRuntime(
 				import.meta.env.VITE_AGENT_API_BASE || "/api",
 			location.origin
 		).href.replace( /\/$/, "" );
+		const bugReport = own(
+			createBugReport( {
+				canvas,
+				apiBase,
+				context: (): readonly BugReportField[] => {
+					const game = presentation.gameplay();
+					const local = game?.localGid ? presentation.read( game.localGid ) : undefined;
+					return [
+						{ name: "Phase", value: sessionState?.phase ?? "starting" },
+						...(sessionState?.nativeServerName ?
+							[ { name: "Shard", value: sessionState.nativeServerName } ] :
+							[]),
+						...(local ?
+							[ {
+								name: "Position",
+								value: `region 0x${local.regionId.toString( 16 ).toUpperCase()} ` +
+									`(${local.x.toFixed( 1 )}, ${local.y.toFixed( 1 )}, ${local.z.toFixed( 1 )})`
+							} ] :
+							[]),
+						{ name: "Build", value: platform.runningEntry() ?? "development" }
+					];
+				},
+				sound: () => audio.captureAudio(),
+				state: () => {
+					const gameplay = presentation.gameplay();
+					return {
+						session: sessionState,
+						gameplay,
+						target: gameplay?.target ? presentation.read( gameplay.target ) : undefined,
+						entities: presentation.entities().length
+					};
+				}
+			} )
+		);
 		const ui = own(
 			createUi(
 				assets,
@@ -309,7 +346,8 @@ export function startRuntime(
 				value => platform.saveInputOptions( value ),
 				value => platform.saveVideoOptions( value ),
 				value => platform.saveChatBlocks( value ),
-				value => platform.saveQuickslotOptions( value )
+				value => platform.saveQuickslotOptions( value ),
+				bugReport
 			)
 		);
 		let lastDockPick = "none";

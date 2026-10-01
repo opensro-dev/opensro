@@ -459,3 +459,439 @@ The same uniform scale as loadingScreenQuads keeps both owners aligned.
 	line-height: 1.2;
 	font-variant-numeric: tabular-nums;
 }
+
+/*
+Bug reporter (runtime/bug-report, issue #90). The launcher sits under the
+FPS chip's toggle in the same style (fixed top right when there is no chip); the report window covers the game until it is
+sent or dismissed. The replay's capture <video> is never visible.
+*/
+
+.sro-bug-launcher {
+	position: fixed;
+	z-index: 1001;
+	top: 8px;
+	right: 30px;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border: 1px solid rgba(202, 165, 82, 0.38);
+	border-radius: 3px;
+	background: rgba(6, 10, 14, 0.62);
+	color: #cba85e;
+	font: 700 10px/16px ui-monospace, "Cascadia Mono", Consolas, monospace;
+	opacity: 0.55;
+	cursor: pointer;
+	transition: opacity 120ms ease;
+}
+
+.sro-fps-chip .sro-bug-launcher {
+	position: static;
+}
+
+.sro-bug-launcher:hover,
+.sro-bug-launcher:focus-visible {
+	opacity: 1;
+}
+
+.sro-bug-launcher[hidden],
+.sro-bug-report [hidden] {
+	display: none;
+}
+
+.sro-replay-source {
+	position: fixed;
+	left: 0;
+	top: 0;
+	width: 2px;
+	height: 2px;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.sro-bug-report {
+	position: fixed;
+	z-index: 1003;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	background: rgba(2, 5, 8, 0.6);
+	color: #e9dfc9;
+	font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+}
+
+.sro-bug-report__panel {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	box-sizing: border-box;
+	width: min(640px, calc(100vw - 32px));
+	max-height: calc(100vh - 32px);
+	overflow: auto;
+	padding: 18px 20px;
+	border: 1px solid #b59a5c88;
+	border-radius: 8px;
+	background: #0b1119f2;
+	box-shadow: 0 12px 48px #000a;
+}
+
+.sro-bug-report__title {
+	margin: 0;
+	color: #cba85e;
+	font-size: 16px;
+}
+
+
+
+
+
+
+.sro-bug-report__status[data-kind="error"] {
+	color: #ff8a7a;
+}
+
+.sro-bug-report__status[data-kind="done"] {
+	color: #9fd89a;
+}
+
+
+.sro-bug-report__description {
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 96px;
+	padding: 8px;
+	border: 1px solid #b59a5c55;
+	border-radius: 4px;
+	background: #05090e;
+	color: inherit;
+	font: inherit;
+	resize: vertical;
+}
+
+.sro-bug-report__note {
+	margin: 0;
+	color: #8e9ba1;
+	font-size: 12px;
+}
+
+.sro-bug-report__status {
+	min-height: 1.45em;
+	margin: 0;
+}
+
+.sro-bug-report__status:empty {
+	min-height: 0;
+}
+
+.sro-bug-report__actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.sro-bug-report__actions button {
+	padding: 6px 14px;
+	border: 1px solid #b59a5c88;
+	border-radius: 4px;
+	background: #16202b;
+	color: #e9dfc9;
+	font: inherit;
+	cursor: pointer;
+}
+
+.sro-bug-report__actions button[type="submit"] {
+	background: #6b5320;
+	border-color: #cba85e;
+}
+
+.sro-bug-report__actions button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* The clip trimmer (bug-report/trimmer.ts): preview of the exact clip, then
+   a thumbnail timeline of the whole replay with the selection lit. */
+
+.sro-trimmer {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.sro-trimmer__caption {
+	margin: 0;
+	color: #9fd89a;
+	font-size: 12px;
+}
+
+.sro-trimmer[data-scrubbing="true"] .sro-trimmer__caption {
+	color: #cba85e;
+}
+
+.sro-trimmer__stage {
+	position: relative;
+	border-radius: 4px;
+	background: #000;
+	overflow: hidden;
+}
+
+.sro-trimmer__video {
+	display: block;
+	width: 100%;
+	max-height: 36vh;
+	cursor: pointer;
+}
+
+.sro-trimmer__controls {
+	position: absolute;
+	left: 8px;
+	bottom: 8px;
+	display: flex;
+	gap: 6px;
+}
+
+.sro-trimmer__play {
+	width: 34px;
+	height: 26px;
+	border: 1px solid #b59a5c88;
+	border-radius: 4px;
+	background: #0b1119cc;
+	color: #e9dfc9;
+	font: 12px/1 system-ui, sans-serif;
+	cursor: pointer;
+}
+
+.sro-trimmer__track {
+	position: relative;
+	height: 54px;
+	margin: 4px 7px 0;
+	border-radius: 4px;
+	background: #05090e;
+	touch-action: none;
+	cursor: pointer;
+	user-select: none;
+}
+
+.sro-trimmer__strip {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	overflow: hidden;
+	border-radius: 4px;
+	pointer-events: none;
+}
+
+.sro-trimmer__strip canvas {
+	flex: 1 1 0;
+	min-width: 0;
+	height: 100%;
+	object-fit: cover;
+}
+
+.sro-trimmer__shade {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	background: rgba(2, 5, 8, 0.72);
+	pointer-events: none;
+}
+
+.sro-trimmer__window {
+	position: absolute;
+	top: -2px;
+	bottom: -2px;
+	box-sizing: border-box;
+	border: 2px solid #cba85e;
+	border-radius: 4px;
+	cursor: grab;
+}
+
+.sro-trimmer[data-scrubbing="true"] .sro-trimmer__window {
+	border-color: #fff;
+}
+
+.sro-trimmer[data-detached="true"] .sro-trimmer__track,
+.sro-trimmer[data-detached="true"] .sro-trimmer__stage {
+	opacity: 0.35;
+}
+
+.sro-trimmer__handle {
+	position: absolute;
+	top: -6px;
+	bottom: -6px;
+	width: 14px;
+	margin-left: -7px;
+	border-radius: 3px;
+	background: #cba85e;
+	box-shadow: 0 0 0 1px #0008;
+	cursor: ew-resize;
+}
+
+.sro-trimmer__handle::after {
+	content: "";
+	position: absolute;
+	left: 5px;
+	top: 35%;
+	bottom: 35%;
+	width: 4px;
+	border-left: 1px solid #3a2d10;
+	border-right: 1px solid #3a2d10;
+}
+
+.sro-trimmer__handle:focus-visible {
+	outline: 2px solid #fff;
+}
+
+.sro-trimmer__playhead {
+	position: absolute;
+	top: -4px;
+	bottom: -4px;
+	width: 2px;
+	margin-left: -1px;
+	background: #fff;
+	box-shadow: 0 0 3px #000;
+	pointer-events: none;
+}
+
+.sro-trimmer__scale {
+	display: flex;
+	justify-content: space-between;
+	margin: 0 7px;
+	color: #8e9ba1;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+
+.sro-trimmer__footer {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.sro-trimmer__info {
+	color: #e9dfc9;
+	font-variant-numeric: tabular-nums;
+}
+
+.sro-trimmer[data-compress="true"] .sro-trimmer__info {
+	color: #e8c77a;
+}
+
+.sro-trimmer__presets {
+	display: flex;
+	gap: 6px;
+}
+
+.sro-trimmer__presets button {
+	padding: 3px 9px;
+	border: 1px solid #b59a5c66;
+	border-radius: 12px;
+	background: #16202b;
+	color: #cbb98f;
+	font: 12px/1.4 inherit;
+	cursor: pointer;
+}
+
+.sro-trimmer__presets button:hover {
+	border-color: #cba85e;
+	color: #fff;
+}
+
+.sro-trimmer__attach {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.sro-trimmer__attach input {
+	accent-color: #cba85e;
+}
+
+.sro-bug-report__saved {
+	border-top: 1px solid #b59a5c33;
+	padding-top: 8px;
+	color: #a9b7bd;
+	font-size: 12px;
+}
+
+.sro-bug-report__saved summary {
+	cursor: pointer;
+	color: #cbb98f;
+}
+
+.sro-bug-report__saved ul {
+	margin: 6px 0 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.sro-bug-report__saved li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.sro-bug-report__saved li span {
+	flex: 1;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.sro-bug-report__saved button {
+	padding: 2px 8px;
+	border: 1px solid #b59a5c66;
+	border-radius: 4px;
+	background: #16202b;
+	color: #e9dfc9;
+	font: 11px/1.4 inherit;
+	cursor: pointer;
+}
+
+/* A request for a saved bug report (a GM's whisper or a #bug= link). */
+
+.sro-bug-request {
+	position: fixed;
+	z-index: 1004;
+	top: 56px;
+	left: 50%;
+	transform: translateX(-50%);
+	box-sizing: border-box;
+	width: min(560px, calc(100vw - 32px));
+	padding: 12px 16px;
+	border: 1px solid #cba85e;
+	border-radius: 8px;
+	background: #0b1119f2;
+	box-shadow: 0 8px 32px #000a;
+	color: #e9dfc9;
+	font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+}
+
+.sro-bug-request p {
+	margin: 0 0 10px;
+}
+
+.sro-bug-request__actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.sro-bug-request__actions button {
+	padding: 5px 12px;
+	border: 1px solid #b59a5c88;
+	border-radius: 4px;
+	background: #16202b;
+	color: #e9dfc9;
+	font: inherit;
+	cursor: pointer;
+}
+
+.sro-bug-request__actions button:first-child:not(:last-child) {
+	background: #6b5320;
+	border-color: #cba85e;
+}

@@ -117,7 +117,8 @@
     "src/engine/runtime/ui/hud/speech.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/characters/damage-feedback.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/audio/preparation.ts": "src/engine/runtime/audio/audio.ts",
-    "src/engine/runtime/ui/hud/item-mall.ts": "src/engine/runtime/ui/ui.ts"
+    "src/engine/runtime/ui/hud/item-mall.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/bug-report/bug-report.ts": "src/engine/runtime/runtime.ts"
   },
   "internals": {
     "src/engine/runtime/runtime-errors.ts": "src/engine/runtime/runtime.ts",
@@ -137,7 +138,13 @@
     "src/engine/runtime/renderer/device/animation.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/animation-shader.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/particle-query.ts": "src/engine/runtime/renderer/device/device.ts",
-    "src/engine/runtime/assets/worker/install.ts": "src/engine/runtime/assets/worker/loader.ts"
+    "src/engine/runtime/assets/worker/install.ts": "src/engine/runtime/assets/worker/loader.ts",
+    "src/engine/runtime/bug-report/recorder.ts": "src/engine/runtime/bug-report/bug-report.ts",
+    "src/engine/runtime/bug-report/dialog.ts": "src/engine/runtime/bug-report/bug-report.ts",
+    "src/engine/runtime/bug-report/trimmer.ts": "src/engine/runtime/bug-report/bug-report.ts",
+    "src/engine/runtime/bug-report/archive.ts": "src/engine/runtime/bug-report/bug-report.ts",
+    "src/engine/runtime/bug-report/transcode.ts": "src/engine/runtime/bug-report/bug-report.ts",
+    "src/engine/runtime/bug-report/journal.ts": "src/engine/runtime/bug-report/bug-report.ts"
   },
   "workers": {
     "src/engine/runtime/simulation/worker/entry.ts": "src/engine/runtime/simulation/host.ts",

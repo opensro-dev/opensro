@@ -92,6 +92,54 @@ mixGain
 		requestedPeriod: "day" | "night" = "day",
 		activeAmbient: AmbientProfile | null = null,
 		activePeriod: "day" | "night" = "day";
+	// The bug reporter's copy of what the player hears (issue #90). Until a
+	// capture is requested nothing changes; afterwards every voice's last
+	// node also feeds the capture. Music plays through its own element and
+	// is tapped from it.
+	let capture: MediaStreamAudioDestinationNode | null = null,
+		musicTap: { element: HTMLAudioElement; source: MediaStreamAudioSourceNode; gain: GainNode; } | null = null;
+	const voiceOutputs = new Set<AudioNode>();
+	/*
+================
+speak
+
+Connects a voice's last node to the speakers, and to the capture if any.
+================
+	*/
+	function speak( node: AudioNode, audio: AudioContext ) {
+		node.connect( audio.destination );
+		if ( capture ) node.connect( capture );
+		voiceOutputs.add( node );
+	}
+	/*
+================
+tapMusic
+
+Follows the music owner's current element into the capture. The element
+changes with every track; its stream is tapped once it has media.
+================
+	*/
+	function tapMusic() {
+		if ( !capture || !context ) return;
+		const element = music.element();
+		if ( musicTap && musicTap.element !== element ) {
+			musicTap.source.disconnect();
+			musicTap.gain.disconnect();
+			musicTap = null;
+		}
+		const tappable = element as (HTMLAudioElement & { captureStream?: () => MediaStream; }) | null;
+		if ( !musicTap && tappable && tappable.readyState >= 2 && typeof tappable.captureStream === "function" ) {
+			const stream = tappable.captureStream();
+			if ( stream.getAudioTracks().length ) {
+				const source = context.createMediaStreamSource( stream ), gain = context.createGain();
+				source.connect( gain );
+				gain.connect( capture );
+				musicTap = { element: tappable, source, gain };
+			}
+		}
+		// The element's own volume is the player's music setting and fades.
+		if ( musicTap ) musicTap.gain.gain.value = musicTap.element.volume;
+	}
 	let ambientTimer = timerStartMs, ambientSequence = 0, ambientGeneration = 0, musicMode = 0;
 	let ambientLayers: { layer: AmbientLayer; remaining: number; }[] = [];
 	/*
@@ -442,6 +490,7 @@ step
 				return;
 			}
 			stepAmbient( seconds );
+			tapMusic();
 			music.step();
 			clock = seconds;
 			for ( const [id, event] of pending ) {
@@ -596,10 +645,11 @@ step
 				source.connect( gain );
 				if ( panner ) {
 					gain.connect( panner );
-					panner.connect( context.destination );
-				} else gain.connect( context.destination );
+					speak( panner, context );
+				} else speak( gain, context );
 				voices.add( source );
 				source.onended = () => {
+					voiceOutputs.delete( panner ?? gain );
 					voiceGains.delete( source );
 					voices.delete( source );
 					if ( loops.get( id ) === source ) loops.delete( id );
@@ -644,6 +694,23 @@ snapshot
 			};
 		},
 		error: () => preparation.error() ?? failure ?? ambientFailure ?? music.error(),
+		/*
+================
+captureAudio
+
+A live copy of the game's sound for the bug reporter's replay, or null
+before the page has an audio context (no user gesture yet).
+================
+		*/
+		captureAudio(): MediaStream | null {
+			if ( disposed || !context ) return null;
+			if ( !capture ) {
+				capture = context.createMediaStreamDestination();
+				// Voices already playing (ambient loops) join the capture too.
+				for ( const node of voiceOutputs ) node.connect( capture );
+			}
+			return capture.stream;
+		},
 		/*
 ================
 reset
@@ -702,6 +769,9 @@ dispose
 			pending.clear();
 			seen.clear();
 			resident = 0;
+			musicTap = null;
+			capture = null;
+			voiceOutputs.clear();
 			context?.close().catch( () => {} );
 			context = null;
 		}
