@@ -331,6 +331,12 @@ GameWorld EnterWorld keys are process-local and need no operator rotation.
 Changing the account catalog still requires stopping Agent because it changes
 login authority rather than an overlap-capable signing key.
 
+The bug report webhook (`SRO_BUG_REPORT_DISCORD_WEBHOOK`, see
+`ops/nomad/README.md`) is also an item of Agent's credential variable. To
+rotate it, delete the old webhook in Discord, create a new one, then run
+`sro-nomad stop` and `sro-nomad deploy` with the new value in the deployer's
+environment; deploying without it turns bug reports off.
+
 ## 5. Shard catalog and leases
 
 `config/shards.json` is the process catalog. Each row contains:

@@ -91,6 +91,36 @@ never writable by a gameplay request. This prevents an ordinary redeploy from
 silently dropping locally configured GM grants. GM prefixes remain actual
 character names; the prefix alone grants no permissions.
 
+### Bug reports
+
+In-game bug reports (the bug button and `/bug` in chat) are off unless the
+deployer sets a Discord webhook. `sro-nomad deploy` reads these variables from
+its own environment:
+
+| Variable | Controls | When unset |
+| --- | --- | --- |
+| `SRO_BUG_REPORT_DISCORD_WEBHOOK` | Enables bug reports and names the Discord channel that receives them (`https://discord.com/api/webhooks/<id>/<token>`) | Disabled: no button, no replay recording, `/bug` says reports are off |
+| `SRO_BUG_REPORT_REPLAY_DEFAULT` | Whether the last-minute replay records by default (`on` or `off`) for players who have not changed it in the Option window | `on` |
+| `SRO_BUG_REPORT_MAX_BYTES` | Upload cap per report in bytes; larger clips are re-encoded to fit. Discord accepts 10 MiB per file without boosts | `10485760` |
+
+```sh
+export SRO_BUG_REPORT_DISCORD_WEBHOOK='https://discord.com/api/webhooks/<id>/<token>'
+go run ./cmd/operations/sro-nomad deploy -build
+```
+
+The webhook is a credential: anyone holding it can post to the channel. It
+travels only as the `bug_report_discord_webhook` item of the Agent's Nomad
+variable and reaches the task through an env template; it is never logged
+or sent to browsers. Keep it out of shell history and source control (for
+example in a `0600` file you source before deploying). An invalid value
+logs a warning and leaves reports off; it never stops the Agent. The other
+two variables become the Agent job's `bug_report_replay_default` and
+`bug_report_max_bytes` variables.
+
+Setting, changing or removing the webhook changes the Agent's credential
+variable, so it follows the same rule as the account catalog: run
+`sro-nomad stop`, then `sro-nomad deploy` with the new environment.
+
 For an operator rename, stop the authority through `sro-nomad stop`, then run
 `go run ./cmd/operations/sro-rename-character -shard SHARD -character OLD -name NEW`
 to inspect the identity, followed by `-commit` to apply. The authority lock must
