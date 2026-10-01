@@ -105,6 +105,10 @@ func (rt *Runtime) applyInventoryMove(
 	request wire.ItemMoveRequest,
 ) OpResult {
 	result := failureResult(wire.ErrCodeInvalidRequest)
+	// Ended-effect frames are pushed after Update returns: peer delivery
+	// reads session characters through the store, whose door is not
+	// reentrant, so publishing inside the callback deadlocks the shard.
+	var endedPublic, endedActor []wire.Frame
 
 	rt.deps.Update(character, "inv-move", func() bool {
 		if character.DeletePending {
@@ -178,7 +182,7 @@ func (rt *Runtime) applyInventoryMove(
 		// and the stats the move publishes are the ones without them.
 		if equipmentChanged {
 			if ended := rt.retireUnmetEquipmentEffects(divisionID, character); len(ended) != 0 {
-				rt.publishEndedEffects(divisionID, character, ended, rt.Now().UnixMilli())
+				endedPublic, endedActor = rt.finishEndedEffects(divisionID, character, ended, rt.Now().UnixMilli())
 				if display, err := rt.PlayerBaseStats(divisionID, character); err == nil {
 					frame := wire.Frame{Opcode: wire.OpBaseStats, Payload: enterworld.BuildLoginStatBlock(character, display)}
 					statFrame = &frame
@@ -222,6 +226,10 @@ func (rt *Runtime) applyInventoryMove(
 		return true
 	})
 
+	rt.publishBodyStatus(divisionID, character.Name, endedPublic)
+	if len(endedActor) != 0 && rt.PushCharacterFrames != nil {
+		rt.PushCharacterFrames(divisionID, character.Name, endedActor)
+	}
 	return result
 }
 
