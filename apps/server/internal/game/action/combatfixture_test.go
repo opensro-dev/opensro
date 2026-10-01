@@ -53,7 +53,7 @@ func assertSkillCastClose(t *testing.T, routed []simulation.DivisionFrames, divi
 		t.Fatalf("finalize payload = % X (%d bytes), want exactly %d", finalize.Payload, len(finalize.Payload), skillCastFinalizeLen)
 	}
 	if finalize.Payload[0] != 0x02 {
-		t.Fatalf("finalize mode = 0x%02X, want mode 2 (the sub_8dcf40 finalize arm)", finalize.Payload[0])
+		t.Fatalf("finalize mode = 0x%02X, want mode 2 (CIDecoSkill_RequestCancellation at 0x8DCF40)", finalize.Payload[0])
 	}
 	if got := binary.LittleEndian.Uint32(finalize.Payload[2:]); got != token {
 		t.Fatalf("finalize token = 0x%X, want the success frame's 0x%X (a miss is a SILENT skip - the bracket never closes)", got, token)
@@ -241,6 +241,9 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 	}
 	rt := NewRuntime(deps, monsters)
 	rt.BerserkRoll = func() (uint32, error) { return 9999, nil }
+	// Combat-order fixtures must not acquire extra frames from random loot.
+	// Loot cases supply their own draws through this same injection boundary.
+	rt.DropRoll = nil
 	rt.Now = clock.Now
 	// Keep ordinary-action fixtures on the noncritical branch; dedicated
 	// critical tests exercise the inclusive zero/boundary outcomes.

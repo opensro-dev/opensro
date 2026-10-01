@@ -335,6 +335,16 @@ authenticated companion browser test passed again in 37.3 seconds, including
 the retained bag, both families, cancellation/resummon, withdrawal and reload.
 Evidence is under `apps/client-next/temp/artifacts/companion-persistence-main-integration/`.
 
+One Windows CI run then exposed ambient loot randomness in the shared combat
+fixture: `TestFatalSkillRewardCommitsAtHitAndPublishesBeforeFinalize` received
+an extra object-spawn frame before its experience update. The fixture now
+leaves loot draws unset; dedicated loot cases already inject their own draw
+source. Both fatal-skill ordering tests passed 100 repetitions, and the entire
+action package passed uncached in 42.506 seconds with licensed data. This is a
+test-fixture correction, not a gameplay drop-rule change. Its stale client
+`8DCF40` name was checked against raw instructions and the existing saved
+`CIDecoSkill_RequestCancellation` label (snapshot 268).
+
 ## Deeper first-summon audit, 2026-10-02
 
 The continuation merged main through `263b645`. All 12 source checks passed in
