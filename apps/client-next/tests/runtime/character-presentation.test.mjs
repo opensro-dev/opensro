@@ -512,6 +512,7 @@ take
 							"pick",
 							"death",
 							...(metadataAdmission.appearance?.overrideTest ? [ "native:avatar_wing:7" ] : []),
+							...(metadataAdmission.appearance?.extraClips ?? []),
 							...(host ? [ "attached-default-188" ] : []),
 							...(idles ? [ "idle122", "idle61", "idle81" ] : []),
 							...(postures ?
@@ -2651,6 +2652,68 @@ test("body avatar override restores normal run and restarts same-name replacemen
 		assert.equal( f.actors.length, 0 );
 		f.dispose();
 	}
+});
+
+test("the equipped weapon's animation set drives stand and run, falling back per state", () => {
+	// CCObjCharacter_ResolveWeaponAnimationPrefix (8E83F0): a spear (band 4)
+	// plays the spear set's two-handed stand/run; a state the set lacks keeps
+	// the default clip. Reported: a spear ran holding the weapon in one hand.
+	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
+		.itemsByRefObjId;
+	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
+	const run = "native:spear:7", stand = "native:spear:0";
+	const appearance = {
+		items,
+		extraClips: [ run, stand ],
+		roster: {
+			models: [ {
+				refObjId: 1,
+				codename: "CHAR_CH_MAN_TEST",
+				glb: "/assets/1.glb",
+				clips: [ "stand", "walk", "run", run, stand ],
+				animationStates: { [run]: { durationMs: 800, loop: true }, [stand]: { durationMs: 2000, loop: true } }
+			} ],
+			dress: roster.dress
+		}
+	};
+	const f = fixture(
+		{},
+		2,
+		false,
+		false,
+		true,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{ appearance }
+	);
+	const spear = { slot: 6, refObjId: 0, typeFlags: (4 << 11) | 0x6c, plus: 0 };
+	let now = 0, movementRevision = 0;
+	const step = ( equipment, movementMode = 3, moving = true ) => {
+		for ( let i = 0; i < 40; i++ ) {
+			f.presentation.step(
+				[ entity( 1, { kind: "player", equipment, movementMode, moving, movementRevision } ) ],
+				null,
+				now += .01
+			);
+		}
+		return f.actors.find( a => a.gid === 1 );
+	};
+	step( [ spear ] );
+	movementRevision++;
+	assert.equal( step( [ spear ] ).clip, run, "a spear runs with the spear set" );
+	assert.equal( step( [ spear ], 3, false ).clip, stand, "and stands with it" );
+	movementRevision++;
+	assert.equal( step( [ spear ], 2 ).clip, "walk", "the spear set's missing walk keeps the default" );
+	movementRevision++;
+	assert.equal( step( [] ).clip, "run", "without a weapon the default set runs" );
+	f.dispose();
 });
 
 test("native Korean wear freeze preserves committed default handles while equipment still changes", () => {

@@ -345,7 +345,17 @@ for (const model of resolved) {
   // runtime shortcut that collapsed every AniGroup to DEFAULT.
   for(const motion of pickAttachedMotionClips(bsr)){const clip=parseBan(await loadDataAsset(motion.path),motion.path);entry[motion.role]={...(await publishClip(motion.path,publishedByPath)),loop:clip.field2!==0,...pickAnimationStateTableMetadata(motion.state)};}
   entry.animationSets = {};
-  for (const [setName, requiredMotionIds] of avatarAnimationRequirements(bsr,avatarOverrides,requiredSkillMotionIdsBySetName)) {
+  // Every authored state of every set, not only the skill-required ones: the
+  // native client plays the equipped weapon's set for all motions
+  // (CCObjCharacter_ResolveWeaponAnimationPrefix 8E83F0 -> +0x114), so a
+  // spear stands, walks and runs with its own two-handed clips.
+  const requirements = avatarAnimationRequirements(bsr, avatarOverrides, requiredSkillMotionIdsBySetName);
+  for (const set of bsr.animationSets ?? []) {
+    const name = set.name.toLowerCase(), ids = requirements.get(name) ?? new Set();
+    for (const state of set.states) if (state.animationPath) ids.add(state.stateId);
+    requirements.set(name, ids);
+  }
+  for (const [setName, requiredMotionIds] of requirements) {
     const animationSet = bsr.animationSets?.find(
       (candidate) => candidate.name.toLowerCase() === setName
     );

@@ -27,7 +27,6 @@ apps/client-next/src/engine/foundation/animation/animated-material.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
 apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
 apps/client-next/src/engine/foundation/animation/animation-emission.ts
-apps/client-next/src/engine/foundation/animation/animation-metadata.ts
 apps/client-next/src/engine/foundation/animation/animation-timelines.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
