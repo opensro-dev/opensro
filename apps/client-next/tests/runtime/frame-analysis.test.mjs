@@ -26,7 +26,7 @@ test("analysis joins GPU by CPU identity, deduplicates publications and does not
 			gpu: { samples: [ sample, { frameId: 999, passes: [ { ms: 100 } ] } ] },
 			intervals: [ 4, 5, 6 ]
 		};
-	owner.draw(
+	owner.frameDraw(
 		3,
 		undefined,
 		undefined,

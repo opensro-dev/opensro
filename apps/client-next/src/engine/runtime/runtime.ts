@@ -47,7 +47,7 @@ FrameProbe
 Development frame timing, including detail spans reported by UI owners.
 ================
 */
-interface FrameProbe extends UiFrameProbe, RenderFrameProbe {
+interface FrameProbe extends UiFrameProbe, Omit<RenderFrameProbe, "detailBegin" | "detailEnd"> {
 	sampleDetails(): boolean;
 	begin( frameId: number ): void;
 	mark( stage: string ): void;
@@ -56,16 +56,66 @@ interface FrameProbe extends UiFrameProbe, RenderFrameProbe {
 
 /*
 ================
+PROFILING_BUILD
+
+Development, or a profile build of the release (tools/lib/release-profile.mjs
+defines __SRO_PROFILE_BUILD__). A production build defines neither. The typeof
+guard keeps the constant safe where no bundler defines it (tests, tools).
+================
+*/
+declare const __SRO_PROFILE_BUILD__: boolean | undefined;
+const PROFILING_BUILD = import.meta.env.DEV ||
+	(typeof __SRO_PROFILE_BUILD__ !== "undefined" && __SRO_PROFILE_BUILD__ === true);
+
+/*
+================
+idleFrameProbe
+
+Stands in for the frame profiler when only the ceiling or pick census is
+installed, so the frame owners still have one probe to call.
+================
+*/
+const idleFrameProbe: FrameProbe = Object.freeze( {
+	detailBegin() {},
+	detailEnd() {},
+	renderBegin() {},
+	renderMark() {},
+	characterBegin() {},
+	characterMark() {},
+	characterCount() {},
+	sampleDetails: () => false,
+	begin() {},
+	mark() {},
+	end() {}
+} );
+
+/*
+================
 frameProbe
 
 The world probe's frame profiler (tools/lib/frame-profiler.mjs), installed
 on globalThis by probe runs only; production leaves it undefined. The frame
-calls it explicitly instead of letting the profiler patch this source.
+calls it explicitly instead of letting the profiler patch this source. The
+animation ceiling's world replay and the pick census join it when installed.
 ================
 */
 function frameProbe(): FrameProbe | undefined {
-	if ( !import.meta.env.DEV ) return undefined;
-	return (globalThis as { __worldProbeFrameProfiler?: FrameProbe; }).__worldProbeFrameProfiler;
+	if ( !PROFILING_BUILD ) return undefined;
+	const installed = globalThis as {
+		__worldProbeFrameProfiler?: FrameProbe;
+		__worldProbeAnimationCeiling?: { worldReplay?( hasView: boolean ): boolean; };
+		__worldProbePickCensus?: ( row: import("@/engine/contracts/runtime").WorldPickSample ) => void;
+	};
+	const frame = installed.__worldProbeFrameProfiler,
+		ceiling = installed.__worldProbeAnimationCeiling,
+		pickCensus = installed.__worldProbePickCensus;
+	if ( !ceiling?.worldReplay && !pickCensus ) return frame;
+	return {
+		...(frame ?? idleFrameProbe),
+		// The capture's methods close over their own state (no this binding).
+		...(ceiling?.worldReplay ? { worldReplay: ceiling.worldReplay } : {}),
+		...(pickCensus ? { pickCensus } : {})
+	};
 }
 /*
 ================
@@ -76,7 +126,7 @@ renderer construction so profiling never replaces the pose implementation.
 ================
 */
 function animationProbe(): import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe | undefined {
-	if ( !import.meta.env.DEV ) return undefined;
+	if ( !PROFILING_BUILD ) return undefined;
 	const captures = globalThis as {
 		__worldProbeAnimationCeiling?:
 			import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe["ceiling"];

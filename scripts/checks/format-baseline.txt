@@ -303,11 +303,8 @@ apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
 apps/client-next/src/engine/runtime/renderer/device/pipelines.ts
 apps/client-next/src/engine/runtime/renderer/device/thunder.ts
 apps/client-next/src/engine/runtime/renderer/device/timing.ts
-apps/client-next/src/engine/runtime/renderer/frame/frame.ts
-apps/client-next/src/engine/runtime/renderer/internal/gpu-contract.ts
 apps/client-next/src/engine/runtime/renderer/readback/readback.ts
 apps/client-next/src/engine/runtime/renderer/surface/surface.ts
-apps/client-next/src/engine/runtime/renderer/world/world.ts
 apps/client-next/src/engine/runtime/runtime-errors.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/input/input.ts
@@ -530,7 +527,6 @@ apps/client-next/tools/beta/verify.mjs
 apps/client-next/tools/dev/edge.mjs
 apps/client-next/tools/dev/updates-client.mjs
 apps/client-next/tools/dev/updates-plugin.mjs
-apps/client-next/tools/execution-flow.mjs
 apps/client-next/tools/generate-item-sounds.mjs
 apps/client-next/tools/generate-windows1252.mjs
 apps/client-next/tools/lib/character-facing-probe.mjs
@@ -542,7 +538,6 @@ apps/client-next/tools/lib/movement-trace.mjs
 apps/client-next/tools/lib/party-probe.mjs
 apps/client-next/tools/lib/performance-lease.mjs
 apps/client-next/tools/lib/profile-source-map.mjs
-apps/client-next/tools/lib/release-profile.mjs
 apps/client-next/tools/lib/status-notice-probe.mjs
 apps/client-next/tools/lib/ui-product-probe.mjs
 apps/client-next/tools/lib/ui-window-probe.mjs
@@ -696,7 +691,6 @@ scripts/build/world/objects/compound.mjs
 scripts/build/world/objects/formats.mjs
 scripts/build/world/sworld/deriveTitleTerrainSectorCoverage.mjs
 scripts/build/world/sworld/prepareCellTerrainTexture.mjs
-scripts/checks/check_asset_delivery.mjs
 scripts/checks/check_asset_pack_integrity.mjs
 scripts/checks/check_precompressed_freshness.mjs
 scripts/checks/lib/methodBlock.mjs

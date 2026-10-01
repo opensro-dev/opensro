@@ -24,6 +24,9 @@ export default defineConfig(({mode})=>{
     server: {proxy,...hosts,...(certificate?{https:certificate}:{}),warmup: {clientFiles: ['./src/bootstrap.ts']}},
     preview: {proxy,...hosts,...(certificate?{https:certificate}:{})},
     build: {outDir: "temp/artifacts/dist"},
+    // Only tools/lib/release-profile.mjs builds a profile (true); runtime.ts
+    // then keeps its explicit probe hooks. Every other build folds them away.
+    define: {__SRO_PROFILE_BUILD__: 'false'},
     plugins: [devUpdates(),publishedAssets(),...(https&&!certificate?[basicSsl()]:[])],
     resolve: {
         alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) }

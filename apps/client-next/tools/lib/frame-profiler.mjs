@@ -4,11 +4,10 @@
 frame-profiler.mjs - the world probe's per-frame stage recorder
 
 createFrameProfiler records per-frame stage timings and draw counts into a
-bounded numeric buffer the probe exports after a capture window.
-instrumentFrameProfiler patches profiler calls into a fixed set of served
-client sources at probe time. That patching is legacy (AGENTS.md: tools do
-not patch source text); runtime.ts, ui.ts and the character renderer call the profiler through
-explicit hooks (frameProbe) and is not patched.
+bounded numeric buffer the probe exports after a capture window. Every owner
+calls it through explicit hooks: runtime.ts installs it as the frame probe
+(frameProbe) and passes it to the UI, renderer, world, frame and character
+owners. No client source is patched.
 
 ===========================================================================
 */
@@ -243,10 +242,10 @@ export function createFrameProfiler( now = () => performance.now(), capacity = 3
 		// sample cadence bounds diagnostic work; none of this ships in normal builds.
 		/*
 		================
-		draw
+		frameDraw
 		================
 		*/
-		draw( frameId, image, geometry, world, ui, preview, flares, thunder, portrait, doll, partyPortraits ) {
+		frameDraw( frameId, image, geometry, world, ui, preview, flares, thunder, portrait, doll, partyPortraits ) {
 			if ( !active ) return;
 			const sampledAt = now();
 			if ( sampledAt < nextDrawSample || drawSamples.length >= 1024 ) return;
@@ -334,123 +333,4 @@ export function createFrameProfiler( now = () => performance.now(), capacity = 3
 			};
 		}
 	};
-}
-
-/*
-================
-instrumentFrameProfiler
-================
-*/
-export function instrumentFrameProfiler( source, file ) {
-	if (
-		![
-			"src/engine/runtime/renderer/frame/frame.ts",
-			"src/engine/runtime/renderer/world/world.ts"
-		].includes( file )
-	) return source;
-	source = source.replace( /\r\n/g, "\n" );
-	/*
-	================
-	insert
-	================
-	*/
-	function insert( marker, text, after = true ) {
-		const count = source.split( marker ).length - 1;
-		if ( count !== 1 ) throw Error( `Frame instrumentation expected one ${marker} in ${file}, found ${count}` );
-		source = source.replace( marker, after ? marker + text : text + marker );
-	}
-	// runtime.ts calls the profiler through explicit hooks (frameProbe) and is
-	// not patched.
-	if ( file === "src/engine/runtime/renderer/frame/frame.ts" ) {
-		insert(
-			"partyPortraits=[],frameId,deferred,bloom){",
-			"globalThis.__worldProbeFrameProfiler?.draw(frameId,image,geometry,world,ui,preview,flares,thunder,portrait,doll,partyPortraits);"
-		);
-	}
-
-	if ( file === "src/engine/runtime/renderer/world/world.ts" ) {
-		/*
-		================
-		detail
-		================
-		*/
-		const detail = ( name, begin, end ) => {
-			insert( begin, `globalThis.__worldProbeFrameProfiler?.detailBegin("${name}");`, false );
-			insert( end, `globalThis.__worldProbeFrameProfiler?.detailEnd("${name}");`, false );
-		};
-		insert(
-			"const frustum=prepareViewFrustum(matrix)",
-			"const __sampleWorldDetails=globalThis.__worldProbeFrameProfiler?.sampleDetails();",
-			false
-		);
-		insert(
-			"if(group.instanceRadius!==undefined){",
-			'if(__sampleWorldDetails)globalThis.__worldProbeFrameProfiler?.detailBegin("world-instance-setup");'
-		);
-		insert(
-			"     for(let i=0;i<source.length;i+=16){",
-			'if(__sampleWorldDetails){globalThis.__worldProbeFrameProfiler?.detailEnd("world-instance-setup");globalThis.__worldProbeFrameProfiler?.detailBegin("world-instance-loop");}',
-			false
-		);
-		insert(
-			"     instancesDirty||=count!",
-			'if(__sampleWorldDetails){globalThis.__worldProbeFrameProfiler?.detailEnd("world-instance-loop");globalThis.__worldProbeFrameProfiler?.detailBegin("world-instance-upload");}',
-			false
-		);
-		insert(
-			"     if(count){visible.push(group);triangles+=group.geometry.indices.length/3*count;}",
-			'if(__sampleWorldDetails)globalThis.__worldProbeFrameProfiler?.detailEnd("world-instance-upload");',
-			false
-		);
-		detail( "terrain-candidates", "const cellChanged=cache.cellX", "const indicesDirty=!cache.chosen" );
-		detail(
-			"terrain-indices",
-			"const indicesDirty=!cache.chosen",
-			"     for(const range of chosen){\n      // Installed"
-		);
-		detail(
-			"terrain-seams",
-			"     for(const range of chosen){\n      // Installed",
-			"     cache.indexCount=count;"
-		);
-		detail(
-			"terrain-index-upload",
-			"     if(indicesDirty){geometry.updateIndices",
-			"     if(positionRanges.length)geometry.updatePositions"
-		);
-		detail(
-			"terrain-position-upload",
-			"     if(positionRanges.length)geometry.updatePositions",
-			"     if(count){visible.push(group);triangles+=count/3;}"
-		);
-		insert(
-			"viewportHeight=1,backgroundDistance?:number):PreparedWorld{",
-			"globalThis.__worldProbeFrameProfiler?.worldBegin();"
-		);
-		insert(
-			"const frameClock=current?",
-			'globalThis.__worldProbeFrameProfiler?.worldMark("world-camera");',
-			false
-		);
-		insert(
-			"const targetCellX=Math.floor",
-			'globalThis.__worldProbeFrameProfiler?.worldMark("world-environment");',
-			false
-		);
-		insert(
-			"fadesChanging=changing;",
-			'globalThis.__worldProbeFrameProfiler?.worldMark("world-selection");',
-			false
-		);
-		insert(
-			"activeAnimated=animated.filter(g=>visibleSet.has(g));animate(geometry,seconds);",
-			'globalThis.__worldProbeFrameProfiler?.worldMark("world-finalize");'
-		);
-		insert(
-			"retainedFadeFrame=fadeFrame;animate(geometry,seconds);",
-			'globalThis.__worldProbeFrameProfiler?.worldMark("world-finalize");'
-		);
-	}
-
-	return source;
 }

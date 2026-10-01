@@ -163,17 +163,3 @@ export function instrumentAnimationCeiling( source ) {
 	// Startup passes the capture owner through RuntimeDiagnostics.
 	return source;
 }
-
-/*
-================
-instrumentWorldSelectionCeiling
-================
-*/
-export function instrumentWorldSelectionCeiling( source ) {
-	const marker = "if(!viewChanged&&!fadesChanging&&targetCellX===retainedTargetX&&targetCellZ===retainedTargetZ){";
-	if ( source.split( marker ).length !== 2 ) throw Error( "World ceiling boundary changed" );
-	return source.replace(
-		marker,
-		"if(globalThis.__worldProbeAnimationCeiling?.worldReplay(!!lastView)||(!viewChanged&&!fadesChanging&&targetCellX===retainedTargetX&&targetCellZ===retainedTargetZ)){"
-	);
-}

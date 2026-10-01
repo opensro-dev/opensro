@@ -12,12 +12,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { build } from "esbuild";
-import {
-	createAnimationCeiling,
-	instrumentAnimationCeiling,
-	instrumentWorldSelectionCeiling
-} from "../../tools/lib/animation-ceiling.mjs";
+import { createAnimationCeiling, instrumentAnimationCeiling } from "../../tools/lib/animation-ceiling.mjs";
 import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
+import "../helpers/native-source-loader.mjs";
+import { pathToFileURL as sourceFileUrl } from "node:url";
 test("ceiling intervention is window-scoped, admits cold poses and excludes other models", () => {
 	const probe = createAnimationCeiling( true );
 	assert.equal( probe.skip( true, true ), false );
@@ -138,22 +136,10 @@ test("combined schedule balances four modes and never replays cold selection", (
 });
 
 test("world replay retains draws but updates camera, then resumes culling and admits recovery", async () => {
-	const file = "src/engine/runtime/renderer/world/world.ts", source = await readFile( file, "utf8" );
-	assert.throws( () => instrumentWorldSelectionCeiling( "" ), /boundary changed/ );
-	const result = await build( {
-		stdin: {
-			contents: instrumentWorldSelectionCeiling( source ),
-			resolveDir: path.resolve( path.dirname( file ) ),
-			loader: "ts"
-		},
-		bundle: true,
-		platform: "node",
-		format: "esm",
-		write: false,
-		tsconfig: path.resolve( "tsconfig.json" )
-	} );
+	// The world renderer exposes the replay as an explicit frame-probe hook;
+	// nothing rewrites its source.
 	const { createWorldRenderer } = await import(
-		"data:text/javascript;base64," + Buffer.from( result.outputFiles[0].contents ).toString( "base64" )
+		sourceFileUrl( "src/engine/runtime/renderer/world/world.ts" ).href
 	);
 	const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
 		world = createWorldRenderer(),
@@ -205,7 +191,7 @@ release
 		far: 1000,
 		fov: Math.PI / 3
 	});
-	globalThis.__worldProbeAnimationCeiling = probe;
+	world.profile( { worldReplay: hasView => probe.worldReplay( hasView ) } );
 	try {
 		world.scene( value );
 		world.camera( camera( 20 ) );
@@ -228,6 +214,5 @@ release
 		assert.ok( probe.stats().worldCold > 0 );
 	} finally {
 		world.dispose( geometry, textures );
-		delete globalThis.__worldProbeAnimationCeiling;
 	}
 });

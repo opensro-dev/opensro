@@ -121,6 +121,26 @@ if ( process.argv.includes( "--animation-phases" ) ) {
 		content: `globalThis.__worldProbeAnimationPhases=(${createAnimationPhaseProfiler.toString()})();`
 	} );
 }
+// Pick census: world.ts reports each exact pick test through its frame probe
+// (pickCensus); this sink aggregates the rows per world group.
+if ( process.argv.includes( "--pick-census" ) ) {
+	await page.addInitScript( () => {
+		globalThis.__worldProbePickCensus = row => {
+			const rows = globalThis.__worldProbePickRows ??= {};
+			const entry = rows[row.group] ??= {
+				calls: 0,
+				ms: 0,
+				triangles: 0,
+				vertices: row.vertices,
+				ranges: row.ranges,
+				skinned: row.skinned
+			};
+			entry.calls++;
+			entry.ms += row.ms;
+			entry.triangles += row.triangles;
+		};
+	} );
+}
 if ( process.argv.includes( "--ui-products" ) ) {
 	await page.addInitScript( {
 		content: `globalThis.__worldProbeUiProducts=(${createUiProductProbe.toString()})();`

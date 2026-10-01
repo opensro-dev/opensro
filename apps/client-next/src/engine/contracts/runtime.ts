@@ -37,6 +37,32 @@ export interface RenderFrameProbe {
 	characterBegin(): void;
 	characterMark( stage: string ): void;
 	characterCount( name: string, value?: number ): void;
+	// World preparation stages and detail spans (renderer/world/world.ts).
+	worldBegin?(): void;
+	worldMark?( stage: string ): void;
+	sampleDetails?(): boolean;
+	detailBegin?( name: string ): void;
+	detailEnd?( name: string ): void;
+	// Animation ceiling: replay the retained world selection this frame.
+	worldReplay?( hasView: boolean ): boolean;
+	// One exact pick test against a world group.
+	pickCensus?( row: WorldPickSample ): void;
+	// The submitted frame's draw lists (renderer/frame/frame.ts), sampled.
+	frameDraw?( frameId: number | undefined, ...draws: readonly unknown[] ): void;
+}
+
+/*
+================
+WorldPickSample
+================
+*/
+export interface WorldPickSample {
+	readonly group: string;
+	readonly ms: number;
+	readonly triangles: number;
+	readonly vertices: number;
+	readonly ranges: boolean;
+	readonly skinned: boolean;
 }
 
 /*

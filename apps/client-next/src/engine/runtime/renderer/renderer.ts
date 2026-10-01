@@ -326,6 +326,7 @@ frame
 		frame( viewport, timeSeconds = 0, frameId, probe ) {
 			probe?.renderBegin();
 			characters.profile( probe );
+			world.profile( probe );
 			if ( disposed || failure ) {
 				return;
 			}
@@ -545,6 +546,7 @@ frame
 								finishDeferred()
 					} :
 					undefined;
+				frame!.profile( probe );
 				const pending = frame!.draw(
 					color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),

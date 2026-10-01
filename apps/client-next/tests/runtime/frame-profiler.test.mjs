@@ -3,18 +3,18 @@
 
 frame-profiler.test.mjs - tests for tools/lib/frame-profiler.mjs
 
-The recorder's stage accounting, and that instrumentation binds to the
-remaining legacy boundaries, refuses missing ones, and leaves explicit
-frame-owner hooks unpatched. UI hook behavior is tested with the real UI
-in ui-resource-lifetime.test.mjs.
+The recorder's stage accounting, and that the world renderer reports its
+stages through the explicit frame-probe hooks (no source is patched). UI hook
+behavior is tested with the real UI in ui-resource-lifetime.test.mjs.
 
 ===========================================================================
 */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { createFrameProfiler, instrumentFrameProfiler } from "../../tools/lib/frame-profiler.mjs";
+import "../helpers/native-source-loader.mjs";
+import { pathToFileURL as sourceFileUrl } from "node:url";
+import { createFrameProfiler } from "../../tools/lib/frame-profiler.mjs";
 
 test("pose counters belong to the main character phase and reset each frame", () => {
 	const owner = createFrameProfiler( () => 0 );
@@ -74,30 +74,54 @@ test("frame recorder separates nested renderer stages, closes CPU spans and repo
 	owner.end();
 	assert.equal( owner.stop().rows[0][0], 20 );
 });
-test("instrumentation binds to current production boundaries and refuses missing boundaries", async () => {
-	const html = "<!doctype html>\r\n<html></html>";
-	assert.equal( instrumentFrameProfiler( html, "index.html" ), html );
-	for (
-		const file of [
-			"src/engine/runtime/renderer/frame/frame.ts",
-			"src/engine/runtime/renderer/world/world.ts"
-		]
-	) {
-		const source = await readFile( file, "utf8" ), instrumented = instrumentFrameProfiler( source, file );
-		assert.notEqual( source, instrumented );
-		assert.match( instrumented, /__worldProbeFrameProfiler/ );
-		assert.throws( () => instrumentFrameProfiler( "", file ), /expected one/ );
-	}
-	// These owners receive explicit profiler hooks and are never patched.
-	for (
-		const file of [
-			"src/engine/runtime/runtime.ts",
-			"src/engine/runtime/renderer/renderer.ts",
-			"src/engine/runtime/renderer/characters/characters.ts"
-		]
-	) {
-		const source = await readFile( file, "utf8" );
-		assert.equal( instrumentFrameProfiler( source, file ), source );
+test("the world renderer reports its preparation stages through the frame probe", async () => {
+	const { createWorldRenderer } = await import(
+		sourceFileUrl( "src/engine/runtime/renderer/world/world.ts" ).href
+	);
+	const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
+		world = createWorldRenderer(),
+		calls = [];
+	const geometry = { upload: () => ({}), release() {}, updateInstances: d => d },
+		textures = { upload: () => ({}), release() {} };
+	const placed = identity();
+	placed[14] = 20;
+	world.profile( {
+		worldBegin: () => calls.push( "begin" ),
+		worldMark: stage => calls.push( stage ),
+		sampleDetails: () => true,
+		detailBegin: name => calls.push( "+" + name ),
+		detailEnd: name => calls.push( "-" + name )
+	} );
+	world.scene( {
+		id: "probe",
+		originRegion: 1,
+		warnings: [],
+		groups: [ {
+			id: "piece",
+			center: [ 0, 0, 20 ],
+			radius: 2,
+			instanceRadius: 2,
+			material: { color: [ 1, 1, 1, 1 ], alphaCutoff: 0, blend: false, doubleSided: true },
+			geometry: {
+				positions: new Float32Array( [ 0, 0, 0, 1, 0, 0, 0, 1, 0 ] ),
+				normals: new Float32Array( 9 ),
+				uvs: new Float32Array( 6 ),
+				indices: new Uint32Array( [ 0, 1, 2 ] ),
+				instances: placed,
+				transform: identity()
+			}
+		} ]
+	} );
+	world.camera( { originRegion: 1, eye: [ 0, 0, 0 ], target: [ 0, 0, 20 ], near: 1, far: 1000, fov: Math.PI / 3 } );
+	try {
+		world.prepare( geometry, textures, 1, 0 );
+		assert.deepEqual(
+			calls.filter( c => !c.startsWith( "+" ) && !c.startsWith( "-" ) ),
+			[ "begin", "world-camera", "world-environment", "world-selection", "world-finalize" ]
+		);
+		assert.ok( calls.includes( "+world-instance-setup" ) && calls.includes( "-world-instance-upload" ) );
+	} finally {
+		world.dispose( geometry, textures );
 	}
 });
 
@@ -126,7 +150,7 @@ test("draw census counts instancing and separate passes without treating shared 
 		draw = { indexCount: 12, instanceCount: 3 },
 		empty = { indexCount: 0, instanceCount: 1 };
 	owner.start();
-	owner.draw(
+	owner.frameDraw(
 		7,
 		{},
 		undefined,
@@ -139,7 +163,7 @@ test("draw census counts instancing and separate passes without treating shared 
 		undefined,
 		[ { draws: [ draw ] } ]
 	);
-	owner.draw( 8, undefined, undefined, [], [], [], undefined, undefined, undefined, undefined, [] );
+	owner.frameDraw( 8, undefined, undefined, [], [], [], undefined, undefined, undefined, undefined, [] );
 	const rows = owner.stop().drawSamples;
 	assert.equal( rows.length, 1 );
 	const row = rows[0];
@@ -152,7 +176,7 @@ test("draw census counts instancing and separate passes without treating shared 
 	assert.equal( row.computePasses, 1 );
 	owner.start();
 	t = 501;
-	owner.draw( 9, undefined, undefined, [], [], [], undefined, undefined, undefined, undefined, [] );
+	owner.frameDraw( 9, undefined, undefined, [], [], [], undefined, undefined, undefined, undefined, [] );
 	assert.equal( owner.stop().drawSamples[0].frameId, 9 );
 });
 

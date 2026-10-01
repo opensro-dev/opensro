@@ -1892,6 +1892,62 @@
 			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
 		},
 		{
+			"file": "src/engine/runtime/renderer/world/world.ts",
+			"expression": "probe?.worldBegin",
+			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/world/world.ts",
+			"expression": "probe?.worldMark",
+			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/world/world.ts",
+			"expression": "probe?.worldReplay",
+			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/world/world.ts",
+			"expression": "probe?.sampleDetails",
+			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/world/world.ts",
+			"expression": "probe?.detailBegin",
+			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/world/world.ts",
+			"expression": "probe?.detailEnd",
+			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/world/world.ts",
+			"expression": "probe?.pickCensus",
+			"function": "pick",
+			"kind": "callback",
+			"reason": "Optional pick-census observer (profile builds only); records one exact pick test without changing its result. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/frame/frame.ts",
+			"expression": "probe?.frameDraw",
+			"function": "draw",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
 			"file": "src/engine/runtime/simulation/host.ts",
 			"expression": "resolve",
 			"function": "wake",
@@ -1933,7 +1989,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "70feaba874dcf2c86601929404cf367027719a3c103fad48833ceacfff79bd53",
+			"sourceSha256": "67dfbcef24111272037f47d5c3b74fa296620b3c8d73c29b184d87addc04c4ba",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,
