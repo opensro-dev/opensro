@@ -2,6 +2,16 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": ["callback:createGameplay:3"]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": ["callback"]
+		},
+		{
 			"consumer": "src/engine/runtime/characters/mall-preview.ts",
 			"provider": "src/engine/runtime/characters/resources/resources.ts",
 			"functions": [
@@ -1989,7 +1999,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "67dfbcef24111272037f47d5c3b74fa296620b3c8d73c29b184d87addc04c4ba",
+			"sourceSha256": "b192caad099c1bb5954b5cac254620c5e35c324c3c255d163589b804be890999",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

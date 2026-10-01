@@ -228,7 +228,7 @@ func TestDivisionMotionCannotOvertakeEnterWorldAdmission(t *testing.T) {
 	sess, _ := srv.Hub.Session(welcome.SessionID)
 	bridge := New(srv.Hub)
 	sess.BeginSceneAdmission()
-	sess.BindCharacter("DIV_A", "Alice")
+	sess.BindCharacter("DIV_A", "Alice", 0)
 	motion := simulation.Frame{Opcode: wire.OpObjectSourceMove, Payload: make([]byte, 20)}
 	bridge.PushToDivision("DIV_A", []simulation.Frame{motion}, "")
 	if err := sess.SendSceneReset([]transport.Frame{{Opcode: transport.OpEnterWorldResult, Payload: []byte{1}}}); err != nil {
@@ -254,8 +254,8 @@ func TestPushToDivisionRoutesAndExcludes(t *testing.T) {
 
 	sessA, _ := srv.Hub.Session(wA.SessionID)
 	sessB, _ := srv.Hub.Session(wB.SessionID)
-	sessA.BindCharacter("DIV_A", "Alice")
-	sessB.BindCharacter("DIV_A", "Bob")
+	sessA.BindCharacter("DIV_A", "Alice", 0)
+	sessB.BindCharacter("DIV_A", "Bob", 0)
 
 	bridge := New(srv.Hub)
 	despawn := simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: []byte{0xE1, 0x93, 0x04, 0x00}}
@@ -281,8 +281,8 @@ func TestPushToDivisionFollowsRebindAndClose(t *testing.T) {
 
 	sessA, _ := srv.Hub.Session(wA.SessionID)
 	sessB, _ := srv.Hub.Session(wB.SessionID)
-	sessA.BindCharacter("DIV_A", "Alice")
-	sessB.BindCharacter("DIV_A", "Bob")
+	sessA.BindCharacter("DIV_A", "Alice", 0)
+	sessB.BindCharacter("DIV_A", "Bob", 0)
 
 	bridge := New(srv.Hub)
 	despawnA := simulation.Frame{Opcode: wire.OpObjectDespawn, Payload: []byte{0xAA, 0xAA, 0xAA, 0xAA}}
@@ -292,7 +292,7 @@ func TestPushToDivisionFollowsRebindAndClose(t *testing.T) {
 	// Distinct payloads make a mis-routed frame unambiguous, and the
 	// silence checks come LAST because a gorilla read timeout poisons the
 	// conn for all later reads.
-	sessB.BindCharacter("DIV_B", "Bob")
+	sessB.BindCharacter("DIV_B", "Bob", 0)
 	bridge.PushToDivision("DIV_A", []simulation.Frame{despawnA}, "")
 	bridge.PushToDivision("DIV_B", []simulation.Frame{despawnB}, "")
 	f := readFrame(t, cA)

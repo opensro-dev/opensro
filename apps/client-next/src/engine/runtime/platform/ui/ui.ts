@@ -46,6 +46,10 @@ export function createUiBridge(
 	let composing = false;
 	let drag: { id: string; pointer: number; x: number; y: number; moved?: boolean; } | null = null, focusRevision = -1;
 	let suppressClick: string | null = null;
+	// Abandoning a drag or a carry is reported as drag-cancel, never as
+	// press null: press null is the visual release that every key-up and
+	// control boundary crossing also sends, and a carried item must survive
+	// those.
 	// Click-carry: a click on a carry control lifts its item onto the cursor;
 	// pointer moves report as that control's drag, and the next left press
 	// reports its drag-end at the press point and is consumed whole, so it
@@ -74,6 +78,7 @@ export function createUiBridge(
 		if ( !drag || event.pointerId !== drag.pointer ) return;
 		const current = controls.get( drag.id )?.value;
 		if ( !current?.draggable || current.disabled ) {
+			emit( { kind: "drag-cancel", id: drag.id } );
 			drag = null;
 			emit( { kind: "press", id: null } );
 			return;
@@ -94,11 +99,13 @@ export function createUiBridge(
 		}
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointercancel", () => {
+		if ( drag ) emit( { kind: "drag-cancel", id: drag.id } );
 		drag = null;
 		suppressClick = null;
 		emit( { kind: "press", id: null } );
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "blur", () => {
+		if ( drag ) emit( { kind: "drag-cancel", id: drag.id } );
 		drag = null;
 		cancelCarry();
 	}, { signal: lifetime.signal } );
@@ -268,6 +275,7 @@ export function createUiBridge(
 				const element = controls.get( drag.id )?.element;
 				if ( element?.hasPointerCapture( drag.pointer ) ) element.releasePointerCapture( drag.pointer );
 				suppressClick = drag.id;
+				emit( { kind: "drag-cancel", id: drag.id } );
 				drag = null;
 				emit( { kind: "press", id: null } );
 			}
@@ -306,9 +314,15 @@ export function createUiBridge(
 			} );
 			// Keyboard activation (detail 0) never lifts an item.
 			if ( slot.value.carry && slot.value.draggable && !carry && event.detail > 0 && putBack !== slot.value.id ) {
-				const [x, y] = uiPoint( event );
+				const [x, y] = uiPoint( event ), rect = slot.value.rect;
 				carry = { id: slot.value.id, x, y };
-				emit( { kind: "drag", id: carry.id, dx: 0, dy: 0 } );
+				// The lifted icon starts on the cursor, not on the slot's centre.
+				emit( {
+					kind: "drag",
+					id: carry.id,
+					dx: x - (rect[0] + rect[2] / 2),
+					dy: y - (rect[1] + rect[3] / 2)
+				} );
 			}
 		}
 	}, { signal: lifetime.signal } );
@@ -322,8 +336,8 @@ export function createUiBridge(
 	function carrying() {
 		const value = carry ? controls.get( carry.id )?.value : undefined;
 		if ( carry && (!value?.carry || value.disabled) ) {
+			emit( { kind: "drag-cancel", id: carry.id } );
 			carry = null;
-			emit( { kind: "press", id: null } );
 		}
 		return carry;
 	}
@@ -334,8 +348,8 @@ export function createUiBridge(
 	*/
 	function cancelCarry() {
 		if ( !carry ) return;
+		emit( { kind: "drag-cancel", id: carry.id } );
 		carry = null;
-		emit( { kind: "press", id: null } );
 	}
 	window.addEventListener( "pointermove", event => {
 		const live = drag ? null : carrying();
@@ -358,7 +372,7 @@ export function createUiBridge(
 		carry = null;
 		swallowClick = true;
 		if ( event.button !== 0 ) {
-			emit( { kind: "press", id: null } );
+			emit( { kind: "drag-cancel", id: live.id } );
 			return;
 		}
 		const [x, y] = uiPoint( event );
@@ -470,6 +484,7 @@ export function createUiBridge(
 		if ( carry?.id === id ) cancelCarry();
 		if ( drag?.id === id ) {
 			if ( slot.element.hasPointerCapture( drag.pointer ) ) slot.element.releasePointerCapture( drag.pointer );
+			emit( { kind: "drag-cancel", id } );
 			drag = null;
 			emit( { kind: "press", id: null } );
 		}

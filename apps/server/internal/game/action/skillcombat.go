@@ -218,10 +218,11 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	}
 	consumeAmmo := (basic && !transformStrike && weaponRequiresAmmunition(loadout.WeaponKind)) || (advanced && skill.Ammunition.Count != 0)
 	if consumeAmmo {
+		// 58E32D refuses any skill whose cnsm requirement is unmet with
+		// 0x300E, the basic attack included: SKILL_CH_BOW_BASE and
+		// SKILL_EU_CROSSBOW_BASE carry cnsm 4/1 and 4/2. The client shows
+		// the out-of-ammunition notice for it, as it does for skills.
 		if _, valid := rt.planEquippedAmmunition(snapshot, loadout.WeaponKind, ammunitionSpent(skill, advanced)); !valid {
-			if basic {
-				return OpResult{}, skillCastRefused
-			}
 			return offensiveRefusal(0x300e), skillCastRefused
 		}
 	}

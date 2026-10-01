@@ -144,7 +144,7 @@ func TestWorldBoundWaitsForGameReady(t *testing.T) {
 
 	// A transport resume can replace bootstrap while a prior scene is loading.
 	// BindCharacter clears the provider, so this admission must run WorldBound.
-	session.BindCharacter(enterworld.DefaultDivisionID, character.Name)
+	session.BindCharacter(enterworld.DefaultDivisionID, character.Name, 0)
 	if err := session.SendSceneReset([]transport.Frame{{Opcode: enterworld.OpcodeResetClient, Payload: []byte{1, 2}}}); err != nil {
 		t.Fatal(err)
 	}

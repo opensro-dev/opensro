@@ -26,7 +26,6 @@ apps/client-next/src/engine/foundation/animation/animated-material.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
 apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
 apps/client-next/src/engine/foundation/animation/animation-emission.ts
-apps/client-next/src/engine/foundation/animation/animation-metadata.ts
 apps/client-next/src/engine/foundation/animation/animation-timelines.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
@@ -112,11 +111,9 @@ apps/client-next/src/engine/foundation/gameplay/gm-command.ts
 apps/client-next/src/engine/foundation/gameplay/ground-item.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/hunting.ts
-apps/client-next/src/engine/foundation/gameplay/inventory-item.ts
 apps/client-next/src/engine/foundation/gameplay/inventory-notices.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
 apps/client-next/src/engine/foundation/gameplay/item-cooldowns.ts
-apps/client-next/src/engine/foundation/gameplay/item-state-delta.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
 apps/client-next/src/engine/foundation/gameplay/name-color.ts

@@ -155,7 +155,7 @@ func wireConnect(t *testing.T, srv *transport.Server, division, characterName st
 	if !ok {
 		t.Fatalf("session %d not registered in hub", welcome.SessionID)
 	}
-	session.BindCharacter(division, characterName)
+	session.BindCharacter(division, characterName, 0)
 	return client
 }
 

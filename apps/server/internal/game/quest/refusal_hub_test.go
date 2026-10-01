@@ -96,7 +96,7 @@ func TestQuestRefusalsThroughRegisteredHub(t *testing.T) {
 		if !ok {
 			t.Fatal("session missing")
 		}
-		s.BindCharacter("quest-test", character.Name)
+		s.BindCharacter("quest-test", character.Name, 0)
 		return c
 	}
 	requester, peer := connect(), connect()

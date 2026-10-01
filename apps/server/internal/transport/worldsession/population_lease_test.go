@@ -26,7 +26,7 @@ func TestSnapshotRequiresAuthenticatedPopulationLifetime(t *testing.T) {
 	if len(b.SnapshotSessions()) != 0 {
 		t.Fatal("unbound transport entered population")
 	}
-	sess.BindCharacter("DIV_A", "Alice")
+	sess.BindCharacter("DIV_A", "Alice", 0)
 	sess.SetWorldSnapshot("DIV_A", staticProvider{simulation.SessionSnapshot{
 		DivisionID: "DIV_A", CharacterID: 7, WorldInstance: uint32(id),
 	}})

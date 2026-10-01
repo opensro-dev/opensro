@@ -639,6 +639,11 @@ spawn
 	ride.writeUInt32LE( 2, 6 );
 	owner.receive( { opcode: 0xb4b5, payload: ride } );
 	assert.equal( flush( owner ).events[0].entity.mountedOn, 2 );
+	owner.receive( { opcode: 0xb4b5, payload: Uint8Array.of( 2, 4 ) } );
+	assert.equal( owner.read( 1 ).mountedOn, 2, "a refused dismount preserves the ride binding" );
+	for ( const payload of [ Uint8Array.of( 2 ), Uint8Array.of( 2, 4, 0 ), Uint8Array.of( 3, 4 ) ] ) {
+		assert.throws( () => owner.receive( { opcode: 0xb4b5, payload } ), /ride state/ );
+	}
 	const invalid = Buffer.from( ride );
 	invalid.writeUInt32LE( 1, 6 );
 	assert.throws( () => owner.receive( { opcode: 0xb4b5, payload: invalid } ), /references absent/ );

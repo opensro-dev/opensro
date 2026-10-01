@@ -20,6 +20,7 @@ const {
 	partyMatchRequest,
 	partyMatchPacket,
 	partyMatchRows,
+	partyMatchButtons,
 	partyAutoCandidates,
 	partyActiveJob,
 	partyPurposeAllowed,
@@ -226,4 +227,60 @@ test("registration eligibility covers every job/purpose byte and valid defaults"
 	}
 	for ( const purpose of [ -1, 0.5, NaN, Infinity ] ) assert.equal( partyPurposeAllowed( 4, purpose ), false );
 	for ( let job = 1; job <= 4; job++ ) assert.ok( partyPurposeAllowed( job, partyDefaultPurpose( job ) ) );
+});
+
+test("a new listing shows at once and survives pages that do not contain it", () => {
+	// Reported: after forming, the listing appeared only after a manual
+	// refresh, and the leader could not delete it from another page.
+	const request = partyMatchRequest( emptyPartyMatching(), { kind: "party-match-register", registration: reg } );
+	const registered = partyMatchPacket( request.state, ack( 0xb6ff ), "Leader", 0, { race: 1, members: 3 } );
+	assert.deepEqual( registered.rows[0], {
+		id: 42,
+		party: 0,
+		type: 3,
+		purpose: 0,
+		min: 1,
+		max: 90,
+		title: reg.title,
+		name: "Leader",
+		race: 1,
+		members: 3
+	} );
+	// A page of other parties keeps the own listing: only 0xB535 retires it.
+	const paged = partyMatchPacket(
+		partyMatchRequest( registered, { kind: "party-match-page", page: 2 } ).state,
+		{ opcode: 0xb588, payload: Uint8Array.of( 1, 2, 2, 0 ) },
+		"Leader"
+	);
+	assert.equal( paged.own?.id, 42 );
+	assert.equal( partyMatchRequest( paged, { kind: "party-match-delete" } ).frame.opcode, 0x7535 );
+});
+
+test("matching buttons follow CIFPartyMatch_RefreshButtons", () => {
+	const base = {
+		own: null,
+		ownName: "",
+		localName: "Me",
+		inParty: false,
+		leader: false,
+		members: 1,
+		options: 0,
+		level: 10,
+		rows: 3
+	};
+	const on = input =>
+		Object.entries( partyMatchButtons( { ...base, ...input } ) ).filter( ( [, v] ) => v )
+			.map( ( [k] ) => Number( k ) );
+	assert.deepEqual( on( {} ), [ 15, 16, 17, 18 ], "solo: join, whisper, auto, form" );
+	assert.deepEqual( on( { level: 4 } ), [ 15, 16, 17 ], "form needs level 5 outside a party" );
+	assert.deepEqual( on( { inParty: true, members: 2 } ), [ 16 ], "a member cannot form, join or auto" );
+	assert.deepEqual( on( { inParty: true, leader: true, members: 2 } ), [ 16, 18 ], "the leader forms" );
+	assert.deepEqual( on( { inParty: true, leader: true, members: 4 } ), [ 16 ], "four without EXP share is full" );
+	assert.deepEqual( on( { inParty: true, leader: true, members: 4, options: 1 } ), [ 16, 18 ], "eight with it" );
+	assert.deepEqual(
+		on( { own: { id: 42 }, ownName: "Me" } ),
+		[ 16, 19, 20 ],
+		"an own listing: modify and delete only"
+	);
+	assert.deepEqual( on( { rows: 0 } ), [ 18 ], "an empty board offers only form" );
 });

@@ -63,6 +63,8 @@ export interface PartyMatching {
 	readonly page: number;
 	readonly pages: number;
 	readonly rows: readonly PartyListing[];
+	// The local player's own listing (PartyMatchManager +0x08). It lives until
+	// a delete reply clears it: a list page that does not show it keeps it.
 	readonly own: PartyRegistration | null;
 	readonly request: PartyJoinRequest | null;
 	readonly pending: "page" | "join" | "register" | "modify" | "delete" | null;
@@ -192,7 +194,8 @@ export function partyMatchPacket(
 	state: PartyMatching,
 	frame: WireFrame,
 	localName = "",
-	now = 0
+	now = 0,
+	local: PartyMatchLocal = { race: 0, members: 1 }
 ): PartyMatching | null {
 	const op = frame.opcode;
 	if ( ![ 0xb588, 0xb5bf, 0xb6ff, 0xb3dc, 0xb535, 0x75bf ].includes( op ) ) return null;
@@ -281,12 +284,19 @@ export function partyMatchPacket(
 				result: null
 			};
 		} else if ( op === 0xb6ff || op === 0xb3dc ) {
-			const own = registration();
+			// PartyMatchManager_SetOwnRecord (80E6B0) builds the listing from the
+			// reply plus the local name, race and party size, and
+			// CIFPartyMatch_RebuildRows (636CE0) shows it at once: a new listing
+			// never waits for the next page request.
+			const own = registration(),
+				row: PartyListing = { ...own, name: localName, race: local.race, members: local.members };
 			next = {
 				...state,
 				pending,
 				own,
-				rows: state.rows.map( r => r.id === own.id ? { ...r, ...own } : r ),
+				rows: state.rows.some( r => r.id === own.id ) ?
+					state.rows.map( r => r.id === own.id ? { ...r, ...own } : r ) :
+					[ row, ...state.rows ],
 				result: null
 			};
 		} else {
@@ -312,7 +322,9 @@ export function partyMatchPacket(
 				pages,
 				rows,
 				pending,
-				own: localName ? (rows.find( r => r.name === localName ) ?? null) : state.own,
+				// A page shows one slice of the board: it can reveal the own
+				// listing (after a relog) but never retire it; only 0xB535 does.
+				own: (localName ? rows.find( r => r.name === localName ) : undefined) ?? state.own,
 				result: null
 			};
 		}
@@ -410,4 +422,49 @@ partyDefaultPurpose
 */
 export function partyDefaultPurpose( job: number ): number {
 	return job === 2 ? 3 : job === 1 || job === 3 ? 2 : 0;
+}
+
+/*
+================
+PartyMatchLocal
+
+The local facts PartyMatchManager_SetOwnRecord (80E6B0) adds to a listing:
+the player's race (country byte) and the party size, 1 outside a party.
+================
+*/
+export interface PartyMatchLocal {
+	readonly race: number;
+	readonly members: number;
+}
+
+/*
+================
+partyMatchButtons
+
+CIFPartyMatch_RefreshButtons (634A10), control by control:
+  0x0F join, 0x11 auto: no own listing, outside a party, level >= 1, rows shown
+  0x10 whisper: rows shown
+  0x12 form: no own listing, and either outside a party at level >= 5 or the
+       leader (SPartyData_IsLocalLeader) of a party that is not full
+       (CCharacterDependentData_IsPartyFull: 4 members, 8 with EXP share)
+  0x13 modify, 0x14 delete: an own listing registered under the local name
+================
+*/
+export function partyMatchButtons( input: {
+	readonly own: PartyRegistration | null;
+	readonly ownName: string;
+	readonly localName: string;
+	readonly inParty: boolean;
+	readonly leader: boolean;
+	readonly members: number;
+	readonly options: number;
+	readonly level: number;
+	readonly rows: number;
+} ): Readonly<Record<15 | 16 | 17 | 18 | 19 | 20, boolean>> {
+	const full = input.members >= ((input.options & 1) ? 8 : 4),
+		open = !input.own && !input.inParty && input.level >= 1 && input.rows > 0,
+		form = !input.own &&
+			(!input.inParty && input.level >= 5 || input.inParty && input.leader && !full),
+		owned = !!input.own && input.ownName === input.localName;
+	return { 15: open, 16: input.rows > 0, 17: open, 18: form, 19: owned, 20: owned };
 }

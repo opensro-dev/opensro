@@ -227,6 +227,8 @@ test("party registration submits formation options even when an empty social sna
 	try {
 		f.setGame( {
 			social: emptySocial(),
+			// CIFPartyMatch_RefreshButtons: a partyless creator needs level 5.
+			progression: { level: 10, masteries: [] },
 			partyMatching: {
 				page: 0,
 				pages: 1,

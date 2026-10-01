@@ -90,6 +90,14 @@ func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.
 	if _, code := rt.offensiveCost(division, snapshot, skill, now); code != 0 {
 		return offensiveRefusal(code)
 	}
+	// Command acceptance runs phase 0x37 (4ACED4), which carries the ammo
+	// bit 0x20 (58E32D): an empty bow is refused at the press, before the
+	// approach walks the archer into range.
+	if skill.Ammunition.Count != 0 {
+		if _, valid := rt.planEquippedAmmunition(snapshot, loadout.WeaponKind, ammunitionSpent(skill, true)); !valid {
+			return offensiveRefusal(0x300e)
+		}
+	}
 	reach := rt.playerActionReach(division, snapshot, skill, loadout)
 	intent := basicAttackIntent{DivisionID: division, CharacterName: c.Name, TargetGid: cast.TargetGid, SkillID: skill.ID, ActionReach: reach, SingleCast: true}
 	rt.setCombatIntent(intent)
@@ -107,7 +115,8 @@ func (rt *Runtime) offensiveAdmissionRefusal(reason string) OpResult {
 	var result OpResult
 	switch reason {
 	case "offensive-shape-unsupported":
-		result.Frames = []wire.Frame{wire.NotificationFrame("This skill is not implemented yet.")}
+		notice := wire.NotificationFrame("This skill is not implemented yet.")
+		result.Frames, result.ActorPrivate = []wire.Frame{notice}, []wire.Frame{notice}
 	case "offensive-weapon-incompatible":
 		result = offensiveRefusal(0x300d)
 	case "offensive-skill-unavailable":

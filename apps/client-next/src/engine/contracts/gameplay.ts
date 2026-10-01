@@ -181,6 +181,9 @@ export type GameplayCommand =
 		readonly quantity: number;
 	}
 	| { readonly kind: "cos-behavior"; readonly gid: number; readonly mode: number; }
+	| { readonly kind: "cos-follow"; readonly gid: number; }
+	| { readonly kind: "cos-cancel"; readonly gid: number; }
+	| { readonly kind: "cos-ride"; readonly gid: number; readonly mounted: boolean; }
 	| { readonly kind: "shop-buyback"; readonly id: number; }
 	| import("./item-process").ItemProcessCommand
 	| { readonly kind: "mall-open"; }
@@ -235,6 +238,9 @@ export type GameplayCommand =
 	| {
 		readonly kind: "item-use";
 		readonly slot: number;
+		readonly companionGid?: number;
+		readonly revivalSlot?: number;
+		readonly summonerSlot?: number;
 	}
 	| {
 		readonly kind: "navigation";

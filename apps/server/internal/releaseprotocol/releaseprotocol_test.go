@@ -95,7 +95,7 @@ TestEveryReleasedProtocolNamesDistinctContracts
 */
 func TestEveryReleasedProtocolNamesDistinctContracts(t *testing.T) {
 	current, ok := ContractsOf(Current)
-	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract}) {
+	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract}) {
 		t.Fatalf("protocol %d names %+v, want the current contract constants", Current, current)
 	}
 	seen := map[Contracts]int{}
