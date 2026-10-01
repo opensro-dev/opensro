@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-main.go - explicit offline Item Mall authority upgrade
+main.go - explicit offline authority upgrade (schema 13 / layout 4 to current)
 
 Defaults to validation. Stop the game server before using -commit; the store
 lock enforces this requirement. The upgrade preserves all existing records.
@@ -11,6 +11,7 @@ lock enforces this requirement. The upgrade preserves all existing records.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -36,23 +37,28 @@ run
 ================
 */
 func run() error {
-	dir := flag.String("authority-dir", "", "existing layout-4 authority directory")
+	dir := flag.String("authority-dir", "", "existing authority directory (schema 13, layout 4)")
 	commit := flag.Bool("commit", false, "retain a backup and commit the layout-5 upgrade")
 	flag.Parse()
 	if *dir == "" || flag.NArg() != 0 {
 		return fmt.Errorf("usage: sro-authority-upgrade -authority-dir PATH [-commit]")
 	}
-	backup, err := store.UpgradeMallAuthority(*dir, *commit)
+	backup, err := store.UpgradeAuthority(*dir, *commit)
 	if backup != "" {
 		fmt.Println("Upgrade backup path:", backup)
+	}
+	if errors.Is(err, store.ErrAuthorityCurrent) {
+		// A retried release: the upgrade already committed.
+		fmt.Println("Authority already in the current format; nothing to upgrade.")
+		return nil
 	}
 	if err != nil {
 		return err
 	}
 	if *commit {
-		fmt.Println("Authority layout 5 committed and validated; existing records preserved.")
+		fmt.Println("Authority upgraded to the current format and validated; existing records preserved.")
 	} else {
-		fmt.Println("Authority layout 4 validated; rerun with -commit to upgrade.")
+		fmt.Println("Source authority validated; rerun with -commit to upgrade.")
 	}
 	return nil
 }

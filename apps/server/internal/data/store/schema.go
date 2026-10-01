@@ -22,7 +22,12 @@ func isVersionMismatch(err error) bool {
 // Version 13 replaces world.dungeonMinimap's presentation prefix/label object
 // with the semantic-only world.dungeonFloorIndex. The browser resolves all
 // minimap presentation from its packed catalogue.
-const CurrentVersion = 13
+//
+// Version 14 adds optional character fields (paramJobs, itemGroupCooldowns,
+// timedSkillJobs, skillActionRecoveryUntilMs) and comes with table layout 5.
+// Records decode strictly, so a schema 13 server cannot read a character that
+// carries them; sro-authority-upgrade converts a schema 13 authority offline.
+const CurrentVersion = 14
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

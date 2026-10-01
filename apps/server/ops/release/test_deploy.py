@@ -7,6 +7,7 @@ test_deploy.py - failed preflight cannot restart the fleet or retain its token
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -75,6 +76,29 @@ class DeployTests(unittest.TestCase):
 					else:
 						self.assertEqual(len(deployment_calls), 1)
 					self.assertEqual((module / "release.json").exists(), failure is None)
+
+	# ================
+	# test_store_upgrade_stops_the_fleet_then_upgrades_enabled_shards
+	#
+	# The fleet stops first (the upgrade refuses a live authority), each enabled
+	# shard is validated and then committed as the database owner, and the
+	# disabled shard is left alone.
+	# ================
+	def test_store_upgrade_stops_the_fleet_then_upgrades_enabled_shards(self):
+		with tempfile.TemporaryDirectory() as directory:
+			module = Path(directory)
+			(module / "config").mkdir()
+			(module / "config/shards.json").write_text(json.dumps({"shards": [
+				{"id": "global-official", "enabled": True}, {"id": "test", "enabled": False}]}))
+			authority = module / ".state/shards/global-official/authority"
+			authority.mkdir(parents=True)
+			(authority / "state.db").write_text("fixture")
+			calls = []
+			owner = SimpleNamespace(getpwuid=lambda uid: SimpleNamespace(pw_name="sro"))
+			with patch.dict(sys.modules, {"pwd": owner}), 				patch.object(deploy, "run", side_effect=lambda arguments, **options: calls.append(arguments)):
+				deploy.upgrade_authorities(module, "sro-nomad", ["-namespace", "sro"], {})
+			upgrader = ["runuser", "-u", "sro", "--", str(module / "sro-authority-upgrade"), "-authority-dir", str(authority)]
+			self.assertEqual(calls, [["sro-nomad", "stop", "-namespace", "sro"], upgrader, upgrader + ["-commit"]])
 
 
 if __name__ == "__main__":

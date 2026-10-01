@@ -24,6 +24,7 @@ FILES = {
 	"gameworld": "bin/gameworld",
 	"sro-nomad": "bin/sro-nomad",
 	"sro-provision-identity": "bin/sro-provision-identity",
+	"sro-authority-upgrade": "bin/sro-authority-upgrade",
 	"go.mod": "go.mod",
 	"ops/nomad/jobs/agent.nomad.hcl": "ops/nomad/jobs/agent.nomad.hcl",
 	"ops/nomad/jobs/gameworld.nomad.hcl": "ops/nomad/jobs/gameworld.nomad.hcl",

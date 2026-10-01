@@ -1,13 +1,14 @@
 /*
 ===========================================================================
 
-itemmall_upgrade_test.go - preserving upgrades, writer exclusion and recovery
+authority_upgrade_test.go - preserving upgrades, writer exclusion and recovery
 
 ===========================================================================
 */
 package store
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,6 +37,9 @@ func makePreMallAuthority(t *testing.T, dir string) {
 	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preMallLayoutVersion, metaKeyLayoutVersion); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", UpgradeFromVersion, metaKeySchemaVersion); err != nil {
+		t.Fatal(err)
+	}
 }
 
 /*
@@ -53,14 +57,14 @@ func TestMallUpgradePreservesAuthorityAndBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if backup, err := UpgradeMallAuthority(dir, false); err != nil || backup != "" {
+	if backup, err := UpgradeAuthority(dir, false); err != nil || backup != "" {
 		t.Fatalf("dry run: %q %v", backup, err)
 	}
 	after, err := os.ReadFile(filepath.Join(dir, DBFileName))
 	if err != nil || string(before) != string(after) {
 		t.Fatal("dry run changed database bytes", err)
 	}
-	backup, err := UpgradeMallAuthority(dir, true)
+	backup, err := UpgradeAuthority(dir, true)
 	if err != nil || backup == "" {
 		t.Fatalf("upgrade: %q %v", backup, err)
 	}
@@ -69,7 +73,7 @@ func TestMallUpgradePreservesAuthorityAndBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	oldGraph, err := loadDB(old, CurrentVersion, preMallLayoutVersion)
+	oldGraph, err := loadDB(old, UpgradeFromVersion, preMallLayoutVersion)
 	if err != nil || len(oldGraph.characters[testDivision]) != 1 {
 		t.Fatal("backup does not restore the pre-upgrade graph", err)
 	}
@@ -82,12 +86,13 @@ func TestMallUpgradePreservesAuthorityAndBackup(t *testing.T) {
 	if err != nil || balance.Silk != 0 || balance.GiftSilk != 0 || balance.Points != 0 {
 		t.Fatalf("unexpected initial currency: %+v %v", balance, err)
 	}
-	if _, err := UpgradeMallAuthority(dir, true); err == nil {
+	if _, err := UpgradeAuthority(dir, true); err == nil {
 		t.Fatal("upgrade admitted a live authority")
 	}
 	s.Close()
-	if _, err := UpgradeMallAuthority(dir, true); err == nil {
-		t.Fatal("upgrade admitted an already upgraded authority")
+	// A retried release finds the upgrade done and changes nothing.
+	if backup, err := UpgradeAuthority(dir, true); !errors.Is(err, ErrAuthorityCurrent) || backup != "" {
+		t.Fatalf("already upgraded authority: %q %v", backup, err)
 	}
 }
 
@@ -109,7 +114,7 @@ func TestMallUpgradeRefusesInvalidSource(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if backup, err := UpgradeMallAuthority(dir, true); err == nil || backup != "" {
+	if backup, err := UpgradeAuthority(dir, true); err == nil || backup != "" {
 		t.Fatalf("invalid graph reached mutation: %q %v", backup, err)
 	}
 }
@@ -133,7 +138,7 @@ WHEN NEW.key = 'layoutVersion' BEGIN SELECT RAISE(ABORT, 'injected failure'); EN
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	backup, err := UpgradeMallAuthority(dir, true)
+	backup, err := UpgradeAuthority(dir, true)
 	if err == nil || backup == "" {
 		t.Fatalf("did not preserve recovery after failure: %q %v", backup, err)
 	}
@@ -142,7 +147,7 @@ WHEN NEW.key = 'layoutVersion' BEGIN SELECT RAISE(ABORT, 'injected failure'); EN
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := loadDB(db, CurrentVersion, preMallLayoutVersion); err != nil {
+	if _, err := loadDB(db, UpgradeFromVersion, preMallLayoutVersion); err != nil {
 		t.Fatal("failed upgrade changed the original authority", err)
 	}
 	for _, table := range []string{"mall_accounts", "account_storage"} {

@@ -43,25 +43,51 @@ def identity(value):
 #
 # Validate the declaration before using it for admission. A server rollback
 # must read the schema already on disk; restoring an old database is not a
-# release operation.
+# release operation. A server may also declare storeUpgradeFrom, the oldest
+# schema its offline upgrade converts (sro-authority-upgrade); releases
+# recorded before that field existed upgrade nothing.
 # ================
 def compatibility(value, component):
 	if not isinstance(value, dict):
 		raise ValueError("missing compatibility declaration")
+	optional = ()
 	if component == "client":
 		keys = ("protocol", "assetSchema")
 	else:
 		keys = ("protocolMin", "protocolMax", "storeReadMin", "storeReadMax", "storeWrite")
-	if set(value) != set(keys):
+		optional = ("storeUpgradeFrom",)
+	if not set(keys) <= set(value) <= set(keys + optional):
 		raise ValueError("invalid compatibility fields")
-	if any(type(value[key]) is not int or value[key] < 1 for key in keys):
+	if any(type(value[key]) is not int or value[key] < 1 for key in value):
 		raise ValueError("compatibility versions must be positive integers")
 	if component == "server":
 		if value["protocolMin"] > value["protocolMax"]:
 			raise ValueError("invalid protocol range")
 		if not value["storeReadMin"] <= value["storeWrite"] <= value["storeReadMax"]:
 			raise ValueError("server cannot read its own persisted schema")
+		if upgrade_from(value) > value["storeReadMin"]:
+			raise ValueError("an offline upgrade must start at or below the readable schema")
 	return value
+
+
+# ================
+# upgrade_from
+#
+# The oldest persisted schema a server can take over: through its offline
+# upgrade when it declares one, else only what it reads directly.
+# ================
+def upgrade_from(value):
+	return value.get("storeUpgradeFrom", value["storeReadMin"])
+
+
+# ================
+# store_upgrade_required
+#
+# True when the candidate cannot open the live database directly and must
+# first run its offline upgrade (admission has checked that it can).
+# ================
+def store_upgrade_required(state, plan):
+	return state["server"]["compatibility"]["storeWrite"] < plan["compatibility"]["storeReadMin"]
 
 
 # ================
@@ -154,8 +180,10 @@ def admit_component(state, plan):
 		raise ValueError("application update requires the existing verified asset schema")
 	if component == "server":
 		live = state["server"]["compatibility"]
-		if not candidate["storeReadMin"] <= live["storeWrite"] <= candidate["storeReadMax"]:
-			raise ValueError("candidate cannot read the live database schema")
+		if not upgrade_from(candidate) <= live["storeWrite"] <= candidate["storeReadMax"]:
+			raise ValueError("candidate cannot read or upgrade the live database schema")
+		if live["storeWrite"] < candidate["storeReadMin"] and plan["mode"] != "forward":
+			raise ValueError("only a forward release may upgrade the persisted schema")
 		if candidate["storeWrite"] < live["storeWrite"]:
 			raise ValueError("deployment cannot downgrade persisted state")
 	return component

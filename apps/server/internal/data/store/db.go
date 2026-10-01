@@ -154,7 +154,8 @@ const (
 // this binary. It is independent from CurrentVersion, which identifies the
 // JSON character-record schema. Adding a table bumps this value and requires an
 // reviewed offline upgrade before deployment. sro-authority-upgrade preserves
-// layout-4 records while adding the empty mall currency table for layout 5.
+// layout-4 records while adding the empty mall currency and warehouse tables
+// for layout 5 (authority_upgrade.go); the release receiver runs it.
 const CurrentLayoutVersion = 5
 
 /*

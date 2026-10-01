@@ -49,8 +49,14 @@ The staging job retains those exact bytes. After approval the receiver:
 1. Rechecks production identity and compatibility and retains verified inputs.
 2. Requires the configured Nomad version and completes a verified remote backup.
 3. Issues a one-hour `sro-deployer` token and validates deployment inputs.
-4. Announces the restart in game and on Discord, waits two minutes, then asks
-   Nomad to deploy and verifies fleet health.
+4. Announces the restart in game and on Discord and waits two minutes. When
+   the candidate cannot open the live database schema but declares an offline
+   upgrade from it (`storeUpgradeFrom` in `compatibility.json`, reported by
+   `sro-release-contract`), the receiver stops the fleet and runs the
+   release's own `sro-authority-upgrade` on every enabled shard, as the
+   database owner: it validates, keeps a backup beside the database
+   (`state.before-mall-*.db`) and commits. Then it asks Nomad to deploy and
+   verifies fleet health.
 5. Records the healthy release and revokes the temporary token. A cleanup
    failure after successful health checks records a warning without claiming
    that the healthy deployment failed.
@@ -96,7 +102,9 @@ neither can be published alone. After approval:
 
 Open tabs of the old client are refused with HTTP 426 and told to reload. A
 pair is admitted only when the old server can read what the new one writes, so
-a revert never needs a database restore. A server rollout that fails its own
+a revert never needs a database restore. A store upgrade therefore ships as a
+server release on its own, never inside a coordinated pair, and no rollback can
+cross it: going back means restoring the upgrade's backup by hand. A server rollout that fails its own
 health checks leaves the journal `failed`; revert is the recovery. While the
 journal is open, every other publication is refused.
 

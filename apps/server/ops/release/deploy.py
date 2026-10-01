@@ -24,7 +24,7 @@ import time
 from urllib.parse import urlsplit
 
 from bundle import FILES, MAX_ARCHIVE_BYTES, unpack
-from release_state import admit, begin, complete, identity, read_state, write_state
+from release_state import admit, begin, complete, identity, read_state, store_upgrade_required, write_state
 from retention import preserve
 
 CONFIG = Path("/etc/opensro-release/config.json")
@@ -139,14 +139,39 @@ def warning(config, module, executable):
 
 
 # ================
+# upgrade_authorities
+#
+# A release whose server cannot open the live database stops the fleet and
+# runs its own offline upgrade on every enabled shard's authority, as the
+# database owner so the game server keeps its file access. The upgrade keeps
+# a backup beside the database and refuses an authority still in use; an
+# authority already upgraded by an interrupted attempt is left as it is.
+# ================
+def upgrade_authorities(module, executable, arguments, environment):
+	import pwd
+	run([executable, "stop", *arguments], cwd=module, env=environment)
+	upgrader = str(module / "sro-authority-upgrade")
+	for shard in json.loads((module / "config/shards.json").read_text())["shards"]:
+		if not shard["enabled"]:
+			continue
+		authority = module / ".state/shards" / shard["id"] / "authority"
+		owner = pwd.getpwuid((authority / "state.db").stat().st_uid).pw_name
+		command = ["runuser", "-u", owner, "--", upgrader, "-authority-dir", str(authority)]
+		run(command, cwd=module, env=environment)
+		run(command + ["-commit"], cwd=module, env=environment)
+		print("Shard " + shard["id"] + " authority upgraded.", flush=True)
+
+
+# ================
 # deploy
 #
 # Back up durable state and validate scoped credentials before the announced
 # maintenance window. Nomad alone owns service replacement and health checks.
 # A revert passes notice=False: it restores the retained server at once, and
-# the release it replaces may not be able to announce anything.
+# the release it replaces may not be able to announce anything. upgrade runs
+# the candidate's offline store upgrade inside the announced window.
 # ================
-def deploy(config, staging, manifest, notice=True):
+def deploy(config, staging, manifest, notice=True, upgrade=False):
 	module = Path(config["module"])
 	clean_env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root"}
 	version = run(["nomad", "version"], capture=True).stdout.splitlines()[0]
@@ -184,6 +209,8 @@ def deploy(config, staging, manifest, notice=True):
 			# On the first installation, check again after the warning window.
 			if config.get("bootstrap_notice", False):
 				warning(config, module, executable)
+		if upgrade:
+			upgrade_authorities(module, executable, arguments, environment)
 		run([executable, "deploy", *arguments], cwd=module, env=environment)
 		run([executable, "status", "-namespace", "sro"], cwd=module, env=environment)
 		write_state(module / "release.json", manifest)
@@ -252,9 +279,9 @@ def deployed(config, manifest):
 # deploy, where an error after the health checks passed (token cleanup) is
 # a warning, returned for the journal, not a failed release.
 # ================
-def rollout(config, staging, manifest, notice=True):
+def rollout(config, staging, manifest, notice=True, upgrade=False):
 	try:
-		deploy(config, staging, manifest, notice)
+		deploy(config, staging, manifest, notice, upgrade)
 	except Exception as error:
 		if not deployed(config, manifest):
 			raise
@@ -287,11 +314,12 @@ def deploy_approved(config, staging, manifest):
 	state = read_state(state_path)
 	plan = manifest["plan"]
 	admit(state, plan)
+	upgrade = store_upgrade_required(state, plan)
 	retain_server(config, state)
 	pending = begin(state, plan, time.time())
 	write_state(state_path, pending)
 	try:
-		warning = rollout(config, staging, manifest)
+		warning = rollout(config, staging, manifest, upgrade=upgrade)
 	except Exception:
 		pending["operation"]["phase"] = "failed"
 		write_state(state_path, pending)

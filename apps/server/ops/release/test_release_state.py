@@ -14,7 +14,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from release_state import admit, begin, complete, read_state, write_state
+from release_state import admit, begin, complete, read_state, store_upgrade_required, write_state
 
 CLIENT_RELEASE = "a" * 64
 SERVER_RELEASE = "b" * 40
@@ -185,6 +185,30 @@ class ReleaseStateTests(unittest.TestCase):
 		plan["compatibility"]["storeReadMax"] = 14
 		with self.assertRaisesRegex(ValueError, "downgrade"):
 			admit(state, plan)
+
+	# ================
+	# test_offline_store_upgrade_admission
+	#
+	# A forward server that declares an offline upgrade from the live schema is
+	# admitted and told to run it; one that cannot reach the live schema, or
+	# declares an upgrade above what it reads, is refused.
+	# ================
+	def test_offline_store_upgrade_admission(self):
+		state = production()
+		plan = candidate("server")
+		plan["compatibility"].update(storeReadMin=14, storeReadMax=14, storeWrite=14)
+		with self.assertRaisesRegex(ValueError, "live database"):
+			admit(state, plan)
+		plan["compatibility"]["storeUpgradeFrom"] = 13
+		self.assertEqual(admit(state, plan), "server")
+		self.assertTrue(store_upgrade_required(state, plan))
+		self.assertFalse(store_upgrade_required(state, candidate("server")))
+		state["server"]["compatibility"].update(storeReadMin=12, storeWrite=12)
+		with self.assertRaisesRegex(ValueError, "live database"):
+			admit(state, plan)
+		plan["compatibility"]["storeUpgradeFrom"] = 15
+		with self.assertRaisesRegex(ValueError, "offline upgrade"):
+			admit(production(), plan)
 
 	# ================
 	# test_completion_cannot_confirm_a_different_release
