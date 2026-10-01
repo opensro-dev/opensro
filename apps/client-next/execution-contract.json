@@ -2,6 +2,16 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": ["callback:createGameplay:3"]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": ["callback"]
+		},
+		{
 			"consumer": "src/engine/runtime/characters/mall-preview.ts",
 			"provider": "src/engine/runtime/characters/resources/resources.ts",
 			"functions": [

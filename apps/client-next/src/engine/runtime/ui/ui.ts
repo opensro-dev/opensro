@@ -11,6 +11,7 @@ Visibility gates new requests, never collection of outstanding work.
 ===========================================================================
 */
 
+import { companionItemTargetCommand } from "@/engine/foundation/gameplay/cos-item-use";
 import {
 	createStoragePanel,
 	firstFreeSlot,
@@ -1048,6 +1049,13 @@ export function createUi(
 	================
 	*/
 	function sendGameplay( command: Extract<SessionCommand, { kind: "gameplay"; }>["command"] ) {
+		if ( command.kind === "inventory-move" ) {
+			const inventory = view?.gameplay?.inventory ?? [];
+			const { source: sourceSlot, destination: destinationSlot } = command;
+			const source = inventory.find( row => row.slot === sourceSlot );
+			const target = inventory.find( row => row.slot === destinationSlot );
+			if ( source && target ) command = companionItemTargetCommand( source, target ) ?? command;
+		}
 		if ( command.kind === "item-use" ) {
 			const item = view?.gameplay?.inventory.find( row => row.slot === command.slot );
 			if ( item && isRestorationPotion( item ) ) {
@@ -4083,6 +4091,33 @@ export function createUi(
 					}
 					if ( binding === 12 ) {
 						sendGameplay( { kind: "action-command", id: 1000 } );
+						return;
+					}
+					if ( binding === 16 || binding === 17 ) {
+						const record = view.gameplay?.cosRecords?.find( r =>
+							r.gid === cosGid && (binding === 16 || !r.dead && r.hp > 0) &&
+							(r.band === 3 || r.band === 4)
+						) ?? view.gameplay?.cosRecords?.find( r =>
+							(binding === 16 || !r.dead && r.hp > 0) && (r.band === 3 || r.band === 4)
+						);
+						if ( record ) {
+							sendGameplay( { kind: binding === 16 ? "cos-cancel" : "cos-follow", gid: record.gid } );
+						}
+						return;
+					}
+					if ( binding === 15 ) {
+						const game = view.gameplay;
+						const local = view.entities.find( entity => entity.gid === game?.localGid );
+						const record = game?.cosRecords?.find( r =>
+							(r.band === 1 || r.band === 2) && !r.dead && r.hp > 0
+						);
+						if ( record && local ) {
+							sendGameplay( {
+								kind: "cos-ride",
+								gid: record.gid,
+								mounted: local.mountedOn !== record.gid
+							} );
+						}
 						return;
 					}
 					if ( binding < 0 && /^F[1-4]$/.test( event.code ) ) {

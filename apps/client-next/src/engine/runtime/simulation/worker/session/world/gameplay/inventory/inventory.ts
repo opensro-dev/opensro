@@ -8,6 +8,7 @@ Child owners handle process-specific state while this owner commits item rows.
 
 ===========================================================================
 */
+import { cosItemUseTail, type CosItemUseContext } from "@/engine/foundation/gameplay/cos-item-use";
 import { createMall } from "./mall/mall";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 import {
@@ -293,6 +294,34 @@ transfer
 		}
 	}
 	return {
+		/*
+================
+bindCompanion
+
+830EC0 -> 59C2E0 binds the private COS record to its summoner inventory
+slot. The separate 3645 receipt owns the native active/dead state byte.
+================
+ */
+		bindCompanion( record: import("@/engine/contracts/gameplay").CosRecord ) {
+			if ( record.inventorySlot === undefined ) return;
+			const previous = slots.get( record.inventorySlot );
+			// Native 59C2E0 ignores an absent slot; it does not create an item.
+			if ( !previous ) return;
+			if ( (previous.typeFlags & 0x7fe) !== 0xcc ) {
+				throw Error( "Companion record has no summoner item" );
+			}
+			slots.set( record.inventorySlot, {
+				...previous,
+				summon: {
+					...previous.summon,
+					state: record.dead ? 4 : 2,
+					refObjId: record.refObjId,
+					name: record.name,
+					rentals: previous.summon?.rentals ?? []
+				}
+			} );
+			published = null;
+		},
 		/*
 ================
 openMall
@@ -1005,14 +1034,16 @@ buyback
 use
 ================
 		*/
-		use( n: number, now = 0 ) {
+		use( n: number, now = 0, context?: CosItemUseContext ) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
 			const item = slots.get( slot( n ) );
 			if ( !item || busy() ) {
 				throw new Error( "Item use unavailable" );
 			}
 			if ( itemCooldown( itemCooldowns, item.typeFlags, now ) ) return null;
-			const p = new Uint8Array( 3 );
+			const tail = cosItemUseTail( item.typeFlags, [ ...slots.values() ], context );
+			const p = new Uint8Array( 3 + tail.length );
+			p.set( tail, 3 );
 			p[0] = n;
 			new DataView( p.buffer ).setUint16( 1, item.typeFlags, true );
 			const frame = { opcode: 0x75bd, payload: p };

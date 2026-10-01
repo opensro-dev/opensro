@@ -623,6 +623,9 @@ receive
 				return;
 			}
 			if ( frame.opcode === 0xb4b5 ) {
+				// 777F60 routes refusals to notification category 14 without
+				// changing either actor. Gameplay owns that notification.
+				if ( p.length === 2 && p[0] === 2 ) return;
 				if ( p.length !== 10 || p[0] !== 1 || p[5]! > 1 ) throw new Error( "Invalid ride state" );
 				const rider = entities.get( v.getUint32( 1, true ) ), mount = v.getUint32( 6, true );
 				if ( !rider || p[5] === 1 && (!entities.has( mount ) || mount === rider.gid) ) {
