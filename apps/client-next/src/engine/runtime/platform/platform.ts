@@ -119,6 +119,31 @@ export function createPlatform(
 	onUi( { kind: "video-preferences", value: video } );
 	/*
 ================
+displayScale
+
+CSS pixels per UI pixel. A chosen display height (the Option window's
+screen size) renders the scene and lays out the interface at that height,
+stretched to fill the page; native keeps one UI pixel per CSS pixel at the
+device's full resolution. The page stays full screen either way.
+================
+	*/
+	function displayScale(): number {
+		const height = video.displayHeight ?? 0, css = canvas.clientHeight;
+		return height > 0 && css > 0 ? css / height : 1;
+	}
+	/*
+================
+uiPoint
+
+A pointer position in UI pixels.
+================
+	*/
+	function uiPoint( event: { clientX: number; clientY: number; } ): [number, number] {
+		const r = canvas.getBoundingClientRect(), scale = displayScale();
+		return [ (event.clientX - r.left) / scale, (event.clientY - r.top) / scale ];
+	}
+	/*
+================
 publishPreferences
 ================
 	*/
@@ -140,7 +165,7 @@ publishPreferences
 	};
 	document.addEventListener( "fullscreenchange", syncDisplay, { signal: lifetime.signal } );
 	window.addEventListener( "wheel", event => {
-		const r = canvas.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
+		const [x, y] = uiPoint( event );
 		if ( blocksUi( x, y ) ) {
 			event.preventDefault();
 			onUi( { kind: "scroll", x, y, delta: event.deltaY } );
@@ -232,7 +257,8 @@ transferText
 					timeMs: performance.timeOrigin + performance.now()
 				} );
 			}
-		}
+		},
+		displayScale
 	);
 	window.addEventListener( "pointermove", event => {
 		const r = canvas.getBoundingClientRect();
@@ -249,15 +275,15 @@ transferText
 	let uiPointer = false;
 	const timeMs = () => performance.timeOrigin + performance.now();
 	const pointer = ( event: PointerEvent ) => {
-		const rect = canvas.getBoundingClientRect();
 		if ( uiPointer ) {
 			if ( event.type === "pointerup" ) uiPointer = false;
 			return;
 		}
+		const [x, y] = uiPoint( event );
 		onInput( {
 			kind: "pointer",
-			x: event.clientX - rect.left,
-			y: event.clientY - rect.top,
+			x,
+			y,
 			buttons: event.buttons,
 			timeMs: timeMs()
 		} );
@@ -268,8 +294,7 @@ transferText
 	canvas.addEventListener( "dragstart", event => event.preventDefault(), { signal: lifetime.signal } );
 	canvas.addEventListener( "pointerdown", event => {
 		onGesture();
-		const r = canvas.getBoundingClientRect();
-		uiPointer = blocksUi( event.clientX - r.left, event.clientY - r.top );
+		uiPointer = blocksUi( ...uiPoint( event ) );
 		if ( uiPointer ) {
 			onInput( { kind: "release", timeMs: timeMs() } );
 			return;
@@ -288,16 +313,17 @@ transferText
 	// mousedown also reports LMB pressed during an existing RMB camera drag.
 	canvas.addEventListener( "mousedown", event => {
 		const r = canvas.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
-		if ( event.button === 2 && bindings.mouseMode === 1 && !blocksUi( x, y ) ) {
+		const blocked = blocksUi( ...uiPoint( event ) );
+		if ( event.button === 2 && bindings.mouseMode === 1 && !blocked ) {
 			onUi( { kind: "activate", id: "hotbar:0" } );
 		}
-		if ( event.button === 0 && !blocksUi( x, y ) && r.width > 0 && r.height > 0 ) {
+		if ( event.button === 0 && !blocked && r.width > 0 && r.height > 0 ) {
 			onWorldClick( x / r.width, y / r.height, false, event.shiftKey );
 		}
 	}, { signal: lifetime.signal } );
 	canvas.addEventListener( "dblclick", event => {
 		const r = canvas.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
-		if ( event.button === 0 && !blocksUi( x, y ) && r.width > 0 && r.height > 0 ) {
+		if ( event.button === 0 && !blocksUi( ...uiPoint( event ) ) && r.width > 0 && r.height > 0 ) {
 			onWorldClick( x / r.width, y / r.height, true, event.shiftKey );
 		}
 	}, { signal: lifetime.signal } );
@@ -336,12 +362,12 @@ transferText
 	}, { signal: lifetime.signal } );
 	canvas.addEventListener( "wheel", event => {
 		event.preventDefault();
-		const r = canvas.getBoundingClientRect();
-		if ( blocksUi( event.clientX - r.left, event.clientY - r.top ) ) return;
+		if ( blocksUi( ...uiPoint( event ) ) ) return;
 		onInput( { kind: "wheel", delta: cameraWheelDelta( event ), timeMs: timeMs() } );
 	}, { signal: lifetime.signal, passive: false } );
 	const viewport = { width: 1, height: 1 };
 	return {
+		displayScale,
 		/*
 ================
 saveVideoOptions
@@ -350,6 +376,7 @@ saveVideoOptions
 		saveVideoOptions( value: VideoOptions ) {
 			const next = videoOptions( value );
 			localStorage.setItem( videoKey, JSON.stringify( next ) );
+			video = next;
 			onUi( { kind: "video-preferences", value: next } );
 		},
 		/*
@@ -457,8 +484,9 @@ presentUi
 		presentUi( state ) {
 			bridge.present( state );
 			if ( fpsChip ) {
-				const right = state.hudCorner ? Math.max( 4, canvas.clientWidth - state.hudCorner[0] + 6 ) : 8,
-					top = state.hudCorner ? Math.max( 4, state.hudCorner[1] ) : 8;
+				const scale = displayScale(),
+					right = state.hudCorner ? Math.max( 4, canvas.clientWidth - state.hudCorner[0] * scale + 6 ) : 8,
+					top = state.hudCorner ? Math.max( 4, state.hudCorner[1] * scale ) : 8;
 				fpsChip.style.right = right + "px";
 				fpsChip.style.top = top + "px";
 			}
@@ -542,8 +570,14 @@ readViewport
 ================
 		*/
 		readViewport() {
-			viewport.width = Math.max( 1, Math.round( canvas.clientWidth * devicePixelRatio ) );
-			viewport.height = Math.max( 1, Math.round( canvas.clientHeight * devicePixelRatio ) );
+			const height = video.displayHeight ?? 0;
+			if ( height > 0 && canvas.clientHeight > 0 ) {
+				viewport.height = height;
+				viewport.width = Math.max( 1, Math.round( canvas.clientWidth * height / canvas.clientHeight ) );
+			} else {
+				viewport.width = Math.max( 1, Math.round( canvas.clientWidth * devicePixelRatio ) );
+				viewport.height = Math.max( 1, Math.round( canvas.clientHeight * devicePixelRatio ) );
+			}
 			return viewport;
 		},
 		/*

@@ -28,8 +28,9 @@ test('movement cadence captures live click reversal and authoritative receipts',
    await route.fulfill({response,body:body.replace('const sessionState = session.step(timeMs);','const probeAt=performance.now(); const sessionState = session.step(timeMs); send({kind:"probe-timing",at:probeAt,elapsed:performance.now()-probeAt,timeMs},[]);')});
   });
   await page.route('**/characters/pose-presentation.ts*',async route=>{
-   const response=await route.fetch(),body=await response.text(),needle=/return\s*\{\s*\.\.\.result,\s*angle:[^}]+\};/;assert.ok(needle.test(body));
-   await route.fulfill({response,body:body.replace(needle,match=>'if(globalThis.__entry?.game?.localGid===gid)globalThis.__entry.visual.push({at:now,pose:{...result,angle:row.angle},moving:row.moving}); '+match)});
+   const response=await route.fetch(),body=await response.text(),needle=/return\s*\{\s*\.\.\.drawn,\s*angle:[^}]+\};/;assert.ok(needle.test(body));
+   // Sampled characters are drawn by sampledPose; record the local player's frame-clock output.
+   await route.fulfill({response,body:body.replace(needle,match=>'if(globalThis.__entry?.game?.localGid===gid)globalThis.__entry.visual.push({at:now,pose:{...drawn,angle:row.angle},moving:input.moving}); '+match)});
   });
   await page.route('**/gameplay/movement/movement.ts*',async route=>{
    const response=await route.fetch(),body=await response.text(),needle='if (confirmedPrediction) owner = predictedOwner;';assert.ok(body.includes(needle));

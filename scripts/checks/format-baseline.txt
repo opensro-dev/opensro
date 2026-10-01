@@ -5,7 +5,6 @@ apps/client-next/src/engine/contracts/camera-script.ts
 apps/client-next/src/engine/contracts/combat-feedback.ts
 apps/client-next/src/engine/contracts/damage-text.ts
 apps/client-next/src/engine/contracts/effective-hp.ts
-apps/client-next/src/engine/contracts/effects.ts
 apps/client-next/src/engine/contracts/footprint.ts
 apps/client-next/src/engine/contracts/frontend.ts
 apps/client-next/src/engine/contracts/geometry.ts
@@ -157,10 +156,8 @@ apps/client-next/src/engine/foundation/math/angles.ts
 apps/client-next/src/engine/foundation/math/pose-math.ts
 apps/client-next/src/engine/foundation/navigation/contact-response.ts
 apps/client-next/src/engine/foundation/navigation/dungeon-navigation.ts
-apps/client-next/src/engine/foundation/navigation/dungeon-ownership.ts
 apps/client-next/src/engine/foundation/navigation/ground-pick.ts
 apps/client-next/src/engine/foundation/navigation/navigation-events.ts
-apps/client-next/src/engine/foundation/navigation/object-navigation.ts
 apps/client-next/src/engine/foundation/navigation/owned-start.ts
 apps/client-next/src/engine/foundation/navigation/region-move.ts
 apps/client-next/src/engine/foundation/navigation/spatial-index.ts
@@ -173,7 +170,6 @@ apps/client-next/src/engine/foundation/rendering/character-shadow.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts
 apps/client-next/src/engine/foundation/rendering/dock-slots.ts
 apps/client-next/src/engine/foundation/rendering/dungeon-water.ts
-apps/client-next/src/engine/foundation/rendering/effect-billboard.ts
 apps/client-next/src/engine/foundation/rendering/equipment-glow.ts
 apps/client-next/src/engine/foundation/rendering/flares.ts
 apps/client-next/src/engine/foundation/rendering/follow-camera.ts
@@ -203,7 +199,6 @@ apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
 apps/client-next/src/engine/foundation/rendering/ui-glyphs.ts
 apps/client-next/src/engine/foundation/rendering/ui-texture-residency.ts
-apps/client-next/src/engine/foundation/rendering/video-options.ts
 apps/client-next/src/engine/foundation/rendering/world-environment.ts
 apps/client-next/src/engine/foundation/rendering/world-material.ts
 apps/client-next/src/engine/foundation/rendering/world-math.ts
@@ -257,7 +252,6 @@ apps/client-next/src/engine/foundation/ui/minimap-tiles.ts
 apps/client-next/src/engine/foundation/ui/minimap-zoom.ts
 apps/client-next/src/engine/foundation/ui/mission-loading.ts
 apps/client-next/src/engine/foundation/ui/money-presentation.ts
-apps/client-next/src/engine/foundation/ui/name-visibility.ts
 apps/client-next/src/engine/foundation/ui/normal-tile.ts
 apps/client-next/src/engine/foundation/ui/notice-dialog.ts
 apps/client-next/src/engine/foundation/ui/notice-text.ts
@@ -307,9 +301,7 @@ apps/client-next/src/engine/runtime/assets/worker/world/world.ts
 apps/client-next/src/engine/runtime/assets/world-lease.ts
 apps/client-next/src/engine/runtime/audio/music/music.ts
 apps/client-next/src/engine/runtime/characters/damage-feedback.ts
-apps/client-next/src/engine/runtime/characters/effects/effects.ts
 apps/client-next/src/engine/runtime/characters/orbs/orbs.ts
-apps/client-next/src/engine/runtime/characters/pose-presentation.ts
 apps/client-next/src/engine/runtime/characters/sounds/sounds.ts
 apps/client-next/src/engine/runtime/characters/state-index.ts
 apps/client-next/src/engine/runtime/frontend/camera/camera.ts
@@ -342,17 +334,13 @@ apps/client-next/src/engine/runtime/renderer/surface/surface.ts
 apps/client-next/src/engine/runtime/renderer/weather/weather.ts
 apps/client-next/src/engine/runtime/renderer/world/world.ts
 apps/client-next/src/engine/runtime/runtime-errors.ts
-apps/client-next/src/engine/runtime/simulation/host.ts
-apps/client-next/src/engine/runtime/simulation/worker/clock/clock.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/input/input.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/codec/codec.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/network.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/core.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/alchemy/alchemy.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts
-apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts
 apps/client-next/src/engine/runtime/simulation/worker/simulation.ts
 apps/client-next/src/engine/runtime/ui/hud/messages.ts
 apps/client-next/src/engine/runtime/ui/hud/minimap.ts

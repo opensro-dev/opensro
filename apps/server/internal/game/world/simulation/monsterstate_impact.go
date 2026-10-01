@@ -104,7 +104,7 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 	}
 	if instance.CurrentHP == 0 {
 		if before > 0 {
-			state.settleCorpseLocked(&instance, nowMs)
+			state.settleCorpseLocked(&instance, nowMs, s.ground)
 		}
 	} else if displacement != nil {
 		delete(state.pendingSummons, gid)
@@ -121,6 +121,17 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 		if err := mover.Transition(monster.MoverEventDisplaced, mover.TargetGID()); err != nil {
 			panic(err)
 		}
+		// The displaced XZ carries the pre-impact height; the victim lands on
+		// the surface under its new position (a push up a slope must not bury
+		// it, and a later death would freeze it there).
+		if s.ground != nil {
+			pose := displacement.Pose
+			if y, ok := s.ground(pose.RegionID, pose.X, pose.Y, pose.Z); ok {
+				grounded := *displacement
+				grounded.Pose.Y = y
+				displacement = &grounded
+			}
+		}
 		mover.Pose = displacement.Pose
 		mover.From, mover.To = displacement.Pose, displacement.Pose
 		if state.movers == nil {
@@ -134,7 +145,7 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 	}
 	// 593BEF: a damaging result breaks root/sleep/stun, then 593F0C applies
 	// the statuses this hit rolled, both only on a surviving actor.
-	effects := s.applyAbnormalLocked(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, instance: &instance, now: nowMs, sources: plan.AbnormalSources}, damage > 0, plan.Abnormal)
+	effects := s.applyAbnormalLocked(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, ground: s.ground, instance: &instance, now: nowMs, sources: plan.AbnormalSources}, damage > 0, plan.Abnormal)
 	state.instances.set(gid, instance)
 	result := MonsterDamageResult{Population: state.lease, Instance: instance, BeforeHP: before, CurrentHP: instance.CurrentHP, Damage: damage, Applied: applied, Fatal: before > 0 && instance.CurrentHP == 0, Knockdown: committed, Abnormal: effects}
 	if knockback != nil {

@@ -129,6 +129,10 @@ type Runtime struct {
 	commerceTaxes         map[merchantTaxKey]merchantTax
 	commerceReferenceSeed []wire.Frame
 
+	// UnlimitedItems names the item codenames whose use is never spent (the
+	// operator's beta starter kit, SRO_BETA_STARTER_KIT). Set once at wiring.
+	UnlimitedItems map[string]bool
+
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame
 	// SteerCOS and StopCOS delegate the vehicle's 0x769E steer (tag 0x04)

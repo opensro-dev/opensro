@@ -128,6 +128,8 @@ import {
 import { createInventory } from "./inventory/inventory";
 import { createCombat } from "./combat/combat";
 import { createTargeting } from "./targeting/targeting";
+import { createMoveReservation } from "./reservation/reservation";
+import { createBetaPlayerMap } from "./beta-map/beta-map";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import type { WireFrame } from "@/engine/contracts/network";
@@ -172,7 +174,9 @@ export function createGameplay(
 	const movement = createMovement( send ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
 		combat = createCombat( readEntity, publishFeedback ),
-		targeting = createTargeting( send );
+		targeting = createTargeting( send ),
+		moveReservation = createMoveReservation(),
+		betaMap = createBetaPlayerMap();
 	/*
 ================
 sendFrame
@@ -240,7 +244,20 @@ Retire all session facts together so a later character cannot inherit
 bindings, selected entities, cooldowns or world-entry state.
 ================
 	*/
+	/*
+================
+localCastHolds
+
+The local player's own cast is live (not cancelled): the server's attack
+lock (4AAB40) drops ground commands until it releases.
+================
+	*/
+	function localCastHolds(): boolean {
+		return combat.state().casts.some( c => c.caster === localGid && c.cancelledAtMs === undefined );
+	}
 	function clearState() {
+		moveReservation.clear();
+		betaMap.clear();
 		partyMatching = emptyPartyMatching();
 		entryVitals = {};
 		warnings = [ false, false ];
@@ -296,7 +313,7 @@ bindings, selected entities, cooldowns or world-entry state.
 		cosResult = undefined;
 		cosError = null;
 	}
-	return {
+	const api = {
 		/*
 ================
 enterMusic
@@ -599,6 +616,19 @@ itemUseType
 		*/
 		itemUseType( slot: number ) {
 			return inventory.useType( slot );
+		},
+		/*
+================
+skillTarget
+
+The object a skill press aims at, or undefined for none: the newest
+selection intent (see targeting.selectionIntent). This owner is always
+newer than the target the UI snapshot carried, which trails a click by one
+grant round trip and a deselection by one publish.
+================
+		*/
+		skillTarget() {
+			return targeting.selectionIntent() || undefined;
 		},
 		/*
 ================
@@ -1020,6 +1050,28 @@ state here before a command can claim a native wire conversation.
 				if ( protocol !== 1 ) {
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
+				if ( localCastHolds() ) {
+					// Resolve the click now, not when the cast releases: its ray belongs
+					// to the camera at click time, and the destination marker appears
+					// when the player clicks. A direction walk keeps its query.
+					let held: typeof command = command;
+					if ( command.kind === "ground-move" ) {
+						const state = movement.state();
+						if ( !state.pose ) return null;
+						const action = worldPointAction(
+							state.pose,
+							movement.pick( command.query ),
+							command.query,
+							false
+						);
+						if ( action.kind === "none" ) return null;
+						if ( action.kind === "walk-to" ) held = { kind: "move", destination: action.destination };
+					}
+					moveReservation.hold( held );
+					selectionDecal = held.kind === "move" ? { kind: "ground", pose: { ...held.destination } } : null;
+					dirty = true;
+					return null;
+				}
 				if ( local?.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) {
 					throw Error( "Mounted COS authority is unavailable" );
 				}
@@ -1223,6 +1275,10 @@ Packet handling must not depend on which HUD panel is currently open.
 		receive( frame: WireFrame, now: number, chatSender?: EntityState ) {
 			const inventoryBefore = inventory.state().inventory;
 			try {
+				if ( betaMap.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( pickup.receive( frame ) ) {
 					// 75BAA0: kind 3 is the generic action notice; pickup's
 					// inventory refusals still arrive separately on B06D.
@@ -1900,6 +1956,23 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			flushBindingRepairs();
+			// A click held through the cast walks as soon as the cast releases;
+			// death forfeits it.
+			if ( moveReservation.holding() && !localCastHolds() ) {
+				const held = moveReservation.take()!;
+				if ( !local || local.appearanceState?.[0] === 2 ) {
+					// A forfeited click takes its marker with it.
+					if ( held.kind === "move" && selectionDecal?.kind === "ground" ) selectionDecal = null;
+					dirty = true;
+				} else {
+					try {
+						api.command( held, now, undefined, local );
+					} catch ( error ) {
+						moveReservation.fail( String( error ) );
+						dirty = true;
+					}
+				}
+			}
 			if ( quests.step( now ) ) dirty = true;
 			if ( gateApproach.phase === "moving" ) {
 				const approachingGate = gateApproach.gate;
@@ -2099,8 +2172,9 @@ have been collected so consumers never observe half of a packet update.
 				...i,
 				...c,
 				...targeting.state(),
+				betaPlayers: betaMap.players(),
 				error: m.error ?? i.error ?? c.error ?? targeting.error() ?? progression.error ??
-					training.state().trainingError ?? social.error ?? cosError ?? null
+					training.state().trainingError ?? social.error ?? cosError ?? moveReservation.error() ?? null
 			};
 		},
 		// 0x3369 answers 0x36DD and runs the 0x366A handler (74B880 -> 74B250),
@@ -2116,6 +2190,7 @@ World transfer retires spatial work while retaining character/session data.
 		*/
 		resetWorld() {
 			pickup.clear();
+			moveReservation.clear();
 			quests.clearGathering();
 			gateApproach = gateApproachTransition( gateApproach, { kind: "cancel" } );
 			returnScroll = undefined;
@@ -2171,4 +2246,5 @@ dispose
 			dirty = false;
 		}
 	};
+	return api;
 }

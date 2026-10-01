@@ -17,7 +17,11 @@ import type { WireFrame } from "@/engine/contracts/network";
 const ADMISSION_TIMEOUT_MS = 10000;
 const REFERENCE_TIMEOUT_MS = 30000;
 const RECONNECT_DELAY_MS = 250;
-const MAX_RECONNECT_ATTEMPTS = 3;
+const MAX_RECONNECT_DELAY_MS = 4000;
+// The Agent keeps a detached session resumable for its GracePeriod (30 s,
+// apps/server/internal/transport/config.go). Retry for all of it: a laptop
+// waking or a Wi-Fi hand-over outlasts a few fast attempts.
+const RESUME_GRACE_MS = 30000;
 const MAX_CHARACTER_NAME_LENGTH = 64;
 
 /*
@@ -62,7 +66,14 @@ onNetworkFailure
 		error: string;
 	} = { kind: "idle" };
 	let lastError: string | undefined;
-	let now = 0, deadline = 0, retryAt = 0, attempt = 0, hasWorld = false, ready = false, revision = 0;
+	let now = 0,
+		deadline = 0,
+		retryAt = 0,
+		attempt = 0,
+		reconnectSince = 0,
+		hasWorld = false,
+		ready = false,
+		revision = 0;
 	/*
 ================
 transition
@@ -433,7 +444,7 @@ step
 				// Only a previously bound, resumable session retries automatically.
 				// Native gameplay commands are never replayed by this owner.
 				if (
-					hasWorld && resume && attempt < MAX_RECONNECT_ATTEMPTS &&
+					hasWorld && resume && (attempt === 0 || now - reconnectSince < RESUME_GRACE_MS) &&
 					[
 						"Transport connection closed",
 						"Transport connection failed",
@@ -441,7 +452,8 @@ step
 						"Admission request failed"
 					].includes( error )
 				) {
-					retryAt = now + RECONNECT_DELAY_MS * 2 ** attempt++;
+					if ( attempt === 0 ) reconnectSince = now;
+					retryAt = now + Math.min( RECONNECT_DELAY_MS * 2 ** attempt++, MAX_RECONNECT_DELAY_MS );
 					transition( "reconnecting" );
 				} else {
 					retryAt = 0;

@@ -398,8 +398,23 @@ The simulation's immutable publication boundary. Revision changes expose
 committed state to consumers without sharing mutable owner collections.
 ================
 */
+/*
+================
+BetaMapPlayer
+
+One row of the beta world map roster (port-only 0x3FB0; beta-map.ts).
+================
+*/
+export interface BetaMapPlayer {
+	readonly gid: number;
+	readonly regionId: number;
+	readonly x: number;
+	readonly z: number;
+	readonly name: string;
+}
 export interface GameplayState {
 	readonly itemMall?: import("./item-mall").MallState;
+	readonly betaPlayers?: readonly BetaMapPlayer[];
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;
 	readonly huntingPoints?: readonly import("@/engine/foundation/gameplay/hunting").HuntingPoint[];
 	readonly npcConversation?: import("@/engine/foundation/gameplay/npc-dialogue").NpcConversation;
@@ -485,6 +500,8 @@ export interface GameplayState {
 	readonly movementPath?: { readonly from: import("./gameplay").Pose; readonly to: import("./gameplay").Pose; };
 	readonly movementRevision?: number;
 	readonly moving?: boolean;
+	/** Simulation time (ms) at which pose was sampled; ClockSample.originMs maps it to wall time. */
+	readonly poseAtMs?: number;
 	readonly authoritativePose: Pose | null;
 	readonly pendingMoves: number;
 	readonly acknowledgedMove: number;

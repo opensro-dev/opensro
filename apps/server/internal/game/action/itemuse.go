@@ -36,11 +36,16 @@ func cosSummonerType(typeIDs [4]int64) bool {
 consumeItemUseRow
 
 Replace the inventory slice so published snapshots retain their old values.
-The caller has already validated the slot and positive stack count.
+The caller has already validated the slot and positive stack count. An item
+in the operator's unlimited set (UnlimitedItems, the beta starter kit) takes
+effect without being spent.
 ================
 */
-func consumeItemUseRow(character *enterworld.Character, rowIndex int) uint16 {
+func (rt *Runtime) consumeItemUseRow(character *enterworld.Character, rowIndex int) uint16 {
 	row := character.MissionInventory[rowIndex]
+	if rt.UnlimitedItems[row.Codename] {
+		return uint16(row.StackCount)
+	}
 	remaining := uint16(row.StackCount - 1)
 	if remaining == 0 {
 		nextRows := make([]enterworld.InventoryRow, 0, len(character.MissionInventory)-1)
@@ -161,7 +166,7 @@ func (rt *Runtime) HandleItemUse(
 				result.Frames = append(result.Frames, frames...)
 				return false
 			}
-			remaining := consumeItemUseRow(character, rowIndex)
+			remaining := rt.consumeItemUseRow(character, rowIndex)
 			result.Frames = []wire.Frame{{Opcode: wire.OpItemUseResponse,
 				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}
 			result.Frames = append(result.Frames, frames...)
@@ -175,7 +180,7 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			changed := character.ModifyBerserkPoints(5)
-			remaining := consumeItemUseRow(character, rowIndex)
+			remaining := rt.consumeItemUseRow(character, rowIndex)
 			result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}}
 			if changed {
 				result.Frames = append(result.Frames, berserkPointsFrame(character, 0))
@@ -225,7 +230,7 @@ func (rt *Runtime) HandleItemUse(
 			if !petSkillWindowHasCapacity(character, ref) {
 				return false
 			}
-			remaining := consumeItemUseRow(character, rowIndex)
+			remaining := rt.consumeItemUseRow(character, rowIndex)
 			character.PetSkillWindows = upsertPetSkillWindow(
 				character.PetSkillWindows, ref.RefObjID, ref.Codename, nowMs+seconds*1000)
 			rt.petSkillWindows.track(divisionID, character.Name)
@@ -283,7 +288,7 @@ func (rt *Runtime) HandleItemUse(
 				CurrentMP:        cosRef.MaxMP,
 				Summoned:         true,
 			}
-			remaining := consumeItemUseRow(character, rowIndex)
+			remaining := rt.consumeItemUseRow(character, rowIndex)
 			spawn := wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
 				BodyStatus: character.ActiveCOS.NativeBodyStatus,
 				RefObjID:   cosRef.RefObjID,
@@ -356,7 +361,7 @@ func (rt *Runtime) HandleItemUse(
 			}
 			owner.commit()
 			character.ItemCureCooldowns[lane] = nowMs + lockMs
-			remaining := consumeItemUseRow(character, rowIndex)
+			remaining := rt.consumeItemUseRow(character, rowIndex)
 			published := rt.playerAbnormalPublication(divisionID, character, owner)
 			frames := []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}
 			frames = append(frames, published.actor...)
@@ -409,7 +414,7 @@ func (rt *Runtime) HandleItemUse(
 		character.CurrentHP = &nextHP
 		character.CurrentMP = &nextMP
 		character.ItemUseCooldowns[tid4-1] = nowMs + duration
-		remaining := consumeItemUseRow(character, rowIndex)
+		remaining := rt.consumeItemUseRow(character, rowIndex)
 
 		frames := []wire.Frame{
 			{

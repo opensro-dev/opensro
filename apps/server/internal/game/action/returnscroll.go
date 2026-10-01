@@ -79,7 +79,7 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 	rt.ClearCombatIntent(division, c.Name)
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
 	rt.returnCasts.Store(key, pendingReturn{division: division, name: c.Name, character: c, due: now + int64(duration), generation: rt.returnGeneration.Add(1)})
-	remaining := consumeItemUseRow(c, row)
+	remaining := rt.consumeItemUseRow(c, row)
 	status := teleportState(c, 1)
 	stop := wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: spawn.RegionID, X: float32(spawn.X), Y: float32(spawn.Y), Z: float32(spawn.Z), Heading: spawn.Angle}}.Encode()}
 	visual := wire.Frame{Opcode: 0x3449, Payload: wire.NewWriter(8).U32(enterworld.ObjectIDForCharacter(c)).U32(ref.RefObjID).Payload()}

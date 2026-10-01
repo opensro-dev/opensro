@@ -387,6 +387,13 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}
 	}
+	// CGObjChar_CheckTargetAttackable (5291D0), reached from
+	// CGObjPC_CanAttackTarget (52BF90, vtable +0x62C): an untouchable attacker
+	// (body mode 2) may not attack anything.
+	if snapshot.NativeBodyStatus == untouchableBodyStatus {
+		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
+		return offensiveRefusal(0x3020)
+	}
 	var skill enterworld.SkillRow
 	var loadout combat.Loadout
 	var refusal string

@@ -137,6 +137,8 @@ export interface Platform extends Disposable {
 	presentUpdate( newer: boolean ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
 	readViewport(): Viewport;
+	/** CSS pixels per UI pixel: 1 when native, else the page height over the chosen screen height. */
+	displayScale(): number;
 	report( text: string, error?: unknown ): void;
 }
 /*
@@ -226,6 +228,8 @@ The simulation worker capability owns its message channel and lifecycle.
 */
 export interface SimulationHost extends Disposable {
 	pollWorld(): import("./world").WorldBatch | null;
+	/** Resolves on the next worker message; paces frames while the tab is hidden. */
+	delivery(): Promise<void>;
 	ackWorld( sequence: number ): void;
 	session( command: SessionCommand ): void;
 	pollSession(): SessionState | null;
@@ -257,6 +261,10 @@ export interface ClockSample {
 	wakeMs: number;
 	maxStepMs: number;
 	debtMs: number;
+	/** Epoch milliseconds (timeOrigin + now) of simulation time zero. Each step runs
+	 * for a fixed deadline, so a simulation time maps to wall time by this origin
+	 * even when a late wake executes several steps at once. */
+	originMs: number;
 }
 /*
 ================

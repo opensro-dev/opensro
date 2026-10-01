@@ -82,7 +82,7 @@ func (rt *Runtime) useQuestTrap(c *enterworld.Character, use skillItemUse, skill
 		result.DiagnosticRefusal = err.Error()
 		return false
 	}
-	remaining := consumeItemUseRow(c, use.row)
+	remaining := rt.consumeItemUseRow(c, use.row)
 	result.Frames = []wire.Frame{{Opcode: wire.OpItemUseResponse,
 		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)

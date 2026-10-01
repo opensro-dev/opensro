@@ -119,6 +119,8 @@ type monsterAbnormalInput struct {
 	division string
 	ctx      MonsterAbnormalContext
 	state    *divisionMonsterState
+	// ground re-grounds a halted pose (see groundedLivePose).
+	ground   MonsterSpawnGroundResolver
 	instance *monster.Instance
 	now      int64
 	sources  map[uint32]MonsterAbnormalSource
@@ -319,7 +321,7 @@ func (o *monsterAbnormalOwner) StopMove() {
 	if !ok || !mover.InFlight(o.now) {
 		return
 	}
-	mover.Pose = mover.LivePoseAt(o.now, nil)
+	mover.Pose = groundedLivePose(mover, o.now, o.ground)
 	if err := mover.Transition(monster.MoverEventDisplaced, mover.TargetGID()); err != nil {
 		panic(err)
 	}
@@ -536,7 +538,7 @@ func (s *MonsterState) PlanAbnormalUpdate(division string, gid uint32, now int64
 	copyInstance := instance
 	// The dry run must not mutate the live mover; StopMove is a start-only
 	// callback, so updates never reach it.
-	o := newMonsterAbnormalOwner(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, instance: &copyInstance, now: now, sources: sources})
+	o := newMonsterAbnormalOwner(monsterAbnormalInput{division: division, ctx: s.abnormalContext, state: state, ground: s.ground, instance: &copyInstance, now: now, sources: sources})
 	if instance.CurrentHP == 0 {
 		o.block.ClearAll(o)
 		o.fx.MaskChanged = true
@@ -585,7 +587,7 @@ func (s *MonsterState) CommitAbnormalUpdate(plan MonsterAbnormalPlan, now int64)
 		applied += debit
 	}
 	if before > 0 && next.CurrentHP == 0 {
-		state.settleCorpseLocked(&next, now)
+		state.settleCorpseLocked(&next, now, s.ground)
 	}
 	state.instances.set(plan.GID, next)
 	state.trackAbnormal(plan.GID, next.Abnormal)

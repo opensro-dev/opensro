@@ -257,7 +257,7 @@ func (v *WaterValidator) ValidateMovementPathFrom(from simulation.Spawn, fromOwn
 		if walkable {
 			return false
 		}
-		if _, _, owned := walk.objectAt(t); owned {
+		if _, _, owned := walk.objectAt(t); owned || walk.bridged(t) {
 			report.ObjectDeckOverrides++
 			return false
 		}

@@ -484,15 +484,22 @@ frame
 						{ target: device.portraitTarget( "__portrait" + (i + 1) ), depth: portraitDepth!.view, draws };
 				} ).filter( ( r ): r is NonNullable<typeof r> => r !== null );
 				const dollInput = uiProduct?.doll;
+				// A hidden doll stays borrowed and warm for the local character, so
+				// the inventory's first open does not prepare a model (portrait.warm).
+				if ( !dollInput && portraitGid !== undefined ) {
+					doll.warm( characters.portraitSource( portraitGid ), device.geometry()!, device.images()! );
+				}
 				const dollRect = uiProduct?.scene.quads.find( quad => quad.doll )?.rect;
 				const width = Math.max( 1, Math.ceil( dollRect?.[2] ?? INVENTORY_DOLL_WIDTH ) );
 				const height = Math.max( 1, Math.ceil( dollRect?.[3] ?? INVENTORY_DOLL_HEIGHT ) );
-				const dollDraws = doll.prepare(
-					dollInput ? characters.portraitSource( dollInput.gid ) : null,
-					device.geometry()!,
-					device.images()!,
-					{ yaw: dollInput?.yaw, seconds: timeSeconds, aspect: width / height }
-				);
+				const dollDraws = dollInput ?
+					doll.prepare(
+						characters.portraitSource( dollInput.gid ),
+						device.geometry()!,
+						device.images()!,
+						{ yaw: dollInput.yaw, seconds: timeSeconds, aspect: width / height }
+					) :
+					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;
 				if ( dollTarget && (!dollDepth || dollWidth !== width || dollHeight !== height) ) {
 					dollDepth?.dispose();

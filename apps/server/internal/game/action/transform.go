@@ -198,7 +198,7 @@ func (rt *Runtime) useMonsterCapsule(division string, c *enterworld.Character, r
 		return false
 	}
 	rt.retireHide(division, c, now)
-	remaining := consumeItemUseRow(c, rowIndex)
+	remaining := rt.consumeItemUseRow(c, rowIndex)
 	*result = OpResult{Frames: append([]wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}, frames...), Broadcast: frames}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
 	return true

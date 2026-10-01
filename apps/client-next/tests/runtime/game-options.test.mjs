@@ -21,7 +21,7 @@ async function load( path ) {
 const { defaultGameOptions, initialGameOptions, gameOptions, gameOptionRows } = await load(
 	"foundation/gameplay/game-options.ts"
 );
-const { nameVisible, hiddenSilkCos } = await load( "foundation/ui/name-visibility.ts" );
+const { nameVisible, nameInRange, hiddenSilkCos } = await load( "foundation/ui/name-visibility.ts" );
 const { vitalWarning } = await load( "foundation/ui/vital-warning.ts" );
 const { createGameplay } = await load( "runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { quickStatus } = await load( "foundation/ui/quick-status.ts" );
@@ -176,4 +176,16 @@ test("startup disables warnings and every overhead status category; Reset remain
 		ownStatus: true,
 		warningSound: true
 	}, "explicit persisted choices survive validation" );
+});
+
+test("the overhead board range is strict 300 units from the local player, across regions", () => {
+	const local = { gid: 1, kind: "local-player", regionId: 1, x: 1900, y: 0, z: 0 };
+	const at = ( regionId, x, y = 0 ) => ({ gid: 2, kind: "player", regionId, x, y, z: 0 });
+	assert.equal( nameInRange( at( 1, 1900 - 299 ), local ), true );
+	assert.equal( nameInRange( at( 1, 1900 - 300 ), local ), false );
+	// Height counts: the range is a sphere, as 85E2E0 measures it.
+	assert.equal( nameInRange( at( 1, 1900, 300 ), local ), false );
+	// The neighbouring region's x = 100 lies 120 units east of x = 1900.
+	assert.equal( nameInRange( at( 2, 100 ), local ), true );
+	assert.equal( nameInRange( at( 1, 1900 ), undefined ), false );
 });

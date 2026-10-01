@@ -96,7 +96,7 @@ func (rt *Runtime) applyPetCure(
 		return false
 	}
 	owner.commit()
-	remaining := consumeItemUseRow(character, rowIndex)
+	remaining := rt.consumeItemUseRow(character, rowIndex)
 	published := rt.cosAbnormalPublication(character.ActiveCOS.GID, owner)
 	frames := []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}
 	frames = append(frames, published...)
@@ -143,7 +143,7 @@ func (rt *Runtime) applyPetRevival(
 	if uint32(pet.Satiety)*100/10000 < 30 {
 		pet.Satiety = 3000
 	}
-	remaining := consumeItemUseRow(character, rowIndex)
+	remaining := rt.consumeItemUseRow(character, rowIndex)
 	gid := pet.GID
 	*result = OpResult{Frames: []wire.Frame{
 		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
@@ -232,7 +232,7 @@ func (rt *Runtime) applyPetPotion(
 	pet.CurrentHP = nextHP
 	pet.CurrentMP = nextMP
 	character.PetPotionCooldowns[lane] = nowMs + 1100
-	remaining := consumeItemUseRow(character, rowIndex)
+	remaining := rt.consumeItemUseRow(character, rowIndex)
 	frames := []wire.Frame{
 		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
 		{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(gid, simulation.Vitals{CurrentHP: nextHP, CurrentMP: nextMP})},

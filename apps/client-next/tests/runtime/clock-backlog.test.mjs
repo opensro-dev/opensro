@@ -79,7 +79,15 @@ test("expensive fixed ticks yield at the work budget and preserve remaining debt
 	defined( callback )();
 	assert.equal( steps, 1 );
 	assert.equal( delay, 0 );
-	assert.deepEqual( clock.sample(), { wakes: 1, steps: 1, stepsInWake: 1, wakeMs: 5, maxStepMs: 5, debtMs: 37 } );
+	assert.deepEqual( clock.sample(), {
+		wakes: 1,
+		steps: 1,
+		stepsInWake: 1,
+		wakeMs: 5,
+		maxStepMs: 5,
+		debtMs: 37,
+		originMs: performance.timeOrigin + 16
+	} );
 	const detached = clock.sample();
 	detached.steps = 999;
 	assert.equal( clock.sample().steps, 1 );
@@ -128,5 +136,39 @@ test("long suspension advances elapsed time once and bounds historical work acro
 	now += 16;
 	defined( callback )();
 	assert.equal( elapsed, now );
+	clock.dispose();
+});
+
+test("the sample's origin maps every step's simulation time to its deadline", t => {
+	let now = 1000, callback;
+	const deadlines = [];
+	t.mock.method( performance, "now", () => now );
+	t.mock.method( globalThis, "setTimeout", fn => {
+		callback = fn;
+		return 1;
+	} );
+	t.mock.method( globalThis, "clearTimeout", () => {} );
+	let simulationMs = 0;
+	const clock = createClock( skippedMs => {
+		// simulation.ts advances its time by the skipped span, steps, then adds one tick.
+		simulationMs += skippedMs;
+		deadlines.push( simulationMs );
+		simulationMs += 16;
+	}, error => {
+		throw error;
+	} );
+	clock.start();
+	// A late wake runs a catch-up burst; a long stall skips ahead.
+	for ( const at of [ 1100, 1180, 4000 ] ) {
+		now = at;
+		defined( callback )();
+	}
+	const origin = clock.sample().originMs - performance.timeOrigin;
+	assert.equal( origin, 1016 );
+	// Each late wake runs a burst of at most four steps, each for its own deadline.
+	const expected = [ 0, 16, 32, 48, 64, 80, 96, 112 ];
+	assert.deepEqual( deadlines.slice( 0, expected.length ), expected );
+	// After the skip, simulation time still names the step's deadline.
+	assert.ok( deadlines.at( -1 ) + origin <= 4000 && deadlines.at( -1 ) + origin > 4000 - 4 * 16 );
 	clock.dispose();
 });

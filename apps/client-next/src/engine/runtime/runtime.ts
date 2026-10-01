@@ -89,6 +89,10 @@ function animationProbe(): import("@/engine/foundation/animation/animation-pose"
 // Frame-timing window for the FPS chip. Two seconds at 60 Hz keeps the readout
 // responsive without letting one stall dominate the published percentile.
 const TELEMETRY_SAMPLES = 120, TELEMETRY_INTERVAL_MS = 500;
+// A hidden tab gets no animation frames. Native keeps its game loop running
+// while minimized; this port keeps consuming the world journal (which fails
+// the session when unacknowledged) at this pace, driven by worker messages.
+const HIDDEN_FRAME_MS = 100;
 /*
 ================
 startRuntime
@@ -100,7 +104,7 @@ export function startRuntime(
 	presentationSeed = Math.trunc( performance.now() ) >>> 0,
 	diagnostics: import("@/engine/contracts/runtime").RuntimeDiagnostics = {}
 ): RuntimeControl {
-	let disposed = false, raf = 0, lastReport = 0;
+	let disposed = false, raf = 0, frameToken = 0, lastReport = 0;
 	let loadingVisible = false, loadingTitle = "Preparing your journey";
 	let pendingWorldReset = false, effectDetail = 2, normalFortressClothes = false;
 	/*
@@ -468,6 +472,8 @@ export function startRuntime(
 			if ( disposed ) {
 				return;
 			}
+			// Whichever of RAF and a hidden delivery ran this frame, retire the other.
+			frameToken++;
 			const cpuStart = performance.now();
 			frameId++;
 			stageAt = cpuStart;
@@ -519,6 +525,11 @@ export function startRuntime(
 					latestSequence = snapshot.sequence;
 					simulationTimeMs = snapshot.timeMs;
 					acceptedInput = snapshot.acceptedInputSequence;
+					// Main-clock milliseconds of simulation time zero: poses carry their
+					// simulation time, and presentation needs it on the frame clock.
+					if ( snapshot.clock?.originMs ) {
+						characters.simulationOrigin( snapshot.clock.originMs - performance.timeOrigin );
+					}
 				}
 				const simulationError = simulation.error();
 				if ( simulationError ) {
@@ -707,8 +718,9 @@ export function startRuntime(
 						session: sessionState,
 						gameplay: presentation.gameplay(),
 						entities: presentation.entities(),
-						width: canvas.clientWidth,
-						height: canvas.clientHeight,
+						// UI pixels: the chosen screen size, or CSS pixels when native.
+						width: canvas.clientWidth / platform.displayScale(),
+						height: canvas.clientHeight / platform.displayScale(),
 						worldReady: readySent || worldReady
 					},
 					now,
@@ -753,7 +765,10 @@ export function startRuntime(
 				const hoverLocal = presentation.gameplay()?.localGid,
 					hoverGid = diagnostics.hoverPicking !== false && worldPointer && frontendState.phase === "world" &&
 							hoverLocal &&
-							!ui.blocks( worldPointer[0] * canvas.clientWidth, worldPointer[1] * canvas.clientHeight ) ?
+							!ui.blocks(
+								worldPointer[0] * canvas.clientWidth / platform.displayScale(),
+								worldPointer[1] * canvas.clientHeight / platform.displayScale()
+							) ?
 						renderer.pickEntity( worldPointer[0], worldPointer[1], hoverLocal, input.blindHeld() ) :
 						null;
 				hoveredEntity = hoverGid;
@@ -842,12 +857,36 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 				}
 				frameProbe()?.end();
 				raf = requestAnimationFrame( frame );
+				hiddenFrame( frameToken, now );
 			} catch ( error ) {
 				platform.report( `Runtime failed: ${String( error )}`, error );
 				dispose();
 			}
 		}
+		/*
+		================
+		hiddenFrame
+
+		A hidden document gets no animation frames. While hidden, a worker
+		delivery at least HIDDEN_FRAME_MS after the last frame runs the next
+		one instead; a visible document keeps waiting for its RAF. The frame
+		token retires this waiter once either path has run a frame.
+		================
+		*/
+		function hiddenFrame( token: number, lastFrameAt: number ): void {
+			simulation.delivery().then( () => {
+				if ( disposed || token !== frameToken ) return;
+				const now = performance.now();
+				if ( globalThis.document?.visibilityState !== "hidden" || now - lastFrameAt < HIDDEN_FRAME_MS ) {
+					hiddenFrame( token, lastFrameAt );
+					return;
+				}
+				cancelAnimationFrame( raf );
+				void frame( now );
+			} );
+		}
 		raf = requestAnimationFrame( frame );
+		hiddenFrame( frameToken, performance.now() );
 		return {
 			dispose,
 			audioSnapshot: () => audio.snapshot(),

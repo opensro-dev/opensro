@@ -195,6 +195,12 @@ test("dock selection uses the aggregate box in roster order, including empty sil
 		2,
 		"retail world picking accepts the model box outside triangle silhouettes"
 	);
+	// A box-only winner yields to a confirmed rival: here a drop sharing the spot.
+	c.actors( [ actor( 2 ), { ...actor( 4 ), groundItem: true } ] );
+	c.prepare( gpu, { upload: () => ({}), release() {} }, 257 );
+	assert.equal( defined( c.pick( [ near ], 0 ) ).gid, 4, "an empty character box does not hide a drop" );
+	c.actors( [ actor( 2 ), actor( 3 ) ] );
+	c.prepare( gpu, { upload: () => ({}), release() {} }, 257 );
 	assert.equal( c.pickFrontend( near, [ 3, 2 ] ), 3 );
 	assert.equal( c.pickFrontend( near, [ 2, 3 ] ), 2 );
 	assert.equal( c.pickFrontend( outside, [ 2, 3 ] ), null );

@@ -26,6 +26,7 @@ import { createPaletteStreams } from "./palette-streams";
 import { createCharacterRenderPlan } from "@/engine/foundation/animation/character-render-plan";
 import { createCharacterHierarchy } from "@/engine/foundation/animation/character-hierarchy";
 import { characterPickVolume } from "@/engine/foundation/animation/character-pick-volume";
+import { meshUnderRays, selectPickCandidate, type PickCandidate } from "@/engine/foundation/animation/character-pick";
 import { pickVolume, pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import { ribbonSpline, ribbonStrip, type RibbonPoint } from "@/engine/foundation/rendering/particle-ribbon";
 import {
@@ -82,6 +83,8 @@ export function createCharacters(
 	let hasDeferred = false, deferredVisible = new Set<number>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
 	const volumes = new WeakMap<CharacterModel, PickBounds>();
+	// Scratch evaluators for mesh-refined picks, one per admitted model.
+	const pickPoses = new WeakMap<CharacterModel, ReturnType<typeof createCharacterPose>>();
 	const textures = new Map<WorldTexture, ImageDraw>();
 	const poses = new Map<number, {
 		model: string;
@@ -207,6 +210,24 @@ export function createCharacters(
 	Compose mount and attachment transforms before applying the actor placement.
 	================
 	*/
+	/*
+	================
+	facedMatrix
+
+	The owner matrix with its rotation replaced by a yaw (placement's axes),
+	keeping each basis column's length and the translation.
+	================
+	*/
+	function facedMatrix( owner: Float32Array, yaw: import("@/engine/foundation/math/angles").Radians ): Float32Array {
+		const faced = placement( 0, 0, owner[12]!, owner[13]!, owner[14]!, yaw );
+		for ( let column = 0; column < 3; column++ ) {
+			const at = column * 4, length = Math.hypot( owner[at]!, owner[at + 1]!, owner[at + 2]! );
+			faced[at] = faced[at]! * length;
+			faced[at + 1] = faced[at + 1]! * length;
+			faced[at + 2] = faced[at + 2]! * length;
+		}
+		return faced;
+	}
 	function transformFor(
 		actor: CharacterActor,
 		rows: ReadonlyMap<number, CharacterActor>,
@@ -247,8 +268,12 @@ export function createCharacters(
 				}
 			}
 			if ( !socket ) socket = identity();
-			const parent = transformFor( holder, rows, origin, cache, chain );
-			if ( !parent ) return null;
+			const owned = transformFor( holder, rows, origin, cache, chain );
+			if ( !owned ) return null;
+			// A root attachment with a fixed facing keeps its owner's position and
+			// scale, not its rotation: 8D5440 copies the caster's matrix at spawn.
+			const facing = actor.attachment?.root ? actor.attachment.facing : undefined;
+			const parent = facing === undefined ? owned : facedMatrix( owned, facing );
 			matrix = new Float32Array( 16 );
 			multiply( parent, socket, matrix );
 			if ( actor.attachment ) {
@@ -489,7 +514,6 @@ export function createCharacters(
 		================
 		*/
 		pick( rays: readonly PickRay[], excluded: number, blindHeld = false ) {
-			let result: { gid: number; depth: number; ray: number; } | null = null, bestDistance = Infinity;
 			const current = snapshots.index, ride = current.get( excluded )?.mountedOn;
 			// Native 856540 uses the aggregate transformed box, independent of
 			// texture alpha and animated limb triangles. Preserve actor order.
@@ -499,6 +523,7 @@ export function createCharacters(
 					drawn.set( batch.gids[i]!, batch.instances.subarray( i * 16, i * 16 + 16 ) );
 				}
 			}
+			const candidates: PickCandidate[] = [];
 			for ( const actor of actors ) {
 				const gid = actor.gid, matrix = drawn.get( gid ), resource = models.get( actor.model );
 				if (
@@ -510,23 +535,46 @@ export function createCharacters(
 					bounds = characterPickVolume( resource.model );
 					volumes.set( resource.model, bounds );
 				}
+				const hits: { ray: number; depth: number; distance: number; }[] = [];
 				for ( let r = 0; r < rays.length; r++ ) {
-					const ray = rays[r]!, depth = pickVolumeDepth( ray, bounds, matrix );
-					if ( depth === null ) continue;
-					const distance = depth * Math.hypot( ...ray.delta );
-					// 69282b: a center hit may replace an off-center winner;
-					// a closer subsequent hit still wins, including off-center.
-					if ( distance < bestDistance || (result?.ray !== 4 && r === 4) ) {
-						bestDistance = distance;
-						result = { gid, depth, ray: r };
+					const depth = pickVolumeDepth( rays[r]!, bounds, matrix );
+					if ( depth !== null ) {
+						hits.push( { ray: r, depth, distance: depth * Math.hypot( ...rays[r]!.delta ) } );
 					}
 				}
+				if ( hits.length ) candidates.push( { actor, matrix, model: resource.model, hits } );
 			}
-			if ( result ) {
-				const rider = actors.find( actor => actor.mountedOn === result!.gid );
-				if ( rider ) result = { ...result, gid: rider.gid };
+			// A box is far larger than a posed body (a T-posed giant's club spans
+			// 70 units). A winner whose posed triangles meet none of the rays yields
+			// to candidates that are confirmed: a drop, or a body actually under
+			// the rays. Without a confirmed rival the native box winner stands, so
+			// near-misses on a lone target still select it. Deliberate deviation
+			// from 692680, which always keeps the nearest box hit.
+			/*
+			================
+			confirmed
+			================
+			*/
+			const confirmed = ( candidate: PickCandidate ) => {
+				if ( candidate.actor.groundItem ) return true;
+				let scratch = pickPoses.get( candidate.model );
+				if ( !scratch ) {
+					scratch = createCharacterPose( candidate.model );
+					pickPoses.set( candidate.model, scratch );
+				}
+				return meshUnderRays( candidate, rays, scratch );
+			};
+			let result = selectPickCandidate( candidates );
+			if ( result && candidates.length > 1 && !confirmed( result.candidate ) ) {
+				const rivals = candidates.filter( candidate =>
+					candidate !== result!.candidate && confirmed( candidate )
+				);
+				if ( rivals.length ) result = selectPickCandidate( rivals );
 			}
-			return result;
+			if ( !result ) return null;
+			// 692680: a mounted winner answers with its rider.
+			const rider = actors.find( actor => actor.mountedOn === result!.gid );
+			return { gid: rider?.gid ?? result.gid, depth: result.depth, ray: result.ray };
 		},
 		/*
 		================
@@ -1634,7 +1682,15 @@ export function createCharacters(
 									}
 								}
 								if ( primitive.billboard ) {
-									faceEffectMesh( batch.palettes[p]!, offset, transform, view!, primitive.billboard );
+									// ViewVBillboard follows the element's velocity (CEFEffect_Render b1556c).
+									faceEffectMesh(
+										batch.palettes[p]!,
+										offset,
+										transform,
+										view!,
+										primitive.billboard,
+										particle?.velocity
+									);
 								}
 								if ( particle ) placeParticle( particle, batch.palettes[p]!, offset, true );
 								particleTimes.push( age );

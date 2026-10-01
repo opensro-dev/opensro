@@ -220,6 +220,9 @@ export interface CharacterActor {
 		readonly basis?: "native" | "bsr" | "compound";
 		readonly modelScale?: number;
 		readonly rotation?: Float32Array;
+		/** Root attachments only: a fixed world yaw replacing the owner's rotation
+		 * (a victim-anchored hit effect keeps the caster's facing, 8D5440). */
+		readonly facing?: import("@/engine/foundation/math/angles").Radians;
 	};
 	readonly mountedOn?: number;
 	readonly gid: number;

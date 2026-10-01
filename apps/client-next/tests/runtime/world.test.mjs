@@ -552,6 +552,47 @@ test("unexpected close retries with a new ticket and rejects a lost resume", asy
 	world.dispose();
 });
 
+test("a dropped session keeps retrying through the resume grace, then gives up", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket" );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered() );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	world.step( 4 );
+	flush( world );
+	world.step( 5 );
+	assert.equal( world.status().phase, "world" );
+	first.onclose();
+	world.step( 6 );
+	assert.equal( world.status().phase, "reconnecting" );
+	// Every attempt fails at once, as while the network is down.
+	let clock = 7, failures = 0;
+	while ( clock < 40000 && world.status().phase === "reconnecting" ) {
+		world.step( clock );
+		await settle();
+		world.step( clock );
+		const latest = sockets[sockets.length - 1];
+		if ( sockets.length - 1 > failures ) {
+			failures++;
+			latest.onclose();
+			world.step( clock );
+		}
+		clock += 50;
+	}
+	assert.ok( failures > 3, `retried ${failures} times, more than the old fixed three` );
+	assert.equal( world.status().phase, "disconnected" );
+	assert.ok( clock >= 30000 && clock < 40000, `gave up at ${clock} ms, after the 30 s resume grace` );
+	world.dispose();
+});
+
 // EncodeCosSpawnBand2 and EncodeCosRideState are the server-owned wire authority.
 test("COS spawn, ride state and mount despawn preserve reliable rider lifecycle", () => {
 	const owner = createEntities();

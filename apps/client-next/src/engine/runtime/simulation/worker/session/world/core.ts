@@ -1,92 +1,385 @@
-import {isNameColorGuard,jobItemType,equipmentHoldType,type NameColorContext} from '@/engine/foundation/gameplay/name-color';
-import {fortressActive} from '@/engine/foundation/gameplay/fortress';
-import type {EntityState} from '@/engine/contracts/world';
-import {travelMode,resetTravelRegion,gateRequest,isReturnScroll} from '@/engine/foundation/gameplay/travel';
-import {commerceReferences} from '@/engine/foundation/gameplay/commerce';
-import {createEntities} from './entities/entities';
-import {createGameplay} from './gameplay/gameplay';
-import type {WireFrame} from '@/engine/contracts/network';
-import type {GameplayCommand} from '@/engine/contracts/gameplay';
-// Deterministic admitted-world owner. Time, bootstrap, commands and packets are
-// supplied by the parent; this owner has no transport, wall clock or randomness.
-export function createWorldCore(send:(frame:WireFrame)=>void){
-    const entities=createEntities((pose,reference,cursor)=>gameplay.surface(pose,reference,undefined,cursor),event=>gameplay.entityLifecycle(event),nameContext),gameplay=createGameplay(send,(handle,at)=>entities.publish({kind:"ui-sound",handle,at}),event=>entities.publish(event),gid=>entities.read(gid),(cue,at)=>entities.publish({kind:'item-sound',cue,at}));
+/*
+===========================================================================
 
-    const capeTeams=new Map<number,number>();
-    let nameTimer:number|undefined,nameClock=0;
-    function nameContext(spawning?:EntityState):NameColorContext|undefined {
-        const local=spawning?.kind==='local-player'?spawning:entities.read(gameplay.localIdentity());if(!local)return;
-        const inputs=gameplay.nameInputs(nameClock);
-        return {...inputs,local:{...local,holdType:local.holdType??equipmentHoldType(inputs.localItem?.typeFlags)},capeTeam:id=>capeTeams.get(id)};
-    }
-    // ItemParam2 is family-dependent (it may be fractional/negative for other items).
-    // Only PvP capes own a team value; preserve strict validation for that family.
-    function admitCape(id:number,typeFlags:number,value:unknown){if(jobItemType(typeFlags)!==5||value===undefined)return;if(typeof value!=='number'||!Number.isInteger(value)||value<0||value>0xffffffff)throw Error('Invalid PvP cape parameter');capeTeams.set(id,value);}
-    let loadingMode:import('@/engine/contracts/world').WorldTravel['mode']=0;
-    let travelRevision=0;
-    let pendingTravel:import('@/engine/contracts/world').WorldTravel|null=null;
-    let awaitingTravelBootstrap=false;
-    let publishedShop:import('@/engine/contracts/gameplay').GameplayState['shop'];
-    let publishedCatalog:import('@/engine/contracts/gameplay').GameplayState['skillCatalog'],publishedSocial:import('@/engine/contracts/gameplay').GameplayState['social'];
-    function invalidateProjection(){publishedShop=undefined;publishedCatalog=undefined;publishedSocial=undefined;}
-    function receive(frame:WireFrame,now:number){
-        nameClock=now;
-        if(frame.opcode===14){const refs=commerceReferences(frame.payload);gameplay.references(refs);entities.references(refs);for(const row of refs)admitCape(row.refObjId,row.typeFlags,row.tooltip?.fields.itemParam2_2a0);return;}
-        const region=resetTravelRegion(frame);
-        if(region!==null){nameTimer=undefined;awaitingTravelBootstrap=true;gameplay.resetWorld();entities.receive(frame,now);pendingTravel={mode:loadingMode,region,revision:++travelRevision};entities.publish({kind:'travel',travel:pendingTravel});return;}
-        const localGid=gameplay.localIdentity(),itemCooldown=frame.opcode===0xb5bd?gameplay.itemUseCooldown(frame.payload[1]!):undefined;
-        const chatSender=frame.opcode===0x3667&&frame.payload.length>=5&&(frame.payload[0]===1||frame.payload[0]===3)?entities.read(new DataView(frame.payload.buffer,frame.payload.byteOffset,frame.payload.byteLength).getUint32(1,true)):undefined;
-        const oldNameContext=nameContext(),oldSocial=gameplay.nameInputs().social;
-        if (!gameplay.receive(frame, now,chatSender))
-            entities.receive(frame, now);
-        const social=gameplay.nameInputs().social;
-        if(frame.opcode===0x35d6)entities.recolor(e=>social.members.some(m=>m.name===e.name));
-        if(frame.opcode===0x3e58){
-            const type=frame.payload[0];
-            if(type===1||type===3&&social.leader===0)entities.recolor(e=>oldSocial.members.some(m=>m.name===e.name),true,oldNameContext);
-            else if(type===2)entities.recolor(e=>social.members.some(m=>m.name===e.name&&!oldSocial.members.some(old=>old.id===m.id)));
-            else if(type===3)entities.recolor(e=>oldSocial.members.some(m=>m.name===e.name&&!social.members.some(next=>next.id===m.id)));
-        }
-        if(frame.opcode===0x32bb||frame.opcode===0x3b29&&(frame.payload[0]===0x19||frame.payload[0]===0x1c))entities.recolor(e=>e.kind==='player'||e.kind==='local-player');
-        if(frame.opcode===0x376f){const local=entities.read(localGid),effective=local?.mountedOn?entities.read(local.mountedOn):local;if(effective)gameplay.speeds(effective,now);}
-        if(frame.opcode===0x3122&&frame.payload.length===6&&frame.payload[4]===0&&frame.payload[5]===2)gameplay.die(new DataView(frame.payload.buffer,frame.payload.byteOffset,6).getUint32(0,true),now);
-        for(const displacement of gameplay.takeDisplacements()){
-            const entity=entities.read(displacement.gid);if(!entity)continue;
-            const resolved=gameplay.constrainDisplacement(displacement,{regionId:entity.regionId,x:entity.x,y:entity.y,z:entity.z,angle:entity.heading},now);
-            entities.displace(resolved,now);const localArrival=gameplay.displace(resolved,now);
-            if(resolved.kind===8){const arrival=localArrival??entities.castArrival(resolved.token);if(arrival!==undefined)gameplay.guidedArrival(resolved.token,arrival);}
-        }
-        for(const token of gameplay.takeCancellations()){entities.cancelCast(token,now);gameplay.cancelCast(token,now);}
-        const selectedMode=travelMode(frame,localGid,itemCooldown);if(selectedMode!==null)loadingMode=selectedMode;
-        if (frame.opcode === 0x30e3 || frame.opcode === 0xb2f5) {
-            const v = new DataView(frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength);
-            const e = entities.read(v.getUint32(frame.opcode === 0x30e3 ? 16 : 0, true));
-            if (e?.kind === "local-player")
-                gameplay.correct(e);
-        }
-        if(frame.opcode===0x35c7){const entity=entities.read(new DataView(frame.payload.buffer,frame.payload.byteOffset,4).getUint32(0,true));if(entity?.kind==='local-player'&&!entity.mountedOn)gameplay.heading(entity.heading);}
-        if (frame.opcode === 0x32a6) {
-            const gid = new DataView(frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength).getUint32(0, true);
-            const entity = entities.read(gid);
-            if (entity)
-                {gameplay.seed(entity);nameTimer=now+3000;}
-        }
-    }
-    return {
-        bootstrap(value:unknown){nameTimer=undefined;capeTeams.clear();for(const row of (value as {refItemSnapshot?:{refObjId:number;typeFlags:number;nativeFields?:Record<string,number>}[]}).refItemSnapshot??[])admitCape(row.refObjId,row.typeFlags,row.nativeFields?.itemParam2_2a0);if(!pendingTravel)loadingMode=0;invalidateProjection();entities.bootstrap(value,awaitingTravelBootstrap);awaitingTravelBootstrap=false;gameplay.bootstrap(value);if(pendingTravel)entities.publish({kind:'travel',travel:pendingTravel});},
-        receive,
-        notice:gameplay.notice,
-        chatBlocks:gameplay.chatBlocks,
-        options:gameplay.options,
-        command(command:GameplayCommand,now:number){if(command.kind==='travel-gate'||command.kind==='travel-instance'){const frame=gateRequest(command);if(!entities.read(command.gid))throw Error('Travel source is not admitted');loadingMode=2;send(frame);return;}const itemType=command.kind==='item-use'?gameplay.itemUseType(command.slot):undefined;const target='gid' in command&&command.gid?entities.read(command.gid):undefined;gameplay.command(command,now,target,entities.read(gameplay.localIdentity()));if(command.kind==='navigation')entities.groundSpawns();if(itemType!==undefined&&isReturnScroll(itemType))loadingMode=2;},
-        step(now:number,advance=true){if(advance){nameClock=now;if(nameTimer!==undefined&&now>=nameTimer){const war=fortressActive(gameplay.nameInputs().fortress);entities.recolor(e=>e.kind==='local-player'||e.kind==='player'||war&&(['cos','monster'].includes(e.kind)||isNameColorGuard(e)));nameTimer=now+3000;}entities.step(now);gameplay.step(now,entities.read(gameplay.localIdentity()));for(const token of gameplay.takeCancellations()){entities.cancelCast(token,now);gameplay.cancelCast(token,now);}
-        }const state=gameplay.take();if(state){const {skillCatalog,social,shop,...dynamic}=state;entities.publish({kind:'gameplay',state:{...dynamic,...(shop!==publishedShop?{shop}:{}),...(skillCatalog!==publishedCatalog?{skillCatalog}:{}),...(social!==publishedSocial?{social}:{})}});publishedShop=shop;publishedCatalog=skillCatalog;publishedSocial=social;}},
-        readyRevision:()=>pendingTravel?.revision??0,
-        // Retail 0x72902a restores destination mode after the loading UI retires.
-        travelReady(){awaitingTravelBootstrap=false;pendingTravel=null;loadingMode=2;gameplay.enterMusic();},
-        clear(){awaitingTravelBootstrap=false;nameTimer=undefined;capeTeams.clear();pendingTravel=null;loadingMode=0;invalidateProjection();gameplay.reset();entities.clear();},
-        synchronized(){return entities.synchronized();},count(){return entities.count();},take(){return entities.take();},ack(sequence:number){entities.ack(sequence);},
-        dispose(){nameTimer=undefined;capeTeams.clear();entities.dispose();gameplay.dispose();}
-    };
+core.ts - the admitted-world owner: entities plus gameplay, one command path
+
+Deterministic: time, bootstrap, commands and packets are supplied by the
+parent session; this owner has no transport, wall clock or randomness. It
+routes each server frame to gameplay first and entities second, and each UI
+command through gameplay with its target resolved from the entity table.
+
+===========================================================================
+*/
+import {
+	isNameColorGuard,
+	jobItemType,
+	equipmentHoldType,
+	type NameColorContext
+} from "@/engine/foundation/gameplay/name-color";
+import { fortressActive } from "@/engine/foundation/gameplay/fortress";
+import type { EntityState } from "@/engine/contracts/world";
+import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
+import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
+import { createEntities } from "./entities/entities";
+import { createGameplay } from "./gameplay/gameplay";
+import type { WireFrame } from "@/engine/contracts/network";
+import type { GameplayCommand } from "@/engine/contracts/gameplay";
+/*
+================
+createWorldCore
+================
+*/
+export function createWorldCore( send: ( frame: WireFrame ) => void ) {
+	const entities = createEntities(
+			( pose, reference, cursor ) => gameplay.surface( pose, reference, undefined, cursor ),
+			event => gameplay.entityLifecycle( event ),
+			nameContext
+		),
+		gameplay = createGameplay(
+			send,
+			( handle, at ) => entities.publish( { kind: "ui-sound", handle, at } ),
+			event => entities.publish( event ),
+			gid => entities.read( gid ),
+			( cue, at ) => entities.publish( { kind: "item-sound", cue, at } )
+		);
+
+	const capeTeams = new Map<number, number>();
+	let nameTimer: number | undefined, nameClock = 0;
+	/*
+================
+nameContext
+The name-colour inputs for the local player, or undefined before it spawns.
+================
+	*/
+	function nameContext( spawning?: EntityState ): NameColorContext | undefined {
+		const local = spawning?.kind === "local-player" ? spawning : entities.read( gameplay.localIdentity() );
+		if ( !local ) return;
+		const inputs = gameplay.nameInputs( nameClock );
+		return {
+			...inputs,
+			local: { ...local, holdType: local.holdType ?? equipmentHoldType( inputs.localItem?.typeFlags ) },
+			capeTeam: id => capeTeams.get( id )
+		};
+	}
+	/*
+================
+admitCape
+ItemParam2 is family-dependent (it may be fractional or negative for other
+items). Only PvP capes own a team value; keep strict validation for them.
+================
+	*/
+	function admitCape( id: number, typeFlags: number, value: unknown ) {
+		if ( jobItemType( typeFlags ) !== 5 || value === undefined ) return;
+		if ( typeof value !== "number" || !Number.isInteger( value ) || value < 0 || value > 0xffffffff ) {
+			throw Error( "Invalid PvP cape parameter" );
+		}
+		capeTeams.set( id, value );
+	}
+	let loadingMode: import("@/engine/contracts/world").WorldTravel["mode"] = 0;
+	let travelRevision = 0;
+	let pendingTravel: import("@/engine/contracts/world").WorldTravel | null = null;
+	let awaitingTravelBootstrap = false;
+	let publishedShop: import("@/engine/contracts/gameplay").GameplayState["shop"];
+	let publishedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
+		publishedSocial: import("@/engine/contracts/gameplay").GameplayState["social"];
+	/*
+================
+invalidateProjection
+Forces the next gameplay publish to resend the large, rarely changing
+fields (shop, skill catalog, social).
+================
+	*/
+	function invalidateProjection() {
+		publishedShop = undefined;
+		publishedCatalog = undefined;
+		publishedSocial = undefined;
+	}
+	/*
+================
+receive
+One server frame: travel resets, gameplay, then entities, then the
+cross-owner follow-ups (name colours, displacements, cancellations).
+================
+	*/
+	function receive( frame: WireFrame, now: number ) {
+		nameClock = now;
+		if ( frame.opcode === 14 ) {
+			const refs = commerceReferences( frame.payload );
+			gameplay.references( refs );
+			entities.references( refs );
+			for ( const row of refs ) admitCape( row.refObjId, row.typeFlags, row.tooltip?.fields.itemParam2_2a0 );
+			return;
+		}
+		const region = resetTravelRegion( frame );
+		if ( region !== null ) {
+			nameTimer = undefined;
+			awaitingTravelBootstrap = true;
+			gameplay.resetWorld();
+			entities.receive( frame, now );
+			pendingTravel = { mode: loadingMode, region, revision: ++travelRevision };
+			entities.publish( { kind: "travel", travel: pendingTravel } );
+			return;
+		}
+		const localGid = gameplay.localIdentity(),
+			itemCooldown = frame.opcode === 0xb5bd ? gameplay.itemUseCooldown( frame.payload[1]! ) : undefined;
+		const chatSender =
+			frame.opcode === 0x3667 && frame.payload.length >= 5 && (frame.payload[0] === 1 || frame.payload[0] === 3) ?
+				entities.read(
+					new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
+						1,
+						true
+					)
+				) :
+				undefined;
+		const oldNameContext = nameContext(), oldSocial = gameplay.nameInputs().social;
+		if ( !gameplay.receive( frame, now, chatSender ) ) {
+			entities.receive( frame, now );
+		}
+		const social = gameplay.nameInputs().social;
+		if ( frame.opcode === 0x35d6 ) entities.recolor( e => social.members.some( m => m.name === e.name ) );
+		if ( frame.opcode === 0x3e58 ) {
+			const type = frame.payload[0];
+			if ( type === 1 || type === 3 && social.leader === 0 ) {
+				entities.recolor( e => oldSocial.members.some( m => m.name === e.name ), true, oldNameContext );
+			} else if ( type === 2 ) {
+				entities.recolor( e =>
+					social.members.some( m => m.name === e.name && !oldSocial.members.some( old => old.id === m.id ) )
+				);
+			} else if ( type === 3 ) {
+				entities.recolor( e =>
+					oldSocial.members.some( m => m.name === e.name && !social.members.some( next => next.id === m.id ) )
+				);
+			}
+		}
+		if (
+			frame.opcode === 0x32bb ||
+			frame.opcode === 0x3b29 && (frame.payload[0] === 0x19 || frame.payload[0] === 0x1c)
+		) entities.recolor( e => e.kind === "player" || e.kind === "local-player" );
+		if ( frame.opcode === 0x376f ) {
+			const local = entities.read( localGid ),
+				effective = local?.mountedOn ? entities.read( local.mountedOn ) : local;
+			if ( effective ) gameplay.speeds( effective, now );
+		}
+		if (
+			frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 0 && frame.payload[5] === 2
+		) {
+			gameplay.die(
+				new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 ).getUint32( 0, true ),
+				now
+			);
+		}
+		for ( const displacement of gameplay.takeDisplacements() ) {
+			const entity = entities.read( displacement.gid );
+			if ( !entity ) continue;
+			const resolved = gameplay.constrainDisplacement( displacement, {
+				regionId: entity.regionId,
+				x: entity.x,
+				y: entity.y,
+				z: entity.z,
+				angle: entity.heading
+			}, now );
+			entities.displace( resolved, now );
+			const localArrival = gameplay.displace( resolved, now );
+			if ( resolved.kind === 8 ) {
+				const arrival = localArrival ?? entities.castArrival( resolved.token );
+				if ( arrival !== undefined ) gameplay.guidedArrival( resolved.token, arrival );
+			}
+		}
+		for ( const token of gameplay.takeCancellations() ) {
+			entities.cancelCast( token, now );
+			gameplay.cancelCast( token, now );
+		}
+		const selectedMode = travelMode( frame, localGid, itemCooldown );
+		if ( selectedMode !== null ) loadingMode = selectedMode;
+		if ( frame.opcode === 0x30e3 || frame.opcode === 0xb2f5 ) {
+			const v = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
+			const e = entities.read( v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ) );
+			if ( e?.kind === "local-player" ) {
+				gameplay.correct( e );
+			}
+		}
+		if ( frame.opcode === 0x35c7 ) {
+			const entity = entities.read(
+				new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true )
+			);
+			if ( entity?.kind === "local-player" && !entity.mountedOn ) gameplay.heading( entity.heading );
+		}
+		if ( frame.opcode === 0x32a6 ) {
+			const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+				.getUint32( 0, true );
+			const entity = entities.read( gid );
+			if ( entity ) {
+				gameplay.seed( entity );
+				nameTimer = now + 3000;
+			}
+		}
+	}
+	return {
+		/*
+================
+bootstrap
+================
+		*/
+		bootstrap( value: unknown ) {
+			nameTimer = undefined;
+			capeTeams.clear();
+			for (
+				const row of (value as {
+					refItemSnapshot?: {
+						refObjId: number;
+						typeFlags: number;
+						nativeFields?: Record<string, number>;
+					}[];
+				}).refItemSnapshot ?? []
+			) admitCape( row.refObjId, row.typeFlags, row.nativeFields?.itemParam2_2a0 );
+			if ( !pendingTravel ) loadingMode = 0;
+			invalidateProjection();
+			entities.bootstrap( value, awaitingTravelBootstrap );
+			awaitingTravelBootstrap = false;
+			gameplay.bootstrap( value );
+			if ( pendingTravel ) entities.publish( { kind: "travel", travel: pendingTravel } );
+		},
+		receive,
+		notice: gameplay.notice,
+		chatBlocks: gameplay.chatBlocks,
+		options: gameplay.options,
+		/*
+================
+command
+UI and quickslot commands. A skill aims at the newest selection intent
+(gameplay.skillTarget) before its target is read from the entity table.
+================
+		*/
+		command( command: GameplayCommand, now: number ) {
+			if ( command.kind === "travel-gate" || command.kind === "travel-instance" ) {
+				const frame = gateRequest( command );
+				if ( !entities.read( command.gid ) ) throw Error( "Travel source is not admitted" );
+				loadingMode = 2;
+				send( frame );
+				return;
+			}
+			const itemType = command.kind === "item-use" ? gameplay.itemUseType( command.slot ) : undefined;
+			// The UI's snapshot target trails a fresh click by one grant round trip.
+			if ( command.kind === "skill" ) {
+				const { gid: _snapshot, ...press } = command, gid = gameplay.skillTarget();
+				command = gid ? { ...press, gid } : press;
+			}
+			const target = "gid" in command && command.gid ? entities.read( command.gid ) : undefined;
+			gameplay.command( command, now, target, entities.read( gameplay.localIdentity() ) );
+			if ( command.kind === "navigation" ) entities.groundSpawns();
+			if ( itemType !== undefined && isReturnScroll( itemType ) ) loadingMode = 2;
+		},
+		/*
+================
+step
+Advances entities and gameplay, then publishes the changed gameplay state.
+================
+		*/
+		step( now: number, advance = true ) {
+			if ( advance ) {
+				nameClock = now;
+				if ( nameTimer !== undefined && now >= nameTimer ) {
+					const war = fortressActive( gameplay.nameInputs().fortress );
+					entities.recolor( e =>
+						e.kind === "local-player" || e.kind === "player" ||
+						war && ([ "cos", "monster" ].includes( e.kind ) || isNameColorGuard( e ))
+					);
+					nameTimer = now + 3000;
+				}
+				entities.step( now );
+				gameplay.step( now, entities.read( gameplay.localIdentity() ) );
+				for ( const token of gameplay.takeCancellations() ) {
+					entities.cancelCast( token, now );
+					gameplay.cancelCast( token, now );
+				}
+			}
+			const state = gameplay.take();
+			if ( state ) {
+				const { skillCatalog, social, shop, ...dynamic } = state;
+				entities.publish( {
+					kind: "gameplay",
+					state: {
+						...dynamic,
+						...(shop !== publishedShop ? { shop } : {}),
+						...(skillCatalog !== publishedCatalog ? { skillCatalog } : {}),
+						...(social !== publishedSocial ? { social } : {})
+					}
+				} );
+				publishedShop = shop;
+				publishedCatalog = skillCatalog;
+				publishedSocial = social;
+			}
+		},
+		readyRevision: () => pendingTravel?.revision ?? 0,
+		/*
+================
+travelReady
+Retail 0x72902a restores destination mode after the loading UI retires.
+================
+		*/
+		travelReady() {
+			awaitingTravelBootstrap = false;
+			pendingTravel = null;
+			loadingMode = 2;
+			gameplay.enterMusic();
+		},
+		/*
+================
+clear
+================
+		*/
+		clear() {
+			awaitingTravelBootstrap = false;
+			nameTimer = undefined;
+			capeTeams.clear();
+			pendingTravel = null;
+			loadingMode = 0;
+			invalidateProjection();
+			gameplay.reset();
+			entities.clear();
+		},
+		/*
+================
+synchronized
+================
+		*/
+		synchronized() {
+			return entities.synchronized();
+		},
+		/*
+================
+count
+================
+		*/
+		count() {
+			return entities.count();
+		},
+		/*
+================
+take
+================
+		*/
+		take() {
+			return entities.take();
+		},
+		/*
+================
+ack
+================
+		*/
+		ack( sequence: number ) {
+			entities.ack( sequence );
+		},
+		/*
+================
+dispose
+================
+		*/
+		dispose() {
+			nameTimer = undefined;
+			capeTeams.clear();
+			entities.dispose();
+			gameplay.dispose();
+		}
+	};
 }
-

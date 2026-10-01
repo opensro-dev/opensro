@@ -239,7 +239,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		}
 		return OpResult{}, skillCastRefused
 	}
-	var burnFrames []wire.Frame
+	var burnFrames, deaths []wire.Frame
 	var targets []wire.SkillAreaTarget
 	for index, impacts := range committed {
 		final := impacts[len(impacts)-1]
@@ -263,6 +263,9 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		targets = append(targets, wire.SkillAreaTarget{GID: gid, Impacts: records})
 		if final.Fatal {
 			rt.queueMonsterDefeat(division, gid, nowMs+monsterDeathPresentationRetention.Milliseconds())
+			// 4A9C80 publishes LIFE for every alive-to-dead transition, area
+			// victims included; without it the client keeps moving the corpse.
+			deaths = append(deaths, monsterLifeDeadFrame(gid))
 		} else {
 			rt.commitSkillHostility(division, enterworld.ObjectIDForCharacter(snapshot), gid, skill, impacts, nowMs)
 		}
@@ -290,6 +293,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	}
 	rt.queueSkillCastClose(division, snapshot.Name, enterworld.ObjectIDForCharacter(snapshot), token, skill, rootID, nowMs+int64(lifetime))
 	public := append([]wire.Frame{success}, burnFrames...)
+	public = append(public, deaths...)
 	public = append(public, rt.groundReferences(drops)...)
 	for _, drop := range drops {
 		public = append(public, wire.DropBroadcastFrames(drop.SpawnRow(true))...)

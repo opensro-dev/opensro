@@ -26,7 +26,8 @@ export function createUiBridge(
 	canvas: HTMLCanvasElement,
 	emit: ( event: UiEvent ) => void,
 	release: () => void,
-	heldKey: ( code: string, down: boolean ) => void = () => {}
+	heldKey: ( code: string, down: boolean ) => void = () => {},
+	displayScale: () => number = () => 1
 ): UiBridge {
 	const lifetime = new AbortController(),
 		root = document.createElement( "section" ),
@@ -299,16 +300,47 @@ export function createUiBridge(
 		) emit( { kind: "press", id: slot.value.id } );
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "keyup", () => emit( { kind: "press", id: null } ), { signal: lifetime.signal } );
+	// The last pointer position and the hover last reported. Browsers send
+	// boundary events only when the pointer moves, so a control that is
+	// re-enabled (an inventory slot after a pending sale), appears (a window
+	// opening) or disappears under a still pointer would keep a stale hover.
+	// Each publication re-tests the element under the pointer (syncHover).
+	let pointerAt: [number, number] | null = null, reportedHover: string | null = null;
+	/*
+	================
+	reportHover
+	================
+	*/
+	function reportHover( id: string | null ) {
+		reportedHover = id;
+		emit( { kind: "hover", id } );
+	}
+	window.addEventListener( "pointermove", event => {
+		pointerAt = [ event.clientX, event.clientY ];
+	}, { signal: lifetime.signal, passive: true } );
+	/*
+	================
+	syncHover
+
+	The hover a still pointer should report after this publication.
+	================
+	*/
+	function syncHover() {
+		if ( !pointerAt || drag ) return;
+		const slot = current( document.elementFromPoint( pointerAt[0], pointerAt[1] ) );
+		const id = slot && !slot.value.disabled ? slot.value.id : null;
+		if ( id !== reportedHover ) reportHover( id );
+	}
 	root.addEventListener( "pointerover", event => {
 		const slot = current( event.target );
 		if ( slot !== current( event.relatedTarget ) ) {
-			emit( { kind: "hover", id: slot && !slot.value.disabled ? slot.value.id : null } );
+			reportHover( slot && !slot.value.disabled ? slot.value.id : null );
 		}
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "pointerout", event => {
 		const next = current( event.relatedTarget );
 		if ( current( event.target ) !== next ) {
-			emit( { kind: "hover", id: next && !next.value.disabled ? next.value.id : null } );
+			reportHover( next && !next.value.disabled ? next.value.id : null );
 			emit( { kind: "press", id: null } );
 		}
 	}, { signal: lifetime.signal } );
@@ -457,17 +489,20 @@ export function createUiBridge(
 				} else if ( el instanceof HTMLInputElement && el.value !== control.value && !composing ) {
 					el.value = control.value ?? "";
 				}
-				const [x, y, w, h] = control.rect,
-					left = box.left + x + "px",
-					top = box.top + y + "px",
-					width = w + "px",
-					height = h + "px";
+				// UI pixels to CSS pixels (platform displayScale: the chosen screen size).
+				const scale = displayScale(),
+					[x, y, w, h] = control.rect,
+					left = box.left + x * scale + "px",
+					top = box.top + y * scale + "px",
+					width = w * scale + "px",
+					height = h * scale + "px";
 				if ( el.style.left !== left ) el.style.left = left;
 				if ( el.style.top !== top ) el.style.top = top;
 				if ( el.style.width !== width ) el.style.width = width;
 				if ( el.style.height !== height ) el.style.height = height;
 				slot.value = control;
 			}
+			syncHover();
 			const request = state.focusRequest;
 			if ( request && request.revision !== focusRevision ) {
 				if ( request.id === null ) {

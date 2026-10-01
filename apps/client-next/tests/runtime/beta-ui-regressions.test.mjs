@@ -343,13 +343,28 @@ test("party-monster mark is published beside its owner and removed when the spaw
 		rarity: 4,
 		rarityAuxIcon: 1
 	};
+	// The mark rides the name board, whose range is measured from the local player.
+	const local = {
+		gid: 1,
+		refObjId: 1907,
+		kind: "local-player",
+		name: "Local",
+		regionId: 1,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0
+	};
 	try {
-		f.setEntities( [ monster ] );
+		f.setEntities( [ local, monster ] );
 		const mark = f.scene()?.quads.find( q => q.texture.endsWith( "/europe_partymob.png" ) );
 		assert.ok( mark, "the native auxiliary flag admits the generated icon resource" );
 		assert.equal( mark.characterAnchor, monster.gid );
 		assert.deepEqual( mark.rect.slice( 2 ), [ 16, 16 ] );
-		f.setEntities( [ { ...monster, rarityAuxIcon: 0 } ] );
+		f.setEntities( [ local, { ...monster, rarityAuxIcon: 0 } ] );
+		assert.equal( f.scene()?.quads.some( q => q.texture.endsWith( "/europe_partymob.png" ) ), false );
+		// The mark belongs to the name board: beyond name range neither shows.
+		f.setEntities( [ local, { ...monster, x: 400 } ] );
 		assert.equal( f.scene()?.quads.some( q => q.texture.endsWith( "/europe_partymob.png" ) ), false );
 	} finally {
 		f.ui.dispose();

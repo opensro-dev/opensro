@@ -43,7 +43,9 @@ test("worker acknowledges camera events without owning or returning camera state
 	} );
 	timers.wake( 16 );
 	const snapshot = messages.find( m => m.kind === "snapshot" );
-	assert.deepEqual( snapshot.clock, { wakes: 0, steps: 0, stepsInWake: 0, wakeMs: 0, maxStepMs: 0, debtMs: 0 } );
+	const { originMs, ...counters } = snapshot.clock;
+	assert.deepEqual( counters, { wakes: 0, steps: 0, stepsInWake: 0, wakeMs: 0, maxStepMs: 0, debtMs: 0 } );
+	assert.ok( originMs > 0, "the clock publishes its origin from the first snapshot" );
 	timers.wake( 32 );
 	assert.equal( messages.filter( m => m.kind === "snapshot" )[1].clock.steps, 1 );
 	assert.equal( snapshot.camera, undefined );

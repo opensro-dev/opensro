@@ -751,6 +751,28 @@ test("silent selection refusal expires, ignores late grants and permits a new in
 	game.dispose();
 });
 
+test("a skill pressed before the selection grant aims at the monster just clicked", async () => {
+	const { createGameplay } = await load( "gameplay" ), game = createGameplay( () => {} );
+	game.bootstrap( {} );
+	game.seed( { ...pose, gid: 1, heading: 0 } );
+	assert.equal( game.skillTarget(), undefined, "no selection leaves the press untargeted" );
+	game.command( { kind: "select", gid: 2 }, 0, { gid: 2, kind: "monster" } );
+	assert.equal( game.skillTarget(), 2, "the click counts before its grant" );
+	const grant = Buffer.alloc( 11 );
+	grant[0] = 1;
+	grant.writeUInt32LE( 2, 1 );
+	game.receive( { opcode: 0xb45a, payload: grant }, 1 );
+	// Click a second monster: the press follows it, not the first grant.
+	game.command( { kind: "select", gid: 3 }, 2, { gid: 3, kind: "monster" } );
+	assert.equal( game.skillTarget(), 3 );
+	grant.writeUInt32LE( 3, 1 );
+	game.receive( { opcode: 0xb45a, payload: grant }, 3 );
+	assert.equal( game.skillTarget(), 3 );
+	game.command( { kind: "release-target" }, 4, undefined );
+	assert.equal( game.skillTarget(), undefined, "a deselection is honoured before its acknowledgement" );
+	game.dispose();
+});
+
 test("missing untagged release requires resynchronization even after target despawns", () => {
 	const targeting = createTargeting( () => {} );
 	targeting.select( 9, 0, "player" );
@@ -1395,4 +1417,31 @@ test("a failed release send preserves the displayed target", () => {
 	assert.throws( () => t.release( 100 ), /backpressure/ );
 	assert.equal( t.state().target, 8 );
 	assert.equal( t.state().targetPending, 0 );
+});
+
+test("a ground click during the local cast walks once the cast releases", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		fixture = JSON.parse(
+			fs.readFileSync(
+				path.resolve( root, "../server/internal/game/item/wire/testdata/skill_action_result_fixture.json" ),
+				"utf8"
+			)
+		),
+		local = { ...pose, gid: fixture.expect.casterGid, heading: 0, appearanceState: [ 1, 0, 0 ] };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( local );
+	const row = fixture.scenarios[0];
+	game.receive( { opcode: row.opcode, payload: Buffer.from( row.payloadHex, "hex" ) }, 10 );
+	// 4B0EA0 drops a ground command during the cast: the click is held, not sent.
+	assert.equal( game.command( { kind: "move", destination: { ...pose, x: 80 } }, 11, undefined, local ), null );
+	game.command( { kind: "move", destination: { ...pose, x: 90 } }, 12, undefined, local );
+	assert.equal( sent.length, 0 );
+	// The marker shows the newest click at once, not when the cast releases.
+	assert.equal( game.take()?.selectionDecal?.pose?.x, 90 );
+	game.receive( { opcode: 0xb505, payload: Uint8Array.of( 2, 0, 1, 0, 0, 0 ) }, 13 );
+	for ( let now = 14; now < 2000 && !sent.length; now += 50 ) game.step( now, local );
+	assert.equal( sent.length, 1, "the newest held click walks after the release" );
+	game.dispose();
 });
