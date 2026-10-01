@@ -440,11 +440,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		if exceptCharacterName != "" {
 			// A character without a bound session is not in the world, so
 			// nobody can observe it and its frames have no audience.
-			for _, session := range hub.CharacterSessions(divisionID, exceptCharacterName) {
-				if sourceGID, ok := session.CharacterObjectID(); ok {
-					action.BroadcastObservedFrames(hub, divisionID, 0, sourceGID, frames)
-				}
+			sources := hub.CharacterSessions(divisionID, exceptCharacterName)
+			if len(sources) == 0 {
 				return
+			}
+			if sourceGID, ok := sources[0].CharacterObjectID(); ok {
+				action.BroadcastObservedFrames(hub, divisionID, 0, sourceGID, frames)
 			}
 			return
 		}
