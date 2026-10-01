@@ -39,8 +39,11 @@ boxes
 Top-level ISO BMFF boxes as [type, offset, size].
 ================
 */
-function boxes( bytes, from = 0, to = bytes.length ) {
-	const view = new DataView( bytes.buffer, bytes.byteOffset ), out = [];
+/** @returns {[string, number, number][]} */
+function boxes( /** @type {Uint8Array} */ bytes, from = 0, to = bytes.length ) {
+	const view = new DataView( bytes.buffer, bytes.byteOffset );
+	/** @type {[string, number, number][]} */
+	const out = [];
 	for ( let at = from; at < to; ) {
 		const size = view.getUint32( at ), type = String.fromCharCode( ...bytes.subarray( at + 4, at + 8 ) );
 		assert.ok( size >= 8 && at + size <= to, `box ${type} overruns its parent` );
@@ -57,14 +60,18 @@ find
 Walks a path of container boxes ("moov/trak/mdia") and returns the last.
 ================
 */
-function find( bytes, path ) {
-	let from = 0, to = bytes.length, found = null;
+/** @returns {[string, number, number]} */
+function find( /** @type {Uint8Array} */ bytes, /** @type {string} */ path ) {
+	let from = 0, to = bytes.length;
+	/** @type {[string, number, number] | undefined} */
+	let found;
 	for ( const type of path.split( "/" ) ) {
 		found = boxes( bytes, from, to ).find( ( [t] ) => t === type );
 		assert.ok( found, `missing ${path}` );
 		from = found[1] + 8;
 		to = found[1] + found[2];
 	}
+	assert.ok( found, `empty path ${path}` );
 	return found;
 }
 
@@ -72,8 +79,10 @@ test("replayKeepFrom keeps the window and starts on a key frame", () => {
 	const list = samples( 300 );
 	const keep = replayKeepFrom( list, 4000000 );
 	assert.equal( list[keep].key, true );
-	assert.ok( list.at( -1 ).timestampUs - list[keep].timestampUs >= 4000000 );
-	assert.ok( list.at( -1 ).timestampUs - list[keep + 60]?.timestampUs < 4000000 );
+	const newest = list[list.length - 1], later = list[keep + 60];
+	assert.ok( newest && later );
+	assert.ok( newest.timestampUs - list[keep].timestampUs >= 4000000 );
+	assert.ok( newest.timestampUs - later.timestampUs < 4000000 );
 	assert.equal( replayKeepFrom( [], 1 ), 0 );
 	assert.equal( replayKeepFrom( samples( 10 ), 60000000 ), 0 );
 });
@@ -211,9 +220,12 @@ test("muxMp4 adds an AAC track after the video, delayed by an edit list", async 
 	const track = { width: 2, height: 2, avcC: new Uint8Array( 7 ), samples: video, audio };
 	const clip = replayClipTrack( track, video[35].timestampUs, video[70].timestampUs );
 	assert.equal( clip.samples[0], video[30] );
-	assert.ok( clip.audio.samples[0].timestampUs >= video[30].timestampUs );
-	assert.ok( clip.audio.samples.at( -1 ).timestampUs <= video[70].timestampUs );
-	assert.equal( replayTrackBytes( clip ), replayBytes( clip.samples ) + clip.audio.samples.length * 3 );
+	const clipAudio = clip.audio?.samples ?? [];
+	const firstAudio = clipAudio[0], lastAudio = clipAudio[clipAudio.length - 1];
+	assert.ok( firstAudio && lastAudio, "the clip keeps its audio" );
+	assert.ok( firstAudio.timestampUs >= video[30].timestampUs );
+	assert.ok( lastAudio.timestampUs <= video[70].timestampUs );
+	assert.equal( replayTrackBytes( clip ), replayBytes( clip.samples ) + clipAudio.length * 3 );
 	assert.equal( replayAudioFrom( audio.samples, 1e12 ), audio.samples.length );
 	assert.equal( replayAudioFrom( audio.samples, 0 ), 0 );
 });
