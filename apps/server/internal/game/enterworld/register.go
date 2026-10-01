@@ -212,7 +212,7 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 		if outcome.OK {
 			// Bind identity BEFORE the result frame so any handler racing
 			// on another frame already sees the bound character.
-			s.BindCharacter(outcome.DivisionID, outcome.CharacterName)
+			s.BindCharacter(outcome.DivisionID, outcome.CharacterName, ObjectIDForCharacter(outcome.Result.Character))
 		}
 		// EnterWorld is one ordered admission transaction. Publishing it as
 		// one batch prevents a large legal object list from racing the socket

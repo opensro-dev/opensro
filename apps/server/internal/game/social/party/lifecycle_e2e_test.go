@@ -44,7 +44,7 @@ func TestPartyReplacedTabKeepsWinnerMembership(t *testing.T) {
 	if !bound || winner == loser {
 		t.Fatal("rebind did not hand the bind key to a new session")
 	}
-	loser.BindCharacter(e2eDivision, e2eNameA)
+	loser.BindCharacter(e2eDivision, e2eNameA, 0)
 
 	// The WINNER's live state: a formed party and an outstanding
 	// invitation prompt, both created after the rebind.

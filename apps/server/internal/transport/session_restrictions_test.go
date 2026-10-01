@@ -9,8 +9,8 @@ func TestCommandRestrictionsKeepNativeSessionOwnership(t *testing.T) {
 	if !s.SetCommandRestriction(CommandRestrictionChat, chat) || !s.SetCommandRestriction(CommandRestrictionTrade, trade) {
 		t.Fatal("install refused")
 	}
-	s.BindCharacter("division", "first")
-	s.BindCharacter("division", "second")
+	s.BindCharacter("division", "first", 0)
+	s.BindCharacter("division", "second", 0)
 	got, ok := s.CommandRestriction(CommandRestrictionChat)
 	if !ok || got != chat {
 		t.Fatal("binding changed restriction")

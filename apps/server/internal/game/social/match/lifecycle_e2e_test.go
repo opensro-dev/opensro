@@ -211,7 +211,7 @@ func TestMatchReplacedTabKeepsWinnerRows(t *testing.T) {
 	if !bound || winner == loser {
 		t.Fatal("rebind did not hand the bind key to a new session")
 	}
-	loser.BindCharacter(e2eDivision, e2eHeroName)
+	loser.BindCharacter(e2eDivision, e2eHeroName, 0)
 
 	// The WINNER registers fresh rows.
 	sendFrame(t, conn2, match.OpPartyRegisterRequest, partyRequest(0, 3003, 1, 0, 20, 60, "winner party"))

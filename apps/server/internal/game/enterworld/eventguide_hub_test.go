@@ -192,6 +192,10 @@ func TestEventGuideAckHubDispatch(t *testing.T) {
 		if !bound || division != enterworld.DefaultDivisionID || name != character.Name {
 			t.Fatal("admission close cannot identify its character")
 		}
+		// Delivery finds the character's visibility from the binding alone.
+		if gid, ok := session.CharacterObjectID(); !ok || gid != enterworld.ObjectIDForCharacter(character) {
+			t.Fatalf("bound object id = %d/%v, want the character's %d", gid, ok, enterworld.ObjectIDForCharacter(character))
+		}
 	default:
 		t.Fatal("entry result published without claiming runtime ownership")
 	}

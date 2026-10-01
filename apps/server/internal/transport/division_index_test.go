@@ -60,12 +60,12 @@ func TestDivisionIndexFollowsPlayerContextAndClose(t *testing.T) {
 
 	expectDivision(t, hub, "DIV_A") // empty before any bind
 
-	s1.BindCharacter("DIV_A", "Alice")
+	s1.BindCharacter("DIV_A", "Alice", 0)
 	s2.SetWorldSnapshot("DIV_A", struct{}{})
 	expectDivision(t, hub, "DIV_A", s1, s2)
 
 	// Division change moves the member between sets.
-	s1.BindCharacter("DIV_B", "Alice")
+	s1.BindCharacter("DIV_B", "Alice", 0)
 	expectDivision(t, hub, "DIV_A", s2)
 	expectDivision(t, hub, "DIV_B", s1)
 
@@ -80,7 +80,7 @@ func TestDivisionIndexFollowsPlayerContextAndClose(t *testing.T) {
 	// Close removes the member; rebinding a closed session cannot resurrect it.
 	hub.closeSession(s2, nil)
 	expectDivision(t, hub, "DIV_A")
-	s2.BindCharacter("DIV_A", "Bob")
+	s2.BindCharacter("DIV_A", "Bob", 0)
 	expectDivision(t, hub, "DIV_A")
 }
 
@@ -93,8 +93,8 @@ func TestDivisionIndexAcrossEviction(t *testing.T) {
 	hub := newHub(testCfg())
 	victim, victimConn := newAttachedSession(t, hub, true) // gated: drain stays open
 	winner, _ := newAttachedSession(t, hub, false)
-	victim.BindCharacter("DIV_A", "Victim")
-	winner.BindCharacter("DIV_A", "Winner")
+	victim.BindCharacter("DIV_A", "Victim", 0)
+	winner.BindCharacter("DIV_A", "Winner", 0)
 
 	if _, replaced := hub.BindExclusive("d1:cg", victim); replaced {
 		t.Fatal("first bind replaced something")

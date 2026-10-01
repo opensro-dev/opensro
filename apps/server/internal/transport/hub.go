@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -527,6 +528,20 @@ func (h *Hub) SessionsInDivision(division string) []*Session {
 	out := make([]*Session, 0, len(set))
 	for _, s := range set {
 		out = append(out, s)
+	}
+	return out
+}
+
+// CharacterSessions returns the sessions in division bound to characterName
+// (ASCII case-insensitive, as character names compare). It reads only the hub
+// index and each session's binding, never game state, so a producer may call
+// it while holding any game lock.
+func (h *Hub) CharacterSessions(division, characterName string) []*Session {
+	var out []*Session
+	for _, s := range h.SessionsInDivision(division) {
+		if _, bound, ok := s.CharacterBinding(); ok && strings.EqualFold(bound, characterName) {
+			out = append(out, s)
+		}
 	}
 	return out
 }

@@ -11,6 +11,7 @@ type sessionPlayerContext struct {
 	accountShard  string
 	divisionID    string
 	characterName string
+	objectID      uint32
 	worldReady    bool
 	worldSnapshot any
 }
@@ -41,10 +42,14 @@ func (s *Session) AdmissionIdentity() (accountID, shardID string, ok bool) {
 
 // BindCharacter publishes the server-authorized character identity selected by
 // EnterWorld. Client-supplied names on later frames are never authoritative.
-func (s *Session) BindCharacter(divisionID, characterName string) {
+// objectID is the character's world object id: delivery resolves a
+// character's sessions and visibility from the binding alone, so it never
+// reads the character store and is safe inside a character door.
+func (s *Session) BindCharacter(divisionID, characterName string, objectID uint32) {
 	s.player.mu.Lock()
 	s.player.divisionID = divisionID
 	s.player.characterName = characterName
+	s.player.objectID = objectID
 	s.player.worldReady = false
 	s.player.worldSnapshot = nil
 	s.player.mu.Unlock()
@@ -59,6 +64,16 @@ func (s *Session) CharacterBinding() (divisionID, characterName string, ok bool)
 		return "", "", false
 	}
 	return s.player.divisionID, s.player.characterName, true
+}
+
+// CharacterObjectID returns the bound character's world object id.
+func (s *Session) CharacterObjectID() (uint32, bool) {
+	s.player.mu.RLock()
+	defer s.player.mu.RUnlock()
+	if s.player.divisionID == "" || s.player.characterName == "" {
+		return 0, false
+	}
+	return s.player.objectID, true
 }
 
 // TryMarkWorldReady performs the character-bound -> world-ready transition.
@@ -112,6 +127,7 @@ func (s *Session) ClearGameplayContext() {
 	s.player.mu.Lock()
 	s.player.divisionID = ""
 	s.player.characterName = ""
+	s.player.objectID = 0
 	s.player.worldReady = false
 	s.player.worldSnapshot = nil
 	s.player.mu.Unlock()
