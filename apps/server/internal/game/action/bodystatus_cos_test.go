@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+bodystatus_cos_test.go - inherited GM body state across pet and ride lifetime
+
+The transport retains its own location until the owner mounts within native
+range; session replacement preserves the same status and actor identity.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -9,6 +19,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+TestGMStatusSummonMountAndSessionLifecycle
+================
+*/
 func TestGMStatusSummonMountAndSessionLifecycle(t *testing.T) {
 	for _, command := range []byte{gmcommand.SubInvisible, gmcommand.SubInvincible} {
 		c := testCharacter()
@@ -41,9 +56,14 @@ func TestGMStatusSummonMountAndSessionLifecycle(t *testing.T) {
 			t.Fatal("unmounted transport followed owner")
 		}
 		mount := rt.HandleCosCommand(testDivision, c, wire.NewWriter(5).U32(c.ActiveCOS.GID).U8(wire.CosCommandMountTag).Payload())
+		if len(mount.Frames) != 0 || c.ActiveCOS.Mounted {
+			t.Fatal("remote mount bypassed native distance gate", mount)
+		}
+		rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) { w.Spawn.X = first.World.Spawn.X })
+		mount = rt.HandleCosCommand(testDivision, c, wire.NewWriter(5).U32(c.ActiveCOS.GID).U8(wire.CosCommandMountTag).Payload())
 		assertOpcodes(t, mount.Frames, wire.OpCosRideState)
 		mounted := rt.PetPresentation(testDivision, c.Name)
-		if mounted == nil || !mounted.Mounted || mounted.NativeBodyStatus != want || mounted.World.LiveSpawnAt(clock.NowMs()).X != first.World.Spawn.X+200 {
+		if mounted == nil || !mounted.Mounted || mounted.NativeBodyStatus != want || mounted.World.LiveSpawnAt(clock.NowMs()).X != first.World.Spawn.X {
 			t.Fatal("mounted presentation did not use rider authority", mounted)
 		}
 		// Logical-session replacement retains this actor; a delayed teardown

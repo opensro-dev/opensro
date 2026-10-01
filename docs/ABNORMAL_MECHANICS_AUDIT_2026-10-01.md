@@ -120,6 +120,12 @@ NPC presence alone must not activate an unauthored seasonal quest. The
 existing quest catalog remains the registration owner. Likewise, the incidental
 siege DB callback is not a claim that full fortress gameplay is implemented.
 
+The user subsequently expanded the implementation scope to these fortress,
+event and COS systems. The data/version observations above remain evidence,
+but are no longer a reason to leave applicable v1.150 behavior unimplemented.
+The active extension is tracked in
+[`FORTRESS_EVENT_COS_2026-10-01.md`](FORTRESS_EVENT_COS_2026-10-01.md).
+
 ## Verification completed
 
 `pnpm check source` passed all 12 tasks after the final COS source-echo change

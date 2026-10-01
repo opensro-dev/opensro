@@ -18,6 +18,38 @@ import (
 
 /*
 ================
+TestDecodeCosPickupAndFollowExactBodies
+
+Both commands share the COS identity prefix; only pickup carries a target.
+Reject every truncated prefix and trailing byte before the action lane runs.
+================
+*/
+func TestDecodeCosPickupAndFollowExactBodies(t *testing.T) {
+	for _, tag := range []uint8{CosCommandPickupTag, CosCommandFollowTag} {
+		body := NewWriter(9).U32(0x00c05001).U8(tag).Payload()
+		if tag == CosCommandPickupTag {
+			body = append(body, 0x78, 0x56, 0x34, 0x12)
+		}
+		request, err := DecodeCosCommand(body)
+		if err != nil || request.CosGid != 0x00c05001 || request.Tag != tag {
+			t.Fatalf("tag %x: %+v, %v", tag, request, err)
+		}
+		if tag == CosCommandPickupTag && request.TargetGid != 0x12345678 {
+			t.Fatalf("pickup target: %+v", request)
+		}
+		for length := 0; length < len(body); length++ {
+			if _, err := DecodeCosCommand(body[:length]); err == nil {
+				t.Fatalf("accepted truncated tag %x at %d bytes", tag, length)
+			}
+		}
+		if _, err := DecodeCosCommand(append(body, 0)); err == nil {
+			t.Fatalf("accepted trailing byte on tag %x", tag)
+		}
+	}
+}
+
+/*
+================
 TestDecodeCosMountRequestPinsTheClientBytes
 ================
 */
@@ -121,7 +153,7 @@ func TestDecodeCosMountRequestSplitsMalformedFromUnsupported(t *testing.T) {
 	}
 	// ...while a 5-byte body with a NON-MOUNT family tag is a distinct
 	// not-a-mount refusal (01 move, 02 attack, 03 stop and 04 steer have
-	// their own lengths; 08 pickup is not decoded).
+	// their own lengths; pickup/follow belong to the general command decoder).
 	for _, tag := range []uint8{0x01, 0x02, 0x03, 0x04, 0x08, 0x00, 0xFF} {
 		if _, err := DecodeCosMountRequest([]byte{0x01, 0x50, 0xC0, 0x00, tag}); err == nil {
 			t.Errorf("tag 0x%02X accepted, want unsupported-form error", tag)

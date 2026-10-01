@@ -62,10 +62,10 @@ func (rt *Runtime) cosMovementBlocked(division string, character *enterworld.Cha
 
 /*
 ================
-stopCosForAbnormal
+stopCosMovement
 ================
 */
-func (rt *Runtime) stopCosForAbnormal(division string, character *enterworld.Character, now int64) []wire.Frame {
+func (rt *Runtime) stopCosMovement(division string, character *enterworld.Character, now int64) []wire.Frame {
 	if character == nil || character.ActiveCOS == nil {
 		return nil
 	}

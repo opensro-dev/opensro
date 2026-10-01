@@ -18,11 +18,11 @@ import (
 ================
 Runtime.HandleCosCommand
 
-HandleCosCommand owns the decoded 0x769E subset. Every form first binds
+HandleCosCommand owns decoded 0x769E commands. Every form first binds
 the claimed GID to the character's persisted active COS and its
 characterdata record; the wire can never nominate an arbitrary entity.
 Movement, steer and stop go to the movement owner (MoveCOS, SteerCOS,
-StopCOS); mount and mounted attack stay here.
+StopCOS); pickup and follow use the pet owner, and mount shares the ride door.
 ================
 */
 func (rt *Runtime) HandleCosCommand(
@@ -37,22 +37,15 @@ func (rt *Runtime) HandleCosCommand(
 
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
+	if command.Tag == wire.CosCommandPickupTag {
+		return rt.handleCosPickupCommand(divisionID, character, command)
+	}
+	if command.Tag == wire.CosCommandFollowTag {
+		return rt.handleCosFollowCommand(divisionID, character, command.CosGid)
+	}
 
-	snapshot := rt.characterSnapshot(divisionID, character)
-	if snapshot == nil || snapshot.DeletePending || snapshot.ActiveCOS == nil ||
-		!snapshot.ActiveCOS.Summoned || snapshot.ActiveCOS.GID != command.CosGid {
-		return OpResult{}
-	}
-	characters, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
-	if !ok {
-		return OpResult{}
-	}
-	ref, ok := characters.CharacterRefByCodename(snapshot.ActiveCOS.Codename)
-	if !ok || ref == nil || ref.RefObjID != snapshot.ActiveCOS.RefObjID || ref.TidWord>>11 != 2 {
-		return OpResult{}
-	}
-	expectedGID, ok := enterworld.CosObjectIDForCharacter(snapshot)
-	if !ok || expectedGID != command.CosGid {
+	snapshot, ref := rt.commandCOSSnapshot(divisionID, character, command.CosGid)
+	if snapshot == nil || ref.TidWord>>11 != 2 {
 		return OpResult{}
 	}
 
@@ -82,38 +75,7 @@ func (rt *Runtime) HandleCosCommand(
 		frames, broadcast := handle(divisionID, character, command.CosGid, command.Heading)
 		return OpResult{Frames: frames, Broadcast: broadcast}
 	case wire.CosCommandMountTag:
-		if snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 {
-			return OpResult{}
-		}
-		committed := false
-		rt.deps.Update(character, "cos-mount", func() bool {
-			if character.ActiveCOS == nil || !character.ActiveCOS.Summoned ||
-				character.ActiveCOS.GID != command.CosGid || character.ActiveCOS.Mounted ||
-				character.ActiveCOS.CurrentHP == 0 {
-				return false
-			}
-			if character.TransformMode == 1 {
-				rt.endTransform(divisionID, character, rt.Now().UnixMilli())
-			}
-			character.ActiveCOS.Mounted = true
-			// The COS spawn already publishes its speed pair. Mounting transfers
-			// the authoritative mover to that same keeper without a new speed.
-			rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(divisionID, character, rt.Now().UnixMilli()))
-			committed = true
-			return true
-		})
-		if !committed {
-			return OpResult{}
-		}
-		frame := wire.Frame{
-			Opcode: wire.OpCosRideState,
-			Payload: wire.EncodeCosRideState(
-				enterworld.ObjectIDForCharacter(snapshot),
-				true,
-				command.CosGid,
-			),
-		}
-		return OpResult{Frames: []wire.Frame{frame}, Broadcast: []wire.Frame{frame}}
+		return rt.changeCosRide(divisionID, character, snapshot, true)
 
 	case wire.CosCommandAttackTag:
 		if !snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 ||
@@ -132,4 +94,34 @@ func (rt *Runtime) HandleCosCommand(
 		log.Debugf("action: decoded unsupported COS tag 0x%02X", command.Tag)
 		return OpResult{}
 	}
+}
+
+/*
+================
+commandCOSSnapshot
+
+One identity/liveness gate for every COS command family. Individual commands
+then check their native family and mount predicates before changing state.
+The caller holds the division operation lock for the entire command.
+================
+*/
+func (rt *Runtime) commandCOSSnapshot(division string, c *enterworld.Character, gid uint32) (*enterworld.Character, *enterworld.CharacterRef) {
+	snapshot := rt.characterSnapshot(division, c)
+	if snapshot == nil || snapshot.DeletePending || enterworld.CurrentHP(snapshot) == 0 {
+		return nil, nil
+	}
+	cos := snapshot.ActiveCOS
+	expected, valid := enterworld.CosObjectIDForCharacter(snapshot)
+	if !valid || cos == nil || !cos.Summoned || cos.CurrentHP == 0 || cos.GID != gid || gid != expected {
+		return nil, nil
+	}
+	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
+	if !ok {
+		return nil, nil
+	}
+	ref, ok := refs.CharacterRefByCodename(cos.Codename)
+	if !ok || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 {
+		return nil, nil
+	}
+	return snapshot, ref
 }

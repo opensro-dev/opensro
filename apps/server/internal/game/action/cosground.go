@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+cosground.go - pet inventory pickup and drop transactions
+
+The pet's live position and persisted container own every grant. Both manual
+inventory operations and native automatic pickup commands enter this owner.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -12,13 +22,50 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// Caller holds the division action lock. A follower's live plane is mandatory:
-// the player's pose is never substituted for a moving pet's position.
-func (rt *Runtime) applyCosGround(division string, c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
-	return rt.applyCosGroundAt(division, c, q, rt.Now(), true)
+const cosPickupApproachTimeoutMs = 9000
+
+/*
+================
+cosGroundAttempt
+================
+*/
+type cosGroundAttempt struct {
+	now           time.Time
+	allowApproach bool
 }
 
-func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q wire.ItemMoveRequest, now time.Time, allowApproach bool) OpResult {
+/*
+================
+applyCosGround
+
+Caller holds the division action lock. Replacing an approach retires its
+command acknowledgement before the next request acquires the pending slot.
+================
+*/
+func (rt *Runtime) applyCosGround(division string, c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
+	rt.petMu.Lock()
+	session := rt.petSessions[petOwnerKey{division, strings.ToLower(c.Name)}]
+	rt.petMu.Unlock()
+	var retired []wire.Frame
+	if session != nil && session.character == c && session.pickup != nil {
+		result := finishPendingCosPickup(session, failureResult(wire.ErrCodeInvalidRequest))
+		retired = result.Frames
+	}
+	result := rt.applyCosGroundAt(division, c, q, cosGroundAttempt{now: rt.Now(), allowApproach: true})
+	result.Frames = append(retired, result.Frames...)
+	return result
+}
+
+/*
+================
+applyCosGroundAt
+
+A follower's live plane is mandatory; the player's pose is never substituted
+for a moving pet's position. Revalidate reservation and capacity at arrival.
+================
+*/
+func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q wire.ItemMoveRequest, attempt cosGroundAttempt) OpResult {
+	now, allowApproach := attempt.now, attempt.allowApproach
 	rt.petMu.Lock()
 	session := rt.petSessions[petOwnerKey{division, strings.ToLower(c.Name)}]
 	rt.petMu.Unlock()
@@ -28,6 +75,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 
 	if allowApproach {
 		session.pickup = nil
+		session.pickupCommand = false
 	}
 	at := session.follower.Position(now.UnixMilli())
 	var sharedOwner uint32
@@ -67,7 +115,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			if allowApproach {
 				copy := q
 				session.pickup = &copy
-				session.pickupDeadline = now.UnixMilli() + 9000
+				session.pickupDeadline = now.UnixMilli() + cosPickupApproachTimeoutMs
 				result = OpResult{}
 			}
 			return false
@@ -93,6 +141,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			}
 			grant, fault := inv.GrantStack(inventory.Item{RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, TransformRefObjID: item.TransformRefObjID}, rt.maxStackFor(item.TypeFlags, item.Codename))
 			if fault != nil {
+				result = failureResult(fault.Code)
 				return false
 			}
 			candidate := *c.ActiveCOS

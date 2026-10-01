@@ -4045,6 +4045,30 @@ export function createUi(
 						sendGameplay( { kind: "action-command", id: 1000 } );
 						return;
 					}
+					if ( binding === 17 ) {
+						const record = view.gameplay?.cosRecords?.find( r =>
+							r.gid === cosGid && !r.dead && r.hp > 0 && (r.band === 3 || r.band === 4)
+						) ?? view.gameplay?.cosRecords?.find( r =>
+							!r.dead && r.hp > 0 && (r.band === 3 || r.band === 4)
+						);
+						if ( record ) {
+							sendGameplay( { kind: "cos-follow", gid: record.gid } );
+						}
+						return;
+					}
+					if ( binding === 15 ) {
+						const game = view.gameplay;
+						const local = view.entities.find( entity => entity.gid === game?.localGid );
+						const record = game?.cosRecords?.find( r => r.band === 2 && !r.dead && r.hp > 0 );
+						if ( record && local ) {
+							sendGameplay( {
+								kind: "cos-ride",
+								gid: record.gid,
+								mounted: local.mountedOn !== record.gid
+							} );
+						}
+						return;
+					}
 					if ( binding < 0 && /^F[1-4]$/.test( event.code ) ) {
 						hotbarPage = Number( event.code.slice( 1 ) ) - 1;
 						dirty = true;

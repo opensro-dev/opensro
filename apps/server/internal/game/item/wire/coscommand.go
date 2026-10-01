@@ -3,8 +3,8 @@
 
 coscommand.go - the 0x769E COS command family and its S->C twins
 
-The strict codec for what a client sends about its summoned COS (movement,
-mount, mounted attack) and the frames the action lane answers with. The
+The strict codec for summoned COS movement, attack, pickup, follow and mount
+requests, and the frames the action lane answers with. The
 comment on the opcode block below carries the native provenance.
 
 ===========================================================================
@@ -26,14 +26,14 @@ import "fmt"
 //
 // 0x769E is a multi-form FAMILY keyed on the trailing tag byte (C3 verify,
 // server-wave seq 38): 0x01 movement, 0x02 approach, 0x03 direction stop,
-// 0x04 steer, 0x08 pickup, 0x0B mount. The mount's movement trio is what
+// 0x04 steer, 0x08 pickup, 0x09 follow, 0x0B mount. The mount's movement trio is what
 // CNavigationDeadreckon sends for a vehicle instead of the player opcodes:
 // SendTargetMovePacket (0x877D80) tag 0x01 with the 0x7738 body,
 // SendAngleUpdatePacket (0x8777B0) tag 0x03 [u16 heading] instead of 0x72F5,
 // and SendSteeringUpdate (0x877540) tag 0x04 [u16 heading] instead of 0x72CF.
-// Those, the mount and the mounted attack are decoded here; every other tag
-// refuses LOUDLY as unsupported rather than being half-parsed (the
-// moverequest.go unsupported-mode precedent).
+// Every supported form has an exact body length. Unknown tags are rejected.
+// DropItemManager_TickAutoPickupRequests (77DFA0) emits tag 8 with a target;
+// CosEntryPanel_SyncActiveState (6A2777) emits tag 9 without a target.
 //
 // S->C twins (emitted by action.HandleCosCommand after authoritative
 // ActiveCOS identity/capability gates):
@@ -49,6 +49,8 @@ import "fmt"
 const (
 	// OpCosCommandRequest is the client's COS command family (0x769E).
 	OpCosCommandRequest uint16 = 0x769E
+	// OpCosRideRequest is the pet panel's explicit ride-state request.
+	OpCosRideRequest uint16 = 0x74B5
 	// OpCosRideState is the S->C ride-state apply (0xB4B5, sub_777f60).
 	OpCosRideState uint16 = 0xB4B5
 	// OpCosRecordCreate is the S->C COS record seed consumed by sub_830ec0.
@@ -115,6 +117,12 @@ func EncodeCosSummonTimerRetire3691(itemRefObjID uint32) []byte {
 // CosCommandMountTag is the mount arm's trailing tag byte (the u8 0x0B the
 // sub_695420 0x1388 arm appends after the gid).
 const CosCommandMountTag uint8 = 0x0B
+
+// CosCommandPickupTag is emitted by the native drop manager at 0x77E1A7.
+const CosCommandPickupTag uint8 = 0x08
+
+// CosCommandFollowTag is the 6A2777 command-class pet follow request.
+const CosCommandFollowTag uint8 = 0x09
 
 // CosCommandAttackTag is sub_692cb0's mounted basic-attack selector.
 const CosCommandAttackTag uint8 = 0x02
@@ -196,11 +204,11 @@ func DecodeCosCommand(payload []byte) (CosCommand, error) {
 			return CosCommand{}, readErr
 		}
 		out.Heading = heading
-	case CosCommandMountTag:
+	case CosCommandMountTag, CosCommandFollowTag:
 		if len(payload) != CosCommandRequestSize {
 			return CosCommand{}, fmt.Errorf("wire: 0x769E mount body %d bytes, want %d", len(payload), CosCommandRequestSize)
 		}
-	case CosCommandAttackTag:
+	case CosCommandAttackTag, CosCommandPickupTag:
 		if len(payload) != CosAttackRequestSize {
 			return CosCommand{}, fmt.Errorf("wire: 0x769E attack body %d bytes, want %d", len(payload), CosAttackRequestSize)
 		}
@@ -210,7 +218,7 @@ func DecodeCosCommand(payload []byte) (CosCommand, error) {
 		}
 		out.TargetGid = targetGid
 	default:
-		return CosCommand{}, fmt.Errorf("wire: 0x769E tag 0x%02X unsupported (decoded forms: 0x01 move, 0x02 attack, 0x03 stop, 0x04 steer, 0x0B mount)", tag)
+		return CosCommand{}, fmt.Errorf("wire: unsupported COS command tag 0x%02X", tag)
 	}
 	if err := r.Done(); err != nil {
 		return CosCommand{}, err

@@ -181,6 +181,8 @@ export type GameplayCommand =
 		readonly quantity: number;
 	}
 	| { readonly kind: "cos-behavior"; readonly gid: number; readonly mode: number; }
+	| { readonly kind: "cos-follow"; readonly gid: number; }
+	| { readonly kind: "cos-ride"; readonly gid: number; readonly mounted: boolean; }
 	| { readonly kind: "shop-buyback"; readonly id: number; }
 	| import("./item-process").ItemProcessCommand
 	| { readonly kind: "mall-open"; }

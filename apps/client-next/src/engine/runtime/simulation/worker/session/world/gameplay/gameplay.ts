@@ -14,6 +14,7 @@ import { createStorageRoom } from "@/engine/foundation/gameplay/storage-room";
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
 import { createPickup } from "./pickup";
 import { createActionSession } from "./action-session";
+import { createCosPickup } from "./cos-pickup";
 import {
 	withdrawalRequest,
 	withdrawalSkillBindings,
@@ -211,6 +212,7 @@ export function createGameplay(
 	const feedback = createFeedback();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
+	const cosPickup = createCosPickup();
 	const training = createTraining( send );
 	const movement = createMovement( send ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
@@ -412,6 +414,7 @@ selected entities, cooldowns or world-entry state.
 		movement.clear();
 		chat.clear();
 		pickup.clear();
+		cosPickup.clear();
 		quests.clear();
 		npcConversation.clear();
 		previousLockedQuestNotice = "";
@@ -489,6 +492,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 		*/
 		bootstrap( value: unknown ) {
 			pickup.clear();
+			cosPickup.clear();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );
 			returnScroll = undefined;
 			teleportMode = 0;
@@ -720,6 +724,7 @@ Entity removal retires targeting and combat references in the same frame.
 		entityLifecycle(
 			event: Extract<import("@/engine/contracts/world").WorldEvent, { kind: "spawn" | "despawn"; }>
 		) {
+			cosPickup.track( event );
 			if ( event.kind === "spawn" ) {
 				combat.seedEffects( event.entity.gid, event.entity.spawnSkills ?? [], soundClock );
 			} else {
@@ -1065,6 +1070,31 @@ state here before a command can claim a native wire conversation.
 				) throw Error( "No owned COS container authority" );
 				const frame = cosContainerRequest( record, command.source, command.destination, command.quantity );
 				return inventory.cosMove( frame, now );
+			}
+			if ( command.kind === "cos-ride" ) {
+				const record = cosRecords.get( command.gid );
+				if (
+					!record || record.dead || record.hp === 0 || record.band !== 2 ||
+					entity?.gid !== record.gid || entity.kind !== "cos" || entity.ownerGid !== localGid ||
+					entity.refObjId !== record.refObjId || command.mounted === (local?.mountedOn === record.gid)
+				) throw Error( "Invalid owned COS ride transition" );
+				const payload = new Uint8Array( 5 );
+				payload[0] = Number( command.mounted );
+				new DataView( payload.buffer ).setUint32( 1, record.gid, true );
+				return sendFrame( { opcode: 0x74b5, payload } );
+			}
+			if ( command.kind === "cos-follow" ) {
+				const record = cosRecords.get( command.gid );
+				if (
+					!record || record.dead || record.hp === 0 || ![ 3, 4 ].includes( record.band ) ||
+					entity?.gid !== record.gid || entity.kind !== "cos" || entity.ownerGid !== localGid ||
+					entity.refObjId !== record.refObjId || local?.mountedOn === record.gid
+				) throw Error( "No living owned follow-capable COS" );
+				// CosEntryPanel_SyncActiveState 6A2777 sends no target after tag 9.
+				const payload = new Uint8Array( 5 );
+				new DataView( payload.buffer ).setUint32( 0, record.gid, true );
+				payload[4] = 9;
+				return sendFrame( { opcode: 0x769e, payload } );
 			}
 			if ( command.kind === "cos-behavior" ) {
 				const record = cosRecords.get( command.gid );
@@ -1908,6 +1938,12 @@ Packet handling must not depend on which HUD panel is currently open.
 						gid: v.getUint32( at, true ),
 						itemGid: p[1] === 8 ? v.getUint32( at + 4, true ) : undefined
 					};
+					if ( cosPickup.result( cosResult, now ) ) {
+						const record = cosRecords.get( cosResult.gid );
+						if ( record && !record.dead && record.hp && record.commandMode !== undefined ) {
+							sendFrame( cosBehaviorRequest( record, record.commandMode & ~0x80 ) );
+						}
+					}
 					dirty = true;
 					return true;
 				}
@@ -1979,7 +2015,9 @@ Packet handling must not depend on which HUD panel is currently open.
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS ground owner" );
 					const next = cosGroundResult( record, frame.payload, cosItemRefs );
-					inventory.cosGrounded( frame.payload );
+					if ( frame.payload[1] !== 0x11 || !cosPickup.receipt( gid ) ) {
+						inventory.cosGrounded( frame.payload );
+					}
 					cosRecords.set( gid, next );
 					dirty = true;
 					return true;
@@ -2163,6 +2201,18 @@ before take assembles the presentation snapshot.
 			}
 			if ( moveReservation.holding() && local && local.appearanceState?.[0] !== 2 ) {
 				cancelActionForMovement();
+			}
+			const sharedOwners = new Set( (social.options & 2) ? social.members.map( member => member.id ) : [] );
+			for (
+				const frame of cosPickup.step( {
+					now,
+					local,
+					records: cosRecords.values(),
+					sharedOwners,
+					read: readEntity
+				} )
+			) {
+				sendFrame( frame );
 			}
 			// A click held through the cast walks as soon as the cast releases;
 			// death forfeits it.
@@ -2421,6 +2471,7 @@ World transfer retires spatial work while retaining character/session data.
 		resetWorld() {
 			actionSession.clear();
 			pickup.clear();
+			cosPickup.clear();
 			moveReservation.clear();
 			quests.clearGathering();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );

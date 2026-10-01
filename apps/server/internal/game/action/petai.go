@@ -43,6 +43,7 @@ type petSession struct {
 	generation     uint64
 	pickup         *wire.ItemMoveRequest
 	pickupDeadline int64
+	pickupCommand  bool
 	public         []wire.Frame
 }
 
@@ -155,9 +156,9 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	}
 	generation := state.generation
 	defer func() {
-		if state.pickup != nil && (state.follower == nil || generation != state.generation) {
-			state.pickup = nil
-			for _, f := range failureResult(wire.ErrCodeInvalidRequest).Frames {
+		if state.pickup != nil && (state.follower == nil || generation != state.generation || nowMs >= state.pickupDeadline) {
+			result := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
+			for _, f := range result.Frames {
 				output = append(output, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 			}
 		}
@@ -212,9 +213,9 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		q := *state.pickup
 		item, found := rt.characterGround(key.division, snapshot, q.GroundGID)
 		if !found || nowMs >= state.pickupDeadline {
-			state.pickup = nil
+			result := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
 			frames := state.follower.Stop(nowMs)
-			for _, f := range failureResult(wire.ErrCodeInvalidRequest).Frames {
+			for _, f := range result.Frames {
 				frames = append(frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 			}
 			return frames
@@ -224,9 +225,9 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		if simulation.WorldDistance2D(pose, target) > grounditem.ExecuteRange {
 			return state.follower.Approach(target, float64(run), nowMs, grounditem.ExecuteRange, constraint)
 		}
-		state.pickup = nil
 		frames := state.follower.Stop(nowMs)
-		result := rt.applyCosGroundAt(key.division, state.character, q, time.UnixMilli(nowMs), false)
+		result := rt.applyCosGroundAt(key.division, state.character, q, cosGroundAttempt{now: time.UnixMilli(nowMs)})
+		result = finishPendingCosPickup(state, result)
 		state.public = append(state.public, result.Broadcast...)
 		for _, f := range result.Frames {
 			frames = append(frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
@@ -337,6 +338,7 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		return
 	}
 	state.pickup = nil
+	state.pickupCommand = false
 	state.public = nil
 	state.generation++
 	state.follower = nil

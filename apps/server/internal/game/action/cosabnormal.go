@@ -363,7 +363,7 @@ movement owner. Both paths settle once and collect the native correction.
 ================
 */
 func (o *cosAbnormalOwner) StopMove() {
-	o.public = append(o.public, o.rt.stopCosForAbnormal(o.division, o.c, o.now)...)
+	o.public = append(o.public, o.rt.stopCosMovement(o.division, o.c, o.now)...)
 }
 
 /*
