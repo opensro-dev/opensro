@@ -67,6 +67,41 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 	assert.equal( sent.length, 5 );
 });
 
+test("pet cancellation retains the record until despawn and rejects foreign ownership", () => {
+	const f = fixture();
+	const sent = [];
+	const gameplay = createGameplay( frame => sent.push( frame ) );
+	gameplay.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x21c6 } ] } );
+	gameplay.seed( f.frame.local );
+	const record = new Uint8Array( 28 );
+	const view = new DataView( record.buffer );
+	view.setUint32( 0, 2, true );
+	view.setUint32( 4, 9, true );
+	view.setUint32( 8, 100, true );
+	gameplay.receive( { opcode: 0x3158, payload: record }, 0 );
+	gameplay.command( { kind: "cos-cancel", gid: 2 }, 1, f.pet, f.frame.local );
+	assert.deepEqual( sent, [ { opcode: 0x756c, payload: Uint8Array.of( 2, 0, 0, 0 ) } ] );
+	gameplay.receive( { opcode: 0xb56c, payload: Uint8Array.of( 1 ) }, 2 );
+	assert.equal( gameplay.take()?.cosRecords?.length, 1 );
+	for ( const payload of [ new Uint8Array(), Uint8Array.of( 2 ), Uint8Array.of( 1, 0 ), Uint8Array.of( 3 ) ] ) {
+		assert.throws( () => gameplay.receive( { opcode: 0xb56c, payload }, 3 ), /cancellation/ );
+	}
+	assert.throws( () =>
+		gameplay.command( { kind: "cos-cancel", gid: 2 }, 4, { ...f.pet, ownerGid: 99 }, f.frame.local )
+	);
+	assert.equal( sent.length, 1 );
+	gameplay.receive( { opcode: 0x36ab, payload: Uint8Array.of( 2, 0, 0, 0 ) }, 5 );
+	assert.equal( gameplay.take()?.cosRecords?.length, 0 );
+	view.setUint32( 8, 0, true );
+	record[23] = 1;
+	gameplay.receive( { opcode: 0x3158, payload: record }, 6 );
+	assert.throws( () => gameplay.command( { kind: "cos-follow", gid: 2 }, 7, f.pet, f.frame.local ) );
+	gameplay.command( { kind: "cos-cancel", gid: 2 }, 7, f.pet, f.frame.local );
+	assert.equal( sent.length, 2 );
+	assert.equal( sent[1].opcode, 0x756c );
+	gameplay.dispose();
+});
+
 test("ride toggle keeps native state-byte ordering and waits for server authority", () => {
 	const f = fixture();
 	const sent = [];

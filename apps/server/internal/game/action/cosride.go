@@ -60,9 +60,9 @@ func (rt *Runtime) changeCosRide(division string, c, snapshot *enterworld.Charac
 		return OpResult{}
 	}
 	now := rt.Now().UnixMilli()
+	vehicle := rt.cosLiveSpawn(division, snapshot, now)
 	if mounted {
 		owner := rt.liveSpawn(simulation.WorldKey(division, c.Name), snapshot, now)
-		vehicle := rt.cosLiveSpawn(division, snapshot, now)
 		// 4FC5D9 rejects opposite coordinate planes before measuring range;
 		// the shared planar distance intentionally strips the dungeon bit.
 		if !worldgeom.SamePlane(owner.RegionID, vehicle.RegionID) {
@@ -82,15 +82,33 @@ func (rt *Runtime) changeCosRide(division string, c, snapshot *enterworld.Charac
 		if !mounted {
 			frames = append(frames, rt.stopCosMovement(division, c, now)...)
 			rt.rememberTransportCOS(division, c, rt.cosLiveSpawn(division, c, now))
-		} else if c.TransformMode == 1 {
-			rt.endTransform(division, c, now)
+		} else {
+			if c.TransformMode == 1 {
+				rt.endTransform(division, c, now)
+			}
+			// 4FC643 relocates the owner to the admitted vehicle before binding
+			// the ride actor. Keeping the old rider pose moves the vehicle instead.
+			world := rt.Worlds.Update(simulation.WorldKey(division, c.Name),
+				func() simulation.WorldState { return simulation.SeedWorldState(c) },
+				func(state *simulation.WorldState) {
+					state.Spawn = vehicle
+					state.MoveSegment = nil
+					state.SpawnSet = true
+					state.MovementSourceSeeded = true
+				})
+			writeBackWorld(c, world)
+			frames = append(frames, wire.Frame{Opcode: wire.OpObjectSourceCorrection,
+				Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{
+					RegionID: vehicle.RegionID, X: float32(vehicle.X), Y: float32(vehicle.Y),
+					Z: float32(vehicle.Z), Heading: vehicle.Angle,
+				}}.Encode()})
 		}
 		c.ActiveCOS.Mounted = mounted
 		frames = append(frames, wire.Frame{Opcode: wire.OpCosRideState,
 			Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(c), mounted, pet.GID)})
 		if mounted {
 			// The already visible vehicle owns its speed publication.
-			rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(division, c, now))
+			frames = append(frames, rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(division, c, now))...)
 		} else {
 			frames = append(frames, rt.refreshMovementEffects(division, c, now)...)
 		}

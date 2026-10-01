@@ -1083,13 +1083,21 @@ state here before a command can claim a native wire conversation.
 				new DataView( payload.buffer ).setUint32( 1, record.gid, true );
 				return sendFrame( { opcode: 0x74b5, payload } );
 			}
-			if ( command.kind === "cos-follow" ) {
+			if ( command.kind === "cos-follow" || command.kind === "cos-cancel" ) {
 				const record = cosRecords.get( command.gid );
 				if (
-					!record || record.dead || record.hp === 0 || ![ 3, 4 ].includes( record.band ) ||
+					!record || (command.kind === "cos-follow" && (record.dead || record.hp === 0)) ||
+					![ 3, 4 ].includes( record.band ) ||
 					entity?.gid !== record.gid || entity.kind !== "cos" || entity.ownerGid !== localGid ||
 					entity.refObjId !== record.refObjId || local?.mountedOn === record.gid
-				) throw Error( "No living owned follow-capable COS" );
+				) throw Error( "No eligible owned companion" );
+				if ( command.kind === "cos-cancel" ) {
+					// 6FF8C0 sends only the owned GID. Acknowledgement does not
+					// remove the actor: the ordinary despawn owns that transition.
+					const payload = new Uint8Array( 4 );
+					new DataView( payload.buffer ).setUint32( 0, record.gid, true );
+					return sendFrame( { opcode: 0x756c, payload } );
+				}
 				// CosEntryPanel_SyncActiveState 6A2777 sends no target after tag 9.
 				const payload = new Uint8Array( 5 );
 				new DataView( payload.buffer ).setUint32( 0, record.gid, true );
@@ -1900,6 +1908,19 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					cosRecords.set( record.gid, record );
 					if ( record.band === 2 ) activeCos = record;
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === 0xb56c ) {
+					const payload = frame.payload;
+					if (
+						(payload[0] !== 1 && payload[0] !== 2) ||
+						payload.length !== (payload[0] === 2 ? 2 : 1)
+					) throw Error( "Invalid COS cancellation result" );
+					if ( payload[0] === 2 ) {
+						const notice = constantNativeNotice( 12, payload[1]! );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
 					dirty = true;
 					return true;
 				}

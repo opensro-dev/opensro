@@ -1,7 +1,7 @@
 # Fortress, event and COS extension — 2026-10-01
 
 Status: implementation in progress on `codex/fortress-event-cos`, based on
-`7d0eb0e`. This is not a completion or production-release claim. The user
+`1f452a2` after the 2026-10-02 rebase. This is not a completion or production-release claim. The user
 explicitly expanded the abnormal-status audit to include these systems.
 The v1.150 content boundary still applies; the later server supplies rules.
 
@@ -23,6 +23,16 @@ The v1.150 content boundary still applies; the later server supplies rules.
   coordinate planes (`4FC5D9`). Dismount parks the transport
   at its live position and restores the rider's movement parameters. Options
   binding 15 now reaches the ride command.
+- Mount now relocates the rider through the shared movement store to the
+  admitted vehicle position before attaching it (`4FC643`), persists that
+  position and publishes the correction followed by ride and speed state.
+- Persistent-pet cancellation (`756C` / `B56C`) is registered on the normal
+  authenticated action hub and reachable through native options binding 16.
+  It checks ownership and the strict planar range below 100 (`511B40`),
+  retains HP/MP, level, experience, name and inventory, clears the summoned
+  state, retires pending pickup and follower work, and publishes ordinary
+  despawn. Retained dead pets can also be cancelled; follow and pickup still
+  require living pets. This does not yet provide summoner-item resummoning.
 - Fortress begin/end publication is now idempotent and ordered with entering
   players' state seeds. Client `7E2100` disables flags by XOR, so duplicate
   end messages reactivated war. The browser already preserves this native
@@ -43,7 +53,10 @@ constant for mount range; database names alone were not treated as proof.
 | Ride request | Client `6FFB40` | `74B5`: state byte, COS GID |
 | Ride response | Client `777F60` | `B4B5`: success/rider/state/COS or failure byte |
 | Mount authority | Server `4FC4D0` | Identity/state gates and inclusive 30-unit 3D range |
+| Mount relocation | Server `4FC643` | Move owner to vehicle before binding the ride actor |
 | Dismount | Server `4FC6D0` | Detach ride actor and restore movement parameters |
+| Pet cancellation admission | Server `511A60` | Owner state, owned record, strict planar range, pet combat-target refusal |
+| Persistent-item toggle | Server `4E8FC0` | Existing summoned record cancels; dormant item submits resummon |
 | Pickup AI | Server `55AB70`, `55AC20` | Approach then common inventory transaction |
 | Target failure | Server `55ADF0` | Failure serializer, not an item-grant function |
 | Pickup receipt | Server `559310`, `4E9480` | Transaction feedback and item receipt |
@@ -82,14 +95,15 @@ an instruction comment and was verified by reading the snapshot back.
 
 ## Outstanding implementation
 
-- Complete COS panel command presentation and summon cancellation/cleanup.
+- Complete COS panel command presentation and summoner-item lifecycle.
+  Cancellation transport and basic retirement are implemented, but native
+  pet-combat refusal must be connected when independent attack AI exists.
 - Pet-owned attack/AI, including owner target rules, independent stats and
   movement. Mounted rider attacks do not establish attack-pet parity.
 - Pet summon/resummon persistence, naming, satiety transitions, inventory
   growth, experience distribution and owner movement tethers mapped above.
-- Finish mount admission and native owner-to-vehicle relocation (`4FC643`)
-  through movement authority. Range and coordinate-plane checks alone do
-  not establish complete ride parity.
+- Finish the remaining mount admission branches. Owner-to-vehicle relocation
+  (`4FC643`) is implemented; this does not establish complete ride parity.
 - Finer server pickup refusal classes, reservation-refresh reacquisition,
   and any remaining native local busy-state branches.
 - Fortress manager requests/UI, persistent ownership/tax/treasury, guild
@@ -100,6 +114,26 @@ an instruction comment and was verified by reading the snapshot back.
 - Reconcile seasonal quest registrations with the v1.150 catalog through
   the existing quest owner. Do not activate later-version content merely
   because the later server contains a registration.
+
+## Shared ownership dependency found on 2026-10-02
+
+`Character.ActiveCOS` currently stores a single companion, and
+`CosObjectIDForCharacter` derives one COS GID per player. The native manager
+keeps separate containers and admits attack/pickup pets by family (`4FCEF0`).
+The client also retains multiple records and can select among command
+classes (`6F2340`, `82EEC0`). Adding pet summoners to the current transport
+assignment would overwrite an existing companion. Before completing
+resummoning and combat, replace that single-record assumption across command
+lookup, inventory persistence, snapshots, movement, peer visibility and
+target authority. Dormant pet data must travel with its summoner item through
+all inventory/storage/drop/transfer paths; an item wire state of "no record"
+must not overwrite a populated companion.
+
+The 2026-10-02 native investigation labelled exposed COS database, command,
+container, caravan and UI helpers. Server snapshot 318 and client snapshot
+260 were saved and representative labels were read back. Standard tree/list
+helpers map to the port language's containers; their presence is not evidence
+that independent pet or caravan gameplay is implemented.
 
 ## Verification log
 
@@ -125,3 +159,18 @@ semantics. The final source rerun passed all 12 tasks in 76.6 seconds. The
 existing client fortress/crest/music suites passed all 20 tests; they include
 the native XOR end arm, relation colors, owner deltas and music transition
 ordering. Those checks do not establish complete fortress gameplay.
+
+### 2026-10-02 continuation
+
+The final source run passed all 12 tasks in 111.4 seconds with the licensed
+server projection configured, including vet, lint, tests and the race subset.
+The final client run passed all 11 gates in 108.9 seconds. Focused pickup,
+cancellation, mount and action/movement browser-runtime tests passed all 12
+cases. These are source-level tests, not a live-browser parity claim.
+
+Earlier attempts failed with the missing server projection, a truncated
+ownership JSON from the rebase (`Expected double-quoted property name`),
+nullable assertions in the new cancellation test, and stale generated NPC/
+attachment packs. The projection, ownership map and assertions were corrected;
+the concurrent asset rebuild completed before the final client run. No test
+was removed or weakened to bypass these failures. No production deployment.

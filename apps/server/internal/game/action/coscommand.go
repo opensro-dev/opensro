@@ -106,13 +106,29 @@ The caller holds the division operation lock for the entire command.
 ================
 */
 func (rt *Runtime) commandCOSSnapshot(division string, c *enterworld.Character, gid uint32) (*enterworld.Character, *enterworld.CharacterRef) {
+	snapshot, ref := rt.ownedCOSSnapshot(division, c, gid)
+	if snapshot == nil || snapshot.ActiveCOS.CurrentHP == 0 {
+		return nil, nil
+	}
+	return snapshot, ref
+}
+
+/*
+================
+ownedCOSSnapshot
+
+Cancellation addresses a retained dead pet as well as a living one. Movement,
+pickup and attack add their liveness gate through commandCOSSnapshot.
+================
+*/
+func (rt *Runtime) ownedCOSSnapshot(division string, c *enterworld.Character, gid uint32) (*enterworld.Character, *enterworld.CharacterRef) {
 	snapshot := rt.characterSnapshot(division, c)
 	if snapshot == nil || snapshot.DeletePending || enterworld.CurrentHP(snapshot) == 0 {
 		return nil, nil
 	}
 	cos := snapshot.ActiveCOS
 	expected, valid := enterworld.CosObjectIDForCharacter(snapshot)
-	if !valid || cos == nil || !cos.Summoned || cos.CurrentHP == 0 || cos.GID != gid || gid != expected {
+	if !valid || cos == nil || !cos.Summoned || cos.GID != gid || gid != expected {
 		return nil, nil
 	}
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)

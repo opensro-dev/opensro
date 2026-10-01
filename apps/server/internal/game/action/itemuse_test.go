@@ -267,12 +267,12 @@ func TestCosMountAndMountedAttackShareAuthorityOnlyAfterCosGates(t *testing.T) {
 
 	mountBody := wire.NewWriter(5).U32(character.ActiveCOS.GID).U8(wire.CosCommandMountTag).Payload()
 	mounted := rt.HandleCosCommand(testDivision, character, mountBody)
-	assertOpcodes(t, mounted.Frames, wire.OpCosRideState)
-	assertOpcodes(t, mounted.Broadcast, wire.OpCosRideState)
+	assertOpcodes(t, mounted.Frames, wire.OpObjectSourceCorrection, wire.OpCosRideState, movementSpeedOpcode)
+	assertOpcodes(t, mounted.Broadcast, wire.OpObjectSourceCorrection, wire.OpCosRideState, movementSpeedOpcode)
 	if character.ActiveCOS == nil || !character.ActiveCOS.Mounted {
 		t.Fatal("mount success did not persist ride state")
 	}
-	if got := mounted.Frames[0].Payload; !reflect.DeepEqual(
+	if got := mounted.Frames[1].Payload; !reflect.DeepEqual(
 		got,
 		wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(character), true, character.ActiveCOS.GID),
 	) {
@@ -381,7 +381,7 @@ func TestCosSummonDoesNotFabricateABoardWindow(t *testing.T) {
 }
 
 // ITEM_MALL_PET_SKILL_* is the family whose Param1 is authored in SECONDS
-// (1800, ì‚¬í•™ì‚¬ìš©ì‹œê°„), which is what sub_6E6E00's x1000 expects.
+// (1800, Ã¬â€šÂ¬Ã­â€¢â„¢Ã¬â€šÂ¬Ã¬Å¡Â©Ã¬â€¹Å“ÃªÂ°â€ž), which is what sub_6E6E00's x1000 expects.
 /*
 ================
 petSkillSource

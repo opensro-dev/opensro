@@ -61,7 +61,7 @@ func TestGMStatusSummonMountAndSessionLifecycle(t *testing.T) {
 		}
 		rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) { w.Spawn.X = first.World.Spawn.X })
 		mount = rt.HandleCosCommand(testDivision, c, wire.NewWriter(5).U32(c.ActiveCOS.GID).U8(wire.CosCommandMountTag).Payload())
-		assertOpcodes(t, mount.Frames, wire.OpCosRideState)
+		assertOpcodes(t, mount.Frames, wire.OpObjectSourceCorrection, wire.OpCosRideState, movementSpeedOpcode)
 		mounted := rt.PetPresentation(testDivision, c.Name)
 		if mounted == nil || !mounted.Mounted || mounted.NativeBodyStatus != want || mounted.World.LiveSpawnAt(clock.NowMs()).X != first.World.Spawn.X {
 			t.Fatal("mounted presentation did not use rider authority", mounted)

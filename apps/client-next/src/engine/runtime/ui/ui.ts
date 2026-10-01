@@ -4045,14 +4045,15 @@ export function createUi(
 						sendGameplay( { kind: "action-command", id: 1000 } );
 						return;
 					}
-					if ( binding === 17 ) {
+					if ( binding === 16 || binding === 17 ) {
 						const record = view.gameplay?.cosRecords?.find( r =>
-							r.gid === cosGid && !r.dead && r.hp > 0 && (r.band === 3 || r.band === 4)
+							r.gid === cosGid && (binding === 16 || !r.dead && r.hp > 0) &&
+							(r.band === 3 || r.band === 4)
 						) ?? view.gameplay?.cosRecords?.find( r =>
-							!r.dead && r.hp > 0 && (r.band === 3 || r.band === 4)
+							(binding === 16 || !r.dead && r.hp > 0) && (r.band === 3 || r.band === 4)
 						);
 						if ( record ) {
-							sendGameplay( { kind: "cos-follow", gid: record.gid } );
+							sendGameplay( { kind: binding === 16 ? "cos-cancel" : "cos-follow", gid: record.gid } );
 						}
 						return;
 					}

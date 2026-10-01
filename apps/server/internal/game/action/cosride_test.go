@@ -45,9 +45,16 @@ func TestCosRideSharesMountRangeAndPreservesDismountedVehicle(t *testing.T) {
 		w.Spawn = initial
 		w.Spawn.X += cosMountRange
 	})
-	assertOpcodes(t, rt.HandleCosRide(testDivision, c, mount).Frames, wire.OpCosRideState)
+	assertOpcodes(t, rt.HandleCosRide(testDivision, c, mount).Frames,
+		wire.OpObjectSourceCorrection, wire.OpCosRideState, movementSpeedOpcode)
 	if !c.ActiveCOS.Mounted {
 		t.Fatal("native inclusive range boundary rejected")
+	}
+	if rider := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }); rider.Spawn != initial || rider.MoveSegment != nil {
+		t.Fatal("mount did not relocate rider onto the admitted vehicle", rider)
+	}
+	if saved := simulation.SeedWorldState(c); saved.Spawn != initial {
+		t.Fatal("mount relocation was not persisted", saved.Spawn)
 	}
 	if result := rt.HandleCosRide(testDivision, c, mount); len(result.Frames) != 0 {
 		t.Fatal("repeated mount changed state", result)
@@ -58,7 +65,7 @@ func TestCosRideSharesMountRangeAndPreservesDismountedVehicle(t *testing.T) {
 		t.Fatal("dismount did not publish the committed state", result)
 	}
 	parked := rt.PetPresentation(testDivision, c.Name).World.Spawn
-	if parked.X != initial.X+cosMountRange {
+	if parked != initial {
 		t.Fatal("dismount reverted transport to its summon position", parked)
 	}
 	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) { w.Spawn.X += 200 })
