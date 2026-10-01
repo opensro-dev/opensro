@@ -224,9 +224,7 @@ rolled status separate from its owning character's block.
 */
 func TestMonsterHitRollsStatusOntoThePet(t *testing.T) {
 	rt, clock, c, mon := newCombatTestRuntime(t, 100)
-	c.ActiveCOS = &enterworld.CharacterCOS{
-		GID: 9001, RefObjID: 1, Codename: "COS_P_RABBIT", CurrentHP: 1_000_000, Summoned: true,
-	}
+	equipCombatTestPet(t, rt, c, 4)
 	mon.Ref.DefaultSkillIDs[0] = 2
 	skills := rt.deps.SkillData().(staticSkillSource)
 	row := skills[2]

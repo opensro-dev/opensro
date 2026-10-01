@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/internal/vitals"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -30,6 +31,7 @@ const (
 	abnormalMaxHPParam           = 3
 	abnormalMaxMPParam           = 4
 	abnormalDiseaseBonusParam    = 0xa9
+	abnormalElementResistBase    = 0x1b
 	abnormalFlatResistanceBase   = 0x91
 	abnormalLevelMask            = 0x203f
 	abnormalMaskBits             = 32
@@ -144,7 +146,15 @@ PlayerMovementBlocked
 */
 func (rt *Runtime) PlayerMovementBlocked(division, name string) bool {
 	block := rt.playerAbnormal(division, name)
-	return block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Root.Bit()|abnormal.Stun.Bit()) != 0
+	if block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Root.Bit()|abnormal.Stun.Bit()) != 0 {
+		return true
+	}
+	character := rt.findCharacter(division, name)
+	if character == nil {
+		return false
+	}
+	snapshot := rt.characterSnapshot(division, character)
+	return snapshot != nil && snapshot.ActiveCOS != nil && snapshot.ActiveCOS.Mounted && rt.cosMovementBlocked(division, snapshot)
 }
 
 /*
@@ -202,24 +212,13 @@ type playerAbnormalOwner struct {
 	hpChanged    bool
 	mpChanged    bool
 	fatal        bool
-	hits         []abnormalPlayerHit
+	hits         []abnormalHit
 	detonations  []abnormal.Slot
 	deathEffects []wire.Frame
 	deathTarget  []wire.Frame
-}
-
-/*
-================
-abnormalPlayerHit
-
-Defer damage credit and wire publication until the HP transaction commits.
-================
-*/
-type abnormalPlayerHit struct {
-	source   uint32
-	credited bool
-	damage   uint32
-	reason   uint8
+	endedEffects []statuseffect.Effect
+	endedPublic  []wire.Frame
+	endedActor   []wire.Frame
 }
 
 /*
@@ -415,10 +414,15 @@ func (o *playerAbnormalOwner) SetMotion(uint8, uint8, float32) {}
 ================
 CancelActions
 
-Record cancellation for publication after releasing the authority lock.
+4AA340 stops the live mover before withdrawing commands. Settle the position
+under the authority lock; publish cancellation and correction after commit.
 ================
 */
-func (o *playerAbnormalOwner) CancelActions(bool) { o.cancel = true }
+func (o *playerAbnormalOwner) CancelActions(all bool) {
+	o.StopMove()
+	o.endedEffects = append(o.endedEffects, o.rt.retireAbnormalSkills(o.division, o.c, all)...)
+	o.cancel = true
+}
 
 /*
 ================
@@ -464,7 +468,7 @@ Vfunc 4FC commits the debit and a possible lethal transition in the same write.
 ================
 */
 func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reason uint8, _ abnormal.Status) {
-	if o.fatal || damage == 0 {
+	if !o.Alive() || damage == 0 || credited && source == enterworld.ObjectIDForCharacter(o.c) {
 		return
 	}
 	remaining := int64(o.CurrentHP())
@@ -472,7 +476,8 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 	remaining -= debit
 	o.c.CurrentHP = &remaining
 	o.hpChanged = true
-	o.hits = append(o.hits, abnormalPlayerHit{source: source, credited: credited, damage: uint32(debit), reason: reason})
+	// 52A33D publishes the authored hit independently of the saturated debit.
+	o.hits = append(o.hits, abnormalHit{source: source, credited: credited, damage: damage, reason: reason})
 	if remaining == 0 {
 		o.fatal = true
 		o.deathEffects, o.deathTarget = o.rt.settlePlayerDeathInDoor(o.division, o.c, o.now)
@@ -526,6 +531,12 @@ func (o *playerAbnormalOwner) commit() {
 	}
 	o.changed = o.changed || o.block.Mask != o.maskBefore
 	o.rt.storePlayerAbnormal(o.division, o.c.Name, o.block)
+	if len(o.endedEffects) != 0 {
+		public, actor := o.rt.finishEndedEffects(o.division, o.c, o.endedEffects, o.now)
+		o.endedPublic = append(o.endedPublic, public...)
+		o.endedActor = append(o.endedActor, actor...)
+		o.endedEffects = nil
+	}
 }
 
 /*
@@ -536,9 +547,9 @@ Run a surviving victim's hit consequences under the authority write lock.
 The caller prepared source facts before entering the transaction.
 ================
 */
-func (o *playerAbnormalOwner) applyHit(damaged bool, records []abnormal.Record) {
-	if damaged && o.block.Mask != 0 {
-		o.changed = o.block.BreakOnHit(o) || o.changed
+func (o *playerAbnormalOwner) applyHit(hit abnormal.HitContext, records []abnormal.Record) {
+	if o.block.Mask != 0 {
+		o.changed = o.block.BreakOnHit(o, hit) || o.changed
 	}
 	for _, record := range records {
 		if o.block.Apply(o, record, o.now) {
@@ -580,6 +591,7 @@ the same door as the lethal HP.
 ==================
 */
 func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Character, now int64) (effects, progression []wire.Frame) {
+	rt.clearPotionRecovery(division, c.Name)
 	state := rt.Worlds.Update(simulation.WorldKey(division, c.Name),
 		func() simulation.WorldState { return simulation.SeedWorldState(c) },
 		func(world *simulation.WorldState) { world.SettleDeath(now) })
@@ -633,6 +645,8 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 	if o == nil {
 		return out
 	}
+	out.public = append(out.public, o.endedPublic...)
+	out.actor = append(out.actor, o.endedActor...)
 	gid := enterworld.ObjectIDForCharacter(c)
 	if o.cancel {
 		rt.ClearCombatIntent(division, c.Name)
@@ -655,16 +669,17 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 		}
 	}
 	for _, hit := range o.hits {
-		// 52A33D's 3058 echo, v1.150 3128 (gid, raw damage), to a credited
-		// player source of a damage-over-time tick.
-		if !hit.credited || hit.reason != abnormalDamageOverTimeReason {
+		// 52A38E/52A3FD also send the victim an echo, even when its source
+		// vanished or died. The source's credit does not gate that packet.
+		if hit.reason != abnormalDamageOverTimeReason {
+			continue
+		}
+		frame := abnormalDamageFrame(gid, hit.damage)
+		out.actor = append(out.actor, frame)
+		if !hit.credited {
 			continue
 		}
 		if source := rt.findCharacterByGid(division, hit.source); source != nil {
-			frame := wire.Frame{
-				Opcode:  abnormalDamageCreditOpcode,
-				Payload: wire.NewWriter(abnormalDamageCreditBytes).U32(gid).U32(hit.damage).Payload(),
-			}
 			out.sources = append(out.sources, privateFrames{source.ID, []wire.Frame{frame}})
 		}
 	}
@@ -769,7 +784,7 @@ which reat passives raise) and the disease bonus (A9); its learned real
 passives supply the status-resistance buckets (59DE50).
 ==================
 */
-func (rt *Runtime) rollMonsterOnPlayer(division string, instance monster.Instance, params *abnormal.SkillParams, target *enterworld.Character, defender combat.Stats, blocked bool) ([]abnormal.Record, error) {
+func (rt *Runtime) rollMonsterOnPlayer(division string, instance monster.Instance, params *abnormal.SkillParams, target *enterworld.Character, defender combat.Stats, wall *enterworld.SkillWall) ([]abnormal.Record, error) {
 	if params == nil || !params.Present() {
 		return nil, nil
 	}
@@ -779,7 +794,6 @@ func (rt *Runtime) rollMonsterOnPlayer(division string, instance monster.Instanc
 	}
 	in := abnormal.RollInput{
 		Params:      params,
-		Blocked:     blocked,
 		TargetLevel: defender.Level,
 		TargetBonus: param(abnormalDiseaseBonusParam),
 		CasterLevel: instance.Ref.Level,
@@ -787,10 +801,14 @@ func (rt *Runtime) rollMonsterOnPlayer(division string, instance monster.Instanc
 		TargetGID:   enterworld.ObjectIDForCharacter(target),
 		Resistance:  defender.StatusResistance,
 	}
-	resistanceParams := [...]uint16{0x1b, 0x1c, 0x1e, 0x1d, 0x1f, 0x20}
-	for i, resistanceParam := range resistanceParams {
-		// The authored keeper order swaps electric shock and burn.
-		in.TargetResist[i] = param(resistanceParam)
+	if wall != nil {
+		in.WallMask = &wall.Mask
+	}
+
+	for i := range in.TargetResist {
+		// 5909FB reads shock from 1D; 590B39 reads burn from 1E. Keeper
+		// parameters follow roll order, not the block's Burn/ES slot order.
+		in.TargetResist[i] = param(abnormalElementResistBase + uint16(i))
 		in.TargetFlat[i] = param(abnormalFlatResistanceBase + uint16(i))
 	}
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, monster: instance.Gid}}

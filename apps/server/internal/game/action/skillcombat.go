@@ -288,25 +288,25 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		return OpResult{}, skillCastDeferred
 	}
 	if skill.ActionCastingTimeMs != 0 && release == nil {
-		if advanced && rootID == 0 {
-			var refusal uint16
-			if !rt.deps.Update(character, "prepare-offensive-cooldown", func() bool {
-				if !enterworld.CharacterAlive(character) {
-					return false
-				}
+		var refusal uint16
+		if !rt.deps.Update(character, "prepare-offensive-cooldown", func() bool {
+			if !enterworld.CharacterAlive(character) {
+				return false
+			}
+			if advanced && rootID == 0 {
 				_, refusal = rt.offensiveCost(divisionID, character, skill, nowMs)
 				if refusal != 0 {
 					return false
 				}
-				rt.startSkillCast(divisionID, character, nowMs)
-				registerOffensiveCooldown(character, skill, nowMs)
-				return true
-			}) {
-				if refusal != 0 {
-					return offensiveRefusal(refusal), skillCastRefused
-				}
-				return OpResult{DiagnosticRefusal: "offensive-prepare-commit-refused"}, skillCastRefused
 			}
+			rt.startSkillCast(divisionID, character, nowMs)
+			rt.registerPlayerSkillCooldown(divisionID, character, skill, nowMs)
+			return true
+		}) {
+			if refusal != 0 {
+				return offensiveRefusal(refusal), skillCastRefused
+			}
+			return OpResult{DiagnosticRefusal: "offensive-prepare-commit-refused"}, skillCastRefused
 		}
 		return rt.prepareProjectileCast(divisionID, snapshot, cast, skill, nowMs, rootID), skillCastAccepted
 	}
@@ -399,6 +399,8 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			}
 			if advanced && rootID == 0 {
 				rt.commitOffensivePhaseCost(divisionID, character, skill, cost, nowMs, release != nil)
+			} else if release == nil {
+				rt.registerPlayerSkillCooldown(divisionID, character, skill, nowMs)
 			}
 			if skill.PositionEffect.Charge {
 				rt.commitSkillTravel(simulation.WorldKey(divisionID, character.Name), character, travel)

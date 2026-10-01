@@ -1,12 +1,30 @@
+/*
+===========================================================================
+
+peercos.go - first sight and lifetime visibility for summoned characters
+
+Publish detached pose, life and abnormal state together when an observer
+first sees a summon. Existing observers receive the live action publications.
+
+===========================================================================
+*/
+
 package simulation
 
 import "opensro.online/server/internal/game/item/wire"
 
 // PeerCOS is a detached publication from the pet simulation owner. It contains
 // no container, inventory, experience or other owner-private record fields.
+/*
+================
+PeerCOS
+================
+*/
 type PeerCOS struct {
 	Mounted          bool
 	NativeBodyStatus uint8
+	LifeState        uint8
+	AbnormalVitals   []byte
 	Row              wire.CosSpawnBand2
 	World            WorldState
 	Revision         uint64
@@ -14,6 +32,11 @@ type PeerCOS struct {
 	Generation       uint64
 }
 
+/*
+================
+shownCOS
+================
+*/
 type shownCOS struct {
 	mounted    bool
 	ref        uint32
@@ -22,6 +45,11 @@ type shownCOS struct {
 	generation uint64
 }
 
+/*
+================
+frames
+================
+*/
 func (p PeerCOS) frames(nowMs int64, spawn bool) []Frame {
 	pose := p.World.LiveSpawnAt(nowMs)
 	position := wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle}
@@ -31,6 +59,13 @@ func (p PeerCOS) frames(nowMs int64, spawn bool) []Frame {
 		row.BodyStatus = p.NativeBodyStatus
 		row.Position = position
 		frames = append(frames, Frame{ScopeGID: row.Gid, ScopeVisible: true, Opcode: wire.OpSingleObjectSpawn, Payload: wire.EncodeCosSpawnBand2(row)})
+		if len(p.AbnormalVitals) != 0 {
+			frames = append(frames, Frame{Opcode: OpVitalsUpdate, Payload: append([]byte(nil), p.AbnormalVitals...)})
+		}
+		if p.LifeState == wire.LifeStateDead {
+			frames = append(frames, Frame{Opcode: OpVitalsUpdate, Payload: HPRefreshPayload(row.Gid, VitalsSourceCombatDamage, 0)},
+				Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: row.Gid, StateType: wire.StateChannelLife, Value: wire.LifeStateDead}).Encode()})
+		}
 		if p.NativeBodyStatus != 0 {
 			frames = append(frames, Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: row.Gid, StateType: wire.StateChannelBody, Value: p.NativeBodyStatus}).Encode()})
 		}
@@ -51,6 +86,11 @@ func (p PeerCOS) frames(nowMs int64, spawn bool) []Frame {
 	return frames
 }
 
+/*
+================
+runPeerCOSVisibility
+================
+*/
 func (t *Ticker) runPeerCOSVisibility(state *divisionTickState, nowMs int64, sessions []SessionSnapshot, live map[string]bool) {
 	index := buildPeerInterestIndex(sessions, nowMs, true)
 	var candidates []int

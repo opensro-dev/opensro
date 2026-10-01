@@ -15,6 +15,8 @@ package action
 import (
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/monster"
+	"testing"
 )
 
 /*
@@ -31,6 +33,30 @@ func (rt *Runtime) applyPlayerAbnormalInDoor(division string, character *enterwo
 	}
 	owner := rt.newPlayerAbnormalOwner(division, character, now)
 	owner.sources = rt.captureAbnormalSources(division, owner.block, records)
-	owner.applyHit(damaged, records)
+	owner.applyHit(abnormal.HitContext{Magical: damaged, Attack: damaged}, records)
 	return owner
+}
+
+/*
+================
+equipCombatTestPet
+
+Give COS tests a real reference identity and independent combat parameters.
+The damage adapter must never fill a missing reference with its rider's stats.
+================
+*/
+func equipCombatTestPet(t *testing.T, rt *Runtime, character *enterworld.Character, band uint16) *enterworld.CharacterRef {
+	t.Helper()
+	gid, valid := enterworld.CosObjectIDForCharacter(character)
+	if !valid {
+		t.Fatal("fixture has no COS identity")
+	}
+	ref := &enterworld.CharacterRef{RefObjID: 9, Codename: "PET", TidWord: band<<11 | 0x1c6,
+		Level: 1, MaxHP: 1_000_000, MaxMP: 600, WalkSpeed: 20, RunSpeed: 80,
+		Parameters: monster.MonsterRef{CombatPinned: true, BodyRadius: 10, HitRate: 10}}
+	items := cosTestItemSource{staticItemSource: testItems(), characters: map[string]*enterworld.CharacterRef{ref.Codename: ref}}
+	rt.deps.(*enterworld.Deps).Items = items
+	character.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: ref.RefObjID, Codename: ref.Codename,
+		Level: ref.Level, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, StateFlags: 1, Summoned: true}
+	return ref
 }

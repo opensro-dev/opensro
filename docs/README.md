@@ -13,3 +13,4 @@
 | [RELEASE.md](../RELEASE.md) | Release checklist |
 | [AGENTS.md](../AGENTS.md) | Code style (id Software) and working rules for contributors and coding agents |
 | [NPC_FACING_2026-10-01.md](NPC_FACING_2026-10-01.md) | NPC heading recovery, inferred relocations and complete placement coverage |
+| [ABNORMAL_MECHANICS_AUDIT_2026-10-01.md](ABNORMAL_MECHANICS_AUDIT_2026-10-01.md) | Native status mechanics, actor adapters, potion queues and regression coverage |

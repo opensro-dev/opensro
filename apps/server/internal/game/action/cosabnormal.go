@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/internal/vitals"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -123,14 +124,21 @@ Adapt a pet's working block without reading the authority store from callbacks.
 ================
 */
 type cosAbnormalOwner struct {
-	rt       *Runtime
-	division string
-	c        *enterworld.Character
-	block    *abnormal.Block
-	now      int64
-	sources  map[uint32]abnormalSourceState
-	changed  bool
-	fatal    bool
+	rt                                 *Runtime
+	division                           string
+	c                                  *enterworld.Character
+	block                              *abnormal.Block
+	now                                int64
+	sources                            map[uint32]abnormalSourceState
+	changed                            bool
+	fatal                              bool
+	aliveBefore                        bool
+	died                               bool
+	ref                                *enterworld.CharacterRef
+	hpChanged, mpChanged, speedChanged bool
+	public                             []wire.Frame
+	hits                               []abnormalHit
+	detonations                        []abnormal.Slot
 }
 
 /*
@@ -144,6 +152,10 @@ func (rt *Runtime) newCosAbnormalOwner(division string, c *enterworld.Character,
 	o := &cosAbnormalOwner{rt: rt, division: division, c: c, now: now, block: &abnormal.Block{}}
 	if c == nil || c.ActiveCOS == nil {
 		return o
+	}
+	o.aliveBefore = c.ActiveCOS.CurrentHP > 0
+	if ref, valid := rt.cosCharacterRef(c); valid {
+		o.ref = ref
 	}
 	if current := rt.cosAbnormal(division, c.Name, c.ActiveCOS.GID); current != nil {
 		copied := *current
@@ -164,6 +176,20 @@ func (o *cosAbnormalOwner) commit() {
 		return
 	}
 	if o.fatal || o.c.ActiveCOS.CurrentHP == 0 {
+		pet := o.c.ActiveCOS
+		if o.aliveBefore && !o.died {
+			o.died = true
+			o.StopMove()
+			// The port's persisted summon flag must agree with native LIFE=2
+			// (529DE0 -> 490210), or the revival item rejects the dead pet.
+			pet.StateFlags &^= 1
+			if pet.Mounted {
+				pet.Mounted = false
+				o.public = append(o.public, wire.Frame{Opcode: wire.OpCosRideState,
+					Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(o.c), false, pet.GID)})
+				o.public = append(o.public, o.rt.refreshMovementEffects(o.division, o.c, o.now)...)
+			}
+		}
 		o.changed = o.block.ClearAll(o) || o.changed
 		o.fatal = true
 	}
@@ -217,38 +243,32 @@ func (o *cosAbnormalOwner) CurrentHP() uint32 {
 ================
 MaxHP
 
-Retain the COS adapter's current-vital projection for shared status callbacks.
+Read the effective authored maximum, including status modifiers.
 ================
 */
 func (o *cosAbnormalOwner) MaxHP() uint32 {
-	if o.c == nil || o.c.ActiveCOS == nil {
-		return 0
-	}
-	return o.c.ActiveCOS.CurrentHP
+	return uint32(o.Param(abnormalMaxHPParam))
 }
 
 /*
 ================
 MaxMP
 
-Read only the active pet's MP within its owner's transaction.
+Read the effective authored maximum, not the pet's depleted current gauge.
 ================
 */
 func (o *cosAbnormalOwner) MaxMP() uint32 {
-	if o.c == nil || o.c.ActiveCOS == nil {
-		return 0
-	}
-	return o.c.ActiveCOS.CurrentMP
+	return uint32(o.Param(abnormalMaxMPParam))
 }
 
 /*
 ================
 Param
 
-The COS adapter has no authored player keeper; retain its zero projection.
+Evaluate the pet's own RefObjChar keeper and independent abnormal writes.
 ================
 */
-func (o *cosAbnormalOwner) Param(uint16) float32 { return 0 }
+func (o *cosAbnormalOwner) Param(id uint16) float32 { return cosParameter(o.ref, o.block, id) }
 
 /*
 ================
@@ -300,10 +320,21 @@ func (o *cosAbnormalOwner) Now() int64 { return o.now }
 ================
 ParamsChanged
 
-The existing COS adapter does not publish a player keeper projection.
+Clamp gauges when a status changes a maximum; defer speed publication until
+all callbacks commit. A COS never emits the player's private stat packet.
 ================
 */
-func (o *cosAbnormalOwner) ParamsChanged(bool) {}
+func (o *cosAbnormalOwner) ParamsChanged(speed bool) {
+	o.speedChanged = o.speedChanged || speed
+	if !o.Alive() || o.ref == nil {
+		return
+	}
+	pet := o.c.ActiveCOS
+	hp, mp := min(pet.CurrentHP, o.MaxHP()), min(pet.CurrentMP, o.MaxMP())
+	o.hpChanged = o.hpChanged || hp != pet.CurrentHP
+	o.mpChanged = o.mpChanged || mp != pet.CurrentMP
+	pet.CurrentHP, pet.CurrentMP = hp, mp
+}
 
 /*
 ================
@@ -318,19 +349,22 @@ func (o *cosAbnormalOwner) SetMotion(uint8, uint8, float32) {}
 ================
 CancelActions
 
-The current COS adapter owns no retained player action queue.
+4AA340 stops the summoned mover before canceling its pending command.
 ================
 */
-func (o *cosAbnormalOwner) CancelActions(bool) {}
+func (o *cosAbnormalOwner) CancelActions(bool) { o.StopMove() }
 
 /*
 ================
 StopMove
 
-The pet follows its owner and has no separate retained movement segment here.
+Collection COS own a follower segment; a mounted transport shares its rider's
+movement owner. Both paths settle once and collect the native correction.
 ================
 */
-func (o *cosAbnormalOwner) StopMove() {}
+func (o *cosAbnormalOwner) StopMove() {
+	o.public = append(o.public, o.rt.stopCosForAbnormal(o.division, o.c, o.now)...)
+}
 
 /*
 ================
@@ -345,29 +379,62 @@ func (o *cosAbnormalOwner) AIEvent(uint8, uint8, uint32) {}
 ================
 Hit
 
-Preserve the existing COS adapter's absence of periodic damage publication.
-Direct monster damage remains owned by monsterHitSummonedCOS.
+Commit periodic damage to the COS, never its owner. The block's callback owns
+poison's nonlethal rule; lethal burn/bleeding use the common pet death commit.
 ================
 */
-func (o *cosAbnormalOwner) Hit(uint32, bool, uint32, uint8, abnormal.Status) {}
+func (o *cosAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reason uint8, _ abnormal.Status) {
+	if !o.Alive() || damage == 0 {
+		return
+	}
+	pet := o.c.ActiveCOS
+	if credited && source == pet.GID {
+		return
+	}
+	// 52A1E0 enters the rider's battle state for credited periodic hits too.
+	// A vanished/uncredited source is passed as null and skips that branch.
+	if credited && enterworld.CharacterAlive(o.c) {
+		o.public = append(o.public, o.rt.enterBattleState(o.division, o.c, o.now)...)
+	}
+	pet.CurrentHP -= vitals.HitDebit(pet.CurrentHP, damage)
+	o.hits = append(o.hits, abnormalHit{source: source, credited: credited, damage: damage, reason: reason})
+	o.hpChanged = true
+	o.fatal = pet.CurrentHP == 0
+}
 
 /*
 ================
 ConsumeResources
 
-The existing COS adapter has no periodic resource-debit implementation.
+The resource-debit carrier preserves one HP and saturates MP at zero.
 ================
 */
-func (o *cosAbnormalOwner) ConsumeResources(int32, int32, uint8) {}
+func (o *cosAbnormalOwner) ConsumeResources(hp, mp int32, _ uint8) {
+	if !o.Alive() {
+		return
+	}
+	pet := o.c.ActiveCOS
+	if hp > 0 {
+		pet.CurrentHP = uint32(max(int64(pet.CurrentHP)-int64(hp), 1))
+		o.hpChanged = true
+	}
+	if mp > 0 {
+		pet.CurrentMP = uint32(max(int64(pet.CurrentMP)-int64(mp), 0))
+		o.mpChanged = true
+	}
+}
 
 /*
 ================
 Detonate
 
-The existing COS adapter has no time-bomb damage carrier.
+59B300 keeps authored explosion damage for the packet even on overkill.
 ================
 */
-func (o *cosAbnormalOwner) Detonate(abnormal.Slot) {}
+func (o *cosAbnormalOwner) Detonate(slot abnormal.Slot) {
+	o.detonations = append(o.detonations, slot)
+	o.Hit(slot.SourceGID, true, slot.Damage1C, abnormalBombReason, abnormal.TimeBomb)
+}
 
 /*
 ================
@@ -377,15 +444,37 @@ Publish the pet's shared abnormal mask without a player-only private snapshot.
 ================
 */
 func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wire.Frame {
-	if o == nil || o.c == nil || !o.changed {
+	if o == nil || o.c == nil || o.c.ActiveCOS == nil {
 		return nil
 	}
 	// 4A5C60 sends the state snapshot (server 30D2, v1.150 0x36C7) only when
 	// vfunc +1C reports a player; the client applies 0x36C7 to the local
 	// player (77C110). A COS publishes its mask through the shared vitals
 	// channel (dirty bit 0x100 -> 33A6) alone.
-	block := rt.cosAbnormal(o.division, o.c.Name, gid)
-	return []wire.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: abnormalVitalsPayload(gid, block)}}
+	frames := append([]wire.Frame(nil), o.public...)
+	if o.hpChanged || o.mpChanged {
+		pet := o.c.ActiveCOS
+		frames = append(frames, wire.Frame{Opcode: simulation.OpVitalsUpdate,
+			Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceFlags(abnormalStatusVitalsSource),
+				simulation.Vitals{CurrentHP: pet.CurrentHP, CurrentMP: pet.CurrentMP})})
+	}
+	for _, slot := range o.detonations {
+		frames = append(frames, timeBombFrame(gid, slot.Damage1C, o.fatal))
+	}
+	if o.speedChanged {
+		frames = append(frames, rt.refreshCosAbnormalSpeed(o)...)
+	}
+	if o.died {
+		life := beginFatalLifePublication(gid)
+		baseline, dead := life.publishDeathBaseline(), life.publishDead()
+		frames = append(frames, wire.Frame{Opcode: baseline.opcode, Payload: baseline.payload},
+			wire.Frame{Opcode: dead.opcode, Payload: dead.payload})
+	}
+	if o.changed {
+		block := rt.cosAbnormal(o.division, o.c.Name, gid)
+		frames = append(frames, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: abnormalVitalsPayload(gid, block)})
+	}
+	return frames
 }
 
 /*
@@ -447,13 +536,26 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 			owner.changed = true
 		}
 		owner.commit()
-		return owner.changed
+		return owner.changed || owner.hpChanged || owner.mpChanged || owner.speedChanged || len(owner.public) != 0
 	})
 	if !committed {
 		return nil
 	}
 	frames := rt.cosAbnormalPublication(entry.gid, owner)
-	return playerAbnormalDivisionFrames(entry.division, c.ID, playerAbnormalFrames{actor: frames, public: frames})
+	publication := playerAbnormalFrames{actor: frames, public: frames}
+	// 52A1E0 delegates COS hits to the NPC/character hit owner. A player
+	// source receives its private echo; the pet's rider is not the victim PC.
+	for _, hit := range owner.hits {
+		if !hit.credited || hit.reason != abnormalDamageOverTimeReason {
+			continue
+		}
+		if source := rt.findCharacterByGid(entry.division, hit.source); source != nil {
+			publication.sources = append(publication.sources, privateFrames{
+				source.ID, []wire.Frame{abnormalDamageFrame(entry.gid, hit.damage)},
+			})
+		}
+	}
+	return playerAbnormalDivisionFrames(entry.division, c.ID, publication)
 }
 
 /*
@@ -461,13 +563,11 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 monsterHitSummonedCOS
 
 monsterHitSummonedCOS applies a monster skill impact to the substituted
-COS (529929 -> PC+0x1CD8). The pet has no separate pose in this port, so
-range uses the owner's live position: the client keeps an unmounted pet
-on the owner. Status rolls use 590680 with the pet gid and a keeper that
-has the COS level only; v1.150 characterdata does not ship pet resist params.
+COS (529929 -> PC+0x1CD8). The independent COS reference, keeper and movement
+owner supply admission; the rider's equipment cannot shield or weaken a pet.
 ==================
 */
-func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Instance, owner *enterworld.Character, skillID uint32, nowMs int64) (result simulation.MonsterAttackResult) {
+func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Instance, owner *enterworld.Character, skillID uint32, nowMs int64, release *pendingMonsterCast) (result simulation.MonsterAttackResult) {
 	pet := owner.ActiveCOS
 	if pet == nil || !pet.Summoned || pet.CurrentHP == 0 || skillID == 0 {
 		return result
@@ -475,13 +575,21 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	skill, ok := rt.deps.SkillData().SkillByID(skillID)
 	actionLifecycleMs, actionLifecyclePinned := skill.ActionLifecycleMs()
 	attackShape := ok && skill.CombatPinned && skill.Attack.Present && skill.TargetRequired
-	timed := actionLifecyclePinned && actionLifecycleMs != 0 && skill.ActionCastingTimeMs == 0
+	timed := actionLifecyclePinned && actionLifecycleMs != 0
 	ranged := skill.ActionRangePinned && skill.ActionRange > 0
 	if !attackShape || !timed || !ranged {
 		return result
 	}
 	snapshot := rt.characterSnapshot(divisionID, owner)
-	if snapshot == nil || snapshot.ActiveCOS == nil || snapshot.ActiveCOS.GID != pet.GID {
+	if snapshot == nil || snapshot.ActiveCOS == nil || snapshot.ActiveCOS.GID != pet.GID || snapshot.DeletePending {
+		return result
+	}
+	if _, sameWorld := rt.characterMonster(divisionID, snapshot, instance.Gid); !sameWorld {
+		return result
+	}
+	result.TargetAlive = true
+	ref, validRef := rt.cosCharacterRef(snapshot)
+	if !validRef {
 		return result
 	}
 	mover, exists := rt.Monsters.Mover(divisionID, instance.Gid)
@@ -489,9 +597,13 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 		return result
 	}
 	monsterPose := mover.LivePoseAt(nowMs, nil)
-	ownerPose := rt.liveSpawn(simulation.WorldKey(divisionID, snapshot.Name), snapshot, nowMs)
-	spacing, spacingOK := rt.monsterToPlayerCombatSpacing(instance, snapshot, simulation.ActionReach(skill.ActionRange))
-	if !spacingOK || !spacing.Contains(simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}, ownerPose) {
+	petPose := rt.cosLiveSpawn(divisionID, snapshot, nowMs)
+	spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(instance.Ref.BodyRadius),
+		TargetBodyRadius: simulation.BodyRadius(ref.Parameters.BodyRadius), ActionReach: rt.monsterActionReach(instance, skill)}
+	if !spacing.Valid() || simulation.IsDungeonRegion(monsterPose.RegionID) != simulation.IsDungeonRegion(petPose.RegionID) {
+		return result
+	}
+	if release == nil && !spacing.Contains(simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}, petPose) {
 		result.Refusal = simulation.MonsterAttackApproachRequired
 		return result
 	}
@@ -499,36 +611,37 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	if err != nil {
 		return result
 	}
-	// The COS is not a CGObjPC keeper. Damage uses the owner's stats so a
-	// zero-defense pet does not fail the formula; the status block is the pet's.
-	defender, _, err := rt.playerCombatStats(divisionID, owner)
+	ownerBlock := rt.newCosAbnormalOwner(divisionID, owner, nowMs)
+	defender, err := cosCombatStats(ref, pet, ownerBlock.block)
 	if err != nil {
 		return result
 	}
-	defender.Level = pet.Level
+	if release == nil && skill.ActionCastingTimeMs > 0 {
+		return rt.prepareMonsterCast(divisionID, instance, monsterCastRecipient{snapshot, pet.GID}, skill, nowMs)
+	}
 	var records []abnormal.Record
-	var damage uint32
-	blocks := 0
+	var formulas []combat.Result
 	for range skill.Attack.ImpactCount {
 		formula, resolveErr := rt.resolveCombat(criticalActor{division: divisionID, monster: instance.Gid}, skill, attacker, defender)
 		if resolveErr != nil || formula.Damage == 0 && !formula.Blocked {
 			return result
 		}
+		formulas = append(formulas, formula)
 		if formula.Blocked {
-			blocks++
 			continue // 5905FB: no damage and no status roll
 		}
-		rolled, rollErr := rt.rollMonsterOnCOS(divisionID, instance, &skill.Abnormal, pet.GID, defender, formula.ResultFlags&8 != 0)
+		rolled, rollErr := rt.rollMonsterOnCOS(cosAbnormalRoll{division: divisionID, caster: instance,
+			params: &skill.Abnormal, target: ownerBlock})
 		if rollErr != nil {
 			return result
 		}
 		records = append(records, rolled...)
-		damage += formula.Damage
 	}
-	ownerBlock := rt.newCosAbnormalOwner(divisionID, owner, nowMs)
 	ownerBlock.sources = rt.captureAbnormalSources(divisionID, ownerBlock.block, records)
 	var fatal bool
+	var impacts []wire.SkillCastTargetImpact
 	var battleFrames []wire.Frame
+	hitContext := abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
 	committed := rt.deps.Update(owner, "monster-cos-hit", func() bool {
 		live := owner.ActiveCOS
 		if live == nil || live.GID != pet.GID || live.CurrentHP == 0 {
@@ -539,18 +652,22 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 		if enterworld.CharacterAlive(owner) {
 			battleFrames = rt.enterBattleState(divisionID, owner, nowMs)
 		}
-		if damage >= live.CurrentHP {
-			live.CurrentHP = 0
-			fatal = true
-		} else {
-			live.CurrentHP -= damage
+		for _, formula := range formulas {
+			hitContext.Magical = hitContext.Magical || formula.MagicalDamage != 0
+			live.CurrentHP -= vitals.HitDebit(live.CurrentHP, formula.Damage)
+			fatal = live.CurrentHP == 0
+			impacts = append(impacts, wire.SkillCastTargetImpact{Damage: formula.Damage,
+				Fatal: fatal, Blocked: formula.Blocked, ResultFlags: formula.ResultFlags})
+			if fatal {
+				break
+			}
 		}
 		if fatal {
 			ownerBlock.changed = ownerBlock.block.ClearAll(ownerBlock)
 			ownerBlock.fatal = true
 		} else {
 			if ownerBlock.block.Mask != 0 {
-				ownerBlock.changed = ownerBlock.block.BreakOnHit(ownerBlock) || ownerBlock.changed
+				ownerBlock.changed = ownerBlock.block.BreakOnHit(ownerBlock, hitContext) || ownerBlock.changed
 			}
 			for _, record := range records {
 				if ownerBlock.block.Apply(ownerBlock, record, nowMs) {
@@ -564,13 +681,27 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	if !committed {
 		return result
 	}
-	token := atomic.AddUint32(&rt.castTokenCounter, 1)
+	token := uint32(0)
+	if release != nil {
+		token = release.token
+	} else {
+		token = atomic.AddUint32(&rt.castTokenCounter, 1)
+	}
 	wireResult := wire.NewStationarySkillCastSingleTargetResult(
 		wire.SkillCastSuccess{SkillId: skillID, CasterGid: instance.Gid, InstanceToken: token},
 		pet.GID,
-		[]wire.SkillCastTargetImpact{{Damage: damage, Fatal: fatal, Blocked: blocks == int(skill.Attack.ImpactCount)}},
+		impacts,
 	)
 	frame := wire.SkillCastSingleTargetResultFrame(wireResult)
+	flight := projectileFlightMs(simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}, petPose, skill.ProjectileSpeed)
+	closeAt := nowMs + max(int64(actionLifecycleMs), flight+1)
+	if release == nil {
+		rt.queueSkillFinalize(divisionID, monsterCastOwner(instance.Gid), instance.Gid, nowMs, wire.SkillCastReleaseFrame(token, pet.GID))
+	} else {
+		frame = wire.SkillCastReleaseResultFrame(wireResult)
+		closeAt = nowMs + max(int64(skill.ActionDurationMs), flight+1)
+	}
+	rt.queueSkillFinalize(divisionID, monsterCastOwner(instance.Gid), instance.Gid, closeAt, wire.SkillCastFinalizeFrame(token))
 	result.Frames = []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}}
 	result.Frames = append(result.Frames, simulation.Frame{
 		Opcode:  simulation.OpVitalsUpdate,
@@ -594,18 +725,39 @@ rollMonsterOnCOS
 Roll the monster's authored status rows against the pet identity and level.
 ================
 */
-func (rt *Runtime) rollMonsterOnCOS(division string, instance monster.Instance, params *abnormal.SkillParams, petGID uint32, defender combat.Stats, blocked bool) ([]abnormal.Record, error) {
-	if params == nil || !params.Present() {
+func (rt *Runtime) rollMonsterOnCOS(input cosAbnormalRoll) ([]abnormal.Record, error) {
+	if input.params == nil || !input.params.Present() || input.target.ref == nil {
 		return nil, nil
 	}
+	pet := input.target.c.ActiveCOS
 	in := abnormal.RollInput{
-		Params:      params,
-		Blocked:     blocked,
-		TargetLevel: defender.Level,
-		CasterLevel: instance.Ref.Level,
-		SourceGID:   instance.Gid,
-		TargetGID:   petGID,
+		Params:      input.params,
+		TargetLevel: pet.Level,
+		CasterLevel: input.caster.Ref.Level,
+		SourceGID:   input.caster.Gid,
+		TargetGID:   pet.GID,
+		TargetBonus: input.target.Param(abnormalDiseaseBonusParam),
+		// 59069B calls 482840: attack COS (band 1) are status-immune.
+		TargetImmune: input.target.ref.TidWord&0x7fe == 0x1c6 && input.target.ref.TidWord>>11 == 1,
 	}
-	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, monster: instance.Gid}}
+	for index := range in.TargetResist {
+		in.TargetResist[index] = input.target.Param(abnormalElementResistBase + uint16(index))
+		in.TargetFlat[index] = input.target.Param(abnormalFlatResistanceBase + uint16(index))
+	}
+	random := &abnormalRandom{rt: rt, actor: criticalActor{division: input.division, monster: input.caster.Gid}}
 	return abnormal.Roll(in, random), random.err
+}
+
+/*
+================
+cosAbnormalRoll
+
+Detached caster and authoritative target inputs for the shared native roll.
+================
+*/
+type cosAbnormalRoll struct {
+	division string
+	caster   monster.Instance
+	params   *abnormal.SkillParams
+	target   *cosAbnormalOwner
 }

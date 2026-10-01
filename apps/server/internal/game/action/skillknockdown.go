@@ -11,6 +11,7 @@ package action
 import (
 	"math"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -76,6 +77,8 @@ func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, 
 	plans := make([]simulation.MonsterDamagePlan, 0, len(formulas))
 	for _, formula := range formulas {
 		plan := simulation.MonsterDamagePlan{GID: target.Gid, ExpectedHP: remaining, Damage: formula.Damage, CreditGID: enterworld.ObjectIDForCharacter(c)}
+		plan.StatusHit = abnormal.HitContext{Magical: formula.MagicalDamage != 0,
+			Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
 		if formula.Blocked {
 			// 5905FB: a blocked impact skips damage, knockdown and statuses.
 			plan.Damage = 0
@@ -114,12 +117,11 @@ func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, 
 		}
 		// 590680 rolls on every hit; 593F0C applies the records only to a
 		// surviving victim (MonsterState.applyDamageLocked).
-		blocked := formula.ResultFlags&8 != 0
-		records, err := rt.rollPlayerOnMonster(division, c, &skill.Abnormal, target, blocked)
+		records, err := rt.rollPlayerOnMonster(division, c, &skill.Abnormal, target)
 		if err != nil {
 			return nil, false
 		}
-		imbueRecords, err := rt.rollPlayerOnMonster(division, c, &formula.Imbue, target, blocked)
+		imbueRecords, err := rt.rollPlayerOnMonster(division, c, &formula.Imbue, target)
 		if err != nil {
 			return nil, false
 		}

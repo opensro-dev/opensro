@@ -218,6 +218,8 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		}
 		if charged && rootID == 0 {
 			rt.commitOffensivePhaseCost(division, character, skill, cost, nowMs, release != nil)
+		} else if release == nil {
+			rt.registerPlayerSkillCooldown(division, character, skill, nowMs)
 		}
 		for index, impacts := range committed {
 			impact := impacts[len(impacts)-1]

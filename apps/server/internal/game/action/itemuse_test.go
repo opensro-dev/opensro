@@ -18,16 +18,31 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+cosTestItemSource
+================
+*/
 type cosTestItemSource struct {
 	staticItemSource
 	characters map[string]*enterworld.CharacterRef
 }
 
+/*
+================
+CharacterRefByCodename
+================
+*/
 func (s cosTestItemSource) CharacterRefByCodename(codename string) (*enterworld.CharacterRef, bool) {
 	ref, ok := s.characters[codename]
 	return ref, ok
 }
 
+/*
+================
+SummonableCharacterRefs
+================
+*/
 func (s cosTestItemSource) SummonableCharacterRefs() []enterworld.CharacterRef {
 	rows := make([]enterworld.CharacterRef, 0, len(s.characters))
 	for _, ref := range s.characters {
@@ -36,6 +51,11 @@ func (s cosTestItemSource) SummonableCharacterRefs() []enterworld.CharacterRef {
 	return rows
 }
 
+/*
+================
+testCosSource
+================
+*/
 func testCosSource(items staticItemSource) cosTestItemSource {
 	items["ITEM_COS_T_DHORSE3"] = &enterworld.ItemRef{
 		RefObjID: 3905, Codename: "ITEM_COS_T_DHORSE3",
@@ -55,6 +75,11 @@ func testCosSource(items staticItemSource) cosTestItemSource {
 	}
 }
 
+/*
+================
+TestHorseLevelRefusalPreservesItemAndAllowsUseAtRequirement
+================
+*/
 func TestHorseLevelRefusalPreservesItemAndAllowsUseAtRequirement(t *testing.T) {
 	c := testCharacter()
 	level := int64(5)
@@ -78,6 +103,11 @@ func TestHorseLevelRefusalPreservesItemAndAllowsUseAtRequirement(t *testing.T) {
 	assertItemUseRefusedUnchanged(t, rt, c, body, wire.ErrCodeMultipleCOS)
 }
 
+/*
+================
+TestHandleItemUseConsumesPotionRecoversHPAndAnswersNativeBurst
+================
+*/
 func TestHandleItemUseConsumesPotionRecoversHPAndAnswersNativeBurst(t *testing.T) {
 	character := testCharacter()
 	currentHP := int64(40)
@@ -100,9 +130,9 @@ func TestHandleItemUseConsumesPotionRecoversHPAndAnswersNativeBurst(t *testing.T
 		wire.EncodeItemUseSuccess(21, 1, 0x08EC); !reflect.DeepEqual(got, want) {
 		t.Fatalf("0xB5BD = % X, want % X", got, want)
 	}
-	// 49AA70: ftol((STR 20/416+1) * 1.02^0 * Param1 120) = 125.
-	if character.CurrentHP == nil || *character.CurrentHP != 165 {
-		t.Fatalf("CurrentHP = %v, want 165", character.CurrentHP)
+	// 49AA70 sizes 125 HP; 49A5B0 credits 25 now and queues four steps.
+	if character.CurrentHP == nil || *character.CurrentHP != 65 {
+		t.Fatalf("CurrentHP = %v, want first-pulse HP 65", character.CurrentHP)
 	}
 	if character.CurrentMP == nil || *character.CurrentMP != 80 {
 		t.Fatalf("CurrentMP = %v, want untouched 80", character.CurrentMP)
@@ -114,6 +144,11 @@ func TestHandleItemUseConsumesPotionRecoversHPAndAnswersNativeBurst(t *testing.T
 	}
 }
 
+/*
+================
+TestHandleItemUseLastPotionRemovesRow
+================
+*/
 func TestHandleItemUseLastPotionRemovesRow(t *testing.T) {
 	character := testCharacter()
 	currentHP := int64(1)
@@ -139,6 +174,11 @@ func TestHandleItemUseLastPotionRemovesRow(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleItemUseRejectsSpoofAndFullPoolWithoutMutation
+================
+*/
 func TestHandleItemUseRejectsSpoofAndFullPoolWithoutMutation(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -177,6 +217,11 @@ func TestHandleItemUseRejectsSpoofAndFullPoolWithoutMutation(t *testing.T) {
 	}
 }
 
+/*
+================
+TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn
+================
+*/
 func TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn(t *testing.T) {
 	character := testCharacter()
 	character.MissionInventory = append(character.MissionInventory, enterworld.InventoryRow{
@@ -206,6 +251,11 @@ func TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn(t *testing.T) {
 	}
 }
 
+/*
+================
+TestCosMountAndMountedAttackShareAuthorityOnlyAfterCosGates
+================
+*/
 func TestCosMountAndMountedAttackShareAuthorityOnlyAfterCosGates(t *testing.T) {
 	character := testCharacter()
 	source := testCosSource(testItems())
@@ -247,6 +297,11 @@ func TestCosMountAndMountedAttackShareAuthorityOnlyAfterCosGates(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMountedAttackEntersTheSharedAuthoritativeCombatMachine
+================
+*/
 func TestMountedAttackEntersTheSharedAuthoritativeCombatMachine(t *testing.T) {
 	rt, _, character, target := newCombatTestRuntime(t, 100)
 	deps, ok := rt.deps.(*enterworld.Deps)
@@ -291,6 +346,11 @@ ITEM_MALL_PET_SKILL_*, raised on use below, so a summon must not fabricate a
 0x3691 of its own.
 ==================
 */
+/*
+================
+TestCosSummonDoesNotFabricateABoardWindow
+================
+*/
 func TestCosSummonDoesNotFabricateABoardWindow(t *testing.T) {
 	character := testCharacter()
 	source := testCosSource(testItems())
@@ -321,7 +381,12 @@ func TestCosSummonDoesNotFabricateABoardWindow(t *testing.T) {
 }
 
 // ITEM_MALL_PET_SKILL_* is the family whose Param1 is authored in SECONDS
-// (1800, 사학사용시간), which is what sub_6E6E00's x1000 expects.
+// (1800, ì‚¬í•™ì‚¬ìš©ì‹œê°„), which is what sub_6E6E00's x1000 expects.
+/*
+================
+petSkillSource
+================
+*/
 func petSkillSource() cosTestItemSource {
 	source := testCosSource(testItems())
 	source.staticItemSource["ITEM_MALL_PET_SKILL_COLD"] = &enterworld.ItemRef{
@@ -332,6 +397,11 @@ func petSkillSource() cosTestItemSource {
 	return source
 }
 
+/*
+================
+TestPetSkillItemRaisesTheKind3WindowOnlyWithALivePet
+================
+*/
 func TestPetSkillItemRaisesTheKind3WindowOnlyWithALivePet(t *testing.T) {
 	character := testCharacter()
 	character.MissionInventory = append(character.MissionInventory, enterworld.InventoryRow{
@@ -388,6 +458,11 @@ func TestPetSkillItemRaisesTheKind3WindowOnlyWithALivePet(t *testing.T) {
 
 // 49B710 consumes a potion into a full gauge: only both amounts <= 0 is a
 // refusal, and 4EF450 clamps the recovery to the maximum.
+/*
+================
+TestHandleItemUseConsumesIntoAFullGauge
+================
+*/
 func TestHandleItemUseConsumesIntoAFullGauge(t *testing.T) {
 	character := testCharacter()
 	full := enterworld.DerivedMaxHP(character)
@@ -411,6 +486,11 @@ TestComputePotionAmountFollowsNative
 (stat/416+1) * 1.02^(level-1); the percentage arm multiplies the maximum by
 the float32 fraction; a nonzero absolute param wins over percentages.
 ==================
+*/
+/*
+================
+TestComputePotionAmountFollowsNative
+================
 */
 func TestComputePotionAmountFollowsNative(t *testing.T) {
 	for _, tc := range []struct {

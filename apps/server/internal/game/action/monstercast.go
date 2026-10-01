@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+monstercast.go - simulation-owned prepared monster casts
+
+Players and COS share preparation, identity revalidation and cancellation.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -10,10 +20,16 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// Preparing -> released or cancelled. Like pendingProjectileCast, this owner
-// uses the simulation clock and division operation lock, never a goroutine.
-// Native 58356C / 585BF8 retain positive casting time; 585F69 generates the
-// release results. Client B245 admits preparation; B505 carries those results.
+/*
+================
+pendingMonsterCast
+
+Preparing -> released or cancelled. Like pendingProjectileCast, this owner
+uses the simulation clock and division operation lock, never a goroutine.
+Native 58356C / 585BF8 retain positive casting time; 585F69 generates the
+release results. Client B245 admits preparation; B505 carries those results.
+================
+*/
 type pendingMonsterCast struct {
 	division      string
 	instance      monster.Instance
@@ -24,9 +40,31 @@ type pendingMonsterCast struct {
 	token         uint32
 	releaseAtMs   int64
 	selfEffect    bool
+	cosTarget     bool
+	cosRefID      uint32
+	cosSlot       uint8
 }
 
-func (rt *Runtime) prepareMonsterCast(division string, instance monster.Instance, target *enterworld.Character, skill enterworld.SkillRow, now int64) simulation.MonsterAttackResult {
+/*
+================
+monsterCastRecipient
+
+Retain the character owner separately from the object hit. A COS can leave
+or be replaced while its owner remains alive and connected.
+================
+*/
+type monsterCastRecipient struct {
+	character *enterworld.Character
+	gid       uint32
+}
+
+/*
+================
+prepareMonsterCast
+
+================
+*/
+func (rt *Runtime) prepareMonsterCast(division string, instance monster.Instance, recipient monsterCastRecipient, skill enterworld.SkillRow, now int64) simulation.MonsterAttackResult {
 	rt.pendingSkillFinalizesMu.Lock()
 	defer rt.pendingSkillFinalizesMu.Unlock()
 	for _, p := range rt.pendingMonsterCasts {
@@ -34,8 +72,13 @@ func (rt *Runtime) prepareMonsterCast(division string, instance monster.Instance
 			return simulation.MonsterAttackResult{TargetAlive: true}
 		}
 	}
-	p := pendingMonsterCast{division: division, instance: instance, target: enterworld.ObjectIDForCharacter(target), characterID: target.ID, characterName: target.Name, skill: skill.ID, token: atomic.AddUint32(&rt.castTokenCounter, 1), releaseAtMs: now + int64(skill.ActionCastingTimeMs) + 1}
+	target := recipient.character
+	p := pendingMonsterCast{division: division, instance: instance, target: recipient.gid, characterID: target.ID, characterName: target.Name, skill: skill.ID, token: atomic.AddUint32(&rt.castTokenCounter, 1), releaseAtMs: now + int64(skill.ActionCastingTimeMs) + 1}
 	p.selfEffect = skill.MonsterSelfEffect.Pinned
+	p.cosTarget = recipient.gid != enterworld.ObjectIDForCharacter(target)
+	if p.cosTarget && target.ActiveCOS != nil {
+		p.cosRefID, p.cosSlot = target.ActiveCOS.RefObjID, target.ActiveCOS.InventorySlot
+	}
 	rt.pendingMonsterCasts = append(rt.pendingMonsterCasts, p)
 	frame := wire.SkillCastUntargetedFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: instance.Gid, InstanceToken: p.token, OwnerOrTargetGid: p.target})
 	if p.selfEffect {
@@ -44,6 +87,12 @@ func (rt *Runtime) prepareMonsterCast(division string, instance monster.Instance
 	return simulation.MonsterAttackResult{Accepted: true, TargetAlive: true, Frames: []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}}}
 }
 
+/*
+================
+advanceMonsterCasts
+
+================
+*/
 func (rt *Runtime) advanceMonsterCasts(now int64) []simulation.DivisionFrames {
 	rt.pendingSkillFinalizesMu.Lock()
 	pending := append([]pendingMonsterCast(nil), rt.pendingMonsterCasts...)
@@ -52,12 +101,17 @@ func (rt *Runtime) advanceMonsterCasts(now int64) []simulation.DivisionFrames {
 	for _, p := range pending {
 		unlock := rt.lockDivision(p.division)
 		attacker, exists := rt.Monsters.Get(p.division, p.instance.Gid)
-		target := rt.findCharacterByGid(p.division, p.target)
+		target := rt.findCharacter(p.division, p.characterName)
 		var snapshot *enterworld.Character
 		if target != nil && target.ID == p.characterID {
 			snapshot = rt.characterSnapshot(p.division, target)
 		}
 		valid := exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0 && snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
+		if p.cosTarget && valid {
+			pet := snapshot.ActiveCOS
+			valid = pet != nil && pet.Summoned && pet.GID == p.target && pet.CurrentHP > 0 &&
+				pet.RefObjID == p.cosRefID && pet.InventorySlot == p.cosSlot
+		}
 		if p.selfEffect {
 			valid = exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0
 		}
@@ -107,4 +161,10 @@ func (rt *Runtime) advanceMonsterCasts(now int64) []simulation.DivisionFrames {
 	return out
 }
 
+/*
+================
+monsterCastOwner
+
+================
+*/
 func monsterCastOwner(gid uint32) string { return fmt.Sprintf("@monster:%d", gid) }

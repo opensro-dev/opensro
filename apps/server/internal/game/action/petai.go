@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+petai.go - session-owned summoned-pet movement, pickup and peer presentation
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -11,7 +19,18 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+petOwnerKey
+================
+*/
 type petOwnerKey struct{ division, name string }
+
+/*
+================
+petSession
+================
+*/
 type petSession struct {
 	session   uint64
 	character *enterworld.Character
@@ -29,6 +48,11 @@ type petSession struct {
 
 // BindPetSession admits a logical authenticated owner, not every character in
 // storage. Duplicate EnterWorld/resume preserves the live pet movement plane.
+/*
+================
+BindPetSession
+================
+*/
 func (rt *Runtime) BindPetSession(division string, c *enterworld.Character, session uint64) {
 	if c == nil || session == 0 {
 		return
@@ -61,12 +85,22 @@ func (rt *Runtime) BindPetSession(division string, c *enterworld.Character, sess
 
 // Called with the division lock held; the map lock never spans a character
 // authority door, movement constraint, or packet publication.
+/*
+================
+forgetPetSession
+================
+*/
 func (rt *Runtime) forgetPetSession(division, name string) {
 	rt.petMu.Lock()
 	defer rt.petMu.Unlock()
 	delete(rt.petSessions, petOwnerKey{division, strings.ToLower(name)})
 }
 
+/*
+================
+advancePets
+================
+*/
 func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 	rt.petMu.Lock()
 	keys := make([]petOwnerKey, 0, len(rt.petSessions))
@@ -107,6 +141,11 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 	return out
 }
 
+/*
+================
+advancePet
+================
+*/
 func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation.Frame) {
 	rt.petMu.Lock()
 	state := rt.petSessions[key]
@@ -157,6 +196,12 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		state.generation++
 		state.refObjID = cos.RefObjID
 	}
+	if rt.cosMovementBlocked(key.division, snapshot) {
+		return state.follower.Stop(nowMs)
+	}
+	block := rt.cosAbnormal(key.division, snapshot.Name, cos.GID)
+	walk, run := cosParameter(ref, block, movementWalkParameter), cosParameter(ref, block, movementRunParameter)
+	state.follower.SetMovementSpeeds(walk, run, nowMs)
 	var constraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
 	if rt.ConstrainMovement != nil {
 		constraint = func(from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
@@ -177,7 +222,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		pose := state.follower.Position(nowMs)
 		target := simulation.Spawn{RegionID: item.Position.RegionID, X: float64(item.Position.X), Y: float64(item.Y), Z: float64(item.Position.Z)}
 		if simulation.WorldDistance2D(pose, target) > grounditem.ExecuteRange {
-			return state.follower.Approach(target, float64(ref.RunSpeed), nowMs, grounditem.ExecuteRange, constraint)
+			return state.follower.Approach(target, float64(run), nowMs, grounditem.ExecuteRange, constraint)
 		}
 		state.pickup = nil
 		frames := state.follower.Stop(nowMs)
@@ -188,11 +233,16 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		}
 		return frames
 	}
-	return state.follower.Advance(owner, float64(ref.RunSpeed), nowMs, constraint)
+	return state.follower.Advance(owner, float64(run), nowMs, constraint)
 }
 
 // PetPresentation is the sole read boundary for peer pet motion. It holds the
 // same division lock as advancement and returns only detached public fields.
+/*
+================
+PetPresentation
+================
+*/
 func (rt *Runtime) PetPresentation(division, name string) *simulation.PeerCOS {
 	unlock := rt.lockDivision(division)
 	defer unlock()
@@ -240,14 +290,27 @@ func (rt *Runtime) PetPresentation(division, name string) *simulation.PeerCOS {
 		if name == "" {
 			name = ref.Name
 		}
+		block := rt.cosAbnormal(division, c.Name, cos.GID)
 		result = &simulation.PeerCOS{Mounted: cos.Mounted, NativeBodyStatus: cos.NativeBodyStatus, World: world, Revision: revision, Session: state.session, Generation: state.generation,
 			Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
-				Walk: ref.WalkSpeed, Run: ref.RunSpeed, Scale: ref.Scale, Name: name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c)}}
+				Walk: cosParameter(ref, block, movementWalkParameter), Run: cosParameter(ref, block, movementRunParameter),
+				Scale: ref.Scale, Name: name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c)}}
+		if block != nil && block.Mask != 0 {
+			result.AbnormalVitals = abnormalVitalsPayload(cos.GID, block)
+		}
+		if cos.CurrentHP == 0 {
+			result.LifeState = wire.LifeStateDead
+		}
 	})
 	return result
 }
 
 // Called inside the summon transaction, with the division operation lock held.
+/*
+================
+rememberTransportCOS
+================
+*/
 func (rt *Runtime) rememberTransportCOS(division string, c *enterworld.Character, pose simulation.Spawn) {
 	rt.petMu.Lock()
 	defer rt.petMu.Unlock()
@@ -261,6 +324,11 @@ func (rt *Runtime) rememberTransportCOS(division string, c *enterworld.Character
 // Successful owner re-entry retires motion/pickup from the departed world.
 // The persisted pet identity and inventory survive; the new projection starts
 // at the same admitted destination as its owner, before peer publication.
+/*
+================
+relocateReturningPet
+================
+*/
 func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character, destination simulation.Spawn) {
 	rt.petMu.Lock()
 	defer rt.petMu.Unlock()

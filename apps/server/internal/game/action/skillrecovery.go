@@ -135,7 +135,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 			}
 
 			rt.startSkillCast(division, character, now)
-			registerOffensiveCooldown(character, skill, now)
+			rt.registerPlayerSkillCooldown(division, character, skill, now)
 			return true
 		}) {
 			if refusal != 0 {

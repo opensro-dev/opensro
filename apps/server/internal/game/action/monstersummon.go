@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+monstersummon.go - native skill admission and lifecycle ownership
+
+Share the existing authority and publication owners across skill families.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -9,6 +19,12 @@ import (
 	"sync/atomic"
 )
 
+/*
+================
+monsterSummonPlan
+
+================
+*/
 func (rt *Runtime) monsterSummonPlan(instance monster.Instance, sample float64) (simulation.MonsterAttackPlan, bool) {
 	if !monster.SummonDue(instance) {
 		return simulation.MonsterAttackPlan{}, false
@@ -31,12 +47,18 @@ func (rt *Runtime) monsterSummonPlan(instance monster.Instance, sample float64) 
 	if !valid || !row.TimingPinned || row.CoolTimeMs == 0 {
 		return simulation.MonsterAttackPlan{}, false
 	}
-	return simulation.MonsterAttackPlan{SkillID: row.ID, Summon: true, CooldownMs: int64(row.CoolTimeMs), ActionLifecycleMs: int64(duration)}, true
+	return simulation.MonsterAttackPlan{SkillID: row.ID, Summon: true, CooldownMs: int64(row.CooldownDurationMs((monsterAbnormalContext{rt}).Param(instance, actionSpeedParameter))), ActionLifecycleMs: int64(duration)}, true
 }
 
-// Called inside the existing division action transaction. The population
-// owner commits children; the visibility owner sends their reference/create
-// rows on its next pass before any child movement or combat can be emitted.
+/*
+================
+monsterSummon
+
+Called inside the existing division action transaction. The population
+owner commits children; the visibility owner sends their reference/create
+rows on its next pass before any child movement or combat can be emitted.
+================
+*/
 func (rt *Runtime) monsterSummon(divisionID string, instance monster.Instance, skill enterworld.SkillRow, nowMs int64) simulation.MonsterAttackResult {
 	result := simulation.MonsterAttackResult{TargetAlive: true}
 	duration, valid := skill.ActionLifecycleMs()

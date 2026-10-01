@@ -36,7 +36,7 @@ func TestMonsterHitOnThePetPutsTheOwnerInBattle(t *testing.T) {
 	if !ok {
 		t.Fatal("no pet gid")
 	}
-	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100000, Summoned: true, Level: 1}
+	equipCombatTestPet(t, rt, c, 4)
 
 	entered := battleStateFrame(enterworld.ObjectIDForCharacter(c), true)
 	count := func(frames []uint16, payloads [][]byte) int {

@@ -21,6 +21,8 @@ import (
 	"sync"
 	"unicode/utf16"
 
+	"opensro.online/server/internal/game/world/monster"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -259,17 +261,20 @@ characterTidWord
 ================
 */
 func characterTidWord(fields []string) (uint16, bool) {
-	if len(fields) <= 11 {
+	if len(fields) <= 12 {
 		return 0, false
 	}
 	charBit, ok0 := textdataInt(fields[8])
 	tid1, ok1 := textdataInt(fields[9])
 	tid2, ok2 := textdataInt(fields[10])
 	tid3, ok3 := textdataInt(fields[11])
-	if !ok0 || !ok1 || !ok2 || !ok3 || charBit < 0 || tid1 < 0 || tid2 < 0 || tid3 < 0 {
+	tid4, ok4 := textdataInt(fields[12])
+	if !ok0 || !ok1 || !ok2 || !ok3 || !ok4 || charBit < 0 || tid1 < 0 || tid2 < 0 || tid3 < 0 || tid4 < 0 || tid4 > 0x1f {
 		return 0, false
 	}
-	word := uint16((tid1&7)<<2 | (tid2&3)<<5 | (tid3&0xf)<<7)
+	// Bits 11..15 distinguish attack, transport and collection COS. The
+	// shared class discriminator alone cannot select immunity or pet AI.
+	word := uint16((tid1&7)<<2 | (tid2&3)<<5 | (tid3&0xf)<<7 | tid4<<11)
 	if charBit != 0 {
 		word |= 0x0002
 	}
@@ -309,6 +314,7 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 	}
 	nameStrID := strings.TrimSpace(fields[5])
 	return &CharacterRef{
+		Parameters:                 monster.CharacterParameters(fields),
 		RefObjID:                   uint32(refObjID),
 		TidWord:                    tidWord,
 		Codename:                   strings.TrimSpace(fields[2]),

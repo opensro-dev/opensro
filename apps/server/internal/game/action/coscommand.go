@@ -58,7 +58,7 @@ func (rt *Runtime) HandleCosCommand(
 
 	switch command.Tag {
 	case wire.CosCommandMovementTag:
-		if !snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 || rt.MoveCOS == nil {
+		if !snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 || rt.MoveCOS == nil || rt.cosMovementBlocked(divisionID, snapshot) {
 			return OpResult{}
 		}
 		rt.bindResidentRegion(simulation.WorldKey(divisionID, character.Name), rt.Now().UnixMilli())
@@ -67,6 +67,9 @@ func (rt *Runtime) HandleCosCommand(
 		// The vehicle's steer/stop pair belongs to the same movement owner
 		// as its moves; only the mounted, living vehicle can walk.
 		if !snapshot.ActiveCOS.Mounted || snapshot.ActiveCOS.CurrentHP == 0 {
+			return OpResult{}
+		}
+		if command.Tag == wire.CosCommandSteerTag && rt.cosMovementBlocked(divisionID, snapshot) {
 			return OpResult{}
 		}
 		handle := rt.SteerCOS
@@ -93,6 +96,9 @@ func (rt *Runtime) HandleCosCommand(
 				rt.endTransform(divisionID, character, rt.Now().UnixMilli())
 			}
 			character.ActiveCOS.Mounted = true
+			// The COS spawn already publishes its speed pair. Mounting transfers
+			// the authoritative mover to that same keeper without a new speed.
+			rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(divisionID, character, rt.Now().UnixMilli()))
 			committed = true
 			return true
 		})

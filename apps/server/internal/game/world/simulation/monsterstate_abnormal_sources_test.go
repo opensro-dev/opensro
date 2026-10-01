@@ -84,7 +84,8 @@ func TestAbnormalSourceLookupRunsOutsidePopulationCommit(t *testing.T) {
 		t.Fatal("status commit queried authority or failed to install burn")
 	}
 	update, ok := s.PlanAbnormalUpdate(division, source.Gid, now+2001)
-	if !ok || ctx.reads != 2 || len(update.Effects.Hits) != 1 || !update.Effects.Hits[0].Credited {
+	// Source resolution still occurs, but 52A288 ignores a self-sourced hit.
+	if !ok || ctx.reads != 2 || len(update.Effects.Hits) != 0 {
 		t.Fatalf("periodic update failed source resolution: %+v", update.Effects)
 	}
 	if _, ok := s.CommitAbnormalUpdate(update, now+2001); !ok || ctx.reads != 2 {

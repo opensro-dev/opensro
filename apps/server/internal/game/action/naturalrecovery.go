@@ -18,6 +18,7 @@ import (
 
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/recovery"
 	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -48,11 +49,13 @@ Replacement sessions start fresh clocks; repeat admission preserves phase.
 ================
 */
 type recoverySession struct {
-	session         uint64
-	character       *enterworld.Character
-	nextMs          int64
-	questNextMs     int64
-	questItemNextMs int64
+	session                    uint64
+	character                  *enterworld.Character
+	nextMs                     int64
+	questNextMs                int64
+	questItemNextMs            int64
+	potions                    recovery.Queue
+	potionNextMs, potionLastMs int64
 }
 
 /*
@@ -80,6 +83,7 @@ func (rt *Runtime) BindRecoverySession(division string, c *enterworld.Character,
 	now := rt.Now().UnixMilli()
 	rt.recoverySessions[key] = &recoverySession{session: session, character: c, nextMs: now + naturalRecoveryIntervalMs, questNextMs: now + questMinuteIntervalMs}
 	rt.recoverySessions[key].questItemNextMs = now + questItemIntervalMs
+	rt.recoverySessions[key].potionNextMs = now + potionRecoveryIntervalMs
 }
 
 /*
@@ -130,7 +134,7 @@ func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFram
 	rt.recoveryMu.Lock()
 	var keys []recoveryKey
 	for key, state := range rt.recoverySessions {
-		if nowMs >= state.nextMs || rt.AdvanceQuestMinute != nil && nowMs >= state.questNextMs ||
+		if nowMs >= state.potionNextMs || nowMs >= state.nextMs || rt.AdvanceQuestMinute != nil && nowMs >= state.questNextMs ||
 			rt.AdvanceQuestItem != nil && nowMs >= state.questItemNextMs {
 			keys = append(keys, key)
 		}
@@ -145,6 +149,7 @@ func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFram
 	var out []simulation.DivisionFrames
 	for _, key := range keys {
 		unlock := rt.lockDivision(key.division)
+		out = append(out, rt.recoverPotionResident(key, nowMs)...)
 		out = append(out, rt.advanceResidentQuestItem(key, nowMs)...)
 		out = append(out, rt.advanceResidentQuestMinute(key, nowMs)...)
 		frames := rt.recoverResident(key, nowMs)

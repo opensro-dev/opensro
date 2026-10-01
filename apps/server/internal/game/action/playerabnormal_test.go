@@ -18,6 +18,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+stunSkill
+================
+*/
 func stunSkill(rt *Runtime) {
 	skills := rt.deps.SkillData().(staticSkillSource)
 	skill := skills[2]
@@ -27,6 +32,11 @@ func stunSkill(rt *Runtime) {
 	skills[2] = skill
 }
 
+/*
+================
+TestMonsterStunLandsOnThePlayer
+================
+*/
 func TestMonsterStunLandsOnThePlayer(t *testing.T) {
 	rt, clock, c, instance := newCombatTestRuntime(t, 100)
 	instance.Ref.DefaultSkillIDs[0] = 2
@@ -58,6 +68,11 @@ func TestMonsterStunLandsOnThePlayer(t *testing.T) {
 
 // 77C110: mask, then each set bit low to high as duration/100, elapsed/100,
 // and one byte (level for 0x203F, grade for 0x017FCFC0, otherwise 0).
+/*
+================
+TestPlayerAbnormalSnapshotPayload
+================
+*/
 func TestPlayerAbnormalSnapshotPayload(t *testing.T) {
 	const now int64 = 10_000
 	// Slot 12 (bit 0x1000) is in neither 0x203F nor 0x017FCFC0, so its byte is 0.
@@ -76,6 +91,11 @@ func TestPlayerAbnormalSnapshotPayload(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPlayerAbnormalGates
+================
+*/
 func TestPlayerAbnormalGates(t *testing.T) {
 	rt, _, c, _ := newCombatTestRuntime(t, 100)
 	cases := []struct {
@@ -97,6 +117,11 @@ func TestPlayerAbnormalGates(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPlayerBurnTicksOncePerPeriodAndKills
+================
+*/
 func TestPlayerBurnTicksOncePerPeriodAndKills(t *testing.T) {
 	rt, clock, c, instance := newCombatTestRuntime(t, 100)
 	now := clock.NowMs()
@@ -126,27 +151,48 @@ func TestPlayerBurnTicksOncePerPeriodAndKills(t *testing.T) {
 	}
 }
 
-func TestDamagingHitBreaksRootSleepAndStun(t *testing.T) {
-	rt, clock, c, instance := newCombatTestRuntime(t, 100)
-	instance.Ref.DefaultSkillIDs[0] = 2
-	skills := rt.deps.SkillData().(staticSkillSource)
-	skill := skills[2]
-	skill.Attack.Min, skill.Attack.Max, skill.Attack.Percent = 1, 1, 100
-	skills[2] = skill
-	rt.CombatRoll = func() (uint32, error) { return 0, nil }
-	now := clock.NowMs()
-	var records []abnormal.Record
-	for _, status := range []abnormal.Status{abnormal.Root, abnormal.Sleep, abnormal.Stun} {
-		records = append(records, abnormal.Record{Status: status, Grade: 2, DurationMs: 20000, SourceGID: instance.Gid})
-	}
-	rt.applyPlayerAbnormalInDoor(testDivision, c, false, records, now)
-	result := rt.MonsterBasicAttack(testDivision, instance, enterworld.ObjectIDForCharacter(c), 2, now)
-	block := rt.playerAbnormal(testDivision, c.Name)
-	if !result.Accepted || enterworld.CurrentHP(c) >= 100 || block != nil && (block.Has(abnormal.Root) || block.Has(abnormal.Sleep) || block.Has(abnormal.Stun)) {
-		t.Fatalf("break accepted %v hp %d block %+v", result.Accepted, enterworld.CurrentHP(c), block)
+/*
+================
+TestMonsterHitRetiresStatusesByDamageLane
+================
+*/
+func TestMonsterHitRetiresStatusesByDamageLane(t *testing.T) {
+	for _, flags := range []uint32{5, 9, 13} {
+		rt, clock, c, instance := newCombatTestRuntime(t, 100)
+		instance.Ref.DefaultSkillIDs[0] = 2
+		skills := rt.deps.SkillData().(staticSkillSource)
+		skill := skills[2]
+		skill.Attack.Min, skill.Attack.Max, skill.Attack.Percent, skill.Attack.Flags = 1, 1, 100, flags
+		skill.ReplacementPinned = true
+		skill.Replacement.MatchesExecutionSelector = true
+		skills[2] = skill
+		rt.CombatRoll = func() (uint32, error) { return 0, nil }
+		now := clock.NowMs()
+		var records []abnormal.Record
+		for _, status := range []abnormal.Status{abnormal.Root, abnormal.Sleep, abnormal.Stun} {
+			records = append(records, abnormal.Record{Status: status, Grade: 2, DurationMs: 20000, SourceGID: instance.Gid})
+		}
+		rt.applyPlayerAbnormalInDoor(testDivision, c, false, records, now)
+		result := rt.MonsterBasicAttack(testDivision, instance, enterworld.ObjectIDForCharacter(c), 2, now)
+		mask := uint32(0)
+		if block := rt.playerAbnormal(testDivision, c.Name); block != nil {
+			mask = block.Mask
+		}
+		want := uint32(0)
+		if flags&8 == 0 {
+			want = abnormal.Root.Bit()
+		}
+		if !result.Accepted || enterworld.CurrentHP(c) >= 100 || mask != want {
+			t.Fatalf("flags %x: accepted %v hp %d mask %x want %x", flags, result.Accepted, enterworld.CurrentHP(c), mask, want)
+		}
 	}
 }
 
+/*
+================
+TestForgetCharacterDropsBlockAndDetachesSource
+================
+*/
 func TestForgetCharacterDropsBlockAndDetachesSource(t *testing.T) {
 	rt, _, c, _ := newCombatTestRuntime(t, 100)
 	deps := rt.deps.(*enterworld.Deps)
@@ -167,6 +213,11 @@ func TestForgetCharacterDropsBlockAndDetachesSource(t *testing.T) {
 	}
 }
 
+/*
+================
+abnormalMaskOf
+================
+*/
 func abnormalMaskOf(payload []byte) uint32 {
 	if len(payload) < 11 || payload[6] != 4 {
 		return 0
@@ -174,6 +225,11 @@ func abnormalMaskOf(payload []byte) uint32 {
 	return binary.LittleEndian.Uint32(payload[7:11])
 }
 
+/*
+================
+hasDeathBaseline
+================
+*/
 func hasDeathBaseline(frames []simulation.Frame, gid uint32) bool {
 	for _, frame := range frames {
 		if frame.Opcode != simulation.OpVitalsUpdate || len(frame.Payload) < 11 || frame.Payload[6] != 1 {
@@ -186,6 +242,11 @@ func hasDeathBaseline(frames []simulation.Frame, gid uint32) bool {
 	return false
 }
 
+/*
+================
+hasLifeDead
+================
+*/
 func hasLifeDead(frames []simulation.Frame, gid uint32) bool {
 	for _, frame := range frames {
 		if frame.Opcode != wire.OpObjectStateRefresh {
