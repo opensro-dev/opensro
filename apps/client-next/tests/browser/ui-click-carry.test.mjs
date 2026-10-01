@@ -103,6 +103,31 @@ test( "a click lifts an item and the next press places it", { timeout: 45000 }, 
 			"the put-back click did not lift again"
 		);
 
+		// Crossing other controls and releasing an ordinary key keep the carry:
+		// the icon used to vanish and reappear at its slot on each boundary.
+		await reset();
+		await page.mouse.click( 36, 36 );
+		await page.mouse.move( 96, 36, { steps: 6 } );
+		await page.mouse.move( 300, 200, { steps: 6 } );
+		await page.keyboard.press( "KeyA" );
+		await page.mouse.move( 320, 220 );
+		seen = await events();
+		assert.equal( seen.filter( e => e.kind === "drag-cancel" ).length, 0, "the carry survives hover and keys" );
+		assert.ok( seen.filter( e => e.kind === "drag" ).length >= 10, "every move reports" );
+		await page.mouse.click( 400, 300 );
+		assert.equal( (await events()).filter( e => e.kind === "drag-end" ).length, 1 );
+
+		// A click off the slot centre starts the icon on the cursor.
+		await reset();
+		await page.mouse.click( 26, 30 );
+		assert.deepEqual( (await events()).filter( e => e.kind === "drag" ).at( 0 ), {
+			kind: "drag",
+			id: "slot:13",
+			dx: -10,
+			dy: -6
+		} );
+		await page.keyboard.press( "Escape" );
+
 		// Right press and Escape cancel without placing.
 		for ( const cancel of [ "right", "Escape" ] ) {
 			await reset();
@@ -112,7 +137,7 @@ test( "a click lifts an item and the next press places it", { timeout: 45000 }, 
 			await page.mouse.move( 250, 250 );
 			seen = await events();
 			assert.equal( seen.filter( e => e.kind === "drag-end" ).length, 0, cancel );
-			assert.ok( seen.some( e => e.kind === "press" && e.id === null ), cancel + " clears the carry" );
+			assert.ok( seen.some( e => e.kind === "drag-cancel" && e.id === "slot:13" ), cancel + " clears the carry" );
 		}
 
 		// A control that stops carrying (its item gone) drops the carry.

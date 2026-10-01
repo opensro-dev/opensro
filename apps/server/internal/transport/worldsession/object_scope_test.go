@@ -11,7 +11,7 @@ func TestBridgeScopePublicationControlsSynchronousObservers(t *testing.T) {
 	srv := startServer(t)
 	c, welcome := dialAndHello(t, srv)
 	session, _ := srv.Hub.Session(welcome.SessionID)
-	session.BindCharacter("DIV_A", "Viewer")
+	session.BindCharacter("DIV_A", "Viewer", 0)
 	bridge := New(srv.Hub)
 	const gid = 81
 	action := []transport.Frame{{Opcode: 0x324b}}

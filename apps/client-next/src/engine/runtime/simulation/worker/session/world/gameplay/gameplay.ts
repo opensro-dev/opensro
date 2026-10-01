@@ -1526,7 +1526,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					rebirthPending = false;
 					dirty = true;
 				}
-				const matched = partyMatchPacket( partyMatching, frame, social.localName, now );
+				const matched = partyMatchPacket( partyMatching, frame, social.localName, now, {
+					race: localCountry ?? 0,
+					members: Math.max( 1, social.members.length )
+				} );
 				if ( matched ) {
 					const flag = frame.payload[0],
 						detail = frame.payload[1],

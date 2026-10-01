@@ -2388,15 +2388,23 @@ soundContext
 						"stand" :
 						resource.clips[0] ?? "";
 					// 8EADF0 tries the selected item override before the ordinary
-					// body track, only when unmounted. Missing states keep the normal
-					// selection; published cold BANs use the existing resource owner.
+					// body track, only when unmounted. Without one the character plays
+					// its weapon's animation set (CCObjCharacter_ResolveWeaponAnimationPrefix
+					// 8E83F0 stores it at +0x114): a spear runs two-handed. A set that
+					// lacks the state keeps the default selection, as native falls back.
+					const motionDisguise = referenceAppearances.get( entity.gid ),
+						weapon = wornEquipment( entity, gameplay ).find( item => item.slot === 6 ),
+						weaponSet = motionDisguise ?
+							weaponAnimationSet( motionDisguise.weapon << 11 ) :
+							weapon ?
+							weaponAnimationSet( weapon.typeFlags ) :
+							undefined,
+						motionSet = override?.animation || weaponSet?.replaceAll( "-", "_" );
 					if (
-						override && !entity.mountedOn && !dead && !sitting &&
+						motionSet && !entity.mountedOn && !dead && !sitting &&
 						(baseRole === "run" || baseRole === "walk" || baseRole === "stand")
 					) {
-						const role = `native:${override.animation}:${
-							baseRole === "run" ? 7 : baseRole === "walk" ? 1 : 0
-						}`;
+						const role = `native:${motionSet}:${baseRole === "run" ? 7 : baseRole === "walk" ? 1 : 0}`;
 						const definition = animationStates.get( resource.codename )?.[role] ??
 								resource.animationStates?.[role],
 							url = nativeMotionUrls.get( resource.codename )?.get( role );

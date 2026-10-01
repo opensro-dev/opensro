@@ -17,6 +17,7 @@ import { createRuntimeErrors } from "./runtime-errors";
 import { createPresentationRandom } from "./random/random";
 import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
+import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
 import { createNavigationStream } from "./navigation/navigation";
 import { createFrontend } from "./frontend/frontend";
 import { createUi, type UiFrameProbe } from "./ui/ui";
@@ -312,6 +313,9 @@ export function startRuntime(
 			)
 		);
 		let lastDockPick = "none";
+		// Deliberate deviation (see world-double-click.ts): a drifted second
+		// press on the same monster still attacks. Do not remove.
+		const worldDoubleClick = createWorldDoubleClick();
 		/*
 		================
 		worldClick
@@ -346,7 +350,13 @@ export function startRuntime(
 				return;
 			}
 			const gid = renderer.pickEntity( x, y, game.localGid, input.blindHeld() ),
-				entity = gid === null ? null : presentation.read( gid );
+				entity = gid === null ? null : presentation.read( gid ),
+				attackable = entity?.kind === "monster" && entity.appearanceState?.[0] !== 2,
+				now = performance.now();
+			// A browser dblclick after a promoted pair would attack a second time.
+			const attack = doubleClick ?
+				worldDoubleClick.double( attackable ? entity!.gid : null, now ) :
+				worldDoubleClick.press( attackable ? entity!.gid : null, now );
 			if ( entity ) {
 				// 698924 retains VK_SHIFT; 698BFD gates whisper prefill after selection.
 				if ( shift && !doubleClick && entity.kind === "player" ) {
@@ -357,8 +367,8 @@ export function startRuntime(
 				if ( entity.kind !== "ground-item" && !game.targetPending ) {
 					simulation.session( { kind: "gameplay", command: { kind: "select", gid: entity.gid } } );
 				}
-				if ( doubleClick ) {
-					if ( entity.kind === "monster" && entity.appearanceState?.[0] !== 2 ) {
+				if ( doubleClick || attack ) {
+					if ( attackable && attack ) {
 						simulation.session( {
 							kind: "gameplay",
 							command: { kind: local?.mountedOn ? "cos-attack" : "attack", gid: entity.gid }

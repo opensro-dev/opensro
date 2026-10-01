@@ -15,7 +15,7 @@ func TestBridgePreservesMovementDeliveryFence(t *testing.T) {
 	srv := startServer(t)
 	c, welcome := dialAndHello(t, srv)
 	session, _ := srv.Hub.Session(welcome.SessionID)
-	session.BindCharacter("DIV_A", "Viewer")
+	session.BindCharacter("DIV_A", "Viewer", 0)
 	bridge := New(srv.Hub)
 	stale := simulation.Frame{Opcode: transport.OpObjectSourceMove, Payload: make([]byte, 20), Current: func() bool { return false }}
 	current := simulation.Frame{Opcode: transport.OpObjectSourceCorrection, Payload: make([]byte, 20), Current: func() bool { return true }}

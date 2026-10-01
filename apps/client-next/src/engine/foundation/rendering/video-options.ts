@@ -3,9 +3,10 @@
 
 video-options.ts - the Option window's video records and screen size
 
-Two native detail records (5CDC20 defaults) plus the browser screen size:
-the page stays full screen and the scene and interface render at the
-chosen height (platform displayScale).
+Two native detail records (5CDC20 defaults) plus the screen size: like the
+native client's window mode, the game area is the chosen width x height,
+centred on a full-screen page at one UI pixel per CSS pixel (platform
+displayScale). It shrinks only when the page is smaller than the mode.
 
 ===========================================================================
 */
@@ -14,21 +15,44 @@ chosen height (platform displayScale).
 // This build switch takes precedence over the saved Metal Detail option.
 export const NATIVE_CHARACTER_LIGHTING = false;
 type VideoRecords = readonly [readonly number[], readonly number[]];
-// Browser screen size (Option window GDR_OPT_VIDEO_CB_SS): 0 is native.
-// The page stays full screen; the scene and interface render at this height.
+// Screen size (Option window GDR_OPT_VIDEO_CB_SS). The first entry is the
+// whole page; the others are fixed modes drawn 1:1, centred and letterboxed.
 /*
 ================
-displayHeights
+displaySizes
 ================
 */
-export function displayHeights(): readonly number[] {
-	return [ 0, 2160, 1440, 1080, 900, 768, 720 ];
+export function displaySizes(): readonly (readonly [number, number])[] {
+	return [
+		[ 0, 0 ],
+		[ 1920, 1080 ],
+		[ 1680, 1050 ],
+		[ 1600, 900 ],
+		[ 1440, 900 ],
+		[ 1366, 768 ],
+		[ 1280, 1024 ],
+		[ 1280, 800 ],
+		[ 1280, 720 ],
+		[ 1024, 768 ],
+		[ 800, 600 ]
+	];
+}
+
+/*
+================
+displaySizeIndex
+
+The listed mode equal to `size`, 0 (the whole page) when none is.
+================
+*/
+export function displaySizeIndex( size: readonly [number, number] | undefined ): number {
+	return size ? Math.max( 0, displaySizes().findIndex( m => m[0] === size[0] && m[1] === size[1] ) ) : 0;
 }
 export interface VideoOptions {
 	readonly custom?: VideoRecords;
 	readonly active: 0 | 1;
 	readonly records: readonly [readonly number[], readonly number[]];
-	readonly displayHeight?: number;
+	readonly displaySize?: readonly [number, number];
 }
 // 5CDC20 initializes the native medium detail record; slot 14 is not displayed.
 // Slot 1 (UIIT_STT_SHADOW_DETAIL) defaults to 0 (UIIT_STT_NONE / nothing) for new players.
@@ -137,14 +161,16 @@ export function videoOptions( value: unknown ): VideoOptions {
 			) || videoRows().some( spec => row[spec.slot]! >= spec.entries.length )
 		) throw Error( "Invalid video record" );
 	}
-	if ( v.displayHeight !== undefined && !displayHeights().includes( v.displayHeight ) ) {
-		throw Error( "Invalid display height" );
+	// A saved size must be a listed mode. The retired height-only setting
+	// (displayHeight) stretched the page; it is dropped, not converted.
+	if ( v.displaySize !== undefined && displaySizeIndex( v.displaySize ) === 0 ) {
+		throw Error( "Invalid display size" );
 	}
 	return {
 		active: v.active,
 		records: [ [ ...v.records[0] ], [ ...v.records[1] ] ],
 		...(v.custom ? { custom: [ [ ...v.custom[0] ], [ ...v.custom[1] ] ] as VideoRecords } : {}),
-		...(v.displayHeight ? { displayHeight: v.displayHeight } : {})
+		...(v.displaySize ? { displaySize: [ v.displaySize[0], v.displaySize[1] ] as const } : {})
 	};
 }
 /*

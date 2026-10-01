@@ -14,7 +14,6 @@ package main
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"strings"
 	"time"
 
 	"opensro.online/server/internal/cluster/shard"
@@ -436,35 +435,31 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	game.items.UpdateExperience = stats.ExperienceUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()
+	// Delivery resolves sessions from their bindings alone and never reads the
+	// character store: the action runtime publishes from inside character
+	// doors (the store's write lock), where any store read would deadlock.
 	game.items.PushCharacterFrames = func(divisionID, characterName string, frames []wire.Frame) {
-		for _, session := range hub.SessionsInDivision(divisionID) {
-			bound, _, ok := enterworld.SessionCharacter(game.deps, session)
-			if !ok || !strings.EqualFold(bound.Name, characterName) {
-				continue
-			}
+		for _, session := range hub.CharacterSessions(divisionID, characterName) {
 			action.SendFrames(session, frames)
 		}
 	}
 	game.items.PushDivisionPeerFrames = func(divisionID, exceptCharacterName string, frames []wire.Frame) {
 		if exceptCharacterName != "" {
-			var sourceGID uint32
-			game.deps.Read(divisionID, func() {
-				for _, character := range game.deps.CharactersForDivision(divisionID) {
-					if character != nil && strings.EqualFold(character.Name, exceptCharacterName) {
-						sourceGID = enterworld.ObjectIDForCharacter(character)
-						break
-					}
-				}
-			})
-			action.BroadcastObservedFrames(hub, divisionID, 0, sourceGID, frames)
+			// A character without a bound session is not in the world, so
+			// nobody can observe it and its frames have no audience.
+			sources := hub.CharacterSessions(divisionID, exceptCharacterName)
+			if len(sources) == 0 {
+				return
+			}
+			if sourceGID, ok := sources[0].CharacterObjectID(); ok {
+				action.BroadcastObservedFrames(hub, divisionID, 0, sourceGID, frames)
+			}
 			return
 		}
 		for _, session := range hub.SessionsInDivision(divisionID) {
-			bound, _, ok := enterworld.SessionCharacter(game.deps, session)
-			if !ok || strings.EqualFold(bound.Name, exceptCharacterName) {
-				continue
+			if _, _, ok := session.CharacterBinding(); ok {
+				action.SendFrames(session, frames)
 			}
-			action.SendFrames(session, frames)
 		}
 	}
 

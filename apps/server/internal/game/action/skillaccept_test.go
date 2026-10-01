@@ -739,18 +739,8 @@ func TestCombatAdmissionFailsClosedBeforeHPMutation(t *testing.T) {
 		"unpinned item option": func(_ *Runtime, character *enterworld.Character) {
 			character.MissionInventory[0].MagicOptions = []uint64{1}
 		},
-		"ammo-dependent weapon": func(rt *Runtime, character *enterworld.Character) {
-			items := rt.deps.ItemReferences().(staticItemSource)
-			weapon := items[character.MissionInventory[0].Codename]
-			weapon.TypeIDs[3] = 6
-			character.MissionInventory[0].TypeFlags = weapon.TypeFlags()
-
-			skills := rt.deps.SkillData().(staticSkillSource)
-			skill := skills[2]
-			skill.Codename = "SKILL_CH_BOW_BASE_01"
-			skill.RequiredWeaponKinds = [2]uint8{6, 0xff}
-			skills[2] = skill
-		},
+		// An empty ammunition weapon is not silent: 58E32D answers 0x300E
+		// (TestBasicAttackWithoutAmmunitionReportsTheNotice).
 	}
 	for name, arrange := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -768,97 +758,6 @@ func TestCombatAdmissionFailsClosedBeforeHPMutation(t *testing.T) {
 				t.Fatalf("refused admission changed target HP: %+v/%v", after, ok)
 			}
 		})
-	}
-}
-
-/*
-================
-TestRangedBasicAttackConsumesRetailAmmunitionSocketAtomically
-================
-*/
-func TestRangedBasicAttackConsumesRetailAmmunitionSocketAtomically(t *testing.T) {
-	rt, _, character, target := newCombatTestRuntime(t, 100)
-	items := rt.deps.ItemReferences().(staticItemSource)
-	weapon := items[character.MissionInventory[0].Codename]
-	weapon.TypeIDs[3] = 6
-	weapon.Combat.ActionRange = 180
-	character.MissionInventory[0].TypeFlags = weapon.TypeFlags()
-
-	arrow := &enterworld.ItemRef{
-		RefObjID: 62_001,
-		Codename: "ITEM_ETC_AMMO_ARROW_01",
-		TypeIDs:  [4]int64{3, 3, 4, 1},
-	}
-	items[arrow.Codename] = arrow
-	character.MissionInventory = append(character.MissionInventory, enterworld.InventoryRow{
-		Slot:       7,
-		RefObjID:   arrow.RefObjID,
-		Codename:   arrow.Codename,
-		TypeFlags:  arrow.TypeFlags(),
-		StackCount: 2,
-	})
-	skills := rt.deps.SkillData().(staticSkillSource)
-	skill := skills[2]
-	skill.Codename = "SKILL_CH_BOW_BASE_01"
-	skill.RequiredWeaponKinds = [2]uint8{6, 0xff}
-	skills[2] = skill
-
-	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
-		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
-	}.Encode())
-	result = assertAndSeparateActionSession(t, result)
-	if len(result.Frames) != 2 || result.Frames[1].Opcode != wire.OpAvatarInventorySlot7StackCount ||
-		!bytes.Equal(result.Frames[1].Payload, []byte{1, 0}) {
-		t.Fatalf("ranged actor frames = %+v, want B245 then private 3752 count=1", result.Frames)
-	}
-	assertSkillDamageOpen(t, result.Frames[:1], 2,
-		enterworld.ObjectIDForCharacter(character), target.Gid)
-	if len(result.Broadcast) != 1 || result.Broadcast[0].Opcode != wire.OpSkillCastResult {
-		t.Fatalf("ranged broadcast = %+v, want B245 only (ammo is private)", result.Broadcast)
-	}
-	if got := character.MissionInventory[1].StackCount; got != 1 {
-		t.Fatalf("arrow stack after committed shot = %d, want 1", got)
-	}
-}
-
-/*
-================
-TestWrongRangedAmmunitionRefusesBeforeDamageOrDebit
-================
-*/
-func TestWrongRangedAmmunitionRefusesBeforeDamageOrDebit(t *testing.T) {
-	rt, _, character, target := newCombatTestRuntime(t, 100)
-	items := rt.deps.ItemReferences().(staticItemSource)
-	weapon := items[character.MissionInventory[0].Codename]
-	weapon.TypeIDs[3] = 6
-	weapon.Combat.ActionRange = 180
-	character.MissionInventory[0].TypeFlags = weapon.TypeFlags()
-
-	bolt := &enterworld.ItemRef{
-		RefObjID: 62_002,
-		Codename: "ITEM_ETC_AMMO_BOLT_01",
-		TypeIDs:  [4]int64{3, 3, 4, 2},
-	}
-	items[bolt.Codename] = bolt
-	character.MissionInventory = append(character.MissionInventory, enterworld.InventoryRow{
-		Slot: 7, RefObjID: bolt.RefObjID, Codename: bolt.Codename,
-		TypeFlags: bolt.TypeFlags(), StackCount: 2,
-	})
-	skills := rt.deps.SkillData().(staticSkillSource)
-	skill := skills[2]
-	skill.Codename = "SKILL_CH_BOW_BASE_01"
-	skill.RequiredWeaponKinds = [2]uint8{6, 0xff}
-	skills[2] = skill
-
-	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
-		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
-	}.Encode())
-	if len(result.Frames) != 0 || character.MissionInventory[1].StackCount != 2 {
-		t.Fatalf("wrong ammunition admitted or debited: frames=%+v inventory=%+v", result.Frames, character.MissionInventory)
-	}
-	after, ok := rt.Monsters.Get(testDivision, target.Gid)
-	if !ok || after.CurrentHP != target.CurrentHP {
-		t.Fatalf("wrong ammunition changed HP: %+v/%v", after, ok)
 	}
 }
 

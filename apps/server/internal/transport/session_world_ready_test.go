@@ -9,7 +9,7 @@ func TestWorldReadyIsOneShotPerCharacterBinding(t *testing.T) {
 	if session.TryMarkWorldReady() {
 		t.Fatal("unbound session crossed world-ready")
 	}
-	session.BindCharacter("global-official", "asd2")
+	session.BindCharacter("global-official", "asd2", 0)
 	if session.WorldReady() {
 		t.Fatal("BindCharacter published world-ready before scene admission")
 	}
@@ -20,7 +20,7 @@ func TestWorldReadyIsOneShotPerCharacterBinding(t *testing.T) {
 		t.Fatal("duplicate game-ready transition was accepted")
 	}
 
-	session.BindCharacter("global-official", "another")
+	session.BindCharacter("global-official", "another", 0)
 	if session.WorldReady() {
 		t.Fatal("new character binding inherited prior world-ready state")
 	}
