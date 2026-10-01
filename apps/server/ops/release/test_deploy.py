@@ -43,6 +43,7 @@ class DeployTests(unittest.TestCase):
 					"gameworld_memory_mb": 1024, "public_webhook": "public-fixture", "staff_webhook": "staff-fixture",
 				}
 				calls = []
+				manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
 
 				# ================
 				# execute
@@ -65,9 +66,9 @@ class DeployTests(unittest.TestCase):
 					patch.object(deploy, "announce") as announcement, patch.object(deploy, "NOTICE_SECONDS", 0):
 					if failure:
 						with self.assertRaises((RuntimeError, subprocess.CalledProcessError)):
-							deploy.deploy(config, staging, {"commit": "a" * 40})
+							deploy.deploy(config, staging, manifest)
 					else:
-						deploy.deploy(config, staging, {"commit": "a" * 40})
+						deploy.deploy(config, staging, manifest)
 					self.assertEqual(calls[-1], ["nomad", "acl", "token", "delete", "accessor-fixture"])
 					deployment_calls = [call for call in calls if len(call) > 1 and call[1] == "deploy"]
 					if failure in ("validate", "notice"):
@@ -99,6 +100,29 @@ class DeployTests(unittest.TestCase):
 				deploy.upgrade_authorities(module, "sro-nomad", ["-namespace", "sro"], {})
 			upgrader = ["runuser", "-u", "sro", "--", str(module / "sro-authority-upgrade"), "-authority-dir", str(authority)]
 			self.assertEqual(calls, [["sro-nomad", "stop", "-namespace", "sro"], upgrader, upgrader + ["-commit"]])
+
+	# ================
+	# test_inputs_follow_the_deployed_release
+	#
+	# A release without a later-added file removes the stale copy, and an
+	# upgrade release that lacks the upgrader is refused before anything runs.
+	# ================
+	def test_inputs_follow_the_deployed_release(self):
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			staging, module = root / "staging", root / "module"
+			names = [name for name in FILES if name != "sro-authority-upgrade"]
+			for name in FILES:
+				for base in (staging, module):
+					path = base / name
+					path.parent.mkdir(parents=True, exist_ok=True)
+					path.write_text("fixture")
+			deploy.copy_inputs(staging, module, names)
+			self.assertFalse((module / "sro-authority-upgrade").exists())
+			self.assertTrue((module / "agent").exists())
+			with patch.object(deploy, "run") as run, self.assertRaisesRegex(ValueError, "sro-authority-upgrade"):
+				deploy.deploy({"module": str(module)}, staging, {"commit": "a" * 40, "files": dict.fromkeys(names, "d")}, upgrade=True)
+			run.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 import tarfile
 
-from bundle import FILES
+from bundle import release_files
 from client_bundle import FORMAT, add_bytes, application_files, validate_base
 from release_state import PLAN_FORMAT, admit, identity, read_state
 from retention import directory
@@ -55,8 +55,9 @@ def prepare(config, request, scratch):
 			"baseRelease": plan["baseRelease"], "plan": plan}
 		digests = {name: row["sha256"] for name, row in files.items()}
 	else:
-		if manifest["commit"] != target["commit"] or set(manifest["files"]) != set(FILES):
+		if manifest["commit"] != target["commit"]:
 			raise ValueError("retained server identity mismatch")
+		release_files(manifest["files"])
 		manifest.update(format="opensro-server-v2", plan=plan)
 		raw = json.dumps(manifest).encode()
 		digests = manifest["files"]

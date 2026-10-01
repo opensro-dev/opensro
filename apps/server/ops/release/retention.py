@@ -17,7 +17,7 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from bundle import FILES
+from bundle import release_files
 from client_bundle import application_files, safe_name
 from release_state import identity
 
@@ -45,7 +45,7 @@ def preserve(config, component, row, live, raw_manifest):
 	if component == "server":
 		if manifest["commit"] != row["commit"]:
 			raise ValueError("server retention identity mismatch")
-		inputs = {name: (Path(live) / name, manifest["files"][name]) for name in FILES}
+		inputs = {name: (Path(live) / name, manifest["files"][name]) for name in release_files(manifest["files"])}
 	else:
 		if manifest["releaseId"] != row["release"]:
 			raise ValueError("client retention identity mismatch")

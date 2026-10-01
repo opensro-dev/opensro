@@ -152,6 +152,43 @@ class BundleTests(unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "file list"):
 			unpack(self.archive, self.root / "unpacked")
 
+	# ================
+	# test_release_built_before_an_added_file
+	#
+	# A release retained before a file joined the bundle still unpacks with its
+	# own file list; an undeclared member is still refused.
+	# ================
+	def test_release_built_before_an_added_file(self):
+		# ================
+		# drop_upgrader
+		# Remove the added file from both the members and the manifest.
+		# ================
+		def drop_upgrader(entries):
+			entries[:] = [entry for entry in entries if entry[0].name != "sro-authority-upgrade"]
+			member, data = entries[-1]
+			manifest = json.loads(data)
+			manifest["files"].pop("sro-authority-upgrade")
+			data = json.dumps(manifest).encode()
+			member.size = len(data)
+			entries[-1] = (member, data)
+		self.rewrite(drop_upgrader)
+		destination = self.root / "unpacked"
+		manifest = unpack(self.archive, destination)
+		self.assertNotIn("sro-authority-upgrade", manifest["files"])
+		self.assertFalse((destination / "sro-authority-upgrade").exists())
+		self.assertTrue((destination / "agent").exists())
+		# ================
+		# stray
+		# A member the manifest does not name.
+		# ================
+		def stray(entries):
+			member = tarfile.TarInfo("sro-authority-upgrade")
+			member.size = 1
+			entries.insert(0, (member, b"x"))
+		self.rewrite(stray)
+		with self.assertRaisesRegex(ValueError, "members"):
+			unpack(self.archive, self.root / "second")
+
 
 if __name__ == "__main__":
 	unittest.main()

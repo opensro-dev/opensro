@@ -29,6 +29,9 @@ FILES = {
 	"ops/nomad/jobs/agent.nomad.hcl": "ops/nomad/jobs/agent.nomad.hcl",
 	"ops/nomad/jobs/gameworld.nomad.hcl": "ops/nomad/jobs/gameworld.nomad.hcl",
 }
+# Files added to FILES after the first release. A release built before one was
+# added does not carry it; every other name is required. FILES only grows.
+ADDED_FILES = frozenset({"sro-authority-upgrade"})
 MAX_ARCHIVE_BYTES = 256 << 20
 MAX_MANIFEST_BYTES = 256 << 10
 COPY_CHUNK_BYTES = 1 << 20
@@ -81,6 +84,20 @@ def validate_plan(plan, commit):
 
 
 # ================
+# release_files
+#
+# The files one release carries, in FILES order: its own manifest decides, so
+# a release retained before a file was added stays deployable. Unknown names
+# and missing original names are refused.
+# ================
+def release_files(names):
+	names = set(names)
+	if not set(FILES) - ADDED_FILES <= names <= set(FILES):
+		raise ValueError("invalid release file list")
+	return [name for name in FILES if name in names]
+
+
+# ================
 # unpack
 #
 # Validate names, types, multiplicity and hashes before writing any file.
@@ -91,22 +108,23 @@ def unpack(source, destination):
 		raise ValueError("release exceeds the upload limit")
 	with tarfile.open(source, "r:") as archive:
 		members = archive.getmembers()
-		if len(members) != len(FILES) + 1 or {item.name for item in members} != set(FILES) | {"release.json"}:
-			raise ValueError("unexpected or duplicate release members")
 		if any(not item.isfile() or item.size < 0 or item.size > MAX_ARCHIVE_BYTES for item in members):
 			raise ValueError("release contains a non-file or oversized member")
+		if "release.json" not in {item.name for item in members}:
+			raise ValueError("release has no manifest")
 		if archive.getmember("release.json").size > MAX_MANIFEST_BYTES:
 			raise ValueError("oversized release manifest")
 		manifest = json.load(archive.extractfile("release.json"))
 		if manifest.get("format") != "opensro-server-v2" or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("commit", "")):
 			raise ValueError("invalid release identity")
 		validate_plan(manifest.get("plan"), manifest["commit"])
-		if set(manifest.get("files", {})) != set(FILES):
-			raise ValueError("invalid release file list")
+		names = release_files(manifest.get("files", {}))
+		if len(members) != len(names) + 1 or {item.name for item in members} != set(names) | {"release.json"}:
+			raise ValueError("unexpected or duplicate release members")
 		for name, digest in manifest["files"].items():
 			if hashlib.file_digest(archive.extractfile(name), "sha256").hexdigest() != digest:
 				raise ValueError("release digest mismatch: " + name)
-		for name in FILES:
+		for name in names:
 			path = destination / name
 			path.parent.mkdir(parents=True, exist_ok=True)
 			with path.open("xb") as output:

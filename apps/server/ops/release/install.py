@@ -20,7 +20,7 @@ import shutil
 import subprocess
 import tempfile
 
-from bundle import FILES
+from bundle import release_files
 from client_bundle import application_files
 from release_state import STATE_FORMAT, identity, write_state
 
@@ -106,7 +106,7 @@ def inspect_live(config, manifest, client_commit, contracts):
 			raise ValueError("live client application differs from its manifest")
 	module = Path(config["module"])
 	server = json.loads((module / "release.json").read_text())
-	for name in FILES:
+	for name in release_files(server["files"]):
 		with (module / name).open("rb") as stream:
 			if hashlib.file_digest(stream, "sha256").hexdigest() != server["files"][name]:
 				raise ValueError("live server input differs from its release: " + name)

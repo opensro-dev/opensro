@@ -23,7 +23,7 @@ import sys
 import time
 from urllib.parse import urlsplit
 
-from bundle import FILES, MAX_ARCHIVE_BYTES, unpack
+from bundle import FILES, MAX_ARCHIVE_BYTES, release_files, unpack
 from release_state import admit, begin, complete, identity, read_state, store_upgrade_required, write_state
 from retention import preserve
 
@@ -82,16 +82,20 @@ def run(arguments, *, cwd=None, env=None, capture=False):
 # copy_inputs
 #
 # Task binaries already live in Nomad's immutable release tree. Replacing
-# deployer inputs therefore does not modify a running executable.
+# deployer inputs therefore does not modify a running executable. A file the
+# deployed release does not carry (a revert to a release built before it was
+# added) is removed, so the module holds exactly that release's inputs.
 # ================
-def copy_inputs(source, module):
-	for name in FILES:
+def copy_inputs(source, module, names):
+	for name in names:
 		target = module / name
 		target.parent.mkdir(parents=True, exist_ok=True)
 		temporary = target.with_name(target.name + ".incoming")
 		shutil.copyfile(source / name, temporary)
 		temporary.chmod(0o755 if FILES[name].startswith("bin/") else 0o644)
 		os.replace(temporary, target)
+	for name in set(FILES) - set(names):
+		(module / name).unlink(missing_ok=True)
 
 
 # ================
@@ -173,6 +177,9 @@ def upgrade_authorities(module, executable, arguments, environment):
 # ================
 def deploy(config, staging, manifest, notice=True, upgrade=False):
 	module = Path(config["module"])
+	names = release_files(manifest["files"])
+	if upgrade and "sro-authority-upgrade" not in names:
+		raise ValueError("a store upgrade release must carry sro-authority-upgrade")
 	clean_env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root"}
 	version = run(["nomad", "version"], capture=True).stdout.splitlines()[0]
 	if version != "Nomad v" + config["nomad_version"]:
@@ -190,7 +197,7 @@ def deploy(config, staging, manifest, notice=True, upgrade=False):
 		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"])]
 	executable = str(module / "sro-nomad")
 	try:
-		copy_inputs(staging, module)
+		copy_inputs(staging, module, names)
 		run([str(module / "sro-provision-identity"), "-state-dir", str(module / ".state/cluster")], cwd=module, env=clean_env)
 		cluster = module / ".state/cluster"
 		shutil.chown(cluster, user="root", group="sro")
