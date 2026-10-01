@@ -19,7 +19,7 @@ const { createGeometryResources } = await import(
 );
 globalThis.GPUBufferUsage = { UNIFORM: 1, COPY_DST: 2, STORAGE: 4, VERTEX: 8, INDEX: 16 };
 globalThis.GPUTextureUsage = { TEXTURE_BINDING: 1, COPY_DST: 2 };
-function fixture() {
+function fixture( dynamicVertices = true ) {
 	const samplers = [],
 		writes = [],
 		gpu = {
@@ -78,7 +78,8 @@ function fixture() {
 		colors: new Float32Array( 400 ).fill( .75 ),
 		maskUVs: new Float32Array( 200 ).fill( .5 ),
 		indices: Uint32Array.of( 0, 1, 2 ),
-		transform: new Float32Array( 16 )
+		transform: new Float32Array( 16 ),
+		dynamicVertices
 	};
 	const draw = resources.commands.upload( data );
 	writes.length = 0;
@@ -136,6 +137,16 @@ test("invalid later ranges and attributes fail before any mutation; empty update
 	f.data.positions[90] = 3;
 	f.resources.commands.updatePositions( f.draw, f.data.positions, undefined, undefined, [ [ 30, 1 ] ] );
 	assert.deepEqual( f.draw.vertices.bytes.subarray( 0, 56 ), before.subarray( 0, 56 ) );
+	f.resources.dispose();
+});
+
+test("a mesh uploaded without dynamicVertices keeps no vertex mirror and refuses a position update", () => {
+	const f = fixture( false );
+	assert.throws(
+		() => f.resources.commands.updatePositions( f.draw, f.data.positions ),
+		/dynamicVertices/
+	);
+	assert.equal( f.writes.length, 0 );
 	f.resources.dispose();
 });
 

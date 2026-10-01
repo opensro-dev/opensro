@@ -7,7 +7,6 @@ apps/client-next/src/engine/contracts/damage-text.ts
 apps/client-next/src/engine/contracts/effective-hp.ts
 apps/client-next/src/engine/contracts/footprint.ts
 apps/client-next/src/engine/contracts/frontend.ts
-apps/client-next/src/engine/contracts/geometry.ts
 apps/client-next/src/engine/contracts/input.ts
 apps/client-next/src/engine/contracts/item-process.ts
 apps/client-next/src/engine/contracts/message.ts
@@ -164,12 +163,10 @@ apps/client-next/src/engine/foundation/rendering/dock-slots.ts
 apps/client-next/src/engine/foundation/rendering/dungeon-water.ts
 apps/client-next/src/engine/foundation/rendering/equipment-glow.ts
 apps/client-next/src/engine/foundation/rendering/flares.ts
-apps/client-next/src/engine/foundation/rendering/follow-camera.ts
 apps/client-next/src/engine/foundation/rendering/footprints.ts
 apps/client-next/src/engine/foundation/rendering/frontend-camera.ts
 apps/client-next/src/engine/foundation/rendering/geometry-validation.ts
 apps/client-next/src/engine/foundation/rendering/geometry-vertices.ts
-apps/client-next/src/engine/foundation/rendering/geometry.ts
 apps/client-next/src/engine/foundation/rendering/material-timeline.ts
 apps/client-next/src/engine/foundation/rendering/modifier-delta.ts
 apps/client-next/src/engine/foundation/rendering/monster-scale.ts
@@ -177,7 +174,6 @@ apps/client-next/src/engine/foundation/rendering/object-visibility.ts
 apps/client-next/src/engine/foundation/rendering/particle-ribbon.ts
 apps/client-next/src/engine/foundation/rendering/pick-destination.ts
 apps/client-next/src/engine/foundation/rendering/pick-volume.ts
-apps/client-next/src/engine/foundation/rendering/picking.ts
 apps/client-next/src/engine/foundation/rendering/scenery-modifiers.ts
 apps/client-next/src/engine/foundation/rendering/scenery-particles.ts
 apps/client-next/src/engine/foundation/rendering/screen-point.ts
@@ -194,7 +190,6 @@ apps/client-next/src/engine/foundation/rendering/ui-texture-residency.ts
 apps/client-next/src/engine/foundation/rendering/world-environment.ts
 apps/client-next/src/engine/foundation/rendering/world-material.ts
 apps/client-next/src/engine/foundation/rendering/world-math.ts
-apps/client-next/src/engine/foundation/rendering/world-scene.ts
 apps/client-next/src/engine/foundation/ui/academy-layout.ts
 apps/client-next/src/engine/foundation/ui/action-layout.ts
 apps/client-next/src/engine/foundation/ui/alchemy-selection.ts
@@ -306,7 +301,6 @@ apps/client-next/src/engine/runtime/renderer/device/animation.ts
 apps/client-next/src/engine/runtime/renderer/device/bloom.ts
 apps/client-next/src/engine/runtime/renderer/device/character-shadows.ts
 apps/client-next/src/engine/runtime/renderer/device/flares.ts
-apps/client-next/src/engine/runtime/renderer/device/geometry.ts
 apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
 apps/client-next/src/engine/runtime/renderer/device/pipelines.ts
 apps/client-next/src/engine/runtime/renderer/device/thunder.ts
@@ -315,7 +309,6 @@ apps/client-next/src/engine/runtime/renderer/frame/frame.ts
 apps/client-next/src/engine/runtime/renderer/internal/gpu-contract.ts
 apps/client-next/src/engine/runtime/renderer/readback/readback.ts
 apps/client-next/src/engine/runtime/renderer/surface/surface.ts
-apps/client-next/src/engine/runtime/renderer/weather/weather.ts
 apps/client-next/src/engine/runtime/renderer/world/world.ts
 apps/client-next/src/engine/runtime/runtime-errors.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
@@ -546,7 +539,6 @@ apps/client-next/tools/generate-windows1252.mjs
 apps/client-next/tools/lib/character-facing-probe.mjs
 apps/client-next/tools/lib/combat-probe.mjs
 apps/client-next/tools/lib/frame-analysis.mjs
-apps/client-next/tools/lib/frame-window.mjs
 apps/client-next/tools/lib/guide-ui-probe.mjs
 apps/client-next/tools/lib/inventory-probe.mjs
 apps/client-next/tools/lib/movement-trace.mjs
@@ -557,7 +549,6 @@ apps/client-next/tools/lib/release-profile.mjs
 apps/client-next/tools/lib/status-notice-probe.mjs
 apps/client-next/tools/lib/ui-product-probe.mjs
 apps/client-next/tools/lib/ui-window-probe.mjs
-apps/client-next/tools/profile-world.mjs
 apps/client-next/tools/published-assets.mjs
 apps/client-next/tools/published-delivery.mjs
 apps/client-next/tools/published-pack.mjs

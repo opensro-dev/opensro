@@ -103,13 +103,18 @@ export function createCursor() {
 	/*
 	================
 	present
+
+	hit is the element under the pointer when the caller already knows it
+	(a pointer event's own hit test); otherwise the current point is
+	hit-tested here. elementFromPoint forces a synchronous layout, so it must
+	not run on every pointer move.
 	================
 	*/
-	function present( target: EventTarget | null = document.activeElement ) {
+	function present( target: EventTarget | null = document.activeElement, hit?: Element | null ) {
 		// Focus is not the start of an editor gesture: pointer entry precedes it.
 		// Hit-test the current point rather than retaining a potentially removed UI
 		// element or trusting event.target while an element owns pointer capture.
-		const hovered = point ? document.elementFromPoint( point[0], point[1] ) : null;
+		const hovered = hit !== undefined ? hit : point ? document.elementFromPoint( point[0], point[1] ) : null;
 		const editing = !!point && !document.hidden && typing.complete && typing.naturalWidth > 0 &&
 			(editable( target ) || editable( hovered ));
 		if ( editing ) {
@@ -151,7 +156,12 @@ export function createCursor() {
 		point = [ event.clientX, event.clientY ];
 		mouseButtons = event.buttons;
 		world();
-		present();
+		// An uncaptured event's target is the browser's own hit at this point.
+		// While an element holds capture (the camera drag on the canvas, a
+		// dragged control) no editor under the pointer can take the gesture, so
+		// none is hovered.
+		const target = event.target instanceof Element ? event.target : null;
+		present( document.activeElement, target && !target.hasPointerCapture( event.pointerId ) ? target : null );
 	}
 
 	typing.addEventListener( "load", () => present(), { signal: lifetime.signal } );

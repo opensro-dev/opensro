@@ -73,7 +73,7 @@ export function createWorldRenderer(budget?:number,readAlpha?:(image:ImageBitmap
   const data=selectionDecalGeometry(interactionCells,point);if(!data)return [];
   const imageKey=JSON.stringify([path]);let image=imageDraws.get(imageKey);if(!image){image=textures.upload(source,[source],false);imageDraws.set(imageKey,image);}
   if(decalDraw&&decalVertexCount===data.positions.length&&decalSlot===slot&&decalImage===image)geometry.updatePositions(decalDraw,data.positions,undefined,data.uvs);
-  else {if(decalDraw)geometry.release(decalDraw);decalDraw=geometry.upload(data,image);decalVertexCount=data.positions.length;decalSlot=slot;}
+  else {if(decalDraw)geometry.release(decalDraw);decalDraw=geometry.upload({...data,dynamicVertices:true},image);decalVertexCount=data.positions.length;decalSlot=slot;}
   decalImage=image;decalKey=key;return [decalDraw];
  }
 
@@ -120,6 +120,20 @@ export function createWorldRenderer(budget?:number,readAlpha?:(image:ImageBitmap
  // These are derived from owned scene metadata. Only blended depth order is
  // camera-dependent; native material-set order remains fixed until replacement.
  let orderedGroups:WorldGroup[]=[],objectOrder=new Map<string,number>();
+ // Shadow receivers by terrain cell. The visible terrain ranges change only
+ // when a group's selection does, so the map is rebuilt on that change, not
+ // every frame (it was the largest self cost of the frame).
+ type ShadowSurfaces=Map<string,import('@/engine/foundation/rendering/character-shadow').ShadowTerrainSurface[]>;
+ let shadowSurfaces:ShadowSurfaces=new Map(),shadowSurfaceInputs:readonly unknown[]=[];
+ function terrainShadowSurfaces():ShadowSurfaces{
+  const inputs:unknown[]=[orderedGroups];
+  for(const group of orderedGroups)if(group.material.terrain)inputs.push(selections.get(group)?.chosen);
+  if(inputs.length===shadowSurfaceInputs.length&&inputs.every((input,i)=>input===shadowSurfaceInputs[i]))return shadowSurfaces;
+  const surfaces:ShadowSurfaces=new Map();
+  for(const group of orderedGroups)if(group.material.terrain)for(const range of selections.get(group)?.chosen??[]){const key=range.cell.join(':'),rows=surfaces.get(key)??[];rows.push({positions:group.geometry.positions,indices:group.geometry.indices,start:range.indexStart,count:range.indexCount});surfaces.set(key,rows);}
+  shadowSurfaces=surfaces;shadowSurfaceInputs=inputs;
+  return surfaces;
+ }
  let previousVisible=new Set<WorldGroup>(),previousTriangles=new Map<WorldGroup,number>();
  function compareGroups(a:WorldGroup,b:WorldGroup):number{
   const layerA=drawPhase(a),layerB=drawPhase(b);
@@ -203,8 +217,7 @@ const previous=new Map(textureMotions.map(row=>[row.group.id,row]));if(!retainTe
   characterShadows(candidates:readonly {projection:import('@/engine/foundation/rendering/character-shadow').ShadowProjection;blobSize?:number;parts:readonly {draw:GeometryDraw;instance:number}[]}[],geometry:GeometryCommands,textures:ImageCommands){
    updateInteractionCells();let image:ImageDraw|undefined;
    if(candidates.some(c=>c.blobSize!==undefined)){const source=images.get(BLOB_SHADOW_TEXTURE)?.source;if(source){const key=JSON.stringify([BLOB_SHADOW_TEXTURE]);image=imageDraws.get(key);if(!image){image=textures.upload(source,[source],false);imageDraws.set(key,image);}}}
-   const surfaces=new Map<string,import('@/engine/foundation/rendering/character-shadow').ShadowTerrainSurface[]>();
-   for(const group of orderedGroups)if(group.material.terrain)for(const range of selections.get(group)?.chosen??[]){const key=range.cell.join(':'),rows=surfaces.get(key)??[];rows.push({positions:group.geometry.positions,indices:group.geometry.indices,start:range.indexStart,count:range.indexCount});surfaces.set(key,rows);}
+   const surfaces=terrainShadowSurfaces();
    const requests=candidates.flatMap(c=>{if(c.blobSize!==undefined&&!image)return [];const receiver=characterShadowReceiver(interactionCells,c.projection,c.blobSize,surfaces);return receiver?[{matrix:c.projection.matrix,receiver,parts:c.parts,blob:c.blobSize!==undefined}]:[];});
    return geometry.characterShadows?.(requests,image)??[];
   },

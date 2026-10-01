@@ -498,8 +498,18 @@ export function createUiBridge(
 			}
 			if ( root.getAttribute( "aria-label" ) !== state.title ) root.setAttribute( "aria-label", state.title );
 			if ( message.textContent !== state.message ) message.textContent = state.message;
+			// Hit geometry this publication changes. Pointer motion over unchanged
+			// controls reports hover through native pointerover/pointerout; only a
+			// changed layout under a still pointer needs the hit test (which forces a
+			// synchronous layout, so it no longer runs on every frame).
+			let hitLayoutChanged = false;
 			const wanted = new Set( state.controls.map( c => c.id ) );
-			for ( const id of controls.keys() ) if ( !wanted.has( id ) ) retire( id );
+			for ( const id of controls.keys() ) {
+				if ( !wanted.has( id ) ) {
+					retire( id );
+					hitLayoutChanged = true;
+				}
+			}
 			const box = canvas.getBoundingClientRect();
 			for ( const [order, control] of state.controls.entries() ) {
 				let slot = controls.get( control.id );
@@ -508,6 +518,7 @@ export function createUiBridge(
 					slot = undefined;
 				}
 				if ( !slot ) {
+					hitLayoutChanged = true;
 					const element = control.kind === "region" ?
 						document.createElement( "div" ) :
 						control.kind === "button" ?
@@ -536,7 +547,10 @@ export function createUiBridge(
 					controls.set( control.id, slot );
 				}
 				const el = slot.element;
-				if ( el.style.zIndex !== String( order ) ) el.style.zIndex = String( order );
+				if ( el.style.zIndex !== String( order ) ) {
+					el.style.zIndex = String( order );
+					hitLayoutChanged = true;
+				}
 				if ( el instanceof HTMLInputElement ) {
 					const limit = control.maxLength ?? (control.kind === "password" ? 1024 : 256);
 					if ( el.maxLength !== limit ) el.maxLength = limit;
@@ -595,13 +609,20 @@ export function createUiBridge(
 					top = box.top + y * scale + "px",
 					width = w * scale + "px",
 					height = h * scale + "px";
-				if ( el.style.left !== left ) el.style.left = left;
-				if ( el.style.top !== top ) el.style.top = top;
-				if ( el.style.width !== width ) el.style.width = width;
-				if ( el.style.height !== height ) el.style.height = height;
+				if (
+					el.style.left !== left || el.style.top !== top || el.style.width !== width ||
+					el.style.height !== height
+				) {
+					el.style.left = left;
+					el.style.top = top;
+					el.style.width = width;
+					el.style.height = height;
+					hitLayoutChanged = true;
+				}
+				if ( !!slot.value.disabled !== !!control.disabled ) hitLayoutChanged = true;
 				slot.value = control;
 			}
-			syncHover();
+			if ( hitLayoutChanged ) syncHover();
 			const request = state.focusRequest;
 			if ( request && request.revision !== focusRevision ) {
 				if ( request.id === null ) {

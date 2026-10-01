@@ -1657,6 +1657,7 @@ export function createCharacters(
 						let draw = batch.draws[p];
 						if ( !draw ) {
 							draw = geometry.upload( {
+								dynamicVertices: true,
 								positions,
 								colors,
 								uvs,
