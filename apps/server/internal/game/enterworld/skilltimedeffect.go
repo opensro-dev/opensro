@@ -28,6 +28,8 @@ const (
 	tagTimedThreat             = 0x746e7432
 	tagTimedDamageRate         = 0x647275
 	tagTimedMaxHPPenalty       = 0x706d6870
+	tagTimedIncomingReduction  = 0x6f646172
+	tagTimedOverlap            = 0x6f766c32
 	parameterWizardMP          = 0x57494d44
 	parameterBardMP            = 0x42444d44
 	parameterMusicArea         = 0x4d554552
@@ -49,12 +51,14 @@ type SkillTimedEffect struct {
 	// Periodic has a separate execution contract from friendly timed buffs.
 	Periodic SkillPeriodicEffect
 	// ItemProgram marks an item-owned timed job (compileTimedItemEffect).
-	ItemProgram                   bool
-	HP, MP, Evasion, Accuracy     SkillFlatRate
-	Recovery                      SkillRecoveryRates
-	GoldDropPercent               uint32
-	Pinned                        bool
-	Persistent                    bool
+	ItemProgram               bool
+	HP, MP, Evasion, Accuracy SkillFlatRate
+	Recovery                  SkillRecoveryRates
+	GoldDropPercent           uint32
+	Pinned                    bool
+	Persistent                bool
+	// IncomingReduction marks an admitted odar block (Earth Barrier).
+	IncomingReduction             bool
 	Physical, Magical, CapPercent uint32
 	// Targeted rows (Warrior guards, Cleric blessings) install on a player
 	// within column 21's range instead of the caster.
@@ -298,6 +302,14 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Link = SkillEffectLink{Present: true, Group: op.Arguments[0], MaxDistance: op.Arguments[1], MaxOutgoing: op.Arguments[2], Board: op.Arguments[3]}
+		case tagTimedIncomingReduction:
+			// odar is installed from BuffModifiers for every recipient (594AC0);
+			// the program only has to agree with that projection.
+			if result.IncomingReduction || op.Count != 2 || !row.BuffModifiers.Odar || op.Arguments[1] != row.BuffModifiers.OdarWord {
+				return
+			}
+			result.IncomingReduction = true
+		case tagTimedOverlap: // ovl2: the replacement descriptor's casting-state word
 		case tagNbuf, tagBbuf: // cancellation policy and secondary board, already projected
 		case tagReqi, tagTimedRequireNot: // 58D480 admits, 59F0E0 re-checks on equipment change
 		case tagEfr: // read above
@@ -345,7 +357,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		result.Block.Present || result.Strength.Present || result.Intellect.Present || row.EffectDurationMs == 0) {
 		return
 	}
-	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present || result.Intellect.Present)
+	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
+		result.Intellect.Present || result.IncomingReduction)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {
