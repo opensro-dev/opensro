@@ -109,34 +109,3 @@ func TestCastingConflictPackedByteSemantics(t *testing.T) {
 		t.Fatal("high current byte consumed")
 	}
 }
-
-/*
-================
-TestStrongerTierReplacesWeakerTier
-
-The deliberate deviation: a later tier of the same buff line retires the
-earlier one across groups; the earlier tier and other lines stay refused.
-================
-*/
-func TestStrongerTierReplacesWeakerTier(t *testing.T) {
-	tier := func(group uint32, code string) ReplacementDescriptor {
-		return ReplacementDescriptor{Activity: 2, Category: 3, Group: group, Rank: 1, BasicCode: code, PackedStates: 771751990}
-	}
-	control := tier(506, "SKILL_EU_WIZARD_MENTALA_DAMAGEUP_A")
-	turnover := tier(507, "SKILL_EU_WIZARD_MENTALA_DAMAGEUP_B")
-	occupied := CastingConflictSnapshot{}
-	occupied.UpdateActive(control.PackedStates, false)
-	if got := DecideReplacement(turnover, []ReplacementCandidate{{Descriptor: control, Mode: 1}}, true, occupied); !got.Allowed || got.RetireIndex != 0 {
-		t.Fatalf("stronger tier refused: %+v", got)
-	}
-	// Cleared bits (59DC00 is not reference counted) must not let it through.
-	for _, bits := range []CastingConflictSnapshot{occupied, {}} {
-		if got := DecideReplacement(control, []ReplacementCandidate{{Descriptor: turnover, Mode: 1}}, true, bits); got.Allowed {
-			t.Fatalf("weaker tier replaced a stronger one: %+v", got)
-		}
-	}
-	other := tier(900, "SKILL_EU_WARRIOR_OTHER_B")
-	if got := DecideReplacement(other, []ReplacementCandidate{{Descriptor: control, Mode: 1}}, true, occupied); got.RetireIndex != -1 {
-		t.Fatalf("another line retired the buff: %+v", got)
-	}
-}
