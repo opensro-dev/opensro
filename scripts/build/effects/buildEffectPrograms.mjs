@@ -185,6 +185,9 @@ export function collectEffectReferences() {
 			add( stage.objectResourcePath );
 			add( stage.secondaryObjectPath );
 		}
+		// 86C440: a stationary skill object (Fire Trap) may be an EFP itself,
+		// published through the skillfx manifest's objects table.
+		if ( record.objectResource?.kind === "effect" ) add( record.objectResource.path );
 	}
 
 	for ( const row of loadCharacterActionEffectRows() ) for ( const resource of row.bloodEffects ) add( resource );
