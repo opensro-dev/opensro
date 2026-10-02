@@ -261,6 +261,26 @@ func resolveLane(
 	if rate != 0 {
 		damage = float64(float32(damage * (1 + rate/100)))
 	}
+	// AE..B1 are written with 80..83's lane layout (odar normalizes its
+	// bits to {basic, skill} x {physical, magical}); the defender's factor
+	// is selected by the same attack kind. The address of this read is not
+	// in the port's corpus: it is inferred from the shared layout and the
+	// "absorbs damage" text of Earth Barrier and the dara item option.
+	taken := float32(0)
+	if attack.Flags&1 != 0 {
+		taken = defender.PhysicalBasicTaken
+		if magical {
+			taken = defender.MagicalBasicTaken
+		}
+	} else if attack.Flags&2 != 0 {
+		taken = defender.PhysicalSkillTaken
+		if magical {
+			taken = defender.MagicalSkillTaken
+		}
+	}
+	if taken != 0 {
+		damage = float64(float32(damage * float64(taken)))
+	}
 	// 58E5F0 body1 sets result bit4; 40E450/40E830 multiply by2
 	// before level, balance and minimum-damage fallback.
 	if attacker.Berserk {

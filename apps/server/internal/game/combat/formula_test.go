@@ -152,3 +152,31 @@ func TestBerserkDamageFlagBothLanes(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestDefenderTakenFactorFollowsLaneAndAttackKind
+
+AE..B1 scale only the matching lane and attack kind: a physical skill hit
+on a defender with a 0.7 physical-skill factor drops from 150 to 105.
+================
+*/
+func TestDefenderTakenFactorFollowsLaneAndAttackKind(t *testing.T) {
+	attacker := Stats{Level: 1, MaxLevel: 1, Strength: 32, Intellect: 32, HitRate: 50,
+		PhysicalAttackMin: 100, PhysicalAttackMax: 200, MagicalAttackMin: 100, MagicalAttackMax: 200}
+	defender := Stats{Level: 1, MaxLevel: 1, EvasionRate: 50, PhysicalSkillTaken: 0.7}
+	for _, tc := range []struct {
+		flags uint32
+		want  uint32
+	}{
+		{physicalAttackFlag | 2, 105},
+		{physicalAttackFlag | 1, 150},
+		{magicalAttackFlag | 2, 150},
+	} {
+		got, err := Resolve(attacker, defender, enterworld.SkillAttack{Present: true, Flags: tc.flags, Percent: 100},
+			(&sequenceRoll{values: []uint32{0, 0, 0, 0}}).next)
+		if err != nil || got.Damage != tc.want {
+			t.Errorf("flags %#x: %+v %v, want damage %d", tc.flags, got, err, tc.want)
+		}
+	}
+}

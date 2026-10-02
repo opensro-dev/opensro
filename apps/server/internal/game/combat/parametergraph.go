@@ -195,6 +195,13 @@ func readParameterStats(g *paramkeeper.Graph, stats *Stats) error {
 		}
 		*dst = float64(v)
 	}
+	for i, dst := range []*float32{&stats.PhysicalBasicTaken, &stats.PhysicalSkillTaken, &stats.MagicalBasicTaken, &stats.MagicalSkillTaken} {
+		v, err := g.Value(uint16(0xae + i))
+		if err != nil {
+			return err
+		}
+		*dst = v
+	}
 	for i, dst := range []*float32{&stats.PhysicalOutgoing, &stats.MagicalOutgoing, &stats.PhysicalIncoming, &stats.MagicalIncoming} {
 		v, err := g.Value(uint16(0xb2 + i))
 		if err != nil {
