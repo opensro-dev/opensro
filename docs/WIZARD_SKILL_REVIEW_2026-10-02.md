@@ -1,4 +1,4 @@
-# Wizard skill PR integration — 2026-10-02
+# Wizard skill PR integration â€” 2026-10-02
 
 PR [#103](https://github.com/opensro-dev/opensro/pull/103) was reviewed at
 9b0eb32efd6246a292b3945f27eb3813d18b583e; PR
