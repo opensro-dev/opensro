@@ -13,6 +13,7 @@ package action
 
 import (
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -55,6 +56,19 @@ func TestLifeControlTradesMaximumHPForMagicalDamage(t *testing.T) {
 	if len(rt.effects.Snapshot(testDivision, c.Name)) != 1 {
 		t.Fatal("Life Control was not installed")
 	}
+	// The release frees the caster; a detached close retires the cast aura.
+	if rt.hasOpenSkillCast(testDivision, c.Name) {
+		t.Fatal("released buff retained the caster's action")
+	}
+	closed := false
+	for _, batch := range rt.drainSkillFinalizes(released + int64(skill.ActionDurationMs)) {
+		for _, f := range batch.Frames {
+			closed = closed || f.Opcode == wire.OpSkillEffectControl && len(f.Payload) == 6 && f.Payload[0] == 2
+		}
+	}
+	if !closed {
+		t.Fatal("Life Control never closed its cast bracket")
+	}
 	buffed, _, err := rt.playerCombatStats(testDivision, c)
 	if err != nil {
 		t.Fatal(err)
@@ -92,5 +106,64 @@ func TestLifeControlTradesMaximumHPForMagicalDamage(t *testing.T) {
 	}
 	if after.MagicalSkillRate != base.MagicalSkillRate {
 		t.Errorf("retired magical rate %v, want %v", after.MagicalSkillRate, base.MagicalSkillRate)
+	}
+}
+
+/*
+================
+TestLifeTurnoverReplacesLifeControl
+
+The deliberate tier deviation through the production owner: Life Turnover
+cast over an active Life Control retires it and installs itself, while a
+Life Control cast over Life Turnover is refused.
+================
+*/
+func TestLifeTurnoverReplacesLifeControl(t *testing.T) {
+	rt, clock, c, _ := newCombatTestRuntime(t, 1000000)
+	control := shippedOffense(t, "SKILL_EU_WIZARD_MENTALA_DAMAGEUP_A_01")
+	turnover := shippedOffense(t, "SKILL_EU_WIZARD_MENTALA_DAMAGEUP_B_01")
+	for _, skill := range []enterworld.SkillRow{control, turnover} {
+		rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	}
+	c.RaceIndex = testInt64(enterworld.RaceEurope)
+	c.Skills = []uint32{control.ID, turnover.ID}
+	c.Intellect = testInt64(2000)
+	c.CurrentMP = testInt64(100000)
+	weapon := rt.deps.ItemReferences().(staticItemSource)[c.MissionInventory[0].Codename]
+	weapon.TypeIDs[3] = 11
+	c.MissionInventory[0].TypeFlags = weapon.TypeFlags()
+	cast := func(skill enterworld.SkillRow) bool {
+		now := clock.NowMs()
+		out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
+		frame, ok := findFrame(out.Frames, wire.OpSkillCastResult)
+		if !ok || frame.Payload[0] != 1 {
+			return false
+		}
+		rt.advanceProjectileCasts(now + int64(skill.ActionCastingTimeMs) + 1)
+		rt.drainStoppedCharacterEffects()
+		// Both tiers share one reuse group: wait it out before the next cast.
+		wait := max(skill.ActionCastingTimeMs+skill.ActionDurationMs, skill.CoolTimeMs) + 1
+		clock.Advance(time.Duration(wait) * time.Millisecond)
+		rt.drainSkillFinalizes(clock.NowMs())
+		return true
+	}
+	active := func() []uint32 {
+		var ids []uint32
+		for _, e := range rt.effects.Snapshot(testDivision, c.Name) {
+			if !e.StopRequested {
+				ids = append(ids, e.SkillID)
+			}
+		}
+		return ids
+	}
+	if !cast(control) || len(active()) != 1 || active()[0] != control.ID {
+		t.Fatalf("Life Control not installed: %v", active())
+	}
+	if !cast(turnover) || len(active()) != 1 || active()[0] != turnover.ID {
+		t.Fatalf("Life Turnover did not replace Life Control: %v", active())
+	}
+	cast(control)
+	if ids := active(); len(ids) != 1 || ids[0] != turnover.ID {
+		t.Fatalf("Life Control replaced the stronger Life Turnover: %v", ids)
 	}
 }
