@@ -11,7 +11,11 @@ Offensive admission owns the rest of a charge's complete instruction stream.
 
 package enterworld
 
-const tagPositionCharge = 0x74656c33
+const (
+	tagPositionTravel   = 0x74656c65 // tele
+	tagPositionTeleport = 0x74656c32 // tel2
+	tagPositionCharge   = 0x74656c33 // tel3
+)
 
 /*
 ================
@@ -32,7 +36,7 @@ type SkillPositionEffect struct {
 decodeSkillPosition
 
 A charge is enabled only after the whole offensive program was admitted.
-The standalone tele branch continues to require its exact ground envelope.
+The standalone tele/tel2 branch continues to require its exact ground envelope.
 ================
 */
 func decodeSkillPosition(fields []string, row SkillRow) SkillPositionEffect {
@@ -45,16 +49,35 @@ func decodeSkillPosition(fields []string, row SkillRow) SkillPositionEffect {
 			}
 		}
 	}
-	if err != nil || p.Len() != 1 || !row.TimingPinned || !row.Consumption.Pinned ||
+	if err != nil || !row.TimingPinned || !row.Consumption.Pinned ||
 		!row.TargetRequired || row.ChainSub || row.ChainNext != 0 ||
 		row.ActionCastingTimeMs != 0 || row.ActionDurationMs != 0 ||
 		row.Consumption.HP != 0 || row.Consumption.HPPercent != 0 ||
 		fields[0] != "1" || fields[15] != "0" || fields[17] != "0" || fields[56] != "0" {
 		return SkillPositionEffect{}
 	}
-	i := p.Instruction(0)
-	if i.Tag != 0x74656c65 || i.Count != 2 || i.Arguments[1] == 0 || i.Arguments[1] > 0x7fffffff {
+	// One ground-travel instruction: tele (Ghost Walk) or tel2 (the Wizard's
+	// Teleport, which 58E010 leaves usable while rooted). Caster getv
+	// modifiers (WIMD) only adjust the prepared cost.
+	var travel SkillInstruction
+	for index := 0; index < p.Len(); index++ {
+		op := p.Instruction(index)
+		switch op.Tag {
+		case tagPositionTravel, tagPositionTeleport:
+			if travel.Tag != 0 {
+				return SkillPositionEffect{}
+			}
+			travel = op
+		case tagGetv:
+			if _, known := SkillParameterFromKey(op.Arguments[0]); !known {
+				return SkillPositionEffect{}
+			}
+		default:
+			return SkillPositionEffect{}
+		}
+	}
+	if travel.Tag == 0 || travel.Count != 2 || travel.Arguments[1] == 0 || travel.Arguments[1] > 0x7fffffff {
 		return SkillPositionEffect{}
 	}
-	return SkillPositionEffect{Pinned: true, Parameter: i.Arguments[0], Range: i.Arguments[1]}
+	return SkillPositionEffect{Pinned: true, Parameter: travel.Arguments[0], Range: travel.Arguments[1]}
 }

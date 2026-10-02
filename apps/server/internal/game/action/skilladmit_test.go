@@ -396,6 +396,38 @@ func TestRootedCasterRefusesTeleport(t *testing.T) {
 
 /*
 ================
+TestRootedWizardTeleportStillTravels
+
+58E010 refuses only tele and tel3 while rooted. The Wizard's Teleport is
+tel2, so a rooted Wizard can still blink out of a bind.
+================
+*/
+func TestRootedWizardTeleportStillTravels(t *testing.T) {
+	skill := shippedOffense(t, "SKILL_EU_WIZARD_PSYCHICA_TELEPORT_A_01")
+	if !skill.CastGate.Tel2 || skill.CastGate.Tele || !skill.PositionEffect.Pinned {
+		t.Fatalf("Teleport shape: gate %+v position %+v", skill.CastGate, skill.PositionEffect)
+	}
+	rt, clock, c, _ := newCombatTestRuntime(t, 100)
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c.Skills = append(c.Skills, skill.ID)
+	mp := int64(skill.Consumption.MP)
+	c.CurrentMP = &mp
+	c.Intellect = testInt64(1000)
+	key := simulation.WorldKey(testDivision, c.Name)
+	from := rt.liveSpawn(key, c, clock.NowMs())
+	rt.ConstrainMovement = func(_ string, _, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+	rt.storePlayerAbnormal(testDivision, c.Name, &abnormal.Block{Mask: abnormal.Root.Bit()})
+	cast := wire.SkillAction{ActionId: skill.ID, HasGroundTarget: true, Region: from.RegionID,
+		GroundX: uint16(from.X + 500), GroundY: uint16(from.Y), GroundZ: uint16(from.Z)}.Encode()
+	out := rt.HandleTargetInteract(testDivision, c, cast)
+	to := rt.liveSpawn(key, c, clock.NowMs())
+	if len(out.Frames) != 3 || to.X != from.X+float64(skill.PositionEffect.Range) {
+		t.Fatalf("rooted Teleport refused or did not travel: %+v %+v -> %+v", out.Frames, from, to)
+	}
+}
+
+/*
+================
 TestShippedReqnThroughCastEntry
 ================
 */

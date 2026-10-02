@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -43,15 +44,20 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 			ids = append(ids, projection.ID)
 		}
 	}
-	if len(ids) != 16 {
-		t.Fatalf("ground-target coverage=%d, want 12 Phantom + 4 Shadow", len(ids))
+	if len(ids) != 20 {
+		t.Fatalf("ground-target coverage=%d, want 12 Phantom + 4 Shadow + 4 Wizard Teleport", len(ids))
 	}
 	for _, id := range ids {
 		skill, ok := source.SkillByID(id)
 		if !ok || !skill.PositionEffect.Pinned || source.ExecutionPlan(id).Kind() != enterworld.SkillExecutionPosition {
 			t.Fatalf("rank %d: %+v", id, skill)
 		}
-		if skill.CoolTimeGroup != 59 || skill.CoolTimeMs != 5000 {
+		// Ghost Walk shares group 59; the Wizard's Teleport (tel2) owns 43.
+		wantGroup := uint8(59)
+		if strings.HasPrefix(skill.Codename, "SKILL_EU_WIZARD_") {
+			wantGroup = 43
+		}
+		if skill.CoolTimeGroup != wantGroup || skill.CoolTimeMs != 5000 {
 			t.Fatalf("authored cooldown: %+v", skill)
 		}
 		if skill.Group == 768 && skill.PositionEffect.Range != 215+uint32(skill.Level-1)*5 {
