@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+expiry_test.go - the duration clock and the expiry update
+
+===========================================================================
+*/
+
 package statuseffect
 
 import "testing"
@@ -43,5 +51,60 @@ func TestNativeDurationClockWrapAndProjection(t *testing.T) {
 		if e.Expired(c.at) != c.expired || e.RemainingMs(c.at) != c.remaining {
 			t.Fatalf("at %x expired %v remaining %d", c.at, e.Expired(c.at), e.RemainingMs(c.at))
 		}
+	}
+}
+
+const (
+	lateInstallStartMs  = 1000 // the operation's clock at installation
+	lateInstallTickMs   = 970  // the tick's clock, sampled before the install
+	lateInstallDuration = 1800000
+	// lateInstallSkill is SKILL_EU_WARRIOR_GUARDA_INTERCEPT_A_01 in its
+	// own group, apart from the link fixture's skill and group.
+	lateInstallSkill = 7260
+	lateInstallGroup = 419
+	// lateInstallToken is distinct from the link fixture's two tokens.
+	lateInstallToken = 20
+	// lateInstallRows is the timed effect plus both link halves.
+	lateInstallRows = 3
+)
+
+/*
+==================
+TestExpireLeavesAnInstallNewerThanItsClock
+
+A tick samples its clock, then an operation installs a timed effect and a
+linked pair on a later clock before the tick's update runs. That update
+must not read the negative elapsed as a wrapped uint32 and retire them;
+the next update past their duration still does.
+==================
+*/
+func TestExpireLeavesAnInstallNewerThanItsClock(t *testing.T) {
+	r := NewRegistry()
+	timed := Effect{DivisionID: "g", CharacterName: "friend", SkillID: lateInstallSkill, SkillGroup: lateInstallGroup, InstanceToken: lateInstallToken,
+		State: StateActive, DurationPresent: true, StartedAtMs: lateInstallStartMs, ExpiresAtMs: lateInstallStartMs + lateInstallDuration}
+	if !r.Apply(timed) {
+		t.Fatal("apply")
+	}
+	l := testLink()
+	l.StartedAtMs, l.ExpiresAtMs = lateInstallStartMs, lateInstallStartMs+lateInstallDuration
+	if code := r.ApplyLink(l); code != 0 {
+		t.Fatal(code)
+	}
+
+	r.Expire(lateInstallTickMs)
+	if ended := r.DrainStopRequested(); len(ended) != 0 {
+		t.Fatalf("the update retired installs newer than its clock: %d owners", len(ended))
+	}
+	if _, ok := r.ThreatLink("g", "friend", lateInstallStartMs); !ok {
+		t.Fatal("the link did not survive the earlier tick")
+	}
+
+	r.Expire(lateInstallStartMs + lateInstallDuration + 1)
+	ended := 0
+	for _, batch := range r.DrainStopRequested() {
+		ended += len(batch.Effects)
+	}
+	if ended != lateInstallRows {
+		t.Fatalf("expired %d rows, want the timed effect and both link halves", ended)
 	}
 }

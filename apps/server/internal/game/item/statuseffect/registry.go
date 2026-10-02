@@ -482,11 +482,19 @@ func (e Effect) RemainingMs(nowMs int64) uint32 {
 	return 0
 }
 
-// Expire uses the same retirement queue as explicit stops. Projection may omit
-// expired rows before the next tick, but only this owner removes live state.
 /*
 ================
 Expire
+
+Expire uses the same retirement queue as explicit stops. Projection may omit
+expired rows before the next tick, but only this owner removes live state.
+
+The simulation tick samples its clock when it fires and runs this update
+later, while operations install effects concurrently on their own clock. A
+row whose origin lies after nowMs was installed after this pass's clock was
+taken; Expired's uint32 elapsed would wrap and retire it at once. Native
+installs and updates on one thread and one clock, so its update never sees
+such a row: it waits for the next pass, whose clock has caught up.
 ================
 */
 func (r *Registry) Expire(nowMs int64) {
@@ -494,6 +502,9 @@ func (r *Registry) Expire(nowMs int64) {
 	defer r.mu.Unlock()
 	for key, rows := range r.byOwner {
 		for i := range rows {
+			if nowMs < rows[i].StartedAtMs {
+				continue
+			}
 			if !rows[i].StopRequested {
 				rows[i].advanceJob(nowMs)
 			}

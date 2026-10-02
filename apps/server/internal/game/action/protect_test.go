@@ -24,7 +24,43 @@ const (
 	protectA1        = 7246 // SKILL_EU_WARRIOR_GUARDA_AGGRO_A_01: lnks 3 1500 2 1, dura 1800000, lkag 36 0
 	protectA1Percent = 36
 	protectHit       = 100
+	// protectTickLagMs is how far a tick's sampled clock trails the cast:
+	// the tick fired, then the cast landed before the tick's update ran.
+	protectTickLagMs = 30
 )
+
+/*
+==================
+TestProtectSurvivesATickSampledBeforeTheCast
+
+The ticker samples its clock when it fires and runs the action update
+after the division work, while a cast is accepted on the operation's own
+clock. A Protect accepted in between must survive that update: before the
+fix the update read the pair's elapsed time as a wrapped uint32 and
+retired both halves with B6A0 right after B419 / B5ED.
+==================
+*/
+func TestProtectSurvivesATickSampledBeforeTheCast(t *testing.T) {
+	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
+	c.BattleUntilMs = 0
+	learnShipped(t, rt, c, protectA1)
+	ally := nearbyCharacter(rt, c, 21, "protected", 1)
+
+	r := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: protectA1, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(ally)}.Encode())
+	if r.DiagnosticRefusal != "" || len(r.Frames) == 0 || r.Frames[0].Payload[0] != 1 {
+		t.Fatalf("protect refused: %+v", r)
+	}
+	for _, out := range rt.TickHook()(clock.NowMs() - protectTickLagMs) {
+		for _, f := range out.Frames {
+			if f.Opcode == wire.OpEndedEffectInstances {
+				t.Fatalf("the tick retired the fresh link: % x", f.Payload)
+			}
+		}
+	}
+	if len(linkedHalves(rt, c.Name, protectA1)) != 1 || len(linkedHalves(rt, ally.Name, protectA1)) != 1 {
+		t.Fatal("a tick sampled before the cast retired the link")
+	}
+}
 
 /*
 ==================
