@@ -107,6 +107,36 @@ import {
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
+import { createCosHud } from "./hud/cos-hud";
+import {
+	COS_CLASS_ATTACK,
+	COS_CLASS_GUILD,
+	COS_CLASS_PICKUP,
+	COS_CLASS_TRANSPORT,
+	COS_COMMAND_ATTACK,
+	COS_COMMAND_CANCEL,
+	COS_COMMAND_CLEAN,
+	COS_COMMAND_FOLLOW,
+	COS_COMMAND_INFO,
+	COS_COMMAND_RIDE,
+	COS_COMMAND_STANCE,
+	cosClass,
+	cosCommandButtons,
+	cosCommandEnabled,
+	cosCommandIcon,
+	cosCommandLabel,
+	cosCommandLayout,
+	type CosCommandContext,
+	cosHpText,
+	cosInfoSections,
+	cosExperienceText,
+	cosRentText,
+	cosSatietyText,
+	cosStanceToggle,
+	cosStatusChrome,
+	cosStatusRatios,
+	cosStatusRect
+} from "@/engine/foundation/ui/cos-command";
 import { questObjectivePresentation } from "@/engine/foundation/ui/quest-presentation";
 import { uniqueBannerQuads } from "@/engine/foundation/ui/unique-banner";
 import { nearestGroundItem } from "@/engine/foundation/gameplay/ground-item";
@@ -500,6 +530,7 @@ export function createUi(
 		uniqueBanner = createUniqueBanner(),
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
+	const cosHud = createCosHud();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
 	const withdrawal = createWithdrawalDialog();
@@ -1239,7 +1270,96 @@ export function createUi(
 	activate
 	================
 	*/
+	/*
+	================
+	cosCommandContext
+
+	What the command bar reads about the selected companion (6A1BE0).
+	================
+	*/
+	function cosCommandContext(): CosCommandContext {
+		const game = view?.gameplay, record = game?.cosRecords?.find( r => r.gid === cosHud.selected() );
+		const local = view?.entities.find( e => e.gid === game?.localGid );
+		return {
+			record,
+			reference: record && hud.data()?.cosReferences.get( record.refObjId ),
+			ownerDead: !!game?.vitals.find( v => v.gid === game.localGid )?.deathState,
+			mounted: !!local?.mountedOn
+		};
+	}
+	/*
+	================
+	executeCosCommand
+
+	CICCos_ExecuteActionCommand (6A2350). Info opens even while the owner is
+	dead; every other command needs the arm 6A1BE0 shows enabled.
+	================
+	*/
+	function executeCosCommand( command: number ) {
+		const context = cosCommandContext(), record = context.record;
+		if ( !record || !cosCommandEnabled( command, context ) ) return;
+		const cls = cosClass( record.band );
+		switch ( command ) {
+			case COS_COMMAND_INFO:
+				if ( cls === COS_CLASS_GUILD ) return;
+				if ( panel === "COS inventory" ) {
+					setPanel( "" );
+					return;
+				}
+				// CGInterface_SetCosInventoryVisible's third argument opens a
+				// transport's or pickup pet's container page.
+				cosGid = record.gid;
+				if ( setPanel( "COS inventory" ) ) {
+					cosTab = (cls === COS_CLASS_TRANSPORT || cls === COS_CLASS_PICKUP) && record.inventory ? 1 : 0;
+				}
+				return;
+			case COS_COMMAND_RIDE:
+				sendGameplay( { kind: "cos-ride", gid: record.gid, mounted: !context.mounted } );
+				return;
+			case COS_COMMAND_ATTACK:
+				// The selected target is the pet's; the client attacks monsters only.
+				if ( view?.gameplay?.target ) {
+					sendGameplay( { kind: "cos-pet-attack", gid: view.gameplay.target, pet: record.gid } );
+				}
+				return;
+			case COS_COMMAND_FOLLOW:
+				sendGameplay( { kind: "cos-follow", gid: record.gid } );
+				return;
+			case COS_COMMAND_CANCEL:
+				sendGameplay( { kind: "cos-cancel", gid: record.gid } );
+				return;
+			case COS_COMMAND_CLEAN:
+				// A transport asks first (type 0xD box); its cargo is dropped.
+				if ( cls === COS_CLASS_TRANSPORT ) cosHud.askClean( record.gid );
+				else sendGameplay( { kind: "cos-clean", gid: record.gid } );
+				dirty = true;
+				return;
+			case COS_COMMAND_STANCE:
+				if ( cls === COS_CLASS_ATTACK ) {
+					sendGameplay( {
+						kind: "cos-behavior",
+						gid: record.gid,
+						mode: cosStanceToggle( record.commandMode )
+					} );
+				}
+				return;
+		}
+	}
 	function activate( id: string ) {
+		if ( id.startsWith( "cos-status:" ) ) {
+			cosHud.select( Number( id.slice( 11 ) ) );
+			dirty = true;
+			return;
+		}
+		if ( id === "cos-command-toggle" ) {
+			cosHud.toggle();
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "cos-command:" ) ) {
+			executeCosCommand( Number( id.slice( 12 ) ) );
+			return;
+		}
 		if ( id === "item-mall" ) {
 			if ( view?.gameplay && !view.gameplay.inventoryPending ) sendGameplay( { kind: "mall-open" } );
 			itemMall.open();
@@ -2802,6 +2922,27 @@ export function createUi(
 				}
 				if ( event.kind !== "hover" ) return;
 			}
+			if ( cosHud.cleanConfirm() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "cos-clean-cancel"
+				) {
+					cosHud.takeClean();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "cos-clean-confirm"
+				) {
+					// CGInterface_OnMsgBoxResult case 0xA sends 0x7618 on OK.
+					const gid = cosHud.takeClean();
+					dirty = true;
+					if ( gid !== null && view?.session?.phase === "world" ) sendGameplay( { kind: "cos-clean", gid } );
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
 			if ( buffDismiss ) {
 				if (
 					event.kind === "key" && event.code === "Escape" ||
@@ -3908,6 +4049,15 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				// CIFCOSStatus_OnRightButtonRelease (6A9E40) selects the companion
+				// and makes it the player's target.
+				if ( event.id.startsWith( "cos-status:" ) ) {
+					const gid = Number( event.id.slice( 11 ) );
+					cosHud.select( gid );
+					sendGameplay( { kind: "select", gid } );
+					dirty = true;
+					return;
+				}
 				if ( event.id.startsWith( "action:" ) ) {
 					executeAction( Number( event.id.slice( 7 ) ) );
 					return;
@@ -4583,6 +4733,8 @@ export function createUi(
 					dirty = true;
 				}
 			}
+			if ( phase !== "world" ) cosHud.reset();
+			else if ( cosHud.reconcile( next.gameplay?.cosRecords ?? [] ) ) dirty = true;
 			if ( phase !== lastPhase ) {
 				if ( retainedWorld ) {
 					hover = null;
@@ -4956,6 +5108,92 @@ export function createUi(
 				controls.push( { id, label: "Close", rect: r, kind: "button" } );
 				if ( resources.has( CLOSE ) && resources.has( CLOSE_PRESS ) && resources.has( CLOSE_FOCUS ) ) {
 					rect( r, white, pressed === id ? CLOSE_PRESS : hover === id ? CLOSE_FOCUS : CLOSE );
+				}
+			}
+			/*
+			================
+			drawCosHud
+
+			CIFCOSManager: one CIFCOSStatus icon per owned companion (6AA290 bind,
+			6A9C50 gauges, the selected one outlined) and the CIFCOSCommand panel
+			of the selected companion, anchored to the under bar (6A34F0).
+			================
+			*/
+			function drawCosHud(
+				data: NonNullable<ReturnType<typeof hud.data>>,
+				records: readonly import("@/engine/contracts/gameplay").CosRecord[],
+				barX: number,
+				barY: number
+			) {
+				const shown = records.filter( r => cosClass( r.band ) !== null );
+				shown.forEach( ( record, i ) => {
+					const cls = cosClass( record.band )!, chrome = cosStatusChrome( cls );
+					const reference = data.cosReferences.get( record.refObjId );
+					const r = cosStatusRect( w, i, cls ), [x, y] = r;
+					if ( record.gid === cosHud.selected() ) {
+						image( [ x - 11, y - 11, chrome.outlineSize[0], chrome.outlineSize[1] ], chrome.outline );
+					}
+					image( r, chrome.frame );
+					const icon = iconPath( reference?.icon );
+					if ( icon ) image( [ x + 6, y + 7, 32, 32 ], icon );
+					const ratios = cosStatusRatios( record, reference );
+					const gauges = [
+						[ chrome.showHp, ratios.hp, "am_hp", 47 ],
+						[ chrome.showHgp, ratios.hgp, "am_hgp", 56 ]
+					] as const;
+					for ( const [shown, ratio, name, dy] of gauges ) {
+						const path = "/assets/images/Media_extracted/interface/animal/" + name + ".png";
+						const size = resources.size( path );
+						if ( !shown || ratio === null ) continue;
+						paths.push( path );
+						if ( size ) {
+							image( [ x + 4, y + dy, size[0] * ratio, size[1] ], path, white, [ 0, 0, ratio, 1 ] );
+						}
+					}
+					blocks.push( r );
+					controls.push( {
+						id: "cos-status:" + record.gid,
+						label: record.name ?? hudCopy( "UIIT_STT_COSNEWUI_TITLE" ),
+						rect: r,
+						kind: "button",
+						rightActivate: true
+					} );
+				} );
+				const context = cosCommandContext(), record = context.record;
+				if ( !record ) return;
+				const commands = cosCommandButtons( cosClass( record.band )! );
+				if ( !commands.length ) return;
+				const layout = cosCommandLayout( barX, barY, commands.length );
+				const animal = "/assets/images/Media_extracted/interface/animal/";
+				if ( cosHud.open() ) {
+					commands.forEach( ( command, i ) => {
+						const row = layout.rows[i]!, size = resources.size( row.frame );
+						paths.push( row.frame );
+						if ( size ) image( [ row.at[0], row.at[1], size[0], size[1] ], row.frame );
+						image( row.slot, cosCommandIcon( command, context ) );
+						blocks.push( row.slot );
+						controls.push( {
+							id: "cos-command:" + command,
+							label: hudCopy( cosCommandLabel( command, context ) ),
+							rect: row.slot,
+							kind: "button",
+							disabled: !cosCommandEnabled( command, context )
+						} );
+					} );
+				}
+				const board = animal + "am_ctrl_tab.png", boardSize = resources.size( board );
+				paths.push( board );
+				if ( boardSize ) image( [ layout.board[0], layout.board[1], boardSize[0], boardSize[1] ], board );
+				const id = "cos-command-toggle",
+					toggle = animal + (cosHud.open() ? "am_ctrl_close" : "am_ctrl_open") +
+						(pressed === id && hover === id ? "_press" : hover === id ? "_focus" : "") + ".png",
+					toggleSize = resources.size( toggle );
+				paths.push( toggle );
+				if ( toggleSize ) {
+					const r: UiRect = [ layout.toggle[0], layout.toggle[1], toggleSize[0], toggleSize[1] ];
+					image( r, toggle );
+					blocks.push( r );
+					controls.push( { id, label: "", rect: r, kind: "button" } );
 				}
 			}
 			/*
@@ -6323,6 +6561,7 @@ export function createUi(
 						}
 					} );
 				}
+				if ( hudData && game?.cosRecords?.length ) drawCosHud( hudData, game.cosRecords, barX, barY );
 				if ( hudData && whispersOpen ) {
 					const wx = 0,
 						wy = h - 52 - (chatRows ? 62 + chatRows * 56 : 20),
@@ -9703,7 +9942,20 @@ export function createUi(
 						oy = py + 66,
 						page = hudData
 							.windows[cosTab === 1 ? "ifcosinventory" : cosTab === 2 ? "ifcossetup" : "ifcosinfo"]!;
-					nativePage( page, ox, oy, cosTab === 0 ? [ 100, 50, 51, 52 ] : [] );
+					// CIFCOSInfo_SetCompanion (6A69F0) shows each block by record
+					// class; the gauges (35..37) fill from the record below.
+					const sections = cosInfoSections( cosClass( record?.band ?? 0 ) ?? -1 );
+					const hiddenInfo = [
+						35,
+						36,
+						37,
+						...(sections.hp ? [] : [ 30, 40, 41 ]),
+						...(sections.rentTime ? [] : [ 50, 51, 52 ]),
+						...(sections.growth ?
+							[ 100 ] :
+							[ 31, 32, 42, 43, 44, 45, 60, 61, 62, 63, 65, 66, 67, 68, 71, 72, 73, 76, 77, 78 ])
+					];
+					nativePage( page, ox, oy, cosTab === 0 ? hiddenInfo : [] );
 					if ( cosTab === 1 ) {
 						const pages = Math.max( 1, Math.ceil( (record?.status ?? 0) / 28 ) );
 						cosPage = Math.min( cosPage, pages - 1 );
@@ -9734,19 +9986,72 @@ export function createUi(
 							cosPage,
 							pages
 						);
-					} else if ( cosTab === 0 ) {
-						for (
-							const [id, value] of [
-								[ 27, record?.name ?? "" ],
-								[ 65, record?.level === undefined ? "" : String( record.level ) ],
-								[ 41, record ? String( record.hp ) : "" ],
-								[ 43, record?.satiety === undefined ? "" : String( record.satiety ) ]
-							] as const
-						) {
-							const node = Object.values( page ).find( n => n.id === id );
-							if ( node ) authoredText( node, ox, oy, value );
+					} else if ( cosTab === 0 && record ) {
+						const reference = hudData.cosReferences.get( record.refObjId );
+						const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
+						const texts: [number, string][] = [
+							// CIFCosInfo_RefreshName (6A5320): an unnamed companion reads "No name".
+							[ 27, record.name || hudCopy( "UIIT_STT_COSNEWUI_TITLE" ) ]
+						];
+						if ( sections.hp ) {
+							const ratio = cosStatusRatios( record, reference ).hp ?? 1;
+							texts.push( [ 41, cosHpText( record, reference ) ] );
+							const gauge = node( 35 );
+							if ( gauge ) authoredGauge( "cos-info-hp", record.gid, gauge, ox, oy, ratio );
 						}
-					} else {
+						if ( sections.rentTime ) {
+							// 6A4FD0 reads the rent left on the companion's summoner item.
+							const summoner = game?.inventory?.find( item => item.slot === record.inventorySlot );
+							const remaining = (summoner?.summon?.remainingSeconds ?? 0) * 1000;
+							texts.push( [
+								52,
+								cosRentText(
+									remaining,
+									hudCopy( "PARAM_DAY" ),
+									hudCopy( "PARAM_HOUR" ),
+									hudCopy( "PARAM_MINUTE" )
+								)
+							] );
+						}
+						if ( sections.growth ) {
+							const satiety = record.satiety ?? 0;
+							texts.push( [ 43, cosSatietyText( satiety ) ] );
+							const hgp = node( 36 );
+							if ( hgp ) {
+								authoredGauge(
+									"cos-info-hgp",
+									record.gid,
+									hgp,
+									ox,
+									oy,
+									cosStatusRatios( record, reference ).hgp ?? 1
+								);
+							}
+							const required = record.level === undefined ? undefined : levels.get( record.level )?.[0];
+							if ( record.experience && required ) {
+								const [low, high] = record.experience;
+								const current = BigInt( high ) << 32n | BigInt( low );
+								const exp = cosExperienceText( current, BigInt( required ) );
+								texts.push( [ 45, exp.text ] );
+								const gauge = node( 37 );
+								if ( gauge ) {
+									authoredGauge(
+										"cos-info-exp",
+										record.gid,
+										gauge,
+										ox,
+										oy,
+										Math.min( 1, exp.ratio )
+									);
+								}
+							}
+							if ( record.level !== undefined ) texts.push( [ 65, String( record.level ) ] );
+						}
+						for ( const [id, value] of texts ) {
+							const at = node( id );
+							if ( at ) authoredText( at, ox, oy, value );
+						}
+					} else if ( cosTab !== 0 ) {
 						for ( const node of Object.values( page ).filter( n => n.type === "CIFCheckBox" ) ) {
 							const bit = 1 << (node.id - 25),
 								path = node.texture.replace( "_off", "_" + (cosDraft & bit ? "on" : "off") );
@@ -11588,6 +11893,45 @@ export function createUi(
 				);
 				button(
 					"recall-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
+			if ( worldVisible && cosHud.cleanConfirm() !== null ) {
+				// 6A2350 case 5 raises the type 0xD box with the two
+				// UIIT_MSG_COS_CLEAN_CONFIRM lines before a transport is destroyed.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads( hudCopy( "UIIT_MSG_COS_CLEAN_CONFIRM1" ), layout.name, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads( hudCopy( "UIIT_MSG_COS_CLEAN_CONFIRM2" ), layout.question, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				button(
+					"cos-clean-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"cos-clean-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);

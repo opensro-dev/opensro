@@ -616,7 +616,6 @@ scripts/build/shared/characterInfo.mjs
 scripts/build/shared/characterMaterialState.mjs
 scripts/build/shared/cifLayoutCatalog.mjs
 scripts/build/shared/cifPreprocessor.mjs
-scripts/build/shared/cifResources.mjs
 scripts/build/shared/collections.mjs
 scripts/build/shared/compressionUtils.mjs
 scripts/build/shared/configResources.mjs

@@ -27,6 +27,7 @@ import { equipmentSocket } from "@/engine/foundation/ui/inventory-layout";
 import { decodeMessageTips, type MessageTip } from "@/engine/foundation/ui/message-tips";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
+import { decodeCosReferences, type CosReference } from "@/engine/foundation/ui/cos-command";
 /*
 ================
 Load
@@ -43,6 +44,7 @@ HudData
 */
 interface HudData {
 	readonly withdrawalPage: AuthoredLayout;
+	readonly cosReferences: ReadonlyMap<number, CosReference>;
 	readonly portals: PortalCatalog;
 	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
 	readonly masteryCosts: Readonly<Record<number, number>>;
@@ -205,7 +207,8 @@ export function createHudResources(
 			"/assets/data/characterDataCountry.json",
 			"/assets/data/levelData.json",
 			"/assets/data/skillMasteryData.json",
-			"/assets/data/teleportData.json"
+			"/assets/data/teleportData.json",
+			"/assets/data/cosPresentation.json"
 		],
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
@@ -260,7 +263,8 @@ export function createHudResources(
 										warm.add( entry.publicPath );
 									}
 								}
-							} else if ( i === layouts.length + 13 ) value = decodePortalCatalog( raw );
+							} else if ( i === layouts.length + 14 ) value = decodeCosReferences( raw );
+							else if ( i === layouts.length + 13 ) value = decodePortalCatalog( raw );
 							else if ( i === layouts.length + 12 ) value = decodeTooltipMasteries( raw );
 							else if ( i === layouts.length + 11 ) {
 								value = masteryCosts( raw );
@@ -300,6 +304,7 @@ export function createHudResources(
 					withdrawalPage,
 					withdrawalGoldPrices: goldPrices,
 					portals: values[layouts.length + 13] as PortalCatalog,
+					cosReferences: values[layouts.length + 14] as HudData["cosReferences"],
 					tooltipMasteries: values[layouts.length + 12] as HudData["tooltipMasteries"],
 					masteryCosts: values[layouts.length + 11] as HudData["masteryCosts"],
 					extended: values[layouts.length - 1] as readonly AuthoredLayout[],

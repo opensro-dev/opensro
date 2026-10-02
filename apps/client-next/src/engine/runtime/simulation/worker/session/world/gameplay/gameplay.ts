@@ -1101,6 +1101,37 @@ state here before a command can claim a native wire conversation.
 				payload[4] = 9;
 				return sendFrame( { opcode: 0x769e, payload } );
 			}
+			if ( command.kind === "cos-pet-attack" ) {
+				// 6A2350 case 2: an attack pet (class 3) attacks the player's target
+				// with 0x769E [u32 pet][u8 2][u32 target] and remembers it at
+				// +0xAB2C. The client admits monster targets only, like its own
+				// basic attack.
+				// command.gid names the target; the record set holds only owned pets.
+				const record = cosRecords.get( command.pet );
+				if ( !record || record.band !== 3 || record.dead || record.hp === 0 || entity?.kind !== "monster" ) {
+					throw Error( "No attack pet or attackable target" );
+				}
+				const payload = new Uint8Array( 9 ), v = new DataView( payload.buffer );
+				v.setUint32( 0, record.gid, true );
+				payload[4] = 2;
+				v.setUint32( 5, entity.gid, true );
+				return sendFrame( { opcode: 0x769e, payload } );
+			}
+			if ( command.kind === "cos-clean" ) {
+				// CICCos_ExecuteActionCommand (6A2350) case 5: a riding mount or a
+				// transport (record class 0/1, bands 1/2) is retired with 0x7618
+				// [u32 gid] (6FF800); a guild soldier (class 4, band 5) with an
+				// empty 0x7458 (6FE850). Pets leave through cancellation instead.
+				const record = cosRecords.get( command.gid );
+				if (
+					!record || ![ 1, 2, 5 ].includes( record.band ) || entity?.gid !== record.gid ||
+					entity.kind !== "cos" || entity.ownerGid !== localGid || entity.refObjId !== record.refObjId
+				) throw Error( "No owned COS to clean" );
+				if ( record.band === 5 ) return sendFrame( { opcode: 0x7458, payload: new Uint8Array( 0 ) } );
+				const payload = new Uint8Array( 4 );
+				new DataView( payload.buffer ).setUint32( 0, record.gid, true );
+				return sendFrame( { opcode: 0x7618, payload } );
+			}
 			if ( command.kind === "cos-behavior" ) {
 				const record = cosRecords.get( command.gid );
 				if (
@@ -1944,6 +1975,22 @@ Packet handling must not depend on which HUD panel is currently open.
 						(payload[0] !== 1 && payload[0] !== 2) ||
 						payload.length !== (payload[0] === 2 ? 2 : 1)
 					) throw Error( "Invalid COS cancellation result" );
+					if ( payload[0] === 2 ) {
+						const notice = constantNativeNotice( 12, payload[1]! );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+					dirty = true;
+					return true;
+				}
+				if ( frame.opcode === 0xb618 ) {
+					// CPSMission_OnCosCleanupResponseB618 (7782A0): 1 is success, and
+					// the despawn retires the actor; otherwise one notice byte in
+					// category 12.
+					const payload = frame.payload;
+					if (
+						(payload[0] !== 1 && payload[0] !== 2) ||
+						payload.length !== (payload[0] === 2 ? 2 : 1)
+					) throw Error( "Invalid COS cleanup result" );
 					if ( payload[0] === 2 ) {
 						const notice = constantNativeNotice( 12, payload[1]! );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];

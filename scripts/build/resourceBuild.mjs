@@ -40,6 +40,7 @@ import { buildSkillMasteryDataAsset } from "./data/buildSkillMasteryDataAsset.mj
 import { buildSkillDataAsset } from "./data/buildSkillDataAsset.mjs";
 import { buildQuestDataAsset } from "./data/buildQuestDataAsset.mjs";
 import { buildCharacterDataCountryAsset } from "./data/buildCharacterDataCountryAsset.mjs";
+import { buildCosPresentationAsset } from "./data/buildCosPresentationAsset.mjs";
 import { buildGInterfaceSectionsAsset } from "./data/buildGInterfaceSectionsAsset.mjs";
 import { buildSiegeFortressDataAsset } from "./data/buildSiegeFortressDataAsset.mjs";
 import { buildMissionPresentationAsset } from "./data/buildMissionPresentationAsset.mjs";
@@ -140,6 +141,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildSkillDataAsset,
 	buildQuestDataAsset,
 	buildCharacterDataCountryAsset,
+	buildCosPresentationAsset,
 	buildGInterfaceSectionsAsset,
 	buildSiegeFortressDataAsset,
 	buildMissionPresentationAsset,
@@ -458,6 +460,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// for the sub_81d5b0 kindred race-mark resolve over sub_7efeb0's
 	// recordMap1f0 lookup). Same placement rules.
 	const characterDataCountry = steps.buildCharacterDataCountryAsset();
+	// COS HUD reference fields (icon, max HP, rideable) for the status icon,
+	// command bar and info page.
+	const cosPresentation = steps.buildCosPresentationAsset();
 	// WIP Toggle*Window plane (ginterface.txt raw section lines ->
 	// ginterface-sections.json, decoded once in sectionWindowPlane.ts and driven
 	// through the REAL sub_783f80 CreateControlsFromSection deserializer).
@@ -530,6 +535,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		skillData,
 		questData,
 		characterDataCountry,
+		cosPresentation,
 		ginterfaceSections,
 		siegeFortressData,
 		nameFilter,
@@ -594,6 +600,7 @@ export function formatResourceBuildSummary( results ) {
 		skillData,
 		questData,
 		characterDataCountry,
+		cosPresentation,
 		ginterfaceSections,
 		siegeFortressData,
 		nameFilter,
