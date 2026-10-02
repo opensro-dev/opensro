@@ -326,7 +326,6 @@ apps/client-next/src/engine/runtime/world/camera/camera.ts
 apps/client-next/src/engine/runtime/world/world.ts
 apps/client-next/tests/architecture/frame-barriers.test.mjs
 apps/client-next/tests/architecture/ownership-fixtures.test.mjs
-apps/client-next/tests/architecture/ownership.test.mjs
 apps/client-next/tests/architecture/panel-navigation.test.mjs
 apps/client-next/tests/browser/absorption-orbs.test.mjs
 apps/client-next/tests/browser/action-refresh.test.mjs
@@ -543,7 +542,6 @@ apps/client-next/tools/verify-animation-dispatch.mjs
 apps/client-next/tools/verify-bsr-transforms.mjs
 apps/client-next/tools/verify-deferred-alpha.mjs
 apps/client-next/tools/verify-entity-model-publication.mjs
-apps/client-next/tools/verify-execution.mjs
 apps/client-next/tools/verify-layout.mjs
 apps/client-next/tools/verify-modifier-keys.mjs
 apps/client-next/tools/verify-ownership.mjs
