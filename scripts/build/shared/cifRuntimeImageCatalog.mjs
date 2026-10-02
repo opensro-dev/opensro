@@ -313,6 +313,8 @@ export const runtimeCifImageReferences = [
 	"interface/playerminiinfo/pmi_hp.ddj",
 	"interface/playerminiinfo/pmi_mp.ddj",
 	"interface/playerminiinfo/pmi_jahwan_burn.ddj",
+	// CIFPetMiniInfo_OnCreate (6B3760) loads the pet portrait frame from code.
+	"interface/playerminiinfo/pmi_pet_face.ddj",
 	"interface/ifcommon/com_kindred_china.ddj",
 	"interface/ifcommon/com_kindred_europe.ddj",
 	// CIFUnderBar_OnCreate @0x573963 loads the custom 20x20 EXP piece into

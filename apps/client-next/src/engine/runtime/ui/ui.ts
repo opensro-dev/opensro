@@ -173,6 +173,7 @@ import {
 	type PracticeRequest
 } from "@/engine/foundation/ui/practice-box";
 import { masteryTooltip } from "@/engine/foundation/ui/mastery-tooltip";
+import { petMiniInfo } from "@/engine/foundation/ui/pet-mini-info";
 import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
@@ -582,6 +583,7 @@ export function createUi(
 	*/
 	type HudSection = { quads: UiQuad[]; controls: UiControl[]; blocks: UiRect[]; paths: string[]; };
 	const playerLayoutCache = createRetainedLayout<HudSection>(), barLayoutCache = createRetainedLayout<HudSection>();
+	const petLayoutCache = createRetainedLayout<HudSection>();
 	let layoutResourcesRevision = 0;
 	let chatHidden = false, whispersOpen = false, statusFilterOpen = false;
 	const statusFilters = new Set<string>( [ "gain", "fight", "status", "party", "game" ] );
@@ -6131,6 +6133,84 @@ export function createUi(
 								"select-window:Character-stats",
 								"Character"
 							);
+						}
+					} );
+				}
+				// CIFPetMiniInfo (6B3AD0 / 6B34C0): the attack pet's panel, child 100
+				// of the player mini window.
+				const pet = hudData && game ? petMiniInfo( game.cosRecords, hudData.cosReferences ) : null;
+				const petPanel = hudData?.player.GDR_PMI_PET_MINI_INFO, petLayout = hudData?.windows.ifpetminiinfo;
+				if ( hudData && pet && petPanel && petLayout ) {
+					const [px, py] = hudData.root.GDR_PLAYER_MINI_INFO!.rect,
+						hpPath = ROOT + "interface/playerminiinfo/pmi_pet_hp.png",
+						hgpPath = ROOT + "interface/playerminiinfo/pmi_pet_hgp.png",
+						facePath = ROOT + "interface/playerminiinfo/pmi_pet_face.png",
+						icon = iconPath( pet.icon ),
+						hpGauge = gauges.read( "pet-mini-hp", pet.gid, pet.hp ?? 0, "empty" ),
+						hgpGauge = gauges.read( "pet-mini-hgp", pet.gid, pet.hgp, "empty" ),
+						cautionFrame = pet.caution ? Math.floor( now / 100 ) % 8 : -1;
+					retainedHud( petLayoutCache, [
+						hudData,
+						layoutResourcesRevision,
+						pet.gid,
+						pet.name,
+						pet.level,
+						icon,
+						hpGauge.current,
+						hpGauge.target,
+						hgpGauge.current,
+						hgpGauge.target,
+						cautionFrame
+					], () => {
+						authoredImage( petPanel, px, py );
+						const [qx, qy] = authoredRect( petPanel, px, py );
+						blocks.push( authoredRect( petPanel, px, py ) );
+						// 6B3760 frames the picture with pmi_pet_face; 6B3AD0 sets its icon.
+						if ( icon ) {
+							paths.push( icon );
+							if ( resources.has( icon ) ) {
+								rect( authoredRect( petLayout.GDR_PET_MINI_PICTURE!, qx, qy ), white, icon );
+							}
+						}
+						authoredImage( petLayout.GDR_PET_MINI_PICTURE!, qx, qy, facePath );
+						authoredText(
+							petLayout.GDR_PET_MINI_TXT_NAME!,
+							qx,
+							qy,
+							pet.name?.length ? pet.name : hudCopy( "UIIT_STT_COSNEWUI_TITLE" )
+						);
+						authoredText(
+							petLayout.GDR_PET_MINI_TXT_LEVEL!,
+							qx,
+							qy,
+							hudCopy( "UIIT_STT_LV_LEVEL" ).replace( "%d", String( pet.level ) )
+						);
+						// A zero-size CIFGauge takes its texture's size (112x8).
+						for (
+							const [node, path, value] of [
+								[ petLayout.GDR_PET_MINI_GAUGE_HP!, hpPath, hpGauge ],
+								[ petLayout.GDR_PET_MINI_GAUGE_HGP!, hgpPath, hgpGauge ]
+							] as const
+						) {
+							paths.push( path );
+							if ( !resources.has( path ) ) continue;
+							const size = resources.size( path ), [gx, gy] = authoredRect( node, qx, qy );
+							if ( !size ) continue;
+							const [gw, gh] = size;
+							quads.push(
+								...gaugeFill( [ gx, gy, gw, gh ], node.uv, path, value.current, value.target, full )
+							);
+						}
+						// Native caution atlas: eight 128x32 cells, four columns, 100ms per cell.
+						const caution = petLayout.GDR_PET_MINI_EFFECT_HP!;
+						paths.push( caution.texture );
+						if ( cautionFrame >= 0 && resources.has( caution.texture ) ) {
+							rect( authoredRect( caution, qx, qy ), white, caution.texture, [
+								(cautionFrame % 4) / 4,
+								Math.floor( cautionFrame / 4 ) / 2,
+								.25,
+								.5
+							] );
 						}
 					} );
 				}
@@ -13683,6 +13763,7 @@ export function createUi(
 			chatLayoutCache.reset();
 			statusLayoutCache.reset();
 			playerLayoutCache.reset();
+			petLayoutCache.reset();
 			barLayoutCache.reset();
 			admittedWindows.clear();
 			lastProduct = null;

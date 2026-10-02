@@ -99,6 +99,7 @@ export function createHudResources(
 	];
 	const windowNames = [
 		"ifextquickslotoption",
+		"ifpetminiinfo",
 		"if_npcwindow",
 		"if_npctalk",
 		"ifstore",

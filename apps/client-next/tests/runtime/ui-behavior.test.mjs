@@ -4618,3 +4618,29 @@ test("learned skill icons and shortcut bars share casting and cooldown admission
 		f.dispose();
 	}
 });
+
+test("an attack pet shows its mini window under the player mini window", () => {
+	const f = uiFixture();
+	try {
+		f.state.gameplay.cosRecords = [ {
+			gid: 7,
+			refObjId: 100,
+			band: 3,
+			hp: 100,
+			mp: 0,
+			status: 0,
+			dead: false,
+			level: 12,
+			satiety: 10000,
+			name: "Fang"
+		} ];
+		for ( let i = 0; i < 50; i++ ) f.ui.step( f.state, 1000 + i );
+		assert.ok( f.hasText( "Fang" ), "the pet's own name" );
+		assert.ok( f.hasText( "12" ), "the pet's level" );
+		f.state.gameplay.cosRecords = [ { ...f.state.gameplay.cosRecords[0], band: 4 } ];
+		for ( let i = 0; i < 5; i++ ) f.ui.step( f.state, 1100 + i );
+		assert.ok( !f.hasText( "Fang" ), "a pickup pet has no mini window" );
+	} finally {
+		f.dispose();
+	}
+});
