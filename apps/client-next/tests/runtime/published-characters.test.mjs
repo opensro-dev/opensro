@@ -103,7 +103,13 @@ test("packed NPC models match their published authority and pass the production 
 
 test("special COS references share authored state-50 models and matching VAT clips", () => {
 	const manifest = readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot );
-	const rows = Object.values( manifest.models ).filter( row => row.kind === "cos" );
+	const cos = Object.values( manifest.models ).filter( row => row.kind === "cos" );
+	// Reviewed 2026-10-02: every COS band whose BSR ships. Riding mounts,
+	// transports and quest companions author no state-50 emote; 582110's
+	// action-1 route plays one for the growth pets, which all author it.
+	assert.equal( cos.length, 1217 );
+	assert.equal( new Set( cos.map( row => row.glb ) ).size, 43 );
+	const rows = cos.filter( row => row.codename.startsWith( "COS_P_" ) );
 	assert.equal( rows.length, 1130 );
 	assert.equal( new Set( rows.map( row => row.glb ) ).size, 22 );
 	for ( const row of rows ) {
