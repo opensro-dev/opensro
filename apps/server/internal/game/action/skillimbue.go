@@ -41,7 +41,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	if _, _, err := combat.PlayerStats(snapshot, rt.statCatalogs()); err != nil {
 		return OpResult{DiagnosticRefusal: "instant-effect-loadout-invalid"}
 	}
-	if _, code := rt.offensiveCost(division, snapshot, skill, now); code != 0 {
+	if _, code := rt.instantSelfEffectCost(division, snapshot, skill, now); code != 0 {
 		return offensiveRefusal(code)
 	}
 	rider, ok := rt.skillDurationRider(division, snapshot, skill)
@@ -60,7 +60,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 		if !enterworld.CharacterAlive(character) || !enterworld.SkillLearned(character, skill.ID) {
 			return false
 		}
-		cost, code := rt.offensiveCost(division, character, skill, now)
+		cost, code := rt.instantSelfEffectCost(division, character, skill, now)
 		refusal = code
 		if code != 0 {
 			return false
@@ -93,6 +93,41 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	frames := append([]wire.Frame{open, vitals, release, close}, effects...)
 	broadcast := append([]wire.Frame{open, release, close}, effects...)
 	return OpResult{Frames: frames, Broadcast: broadcast, ActorPrivate: []wire.Frame{vitals}}
+}
+
+/*
+================
+instantSelfEffectCost
+
+The 58D8F0 phases an instant self effect answers itself, in native bit
+order: cooldown (0x01 -> 0x3005), the weapon (0x04 -> 58D480, e.g. 0x300D
+for Scud's dagger-only 13/255 without a dagger) and then MP (0x10). The
+dispatch in targetinteract.go reaches this owner before the command
+admission, so without this phase a weapon-restricted row would never be
+checked. Only the equipment phase is added, not the whole execution mask:
+its action-recovery phase (0x80) would refuse the open attack 4AD870 lets
+an instant effect run beside.
+
+The phase judges weapon bytes only. Of the rows this owner admits, the
+Chinese imbue and movement rows and the three SKILL_MALL_PET_SKILL rows are
+0xFF/0xFF without reqi and pass it unchanged; Scud (13/255, no reqi) is the
+row it exists for. The Rogue's poison coatings carry reqi pairs (6 12 /
+6 13) and skip it: no native trace shows 58D480 running their pairs on this
+path, so they keep the admission they had before Scud, and their weapon is
+still judged by the equipment re-check (59F0E0) after an item moves.
+================
+*/
+func (rt *Runtime) instantSelfEffectCost(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64) (int64, uint16) {
+	cost, code := rt.offensiveCost(division, c, skill, now)
+	if code == 0x3003 || code == 0x3005 || skill.Reqi.Present {
+		// An unparsed row or a cooling skill answers before the weapon; a
+		// reqi row is not judged here (see above).
+		return cost, code
+	}
+	if refusal := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill); refusal != 0 {
+		return 0, refusal
+	}
+	return cost, code
 }
 
 /*
