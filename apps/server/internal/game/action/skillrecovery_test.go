@@ -715,8 +715,8 @@ func TestResurrectionAmounts(t *testing.T) {
 ==================
 TestResurrectionProposalAndAnswer
 
-The cast proposes; only a yes from a still-dead player revives. Rejects
-the instant revive, the invented alive refusal and the 0x3008 code.
+The cast proposes; only a yes from a still-dead player revives. The authored
+corpse selector rejects a living player at 58D80A, before any proposal.
 ==================
 */
 func TestResurrectionProposalAndAnswer(t *testing.T) {
@@ -784,9 +784,9 @@ func TestResurrectionProposalAndAnswer(t *testing.T) {
 	}
 	p.m.Level = testInt64(1)
 
-	// A living target is admitted and proposed nothing.
+	// RefSkill+9F is the corpse selector, not the EnemyP group byte.
 	*p.m.CurrentHP = 100
-	if r, toMate := cast(); r.DiagnosticRefusal != "" || refusal(r) != 0 || len(toMate) != 0 {
+	if r, toMate := cast(); r.DiagnosticRefusal != "" || refusal(r) != 6 || len(toMate) != 0 {
 		t.Fatalf("living target %q %+v %+v", r.DiagnosticRefusal, r.Frames, toMate)
 	}
 	if *p.m.CurrentHP != 100 || consent.HasPendingInvite(testDivision, p.m.Name) {

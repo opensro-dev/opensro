@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+replacement_transaction.go - atomic effect replacement and retirement
+
+Admission and installation share metadata and registry state under one lock.
+Retired instances remain queued until their teardown is published.
+
+===========================================================================
+*/
 package statuseffect
 
 import "strings"
@@ -7,6 +17,11 @@ import "strings"
 // registry lock, never accepted from a caller's stale snapshot. Missing metadata
 // fails closed. This transaction does not itself establish cast admission,
 // release timing, costs or current-command ownership.
+/*
+================
+ReplacementApplication
+================
+*/
 type ReplacementApplication struct {
 	Effect                     Effect
 	Descriptors                map[uint32]ReplacementDescriptor
@@ -18,6 +33,11 @@ type ReplacementApplication struct {
 // one lock. Retired rows remain until the update drains them. Consequently even
 // replacement needs a free row and a new token: reusing the old token before its
 // ended-instance publication would let that packet destroy the new effect.
+/*
+================
+ApplyReplacement
+================
+*/
 func (r *Registry) ApplyReplacement(a ReplacementApplication) bool {
 	return r.applyReplacement(a, true)
 }
@@ -26,10 +46,20 @@ func (r *Registry) ApplyReplacement(a ReplacementApplication) bool {
 // 58E2F4 for untargeted unlinked skills). It may request old-instance retirement
 // but does not allocate, append or install the new effect. Later release or
 // installation failure does not roll this native side effect back.
+/*
+================
+RequestReplacement
+================
+*/
 func (r *Registry) RequestReplacement(a ReplacementApplication) bool {
 	return r.applyReplacement(a, false)
 }
 
+/*
+================
+applyReplacement
+================
+*/
 func (r *Registry) applyReplacement(a ReplacementApplication, install bool) bool {
 	e := a.Effect
 	if r == nil || e.DivisionID == "" || e.CharacterName == "" || e.SkillID == 0 || e.LinkToken != 0 || e.StopRequested || e.MovementKind > MovementIndependent || install && e.InstanceToken == 0 {
@@ -112,12 +142,18 @@ func (r *Registry) applyReplacement(a ReplacementApplication, install bool) bool
 	}
 	if install {
 		prepareMovement(r.byOwner[key], -1, &e)
+		r.replaceForcedTargetLocked(key, e)
 		r.byOwner[key] = append(r.byOwner[key], e)
 		r.changeEffectStatesLocked(key, e, false)
 	}
 	return true
 }
 
+/*
+================
+requestReplacementStopLocked
+================
+*/
 func (r *Registry) requestReplacementStopLocked(key string, index int) {
 	r.byOwner[key][index].StopRequested = true
 	if !r.pendingSet[key] {

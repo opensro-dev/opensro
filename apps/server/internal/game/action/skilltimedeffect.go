@@ -77,7 +77,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 		token = atomic.AddUint32(&rt.castTokenCounter, 1)
 	}
 	effectToken := atomic.AddUint32(&rt.castTokenCounter, 1)
-	rider, ok := rt.concealmentRider(division, snapshot, skill)
+	rider, ok := rt.skillDurationRider(division, snapshot, skill)
 	if !ok {
 		return OpResult{DiagnosticRefusal: "timed-effect-stats-unavailable"}, skillCastRefused
 	}

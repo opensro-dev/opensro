@@ -44,6 +44,10 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	if _, code := rt.offensiveCost(division, snapshot, skill, now); code != 0 {
 		return offensiveRefusal(code)
 	}
+	rider, ok := rt.skillDurationRider(division, snapshot, skill)
+	if !ok {
+		return OpResult{DiagnosticRefusal: "instant-effect-stats-unavailable"}
+	}
 	token := atomic.AddUint32(&rt.castTokenCounter, 1)
 	effectToken := atomic.AddUint32(&rt.castTokenCounter, 1)
 	var effects []wire.Frame
@@ -67,7 +71,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 			return false
 		}
 		var ok bool
-		effects, ok = rt.commitCharacterEffect(division, character, skill, effectToken, statuseffect.StateActive, false, EffectPresentation{Phase: 2}, now)
+		effects, ok = rt.commitCharacterEffect(division, character, skill, effectToken, statuseffect.StateActive, false, EffectPresentation{Phase: 2, Rider: rider}, now)
 		if !ok {
 			return false
 		}

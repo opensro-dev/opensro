@@ -1,11 +1,33 @@
+/*
+===========================================================================
+
+skillimbue.go - complete weapon-coating programs and their impact riders
+
+Chinese forces add elemental damage; Rogue coatings carry only poison.
+Both use the persistent imbue owner and the shared abnormal-status resolver.
+
+===========================================================================
+*/
 package enterworld
 
 // SkillBurn is the bu body: duration power, proc chance, damage-table level.
 // 590B12 uses value 2 for probability; 590B7C uses value 1 for duration;
 // 590BF2 uses value 3 to index C63C94. These are not interchangeable.
+/*
+================
+SkillBurn
+================
+*/
 type SkillBurn struct{ Power, Chance, Level uint32 }
+
+/*
+================
+SkillImbue
+================
+*/
 type SkillImbue struct {
 	Pinned bool
+	Poison bool
 	Attack SkillAttack
 	Burn   SkillBurn
 	// Area is the Lightning Force's efr: an imbue-eligible attack with no
@@ -18,7 +40,16 @@ type SkillImbue struct {
 // its efr spread. The imbue hit rolls that rider from row.Abnormal
 // (590680); the words are checked here only so a malformed row is refused.
 // Admission covers every shipped rank without codename exceptions.
+/*
+================
+parseSkillImbue
+================
+*/
 func parseSkillImbue(fields []string, row *SkillRow) {
+	if coating := compilePoisonCoating(fields, *row); coating.Pinned {
+		row.Imbue = coating
+		return
+	}
 	if len(fields) != 118 || fields[0] != "1" || fields[8] != "1" || fields[68] != "3" || fields[18] != "1" || row.ChainNext != 0 || !row.Consumption.Pinned || !row.TimingPinned || row.Consumption.HP != 0 || row.Consumption.HPPercent != 0 {
 		return
 	}

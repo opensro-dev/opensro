@@ -75,6 +75,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// motion-state 2 continuously owned and could strand click movement.
 		openActionOwners := rt.openSkillCastOwnerSnapshot()
 		out := rt.advanceBerserk(nowMs)
+		out = append(out, rt.advancePlayerAggressions(nowMs)...)
 		out = append(out, rt.advanceBattleStates(nowMs)...)
 		out = append(out, rt.drainSkillFinalizes(nowMs)...)
 		out = append(out, rt.advanceProjectileCasts(nowMs)...)
@@ -319,6 +320,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.returnCasts.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.aggressionActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.leavePopulationSession(divisionID, characterName)
 	rt.forgetCriticalCharacter(divisionID, characterName)
 	var departedGID uint32
@@ -336,6 +338,8 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 			changed := c.NativeTeleportMode != 0
 			c.NativeTeleportMode = 0
 			c.BerserkUntilMs = 0
+			changed = len(c.Aggressions) != 0 || changed
+			c.Aggressions = nil
 			changed = c.TransitionBodyStatus(domain.BodyStatusTransition{}) || changed
 			if rows := rt.effects.Snapshot(divisionID, characterName); len(rows) > 0 {
 				changed = rt.checkpointSkillJobs(c, rows, rt.Now().UnixMilli()) || changed

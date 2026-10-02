@@ -79,6 +79,8 @@ const (
 	// DTDR +0x52C extends a linked effect by a percentage of its base
 	// duration (5833EB..583450), independent of DTAT's damage scaling.
 	ParameterDotDuration
+	// RPBU +0x508 adds milliseconds to the coating, not its poison victim.
+	ParameterPoisonCoatingDuration
 	SkillParameterCount
 )
 
@@ -154,6 +156,8 @@ func SkillParameterFromKey(key uint32) (SkillParameter, bool) {
 		return ParameterPoisonDamage, true
 	case 0x52505455:
 		return ParameterPoisonDuration, true
+	case 0x52504255:
+		return ParameterPoisonCoatingDuration, true
 	case 0x54524141:
 		return ParameterTrapDamage, true
 	case 0x57494d44:

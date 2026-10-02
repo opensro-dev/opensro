@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+pk_test.go - persistence and snapshot isolation for player relations
+
+===========================================================================
+*/
 package domain
 
 import (
@@ -5,6 +12,11 @@ import (
 	"testing"
 )
 
+/*
+================
+TestCriminalRecordSurvivesReloadWithoutResurrectingEventOrAggression
+================
+*/
 func TestCriminalRecordSurvivesReloadWithoutResurrectingEventOrAggression(t *testing.T) {
 	c := &Character{PK: &PKRecord{DailyCount: 3, TotalCount: 5, Penalty: 3600}, Aggressions: map[uint32]uint32{100003: 20}, EventMembership: &EventMembership{ID: 17, Team: 0}}
 	if c.PVPState() != 2 || c.EventTeam() != 0 {
@@ -27,6 +39,11 @@ func TestCriminalRecordSurvivesReloadWithoutResurrectingEventOrAggression(t *tes
 	}
 }
 
+/*
+================
+TestNameAuthoritySnapshotDetachesAllMutableInputs
+================
+*/
 func TestNameAuthoritySnapshotDetachesAllMutableInputs(t *testing.T) {
 	c := &Character{PK: &PKRecord{Penalty: 1200}, Aggressions: map[uint32]uint32{100003: 20}, EventMembership: &EventMembership{ID: 17, Team: 0}}
 	snapshot := cloneCharacter(c)
@@ -36,8 +53,8 @@ func TestNameAuthoritySnapshotDetachesAllMutableInputs(t *testing.T) {
 	if snapshot.PVPState() != 2 || snapshot.EventTeam() != 0 || snapshot.Aggressions[100003] != 20 {
 		t.Fatal("snapshot aliases live authority")
 	}
-	if c.PVPState() != 1 {
-		t.Fatal("live aggression without penalty is assault")
+	if c.PVPState() != 0 {
+		t.Fatal("last aggression tick must clear grey before target protection")
 	}
 	delete(c.Aggressions, 100003)
 	if c.PVPState() != 0 {

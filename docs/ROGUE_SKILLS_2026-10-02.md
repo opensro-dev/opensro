@@ -1,0 +1,117 @@
+# Scorn and Poison Weapons — 2026-10-02
+
+The port admits the complete authored programs for all six Scorn/Gross Scorn
+ranks and all eight Rogue poison-coating ranks. Recognition follows
+program shape and reference fields, not an allowlist of skill IDs or names.
+Malformed or additional instructions remain refused by these producers.
+
+## Poison coating
+
+The Rogue program's `att` payload is intentionally zero. It contributes poison
+to eligible weapon impacts through the existing imbue and abnormal-status
+owners without manufacturing a second damage hit. Dagger and crossbow basics
+exercise this path, including the crossbow's delayed release and ammunition.
+The shared resolver also owns linked stages and area impacts.
+
+Server `5833BE..5833E6` adds the RPBU keeper value to the coating's duration.
+The five authored duration passives now feed that parameter. RPDU changes
+poison tick damage and RPTU changes poison level/duration when the hit rolls;
+neither extends the coating. A poison already on a victim keeps its own
+lifetime after the coating ends or is cancelled.
+
+Client `776450` already decodes the optional duration word from the reference
+layout, and its buff timer adds that word to the authored duration. No new
+opcode, packet-length heuristic or protocol version is required.
+
+## Scorn ownership and targeting
+
+- Server `5838AC..5839A4` admits a living player, performs a zero-damage hit,
+  stores the caster GID in the recipient's effect context, and replaces its
+  selection record. The selection calls match the ordinary select handler
+  at `52B5B4..52B61A`; they do not cancel a committed action.
+- `58CF7F..58CF93` constrains subsequent primary targeted admission, including
+  support skills. The shared admission owner enforces this instead of a
+  Scorn-only request check. Untargeted skills do not acquire an invented
+  primary target.
+- `5936D5..5936E8` gives each recipient one active forced-target owner, even
+  across different skill groups. Replacements retire through the ordinary
+  counted teardown queue. The instance also owns expiry and recipient-death
+  cleanup; there is no separate target-lock cache.
+- `5847C0..5847DE` checks source presence, not source HP or a distance tether.
+  A dead caster still present in the world does not release Scorn. A departed
+  source stops the effect and publishes its teardown.
+- Gross Scorn selects the primary first, then eligible hostile players in the
+  same world. Shape-two reach expands the primary-centered radius by caster
+  and candidate body radii (`58AB6D`). The authored recipient limit applies
+  after life, presence, relation, world and range filtering.
+- `nbuf` prevents voluntary cancellation. Scorn still wakes Sleep through the
+  shared hit consequence; its zero damage does not reduce HP.
+
+The v1.188 server writes additional context data in its own attached-effect
+packet. The v1.150 client's `776450` does not read a Scorn target-GID word.
+That later-version word must not be added to the port's `B419`.
+
+## Shared corrections
+
+Reference target columns were described three bytes out of alignment in the
+old player-target path. `RefSkill+97` is Building (column 25), `+98` is Self
+(26), and `+9C` is EnemyP (30). Corpse selection independently refuses living
+targets. The cure fallback in `593F50` also uses Self, not Animal; a regression
+test varies those flags independently.
+
+Ordinary-world hostile player admission now checks both region permissions,
+party protection, cape/job relations, the PK level floor and criminal limits.
+Legal cape/job opponents do not become criminals merely because they fight.
+Relation contexts take precedence over incidental criminal state: a grey
+player does not turn a same-cape ally into an area enemy.
+
+In v1.150 the equipped free-battle cape supplies its group through item
+parameter 2 (the authored field is labelled as the free-battle group number).
+This projects the group used by server `4EB320` without introducing the later
+server's separate free-PvP mode-selection feature. Group five opposes itself;
+other matching groups are allies. This change does not create guild-war,
+fortress-combat, caravan-trade or event enrollment authorities where none
+currently produce live participant state.
+
+Zero-damage hostile player hits use the same aggression map as player combat
+state. `4E25C0` registers/refreshes a target for twenty ticks; `4E1DF0` retains
+the attacker when the victim is already grey. `52AA90` decrements the map,
+removes new party allies and clears grey one tick before removing the final
+target. The final count of one remains protected by `4F14D0`. That callback
+also advances the native timed-action manager by 1.0 seconds; the port uses
+one-second scheduled ticks and catches up after a delayed simulation frame.
+Actor departure clears the transient map and its scheduling index.
+
+## Region reference projection
+
+`world/regioncombat_generated.go` is generated by
+`scripts/build/import_region_combat.py` from the research shard backup's
+primary `_RefRegion` allocation. The generated header records the input SHA256.
+The census is 3,194 unique region IDs, including 103 protected regions.
+The importer reads backup pages; it neither executes SQL nor restores a database.
+
+`wRegionID` is authoritative. Reconstructing it from X/Z is wrong for dungeons
+and disagrees with one authored outdoor row. Runtime unknown regions fail
+closed. The later reference catalog supplies the ordinary-region permission
+rule for existing v1.150 regions; including a catalog key does not instantiate
+or expose a later-version map. This is the version-boundary projection used
+for the server's `52943E..52946E` region checks.
+
+## Verification
+
+Coverage includes the complete rank census and malformed programs; real
+dagger/crossbow poison impacts; RPBU wire data; RPDU/RPTU victim ticks;
+coating cancellation and separate victim expiry; Scorn costs/refusals;
+selection versus command lifetime; cross-family replacement; strict expiry;
+recipient death versus source death/departure; secondary target filtering and
+radius equality; aggression countdown/refresh/party changes; and independent
+self/animal cure flags.
+
+The source pipeline passed all 12 tasks, including full server tests, race
+checks, vet, lint and the vulnerability check. The first full client run found
+the stale pre-#108 COS census (`1217 != 1130`); main's model-expansion and HUD
+commits were incorporated. The rerun passed all 11 client gates, and the final
+source rerun passed all 12 tasks on that updated base. No authenticated live
+browser exercise or production deployment was performed for this change.
+
+This change does not deploy a server or publish client/data assets.

@@ -37,6 +37,7 @@
 		"*.{mjs,cjs}"
 	],
 	"excludes": [
+		"apps/server/internal/game/world/regioncombat_generated.go",
 		"apps/server/internal/game/item/loot/.generated/**",
 		"**/node_modules",
 		"**/temp",

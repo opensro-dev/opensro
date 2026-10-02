@@ -12,9 +12,9 @@ package enterworld
 ==================
 SkillTargets
 
-SkillTargets is RefSkill +0x97 through +0xA1, skilldata columns 22..32.
+SkillTargets preserves the client table's target columns 22..33.
 Skill_ValidateTargetPermissions (58D7A0) reads these bytes. +0x97 is
-column 22 Target_Required; +0x98 is TargetType_Animal.
+column 25 TargetType_Building; +0x98 is column 26 TargetGroup_Self.
 ==================
 */
 type SkillTargets struct {
@@ -30,6 +30,11 @@ type SkillTargets struct {
 
 // skillTargetsFromColumns reads columns 22..32. A cell other than 0 or 1
 // leaves that byte clear, matching the Target_Required parser.
+/*
+================
+skillTargetsFromColumns
+================
+*/
 func skillTargetsFromColumns(fields []string) SkillTargets {
 	var out SkillTargets
 	if len(fields) <= 32 {

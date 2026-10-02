@@ -48,6 +48,7 @@ An entire category-three program. Native 5830B0 owns preparation and release;
 ================
 */
 type SkillTimedEffect struct {
+	ForcedTarget bool // hitm: recipient may target only its caster (58CF7F).
 	// Periodic has a separate execution contract from friendly timed buffs.
 	Periodic SkillPeriodicEffect
 	// ItemProgram marks an item-owned timed job (compileTimedItemEffect).
@@ -165,6 +166,10 @@ enabled only after this complete producer succeeds, never from hste alone.
 ================
 */
 func parseSkillTimedEffect(fields []string, row *SkillRow) {
+	if forced := compileForcedTarget(fields, *row); forced.Pinned {
+		row.TimedEffect = forced
+		return
+	}
 	if item, ok := compileTimedItemEffect(fields, *row); ok {
 		row.TimedEffect = item
 		return

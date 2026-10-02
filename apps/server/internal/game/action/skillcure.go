@@ -9,8 +9,6 @@ skillcure.go - skill cures (593F50) and party area reach
 package action
 
 import (
-	"math"
-
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -23,8 +21,8 @@ applySkillCure
 
 applySkillCure is the 593F50 cure at release. A non-empty action vector is
 cured entry by entry; a missing id is skipped. An empty vector cures the
-caster only when RefSkill+0x98 (column 23 TargetType_Animal) is set.
-Every shipped cure row has columns 22 and 23 equal. Each cured player's
+caster only when RefSkill+0x98 (column 26 TargetGroup_Self) is set.
+Each cured player's
 private snapshot (0x36C7) goes to that player: the caster's own in actor,
 everyone else's through recipients.
 ==================
@@ -43,7 +41,7 @@ func (rt *Runtime) applySkillCure(division string, caster *enterworld.Character,
 	}
 	targets := rt.skillCureVector(division, caster, skill, cast, now)
 	if len(targets) == 0 {
-		if skill.Targets.Animal {
+		if skill.Targets.Self {
 			private, shared := rt.cureCharacter(division, caster, skill, now)
 			route(caster, private, shared)
 		}
@@ -175,9 +173,9 @@ distance3D
 ================
 */
 func distance3D(from, to simulation.Spawn) float64 {
-	planar := simulation.WorldDistance2D(from, to)
-	dy := to.Y - from.Y
-	return math.Sqrt(planar*planar + dy*dy)
+	// Reuse the native vector's float stores. Computing a planar square root
+	// and squaring it again changes the boundary used by every player area.
+	return float64(relative(from, to).length())
 }
 
 /*

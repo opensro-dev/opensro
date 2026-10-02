@@ -46,6 +46,7 @@ barrier.
 type Runtime struct {
 	berserkActors       sync.Map // derived expiry index; character store owns state
 	battleActors        sync.Map // battle-state expiry index (battlestate.go)
+	aggressionActors    sync.Map // scheduled counters; character owns aggression entries
 	BerserkRoll         combat.Roll32767
 	RewardParties       func(division string) []RewardParty
 	NextPartyLootMember func(division, name string) uint32

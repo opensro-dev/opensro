@@ -213,6 +213,13 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 	// 58E13E -> 58CC70: the player target's own checks, then reqc bit 0,
 	// which wants a knocked-down target (motion 8, 58D199).
 	if mask&admitTargets != 0 && target != nil {
+		if forced := rt.effects.ForcedTarget(division, c.Name, now); forced != 0 {
+			// 58CF7F compares context+28 for every targeted action, including
+			// support skills. A monster cannot be the source of this program.
+			if target.player == nil || enterworld.ObjectIDForCharacter(target.player) != forced {
+				return 0x3006
+			}
+		}
 		if target.player != nil {
 			if code := rt.playerSkillTarget(division, c, target.player, skill, now); code != 0 {
 				return code

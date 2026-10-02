@@ -1,47 +1,47 @@
 /*
 ===========================================================================
 
-skilltarget_test.go - tests for skilltarget.go
+skilltarget_test.go - native player-target flag branches
+
+The native RefSkill target-group bytes start at +98, after the type bytes.
+EnemyP is +9C; +9F selects corpses and must never be confused with it.
 
 ===========================================================================
 */
-
 package action
 
 import (
-	"testing"
-
 	"opensro.online/server/internal/game/enterworld"
+	"testing"
 )
 
 /*
-==================
+================
 TestSkillTargetPermissionNativeArms
-
-58D7A0 arms that differ from a plain "players only" rule: Enemy_P only
-refuses a living target, and a building-only row admits a player who
-shares the caster's party object (+0x1CB8).
-==================
+================
 */
 func TestSkillTargetPermissionNativeArms(t *testing.T) {
-	enemyP := enterworld.SkillTargets{Animal: true, EnemyP: true}
-	if skillTargetPermission(enemyP, false, true, false) {
-		t.Error("Enemy_P admitted a living player")
+	cases := []struct {
+		name                     string
+		flags                    enterworld.SkillTargets
+		self, alive, party, want bool
+	}{
+		{"enemy player", enterworld.SkillTargets{Animal: true, EnemyP: true}, false, true, false, true},
+		{"enemy monster only", enterworld.SkillTargets{Animal: true, EnemyM: true}, false, true, false, false},
+		{"corpse refuses living", enterworld.SkillTargets{Animal: true, DeadBody: true}, false, true, false, false},
+		{"corpse admits dead", enterworld.SkillTargets{Animal: true, DeadBody: true}, false, false, false, true},
+		{"self missing", enterworld.SkillTargets{Animal: true, EnemyP: true}, true, true, false, false},
+		{"self allowed", enterworld.SkillTargets{Animal: true, Self: true}, true, true, false, true},
+		{"party missing", enterworld.SkillTargets{Animal: true, Party: true}, false, true, false, false},
+		{"party shared", enterworld.SkillTargets{Animal: true, Party: true}, false, true, true, true},
+		{"ally bypasses party restriction", enterworld.SkillTargets{Animal: true, Ally: true, Party: true}, false, true, false, true},
+		{"dont care", enterworld.SkillTargets{DontCare: true, DeadBody: true}, true, true, false, true},
 	}
-	if !skillTargetPermission(enemyP, false, false, false) {
-		t.Error("Enemy_P refused a dead player")
-	}
-
-	kit := enterworld.SkillTargets{Required: true, Building: true}
-	if skillTargetPermission(kit, false, true, false) {
-		t.Error("building-only admitted a player outside the party")
-	}
-	if !skillTargetPermission(kit, false, true, true) {
-		t.Error("building-only refused a party member")
-	}
-
-	selfOnly := enterworld.SkillTargets{Animal: true, Self: true}
-	if skillTargetPermission(selfOnly, false, true, true) {
-		t.Error("Self without Ally admitted another player")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := skillTargetPermission(c.flags, c.self, c.alive, c.party); got != c.want {
+				t.Fatalf("admission=%v want=%v", got, c.want)
+			}
+		})
 	}
 }

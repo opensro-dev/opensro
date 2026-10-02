@@ -161,21 +161,28 @@ func (rt *Runtime) installRecipientEffects(division string, recipients []*enterw
 
 /*
 ================
-concealmentRider
+skillDurationRider
 
-STDU milliseconds the caster's passives add to a hide (5833C8). Other timed
-effects carry no duration rider.
+RPBU milliseconds extend a poison coating (5833BE); otherwise STDU extends
+a hide (5833C8). The same rider owns the server lifetime and client timer.
 ================
 */
-func (rt *Runtime) concealmentRider(division string, caster *enterworld.Character, skill enterworld.SkillRow) (uint32, bool) {
-	if !skill.Concealment.Pinned || !skill.Concealment.DurationBonus {
+func (rt *Runtime) skillDurationRider(division string, caster *enterworld.Character, skill enterworld.SkillRow) (uint32, bool) {
+	parameter := enterworld.ParameterPoisonCoatingDuration
+	if !skill.Imbue.Poison {
+		parameter = enterworld.ParameterStealthDuration
+		if !skill.Concealment.Pinned || !skill.Concealment.DurationBonus {
+			return 0, true
+		}
+	}
+	if !skill.EffectRider {
 		return 0, true
 	}
 	stats, _, err := rt.playerCombatStats(division, caster)
 	if err != nil {
 		return 0, false
 	}
-	return stats.SkillParameters[enterworld.ParameterStealthDuration], true
+	return stats.SkillParameters[parameter], true
 }
 
 /*

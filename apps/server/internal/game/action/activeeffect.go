@@ -97,8 +97,9 @@ serializes +20/+24, while state eligibility comes from +0c.
 ================
 */
 type EffectPresentation struct {
-	Phase uint8
-	Rider uint32
+	ForcedTargetGID uint32
+	Phase           uint8
+	Rider           uint32
 	// TransformRefObjID is the RefObj an msch 1 cast carries (context
 	// +0x20, set by BeginIndirectSkill from a monster mask), or the model
 	// of the player an msch 2 Duplicate copies, with that player's record
@@ -223,6 +224,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		bodyOwner = bodyEffectSequence.Add(1)
 	}
 	effect := statuseffect.Effect{
+		ForcedTargetGID: presentation.ForcedTargetGID,
 		OwnerGID:        enterworld.ObjectIDForCharacter(character),
 		BodyStatusOwner: bodyOwner,
 		DurationPresent: row.EffectDurationPresent || row.EffectDurationMs != 0,

@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+registry.go - character-owned effect installation and retirement
+
+One registry owns the effect instances, modifier contributions and target
+constraints. Consumers read snapshots; retirement publishes instance tokens.
+
+===========================================================================
+*/
 package statuseffect
 
 import (
@@ -9,6 +19,11 @@ import (
 // CSkillManager_FindActiveBuffBySkillID (v1.188
 // SR_GameServer 0x59ef90). Only states 1 and 2 are eligible for the native
 // client-cancellation action.
+/*
+================
+State
+================
+*/
 type State uint8
 
 const (
@@ -23,7 +38,13 @@ const (
 // ClientCancelable mirrors ActiveCharacterEffect_RequestStop(effect, false):
 // the UI request is not a privileged purge and cannot remove an effect whose
 // server descriptor forbids voluntary cancellation.
+/*
+================
+Effect
+================
+*/
 type Effect struct {
+	ForcedTargetGID  uint32 // hitm context+28; zero means no target constraint.
 	jobClock         relativeJobClock
 	jobClockPresent  bool
 	jobCheckpointDue bool
@@ -89,6 +110,11 @@ type Effect struct {
 // EndedBatch is one character update's retired effect set. Retail broadcasts
 // one counted ended-instance packet per character update, not one global
 // packet across every character in a division.
+/*
+================
+EndedBatch
+================
+*/
 type EndedBatch struct {
 	DivisionID    string
 	CharacterName string
@@ -103,6 +129,11 @@ const MaxAttachedEffectsPerCharacter = 0xff
 // Registry is the sole runtime owner of cancellable character effects. It is
 // deliberately independent from presentation packets: callers commit state
 // here first, then serialize the resulting Effect through wire.
+/*
+================
+Registry
+================
+*/
 type Registry struct {
 	nextModifierSource uint64
 	mu                 sync.Mutex
@@ -114,6 +145,11 @@ type Registry struct {
 	pendingSet         map[string]bool
 }
 
+/*
+================
+NewRegistry
+================
+*/
 func NewRegistry() *Registry {
 	return &Registry{
 		castingStates: make(map[string]CastingConflictSnapshot),
@@ -124,6 +160,11 @@ func NewRegistry() *Registry {
 	}
 }
 
+/*
+================
+ownerKey
+================
+*/
 func ownerKey(divisionID, characterName string) string {
 	return strings.ToLower(divisionID) + "\x00" + strings.ToLower(characterName)
 }
@@ -131,6 +172,11 @@ func ownerKey(divisionID, characterName string) string {
 // Apply inserts or replaces the exact {group, instance} identity for one
 // owner. A zero instance remains a real key: it represents a non-stacked
 // effect family, not a wildcard at the storage boundary.
+/*
+================
+Apply
+================
+*/
 func (r *Registry) Apply(effect Effect) bool {
 	if r == nil || effect.LinkToken != 0 || effect.SkillID == 0 || effect.SkillGroup == 0 ||
 		effect.DivisionID == "" || effect.CharacterName == "" || effect.MovementKind > MovementIndependent {
@@ -177,6 +223,7 @@ func (r *Registry) Apply(effect Effect) bool {
 				return false
 			}
 			prepareMovement(rows, index, &effect)
+			r.replaceForcedTargetLocked(key, effect)
 			r.changeEffectStatesLocked(key, rows[index], true)
 			rows[index] = effect
 			r.changeEffectStatesLocked(key, effect, false)
@@ -191,6 +238,7 @@ func (r *Registry) Apply(effect Effect) bool {
 		return false
 	}
 	prepareMovement(rows, -1, &effect)
+	r.replaceForcedTargetLocked(key, effect)
 	r.byOwner[key] = append(rows, effect)
 	r.changeEffectStatesLocked(key, effect, false)
 	return true
@@ -201,6 +249,11 @@ func (r *Registry) Apply(effect Effect) bool {
 // request carries a nonzero token. It clears the matched effect's logical
 // live flag and returns it, preserving native list order. Erasure and the
 // ended-instance broadcast deliberately belong to DrainStopRequested.
+/*
+================
+RequestVoluntaryStop
+================
+*/
 func (r *Registry) RequestVoluntaryStop(
 	divisionID, characterName string,
 	skillID, optionalInstanceToken uint32,
@@ -240,6 +293,11 @@ func (r *Registry) RequestVoluntaryStop(
 // DrainStopRequested is the character-effect update/retirement phase. It
 // removes only rows whose live flag was cleared and returns batches in request
 // order so the simulation tick can serialize one counted packet per owner.
+/*
+================
+DrainStopRequested
+================
+*/
 func (r *Registry) DrainStopRequested() []EndedBatch {
 	if r == nil {
 		return nil
@@ -297,6 +355,11 @@ func (r *Registry) DrainStopRequested() []EndedBatch {
 }
 
 // Snapshot returns an owner-isolated copy for diagnostics and tests.
+/*
+================
+Snapshot
+================
+*/
 func (r *Registry) Snapshot(divisionID, characterName string) []Effect {
 	if r == nil {
 		return nil
@@ -307,6 +370,11 @@ func (r *Registry) Snapshot(divisionID, characterName string) []Effect {
 	return append([]Effect(nil), rows...)
 }
 
+/*
+================
+Forget
+================
+*/
 func (r *Registry) Forget(divisionID, characterName string) {
 	if r == nil {
 		return
@@ -328,6 +396,11 @@ func (r *Registry) Forget(divisionID, characterName string) {
 // modifier-only and presentation-only effects. Authored cbuf protection and the existing durable-job
 // lifecycle are independent reasons to retain an application.
 // The action owner holds the character mutation door while consuming this list.
+/*
+================
+RetireBodyStatusesOnDeath
+================
+*/
 func (r *Registry) RetireBodyStatusesOnDeath(divisionID, characterName string) []Effect {
 	if r == nil {
 		return nil
@@ -367,6 +440,11 @@ func (r *Registry) RetireBodyStatusesOnDeath(divisionID, characterName string) [
 // effects use native 5830B0:5851E5..5851E7 (unsigned elapsed > duration+rider),
 // including zero duration. Durable jobs use the native online-seconds clock.
 // No caller should infer liveness from a positive remaining-duration display.
+/*
+================
+Expired
+================
+*/
 func (e Effect) Expired(nowMs int64) bool {
 	if !e.DurationPresent && e.ExpiresAtMs <= 0 {
 		return false
@@ -386,6 +464,11 @@ func (e Effect) Expired(nowMs int64) bool {
 
 // RemainingMs is presentation of the same clock, not an alternate liveness
 // test: zero remaining is still live at a strict native deadline.
+/*
+================
+RemainingMs
+================
+*/
 func (e Effect) RemainingMs(nowMs int64) uint32 {
 	if e.Expired(nowMs) {
 		return 0
@@ -401,6 +484,11 @@ func (e Effect) RemainingMs(nowMs int64) uint32 {
 
 // Expire uses the same retirement queue as explicit stops. Projection may omit
 // expired rows before the next tick, but only this owner removes live state.
+/*
+================
+Expire
+================
+*/
 func (r *Registry) Expire(nowMs int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -422,6 +510,11 @@ func (r *Registry) Expire(nowMs int64) {
 
 // TakeJobCheckpoints advances each job's own clock and consumes its pending
 // checkpoint. Jobs installed later do not inherit a global 300-second timer.
+/*
+================
+TakeJobCheckpoints
+================
+*/
 func (r *Registry) TakeJobCheckpoints(nowMs int64) []EndedBatch {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -450,6 +543,11 @@ func (r *Registry) TakeJobCheckpoints(nowMs int64) []EndedBatch {
 
 // RetireEvent implements synchronous 5A16C0 event-mask teardown. Producers
 // bind only descriptors with nonzero activity and execution context mode 1.
+/*
+================
+RetireEvent
+================
+*/
 func (r *Registry) RetireEvent(division, name string, mask uint8) []Effect {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -483,6 +581,11 @@ func (r *Registry) RetireEvent(division, name string, mask uint8) []Effect {
 // RetireInstances is the synchronous RequestRetirement of chosen instances
 // (CSkillManager_ProcessDamageEffects 5A1691): the same teardown as
 // RetireEvent, selected by instance token instead of event bit.
+/*
+================
+RetireInstances
+================
+*/
 func (r *Registry) RetireInstances(division, name string, tokens []uint32) []Effect {
 	if len(tokens) == 0 {
 		return nil

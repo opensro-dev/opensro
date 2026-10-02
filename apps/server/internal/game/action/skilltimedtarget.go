@@ -66,6 +66,9 @@ func (rt *Runtime) acceptTimedTargetEffect(division string, c, snapshot *enterwo
 	if !rt.auraReplacementAllowed(division, target, skill) {
 		return offensiveRefusal(0x300c)
 	}
+	if skill.TimedEffect.ForcedTarget {
+		return rt.acceptForcedTarget(tauntPlayerCast{division: division, caster: c, snapshot: snapshot, target: target, skill: skill, now: now})
+	}
 	if skill.TimedEffect.Link.Present {
 		return rt.acceptLinkedTargetEffect(division, c, snapshot, target, view, cast, skill, now)
 	}

@@ -22,6 +22,7 @@ advanceLinkedEffects
 ================
 */
 func (rt *Runtime) advanceLinkedEffects(nowMs int64) {
+	rt.advanceForcedTargets()
 	for _, link := range rt.effects.Links() {
 		unlock := rt.lockDivision(link.DivisionID)
 		source := rt.characterSnapshot(link.DivisionID, rt.findCharacter(link.DivisionID, link.SourceName))

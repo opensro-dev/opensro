@@ -16,6 +16,7 @@ IsNPC 4825C0, IsMonster 482600, GetLifeStateByte 485EE0, GetMotionState
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -28,15 +29,24 @@ playerSkillTarget
 58CC70 for a player target. Returns 0 to admit, else the refusal code:
 
   - missing, or on another plane or sector              0x3006
-  - dead, unless the row has Enemy_P or resu (58CDF1)   0x3006
+  - dead, unless the row selects corpses or resu        0x3006
   - refused by skillTargetPermission                    0x3006
   - resu, above a nonzero word 0 (58D0CE)               0x3012
 
-A living target passes a resu row; the cast then proposes nothing.
+A resu row may admit the dead; its corpse selector independently refuses
+a living target in the common permission predicate.
 ==================
 */
 func (rt *Runtime) playerSkillTarget(division string, caster, target *enterworld.Character, skill enterworld.SkillRow, now int64) uint16 {
 	if target == nil {
+		return 0x3006
+	}
+	if target.DeletePending || domain.CharacterWorldInstance(caster) != domain.CharacterWorldInstance(target) {
+		return 0x3006
+	}
+	// Type selection precedes the group predicate. A building-only repair
+	// program must not be admitted merely because its group bytes are clear.
+	if skill.Targets.Present && !skill.Targets.Animal && (skill.Targets.Building || skill.Targets.Land) {
 		return 0x3006
 	}
 	from := rt.liveSpawn(simulation.WorldKey(division, caster.Name), caster, now)
@@ -46,12 +56,20 @@ func (rt *Runtime) playerSkillTarget(division string, caster, target *enterworld
 	}
 
 	alive := enterworld.CharacterAlive(target)
-	if !alive && !skill.Targets.EnemyP && !skill.Abnormal.AdmitDeadParty {
+	if !alive && !skill.Targets.DeadBody && !skill.Abnormal.AdmitDeadParty {
 		return 0x3006
+	}
+	if skill.Replacement.MatchesExecutionSelector {
+		if code := rt.playerAttackTargetRefusal(division, caster, target, now); code != 0 {
+			return code
+		}
 	}
 
 	sameParty := rt.sharePartyObject(division, caster, target)
-	if !skillTargetPermission(skill.Targets, caster == target, alive, sameParty) {
+	if !skillTargetPermission(skill.Targets, enterworld.ObjectIDForCharacter(caster) == enterworld.ObjectIDForCharacter(target), alive, sameParty) {
+		return 0x3006
+	}
+	if !sameParty && !rt.playerSkillRelationAllowed(division, caster, target, skill.Replacement.MatchesExecutionSelector) {
 		return 0x3006
 	}
 
@@ -75,11 +93,11 @@ skillTargetPermission
 
 58D7A0 for a player caster and a player target, in its order:
 
-  - Enemy_M admits at once
-  - no Animal and the target is the caster: refuse
-  - Enemy_P and a living target: refuse
-  - Self without Ally: refuse (the target is a player)
-  - Building without Land or Animal: both must have a party object
+  - DontCare admits at once
+  - no Self and the target is the caster: refuse
+  - DeadBody and a living target: refuse
+  - EnemyM without EnemyP: refuse (the target is a player)
+  - Party without Ally or Self: both must have a party object
     (+0x1CB8) with the same id (CGObjPC_GetPartyID 4EA280)
 
 Motion 8 without da (+0x240) would also refuse; players here have no
@@ -87,27 +105,32 @@ motion-8 channel, only sit, so that compare cannot fire.
 ==================
 */
 func skillTargetPermission(t enterworld.SkillTargets, sameObject, targetAlive, sameParty bool) bool {
-	if t.EnemyM {
+	if t.DontCare {
 		return true
 	}
-	if !t.Animal && sameObject {
+	if !t.Self && sameObject {
 		return false
 	}
-	if t.EnemyP && targetAlive {
+	if t.DeadBody && targetAlive {
 		return false
 	}
-	if t.Self && !t.Ally {
+	if t.EnemyM && !t.EnemyP {
 		return false
 	}
-	buildingOnly := t.Building && !t.Land && !t.Animal
-	if buildingOnly && !sameParty {
+	partyOnly := t.Party && !t.Ally && !t.Self
+	if partyOnly && !sameParty {
 		return false
 	}
 	return true
 }
 
-// sharePartyObject reports both players in one party (both +0x1CB8 set and
-// equal ids).
+/*
+================
+sharePartyObject
+
+Both players have a party object (+0x1CB8) with the same ID.
+================
+*/
 func (rt *Runtime) sharePartyObject(division string, a, b *enterworld.Character) bool {
 	party := rt.auraParty(division, a)
 	return len(party) != 0 && party[enterworld.ObjectIDForCharacter(b)]
