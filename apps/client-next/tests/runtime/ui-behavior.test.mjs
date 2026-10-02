@@ -28,6 +28,7 @@ async function load( file ) {
 }
 const { createUiAssets } = await load( "src/engine/runtime/ui/resources/resources.ts" );
 const { createUi } = await load( "src/engine/runtime/ui/ui.ts" );
+const { topmostControlAt } = await load( "src/engine/foundation/ui/hit-test.ts" );
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createQuests } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts" );
@@ -1336,6 +1337,119 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		assert.equal( prompt( 16800 ), false );
 		f.ui.event( { kind: "world-select", gid: 1 } );
 		assert.equal( prompt( 16801 ), true, "explicit selection bypasses the automatic death timer" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("resurrection question draws over the death box with native text and death box controls stay dispatchable", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		/** @type {any} */ let latest = null;
+		const step = now => (latest = f.ui.step( f.state, now ) ?? latest),
+			ids = () => defined( latest ).controls.map( c => c.id );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			progression: { level: 10, masteries: [] },
+			vitals: [ { gid: 1, hp: 0, mp: 0, deathState: true } ]
+		};
+		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 2, 0, 0 ] } ];
+		for ( let t = 0; t <= 3000; t += 100 ) step( t );
+		assert.ok( ids().includes( "rebirth-point" ) );
+		assert.ok( ids().includes( "chat-text" ) );
+		f.state.gameplay = { ...f.state.gameplay, social: { invitation: null, resurrection: { gid: 2 } } };
+		step( 3100 );
+		assert.deepEqual( ids(), [
+			"rebirth-body",
+			"rebirth-drag",
+			"rebirth-point",
+			"rebirth-alternate",
+			"resurrection-body",
+			"resurrection-drag",
+			"resurrection-accept",
+			"resurrection-refuse"
+		], "the question sits above the death box and the HUD is held" );
+		assert.deepEqual(
+			defined( latest ).controls.filter( c => c.id.startsWith( "resurrection-" ) && c.kind === "button" ).map(
+				c => [
+					c.id,
+					c.label,
+					c.rect
+				]
+			),
+			[ [ "resurrection-accept", "Yes", [ 719, 508, 76, 24 ] ], [ "resurrection-refuse", "No", [
+				805,
+				508,
+				76,
+				24
+			] ] ]
+		);
+		assert.ok( f.hasText( "The warm light is hovering around your body." ) );
+		assert.ok( f.hasText( "You feel the soul entering your body." ) );
+		assert.ok( f.hasText( "Will you resurrect yourself to venture again?" ) );
+		for ( const id of [ "rebirth-point", "rebirth-alternate" ] ) {
+			const [x, y, rw, rh] = defined( latest ).controls.find( c => c.id === id ).rect;
+			assert.equal(
+				topmostControlAt( defined( latest ).controls, x + (rw >> 1), y + (rh >> 1) )?.id,
+				"resurrection-body",
+				`the centred question covers ${id} until it is dragged aside`
+			);
+		}
+		f.ui.event( { kind: "drag", id: "resurrection-drag", dx: 40, dy: -30 } );
+		step( 3110 );
+		assert.deepEqual( defined( latest ).controls.find( c => c.id === "resurrection-accept" ).rect, [
+			759,
+			478,
+			76,
+			24
+		] );
+		f.ui.event( { kind: "activate", id: "logout" } );
+		assert.deepEqual( sent, [] );
+		f.ui.event( { kind: "activate", id: "resurrection-accept" } );
+		assert.deepEqual( sent, [ { kind: "gameplay", command: { kind: "resurrection-consent", accept: true } } ] );
+		f.ui.event( { kind: "activate", id: "resurrection-refuse" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "resurrection-consent", accept: false }
+		} );
+		f.ui.event( { kind: "activate", id: "rebirth-point" } );
+		assert.deepEqual( sent.at( -1 ), { kind: "gameplay", command: { kind: "rebirth", choice: 1 } } );
+		f.state.gameplay = { ...f.state.gameplay, social: { invitation: null } };
+		step( 3200 );
+		assert.ok( !ids().includes( "resurrection-accept" ) );
+		assert.ok( ids().includes( "rebirth-point" ) );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("an invitation box and the resurrection question stay open and answerable together", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		f.ui.step( f.state, 0 );
+		const invited = { invitation: { type: 2, gid: 1, options: 0 } },
+			both = { invitation: { type: 2, gid: 1, options: 0 }, resurrection: { gid: 2 } },
+			at = ( social, now ) => f.ui.step( { ...f.state, gameplay: { ...f.state.gameplay, social } }, now ),
+			buttons = semantic => semantic.controls.filter( c => c.kind === "button" ).map( c => [ c.id, c.rect ] );
+		const alone = buttons( at( invited, 100 ) );
+		assert.deepEqual( alone.map( ( [id] ) => id ), [ "invite-accept", "invite-refuse" ] );
+		const raced = buttons( at( both, 200 ) );
+		assert.deepEqual( raced.map( ( [id] ) => id ), [
+			"invite-accept",
+			"invite-refuse",
+			"resurrection-accept",
+			"resurrection-refuse"
+		] );
+		assert.deepEqual( raced.slice( 0, 2 ), alone, "the invitation box keeps its native controls" );
+		f.ui.event( { kind: "activate", id: "invite-refuse" } );
+		f.ui.event( { kind: "activate", id: "resurrection-accept" } );
+		assert.deepEqual( sent, [
+			{ kind: "gameplay", command: { kind: "social-consent", accept: false } },
+			{ kind: "gameplay", command: { kind: "resurrection-consent", accept: true } }
+		] );
+		const question = buttons( at( { invitation: null, resurrection: { gid: 2 } }, 300 ) );
+		assert.deepEqual( question.map( ( [id] ) => id ), [ "resurrection-accept", "resurrection-refuse" ] );
+		assert.deepEqual( buttons( at( invited, 400 ) ), alone, "the question leaves the invitation box as it was" );
 	} finally {
 		f.dispose();
 	}

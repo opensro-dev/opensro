@@ -67,6 +67,8 @@ export interface GuildWar {
 	readonly word3c: number;
 	readonly ending?: boolean;
 }
+// The 0x3393 type a resurrection skill proposes to a dead player.
+export const RESURRECTION_PROPOSAL = 4;
 export interface SocialState {
 	readonly wars?: readonly GuildWar[];
 	readonly roleUpdates?: readonly { name: string; role: number; }[];
@@ -98,6 +100,10 @@ export interface SocialState {
 		readonly options?: number;
 		readonly gid: number;
 	} | null;
+	// The open resurrection question (0x3393 type 4, box kind 4); its gid is
+	// the caster. It has its own slot so it never displaces an invitation
+	// and no invitation displaces it.
+	readonly resurrection?: { readonly gid: number; };
 	// Native war-proposal replies reach the same system-message board as the
 	// fortress announcements. The gameplay owner drains this each frame.
 	readonly notice?: import("./system-notices").SystemNotice;
@@ -119,6 +125,9 @@ export type SocialCommand = {
 	kind: "social-consent";
 	accept: boolean;
 	automatic?: boolean;
+} | {
+	kind: "resurrection-consent";
+	accept: boolean;
 } | {
 	kind: "guild-create";
 	gid: number;
@@ -156,6 +165,23 @@ emptySocial
 */
 export function emptySocial( localName = "" ): SocialState {
 	return { localName, self: 0, leader: 0, options: 0, members: [], guild: null, invitation: null, error: null };
+}
+
+/*
+================
+withoutResurrection
+
+The state with the resurrection question closed. The slot is optional and
+dropped rather than nulled, so a state that never held a question keeps
+the exact shape it had before the slot existed.
+================
+*/
+export function withoutResurrection( state: SocialState ): SocialState {
+	if ( !state.resurrection ) {
+		return state;
+	}
+	const { resurrection: _closed, ...rest } = state;
+	return rest;
 }
 
 /*
@@ -231,6 +257,16 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 				u8( 1 );
 				u8( c.automatic ? 0 : 2 );
 			}
+			opcode = 0x3393;
+			break;
+		case "resurrection-consent":
+			if ( !state.resurrection ) {
+				throw Error( "Resurrection is no longer available" );
+			}
+			// Box kind 4 answers through CGInterface_OnMsgBoxResult case 1 as
+			// {1, button}: button 1 is yes (526020), 2 is no (52C800).
+			u8( 1 );
+			u8( c.accept ? 1 : 2 );
 			opcode = 0x3393;
 			break;
 		case "guild-create":
@@ -498,14 +534,18 @@ export function socialPacket(
 		next = { ...next, alliances, allianceMaster, allianceCrests };
 	} else if ( op === 0x3393 ) {
 		const type = u8();
-		if ( type !== 1 && type !== 2 && type !== 3 && type !== 5 ) {
+		if ( type !== 1 && type !== 2 && type !== 3 && type !== RESURRECTION_PROPOSAL && type !== 5 ) {
 			return null;
 		}
 		const gid = u32();
 		if ( !gid ) {
 			throw Error( "Invalid invitation" );
 		}
-		next = { ...next, invitation: { type, gid, ...(type === 2 || type === 3 ? { options: u8() } : {}) } };
+		// 7644E0 type 4 carries only the caster: {u8 4, u32 casterGid}. It
+		// fills its own slot and leaves a pending invitation untouched.
+		next = type === RESURRECTION_PROPOSAL ?
+			{ ...next, resurrection: { gid } } :
+			{ ...next, invitation: { type, gid, ...(type === 2 || type === 3 ? { options: u8() } : {}) } };
 	} // 75B450 / 75B4B0 / 75B520 use category ONE, unlike invite failures.
 	// Membership remains authoritative on 3E58, not these acknowledgements.
 	else if ( op === 0xb095 || op === 0xb34a || op === 0xb2db ) {

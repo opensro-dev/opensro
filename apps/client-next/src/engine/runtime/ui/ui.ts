@@ -341,6 +341,8 @@ import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
 import { noticeDialog } from "@/engine/foundation/ui/notice-dialog";
 import { rebirthDialog } from "@/engine/foundation/ui/rebirth-dialog";
+import { createResurrectionPrompt, resurrectionQuestion } from "@/engine/foundation/ui/resurrection-proposal";
+import { textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu } from "@/engine/foundation/ui/system-menu";
 import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
 import { guideTokens } from "@/engine/foundation/ui/guide-content";
@@ -563,6 +565,7 @@ export function createUi(
 	const npcPanel = createNpcPanel(), windowPlacement = createWindowPlacement();
 	// The warehouse window's page (storage-panel.ts).
 	const storagePanel = createStoragePanel();
+	const resurrectionPrompt = createResurrectionPrompt();
 	const itemMall = createItemMall();
 	const windowWarm = createWindowWarm();
 
@@ -859,6 +862,21 @@ export function createUi(
 	*/
 	function hudCopy( key: string ) {
 		return hud.data()?.strings[key] ?? "";
+	}
+	/*
+	================
+	resurrectionLayout
+
+	The resurrection question box sized by its measured lines.
+	================
+	*/
+	function resurrectionLayout( width: number, height: number, position: readonly [number, number] | null ) {
+		return textMessageBoxLayout(
+			width,
+			height,
+			resurrectionQuestion().map( key => text.run( hudCopy( key ) ).width ),
+			position
+		);
 	}
 	/*
 	================
@@ -1900,6 +1918,8 @@ export function createUi(
 		else if ( id === "process-prev" ) processPage = Math.max( 0, processPage - 1 );
 		else if ( id === "invite-accept" || id === "invite-refuse" ) {
 			sendGameplay( { kind: "social-consent", accept: id === "invite-accept" } );
+		} else if ( id === "resurrection-accept" || id === "resurrection-refuse" ) {
+			sendGameplay( { kind: "resurrection-consent", accept: id === "resurrection-accept" } );
 		} else if ( id === "party-invite" && view.gameplay?.target ) {
 			sendGameplay( {
 				kind: "party-invite",
@@ -3747,6 +3767,16 @@ export function createUi(
 					return;
 				}
 			}
+			if ( event.kind === "drag" && event.id === "resurrection-drag" && view ) {
+				const layout = resurrectionLayout( view.width, view.height, resurrectionPrompt.position() ),
+					next = resurrectionLayout( view.width, view.height, [
+						layout.frame[0] + event.dx,
+						layout.frame[1] + event.dy
+					] );
+				resurrectionPrompt.place( [ next.frame[0], next.frame[1] ] );
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "drag" && event.id === "invite-drag" && view ) {
 				const layout = view.gameplay?.social?.invitation?.type === 5 ?
 						guildProposalLayout( view.width, view.height, invitePosition ) :
@@ -3825,7 +3855,9 @@ export function createUi(
 				}
 				return;
 			}
-			if ( (event.kind === "drag" || event.kind === "scroll") && controls.some( c => c.id === "invite-drag" ) ) {
+			// A proposal box (an invitation or the resurrection question) is modal.
+			const proposalOpen = controls.some( c => c.id === "invite-drag" || c.id === "resurrection-drag" );
+			if ( (event.kind === "drag" || event.kind === "scroll") && proposalOpen ) {
 				return;
 			}
 			if (
@@ -3997,7 +4029,7 @@ export function createUi(
 				}
 				return;
 			}
-			if ( controls.some( c => c.id === "invite-drag" ) ) {
+			if ( proposalOpen ) {
 				if ( event.kind === "key" || event.kind === "edit" || event.kind === "double-activate" ) return;
 				if ( event.id !== null && !controls.some( c => c.id === event.id ) ) return;
 			}
@@ -4715,7 +4747,10 @@ export function createUi(
 				splitStack = null;
 				groundDrop = null;
 			}
-			if ( phase !== "world" || next.gameplay?.inventoryPending || next.gameplay?.social?.invitation ) {
+			if (
+				phase !== "world" || next.gameplay?.inventoryPending || next.gameplay?.social?.invitation ||
+				next.gameplay?.social?.resurrection
+			) {
 				carriedItem = null;
 			}
 			const invitation = phase === "world" || retainedWorld ? next.gameplay?.social?.invitation : null,
@@ -4724,6 +4759,9 @@ export function createUi(
 				inviteIdentity = identity;
 				invitePosition = null;
 			}
+			resurrectionPrompt.sync(
+				phase === "world" || retainedWorld ? next.gameplay?.social?.resurrection?.gid ?? 0 : 0
+			);
 			if ( phase !== "disconnected" ) disconnectPosition = null;
 			const gachaVisible = phase === "world" && !!next.gameplay?.gacha?.visible;
 			if ( gachaVisible && !gachaWasVisible ) {
@@ -12276,12 +12314,8 @@ export function createUi(
 				button( "shop-warning-cancel", hudCopy( "UIIT_CTL_NO" ), x + (dw >> 1) + 5, y + 114, 76 );
 			}
 			if ( worldVisible && groundDrop ) {
-				// 6888C0 seeds 360x151; 52BCF0 grows body + (60,122); 52E720 body at (30,65).
 				const lines = [ "UIIT_MSG_DROP_WARNING_1", "UIIT_MSG_DROP_WARNING_2" ].map( key => hudCopy( key ) ),
-					lineHeight = 23,
-					dw = Math.max( 360, ...lines.map( line => Math.ceil( text.run( line ).width ) + 60 ) ),
-					dh = Math.max( 151, lines.length * lineHeight + 122 );
-				const layout = messageBox( w, h, dw, dh ), [x, y] = layout.frame;
+					layout = textMessageBoxLayout( w, h, lines.map( line => text.run( line ).width ) );
 				controls = [];
 				blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
@@ -12301,21 +12335,17 @@ export function createUi(
 					} )
 				);
 				for ( const [i, line] of lines.entries() ) {
-					quads.push(
-						...text.quads( line, [ x + 30, y + 65 + i * lineHeight, dw - 60, lineHeight ], full, white, {
-							vAlign: 0
-						} )
-					);
+					quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
 				}
 				button(
 					"ground-drop-confirm",
 					hudCopy( "UIIT_CTL_YES" ),
-					x + (dw >> 1) - 81,
-					y + dh - 37,
+					layout.accept[0],
+					layout.accept[1],
 					76,
 					!!game?.inventoryPending
 				);
-				button( "ground-drop-cancel", hudCopy( "UIIT_CTL_NO" ), x + (dw >> 1) + 5, y + dh - 37, 76 );
+				button( "ground-drop-cancel", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
 			}
 			const gathering = game?.questGathering;
 			const delayRows = [
@@ -12634,6 +12664,65 @@ export function createUi(
 						)
 					);
 				}
+			}
+			// The resurrection question comes while the player is dead: it is the
+			// newest box, so it draws over the death box and over a pending
+			// invitation box, which keeps its own slot and stays answerable.
+			// Inferred: the death box's and the invitation box's controls stay
+			// dispatchable (the centred question covers the death box's buttons
+			// until dragged aside), every other open dialog loses its controls
+			// until the question is answered, and the question is not dismissed
+			// by a revive or the server's 30 s expiry.
+			if ( game?.social?.resurrection && worldVisible ) {
+				/*
+				================
+				kept
+
+				Controls that survive the question: the death box, a pending
+				invitation box and the question itself.
+				================
+				*/
+				const kept = ( id: string | null ) =>
+					!!id &&
+					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ));
+				controls = controls.filter( c => kept( c.id ) );
+				blocks = [ full ];
+				if ( !kept( focus ) ) {
+					focus = null;
+					composing = false;
+				}
+				paths.push( ...partyProposalAssets() );
+				const layout = resurrectionLayout( w, h, resurrectionPrompt.position() );
+				controls.push( {
+					id: "resurrection-body",
+					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					kind: "region",
+					rect: layout.frame
+				}, {
+					id: "resurrection-drag",
+					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					kind: "region",
+					draggable: true,
+					rect: layout.drag
+				} );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				resurrectionQuestion().forEach( ( key, i ) =>
+					quads.push( ...text.quads( hudCopy( key ), layout.lines[i]!, full, white, { vAlign: 0 } ) )
+				);
+				button( "resurrection-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
+				button( "resurrection-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
 			}
 			const fatalAssetFailure = next.frontend?.error ?? next.resourceError ?? hud.error() ?? text.error() ??
 				guideResources.error() ??
