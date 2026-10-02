@@ -31,7 +31,7 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 		block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{
 			RegionID: player.Pose.RegionID, X: float64(float32(player.Pose.X)), Z: float64(float32(player.Pose.Z)),
 		})
-		if order, exists := blocks.order(block); exists && player.Gid != 0 &&
+		if order, exists := blocks.order(block); exists && player.Gid != 0 && !actor.Fears(player.Gid) &&
 			monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) &&
 			ordinaryPlayerHostility(actor, player) {
 			ordered = append(ordered, candidate{player: player, block: order})

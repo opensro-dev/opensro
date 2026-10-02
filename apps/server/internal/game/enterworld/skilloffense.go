@@ -307,6 +307,17 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		row.Threat = taunt
 		return ""
 	}
+	if threat, ok := compileSkillStatusCast(fields, *row); ok {
+		// Retail initializes the generated-result count to one even without
+		// att or cm; the single record carries the status roll.
+		row.StatusCast = true
+		row.Threat = threat
+		row.OffensiveArea, row.Threat.Area = threat.Area, SkillOffensiveArea{}
+		row.Attack.ImpactCount = 1
+		row.OffensiveStagePinned = true
+		row.DirectOffensePinned = true
+		return ""
+	}
 	// Admission is by executable shape, never a hand-maintained skill-name list.
 	// Linked casts and additional effect blocks require their own authority
 	// operations; they cannot be silently reduced to one damage result.

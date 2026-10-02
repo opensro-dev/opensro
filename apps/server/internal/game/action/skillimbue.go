@@ -125,6 +125,11 @@ imbue damage only.
 ==================
 */
 func (rt *Runtime) resolvePlayerImpact(division, name string, skill enterworld.SkillRow, attacker, defender combat.Stats, nowMs int64, chained bool) (combat.Result, error) {
+	// A status cast has no att block: its record is a successful zero-damage
+	// result with no critical, block or imbue roll (skillstatuscast.go).
+	if skill.StatusCast {
+		return combat.Result{ResultFlags: 1}, nil
+	}
 	actor := criticalActor{division: division, character: name}
 	if chained {
 		skill.Attack.Flags &^= 4

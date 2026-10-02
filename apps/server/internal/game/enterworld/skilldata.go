@@ -188,7 +188,10 @@ type SkillRow struct {
 	Consumption          SkillConsumption
 	DirectOffensePinned  bool
 	OffensiveStagePinned bool // complete executable stage; root admission also validates every link
-	OffensiveArea        SkillOffensiveArea
+	// StatusCast marks a damage-free hostile status program (skillstatuscast.go):
+	// its single impact is a zero-damage record that only rolls statuses.
+	StatusCast    bool
+	OffensiveArea SkillOffensiveArea
 	// Native encoded alcu/luck blocks feed ParamKeeper AC/AD respectively.
 	AlchemyStoneBonus     uint32
 	AlchemyReinforceBonus uint32
