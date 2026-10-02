@@ -50,6 +50,7 @@ import (
 	"opensro.online/server/internal/game/social/community"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/entryauth"
 	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
@@ -149,6 +150,10 @@ func startInviteServer(t *testing.T, dir string, seeds []*enterworld.Character) 
 	}
 
 	partyRt := party.NewRuntime(deps, directory)
+	// Everyone stands together: these suites test invitation lanes, not reach.
+	partyRt.UseLivePose(func(string, *enterworld.Character) simulation.Spawn {
+		return simulation.Spawn{RegionID: 0x6A48, X: 900, Z: 900}
+	})
 	invites := guild.NewInviteRuntime(deps, directory)
 	partyRt.AddConsentArm(invites)
 	invites.PeerPending = partyRt.Registry().HasPendingInviteFor

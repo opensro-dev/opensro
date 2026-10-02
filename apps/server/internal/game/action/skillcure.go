@@ -12,6 +12,7 @@ import (
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -148,22 +149,12 @@ func partyAreaReach(from, to simulation.Spawn, radius uint32) bool {
 ==================
 samePlaneAdjacent
 
-samePlaneAdjacent is Pos_AreSamePlaneAndAdjacentSectors (430CE0). Two
-dungeon positions compare only within one dungeon region; outdoors both
-sector bytes must be within one.
+samePlaneAdjacent is Pos_AreSamePlaneAndAdjacentSectors (430CE0); the
+world package owns the rule.
 ==================
 */
 func samePlaneAdjacent(from, to simulation.Spawn) bool {
-	fromDungeon, toDungeon := simulation.IsDungeonRegion(from.RegionID), simulation.IsDungeonRegion(to.RegionID)
-	if fromDungeon != toDungeon {
-		return false
-	}
-	if fromDungeon {
-		return from.RegionID == to.RegionID
-	}
-	dx := int(from.RegionID&0xff) - int(to.RegionID&0xff)
-	dz := int(from.RegionID>>8) - int(to.RegionID>>8)
-	return dx >= -1 && dx <= 1 && dz >= -1 && dz <= 1
+	return world.SamePlaneAdjacent(from.RegionID, to.RegionID)
 }
 
 // distance3D is Vec3_Length of Pos_GetRelative3DOrIncompatibleSentinel.

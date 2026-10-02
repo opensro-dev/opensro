@@ -5160,9 +5160,11 @@ export function createUi(
 						}
 					}
 					blocks.push( r );
+					const name = record.name || hudCopy( "UIIT_STT_COSNEWUI_TITLE" );
 					controls.push( {
 						id: "cos-status:" + record.gid,
-						label: record.name ?? hudCopy( "UIIT_STT_COSNEWUI_TITLE" ),
+						label: name,
+						helpText: name,
 						rect: r,
 						kind: "button",
 						rightActivate: true
@@ -5181,9 +5183,11 @@ export function createUi(
 						if ( size ) image( [ row.at[0], row.at[1], size[0], size[1] ], row.frame );
 						image( row.slot, cosCommandIcon( command, context ) );
 						blocks.push( row.slot );
+						const help = hudCopy( cosCommandLabel( command, context ) );
 						controls.push( {
 							id: "cos-command:" + command,
-							label: hudCopy( cosCommandLabel( command, context ) ),
+							label: help,
+							helpText: help,
 							rect: row.slot,
 							kind: "button",
 							disabled: !cosCommandEnabled( command, context )
@@ -5193,11 +5197,16 @@ export function createUi(
 				const board = animal + "am_ctrl_tab.png", boardSize = resources.size( board );
 				paths.push( board );
 				if ( boardSize ) image( [ layout.board[0], layout.board[1], boardSize[0], boardSize[1] ], board );
+				// The control's rect comes from the base art and every state is
+				// requested up front: switching to a not-yet-loaded focus image
+				// must not drop the control under the cursor (it flickered).
 				const id = "cos-command-toggle",
-					toggle = animal + (cosHud.open() ? "am_ctrl_close" : "am_ctrl_open") +
-						(pressed === id && hover === id ? "_press" : hover === id ? "_focus" : "") + ".png",
-					toggleSize = resources.size( toggle );
-				paths.push( toggle );
+					base = animal + (cosHud.open() ? "am_ctrl_close" : "am_ctrl_open"),
+					states = [ base + ".png", base + "_focus.png", base + "_press.png" ],
+					wanted = states[pressed === id && hover === id ? 2 : hover === id ? 1 : 0]!,
+					toggle = resources.has( wanted ) ? wanted : states[0]!,
+					toggleSize = resources.size( states[0]! );
+				paths.push( ...states );
 				if ( toggleSize ) {
 					const r: UiRect = [ layout.toggle[0], layout.toggle[1], toggleSize[0], toggleSize[1] ];
 					image( r, toggle );
@@ -6474,10 +6483,17 @@ export function createUi(
 					blocks.push( ...output.blocks );
 				}
 				if ( target && hudData ) {
-					const hp = game?.vitals.find( v => v.gid === target.gid )?.hp,
+					// A companion's spawn carries no max HP: native reads its
+					// reference's +0x1B0, and an owned one's HP from its record.
+					const record = target.kind === "cos" ?
+						game?.cosRecords?.find( r => r.gid === target.gid ) :
+						undefined;
+					const maxHp = target.maxHp ??
+						(target.kind === "cos" ? hudData.cosReferences.get( target.refObjId )?.maxHp : undefined);
+					const hp = game?.vitals.find( v => v.gid === target.gid )?.hp ?? record?.hp,
 						output = targetStatus(
 							hudData.targets,
-							target,
+							maxHp === target.maxHp ? target : { ...target, maxHp },
 							game?.progression?.level ?? character?.level ?? 1,
 							hp,
 							hudCopy,

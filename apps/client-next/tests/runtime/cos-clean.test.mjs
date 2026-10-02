@@ -58,8 +58,23 @@ test("Clean retires a riding mount or a transport with 0x7618", () => {
 		const { gameplay, sent, cos } = owned( band, tid );
 		gameplay.command( { kind: "cos-clean", gid: 2 }, 1, cos, LOCAL );
 		assert.deepEqual( sent, [ { opcode: 0x7618, payload: Uint8Array.of( 2, 0, 0, 0 ) } ], `band ${band}` );
-		assert.throws( () => gameplay.command( { kind: "cos-clean", gid: 2 }, 2, { ...cos, ownerGid: 99 }, LOCAL ) );
+		if ( band === 2 ) {
+			assert.throws( () =>
+				gameplay.command( { kind: "cos-clean", gid: 2 }, 2, { ...cos, ownerGid: 99 }, LOCAL )
+			);
+		}
 	}
+});
+
+test("a riding mount spawns without an owner GID and is still cleaned", () => {
+	// 0x3015 carries an owner GID only for bands other than 1; the 0x3158
+	// record's GID is what makes the horse ours.
+	const { gameplay, sent, cos } = owned( 1, 0x09c6 );
+	gameplay.command( { kind: "cos-clean", gid: 2 }, 1, { ...cos, ownerGid: undefined }, LOCAL );
+	assert.deepEqual( sent, [ { opcode: 0x7618, payload: Uint8Array.of( 2, 0, 0, 0 ) } ] );
+	assert.throws( () =>
+		gameplay.command( { kind: "cos-clean", gid: 2 }, 2, { ...cos, gid: 3, ownerGid: undefined }, LOCAL )
+	);
 });
 
 test("pets cannot be cleaned", () => {

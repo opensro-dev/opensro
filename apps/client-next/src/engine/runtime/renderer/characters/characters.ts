@@ -263,6 +263,17 @@ export function createCharacters(
 		}
 		return faced;
 	}
+	/*
+	================
+	determinant3
+
+	The determinant of a column-major 4x4 matrix's upper 3x3 (its basis).
+	================
+	*/
+	function determinant3( m: ArrayLike<number> ) {
+		return m[0]! * (m[5]! * m[10]! - m[9]! * m[6]!) - m[4]! * (m[1]! * m[10]! - m[9]! * m[2]!) +
+			m[8]! * (m[1]! * m[6]! - m[5]! * m[2]!);
+	}
 	function transformFor(
 		actor: CharacterActor,
 		rows: ReadonlyMap<number, CharacterActor>,
@@ -302,6 +313,15 @@ export function createCharacters(
 					socket = mountSocket;
 				}
 			}
+			// A bare rider sits on the mount's saddle in the mount's resource
+			// space, which carries the import adapter Sx(-1) (character.ts
+			// __gltf_left_handed__); the rider's own body applies it again.
+			// Cancel it once, as the native basis below does for named sockets,
+			// or the rider is mirrored and culled inside out. A missing saddle
+			// keeps the plain root (identity), which has no adapter to cancel.
+			// Only an improper socket carries the adapter; a proper one (a model
+			// built without the import root) has nothing to cancel.
+			const saddled = !actor.attachment && !!socket && determinant3( socket ) < 0;
 			if ( !socket ) socket = identity();
 			const owned = transformFor( holder, rows, origin, cache, chain );
 			if ( !owned ) return null;
@@ -311,6 +331,9 @@ export function createCharacters(
 			const parent = facing === undefined ? owned : facedMatrix( owned, facing );
 			matrix = new Float32Array( 16 );
 			multiply( parent, socket, matrix );
+			if ( saddled ) {
+				for ( let n = 0; n < 3; n++ ) matrix[n] = -matrix[n]!;
+			}
 			if ( actor.attachment ) {
 				const [x, y, z] = actor.attachment.offset;
 				if ( actor.attachment.basis === "bsr" ) {

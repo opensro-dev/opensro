@@ -199,7 +199,16 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 			const v = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
 			const e = entities.read( v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ) );
 			if ( e?.kind === "local-player" ) {
-				gameplay.correct( e, now );
+				// A rider's position belongs to its mount (0x85E000): entities
+				// applied the correction to the mount's row, and the rider's own
+				// row still holds where it mounted. Correct from the mover.
+				const mover = e.mountedOn ? entities.read( e.mountedOn ) : undefined;
+				gameplay.correct(
+					mover ?
+						{ ...e, regionId: mover.regionId, x: mover.x, y: mover.y, z: mover.z, heading: mover.heading } :
+						e,
+					now
+				);
 			}
 		}
 		if ( frame.opcode === 0x35c7 ) {

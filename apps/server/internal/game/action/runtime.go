@@ -671,6 +671,18 @@ func (rt *Runtime) liveSpawn(
 
 /*
 ==================
+LiveSpawnFor
+
+The character's live position now, for lanes outside action that gate on
+native range (the party invite's CGObjChar_CheckHitRange).
+==================
+*/
+func (rt *Runtime) LiveSpawnFor(divisionID string, character *enterworld.Character) simulation.Spawn {
+	return rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, rt.Now().UnixMilli())
+}
+
+/*
+==================
 liveNav
 
 liveNav is liveSpawn plus the surface owner retained at that point.

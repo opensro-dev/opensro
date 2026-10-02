@@ -338,6 +338,50 @@ test("COS record gates mounting; result feedback never invents a ride and despaw
 	core.dispose();
 });
 
+test("a mounted rider's position correction moves the local pose to the mount, not where it mounted", () => {
+	const core = createWorldCore( () => {} );
+	const flush = () => {
+		core.step( 0, false );
+		const b = core.take();
+		if ( b ) core.ack( b.sequence );
+		return b;
+	};
+	core.bootstrap( {
+		protocolVersion: 2,
+		nativeResult: 1,
+		refObjSnapshot: [ { refObjId: 3914, tidWord: 0x11c6, kind: "cos" } ],
+		refItemSnapshot: [],
+		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 } }
+	} );
+	flush();
+	core.receive( { opcode: 0x3369, payload: Buffer.from( [ 1, 1 ] ) }, 0 );
+	core.receive( { opcode: 0x32a6, payload: Buffer.from( [ 7, 0, 0, 0, 0, 0, 0, 0 ] ) }, 0 );
+	const spawn = Buffer.alloc( 57 );
+	spawn.writeUInt32LE( 3914 );
+	spawn.writeUInt32LE( 8, 4 );
+	spawn.writeUInt16LE( 257, 8 );
+	spawn[25] = 1;
+	spawn[45] = 1;
+	spawn.writeUInt32LE( 7, 52 );
+	core.receive( { opcode: 0x30d7, payload: spawn }, 0 );
+	core.receive( { opcode: 0xb4b5, payload: Buffer.from( [ 1, 7, 0, 0, 0, 1, 8, 0, 0, 0 ] ) }, 0 );
+	flush();
+	// The server's attack approach settles the rider (B2F5 names the rider's
+	// GID). Entities apply it to the mount; the local pose must follow it.
+	const position = Buffer.alloc( 20 );
+	position.writeUInt32LE( 7 );
+	position.writeUInt16LE( 257, 4 );
+	position.writeFloatLE( 500, 6 );
+	position.writeFloatLE( 2, 10 );
+	position.writeFloatLE( 600, 14 );
+	core.receive( { opcode: 0xb2f5, payload: position }, 10 );
+	const events = defined( flush() ).events.filter( e => e.kind === "gameplay" );
+	const pose = defined( defined( events[events.length - 1] ).state.pose );
+	assert.equal( pose.x, 500 );
+	assert.equal( pose.z, 600 );
+	core.dispose();
+});
+
 test("all ground spawn tail branches consume claimant bytes; special names append without replacing the item name", () => {
 	const base = gold.subarray( 0, -1 );
 	for ( const state of [ 0, 1, 2, 3, 4, 5, 6, 7 ] ) {

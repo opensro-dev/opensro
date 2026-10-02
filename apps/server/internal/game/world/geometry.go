@@ -70,6 +70,27 @@ func SamePlane(a, b uint16) bool {
 	return IsDungeonRegion(a) == IsDungeonRegion(b)
 }
 
+/*
+==================
+SamePlaneAdjacent
+
+Pos_AreSamePlaneAndAdjacentSectors (430CE0). Two dungeon positions compare
+only within one dungeon region; outdoors both sector bytes must be within
+one of each other.
+==================
+*/
+func SamePlaneAdjacent(a, b uint16) bool {
+	if !SamePlane(a, b) {
+		return false
+	}
+	if IsDungeonRegion(a) {
+		return a == b
+	}
+	dx := int(a&0xff) - int(b&0xff)
+	dz := int(a>>8) - int(b>>8)
+	return dx >= -1 && dx <= 1 && dz >= -1 && dz <= 1
+}
+
 // Delta returns the frame-correct from->to planar vector. The high
 // sector byte excludes the dungeon marker; valid comparisons stay within one
 // plane, so this is identical to cancelling the shared marker bit.

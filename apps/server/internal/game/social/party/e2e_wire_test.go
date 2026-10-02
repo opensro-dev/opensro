@@ -65,6 +65,7 @@ import (
 	wiretest "opensro.online/server/internal/game/internal"
 	presence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/entryauth"
 	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
@@ -96,6 +97,7 @@ type e2eServer struct {
 	srv       *transport.Server
 	authority *store.Store
 	runtime   *party.Runtime
+	poses     *e2ePoses
 }
 
 // partySkillSeeder is this suite's stand-in for
@@ -190,6 +192,8 @@ func startPartyServer(t *testing.T, dir string, createCharacters bool) e2eServer
 
 	presence := presence.NewDirectory(srv.Hub)
 	runtime := party.NewRuntime(deps, presence)
+	poses := &e2ePoses{moved: map[string]simulation.Spawn{}}
+	runtime.UseLivePose(poses.at)
 	deps.OnWorldBound = func(s *transport.Session, divisionID string, character *enterworld.Character) {
 		key := divisionID + ":" + strings.ToLower(character.Name)
 		if old, replaced := srv.Hub.BindExclusive(key, s); replaced {
@@ -210,7 +214,7 @@ func startPartyServer(t *testing.T, dir string, createCharacters bool) e2eServer
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { shutdownServer(t, srv) })
-	return e2eServer{srv: srv, authority: authority, runtime: runtime}
+	return e2eServer{srv: srv, authority: authority, runtime: runtime, poses: poses}
 }
 
 /*

@@ -196,6 +196,7 @@ func newGameplayPlane(
 
 	parties := party.NewRuntime(deps, presence)
 	parties.UseMemberVitals(items.GameplayVitals)
+	parties.UseLivePose(items.LiveSpawnFor)
 	items.NextPartyLootMember = parties.Registry().NextLootMember
 	items.RewardActorPresent = func(division, name string) bool {
 		s, ok := presence.SessionByName(division, name)

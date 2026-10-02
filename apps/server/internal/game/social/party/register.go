@@ -14,6 +14,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
 
@@ -62,6 +65,22 @@ readers, which overstate a +HP member as full.
 */
 type MemberVitals func(divisionID string, character *enterworld.Character) (currentHP, maxHP, currentMP, maxMP int64)
 
+// LivePose reads a character's live world position (the movement owner's
+// interpolated spawn), which the native invite range gate measures.
+type LivePose func(divisionID string, character *enterworld.Character) simulation.Spawn
+
+const (
+	// playerHitRange is CGObjChar_CheckHitRange's (4A8E10) range for a
+	// target whose vtable+0x1C CGObjChar_IsPlayer holds.
+	playerHitRange = 600
+	// inviteWrongTarget and inviteTooFar are 4A8E10's results 3 (wrong
+	// class or not same-plane adjacent sectors) and 4 (beyond the range).
+	// CGObjPC_OnPartyFormRequest (5143B0) returns them in the request's
+	// error ack; the client shows 0x200+code: 515 invalid target, 516 too far.
+	inviteWrongTarget uint8 = 3
+	inviteTooFar      uint8 = 4
+)
+
 /*
 ================
 Runtime
@@ -74,6 +93,7 @@ type Runtime struct {
 	registry     *Registry
 	consentArms  []ConsentArm
 	memberVitals MemberVitals
+	livePose     LivePose
 	updates      memberUpdateState
 }
 
@@ -125,6 +145,50 @@ func (r *Runtime) UseMemberVitals(fn MemberVitals) {
 	if r != nil {
 		r.memberVitals = fn
 	}
+}
+
+/*
+==================
+UseLivePose
+
+UseLivePose installs the live position read the invite range gate uses.
+Without it every invite target is refused as out of range: a missing
+position source must never admit a cross-map proposal.
+==================
+*/
+func (r *Runtime) UseLivePose(fn LivePose) {
+	if r != nil {
+		r.livePose = fn
+	}
+}
+
+/*
+==================
+inviteRange
+
+CGObjChar_CheckHitRange (4A8E10) as CGObjPC_OnPartyFormRequest (5143B0)
+calls it for the proposed member: same plane and adjacent sectors, then
+the 3D distance within the player class range. 0 admits; otherwise the
+native result code for the refusal ack.
+==================
+*/
+func (r *Runtime) inviteRange(divisionID string, actor, target *enterworld.Character) uint8 {
+	if r.livePose == nil {
+		return inviteTooFar
+	}
+	from, to := r.livePose(divisionID, actor), r.livePose(divisionID, target)
+	if !world.SamePlaneAdjacent(from.RegionID, to.RegionID) {
+		return inviteWrongTarget
+	}
+	distance := monster.NativeActorDistance(
+		monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z},
+		monster.Pose{RegionID: to.RegionID, X: to.X, Y: to.Y, Z: to.Z},
+	)
+	// 4A8E10 refuses when the range is below the distance.
+	if playerHitRange < distance {
+		return inviteTooFar
+	}
+	return 0
 }
 
 /*
@@ -364,6 +428,11 @@ func (r *Runtime) handleInvite(s *transport.Session, opcode uint16, payload []by
 		log.Debugf("party: 0x70D5 (invite) refused for %s: %s", actor.Name, refusal)
 		return
 	}
+	if code := r.inviteRange(divisionID, actor, target); code != 0 {
+		log.Debugf("party: 0x70D5 (invite) refused for %s: %s out of range (%d)", actor.Name, target.Name, code)
+		_ = s.Send(OpCreatePartyAck, []byte{2, code})
+		return
+	}
 	if _, partied := r.registry.PartyOf(divisionID, target.Name); partied {
 		log.Debugf("party: 0x70D5 (invite) refused for %s: target already in a party", actor.Name)
 		_ = s.Send(OpCreatePartyAck, []byte{2, 0x18})
@@ -427,6 +496,13 @@ func (r *Runtime) handleJoinInvite(s *transport.Session, opcode uint16, payload 
 	target, targetSession, refusal := r.resolveInviteTarget(divisionID, actor, targetRef)
 	if refusal != "" {
 		log.Debugf("party: 0x751A (join-invite) refused for %s: %s", actor.Name, refusal)
+		return
+	}
+	// INFERENCE: the in-party proposal has the same target class and reach
+	// as the form request; the client composes both from a selected player.
+	if code := r.inviteRange(divisionID, actor, target); code != 0 {
+		log.Debugf("party: 0x751A (join-invite) refused for %s: %s out of range (%d)", actor.Name, target.Name, code)
+		_ = s.Send(OpPartyJoinInviteAck, []byte{2, code})
 		return
 	}
 	if targetParty, partied := r.registry.PartyOf(divisionID, target.Name); partied {

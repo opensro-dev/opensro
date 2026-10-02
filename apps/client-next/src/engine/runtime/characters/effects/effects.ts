@@ -753,6 +753,62 @@ export function createCharacterEffects(
 				}
 				return admitted;
 			}
+			/*
+			================
+			moverSourceCold
+
+			True when a mover stage this callback starts launches from a bone on a
+			resident actor that cannot be posed yet: its model, or the mount it
+			rides, is still loading. The admission below would otherwise drop the
+			mover as unsupported. A returning mover leaves its victims; every other
+			mover leaves the caster. Target sockets are not probed here: they are
+			sampled live at launch and again at each retarget.
+			================
+			*/
+			// Launch sockets the hold below sampled this step, keyed by callback,
+			// stage and source. The launch reuses them: one sample per launch.
+			const launchSockets = new Map<string, EffectVisual["actor"]["pose"] | null>();
+			/*
+			================
+			launchKey
+			================
+			*/
+			function launchKey( trigger: EffectTrigger, index: number, gid: number ) {
+				return `${trigger.cast.token}:${trigger.phase}:${trigger.event}:${index}:${gid}`;
+			}
+			function moverSourceCold(
+				record: import("@/engine/contracts/effects").EffectRecord,
+				trigger: EffectTrigger,
+				byGid: ReadonlyMap<number, EntityState>
+			) {
+				if ( !socket ) return false;
+				const cast = trigger.cast;
+				let cold = false;
+				for ( let index = 0; index < record.stages.length; index++ ) {
+					const stage = record.stages[index]!;
+					if ( (stage.phase ?? "SHOT") !== trigger.phase || stage.startEvent !== trigger.event ) continue;
+					if ( !stage.bone || stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ) continue;
+					const returning = stage.action === "AT_SOURCE" && stage.move !== "MOV_NONE";
+					const mover = returning || stage.action === "AT_MOV_1TAR" || stage.action === "AT_MOV_SPLASH" ||
+						stage.action === "AT_MOV_OPTION";
+					if ( !mover ) continue;
+					const sources = returning ?
+						[ ...new Set( [ cast.target, ...(cast.results?.map( row => row.target ) ?? []) ] ) ] :
+						[ cast.caster ];
+					for ( const gid of sources ) {
+						if ( !byGid.has( gid ) ) continue;
+						const pose = socket(
+							gid,
+							stage.bone,
+							[ stage.offset[0], stage.offset[1], -stage.offset[2] ],
+							trigger
+						);
+						launchSockets.set( launchKey( trigger, index, gid ), pose );
+						if ( !pose ) cold = true;
+					}
+				}
+				return cold;
+			}
 			if ( disposed ) {
 				return [];
 			}
@@ -1003,6 +1059,14 @@ export function createCharacterEffects(
 							cast.results.map( r => r.target ) :
 							[ cast.target ]).some( gid => byGid.has( gid ) && !presentation.get( gid )?.effectAnchor )
 					) continue;
+					// Native compounds load synchronously, so 8D6330 always finds a
+					// mover's launch bone. Here a resident caster (or its mount) may
+					// still be loading; hold the callback until its launch bone poses,
+					// but not past the cast itself, so a failed model still reports.
+					if (
+						pendingRecord && castStates.has( cast.token ) &&
+						moverSourceCold( pendingRecord, trigger, byGid )
+					) continue;
 					pendingTriggers.delete( pendingKey );
 					if ( !seen.has( key ) ) {
 						seen.add( key );
@@ -1137,11 +1201,12 @@ export function createCharacterEffects(
 								// 8DE6C7..8DE786: AT_TARGET movers start/end at
 								// target-local offsets; this lane does not sample bones.
 								const sourceSocket = flying && !targetLocal && stage.bone ?
-									socket?.( entity.gid, stage.bone, [
-										stage.offset[0],
-										stage.offset[1],
-										-stage.offset[2]
-									], trigger ) :
+									launchSockets.get( launchKey( trigger, index, entity.gid ) ) ??
+										socket?.( entity.gid, stage.bone, [
+											stage.offset[0],
+											stage.offset[1],
+											-stage.offset[2]
+										], trigger ) :
 									undefined;
 								const targetOffset = stage.targetOffset ?? [ 0, 0, 0 ];
 								const targetSocket = flying && !radial && !targetLocal && target && stage.targetBone ?

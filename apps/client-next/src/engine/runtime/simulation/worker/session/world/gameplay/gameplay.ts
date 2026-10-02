@@ -1123,9 +1123,12 @@ state here before a command can claim a native wire conversation.
 				// [u32 gid] (6FF800); a guild soldier (class 4, band 5) with an
 				// empty 0x7458 (6FE850). Pets leave through cancellation instead.
 				const record = cosRecords.get( command.gid );
+				// A riding mount spawns without an owner GID (as cos-ride allows);
+				// the owner's own record set proves it is ours.
 				if (
 					!record || ![ 1, 2, 5 ].includes( record.band ) || entity?.gid !== record.gid ||
-					entity.kind !== "cos" || entity.ownerGid !== localGid || entity.refObjId !== record.refObjId
+					entity.kind !== "cos" || (record.band !== 1 && entity.ownerGid !== localGid) ||
+					entity.refObjId !== record.refObjId
 				) throw Error( "No owned COS to clean" );
 				if ( record.band === 5 ) return sendFrame( { opcode: 0x7458, payload: new Uint8Array( 0 ) } );
 				const payload = new Uint8Array( 4 );

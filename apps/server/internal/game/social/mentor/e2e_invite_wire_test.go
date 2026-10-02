@@ -58,6 +58,7 @@ import (
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/social/mentor"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/entryauth"
 	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
@@ -173,6 +174,10 @@ func startCampServer(t *testing.T, dir string, seeds []*enterworld.Character) ca
 	}
 
 	partyRt := party.NewRuntime(deps, directory)
+	// Everyone stands together: these suites test invitation lanes, not reach.
+	partyRt.UseLivePose(func(string, *enterworld.Character) simulation.Spawn {
+		return simulation.Spawn{RegionID: 0x6A48, X: 900, Z: 900}
+	})
 	guildInv := guild.NewInviteRuntime(deps, directory)
 	mentorInv := mentor.NewInviteRuntime(deps, directory)
 	partyRt.AddConsentArm(guildInv)

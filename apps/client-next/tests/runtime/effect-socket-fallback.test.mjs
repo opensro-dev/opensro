@@ -101,6 +101,69 @@ test("effect sockets retry mounts and use the last mount root when all markers m
 	);
 });
 
+/*
+================
+adapted
+
+A model as character.ts imports it: every root sits under the
+__gltf_left_handed__ node, whose Sx(-1) every pose global inherits.
+================
+*/
+function adapted( name, translation ) {
+	const node = ( n, parent, t, scale = [ 1, 1, 1 ] ) => ({
+		name: n,
+		parent,
+		translation: t,
+		rotation: [ 0, 0, 0, 1 ],
+		scale
+	});
+	return {
+		nodes: [ node( "__gltf_left_handed__", -1, [ 0, 0, 0 ], [ -1, 1, 1 ] ), node( name, 0, translation ) ],
+		primitives: [],
+		images: [],
+		clips: []
+	};
+}
+
+/*
+================
+determinant
+================
+*/
+function determinant( m ) {
+	return m[0] * (m[5] * m[10] - m[9] * m[6]) - m[4] * (m[1] * m[10] - m[9] * m[2]) +
+		m[8] * (m[1] * m[6] - m[5] * m[2]);
+}
+
+test("a mounted rider keeps its on-foot handedness and facing on the saddle", () => {
+	const renderer = createCharacters();
+	renderer.model( "rider", adapted( "Bip01 R Hand", [ 1, 0, 0 ] ), [] );
+	renderer.model( "horse", adapted( "saddle", [ 0, 10, 0 ] ), [] );
+	renderer.model( "bare", adapted( "tail", [ 0, 0, -5 ] ), [] );
+	const yaw = radians( 0.5 );
+	const pose = { regionId: 257, x: 0, y: 0, z: 0, yaw };
+	const rider = { gid: 1, model: "rider", pose, scale: 1, clip: "", time: 0, loop: true };
+	const horse = { gid: 2, model: "horse", pose, scale: 1, clip: "", time: 0, loop: true };
+	const foot = renderer.matrix( [ rider ], 1 );
+	const mounted = renderer.matrix( [ { ...rider, mountedOn: 2 }, horse ], 1 );
+	assert.ok( foot && mounted );
+	// The saddle's Sx(-1) is cancelled once: same rotation, raised by the saddle.
+	assert.ok( determinant( mounted ) > 0, "a mirrored rider is culled inside out" );
+	for ( let i = 0; i < 12; i++ ) assert.ok( Math.abs( mounted[i] - foot[i] ) < 1e-5, `column entry ${i}` );
+	assert.ok( Math.abs( mounted[13] - foot[13] - 10 ) < 1e-5 );
+	// Effect sockets sampled through the mount see the same hand as on foot.
+	const query = { name: "Bip01 R Hand", fallback: /** @type {const} */ ("mount-root") };
+	const hand = renderer.socket( [ rider ], 1, query, [ 0, 0, 0 ] );
+	const riding = renderer.socket( [ { ...rider, mountedOn: 2 }, horse ], 1, query, [ 0, 0, 0 ] );
+	assert.ok( hand && riding );
+	assert.ok( Math.abs( riding.x - hand.x ) < 1e-5 && Math.abs( riding.z - hand.z ) < 1e-5 );
+	assert.ok( Math.abs( riding.y - hand.y - 10 ) < 1e-5 );
+	// A mount without a saddle keeps the plain root: nothing to cancel.
+	const rooted = renderer.matrix( [ { ...rider, mountedOn: 3 }, { ...horse, gid: 3, model: "bare" } ], 1 );
+	assert.ok( rooted );
+	for ( let i = 0; i < 16; i++ ) assert.ok( Math.abs( rooted[i] - foot[i] ) < 1e-5, `root entry ${i}` );
+});
+
 for ( const targetBone of [ null, "missing-target-marker" ] ) {
 	test(`Power Shot projectile survives missing source and ${targetBone ?? "unnamed target"} sockets`, () => {
 		const resource = "res/item/china/weapon/cha_arrow_normal.bsr";
@@ -207,10 +270,10 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 		step
 		================
 		*/
-		function step( now, triggers = [] ) {
+		function step( now, triggers = [], state = gameplay ) {
 			return effects.step(
 				entities,
-				gameplay,
+				state,
 				now,
 				() => true,
 				() => 10,
@@ -227,11 +290,23 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 		assert.equal( launched[0].pose.x, 0 );
 		assert.ok( step( 1.1 )[0].pose.x > 0 );
 		assert.deepEqual( step( 2 ), [] );
-		// A genuinely unavailable model stays distinguishable from a missing
-		// marker, and the incident text identifies the endpoint that failed.
+		// A caster whose model is still loading holds the callback while its
+		// cast lives (native compounds load synchronously), then launches from
+		// the posed marker; only a model still cold when the cast ends reports.
 		actors[0].model = "cold";
 		cast.token = 2;
-		step( 3, [ { cast, phase: "SHOT", event: 1, at: 3 } ] );
+		assert.deepEqual( step( 3, [ { cast, phase: "SHOT", event: 1, at: 3 } ] ), [] );
+		assert.equal( effects.error(), null );
+		actors[0].model = "body";
+		const held = step( 3.1 );
+		assert.equal( effects.error(), null );
+		assert.equal( held.length, 1 );
+		// The held mover keeps its native clock: 0.1 s at 250 units/s.
+		assert.ok( Math.abs( held[0].pose.x - 25 ) < 1 );
+		actors[0].model = "cold";
+		cast.token = 3;
+		assert.deepEqual( step( 5, [ { cast, phase: "SHOT", event: 1, at: 5 } ] ), [] );
+		step( 5.1, [], { ...gameplay, casts: [] } );
 		const error = effects.error();
 		assert.ok( error );
 		assert.match( error, /source-socket:1\/ai_end/ );
