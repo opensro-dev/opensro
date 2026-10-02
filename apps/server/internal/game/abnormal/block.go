@@ -472,13 +472,23 @@ func (b *Block) Grades() []uint8 {
 	return out
 }
 
-// elapsed is the native unsigned GetTickCount difference.
 /*
 ================
 elapsed
+
+The native unsigned GetTickCount difference. Native reads one clock, so a
+slot never starts after the instant that updates it. The port samples two:
+a release inside the world tick admits with the monster registry's clock,
+then the same tick updates with its earlier sampled instant. Without the
+clamp that negative age wraps to ~49 days and expires the slot at once.
 ================
 */
-func elapsed(now, since int64) uint32 { return uint32(now - since) }
+func elapsed(now, since int64) uint32 {
+	if now < since {
+		return 0
+	}
+	return uint32(now - since)
+}
 
 // ForgetSource detaches a caster identity without curing the victim: a
 // disconnected source no longer resolves through ObjMgr (its GID is gone).
