@@ -106,6 +106,7 @@ buffs and heals alike. It is the only writer of these fields;
 decodeSkillOffense only validates them.
 
 	getv WIMD/BDMD/HLMD  +0x4E4/+0x554/+0x55C  prepared MP cut
+	getv WIRU/CBRA       +0x4E8/+0x50C         cast reach addends (4AE87E)
 	getv MUER/DSER       +0x544/+0x54C         aura radius addends
 	scls                 +0x380                selector bits (5842AC)
 	reqc                 +0x39C                bits 0, 4, 5 (SkillReqc)
@@ -132,15 +133,28 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 	}
 	for i := skilldataColEncodedTail; i < len(fields); {
 		tag, ok := textdataInt(fields[i])
-		if !ok || tag == 0 || tag == 0x73736f75 {
+		if !ok || tag == 0x73736f75 {
 			return
+		}
+		// A zero word is padding, not the end of the program: the native
+		// indexers skip it, as CompileSkillProgram does, so a getv or reqi
+		// authored after a padded opcode ("odar 4 n 0 getv ...") still
+		// reaches the row.
+		if tag == 0 {
+			i++
+			continue
 		}
 		switch tag {
 		case 0x67657476: // getv
+			// WIRU/CBRA (+0x4E8/+0x50C) sit beside WIMD (+0x4E4) in this
+			// per-row index, so a row without att records them too, and
+			// 4AE87E adds them to the cast's reach. Owners that never
+			// compute a reach simply ignore the bit.
 			if key, ok := word(i + 1); ok {
 				if slot, known := SkillParameterFromKey(key); known &&
 					(slot == ParameterWizardMPDecrease || slot == ParameterBardMPDecrease || slot == ParameterHealerMPDecrease ||
-						slot == ParameterMusicRange || slot == ParameterDanceRange || slot == ParameterHealRecoveryUp) {
+						slot == ParameterMusicRange || slot == ParameterDanceRange || slot == ParameterHealRecoveryUp ||
+						slot == ParameterWizardRange || slot == ParameterCrossbowRange) {
 					row.Attack.Parameters |= SkillParameterMask(1) << slot
 				}
 			}
