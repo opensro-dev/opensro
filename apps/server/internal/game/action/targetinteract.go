@@ -207,6 +207,11 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 					return result
 				}
 
+				if skill.CombatTrap.Pinned {
+					result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
+					return result
+				}
+
 				return rt.beginOffensiveSkill(divisionID, character, snapshot, cast)
 			}
 		}

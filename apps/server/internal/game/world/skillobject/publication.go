@@ -31,6 +31,8 @@ type Viewer struct {
 	Population instance.Lease
 	Position   worldgeom.RegionXZ
 	Published  []uint32
+	// CharacterGID is the viewing player; a hidden trap shows only to its owner.
+	CharacterGID uint32
 }
 
 /*
@@ -41,6 +43,9 @@ World generation participates in visibility as well as capture admission.
 ================
 */
 func Visible(object Object, viewer Viewer) bool {
+	if object.Program.Hidden && object.OwnerGID != viewer.CharacterGID {
+		return false
+	}
 	return object.Division == viewer.Division && object.Population == viewer.Population &&
 		worldgeom.InterestVisible(viewer.Position, worldgeom.RegionXZ{
 			RegionID: object.Spawn.Region, X: float64(object.Spawn.X), Z: float64(object.Spawn.Z),

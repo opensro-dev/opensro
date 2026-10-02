@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/instance"
 )
 
@@ -119,5 +120,36 @@ func TestTrapTargetFilterUsesOwnershipThreeDimensionsAndTerminatedList(t *testin
 	object.Program.Targets = [3]uint32{0, base.RefID}
 	if Matches(object, base) {
 		t.Fatal("target after the zero terminator matched")
+	}
+}
+
+/*
+================
+TestCombatTrapMatchesAnyLivingVictimAndHidesFromOthers
+
+A combat trap ignores the quest target list and the victim's current
+opponent; a hidden trap is published only to its owner.
+================
+*/
+func TestCombatTrapMatchesAnyLivingVictimAndHidesFromOthers(t *testing.T) {
+	var registry Registry
+	object := trapFixture(t, &registry)
+	object.Program.Combat, object.Program.Hidden = true, true
+	victim := Target{GID: 7, RefID: 1, OwnerGID: 999, Alive: true, Region: object.Spawn.Region, X: 105, Y: 10, Z: 200}
+	if !Matches(object, victim) {
+		t.Fatal("combat trap refused a living monster fighting someone else")
+	}
+	victim.Alive = false
+	if Matches(object, victim) {
+		t.Fatal("combat trap matched a corpse")
+	}
+	viewer := Viewer{Division: object.Division, Population: object.Population,
+		Position: worldgeom.RegionXZ{RegionID: object.Spawn.Region, X: 100, Z: 200}}
+	if Visible(object, viewer) {
+		t.Fatal("hidden trap shown to a stranger")
+	}
+	viewer.CharacterGID = object.OwnerGID
+	if !Visible(object, viewer) {
+		t.Fatal("hidden trap hidden from its owner")
 	}
 }

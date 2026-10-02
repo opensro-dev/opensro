@@ -93,6 +93,7 @@ func parseSkillOffense(fields []string, row *SkillRow) {
 	noteParameterIndex(fields, row)
 	row.OffenseRefusal = decodeSkillOffense(fields, row)
 	row.CastGate.QuestTrap = compileQuestTrap(fields)
+	row.CombatTrap = compileCombatTrap(fields, *row)
 }
 
 /*

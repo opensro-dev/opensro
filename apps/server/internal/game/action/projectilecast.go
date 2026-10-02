@@ -36,6 +36,7 @@ type pendingProjectileCast struct {
 	executionCost             skillCharge // immutable prepared snapshot; never recomputed at release
 	supportCast               bool        // shares prepare/cancel ownership; has no monster target or flight
 	selfEffect                bool        // category-three recipient installation at release
+	trap                      bool        // untargeted; the release plants a combat trap (skillcombattrap.go)
 	statusArea                bool        // untargeted; the release rolls a caster-centred status area
 	divisionID, characterName string
 	characterID               int64
@@ -142,7 +143,7 @@ func (rt *Runtime) advanceProjectileCasts(now int64) []simulation.DivisionFrames
 			snapshot = rt.characterSnapshot(p.divisionID, c)
 		}
 		valid := snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
-		if !p.supportCast && !p.selfEffect && !p.statusArea {
+		if !p.supportCast && !p.selfEffect && !p.trap && !p.statusArea {
 			target, exists := rt.characterMonster(p.divisionID, snapshot, p.cast.TargetGid)
 			valid = valid && exists && target.CurrentHP > 0
 		}
@@ -184,6 +185,10 @@ func (rt *Runtime) advanceProjectileCasts(now int64) []simulation.DivisionFrames
 			} else if p.statusArea {
 				if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
 					result, decision = rt.acceptUntargetedStatusCast(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				}
+			} else if p.trap {
+				if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
+					result, decision = rt.acceptCombatTrap(p.divisionID, c, snapshot, p.cast, skill, now, &p)
 				}
 			} else if p.supportCast {
 				if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {

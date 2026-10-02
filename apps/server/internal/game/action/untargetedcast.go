@@ -3,9 +3,9 @@
 
 untargetedcast.go - admission and preparation of untargeted hostile casts
 
-Lightning Impact prepares without a target. Untargeted hostile casts share
-the owner-state gates, the execution mask, the phase cost and the prepared
-self-cast envelope; only their release owners differ.
+Lightning Impact and the planted Fire Trap prepare without a target. Both
+share the owner-state gates, the execution mask, the phase cost and the
+prepared self-cast envelope; only their release owners differ.
 
 ===========================================================================
 */
@@ -71,7 +71,7 @@ func (rt *Runtime) beginUntargetedCast(division string, c, snapshot *enterworld.
 prepareUntargetedCast
 
 The prepared self-cast envelope for an untargeted hostile release; mark
-selects the release owner (a caster-centred status area).
+selects the release owner (a planted trap or a caster-centred status area).
 ================
 */
 func (rt *Runtime) prepareUntargetedCast(division string, c *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, mark func(*pendingProjectileCast)) OpResult {
