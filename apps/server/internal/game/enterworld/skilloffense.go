@@ -333,6 +333,15 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		row.DirectOffensePinned = true
 		return ""
 	}
+	if area, ok := compileSkillAreaBurst(fields, *row); ok {
+		// Untargeted caster-centred attack (skillareaburst.go): the target
+		// gate below would refuse it, as it did before an owner existed.
+		row.AreaBurst = true
+		row.OffensiveArea = area
+		row.OffensiveStagePinned = true
+		row.DirectOffensePinned = true
+		return ""
+	}
 	// Admission is by executable shape, never a hand-maintained skill-name list.
 	// Linked casts and additional effect blocks require their own authority
 	// operations; they cannot be silently reduced to one damage result.

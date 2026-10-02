@@ -365,6 +365,10 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 				return result
 			}
 
+			if skill.AreaBurst && !skill.TargetRequired {
+				return rt.acceptAreaBurst(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
+			}
+
 			if skill.CombatTrap.Pinned {
 				result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
 				return result
