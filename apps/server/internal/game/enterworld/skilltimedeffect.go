@@ -21,6 +21,7 @@ const (
 	tagTimedStrength           = 0x73747269
 	tagTimedIntellect          = 0x696e7469
 	tagTimedLink               = 0x6c6e6b73
+	tagTimedLinkedThreat       = 0x6c6b6167
 	tagTimedRequireNot         = 0x7265716e
 	tagTimedMaxHP              = 0x687069
 	tagTimedAttack             = 0x61706175
@@ -37,6 +38,10 @@ const (
 	parameterBlessingMagical   = 0x484c534d
 	parameterBlessingStrength  = 0x484c4653
 	parameterBlessingIntellect = 0x484c4d49
+
+	// maxLinkedThreatPercent bounds lkag's share: v1.150 authors 36..60 and a
+	// share above the whole aggression has no proven meaning.
+	maxLinkedThreatPercent = 100
 )
 
 /*
@@ -149,12 +154,16 @@ SkillEffectLink
 
 lnks {group, max distance, max outgoing, board}. A zero board word hides the
 source half from the caster's board; both halves still exist on the server.
+Threat is lkag {percent, 0}: the share of the recipient's aggression that
+5A03A0 (combat.SplitLinkedThreat) hands to the link source.
 ================
 */
 type SkillEffectLink struct {
 	Present                         bool
 	Group, MaxDistance, MaxOutgoing uint32
 	Board                           uint32
+	Threat                          bool
+	ThreatPercent                   uint32
 }
 
 /*
@@ -307,6 +316,16 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Link = SkillEffectLink{Present: true, Group: op.Arguments[0], MaxDistance: op.Arguments[1], MaxOutgoing: op.Arguments[2], Board: op.Arguments[3]}
+		case tagTimedLinkedThreat:
+			// lkag rides the link context (ApplyLink, 594EAC). Every v1.150
+			// row authors it after lnks with a zero second word and a percent
+			// of at most 100; any other order, second word or percent has an
+			// unproven meaning and stays refused.
+			if !result.Link.Present || result.Link.Threat || op.Count != 2 || op.Arguments[1] != 0 ||
+				op.Arguments[0] > maxLinkedThreatPercent {
+				return
+			}
+			result.Link.Threat, result.Link.ThreatPercent = true, op.Arguments[0]
 		case tagTimedIncomingReduction:
 			// odar is installed from BuffModifiers for every recipient (594AC0);
 			// the program only has to agree with that projection.
@@ -344,9 +363,12 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			return
 		}
 	}
-	// A link carries only the stat blessings so far; a linked defp would
-	// need the source-half rule of 5951FC checked first.
-	if result.Link.Present && (defense || result.Area.Present || result.Persistent) ||
+	// A link carries only the stat blessings and lkag so far; a linked defp
+	// would need the source-half rule of 5951FC checked first. The linked
+	// runtime installs only stri/inti writes, so a threat link with blk or
+	// odar would silently drop them and stays refused.
+	if result.Link.Threat && (result.Block.Present || result.IncomingReduction) ||
+		result.Link.Present && (defense || result.Area.Present || result.Persistent) ||
 		result.StrengthAddend && !result.Strength.Present || result.IntellectAddend && !result.Intellect.Present {
 		return
 	}
@@ -363,7 +385,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
-		result.Intellect.Present || result.IncomingReduction)
+		result.Intellect.Present || result.IncomingReduction || result.Link.Present && result.Link.Threat)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {

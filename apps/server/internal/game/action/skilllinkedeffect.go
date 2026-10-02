@@ -10,6 +10,9 @@ recipient half on the target (mode 2), joined by a descriptor that
 receives the stri / inti writes: 594F53 skips them for a linked source.
 The caster sees the source half on its own board through the private
 B5ED, which names the subject; everyone sees the recipient through B419.
+The Warrior's Protect (GUARDA_AGGRO) is the same pair with lkag and no
+writes: the link carries the threat share commitAggression hands to the
+source (594EAC, 5A03A0).
 
 ===========================================================================
 */
@@ -75,7 +78,7 @@ func (rt *Runtime) acceptLinkedTargetEffect(division string, c, snapshot, target
 		SourceGID: casterGID, TargetGID: cast.TargetGid,
 		SourceToken: atomic.AddUint32(&rt.castTokenCounter, 1), TargetToken: atomic.AddUint32(&rt.castTokenCounter, 1),
 		SkillID: skill.ID, SkillGroup: skill.Group,
-		Group: d.Link.Group, MaxDistance: d.Link.MaxDistance, MaxOutgoing: d.Link.MaxOutgoing,
+		Group: d.Link.Group, MaxDistance: d.Link.MaxDistance, MaxOutgoing: d.Link.MaxOutgoing, ThreatPercent: d.Link.ThreatPercent,
 		StartedAtMs: now, ExpiresAtMs: now + int64(skill.EffectDurationMs),
 		ClientCancelable: !skill.VoluntaryCancelBlocked, TargetModifiers: modifiers,
 	}
