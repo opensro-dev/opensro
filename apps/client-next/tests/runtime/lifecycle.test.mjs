@@ -192,6 +192,43 @@ test("device resolved after disposal is destroyed, never activated", async () =>
 	}
 });
 
+test("a device failure reports its cause, not the errors that follow it (BUG-022)", async () => {
+	const old = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
+	let uncaptured;
+	Object.defineProperty( globalThis, "navigator", {
+		configurable: true,
+		value: {
+			gpu: {
+				requestAdapter: async () => ({
+					features: new Set(),
+					requestDevice: async () => ({
+						lost: new Promise( () => {} ),
+						addEventListener( name, handler ) {
+							if ( name === "uncapturederror" ) uncaptured = handler;
+						},
+						destroy() {},
+						createShaderModule() {
+							throw new Error( "createTexture: format bgra8unorm-srgb is not renderable" );
+						}
+					})
+				}),
+				getPreferredCanvasFormat: () => "bgra8unorm"
+			}
+		}
+	} );
+	try {
+		const owner = createDevice();
+		await new Promise( r => setImmediate( r ) );
+		assert.equal( owner.phase(), "failed" );
+		defined( uncaptured )( { error: { message: "GPUTexture.createView: texture is not valid" } } );
+		assert.match( String( owner.error() ), /not renderable/, "the cause survives the cascade" );
+		owner.dispose();
+	} finally {
+		if ( old ) Object.defineProperty( globalThis, "navigator", old );
+		else delete globalThis.navigator;
+	}
+});
+
 const { createRenderer } = await load( "src/engine/runtime/renderer/renderer.ts" );
 test("device loss rebuilds only renderer resources and bounds repeated recovery", async t => {
 	mockGlobal( t, "GPUShaderStage", { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 } );

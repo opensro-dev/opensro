@@ -58,6 +58,10 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		if ( generation !== epoch ) {
 			return;
 		}
+		// Keep the first failure. WebGPU reports the cause (say, createTexture
+		// rejecting a format or usage) and then every consequence ("createView:
+		// texture is not valid"); the report must name the cause (BUG-022).
+		if ( phase === "failed" ) return;
 		recoverable = canRecover;
 		failure = String( error );
 		phase = "failed";
