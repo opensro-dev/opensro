@@ -28,8 +28,10 @@ function reference( rows ) {
 			chain.push( current );
 			const parent = current.attachment?.gid ?? current.mountedOn;
 			if ( parent === undefined ) break;
+			const mounted = current.attachment === undefined;
 			current = map.get( parent );
-			if ( !current ) chain.length = 0;
+			// A missing attachment parent hides the chain; a missing mount ends it.
+			if ( !current && !mounted ) chain.length = 0;
 		}
 		return [ row.gid, chain ];
 	} ) );
@@ -71,4 +73,13 @@ test("retained hierarchy matches full traversal through pose, parent, membership
 		),
 		{ seed: 2402028, numRuns: 1000 }
 	);
+});
+
+test("a rider whose mount is absent stays drawn; an orphaned attachment does not", () => {
+	const owner = createCharacterHierarchy();
+	const rider = { gid: 1, mountedOn: 99, model: "m" },
+		weapon = { gid: 2, attachment: { gid: 98, bone: "b" }, model: "m" };
+	const { chains } = owner.update( [ rider, weapon ] );
+	assert.deepEqual( chains.get( 1 ), [ rider ] );
+	assert.deepEqual( chains.get( 2 ), [] );
 });

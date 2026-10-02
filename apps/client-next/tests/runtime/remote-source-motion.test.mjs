@@ -116,3 +116,27 @@ test("source synchronization does not start an idle entity walking", () => {
 	assert.equal( flush( owner ).length, 0 );
 	owner.dispose();
 });
+
+test("a rider's movement moves its mount (CCharactor_GetActiveMoverEntity 0x85E000)", () => {
+	const owner = createPeer();
+	const MOUNT = 8;
+	const spawn = Buffer.alloc( 49 );
+	spawn.writeUInt32LE( 1 );
+	spawn.writeUInt32LE( MOUNT, 4 );
+	spawn.writeUInt16LE( REGION, 8 );
+	spawn[25] = 3;
+	spawn.writeFloatLE( 20, 32 );
+	spawn.writeFloatLE( SPEED, 36 );
+	spawn[45] = 1;
+	owner.receive( { opcode: 0x30d7, payload: spawn }, 0 );
+	owner.receive( { opcode: 0xb4b5, payload: Buffer.from( [ 1, GID, 0, 0, 0, 1, MOUNT, 0, 0, 0 ] ) }, 0 );
+	flush( owner );
+	owner.receive( destinationPacket(), 0 );
+	const moved = flush( owner ).filter( event => event.kind === "state" );
+	assert.deepEqual( moved.map( event => event.entity.gid ), [ MOUNT ], "the mount takes the rider's travel" );
+	assert.ok( moved[0].entity.movementPath, "the mount walks the rider's path" );
+	owner.receive( sourcePacket( 0xb2f5, 30 ), 100 );
+	const corrected = flush( owner ).filter( event => event.kind === "state" );
+	assert.deepEqual( corrected.map( event => event.entity.gid ), [ MOUNT ], "a rider's correction places the mount" );
+	owner.dispose();
+});

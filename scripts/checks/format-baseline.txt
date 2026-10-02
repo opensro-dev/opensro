@@ -31,7 +31,6 @@ apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
 apps/client-next/src/engine/foundation/animation/character-bounds.ts
-apps/client-next/src/engine/foundation/animation/character-hierarchy.ts
 apps/client-next/src/engine/foundation/animation/character-render-plan.ts
 apps/client-next/src/engine/foundation/animation/character-selection.ts
 apps/client-next/src/engine/foundation/animation/combat-stance.ts
