@@ -160,6 +160,11 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	if partyHeal || partyResu {
 		party = rt.skillCureVector(division, snapshot, skill, cast, now)
 	}
+	// The cure vector reads the store; resolve it before the caster's door.
+	var cureTargets []cureTarget
+	if cure {
+		cureTargets = rt.resolveSkillCureTargets(division, character, snapshot, skill, cast, now)
+	}
 	casterGID := enterworld.ObjectIDForCharacter(snapshot)
 	healCaster := skill.Recovery.SelfFlatPinned ||
 		targeted && recipient == character ||
@@ -185,12 +190,12 @@ func (rt *Runtime) acceptSupportSkillPhase(
 			rt.startSkillCast(division, character, now)
 		}
 		rt.commitOffensivePhaseCost(division, character, skill, cost, now, release != nil)
-		if skill.Abnormal.CurePresent() {
+		if cure {
 			cureActor, curePublic, cureRecipients = rt.applySkillCure(
 				division,
 				character,
 				skill,
-				cast,
+				cureTargets,
 				now,
 			)
 		}

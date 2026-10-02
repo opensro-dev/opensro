@@ -34,7 +34,8 @@ func TestEmptyCureVectorUsesSelfFlag(t *testing.T) {
 		skill.Abnormal.Curl = true
 		skill.Abnormal.CurlMask = int32(abnormal.Stun.Bit())
 		skill.Abnormal.CurlChance = 100
-		rt.applySkillCure(testDivision, c, skill, wire.SkillAction{}, clock.NowMs())
+		targets := rt.resolveSkillCureTargets(testDivision, c, c, skill, wire.SkillAction{}, clock.NowMs())
+		rt.applySkillCure(testDivision, c, skill, targets, clock.NowMs())
 		block := rt.playerAbnormal(testDivision, c.Name)
 		stunned := block != nil && block.Has(abnormal.Stun)
 		if stunned == self {
