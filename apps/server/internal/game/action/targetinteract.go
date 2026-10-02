@@ -329,6 +329,12 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 				return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill}, cast)
 			}
 
+			// Untargeted party-area heals and resurrections: their
+			// action vector is the party selection (58BEF0).
+			if skill.Recovery.PartyResurrectPinned || skill.Recovery.PartyHealPinned {
+				return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
+			}
+
 			if skill.Recovery.SelfFlatPinned ||
 				(skill.Heal.Present || skill.Abnormal.AdmitDeadParty) && skill.TargetRequired ||
 				skill.Abnormal.CurePresent() {
