@@ -462,7 +462,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	const characterDataCountry = steps.buildCharacterDataCountryAsset();
 	// COS HUD reference fields (icon, max HP, rideable) for the status icon,
 	// command bar and info page.
-	const cosPresentation = steps.buildCosPresentationAsset();
+	const cosPresentation = await steps.buildCosPresentationAsset();
 	// WIP Toggle*Window plane (ginterface.txt raw section lines ->
 	// ginterface-sections.json, decoded once in sectionWindowPlane.ts and driven
 	// through the REAL sub_783f80 CreateControlsFromSection deserializer).

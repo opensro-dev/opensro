@@ -27,6 +27,7 @@ magicalDefence, parry, hit, skills].
 ===========================================================================
 */
 import path from "node:path";
+import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { listTextDataShardNamesSync, readTextDataRowsSync } from "../shared/textDataIo.mjs";
@@ -55,7 +56,7 @@ const COS_BAND_LAST = 6;
 buildCosPresentationAsset
 ================
 */
-export function buildCosPresentationAsset( options = {} ) {
+export async function buildCosPresentationAsset( options = {} ) {
 	const textdataRoot = options.textdataRoot ?? retailTextdataRoot;
 	const rows = {};
 	for ( const shard of listTextDataShardNamesSync( textdataRoot, /^characterdata.*\.txt$/i ) ) {
@@ -103,8 +104,11 @@ export function buildCosPresentationAsset( options = {} ) {
 		outputFileName: "cosPresentation.json",
 		value: { format: "sro-cos-presentation", version: 1, rows }
 	} );
+	// The packs carry the compressed sidecars; a stale one would ship the
+	// previous rows.
+	await refreshPrecompressedSidecars( [ outPath ], { onlyWhenStale: true } );
 	console.log( `[cos-presentation] wrote ${Object.keys( rows ).length} COS reference row(s)` );
 	return { outPath, rows: Object.keys( rows ).length };
 }
 
-if ( isMainScript( import.meta.url ) ) buildCosPresentationAsset();
+if ( isMainScript( import.meta.url ) ) await buildCosPresentationAsset();
