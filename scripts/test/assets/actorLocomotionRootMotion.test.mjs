@@ -257,13 +257,14 @@ test("published Baroi locomotion is horizontally in-place", () => {
 	}
 });
 
-// Reviewed 2026-09-28. COS: the 22 pet models published since every enabled
-// COS reference is baked (npcModelRoster.mjs enabledCosReferences), each with
-// walk and run. Actors: 148, including MOB_DH_SOLDIEREARTHGHOST, which the
+// Reviewed 2026-10-02. COS: the 39 models of every COS band (riding horses,
+// transports, pets, quest companions) whose own or base BSR ships in the
+// client (npcModelRoster.mjs enabledCosReferences). Each has walk and run
+// except COS_T_LIZARD, whose t_lizard.bsr authors only run. Actors: 148, including MOB_DH_SOLDIEREARTHGHOST, which the
 // v1.150 client places and a quest needs; the server keeps it spawnable
 // despite the v1.188 shard's all-zero caps (monster laterDisabledCodenames).
-const COS_LOCOMOTION_RESOURCES = 22;
-const COS_LOCOMOTION_ROLES = 44;
+const COS_LOCOMOTION_RESOURCES = 39;
+const COS_LOCOMOTION_ROLES = 77;
 
 test("every holder-driven actor resource exports in-place locomotion", () => {
 	const npcManifest = JSON.parse(

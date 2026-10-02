@@ -18,14 +18,21 @@ manifest against these same functions.
 */
 
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
-import { rebuildRoot as repositoryRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { dataExtractedRoot, rebuildRoot as repositoryRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { TITLE_CROWD_ROSTER } from "./resolveCharRoster.mjs";
 
 const textdataDir = retailTextdataRoot;
 
 // characterdata columns for the COS gate: service flag, then TypeID1..4.
 const CHARACTERDATA_SERVICE = 0;
 const CHARACTERDATA_REF_OBJ_ID = 1;
+// The base codename a clone row borrows its model from.
+const CHARACTERDATA_BASE = 4;
+// TypeID4 COS bands: 1 riding mount through 6 quest companion.
+const COS_BAND_FIRST = 1;
+const COS_BAND_LAST = 6;
 const CHARACTERDATA_TYPE_ID1 = 9;
 const CHARACTERDATA_TYPE_ID2 = 10;
 const CHARACTERDATA_TYPE_ID3 = 11;
@@ -128,18 +135,45 @@ export function loadSpawnableNpcRoster() {
 ================
 enabledCosReferences
 
-Every enabled COS reference in characterdata: in service, TypeID 1/2/3 and
-TypeID4 3 or 4. 582110 routes action 1 of growth pets and hidden transports
-to state 50, so each enabled reference is published, sharing the native BSR
-bake across levels. `rows` is loadCharacterDataRows' codename -> columns map.
+Every enabled COS reference the world can spawn, in every TypeID4 band: 1
+riding mounts (COS_C_*), 2 transports (COS_T_*), 3 attack and 4 pickup pets,
+5 guild soldiers and 6 quest companions; in service with TypeID 1/2/3.
+CICCos and CICRide resolve the spawned reference's model like any actor's,
+so a band left out has no model: a summoned riding horse was invisible, and
+so was the rider attached to it. 582110 routes action 1 of growth pets and
+hidden transports to state 50, so each enabled reference is published,
+sharing the native BSR bake across levels.
+
+A reference is a model only when its row, or the base row it links to (col
+4, one hop like the _CLON rows), names a BSR resource that the client data
+ships. Guild mercenaries (COS_GUILD_*, band 5) name only a scroll icon and
+link to themselves; characterdata also enables a few references whose BSR
+the v1.150 Data.pk2 does not hold (COS_C_DONKEY, COS_C_CAMEL*, COS_T_COW2..).
+The client has no model for either, and cannot draw them.
+
+References the title crowd roster already publishes (TITLE_CROWD_ROSTER,
+its rideable COS_T_* mounts) stay with that owner: two rows for one RefObj
+would leave the client catalog to whichever manifest loads last. `rows` is
+loadCharacterDataRows' codename -> columns map.
 ================
 */
 export function enabledCosReferences( rows ) {
-	return [ ...rows ].filter( ( [, cols] ) =>
+	const crowd = new Set( TITLE_CROWD_ROSTER );
+	const shipped = cols => {
+		const value = cols?.find( value => /\.bsr$/i.test( value ) );
+		return !!value &&
+			fs.existsSync( path.join( dataExtractedRoot, "res", value.replaceAll( "\\", "/" ).toLowerCase() ) );
+	};
+	const modelled = ( codename, cols ) =>
+		shipped( cols ) || !!cols[CHARACTERDATA_BASE] && cols[CHARACTERDATA_BASE] !== codename &&
+			shipped( rows.get( cols[CHARACTERDATA_BASE] ) );
+	return [ ...rows ].filter( ( [codename, cols] ) =>
+		!crowd.has( codename ) && modelled( codename, cols ) &&
 		Number( cols[CHARACTERDATA_SERVICE] ) === 1 &&
 		Number( cols[CHARACTERDATA_TYPE_ID1] ) === 1 &&
 		Number( cols[CHARACTERDATA_TYPE_ID2] ) === 2 &&
 		Number( cols[CHARACTERDATA_TYPE_ID3] ) === 3 &&
-		[ 3, 4 ].includes( Number( cols[CHARACTERDATA_TYPE_ID4] ) )
+		Number( cols[CHARACTERDATA_TYPE_ID4] ) >= COS_BAND_FIRST &&
+		Number( cols[CHARACTERDATA_TYPE_ID4] ) <= COS_BAND_LAST
 	).map( ( [codename, cols] ) => ({ codename, refObjId: Number( cols[CHARACTERDATA_REF_OBJ_ID] ) }) );
 }

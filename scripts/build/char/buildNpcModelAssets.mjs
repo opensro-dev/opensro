@@ -231,6 +231,27 @@ import { expandCharacterInfoCodenames } from "../shared/characterInfo.mjs";
 
 /*
 ================
+characterInfoResolver
+
+CharacterInfo_FindByRefThenOriginalThenDefault (9171B0): a character's own
+characterInfo row, else its original reference's, else the default, which is
+the first row whose codename names a known reference
+(CharacterInfo_RegisterExistingRefAndSeedDefault, 91B7E0). Every character
+resolves, so none is left without a sound and effect profile. Native reads the
+original reference from the character data (+0x5C); the clone base link in
+characterdata column 4, the chain resolveNpcModel follows for the model, is
+taken to be that reference. `records` keeps file order (a Map).
+================
+*/
+function characterInfoResolver( records, rows ) {
+	const BASE_COLUMN = 4;
+	const defaultCodename = [ ...records.keys() ].find( codename => rows.has( codename ) );
+	const fallback = defaultCodename === undefined ? undefined : records.get( defaultCodename );
+	return codename => records.get( codename ) ?? records.get( rows.get( codename )?.[BASE_COLUMN] ?? "" ) ?? fallback;
+}
+
+/*
+================
 loadCharacterInfo
 ================
 */
@@ -589,6 +610,7 @@ export async function buildNpcModelAssets( options = {} ) {
 	// clone base links remain resolvable without a second classifier.
 	const rows = loadCharacterDataRows( textdataDir, { codenamePattern: /./ } );
 	const characterInfo = loadCharacterInfo();
+	const resolveCharacterInfo = characterInfoResolver( characterInfo, rows );
 	const npcRoster = loadSpawnableNpcRoster();
 	const mobRoster = loadSpawnableMobRoster();
 	const mobRosterByCodename = new Map( mobRoster.map( ( ref ) => [ ref.codename, ref ] ) );
@@ -597,8 +619,8 @@ export async function buildNpcModelAssets( options = {} ) {
 	const cosRoster = enabledCosReferences( rows ).map( ( { codename, refObjId } ) => ({
 		codename,
 		refObjId,
-		rideModelPath: characterInfo.get( codename )?.rideModelPath,
-		riderTransformMode: characterInfo.get( codename )?.riderTransformMode
+		rideModelPath: resolveCharacterInfo( codename )?.rideModelPath,
+		riderTransformMode: resolveCharacterInfo( codename )?.riderTransformMode
 	}) );
 	const cosNames = new Set( cosRoster.map( row => row.codename ) );
 	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster ];
@@ -640,7 +662,7 @@ export async function buildNpcModelAssets( options = {} ) {
 		} );
 		claimResourceOutput( outputOwners, model.bsrPath, output.publicPath );
 		const publicPath = output.publicPath;
-		const info = characterInfo.get( codename );
+		const info = resolveCharacterInfo( codename );
 		const soundProfileName = info?.soundProfileName;
 		if ( !soundProfileName && isMob ) {
 			throw new Error( `[npc] ${codename}: no skilleffect characterInfo ResourceTypeName` );
