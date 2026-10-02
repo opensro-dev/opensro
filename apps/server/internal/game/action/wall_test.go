@@ -147,8 +147,14 @@ the absorb entry is a bare type 8 and the pool stays full.
 */
 func TestFireWallLetsThePhysicalHitThrough(t *testing.T) {
 	rt, clock, c, mob := wallFixture(t, fireWallA1, 5)
+	// Survive the hit: death retires every unprotected effect, the wall too.
+	c.Strength = testInt64(500)
+	c.CurrentHP = nil
 	hp := enterworld.CurrentHP(c)
 	_, wall := wallHit(t, rt, clock, c, mob)
+	if !enterworld.CharacterAlive(c) {
+		t.Fatal("fixture player died; the wall would retire with it")
+	}
 	for _, r := range wall {
 		if r.tag != 8 {
 			t.Fatalf("absorb records %+v", wall)

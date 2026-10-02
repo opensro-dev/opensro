@@ -52,3 +52,21 @@ func TestDeathRetiresModifierOwnershipButPreservesProtectedEffects(t *testing.T)
 		t.Fatal("duplicate retirement")
 	}
 }
+
+/*
+================
+TestDeathRetiresPresentationOnlyEffects
+
+A buff that installs no modifier, status or link (a planted trap's board
+entry) still ends on death; only cbuf and durable jobs survive.
+================
+*/
+func TestDeathRetiresPresentationOnlyEffects(t *testing.T) {
+	r := NewRegistry()
+	if !r.Apply(Effect{DivisionID: "d", CharacterName: "c", SkillID: 7, SkillGroup: 7, InstanceToken: 7}) {
+		t.Fatal("install")
+	}
+	if ended := r.RetireBodyStatusesOnDeath("d", "c"); len(ended) != 1 || ended[0].InstanceToken != 7 {
+		t.Fatal("presentation-only buff survived death", ended)
+	}
+}

@@ -324,8 +324,8 @@ func (r *Registry) Forget(divisionID, characterName string) {
 	r.mu.Unlock()
 }
 
-// RetireBodyStatusesOnDeath removes supported transient applications, including
-// modifier-only effects. Authored cbuf protection and the existing durable-job
+// RetireBodyStatusesOnDeath removes every transient application, including
+// modifier-only and presentation-only effects. Authored cbuf protection and the existing durable-job
 // lifecycle are independent reasons to retain an application.
 // The action owner holds the character mutation door while consuming this list.
 func (r *Registry) RetireBodyStatusesOnDeath(divisionID, characterName string) []Effect {
@@ -343,7 +343,9 @@ func (r *Registry) RetireBodyStatusesOnDeath(divisionID, characterName string) [
 		}
 	}
 	for _, effect := range rows {
-		if RetirementSelected(true, 0, false, 0, false, false, effect.DeathProtected || effect.Persistent) && (effect.BodyStatusOwner != 0 || effect.TransformRefObjID != 0 || effect.Movement || effect.Imbue || effect.LinkToken != 0 || effect.Modifiers.data != nil) {
+		// 59FFD3 forces selection of every unprotected application. A
+		// presentation-only buff (a planted trap's board entry) ends too.
+		if RetirementSelected(true, 0, false, 0, false, false, effect.DeathProtected || effect.Persistent) {
 			r.changeEffectStatesLocked(key, effect, true)
 			if effect.LinkToken != 0 {
 				r.retireLinkHalfLocked(effect)
