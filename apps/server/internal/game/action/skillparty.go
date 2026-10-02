@@ -25,6 +25,7 @@ import (
 	"sort"
 	"sync/atomic"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
@@ -65,7 +66,8 @@ CAST START
 acceptPartyBuff
 
 583657: charge the cast, install the caster's persistent instance and open
-the area. Members are chosen by the update, never here.
+the area. Members are chosen by the update, never here. The caster's new
+stats ride its own burst only; observers see the cast and the instance.
 ==================
 */
 func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow) OpResult {
@@ -117,6 +119,9 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 		}
 		return OpResult{DiagnosticRefusal: "party-buff-commit-refused"}
 	}
+	broadcast := append([]wire.Frame(nil), frames...)
+	private := rt.auraStatsFrames(division, c, skill, token)
+	frames = append(frames, private...)
 
 	aura := partyAura{
 		division:   division,
@@ -131,7 +136,7 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 	rt.partyAuraMu.Lock()
 	rt.partyAuras = append(rt.partyAuras, aura)
 	rt.partyAuraMu.Unlock()
-	return OpResult{Frames: frames, Broadcast: frames}
+	return OpResult{Frames: frames, Broadcast: broadcast, ActorPrivate: private}
 }
 
 // auraRadius is the efr radius plus the caster's MUER (+0x544) and DSER
@@ -356,8 +361,8 @@ joinAura
 
 The party walk after the heal: every other party member not in the set,
 alive, on the same plane, within the radius and admitted by buff
-replacement gets a child instance under its own authority. There is no
-target cap.
+replacement gets a child instance under its own authority, and its new
+stats privately. There is no target cap.
 ==================
 */
 func (rt *Runtime) joinAura(aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow, now int64) []simulation.DivisionFrames {
@@ -390,8 +395,42 @@ func (rt *Runtime) joinAura(aura *partyAura, caster *enterworld.Character, skill
 		}
 		aura.members[member.Name] = child
 		out = append(out, simulation.DivisionFrames{DivisionID: aura.division, SourceGID: gid, Frames: simFrames(installed)})
+		if stats := rt.auraStatsFrames(aura.division, member, skill, child); len(stats) != 0 {
+			out = append(out, simulation.DivisionFrames{DivisionID: aura.division, OnlyCharacterID: member.ID, Frames: simFrames(stats)})
+		}
 	}
 	return out
+}
+
+/*
+==================
+auraStatsFrames
+
+The owner's private 0x343C after one aura instance was installed. The
+frame and its private routing follow the timed self effect's release
+(skilltimedeffect.go), which publishes unconditionally. The gate does not:
+the frame is sent only when that instance writes parameters, the condition
+under which its retirement republishes the block
+(drainStoppedCharacterEffects), so an eshp-only aura adds no frame.
+==================
+*/
+func (rt *Runtime) auraStatsFrames(division string, c *enterworld.Character, skill enterworld.SkillRow, token uint32) []wire.Frame {
+	writes := false
+	for _, effect := range rt.effects.Snapshot(division, c.Name) {
+		if effect.InstanceToken == token {
+			writes = effect.Modifiers.HasWrites()
+			break
+		}
+	}
+	if !writes {
+		return nil
+	}
+	stats, err := rt.PlayerBaseStats(division, c)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{"division": division, "character": c.Name, "skill": skill.ID}).Error("aura installation stat projection failed")
+		return nil
+	}
+	return []wire.Frame{{Opcode: wire.OpBaseStats, Payload: stats.Encode()}}
 }
 
 // auraParty is the caster's party (actor+0x1CB8) as a gid set, empty when

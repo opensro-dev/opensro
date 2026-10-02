@@ -5,8 +5,8 @@ hitmarch_test.go - the hr block of 594AC0 on skill buffs and item programs
 
 Hit March and Clout March are Bard party auras whose only payload is hr: the
 caster and every joined member must gain hit rate (parameter 11) for as long
-as the aura lives. Timed item programs read the same tag and must still
-install it exactly once.
+as the aura lives, and each must see its new hit rate in its own 0x343C.
+Timed item programs read the same tag and must still install it exactly once.
 
 ===========================================================================
 */
@@ -126,6 +126,81 @@ func TestHitMarchEveryShippedRankRaisesPartyHitRate(t *testing.T) {
 			}
 		})
 	}
+}
+
+/*
+================
+TestHitMarchPublishesStatsAtInstallAndJoin
+
+The hr installed by the aura must reach the clients: the caster's cast burst
+carries its raised 0x343C privately (never to observers), and the join walk
+routes the raised block to the joining member alone.
+================
+*/
+func TestHitMarchPublishesStatsAtInstallAndJoin(t *testing.T) {
+	rt, clock, c, _ := marchFixture(t, hitMarchFirstID)
+	mate := nearbyCharacter(rt, c, 12, "hit-stats-mate", hitMarchRadius-1)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(mate)}}}
+	}
+	gain := uint16(hitMarchFlat[hitMarchFirstID])
+	casterBefore, err := rt.PlayerBaseStats(testDivision, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mateBefore, err := rt.PlayerBaseStats(testDivision, mate)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result := castSelf(rt, c, hitMarchFirstID)
+	if result.DiagnosticRefusal != "" || !hasSkillEffect(rt, c.Name, hitMarchFirstID) {
+		t.Fatalf("aura cast refused: %+v", result)
+	}
+	casterAfter, err := rt.PlayerBaseStats(testDivision, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if casterAfter.HitRate != casterBefore.HitRate+gain {
+		t.Fatalf("caster hit rate %d, want %d", casterAfter.HitRate, casterBefore.HitRate+gain)
+	}
+	if !hasStatsFrame(result.Frames, casterAfter) || !hasStatsFrame(result.ActorPrivate, casterAfter) || hasOpcode(result.Broadcast, wire.OpBaseStats) {
+		t.Fatalf("caster stats not published privately: frames %+v, private %+v", result.Frames, result.ActorPrivate)
+	}
+
+	out := rt.advancePartyAuras(clock.NowMs())
+	mateAfter, err := rt.PlayerBaseStats(testDivision, mate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mateAfter.HitRate != mateBefore.HitRate+gain {
+		t.Fatalf("member hit rate %d, want %d", mateAfter.HitRate, mateBefore.HitRate+gain)
+	}
+	published := false
+	for _, batch := range out {
+		for _, frame := range batch.Frames {
+			if frame.Opcode != wire.OpBaseStats {
+				continue
+			}
+			if batch.OnlyCharacterID != mate.ID || string(frame.Payload) != string(mateAfter.Encode()) {
+				t.Fatalf("stats routed to %d with %x, want member %d with %x", batch.OnlyCharacterID, frame.Payload, mate.ID, mateAfter.Encode())
+			}
+			published = true
+		}
+	}
+	if !published {
+		t.Fatalf("join walk published no member stats: %+v", out)
+	}
+}
+
+// hasStatsFrame finds a 0x343C carrying exactly want.
+func hasStatsFrame(frames []wire.Frame, want wire.BaseStats) bool {
+	for _, frame := range frames {
+		if frame.Opcode == wire.OpBaseStats && string(frame.Payload) == string(want.Encode()) {
+			return true
+		}
+	}
+	return false
 }
 
 /*
