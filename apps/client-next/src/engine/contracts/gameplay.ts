@@ -529,6 +529,12 @@ export interface GameplayState {
 	readonly avatarInventory?: readonly InventoryItem[];
 	readonly inventory: readonly InventoryItem[];
 	readonly inventoryPending: boolean;
+	// Slot flashes raised by the 0x3645 item-state update (item-slot-effects.ts).
+	readonly itemFlashes?: readonly {
+		readonly slot: number;
+		readonly kind: "changed" | "life";
+		readonly atMs: number;
+	}[];
 	readonly vitals: readonly VitalState[];
 	readonly itemCooldowns?: readonly import("@/engine/foundation/gameplay/item-cooldowns").ItemCooldown[];
 	readonly skillCooldowns?: readonly import("@/engine/foundation/gameplay/skill-cooldowns").SkillCooldown[];

@@ -35,6 +35,7 @@ import {
 import { createAlchemy } from "./alchemy/alchemy";
 import { createGacha } from "./gacha/gacha";
 import { itemStateDelta } from "@/engine/foundation/gameplay/item-state-delta";
+import { itemSlotFlashKinds } from "@/engine/foundation/ui/item-slot-effects";
 import type { ItemProcessCommand } from "@/engine/contracts/item-process";
 import {
 	saleResult,
@@ -131,6 +132,11 @@ presentShop
 		return shopPresentation;
 	}
 	let published: readonly InventoryItem[] | null = null;
+	// One-shot slot flashes the 0x3645 item-state update raised (7654B0); each
+	// lasts under 1.3 s, so older entries are dropped on the next update.
+	let itemFlashes: readonly { readonly slot: number; readonly kind: "changed" | "life"; readonly atMs: number; }[] =
+		[];
+	const FLASH_RETENTION_MS = 2000;
 	const objRefs = new Map<number, number>();
 	const useCooldowns = new Map<number, number>();
 	const refs = new Map<number, number>(), names = new Map<number, string>();
@@ -1103,7 +1109,14 @@ receive
 				return true;
 			}
 			if ( op === 0x3645 ) {
-				const next = itemStateDelta( p, slots, refs, names );
+				const before = slots.get( p[0]! ), next = itemStateDelta( p, slots, refs, names );
+				const kinds = itemSlotFlashKinds( p[1]!, before?.summon?.state, next.item?.summon?.state );
+				if ( kinds.length ) {
+					itemFlashes = [
+						...itemFlashes.filter( f => now - f.atMs < FLASH_RETENTION_MS ),
+						...kinds.map( kind => ({ slot: next.slot, kind, atMs: now }) )
+					];
+				}
 				if ( next.item ) slots.set( next.slot, next.item );
 				else slots.delete( next.slot );
 				published = null;
@@ -1544,6 +1557,7 @@ state
 				inventorySlotCount,
 				equipmentSlotCount,
 				inventory: published ?? (published = [ ...slots.values() ].map( present )),
+				itemFlashes,
 				inventoryPending: pending !== null || mall.pending() || alchemy.state().pending ||
 					[ "rolling", "waiting" ].includes( gacha.state().phase ),
 				error
@@ -1572,6 +1586,7 @@ clear
 			icons.clear();
 			inventorySlotCount = undefined;
 			equipmentSlotCount = undefined;
+			itemFlashes = [];
 			published = null;
 			slots.clear();
 			avatars.clear();

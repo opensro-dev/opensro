@@ -108,6 +108,8 @@ import {
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createCosHud } from "./hud/cos-hud";
+import { createSlotEffectClock } from "./hud/slot-effects";
+import { itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
 	COS_CLASS_GUILD,
@@ -536,6 +538,7 @@ export function createUi(
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
+	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
 	const withdrawal = createWithdrawalDialog();
@@ -4421,6 +4424,7 @@ export function createUi(
 				quickslotTick = slotTick;
 				dirty = true;
 			}
+			if ( slotEffects.due( next.simulationTimeMs ?? 0 ) ) dirty = true;
 			if ( now >= equipmentWarningDue ) {
 				equipmentWarningDue = now + 80;
 				equipmentWarningPhase = (equipmentWarningPhase + 1) % 17;
@@ -5501,6 +5505,7 @@ export function createUi(
 			}
 			equipmentWarningVisible = false;
 			cautionVisible = false;
+			slotEffects.beginPaint();
 			/*
 			================
 			equipmentOverlay
@@ -5543,7 +5548,27 @@ export function createUi(
 				if ( path ) {
 					image( r, path );
 					if ( item && "typeFlags" in item ) {
-						equipmentOverlay( item as import("@/engine/contracts/gameplay").InventoryItem, r );
+						const owned = item as import("@/engine/contracts/gameplay").InventoryItem;
+						equipmentOverlay( owned, r );
+						// CIFSlotWithHelp's item effects (item-slot-effects.ts): the dead
+						// companion wash, then the animated sheets. 0x3645 flashes target
+						// the inventory and equipment slots.
+						const wash = itemSlotWash( owned );
+						if ( wash ) rect( r, wash );
+						const flashes = id.startsWith( "slot:" ) ?
+							(game?.itemFlashes ?? []).filter( f => f.slot === owned.slot ) :
+							[];
+						const overlays = itemSlotOverlays(
+							owned,
+							r,
+							slotSeed( id + ":" + owned.refObjId ),
+							next.simulationTimeMs ?? 0,
+							flashes
+						);
+						for ( const overlay of overlays ) {
+							image( overlay.rect, overlay.path, white, overlay.uv );
+							slotEffects.mark();
+						}
 					}
 				}
 				controls.push( {
