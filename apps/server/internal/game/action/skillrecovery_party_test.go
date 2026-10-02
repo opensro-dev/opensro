@@ -2,7 +2,8 @@
 ===========================================================================
 
 skillrecovery_party_test.go - tests for skillrecovery.go: self-targeted
-heals, party-area heals and resurrections, HP-cost self heals
+heals, party-area heals and resurrections, HP-cost self heals, the
+caster's charge and the cast bracket
 
 The shipped Cleric and Bard rows are driven through HandleTargetInteract
 and the cast release, as the client drives them.
@@ -423,5 +424,220 @@ func TestRaveMelodyConvertsHPToMP(t *testing.T) {
 	}
 	if vitalsFor(gid, full.ActorPrivate) != 1 {
 		t.Fatalf("HP charge not published with MP full: %+v", full.ActorPrivate)
+	}
+}
+
+/*
+==================
+castVitals
+
+The HP and MP of the last full 0x33A6 that names gid:
+[u32 gid][u16 source][u8 mask 3][u32 hp][u32 mp].
+==================
+*/
+func castVitals(t *testing.T, gid uint32, frames []wire.Frame) (hp, mp uint32) {
+	t.Helper()
+	for _, f := range frames {
+		if f.Opcode != simulation.OpVitalsUpdate || len(f.Payload) < 4 ||
+			binary.LittleEndian.Uint32(f.Payload) != gid {
+			continue
+		}
+		if len(f.Payload) != vitalsRefreshLen || f.Payload[6] != vitalsMaskHPMP {
+			t.Fatalf("not a full HP/MP refresh: %x", f.Payload)
+		}
+		hp, mp = binary.LittleEndian.Uint32(f.Payload[7:]), binary.LittleEndian.Uint32(f.Payload[11:])
+	}
+	return hp, mp
+}
+
+const (
+	vitalsRefreshLen = 15   // the HP and MP refresh body
+	vitalsMaskHPMP   = 0x03 // update mask: HP and MP
+
+	// fixtureCasterMP sits below the level-1 fixture's 200 MP maximum and
+	// above fixtureMPCostCeiling, so a charge shows in the gauge.
+	fixtureCasterMP = 150
+)
+
+/*
+==================
+TestResurrectionOnTheLivingCasterIsRefused
+
+Grad Reverse cast on the caster's own living gid once refilled its HP and
+MP. Reverse and Grad Reverse select corpses (column 33), so the common
+permission predicate refuses a living target, the caster included, with
+0x3006 before any charge: nothing is healed, paid or proposed.
+==================
+*/
+func TestResurrectionOnTheLivingCasterIsRefused(t *testing.T) {
+	const (
+		castRefused       = 2    // B070 result byte of a refused cast
+		targetRefusalCode = 0x06 // low byte of 0x3006
+	)
+	for _, code := range []string{
+		"SKILL_EU_CLERIC_REBIRTHA_TARGET_A_01",
+		"SKILL_EU_CLERIC_REBIRTHA_TARGET_B_01",
+	} {
+		skill := shippedOffense(t, code)
+		if !skill.Abnormal.AdmitDeadParty || !skill.Targets.DeadBody || !skill.Heal.Present {
+			t.Fatalf("%s resu %+v targets %+v", code, skill.Abnormal, skill.Targets)
+		}
+		affordable(&skill)
+		t.Run(code, func(t *testing.T) {
+			p := newSupportPair(t, skill)
+			*p.c.CurrentMP = fixtureCasterMP
+			request := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(p.c)}
+
+			r := p.rt.HandleTargetInteract(testDivision, p.c, request.Encode())
+			if len(r.Frames) == 0 || r.Frames[0].Payload[0] != castRefused || r.Frames[0].Payload[1] != targetRefusalCode {
+				t.Fatalf("living caster %q %+v, want 0x3006", r.DiagnosticRefusal, r.Frames)
+			}
+			if *p.c.CurrentHP != 40 || *p.c.CurrentMP != fixtureCasterMP {
+				t.Fatalf("caster hp %d mp %d, want 40/%d untouched", *p.c.CurrentHP, *p.c.CurrentMP, fixtureCasterMP)
+			}
+			if p.rt.ResurrectionConsent().HasPendingInvite(testDivision, p.c.Name) {
+				t.Fatal("the living caster was offered a revival")
+			}
+		})
+	}
+}
+
+/*
+==================
+TestGroupReversePublishesTheCastersCharge
+
+Group Reverse heals nobody at the cast, but it charges the caster's MP:
+the caster's 0x33A6 carries that charge at the cast, not at the next
+regeneration tick.
+==================
+*/
+func TestGroupReversePublishesTheCastersCharge(t *testing.T) {
+	for _, code := range []string{
+		"SKILL_EU_CLERIC_REBIRTHA_GROUP_A_01",
+		"SKILL_EU_CLERIC_REBIRTHA_GROUP_B_01",
+	} {
+		skill := shippedOffense(t, code)
+		affordable(&skill)
+		t.Run(code, func(t *testing.T) {
+			p := newSupportParty(t, skill)
+			casterGID := enterworld.ObjectIDForCharacter(p.c)
+			*p.c.CurrentMP = fixtureCasterMP
+			mpBefore := *p.c.CurrentMP
+
+			r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID})
+			if *p.c.CurrentMP >= mpBefore {
+				t.Fatalf("caster mp %d, want the cost paid from %d", *p.c.CurrentMP, mpBefore)
+			}
+			toCaster := append(framesFor(p.c.ID, r, batches), r.ActorPrivate...)
+			if vitalsFor(casterGID, toCaster) != 1 {
+				t.Fatalf("caster charge not published: %+v %+v", r, batches)
+			}
+			if _, mp := castVitals(t, casterGID, toCaster); int64(mp) != *p.c.CurrentMP {
+				t.Fatalf("published mp %d, want %d", mp, *p.c.CurrentMP)
+			}
+			if vitalsFor(casterGID, framesFor(p.m.ID, r, batches)) != 0 {
+				t.Fatal("the caster's private vitals reached the mate")
+			}
+		})
+	}
+}
+
+/*
+==================
+TestTargetedHealBracketNamesTheCaster
+
+Healing on a mate heals the mate, and the opening B245 and releasing B505
+name the caster, as the shipped support owner has always sent them: what a
+targeted heal's bracket names natively is not established, so it is left
+alone. The caster's charge is not published at the cast either.
+==================
+*/
+func TestTargetedHealBracketNamesTheCaster(t *testing.T) {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_TARGET_A_01")
+	if skill.ActionCastingTimeMs == 0 {
+		t.Fatalf("%s has no casting time", skill.Codename)
+	}
+	p := newSupportPair(t, skill)
+	casterGID, mateGID := enterworld.ObjectIDForCharacter(p.c), enterworld.ObjectIDForCharacter(p.m)
+	*p.c.CurrentMP = fixtureCasterMP
+
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: mateGID})
+	if *p.m.CurrentHP <= 1 {
+		t.Fatalf("mate not healed: hp %d", *p.m.CurrentHP)
+	}
+	if *p.c.CurrentMP >= fixtureCasterMP {
+		t.Fatalf("caster mp %d, want the cost paid from %d", *p.c.CurrentMP, fixtureCasterMP)
+	}
+
+	if open, release := bracketTargets(t, casterGID, r, batches); open != casterGID || release != casterGID {
+		t.Fatalf("bracket names %d and %d, want the caster %d", open, release, casterGID)
+	}
+
+	if vitalsFor(casterGID, append(framesFor(p.c.ID, r, batches), r.ActorPrivate...)) != 0 {
+		t.Fatalf("caster charge published: %+v %+v", r, batches)
+	}
+}
+
+/*
+==================
+bracketTargets
+
+The target the opening B245 names and the one the releasing B505 names:
+B245 [ok][result][skill u32][caster u32][token u32][target u32], B505
+[mode 1][token u32][target u32]. The opening must come from casterGID.
+==================
+*/
+func bracketTargets(t *testing.T, casterGID uint32, r OpResult, batches []simulation.DivisionFrames) (open, release uint32) {
+	t.Helper()
+	opening := r.Broadcast[0]
+	if opening.Opcode != wire.OpSkillCastResult || len(opening.Payload) < 18 ||
+		binary.LittleEndian.Uint32(opening.Payload[6:]) != casterGID {
+		t.Fatalf("opening bracket %x is not the caster's", opening.Payload)
+	}
+	open = binary.LittleEndian.Uint32(opening.Payload[14:])
+
+	released := false
+	for _, batch := range batches {
+		for _, f := range batch.Frames {
+			if f.Opcode != wire.OpSkillEffectControl || len(f.Payload) < 9 || f.Payload[0] != 1 {
+				continue
+			}
+			if released && binary.LittleEndian.Uint32(f.Payload[5:]) != release {
+				t.Fatalf("releases disagree on the target: %x", f.Payload)
+			}
+			released = true
+			release = binary.LittleEndian.Uint32(f.Payload[5:])
+		}
+	}
+	if !released {
+		t.Fatalf("no release in %+v", batches)
+	}
+	return open, release
+}
+
+/*
+==================
+TestResurrectionBracketNamesTheCaster
+
+Reverse on a dead mate proposes the revival, and its B245 and release B505
+still name the caster, as they always have: what a revival names there is
+not established, so it is left alone.
+==================
+*/
+func TestResurrectionBracketNamesTheCaster(t *testing.T) {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_REBIRTHA_TARGET_A_01")
+	if skill.ActionCastingTimeMs == 0 {
+		t.Fatalf("%s has no casting time", skill.Codename)
+	}
+	p := newSupportPair(t, skill)
+	casterGID, mateGID := enterworld.ObjectIDForCharacter(p.c), enterworld.ObjectIDForCharacter(p.m)
+	*p.m.CurrentHP = 0
+
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: mateGID})
+	if !p.rt.ResurrectionConsent().HasPendingInvite(testDivision, p.m.Name) {
+		t.Fatal("the dead mate was not proposed a revival")
+	}
+	if open, release := bracketTargets(t, casterGID, r, batches); open != casterGID || release != casterGID {
+		t.Fatalf("bracket names %d and %d, want the caster %d", open, release, casterGID)
 	}
 }

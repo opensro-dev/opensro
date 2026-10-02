@@ -200,7 +200,15 @@ func (rt *Runtime) acceptSupportSkillPhase(
 			)
 		}
 
+		// Only the party-area rows and the HP-cost self heal (Rave Melody)
+		// publish a charge-only 0x33A6; the other support rows keep the
+		// caster frames they always had (supportCostVitals).
+		chargeVitals := partyHeal || partyResu ||
+			skill.Recovery.SelfFlatPinned && cost.hp != 0
 		if !healCaster {
+			if chargeVitals {
+				vitals = rt.supportCostVitals(division, character, cost)
+			}
 			return true
 		}
 
@@ -210,16 +218,8 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		}
 
 		vitals, ok = rt.applySkillRecovery(division, character, hp, mp)
-		if ok && vitals.Opcode == 0 && cost.hp != 0 {
-			// Rave Melody with a full MP gauge: the recovery moved nothing,
-			// but the HP cost did. Publish the caster's gauges after the
-			// charge, as the other cost-paying casts do (skillposition.go,
-			// statuscastarea.go). Inferred from those owners, not from a
-			// native address.
-			vitals = wire.Frame{
-				Opcode:  simulation.OpVitalsUpdate,
-				Payload: simulation.VitalsRefreshWithSourcePayload(casterGID, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(division, character)),
-			}
+		if ok && vitals.Opcode == 0 && chargeVitals {
+			vitals = rt.supportCostVitals(division, character, cost)
 		}
 		return ok
 	}) {
@@ -323,6 +323,32 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		curePublic,
 		cureRecipients,
 	), skillCastAccepted
+}
+
+/*
+==================
+supportCostVitals
+
+The caster's 0x33A6 after the charge when its own recovery published
+nothing, for the rows this owner admits beyond the shipped ones: Rave
+Melody with a full MP gauge (its flat HP cost), and the party-area heals
+and resurrections (Group Reverse heals nobody but charges MP). Inferred
+from the other cost-paying owners (skillposition.go, statuscastarea.go),
+not from a native address. Heals on another player, cures and targeted
+resurrections keep the caster frames they had: whether native publishes
+their charge at the cast is not established. A cast that charged nothing
+publishes nothing.
+==================
+*/
+func (rt *Runtime) supportCostVitals(division string, caster *enterworld.Character, cost skillCharge) wire.Frame {
+	if cost.mp == 0 && cost.hp == 0 {
+		return wire.Frame{}
+	}
+	gid := enterworld.ObjectIDForCharacter(caster)
+	return wire.Frame{
+		Opcode:  simulation.OpVitalsUpdate,
+		Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(division, caster)),
+	}
 }
 
 /*
