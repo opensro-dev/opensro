@@ -16,6 +16,26 @@ import path from "node:path";
 import ts from "typescript";
 export { ts };
 export const root = path.resolve( import.meta.dirname, ".." );
+
+// Parsed files by base-relative path, reused while the text is identical.
+// The architecture tests verify many near-identical copies of src/ in one
+// process; each copy then re-parses only the file it changed. Consumers
+// only read the trees.
+const parsed = new Map();
+
+/*
+================
+parse
+================
+*/
+function parse( key, text ) {
+	const cached = parsed.get( key );
+	if ( cached && cached.text === text ) return cached.file;
+	const file = ts.createSourceFile( key, text, ts.ScriptTarget.Latest, true );
+	parsed.set( key, { text, file } );
+	return file;
+}
+
 /*
 ================
 project
@@ -33,10 +53,7 @@ export function project( base = root ) {
 				walk( full );
 			} else if ( /\.(?:ts|tsx|mts|cts)$/.test( e.name ) ) {
 				const key = path.relative( base, full ).replaceAll( "\\", "/" );
-				files.set(
-					key,
-					ts.createSourceFile( key, fs.readFileSync( full, "utf8" ), ts.ScriptTarget.Latest, true )
-				);
+				files.set( key, parse( key, fs.readFileSync( full, "utf8" ) ) );
 			}
 		}
 	}

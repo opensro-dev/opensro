@@ -29,7 +29,8 @@ const SOURCE_GATE_NAMES = new Set( [ "verify:test-types", "typecheck", "verify:l
 
 // Longest first, so the critical path starts immediately.
 const GATES = [
-	[ "test", [ "--test", "tests/architecture/*.test.mjs", "tests/runtime/*.test.mjs" ] ],
+	// Reuses each file's pass while every input it read is unchanged.
+	[ "test", [ "tools/run-tests.mjs", "tests/architecture", "tests/runtime" ] ],
 	[ "verify:test-types", [ "tools/verify-test-types.mjs" ] ],
 	[ "typecheck", [
 		path.join( clientRoot, "node_modules", "typescript", "bin", "tsc" ),
@@ -62,7 +63,7 @@ function sourceGates() {
 		.sort()
 		.map( ( name ) => `tests/architecture/${name}` );
 	const tests = [
-		"--test",
+		"tools/run-tests.mjs",
 		...architecture,
 		"tests/runtime/beta-release.test.mjs",
 		"tests/runtime/release-smoke.test.mjs"

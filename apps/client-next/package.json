@@ -21,7 +21,7 @@
     "audit:audio": "node tools/audit-audio-parity.mjs",
     "audit:bsr": "node tools/audit-bsr-parity.mjs",
     "audit:vfx": "node tools/audit-effect-coverage.mjs",
-    "test": "node --test tests/architecture/*.test.mjs tests/runtime/*.test.mjs",
+    "test": "node tools/run-tests.mjs tests/architecture tests/runtime",
     "test:browser": "node --test tests/browser/*.test.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4180 --strictPort",
