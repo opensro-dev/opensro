@@ -3,9 +3,10 @@
 
 skillstatuscast.go - complete damage-free hostile status programs
 
-The Wizard's Root, Mesh Root and Lightning Shock carry no att block: the
-cast is one successful zero-damage record whose only consequences are the
-590680 status roll and the authored aggression. Admission is by executable
+The Wizard's Root, Mesh Root and Lightning Shock, the Warrior's Axis
+Quiver and the Rogue's Poison Field carry no att block: the cast is one
+successful zero-damage record whose only consequences are the 590680
+status roll and the authored aggression. Admission is by executable
 shape, never by skill name.
 
 ===========================================================================
@@ -25,6 +26,12 @@ const (
 	// statusCastSelect is the hostile character mask (efr +0x14) shared by
 	// every admitted offense area.
 	statusCastSelect = 24
+
+	// statusCastContinueColumn is ContinueBasicAttack (skilldata column 19).
+	// Axis Quiver authors 1; the combat intent resumes the basic attack
+	// after the skill generically (basicattack.go, 4AEC9E..4AECB3), so the
+	// flag needs nothing from this owner. Any other value is not a flag.
+	statusCastContinueColumn = 19
 )
 
 /*
@@ -32,13 +39,18 @@ const (
 compileSkillStatusCast
 
 58E5F0 emits a successful zero-damage record for a program without att,
-as it does for taunts. Admit a row when its complete program is
-status blocks plus aggression, caster getv modifiers and an optional
-primary-centered area. A targeted row acts on monsters, so it must name
-Enemy_M (column 29): Mana Drain authors Enemy_P only and its description
-says it has no effect on monsters. An untargeted row selects its hostile
-victims around the caster (efr shape 1, select 24) and leaves the target
-columns empty (Lightning Impact).
+as it does for taunts. Admit a row when its complete program is status
+blocks plus aggression, caster getv modifiers, reqi equipment pairs and
+an optional primary-centered area. Aggression is either tant or tnt2
+(Axis Quiver), never both: 58E5F0 admits tnt2 without att and emits a
+successful zero-damage record (compileSkillTaunt). reqi pairs are stored
+on row.Reqi by noteParameterIndex and enforced before dispatch by 58D480
+(action.skillEquipmentRefusal, 0x300D); Poison Field authors two of them,
+so reqi, like getv, may repeat. A targeted row acts on monsters, so it
+must name Enemy_M (column 29): Mana Drain authors Enemy_P only and its
+description says it has no effect on monsters. An untargeted row selects
+its hostile victims around the caster (efr shape 1, select 24) and leaves
+the target columns empty (Lightning Impact).
 ================
 */
 func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
@@ -48,10 +60,13 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 		return SkillThreat{}, false
 	}
 	// No projectile, no ground target, no secondary-target columns.
-	for _, column := range []int{15, 16, 17, 19, 20, 24, 25, 26, 27, 28, 31, 32, 33, 56} {
+	for _, column := range []int{15, 16, 17, 20, 24, 25, 26, 27, 28, 31, 32, 33, 56} {
 		if fields[column] != "0" {
 			return SkillThreat{}, false
 		}
+	}
+	if continueAttack := fields[statusCastContinueColumn]; continueAttack != "0" && continueAttack != "1" {
+		return SkillThreat{}, false
 	}
 	program, err := CompileSkillProgram(fields)
 	if err != nil {
@@ -62,7 +77,7 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 	seen := make(map[uint32]bool)
 	for i := 0; i < program.Len(); i++ {
 		op := program.Instruction(i)
-		if seen[op.Tag] && op.Tag != tagGetv {
+		if seen[op.Tag] && op.Tag != tagGetv && op.Tag != tagReqi {
 			return SkillThreat{}, false
 		}
 		seen[op.Tag] = true
@@ -71,9 +86,16 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 			continue
 		}
 		switch op.Tag {
-		case tagStatusThreat:
+		case tagStatusThreat, tagThreat:
+			// One aggression word per record. Native lets tant take
+			// precedence over tnt2 (tagStatusThreat); no shipped status cast
+			// authors both, so such a row is refused, not ported.
+			if threat.Present {
+				return SkillThreat{}, false
+			}
 			threat.Present, threat.Flat, threat.Percent = true, op.Arguments[0], op.Arguments[1]
-		case tagGetv: // caster modifiers (WIMD, WIRU) read at cast
+		case tagReqi: // row.Reqi; 58D480 admits before dispatch
+		case tagGetv: // caster getv modifiers (WIMD, WIRU, RPDU, RPTU) read at cast
 			if _, known := SkillParameterFromKey(op.Arguments[0]); !known {
 				return SkillThreat{}, false
 			}
