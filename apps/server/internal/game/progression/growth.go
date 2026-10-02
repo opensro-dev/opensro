@@ -15,6 +15,8 @@ the native kill count for that level. A gain at level L is multiplied by
 kills(L) / kills(1), never below 1, so every level after the first
 compresses to the level-1 pace (one level costs what 1 -> 2 costs). Every source scales the same way:
 kills, party shares and quest rewards all pass through applyExperience.
+A resurrection's refund of EXP lost at death is not a gain and stays
+native (ExperienceRefundUpdater).
 
 SP: skill EXP gains get the same level compression as EXP, then a flat
 SkillExpRate on top. A flat rate alone fell behind: at level 42 EXP is worth

@@ -445,6 +445,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		},
 	}
 	game.items.UpdateExperience = stats.ExperienceUpdater()
+	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()
 	// Delivery resolves sessions from their bindings alone and never reads the
 	// character store: the action runtime publishes from inside character

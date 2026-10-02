@@ -7,7 +7,11 @@ growth_test.go - the closed-beta growth rates
 */
 package progression
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/game/enterworld"
+)
 
 /*
 ================
@@ -107,5 +111,42 @@ func TestBetaGrowthSwitchReadsTheEnvironment(t *testing.T) {
 		if rates := BetaGrowthFromEnv(); rates.GoldRate != betaGoldRateDefault {
 			t.Fatalf("gold override %q = %+v", bad, rates)
 		}
+	}
+}
+
+/*
+================
+TestBetaGrowthLeavesAResurrectionRefundNative
+
+A resurrection gives back a share of the EXP a death took. With beta
+growth on, a level-50 gain is worth 80 times its amount, but the refund
+is not a gain: it lands exactly as computed.
+================
+*/
+func TestBetaGrowthLeavesAResurrectionRefundNative(t *testing.T) {
+	const level, refund = 50, 1_000
+	fresh := func() (*Runtime, *enterworld.Character) {
+		character := levelupTestCharacter()
+		character.Level = int64Ptr(level)
+		character.MaxLevel = int64Ptr(level)
+		character.Experience = int64Ptr(0)
+		rt := NewRuntime(&enterworld.Deps{
+			Characters: enterworld.StaticCharacterSource{testDivision: {character}},
+			Items:      emptyItemRefs{},
+			Levels:     growthLevels{},
+		})
+		rt.Growth = GrowthRates{Enabled: true}
+		return rt, character
+	}
+
+	rt, character := fresh()
+	if _, ok := rt.ExperienceUpdater()(character, refund, 0, 0); !ok || *character.Experience != 80*refund {
+		t.Fatalf("gain landed as %d, want the beta %d", *character.Experience, 80*refund)
+	}
+
+	rt, character = fresh()
+	frames, ok := rt.ExperienceRefundUpdater()(character, refund)
+	if !ok || len(frames) == 0 || *character.Experience != refund {
+		t.Fatalf("refund landed as %d (ok %v), want %d", *character.Experience, ok, refund)
 	}
 }

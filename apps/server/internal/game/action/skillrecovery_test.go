@@ -734,7 +734,11 @@ func TestResurrectionProposalAndAnswer(t *testing.T) {
 	consent := p.rt.ResurrectionConsent()
 
 	var granted int64
-	p.rt.UpdateExperience = func(_ *enterworld.Character, exp, _ int64, _ uint32) ([]wire.Frame, bool) {
+	p.rt.UpdateExperience = func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) {
+		t.Fatal("a refund went through the gain updater")
+		return nil, false
+	}
+	p.rt.RefundExperience = func(_ *enterworld.Character, exp int64) ([]wire.Frame, bool) {
 		granted = exp
 		return []wire.Frame{{Opcode: wire.OpExpUpdate}}, true
 	}

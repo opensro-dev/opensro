@@ -247,6 +247,11 @@ type Runtime struct {
 		sourceGid uint32,
 	) ([]wire.Frame, bool)
 
+	// RefundExperience is the stat authority's door-free refund of EXP lost
+	// at death (a resurrection's share). Unlike UpdateExperience it is not a
+	// gain, so the growth rates never scale it. Nil grants no refund.
+	RefundExperience func(character *enterworld.Character, exp int64) ([]wire.Frame, bool)
+
 	// ApplyDeathPenalty is progression' door-free ordinary-death updater. Monster
 	// combat invokes it from inside the fatal-HP character transaction; levels
 	// <= 10 legitimately return no frames under the retail protection gate.

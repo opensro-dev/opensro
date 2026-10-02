@@ -205,6 +205,22 @@ func (rt *Runtime) ExperienceUpdater() func(*enterworld.Character, int64, int64,
 
 /*
 ==================
+ExperienceRefundUpdater
+
+ExperienceRefundUpdater returns the door-free update that gives back EXP a
+death took (a resurrection's share of char+0x1CE0). A refund is not a
+gain: it bypasses the growth rates, which apply to gains only, as the
+death penalty it offsets does. Call it from inside Dependencies.Update.
+==================
+*/
+func (rt *Runtime) ExperienceRefundUpdater() func(*enterworld.Character, int64) ([]wire.Frame, bool) {
+	return func(character *enterworld.Character, exp int64) ([]wire.Frame, bool) {
+		return rt.commitExperience(character, exp, 0, 0)
+	}
+}
+
+/*
+==================
 DeathPenaltyUpdater
 
 DeathPenaltyUpdater returns the door-free ordinary monster-death updater.
@@ -303,8 +319,7 @@ func (rt *Runtime) applyOrdinaryDeathPenalty(character *enterworld.Character) ([
 ================
 applyExperience
 
-The caller already owns the character transaction. All fallible projection
-runs on a detached candidate before persisted fields or packets are exposed.
+A gain or loss through the growth rates, then commitExperience.
 ================
 */
 func (rt *Runtime) applyExperience(
@@ -315,8 +330,27 @@ func (rt *Runtime) applyExperience(
 	if character == nil || character.DeletePending {
 		return nil, false
 	}
+	expDelta, skillExpDelta = rt.Growth.scale(rt.deps.LevelData(), characterLevel(character), expDelta, skillExpDelta)
+	return rt.commitExperience(character, expDelta, skillExpDelta, sourceGid)
+}
+
+/*
+================
+commitExperience
+
+The caller already owns the character transaction. All fallible projection
+runs on a detached candidate before persisted fields or packets are exposed.
+================
+*/
+func (rt *Runtime) commitExperience(
+	character *enterworld.Character,
+	expDelta, skillExpDelta int64,
+	sourceGid uint32,
+) ([]wire.Frame, bool) {
+	if character == nil || character.DeletePending {
+		return nil, false
+	}
 	next := character.Snapshot()
-	expDelta, skillExpDelta = rt.Growth.scale(rt.deps.LevelData(), characterLevel(next), expDelta, skillExpDelta)
 	expDelta = clampExpDelta(expDelta)
 	skillExpDelta = clampSkillExpDelta(skillExpDelta)
 	if expDelta == 0 && skillExpDelta == 0 {

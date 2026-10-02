@@ -324,7 +324,8 @@ acceptResurrection
 
 46CB30 for a yes. The player must still be dead. One character door
 commits the revival where the corpse lies with 1 HP (4DF290 arg 1: every
-revival also clears the recorded EXP loss), the EXP (vfunc +0x170), the HP
+revival also clears the recorded EXP loss), the EXP (vfunc +0x170, a
+refund of the loss, outside the port's growth rates), the HP
 and MP (applySkillRecovery is ApplyReducedRecovery) and the rmut skill.
 Native starts rmut as an indirect cast (CSkillManager_BeginIndirectSkill);
 this port installs its effect directly.
@@ -373,8 +374,8 @@ func (rt *Runtime) acceptResurrection(division, name string, offer resurrectionO
 		untouchable = rt.grantReviveUntouchable(division, character, nowMs)
 		revivedVitals = enterworld.BuildVitalsRefreshPayload(character)
 
-		if offer.exp > 0 && rt.UpdateExperience != nil {
-			progression, _ = rt.UpdateExperience(character, offer.exp, 0, 0)
+		if offer.exp > 0 && rt.RefundExperience != nil {
+			progression, _ = rt.RefundExperience(character, offer.exp)
 		}
 		if offer.hp != 0 || offer.mp != 0 {
 			frame, ok := rt.applySkillRecovery(division, character, offer.hp, offer.mp)
