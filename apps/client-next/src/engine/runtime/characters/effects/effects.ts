@@ -1033,7 +1033,9 @@ export function createCharacterEffects(
 								byGid.get( cast.caster )?.kind !== "player"
 							) cameraEvents.push( { ...script, atMs: Math.trunc( now * 1000 ) } );
 							const returning = stage.action === "AT_SOURCE" && stage.move !== "MOV_NONE";
-							const targetLocal = stage.action === "AT_TARGET";
+							// Action types 3 and 4 (skillEffectStage.ts) both anchor on the
+							// target; the attached and state lanes already treat them alike.
+							const targetLocal = stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F";
 							const radial = stage.action === "AT_MOV_OPTION",
 								chain = stage.action === "AT_MOV_SPLASH" && stage.move !== "MOV_HWAN";
 							const distributed = stage.action === "AT_MOV_1TAR" || stage.action === "AT_MOV_SPLASH";
@@ -1159,7 +1161,14 @@ export function createCharacterEffects(
 								if (
 									!model ||
 									(!supportedFlight &&
-										(![ "AT_DMG_POS", "AT_ONE_FOLLOW", "AT_LOOP", "AT_STOP", "AT_TARGET" ].includes(
+										(![
+											"AT_DMG_POS",
+											"AT_ONE_FOLLOW",
+											"AT_LOOP",
+											"AT_STOP",
+											"AT_TARGET",
+											"AT_TARGET_F"
+										].includes(
 											stage.action
 										) || stage.move !== "MOV_NONE" ||
 											(stage.bone &&
@@ -1380,7 +1389,7 @@ export function createCharacterEffects(
 											index: resultIndex,
 											allTargets: dispatch.all,
 											secondary: record.secondaryEffect ?? false,
-											atTarget: stage.action === "AT_TARGET",
+											atTarget: targetLocal,
 											soundSkill:
 												impactSource( cast.caster, 0, gameplay?.attachedEffects ?? [], skill =>
 													catalog?.[String( skill )]?.attachedAction, cast ).skill
