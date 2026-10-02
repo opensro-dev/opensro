@@ -343,6 +343,8 @@ Keeps cast identity, timing and results together across incremental packets.
 ================
 */
 export interface CastState {
+	/** 7756D0/8D9940 capture this before the trap is despawned. */
+	readonly effectPosition?: Pose;
 	readonly resultStageCount?: number;
 	/** A parsed temporary instance: results only, never a cast animation. */
 	readonly resultOnly?: boolean;

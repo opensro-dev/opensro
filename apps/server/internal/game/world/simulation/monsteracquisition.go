@@ -1,7 +1,16 @@
+/*
+===========================================================================
+
+monsteracquisition.go - native acquisition ordering and target lookup
+
+===========================================================================
+*/
+
 package simulation
 
 import (
 	"math"
+	"opensro.online/server/internal/game/abnormal"
 	"sort"
 
 	worldgeom "opensro.online/server/internal/game/world"
@@ -12,6 +21,11 @@ import (
 // 2 (5464E0) in the v1.188 research server. Special tactics selectors and dungeon
 // cell enumeration remain outside this projection. The independent observer
 // and hostility checks precede ranking; companion selection remains open.
+/*
+================
+ordinaryPlayerAcquisition
+================
+*/
 func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, players []playerPose, sightRange float64) (playerPose, bool) {
 	if len(players) == 0 {
 		return playerPose{}, false
@@ -31,7 +45,7 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 		block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{
 			RegionID: player.Pose.RegionID, X: float64(float32(player.Pose.X)), Z: float64(float32(player.Pose.Z)),
 		})
-		if order, exists := blocks.order(block); exists && player.Gid != 0 && !actor.Fears(player.Gid) &&
+		if order, exists := blocks.order(block); exists && player.Gid != 0 &&
 			monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) &&
 			ordinaryPlayerHostility(actor, player) {
 			ordered = append(ordered, candidate{player: player, block: order})
@@ -57,20 +71,38 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 	return best, best.Gid != 0
 }
 
-// The current ordinary player projection has no producers for native bound-
-// target, excluded-GID, C44, or level/rarity protection state. Do not derive
-// those fields from movement, GM privilege, presentation effects, or names.
-// This adapter closes only its existing authoritative body-status input.
-// Remembered-opponent lookup deliberately does not call it (547E04/547E0F).
+/*
+================
+ordinaryPlayerHostility
+
+5299E0 checks detection before Fear's source exclusion. Project the live
+abnormal slot into the existing hostility owner instead of filtering the
+candidate first. Remembered-opponent lookup only calls 540DE0 (547E04).
+================
+*/
 func ordinaryPlayerHostility(actor monster.Instance, player playerPose) bool {
-	return monster.AllowsHostility(monster.HostilityObserver{
+	observer := monster.HostilityObserver{
 		TID: actor.Ref.TidWord, ReferenceFlags: actor.Nest.NativeTacticsFlags, Mode: 1,
-	}, monster.HostilityTarget{GID: player.Gid, BodyStatus: player.NativeBodyStatus, Player: true})
+	}
+	if actor.Abnormal != nil {
+		fear := actor.Abnormal.Slots[abnormal.Fear]
+		observer.RestrictionD34 = actor.Abnormal.Mask
+		observer.Restriction118C = fear.Active
+		observer.ExcludedGID = fear.SourceGID
+	}
+	return monster.AllowsHostility(observer, monster.HostilityTarget{
+		GID: player.Gid, BodyStatus: player.NativeBodyStatus, Player: true,
+	})
 }
 
 // 546687..546758: comparisons use the exact integer, not float32(integer).
 // Finite world positions are the adapter's input domain. A zero accumulator
 // intentionally allows replacement even by a farther in-range candidate.
+/*
+================
+acquisitionRankAccepts
+================
+*/
 func acquisitionRankAccepts(target, best uint32, distance float32, sight uint32) bool {
 	d := float64(distance)
 	return !math.IsNaN(d) && d >= 0 && d <= float64(sight) &&
@@ -81,11 +113,21 @@ func acquisitionRankAccepts(target, best uint32, distance float32, sight uint32)
 // further clamps to 1..310 and samples (x-r,x,x+r) in each of three z rows.
 // Repeated blocks are omitted. This is broad-phase selection, not the sight
 // predicate: a player elsewhere in a sampled block still reaches ranking.
+/*
+================
+acquisitionBlockSet
+================
+*/
 type acquisitionBlockSet struct {
 	blocks [9]worldgeom.InterestBlock
 	count  int
 }
 
+/*
+================
+order
+================
+*/
 func (s acquisitionBlockSet) order(block worldgeom.InterestBlock) (int, bool) {
 	for i := 0; i < s.count; i++ {
 		if s.blocks[i] == block {
@@ -95,6 +137,11 @@ func (s acquisitionBlockSet) order(block worldgeom.InterestBlock) (int, bool) {
 	return 0, false
 }
 
+/*
+================
+acquisitionBlocks
+================
+*/
 func acquisitionBlocks(from monster.Pose, sight uint32) acquisitionBlockSet {
 	radius := float32(sight)
 	if radius < 1 {
@@ -123,6 +170,71 @@ func acquisitionBlocks(from monster.Pose, sight uint32) acquisitionBlockSet {
 
 // 430BA0 stores each region-relative displacement as float32. 53D7A0
 // squares those values, rounds their sum to float32, then takes its square root.
+/*
+================
+acquisitionDistance
+================
+*/
 func acquisitionDistance(from monster.Pose, to Spawn) float32 {
 	return monster.NativeActorDistance(from, monster.Pose{RegionID: to.RegionID, X: to.X, Y: to.Y, Z: to.Z})
+}
+
+/*
+================
+nearestPlayerWithin
+================
+*/
+func nearestPlayerWithin(from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
+	return nearestEligiblePlayer(monster.Instance{}, from, divisionPlayers, sightRange)
+}
+
+/*
+================
+nearestEligiblePlayer
+================
+*/
+func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
+	if !IsDungeonRegion(from.RegionID) && actor.Nest.NativeTacticsFlags&0x184 == 0 {
+		return ordinaryPlayerAcquisition(actor, from, divisionPlayers, sightRange)
+	}
+	// Special selectors 3/4/5 and dungeon cell queries are not selector 2.
+	// Retain their existing projection until those distinct contracts close.
+	best := playerPose{}
+	bestDistance := sightRange
+	found := false
+	for _, player := range divisionPlayers {
+		if !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) {
+			continue
+		}
+		d := planarDistanceSpawn(player.Pose, poseToSpawn(from))
+		if d <= bestDistance {
+			best, bestDistance, found = player, d, true
+		}
+	}
+	return best, found
+}
+
+/*
+================
+playerByGid
+================
+*/
+func playerByGid(divisionPlayers []playerPose, gid uint32) (playerPose, bool) {
+	for _, player := range divisionPlayers {
+		if player.Gid == gid {
+			return player, true
+		}
+	}
+	return playerPose{}, false
+}
+
+/*
+================
+eligiblePlayerByGid
+================
+*/
+func eligiblePlayerByGid(actor monster.Instance, players []playerPose, gid uint32) (playerPose, bool) {
+	player, exists := playerByGid(players, gid)
+	return player, exists &&
+		monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus)
 }

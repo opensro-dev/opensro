@@ -90,7 +90,7 @@ func Resolve(
 	attack enterworld.SkillAttack,
 	roll Roll32767,
 ) (Result, error) {
-	return resolve(attacker, defender, attack, roll, true, false)
+	return ResolveOutcome(attacker, defender, attack, roll, true, false)
 }
 
 /*
@@ -111,22 +111,35 @@ func ResolveMonster(
 	attack enterworld.SkillAttack,
 	roll Roll32767,
 ) (Result, error) {
-	return resolve(attacker, defender, attack, roll, false, false)
+	return ResolveOutcome(attacker, defender, attack, roll, false, false)
 }
 
 /*
 ================
-resolve
+AttackCalculation
+
+Keep the authored effect and initiating attack separate from the selected
+damage lanes. 410BB0 classifies by both RefSkill rows; a wall or chained
+recipient can suppress a lane without rewriting either authored row.
 ================
 */
-func resolve(
-	attacker Stats,
-	defender Stats,
-	attack enterworld.SkillAttack,
-	roll Roll32767,
-	applyPlayerBalance bool,
-	critical bool,
-) (Result, error) {
+type AttackCalculation struct {
+	Attack        enterworld.SkillAttack
+	OriginalFlags uint32
+	Lanes         uint32
+	Player        bool
+	Critical      bool
+	wall          bool
+}
+
+/*
+================
+ResolveCalculation
+================
+*/
+func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation, roll Roll32767) (Result, error) {
+	attack := calculation.Attack
+	critical := calculation.Critical
 	if !attack.Present {
 		return Result{}, fmt.Errorf("combat: skill has no pinned primary attack block")
 	}
@@ -136,7 +149,7 @@ func resolve(
 	if attack.Percent < 0 || attack.Min < 0 || attack.Max < 0 {
 		return Result{}, fmt.Errorf("combat: attack block contains a negative damage input")
 	}
-	if attack.Flags&(physicalAttackFlag|magicalAttackFlag) == 0 {
+	if calculation.Lanes&(physicalAttackFlag|magicalAttackFlag) == 0 {
 		return Result{}, fmt.Errorf(
 			"combat: attack flags %#x select neither CFormulae damage lane",
 			attack.Flags,
@@ -145,15 +158,15 @@ func resolve(
 
 	var total uint64
 	var magicalDamage uint32
-	if attack.Flags&physicalAttackFlag != 0 {
-		damage, err := resolveLane(attacker, defender, attack, roll, false, applyPlayerBalance, critical)
+	if calculation.Lanes&physicalAttackFlag != 0 {
+		damage, err := resolveLane(attacker, defender, calculation, laneRoll{roll: roll, critical: critical})
 		if err != nil {
 			return Result{}, err
 		}
 		total += uint64(downAttackDamage(damage, defender.MotionState, attack.DownAttack))
 	}
-	if attack.Flags&magicalAttackFlag != 0 {
-		damage, err := resolveLane(attacker, defender, attack, roll, true, applyPlayerBalance, false)
+	if calculation.Lanes&magicalAttackFlag != 0 {
+		damage, err := resolveLane(attacker, defender, calculation, laneRoll{roll: roll, magical: true})
 		if err != nil {
 			return Result{}, err
 		}
@@ -180,18 +193,55 @@ func resolve(
 
 /*
 ================
+laneRoll
+================
+*/
+type laneRoll struct {
+	roll     Roll32767
+	magical  bool
+	critical bool
+}
+
+/*
+================
+defenseAbsorption
+
+40EBE0/40EEF0 never call 410BB0: a Force wall has its own damage pool,
+so the protected character's absorption does not reduce the wall's damage.
+================
+*/
+func defenseAbsorption(defender Stats, calculation AttackCalculation) float32 {
+	if calculation.wall {
+		return 0
+	}
+	effect, original := calculation.Attack.Flags, calculation.OriginalFlags
+	if effect&physicalAttackFlag != 0 {
+		if original&1 != 0 {
+			return defender.PhysicalBasicTaken
+		}
+		if original&2 != 0 {
+			return defender.PhysicalSkillTaken
+		}
+	} else if effect&magicalAttackFlag != 0 {
+		if original&1 != 0 {
+			return defender.MagicalBasicTaken
+		}
+		if original&2 != 0 {
+			return defender.MagicalSkillTaken
+		}
+	}
+	return 0
+}
+
+/*
+================
 resolveLane
 ================
 */
-func resolveLane(
-	attacker Stats,
-	defender Stats,
-	attack enterworld.SkillAttack,
-	roll Roll32767,
-	magical bool,
-	applyPlayerBalance bool,
-	critical bool,
-) (uint32, error) {
+func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane laneRoll) (uint32, error) {
+	attack, roll := calculation.Attack, lane.roll
+	magical, critical := lane.magical, lane.critical
+	applyPlayerBalance := calculation.Player
 	attackMin := attacker.PhysicalAttackMin
 	attackMax := attacker.PhysicalAttackMax
 	defense := defender.PhysicalDefense
@@ -261,23 +311,9 @@ func resolveLane(
 	if rate != 0 {
 		damage = float64(float32(damage * (1 + rate/100)))
 	}
-	// AE..B1 are written with 80..83's lane layout (odar normalizes its
-	// bits to {basic, skill} x {physical, magical}); the defender's factor
-	// is selected by the same attack kind. The address of this read is not
-	// in the port's corpus: it is inferred from the shared layout and the
-	// "absorbs damage" text of Earth Barrier and the dara item option.
-	taken := float32(0)
-	if attack.Flags&1 != 0 {
-		taken = defender.PhysicalBasicTaken
-		if magical {
-			taken = defender.MagicalBasicTaken
-		}
-	} else if attack.Flags&2 != 0 {
-		taken = defender.PhysicalSkillTaken
-		if magical {
-			taken = defender.MagicalSkillTaken
-		}
-	}
+	// 410BB0 uses the current effect's physical bit before its magical bit,
+	// then the ORIGINAL attack's basic/skill bit (58F2F3 and 58F312).
+	taken := defenseAbsorption(defender, calculation)
 	if taken != 0 {
 		damage = float64(float32(damage * float64(taken)))
 	}

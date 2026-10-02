@@ -221,7 +221,7 @@ export function createCombat(
 		caster: number,
 		phase: NonNullable<ReturnType<typeof castPhase>>,
 		now: number,
-		skill = 0
+		source: { skill: number; position?: import("@/engine/contracts/gameplay").Pose; } = { skill: 0 }
 	) {
 		// Constructor skillId/token remain zero in native. Use a negative LOCAL
 		// correlation ID, never the incoming wire token or an active cast slot.
@@ -232,7 +232,8 @@ export function createCombat(
 		const cast: CastState = {
 			token,
 			caster,
-			skill,
+			skill: source.skill,
+			effectPosition: source.position,
 			target: phase.target,
 			impacts,
 			results: phase.results,
@@ -381,9 +382,22 @@ export function createCombat(
 		*/
 		receive( op: number, p: Uint8Array, now = 0 ) {
 			if ( op === 0xb3c6 ) {
-				const pulse = skillPulse( p );
-				if ( !pulse ) return false;
-				temporaryResults( pulse.caster, pulse.phase, now, pulse.skill );
+				const pulse = skillPulse( p, gid => {
+					const object = readEntity( gid );
+					if ( !object?.skillObject ) return undefined;
+					return {
+						skill: object.skillObject.skillId,
+						position: {
+							regionId: object.regionId,
+							x: object.x,
+							y: object.y,
+							z: object.z,
+							angle: object.heading
+						}
+					};
+				} );
+				if ( !pulse ) return p[0] === 3;
+				temporaryResults( pulse.caster, pulse.phase, now, { skill: pulse.skill, position: pulse.position } );
 				publishedVitals = null;
 				return true;
 			}

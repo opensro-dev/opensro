@@ -96,35 +96,6 @@ type MonsterMoverOps struct {
 	breachLogged map[string]bool
 }
 
-type MonsterAttackPlan struct {
-	SelfEffect        bool
-	Summon            bool
-	SkillID           uint32
-	Reach             ActionReach
-	CooldownMs        int64
-	ActionLifecycleMs int64
-}
-
-type MonsterAttackResult struct {
-	Frames       []Frame
-	TargetFrames []Frame
-	Accepted     bool
-	TargetAlive  bool
-	Refusal      MonsterAttackRefusal
-}
-
-// Refusal is meaningful only for an unaccepted action. Unclassified failures
-// remain fail-closed; data/ownership errors must never become retry permission.
-type MonsterAttackRefusal uint8
-
-const (
-	MonsterAttackUnavailable MonsterAttackRefusal = iota
-	MonsterAttackApproachRequired
-	MonsterAttackCommandRejected
-)
-
-type MonsterAttackOperation func(divisionID string, instance monster.Instance, targetGid, skillID uint32, nowMs int64) MonsterAttackResult
-
 /*
 ==================
 mustMoverTransition
@@ -140,6 +111,11 @@ func mustMoverTransition(mover *monster.MoverState, event monster.MoverEvent, ta
 	}
 }
 
+/*
+================
+logScopeBudgetBreach
+================
+*/
 func (ops *MonsterMoverOps) logScopeBudgetBreach(divisionID string, count int) {
 	if ops.breachLogged == nil {
 		ops.breachLogged = make(map[string]bool)
@@ -245,6 +221,11 @@ type playerMovementIntent struct {
 	present     bool
 }
 
+/*
+================
+capturePlayerMovementIntent
+================
+*/
 func capturePlayerMovementIntent(world WorldState, nowMs int64) playerMovementIntent {
 	return playerMovementIntent{
 		destination: world.Spawn,
@@ -254,6 +235,11 @@ func capturePlayerMovementIntent(world WorldState, nowMs int64) playerMovementIn
 }
 
 // playerPose is one live player position inside a division at tick time.
+/*
+================
+playerPose
+================
+*/
 type playerPose struct {
 	NativeBodyStatus uint8
 	Gid              uint32
@@ -287,6 +273,11 @@ func (player playerPose) chaseGuidance() monster.ChaseGuidance {
 }
 
 // RunMonsterLeg advances actors independently of observer interest.
+/*
+================
+RunMonsterLeg
+================
+*/
 func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapshot, push Pusher) {
 	if ops == nil || ops.Monsters == nil {
 		return
@@ -353,6 +344,11 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	}
 }
 
+/*
+================
+advanceAndPublish
+================
+*/
 func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, instance monster.Instance, players []playerPose, nowMs int64, sessions []SessionSnapshot, push Pusher) {
 	frames, targeted := ops.advanceInstance(divisionID, instance, players, nowMs)
 	for _, session := range sessions {
@@ -400,180 +396,20 @@ func monsterInFlightSnapshotFrames(
 }
 
 // Scope and bootstrap use the same live-state projection.
+/*
+================
+monsterWireDefFromInstance
+================
+*/
 func monsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterDef {
 	return MonsterWireDefFromInstance(instance, nowMs)
 }
 
-func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance monster.Instance, requestedSkillID uint32) (MonsterAttackPlan, bool) {
-	if ops.AttackPlan == nil {
-		return MonsterAttackPlan{}, false
-	}
-	// Research 5472CB..5472FE reuses the active skill before invoking the
-	// selector. Resolving a retained authored ID must not consume a choice
-	// draw; its interval draw was already consumed on adoption.
-	if requestedSkillID != 0 {
-		return ops.AttackPlan(instance, requestedSkillID, 0)
-	}
-	if ops.Monsters != nil {
-		if skill, selected := ops.Monsters.SelectConditionalSkill(divisionID, instance.Gid); selected {
-			return ops.AttackPlan(instance, skill, 0)
-		}
-	}
-	return ops.AttackPlan(instance, requestedSkillID, ops.rand())
-}
-
 /*
-==================
-tryMonsterAttack
-
-tryMonsterAttack owns the chase->attack transition and the repeating
-attack state. It interrupts an in-flight chase at the sampled live pose,
-emits one settle/facing correction when either changed, and never lets the
-movement planner and the action planner own the same monster simultaneously.
-==================
+================
+resolveTactics
+================
 */
-func (ops *MonsterMoverOps) tryMonsterAttack(
-	divisionID string,
-	instance monster.Instance,
-	tactics monster.Tactics,
-	mover monster.MoverState,
-	players []playerPose,
-	nowMs int64,
-) ([]Frame, *monsterTargetFrames, bool) {
-	if mover.TargetGID() == 0 ||
-		(mover.Mode() != monster.MoverChasing && mover.Mode() != monster.MoverAttacking) {
-		return nil, nil, false
-	}
-	target, alive := eligiblePlayerByGid(instance, players, mover.TargetGID())
-	if !alive {
-		return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventTargetLost, nowMs), nil, true
-	}
-	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
-	// Every native timer query services the selected action timer first.
-	// Selection must gate both pursuit and fresh skill selection, including
-	// a cast whose duration exceeds the ordinary selector interval.
-	if !ops.Monsters.selectedAITimerReady(divisionID, instance.Gid, nowMs) {
-		return nil, nil, true
-	}
-	if frames, handled := ops.advancePursuitControls(divisionID, instance, mover, target, live, nowMs); handled {
-		return frames, nil, true
-	}
-	if tactics.ChaseLeash > 0 && planarDistance(live, anchorPose(instance)) > tactics.ChaseLeash {
-		return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventLeashBroken, nowMs), nil, true
-	}
-	// 5472A0 returns 2 while Timer 5 is closed; 55A1D5 chases only on 1.
-	// Retain this port's existing accepted-action deadline before range-driven
-	// replanning. This does not change skill timing or interval selection.
-	// Target loss and eligibility are still checked above.
-	if mover.Mode() == monster.MoverAttacking && nowMs < mover.NextAttackMs {
-		return nil, nil, true
-	}
-	// Choose a damage-triggered wave at the next action boundary, from the
-	// current HP band, not from a stale plan cached during another cast.
-	if monster.SummonDue(instance) && nowMs < mover.NextAttackMs {
-		return nil, nil, true
-	}
-	plan, planned := ops.selectMonsterAttack(divisionID, instance, mover.AttackSkillID)
-	if !planned || (!plan.Summon && ((!plan.SelfEffect && plan.Reach <= 0) || plan.Reach < 0 || plan.ActionLifecycleMs <= 0)) || plan.CooldownMs <= 0 {
-		if mover.Retaliating() || mover.Mode() == monster.MoverAttacking {
-			// A malformed/missing authored action may never strand a
-			// damage-owned target in zero-length chase replans. Fail closed on
-			// combat, release aggro, and resume the wander lifecycle.
-			return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventAttackUnavailable, nowMs), nil, true
-		}
-		return nil, nil, false
-	}
-	ops.adoptMonsterAttack(&mover, plan)
-	spacing := CombatSpacing{
-		ActorBodyRadius:  BodyRadius(instance.Ref.BodyRadius),
-		TargetBodyRadius: target.BodyRadius,
-		ActionReach:      plan.Reach,
-	}
-	if !plan.Summon && !spacing.Valid() {
-		return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventAttackUnavailable, nowMs), nil, true
-	}
-	if !plan.Summon && !spacing.Contains(poseToSpawn(live), target.Pose) {
-		if mover.Mode() == monster.MoverAttacking || !mover.InFlight(nowMs) {
-			return ops.startChaseLeg(divisionID, instance, tactics, mover, target, nowMs), nil, true
-		}
-		return nil, nil, false
-	}
-
-	hadSegment := mover.ArriveMs > mover.DepartMs
-	facing := live
-	// Retail's action steering resolves the live target position, derives a
-	// horizontal direction, converts it through Math_DirVecToYaw and commits
-	// CIObject_SetYaw before the action starts (client sub_8e0440, flags&8).
-	// The server owns the equivalent authoritative transition: B245 describes
-	// the action, but it does not carry a replacement heading.
-	if heading, ok := HeadingFromMovement(poseToSpawn(live), target.Pose); ok {
-		facing.Heading = heading
-	}
-	var frames []Frame
-	if hadSegment || facing.Heading != live.Heading {
-		frames = append(frames, correctionFrame(instance.Gid, facing))
-	}
-	mover.Pose = facing
-	mover.From, mover.To = monster.Pose{}, monster.Pose{}
-	mover.DepartMs, mover.ArriveMs = 0, 0
-	mustMoverTransition(&mover, monster.MoverEventAttackStarted, target.Gid)
-	if nowMs < mover.NextAttackMs || ops.BasicAttack == nil {
-		return ops.Monsters.CommitMoverFrames(divisionID, instance.Gid, mover, frames), nil, true
-	}
-	// Admit facing/action ownership BEFORE the callback can commit damage.
-	// Reserve the selected strategy interval, including its native jitter,
-	// in that same value (547342 uses strategy +48, not raw skill cooldown).
-	// Retaliation must retain it if post-cast bookkeeping is superseded.
-	mover.NextAttackMs = nowMs + int64(mover.AttackIntervalMs)
-	if !ops.Monsters.CommitMover(divisionID, instance.Gid, mover) {
-		return nil, nil, true
-	}
-	result := ops.BasicAttack(divisionID, instance, target.Gid, plan.SkillID, nowMs)
-	if result.Accepted {
-		mover.LastBattleActivityMs = uint32(nowMs)
-	}
-	frames = append(frames, result.Frames...)
-	var targeted *monsterTargetFrames
-	if len(result.TargetFrames) > 0 {
-		targeted = &monsterTargetFrames{TargetGid: target.Gid, Frames: result.TargetFrames}
-	}
-	// A refusal often returns the zero result, whose TargetAlive is false.
-	// Only an accepted action can own fatal-result animation recovery.
-	if !result.Accepted {
-		switch result.Refusal {
-		case MonsterAttackApproachRequired, MonsterAttackCommandRejected:
-			// Research 5472A0 admission refusal retains the selected skill;
-			// 59ADF1 -> event 4(-1) -> 558F70 completes/clears it instead.
-			// Neither owns a HOMING transition. Recheck the live target and
-			// range on the next AI tick, without recursively retrying damage.
-			event := monster.MoverEventAttackApproachRequired
-			if result.Refusal == MonsterAttackCommandRejected {
-				event = monster.MoverEventSkillCommandRejected
-			}
-			mustMoverTransition(&mover, event, target.Gid)
-			ops.Monsters.CommitMover(divisionID, instance.Gid, mover)
-			return frames, targeted, true
-		}
-		return append(frames, ops.startReturnLeg(
-			divisionID, instance, tactics, mover, monster.MoverEventAttackRefused, nowMs,
-		)...), targeted, true
-	}
-	if !result.TargetAlive {
-		// The fatal B245 owns the monster until its authored action finishes.
-		// Returning in this same burst lets movement overwrite attack facing and
-		// produces a hit while the monster is already walking away.
-		mover.BehaviorDeadlineMs = nowMs + plan.ActionLifecycleMs
-		mustMoverTransition(&mover, monster.MoverEventTargetDefeated, 0)
-		ops.Monsters.CommitMover(divisionID, instance.Gid, mover)
-		return frames, targeted, true
-	}
-	mover.NextAttackMs = nowMs + int64(mover.AttackIntervalMs)
-	// Select the next authored default action on the next due tick.
-	mover.AttackSkillID = 0
-	ops.Monsters.CommitMover(divisionID, instance.Gid, mover)
-	return frames, targeted, true
-}
-
 func (ops *MonsterMoverOps) resolveTactics(instance monster.Instance) monster.Tactics {
 	if ops.TacticsFor != nil {
 		return ops.TacticsFor(instance)
@@ -583,6 +419,11 @@ func (ops *MonsterMoverOps) resolveTactics(instance monster.Instance) monster.Ta
 
 // startWanderLeg probes the facing-relative direction, then requests the
 // independently sampled travel distance from the actor's current position.
+/*
+================
+startWanderLeg
+================
+*/
 func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, nowMs int64) []Frame {
 	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
 	if !monster.CanEnterWander(instance.Ref.TidWord, instance.Ref.RunSpeed) || instance.Ref.WalkSpeed <= 0 || tactics.WanderProbeDistance <= 0 {
@@ -620,12 +461,22 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 
 // startReturnLeg uses the native movement-channel consumer (5489B0), not
 // the unrelated obstacle rotation sign at CTactics+164.
+/*
+================
+startReturnLeg
+================
+*/
 func (ops *MonsterMoverOps) startReturnLeg(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, event monster.MoverEvent, nowMs int64) []Frame {
 	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
 	mover, frames := ops.planReturnLeg(instance, mover, event, nowMs)
 	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
 }
 
+/*
+================
+planReturnLeg
+================
+*/
 func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monster.MoverState, event monster.MoverEvent, nowMs int64) (monster.MoverState, []Frame) {
 	speed := instance.WalkSpeed()
 	channel := wire.MoveStateWalk
@@ -685,6 +536,11 @@ func (ops *MonsterMoverOps) commitSegment(divisionID string, instance monster.In
 }
 
 // Approach allocation and geometry must publish in the same navigation transaction.
+/*
+================
+commitPreparedSegment
+================
+*/
 func (ops *MonsterMoverOps) commitPreparedSegment(divisionID string, before navigationAdmission, instance monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
 	mover, frames := ops.planSegment(instance, mover, dest, speed, channel, nowMs)
 	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
@@ -692,6 +548,11 @@ func (ops *MonsterMoverOps) commitPreparedSegment(divisionID string, before navi
 
 // Plan only: terrain sampling may run concurrently with damage/lifecycle work.
 // The caller must admit the result before publishing any returned frame.
+/*
+================
+planDirectSegment
+================
+*/
 func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) (monster.MoverState, []Frame) {
 	// Quantise the destination to the grid the WIRE can express, before
 	// anything derives from it. The 0xB738 goal is the only destination the
@@ -799,6 +660,11 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 
 // A missing navigation result settles the old segment in the SAME admitted
 // transaction. Sending nothing would leave the client walking the old goal.
+/*
+================
+holdNavigation
+================
+*/
 func (ops *MonsterMoverOps) holdNavigation(gid uint32, mover monster.MoverState, live monster.Pose, now int64) (monster.MoverState, []Frame) {
 	mover.Pose = live
 	mover.From, mover.To = monster.Pose{}, monster.Pose{}
@@ -846,6 +712,11 @@ func monsterMovementSourceRequired(mover monster.MoverState, from, dest monster.
 
 // poseOneUnitAlongHeading reconstructs Math_YawToDirVec's planar convention
 // after 8535A0 converts the wire bearing: heading 0 faces +X.
+/*
+================
+poseOneUnitAlongHeading
+================
+*/
 func poseOneUnitAlongHeading(from monster.Pose, heading uint16) monster.Pose {
 	yaw := float64(heading)/65535*2*math.Pi + math.Pi/2
 	to := from
@@ -856,6 +727,11 @@ func poseOneUnitAlongHeading(from monster.Pose, heading uint16) monster.Pose {
 
 // currentChannel maps the zero value (fresh mover) to the walk channel
 // the create row ships (MonsterSpawnSpeedChannel).
+/*
+================
+currentChannel
+================
+*/
 func currentChannel(channel uint8) uint8 {
 	if channel == 0 {
 		return wire.MoveStateWalk
@@ -864,6 +740,11 @@ func currentChannel(channel uint8) uint8 {
 }
 
 // hasPlanner reports whether a world-surface planner is wired.
+/*
+================
+hasPlanner
+================
+*/
 func (ops *MonsterMoverOps) hasPlanner() bool {
 	return ops.PlanPathFrom != nil || ops.PlanPath != nil
 }
@@ -884,6 +765,11 @@ func (ops *MonsterMoverOps) planPath(from monster.Pose, fromOwner NavOwner, goal
 	return ops.PlanPath(from, goal)
 }
 
+/*
+================
+rand
+================
+*/
 func (ops *MonsterMoverOps) rand() float64 {
 	if ops.Rand == nil {
 		return 0.5
@@ -893,6 +779,11 @@ func (ops *MonsterMoverOps) rand() float64 {
 
 // ---- pure helpers ----
 
+/*
+================
+anchorPose
+================
+*/
 func anchorPose(instance monster.Instance) monster.Pose {
 	if instance.Nest.HasControls {
 		// 545F70/545C50 use CNest+10, not the randomized spawn candidate.
@@ -907,65 +798,50 @@ func anchorPose(instance monster.Instance) monster.Pose {
 	}
 }
 
+/*
+================
+poseToSpawn
+================
+*/
 func poseToSpawn(p monster.Pose) Spawn {
 	return Spawn{RegionID: p.RegionID, X: p.X, Y: p.Y, Z: p.Z, Angle: p.Heading}
 }
 
-func nearestPlayerWithin(from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
-	return nearestEligiblePlayer(monster.Instance{}, from, divisionPlayers, sightRange)
-}
-
-func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
-	if !IsDungeonRegion(from.RegionID) && actor.Nest.NativeTacticsFlags&0x184 == 0 {
-		return ordinaryPlayerAcquisition(actor, from, divisionPlayers, sightRange)
-	}
-	// Special selectors 3/4/5 and dungeon cell queries are not selector 2.
-	// Retain their existing projection until those distinct contracts close.
-	best := playerPose{}
-	bestDistance := sightRange
-	found := false
-	for _, player := range divisionPlayers {
-		if actor.Fears(player.Gid) || !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) {
-			continue
-		}
-		d := planarDistanceSpawn(player.Pose, poseToSpawn(from))
-		if d <= bestDistance {
-			best, bestDistance, found = player, d, true
-		}
-	}
-	return best, found
-}
-
-func playerByGid(divisionPlayers []playerPose, gid uint32) (playerPose, bool) {
-	for _, player := range divisionPlayers {
-		if player.Gid == gid {
-			return player, true
-		}
-	}
-	return playerPose{}, false
-}
-
-func eligiblePlayerByGid(actor monster.Instance, players []playerPose, gid uint32) (playerPose, bool) {
-	player, exists := playerByGid(players, gid)
-	return player, exists && !actor.Fears(gid) &&
-		monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus)
-}
-
+/*
+================
+planarDistance
+================
+*/
 func planarDistance(a, b monster.Pose) float64 {
 	return WorldDistance2D(poseToSpawn(a), poseToSpawn(b))
 }
 
+/*
+================
+planarDistanceSpawn
+================
+*/
 func planarDistanceSpawn(a Spawn, b Spawn) float64 {
 	return WorldDistance2D(a, b)
 }
 
 // All movement producers encode wire bearings through the shared inverse of
 // native 8535A0. Native model yaw and wire heading differ by pi/2.
+/*
+================
+headingWordToward
+================
+*/
 func headingWordToward(from, to monster.Pose) uint16 {
 	dx, dz := monsterPoseDelta(from, to)
 	return headingWordFromDelta(dx, dz)
 }
 
+/*
+================
+correctionFrame
+================
+*/
 func correctionFrame(gid uint32, pose monster.Pose) Frame {
 	correction := wire.ObjectSourceCorrection{
 		Gid: gid,
@@ -980,6 +856,11 @@ func correctionFrame(gid uint32, pose monster.Pose) Frame {
 	return Frame{Opcode: wire.OpObjectSourceCorrection, Payload: correction.Encode()}
 }
 
+/*
+================
+idleDelayMs
+================
+*/
 func (ops *MonsterMoverOps) idleDelayMs() int64 {
 	return monster.NativeIdleDelayMs(func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 }

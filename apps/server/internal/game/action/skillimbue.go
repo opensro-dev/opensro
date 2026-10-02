@@ -131,15 +131,19 @@ func (rt *Runtime) resolvePlayerImpact(division, name string, skill enterworld.S
 		return combat.Result{ResultFlags: 1}, nil
 	}
 	actor := criticalActor{division: division, character: name}
+	lanes := skill.Attack.Flags & 0xc
 	if chained {
-		skill.Attack.Flags &^= 4
+		lanes &^= 4
 	}
 	var result combat.Result
 	var err error
-	if chained && skill.Attack.Flags&0xc == 0 {
+	if chained && lanes == 0 {
 		result = combat.Result{ResultFlags: 1}
 	} else {
-		result, err = rt.resolveCombat(actor, skill, attacker, defender)
+		split, resolveErr := rt.resolveCombatRequest(combatRequest{
+			actor: actor, skill: skill, attacker: attacker, defender: defender, lanes: lanes,
+		})
+		result, err = split.Defender, resolveErr
 	}
 	// A blocked impact takes no imbue share (5905FB skips it).
 	if err != nil || skill.Attack.Value5 == 0 || result.Blocked {
@@ -149,7 +153,16 @@ func (rt *Runtime) resolvePlayerImpact(division, name string, skill enterworld.S
 	if !imbue.Pinned {
 		return result, nil
 	}
-	extra, err := combat.ResolveOutcome(attacker, defender, imbue.Attack, rt.CombatRoll, true, false)
+	imbueLanes := imbue.Attack.Flags & 0xc
+	if chained {
+		imbueLanes &^= 4
+	}
+	var extra combat.Result
+	if imbueLanes != 0 {
+		extra, err = combat.ResolveCalculation(attacker, defender, combat.AttackCalculation{
+			Attack: imbue.Attack, OriginalFlags: skill.Attack.Flags, Lanes: imbueLanes, Player: true,
+		}, rt.CombatRoll)
+	}
 	if err != nil {
 		return combat.Result{}, err
 	}

@@ -97,7 +97,6 @@ apps/client-next/src/engine/foundation/gameplay/cast-results.ts
 apps/client-next/src/engine/foundation/gameplay/character-spawn.ts
 apps/client-next/src/engine/foundation/gameplay/chat-blocks.ts
 apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
-apps/client-next/src/engine/foundation/gameplay/concealment.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
 apps/client-next/src/engine/foundation/gameplay/cos-record.ts
 apps/client-next/src/engine/foundation/gameplay/cos-timer.ts

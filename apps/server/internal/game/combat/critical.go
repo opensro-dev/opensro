@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+critical.go - native critical probability and damage outcome
+
+===========================================================================
+*/
+
 package combat
 
 import (
@@ -9,6 +17,11 @@ import (
 // Probability is the per-actor, per-skill accumulator in v1.188 599CC0.
 // Copy it when planning; publish the next value only after a successful roll.
 // It belongs to the actor lifetime, not a cast, target, or persisted character.
+/*
+================
+Probability
+================
+*/
 type Probability struct {
 	Initialized bool
 	Threshold   int32
@@ -17,6 +30,11 @@ type Probability struct {
 // CriticalOutcome follows 58E800..58E848, 5A1A20 and 599CC0. Native converts
 // Param12 to a byte. The inclusive rand()%101 comparison and accumulating
 // threshold are intentional: independent percentage rolls are not equivalent.
+/*
+================
+CriticalOutcome
+================
+*/
 func CriticalOutcome(rate float64, previous Probability, roll Roll32767) (bool, Probability, error) {
 	if math.IsNaN(rate) || math.IsInf(rate, 0) || rate < 0 || rate > math.MaxInt32 {
 		return false, previous, fmt.Errorf("combat: invalid critical rate %v", rate)
@@ -53,6 +71,13 @@ func CriticalOutcome(rate float64, previous Probability, roll Roll32767) (bool, 
 // ResolveOutcome keeps outcome selection upstream of both damage lanes. A
 // critical doubles physical damage before level/balance/minimum-floor logic
 // (40E67C..40E696); 40E830 has no corresponding magical critical multiplier.
+/*
+================
+ResolveOutcome
+================
+*/
 func ResolveOutcome(attacker, defender Stats, attack enterworld.SkillAttack, roll Roll32767, player, critical bool) (Result, error) {
-	return resolve(attacker, defender, attack, roll, player, critical)
+	return ResolveCalculation(attacker, defender, AttackCalculation{
+		Attack: attack, OriginalFlags: attack.Flags, Lanes: attack.Flags & (physicalAttackFlag | magicalAttackFlag), Player: player, Critical: critical,
+	}, roll)
 }

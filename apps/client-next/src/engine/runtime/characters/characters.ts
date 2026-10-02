@@ -1732,6 +1732,27 @@ soundContext
 						}
 					}
 				}
+				// 7756D0 captures the trap position before destruction. Result
+				// presentation must not depend on its model or entity surviving.
+				if ( effectDetail && "effectPosition" in cast && cast.effectPosition ) {
+					const position = cast.effectPosition;
+					effectActors.push( ...effects.damage(
+						target.gid,
+						cast.caster,
+						impact.type ?? 0,
+						cast.skill,
+						false,
+						false,
+						true,
+						{ ...position, yaw: characterHeadingYaw( position.angle ) },
+						[ 1, 0, 0, 0, 1, 0, 0, 0, 1 ],
+						undefined,
+						bloodEnabled,
+						seconds,
+						resources.ready
+					) );
+					continue;
+				}
 				const route = hit.source === "flush" ?
 					effects.impactSource( caster?.gid, target.gid, gameplay?.attachedEffects ?? [], cast ) :
 					{ gid: cast.caster, skill: hit.soundSkill ?? 0, defensive: false };
@@ -1963,7 +1984,11 @@ soundContext
 				active.add( entity.gid );
 				try {
 					if ( entity.skillObject ) {
-						const visual = skillObjects.frame( entity, seconds, resources );
+						const visual = skillObjects.frame( entity, seconds, resources, {
+							localGid: gameplay?.localGid ?? 0,
+							effects: gameplay?.attachedEffects ?? [],
+							skill: concealmentSkills( gameplay?.skillCatalog )
+						} );
 						if ( visual ) {
 							next.set( entity.gid, visual.actor );
 							displayedDependencies.set( entity.gid, visual.paths );

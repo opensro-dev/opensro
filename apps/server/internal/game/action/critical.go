@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+critical.go - actor-owned critical and block history for every impact
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -8,10 +16,21 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
+/*
+================
+criticalActor
+================
+*/
 type criticalActor struct {
 	division, character string
 	monster             uint32
 }
+
+/*
+================
+criticalHistory
+================
+*/
 type criticalHistory struct {
 	mu     sync.Mutex
 	actors map[criticalActor]map[uint32]combat.Probability
@@ -20,6 +39,11 @@ type criticalHistory struct {
 // Action owns native ParamKeeper's probability history. All production attack
 // paths use this door; formula helpers alone intentionally have no actor state.
 // Targets do not enter the key: changing victims must not reset critical odds.
+/*
+================
+resolveCombat
+================
+*/
 func (rt *Runtime) resolveCombat(actor criticalActor, skill enterworld.SkillRow, attacker, defender combat.Stats) (combat.Result, error) {
 	out, err := rt.resolveCombatBehindWall(actor, skill, attacker, defender, nil)
 	return out.Defender, err
@@ -27,14 +51,49 @@ func (rt *Runtime) resolveCombat(actor criticalActor, skill enterworld.SkillRow,
 
 // resolveCombatBehindWall splits the hit when the defender stands behind a
 // Force wall (58E5F0); the one critical decision serves both records.
+/*
+================
+resolveCombatBehindWall
+================
+*/
 func (rt *Runtime) resolveCombatBehindWall(actor criticalActor, skill enterworld.SkillRow, attacker, defender combat.Stats, wall *enterworld.SkillWall) (combat.WallOutcome, error) {
+	return rt.resolveCombatRequest(combatRequest{
+		actor: actor, skill: skill, attacker: attacker, defender: defender,
+		wall: wall, lanes: skill.Attack.Flags & 0xc,
+	})
+}
+
+/*
+================
+combatRequest
+
+Lane selection is impact state, never a mutation of the authored att flags.
+================
+*/
+type combatRequest struct {
+	actor    criticalActor
+	skill    enterworld.SkillRow
+	attacker combat.Stats
+	defender combat.Stats
+	wall     *enterworld.SkillWall
+	lanes    uint32
+}
+
+/*
+================
+resolveCombatRequest
+================
+*/
+func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutcome, error) {
+	actor, skill := request.actor, request.skill
+	attacker, defender, wall := request.attacker, request.defender, request.wall
 	rt.criticals.mu.Lock()
 	defer rt.criticals.mu.Unlock()
 	actor.character = strings.ToLower(actor.character)
 	key := skill.ID & 0xffffff // 58ED8C..58ED97: key is 0x43000000 | skill ID.
 	previous := rt.criticals.actors[actor][key]
 	critical, next := false, previous
-	if skill.Attack.Flags&4 != 0 {
+	if request.lanes&4 != 0 {
 		rate, err := combat.EffectiveCriticalRate(attacker.CriticalRate, skill.CriticalModifier)
 		if err != nil {
 			return combat.WallOutcome{}, err
@@ -46,10 +105,14 @@ func (rt *Runtime) resolveCombatBehindWall(actor criticalActor, skill enterworld
 	}
 	var out combat.WallOutcome
 	var err error
+	calculation := combat.AttackCalculation{
+		Attack: skill.Attack, OriginalFlags: skill.Attack.Flags, Lanes: request.lanes,
+		Player: actor.monster == 0, Critical: critical,
+	}
 	if wall != nil {
-		out, err = combat.ResolveAgainstWall(attacker, defender, skill.Attack, *wall, rt.CombatRoll, actor.monster == 0, critical)
+		out, err = combat.ResolveCalculationAgainstWall(attacker, defender, combat.WallCalculation{Attack: calculation, Wall: *wall}, rt.CombatRoll)
 	} else {
-		out.Defender, err = combat.ResolveOutcome(attacker, defender, skill.Attack, rt.CombatRoll, actor.monster == 0, critical)
+		out.Defender, err = combat.ResolveCalculation(attacker, defender, calculation, rt.CombatRoll)
 	}
 	if err != nil {
 		return combat.WallOutcome{}, err
@@ -89,12 +152,22 @@ func (rt *Runtime) resolveCombatBehindWall(actor criticalActor, skill enterworld
 	return out, nil
 }
 
+/*
+================
+forgetCriticalCharacter
+================
+*/
 func (rt *Runtime) forgetCriticalCharacter(division, name string) {
 	rt.criticals.mu.Lock()
 	defer rt.criticals.mu.Unlock()
 	delete(rt.criticals.actors, criticalActor{division: division, character: strings.ToLower(name)})
 }
 
+/*
+================
+retireMonsterCriticals
+================
+*/
 func (rt *Runtime) retireMonsterCriticals() {
 	rt.criticals.mu.Lock()
 	defer rt.criticals.mu.Unlock()
@@ -112,6 +185,11 @@ func (rt *Runtime) retireMonsterCriticals() {
 	}
 }
 
+/*
+================
+effectOutcome
+================
+*/
 func (rt *Runtime) effectOutcome(actor criticalActor, key, chance uint32) (bool, error) {
 	rt.criticals.mu.Lock()
 	defer rt.criticals.mu.Unlock()

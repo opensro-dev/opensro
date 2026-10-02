@@ -21,6 +21,11 @@ import "opensro.online/server/internal/game/enterworld"
 // Absorbed what the wall's lanes computed, Covered whether every lane of
 // the attack was a wall lane (58F06B..58F0A6; otherwise the absorb record
 // is type 8).
+/*
+================
+WallOutcome
+================
+*/
 type WallOutcome struct {
 	Defender Result
 	Absorbed uint32
@@ -33,7 +38,31 @@ ResolveAgainstWall
 ==================
 */
 func ResolveAgainstWall(attacker, defender Stats, attack enterworld.SkillAttack, wall enterworld.SkillWall, roll Roll32767, player, critical bool) (WallOutcome, error) {
-	lanes := attack.Flags & (physicalAttackFlag | magicalAttackFlag)
+	return ResolveCalculationAgainstWall(attacker, defender, WallCalculation{
+		Attack: AttackCalculation{Attack: attack, OriginalFlags: attack.Flags, Lanes: attack.Flags & (physicalAttackFlag | magicalAttackFlag), Player: player, Critical: critical},
+		Wall:   wall,
+	}, roll)
+}
+
+/*
+================
+WallCalculation
+================
+*/
+type WallCalculation struct {
+	Attack AttackCalculation
+	Wall   enterworld.SkillWall
+}
+
+/*
+================
+ResolveCalculationAgainstWall
+================
+*/
+func ResolveCalculationAgainstWall(attacker, defender Stats, input WallCalculation, roll Roll32767) (WallOutcome, error) {
+	calculation, wall := input.Attack, input.Wall
+	attack, critical := calculation.Attack, calculation.Critical
+	lanes := calculation.Lanes
 	walled := lanes & wall.Mask
 	var out WallOutcome
 	out.Covered = lanes&^wall.Mask == 0
@@ -41,12 +70,13 @@ func ResolveAgainstWall(attacker, defender Stats, attack enterworld.SkillAttack,
 		shield := defender
 		shield.PhysicalDefense, shield.MagicalDefense = float64(wall.Defense), float64(wall.Defense)
 		shield.ParryRate, shield.MagicalParry = float64(wall.Parry), float64(wall.Parry)
-		wallAttack := attack
-		wallAttack.Flags = attack.Flags&^lanes | walled
+		wallAttack := calculation
+		wallAttack.Lanes = walled
+		wallAttack.wall = true
 		// atca (58F52F) and da scale the defender's record, not the wall's.
-		wallAttack.Atca = false
-		wallAttack.DownAttack = enterworld.SkillDownAttack{}
-		absorbed, err := resolve(attacker, shield, wallAttack, roll, player, critical)
+		wallAttack.Attack.Atca = false
+		wallAttack.Attack.DownAttack = enterworld.SkillDownAttack{}
+		absorbed, err := ResolveCalculation(attacker, shield, wallAttack, roll)
 		if err != nil {
 			return WallOutcome{}, err
 		}
@@ -64,9 +94,9 @@ func ResolveAgainstWall(attacker, defender Stats, attack enterworld.SkillAttack,
 		out.Defender = Result{ResultFlags: flags}
 		return out, nil
 	}
-	own := attack
-	own.Flags = attack.Flags &^ walled
-	result, err := resolve(attacker, defender, own, roll, player, critical)
+	own := calculation
+	own.Lanes = lanes &^ walled
+	result, err := ResolveCalculation(attacker, defender, own, roll)
 	if err != nil {
 		return WallOutcome{}, err
 	}

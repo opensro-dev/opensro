@@ -114,7 +114,18 @@ func TestFireTrapExplodesOnTheFirstMonsterInRange(t *testing.T) {
 		t.Fatal("planting never closed its cast bracket")
 	}
 
-	out := rt.AdvanceSkillObjects(release+int64(enterworld.CombatTrapScanMs), nil)
+	sessions := []simulation.SessionSnapshot{{
+		DivisionID: testDivision, CharacterID: c.ID, Population: objects[0].Population,
+		PublishedObjects: []uint32{}, World: simulation.SeedWorldState(c),
+	}}
+	peer := sessions[0]
+	peer.CharacterID++
+	sessions = append(sessions, peer)
+	foreign := peer
+	foreign.CharacterID++
+	foreign.Population.Generation++
+	sessions = append(sessions, foreign)
+	out := rt.AdvanceSkillObjects(release+int64(enterworld.CombatTrapScanMs), sessions)
 	after, _ := rt.Monsters.Get(testDivision, gid)
 	if after.CurrentHP >= before.CurrentHP {
 		t.Fatalf("explosion dealt no damage: HP %d -> %d", before.CurrentHP, after.CurrentHP)
@@ -122,18 +133,35 @@ func TestFireTrapExplodesOnTheFirstMonsterInRange(t *testing.T) {
 	if len(rt.SkillObjects.Snapshot()) != 0 || len(rt.effects.Snapshot(testDivision, c.Name)) != 0 {
 		t.Fatal("exploded trap or its buff was not retired")
 	}
-	found := false
+	found := 0
 	for _, batch := range out {
-		for _, f := range batch.Frames {
-			if f.Opcode == wire.OpSkillPulse && len(f.Payload) >= 9 &&
-				binary.LittleEndian.Uint32(f.Payload[1:]) == enterworld.ObjectIDForCharacter(c) &&
-				binary.LittleEndian.Uint32(f.Payload[5:]) == skill.ID {
-				found = true
+		var spawnIndex, resultIndex, despawnIndex = -1, -1, -1
+		for index, f := range batch.Frames {
+			switch f.Opcode {
+			case wire.OpSingleObjectSpawn:
+				spawnIndex = index
+			case wire.OpSkillPulse:
+				if len(f.Payload) < 7 || f.Payload[0] != 3 || binary.LittleEndian.Uint32(f.Payload[1:]) != trapGID {
+					t.Fatalf("invalid native trap result: %x", f.Payload)
+				}
+				resultIndex = index
+			case wire.OpObjectDespawn:
+				despawnIndex = index
 			}
 		}
+		if resultIndex < 0 {
+			continue
+		}
+		if batch.OnlyCharacterID == foreign.CharacterID {
+			t.Fatal("trap crossed population generation")
+		}
+		if spawnIndex < 0 || spawnIndex >= resultIndex || despawnIndex <= resultIndex {
+			t.Fatalf("trap lifetime order spawn=%d result=%d despawn=%d", spawnIndex, resultIndex, despawnIndex)
+		}
+		found++
 	}
-	if !found || trapGID == 0 {
-		t.Fatalf("no B3C6 result from the planter: %+v", out)
+	if found != 2 {
+		t.Fatalf("received %d trap results; owner and peer must both see one", found)
 	}
 }
 

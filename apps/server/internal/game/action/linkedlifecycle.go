@@ -1,13 +1,26 @@
+/*
+===========================================================================
+
+linkedlifecycle.go - retire live links when either endpoint or its tether fails
+
+===========================================================================
+*/
+
 package action
 
 import (
-	"math"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
 // 58482E..584A67 checks the live pair, not the two original cast positions.
 // Retirement itself stays in the existing character-effect update owner.
+/*
+================
+advanceLinkedEffects
+================
+*/
 func (rt *Runtime) advanceLinkedEffects(nowMs int64) {
 	for _, link := range rt.effects.Links() {
 		unlock := rt.lockDivision(link.DivisionID)
@@ -19,9 +32,10 @@ func (rt *Runtime) advanceLinkedEffects(nowMs int64) {
 		if valid && link.MaxDistance != 0 {
 			from := rt.liveSpawn(simulation.WorldKey(link.DivisionID, source.Name), source, nowMs)
 			to := rt.liveSpawn(simulation.WorldKey(link.DivisionID, target.Name), target, nowMs)
-			d := simulation.WorldDistance2D(from, to)
-			y := to.Y - from.Y
-			valid = math.Sqrt(d*d+y*y) <= float64(link.MaxDistance)
+			// 5849F1 shares the trap tether's native 3D distance and float stores.
+			a := monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}
+			b := monster.Pose{RegionID: to.RegionID, X: to.X, Y: to.Y, Z: to.Z}
+			valid = monster.NativeActorDistance(a, b) <= float32(link.MaxDistance)
 		}
 		if !valid {
 			rt.effects.StopLink(link.DivisionID, link.SourceToken)

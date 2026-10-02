@@ -92,3 +92,52 @@ test("malformed resource replacements cannot erase a usable object catalog", () 
 	assert.equal( owner.frame( entity, 0, ready )?.actor.model, MODEL );
 	assert.equal( owner.frame( { ...entity, skillObject: { skillId: 999 } }, 0, ready ), null );
 });
+
+test("trap concealment uses detection levels and the planter's object token", () => {
+	const { owner, entity } = fixture();
+	const ready = { ready: () => true, plan: () => true };
+	/** @type {import("../../src/engine/foundation/gameplay/attached-effects").AttachedEffect[]} */
+	const effects = [];
+	const rows = new Map( [
+		[ 7108, { hide: { mask: 4, level: 10 } } ],
+		[ 1, { sight: { mask: 4, level: 9 } } ],
+		[ 2, { sight: { mask: 4, level: 10 }, detectRange: 1 } ]
+	] );
+	const viewer = {
+		localGid: 7,
+		effects,
+		skill: id => {
+			const row = rows.get( id );
+			return row ?
+				{
+					id,
+					group: 1,
+					level: 1,
+					name: "fixture",
+					spCost: 0,
+					trainable: false,
+					targetRequired: false,
+					cooldownMs: 0,
+					masteries: [],
+					prerequisites: [],
+					...row
+				} :
+				undefined;
+		}
+	};
+	assert.equal( owner.frame( entity, 0, ready, viewer ), null );
+	effects.push( { gid: 7, skill: 1, token: 20, phase: 2 } );
+	assert.equal( owner.frame( entity, 0.1, ready, viewer ), null );
+	effects[0] = { ...effects[0], skill: 2 };
+	assert.ok( owner.frame( entity, 0.2, ready, viewer ) );
+	effects.length = 0;
+	effects.push( { gid: 8, skill: 7108, token: entity.gid, phase: 2 } );
+	assert.equal( owner.frame( entity, 1, ready, viewer ), null );
+	effects[0] = { ...effects[0], gid: 7 };
+	assert.equal( owner.frame( entity, 1.5, ready, viewer ), null );
+	assert.ok( owner.frame( entity, 2, ready, viewer ) );
+	effects.length = 0;
+	assert.ok( owner.frame( entity, 3, ready, viewer ) );
+	owner.retain( [] );
+	assert.equal( owner.frame( entity, 4, ready, viewer ), null );
+});

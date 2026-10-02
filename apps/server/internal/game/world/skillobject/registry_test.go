@@ -125,13 +125,13 @@ func TestTrapTargetFilterUsesOwnershipThreeDimensionsAndTerminatedList(t *testin
 
 /*
 ================
-TestCombatTrapMatchesAnyLivingVictimAndHidesFromOthers
+TestCombatTrapMatchesAnyLivingVictimAndReplicatesToObservers
 
 A combat trap ignores the quest target list and the victim's current
-opponent; a hidden trap is published only to its owner.
+opponent; concealment changes presentation without removing replication.
 ================
 */
-func TestCombatTrapMatchesAnyLivingVictimAndHidesFromOthers(t *testing.T) {
+func TestCombatTrapMatchesAnyLivingVictimAndReplicatesToObservers(t *testing.T) {
 	var registry Registry
 	object := trapFixture(t, &registry)
 	object.Program.Combat, object.Program.Hidden = true, true
@@ -145,8 +145,8 @@ func TestCombatTrapMatchesAnyLivingVictimAndHidesFromOthers(t *testing.T) {
 	}
 	viewer := Viewer{Division: object.Division, Population: object.Population,
 		Position: worldgeom.RegionXZ{RegionID: object.Spawn.Region, X: 100, Z: 200}}
-	if Visible(object, viewer) {
-		t.Fatal("hidden trap shown to a stranger")
+	if !Visible(object, viewer) {
+		t.Fatal("concealed trap missing from observer replication")
 	}
 	viewer.CharacterGID = object.OwnerGID
 	if !Visible(object, viewer) {

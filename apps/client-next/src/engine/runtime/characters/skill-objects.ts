@@ -9,6 +9,9 @@ does not infer captures from animations or keep objects alive after despawn.
 
 ===========================================================================
 */
+import { skillObjectVisible } from "@/engine/foundation/gameplay/concealment";
+import type { AttachedEffect } from "@/engine/foundation/gameplay/attached-effects";
+import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import type { CharacterActor } from "@/engine/contracts/character";
 import type { EntityState } from "@/engine/contracts/world";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
@@ -86,6 +89,20 @@ function recordObject( value: unknown ): Record<string, unknown> {
 
 /*
 ================
+SkillObjectViewer
+
+The surrounding character owner supplies the same reference/effect snapshot
+used for ordinary concealment. Trap existence remains owned by replication.
+================
+*/
+interface SkillObjectViewer {
+	localGid: number;
+	effects: readonly AttachedEffect[];
+	skill: ( id: number ) => SkillMetadata | undefined;
+}
+
+/*
+================
 createSkillObjects
 
 86C440 installs state zero at unit scale. Object pose and heading come from
@@ -97,6 +114,7 @@ export function createSkillObjects( allocate: () => number ) {
 	const models = new Map<string, ObjectModel>();
 	const clocks = new Map<number, ObjectClock>();
 	const loaded = new Set<string>();
+	const ownership = new Map<number, { next: number; owned: boolean; }>();
 	return {
 		/*
 		================
@@ -169,6 +187,7 @@ export function createSkillObjects( allocate: () => number ) {
 		retain( entities: readonly EntityState[] ) {
 			const alive = new Set( entities.filter( entity => entity.skillObject ).map( entity => entity.gid ) );
 			for ( const gid of clocks.keys() ) if ( !alive.has( gid ) ) clocks.delete( gid );
+			for ( const gid of ownership.keys() ) if ( !alive.has( gid ) ) ownership.delete( gid );
 		},
 		/*
 		================
@@ -178,7 +197,23 @@ export function createSkillObjects( allocate: () => number ) {
 		does not consume its initial animation while waiting for admission.
 		================
 		*/
-		frame( entity: EntityState, seconds: number, resources: SkillObjectResources ) {
+		frame( entity: EntityState, seconds: number, resources: SkillObjectResources, viewer?: SkillObjectViewer ) {
+			if ( viewer && entity.skillObject ) {
+				const hide = viewer.skill( entity.skillObject.skillId )?.hide;
+				const effects = viewer.effects.filter( effect => effect.gid === viewer.localGid );
+				let state = ownership.get( entity.gid );
+				if ( !state ) {
+					state = { next: seconds + 1, owned: false };
+					ownership.set( entity.gid, state );
+				}
+				// 86C636/86C70F: the planter's buff token is the object GID.
+				// Ownership survives the buff's retirement until object removal.
+				if ( hide && hide.mask & 4 && seconds >= state.next ) {
+					state.owned ||= effects.some( effect => effect.token === entity.gid );
+					state.next = seconds + 1;
+				}
+				if ( !state.owned && !skillObjectVisible( hide, effects, viewer.skill ) ) return null;
+			}
 			const resource = entity.skillObject && records.get( entity.skillObject.skillId );
 			if ( !resource ) return null;
 			const model: ObjectModel | undefined = resource.kind === "effect" ?
@@ -225,6 +260,7 @@ export function createSkillObjects( allocate: () => number ) {
 		*/
 		reset() {
 			clocks.clear();
+			ownership.clear();
 		},
 		/*
 		================
@@ -234,6 +270,7 @@ export function createSkillObjects( allocate: () => number ) {
 		dispose() {
 			loaded.clear();
 			clocks.clear();
+			ownership.clear();
 			records.clear();
 			models.clear();
 		}

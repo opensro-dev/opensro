@@ -38,7 +38,7 @@ type Program struct {
 	Radius     uint32
 	Targets    [3]uint32
 	// Combat marks a planted hostile trap: any living monster in Radius
-	// triggers it. Hidden traps are published only to their owner;
+	// triggers it. Hidden traps remain replicated; the native client owns concealment;
 	// OwnerDistance retires the trap once its planter walks beyond it.
 	Combat        bool
 	Hidden        bool
@@ -122,6 +122,10 @@ func (r *Registry) Create(object Object) (Object, error) {
 	}
 	r.nextGID++
 	object.Spawn.GID = r.nextGID
+	if object.Program.Combat {
+		// 86C70F identifies the planter's decoration by this same object ID.
+		object.OwnerEffect = object.Spawn.GID
+	}
 	object.Spawn.SkillID = object.Program.SkillID
 	object.NextScanMs = object.CreatedMs + int64(object.Program.ScanMs)
 	if r.objects == nil {

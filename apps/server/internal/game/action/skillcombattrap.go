@@ -15,14 +15,11 @@ the trap and settles through the ordinary monster damage and reward doors.
 package action
 
 import (
-	"sync/atomic"
-
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
-	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -55,7 +52,6 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 	at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
 	var refusal uint16
 	var effects []wire.Frame
-	effectToken := atomic.AddUint32(&rt.castTokenCounter, 1)
 	if !rt.deps.Update(c, "release-combat-trap", func() bool {
 		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 			return false
@@ -66,7 +62,7 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 			return false
 		}
 		object, err := rt.SkillObjects.Create(skillobject.Object{
-			Division: division, Population: lease, OwnerGID: gid, OwnerName: c.Name, CreatedMs: now, OwnerEffect: effectToken,
+			Division: division, Population: lease, OwnerGID: gid, OwnerName: c.Name, CreatedMs: now,
 			Program: skillobject.Program{SkillID: skill.ID, DurationMs: trap.DurationMs, ScanMs: enterworld.CombatTrapScanMs,
 				Radius: trap.TriggerRadius, Combat: true, Hidden: trap.Hidden, OwnerDistance: trap.OwnerDistance, LinkGroup: trap.LinkGroup},
 			Spawn: wire.SkillObjectSpawn{Region: at.RegionID, X: float32(at.X), Y: float32(at.Y), Z: float32(at.Z), Heading: at.Angle},
@@ -76,7 +72,7 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 		}
 		// lnks' board word shows the live trap on the planter's buff board.
 		var installed bool
-		effects, installed = rt.commitCharacterEffect(division, c, skill, effectToken, statuseffect.StateActive, false, EffectPresentation{Phase: 1}, now)
+		effects, installed = rt.commitCharacterEffect(division, c, skill, object.OwnerEffect, statuseffect.StateActive, false, EffectPresentation{Phase: 1}, now)
 		if !installed {
 			rt.SkillObjects.Remove(object.Spawn.GID)
 			return false
@@ -143,13 +139,14 @@ func (rt *Runtime) retireCombatTrapEffect(division string, c *enterworld.Charact
 ================
 combatTrapOwnerNear
 
-lnks' second word: the planter must stay within this planar distance.
+lnks' second word bounds the full 3D separation (5849F1..584A08).
+NativeActorDistance preserves the float stores in 430BA0/405270/405250.
 ================
 */
 func combatTrapOwnerNear(object skillobject.Object, owner simulation.Spawn) bool {
-	from := worldgeom.RegionXZ{RegionID: object.Spawn.Region, X: float64(object.Spawn.X), Z: float64(object.Spawn.Z)}
-	to := worldgeom.RegionXZ{RegionID: owner.RegionID, X: owner.X, Z: owner.Z}
-	return worldgeom.SamePlane(from.RegionID, to.RegionID) && worldgeom.Distance(from, to) <= float64(object.Program.OwnerDistance)
+	from := monster.Pose{RegionID: object.Spawn.Region, X: float64(object.Spawn.X), Y: float64(object.Spawn.Y), Z: float64(object.Spawn.Z)}
+	to := monster.Pose{RegionID: owner.RegionID, X: owner.X, Y: owner.Y, Z: owner.Z}
+	return monster.NativeActorDistance(from, to) <= float32(object.Program.OwnerDistance)
 }
 
 /*
@@ -263,17 +260,16 @@ func (rt *Runtime) explodeCombatTrap(object skillobject.Object, c, snapshot *ent
 		after = append(after, rt.monsterImpactAbnormalFrames(object.Division, gid, impacts)...)
 		rt.commitSkillHostility(object.Division, owner, gid, strike, impacts, now)
 	}
-	// A planted object has no casting motion: like a linked pulse (59B220),
-	// the explosion is a B3C6 result batch credited to its planter, which the
-	// client presents at once, damage text included, without an action bracket.
-	success := wire.SkillPulseFrame(owner, skill.ID, targets)
+	// 59B2A0 sends the trap identity, not its planter. Scope publication
+	// keeps the object available until this result has been consumed.
+	success := wire.SkillTrapResultsFrame(object.Spawn.GID, targets)
 	public := append([]wire.Frame{success}, after...)
 	public = append(public, rt.groundReferences(drops)...)
 	for _, drop := range drops {
 		public = append(public, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
 	}
 	public = append(public, settlements.public...)
-	out := []simulation.DivisionFrames{{DivisionID: object.Division, SourceGID: owner, Frames: simFrames(public)}}
+	out := []simulation.DivisionFrames{{DivisionID: object.Division, SourceGID: object.Spawn.GID, Frames: simFrames(public)}}
 	private := append(wire.ProgressionPrivateFrames(progression), settlements.otherPublic...)
 	if len(private) > 0 {
 		out = append(out, simulation.DivisionFrames{DivisionID: object.Division, OnlyCharacterID: c.ID, Frames: simFrames(private)})

@@ -2,6 +2,11 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/foundation/gameplay/combat-result.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
+			"functions": [ "callback:skillPulse:1" ]
+		},
+		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": ["callback:createGameplay:3"]

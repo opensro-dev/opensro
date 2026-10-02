@@ -27,3 +27,16 @@ func TestSkillPulseNativeLayout(t *testing.T) {
 		t.Fatalf("pulse %04x %x; want %x", frame.Opcode, frame.Payload, want)
 	}
 }
+
+/*
+================
+TestSkillTrapResultsNativeLayout
+================
+*/
+func TestSkillTrapResultsNativeLayout(t *testing.T) {
+	frame := SkillTrapResultsFrame(1, []SkillAreaTarget{{GID: 2, Impacts: []SkillCastTargetImpact{{ResultFlags: 1, Damage: 25}}}})
+	want := []byte{3, 1, 0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 1, 25, 0, 0, 0, 0, 0, 0}
+	if frame.Opcode != OpSkillPulse || !bytes.Equal(frame.Payload, want) {
+		t.Fatalf("trap result %04x %x; want %x", frame.Opcode, frame.Payload, want)
+	}
+}

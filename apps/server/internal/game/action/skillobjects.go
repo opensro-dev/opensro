@@ -124,25 +124,54 @@ func (rt *Runtime) SkillObjectRows(division string, c *enterworld.Character, ent
 AdvanceSkillObjects
 
 Tick after ordinary action updates so death and travel retire the owner
-before a trap can dispatch a new capture. Publication follows all retirements.
+before a trap can dispatch a new capture. Each viewer receives spawn, result
+and retirement in one ordered batch, including first-tick detonations.
 ================
 */
 func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.SessionSnapshot) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
-	for _, object := range rt.SkillObjects.Snapshot() {
-		out = append(out, rt.advanceSkillObject(object, nowMs)...)
+	before := rt.SkillObjects.Snapshot()
+	var results []simulation.DivisionFrames
+	for _, object := range before {
+		for _, batch := range rt.advanceSkillObject(object, nowMs) {
+			if batch.SourceGID == object.Spawn.GID {
+				results = append(results, batch)
+			} else {
+				out = append(out, batch)
+			}
+		}
 	}
-	objects := rt.SkillObjects.Snapshot()
+	after := rt.SkillObjects.Snapshot()
 	for _, session := range sessions {
+		if session.PublishedObjects == nil {
+			continue
+		}
 		pose := session.World.LiveSpawnAt(nowMs)
-		frames := skillobject.ScopeFrames(objects, skillobject.Viewer{
+		viewer := skillobject.Viewer{
 			Division: session.DivisionID, Population: session.Population, Published: session.PublishedObjects,
 			CharacterGID: simulation.PlayerObjectID(session.CharacterID),
 			Position:     worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z},
-		})
+		}
+		frames := simFrames(skillobject.ScopeFrames(before, viewer))
+		// This is a prediction inside one reliable batch, not another scope
+		// cache. Transport commits all Scope changes only after admission.
+		published := make([]uint32, 0, len(before))
+		for _, object := range before {
+			if !skillobject.Visible(object, viewer) {
+				continue
+			}
+			published = append(published, object.Spawn.GID)
+			for _, batch := range results {
+				if batch.DivisionID == object.Division && batch.SourceGID == object.Spawn.GID {
+					frames = append(frames, batch.Frames...)
+				}
+			}
+		}
+		viewer.Published = published
+		frames = append(frames, simFrames(skillobject.ScopeFrames(after, viewer))...)
 		if len(frames) > 0 {
 			out = append(out, simulation.DivisionFrames{DivisionID: session.DivisionID,
-				OnlyCharacterID: session.CharacterID, Frames: simFrames(frames)})
+				OnlyCharacterID: session.CharacterID, Frames: frames})
 		}
 	}
 	return out

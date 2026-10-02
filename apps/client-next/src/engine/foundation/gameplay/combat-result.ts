@@ -16,6 +16,7 @@ const RESULT_TARGETS = 1;
 const RESULT_CORRECTION = 2;
 const RESULT_TRAVEL = 8;
 const PULSE_RESULTS = 2;
+const TRAP_RESULTS = 3;
 
 /*
 ================
@@ -161,18 +162,28 @@ export function castPhase( payload: Uint8Array, offset: number ) {
 skillPulse
 
 7757CB reads mode 2, caster and skill before a bare result batch. Other B3C6
-modes have different contracts and cannot be interpreted as linked attacks.
+mode 3 reads only a trap GID and gets the skill and position from its object.
+Both modes validate the entire batch before the combat owner changes HP.
 ================
 */
-export function skillPulse( payload: Uint8Array ) {
+export function skillPulse(
+	payload: Uint8Array,
+	trap: ( gid: number ) => { skill: number; position: Pose; } | undefined = () => undefined
+) {
 	const reader = resultReader( payload, 0 );
-	if ( reader.u8() !== PULSE_RESULTS ) return null;
-	const caster = reader.u32(), skill = reader.u32();
+	const mode = reader.u8();
+	if ( mode !== PULSE_RESULTS && mode !== TRAP_RESULTS ) return null;
+	const caster = reader.u32();
+	const object = mode === TRAP_RESULTS ? trap( caster ) : undefined;
+	// 7756D0 discards an unknown trap's tail without applying its results.
+	if ( mode === TRAP_RESULTS && !object ) return null;
+	const skill = object ? object.skill : reader.u32();
 	const batch = reader.batch();
 	reader.assertEnd();
 	return {
 		caster,
 		skill,
+		position: object?.position,
 		phase: {
 			target: batch.results[0]?.target ?? 0,
 			flags: RESULT_TARGETS,
