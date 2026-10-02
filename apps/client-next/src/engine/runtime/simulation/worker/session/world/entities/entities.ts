@@ -901,8 +901,15 @@ receive
 				if ( p.length < 4 ) {
 					throw new Error( "Truncated movement broadcast" );
 				}
-				const entity = entities.get( v.getUint32( 0, true ) );
-				if ( entity && entity.kind !== "local-player" && entity.appearanceState?.[0] !== 2 ) {
+				const source = entities.get( v.getUint32( 0, true ) );
+				// CCharactor_GetActiveMoverEntity (0x85E000): a rider's movement moves
+				// its mount, and the rider sits on it. The local player's own movement
+				// is the gameplay owner's, which drives its mount in presentation.
+				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
+				if (
+					entity && source?.kind !== "local-player" && entity.kind !== "local-player" &&
+					entity.appearanceState?.[0] !== 2
+				) {
 					const movementPath = motion.receive( p, entity, now );
 					apply( {
 						kind: "state",
@@ -937,7 +944,9 @@ receive
 				if ( p.length !== 20 ) {
 					throw new Error( "Invalid entity position" );
 				}
-				const gid = v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ), entity = entities.get( gid );
+				const gid = v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ), source = entities.get( gid );
+				// A rider's position belongs to its active mover, the mount (0x85E000).
+				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				// Source movement is advisory travel; LIFE-dead retires it.
 				// B2F5 remains admissible: present rebirth corrects before LIFE-alive.
 				if ( frame.opcode === 0x30e3 && entity?.appearanceState?.[0] === 2 ) return;

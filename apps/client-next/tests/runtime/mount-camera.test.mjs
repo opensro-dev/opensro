@@ -19,7 +19,7 @@ const { createCharacterPresentation } = await import(
 );
 
 const { createPresentationRandom } = await import( sourceFileUrl( "src/engine/runtime/random/random.ts" ).href );
-test("camera anchor follows admitted mount identity, authored height, despawn and dismount", () => {
+test("camera anchor rides the locally driven mount, falls back to the rider, and dismounts", () => {
 	let id = 0;
 	const jobs = new Map();
 	const encode = value => new TextEncoder().encode( JSON.stringify( value ) ).buffer;
@@ -99,13 +99,20 @@ test("camera anchor follows admitted mount identity, authored height, despawn an
 	};
 	for ( let i = 0; i < 30; i++ ) presenter.step( [ rider, mount ], gameplay, i / 60 );
 	assert.equal( presenter.error(), null );
+	// CCharactor_GetActiveMoverEntity (0x85E000): the local movement owner
+	// drives the mount, so the anchor is the local pose raised by the mount's
+	// authored height (2 + 40 - 13), not the mount row's stale spawn point.
 	assert.deepEqual( presenter.cameraTarget(), {
 		mounted: true,
 		height: 20,
-		pose: { regionId: 257, x: 10, y: 35, z: 20, angle: 0 }
+		pose: { regionId: 257, x: 1, y: 29, z: 3, angle: 0 }
 	} );
 	presenter.step( [ rider ], gameplay, 1 );
-	assert.equal( presenter.cameraTarget(), null, "missing mount must not invent a ground anchor" );
+	assert.deepEqual(
+		presenter.cameraTarget(),
+		{ mounted: false, height: 20, pose: gameplay.pose },
+		"a rider whose mount is absent is followed on foot, never lost"
+	);
 	presenter.step( [ { ...rider, mountedOn: undefined } ], gameplay, 2 );
 	assert.deepEqual( presenter.cameraTarget(), { mounted: false, height: 20, pose: gameplay.pose } );
 	presenter.reset();

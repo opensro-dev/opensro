@@ -658,9 +658,18 @@ step
 			else the entity row. Presentation draws from it via posePresentation.
 			================
 			*/
+			// CCharactor_GetActiveMoverEntity (0x85E000): while the local player
+			// rides, its movement owner moves the mount and the rider sits on it.
+			// The mount takes the local pose, samples and movement state; the
+			// server keeps one shared mover for both (cosride.go).
+			const localGid = gameplay?.pose ? gameplay.localGid : undefined;
+			const localMount = localGid === undefined ?
+				undefined :
+				entities.find( entity => entity.gid === localGid )?.mountedOn;
+			const localMover = ( gid: number ) => !!gameplay?.pose && (gid === gameplay.localGid || gid === localMount);
 			const logicalPose = ( entity: EntityState ): import("@/engine/contracts/gameplay").Pose =>
-				entity.gid === gameplay?.localGid && gameplay.pose ?
-					gameplay.pose :
+				localMover( entity.gid ) ?
+					gameplay!.pose! :
 					{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 			// Timed samples draw on the frame clock: the local player from its
 			// movement owner, every other character from its stepped path.
@@ -675,8 +684,9 @@ step
 					...(source.movementPath ? { to: source.movementPath.to } : {})
 				} );
 			};
-			for ( const entity of entities ) if ( entity.gid !== gameplay?.localGid ) sample( entity.gid, entity );
+			for ( const entity of entities ) if ( !localMover( entity.gid ) ) sample( entity.gid, entity );
 			if ( gameplay?.pose ) sample( gameplay.localGid, gameplay );
+			if ( gameplay?.pose && localMount !== undefined ) sample( localMount, gameplay );
 			posePresentation.samples( samples );
 			const result = resources.poll();
 			const skillObjectResult = result && SKILL_OBJECT_MANIFESTS.some( path => path === result.path );
@@ -1552,7 +1562,7 @@ soundContext
 			let drawnLocal: import("@/engine/contracts/gameplay").Pose | null = null;
 			const effectEntities = entities.map( entity => {
 				const local = entity.gid === gameplay?.localGid && !!gameplay.pose;
-				if ( !samples.has( entity.gid ) || !local && !entity.moving ) return entity;
+				if ( !samples.has( entity.gid ) || !localMover( entity.gid ) && !entity.moving ) return entity;
 				const drawn = posePresentation.pose( entity.gid, logicalPose( entity ), seconds );
 				if ( local ) {
 					drawnLocal = { ...gameplay!.pose!, regionId: drawn.regionId, x: drawn.x, y: drawn.y, z: drawn.z };
@@ -2297,7 +2307,7 @@ soundContext
 						resource.clips.includes( "deathloop" ) ?
 						"deathloop" :
 						"death";
-					let moving = (entity.gid === gameplay?.localGid ? gameplay.moving : entity.moving) ?? false;
+					let moving = (localMover( entity.gid ) ? gameplay!.moving : entity.moving) ?? false;
 					const statusMask = vitalsByGid.get( entity.gid )?.abnormal ?? 0;
 					const statusView = statusOwner.view( entity.gid, statusMask, entity.appearanceState?.[2] ?? 0 );
 					// 85C590 writes +0xB9 from the FZ bit with no hp test.
@@ -2306,7 +2316,7 @@ soundContext
 					if ( poseFrozen ) moving = false;
 					const requestedMoving = moving;
 					const movementRevision =
-						(entity.gid === gameplay?.localGid ? gameplay.movementRevision : entity.movementRevision) ?? 0;
+						(localMover( entity.gid ) ? gameplay!.movementRevision : entity.movementRevision) ?? 0;
 					if (
 						state.navigationHold &&
 						(state.navigationHold.revision !== movementRevision || dead || entity.mountedOn)
@@ -2356,7 +2366,7 @@ soundContext
 					const entryRate = movementEntryRate(
 						renderPose,
 						nativePose,
-						entity.gid === gameplay?.localGid ? gameplay.movementPath : entity.movementPath,
+						localMover( entity.gid ) ? gameplay!.movementPath : entity.movementPath,
 						state.actionRevision !== movementRevision
 					);
 					state.actionRevision = movementRevision;
@@ -2988,7 +2998,7 @@ soundContext
 					auxiliaryActors.set( entity.gid, children );
 				}
 				const alive = new Set<number>();
-				let moving = (entity.gid === gameplay?.localGid ? gameplay.moving : entity.moving) ?? false;
+				let moving = (localMover( entity.gid ) ? gameplay!.moving : entity.moving) ?? false;
 				const requested = entity.mountedOn !== undefined || entity.appearanceState?.[0] === 2 ||
 						castByActor.has( entity.gid ) ?
 					"stand" :
@@ -3048,17 +3058,20 @@ soundContext
 				const height = heights.get( catalog.get( local.refObjId )?.codename ?? "" );
 				const mount = local.mountedOn ? entitiesByGid.get( local.mountedOn ) : undefined;
 				const mountHeight = mount ? heights.get( catalog.get( mount.refObjId )?.codename ?? "" ) : undefined;
-				const rendered = next.get( mount?.gid ?? local.gid )?.pose;
-				if ( rendered && height !== undefined && (!local.mountedOn || mount && mountHeight !== undefined) ) {
+				// A rider whose mount has not spawned (yet) is drawn alone; follow it.
+				const riding = mount && mountHeight !== undefined && next.has( mount.gid ) ? mount : undefined;
+				const rendered = next.get( riding?.gid ?? local.gid )?.pose;
+				if ( rendered && height !== undefined ) {
 					cameraTarget = {
 						height,
-						mounted: !!mount,
+						mounted: !!riding,
 						pose: {
 							regionId: rendered.regionId,
 							x: rendered.x,
-							y: mount ? Math.fround( Math.fround( rendered.y + mountHeight! ) - 13 ) : rendered.y,
+							y: riding ? Math.fround( Math.fround( rendered.y + mountHeight! ) - 13 ) : rendered.y,
 							z: rendered.z,
-							angle: mount?.heading ?? gameplay.pose.angle
+							// The local mover drives the mount, so its heading is the mount's.
+							angle: gameplay.pose.angle
 						}
 					};
 				}
