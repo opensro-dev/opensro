@@ -1,5 +1,7 @@
 package statuseffect
 
+import "strings"
+
 // ReplacementDescriptor contains only native 59D870 inputs. It describes the
 // authored program, not an assertion that the entire skill is executable.
 // Presence flags distinguish an absent instruction from a present zero word.
@@ -95,6 +97,15 @@ func DecideReplacement(in ReplacementDescriptor, existing []ReplacementCandidate
 				}
 				continue
 			}
+			switch tierOrder(in, old) {
+			case 1:
+				return ReplacementDecision{Allowed: true, RetireIndex: index}
+			case -1:
+				// The casting-state bits are not reference counted (59DC00):
+				// the weaker tier's retirement cleared the shared bits, so the
+				// conflict check below cannot be relied on to refuse it.
+				return reject
+			}
 			if in.Lks2 || old.Lnks && row.Mode == 1 || in.Group == 0 || in.Group != old.Group {
 				continue
 			}
@@ -108,4 +119,51 @@ func DecideReplacement(in ReplacementDescriptor, existing []ReplacementCandidate
 		return reject
 	}
 	return accept
+}
+
+/*
+================
+tierOrder
+
+DELIBERATE DEVIATION from 59D870. Native replacement stays inside one skill
+group, so a higher tier of the same buff line (Life Turnover over Life
+Control, Earth Fence over Earth Barrier) is refused by their shared casting
+states while the lower tier lasts. The port lets the stronger tier replace
+the weaker one: same line (basic code minus its tier letter), the same
+casting states, and a later tier letter. A weaker tier over a stronger
+one is refused. Returns 1 to replace, -1 to refuse, 0 when unrelated.
+================
+*/
+func tierOrder(in, old ReplacementDescriptor) int {
+	if in.Group == 0 || in.Group == old.Group || in.PackedStates != old.PackedStates ||
+		in.Ovl2Present != old.Ovl2Present || in.Ovl2 != old.Ovl2 {
+		return 0
+	}
+	inLine, inTier, ok := buffTier(in.BasicCode)
+	oldLine, oldTier, oldOK := buffTier(old.BasicCode)
+	switch {
+	case !ok || !oldOK || inLine != oldLine:
+		return 0
+	case inTier > oldTier:
+		return 1
+	case inTier < oldTier:
+		return -1
+	}
+	return 0
+}
+
+/*
+================
+buffTier
+
+Split a basic code such as SKILL_EU_WIZARD_MENTALA_DAMAGEUP_B into its line
+and its single-letter tier.
+================
+*/
+func buffTier(code string) (string, byte, bool) {
+	cut := strings.LastIndexByte(code, '_')
+	if cut <= 0 || len(code)-cut != 2 || code[cut+1] < 'A' || code[cut+1] > 'Z' {
+		return "", 0, false
+	}
+	return code[:cut], code[cut+1], true
 }
