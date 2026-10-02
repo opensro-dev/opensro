@@ -43,6 +43,14 @@ func (rt *Runtime) HandleCosCommand(
 	if command.Tag == wire.CosCommandFollowTag {
 		return rt.handleCosFollowCommand(divisionID, character, command.CosGid)
 	}
+	if command.Tag == wire.CosCommandAttackTag {
+		// 4D2200 serves the attack order for every owned COS: a mounted
+		// vehicle with the +0x210 capability carries its rider into battle
+		// (below), an attack pet fights on its own AI (petcombat.go).
+		if pet, ref := rt.commandCOSSnapshot(divisionID, character, command.CosGid); pet != nil && ref.TidWord>>11 == attackPetBand {
+			return rt.orderPetAttack(divisionID, character, pet, command.CosGid, command.TargetGid, rt.Now().UnixMilli())
+		}
+	}
 
 	snapshot, ref := rt.commandCOSSnapshot(divisionID, character, command.CosGid)
 	if snapshot == nil || (ref.TidWord>>11 != 1 && ref.TidWord>>11 != 2) {

@@ -51,6 +51,11 @@ type petSession struct {
 	pickupDeadline int64
 	pickupCommand  bool
 	public         []wire.Frame
+	// combat is the attack pet's BATTLE state (petcombat.go); nil follows.
+	combat *petCombatIntent
+	// others holds kill-settlement frames for other characters (a party's
+	// shared experience), drained with public by advancePets.
+	others []RecipientFrames
 }
 
 // BindPetSession admits a logical authenticated owner, not every character in
@@ -160,11 +165,15 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 			characterID = state.character.ID
 		}
 		var public []wire.Frame
+		var others []RecipientFrames
 		if state != nil {
-			public = state.public
-			state.public = nil
+			public, others = state.public, state.others
+			state.public, state.others = nil, nil
 		}
 		unlock()
+		for _, other := range others {
+			out = append(out, simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: other.CharacterID, Frames: simFrames(other.Frames)})
+		}
 		if len(public) > 0 && rt.PushDivisionPeerFrames != nil {
 			rt.PushDivisionPeerFrames(key.division, key.name, public)
 		}
@@ -205,12 +214,15 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		}
 	})
 	if snapshot == nil {
-		state.follower = nil
+		state.follower, state.combat = nil, nil
 		return nil
 	}
 	cos := snapshot.CompanionByGID(key.gid)
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
 	if !ok || snapshot.DeletePending || enterworld.CurrentHP(snapshot) == 0 || cos == nil || !cos.Summoned || cos.Mounted || cos.CurrentHP == 0 {
+		// An unsummoned, dead or mounted pet leaves BATTLE; a later summon
+		// must not resume an old fight.
+		state.combat = nil
 		if state.follower == nil {
 			return nil
 		}
@@ -240,6 +252,10 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		constraint = func(from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
 			return rt.ConstrainMovement(snapshot.Name, from, to)
 		}
+	}
+	if frames, handled := rt.advancePetCombat(petCombatStep{key: key, state: state, snapshot: snapshot,
+		pet: cos, ref: ref, run: run, constraint: constraint, nowMs: nowMs}); handled {
+		return frames
 	}
 	if state.pickup != nil {
 		q := *state.pickup

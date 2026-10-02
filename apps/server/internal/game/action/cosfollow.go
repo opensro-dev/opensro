@@ -35,6 +35,8 @@ func (rt *Runtime) handleCosFollowCommand(division string, c *enterworld.Charact
 	if state == nil || state.character != c || state.follower == nil || state.follower.GID() != gid {
 		return OpResult{}
 	}
+	// AI event 0x1A (CAIState_OnOwnerFollowOrder 559600): leave BATTLE.
+	state.combat = nil
 	result := OpResult{}
 	if state.pickup != nil {
 		result = finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
