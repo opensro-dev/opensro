@@ -49,7 +49,13 @@ The odar parser (588C3B / 588C52) ORs 1|2 into kinds 4, 8 and 0xC and 4|8
 into kinds 1, 2 and 3; other kinds keep their own bits.
 
 	ru   +0x250  5958E7  MP recovery rate modifier 0x21
-	hr   +0x24C  595825  HP recovery flat 0x0A, HP recovery rate 0x0B
+	hr   +0x24C  595825  hit rate 11: word 1 percent sum, then word 0 flat
+	                     (the item path's er/hr order; not HP recovery)
+
+The hr semantics come from the 594AC0 note that er/hr write parameters
+9/11, which the timed-item path already follows. 595825 is the label this
+comment carried before (when it read HP recovery 0x0A/0x0B); it has not been
+re-checked as the hr sub-site, so treat that one address as unverified.
 
 ==================
 */

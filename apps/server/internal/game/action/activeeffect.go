@@ -266,7 +266,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	}
 	var statusFrames []wire.Frame
 	// 594AC0 installs every block the row carries in one pass.
-	writes := buffModifierWrites(row.BuffModifiers)
+	writes := buffModifierWrites(row.BuffModifiers, itemProgramWritesAccuracy(row.TimedEffect))
 	itemWrites, err := rt.timedItemModifierWrites(divisionID, character, row.TimedEffect)
 	if err != nil {
 		return nil, false
@@ -509,11 +509,24 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 ================
 buffModifierWrites
 
-The dru (595A97) and odar (596004) part of 594AC0.
+The dru (595A97), odar (596004) and hr part of 594AC0.
+
+hr (+0x24C) writes parameter 11, the hit rate: word 1 enters the percent-sum
+channel, then word 0 the flat channel, the same order the timed item path
+already installs for the same tag (timeditemmodifier.go). Both parsers read
+hr from one row, so an item program that already files its Accuracy block
+owns the write and the skill-side copy is skipped (itemAccuracy): 594AC0
+installs the block once.
 ================
 */
-func buffModifierWrites(m enterworld.SkillBuffModifiers) []paramkeeper.Write {
+func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []paramkeeper.Write {
 	var writes []paramkeeper.Write
+	if m.Hr && !itemAccuracy {
+		writes = append(writes,
+			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.PercentSum, Value: float32(m.HrRate)},
+			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.Flat, Value: float32(m.HrFlat)},
+		)
+	}
 	if m.Dru {
 		for i, params := range [2][2]uint16{{0x80, 0x81}, {0x82, 0x83}} {
 			for _, param := range params {
