@@ -667,6 +667,19 @@ func (rt *Runtime) queueSkillCastClose(divisionID, characterName string, sourceG
 
 /*
 ==================
+queueDetachedCastClose
+
+The closing B505 of a released action that no longer owns its caster
+(self effects, planted traps). It routes through the caster's scope but is
+queued under a separate owner, so hasOpenSkillCast stays false.
+==================
+*/
+func (rt *Runtime) queueDetachedCastClose(divisionID, characterName string, sourceGID, token uint32, closeAtMs int64) {
+	rt.queueSkillFinalize(divisionID, "@close:"+characterName, sourceGID, closeAtMs, wire.SkillCastFinalizeFrame(token))
+}
+
+/*
+==================
 extendChainBracket
 
 extendChainBracket keeps the root deco alive through the stage that was
