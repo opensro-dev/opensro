@@ -57,3 +57,25 @@ func TestReleasedSelfEffectClosesItsBracket(t *testing.T) {
 		t.Fatal("the released cast never closed its bracket")
 	}
 }
+
+/*
+================
+TestDetachedCastCloseRetiresWithSession
+
+A free caster still owns its delayed presentation. Disconnect must remove
+that close while preserving another player's queued packet.
+================
+*/
+func TestDetachedCastCloseRetiresWithSession(t *testing.T) {
+	rt, _ := newTestRuntime(testCharacter(), testItems())
+	rt.queueDetachedCastClose(testDivision, "leaving", 11, 101, 50)
+	rt.queueDetachedCastClose(testDivision, "staying", 22, 202, 50)
+	if rt.hasOpenSkillCast(testDivision, "leaving") || len(rt.openSkillCastOwnerSnapshot()) != 0 {
+		t.Error("presentation-only close retained command ownership")
+	}
+	rt.clearSkillFinalizes(testDivision, "leaving")
+	got := rt.drainSkillFinalizes(50)
+	if len(got) != 1 || got[0].SourceGID != 22 {
+		t.Fatalf("disconnected session retained its close: %+v", got)
+	}
+}

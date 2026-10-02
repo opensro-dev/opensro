@@ -171,3 +171,39 @@ func TestFireTrapRetirement(t *testing.T) {
 		t.Fatal("trap or its buff survived its planter walking away")
 	}
 }
+
+/*
+================
+TestFireTrapLimitIsScopedToDivision
+
+Player GIDs may coincide across divisions. Replanting must neither count
+nor retire another division's trap, even when its link group also matches.
+================
+*/
+func TestFireTrapLimitIsScopedToDivision(t *testing.T) {
+	rt, clock, c, skill, gid := combatTrapFixture(t)
+	if !rt.Monsters.Defeat(testDivision, gid, clock.Now()) {
+		t.Fatal("could not clear the trigger monster")
+	}
+	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
+	foreign := rt.SkillObjects.Snapshot()[0]
+	foreign.Division = "other-division"
+	foreign, err := rt.SkillObjects.Create(foreign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(time.Duration(skill.CoolTimeMs+1) * time.Millisecond)
+	rt.drainSkillFinalizes(clock.NowMs())
+	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
+	objects := rt.SkillObjects.Snapshot()
+	if len(objects) != 2 {
+		t.Fatalf("replant crossed division boundary: %+v", objects)
+	}
+	found := false
+	for _, object := range objects {
+		found = found || object.Spawn.GID == foreign.Spawn.GID
+	}
+	if !found {
+		t.Fatal("another division's trap was retired")
+	}
+}

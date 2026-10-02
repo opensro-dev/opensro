@@ -112,7 +112,7 @@ func (rt *Runtime) retireExcessCombatTraps(division string, c *enterworld.Charac
 	owner := enterworld.ObjectIDForCharacter(c)
 	var live []skillobject.Object
 	for _, object := range rt.SkillObjects.Snapshot() {
-		if object.OwnerGID == owner && object.Program.Combat && object.Program.LinkGroup == trap.LinkGroup {
+		if object.Division == division && object.OwnerGID == owner && object.Program.Combat && object.Program.LinkGroup == trap.LinkGroup {
 			live = append(live, object)
 		}
 	}

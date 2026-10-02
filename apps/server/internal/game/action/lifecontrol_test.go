@@ -111,14 +111,14 @@ func TestLifeControlTradesMaximumHPForMagicalDamage(t *testing.T) {
 
 /*
 ================
-TestLifeTurnoverReplacesLifeControl
+TestLifeTurnoverPreservesNativeGroupConflict
 
-The deliberate tier deviation through the production owner: Life Turnover
-cast over an active Life Control retires it and installs itself, while a
-Life Control cast over Life Turnover is refused.
+Different skill groups do not replace each other merely because their
+names end in successive letters. Shared casting states retain the native
+conflict until the old effect ends.
 ================
 */
-func TestLifeTurnoverReplacesLifeControl(t *testing.T) {
+func TestLifeTurnoverPreservesNativeGroupConflict(t *testing.T) {
 	rt, clock, c, _ := newCombatTestRuntime(t, 1000000)
 	control := shippedOffense(t, "SKILL_EU_WIZARD_MENTALA_DAMAGEUP_A_01")
 	turnover := shippedOffense(t, "SKILL_EU_WIZARD_MENTALA_DAMAGEUP_B_01")
@@ -159,11 +159,8 @@ func TestLifeTurnoverReplacesLifeControl(t *testing.T) {
 	if !cast(control) || len(active()) != 1 || active()[0] != control.ID {
 		t.Fatalf("Life Control not installed: %v", active())
 	}
-	if !cast(turnover) || len(active()) != 1 || active()[0] != turnover.ID {
-		t.Fatalf("Life Turnover did not replace Life Control: %v", active())
-	}
-	cast(control)
-	if ids := active(); len(ids) != 1 || ids[0] != turnover.ID {
-		t.Fatalf("Life Control replaced the stronger Life Turnover: %v", ids)
+	cast(turnover)
+	if ids := active(); len(ids) != 1 || ids[0] != control.ID {
+		t.Fatalf("Life Turnover bypassed the native group conflict: %v", ids)
 	}
 }

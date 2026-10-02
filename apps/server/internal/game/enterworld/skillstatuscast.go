@@ -17,10 +17,9 @@ import "opensro.online/server/internal/game/abnormal"
 
 const (
 	// tagStatusThreat is tant, authored on every damage-free status cast.
-	// It has tnt2's two-word shape (flat, percent): the v1.150 rows carry
-	// percent 0 and a flat word that grows with the skill level (155 at
-	// Root 1, 2503 at Root 8). Without the research corpus at hand the port
-	// infers tnt2 semantics; a zero-damage record adds the flat word alone.
+	// 58914D binds +3C8; 590402..590463 applies its percentage, then
+	// 5904CF adds its flat word. It takes precedence over tnt2 (+3CC).
+	// Shipped status casts author zero percent, leaving only the flat word.
 	tagStatusThreat = 0x74616e74
 
 	// statusCastSelect is the hostile character mask (efr +0x14) shared by
