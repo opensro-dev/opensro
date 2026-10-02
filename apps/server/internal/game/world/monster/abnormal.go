@@ -8,7 +8,10 @@ abnormal.go - monster abnormal-mask views
 
 package monster
 
-import "opensro.online/server/internal/game/paramkeeper"
+import (
+	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/paramkeeper"
+)
 
 // AbnormalMask is the actor's published mask (block+04).
 func (i Instance) AbnormalMask() uint32 {
@@ -22,6 +25,25 @@ func (i Instance) AbnormalMask() uint32 {
 // (mask C1) or stun (4000) refuse every new movement leg.
 func (i Instance) MovementBlocked() bool {
 	return i.AbnormalMask()&(0xc1|0x4000) != 0
+}
+
+/*
+================
+Fears
+
+Fears reports an active Fear installed by gid. The v1.150 client describes
+the status as "You cannot select or attack the target you fear for a fixed
+time" (DE_UIIT_MSG_STATE_SKILL_CURSING_FEAR). 4A4BD0 only queues the
+abandon event; without the AI selection disassembly at hand, the port
+infers the rule from that text and applies it to every target selection.
+================
+*/
+func (i Instance) Fears(gid uint32) bool {
+	if i.Abnormal == nil || gid == 0 {
+		return false
+	}
+	slot := i.Abnormal.Slots[abnormal.Fear]
+	return slot.Active && slot.SourceGID == gid
 }
 
 func (i Instance) effectiveSpeed(param uint16, base float64) float64 {

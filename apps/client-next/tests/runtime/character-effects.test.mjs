@@ -1409,3 +1409,78 @@ test("Tomb Stone projectiles capture live local target at launch, never its spaw
 	assert.equal( entities[1].x, 755, "effect sampling must not mutate the entity owner" );
 	effects.dispose();
 });
+test("AT_TARGET_F shot stages anchor on the target exactly like AT_TARGET", () => {
+	const born = {};
+	for ( const action of [ "AT_TARGET", "AT_TARGET_F" ] ) {
+		let id = 0;
+		const jobs = new Map(),
+			effects = createCharacterEffects(
+				{
+					available: () => 4,
+					request( url, limit, decode ) {
+						jobs.set(
+							++id,
+							decode === "effects" ?
+								{
+									kind: "effects",
+									catalog: {
+										"1": {
+											clips: [ "attack1" ],
+											stages: [ {
+												resource: "hit.efp",
+												damageEvent: false,
+												startEvent: 1,
+												action,
+												move: "MOV_NONE",
+												bone: null,
+												offset: [ 0, 0, 0 ],
+												targetBone: null,
+												targetOffset: [ 0, 0, 0 ],
+												life: 0,
+												sound: null,
+												count: 1,
+												scripts: []
+											} ]
+										}
+									}
+								} :
+								{
+									kind: "bytes",
+									buffer: encode( { format: "sro-skill-stage-models", models: {} } ).buffer
+								}
+						);
+						return id;
+					},
+					take( id ) {
+						const result = jobs.get( id );
+						jobs.delete( id );
+						return result;
+					},
+					cancel( id ) {
+						jobs.delete( id );
+					}
+				},
+				"http://localhost",
+				() => {},
+				createPresentationRandom( 1 )
+			);
+		const caster = { gid: 1, refObjId: 1, regionId: 257, x: 0, y: 0, z: 0, heading: 0 },
+			target = { gid: 2, refObjId: 1, regionId: 257, x: 40, y: 5, z: 30, heading: 0 },
+			gameplay = { casts: [ { token: 1, caster: 1, target: 2, skill: 1 } ], localGid: 1 };
+		const step = time =>
+			effects.step( [ caster, target ], gameplay, time, () => true, () => 0.5, [ {
+				cast: gameplay.casts[0],
+				phase: "SHOT",
+				event: 1,
+				at: time
+			} ] );
+		let actors = [];
+		for ( const time of [ 0, 0.1, 0.2, 0.3 ] ) actors = step( time );
+		assert.equal( effects.error(), null, `${action}: ${effects.error()}` );
+		assert.equal( actors.length, 1, `${action} produced no effect` );
+		born[action] = actors[0].pose;
+		effects.dispose();
+	}
+	assert.deepEqual( born.AT_TARGET_F, born.AT_TARGET );
+	assert.equal( born.AT_TARGET_F.x, 40 );
+});

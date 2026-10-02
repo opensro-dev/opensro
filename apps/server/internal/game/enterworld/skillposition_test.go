@@ -1,9 +1,25 @@
+/*
+===========================================================================
+
+skillposition_test.go - ground-travel program admission
+
+===========================================================================
+*/
+
 package enterworld
 
 import "testing"
 
+/*
+================
+TestPositionProgramFailsClosed
+
+tele and tel2 with caster getv modifiers admit; any other instruction,
+range or envelope refuses.
+================
+*/
 func TestPositionProgramFailsClosed(t *testing.T) {
-	for _, mode := range []string{"tele", "extra", "tel2", "negative-range", "zero-range", "linked", "casting", "hp-cost"} {
+	for _, mode := range []string{"tele", "extra", "tel2", "getv", "unknown-getv", "negative-range", "zero-range", "linked", "casting", "hp-cost"} {
 		f := make([]string, 118)
 		for i := range f {
 			f[i] = "0"
@@ -19,6 +35,10 @@ func TestPositionProgramFailsClosed(t *testing.T) {
 			f[73] = "10"
 		case "tel2":
 			f[69] = "1952803890"
+		case "getv": // WIMD only adjusts the prepared cost
+			f[72], f[73] = "1734702198", "1464421700"
+		case "unknown-getv":
+			f[72], f[73] = "1734702198", "1"
 		case "negative-range":
 			f[71] = "-1"
 		case "zero-range":
@@ -31,7 +51,7 @@ func TestPositionProgramFailsClosed(t *testing.T) {
 			r.Consumption.HP = 1
 		}
 		r.PositionEffect = decodeSkillPosition(f, r)
-		if r.PositionEffect.Pinned != (mode == "tele") {
+		if r.PositionEffect.Pinned != (mode == "tele" || mode == "tel2" || mode == "getv") {
 			t.Fatalf("%s %+v", mode, r.PositionEffect)
 		}
 		if compactSkill(r).value().PositionEffect != r.PositionEffect {

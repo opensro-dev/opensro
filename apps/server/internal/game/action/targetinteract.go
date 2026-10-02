@@ -202,6 +202,16 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 					return rt.acceptWall(divisionID, character, snapshot, cast, skill)
 				}
 
+				if skill.StatusCast && !skill.TargetRequired {
+					result, _ := rt.acceptUntargetedStatusCast(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
+					return result
+				}
+
+				if skill.CombatTrap.Pinned {
+					result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
+					return result
+				}
+
 				return rt.beginOffensiveSkill(divisionID, character, snapshot, cast)
 			}
 		}

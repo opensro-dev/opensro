@@ -925,7 +925,7 @@ func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPl
 	bestDistance := sightRange
 	found := false
 	for _, player := range divisionPlayers {
-		if !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) {
+		if actor.Fears(player.Gid) || !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) {
 			continue
 		}
 		d := planarDistanceSpawn(player.Pose, poseToSpawn(from))
@@ -947,7 +947,8 @@ func playerByGid(divisionPlayers []playerPose, gid uint32) (playerPose, bool) {
 
 func eligiblePlayerByGid(actor monster.Instance, players []playerPose, gid uint32) (playerPose, bool) {
 	player, exists := playerByGid(players, gid)
-	return player, exists && monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus)
+	return player, exists && !actor.Fears(gid) &&
+		monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus)
 }
 
 func planarDistance(a, b monster.Pose) float64 {

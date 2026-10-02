@@ -41,10 +41,13 @@ type Stats struct {
 	StealthStrike                                                            bool // command issued in body mode 6: hit flag 8 (58EDD7)
 	// Native B2..B5 final lane factors. Zero is the native no-modifier sentinel.
 	PhysicalOutgoing, MagicalOutgoing, PhysicalIncoming, MagicalIncoming float32
-	masteries                                                            []domain.CharacterMastery       // private copied snapshot; never aliases live authority
-	MotionState                                                          uint8                           // live authority snapshot; native state 8 is knocked down
-	AbnormalMask                                                         uint32                          // character +0xD34, the published abnormal mask; atca 58F52F tests it
-	SkillParameters                                                      enterworld.SkillParameterValues // learned native dictionary; not displayed stats
+	// Native AE..B1 received-damage factors by lane and attack kind (odar,
+	// dara), the defender's counterpart of 80..83. Zero means no modifier.
+	PhysicalBasicTaken, PhysicalSkillTaken, MagicalBasicTaken, MagicalSkillTaken float32
+	masteries                                                                    []domain.CharacterMastery       // private copied snapshot; never aliases live authority
+	MotionState                                                                  uint8                           // live authority snapshot; native state 8 is knocked down
+	AbnormalMask                                                                 uint32                          // character +0xD34, the published abnormal mask; atca 58F52F tests it
+	SkillParameters                                                              enterworld.SkillParameterValues // learned native dictionary; not displayed stats
 	// StatusResistance is the learned status-resistance buckets real fills,
 	// indexed like abnormal.Source.Resist (59DE50).
 	StatusResistance [17]abnormal.Resistance

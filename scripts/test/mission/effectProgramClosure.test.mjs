@@ -131,3 +131,17 @@ test("skillaniset2 Service=0 authoring rows never cross into runtime records", a
     );
   }
 });
+
+test("stationary skill objects authored as EFP resources reach the program catalog", async () => {
+  const [catalog, manifest] = await Promise.all([
+    readPublishedAssetJson(EFFECT_PROGRAMS_PATH),
+    readPublishedAssetJson("/assets/skillfx/manifest.json")
+  ]);
+  const effects = [...new Set(Object.values(manifest.objects ?? {})
+    .filter((resource) => resource.kind === "effect")
+    .map((resource) => normalizeEffectPath(resource.path)))].sort();
+  assert.ok(effects.includes("skill/europe/wizard_fire_trap_creation.efp"), "Fire Trap object resource not scanned");
+  for (const effectPath of effects) {
+    assert.ok(catalogResolves(effectPath, catalog), `${effectPath} skill object has no GPU program`);
+  }
+});

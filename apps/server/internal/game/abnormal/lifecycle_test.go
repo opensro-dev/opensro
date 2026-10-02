@@ -136,3 +136,32 @@ func TestHitRetirementUsesSeparateNativeConditions(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestSlotAdmittedAfterTickInstantDoesNotExpire
+
+A prepared release inside the world tick admits with the registry clock,
+a few milliseconds after the instant the same tick then updates with.
+================
+*/
+func TestSlotAdmittedAfterTickInstantDoesNotExpire(t *testing.T) {
+	var block Block
+	owner := &fakeOwner{alive: true, monster: true, block: &block}
+	block.Apply(owner, Record{Status: Root, Grade: 1, DurationMs: 10000, SourceGID: 9}, 1005)
+	owner.now = 1000
+	block.Update(owner, owner.now)
+	if !block.Has(Root) {
+		t.Fatal("a slot admitted after the tick instant expired in that tick")
+	}
+	owner.now = 11005
+	block.Update(owner, owner.now)
+	if !block.Has(Root) {
+		t.Fatal("expired at equality")
+	}
+	owner.now++
+	block.Update(owner, owner.now)
+	if block.Has(Root) {
+		t.Fatal("did not expire after its duration")
+	}
+}

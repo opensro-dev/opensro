@@ -203,7 +203,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	actionLifecycleMs, actionLifecyclePinned := skill.ActionLifecycleMs()
-	if !known || ((!skill.CombatPinned || !skill.Attack.Present) && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only) ||
+	if !known || ((!skill.CombatPinned || !skill.Attack.Present) && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only && !skill.StatusCast) ||
 		!actionLifecyclePinned || actionLifecycleMs == 0 && !skill.PositionEffect.Charge ||
 		!skill.TargetRequired || (!basic && !advanced) {
 		return OpResult{}, skillCastRefused
@@ -663,6 +663,19 @@ func (rt *Runtime) queueSkillCastClose(divisionID, characterName string, sourceG
 		chainBracket:  skill.ChainNext != 0,
 	})
 	rt.pendingSkillFinalizesMu.Unlock()
+}
+
+/*
+==================
+queueDetachedCastClose
+
+The closing B505 of a released action that no longer owns its caster
+(self effects, planted traps). It routes through the caster's scope but is
+queued under a separate owner, so hasOpenSkillCast stays false.
+==================
+*/
+func (rt *Runtime) queueDetachedCastClose(divisionID, characterName string, sourceGID, token uint32, closeAtMs int64) {
+	rt.queueSkillFinalize(divisionID, "@close:"+characterName, sourceGID, closeAtMs, wire.SkillCastFinalizeFrame(token))
 }
 
 /*

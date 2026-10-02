@@ -104,7 +104,7 @@ func (rt *Runtime) SkillObjectRows(division string, c *enterworld.Character, ent
 	if !present {
 		return nil
 	}
-	viewer := skillobject.Viewer{Division: division, Population: lease, Position: worldgeom.RegionXZ{
+	viewer := skillobject.Viewer{Division: division, Population: lease, CharacterGID: enterworld.ObjectIDForCharacter(c), Position: worldgeom.RegionXZ{
 		RegionID: uint16(entry.StartProfile.RegionID), X: entry.StartProfile.X, Z: entry.StartProfile.Z,
 	}}
 	var rows []enterworld.Packet
@@ -137,7 +137,8 @@ func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.Sessio
 		pose := session.World.LiveSpawnAt(nowMs)
 		frames := skillobject.ScopeFrames(objects, skillobject.Viewer{
 			Division: session.DivisionID, Population: session.Population, Published: session.PublishedObjects,
-			Position: worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z},
+			CharacterGID: simulation.PlayerObjectID(session.CharacterID),
+			Position:     worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z},
 		})
 		if len(frames) > 0 {
 			out = append(out, simulation.DivisionFrames{DivisionID: session.DivisionID,
@@ -181,7 +182,21 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 				Region: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z})
 		}
 	}
+	if object.Program.Combat && ownerPresent {
+		ownerPresent = combatTrapOwnerNear(object, rt.liveSpawn(simulation.WorldKey(object.Division, object.OwnerName), snapshot, nowMs))
+	}
 	_, targetGID, retired := rt.SkillObjects.Scan(object.Spawn.GID, nowMs, ownerPresent, targets)
+	if retired && object.Program.Combat {
+		rt.retireCombatTrapEffect(object.Division, c, object, nowMs)
+	}
+	if retired && targetGID != 0 && object.Program.Combat {
+		target, exists := rt.Monsters.GetInPopulation(object.Division, lease, targetGID)
+		skill, known := rt.deps.SkillData().SkillByID(object.Program.SkillID)
+		if !exists || target.CurrentHP == 0 || !known || !skill.CombatTrap.Pinned {
+			return nil
+		}
+		return rt.explodeCombatTrap(object, c, snapshot, skill, target, lease, nowMs)
+	}
 	if !retired || targetGID == 0 || rt.CaptureQuestTrap == nil {
 		return nil
 	}

@@ -93,6 +93,7 @@ func parseSkillOffense(fields []string, row *SkillRow) {
 	noteParameterIndex(fields, row)
 	row.OffenseRefusal = decodeSkillOffense(fields, row)
 	row.CastGate.QuestTrap = compileQuestTrap(fields)
+	row.CombatTrap = compileCombatTrap(fields, *row)
 }
 
 /*
@@ -305,6 +306,17 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 	row.Consumption = SkillConsumption{uint32(values[0]), uint32(values[1]), uint16(values[2]), uint16(values[3]), true}
 	if taunt := compileSkillTaunt(fields, *row); taunt.Only {
 		row.Threat = taunt
+		return ""
+	}
+	if threat, ok := compileSkillStatusCast(fields, *row); ok {
+		// Retail initializes the generated-result count to one even without
+		// att or cm; the single record carries the status roll.
+		row.StatusCast = true
+		row.Threat = threat
+		row.OffensiveArea, row.Threat.Area = threat.Area, SkillOffensiveArea{}
+		row.Attack.ImpactCount = 1
+		row.OffensiveStagePinned = true
+		row.DirectOffensePinned = true
 		return ""
 	}
 	// Admission is by executable shape, never a hand-maintained skill-name list.
