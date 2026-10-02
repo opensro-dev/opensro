@@ -212,6 +212,10 @@ type SkillPassiveParameters struct {
 	// Real is real {status mask, flat, grade} (+0x300): 59DF20 files the flat
 	// under the grade in each masked status's resistance bucket.
 	Real SkillPassiveReal
+	// Br is br {lane mask, value}: 594AC0 (0x595DFD..0x595EFA) adds value to
+	// the flat block-rate parameter of each lane the normalized mask selects;
+	// see combat.BlockRateWrites.
+	Br SkillPassiveBlockRate
 }
 
 /*
@@ -234,11 +238,37 @@ type SkillPassiveReal struct{ Mask, Flat, Grade uint32 }
 
 /*
 ================
+SkillPassiveBlockRate
+
+A passive block-rate addend. Mask is already normalized by the 587630 lane
+rule, the same form the timed br buff stores.
+================
+*/
+type SkillPassiveBlockRate struct{ Mask, Value uint32 }
+
+// tagPassiveBlockRate is br, the token the timed compiler knows as
+// tagTimedBlock; a passive row carries the same two words.
+const tagPassiveBlockRate = 0x6272
+
+// maxPassiveBlockRate is the admission ceiling for a br value. It is the
+// same percent bound the timed br compiler applies, so both parsers refuse
+// the same malformed rows; every shipped passive br is between 2 and 10.
+const maxPassiveBlockRate = 100
+
+/*
+================
 encodedPassiveParameters
 
 Native stores up to five three-argument setv blocks. Repeated keys overwrite
 in source order. reat, real and the reqi/reqn gate complete the resistance
-passives. Refuse the whole program if any operation lacks execution.
+passives; br is the block-rate passive (a duplicate br, a zero mask or a
+value above maxPassiveBlockRate is malformed). Refuse the whole program if
+any operation lacks execution.
+
+Any one consumed block pins the program: none of the cited installers for
+reat (595542..59568F), real (59DF20) or br (0x595DFD) reads a setv.
+Protection is reat + real + reqi and Blockade br + reqi; a program holding
+only its reqi gate has nothing to install and stays unpinned.
 ================
 */
 func encodedPassiveParameters(fields []string) SkillPassiveParameters {
@@ -279,12 +309,17 @@ func encodedPassiveParameters(fields []string) SkillPassiveParameters {
 				return SkillPassiveParameters{}
 			}
 			out.Real = SkillPassiveReal{Mask: op.Arguments[0], Flat: op.Arguments[1], Grade: op.Arguments[2]}
+		case tagPassiveBlockRate:
+			if out.Br.Mask != 0 || op.Arguments[0] == 0 || op.Arguments[1] > maxPassiveBlockRate {
+				return SkillPassiveParameters{}
+			}
+			out.Br = SkillPassiveBlockRate{Mask: normalizeLaneMask(op.Arguments[0]), Value: op.Arguments[1]}
 		case 0x72657169, 0x7265716e: // reqi/reqn: row.Reqi
 		default:
 			return SkillPassiveParameters{}
 		}
 	}
-	out.Pinned = count > 0
+	out.Pinned = count > 0 || out.Reat.Mask != 0 || out.Real.Mask != 0 || out.Br.Mask != 0
 	return out
 }
 

@@ -1,3 +1,17 @@
+/*
+===========================================================================
+
+passives.go - learned passive skills projected onto the keeper
+
+Each learned passive group's highest rank contributes its setv parameter
+values, keeper writes (reat, br, passive defense, passive cr) and status
+resistance buckets. A program declaring reqi is gated by the 59F0E0
+equipment walk; passive cr follows the equipped weapon kind instead.
+Nothing here is cached: Character.Snapshot is the only input.
+
+===========================================================================
+*/
+
 package combat
 
 import (
@@ -8,11 +22,18 @@ import (
 	"opensro.online/server/internal/game/paramkeeper"
 )
 
-// Invariant: each currently learned passive rank contributes at most once.
-// Equipment eligibility applies only when the program declares reqi. Character.Snapshot
-// is the single input owner (learning, equipment, teardown and restoration).
-// This pure projection stores no bonus, activation latch or invalidation cache.
-// Never sum executing-skill cr blocks or persist derived passive values.
+/*
+==================
+learnedPassives
+
+Invariant: each currently learned passive rank contributes at most once.
+Equipment eligibility applies only when the program declares reqi.
+Character.Snapshot is the single input owner (learning, equipment, teardown
+and restoration). This pure projection stores no bonus, activation latch or
+invalidation cache. Never sum executing-skill cr blocks or persist derived
+passive values.
+==================
+*/
 func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, items enterworld.ItemRefSource, weaponKind uint8) ([]paramkeeper.Write, enterworld.SkillParameterValues, error) {
 	if len(c.Skills) == 0 {
 		return nil, enterworld.SkillParameterValues{}, nil
@@ -60,6 +81,15 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 			for i := uint16(0); i < 6; i++ {
 				if p.Reat.Mask&(1<<i) != 0 {
 					writes = append(writes, paramkeeper.Write{Parameter: 0x91 + i, Channel: paramkeeper.Flat, Source: source, Value: float32(p.Reat.Value)})
+				}
+			}
+			// 594AC0 at 0x595DFD..0x595EFA: br raises the flat block rate of
+			// each lane its mask selects. BlockChance reads those lanes with no
+			// shield test of its own, so the reqi walk is the only gate.
+			if p.Br.Mask != 0 {
+				for _, w := range BlockRateWrites(p.Br.Mask, p.Br.Value) {
+					w.Source = source
+					writes = append(writes, w)
 				}
 			}
 		}
