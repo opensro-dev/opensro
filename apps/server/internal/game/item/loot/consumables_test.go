@@ -11,6 +11,8 @@ package loot
 import (
 	"encoding/json"
 	"errors"
+	"math/rand/v2"
+	"strings"
 	"testing"
 )
 
@@ -171,5 +173,47 @@ func TestCatalogRejectsDuplicateAssignmentAndInvalidProbability(t *testing.T) {
 	source.Classes[2][0][0] = -1
 	if _, err := compileConsumables(source); err == nil {
 		t.Fatal("negative probability accepted")
+	}
+}
+
+/*
+================
+TestRecoveryPotionDropRate
+
+BUG-005 asked whether recovery potions can drop at all. Each family's class
+row is a probability (0.1 is 10%): family 2, the recovery family, gives an
+ordinary kill about a 10% chance of an HP, MP or vigor potion before the level-gap
+admission. Measure it with the real catalogue and the native two-draw roll.
+================
+*/
+func TestRecoveryPotionDropRate(t *testing.T) {
+	const kills = 200000
+	prng := rand.New(rand.NewPCG(1, 2))
+	draw := func() (uint32, error) { return uint32(prng.IntN(32768)), nil }
+	for _, level := range []uint8{1, 10, 25, 45, 70} {
+		hp, mp, vigor := 0, 0, 0
+		for kill := 0; kill < kills; kill++ {
+			roll, ok := rollMillion(draw)
+			if !ok {
+				t.Fatal("million roll failed")
+			}
+			item, ok := SelectConsumable(2, level, roll, draw)
+			switch {
+			case !ok:
+			case strings.HasPrefix(item.Codename, "ITEM_ETC_HP_"):
+				hp++
+			case strings.HasPrefix(item.Codename, "ITEM_ETC_MP_"):
+				mp++
+			case strings.HasPrefix(item.Codename, "ITEM_ETC_ALL_"):
+				vigor++
+			default:
+				t.Fatalf("recovery family at level %d dropped %s", level, item.Codename)
+			}
+		}
+		rate := float64(hp+mp+vigor) / kills
+		if rate < 0.05 || rate > 0.12 || hp == 0 || mp == 0 {
+			t.Fatalf("level %d recovery rate %.4f (hp %d, mp %d, vigor %d), want 5-12%% with both HP and MP", level, rate, hp, mp, vigor)
+		}
+		t.Logf("level %d: recovery %.2f%% (hp %d, mp %d, vigor %d of %d kills)", level, rate*100, hp, mp, vigor, kills)
 	}
 }

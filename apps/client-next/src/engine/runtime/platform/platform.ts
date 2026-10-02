@@ -22,6 +22,7 @@ import { defaultInputOptions, inputOptions, virtualKey, type InputOptions } from
 import { sightMode, type SightMode } from "@/engine/foundation/rendering/camera-options";
 import { initialAudioOptions, audioOptions, type AudioOptions } from "@/engine/foundation/audio/options";
 import { cameraWheelDelta } from "@/engine/foundation/rendering/camera-wheel";
+import { createTouchCamera, type TouchCameraOutput } from "@/engine/foundation/rendering/touch-camera";
 import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
 import { createUiBridge } from "./ui/ui";
 import { createCursor } from "./ui/cursor";
@@ -306,12 +307,27 @@ transferText
 	} );
 	let uiPointer = false;
 	const timeMs = () => performance.timeOrigin + performance.now();
+	// Touch has no camera button: a one-finger drag orbits and a pinch zooms.
+	const touchCamera = createTouchCamera();
+	const touchInput = ( outputs: readonly TouchCameraOutput[] ) => {
+		for ( const output of outputs ) onInput( { ...output, timeMs: timeMs() } );
+	};
 	const pointer = ( event: PointerEvent ) => {
 		if ( uiPointer ) {
 			if ( event.type === "pointerup" ) uiPointer = false;
 			return;
 		}
 		const [x, y] = uiPoint( event );
+		if ( event.pointerType === "touch" ) {
+			touchInput(
+				event.type === "pointerup" ?
+					touchCamera.up( event.pointerId ) :
+					event.type === "pointerdown" ?
+					touchCamera.down( event.pointerId, x, y, bindings.mouseMode === 0 ? 2 : 1 ) :
+					touchCamera.move( event.pointerId, x, y, bindings.mouseMode === 0 ? 2 : 1 )
+			);
+			return;
+		}
 		onInput( {
 			kind: "pointer",
 			x,
@@ -359,7 +375,8 @@ transferText
 			onWorldClick( x / r.width, y / r.height, true, event.shiftKey );
 		}
 	}, { signal: lifetime.signal } );
-	canvas.addEventListener( "pointercancel", () => {
+	canvas.addEventListener( "pointercancel", event => {
+		if ( event.pointerType === "touch" ) touchCamera.up( event.pointerId );
 		uiPointer = false;
 		onInput( { kind: "release", timeMs: timeMs() } );
 	}, { signal: lifetime.signal } );

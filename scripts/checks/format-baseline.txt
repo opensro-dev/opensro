@@ -75,7 +75,6 @@ apps/client-next/src/engine/foundation/animation/random-idle.ts
 apps/client-next/src/engine/foundation/animation/scenery-emission.ts
 apps/client-next/src/engine/foundation/animation/skill-motion-resolve.ts
 apps/client-next/src/engine/foundation/animation/skill-motion.ts
-apps/client-next/src/engine/foundation/animation/sound-selectors.ts
 apps/client-next/src/engine/foundation/animation/status-presentation.ts
 apps/client-next/src/engine/foundation/assets/asset-budget.ts
 apps/client-next/src/engine/foundation/assets/image-budget.ts

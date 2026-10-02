@@ -166,6 +166,12 @@ import { experienceBar, EXPERIENCE_BAR, gaugeFill } from "@/engine/foundation/ui
 import { createRegionBanner } from "./hud/region-banner";
 import { regionBannerQuads } from "@/engine/foundation/ui/region-banner";
 import { buffTooltip } from "@/engine/foundation/ui/buff-tooltip";
+import {
+	masteryPractice,
+	PRACTICE_MASTERY,
+	PRACTICE_SKILL,
+	type PracticeRequest
+} from "@/engine/foundation/ui/practice-box";
 import { masteryTooltip } from "@/engine/foundation/ui/mastery-tooltip";
 import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
@@ -765,7 +771,7 @@ export function createUi(
 	];
 	const partyListingPurposes = partyPurposes.slice( 0, 4 );
 	let questPosition: readonly [number, number] = [ 0, 0 ], questDetailScroll = 0, questDetailMax = 0;
-	let skillConfirm = 0, questDetails = false;
+	let practice: PracticeRequest | null = null, questDetails = false;
 	let skillTab = 0, selectedMastery = 0, skillScroll = 0;
 	let selectedSkill = 0, skillPage = 0, hotbarPage = 0, trainingMode = false, clearHotbar = false;
 	let carriedShortcut: { id: string; x: number; y: number; } | null = null;
@@ -899,7 +905,7 @@ export function createUi(
 		blockOffset = 0;
 		if ( shopDialog || shopWarning ) closeShopDialog();
 		guildDialog = "";
-		skillConfirm = 0;
+		practice = null;
 		questDetails = false;
 		confirmDrop = "";
 		confirmAbandon = false;
@@ -1023,7 +1029,7 @@ export function createUi(
 		blockOffset = 0;
 		panel = "";
 		admittedWindows.clear();
-		skillConfirm = 0;
+		practice = null;
 		questDetails = false;
 		skillTab = 0;
 		selectedMastery = 0;
@@ -1536,7 +1542,7 @@ export function createUi(
 			return;
 		}
 		if ( withdrawal.confirming() ) return;
-		if ( skillConfirm && !id.startsWith( "skill-confirm-" ) ) return;
+		if ( practice && !id.startsWith( "skill-confirm-" ) ) return;
 		if ( confirmAbandon && !id.startsWith( "quest-abandon-" ) ) return;
 		const phase = view.session?.phase ?? "signed-out";
 		if ( npcPanel.event( { kind: "activate", id } ) ) {
@@ -2095,28 +2101,34 @@ export function createUi(
 			selectedQuest = idn;
 		} else if ( id === "quest-scroll-up" || id === "quest-scroll-down" ) {
 			questPage = Math.max( 0, questPage + (id.endsWith( "up" ) ? -1 : 1) );
-		} else if ( id.startsWith( "skill-learn:" ) ) skillConfirm = Number( id.slice( 12 ) );
-		else if ( id === "skill-confirm-cancel" ) skillConfirm = 0;
-		else if ( id === "skill-confirm-ok" ) {
-			const game = view.gameplay, row = game ? skillMetadataById( game, skillConfirm ) : undefined;
-			if (
-				row && game?.progression && !game.trainingPending &&
-				!skillTrainingReason( row, game.skills ?? [], game.skillCatalog ?? [], game.progression )
-			) sendGameplay( { kind: "skill-train", id: skillConfirm } );
-			skillConfirm = 0;
+		} else if ( id.startsWith( "skill-learn:" ) ) practice = { mode: PRACTICE_SKILL, id: Number( id.slice( 12 ) ) };
+		else if ( id === "skill-confirm-cancel" ) practice = null;
+		else if ( id === "skill-confirm-ok" && practice ) {
+			// 5DE690 re-checks the request before it sends either level-up.
+			const game = view.gameplay, costs = hud.data()?.masteryCosts;
+			if ( practice.mode === PRACTICE_MASTERY ) {
+				if (
+					game?.progression && costs && !game.trainingPending &&
+					!masteryTrainingReason( practice.id, game.progression, costs )
+				) sendGameplay( { kind: "mastery-train", id: practice.id } );
+			} else {
+				const row = game ? skillMetadataById( game, practice.id ) : undefined;
+				if (
+					row && game?.progression && !game.trainingPending &&
+					!skillTrainingReason( row, game.skills ?? [], game.skillCatalog ?? [], game.progression )
+				) sendGameplay( { kind: "skill-train", id: practice.id } );
+			}
+			practice = null;
 		} else if ( id === "quest-details-close" ) questDetails = false;
 		else if ( id === "quest-detail-up" || id === "quest-detail-down" ) {
 			questDetailScroll = Math.max(
 				0,
 				Math.min( questDetailMax, questDetailScroll + (id.endsWith( "up" ) ? -1 : 1) * (text.height() + 5) )
 			);
-		} else if ( id === "skill-train" ) sendGameplay( { kind: "skill-train", id: selectedSkill } );
-		else if ( id.startsWith( "mastery:" ) ) {
-			const idValue = Number( id.slice( 8 ) ), game = view.gameplay, costs = hud.data()?.masteryCosts;
-			if (
-				game?.progression && costs && !game.trainingPending &&
-				!masteryTrainingReason( idValue, game.progression, costs )
-			) sendGameplay( { kind: "mastery-train", id: idValue } );
+		} else if ( id.startsWith( "mastery:" ) ) {
+			// The board's level-up opens the practice box in its mastery face;
+			// nothing is sent until the box is confirmed.
+			practice = { mode: PRACTICE_MASTERY, id: Number( id.slice( 8 ) ) };
 		} else if ( id.startsWith( "skill:" ) ) selectedSkill = Number( id.slice( 6 ) );
 		else if ( id === "skills-next" ) skillPage++;
 		else if ( id === "skills-prev" ) skillPage = Math.max( 0, skillPage - 1 );
@@ -3241,8 +3253,8 @@ export function createUi(
 				}
 				return;
 			}
-			if ( event.kind === "key" && skillConfirm ) {
-				if ( event.code === "Escape" ) skillConfirm = 0;
+			if ( event.kind === "key" && practice ) {
+				if ( event.code === "Escape" ) practice = null;
 				else if ( event.code === "Enter" ) activate( "skill-confirm-ok" );
 				dirty = true;
 				return;
@@ -9064,8 +9076,9 @@ export function createUi(
 					controls.push( ...scroll.controls );
 					endWindow( admission );
 				}
-				if ( skillConfirm && panel === "Skills" && hudData ) {
-					const row = training.skill( skillConfirm ),
+				if ( practice && panel === "Skills" && hudData ) {
+					const mastery = practice.mode === PRACTICE_MASTERY,
+						row = mastery ? undefined : training.skill( practice.id ),
 						page = hudData.windows.ifskillpracticebox!,
 						px = Math.floor( (w - 320) / 2 ),
 						py = Math.floor( (h - 334) / 2 ),
@@ -9083,20 +9096,31 @@ export function createUi(
 							full
 						)
 					);
-					// 5DDF00 skill mode hides the mastery-only name and decoration. 5DE5F8
-					// initializes control 8's opaque fill; authored Color is only editor data.
+					// CIFSkillPracticeBox_SetMode (5DDF00): the skill face hides the
+					// mastery name and decoration; the mastery face hides the skill slot,
+					// name and level. 5DE5F8 initializes control 8's opaque fill;
+					// authored Color is only editor data.
+					const hidden = mastery ?
+						[
+							page.GDR_SKLPB_SLOT,
+							page.GDR_SKLPB_SKILLNAME,
+							page.GDR_SKLPB_SKILLLEV,
+							page.GDR_SKLPB_SKILLLEV_LV
+						] :
+						[ page.GDR_SKLPB_MASTERYNAME, page.GDR_SKLPB_MNDECO ];
 					for ( const node of authoredPaintOrder( page ) ) {
-						if (
-							node === page.GDR_SKLPB_MASTERYNAME || node === page.GDR_SKLPB_MNDECO ||
-							node.type === "CIFButton"
-						) continue;
+						if ( hidden.includes( node ) || node.type === "CIFButton" ) continue;
 						if ( node === page.GDR_SKLPB_FILL_COLOR ) {
 							rect( authoredRect( node, px, py ), [ 15 / 255, 15 / 255, 15 / 255, 1 ] );
 						} else authoredChrome( node, px, py );
 					}
 					quads.push(
 						...text.quads(
-							hudCopy( "UIIT_STT_CIRCULATION_PRACTICE_SKILL_WND" ),
+							hudCopy(
+								mastery ?
+									"UIIT_STT_CIRCULATION_PRACTICE_MASTERY_WND" :
+									"UIIT_STT_CIRCULATION_PRACTICE_SKILL_WND"
+							),
 							messageBox( w, h, 320, 334, [ px, py ] ).title,
 							full,
 							white,
@@ -9141,6 +9165,41 @@ export function createUi(
 								rect( authoredRect( page.GDR_SKLPB_SLOT!, px, py ), white, icon );
 							}
 						}
+					}
+					// 5DE040 mastery face: name, description, the next-level message and
+					// the current level's SP cost.
+					const record = mastery ? hudData.tooltipMasteries.get( practice.id ) : undefined,
+						level = mastery ?
+							game?.progression?.masteries.find( m => m.id === record?.id )?.level :
+							undefined,
+						next = level === undefined ? null : masteryPractice( level, hudData.masteryCosts );
+					if ( record && next ) {
+						const name = hudCopy( record.name ),
+							node = page.GDR_SKLPB_DESCRIPTION!,
+							dr = authoredRect( node, px, py );
+						quads.push(
+							...text.box(
+								hudCopy( record.description ),
+								[ dr[0], dr[1], dr[2] - 20, dr[3] ],
+								dr,
+								node.color,
+								{
+									fontIndex: node.fontIndex,
+									hAlign: node.hAlign
+								}
+							)
+						);
+						authoredText( page.GDR_SKLPB_MASTERYNAME!, px, py, name );
+						authoredText(
+							page.GDR_SKLPB_NEXTSTATEMSG!,
+							px,
+							py,
+							hudCopy( "UIIT_STT_SKILL_LEARN" ).replace( "%s", name ).replace(
+								"%d",
+								String( next.nextLevel )
+							)
+						);
+						authoredText( page.GDR_SKLPB_NEEDSP_AMOUNT!, px, py, String( next.cost ) );
 					}
 					for (
 						const [node, id] of [ [ page.GDR_SKLPB_BTN_PRACTICE!, "skill-confirm-ok" ], [
@@ -13360,7 +13419,7 @@ export function createUi(
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
 				if (
 					control && game && hudData && phase === "world" && !carriedShortcut && !carriedItem && !pressed &&
-					!skillConfirm
+					!practice
 				) {
 					/*
 					================
@@ -13468,7 +13527,7 @@ export function createUi(
 				}
 				if (
 					control && tooltip.length && phase === "world" && !carriedShortcut && !carriedItem && !pressed &&
-					!skillConfirm
+					!practice
 				) {
 					const bubble = tooltipBubble(
 						tooltip,

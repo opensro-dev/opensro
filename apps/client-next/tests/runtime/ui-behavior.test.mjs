@@ -3179,7 +3179,14 @@ test("skill training UI rechecks SP at confirmation, waits for authority, and ex
 		game.progression = { level: 10, skillPoints: 0, masteries: [ { id: 257, level: 0 } ] };
 		draw();
 		assert.equal( defined( output ).controls.find( c => c.id === "mastery:257" ).disabled, false );
+		// 5DE040's mastery face confirms first: the board's level-up sends nothing.
 		click( "mastery:257" );
+		assert.equal( commands.length, 0, "a mastery level-up waits for the practice box" );
+		assert.ok( defined( output ).controls.some( c => c.id === "skill-confirm-ok" ) );
+		click( "skill-confirm-cancel" );
+		assert.equal( commands.length, 0, "cancel sends nothing" );
+		click( "mastery:257" );
+		click( "skill-confirm-ok" );
 		assert.deepEqual( commands.pop(), { kind: "mastery-train", id: 257 } );
 		game.progression = { ...game.progression, masteries: [ { id: 257, level: 4 } ], skillPoints: 1 };
 		draw();
