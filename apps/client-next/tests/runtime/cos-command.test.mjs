@@ -16,7 +16,16 @@ import assert from "node:assert/strict";
 const cos = await import( "../../src/engine/foundation/ui/cos-command.ts" );
 
 const HORSE = { gid: 7, refObjId: 2191, band: 1, hp: 500, mp: 0, status: 0, dead: false };
-const HORSE_REF = { icon: "cos\\cos_c_horse1.ddj", maxHp: 983, rideable: false };
+const HORSE_REF = {
+	icon: "cos\\cos_c_horse1.ddj",
+	maxHp: 983,
+	rideable: false,
+	physicalDefence: 0,
+	magicalDefence: 0,
+	parry: 65,
+	hit: 65,
+	skills: []
+};
 const TRANSPORT = { gid: 8, refObjId: 3914, band: 2, hp: 100, mp: 0, status: 0, dead: false };
 const TRANSPORT_REF = { icon: "cos\\cos_t_dhorse3.ddj", maxHp: 87829, rideable: true };
 const PET = {
@@ -112,7 +121,7 @@ test("status chrome and gauges follow 6AA290 and 6A9C50", () => {
 	assert.deepEqual( cos.cosStatusChrome( 0 ).size, [ 44, 56 ] );
 	assert.equal( cos.cosStatusChrome( 4 ).showHp, false );
 	assert.deepEqual( cos.cosStatusRect( 1024, 1, 0 ), [ 1024 - 172 - 48, 2, 44, 56 ] );
-	assert.deepEqual( cos.cosStatusRatios( PET, { icon: "", maxHp: 200, rideable: false } ), { hp: 0.25, hgp: 0.25 } );
+	assert.deepEqual( cos.cosStatusRatios( PET, { ...HORSE_REF, maxHp: 200 } ), { hp: 0.25, hgp: 0.25 } );
 	assert.deepEqual( cos.cosStatusRatios( HORSE, undefined ), { hp: null, hgp: null } );
 });
 
@@ -143,11 +152,55 @@ test("info page texts use the native formats", () => {
 test("the presentation catalog rejects malformed rows", () => {
 	const references = cos.decodeCosReferences( {
 		format: "sro-cos-presentation",
-		rows: { 2191: [ "cos\\cos_c_horse1.ddj", 983, false ] }
+		rows: { 2191: [ "cos\\cos_c_horse1.ddj", 983, false, 0, 0, 65, 65, [] ] }
 	} );
 	assert.deepEqual( references.get( 2191 ), HORSE_REF );
 	assert.throws( () =>
 		cos.decodeCosReferences( { format: "sro-cos-presentation", rows: { 1: [ "x", -1, false ] } } )
 	);
 	assert.throws( () => cos.decodeCosReferences( { format: "other", rows: {} } ) );
+});
+
+test("8301A0 derives the attack pet's abilities from its reference", () => {
+	const wolf = {
+		icon: "",
+		maxHp: 6858,
+		rideable: false,
+		physicalDefence: 199,
+		magicalDefence: 318,
+		parry: 105,
+		hit: 107,
+		skills: [ 1, 2, 3 ]
+	};
+	const blocks = new Map( [
+		[ 1, { flags: 4, minimum: 40, maximum: 61 } ],
+		[ 2, { flags: 8, minimum: 30, maximum: 45 } ],
+		[ 3, { flags: 4, minimum: 99, maximum: 99 } ]
+	] );
+	const fed = cos.cosAbilities( { ...PET, satiety: 3001 }, wolf, [ 1, 2, 3 ].map( skill => blocks.get( skill ) ) );
+	assert.deepEqual( fed, {
+		low: false,
+		physical: [ 40, 61 ],
+		magical: [ 30, 45 ],
+		physicalDefence: 199,
+		magicalDefence: 318,
+		hit: 107,
+		parry: 105
+	}, "the walk stops once both kinds are set" );
+	const hungry = cos.cosAbilities( { ...PET, satiety: 3000 }, wolf, [ 1, 2, 3 ].map( skill => blocks.get( skill ) ) );
+	assert.deepEqual( [ hungry.low, hungry.physical, hungry.magical, hungry.physicalDefence, hungry.hit ], [
+		true,
+		[ 20, 30 ],
+		[ 15, 22 ],
+		99,
+		53
+	] );
+	const physicalOnly = cos.cosAbilities(
+		PET,
+		{ ...wolf, skills: [ 1, 3 ] },
+		[ 1, 3 ].map( skill => blocks.get( skill ) )
+	);
+	assert.deepEqual( physicalOnly.physical, [ 49, 49 ], "a later block of the same kind overwrites" );
+	assert.equal( cos.cosAttackText( [ 0, 0 ] ), "0" );
+	assert.equal( cos.cosAttackText( [ 40, 61 ] ), "40 ~ 61" );
 });

@@ -62,6 +62,13 @@ export interface CosReference {
 	readonly icon: string;
 	readonly maxHp: number;
 	readonly rideable: boolean;
+	// +0x1E0/+0x1E4/+0x1F0/+0x1F8 and the +0x210 default skills, read by
+	// CCosDataManager_RecalculateSatietyDependentStats (8301A0).
+	readonly physicalDefence: number;
+	readonly magicalDefence: number;
+	readonly parry: number;
+	readonly hit: number;
+	readonly skills: readonly number[];
 }
 
 /*
@@ -379,10 +386,21 @@ export function decodeCosReferences( raw: unknown ): ReadonlyMap<number, CosRefe
 	for ( const [key, row] of Object.entries( value.rows as Record<string, unknown> ) ) {
 		const id = Number( key );
 		if (
-			!Number.isSafeInteger( id ) || id <= 0 || !Array.isArray( row ) || row.length !== 3 ||
-			typeof row[0] !== "string" || !Number.isSafeInteger( row[1] ) || row[1] < 0 || typeof row[2] !== "boolean"
+			!Number.isSafeInteger( id ) || id <= 0 || !Array.isArray( row ) || row.length !== 8 ||
+			typeof row[0] !== "string" || !Number.isSafeInteger( row[1] ) || row[1] < 0 ||
+			typeof row[2] !== "boolean" || !row.slice( 3, 7 ).every( Number.isSafeInteger ) ||
+			!Array.isArray( row[7] ) || !row[7].every( skill => Number.isSafeInteger( skill ) && skill > 0 )
 		) throw Error( "Invalid COS presentation row " + key );
-		references.set( id, { icon: row[0], maxHp: row[1], rideable: row[2] } );
+		references.set( id, {
+			icon: row[0],
+			maxHp: row[1],
+			rideable: row[2],
+			physicalDefence: row[3],
+			magicalDefence: row[4],
+			parry: row[5],
+			hit: row[6],
+			skills: row[7]
+		} );
 	}
 	return references;
 }
@@ -416,4 +434,79 @@ export function cosRentText( remainingMs: number, day: string, hour: string, min
 	const rest = remainingMs % DAY_MS;
 	return `${Math.trunc( remainingMs / DAY_MS )}${day} ${Math.trunc( rest / HOUR_MS )}${hour} ` +
 		`${Math.trunc( rest % HOUR_MS / MINUTE_MS )}${minute}`;
+}
+
+// CCOSEntity_IsSatietyAtOrBelowThirtyPercent (82D300): satiety (+0x10) <= 3000.
+const SATIETY_LOW = 3000;
+// Flag bits of a skill's `att` block (8301A0).
+const ATTACK_PHYSICAL = 4;
+const ATTACK_MAGICAL = 8;
+
+/*
+================
+CosAttackBlock
+
+The `att` parameter block of a skill (values[0] flags, [2] min, [3] max).
+================
+*/
+export interface CosAttackBlock {
+	readonly flags: number;
+	readonly minimum: number;
+	readonly maximum: number;
+}
+
+/*
+================
+cosAbilities
+
+CCosDataManager_RecalculateSatietyDependentStats (8301A0) for an attack pet:
+the default skills' attack blocks (attacks[i] for reference.skills[i]) are
+walked in order, a physical block (flag 4) setting
+the physical range and a magical one (flag 8) the magical range, until both
+are set or ten slots pass; a later block of a kind already set overwrites
+it. Every value is halved at low satiety: the attack ranges unsigned
+(shr 1), the defences, hit and parry signed toward zero, stored as words.
+================
+*/
+export function cosAbilities(
+	record: CosRecord,
+	reference: CosReference,
+	attacks: readonly (CosAttackBlock | undefined)[]
+) {
+	const low = (record.satiety ?? 0) <= SATIETY_LOW;
+	const halfUnsigned = ( value: number ) => low ? (value >>> 0) >>> 1 : value >>> 0;
+	const halfSigned = ( value: number ) => ((low ? Math.trunc( value / 2 ) : value) << 16) >> 16;
+	let physical: readonly [number, number] = [ 0, 0 ], magical: readonly [number, number] = [ 0, 0 ];
+	let hasPhysical = false, hasMagical = false;
+	for ( const block of attacks.slice( 0, reference.skills.length ) ) {
+		if ( block && block.flags & ATTACK_PHYSICAL ) {
+			physical = [ halfUnsigned( block.minimum ), halfUnsigned( block.maximum ) ];
+			hasPhysical = true;
+		} else if ( block && block.flags & ATTACK_MAGICAL ) {
+			magical = [ halfUnsigned( block.minimum ), halfUnsigned( block.maximum ) ];
+			hasMagical = true;
+		}
+		if ( hasPhysical && hasMagical ) break;
+	}
+	return {
+		low,
+		physical,
+		magical,
+		physicalDefence: halfSigned( reference.physicalDefence ),
+		magicalDefence: halfSigned( reference.magicalDefence ),
+		hit: halfSigned( reference.hit ),
+		parry: halfSigned( reference.parry )
+	};
+}
+
+/*
+================
+cosAttackText
+
+CIFCosInfo_RefreshSatietyDependentStats (6A4600): "%d ~ %d", or "0" when
+the range's maximum is zero.
+================
+*/
+export function cosAttackText( range: readonly [number, number] ): string {
+	return range[1] === 0 ? "0" : `${range[0]} ~ ${range[1]}`;
 }

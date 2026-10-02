@@ -120,6 +120,8 @@ import {
 	COS_COMMAND_INFO,
 	COS_COMMAND_RIDE,
 	COS_COMMAND_STANCE,
+	cosAbilities,
+	cosAttackText,
 	cosClass,
 	cosCommandButtons,
 	cosCommandEnabled,
@@ -333,6 +335,9 @@ import { guideTokens } from "@/engine/foundation/ui/guide-content";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/contracts/session";
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
+
+// CIFCosInfo_RefreshSatietyDependentStats (6A4600) font colour 0xFF999999.
+const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // No video option combo is open (slot -1 is the screen-size combo).
 const VIDEO_COMBO_CLOSED = -99;
 const ROOT = "/assets/images/Media_extracted/", BUTTON = ROOT + "interface/ifcommon/com_button.png";
@@ -10046,6 +10051,36 @@ export function createUi(
 								}
 							}
 							if ( record.level !== undefined ) texts.push( [ 65, String( record.level ) ] );
+							if ( reference ) {
+								// 6A4600 greys the ability values at low satiety (0xFF999999).
+								const ability = cosAbilities(
+									record,
+									reference,
+									reference.skills.map( skill => {
+										const attack = hudData.tooltipSkills.get( skill )?.attack;
+										return attack?.present ? attack : undefined;
+									} )
+								);
+								const values: [number, string][] = [
+									[ 66, String( ability.hit ) ],
+									[ 67, cosAttackText( ability.physical ) ],
+									[ 68, String( ability.physicalDefence ) ],
+									[ 76, String( ability.parry ) ],
+									[ 77, cosAttackText( ability.magical ) ],
+									[ 78, String( ability.magicalDefence ) ]
+								];
+								for ( const [id, value] of values ) {
+									const at = node( id );
+									if ( at ) {
+										authoredText(
+											ability.low ? { ...at, color: COS_LOW_SATIETY } : at,
+											ox,
+											oy,
+											value
+										);
+									}
+								}
+							}
 						}
 						for ( const [id, value] of texts ) {
 							const at = node( id );

@@ -11,8 +11,18 @@ The COS status icon, command bar and info page (CIFCOSStatus 6AA290 /
 	column 59 -> +0x1B0 max HP
 	column 68 -> +0x1D4 non-zero lets the Ride command board it
 
+An attack pet's info page also derives its ability table from the reference
+(CCosDataManager_RecalculateSatietyDependentStats 8301A0):
+
+	columns 77/78 -> +0x1E0/+0x1E4 physical and magical defence
+	column 81     -> +0x1F0 parry
+	column 83     -> +0x1F8 hit
+	columns 89..98 -> +0x210 default skills, up to the first zero; the first
+	                 physical and magical attack blocks give the attack ranges
+
 Every in-service COS reference (TypeID 1/2/3, TID4 band 1..6) ships, keyed by
-its RefObj id: refObjId -> [icon, maxHp, rideable].
+its RefObj id: refObjId -> [icon, maxHp, rideable, physicalDefence,
+magicalDefence, parry, hit, skills].
 
 ===========================================================================
 */
@@ -31,6 +41,12 @@ const COLUMN_TYPE_ID4 = 12;
 const COLUMN_ICON = 54;
 const COLUMN_MAX_HP = 59;
 const COLUMN_RIDEABLE = 68;
+const COLUMN_PHYSICAL_DEFENCE = 77;
+const COLUMN_MAGICAL_DEFENCE = 78;
+const COLUMN_PARRY = 81;
+const COLUMN_HIT = 83;
+const COLUMN_SKILL_FIRST = 89;
+const SKILL_SLOTS = 10;
 const COS_BAND_FIRST = 1;
 const COS_BAND_LAST = 6;
 
@@ -57,7 +73,29 @@ export function buildCosPresentationAsset( options = {} ) {
 				throw new Error( `[cos-presentation] invalid COS reference row ${cols[2]}` );
 			}
 			const icon = cols[COLUMN_ICON]?.trim().toLowerCase() ?? "";
-			rows[String( id )] = [ /\.ddj$/.test( icon ) ? icon : "", maxHp, rideable !== 0 ];
+			const stat = column => {
+				const value = Number( cols[column] );
+				if ( !Number.isSafeInteger( value ) ) {
+					throw new Error( `[cos-presentation] ${cols[2]}: column ${column}` );
+				}
+				return value;
+			};
+			const skills = [];
+			for ( let i = 0; i < SKILL_SLOTS; i++ ) {
+				const skill = stat( COLUMN_SKILL_FIRST + i );
+				if ( skill === 0 ) break;
+				skills.push( skill );
+			}
+			rows[String( id )] = [
+				/\.ddj$/.test( icon ) ? icon : "",
+				maxHp,
+				rideable !== 0,
+				stat( COLUMN_PHYSICAL_DEFENCE ),
+				stat( COLUMN_MAGICAL_DEFENCE ),
+				stat( COLUMN_PARRY ),
+				stat( COLUMN_HIT ),
+				skills
+			];
 		}
 	}
 	const { outPath } = exportDataAsset( {
