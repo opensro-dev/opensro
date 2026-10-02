@@ -4,6 +4,7 @@ import (
 	"math"
 
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 // Spawn is one settled placement on the sector grid: region + region-local
@@ -78,6 +79,10 @@ type WorldState struct {
 	// reason as Sitting - a re-enter always stands, so a transition can
 	// never outlive the session that started it.
 	PostureTransitionUntilMs int64 `json:"-"`
+	// AbnormalMotion is the hold the abnormal engine installs through vfunc
+	// 55C (4A9D00): 0xA frozen and its 1.5 s thaw, 9 stunned, 0x13 asleep.
+	// RUNTIME-ONLY: a re-entered character re-installs its abnormal block.
+	AbnormalMotion monster.MotionHold `json:"-"`
 	// SpawnSet reports whether any move has been accepted this life.
 	SpawnSet bool `json:"spawnSet"`
 	// MovementSourceSeeded reports whether the 0xB738 source block was
@@ -116,6 +121,38 @@ func (w *WorldState) StandUp(nowMs int64) bool {
 	w.Sitting = false
 	w.PostureTransitionUntilMs = nowMs + PostureTransitionMs
 	return true
+}
+
+// Native motion bytes (CGObj state+0x2) this port models for players.
+const (
+	MotionNone       uint8 = 0
+	MotionSitting    uint8 = 4
+	MotionWall       uint8 = 0x11
+	MotionPostureNow uint8 = 0x12
+)
+
+// MotionStateAt is the player's native motion byte (GetMotionState 4AA590
+// reads state+0x2) as the world plane knows it. Writers in native: 4A9D00
+// for the abnormal hold, 4B15A4/4B15B8 for the 0x12 posture change and
+// seated 4, and 4AA3F5 for walk 2 / run 3, which it sets only while the
+// character is moving. The standing-wall 0x11 lives with the skill owner.
+func (w WorldState) MotionStateAt(nowMs int64) uint8 {
+	if state := w.AbnormalMotion.StateAt(nowMs); state != MotionNone {
+		return state
+	}
+	if nowMs < w.PostureTransitionUntilMs {
+		return MotionPostureNow
+	}
+	if w.Sitting {
+		return MotionSitting
+	}
+	if w.MoveSegment.Valid() && nowMs < w.MoveSegment.ArrivesAtMs {
+		if w.MovementMode == WalkMode {
+			return WalkMode
+		}
+		return RunMode
+	}
+	return MotionNone
 }
 
 // SettleDeath must run inside the same character commit door as fatal HP.

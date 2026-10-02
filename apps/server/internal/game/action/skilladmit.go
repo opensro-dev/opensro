@@ -376,6 +376,31 @@ func (rt *Runtime) casterSitting(division string, c *enterworld.Character) bool 
 }
 
 /*
+================
+playerMotionState
+
+The player's native motion byte (state+0x2, GetMotionState 4AA590): the
+world plane's moving, seated, posture-change and abnormal hold, then the
+standing wall (0x11, set at 593690), which the skill owner keeps.
+================
+*/
+func (rt *Runtime) playerMotionState(division string, c *enterworld.Character, nowMs int64) uint8 {
+	if rt.Worlds == nil {
+		return simulation.MotionNone
+	}
+	world := rt.Worlds.Snapshot(simulation.WorldKey(division, c.Name), func() simulation.WorldState {
+		return simulation.SeedWorldState(c)
+	})
+	if state := world.MotionStateAt(nowMs); state != simulation.MotionNone {
+		return state
+	}
+	if rt.wallStanding(division, c.Name) {
+		return simulation.MotionWall
+	}
+	return simulation.MotionNone
+}
+
+/*
 ==================
 casterHasRpktBuff
 

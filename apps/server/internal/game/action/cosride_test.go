@@ -10,7 +10,9 @@ package action
 import (
 	"reflect"
 	"testing"
+	"time"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -188,5 +190,66 @@ func TestCosMountRefusedInBattle(t *testing.T) {
 	c.BattleUntilMs = clock.Now().UnixMilli() + battleStateMs
 	if result := rt.HandleCosRide(testDivision, c, wire.NewWriter(5).U8(0).U32(gid).Payload()); c.ActiveCOS.Mounted || len(result.Broadcast) == 0 {
 		t.Fatal("dismount in battle refused", result)
+	}
+}
+
+/*
+================
+TestCosMountRefusedWhileTheRiderHasAMotion
+
+5119D5: a set motion byte (GetMotionState 4AA590) refuses the mount with 5
+before the battle check. Moving, seated, changing posture and the 1.5 s thaw
+the freeze leaves behind each hold it; the same request mounts once the
+byte is clear.
+================
+*/
+func TestCosMountRefusedWhileTheRiderHasAMotion(t *testing.T) {
+	c := testCharacter()
+	rt, clock := newTestRuntime(c, testCosSource(testItems()))
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3",
+		CurrentHP: 100, Summoned: true}
+	rt.BindPetSession(testDivision, c, 1)
+	key := simulation.WorldKey(testDivision, c.Name)
+	seed := func() simulation.WorldState { return simulation.SeedWorldState(c) }
+	vehicle := rt.PetPresentation(testDivision, c.Name).World.Spawn
+	mount := wire.NewWriter(5).U8(1).U32(gid).Payload()
+	now := clock.Now().UnixMilli()
+
+	for name, pose := range map[string]func(*simulation.WorldState){
+		"moving": func(w *simulation.WorldState) {
+			w.MoveSegment = &simulation.MoveSegment{From: vehicle, StartedAtMs: now - 100, ArrivesAtMs: now + 1000}
+		},
+		"seated":   func(w *simulation.WorldState) { w.Sitting = true },
+		"standing": func(w *simulation.WorldState) { w.PostureTransitionUntilMs = now + 500 },
+	} {
+		rt.Worlds.Update(key, seed, func(w *simulation.WorldState) {
+			*w = simulation.SeedWorldState(c)
+			w.Spawn = vehicle
+			pose(w)
+		})
+		// Battle is also set: the motion refusal comes first.
+		c.BattleUntilMs = now + battleStateMs
+		if result := rt.HandleCosRide(testDivision, c, mount); !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideInvalidState).Frames) || c.ActiveCOS.Mounted {
+			t.Fatal(name, "mount was not refused with 5", result)
+		}
+	}
+	c.BattleUntilMs = 0
+	rt.Worlds.Update(key, seed, func(w *simulation.WorldState) {
+		*w = simulation.SeedWorldState(c)
+		w.Spawn = vehicle
+	})
+
+	// A freeze ending installs the thaw (0xA, then 0 after 1.5 s).
+	owner := &playerAbnormalOwner{rt: rt, division: testDivision, c: c, block: &abnormal.Block{}, now: now}
+	owner.SetMotion(0xa, 0, 1.5)
+	if result := rt.HandleCosRide(testDivision, c, mount); !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideInvalidState).Frames) || c.ActiveCOS.Mounted {
+		t.Fatal("mount during the thaw was not refused with 5", result)
+	}
+	clock.Advance(1500 * time.Millisecond)
+	assertOpcodes(t, rt.HandleCosRide(testDivision, c, mount).Frames,
+		wire.OpObjectSourceCorrection, wire.OpCosRideState, movementSpeedOpcode)
+	if !c.ActiveCOS.Mounted {
+		t.Fatal("mount after the thaw refused")
 	}
 }

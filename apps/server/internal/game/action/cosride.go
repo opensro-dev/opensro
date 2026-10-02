@@ -60,12 +60,19 @@ func (rt *Runtime) HandleCosRide(division string, c *enterworld.Character, paylo
 	}
 	unlock := rt.lockDivision(division)
 	defer unlock()
-	// 5119FA reads the rider's battle state (+0x30 +0xD) before 4EC640 looks
-	// at the vehicle: a fighting player cannot mount any COS. Dismount is
-	// never refused for battle.
+	// Before 4EC640 looks at the vehicle, 5119D5 refuses a rider whose motion
+	// byte is set (moving, seated, changing posture, at a wall, frozen,
+	// stunned or asleep) and 5119FA one in battle state (+0x30 +0xD).
+	// Dismount is refused for neither.
 	if payload[0] == 1 {
-		if rider := rt.characterSnapshot(division, c); rider != nil && inBattleState(rider, rt.Now().UnixMilli()) {
-			return cosRideFailure(cosRideInBattle)
+		if rider := rt.characterSnapshot(division, c); rider != nil {
+			now := rt.Now().UnixMilli()
+			if rt.playerMotionState(division, rider, now) != simulation.MotionNone {
+				return cosRideFailure(cosRideInvalidState)
+			}
+			if inBattleState(rider, now) {
+				return cosRideFailure(cosRideInBattle)
+			}
 		}
 	}
 	snapshot, ref := rt.commandCOSSnapshot(division, c, binary.LittleEndian.Uint32(payload[1:]))

@@ -13,6 +13,7 @@ network publication follows the committed character state.
 package action
 
 import (
+	"math"
 	"strings"
 	"sync"
 
@@ -403,12 +404,42 @@ func (o *playerAbnormalOwner) ParamsChanged(speed bool) {
 ==================
 SetMotion
 
-SetMotion has no v1.150 player carrier: 0x3122 publishes state channels
-only, and the client derives the frozen/asleep/stunned pose from the mask.
-The command gates read the mask directly.
+No v1.150 wire carries a player's motion hold: 0x3122 publishes state
+channels only, and the client derives the frozen/asleep/stunned pose from
+the mask. The hold is kept on the world plane for gates that read the
+native motion byte (state+0x2), such as the 74B5 mount door (5119D5),
+because it outlives the mask by the 1.5 s thaw after a freeze.
 ==================
 */
-func (o *playerAbnormalOwner) SetMotion(uint8, uint8, float32) {}
+func (o *playerAbnormalOwner) SetMotion(state, next uint8, delay float32) {
+	if o.rt.Worlds == nil {
+		return
+	}
+	// 4A9D1F: state zero falls back to a still-active freeze, stun or sleep
+	// (4AAB60), as the monster owner does.
+	if state == simulation.MotionNone {
+		switch {
+		case o.block.Has(abnormal.Freeze):
+			state = 0xa
+		case o.block.Has(abnormal.Stun):
+			state = 9
+		case o.block.Has(abnormal.Sleep):
+			state = 0x13
+		}
+	}
+	hold := monster.MotionHold{}
+	switch {
+	case state == simulation.MotionNone:
+	case next == 0xff:
+		hold = monster.MotionHold{State: state, UntilMs: math.MaxInt64}
+	default:
+		// Only (0xA, 0, 1.5) reaches here: the thaw after a freeze.
+		hold = monster.MotionHold{State: state, UntilMs: o.now + int64(float64(delay)*1000)}
+	}
+	o.rt.Worlds.Update(simulation.WorldKey(o.division, o.c.Name),
+		func() simulation.WorldState { return simulation.SeedWorldState(o.c) },
+		func(world *simulation.WorldState) { world.AbnormalMotion = hold })
+}
 
 /*
 ================
