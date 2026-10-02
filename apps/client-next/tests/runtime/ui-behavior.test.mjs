@@ -1126,9 +1126,14 @@ test("monster names respect native distance and ownership gates, with hover and 
 		monster.appearanceState = [ 2, 0, 0 ];
 		f.ui.step( f.state, 1600 );
 		assert.ok( glyphs().length > 0, "native name gate is ownership, not LIFE" );
+		// 85E2E0 hides a monster or COS name only while it is ridden
+		// (CICharactor_GetMountedHorseOrVehicle): an owned pet keeps its name.
 		monster.ownerGid = 1;
 		f.ui.step( f.state, 1700 );
-		assert.equal( glyphs().length, 0 );
+		assert.ok( glyphs().length > 0, "an owned, unridden COS keeps its name" );
+		f.state.entities[0] = { ...f.state.entities[0], mountedOn: 99 };
+		f.ui.step( f.state, 1800 );
+		assert.equal( glyphs().length, 0, "the ridden COS hides its name" );
 	} finally {
 		f.dispose();
 	}
@@ -3161,6 +3166,9 @@ test("skill training UI rechecks SP at confirmation, waits for authority, and ex
 		);
 		click( "skill-learn:291" );
 		assert.ok( defined( output ).controls.some( c => c.id === "skill-confirm-ok" ) );
+		// 5DE4E0 / 5DDF00: the slot frame (control 11) belongs to the skill face only.
+		const slotFrame = () => f.scenes.at( -1 ).quads.some( q => q.texture.includes( "msgbox_itemwindow" ) );
+		assert.ok( slotFrame(), "the skill face draws its slot frame" );
 		game.progression = { ...game.progression, skillPoints: 4 };
 		draw();
 		click( "skill-confirm-ok" );
@@ -3183,6 +3191,7 @@ test("skill training UI rechecks SP at confirmation, waits for authority, and ex
 		click( "mastery:257" );
 		assert.equal( commands.length, 0, "a mastery level-up waits for the practice box" );
 		assert.ok( defined( output ).controls.some( c => c.id === "skill-confirm-ok" ) );
+		assert.ok( !slotFrame(), "the mastery face hides the empty slot frame" );
 		click( "skill-confirm-cancel" );
 		assert.equal( commands.length, 0, "cancel sends nothing" );
 		click( "mastery:257" );

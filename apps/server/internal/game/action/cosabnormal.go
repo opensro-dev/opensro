@@ -787,3 +787,27 @@ type cosAbnormalRoll struct {
 	params   *abnormal.SkillParams
 	target   *cosAbnormalOwner
 }
+
+/*
+================
+ridingCOS
+
+The COS a hostile single-target skill aimed at this player strikes instead.
+CSkillManager_InitiateSkillCast (59B5F3) retargets such a skill, from any
+caster but the skill system's AutoMob, when the target PC is mounted
+(CGObjPC_IsMountedOnCOS, slot 0x540) on a vehicle, riding horse or attack
+COS (slots 0x30/0x34/0x38): the ride (PC+0x1D18) takes the hit. The swap
+happens once, at cast admission; a cast already admitted on the rider keeps
+its target. Zero when the player is not riding a live COS.
+================
+*/
+func ridingCOS(c *enterworld.Character) uint32 {
+	if c == nil || c.ActiveCOS == nil {
+		return 0
+	}
+	ride := c.ActiveCOS
+	if !ride.Summoned || !ride.Mounted || ride.CurrentHP == 0 {
+		return 0
+	}
+	return ride.GID
+}

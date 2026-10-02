@@ -9,10 +9,10 @@ receipt matches. A timed-out purchase requires resynchronization, never retry.
 ===========================================================================
 */
 import type { MallState } from "@/engine/contracts/item-mall";
+import { MALL_CATALOG_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { mallProjection } from "@/engine/foundation/gameplay/item-mall-catalog";
 import { mallPurchasePayload, type MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 
-const MALL_CATALOG_OPCODE = 15;
 const ITEM_MOVE_REQUEST = 0x706d;
 const REQUEST_TIMEOUT_MS = 10000;
 
@@ -37,7 +37,7 @@ export function createMall() {
   */
 		open( now: number ) {
 			if ( request || expired ) throw Error( "Mall request unavailable" );
-			const frame = { opcode: MALL_CATALOG_OPCODE, payload: new Uint8Array() };
+			const frame = { opcode: MALL_CATALOG_CONTROL, payload: new Uint8Array() };
 			request = "catalog";
 			deadline = now + REQUEST_TIMEOUT_MS;
 			if ( state ) state = { ...state, pending: true, error: undefined };

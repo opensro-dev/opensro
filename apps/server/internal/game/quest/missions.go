@@ -139,6 +139,9 @@ func (rt *Runtime) NormalizeEntryRecords(c *enterworld.Character) error {
 		if !ok {
 			return fmt.Errorf("quest %s invalid persisted stage %d", root.Codename, record.Stage)
 		}
+		// Records saved before the journal carried targets gain them here, so
+		// the enter-world section already names the NPC to visit.
+		c.ActiveQuests[i], _ = withJournalTargets(c, def, c.ActiveQuests[i])
 		if def.Objective != ObjectiveParallel {
 			continue
 		}
@@ -213,7 +216,8 @@ func refreshMissions(c *enterworld.Character, def *Definition, record enterworld
 		}
 		updated.Contents = append(updated.Contents, next)
 	}
-	return updated, changed
+	updated, retargeted := withJournalTargets(c, def, updated)
+	return updated, changed || retargeted
 }
 
 func missionCompletionReached(node enterworld.ActiveQuestContentsNode) bool {

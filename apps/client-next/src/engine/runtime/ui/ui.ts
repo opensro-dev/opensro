@@ -9176,16 +9176,18 @@ export function createUi(
 							full
 						)
 					);
-					// CIFSkillPracticeBox_SetMode (5DDF00): the skill face hides the
-					// mastery name and decoration; the mastery face hides the skill slot,
-					// name and level. 5DE5F8 initializes control 8's opaque fill;
-					// authored Color is only editor data.
+					// CIFSkillPracticeBox_SetMode (5DDF00) toggles the six controls
+					// CIFSkillPracticeBox_OnCreate (5DE4E0) stores: ids 11-13 and 15 (slot
+					// frame, slot, skill name, level number) for the skill face, ids 16-17
+					// (mastery band and name) for the mastery face. The "Lv" caption (14)
+					// is never stored, so it stays in both faces. 5DE5F8 initializes
+					// control 8's opaque fill; authored Color is only editor data.
 					const hidden = mastery ?
 						[
+							page.GDR_SKLPB_SLOTDECO,
 							page.GDR_SKLPB_SLOT,
 							page.GDR_SKLPB_SKILLNAME,
-							page.GDR_SKLPB_SKILLLEV,
-							page.GDR_SKLPB_SKILLLEV_LV
+							page.GDR_SKLPB_SKILLLEV
 						] :
 						[ page.GDR_SKLPB_MASTERYNAME, page.GDR_SKLPB_MNDECO ];
 					for ( const node of authoredPaintOrder( page ) ) {
@@ -10680,6 +10682,8 @@ export function createUi(
 				// Characters whose guild line, fortress mark or quick status bars show;
 				// overheadBoardVisible shows their names with them.
 				const overlaid = new Set<number>();
+				// Mounts carrying a rider: their ride link hides their name board.
+				const ridden = new Set( next.entities.flatMap( e => e.mountedOn ? [ e.mountedOn ] : [] ) );
 				if ( game && hud.data() ) {
 					for ( const entity of next.entities ) {
 						if (
@@ -10828,7 +10832,15 @@ export function createUi(
 					// One decision for the name and every overhead icon: an icon never
 					// shows without its name (name-visibility.ts header).
 					const named = !hiddenSilkCos( entity, options.hideSilkCos ) &&
-						overheadBoardVisible( entity, local, hovered, options, game?.pose, overlaid.has( entity.gid ) );
+						overheadBoardVisible(
+							entity,
+							local,
+							hovered,
+							options,
+							game?.pose,
+							overlaid.has( entity.gid ),
+							ridden.has( entity.gid )
+						);
 					const partyMark = named ?
 						monsterPartyNameplate( entity, [
 							text.run( entity.name ?? "", selected ? 2 : 0 ).width,

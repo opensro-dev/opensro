@@ -316,6 +316,7 @@ clearFootprints
 			combatIdle?: {
 				body: Resource;
 				metadata: Record<string, AnimationMetadata> | undefined;
+				set: string;
 				motion: ReturnType<typeof skillMotionResolveAnimation>;
 			};
 			clip: string;
@@ -2384,17 +2385,39 @@ soundContext
 						};
 						moving = false;
 					}
+					// 8EADF0 tries the selected item override before the ordinary
+					// body track, only when unmounted. Without one the character plays
+					// its weapon's animation set (CCObjCharacter_ResolveWeaponAnimationPrefix
+					// 8E83F0 stores it at +0x114): a spear runs two-handed. A set that
+					// lacks the state keeps the default selection, as native falls back.
+					const motionDisguise = referenceAppearances.get( entity.gid ),
+						weapon = wornEquipment( entity, gameplay ).find( item => item.slot === 6 ),
+						weaponSet = motionDisguise ?
+							weaponAnimationSet( motionDisguise.weapon << 11 ) :
+							weapon ?
+							weaponAnimationSet( weapon.typeFlags ) :
+							undefined,
+						motionSet = override?.animation || weaponSet?.replaceAll( "-", "_" );
 					let combatIdle: ReturnType<typeof skillMotionResolveAnimation>;
 					if ( (combatStanceEnds.get( entity.gid ) ?? -Infinity) > seconds ) {
-						const metadata = animationStates.get( resource.codename );
-						if ( state.combatIdle?.body !== resource || state.combatIdle.metadata !== metadata ) {
-							// 8E5ADE -> model vtable C15160+0C -> 8E7470:
-							// DEFAULT state 6, NOT weapon-set preview state 0.
+						const metadata = animationStates.get( resource.codename ),
+							stanceSet = !entity.mountedOn && motionSet || "default";
+						if (
+							state.combatIdle?.body !== resource || state.combatIdle.metadata !== metadata ||
+							state.combatIdle.set !== stanceSet
+						) {
+							// CICharactor_UpdateCombatStanceAnimation (8E5ADE) plays state 6
+							// through the model's slot +0C. On a character model that is
+							// CCObjCharacter_PlayAnimation (8EADF0, CCObjCharacter vtable
+							// C15290), not the CCObjAnimation base's DEFAULT-only 8E7470: the
+							// item override, then the weapon set (a crossbow's ready stance),
+							// then DEFAULT (skillMotionResolveAnimation retries it).
 							state.combatIdle = {
 								body: resource,
 								metadata,
+								set: stanceSet,
 								motion: skillMotionResolveAnimation( {
-									role: "native:default:6",
+									role: `native:${stanceSet}:6`,
 									clips: resource.clips,
 									bodyStates: resource.animationStates,
 									catalogStates: metadata,
@@ -2422,19 +2445,6 @@ soundContext
 						resource.clips.includes( "stand" ) ?
 						"stand" :
 						resource.clips[0] ?? "";
-					// 8EADF0 tries the selected item override before the ordinary
-					// body track, only when unmounted. Without one the character plays
-					// its weapon's animation set (CCObjCharacter_ResolveWeaponAnimationPrefix
-					// 8E83F0 stores it at +0x114): a spear runs two-handed. A set that
-					// lacks the state keeps the default selection, as native falls back.
-					const motionDisguise = referenceAppearances.get( entity.gid ),
-						weapon = wornEquipment( entity, gameplay ).find( item => item.slot === 6 ),
-						weaponSet = motionDisguise ?
-							weaponAnimationSet( motionDisguise.weapon << 11 ) :
-							weapon ?
-							weaponAnimationSet( weapon.typeFlags ) :
-							undefined,
-						motionSet = override?.animation || weaponSet?.replaceAll( "-", "_" );
 					if (
 						motionSet && !entity.mountedOn && !dead && !sitting &&
 						(baseRole === "run" || baseRole === "walk" || baseRole === "stand")

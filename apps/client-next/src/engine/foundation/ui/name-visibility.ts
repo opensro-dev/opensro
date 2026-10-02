@@ -49,7 +49,10 @@ export function nameInRange(
 nameVisible
 
 CICCharacter 85E2E0: hover wins before distance/options. Guild equality is
-native guild-record pointer equality, including two absent records.
+native guild-record pointer equality, including two absent records. A
+monster or COS in a ride link (CICharactor_GetMountedHorseOrVehicle reads
+the linked GID at +0x2A4, set on a ridden mount) shows no name board; an
+owned pet that is not ridden shows its name like any companion.
 ================
 */
 export function nameVisible(
@@ -57,11 +60,12 @@ export function nameVisible(
 	local: EntityState | undefined,
 	hovered: boolean,
 	options: GameOptions,
-	pose?: import("@/engine/contracts/gameplay").Pose | null
+	pose?: import("@/engine/contracts/gameplay").Pose | null,
+	rideLinked = false
 ): boolean {
 	if ( hovered ) return true;
 	if ( !local || !nameInRange( entity, local, pose ) ) return false;
-	if ( entity.kind === "monster" || entity.kind === "cos" ) return options.monsterNames && !entity.ownerGid;
+	if ( entity.kind === "monster" || entity.kind === "cos" ) return options.monsterNames && !rideLinked;
 	if ( entity.kind === "npc" ) return options.npcNames;
 	if ( entity.gid === local.gid ) return options.ownName;
 	if ( entity.kind === "player" ) {
@@ -98,10 +102,11 @@ export function overheadBoardVisible(
 	hovered: boolean,
 	options: GameOptions,
 	pose: import("@/engine/contracts/gameplay").Pose | null | undefined,
-	overlayShown: boolean
+	overlayShown: boolean,
+	rideLinked = false
 ): boolean {
 	return overlayShown || beginnerMarkShown( entity, options ) || hasMonsterPartyMark( entity ) ||
-		nameVisible( entity, local, hovered, options, pose );
+		nameVisible( entity, local, hovered, options, pose, rideLinked );
 }
 
 /*

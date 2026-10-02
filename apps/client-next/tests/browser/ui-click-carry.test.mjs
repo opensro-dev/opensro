@@ -128,6 +128,19 @@ test( "a click lifts an item and the next press places it", { timeout: 45000 }, 
 		} );
 		await page.keyboard.press( "Escape" );
 
+		// A modifier click is a transaction (quick sale, split, COS transfer):
+		// it activates with its modifier and never lifts the icon.
+		for ( const modifier of [ "Control", "Shift", "Alt" ] ) {
+			await reset();
+			await page.keyboard.down( modifier );
+			await page.mouse.click( 36, 36 );
+			await page.keyboard.up( modifier );
+			await page.mouse.move( 250, 250 );
+			seen = await events();
+			assert.ok( seen.some( e => e.kind === "activate" && e.id === "slot:13" ), modifier + " activates" );
+			assert.equal( seen.filter( e => e.kind === "drag" ).length, 0, modifier + " click lifted the item" );
+		}
+
 		// Right press and Escape cancel without placing.
 		for ( const cancel of [ "right", "Escape" ] ) {
 			await reset();

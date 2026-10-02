@@ -172,9 +172,10 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	}()
 	character := rt.findCharacterByGid(divisionID, targetGid)
 	if character == nil {
-		// 529929: when the mob's hostility byte is set and the player has a
-		// COS, the target object becomes PC+0x1CD8. A hit addressed to that
-		// gid lands on the pet, including the 590680 status roll.
+		// A hit addressed to a COS gid (a mounted rider's ride, redirected
+		// below, or a pet a test names) lands on the pet, including the 590680
+		// status roll. CGObjMob_EvaluateHostility (529929) only credits the
+		// hostility to the owner (COS+0x1CD8); it never moves the damage.
 		if owner := rt.characterByCosGID(divisionID, targetGid); owner != nil {
 			return rt.monsterHitSummonedCOS(divisionID, instance, monsterCastRecipient{owner, targetGid}, skillID, nowMs, release)
 		}
@@ -183,6 +184,12 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	snapshot := rt.characterSnapshot(divisionID, character)
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
 		return result
+	}
+	// Only hostile-target skills swap (59B5F3 tests the target flag); summons
+	// and self effects keep their own branches below.
+	if ride := ridingCOS(snapshot); release == nil && ride != 0 && ok && skill.TargetRequired &&
+		!skill.Summon.Present && !skill.MonsterSelfEffect.Pinned {
+		return rt.monsterHitSummonedCOS(divisionID, instance, monsterCastRecipient{character, ride}, skillID, nowMs, nil)
 	}
 	if _, sameWorld := rt.characterMonster(divisionID, snapshot, instance.Gid); !sameWorld {
 		return result

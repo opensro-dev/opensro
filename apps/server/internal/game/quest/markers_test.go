@@ -7,6 +7,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"slices"
 	"testing"
 )
 
@@ -46,6 +47,77 @@ func TestMarkerStatesFollowAuthoritativeQuestLifecycle(t *testing.T) {
 		t.Fatal("deleted character has quest markers")
 	}
 }
+
+/*
+================
+TestMarkersByNpcShowsTheReportOverAnOffer
+
+The client indexes the lowest key per NPC (787DB0), so the server must not
+let a lower quest the NPC offers mask the quest ready to report there.
+================
+*/
+func TestMarkersByNpcShowsTheReportOverAnOffer(t *testing.T) {
+	states := map[uint32]NpcMarker{
+		10: {Codename: "NPC_A", State: markerStateOffer},
+		20: {Codename: "NPC_A", State: markerStateReport},
+		30: {Codename: "NPC_A", State: markerStateInProgress},
+		40: {Codename: "NPC_B", State: markerStateInProgress},
+		50: {Codename: "NPC_B", State: markerStateOffer},
+		60: {Codename: "NPC_C", State: markerStateOffer},
+		70: {Codename: "NPC_C", State: markerStateOffer},
+	}
+	got := MarkersByNpc(states)
+	want := map[uint32]NpcMarker{20: states[20], 50: states[50], 60: states[60]}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for id, m := range want {
+		if got[id] != m {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
+/*
+================
+TestJournalTargetsFollowTheQuestNpc
+
+The journal names the NPC the quest sends the player to (SQuestInfo 0x40),
+so the world map and minimap can place it; a stage advance moves it.
+================
+*/
+func TestJournalTargetsFollowTheQuestNpc(t *testing.T) {
+	licensed.RequireGameData(t)
+	defs, items := loadShippedDefinitions(t)
+	refs := map[string]uint32{"NPC_EU_ADVICE": 7526, "NPC_EU_ARMOR": 7527}
+	if err := defs.ResolveJournalNpcs(func(code string) (uint32, bool) {
+		if ref, ok := refs[code]; ok {
+			return ref, true
+		}
+		return 1, true
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := NewRuntime(&enterworld.Deps{Items: items}, defs, func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) { return nil, true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	race, level := int64(enterworld.RaceEurope), int64(1)
+	c := &enterworld.Character{Name: "Journal", RaceIndex: &race, Level: &level}
+	if _, err := rt.StartQuest(c, "QTUTORIAL_EU"); err != nil {
+		t.Fatal(err)
+	}
+	if r := c.ActiveQuests[0]; r.Flags&questFlagTargets == 0 || !slices.Equal(r.TargetIds, []uint32{7526}) {
+		t.Fatalf("accepted record targets %#x %v, want Lipria", r.Flags, r.TargetIds)
+	}
+	if _, err := rt.AdvanceNpcQuest(c, stageToken("QTUTORIAL_EU", 0), "NPC_EU_ADVICE"); err != nil {
+		t.Fatal(err)
+	}
+	if r := c.ActiveQuests[0]; !slices.Equal(r.TargetIds, []uint32{7527}) {
+		t.Fatalf("stage 2 targets %v, want Jatomo", r.TargetIds)
+	}
+}
+
 func TestMarkerPublicationReplacementRemovalAndReconnect(t *testing.T) {
 	var pub MarkerPublication
 	p := EncodeNpcMarker(7, 200001, 1, 257, 10, -20, 30)

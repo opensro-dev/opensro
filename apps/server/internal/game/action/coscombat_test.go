@@ -97,3 +97,41 @@ func TestMonsterCosCastCancelsDepartedOrReplacedPet(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestMonsterHitOnMountedRiderLandsOnTheRide
+
+CSkillManager_InitiateSkillCast (59B5F3) retargets a hostile single-target
+skill aimed at a mounted player to the ridden COS. Unmounted, or once the
+ride is dead, the rider keeps the target and the ride is never struck.
+================
+*/
+func TestMonsterHitOnMountedRiderLandsOnTheRide(t *testing.T) {
+	for _, state := range []string{"mounted", "unmounted", "ride-dead"} {
+		rt, clock, c, m := newCombatTestRuntime(t, 100)
+		equipCombatTestPet(t, rt, c, 2)
+		c.ActiveCOS.Mounted = state != "unmounted"
+		if state == "ride-dead" {
+			c.ActiveCOS.CurrentHP = 0
+		}
+		m.Ref.DefaultSkillIDs[0] = 2
+		skills := rt.deps.SkillData().(staticSkillSource)
+		skill := skills[2]
+		skill.Attack.Min, skill.Attack.Max, skill.Attack.Percent = 10, 10, 100
+		skills[2] = skill
+		rt.CombatRoll = func() (uint32, error) { return 0, nil }
+		rideBefore, riderBefore := c.ActiveCOS.CurrentHP, enterworld.CurrentHP(c)
+		hit := rt.MonsterBasicAttack(testDivision, m, enterworld.ObjectIDForCharacter(c), 2, clock.NowMs())
+		if state == "mounted" {
+			if !hit.Accepted || c.ActiveCOS.CurrentHP >= rideBefore || enterworld.CurrentHP(c) != riderBefore {
+				t.Fatalf("mounted hit: ride %d->%d, rider %d->%d", rideBefore, c.ActiveCOS.CurrentHP,
+					riderBefore, enterworld.CurrentHP(c))
+			}
+			continue
+		}
+		if c.ActiveCOS.CurrentHP != rideBefore {
+			t.Fatalf("%s: the ride was struck (%d->%d)", state, rideBefore, c.ActiveCOS.CurrentHP)
+		}
+	}
+}

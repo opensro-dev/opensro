@@ -78,7 +78,9 @@ function ban() {
 	const out = Buffer.concat( rows );
 	return out.buffer.slice( out.byteOffset, out.byteOffset + out.byteLength );
 }
-function fixture( { wait = false, effectOnly = false, missingMotion = false, nativeBan = false } = {} ) {
+function fixture(
+	{ wait = false, effectOnly = false, missingMotion = false, nativeBan = false, crossbow = false } = {}
+) {
 	let next = 0, actors = [];
 	const pending = new Map(), requests = [], installed = [];
 	const clips = [
@@ -157,7 +159,8 @@ function fixture( { wait = false, effectOnly = false, missingMotion = false, nat
 							[ 1, 2, 3 ].map(
 								id => [ "CHAR_" + id, {
 									animationSets: {
-										default: { 6: { ...metadata( 6 ), url: "/assets/anim/combat.ban" } }
+										default: { 6: { ...metadata( 6 ), url: "/assets/anim/combat.ban" } },
+										bow: { 6: { ...metadata( 6 ), url: "/assets/anim/bow-ready.ban" } }
 									}
 								} ]
 							)
@@ -180,6 +183,8 @@ function fixture( { wait = false, effectOnly = false, missingMotion = false, nat
 			}
 			if ( job.url.endsWith( "/audio/effectsound.json" ) ) return json( { rules: [] } );
 			return json( {
+				// The crossbow needs only a catalog entry; no visual socket.
+				...(crossbow ? { dress: { equipment: { 9000: { slot: null, bodies: {} } } } } : {}),
 				models: [ 1, 2, 3 ].map( refObjId => ({
 					refObjId,
 					codename: "CHAR_" + refObjId,
@@ -218,7 +223,8 @@ function fixture( { wait = false, effectOnly = false, missingMotion = false, nat
 			{
 				localGid: 1,
 				pose: local ? { ...local, angle: local.heading } : undefined,
-				inventory: [],
+				// A worn EU crossbow (item type 12 in bits 11..15) in the weapon slot.
+				inventory: crossbow ? [ { slot: 6, refObjId: 9000, typeFlags: 12 << 11, plus: 0 } ] : [],
 				casts,
 				vitals: [],
 				skills: [],
@@ -409,6 +415,18 @@ test("published DEFAULT state 6 BAN is admitted on the body even when absent fro
 		assert.ok( f.installed.some( row => row.body === "/assets/1.glb" && row.name === "native:default:6" ) );
 		assert.equal( f.actor().clip, "native:default:6" );
 		assert.equal( f.step( 6 ).clip, "stand" );
+	} finally {
+		f.dispose();
+	}
+});
+test("combat stance plays the weapon set's state 6: a crossbow holds its ready stance", () => {
+	// 8E5ADE -> CCObjCharacter_PlayAnimation (8EADF0) resolves state 6 in the
+	// active weapon prefix before DEFAULT; DEFAULT is the bare-hand stance.
+	const f = fixture( { nativeBan: true, crossbow: true } );
+	try {
+		for ( let i = 0; i < 15; i++ ) f.step( 1 + i / 100, [ cast() ] );
+		assert.ok( f.requests.some( url => url.endsWith( "/anim/bow-ready.ban" ) ) );
+		assert.equal( f.actor().clip, "native:bow:6" );
 	} finally {
 		f.dispose();
 	}

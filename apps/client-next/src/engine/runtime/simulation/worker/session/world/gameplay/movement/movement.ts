@@ -27,6 +27,7 @@ import {
 	movementSpeedTransition
 } from "@/engine/foundation/gameplay/native-movement";
 import { createNavigation } from "./navigation/navigation";
+import { admitPose, decodeMovementReceipt, receiptWorld } from "@/engine/foundation/gameplay/movement-wire";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { displacementSegment } from "@/engine/foundation/gameplay/cast-displacement";
 import {
@@ -46,6 +47,9 @@ const ENVELOPE_PLAYER = 1;
 const ENVELOPE_COS = 2;
 // 0x769E tag 1 carries the vehicle's 0x7738 body.
 const COS_MOVEMENT_TAG = 1;
+// How long a walk held for a cast waits for the server's settle before it
+// follows the server again: a refused or deferred cast never settles.
+const CAST_HOLD_MS = 1500;
 
 /*
 ================
@@ -99,30 +103,15 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 	// A server-driven walk started locally before its acknowledgement (a
 	// pickup run-up): where it leaves from and the goal the server will walk.
 	let predicted: { from: Pose; to: Pose; } | null = null;
+	// A walk stopped where a cast command left it (holdForCast): the held
+	// pose, when the hold lapses, and the server walk to follow if it does.
+	let castHold: { pose: Pose; until: number; resume: Parameters<typeof bindOwners>[0] | null; } | null = null;
 	const pending = new Map<number, {
 		to: Pose;
 		sent: number;
 		predictedEnd: Pose | null;
 		direction?: number;
 	}>();
-	/*
-================
-admit
-================
-	*/
-	function admit( value: unknown ): Pose {
-		const p = value as Pose;
-		if (
-			!p || !Number.isInteger( p.regionId ) || p.regionId <= 0 || p.regionId > 65535 ||
-			![ p.x, p.y, p.z, p.angle ].every( Number.isFinite ) || (p.regionId & 0x8000 ?
-				p.x < -32768 || p.x > 32767 || p.z < -32768 || p.z > 32767 :
-				p.x < 0 || p.x >= 1920 || p.z < 0 || p.z >= 1920) ||
-			p.y < -32768 || p.y > 32767 || p.angle < 0 || p.angle > 65535
-		) {
-			throw new Error( "Invalid movement pose" );
-		}
-		return Object.freeze( { ...p } );
-	}
 	/*
 ================
 samePredictedGoal
@@ -154,6 +143,26 @@ reconcile
 		}
 		owner = undefined;
 		return navigation.surface( from );
+	}
+	/*
+================
+bindOwners
+================
+	*/
+	/*
+================
+keepCastHold
+
+A receipt for a walk sent before the hold confirms the server's path; the
+player stays held and that path becomes the one to follow if the hold lapses.
+================
+	*/
+	function keepCastHold() {
+		if ( !castHold ) return;
+		castHold.resume = segment;
+		pose = castHold.pose;
+		segment = null;
+		walk = null;
 	}
 	/*
 ================
@@ -298,6 +307,30 @@ displace
 		},
 		/*
 ================
+holdForCast
+
+A targeted skill or attack command makes the server settle its walk where
+the command finds it (enterBasicAttackRange: SettleLive, then the B2F5
+correction before the cast), or re-route from that point to approach. With
+equal latency both ways that is where the local walk stands when the command
+is sent. Walking on until the correction lands overshot by speed x RTT, and
+the correction then pulled the player back, past MAX_CORRECTION_DISTANCE as
+a snap. End the local walk here; receipts still update the authority, the
+correction or a new move ends the hold, and a hold that lapses follows the
+server's walk again.
+================
+		*/
+		holdForCast( now: number ) {
+			if ( !segment || !pose || segment.castToken !== undefined ) return;
+			pose = navigation.surface( sampleMovement( segment, now ), pose, owner, surfaceCursor );
+			poseAtMs = now;
+			castHold = { pose, until: now + CAST_HOLD_MS, resume: segment };
+			segment = null;
+			walk = null;
+			movementRevision++;
+		},
+		/*
+================
 cancelCast
 ================
 		*/
@@ -424,6 +457,7 @@ native
 			}
 			// A source-less angular acknowledgement leaves the path running.
 			if ( decoded.kind === "keep" ) return;
+			castHold = null;
 			movementRevision++;
 			const adopt = predicted !== null && decoded.kind !== "direction" &&
 				samePredictedGoal( predicted.to, decoded.to );
@@ -499,7 +533,7 @@ minimapFloors
 		*/
 		minimapFloors( poses: readonly Pose[] ) {
 			if ( !Array.isArray( poses ) || poses.length > 4096 ) throw Error( "Minimap floor query budget" );
-			minimapQueries = poses.map( admit );
+			minimapQueries = poses.map( value => admitPose( value ) );
 		},
 		/*
 ================
@@ -512,7 +546,7 @@ seed
 			surfaceCursor = {};
 			owner = undefined;
 			acknowledged = nextId;
-			pose = authoritative = navigation.surface( admit( value ) );
+			pose = authoritative = navigation.surface( admitPose( value ) );
 			segment = null;
 			walk = null;
 			pending.clear();
@@ -525,10 +559,11 @@ correct
 		*/
 		correct( value: Pose, now?: number ) {
 			movementRevision++;
+			castHold = null;
 			// A live source correction ends motion, but is not a new spawn.
 			// Resolve its surface through the existing navigation owner before
 			// retiring the segment; server endpoint Y can be below a hill/deck.
-			pose = authoritative = reconcile( admit( value ) );
+			pose = authoritative = reconcile( admitPose( value ) );
 			predicted = null;
 			surfaceCursor = {};
 			segment = null;
@@ -567,10 +602,11 @@ request
 		*/
 		request( value: Pose, now: number, cosGid?: number ) {
 			if ( life === "dead" ) throw new Error( "Movement while dead" );
+			castHold = null;
 			if ( !pose || pending.size >= 32 || nextId === 0xffffffff ) {
 				throw new Error( "Movement command capacity exceeded or player absent" );
 			}
-			const p = admit( value ),
+			const p = admitPose( value ),
 				to = { ...p, x: Math.trunc( p.x ), y: Math.trunc( p.y ), z: Math.trunc( p.z ) },
 				id = nextId + 1;
 			if ( cosGid !== undefined && (!Number.isInteger( cosGid ) || cosGid < 1 || cosGid > 0xffffffff) ) {
@@ -631,7 +667,7 @@ walk (native); a refusal ends it (endPrediction).
 		predictApproach( value: Pose, now: number ): boolean {
 			if ( !pose || life === "dead" || walk || pending.size || predicted ) return false;
 			const current = segment ? sampleMovement( segment, now ) : pose,
-				to = admit( value ),
+				to = admitPose( value ),
 				query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; } = {
 					slide: false,
 					sourceOwner: owner
@@ -693,6 +729,7 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 		*/
 		direct( heading: number, now: number, cosGid?: number ) {
 			if ( life === "dead" ) throw new Error( "Movement while dead" );
+			castHold = null;
 			if ( !pose || pending.size >= 32 || nextId === 0xffffffff ) {
 				throw new Error( "Movement command capacity exceeded or player absent" );
 			}
@@ -733,28 +770,7 @@ receive
 ================
 		*/
 		receive( payload: Uint8Array, now: number, expectedGid?: number ) {
-			const r = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( payload ) ) as {
-				v: number;
-				id: number;
-				gid: number;
-				accepted: boolean;
-				serverTimeMs: number;
-				error?: string;
-				world: {
-					spawn: Pose;
-					moveSegment?: {
-						from: Pose;
-						startedAtMs: number;
-						arrivesAtMs: number;
-					};
-				};
-			};
-			if (
-				(expectedGid !== undefined && r.gid !== expectedGid) || r.v !== 1 || !Number.isInteger( r.id ) ||
-				typeof r.accepted !== "boolean" || !Number.isFinite( r.serverTimeMs )
-			) {
-				throw new Error( "Invalid movement receipt" );
-			}
+			const r = decodeMovementReceipt( payload, expectedGid );
 			if ( r.id <= acknowledged ) {
 				return;
 			}
@@ -762,16 +778,10 @@ receive
 			if ( !command ) {
 				throw new Error( "Unsolicited movement receipt" );
 			}
-			const to = admit( r.world?.spawn ), s = r.world.moveSegment;
+			const world = receiptWorld( r ), to = world.spawn, s = world.segment;
 			let replacement: typeof segment = null;
 			if ( s ) {
-				const from = admit( s.from );
-				if (
-					!Number.isFinite( s.startedAtMs ) || !Number.isFinite( s.arrivesAtMs ) ||
-					s.arrivesAtMs <= s.startedAtMs
-				) {
-					throw new Error( "Invalid authoritative movement clock" );
-				}
+				const from = s.from;
 				const t = Math.max(
 					0,
 					Math.min( 1, (r.serverTimeMs - s.startedAtMs) / (s.arrivesAtMs - s.startedAtMs) )
@@ -798,7 +808,7 @@ receive
 				// reference the local walk reconciles toward. A leg shorter than
 				// a full one ended on a contact and stops the reference there.
 				const heading = command.direction, start = replacement?.from ?? to;
-				const blocked = !s || directionLegBlocked( poseDistance( admit( s.from ), to ) );
+				const blocked = !s || directionLegBlocked( poseDistance( s.from, to ) );
 				walk.reference = {
 					from: start,
 					start: now,
@@ -823,6 +833,7 @@ receive
 				acknowledged = r.id;
 				for ( const id of pending.keys() ) if ( id <= r.id ) pending.delete( id );
 				error = null;
+				keepCastHold();
 				return;
 			}
 			if ( command.direction !== undefined ) walk = null;
@@ -863,6 +874,7 @@ receive
 				}
 			}
 			error = r.accepted ? null : r.error ?? "Movement rejected";
+			keepCastHold();
 		},
 		/*
 ================
@@ -872,6 +884,16 @@ step
 		step( now: number ) {
 			if ( pending.size && now - pending.values().next().value!.sent > 10000 ) {
 				throw new Error( "Movement receipt timed out; resynchronize session" );
+			}
+			if ( castHold && now >= castHold.until ) {
+				// No settle came: the server is still walking. Follow its path from
+				// where it stands now (a lapsed server leg samples to its end).
+				const resume = castHold.resume;
+				castHold = null;
+				if ( resume ) {
+					segment = resume;
+					movementRevision++;
+				}
 			}
 			driftWalk( now );
 			if ( !segment ) {
@@ -949,6 +971,7 @@ clear
 			segment = null;
 			walk = null;
 			predicted = null;
+			castHold = null;
 			pending.clear();
 			error = null;
 			navigation.clear();

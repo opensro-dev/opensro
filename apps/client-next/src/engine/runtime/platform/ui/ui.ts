@@ -312,8 +312,16 @@ export function createUiBridge(
 				ctrl: event.ctrlKey,
 				alt: event.altKey
 			} );
-			// Keyboard activation (detail 0) never lifts an item.
-			if ( slot.value.carry && slot.value.draggable && !carry && event.detail > 0 && putBack !== slot.value.id ) {
+			// Keyboard activation (detail 0) never lifts an item. Nor does a
+			// modifier click: CIFItemSlot_DispatchActivation (567290) turns CTRL,
+			// SHIFT and ALT clicks into the quick sale/buy, the stack split and
+			// the COS transfer, exclusive of the plain click. Lifting here too
+			// threw the icon onto the cursor until the sale disabled its slot.
+			const modified = event.ctrlKey || event.shiftKey || event.altKey;
+			if (
+				slot.value.carry && slot.value.draggable && !carry && event.detail > 0 && !modified &&
+				putBack !== slot.value.id
+			) {
 				const [x, y] = uiPoint( event ), rect = slot.value.rect;
 				carry = { id: slot.value.id, x, y };
 				// The lifted icon starts on the cursor, not on the slot's centre.

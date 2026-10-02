@@ -9,6 +9,7 @@ never retries a successfully received world.
 
 ===========================================================================
 */
+import { isCommerceControl } from "@/engine/foundation/gameplay/commerce-controls";
 import { createNetwork } from "@/engine/runtime/simulation/worker/network/network";
 import { createWorldCore } from "./core";
 import { createDeparture } from "./departure";
@@ -209,7 +210,7 @@ receive
 			}
 			return;
 		}
-		if ( frame.opcode === 11 || frame.opcode === 12 || frame.opcode === 13 || frame.opcode === 14 ) {
+		if ( isCommerceControl( frame.opcode ) ) {
 			if ( !boundThisTransport ) throw Error( "Commerce packet before EnterWorld" );
 			core.receive( frame, now );
 			return;

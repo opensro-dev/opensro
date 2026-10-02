@@ -38,7 +38,7 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 			}
 			live[session.ID] = true
 			var states map[uint32]quest.NpcMarker
-			game.deps.Read(division, func() { states = game.quests.MarkerStates(c) })
+			game.deps.Read(division, func() { states = quest.MarkersByNpc(game.quests.MarkerStates(c)) })
 			rows := make(map[uint32][18]byte, len(states))
 			for id, state := range states {
 				npc, ok := anchors[state.Codename]
@@ -72,9 +72,11 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 
 func (game *gameplayPlane) validateQuestMarkerRoster() error {
 	counts := map[string]int{}
+	refs := map[string]uint32{}
 	for _, npc := range game.items.NpcRoster {
 		if npc.AuthoredSpawn {
 			counts[npc.Codename]++
+			refs[npc.Codename] = npc.RefObjID
 		}
 	}
 	for _, def := range game.quests.Defs.All() {
@@ -90,5 +92,9 @@ func (game *gameplayPlane) validateQuestMarkerRoster() error {
 			}
 		}
 	}
-	return nil
+	// The journal target list names these same placements (SQuestInfo 0x40).
+	return game.quests.Defs.ResolveJournalNpcs(func(code string) (uint32, bool) {
+		ref, ok := refs[code]
+		return ref, ok
+	})
 }

@@ -1,11 +1,36 @@
+/*
+===========================================================================
+
+markers.go - the quest NPC markers each viewer sees
+
+MarkerStates derives every quest's marker from the transaction's own
+acceptance and objective predicates; MarkersByNpc reduces them to the one
+row per NPC the client can show; MarkerPublication sends each session only
+the rows that changed (0x3498 add/replace, 0x30EA remove).
+
+===========================================================================
+*/
+
 package quest
 
 import (
 	"encoding/binary"
+	"fmt"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"slices"
 	"sort"
 )
+
+// Marker states 856500 maps to the start, in-progress and report effects.
+const (
+	markerStateOffer      = 1
+	markerStateInProgress = 2
+	markerStateReport     = 3
+)
+
+// SQuestInfo flag 0x40: the NPC target list follows the contents.
+const questFlagTargets = 0x40
 
 // MarkerStates derives presentation from the same acceptance and objective
 // predicates as the quest transaction. Call under the character read door.
@@ -30,7 +55,7 @@ func (rt *Runtime) MarkerStates(c *enterworld.Character) map[uint32]NpcMarker {
 			// 925D20 calls condition slot +11C with arg4=1: the marker
 			// checks the hour but bypasses the first-come quota (926B01).
 			if canAcceptAgain(c, def) && prerequisitesMet(c, def) && rt.calendarAvailable(def, true) {
-				out[def.RefID] = NpcMarker{Codename: def.StartNpcCodename, State: 1}
+				out[def.RefID] = NpcMarker{Codename: def.StartNpcCodename, State: markerStateOffer}
 			}
 			continue
 		}
@@ -43,20 +68,165 @@ func (rt *Runtime) MarkerStates(c *enterworld.Character) map[uint32]NpcMarker {
 				continue
 			}
 		}
-		npc := current.EndNpcCodename
-		state := uint8(2)
-		if stageObjectiveMet(c, current, record) {
-			state = 3
-		}
-		if current.DeliveryNpcCodename != "" && heldCollectCount(c, current) < current.CollectCount {
-			npc = current.DeliveryNpcCodename
-			state = 3
-		}
-		if npc != "" {
-			out[def.RefID] = NpcMarker{Codename: npc, State: state}
+		if target := questTarget(c, current, record); target.Codename != "" {
+			out[def.RefID] = NpcMarker{Codename: target.Codename, State: target.State}
 		}
 	}
 	return out
+}
+
+/*
+================
+questTarget
+
+The NPC an accepted quest currently sends the player to: the stage's end
+NPC (in progress, or ready to report once the objective is met), or the
+delivery NPC while items remain to hand over. The overhead marker and the
+journal target list both name this one NPC.
+================
+*/
+type journalTarget struct {
+	NpcMarker
+	ref uint32
+}
+
+func questTarget(c *enterworld.Character, current *Definition, record enterworld.ActiveQuestRecord) journalTarget {
+	target := journalTarget{NpcMarker{Codename: current.EndNpcCodename, State: markerStateInProgress}, current.endNpcRef}
+	if stageObjectiveMet(c, current, record) {
+		target.State = markerStateReport
+	}
+	if current.DeliveryNpcCodename != "" && heldCollectCount(c, current) < current.CollectCount {
+		target = journalTarget{NpcMarker{Codename: current.DeliveryNpcCodename, State: markerStateReport}, current.deliveryNpcRef}
+	}
+	return target
+}
+
+/*
+================
+withJournalTargets
+
+SQuestInfo flag 0x40 carries the NPC RefObjIDs CIFWorldMap_DrawQuestNpcMarkers
+(57B1C0) and the minimap resolve through npcpos.txt for the selected quest.
+SQuestInfo_Deserialize (788210) clears that list on every update without
+the timer flag 4 and then appends, so the record keeps the full current
+list and every full update resends it; flag-4 timer deltas carry none.
+Reports whether the list changed, so the caller publishes the move. With
+no resolved NPC the record keeps whatever envelope it carries.
+================
+*/
+func withJournalTargets(c *enterworld.Character, current *Definition, record enterworld.ActiveQuestRecord) (enterworld.ActiveQuestRecord, bool) {
+	ref := questTarget(c, current, record).ref
+	if ref == 0 {
+		// No resolved placement (an unwired roster): keep the envelope.
+		return record, false
+	}
+	targets := []uint32{ref}
+	flags := record.Flags | questFlagTargets
+	if flags == record.Flags && slices.Equal(targets, record.TargetIds) {
+		return record, false
+	}
+	record.Flags, record.TargetIds = flags, targets
+	return record, true
+}
+
+/*
+================
+ResolveJournalNpcs
+
+Resolve the end and delivery NPCs of every quest and stage to the RefObjIDs
+npcpos.txt is keyed by, from the world NPC roster. The gameworld calls it
+once at startup, before any session reads a definition; until then no
+target list is published.
+================
+*/
+func (d *Definitions) ResolveJournalNpcs(refID func(codename string) (uint32, bool)) error {
+	resolve := func(def *Definition, code string) (uint32, error) {
+		if code == "" {
+			return 0, nil
+		}
+		ref, ok := refID(code)
+		if !ok || ref == 0 {
+			return 0, fmt.Errorf("quest %s names unplaced NPC %s", def.Codename, code)
+		}
+		return ref, nil
+	}
+	var err error
+	for _, def := range d.ordered {
+		if def.endNpcRef, err = resolve(def, def.EndNpcCodename); err != nil {
+			return err
+		}
+		if def.deliveryNpcRef, err = resolve(def, def.DeliveryNpcCodename); err != nil {
+			return err
+		}
+		for i := range def.Stages {
+			s := &def.Stages[i]
+			if s.endNpcRef, err = resolve(def, s.EndNpcCodename); err != nil {
+				return err
+			}
+			if s.deliveryNpcRef, err = resolve(def, s.DeliveryNpcCodename); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+/*
+================
+MarkersByNpc
+
+The client keeps one marker per NPC: CQuestMarkerRegistry_RebuildNpcIndex
+(787DB0) walks the rows in ascending key order and indexes the first one per
+NPC GID. Publishing a row per quest therefore let a lower quest the NPC
+offers hide the quest the player came back to report. Neither binary shows
+the retail server's aggregation, so this is an inference: the server sends
+one row per NPC, ranked report (3) over offer (1) over in progress (2), the
+lowest quest key breaking a tie.
+================
+*/
+func MarkersByNpc(states map[uint32]NpcMarker) map[uint32]NpcMarker {
+	best := make(map[string]uint32, len(states))
+	for id, m := range states {
+		if at, ok := best[m.Codename]; !ok || markerOutranks(id, m, at, states[at]) {
+			best[m.Codename] = id
+		}
+	}
+	out := make(map[uint32]NpcMarker, len(best))
+	for _, id := range best {
+		out[id] = states[id]
+	}
+	return out
+}
+
+/*
+================
+markerOutranks
+================
+*/
+func markerOutranks(id uint32, m NpcMarker, otherID uint32, other NpcMarker) bool {
+	if rank, otherRank := markerRank(m.State), markerRank(other.State); rank != otherRank {
+		return rank < otherRank
+	}
+	return id < otherID
+}
+
+/*
+================
+markerRank
+
+Lower ranks win: report, offer, in progress, then anything else.
+================
+*/
+func markerRank(state uint8) int {
+	switch state {
+	case markerStateReport:
+		return 0
+	case markerStateOffer:
+		return 1
+	case markerStateInProgress:
+		return 2
+	}
+	return 3
 }
 
 type NpcMarker struct {

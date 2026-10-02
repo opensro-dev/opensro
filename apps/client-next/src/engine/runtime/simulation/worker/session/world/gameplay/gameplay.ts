@@ -1451,11 +1451,17 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "attack" && entity.kind !== "monster" ) {
 				throw new Error( "Target is not attackable" );
 			}
+			// A targeted command settles the server's walk where it finds it: stop the
+			// local walk at the same point (movement.holdForCast).
 			if ( command.kind === "attack" ) {
-				return sendFrame( combat.attack( entity.gid ) );
+				const frame = combat.attack( entity.gid );
+				movement.holdForCast( now );
+				return sendFrame( frame );
 			}
 			if ( command.kind !== "skill" ) throw Error( "Unsupported gameplay command" );
-			return sendFrame( combat.skill( command.skillId, entity.gid ) );
+			const frame = combat.skill( command.skillId, entity.gid );
+			movement.holdForCast( now );
+			return sendFrame( frame );
 		},
 		/*
 ================

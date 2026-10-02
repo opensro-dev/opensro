@@ -696,7 +696,7 @@ func (rt *Runtime) completeRewardAt(character *enterworld.Character, def *Defini
 			if nextDef.Objective == ObjectiveCollect {
 				progress = heldCollectCount(character, nextDef)
 			}
-			record := BuildActiveQuestRecord(nextDef, progress)
+			record, _ := withJournalTargets(character, nextDef, BuildActiveQuestRecord(nextDef, progress))
 			character.ActiveQuests[at] = record
 			advanced = &record
 		} else {

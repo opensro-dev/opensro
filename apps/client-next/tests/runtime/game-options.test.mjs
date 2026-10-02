@@ -66,7 +66,10 @@ test("native hover, distance, own/other, guild and owned COS name branches", () 
 	assert.equal( nameVisible( { ...other, x: 300 }, local, false, options ), false );
 	assert.equal( nameVisible( { ...other, x: 299 }, local, false, options ), true );
 	assert.equal( nameVisible( { ...other, guildId: 7 }, local, false, { ...off, guildNames: true } ), true );
-	assert.equal( nameVisible( { ...other, kind: "cos", ownerGid: 1 }, local, false, options ), false );
+	// 85E2E0 hides a COS only while it is in a ride link; an owned pet shows its name.
+	assert.equal( nameVisible( { ...other, kind: "cos", ownerGid: 1 }, local, false, options ), true );
+	assert.equal( nameVisible( { ...other, kind: "cos" }, local, false, options, undefined, true ), false );
+	assert.equal( nameVisible( { ...other, kind: "cos" }, local, true, options, undefined, true ), true, "hover wins" );
 	assert.equal( nameVisible( { ...other, kind: "cos" }, local, false, options ), true );
 	for ( const band of [ 1, 2, 3, 4, 5 ] ) {
 		assert.equal( hiddenSilkCos( { ...other, kind: "cos", tidWord: (band << 11) | 0x1c6 }, true ), band === 4 );

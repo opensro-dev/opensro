@@ -256,7 +256,11 @@ type Definition struct {
 	deliveryRefs         []uint32
 	requiredEquippedItem string
 	stageIndex           uint16
-	missionIndex         uint8
+	// endNpcRef/deliveryNpcRef are the RefObjIDs the journal target list
+	// names (ResolveJournalNpcs); zero until the world roster resolves them.
+	endNpcRef      uint32
+	deliveryNpcRef uint32
+	missionIndex   uint8
 	QuestSpec
 	// RefID/Level resolve from the shipped questdata row (grade A).
 	RefID uint32

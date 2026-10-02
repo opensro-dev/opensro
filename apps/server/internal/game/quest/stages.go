@@ -17,6 +17,8 @@ type QuestStage struct {
 	ContentsSymbol string
 	EquippedItem   string
 	collectRef     uint32
+	endNpcRef      uint32
+	deliveryNpcRef uint32
 }
 
 func stageToken(code string, stage uint16) string { return fmt.Sprintf("%s@%d", code, stage) }
@@ -45,6 +47,7 @@ func definitionAtStage(root *Definition, stage uint16) (*Definition, bool) {
 	d.QuestSpec = s.QuestSpec
 	d.Codename, d.KindByte = root.Codename, root.KindByte
 	d.ContentsSymbol, d.CollectItemRefID, d.stageIndex = s.ContentsSymbol, s.collectRef, stage
+	d.endNpcRef, d.deliveryNpcRef = s.endNpcRef, s.deliveryNpcRef
 	// Keep the equip predicate with the resolved stage, without exposing the
 	// remaining stage graph to BuildActiveQuestRecord's initial-state branch.
 	d.requiredEquippedItem = s.EquippedItem
