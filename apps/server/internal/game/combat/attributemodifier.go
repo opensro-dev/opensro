@@ -31,6 +31,7 @@ const (
 AttributeEffectWrites
 
 595481 installs hpi; 595C4E installs apau; 5961E3 installs pmdg mode two.
+pmhp (Life Control) takes pmdg's form on the maximum-HP parameter.
 Convert the unsigned operand before negation, matching the x87 path.
 ================
 */
@@ -51,6 +52,11 @@ func AttributeEffectWrites(a enterworld.SkillAttributeBoost) []paramkeeper.Write
 		} {
 			writes = append(writes, paramkeeper.Write{Parameter: lane.parameter, Channel: paramkeeper.Flat, Value: float32(lane.value)})
 		}
+	}
+	if a.MaxHPPenalty {
+		// pmhp mirrors pmdg's negated percentage product on the maximum.
+		writes = append(writes,
+			paramkeeper.Write{Parameter: attributeMaxHP, Channel: paramkeeper.PercentProduct, Value: float32(-float64(a.HPPenaltyPercent))})
 	}
 	if a.DamagePenalty {
 		writes = append(writes,

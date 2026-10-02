@@ -26,6 +26,9 @@ const (
 	tagTimedAttack             = 0x61706175
 	tagTimedDamagePenalty      = 0x706d6467
 	tagTimedThreat             = 0x746e7432
+	tagTimedDamageRate         = 0x647275
+	tagTimedMaxHPPenalty       = 0x706d6870
+	parameterWizardMP          = 0x57494d44
 	parameterBardMP            = 0x42444d44
 	parameterMusicArea         = 0x4d554552
 	parameterBlessingPhysical  = 0x484c4250
@@ -92,6 +95,10 @@ type SkillAttributeBoost struct {
 	HPFlat, HPPercent               uint32
 	PhysicalAttack, MagicalAttack   uint32
 	PhysicalPenalty, MagicalPenalty uint32
+	// DamageRate is dru: 594AC0 installs it from BuffModifiers for every
+	// effect, so the program only has to be admitted. MaxHPPenalty is pmhp.
+	DamageRate, MaxHPPenalty bool
+	HPPenaltyPercent         uint32
 }
 
 /*
@@ -215,7 +222,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	for i := 0; i < program.Len(); i++ {
 		op := program.Instruction(i)
 		switch op.Tag {
-		case tagTimedMaxHP, tagTimedAttack, tagTimedDamagePenalty, tagTimedThreat:
+		case tagTimedMaxHP, tagTimedAttack, tagTimedDamagePenalty, tagTimedThreat, tagTimedDamageRate, tagTimedMaxHPPenalty:
 			if attributeTags[op.Tag] || targeted || result.Area.Present {
 				return
 			}
@@ -232,6 +239,22 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 					return
 				}
 				a.DamagePenalty, a.PhysicalPenalty, a.MagicalPenalty = true, op.Arguments[1], op.Arguments[2]
+			case tagTimedDamageRate:
+				if op.Count != 2 || !row.BuffModifiers.Dru || row.BuffModifiers.DruWords != [2]uint32{op.Arguments[0], op.Arguments[1]} {
+					return
+				}
+				a.DamageRate = true
+			case tagTimedMaxHPPenalty:
+				// pmhp has pmdg's four-word shape: duration, two words, mode 2.
+				// The client (8DCF61) reads the third word as the percentage;
+				// 100 marks a deferred cancellation this owner does not port.
+				// The second word is zero in every v1.150 row and stays refused
+				// otherwise, since its lane is unproven.
+				if op.Count != 4 || op.Arguments[0] != row.EffectDurationMs || op.Arguments[1] != 0 ||
+					op.Arguments[2] == 0 || op.Arguments[2] >= 100 || op.Arguments[3] != 2 {
+					return
+				}
+				a.MaxHPPenalty, a.HPPenaltyPercent = true, op.Arguments[2]
 			case tagTimedThreat:
 				// 5903EC consumes tnt2 only when producing a target hit.
 				// A self buff has no hostile target result; 594AC0 does not
@@ -285,6 +308,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				// but 5830B0 reads it only when creating an efr-kind-2 aura;
 				// the kind-1 March selection keeps its authored radius.
 				musicParameters = true
+			case parameterWizardMP:
+				// The prepared cost already applies WIMD (noteParameterIndex).
 			case parameterBlessingPhysical:
 				result.PhysicalAddend = true
 			case parameterBlessingMagical:
@@ -314,7 +339,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	result.Defense = defense
-	attributes := result.Attributes.MaxHP || result.Attributes.Attack || result.Attributes.DamagePenalty
+	attributes := result.Attributes.MaxHP || result.Attributes.Attack || result.Attributes.DamagePenalty ||
+		result.Attributes.DamageRate || result.Attributes.MaxHPPenalty
 	if len(attributeTags) != 0 && (!attributes || result.Persistent || result.Link.Present || movement || defense ||
 		result.Block.Present || result.Strength.Present || result.Intellect.Present || row.EffectDurationMs == 0) {
 		return
