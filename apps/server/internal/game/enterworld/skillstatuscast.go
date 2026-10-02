@@ -32,18 +32,19 @@ const (
 ================
 compileSkillStatusCast
 
-58E5F0 emits a successful zero-damage record for a targeted program
-without att, as it does for taunts. Admit a row when its complete program is
+58E5F0 emits a successful zero-damage record for a program without att,
+as it does for taunts. Admit a row when its complete program is
 status blocks plus aggression, caster getv modifiers and an optional
-primary-centered area. The owner acts on monsters, so the row must name
+primary-centered area. A targeted row acts on monsters, so it must name
 Enemy_M (column 29): Mana Drain authors Enemy_P only and its description
-says it has no effect on monsters. Untargeted (caster-centered) rows stay
-refused until a release owner exists for an action without a primary.
+says it has no effect on monsters. An untargeted row selects its hostile
+victims around the caster (efr shape 1, select 24) and leaves the target
+columns empty (Lightning Impact).
 ================
 */
 func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || fields[68] != "0" ||
-		!row.TimingPinned || !row.Consumption.Pinned || !row.ActionRangePinned || !row.TargetRequired || !row.Targets.EnemyM ||
+		!row.TimingPinned || !row.Consumption.Pinned || !row.ActionRangePinned || row.TargetRequired && !row.Targets.EnemyM ||
 		row.ChainSub || row.ChainNext != 0 || row.ActionDurationMs == 0 || row.Attack.Present {
 		return SkillThreat{}, false
 	}
@@ -79,7 +80,13 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 			}
 		case tagEfr:
 			a := op.Arguments
-			if a[0] != 1 || a[1] != 2 || a[2] == 0 || a[2] > 0xffff ||
+			// A targeted row centres on its primary (shape 2); an untargeted
+			// row centres on the caster (shape 1, Lightning Impact).
+			wantShape := uint32(2)
+			if !row.TargetRequired {
+				wantShape = 1
+			}
+			if a[0] != 1 || a[1] != wantShape || a[2] == 0 || a[2] > 0xffff ||
 				a[3] == 0 || a[3] > 255 || a[4] > 100 || a[5] != statusCastSelect {
 				return SkillThreat{}, false
 			}
@@ -89,7 +96,7 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 			return SkillThreat{}, false
 		}
 	}
-	if statuses == 0 || !row.Abnormal.Present() {
+	if statuses == 0 || !row.Abnormal.Present() || !row.TargetRequired && threat.Area.Radius == 0 {
 		return SkillThreat{}, false
 	}
 	return threat, true

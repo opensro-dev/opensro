@@ -91,3 +91,16 @@ func SkillCastAreaReleaseFrame(cast SkillCastSuccess, primary uint32, targets []
 	start := SkillCastAreaFrame(cast, primary, targets)
 	return Frame{Opcode: OpSkillEffectControl, Payload: append(NewWriter(5).U8(1).U32(cast.InstanceToken).Payload(), start.Payload[14:]...)}
 }
+
+/*
+================
+SkillCastUntargetedAreaReleaseFrame
+
+The release of a prepared caster-centred area (Lightning Impact): the same
+result grammar as SkillCastAreaReleaseFrame with the zero steering target.
+================
+*/
+func SkillCastUntargetedAreaReleaseFrame(cast SkillCastSuccess, targets []SkillAreaTarget) Frame {
+	start := SkillCastUntargetedAreaFrame(cast, targets)
+	return Frame{Opcode: OpSkillEffectControl, Payload: append(NewWriter(5).U8(1).U32(cast.InstanceToken).Payload(), start.Payload[14:]...)}
+}
