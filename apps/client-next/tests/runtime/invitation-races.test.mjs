@@ -211,6 +211,16 @@ test("a resurrection proposal is held in its own slot until the player answers i
 	}
 });
 
+test("an rmut revival (type 8) fills the same slot as a mutation and answers the same way", () => {
+	const { game, frames } = fixture();
+	assert.equal( game.receive( { opcode: 0x3393, payload: Uint8Array.of( 8, 0x2a, 1, 0, 0 ) }, 0 ), true );
+	assert.deepEqual( defined( defined( game.take() ).social ).resurrection, { gid: 0x12a, mutation: true } );
+	game.command( { kind: "resurrection-consent", accept: true }, 1, undefined );
+	assert.equal( frames.length, 1 );
+	assert.deepEqual( [ frames[0].opcode, ...frames[0].payload ], [ 0x3393, 1, 1 ] );
+	game.dispose();
+});
+
 test("resurrection proposals reject a missing caster and a truncated or padded body", () => {
 	for ( const payload of [ [ 4, 0, 0, 0, 0 ], [ 4, 7, 0, 0 ], [ 4, 7, 0, 0, 0, 0 ] ] ) {
 		const { game, frames } = fixture();

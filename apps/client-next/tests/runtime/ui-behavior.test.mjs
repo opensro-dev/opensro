@@ -1342,7 +1342,7 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 	}
 });
 
-test("resurrection question draws over the death box with native text and death box controls stay dispatchable", () => {
+test("a resurrection question retires the death box at native geometry; selecting oneself restores it", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
 		/** @type {any} */ let latest = null;
@@ -1356,30 +1356,27 @@ test("resurrection question draws over the death box with native text and death 
 		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 2, 0, 0 ] } ];
 		for ( let t = 0; t <= 3000; t += 100 ) step( t );
 		assert.ok( ids().includes( "rebirth-point" ) );
-		assert.ok( ids().includes( "chat-text" ) );
+		const confirmCaption = defined( latest ).controls.find( c => c.id === "rebirth-body" ).label;
+		// 7644E0 case 3: ClearStateTimer(0xF), retire kinds 3 and 4, open kind 4.
 		f.state.gameplay = { ...f.state.gameplay, social: { invitation: null, resurrection: { gid: 2 } } };
 		step( 3100 );
 		assert.deepEqual( ids(), [
-			"rebirth-body",
-			"rebirth-drag",
-			"rebirth-point",
-			"rebirth-alternate",
 			"resurrection-body",
 			"resurrection-drag",
 			"resurrection-accept",
 			"resurrection-refuse"
-		], "the question sits above the death box and the HUD is held" );
+		], "the question retires the death box and holds the HUD" );
+		const body = defined( latest ).controls.find( c => c.id === "resurrection-body" );
+		// 5C82D0 centres 308x148 (1600x900: 646,376); 52F460 case 3 resizes to 400x210.
+		assert.deepEqual( body.rect, [ 646, 376, 400, 210 ] );
+		assert.ok( body.label && body.label !== confirmCaption, "kind 4 carries the agreement caption" );
 		assert.deepEqual(
 			defined( latest ).controls.filter( c => c.id.startsWith( "resurrection-" ) && c.kind === "button" ).map(
-				c => [
-					c.id,
-					c.label,
-					c.rect
-				]
+				c => [ c.id, c.label, c.rect ]
 			),
-			[ [ "resurrection-accept", "Yes", [ 719, 508, 76, 24 ] ], [ "resurrection-refuse", "No", [
-				805,
-				508,
+			[ [ "resurrection-accept", "Yes", [ 769, 544, 76, 24 ] ], [ "resurrection-refuse", "No", [
+				849,
+				544,
 				76,
 				24
 			] ] ]
@@ -1387,37 +1384,43 @@ test("resurrection question draws over the death box with native text and death 
 		assert.ok( f.hasText( "The warm light is hovering around your body." ) );
 		assert.ok( f.hasText( "You feel the soul entering your body." ) );
 		assert.ok( f.hasText( "Will you resurrect yourself to venture again?" ) );
-		for ( const id of [ "rebirth-point", "rebirth-alternate" ] ) {
-			const [x, y, rw, rh] = defined( latest ).controls.find( c => c.id === id ).rect;
-			assert.equal(
-				topmostControlAt( defined( latest ).controls, x + (rw >> 1), y + (rh >> 1) )?.id,
-				"resurrection-body",
-				`the centred question covers ${id} until it is dragged aside`
-			);
-		}
 		f.ui.event( { kind: "drag", id: "resurrection-drag", dx: 40, dy: -30 } );
 		step( 3110 );
 		assert.deepEqual( defined( latest ).controls.find( c => c.id === "resurrection-accept" ).rect, [
-			759,
-			478,
+			809,
+			514,
 			76,
 			24
 		] );
 		f.ui.event( { kind: "activate", id: "logout" } );
 		assert.deepEqual( sent, [] );
-		f.ui.event( { kind: "activate", id: "resurrection-accept" } );
-		assert.deepEqual( sent, [ { kind: "gameplay", command: { kind: "resurrection-consent", accept: true } } ] );
 		f.ui.event( { kind: "activate", id: "resurrection-refuse" } );
 		assert.deepEqual( sent.at( -1 ), {
 			kind: "gameplay",
 			command: { kind: "resurrection-consent", accept: false }
 		} );
-		f.ui.event( { kind: "activate", id: "rebirth-point" } );
-		assert.deepEqual( sent.at( -1 ), { kind: "gameplay", command: { kind: "rebirth", choice: 1 } } );
+		// The refusal closes the slot; nothing reopens the death box by itself.
 		f.state.gameplay = { ...f.state.gameplay, social: { invitation: null } };
-		step( 3200 );
-		assert.ok( !ids().includes( "resurrection-accept" ) );
-		assert.ok( ids().includes( "rebirth-point" ) );
+		for ( let t = 3200; t <= 9000; t += 200 ) step( t );
+		assert.ok( !ids().includes( "rebirth-point" ), "the retired death box stays closed" );
+		// 6813E0: selecting oneself while dead opens kind 3 again.
+		f.ui.event( { kind: "world-select", gid: 1 } );
+		step( 9100 );
+		assert.ok( ids().includes( "rebirth-point" ), "selecting oneself restores the death box" );
+		// 7644E0 case 7: an rmut revival asks the mutation question instead.
+		f.state.gameplay = {
+			...f.state.gameplay,
+			social: { invitation: null, resurrection: { gid: 3, mutation: true } }
+		};
+		step( 9200 );
+		assert.ok( !ids().includes( "rebirth-point" ), "the mutation question retires the death box too" );
+		assert.ok( ids().includes( "resurrection-accept" ) );
+		assert.ok( !f.hasText( "The warm light is hovering around your body." ) );
+		f.ui.event( { kind: "activate", id: "resurrection-accept" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "resurrection-consent", accept: true }
+		} );
 	} finally {
 		f.dispose();
 	}

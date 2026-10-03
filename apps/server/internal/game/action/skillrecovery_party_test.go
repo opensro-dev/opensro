@@ -776,3 +776,32 @@ func TestPartyHealOverTimeInstallsReachEachClientOnce(t *testing.T) {
 		})
 	}
 }
+
+/*
+==================
+TestMutationRevivalProposesTypeEight
+
+4EA0D0 proposes type 8 for a resu row with an rmut skill (Reverse
+Oblation, REBIRTHA_SPECIAL); the client asks the REBIRTH_MUTATION question.
+==================
+*/
+func TestMutationRevivalProposesTypeEight(t *testing.T) {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_REBIRTHA_SPECIAL_A_01")
+	if skill.Abnormal.Rmut == 0 {
+		t.Fatal("fixture: the special revival names no rmut skill")
+	}
+	affordable(&skill)
+	p := newSupportParty(t, skill, 100, 400)
+	dead := p.mates[0]
+	*dead.CurrentHP = 0
+	cast := wire.SkillAction{ActionId: skill.ID}
+	if skill.TargetRequired {
+		cast = wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(dead)}
+	}
+	r, batches := p.castReleased(t, skill, cast)
+	prompt := framesFor(dead.ID, r, batches)
+	if len(prompt) != 1 || prompt[0].Opcode != opInvitationProposal || len(prompt[0].Payload) != 5 ||
+		prompt[0].Payload[0] != mutationProposalType {
+		t.Fatalf("mutation revival prompt %+v", prompt)
+	}
+}

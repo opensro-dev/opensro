@@ -69,6 +69,8 @@ export interface GuildWar {
 }
 // The 0x3393 type a resurrection skill proposes to a dead player.
 export const RESURRECTION_PROPOSAL = 4;
+// The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).
+export const MUTATION_PROPOSAL = 8;
 export interface SocialState {
 	readonly wars?: readonly GuildWar[];
 	readonly roleUpdates?: readonly { name: string; role: number; }[];
@@ -103,7 +105,7 @@ export interface SocialState {
 	// The open resurrection question (0x3393 type 4, box kind 4); its gid is
 	// the caster. It has its own slot so it never displaces an invitation
 	// and no invitation displaces it.
-	readonly resurrection?: { readonly gid: number; };
+	readonly resurrection?: { readonly gid: number; readonly mutation?: boolean; };
 	// Native war-proposal replies reach the same system-message board as the
 	// fortress announcements. The gameplay owner drains this each frame.
 	readonly notice?: import("./system-notices").SystemNotice;
@@ -534,17 +536,20 @@ export function socialPacket(
 		next = { ...next, alliances, allianceMaster, allianceCrests };
 	} else if ( op === 0x3393 ) {
 		const type = u8();
-		if ( type !== 1 && type !== 2 && type !== 3 && type !== RESURRECTION_PROPOSAL && type !== 5 ) {
+		if (
+			type !== 1 && type !== 2 && type !== 3 && type !== RESURRECTION_PROPOSAL && type !== 5 &&
+			type !== MUTATION_PROPOSAL
+		) {
 			return null;
 		}
 		const gid = u32();
 		if ( !gid ) {
 			throw Error( "Invalid invitation" );
 		}
-		// 7644E0 type 4 carries only the caster: {u8 4, u32 casterGid}. It
-		// fills its own slot and leaves a pending invitation untouched.
-		next = type === RESURRECTION_PROPOSAL ?
-			{ ...next, resurrection: { gid } } :
+		// 7644E0 types 4 and 8 carry only the caster: {u8 type, u32 casterGid}.
+		// They fill their own slot and leave a pending invitation untouched.
+		next = type === RESURRECTION_PROPOSAL || type === MUTATION_PROPOSAL ?
+			{ ...next, resurrection: { gid, ...(type === MUTATION_PROPOSAL ? { mutation: true } : {}) } } :
 			{ ...next, invitation: { type, gid, ...(type === 2 || type === 3 ? { options: u8() } : {}) } };
 	} // 75B450 / 75B4B0 / 75B520 use category ONE, unlike invite failures.
 	// Membership remains authoritative on 3E58, not these acknowledgements.

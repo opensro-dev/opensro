@@ -341,7 +341,12 @@ import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
 import { noticeDialog } from "@/engine/foundation/ui/notice-dialog";
 import { rebirthDialog } from "@/engine/foundation/ui/rebirth-dialog";
-import { createResurrectionPrompt, resurrectionQuestion } from "@/engine/foundation/ui/resurrection-proposal";
+import {
+	createResurrectionPrompt,
+	RESURRECTION_NOTE_COLOR,
+	resurrectionBoxLayout,
+	resurrectionQuestion
+} from "@/engine/foundation/ui/resurrection-proposal";
 import { textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu } from "@/engine/foundation/ui/system-menu";
 import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
@@ -867,14 +872,21 @@ export function createUi(
 	================
 	resurrectionLayout
 
-	The resurrection question box sized by its measured lines.
+	Type 4 is confirm box kind 4 at its native geometry; type 8 (an rmut
+	revival) is a simple message box sized by its measured line.
 	================
 	*/
-	function resurrectionLayout( width: number, height: number, position: readonly [number, number] | null ) {
+	function resurrectionLayout(
+		width: number,
+		height: number,
+		position: readonly [number, number] | null,
+		mutation = false
+	) {
+		if ( !mutation ) return resurrectionBoxLayout( width, height, position );
 		return textMessageBoxLayout(
 			width,
 			height,
-			resurrectionQuestion().map( key => text.run( hudCopy( key ) ).width ),
+			resurrectionQuestion( true ).map( key => text.run( hudCopy( key ) ).width ),
 			position
 		);
 	}
@@ -3768,11 +3780,12 @@ export function createUi(
 				}
 			}
 			if ( event.kind === "drag" && event.id === "resurrection-drag" && view ) {
-				const layout = resurrectionLayout( view.width, view.height, resurrectionPrompt.position() ),
+				const mutation = !!view.gameplay?.social?.resurrection?.mutation,
+					layout = resurrectionLayout( view.width, view.height, resurrectionPrompt.position(), mutation ),
 					next = resurrectionLayout( view.width, view.height, [
 						layout.frame[0] + event.dx,
 						layout.frame[1] + event.dy
-					] );
+					], mutation );
 				resurrectionPrompt.place( [ next.frame[0], next.frame[1] ] );
 				dirty = true;
 				return;
@@ -4759,9 +4772,15 @@ export function createUi(
 				inviteIdentity = identity;
 				invitePosition = null;
 			}
-			resurrectionPrompt.sync(
-				phase === "world" || retainedWorld ? next.gameplay?.social?.resurrection?.gid ?? 0 : 0
-			);
+			// 7644E0 (types 4 and 8) clears the pending death-box timer 0xF and
+			// retires the death box (kind 3) when a question opens; selecting
+			// oneself while dead brings it back (6813E0, the world-select path).
+			const proposer = phase === "world" || retainedWorld ? next.gameplay?.social?.resurrection?.gid ?? 0 : 0;
+			if ( proposer && resurrectionPrompt.opens( proposer ) ) {
+				deathDismissed = true;
+				deathRequested = false;
+			}
+			resurrectionPrompt.sync( proposer );
 			if ( phase !== "disconnected" ) disconnectPosition = null;
 			const gachaVisible = phase === "world" && !!next.gameplay?.gacha?.visible;
 			if ( gachaVisible && !gachaWasVisible ) {
@@ -12665,14 +12684,12 @@ export function createUi(
 					);
 				}
 			}
-			// The resurrection question comes while the player is dead: it is the
-			// newest box, so it draws over the death box and over a pending
-			// invitation box, which keeps its own slot and stays answerable.
-			// Inferred: the death box's and the invitation box's controls stay
-			// dispatchable (the centred question covers the death box's buttons
-			// until dragged aside), every other open dialog loses its controls
-			// until the question is answered, and the question is not dismissed
-			// by a revive or the server's 30 s expiry.
+			// The resurrection question comes while the player is dead. Opening it
+			// retired the death box (7644E0, see the proposal sync); a death box
+			// the player reopens by selecting themselves (6813E0) and a pending
+			// invitation box keep their controls. Every other open dialog loses
+			// its controls until the question is answered; the question is not
+			// dismissed by a revive or the server's 30 s expiry.
 			if ( game?.social?.resurrection && worldVisible ) {
 				/*
 				================
@@ -12692,15 +12709,16 @@ export function createUi(
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
-				const layout = resurrectionLayout( w, h, resurrectionPrompt.position() );
+				const mutation = !!game.social.resurrection.mutation,
+					layout = resurrectionLayout( w, h, resurrectionPrompt.position(), mutation );
 				controls.push( {
 					id: "resurrection-body",
-					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					label: hudCopy( "UIIT_STT_AGREEMENT_BOX" ),
 					kind: "region",
 					rect: layout.frame
 				}, {
 					id: "resurrection-drag",
-					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					label: hudCopy( "UIIT_STT_AGREEMENT_BOX" ),
 					kind: "region",
 					draggable: true,
 					rect: layout.drag
@@ -12713,13 +12731,25 @@ export function createUi(
 						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
 						full
 					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+					// Both boxes carry the agreement caption (52F460 case 3, 7644E0 case 7).
+					...text.quads( hudCopy( "UIIT_STT_AGREEMENT_BOX" ), layout.title, full, white, {
 						hAlign: 1,
 						vAlign: 0
 					} )
 				);
-				resurrectionQuestion().forEach( ( key, i ) =>
-					quads.push( ...text.quads( hudCopy( key ), layout.lines[i]!, full, white, { vAlign: 0 } ) )
+				// Kind 4's third line is the note in 0xFFFFF1D3 (52F460 case 3).
+				resurrectionQuestion( mutation ).forEach( ( key, i ) =>
+					quads.push(
+						...text.quads(
+							hudCopy( key ),
+							layout.lines[i]!,
+							full,
+							!mutation && i === 2 ?
+								RESURRECTION_NOTE_COLOR :
+								white,
+							{ vAlign: 0 }
+						)
+					)
 				);
 				button( "resurrection-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
 				button( "resurrection-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
