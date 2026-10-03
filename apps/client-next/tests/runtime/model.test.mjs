@@ -138,3 +138,28 @@ test("native environment coverage retains texture cutouts but fades with instanc
 		assert.equal( primitive.geometry.material.fadeAlphaOnly, true );
 	}
 });
+
+test("authored NaN texture coordinates read as 0; a non-finite position still refuses the model", () => {
+	const decoder = createModelDecoder();
+	for (
+		const asset of [
+			"/assets/world/animated-objects/artifact-china-dunhuang-w_cd_ani_boat.glb",
+			"/assets/world/animated-objects/artifact-china-dunhuang-w_cd_boat.glb",
+			"/assets/world/animated-objects/npc-npc-chinasystem_boatman2.glb"
+		]
+	) {
+		const bytes = readPublishedAssetBytesSync( asset, path.join( root, "../../.generated/client-public" ) );
+		const model = decoder.character( decoder.decode( bytes ) );
+		assert.ok( model.primitives.length > 0, asset );
+		for ( const primitive of model.primitives ) {
+			assert.ok( primitive.geometry.uvs.every( Number.isFinite ), asset );
+		}
+		// The same model with one NaN position is refused, as before.
+		const copy = Uint8Array.from( bytes ), view = new DataView( copy.buffer );
+		const length = view.getUint32( 12, true ), json = JSON.parse( Buffer.from( copy.subarray( 20, 20 + length ) ) );
+		const accessor = json.accessors[json.meshes[0].primitives[0].attributes.POSITION];
+		const at = 28 + length + (json.bufferViews[accessor.bufferView].byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+		view.setFloat32( at, NaN, true );
+		assert.throws( () => decoder.character( decoder.decode( copy ) ), /Non-finite character accessor/, asset );
+	}
+});

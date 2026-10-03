@@ -146,7 +146,20 @@ decode
 					throw new Error( "Character expansion exceeds decoded byte budget" );
 				}
 			}
-			function accessor( index: number, width: number ): Float32Array {
+			/*
+			================
+			accessor
+
+			An accessor's values as floats. Every value must be finite, except
+			texture coordinates (texcoords): the Dunhuang wharf boats and
+			boatman (w_cd_ani_boat, w_cd_boat, chinasystem_boatman2) author
+			NaN UVs on a few vertices, which the native D3D9 renderer samples
+			without complaint. Inference: a NaN coordinate reads as 0, the
+			texel a hardware sampler resolves an undefined coordinate to; the
+			vertex's position, normal and skinning stay strictly checked.
+			================
+			*/
+			function accessor( index: number, width: number, texcoords = false ): Float32Array {
 				const a = j.accessors[index], v = a?.bufferView === undefined ? undefined : j.bufferViews[a.bufferView];
 				if (
 					!a || !v || a.sparse ||
@@ -187,7 +200,8 @@ decode
 								Math.max( -1, value / (a.componentType === 5120 ? 127 : 32767) );
 						}
 						if ( !Number.isFinite( value ) ) {
-							throw new Error( "Non-finite character accessor" );
+							if ( !texcoords ) throw new Error( "Non-finite character accessor" );
+							value = 0;
 						}
 						result[n * width + c] = value;
 					}
@@ -335,7 +349,7 @@ decode
 								accessor( p.attributes.NORMAL, 3 ),
 							uvs: p.attributes.TEXCOORD_0 === undefined ?
 								new Float32Array( count * 2 ) :
-								accessor( p.attributes.TEXCOORD_0, 2 ),
+								accessor( p.attributes.TEXCOORD_0, 2, true ),
 							joints: jointIndices,
 							weights,
 							transform: identity(),
