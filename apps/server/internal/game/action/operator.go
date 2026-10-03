@@ -34,7 +34,9 @@ type OperatorTown struct {
 ================
 OperatorTowns
 
-Only authored outdoor recall gates qualify. Client coordinates are never input.
+Only authored outdoor recall gates qualify, matching appointedRebirthPoint.
+The portal building flag includes city gates; it does not mean an indoor region.
+Client coordinates are never input.
 ================
 */
 func (rt *Runtime) OperatorTowns() []OperatorTown {
@@ -43,7 +45,7 @@ func (rt *Runtime) OperatorTowns() []OperatorTown {
 		return rows
 	}
 	for _, destination := range rt.portals.destinations {
-		if destination.recall && !destination.building && destination.ref != 0 && destination.spawn.RegionID != 0 && !simulation.IsDungeonRegion(destination.spawn.RegionID) {
+		if destination.recall && destination.ref != 0 && destination.spawn.RegionID != 0 && !simulation.IsDungeonRegion(destination.spawn.RegionID) {
 			rows = append(rows, OperatorTown{destination.id, destination.code, destination.spawn})
 		}
 	}

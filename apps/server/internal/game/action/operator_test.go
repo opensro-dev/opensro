@@ -8,6 +8,8 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"testing"
 
@@ -26,7 +28,7 @@ func TestOperatorRescuePreservesCharacterAndRetiresMovement(t *testing.T) {
 		installMidMove(rt, c, clock)
 		destination := simulation.Spawn{RegionID: 26265, X: 957, Y: -80, Z: 1508}
 		rt.portals = &portalCatalog{destinations: map[uint32]portalDestination{
-			2: {id: 2, ref: 2095, code: "GATE_WC", recall: true, spawn: destination},
+			2: {id: 2, ref: 2095, code: "GATE_WC", building: true, recall: true, spawn: destination},
 		}}
 		before := c.Snapshot()
 		rt.Selected.Set(testDivision, c.Name, 99)
@@ -74,7 +76,7 @@ func TestOperatorTownsRejectInstancesAndNonRecallDestinations(t *testing.T) {
 		4: {id: 4, ref: 4, recall: true, spawn: simulation.Spawn{RegionID: 0x8001}},
 	}}
 	towns := rt.OperatorTowns()
-	if len(towns) != 1 || towns[0].ID != 1 {
+	if len(towns) != 2 || towns[0].ID != 1 || towns[1].ID != 2 {
 		t.Fatalf("towns %+v", towns)
 	}
 }
@@ -93,7 +95,7 @@ func TestOperatorRescuePersistsThroughAuthorityRestart(t *testing.T) {
 	deps.ReadCharacter = func(_ string, read func()) { d.authority.ReadState(read) }
 	destination := simulation.Spawn{RegionID: 26265, X: 957, Y: -80, Z: 1508}
 	d.rt.portals = &portalCatalog{destinations: map[uint32]portalDestination{
-		2: {id: 2, ref: 2095, code: "GATE_WC", recall: true, spawn: destination},
+		2: {id: 2, ref: 2095, code: "GATE_WC", building: true, recall: true, spawn: destination},
 	}}
 	before := d.character.Snapshot()
 	if err := d.rt.OperatorRescue(testDivision, d.character.Name, 2); err != nil {
@@ -135,4 +137,34 @@ func TestOperatorRescueRefusesPendingDeletionBeforeCleanup(t *testing.T) {
 	if _, selected := rt.Selected.Get(testDivision, c.Name); !selected {
 		t.Fatal("refusal cleaned up live runtime")
 	}
+}
+
+/*
+================
+TestOperatorTownsFromPublishedCatalog
+
+City gates are authored teleport buildings, not dungeon destinations. Validate
+real data so a fabricated catalog cannot hide an unusable production selector.
+================
+*/
+func TestOperatorTownsFromPublishedCatalog(t *testing.T) {
+	licensed.RequireGameData(t)
+	rt, _ := newTestRuntime(rebirthTestCharacter(20, 100), testItems())
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+		t.Fatal(err)
+	}
+	towns := rt.OperatorTowns()
+	if len(towns) != 5 {
+		t.Fatalf("town census: %+v", towns)
+	}
+	for _, town := range towns {
+		if town.ID != 2 {
+			continue
+		}
+		if town.Code != "GATE_WC" || town.Position != (simulation.Spawn{RegionID: 26265, X: 957, Y: -80, Z: 1508}) {
+			t.Fatalf("Donwhang destination: %+v", town)
+		}
+		return
+	}
+	t.Fatal("Donwhang is missing")
 }
