@@ -19,7 +19,6 @@ package action
 import (
 	"sync/atomic"
 
-	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
@@ -49,40 +48,12 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 	if err != nil {
 		return OpResult{DiagnosticRefusal: "area-burst-stats-unavailable"}
 	}
-	plans := make([]areaVictimPlan, 0, len(victims))
-	sequences := make([][]simulation.MonsterDamagePlan, 0, len(victims))
-	percent := uint64(100)
-	for _, target := range victims {
-		defender, err := combat.MonsterInstanceStats(target)
-		if err != nil {
-			return OpResult{DiagnosticRefusal: "area-burst-defender"}
-		}
-		defender.MotionState = target.Motion.StateAt(now)
-		plan := areaVictimPlan{target: target}
-		total := uint64(0)
-		for range skill.Attack.ImpactCount {
-			formula, err := rt.resolvePlayerImpact(division, snapshot.Name, skill, attacker, defender, now, false)
-			if err != nil {
-				return OpResult{DiagnosticRefusal: "area-burst-formula"}
-			}
-			formula.Damage = uint32(uint64(formula.Damage) * percent / 100)
-			total += uint64(formula.Damage)
-			plan.formulas = append(plan.formulas, formula)
-		}
-		percent = percent * uint64(100-skill.OffensiveArea.ReductionPercent) / 100
-		if total >= uint64(target.CurrentHP) {
-			mover, ok := rt.Monsters.Mover(division, target.Gid)
-			if !ok {
-				return OpResult{DiagnosticRefusal: "area-burst-pose"}
-			}
-			plan.pose = mover.LivePoseAt(now, nil)
-		}
-		impacts, ok := rt.planMonsterImpacts(division, snapshot, skill, target, plan.formulas, now)
-		if !ok {
-			return OpResult{DiagnosticRefusal: "area-burst-plan"}
-		}
-		plans = append(plans, plan)
-		sequences = append(sequences, impacts)
+	plans, sequences, planned := rt.planAreaVictims(areaPlanInput{
+		division: division, snapshot: snapshot, skill: skill, attacker: attacker, victims: victims,
+		reduction: skill.OffensiveArea.ReductionPercent, impacts: int(skill.Attack.ImpactCount), now: now,
+	})
+	if !planned {
+		return OpResult{DiagnosticRefusal: "area-burst-plan"}
 	}
 	var committed [][]simulation.MonsterDamageResult
 	var progression, battleFrames []wire.Frame
@@ -108,18 +79,7 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 		}
 		rt.startSkillCast(division, c, now)
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, false)
-		for index, impacts := range committed {
-			impact := impacts[len(impacts)-1]
-			if !impact.Fatal {
-				continue
-			}
-			s := rt.settleMonsterInsideDoor(division, c, roster, impact, plans[index].pose, now)
-			progression = append(progression, s.actorFrames...)
-			drops = append(drops, s.drops...)
-			settlements.public = append(settlements.public, s.public...)
-			settlements.otherPublic = append(settlements.otherPublic, s.otherPublic...)
-			settlements.others = append(settlements.others, s.others...)
-		}
+		progression, drops, settlements = rt.settleAreaFatalities(division, c, roster, committed, plans, now)
 		return true
 	}) {
 		if refusal != 0 {

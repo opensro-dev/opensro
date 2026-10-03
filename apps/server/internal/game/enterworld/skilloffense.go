@@ -147,7 +147,7 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			continue
 		}
 		switch tag {
-		case 0x67657476: // getv
+		case tagGetv: // getv
 			// WIRU/CBRA (+0x4E8/+0x50C) sit beside WIMD (+0x4E4) in this
 			// per-row index, so a row without att records them too, and
 			// 4AE87E adds them to the cast's reach. Owners that never
@@ -179,7 +179,7 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			}
 		case 0x7265716e: // reqn
 			row.Reqi.All = true
-		case 0x656672: // efr; kind 2 is persistent area at +0x290, kind 3 at +0x294
+		case tagEfr: // efr; kind 2 is persistent area at +0x290, kind 3 at +0x294
 			kind, kindOK := word(i + 1)
 			radius, radiusOK := word(i + 3)
 			maxTargets, maxOK := word(i + 4)
@@ -427,7 +427,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			row.DirectOffensePinned = row.OffensiveStagePinned && row.ChainNext == 0
 			return ""
 		}
-		if seen[tag] && tag != 0x67657476 && tag != 0x72657169 {
+		if seen[tag] && tag != tagGetv && tag != 0x72657169 {
 			return "offense:duplicate-instruction:" + strconv.FormatInt(tag, 16)
 		}
 		seen[tag] = true
@@ -588,7 +588,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			if !row.CriticalModifier.Present {
 				return "offense:critical-arguments" // shared parser must validate the unsigned pair first
 			}
-		case 0x67657476:
+		case tagGetv:
 			arity = 1
 			if i+1 >= len(fields) {
 				return "offense:invalid-envelope-or-arguments"
@@ -602,7 +602,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			if !known && key != 0x4d414154 && !abnormalKey {
 				return "offense:getv:" + strconv.FormatInt(key, 16)
 			}
-		case 0x656672:
+		case tagEfr:
 			arity = 6
 			// Every victim takes every mc impact (58E5F0 loops impacts per
 			// target group; action/skillarea.go).

@@ -18,10 +18,8 @@ package enterworld
 const (
 	// Program tags, little-endian as stored in the numeric skilldata cells.
 	recoveryTagHeal = 0x6865616c // heal +0x324
-	recoveryTagEfr  = 0x656672   // efr: kind 1 is the action area (+0x28C)
 	recoveryTagMwhh = 0x6d776868 // mwhh +0x328
 	recoveryTagMwmh = 0x6d776d68 // mwmh +0x32C
-	recoveryTagGetv = 0x67657476 // getv
 	recoveryTagResu = 0x72657375 // resu +0x330
 	recoveryTagDura = 0x64757261 // dura: the effect's lifetime
 	recoveryTagPuls = 0x70756c73 // puls +0x384: the period
@@ -174,7 +172,7 @@ exceed.
 */
 func partyRecoveryArea(op SkillInstruction) bool {
 	a := op.Arguments
-	return op.Tag == recoveryTagEfr && op.Count == 6 &&
+	return op.Tag == tagEfr && op.Count == 6 &&
 		a[0] == recoveryEfrActionArea && a[1] == recoveryEfrAroundCaster && a[2] != 0 &&
 		a[3] >= recoveryPartyMemberBound && a[4] == 0 &&
 		(a[5] == recoveryPartySelect || a[5] == recoveryPartySelectWithCaster)
@@ -231,7 +229,7 @@ func healProgramTail(program SkillProgram, first int) bool {
 	for i := first; i < program.Len(); i++ {
 		op := program.Instruction(i)
 		parameter, known := SkillParameterFromKey(op.Arguments[0])
-		getv := op.Tag == recoveryTagGetv && op.Count == 1 && known
+		getv := op.Tag == tagGetv && op.Count == 1 && known
 		switch {
 		case op.Tag == recoveryTagMwhh && op.Count == 1 && !weaponHP:
 			weaponHP = true

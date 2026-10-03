@@ -591,7 +591,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				EffectDurationMs:       encodedEffectDuration(fields),
 				EffectDurationPresent:  encodedTailContainsTag(fields, 0x64757261),
 				HideDetectionBuff:      encodedPrimaryParameterEquals(fields, 0x6c6e6b73, 3, 0, false),
-				IndefiniteBuffTimer:    encodedPrimaryParameterEquals(fields, 0x656672, 0, 3, true),
+				IndefiniteBuffTimer:    encodedPrimaryParameterEquals(fields, tagEfr, 0, 3, true),
 				BodyStatus:             encodedBodyStatus(fields),
 				MovementModifier:       encodedMovementModifier(fields),
 				EffectRider:            encodedEffectRider(fields),
@@ -748,7 +748,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				{ID: textdataU32(fields[skilldataColReqMastery1]), Level: textdataNonNegative(fields[skilldataColReqMasteryLv1])},
 				{ID: textdataU32(fields[skilldataColReqMastery2]), Level: textdataNonNegative(fields[skilldataColReqMasteryLv2])},
 			}
-			row.Attack.MasteryEnhancement = encodedTailHasParameter(fields, 0x67657476, 0x4d414154)
+			row.Attack.MasteryEnhancement = encodedTailHasParameter(fields, tagGetv, 0x4d414154)
 			row.Attack.MasteryIDs = [2]uint32{row.Masteries[0].ID, row.Masteries[1].ID}
 			if row.Imbue.Pinned {
 				row.Imbue.Attack.MasteryEnhancement = row.Attack.MasteryEnhancement

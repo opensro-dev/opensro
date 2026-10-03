@@ -259,15 +259,6 @@ rule, the same form the timed br buff stores.
 */
 type SkillPassiveBlockRate struct{ Mask, Value uint32 }
 
-// tagPassiveBlockRate is br, the token the timed compiler knows as
-// tagTimedBlock; a passive row carries the same two words.
-const tagPassiveBlockRate = 0x6272
-
-// maxPassiveBlockRate is the admission ceiling for a br value. It is the
-// same percent bound the timed br compiler applies, so both parsers refuse
-// the same malformed rows; every shipped passive br is between 2 and 10.
-const maxPassiveBlockRate = 100
-
 /*
 ================
 encodedPassiveParameters
@@ -275,7 +266,7 @@ encodedPassiveParameters
 Native stores up to five three-argument setv blocks. Repeated keys overwrite
 in source order. reat, real and the reqi/reqn gate complete the resistance
 passives; br is the block-rate passive (a duplicate br, a zero mask or a
-value above maxPassiveBlockRate is malformed). Refuse the whole program if
+value above maxBlockRatePercent is malformed). Refuse the whole program if
 any operation lacks execution.
 
 Any one consumed block pins the program: none of the cited installers for
@@ -322,8 +313,8 @@ func encodedPassiveParameters(fields []string) SkillPassiveParameters {
 				return SkillPassiveParameters{}
 			}
 			out.Real = SkillPassiveReal{Mask: op.Arguments[0], Flat: op.Arguments[1], Grade: op.Arguments[2]}
-		case tagPassiveBlockRate:
-			if out.Br.Mask != 0 || op.Arguments[0] == 0 || op.Arguments[1] > maxPassiveBlockRate {
+		case tagTimedBlock:
+			if out.Br.Mask != 0 || op.Count != 2 || op.Arguments[0] == 0 || op.Arguments[1] > maxBlockRatePercent {
 				return SkillPassiveParameters{}
 			}
 			out.Br = SkillPassiveBlockRate{Mask: normalizeLaneMask(op.Arguments[0]), Value: op.Arguments[1]}
@@ -355,7 +346,7 @@ func encodedAttackParameters(fields []string) SkillParameterMask {
 		if i+arity >= len(fields) {
 			return mask
 		}
-		if tag == 0x67657476 {
+		if tag == tagGetv {
 			key, valid := textdataInt(fields[i+1])
 			if valid && key >= 0 && key <= 0xffffffff {
 				if slot, known := SkillParameterFromKey(uint32(key)); known {

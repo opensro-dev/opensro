@@ -13,11 +13,16 @@ Ordinary casts and item-owned timed jobs share effect descriptors and lifecycle.
 package enterworld
 
 const (
-	tagTimedHaste              = 0x68737465
-	tagTimedOverride           = 0x68737432
-	tagTimedIndependent        = 0x68737433
-	tagTimedDefense            = 0x64656670
-	tagTimedBlock              = 0x6272
+	tagTimedHaste       = 0x68737465
+	tagTimedOverride    = 0x68737432
+	tagTimedIndependent = 0x68737433
+	tagTimedDefense     = 0x64656670
+	tagTimedBlock       = 0x6272
+
+	// maxBlockRatePercent is the admission ceiling for a br value, timed or
+	// passive: a percent of the whole block chance. Every shipped br is
+	// within it (passives 2..10).
+	maxBlockRatePercent        = 100
 	tagTimedStrength           = 0x73747269
 	tagTimedIntellect          = 0x696e7469
 	tagTimedLink               = 0x6c6e6b73
@@ -350,7 +355,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			movement = true
 		case tagTimedBlock:
-			if result.Block.Present || op.Count != 2 || op.Arguments[1] > 100 {
+			if result.Block.Present || op.Count != 2 || op.Arguments[1] > maxBlockRatePercent {
 				return
 			}
 			result.Block = SkillBlockBoost{Present: true, Mask: normalizeLaneMask(op.Arguments[0]), Value: op.Arguments[1]}
