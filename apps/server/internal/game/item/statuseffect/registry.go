@@ -461,6 +461,13 @@ func (e Effect) Expired(nowMs int64) bool {
 		return nowMs >= e.ExpiresAtMs
 	}
 	if e.DurationPresent {
+		// Native installs and reads on one thread and one clock, so its
+		// unsigned elapsed never starts below zero. Here a reader's clock can
+		// trail an install made after it was sampled: that row has not
+		// started yet, it has not wrapped.
+		if nowMs < e.StartedAtMs {
+			return false
+		}
 		return uint32(nowMs-e.StartedAtMs) > uint32(e.ExpiresAtMs-e.StartedAtMs)
 	}
 	return nowMs > e.ExpiresAtMs
@@ -478,6 +485,9 @@ func (e Effect) RemainingMs(nowMs int64) uint32 {
 		return 0
 	}
 	if e.DurationPresent && !e.Persistent {
+		if nowMs < e.StartedAtMs {
+			return uint32(e.ExpiresAtMs - e.StartedAtMs)
+		}
 		return uint32(e.ExpiresAtMs-e.StartedAtMs) - uint32(nowMs-e.StartedAtMs)
 	}
 	if e.ExpiresAtMs > nowMs {

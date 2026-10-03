@@ -22,6 +22,7 @@ package action
 
 import (
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -30,27 +31,28 @@ import (
 ================
 linkedManaShare
 
-lkdh's MP for one batch of impacts, per impact as
+lkdh's HP and MP for one batch of impacts, per impact as
 CSkillManager_DistributeSharedDamage (5A04A0) runs per hit record: the HP
 the impact took (SkillCombat_ApplyResultRecipients passes the damage, or
 the remaining HP on a fatal hit) is skipped when it is 1 or less
 (593BDD), divided by the links the attacker holds and stored as a float32
-share; the MP is ftol(share * (word 1 / 100.0)), held at word 2.
+share; HP is ftol(word 0 / 100.0 * share) and MP ftol(share * (word 1 /
+100.0)), each held at word 2.
 ================
 */
-func linkedManaShare(impacts []simulation.MonsterDamageResult, percent, ceiling uint32, held int) int64 {
+func linkedManaShare(impacts []simulation.MonsterDamageResult, link statuseffect.Link, held int) (hp, mp int64) {
 	if held <= 0 {
-		return 0
+		return 0, 0
 	}
-	var mp int64
 	for _, impact := range impacts {
 		if impact.Applied <= 1 {
 			continue
 		}
-		share := float32(impact.Applied / uint32(held))
-		mp += int64(min(uint32(crtFtol(float64(share)*(float64(percent)/fullDamagePercent))), ceiling))
+		share := float64(float32(impact.Applied / uint32(held)))
+		hp += int64(min(uint32(crtFtol(float64(link.ManaHPPercent)/fullDamagePercent*share)), link.ManaCap))
+		mp += int64(min(uint32(crtFtol(share*(float64(link.ManaPercent)/fullDamagePercent))), link.ManaCap))
 	}
-	return mp
+	return hp, mp
 }
 
 /*
@@ -76,9 +78,9 @@ func (rt *Runtime) commitLinkedMana(division string, attacker uint32, impacts []
 	}
 	links, held := rt.effects.ManaLinks(division, c.Name, now)
 	for _, link := range links {
-		mp := linkedManaShare(impacts, link.ManaPercent, link.ManaCap, held)
+		hp, mp := linkedManaShare(impacts, link, held)
 		source := rt.findCharacter(division, link.SourceName)
-		if mp == 0 || source == nil || enterworld.ObjectIDForCharacter(source) != link.SourceGID {
+		if hp == 0 && mp == 0 || source == nil || enterworld.ObjectIDForCharacter(source) != link.SourceGID {
 			continue
 		}
 		var frame wire.Frame
@@ -87,7 +89,7 @@ func (rt *Runtime) commitLinkedMana(division string, attacker uint32, impacts []
 				return false
 			}
 			var ok bool
-			frame, ok = rt.applySkillRecovery(division, source, 0, mp)
+			frame, ok = rt.applySkillRecovery(division, source, hp, mp)
 			return ok
 		})
 		if frame.Opcode != 0 && rt.PushCharacterFrames != nil {

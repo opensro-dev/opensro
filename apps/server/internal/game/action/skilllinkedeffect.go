@@ -81,7 +81,7 @@ func (rt *Runtime) acceptLinkedTargetEffect(division string, c, snapshot, target
 		SourceToken: atomic.AddUint32(&rt.castTokenCounter, 1), TargetToken: atomic.AddUint32(&rt.castTokenCounter, 1),
 		SkillID: skill.ID, SkillGroup: skill.Group,
 		Group: d.Link.Group, MaxDistance: d.Link.MaxDistance, MaxOutgoing: d.Link.MaxOutgoing, ThreatPercent: d.Link.ThreatPercent,
-		ManaPercent: d.Link.ManaPercent, ManaCap: d.Link.ManaCap,
+		ManaHPPercent: d.Link.ManaHPPercent, ManaPercent: d.Link.ManaPercent, ManaCap: d.Link.ManaCap,
 		StartedAtMs: now, ExpiresAtMs: now + int64(skill.EffectDurationMs),
 		ClientCancelable: !skill.VoluntaryCancelBlocked, TargetModifiers: modifiers,
 	}

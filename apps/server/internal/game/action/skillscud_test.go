@@ -145,14 +145,14 @@ func TestScudRefusesAWeaponOtherThanADagger(t *testing.T) {
 
 /*
 ================
-TestScudWeaponPhaseSkipsPoisonCoatingReqi
+TestPoisonCoatingReqiIsJudgedAtThePress
 
-The weapon phase Scud added judges weapon bytes only. A poison coating
-carries reqi pairs (6 12 / 6 13) and keeps the admission it had before
-Scud: with no weapon equipped the cast is accepted, charged and installed.
+58D480 walks a row's reqi pairs at the press (ProcessCommand 0x4ACED4, mask
+0x37): a poison coating (reqi 6 12 / 6 13) cast with no weapon is refused
+0x300D before any MP is charged or effect installed.
 ================
 */
-func TestScudWeaponPhaseSkipsPoisonCoatingReqi(t *testing.T) {
+func TestPoisonCoatingReqiIsJudgedAtThePress(t *testing.T) {
 	rt, _, c, row, _ := poisonCoatingFixture(t)
 	if !row.Reqi.Present {
 		t.Fatalf("%s lost its reqi pairs: %+v", row.Codename, row.Reqi)
@@ -160,11 +160,12 @@ func TestScudWeaponPhaseSkipsPoisonCoatingReqi(t *testing.T) {
 	c.MissionInventory = nil
 	before := *c.CurrentMP
 	out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: row.ID}.Encode())
-	if _, ok := findFrame(out.Frames, wire.OpAttachedEffect); !ok {
-		t.Fatalf("unarmed coating refused: %+v", out)
+	frame, ok := findFrame(out.Frames, wire.OpSkillCastResult)
+	if !ok || len(frame.Payload) != 2 || frame.Payload[0] != 2 || frame.Payload[1] != 0x0d {
+		t.Fatalf("unarmed coating not refused 0x300D: %+v", out)
 	}
-	if len(rt.effects.Snapshot(testDivision, c.Name)) != 1 || *c.CurrentMP >= before {
-		t.Fatal("unarmed coating not committed exactly once", *c.CurrentMP)
+	if len(rt.effects.Snapshot(testDivision, c.Name)) != 0 || *c.CurrentMP != before {
+		t.Fatal("a refused coating charged MP or installed its effect", *c.CurrentMP)
 	}
 }
 

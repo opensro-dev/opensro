@@ -41,9 +41,9 @@ compileSkillStatusCast
 58E5F0 emits a successful zero-damage record for a program without att,
 as it does for taunts. Admit a row when its complete program is status
 blocks plus aggression, caster getv modifiers, reqi equipment pairs and
-an optional primary-centered area. Aggression is either tant or tnt2
-(Axis Quiver), never both: 58E5F0 admits tnt2 without att and emits a
-successful zero-damage record (compileSkillTaunt). reqi pairs are stored
+an optional primary-centered area. Aggression is tant or tnt2 (Axis
+Quiver); with both, tant wins (5903F6). 58E5F0 admits tnt2 without att and
+emits a successful zero-damage record (compileSkillTaunt). reqi pairs are stored
 on row.Reqi by noteParameterIndex and enforced before dispatch by 58D480
 (action.skillEquipmentRefusal, 0x300D); Poison Field authors two of them,
 so reqi, like getv, may repeat. A targeted row acts on monsters, so it
@@ -75,6 +75,7 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 	var threat SkillThreat
 	statuses := 0
 	seen := make(map[uint32]bool)
+	statusThreat := false
 	for i := 0; i < program.Len(); i++ {
 		op := program.Instruction(i)
 		if seen[op.Tag] && op.Tag != tagGetv && op.Tag != tagReqi {
@@ -86,14 +87,15 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 			continue
 		}
 		switch op.Tag {
-		case tagStatusThreat, tagThreat:
-			// One aggression word per record. Native lets tant take
-			// precedence over tnt2 (tagStatusThreat); no shipped status cast
-			// authors both, so such a row is refused, not ported.
-			if threat.Present {
-				return SkillThreat{}, false
-			}
+		case tagStatusThreat:
+			// 5903F6: a present tant takes the record's aggression and the
+			// tnt2 block is skipped, in whichever order the row authors them.
 			threat.Present, threat.Flat, threat.Percent = true, op.Arguments[0], op.Arguments[1]
+			statusThreat = true
+		case tagThreat:
+			if !statusThreat {
+				threat.Present, threat.Flat, threat.Percent = true, op.Arguments[0], op.Arguments[1]
+			}
 		case tagReqi: // row.Reqi; 58D480 admits before dispatch
 		case tagGetv: // caster getv modifiers (WIMD, WIRU, RPDU, RPTU) read at cast
 			if _, known := SkillParameterFromKey(op.Arguments[0]); !known {

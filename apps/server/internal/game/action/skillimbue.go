@@ -108,20 +108,20 @@ checked. Only the equipment phase is added, not the whole execution mask:
 its action-recovery phase (0x80) would refuse the open attack 4AD870 lets
 an instant effect run beside.
 
-The phase judges weapon bytes only. Of the rows this owner admits, the
-Chinese imbue and movement rows and the three SKILL_MALL_PET_SKILL rows are
-0xFF/0xFF without reqi and pass it unchanged; Scud (13/255, no reqi) is the
-row it exists for. The Rogue's poison coatings carry reqi pairs (6 12 /
-6 13) and skip it: no native trace shows 58D480 running their pairs on this
-path, so they keep the admission they had before Scud, and their weapon is
-still judged by the equipment re-check (59F0E0) after an item moves.
+The phase is Skill_ValidateEquipmentRequirements (58D480) whole: a row
+with reqi pairs walks them (+0x3A0), any other row its weapon bytes. Native
+runs it at the press for every skill command but an onff pulse
+(CGCharAutoCommandActor_ProcessCommand 0x4ACED4, mask 0x37), so the Rogue's
+poison coatings (reqi 6 12 / 6 13) are refused 0x300D without a crossbow or
+a dagger, and Scud (13/255) without a dagger. The Chinese imbue and
+movement rows and the SKILL_MALL_PET_SKILL rows are 0xFF/0xFF without reqi
+and pass it unchanged.
 ================
 */
 func (rt *Runtime) instantSelfEffectCost(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64) (int64, uint16) {
 	cost, code := rt.offensiveCost(division, c, skill, now)
-	if code == 0x3003 || code == 0x3005 || skill.Reqi.Present {
-		// An unparsed row or a cooling skill answers before the weapon; a
-		// reqi row is not judged here (see above).
+	if code == 0x3003 || code == 0x3005 {
+		// An unparsed row or a cooling skill answers before the weapon.
 		return cost, code
 	}
 	if refusal := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill); refusal != 0 {

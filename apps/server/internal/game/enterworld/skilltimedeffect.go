@@ -41,14 +41,6 @@ const (
 	parameterBlessingMagical   = 0x484c534d
 	parameterBlessingStrength  = 0x484c4653
 	parameterBlessingIntellect = 0x484c4d49
-
-	// maxLinkedThreatPercent bounds lkag's share: v1.150 authors 36..60 and a
-	// share above the whole aggression has no proven meaning.
-	maxLinkedThreatPercent = 100
-
-	// maxLinkedDamagePercent bounds lkdh's MP share the same way: Mana
-	// Switch authors 50 on every tier.
-	maxLinkedDamagePercent = 100
 )
 
 /*
@@ -198,14 +190,14 @@ PerTarget is lks2, which makes lnks' outgoing count per recipient
 ================
 */
 type SkillEffectLink struct {
-	Present                         bool
-	Group, MaxDistance, MaxOutgoing uint32
-	Board                           uint32
-	Threat                          bool
-	ThreatPercent                   uint32
-	PerTarget                       bool
-	Mana                            bool
-	ManaPercent, ManaCap            uint32
+	Present                             bool
+	Group, MaxDistance, MaxOutgoing     uint32
+	Board                               uint32
+	Threat                              bool
+	ThreatPercent                       uint32
+	PerTarget                           bool
+	Mana                                bool
+	ManaHPPercent, ManaPercent, ManaCap uint32
 }
 
 /*
@@ -290,6 +282,12 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		*b = SkillStatBoost{Present: true, Value: op.Arguments[0], CapPercent: op.Arguments[1]}
 		return true
 	}
+	// lkag and lkdh may be authored anywhere in the program; the native index
+	// keeps them wherever they sit, and they ride the row's lnks, which is
+	// checked once every block is read.
+	var linkThreat, linkDamage bool
+	var linkThreatPercent uint32
+	var linkDamageWords [3]uint32
 	for i := 0; i < program.Len(); i++ {
 		op := program.Instruction(i)
 		switch op.Tag {
@@ -370,15 +368,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			result.Link = SkillEffectLink{Present: true, Group: op.Arguments[0], MaxDistance: op.Arguments[1], MaxOutgoing: op.Arguments[2], Board: op.Arguments[3]}
 		case tagTimedLinkedThreat:
-			// lkag rides the link context (ApplyLink, 594EAC). Every v1.150
-			// row authors it after lnks with a zero second word and a percent
-			// of at most 100; any other order, second word or percent has an
-			// unproven meaning and stays refused.
-			if !result.Link.Present || result.Link.Threat || op.Count != 2 || op.Arguments[1] != 0 ||
-				op.Arguments[0] > maxLinkedThreatPercent {
+			// lkag rides the link context (ApplyLink, 594EAC): 5A03A0 reads
+			// word 0 only (+0x47C), word 1 has no reader, and the share is
+			// formed as authored. The row's lnks is checked after the walk.
+			if linkThreat || op.Count != 2 {
 				return
 			}
-			result.Link.Threat, result.Link.ThreatPercent = true, op.Arguments[0]
+			linkThreat, linkThreatPercent = true, op.Arguments[0]
 		case tagTimedLinkPerTarget:
 			// lks2 rides an lnks that sets an outgoing count; Mana Switch
 			// authors none (word 2 is 0), so the per-recipient count has
@@ -388,13 +384,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			result.Link.PerTarget = true
 		case tagTimedLinkedDamage:
-			// lkdh after lnks, as lkag: the HP word has no owner and a zero
-			// ceiling an unproven meaning, so both stay refused.
-			if !result.Link.Present || result.Link.Mana || op.Count != 3 || op.Arguments[0] != 0 ||
-				op.Arguments[1] == 0 || op.Arguments[1] > maxLinkedDamagePercent || op.Arguments[2] == 0 {
+			// lkdh {HP percent, MP percent, cap} (+0x3E0): 5A04A0 pays the
+			// link source both shares as authored, each held at the cap.
+			if linkDamage || op.Count != 3 {
 				return
 			}
-			result.Link.Mana, result.Link.ManaPercent, result.Link.ManaCap = true, op.Arguments[1], op.Arguments[2]
+			linkDamage = true
+			linkDamageWords = [3]uint32{op.Arguments[0], op.Arguments[1], op.Arguments[2]}
 		case tagTimedIncomingReduction:
 			// odar is installed from BuffModifiers for every recipient (594AC0);
 			// the program only has to agree with that projection.
@@ -438,6 +434,15 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		default:
 			return
 		}
+	}
+	if linkThreat || linkDamage {
+		if !result.Link.Present {
+			return
+		}
+		result.Link.Threat, result.Link.ThreatPercent = linkThreat, linkThreatPercent
+		result.Link.Mana = linkDamage
+		result.Link.ManaHPPercent, result.Link.ManaPercent, result.Link.ManaCap =
+			linkDamageWords[0], linkDamageWords[1], linkDamageWords[2]
 	}
 	// A link carries only the stat blessings and lkag so far; a linked defp
 	// would need the source-half rule of 5951FC checked first. The linked

@@ -61,23 +61,27 @@ func TestLinkedThreatProgramAdmissionIsAtomic(t *testing.T) {
 		}
 		return out
 	}
+	// The native index keeps lkag wherever it is authored, 5A03A0 reads word
+	// 0 only and forms the share as authored: order, word 1 and a share above
+	// the whole aggression are all admitted.
 	for _, tc := range []struct {
-		name  string
-		tail  []uint32
-		odar  bool
-		valid bool
+		name    string
+		tail    []uint32
+		odar    bool
+		valid   bool
+		percent uint32
 	}{
-		{"protect", join(link, lkag, []uint32{tagReqi, 6, 7, tagReqi, 6, 8, tagReqi, 6, 9}), false, true},
-		{"threat before link", join(lkag, link), false, false},
-		{"link without threat", join(link), false, false},
-		{"threat without link", join(lkag), false, false},
-		{"nonzero second word", join(link, []uint32{tagTimedLinkedThreat, 36, 1}), false, false},
-		{"percent above whole", join(link, []uint32{tagTimedLinkedThreat, maxLinkedThreatPercent + 1, 0}), false, false},
-		{"duplicate threat", join(link, lkag, lkag), false, false},
-		{"with defense", join(link, lkag, []uint32{tagTimedDefense, 10, 10, 100}), false, false},
-		{"persistent", join(link, lkag, []uint32{tagCbuf}), false, false},
-		{"with block", join(link, lkag, []uint32{tagTimedBlock, 1, 10}), false, false},
-		{"with odar", join(link, lkag, []uint32{tagTimedIncomingReduction, 0, 20}), true, false},
+		{"protect", join(link, lkag, []uint32{tagReqi, 6, 7, tagReqi, 6, 8, tagReqi, 6, 9}), false, true, 36},
+		{"threat before link", join(lkag, link), false, true, 36},
+		{"link without threat", join(link), false, false, 0},
+		{"threat without link", join(lkag), false, false, 0},
+		{"nonzero second word", join(link, []uint32{tagTimedLinkedThreat, 36, 1}), false, true, 36},
+		{"percent above whole", join(link, []uint32{tagTimedLinkedThreat, 150, 0}), false, true, 150},
+		{"duplicate threat", join(link, lkag, lkag), false, false, 0},
+		{"with defense", join(link, lkag, []uint32{tagTimedDefense, 10, 10, 100}), false, false, 0},
+		{"persistent", join(link, lkag, []uint32{tagCbuf}), false, false, 0},
+		{"with block", join(link, lkag, []uint32{tagTimedBlock, 1, 10}), false, false, 0},
+		{"with odar", join(link, lkag, []uint32{tagTimedIncomingReduction, 0, 20}), true, false, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			row := SkillRow{
@@ -93,7 +97,7 @@ func TestLinkedThreatProgramAdmissionIsAtomic(t *testing.T) {
 			if d.Pinned != tc.valid {
 				t.Fatalf("admission %v, want %v: %+v", d.Pinned, tc.valid, d)
 			}
-			if tc.valid && (!d.Targeted || !d.Link.Present || !d.Link.Threat || d.Link.ThreatPercent != 36 ||
+			if tc.valid && (!d.Targeted || !d.Link.Present || !d.Link.Threat || d.Link.ThreatPercent != tc.percent ||
 				d.Link.Group != 3 || d.Link.MaxDistance != 1500 || d.Link.MaxOutgoing != 2) {
 				t.Fatalf("protect program: %+v", d)
 			}

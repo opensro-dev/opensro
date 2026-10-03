@@ -83,7 +83,8 @@ func TestStatusCastAdmissionBoundaries(t *testing.T) {
 		{"tant", true},
 		{"continue", true},
 		{"reqi-twice", true},
-		{"tant-and-tnt2", false},
+		{"tant-and-tnt2", true},
+		{"tnt2-then-tant", true},
 		{"continue-two", false},
 		{"duplicate-status", false},
 		{"duplicate-tnt2", false},
@@ -95,7 +96,9 @@ func TestStatusCastAdmissionBoundaries(t *testing.T) {
 			case "tant":
 				tail = append(tail, tagStatusThreat, 242, 0)
 			case "tant-and-tnt2":
-				tail = append(tail, tagStatusThreat, 242, 0, tagThreat, 242, 0)
+				tail = append(tail, tagStatusThreat, 300, 0, tagThreat, 242, 0)
+			case "tnt2-then-tant":
+				tail = append(tail, tagThreat, 242, 0, tagStatusThreat, 300, 0)
 			case "duplicate-tnt2":
 				tail = append(tail, tagThreat, 242, 0, tagThreat, 242, 0)
 			case "duplicate-status":
@@ -123,7 +126,12 @@ func TestStatusCastAdmissionBoundaries(t *testing.T) {
 			if ok != tc.valid {
 				t.Fatalf("admission=%v, want %v", ok, tc.valid)
 			}
-			if ok && (threat.Flat != 242 || threat.Percent != 0 || threat.Area.MaxTargets != 3) {
+			// With both aggression words, tant's (300) wins (5903F6).
+			wantFlat := uint32(242)
+			if tc.mode == "tant-and-tnt2" || tc.mode == "tnt2-then-tant" {
+				wantFlat = 300
+			}
+			if ok && (threat.Flat != wantFlat || threat.Percent != 0 || threat.Area.MaxTargets != 3) {
 				t.Fatalf("compiled %+v", threat)
 			}
 		})

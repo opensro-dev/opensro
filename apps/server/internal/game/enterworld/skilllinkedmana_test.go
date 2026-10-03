@@ -110,12 +110,10 @@ func TestLinkedDamageProgramAdmissionIsAtomic(t *testing.T) {
 	}{
 		{"mana switch", manaLinkFields(join(link, lks2, lkdh, tail)), true},
 		{"without lks2", manaLinkFields(join(link, lkdh, tail)), true},
-		{"damage before link", manaLinkFields(join(lkdh, link, tail)), false},
+		// 5A04A0 pays both words as authored, each held at word 2, and the
+		// native index keeps lkdh wherever it is authored.
+		{"damage before link", manaLinkFields(join(lkdh, link, tail)), true},
 		{"damage without link", manaLinkFields(join(lkdh, tail)), false},
-		{"hp word", manaLinkFields(join(link, []uint32{tagTimedLinkedDamage, 10, manaSwitchPercent, 1596})), false},
-		{"zero percent", manaLinkFields(join(link, []uint32{tagTimedLinkedDamage, 0, 0, 1596})), false},
-		{"percent above whole", manaLinkFields(join(link, []uint32{tagTimedLinkedDamage, 0, maxLinkedDamagePercent + 1, 1596})), false},
-		{"zero cap", manaLinkFields(join(link, []uint32{tagTimedLinkedDamage, 0, manaSwitchPercent, 0})), false},
 		{"duplicate damage", manaLinkFields(join(link, lkdh, lkdh)), false},
 		{"lks2 on a counted link", manaLinkFields(join([]uint32{tagTimedLink, manaSwitchGroup, manaSwitchDistance, 2, 0}, lks2, lkdh)), false},
 		{"with threat", manaLinkFields(join(link, lkdh, []uint32{tagTimedLinkedThreat, 36, 0})), false},
@@ -138,5 +136,38 @@ func TestLinkedDamageProgramAdmissionIsAtomic(t *testing.T) {
 				t.Fatalf("mana switch program: %+v", d)
 			}
 		})
+	}
+}
+
+/*
+================
+TestLinkedDamageWordsAreAdmittedAsAuthored
+
+CSkillManager_DistributeSharedDamage (5A04A0) pays an lkdh link's HP word
+and MP word as authored, each held at word 2: an HP word, a zero share, a
+share above the whole damage and a zero cap all admit with their words.
+================
+*/
+func TestLinkedDamageWordsAreAdmittedAsAuthored(t *testing.T) {
+	link := []uint32{tagTimedLink, manaSwitchGroup, manaSwitchDistance, 0, 0}
+	for _, words := range [][3]uint32{
+		{10, manaSwitchPercent, 1596},
+		{0, 0, 1596},
+		{0, 150, 1596},
+		{0, manaSwitchPercent, 0},
+	} {
+		tail := append([]uint32{tagDura, manaSwitchDurationMs}, link...)
+		tail = append(tail, tagTimedLinkedDamage, words[0], words[1], words[2])
+		row := SkillRow{
+			Consumption: SkillConsumption{Pinned: true}, TimingPinned: true,
+			ActionCastingTimePinned: true, ActionDurationPinned: true, ReplacementPinned: true,
+			EffectDurationMs: manaSwitchDurationMs,
+		}
+		parseSkillTimedEffect(manaLinkFields(tail), &row)
+		d := row.TimedEffect
+		if !d.Pinned || !d.Link.Mana || d.Link.ManaHPPercent != words[0] || d.Link.ManaPercent != words[1] ||
+			d.Link.ManaCap != words[2] {
+			t.Errorf("lkdh %v: %+v", words, d)
+		}
 	}
 }

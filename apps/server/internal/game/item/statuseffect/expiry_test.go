@@ -46,7 +46,9 @@ func TestNativeDurationClockWrapAndProjection(t *testing.T) {
 		// The native counter and elapsed subtraction are uint32. Retain that
 		// behavior even for a detached snapshot after an entire counter cycle.
 		{start + 0x100000000, false, 32}, {start + 0x100000020, false, 0},
-		{start - 1, true, 0},
+		// A reader whose clock trails the install sees a row not yet started:
+		// live, its whole duration left (never a wrapped elapsed).
+		{start - 1, false, 32},
 	} {
 		if e.Expired(c.at) != c.expired || e.RemainingMs(c.at) != c.remaining {
 			t.Fatalf("at %x expired %v remaining %d", c.at, e.Expired(c.at), e.RemainingMs(c.at))
