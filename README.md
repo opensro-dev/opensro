@@ -16,7 +16,7 @@ browser- and server-ready data.
 | --- | --- |
 | `apps/server/` | Go Agent and GameWorld processes, Nomad jobs, operator docs |
 | `apps/client-next/` | Browser client (TypeScript, WebGPU, Vite) |
-| `apps/server-observatory/` | Local read-only operations dashboard |
+| `apps/server-observatory/` | Operations dashboard with optional authenticated player recovery |
 | `scripts/` | Asset pipeline, repository checks and the `pnpm task` runner |
 | `docs/` | Setup, architecture and asset-pipeline documentation |
 | `patches/` | Dependency patches applied by pnpm |

@@ -23,6 +23,9 @@ npm start         # http://localhost:5190
   network rates, queues, write errors, respawn queue, storage health.
 - **Items:** searchable server item table with icons, details and a copyable
   `/MAKEITEM` command (the dashboard never sends it).
+- **Player recovery:** inspect private character state, download evidence, and
+  explicitly confirm an audited relocation to an authored town. Requires the
+  separate operator configuration described below.
 - Realm strip, population hotspots, a per-session realm chronicle and operator
   alerts for unavailable realms, stale captures and storage errors.
 
