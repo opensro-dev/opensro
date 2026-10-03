@@ -15,6 +15,8 @@ import (
 	"reflect"
 	"testing"
 
+	"opensro.online/server/internal/domain"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -87,5 +89,40 @@ func TestRepeatedRebirthChoicesDoNotCommitTwice(t *testing.T) {
 				t.Fatalf("duplicate choice %d after %d changed the living actor: %+v", retryChoice, choice, retry)
 			}
 		}
+	}
+}
+
+/*
+================
+TestRebirthRetryAfterConcurrentParamJobExpiry
+
+Unlike timed-skill checkpoints, param-job expiry does not take the action
+maintenance/division lock. Exercise that production writer at the preparation
+boundary rather than inventing an arbitrary character mutation.
+================
+*/
+func TestRebirthRetryAfterConcurrentParamJobExpiry(t *testing.T) {
+	character := rebirthTestCharacter(1, 0)
+	rt, clock := newTestRuntime(character, testItems())
+	character.ParamJobs = []domain.ParamJob{{
+		ItemRefObjID: 7, Codename: "ITEM_ETC_INTERNAL_150EXP_SCROLL",
+		Param: paramExpRate, Value: 150, EndUnixMs: clock.NowMs(),
+	}}
+	rt.paramJobOwners.track(testDivision, character.Name)
+	deps := rt.deps
+	rt.deps = failedRebirthPreparation{Dependencies: deps, mutate: func() {
+		rt.advanceParamJobs(clock.NowMs())
+	}}
+	refused := rt.HandleLocalRebirth(testDivision, character, []byte{wire.RebirthAtSpecifiedPoint})
+	if len(character.ParamJobs) != 0 {
+		t.Fatal("the production expiry writer did not retire the scroll")
+	}
+	if refused.DiagnosticRefusal != "" || len(refused.Frames) != 0 || enterworld.CharacterAlive(character) {
+		t.Fatalf("changed preparation was not silently refused: %+v", refused)
+	}
+	rt.deps = deps
+	retry := rt.HandleLocalRebirth(testDivision, character, []byte{wire.RebirthAtSpecifiedPoint})
+	if len(retry.Frames) == 0 || !enterworld.CharacterAlive(character) || len(character.ParamJobs) != 0 {
+		t.Fatalf("same-session retry failed or resurrected the expired scroll: %+v", retry)
 	}
 }

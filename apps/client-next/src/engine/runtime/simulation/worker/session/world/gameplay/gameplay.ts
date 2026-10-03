@@ -878,8 +878,9 @@ state here before a command can claim a native wire conversation.
 				if ( local?.gid !== localGid || local?.appearanceState?.[0] !== 2 ) return null;
 				if ( command.choice !== 1 && command.choice !== 2 ) throw Error( "Invalid rebirth choice" );
 				if ( command.choice === 2 && (progression.level === undefined || progression.level > 10) ) return null;
-				// This request has no acknowledgement; a silent refusal must not lock
-				// out later clicks. The server serializes revival and rejects living actors.
+				// Native 697215 sends 32DC without an opcode-group lock: CC9054 only
+				// registers 7338/B338. Silent refusals must leave later clicks usable.
+				// The server serializes revival and rejects already-living actors.
 				const frame = { opcode: 0x32dc, payload: Uint8Array.of( command.choice ) };
 				send( frame );
 				return frame;
