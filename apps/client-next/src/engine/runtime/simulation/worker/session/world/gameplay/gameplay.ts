@@ -1511,6 +1511,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					// inventory refusals still arrive separately on B06D.
 					const notice = frame.payload[0] === 3 ? constantNativeNotice( 0x19, frame.payload[2]! ) : null;
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					// A refused command leaves the server's walk running.
+					if ( frame.payload[0] === 3 ) movement.castRefused( now );
 					dirty = true;
 					return true;
 				}
@@ -2210,6 +2212,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				// B245 [2, code]: the server refused the targeted command at the
+				// press, before touching movement (an empty MP pool is 0x3004).
+				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) movement.castRefused( now );
 				if ( item && cast ) returnScroll = cast;
 				// A pickup into the gold slot (0xFE) prints the whole heap: pickup types
 				// 6/0x1C resolve to window 0x46 with slot 0xFE (7653D0), and that branch

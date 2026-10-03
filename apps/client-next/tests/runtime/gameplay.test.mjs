@@ -1451,3 +1451,38 @@ test("a ground click during the local cast walks once the cast releases", async 
 	assert.equal( sent.length, 2, "the newest held click walks after the release" );
 	game.dispose();
 });
+
+test("a refused targeted command lets the held walk rejoin the server's without a jump", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		local = { ...pose, gid: 7, heading: 0 },
+		monster = { ...pose, x: 400, gid: 8, kind: "monster", heading: 0 };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( local );
+	// The server's run of the local player to x = 260: 4 s at 50 units/s.
+	const walk = Buffer.alloc( 14 );
+	walk.writeUInt32LE( 7 );
+	walk[4] = 1;
+	walk.writeUInt16LE( pose.regionId, 5 );
+	walk.writeInt16LE( 260, 7 );
+	walk.writeInt16LE( 10, 9 );
+	walk.writeInt16LE( 100, 11 );
+	assert.equal( game.receive( { opcode: 0xb738, payload: walk }, 0 ), true );
+	for ( let now = 16; now <= 1000; now += 16 ) game.step( now, local );
+	game.step( 1000, local );
+	game.command( { kind: "attack", gid: 8 }, 1000, monster, local );
+	assert.equal( sent.at( -1 ).opcode, 0x72cd );
+	// B245 [2, 0x04]: refused at the press (no MP); the server's run goes on.
+	game.receive( { opcode: 0xb245, payload: Uint8Array.of( 2, 4 ) }, 1100 );
+	let previous = game.take()?.pose?.x ?? 110, largest = 0;
+	for ( let now = 1116; now <= 4016; now += 16 ) {
+		game.step( now, local );
+		const x = game.take()?.pose?.x ?? previous;
+		largest = Math.max( largest, Math.abs( x - previous ) );
+		previous = x;
+	}
+	assert.ok( largest <= 50 * 1.3 * 16 / 1000 + 1e-6, "the rejoin jumped " + largest );
+	assert.ok( Math.abs( previous - 260 ) < 1e-6, "arrived at " + previous );
+	game.dispose();
+});
