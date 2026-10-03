@@ -40,15 +40,35 @@ const CONFIRM_CENTRE_HEIGHT = 0x94;
 const CONFIRM_WIDTH = 0x190;
 const CONFIRM_HEIGHT = 0xd2;
 // 52F460 case 3: the three lines (306x16) and the Yes/No buttons.
-const CONFIRM_LINES: readonly (readonly [number, number])[] = [ [ 0x2e, 0x3b ], [ 0x2e, 0x4d ], [ 0x2e, 0x71 ] ];
+const CONFIRM_LINE_X = 0x2e;
+const CONFIRM_LINE_1_Y = 0x3b;
+const CONFIRM_LINE_2_Y = 0x4d;
+const CONFIRM_LINE_3_Y = 0x71;
 const CONFIRM_LINE_WIDTH = 0x132;
 const CONFIRM_LINE_HEIGHT = 0x10;
-const CONFIRM_ACCEPT: readonly [number, number] = [ 0x7b, 0xa8 ];
-const CONFIRM_REFUSE: readonly [number, number] = [ 0xcb, 0xa8 ];
+const CONFIRM_ACCEPT_X = 0x7b;
+const CONFIRM_REFUSE_X = 0xcb;
+const CONFIRM_BUTTON_Y = 0xa8;
 const CONFIRM_BUTTON_WIDTH = 76;
 const CONFIRM_BUTTON_HEIGHT = 24;
 // The third line's font colour, 0xFFFFF1D3 (CGFontTexture_SetFontColor).
-export const RESURRECTION_NOTE_COLOR: readonly [number, number, number, number] = [ 1, 0xf1 / 255, 0xd3 / 255, 1 ];
+const NOTE_COLOR_ARGB = 0xfffff1d3;
+
+/*
+================
+resurrectionNoteColor
+
+The third line's colour as rgba.
+================
+*/
+export function resurrectionNoteColor(): [number, number, number, number] {
+	return [
+		(NOTE_COLOR_ARGB >>> 16 & 0xff) / 255,
+		(NOTE_COLOR_ARGB >>> 8 & 0xff) / 255,
+		(NOTE_COLOR_ARGB & 0xff) / 255,
+		(NOTE_COLOR_ARGB >>> 24) / 255
+	];
+}
 
 /*
 ================
@@ -78,9 +98,14 @@ export function resurrectionBoxLayout(
 	const box = messageBox( width, height, CONFIRM_WIDTH, CONFIRM_HEIGHT, origin ), [x, y] = box.frame;
 	return {
 		...box,
-		lines: CONFIRM_LINES.map( ( [dx, dy] ): UiRect => [ x + dx, y + dy, CONFIRM_LINE_WIDTH, CONFIRM_LINE_HEIGHT ] ),
-		accept: [ x + CONFIRM_ACCEPT[0], y + CONFIRM_ACCEPT[1], CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT ],
-		refuse: [ x + CONFIRM_REFUSE[0], y + CONFIRM_REFUSE[1], CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT ]
+		lines: [ CONFIRM_LINE_1_Y, CONFIRM_LINE_2_Y, CONFIRM_LINE_3_Y ].map( ( dy ): UiRect => [
+			x + CONFIRM_LINE_X,
+			y + dy,
+			CONFIRM_LINE_WIDTH,
+			CONFIRM_LINE_HEIGHT
+		] ),
+		accept: [ x + CONFIRM_ACCEPT_X, y + CONFIRM_BUTTON_Y, CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT ],
+		refuse: [ x + CONFIRM_REFUSE_X, y + CONFIRM_BUTTON_Y, CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT ]
 	};
 }
 

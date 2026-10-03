@@ -343,8 +343,8 @@ import { noticeDialog } from "@/engine/foundation/ui/notice-dialog";
 import { rebirthDialog } from "@/engine/foundation/ui/rebirth-dialog";
 import {
 	createResurrectionPrompt,
-	RESURRECTION_NOTE_COLOR,
 	resurrectionBoxLayout,
+	resurrectionNoteColor,
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
 import { textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
@@ -12745,7 +12745,7 @@ export function createUi(
 							layout.lines[i]!,
 							full,
 							!mutation && i === 2 ?
-								RESURRECTION_NOTE_COLOR :
+								resurrectionNoteColor() :
 								white,
 							{ vAlign: 0 }
 						)
