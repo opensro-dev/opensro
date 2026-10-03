@@ -293,8 +293,9 @@ func TestGroupHealingHealsTheCasterAndPartyInRange(t *testing.T) {
 TestPartyHealIsNotATimedHeal
 
 Healing Orbit (efr dura puls heal) and Healing Cycle (dura puls heal) are
-timed heals with no ported producer: neither may reach the party heal.
-Group Reverse carries a heal block but resurrects.
+heals over time (skillhealtime.go): neither may reach the party heal, and
+the release heals nobody. Group Reverse carries a heal block but
+resurrects.
 ==================
 */
 func TestPartyHealIsNotATimedHeal(t *testing.T) {

@@ -88,6 +88,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		out = append(out, rt.advancePartyAuras(nowMs)...)
 		out = append(out, rt.advanceWalls(nowMs)...)
 		out = append(out, rt.advancePeriodicEffects(nowMs)...)
+		// A heal over time pulses before expiry: its last pulse lands on
+		// the instant its effect's duration is reached.
+		out = append(out, rt.advanceHealsOverTime(nowMs)...)
 		rt.effects.Expire(nowMs)
 		out = append(out, rt.drainStoppedCharacterEffects()...)
 		// 4A4390 per actor: expiry, damage over time, detonation, mask.

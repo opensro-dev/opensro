@@ -73,6 +73,10 @@ type Runtime struct {
 	partyAuras  []partyAura
 	partyAuraMu sync.Mutex
 
+	// healsOverTime are the installed timed heals (skillhealtime.go).
+	healsOverTime  []healOverTime
+	healOverTimeMu sync.Mutex
+
 	// walls are the actors' Force-wall slots (+0xC0C), keyed by wallKey.
 	walls  map[string]*standingWall
 	wallMu sync.Mutex

@@ -4,10 +4,11 @@
 skillrecovery.go - admitting self heals and party-area recovery casts
 
 A recovery row is admitted only when its whole program is understood:
-resu/puls/dura/mwhh/efr/getv cannot silently disappear from a cast. Three
-shapes qualify: a flat self heal, a party-area heal and a party-area
-resurrection. Amounts and recipients are computed by action/skillheal.go,
-action/skillcure.go and action/resurrection.go.
+resu/puls/dura/mwhh/efr/getv cannot silently disappear from a cast. Four
+shapes qualify: a flat self heal, a party-area heal, a party-area
+resurrection and a heal over time. Amounts and recipients are computed by
+action/skillheal.go, action/skillcure.go, action/resurrection.go and
+action/skillhealtime.go.
 
 ===========================================================================
 */
@@ -22,6 +23,8 @@ const (
 	recoveryTagMwmh = 0x6d776d68 // mwmh +0x32C
 	recoveryTagGetv = 0x67657476 // getv
 	recoveryTagResu = 0x72657375 // resu +0x330
+	recoveryTagDura = 0x64757261 // dura: the effect's lifetime
+	recoveryTagPuls = 0x70756c73 // puls +0x384: the period
 
 	// recoveryEfrActionArea and recoveryEfrAroundCaster are efr words 0 and
 	// 1: the action-area slot and a caster-centred area.
@@ -44,6 +47,10 @@ const (
 	// instant action. Healing Orbit carries 3 (a timed handler) and must
 	// not be reduced to a one-shot heal.
 	recoveryInstantHandler = "0"
+
+	// recoveryTimedHandler is column 68 of a timed action (5830B0): the
+	// heals over time (Mana Cycle, Healing Cycle and their Orbits).
+	recoveryTimedHandler = "3"
 )
 
 /*
@@ -61,12 +68,22 @@ and getv HLRU / HLMD: every party member the selection returns is healed by
 PartyResurrectPinned admits an untargeted efr[1,1,radius,cap,0,4|5]
 heal[...] resu[...] program: each dead party member in range is proposed a
 revival, the heal block being the revival vitals (594780).
+
+HealOverTimePinned admits a timed heal (handler 3) whose program is
+[efr[1,1,radius,cap,0,4|5]] dura[ms] puls[ms] heal[...] with the party
+heal's optional weapon terms and getv words: each recipient holds the
+row's effect for dura and is healed every PulseMs. A targeted row (Mana
+Cycle, Healing Cycle) has no efr and heals its target; an untargeted one
+(Mana Orbit, Healing Orbit) leads with the party efr and heals the whole
+selection.
 ==================
 */
 type SkillRecovery struct {
 	SelfFlatPinned       bool
 	PartyHealPinned      bool
 	PartyResurrectPinned bool
+	HealOverTimePinned   bool
+	PulseMs              uint32
 }
 
 /*
@@ -80,6 +97,9 @@ action owner (58E1B6 check, 58312C charge); a percent HP cost stays out.
 ==================
 */
 func parseSkillRecovery(fields []string, row *SkillRow) {
+	if parseHealOverTime(fields, row) {
+		return
+	}
 	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || row.ChainNext != 0 ||
 		row.TargetRequired || !row.Consumption.Pinned || !row.TimingPinned ||
 		row.Consumption.HPPercent != 0 {
@@ -195,8 +215,20 @@ func partyHealProgram(program SkillProgram) bool {
 		!recoveryHealBlock(program.Instruction(1)) {
 		return false
 	}
+	return healProgramTail(program, 2)
+}
+
+/*
+==================
+healProgramTail
+
+The instructions a heal block may carry after it, from index first to the
+end: [mwhh] [mwmh] [getv HLRU] [getv HLMD], each at most once.
+==================
+*/
+func healProgramTail(program SkillProgram, first int) bool {
 	var weaponHP, weaponMP, recoveryUp, mpDecrease bool
-	for i := 2; i < program.Len(); i++ {
+	for i := first; i < program.Len(); i++ {
 		op := program.Instruction(i)
 		parameter, known := SkillParameterFromKey(op.Arguments[0])
 		getv := op.Tag == recoveryTagGetv && op.Count == 1 && known
@@ -213,6 +245,60 @@ func partyHealProgram(program SkillProgram) bool {
 			return false
 		}
 	}
+	return true
+}
+
+/*
+==================
+parseHealOverTime
+
+The heal-over-time envelope: an active, unlinked row with pinned cost and
+timing, the timed handler, and no periodic, action-repeat or ground-target
+columns. Unlike the instant shapes it may be targeted; a targeted row
+keeps its target columns (22, 23, 26..28: required, animal, self, ally,
+party) and must not lead with an efr, an untargeted one must lead with the
+party efr. Returns whether the row was admitted.
+==================
+*/
+func parseHealOverTime(fields []string, row *SkillRow) bool {
+	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || row.ChainNext != 0 ||
+		!row.Consumption.Pinned || !row.TimingPinned || row.Consumption.HPPercent != 0 ||
+		fields[skilldataColActionHandler] != recoveryTimedHandler {
+		return false
+	}
+	columns := []int{15, 16, 17, 19, 20, 24, 25, 29, 30, 31, 32, 33, 56}
+	if !row.TargetRequired {
+		columns = append(columns, 22, 23, 26, 27, 28)
+	}
+	for _, column := range columns {
+		if fields[column] != "0" {
+			return false
+		}
+	}
+	if lifetime, ok := row.ActionLifecycleMs(); !ok || lifetime == 0 {
+		return false
+	}
+	program, err := CompileSkillProgram(fields)
+	if err != nil {
+		return false
+	}
+	first := 0
+	if !row.TargetRequired {
+		if program.Len() == 0 || !partyRecoveryArea(program.Instruction(0)) {
+			return false
+		}
+		first = 1
+	}
+	if program.Len() < first+3 {
+		return false
+	}
+	dura, puls := program.Instruction(first), program.Instruction(first+1)
+	if dura.Tag != recoveryTagDura || dura.Count != 1 || puls.Tag != recoveryTagPuls || puls.Count != 1 ||
+		puls.Arguments[0] == 0 || dura.Arguments[0] < puls.Arguments[0] || dura.Arguments[0] != row.EffectDurationMs ||
+		!recoveryHealBlock(program.Instruction(first+2)) || !healProgramTail(program, first+3) {
+		return false
+	}
+	row.Recovery = SkillRecovery{HealOverTimePinned: true, PulseMs: puls.Arguments[0]}
 	return true
 }
 

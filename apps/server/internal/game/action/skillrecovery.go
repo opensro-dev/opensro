@@ -72,6 +72,12 @@ applies 5A0850 to every entry, a party resurrection runs the per-target
 5946C5 arm (proposeResurrection) on every entry. A targeted heal whose efr
 is shape 6 also heals the primary's nearest party members by its reduction
 word (secondaryHealTargets).
+
+A heal over time (Mana Cycle, Mana Orbit) heals nobody at release: its
+target, or its party vector, receives the row's effect and is healed every
+puls by skillhealtime.go. A targeted one cast without a target lands on
+the caster when the row admits Self (column 26), the rule 593F50 applies
+to an empty cure vector (resolveSkillCureTargets).
 ==================
 */
 func (rt *Runtime) acceptSupportSkillPhase(
@@ -87,7 +93,9 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	targeted := ((skill.Heal.Present && !skill.Aura.Eshp) || resu) && skill.TargetRequired
 	partyHeal := skill.Recovery.PartyHealPinned
 	partyResu := skill.Recovery.PartyResurrectPinned
-	supported := skill.Recovery.SelfFlatPinned || cure || targeted || partyHeal || partyResu
+	overTime := skill.Recovery.HealOverTimePinned
+	partyOverTime := overTime && !skill.TargetRequired
+	supported := skill.Recovery.SelfFlatPinned || cure || targeted || partyHeal || partyResu || partyOverTime
 	selfHealOnly := skill.Recovery.SelfFlatPinned && !cure && !targeted
 	casterReady := enterworld.SkillLearned(snapshot, skill.ID) &&
 		enterworld.CharacterAlive(snapshot)
@@ -100,6 +108,10 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	recipient, recipientView := character, snapshot
 	var target *admitTarget
 	var primaryAt simulation.Spawn
+
+	if overTime && targeted && !cast.HasTarget && skill.Targets.Self {
+		cast.HasTarget, cast.TargetGid = true, enterworld.ObjectIDForCharacter(snapshot)
+	}
 
 	if targeted {
 		if !cast.HasTarget || cast.TargetGid == 0 {
@@ -174,7 +186,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	}
 
 	var party []uint32
-	if partyHeal || partyResu {
+	if partyHeal || partyResu || partyOverTime {
 		party = rt.skillCureVector(division, snapshot, skill, cast, now)
 	}
 	// The cure vector reads the store; resolve it before the caster's door.
@@ -183,13 +195,13 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		cureTargets = rt.resolveSkillCureTargets(division, character, snapshot, skill, cast, now)
 	}
 	var secondary []uint32
-	if targeted && !resu {
+	if targeted && !resu && !overTime {
 		secondary = rt.secondaryHealTargets(division, snapshot, recipientView, primaryAt, skill.Abnormal.EffectArea, now)
 	}
 	casterGID := enterworld.ObjectIDForCharacter(snapshot)
-	healCaster := skill.Recovery.SelfFlatPinned ||
+	healCaster := !overTime && (skill.Recovery.SelfFlatPinned ||
 		targeted && recipient == character ||
-		partyHeal && slices.Contains(party, casterGID)
+		partyHeal && slices.Contains(party, casterGID))
 
 	var refusal uint16
 	var vitals wire.Frame
@@ -221,10 +233,11 @@ func (rt *Runtime) acceptSupportSkillPhase(
 			)
 		}
 
-		// Only the party-area rows and the HP-cost self heal (Rave Melody)
-		// publish a charge-only 0x33A6; the other support rows keep the
-		// caster frames they always had (supportCostVitals).
-		chargeVitals := partyHeal || partyResu ||
+		// Only the party-area rows, the heals over time and the HP-cost
+		// self heal (Rave Melody) publish a charge-only 0x33A6; the other
+		// support rows keep the caster frames they always had
+		// (supportCostVitals).
+		chargeVitals := partyHeal || partyResu || overTime ||
 			skill.Recovery.SelfFlatPinned && cost.hp != 0
 		if !healCaster {
 			if chargeVitals {
@@ -252,6 +265,15 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	}
 
 	switch {
+	case overTime:
+		recipients := []*enterworld.Character{recipient}
+		if partyOverTime {
+			recipients = recipients[:0]
+			for _, gid := range party {
+				recipients = append(recipients, rt.findCharacterByGid(division, gid))
+			}
+		}
+		curePublic = append(curePublic, rt.installHealsOverTime(division, character, skill, recipients, now)...)
 	case partyResu:
 		cureRecipients = append(cureRecipients, rt.proposePartyResurrection(division, snapshot, skill, party, now)...)
 	case partyHeal:
@@ -356,8 +378,9 @@ supportCostVitals
 
 The caster's 0x33A6 after the charge when its own recovery published
 nothing, for the rows this owner admits beyond the shipped ones: Rave
-Melody with a full MP gauge (its flat HP cost), and the party-area heals
-and resurrections (Group Reverse heals nobody but charges MP). Inferred
+Melody with a full MP gauge (its flat HP cost), the party-area heals
+and resurrections (Group Reverse heals nobody but charges MP) and the
+heals over time, which heal nobody at release. Inferred
 from the other cost-paying owners (skillposition.go, statuscastarea.go),
 not from a native address. Heals on another player, cures and targeted
 resurrections keep the caster frames they had: whether native publishes

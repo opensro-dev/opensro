@@ -126,8 +126,8 @@ Over the shipped catalog, exactly the Group Healing / Group Healing Breath
 / Group Recovery / Holy Group Recovery lines and the Bard's Mana Breeze
 (heal with an mwmh weapon term) compile to a party heal and
 exactly the Group Reverse / Holy Group Reverse lines to a party
-resurrection. Healing Orbit (efr dura puls heal, handler 3), Healing
-Division (eshp) and every targeted heal stay out.
+resurrection. Healing Orbit (efr dura puls heal, handler 3) is a heal
+over time; Healing Division (eshp) and every targeted heal stay out.
 ==================
 */
 func TestPartyRecoveryRowsAreAdmittedByCompleteProgram(t *testing.T) {
@@ -185,7 +185,7 @@ func TestPartyRecoveryRowsAreAdmittedByCompleteProgram(t *testing.T) {
 		reverse.Abnormal.ResuMaxLevel != 60 || reverse.Heal.HP != 763 || reverse.Heal.MP != 763 {
 		t.Fatalf("group reverse %+v %+v %+v", area, reverse.Abnormal, reverse.Heal)
 	}
-	for _, name := range []string{"SKILL_EU_CLERIC_HEALA_CYCLE_A_01", "SKILL_EU_CLERIC_HEALA_CYCLE_B_01", "SKILL_EU_CLERIC_HEALA_DIVIDE_A_01", "SKILL_EU_CLERIC_HEALA_TARGET_A_01"} {
+	for _, name := range []string{"SKILL_EU_CLERIC_HEALA_DIVIDE_A_01", "SKILL_EU_CLERIC_HEALA_TARGET_A_01"} {
 		row, ok := source.SkillByCodename(name)
 		if !ok || row.Recovery != (SkillRecovery{}) {
 			t.Fatalf("%s admitted as recovery %+v", name, row.Recovery)
@@ -259,5 +259,106 @@ func TestPartyRecoveryProgramRefusesUnknownInstructions(t *testing.T) {
 	parseSkillRecovery(resu, &row)
 	if row.Recovery != (SkillRecovery{}) {
 		t.Fatalf("resurrection with rmut admitted %+v", row.Recovery)
+	}
+}
+
+/*
+==================
+TestHealOverTimeRowsAreAdmittedByCompleteProgram
+
+Over the shipped catalog, exactly the Bard's Mana Cycle / Mana Orbit and
+the Cleric's Healing Cycle / Healing Orbit lines compile to a heal over
+time: targeted dura puls heal, or the party efr in front of it, with the
+timed handler. Mana Cycle tier 1 pulses every 2000 ms for 16000 ms.
+==================
+*/
+func TestHealOverTimeRowsAreAdmittedByCompleteProgram(t *testing.T) {
+	source := sharedShippedSkills(t)
+	lines := []string{
+		"SKILL_EU_BARD_RECOVERA_MPHEAL_A_",
+		"SKILL_EU_BARD_RECOVERA_MPHEAL_B_",
+		"SKILL_EU_CLERIC_HEALA_CYCLE_A_",
+		"SKILL_EU_CLERIC_HEALA_CYCLE_B_",
+	}
+	count := 0
+	for _, ref := range source.SpawnSkillRows() {
+		row, _ := source.SkillByID(ref.ID)
+		in := false
+		for _, line := range lines {
+			in = in || strings.HasPrefix(row.Codename, line)
+		}
+		if row.Recovery.HealOverTimePinned != in {
+			t.Errorf("%s heal over time %v", row.Codename, row.Recovery.HealOverTimePinned)
+		}
+		if row.Recovery.HealOverTimePinned {
+			count++
+		}
+	}
+	// 14 + 1 Bard tiers, 11 + 2 Cleric tiers.
+	if count != 28 {
+		t.Fatalf("heals over time %d", count)
+	}
+
+	cycle, _ := source.SkillByCodename("SKILL_EU_BARD_RECOVERA_MPHEAL_A_01")
+	if cycle.Recovery != (SkillRecovery{HealOverTimePinned: true, PulseMs: 2000}) || cycle.EffectDurationMs != 16000 ||
+		!cycle.TargetRequired || cycle.Heal.MP != 76 || !cycle.Heal.WeaponMP {
+		t.Fatalf("mana cycle %+v %+v", cycle.Recovery, cycle.Heal)
+	}
+}
+
+/*
+==================
+TestHealOverTimeProgramRefusesAlteredShapes
+
+A synthetic Mana Orbit row: the instant handler, a missing or zero puls,
+a puls longer than dura, a trailing instruction, a target column on the
+party form and a targeted row leading with efr all refuse it.
+==================
+*/
+func TestHealOverTimeProgramRefusesAlteredShapes(t *testing.T) {
+	fields := make([]string, 118)
+	for i := range fields {
+		fields[i] = "0"
+	}
+	fields[0], fields[8], fields[68] = "1", "2", "3"
+	// efr[1,1,300,8,0,5] dura[16000] puls[2000] heal[0,0,2119,0] mwmh[90]
+	program := []string{"6645362", "1", "1", "300", "8", "0", "5", "1685418593", "16000", "1886743667", "2000", "1751474540", "0", "0", "2119", "0", "1836543336", "90"}
+	copy(fields[69:], program)
+	base := SkillRow{Consumption: SkillConsumption{MP: 90, Pinned: true}, TimingPinned: true, ActionCastingTimePinned: true,
+		ActionDurationMs: 1500, ActionDurationPinned: true, EffectDurationMs: 16000, EffectDurationPresent: true}
+	row := base
+	parseSkillRecovery(fields, &row)
+	if row.Recovery != (SkillRecovery{HealOverTimePinned: true, PulseMs: 2000}) {
+		t.Fatalf("baseline %+v", row.Recovery)
+	}
+
+	for _, mutation := range []struct {
+		column int
+		value  string
+	}{
+		{68, "0"},          // the instant handler
+		{78, "0"},          // no puls tag
+		{79, "0"},          // a zero period
+		{79, "20000"},      // a period past the duration
+		{77, "8000"},       // dura disagreeing with the effect duration
+		{87, "1886743667"}, // a trailing puls
+		{22, "1"},          // a target column on the party form
+		{71, "2"},          // efr around the primary target
+	} {
+		changed := append([]string(nil), fields...)
+		changed[mutation.column] = mutation.value
+		row = base
+		parseSkillRecovery(changed, &row)
+		if row.Recovery.HealOverTimePinned {
+			t.Errorf("column %d = %s admitted %+v", mutation.column, mutation.value, row.Recovery)
+		}
+	}
+
+	// A targeted row must not carry the party efr.
+	row = base
+	row.TargetRequired = true
+	parseSkillRecovery(fields, &row)
+	if row.Recovery.HealOverTimePinned {
+		t.Errorf("targeted row with efr admitted %+v", row.Recovery)
 	}
 }

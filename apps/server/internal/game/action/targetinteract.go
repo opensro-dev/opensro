@@ -335,6 +335,14 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 				return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
 			}
 
+			// Untargeted party-area heals, heals over time and
+			// resurrections: their action vector is the party
+			// selection (58BEF0).
+			if skill.Recovery.PartyResurrectPinned || skill.Recovery.PartyHealPinned ||
+				skill.Recovery.HealOverTimePinned {
+				return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
+			}
+
 			if skill.Recovery.SelfFlatPinned ||
 				(skill.Heal.Present || skill.Abnormal.AdmitDeadParty) && skill.TargetRequired ||
 				skill.Abnormal.CurePresent() {
