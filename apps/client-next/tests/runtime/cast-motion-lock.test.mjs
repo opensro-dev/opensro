@@ -17,7 +17,54 @@ const { createCastMotionLock } = await import( "../../src/engine/foundation/game
 const LOCAL = 7;
 // SKILL_CH_COLD_GANGGI_A_01 (Weak guard of ice): 1000 ms cast + 1000 ms action.
 const ICE_GUARD = 240;
+const ICE_GUARD_ACTION_MS = 2000;
 const UNCATALOGUED = 999;
+
+/*
+================
+skill
+
+A complete catalogue row with an optional action window.
+================
+*/
+/** @param {number} id @param {number} [actionMs] @returns {import("../../src/engine/foundation/gameplay/skill-catalog.ts").SkillMetadata} */
+function skill( id, actionMs ) {
+	const none = { ID: 0, Level: 0 };
+	return {
+		id,
+		group: 1,
+		level: 1,
+		name: "SKILL_" + id,
+		spCost: 0,
+		trainable: false,
+		targetRequired: false,
+		cooldownMs: 0,
+		masteries: [ none, none ],
+		prerequisites: [ none, none, none ],
+		...(actionMs === undefined ? {} : { actionMs })
+	};
+}
+
+/*
+================
+cast
+
+A complete cast record opened at receivedAtMs.
+================
+*/
+/** @param {Partial<import("../../src/engine/contracts/gameplay.ts").CastState>} fields @returns {import("../../src/engine/contracts/gameplay.ts").CastState} */
+function cast( fields ) {
+	return {
+		token: 1,
+		caster: LOCAL,
+		skill: ICE_GUARD,
+		target: 0,
+		damage: 0,
+		fatal: false,
+		receivedAtMs: 0,
+		...fields
+	};
+}
 
 /*
 ================
@@ -26,35 +73,29 @@ lockWith
 */
 function lockWith() {
 	const lock = createCastMotionLock();
-	lock.catalog( [ { id: ICE_GUARD, actionMs: 2000 }, { id: 1, actionMs: undefined } ] );
+	lock.catalog( [ skill( ICE_GUARD, ICE_GUARD_ACTION_MS ), skill( 1 ) ] );
 	return lock;
 }
 
 test("a self buff holds the caster for its whole action window, not the object-action count", () => {
-	const lock = lockWith(), cast = { token: 1, caster: LOCAL, skill: ICE_GUARD, receivedAtMs: 1000 };
+	const lock = lockWith(), opened = cast( { receivedAtMs: 1000 } );
 	// A self buff queues no object command: the old count gate let the walk through.
-	assert.equal( lock.locked( [ cast ], LOCAL, 1000, false ), true );
-	assert.equal( lock.locked( [ cast ], LOCAL, 2999, false ), true );
-	assert.equal( lock.locked( [ cast ], LOCAL, 3000, false ), false, "the click walks when the action ends" );
+	assert.equal( lock.locked( [ opened ], LOCAL, 1000, false ), true );
+	assert.equal( lock.locked( [ opened ], LOCAL, 2999, false ), true );
+	assert.equal( lock.locked( [ opened ], LOCAL, 3000, false ), false, "the click walks when the action ends" );
 });
 
 test("a cancelled or another actor's cast never holds the local walk", () => {
 	const lock = lockWith();
-	assert.equal(
-		lock.locked( [ { caster: LOCAL, skill: ICE_GUARD, receivedAtMs: 0, cancelledAtMs: 10 } ], LOCAL, 20, true ),
-		false
-	);
-	assert.equal( lock.locked( [ { caster: 8, skill: ICE_GUARD, receivedAtMs: 0 } ], LOCAL, 20, true ), false );
-	assert.equal(
-		lock.locked( [ { caster: LOCAL, skill: ICE_GUARD, receivedAtMs: 0, resultOnly: true } ], LOCAL, 20, true ),
-		false
-	);
+	assert.equal( lock.locked( [ cast( { cancelledAtMs: 10 } ) ], LOCAL, 20, true ), false );
+	assert.equal( lock.locked( [ cast( { caster: 8 } ) ], LOCAL, 20, true ), false );
+	assert.equal( lock.locked( [ cast( { resultOnly: true } ) ], LOCAL, 20, true ), false );
 });
 
 test("a skill without a known window keeps the committed-command fallback", () => {
-	const lock = lockWith(), cast = { caster: LOCAL, skill: UNCATALOGUED, receivedAtMs: 0 };
-	assert.equal( lock.locked( [ cast ], LOCAL, 50000, true ), true );
-	assert.equal( lock.locked( [ cast ], LOCAL, 50000, false ), false );
+	const lock = lockWith(), open = cast( { skill: UNCATALOGUED } );
+	assert.equal( lock.locked( [ open ], LOCAL, 50000, true ), true );
+	assert.equal( lock.locked( [ open ], LOCAL, 50000, false ), false );
 	lock.clear();
-	assert.equal( lock.locked( [ { caster: LOCAL, skill: ICE_GUARD, receivedAtMs: 0 } ], LOCAL, 10, false ), false );
+	assert.equal( lock.locked( [ cast( {} ) ], LOCAL, 10, false ), false );
 });
