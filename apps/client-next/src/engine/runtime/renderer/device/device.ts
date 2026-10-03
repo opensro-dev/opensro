@@ -8,6 +8,7 @@ device.ts - WebGPU generation and resource lifecycle
 import { createBloom } from "./bloom";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
+import { createParticlePresentation } from "./particles";
 import { createGpuTiming } from "./timing";
 import { createThunder } from "./thunder";
 import { createFlares } from "./flares";
@@ -323,7 +324,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				environmentBuffer,
 				pipelines.worldSampling,
 				gpuAnimationEnabled ? createGpuAnimationResources( created ) : undefined,
-				navigator.gpu.getPreferredCanvasFormat()
+				navigator.gpu.getPreferredCanvasFormat(),
+				createParticlePresentation( created )
 			);
 			ui = createUiResources( created, navigator.gpu.getPreferredCanvasFormat() );
 

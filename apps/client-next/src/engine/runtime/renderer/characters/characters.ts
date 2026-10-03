@@ -35,21 +35,20 @@ import {
 	ribbonStrip,
 	type RibbonPoint
 } from "@/engine/foundation/rendering/particle-ribbon";
+import { particleRandomTable, initializeParticle } from "@/engine/foundation/animation/particle-program";
+import { PARTICLE_TICKS_PER_SECOND, ROTATION_WORK } from "@/engine/foundation/animation/particle-presentation";
 import {
-	particleRandomTable,
-	initializeParticle,
-	advanceParticle,
-	placeParticle,
-	type ParticleInstance
-} from "@/engine/foundation/animation/particle-program";
-import {
-	createPresentedParticle,
-	PARTICLE_TICKS_PER_SECOND,
-	presentParticle,
-	snapshotParticleTick
-} from "@/engine/foundation/animation/particle-presentation";
+	beginParticleFrame,
+	createParticleRow,
+	createParticleStream,
+	endParticleFrame,
+	writeParticleRow,
+	type ParticleHistory,
+	type ParticleRandom,
+	type ParticleStream
+} from "./particle-streams";
 import { type PickBounds, type PickRay } from "@/engine/foundation/rendering/picking";
-import { faceEffectPlate, faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
+import { faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import { characterRadius, createCharacterBoundsCache } from "@/engine/foundation/animation/character-bounds";
 import {
 	CHARACTER_ASSEMBLIES,
@@ -134,16 +133,12 @@ export function createCharacters() {
 		dependencies?: readonly string[];
 	}>();
 	const materialClocks = createModelMaterialClocks(), deferred = createDeferredParticles();
-	// Scratch for the particle being drawn (presentParticle writes it in place).
-	const presentedParticle = createPresentedParticle();
-	// Scratch basis for faceEffectMesh, which runs per drawn particle.
+	// Scratch for the ribbon element frames' rotation (particleElementMatrix).
+	const rotationWork = new Float64Array( ROTATION_WORK );
+	// Scratch basis for faceEffectMesh, which runs per billboard actor.
 	const billboardAxes = new Float64Array( 9 );
-	// Per drawn particle: its birth matrix, age and opacity. Reused every frame,
-	// growing to the largest emission seen, so the particle loop allocates nothing.
-	const particleTransform = new Float32Array( 16 );
 	// The vertex range a ribbon upload covers, [ start, count ].
 	const ribbonRange: [number, number][] = [ [ 0, 0 ] ];
-	let particleAges = new Float64Array( 64 ), particleOpacities = new Float32Array( 64 );
 	const particleSnapshots = new Map<number, { matrix: Float32Array; regionId: number; }>();
 	let hasDeferred = false, deferredVisible = new Set<number>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
@@ -194,19 +189,18 @@ export function createCharacters() {
 	let poseFrame = 0;
 	// Birth transforms belong to the actor lifetime, not GPU batches. Keep them
 	// across culling, batch membership changes and device recreation.
-	const particleRandom = particleRandomTable();
-	let particleRandomIndex = 0;
+	const particleRandom: ParticleRandom = { table: particleRandomTable(), index: 0 };
+	// One actor's inputs to its particle streams, refilled per actor.
+	const particleRow = createParticleRow();
 	const particleBirths = new Map<
 		number,
-		{
+		ParticleHistory & {
 			model: string;
 			time: number;
 			cycle: number;
 			origin: number;
 			bytes: number;
 			graph?: ParticleGraphState;
-			matrices: (Float32Array | undefined)[];
-			programs: (ParticleInstance | undefined)[][];
 		}
 	>();
 	const batches = new Map<string, {
@@ -218,7 +212,8 @@ export function createCharacters() {
 		times: Float64Array;
 		palettes: Float32Array[];
 		streams?: ReturnType<typeof createPaletteStreams>;
-		particleInstances: (Float32Array | undefined)[];
+		// Emitted primitives' GPU presentation streams (particle-streams.ts).
+		particles: (ParticleStream | undefined)[];
 		appearances: (Float32Array | undefined)[];
 		// Ribbon vertex streams by primitive, kept across frames; used is the
 		// vertex count the last frame wrote.
@@ -1288,7 +1283,7 @@ export function createCharacters() {
 						origin,
 						bytes: storage,
 						graph: model.particleGraph ?
-							createParticleGraph( model.particleGraph, particleRandomIndex ) :
+							createParticleGraph( model.particleGraph, particleRandom.index ) :
 							undefined,
 						programs: model.primitives.map( () => [] ),
 						matrices: model.primitives.map( p =>
@@ -1309,16 +1304,19 @@ export function createCharacters() {
 						model.particleGraph,
 						actor.time,
 						transform,
-						particleRandom,
+						particleRandom.table,
 						actor.emissionEnd,
 						dx,
 						dz,
 						actor.loop
 					);
-					particleRandomIndex = history.graph.index;
+					particleRandom.index = history.graph.index;
+					// Graph ribbons are strips through their elements' drawn
+					// frames; other graph primitives are drawn from their tick
+					// records by the GPU pass (particle-streams.ts).
 					for ( let p = 0; p < model.primitives.length; p++ ) {
 						const emitter = model.primitives[p]!.particleEmitter, matrices = history.matrices[p];
-						if ( emitter === undefined || !matrices ) continue;
+						if ( emitter === undefined || !matrices || !model.primitives[p]!.ribbon ) continue;
 						const elements = history.graph.elements[emitter]!;
 						matrices.fill( NaN );
 						for ( let b = 0; b < elements.length; b++ ) {
@@ -1329,12 +1327,12 @@ export function createCharacters() {
 								matrices,
 								b * 16,
 								actor.time * PARTICLE_TICKS_PER_SECOND - history.graph.frame,
-								presentedParticle.work
+								rotationWork
 							);
-							history.programs[p]![b] = element.state;
 						}
 					}
-				} else {for ( let p = 0; p < model.primitives.length; p++ ) {
+				} else {
+					for ( let p = 0; p < model.primitives.length; p++ ) {
 						const emission = model.primitives[p]!.emission, matrices = history.matrices[p];
 						if ( !emission || !matrices ) continue;
 						for ( let b = 0; b < emission.births.length; b++ ) {
@@ -1352,17 +1350,18 @@ export function createCharacters() {
 								if ( program ) {
 									const sample = initializeParticle(
 										program,
-										particleRandom,
-										particleRandomIndex,
+										particleRandom.table,
+										particleRandom.index,
 										transform
 									);
-									particleRandomIndex = sample.index;
+									particleRandom.index = sample.index;
 									history.programs[p]![b] = sample.state;
 								}
 							}
 							if ( emission.follow ) matrices.set( transform, offset );
 						}
-					}}
+					}
+				}
 				history.origin = origin;
 				history.time = actor.time;
 			}
@@ -1593,18 +1592,12 @@ export function createCharacters() {
 										p.joints.length * 16
 								)
 							),
-						particleInstances: model.primitives.map( p =>
-							p.emission ?
-								new Float32Array(
-									rows.length * (p.emission.capacity ?? p.emission.births.length) * 16
-								) :
-								undefined
+						particles: model.primitives.map( ( p, index ) =>
+							p.emission && !p.ribbon ? createParticleStream( model, index, rows.length ) : undefined
 						),
 						appearances: model.primitives.map( p =>
-							p.materialFrames || rows[0]!.materialTint ?
-								new Float32Array(
-									capacity * (p.emission?.capacity ?? p.emission?.births.length ?? 1) * 8
-								) :
+							!p.emission && (p.materialFrames || rows[0]!.materialTint) ?
+								new Float32Array( capacity * 8 ) :
 								undefined
 						),
 						ribbons: []
@@ -1824,132 +1817,81 @@ export function createCharacters() {
 						output.push( draw );
 						continue;
 					}
-					const appearance = batch.appearances[p];
-					const emitted = batch.particleInstances[p];
-					let instances = batch.instances.subarray( 0, rows.length * 16 );
-					// Graph particles share this immutable bind scale. Copy it
-					// into each palette before applying that particle's scale.
-					const graphPalette = primitive.emission && model.particleGraph ? identity() : undefined;
-					if ( graphPalette ) {
-						for ( let axis = 0; axis < 3; axis++ ) graphPalette[axis * 5] = model.nodes[0]!.scale[axis]!;
-					}
-					let particleCount = 0;
-					if ( primitive.emission && emitted ) {
-						let count = 0;
-						for ( let i = 0; i < rows.length; i++ ) {
-							// One lookup per actor; the slot loop below runs per particle.
-							const actor = rows[i]!,
-								state = poses.get( actor.gid )!,
-								history = particleBirths.get( actor.gid )!,
-								birthMatrices = history.matrices[p]!,
-								programs = history.programs[p]!;
-							const elements = primitive.particleEmitter === undefined ?
+					/*
+					================
+					uploadPrimitive
+
+					The primitive's draw for this batch, with its material
+					policy (blend, fade, tint, deferral) and textures.
+					================
+					*/
+					const uploadPrimitive = ( instances: Float32Array, paletteOffsets?: Uint32Array ) => {
+						const authored = modifierClocks?.[p]?.material ?? primitive.geometry.material,
+							base = authored!;
+						return geometry.upload(
+							{
+								...primitive.geometry,
+								world: !preview,
+								material: {
+									...base,
+									...(rows[0]!.deferredParticle ? { deferredParticle: true } : {}),
+									instanceMaterialTint: !!rows[0]!.materialTint,
+									// A fading opaque body becomes alpha blended but keeps writing
+									// depth. An already blended material (every effect program) keeps
+									// its own blend and never writes depth: a fading effect must not
+									// hide what is behind it, such as a name board.
+									...(fading ?
+										authored?.blend ?
+											{ instanceFade: true, depthWrite: false } :
+											{ blend: true, instanceFade: true } :
+										{}),
+									...(preview ? { fogDisabled: true } : {})
+								},
+								instances,
+								bones: batch.palettes[p],
+								transform: preview ? view! : identity()
+							},
+							resource.textures[primitive.image],
+							paletteOffsets,
+							primitive.equipmentGlow && !fading && (rows[0]!.animationLod?.fraction ?? 0) <= .5 ?
+								resource.textures[primitive.equipmentGlow.image] :
+								primitive.environmentImage === undefined ?
 								undefined :
-								history.graph?.elements[primitive.particleEmitter];
-							for ( let b = 0; b < (elements?.length ?? primitive.emission.births.length); b++ ) {
-								const element = elements?.[b];
-								if ( elements && !element?.alive ) continue;
-								const birth = element ? element.clockBirth / 20 : primitive.emission.births[b]!,
-									at = b * 16;
-								const elapsed = actor.time - birth,
-									age = primitive.emission.loop && elapsed >= 0 ?
-										elapsed % primitive.emission.lifetime :
-										elapsed;
-								if (
-									age < 0 || age >= primitive.emission.lifetime ||
-									!Number.isFinite( birthMatrices[at + 15] ) ||
-									!elements && actor.emissionEnd !== undefined && birth >= actor.emissionEnd
-								) continue;
-								for ( let i = 0; i < 16; i++ ) particleTransform[i] = birthMatrices[at + i]!;
-								emitted.set( particleTransform, count * 16 );
-								const offset = count * primitive.joints.length * 16;
-								if ( graphPalette ) batch.palettes[p]!.set( graphPalette, offset );
-								else state.pose.palette( primitive, batch.palettes[p]!, offset );
-								const particle = programs[b];
-								// Ticks stay native (20 Hz); the drawn particle carries the
-								// fraction of the next tick (particle-presentation.ts).
-								let drawn = particle;
-								if ( particle ) {
-									if ( model.particleGraph ) {
-										const graph = history.graph!;
-										drawn = presentParticle(
-											particle,
-											actor.time * PARTICLE_TICKS_PER_SECOND - graph.frame,
-											presentedParticle
-										);
-										for ( let axis = 0; axis < 3; axis++ ) {
-											for ( let row = 0; row < 3; row++ ) {
-												batch.palettes[p]![offset + axis * 4 + row]! *= drawn.scale[axis]!;
-											}
-										}
-									} else if ( primitive.particleProgram ) {
-										const tick = Math.floor( age * PARTICLE_TICKS_PER_SECOND );
-										if ( tick > particle.frame ) {
-											// Advance to the tick before, record it, then take the
-											// last step: the same sequential steps as one call.
-											if ( tick - 1 > particle.frame ) {
-												particleRandomIndex = advanceParticle(
-													particle,
-													primitive.particleProgram,
-													tick - 1,
-													particleRandom,
-													particleRandomIndex
-												);
-											}
-											snapshotParticleTick( particle );
-											particleRandomIndex = advanceParticle(
-												particle,
-												primitive.particleProgram,
-												tick,
-												particleRandom,
-												particleRandomIndex
-											);
-										}
-										drawn = presentParticle(
-											particle,
-											age * PARTICLE_TICKS_PER_SECOND - tick,
-											presentedParticle
-										);
-										placeParticle( drawn, batch.palettes[p]!, offset );
-									}
-								}
-								if ( primitive.billboard ) {
-									// ViewVBillboard follows the element's velocity (CEFEffect_Render b1556c).
-									faceEffectMesh(
-										batch.palettes[p]!,
-										offset,
-										particleTransform,
-										view!,
-										primitive.billboard,
-										particle?.velocity,
-										billboardAxes
-									);
-								}
-								if ( drawn ) placeParticle( drawn, batch.palettes[p]!, offset, true );
-								if ( particleCount === particleAges.length ) {
-									const ages = new Float64Array( particleCount * 2 ),
-										opacities = new Float32Array( particleCount * 2 );
-									ages.set( particleAges );
-									opacities.set( particleOpacities );
-									particleAges = ages;
-									particleOpacities = opacities;
-								}
-								particleAges[particleCount] = age;
-								if ( fading ) particleOpacities[particleCount] = opacity( actor );
-								particleCount++;
-								count++;
-							}
+								resource.textures[primitive.environmentImage]
+						);
+					};
+					const particles = batch.particles[p];
+					if ( particles ) {
+						// Ticks stay native (20 Hz) and the GPU pass draws them at
+						// the display rate (particle-streams.ts).
+						beginParticleFrame( particles, view );
+						for ( let i = 0; i < rows.length; i++ ) {
+							const actor = rows[i]!;
+							particleRow.actor = actor;
+							particleRow.history = particleBirths.get( actor.gid )!;
+							particleRow.pose = poses.get( actor.gid )!.pose;
+							particleRow.opacity = fading ? opacity( actor ) : 1;
+							particleRow.origin = origin;
+							writeParticleRow( particles, i, particleRow, particleRandom );
 						}
-						instances = emitted.subarray( 0, count * 16 );
-						probe?.characterCount( "particles", count );
+						let draw = batch.draws[p];
+						if ( !draw ) {
+							draw = uploadPrimitive( new Float32Array( particles.rows * particles.slots * 16 ) );
+							batch.draws[p] = draw;
+						} else if ( preview ) geometry.updateTransform( draw, view! );
+						geometry.presentParticles( draw, particles );
+						endParticleFrame( particles );
+						probe?.characterCount( "particles", particles.live );
+						updateModifiers( draw, p, true );
+						output.push( draw );
+						continue;
 					}
+					const appearance = batch.appearances[p];
+					const instances = batch.instances.subarray( 0, rows.length * 16 );
 					if ( primitive.materialFrames && appearance ) {
 						const frames = primitive.materialFrames, count = frames.colors.length / 4;
-						for ( let i = 0; i < (emitted ? particleCount : rows.length); i++ ) {
-							const at = Math.max(
-									0,
-									Math.min( count - 1, (emitted ? particleAges[i]! : rows[i]!.time) * frames.fps )
-								),
+						for ( let i = 0; i < rows.length; i++ ) {
+							const at = Math.max( 0, Math.min( count - 1, rows[i]!.time * frames.fps ) ),
 								index = Math.floor( at ),
 								next = Math.min( count - 1, index + 1 ),
 								fraction = frames.sampling === "step" ? 0 : at - index;
@@ -1960,7 +1902,7 @@ export function createCharacters() {
 							appearance.set( frames.windows.subarray( index * 4, index * 4 + 4 ), i * 8 + 4 );
 						}
 					}
-					if ( appearance && !emitted ) {
+					if ( appearance ) {
 						for ( let i = 0; i < rows.length; i++ ) {
 							if ( !primitive.materialFrames ) {
 								// Neutral appearance: white, opaque window, no offset.
@@ -2002,49 +1944,13 @@ export function createCharacters() {
 						paletteOffsets = stream?.offsets.subarray( 0, rows.length );
 					let draw = batch.draws[p];
 					if ( !draw ) {
-						const authored = modifierClocks?.[p]?.material ?? primitive.geometry.material,
-							base = authored!;
-						draw = geometry.upload(
-							{
-								...primitive.geometry,
-								world: !preview,
-								material: {
-									...base,
-									...(rows[0]!.deferredParticle ? { deferredParticle: true } : {}),
-									instanceMaterialTint: !!rows[0]!.materialTint,
-									// A fading opaque body becomes alpha blended but keeps writing
-									// depth. An already blended material (every effect program) keeps
-									// its own blend and never writes depth: a fading effect must not
-									// hide what is behind it, such as a name board.
-									...(fading ?
-										authored?.blend ?
-											{ instanceFade: true, depthWrite: false } :
-											{ blend: true, instanceFade: true } :
-										{}),
-									...(preview ? { fogDisabled: true } : {})
-								},
-								instances: emitted ?? batch.instances,
-								bones: batch.palettes[p],
-								transform: preview ? view! : identity()
-							},
-							resource.textures[primitive.image],
-							stream?.offsets,
-							primitive.equipmentGlow && !fading && (rows[0]!.animationLod?.fraction ?? 0) <= .5 ?
-								resource.textures[primitive.equipmentGlow.image] :
-								primitive.environmentImage === undefined ?
-								undefined :
-								resource.textures[primitive.environmentImage]
-						);
+						draw = uploadPrimitive( batch.instances, stream?.offsets );
 						batch.draws[p] = draw;
-						if ( capacity !== rows.length || fading || appearance || emitted || pointLights ) {
+						if ( capacity !== rows.length || fading || appearance || pointLights ) {
 							draw = geometry.updateInstances(
 								draw,
 								instances,
-								fading ?
-									(emitted ?
-										particleOpacities.subarray( 0, particleCount ) :
-										Float32Array.from( rows, opacity )) :
-									undefined,
+								fading ? Float32Array.from( rows, opacity ) : undefined,
 								appearance?.subarray( 0, instances.length / 2 ),
 								pointLights,
 								paletteOffsets
@@ -2053,16 +1959,12 @@ export function createCharacters() {
 						}
 					} else {
 						if (
-							instancesChanged || fading || appearance || emitted || pointLights || stream?.mappingChanged
+							instancesChanged || fading || appearance || pointLights || stream?.mappingChanged
 						) {
 							draw = geometry.updateInstances(
 								draw,
 								instances,
-								fading ?
-									(emitted ?
-										particleOpacities.subarray( 0, particleCount ) :
-										Float32Array.from( rows, opacity )) :
-									undefined,
+								fading ? Float32Array.from( rows, opacity ) : undefined,
 								appearance?.subarray( 0, instances.length / 2 ),
 								pointLights,
 								paletteOffsets
@@ -2070,9 +1972,7 @@ export function createCharacters() {
 						}
 						batch.draws[p] = draw;
 						if ( !stream ) {
-							const upload = emitted ?
-								batch.palettes[p]! :
-								batch.palettes[p]!.subarray( 0, rows.length * primitive.joints.length * 16 );
+							const upload = batch.palettes[p]!.subarray( 0, rows.length * primitive.joints.length * 16 );
 							boneUploadBytes += upload.byteLength;
 							geometry.updateBones( draw, upload );
 						}

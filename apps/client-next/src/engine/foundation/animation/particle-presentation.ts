@@ -31,8 +31,7 @@ export interface ParticleTickPose {
 	readonly scale: number[];
 	readonly rotation: Float32Array;
 	readonly matrix: Float32Array;
-	// The last tick step of rotation and of matrix (continueRotation's cache).
-	rotationStep?: Float64Array;
+	// The last tick step of the graph element frame (continueRotation's cache).
 	matrixStep?: Float64Array;
 }
 
@@ -77,74 +76,8 @@ export function snapshotParticleTick( state: ParticleInstance, matrix?: Float32A
 	state.previous = previous;
 }
 
-/*
-================
-PresentedParticle
-
-The caller's scratch for one drawn particle. It owns every array it
-holds, so writing it never touches a live particle, and work is the
-rotation math's scratch: nothing here allocates per particle per frame.
-================
-*/
-export interface PresentedParticle extends ParticleInstance {
-	readonly work: Float64Array;
-}
-
 // invert3 9, step 9, partial 9.
-const ROTATION_WORK = 27;
-
-export function createPresentedParticle(): PresentedParticle {
-	return {
-		position: [ 0, 0, 0 ],
-		velocity: [ 0, 0, 0 ],
-		scale: [ 1, 1, 1 ],
-		rotation: new Float32Array( 16 ),
-		frame: 0,
-		work: new Float64Array( ROTATION_WORK )
-	};
-}
-
-/*
-================
-presentParticle
-
-Fill out with the particle carried fraction (0..1) of a tick past its
-latest tick. Position and scale continue linearly; rotation continues by
-the same fraction of its last tick rotation.
-================
-*/
-export function presentParticle(
-	state: ParticleInstance,
-	fraction: number,
-	out: PresentedParticle
-): PresentedParticle {
-	const previous = state.previous, blend = Math.max( 0, Math.min( 1, fraction ) );
-	out.frame = state.frame;
-	out.velocity = state.velocity;
-	if ( !previous || blend === 0 ) {
-		for ( let axis = 0; axis < 3; axis++ ) {
-			out.position[axis] = state.position[axis]!;
-			out.scale[axis] = state.scale[axis]!;
-		}
-		out.rotation.set( state.rotation );
-		return out;
-	}
-	for ( let axis = 0; axis < 3; axis++ ) {
-		const position = state.position[axis]!, scale = state.scale[axis]!;
-		out.position[axis] = position + (position - previous.position[axis]!) * blend;
-		out.scale[axis] = scale + (scale - previous.scale[axis]!) * blend;
-	}
-	continueRotation(
-		previous.rotation,
-		state.rotation,
-		blend,
-		out.rotation,
-		0,
-		out.work,
-		previous.rotationStep ??= createStepCache()
-	);
-	return out;
-}
+export const ROTATION_WORK = 27;
 
 /*
 ================
@@ -203,6 +136,32 @@ export function continueRotation(
 		z = work[20]!;
 		angle = work[21]!;
 	}
+	turnByStep( current, x, y, z, angle, fraction, out, offset, work );
+}
+
+/*
+================
+turnByStep
+
+Write current * step^fraction into out at offset for a step given as unit
+axis xyz and angle: the per-frame half of continueRotation, which the
+GPU particle pass repeats (particle-records.ts). Only the 3x3 part
+turns; the rest of current is copied. An angle of 0 copies current.
+================
+*/
+export function turnByStep(
+	current: ArrayLike<number>,
+	x: number,
+	y: number,
+	z: number,
+	angle: number,
+	fraction: number,
+	out: Float32Array,
+	offset: number,
+	work: Float64Array
+): void {
+	for ( let i = 0; i < 16; i++ ) out[offset + i] = current[i]!;
+	if ( angle === 0 || fraction <= 0 ) return;
 	partialRotation( x, y, z, angle, fraction, work );
 	// out = current * partial (3x3 part only); partial is at work[18].
 	for ( let column = 0; column < 3; column++ ) {
@@ -212,6 +171,41 @@ export function continueRotation(
 				current[8 + row]! * work[18 + column * 3 + 2]!;
 		}
 	}
+}
+
+/*
+================
+tickRotationStep
+
+The rotation the last tick took from previous to current (the step
+continueRotation continues), written as axis xyz and angle into
+out[at..at+3]. The angle is 0 when the tick did not turn, or when its step
+is not a rotation: continueRotation then leaves current as is. work is
+scratch of at least ROTATION_WORK entries.
+================
+*/
+export function tickRotationStep(
+	previous: ArrayLike<number>,
+	current: ArrayLike<number>,
+	out: Float32Array,
+	at: number,
+	work: Float64Array
+): void {
+	out[at] =
+		out[at + 1] =
+		out[at + 2] =
+		out[at + 3] =
+			0;
+	if (
+		previous[0] === current[0] && previous[1] === current[1] && previous[2] === current[2] &&
+		previous[4] === current[4] && previous[5] === current[5] && previous[6] === current[6] &&
+		previous[8] === current[8] && previous[9] === current[9] && previous[10] === current[10]
+	) return;
+	if ( !invert3( previous, work ) || !stepRotation( current, work ) ) return;
+	out[at] = work[18]!;
+	out[at + 1] = work[19]!;
+	out[at + 2] = work[20]!;
+	out[at + 3] = work[21]!;
 }
 
 /*

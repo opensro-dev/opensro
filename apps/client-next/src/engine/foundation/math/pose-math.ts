@@ -51,32 +51,6 @@ export function multiplyDisjoint( a: Float32Array, b: Float32Array, out: Float32
 
 /*
 ================
-multiplyInPlace
-
-target[offset..offset+16] = target[offset..] * b, with multiply's exact
-arithmetic. The left matrix is read into locals first, so the product can
-overwrite it; nothing is allocated (particles call this per frame).
-================
-*/
-export function multiplyInPlace( target: Float32Array, offset: number, b: ArrayLike<number> ) {
-	const a0 = target[offset]!, a1 = target[offset + 1]!, a2 = target[offset + 2]!, a3 = target[offset + 3]!;
-	const a4 = target[offset + 4]!, a5 = target[offset + 5]!, a6 = target[offset + 6]!, a7 = target[offset + 7]!;
-	const a8 = target[offset + 8]!, a9 = target[offset + 9]!, a10 = target[offset + 10]!, a11 = target[offset + 11]!;
-	const a12 = target[offset + 12]!,
-		a13 = target[offset + 13]!,
-		a14 = target[offset + 14]!,
-		a15 = target[offset + 15]!;
-	for ( let c = 0; c < 4; c++ ) {
-		const at = c * 4, b0 = b[at]!, b1 = b[at + 1]!, b2 = b[at + 2]!, b3 = b[at + 3]!, to = offset + at;
-		target[to] = ((0 + a0 * b0 + a4 * b1) + a8 * b2) + a12 * b3;
-		target[to + 1] = ((0 + a1 * b0 + a5 * b1) + a9 * b2) + a13 * b3;
-		target[to + 2] = ((0 + a2 * b0 + a6 * b1) + a10 * b2) + a14 * b3;
-		target[to + 3] = ((0 + a3 * b0 + a7 * b1) + a11 * b2) + a15 * b3;
-	}
-}
-
-/*
-================
 compose
 
 out = T * R(q) * S, q normalized.

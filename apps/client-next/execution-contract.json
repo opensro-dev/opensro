@@ -524,7 +524,8 @@
 				"updateIndices",
 				"updateMaterialColors",
 				"updateTextureTransform",
-				"updateEquipmentGlow"
+				"updateEquipmentGlow",
+				"presentParticles"
 			]
 		},
 		{
@@ -1839,6 +1840,13 @@
 			"function": "encode",
 			"kind": "callback",
 			"reason": "Optional device-owned GpuTimingFrame callback for the skeletal compute pass."
+		},
+		{
+			"file": "src/engine/runtime/renderer/device/particles.ts",
+			"expression": "timing?.pass",
+			"function": "encode",
+			"kind": "callback",
+			"reason": "Optional device-owned GpuTimingFrame callback for the particle presentation compute pass."
 		},
 		{
 			"file": "src/engine/runtime/assets/worker/loader.ts",

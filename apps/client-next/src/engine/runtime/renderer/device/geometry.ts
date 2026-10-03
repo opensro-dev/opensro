@@ -11,6 +11,7 @@ with dynamicVertices keep a CPU mirror for position updates.
 */
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { createCharacterShadows } from "./character-shadows";
+import type { createParticlePresentation } from "./particles";
 import type { createGpuAnimationResources } from "./animation";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { packGeometryVertices } from "@/engine/foundation/rendering/geometry-vertices";
@@ -31,7 +32,8 @@ export function createGeometryResources(
 	environment: GPUBuffer,
 	sampling?: ( filtered: boolean, detail: number ) => GPUSampler,
 	animation?: ReturnType<typeof createGpuAnimationResources>,
-	format: GPUTextureFormat = "rgba8unorm"
+	format: GPUTextureFormat = "rgba8unorm",
+	particles?: ReturnType<typeof createParticlePresentation>
 ) {
 	let filtered = true, detail = 2, mixedCpuUploadBytes = 0;
 	const geometryBuffers = new Map<GeometryDraw, GPUBuffer[]>();
@@ -249,6 +251,22 @@ export function createGeometryResources(
 				}
 			} :
 			{}),
+		/*
+		================
+		presentParticles
+		================
+		*/
+		presentParticles( draw: GeometryDraw, presentation: import("../internal/gpu-contract").ParticlePresentation ) {
+			const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
+			if ( !particles ) throw Error( "Particle presentation unavailable" );
+			if ( !meta || !buffers || meta.bones === defaultBones || meta.palette ) {
+				throw Error( "Particle presentation requires an owned skinned draw" );
+			}
+			if ( meta.selection.instanceCount !== presentation.rows * presentation.slots ) {
+				throw Error( "Particle presentation must draw one instance a slot" );
+			}
+			particles.present( draw, buffers[3]!, meta.bones, presentation );
+		},
 		/*
 		================
 		updateBones
@@ -793,13 +811,14 @@ export function createGeometryResources(
 				buffer.destroy();
 			}
 			releasePalette( metadata.get( draw )?.palette );
+			particles?.release( draw );
 			geometryBuffers.delete( draw );
 			metadata.delete( draw );
 		}
 	} );
 	return {
 		commands,
-		ready: animation?.ready ?? Promise.resolve(),
+		ready: Promise.all( [ animation?.ready, particles?.ready ] ),
 		/*
 		================
 		prepare
@@ -807,6 +826,7 @@ export function createGeometryResources(
 		*/
 		prepare( encoder: GPUCommandEncoder, timing?: import("../internal/gpu-contract").GpuTimingFrame ) {
 			animation?.encode( encoder, timing );
+			particles?.encode( encoder, timing );
 			shadows?.encode( encoder );
 		},
 		/*
@@ -852,6 +872,7 @@ export function createGeometryResources(
 		dispose() {
 			shadows?.dispose();
 			animation?.dispose();
+			particles?.dispose();
 			for ( const buffers of geometryBuffers.values() ) {
 				for ( const buffer of buffers ) {
 					buffer.destroy();

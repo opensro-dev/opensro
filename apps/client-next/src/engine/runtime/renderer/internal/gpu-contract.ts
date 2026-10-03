@@ -149,6 +149,35 @@ export interface CharacterShadowRequest {
 	readonly blob: boolean;
 	readonly parts: readonly { readonly draw: GeometryDraw; readonly instance: number; }[];
 }
+/*
+================
+ParticlePresentation
+
+One emitted primitive's particles for the GPU presentation pass
+(device/particle-shader.ts): rows actors of slots particle slots each.
+records and actors use the layouts of foundation/animation/
+particle-records.ts. The owner rewrites records only at a tick and marks
+the slots it rewrote in [dirtyStart, dirtyEnd); it writes actors and
+axes every frame.
+================
+*/
+export interface ParticlePresentation {
+	readonly rows: number;
+	readonly slots: number;
+	// The particles belong to a particle graph (one tick fraction an actor).
+	readonly graph: boolean;
+	// ParticleView: none, camera, y or v (effect-billboard.ts).
+	readonly view: number;
+	readonly lifetime: number;
+	readonly loop: boolean;
+	readonly frames?: import("@/engine/contracts/character").CharacterPrimitive["materialFrames"];
+	readonly records: Float32Array;
+	readonly actors: Float32Array;
+	// The camera basis of the view mode: three columns of four floats.
+	readonly axes: Float32Array;
+	dirtyStart: number;
+	dirtyEnd: number;
+}
 export interface GeometryCommands {
 	characterShadows?( requests: readonly CharacterShadowRequest[], blob?: ImageDraw ): readonly GeometryDraw[];
 	// Null samples are CPU-owned slots already materialized in source; GPU samples preserve their canonical indices.
@@ -183,6 +212,9 @@ export interface GeometryCommands {
 	): void;
 	updateTextureTransform( draw: GeometryDraw, matrix: Float32Array ): void;
 	updateBones( draw: GeometryDraw, bones: Float32Array, revision?: number ): number;
+	// The draw's instances and palettes come from the particle pass this
+	// frame; the draw has one instance and one joint a slot.
+	presentParticles( draw: GeometryDraw, particles: ParticlePresentation ): void;
 	updateIndices( draw: GeometryDraw, indices: Uint32Array ): void;
 	// ranges are vertex start/count pairs within positions. Without a slot the
 	// positions cover the whole draw; with one (0 included) they are a terrain

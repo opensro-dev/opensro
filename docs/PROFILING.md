@@ -43,6 +43,7 @@ Useful options:
 | `--at jangan,hunt` / `--only drag` | Run some locations or scenarios |
 | `--seconds N` | Longer spans for steadier numbers (default 3) |
 | `--heap` | Allocation rate per scenario (MB/s, KB/frame) and an allocation profile each |
+| `--spans` | Where a frame goes without a profiler's overhead: ms per frame of each runtime stage (`@stage`, since the previous mark) and of each detail span (`stage`, with `stage n` spans per frame) |
 | `--cpu` | A CPU profile per scenario |
 | `--counts` | WebGPU commands per frame (draws, bundles, buffer writes, submits); slows the frame, so read only its counts |
 | `--trace` | A Chrome trace per location (main thread, workers, GPU process) |
@@ -52,6 +53,28 @@ Captures go to `temp/artifacts/fps-bench/<location>-<scenario>.*`.
 The machine is shared with whatever else runs on it: numbers move by up to
 a quarter between runs. Compare runs made back to back, never a number
 from this morning with one from now, and measure a change more than once.
+
+### Effects without a server
+
+```
+node tools/perf/bench/effects-bench.mjs [--count 36] [--match ^skill/] [--cpu] [--heap]
+```
+
+Renders many published effect programs at once (36 looping skill effects
+by default) through the production renderer, with no game server or
+character: the same scene on every run, so it suits particle and ribbon
+work, and it needs no live monster. It prints frames a second, the main
+thread's frame time, and what the frame drew (particles, ribbon vertices,
+draws); `--cpu` and `--heap` capture the measured span into
+`temp/artifacts/effects-bench/`.
+
+To compare against another tree (say, the last commit), start a second
+dev server from a worktree of it on another port and point the benchmark
+at it:
+
+```
+SRO_PROBE_CLIENT_NEXT_BASE_URL=http://127.0.0.1:5199 node tools/perf/bench/effects-bench.mjs
+```
 
 ## 2. Find the cost: the analyzers
 
@@ -106,7 +129,13 @@ What has paid off so far, in order of size:
   typed arrays (`renderer/world/walk-table.ts`).
 - **Let the GPU do what it does for free.** Clipping off-screen triangles
   costs it almost nothing; re-uploading index and instance lists from the
-  CPU every frame does not.
+  CPU every frame does not. Emitted particles tick at 20 Hz on the CPU,
+  which writes a slot's record only at its tick; a compute pass draws
+  every frame from the records (`device/particle-shader.ts`, held to a
+  JavaScript reference by `tests/browser/particle-presentation.test.mjs`).
+- **Batch queue writes.** Each `writeBuffer` call has a fixed cost: a
+  hundred small writes a frame cost more than one large one. The particle
+  pass packs every stream's frame data into one arena (`device/particles.ts`).
 - **Allocate nothing in the frame.** Reuse arrays and typed-array views;
   avoid closures, spreads and `subarray` in per-item loops.
 

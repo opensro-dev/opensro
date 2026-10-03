@@ -94,7 +94,7 @@ column vectors, nine values). Runs per drawn particle per frame, so it
 writes into the caller's scratch instead of building arrays.
 ================
 */
-function cameraAxes( view: Float32Array, mode: "camera" | "y", axes: Float64Array ): void {
+export function cameraAxes( view: Float32Array, mode: "camera" | "y", axes: Float64Array ): void {
 	axes[0] = view[0]!;
 	axes[1] = view[4]!;
 	axes[2] = view[8]!;

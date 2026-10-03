@@ -59,6 +59,7 @@ const bloom = runtime + "renderer/device/bloom.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
+const particles = runtime + "renderer/device/particles.ts";
 const deviceInternals = [
 	bloom,
 	device,
@@ -71,6 +72,7 @@ const deviceInternals = [
 	timing,
 	animation,
 	particleQuery,
+	particles,
 	shadows
 ];
 export const rules = {
@@ -213,6 +215,18 @@ for (
 		"beginComputePass"
 	]
 ) rules[name].push( animation );
+// The particle presentation pass, like skinning, is encoded by geometry
+// preparation on the frame encoder into the draws' own buffers.
+for (
+	const name of [
+		"createShaderModule",
+		"createComputePipelineAsync",
+		"createBuffer",
+		"createBindGroup",
+		"writeBuffer",
+		"beginComputePass"
+	]
+) rules[name].push( particles );
 // Geometry preparation encodes device-owned skinning and shadow prepasses on
 // the frame encoder; it cannot create, submit, or finish an encoder.
 for (
@@ -325,7 +339,7 @@ export function verifyCapabilities( base = root ) {
 			}
 			if (
 				ts.isIdentifier( n ) && [ "GPUCommandEncoder", "GPURenderBundleEncoder" ].includes( n.text ) &&
-				!([ animation, geometry, shadows ].includes( file ) && n.text === "GPUCommandEncoder") &&
+				!([ animation, particles, geometry, shadows ].includes( file ) && n.text === "GPUCommandEncoder") &&
 				![ frame, runtime + "renderer/internal/gpu-contract.ts" ].includes( file )
 			) {
 				issues.push( `${file}: raw command encoder outside frame capability` );
