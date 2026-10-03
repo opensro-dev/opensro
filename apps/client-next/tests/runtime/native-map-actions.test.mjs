@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 const asset = p => JSON.parse( readFileSync( "../../.generated/client-public/assets/" + p, "utf8" ) );
-const { decodeMapLabels, decodeMapIcons, worldMapPresentation } = await import(
+const { decodeMapLabels, decodeMapIcons, worldMapPresentation, worldMapDemand, worldMapPages } = await import(
 	"../../src/engine/foundation/ui/world-map.ts"
 );
 const { mapLabelVisible } = await import( "../../src/engine/foundation/ui/world-map.ts" );
@@ -193,4 +193,29 @@ test("only labels reaching the map window are laid out", () => {
 	assert.equal( mapLabelVisible( [ 0, 0, 10, 10 ], [ 27, 0, 100, 100 ] ), false );
 	assert.equal( mapLabelVisible( [ 200, 50, 10, 10 ], [ 0, 0, 100, 100 ] ), false );
 	assert.equal( mapLabelVisible( [ 50, 50, 10, 10 ], [ 0, 0, 100, 100 ] ), true );
+});
+
+test("a closed map demands exactly the page and icon images the open map draws", () => {
+	const icons = decodeMapIcons( asset( "data/worldmap-localinfo.json" ) ), clip = [ 100, 80, 700, 500 ];
+	let seed = 3, compared = 0;
+	const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+	for ( const pageId of [ 0, ...worldMapPages().map( page => page.id ) ] ) {
+		for ( let trial = 0; trial < 40; trial++ ) {
+			const pose = {
+				regionId: (90 + (random() * 30 | 0)) << 8 | (130 + (random() * 40 | 0)),
+				x: random() * 1920,
+				y: 0,
+				z: random() * 1920,
+				angle: 0
+			};
+			const pan = [ (random() - .5) * 4000, (random() - .5) * 1000 ];
+			const drawn = worldMapPresentation( pose, pageId, clip, pan, pose, [], icons );
+			const expected = [ ...drawn.background, ...drawn.overlay ].map( quad => quad.texture );
+			const demand = [];
+			worldMapDemand( pageId, clip, pan, pose, icons, demand );
+			assert.deepEqual( demand, expected, `page ${pageId} trial ${trial}` );
+			compared += expected.length;
+		}
+	}
+	assert.ok( compared > 200, `only ${compared} images compared` );
 });

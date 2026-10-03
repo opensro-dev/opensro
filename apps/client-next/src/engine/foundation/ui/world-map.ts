@@ -15,6 +15,8 @@ import { minimapRotation } from "./hud-readouts";
 const WORLD_MAP_ROOT = "/assets/images/Media_extracted/interface/worldmap/map/";
 // The overview page is 28 x 8 tiles of 128 pixels; tile names count four
 // regions per tile from region 66 x 113.
+// The local player's map sign, drawn last (57ce80).
+export const MAP_LOCAL_MARKER = "/assets/images/Media_extracted/interface/minimap/mm_sign_character.png";
 const WORLD_TILE_COLUMNS = 28;
 const WORLD_TILE_ROWS = 8;
 const WORLD_TILE_SIZE = 128;
@@ -298,33 +300,16 @@ export function worldMapPresentation(
 	// kind-2 icons first, kind-1 labels second, regardless of record-id order.
 	// The caller inserts glyph quads after overlay and before the marker passes;
 	// 57ce80 puts the local player last.
-	const page = worldMapPages().find( ( row ) => row.id === pageId ),
-		background: UiQuad[] = [],
+	const background: UiQuad[] = [],
 		overlay: UiQuad[] = [],
 		markerQuads: UiQuad[] = [],
 		white = [ 1, 1, 1, 1 ] as const;
-	const width = page?.size[0] ?? 3584,
-		height = page?.size[1] ?? 1024;
-	const b = page?.bounds,
-		left = b ? b[0] * 192 + b[4] : 66 * 192,
-		bottom = b ? b[3] * 192 + b[7] : 82 * 192,
-		top = b ? b[1] * 192 + b[5] : 114 * 192,
-		right = b ? b[2] * 192 + b[6] : 178 * 192;
-	// 579920 moves the map by each drag delta after clipping it against the four
-	// view edges, so the stored position never leaves the page. The returned pan
-	// is that clamped position; callers keep it instead of an unbounded sum.
-	const cx = clip[2] / 2 -
-			(((center.regionId & 255) * 192 + center.x / 10 - left) /
-					(right - left)) *
-				width,
-		cy = clip[3] / 2 -
-			((top - ((center.regionId >>> 8) * 192 + center.z / 10)) /
-					(top - bottom)) *
-				height;
-	const px = Math.min( 0, Math.max( clip[2] - width, cx + pan[0] ) ),
-		py = Math.min( 0, Math.max( clip[3] - height, cy + pan[1] ) );
-	const ox = clip[0] + px,
-		oy = clip[1] + py;
+	const { page, width, height, left, bottom, top, right, cx, cy, px, py, ox, oy } = worldMapFrame(
+		pageId,
+		clip,
+		pan,
+		center
+	);
 	/*
 	================
 	sprite
@@ -415,7 +400,7 @@ export function worldMapPresentation(
 		p.regionId,
 		p.x,
 		p.z,
-		"/assets/images/Media_extracted/interface/minimap/mm_sign_character.png",
+		MAP_LOCAL_MARKER,
 		minimapRotation( p.angle )
 	);
 	return {
@@ -429,6 +414,85 @@ export function worldMapPresentation(
 		pan: [ px - cx, py - cy ] as [number, number]
 	};
 }
+/*
+================
+worldMapFrame
+
+Where a page lies in the view: its size and world bounds, and the
+origin the view's centre and pan put it at. 579920 moves the map by each
+drag delta after clipping it against the four view edges, so the stored
+position never leaves the page; pan is that clamped position.
+================
+*/
+function worldMapFrame( pageId: number, clip: UiRect, pan: readonly [number, number], center: Pose ) {
+	const page = worldMapPages().find( ( row ) => row.id === pageId );
+	const width = page?.size[0] ?? 3584,
+		height = page?.size[1] ?? 1024;
+	const b = page?.bounds,
+		left = b ? b[0] * 192 + b[4] : 66 * 192,
+		bottom = b ? b[3] * 192 + b[7] : 82 * 192,
+		top = b ? b[1] * 192 + b[5] : 114 * 192,
+		right = b ? b[2] * 192 + b[6] : 178 * 192;
+	const cx = clip[2] / 2 -
+			(((center.regionId & 255) * 192 + center.x / 10 - left) /
+					(right - left)) *
+				width,
+		cy = clip[3] / 2 -
+			((top - ((center.regionId >>> 8) * 192 + center.z / 10)) /
+					(top - bottom)) *
+				height;
+	const px = Math.min( 0, Math.max( clip[2] - width, cx + pan[0] ) ),
+		py = Math.min( 0, Math.max( clip[3] - height, cy + pan[1] ) );
+	return { page, width, height, left, bottom, top, right, cx, cy, px, py, ox: clip[0] + px, oy: clip[1] + py };
+}
+
+/*
+================
+inClip
+
+The sprite test of worldMapPresentation: rect overlaps clip.
+================
+*/
+function inClip( x: number, y: number, w: number, h: number, clip: UiRect ): boolean {
+	return x + w > clip[0] && x < clip[0] + clip[2] && y + h > clip[1] && y < clip[1] + clip[3];
+}
+
+/*
+================
+worldMapDemand
+
+The page images and icons worldMapPresentation would draw for the same
+view, added to out, without building its quads, labels or hits: a closed
+map demands what opening it shows, at a fraction of the cost. Markers add
+their own images (the caller knows them).
+================
+*/
+export function worldMapDemand(
+	pageId: number,
+	clip: UiRect,
+	pan: readonly [number, number],
+	center: Pose,
+	icons: readonly MapIcon[],
+	out: string[]
+) {
+	const { page, width, height, ox, oy } = worldMapFrame( pageId, clip, pan, center );
+	if ( page ) {
+		if ( inClip( ox, oy, width, height, clip ) ) out.push( worldMapPagePath( page.image ) );
+	} else {
+		for ( let x = 0; x < WORLD_TILE_COLUMNS; x++ ) {
+			for ( let y = 0; y < WORLD_TILE_ROWS; y++ ) {
+				const tx = ox + x * WORLD_TILE_SIZE, ty = oy + y * WORLD_TILE_SIZE;
+				if ( inClip( tx, ty, WORLD_TILE_SIZE, WORLD_TILE_SIZE, clip ) ) out.push( worldMapTilePath( x, y ) );
+			}
+		}
+	}
+	for ( const icon of icons ) {
+		if ( icon.page === pageId && inClip( ox + icon.x, oy + icon.y, icon.width, icon.height, clip ) ) {
+			out.push( icon.path );
+		}
+	}
+}
+
 /*
 ================
 worldMapQuads

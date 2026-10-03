@@ -277,6 +277,8 @@ import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout } from "@/engine/foundation/ui/chat-layout";
 import {
 	worldMapImagePaths,
+	worldMapDemand,
+	MAP_LOCAL_MARKER,
 	worldMapPageAt,
 	worldMapPages,
 	worldMapPresentation,
@@ -7027,7 +7029,12 @@ export function createUi(
 						} );
 					}
 				}
-				const mapProjection = pose ?
+				// A closed map only demands its images, so opening it is instant: the
+				// demand is computed without the projection (worldMapDemand). Its label
+				// glyphs (the largest allocation of a HUD step) and click hits are built
+				// while it is open. The font atlas is demanded either way.
+				const mapOpen = panel === "Map";
+				const mapProjection = pose && mapOpen ?
 					worldMapPresentation(
 						pose,
 						mapPage,
@@ -7050,10 +7057,6 @@ export function createUi(
 				// can never be hidden by a shop icon or a zone label.
 				// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
 				// its own font extent, subtracting the integer half-width from the anchor.
-				// A closed map only demands its images, so opening it is instant: its
-				// label glyphs (the largest allocation of a HUD step) and click hits
-				// are built while it is open. The font atlas is demanded either way.
-				const mapOpen = panel === "Map";
 				const fontPath = text.path();
 				if ( !mapOpen && fontPath ) paths.push( fontPath );
 				const mapImages = mapProjection ?
@@ -7088,7 +7091,19 @@ export function createUi(
 						} );
 					}
 				}
-				paths.push( ...mapImages.map( q => q.texture ) );
+				if ( mapOpen ) paths.push( ...mapImages.map( q => q.texture ) );
+				else if ( pose ) {
+					worldMapDemand(
+						mapPage,
+						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapPan,
+						mapCenter ?? pose,
+						hudData?.mapIcons ?? [],
+						paths
+					);
+					for ( const row of mapMarkers ) paths.push( row.path );
+					paths.push( MAP_LOCAL_MARKER );
+				}
 				if ( panel === "Map" && hudData ) {
 					// Map tiles and icons stream in as a pan reveals them (demanded above, and
 					// absent textures simply do not draw). Gating admission on them disabled
