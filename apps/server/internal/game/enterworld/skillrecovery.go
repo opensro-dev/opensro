@@ -19,6 +19,7 @@ const (
 	recoveryTagHeal = 0x6865616c // heal +0x324
 	recoveryTagEfr  = 0x656672   // efr: kind 1 is the action area (+0x28C)
 	recoveryTagMwhh = 0x6d776868 // mwhh +0x328
+	recoveryTagMwmh = 0x6d776d68 // mwmh +0x32C
 	recoveryTagGetv = 0x67657476 // getv
 	recoveryTagResu = 0x72657375 // resu +0x330
 
@@ -53,8 +54,8 @@ SelfFlatPinned admits a self heal whose whole program is one flat heal
 block (SkillHeal): no percent words, no weapon term, nothing after it.
 
 PartyHealPinned admits an untargeted instant heal whose program is exactly
-efr[1,1,radius,cap,0,4|5] heal[...] with an optional mwhh weapon term and
-getv HLRU / HLMD: every party member the selection returns is healed by
+efr[1,1,radius,cap,0,4|5] heal[...] with optional mwhh / mwmh weapon terms
+and getv HLRU / HLMD: every party member the selection returns is healed by
 5A0850. Healing Orbit (dura/puls) and Group Reverse (resu) never match.
 
 PartyResurrectPinned admits an untargeted efr[1,1,radius,cap,0,4|5]
@@ -182,9 +183,11 @@ func recoveryHealBlock(op SkillInstruction) bool {
 ==================
 partyHealProgram
 
-efr heal [mwhh] [getv HLRU] [getv HLMD] and nothing else. HLRU raises the
-percent words (59425E, action/skillheal.go) and HLMD cuts the prepared MP
-cost (combat.ApplyMPDecrease); any other instruction refuses the row.
+efr heal [mwhh] [mwmh] [getv HLRU] [getv HLMD] and nothing else. mwhh and
+mwmh add the caster's weapon term to the HP and MP amounts (411080,
+action/skillheal.go: Mana Breeze is heal(0,0,mp,0) mwmh), HLRU raises the
+percent words (59425E) and HLMD cuts the prepared MP cost
+(combat.ApplyMPDecrease); any other instruction refuses the row.
 ==================
 */
 func partyHealProgram(program SkillProgram) bool {
@@ -192,14 +195,16 @@ func partyHealProgram(program SkillProgram) bool {
 		!recoveryHealBlock(program.Instruction(1)) {
 		return false
 	}
-	var weapon, recoveryUp, mpDecrease bool
+	var weaponHP, weaponMP, recoveryUp, mpDecrease bool
 	for i := 2; i < program.Len(); i++ {
 		op := program.Instruction(i)
 		parameter, known := SkillParameterFromKey(op.Arguments[0])
 		getv := op.Tag == recoveryTagGetv && op.Count == 1 && known
 		switch {
-		case op.Tag == recoveryTagMwhh && op.Count == 1 && !weapon:
-			weapon = true
+		case op.Tag == recoveryTagMwhh && op.Count == 1 && !weaponHP:
+			weaponHP = true
+		case op.Tag == recoveryTagMwmh && op.Count == 1 && !weaponMP:
+			weaponMP = true
 		case getv && parameter == ParameterHealRecoveryUp && !recoveryUp:
 			recoveryUp = true
 		case getv && parameter == ParameterHealerMPDecrease && !mpDecrease:

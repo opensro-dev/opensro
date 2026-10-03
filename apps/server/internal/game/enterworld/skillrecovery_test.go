@@ -123,7 +123,8 @@ func TestRaveMelodyAdmitsAFlatHPCost(t *testing.T) {
 TestPartyRecoveryRowsAreAdmittedByCompleteProgram
 
 Over the shipped catalog, exactly the Group Healing / Group Healing Breath
-/ Group Recovery / Holy Group Recovery lines compile to a party heal and
+/ Group Recovery / Holy Group Recovery lines and the Bard's Mana Breeze
+(heal with an mwmh weapon term) compile to a party heal and
 exactly the Group Reverse / Holy Group Reverse lines to a party
 resurrection. Healing Orbit (efr dura puls heal, handler 3), Healing
 Division (eshp) and every targeted heal stay out.
@@ -136,6 +137,7 @@ func TestPartyRecoveryRowsAreAdmittedByCompleteProgram(t *testing.T) {
 		"SKILL_EU_CLERIC_HEALA_GROUP_B_",
 		"SKILL_EU_CLERIC_RECOVERYA_QUICK_A_",
 		"SKILL_EU_CLERIC_RECOVERYA_QUICK_B_",
+		"SKILL_EU_BARD_RECOVERA_MANATRANS_B_",
 	}
 	resuLines := []string{
 		"SKILL_EU_CLERIC_REBIRTHA_GROUP_A_",
@@ -166,8 +168,8 @@ func TestPartyRecoveryRowsAreAdmittedByCompleteProgram(t *testing.T) {
 			resus++
 		}
 	}
-	// 8 + 4 + 8 + 1 heal tiers, 5 + 1 resurrection tiers.
-	if heals != 21 || resus != 6 {
+	// 8 + 4 + 8 + 1 + 4 heal tiers, 5 + 1 resurrection tiers.
+	if heals != 25 || resus != 6 {
 		t.Fatalf("party heals %d, party resurrections %d", heals, resus)
 	}
 
