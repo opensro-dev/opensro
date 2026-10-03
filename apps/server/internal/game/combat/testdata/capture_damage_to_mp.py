@@ -130,7 +130,7 @@ def main():
 	parser.add_argument("--output", type=Path, required=True)
 	args = parser.parse_args()
 	corpus = capture(args.binary)
-	args.output.write_text(json.dumps(corpus, separators=(",", ":")) + "\n", encoding="utf-8")
+	args.output.write_bytes((json.dumps(corpus, separators=(",", ":")) + "\n").encode("utf-8"))
 	print(f"Captured {len(corpus['cases'])} original-machine cases")
 
 if __name__ == "__main__":
