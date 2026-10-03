@@ -24,6 +24,7 @@ Bounds are grown so that rejecting them rejects every member test exactly
 */
 import type { WorldGroup } from "@/engine/contracts/scene";
 import { instanceGroupSphere } from "@/engine/foundation/rendering/instance-bounds";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 
 export const WALK_SKY = 0;
 export const WALK_TERRAIN = 1;
@@ -151,7 +152,7 @@ function compileInstanced( table: WalkTable, i: number, bounds: readonly number[
 	let spread = 0;
 	for ( let slot = 0; slot * 16 < instances.length; slot++ ) {
 		const at = slot * 16, x = instances[at + 12]!, y = instances[at + 13]!, z = instances[at + 14]!;
-		spread = Math.max( spread, Math.hypot( x - sphere[0]!, y - sphere[1]!, z - sphere[2]! ) );
+		spread = Math.max( spread, hypot3( x - sphere[0]!, y - sphere[1]!, z - sphere[2]! ) );
 		table.origin[(base + slot) * 3] = x;
 		table.origin[(base + slot) * 3 + 1] = y;
 		table.origin[(base + slot) * 3 + 2] = z;
@@ -233,7 +234,7 @@ its range for any placement of the group.
 */
 export function fadeKeeps( table: WalkTable, i: number, eye: readonly number[], sceneryRange: number ): number {
 	const s = i * 5, r = i * 4;
-	const distance = Math.hypot(
+	const distance = hypot3(
 		eye[0]! - table.sphere[s]!,
 		eye[1]! - table.sphere[s + 1]!,
 		eye[2]! - table.sphere[s + 2]!

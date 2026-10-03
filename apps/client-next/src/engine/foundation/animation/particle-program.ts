@@ -16,6 +16,7 @@ import { identity } from "@/engine/foundation/rendering/world-math";
 import { multiply } from "@/engine/foundation/math/pose-math";
 import { particleCommandFrames } from "@/engine/foundation/animation/particle-command-frames";
 import { particleRotation, particleCone } from "@/engine/foundation/animation/particle-rotation";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 export interface ParticleVectorCommand {
 	readonly name: "SetPosition" | "SetVelocity" | "Force";
 	readonly flags: number;
@@ -357,7 +358,7 @@ export function advanceParticle(
 			const dx = ref[0]! - state.position[0]!,
 				dy = ref[1]! - state.position[1]!,
 				dz = ref[2]! - state.position[2]!;
-			const dist = Math.hypot( dx, dy, dz );
+			const dist = hypot3( dx, dy, dz );
 			if ( dist > 1e-6 ) {
 				const k = program.attraction / dist;
 				state.velocity[0] = Math.fround( state.velocity[0]! + dx * k );

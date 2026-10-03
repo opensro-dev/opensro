@@ -14,6 +14,7 @@ streams: nothing here allocates per point.
 
 ===========================================================================
 */
+import { hypot3 } from "@/engine/foundation/math/hypot";
 
 // Coincident neighbours: AF9020 drops a point unless an axis moved more
 // than this; AF8E80 and AF73A0 keep it when an axis moved this much.
@@ -218,7 +219,7 @@ export function ribbonStrip(
 ): void {
 	const n = points.count;
 	const rx = view[0]!, ry = view[4]!, rz = view[8]!, ux = view[1]!, uy = view[5]!, uz = view[9]!;
-	const rl = Math.hypot( rx, ry, rz ), ul = Math.hypot( ux, uy, uz );
+	const rl = hypot3( rx, ry, rz ), ul = hypot3( ux, uy, uz );
 	if ( rl < MIN_LENGTH || ul < MIN_LENGTH ) throw Error( "Invalid ribbon camera" );
 	reserve( work, n );
 	const projected = work.positions;
@@ -233,7 +234,7 @@ export function ribbonStrip(
 		const a = Math.max( 0, i - 1 ), b = Math.min( n - 1, i + 1 );
 		const dx = projected[a * 2]! - projected[b * 2]!, dy = projected[a * 2 + 1]! - projected[b * 2 + 1]!;
 		const sx = rx / rl * dy - ux / ul * dx, sy = ry / rl * dy - uy / ul * dx, sz = rz / rl * dy - uz / ul * dx;
-		const length = Math.hypot( sx, sy, sz ), width = points.widths[i]!, at = (vertex + i * 2) * 3;
+		const length = hypot3( sx, sy, sz ), width = points.widths[i]!, at = (vertex + i * 2) * 3;
 		for ( let axis = 0; axis < 3; axis++ ) {
 			const side = axis === 0 ? sx : axis === 1 ? sy : sz;
 			const offset = length > MIN_LENGTH ? side / length * width : 0, p = points.positions[i * 3 + axis]!;

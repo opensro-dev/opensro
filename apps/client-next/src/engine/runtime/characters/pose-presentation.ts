@@ -25,6 +25,7 @@ which snaps; logical poses stay authoritative.
 import type { Pose } from "@/engine/contracts/gameplay";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { REGION_SIZE, interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
+import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
 // A discontinuity is a teleport, not motion: no interpolation or smoothing.
@@ -188,12 +189,12 @@ function sampledModel( row: SampleTrack, now: number ): Pose {
 	if ( gap <= 0 || gap > MAX_SAMPLE_GAP_SECONDS ) return latest.pose;
 	const span = worldVector( latest.pose, previous.pose );
 	if ( !span ) return latest.pose;
-	const stepped = Math.hypot( span[0], span[2] );
+	const stepped = hypot2( span[0], span[2] );
 	if ( stepped === 0 ) return latest.pose;
 	let ahead = Math.min( MAX_EXTRAPOLATION_SECONDS, Math.max( 0, now - latest.at ) ) / gap;
 	if ( row.to ) {
 		const rest = worldVector( row.to, latest.pose );
-		if ( rest ) ahead = Math.min( ahead, Math.hypot( rest[0], rest[2] ) / stepped );
+		if ( rest ) ahead = Math.min( ahead, hypot2( rest[0], rest[2] ) / stepped );
 	}
 	if ( ahead === 0 ) return latest.pose;
 	return {
@@ -241,7 +242,7 @@ export function createPosePresentation() {
 		} else if ( now !== row.last ) {
 			const decay = Math.exp( -(now - row.last) / CORRECTION_TAU_SECONDS );
 			row.offset = [ row.offset[0] * decay, row.offset[1] * decay, row.offset[2] * decay ];
-			if ( Math.hypot( row.offset[0], row.offset[1], row.offset[2] ) < MIN_CORRECTION_DISTANCE ) {
+			if ( hypot3( row.offset[0], row.offset[1], row.offset[2] ) < MIN_CORRECTION_DISTANCE ) {
 				row.offset = [ 0, 0, 0 ];
 			}
 			row.angle = turn( row.angle, target.angle, now - row.last );
@@ -262,7 +263,7 @@ export function createPosePresentation() {
 			row.to = input.to;
 			const jump = worldVector( before, sampledModel( row, now ) );
 			if ( jump ) row.offset = [ row.offset[0] + jump[0], row.offset[1] + jump[1], row.offset[2] + jump[2] ];
-			if ( !jump || Math.hypot( row.offset[0], row.offset[1], row.offset[2] ) > MAX_CORRECTION_DISTANCE ) {
+			if ( !jump || hypot3( row.offset[0], row.offset[1], row.offset[2] ) > MAX_CORRECTION_DISTANCE ) {
 				row.offset = [ 0, 0, 0 ];
 			}
 		}

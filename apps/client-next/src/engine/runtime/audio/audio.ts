@@ -34,6 +34,7 @@ import { itemSoundCategory } from "@/engine/foundation/audio/item-sounds";
 import { createMusic } from "./music/music";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SoundEvent } from "@/engine/contracts/audio";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 const MAX_DECODES = 2, SOUND_INPUT_BYTES = 4 << 20, SOUND_RESIDENT_BYTES = 32 << 20;
 const RESIDENCY_RETRY_SECONDS = 2;
 /*
@@ -596,7 +597,7 @@ step
 				// A89190 rejects inaudible positional voices before allocating playback.
 				if (
 					event.spatial !== false &&
-					Math.hypot( event.x - listener[0], event.y - listener[1], event.z - listener[2] ) >= 300
+					hypot3( event.x - listener[0], event.y - listener[1], event.z - listener[2] ) >= 300
 				) {
 					pending.delete( id );
 					continue;

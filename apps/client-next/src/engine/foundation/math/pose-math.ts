@@ -9,6 +9,7 @@ native float path bit for bit.
 
 ===========================================================================
 */
+import { hypot4 } from "@/engine/foundation/math/hypot";
 
 /*
 ================
@@ -63,7 +64,7 @@ export function compose(
 	out: Float32Array,
 	offset = 0
 ) {
-	const length = Math.hypot( q[0]!, q[1]!, q[2]!, q[3]! );
+	const length = hypot4( q[0]!, q[1]!, q[2]!, q[3]! );
 	if ( length < 1e-12 ) throw new Error( "Invalid pose quaternion" );
 	const x = q[0]! / length, y = q[1]! / length, z = q[2]! / length, w = q[3]! / length;
 	offset = Math.trunc( offset ) || 0;

@@ -70,6 +70,7 @@ import {
 } from "@/engine/foundation/rendering/world-math";
 import type { CharacterActor, CharacterModel } from "@/engine/contracts/character";
 import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from "../internal/gpu-contract";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 
 /*
 ================
@@ -325,7 +326,7 @@ export function createCharacters() {
 	function facedMatrix( owner: Float32Array, yaw: import("@/engine/foundation/math/angles").Radians ): Float32Array {
 		const faced = placement( 0, 0, owner[12]!, owner[13]!, owner[14]!, yaw );
 		for ( let column = 0; column < 3; column++ ) {
-			const at = column * 4, length = Math.hypot( owner[at]!, owner[at + 1]!, owner[at + 2]! );
+			const at = column * 4, length = hypot3( owner[at]!, owner[at + 1]!, owner[at + 2]! );
 			faced[at] = faced[at]! * length;
 			faced[at + 1] = faced[at + 1]! * length;
 			faced[at + 2] = faced[at + 2]! * length;
@@ -442,7 +443,7 @@ export function createCharacters() {
 					// from bone orientation, using character height scale C0.
 					const offset = [ x, y, z ];
 					for ( let c = 0; c < 3; c++ ) {
-						const size = Math.hypot( parent[c * 4]!, parent[c * 4 + 1]!, parent[c * 4 + 2]! );
+						const size = hypot3( parent[c * 4]!, parent[c * 4 + 1]!, parent[c * 4 + 2]! );
 						if ( size ) {
 							for ( let n = 0; n < 3; n++ ) {
 								matrix[12 + n]! += parent[c * 4 + n]! / size * (c === 1 ? 1 : -1) * offset[c]! *
@@ -457,7 +458,7 @@ export function createCharacters() {
 		}
 		if ( actor.absoluteEffectScale && actor.attachment ) {
 			for ( let c = 0; c < 3; c++ ) {
-				const size = Math.hypot( matrix[c * 4]!, matrix[c * 4 + 1]!, matrix[c * 4 + 2]! );
+				const size = hypot3( matrix[c * 4]!, matrix[c * 4 + 1]!, matrix[c * 4 + 2]! );
 				if ( size ) { for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n]! /= size; }
 			}
 		}
@@ -689,7 +690,11 @@ export function createCharacters() {
 				for ( let r = 0; r < rays.length; r++ ) {
 					const depth = pickVolumeDepth( rays[r]!, bounds, matrix );
 					if ( depth !== null ) {
-						hits.push( { ray: r, depth, distance: depth * Math.hypot( ...rays[r]!.delta ) } );
+						hits.push( {
+							ray: r,
+							depth,
+							distance: depth * hypot3( rays[r]!.delta[0]!, rays[r]!.delta[1]!, rays[r]!.delta[2]! )
+						} );
 					}
 				}
 				if ( hits.length ) candidates.push( { actor, matrix, model: resource.model, hits } );
@@ -837,7 +842,7 @@ export function createCharacters() {
 			return [ ...points ].map( ( [gid, point] ) => ({
 				gid,
 				point,
-				distance: Math.hypot( ...point.map( ( v, i ) => v - eye[i]! ) )
+				distance: hypot3( point[0]! - eye[0]!, point[1]! - eye[1]!, point[2]! - eye[2]! )
 			}) ).sort( ( a, b ) => a.distance - b.distance || a.gid - b.gid ).filter( r =>
 				mode !== 2 || r.distance <= SHADOW_DISTANCE
 			).slice( 0, SHADOW_LIMIT ).flatMap( ( { gid, point } ) => {
@@ -1395,7 +1400,13 @@ export function createCharacters() {
 				let radius = 0;
 				for ( const value of chain ) {
 					radius = (radius + models.get( value.model )!.radius) * value.scale * (value.bodyVolume ? 1.2 : 1) +
-						(value.attachment ? Math.hypot( ...value.attachment.offset ) : 0);
+						(value.attachment ?
+							hypot3(
+								value.attachment.offset[0]!,
+								value.attachment.offset[1]!,
+								value.attachment.offset[2]!
+							) :
+							0);
 				}
 				return !frustum ||
 					visibleFrustumSphere(
@@ -1789,7 +1800,7 @@ export function createCharacters() {
 									),
 									at = Math.min( material.colors.length / 4 - 1, Math.floor( age * material.fps ) );
 								const scale =
-									Math.hypot( matrices[b * 16]!, matrices[b * 16 + 1]!, matrices[b * 16 + 2]! ) *
+									hypot3( matrices[b * 16]!, matrices[b * 16 + 1]!, matrices[b * 16 + 2]! ) *
 									model.nodes[0]!.scale[0]!;
 								pushRibbonPoint(
 									points,

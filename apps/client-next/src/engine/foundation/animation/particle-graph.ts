@@ -34,6 +34,7 @@ import {
 	continueRotation,
 	createStepCache
 } from "@/engine/foundation/animation/particle-presentation";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 
 export interface ParticleEmitter {
 	readonly emission?: EmissionParameters;
@@ -225,7 +226,7 @@ strength / distance.
 function attract( element: ParticleElement, source: ParticleElement, strength: number ): void {
 	const position = element.state.position, from = source.state.position, velocity = element.state.velocity;
 	const d0 = position[0]! - from[0]!, d1 = position[1]! - from[1]!, d2 = position[2]! - from[2]!;
-	const length = Math.hypot( d0, d1, d2 );
+	const length = hypot3( d0, d1, d2 );
 	// Not a negated test: a NaN distance skips the pull, as native does.
 	if ( !(length > 1e-6) ) return;
 	velocity[0] = Math.fround( velocity[0]! + d0 * strength / length );

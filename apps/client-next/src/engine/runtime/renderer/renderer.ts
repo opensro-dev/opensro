@@ -27,6 +27,7 @@ import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw } from "./internal/gpu-contract";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 const INVENTORY_DOLL_WIDTH = 176;
 const INVENTORY_DOLL_HEIGHT = 318;
 
@@ -109,7 +110,7 @@ export function createRenderer(
 			if ( disposed || failure || !pickView || device.phase() !== "running" || !pickOrigin ) return null;
 			const raw = pickRay( pickView, x, y );
 			if ( !raw ) return null;
-			const length = Math.hypot( ...raw.delta );
+			const length = hypot3( raw.delta[0]!, raw.delta[1]!, raw.delta[2]! );
 			if ( !length ) return null;
 			const ray = { start: raw.start, delta: raw.delta.map( v => v / length * 1000 ) };
 			return { originRegion: pickOrigin, ray, terrainDepth: world.pickGround( ray ) };
@@ -175,7 +176,9 @@ export function createRenderer(
 				}
 			}
 			let hit = characters.pick( rays, excluded, blindHeld ),
-				best = hit ? hit.depth * Math.hypot( ...rays[hit.ray]!.delta ) : Infinity;
+				best = hit ?
+					hit.depth * hypot3( rays[hit.ray]!.delta[0]!, rays[hit.ray]!.delta[1]!, rays[hit.ray]!.delta[2]! ) :
+					Infinity;
 			// CITeleportGate 8764C0: translation-only box, independent of map meshes.
 			for ( const gate of gates ) {
 				const b = gate.teleport;
@@ -208,7 +211,7 @@ export function createRenderer(
 						b.radius
 					], matrix );
 					if ( depth === null ) continue;
-					const distance = depth * Math.hypot( ...rays[r]!.delta );
+					const distance = depth * hypot3( rays[r]!.delta[0]!, rays[r]!.delta[1]!, rays[r]!.delta[2]! );
 					if ( distance < best || (hit?.ray !== 4 && r === 4) ) {
 						hit = { gid: gate.gid, depth, ray: r };
 						best = distance;

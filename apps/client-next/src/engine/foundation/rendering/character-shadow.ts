@@ -13,6 +13,7 @@ import type { TerrainRange } from "@/engine/contracts/scene";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { identity } from "./world-math";
 import { terrainCellKey, type TerrainCells } from "./terrain-interaction";
+import { hypot2 } from "@/engine/foundation/math/hypot";
 export const SHADOW_LIMIT = 10;
 export const SHADOW_DISTANCE = 3000;
 export const BLOB_SHADOW_TEXTURE = "/assets/images/Map_extracted/skybox/shadowsphere.png";
@@ -36,7 +37,7 @@ export function shadowProjection( point: readonly [number, number, number], heig
 		ex = f( size * Math.SQRT1_2 ),
 		ey = f( ex + size * .5 ),
 		target = f( size / 3 ),
-		len = Math.hypot( ex, ey - target ),
+		len = hypot2( ex, ey - target ),
 		zx = -ex / len,
 		zy = -(ey - target) / len;
 	// LookAtLH gives right +Z and up (zy,-zx,0).

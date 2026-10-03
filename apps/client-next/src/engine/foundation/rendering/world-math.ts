@@ -12,6 +12,7 @@ exact coefficients the native float path rounds from.
 */
 import type { WorldCamera } from "@/engine/contracts/scene";
 import type { Radians } from "@/engine/foundation/math/angles";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 /*
 ================
 identity
@@ -81,12 +82,12 @@ cameraBasis
 */
 export function cameraBasis( camera: WorldCamera ) {
 	const forward = camera.target.map( ( v, i ) => v - camera.eye[i]! );
-	const length = Math.hypot( ...forward );
+	const length = hypot3( forward[0]!, forward[1]!, forward[2]! );
 	if ( !Number.isFinite( length ) || length < 1e-8 ) throw new Error( "Invalid world camera" );
 	const [zx, zy, zz] = forward.map( v => v / length ) as [number, number, number];
 	const [ux, uy, uz] = camera.up ?? [ 0, 1, 0 ];
 	let xx = uy * zz - uz * zy, xy = uz * zx - ux * zz, xz = ux * zy - uy * zx;
-	const xl = Math.hypot( xx, xy, xz );
+	const xl = hypot3( xx, xy, xz );
 	if ( !Number.isFinite( xl ) || xl < 1e-8 ) throw new Error( "Camera up vector is parallel to view" );
 	xx /= xl;
 	xy /= xl;
@@ -160,7 +161,7 @@ export function visibleSphere( m: Float32Array, c: readonly number[], radius: nu
 			b = (zero ? 0 : m[7]!) + sign * m[4 + axis]!,
 			d = (zero ? 0 : m[11]!) + sign * m[8 + axis]!,
 			e = (zero ? 0 : m[15]!) + sign * m[12 + axis]!;
-		if ( a * x + b * y + d * z + e < -radius * Math.hypot( a, b, d ) ) return false;
+		if ( a * x + b * y + d * z + e < -radius * hypot3( a, b, d ) ) return false;
 	}
 	return true;
 }
@@ -170,7 +171,7 @@ export function visibleSphere( m: Float32Array, c: readonly number[], radius: nu
 prepareViewFrustum
 
 The six clip planes (a, b, d, e, |abd|) of a view-projection matrix.
-Double precision preserves the exact coefficients and Math.hypot result
+Double precision preserves the exact coefficients and hypot3 (Math.hypot) result
 used by visibleSphere. Float32 storage here would move clip boundaries.
 ================
 */
@@ -189,7 +190,7 @@ export function prepareViewFrustum( m: Float32Array ): Float64Array {
 		planes[offset + 1] = b;
 		planes[offset + 2] = d;
 		planes[offset + 3] = e;
-		planes[offset + 4] = Math.hypot( a, b, d );
+		planes[offset + 4] = hypot3( a, b, d );
 	}
 	return planes;
 }

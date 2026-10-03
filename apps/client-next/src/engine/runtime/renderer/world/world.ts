@@ -98,6 +98,7 @@ import {
 	terrainLod
 } from "@/engine/foundation/rendering/world-math";
 import { validPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 /*
 ================
 drawPhase
@@ -1876,7 +1877,7 @@ export function createWorldRenderer(
 			// ties keep draw order.
 			for ( let i = transparentStart; i < visibleCount; i++ ) {
 				const index = orderVisible[i]!, group = orderedGroups[index]!;
-				orderDepth[index] = Math.hypot(
+				orderDepth[index] = hypot3(
 					group.center[0] - localCamera.eye[0],
 					group.center[1] - localCamera.eye[1],
 					group.center[2] - localCamera.eye[2]
