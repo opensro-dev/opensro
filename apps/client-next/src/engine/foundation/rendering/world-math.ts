@@ -208,6 +208,31 @@ export function visibleFrustumSphere( planes: Float64Array, x: number, y: number
 	return true;
 }
 
+export const FRUSTUM_OUTSIDE = -1;
+export const FRUSTUM_CROSSING = 0;
+export const FRUSTUM_INSIDE = 1;
+
+/*
+================
+frustumSphereSide
+
+Whether a sphere is wholly outside a plane, wholly inside every plane, or
+crossing. A caller testing a smaller bound inside the sphere takes outside
+and inside as that bound's answer when the sphere has headroom beyond the
+other test's float margin, and tests the bound itself only when crossing.
+================
+*/
+export function frustumSphereSide( planes: Float64Array, x: number, y: number, z: number, radius: number ): number {
+	let side = FRUSTUM_INSIDE;
+	for ( let i = 0; i < 30; i += 5 ) {
+		const distance = planes[i]! * x + planes[i + 1]! * y + planes[i + 2]! * z + planes[i + 3]!,
+			reach = radius * planes[i + 4]!;
+		if ( distance < -reach ) return FRUSTUM_OUTSIDE;
+		if ( distance <= reach ) side = FRUSTUM_CROSSING;
+	}
+	return side;
+}
+
 /*
 ================
 visibleFrustumBox

@@ -21,9 +21,15 @@ const { instanceGroupSphere } = await src( "src/engine/foundation/rendering/inst
 const { compileWalkTable, residentSlots, fadeKeeps, FADE_KEEPS_IN, FADE_KEEPS_OUT } = await src(
 	"src/engine/runtime/renderer/world/walk-table.ts"
 );
-const { viewProjection, prepareViewFrustum, visibleFrustumBox, visibleFrustumSphere } = await src(
-	"src/engine/foundation/rendering/world-math.ts"
-);
+const {
+	viewProjection,
+	prepareViewFrustum,
+	visibleFrustumBox,
+	visibleFrustumSphere,
+	frustumSphereSide,
+	FRUSTUM_INSIDE,
+	FRUSTUM_OUTSIDE
+} = await src( "src/engine/foundation/rendering/world-math.ts" );
 
 /*
 ================
@@ -207,4 +213,46 @@ test("resident slots follow the target cell and keep undescribed slots", () => {
 	assert.deepEqual( at( 3, 0 ), [ 2, 3 ] );
 	assert.deepEqual( at( 7, 7 ), [ 1, 3 ] );
 	assert.deepEqual( at( 1, 1 ), [ 0, 3 ] );
+});
+
+test("a placement's sphere decides its box test exactly when wholly inside or outside", () => {
+	const next = random( 23 ), bounds = [ -6, -1, -4, 5, 9, 7 ], seen = { inside: 0, outside: 0 };
+	const visibility = Array.from( { length: 16 }, () => ({ id: "x", radius: 1, range: 1, cells: [], cellRadius: 0 }) );
+	for ( let trial = 0; trial < 40; trial++ ) {
+		const centre = [ next() * 4000, next() * 100, next() * 4000 ], instances = placements( next, 16, centre, 600 );
+		const positions = new Float32Array( 3 ),
+			group = {
+				material: {},
+				geometry: { instances, positions },
+				instanceRadius: 9,
+				visibility
+			};
+		const table = compileWalkTable( [ group ], new WeakMap( [ [ positions, bounds ] ] ) );
+		for ( let view = 0; view < 40; view++ ) {
+			const eye = [ centre[0] + (next() - .5) * 1500, 30 + next() * 300, centre[2] + (next() - .5) * 1500 ];
+			const target = [ eye[0] + (next() - .5) * 100, eye[1] - 20, eye[2] + (next() - .5) * 100 ];
+			const frustum = prepareViewFrustum(
+				viewProjection( { eye, target, fov: Math.PI / 3, near: 1, far: 3500 }, 16 / 9 )
+			);
+			for ( let slot = 0; slot < 16; slot++ ) {
+				const o = table.origin,
+					side = frustumSphereSide(
+						frustum,
+						o[slot * 3],
+						o[slot * 3 + 1],
+						o[slot * 3 + 2],
+						table.slotReach[slot]
+					);
+				const box = visibleFrustumBox( frustum, bounds, instances, slot * 16 );
+				if ( side === FRUSTUM_INSIDE ) {
+					seen.inside++;
+					assert.equal( box, true, `trial ${trial} view ${view} slot ${slot}` );
+				} else if ( side === FRUSTUM_OUTSIDE ) {
+					seen.outside++;
+					assert.equal( box, false, `trial ${trial} view ${view} slot ${slot}` );
+				}
+			}
+		}
+	}
+	assert.ok( seen.inside > 500 && seen.outside > 500, JSON.stringify( seen ) );
 });

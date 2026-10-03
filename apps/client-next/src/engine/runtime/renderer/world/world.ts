@@ -97,6 +97,9 @@ import {
 	visibleFrustumSphere,
 	visibleFrustumBox,
 	visibleFrustumAabb,
+	frustumSphereSide,
+	FRUSTUM_CROSSING,
+	FRUSTUM_INSIDE,
 	terrainLod
 } from "@/engine/foundation/rendering/world-math";
 import { validPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
@@ -588,6 +591,8 @@ export function createWorldRenderer(
 	let visibleMarks = new Uint8Array( 0 ), orderPhase = new Int8Array( 0 );
 	// The current scene's groups in walk order, with their typed bounds.
 	let walk = compileWalkTable( [], pickBounds );
+	// Instanced selection caches by walk index, so the walk does not look them up.
+	let walkCaches: (ReturnType<typeof instanceSelection> | undefined)[] = [];
 	/*
 	================
 	orderGroups
@@ -604,6 +609,7 @@ export function createWorldRenderer(
 		visibleMarks = new Uint8Array( groups.length );
 		orderPhase = Int8Array.from( groups, drawPhase );
 		walk = compileWalkTable( sceneGroups, pickBounds );
+		walkCaches = new Array( sceneGroups.length );
 		shadowSurfaces.reset();
 		for ( let index = 0; index < groups.length; index++ ) {
 			const group = groups[index]!, chosen = selections.get( group )?.chosen;
@@ -1831,7 +1837,8 @@ export function createWorldRenderer(
 					// A group outside that showed nothing still shows nothing; only one
 					// that may show placements, or must stop showing them, is touched.
 					if ( !outside || walk.count[walked] !== 0 ) {
-						const cache = instanceSelection( group ), source = group.geometry.instances!;
+						const cache = walkCaches[walked] ??= instanceSelection( group ),
+							source = group.geometry.instances!;
 						let instancesDirty = false;
 						if ( !cache.boundsResolved ) {
 							cache.bounds = group.geometry.bones ?
@@ -1844,15 +1851,29 @@ export function createWorldRenderer(
 							const alpha = walk.alpha[base + n]!;
 							if ( alpha < 0 ) continue;
 							const i = walk.resident[base + n]! * 16;
-							const inFrustum = bounds ?
-								visibleFrustumBox( frustum, bounds, source, i ) :
-								visibleFrustumSphere(
+							// The placement's sphere settles most box tests: wholly outside or
+							// wholly inside it answers for the box (walk-table.ts slotReach).
+							let inFrustum: boolean;
+							if ( bounds ) {
+								const g = (base + i / 16) * 3,
+									side = frustumSphereSide(
+										frustum,
+										walk.origin[g]!,
+										walk.origin[g + 1]!,
+										walk.origin[g + 2]!,
+										walk.slotReach[base + i / 16]!
+									);
+								inFrustum = side === FRUSTUM_INSIDE ||
+									side === FRUSTUM_CROSSING && visibleFrustumBox( frustum, bounds, source, i );
+							} else {
+								inFrustum = visibleFrustumSphere(
 									frustum,
 									source[i + 12]!,
 									source[i + 13]!,
 									source[i + 14]!,
 									group.instanceRadius!
 								);
+							}
 							if ( !inFrustum ) continue;
 							if ( cache.sourceInstances![count] !== i ) {
 								cache.instances!.set( source.subarray( i, i + 16 ), count * 16 );

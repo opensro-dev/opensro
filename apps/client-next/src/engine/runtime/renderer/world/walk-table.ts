@@ -70,6 +70,9 @@ export interface WalkTable {
 	// renderer resolves a group's rows once each fade epoch).
 	readonly slotBase: Int32Array;
 	readonly origin: Float64Array;
+	// A sphere about the origin holding the placement's frustum bound, with
+	// headroom (frustumSphereSide decides most placements without the box).
+	readonly slotReach: Float64Array;
 	readonly radius: Float64Array;
 	readonly range: Float64Array;
 	readonly slotKind: Uint8Array;
@@ -118,6 +121,7 @@ export function compileWalkTable(
 		triangles: new Float64Array( count ),
 		slotBase,
 		origin: new Float64Array( slots * 3 ),
+		slotReach: new Float64Array( slots ),
 		radius: new Float64Array( slots ),
 		range: new Float64Array( slots ),
 		slotKind: new Uint8Array( slots ),
@@ -158,6 +162,7 @@ function compileInstanced( table: WalkTable, i: number, bounds: readonly number[
 		table.origin[(base + slot) * 3] = x;
 		table.origin[(base + slot) * 3 + 1] = y;
 		table.origin[(base + slot) * 3 + 2] = z;
+		table.slotReach[base + slot] = placementReach( instances, at, bounds, group.instanceRadius! ) + REACH_MARGIN;
 		const descriptor = group.visibility?.[slot];
 		if ( !descriptor ) {
 			table.slotKind[base + slot] = SLOT_UNFADED;
@@ -180,6 +185,31 @@ function compileInstanced( table: WalkTable, i: number, bounds: readonly number[
 		}
 	}
 	table.reach.set( [ fixedLow, fixedHigh, sceneryLow, sceneryHigh ], i * 4 );
+}
+
+/*
+================
+placementReach
+
+The farthest point of a placement's frustum bound from its origin: the
+transformed local box's corners, or its sphere.
+================
+*/
+function placementReach( instances: Float32Array, at: number, bounds: readonly number[] | undefined, radius: number ) {
+	if ( !bounds ) return radius;
+	let reach = 0;
+	for ( let corner = 0; corner < 8; corner++ ) {
+		const x = bounds[corner & 1 ? 3 : 0]!, y = bounds[corner & 2 ? 4 : 1]!, z = bounds[corner & 4 ? 5 : 2]!;
+		reach = Math.max(
+			reach,
+			Math.hypot(
+				instances[at]! * x + instances[at + 4]! * y + instances[at + 8]! * z,
+				instances[at + 1]! * x + instances[at + 5]! * y + instances[at + 9]! * z,
+				instances[at + 2]! * x + instances[at + 6]! * y + instances[at + 10]! * z
+			)
+		);
+	}
+	return reach;
 }
 
 /*
