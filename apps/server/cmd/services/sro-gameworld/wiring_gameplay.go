@@ -355,7 +355,16 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err != nil {
 		return fmt.Errorf("quest definitions: %w", err)
 	}
+	masteryOverride, err := progression.BetaMasteryFromEnv()
+	if err != nil {
+		return err
+	}
+	game.deps.MasteryTotalOverride = masteryOverride
 	stats := progression.NewRuntime(game.deps)
+	stats.MasteryTotalOverride = masteryOverride
+	if masteryOverride != 0 {
+		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
+	}
 	stats.Growth = progression.BetaGrowthFromEnv()
 	if stats.Growth.Enabled {
 		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d, gold x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.GoldRate)

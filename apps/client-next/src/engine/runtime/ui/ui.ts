@@ -9083,11 +9083,11 @@ export function createUi(
 					authoredText( page.GDR_SKILL_TEXT_SP_NUM!, ox, oy, String( game?.progression?.skillPoints ?? 0 ) );
 					const model = next.entities.find( e => e.gid === game?.localGid )?.refObjId,
 						country = model === undefined ? game?.guide?.country : hudData.countries[model],
-						cap = country === 0 ?
+						cap = game?.masteryTotalOverride ?? (country === 0 ?
 							300 :
 							country === 1 ?
 							Math.min( 2 * (game?.progression?.level ?? 0), 240 ) :
-							0;
+							0);
 					authoredText(
 						page.GDR_SKILL_TEXT_TOTAL_MASTERYLEV_NUM!,
 						ox,

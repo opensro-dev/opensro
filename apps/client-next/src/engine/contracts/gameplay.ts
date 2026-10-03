@@ -459,6 +459,7 @@ export interface GameplayState {
 	readonly targetTaxRate?: number;
 	readonly shopCompletionRevision?: number;
 	readonly shop?: import("@/engine/foundation/gameplay/commerce").ShopState;
+	readonly masteryTotalOverride?: number;
 	readonly trainingPending?: boolean;
 	readonly trainingError?: string | null;
 	// Journal omission retains the previous projection; reset sends a complete replacement.

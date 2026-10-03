@@ -215,7 +215,8 @@ type BootstrapResult struct {
 	Packets              []Packet
 	// UnlimitedItems are the RefObjIDs the beta starter kit never spends, so
 	// the client can show them as unlimited rather than a stack of one.
-	UnlimitedItems []uint32
+	UnlimitedItems       []uint32
+	MasteryTotalOverride int64
 }
 
 /*
@@ -262,6 +263,7 @@ type bootstrapSuccessView struct {
 	SystemMessages            interface{}              `json:"systemMessages"`
 	Packets                   []Packet                 `json:"packets"`
 	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
+	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 }
 
 /*
@@ -329,6 +331,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		SystemMessages:            r.SystemMessages,
 		Packets:                   r.Packets,
 		UnlimitedItems:            r.UnlimitedItems,
+		MasteryTotalOverride:      r.MasteryTotalOverride,
 	})
 }
 

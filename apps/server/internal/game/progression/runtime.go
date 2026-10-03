@@ -133,6 +133,8 @@ type Runtime struct {
 	Withdrawal         WithdrawalHooks
 	// Growth is the closed-beta rate switch (growth.go); zero is native.
 	Growth GrowthRates
+	// MasteryTotalOverride is the beta budget; zero keeps native race rules.
+	MasteryTotalOverride int64
 }
 
 /*
@@ -513,7 +515,7 @@ func (rt *Runtime) HandleMasteryLevelUp(divisionID string, character *enterworld
 
 		// Gate 3: the 07:05 budget, on the door-fresh sum. Amount is
 		// pinned to 1 above, so the post-training sum is sum+1.
-		if masteryLevelSum(character)+1 > totalMasteryCap(character) {
+		if masteryLevelSum(character)+1 > rt.masteryAllowance(character) {
 			refusal = wire.ErrCodeMasteryTotalLimit
 			return false
 		}

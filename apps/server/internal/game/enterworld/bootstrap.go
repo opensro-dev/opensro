@@ -270,6 +270,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		SystemMessages:       systemMessages,
 		Packets:              packets,
 		UnlimitedItems:       StarterKitRefObjIDs(deps.StarterKit),
+		MasteryTotalOverride: deps.MasteryTotalOverride,
 	}
 }
 
