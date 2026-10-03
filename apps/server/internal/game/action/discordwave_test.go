@@ -1,11 +1,12 @@
 /*
 ===========================================================================
 
-discordwave_test.go - the Bard's Discord Wave makes monsters let go
+discordwave_test.go - the Bard's Discord Wave clears monsters' hostility
 
 The shipped Discord Wave row is cast through HandleTargetInteract on the
-Bard itself; the monsters chasing the Bard then run the real monster leg
-(Bard specification, rule 9).
+Bard itself; the monsters chasing the Bard then run the real monster leg.
+Native sends each victim one negative hate event sourced at the cast's
+target (593D62..593E7B) through the ordinary ledger update (5473C0).
 
 ===========================================================================
 */
@@ -44,9 +45,11 @@ TestDiscordWaveReleasesUpToFourMonstersAroundItsTarget
 
 Six monsters chase the Bard: five within 100 of it, one 200 away. The
 first holds more hostility than the cut. Discord Wave on the Bard cuts
-exactly four of the five near ones: the first keeps the Bard with less
-hostility, the next three lose it and drop the Bard on their next step;
-the fifth near one and the far one are untouched.
+exactly four of the five near ones: the first keeps less hostility, the next
+three are left with none. 5473C0 clamps at zero and, when the primary record
+reaches it, refuses the callback, so each keeps the target it chases until
+another opponent's hate takes over. The fifth near one and the far one are
+untouched.
 ================
 */
 func TestDiscordWaveReleasesUpToFourMonstersAroundItsTarget(t *testing.T) {
@@ -80,7 +83,7 @@ func TestDiscordWaveReleasesUpToFourMonstersAroundItsTarget(t *testing.T) {
 		if !state.ArmRetaliation(testDivision, mob.Gid, gid) {
 			t.Fatal("no retaliation")
 		}
-		hostility := uint32(discordSmallHostility)
+		hostility := int32(discordSmallHostility)
 		if i == 0 {
 			hostility = discordLargeHostility
 		}
@@ -151,7 +154,7 @@ func TestDiscordWaveReleasesUpToFourMonstersAroundItsTarget(t *testing.T) {
 				t.Fatalf("the hostile monster: hostility %d -> %d, keeps the Bard %v", before[i], after, keeps)
 			}
 		case i < discordMaxTargets:
-			if after != 0 || keeps {
+			if after != 0 || !keeps {
 				t.Fatalf("monster %d: hostility %d -> %d, keeps the Bard %v", i, before[i], after, keeps)
 			}
 		default:

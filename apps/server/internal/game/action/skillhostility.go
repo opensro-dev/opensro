@@ -38,7 +38,7 @@ func (rt *Runtime) commitSkillHostility(division string, attacker, target uint32
 		damage += impact.Applied
 		aggression = combat.AccumulateThreat(aggression, impact.Applied, skill.Threat)
 	}
-	rt.commitAggression(division, target, simulation.HostilityEvent{Attacker: attacker, Damage: damage, Aggression: aggression}, now)
+	rt.commitAggression(division, target, simulation.HostilityEvent{Attacker: attacker, Damage: damage, Aggression: int32(aggression)}, now)
 }
 
 /*
@@ -49,7 +49,7 @@ Both damaging hits and taunts share link transfer and live target resolution.
 ================
 */
 func (rt *Runtime) commitAggression(division string, target uint32, event simulation.HostilityEvent, now int64) {
-	attacker, damage, aggression := event.Attacker, event.Damage, event.Aggression
+	attacker, damage, aggression := event.Attacker, event.Damage, uint32(event.Aggression)
 	if damage == 0 && aggression == 0 {
 		return
 	}
@@ -61,11 +61,11 @@ func (rt *Runtime) commitAggression(division string, target uint32, event simula
 			if rt.findCharacterByGid(division, link.SourceGID) != nil {
 				var transferred uint32
 				aggression, transferred = combat.SplitLinkedThreat(aggression, link.ThreatPercent)
-				events = append(events, simulation.HostilityEvent{Attacker: link.SourceGID, Aggression: transferred})
+				events = append(events, simulation.HostilityEvent{Attacker: link.SourceGID, Aggression: int32(transferred)})
 			}
 		}
 	}
-	events = append(events, simulation.HostilityEvent{Attacker: attacker, Damage: damage, Aggression: aggression})
+	events = append(events, simulation.HostilityEvent{Attacker: attacker, Damage: damage, Aggression: int32(aggression)})
 	rt.recordSkillHostility(division, target, events, now)
 }
 

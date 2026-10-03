@@ -5,12 +5,11 @@ discordwave.go - the Bard's Discord Wave lowers monster hostility
 
 Discord Wave (SKILL_EU_BARD_FORGETA_AGGRO_A, efr(1,2,100,4,0,16) ovl2(34)
 dtnt(flat,0) mwdt(850) getv(BDMD)) is an instant cast on a friendly target
-(Self, Ally, Party; enterworld/skillthreatdecrease.go). "Removes Monsters'
-hostility toward their target by creating a big wave of discord around the
-target": up to efr's four monsters within efr's radius of that target lose
-dtnt's flat word (plus the mwdt weapon term) of the aggression they hold
-for the target they fight, and a monster left with none drops it
-(simulation.MonsterState.ReduceTargetHostility).
+(Self, Ally, Party; enterworld/skillthreatdecrease.go). "Removes Monsters' hostility toward their target by creating a big wave of
+discord around the target": up to efr's four monsters within efr's radius
+of that target receive one hate event sourced at the target, whose amounts
+are negative (dtnt's flat word plus the mwdt weapon term, and its percent
+word), through the same ledger update every hit uses.
 
 Owner's rule: Discord Wave lowers the hostility (dtnt) of up to 4 monsters
 around the target so that they let go of whom they were attacking.
@@ -106,8 +105,13 @@ func (rt *Runtime) acceptDiscordWave(division string, c, snapshot *enterworld.Ch
 		}
 		return OpResult{DiagnosticRefusal: "discord-commit-refused"}
 	}
+	// SkillCombat_ApplyResultRecipients (593D62..593E7B): with dtnt the hate
+	// event's source is the cast's target, and its amounts are negative: the
+	// flat word plus the weapon term, and the percent word. It runs the
+	// ordinary ledger update (5473C0), which clamps at zero.
+	decrease := simulation.HostilityEvent{Attacker: cast.TargetGid, Aggression: -int32(cut), Percent: -int32(skill.Threat.DecreasePercent)}
 	for _, victim := range rt.discordVictims(division, snapshot, view, to, skill.Threat.Area, now) {
-		rt.Monsters.ReduceTargetHostility(division, victim.Gid, cut, skill.Threat.DecreasePercent)
+		rt.recordSkillHostility(division, victim.Gid, []simulation.HostilityEvent{decrease}, now)
 	}
 
 	casterGID := enterworld.ObjectIDForCharacter(snapshot)
