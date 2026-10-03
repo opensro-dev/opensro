@@ -1,4 +1,10 @@
 /*
+===========================================================================
+geometry-validation.ts - mesh admission and deterministic missing texture coordinates
+Geometry, topology and skin data remain strict. UVs are independent of geometry.
+===========================================================================
+*/
+/*
 ================
 finiteGeometryValues
 ================
@@ -65,4 +71,21 @@ export function numbersWithin( values: ArrayLike<number>, low: number, high: num
 		if ( value < low || value > high ) return false;
 	}
 	return true;
+}
+
+/*
+================
+textureCoordinate
+
+Retail W_CD_boat02/05 contain NaN UVs. The native vertex packer at A4EE5E
+copies them without rejecting the mesh. JSON world resources represent these
+values as null, while GLBs retain NaN. Inference for portable GPU sampling:
+use the same zero coordinate as an absent UV channel, independently per axis.
+Do not apply this policy to positions, normals, skinning or animation values.
+================
+*/
+export function textureCoordinate( value: number | null ): number {
+	if ( value === null || (typeof value === "number" && !Number.isFinite( value )) ) return 0;
+	if ( typeof value !== "number" ) throw new Error( "Invalid texture coordinate" );
+	return value;
 }

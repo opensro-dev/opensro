@@ -394,7 +394,13 @@ export function avatarToGlb( avatar ) {
 		for ( let i = 0; i < m.vertexCount; i += 1 ) {
 			grp.positions.push( m.positions[i * 3], m.positions[i * 3 + 1], -m.positions[i * 3 + 2] );
 			grp.normals.push( m.normals[i * 3], m.normals[i * 3 + 1], -m.normals[i * 3 + 2] );
-			grp.uvs.push( m.uvs[i * 2], m.uvs[i * 2 + 1] );
+			// Retail boat meshes carry undefined UV components. Use the same
+			// portable zero-coordinate policy as runtime textureCoordinate;
+			// GLB must not publish NaN even though native vertex packing copies it.
+			grp.uvs.push(
+				Number.isFinite( m.uvs[i * 2] ) ? m.uvs[i * 2] : 0,
+				Number.isFinite( m.uvs[i * 2 + 1] ) ? m.uvs[i * 2 + 1] : 0
+			);
 			if ( !rigid ) {
 				grp.joints.push(
 					part.localToGlobal[m.boneIndices[i * 2]],
