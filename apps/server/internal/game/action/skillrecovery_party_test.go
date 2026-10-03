@@ -675,3 +675,104 @@ func TestHealingOrbitHealsItsCasterOverTime(t *testing.T) {
 		t.Fatalf("first pulse: caster %d -> %d, mate %d -> %d", casterHP, *p.c.CurrentHP, mateHP, *p.m.CurrentHP)
 	}
 }
+
+/*
+==================
+installsDelivered
+
+The 0xB419 frames each of chars receives, by instance token, as production
+delivers one support cast: the request's Frames to the actor, Broadcast to
+every other character and Recipients to theirs; a release's batches by
+their route, where a SourceGID batch reaches every character, its source
+included.
+==================
+*/
+func installsDelivered(actor *enterworld.Character, chars []*enterworld.Character, r OpResult, batches []simulation.DivisionFrames) map[string]map[uint32]int {
+	out := map[string]map[uint32]int{}
+	count := func(c *enterworld.Character, frames []wire.Frame) {
+		if out[c.Name] == nil {
+			out[c.Name] = map[uint32]int{}
+		}
+		for _, frame := range frames {
+			if frame.Opcode == wire.OpAttachedEffect {
+				out[c.Name][binary.LittleEndian.Uint32(frame.Payload[attachedEffectTokenOffset:])]++
+			}
+		}
+	}
+	for _, c := range chars {
+		if c == actor {
+			count(c, r.Frames)
+		} else {
+			count(c, r.Broadcast)
+		}
+		count(c, framesFor(c.ID, r, nil))
+		for _, batch := range batches {
+			if batch.OnlyCharacterID != 0 && batch.OnlyCharacterID != c.ID {
+				continue
+			}
+			var frames []wire.Frame
+			for _, f := range batch.Frames {
+				frames = append(frames, wire.Frame{Opcode: f.Opcode, Payload: f.Payload})
+			}
+			count(c, frames)
+		}
+	}
+	return out
+}
+
+/*
+==================
+TestPartyHealOverTimeInstallsReachEachClientOnce
+
+Live finding: the release of Healing Orbit (500 ms cast time) sent its
+caster every install twice, once in the public batch every observer gets,
+its source included, and again in the caster's private tail, and the
+client failed on the duplicated buff. Every character must receive each
+install exactly once, after the cast-time Healing Orbit and the instant
+Mana Orbit alike, and after Healing Cycle and Mana Cycle cast with
+nothing selected, which land on the caster alone.
+==================
+*/
+func TestPartyHealOverTimeInstallsReachEachClientOnce(t *testing.T) {
+	for _, tc := range []struct {
+		code string
+		harp bool
+	}{
+		{"SKILL_EU_CLERIC_HEALA_CYCLE_B_01", false},
+		{"SKILL_EU_CLERIC_HEALA_CYCLE_A_01", false},
+		{"SKILL_EU_BARD_RECOVERA_MPHEAL_B_01", true},
+		{"SKILL_EU_BARD_RECOVERA_MPHEAL_A_01", true},
+	} {
+		code := tc.code
+		t.Run(code, func(t *testing.T) {
+			skill := shippedOffense(t, code)
+			affordable(&skill)
+			p := newSupportParty(t, skill, 100)
+			if tc.harp {
+				equipHarp(p.supportPair)
+			}
+			chars := append([]*enterworld.Character{p.c}, p.mates...)
+			r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID})
+			if !hasSkillEffect(p.rt, p.c.Name, skill.ID) {
+				t.Fatalf("the caster holds no %s", code)
+			}
+
+			for _, c := range chars {
+				var token uint32
+				for _, e := range p.rt.effects.Snapshot(testDivision, c.Name) {
+					if e.SkillID == skill.ID {
+						token = e.InstanceToken
+					}
+				}
+				if token == 0 {
+					continue
+				}
+				for _, viewer := range chars {
+					if got := installsDelivered(p.c, chars, r, batches)[viewer.Name][token]; got != 1 {
+						t.Errorf("%s received the install of %s's token %#x %d times, want once", viewer.Name, c.Name, token, got)
+					}
+				}
+			}
+		})
+	}
+}

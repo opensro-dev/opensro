@@ -533,6 +533,13 @@ func (rt *Runtime) proposePartyResurrection(division string, caster *enterworld.
 /*
 ==================
 supportCastResult
+
+Frames is the caster's whole burst; ActorPrivate is only its private part
+(the vitals and the actor frames), never the public frames: a prepared
+release publishes Broadcast through the caster's observed scope, which
+reaches the caster too (projectilecast.go), and a public frame in both
+reached the caster twice. Live, a released Healing Orbit sent its caster
+every 0xB419 twice and the client failed on the repeated buff identity.
 ==================
 */
 func supportCastResult(
@@ -541,18 +548,19 @@ func supportCastResult(
 	actor, public []wire.Frame,
 	recipients []RecipientFrames,
 ) OpResult {
-	frames := []wire.Frame{control}
+	var private []wire.Frame
 	if heal {
-		frames = append(frames, vitals)
+		private = append(private, vitals)
 	}
+	private = append(private, actor...)
 
-	frames = append(frames, actor...)
+	frames := append([]wire.Frame{control}, private...)
 	frames = append(frames, public...)
 
 	return OpResult{
 		Frames:       frames,
 		Broadcast:    append([]wire.Frame{control}, public...),
-		ActorPrivate: frames[1:],
+		ActorPrivate: private,
 		Recipients:   recipients,
 	}
 }
