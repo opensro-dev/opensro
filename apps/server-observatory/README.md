@@ -1,6 +1,6 @@
 # Server observatory
 
-Local, read-only operations dashboard for running shards. Node 22+, no install
+Operations dashboard for running shards, read-only by default. Node 22+, no install
 or build step. Not required to play.
 
 ```powershell
@@ -58,8 +58,58 @@ forwarding headers. It copies state under the existing owner locks and caches
 the encoded result for two seconds. The Node gateway binds 127.0.0.1, accepts
 only local same-origin requests, uses the fixed shard URLs from the catalog,
 coalesces requests per shard, times out after five seconds and caps payloads at
-24 MiB. There are no mutating endpoints. Remote hosting would need its own
-authenticated access design.
+24 MiB. Player recovery is optional and uses a separate credential.
+
+### Authenticated hosting and player recovery
+
+Set `SRO_OBSERVATORY_CONFIG` to a private JSON file:
+
+```json
+{
+  "shards": "/absolute/path/to/shards.json",
+  "operatorTokenFile": "/private/path/operator-token",
+  "edge": {
+    "origin": "https://console.example.com",
+    "operator": "operator",
+    "secret": "REPLACE_WITH_A_RANDOM_SECRET_AT_LEAST_32_CHARACTERS"
+  }
+}
+```
+
+The HTTPS reverse proxy must authenticate the operator, overwrite
+`X-SRO-Operator` and `X-SRO-Console-Auth` with the configured values, and remove
+the incoming `Authorization` header. The gateway still binds only loopback.
+All console pages and API routes require edge authentication; rescue additionally
+requires an exact matching Origin, JSON content type and `X-SRO-Console: 1`.
+The edge secret and upstream token are independent, private credentials.
+Never expose either value in browser JavaScript or commit the configuration.
+
+Install the same upstream token (at least 32 characters) in the GameWorld
+shard authority directory as `operator-token` before starting that GameWorld.
+The endpoint is absent when this file is absent. Keep this directory private;
+the gateway needs only its own token copy, not access to the authority database.
+Host service configuration, DNS, credentials and rollout procedures belong in
+the private operations repository.
+
+Open **Player recovery**, select the shard and inspect a character. Download
+the diagnostic JSON to preserve evidence, select a town, enter a reason and
+type the exact character name to confirm rescue. The server admits only
+outdoor recall gates from its authored teleport catalog. It closes that
+character's session and uses a binding-control lease to prevent login during
+relocation. Ordinary character authority persists the destination; no direct
+SQL writes are used. The player logs in again afterward. Living/dead state,
+property and durable companions are retained; normal session cleanup retires
+transient combat and movement. Rescue does not grant GM privileges or revive.
+
+Every rescue writes and fsyncs an intent with the original diagnostic state
+before mutation, then appends its outcome to `operator-audit.jsonl` beside the
+authority store. Request IDs remain consumed after restart, including failed
+attempts. A timeout or uncertain response requires inspection, never an
+automatic retry. The journal is capped at 16 MiB and refuses further writes
+when full. Archive it under the host's backup policy during maintenance,
+retaining consumed IDs in the replacement journal; never silently truncate it.
+Snapshots omit credentials, account IDs and chat, but include character state
+and companion data: treat exports and the journal as private operations data.
 
 ## Tests
 

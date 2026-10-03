@@ -1,0 +1,89 @@
+/*
+===========================================================================
+players.css - readable operator forms and diagnostic evidence
+===========================================================================
+*/
+:root {
+	color-scheme: dark;
+	font-family: system-ui, sans-serif;
+	background: #101c20;
+	color: #e7ece7;
+}
+body {
+	margin: 0;
+}
+header {
+	display: flex;
+	justify-content: space-between;
+	padding: 22px 5%;
+	border-bottom: 1px solid #38524f;
+}
+a {
+	color: #d9bc78;
+}
+main {
+	max-width: 980px;
+	margin: 42px auto;
+	padding: 0 24px 60px;
+}
+h1 {
+	font-size: 38px;
+	margin-bottom: 10px;
+}
+.eyebrow {
+	color: #d9bc78;
+	letter-spacing: 3px;
+	font-size: 12px;
+}
+p {
+	line-height: 1.6;
+	color: #c4d3ce;
+}
+form {
+	display: grid;
+	gap: 18px;
+	padding: 24px;
+	margin: 24px 0;
+	border: 1px solid #38524f;
+	border-radius: 8px;
+}
+label {
+	display: grid;
+	gap: 8px;
+}
+input, select, textarea, button {
+	font: inherit;
+	padding: 12px;
+	border: 1px solid #526863;
+	border-radius: 4px;
+	background: #182b2e;
+	color: inherit;
+}
+button {
+	cursor: pointer;
+	background: #355c55;
+}
+button:disabled {
+	opacity: .5;
+	cursor: wait;
+}
+#rescue-button {
+	background: #684531;
+}
+#status {
+	padding: 14px;
+	background: #182b2e;
+	min-height: 24px;
+}
+details {
+	margin-top: 24px;
+}
+pre {
+	padding: 18px;
+	background: #091417;
+	overflow: auto;
+	max-height: 500px;
+}
+[hidden] {
+	display: none;
+}

@@ -525,8 +525,6 @@ apps/server-observatory/public/items.js
 apps/server-observatory/public/model.js
 apps/server-observatory/public/operations.js
 apps/server-observatory/public/view.js
-apps/server-observatory/server/main.mjs
-apps/server-observatory/server/security.mjs
 apps/server-observatory/server/source.mjs
 apps/server-observatory/tests/items.test.mjs
 apps/server-observatory/tests/model.test.mjs

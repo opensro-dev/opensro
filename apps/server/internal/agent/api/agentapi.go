@@ -183,6 +183,7 @@ API
 ================
 */
 type API struct {
+	operator                http.Handler
 	notices                 *noticePublisher
 	observatory             *observatoryReader
 	monsterQuery            MonsterPositionQuery
@@ -330,6 +331,9 @@ Handler
 */
 func (api *API) Handler() http.Handler {
 	mux := http.NewServeMux()
+	if api.operator != nil {
+		mux.Handle("/internal/operations/player", api.requireRunning(api.operator))
+	}
 	if api.notices != nil {
 		mux.Handle(NoticePath, api.requireRunning(http.HandlerFunc(api.handleNotice)))
 	}
