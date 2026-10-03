@@ -447,7 +447,6 @@ export interface GameplayState {
 		readonly reference: import("@/engine/foundation/gameplay/param-job").ParamJobReference;
 	})[];
 	readonly abnormalRecords?: readonly import("@/engine/foundation/gameplay/abnormal-snapshot").AbnormalRecord[];
-	readonly rebirthPending?: boolean;
 	readonly selectionDecal?: SelectionDecal | null;
 	readonly notices?: readonly import("@/engine/foundation/gameplay/system-notices").SystemNotice[];
 	readonly partyMatching?: import("@/engine/foundation/gameplay/party-matching").PartyMatching;

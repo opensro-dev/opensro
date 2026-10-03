@@ -279,7 +279,6 @@ fails; retry persistence without restoring stale slot occupancy.
 	let worldClock: GameplayState["worldClock"];
 	let environment = entryEnvironment( {} ).state;
 	let cosError: string | null = null;
-	let rebirthPending = false;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	let activeCos: GameplayState["activeCos"], cosResult: GameplayState["cosResult"];
@@ -390,7 +389,6 @@ selected entities, cooldowns or world-entry state.
 		potionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
 		potionDue.fill( null );
 		selectionDecal = null;
-		rebirthPending = false;
 		uniqueRefs = uniqueReferences( {} );
 		gmItems.clear();
 		gmReplies = [];
@@ -524,7 +522,6 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			};
 			gmReplies = [];
 			notices = entryEvents.notices.map( key => ({ key, value: 0, sequence: ++noticeSequence }) );
-			rebirthPending = false;
 			feedback.bootstrap( value );
 			const b = value as {
 				character?: {
@@ -878,12 +875,13 @@ state here before a command can claim a native wire conversation.
 				return frame ? sendFrame( frame ) : null;
 			}
 			if ( command.kind === "rebirth" ) {
-				if ( local?.gid !== localGid || local?.appearanceState?.[0] !== 2 || rebirthPending ) return null;
+				if ( local?.gid !== localGid || local?.appearanceState?.[0] !== 2 ) return null;
 				if ( command.choice !== 1 && command.choice !== 2 ) throw Error( "Invalid rebirth choice" );
 				if ( command.choice === 2 && (progression.level === undefined || progression.level > 10) ) return null;
+				// This request has no acknowledgement; a silent refusal must not lock
+				// out later clicks. The server serializes revival and rejects living actors.
 				const frame = { opcode: 0x32dc, payload: Uint8Array.of( command.choice ) };
 				send( frame );
-				rebirthPending = true;
 				return frame;
 			}
 			if (
@@ -1563,7 +1561,6 @@ Packet handling must not depend on which HUD panel is currently open.
 					frame.payload[5] === 1 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 ).getUint32( 0, true ) === localGid
 				) {
-					rebirthPending = false;
 					dirty = true;
 				}
 				const matched = partyMatchPacket( partyMatching, frame, social.localName, now, {
@@ -2529,7 +2526,6 @@ The published plane when something changed since the last take, else null.
 				gmReplies,
 				eligibility,
 				autoPotion,
-				rebirthPending,
 				selectionDecal,
 				notices,
 				partyMatching,
@@ -2613,7 +2609,6 @@ World transfer retires spatial work while retaining character/session data.
 			warnings = [ false, false ];
 			potionDue.fill( null );
 			potionFacts = { ...potionFacts, alive: false };
-			rebirthPending = false;
 			selectionDecal = null;
 			social = { ...social, invitation: null };
 			movement.clear();
