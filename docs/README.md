@@ -12,7 +12,7 @@
 | [apps/server/ops/docs/ACCEPTED_ADVISORIES.md](../apps/server/ops/docs/ACCEPTED_ADVISORIES.md) | Reviewed vulnerability-scanner findings |
 | [RELEASE.md](../RELEASE.md) | Release checklist |
 | [AGENTS.md](../AGENTS.md) | Code style (id Software) and working rules for contributors and coding agents |
+| [PROFILING.md](PROFILING.md) | Measuring frame rate and allocations, finding the cost, proving a fix |
+| [COMPANION_PROTOCOL_RELEASE.md](COMPANION_PROTOCOL_RELEASE.md) | Release order for the companion protocol and authority schema |
 | [NPC_FACING_2026-10-01.md](NPC_FACING_2026-10-01.md) | NPC heading recovery, inferred relocations and complete placement coverage |
-| [ABNORMAL_MECHANICS_AUDIT_2026-10-01.md](ABNORMAL_MECHANICS_AUDIT_2026-10-01.md) | Native status mechanics, actor adapters, potion queues and regression coverage |
-| [WIZARD_SKILL_REVIEW_2026-10-02.md](WIZARD_SKILL_REVIEW_2026-10-02.md) | PR #103/#104 native review, corrected shared contracts and regression coverage |
-| [ROGUE_SKILLS_2026-10-02.md](ROGUE_SKILLS_2026-10-02.md) | Scorn, Poison Weapons, player relations, effect retirement and native evidence |
+| [RETIRED.md](RETIRED.md) | Dated work reports removed from the tree, and how to restore them |

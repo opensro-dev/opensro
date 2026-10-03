@@ -75,17 +75,20 @@ createStackTotals
 
 Aggregates weighted call stacks (keys, innermost first): self weight of
 the innermost key, inclusive weight of every key on the stack (once per
-stack), and, for keys starting with childrenOf, the weight under each
-direct callee of the innermost such frame ("(self)" for its own).
+stack); for keys starting with childrenOf, the weight under each direct
+callee of the innermost such frame ("(self)" for its own); and for stacks
+whose innermost key starts with callersOf, the weight by the three frames
+calling it (nearest first).
 ================
 */
-export function createStackTotals( childrenOf = null ) {
-	const self = new Map(), total = new Map(), children = new Map();
+export function createStackTotals( childrenOf = null, callersOf = null ) {
+	const self = new Map(), total = new Map(), children = new Map(), callers = new Map();
 	let weight = 0;
 	return {
 		self,
 		total,
 		children,
+		callers,
 		weight: () => weight,
 		/*
 		================
@@ -101,6 +104,9 @@ export function createStackTotals( childrenOf = null ) {
 				if ( seen.has( key ) ) continue;
 				seen.add( key );
 				add( total, key, amount );
+			}
+			if ( callersOf && stack[0].startsWith( callersOf ) ) {
+				add( callers, stack.slice( 1, 4 ).join( " < " ) || "(root)", amount );
 			}
 			if ( !childrenOf ) return;
 			for ( let i = 0; i < stack.length; i++ ) {
