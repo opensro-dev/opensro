@@ -170,15 +170,23 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 		assert.equal( ordinaryWrites, writes, "deferred continuation repeated ordinary uploads" );
 		return draws.map( d => d.instances[12] );
 	}
+	// Each drawn particle sits at its tick position plus less than one tick of
+	// motion: presentation carries the pending fraction (particle-presentation.ts).
+	const atTick = ( drawn, ticks ) => {
+		assert.equal( drawn.length, ticks.length );
+		drawn.forEach( ( value, i ) =>
+			assert.ok( value >= ticks[i] - 1e-4 && value < ticks[i] + 1, `${value} vs ${ticks[i]}` )
+		);
+	};
 	try {
 		assert.deepEqual( frame( 0 ), [] );
 		assert.deepEqual( frame( .5 ), [] );
-		assert.deepEqual( frame( .501, true ), [ 0 ] );
-		assert.deepEqual( frame( .601 ), [ 2 ] );
-		assert.deepEqual( frame( .801 ), [ 6 ] );
+		atTick( frame( .501, true ), [ 0 ] );
+		atTick( frame( .601 ), [ 2 ] );
+		atTick( frame( .801 ), [ 6 ] );
 		assert.deepEqual( frame( 1.002, false ), [] );
 		assert.deepEqual( frame( 1.302 ), [] );
-		assert.deepEqual( frame( 1.503, true ), [ 10 ] );
+		atTick( frame( 1.503, true ), [ 10 ] );
 	} finally {
 		owner.dispose( gpu, null );
 	}

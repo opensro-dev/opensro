@@ -49,6 +49,7 @@ export function createPortrait(
 			preview?: boolean
 		): readonly GeometryDraw[];
 		borrowModel( id: string, model: CharacterModel, images: readonly WorldTexture[] ): void;
+		hasModel( id: string ): boolean;
 		socket(
 			actors: readonly CharacterActor[],
 			gid: number,
@@ -79,11 +80,6 @@ export function createPortrait(
 	let borrowed: readonly PortraitPart[] = [];
 	preview.retain( [] );
 	return {
-		/*
-		================
-		prepare
-		================
-		*/
 		prepare(
 			value: PortraitSource | null,
 			geometry: GeometryCommands,
@@ -103,10 +99,22 @@ export function createPortrait(
 				parts.some( ( part, index ) =>
 					part.model !== borrowed[index]?.model || part.actor.model !== borrowed[index]?.actor.model
 				);
-			if ( changed || source !== value.model || identity !== value.actor.gid ) {
+			// Attached effects come and go every few frames in combat. Only a
+			// change of the character's own model resets the borrowed set; a new
+			// child borrows just its own model (residency drops the departed).
+			const bodyChanged = source !== value.model || value.actor.model !== borrowed[0]?.actor.model;
+			if ( changed && !bodyChanged ) {
+				for ( const part of parts ) {
+					if ( !preview.hasModel( part.actor.model ) ) {
+						preview.borrowModel( part.actor.model, part.model, part.images );
+					}
+				}
+				borrowed = parts;
+			}
+			if ( bodyChanged || identity !== value.actor.gid ) {
 				started = seconds;
 				identity = value.actor.gid;
-				if ( changed || source !== value.model ) {
+				if ( bodyChanged ) {
 					preview.actors( [] );
 					preview.prepare( geometry, images, 0 );
 					const models = new Set<string>();

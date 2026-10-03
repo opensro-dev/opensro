@@ -233,6 +233,9 @@ export interface CharacterActor {
 		/** Root attachments only: a fixed world yaw replacing the owner's rotation
 		 * (a victim-anchored hit effect keeps the caster's facing, 8D5440). */
 		readonly facing?: import("@/engine/foundation/math/angles").Radians;
+		/** Root attachments only: the effect stands at the character's ground
+		 * position. For a rider that is the ride's root, not the saddle. */
+		readonly ground?: boolean;
 	};
 	readonly mountedOn?: number;
 	readonly gid: number;

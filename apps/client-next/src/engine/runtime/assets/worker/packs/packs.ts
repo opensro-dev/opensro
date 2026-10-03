@@ -18,7 +18,7 @@ it, silently, so the installer never shows on a loading screen.
 import { createPersistentAssets } from "./persistent";
 import { createPackIndex } from "./index/index";
 import type { PackDescriptor, PackEntry, PackDownload } from "./internal/pack-contract";
-import { readBytes } from "@/engine/foundation/assets/read-bytes";
+import { gunzipBytes } from "@/engine/foundation/assets/read-bytes";
 import { createPackBlocks } from "./blocks";
 export type { PackRange } from "./internal/pack-contract";
 
@@ -49,6 +49,11 @@ export function createPacks(
 	const transports = new Map<string, Promise<Uint8Array<ArrayBuffer>>>();
 	let transportBytes = 0, transportDecodedBytes = 0, hashCalls = 0, hashBytes = 0;
 	const headers = new Map<string, Promise<number>>();
+	/*
+	================
+	member
+	================
+	*/
 	async function member( base: string, descriptor: PackDescriptor, entry: PackEntry, signal: AbortSignal ) {
 		let header = headers.get( descriptor.path );
 		if ( !header ) {
@@ -82,6 +87,11 @@ export function createPacks(
 		const bytes = await blocks.read( base, descriptor, start, entry );
 		return bytes;
 	}
+	/*
+	================
+	sha
+	================
+	*/
 	async function sha( bytes: Uint8Array<ArrayBuffer> ) {
 		hashCalls++;
 		hashBytes += bytes.length;
@@ -90,6 +100,11 @@ export function createPacks(
 			b => b.toString( 16 ).padStart( 2, "0" )
 		).join( "" );
 	}
+	/*
+	================
+	manifest
+	================
+	*/
 	function manifest( base: string ): Promise<Index> {
 		if ( origin !== null && origin !== base ) throw new Error( "Asset origin changed during session" );
 		origin = base;
@@ -105,6 +120,11 @@ export function createPacks(
 		}
 		return index;
 	}
+	/*
+	================
+	pack
+	================
+	*/
 	async function pack( base: string, descriptor: PackDescriptor ): Promise<Loaded> {
 		const hit = cache.get( descriptor.path );
 		if ( hit ) {
@@ -152,6 +172,11 @@ export function createPacks(
 			loading.delete( descriptor.path );
 		}
 	}
+	/*
+	================
+	compressed
+	================
+	*/
 	async function compressed( base: string, entry: PackEntry ) {
 		const t = entry.transport!, key = t.sha256;
 		while ( transports.size >= 4 && !transports.has( key ) ) {
@@ -165,10 +190,7 @@ export function createPacks(
 				if ( encoded.length !== t.length || await sha( encoded ) !== t.sha256 ) {
 					throw Error( "Compressed transport SHA-256 mismatch" );
 				}
-				const bytes = await readBytes(
-					new Blob( [ encoded ] ).stream().pipeThrough( new DecompressionStream( "gzip" ) ),
-					entry.length
-				);
+				const bytes = await gunzipBytes( encoded, entry.length );
 				transportBytes += encoded.length;
 				transportDecodedBytes += bytes.length;
 				return bytes;
@@ -180,6 +202,11 @@ export function createPacks(
 		}
 		return (await work).slice();
 	}
+	/*
+	================
+	loose
+	================
+	*/
 	async function loose( base: string, entry: PackEntry, signal: AbortSignal ) {
 		const bytes = await download( base + entry.publicPath, entry.length, signal );
 		return bytes;
@@ -260,10 +287,7 @@ export function createPacks(
 			if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
 			if ( !saved && !cache.has( entry.packPath ) ) persistent.enqueue( url.origin, entry.sha256, bytes );
 			const result = gzip ?
-				await readBytes(
-					new Blob( [ bytes ] ).stream().pipeThrough( new DecompressionStream( "gzip" ) ),
-					limit
-				) :
+				await gunzipBytes( bytes, limit ) :
 				bytes;
 			if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
 			if ( report ) activity( url.pathname, "ready" );
@@ -322,6 +346,11 @@ export function createPacks(
 		read: ( url: URL, limit: number, signal: AbortSignal, report = true ) =>
 			readVerified( url, limit, signal, report ),
 		install,
+		/*
+		================
+		worldAnimationManifests
+		================
+		*/
 		async worldAnimationManifests( base: string, sources: ReadonlySet<string | undefined> ) {
 			const registry = await manifest( base );
 			const paths = registry.animations ?
@@ -336,6 +365,11 @@ export function createPacks(
 			paths.sort( ( a, b ) => registry.animationOrder.get( a )! - registry.animationOrder.get( b )! );
 			return paths.map( path => path.replace( /\.gz$/, "" ) );
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose() {
 			if ( disposed ) return;
 			disposed = true;

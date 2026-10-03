@@ -10,6 +10,7 @@ resourceRevision so no retained bind group can refer to a retired texture.
 */
 import type { UiScene, UiQuad } from "@/engine/contracts/ui";
 import type { UiDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
+import { uiRecordCount, UI_RECORD_LIMIT } from "@/engine/foundation/rendering/text-run";
 // Device-owned UI resources. Stable instance storage and draw bundles survive data edits.
 /*
 ================
@@ -120,10 +121,10 @@ fs
 	} );
 	let pipeline: GPURenderPipeline | null = null, worldPipeline: GPURenderPipeline | null = null, disposed = false;
 	/*
- ================
- descriptor
- ================
- */
+	================
+	descriptor
+	================
+	*/
 	const descriptor = ( depthCompare: GPUCompareFunction ): GPURenderPipelineDescriptor => ({
 		label: "gpu-ui",
 		layout: device.createPipelineLayout( { bindGroupLayouts: [ layout ] } ),
@@ -162,14 +163,16 @@ fs
 	const textures = new Map<string, { texture: GPUTexture; width: number; height: number; }>();
 	const bindings = new Map<string, Map<string, GPUBindGroup>>();
 	const packed: (UiQuad | undefined)[] = [];
+	// The glyph a packed record holds (-1 or unused for a plain quad).
+	const packedGlyph: number[] = [];
 	let values = new Float32Array( 0 ), uploaded = new Float32Array( 0 );
 	const viewportValues = new Float32Array( 4 ), noMask = [ 0, 0, 1, 1 ] as const;
 	let last: UiScene | null = null, draws: readonly UiDraw[] = [], resourceRevision = 0, recordedResources = -1;
 	/*
- ================
- texture
- ================
- */
+	================
+	texture
+	================
+	*/
 	function texture( id: string, image: ImageBitmap | ImageData | null ) {
 		if ( disposed ) return;
 		if ( !image ) {
@@ -221,13 +224,13 @@ fs
 		ready,
 		texture,
 		/*
- ================
- portraitTarget
+		================
+		portraitTarget
 
- Inventory and mall have different native viewports. Retire both the target
- and its cached bindings when switching owners, before encoding any draws.
- ================
- */
+		Inventory and mall have different native viewports. Retire both the target
+		and its cached bindings when switching owners, before encoding any draws.
+		================
+		*/
 		portraitTarget( id = "__portrait", width = 128, height = 128 ) {
 			if (
 				!Number.isInteger( width ) || !Number.isInteger( height ) || width < 1 || height < 1 || width > 4096 ||
@@ -252,18 +255,20 @@ fs
 			return slot.texture.createView();
 		},
 		/*
- ================
- prepare
- ================
- */
+		================
+		prepare
+		================
+		*/
 		prepare( scene: UiScene | null ): readonly UiDraw[] {
 			if ( !pipeline || !scene ) return [];
 			if ( last === scene && recordedResources === resourceRevision ) return draws;
-			if ( scene.quads.length > 8192 ) throw new Error( "UI quad budget exceeded" );
+			// One GPU record per plain quad and per glyph of a text run.
+			const records = uiRecordCount( scene.quads );
+			if ( scene.quads.length > 8192 || records > UI_RECORD_LIMIT ) throw new Error( "UI quad budget exceeded" );
 			if ( recordedResources !== resourceRevision ) bindings.clear();
-			const needed = scene.quads.length * 28;
+			const needed = records * 28;
 			if ( values.length < needed ) {
-				const capacity = 2 ** Math.ceil( Math.log2( Math.max( 1, scene.quads.length ) ) ) * 28,
+				const capacity = 2 ** Math.ceil( Math.log2( Math.max( 1, records ) ) ) * 28,
 					next = new Float32Array( capacity );
 				next.set( uploaded );
 				uploaded = next;
@@ -273,16 +278,20 @@ fs
 			const next: UiDraw[] = [];
 			let first = needed, lastChanged = -1;
 			let previous: GPUBindGroup | null = null;
-			scene.quads.forEach( ( quad, index ) => {
+			let record = 0;
+			for ( const quad of scene.quads ) {
+				const run = quad.run, count = run ? run.glyphs.length : 1;
+				if ( count === 0 ) continue;
 				// An absent image is not a solid-color primitive. Keep its draw absent until
 				// the texture arrives; resourceRevision rebuilds the command list then.
 				const maskKey = quad.mask?.texture ?? "",
 					slot = textures.get( quad.texture ),
 					mask = textures.get( maskKey );
 				if ( !slot || !mask ) {
-					packed[index] = undefined;
+					for ( let i = 0; i < count; i++ ) packed[record + i] = undefined;
+					record += count;
 					previous = null;
-					return;
+					continue;
 				}
 				let textureBindings = bindings.get( quad.texture );
 				if ( !textureBindings ) {
@@ -305,11 +314,24 @@ fs
 					textureBindings.set( bindingKey, binding );
 				}
 				// UiQuad is an immutable publication. Projected labels replace only their
-				// own records; retained HUD records keep the already packed GPU bytes.
-				if ( packed[index] !== quad ) {
+				// own records; retained HUD records keep the already packed GPU bytes. A
+				// run's glyph i is the glyph quad expandTextRuns would make: the run's
+				// fields with rect = origin + offset and the glyph's own uv.
+				for ( let i = 0; i < count; i++ ) {
+					const index = record + i;
+					if ( packed[index] === quad && packedGlyph[index] === i ) continue;
 					const at = index * 28;
-					values.set( quad.rect, at );
-					values.set( quad.uv, at + 4 );
+					if ( run ) {
+						const glyph = run.glyphs[i]!;
+						values[at] = quad.rect[0] + glyph.x;
+						values[at + 1] = quad.rect[1] + glyph.y;
+						values[at + 2] = glyph.width;
+						values[at + 3] = glyph.height;
+						values.set( glyph.uv, at + 4 );
+					} else {
+						values.set( quad.rect, at );
+						values.set( quad.uv, at + 4 );
+					}
 					values.set( quad.color, at + 8 );
 					values.set( quad.clip, at + 12 );
 					values.set( quad.mask?.rect ?? noMask, at + 16 );
@@ -318,13 +340,14 @@ fs
 					values[at + 22] = quad.rotation ?? 0;
 					values[at + 23] = quad.depth ?? 0;
 					values.set( quad.rightColor ?? quad.color, at + 24 );
-					for ( let i = at; i < at + 28; i++ ) {
-						if ( values[i] !== uploaded[i] ) {
-							first = Math.min( first, i );
-							lastChanged = i;
+					for ( let k = at; k < at + 28; k++ ) {
+						if ( values[k] !== uploaded[k] ) {
+							first = Math.min( first, k );
+							lastChanged = k;
 						}
 					}
 					packed[index] = quad;
+					packedGlyph[index] = i;
 				}
 				const layer = quad.depth !== undefined ? "world" : quad.layer,
 					selectedPipeline = quad.depth !== undefined && quad.occlusion !== "none" ?
@@ -333,11 +356,13 @@ fs
 				if (
 					binding === previous && layer === next[next.length - 1]!.layer &&
 					selectedPipeline === next[next.length - 1]!.pipeline
-				) next[next.length - 1]!.count++;
-				else next.push( { pipeline: selectedPipeline, binding, first: index, count: 1, layer } );
+				) next[next.length - 1]!.count += count;
+				else next.push( { pipeline: selectedPipeline, binding, first: record, count, layer } );
 				previous = binding;
-			} );
-			packed.length = scene.quads.length;
+				record += count;
+			}
+			packed.length = records;
+			packedGlyph.length = records;
 			if ( lastChanged >= first ) {
 				const changed = values.subarray( first, lastChanged + 1 );
 				device.queue.writeBuffer( storage, first * 4, changed );
@@ -361,10 +386,10 @@ fs
 			return draws;
 		},
 		/*
- ================
- dispose
- ================
- */
+		================
+		dispose
+		================
+		*/
 		dispose() {
 			disposed = true;
 			for ( const slot of textures.values() ) slot.texture.destroy();
@@ -374,6 +399,7 @@ fs
 			viewport.destroy();
 			draws = [];
 			packed.length = 0;
+			packedGlyph.length = 0;
 			last = null;
 		}
 	};

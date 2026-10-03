@@ -16,9 +16,19 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
 
-const { titleGlyphs, titleTextBox, titleColoredText, resolveTextOverlaps } = await import(
+const { titleText, titleTextBox, titleColoredText, resolveTextOverlaps } = await import(
 	sourceFileUrl( "src/engine/foundation/rendering/ui-glyphs.ts" ).href
 );
+const { expandTextRuns } = await import( sourceFileUrl( "src/engine/foundation/rendering/text-run.ts" ).href );
+/*
+================
+glyphQuads
+
+The glyph quads a laid-out line stands for: its text run expanded.
+================
+*/
+const glyphQuads = ( ...args ) => expandTextRuns( titleText( ...args ) );
+
 const atlas = JSON.parse(
 	await readFile( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf8" )
 );
@@ -43,8 +53,8 @@ test("UI measurement uses the same font slot as painting and isolates cached wid
 			assert.equal( text.run( value, 0, fontIndex ).width, width );
 			const box = [ 100 - Math.floor( width / 2 ), 20, width, text.extentHeight( fontIndex ) ];
 			assert.deepEqual(
-				text.quads( value, box, clip, color, { fontIndex, vAlign: 0 } ).map( q => q.rect ),
-				titleGlyphs( atlas, value, box, clip, color, { fontIndex, vAlign: 0 } ).map( q => q.rect )
+				expandTextRuns( text.quads( value, box, clip, color, { fontIndex, vAlign: 0 } ) ).map( q => q.rect ),
+				glyphQuads( atlas, value, box, clip, color, { fontIndex, vAlign: 0 } ).map( q => q.rect )
 			);
 		}
 	} finally {
@@ -52,18 +62,20 @@ test("UI measurement uses the same font slot as painting and isolates cached wid
 	}
 });
 test("native dialog blank lines and countdown color spans survive text layout", () => {
-	const lines = titleTextBox( atlas, "A\n\nA", rect, clip, color );
+	const lines = expandTextRuns( titleTextBox( atlas, "A\n\nA", rect, clip, color ) );
 	assert.equal( lines[1].rect[1] - lines[0].rect[1], 28 );
-	const runs = titleColoredText( atlas, '<sml2>A<font color="255,255,208,81">7</font>A</sml2>', rect, clip, color );
+	const runs = expandTextRuns(
+		titleColoredText( atlas, '<sml2>A<font color="255,255,208,81">7</font>A</sml2>', rect, clip, color )
+	);
 	assert.deepEqual( runs.map( q => q.color ), [ color, [ 1, 208 / 255, 81 / 255, 1 ], color ] );
 	assert.deepEqual(
 		runs.map( q => q.rect ),
-		titleGlyphs( atlas, "A7A", rect, clip, color, { vAlign: 0 } ).map( q => q.rect )
+		glyphQuads( atlas, "A7A", rect, clip, color, { vAlign: 0 } ).map( q => q.rect )
 	);
 });
 test("authored font slots select distinct native masks without scaling the default font", () => {
-	const small = titleGlyphs( atlas, "Connect", rect, clip, color, { fontIndex: 0 } );
-	const title = titleGlyphs( atlas, "Connect", rect, clip, color, { fontIndex: 2 } );
+	const small = glyphQuads( atlas, "Connect", rect, clip, color, { fontIndex: 0 } );
+	const title = glyphQuads( atlas, "Connect", rect, clip, color, { fontIndex: 2 } );
 	assert.notDeepEqual( small.map( q => q.uv ), title.map( q => q.uv ) );
 	assert.ok( title.at( -1 ).rect[0] > small.at( -1 ).rect[0], "Title text uses its own larger advances" );
 	for ( const [index, quads] of [ [ 0, small ], [ 2, title ] ] ) {
@@ -72,14 +84,14 @@ test("authored font slots select distinct native masks without scaling the defau
 		assert.equal( quads[0].uv[0], glyph.x / atlas.atlasWidth );
 	}
 	assert.throws(
-		() => titleGlyphs( atlas, "A", rect, clip, color, { fontIndex: 99 } ),
+		() => glyphQuads( atlas, "A", rect, clip, color, { fontIndex: 99 } ),
 		/Missing retail UI font slot/
 	);
 });
 test("top-aligned title captions retain the native line box even in a short control", () => {
 	const box = [ 10, 20, 53, 15 ], style = { fontIndex: 2, hAlign: 0, vAlign: 0 };
-	const top = titleGlyphs( atlas, "ID", box, clip, color, style );
-	const center = titleGlyphs( atlas, "ID", box, clip, color, { ...style, vAlign: 1 } );
+	const top = glyphQuads( atlas, "ID", box, clip, color, style );
+	const center = glyphQuads( atlas, "ID", box, clip, color, { ...style, vAlign: 1 } );
 	assert.equal( top[0].rect[1] - center[0].rect[1], 1 );
 	assert.equal( top[0].rect[1], 20 + atlas.fonts["2"].ascent - atlas.fonts["2"].glyphs["73"].originY );
 	assert.deepEqual( top[0].clip, clip, "Native statics can extend into free space without cropping their line" );
@@ -87,16 +99,16 @@ test("top-aligned title captions retain the native line box even in a short cont
 test("control characters emit no quads and authored symbols resolve past the replacement glyph", () => {
 	// Shipped guide text carries literal newlines (UIIT_STT_GAMEGUIDE_START_2);
 	// drawing them through the '?' fallback invented visible glyphs.
-	const clean = titleGlyphs( atlas, "ABC", rect, clip, color, { vAlign: 0 } );
-	const mixed = titleGlyphs( atlas, "A\nB\tC\rD", rect, clip, color, { vAlign: 0 } );
+	const clean = glyphQuads( atlas, "ABC", rect, clip, color, { vAlign: 0 } );
+	const mixed = glyphQuads( atlas, "A\nB\tC\rD", rect, clip, color, { vAlign: 0 } );
 	assert.equal( mixed.length, 4 );
 	assert.deepEqual( mixed.slice( 0, 3 ).map( q => q.rect ), clean.map( q => q.rect ) );
 	const end = q => q.rect[0] + q.rect[2];
 	assert.equal(
 		end( mixed.at( -1 ) ),
-		end( titleGlyphs( atlas, "ABCD", rect, clip, color, { vAlign: 0 } ).at( -1 ) )
+		end( glyphQuads( atlas, "ABCD", rect, clip, color, { vAlign: 0 } ).at( -1 ) )
 	);
-	const mark = titleGlyphs( atlas, "※", rect, clip, color, { vAlign: 0 } );
+	const mark = glyphQuads( atlas, "※", rect, clip, color, { vAlign: 0 } );
 	assert.equal( mark.length, 1 );
 	const fallback = atlas.fonts["0"].glyphs["63"], drawn = atlas.fonts["0"].glyphs["8251"];
 	assert.ok( drawn && drawn.x !== fallback.x || drawn.y !== fallback.y, "U+203B resolves to its own atlas cell" );
@@ -132,7 +144,7 @@ test("single-line fitting prevents localized labels and long names invading adja
 				) {
 					for ( const width of [ 0, 1, 8, 9, 64, 202 ] ) {
 						const box = [ 34, 106, width, 19 ],
-							quads = titleGlyphs( effective, value, box, clip, color, {
+							quads = glyphQuads( effective, value, box, clip, color, {
 								fontIndex,
 								fontStyle,
 								hAlign,
@@ -161,7 +173,7 @@ test("single-line fitting prevents localized labels and long names invading adja
 });
 test("edit overflow preserves all input glyphs, alignment and clipping for caret ownership", () => {
 	const value = "12345678901234567890", box = [ 30, 20, 28, 14 ];
-	const quads = titleGlyphs( atlas, value, box, box, color, { hAlign: 2, overflow: "clip" } );
+	const quads = glyphQuads( atlas, value, box, box, color, { hAlign: 2, overflow: "clip" } );
 	assert.equal( readText( quads, atlas.fonts["0"] ), value );
 	assert.ok( quads[0].rect[0] < box[0] );
 	assert.deepEqual( quads[0].clip, box );
@@ -180,7 +192,7 @@ test("overflow prefixes agree with 350 bounded executions of native 782AC0", asy
 		// edge case too, tested separately; compare the common nonempty domain here.
 		if ( advance( row.value ) <= width || advance( row.value[0] ) > row.budget ) continue;
 		const effective = { ...atlas, fonts: { ...atlas.fonts, [row.fontIndex + ":2"]: font } };
-		const quads = titleGlyphs( effective, row.value, [ 0, 0, width, 20 ], clip, color, {
+		const quads = glyphQuads( effective, row.value, [ 0, 0, width, 20 ], clip, color, {
 			fontIndex: row.fontIndex,
 			fontStyle: row.fontStyle,
 			overflow: "ellipsis"
@@ -193,29 +205,35 @@ test("overflow prefixes agree with 350 bounded executions of native 782AC0", asy
 
 test("shared projection fits actual neighboring-column collisions, preserving native overflow into free space", () => {
 	const box = [ 34, 106, 64, 19 ],
-		native = titleGlyphs( atlas, "Retained number", box, clip, color, { hAlign: 1, vAlign: 0 } );
-	assert.equal( readText( resolveTextOverlaps( native ), atlas.fonts[0] ), "Retained number" );
-	const neighbor = titleGlyphs( atlas, "48", [ 105, 106, 41, 19 ], clip, color, { overflow: "clip", vAlign: 0 } );
+		native = titleText( atlas, "Retained number", box, clip, color, { hAlign: 1, vAlign: 0 } );
+	const read = quads => readText( expandTextRuns( quads ), atlas.fonts[0] );
+	assert.equal( read( resolveTextOverlaps( native ) ), "Retained number" );
+	const neighbor = titleText( atlas, "48", [ 105, 106, 41, 19 ], clip, color, { overflow: "clip", vAlign: 0 } );
 	const output = resolveTextOverlaps( [ ...native, ...neighbor ] );
-	assert.equal( readText( output, atlas.fonts[0] ), "Retained ...48" );
+	assert.equal( read( output ), "Retained ...48" );
 	assert.ok( output.every( q => !("textLayout" in q) ), "GPU scene carries no layout sidecars" );
-	assert.equal( readText( native, atlas.fonts[0] ), "Retained number", "retained source projection stays immutable" );
-	const far = titleGlyphs( atlas, "48", [ 150, 106, 41, 19 ], clip, color, { overflow: "clip", vAlign: 0 } );
-	assert.equal( readText( resolveTextOverlaps( [ ...native, ...far ] ), atlas.fonts[0] ), "Retained number48" );
-	const below = titleGlyphs( atlas, "48", [ 105, 150, 41, 19 ], clip, color, { overflow: "clip", vAlign: 0 } );
-	assert.equal( readText( resolveTextOverlaps( [ ...native, ...below ] ), atlas.fonts[0] ), "Retained number48" );
+	assert.equal( read( native ), "Retained number", "retained source projection stays immutable" );
+	const far = titleText( atlas, "48", [ 150, 106, 41, 19 ], clip, color, { overflow: "clip", vAlign: 0 } );
+	assert.equal( read( resolveTextOverlaps( [ ...native, ...far ] ) ), "Retained number48" );
+	const below = titleText( atlas, "48", [ 105, 150, 41, 19 ], clip, color, { overflow: "clip", vAlign: 0 } );
+	assert.equal( read( resolveTextOverlaps( [ ...native, ...below ] ) ), "Retained number48" );
 	// Native right-aligned captions and trailing denominations deliberately grow
 	// outside narrow alignment rectangles; fitting all boxes broke purchase UI.
 	for ( const [value, hAlign] of [ [ "Quantity", 2 ], [ "Gold", 0 ] ] ) {
-		const run = titleGlyphs( atlas, value, [ 80, 20, 12, 16 ], clip, color, { hAlign } );
-		assert.equal( readText( resolveTextOverlaps( run ), atlas.fonts[0] ), value );
+		const run = titleText( atlas, value, [ 80, 20, 12, 16 ], clip, color, { hAlign } );
+		assert.equal( read( resolveTextOverlaps( run ) ), value );
 	}
 	const faded = native.map( q => ({ ...q, color: [ 1, 1, 1, .25 ] }) );
 	const fitted = resolveTextOverlaps( [ ...faded, ...neighbor ] );
-	assert.ok( fitted.slice( 0, 12 ).every( q => q.color[3] === .25 ), "post-layout alpha survives fitting" );
+	assert.ok(
+		expandTextRuns( fitted ).slice( 0, 12 ).every( q => q.color[3] === .25 ),
+		"post-layout alpha survives fitting"
+	);
 	const anchored = native.map( q => ({ ...q, characterAnchor: 1 }) );
-	assert.equal(
-		readText( resolveTextOverlaps( [ ...anchored, ...neighbor ] ), atlas.fonts[0] ),
-		"Retained number48"
+	assert.equal( read( resolveTextOverlaps( [ ...anchored, ...neighbor ] ) ), "Retained number48" );
+	// Every layout belongs to a run; a loose glyph with a layout is a contract break.
+	assert.throws(
+		() => resolveTextOverlaps( expandTextRuns( native ) ),
+		/text layout without a text run/
 	);
 });

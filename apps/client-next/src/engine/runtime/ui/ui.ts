@@ -280,7 +280,8 @@ import {
 	worldMapPageAt,
 	worldMapPages,
 	worldMapPresentation,
-	type MapMarker
+	type MapMarker,
+	mapLabelVisible
 } from "@/engine/foundation/ui/world-map";
 import { experienceReadout, minimapCoordinates, minimapRotation } from "@/engine/foundation/ui/hud-readouts";
 import { tooltipBubble, hudTooltipKey } from "@/engine/foundation/ui/helper-bubble";
@@ -1283,11 +1284,6 @@ export function createUi(
 	}
 	/*
 	================
-	activate
-	================
-	*/
-	/*
-	================
 	cosCommandContext
 
 	What the command bar reads about the selected companion (6A1BE0).
@@ -1361,6 +1357,11 @@ export function createUi(
 				return;
 		}
 	}
+	/*
+	================
+	activate
+	================
+	*/
 	function activate( id: string ) {
 		if ( id.startsWith( "cos-status:" ) ) {
 			cosHud.select( Number( id.slice( 11 ) ) );
@@ -2768,11 +2769,6 @@ export function createUi(
 				null,
 		/*
 		================
-		stats
-		================
-		*/
-		/*
-		================
 		entryReady
 
 		Basic HUD and Help artwork must be decoded before releasing world entry.
@@ -2781,8 +2777,14 @@ export function createUi(
 		*/
 		entryReady() {
 			const main = hud.data(), guide = guideResources.data();
-			return !!main && !!guide && main.warmPaths.every( resources.has ) && guide.warmPaths.every( resources.has );
+			return !!main && !!guide && resources.residentAll( main.warmPaths ) &&
+				resources.residentAll( guide.warmPaths );
 		},
+		/*
+		================
+		stats
+		================
+		*/
 		stats: () => ({
 			...resources.stats(),
 			layoutRetention: {
@@ -2794,6 +2796,7 @@ export function createUi(
 			panel,
 			windowMissing,
 			windowReady: !([ "Academy Matching", "Game Guide", "Quests" ].includes( panel ) && !guideResources.data()),
+			hudSettling: hud.settling(),
 			error: diagnosticError
 		}),
 		/*
@@ -2803,6 +2806,14 @@ export function createUi(
 		*/
 		event( event: UiEvent ) {
 			if ( disposed ) return;
+			// An edit's normalized value (a clamped quantity, a filtered digit) can
+			// equal the value already published, so value comparison would publish
+			// nothing and the field would keep the raw keystrokes. Forget the last
+			// product: the next step republishes and the bridge reconciles the field.
+			if ( event.kind === "edit" ) {
+				lastProduct = null;
+				dirty = true;
+			}
 			// Ahead of every modal gate: an abandoned carry must always clear.
 			if ( event.kind === "drag-cancel" ) {
 				if ( carriedItem?.source === event.id ) carriedItem = null;
@@ -5358,12 +5369,7 @@ export function createUi(
 				label: string,
 				disabled = false
 			) {
-				const r = authoredRect( node, ox, oy ),
-					published = hud.data()?.warmPaths,
-					family = [ "", "_focus", "_press", "_disable" ].map( s => {
-						const path = node.texture.replace( ".png", s + ".png" );
-						return s && published && !published.includes( path ) ? node.texture : path;
-					} );
+				const r = authoredRect( node, ox, oy ), family = hud.buttonFamily( node.texture );
 				paths.push( ...family );
 				controls.push( { id, label, rect: r, kind: "button", disabled } );
 				blocks.push( r );
@@ -7049,10 +7055,13 @@ export function createUi(
 						...mapProjection.background,
 						...mapProjection.overlay,
 						...mapProjection.labels.flatMap( ( { label: entry, x, y, clip } ) => {
-							const width = text.run( entry.text, 0, entry.font ).width;
+							const width = text.run( entry.text, 0, entry.font ).width,
+								height = text.extentHeight( entry.font ),
+								left = x - Math.floor( width / 2 );
+							if ( !mapLabelVisible( [ left, y, width, height ], clip ) ) return [];
 							return text.quads(
 								entry.text,
-								[ x - Math.floor( width / 2 ), y, width, text.extentHeight( entry.font ) ],
+								[ left, y, width, height ],
 								clip,
 								entry.color,
 								{ fontIndex: entry.font, hAlign: 0, vAlign: 0 }
@@ -8550,7 +8559,9 @@ export function createUi(
 								(slot < 13 ? "Equipment slot " + slot : "Empty bag slot " + (slot - 13)),
 							rect: r,
 							kind: "button",
-							disabled: !enabled || !!game?.inventoryPending,
+							// 699359: a move while one is pending is dropped (highlights reset);
+							// native slots stay enabled, so hover and tooltips keep working.
+							disabled: !enabled,
 							selected: inventorySlot === slot,
 							rightActivate: !!item,
 							draggable: !!item,
@@ -8603,7 +8614,8 @@ export function createUi(
 						label: "Equip item",
 						kind: "button",
 						rect: [ ex + 2, ey + 15, 176, 318 ],
-						disabled: !!game?.inventoryPending
+						// 699359 drops moves while one is pending; the drop zone stays enabled.
+						disabled: false
 					} );
 					for (
 						const node of Object.values( equipment ).filter( n =>
@@ -8648,7 +8660,8 @@ export function createUi(
 								label: item?.name ?? "Avatar slot " + type,
 								rect: r,
 								kind: "button",
-								disabled: !!game?.inventoryPending,
+								// 699359 drops moves while one is pending; avatar slots stay enabled.
+								disabled: false,
 								rightActivate: !!item,
 								draggable: !!item,
 								carry: !!item
@@ -8934,8 +8947,7 @@ export function createUi(
 									candidates: catalog.slots[selectedMastery + ":" + group.row + ":" + col] ?? [],
 									training: learned,
 									masteries,
-									progression: game?.progression,
-									trainingPending: !!game?.trainingPending
+									progression: game?.progression
 								} ),
 								entry = slot.entry,
 								owned = slot.owned,
@@ -13747,6 +13759,8 @@ export function createUi(
 				return null;
 			}
 			gauges.end();
+			// Text runs travel to the renderer whole: the GPU packer writes one record
+			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
 			quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );

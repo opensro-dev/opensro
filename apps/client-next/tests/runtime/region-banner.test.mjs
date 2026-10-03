@@ -86,3 +86,23 @@ test("native region decoration shares text opacity, precedes glyphs and centers 
 		);
 	}
 });
+
+test("the 1.5x title scales its text runs: painted glyphs equal scaled glyph quads", async () => {
+	const { readFile } = await import( "node:fs/promises" );
+	const { decodeUiFont, titleText } = await load( "src/engine/foundation/rendering/ui-glyphs.ts" );
+	const { expandTextRuns } = await load( "src/engine/foundation/rendering/text-run.ts" );
+	const atlas = decodeUiFont(
+		JSON.parse( await readFile( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf8" ) )
+	);
+	const runs = ( ...args ) => titleText( atlas, ...args ), glyphs = ( ...args ) => expandTextRuns( runs( ...args ) );
+	for ( const width of [ 800, 1366, 1920 ] ) {
+		const value = regionBannerText( 3, codes, zones );
+		const painted = expandTextRuns( regionBannerQuads( value, 1, width, 900, runs, 23 ) ),
+			expected = regionBannerQuads( value, 1, width, 900, glyphs, 23 );
+		assert.ok( expected.length > 10 );
+		assert.deepEqual( painted, expected );
+		// The title glyphs really are 1.5x their font size.
+		const first = expected[0], glyph = atlas.fonts["4"].glyphs[String( "F".codePointAt( 0 ) )];
+		assert.equal( first.rect[2], glyph.width * 1.5 );
+	}
+});

@@ -77,8 +77,15 @@ import {
 	visibleFrustumBox,
 	terrainLod
 } from "@/engine/foundation/rendering/world-math";
-// Finish the ground before depth-writing objects blend against it. Asset names
-// cannot order these passes: even a zero-alpha native object writes depth.
+import { validPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
+/*
+================
+drawPhase
+
+Finish the ground before depth-writing objects blend against it. Asset names
+cannot order these passes: even a zero-alpha native object writes depth.
+================
+*/
 function drawPhase( { material }: WorldGroup ): number {
 	if ( material.sky ) return -1;
 	if ( material.lightmap ) return 2;
@@ -86,6 +93,86 @@ function drawPhase( { material }: WorldGroup ): number {
 	if ( material.objectFade ) return 3;
 	return material.blend ? 4 : 3;
 }
+
+// followInput's slots: target xyz, yaw, pitch, distance, height, mounted,
+// offset xy, collision distance.
+const FOLLOW_INPUT_LENGTH = 11;
+
+/*
+================
+imageDrawKey
+
+The imageDraws key of an upload's ordered frame paths. Paths never contain
+a newline, so a single path is its own key and a multi-frame key can never
+equal one.
+================
+*/
+function imageDrawKey( paths: readonly string[] ): string {
+	return paths.length === 1 ? paths[0]! : paths.join( "\n" );
+}
+
+/*
+================
+followInput
+
+Writes the inputs the follow-camera collision resolve depends on into out
+and reports whether they differ from what out held. An absent optional is
+NaN; NaN slots compare equal to NaN, so they never force a resolve.
+Replaces a JSON key built every frame.
+================
+*/
+function followInput(
+	target: readonly [number, number, number],
+	follow: NonNullable<WorldCamera["follow"]>,
+	distance: number | null,
+	out: Float64Array
+): boolean {
+	let changed = false;
+	/*
+	================
+	write
+	================
+	*/
+	function write( slot: number, value: number ) {
+		const old = out[slot]!;
+		if ( old !== value && !(old !== old && value !== value) ) changed = true;
+		out[slot] = value;
+	}
+	write( 0, target[0] );
+	write( 1, target[1] );
+	write( 2, target[2] );
+	write( 3, follow.yaw );
+	write( 4, follow.pitch );
+	write( 5, follow.distance );
+	write( 6, follow.height ?? NaN );
+	write( 7, follow.mounted === undefined ? NaN : follow.mounted ? 1 : 0 );
+	write( 8, follow.offset?.[0] ?? NaN );
+	write( 9, follow.offset?.[1] ?? NaN );
+	write( 10, distance ?? NaN );
+	return changed;
+}
+
+/*
+================
+objectFadeDistance
+
+The eye-to-placement distance SWorld_AdvanceObjectFade (0x8C4C60) is fed,
+computed as its caller does at 8B988F..8B98F0: each delta stored as a
+float, ( dy*dy + dx*dx ) + dz*dz stored as a float, then CRT_sqrt stored
+as a float. The client runs x87 at 53-bit precision, so doubles reproduce
+the intermediate sums.
+================
+*/
+function objectFadeDistance( eye: ArrayLike<number>, x: number, y: number, z: number ): number {
+	const dx = Math.fround( eye[0]! - x ), dy = Math.fround( eye[1]! - y ), dz = Math.fround( eye[2]! - z );
+	return Math.fround( Math.sqrt( Math.fround( dy * dy + dx * dx + dz * dz ) ) );
+}
+
+/*
+================
+createWorldRenderer
+================
+*/
 export function createWorldRenderer(
 	budget?: number,
 	readAlpha?: ( image: ImageBitmap ) => PickAlpha,
@@ -97,7 +184,11 @@ export function createWorldRenderer(
 	let decalState:
 		| { readonly pose: import("@/engine/contracts/gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; }
 		| null = null;
-	let decalDraw: GeometryDraw | null = null, decalKey = "", decalVertexCount = 0, decalSlot = -1;
+	let decalDraw: GeometryDraw | null = null, decalVertexCount = 0, decalSlot = -1;
+	// The point the retained decal geometry was built for; decalValid false
+	// forces a rebuild (new interaction cells, GPU loss).
+	let decalValid = false, decalBuiltSlot = -1;
+	const decalPoint: [number, number, number] = [ 0, 0, 0 ];
 	let decalImage: ImageDraw | null = null;
 	// Scene membership owns decal demand. indexPending refreshes it on admission,
 	// cancellation, commit, device recovery and disposal; camera and texture
@@ -106,6 +197,11 @@ export function createWorldRenderer(
 	const selectionPaths = () => selectionDemand;
 	let footprints: readonly import("@/engine/contracts/footprint").Footprint[] = [];
 	const footprintDraws = new Map<number, { draw: GeometryDraw; scene: WorldScene; image: ImageDraw; }>();
+	/*
+	================
+	prepareFootprints
+	================
+	*/
 	function prepareFootprints( geometry: GeometryCommands, textures: ImageCommands, seconds: number ): GeometryDraw[] {
 		const live = new Set( footprints.filter( p => seconds < p.started + 20 ).map( p => p.id ) );
 		for ( const [id, row] of footprintDraws ) {
@@ -122,11 +218,10 @@ export function createWorldRenderer(
 			if ( ((pose.regionId | current.originRegion) & 0x8000) && pose.regionId !== current.originRegion ) continue;
 			const path = footprintTextures()[footprint.surface === "SAND" ? 0 : 1], source = images.get( path )?.source;
 			if ( !source ) continue;
-			const key = JSON.stringify( [ path ] );
-			let image = imageDraws.get( key );
+			let image = imageDraws.get( path );
 			if ( !image ) {
 				image = textures.upload( source, [ source ], false );
-				imageDraws.set( key, image );
+				imageDraws.set( path, image );
 			}
 			let row = footprintDraws.get( footprint.id );
 			if ( row?.image !== image ) {
@@ -162,13 +257,23 @@ export function createWorldRenderer(
 		}
 		return result;
 	}
+	/*
+	================
+	updateInteractionCells
+	================
+	*/
 	function updateInteractionCells() {
 		if ( interactionScene !== current ) {
 			interactionScene = current;
 			interactionCells = terrainInteractionCells( current );
-			decalKey = "";
+			decalValid = false;
 		}
 	}
+	/*
+	================
+	prepareDecal
+	================
+	*/
 	function prepareDecal( geometry: GeometryCommands, textures: ImageCommands ): readonly GeometryDraw[] {
 		updateInteractionCells();
 		if ( !current || current.residency === "frontend" || !decalState ) return [];
@@ -176,22 +281,20 @@ export function createWorldRenderer(
 		if ( ((pose.regionId | current.originRegion) & 0x8000) && pose.regionId !== current.originRegion ) return [];
 		const path = selectionTextures()[slot]!, source = images.get( path )?.source;
 		if ( !source ) return [];
-		const point: [number, number, number] = [
-			pose.x + ((pose.regionId & 255) - (current.originRegion & 255)) * 1920,
-			pose.y,
-			pose.z + ((pose.regionId >>> 8) - (current.originRegion >>> 8)) * 1920
-		];
-		const key = JSON.stringify( [ slot, ...point ] );
-		if ( key === decalKey && decalDraw && decalImage === imageDraws.get( JSON.stringify( [ path ] ) ) ) {
-			return [ decalDraw ];
-		}
-		const data = selectionDecalGeometry( interactionCells, point );
+		const x = pose.x + ((pose.regionId & 255) - (current.originRegion & 255)) * 1920,
+			y = pose.y,
+			z = pose.z + ((pose.regionId >>> 8) - (current.originRegion >>> 8)) * 1920;
+		if (
+			decalValid && decalBuiltSlot === slot && decalPoint[0] === x && decalPoint[1] === y &&
+			decalPoint[2] === z &&
+			decalDraw && decalImage === imageDraws.get( path )
+		) return [ decalDraw ];
+		const data = selectionDecalGeometry( interactionCells, [ x, y, z ] );
 		if ( !data ) return [];
-		const imageKey = JSON.stringify( [ path ] );
-		let image = imageDraws.get( imageKey );
+		let image = imageDraws.get( path );
 		if ( !image ) {
 			image = textures.upload( source, [ source ], false );
-			imageDraws.set( imageKey, image );
+			imageDraws.set( path, image );
 		}
 		if ( decalDraw && decalVertexCount === data.positions.length && decalSlot === slot && decalImage === image ) {
 			geometry.updatePositions( decalDraw, data.positions, undefined, data.uvs );
@@ -202,7 +305,11 @@ export function createWorldRenderer(
 			decalSlot = slot;
 		}
 		decalImage = image;
-		decalKey = key;
+		decalValid = true;
+		decalBuiltSlot = slot;
+		decalPoint[0] = x;
+		decalPoint[1] = y;
+		decalPoint[2] = z;
 		return [ decalDraw ];
 	}
 
@@ -221,7 +328,10 @@ export function createWorldRenderer(
 	let collisionScene: WorldScene | null = null,
 		collisionParts: ReturnType<typeof cameraCollisionParts> = [],
 		collisionDistance: number | null = null;
-	let collisionKey = "", collisionCamera: WorldCamera | null = null;
+	let collisionCamera: WorldCamera | null = null;
+	// The inputs the retained collisionCamera was resolved for (followInput).
+	const collisionInput = new Float64Array( FOLLOW_INPUT_LENGTH );
+	let collisionInputValid = false;
 	let current: WorldScene | null = null,
 		pending: WorldScene | null = null,
 		camera: WorldCamera = {
@@ -233,8 +343,15 @@ export function createWorldRenderer(
 		};
 	const images = new Map<string, { source: import("@/engine/contracts/texture").WorldTexture; }>(),
 		draws = new Map<WorldGroup, GeometryDraw>();
-	// Decoded pixels are shared by path; GPU arrays are shared by their ordered layers.
+	// Decoded pixels are shared by path; GPU arrays are shared by their ordered
+	// layers, keyed by imageDrawKey. A single path is its own key, so the
+	// per-frame lookups (footprints, decal, flares, weather) allocate nothing.
 	const imageDraws = new Map<string, ImageDraw>();
+	/*
+	================
+	texturePaths
+	================
+	*/
 	function texturePaths( group: WorldGroup ): readonly string[] {
 		return group.material.frames ?? (group.material.texture ? [ group.material.texture ] : []);
 	}
@@ -245,6 +362,11 @@ export function createWorldRenderer(
 	let pendingGroupCount = 0;
 	let collisionPreparation: ReturnType<typeof prepareCameraCollisionParts> | null = null,
 		preparedCollision: ReturnType<typeof cameraCollisionParts> | null = null;
+	/*
+	================
+	indexPending
+	================
+	*/
 	function indexPending() {
 		selectionDemand = [ current, pending ].some( scene =>
 				scene && scene.residency !== "frontend" &&
@@ -318,7 +440,18 @@ export function createWorldRenderer(
 	// when a group's selection does, so the map is rebuilt on that change, not
 	// every frame (it was the largest self cost of the frame).
 	type ShadowSurfaces = Map<string, import("@/engine/foundation/rendering/character-shadow").ShadowTerrainSurface[]>;
+	// Receivers by shadow key, kept only while a shadow uses them this frame.
+	const shadowReceivers = new Map<string, {
+		readonly cells: ReturnType<typeof terrainInteractionCells>;
+		readonly surfaces: ShadowSurfaces;
+		readonly receiver: ReturnType<typeof characterShadowReceiver>;
+	}>();
 	let shadowSurfaces: ShadowSurfaces = new Map(), shadowSurfaceInputs: readonly unknown[] = [];
+	/*
+	================
+	terrainShadowSurfaces
+	================
+	*/
 	function terrainShadowSurfaces(): ShadowSurfaces {
 		const inputs: unknown[] = [ orderedGroups ];
 		for ( const group of orderedGroups ) {
@@ -348,6 +481,11 @@ export function createWorldRenderer(
 		return surfaces;
 	}
 	let previousVisible = new Set<WorldGroup>(), previousTriangles = new Map<WorldGroup, number>();
+	/*
+	================
+	compareGroups
+	================
+	*/
 	function compareGroups( a: WorldGroup, b: WorldGroup ): number {
 		const layerA = drawPhase( a ), layerB = drawPhase( b );
 		if ( layerA !== layerB ) return layerA - layerB;
@@ -384,6 +522,11 @@ export function createWorldRenderer(
 	}[] = [];
 	let textureMotions: { group: WorldGroup; motion: ReturnType<typeof createTextureMotion>; draw?: GeometryDraw; }[] =
 		[];
+	/*
+	================
+	resetAnimations
+	================
+	*/
 	function resetAnimations( scene?: WorldScene, retainTextureMotion = false ) {
 		if ( !retainTextureMotion ) {
 			const old = new Map( materialTimelines.map( r => [ r.group.id, r ] ) );
@@ -424,6 +567,11 @@ export function createWorldRenderer(
 			animationKeys.set( group, JSON.stringify( [ group.animation!.model, group.animation!.clip ] ) );
 		}
 	}
+	/*
+	================
+	evaluateAnimations
+	================
+	*/
 	function evaluateAnimations( seconds: number, groups: readonly WorldGroup[] = activeAnimated ) {
 		const palettes = new Set<Float32Array>();
 		for ( const group of groups ) {
@@ -446,6 +594,11 @@ export function createWorldRenderer(
 		}
 		return palettes;
 	}
+	/*
+	================
+	animate
+	================
+	*/
 	function animate( geometry: GeometryCommands, seconds: number, force = false ) {
 		for ( const row of materialTimelines ) {
 			const changed = row.clock.step( seconds ), draw = draws.get( row.group );
@@ -473,12 +626,22 @@ export function createWorldRenderer(
 	let lastView: Float32Array | null = null, lastEye: WorldCamera["eye"] | null = null;
 	const sizes = new Map<WorldScene, number>();
 	let imageBytes = 0, disposed = false;
+	/*
+	================
+	capacity
+	================
+	*/
 	function capacity( scene?: WorldScene | null ) {
 		return budget ??
 			(scene?.residency === "frontend" || current?.residency === "frontend" || pending?.residency === "frontend" ?
 				FRONTEND_RESIDENCY_BYTES :
 				WORLD_RESIDENCY_BYTES);
 	}
+	/*
+	================
+	retainedBytes
+	================
+	*/
 	function retainedBytes() {
 		let bytes = imageBytes;
 		for ( const size of sizes.values() ) bytes += size;
@@ -487,6 +650,11 @@ export function createWorldRenderer(
 	let terrainEnd = 0, transparentStart = 0;
 	let selected: GeometryDraw[] = [], rebuilds = 0, triangles = 0;
 	let prune = false;
+	/*
+	================
+	collectUnused
+	================
+	*/
 	function collectUnused( textures: ImageCommands ) {
 		const groups = [ ...(current?.groups ?? []), ...(pending?.groups ?? []) ];
 		const flarePaths = [
@@ -496,8 +664,8 @@ export function createWorldRenderer(
 			...selectionPaths()
 		];
 		const usedDraws = new Set( [
-			...groups.map( group => JSON.stringify( texturePaths( group ) ) ),
-			...flarePaths.map( path => JSON.stringify( [ path ] ) )
+			...groups.map( group => imageDrawKey( texturePaths( group ) ) ),
+			...flarePaths
 		] );
 		for ( const [key, draw] of imageDraws ) {
 			if ( !usedDraws.has( key ) ) {
@@ -515,6 +683,11 @@ export function createWorldRenderer(
 		}
 		prune = false;
 	}
+	/*
+	================
+	release
+	================
+	*/
 	function release( scene: WorldScene | null, geometry: GeometryCommands ) {
 		for ( const group of scene?.groups ?? [] ) {
 			const draw = draws.get( group );
@@ -524,10 +697,20 @@ export function createWorldRenderer(
 		}
 		if ( scene ) sizes.delete( scene );
 	}
+	/*
+	================
+	weatherGround
+	================
+	*/
 	function weatherGround( x: number, y: number, z: number ) {
 		const distance = pick( { start: [ x, y, z ], delta: [ 0, -1, 0 ] }, 1e6, true );
 		return distance === null ? null : y - distance;
 	}
+	/*
+	================
+	pick
+	================
+	*/
 	function pick( ray: PickRay, limit: number, excludeWater = false, terrainOnly = false, occlusionOnly = false ) {
 		let nearest = limit;
 		for ( const group of pickGroups ) {
@@ -587,9 +770,19 @@ export function createWorldRenderer(
 		return nearest < limit ? nearest : null;
 	}
 	return {
+		/*
+		================
+		profile
+		================
+		*/
 		profile( value: import("@/engine/contracts/runtime").RenderFrameProbe | undefined ) {
 			probe = value;
 		},
+		/*
+		================
+		night
+		================
+		*/
 		night() {
 			if ( !current ) return false;
 			const time = environmentTime(
@@ -613,24 +806,44 @@ export function createWorldRenderer(
 			if ( candidates.some( c => c.blobSize !== undefined ) ) {
 				const source = images.get( BLOB_SHADOW_TEXTURE )?.source;
 				if ( source ) {
-					const key = JSON.stringify( [ BLOB_SHADOW_TEXTURE ] );
-					image = imageDraws.get( key );
+					image = imageDraws.get( BLOB_SHADOW_TEXTURE );
 					if ( !image ) {
 						image = textures.upload( source, [ source ], false );
-						imageDraws.set( key, image );
+						imageDraws.set( BLOB_SHADOW_TEXTURE, image );
 					}
 				}
 			}
 			const surfaces = terrainShadowSurfaces();
+			// A receiver depends only on the shadow's point and size, the blob
+			// size and the terrain. A still character reuses last frame's mesh.
+			const used = new Set<string>();
 			const requests = candidates.flatMap( c => {
 				if ( c.blobSize !== undefined && !image ) return [];
-				const receiver = characterShadowReceiver( interactionCells, c.projection, c.blobSize, surfaces );
+				const point = c.projection.point,
+					key = `${c.blobSize ?? ""}:${c.projection.size}:${point[0]}:${point[1]}:${point[2]}`;
+				used.add( key );
+				let cached = shadowReceivers.get( key );
+				if ( !cached || cached.cells !== interactionCells || cached.surfaces !== surfaces ) {
+					cached = {
+						cells: interactionCells,
+						surfaces,
+						receiver: characterShadowReceiver( interactionCells, c.projection, c.blobSize, surfaces )
+					};
+					shadowReceivers.set( key, cached );
+				}
+				const receiver = cached.receiver;
 				return receiver ?
 					[ { matrix: c.projection.matrix, receiver, parts: c.parts, blob: c.blobSize !== undefined } ] :
 					[];
 			} );
+			for ( const key of shadowReceivers.keys() ) if ( !used.has( key ) ) shadowReceivers.delete( key );
 			return geometry.characterShadows?.( requests, image ) ?? [];
 		},
+		/*
+		================
+		scenery
+		================
+		*/
 		scenery() {
 			if ( !current?.scenery?.length ) return null;
 			const time = environmentTime(
@@ -646,6 +859,11 @@ export function createWorldRenderer(
 				night: time < .25 || time > .75
 			};
 		},
+		/*
+		================
+		pickInterface
+		================
+		*/
 		pickInterface( ray: PickRay ) {
 			for ( const id of [ 2, 3 ] ) {
 				for ( const group of pickGroups ) {
@@ -656,6 +874,11 @@ export function createWorldRenderer(
 			}
 			return null;
 		},
+		/*
+		================
+		interfaceCenters
+		================
+		*/
 		interfaceCenters() {
 			return [ 2, 3 ].map( id => {
 				const groups = pickGroups.filter( group => group.id.startsWith( "interface:" + id + ":" ) );
@@ -676,26 +899,61 @@ export function createWorldRenderer(
 			} );
 		},
 		pick,
+		/*
+		================
+		occludes
+		================
+		*/
 		occludes( ray: PickRay, limit: number ) {
 			return pick( ray, limit, false, false, true ) !== null;
 		},
+		/*
+		================
+		pickGround
+		================
+		*/
 		pickGround( ray: PickRay ) {
 			updateInteractionCells();
 			return pickTerrainCells( interactionCells, ray );
 		},
+		/*
+		================
+		footprints
+		================
+		*/
 		footprints( value: readonly import("@/engine/contracts/footprint").Footprint[] ) {
 			footprints = value;
 		},
+		/*
+		================
+		selectionDecal
+		================
+		*/
 		selectionDecal( value: typeof decalState ) {
 			decalState = value ? { pose: { ...value.pose }, slot: value.slot } : null;
 		},
+		/*
+		================
+		weather
+		================
+		*/
 		weather( value: import("@/engine/foundation/gameplay/weather").WeatherOptions | null ) {
 			weatherOptions = value;
 			weather.set( value );
 		},
+		/*
+		================
+		clock
+		================
+		*/
 		clock( value: { timeOfDay: number; lunarDay: number; } | null ) {
 			clock = value ? { ...value } : null;
 		},
+		/*
+		================
+		cancelPending
+		================
+		*/
 		cancelPending() {
 			if ( disposed ) return;
 			if ( pending ) retired.push( pending );
@@ -703,6 +961,11 @@ export function createWorldRenderer(
 			indexPending();
 			prune = true;
 		},
+		/*
+		================
+		adopt
+		================
+		*/
 		adopt( lease: WorldSceneLease, detail?: WorldScene["terrainDetail"] ) {
 			if ( disposed ) throw new Error( "World renderer disposed" );
 			if ( detail !== undefined && detail !== "full" && detail !== "distance" ) {
@@ -746,6 +1009,11 @@ export function createWorldRenderer(
 			pending = replacement;
 			indexPending();
 		},
+		/*
+		================
+		scene
+		================
+		*/
 		scene( scene: WorldScene | null ) {
 			if ( !scene ) {
 				environmentState = null;
@@ -778,6 +1046,11 @@ export function createWorldRenderer(
 			pending = replacement;
 			indexPending();
 		},
+		/*
+		================
+		camera
+		================
+		*/
 		camera( value: WorldCamera ) {
 			if ( value.dungeonBlock !== camera.dungeonBlock ) lastView = null;
 			camera = {
@@ -787,6 +1060,11 @@ export function createWorldRenderer(
 				target: [ ...value.target ]
 			};
 		},
+		/*
+		================
+		neededTextures
+		================
+		*/
 		neededTextures() {
 			return [
 				...new Set( [
@@ -795,7 +1073,11 @@ export function createWorldRenderer(
 				] )
 			];
 		},
-		texture( path: string, image: import("@/engine/contracts/texture").WorldTexture ) {
+		texture(
+			path: string,
+			image: import("@/engine/contracts/texture").WorldTexture,
+			alpha?: PickAlpha
+		) {
 			if ( disposed ) {
 				if ( !("kind" in image) ) image.close();
 				throw new Error( "World renderer disposed" );
@@ -811,6 +1093,10 @@ export function createWorldRenderer(
 			}
 			imageBytes += bytes;
 			images.set( path, { source: image } );
+			// A mask decoded with the texture spares the main-thread readback.
+			if ( !("kind" in image) && validPickAlpha( alpha, image.width, image.height ) ) {
+				alphaMasks.set( image, alpha );
+			}
 			missingTextures.delete( path );
 			for ( const group of textureWaiters.get( path ) ?? [] ) {
 				const count = groupWaits.get( group )! - 1;
@@ -872,7 +1158,7 @@ export function createWorldRenderer(
 							}
 						}
 					}
-					const key = JSON.stringify( paths );
+					const key = imageDrawKey( paths );
 					let imageDraw = imageDraws.get( key );
 					if ( paths.length && !imageDraw ) {
 						const frames = paths.map( path => images.get( path )!.source );
@@ -898,7 +1184,7 @@ export function createWorldRenderer(
 					if ( preparedCollision ) {
 						collisionScene = current;
 						collisionParts = preparedCollision;
-						collisionKey = "";
+						collisionInputValid = false;
 						collisionCamera = null;
 						if ( !current.groups.length ) collisionDistance = null;
 					}
@@ -950,7 +1236,7 @@ export function createWorldRenderer(
 				if ( collisionScene !== current ) {
 					collisionScene = current;
 					collisionParts = cameraCollisionParts( current );
-					collisionKey = "";
+					collisionInputValid = false;
 					collisionCamera = null;
 					if ( !current.groups.length ) collisionDistance = null;
 				}
@@ -964,22 +1250,26 @@ export function createWorldRenderer(
 				// A visible draw can update its palette after the previous camera query.
 				// Refresh ray candidates against current palettes, including that case.
 				refitAnimatedCameraParts( candidates );
-				if ( changed.size ) collisionKey = "";
+				if ( changed.size ) collisionInputValid = false;
 			}
 			if ( camera.follow ) {
-				const key = JSON.stringify( [ localCamera.target, camera.follow, collisionDistance ] );
-				if ( key !== collisionKey ) {
+				if (
+					followInput( localCamera.target, camera.follow, collisionDistance, collisionInput ) ||
+					!collisionInputValid
+				) {
 					const result = resolveFollowCamera( localCamera, collisionParts, collisionDistance );
 					collisionCamera = result.camera;
 					collisionDistance = result.collision;
-					collisionKey = key;
+					// The recorded inputs carry the pre-resolve distance: a resolve that
+					// moves it resolves once more next frame, as the string key did.
+					collisionInputValid = true;
 				}
 				localCamera = { ...localCamera, eye: collisionCamera!.eye, target: collisionCamera!.target };
 			} else {
 				collisionScene = null;
 				collisionParts = [];
 				collisionDistance = null;
-				collisionKey = "";
+				collisionInputValid = false;
 				collisionCamera = null;
 			}
 			probe?.worldMark?.( "world-camera" );
@@ -1035,11 +1325,10 @@ export function createWorldRenderer(
 				{
 					uniforms: flareFrame,
 					textures: current!.flareTextures!.map( path => {
-						const key = JSON.stringify( [ path ] );
-						let draw = imageDraws.get( key );
+						let draw = imageDraws.get( path );
 						if ( !draw ) {
 							draw = textures.upload( images.get( path )!.source );
-							imageDraws.set( key, draw );
+							imageDraws.set( path, draw );
 						}
 						return draw;
 					} )
@@ -1054,11 +1343,10 @@ export function createWorldRenderer(
 			for ( const path of weather.paths() ) {
 				const image = images.get( path );
 				if ( !image ) continue;
-				const key = JSON.stringify( [ path ] );
-				let draw = imageDraws.get( key );
+				let draw = imageDraws.get( path );
 				if ( !draw ) {
 					draw = textures.upload( image.source );
-					imageDraws.set( key, draw );
+					imageDraws.set( path, draw );
 				}
 				weatherImages.set( path, draw );
 			}
@@ -1331,12 +1619,11 @@ export function createWorldRenderer(
 									(state.state === 0 || state.state === 2)
 								) state.lastFrame = fadeFrame;
 								else {
-									const distance = Math.fround(
-										Math.hypot(
-											source[i + 12]! - localCamera.eye[0],
-											source[i + 13]! - localCamera.eye[1],
-											source[i + 14]! - localCamera.eye[2]
-										)
+									const distance = objectFadeDistance(
+										localCamera.eye,
+										source[i + 12]!,
+										source[i + 13]!,
+										source[i + 14]!
 									);
 									state = advanceObjectFade(
 										state,
@@ -1438,18 +1725,19 @@ export function createWorldRenderer(
 			transparentStart = ordered.findIndex( group => drawPhase( group ) === 4 );
 			if ( transparentStart < 0 ) transparentStart = ordered.length;
 			const transparent = ordered.splice( transparentStart );
-			transparent.sort( ( a, b ) =>
-				Math.hypot(
-					b.center[0] - localCamera.eye[0],
-					b.center[1] - localCamera.eye[1],
-					b.center[2] - localCamera.eye[2]
-				) -
-				Math.hypot(
-					a.center[0] - localCamera.eye[0],
-					a.center[1] - localCamera.eye[1],
-					a.center[2] - localCamera.eye[2]
-				)
-			);
+			// Far to near. Each group's distance is taken once, not per comparison.
+			const depth = new Map<WorldGroup, number>();
+			for ( const group of transparent ) {
+				depth.set(
+					group,
+					Math.hypot(
+						group.center[0] - localCamera.eye[0],
+						group.center[1] - localCamera.eye[1],
+						group.center[2] - localCamera.eye[2]
+					)
+				);
+			}
+			transparent.sort( ( a, b ) => depth.get( b )! - depth.get( a )! );
 			ordered.push( ...transparent );
 			pickGroups = ordered;
 			// Upload gives every admitted group a unique resource handle. Its identity
@@ -1482,11 +1770,16 @@ export function createWorldRenderer(
 				originRegion: current?.originRegion ?? 0
 			};
 		},
+		/*
+		================
+		invalidate
+		================
+		*/
 		invalidate() {
 			footprintDraws.clear();
 			decalImage = null;
 			decalDraw = null;
-			decalKey = "";
+			decalValid = false;
 			interactionScene = null;
 			interactionCells.clear();
 			weather.invalidate();
@@ -1511,6 +1804,11 @@ export function createWorldRenderer(
 			triangles = 0;
 			indexPending();
 		},
+		/*
+		================
+		stats
+		================
+		*/
 		stats(): WorldRenderStats {
 			return {
 				sceneId: current?.id ?? null,
@@ -1522,6 +1820,11 @@ export function createWorldRenderer(
 				bundleRebuilds: rebuilds
 			};
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose( geometry: GeometryCommands | null, textures: ImageCommands | null ) {
 			if ( disposed ) return;
 			disposed = true;

@@ -31,7 +31,9 @@ test("unrequested cyclic overrides cannot abort admission; requested cycles stil
 });
 
 test("complete published skill table admits and requested roots match uncached traversal", async () => {
-	const data = JSON.parse( await readFile( "../../.generated/client-public/assets/data/skillData.json", "utf8" ) );
+	const data = JSON.parse(
+		await readFile( "../../.generated/client-public/assets/data/skillAudioData.json", "utf8" )
+	);
 	const rows = data.skillAudioRows,
 		lookup = skillSoundRoots( rows ),
 		records = new Map( rows.map( row => {

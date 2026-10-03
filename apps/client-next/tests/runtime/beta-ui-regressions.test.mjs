@@ -16,6 +16,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 
 const { createUi } = await import( "../../src/engine/runtime/ui/ui.ts" );
+const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
 const WARM_FRAMES = 24;
 const FRAME_MS = 100;
@@ -101,12 +102,12 @@ function createFixture() {
 		{
 			available: () => 8,
 			/*
-================
-request
+			================
+			request
 
-Missing optional assets complete as errors instead of leaving a request live.
-================
-		*/
+			Missing optional assets complete as errors instead of leaving a request live.
+			================
+			*/
 			request( url ) {
 				const id = ++requestId, path = decodeURIComponent( new URL( url ).pathname );
 				try {
@@ -119,12 +120,12 @@ Missing optional assets complete as errors instead of leaving a request live.
 								width: bytes.readUInt32BE( 16 ),
 								height: bytes.readUInt32BE( 20 ),
 								/*
-================
-close
+								================
+								close
 
-The fixture owns metadata only; no browser bitmap needs releasing.
-================
-						*/
+								The fixture owns metadata only; no browser bitmap needs releasing.
+								================
+								*/
 								close() {}
 							}
 						} );
@@ -135,12 +136,12 @@ The fixture owns metadata only; no browser bitmap needs releasing.
 				return id;
 			},
 			/*
-================
-take
+			================
+			take
 
-Each completion transfers once to its requesting resource owner.
-================
-		*/
+			Each completion transfers once to its requesting resource owner.
+			================
+			*/
 			take( id ) {
 				const result = pending.get( id ) ?? null;
 				pending.delete( id );
@@ -151,30 +152,31 @@ Each completion transfers once to its requesting resource owner.
 			}
 		},
 		command => commands.push( command ),
+		// Recorded as drawn: text runs expanded into their glyph quads (text-run.ts).
 		next => {
-			scene = next;
+			scene = next && { ...next, quads: expandTextRuns( next.quads ) };
 		},
 		() => {},
 		"https://fixture.invalid/",
 		"https://fixture.invalid/"
 	);
 	/*
-================
-step
+	================
+	step
 
-Advance enough frames to finish dependent retail resource requests.
-================
+	Advance enough frames to finish dependent retail resource requests.
+	================
 	*/
 	function step() {
 		for ( let i = 0; i < WARM_FRAMES; i++ ) semantics = ui.step( view, frame++ * FRAME_MS ) ?? semantics;
 		return semantics;
 	}
 	/*
-================
-setGame
+	================
+	setGame
 
-Publish a new immutable gameplay snapshot, as the simulation worker does.
-================
+	Publish a new immutable gameplay snapshot, as the simulation worker does.
+	================
 	*/
 	/** @param {Partial<import('../../src/engine/contracts/gameplay').GameplayState>} patch */
 	function setGame( patch ) {
@@ -183,11 +185,11 @@ Publish a new immutable gameplay snapshot, as the simulation worker does.
 		return step();
 	}
 	/*
-================
-setEntities
+	================
+	setEntities
 
-Replace the visible entity snapshot without inventing UI-private name state.
-================
+	Replace the visible entity snapshot without inventing UI-private name state.
+	================
 	*/
 	/** @param {import('../../src/engine/contracts/world').EntityState[]} entities */
 	function setEntities( entities ) {

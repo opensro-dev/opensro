@@ -63,12 +63,14 @@ test("every partition of four simulation frames reproduces a delayed first draw,
 		emitter( { frames: 3, program: { vectors: [ vector( "SetVelocity", [ 2, 0, 0 ] ) ] } } ),
 		emitter( { parent: 0, births: [ 2 ], frames: 8 } )
 	];
+	// The graph's scratch is working storage, not state: compare the rest.
+	const graphState = ( { scratch, ...state } ) => state;
 	const expected = run( graph, [ .2 ] );
 	for ( let mask = 0; mask < 16; mask++ ) {
 		const times = [];
 		for ( let n = 0; n < 4; n++ ) if ( mask & (1 << n) ) times.push( n / 20 );
 		times.push( .2 );
-		assert.deepEqual( run( graph, times ), expected );
+		assert.deepEqual( graphState( run( graph, times ) ), graphState( expected ) );
 	}
 	assert.equal( expected.elements[1][0].state.position[0], 10 );
 });

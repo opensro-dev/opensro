@@ -39,7 +39,10 @@ function fixture() {
 		"/assets/char/roster.json": { models: [ { refObjId: 1, codename: "HERO" } ] },
 		"/assets/npc/manifest.json": { models: { auxiliary: { codename: "res/auxiliary.bsr" } } },
 		"/assets/anim/manifest.json": { models: { HERO: { soundProfileName: "PCM" } } },
-		"/assets/data/skillData.json": { skillAudioRows: [ "2\t0\tBASIC_01\tBASIC", "3\t2\tCHILD\tCHILD" ] },
+		"/assets/data/skillAudioData.json": {
+			format: "sro-skill-audio",
+			skillAudioRows: [ "2\t0\tBASIC_01\tBASIC", "3\t2\tCHILD\tCHILD" ]
+		},
 		"/assets/skill/effectRecords.json": { 3: { stages: [ { sound: SPELL } ] } }
 	};
 	const calls = [], pending = new Map();
@@ -51,6 +54,11 @@ function fixture() {
 		install() {},
 		dispose() {},
 		available: () => 4 - pending.size,
+		/*
+		================
+		request
+		================
+		*/
 		request( url, limit = 16 << 20, decode ) {
 			assert.ok( limit <= assetRequestBudget( decode ), "request must fit the production decoder budget" );
 			const path = new URL( url ).pathname;
@@ -58,6 +66,11 @@ function fixture() {
 			pending.set( ++next, path );
 			return next;
 		},
+		/*
+		================
+		take
+		================
+		*/
 		take( id ) {
 			const path = pending.get( id );
 			if ( !path ) return null;
@@ -71,6 +84,11 @@ function fixture() {
 					new ArrayBuffer( 4 )
 			};
 		},
+		/*
+		================
+		cancel
+		================
+		*/
 		cancel( id ) {
 			pending.delete( id );
 		}
@@ -169,66 +187,76 @@ function installAudioContext( t, decodes, started ) {
 	const previous = globalThis.AudioContext;
 	const node = () => ({ connect() {}, disconnect() {} });
 	/*
-================
-Context
-================
+	================
+	Context
+	================
 	*/
 	class Context {
 		state = "running";
 		destination = {};
 		listener = { positionX: {}, positionY: {}, positionZ: {} };
 		/*
-================
-resume
-================
+		================
+		resume
+		================
 		*/
 		resume() {
 			return Promise.resolve();
 		}
 		/*
-================
-close
-================
+		================
+		close
+		================
 		*/
 		close() {
 			return Promise.resolve();
 		}
 		/*
-================
-decodeAudioData
-================
+		================
+		decodeAudioData
+		================
 		*/
 		decodeAudioData() {
 			return new Promise( resolve => decodes.push( resolve ) );
 		}
 		/*
-================
-createGain
-================
+		================
+		createGain
+		================
 		*/
 		createGain() {
 			return { ...node(), gain: {} };
 		}
 		/*
-================
-createPanner
-================
+		================
+		createPanner
+		================
 		*/
 		createPanner() {
 			return { ...node(), positionX: {}, positionY: {}, positionZ: {} };
 		}
 		/*
-================
-createBufferSource
-================
+		================
+		createBufferSource
+		================
 		*/
 		createBufferSource() {
 			return {
 				...node(),
 				onended: () => {},
+				/*
+				================
+				start
+				================
+				*/
 				start() {
 					started.push( this );
 				},
+				/*
+				================
+				stop
+				================
+				*/
 				stop() {
 					this.onended?.();
 				}

@@ -140,17 +140,18 @@ colorPalette
 
 BC1's endpoint order selects transparent black. BC2 and BC3 always use four
 opaque RGB colors; their independent alpha block supplies transparency.
+Writes into the caller's palette: this runs once per 4x4 block.
 ================
 */
-function colorPalette( data: DataView, offset: number, transparent: boolean ): Uint8Array {
+function colorPalette( data: DataView, offset: number, transparent: boolean, palette: Uint8Array ): Uint8Array {
 	const first = data.getUint16( offset, true ), second = data.getUint16( offset + 2, true );
-	const palette = new Uint8Array( BLOCK_SIDE * CHANNELS );
-	for ( const [index, value] of [ first, second ].entries() ) {
+	for ( let index = 0; index < 2; index++ ) {
+		const value = index === 0 ? first : second, at = index * CHANNELS;
 		const red = value >> 11, green = (value >> 5) & 63, blue = value & 31;
-		palette.set(
-			[ (red << 3) | (red >> 2), (green << 2) | (green >> 4), (blue << 3) | (blue >> 2), 255 ],
-			index * CHANNELS
-		);
+		palette[at] = (red << 3) | (red >> 2);
+		palette[at + 1] = (green << 2) | (green >> 4);
+		palette[at + 2] = (blue << 3) | (blue >> 2);
+		palette[at + 3] = 255;
 	}
 	const threeColors = transparent && first <= second;
 	for ( let channel = 0; channel < 3; channel++ ) {
@@ -228,23 +229,34 @@ export function decodeNativeSurface( surface: {
 	const result = new Uint8Array( width * height * CHANNELS );
 	if ( format === "bgra8unorm" ) {
 		for ( let pixel = 0; pixel < result.length; pixel += CHANNELS ) {
-			result.set( [ bytes[pixel + 2]!, bytes[pixel + 1]!, bytes[pixel]!, bytes[pixel + 3]! ], pixel );
+			const blue = bytes[pixel]!;
+			result[pixel] = bytes[pixel + 2]!;
+			result[pixel + 1] = bytes[pixel + 1]!;
+			result[pixel + 2] = blue;
+			result[pixel + 3] = bytes[pixel + 3]!;
 		}
 		return result;
 	}
 	const blockBytes = nativeTextureBlockBytes( format ), columns = Math.ceil( width / BLOCK_SIDE );
 	const data = new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength );
+	// One palette for the surface: a per-block array and a per-pixel subarray
+	// view were the asset worker's largest garbage while decoding regions.
+	const scratch = new Uint8Array( BLOCK_SIDE * CHANNELS );
 	for ( let y = 0; y < height; y += BLOCK_SIDE ) {
 		for ( let x = 0; x < width; x += BLOCK_SIDE ) {
 			const offset = ((y / BLOCK_SIDE) * columns + x / BLOCK_SIDE) * blockBytes;
 			const colors = offset + (format === "bc1-rgba-unorm" ? 0 : COLOR_BLOCK_BYTES);
-			const palette = colorPalette( data, colors, format === "bc1-rgba-unorm" );
+			const palette = colorPalette( data, colors, format === "bc1-rgba-unorm", scratch );
 			const selectors = data.getUint32( colors + CHANNELS, true );
 			for ( let py = 0; py < BLOCK_SIDE && y + py < height; py++ ) {
 				for ( let px = 0; px < BLOCK_SIDE && x + px < width; px++ ) {
 					const pixel = py * BLOCK_SIDE + px, selector = (selectors >>> (pixel * 2)) & 3;
 					const target = ((y + py) * width + x + px) * CHANNELS;
-					result.set( palette.subarray( selector * CHANNELS, (selector + 1) * CHANNELS ), target );
+					const from = selector * CHANNELS;
+					result[target] = palette[from]!;
+					result[target + 1] = palette[from + 1]!;
+					result[target + 2] = palette[from + 2]!;
+					result[target + 3] = palette[from + 3]!;
 					if ( format === "bc2-rgba-unorm" ) {
 						result[target + 3] = ((bytes[offset + Math.floor( pixel / 2 )]! >>> ((pixel % 2) * 4)) & 15) *
 							17;

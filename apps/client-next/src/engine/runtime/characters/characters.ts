@@ -58,7 +58,6 @@ import {
 import { advanceBodyShape, bodyVolumeIndex, type BodyShapeBlend } from "@/engine/foundation/animation/body-shape";
 import { createSceneryEmission } from "@/engine/foundation/animation/scenery-emission";
 import { damageAnchor } from "@/engine/foundation/animation/damage-anchor";
-import { decodeTooltipSkills } from "@/engine/foundation/ui/skill-tooltip-catalog";
 import {
 	createReferenceAppearances,
 	referenceAppearanceItems
@@ -205,9 +204,9 @@ export function createCharacterPresentation(
 	let animationDelta = createModifierDelta();
 	let footprints: import("@/engine/contracts/footprint").Footprint[] = [], footprintSequence = 0;
 	/*
-================
-footContact
-================
+	================
+	footContact
+	================
 	*/
 	function footContact(
 		entity: EntityState,
@@ -237,9 +236,9 @@ footContact
 		}
 	}
 	/*
-================
-clearFootprints
-================
+	================
+	clearFootprints
+	================
 	*/
 	function clearFootprints() {
 		if ( footprints.length ) {
@@ -392,7 +391,10 @@ clearFootprints
 		"/assets/audio/effectsound.json",
 		"/assets/anim/manifest.json",
 		"/assets/itemdrop/manifest.json",
-		"/assets/data/skillData.json"
+		// The skill sound plane and the characterInfo plane, published apart from
+		// the 27,835-row skill catalogue the HUD owns (buildSkillDataAsset.mjs).
+		"/assets/data/skillAudioData.json",
+		"/assets/data/characterActionData.json"
 	];
 	const shadowSizes = new Map<number, number>();
 	const heights = new Map<string, number>(), heightFactors = new Map<string, number>();
@@ -412,17 +414,17 @@ clearFootprints
 	// A mask's skin (msch 1) replaces the model outright; an msch 3 disguise
 	// keeps the body and redresses it.
 	/*
-================
-transformSkinRef
-================
+	================
+	transformSkinRef
+	================
 	*/
 	function transformSkinRef( entity: EntityState ) {
 		return referenceAppearances.skin( entity.gid, entity.transformSkin );
 	}
 	/*
-================
-appearanceRef
-================
+	================
+	appearanceRef
+	================
 	*/
 	function appearanceRef( entity: EntityState ) {
 		return transformSkinRef( entity ) ?? referenceAppearances.get( entity.gid )?.model ?? entity.refObjId;
@@ -430,17 +432,17 @@ appearanceRef
 	// The skin in force: a Duplicate (player skin) wears the copied player's
 	// items; a mask wears nothing of the player's (85C060).
 	/*
-================
-activeSkin
-================
+	================
+	activeSkin
+	================
 	*/
 	function activeSkin( entity: EntityState ) {
 		return transformSkinRef( entity ) !== undefined ? entity.transformSkin : undefined;
 	}
 	/*
-================
-wornEquipment
-================
+	================
+	wornEquipment
+	================
 	*/
 	function wornEquipment(
 		entity: EntityState,
@@ -456,9 +458,9 @@ wornEquipment
 		return entity.gid === gameplay?.localGid ? gameplay.inventory : entity.equipment ?? [];
 	}
 	/*
-================
-resourceFor
-================
+	================
+	resourceFor
+	================
 	*/
 	function resourceFor( entity: EntityState ): Resource | undefined {
 		const resource = catalog.get( appearanceRef( entity ) );
@@ -481,9 +483,9 @@ resourceFor
 	// readiness each frame, but derive garment/cosmetic parts only on change.
 	const hwanHairActors = new Map<number, { gid: number; started: number; }>();
 	/*
-================
-Auxiliary
-================
+	================
+	Auxiliary
+	================
 	*/
 	type Auxiliary = { id: number; entry: SetEntry & { bone: string; clips: readonly string[]; }; };
 	const avatarOverrides = new Map<number, AvatarOverrideSelection>();
@@ -528,9 +530,9 @@ Auxiliary
 			return mallPreview.state();
 		},
 		/*
-================
-options
-================
+		================
+		options
+		================
 		*/
 		options( value: import("@/engine/foundation/gameplay/game-options").GameOptions ) {
 			hideSilkCos = value.hideSilkCos;
@@ -538,9 +540,9 @@ options
 		// 856480 sets a global bit on admission; 85FA80 clears it on removal.
 		// It is not a count: a surviving actor cannot re-enable a cleared bit.
 		/*
-================
-receiveLifecycle
-================
+		================
+		receiveLifecycle
+		================
 		*/
 		receiveLifecycle( events: readonly import("@/engine/contracts/world").WorldEvent[] ) {
 			entityLod.receive( events );
@@ -570,9 +572,9 @@ receiveLifecycle
 			for ( const event of next ) rainEvents.push( event );
 		},
 		/*
-================
-eventRain
-================
+		================
+		eventRain
+		================
 		*/
 		eventRain() {
 			// Preserve delivery order while the character catalogs load.
@@ -604,9 +606,9 @@ eventRain
 			return rainEventActive;
 		},
 		/*
-================
-receiveFeedback
-================
+		================
+		receiveFeedback
+		================
 		*/
 		receiveFeedback(
 			events: readonly import("@/engine/contracts/orb").VisualFeedback[],
@@ -621,9 +623,9 @@ receiveFeedback
 			}
 		},
 		/*
-================
-step
-================
+		================
+		step
+		================
 		*/
 		step(
 			entities: readonly EntityState[],
@@ -650,15 +652,6 @@ step
 			skillObjects.retain( entities );
 			resources.begin( seconds );
 			failure = null;
-			/*
-			================
-			logicalPose
-
-			The worker's latest pose of a character: the local movement owner's for
-			the local player (its entity row can still hold the spawn position),
-			else the entity row. Presentation draws from it via posePresentation.
-			================
-			*/
 			// CCharactor_GetActiveMoverEntity (0x85E000): while the local player
 			// rides, its movement owner moves the mount and the rider sits on it.
 			// The mount takes the local pose, samples and movement state; the
@@ -668,6 +661,15 @@ step
 				undefined :
 				entities.find( entity => entity.gid === localGid )?.mountedOn;
 			const localMover = ( gid: number ) => !!gameplay?.pose && (gid === gameplay.localGid || gid === localMount);
+			/*
+			================
+			logicalPose
+
+			The worker's latest pose of a character: the local movement owner's for
+			the local player (its entity row can still hold the spawn position),
+			else the entity row. Presentation draws from it via posePresentation.
+			================
+			*/
 			const logicalPose = ( entity: EntityState ): import("@/engine/contracts/gameplay").Pose =>
 				localMover( entity.gid ) ?
 					gameplay!.pose! :
@@ -707,6 +709,7 @@ step
 					const decoded = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) );
 					const value = decoded as {
 						effectAppearanceStores?: number[][];
+						effectAppearanceReferences?: readonly (readonly [number, number, number])[];
 						skillAudioRows?: string[];
 						recoveryByCodename?: Record<string, number>;
 						models?: Resource[] | Record<string, Resource>;
@@ -1000,12 +1003,16 @@ step
 							pools.length !== 2 ||
 							pools.some( p => !Array.isArray( p ) || p.some( id => !Number.isInteger( id ) || id <= 0 ) )
 						) throw Error( "Invalid native appearance stores" );
+						// The msch (CSkillData+0x268) references, walked at build time by the
+						// client's own decoder (tooltipAppearanceReferences).
 						const refs = new Map<number, { type: number; cap: number; }>();
-						for ( const row of decodeTooltipSkills( value ).values() ) {
-							const block = row.directTooltipParams.nativeParamBlocks.slice().reverse().find( b =>
-								b.offset === 0x268
-							);
-							if ( block ) refs.set( row.id, { type: block.values[0]!, cap: block.values[1]! } );
+						for ( const row of value.effectAppearanceReferences ?? [] ) {
+							if (
+								!Array.isArray( row ) || row.length !== 3 || !Number.isSafeInteger( row[0] ) ||
+								!Number.isSafeInteger( row[1] ) || !Number.isSafeInteger( row[2] ) || row[0] <= 0 ||
+								refs.has( row[0] )
+							) throw Error( "Invalid native appearance references" );
+							refs.set( row[0], { type: row[1], cap: row[2] } );
 						}
 						referenceAppearances.setReferences( refs, pools );
 					}
@@ -1403,9 +1410,9 @@ step
 				else advanceGroundVisual( clock, seconds, !!entity.groundItem?.claimantGid, clock.duration );
 			}
 			/*
-================
-soundContext
-================
+			================
+			soundContext
+			================
 			*/
 			function soundContext( entity: EntityState, skill = 0, critical = false ) {
 				const player = entity.kind === "player" || entity.kind === "local-player",
@@ -3264,19 +3271,19 @@ soundContext
 		},
 		ready: ( gid: number ) => displayed.has( gid ),
 		/*
- ================
- entryReady
+		================
+		entryReady
 
- Keep first-use baseline work behind world entry without spawning fake drops.
- ================
- */
+		Keep first-use baseline work behind world entry without spawning fake drops.
+		================
+		*/
 		entryReady: () => commonReady && warmMotions.length === 0 && effects.loaded(),
 		previewReady: () => previewReady,
 		dockReady: () => dockReady,
 		/*
-================
-profile
-================
+		================
+		profile
+		================
 		*/
 		profile( value: CharacterFrameProbe | undefined ) {
 			probe = value;
@@ -3287,20 +3294,20 @@ profile
 		damageText: () => damageTexts as readonly import("@/engine/contracts/damage-text").DamageText[],
 		error: () => failure ?? resources.error() ?? effects.error(),
 		/*
-================
-simulationOrigin
+		================
+		simulationOrigin
 
-Frame-clock milliseconds of simulation time zero; local poses carry their
-simulation time (GameplayState.poseAtMs).
-================
+		Frame-clock milliseconds of simulation time zero; local poses carry their
+		simulation time (GameplayState.poseAtMs).
+		================
 		*/
 		simulationOrigin( ms: number ) {
 			posePresentation.origin( ms );
 		},
 		/*
-================
-reset
-================
+		================
+		reset
+		================
 		*/
 		reset() {
 			mallPreview.reset();
@@ -3358,9 +3365,9 @@ reset
 			renderer.setCharacterActors( [] );
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
 			mallPreview.reset();

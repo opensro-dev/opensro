@@ -13,7 +13,7 @@ import type { WorldScene } from "@/engine/contracts/scene";
 import { copyMaterial, copyGeometry, validateGeometry } from "@/engine/foundation/rendering/geometry";
 import type { PreparedWorldScene } from "@/engine/contracts/world-admission";
 import type { Geometry } from "@/engine/contracts/geometry";
-import { finiteGeometryValues, geometryIndicesInRange } from "./geometry-validation";
+import { finiteGeometryValues, finiteNumbers, geometryIndicesInRange, numbersWithin } from "./geometry-validation";
 import { PICK_BLOCK_INDICES } from "./picking";
 // Frontend stage manifests intentionally retain the complete scripted route.
 // Constantinople reference measurement: 406 MiB scene, 731 MiB decode scratch.
@@ -27,8 +27,14 @@ export const WORLD_SCENE_BYTES = 201326592;
 // Admission still enforces this aggregate bound, including retired products.
 export const WORLD_RESIDENCY_BYTES = 671088640; // 2 * WORLD_SCENE_BYTES + 256 MiB
 export const WORLD_DECODE_BYTES = 536870912;
-// Validate before copying. Count owned arrays, selection scratch and retained
-// interleaved vertices; caller-owned metadata is never retained by admission.
+/*
+================
+worldSceneBytes
+
+Validate before copying. Count owned arrays, selection scratch and retained
+interleaved vertices; caller-owned metadata is never retained by admission.
+================
+*/
 export function worldSceneBytes( scene: WorldScene | null ): number {
 	if ( scene?.terrainDetail !== undefined && scene.terrainDetail !== "full" && scene.terrainDetail !== "distance" ) {
 		throw new Error( "Invalid terrain detail policy" );
@@ -111,6 +117,10 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 		(!Number.isInteger( scene.starRandomState ) || scene.starRandomState < 0 || scene.starRandomState > 0xffffffff)
 	) throw new Error( "Invalid published star RNG state" );
 	for ( const group of groups ) {
+		if (
+			group.terrainSector !== undefined &&
+			(!Number.isInteger( group.terrainSector ) || group.terrainSector < 0 || group.terrainSector > 0xffff)
+		) throw Error( "Invalid terrain sector" );
 		if (
 			group.dungeonBlock !== undefined &&
 			(!Number.isInteger( group.dungeonBlock ) || group.dungeonBlock < 0 ||
@@ -220,7 +230,7 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 				range.cell.length !== 2 || !range.cell.every( Number.isSafeInteger ) || range.center.length !== 3 ||
 				!range.center.every( Number.isFinite ) ||
 				!Number.isFinite( range.radius ) || range.radius < 0 || range.heights.length !== 289 ||
-				!range.heights.every( Number.isFinite )
+				!finiteNumbers( range.heights )
 			) {
 				throw new Error( "Invalid terrain range" );
 			}
@@ -229,7 +239,7 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 				if (
 					b.length !== 6 || !b.every( Number.isFinite ) || b[0] > range.cell[0] * 320 ||
 					b[3] < (range.cell[0] + 1) * 320 || b[2] > range.cell[1] * 320 ||
-					b[5] < (range.cell[1] + 1) * 320 || range.heights.some( y => y < b[1] || y > b[4] )
+					b[5] < (range.cell[1] + 1) * 320 || !numbersWithin( range.heights, b[1], b[4] )
 				) throw Error( "Invalid terrain cell bounds" );
 				bytes += 48;
 			}
@@ -251,9 +261,15 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 	}
 	return bytes;
 }
-// Admission owns this derived plan. Include every boundary vertex, plus any
-// interior vertex needing authored-height restoration on its first selection.
-// Rebuild from source geometry instead of trusting caller-supplied metadata.
+/*
+================
+terrainSeamVertices
+
+Admission owns this derived plan. Include every boundary vertex, plus any
+interior vertex needing authored-height restoration on its first selection.
+Rebuild from source geometry instead of trusting caller-supplied metadata.
+================
+*/
 function terrainSeamVertices(
 	range: import("@/engine/contracts/scene").TerrainRange,
 	positions: Float32Array
@@ -271,8 +287,43 @@ function terrainSeamVertices(
 	return new Uint32Array( entries );
 }
 
+/*
+================
+sharedSeamVertices
+
+The seam vertices of every range, as views into one buffer per group. A
+town scene has thousands of terrain ranges, and a buffer apiece made the
+scene transfer (and its structured clone) thousands of buffers long.
+================
+*/
+function sharedSeamVertices(
+	ranges: readonly import("@/engine/contracts/scene").TerrainRange[],
+	positions: Float32Array
+): import("@/engine/contracts/scene").TerrainRange[] {
+	const seams = ranges.map( range => terrainSeamVertices( range, positions ) );
+	const shared = new Uint32Array( seams.reduce( ( n, seam ) => n + seam.length, 0 ) );
+	let at = 0;
+	return ranges.map( ( range, i ) => {
+		const seam = seams[i]!;
+		shared.set( seam, at );
+		const view = shared.subarray( at, at + seam.length );
+		at += seam.length;
+		return { ...range, seamVertices: view };
+	} );
+}
+
+/*
+================
+copyWorldScene
+================
+*/
 export function copyWorldScene( scene: WorldScene ): WorldScene {
 	const heightGrids = new Map<readonly number[], readonly number[]>();
+	/*
+	================
+	copyHeights
+	================
+	*/
 	function copyHeights( source: readonly number[] ) {
 		let copy = heightGrids.get( source );
 		if ( !copy ) {
@@ -346,8 +397,14 @@ export function copyWorldScene( scene: WorldScene ): WorldScene {
 	};
 }
 
-// Decoder output is exclusively worker-owned. Validate the same render contract
-// as the copying API, then transfer it instead of making another geometry copy.
+/*
+================
+prepareWorldScene
+
+Decoder output is exclusively worker-owned. Validate the same render contract
+as the copying API, then transfer it instead of making another geometry copy.
+================
+*/
 export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 	const bytes = worldSceneBytes( scene ),
 		limit = scene.residency === "frontend" ? FRONTEND_SCENE_BYTES : WORLD_SCENE_BYTES;
@@ -391,10 +448,7 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 		} satisfies Record<keyof Geometry, unknown>;
 		return {
 			...group,
-			ranges: group.ranges?.map( range => ({
-				...range,
-				seamVertices: terrainSeamVertices( range, geometry.positions )
-			}) ),
+			ranges: group.ranges && sharedSeamVertices( group.ranges, geometry.positions ),
 			material,
 			geometry
 		};
@@ -409,10 +463,21 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 	};
 }
 
-// Includes skin/model storage, which the old hand-written transfer list omitted.
-// This traverses descriptors, never individual typed-array elements.
+/*
+================
+worldSceneTransfers
+
+Includes skin/model storage, which the old hand-written transfer list omitted.
+This traverses descriptors, never individual typed-array elements.
+================
+*/
 export function worldSceneTransfers( scene: WorldScene ): ArrayBuffer[] {
 	const buffers = new Set<ArrayBuffer>(), seen = new Set<object>();
+	/*
+	================
+	visit
+	================
+	*/
 	function visit( value: unknown ): void {
 		if ( value === null || typeof value !== "object" || seen.has( value ) ) return;
 		seen.add( value );

@@ -37,7 +37,7 @@ const CATALOG_PATHS = [
 	"/assets/char/roster.json",
 	"/assets/npc/manifest.json",
 	"/assets/anim/manifest.json",
-	"/assets/data/skillData.json",
+	"/assets/data/skillAudioData.json",
 	"/assets/skill/effectRecords.json"
 ] as const;
 
@@ -73,6 +73,17 @@ interface EffectRow {
 
 /*
 ================
+sameMembers
+================
+*/
+function sameMembers<T>( a: ReadonlySet<T>, b: ReadonlySet<T> ): boolean {
+	if ( a.size !== b.size ) return false;
+	for ( const value of a ) if ( !b.has( value ) ) return false;
+	return true;
+}
+
+/*
+================
 createSoundPreparation
 ================
 */
@@ -86,7 +97,16 @@ export function createSoundPreparation( assets: AssetOwner, origin: string ) {
 	let profiles: Record<string, { soundProfileName?: string; }> = {};
 	let skills: ReturnType<typeof skillSoundRoots> | null = null;
 	let effects: Record<string, EffectRow> = {};
-	let key = "";
+	// The last selection's inputs. Runs every frame: equal inputs return
+	// before any set is built, equal members before any path is chosen.
+	const selection: {
+		entities: readonly SoundEntity[] | null;
+		skills: SoundScene["skills"] | undefined;
+		casts: SoundScene["casts"] | undefined;
+		attachedEffects: SoundScene["attachedEffects"] | undefined;
+		ids: Set<number> | null;
+		refs: Set<number> | null;
+	} = { entities: null, skills: undefined, casts: undefined, attachedEffects: undefined, ids: null, refs: null };
 	let paths: readonly string[] = [];
 	let active = false;
 
@@ -137,8 +157,11 @@ export function createSoundPreparation( assets: AssetOwner, origin: string ) {
 				) => [ name, { soundProfileName: row.soundProfileName } ] )
 			);
 		} else if ( cursor === 4 ) {
-			const source = value as { skillAudioRows: string[]; };
-			if ( !Array.isArray( source.skillAudioRows ) ) throw Error( "Missing skill sound roots" );
+			// skillAudioData.json: the skill sound identity plane alone (buildSkillDataAsset.mjs).
+			const source = value as { format?: unknown; skillAudioRows: string[]; };
+			if ( source.format !== "sro-skill-audio" || !Array.isArray( source.skillAudioRows ) ) {
+				throw Error( "Missing skill sound roots" );
+			}
 			skills = skillSoundRoots( source.skillAudioRows );
 		} else {
 			effects = Object.fromEntries(
@@ -163,20 +186,24 @@ export function createSoundPreparation( assets: AssetOwner, origin: string ) {
 	================
 	*/
 	function select( gameplay: SoundScene, entities: readonly SoundEntity[] ) {
+		if (
+			selection.ids && selection.entities === entities && selection.skills === gameplay.skills &&
+			selection.casts === gameplay.casts && selection.attachedEffects === gameplay.attachedEffects
+		) return;
+		selection.entities = entities;
+		selection.skills = gameplay.skills;
+		selection.casts = gameplay.casts;
+		selection.attachedEffects = gameplay.attachedEffects;
 		const ids = new Set( gameplay.skills ?? [] );
 		for ( const cast of gameplay.casts ?? [] ) ids.add( cast.skill );
 		for ( const effect of gameplay.attachedEffects ?? [] ) ids.add( effect.skill );
-		const refs = new Set(
-			entities.filter( entity => !entity.groundItem ).map( entity =>
-				entity.transformSkin?.refObjId ?? entity.refObjId
-			)
-		);
-		const nextKey = JSON.stringify( [
-			[ ...refs ].sort( ( a, b ) => a - b ),
-			[ ...ids ].sort( ( a, b ) => a - b )
-		] );
-		if ( key === nextKey ) return;
-		key = nextKey;
+		const refs = new Set<number>();
+		for ( const entity of entities ) {
+			if ( !entity.groundItem ) refs.add( entity.transformSkin?.refObjId ?? entity.refObjId );
+		}
+		if ( selection.ids && sameMembers( selection.ids, ids ) && sameMembers( selection.refs!, refs ) ) return;
+		selection.ids = ids;
+		selection.refs = refs;
 		const wantedProfiles = new Set<string>();
 		for ( const id of refs ) {
 			const row = characters.get( id );

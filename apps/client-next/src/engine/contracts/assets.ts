@@ -59,6 +59,8 @@ export type AssetRequest = {
 	id: number;
 	url: string;
 	limit: number;
+	// Also return the decoded texture's alpha as a picking mask (world DDS).
+	pickAlpha?: boolean;
 	decode?:
 		| "navigation"
 		| "frontend-world"
@@ -99,7 +101,12 @@ export type AssetResult =
 		world: import("./world-admission").WorldSceneLease;
 	}
 	| { kind: "model"; id: number; model: ModelDocument; }
-	| { kind: "image"; id: number; image: ImageBitmap; }
+	| {
+		kind: "image";
+		id: number;
+		image: ImageBitmap;
+		alpha?: import("@/engine/foundation/rendering/picking").PickAlpha;
+	}
 	// The entry bundle the live page names, or null when it names none.
 	| { kind: "release"; id: number; entry: string | null; }
 	| {
@@ -137,7 +144,8 @@ export interface AssetOwner {
 			| "character"
 			| "effects"
 			| "effect"
-			| "release"
+			| "release",
+		options?: { readonly pickAlpha?: boolean; }
 	): number;
 	take( id: number ): AssetResult | null;
 	cancel( id: number ): void;

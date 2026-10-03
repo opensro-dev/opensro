@@ -19,6 +19,7 @@ const asset = p => JSON.parse( readFileSync( "../../.generated/client-public/ass
 const { decodeMapLabels, decodeMapIcons, worldMapPresentation } = await import(
 	"../../src/engine/foundation/ui/world-map.ts"
 );
+const { mapLabelVisible } = await import( "../../src/engine/foundation/ui/world-map.ts" );
 const { decodeActionSlots } = await import( "../../src/engine/foundation/ui/action-layout.ts" );
 const { rosterPositions } = await import( "../../src/engine/foundation/ui/minimap-markers.ts" );
 test("published map labels resolve and share the scrolling tile origin", () => {
@@ -177,4 +178,20 @@ test("macro world map resolves and projects town labels on page 0", () => {
 	// Jangan label and icon must coincide geographically
 	assert.ok( Math.abs( defined( jangan ).x - (janganIcon.rect[0] + janganIcon.rect[2] / 2) ) < 40 );
 	assert.ok( Math.abs( defined( jangan ).y - (janganIcon.rect[1] + janganIcon.rect[3] / 2) ) < 40 );
+});
+
+test("only labels reaching the map window are laid out", () => {
+	const labels = decodeMapLabels(
+		asset( "data/worldmap-localinfo.json" ),
+		asset( "text/textdataname.en.json" ).entries
+	);
+	const p = { regionId: 0x62a8, x: 0, y: 0, z: 0, angle: 0 }, clip = [ 10, 20, 640, 384 ];
+	const projected = worldMapPresentation( p, 1, clip, [ 0, 0 ], p, labels ).labels;
+	const shown = projected.filter( row => mapLabelVisible( [ row.x - 40, row.y, 80, 12 ], clip ) );
+	assert.ok( shown.length > 0 && shown.length < projected.length, `${shown.length} of ${projected.length}` );
+	// The ink margin keeps a label just past the edge, whose glyphs can still show.
+	assert.equal( mapLabelVisible( [ 0, 0, 10, 10 ], [ 25, 0, 100, 100 ] ), true );
+	assert.equal( mapLabelVisible( [ 0, 0, 10, 10 ], [ 27, 0, 100, 100 ] ), false );
+	assert.equal( mapLabelVisible( [ 200, 50, 10, 10 ], [ 0, 0, 100, 100 ] ), false );
+	assert.equal( mapLabelVisible( [ 50, 50, 10, 10 ], [ 0, 0, 100, 100 ] ), true );
 });

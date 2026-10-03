@@ -15,7 +15,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
-const { titleGlyphs } = await import( "../../src/engine/foundation/rendering/ui-glyphs.ts" );
+const { titleText } = await import( "../../src/engine/foundation/rendering/ui-glyphs.ts" );
+const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { createChat } = await import( "../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts" );
 const atlas = JSON.parse(
 	readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf8" )
@@ -27,12 +28,14 @@ test("extended Latin glyphs survive atlas admission and every native font style"
 		for ( const fontStyle of [ 0, 2 ] ) {
 			const face = fontStyle === 2 ? atlas.fonts[fontIndex].styles["2"] : atlas.fonts[fontIndex];
 			const effective = { ...atlas, fonts: { ...atlas.fonts, [fontIndex + ":2"]: face } };
-			const quads = titleGlyphs( effective, LATIN_SAMPLE, [ 0, 0, 2000, 100 ], [ 0, 0, 2000, 100 ], [
-				1,
-				1,
-				1,
-				1
-			], { fontIndex, fontStyle, vAlign: 0 } );
+			const quads = expandTextRuns(
+				titleText( effective, LATIN_SAMPLE, [ 0, 0, 2000, 100 ], [ 0, 0, 2000, 100 ], [
+					1,
+					1,
+					1,
+					1
+				], { fontIndex, fontStyle, vAlign: 0 } )
+			);
 			assert.equal( quads.length, LATIN_SAMPLE.length );
 			for ( let index = 0; index < LATIN_SAMPLE.length; index++ ) {
 				const code = LATIN_SAMPLE.codePointAt( index );

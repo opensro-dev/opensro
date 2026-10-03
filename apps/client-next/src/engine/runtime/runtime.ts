@@ -721,8 +721,8 @@ export function startRuntime(
 						gameplay: presentation.gameplay(),
 						entities: presentation.entities(),
 						// UI pixels: the chosen screen size, or CSS pixels when native.
-						width: canvas.clientWidth / platform.displayScale(),
-						height: canvas.clientHeight / platform.displayScale(),
+						width: platform.canvasSize().width / platform.displayScale(),
+						height: platform.canvasSize().height / platform.displayScale(),
 						worldReady: readySent || worldReady
 					},
 					now,
@@ -768,8 +768,8 @@ export function startRuntime(
 					hoverGid = diagnostics.hoverPicking !== false && worldPointer && frontendState.phase === "world" &&
 							hoverLocal &&
 							!ui.blocks(
-								worldPointer[0] * canvas.clientWidth / platform.displayScale(),
-								worldPointer[1] * canvas.clientHeight / platform.displayScale()
+								worldPointer[0] * platform.canvasSize().width / platform.displayScale(),
+								worldPointer[1] * platform.canvasSize().height / platform.displayScale()
 							) ?
 						renderer.pickEntity( worldPointer[0], worldPointer[1], hoverLocal, input.blindHeld() ) :
 						null;

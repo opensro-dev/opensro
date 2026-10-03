@@ -162,6 +162,8 @@ export interface Platform extends Disposable {
 	visibilityReturned(): boolean;
 	presentUpdate( newer: boolean ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
+	/** The canvas CSS size, observed rather than read (no forced layout). */
+	canvasSize(): { readonly width: number; readonly height: number; };
 	readViewport(): Viewport;
 	/** CSS pixels per UI pixel: 1 when native, else the page height over the chosen screen height. */
 	displayScale(): number;
@@ -234,7 +236,11 @@ export interface Renderer extends Disposable {
 	): void;
 	cancelWorldUpdate(): void;
 	setWorldCamera( camera: import("./scene").WorldCamera ): void;
-	setWorldTexture( path: string, image: import("./texture").WorldTexture ): void;
+	setWorldTexture(
+		path: string,
+		image: import("./texture").WorldTexture,
+		alpha?: import("@/engine/foundation/rendering/picking").PickAlpha
+	): void;
 	neededWorldTextures(): readonly string[];
 	worldStats(): import("./scene").WorldRenderStats;
 	setGeometryInstances( instances: Float32Array ): void;

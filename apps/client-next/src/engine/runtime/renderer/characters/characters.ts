@@ -42,6 +42,12 @@ import {
 	placeParticle,
 	type ParticleInstance
 } from "@/engine/foundation/animation/particle-program";
+import {
+	createPresentedParticle,
+	PARTICLE_TICKS_PER_SECOND,
+	presentParticle,
+	snapshotParticleTick
+} from "@/engine/foundation/animation/particle-presentation";
 import { type PickBounds, type PickRay } from "@/engine/foundation/rendering/picking";
 import { faceEffectPlate, faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import { characterRadius } from "@/engine/foundation/animation/character-bounds";
@@ -63,6 +69,33 @@ import {
 } from "@/engine/foundation/rendering/world-math";
 import type { CharacterActor, CharacterModel } from "@/engine/contracts/character";
 import type { GeometryCommands, GeometryDraw, ImageCommands, ImageDraw } from "../internal/gpu-contract";
+
+/*
+================
+samePoseInputs
+
+Whether two actors request the same evaluated pose: the inputs
+CharacterPose.evaluate and bodyVolume read (clip, time, loop, and each
+layer's clip, time, loop, weight and lane). Layer rate and activation are
+presentation state the pose never reads. Replaces a JSON key built for
+every actor every frame.
+================
+*/
+function samePoseInputs( a: CharacterActor, b: CharacterActor ): boolean {
+	if ( a.clip !== b.clip || a.time !== b.time || a.loop !== b.loop ) return false;
+	if ( a.bodyVolume?.index !== b.bodyVolume?.index || a.bodyVolume?.female !== b.bodyVolume?.female ) return false;
+	const x = a.layers, y = b.layers;
+	if ( x === y ) return true;
+	if ( !x || !y || x.length !== y.length ) return false;
+	for ( let i = 0; i < x.length; i++ ) {
+		const l = x[i]!, r = y[i]!;
+		if (
+			l.clip !== r.clip || l.time !== r.time || l.loop !== r.loop || l.weight !== r.weight || l.lane !== r.lane
+		) return false;
+	}
+	return true;
+}
+
 /*
 ================
 createCharacters
@@ -85,6 +118,10 @@ export function createCharacters(
 		dependencies?: readonly string[];
 	}>();
 	const materialClocks = createModelMaterialClocks(), deferred = createDeferredParticles();
+	// Scratch for the particle being drawn (presentParticle writes it in place).
+	const presentedParticle = createPresentedParticle();
+	// Scratch basis for faceEffectMesh, which runs per drawn particle.
+	const billboardAxes = new Float64Array( 9 );
 	const particleSnapshots = new Map<number, { matrix: Float32Array; regionId: number; }>();
 	let hasDeferred = false, deferredVisible = new Set<number>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
@@ -176,7 +213,10 @@ export function createCharacters(
 	let gpuAnimation: GeometryCommands["gpuAnimationStats"], deferPoses = false;
 	// A frame may contain many instances requesting exactly the same model pose.
 	// Share only identical inputs; particles retain independent mutable age samples.
-	let framePoses: Map<string, Map<string, ReturnType<typeof createCharacterPose>>> | null = null;
+	// Indexed by model, then sample time; samePoseInputs settles the rest.
+	let framePoses:
+		| Map<string, Map<number, { actor: CharacterActor; pose: ReturnType<typeof createCharacterPose>; }[]>>
+		| null = null;
 	let poseRequests = 0,
 		poseEvaluations = 0,
 		poseSharingHits = 0,
@@ -197,10 +237,16 @@ export function createCharacters(
 		if ( !model ) return null;
 		const share = framePoses && !resource!.plan.emission &&
 			(!actor.animationLod || !actor.animationLod.crowded || actor.animationLod.fraction < .75);
-		const key = share ?
-			JSON.stringify( [ actor.clip, actor.time, actor.loop, actor.layers ?? null, actor.bodyVolume ?? null ] ) :
-			"";
-		const shared = share ? framePoses!.get( actor.model )?.get( key ) : undefined;
+		const candidates = share ? framePoses!.get( actor.model )?.get( actor.time ) : undefined;
+		let shared: ReturnType<typeof createCharacterPose> | undefined;
+		if ( candidates ) {
+			for ( const candidate of candidates ) {
+				if ( samePoseInputs( candidate.actor, actor ) ) {
+					shared = candidate.pose;
+					break;
+				}
+			}
+		}
 		if ( shared ) {
 			poseSharingHits++;
 			poses.set( actor.gid, { model: actor.model, pose: shared } );
@@ -234,17 +280,12 @@ export function createCharacters(
 				samples = new Map();
 				framePoses!.set( actor.model, samples );
 			}
-			samples.set( key, state.pose );
+			const sameTime = samples.get( actor.time );
+			if ( sameTime ) sameTime.push( { actor, pose: state.pose } );
+			else samples.set( actor.time, [ { actor, pose: state.pose } ] );
 		}
 		return state.pose;
 	}
-	/*
-	================
-	transformFor
-
-	Compose mount and attachment transforms before applying the actor placement.
-	================
-	*/
 	/*
 	================
 	facedMatrix
@@ -274,6 +315,13 @@ export function createCharacters(
 		return m[0]! * (m[5]! * m[10]! - m[9]! * m[6]!) - m[4]! * (m[1]! * m[10]! - m[9]! * m[2]!) +
 			m[8]! * (m[1]! * m[6]! - m[5]! * m[2]!);
 	}
+	/*
+	================
+	transformFor
+
+	Compose mount and attachment transforms before applying the actor placement.
+	================
+	*/
 	function transformFor(
 		actor: CharacterActor,
 		rows: ReadonlyMap<number, CharacterActor>,
@@ -297,6 +345,11 @@ export function createCharacters(
 			// the same keep-the-owner-matrix step. CRTSocket_UpdateOrdinaryMatrices
 			// (AB68C0) copies the parent matrix; it does not drop the child.
 			let holder = owner;
+			// A ground effect of a rider stands at the ride's root, not the
+			// saddle; it follows the character again once dismounted.
+			if ( actor.attachment?.ground && owner.mountedOn !== undefined ) {
+				holder = rows.get( owner.mountedOn ) ?? owner;
+			}
 			let socket = actor.attachment?.root ?
 				identity() :
 				poseFor( holder )?.socket(
@@ -419,9 +472,7 @@ export function createCharacters(
 	return {
 		/*
 		================
-		labelAnchors
-
-		Project retained actor anchors through the same world view used by rendering.
+		profile
 		================
 		*/
 		profile( value: import("@/engine/contracts/runtime").RenderFrameProbe | undefined ) {
@@ -675,6 +726,16 @@ export function createCharacters(
 				}
 			}
 			return { actor, model: resource.model, images: resource.images, children };
+		},
+		/*
+		================
+		hasModel
+
+		Whether a source with this id is resident (owned or borrowed).
+		================
+		*/
+		hasModel( id: string ): boolean {
+			return models.has( id );
 		},
 		/*
 		================
@@ -1097,7 +1158,7 @@ export function createCharacters(
 						{
 							...source,
 							deferredParticle: !sample.deferred && sample.draw ? undefined : source.deferredParticle,
-							time: sample.time,
+							time: sample.draw ? sample.time + deferred.pendingSeconds() : sample.time,
 							opacity: (!sample.deferred || continuation) && sample.draw ?
 								(source.opacity ?? 1) * sample.instanceAlpha / 255 :
 								0
@@ -1238,7 +1299,13 @@ export function createCharacters(
 						for ( let b = 0; b < elements.length; b++ ) {
 							const element = elements[b];
 							if ( !element?.alive ) continue;
-							particleElementMatrix( element, matrices, b * 16, actor.time * 20 - history.graph.frame );
+							particleElementMatrix(
+								element,
+								matrices,
+								b * 16,
+								actor.time * PARTICLE_TICKS_PER_SECOND - history.graph.frame,
+								presentedParticle.work
+							);
 							history.programs[p]![b] = element.state;
 						}
 					}
@@ -1605,7 +1672,15 @@ export function createCharacters(
 						if ( primitive.emission ) continue;
 						if ( !batch.streams ) state.pose.palette( primitive, batch.palettes[p]!, offset );
 						if ( primitive.billboard ) {
-							faceEffectMesh( batch.palettes[p]!, offset, transform, view!, primitive.billboard );
+							faceEffectMesh(
+								batch.palettes[p]!,
+								offset,
+								transform,
+								view!,
+								primitive.billboard,
+								undefined,
+								billboardAxes
+							);
 						}
 					}
 				}
@@ -1741,22 +1816,51 @@ export function createCharacters(
 								if ( graphPalette ) batch.palettes[p]!.set( graphPalette, offset );
 								else state.pose.palette( primitive, batch.palettes[p]!, offset );
 								const particle = particleBirths.get( actor.gid )!.programs[p]![b];
+								// Ticks stay native (20 Hz); the drawn particle carries the
+								// fraction of the next tick (particle-presentation.ts).
+								let drawn = particle;
 								if ( particle ) {
 									if ( model.particleGraph ) {
+										const graph = particleBirths.get( actor.gid )!.graph!;
+										drawn = presentParticle(
+											particle,
+											actor.time * PARTICLE_TICKS_PER_SECOND - graph.frame,
+											presentedParticle
+										);
 										for ( let axis = 0; axis < 3; axis++ ) {
 											for ( let row = 0; row < 3; row++ ) {
-												batch.palettes[p]![offset + axis * 4 + row]! *= particle.scale[axis]!;
+												batch.palettes[p]![offset + axis * 4 + row]! *= drawn.scale[axis]!;
 											}
 										}
 									} else if ( primitive.particleProgram ) {
-										particleRandomIndex = advanceParticle(
+										const tick = Math.floor( age * PARTICLE_TICKS_PER_SECOND );
+										if ( tick > particle.frame ) {
+											// Advance to the tick before, record it, then take the
+											// last step: the same sequential steps as one call.
+											if ( tick - 1 > particle.frame ) {
+												particleRandomIndex = advanceParticle(
+													particle,
+													primitive.particleProgram,
+													tick - 1,
+													particleRandom,
+													particleRandomIndex
+												);
+											}
+											snapshotParticleTick( particle );
+											particleRandomIndex = advanceParticle(
+												particle,
+												primitive.particleProgram,
+												tick,
+												particleRandom,
+												particleRandomIndex
+											);
+										}
+										drawn = presentParticle(
 											particle,
-											primitive.particleProgram,
-											Math.floor( age * 20 ),
-											particleRandom,
-											particleRandomIndex
+											age * PARTICLE_TICKS_PER_SECOND - tick,
+											presentedParticle
 										);
-										placeParticle( particle, batch.palettes[p]!, offset );
+										placeParticle( drawn, batch.palettes[p]!, offset );
 									}
 								}
 								if ( primitive.billboard ) {
@@ -1767,10 +1871,11 @@ export function createCharacters(
 										transform,
 										view!,
 										primitive.billboard,
-										particle?.velocity
+										particle?.velocity,
+										billboardAxes
 									);
 								}
-								if ( particle ) placeParticle( particle, batch.palettes[p]!, offset, true );
+								if ( drawn ) placeParticle( drawn, batch.palettes[p]!, offset, true );
 								particleTimes.push( age );
 								if ( fading ) particleOpacities.push( opacity( actor ) );
 								count++;
@@ -1797,7 +1902,11 @@ export function createCharacters(
 					}
 					if ( appearance && !emitted ) {
 						for ( let i = 0; i < rows.length; i++ ) {
-							if ( !primitive.materialFrames ) appearance.set( [ 1, 1, 1, 1, 1, 1, 0, 0 ], i * 8 );
+							if ( !primitive.materialFrames ) {
+								// Neutral appearance: white, opaque window, no offset.
+								appearance.fill( 1, i * 8, i * 8 + 6 );
+								appearance[i * 8 + 6] = appearance[i * 8 + 7] = 0;
+							}
 							const tint = rows[i]!.materialTint;
 							if ( tint ) { for ( let c = 0; c < 3; c++ ) appearance[i * 8 + c]! *= tint[c]!; }
 						}

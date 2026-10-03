@@ -649,7 +649,10 @@ export function createCharacterEffects(
 						gid: owner.gid,
 						bone: overhead ? "" : bone,
 						root: overhead || !bone,
-						offset: [ offset[0], offset[1] + (overhead ? owner.height! : 0), -offset[2] ]
+						offset: [ offset[0], offset[1] + (overhead ? owner.height! : 0), -offset[2] ],
+						// A root effect (a speed buff's ring) stands on the ground: under
+						// a rider that is the ride's position, as retail draws it.
+						...(!overhead && !bone ? { ground: true } : {})
 					}
 				};
 				const control = {
@@ -753,6 +756,17 @@ export function createCharacterEffects(
 				}
 				return admitted;
 			}
+			// Launch sockets the hold below sampled this step, keyed by callback,
+			// stage and source. The launch reuses them: one sample per launch.
+			const launchSockets = new Map<string, EffectVisual["actor"]["pose"] | null>();
+			/*
+			================
+			launchKey
+			================
+			*/
+			function launchKey( trigger: EffectTrigger, index: number, gid: number ) {
+				return `${trigger.cast.token}:${trigger.phase}:${trigger.event}:${index}:${gid}`;
+			}
 			/*
 			================
 			moverSourceCold
@@ -765,17 +779,6 @@ export function createCharacterEffects(
 			sampled live at launch and again at each retarget.
 			================
 			*/
-			// Launch sockets the hold below sampled this step, keyed by callback,
-			// stage and source. The launch reuses them: one sample per launch.
-			const launchSockets = new Map<string, EffectVisual["actor"]["pose"] | null>();
-			/*
-			================
-			launchKey
-			================
-			*/
-			function launchKey( trigger: EffectTrigger, index: number, gid: number ) {
-				return `${trigger.cast.token}:${trigger.phase}:${trigger.event}:${index}:${gid}`;
-			}
 			function moverSourceCold(
 				record: import("@/engine/contracts/effects").EffectRecord,
 				trigger: EffectTrigger,

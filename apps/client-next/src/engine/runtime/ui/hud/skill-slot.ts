@@ -21,45 +21,43 @@ This module only decides. ui.ts draws what SkillSlot_Resolve returns.
 ===========================================================================
 */
 
-import type {SkillUi} from '@/engine/foundation/ui/skill-layout';
-import type {SkillMetadata,createSkillTrainingContext} from '@/engine/foundation/gameplay/skill-catalog';
-import type {Progression} from '@/engine/foundation/gameplay/progression';
+import type { SkillUi } from "@/engine/foundation/ui/skill-layout";
+import type { SkillMetadata, createSkillTrainingContext } from "@/engine/foundation/gameplay/skill-catalog";
+import type { Progression } from "@/engine/foundation/gameplay/progression";
 
-type SkillTraining=ReturnType<typeof createSkillTrainingContext>;
-type SkillSlotCandidate=SkillUi['skills'][number];
+type SkillTraining = ReturnType<typeof createSkillTrainingContext>;
+type SkillSlotCandidate = SkillUi["skills"][number];
 
 /** Alpha 588AF0 gives a state-8 preview whose mastery level is met. */
-export const SKILL_SLOT_PREVIEW_ALPHA=0x80/0xff;
+export const SKILL_SLOT_PREVIEW_ALPHA = 0x80 / 0xff;
 
-export type SkillSlotIcon=
-	| {readonly kind:'skill';readonly icon:string}
-	| {readonly kind:'mastery-disable'}
-	| {readonly kind:'empty'};
+export type SkillSlotIcon =
+	| { readonly kind: "skill"; readonly icon: string; }
+	| { readonly kind: "mastery-disable"; }
+	| { readonly kind: "empty"; };
 
-export type SkillSlotButton=
-	| {readonly kind:'learn';readonly skill:SkillMetadata;readonly upgrade:boolean}
-	| {readonly kind:'max'}
-	| {readonly kind:'none'};
+export type SkillSlotButton =
+	| { readonly kind: "learn"; readonly skill: SkillMetadata; readonly upgrade: boolean; }
+	| { readonly kind: "max"; }
+	| { readonly kind: "none"; };
 
 export interface SkillSlot {
 	/** The bound record: the highest learned rank, else the level-1 skill. */
-	readonly entry:SkillSlotCandidate|undefined;
+	readonly entry: SkillSlotCandidate | undefined;
 	/** The highest learned rank (bind state 0), when any. */
-	readonly owned:SkillSlotCandidate|undefined;
-	readonly icon:SkillSlotIcon;
+	readonly owned: SkillSlotCandidate | undefined;
+	readonly icon: SkillSlotIcon;
 	/** Icon alpha, 0..1: opaque except a revealed state-8 preview. */
-	readonly alpha:number;
-	readonly button:SkillSlotButton;
+	readonly alpha: number;
+	readonly button: SkillSlotButton;
 }
 
 export interface SkillSlotInput {
-	readonly candidates:readonly SkillSlotCandidate[];
-	readonly training:SkillTraining;
-	readonly masteries:readonly {readonly id:number;readonly level:number}[];
-	readonly progression:Progression|undefined;
-	readonly trainingPending:boolean;
+	readonly candidates: readonly SkillSlotCandidate[];
+	readonly training: SkillTraining;
+	readonly masteries: readonly { readonly id: number; readonly level: number; }[];
+	readonly progression: Progression | undefined;
 }
-
 
 /*
 ==================
@@ -69,11 +67,14 @@ SkillSlot_Bind
 unlearned group binds its level-1 skill (state 8), which may be absent.
 ==================
 */
-function SkillSlot_Bind( candidates: readonly SkillSlotCandidate[], training: SkillTraining ): { entry: SkillSlotCandidate | undefined; owned: SkillSlotCandidate | undefined } {
+function SkillSlot_Bind(
+	candidates: readonly SkillSlotCandidate[],
+	training: SkillTraining
+): { entry: SkillSlotCandidate | undefined; owned: SkillSlotCandidate | undefined; } {
 	let owned: SkillSlotCandidate | undefined;
 
 	for ( const candidate of candidates ) {
-		if ( training.learned( candidate.id ) && ( !owned || candidate.level > owned.level ) ) {
+		if ( training.learned( candidate.id ) && (!owned || candidate.level > owned.level) ) {
 			owned = candidate;
 		}
 	}
@@ -90,7 +91,11 @@ info+0xAC level) against the character's live mastery level. A skill
 without a first requirement is never met this way.
 ==================
 */
-function SkillSlot_MasteryLevelMet( entry: SkillSlotCandidate, training: SkillTraining, masteries: SkillSlotInput['masteries'] ): boolean {
+function SkillSlot_MasteryLevelMet(
+	entry: SkillSlotCandidate,
+	training: SkillTraining,
+	masteries: SkillSlotInput["masteries"]
+): boolean {
 	const required = training.skill( entry.id )?.masteries[0];
 
 	if ( !required ) {
@@ -110,12 +115,12 @@ column with no bound record shows the empty cell.
 */
 function SkillSlot_Icon( entry: SkillSlotCandidate | undefined, revealed: boolean ): SkillSlotIcon {
 	if ( !entry ) {
-		return { kind: 'empty' };
+		return { kind: "empty" };
 	}
 	if ( !revealed ) {
-		return { kind: 'mastery-disable' };
+		return { kind: "mastery-disable" };
 	}
-	return { kind: 'skill', icon: entry.icon };
+	return { kind: "skill", icon: entry.icon };
 }
 
 /*
@@ -129,17 +134,21 @@ reason; the server rechecks it.
 ==================
 */
 function SkillSlot_Button( input: SkillSlotInput, owned: SkillSlotCandidate | undefined ): SkillSlotButton {
-	const nextLevel = ( owned?.level ?? 0 ) + 1;
+	const nextLevel = (owned?.level ?? 0) + 1;
 	const next = input.candidates.find( candidate => candidate.level === nextLevel );
 	const ref = input.training.skill( next?.id );
 
-	if ( ref && input.progression && !input.trainingPending && !input.training.reason( ref, input.progression ) ) {
-		return { kind: 'learn', skill: ref, upgrade: !!owned };
+	// CIFSkillSlot_UpdateLevelUpButton (588AF0) shows the button from mastery,
+	// prerequisites and learned skills only: no request-pending gate. Hiding
+	// every button while one request was in flight made them all blink for a
+	// round trip. A second request is still refused at confirmation (5DE690).
+	if ( ref && input.progression && !input.training.reason( ref, input.progression ) ) {
+		return { kind: "learn", skill: ref, upgrade: !!owned };
 	}
 	if ( owned && !next ) {
-		return { kind: 'max' };
+		return { kind: "max" };
 	}
-	return { kind: 'none' };
+	return { kind: "none" };
 }
 
 /*
@@ -151,7 +160,7 @@ Everything the skill window draws for one cell.
 */
 export function SkillSlot_Resolve( input: SkillSlotInput ): SkillSlot {
 	const { entry, owned } = SkillSlot_Bind( input.candidates, input.training );
-	const revealed = !!owned || ( !!entry && SkillSlot_MasteryLevelMet( entry, input.training, input.masteries ) );
+	const revealed = !!owned || (!!entry && SkillSlot_MasteryLevelMet( entry, input.training, input.masteries ));
 
 	// 588AF0 0x588D95: only a state-8 preview past the mastery gate dims.
 	const alpha = !owned && entry && revealed ? SKILL_SLOT_PREVIEW_ALPHA : 1;
@@ -161,6 +170,6 @@ export function SkillSlot_Resolve( input: SkillSlotInput ): SkillSlot {
 		owned,
 		icon: SkillSlot_Icon( entry, revealed ),
 		alpha,
-		button: entry ? SkillSlot_Button( input, owned ) : { kind: 'none' },
+		button: entry ? SkillSlot_Button( input, owned ) : { kind: "none" }
 	};
 }

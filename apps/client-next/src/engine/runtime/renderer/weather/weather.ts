@@ -311,7 +311,10 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 							];
 					for ( let j = 0; j < vertices; j++ ) {
 						const c = corners[j]!;
-						batch.positions.set( [ p.x + c[0]!, p.y + c[1]!, p.z + c[2]! ], (i * vertices + j) * 3 );
+						const at = (i * vertices + j) * 3;
+						batch.positions[at] = p.x + c[0]!;
+						batch.positions[at + 1] = p.y + c[1]!;
+						batch.positions[at + 2] = p.z + c[2]!;
 						if ( kind === 1 ) {
 							batch.colors[(i * vertices + j) * 4 + 3] = (255 - Math.trunc( scale * 63 )) / 255;
 						}

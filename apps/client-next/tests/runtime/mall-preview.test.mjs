@@ -122,13 +122,8 @@ test("cold try-on keeps the last complete body and admits every required source"
 
 test("borrowed portrait keeps socket children, retires old models and never closes shared images", () => {
 	const models = new Map();
-	let actors = [], projection;
+	let actors = [], projection, bodyBorrows = 0;
 	const preview = createPortrait( {
-		/*
-		================
-		retain
-		================
-		*/
 		retain() {},
 		/*
 		================
@@ -156,6 +151,15 @@ test("borrowed portrait keeps socket children, retires old models and never clos
 		borrowModel( key, model ) {
 			assert.ok( !models.has( key ) );
 			models.set( key, model );
+			if ( key === "body" ) bodyBorrows++;
+		},
+		/*
+		================
+		hasModel
+		================
+		*/
+		hasModel( key ) {
+			return models.has( key );
 		},
 		/*
 		================
@@ -165,11 +169,6 @@ test("borrowed portrait keeps socket children, retires old models and never clos
 		socket() {
 			return { x: 0, y: 10, z: 0 };
 		},
-		/*
-		================
-		invalidate
-		================
-		*/
 		invalidate() {},
 		/*
 		================
@@ -219,6 +218,16 @@ test("borrowed portrait keeps socket children, retires old models and never clos
 	assert.deepEqual( [ ...models.keys() ], [ "body", "wings" ] );
 	preview.prepare( { ...source, children: [] }, geometry, images, { yaw: 0, seconds: 12 } );
 	assert.deepEqual( [ ...models.keys() ], [ "body" ] );
+	// Effects attach and detach every few frames in combat: the body stays
+	// borrowed (its render and GPU plans are not rebuilt) and keeps its clock.
+	for ( let n = 0; n < 4; n++ ) {
+		preview.prepare( source, geometry, images, { yaw: 0, seconds: 13 + n } );
+		preview.prepare( { ...source, children: [] }, geometry, images, { yaw: 0, seconds: 13.5 + n } );
+	}
+	preview.prepare( source, geometry, images, { yaw: 0, seconds: 18 } );
+	assert.deepEqual( [ ...models.keys() ], [ "body", "wings" ] );
+	assert.equal( bodyBorrows, 1, "a child change re-borrowed the body" );
+	assert.equal( actors[0].time, 8, "a child change restarted the body's clock" );
 	preview.prepare( null, geometry, images );
 	assert.equal( models.size, 0 );
 	preview.prepare( source, geometry, images, { yaw: 0, seconds: 20 } );

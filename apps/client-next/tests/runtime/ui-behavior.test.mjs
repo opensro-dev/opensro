@@ -15,6 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
+const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const fontBytes = readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json" ),
 	fontAtlas = JSON.parse( fontBytes );
 /*
@@ -41,18 +42,18 @@ function assetFixture() {
 	const assets = {
 		available: () => 8,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request( url ) {
 			requests.push( url );
 			return ++id;
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take( id ) {
 			const r = results.get( id );
@@ -95,6 +96,28 @@ test("UI textures recover with backoff, release demand and cannot restart after 
 	f.resources.step( paths, 99999 );
 	assert.equal( f.requests.length, 3 );
 });
+/*
+================
+residentListEviction
+
+A baseline list found resident is remembered, and the memo must not
+outlive an eviction: a 4096 x 4096 image is 64 MiB, over the 48 MiB cap,
+so it is evicted as soon as demand stops wanting it.
+================
+*/
+test("a resident image list stops reading resident once one of its images is evicted", () => {
+	const f = assetFixture(), baseline = [ "/a.png" ];
+	assert.equal( f.resources.residentAll( baseline ), false );
+	f.resources.step( baseline, 0 );
+	f.results.set( 1, { kind: "image", image: { width: 4096, height: 4096 } } );
+	f.resources.step( baseline, 1 );
+	assert.equal( f.resources.residentAll( baseline ), true );
+	assert.equal( f.resources.residentAll( baseline ), true, "remembered answer" );
+	f.resources.step( [ "/b.png" ], 2 );
+	assert.equal( f.resources.has( "/a.png" ), false );
+	assert.equal( f.resources.residentAll( baseline ), false );
+	f.resources.dispose();
+});
 test("UI request exceptions are recoverable and released failures do not poison re-entry", () => {
 	const f = assetFixture();
 	const request = f.assets.request;
@@ -126,9 +149,9 @@ test("released image failures invalidate retained error UI and report attributed
 				return r;
 			},
 			/*
-================
-cancel
-================
+			================
+			cancel
+			================
 			*/
 			cancel() {}
 		},
@@ -198,9 +221,9 @@ test("UI image disposal drains all releases even when cancellation and renderer 
 			return value;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel( id ) {
 			cancelled.push( id );
@@ -239,9 +262,9 @@ test("UI image dimensions are captured before ownership is transferred to the re
 			return value;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel() {}
 	}, ( _path, bitmap ) => {
@@ -299,10 +322,11 @@ function uiFixture(
 							path,
 							image: {
 								width: bytes.readUInt32BE( 16 ),
-								height: bytes.readUInt32BE( 20 ), /*
-================
-close
-================
+								height: bytes.readUInt32BE( 20 ),
+								/*
+								================
+								close
+								================
 								*/
 								close() {}
 							}
@@ -314,7 +338,9 @@ close
 			cancel: id => pending.delete( id )
 		},
 		commands,
-		s => scenes.push( s ),
+		// Scenes are recorded as drawn: text runs expanded into the glyph quads the
+		// GPU packer writes (text-run.ts), so assertions read painted glyphs.
+		s => scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } ),
 		( ...args ) => textures.push( args ),
 		"https://fixture.invalid/",
 		"https://fixture.invalid/",
@@ -338,9 +364,9 @@ close
 		worldReady: true
 	};
 	/*
-================
-hasText
-================
+	================
+	hasText
+	================
 	*/
 	function hasText( value, font = "0", style = 0 ) {
 		const face = style === 2 ? fontAtlas.fonts[font].styles["2"] : fontAtlas.fonts[font];
@@ -364,13 +390,15 @@ hasText
 		ui: {
 			...ui,
 			/*
-================
-step
-================
+			================
+			step
+			================
 			*/
 			step( state, now ) {
 				let result = ui.step( state, now );
 				for ( let i = 0; i < 8 && pending.size; i++ ) result = ui.step( state, now ) ?? result;
+				// The skill catalogue decodes in bounded steps after its bytes arrive.
+				for ( let i = 0; i < 64 && ui.stats().hudSettling; i++ ) result = ui.step( state, now ) ?? result;
 				return result;
 			}
 		},
@@ -379,9 +407,9 @@ step
 		textures,
 		state,
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
 			ui.dispose();
@@ -498,9 +526,9 @@ test("NPC UI uses authored talk bounds and native fonts through option, accept, 
 	let now = 100;
 	game.seed( { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
 	/*
-================
-settle
-================
+	================
+	settle
+	================
 	*/
 	function settle() {
 		const state = game.take();
@@ -508,9 +536,9 @@ settle
 		for ( let i = 0; i < 50; i++ ) semantics = f.ui.step( f.state, now++ ) ?? semantics;
 	}
 	/*
-================
-select
-================
+	================
+	select
+	================
 	*/
 	function select() {
 		game.command( { kind: "select", gid: 7 }, now, npc );
@@ -518,9 +546,9 @@ select
 		settle();
 	}
 	/*
-================
-reply
-================
+	================
+	reply
+	================
 	*/
 	function reply( kind, prompt, options = [] ) {
 		const str = s => {
@@ -614,9 +642,9 @@ test("quest objectives repaint native progress, per-node status and color after 
 	const strings =
 		JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
 	/*
-================
-update
-================
+	================
+	update
+	================
 	*/
 	function update( kind, count ) {
 		const name = Buffer.from( symbol ), p = Buffer.alloc( 5 + 3 + 1 + 1 + 2 + 2 + name.length + 1 + 4 );
@@ -642,17 +670,17 @@ update
 	}
 	/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */ let semantics;
 	/*
-================
-settle
-================
+	================
+	settle
+	================
 	*/
 	function settle( now ) {
 		for ( let i = 0; i < 100; i++ ) semantics = f.rawStep( { ...f.state }, now + i ) ?? semantics;
 	}
 	/*
-================
-glyphRun
-================
+	================
+	glyphRun
+	================
 	*/
 	function glyphRun( value, color ) {
 		const glyphs = f.scenes.at( -1 ).quads.filter( q => q.texture === fontAtlas.image );
@@ -2011,9 +2039,9 @@ test("merchant amount editor clamps to the authored limit before purchase", () =
 		f.state.entities.push( { ...f.state.entities[0], gid: 17, kind: "npc", name: "Merchant" } );
 		let now = 0;
 		/*
-================
-draw
-================
+		================
+		draw
+		================
 		*/
 		function draw() {
 			return f.ui.step( f.state, now += 100 );
@@ -2764,6 +2792,64 @@ test("native party join progress owns input for ten seconds and uses the 200ms g
 	}
 });
 
+test("a pending item move keeps inventory slots enabled and drops further moves", () => {
+	// 69B5A0 sets the native move flag for 3 s; 699359 drops a request while it
+	// is set, but the slots stay enabled (hover and tooltips keep working).
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventory: [ { slot: 14, refObjId: 1, typeFlags: 0x6c, quantity: 10, name: "Stack", magic: [] } ],
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventoryPending: true
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		const semantics = f.ui.step( state, ++now );
+		const slot = semantics?.controls.find( c => c.id === "slot:14" );
+		assert.equal( slot?.disabled, false, "a pending move does not disable the slot" );
+		f.ui.event( { kind: "double-activate", id: "slot:14" } );
+		f.ui.step( state, ++now );
+		assert.deepEqual( sent.filter( c => c?.kind === "inventory-move" ), [], "the second move is dropped" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("an edit normalized back to the published value still republishes the field", () => {
+	// 521A85: the edit replaces an oversized draft with its limit. When that
+	// limit is already the field's value the semantics compare equal; the UI
+	// must publish them anyway, or the field keeps the raw keystrokes.
+	const f = uiFixture();
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventory: [ { slot: 14, refObjId: 1, typeFlags: 0x6c, quantity: 10, name: "Stack", magic: [] } ],
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventoryPending: false
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "slot:14", shift: true } );
+		f.ui.step( state, ++now );
+		const field = semantics => semantics?.controls.find( c => c.id === "split-amount" )?.value;
+		f.ui.event( { kind: "edit", id: "split-amount", value: "99", start: 2, end: 2, composing: false } );
+		assert.equal( field( f.ui.step( state, ++now ) ), "9" );
+		assert.equal( f.ui.step( state, ++now ), null, "nothing changed, nothing published" );
+		f.ui.event( { kind: "edit", id: "split-amount", value: "999", start: 3, end: 3, composing: false } );
+		assert.equal( field( f.ui.step( state, ++now ) ), "9", "the clamped field is published again" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("native Shift split clamps to stack minus one, chooses first free bag slot and cancels without mutation", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
@@ -3180,9 +3266,14 @@ test("skill training UI rechecks SP at confirmation, waits for authority, and ex
 		click( "skill-confirm-ok" );
 		assert.deepEqual( commands.pop(), { kind: "skill-train", id: 291 } );
 		assert.deepEqual( game.skills, [ 3 ], "sending never invents the learned successor" );
+		// 588AF0 has no pending gate: the button stays while a request is in
+		// flight, and confirming it sends nothing until the first is answered.
 		game.trainingPending = true;
 		draw();
-		assert.ok( !defined( output ).controls.some( c => c.id === "skill-learn:291" ) );
+		assert.ok( defined( output ).controls.some( c => c.id === "skill-learn:291" ), "the button does not blink" );
+		click( "skill-learn:291" );
+		click( "skill-confirm-ok" );
+		assert.equal( commands.length, 0, "a pending request blocks a second one" );
 		game.trainingPending = false;
 		game.progression = { level: 10, skillPoints: 0, masteries: [ { id: 257, level: 0 } ] };
 		draw();
@@ -3340,11 +3431,11 @@ test("native window sisters retain drag placement, close on ESC and reject retir
 	f.state.gameplay.cosRecords = [ { gid: 7, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false } ];
 	/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */ let semantics;
 	/*
-================
-settle
+	================
+	settle
 
-Drain dependent window resources before asserting placement or capture state.
-================
+	Drain dependent window resources before asserting placement or capture state.
+	================
 	*/
 	const settle = () => {
 		for ( let i = 0; i < 50; i++ ) semantics = f.ui.step( f.state, 1000 + i ) ?? semantics;
@@ -3897,9 +3988,9 @@ test("open Skills and hotbar do not rescan the catalog during camera/hover UI re
 		let reads = 0;
 		const catalog = new Proxy( rows, {
 			/*
-================
-get
-================
+			================
+			get
+			================
 			*/
 			get( target, key, receiver ) {
 				if ( typeof key === "string" && /^\d+$/.test( key ) ) reads++;

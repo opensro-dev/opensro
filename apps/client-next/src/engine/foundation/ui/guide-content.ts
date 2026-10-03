@@ -10,7 +10,7 @@ layout, and image paths remain within the published interface assets.
 ===========================================================================
 */
 import type { FontAtlas } from "@/engine/foundation/rendering/ui-glyphs";
-import { titleGlyphs, drawableGlyph } from "@/engine/foundation/rendering/ui-glyphs";
+import { titleText, drawableGlyph } from "@/engine/foundation/rendering/ui-glyphs";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 /*
 ================
@@ -130,10 +130,10 @@ export function guideContent(
 	const quads: UiQuad[] = [], paths: string[] = [];
 	let x = r[0], y = r[1], margin = 5, line = atlas.fonts["0"]!.recordHeight + margin;
 	/*
- ================
- newline
- ================
- */
+	================
+	newline
+	================
+	*/
 	const newline = () => {
 		x = r[0];
 		y += line;
@@ -177,7 +177,7 @@ export function guideContent(
 			if ( x > r[0] && x + width > r[0] + r[2] ) newline();
 			if ( x === r[0] && !word.trim() ) continue;
 			quads.push(
-				...titleGlyphs( atlas, word, [ x, y, width, font.recordHeight + 5 ], clip, token.color ?? color, {
+				...titleText( atlas, word, [ x, y, width, font.recordHeight + 5 ], clip, token.color ?? color, {
 					fontStyle: token.strong ? 2 : 0,
 					vAlign: 0
 				} )

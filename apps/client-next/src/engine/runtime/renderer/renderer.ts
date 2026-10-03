@@ -69,9 +69,9 @@ export function createRenderer(
 	let disposed = false, failure: string | null = null;
 	return {
 		/*
-================
-setTeleportGates
-================
+		================
+		setTeleportGates
+		================
 		*/
 		setTeleportGates( entities ) {
 			gates = entities.filter( e => e.kind === "teleport" ).map( e => ({
@@ -79,10 +79,11 @@ setTeleportGates
 				teleport: e.teleport ? { ...e.teleport } : undefined
 			}) );
 		},
-		scenery: world.scenery, /*
-================
-videoOptions
-================
+		scenery: world.scenery,
+		/*
+		================
+		videoOptions
+		================
 		*/
 		videoOptions( value ) {
 			const next = videoOptions( value ), before = video.records[video.active], after = next.records[next.active];
@@ -93,10 +94,11 @@ videoOptions
 			}
 		},
 		setFootprints: world.footprints,
-		setSelectionDecal: world.selectionDecal, /*
-================
-pickGround
-================
+		setSelectionDecal: world.selectionDecal,
+		/*
+		================
+		pickGround
+		================
 		*/
 		pickGround( x, y ) {
 			if ( disposed || failure || !pickView || device.phase() !== "running" || !pickOrigin ) return null;
@@ -106,10 +108,11 @@ pickGround
 			if ( !length ) return null;
 			const ray = { start: raw.start, delta: raw.delta.map( v => v / length * 1000 ) };
 			return { originRegion: pickOrigin, ray, terrainDepth: world.pickGround( ray ) };
-		}, /*
-================
-pickDestination
-================
+		},
+		/*
+		================
+		pickDestination
+		================
 		*/
 		pickDestination( x, y ) {
 			if ( disposed || failure || !pickView || device.phase() !== "running" ) return null;
@@ -117,35 +120,39 @@ pickDestination
 			if ( !ray ) return null;
 			const depth = world.pick( ray, 1, true );
 			return depth === null ? null : pickDestination( ray, depth, pickOrigin );
-		}, /*
-================
-pickFrontendCharacter
-================
+		},
+		/*
+		================
+		pickFrontendCharacter
+		================
 		*/
 		pickFrontendCharacter( x, y, ids ) {
 			if ( disposed || failure || !pickView || device.phase() !== "running" ) return null;
 			const ray = pickRay( pickView, x, y );
 			return ray ? characters.pickFrontend( ray, ids ) : null;
 		},
-		frontendRaceCenters: world.interfaceCenters, /*
-================
-pickFrontendRace
-================
+		frontendRaceCenters: world.interfaceCenters,
+		/*
+		================
+		pickFrontendRace
+		================
 		*/
 		pickFrontendRace( x, y ) {
 			const ray = pickView ? pickRay( pickView, x, y ) : null;
 			return ray ? world.pickInterface( ray ) : null;
-		}, /*
-================
-setCharacterPreview
-================
+		},
+		/*
+		================
+		setCharacterPreview
+		================
 		*/
 		setCharacterPreview( camera ) {
 			preview = camera ? structuredClone( camera ) : null;
-		}, /*
-================
-pickEntity
-================
+		},
+		/*
+		================
+		pickEntity
+		================
 		*/
 		pickEntity( x, y, excluded, blindHeld = false ) {
 			if ( disposed || failure || !pickView || device.phase() !== "running" ) return null;
@@ -210,10 +217,11 @@ pickEntity
 		setUi: scene => {
 			if ( disposed ) throw new Error( "Renderer disposed" );
 			uiProduct = uiPreparation.prepare( scene );
-		}, /*
-================
-setUiTexture
-================
+		},
+		/*
+		================
+		setUiTexture
+		================
 		*/
 		setUiTexture( id, image ) {
 			const old = uiTextures.get( id );
@@ -243,13 +251,13 @@ setUiTexture
 		setWorld: scene => world.scene( scene ),
 		adoptWorld: ( lease, detail ) => world.adopt( lease, detail ),
 		setWorldCamera: camera => world.camera( camera ),
-		setWorldTexture: ( path, image ) => world.texture( path, image ),
+		setWorldTexture: ( path, image, alpha ) => world.texture( path, image, alpha ),
 		neededWorldTextures: () => world.neededTextures(),
 		worldStats: () => world.stats(),
 		/*
-================
-setGeometryInstances
-================
+		================
+		setGeometryInstances
+		================
 		*/
 		setGeometryInstances( instances ) {
 			if ( disposed || !mesh ) throw new Error( "No owned geometry" );
@@ -265,9 +273,9 @@ setGeometryInstances
 			instancesDirty = true;
 		},
 		/*
-================
-setGeometryTransform
-================
+		================
+		setGeometryTransform
+		================
 		*/
 		setGeometryTransform( transform ) {
 			if ( disposed || !mesh ) throw new Error( "No owned geometry" );
@@ -283,9 +291,9 @@ setGeometryTransform
 			}
 		},
 		/*
-================
-setGeometry
-================
+		================
+		setGeometry
+		================
 		*/
 		setGeometry( data ) {
 			if ( disposed ) throw new Error( "Renderer disposed" );
@@ -297,9 +305,9 @@ setGeometry
 			mesh = replacement;
 		},
 		/*
-================
-setImage
-================
+		================
+		setImage
+		================
 		*/
 		setImage( image ) {
 			if ( disposed ) {
@@ -319,9 +327,9 @@ setImage
 		phase: () => disposed ? "disposed" : failure ? "failed" : device.phase(),
 		error: () => failure ?? device.error(),
 		/*
-================
-frame
-================
+		================
+		frame
+		================
 		*/
 		frame( viewport, timeSeconds = 0, frameId, probe ) {
 			probe?.renderBegin();
@@ -592,9 +600,9 @@ frame
 			}
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
 			if ( disposed ) {

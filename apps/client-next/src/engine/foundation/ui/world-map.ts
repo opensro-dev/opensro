@@ -437,3 +437,25 @@ export function worldMapQuads(
 ): readonly UiQuad[] {
 	return worldMapPresentation( p, pageId, clip, pan, center ).quads;
 }
+
+// Glyph ink may reach past a label's measured box (bearings, descent).
+const MAP_LABEL_INK_MARGIN = 16;
+
+/*
+================
+mapLabelVisible
+
+Whether a label's box, widened by the ink margin, reaches the window. A
+label wholly outside draws nothing and cannot overlap a visible label's
+ink, so it is not laid out: a page has hundreds of labels, and the map
+follows the player, so every one moves each frame.
+================
+*/
+export function mapLabelVisible( box: UiRect, clip: UiRect ): boolean {
+	return !(
+		box[0] + box[2] + MAP_LABEL_INK_MARGIN < clip[0] ||
+		box[0] - MAP_LABEL_INK_MARGIN > clip[0] + clip[2] ||
+		box[1] + box[3] + MAP_LABEL_INK_MARGIN < clip[1] ||
+		box[1] - MAP_LABEL_INK_MARGIN > clip[1] + clip[3]
+	);
+}

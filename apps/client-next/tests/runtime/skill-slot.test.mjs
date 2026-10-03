@@ -64,8 +64,7 @@ const resolve = ( candidates, learned ) =>
 		candidates,
 		training: createSkillTrainingContext( learned, catalog ),
 		masteries: progression.masteries,
-		progression,
-		trainingPending: false
+		progression
 	} );
 
 test("588AF0: an unlearned skill with an untrained predecessor is dimmed, not drawn active", () => {

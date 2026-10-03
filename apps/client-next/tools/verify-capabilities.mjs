@@ -88,8 +88,9 @@ export const rules = {
 	createGain: [ runtime + "audio/audio.ts" ],
 	requestAnimationFrame: [ runtime + "runtime.ts" ],
 	cancelAnimationFrame: [ runtime + "runtime.ts" ],
-	setTimeout: [ runtime + "simulation/worker/clock/clock.ts" ],
-	clearTimeout: [ runtime + "simulation/worker/clock/clock.ts" ],
+	// The asset loader owns one trailing progress timer, cleared on dispose.
+	setTimeout: [ runtime + "simulation/worker/clock/clock.ts", runtime + "assets/worker/loader.ts" ],
+	clearTimeout: [ runtime + "simulation/worker/clock/clock.ts", runtime + "assets/worker/loader.ts" ],
 	setInterval: [],
 	createRenderBundleEncoder: [ device ],
 	createBundleEncoder: [ device, frame ],

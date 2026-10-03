@@ -37,6 +37,7 @@ import {
 import { ownedPlacementStart } from "@/engine/foundation/navigation/owned-start";
 import type { NavMesh, NavPlacement, NavigationProduct } from "@/engine/contracts/navigation";
 import type { Pose } from "@/engine/contracts/gameplay";
+import { base64Bytes } from "@/engine/foundation/assets/base64";
 // Published region navmesh, same z-major 96*96 tile/cell gate as the server's
 // water_assets_schema.go. No fetch, mesh building or per-entity graph scan.
 /*
@@ -92,24 +93,24 @@ export function createNavigation() {
 		planeHeights?: DataView;
 	}>();
 	/*
-================
-bytes
-================
+	================
+	bytes
+	================
 	*/
 	function bytes( value: unknown, length: number ) {
 		if ( typeof value !== "string" || value.length > length * 2 + 8 ) {
 			throw new Error( "Invalid navigation column" );
 		}
-		const raw = atob( value );
+		const raw = base64Bytes( value );
 		if ( raw.length !== length ) {
 			throw new Error( "Navigation column length mismatch" );
 		}
-		return Uint8Array.from( raw, c => c.charCodeAt( 0 ) );
+		return raw;
 	}
 	/*
-================
-cell
-================
+	================
+	cell
+	================
 	*/
 	function cell( region: number, x: number, z: number ): "open" | "blocked" | "unknown" {
 		if ( region & 0x8000 ) {
@@ -130,11 +131,11 @@ cell
 		return grid.blocked[index] || grid.cells.getUint32( index * 4, true ) >= grid.count ? "blocked" : "open";
 	}
 	/*
-================
-surfaceHeight
-Height of the surface under pose: a preferred owner cell, else the terrain
-and (when initializing) the nearest object deck by |deltaY|.
-================
+	================
+	surfaceHeight
+	Height of the surface under pose: a preferred owner cell, else the terrain
+	and (when initializing) the nearest object deck by |deltaY|.
+	================
 	*/
 	function surfaceHeight(
 		pose: Pose,
@@ -194,25 +195,25 @@ and (when initializing) the nearest object deck by |deltaY|.
 	// region borders; carry the owner across installs by the placement's world
 	// geometry instead of dropping it and re-guessing the surface from height.
 	/*
-================
-worldX
-================
+	================
+	worldX
+	================
 	*/
 	function worldX( p: NavPlacement, o: number ) {
 		return o & 0x8000 ? p.x : p.x + (o & 255) * 1920;
 	}
 	/*
-================
-worldZ
-================
+	================
+	worldZ
+	================
 	*/
 	function worldZ( p: NavPlacement, o: number ) {
 		return o & 0x8000 ? p.z : p.z + (o >>> 8) * 1920;
 	}
 	/*
-================
-sameMesh
-================
+	================
+	sameMesh
+	================
 	*/
 	function sameMesh( a: NavMesh, b: NavMesh ) {
 		if ( a.passThrough !== b.passThrough ) return false;
@@ -241,9 +242,9 @@ sameMesh
 	}
 	return {
 		/*
-================
-anchor
-================
+		================
+		anchor
+		================
 		*/
 		anchor( owner: NavOwner | undefined ) {
 			const p = owner && objects[owner.placement];
@@ -260,9 +261,9 @@ anchor
 				undefined;
 		},
 		/*
-================
-relocate
-================
+		================
+		relocate
+		================
 		*/
 		relocate(
 			anchor:
@@ -285,9 +286,9 @@ relocate
 		},
 		stats: () => index?.stats() ?? { queries: 0, visited: 0, candidates: 0, bytes: 0 },
 		/*
-================
-pick
-================
+		================
+		pick
+		================
 		*/
 		pick( query: import("@/engine/contracts/navigation").GroundPickQuery ) {
 			return complete ? pickNavigationGround( objects, origin, query ) : null;
@@ -295,9 +296,9 @@ pick
 		// 403E80 resolves height during terrain stepping; 403D20 arbitrates
 		// the terrain/object layer. Never substitute a render-mesh intersection.
 		/*
-================
-surface
-================
+		================
+		surface
+		================
 		*/
 		surface(
 			pose: Pose,
@@ -336,9 +337,9 @@ surface
 			return h === null ? pose : { ...pose, y: h };
 		},
 		/*
-================
-block
-================
+		================
+		block
+		================
 		*/
 		block( pose: Pose | null, owner?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner ) {
 			if ( !pose || !(pose.regionId & 0x8000) || pose.regionId !== origin || !complete ) return undefined;
@@ -350,9 +351,9 @@ block
 			return blockValue = resolved ? objects[resolved.placement]?.block : undefined;
 		},
 		/*
-================
-floor
-================
+		================
+		floor
+		================
 		*/
 		floor( pose: Pose | null, owner?: NavOwner ) {
 			if ( !pose || !(pose.regionId & 0x8000) || pose.regionId !== origin || !complete ) return undefined;
@@ -367,9 +368,9 @@ floor
 			return value;
 		},
 		/*
-================
-registerEvent
-================
+		================
+		registerEvent
+		================
 		*/
 		registerEvent( name: string, response: Readonly<{ enter: number; exit: number; }> ) {
 			if (
@@ -382,17 +383,17 @@ registerEvent
 			eventHandlers.set( name, Object.freeze( { ...response } ) );
 		},
 		/*
-================
-unregisterEvent
-================
+		================
+		unregisterEvent
+		================
 		*/
 		unregisterEvent( name: string ) {
 			eventHandlers.delete( name );
 		},
 		/*
-================
-install
-================
+		================
+		install
+		================
 		*/
 		install( regionId: number, value: unknown ) {
 			floors.clear();
@@ -407,7 +408,9 @@ install
 			if ( product.complete === true ) residencyBytes = admitObjectProduct( product, regionId );
 			if ( regionId & 0x8000 ) {
 				if ( !product.complete ) throw new Error( "Dungeon coverage is missing" );
-				const copy = structuredClone( product.objects ), nextIndex = createNavigationIndex( copy );
+				// The product arrived by message, so it is already this worker's own copy,
+				// and navigation never writes into it (the oracle runs it deep-frozen).
+				const copy = product.objects, nextIndex = createNavigationIndex( copy );
 				if ( residencyBytes + nextIndex.bytes > 64 * 1024 * 1024 ) throw Error( "Navigation residency budget" );
 				index = nextIndex;
 				revision++;
@@ -504,7 +507,7 @@ install
 			if ( regions.size + admitted.filter( row => !regions.has( row.id ) ).length > 64 ) {
 				throw new Error( "Navigation residency limit exceeded" );
 			}
-			const copy = product.complete ? structuredClone( product.objects ) : [];
+			const copy = product.complete ? product.objects : [];
 			const nextIndex = createNavigationIndex( copy );
 			if ( residencyBytes + nextIndex.bytes > 64 * 1024 * 1024 ) throw Error( "Navigation residency budget" );
 			index = nextIndex;
@@ -518,10 +521,10 @@ install
 			}
 		},
 		/*
-================
-clip
-Clips one predicted move against terrain and object meshes.
-================
+		================
+		clip
+		Clips one predicted move against terrain and object meshes.
+		================
 		*/
 		clip(
 			from: Pose,
@@ -561,9 +564,9 @@ Clips one predicted move against terrain and object meshes.
 					};
 				}
 				/*
-================
-canonicalPose
-================
+				================
+				canonicalPose
+				================
 				*/
 				function canonicalPose( p: Pose ): Pose | null {
 					if ( p.regionId & 0x8000 ) return p;
@@ -607,6 +610,9 @@ canonicalPose
 				// endpoint. An outside destination can still produce a valid wall
 				// contact. The chord coverage pass below rejects unlinked gaps.
 
+				// Built once per leg: the per-object contact loop used to rebuild these
+				// for every placed object, millions of arrays a minute in a town.
+				const fromPoint = [ from.x + ox, from.y, from.z + oz ], toPoint = [ to.x + ox, to.y, to.z + oz ];
 				const requestedSpan = Math.max( Math.abs( to.x - from.x ), Math.abs( to.z - from.z ), .01 );
 				// FindNavCell's terrain-first tie applies only to a mover with no retained cell.
 				const startTerrainY = !dungeon && !sourceOwner ?
@@ -615,14 +621,14 @@ canonicalPose
 				const candidatePath = dungeon ?
 					dungeonOwnerPath(
 						objects,
-						[ from.x + ox, from.y, from.z + oz ],
-						[ to.x + ox, to.y, to.z + oz ],
+						fromPoint,
+						toPoint,
 						sourceOwner
 					) :
 					terrainOwnerPath(
 						objects,
-						[ from.x + ox, from.y, from.z + oz ],
-						[ to.x + ox, to.y, to.z + oz ],
+						fromPoint,
+						toPoint,
 						sourceOwner,
 						startTerrainY
 					);
@@ -632,11 +638,7 @@ canonicalPose
 					!ownerPath?.spans.some( span => span.from === 0 ) && !deck( from.x, from.z, from.y )
 				) return null;
 				if ( dungeon && !ownerPath ) return null;
-				const passages = linkPassages( objects, [ from.x + ox, from.y, from.z + oz ], [
-					to.x + ox,
-					to.y,
-					to.z + oz
-				], !!ownerPath );
+				const passages = linkPassages( objects, fromPoint, toPoint, !!ownerPath );
 				let contact = Infinity, contactKey = Infinity, retainedFraction = 1;
 				let response: ReturnType<typeof navContactDetail> = null;
 				if ( (globalThis as any).NAVDBG ) console.log( "CLIPSTART", { from, to, owner: ownerPath?.spans } );
@@ -646,11 +648,12 @@ canonicalPose
 				// mover comes from. Owned spans follow their own mesh below.
 				const terrainParts = dungeon ? [] : terrainIntervals( ownerPath?.spans ?? [] );
 				for ( const p of objects ) {
+					const objectSpans = ownerPath?.spans.filter( span => objects[span.placement] === p );
 					if ( terrainParts.length ) {
 						const terrain = navContactDetail(
 							p,
-							[ from.x + ox, from.y, from.z + oz ],
-							[ to.x + ox, to.y, to.z + oz ],
+							fromPoint,
+							toPoint,
 							objects,
 							passages,
 							output?.slide === true,
@@ -675,13 +678,13 @@ canonicalPose
 					}
 					const edge = navContactDetail(
 						p,
-						[ from.x + ox, from.y, from.z + oz ],
-						[ to.x + ox, to.y, to.z + oz ],
+						fromPoint,
+						toPoint,
 						objects,
 						passages,
 						output?.slide === true,
 						!dungeon,
-						ownerPath?.spans.filter( span => objects[span.placement] === p )
+						objectSpans
 					);
 					const owned = !ownerPath ||
 						ownerPath.spans.some( span =>
@@ -693,11 +696,7 @@ canonicalPose
 						contactKey = edge.fraction;
 						response = edge;
 					}
-					const obstacle = navObstacleContact( p, [ from.x + ox, from.y, from.z + oz ], [
-						to.x + ox,
-						to.y,
-						to.z + oz
-					], ownerPath?.spans.filter( span => objects[span.placement] === p ) );
+					const obstacle = navObstacleContact( p, fromPoint, toPoint, objectSpans );
 					if ( obstacle < contactKey ) {
 						contact = obstacle;
 						contactKey = obstacle;
@@ -916,9 +915,9 @@ canonicalPose
 			return null;
 		},
 		/*
-================
-clear
-================
+		================
+		clear
+		================
 		*/
 		clear() {
 			floors.clear();

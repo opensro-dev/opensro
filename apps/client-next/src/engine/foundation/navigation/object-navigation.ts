@@ -15,6 +15,7 @@ import type { NavigationIndex } from "./spatial-index";
 import { cellEntry, edgeResponse, slideNormal } from "./contact-response";
 import type { NavPassage } from "./topology";
 import type { NavMesh, NavPlacement, ObjectNavWire } from "@/engine/contracts/navigation";
+import { base64Bytes } from "@/engine/foundation/assets/base64";
 // Native BMS offset 7: sub_4265b0, sub_426160. Header word 11 is flags, not an offset.
 /*
 ================
@@ -33,7 +34,7 @@ export function objectNavigation( row: ObjectNavWire ): NavMesh[] {
 	if ( typeof payload.rawBase64 !== "string" || payload.rawBase64.length > 32 * 1024 * 1024 ) {
 		throw new Error( "Object navigation payload budget" );
 	}
-	const raw = Uint8Array.from( atob( payload.rawBase64 ), c => c.charCodeAt( 0 ) );
+	const raw = base64Bytes( payload.rawBase64 );
 	if ( raw.length !== payload.byteLength ) throw new Error( "Object navigation byte length" );
 	const end = Math.min( row.byteLength, ...offsets.filter( ( n, i ) => i !== 11 && n > offsets[7]! ) ),
 		size = end - offsets[7]!;

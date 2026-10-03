@@ -276,9 +276,9 @@ function fixture(
 	const assets = {
 		available: () => 4,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request( url, limit, decode ) {
 			const id = ++next;
@@ -287,27 +287,27 @@ request
 			return id;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel( id ) {
 			pending.delete( id );
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take( id ) {
 			const job = pending.get( id );
 			if ( !job || metadataAdmission.blockedPaths?.has( job.url ) ) return null;
-			if ( metadataAdmission.failOnce && job.url.endsWith( "/data/skillData.json" ) ) {
+			if ( metadataAdmission.failOnce && job.url.endsWith( "/data/characterActionData.json" ) ) {
 				metadataAdmission.failOnce = false;
 				pending.delete( id );
 				return { kind: "error", error: "Metadata temporarily unavailable" };
 			}
-			if ( metadataAdmission.pending && job.url.endsWith( "/data/skillData.json" ) ) return null;
+			if ( metadataAdmission.pending && job.url.endsWith( "/data/characterActionData.json" ) ) return null;
 			pending.delete( id );
 			if ( metadataAdmission.appearance ) {
 				const value = job.url.endsWith( "/char/roster.json" ) ?
@@ -347,7 +347,7 @@ take
 					).buffer
 				};
 			}
-			if ( metadataAdmission.rows && job.url.endsWith( "/data/skillData.json" ) ) {
+			if ( metadataAdmission.rows && job.url.endsWith( "/data/characterActionData.json" ) ) {
 				return {
 					kind: "bytes",
 					buffer: new TextEncoder().encode(
@@ -355,14 +355,14 @@ take
 					).buffer
 				};
 			}
-			if ( reference && job.url.endsWith( "/data/skillData.json" ) ) {
+			if ( reference && job.url.endsWith( "/data/characterActionData.json" ) ) {
 				const data = JSON.parse(
-					readFileSync( path.join( publicRoot, "assets/data/skillData.json" ), "utf8" )
+					readFileSync( path.join( publicRoot, "assets/data/characterActionData.json" ), "utf8" )
 				);
 				data.effectAppearanceStores = [ [ 2 ], [ 2 ] ];
 				return { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( data ) ).buffer };
 			}
-			if ( audio && job.url.endsWith( "/data/skillData.json" ) ) {
+			if ( audio && job.url.endsWith( "/data/skillAudioData.json" ) ) {
 				return {
 					kind: "bytes",
 					buffer: new TextEncoder().encode(
@@ -392,7 +392,10 @@ take
 					).buffer
 				};
 			}
-			if ( job.url.endsWith( "/anim/manifest.json" ) || job.url.endsWith( "/data/skillData.json" ) ) {
+			if (
+				job.url.endsWith( "/anim/manifest.json" ) || job.url.endsWith( "/data/skillAudioData.json" ) ||
+				job.url.endsWith( "/data/characterActionData.json" )
+			) {
 				return { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( { models: {} } ) ).buffer };
 			}
 			if ( job.url.endsWith( "/itemdrop/manifest.json" ) ) {
@@ -539,9 +542,9 @@ take
 	};
 	const renderer = {
 		/*
-================
-setFootprints
-================
+		================
+		setFootprints
+		================
 		*/
 		setFootprints( rows ) {
 			footprints.push( rows );
@@ -553,9 +556,9 @@ setFootprints
 		characterSocket: () => null,
 		setCharacterModel: characters.model,
 		/*
-================
-setCharacterAssembly
-================
+		================
+		setCharacterAssembly
+		================
 		*/
 		setCharacterAssembly( id, base, parts ) {
 			assemblies.push( { id, base, parts } );
@@ -563,9 +566,9 @@ setCharacterAssembly
 		},
 		retainCharacterModels: characters.retain,
 		/*
-================
-setCharacterActors
-================
+		================
+		setCharacterActors
+		================
 		*/
 		setCharacterActors( value, portraits = [] ) {
 			actors = value;
@@ -574,33 +577,33 @@ setCharacterActors
 	};
 	const gpu = {
 		/*
-================
-upload
-================
+		================
+		upload
+		================
 		*/
 		upload( data ) {
 			instances.push( data.instances.slice() );
 			return {};
 		},
 		/*
-================
-updateInstances
-================
+		================
+		updateInstances
+		================
 		*/
 		updateInstances( draw, value ) {
 			instances.push( value.slice() );
 			return draw;
 		},
 		/*
-================
-updateBones
-================
+		================
+		updateBones
+		================
 		*/
 		updateBones() {},
 		/*
-================
-release
-================
+		================
+		release
+		================
 		*/
 		release() {
 			released++;
@@ -634,33 +637,33 @@ release
 			return released;
 		},
 		/*
-================
-step
-================
+		================
+		step
+		================
 		*/
 		step( entities, time, gameplay = null ) {
 			presentation.step( entities, gameplay, time );
 			return characters.prepare( gpu, {
 				/*
-================
-upload
-================
+				================
+				upload
+				================
 				*/
 				upload() {
 					return {};
 				},
 				/*
-================
-release
-================
+				================
+				release
+				================
 				*/
 				release() {}
 			}, 1 );
 		},
 		/*
-================
-warm
-================
+		================
+		warm
+		================
 		*/
 		warm() {
 			for ( let t = 0; t < 30 && actors.length === 0; t++ ) this.step( [ entity( 1 ) ], t / 100 );
@@ -668,9 +671,9 @@ warm
 			assert.equal( presentation.error(), null );
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
 			presentation.dispose();
@@ -1075,9 +1078,9 @@ test("rejected manifest publishes no rows and repaired retry commits completely"
 	const assets = {
 		available: () => 4,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request( url, limit, decode ) {
 			jobs.set( ++id, { url, decode } );
@@ -1085,17 +1088,17 @@ request
 			return id;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel( id ) {
 			jobs.delete( id );
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take( id ) {
 			const job = jobs.get( id );
@@ -1377,9 +1380,9 @@ test("customization prepares both genders and swaps every figure without a new r
 	const assets = {
 		available: () => 4,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request( url, limit, decode ) {
 			pending.set( ++serial, { url, decode } );
@@ -1387,17 +1390,17 @@ request
 			return serial;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel( id ) {
 			pending.delete( id );
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take( id ) {
 			const job = pending.get( id );
@@ -1413,27 +1416,27 @@ take
 	};
 	const renderer = {
 		/*
-================
-setCharacterModel
-================
+		================
+		setCharacterModel
+		================
 		*/
 		setCharacterModel() {},
 		/*
-================
-setCharacterAssembly
-================
+		================
+		setCharacterAssembly
+		================
 		*/
 		setCharacterAssembly() {},
 		/*
-================
-retainCharacterModels
-================
+		================
+		retainCharacterModels
+		================
 		*/
 		retainCharacterModels() {},
 		/*
-================
-setCharacterActors
-================
+		================
+		setCharacterActors
+		================
 		*/
 		setCharacterActors( value ) {
 			actors = value;
@@ -3143,9 +3146,9 @@ test("berserk hair publishes compound attachments only after the resource is rea
 		);
 		let now = 0;
 		/*
-================
-step
-================
+		================
+		step
+		================
 		*/
 		function step( active ) {
 			for ( let i = 0; i < 30; i++ ) {
@@ -3169,9 +3172,9 @@ step
 			}
 		}
 		/*
-================
-children
-================
+		================
+		children
+		================
 		*/
 		function children() {
 			return f.actors.filter( a => a.model === hair.glb );

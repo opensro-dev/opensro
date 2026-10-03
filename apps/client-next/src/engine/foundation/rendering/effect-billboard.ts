@@ -77,22 +77,44 @@ export function velocityBasis( velocity: readonly number[] | undefined ): Vector
 ================
 cameraAxes
 
-The billboard basis for the camera-facing modes.
+Write the billboard basis for the camera-facing modes into axes (three
+column vectors, nine values). Runs per drawn particle per frame, so it
+writes into the caller's scratch instead of building arrays.
 ================
 */
-function cameraAxes( view: Float32Array, mode: "camera" | "y" ): number[][] {
-	const camera = [ [ view[0]!, view[4]!, view[8]! ], [ view[1]!, view[5]!, view[9]! ], [
-		view[3]!,
-		view[7]!,
-		view[11]!
-	] ];
-	if ( mode === "camera" ) return camera;
+function cameraAxes( view: Float32Array, mode: "camera" | "y", axes: Float64Array ): void {
+	axes[0] = view[0]!;
+	axes[1] = view[4]!;
+	axes[2] = view[8]!;
+	axes[3] = view[1]!;
+	axes[4] = view[5]!;
+	axes[5] = view[9]!;
+	axes[6] = view[3]!;
+	axes[7] = view[7]!;
+	axes[8] = view[11]!;
+	if ( mode === "camera" ) return;
 	const fwdX = view[3]!, fwdZ = view[11]!, fwdLen = Math.hypot( fwdX, fwdZ );
 	if ( fwdLen < 1e-12 ) {
-		return camera.every( a => Math.hypot( ...a ) > 1e-12 ) ? camera : [ [ 1, 0, 0 ], [ 0, 1, 0 ], [ 0, 0, 1 ] ];
+		// The camera basis stands unless one of its axes has collapsed.
+		for ( let column = 0; column < 3; column++ ) {
+			if ( !(Math.hypot( axes[column * 3]!, axes[column * 3 + 1]!, axes[column * 3 + 2]! ) > 1e-12) ) {
+				axes.fill( 0 );
+				axes[0] = axes[4] = axes[8] = 1;
+				return;
+			}
+		}
+		return;
 	}
-	const fwd = [ fwdX / fwdLen, 0, fwdZ / fwdLen ];
-	return [ [ fwd[2]!, 0, -fwd[0]! ], [ 0, 1, 0 ], fwd ];
+	const x = fwdX / fwdLen, z = fwdZ / fwdLen;
+	axes[0] = z;
+	axes[1] = 0;
+	axes[2] = -x;
+	axes[3] = 0;
+	axes[4] = 1;
+	axes[5] = 0;
+	axes[6] = x;
+	axes[7] = 0;
+	axes[8] = z;
 }
 
 /*
@@ -101,7 +123,8 @@ faceEffectMesh
 
 Replaces the element's rotation in its palette with the view mode's basis,
 keeping its scale. velocity is the element's current velocity (required
-meaning only for "v"; an element without one keeps world axes).
+meaning only for "v"; an element without one keeps world axes). axes is
+optional scratch of nine values; the renderer passes one per frame.
 ================
 */
 export function faceEffectMesh(
@@ -110,32 +133,58 @@ export function faceEffectMesh(
 	instance: Float32Array,
 	view: Float32Array,
 	mode: "camera" | "y" | "v" = "camera",
-	velocity?: readonly number[]
+	velocity?: readonly number[],
+	axes: Float64Array = new Float64Array( 9 )
 ): void {
-	const a = [ instance[0]!, instance[1]!, instance[2]! ],
-		b = [ instance[4]!, instance[5]!, instance[6]! ],
-		c = [ instance[8]!, instance[9]!, instance[10]! ];
-	const rows = [ cross( b, c ), cross( c, a ), cross( a, b ) ], det = dot( a, rows[0]! );
+	const a0 = instance[0]!, a1 = instance[1]!, a2 = instance[2]!;
+	const b0 = instance[4]!, b1 = instance[5]!, b2 = instance[6]!;
+	const c0 = instance[8]!, c1 = instance[9]!, c2 = instance[10]!;
+	// rows = [ b x c, c x a, a x b ]
+	const r00 = b1 * c2 - b2 * c1, r01 = b2 * c0 - b0 * c2, r02 = b0 * c1 - b1 * c0;
+	const r10 = c1 * a2 - c2 * a1, r11 = c2 * a0 - c0 * a2, r12 = c0 * a1 - c1 * a0;
+	const r20 = a1 * b2 - a2 * b1, r21 = a2 * b0 - a0 * b2, r22 = a0 * b1 - a1 * b0;
+	const det = a0 * r00 + a1 * r01 + a2 * r02;
 	if ( Math.abs( det ) < 1e-12 ) return; // A zero-sized actor is already invisible.
-	const col0 = [ palette[offset]!, palette[offset + 1]!, palette[offset + 2]! ];
-	const col1 = [ palette[offset + 4]!, palette[offset + 5]!, palette[offset + 6]! ];
-	const col2 = [ palette[offset + 8]!, palette[offset + 9]!, palette[offset + 10]! ];
+	const p00 = palette[offset]!, p01 = palette[offset + 1]!, p02 = palette[offset + 2]!;
+	const p10 = palette[offset + 4]!, p11 = palette[offset + 5]!, p12 = palette[offset + 6]!;
+	const p20 = palette[offset + 8]!, p21 = palette[offset + 9]!, p22 = palette[offset + 10]!;
 	// A still ViewVBillboard element keeps its own rotation, now on world
 	// axes (b1556c skips the +0xac instance product): its columns are the
 	// basis and carry their own sign, so the scale is their length.
 	const moving = mode === "v" ? velocityBasis( velocity ) : null;
 	const kept = mode === "v" && !moving;
-	const axes = mode === "v" ? moving ?? [ col0, col1, col2 ] : cameraAxes( view, mode );
-	const s0 = !kept && col0[1] === 0 && col0[2] === 0 ? col0[0]! : Math.hypot( ...col0 );
-	const s1 = !kept && col1[0] === 0 && col1[2] === 0 ? col1[1]! : Math.hypot( ...col1 );
-	const s2 = !kept && col2[0] === 0 && col2[1] === 0 ? col2[2]! : Math.hypot( ...col2 );
-	const scale = [ Math.hypot( ...a ) * s0, Math.hypot( ...b ) * s1, Math.hypot( ...c ) * s2 ];
-	for ( let col = 0; col < 3; col++ ) {
-		const axis = axes[col]!, length = Math.hypot( axis[0]!, axis[1]!, axis[2]! );
-		if ( !Number.isFinite( length ) || length < 1e-12 ) throw new Error( "Invalid effect camera basis" );
-		for ( let row = 0; row < 3; row++ ) {
-			palette[offset + col * 4 + row] = dot( rows[row]!, axis ) / det / length * scale[col]!;
+	if ( mode !== "v" ) cameraAxes( view, mode, axes );
+	else if ( moving ) {
+		for ( let column = 0; column < 3; column++ ) {
+			const axis = moving[column]!;
+			axes[column * 3] = axis[0];
+			axes[column * 3 + 1] = axis[1];
+			axes[column * 3 + 2] = axis[2];
 		}
+	} else {
+		axes[0] = p00;
+		axes[1] = p01;
+		axes[2] = p02;
+		axes[3] = p10;
+		axes[4] = p11;
+		axes[5] = p12;
+		axes[6] = p20;
+		axes[7] = p21;
+		axes[8] = p22;
+	}
+	const s0 = !kept && p01 === 0 && p02 === 0 ? p00 : Math.hypot( p00, p01, p02 );
+	const s1 = !kept && p10 === 0 && p12 === 0 ? p11 : Math.hypot( p10, p11, p12 );
+	const s2 = !kept && p20 === 0 && p21 === 0 ? p22 : Math.hypot( p20, p21, p22 );
+	const scale0 = Math.hypot( a0, a1, a2 ) * s0,
+		scale1 = Math.hypot( b0, b1, b2 ) * s1,
+		scale2 = Math.hypot( c0, c1, c2 ) * s2;
+	for ( let col = 0; col < 3; col++ ) {
+		const x = axes[col * 3]!, y = axes[col * 3 + 1]!, z = axes[col * 3 + 2]!, length = Math.hypot( x, y, z );
+		if ( !Number.isFinite( length ) || length < 1e-12 ) throw new Error( "Invalid effect camera basis" );
+		const scale = col === 0 ? scale0 : col === 1 ? scale1 : scale2;
+		palette[offset + col * 4] = (r00 * x + r01 * y + r02 * z) / det / length * scale;
+		palette[offset + col * 4 + 1] = (r10 * x + r11 * y + r12 * z) / det / length * scale;
+		palette[offset + col * 4 + 2] = (r20 * x + r21 * y + r22 * z) / det / length * scale;
 	}
 }
 
