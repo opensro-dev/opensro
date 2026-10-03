@@ -274,16 +274,18 @@ callbacks (4A4BD0 / 4A4F70 -> CAITactics current state +80). BATTLE
 (55A390) abandons a feared caster that is its current target, and any
 player target under confusion; other states only record the event.
 The end event (+84, 559760) needs no port action: the next scan resumes.
+A Discord Wave release (aiEventKindDiscord, monsterdiscord.go) abandons
+the target it names, like Fear.
 ==================
 */
 func (ops *MonsterMoverOps) applyTacticsEvents(divisionID string, instance monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {
 	events := ops.Monsters.takeAIEvents(divisionID, instance.Gid)
 	battle := mover.Mode() == monster.MoverChasing || mover.Mode() == monster.MoverAttacking
 	for _, event := range events {
-		if event.Event != 0x14 || !battle || mover.TargetGID() == 0 {
+		if event.Event != aiEventStart || !battle || mover.TargetGID() == 0 {
 			continue
 		}
-		if event.Kind == 9 && mover.TargetGID() != event.Source {
+		if (event.Kind == 9 || event.Kind == aiEventKindDiscord) && mover.TargetGID() != event.Source {
 			continue
 		}
 		return ops.startReturnLeg(divisionID, instance, ops.resolveTactics(instance), mover, monster.MoverEventTargetLost, nowMs), true

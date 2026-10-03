@@ -337,6 +337,10 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		row.Threat = taunt
 		return ""
 	}
+	if decrease, ok := compileSkillThreatDecrease(fields, *row); ok {
+		row.Threat = decrease
+		return ""
+	}
 	if threat, ok := compileSkillStatusCast(fields, *row); ok {
 		// Retail initializes the generated-result count to one even without
 		// att or cm; the single record carries the status roll.

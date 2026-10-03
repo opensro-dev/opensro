@@ -325,6 +325,11 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 			if skill.PositionEffect.Pinned {
 				return rt.acceptPositionSkill(divisionID, character, snapshot, cast, skill)
 			}
+			// Discord Wave: a friendly-targeted hostility cut
+			// (discordwave.go).
+			if skill.Threat.Decrease {
+				return rt.acceptDiscordWave(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
+			}
 			if skill.Threat.Only && !skill.TargetRequired {
 				return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill}, cast)
 			}
