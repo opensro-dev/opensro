@@ -31,6 +31,26 @@ export interface ParticleTickPose {
 	readonly scale: number[];
 	readonly rotation: Float32Array;
 	readonly matrix: Float32Array;
+	// The last tick step of rotation and of matrix (continueRotation's cache).
+	rotationStep?: Float64Array;
+	matrixStep?: Float64Array;
+}
+
+// A step cache: the previous and current 3x3 it was found for (0..17), its
+// state (18: 0 empty, 1 a rotation, 2 none), and axis xyz and angle (19..22).
+const STEP_CACHE = 23;
+const STEP_STATE = 18;
+const STEP_EMPTY = 0;
+const STEP_ROTATION = 1;
+const STEP_NONE = 2;
+
+/*
+================
+createStepCache
+================
+*/
+export function createStepCache(): Float64Array {
+	return new Float64Array( STEP_CACHE );
 }
 
 /*
@@ -114,7 +134,15 @@ export function presentParticle(
 		out.position[axis] = position + (position - previous.position[axis]!) * blend;
 		out.scale[axis] = scale + (scale - previous.scale[axis]!) * blend;
 	}
-	continueRotation( previous.rotation, state.rotation, blend, out.rotation, 0, out.work );
+	continueRotation(
+		previous.rotation,
+		state.rotation,
+		blend,
+		out.rotation,
+		0,
+		out.work,
+		previous.rotationStep ??= createStepCache()
+	);
 	return out;
 }
 
@@ -128,7 +156,11 @@ translation row and any scale of current are kept. A step that is not a
 rotation, or is too large to be motion, leaves current as is. work is
 caller scratch of at least ROTATION_WORK entries.
 
-Most particles do not rotate between ticks; they take the copy path.
+Most particles do not rotate between ticks; they take the copy path. The
+step changes only at a tick, so with a cache (createStepCache, one per
+tick pose) its axis and angle are found once per tick and each frame only
+turns by its fraction; the cache answers only for the exact inputs it was
+found for, so the result is unchanged.
 ================
 */
 export function continueRotation(
@@ -137,7 +169,8 @@ export function continueRotation(
 	fraction: number,
 	out: Float32Array,
 	offset: number,
-	work: Float64Array = new Float64Array( ROTATION_WORK )
+	work: Float64Array = new Float64Array( ROTATION_WORK ),
+	cache?: Float64Array
 ): void {
 	for ( let i = 0; i < 16; i++ ) out[offset + i] = current[i]!;
 	if ( fraction <= 0 ) return;
@@ -146,16 +179,31 @@ export function continueRotation(
 		previous[4] === current[4] && previous[5] === current[5] && previous[6] === current[6] &&
 		previous[8] === current[8] && previous[9] === current[9] && previous[10] === current[10]
 	) return;
-	if ( !invert3( previous, work ) ) return;
-	// step = previous^-1 * current, column-major 3x3 at work[9].
-	for ( let column = 0; column < 3; column++ ) {
-		for ( let row = 0; row < 3; row++ ) {
-			work[9 + column * 3 + row] = work[row]! * current[column * 4]! +
-				work[3 + row]! * current[column * 4 + 1]! +
-				work[6 + row]! * current[column * 4 + 2]!;
+	let x: number, y: number, z: number, angle: number;
+	if ( cache && cache[STEP_STATE] !== STEP_EMPTY && stepInputsMatch( cache, previous, current ) ) {
+		if ( cache[STEP_STATE] === STEP_NONE ) return;
+		x = cache[19]!;
+		y = cache[20]!;
+		z = cache[21]!;
+		angle = cache[22]!;
+	} else {
+		const found = invert3( previous, work ) && stepRotation( current, work );
+		if ( cache ) {
+			for ( let i = 0; i < 9; i++ ) {
+				const at = (i / 3 | 0) * 4 + i % 3;
+				cache[i] = previous[at]!;
+				cache[9 + i] = current[at]!;
+			}
+			cache[STEP_STATE] = found ? STEP_ROTATION : STEP_NONE;
+			for ( let i = 0; i < 4; i++ ) cache[19 + i] = work[18 + i]!;
 		}
+		if ( !found ) return;
+		x = work[18]!;
+		y = work[19]!;
+		z = work[20]!;
+		angle = work[21]!;
 	}
-	if ( !partialRotation( work, fraction ) ) return;
+	partialRotation( x, y, z, angle, fraction, work );
 	// out = current * partial (3x3 part only); partial is at work[18].
 	for ( let column = 0; column < 3; column++ ) {
 		for ( let row = 0; row < 3; row++ ) {
@@ -194,28 +242,67 @@ function invert3( m: ArrayLike<number>, work: Float64Array ): boolean {
 
 /*
 ================
-partialRotation
+stepInputsMatch
 
-From the step rotation at work[9..17], write the rotation by fraction of
-its angle about the same axis into work[18..26]. False when the step is
-not a rotation (it also scaled or sheared) or exceeds MAX_TICK_ROTATION_RAD.
+True when cache was found for these exact previous and current 3x3.
 ================
 */
-function partialRotation( work: Float64Array, fraction: number ): boolean {
-	const r = ( row: number, column: number ) => work[9 + column * 3 + row]!;
+function stepInputsMatch( cache: Float64Array, previous: ArrayLike<number>, current: ArrayLike<number> ): boolean {
+	for ( let i = 0; i < 9; i++ ) {
+		const at = (i / 3 | 0) * 4 + i % 3;
+		if ( cache[i] !== previous[at] || cache[9 + i] !== current[at] ) return false;
+	}
+	return true;
+}
+
+/*
+================
+stepRotation
+
+With previous^-1 at work[0..8], the step previous^-1 * current at
+work[9..17], and its axis xyz and angle at work[18..21]. False when the
+step is not a rotation (it also scaled or sheared) or exceeds
+MAX_TICK_ROTATION_RAD.
+================
+*/
+function stepRotation( current: ArrayLike<number>, work: Float64Array ): boolean {
+	// step = previous^-1 * current, column-major 3x3 at work[9].
 	for ( let column = 0; column < 3; column++ ) {
-		const x = r( 0, column ), y = r( 1, column ), z = r( 2, column );
+		for ( let row = 0; row < 3; row++ ) {
+			work[9 + column * 3 + row] = work[row]! * current[column * 4]! +
+				work[3 + row]! * current[column * 4 + 1]! +
+				work[6 + row]! * current[column * 4 + 2]!;
+		}
+	}
+	for ( let column = 0; column < 3; column++ ) {
+		const x = work[9 + column * 3]!, y = work[10 + column * 3]!, z = work[11 + column * 3]!;
 		if ( Math.abs( x * x + y * y + z * z - 1 ) > 2e-3 ) return false;
 	}
-	const cos = Math.max( -1, Math.min( 1, (r( 0, 0 ) + r( 1, 1 ) + r( 2, 2 ) - 1) / 2 ) );
+	const cos = Math.max( -1, Math.min( 1, (work[9]! + work[13]! + work[17]! - 1) / 2 ) );
 	const angle = Math.acos( cos );
 	if ( angle > MAX_TICK_ROTATION_RAD || angle < 1e-7 ) return false;
-	let x = r( 2, 1 ) - r( 1, 2 ), y = r( 0, 2 ) - r( 2, 0 ), z = r( 1, 0 ) - r( 0, 1 );
+	let x = work[14]! - work[16]!, y = work[15]! - work[11]!, z = work[10]! - work[12]!;
 	const length = Math.sqrt( x * x + y * y + z * z );
 	if ( length < 1e-9 ) return false;
 	x /= length;
 	y /= length;
 	z /= length;
+	work[18] = x;
+	work[19] = y;
+	work[20] = z;
+	work[21] = angle;
+	return true;
+}
+
+/*
+================
+partialRotation
+
+The rotation by fraction of angle about the unit axis xyz, written
+column-major into work[18..26].
+================
+*/
+function partialRotation( x: number, y: number, z: number, angle: number, fraction: number, work: Float64Array ) {
 	const turn = angle * fraction, c = Math.cos( turn ), s = Math.sin( turn ), t = 1 - c;
 	work[18] = t * x * x + c;
 	work[19] = t * x * y + s * z;
@@ -226,5 +313,4 @@ function partialRotation( work: Float64Array, fraction: number ): boolean {
 	work[24] = t * x * z + s * y;
 	work[25] = t * y * z - s * x;
 	work[26] = t * z * z + c;
-	return true;
 }

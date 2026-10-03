@@ -29,7 +29,11 @@ import {
 	type ParticleProgram,
 	type ParticleVectorCommand
 } from "@/engine/foundation/animation/particle-program";
-import { snapshotParticleTick, continueRotation } from "@/engine/foundation/animation/particle-presentation";
+import {
+	snapshotParticleTick,
+	continueRotation,
+	createStepCache
+} from "@/engine/foundation/animation/particle-presentation";
 
 export interface ParticleEmitter {
 	readonly emission?: EmissionParameters;
@@ -740,8 +744,17 @@ export function particleElementMatrix(
 	work?: Float64Array
 ): void {
 	const blend = Math.max( 0, Math.min( 1, fraction ) ), previous = element.state.previous;
-	if ( previous && blend > 0 ) continueRotation( previous.matrix, element.matrix, blend, out, offset, work );
-	else out.set( element.matrix, offset );
+	if ( previous && blend > 0 ) {
+		continueRotation(
+			previous.matrix,
+			element.matrix,
+			blend,
+			out,
+			offset,
+			work,
+			previous.matrixStep ??= createStepCache()
+		);
+	} else out.set( element.matrix, offset );
 	for ( let axis = 0; axis < 3; axis++ ) {
 		out[offset + 12 + axis] = element.state.position[axis]! +
 			(element.state.position[axis]! - element.previousPosition[axis]!) * blend;

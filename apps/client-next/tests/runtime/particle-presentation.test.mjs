@@ -15,9 +15,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const load = file => import( sourceFileUrl( file ).href );
-const { createPresentedParticle, presentParticle, snapshotParticleTick, continueRotation } = await load(
-	"src/engine/foundation/animation/particle-presentation.ts"
-);
+const { createPresentedParticle, presentParticle, snapshotParticleTick, continueRotation, createStepCache } =
+	await load(
+		"src/engine/foundation/animation/particle-presentation.ts"
+	);
 const { createParticleGraph, advanceParticleGraph, particleElementMatrix } = await load(
 	"src/engine/foundation/animation/particle-graph.ts"
 );
@@ -138,4 +139,62 @@ test("the drawn zoom glides to the wheel distance and lands", () => {
 	assert.ok( Math.abs( a - b ) < 1e-9 );
 	ease.reset();
 	assert.equal( ease.step( 150, 2000 ), 150, "a reset draws the target at once" );
+});
+
+test("a step cache gives the uncached rotation exactly, across ticks, hits and resets", () => {
+	let seed = 9;
+	const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+	// A rotation about a random axis, scaled, as a tick pose.
+	const pose = () => {
+		const m = identity(), x = random() - .5, y = random() - .5, z = random() - .5, length = Math.hypot( x, y, z );
+		const angle = random() * 6,
+			c = Math.cos( angle ),
+			s = Math.sin( angle ),
+			t = 1 - c,
+			u = x / length,
+			v = y / length,
+			w = z / length,
+			scale = .5 + random();
+		const r = [
+			t * u * u + c,
+			t * u * v + s * w,
+			t * u * w - s * v,
+			t * u * v - s * w,
+			t * v * v + c,
+			t * v * w + s * u,
+			t * u * w + s * v,
+			t * v * w - s * u,
+			t * w * w + c
+		];
+		for ( let column = 0; column < 3; column++ ) {
+			for ( let row = 0; row < 3; row++ ) m[column * 4 + row] = r[column * 3 + row] * scale;
+		}
+		m[12] = random() * 100;
+		return m;
+	};
+	const cache = createStepCache(), cached = new Float32Array( 16 ), plain = new Float32Array( 16 );
+	let rotated = 0, previous = pose();
+	for ( let tick = 0; tick < 400; tick++ ) {
+		// Small steps (drawn turning), large ones (a reset) and unchanged ones.
+		const kind = tick % 3, current = kind === 2 ? previous.slice() : kind === 1 ? pose() : previous.map( v => v );
+		if ( kind === 0 ) {
+			const step = spinZ( random() * .8 - .4 );
+			const out = new Float32Array( 16 );
+			for ( let c = 0; c < 4; c++ ) {
+				for ( let r = 0; r < 4; r++ ) {
+					out[c * 4 + r] = previous[r] * step[c * 4] + previous[4 + r] * step[c * 4 + 1] +
+						previous[8 + r] * step[c * 4 + 2] + previous[12 + r] * step[c * 4 + 3];
+				}
+			}
+			current.set( out );
+		}
+		for ( const fraction of [ .1, .5, .9, .5 ] ) {
+			continueRotation( previous, current, fraction, cached, 0, undefined, cache );
+			continueRotation( previous, current, fraction, plain, 0 );
+			assert.deepEqual( [ ...cached ], [ ...plain ], `tick ${tick} fraction ${fraction}` );
+			if ( cached.some( ( v, i ) => v !== current[i] ) ) rotated++;
+		}
+		previous = current;
+	}
+	assert.ok( rotated > 100, `only ${rotated} frames rotated` );
 });

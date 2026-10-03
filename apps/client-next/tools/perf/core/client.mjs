@@ -48,7 +48,9 @@ function instrument( counts ) {
 		renderMark() {},
 		characterBegin() {},
 		characterMark() {},
-		characterCount() {},
+		characterCount( name, value = 1 ) {
+			tally[name] = (tally[name] ?? 0) + value;
+		},
 		sampleDetails: () => false,
 		worldBegin() {
 			worldStart = now();

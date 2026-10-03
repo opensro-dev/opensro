@@ -13,7 +13,7 @@ lives in particle-presentation.ts.
 
 import { crtRandomRange } from "@/engine/foundation/math/crt-random";
 import { identity } from "@/engine/foundation/rendering/world-math";
-import { multiply } from "@/engine/foundation/math/pose-math";
+import { multiply, multiplyInPlace } from "@/engine/foundation/math/pose-math";
 import { particleCommandFrames } from "@/engine/foundation/animation/particle-command-frames";
 import { particleRotation, particleCone } from "@/engine/foundation/animation/particle-rotation";
 export interface ParticleVectorCommand {
@@ -391,9 +391,7 @@ placeParticle
 */
 export function placeParticle( state: ParticleInstance, palette: Float32Array, offset: number, spin = false ) {
 	if ( spin ) {
-		const result = new Float32Array( 16 );
-		multiply( palette.subarray( offset, offset + 16 ), state.rotation, result );
-		palette.set( result, offset );
+		multiplyInPlace( palette, offset, state.rotation );
 		return;
 	}
 	for ( let i = 0; i < 3; i++ ) {

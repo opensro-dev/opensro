@@ -48,6 +48,29 @@ export function createGeometryResources(
 	let instanceScratch = new Float32Array( 0 );
 	/*
 	================
+	finiteValues
+	================
+	*/
+	function finiteValues( values: Float32Array ): boolean {
+		for ( let i = 0; i < values.length; i++ ) if ( !Number.isFinite( values[i] ) ) return false;
+		return true;
+	}
+	/*
+	================
+	unitValues
+
+	Every value finite and within 0..1.
+	================
+	*/
+	function unitValues( values: Float32Array ): boolean {
+		for ( let i = 0; i < values.length; i++ ) {
+			const v = values[i]!;
+			if ( !(Number.isFinite( v ) && v >= 0 && v <= 1) ) return false;
+		}
+		return true;
+	}
+	/*
+	================
 	packInstances
 	================
 	*/
@@ -59,14 +82,14 @@ export function createGeometryResources(
 		paletteOffsets?: Uint32Array
 	) {
 		const count = instances.length / 16;
-		if (
-			!Number.isInteger( count ) ||
-			opacity && (opacity.length !== count || !opacity.every( v => Number.isFinite( v ) && v >= 0 && v <= 1 ))
-		) throw new Error( "Invalid instance opacity" );
-		if ( pointLights && (pointLights.length !== count * 12 || !pointLights.every( Number.isFinite )) ) {
+		// Plain loops: these run on every instance upload, every frame.
+		if ( !Number.isInteger( count ) || opacity && (opacity.length !== count || !unitValues( opacity )) ) {
+			throw new Error( "Invalid instance opacity" );
+		}
+		if ( pointLights && (pointLights.length !== count * 12 || !finiteValues( pointLights )) ) {
 			throw Error( "Invalid point light stream" );
 		}
-		if ( appearance && (appearance.length !== count * 8 || !appearance.every( Number.isFinite )) ) {
+		if ( appearance && (appearance.length !== count * 8 || !finiteValues( appearance )) ) {
 			throw new Error( "Invalid instance appearance" );
 		}
 		if ( paletteOffsets && (paletteOffsets.length !== count || paletteOffsets.some( v => v >= 16777216 )) ) {
