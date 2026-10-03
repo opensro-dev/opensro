@@ -123,6 +123,7 @@ import {
 	trainingRequest,
 	type SkillMetadata
 } from "@/engine/foundation/gameplay/skill-catalog";
+import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
 import { bootstrapProgression, progressionPacket, type Progression } from "@/engine/foundation/gameplay/progression";
 import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/quickslots";
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
@@ -263,6 +264,8 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let worldReferences: WorldReferences = { country: () => undefined, item: () => undefined };
 	let bindings = skillBindings( {} );
 	let catalog: readonly SkillMetadata[] = [];
+	// The local cast's action-state-2 window (CIDecoSkill 8E0A23 / 877240).
+	const castMotion = createCastMotionLock();
 	const bindingRepairs = new Map<number, import("@/engine/foundation/gameplay/quickslots").QuickSlot>();
 	/*
 ================
@@ -409,6 +412,7 @@ selected entities, cooldowns or world-entry state.
 		musicMode = 0;
 		bindings = skillBindings( {} );
 		catalog = [];
+		castMotion.clear();
 		progression = { masteries: [] };
 		skillGroups.clear();
 		movement.clear();
@@ -583,6 +587,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			social = emptySocial( (value as { character?: { name?: string; }; }).character?.name ?? "" );
 			bindings = skillBindings( value );
 			catalog = nextCatalog;
+			castMotion.catalog( nextCatalog );
 			worldClock = undefined;
 			environment = entryEvents.state;
 			chat.bootstrap( value );
@@ -1279,7 +1284,7 @@ state here before a command can claim a native wire conversation.
 				if ( protocol !== 1 ) {
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
-				if ( localCastHolds() && !actionSession.released() ) {
+				if ( castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() ) ) {
 					// Resolve the click now, not when the cast releases: its ray belongs
 					// to the camera at click time, and the destination marker appears
 					// when the player clicks. A direction walk keeps its query.
@@ -2352,9 +2357,13 @@ before take assembles the presentation snapshot.
 			) {
 				sendFrame( frame );
 			}
-			// A click held through the cast walks as soon as the cast releases;
+			// A click held through the cast walks as soon as the caster leaves
+			// action state 2 (the skill's action window ends or it is cancelled);
 			// death forfeits it.
-			if ( moveReservation.holding() && (!localCastHolds() || actionSession.released()) ) {
+			if (
+				moveReservation.holding() &&
+				!castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() )
+			) {
 				const held = moveReservation.take()!;
 				if ( !local || local.appearanceState?.[0] === 2 ) {
 					// A forfeited click takes its marker with it.

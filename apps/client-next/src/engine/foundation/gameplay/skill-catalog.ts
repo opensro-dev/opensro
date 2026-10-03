@@ -39,6 +39,9 @@ export interface SkillMetadata {
 	readonly targetSelf?: boolean;
 	readonly groundTarget?: boolean;
 	readonly cooldownMs: number;
+	// Action_CastingTime + Action_ActionDuration (columns 12 + 13): the action
+	// actor's lifetime, which holds the caster's action state 2 (cast-motion-lock).
+	readonly actionMs?: number;
 	readonly cooldownGroup?: number;
 	readonly masteries: readonly Requirement[];
 	readonly prerequisites: readonly Requirement[];
@@ -144,6 +147,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			targetSelf: ui.targetSelf ?? false,
 			groundTarget: ui.groundTarget ?? false,
 			cooldownMs: uint( ui.cooldownMs ),
+			...(ui.actionMs === undefined ? {} : { actionMs: uint( ui.actionMs ) }),
 			cooldownGroup: uint( ui.cooldownGroup ?? 0, 255 ),
 			masteries: requirements( ui.masteries, 2 ),
 			prerequisites: requirements( ui.prerequisites, 3 )

@@ -831,10 +831,15 @@ type SkillUiRow struct {
 	// TargetSelf marks a target-required row that also admits its caster
 	// (column 26, TargetGroup_Self): the client aims a cast with nothing
 	// selected at its own character. Omitted when false.
-	TargetSelf    bool                `json:"targetSelf,omitempty"`
-	GroundTarget  bool                `json:"groundTarget,omitempty"`
-	CooldownGroup uint8               `json:"cooldownGroup,omitempty"`
-	CooldownMs    uint32              `json:"cooldownMs"`
+	TargetSelf    bool   `json:"targetSelf,omitempty"`
+	GroundTarget  bool   `json:"groundTarget,omitempty"`
+	CooldownGroup uint8  `json:"cooldownGroup,omitempty"`
+	CooldownMs    uint32 `json:"cooldownMs"`
+	// ActionMs is the action actor's lifetime (ActionLifecycleMs, columns
+	// 12 + 13): the client holds the caster's action state 2, and with it
+	// every ground click, for this long (CIDecoSkill 8E0A23, 877240).
+	// Omitted when either column is unpinned.
+	ActionMs      uint64              `json:"actionMs,omitempty"`
 	Masteries     [2]SkillRequirement `json:"masteries"`
 	Prerequisites [3]SkillRequirement `json:"prerequisites"`
 }
@@ -918,6 +923,9 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 				projection.UI.BuffCancel = "confirm"
 			}
 			projection.UI.BuffCancelInstance = row.BuffCancelInstance
+			if lifecycle, pinned := row.ActionLifecycleMs(); pinned {
+				projection.UI.ActionMs = lifecycle
+			}
 			if row.SpeedBuff.Present {
 				projection.UI.SpeedBuff = &SkillUiSpeedBuff{Active: row.SpeedBuff.Active}
 			}
