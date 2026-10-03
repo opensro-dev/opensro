@@ -81,11 +81,14 @@ const (
 	ParameterDotDuration
 	// RPBU +0x508 adds milliseconds to the coating, not its poison victim.
 	ParameterPoisonCoatingDuration
-	// Cut resistance of the Bard's area auras. Prism's setv MUCR and Screen
-	// Dance's setv DSCR are points taken off the skc cut chance of a music
-	// (getv MUCR) or dance (getv DSCR) aura when its Bard is hit; see
-	// action.damageCutChance. Owner's rule: the passives reduce that chance.
+	// MUCR +0x548: the Bard's music keep addend. A row that reads getv MUCR
+	// adds the caster's value to its skc keep chance (5A160A); see
+	// action.damageKeepPercent. DSER (ParameterDanceRange) is the dance
+	// addend at 5A162E.
 	ParameterMusicCutResist
+	// DSCR +0x550: indexed by 587630 and authored by the dances and Screen
+	// Dance, but no native code reads it (whole-image scan); it changes
+	// nothing and stays a known key only so those rows admit.
 	ParameterDanceCutResist
 	SkillParameterCount
 )
