@@ -179,6 +179,11 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		if owner := rt.characterByCosGID(divisionID, targetGid); owner != nil {
 			return rt.monsterHitSummonedCOS(divisionID, instance, monsterCastRecipient{owner, targetGid}, skillID, nowMs, release)
 		}
+		// A Temptation fight: a tempted monster, or the monster answering
+		// it, strikes a monster (temptation.go).
+		if target, fight := rt.monsterFightAdmitted(divisionID, instance, targetGid); fight && release == nil {
+			return rt.monsterHitMonster(divisionID, instance, target, skillID, nowMs)
+		}
 		return result
 	}
 	snapshot := rt.characterSnapshot(divisionID, character)

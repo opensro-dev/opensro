@@ -77,6 +77,12 @@ func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.
 		return nil, nil
 	}
 	tactics := ops.resolveTactics(instance)
+	// Temptation: a tempted monster, and a monster fighting one, plan
+	// against monsters (monstertemptation.go).
+	divisionPlayers, tactics = ops.temptationView(divisionID, instance, mover, divisionPlayers, tactics, nowMs)
+	if frames, targeted, handled := ops.acquireTemptationFoe(divisionID, instance, tactics, mover, divisionPlayers, nowMs); handled {
+		return frames, targeted
+	}
 	if mover.Mode() == monster.MoverWandering && mover.BehaviorDeadlineMs > 0 && nowMs > mover.BehaviorDeadlineMs {
 		// 559EB0 -> event 37 -> 5599A0: enter IDLE before scanning.
 		// WANDER::OnExit is a no-op; do not cancel the movement channel.

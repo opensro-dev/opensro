@@ -95,6 +95,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		out = append(out, rt.drainStoppedCharacterEffects()...)
 		// 4A4390 per actor: expiry, damage over time, detonation, mask.
 		out = append(out, rt.advanceMonsterAbnormals(nowMs)...)
+		out = append(out, rt.drainMonsterFightRecipients()...)
 		out = append(out, rt.advancePlayerAbnormals(nowMs)...)
 		out = append(out, rt.advanceCosAbnormals(nowMs)...)
 		out = append(out, rt.advanceQueuedActionSessions(nowMs)...)

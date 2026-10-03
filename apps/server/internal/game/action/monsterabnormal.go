@@ -233,6 +233,8 @@ func (r *abnormalRandom) Rand() int32 {
 rollPlayerOnMonster
 
 rollPlayerOnMonster ports 590680 for a player's hit on a monster target.
+Temptation's Confusion is then dropped on a monster it cannot affect
+(untemptableConfusion, the owner's rule).
 ================
 */
 func (rt *Runtime) rollPlayerOnMonster(division string, c *enterworld.Character, params *abnormal.SkillParams, target monster.Instance) ([]abnormal.Record, error) {
@@ -266,7 +268,7 @@ func (rt *Runtime) rollPlayerOnMonster(division string, c *enterworld.Character,
 		in.TargetResist[i] = float32(target.Ref.ElementResist[i])
 	}
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, character: c.Name}}
-	records := abnormal.Roll(in, random)
+	records := untemptableConfusion(target, abnormal.Roll(in, random))
 	return records, random.err
 }
 

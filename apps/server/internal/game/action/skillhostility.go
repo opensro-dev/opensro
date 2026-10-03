@@ -92,6 +92,10 @@ func (rt *Runtime) recordSkillHostility(division string, target uint32, events [
 	for _, gid := range gids {
 		character := rt.findCharacterByGid(division, gid)
 		if character == nil {
+			// A monster in a Temptation fight (temptation.go).
+			if candidate, ok := rt.temptedOpponentCandidate(division, instance, gid, from, now); ok {
+				candidates[gid] = candidate
+			}
 			continue
 		}
 		snapshot := rt.characterSnapshot(division, character)
