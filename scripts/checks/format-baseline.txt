@@ -7,7 +7,6 @@ apps/client-next/src/engine/contracts/damage-text.ts
 apps/client-next/src/engine/contracts/effective-hp.ts
 apps/client-next/src/engine/contracts/footprint.ts
 apps/client-next/src/engine/contracts/frontend.ts
-apps/client-next/src/engine/contracts/input.ts
 apps/client-next/src/engine/contracts/item-process.ts
 apps/client-next/src/engine/contracts/message.ts
 apps/client-next/src/engine/contracts/model.ts
@@ -162,7 +161,6 @@ apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
 apps/client-next/src/engine/foundation/rendering/world-environment.ts
 apps/client-next/src/engine/foundation/rendering/world-material.ts
-apps/client-next/src/engine/foundation/rendering/world-math.ts
 apps/client-next/src/engine/foundation/ui/academy-layout.ts
 apps/client-next/src/engine/foundation/ui/action-layout.ts
 apps/client-next/src/engine/foundation/ui/alchemy-selection.ts
@@ -254,7 +252,6 @@ apps/client-next/src/engine/runtime/frontend/flow/flow.ts
 apps/client-next/src/engine/runtime/frontend/frontend.ts
 apps/client-next/src/engine/runtime/frontend/stage/preload.ts
 apps/client-next/src/engine/runtime/frontend/stage/stage.ts
-apps/client-next/src/engine/runtime/input/input.ts
 apps/client-next/src/engine/runtime/navigation/navigation.ts
 apps/client-next/src/engine/runtime/presentation/effective-hp.ts
 apps/client-next/src/engine/runtime/random/random.ts
@@ -269,7 +266,6 @@ apps/client-next/src/engine/runtime/renderer/device/timing.ts
 apps/client-next/src/engine/runtime/renderer/surface/surface.ts
 apps/client-next/src/engine/runtime/runtime-errors.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
-apps/client-next/src/engine/runtime/simulation/worker/input/input.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/codec/codec.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/network.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
@@ -468,7 +464,6 @@ apps/client-next/tests/runtime/snapshot-age.test.mjs
 apps/client-next/tests/runtime/ui-cleanup.test.mjs
 apps/client-next/tests/runtime/ui-product-probe.test.mjs
 apps/client-next/tests/runtime/weather-publication.test.mjs
-apps/client-next/tests/runtime/world-replay.test.mjs
 apps/client-next/tools/audit-bsr-parity.mjs
 apps/client-next/tools/audit-effect-coverage.mjs
 apps/client-next/tools/beta/archive.mjs
@@ -504,7 +499,6 @@ apps/client-next/tools/verify-entity-model-publication.mjs
 apps/client-next/tools/verify-layout.mjs
 apps/client-next/tools/verify-modifier-keys.mjs
 apps/client-next/tools/verify-ownership.mjs
-apps/client-next/tools/world-replay.mjs
 apps/client-next/vite.config.mjs
 apps/server-observatory/public/app.js
 apps/server-observatory/public/item-model.js

@@ -608,11 +608,11 @@ test("camera responds before worker acknowledgement, drains once and release pre
 	const immediate = input.camera();
 	assert.equal( immediate.yaw, .1 );
 	assert.equal( immediate.distance, 74 );
-	const batch = input.drain();
-	assert.equal( batch.commands.length, 3 );
-	assert.deepEqual( input.camera(), immediate );
+	// Camera input moves the camera here and sends the worker nothing.
 	assert.equal( input.drain(), null );
+	assert.deepEqual( input.camera(), immediate );
 	input.accept( { kind: "release", timeMs: 3 } );
+	assert.deepEqual( input.drain().commands.map( command => command.kind ), [ "release" ] );
 	input.accept( { kind: "pointer", x: 999, y: 999, buttons: 2, timeMs: 4 } );
 	assert.deepEqual( input.camera(), immediate );
 	input.accept( { kind: "pointer", x: 1001, y: 999, buttons: 2, timeMs: 5 } );

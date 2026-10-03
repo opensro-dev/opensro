@@ -39,6 +39,8 @@ type Layer = {
 	members: Map<WorldGroup, Member>;
 	indices: Uint32Array;
 	dirty: boolean;
+	// The submission pass that last took this layer's draw.
+	submitted: number;
 };
 
 /*
@@ -156,7 +158,8 @@ export function createTerrainLayers() {
 					top: 0,
 					members: new Map<WorldGroup, Member>(),
 					indices: new Uint32Array( 0 ),
-					dirty: true
+					dirty: true,
+					submitted: -1
 				};
 				layer = { ...shell, draw: allocate( geometry, shell, shell.vertexCapacity, shell.indexCapacity ) };
 				layer.indices = new Uint32Array( layer.indexCapacity );
@@ -196,6 +199,22 @@ export function createTerrainLayers() {
 		================
 		*/
 		drawOf: ( group: WorldGroup ) => members.get( group )!.layer.draw,
+		/*
+		================
+		drawFor
+
+		The draw a group submits in pass: its layer's draw at the layer's
+		first member in the pass, null for the other members, undefined when
+		the group is not a member (it submits its own draw).
+		================
+		*/
+		drawFor( group: WorldGroup, pass: number ): GeometryDraw | null | undefined {
+			const member = members.get( group );
+			if ( !member ) return undefined;
+			if ( member.layer.submitted === pass ) return null;
+			member.layer.submitted = pass;
+			return member.layer.draw;
+		},
 		/*
 		================
 		remove

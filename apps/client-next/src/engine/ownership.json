@@ -66,6 +66,8 @@
     "src/engine/runtime/renderer/world/residency.ts": "src/engine/runtime/renderer/world/world.ts",
     "src/engine/runtime/renderer/world/terrain-layers.ts": "src/engine/runtime/renderer/world/world.ts",
     "src/engine/runtime/renderer/world/shadow-surfaces.ts": "src/engine/runtime/renderer/world/world.ts",
+    "src/engine/runtime/renderer/world/object-fades.ts": "src/engine/runtime/renderer/world/world.ts",
+    "src/engine/runtime/renderer/world/walk-table.ts": "src/engine/runtime/renderer/world/world.ts",
     "src/engine/runtime/assets/worker/world/resources/resources.ts": "src/engine/runtime/assets/worker/world/world.ts",
     "src/engine/runtime/assets/worker/model/character/character.ts": "src/engine/runtime/assets/worker/model/model.ts",
     "src/engine/runtime/renderer/characters/characters.ts": "src/engine/runtime/renderer/renderer.ts",

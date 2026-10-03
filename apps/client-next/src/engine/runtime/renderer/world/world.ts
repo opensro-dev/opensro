@@ -15,6 +15,19 @@ import {
 	BLOB_SHADOW_TEXTURE
 } from "@/engine/foundation/rendering/character-shadow";
 import { createShadowSurfaces } from "./shadow-surfaces";
+import { createObjectFades } from "./object-fades";
+import {
+	compileWalkTable,
+	fadeKeeps,
+	residentSlots,
+	FADE_KEEPS_IN,
+	FADE_KEEPS_OUT,
+	SLOT_SCENERY,
+	SLOT_UNFADED,
+	WALK_INSTANCED,
+	WALK_SKY,
+	WALK_TERRAIN
+} from "./walk-table";
 import { footprintGeometry, footprintTextures } from "@/engine/foundation/rendering/footprints";
 import { createMaterialTimeline } from "@/engine/foundation/rendering/material-timeline";
 import { createTextureAtlas } from "@/engine/foundation/rendering/texture-atlas";
@@ -54,8 +67,6 @@ import {
 	type RegionCollision
 } from "@/engine/foundation/rendering/follow-camera";
 import { initialStarFlicker } from "@/engine/foundation/rendering/star-flicker";
-import { advanceObjectFade } from "@/engine/foundation/rendering/object-visibility";
-import type { ObjectFade } from "@/engine/foundation/rendering/object-visibility";
 import { createCharacterPose } from "@/engine/foundation/animation/animation-pose";
 import {
 	worldEnvironment,
@@ -492,12 +503,9 @@ export function createWorldRenderer(
 			opacity?: Float32Array;
 			sourceInstances?: Int32Array;
 			alphas?: Uint8Array;
-			fadeRows?: FadeRow[];
-			resident?: Uint8Array;
-			// The resident slots in order: the walk visits only these.
-			residentSlots?: Uint32Array;
-			targetCellX?: number;
-			targetCellZ?: number;
+			// Placement bounds (undefined for animated meshes), once resolved.
+			bounds?: PickBounds;
+			boundsResolved?: boolean;
 			seams?: Map<number, { mask: number; cellX: number; cellZ: number; }>;
 			candidates?: readonly TerrainRange[];
 			candidateVolumes?: Uint32Array;
@@ -518,14 +526,12 @@ export function createWorldRenderer(
 	================
 	instanceSelection
 
-	The selection cache of an instanced group, with its association
-	membership for the target cell. Native membership depends on the target
-	cell, not on each sub-cell camera sample or animation clock, so it is
-	recomputed only when that cell changes. Admission builds it for every new
-	group, a few per frame, so the first frame of a new scene does not.
+	The selection cache of an instanced group: the placements it shows and
+	their opacity. Admission builds it for every new group, a few per frame,
+	so the first frame of a new scene does not.
 	================
 	*/
-	function instanceSelection( group: WorldGroup, targetCellX: number, targetCellZ: number ) {
+	function instanceSelection( group: WorldGroup ) {
 		const source = group.geometry.instances!;
 		let cache = selections.get( group );
 		if ( !cache ) {
@@ -535,33 +541,9 @@ export function createWorldRenderer(
 				sourceInstances: new Int32Array( source.length / 16 ).fill( -1 ),
 				alphas: new Uint8Array( source.length / 16 )
 			};
+			if ( group.visibility ) cache.opacity = new Float32Array( source.length / 16 );
 			selections.set( group, cache );
 		}
-		if (
-			group.visibility &&
-			(!cache.resident || cache.targetCellX !== targetCellX || cache.targetCellZ !== targetCellZ)
-		) {
-			cache.resident ??= new Uint8Array( source.length / 16 );
-			for ( let slot = 0; slot < cache.resident.length; slot++ ) {
-				const descriptor = group.visibility[slot];
-				cache.resident[slot] = Number(
-					!descriptor ||
-						descriptor.cells.some( cell =>
-							Math.abs( cell[0] - targetCellX ) <= descriptor.cellRadius &&
-							Math.abs( cell[1] - targetCellZ ) <= descriptor.cellRadius
-						)
-				);
-			}
-			let resident = 0;
-			for ( let slot = 0; slot < cache.resident.length; slot++ ) resident += cache.resident[slot]!;
-			cache.residentSlots = new Uint32Array( resident );
-			for ( let slot = 0, at = 0; slot < cache.resident.length; slot++ ) {
-				if ( cache.resident[slot] ) cache.residentSlots[at++] = slot;
-			}
-			cache.targetCellX = targetCellX;
-			cache.targetCellZ = targetCellZ;
-		}
-		if ( group.visibility && !cache.opacity ) cache.opacity = new Float32Array( source.length / 16 );
 		return cache;
 	}
 	// These are derived from owned scene metadata. Only blended depth order is
@@ -602,19 +584,26 @@ export function createWorldRenderer(
 	// Each ordered group's index in orderedGroups.
 	let groupOrder = new Map<WorldGroup, number>();
 	// Visible marks by draw order: the walk marks, ordering reads them back.
-	let visibleMarks = new Uint8Array( 0 );
+	// The draw phase of each group, by draw order.
+	let visibleMarks = new Uint8Array( 0 ), orderPhase = new Int8Array( 0 );
+	// The current scene's groups in walk order, with their typed bounds.
+	let walk = compileWalkTable( [], pickBounds );
 	/*
 	================
 	orderGroups
 
-	Sets the draw order of the current scene. Shadow surfaces follow that
-	order, so they are rebuilt from the retained selections.
+	Sets the draw order of the current scene and compiles its walk table.
+	Shadow surfaces follow the draw order, so they are rebuilt from the
+	retained selections.
 	================
 	*/
-	function orderGroups( groups: WorldGroup[] ) {
+	function orderGroups( sceneGroups: readonly WorldGroup[] ) {
+		const groups = [ ...sceneGroups ].sort( compareGroups );
 		orderedGroups = groups;
 		groupOrder = new Map( groups.map( ( group, index ) => [ group, index ] ) );
 		visibleMarks = new Uint8Array( groups.length );
+		orderPhase = Int8Array.from( groups, drawPhase );
+		walk = compileWalkTable( sceneGroups, pickBounds );
 		shadowSurfaces.reset();
 		for ( let index = 0; index < groups.length; index++ ) {
 			const group = groups[index]!, chosen = selections.get( group )?.chosen;
@@ -622,9 +611,8 @@ export function createWorldRenderer(
 		}
 		shadowSurfaces.commit();
 	}
-	// Triangles of each group when it was last visible; read only for groups in
-	// previousVisible, so an invisible group's entry is never consulted.
-	let previousVisible = new Set<WorldGroup>(), previousTriangles = new Map<WorldGroup, number>();
+	// Selection walks so far (walk-table.ts seen), and layer submission passes.
+	let walkStamp = 0, submitPass = 0;
 	/*
 	================
 	compareGroups
@@ -644,11 +632,13 @@ export function createWorldRenderer(
 		}
 		return layerA === 4 ? 0 : a.id.localeCompare( b.id );
 	}
-	type FadeRow = { value: ObjectFade; visited: number; alpha: number; };
-	const fades = new Map<string, FadeRow>();
+	// Object fades by placement (object-fades.ts). Row numbers change when the
+	// fades are compacted or cleared; fadeEpoch tells a group to resolve its
+	// rows again.
+	const fades = createObjectFades();
+	let fadeEpoch = 0;
 	let selectedFadeFrame = -1, fadeFrame = 0, fadeSeconds: number | null = null, fadeScene: WorldScene | null = null;
-	let activeFades: FadeRow[] = [],
-		retainedFadeFrame: number | null = null,
+	let retainedFadeFrame: number | null = null,
 		fadesChanging = true,
 		retainedTargetX = NaN,
 		retainedTargetZ = NaN;
@@ -998,10 +988,11 @@ export function createWorldRenderer(
 				current.residency === "frontend" ? null : clock
 			);
 			return {
-				emitters: current.scenery.filter( e =>
-					!fades.has( e.placement ) ||
-					(fades.get( e.placement )!.visited === selectedFadeFrame && fades.get( e.placement )!.alpha > 0)
-				),
+				emitters: current.scenery.filter( e => {
+					const row = fades.find( e.placement );
+					return row === undefined ||
+						fades.visited( row ) === selectedFadeFrame && fades.published( row ) > 0;
+				} ),
 				night: time < .25 || time > .75
 			};
 		},
@@ -1331,18 +1322,7 @@ export function createWorldRenderer(
 							layers.admit( geometry, pending, group, imageDraw ) :
 							geometry.upload( group.geometry, imageDraw )
 					);
-					if ( group.instanceRadius !== undefined ) {
-						const shift = camera.originRegion ? camera.originRegion : pending.originRegion;
-						instanceSelection(
-							group,
-							Math.floor(
-								(camera.target[0] + ((shift & 255) - (pending.originRegion & 255)) * 1920) / 320
-							),
-							Math.floor(
-								(camera.target[2] + ((shift >>> 8) - (pending.originRegion >>> 8)) * 1920) / 320
-							)
-						);
-					}
+					if ( group.instanceRadius !== undefined ) instanceSelection( group );
 					readyGroups.delete( group );
 					pendingGroupCount--;
 				}
@@ -1375,12 +1355,13 @@ export function createWorldRenderer(
 						for ( const group of current.groups ) {
 							for ( const descriptor of group.visibility ?? [] ) placed.add( descriptor.id );
 						}
-						for ( const id of fades.keys() ) if ( !placed.has( id ) ) fades.delete( id );
+						fades.keepOnly( placed );
+						fadeEpoch++;
 						fadeScene = current;
 						fadesChanging = true;
 					} else if ( fadeScene !== current ) {
 						fades.clear();
-						activeFades.length = 0;
+						fadeEpoch++;
 						retainedFadeFrame = null;
 						fadesChanging = true;
 						fadeScene = current;
@@ -1402,9 +1383,7 @@ export function createWorldRenderer(
 						const key = group.materialOrder?.set ?? group.id;
 						if ( !objectOrder.has( key ) ) objectOrder.set( key, objectOrder.size );
 					}
-					orderGroups( [ ...current.groups ].sort( compareGroups ) );
-					previousVisible.clear();
-					previousTriangles.clear();
+					orderGroups( current.groups );
 					prune = true;
 				}
 			}
@@ -1570,15 +1549,11 @@ export function createWorldRenderer(
 					originRegion: current?.originRegion ?? 0
 				};
 			}
-			if ( retainedFadeFrame !== null ) {
-				for ( const row of activeFades ) {
-					row.value.lastFrame = retainedFadeFrame;
-				}
-			}
+			if ( retainedFadeFrame !== null ) fades.stampActive( retainedFadeFrame );
 			// Only the stationary early-out defers frame stamps. An ordinary selection
 			// walk has already committed them; do not replay those writes next frame.
 			retainedFadeFrame = null;
-			activeFades.length = 0;
+			fades.clearActive();
 			let changing = false;
 			lastView = matrix;
 			const sampleDetails = probe?.sampleDetails?.() ?? false;
@@ -1592,26 +1567,36 @@ export function createWorldRenderer(
 				480;
 			const selectTerrainLod = ( distanceSquared: number ) =>
 				current?.terrainDetail === "full" ? 0 : terrainLod( distanceSquared );
-			for ( const group of current?.groups ?? [] ) {
-				if ( group.dungeonBlock !== undefined && current?.dungeonVisibility ) {
+			const walkGroups = walk.groups, stamp = ++walkStamp;
+			for ( let walked = 0; walked < walkGroups.length; walked++ ) {
+				const group = walkGroups[walked]!, kind = walk.kind[walked]!;
+				if ( current?.dungeonVisibility && group.dungeonBlock !== undefined ) {
 					const visibleBlocks = camera.dungeonBlock === undefined ?
 						undefined :
 						current.dungeonVisibility[camera.dungeonBlock];
 					if ( !visibleBlocks?.includes( group.dungeonBlock ) ) continue;
 				}
-				if ( group.material.sky ) {
+				if ( kind === WALK_SKY ) {
 					visible.push( group );
+					walk.seen[walked] = stamp;
 					continue;
 				}
-				if ( !viewChanged && !group.visibility ) {
-					if ( previousVisible.has( group ) ) {
+				// A terrain group outside the frustum that chose nothing still chooses
+				// nothing: every range in its box is outside (walk-table.ts).
+				if (
+					kind === WALK_TERRAIN && walk.shown[walked] === 0 &&
+					!visibleFrustumAabb( frustum, walk.box, walked * 6 )
+				) continue;
+				if ( !viewChanged && !walk.faded[walked] ) {
+					if ( walk.seen[walked] === stamp - 1 ) {
 						visible.push( group );
-						triangles += previousTriangles.get( group ) ?? 0;
+						walk.seen[walked] = stamp;
+						triangles += walk.triangles[walked]!;
 					}
 					continue;
 				}
 				const trianglesBefore = triangles;
-				if ( group.ranges ) {
+				if ( kind === WALK_TERRAIN && group.ranges ) {
 					const terrainVolumes = groupVisibility.get( group )!,
 						terrainMask = terrainMasks.get( terrainVolumes )!;
 					let cache = selections.get( group );
@@ -1732,6 +1717,7 @@ export function createWorldRenderer(
 					}
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-seams" );
 					cache.indexCount = count;
+					walk.shown[walked] = chosen.length;
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-index-upload" );
 					if ( indicesDirty ) {
 						if ( layers.member( group ) ) layers.select( group, cache.indices, count );
@@ -1760,92 +1746,114 @@ export function createWorldRenderer(
 					if ( count ) {
 						visible.push( group );
 						triangles += count / 3;
-						previousTriangles.set( group, triangles - trianglesBefore );
+						walk.seen[walked] = stamp;
+						walk.triangles[walked] = triangles - trianglesBefore;
 					}
 					continue;
 				}
-				if ( group.instanceRadius !== undefined ) {
+				if ( kind === WALK_INSTANCED ) {
 					if ( sampleDetails ) probe?.detailBegin?.( "world-instance-setup" );
-					// Fade state still ticks below, whatever the membership.
-					const cache = instanceSelection( group, targetCellX, targetCellZ );
-					const source = group.geometry.instances!,
-						bounds = group.geometry.bones ? undefined : pickBounds.get( group.geometry.positions );
-					let count = 0, instancesDirty = false;
-					// Resolve placement identity once for each admitted mesh. A building's
-					// material pieces share one fade owner; the render loop uses direct slots.
-					if ( group.visibility && !cache.fadeRows ) {
-						cache.fadeRows = group.visibility.map( descriptor => {
-							let row = fades.get( descriptor.id );
-							if ( !row ) {
-								row = { value: { state: 0, alpha: 0, lastFrame: 0 }, visited: -1, alpha: 0 };
-								fades.set( descriptor.id, row );
-							}
-							return row;
-						} );
+					const base = walk.slotBase[walked]!, at = walked * 5, sphere = walk.sphere, eye = localCamera.eye;
+					const resident = residentSlots( walk, walked, targetCellX, targetCellZ ),
+						faded = walk.faded[walked] === 1;
+					// Placement identity resolves once each fade epoch (rows change when
+					// the fades compact or clear). A building's material pieces share
+					// one row.
+					if ( faded && walk.rowsEpoch[walked] !== fadeEpoch ) {
+						const descriptors = group.visibility!;
+						for ( let slot = 0; slot < descriptors.length; slot++ ) {
+							walk.row[base + slot] = fades.row( descriptors[slot]!.id );
+						}
+						walk.rowsEpoch[walked] = fadeEpoch;
 					}
+					// No placement of a group outside the frustum is visible: its fades
+					// still advance below, but no placement is tested or copied.
+					const outside = !visibleFrustumSphere(
+						frustum,
+						sphere[at]!,
+						sphere[at + 1]!,
+						sphere[at + 2]!,
+						sphere[at + 3]!
+					);
+					// Objects in a steady state this group's eye distances cannot leave
+					// take only the frame stamp advanceObjectFade would give them.
+					const keeps = faded ? fadeKeeps( walk, walked, eye, sceneryRange ) : 0;
 					if ( sampleDetails ) {
 						probe?.detailEnd?.( "world-instance-setup" );
 						probe?.detailBegin?.( "world-instance-loop" );
 					}
-					// Slots outside the target cell's association are not resident and
-					// keep their fades untouched; only resident slots are walked.
-					const slots = cache.residentSlots, total = slots ? slots.length : source.length / 16;
-					for ( let n = 0; n < total; n++ ) {
-						const i = (slots ? slots[n]! : n) * 16, descriptor = group.visibility?.[i / 16];
-						let alpha = 255, visible = false;
-						if ( descriptor ) {
-							const row = cache.fadeRows![i / 16]!;
-							if ( row.visited !== fadeFrame ) {
-								row.visited = fadeFrame;
-								activeFades.push( row );
+					// Fade state ticks for every resident object, whatever the frustum.
+					// Each resident slot leaves its published alpha, or -1 when out.
+					for ( let n = 0; n < resident; n++ ) {
+						const slot = walk.resident[base + n]!, g = base + slot, slotKind = walk.slotKind[g]!;
+						if ( slotKind === SLOT_UNFADED ) {
+							walk.alpha[base + n] = 255;
+							continue;
+						}
+						const row = walk.row[g]!;
+						fades.visit( row, fadeFrame );
+						if ( fades.lastFrame( row ) !== fadeFrame ) {
+							const state = fades.state( row );
+							if (
+								!viewChanged && fades.lastFrame( row ) === ((fadeFrame - 1) >>> 0) &&
+									(state === 0 || state === 2) ||
+								state === 2 && keeps & FADE_KEEPS_IN || state === 0 && keeps & FADE_KEEPS_OUT
+							) fades.stamp( row, fadeFrame );
+							else {
+								fades.advance(
+									row,
+									objectFadeDistance(
+										eye,
+										walk.origin[g * 3]!,
+										walk.origin[g * 3 + 1]!,
+										walk.origin[g * 3 + 2]!
+									),
+									walk.radius[g]!,
+									slotKind === SLOT_SCENERY ? sceneryRange : walk.range[g]!,
+									dt,
+									fadeFrame
+								);
 							}
-							let state = row.value;
-							if ( state.lastFrame !== fadeFrame ) {
-								if (
-									!viewChanged && state.lastFrame === ((fadeFrame - 1) >>> 0) &&
-									(state.state === 0 || state.state === 2)
-								) state.lastFrame = fadeFrame;
-								else {
-									const distance = objectFadeDistance(
-										localCamera.eye,
-										source[i + 12]!,
-										source[i + 13]!,
-										source[i + 14]!
-									);
-									state = advanceObjectFade(
-										state,
-										distance,
-										descriptor.radius,
-										descriptor.sceneryRange ? sceneryRange : descriptor.range,
-										dt,
-										fadeFrame,
-										state
-									);
-								}
-								// Placement-owned publication, shared by every material piece. Native
-								// 8B98FF..8B9932 likewise converts alpha after the object fade update.
-								row.alpha = Math.max( 0, Math.min( 255, Math.trunc( state.alpha ) ) );
-							}
-							if ( state.state === 1 || state.state === 3 ) changing = true;
-							// Range/fade admission is independent of camera visibility. Keep its
-							// clock current offscreen, then reject draws (and draw-only animation)
-							// using the decoder's conservative all-pose bound. Retail likewise
-							// tests object bounds before submission: 8AA9C5..8AA9D8, A2D410.
-							alpha = row.alpha;
-							visible = state.state !== 0;
-						} else visible = true;
-						if ( visible ) {
-							visible = bounds ?
+						}
+						const state = fades.state( row );
+						if ( state === 1 || state === 3 ) changing = true;
+						// Range/fade admission is independent of camera visibility. Keep its
+						// clock current offscreen, then reject draws (and draw-only animation)
+						// using the decoder's conservative all-pose bound. Retail likewise
+						// tests object bounds before submission: 8AA9C5..8AA9D8, A2D410.
+						walk.alpha[base + n] = state !== 0 ? fades.published( row ) : -1;
+					}
+					if ( sampleDetails ) {
+						probe?.detailEnd?.( "world-instance-loop" );
+						probe?.detailBegin?.( "world-instance-upload" );
+					}
+					let count = 0;
+					// A group outside that showed nothing still shows nothing; only one
+					// that may show placements, or must stop showing them, is touched.
+					if ( !outside || walk.count[walked] !== 0 ) {
+						const cache = instanceSelection( group ), source = group.geometry.instances!;
+						let instancesDirty = false;
+						if ( !cache.boundsResolved ) {
+							cache.bounds = group.geometry.bones ?
+								undefined :
+								pickBounds.get( group.geometry.positions );
+							cache.boundsResolved = true;
+						}
+						const bounds = cache.bounds;
+						for ( let n = 0; !outside && n < resident; n++ ) {
+							const alpha = walk.alpha[base + n]!;
+							if ( alpha < 0 ) continue;
+							const i = walk.resident[base + n]! * 16;
+							const inFrustum = bounds ?
 								visibleFrustumBox( frustum, bounds, source, i ) :
 								visibleFrustumSphere(
 									frustum,
 									source[i + 12]!,
 									source[i + 13]!,
 									source[i + 14]!,
-									group.instanceRadius
+									group.instanceRadius!
 								);
-						}
-						if ( visible ) {
+							if ( !inFrustum ) continue;
 							if ( cache.sourceInstances![count] !== i ) {
 								cache.instances!.set( source.subarray( i, i + 16 ), count * 16 );
 								cache.sourceInstances![count] = i;
@@ -1858,28 +1866,26 @@ export function createWorldRenderer(
 							}
 							count++;
 						}
+						instancesDirty ||= count !== (cache.instanceCount ?? 0);
+						cache.instanceCount = count;
+						if ( instancesDirty ) {
+							draws.set(
+								group,
+								geometry.updateInstances(
+									draws.get( group )!,
+									cache.instances!.subarray( 0, count * 16 ),
+									cache.opacity?.subarray( 0, count )
+								)
+							);
+						}
 					}
-					if ( sampleDetails ) {
-						probe?.detailEnd?.( "world-instance-loop" );
-						probe?.detailBegin?.( "world-instance-upload" );
-					}
-					instancesDirty ||= count !== (cache.instanceCount ?? 0);
-					cache.instanceCount = count;
-					if ( instancesDirty ) {
-						draws.set(
-							group,
-							geometry.updateInstances(
-								draws.get( group )!,
-								cache.instances!.subarray( 0, count * 16 ),
-								cache.opacity?.subarray( 0, count )
-							)
-						);
-					}
+					walk.count[walked] = count;
 					if ( sampleDetails ) probe?.detailEnd?.( "world-instance-upload" );
 					if ( count ) {
 						visible.push( group );
 						triangles += group.geometry.indices.length / 3 * count;
-						previousTriangles.set( group, triangles - trianglesBefore );
+						walk.seen[walked] = stamp;
+						walk.triangles[walked] = triangles - trianglesBefore;
 					}
 					continue;
 				}
@@ -1888,7 +1894,8 @@ export function createWorldRenderer(
 				) {
 					visible.push( group );
 					triangles += group.geometry.indices.length / 3 * (group.geometry.instances!.length / 16);
-					previousTriangles.set( group, triangles - trianglesBefore );
+					walk.seen[walked] = stamp;
+					walk.triangles[walked] = triangles - trianglesBefore;
 				}
 			}
 			// CObjRenderer::QueueObject (0xAAE9C0) appends; 0xA5EE80 consumes
@@ -1901,22 +1908,25 @@ export function createWorldRenderer(
 			fadesChanging = changing;
 			retainedTargetX = targetCellX;
 			retainedTargetZ = targetCellZ;
-			const visibleSet = new Set( visible );
-			previousVisible = visibleSet;
-			// Draw order of the visible groups, without walking every resident one.
+			// Draw order of the visible groups, without walking every resident one;
+			// the phase boundaries fall out of the same pass.
 			for ( const group of visible ) {
 				const index = groupOrder.get( group );
 				if ( index !== undefined ) visibleMarks[index] = 1;
 			}
+			activeAnimated = animated.filter( group => visibleMarks[groupOrder.get( group ) ?? -1] === 1 );
 			const ordered: WorldGroup[] = [];
+			terrainEnd = -1;
+			transparentStart = -1;
 			for ( let index = 0; index < visibleMarks.length; index++ ) {
 				if ( !visibleMarks[index] ) continue;
 				visibleMarks[index] = 0;
+				const phase = orderPhase[index]!;
+				if ( terrainEnd < 0 && phase >= 3 ) terrainEnd = ordered.length;
+				if ( transparentStart < 0 && phase === 4 ) transparentStart = ordered.length;
 				ordered.push( orderedGroups[index]! );
 			}
-			terrainEnd = ordered.findIndex( group => drawPhase( group ) >= 3 );
 			if ( terrainEnd < 0 ) terrainEnd = ordered.length;
-			transparentStart = ordered.findIndex( group => drawPhase( group ) === 4 );
 			if ( transparentStart < 0 ) transparentStart = ordered.length;
 			const transparent = ordered.splice( transparentStart );
 			// Far to near. Each group's distance is taken once, not per comparison.
@@ -1939,17 +1949,15 @@ export function createWorldRenderer(
 			// of every asset name each frame adds no invalidation information.
 			// Layer members share their layer's draw: submit it once, at its first
 			// member. Members are terrain, so only the opaque phases shift.
-			const nextDraws: GeometryDraw[] = [], submitted = new Set<GeometryDraw>();
+			const nextDraws: GeometryDraw[] = [], pass = ++submitPass;
 			let shifted = 0;
 			for ( let i = 0; i < ordered.length; i++ ) {
-				const group = ordered[i]!, member = layers.member( group );
-				const draw = member ? layers.drawOf( group ) : draws.get( group )!;
-				if ( submitted.has( draw ) ) {
+				const group = ordered[i]!, draw = layers.drawFor( group, pass );
+				if ( draw === null ) {
 					if ( i < terrainEnd ) shifted++;
 					continue;
 				}
-				if ( member ) submitted.add( draw );
-				nextDraws.push( draw );
+				nextDraws.push( draw ?? draws.get( group )! );
 			}
 			terrainEnd -= shifted;
 			transparentStart -= shifted;
@@ -1960,7 +1968,6 @@ export function createWorldRenderer(
 				rebuilds++;
 			}
 
-			activeAnimated = animated.filter( g => visibleSet.has( g ) );
 			animate( geometry, seconds );
 			probe?.worldMark?.( "world-finalize" );
 			return {
@@ -1994,8 +2001,6 @@ export function createWorldRenderer(
 			weather.invalidate();
 			orderGroups( [] );
 			objectOrder.clear();
-			previousVisible.clear();
-			previousTriangles.clear();
 			lastEye = null;
 			pickGroups = [];
 			resetAnimations( undefined, true );
@@ -2047,15 +2052,13 @@ export function createWorldRenderer(
 			weather.dispose( geometry );
 			orderGroups( [] );
 			objectOrder.clear();
-			previousVisible.clear();
-			previousTriangles.clear();
 			lastEye = null;
 			pickGroups = [];
 			collisionScene = null;
 			collisionParts = [];
 			collisionCamera = null;
 			fades.clear();
-			activeFades.length = 0;
+			fadeEpoch++;
 			fadeScene = null;
 			resetAnimations();
 			if ( geometry ) {
