@@ -213,6 +213,9 @@ export interface CharacterActor {
 	readonly effectAnchor?: { readonly bone: string | null; readonly offset: readonly [number, number, number]; };
 	readonly height?: number;
 	readonly pickable?: boolean;
+	/** A linked ride's rider: a pick on the ride answers with this gid
+	 * (World_PickEntityAtScreenPoint 692680 reads the ride's +0x2A4). */
+	readonly pickOwner?: number;
 	readonly bodyVolume?: { readonly index: number; readonly female: boolean; };
 	readonly opacity?: number;
 	/** A skill/orb effect entity: its owner's model fades do not reach it

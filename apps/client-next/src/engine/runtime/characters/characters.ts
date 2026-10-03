@@ -142,6 +142,18 @@ interface Resource {
 }
 /*
 ================
+LinkedRide
+
+A characterInfo "ride" BSR (skilleffect.txt section characterInfo, columns
+Ride Type and ride), published as an npc manifest row of kind "ride".
+================
+*/
+interface LinkedRide {
+	readonly glb: string;
+	readonly clips: readonly string[];
+}
+/*
+================
 CharacterFrameProbe
 Optional measurements supplied by the runtime; presentation never discovers globals.
 ================
@@ -151,6 +163,11 @@ export interface CharacterFrameProbe {
 	detailEnd( stage: string ): void;
 	sampleDetails(): boolean;
 }
+
+// The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
+// table CCDB10: none = 0, RT_FIXED = 1, RT_DUMMY = 2).
+const RIDER_ON_SADDLE = 0;
+const RIDE_COPIES_RIDER = 2;
 
 const GOLD_DROP_MODELS = [
 	"item/etc/drop_ch_money_ing.bsr",
@@ -482,6 +499,10 @@ export function createCharacterPresentation(
 	// Appearance topology is independent of pose time. Revalidate resource
 	// readiness each frame, but derive garment/cosmetic parts only on change.
 	const hwanHairActors = new Map<number, { gid: number; started: number; }>();
+	// characterInfo rides: the rider's codename -> its packetless ride model, and
+	// each live rider's presentation-owned ride actor (CICMonster_DeserializeSpawnPacket).
+	const ridesByRider = new Map<string, LinkedRide>();
+	const linkedRides = new Map<number, number>();
 	/*
 	================
 	Auxiliary
@@ -746,6 +767,26 @@ export function createCharacterPresentation(
 						nextProfiles = new Map( soundProfiles ),
 						nextMotionUrls = new Map( nativeMotionUrls );
 					const rows = Object.values( value.models ?? {} ).filter( row => row.refObjId !== undefined );
+					const nextRides = new Map( ridesByRider );
+					for (
+						const row of Object.values( value.models ?? {} ) as (Resource & {
+							kind?: string;
+							requiredBy?: unknown;
+						})[]
+					) {
+						if ( row.kind !== "ride" ) continue;
+						if (
+							typeof row.glb !== "string" || !row.glb.startsWith( "/assets/npc/" ) ||
+							row.glb.includes( ".." ) ||
+							!Array.isArray( row.clips ) || row.clips.some( clip => typeof clip !== "string" ) ||
+							!Array.isArray( row.requiredBy ) || row.requiredBy.some( rider =>
+								typeof rider !== "string"
+							)
+						) throw new Error( "Invalid linked ride" );
+						for ( const rider of row.requiredBy as string[] ) {
+							nextRides.set( rider, { glb: row.glb, clips: row.clips } );
+						}
+					}
 					for ( const row of rows ) {
 						if (
 							(row.scalePercent !== undefined &&
@@ -1025,6 +1066,8 @@ export function createCharacterPresentation(
 					for ( const [key, factor] of nextHeightFactors ) heightFactors.set( key, factor );
 					catalog.clear();
 					for ( const [key, row] of nextCatalog ) catalog.set( key, row );
+					ridesByRider.clear();
+					for ( const [key, row] of nextRides ) ridesByRider.set( key, row );
 					animationStates.clear();
 					for ( const [key, row] of nextAnimations ) animationStates.set( key, row );
 					nativeMotionUrls.clear();
@@ -2998,6 +3041,50 @@ export function createCharacterPresentation(
 				} );
 			}
 			for ( const gid of hwanHairActors.keys() ) if ( !hairOwners.has( gid ) ) hwanHairActors.delete( gid );
+			// CICMonster_DeserializeSpawnPacket (861B00): a characterInfo ride BSR
+			// becomes a second entity linked as the rider's ride (+0x2A0), its
+			// transform mode (+0x29D) copied from the rider's Ride Type. Every motion
+			// the rider plays is forwarded to it (CICharactor_PlayAnimationByMotionId
+			// 85ED80; CCObjCharacter_PlayAnimationWithFallback keeps a missing clip on
+			// "stand"), and it leaves with the rider (CICharactor_DespawnWithFade
+			// 855B00). CICUser_SubmitBodyRideAndAttachments (8602C0) composes them:
+			// mode 0 seats the rider on the ride's animated "saddle", mode 2 copies the
+			// rider's world matrix onto the ride, mode 1 (RT_FIXED) links neither. The
+			// ride carries no scale of its own (861B00 never calls SetModelScale on it).
+			const rideOwners = new Set<number>();
+			for ( const entity of entities ) {
+				const resource = resourceFor( entity ), owner = next.get( entity.gid );
+				const ride = resource ? ridesByRider.get( resource.codename ) : undefined;
+				if ( !owner || !ride || !resources.ready( ride.glb ) || next.size >= CHARACTER_ACTORS ) continue;
+				rideOwners.add( entity.gid );
+				let gid = linkedRides.get( entity.gid );
+				if ( gid === undefined ) {
+					gid = allocateActor();
+					linkedRides.set( entity.gid, gid );
+				}
+				const mode = riderModes.get( resource!.codename ) ?? 0;
+				const motion = ( clip: string ) => ride.clips.includes( clip ) ? clip : "stand";
+				next.set( gid, {
+					gid,
+					model: ride.glb,
+					pose: owner.pose,
+					clip: motion( owner.clip ),
+					layers: owner.layers?.map( layer => ({ ...layer, clip: motion( layer.clip ) }) ),
+					time: owner.time,
+					loop: owner.loop,
+					scale: 1,
+					opacity: owner.opacity,
+					height: owner.height,
+					// World_PickEntityAtScreenPoint (692680): a ride answers with its rider.
+					pickable: owner.pickable,
+					pickOwner: entity.gid,
+					...(mode === RIDE_COPIES_RIDER ?
+						{ attachment: { gid: entity.gid, bone: "", root: true, offset: [ 0, 0, 0 ] as const } } :
+						{})
+				} );
+				if ( mode === RIDER_ON_SADDLE ) next.set( entity.gid, { ...owner, mountedOn: gid } );
+			}
+			for ( const gid of linkedRides.keys() ) if ( !rideOwners.has( gid ) ) linkedRides.delete( gid );
 			// 8E9DD0 / 8EA7A0: auxiliary resource is the item's second animated
 			// handle. Its lifetime follows the COMMITTED body selection, including
 			// cold replacement fallback, not the newest unready inventory plan.

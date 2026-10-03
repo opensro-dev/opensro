@@ -21,7 +21,11 @@ import {
 	removeSupersededResourceOutputs,
 	resourceGlbOutput
 } from "../../build/char/resourceGlbOutput.mjs";
-import { expandCharacterInfoCodenames, preserveFreshNpcVatReferences } from "../../build/char/buildNpcModelAssets.mjs";
+import {
+	bakeCharacterResource,
+	expandCharacterInfoCodenames,
+	preserveFreshNpcVatReferences
+} from "../../build/char/buildNpcModelAssets.mjs";
 import {
 	enabledCosReferences,
 	loadSpawnableMobRoster,
@@ -194,6 +198,21 @@ test("zero-length BMS skin sections preserve native rigid geometry", async () =>
 	assert.equal( mesh.boneNames.length, 0 );
 	assert.equal( mesh.vertexCount, 66 );
 	assert.equal( mesh.triangleCount, 36 );
+});
+
+test("a monster bake publishes every authored state a skill can name (Captain Ivy ATTACK05..08)", async t => {
+	const dir = fs.mkdtempSync( path.join( os.tmpdir(), "ivy-bake-" ) );
+	t.after( () => fs.rmSync( dir, { recursive: true, force: true } ) );
+	const baked = await bakeCharacterResource( "res/mob/asiam/ivy.bsr", {
+		publicPath: "/assets/npc/test/ivy.glb",
+		diskPath: path.join( dir, "ivy.glb" )
+	}, true );
+	// MSKILL_AM_IVY_ATTACK05..07 and SUMMON01..03 name ANI_ATTACK5..8 (183..186).
+	for ( const id of [ 183, 184, 185, 186 ] ) {
+		const role = `native:default:${id}`;
+		assert.equal( baked.animationStates[role]?.stateId, id, role );
+		assert.ok( baked.clips.includes( role ), role );
+	}
 });
 
 test("BSR outputs preserve native hierarchy and reject cross-resource collisions", () => {

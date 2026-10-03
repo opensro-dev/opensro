@@ -732,15 +732,21 @@ export function createCharacters() {
 				if ( rivals.length ) result = selectPickCandidate( rivals );
 			}
 			if ( !result ) return null;
-			// 692680: a mounted winner answers with its rider.
-			const rider = actors.find( actor => actor.mountedOn === result!.gid );
-			return { gid: rider?.gid ?? result.gid, depth: result.depth, ray: result.ray };
+			// 692680: a mounted winner answers with its rider, as does a linked ride.
+			const rider = actors.find( actor => actor.mountedOn === result!.gid ),
+				winner = actors.find( actor => actor.gid === result!.gid );
+			return { gid: rider?.gid ?? winner?.pickOwner ?? result.gid, depth: result.depth, ray: result.ray };
 		},
 		/*
 		================
 		portraitSource
 
 		Borrow the same retained model and textures used by the world actor.
+		Only the character's own model parts (compound attachments: hair and
+		equipment) follow it. Native portraits and the inventory doll own a
+		separate CCObjCharacter built from the appearance
+		(CIFQuickPartySlot_SetPortraitModel 5B9DF0, +0x3E0); skill and buff
+		effects are decorations of the world entity and never reach it.
 		================
 		*/
 		portraitSource( gid: number ): PortraitSource | null {
@@ -754,7 +760,10 @@ export function createCharacters() {
 			for ( let previous = -1; previous !== parents.size; ) {
 				previous = parents.size;
 				for ( const child of candidates ) {
-					if ( parents.has( child.gid ) || !child.attachment || !parents.has( child.attachment.gid ) ) {
+					if (
+						parents.has( child.gid ) || child.attachment?.basis !== "compound" ||
+						!parents.has( child.attachment.gid )
+					) {
 						continue;
 					}
 					const childResource = models.get( child.model );

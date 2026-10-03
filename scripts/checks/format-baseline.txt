@@ -60,7 +60,6 @@ apps/client-next/src/engine/foundation/animation/posture.ts
 apps/client-next/src/engine/foundation/animation/presentation-ids.ts
 apps/client-next/src/engine/foundation/animation/preview-idle.ts
 apps/client-next/src/engine/foundation/animation/projectile-curve.ts
-apps/client-next/src/engine/foundation/animation/projectile-time.ts
 apps/client-next/src/engine/foundation/animation/random-idle.ts
 apps/client-next/src/engine/foundation/animation/scenery-emission.ts
 apps/client-next/src/engine/foundation/animation/skill-motion-resolve.ts

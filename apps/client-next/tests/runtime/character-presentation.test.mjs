@@ -479,63 +479,66 @@ function fixture(
 				kind: "bytes",
 				buffer: new TextEncoder().encode( JSON.stringify( {
 					recoveryByCodename: postures ? { NPC_1: 2000, NPC_2: 2000 } : undefined,
-					models: Array.from( { length: modelCount }, ( _, i ) => i + 1 ).map( refObjId => ({
-						refObjId,
-						eventRain,
-						codename: metadataAdmission.appearance?.roster.models.find( r =>
-							r.refObjId === refObjId
-						)?.codename ?? "NPC_" + refObjId,
-						particleModifiers: drops ? undefined : modifiers,
-						modifierSets: modifiers?.map( m => ({
-							kind: m.kind,
-							stateId: m.stateId,
-							animationSetName: m.animationSetName,
-							count: 1,
-							firstBaseWord4: m.baseWords?.[4] ?? 0
-						}) ),
-						animationBindings,
-						glb: `/assets/${refObjId}.glb`,
-						animationStates: metadataAdmission.appearance?.roster.models.find( r =>
-							r.refObjId === refObjId
-						)?.animationStates ?? animationAudio?.states ?? (host ?
-							{
-								"attached-default-188": {
-									loop: true,
-									durationMs: 1000,
-									soundEvents: [],
-									trackEvents: [],
-									timeWarpCurve: { scale: 0, records: [] }
-								}
-							} :
-							undefined),
-						clips: [
-							"stand",
-							"walk",
-							"run",
-							"pick",
-							"death",
-							...(metadataAdmission.appearance?.overrideTest ? [ "native:avatar_wing:7" ] : []),
-							...(metadataAdmission.appearance?.extraClips ?? []),
-							...(host ? [ "attached-default-188" ] : []),
-							...(idles ? [ "idle122", "idle61", "idle81" ] : []),
-							...(postures ?
-								[
-									"charselect-state13",
-									"charselect-state14",
-									"charselect-state15",
-									"deathloop",
-									"down",
-									"downwait",
-									"downdamage",
-									"wakeup",
-									"deathquick",
-									"emote0",
-									"emote2",
-									"emote6"
-								] :
-								[])
-						]
-					}) )
+					models: [
+						...(options.rides ?? []),
+						...Array.from( { length: modelCount }, ( _, i ) => i + 1 ).map( refObjId => ({
+							refObjId,
+							eventRain,
+							codename: metadataAdmission.appearance?.roster.models.find( r =>
+								r.refObjId === refObjId
+							)?.codename ?? "NPC_" + refObjId,
+							particleModifiers: drops ? undefined : modifiers,
+							modifierSets: modifiers?.map( m => ({
+								kind: m.kind,
+								stateId: m.stateId,
+								animationSetName: m.animationSetName,
+								count: 1,
+								firstBaseWord4: m.baseWords?.[4] ?? 0
+							}) ),
+							animationBindings,
+							glb: `/assets/${refObjId}.glb`,
+							animationStates: metadataAdmission.appearance?.roster.models.find( r =>
+								r.refObjId === refObjId
+							)?.animationStates ?? animationAudio?.states ?? (host ?
+								{
+									"attached-default-188": {
+										loop: true,
+										durationMs: 1000,
+										soundEvents: [],
+										trackEvents: [],
+										timeWarpCurve: { scale: 0, records: [] }
+									}
+								} :
+								undefined),
+							clips: [
+								"stand",
+								"walk",
+								"run",
+								"pick",
+								"death",
+								...(metadataAdmission.appearance?.overrideTest ? [ "native:avatar_wing:7" ] : []),
+								...(metadataAdmission.appearance?.extraClips ?? []),
+								...(host ? [ "attached-default-188" ] : []),
+								...(idles ? [ "idle122", "idle61", "idle81" ] : []),
+								...(postures ?
+									[
+										"charselect-state13",
+										"charselect-state14",
+										"charselect-state15",
+										"deathloop",
+										"down",
+										"downwait",
+										"downdamage",
+										"wakeup",
+										"deathquick",
+										"emote0",
+										"emote2",
+										"emote6"
+									] :
+									[])
+							]
+						}) )
+					]
 				} ) ).buffer
 			};
 		}
@@ -3200,6 +3203,64 @@ test("berserk hair publishes compound attachments only after the resource is rea
 		assert.equal( children().length, 2 );
 		f.presentation.step( [], null, now + 1 );
 		assert.equal( children().length, 0, "despawn retires private skeletons" );
+		f.dispose();
+	}
+});
+
+test("a characterInfo ride joins its rider, follows its motions and links by the native ride mode", () => {
+	const ride = {
+		kind: "ride",
+		codename: "res/mob/ride.bsr",
+		glb: "/assets/npc/mob/ride.glb",
+		clips: [ "stand", "walk" ],
+		requiredBy: [ "NPC_1", "NPC_2", "NPC_3" ]
+	};
+	// NPC_1 rides on the saddle (none), NPC_2 is RT_FIXED, NPC_3 is RT_DUMMY.
+	const rows = [ 0, 1, 2 ].map( mode => ({
+		codename: "NPC_" + (mode + 1),
+		soundProfileName: "MOB_TEST",
+		riderTransformMode: mode
+	}) );
+	const f = fixture(
+		{},
+		3,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{
+			rows
+		},
+		{ rides: [ ride ] }
+	);
+	try {
+		f.warm();
+		const riders = [ 1, 2, 3 ].map( gid => entity( gid, { kind: "monster" } ) );
+		for ( let i = 0; i < 40; i++ ) f.step( riders, i / 10 );
+		const rides = f.actors.filter( actor => actor.model === ride.glb );
+		assert.equal( rides.length, 3, "every rider owns one ride" );
+		const rideOf = gid => rides.find( actor => actor.pickOwner === gid );
+		const actorOf = gid => f.actors.find( actor => actor.gid === gid );
+		assert.equal( actorOf( 1 )?.mountedOn, rideOf( 1 )?.gid, "mode 0 seats the rider on the saddle" );
+		assert.equal( actorOf( 2 )?.mountedOn, undefined );
+		assert.equal( rideOf( 2 )?.attachment, undefined, "RT_FIXED links neither way" );
+		assert.equal( actorOf( 3 )?.mountedOn, undefined );
+		assert.deepEqual( rideOf( 3 )?.attachment, { gid: 3, bone: "", root: true, offset: [ 0, 0, 0 ] } );
+		for ( const gid of [ 1, 2, 3 ] ) {
+			assert.equal( rideOf( gid )?.clip, actorOf( gid )?.clip, "the ride plays the rider's motion" );
+			assert.equal( rideOf( gid )?.scale, 1 );
+		}
+		f.step( riders.slice( 1 ), 4 );
+		assert.equal( f.actors.some( actor => actor.pickOwner === 1 ), false, "the ride leaves with its rider" );
+	} finally {
 		f.dispose();
 	}
 });

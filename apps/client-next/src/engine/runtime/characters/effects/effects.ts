@@ -1226,7 +1226,9 @@ export function createCharacterEffects(
 									(curved || stage.move === "MOV_STRAIGHT" || stage.move === "MOV_ROUND" ||
 										[ "MOV_UP", "MOV_UPR" ].includes( stage.move ) &&
 											stage.parameters !== undefined) &&
-									motion && (curved || motion.startSpeed > 0) &&
+									// 8DE6C7: no speed gate. Navigation_StepTowards (879650)
+									// arrives a speed-0 mover whose start is its end at once.
+									motion && (curved || motion.startSpeed >= 0 && motion.endSpeed >= 0) &&
 									projectileSpace( pose.regionId, target.regionId ) &&
 									(!radial || stage.move === "MOV_STRAIGHT" && stage.native?.actionOptions.enabled);
 								if (
@@ -2510,9 +2512,13 @@ export function createCharacterEffects(
 						elapsed = now - visualStarts.get( gid )!;
 					}
 					const life = visual.life || duration( visual.actor.model, visual.actor.clip );
+					// 8D8580: a mover that cannot arrive (speed 0 short of its end) keeps
+					// ticking its visual; once that visual ends nothing of it is drawn.
+					const stationary = !!visual.flight && !visual.flight.moving && !visual.flight.curve &&
+						visual.flight.speed === 0;
 					if (
-						!visual.flight && !visual.landed && !command?.loop && command?.released === undefined &&
-						(!life || elapsed >= life)
+						(!visual.flight || stationary) && !visual.landed && !command?.loop &&
+						command?.released === undefined && (!life || elapsed >= life)
 					) {
 						active.delete( gid );
 						continue;
