@@ -199,6 +199,75 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 	}
 });
 
+test("the deferred continuation never releases a draw the frame's first pass returned", async () => {
+	const { createCharacters } = await import(
+		sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
+	);
+	const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
+	const model = {
+		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
+		images: [],
+		clips: [ { name: "idle", duration: 1, channels: [] } ],
+		primitives: [ {
+			name: "body",
+			node: 0,
+			joints: [ 0 ],
+			inverseBind: identity(),
+			image: -1,
+			geometry: {
+				positions: new Float32Array( 9 ),
+				indices: Uint32Array.of( 0, 1, 2 ),
+				transform: identity(),
+				material: { color: [ 1, 1, 1, 1 ], alphaCutoff: 0, blend: false, doubleSided: true }
+			}
+		} ]
+	};
+	const owner = createCharacters(), released = [];
+	owner.model( "ordinary", model, [] );
+	const gpu = {
+		upload( g ) {
+			return { id: Symbol( "draw" ), instances: [ ...g.instances ] };
+		},
+		release( d ) {
+			released.push( d );
+		},
+		updateInstances( d, v ) {
+			d.instances = [ ...v ];
+			return d;
+		},
+		updateBones() {}
+	};
+	const ordinary = {
+		gid: 2,
+		model: "ordinary",
+		pose: { regionId: 257, x: 5, y: 0, z: 0, yaw: 0 },
+		clip: "idle",
+		time: 0,
+		loop: true,
+		scale: 1
+	};
+	try {
+		owner.actors( [ ordinary ] );
+		const first = owner.prepare( gpu, {}, 257, undefined, false, 0 );
+		assert.ok( first.length > 0, "the first pass drew the ordinary actor" );
+		// The continuation plans without the batch the first pass used (in play:
+		// the deferred actors it adds take the render budget first). Its draws are
+		// already recorded in the frame's command buffer: they must survive.
+		owner.actors( [] );
+		owner.prepare( gpu, {}, 257, undefined, false, 0, true );
+		assert.deepEqual(
+			released.filter( d => first.includes( d ) ),
+			[],
+			"the continuation released a recorded draw"
+		);
+		// The next full pass retires it.
+		owner.prepare( gpu, {}, 257, undefined, false, .1 );
+		assert.ok( first.every( d => released.includes( d ) ), "the next frame kept a draw nobody uses" );
+	} finally {
+		owner.dispose( gpu, null );
+	}
+});
+
 test("ordinary fallback keeps instance alpha, bypasses query cadence and ticks even at zero alpha", () => {
 	const owner = createDeferredParticles();
 	owner.begin( 0, [ actor ], false );

@@ -236,6 +236,11 @@ export function createCharacters() {
 	// Residency depends on model membership, not interpolated poses or clocks.
 	// Snapshot the model ids: actor snapshots are mutated by the next publication.
 	let residencyDirty = true, residencyPasses = 0, hasMaterialClocks = false;
+	// The batches the frame's first pass planned. Its draws are recorded in
+	// the frame's command buffer before the deferred continuation runs, so the
+	// continuation may not release or resize them: their buffers must outlive
+	// the submit. The next full pass retires what the frame left behind.
+	const submitted = new Set<string>();
 	let actors: readonly CharacterActor[] = [], disposed = false;
 	const portraitSnapshots = createActorSnapshots();
 	let portraits: readonly CharacterActor[] = [];
@@ -1165,7 +1170,10 @@ export function createCharacters() {
 			night = true
 		) {
 			probe?.characterBegin();
-			if ( !continuation ) poseFrame++;
+			if ( !continuation ) {
+				poseFrame++;
+				submitted.clear();
+			}
 			if ( !continuation ) deferred.begin( seconds, hasDeferred ? actors : [], deferredEnabled, night );
 			deferPoses = !!geometry.prepareGpuBones;
 			gpuAnimation = geometry.gpuAnimationStats;
@@ -1211,7 +1219,10 @@ export function createCharacters() {
 				}
 				return actor.loop && duration && plan?.clocked ? { ...actor, time: actor.time % duration } : actor;
 			} );
-			if ( residencyDirty ) {
+			// Residency retires draws and textures; the first pass's recorded
+			// commands still use them, so the continuation leaves it for the next
+			// full pass.
+			if ( residencyDirty && !continuation ) {
 				residencyPasses++;
 				if ( retained ) {
 					const keep = new Set( [
@@ -1470,7 +1481,7 @@ export function createCharacters() {
 			}
 			// Retire all obsolete storage before allocating the replacement frame.
 			for ( const [id, batch] of batches ) {
-				if ( retainedDeferred( batch ) ) continue;
+				if ( retainedDeferred( batch ) || continuation && submitted.has( id ) ) continue;
 				const rows = grouped.get( id );
 				const capacity = rows ? models.get( rows[0]!.model )!.plan.capacity( rows.length ) : 0;
 				if ( !rows || batch.capacity !== capacity || !batch.signature.startsWith( String( preview ) + ":" ) ) {
@@ -1529,7 +1540,7 @@ export function createCharacters() {
 			}
 			const output: GeometryDraw[] = [];
 			for ( const [id, batch] of batches ) {
-				if ( !grouped.has( id ) && !retainedDeferred( batch ) ) {
+				if ( !grouped.has( id ) && !retainedDeferred( batch ) && !(continuation && submitted.has( id )) ) {
 					for ( const draw of batch.draws ) {
 						geometry.release( draw );
 					}
@@ -1537,6 +1548,7 @@ export function createCharacters() {
 				}
 			}
 			for ( const [id, rows] of grouped ) {
+				if ( !continuation ) submitted.add( id );
 				// The first pass already submitted ordinary geometry. Keep its
 				// admission/budget accounting, but do not rebuild or upload it
 				// again when visibility completes the deferred pass.
