@@ -20,6 +20,11 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+rebirthTestCharacter
+================
+*/
 func rebirthTestCharacter(level, hp int64) *enterworld.Character {
 	character := testCharacter()
 	character.Level = &level
@@ -31,6 +36,11 @@ func rebirthTestCharacter(level, hp int64) *enterworld.Character {
 	return character
 }
 
+/*
+================
+TestRebirthPointAppointmentPersistsAdmittedPoint
+================
+*/
 func TestRebirthPointAppointmentPersistsAdmittedPoint(t *testing.T) {
 	character := rebirthTestCharacter(20, 100)
 	rt, _ := newTestRuntime(character, testItems())
@@ -58,6 +68,11 @@ func TestRebirthPointAppointmentPersistsAdmittedPoint(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDesignatedRebirthRestoresWorldVitalsAndLife
+================
+*/
 func TestDesignatedRebirthRestoresWorldVitalsAndLife(t *testing.T) {
 	character := rebirthTestCharacter(20, 0)
 	appointed := simulation.EuropeStartProfile()
@@ -138,6 +153,11 @@ func TestDesignatedRebirthRestoresWorldVitalsAndLife(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDevelopmentRestoreViewerRevivesThroughPresentRebirth
+================
+*/
 func TestDevelopmentRestoreViewerRevivesThroughPresentRebirth(t *testing.T) {
 	character := rebirthTestCharacter(3, 0)
 	rt, _ := newTestRuntime(character, testItems())
@@ -153,6 +173,11 @@ func TestDevelopmentRestoreViewerRevivesThroughPresentRebirth(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPresentPositionRebirthIsLevelGated
+================
+*/
 func TestPresentPositionRebirthIsLevelGated(t *testing.T) {
 	high := rebirthTestCharacter(11, 0)
 	highRuntime, _ := newTestRuntime(high, testItems())
@@ -189,13 +214,16 @@ func TestPresentPositionRebirthIsLevelGated(t *testing.T) {
 		}
 	}
 	vitals := result.Frames[1].Payload
+	wantHP := uint32(1 + int64(float64(float32(enterworld.DerivedMaxHP(low)))*float64(float32(0.4))))
+	recoveredMP := int64(float64(float32(enterworld.DerivedMaxMP(low))) * float64(float32(0.4)))
+	wantMP := uint32(min(enterworld.DerivedMaxMP(low), 75+recoveredMP))
 	if len(vitals) != 15 ||
 		binary.LittleEndian.Uint32(vitals[0:4]) != enterworld.ObjectIDForCharacter(low) ||
 		binary.LittleEndian.Uint16(vitals[4:6]) != 0 ||
 		vitals[6] != 0x03 ||
-		binary.LittleEndian.Uint32(vitals[7:11]) != uint32(enterworld.DerivedMaxHP(low)) ||
-		binary.LittleEndian.Uint32(vitals[11:15]) != uint32(enterworld.DerivedMaxMP(low)) {
-		t.Fatalf("present-position vitals payload = %x, want source-zero full HP/MP restoration", vitals)
+		binary.LittleEndian.Uint32(vitals[7:11]) != wantHP ||
+		binary.LittleEndian.Uint32(vitals[11:15]) != wantMP {
+		t.Fatalf("present-position vitals payload = %x, want source-zero one HP plus 40 percent and retained MP", vitals)
 	}
 	life, err := wire.DecodeObjectStateRefresh(result.Frames[2].Payload)
 	if err != nil || life.StateType != wire.StateChannelLife || life.Value != wire.LifeStateAlive {
@@ -207,6 +235,11 @@ func TestPresentPositionRebirthIsLevelGated(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRecallAppointmentGateCatalogAndPersistence
+================
+*/
 func TestRecallAppointmentGateCatalogAndPersistence(t *testing.T) {
 	licensed.RequireGameData(t)
 	c := rebirthTestCharacter(20, 100)
@@ -275,6 +308,12 @@ func TestRecallAppointmentGateCatalogAndPersistence(t *testing.T) {
 		t.Fatalf("only %d eligible gates checked", count)
 	}
 }
+
+/*
+================
+TestRecallReferenceUsesCurrentCatalogThenStoredFallback
+================
+*/
 func TestRecallReferenceUsesCurrentCatalogThenStoredFallback(t *testing.T) {
 	c := rebirthTestCharacter(20, 100)
 	rt, _ := newTestRuntime(c, testItems())
@@ -298,6 +337,11 @@ func TestRecallReferenceUsesCurrentCatalogThenStoredFallback(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRecallAppointmentSurvivesAuthorityReopen
+================
+*/
 func TestRecallAppointmentSurvivesAuthorityReopen(t *testing.T) {
 	licensed.RequireGameData(t)
 	d := openDoorRuntime(t, t.TempDir(), rebirthTestCharacter(20, 100))

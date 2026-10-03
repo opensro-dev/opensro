@@ -3,15 +3,17 @@
 
 spawnprotection.go - the untouchable grace after a revival
 
-CGObjPC_TeleportToTown (4DF2E0), the revival arm (arg2 == 1), clears the
-abnormal states, restores HP and MP, and then calls
+CGObjPC_TeleportToTown (4DF290), the revival arm (arg2 == 1), clears the
+abnormal states, changes LIFE and motion, and then calls
 CGObjChar_SetBodyModeAndScheduleRestore (4A9FC0, vtable +0x318) with body
 mode 2 for 6.0 seconds (11.0 where CGameWorldMgr_CallGameWorldSlot31 marks
 the world; the port runs only the field world, so 6). Body mode 2 makes the
 character untouchable: monsters skip it as a target (540DE0) and attackers
 are refused (5291D0), so a revived player is not killed again before they
 can act. When the time is up the scheduled restore returns the body mode,
-unless something else has replaced it meanwhile.
+unless something else has replaced it meanwhile. The helper then adds one
+HP; callers own further HP/MP recovery. Both self-rebirth and an accepted
+resurrection skill use this protection owner.
 
 ===========================================================================
 */

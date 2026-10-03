@@ -850,7 +850,7 @@ func TestResurrectionProposalAndAnswer(t *testing.T) {
 	if err != nil || life.StateType != wire.StateChannelLife || life.Value == wire.LifeStateDead {
 		t.Fatalf("life frame %+v %v", life, err)
 	}
-	if len(peers) != 2 || peers[1].Opcode != wire.OpObjectStateRefresh {
+	if len(peers) != 3 || peers[1].Opcode != wire.OpObjectStateRefresh || peers[2].Opcode != wire.OpObjectStateRefresh {
 		t.Fatalf("peer frames %+v", peers)
 	}
 	consent.ApplyConsent(nil, testDivision, p.m, 1, 1)
