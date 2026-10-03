@@ -936,6 +936,13 @@ export const runtimeCifImageReferences = [
 	"interface/ifcommon/com_pt_leader.ddj",
 	"interface/ifcommon/com_kindred_china16.ddj",
 	"interface/ifcommon/com_kindred_europe16.ddj",
+	// Quick-party distance shades: CIFQuickPartySlot_SetDistanceOverlay
+	// (5BA400) sets them on GDR_QPS_STATUS by code (5BD0A0 picks the step).
+	"interface/quickparty/qpt_face_faraway_60.ddj",
+	"interface/quickparty/qpt_face_faraway_70.ddj",
+	"interface/quickparty/qpt_face_faraway_80.ddj",
+	"interface/quickparty/qpt_face_faraway_90.ddj",
+	"interface/quickparty/qpt_face_faraway_100.ddj",
 	"interface/party/pt_icon_frame.ddj",
 	"interface/party/pt_box.ddj",
 	"interface/party/pt_guildname_01.ddj",

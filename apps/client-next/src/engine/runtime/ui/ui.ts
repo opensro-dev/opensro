@@ -189,7 +189,14 @@ import { buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
 import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
-import { partyMembers, partyOverlay, partyPortraitGid } from "@/engine/foundation/ui/party-overlay";
+import {
+	partyDistanceShade,
+	partyMembers,
+	partyOverlay,
+	partyPortraitGid,
+	partyRosterPose,
+	partyShadeImage
+} from "@/engine/foundation/ui/party-overlay";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import {
 	admittanceOverlay,
@@ -6359,7 +6366,8 @@ export function createUi(
 				}
 				if ( hudData && game?.social?.leader ) {
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
-						slot = hudData.windows.ifquickpartyslot!;
+						slot = hudData.windows.ifquickpartyslot!,
+						localPose = next.entities.find( e => e.gid === game.localGid ) ?? null;
 					for (
 						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
 					) {
@@ -6407,6 +6415,14 @@ export function createUi(
 							color: white,
 							clip: full
 						} );
+						// 5BD0A0: a visible member is measured at its live pose, one
+						// out of view at its roster record.
+						const shade = localPose ?
+							partyShadeImage(
+								partyDistanceShade( localPose, row.entity ?? partyRosterPose( row.member ) )
+							) :
+							null;
+						if ( shade ) authoredImage( slot.GDR_QPS_STATUS!, x, y, ROOT + shade );
 						if ( row.entity ) {
 							const r: UiRect = [ x, y, 122, 40 ];
 							controls.push( {
