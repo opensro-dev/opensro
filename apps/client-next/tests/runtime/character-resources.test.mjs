@@ -1705,22 +1705,9 @@ test("actor reordering and duplicate-model count changes do not invalidate model
 	renderer.dispose( geometry, images );
 });
 
-test("injected character profiling observes pose lifetime without changing palette output", () => {
-	const counts = [], stages = [], palettes = [], poseSamples = [];
-	const renderer = createCharacters( {
-		phases: {
-			/*
-			================
-			begin
-			The renderer must pass its observer to real pose materialization.
-			================
-			*/
-			begin( model, reason ) {
-				poseSamples.push( reason );
-				return null;
-			}
-		}
-	} );
+test("the injected frame probe observes character stages and pose lifetime without changing palette output", () => {
+	const counts = [], stages = [], palettes = [];
+	const renderer = createCharacters();
 	const source = model();
 	source.images = [];
 	source.primitives[0].image = -1;
@@ -1831,7 +1818,6 @@ test("injected character profiling observes pose lifetime without changing palet
 		renderer.actors( [ actor( "body" ) ] );
 		renderer.prepare( geometry, images, 1 );
 		const observed = palettes.at( -1 );
-		assert.ok( poseSamples.length > 0, "constructor observer reaches pose materialization" );
 		assert.deepEqual( stages, [ "begin", "character-plan", "character-poses", "character-upload" ] );
 		assert.ok( counts.some( ( [name, value] ) => name === "pose-created" && value === 1 ) );
 		renderer.actors( [] );

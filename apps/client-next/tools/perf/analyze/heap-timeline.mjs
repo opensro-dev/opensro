@@ -1,10 +1,11 @@
 /*
 ===========================================================================
 
-heap.mjs - allocation report from a DevTools heap timeline
+heap-timeline.mjs - allocation report from a DevTools heap timeline
 
 Usage:
-  node --max-old-space-size=14000 tools/trace/heap.mjs FILE.heaptimeline [--top N] [--callers FN]
+  node --max-old-space-size=14000 tools/perf/analyze/heap-timeline.mjs FILE.heaptimeline
+       [--top N] [--callers FN]
 
 A heap timeline ("Allocation instrumentation on timeline") holds the heap
 snapshot taken at its end plus an allocation trace tree: every allocating
@@ -18,6 +19,9 @@ reports:
 - callers (--callers FN): the stacks that call functions whose key starts
   with FN, by the bytes those calls allocated.
 
+For allocations during a benchmark scenario, a sampled heap profile is
+lighter: tools/perf/bench --heap, read with analyze/profile.mjs.
+
 Files can exceed V8's largest string, so only the needed sections are
 sliced out by bracket matching and parsed one at a time.
 
@@ -25,6 +29,7 @@ sliced out by bracket matching and parsed one at a time.
 */
 import { openSync, readSync, fstatSync, closeSync } from "node:fs";
 import path from "node:path";
+import { parseOptions, table as weightTable } from "../core/report.mjs";
 
 const CHUNK = 64 << 20;
 
@@ -103,12 +108,15 @@ function numbers( buffer, key ) {
 /*
 ================
 table
+
+Rows of { size, count } by stack, in KB with the object count.
 ================
 */
-function table( map, top, unit = "KB" ) {
-	return [ ...map ].sort( ( a, b ) => b[1].size - a[1].size ).slice( 0, top ).map( ( [k, v] ) =>
-		`${(v.size / 1024).toFixed( 0 ).padStart( 10 )} ${unit} ${String( v.count ).padStart( 9 )} objs  ${k}`
-	).join( "\n" );
+function table( map, top ) {
+	const rows = new Map(
+		[ ...map ].map( ( [key, row] ) => [ `${String( row.count ).padStart( 9 )} objs  ${key}`, row.size ] )
+	);
+	return weightTable( rows, { scale: 1024, top, unit: "KB", digits: 0 } );
 }
 
 /*
@@ -209,8 +217,7 @@ function report( file, top, callersOf ) {
 	console.log( out.join( "\n" ) );
 }
 
-const args = process.argv.slice( 2 ), topAt = args.indexOf( "--top" ), callersAt = args.indexOf( "--callers" );
-const top = topAt >= 0 ? Number( args[topAt + 1] ) : 30, callersOf = callersAt >= 0 ? args[callersAt + 1] : undefined;
-const file = args.find( ( a, i ) => !a.startsWith( "--" ) && args[i - 1] !== "--top" && args[i - 1] !== "--callers" );
-if ( !file ) throw new Error( "usage: heap.mjs FILE.heaptimeline [--top N] [--callers FN]" );
-report( file, top, callersOf );
+const USAGE = "heap-timeline.mjs FILE.heaptimeline [--top N] [--callers FN]";
+const options = parseOptions( process.argv.slice( 2 ), { top: 30, callers: "" }, USAGE );
+if ( !options.files[0] ) throw Error( `usage: ${USAGE}` );
+report( options.files[0], options.top, options.callers || undefined );

@@ -103,9 +103,7 @@ createCharacters
 Own source resources separately from borrowed assemblies and per-frame draw batches.
 ================
 */
-export function createCharacters(
-	animationProbe?: import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe
-) {
+export function createCharacters() {
 	let probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined;
 	// Per-geometry radius work: an assembled character reuses its parts'.
 	const bounds = createCharacterBoundsCache();
@@ -256,7 +254,7 @@ export function createCharacters(
 		}
 		let state = ownedPoses.get( actor.gid );
 		if ( !state || state.model !== actor.model ) {
-			state = { model: actor.model, pose: createCharacterPose( model, animationProbe ), lod: createPoseLod() };
+			state = { model: actor.model, pose: createCharacterPose( model ), lod: createPoseLod() };
 			poseCreations++;
 			probe?.characterCount( "pose-created" );
 			ownedPoses.set( actor.gid, state );

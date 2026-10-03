@@ -43,26 +43,6 @@ export interface RenderFrameProbe {
 	sampleDetails?(): boolean;
 	detailBegin?( name: string ): void;
 	detailEnd?( name: string ): void;
-	// Animation ceiling: replay the retained world selection this frame.
-	worldReplay?( hasView: boolean ): boolean;
-	// One exact pick test against a world group.
-	pickCensus?( row: WorldPickSample ): void;
-	// The submitted frame's draw lists (renderer/frame/frame.ts), sampled.
-	frameDraw?( frameId: number | undefined, ...draws: readonly unknown[] ): void;
-}
-
-/*
-================
-WorldPickSample
-================
-*/
-export interface WorldPickSample {
-	readonly group: string;
-	readonly ms: number;
-	readonly triangles: number;
-	readonly vertices: number;
-	readonly ranges: boolean;
-	readonly skinned: boolean;
 }
 
 /*
@@ -73,7 +53,6 @@ A read-only snapshot of runtime failures and bounded resource statistics.
 ================
 */
 export interface RuntimeDiagnostics {
-	readonly animationPose?: import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe;
 	readonly gpuAnimation?: boolean;
 	readonly gpuTiming?: boolean;
 	readonly hoverPicking?: boolean;

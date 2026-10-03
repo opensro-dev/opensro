@@ -1,10 +1,10 @@
 /*
 ===========================================================================
 
-analyze.mjs - performance report from a DevTools trace
+trace.mjs - performance report from a DevTools trace
 
 Usage:
-  node --max-old-space-size=12000 tools/trace/analyze.mjs TRACE.json [options]
+  node --max-old-space-size=12000 tools/perf/analyze/trace.mjs TRACE.json [options]
 
 Options:
   --window A:B        seconds from the trace start (default: all)
@@ -29,41 +29,13 @@ by function. Main-thread costs are per frame; worker costs per second.
 */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadTrace, frameStarts, mainThread, forEachSample } from "./trace-model.mjs";
-import { createSymbolizer } from "./source-map.mjs";
+import { loadTrace, frameStarts, mainThread, forEachSample } from "../core/trace.mjs";
+import { createSymbolizer } from "../core/symbols.mjs";
+import { parseOptions, table, createStackTotals } from "../core/report.mjs";
 
-const CLIENT_ROOT = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "../.." );
+const CLIENT_ROOT = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "../../.." );
+const USAGE = "trace.mjs TRACE.json [options] (see the file banner)";
 const US = 1000;
-
-/*
-================
-parseArgs
-================
-*/
-function parseArgs( argv ) {
-	const options = { top: 25, gap: 2000, long: 25, devRoot: CLIENT_ROOT };
-	const rest = [];
-	for ( let i = 0; i < argv.length; i++ ) {
-		const arg = argv[i];
-		const value = () => argv[++i];
-		if ( arg === "--window" ) options.window = value();
-		else if ( arg === "--maps" ) options.maps = value();
-		else if ( arg === "--dev-root" ) options.devRoot = value();
-		else if ( arg === "--top" ) options.top = Number( value() );
-		else if ( arg === "--gap" ) options.gap = Number( value() );
-		else if ( arg === "--long" ) options.long = Number( value() );
-		else if ( arg === "--thread" ) options.thread = value();
-		else if ( arg === "--children" ) options.children = value();
-		else if ( arg === "--lines" ) options.lines = value();
-		else if ( arg === "--compare" ) options.compare = value();
-		else if ( arg === "--json" ) options.json = true;
-		else if ( arg === "--timeline" ) options.timeline = true;
-		else rest.push( arg );
-	}
-	if ( !rest[0] ) throw new Error( "usage: analyze.mjs TRACE.json [options] (see the file banner)" );
-	options.trace = rest[0];
-	return options;
-}
 
 /*
 ================
@@ -102,25 +74,16 @@ function keyer( symbolizer, profile ) {
 ================
 attribute
 
-Self and inclusive µs by function key over a window.
+Self and inclusive µs by function key over a window, and with childrenOf
+the time under each direct callee of functions whose key starts with it.
 ================
 */
-function attribute( profile, window, symbolizer, gap ) {
-	const key = keyer( symbolizer, profile ), self = new Map(), total = new Map();
-	let sampled = 0;
+function attribute( profile, window, symbolizer, gap, childrenOf = null ) {
+	const key = keyer( symbolizer, profile ), totals = createStackTotals( childrenOf );
 	const gaps = forEachSample( profile, window[0], window[1], gap, ( i, owned, stack ) => {
-		sampled += owned;
-		const leaf = key( stack[0] );
-		self.set( leaf, (self.get( leaf ) ?? 0) + owned );
-		const seen = new Set();
-		for ( const id of stack ) {
-			const k = key( id );
-			if ( seen.has( k ) ) continue;
-			seen.add( k );
-			total.set( k, (total.get( k ) ?? 0) + owned );
-		}
+		totals.add( stack.map( key ), owned );
 	} );
-	return { self, total, sampled, gaps };
+	return { self: totals.self, total: totals.total, children: totals.children, sampled: totals.weight(), gaps };
 }
 
 /*
@@ -131,16 +94,8 @@ Time of each direct callee under functions whose key starts with prefix.
 ================
 */
 function children( profile, window, symbolizer, gap, prefix ) {
-	const key = keyer( symbolizer, profile ), by = new Map();
-	let sum = 0;
-	forEachSample( profile, window[0], window[1], gap, ( i, owned, stack ) => {
-		const at = stack.findIndex( id => key( id ).startsWith( prefix ) );
-		if ( at < 0 ) return;
-		const k = at === 0 ? "(self)" : key( stack[at - 1] );
-		by.set( k, (by.get( k ) ?? 0) + owned );
-		sum += owned;
-	} );
-	return { by, sum };
+	const by = attribute( profile, window, symbolizer, gap, prefix ).children;
+	return { by, sum: [ ...by.values() ].reduce( ( a, b ) => a + b, 0 ) };
 }
 
 /*
@@ -231,17 +186,6 @@ function windowBusy( trace, window ) {
 
 /*
 ================
-table
-================
-*/
-function table( map, scale, top, unit ) {
-	return [ ...map ].sort( ( a, b ) => b[1] - a[1] ).slice( 0, top ).map( ( [k, v] ) =>
-		`${(v / scale).toFixed( 3 ).padStart( 9 )} ${unit}  ${k}`
-	).join( "\n" );
-}
-
-/*
-================
 timeline
 
 Per second: frames, main-thread and GPU-process busy ms per frame, and the
@@ -291,7 +235,7 @@ Everything the report needs for one trace and window.
 */
 async function analyzeTrace( file, spec, options ) {
 	const trace = loadTrace( file ), main = mainThread( trace ), window = windowOf( trace, spec );
-	const symbolizer = await createSymbolizer( { maps: options.maps, root: options.devRoot } );
+	const symbolizer = await createSymbolizer( { maps: options.maps || undefined, root: options.devRoot } );
 	const urls = new Set();
 	for ( const profile of trace.profiles.values() ) {
 		for ( const node of profile.nodes.values() ) urls.add( node.callFrame.url );
@@ -315,7 +259,7 @@ async function report( options ) {
 		Math.max( window[0], trace.start );
 	const span = seconds / 1e6;
 	const out = [];
-	out.push( `# ${path.basename( trace.file )}  window ${options.window ?? "all"}  (${span.toFixed( 1 )} s)` );
+	out.push( `# ${path.basename( trace.file )}  window ${options.window || "all"}  (${span.toFixed( 1 )} s)` );
 	out.push( "\n## Threads (RunTask time in the window: ms, % of window, ms per frame)" );
 	const { busy, slices } = windowBusy( trace, [
 		Math.max( window[0], trace.start ),
@@ -356,8 +300,8 @@ async function report( options ) {
 				(mainCost.gaps / perFrame).toFixed( 2 )
 			} ms)`
 		);
-		out.push( "### self\n" + table( mainCost.self, perFrame, options.top, "ms/f" ) );
-		out.push( "### inclusive\n" + table( mainCost.total, perFrame, options.top, "ms/f" ) );
+		out.push( "### self\n" + table( mainCost.self, { scale: perFrame, top: options.top, unit: "ms/f" } ) );
+		out.push( "### inclusive\n" + table( mainCost.total, { scale: perFrame, top: options.top, unit: "ms/f" } ) );
 	}
 	if ( mainProfile && options.timeline ) out.push( ...timeline( a, options ) );
 	for ( const profile of trace.profiles.values() ) {
@@ -370,8 +314,9 @@ async function report( options ) {
 				(cost.sampled / seconds * 100).toFixed( 0 )
 			}% of window)`
 		);
-		out.push( "### self\n" + table( cost.self, span * US, Math.min( options.top, 15 ), "ms/s" ) );
-		out.push( "### inclusive\n" + table( cost.total, span * US, Math.min( options.top, 15 ), "ms/s" ) );
+		const format = { scale: span * US, top: Math.min( options.top, 15 ), unit: "ms/s" };
+		out.push( "### self\n" + table( cost.self, format ) );
+		out.push( "### inclusive\n" + table( cost.total, format ) );
 	}
 	for ( const [label, run] of [ [ "children", children ], [ "lines", lines ] ] ) {
 		if ( !options[label] ) continue;
@@ -385,7 +330,7 @@ async function report( options ) {
 					(result.sum / scale).toFixed( 3 )
 				} ${unit})`
 			);
-			out.push( table( result.by, scale, options.top, unit ) );
+			out.push( table( result.by, { scale, top: options.top, unit } ) );
 		}
 	}
 	if ( options.compare && mainCost ) {
@@ -402,15 +347,14 @@ async function report( options ) {
 				frames.frames / span | 0
 			} vs ${b.frames.frames} frames)`
 		);
-		out.push( "### grew\n" + table( delta, 1, options.top, "ms/f" ) );
-		out.push(
-			"### shrank\n" + table( new Map( [ ...delta ].map( ( [k, v] ) => [ k, -v ] ) ), 1, options.top, "ms/f" )
-		);
+		const format = { top: options.top, unit: "ms/f" };
+		out.push( "### grew\n" + table( delta, format ) );
+		out.push( "### shrank\n" + table( new Map( [ ...delta ].map( ( [k, v] ) => [ k, -v ] ) ), format ) );
 	}
 	if ( options.json ) {
 		console.log( JSON.stringify( {
 			trace: trace.file,
-			window: options.window ?? "all",
+			window: options.window || "all",
 			frames: { ...frames, perSecond: Object.fromEntries( frames.perSecond ) },
 			threads: [ ...trace.threads.values() ].map( t => ({ label: t.label, key: t.key, busyMs: t.busy / US }) ),
 			mainSelf: mainCost && Object.fromEntries( [ ...mainCost.self ].map( ( [k, v] ) => [ k, v / US ] ) ),
@@ -421,4 +365,20 @@ async function report( options ) {
 	console.log( out.join( "\n" ) );
 }
 
-await report( parseArgs( process.argv.slice( 2 ) ) );
+const options = parseOptions( process.argv.slice( 2 ), {
+	window: "",
+	maps: "",
+	devRoot: CLIENT_ROOT,
+	top: 25,
+	gap: 2000,
+	long: 25,
+	thread: "",
+	children: "",
+	lines: "",
+	compare: "",
+	json: false,
+	timeline: false
+}, USAGE );
+if ( !options.files[0] ) throw Error( `usage: ${USAGE}` );
+options.trace = options.files[0];
+await report( options );

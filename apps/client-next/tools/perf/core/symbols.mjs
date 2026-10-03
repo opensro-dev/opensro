@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-source-map.mjs - map trace call frames back to client source
+symbols.mjs - map profiled call frames back to client source
 
 A DevTools trace names frames by served script, line and column. Two
 builds serve different scripts:
@@ -90,6 +90,9 @@ Lookup of a generated (zero-based line, column) in one parsed map.
 ================
 */
 export function createSourceMap( map ) {
+	if ( map?.version !== 3 || !Array.isArray( map.sources ) || typeof map.mappings !== "string" ) {
+		throw Error( "Unsupported source map" );
+	}
 	const lines = decodeMappings( map.mappings );
 	return {
 		/*

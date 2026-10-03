@@ -858,16 +858,7 @@ export function createWorldRenderer(
 					if ( occludesGeometry( ray, mesh, matrix, nearest, source.bones, surface ) ) return 0;
 					continue;
 				}
-				const pickStarted = probe?.pickCensus ? performance.now() : 0;
 				const depth = pickGeometry( ray, mesh, matrix, source.bones, surface );
-				probe?.pickCensus?.( {
-					group: group.id,
-					ms: performance.now() - pickStarted,
-					triangles: indices.length / 3,
-					vertices: source.positions.length / 3,
-					ranges: !!group.ranges,
-					skinned: !!source.bones
-				} );
 				if ( depth !== null && depth < nearest ) nearest = depth;
 			}
 		}
@@ -1484,8 +1475,7 @@ export function createWorldRenderer(
 			const targetCellX = Math.floor( localCamera.target[0] / 320 ),
 				targetCellZ = Math.floor( localCamera.target[2] / 320 );
 			if (
-				probe?.worldReplay?.( !!lastView ) ||
-				(!viewChanged && !fadesChanging && targetCellX === retainedTargetX && targetCellZ === retainedTargetZ)
+				!viewChanged && !fadesChanging && targetCellX === retainedTargetX && targetCellZ === retainedTargetZ
 			) {
 				// Every resident object would receive this frame stamp without changing
 				// selection or opacity. Materialize those stamps only on the next walk.

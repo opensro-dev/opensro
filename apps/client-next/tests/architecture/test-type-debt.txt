@@ -159,7 +159,6 @@ tests/browser/world.test.mjs
 tests/helpers/native-source-loader.mjs
 tests/runtime/academy-notices.test.mjs
 tests/runtime/action-time.test.mjs
-tests/runtime/animation-phase-profiler.test.mjs
 tests/runtime/arrow-trail.test.mjs
 tests/runtime/asset-delivery.test.mjs
 tests/runtime/asset-handles.test.mjs
@@ -200,7 +199,6 @@ tests/runtime/entry-consumers.test.mjs
 tests/runtime/environment-audio.test.mjs
 tests/runtime/environment-integration.test.mjs
 tests/runtime/external-item-effects.test.mjs
-tests/runtime/frame-window.test.mjs
 tests/runtime/frontend.test.mjs
 tests/runtime/game-options.test.mjs
 tests/runtime/gameplay.test.mjs
@@ -245,7 +243,6 @@ tests/runtime/published-routing.test.mjs
 tests/runtime/quest-progress.test.mjs
 tests/runtime/quest-time.test.mjs
 tests/runtime/quickslot-inventory.test.mjs
-tests/runtime/release-profile.test.mjs
 tests/runtime/restriction-notices.test.mjs
 tests/runtime/retained-layout.test.mjs
 tests/runtime/runtime-failures.test.mjs

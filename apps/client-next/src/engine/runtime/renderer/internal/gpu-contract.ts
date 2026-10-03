@@ -84,8 +84,6 @@ export interface DeferredDraw {
 	prepare(): readonly GeometryDraw[] | Promise<readonly GeometryDraw[]>;
 }
 export interface FrameOwner {
-	// Optional measurements from the frame owner (runtime.ts frameProbe).
-	profile( probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined ): void;
 	draw(
 		view: GPUTextureView,
 		image?: ImageDraw,

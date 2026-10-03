@@ -5,7 +5,7 @@ frame.ts - the frame owner: render passes and bundles
 
 Records and submits one frame's passes (world, overlays, UI, portraits)
 from the prepared draw lists, retaining render bundles while their inputs
-are unchanged. Diagnostics observe it only through the frame probe.
+are unchanged.
 
 ===========================================================================
 */
@@ -34,12 +34,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 	>();
 	let anchors = new Set<GeometryDraw>();
 	let recordedImage: ImageDraw | undefined, imageBundle: GPURenderBundle | null = null;
-	// Optional measurements from the frame owner; the profiler never rewrites this source.
-	let probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined;
 	return {
-		profile( value ) {
-			probe = value;
-		},
 		draw(
 			view,
 			image,
@@ -57,19 +52,6 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			deferred,
 			bloom
 		) {
-			probe?.frameDraw?.(
-				frameId,
-				image,
-				geometry,
-				world,
-				ui,
-				preview,
-				flares,
-				thunder,
-				portrait,
-				doll,
-				partyPortraits
-			);
 			const sceneView = bloom?.view ?? view;
 			if ( ui !== recordedUi ) {
 				function record( layer: UiDraw["layer"] ) {

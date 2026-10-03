@@ -1852,21 +1852,21 @@
 			"expression": "frameProbe()?.begin",
 			"function": "frame",
 			"kind": "callback",
-			"reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+			"reason": "Optional benchmark frame probe (frame-probes.ts, installed by tools/perf/bench); undefined outside development benchmark runs."
 		},
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"expression": "frameProbe()?.end",
 			"function": "frame",
 			"kind": "callback",
-			"reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+			"reason": "Optional benchmark frame probe (frame-probes.ts, installed by tools/perf/bench); undefined outside development benchmark runs."
 		},
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"expression": "frameProbe()?.mark",
 			"function": "markStage",
 			"kind": "callback",
-			"reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+			"reason": "Optional benchmark frame probe (frame-probes.ts, installed by tools/perf/bench); undefined outside development benchmark runs."
 		},
 		{
 			"file": "src/engine/runtime/ui/ui.ts",
@@ -1881,41 +1881,6 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "Optional frame-owned timing observer. Records UI assembly, comparison and publication without changing the product; covered by ui-resource-lifetime.test.mjs. Runtime supplies it only in development."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "probe?.phases?.begin",
-			"function": "materialize",
-			"kind": "callback",
-			"reason": "Optional injected diagnostic timer; observes the same pose evaluation. Compared against unobserved palettes in animation-phase-profiler.test.mjs."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "timer.start",
-			"function": "materialize",
-			"kind": "callback",
-			"reason": "Optional injected diagnostic timer; observes the same pose evaluation. Compared against unobserved palettes in animation-phase-profiler.test.mjs."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "timer.end",
-			"function": "materialize",
-			"kind": "callback",
-			"reason": "Optional injected diagnostic timer; observes the same pose evaluation. Compared against unobserved palettes in animation-phase-profiler.test.mjs."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "probe?.ceiling?.skip",
-			"function": "evaluate",
-			"kind": "callback",
-			"reason": "Diagnostic-only injected warmed-pose replay; animation-ceiling.test.mjs verifies capture lifetime."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "probe?.ceiling?.palette",
-			"function": "palette",
-			"kind": "callback",
-			"reason": "Injected diagnostic palette census; does not change palette output."
 		},
 		{
 			"file": "src/engine/runtime/characters/characters.ts",
@@ -1996,13 +1961,6 @@
 		},
 		{
 			"file": "src/engine/runtime/renderer/world/world.ts",
-			"expression": "probe?.worldReplay",
-			"function": "prepare",
-			"kind": "callback",
-			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
-		},
-		{
-			"file": "src/engine/runtime/renderer/world/world.ts",
 			"expression": "probe?.sampleDetails",
 			"function": "prepare",
 			"kind": "callback",
@@ -2019,20 +1977,6 @@
 			"file": "src/engine/runtime/renderer/world/world.ts",
 			"expression": "probe?.detailEnd",
 			"function": "prepare",
-			"kind": "callback",
-			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
-		},
-		{
-			"file": "src/engine/runtime/renderer/world/world.ts",
-			"expression": "probe?.pickCensus",
-			"function": "pick",
-			"kind": "callback",
-			"reason": "Optional pick-census observer (profile builds only); records one exact pick test without changing its result. Replaces source rewriting."
-		},
-		{
-			"file": "src/engine/runtime/renderer/frame/frame.ts",
-			"expression": "probe?.frameDraw",
-			"function": "draw",
 			"kind": "callback",
 			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
 		},
@@ -2092,7 +2036,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "4efd56adc49fd5d8191a1fb61e79a7ce95d6cbd6bb3f30f41ba1f646e699fc21",
+			"sourceSha256": "38c2841824bd8eca639850b2abb4c1e8927f38da2353778dad93d6ca97728417",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

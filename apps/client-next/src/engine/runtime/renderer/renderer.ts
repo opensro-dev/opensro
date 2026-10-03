@@ -41,13 +41,13 @@ export function createRenderer(
 	diagnostics: import("@/engine/contracts/runtime").RuntimeDiagnostics = {}
 ): Renderer {
 	let video = defaultVideoOptions();
-	const portrait = createPortrait( createCharacters( diagnostics.animationPose ) );
+	const portrait = createPortrait( createCharacters() );
 	let portraitDepth: import("./internal/gpu-contract").DepthTarget | null = null;
 	const partyPortraits = Array.from(
 		{ length: 7 },
-		() => createPortrait( createCharacters( diagnostics.animationPose ) )
+		() => createPortrait( createCharacters() )
 	);
-	const doll = createPortrait( createCharacters( diagnostics.animationPose ) );
+	const doll = createPortrait( createCharacters() );
 	let dollWidth = 0, dollHeight = 0;
 	let dollDepth: import("./internal/gpu-contract").DepthTarget | null = null;
 	const uiPreparation = createUiPreparation();
@@ -55,7 +55,7 @@ export function createRenderer(
 	const uiTextures = new Map<string, ImageBitmap | ImageData>(), dirtyUi = new Set<string>();
 	let residentUi = new Set<string>(), residentUiProduct: ReturnType<typeof prepareUi> | null = null;
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
-		characters = createCharacters( diagnostics.animationPose );
+		characters = createCharacters();
 	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
 	let surface: SurfaceOwner | null = null, frame: FrameOwner | null = null;
 	let transformDirty = false, instancesDirty = false;
@@ -554,7 +554,6 @@ export function createRenderer(
 								finishDeferred()
 					} :
 					undefined;
-				frame!.profile( probe );
 				const pending = frame!.draw(
 					color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),

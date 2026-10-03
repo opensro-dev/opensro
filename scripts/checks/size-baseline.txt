@@ -17,6 +17,5 @@ apps/client-next/tests/runtime/gameplay.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/ui-behavior.test.mjs # test file covering every window; split per window
 apps/client-next/tests/runtime/world-renderer.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/world.test.mjs # test file; split by feature
-apps/client-next/tools/profile-world.mjs # not yet analysed; split on its responsibility boundaries when formatted
 scripts/build/shared/cifRuntimeImageCatalog.mjs # not yet analysed; split on its responsibility boundaries when formatted
 apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/entities.ts # one transactional entity packet dispatcher owns spawn, movement, visibility and retirement state

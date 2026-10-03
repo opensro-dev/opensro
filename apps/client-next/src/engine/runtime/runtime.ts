@@ -32,7 +32,7 @@ import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
 import { createBugReport } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
-import { animationProbe, frameProbe } from "./frame-probes";
+import { frameProbe } from "./frame-probes";
 import { createRenderer } from "./renderer/renderer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
@@ -121,10 +121,7 @@ export function startRuntime(
 		const input = createInput();
 		const simulation = own( createSimulationHost() );
 		const renderer = own(
-			createRenderer( canvas, random, audio.enqueue, {
-				...diagnostics,
-				animationPose: diagnostics.animationPose ?? animationProbe()
-			} )
+			createRenderer( canvas, random, audio.enqueue, diagnostics )
 		);
 		const frontend = own(
 			createFrontend(
