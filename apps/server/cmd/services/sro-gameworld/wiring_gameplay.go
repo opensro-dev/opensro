@@ -147,7 +147,7 @@ func newGameplayPlane(
 	if deps.MonsterState != nil {
 		deps.MonsterState.EnableRegionDormancy()
 		deps.MonsterState.SetSpawnGroundResolver(water.WalkableSpawnHeightAt)
-		deps.MonsterState.SetSpawnCollisionTest(water.SpawnMoveTestResult)
+		deps.MonsterState.SetSpawnCollisionTest(water.SpawnMoveTest)
 		deps.MonsterState.SetSpawnRegionAvailability(water.SpawnRegionAvailable)
 		deps.MonsterState.SetPopulationPlayers(items.PopulationPlayers)
 		for _, division := range authorityStore.DivisionIDs() {

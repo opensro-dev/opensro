@@ -26,16 +26,16 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// SpawnMoveTestResult is the move-test result population creation (5F6EB0)
-// acts on for a candidate generated around a nest centre. Both outdoor and
-// dungeon blocking contacts retain their result bits; the world-surface
-// resolver separately owns height admission.
-func (v *WaterValidator) SpawnMoveTestResult(from, to simulation.Spawn) uint32 {
+// SpawnMoveTest is the move test population creation (5F6EB0) runs for a
+// candidate generated around a nest centre: the result bits it acts on and
+// the walked resting point, whose height names the surface the walk reached.
+// Both outdoor and dungeon blocking contacts retain their result bits.
+func (v *WaterValidator) SpawnMoveTest(from, to simulation.Spawn) simulation.MonsterSpawnMove {
 	report := v.ClipMovementPath(simulation.NormalizeSpawnFrame(from), simulation.NormalizeSpawnFrame(to))
 	if report.Outcome != ClipBlocked {
-		return 0
+		return simulation.MonsterSpawnMove{Rest: report.Rest}
 	}
-	return report.NativeResult
+	return simulation.MonsterSpawnMove{Result: report.NativeResult, Rest: report.Rest}
 }
 
 // EnvMoveClientClip selects the clip posture:

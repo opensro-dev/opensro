@@ -143,15 +143,15 @@ func TestBlockedOrdinaryCandidateRetriesNextCallback(t *testing.T) {
 	w := newLifecycleWorld(t, lifecycleRef(1), nest)
 	blocked := true
 	calls := 0
-	w.s.SetSpawnCollisionTest(func(from, to Spawn) uint32 {
+	w.s.SetSpawnCollisionTest(func(from, to Spawn) MonsterSpawnMove {
 		calls++
 		if from.RegionID != lifecycleRegion || from.X != 100 || from.Z != 100 || from.Y != 10 {
 			t.Fatalf("move test from %+v, want the nest centre", from)
 		}
 		if blocked {
-			return monster.NavResultBlocked
+			return MonsterSpawnMove{Result: monster.NavResultBlocked, Rest: from}
 		}
-		return 0
+		return MonsterSpawnMove{Rest: to}
 	})
 	w.expectLive(0, 0)
 	if calls != 1 {
@@ -175,7 +175,9 @@ func TestBlockedPromotedCandidateSpawnsAtTheCentre(t *testing.T) {
 	nest.HasChampionTactics = true
 	nest.ChampionGenPercentage = 100
 	w := newLifecycleWorld(t, lifecycleRef(1), nest)
-	w.s.SetSpawnCollisionTest(func(Spawn, Spawn) uint32 { return monster.NavResultBlocked })
+	w.s.SetSpawnCollisionTest(func(from, _ Spawn) MonsterSpawnMove {
+		return MonsterSpawnMove{Result: monster.NavResultBlocked, Rest: from}
+	})
 	live := w.expectLive(0, 1)
 	if live[0].Rarity()&0x0f == 0 || live[0].Spawn.X != 100 || live[0].Spawn.Z != 100 {
 		t.Fatalf("promoted blocked spawn = rarity %#02x at %+v, want the centre", live[0].Rarity(), live[0].Spawn)
@@ -189,11 +191,11 @@ func TestClippedCandidateHalvesTheNestInterval(t *testing.T) {
 	nest.GenerateRadius = 30
 	w := newLifecycleWorld(t, lifecycleRef(1), nest)
 	clipped := false
-	w.s.SetSpawnCollisionTest(func(Spawn, Spawn) uint32 {
+	w.s.SetSpawnCollisionTest(func(from, to Spawn) MonsterSpawnMove {
 		if clipped {
-			return monster.NavResultClipped
+			return MonsterSpawnMove{Result: monster.NavResultClipped, Rest: from}
 		}
-		return 0
+		return MonsterSpawnMove{Rest: to}
 	})
 	live := w.expectLive(0, 1)
 	w.kill(0, live[0].Gid)

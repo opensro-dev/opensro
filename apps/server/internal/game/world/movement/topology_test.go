@@ -34,14 +34,14 @@ func TestDungeonTopologyClipsAndTraverses(t *testing.T) {
 		if r.Outcome != ClipArrived || r.Rest != pair[1] {
 			t.Fatalf("Linked traversal %+v", r)
 		}
-		if got := v.SpawnMoveTestResult(pair[0], pair[1]); got != 0 {
+		if got := v.SpawnMoveTest(pair[0], pair[1]).Result; got != 0 {
 			t.Fatalf("Linked spawn path refused: %x", got)
 		}
 	}
 	blocks[0].connected = nil
 	blocks[1].connected = nil
 	surface.objects = resolveDungeonLinks(blocks)
-	if got := v.SpawnMoveTestResult(a, b); got != monster.NavResultBlocked {
+	if got := v.SpawnMoveTest(a, b).Result; got != monster.NavResultBlocked {
 		t.Fatalf("Unlinked spawn path admitted: %x", got)
 	}
 	if r := v.ClipMovementPath(a, b); r.Outcome != ClipBlocked || r.Rest.X != 99.82111358642578 || r.Rest.Z != 49.91055679321289 {
@@ -53,7 +53,7 @@ func TestDungeonTopologyClipsAndTraverses(t *testing.T) {
 	}
 	delete(v.dungeonSpawnSurfaces, 0x8001)
 	b.RegionID = a.RegionID
-	if got := v.SpawnMoveTestResult(a, b); got != monster.NavResultBlocked {
+	if got := v.SpawnMoveTest(a, b).Result; got != monster.NavResultBlocked {
 		t.Fatalf("Unknown dungeon surface admitted: %x", got)
 	}
 	if r := v.ClipMovementPath(a, b); r.Rest != a || r.Outcome != ClipBlocked {

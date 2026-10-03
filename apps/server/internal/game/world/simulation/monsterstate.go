@@ -115,12 +115,23 @@ type MonsterSpawnGroundResolver func(regionID uint16, x, authoredY, z float64) (
 MonsterSpawnCollisionTest
 
 MonsterSpawnCollisionTest is the navmesh move test creation 5F6EB0 runs
-from the nest centre to a generated candidate. It returns the native result
-bits (monster.NavResultClipped / NavResultBlocked); zero admits the
-candidate.
+from the nest centre to a generated candidate (region manager vtable +0x30).
+Result carries the native bits (monster.NavResultClipped / NavResultBlocked;
+zero admits the candidate). Rest is where the walk came to rest, on the
+surface it walked: 5F6EB0 creates the monster at that written position.
 ==================
 */
-type MonsterSpawnCollisionTest func(from, to Spawn) uint32
+type MonsterSpawnCollisionTest func(from, to Spawn) MonsterSpawnMove
+
+/*
+==================
+MonsterSpawnMove
+==================
+*/
+type MonsterSpawnMove struct {
+	Result uint32
+	Rest   Spawn
+}
 
 // NewMonsterState builds empty authoritative state over an immutable catalog.
 /*
