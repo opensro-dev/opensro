@@ -65,6 +65,7 @@ type deployment struct {
 	Network         string
 	AllowedOrigins  string
 	GMCharacters    string
+	BetaMastery     string
 	TransportCert   string
 	TransportKey    string
 	TransportTLSID  string
@@ -261,6 +262,10 @@ func resolveDeployment(
 		return nil, fmt.Errorf("GM allowlist: %w", err)
 	}
 	bugReports, warnings := bugreport.LoadConfig(os.Getenv)
+	betaMastery, err := configuredBetaMastery(stateDir)
+	if err != nil {
+		return nil, err
+	}
 	for _, warning := range warnings {
 		fmt.Printf("Bug reports: %s\n", warning)
 	}
@@ -361,6 +366,7 @@ func resolveDeployment(
 		Network:         hostNetwork,
 		AllowedOrigins:  allowedOrigins,
 		GMCharacters:    gmCharacters,
+		BetaMastery:     betaMastery,
 		TransportCert:   transportCert,
 		TransportKey:    transportKey,
 		TransportTLSID:  transportTLSID,
@@ -638,6 +644,7 @@ func (deployment *deployment) gameVariables(
 		"private_network":     boolEnvValue(deployment.PrivateNetwork),
 		"allowed_origins":     deployment.AllowedOrigins,
 		"gm_characters":       deployment.GMCharacters,
+		"beta_mastery":        deployment.BetaMastery,
 	})
 }
 

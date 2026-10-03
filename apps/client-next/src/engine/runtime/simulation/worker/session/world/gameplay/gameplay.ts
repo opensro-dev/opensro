@@ -571,6 +571,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			skillGroups.clear();
 			for ( const [id, ref] of nextGroups ) skillGroups.set( id, ref );
 			training.reset();
+			training.bootstrap( value );
 			fortress = fortressBootstrap( value );
 			musicMode = 0;
 			social = emptySocial( (value as { character?: { name?: string; }; }).character?.name ?? "" );

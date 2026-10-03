@@ -19,7 +19,22 @@ createTraining
 */
 export function createTraining( send: ( frame: WireFrame ) => void ) {
 	let state: TrainingState = { phase: "idle" };
+	let masteryTotalOverride: number | undefined;
 	return {
+		/*
+		================
+		bootstrap
+
+		The server owns the optional beta budget. Missing means native rules.
+		================
+		*/
+		bootstrap( value: unknown ) {
+			const limit = (value as { masteryTotalOverride?: unknown; }).masteryTotalOverride;
+			if ( limit !== undefined && (typeof limit !== "number" || !Number.isSafeInteger( limit ) || limit <= 0) ) {
+				throw new Error( "Invalid mastery total override" );
+			}
+			masteryTotalOverride = limit as number | undefined;
+		},
 		/*
 		================
 		request
@@ -70,6 +85,7 @@ export function createTraining( send: ( frame: WireFrame ) => void ) {
 		*/
 		state() {
 			return {
+				masteryTotalOverride,
 				trainingPending: state.phase !== "idle",
 				trainingError: state.phase === "uncertain" ?
 					"Training result is unknown. Reconnect before trying again." :
@@ -82,6 +98,7 @@ export function createTraining( send: ( frame: WireFrame ) => void ) {
 		================
 		*/
 		reset() {
+			masteryTotalOverride = undefined;
 			state = trainingTransition( state, { type: "reset" } );
 		},
 		/*
@@ -90,6 +107,7 @@ export function createTraining( send: ( frame: WireFrame ) => void ) {
 		================
 		*/
 		dispose() {
+			masteryTotalOverride = undefined;
 			state = { phase: "idle" };
 		}
 	};
