@@ -6,8 +6,8 @@ skillheal.go - heal amounts and their application
 Both native heal routines, CSkillManager_ApplySkillHeal (5A0850) for a cast
 and CSkillManager_ApplyHealRecovery (5A09F0) for the eshp aura, run the
 same three steps: a base amount from the heal block, the recipient's
-0xAA / 0xAB scale, then the caster's weapon term. The recipient's rhru
-(applyHealReceived) raises the total, which reaches the recipient through
+0xAA / 0xAB scale (which rhru buffs raise, 594AC0), then the caster's
+weapon term. The total reaches the recipient through
 CGObjChar_ApplyReducedRecovery (4A86A0).
 
 ===========================================================================
@@ -70,23 +70,15 @@ func (rt *Runtime) skillHealAmounts(division string, recipient, caster *enterwor
 		}
 		up = casterStats.SkillParameters[enterworld.ParameterHealRecoveryUp]
 	}
+	// 59425E: a heal that reads getv HLRU raises both percent words by the
+	// caster's value (Faith). The aura's pulse runs the same code: native
+	// CastLifecycle_ProcessPersistent reaches SkillCombat_ApplySkillEffectsToTargets
+	// through SkillCombat_EngageSkill (584337, 58547B), the only HLRU reader.
+	heal.HPPercent += up
+	heal.MPPercent += up
 	if routine == healAura {
 		hp, mp = auraHealBase(heal, maxHP, maxMP)
-		// Inferred: on the aura the caster's HLRU raises each amount by that
-		// percent of itself, the effect it has on a cast's flat amounts.
-		// Adding it to the percent words, as 59425E does for a cast, turns an
-		// unauthored word into a share of the maximum: Recovery Division,
-		// heal(445,0,0,0), then restored MP and replaced its 445 HP with a
-		// share of maximum HP for a caster who learned Faith.
-		if up != 0 {
-			hp = raisedByPercent(hp, up)
-			mp = raisedByPercent(mp, up)
-		}
 	} else {
-		// 59425E: a heal that reads getv HLRU raises both percent words by
-		// the caster's value (Faith).
-		heal.HPPercent += up
-		heal.MPPercent += up
 		hp, mp = castHealBase(heal, maxHP)
 	}
 
@@ -103,71 +95,7 @@ func (rt *Runtime) skillHealAmounts(division string, recipient, caster *enterwor
 		hp += bonusHP
 		mp += bonusMP
 	}
-	hp, mp = rt.applyHealReceived(division, recipient, hp, mp)
 	return hp, mp, true
-}
-
-/*
-==================
-applyHealReceived
-
-The recipient's healing-received raise: every live effect on recipient
-whose row carries rhru (Dancing of Healing / Vitality, on the dancing Bard
-and every member it joined) adds its HP word to the HP amount and its MP
-word to the MP amount, in percent, summed over the effects.
-
-Every producer that hands a recipient HP or MP through a skill calls this
-once on its final amounts, before applySkillRecovery: skillHealAmounts does
-it for casts, party heals and the eshp aura; a heal-over-time owner must
-call it on each pulse's amounts.
-
-Owner's rule: Dancing of Healing / Vitality give +% healing received.
-Inferred: the raise applies to the whole amount (after the 0xAA / 0xAB
-scale and the caster's weapon term), with healScale's rounding; resurrection
-offers and potions are not skill heals and do not read it. The caller holds
-recipient's door.
-==================
-*/
-func (rt *Runtime) applyHealReceived(division string, recipient *enterworld.Character, hp, mp int64) (int64, int64) {
-	var up [2]uint32
-	for _, row := range rt.liveEffectRows(division, recipient) {
-		if row.BuffModifiers.Rhru {
-			up[0] += row.BuffModifiers.RhruWords[0]
-			up[1] += row.BuffModifiers.RhruWords[1]
-		}
-	}
-	if up[0] != 0 {
-		hp = healScale(hp, float32(up[0]))
-	}
-	if up[1] != 0 {
-		mp = healScale(mp, float32(up[1]))
-	}
-	return hp, mp
-}
-
-/*
-==================
-liveEffectRows
-
-The skill rows of c's installed effects that were not asked to stop, one
-per instance, for owners that read a block no parameter carries.
-==================
-*/
-func (rt *Runtime) liveEffectRows(division string, c *enterworld.Character) []enterworld.SkillRow {
-	skills := rt.deps.SkillData()
-	if rt.effects == nil || skills == nil || c == nil {
-		return nil
-	}
-	var rows []enterworld.SkillRow
-	for _, effect := range rt.effects.Snapshot(division, c.Name) {
-		if effect.StopRequested {
-			continue
-		}
-		if row, ok := skills.SkillByID(effect.SkillID); ok {
-			rows = append(rows, row)
-		}
-	}
-	return rows
 }
 
 /*
