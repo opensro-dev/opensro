@@ -78,21 +78,24 @@ ordinaryPlayerHostility
 5299E0 checks detection before Fear's source exclusion. Project the live
 abnormal slot into the existing hostility owner instead of filtering the
 candidate first. Remembered-opponent lookup only calls 540DE0 (547E04).
+
+The observer carries the monster's full type word, level and grade, and
+the player its first-attack protection (the Bard's Noise), so 5299E0's
+last branch decides the protection. The type word used to be the client
+TID alone, which never matched that branch's 0x8C6.
 ================
 */
 func ordinaryPlayerHostility(actor monster.Instance, player playerPose) bool {
-	observer := monster.HostilityObserver{
-		TID: actor.Ref.TidWord, ReferenceFlags: actor.Nest.NativeTacticsFlags, Mode: 1,
-	}
+	observer := actor.Observer()
 	if actor.Abnormal != nil {
 		fear := actor.Abnormal.Slots[abnormal.Fear]
 		observer.RestrictionD34 = actor.Abnormal.Mask
 		observer.Restriction118C = fear.Active
 		observer.ExcludedGID = fear.SourceGID
 	}
-	return monster.AllowsHostility(observer, monster.HostilityTarget{
+	return monster.AllowsHostility(observer, player.Guard.Protect(monster.HostilityTarget{
 		GID: player.Gid, BodyStatus: player.NativeBodyStatus, Player: true,
-	})
+	}))
 }
 
 // 546687..546758: comparisons use the exact integer, not float32(integer).
@@ -204,6 +207,10 @@ func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPl
 	found := false
 	for _, player := range divisionPlayers {
 		if !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) {
+			continue
+		}
+		// The first-attack protection holds for every acquisition scan.
+		if monster.FirstAttackProtected(actor.Observer(), player.Guard.Protect(monster.HostilityTarget{GID: player.Gid, Player: true})) {
 			continue
 		}
 		d := planarDistanceSpawn(player.Pose, poseToSpawn(from))

@@ -31,6 +31,7 @@ const (
 	tagTimedMaxHPPenalty       = 0x706d6870
 	tagTimedIncomingReduction  = 0x6f646172
 	tagTimedOverlap            = 0x6f766c32
+	tagTimedPreemptive         = 0x706f6c61
 	parameterWizardMP          = 0x57494d44
 	parameterBardMP            = 0x42444d44
 	parameterMusicArea         = 0x4d554552
@@ -90,6 +91,28 @@ type SkillTimedEffect struct {
 	Defense    bool
 	Block      SkillBlockBoost
 	Attributes SkillAttributeBoost
+	// Preemptive is pola (Noise): while the effect lasts, the monsters it
+	// names do not acquire its owner first.
+	Preemptive SkillPreemptiveGuard
+}
+
+/*
+================
+SkillPreemptiveGuard
+
+pola {grade mask, level}, the "Preemptive attack prevention (lv word 1)"
+row of the client tooltip (sub_7f9bd0). Inferred from the protection
+branch of CGObjMob_EvaluateHostility (5299E0), whose target carries a
+mask and a level: a regular monster (type word 0x8C6) whose grade bit
+(normal 1, champion 2, unique 4, elite 8) is in Mask and whose level does
+not exceed Level does not choose the protected player. Every v1.150 row
+authors mask 1 (normal grade only) and a level that grows with the tier
+(30 .. 100); the client prints that word as a level, not a percentage.
+================
+*/
+type SkillPreemptiveGuard struct {
+	Present     bool
+	Mask, Level uint32
 }
 
 /*
@@ -333,6 +356,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.IncomingReduction = true
+		case tagTimedPreemptive:
+			// A self-only guard: the protection is the owner's, so it
+			// never rides a target, an area or a link.
+			if result.Preemptive.Present || op.Count != 2 || op.Arguments[0] == 0 || targeted || result.Area.Present {
+				return
+			}
+			result.Preemptive = SkillPreemptiveGuard{Present: true, Mask: op.Arguments[0], Level: op.Arguments[1]}
 		case tagTimedOverlap: // ovl2: the replacement descriptor's casting-state word
 		case tagNbuf, tagBbuf: // cancellation policy and secondary board, already projected
 		case tagReqi, tagTimedRequireNot: // 58D480 admits, 59F0E0 re-checks on equipment change
@@ -369,12 +399,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// odar would silently drop them and stays refused.
 	if result.Link.Threat && (result.Block.Present || result.IncomingReduction) ||
 		result.Link.Present && (defense || result.Area.Present || result.Persistent) ||
-		result.StrengthAddend && !result.Strength.Present || result.IntellectAddend && !result.Intellect.Present {
+		result.StrengthAddend && !result.Strength.Present || result.IntellectAddend && !result.Intellect.Present ||
+		result.Preemptive.Present && (result.Link.Present || result.Persistent || row.EffectDurationMs == 0) {
 		return
 	}
 	partySelection := result.Area.Select == SelectParty || result.Area.Select == SelectParty|SelectCaster
 	if movement && (targeted || !result.Area.Present || !partySelection || result.Persistent || result.Link.Present || row.EffectDurationMs == 0) ||
-		musicParameters && !movement {
+		musicParameters && !movement && !result.Preemptive.Present {
 		return
 	}
 	result.Defense = defense
@@ -385,7 +416,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
-		result.Intellect.Present || result.IncomingReduction || result.Link.Present && result.Link.Threat)
+		result.Intellect.Present || result.IncomingReduction || result.Link.Present && result.Link.Threat ||
+		result.Preemptive.Present)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {

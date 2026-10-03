@@ -84,6 +84,9 @@ type MonsterMoverOps struct {
 	// already owns that transaction and must not acquire it again. Production
 	// installs this; BasicAttack alone is the detached simulation test seam.
 	RunAction func(divisionID string, run func(MonsterAttackOperation))
+	// FirstAttackGuard reads a player's live first-attack protection (the
+	// Bard's Noise) from the effect owner. nil protects nobody.
+	FirstAttackGuard func(divisionID string, playerGID uint32, nowMs int64) monster.FirstAttackGuard
 
 	// shownMonsters tracks which monster gids each viewer session has
 	// been sent a spawn for (the peervis shownPeers pattern). On first sight,
@@ -246,6 +249,9 @@ type playerPose struct {
 	Pose             Spawn
 	MovementIntent   playerMovementIntent
 	BodyRadius       BodyRadius
+	// Guard is the player's first-attack protection (the Bard's Noise),
+	// read from the action owner when the leg samples its players.
+	Guard monster.FirstAttackGuard
 }
 
 /*
@@ -314,7 +320,11 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			if session.DivisionID != divisionID || session.Population != batch.key.lease || !session.CombatEligible {
 				continue
 			}
-			players = append(players, playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs), MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius, NativeBodyStatus: session.NativeBodyStatus})
+			player := playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs), MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius, NativeBodyStatus: session.NativeBodyStatus}
+			if ops.FirstAttackGuard != nil {
+				player.Guard = ops.FirstAttackGuard(divisionID, player.Gid, nowMs)
+			}
+			players = append(players, player)
 		}
 		for _, gid := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.

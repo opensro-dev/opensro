@@ -1,9 +1,27 @@
+/*
+===========================================================================
+
+hostility.go - whether a monster may choose a target (5299E0)
+
+The default world controller's mob decision (v1.188 604E00 -> 5298C0 ->
+5299E0) as plain values: an observer, a target, and the predicate. Its last
+branch is the first-attack protection the Bard's Noise (pola) installs.
+
+===========================================================================
+*/
+
 package monster
 
-// HostilityObserver and HostilityTarget are the inputs consumed by the default
-// world controller's mob decision (v1.188 604E00 -> 5298C0 -> 5299E0).
-// They are values, not a shared combat-eligibility cache. Numeric restrictions
-// remain unnamed where their gameplay producers have not been recovered.
+/*
+================
+HostilityObserver
+
+HostilityObserver and HostilityTarget are the inputs consumed by the
+mob decision. They are values, not a shared combat-eligibility cache.
+Numeric restrictions remain unnamed where their gameplay producers have
+not been recovered.
+================
+*/
 type HostilityObserver struct {
 	TID             uint16
 	ReferenceFlags  uint32
@@ -17,6 +35,11 @@ type HostilityObserver struct {
 	BoundTargetGID  uint32
 }
 
+/*
+================
+HostilityTarget
+================
+*/
 type HostilityTarget struct {
 	GID              uint32
 	BodyStatus       uint8
@@ -29,10 +52,16 @@ type HostilityTarget struct {
 	ProtectionLevel  uint32
 }
 
-// AllowsHostility implements the player-target projection. COS substitution
-// at 529929 and non-default world controllers require their own adapters.
-// LIFE/visibility are caller responsibilities: this function does not invent
-// a life test or replace the independent 540DE0 observer-status predicate.
+/*
+================
+AllowsHostility
+
+The player-target projection. COS substitution at 529929 and non-default
+world controllers require their own adapters. LIFE/visibility are caller
+responsibilities: this function does not invent a life test or replace
+the independent 540DE0 observer-status predicate.
+================
+*/
 func AllowsHostility(actor HostilityObserver, target HostilityTarget) bool {
 	if target.GID == 0 || target.RejectedType43C ||
 		(target.BodyStatus >= 2 && target.BodyStatus <= 4) {
@@ -56,11 +85,24 @@ func AllowsHostility(actor HostilityObserver, target HostilityTarget) bool {
 	if (target.Player && target.RestrictionC44) || target.RejectedType3C {
 		return false
 	}
-	if actor.Mode == 0 || actor.TID&0xfffe != 0x8c6 || !target.ProtectionActive {
-		return true
+	return !FirstAttackProtected(actor, target)
+}
+
+/*
+================
+FirstAttackProtected
+
+The protection branch at the end of 5299E0: a regular monster (type word
+0x8C6) in a scanning mode does not choose a target whose protection names
+its grade bit, unless its level is above the protection's level.
+================
+*/
+func FirstAttackProtected(actor HostilityObserver, target HostilityTarget) bool {
+	if actor.Mode == 0 || actor.TID&typeWordFlagMask != regularMonsterTypeWord || !target.ProtectionActive {
+		return false
 	}
 	var mask uint32
-	switch actor.Rarity & 0xf {
+	switch actor.Rarity & rarityGradeMask {
 	case 0:
 		mask = 1
 	case 1:
@@ -70,5 +112,45 @@ func AllowsHostility(actor HostilityObserver, target HostilityTarget) bool {
 	case 6:
 		mask = 8
 	}
-	return target.ProtectionMask&mask == 0 || uint32(actor.Level) > target.ProtectionLevel
+	return target.ProtectionMask&mask != 0 && uint32(actor.Level) <= target.ProtectionLevel
+}
+
+/*
+================
+FirstAttackGuard
+
+A player's live first-attack protection (the Bard's Noise): the grade
+mask and level of its pola block. A zero mask protects nothing.
+================
+*/
+type FirstAttackGuard struct {
+	Mask, Level uint32
+}
+
+/*
+================
+Protect
+
+Copy the guard onto a hostility target's protection fields.
+================
+*/
+func (g FirstAttackGuard) Protect(target HostilityTarget) HostilityTarget {
+	target.ProtectionActive = g.Mask != 0
+	target.ProtectionMask, target.ProtectionLevel = g.Mask, g.Level
+	return target
+}
+
+/*
+================
+Observer
+
+The hostility observer an ordinary acquisition scan (mode 1) passes for
+this monster: its full type word (TID4 in bits 11-15), level and grade.
+================
+*/
+func (i Instance) Observer() HostilityObserver {
+	return HostilityObserver{
+		TID: NativeTypeWord(i.Ref), ReferenceFlags: i.Nest.NativeTacticsFlags, Mode: 1,
+		Level: i.Ref.Level, Rarity: i.Rarity(),
+	}
 }
