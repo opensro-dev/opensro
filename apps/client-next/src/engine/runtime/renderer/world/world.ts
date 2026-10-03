@@ -32,7 +32,7 @@ import { footprintGeometry, footprintTextures } from "@/engine/foundation/render
 import { createMaterialTimeline } from "@/engine/foundation/rendering/material-timeline";
 import { createTextureAtlas } from "@/engine/foundation/rendering/texture-atlas";
 import { createWorldResidency } from "./residency";
-import { createTerrainLayers } from "./terrain-layers";
+import { createTerrainLayers, type TerrainLayer } from "./terrain-layers";
 import {
 	terrainInteractionCells,
 	terrainCellKey,
@@ -540,6 +540,11 @@ export function createWorldRenderer(
 	// Visible marks by draw order: the walk marks, ordering reads them back.
 	// The draw phase of each group, by draw order.
 	let visibleMarks = new Uint8Array( 0 ), orderPhase = new Int8Array( 0 );
+	// Per order index: the terrain layer the group draws through, else its own
+	// draw (orderGroups), so submission reads arrays, not maps; and the
+	// selection walk's scratch (visible order indices, transparent depths).
+	let orderLayers: (TerrainLayer | undefined)[] = [], orderDraws: (GeometryDraw | undefined)[] = [];
+	let orderVisible = new Int32Array( 0 ), orderDepth = new Float64Array( 0 );
 	// The current scene's groups in walk order, with their typed bounds.
 	let walk = compileWalkTable( [], pickBounds );
 	// Instanced selection caches by walk index, so the walk does not look them up.
@@ -559,6 +564,10 @@ export function createWorldRenderer(
 		groupOrder = new Map( groups.map( ( group, index ) => [ group, index ] ) );
 		visibleMarks = new Uint8Array( groups.length );
 		orderPhase = Int8Array.from( groups, drawPhase );
+		orderLayers = groups.map( group => layers.layerOf( group ) );
+		orderDraws = groups.map( group => draws.get( group ) );
+		orderVisible = new Int32Array( groups.length );
+		orderDepth = new Float64Array( groups.length );
 		walk = compileWalkTable( sceneGroups, pickBounds );
 		walkCaches = new Array( sceneGroups.length );
 		for ( let i = 0; i < sceneGroups.length; i++ ) walk.order[i] = groupOrder.get( sceneGroups[i]! )!;
@@ -1803,14 +1812,13 @@ export function createWorldRenderer(
 						instancesDirty ||= count !== (cache.instanceCount ?? 0);
 						cache.instanceCount = count;
 						if ( instancesDirty ) {
-							draws.set(
-								group,
-								geometry.updateInstances(
-									draws.get( group )!,
-									cache.instances!.subarray( 0, count * 16 ),
-									cache.opacity?.subarray( 0, count )
-								)
+							const draw = geometry.updateInstances(
+								draws.get( group )!,
+								cache.instances!.subarray( 0, count * 16 ),
+								cache.opacity?.subarray( 0, count )
 							);
+							draws.set( group, draw );
+							orderDraws[walk.order[walked]!] = draw;
 						}
 						walk.count[walked] = count;
 					}
@@ -1851,34 +1859,34 @@ export function createWorldRenderer(
 			// Draw order of the visible groups, without walking every resident one;
 			// the phase boundaries fall out of the same pass.
 			activeAnimated = animated.filter( group => visibleMarks[groupOrder.get( group ) ?? -1] === 1 );
-			const ordered: WorldGroup[] = [];
+			let visibleCount = 0;
 			terrainEnd = -1;
 			transparentStart = -1;
 			for ( let index = 0; index < visibleMarks.length; index++ ) {
 				if ( !visibleMarks[index] ) continue;
 				visibleMarks[index] = 0;
 				const phase = orderPhase[index]!;
-				if ( terrainEnd < 0 && phase >= 3 ) terrainEnd = ordered.length;
-				if ( transparentStart < 0 && phase === 4 ) transparentStart = ordered.length;
-				ordered.push( orderedGroups[index]! );
+				if ( terrainEnd < 0 && phase >= 3 ) terrainEnd = visibleCount;
+				if ( transparentStart < 0 && phase === 4 ) transparentStart = visibleCount;
+				orderVisible[visibleCount++] = index;
 			}
-			if ( terrainEnd < 0 ) terrainEnd = ordered.length;
-			if ( transparentStart < 0 ) transparentStart = ordered.length;
-			const transparent = ordered.splice( transparentStart );
-			// Far to near. Each group's distance is taken once, not per comparison.
-			const depth = new Map<WorldGroup, number>();
-			for ( const group of transparent ) {
-				depth.set(
-					group,
-					Math.hypot(
-						group.center[0] - localCamera.eye[0],
-						group.center[1] - localCamera.eye[1],
-						group.center[2] - localCamera.eye[2]
-					)
+			if ( terrainEnd < 0 ) terrainEnd = visibleCount;
+			if ( transparentStart < 0 ) transparentStart = visibleCount;
+			// Far to near. Each group's distance is taken once, not per comparison;
+			// ties keep draw order.
+			for ( let i = transparentStart; i < visibleCount; i++ ) {
+				const index = orderVisible[i]!, group = orderedGroups[index]!;
+				orderDepth[index] = Math.hypot(
+					group.center[0] - localCamera.eye[0],
+					group.center[1] - localCamera.eye[1],
+					group.center[2] - localCamera.eye[2]
 				);
 			}
-			transparent.sort( ( a, b ) => depth.get( b )! - depth.get( a )! );
-			ordered.push( ...transparent );
+			orderVisible.subarray( transparentStart, visibleCount ).sort( ( a, b ) =>
+				orderDepth[b]! - orderDepth[a]! || a - b
+			);
+			const ordered: WorldGroup[] = new Array( visibleCount );
+			for ( let i = 0; i < visibleCount; i++ ) ordered[i] = orderedGroups[orderVisible[i]!]!;
 			pickGroups = ordered;
 			// Upload gives every admitted group a unique resource handle. Its identity
 			// already covers scene replacement and binding growth; rebuilding a string
@@ -1887,13 +1895,14 @@ export function createWorldRenderer(
 			// member. Members are terrain, so only the opaque phases shift.
 			const nextDraws: GeometryDraw[] = [], pass = ++submitPass;
 			let shifted = 0;
-			for ( let i = 0; i < ordered.length; i++ ) {
-				const group = ordered[i]!, draw = layers.drawFor( group, pass );
+			for ( let i = 0; i < visibleCount; i++ ) {
+				const index = orderVisible[i]!, layer = orderLayers[index];
+				const draw = layer ? layers.drawInPass( layer, pass ) : orderDraws[index]!;
 				if ( draw === null ) {
 					if ( i < terrainEnd ) shifted++;
 					continue;
 				}
-				nextDraws.push( draw ?? draws.get( group )! );
+				nextDraws.push( draw );
 			}
 			terrainEnd -= shifted;
 			transparentStart -= shifted;

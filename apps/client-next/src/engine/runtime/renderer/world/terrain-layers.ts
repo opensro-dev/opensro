@@ -28,6 +28,14 @@ const VERTEX_FLOATS = 14;
 const IDENTITY = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
 
 type Member = { layer: Layer; base: number; vertices: number; chosen: Uint32Array; count: number; };
+/*
+================
+TerrainLayer
+
+One layer: callers hold it (layerOf) to take its current draw (drawInPass).
+================
+*/
+export type TerrainLayer = Layer;
 type Layer = {
 	key: string;
 	draw: GeometryDraw;
@@ -201,19 +209,26 @@ export function createTerrainLayers() {
 		drawOf: ( group: WorldGroup ) => members.get( group )!.layer.draw,
 		/*
 		================
-		drawFor
+		layerOf
 
-		The draw a group submits in pass: its layer's draw at the layer's
-		first member in the pass, null for the other members, undefined when
-		the group is not a member (it submits its own draw).
+		The layer group draws through, or undefined when the group is not a
+		member (it submits its own draw). Membership changes only through
+		admit, remove and clear.
 		================
 		*/
-		drawFor( group: WorldGroup, pass: number ): GeometryDraw | null | undefined {
-			const member = members.get( group );
-			if ( !member ) return undefined;
-			if ( member.layer.submitted === pass ) return null;
-			member.layer.submitted = pass;
-			return member.layer.draw;
+		layerOf: ( group: WorldGroup ): TerrainLayer | undefined => members.get( group )?.layer,
+		/*
+		================
+		drawInPass
+
+		The draw layer submits in pass: its current draw at its first member
+		in the pass, null for the other members.
+		================
+		*/
+		drawInPass( layer: TerrainLayer, pass: number ): GeometryDraw | null {
+			if ( layer.submitted === pass ) return null;
+			layer.submitted = pass;
+			return layer.draw;
 		},
 		/*
 		================

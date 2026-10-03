@@ -430,7 +430,6 @@ apps/client-next/tests/browser/world-dock-occlusion.test.mjs
 apps/client-next/tests/browser/world-fade-composition.test.mjs
 apps/client-next/tests/browser/world-foliage-region.test.mjs
 apps/client-next/tests/browser/world-foliage.test.mjs
-apps/client-next/tests/browser/world-frustum.test.mjs
 apps/client-next/tests/browser/world-gestures.test.mjs
 apps/client-next/tests/browser/world-lifecycle.test.mjs
 apps/client-next/tests/browser/world-loading-recovery.test.mjs

@@ -18,6 +18,88 @@ import { packGeometryVertices } from "@/engine/foundation/rendering/geometry-ver
 import type { GeometryCommands, GeometryDraw, ImageDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
 /*
 ================
+DeviceDraw
+
+A draw handle. Consumers only read it: assigning a count throws. Its
+counts, binding and capacity change in place, through select and rebind,
+which only this module calls. Every handle is one class, one shape, so the
+per-frame reads of its counts are monomorphic.
+================
+*/
+class DeviceDraw implements GeometryDraw {
+	readonly deferredParticle: boolean | undefined;
+	readonly blended: boolean;
+	readonly pipeline: GPURenderPipeline;
+	readonly vertices: GPUBuffer;
+	readonly indices: GPUBuffer;
+	readonly count: number;
+	#binding: GPUBindGroup;
+	#instanceCapacity: number;
+	#indexCount: number;
+	#instanceCount: number;
+
+	constructor(
+		fixed: Pick<GeometryDraw, "deferredParticle" | "blended" | "pipeline" | "vertices" | "indices" | "count">,
+		binding: GPUBindGroup,
+		instanceCapacity: number,
+		instanceCount: number
+	) {
+		this.deferredParticle = fixed.deferredParticle;
+		this.blended = fixed.blended ?? false;
+		this.pipeline = fixed.pipeline;
+		this.vertices = fixed.vertices;
+		this.indices = fixed.indices;
+		this.count = fixed.count;
+		this.#binding = binding;
+		this.#instanceCapacity = instanceCapacity;
+		this.#indexCount = fixed.count;
+		this.#instanceCount = instanceCount;
+		Object.freeze( this );
+	}
+
+	get binding() {
+		return this.#binding;
+	}
+
+	get instanceCapacity() {
+		return this.#instanceCapacity;
+	}
+
+	get indexCount() {
+		return this.#indexCount;
+	}
+
+	get instanceCount() {
+		return this.#instanceCount;
+	}
+
+	/*
+	================
+	select
+
+	The index and instance counts the draw submits.
+	================
+	*/
+	static select( draw: DeviceDraw, indexCount: number, instanceCount: number ) {
+		draw.#indexCount = indexCount;
+		draw.#instanceCount = instanceCount;
+	}
+
+	/*
+	================
+	rebind
+
+	A new binding, and with grown instance storage its capacity.
+	================
+	*/
+	static rebind( draw: DeviceDraw, binding: GPUBindGroup, instanceCapacity = draw.#instanceCapacity ) {
+		draw.#binding = binding;
+		draw.#instanceCapacity = instanceCapacity;
+	}
+}
+
+/*
+================
 createGeometryResources
 ================
 */
@@ -191,7 +273,8 @@ export function createGeometryResources(
 		indexBytes: number;
 		palette?: SharedPalette;
 		jointMaximum: number;
-		selection: { indexCount: number; instanceCount: number; binding: GPUBindGroup; };
+		// The draw handle itself, which this owner updates in place.
+		selection: DeviceDraw;
 	}>();
 	let shadows: ReturnType<typeof createCharacterShadows> | undefined;
 	const commands: GeometryCommands = Object.freeze( {
@@ -317,8 +400,7 @@ export function createGeometryResources(
 					indices.byteLength
 				);
 			}
-			meta.selection.indexCount = indices.length;
-			meta.selection.instanceCount = 1;
+			DeviceDraw.select( meta.selection, indices.length, 1 );
 		},
 		updatePositions(
 			draw: GeometryDraw,
@@ -442,9 +524,7 @@ export function createGeometryResources(
 						packed.byteLength
 					);
 				}
-				const selection = metadata.get( draw )!.selection;
-				selection.indexCount = draw.count;
-				selection.instanceCount = count;
+				DeviceDraw.select( meta.selection, draw.count, count );
 				return draw;
 			}
 			gpu.pushErrorScope( "validation" );
@@ -463,45 +543,28 @@ export function createGeometryResources(
 							packed.byteOffset,
 							packed.byteLength
 						);
-						const selection = metadata.get( draw )!.selection;
-						selection.binding = geometryBinding(
-							metadata.get( draw )!.uniform,
-							storage,
-							metadata.get( draw )!.material,
-							draw.pipeline,
-							metadata.get( draw )!.image,
-							metadata.get( draw )!.skin,
-							metadata.get( draw )!.bones,
-							metadata.get( draw )!.environmentImage
+						DeviceDraw.rebind(
+							meta.selection,
+							geometryBinding(
+								meta.uniform,
+								storage,
+								meta.material,
+								draw.pipeline,
+								meta.image,
+								meta.skin,
+								meta.bones,
+								meta.environmentImage
+							),
+							capacity
 						);
-						const replacement = Object.freeze( {
-							...draw,
-							get indexCount() {
-								return selection.indexCount;
-							},
-							get instanceCount() {
-								return selection.instanceCount;
-							},
-							get binding() {
-								return selection.binding;
-							},
-							instanceCapacity: capacity
-						} );
 						buffers[3]!.destroy();
 						buffers[3] = storage;
-						geometryBuffers.delete( draw );
-						geometryBuffers.set( replacement, buffers );
-						metadata.set( replacement, metadata.get( draw )! );
-						metadata.delete( draw );
-						draw = replacement;
 					} catch ( error ) {
 						storage.destroy();
 						throw error;
 					}
 				}
-				const selection = metadata.get( draw )!.selection;
-				selection.indexCount = draw.count;
-				selection.instanceCount = count;
+				DeviceDraw.select( meta.selection, draw.count, count );
 				return draw;
 			} finally {
 				gpu.popErrorScope().then( error => {
@@ -755,25 +818,19 @@ export function createGeometryResources(
 					boneBuffer,
 					environmentImage
 				);
-				const selection = { indexCount: data.indices.length, instanceCount: count, binding };
-				const draw = Object.freeze( {
-					deferredParticle: mat?.deferredParticle,
-					blended: data.material?.sky ? false : data.material?.blend ?? false,
-					pipeline: selected,
-					get binding() {
-						return selection.binding;
+				const draw = new DeviceDraw(
+					{
+						deferredParticle: mat?.deferredParticle,
+						blended: data.material?.sky ? false : data.material?.blend ?? false,
+						pipeline: selected,
+						vertices,
+						indices,
+						count: data.indices.length
 					},
-					vertices,
-					indices,
-					instanceCapacity: capacity,
-					count: data.indices.length,
-					get indexCount() {
-						return selection.indexCount;
-					},
-					get instanceCount() {
-						return selection.instanceCount;
-					}
-				} );
+					binding,
+					capacity,
+					count
+				);
 				geometryBuffers.set( draw, buffers );
 				metadata.set( draw, {
 					uniform: data.world ? worldUniform! : uniform,
@@ -787,7 +844,7 @@ export function createGeometryResources(
 					indexBytes: indices.size,
 					palette,
 					jointMaximum,
-					selection
+					selection: draw
 				} );
 				return draw;
 			} catch ( error ) {
@@ -847,15 +904,18 @@ export function createGeometryResources(
 			if ( !sampling ) throw Error( "Texture settings capability unavailable" );
 			worldSampler = sampling( filtered, detail );
 			for ( const [draw, meta] of metadata ) {
-				meta.selection.binding = geometryBinding(
-					meta.uniform,
-					geometryBuffers.get( draw )![3]!,
-					meta.material,
-					draw.pipeline,
-					meta.image,
-					meta.skin,
-					meta.bones,
-					meta.environmentImage
+				DeviceDraw.rebind(
+					meta.selection,
+					geometryBinding(
+						meta.uniform,
+						geometryBuffers.get( draw )![3]!,
+						meta.material,
+						draw.pipeline,
+						meta.image,
+						meta.skin,
+						meta.bones,
+						meta.environmentImage
+					)
 				);
 			}
 		},
