@@ -169,6 +169,10 @@ func (rt *Runtime) resolvePlayerImpact(division, name string, skill enterworld.S
 	if skill.StatusCast {
 		return combat.Result{ResultFlags: 1}, nil
 	}
+	// A pdmg hit is its authored amount (skilltuning.go).
+	if skill.FixedDamage.Present {
+		return fixedDamageResult(skill.FixedDamage), nil
+	}
 	actor := criticalActor{division: division, character: name}
 	lanes := skill.Attack.Flags & 0xc
 	if chained {

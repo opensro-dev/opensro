@@ -205,7 +205,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	actionLifecycleMs, actionLifecyclePinned := skill.ActionLifecycleMs()
-	if !known || ((!skill.CombatPinned || !skill.Attack.Present) && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only && !skill.StatusCast) ||
+	if !known || ((!skill.CombatPinned || !skill.Attack.Present) && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only && !skill.StatusCast && !skill.FixedDamage.Present) ||
 		!actionLifecyclePinned || actionLifecycleMs == 0 && !skill.PositionEffect.Charge ||
 		!skill.TargetRequired || (!basic && !advanced) {
 		return OpResult{}, skillCastRefused
@@ -368,6 +368,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	var ammo ammunitionResult
 	var killProgressionFrames []wire.Frame
 	var battleFrames []wire.Frame
+	var tuning wire.Frame
 	var refusal uint16
 	{
 		// Character ammo and monster HP move under the same per-division lock
@@ -404,6 +405,11 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				rt.commitOffensivePhaseCost(divisionID, character, skill, cost, nowMs, release != nil)
 			} else if release == nil {
 				rt.registerPlayerSkillCooldown(divisionID, character, skill, nowMs)
+			}
+			if skill.FixedDamage.Present {
+				// After the cost: the drained MP refills the gauge the
+				// cast just spent (skilltuning.go).
+				tuning = rt.commitTuningMana(divisionID, character, skill.FixedDamage, committed)
 			}
 			if skill.PositionEffect.Charge {
 				rt.commitSkillTravel(simulation.WorldKey(divisionID, character.Name), character, travel)
@@ -521,6 +527,10 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(enterworld.ObjectIDForCharacter(character), rt.publishedVitals(divisionID, character))}
 		actorFrames = append(actorFrames, vitals)
 		privateFrames = append(privateFrames, vitals)
+	}
+	if tuning.Opcode != 0 {
+		actorFrames = append(actorFrames, tuning)
+		privateFrames = append(privateFrames, tuning)
 	}
 	actorFrames = append(actorFrames, killProgressionFrames...)
 	broadcastFrames = append(broadcastFrames, settlement.public...)

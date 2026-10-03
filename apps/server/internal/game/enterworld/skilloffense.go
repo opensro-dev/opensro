@@ -352,6 +352,15 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		row.DirectOffensePinned = true
 		return ""
 	}
+	if fixed, ok := compileSkillFixedDamage(fields, *row); ok {
+		// One fixed-damage record (skillfixeddamage.go), released by the
+		// ordinary single-target offensive owner.
+		row.FixedDamage = fixed
+		row.Attack.ImpactCount = 1
+		row.OffensiveStagePinned = true
+		row.DirectOffensePinned = true
+		return ""
+	}
 	if area, ok := compileSkillAreaBurst(fields, *row); ok {
 		// Untargeted caster-centred attack (skillareaburst.go): the target
 		// gate below would refuse it, as it did before an owner existed.

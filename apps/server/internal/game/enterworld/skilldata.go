@@ -194,6 +194,9 @@ type SkillRow struct {
 	// AreaBurst marks an untargeted caster-centred attack (skillareaburst.go):
 	// no target, its victims are the hostile monsters around the caster.
 	AreaBurst bool
+	// FixedDamage marks a pdmg hit (skillfixeddamage.go): its single impact
+	// deals the authored amount, and dmgt converts the damage into MP.
+	FixedDamage SkillFixedDamage
 	// CombatTrap is a planted hostile trap program (skilltrap.go).
 	CombatTrap    SkillCombatTrap
 	OffensiveArea SkillOffensiveArea
