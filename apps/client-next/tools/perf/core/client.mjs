@@ -33,25 +33,53 @@ instrument
 
 Page start-up hooks: the frame probe (frame and world time per frame) and,
 with counts, wrappers that count WebGPU commands into the current frame.
+With spans, the probe also times the runtime's own stage marks (as
+"@stage" ms since the previous mark of the same owner) and detail spans
+(as "stage" ms and "stage n" spans per frame): where a frame goes, without
+a profiler's overhead.
 ================
 */
-function instrument( counts ) {
+function instrument( { counts, spans } ) {
 	const now = () => performance.now();
-	let frameStart = 0, worldStart = 0, worldEnd = 0;
-	const tally = {};
+	let frameStart = 0, worldStart = 0, worldEnd = 0, frameMark = 0, renderMark = 0, characterMark = 0;
+	const tally = {}, opened = {};
+	const add = ( key, value ) => {
+		tally[key] = (tally[key] ?? 0) + value;
+	};
 	globalThis.__benchRows = [];
 	globalThis.__benchTally = tally;
 	globalThis.__worldProbeFrameProfiler = {
-		detailBegin() {},
-		detailEnd() {},
-		renderBegin() {},
-		renderMark() {},
-		characterBegin() {},
-		characterMark() {},
-		characterCount( name, value = 1 ) {
-			tally[name] = (tally[name] ?? 0) + value;
+		detailBegin( stage ) {
+			if ( spans ) opened[stage] = now();
 		},
-		sampleDetails: () => false,
+		detailEnd( stage ) {
+			if ( !spans || opened[stage] === undefined ) return;
+			add( stage, now() - opened[stage] );
+			add( stage + " n", 1 );
+			opened[stage] = undefined;
+		},
+		renderBegin() {
+			renderMark = now();
+		},
+		renderMark( stage ) {
+			if ( !spans ) return;
+			const at = now();
+			add( "@" + stage, at - renderMark );
+			renderMark = at;
+		},
+		characterBegin() {
+			characterMark = now();
+		},
+		characterMark( stage ) {
+			if ( !spans ) return;
+			const at = now();
+			add( "@" + stage, at - characterMark );
+			characterMark = at;
+		},
+		characterCount( name, value = 1 ) {
+			add( name, value );
+		},
+		sampleDetails: () => spans,
 		worldBegin() {
 			worldStart = now();
 		},
@@ -59,11 +87,16 @@ function instrument( counts ) {
 			worldEnd = now();
 		},
 		begin() {
-			frameStart = now();
+			frameStart = frameMark = now();
 			worldStart = worldEnd = 0;
 			for ( const key in tally ) tally[key] = 0;
 		},
-		mark() {},
+		mark( stage ) {
+			if ( !spans ) return;
+			const at = now();
+			add( "@" + stage, at - frameMark );
+			frameMark = at;
+		},
 		end() {
 			globalThis.__benchRows.push( [ now() - frameStart, worldEnd - worldStart, { ...tally } ] );
 		}
@@ -169,15 +202,16 @@ openClient
 
 Resets the scratch character to fixture, boots the client at 1600x900,
 revives the character if it died and lets the world settle. Returns the
-browser and page; close the browser when done.
+browser and page; close the browser when done. counts and spans are
+instrument's options.
 ================
 */
-export async function openClient( fixture, { counts = false } = {} ) {
+export async function openClient( fixture, { counts = false, spans = false } = {} ) {
 	process.env.SRO_PROBE_UNLOCK_FPS = "1";
 	await resetMissionMovementFixture( { characterName: CHARACTER, fixture, timeoutMs: 60000 } );
 	const { browser, page } = await launchProbeBrowser();
 	try {
-		await page.addInitScript( instrument, counts );
+		await page.addInitScript( instrument, { counts, spans } );
 		await bootPlayableSession( page, CHARACTER );
 		await page.evaluate( () => globalThis.__benchRuntime = globalThis.__playableRuntime );
 		await page.setViewportSize( VIEWPORT );

@@ -167,7 +167,6 @@ apps/client-next/src/engine/foundation/ui/authored-layout.ts
 apps/client-next/src/engine/foundation/ui/bar.ts
 apps/client-next/src/engine/foundation/ui/button-state.ts
 apps/client-next/src/engine/foundation/ui/catalog-message.ts
-apps/client-next/src/engine/foundation/ui/character-labels.ts
 apps/client-next/src/engine/foundation/ui/character-status.ts
 apps/client-next/src/engine/foundation/ui/chat-presentation.ts
 apps/client-next/src/engine/foundation/ui/chat-scrollbar.ts

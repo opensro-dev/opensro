@@ -89,6 +89,11 @@ export interface UiQuad {
 /*
 ================
 UiScene
+
+damageText: the world's annotations show, so the renderer draws the
+current damage text after them every frame. Damage text rises and fades
+with time, so it is not part of the retained product: a rebuild per frame
+for it was most of a fight's interface cost.
 ================
 */
 export interface UiScene {
@@ -96,6 +101,7 @@ export interface UiScene {
 	readonly width: number;
 	readonly height: number;
 	readonly quads: readonly UiQuad[];
+	readonly damageText?: boolean;
 }
 // viewer: a CIFBuffViewer cell (6DE6F0). Its entry never carries a remaining
 // time, and an owner without a character (party) formats abnormal bits unlevelled.
@@ -222,7 +228,6 @@ export interface UiView {
 	readonly blindHeld?: boolean;
 	readonly simulationTimeMs?: number;
 	readonly hoveredEntity?: number | null;
-	readonly damageText?: readonly import("./damage-text").DamageText[];
 	readonly travel?: import("./world").WorldTravel | null;
 	readonly worldTransitionRegion?: number;
 	readonly loadingProgress?: number;

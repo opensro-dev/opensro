@@ -11,6 +11,7 @@ import { uiTextureResidency } from "@/engine/foundation/rendering/ui-texture-res
 import { cameraBasis } from "@/engine/foundation/rendering/world-math";
 import { createPortrait } from "./characters/portrait";
 import { projectCharacterLabels } from "@/engine/foundation/ui/character-labels";
+import { damageTextAssets, damageTextQuads } from "@/engine/foundation/ui/damage-text";
 import { pickDestination } from "@/engine/foundation/rendering/pick-destination";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { readPickAlpha } from "./readback/readback";
@@ -54,6 +55,10 @@ export function createRenderer(
 	let uiProduct: ReturnType<typeof prepareUi> | null = null;
 	const uiTextures = new Map<string, ImageBitmap | ImageData>(), dirtyUi = new Set<string>();
 	let residentUi = new Set<string>(), residentUiProduct: ReturnType<typeof prepareUi> | null = null;
+	// The damage text a scene's world annotations show (setDamageText), drawn
+	// each frame; its glyphs stay resident while such a scene is.
+	let damageRows: readonly import("@/engine/contracts/damage-text").DamageText[] = [];
+	const damageTextures = damageTextAssets();
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
 		characters = createCharacters();
 	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
@@ -220,6 +225,14 @@ export function createRenderer(
 		},
 		/*
 		================
+		setDamageText
+		================
+		*/
+		setDamageText( rows ) {
+			damageRows = rows;
+		},
+		/*
+		================
 		setUiTexture
 		================
 		*/
@@ -376,7 +389,8 @@ export function createRenderer(
 						uiProduct?.scene ?? null,
 						uiTextures,
 						residentUi,
-						dirtyUi
+						dirtyUi,
+						uiProduct?.scene.damageText ? damageTextures : []
 					);
 					// Release first so window replacement cannot transiently
 					// exceed the device budget. CPU bitmaps stay warm for reopen.
@@ -456,11 +470,16 @@ export function createRenderer(
 				);
 				probe?.renderMark( "character-prepare" );
 				const uiScene = uiProduct?.scene ?? null, anchored = uiProduct?.anchors;
+				// Damage text rises and fades with the frame's clock, the same clock
+				// the interface used when it drew it into its own product.
+				const damage = uiScene?.damageText && damageRows.length && !preview ?
+					damageTextQuads( damageRows, timeSeconds, uiScene.width, uiScene.height ) :
+					[];
 				// Anchors are UI scene pixels, like the world anchors projected
 				// beside them. The GPU viewport is the backing store (CSS size
 				// times devicePixelRatio); projecting into it put every name at
 				// 1.25x its actor under 125% display scaling (BUG-043).
-				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors) ?
+				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors || damage.length) ?
 					projectCharacterLabels(
 						uiScene,
 						preview || !anchored?.size ?
@@ -472,7 +491,8 @@ export function createRenderer(
 								uiScene.height,
 								anchored!
 							),
-						preview ? undefined : { origin: scene.originRegion, matrix: scene.matrix }
+						preview ? undefined : { origin: scene.originRegion, matrix: scene.matrix },
+						damage
 					) :
 					uiScene;
 				const portraitGid = uiProduct?.portraitGid;

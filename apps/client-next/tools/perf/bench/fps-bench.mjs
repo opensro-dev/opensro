@@ -5,7 +5,7 @@ fps-bench.mjs - frame rate of the real client in the scenarios that matter
 
 Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
-       [--counts] [--cpu] [--heap] [--out DIR] [--trace] [--json FILE]
+       [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--json FILE]
 
 For each location (--at) resets the scratch character there, boots the dev
 client uncapped at 1600x900 (core/client.mjs) and runs the location's
@@ -22,6 +22,9 @@ main thread's frame and world-preparation time per frame. Options add:
 
   --counts  WebGPU commands per frame (draws, bundles, writes, submits);
             counting slows the frame, so timings are not comparable;
+  --spans   the runtime's stage marks ("@stage" ms per frame) and detail
+            spans ("stage" ms and "stage n" per frame, such as ui-assembly:
+            how often the HUD rebuilds and what a rebuild costs);
   --cpu     a CPU profile per scenario, OUT/<location>-<scenario>.cpuprofile;
   --heap    a sampled allocation profile per scenario (.heapprofile) and
             the allocation rate in the row;
@@ -68,7 +71,7 @@ const LOCATIONS = [ {
 	},
 	scenarios: [ "skill" ]
 } ];
-const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--cpu] [--heap] [--out DIR] " +
+const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
 	"[--trace] [--json FILE]";
 
 /*
@@ -116,7 +119,7 @@ One location: open the client there and run its scenarios.
 ================
 */
 async function session( options, location, results ) {
-	const client = await openClient( location.fixture, { counts: options.counts } );
+	const client = await openClient( location.fixture, { counts: options.counts, spans: options.spans } );
 	try {
 		const captures = await createCaptures( client.page, {
 			dir: options.out,
@@ -163,6 +166,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	at: LOCATIONS.map( l => l.name ),
 	only: SCENARIOS,
 	counts: false,
+	spans: false,
 	cpu: false,
 	heap: false,
 	trace: false,

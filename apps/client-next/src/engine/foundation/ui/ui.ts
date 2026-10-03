@@ -138,7 +138,13 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 			...(run ? { run } : {})
 		};
 	} );
-	return { revision: scene.revision, width: scene.width, height: scene.height, quads };
+	return {
+		revision: scene.revision,
+		width: scene.width,
+		height: scene.height,
+		quads,
+		...(scene.damageText ? { damageText: true } : {})
+	};
 }
 
 /*

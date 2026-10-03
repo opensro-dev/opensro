@@ -262,7 +262,7 @@ import { textBoardLines } from "@/engine/foundation/ui/text-lines";
 import { createSpeech } from "./hud/speech";
 import { createMessageScroll } from "./hud/scroll";
 import { createHudMessages } from "./hud/messages";
-import { damageTextAssets, damageTextQuads } from "@/engine/foundation/ui/damage-text";
+import { damageTextAssets } from "@/engine/foundation/ui/damage-text";
 import { targetStatus } from "@/engine/foundation/ui/target-status";
 import {
 	loadingPresentation,
@@ -714,6 +714,7 @@ export function createUi(
 	let lastProduct: {
 		width: number;
 		height: number;
+		damageText: boolean;
 		quads: readonly UiQuad[];
 		semantics: import("@/engine/contracts/ui").UiSemantics;
 	} | null = null;
@@ -4623,7 +4624,7 @@ export function createUi(
 			const stableWorld = next.session?.phase === "world" && next.frontend?.phase === "world" &&
 				view?.frontend?.phase === "world" &&
 				!loading && !next.travel && next.worldTransitionRegion === undefined && next.worldReady &&
-				!next.damageText?.length && !view.damageText?.length && now < hudMessages.deadline() &&
+				now < hudMessages.deadline() &&
 				now < speech.deadline() &&
 				view.resourceError === next.resourceError && view.worldError === next.worldError &&
 				view.worldReady === next.worldReady && view.travel === next.travel &&
@@ -10981,12 +10982,9 @@ export function createUi(
 						)
 					);
 				}
-				// After nametags/speech: world UI does not depth-write, so later quads cover earlier ones.
-				quads.push(
-					...damageTextQuads( next.damageText ?? [], now / 1000, w, h ).filter( q =>
-						resources.has( q.texture )
-					)
-				);
+				// Damage text follows the nametags and speech: world UI does not
+				// depth-write, so later quads cover earlier ones. The renderer draws
+				// it each frame (UiScene.damageText); this only demands its glyphs.
 				// World annotations precede CIF windows; they must not bleed through menus.
 				quads.unshift( ...quads.splice( worldLabelStart ) );
 			}
@@ -13786,12 +13784,13 @@ export function createUi(
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&
-				sameUiQuads( lastProduct.quads, quads ) && sameUiSemantics( lastProduct.semantics, semantics );
+				lastProduct.damageText === worldVisible && sameUiQuads( lastProduct.quads, quads ) &&
+				sameUiSemantics( lastProduct.semantics, semantics );
 			probe?.detailEnd( "ui-compare" );
 			if ( unchanged ) return null;
 			probe?.detailBegin( "ui-publish" );
-			lastProduct = { width: w, height: h, quads, semantics };
-			publish( { revision: ++revision, width: w, height: h, quads } );
+			lastProduct = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			publish( { revision: ++revision, width: w, height: h, quads, damageText: worldVisible } );
 			probe?.detailEnd( "ui-publish" );
 			return semantics;
 		},

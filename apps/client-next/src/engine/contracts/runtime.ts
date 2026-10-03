@@ -190,6 +190,8 @@ export interface Renderer extends Disposable {
 	setWeather( value: import("@/engine/foundation/gameplay/weather").WeatherOptions | null ): void;
 	setWorldClock( value: { timeOfDay: number; lunarDay: number; } | null ): void;
 	setUi( scene: import("./ui").UiScene | null ): void;
+	/** The damage text a scene's world annotations show this frame (UiScene.damageText). */
+	setDamageText( rows: readonly import("./damage-text").DamageText[] ): void;
 	setUiTexture( id: string, image: ImageBitmap | ImageData | null ): void;
 	retainCharacterModels( ids: readonly string[] ): void;
 	setCharacterAssembly( id: string, base: string, parts: readonly import("./character").CharacterAttachment[] ): void;

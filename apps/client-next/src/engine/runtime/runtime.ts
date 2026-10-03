@@ -712,7 +712,6 @@ export function startRuntime(
 						worldTransitionRegion: world.loadingRegion(),
 						loadingProgress,
 						berserkGauge: characters.orbGauge(),
-						damageText: characters.damageText(),
 						frontend: frontendState,
 						session: sessionState,
 						gameplay: presentation.gameplay(),
@@ -756,6 +755,7 @@ export function startRuntime(
 				// A server's 426 is the same news, learned from a refused request.
 				platform.presentUpdate( releaseWatch.newerAvailable() || sessionState?.releaseOutdated === true );
 				markStage( "ui" );
+				renderer.setDamageText( characters.damageText() );
 				const rendered = renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() );
 				if ( rendered ) await rendered;
 				if ( disposed ) return;
