@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -33,6 +34,10 @@ const (
 	// bardCastGap clears one cast's action bracket and the 10 s cooldown
 	// the Bard's auras share before the next cast.
 	bardCastGap = 11 * time.Second
+	// musicLifeTestID is a stand-in Music Life passive filing BDMD at
+	// musicLifeTestPercent.
+	musicLifeTestID      = 900002
+	musicLifeTestPercent = 50
 )
 
 /*
@@ -314,5 +319,46 @@ func TestBardAuraRejoinsARevivedMember(t *testing.T) {
 	bardTick(rt, clock, time.Millisecond)
 	if !hasSkillEffect(rt, mate.Name, guardTambourID) {
 		t.Fatal("the revived member was not joined again")
+	}
+}
+
+/*
+================
+TestBardAuraPulseChecksTheCutCost
+
+Live finding: the pulse compared the Bard's MP with the uncut onff word
+while it charged the word cut by BDMD (Music Life), so an aura ended with
+MP left for the charge. A Bard holding exactly the cut cost pays it and
+keeps playing; one MP less ends the aura.
+================
+*/
+func TestBardAuraPulseChecksTheCutCost(t *testing.T) {
+	rt, clock, c, row := marchFixture(t, guardTambourID)
+	if !row.Attack.Parameters.Has(enterworld.ParameterBardMPDecrease) {
+		t.Fatalf("Guard Tambour does not read BDMD: %v", row.Attack.Parameters)
+	}
+	passive := enterworld.SkillRow{ID: musicLifeTestID, Group: musicLifeTestID, PassiveParameters: enterworld.SkillPassiveParameters{
+		Pinned: true,
+		Mask:   1 << enterworld.ParameterBardMPDecrease,
+		Values: enterworld.SkillParameterValues{enterworld.ParameterBardMPDecrease: musicLifeTestPercent},
+	}}
+	rt.deps.SkillData().(staticSkillSource)[passive.ID] = passive
+	c.Skills = append(c.Skills, passive.ID)
+	cost := int64(combat.CutMPCost(int32(row.Aura.PulseMP), musicLifeTestPercent))
+	if cost >= int64(row.Aura.PulseMP) {
+		t.Fatalf("cut cost %d is not below the onff word %d", cost, row.Aura.PulseMP)
+	}
+	mustCast(t, rt, clock, c, guardTambourID)
+
+	c.CurrentMP = testInt64(cost)
+	bardTick(rt, clock, auraPulse)
+	if !hasSkillEffect(rt, c.Name, guardTambourID) || *c.CurrentMP != 0 {
+		t.Fatalf("a Bard holding the cut cost lost its aura or paid wrong: MP %d", *c.CurrentMP)
+	}
+	c.CurrentMP = testInt64(cost - 1)
+	bardTick(rt, clock, auraPulse)
+	bardTick(rt, clock, time.Millisecond)
+	if hasSkillEffect(rt, c.Name, guardTambourID) {
+		t.Fatal("the aura outlived an MP below its cut cost")
 	}
 }

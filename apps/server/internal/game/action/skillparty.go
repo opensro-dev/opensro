@@ -337,20 +337,21 @@ func (rt *Runtime) instanceLive(division, name string, skillID, token uint32) bo
 ==================
 pulseAura
 
-585262: current MP below onff word 1 retires the aura; otherwise that word,
-cut by the caster's BDMD and then its dcmp (Dancing of Mana), is paid.
+585262: current MP below the pulse cost retires the aura; otherwise that
+cost is paid. The test and the charge read one cost (auraPulseCost): live,
+an aura whose Bard held MP for the cut charge but not for the uncut onff
+word ended at its pulse.
 ==================
 */
 func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skill enterworld.SkillRow) ([]simulation.DivisionFrames, bool) {
+	cost, ok := rt.auraPulseCost(division, caster, skill)
+	if !ok {
+		return nil, false
+	}
 	_, _, _, current := rt.playerKeeperVitals(division, caster)
-	if current < int64(skill.Aura.PulseMP) {
+	if current < cost {
 		return nil, false
 	}
-	stats, _, err := rt.playerCombatStats(division, caster)
-	if err != nil {
-		return nil, false
-	}
-	cost := int64(rt.cutMPConsumption(division, caster, combat.ApplyMPDecrease(int32(skill.Aura.PulseMP), skill.Attack.Parameters, stats.SkillParameters)))
 
 	gid := enterworld.ObjectIDForCharacter(caster)
 	var vitals []simulation.Frame
@@ -364,6 +365,23 @@ func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skil
 		return nil, false
 	}
 	return []simulation.DivisionFrames{{DivisionID: division, OnlyCharacterID: caster.ID, Frames: vitals}}, true
+}
+
+/*
+==================
+auraPulseCost
+
+onff word 1 cut by the caster's BDMD (Music Life) and then its dcmp
+(Dancing of Mana): what one pulse charges.
+==================
+*/
+func (rt *Runtime) auraPulseCost(division string, caster *enterworld.Character, skill enterworld.SkillRow) (int64, bool) {
+	stats, _, err := rt.playerCombatStats(division, caster)
+	if err != nil {
+		return 0, false
+	}
+	cut := combat.ApplyMPDecrease(int32(skill.Aura.PulseMP), skill.Attack.Parameters, stats.SkillParameters)
+	return int64(rt.cutMPConsumption(division, caster, cut)), true
 }
 
 // retireAura ends the caster's instance and every child.
