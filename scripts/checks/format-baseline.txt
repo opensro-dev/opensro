@@ -21,7 +21,6 @@ apps/client-next/src/engine/contracts/world-admission.ts
 apps/client-next/src/engine/foundation/animation/action-refresh.ts
 apps/client-next/src/engine/foundation/animation/action-schedule.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
-apps/client-next/src/engine/foundation/animation/animated-material.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
 apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
 apps/client-next/src/engine/foundation/animation/animation-emission.ts
@@ -30,7 +29,6 @@ apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
 apps/client-next/src/engine/foundation/animation/character-bounds.ts
-apps/client-next/src/engine/foundation/animation/character-render-plan.ts
 apps/client-next/src/engine/foundation/animation/character-selection.ts
 apps/client-next/src/engine/foundation/animation/combat-stance.ts
 apps/client-next/src/engine/foundation/animation/damage-anchor.ts
@@ -157,7 +155,6 @@ apps/client-next/src/engine/foundation/rendering/object-visibility.ts
 apps/client-next/src/engine/foundation/rendering/particle-ribbon.ts
 apps/client-next/src/engine/foundation/rendering/pick-destination.ts
 apps/client-next/src/engine/foundation/rendering/pick-volume.ts
-apps/client-next/src/engine/foundation/rendering/scenery-modifiers.ts
 apps/client-next/src/engine/foundation/rendering/scenery-particles.ts
 apps/client-next/src/engine/foundation/rendering/screen-point.ts
 apps/client-next/src/engine/foundation/rendering/sky-geometry.ts
@@ -244,7 +241,6 @@ apps/client-next/src/engine/foundation/ui/vertical-spin.ts
 apps/client-next/src/engine/foundation/ui/vital-warning.ts
 apps/client-next/src/engine/foundation/ui/world-cursor.ts
 apps/client-next/src/engine/runtime/assets/worker/effects/effects.ts
-apps/client-next/src/engine/runtime/assets/worker/effects/program/program.ts
 apps/client-next/src/engine/runtime/assets/worker/entry.ts
 apps/client-next/src/engine/runtime/assets/worker/model/model.ts
 apps/client-next/src/engine/runtime/assets/worker/navigation/navigation.ts
@@ -269,10 +265,8 @@ apps/client-next/src/engine/runtime/random/random.ts
 apps/client-next/src/engine/runtime/renderer/characters/actor-snapshots.ts
 apps/client-next/src/engine/runtime/renderer/characters/palette-streams.ts
 apps/client-next/src/engine/runtime/renderer/device/animation-shader.ts
-apps/client-next/src/engine/runtime/renderer/device/bloom.ts
 apps/client-next/src/engine/runtime/renderer/device/flares.ts
 apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
-apps/client-next/src/engine/runtime/renderer/device/pipelines.ts
 apps/client-next/src/engine/runtime/renderer/device/thunder.ts
 apps/client-next/src/engine/runtime/renderer/device/timing.ts
 apps/client-next/src/engine/runtime/renderer/readback/readback.ts

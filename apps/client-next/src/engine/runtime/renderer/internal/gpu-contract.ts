@@ -175,6 +175,7 @@ export interface GeometryCommands {
 		poses: number;
 	};
 	updateMaterialColors( draw: GeometryDraw, rgb: Float32Array, flags: number ): void;
+	updateTextureFactor( draw: GeometryDraw, rgba: Float32Array ): void;
 	updateEquipmentGlow(
 		draw: GeometryDraw,
 		color: Float32Array,

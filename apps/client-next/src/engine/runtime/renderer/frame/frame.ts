@@ -17,7 +17,18 @@ import type {
 	UiDraw,
 	FlareDraw
 } from "@/engine/runtime/renderer/internal/gpu-contract";
+import { BLOOM_BLEND_BYTE } from "@/engine/foundation/rendering/blend-state";
 export function createFrame( commands: FrameCommands ): FrameOwner {
+	// D3DRS_BLENDFACTOR as the native device holds it: white until the first
+	// bloom composite sets it (SWorld_CompositeBloom 8AA560), which never
+	// restores it. BLENDFACTOR blends read it in every geometry pass.
+	let blendFactor: GPUColor = [ 1, 1, 1, 1 ];
+	const bloomBlendFactor: GPUColor = [
+		BLOOM_BLEND_BYTE / 255,
+		BLOOM_BLEND_BYTE / 255,
+		BLOOM_BLEND_BYTE / 255,
+		1
+	];
 	let recordedUi: readonly UiDraw[] = [],
 		uiBundle: GPURenderBundle | null = null,
 		backgroundBundle: GPURenderBundle | null = null,
@@ -170,6 +181,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							depthStoreOp: "discard"
 						}
 					} );
+					pass.setBlendConstant( blendFactor );
 					for ( const draw of portrait.draws ) {
 						if ( draw.indexCount <= 0 || draw.instanceCount <= 0 ) continue;
 						pass.setPipeline( draw.pipeline );
@@ -201,6 +213,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					storeOp: "store"
 				} ]
 			} );
+			pass.setBlendConstant( blendFactor );
 			if ( bundles.length ) pass.executeBundles( bundles );
 			if ( !bloom && !deferred && worldUiBundle ) pass.executeBundles( [ worldUiBundle ] );
 			if ( !bloom && !deferred && !flares && !thunder && backgroundBundle ) {
@@ -227,6 +240,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							} :
 							{})
 					} );
+					tail.setBlendConstant( blendFactor );
 					for ( const draw of extra ) {
 						if ( draw.indexCount <= 0 || draw.instanceCount <= 0 ) continue;
 						tail.setPipeline( draw.pipeline );
@@ -250,12 +264,14 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 						label: "weather-thunder",
 						colorAttachments: [ { view: sceneView, loadOp: "load", storeOp: "store" } ]
 					} );
+					overlay.setBlendConstant( blendFactor );
 					overlay.setPipeline( thunder.pipeline );
 					overlay.setBindGroup( 0, thunder.binding );
 					overlay.draw( 6 );
 					overlay.end();
 				}
 				bloom?.encode( encoder, view );
+				if ( bloom ) blendFactor = bloomBlendFactor;
 				if ( flares ) {
 					const compute = encoder.beginComputePass( {
 						timestampWrites: timing?.pass( "flare-visibility" ),
@@ -270,6 +286,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 						label: "flare-chain",
 						colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ]
 					} );
+					overlay.setBlendConstant( blendFactor );
 					if ( flareBundle ) overlay.executeBundles( [ flareBundle ] );
 					overlay.end();
 				}
@@ -310,6 +327,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							{}),
 						colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ]
 					} );
+					overlay.setBlendConstant( blendFactor );
 					for ( const draw of preview ) {
 						if ( draw.indexCount <= 0 || draw.instanceCount <= 0 ) continue;
 						overlay.setPipeline( draw.pipeline );

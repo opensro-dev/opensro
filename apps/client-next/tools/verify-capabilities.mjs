@@ -141,7 +141,9 @@ export const rules = {
 	WebTransport: [],
 	Worker: [ runtime + "simulation/host.ts", runtime + "assets/assets.ts" ]
 };
-for ( const name of [ "createShaderModule", "createRenderPipelineAsync", "createSampler" ] ) {
+// A geometry pipeline for a native state no scene precompiles is compiled
+// at its first upload, as D3D9 applies any render state at once.
+for ( const name of [ "createShaderModule", "createRenderPipeline", "createRenderPipelineAsync", "createSampler" ] ) {
 	rules[name].push( pipelines );
 }
 for (

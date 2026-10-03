@@ -22,9 +22,15 @@ export interface WorldMaterial {
 	readonly depthWrite?: boolean;
 	/** Native CRTModTexAni mode 1: rates for m00,m01,m10,m11,m20,m21. */
 	readonly uvVelocity?: readonly [number, number, number, number, number, number];
-	readonly multiplyAddBlend?: boolean;
-	readonly sourceColorBlend?: boolean;
-	readonly inverseSourceColorBlend?: boolean;
+	/** D3D SRCBLEND/DESTBLEND when blend is set (blend-state.ts); default SRCALPHA/INVSRCALPHA. */
+	readonly blendPair?: import("@/engine/foundation/rendering/blend-state").BlendPair;
+	/** D3DRS_TEXTUREFACTOR rgba in [0, 1] for a stage's TFACTOR argument; default white. */
+	readonly textureFactor?: readonly [number, number, number, number];
+	/**
+	 * A BSR material modifier's TEXTUREFACTOR pulse (sub_aecab0): an alpha
+	 * byte oscillating between low and high at rate * delta ms * 0.01.
+	 */
+	readonly textureFactorPulse?: { readonly low: number; readonly high: number; readonly rate: number; };
 	readonly instanceMaterialTint?: boolean;
 	readonly decal?: boolean;
 	/** SWorld pooled terrain decal pass: source alpha blend, no depth test/write. */
@@ -50,7 +56,6 @@ export interface WorldMaterial {
 	readonly lightmap?: boolean;
 	readonly water?: boolean;
 	readonly blend: boolean;
-	readonly additive?: boolean;
 	readonly doubleSided: boolean;
 	// Presence selects native object vertex lighting; scalar multiplies ambient only.
 	// On this path unlit means native NOLIGHT (white), not material diffuse tint.
@@ -59,7 +64,14 @@ export interface WorldMaterial {
 	readonly unlit?: boolean;
 	readonly terrain?: boolean;
 	readonly order?: number;
-	/** Native stage-0 colour/alpha ops (effects, CEFEffect_Render B153A0). */
+	/**
+	 * The stage's DIFFUSE is a BSR vertex shader's oD0 (vss0.c/vss2.c): lit,
+	 * the light with alpha 1 (RenderState_ApplyTintedMaterialColor A91970 sets
+	 * both light constants' w to 1); NOLIGHT, white. Otherwise it is the
+	 * fixed-function vertex diffuse (effects).
+	 */
+	readonly shaderDiffuse?: boolean;
+	/** Native stage-0 colour/alpha ops (effects B153A0, BSR material modifiers sub_aed240). */
 	readonly textureStage?: import("@/engine/foundation/rendering/texture-stage").TextureStage;
 }
 export interface TerrainRange {

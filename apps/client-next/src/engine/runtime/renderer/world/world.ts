@@ -9,9 +9,11 @@ world. Diagnostics observe it only through the frame probe (profile).
 
 ===========================================================================
 */
+import { blendAdds } from "@/engine/foundation/rendering/blend-state";
 import { characterShadowReceiver, BLOB_SHADOW_TEXTURE } from "@/engine/foundation/rendering/character-shadow";
 import { footprintGeometry, footprintTextures } from "@/engine/foundation/rendering/footprints";
 import { createMaterialTimeline } from "@/engine/foundation/rendering/material-timeline";
+import { createTextureFactorPulse } from "@/engine/foundation/rendering/texture-factor-pulse";
 import { createTextureAtlas } from "@/engine/foundation/rendering/texture-atlas";
 import { createTerrainVisibility } from "@/engine/foundation/rendering/terrain-visibility";
 import {
@@ -522,6 +524,12 @@ export function createWorldRenderer(
 	}[] = [];
 	let textureMotions: { group: WorldGroup; motion: ReturnType<typeof createTextureMotion>; draw?: GeometryDraw; }[] =
 		[];
+	// Groups whose material modifier pulses TEXTUREFACTOR (texture-factor-pulse.ts).
+	let texturePulses: {
+		group: WorldGroup;
+		pulse: ReturnType<typeof createTextureFactorPulse>;
+		draw?: GeometryDraw;
+	}[] = [];
 	/*
 	================
 	resetAnimations
@@ -538,6 +546,16 @@ export function createWorldRenderer(
 					old.get( group.id )!.clock :
 					createMaterialTimeline( group.material.colorTimeline! )
 			}) ) ?? [];
+			const pulses = new Map( texturePulses.map( r => [ r.group.id, r ] ) );
+			texturePulses = scene?.groups.filter( g => g.material.textureFactorPulse ).map( group => {
+				const kept = pulses.get( group.id );
+				const same = kept && JSON.stringify( kept.group.material.textureFactorPulse ) ===
+						JSON.stringify( group.material.textureFactorPulse );
+				return {
+					group,
+					pulse: same ? kept.pulse : createTextureFactorPulse( group.material.textureFactorPulse! )
+				};
+			} ) ?? [];
 		}
 		const previous = new Map( textureMotions.map( row => [ row.group.id, row ] ) );
 		if ( !retainTextureMotion ) {
@@ -604,6 +622,13 @@ export function createWorldRenderer(
 			const changed = row.clock.step( seconds ), draw = draws.get( row.group );
 			if ( draw && draw.instanceCount > 0 && (changed || force || row.draw !== draw) ) {
 				geometry.updateMaterialColors( draw, row.clock.rgb, row.group.material.colorTimeline!.flags );
+				row.draw = draw;
+			}
+		}
+		for ( const row of texturePulses ) {
+			const changed = row.pulse.step( seconds ), draw = draws.get( row.group );
+			if ( draw && draw.instanceCount > 0 && (changed || force || row.draw !== draw) ) {
+				geometry.updateTextureFactor( draw, row.pulse.factor );
 				row.draw = draw;
 			}
 		}
@@ -716,7 +741,7 @@ export function createWorldRenderer(
 		for ( const group of pickGroups ) {
 			if ( terrainOnly && !group.material.terrain && !group.material.water ) continue;
 			if (
-				group.material.sky || group.material.lightmap || group.material.additive ||
+				group.material.sky || group.material.lightmap || blendAdds( group.material ) ||
 				excludeWater && group.material.water
 			) continue;
 			const cache = selections.get( group ), draw = draws.get( group );
@@ -1149,7 +1174,7 @@ export function createWorldRenderer(
 					// Alpha readback belongs to bounded resource admission, not the first
 					// hover over a resident object. Animated texture frames are admitted too.
 					if (
-						readAlpha && !group.material.sky && !group.material.lightmap && !group.material.additive
+						readAlpha && !group.material.sky && !group.material.lightmap && !blendAdds( group.material )
 					) {
 						for ( const path of paths ) {
 							const bitmap = images.get( path )?.source;

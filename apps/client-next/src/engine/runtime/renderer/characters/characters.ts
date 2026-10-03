@@ -1527,6 +1527,9 @@ export function createCharacters(
 					if ( clock.texture && (initial || clock.textureChanged) ) {
 						geometry.updateTextureTransform( draw, clock.texture.matrix );
 					}
+					if ( clock.pulse && (initial || clock.pulseChanged) ) {
+						geometry.updateTextureFactor( draw, clock.pulse.factor );
+					}
 				};
 				if ( !resource.textures.length ) {
 					resource.textures = resource.images.map( image => {

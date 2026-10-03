@@ -40,6 +40,9 @@ test("one pass ends before one submit", () => {
 				beginRenderPass() {
 					log.push( "begin" );
 					return {
+						setBlendConstant( color ) {
+							log.push( "blend " + color.join() );
+						},
 						end() {
 							log.push( "end" );
 						}
@@ -57,7 +60,8 @@ test("one pass ends before one submit", () => {
 		}
 	} );
 	frame.draw( {} );
-	assert.deepEqual( log, [ "encoder", "begin", "end", "finish", "submit" ] );
+	// D3DRS_BLENDFACTOR is white until a bloom composite sets it.
+	assert.deepEqual( log, [ "encoder", "begin", "blend 1,1,1,1", "end", "finish", "submit" ] );
 });
 test("creation preview overlays cinematic art and stays below foreground controls", () => {
 	const log = [];
@@ -90,6 +94,7 @@ test("creation preview overlays cinematic art and stays below foreground control
 						setVertexBuffer() {},
 						setIndexBuffer() {},
 						drawIndexed() {},
+						setBlendConstant() {},
 						end() {}
 					};
 				},
@@ -342,6 +347,7 @@ test("device loss rebuilds only renderer resources and bounds repeated recovery"
 									beginRenderPass() {
 										return {
 											end() {},
+											setBlendConstant() {},
 											executeBundles() {},
 											setPipeline() {},
 											setBindGroup() {},
@@ -445,6 +451,7 @@ test("retained geometry records once, reuses commands, and rebuilds changed bind
 					assert.deepEqual( bundles, [ "bundle" ] );
 					executions++;
 				},
+				setBlendConstant() {},
 				end() {}
 			}),
 			finish: () => "commands"
@@ -672,7 +679,10 @@ test("direct bundles track changing counts on a stable resource and retain uncha
 				finish: () => ({})
 			};
 		},
-		createEncoder: () => ({ beginRenderPass: () => ({ executeBundles() {}, end() {} }), finish: () => ({}) }),
+		createEncoder: () => ({
+			beginRenderPass: () => ({ executeBundles() {}, setBlendConstant() {}, end() {} }),
+			finish: () => ({})
+		}),
 		submit() {}
 	} );
 	for ( const counts of [ [ 6, 1 ], [ 3, 1 ], [ 3, 1 ], [ 3, 0 ], [ 6, 2 ] ] ) {
@@ -712,6 +722,7 @@ test("bounded direct bundles preserve the complete ordered command tape through 
 				executeBundles( bundles ) {
 					actual.push( ...bundles.flat() );
 				},
+				setBlendConstant() {},
 				end() {}
 			}),
 			finish: () => ({})
@@ -777,6 +788,7 @@ test("retained geometry invalidates in-place binding replacements and omits empt
 				executeBundles( b ) {
 					executed.push( ...b.flat() );
 				},
+				setBlendConstant() {},
 				end() {}
 			}),
 			finish: () => ({})

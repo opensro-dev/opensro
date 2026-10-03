@@ -80,7 +80,7 @@ test("authored effect mesh, scale, blend and atlas frames compile without genera
 		p = model.primitives[0];
 	assert.equal( model.clips[0].duration, 0.5 );
 	assert.deepEqual( [ ...model.clips[0].channels[0].values ], [ 1, 1, 1, 3, 3, 3 ] );
-	assert.equal( defined( p.geometry.material ).additive, true );
+	assert.deepEqual( defined( p.geometry.material ).blendPair, { source: 5, destination: 2 } );
 	assert.equal( defined( p.materialFrames ).colors.at( -1 ), 0 );
 	assert.deepEqual( [ ...defined( p.materialFrames ).windows.slice( -4 ) ], [ 0.5, 1, 0.5, 0 ] );
 	assert.deepEqual( decoded.imagePaths, [ "/assets/images/texture.png" ] );
@@ -176,21 +176,29 @@ test("SetBANPos and SetBANRot map frame tables to translation and rotation anima
 });
 
 test("Phase 6 native blend pairs, leaf anchor, lifetime budget, and inert rotation admit cleanly", () => {
-	const blends = [ [ 5, 7 ], [ 4, 3 ], [ 1, 6 ] ];
+	// Every pair D3D9 defines draws with its own factors (CEFEffect_Render
+	// B153A0 sets SRCBLEND/DESTBLEND from the resource), 9/9 included.
+	const blends = [ [ 5, 7 ], [ 4, 3 ], [ 1, 6 ], [ 9, 9 ] ];
 	for ( const [src, dst] of blends ) {
 		const value = catalog();
 		value.effects["hit.efp"].root.resource.srcBlend = src;
 		value.effects["hit.efp"].root.resource.dstBlend = dst;
 		const decoded = createEffectPrograms().decode( encode( value ), "hit.efp" );
-		assert.ok( decoded.model );
+		assert.deepEqual( defined( decoded.model.primitives[0].geometry.material ).blendPair, {
+			source: src,
+			destination: dst
+		} );
 	}
-	const invalid = catalog();
-	invalid.effects["hit.efp"].root.resource.srcBlend = 9;
-	invalid.effects["hit.efp"].root.resource.dstBlend = 9;
-	assert.throws(
-		() => createEffectPrograms().decode( encode( invalid ), "hit.efp" ),
-		/Unsupported native effect blend/
-	);
+	// A factor outside D3DBLEND, or a source-only factor as the destination.
+	for ( const [src, dst] of [ [ 16, 6 ], [ 5, 12 ], [ 0, 2 ] ] ) {
+		const invalid = catalog();
+		invalid.effects["hit.efp"].root.resource.srcBlend = src;
+		invalid.effects["hit.efp"].root.resource.dstBlend = dst;
+		assert.throws(
+			() => createEffectPrograms().decode( encode( invalid ), "hit.efp" ),
+			/Undefined native effect blend/
+		);
+	}
 
 	const leafVal = catalog();
 	const leafNode = leafVal.effects["hit.efp"].root;

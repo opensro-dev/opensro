@@ -76,26 +76,156 @@ test("truncated material and UV records cannot become partial scenery products",
 	}
 });
 
-test("native NPC alpha comparisons, texture multiplication and untouched depth state survive projection", async () => {
-	for (
-		const [source, compare, squared] of [ [ "res/npc/npc/khotanshop_designer.bsr", 6, false ], [
-			"res/npc/npc/centralasiashop_warehouse.bsr",
-			8,
-			false
-		], [ "res/npc/npc/centralasiasystem_flyship.bsr", undefined, true ] ]
-	) {
-		const { modifiers } = parseJmxResourceBsr( await loadDataAsset( source ) );
-		const modifier = defined( modifiers ).materialModifiers[0], warnings = [];
-		const material = sceneryMaterial(
-			{ ...base, depthWrite: false },
-			modifiers,
-			modifier.baseWords[3],
-			m => warnings.push( m )
-		);
+/*
+================
+projected
+
+The first material modifier of a BSR projected onto base, with its warnings.
+================
+*/
+async function projected( source, from = base ) {
+	const { modifiers } = parseJmxResourceBsr( await loadDataAsset( source ) );
+	const modifier = defined( modifiers ).materialModifiers[0], warnings = [];
+	const material = sceneryMaterial( from, modifiers, modifier.baseWords[3], m => warnings.push( m ) );
+	return { material, warnings };
+}
+
+test("native NPC modifiers keep their alpha test, D3D blend pair and stage-0 ops", async () => {
+	// CRTModMtrl_BeginStates (AED240): +0x54 installs SRCBLEND/DESTBLEND and the
+	// six stage states; +0x50 the alpha function. Untouched depth state stays.
+	const blend = { source: 5, destination: 6 };
+	const cases = [
+		[ "res/npc/npc/khotanshop_designer.bsr", 6, {
+			colorOp: 5,
+			colorArg1: 0,
+			colorArg2: 2,
+			alphaOp: 2,
+			alphaArg1: 2,
+			alphaArg2: 2
+		} ],
+		[ "res/npc/npc/centralasiashop_warehouse.bsr", 8, {
+			colorOp: 5,
+			colorArg1: 0,
+			colorArg2: 2,
+			alphaOp: 2,
+			alphaArg1: 2,
+			alphaArg2: 2
+		} ],
+		// Alpha MODULATE of TEXTURE by itself: the texel alpha squared.
+		[ "res/npc/npc/centralasiasystem_flyship.bsr", undefined, {
+			colorOp: 5,
+			colorArg1: 0,
+			colorArg2: 2,
+			alphaOp: 4,
+			alphaArg1: 2,
+			alphaArg2: 2
+		} ]
+	];
+	for ( const [source, compare, stage] of cases ) {
+		const { material, warnings } = await projected( source, { ...base, depthWrite: false } );
 		assert.deepEqual( warnings, [], source );
 		assert.equal( material.alphaCompare, compare, source );
-		assert.equal( material.textureAlphaSquared, squared, source );
+		assert.deepEqual( material.blendPair, blend, source );
+		assert.deepEqual( material.textureStage, stage, source );
+		assert.equal( material.shaderDiffuse, true, source );
 		assert.equal( material.depthWrite, false, "zero override must not enable depth writes" );
 		assert.doesNotThrow( () => copyMaterial( material ) );
 	}
+});
+
+test("sword skill trails blend and evaluate stage 0 as their modifiers author", async () => {
+	// a and b: SRCALPHA/ONE (additive) with MODULATE4X; c: SRCALPHA/INVSRCALPHA
+	// with ADD. Alpha selects TEXTURE in all three.
+	const cases = [
+		[ "res/etc/sword_skill_a.bsr", { source: 5, destination: 2 }, 6 ],
+		[ "res/etc/sword_skill_b.bsr", { source: 5, destination: 2 }, 6 ],
+		[ "res/etc/sword_skill_c.bsr", { source: 5, destination: 6 }, 7 ]
+	];
+	for ( const [source, blendPair, colorOp] of cases ) {
+		const { material, warnings } = await projected( source );
+		assert.deepEqual( warnings, [], source );
+		assert.equal( material.blend, true, source );
+		assert.deepEqual( material.blendPair, blendPair, source );
+		assert.deepEqual(
+			material.textureStage,
+			{ colorOp, colorArg1: 0, colorArg2: 2, alphaOp: 3, alphaArg1: 2, alphaArg2: 2 },
+			source
+		);
+		assert.equal( material.textureFactorPulse, undefined, source );
+		const owned = copyMaterial( material );
+		assert.notEqual( owned.blendPair, material.blendPair );
+		assert.deepEqual( owned.textureStage, material.textureStage );
+	}
+});
+
+/*
+================
+syntheticModifiers
+
+One ambient material modifier for every material, with the +0x50 words and
++0x60 bytes given.
+================
+*/
+function syntheticModifiers( words, bytes ) {
+	return {
+		materialModifiers: [ {
+			kind: 2,
+			animationSetName: "ambient",
+			baseWords: [ 0, 0, 0, 0xffffffff ],
+			words50: words,
+			bytes60: bytes,
+			colors: [],
+			field70: 0,
+			flags: 0
+		} ],
+		textureModifiers: []
+	};
+}
+
+// SRCALPHA/INVSRCALPHA, MODULATE TEXTURE DIFFUSE, SELECTARG1 TEXTURE, alpha
+// ref 0x80 GREATER, pulse 16..240 at rate 2.5.
+const PULSE_RATE = [ ...new Uint8Array( Float32Array.of( 2.5 ).buffer ) ];
+const STATE_BYTES = [ 5, 6, 4, 2, 0, 2, 2, 0, 0x80, 5, 16, 240, ...PULSE_RATE ];
+
+test("the +0x5c word adds the TEXTUREFACTOR pulse with its float32 rate", () => {
+	const warnings = [];
+	const material = sceneryMaterial(
+		base,
+		syntheticModifiers( [ 0, 1, 0, 1 ], STATE_BYTES ),
+		0,
+		m => warnings.push( m )
+	);
+	assert.deepEqual( warnings, [] );
+	assert.deepEqual( material.textureFactorPulse, { low: 16, high: 240, rate: 2.5 } );
+	assert.equal( material.alphaCompare, base.alphaCompare, "+0x50 off keeps the source alpha test" );
+	assert.equal( material.depthWrite, base.depthWrite, "+0x58 off keeps the source depth writes" );
+	const owned = copyMaterial( material );
+	assert.notEqual( owned.textureFactorPulse, material.textureFactorPulse );
+	assert.deepEqual( owned.textureFactorPulse, material.textureFactorPulse );
+	// Without +0x54 the pulse word installs nothing.
+	const unblended = sceneryMaterial( base, syntheticModifiers( [ 0, 0, 0, 1 ], STATE_BYTES ), 0, () => {} );
+	assert.equal( unblended.textureFactorPulse, undefined );
+	assert.equal( unblended.blendPair, undefined );
+});
+
+test("undefined native states are refused, never approximated", () => {
+	const refused = [
+		// DESTBLEND BOTHSRCALPHA is source-only.
+		[ [ 0, 1, 0, 0 ], [ 5, 12, ...STATE_BYTES.slice( 2 ) ] ],
+		// BUMPENVMAP needs a following stage.
+		[ [ 0, 1, 0, 0 ], [ 5, 6, 22, ...STATE_BYTES.slice( 3 ) ] ],
+		// MODULATEALPHA_ADDCOLOR is colour-only.
+		[ [ 0, 1, 0, 0 ], [ 5, 6, 4, 2, 0, 18, ...STATE_BYTES.slice( 6 ) ] ],
+		// ALPHAFUNC 9 is not a D3DCMPFUNC.
+		[ [ 1, 0, 0, 0 ], [ ...STATE_BYTES.slice( 0, 9 ), 9, ...STATE_BYTES.slice( 10 ) ] ]
+	];
+	for ( const [words, bytes] of refused ) {
+		const warnings = [];
+		const material = sceneryMaterial( base, syntheticModifiers( words, bytes ), 0, m => warnings.push( m ) );
+		assert.deepEqual( warnings, [ "Undefined scenery material state" ], `${words} ${bytes}` );
+		assert.equal( material, base );
+	}
+	const warnings = [];
+	sceneryMaterial( base, syntheticModifiers( [ 0, 1, 0 ], STATE_BYTES ), 0, m => warnings.push( m ) );
+	assert.deepEqual( warnings, [ "Malformed scenery material state" ] );
 });

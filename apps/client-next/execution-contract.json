@@ -405,7 +405,8 @@
 				"updateInstances",
 				"updateBones",
 				"updateTextureTransform",
-				"updateMaterialColors"
+				"updateMaterialColors",
+				"updateTextureFactor"
 			],
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"consumer": "src/engine/runtime/renderer/world/world.ts"
@@ -488,7 +489,8 @@
 				"updateIndices",
 				"updateMaterialColors",
 				"updateTextureTransform",
-				"updateEquipmentGlow"
+				"updateEquipmentGlow",
+				"updateTextureFactor"
 			]
 		},
 		{

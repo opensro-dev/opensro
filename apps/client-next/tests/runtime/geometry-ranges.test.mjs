@@ -55,12 +55,12 @@ function fixture( dynamicVertices = true ) {
 		e => {
 			throw e;
 		},
-		() =>
-			Array( 16 ).fill( {
-				getBindGroupLayout() {
-					return {};
-				}
-			} ),
+		// One geometry pipeline per state.
+		() => ({
+			getBindGroupLayout() {
+				return {};
+			}
+		}),
 		() => {},
 		{},
 		{},

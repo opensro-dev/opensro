@@ -19,11 +19,12 @@ const { createEffectPrograms } = await import(
 	sourceFileUrl( "src/engine/runtime/assets/worker/effects/program/program.ts" ).href
 );
 const bytes = new Uint8Array( await readFile( "../../.generated/client-public/assets/effects/programs.json" ) );
-test("stone admits the native source-color blend and temptation retains loop identity", () => {
+test("stone keeps its native source-colour blend pair and temptation retains loop identity", () => {
 	const decoder = createEffectPrograms(),
 		stone = decoder.decode( bytes, "battle/status_bad_stone_on.efp" ).model,
 		temptation = decoder.decode( bytes, "battle/status_bad_temptation.efp" ).model;
-	assert.ok( stone.primitives.some( p => p.geometry.material.sourceColorBlend ) );
+	// The resource's own D3D pair: SRCCOLOR (3) as the source factor.
+	assert.ok( stone.primitives.some( p => p.geometry.material.blendPair?.source === 3 ) );
 	assert.equal( temptation.particleGraph.filter( e => e.loop ).length, 2 );
 	assert.ok( temptation.particleGraph.filter( e => e.loop ).every( e => e.frames === 20 ) );
 });
