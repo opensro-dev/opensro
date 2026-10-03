@@ -301,6 +301,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	impacts := make([]wire.SkillCastTargetImpact, 0, len(formulas))
 	var absorbRecords []wire.SkillCastTargetImpact
 	var fatal bool
+	var mpSpent uint32
 	var deathProgressionFrames []wire.Frame
 	var deathEffectFrames []wire.Frame
 	var battleFrames []wire.Frame
@@ -316,9 +317,17 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 			!monster.AllowsTargetStatus(instance.Ref.TidWord, instance.Nest.NativeTacticsFlags, character.NativeBodyStatus) {
 			return false
 		}
-		_, _, remaining, _ := rt.playerKeeperVitals(divisionID, character)
+		_, _, remaining, remainingMP := rt.playerKeeperVitals(divisionID, character)
+		redirectPercent := rt.effects.DamageToMPPercent(divisionID, character.Name)
 		for _, formula := range formulas {
 			hitContext.Magical = hitContext.Magical || formula.MagicalDamage != 0
+			// Native 58F72F processes dgmp after wall absorption, per impact.
+			if redirectPercent != 0 {
+				var spent uint32
+				formula, spent = combat.RedirectDamageToMP(formula, uint32(remainingMP), redirectPercent)
+				remainingMP -= int64(spent)
+				mpSpent += spent
+			}
 			debit := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
 			remaining -= debit
 			fatal = remaining == 0
@@ -334,6 +343,9 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 			}
 		}
 		character.CurrentHP = &remaining
+		if mpSpent != 0 {
+			character.CurrentMP = &remainingMP
+		}
 		struck = len(impacts) > 0
 		if walled && !skill.WallBypass {
 			var absorbed uint32
@@ -398,6 +410,11 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		wire.SkillCastFinalizeFrame(token),
 	)
 	result.Frames = []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}}
+	if mpSpent != 0 {
+		_, _, _, mp := rt.playerKeeperVitals(divisionID, character)
+		result.TargetFrames = append(result.TargetFrames, simulation.Frame{Opcode: simulation.OpVitalsUpdate,
+			Payload: simulation.MPRefreshPayload(targetGid, simulation.VitalsSourceCombatDamage, uint32(mp))})
+	}
 	for _, f := range abnormalFrames.public {
 		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 	}

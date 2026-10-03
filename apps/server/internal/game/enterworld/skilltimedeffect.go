@@ -28,6 +28,8 @@ const (
 	tagTimedThreat             = 0x746e7432
 	tagTimedDamageRate         = 0x647275
 	tagTimedMaxHPPenalty       = 0x706d6870
+	tagTimedDamageToMP         = 0x64676d70
+	maxDamageToMPPercent       = 100
 	tagTimedIncomingReduction  = 0x6f646172
 	tagTimedOverlap            = 0x6f766c32
 	parameterWizardMP          = 0x57494d44
@@ -48,7 +50,9 @@ An entire category-three program. Native 5830B0 owns preparation and release;
 ================
 */
 type SkillTimedEffect struct {
-	ForcedTarget bool // hitm: recipient may target only its caster (58CF7F).
+	DamageToMP        bool // dgmp installs the damage processor's single recipient instance.
+	DamageToMPPercent uint32
+	ForcedTarget      bool // hitm: recipient may target only its caster (58CF7F).
 	// Periodic has a separate execution contract from friendly timed buffs.
 	Periodic SkillPeriodicEffect
 	// ItemProgram marks an item-owned timed job (compileTimedItemEffect).
@@ -307,6 +311,11 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Link = SkillEffectLink{Present: true, Group: op.Arguments[0], MaxDistance: op.Arguments[1], MaxOutgoing: op.Arguments[2], Board: op.Arguments[3]}
+		case tagTimedDamageToMP:
+			if result.DamageToMP || op.Count != 1 || op.Arguments[0] > maxDamageToMPPercent {
+				return
+			}
+			result.DamageToMP, result.DamageToMPPercent = true, op.Arguments[0]
 		case tagTimedIncomingReduction:
 			// odar is installed from BuffModifiers for every recipient (594AC0);
 			// the program only has to agree with that projection.
@@ -363,7 +372,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
-		result.Intellect.Present || result.IncomingReduction)
+		result.Intellect.Present || result.IncomingReduction || result.DamageToMP)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {

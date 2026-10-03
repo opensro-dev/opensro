@@ -65,10 +65,10 @@ type Result struct {
 	// rolled per impact after the skill's own statuses (590B24).
 	Imbue  abnormal.SkillParams
 	Damage uint32
-	// MagicalDamage retains the lane accumulator before total-damage
-	// scaling. 58F491 releases Root only when this accumulator is nonzero.
-	MagicalDamage uint32
-	ResultFlags   uint8
+	// Lane accumulators survive total scaling: 5A0B87 admits damage effects
+	// only with a nonzero lane, and 58F491 tests the magical lane for Root.
+	PhysicalDamage, MagicalDamage uint32
+	ResultFlags                   uint8
 	// Blocked is a type-2 record (0x58F0EF): no damage, no imbue share, no
 	// status roll, no knockdown (the defender's +0xD2C is never set).
 	Blocked bool
@@ -157,13 +157,14 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 	}
 
 	var total uint64
-	var magicalDamage uint32
+	var physicalDamage, magicalDamage uint32
 	if calculation.Lanes&physicalAttackFlag != 0 {
 		damage, err := resolveLane(attacker, defender, calculation, laneRoll{roll: roll, critical: critical})
 		if err != nil {
 			return Result{}, err
 		}
-		total += uint64(downAttackDamage(damage, defender.MotionState, attack.DownAttack))
+		physicalDamage = downAttackDamage(damage, defender.MotionState, attack.DownAttack)
+		total += uint64(physicalDamage)
 	}
 	if calculation.Lanes&magicalAttackFlag != 0 {
 		damage, err := resolveLane(attacker, defender, calculation, laneRoll{roll: roll, magical: true})
@@ -188,7 +189,7 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 	if attacker.Berserk {
 		flags |= 4
 	}
-	return Result{Damage: uint32(total), MagicalDamage: magicalDamage, ResultFlags: flags}, nil
+	return Result{Damage: uint32(total), PhysicalDamage: physicalDamage, MagicalDamage: magicalDamage, ResultFlags: flags}, nil
 }
 
 /*
