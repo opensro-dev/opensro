@@ -62,20 +62,31 @@ func (rt *Runtime) skillHealAmounts(division string, recipient, caster *enterwor
 	maxHP, maxMP, _, _ := rt.playerKeeperVitals(division, recipient)
 
 	heal := skill.Heal
-	// 59425E: a heal that reads getv HLRU raises both percent words by the
-	// caster's value (Faith).
+	var up uint32
 	if skill.Attack.Parameters.Has(enterworld.ParameterHealRecoveryUp) && caster != nil {
 		casterStats, _, err := rt.playerCombatStats(division, caster)
 		if err != nil {
 			return 0, 0, false
 		}
-		up := casterStats.SkillParameters[enterworld.ParameterHealRecoveryUp]
-		heal.HPPercent += up
-		heal.MPPercent += up
+		up = casterStats.SkillParameters[enterworld.ParameterHealRecoveryUp]
 	}
 	if routine == healAura {
 		hp, mp = auraHealBase(heal, maxHP, maxMP)
+		// Inferred: on the aura the caster's HLRU raises each amount by that
+		// percent of itself, the effect it has on a cast's flat amounts.
+		// Adding it to the percent words, as 59425E does for a cast, turns an
+		// unauthored word into a share of the maximum: Recovery Division,
+		// heal(445,0,0,0), then restored MP and replaced its 445 HP with a
+		// share of maximum HP for a caster who learned Faith.
+		if up != 0 {
+			hp = raisedByPercent(hp, up)
+			mp = raisedByPercent(mp, up)
+		}
 	} else {
+		// 59425E: a heal that reads getv HLRU raises both percent words by
+		// the caster's value (Faith).
+		heal.HPPercent += up
+		heal.MPPercent += up
 		hp, mp = castHealBase(heal, maxHP)
 	}
 
