@@ -376,8 +376,8 @@ func TestShippedTargetHealReachesPartyMember(t *testing.T) {
 	spawn := *world.Spawn
 	world.Spawn = &spawn
 	m.World = &world
-	deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision],
+	fixtureCharacters(deps.Characters)[testDivision] = append(
+		fixtureCharacters(deps.Characters)[testDivision],
 		&m,
 	)
 
@@ -458,8 +458,8 @@ func newSupportPair(t *testing.T, skills ...enterworld.SkillRow) supportPair {
 	world.Spawn = &spawn
 	m.World = &world
 	deps := rt.deps.(*enterworld.Deps)
-	deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision],
+	fixtureCharacters(deps.Characters)[testDivision] = append(
+		fixtureCharacters(deps.Characters)[testDivision],
 		&m,
 	)
 

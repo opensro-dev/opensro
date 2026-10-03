@@ -56,8 +56,8 @@ func newSupportParty(t *testing.T, skill enterworld.SkillRow, offsets ...float64
 		spawn := *world.Spawn
 		world.Spawn = &spawn
 		m.World = &world
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(
-			deps.Characters.(enterworld.StaticCharacterSource)[testDivision],
+		fixtureCharacters(deps.Characters)[testDivision] = append(
+			fixtureCharacters(deps.Characters)[testDivision],
 			&m,
 		)
 		p.place(&m, dx)

@@ -29,7 +29,7 @@ func sharedPickupFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Charac
 	peer := picker.Snapshot()
 	peer.ID, peer.Name = 4, "LootPeer"
 	rt, clock := newTestRuntime(picker, testItems())
-	rt.deps.(*enterworld.Deps).Characters.(enterworld.StaticCharacterSource)[testDivision] = []*enterworld.Character{picker, peer}
+	fixtureCharacters(rt.deps.(*enterworld.Deps).Characters)[testDivision] = []*enterworld.Character{picker, peer}
 	registry := party.NewRegistry()
 	_, refusal := registry.Form(testDivision, party.Member{MemberID: enterworld.ObjectIDForCharacter(picker), Name: picker.Name}, party.Member{MemberID: enterworld.ObjectIDForCharacter(peer), Name: peer.Name}, party.PartyOptionItemShare)
 	if refusal != "" {

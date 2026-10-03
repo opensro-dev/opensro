@@ -73,7 +73,7 @@ func TestShippedDanceRefusedUntilSelector(t *testing.T) {
 			spawn.X = &x
 			world.Spawn = &spawn
 			m.World = &world
-			deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &m)
+			fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &m)
 			return &m
 		}
 		mate := member(4, "mate", 800)
@@ -187,7 +187,7 @@ func TestShippedGuardAuraAppliesOdar(t *testing.T) {
 		spawn.X = &x
 		world.Spawn = &spawn
 		m.World = &world
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &m)
+		fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &m)
 		return &m
 	}
 	mate := member(4, "mate", 800)
@@ -263,7 +263,7 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 		spawn := *world.Spawn
 		world.Spawn = &spawn
 		m.World = &world
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &m)
+		fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &m)
 		return &m
 	}
 	mate := member(4, "mate")

@@ -56,7 +56,7 @@ func TestFatalActorDoesNotStealRewardOrDropOwnership(t *testing.T) {
 	peer := *actor
 	peer.ID, peer.Name = 4, "contributor"
 	deps := rt.deps.(*enterworld.Deps)
-	source := deps.Characters.(enterworld.StaticCharacterSource)
+	source := fixtureCharacters(deps.Characters)
 	source[testDivision] = append(source[testDivision], &peer)
 	gid := enterworld.ObjectIDForCharacter(&peer)
 	hits := rt.Monsters.ApplyDamageSequence(testDivision, target.Gid, 100, []simulation.MonsterDamagePlan{{GID: target.Gid, Damage: 99, CreditGID: gid}})
@@ -86,7 +86,7 @@ func TestFatalActorDoesNotStealRewardOrDropOwnership(t *testing.T) {
 func TestPartyKillPaysNearbyIdleMemberButExcludesDeadAndOffline(t *testing.T) {
 	rt, _, actor, target := newCombatTestRuntime(t, 1)
 	deps := rt.deps.(*enterworld.Deps)
-	source := deps.Characters.(enterworld.StaticCharacterSource)
+	source := fixtureCharacters(deps.Characters)
 	members := []uint32{enterworld.ObjectIDForCharacter(actor)}
 	for i := int64(4); i <= 6; i++ {
 		c := *actor
@@ -141,7 +141,7 @@ func TestPartyRewardRejectsOtherInstanceAtIdenticalCoordinates(t *testing.T) {
 	packed := uint32(0x20001)
 	world.PackedInstance = &packed
 	peer.World = &world
-	source := rt.deps.(*enterworld.Deps).Characters.(enterworld.StaticCharacterSource)
+	source := fixtureCharacters(rt.deps.(*enterworld.Deps).Characters)
 	source[testDivision] = append(source[testDivision], &peer)
 	rt.RewardParties = func(string) []RewardParty {
 		return []RewardParty{{Order: 1, Options: 1, Members: []uint32{enterworld.ObjectIDForCharacter(actor), enterworld.ObjectIDForCharacter(&peer)}}}

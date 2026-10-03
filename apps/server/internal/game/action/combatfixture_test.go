@@ -251,5 +251,8 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 	// Fixtures fight already in battle, so a strike changes no state+0xD;
 	// battle entry and exit are pinned by the battle-state tests.
 	character.BattleUntilMs = math.MaxInt64
+	// The production store forbids a read inside a character write; every
+	// combat fixture runs behind the same door so a nested read fails here.
+	installStoreDoor(t, rt)
 	return rt, clock, character, instances[0]
 }

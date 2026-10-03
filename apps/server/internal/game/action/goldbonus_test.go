@@ -74,7 +74,7 @@ func TestGoldBonusFollowsWinningContributorThroughFatalHit(t *testing.T) {
 	owner := *actor
 	owner.ID, owner.Name = 4, "gold-owner"
 	deps := rt.deps.(*enterworld.Deps)
-	source := deps.Characters.(enterworld.StaticCharacterSource)
+	source := fixtureCharacters(deps.Characters)
 	source[testDivision] = append(source[testDivision], &owner)
 	const skillID = 900001
 	deps.Skills.(staticSkillSource)[skillID] = enterworld.SkillRow{

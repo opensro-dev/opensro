@@ -34,8 +34,8 @@ func followFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character, *
 	world.Spawn = &spawn
 	target.World = &world
 	deps := rt.deps.(*enterworld.Deps)
-	deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &target,
+	fixtureCharacters(deps.Characters)[testDivision] = append(
+		fixtureCharacters(deps.Characters)[testDivision], &target,
 	)
 	for _, c := range []*enterworld.Character{actor, &target} {
 		if err := rt.AdmitCharacterSession(testDivision, c.Name, uint64(c.ID)); err != nil {

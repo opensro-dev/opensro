@@ -51,7 +51,7 @@ Route the fixture's doors and its character source through one store lock.
 func installStoreDoor(t *testing.T, rt *Runtime) *storeDoor {
 	t.Helper()
 	deps := rt.deps.(*enterworld.Deps)
-	door := &storeDoor{t: t, inner: deps.Characters.(enterworld.StaticCharacterSource)}
+	door := &storeDoor{t: t, inner: fixtureCharacters(deps.Characters)}
 	deps.Characters = door
 	deps.UpdateCharacter = func(_ *enterworld.Character, _ string, update func() bool) bool {
 		door.mu.Lock()
@@ -266,4 +266,20 @@ func TestPetCureResolvesOwnerOutsideTheDoor(t *testing.T) {
 	if !hasPetMask(result.Broadcast, petGID) {
 		t.Fatalf("pet mask not published: %v", result.Broadcast)
 	}
+}
+
+/*
+================
+fixtureCharacters
+
+The static roster behind a fixture's character source, door or not: the
+door shares its map, so a fixture that adds a character adds it behind the
+door as well.
+================
+*/
+func fixtureCharacters(source any) enterworld.StaticCharacterSource {
+	if door, ok := source.(*storeDoor); ok {
+		return door.inner
+	}
+	return source.(enterworld.StaticCharacterSource)
 }

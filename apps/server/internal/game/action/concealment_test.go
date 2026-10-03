@@ -179,7 +179,7 @@ func nearbyCharacter(rt *Runtime, c *enterworld.Character, id int64, name string
 	world.Spawn = &spawn
 	m.World = &world
 	deps := rt.deps.(*enterworld.Deps)
-	deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &m)
+	fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &m)
 	return &m
 }
 
