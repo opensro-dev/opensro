@@ -125,7 +125,7 @@ PowerShell scripts are the exception: ASCII-only and CRLF.
 
 Write files with an editor, your file tools, Node or Python. Never write
 through Windows PowerShell 5.1 (`>`, `Out-File`, `Set-Content`): it emits the
-ANSI codepage or a BOM plus CRLF, which is how a "â€¦" became two invalid bytes
+ANSI codepage or a BOM plus CRLF, which is how a "…" became two invalid bytes
 in `jmxAssetIO.mjs` and how 700 files ended up CRLF. The gate's `--fix` repairs
 BOMs and CRLF; invalid UTF-8 needs a person.
 
