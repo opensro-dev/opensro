@@ -113,3 +113,52 @@ func TestManaBreezeGivesThePartyInRangeItsMP(t *testing.T) {
 		t.Errorf("caster (select 4) was healed: mp %d", *p.c.CurrentMP)
 	}
 }
+
+/*
+==================
+TestManaWindGivesHalfToTwoNearbyMembers
+
+Mana Wind is efr(1,6,100,3,50,4) heal(0,0,mp,0) mwmh: the target receives
+the whole heal and at most two other party members within 100 of the
+target, nearest first, receive 50 % of it. A third member in range, a
+member past 100, a player outside the party and the caster get nothing.
+==================
+*/
+func TestManaWindGivesHalfToTwoNearbyMembers(t *testing.T) {
+	skill := shippedOffense(t, "SKILL_EU_BARD_RECOVERA_MANATRANS_A_01")
+	area := skill.Abnormal.EffectArea
+	if !skill.TargetRequired || skill.Heal.MP == 0 || area.Shape != 6 || area.Radius != 100 ||
+		area.MaxTargets != 3 || area.Reduction != 50 || area.Select != 4 {
+		t.Fatalf("mana wind heal %+v area %+v", skill.Heal, area)
+	}
+	affordable(&skill)
+	p := newSupportParty(t, skill, 90, 50, 80, 150)
+	equipHarp(p.supportPair)
+	third, first, second, far := p.mates[1], p.mates[2], p.mates[3], p.mates[4]
+	stranger := nearbyCharacter(p.rt, p.c, 30, "stranger", 10)
+	for _, c := range []*enterworld.Character{p.m, first, second, third, far, stranger} {
+		c.CurrentMP = testInt64(0)
+	}
+	p.c.CurrentMP = testInt64(150)
+
+	p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(p.m)})
+
+	whole := manaHealWant(t, p.supportPair, p.m, skill)
+	if want := gaugeMP(t, p.supportPair, p.m, whole); *p.m.CurrentMP != want {
+		t.Errorf("target mp %d want %d", *p.m.CurrentMP, want)
+	}
+	for _, member := range []*enterworld.Character{first, second} {
+		half := manaHealWant(t, p.supportPair, member, skill) * 50 / 100
+		if want := gaugeMP(t, p.supportPair, member, half); *member.CurrentMP != want || want == gaugeMP(t, p.supportPair, member, whole) {
+			t.Errorf("%s nearby: mp %d want half %d", member.Name, *member.CurrentMP, want)
+		}
+	}
+	for _, other := range []*enterworld.Character{third, far, stranger} {
+		if *other.CurrentMP != 0 {
+			t.Errorf("%s outside the two nearest members got mp %d", other.Name, *other.CurrentMP)
+		}
+	}
+	if *p.c.CurrentMP >= 150 {
+		t.Errorf("caster was healed: mp %d", *p.c.CurrentMP)
+	}
+}

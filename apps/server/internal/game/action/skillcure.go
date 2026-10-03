@@ -135,15 +135,29 @@ within the efr radius (+8) by 3D distance, inclusive.
 ==================
 */
 func (rt *Runtime) partyCureTargets(division string, caster *enterworld.Character, radius uint32, includeSelf, admitDead bool, now int64) []uint32 {
-	casterGID := enterworld.ObjectIDForCharacter(caster)
 	var out []uint32
 	if includeSelf {
-		out = append(out, casterGID)
+		out = append(out, enterworld.ObjectIDForCharacter(caster))
 	}
+	from := rt.liveSpawn(simulation.WorldKey(division, caster.Name), caster, now)
+	return append(out, rt.partyMembersAround(division, caster, from, radius, admitDead, now)...)
+}
+
+/*
+==================
+partyMembersAround
+
+The member walk of 58BEF0 around any centre: every party member of caster
+but the caster itself, alive unless admitDead, whose live position passes
+partyAreaReach from center. Party roster order.
+==================
+*/
+func (rt *Runtime) partyMembersAround(division string, caster *enterworld.Character, center simulation.Spawn, radius uint32, admitDead bool, now int64) []uint32 {
 	if rt.RewardParties == nil {
-		return out
+		return nil
 	}
-	var members []uint32
+	casterGID := enterworld.ObjectIDForCharacter(caster)
+	var out, members []uint32
 	for _, party := range rt.RewardParties(division) {
 		for _, gid := range party.Members {
 			if gid == casterGID {
@@ -151,7 +165,6 @@ func (rt *Runtime) partyCureTargets(division string, caster *enterworld.Characte
 			}
 		}
 	}
-	from := rt.liveSpawn(simulation.WorldKey(division, caster.Name), caster, now)
 	for _, gid := range members {
 		if gid == casterGID {
 			continue
@@ -161,7 +174,7 @@ func (rt *Runtime) partyCureTargets(division string, caster *enterworld.Characte
 			continue
 		}
 		to := rt.liveSpawn(simulation.WorldKey(division, other.Name), other, now)
-		if !partyAreaReach(from, to, radius) {
+		if !partyAreaReach(center, to, radius) {
 			continue
 		}
 		out = append(out, gid)

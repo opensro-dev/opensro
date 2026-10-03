@@ -10,11 +10,24 @@ package action
 
 import (
 	"slices"
+	"sort"
 	"sync/atomic"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+)
+
+const (
+	// fullHealPercent is the whole heal; a reduction word is taken from it.
+	fullHealPercent = 100
+
+	// healAreaKind and healSecondaryShape are efr words 0 and 1 of a
+	// targeted heal that also reaches the primary's neighbours: the action
+	// area (+0x28C) around the primary target.
+	healAreaKind       = 1
+	healSecondaryShape = 6
 )
 
 /*
@@ -56,7 +69,9 @@ target (resurrection.go) and heals nobody.
 A party-area row (enterworld SkillRecovery) runs its action vector,
 TargetSelection_Party (58BEF0, skillCureVector), at execution: a party heal
 applies 5A0850 to every entry, a party resurrection runs the per-target
-5946C5 arm (proposeResurrection) on every entry.
+5946C5 arm (proposeResurrection) on every entry. A targeted heal whose efr
+is shape 6 also heals the primary's nearest party members by its reduction
+word (secondaryHealTargets).
 ==================
 */
 func (rt *Runtime) acceptSupportSkillPhase(
@@ -84,6 +99,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 
 	recipient, recipientView := character, snapshot
 	var target *admitTarget
+	var primaryAt simulation.Spawn
 
 	if targeted {
 		if !cast.HasTarget || cast.TargetGid == 0 {
@@ -110,6 +126,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		}
 
 		target = &admitTarget{at: to, player: recipientView}
+		primaryAt = to
 	}
 
 	if rt.skillCastPostureBlocked(division, snapshot, now) ||
@@ -164,6 +181,10 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	var cureTargets []cureTarget
 	if cure {
 		cureTargets = rt.resolveSkillCureTargets(division, character, snapshot, skill, cast, now)
+	}
+	var secondary []uint32
+	if targeted && !resu {
+		secondary = rt.secondaryHealTargets(division, snapshot, recipientView, primaryAt, skill.Abnormal.EffectArea, now)
 	}
 	casterGID := enterworld.ObjectIDForCharacter(snapshot)
 	healCaster := skill.Recovery.SelfFlatPinned ||
@@ -234,7 +255,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	case partyResu:
 		cureRecipients = append(cureRecipients, rt.proposePartyResurrection(division, snapshot, skill, party, now)...)
 	case partyHeal:
-		cureRecipients = append(cureRecipients, rt.applyPartyHeal(division, character, skill, party)...)
+		cureRecipients = append(cureRecipients, rt.applyPartyHeal(division, character, skill, party, fullHealPercent)...)
 	case resu:
 		if prompt := rt.proposeResurrection(division, snapshot, recipientView, skill, now); len(prompt) != 0 {
 			cureRecipients = append(cureRecipients, RecipientFrames{
@@ -263,6 +284,10 @@ func (rt *Runtime) acceptSupportSkillPhase(
 				Frames:      []wire.Frame{frame},
 			})
 		}
+	}
+	if len(secondary) != 0 {
+		share := fullHealPercent - skill.Abnormal.EffectArea.Reduction
+		cureRecipients = append(cureRecipients, rt.applyPartyHeal(division, character, skill, secondary, share)...)
 	}
 
 	var token uint32
@@ -360,9 +385,13 @@ inside its door. Each member is healed inside its own door and receives its
 0x33A6 frame alone. Inferred: a member whose door refuses (gone, or its
 stats unavailable) is skipped, since the caster has already paid and the
 others are still healed.
+
+percent is the share of the heal each entry receives: fullHealPercent for
+a party heal, less for the secondary targets of a shape-6 heal
+(secondaryHealTargets).
 ==================
 */
-func (rt *Runtime) applyPartyHeal(division string, caster *enterworld.Character, skill enterworld.SkillRow, party []uint32) []RecipientFrames {
+func (rt *Runtime) applyPartyHeal(division string, caster *enterworld.Character, skill enterworld.SkillRow, party []uint32, percent uint32) []RecipientFrames {
 	casterGID := enterworld.ObjectIDForCharacter(caster)
 	var out []RecipientFrames
 	for _, gid := range party {
@@ -380,6 +409,10 @@ func (rt *Runtime) applyPartyHeal(division string, caster *enterworld.Character,
 			if !ok {
 				return false
 			}
+			if percent != fullHealPercent {
+				hp = hp * int64(percent) / fullHealPercent
+				mp = mp * int64(percent) / fullHealPercent
+			}
 
 			var applied bool
 			frame, applied = rt.applySkillRecovery(division, member, hp, mp)
@@ -389,6 +422,61 @@ func (rt *Runtime) applyPartyHeal(division string, caster *enterworld.Character,
 		}
 
 		out = append(out, RecipientFrames{CharacterID: member.ID, Frames: []wire.Frame{frame}})
+	}
+	return out
+}
+
+/*
+==================
+secondaryHealTargets
+
+The secondary half of a targeted heal whose efr is shape 6 (Mana Wind,
+efr(1,6,100,3,50,4)): up to MaxTargets - 1 other living members of the
+caster's party within the radius of the primary target's position, the
+nearest first (the offensive shape 6 orders its secondary victims by
+centre distance from the primary, skillarea.go), ties in gid order. Rows
+without a shape-6 party efr return nothing.
+
+Owner's rule 8 (Bard specification): Mana Wind gives MP to the target and
+50 % to up to 2 nearby members. Inferred: each secondary receives the
+reduction word's share of the full heal (applyPartyHeal), not the offense's
+compounding 100 / 50 / 25 %; the caster is never a secondary, as the
+shipped select word 4 leaves it out of 58BEF0; and the secondaries are
+resolved at release, before the caster's door, like the party vector.
+==================
+*/
+func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterworld.Character, center simulation.Spawn, area abnormal.EffectArea, now int64) []uint32 {
+	if !area.Present || area.Kind != healAreaKind || area.Shape != healSecondaryShape ||
+		area.Select&enterworld.SelectParty == 0 || area.MaxTargets < 2 || area.Reduction >= fullHealPercent {
+		return nil
+	}
+	primaryGID := enterworld.ObjectIDForCharacter(primary)
+	type candidate struct {
+		gid      uint32
+		distance float64
+	}
+	var near []candidate
+	for _, gid := range rt.partyMembersAround(division, caster, center, area.Radius, false, now) {
+		other := rt.findCharacterByGid(division, gid)
+		if gid == primaryGID || other == nil {
+			continue
+		}
+		at := rt.liveSpawn(simulation.WorldKey(division, other.Name), other, now)
+		near = append(near, candidate{gid: gid, distance: distance3D(center, at)})
+	}
+	sort.Slice(near, func(i, j int) bool {
+		if near[i].distance != near[j].distance {
+			return near[i].distance < near[j].distance
+		}
+		return near[i].gid < near[j].gid
+	})
+
+	out := make([]uint32, 0, len(near))
+	for _, one := range near {
+		if len(out) == int(area.MaxTargets)-1 {
+			break
+		}
+		out = append(out, one.gid)
 	}
 	return out
 }
