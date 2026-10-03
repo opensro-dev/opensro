@@ -59,3 +59,19 @@ test("player requests cannot choose an upstream and preserve authority refusals"
 	assert.equal( calls[0].url.searchParams.get( "character" ), "Viper & extra" );
 	assert.equal( calls[0].options.redirect, "error" );
 });
+
+/*
+================
+Unavailable shard operations remain an explicit refusal, never a successful rescue.
+================
+*/
+test("an older GameWorld gives an actionable unavailable message", async () => {
+	const owner = createPlayerOperations(
+		[ { id: "realm", url: "http://127.0.0.1:8791" } ],
+		"test-token",
+		async () => new Response( "404 page not found\n", { status: 404 } )
+	);
+	const result = await owner.request( "realm", "Viper" );
+	assert.equal( result.status, 503 );
+	assert.match( result.body.error, /not enabled/ );
+});

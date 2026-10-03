@@ -68,6 +68,11 @@ async function handleRequest( req, res ) {
 			return;
 		}
 		const url = new URL( req.url, "http://127.0.0.1" );
+		if ( url.pathname === "/players.html" ) {
+			res.writeHead( 302, { Location: "/#recovery" } );
+			res.end();
+			return;
+		}
 		if ( url.pathname === "/api/player" ) {
 			let rescue;
 			if ( req.method === "POST" ) {

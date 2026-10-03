@@ -1,23 +1,382 @@
+/*
+===========================================================================
+theme.css - shared observatory surfaces, typography and navigation hierarchy
+===========================================================================
+*/
 /* Bronze window fittings, inked parchment and jade: an operator's Silk Road atlas. */
-:root{--bg:#171814;--surface:#222820;--line:#514b35;--text:#ede3c9;--muted:#b4ad94;--jade:#a2c4a0;--gold:#dfbb76;--red:#f0a18e}
-body{background:radial-gradient(ellipse at 70% 0,#51472955,transparent 55%),linear-gradient(110deg,#111914,#27291f 65%,#1a1b15);background-attachment:fixed}
-.rail{background:linear-gradient(90deg,#151a14,#26271c);border-right:3px double #716344}
-.rail-label{color:#b49a66}.seal{border:3px double #ad9059;transform:rotate(-3deg);background:#2a2b1c}.rail-line{background:#806a41}
-header{background:#171d16cc;border-bottom:3px double #66583b}.brand{color:var(--gold)}.brand span{color:#b7a47c}
-h1{font-variant:small-caps;letter-spacing:.2px;text-shadow:0 2px 5px #0008}h1 em{font-variant:normal}h2{color:#edcf91}
-.button,input,select{border:1px solid #7a6944;border-radius:2px;background:linear-gradient(#303327,#20261e);box-shadow:inset 0 0 0 1px #ffffff05}
-.button:hover{background:#454532;border-color:var(--gold)}.panel{border:3px double #80704b;border-radius:3px;box-shadow:0 8px 24px #0003,inset 0 0 24px #0002}
-.panel-heading{background:linear-gradient(90deg,#4a432555,#20271c00);border-bottom:1px solid #8e784433;position:relative}
-.panel-heading:after{content:'◆';position:absolute;right:8px;top:4px;color:#b49859;font-size:7px}
-.metric{background:linear-gradient(125deg,#e2d4ab,#c4b387);color:#302d21;border:3px double #75613c;border-radius:2px;box-shadow:0 5px 16px #0003}
-.metric-label,.metric-foot,.metric-number small{color:#5b513a}.metric-icon{color:#725023}.metric-number{font-family:Georgia,serif}.metric:nth-child(n){border-top-color:#a08856}
-.atlas{background:radial-gradient(ellipse at 45% 45%,#525943,#293c2b 60%,#1e2b20)}
-.encounter:hover,tbody tr:hover{background:#373d2b}.encounter .crest{background:#53462a}.health-row{color:#d0c9b0}th{background:#1b2119}dialog{background:#262d21;border:3px double #b99a60;border-radius:3px}
-.realm-strip{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}.realm{flex:1;min-width:220px;display:flex;align-items:center;gap:14px;text-align:left;padding:13px 17px;border:1px solid #66583b;background:#171e17;color:var(--text);border-radius:2px}
-.realm.selected{border-color:#c0a268;background:linear-gradient(100deg,#474329,#242c20)}.realm strong{font:17px Georgia,serif}.realm small{display:block;font-size:10px;color:var(--muted);margin-top:4px}.realm-state{margin-left:auto;font-size:8px;letter-spacing:1.5px;color:var(--jade)}
-.realm-gem{width:9px;height:9px;transform:rotate(45deg);background:#99bf91;border:1px solid #d3dcad;box-shadow:0 0 12px #9cbd7733}.realm-gem.offline{background:#b36651;box-shadow:none}
-.operator-alert{padding:12px 18px;border-left:3px solid var(--red);background:#4b3228;margin-bottom:15px;color:#f0d1b0}
-.hotspot{width:100%;display:flex;justify-content:space-between;text-align:left;gap:12px;padding:13px 24px;background:none;border:0;border-top:1px solid var(--line);font-size:12px}.hotspot:hover{background:#3e422d}.hotspot span:last-child{text-align:right;color:var(--jade)}.hotspot small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
-#journal{max-height:345px;overflow:auto}.journal-entry{display:flex;gap:16px;padding:13px 24px;font-size:12px;border-top:1px solid var(--line)}.journal-entry time{color:var(--gold);white-space:nowrap;font-size:10px}
-.census-tools{display:flex;gap:16px;align-items:end;flex-wrap:wrap;padding:18px 24px}.census-tools label{color:var(--muted);font-size:11px}.census-tools input,.census-tools select{display:block;width:160px;margin-top:5px}
-@media(max-width:800px){.realm{min-width:100%;}.hotspot{padding:13px 16px}.realm-strip{gap:8px}h1{font-size:34px}.journal-entry{padding:12px 16px}}
+:root {
+	--bg:#171814;
+	--surface:#222820;
+	--line:#514b35;
+	--text:#ede3c9;
+	--muted:#b4ad94;
+	--jade:#a2c4a0;
+	--gold:#dfbb76;
+	--red:#f0a18e
+}
+body {
+	background:radial-gradient(ellipse at 70% 0,#51472955,transparent 55%),linear-gradient(110deg,#111914,#27291f 65%,#1a1b15);
+	background-attachment:fixed
+}
+.rail {
+	background:linear-gradient(90deg,#151a14,#26271c);
+	border-right:3px double #716344
+}
+.rail-label {
+	color:#b49a66
+}
+.seal {
+	border:3px double #ad9059;
+	transform:rotate(-3deg);
+	background:#2a2b1c
+}
+.rail-line {
+	background:#806a41
+}
+header {
+	background:#171d16cc;
+	border-bottom:3px double #66583b
+}
+.brand {
+	color:var(--gold)
+}
+.brand span {
+	color:#b7a47c
+}
+h1 {
+	font-variant:small-caps;
+	letter-spacing:.2px;
+	text-shadow:0 2px 5px #0008
+}
+h1 em {
+	font-variant:normal
+}
+h2 {
+	color:#edcf91
+}
+.button,input,select {
+	border:1px solid #7a6944;
+	border-radius:2px;
+	background:linear-gradient(#303327,#20261e);
+	box-shadow:inset 0 0 0 1px #ffffff05
+}
+.button:hover {
+	background:#454532;
+	border-color:var(--gold)
+}
+.panel {
+	border:3px double #80704b;
+	border-radius:3px;
+	box-shadow:0 8px 24px #0003,inset 0 0 24px #0002
+}
+.panel-heading {
+	background:linear-gradient(90deg,#4a432555,#20271c00);
+	border-bottom:1px solid #8e784433;
+	position:relative
+}
+.panel-heading:after {
+	content:'◆';
+	position:absolute;
+	right:8px;
+	top:4px;
+	color:#b49859;
+	font-size:7px
+}
+.metric {
+	background:linear-gradient(125deg,#e2d4ab,#c4b387);
+	color:#302d21;
+	border:3px double #75613c;
+	border-radius:2px;
+	box-shadow:0 5px 16px #0003
+}
+.metric-label,.metric-foot,.metric-number small {
+	color:#5b513a
+}
+.metric-icon {
+	color:#725023
+}
+.metric-number {
+	font-family:Georgia,serif
+}
+.metric:nth-child(n) {
+	border-top-color:#a08856
+}
+.atlas {
+	background:radial-gradient(ellipse at 45% 45%,#525943,#293c2b 60%,#1e2b20)
+}
+.encounter:hover,tbody tr:hover {
+	background:#373d2b
+}
+.encounter .crest {
+	background:#53462a
+}
+.health-row {
+	color:#d0c9b0
+}
+th {
+	background:#1b2119
+}
+dialog {
+	background:#262d21;
+	border:3px double #b99a60;
+	border-radius:3px
+}
+.realm-strip {
+	display:flex;
+	gap:12px;
+	margin-bottom:20px;
+	flex-wrap:wrap
+}
+.realm {
+	flex:1;
+	min-width:220px;
+	display:flex;
+	align-items:center;
+	gap:14px;
+	text-align:left;
+	padding:13px 17px;
+	border:1px solid #66583b;
+	background:#171e17;
+	color:var(--text);
+	border-radius:2px
+}
+.realm.selected {
+	border-color:#c0a268;
+	background:linear-gradient(100deg,#474329,#242c20)
+}
+.realm strong {
+	font:17px Georgia,serif
+}
+.realm small {
+	display:block;
+	font-size:10px;
+	color:var(--muted);
+	margin-top:4px
+}
+.realm-state {
+	margin-left:auto;
+	font-size:8px;
+	letter-spacing:1.5px;
+	color:var(--jade)
+}
+.realm-gem {
+	width:9px;
+	height:9px;
+	transform:rotate(45deg);
+	background:#99bf91;
+	border:1px solid #d3dcad;
+	box-shadow:0 0 12px #9cbd7733
+}
+.realm-gem.offline {
+	background:#b36651;
+	box-shadow:none
+}
+.operator-alert {
+	padding:12px 18px;
+	border-left:3px solid var(--red);
+	background:#4b3228;
+	margin-bottom:15px;
+	color:#f0d1b0
+}
+.hotspot {
+	width:100%;
+	display:flex;
+	justify-content:space-between;
+	text-align:left;
+	gap:12px;
+	padding:13px 24px;
+	background:none;
+	border:0;
+	border-top:1px solid var(--line);
+	font-size:12px
+}
+.hotspot:hover {
+	background:#3e422d
+}
+.hotspot span:last-child {
+	text-align:right;
+	color:var(--jade)
+}
+.hotspot small {
+	display:block;
+	color:var(--muted);
+	font-size:10px;
+	margin-top:3px
+}
+#journal {
+	max-height:345px;
+	overflow:auto
+}
+.journal-entry {
+	display:flex;
+	gap:16px;
+	padding:13px 24px;
+	font-size:12px;
+	border-top:1px solid var(--line)
+}
+.journal-entry time {
+	color:var(--gold);
+	white-space:nowrap;
+	font-size:10px
+}
+.census-tools {
+	display:flex;
+	gap:16px;
+	align-items:end;
+	flex-wrap:wrap;
+	padding:18px 24px
+}
+.census-tools label {
+	color:var(--muted);
+	font-size:11px
+}
+.census-tools input,.census-tools select {
+	display:block;
+	width:160px;
+	margin-top:5px
+}
+@media(max-width:800px) {
+	.realm {
+		min-width:100%;
+	}
+	.hotspot {
+		padding:13px 16px
+	}
+	.realm-strip {
+		gap:8px
+	}
+	h1 {
+		font-size:34px
+	}
+	.journal-entry {
+		padding:12px 16px
+	}
+}
+/* Shared navigation and quieter surfaces keep operational state prominent. */
+:root {
+	--bg: #101a17;
+	--surface: #182721;
+	--line: #35473b;
+	--text: #ece8d9;
+	--muted: #a1b0a1;
+	--jade: #99c6a8;
+	--gold: #dfbd7d;
+}
+body {
+	background: radial-gradient(ellipse at 80% 0, #35483244, transparent 55%), #101a17;
+}
+.rail {
+	background: #101b16;
+	border-right: 1px solid var(--line);
+}
+header {
+	background: #121e18f5;
+	border-bottom: 1px solid var(--line);
+	gap: 34px;
+	min-height: 88px;
+	height: auto;
+}
+nav {
+	gap: 22px;
+	align-items: stretch;
+	min-height: 88px;
+}
+nav button {
+	white-space: nowrap;
+	min-height: 44px;
+}
+nav button:hover {
+	color: var(--gold);
+}
+nav button:focus-visible {
+	outline: 2px solid var(--gold);
+	outline-offset: -5px;
+}
+h1 {
+	font-variant: normal;
+	font-size: 38px;
+	letter-spacing: -.5px;
+	text-shadow: none;
+}
+.panel {
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--surface);
+	box-shadow: 0 5px 20px #0002;
+}
+.panel-heading {
+	background: transparent;
+	border-bottom: 1px solid var(--line);
+}
+.panel-heading:after {
+	content: none;
+}
+h2 {
+	color: var(--text);
+}
+.metric {
+	color: var(--text);
+	background: linear-gradient(120deg, #23382a, #192b23);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	box-shadow: none;
+}
+.metric-label, .metric-foot, .metric-number small {
+	color: var(--muted);
+}
+.metric-icon {
+	color: var(--gold);
+}
+.metric-number {
+	font-family: Georgia, serif;
+}
+.button, input, select {
+	border-radius: 6px;
+}
+.realm {
+	border-radius: 8px;
+	border-color: var(--line);
+}
+.realm.selected {
+	background: #20362a;
+	border-color: #6c8b68;
+}
+.connection {
+	line-height: 1.6;
+}
+#recovery {
+	padding-top: 5px;
+}
+@media (max-width: 1250px) {
+	header {
+		flex-wrap: wrap;
+		padding-top: 22px;
+		gap: 12px 24px;
+	}
+	nav {
+		order: 3;
+		width: 100%;
+		min-height: 58px;
+		gap: 26px;
+		overflow-x: auto;
+	}
+	.connection {
+		margin-left: auto;
+	}
+}
+@media (max-width: 800px) {
+	header {
+		padding: 18px 20px 0;
+	}
+	nav {
+		justify-content: flex-start;
+		min-height: 54px;
+		gap: 24px;
+	}
+	nav button {
+		flex: 0 0 auto;
+	}
+	h1 {
+		font-size: 32px;
+	}
+}

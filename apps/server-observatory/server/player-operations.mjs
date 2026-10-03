@@ -62,6 +62,15 @@ export function createPlayerOperations( shards, token, fetcher = fetch ) {
 			await reader.cancel();
 		}
 		const text = Buffer.concat( chunks ).toString( "utf8" );
+		if ( response.status === 404 && text.trim() === "404 page not found" ) {
+			return {
+				status: 503,
+				body: {
+					error:
+						"Player recovery is not enabled on this running shard. Its GameWorld release must include the operator endpoint."
+				}
+			};
+		}
 		return { status: response.status, body: response.ok ? JSON.parse( text ) : { error: text.trim() } };
 	}
 	return { request };

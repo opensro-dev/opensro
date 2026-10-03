@@ -9,8 +9,10 @@
 <link rel="stylesheet" href="/styles.css">
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/items.css">
+<link rel="stylesheet" href="/players.css">
 <script type="module" src="/app.js">
 </script>
+<script type="module" src="/players.js"></script>
 <script type="module" src="/items.js">
 </script>
 </head>
@@ -28,12 +30,12 @@
 <a class="brand" href="/">Observatory<span>WORLD OPERATIONS</span>
 </a>
 <nav aria-label="Dashboard views">
-<a href="/players.html">Player recovery</a>
 <button data-view="overview" class="active">Overview</button>
 <button data-view="players">Players</button>
 <button data-view="world">World census</button>
 <button data-view="health">Runtime</button>
 <button data-view="items">Items</button>
+<button data-view="recovery">Player recovery</button>
 </nav>
 <span id="connection" class="connection">Connecting</span>
 </header>
@@ -41,8 +43,7 @@
 <div class="page-heading">
 <div>
 <div class="eyebrow">SILKROAD ONLINE / LIVE OPERATIONS</div>
-<h1>Guardians of <em>the Silk Road.</em>
-</h1>
+<h1 id="view-title">World overview</h1>
 <p id="subtitle">A live window into the people, creatures and systems of Silkroad.</p>
 </div>
 <div class="heading-actions">
@@ -290,6 +291,44 @@
 </div>
 <p class="panel-note">Reference catalog, not a promise of implemented item effects. Commands require GM permission and create a ground drop to pick up. This dashboard only copies commands; it never grants items.</p>
 </article>
+</section>
+<section id="recovery" class="view" hidden>
+ <div class="recovery-heading">
+  <div><span class="eyebrow">CHARACTER AUTHORITY</span><h2>Get players back on the road.</h2>
+  <p>Inspect first. Preserve the evidence. Return a stranded character to a safe town.</p></div>
+  <span class="operator-badge" id="recovery-operator">Authenticating...</span>
+ </div>
+ <ol class="recovery-steps" aria-label="Recovery process">
+  <li><span>01</span> Find the character</li><li><span>02</span> Save a diagnostic</li><li><span>03</span> Rescue to town</li>
+ </ol>
+ <form id="recovery-inspect" class="recovery-search panel">
+  <label>Server<select id="recovery-shard" required></select></label>
+  <label>Character name<input id="recovery-character" required maxlength="64" autocomplete="off" placeholder="e.g. Viper"></label>
+  <button class="button primary" id="recovery-inspect-button">Inspect character</button>
+ </form>
+ <p id="recovery-status" class="recovery-notice" role="status" aria-live="polite">Choose a character to begin.</p>
+ <section id="recovery-result" hidden>
+  <div class="recovery-grid">
+   <article class="panel recovery-profile">
+    <div class="panel-heading"><div><span class="eyebrow">INSPECTED CHARACTER</span><h2 id="recovery-player-title">Character</h2></div><span id="recovery-session" class="tag">Offline</span></div>
+    <dl id="recovery-facts" class="recovery-facts"></dl>
+    <div class="recovery-evidence"><h3>Keep the original evidence</h3><p>The snapshot includes position, session, companion and storage state. Save it before making changes.</p>
+    <button id="recovery-download" class="button" type="button">Download diagnostic JSON</button></div>
+    <details class="recovery-raw"><summary>View diagnostic state</summary><pre id="recovery-state"></pre></details>
+   </article>
+   <form id="recovery-rescue" class="panel recovery-form">
+    <div class="panel-heading"><div><span class="eyebrow">AUDITED OPERATION</span><h2>Rescue to town</h2></div><span class="tag">REQUIRES RELOGIN</span></div>
+    <div class="recovery-form-body">
+     <p class="recovery-note">Only this player will be disconnected. Inventory, progress and health are preserved. Dead characters stay dead.</p>
+     <label>Destination<select id="recovery-town" required></select></label>
+     <label>Reason<textarea id="recovery-reason" required minlength="5" maxlength="500" rows="3" placeholder="What happened, and why is rescue needed?"></textarea></label>
+     <label>Confirm character name<input id="recovery-confirmation" required autocomplete="off" placeholder="Type the exact name shown on the left"></label>
+     <button id="recovery-rescue-button" class="button rescue-submit" type="submit">Disconnect and rescue player</button>
+     <p class="recovery-hint">The original state and result are recorded in the private audit log.</p>
+    </div>
+   </form>
+  </div>
+ </section>
 </section>
 <footer>
 <span>
