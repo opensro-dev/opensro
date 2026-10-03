@@ -8729,7 +8729,10 @@ export function createUi(
 						const money = moneyPresentation( game.progression.gold );
 						authoredText( { ...bag.GDR_INVENTORY_STA_MONEY!, color: money.color }, bx, by, money.text );
 					}
-					endWindow( admission );
+					// Beside a service window the inventory is a companion with its own close
+					// identity. It retains only its own admission: replaying the standalone
+					// window would publish a second "close" beside the service window's.
+					endWindow( admission, panel === "Inventory" ? "primary" : "companion:Inventory" );
 				}
 				if ( panel === "Actions" && hudData ) {
 					const admission = beginWindow(),

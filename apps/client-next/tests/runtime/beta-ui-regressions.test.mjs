@@ -53,11 +53,16 @@ createFixture
 
 Keep resource delivery synchronous while preserving request/take ownership.
 The UI still advances its own loading and publication lifecycles normally.
+A path ending in a held suffix stays in flight until deliver releases it,
+as a slow image decode does in the browser.
 ================
 */
-function createFixture() {
+/** @param {readonly string[]} [held] */
+function createFixture( held = [] ) {
 	/** @type {Map<number, import('../../src/engine/contracts/assets').AssetResult>} */
 	const pending = new Map();
+	/** @type {Map<number, string>} */
+	const inFlight = new Map();
 	/** @type {import('../../src/engine/contracts/session').SessionCommand[]} */
 	const commands = [];
 	/** @type {import('../../src/engine/contracts/ui').UiScene | null} */
@@ -110,29 +115,11 @@ function createFixture() {
 			*/
 			request( url ) {
 				const id = ++requestId, path = decodeURIComponent( new URL( url ).pathname );
-				try {
-					const bytes = readFileSync( "../../.generated/client-public" + path );
-					if ( path.endsWith( ".png" ) ) {
-						pending.set( id, {
-							kind: "image",
-							id,
-							image: {
-								width: bytes.readUInt32BE( 16 ),
-								height: bytes.readUInt32BE( 20 ),
-								/*
-								================
-								close
-
-								The fixture owns metadata only; no browser bitmap needs releasing.
-								================
-								*/
-								close() {}
-							}
-						} );
-					} else pending.set( id, { kind: "bytes", id, buffer: Uint8Array.from( bytes ).buffer } );
-				} catch {
-					pending.set( id, { kind: "error", id, error: "Fixture asset missing: " + path } );
+				if ( held.some( suffix => path.endsWith( suffix ) ) ) {
+					inFlight.set( id, path );
+					return id;
 				}
+				load( id, path );
 				return id;
 			},
 			/*
@@ -149,6 +136,7 @@ function createFixture() {
 			},
 			cancel: id => {
 				pending.delete( id );
+				inFlight.delete( id );
 			}
 		},
 		command => commands.push( command ),
@@ -162,13 +150,63 @@ function createFixture() {
 	);
 	/*
 	================
-	step
+	load
 
-	Advance enough frames to finish dependent retail resource requests.
+	Complete one request from the generated retail catalog.
 	================
 	*/
-	function step() {
-		for ( let i = 0; i < WARM_FRAMES; i++ ) semantics = ui.step( view, frame++ * FRAME_MS ) ?? semantics;
+	/** @param {number} id @param {string} path */
+	function load( id, path ) {
+		try {
+			const bytes = readFileSync( "../../.generated/client-public" + path );
+			if ( path.endsWith( ".png" ) ) {
+				pending.set( id, {
+					kind: "image",
+					id,
+					image: {
+						width: bytes.readUInt32BE( 16 ),
+						height: bytes.readUInt32BE( 20 ),
+						/*
+						================
+						close
+
+						The fixture owns metadata only; no browser bitmap needs releasing.
+						================
+						*/
+						close() {}
+					}
+				} );
+			} else pending.set( id, { kind: "bytes", id, buffer: Uint8Array.from( bytes ).buffer } );
+		} catch {
+			pending.set( id, { kind: "error", id, error: "Fixture asset missing: " + path } );
+		}
+	}
+	/*
+	================
+	deliver
+
+	Complete every held request.
+	================
+	*/
+	function deliver() {
+		for ( const [id, path] of inFlight ) load( id, path );
+		inFlight.clear();
+	}
+	/*
+	================
+	step
+
+	Advance enough frames to finish dependent retail resource requests. inspect
+	sees every publication, including the frames a resource is still in flight.
+	================
+	*/
+	/** @param {( semantics: import('../../src/engine/contracts/ui').UiSemantics ) => void} [inspect] */
+	function step( inspect ) {
+		for ( let i = 0; i < WARM_FRAMES; i++ ) {
+			const published = ui.step( view, frame++ * FRAME_MS );
+			if ( published ) inspect?.( published );
+			semantics = published ?? semantics;
+		}
 		return semantics;
 	}
 	/*
@@ -178,11 +216,14 @@ function createFixture() {
 	Publish a new immutable gameplay snapshot, as the simulation worker does.
 	================
 	*/
-	/** @param {Partial<import('../../src/engine/contracts/gameplay').GameplayState>} patch */
-	function setGame( patch ) {
+	/**
+	 * @param {Partial<import('../../src/engine/contracts/gameplay').GameplayState>} patch
+	 * @param {( semantics: import('../../src/engine/contracts/ui').UiSemantics ) => void} [inspect]
+	 */
+	function setGame( patch, inspect ) {
 		assert.ok( view.gameplay );
 		view = { ...view, gameplay: { ...view.gameplay, ...patch } };
-		return step();
+		return step( inspect );
 	}
 	/*
 	================
@@ -197,7 +238,7 @@ function createFixture() {
 		return step();
 	}
 	step();
-	return { ui, commands, step, setGame, setEntities, scene: () => scene };
+	return { ui, commands, step, setGame, setEntities, deliver, scene: () => scene };
 }
 
 test("pet window rejects empty and dead rosters and closes when its last pet disappears", () => {
@@ -376,6 +417,46 @@ test("party-monster mark is published beside its owner and removed when the spaw
 			far.some( q => q.characterAnchor === monster.gid && q.texture === "" ),
 			"the far party monster's name board is drawn with its mark"
 		);
+	} finally {
+		f.ui.dispose();
+	}
+});
+
+test("a companion inventory never replays the standalone inventory's close identity", () => {
+	const icon = "icon/item/etc/all_potion_01.png", f = createFixture( [ icon ] );
+	const pet = { gid: 7, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false };
+	const potion = {
+		slot: 13,
+		refObjId: 4,
+		typeFlags: 0,
+		quantity: 10,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: [],
+		icon: "item/etc/all_potion_01.ddj"
+	};
+	/** @param {import('../../src/engine/contracts/ui').UiSemantics} semantics */
+	const unique = semantics => {
+		const ids = semantics.controls.map( c => c.id );
+		assert.deepEqual( ids.filter( ( id, i ) => ids.indexOf( id ) !== i ), [], "control identities are unique" );
+	};
+	try {
+		f.setGame( { cosRecords: [ pet ], inventorySlotCount: 32 } );
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		assert.equal( f.step()?.controls.filter( c => c.id === "close" ).length, 1 );
+		// The service window admits while a new item's icon is still in flight,
+		// so the companion inventory beside it is not yet admitted. Its retained
+		// fallback must be its own window, never the standalone inventory, whose
+		// close identity the service window now owns.
+		f.ui.event( { kind: "activate", id: "open-window:COS inventory" } );
+		const waiting = f.setGame( { inventory: [ potion ] }, unique );
+		assert.equal( waiting?.controls.filter( c => c.id === "close" ).length, 1 );
+		f.deliver();
+		const service = f.step( unique );
+		assert.equal( service?.controls.filter( c => c.id === "close" ).length, 1 );
+		assert.ok( service?.controls.some( c => c.id === "companion-close" ) );
+		assert.ok( service?.controls.some( c => c.id === "slot:13" ) );
 	} finally {
 		f.ui.dispose();
 	}
