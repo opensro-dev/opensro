@@ -48,8 +48,11 @@ const ENVELOPE_COS = 2;
 // 0x769E tag 1 carries the vehicle's 0x7738 body.
 const COS_MOVEMENT_TAG = 1;
 // How long a walk held for a cast waits for the server's settle before it
-// follows the server again: a refused or deferred cast never settles.
+// follows the server again: a deferred cast never settles.
 const CAST_HOLD_MS = 1500;
+// A held player rejoins the server's walk no faster than this multiple of its
+// own speed, so the catch-up reads as walking, never as a slide or a jump.
+const CATCHUP_SPEED_FACTOR = 1.3;
 
 /*
 ================
@@ -163,6 +166,38 @@ player stays held and that path becomes the one to follow if the hold lapses.
 		pose = castHold.pose;
 		segment = null;
 		walk = null;
+	}
+	/*
+================
+rejoinServerWalk
+
+The cast hold ends without a settle (the server refused the command, or no
+answer came): the server never stopped, so its walk is ahead of the held
+player. Walk from the held pose to that walk's end, arriving when the server
+does, but never faster than CATCHUP_SPEED_FACTOR: the player rejoins the
+server's path continuously instead of jumping to where it has got to.
+================
+	*/
+	function rejoinServerWalk( now: number ) {
+		if ( !castHold ) return;
+		const held = castHold.pose, resume = castHold.resume;
+		castHold = null;
+		movementRevision++;
+		if ( !resume ) return;
+		const remaining = poseDistance( held, resume.to ),
+			arrival = resume.start + resume.duration,
+			fastest = remaining / (speed * CATCHUP_SPEED_FACTOR) * 1000;
+		pose = held;
+		poseAtMs = now;
+		segment = remaining ?
+			bindOwners( {
+				from: held,
+				to: { ...resume.to, angle: movementHeading( held, resume.to ) },
+				start: now,
+				timing: "speed",
+				duration: Math.max( arrival - now, fastest )
+			} ) :
+			null;
 	}
 	/*
 ================
@@ -328,6 +363,19 @@ server's walk again.
 			segment = null;
 			walk = null;
 			movementRevision++;
+		},
+		/*
+================
+castRefused
+
+The server refused the command the walk was held for (B245 [2, code], or the
+B2CD action notice). It refuses before touching movement (offensiveCost runs
+at the press, 58D8F0), so its walk went on: rejoin it now rather than when
+the hold lapses.
+================
+		*/
+		castRefused( now: number ) {
+			rejoinServerWalk( now );
 		},
 		/*
 ================
@@ -885,16 +933,8 @@ step
 			if ( pending.size && now - pending.values().next().value!.sent > 10000 ) {
 				throw new Error( "Movement receipt timed out; resynchronize session" );
 			}
-			if ( castHold && now >= castHold.until ) {
-				// No settle came: the server is still walking. Follow its path from
-				// where it stands now (a lapsed server leg samples to its end).
-				const resume = castHold.resume;
-				castHold = null;
-				if ( resume ) {
-					segment = resume;
-					movementRevision++;
-				}
-			}
+			// No settle came: the server is still walking. Rejoin its path.
+			if ( castHold && now >= castHold.until ) rejoinServerWalk( now );
 			driftWalk( now );
 			if ( !segment ) {
 				return false;
