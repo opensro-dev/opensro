@@ -337,19 +337,20 @@ func (rt *Runtime) instanceLive(division, name string, skillID, token uint32) bo
 ==================
 pulseAura
 
-585262: current MP below the pulse cost retires the aura; otherwise that
-cost is paid. The test and the charge read one cost (auraPulseCost): live,
-an aura whose Bard held MP for the cut charge but not for the uncut onff
-word ended at its pulse.
+CastLifecycle_ProcessPersistent 585277..585284: current MP below the raw onff
+word 1 retires the aura (jl), before any cut; the charge that follows is the
+word at the caster's 0x8D rate cut by BDMD and getv (auraPulseCost). A Bard
+holding enough for the cut charge but not the raw word loses the aura, as
+native does.
 ==================
 */
 func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skill enterworld.SkillRow) ([]simulation.DivisionFrames, bool) {
-	cost, ok := rt.auraPulseCost(division, caster, skill)
-	if !ok {
+	_, _, _, current := rt.playerKeeperVitals(division, caster)
+	if current < int64(skill.Aura.PulseMP) {
 		return nil, false
 	}
-	_, _, _, current := rt.playerKeeperVitals(division, caster)
-	if current < cost {
+	cost, ok := rt.auraPulseCost(division, caster, skill)
+	if !ok {
 		return nil, false
 	}
 

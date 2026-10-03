@@ -324,15 +324,15 @@ func TestBardAuraRejoinsARevivedMember(t *testing.T) {
 
 /*
 ================
-TestBardAuraPulseChecksTheCutCost
+TestBardAuraPulseTestsTheRawWordAndChargesTheCut
 
-Live finding: the pulse compared the Bard's MP with the uncut onff word
-while it charged the word cut by BDMD (Music Life), so an aura ended with
-MP left for the charge. A Bard holding exactly the cut cost pays it and
-keeps playing; one MP less ends the aura.
+585277..585284 compares the Bard's MP with the raw onff word 1 before any
+cut; the charge is the word cut by BDMD (Music Life). Holding the raw word
+keeps the aura and pays only the cut; one MP less ends it even though the
+cut charge would fit.
 ================
 */
-func TestBardAuraPulseChecksTheCutCost(t *testing.T) {
+func TestBardAuraPulseTestsTheRawWordAndChargesTheCut(t *testing.T) {
 	rt, clock, c, row := marchFixture(t, guardTambourID)
 	if !row.Attack.Parameters.Has(enterworld.ParameterBardMPDecrease) {
 		t.Fatalf("Guard Tambour does not read BDMD: %v", row.Attack.Parameters)
@@ -344,22 +344,23 @@ func TestBardAuraPulseChecksTheCutCost(t *testing.T) {
 	}}
 	rt.deps.SkillData().(staticSkillSource)[passive.ID] = passive
 	c.Skills = append(c.Skills, passive.ID)
+	word := int64(row.Aura.PulseMP)
 	cost := int64(combat.CutMPCost(int32(row.Aura.PulseMP), musicLifeTestPercent))
-	if cost >= int64(row.Aura.PulseMP) {
-		t.Fatalf("cut cost %d is not below the onff word %d", cost, row.Aura.PulseMP)
+	if cost >= word {
+		t.Fatalf("cut cost %d is not below the onff word %d", cost, word)
 	}
 	mustCast(t, rt, clock, c, guardTambourID)
 
-	c.CurrentMP = testInt64(cost)
+	c.CurrentMP = testInt64(word)
 	bardTick(rt, clock, auraPulse)
-	if !hasSkillEffect(rt, c.Name, guardTambourID) || *c.CurrentMP != 0 {
-		t.Fatalf("a Bard holding the cut cost lost its aura or paid wrong: MP %d", *c.CurrentMP)
+	if !hasSkillEffect(rt, c.Name, guardTambourID) || *c.CurrentMP != word-cost {
+		t.Fatalf("a Bard holding the raw word lost its aura or paid wrong: MP %d, want %d", *c.CurrentMP, word-cost)
 	}
-	c.CurrentMP = testInt64(cost - 1)
+	c.CurrentMP = testInt64(word - 1)
 	bardTick(rt, clock, auraPulse)
 	bardTick(rt, clock, time.Millisecond)
 	if hasSkillEffect(rt, c.Name, guardTambourID) {
-		t.Fatal("the aura outlived an MP below its cut cost")
+		t.Fatal("the aura outlived an MP below the raw onff word")
 	}
 }
 
