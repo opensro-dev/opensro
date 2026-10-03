@@ -13,7 +13,7 @@ the two ways effects end early:
 	        effect whose skc event mask holds the bit
 	damage  CSkillManager_ProcessDamageEffects (5A0B80): a landed or
 	        blocked hit whose att flags share a bit with the effect's
-	        skc damage mask ends it, unless the keep roll holds
+	        skc damage mask ends it, with the chance damageCutChance gives
 
 Whether a hidden character is seen is the observer client's decision
 (CICharactor_UpdateStatesAndOwnedDecorations 85D890); the server only
@@ -226,9 +226,16 @@ func (rt *Runtime) retireEffectsOnEvent(division string, c *enterworld.Character
 cancelEffectsOnDamage
 
 5A15E0..5A1696 for one landed or blocked hit on c. flags are the
-attack's att word 0. The keep roll holds with KeepPercent (plus the
-victim's modifiers, none of which a shipped hide carries). The caller
-holds c's door.
+attack's att word 0. Each effect whose skc damage mask the hit matches
+ends with damageCutChance, rolled on the victim's probability stream.
+
+A party aura's child is never cut by a hit on the member holding it.
+Owner's rule: a tambour, instrument march or dance is cut when its Bard
+receives an attack; the Bard's own instance carries the roll, and its end
+retires every child at the aura's next update. Inferred: a hit on a member
+leaves that member's copy alone, since the rule names the Bard only.
+
+The caller holds c's door.
 ==================
 */
 func (rt *Runtime) cancelEffectsOnDamage(division string, c *enterworld.Character, flags uint32, now int64) {
@@ -242,16 +249,59 @@ func (rt *Runtime) cancelEffectsOnDamage(division string, c *enterworld.Characte
 	var tokens []uint32
 	for _, effect := range rt.effects.Snapshot(division, c.Name) {
 		row, ok := skills.SkillByID(effect.SkillID)
-		if !ok || !row.DamageCancel.Present || row.DamageCancel.Mask&flags == 0 {
+		if !ok || !row.DamageCancel.Present || row.DamageCancel.Mask&flags == 0 || effect.AuraParentToken != 0 {
 			continue
 		}
-		breaks, err := rt.effectOutcome(criticalActor{division: division, character: c.Name}, damageCancelRollKey, 100-row.DamageCancel.KeepPercent)
+		chance, ok := rt.damageCutChance(division, c, row)
+		if !ok {
+			continue
+		}
+		breaks, err := rt.effectOutcome(criticalActor{division: division, character: c.Name}, damageCancelRollKey, chance)
 		if err != nil || !breaks {
 			continue
 		}
 		tokens = append(tokens, effect.InstanceToken)
 	}
 	rt.publishEndedEffects(division, c, rt.effects.RetireInstances(division, c.Name, tokens), now)
+}
+
+/*
+==================
+damageCutChance
+
+The percent chance that one matching hit ends an effect of row on c: skc
+word 2, or 100 when that word is 0 (a hide ends on every masked hit).
+
+Owner's rule: Prism (setv MUCR) and Screen Dance (setv DSCR) reduce the
+cut chance of the Bard's music and dance auras by their points. A row
+reads the key it is reduced by through getv (the tambours and marches
+getv MUCR, the dances DSCR); c's learned value is taken off, never below
+0. Inferred: points are percentage points of the chance (80 - 14 = 66),
+not a percentage of it.
+
+ok is false when c's stats cannot be read; the hit then ends nothing.
+==================
+*/
+func (rt *Runtime) damageCutChance(division string, c *enterworld.Character, row enterworld.SkillRow) (uint32, bool) {
+	chance := row.DamageCancel.Chance
+	if chance == 0 {
+		chance = 100
+	}
+	resist := [...]enterworld.SkillParameter{enterworld.ParameterMusicCutResist, enterworld.ParameterDanceCutResist}
+	if !row.Attack.Parameters.Has(resist[0]) && !row.Attack.Parameters.Has(resist[1]) {
+		return chance, true
+	}
+	stats, _, err := rt.playerCombatStats(division, c)
+	if err != nil {
+		return 0, false
+	}
+	for _, key := range resist {
+		if !row.Attack.Parameters.Has(key) {
+			continue
+		}
+		chance -= min(chance, stats.SkillParameters[key])
+	}
+	return chance, true
 }
 
 /*

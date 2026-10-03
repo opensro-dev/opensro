@@ -81,6 +81,12 @@ const (
 	ParameterDotDuration
 	// RPBU +0x508 adds milliseconds to the coating, not its poison victim.
 	ParameterPoisonCoatingDuration
+	// Cut resistance of the Bard's area auras. Prism's setv MUCR and Screen
+	// Dance's setv DSCR are points taken off the skc cut chance of a music
+	// (getv MUCR) or dance (getv DSCR) aura when its Bard is hit; see
+	// action.damageCutChance. Owner's rule: the passives reduce that chance.
+	ParameterMusicCutResist
+	ParameterDanceCutResist
 	SkillParameterCount
 )
 
@@ -190,6 +196,10 @@ func SkillParameterFromKey(key uint32) (SkillParameter, bool) {
 		return ParameterBlessIntellect, true
 	case 0x484c5255:
 		return ParameterHealRecoveryUp, true
+	case 0x4d554352:
+		return ParameterMusicCutResist, true
+	case 0x44534352:
+		return ParameterDanceCutResist, true
 	}
 	return 0, false
 }

@@ -45,14 +45,18 @@ SkillDamageCancel
 
 skc words 0 and 2. CSkillManager_ProcessDamageEffects (5A1612) retires an
 effect when the landing attack's att flags (+0x230 word 0) share a bit
-with Mask, unless a keep roll of KeepPercent succeeds. Word 1, the event
-mask, is SkillReplacement.EventCancelMask.
+with Mask. Word 1, the event mask, is SkillReplacement.EventCancelMask.
+
+Chance is word 2, the percent chance that such a hit ends the effect; 0
+means every hit does. Owner's rule: the Bard's skc(15,0,80) ends the aura
+on 80 % of the hits its Bard receives. The shipped hides and duplicates
+author 0 and keep ending on every masked hit, as before.
 ==================
 */
 type SkillDamageCancel struct {
-	Present     bool
-	Mask        uint32
-	KeepPercent uint32
+	Present bool
+	Mask    uint32
+	Chance  uint32
 }
 
 func encodedDamageCancel(fields []string) SkillDamageCancel {
@@ -60,7 +64,7 @@ func encodedDamageCancel(fields []string) SkillDamageCancel {
 	if !ok || len(values) < 3 || values[0] == 0 {
 		return SkillDamageCancel{}
 	}
-	return SkillDamageCancel{Present: true, Mask: values[0], KeepPercent: min(values[2], 100)}
+	return SkillDamageCancel{Present: true, Mask: values[0], Chance: min(values[2], 100)}
 }
 
 /*

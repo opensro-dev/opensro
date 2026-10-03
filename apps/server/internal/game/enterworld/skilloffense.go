@@ -108,6 +108,7 @@ decodeSkillOffense only validates them.
 	getv WIMD/BDMD/HLMD  +0x4E4/+0x554/+0x55C  prepared MP cut
 	getv WIRU/CBRA       +0x4E8/+0x50C         cast reach addends (4AE87E)
 	getv MUER/DSER       +0x544/+0x54C         aura radius addends
+	getv MUCR/DSCR       -                     aura cut resistance (Prism, Screen Dance)
 	scls                 +0x380                selector bits (5842AC)
 	reqc                 +0x39C                bits 0, 4, 5 (SkillReqc)
 	reqi                 +0x3A0                up to five {kind, value}
@@ -154,7 +155,8 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 				if slot, known := SkillParameterFromKey(key); known &&
 					(slot == ParameterWizardMPDecrease || slot == ParameterBardMPDecrease || slot == ParameterHealerMPDecrease ||
 						slot == ParameterMusicRange || slot == ParameterDanceRange || slot == ParameterHealRecoveryUp ||
-						slot == ParameterWizardRange || slot == ParameterCrossbowRange) {
+						slot == ParameterWizardRange || slot == ParameterCrossbowRange ||
+						slot == ParameterMusicCutResist || slot == ParameterDanceCutResist) {
 					row.Attack.Parameters |= SkillParameterMask(1) << slot
 				}
 			}

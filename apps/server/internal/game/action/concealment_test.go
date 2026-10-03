@@ -147,7 +147,7 @@ func TestStealthEndsOnTheNextCast(t *testing.T) {
 TestDamageCancelFollowsTheMasks
 
 5A1612: a hit whose att flags share a bit with skc word 0 ends the hide
-(keep 0 %); a hit with other flags does not.
+(chance word 0: every such hit); a hit with other flags does not.
 ==================
 */
 func TestDamageCancelFollowsTheMasks(t *testing.T) {
