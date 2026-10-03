@@ -16,6 +16,13 @@ One update runs, in native order:
 
 Steps 3-5 are throttled by puls (+0x384) when the row has it.
 
+The Bard's auras follow the owner's rules on top of that update (rules 1
+and 4 of the Bard specification): a Bard keeps one instrument aura and one
+dance at a time, the new cast replacing the old; an aura ends when its
+caster runs out of MP, dies or goes through a loading screen; a member who
+left the radius, or whose child ended for any other reason, joins again
+when the walk finds it back in range.
+
 ===========================================================================
 */
 
@@ -107,6 +114,7 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 		if !ok {
 			return false
 		}
+		rt.replaceOwnAura(division, c, skill, token)
 		success := wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: enterworld.ObjectIDForCharacter(c), InstanceToken: token}
 		frames = append(frames, wire.SkillCastSelfFrame(success))
 		frames = append(frames, installed...)
@@ -230,8 +238,14 @@ func (rt *Runtime) advanceAura(aura *partyAura, now int64) ([]simulation.Divisio
 // auraInstanceLive reports the caster's persistent instance still installed
 // and not asked to stop.
 func (rt *Runtime) auraInstanceLive(aura partyAura) bool {
-	for _, effect := range rt.effects.Snapshot(aura.division, aura.casterName) {
-		if effect.SkillID == aura.skillID && effect.InstanceToken == aura.token {
+	return rt.instanceLive(aura.division, aura.casterName, aura.skillID, aura.token)
+}
+
+// instanceLive reports one instance of skillID still installed on name and
+// not asked to stop.
+func (rt *Runtime) instanceLive(division, name string, skillID, token uint32) bool {
+	for _, effect := range rt.effects.Snapshot(division, name) {
+		if effect.SkillID == skillID && effect.InstanceToken == token {
 			return !effect.StopRequested
 		}
 	}
@@ -308,6 +322,13 @@ leaveAura
 The set walk at 584C... A member whose object is gone is erased (and, since
 per-name effect state outlives a logged-out object here, its child is
 stopped too). Everyone else is tested by memberLeaves.
+
+A member whose child already ended is erased as well, so the join walk
+right after can hand it a new one. Inferred: native erases a set entry when
+the child's own retirement notifies the area (the child dies with the
+member's death, a loading screen or an equipment re-check); this port has
+no such callback, so the walk reads the child's liveness instead. Without
+it the set kept the dead token and the member never joined again.
 ==================
 */
 func (rt *Runtime) leaveAura(aura *partyAura, caster *enterworld.Character, now int64) {
@@ -318,6 +339,10 @@ func (rt *Runtime) leaveAura(aura *partyAura, caster *enterworld.Character, now 
 		member := rt.findCharacter(aura.division, name)
 		if member == nil {
 			rt.effects.RequestVoluntaryStop(aura.division, name, aura.skillID, token)
+			delete(aura.members, name)
+			continue
+		}
+		if !rt.instanceLive(aura.division, name, aura.skillID, token) {
 			delete(aura.members, name)
 			continue
 		}
@@ -387,7 +412,7 @@ func (rt *Runtime) joinAura(aura *partyAura, caster *enterworld.Character, skill
 		var installed []wire.Frame
 		joined := rt.deps.Update(member, "aura-join", func() bool {
 			var ok bool
-			installed, ok = rt.commitCharacterEffect(aura.division, member, skill, child, statuseffect.StateActive, true, EffectPresentation{Phase: 1}, now)
+			installed, ok = rt.commitCharacterEffect(aura.division, member, skill, child, statuseffect.StateActive, true, EffectPresentation{Phase: 1, AuraParent: aura.token}, now)
 			return ok
 		})
 		if !joined {
@@ -462,6 +487,81 @@ func (rt *Runtime) auraReplacementAllowed(division string, member *enterworld.Ch
 		return true
 	}
 	return rt.requestSelfEffectReplacement(division, member, skill)
+}
+
+/*
+===============================================================================
+
+THE BARD'S RULES
+
+===============================================================================
+*/
+
+/*
+==================
+replaceOwnAura
+
+Owner's rule 1: a Bard plays one instrument aura (Guard Tambour, Mana
+Tambour, Hit March, Clout March) at a time; casting another replaces the
+one already playing. Inferred: a dance replaces the Bard's previous dance
+the same way, since a Bard dances one Dancing at a time. Moving and Swing
+March are timed buffs of no family and are never touched here.
+
+The old caster instance is asked to stop, exactly as a client cancel does;
+the next update finds it stopped and retires its children (advanceAura).
+Only the caster's own instances are read: a child the Bard holds from
+another Bard's aura has an AuraParentToken. The caller holds c's door.
+==================
+*/
+func (rt *Runtime) replaceOwnAura(division string, c *enterworld.Character, skill enterworld.SkillRow, token uint32) {
+	family := skill.AuraFamily()
+	if family == enterworld.AuraFamilyNone {
+		return
+	}
+	for _, effect := range rt.effects.Snapshot(division, c.Name) {
+		if effect.InstanceToken == token || effect.AuraParentToken != 0 || effect.StopRequested {
+			continue
+		}
+		row, ok := rt.deps.SkillData().SkillByID(effect.SkillID)
+		if !ok || row.AuraFamily() != family {
+			continue
+		}
+		rt.effects.RequestVoluntaryStop(division, c.Name, effect.SkillID, effect.InstanceToken)
+	}
+}
+
+/*
+==================
+endPartyAurasForLoading
+
+Owner's rule 1: a teleport, a portal or a return to town (any loading
+screen) ends the auras the character plays. Inferred: the children it holds
+from other casters' auras end with the same loading; it is out of every
+radius while it loads, and the join walk hands it a new child once it is
+back in range. Both are retired now, before the re-entry packets are built,
+so the rebuilt client never sees them; the aura's next update retires the
+remaining children of an ended caster instance.
+==================
+*/
+func (rt *Runtime) endPartyAurasForLoading(division string, c *enterworld.Character) {
+	if rt.effects == nil {
+		return
+	}
+	skills := rt.deps.SkillData()
+	if skills == nil {
+		return
+	}
+	rt.deps.Update(c, "aura-loading-end", func() bool {
+		var tokens []uint32
+		for _, effect := range rt.effects.Snapshot(division, c.Name) {
+			if row, ok := skills.SkillByID(effect.SkillID); ok && row.Aura.Present {
+				tokens = append(tokens, effect.InstanceToken)
+			}
+		}
+		ended := rt.effects.RetireInstances(division, c.Name, tokens)
+		rt.publishEndedEffects(division, c, ended, rt.Now().UnixMilli())
+		return len(ended) != 0
+	})
 }
 
 /*

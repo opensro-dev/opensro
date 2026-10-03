@@ -71,6 +71,7 @@ func (rt *Runtime) WarpGM(division, name string, p wire.Position) bool {
 		return false
 	}
 	rt.endTransformForLoading(division, c)
+	rt.endPartyAurasForLoading(division, c)
 	previousPets := rt.relocateReturningPet(division, c, destination)
 	packets, ok := rt.deps.ReentryPackets(division, name)
 	if ok && len(packets) > 0 && packets[0].NativeOpcode == enterworld.OpcodeResetClient {

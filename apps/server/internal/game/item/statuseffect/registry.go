@@ -58,6 +58,10 @@ type Effect struct {
 	OwnerGID       uint32
 	AreaSourceGID  uint32
 	AreaSourceName string
+	// AuraParentToken marks a party aura's child: the instance token of the
+	// caster's persistent instance (action/skillparty.go) it was handed out
+	// by. Zero for the caster's own instance and every other effect.
+	AuraParentToken uint32
 	// LinkToken identifies the shared source/target relationship. Only ApplyLink
 	// may create these rows; ordinary Apply cannot replace half of a pair.
 	LinkToken uint32

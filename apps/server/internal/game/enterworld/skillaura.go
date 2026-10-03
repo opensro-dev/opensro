@@ -74,3 +74,52 @@ type SkillBuffModifiers struct {
 
 // Present reports a block 594AC0 would install.
 func (m SkillBuffModifiers) Present() bool { return m.Dru || m.Odar || m.Ru || m.Hr }
+
+/*
+==================
+AuraFamily
+
+The two kinds of Bard area aura the owner's rules tell apart, read from the
+row's data, never its codename:
+
+	instrument  efr kind 2 + onff + scls bit 0 (the music a dance needs):
+	            Guard and Mana Tambour, Hit and Clout March
+	dance       efr kind 2 + onff + reqc bit 5 (needs that music):
+	            the seven Dancings
+
+Moving and Swing March are timed efr kind 1 buffs (dura + hste), not auras,
+and stay AuraFamilyNone: they coexist with both families. The Cleric's eshp
+aura has neither bit and is AuraFamilyNone too.
+==================
+*/
+type AuraFamily uint8
+
+const (
+	AuraFamilyNone AuraFamily = iota
+	AuraFamilyInstrument
+	AuraFamilyDance
+)
+
+// selectorMusic is scls bit 0, the skill-manager selector a reqc bit 5 row
+// asks for (59DDF0).
+const selectorMusic = 1
+
+/*
+==================
+AuraFamily
+
+The family of r's persistent area aura, AuraFamilyNone for every other row.
+==================
+*/
+func (r SkillRow) AuraFamily() AuraFamily {
+	if !r.Aura.Present || r.Aura.PulseMs == 0 {
+		return AuraFamilyNone
+	}
+	if r.Reqc.Dance {
+		return AuraFamilyDance
+	}
+	if r.SelectorMask&selectorMusic != 0 {
+		return AuraFamilyInstrument
+	}
+	return AuraFamilyNone
+}

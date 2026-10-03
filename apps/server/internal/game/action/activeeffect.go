@@ -110,6 +110,9 @@ type EffectPresentation struct {
 	// DefenseAddend is a recipient context's +0x34/+0x38 (58381F): the
 	// caster's getv HLBP or HLSM value, added to defp's physical/magical.
 	DefenseAddend [2]uint32
+	// AuraParent is the caster instance token a party aura's child joins
+	// under (skillparty.go joinAura); zero for any other application.
+	AuraParent uint32
 }
 
 /*
@@ -240,6 +243,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		State:           state,
 		Phase:           presentation.Phase, Rider: presentation.Rider, ExpiresAtMs: expires,
 		ClientCancelable: !row.VoluntaryCancelBlocked || canStop,
+		AuraParentToken:  presentation.AuraParent,
 	}
 	if row.ReplacementPinned && row.Replacement.Activity != 0 && presentation.Phase == 1 {
 		effect.EventCancelMask = row.Replacement.EventCancelMask

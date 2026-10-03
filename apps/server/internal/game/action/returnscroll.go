@@ -227,6 +227,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	}
 	rt.returnCasts.Delete(key)
 	rt.endTransformForLoading(job.division, c)
+	rt.endPartyAurasForLoading(job.division, c)
 	previousPets := rt.relocateReturningPet(job.division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(job.division, job.name)
 	clear := teleportState(c, 0)

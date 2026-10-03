@@ -331,6 +331,7 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(failure)
 	}
 	rt.endTransformForLoading(division, c)
+	rt.endPartyAurasForLoading(division, c)
 	previousPets := rt.relocateReturningPet(division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(division, c.Name)
 	if !accepted || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {

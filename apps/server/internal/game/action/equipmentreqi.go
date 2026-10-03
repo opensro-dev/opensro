@@ -11,6 +11,11 @@ no longer meets is retired - except any SKILL_CH_FIRE_SHIELD_ row, which
 the native exempts by name (59F397). Instances cast on someone else are
 never re-checked.
 
+A party aura's child is installed in mode 1 too, but its reqi (the Bard's
+harp) belongs to the caster, who is re-checked on its own instance. Inferred:
+the child is never re-checked against the member's equipment, otherwise any
+equipment move of a harpless member ended its march or tambour.
+
 ===========================================================================
 */
 
@@ -33,7 +38,7 @@ func (rt *Runtime) retireUnmetEquipmentEffects(division string, c *enterworld.Ch
 	items := rt.statCatalogs().Items
 	var tokens []uint32
 	for _, e := range rt.effects.Snapshot(division, c.Name) {
-		if e.Phase != 1 {
+		if e.Phase != 1 || e.AuraParentToken != 0 {
 			continue
 		}
 		row, ok := skills.SkillByID(e.SkillID)
