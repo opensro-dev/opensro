@@ -362,3 +362,34 @@ func TestBardAuraPulseChecksTheCutCost(t *testing.T) {
 		t.Fatal("the aura outlived an MP below its cut cost")
 	}
 }
+
+/*
+================
+TestBardAuraLeavesTheExMembersOfADissolvedParty
+
+Live finding: when the other member of a two-member party left, the party
+dissolved and the ex-member kept its copy while in range, because the
+leave walk read no party as "no party test". A Bard with no party keeps
+its aura on itself only.
+================
+*/
+func TestBardAuraLeavesTheExMembersOfADissolvedParty(t *testing.T) {
+	rt, clock, c, _ := marchFixture(t, guardTambourID)
+	mate := partyMate(rt, c, 12, "dissolved-mate", 100)
+	setParty(rt, c, mate)
+	mustCast(t, rt, clock, c, guardTambourID)
+	bardTick(rt, clock, time.Millisecond)
+	if !hasSkillEffect(rt, mate.Name, guardTambourID) {
+		t.Fatal("the member did not join")
+	}
+
+	rt.RewardParties = func(string) []RewardParty { return nil }
+	bardTick(rt, clock, time.Millisecond)
+	bardTick(rt, clock, time.Millisecond)
+	if hasSkillEffect(rt, mate.Name, guardTambourID) {
+		t.Fatal("the ex-member kept the aura of a dissolved party")
+	}
+	if !hasSkillEffect(rt, c.Name, guardTambourID) {
+		t.Fatal("the Bard lost its own aura with its party")
+	}
+}

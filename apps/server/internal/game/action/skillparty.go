@@ -491,16 +491,22 @@ memberLeaves
 
 The native leave rule, in its order:
 
-  - with the caster in a party, another party leaves
+  - a member outside the caster's party leaves
   - another plane or sector stays: that branch jumps to the keep path
     (584D95) before distance is read
   - a 3D distance past the radius leaves
 
 Death is never read by this walk.
+
+Native skips the party test when the caster has no party. Owner's rule
+(Bard specification, rule 1: the aura is the party's): a caster with no
+party keeps the aura on itself only, so when its party dissolves every
+ex-member leaves at the next walk. Live, an ex-member of a dissolved
+two-member party kept its copy while in range.
 ==================
 */
 func memberLeaves(party map[uint32]bool, member *enterworld.Character, from, to simulation.Spawn, radius uint32) bool {
-	if len(party) != 0 && !party[enterworld.ObjectIDForCharacter(member)] {
+	if !party[enterworld.ObjectIDForCharacter(member)] {
 		return true
 	}
 	if !samePlaneAdjacent(from, to) {
