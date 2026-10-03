@@ -642,3 +642,36 @@ func TestResurrectionBracketNamesTheCaster(t *testing.T) {
 		t.Fatalf("bracket names %d and %d, want the caster %d", open, release, casterGID)
 	}
 }
+
+/*
+==================
+TestHealingOrbitHealsItsCasterOverTime
+
+Healing Orbit is efr select 5 (the caster included) with a 500 ms cast
+time. Live finding: the release installed it on the party but never on the
+casting Cleric, whose own prepared command was read as a casting conflict
+of the effect it was releasing. Like the instant Mana Orbit, the caster
+holds the effect and is healed at every pulse.
+==================
+*/
+func TestHealingOrbitHealsItsCasterOverTime(t *testing.T) {
+	orbit := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_CYCLE_B_01")
+	if orbit.ActionCastingTimeMs == 0 || orbit.Abnormal.EffectArea.Select&enterworld.SelectCaster == 0 || !orbit.Recovery.HealOverTimePinned {
+		t.Fatalf("healing orbit cast %d area %+v recovery %+v", orbit.ActionCastingTimeMs, orbit.Abnormal.EffectArea, orbit.Recovery)
+	}
+	affordable(&orbit)
+	p := newSupportParty(t, orbit)
+	p.castReleased(t, orbit, wire.SkillAction{ActionId: orbit.ID})
+	for _, who := range []*enterworld.Character{p.c, p.m} {
+		if !hasSkillEffect(p.rt, who.Name, orbit.ID) {
+			t.Fatalf("%s holds no Healing Orbit after its release", who.Name)
+		}
+	}
+
+	casterHP, mateHP := *p.c.CurrentHP, *p.m.CurrentHP
+	p.clock.Advance(time.Duration(int64(orbit.ActionCastingTimeMs)+1+int64(orbit.Recovery.PulseMs)) * time.Millisecond)
+	p.rt.TickHook()(p.clock.NowMs())
+	if *p.c.CurrentHP <= casterHP || *p.m.CurrentHP <= mateHP {
+		t.Fatalf("first pulse: caster %d -> %d, mate %d -> %d", casterHP, *p.c.CurrentHP, mateHP, *p.m.CurrentHP)
+	}
+}

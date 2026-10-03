@@ -68,7 +68,7 @@ func (rt *Runtime) installHealsOverTime(division string, caster *enterworld.Char
 	}
 	var public []wire.Frame
 	for _, who := range recipients {
-		if who == nil || !rt.auraReplacementAllowed(division, who, skill) {
+		if who == nil || !rt.healOverTimeReplacementAllowed(division, caster, who, skill) {
 			continue
 		}
 		presentation := EffectPresentation{Phase: 2}
@@ -105,6 +105,27 @@ func (rt *Runtime) installHealsOverTime(division string, caster *enterworld.Char
 		rt.healOverTimeMu.Unlock()
 	}
 	return public
+}
+
+/*
+==================
+healOverTimeReplacementAllowed
+
+auraReplacementAllowed on one recipient. The caster is validated as at its
+own cast's release (requestReleasedEffectReplacement): with a cast time
+(Healing Orbit, Healing Cycle) its prepared command is still current, and
+must not refuse the effect it releases, as it never does for the instant
+Mana Orbit, whose command is never current.
+==================
+*/
+func (rt *Runtime) healOverTimeReplacementAllowed(division string, caster, who *enterworld.Character, skill enterworld.SkillRow) bool {
+	if who.ID != caster.ID {
+		return rt.auraReplacementAllowed(division, who, skill)
+	}
+	if !skill.ReplacementPinned || skill.Replacement.Lnks {
+		return true
+	}
+	return rt.requestReleasedEffectReplacement(division, who, skill)
 }
 
 /*
