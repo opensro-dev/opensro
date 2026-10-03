@@ -136,13 +136,11 @@ export function createGeometryResources(
 	validatePaletteOffsets
 	================
 	*/
-	function validatePaletteOffsets(
-		offsets: Uint32Array | undefined,
-		bones: GPUBuffer | undefined,
-		jointMaximum: number
-	) {
-		if ( !offsets || !bones || offsets.some( offset => offset + jointMaximum >= bones.size / 64 ) ) {
-			throw Error( "Palette offset outside bone storage" );
+	function validatePaletteOffsets( offsets: Uint32Array | undefined, boneBytes: number, jointMaximum: number ) {
+		if ( !offsets ) throw Error( "Palette offset outside bone storage" );
+		const joints = boneBytes / 64;
+		for ( let i = 0; i < offsets.length; i++ ) {
+			if ( offsets[i]! + jointMaximum >= joints ) throw Error( "Palette offset outside bone storage" );
 		}
 	}
 	const geometryBinding = (
@@ -187,6 +185,10 @@ export function createGeometryResources(
 		vertices?: Float32Array;
 		skin: GPUBuffer;
 		bones: GPUBuffer;
+		// The bone and index buffers' sizes, read once: a GPUBuffer's size
+		// crosses into the browser on every read, and updates run every frame.
+		boneBytes: number;
+		indexBytes: number;
 		palette?: SharedPalette;
 		jointMaximum: number;
 		selection: { indexCount: number; instanceCount: number; binding: GPUBindGroup; };
@@ -274,7 +276,7 @@ export function createGeometryResources(
 		*/
 		updateBones( draw: GeometryDraw, bones: Float32Array, revision?: number ) {
 			const meta = metadata.get( draw );
-			if ( !meta || meta.bones === defaultBones || bones.byteLength > meta.bones.size ) {
+			if ( !meta || meta.bones === defaultBones || bones.byteLength > meta.boneBytes ) {
 				throw new Error( "Invalid bone palette" );
 			}
 			if ( meta.palette ) {
@@ -302,8 +304,8 @@ export function createGeometryResources(
 		================
 		*/
 		updateIndices( draw: GeometryDraw, indices: Uint32Array ) {
-			const gpu = current(), buffers = geometryBuffers.get( draw );
-			if ( !buffers || indices.byteLength > buffers[1]!.size ) {
+			const gpu = current(), buffers = geometryBuffers.get( draw ), meta = metadata.get( draw );
+			if ( !buffers || !meta || indices.byteLength > meta.indexBytes ) {
 				throw new Error( "Invalid index selection" );
 			}
 			if ( indices.byteLength ) {
@@ -315,9 +317,8 @@ export function createGeometryResources(
 					indices.byteLength
 				);
 			}
-			const selection = metadata.get( draw )!.selection;
-			selection.indexCount = indices.length;
-			selection.instanceCount = 1;
+			meta.selection.indexCount = indices.length;
+			meta.selection.instanceCount = 1;
 		},
 		updatePositions(
 			draw: GeometryDraw,
@@ -425,7 +426,7 @@ export function createGeometryResources(
 				throw new Error( "Stale geometry handle" );
 			}
 			const meta = metadata.get( draw )!;
-			if ( meta.palette ) validatePaletteOffsets( paletteOffsets, meta.bones, meta.jointMaximum );
+			if ( meta.palette ) validatePaletteOffsets( paletteOffsets, meta.boneBytes, meta.jointMaximum );
 			else if ( paletteOffsets ) throw Error( "Palette offsets require shared bone storage" );
 			const count = instances.length / 16,
 				packed = packInstances( instances, opacity, appearance, pointLights, paletteOffsets );
@@ -645,7 +646,7 @@ export function createGeometryResources(
 				}
 				if ( paletteOffsets ) {
 					if ( !palette ) throw Error( "Palette offsets require skinned geometry" );
-					validatePaletteOffsets( paletteOffsets, boneBuffer, jointMaximum );
+					validatePaletteOffsets( paletteOffsets, boneBuffer.size, jointMaximum );
 				}
 				const mat = data.material;
 				if ( mat?.environmentReflection && !environmentImage ) {
@@ -782,6 +783,8 @@ export function createGeometryResources(
 					...(data.dynamicVertices ? { vertices: interleaved } : {}),
 					skin: skinBuffer,
 					bones: boneBuffer,
+					boneBytes: boneBuffer.size,
+					indexBytes: indices.size,
 					palette,
 					jointMaximum,
 					selection

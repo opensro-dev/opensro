@@ -5,7 +5,7 @@ effects-bench.mjs - frame rate of many skill effects, without a server
 
   node tools/perf/bench/effects-bench.mjs [--count N] [--seconds S]
                                           [--match REGEX] [--size WxH]
-                                          [--cpu] [--heap] [--out DIR]
+                                          [--cpu] [--heap] [--counts] [--out DIR]
 
 Renders count published effect programs (those whose name matches) at
 once through the production renderer in an uncapped browser, every one
@@ -17,7 +17,8 @@ is the same on every run: the measure for particle presentation work.
 To compare two trees, run a second dev server from the other tree and
 point this at it with SRO_PROBE_CLIENT_NEXT_BASE_URL. --cpu and --heap
 capture the measured span as OUT/effects.cpuprofile and .heapprofile
-(read them with tools/perf/analyze/profile.mjs).
+(read them with tools/perf/analyze/profile.mjs); --counts adds WebGPU
+calls a frame (bundles recorded, queue writes, dispatches, bind groups).
 
 ===========================================================================
 */
@@ -26,7 +27,8 @@ import { CLIENT_NEXT_BASE_URL } from "../../../../../scripts/lib/probeEndpoints.
 import { parseOptions } from "../core/report.mjs";
 import { createCaptures } from "../core/client.mjs";
 
-const USAGE = "effects-bench.mjs [--count N] [--seconds S] [--match REGEX] [--size WxH] [--cpu] [--heap] [--out DIR]";
+const USAGE =
+	"effects-bench.mjs [--count N] [--seconds S] [--match REGEX] [--size WxH] [--cpu] [--heap] [--counts] [--out DIR]";
 
 /*
 ================
@@ -37,7 +39,7 @@ in globalThis.__effectsBench for measureEffects. It runs in the page, so
 it closes over nothing.
 ================
 */
-async function admitEffects( { count, match, width, height } ) {
+async function admitEffects( { count, match, width, height, counts } ) {
 	const GRID_SPACING = 40;
 	const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
 	const { createAssets } = await import( "/src/engine/runtime/assets/assets.ts" );
@@ -53,15 +55,37 @@ async function admitEffects( { count, match, width, height } ) {
 	const paths = Object.keys( catalog.effects ).filter( name => pattern.test( name ) ).slice( 0, count ).map( name =>
 		"/assets/effects/programs.json#" + encodeURIComponent( name )
 	);
-	const tally = {};
+	// The renderer's frame probe (frame-probes.ts): counts, and "@stage" ms
+	// since the owner's previous mark, as client.mjs records them.
+	const tally = {}, marks = { render: 0, character: 0 };
+	const add = ( key, value ) => {
+		tally[key] = (tally[key] ?? 0) + value;
+	};
+	const mark = ( owner, stage ) => {
+		const now = performance.now();
+		add( "@" + stage, now - marks[owner] );
+		marks[owner] = now;
+	};
+	if ( counts ) {
+		const wrap = ( prototype, name, key ) => {
+			const original = prototype[name];
+			prototype[name] = function( ...args ) {
+				add( key, 1 );
+				return original.apply( this, args );
+			};
+		};
+		wrap( GPUDevice.prototype, "createRenderBundleEncoder", "bundles recorded" );
+		wrap( GPUQueue.prototype, "writeBuffer", "writeBuffer" );
+		wrap( GPUComputePassEncoder.prototype, "dispatchWorkgroups", "dispatches" );
+		wrap( GPUComputePassEncoder.prototype, "setBindGroup", "compute bind groups" );
+		wrap( GPURenderPassEncoder.prototype, "executeBundles", "executeBundles" );
+	}
 	const probe = {
-		characterCount( name, value = 1 ) {
-			tally[name] = (tally[name] ?? 0) + value;
-		},
-		characterBegin() {},
-		characterMark() {},
-		renderBegin() {},
-		renderMark() {},
+		characterCount: ( name, value = 1 ) => add( name, value ),
+		characterBegin: () => marks.character = performance.now(),
+		characterMark: stage => mark( "character", stage ),
+		renderBegin: () => marks.render = performance.now(),
+		renderMark: stage => mark( "render", stage ),
 		detailBegin() {},
 		detailEnd() {},
 		sampleDetails: () => false,
@@ -146,7 +170,7 @@ async function measureEffects( seconds ) {
 		const sorted = frames.slice( 2 ).sort( ( a, b ) => a - b ),
 			mean = list => list.reduce( ( a, b ) => a + b, 0 ) / Math.max( 1, list.length );
 		const counts = {};
-		for ( const key in tally ) counts[key] = Number( (tally[key] / measured).toFixed( 1 ) );
+		for ( const key in tally ) counts[key] = Number( (tally[key] / measured).toFixed( key[0] === "@" ? 2 : 1 ) );
 		return {
 			effects: ready.length,
 			fps: 1000 / mean( sorted ),
@@ -172,6 +196,7 @@ const options = parseOptions(
 		size: "1600x900",
 		cpu: false,
 		heap: false,
+		counts: false,
 		out: "temp/artifacts/effects-bench"
 	},
 	USAGE
@@ -183,7 +208,13 @@ try {
 	// A static document of the dev server's origin: the page imports the
 	// renderer from it, and no client boots beside the measured one.
 	await page.goto( CLIENT_NEXT_BASE_URL + "/assets/skillfx/manifest.json" );
-	await page.evaluate( admitEffects, { count: options.count, match: options.match, width, height } );
+	await page.evaluate( admitEffects, {
+		count: options.count,
+		match: options.match,
+		width,
+		height,
+		counts: options.counts
+	} );
 	const captures = await createCaptures( page, { dir: options.out, cpu: options.cpu, heap: options.heap } );
 	await captures.start();
 	const result = await page.evaluate( measureEffects, options.seconds );

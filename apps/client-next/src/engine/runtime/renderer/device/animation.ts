@@ -267,8 +267,12 @@ export function createGpuAnimationResources( device: GPUDevice ) {
 				!pipeline || unsupported.has( model ) || !samples.some( s => s !== null ) || !primitive.joints.length
 			) return false;
 			const capacity = source.length / (primitive.joints.length * 16);
+			// A row keeps its output (checked below on every prepare), so the
+			// output's size is read for a new row only: reading it crosses into
+			// the browser. Either way it is refused before anything is admitted.
 			if (
-				!Number.isInteger( capacity ) || samples.length > capacity || source.byteLength > output.size
+				!Number.isInteger( capacity ) || samples.length > capacity ||
+				!streams.has( source ) && source.byteLength > output.size
 			) throw Error( "GPU animation palette capacity exceeded" );
 			if ( samples.some( s => s !== null && (!Number.isFinite( s.time ) || s.time < 0) ) ) return false;
 			if ( !model.primitives.includes( primitive ) ) throw Error( "Unknown GPU palette binding" );

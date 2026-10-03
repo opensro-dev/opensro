@@ -255,8 +255,7 @@ export function createParticlePresentation( device: GPUDevice ) {
 			const count = particles.rows * particles.slots;
 			if (
 				!Number.isSafeInteger( count ) || count <= 0 || particles.records.length !== count * PARTICLE_RECORD ||
-				particles.actors.length !== particles.rows * PARTICLE_ACTOR || particles.axes.length !== 12 ||
-				count * 160 > instances.size || count * 64 > bones.size
+				particles.actors.length !== particles.rows * PARTICLE_ACTOR || particles.axes.length !== 12
 			) throw Error( "Invalid particle presentation" );
 			let stream = streams.get( draw ), start = particles.dirtyStart, end = particles.dirtyEnd;
 			if (
@@ -267,6 +266,11 @@ export function createParticlePresentation( device: GPUDevice ) {
 				throw Error( "Particle presentation changed shape" );
 			}
 			if ( !stream ) {
+				// A draw's buffers are fixed for its life: their size is checked
+				// once (reading it crosses into the browser every call).
+				if ( count * 160 > instances.size || count * 64 > bones.size ) {
+					throw Error( "Particle presentation outside its draw" );
+				}
 				stream = createStream( particles, instances, bones );
 				streams.set( draw, stream );
 				start = 0;
