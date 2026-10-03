@@ -249,7 +249,7 @@ export function createRenderer(
 		characterActors: characters.currentActors,
 		cancelWorldUpdate: () => world.cancelPending(),
 		setWorld: scene => world.scene( scene ),
-		adoptWorld: ( lease, detail ) => world.adopt( lease, detail ),
+		adoptWorld: ( lease, detail, terrain ) => world.adopt( lease, detail, terrain ),
 		setWorldCamera: camera => world.camera( camera ),
 		setWorldTexture: ( path, image, alpha ) => world.texture( path, image, alpha ),
 		neededWorldTextures: () => world.neededTextures(),

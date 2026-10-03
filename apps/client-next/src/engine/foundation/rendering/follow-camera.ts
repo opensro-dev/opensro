@@ -8,7 +8,7 @@ tree), and resolves the follow camera segment against them.
 
 ===========================================================================
 */
-import type { WorldCamera, WorldScene } from "@/engine/contracts/scene";
+import type { WorldCamera, WorldGroup, WorldScene } from "@/engine/contracts/scene";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { characterRadius } from "@/engine/foundation/animation/character-bounds";
 import { geometryPickBlocks, geometryVertex, pickGeometry, pickGeometryBlocks, type PickRay } from "./picking";
@@ -33,12 +33,17 @@ export type CameraCollisionPart = {
 	boundsDirty?: boolean;
 	blocks?: Float64Array;
 };
+// base: this subtree indexes a region's own parts; add base for the scene's.
 type CollisionNode = {
 	min: number[];
 	max: number[];
 	children?: readonly CollisionNode[];
 	indices?: readonly number[];
+	base?: number;
 };
+// One resident region terrain group's collision: its parts and a tree over
+// them, kept while the group stays resident (renderer/world/world.ts).
+export type RegionCollision = { readonly parts: CameraCollisionPart[]; readonly tree: CollisionNode | null; };
 type CollisionProduct = CameraCollisionPart[] & {
 	readonly acceleration: {
 		readonly root: CollisionNode | null;
@@ -46,6 +51,11 @@ type CollisionProduct = CameraCollisionPart[] & {
 		readonly animated: readonly number[];
 	};
 };
+/*
+================
+collisionTree
+================
+*/
 function* collisionTree(
 	parts: readonly CameraCollisionPart[],
 	indices: number[],
@@ -79,9 +89,15 @@ function* collisionTree(
 		]
 	};
 }
-// Nonnegative skin weights form a scaled convex combination. Retain bounds of
-// each joint's contributing vertices once; pose changes transform these boxes,
-// not every triangle vertex in every placement. Exact triangle tests still own hits.
+/*
+================
+skinEnvelope
+
+Nonnegative skin weights form a scaled convex combination. Retain bounds of
+each joint's contributing vertices once; pose changes transform these boxes,
+not every triangle vertex in every placement. Exact triangle tests still own hits.
+================
+*/
 function* skinEnvelope( geometry: Geometry ): Generator<void, SkinEnvelope | undefined> {
 	if ( !geometry.bones || !geometry.weights || !geometry.joints ) return undefined;
 	const joints = new Map<number, { index: number; min: number[]; max: number[]; }>();
@@ -115,6 +131,11 @@ function* skinEnvelope( geometry: Geometry ): Generator<void, SkinEnvelope | und
 	}
 	return joints.size ? { joints: [ ...joints.values() ], weightMin, weightMax } : undefined;
 }
+/*
+================
+refitAnimatedCameraParts
+================
+*/
 export function refitAnimatedCameraParts(
 	parts: readonly CameraCollisionPart[],
 	changed?: ReadonlySet<Float32Array>,
@@ -192,17 +213,35 @@ export function refitAnimatedCameraParts(
 	}
 }
 
-// Immutable collision projection of admitted geometry, independent of draw LOD,
-// frustum selection and opacity. Bounds are prepared once, not on each ray.
-export function* prepareCameraCollisionParts( scene: WorldScene ): Generator<void, CameraCollisionPart[]> {
+/*
+================
+prepareCameraCollisionParts
+
+Immutable collision projection of admitted geometry, independent of draw LOD,
+frustum selection and opacity. Bounds are prepared once, not on each ray.
+================
+*/
+export function* prepareCameraCollisionParts(
+	scene: WorldScene,
+	terrain: WeakMap<WorldGroup, RegionCollision> = new WeakMap()
+): Generator<void, CameraCollisionPart[]> {
 	const identity = new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
-	const parts: CameraCollisionPart[] = [];
+	const parts: CameraCollisionPart[] = [], regions: RegionCollision[] = [];
 	const sweepRadius = new Map<Geometry, number>();
 	for ( const group of scene.groups ) {
 		if ( group.material.sky || group.material.water || group.material.lightmap ) continue;
 		// An explicit empty projection means every authored part failed the native
 		// eligibility gate. Avoid building bounds or skin envelopes for decoration.
 		if ( group.collision?.length === 0 ) continue;
+		// A region's terrain is immutable while resident: reuse the parts and tree
+		// it had in the scene before this crossing instead of projecting it again.
+		const regional = group.terrainSector !== undefined;
+		const reused = regional ? terrain.get( group ) : undefined;
+		if ( reused ) {
+			regions.push( reused );
+			continue;
+		}
+		const groupStart = parts.length;
 		const source = group.geometry;
 		const ranges = group.ranges?.filter( r => r.lod === 0 );
 		for ( const range of ranges ?? [ null ] ) {
@@ -289,6 +328,18 @@ export function* prepareCameraCollisionParts( scene: WorldScene ): Generator<voi
 				if ( (i / 16 & 31) === 31 ) yield;
 			}
 		}
+		if ( regional ) {
+			const own = parts.splice( groupStart );
+			const entry = {
+				parts: own,
+				tree: yield* collisionTree(
+					own,
+					own.flatMap( ( part, i ) => part.geometry.indices.length ? [ i ] : [] )
+				)
+			};
+			terrain.set( group, entry );
+			regions.push( entry );
+		}
 	}
 	// Native first-part precedence must survive draw/material batching. Unknown
 	// synthetic groups remain independent colliders; terrain remains nearest-hit.
@@ -328,20 +379,56 @@ export function* prepareCameraCollisionParts( scene: WorldScene ): Generator<voi
 				fixed).push( i );
 		}
 	}
-	return Object.assign( parts, {
-		acceleration: {
-			root: yield* collisionTree( parts, fixed ),
-			animatedRoot: yield* collisionTree( parts, bounded, true ),
-			animated
+	const objectRoot = yield* collisionTree( parts, fixed ),
+		animatedRoot = yield* collisionTree( parts, bounded, true );
+	// Terrain is nearest-hit and has no part precedence: each region joins after
+	// the object parts with its own retained tree, mounted at its offset.
+	const roots = objectRoot ? [ objectRoot ] : [];
+	for ( const region of regions ) {
+		if ( region.tree ) {
+			roots.push( { min: region.tree.min, max: region.tree.max, children: [ region.tree ], base: parts.length } );
 		}
-	} );
+		for ( const part of region.parts ) parts.push( part );
+	}
+	return Object.assign( parts, { acceleration: { root: joinTrees( roots ), animatedRoot, animated } } );
 }
-export function cameraCollisionParts( scene: WorldScene ): CameraCollisionPart[] {
-	const preparation = prepareCameraCollisionParts( scene );
+/*
+================
+joinTrees
+
+One node over several subtrees, or the only subtree, or none.
+================
+*/
+function joinTrees( roots: readonly CollisionNode[] ): CollisionNode | null {
+	if ( roots.length <= 1 ) return roots[0] ?? null;
+	const min = [ Infinity, Infinity, Infinity ], max = [ -Infinity, -Infinity, -Infinity ];
+	for ( const root of roots ) {
+		for ( let axis = 0; axis < 3; axis++ ) {
+			min[axis] = Math.min( min[axis]!, root.min[axis]! );
+			max[axis] = Math.max( max[axis]!, root.max[axis]! );
+		}
+	}
+	return { min, max, children: roots };
+}
+/*
+================
+cameraCollisionParts
+================
+*/
+export function cameraCollisionParts(
+	scene: WorldScene,
+	terrain?: WeakMap<WorldGroup, RegionCollision>
+): CameraCollisionPart[] {
+	const preparation = prepareCameraCollisionParts( scene, terrain );
 	let result = preparation.next();
 	while ( !result.done ) result = preparation.next();
 	return result.value;
 }
+/*
+================
+intersects
+================
+*/
 function intersects(
 	ray: PickRay,
 	part: { readonly min: readonly number[]; readonly max: readonly number[]; },
@@ -361,11 +448,22 @@ function intersects(
 	}
 	return true;
 }
-function queryTree( node: CollisionNode | null, ray: PickRay, indices: number[] ): void {
+/*
+================
+queryTree
+================
+*/
+function queryTree( node: CollisionNode | null, ray: PickRay, indices: number[], base = 0 ): void {
 	if ( !node || !intersects( ray, node, 1 ) ) return;
-	if ( node.indices ) indices.push( ...node.indices );
-	else for ( const child of node.children! ) queryTree( child, ray, indices );
+	const offset = base + (node.base ?? 0);
+	if ( node.indices ) { for ( const index of node.indices ) indices.push( index + offset ); }
+	else for ( const child of node.children! ) queryTree( child, ray, indices, offset );
 }
+/*
+================
+animatedCameraCandidates
+================
+*/
 export function animatedCameraCandidates(
 	parts: readonly CameraCollisionPart[],
 	ray: PickRay
@@ -378,6 +476,11 @@ export function animatedCameraCandidates(
 	queryTree( acceleration.animatedRoot, ray, indices );
 	return indices.map( index => parts[index]! ).filter( part => !part.sweep || intersects( ray, part.sweep, 1 ) );
 }
+/*
+================
+cameraSegmentHit
+================
+*/
 export function cameraSegmentHit( parts: readonly CameraCollisionPart[], ray: PickRay ): number | null {
 	let nearest = 1, hit = false;
 	const resolved = new Set<string>();
@@ -410,6 +513,11 @@ export function cameraSegmentHit( parts: readonly CameraCollisionPart[], ray: Pi
 	}
 	return hit ? nearest : null;
 }
+/*
+================
+cameraCollisionPalettes
+================
+*/
 export function cameraCollisionPalettes(
 	parts: readonly CameraCollisionPart[],
 	ray: PickRay
@@ -418,13 +526,24 @@ export function cameraCollisionPalettes(
 	for ( const part of animatedCameraCandidates( parts, ray ) ) palettes.add( part.geometry.bones! );
 	return palettes;
 }
+/*
+================
+followDistance
+================
+*/
 export function followDistance( pitch: number, requested: number ): number {
 	if ( pitch >= 0 ) return requested;
 	const f = Math.fround, n = f( -pitch / 0.8999999761581421 );
 	return Math.min( requested, f( (1 - f( Math.sin( f( 1.5707963705062866 * n ) ) )) * 110 + 40 ) );
 }
-// Native 0x68f830 target-height feedback and 0x68fad0 segment/margin.
-// Height is supplied by the character presentation metadata owner.
+/*
+================
+followCameraQuery
+
+Native 0x68f830 target-height feedback and 0x68fad0 segment/margin.
+Height is supplied by the character presentation metadata owner.
+================
+*/
 export function followCameraQuery( camera: WorldCamera, previous: number | null ) {
 	const follow = camera.follow!;
 	const distance = followDistance( follow.pitch, follow.distance );
@@ -453,6 +572,11 @@ export function followCameraQuery( camera: WorldCamera, previous: number | null 
 	};
 	return { ray, target, direction, distance };
 }
+/*
+================
+resolveFollowCamera
+================
+*/
 export function resolveFollowCamera(
 	camera: WorldCamera,
 	parts: readonly CameraCollisionPart[],

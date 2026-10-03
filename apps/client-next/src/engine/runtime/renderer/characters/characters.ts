@@ -1791,12 +1791,15 @@ export function createCharacters(
 					if ( primitive.emission && emitted ) {
 						let count = 0;
 						for ( let i = 0; i < rows.length; i++ ) {
+							// One lookup per actor; the slot loop below runs per particle.
 							const actor = rows[i]!,
 								state = poses.get( actor.gid )!,
-								birthMatrices = particleBirths.get( actor.gid )!.matrices[p]!;
+								history = particleBirths.get( actor.gid )!,
+								birthMatrices = history.matrices[p]!,
+								programs = history.programs[p]!;
 							const elements = primitive.particleEmitter === undefined ?
 								undefined :
-								particleBirths.get( actor.gid )!.graph?.elements[primitive.particleEmitter];
+								history.graph?.elements[primitive.particleEmitter];
 							for ( let b = 0; b < (elements?.length ?? primitive.emission.births.length); b++ ) {
 								const element = elements?.[b];
 								if ( elements && !element?.alive ) continue;
@@ -1815,13 +1818,13 @@ export function createCharacters(
 								const offset = count * primitive.joints.length * 16;
 								if ( graphPalette ) batch.palettes[p]!.set( graphPalette, offset );
 								else state.pose.palette( primitive, batch.palettes[p]!, offset );
-								const particle = particleBirths.get( actor.gid )!.programs[p]![b];
+								const particle = programs[b];
 								// Ticks stay native (20 Hz); the drawn particle carries the
 								// fraction of the next tick (particle-presentation.ts).
 								let drawn = particle;
 								if ( particle ) {
 									if ( model.particleGraph ) {
-										const graph = particleBirths.get( actor.gid )!.graph!;
+										const graph = history.graph!;
 										drawn = presentParticle(
 											particle,
 											actor.time * PARTICLE_TICKS_PER_SECOND - graph.frame,

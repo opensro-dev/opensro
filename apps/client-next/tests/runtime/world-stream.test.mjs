@@ -15,6 +15,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( path.join( root, file ) ).href );
 }
@@ -23,6 +28,24 @@ const { prepareWorldScene, worldSceneTransfers } = await load( "src/engine/found
 const { createWorldLease } = await load( "src/engine/runtime/assets/world-lease.ts" );
 const { createWorldRenderer } = await load( "src/engine/runtime/renderer/world/world.ts" );
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
+/*
+================
+scene
+
+True when request r asks for the scene of bundle (its objects; the
+terrain of each region is a separate part request).
+================
+*/
+function scene( r, bundle ) {
+	const url = new URL( r.url );
+	return url.pathname === "/assets/" + bundle &&
+		new URLSearchParams( url.hash.slice( 1 ) ).get( "part" ) === "objects";
+}
+/*
+================
+fixture
+================
+*/
 function fixture() {
 	let id = 0;
 	const ready = new Map(), requests = [], cancelled = [];
@@ -30,20 +53,32 @@ function fixture() {
 	let camera;
 	const assets = {
 		available: () => 4 - ready.size,
+		/*
+		================
+		request
+		================
+		*/
 		request( url, limit, decode ) {
 			const key = ++id;
 			requests.push( { key, url, decode } );
 			if ( decode === "world" ) {
-				const region = url.includes( "/a.json" ) ? 1 : 2;
+				// The stream asks for an outdoor scene as its objects plus one terrain
+				// part per region, all in the anchor region's coordinates.
+				const region = url.includes( "/a.json" ) ? 1 : url.includes( "/c.json" ) ? 3 : 2,
+					hash = new URLSearchParams( new URL( url ).hash.slice( 1 ) ),
+					part = hash.get( "part" ) ?? "all",
+					anchor = hash.get( "anchor" ),
+					origin = anchor === null ? region : Number.parseInt( anchor, 16 );
 				ready.set( key, {
 					kind: "world",
 					id: key,
 					scene: {
-						id: String( region ),
-						originRegion: region,
+						id: `${region}:${part}`,
+						originRegion: origin,
 						warnings: [],
 						groups: [ {
-							id: String( region ),
+							id: `${part}:${region}`,
+							...(part === "terrain" ? { terrainSector: region } : {}),
 							center: [ 0, 0, 0 ],
 							radius: 10000,
 							material: {
@@ -84,6 +119,11 @@ function fixture() {
 				} );}
 			return key;
 		},
+		/*
+		================
+		take
+		================
+		*/
 		take( key ) {
 			const value = ready.get( key );
 			ready.delete( key );
@@ -99,6 +139,11 @@ function fixture() {
 			}
 			return value ?? null;
 		},
+		/*
+		================
+		cancel
+		================
+		*/
 		cancel( key ) {
 			cancelled.push( key );
 			ready.delete( key );
@@ -111,12 +156,22 @@ function fixture() {
 		setWorldTexture: ( path, image ) => world.texture( path, image ),
 		neededWorldTextures: () => world.neededTextures(),
 		worldStats: () => world.stats(),
+		/*
+		================
+		setWorldCamera
+		================
+		*/
 		setWorldCamera( value ) {
 			camera = value;
 			world.camera( value );
 		}
 	};
 	const stream = createWorldStream( assets, renderer, "https://assets.test" );
+	/*
+	================
+	step
+	================
+	*/
 	function step( region, controls ) {
 		stream.step( { regionId: region, x: 0, y: 0, z: 0, angle: 0 }, controls );
 		world.prepare( { upload: data => ({ data }), release() {} }, { upload: () => ({}), release() {} }, 1 );
@@ -152,14 +207,14 @@ test("returning from a failed neighbor reuses the still-displayed region", () =>
 	const f = fixture();
 	for ( let i = 0; i < 5; i++ ) f.step( 1 );
 	f.step( 2 );
-	const job = f.requests.at( -1 );
+	const job = f.requests.slice().reverse().find( r => scene( r, "b.json" ) );
 	f.ready.set( job.key, { kind: "error", id: job.key, error: "neighbor unavailable" } );
 	f.stream.step( { regionId: 2, x: 0, y: 0, z: 0, angle: 0 } );
 	assert.match( f.stream.error(), /neighbor unavailable/ );
 	const count = f.requests.length;
 	for ( let i = 0; i < 8; i++ ) f.step( 1 );
 	assert.equal( f.requests.length, count );
-	assert.equal( f.world.stats().sceneId, "1" );
+	assert.equal( f.world.stats().sceneId, "1:objects" );
 	assert.equal( f.world.stats().pendingGroups, 0 );
 	f.stream.reset();
 	for ( let i = 0; i < 5; i++ ) f.step( 1 );
@@ -169,7 +224,8 @@ test("failed scene transaction preserves current scene and camera, then retries 
 	const f = fixture();
 	for ( let i = 0; i < 5; i++ ) f.step( 1 );
 	f.step( 2 );
-	const worldJob = f.requests.at( -1 ), replacement = f.ready.get( worldJob.key ).scene;
+	const worldJob = f.requests.slice().reverse().find( r => scene( r, "b.json" ) ),
+		replacement = f.ready.get( worldJob.key ).scene;
 	replacement.groups.push( {
 		...replacement.groups[0],
 		id: "extra",
@@ -184,7 +240,7 @@ test("failed scene transaction preserves current scene and camera, then retries 
 	assert.match( f.stream.error(), /503/ );
 	assert.ok( f.cancelled.includes( textures[1].key ) );
 	assert.equal( f.ready.size, 0 );
-	assert.equal( f.world.stats().sceneId, "1" );
+	assert.equal( f.world.stats().sceneId, "1:objects" );
 	assert.equal( f.world.stats().pendingGroups, 0 );
 	const requests = f.requests.length;
 	f.stream.step( { ...pose, x: 200 } );
@@ -192,12 +248,14 @@ test("failed scene transaction preserves current scene and camera, then retries 
 	assert.equal( f.requests.length, requests );
 	f.stream.retry();
 	for ( let i = 0; i < 5; i++ ) f.step( 2 );
-	assert.equal( f.world.stats().sceneId, "2" );
+	assert.equal( f.world.stats().sceneId, "2:objects" );
 	assert.equal( f.stream.error(), null );
+	assert.ok( f.requests.slice( requests ).some( r => scene( r, "b.json" ) ), "the retry requests fresh handles" );
+	const retried = f.requests.length;
 	f.stream.dispose();
 	f.stream.retry();
 	f.stream.step( pose );
-	assert.equal( f.requests.length, requests + 2 );
+	assert.equal( f.requests.length, retried, "a disposed stream requests nothing" );
 });
 
 test("one neighbouring preload transfers across the boundary and reversal cancels it", () => {
@@ -208,12 +266,12 @@ test("one neighbouring preload transfers across the boundary and reversal cancel
 		f.stream.step( pose( 1000 ) );
 		f.stream.step( pose( 1600 ) );
 		const request = f.requests.at( -1 );
-		assert.ok( request.url.endsWith( "/b.json" ) );
+		assert.ok( scene( request, "b.json" ) );
 		if ( completed ) f.stream.step( pose( 1700 ) );
 		f.step( 2 );
 		for ( let i = 0; i < 5; i++ ) f.step( 2 );
-		assert.equal( f.requests.filter( r => r.url.endsWith( "/b.json" ) ).length, 1 );
-		assert.equal( f.world.stats().sceneId, "2" );
+		assert.equal( f.requests.filter( r => scene( r, "b.json" ) ).length, 1 );
+		assert.equal( f.world.stats().sceneId, "2:objects" );
 		f.stream.dispose();
 	}
 	const f = fixture();
@@ -272,10 +330,10 @@ test("failed speculation waits for a new intent; actual crossing can retry once 
 	const request = f.requests.at( -1 );
 	f.ready.set( request.key, { kind: "error", id: request.key, error: "503" } );
 	for ( let x = 1550; x < 1800; x += 50 ) f.stream.step( pose( x ) );
-	assert.equal( f.requests.filter( r => r.url.endsWith( "/b.json" ) ).length, 1 );
+	assert.equal( f.requests.filter( r => scene( r, "b.json" ) ).length, 1 );
 	assert.equal( f.stream.error(), null );
 	for ( let i = 0; i < 5; i++ ) f.step( 2 );
-	assert.equal( f.requests.filter( r => r.url.endsWith( "/b.json" ) ).length, 2 );
+	assert.equal( f.requests.filter( r => scene( r, "b.json" ) ).length, 2 );
 	assert.equal( f.stream.ready(), true );
 	f.stream.dispose();
 });
@@ -303,9 +361,35 @@ test("mission selection ignores frontend catalog order on entry and edge prefetc
 	} );
 	for ( let i = 0; i < 5; i++ ) f.step( 1 );
 	f.stream.step( { regionId: 1, x: 1500, y: 0, z: 960, angle: 0 } );
-	assert.ok( f.requests.some( r => r.url.endsWith( "/a.json" ) ) );
-	assert.ok( f.requests.some( r => r.url.endsWith( "/b.json" ) ) );
+	assert.ok( f.requests.some( r => scene( r, "a.json" ) ) );
+	assert.ok( f.requests.some( r => scene( r, "b.json" ) ) );
 	assert.ok( f.requests.every( r => !r.url.includes( "wrong-" ) ) );
+	f.stream.dispose();
+	f.world.dispose();
+});
+
+test("a crossing requests terrain only for the regions it adds, in one anchor", () => {
+	const f = fixture();
+	f.step( 1 );
+	const catalog = f.requests.at( -1 ), row = name => [ { area: "outdoor", bundlePublicPath: "/assets/" + name } ];
+	f.ready.set( catalog.key, {
+		kind: "bytes",
+		buffer: new TextEncoder().encode( JSON.stringify( {
+			regionsById: { "0x0001": row( "a.json" ), "0x0002": row( "b.json" ), "0x0003": row( "c.json" ) }
+		} ) ).buffer
+	} );
+	for ( const region of [ 1, 2, 3 ] ) for ( let i = 0; i < 6; i++ ) f.step( region );
+	const terrain = f.requests.filter( r => new URL( r.url ).hash.includes( "part=terrain" ) ).map( r =>
+		new URL( r.url ).pathname
+	);
+	// 0x0001 covers a and b; 0x0002 adds c; 0x0003 adds nothing new.
+	assert.deepEqual( terrain, [ "/assets/a.json", "/assets/b.json", "/assets/c.json" ] );
+	const anchors = f.requests.filter( r => new URL( r.url ).hash.includes( "part=" ) ).map( r =>
+		new URLSearchParams( new URL( r.url ).hash.slice( 1 ) ).get( "anchor" )
+	);
+	assert.ok( anchors.every( anchor => anchor === "0001" ), "every part shares the first scene's anchor" );
+	assert.equal( f.world.stats().sceneId, "3:objects" );
+	assert.equal( f.world.stats().pendingGroups, 0 );
 	f.stream.dispose();
 	f.world.dispose();
 });

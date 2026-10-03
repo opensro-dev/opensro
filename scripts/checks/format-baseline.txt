@@ -17,7 +17,6 @@ apps/client-next/src/engine/contracts/orb.ts
 apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/contracts/scenery.ts
 apps/client-next/src/engine/contracts/simulation.ts
-apps/client-next/src/engine/contracts/world-admission.ts
 apps/client-next/src/engine/foundation/animation/action-refresh.ts
 apps/client-next/src/engine/foundation/animation/action-schedule.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
@@ -480,7 +479,6 @@ apps/client-next/tests/runtime/snapshot-age.test.mjs
 apps/client-next/tests/runtime/ui-cleanup.test.mjs
 apps/client-next/tests/runtime/ui-product-probe.test.mjs
 apps/client-next/tests/runtime/weather-publication.test.mjs
-apps/client-next/tests/runtime/world-admission.test.mjs
 apps/client-next/tests/runtime/world-replay.test.mjs
 apps/client-next/tools/audit-bsr-parity.mjs
 apps/client-next/tools/audit-effect-coverage.mjs

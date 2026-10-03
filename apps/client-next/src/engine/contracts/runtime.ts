@@ -230,9 +230,11 @@ export interface Renderer extends Disposable {
 	characterActors(): readonly import("./character").CharacterActor[];
 
 	setWorld( scene: import("./scene").WorldScene | null ): void;
+	/** terrain: the outdoor region parts this scene composes with (world-admission.ts). */
 	adoptWorld(
 		world: import("./world-admission").WorldSceneLease,
-		detail?: import("./scene").WorldScene["terrainDetail"]
+		detail?: import("./scene").WorldScene["terrainDetail"],
+		terrain?: readonly import("./world-admission").WorldTerrainPart[]
 	): void;
 	cancelWorldUpdate(): void;
 	setWorldCamera( camera: import("./scene").WorldCamera ): void;

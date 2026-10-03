@@ -14,6 +14,7 @@ import { footprintGeometry, footprintTextures } from "@/engine/foundation/render
 import { createMaterialTimeline } from "@/engine/foundation/rendering/material-timeline";
 import { createTextureAtlas } from "@/engine/foundation/rendering/texture-atlas";
 import { createTerrainVisibility } from "@/engine/foundation/rendering/terrain-visibility";
+import { createWorldResidency } from "./residency";
 import {
 	terrainInteractionCells,
 	pickTerrainCells,
@@ -41,7 +42,8 @@ import {
 	refitAnimatedCameraParts,
 	resolveFollowCamera,
 	followCameraQuery,
-	animatedCameraCandidates
+	animatedCameraCandidates,
+	type RegionCollision
 } from "@/engine/foundation/rendering/follow-camera";
 import { initialStarFlicker } from "@/engine/foundation/rendering/star-flicker";
 import { advanceObjectFade } from "@/engine/foundation/rendering/object-visibility";
@@ -97,6 +99,11 @@ function drawPhase( { material }: WorldGroup ): number {
 // followInput's slots: target xyz, yaw, pitch, distance, height, mounted,
 // offset xy, collision distance.
 const FOLLOW_INPUT_LENGTH = 11;
+// GPU geometry bytes admitted per frame while a scene loads. A region's
+// terrain arrives as a few megabytes; spreading it keeps crossings smooth.
+// At least one group is admitted each frame, whatever its size.
+const UPLOAD_BYTES_PER_FRAME = 4 << 20;
+type TerrainVisibility = ReturnType<typeof createTerrainVisibility>;
 
 /*
 ================
@@ -324,7 +331,48 @@ export function createWorldRenderer(
 	// Immutable admitted positions own these bounds; replacement storage invalidates them.
 	const pickBounds = new WeakMap<Float32Array, PickBounds>();
 	const pickBlocks = new WeakMap<WorldGroup, Float64Array>();
-	const terrainVisibility = new WeakMap<WorldScene, ReturnType<typeof createTerrainVisibility>>();
+	// Terrain volume slots. A region's terrain groups share one visibility per
+	// (anchor, region), kept while the region stays resident across scenes; a
+	// scene without regions owns one for all its terrain. Groups keep theirs.
+	const regionVisibility = new Map<string, TerrainVisibility>(),
+		sceneVisibility = new WeakMap<WorldScene, TerrainVisibility>(),
+		groupVisibility = new WeakMap<WorldGroup, TerrainVisibility>(),
+		terrainMasks = new Map<TerrainVisibility, Uint8Array>();
+	let currentVisibility: TerrainVisibility[] = [];
+	// Camera collision parts of a region's terrain survive crossings with it.
+	const terrainCollision = new WeakMap<WorldGroup, RegionCollision>();
+	/*
+	================
+	visibilityFor
+	================
+	*/
+	function visibilityFor( scene: WorldScene, group: WorldGroup ): TerrainVisibility {
+		let visibility = group.terrainSector === undefined ?
+			sceneVisibility.get( scene ) :
+			regionVisibility.get( scene.originRegion + ":" + group.terrainSector );
+		if ( !visibility ) {
+			visibility = createTerrainVisibility();
+			if ( group.terrainSector === undefined ) sceneVisibility.set( scene, visibility );
+			else regionVisibility.set( scene.originRegion + ":" + group.terrainSector, visibility );
+		}
+		return visibility;
+	}
+	/*
+	================
+	pruneVisibility
+
+	Forgets region visibilities no held scene uses.
+	================
+	*/
+	function pruneVisibility() {
+		const used = new Set<string>();
+		for ( const scene of [ current, pending, ...retired ] ) {
+			for ( const group of scene?.groups ?? [] ) {
+				if ( group.terrainSector !== undefined ) used.add( scene!.originRegion + ":" + group.terrainSector );
+			}
+		}
+		for ( const key of regionVisibility.keys() ) if ( !used.has( key ) ) regionVisibility.delete( key );
+	}
 	let collisionScene: WorldScene | null = null,
 		collisionParts: ReturnType<typeof cameraCollisionParts> = [],
 		collisionDistance: number | null = null;
@@ -430,6 +478,50 @@ export function createWorldRenderer(
 			cellZ?: number;
 		}
 	>();
+	/*
+	================
+	instanceSelection
+
+	The selection cache of an instanced group, with its association
+	membership for the target cell. Native membership depends on the target
+	cell, not on each sub-cell camera sample or animation clock, so it is
+	recomputed only when that cell changes. Admission builds it for every new
+	group, a few per frame, so the first frame of a new scene does not.
+	================
+	*/
+	function instanceSelection( group: WorldGroup, targetCellX: number, targetCellZ: number ) {
+		const source = group.geometry.instances!;
+		let cache = selections.get( group );
+		if ( !cache ) {
+			cache = {
+				indices: new Uint32Array(),
+				instances: new Float32Array( source.length ),
+				sourceInstances: new Int32Array( source.length / 16 ).fill( -1 ),
+				alphas: new Uint8Array( source.length / 16 )
+			};
+			selections.set( group, cache );
+		}
+		if (
+			group.visibility &&
+			(!cache.resident || cache.targetCellX !== targetCellX || cache.targetCellZ !== targetCellZ)
+		) {
+			cache.resident ??= new Uint8Array( source.length / 16 );
+			for ( let slot = 0; slot < cache.resident.length; slot++ ) {
+				const descriptor = group.visibility[slot];
+				cache.resident[slot] = Number(
+					!descriptor ||
+						descriptor.cells.some( cell =>
+							Math.abs( cell[0] - targetCellX ) <= descriptor.cellRadius &&
+							Math.abs( cell[1] - targetCellZ ) <= descriptor.cellRadius
+						)
+				);
+			}
+			cache.targetCellX = targetCellX;
+			cache.targetCellZ = targetCellZ;
+		}
+		if ( group.visibility && !cache.opacity ) cache.opacity = new Float32Array( source.length / 16 );
+		return cache;
+	}
 	// These are derived from owned scene metadata. Only blended depth order is
 	// camera-dependent; native material-set order remains fixed until replacement.
 	let orderedGroups: WorldGroup[] = [], objectOrder = new Map<string, number>();
@@ -624,7 +716,7 @@ export function createWorldRenderer(
 	}
 	const retired: WorldScene[] = [];
 	let lastView: Float32Array | null = null, lastEye: WorldCamera["eye"] | null = null;
-	const sizes = new Map<WorldScene, number>();
+	const residency = createWorldResidency();
 	let imageBytes = 0, disposed = false;
 	/*
 	================
@@ -643,9 +735,7 @@ export function createWorldRenderer(
 	================
 	*/
 	function retainedBytes() {
-		let bytes = imageBytes;
-		for ( const size of sizes.values() ) bytes += size;
-		return bytes;
+		return imageBytes + residency.retained();
 	}
 	let terrainEnd = 0, transparentStart = 0;
 	let selected: GeometryDraw[] = [], rebuilds = 0, triangles = 0;
@@ -689,13 +779,14 @@ export function createWorldRenderer(
 	================
 	*/
 	function release( scene: WorldScene | null, geometry: GeometryCommands ) {
-		for ( const group of scene?.groups ?? [] ) {
+		if ( !scene ) return;
+		// Groups another held scene still uses (a retained region) keep their draws.
+		for ( const group of residency.release( scene, [ current, pending, ...retired ] ) ) {
 			const draw = draws.get( group );
 			if ( draw ) geometry.release( draw );
 			draws.delete( group );
 			selections.delete( group );
 		}
-		if ( scene ) sizes.delete( scene );
 	}
 	/*
 	================
@@ -961,12 +1052,11 @@ export function createWorldRenderer(
 			indexPending();
 			prune = true;
 		},
-		/*
-		================
-		adopt
-		================
-		*/
-		adopt( lease: WorldSceneLease, detail?: WorldScene["terrainDetail"] ) {
+		adopt(
+			lease: WorldSceneLease,
+			detail?: WorldScene["terrainDetail"],
+			terrain: readonly import("@/engine/contracts/world-admission").WorldTerrainPart[] = []
+		) {
 			if ( disposed ) throw new Error( "World renderer disposed" );
 			if ( detail !== undefined && detail !== "full" && detail !== "distance" ) {
 				throw new Error( "Invalid terrain detail policy" );
@@ -994,9 +1084,26 @@ export function createWorldRenderer(
 				};
 			}
 			if ( detail !== undefined ) replacement = { ...replacement, terrainDetail: detail };
+			// Terrain parts join in the scene's own coordinates, each region once.
+			const regions = new Set<number>();
+			let whole = size;
+			for ( const part of terrain ) {
+				if (
+					part.origin !== replacement.originRegion || regions.has( part.region ) ||
+					!Number.isSafeInteger( part.bytes ) || part.bytes < 0 || replacement.residency === "frontend"
+				) throw new Error( "Invalid world terrain part" );
+				regions.add( part.region );
+				whole += part.bytes;
+			}
+			if ( terrain.length ) {
+				replacement = {
+					...replacement,
+					groups: [ ...replacement.groups, ...terrain.flatMap( part => part.groups ) ]
+				};
+			}
 			if (
-				size > (replacement.residency === "frontend" ? FRONTEND_SCENE_BYTES : WORLD_SCENE_BYTES) ||
-				retainedBytes() + size > capacity( replacement )
+				whole > (replacement.residency === "frontend" ? FRONTEND_SCENE_BYTES : WORLD_SCENE_BYTES) ||
+				retainedBytes() + residency.incoming( size, terrain ) > capacity( replacement )
 			) {
 				throw new Error(
 					`World CPU residency budget exceeded (incoming ${size}, retained ${retainedBytes()}, images ${imageBytes}, capacity ${
@@ -1005,7 +1112,7 @@ export function createWorldRenderer(
 				);
 			}
 			if ( pending ) retired.push( pending );
-			sizes.set( replacement, size );
+			residency.hold( replacement, size, terrain );
 			pending = replacement;
 			indexPending();
 		},
@@ -1042,7 +1149,7 @@ export function createWorldRenderer(
 				copyWorldScene( scene ) :
 				{ id: "empty", originRegion: 0, groups: [], warnings: [] };
 			if ( pending ) retired.push( pending );
-			sizes.set( replacement, size );
+			residency.hold( replacement, size );
 			pending = replacement;
 			indexPending();
 		},
@@ -1118,12 +1225,11 @@ export function createWorldRenderer(
 			backgroundDistance?: number
 		): PreparedWorld {
 			probe?.worldBegin?.();
-			for ( const scene of retired ) release( scene, geometry );
-			retired.length = 0;
-			let budget = 8;
+			while ( retired.length ) release( retired.pop()!, geometry );
+			let budget = 8, uploadBytes = UPLOAD_BYTES_PER_FRAME;
 			if ( pending ) {
 				if ( camera.follow && !preparedCollision ) {
-					collisionPreparation ??= prepareCameraCollisionParts( pending );
+					collisionPreparation ??= prepareCameraCollisionParts( pending, terrainCollision );
 					// Prepare the exact collision product alongside GPU admission. Keep the
 					// old scene until both are ready; never remove collision for a fast handoff.
 					for ( let work = 0; work < 40; work++ ) {
@@ -1136,14 +1242,12 @@ export function createWorldRenderer(
 					}
 				}
 				for ( const group of readyGroups ) {
-					if ( !budget-- ) break;
+					if ( !budget-- || uploadBytes <= 0 ) break;
+					uploadBytes -= group.geometry.positions.length / 3 * 56 + group.geometry.indices.byteLength;
 					const paths = texturePaths( group );
 					if ( group.ranges ) {
-						let visibility = terrainVisibility.get( pending );
-						if ( !visibility ) {
-							visibility = createTerrainVisibility();
-							terrainVisibility.set( pending, visibility );
-						}
+						const visibility = visibilityFor( pending, group );
+						groupVisibility.set( group, visibility );
 						for ( const range of group.ranges ) visibility.admit( range );
 					}
 					// Alpha readback belongs to bounded resource admission, not the first
@@ -1174,13 +1278,32 @@ export function createWorldRenderer(
 						pickBlocks.set( group, geometryPickBlocks( group.geometry ) );
 					}
 					draws.set( group, geometry.upload( group.geometry, imageDraw ) );
+					if ( group.instanceRadius !== undefined ) {
+						const shift = camera.originRegion ? camera.originRegion : pending.originRegion;
+						instanceSelection(
+							group,
+							Math.floor(
+								(camera.target[0] + ((shift & 255) - (pending.originRegion & 255)) * 1920) / 320
+							),
+							Math.floor(
+								(camera.target[2] + ((shift >>> 8) - (pending.originRegion >>> 8)) * 1920) / 320
+							)
+						);
+					}
 					readyGroups.delete( group );
 					pendingGroupCount--;
 				}
 				if ( pendingGroupCount === 0 && missingTextures.size === 0 && (!camera.follow || preparedCollision) ) {
+					const previous = current;
 					release( current, geometry );
 					current = pending;
 					pending = null;
+					pruneVisibility();
+					currentVisibility = [
+						...new Set(
+							current.groups.flatMap( group => group.ranges ? [ groupVisibility.get( group )! ] : [] )
+						)
+					];
 					if ( preparedCollision ) {
 						collisionScene = current;
 						collisionParts = preparedCollision;
@@ -1189,7 +1312,20 @@ export function createWorldRenderer(
 						if ( !current.groups.length ) collisionDistance = null;
 					}
 					indexPending();
-					if ( fadeScene !== current ) {
+					// Placements keep their fade identity across outdoor scenes: a crossing
+					// must not fade every retained building in again.
+					const sameWorld = !!previous && fadeScene === previous &&
+						previous.residency === current.residency &&
+						!((previous.originRegion | current.originRegion) & 0x8000);
+					if ( sameWorld ) {
+						const placed = new Set<string>();
+						for ( const group of current.groups ) {
+							for ( const descriptor of group.visibility ?? [] ) placed.add( descriptor.id );
+						}
+						for ( const id of fades.keys() ) if ( !placed.has( id ) ) fades.delete( id );
+						fadeScene = current;
+						fadesChanging = true;
+					} else if ( fadeScene !== current ) {
 						fades.clear();
 						activeFades.length = 0;
 						retainedFadeFrame = null;
@@ -1235,7 +1371,7 @@ export function createWorldRenderer(
 			if ( camera.follow && current ) {
 				if ( collisionScene !== current ) {
 					collisionScene = current;
-					collisionParts = cameraCollisionParts( current );
+					collisionParts = cameraCollisionParts( current, terrainCollision );
 					collisionInputValid = false;
 					collisionCamera = null;
 					if ( !current.groups.length ) collisionDistance = null;
@@ -1395,8 +1531,8 @@ export function createWorldRenderer(
 			const sampleDetails = probe?.sampleDetails?.() ?? false;
 			const frustum = prepareViewFrustum( matrix ), visible: WorldGroup[] = [];
 			triangles = 0;
-			const terrainVolumes = current ? terrainVisibility.get( current ) : undefined;
-			const terrainMask = terrainVolumes?.begin( frustum );
+			terrainMasks.clear();
+			for ( const visibility of currentVisibility ) terrainMasks.set( visibility, visibility.begin( frustum ) );
 			const eyeCellX = Math.floor( localCamera.eye[0] / 320 ), eyeCellZ = Math.floor( localCamera.eye[2] / 320 );
 			const selectTerrainLod = ( distanceSquared: number ) =>
 				current?.terrainDetail === "full" ? 0 : terrainLod( distanceSquared );
@@ -1420,6 +1556,8 @@ export function createWorldRenderer(
 				}
 				const trianglesBefore = triangles;
 				if ( group.ranges ) {
+					const terrainVolumes = groupVisibility.get( group )!,
+						terrainMask = terrainMasks.get( terrainVolumes )!;
 					let cache = selections.get( group );
 					if ( !cache ) {
 						cache = { indices: new Uint32Array( group.geometry.indices.length ), seams: new Map() };
@@ -1447,13 +1585,13 @@ export function createWorldRenderer(
 								const dx = range.cell[0] - eyeCellX, dz = range.cell[1] - eyeCellZ;
 								return range.lod === selectTerrainLod( dx * dx + dz * dz );
 							} );
-							cache.candidateVolumes = terrainVolumes!.indices( cache.candidates );
+							cache.candidateVolumes = terrainVolumes.indices( cache.candidates );
 						}
 					}
 					cache.cellX = eyeCellX;
 					cache.cellZ = eyeCellZ;
 					const chosen = cache.candidates.filter( ( range, i ) =>
-						terrainMask![cache.candidateVolumes![i]!] === 1
+						terrainMask[cache.candidateVolumes![i]!] === 1
 					);
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-candidates" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-indices" );
@@ -1552,40 +1690,11 @@ export function createWorldRenderer(
 				}
 				if ( group.instanceRadius !== undefined ) {
 					if ( sampleDetails ) probe?.detailBegin?.( "world-instance-setup" );
-					let cache = selections.get( group );
-					if ( !cache ) {
-						cache = {
-							indices: new Uint32Array(),
-							instances: new Float32Array( group.geometry.instances!.length ),
-							sourceInstances: new Int32Array( group.geometry.instances!.length / 16 ).fill( -1 ),
-							alphas: new Uint8Array( group.geometry.instances!.length / 16 )
-						};
-						selections.set( group, cache );
-					}
+					// Fade state still ticks below, whatever the membership.
+					const cache = instanceSelection( group, targetCellX, targetCellZ );
 					const source = group.geometry.instances!,
 						bounds = group.geometry.bones ? undefined : pickBounds.get( group.geometry.positions );
 					let count = 0, instancesDirty = false;
-					// Native association membership depends on the target cell, not on each
-					// sub-cell camera sample or animation clock. Fade state still ticks below.
-					if (
-						group.visibility &&
-						(!cache.resident || cache.targetCellX !== targetCellX || cache.targetCellZ !== targetCellZ)
-					) {
-						cache.resident ??= new Uint8Array( source.length / 16 );
-						for ( let slot = 0; slot < cache.resident.length; slot++ ) {
-							const descriptor = group.visibility[slot];
-							cache.resident[slot] = Number(
-								!descriptor ||
-									descriptor.cells.some( cell =>
-										Math.abs( cell[0] - targetCellX ) <= descriptor.cellRadius &&
-										Math.abs( cell[1] - targetCellZ ) <= descriptor.cellRadius
-									)
-							);
-						}
-						cache.targetCellX = targetCellX;
-						cache.targetCellZ = targetCellZ;
-					}
-					if ( group.visibility && !cache.opacity ) cache.opacity = new Float32Array( source.length / 16 );
 					// Resolve placement identity once for each admitted mesh. A building's
 					// material pieces share one fade owner; the render loop uses direct slots.
 					if ( group.visibility && !cache.fadeRows ) {
@@ -1795,9 +1904,7 @@ export function createWorldRenderer(
 			retired.length = 0;
 			imageDraws.clear();
 			pending = pending ?? current;
-			const size = pending ? sizes.get( pending ) ?? 0 : 0;
-			sizes.clear();
-			if ( pending ) sizes.set( pending, size );
+			residency.keepOnly( pending );
 			current = null;
 			selected = [];
 			lastView = null;
@@ -1850,18 +1957,16 @@ export function createWorldRenderer(
 			activeFades.length = 0;
 			fadeScene = null;
 			resetAnimations();
-			if ( geometry ) {
-				release( current, geometry );
-				release( pending, geometry );
-				for ( const scene of retired ) release( scene, geometry );
-				retired.length = 0;
-			}
+			if ( geometry ) { for ( const draw of draws.values() ) geometry.release( draw ); }
+			retired.length = 0;
 			if ( textures ) { for ( const draw of imageDraws.values() ) textures.release( draw ); }
 			imageDraws.clear();
 			for ( const image of images.values() ) if ( !("kind" in image.source) ) image.source.close();
 			images.clear();
 			imageBytes = 0;
-			sizes.clear();
+			residency.clear();
+			currentVisibility = [];
+			regionVisibility.clear();
 			retired.length = 0;
 			draws.clear();
 			selections.clear();

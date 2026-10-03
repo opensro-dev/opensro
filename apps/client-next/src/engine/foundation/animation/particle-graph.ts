@@ -449,7 +449,10 @@ export function advanceParticleGraph(
 	const target = Math.min( Math.floor( time * TICKS_PER_SECOND + 1e-6 ), tickHorizon( graph ) );
 	if ( target < history.frame || !Number.isSafeInteger( target ) ) throw Error( "Invalid particle graph time" );
 	const scratch = history.scratch, elements = history.elements;
-	for ( let n = 0; n < elements.length; n++ ) {
+	// Only a region crossing shifts the origin. Every other call walked every
+	// retained element slot to add zero: a skill trace showed it as the
+	// largest single cost of its effects (0.8 ms of every frame).
+	for ( let n = 0; (shiftX !== 0 || shiftZ !== 0) && n < elements.length; n++ ) {
 		const rows = elements[n]!;
 		for ( let b = 0; b < rows.length; b++ ) {
 			const e = rows[b];

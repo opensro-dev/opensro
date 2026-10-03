@@ -62,6 +62,8 @@
     "src/engine/runtime/assets/worker/world/world.ts": "src/engine/runtime/assets/worker/loader.ts",
     "src/engine/runtime/world/world.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/world/camera/camera.ts": "src/engine/runtime/world/world.ts",
+    "src/engine/runtime/world/terrain-parts.ts": "src/engine/runtime/world/world.ts",
+    "src/engine/runtime/renderer/world/residency.ts": "src/engine/runtime/renderer/world/world.ts",
     "src/engine/runtime/assets/worker/world/resources/resources.ts": "src/engine/runtime/assets/worker/world/world.ts",
     "src/engine/runtime/assets/worker/model/character/character.ts": "src/engine/runtime/assets/worker/model/model.ts",
     "src/engine/runtime/renderer/characters/characters.ts": "src/engine/runtime/renderer/renderer.ts",
