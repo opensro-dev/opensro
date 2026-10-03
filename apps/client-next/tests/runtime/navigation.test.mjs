@@ -261,6 +261,39 @@ test("movement predicts an admitted seam before receipt and reconciles to author
 	assert.equal( movement.state().pendingMoves, 0 );
 	movement.clear();
 });
+test("a receipt arriving between worker steps keeps the predicted walk's elapsed time", async () => {
+	const { createMovement } = await load( "runtime/simulation/worker/session/world/gameplay/movement/movement.ts" );
+	const movement = createMovement( () => {} ), p = product();
+	p.objects = [];
+	const from = { ...pose, x: 10, y: 0 }, to = { ...pose, x: 110, y: 0 };
+	movement.seed( from );
+	movement.navigation( 257, p );
+	movement.request( to, 0 );
+	// The worker steps every 16 ms; the production receipt lands 8 ms after a
+	// step. The server started its walk half a round trip after the click.
+	for ( let now = 0; now <= 352; now += 16 ) movement.step( now );
+	movement.receive(
+		new TextEncoder().encode( JSON.stringify( {
+			v: 1,
+			id: 1,
+			gid: 7,
+			accepted: true,
+			serverTimeMs: 175,
+			world: { spawn: to, moveSegment: { from, startedAtMs: 175, arrivesAtMs: 2175 } }
+		} ) ),
+		360,
+		7
+	);
+	for ( const now of [ 360, 368, 400 ] ) {
+		movement.step( now );
+		const expected = 10 + 50 * now / 1000;
+		assert.ok(
+			Math.abs( movement.state().pose.x - expected ) < 1e-6,
+			`receipt lost walking time at ${now}: ${movement.state().pose.x} vs ${expected}`
+		);
+	}
+	movement.clear();
+});
 test("prediction crosses admitted outdoor seams with destination heights and canonical coordinates", () => {
 	const nav = createNavigation(), p = product();
 	p.objects = [];

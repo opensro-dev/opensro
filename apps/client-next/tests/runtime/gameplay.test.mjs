@@ -983,12 +983,15 @@ test("predicted and acknowledged local motion follow resident navigation between
 	m.step( 400 );
 	assert.equal( m.state().pose.x, 80 );
 	assert.equal( m.state().pose.y, 30 );
+	// The receipt lands 100 ms after the last step: the walk keeps that time
+	// (x = 60 + 50 t) and its surface, then finishes at the server's pace.
 	m.receive( receipt( 1, { ...pose, x: 100 } ), 500 );
-	assert.equal( m.state().pose.x, 80 );
-	assert.equal( m.state().pose.y, 30, "confirmation keeps the current hill surface" );
+	assert.equal( m.state().pose.x, 85 );
+	assert.equal( m.state().pose.y, 25, "confirmation resolves the live hill surface" );
+	assert.equal( m.state().poseAtMs, 500 );
 	m.step( 750 );
-	assert.equal( m.state().pose.x, 90 );
-	assert.equal( m.state().pose.y, 20 );
+	assert.equal( m.state().pose.x, 95 );
+	assert.equal( m.state().pose.y, 15 );
 	m.step( 1500 );
 	assert.equal( m.state().pose.y, 10 );
 });
@@ -1452,6 +1455,52 @@ test("a ground click during the local cast walks once the cast releases", async 
 	game.dispose();
 });
 
+test("a ground click during a self skill waits for its action window, not the server count", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		fixture = JSON.parse(
+			fs.readFileSync(
+				path.resolve( root, "../server/internal/game/item/wire/testdata/skill_action_result_fixture.json" ),
+				"utf8"
+			)
+		),
+		local = { ...pose, gid: fixture.expect.casterGid, heading: 0, appearanceState: [ 1, 0, 0 ] },
+		none = { ID: 0, Level: 0 };
+	// 1000 ms cast + 1000 ms action, as Weak guard of ice authors it.
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		refSkillSnapshot: [ {
+			id: fixture.expect.skillId,
+			group: 1,
+			level: 1,
+			status: false,
+			effectRider: false,
+			ui: {
+				name: "SKILL_CH_COLD_GANGGI_A_01",
+				spCost: 0,
+				trainable: false,
+				targetRequired: false,
+				cooldownMs: 0,
+				actionMs: 2000,
+				masteries: [ none, none ],
+				prerequisites: [ none, none, none ]
+			}
+		} ]
+	} );
+	game.seed( local );
+	const row = fixture.scenarios[0];
+	game.receive( { opcode: row.opcode, payload: Buffer.from( row.payloadHex, "hex" ) }, 10 );
+	// A self skill queues no object command: B2CD reports none.
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 0 ) }, 10 );
+	// CanPerformLocomotion (877240): action state 2 stores the click.
+	assert.equal( game.command( { kind: "move", destination: { ...pose, x: 80 } }, 500, undefined, local ), null );
+	for ( let now = 550; now < 2000; now += 50 ) game.step( now, local );
+	assert.equal( sent.length, 0, "no walk while the action runs" );
+	for ( let now = 2000; now < 2200 && sent.length < 1; now += 50 ) game.step( now, local );
+	assert.equal( sent.length, 1, "the stored click walks when the action window ends" );
+	game.dispose();
+});
 test("a refused targeted command lets the held walk rejoin the server's without a jump", async () => {
 	const { createGameplay } = await load( "gameplay" ),
 		sent = [],

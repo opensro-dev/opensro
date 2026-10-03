@@ -270,7 +270,30 @@ new leg from the live pose; the walk's own heading is kept for later legs.
 		walk.factor = drift.factor;
 		owner = liveOwner( now );
 		pose = navigation.surface( local, pose ?? local, owner, surfaceCursor );
+		poseAtMs = now;
 		segment = directionSegment( pose, drift.heading, now, drift.factor );
+	}
+	/*
+================
+advanceTo
+
+Bring the rest pose to now along the walk in progress, stamped with the
+time it was taken at. Every re-anchor (a click, a direction walk, a
+receipt, a server walk, a correction, a cast) starts here. Starting from
+the last stepped pose instead drops the time since that worker step: the
+presentation extrapolates every sample along its velocity, so the
+shortfall is drawn as a back-step of up to one step's travel, felt on
+every high-latency acknowledgement and skill press.
+================
+	*/
+	function advanceTo( now: number ) {
+		if ( !pose ) return;
+		if ( segment ) {
+			owner = liveOwner( now );
+			pose = navigation.surface( sampleMovement( segment, now ), pose, owner, surfaceCursor );
+			owner = surfaceCursor.owner ?? owner;
+		}
+		poseAtMs = now;
 	}
 	/*
 ================
@@ -329,6 +352,7 @@ displace
 			surfaceCursor = {};
 			walk = null;
 			pose = authoritative = navigation.surface( next.from, from, owner );
+			poseAtMs = now;
 			segment = next.duration ?
 				bindOwners( {
 					...next,
@@ -357,8 +381,7 @@ server's walk again.
 		*/
 		holdForCast( now: number ) {
 			if ( !segment || !pose || segment.castToken !== undefined ) return;
-			pose = navigation.surface( sampleMovement( segment, now ), pose, owner, surfaceCursor );
-			poseAtMs = now;
+			advanceTo( now );
 			castHold = { pose, until: now + CAST_HOLD_MS, resume: segment };
 			segment = null;
 			walk = null;
@@ -389,6 +412,7 @@ cancelCast
 					pose ?? segment.from,
 					owner
 				);
+				poseAtMs = now;
 				segment = null;
 			}
 		},
@@ -457,6 +481,7 @@ mode
 			if ( !segment ) return;
 			const next = movementModeTransition( segment, value, speed, now, segment.timing === "server" );
 			pose = navigation.surface( next.pose, pose ?? next.pose, owner );
+			poseAtMs = now;
 			if ( segment.timing === "server" || !next.segment ) authoritative = pose;
 			if ( !next.segment ) walk = null;
 			segment = next.segment ?
@@ -486,6 +511,7 @@ speeds
 			if ( segment && !segment.fixedTiming && speed !== previous ) {
 				const next = movementSpeedTransition( segment, previous, speed, now );
 				pose = navigation.surface( next.from, pose ?? next.from, owner );
+				poseAtMs = now;
 				segment = next.duration ? bindOwners( { ...segment, ...next, from: pose } ) : null;
 			}
 		},
@@ -498,13 +524,14 @@ native
 			if ( !pose || life === "dead" ) {
 				return;
 			}
-			const current = segment ? sampleMovement( segment, now ) : pose;
-			const decoded = decodeNativeMovement( p, current );
+			const decoded = decodeNativeMovement( p, segment ? sampleMovement( segment, now ) : pose );
 			if ( decoded.gid !== gid ) {
 				return;
 			}
 			// A source-less angular acknowledgement leaves the path running.
 			if ( decoded.kind === "keep" ) return;
+			advanceTo( now );
+			const current = pose;
 			castHold = null;
 			movementRevision++;
 			const adopt = predicted !== null && decoded.kind !== "direction" &&
@@ -608,6 +635,7 @@ correct
 		correct( value: Pose, now?: number ) {
 			movementRevision++;
 			castHold = null;
+			if ( now !== undefined ) advanceTo( now );
 			// A live source correction ends motion, but is not a new spawn.
 			// Resolve its surface through the existing navigation owner before
 			// retiring the segment; server endpoint Y can be below a hill/deck.
@@ -654,6 +682,7 @@ request
 			if ( !pose || pending.size >= 32 || nextId === 0xffffffff ) {
 				throw new Error( "Movement command capacity exceeded or player absent" );
 			}
+			advanceTo( now );
 			const p = admitPose( value ),
 				to = { ...p, x: Math.trunc( p.x ), y: Math.trunc( p.y ), z: Math.trunc( p.z ) },
 				id = nextId + 1;
@@ -784,6 +813,7 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 			if ( cosGid !== undefined && (!Number.isInteger( cosGid ) || cosGid < 1 || cosGid > 0xffffffff) ) {
 				throw Error( "Invalid COS owner" );
 			}
+			advanceTo( now );
 			const body = directionMoveBody( heading ),
 				id = nextId + 1,
 				offset = cosGid === undefined ? 0 : 5,
@@ -851,6 +881,7 @@ receive
 				for ( const id of pending.keys() ) if ( id <= r.id ) pending.delete( id );
 				return;
 			}
+			advanceTo( now );
 			if ( command.direction !== undefined && r.accepted && walk ) {
 				// The server walks from its live point; its first leg is the
 				// reference the local walk reconciles toward. A leg shorter than
