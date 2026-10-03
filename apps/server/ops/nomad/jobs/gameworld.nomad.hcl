@@ -129,8 +129,10 @@ variable "beta_player_map" {
   default = "on"
 }
 
-# beta_growth holds every level to the level-3 kill pace and multiplies skill
-# EXP by beta_skill_exp_rate. "off" restores the native rates.
+# beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
+# multiplies skill EXP by beta_skill_exp_rate on top, rolls drop passes
+# beta_drop_rate times and multiplies gold heaps by beta_gold_rate. "off"
+# restores the native rates.
 variable "beta_growth" {
   type    = string
   default = "on"
@@ -144,6 +146,11 @@ variable "beta_skill_exp_rate" {
 variable "beta_drop_rate" {
   type    = string
   default = "5"
+}
+
+variable "beta_gold_rate" {
+  type    = string
+  default = "50"
 }
 
 variable "cpu" {
@@ -281,6 +288,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate
+        SRO_BETA_GOLD_RATE                 = var.beta_gold_rate
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                 = var.cert_dir

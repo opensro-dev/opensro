@@ -97,6 +97,11 @@ func (rt *Runtime) rollMonsterGoldAmount(monster monster.Instance) (uint32, bool
 	if scaled == 0 || scaled > math.MaxInt32 {
 		return 0, false
 	}
+	// The beta gold rate is port-only and applies after the native heap is
+	// built, so it never changes the RNG order; it clamps instead of refusing.
+	if rt.GoldRate > 1 {
+		scaled = min(scaled*uint64(rt.GoldRate), math.MaxInt32)
+	}
 	return uint32(scaled), true
 }
 

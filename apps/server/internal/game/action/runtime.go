@@ -172,6 +172,10 @@ type Runtime struct {
 	// capacity. 0 or 1 is native; the closed-beta growth switch raises it.
 	DropPassRate int
 
+	// GoldRate multiplies every monster gold heap after the native rarity
+	// multipliers. 0 or 1 is native; the closed-beta growth switch raises it.
+	GoldRate int
+
 	// Now abstracts the clock for deterministic tests.
 	Now         func() time.Time
 	departureMu sync.Mutex
