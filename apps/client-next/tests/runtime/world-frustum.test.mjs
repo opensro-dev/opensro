@@ -15,7 +15,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { root } from "../../tools/project.mjs";
 
-const { viewProjection, prepareViewFrustum, visibleFrustumBox, visibleFrustumAabb } = await import(
+import fc from "fast-check";
+const { viewProjection, prepareViewFrustum, visibleFrustumBox, visibleFrustumSphere, visibleSphere } = await import(
 	sourceFileUrl( `${root}/src/engine/foundation/rendering/world-math.ts` ).href
 );
 test("transformed box rejection preserves the explicit eight-corner clip oracle under rotation, shear, scale and reflection", () => {
@@ -64,32 +65,31 @@ test("transformed box rejection preserves the explicit eight-corner clip oracle 
 	assert.ok( rejected > 1000 && accepted > 100, "exercise both decisions" );
 });
 
-test("axis-aligned terrain rejection preserves an independent eight-corner plane oracle", () => {
-	let seed = 2402033;
-	const random = () => ((seed = (Math.imul( seed, 1664525 ) + 1013904223) >>> 0) / 2 ** 32);
-	for ( let trial = 0; trial < 10000; trial++ ) {
-		const x = (random() - .5) * 6000,
-			y = (random() - .5) * 400,
-			z = (random() - .5) * 6000,
-			b = [ x, y, z, x + 320, y + random() * 600, z + 320 ];
-		const f = prepareViewFrustum(
-			viewProjection( {
-				eye: [ 0, 40, 0 ],
-				target: [ Math.sin( trial ), 0, Math.cos( trial ) ],
-				near: 1,
-				far: 3500,
-				fov: Math.PI / 3
-			}, 1.3 )
-		);
-		const corners = Array.from(
-			{ length: 8 },
-			( _, mask ) => [ b[mask & 1 ? 3 : 0], b[mask & 2 ? 4 : 1], b[mask & 4 ? 5 : 2] ]
-		);
-		const oracle = Array.from(
-			{ length: 6 },
-			( _, i ) =>
-				corners.some( p => f[i * 5] * p[0] + f[i * 5 + 1] * p[1] + f[i * 5 + 2] * p[2] + f[i * 5 + 3] >= 0 )
-		).every( Boolean );
-		if ( oracle ) assert.ok( visibleFrustumAabb( f, b ), `seed 2402033 case ${trial}` );
-	}
+test("shared character frustum exactly preserves per-actor sphere decisions", () => {
+	fc.assert(
+		fc.property(
+			fc.tuple(
+				fc.integer( { min: -4000, max: 4000 } ),
+				fc.integer( { min: -1000, max: 1000 } ),
+				fc.integer( { min: -4000, max: 4000 } ),
+				fc.integer( { min: 0, max: 3000 } )
+			),
+			fc.integer( { min: -1000, max: 1000 } ),
+			( [x, y, z, radius], heading ) => {
+				const angle = heading / 100,
+					view = viewProjection( {
+						eye: [ 30, 80, -200 ],
+						target: [ 30 + Math.sin( angle ) * 100, 20, -200 + Math.cos( angle ) * 100 ],
+						fov: Math.PI / 3,
+						near: 1,
+						far: 4000
+					}, 1.3 );
+				assert.equal(
+					visibleFrustumSphere( prepareViewFrustum( view ), x, y, z, radius ),
+					visibleSphere( view, [ x, y, z ], radius )
+				);
+			}
+		),
+		{ seed: 2402034, numRuns: 10000 }
+	);
 });

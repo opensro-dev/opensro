@@ -9,7 +9,6 @@ the frustum, and touching each group's objects only to learn that cost
 more than the work itself. This table holds, per group in walk order, the
 numbers that decide what the walk must do:
 
-- terrain: a box around all its ranges, and how many it chose last pass;
 - instanced: a sphere around every placement's frustum bound, the spread
   of the placement origins, the eye distances at which its objects change
   fade, and per placement slot the fade inputs (origin, radius, range,
@@ -41,26 +40,24 @@ export const SLOT_UNFADED = 2;
 // covers their rounding at any world distance.
 const REACH_MARGIN = 1;
 
-// A terrain box grown by this much rejects only when every range in it
-// would: the frustum tests' float headroom is a few hundredths of a unit.
-const BOX_MARGIN = 1;
-
 export interface WalkTable {
 	readonly groups: readonly WorldGroup[];
 	readonly kind: Uint8Array;
 	// Groups with object fades (instanced groups with descriptors).
 	readonly faded: Uint8Array;
-	// Terrain: min xyz, max xyz (6 a group).
-	readonly box: Float64Array;
-	// Ranges a terrain group chose in its last pass (-1 before one).
-	readonly shown: Int32Array;
 	// Instanced: centre xyz, frustum radius, origin spread (5 a group).
 	readonly sphere: Float64Array;
 	// Instanced fade reach: smallest and largest range + radius of fixed
 	// range objects, smallest and largest radius of scenery objects.
 	readonly reach: Float64Array;
-	// Instanced placements a group showed in its last pass (-1 before one).
+	// Instanced: placements in the group's list; terrain: indices chosen.
+	// -1 before the group's first pass.
 	readonly count: Int32Array;
+	// Terrain: the eye cell (x, z) the group last chose for.
+	readonly cell: Float64Array;
+	// The group's index in draw order, and its triangles per placement.
+	readonly order: Int32Array;
+	readonly instanceTriangles: Float64Array;
 	// The walk that last showed a group, and the triangles it showed then:
 	// a walk that keeps the view reuses both.
 	readonly seen: Float64Array;
@@ -70,9 +67,6 @@ export interface WalkTable {
 	// renderer resolves a group's rows once each fade epoch).
 	readonly slotBase: Int32Array;
 	readonly origin: Float64Array;
-	// A sphere about the origin holding the placement's frustum bound, with
-	// headroom (frustumSphereSide decides most placements without the box).
-	readonly slotReach: Float64Array;
 	readonly radius: Float64Array;
 	readonly range: Float64Array;
 	readonly slotKind: Uint8Array;
@@ -84,8 +78,8 @@ export interface WalkTable {
 	readonly resident: Uint32Array;
 	readonly residentCount: Int32Array;
 	readonly residentCell: Float64Array;
-	// The walk's scratch: per resident slot (at the group's slot base), the
-	// published alpha of its object this frame, or -1 when it is out.
+	// Per resident slot (at the group's slot base), the published alpha of its
+	// object in the group's placement list, or -1 when it is out.
 	readonly alpha: Int16Array;
 }
 
@@ -112,16 +106,16 @@ export function compileWalkTable(
 		groups,
 		kind: new Uint8Array( count ),
 		faded: new Uint8Array( count ),
-		box: new Float64Array( count * 6 ),
-		shown: new Int32Array( count ).fill( -1 ),
 		sphere: new Float64Array( count * 5 ),
 		reach: new Float64Array( count * 4 ),
 		count: new Int32Array( count ).fill( -1 ),
+		cell: new Float64Array( count * 2 ).fill( NaN ),
+		order: new Int32Array( count ),
+		instanceTriangles: new Float64Array( count ),
 		seen: new Float64Array( count ).fill( -1 ),
 		triangles: new Float64Array( count ),
 		slotBase,
 		origin: new Float64Array( slots * 3 ),
-		slotReach: new Float64Array( slots ),
 		radius: new Float64Array( slots ),
 		range: new Float64Array( slots ),
 		slotKind: new Uint8Array( slots ),
@@ -135,11 +129,10 @@ export function compileWalkTable(
 	for ( let i = 0; i < count; i++ ) {
 		const group = groups[i]!;
 		if ( group.material.sky ) table.kind[i] = WALK_SKY;
-		else if ( group.ranges ) {
-			table.kind[i] = WALK_TERRAIN;
-			terrainBox( group, table.box, i * 6 );
-		} else if ( group.instanceRadius !== undefined ) {
+		else if ( group.ranges ) table.kind[i] = WALK_TERRAIN;
+		else if ( group.instanceRadius !== undefined ) {
 			table.kind[i] = WALK_INSTANCED;
+			table.instanceTriangles[i] = group.geometry.indices.length / 3;
 			compileInstanced( table, i, group.geometry.bones ? undefined : pickBounds.get( group.geometry.positions ) );
 		} else table.kind[i] = WALK_PLAIN;
 	}
@@ -162,7 +155,6 @@ function compileInstanced( table: WalkTable, i: number, bounds: readonly number[
 		table.origin[(base + slot) * 3] = x;
 		table.origin[(base + slot) * 3 + 1] = y;
 		table.origin[(base + slot) * 3 + 2] = z;
-		table.slotReach[base + slot] = placementReach( instances, at, bounds, group.instanceRadius! ) + REACH_MARGIN;
 		const descriptor = group.visibility?.[slot];
 		if ( !descriptor ) {
 			table.slotKind[base + slot] = SLOT_UNFADED;
@@ -185,48 +177,6 @@ function compileInstanced( table: WalkTable, i: number, bounds: readonly number[
 		}
 	}
 	table.reach.set( [ fixedLow, fixedHigh, sceneryLow, sceneryHigh ], i * 4 );
-}
-
-/*
-================
-placementReach
-
-The farthest point of a placement's frustum bound from its origin: the
-transformed local box's corners, or its sphere.
-================
-*/
-function placementReach( instances: Float32Array, at: number, bounds: readonly number[] | undefined, radius: number ) {
-	if ( !bounds ) return radius;
-	let reach = 0;
-	for ( let corner = 0; corner < 8; corner++ ) {
-		const x = bounds[corner & 1 ? 3 : 0]!, y = bounds[corner & 2 ? 4 : 1]!, z = bounds[corner & 4 ? 5 : 2]!;
-		reach = Math.max(
-			reach,
-			Math.hypot(
-				instances[at]! * x + instances[at + 4]! * y + instances[at + 8]! * z,
-				instances[at + 1]! * x + instances[at + 5]! * y + instances[at + 9]! * z,
-				instances[at + 2]! * x + instances[at + 6]! * y + instances[at + 10]! * z
-			)
-		);
-	}
-	return reach;
-}
-
-/*
-================
-terrainBox
-================
-*/
-function terrainBox( group: WorldGroup, box: Float64Array, at: number ) {
-	box.set( [ Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity ], at );
-	for ( const range of group.ranges! ) {
-		const b = range.bounds, c = range.center, r = range.radius;
-		for ( let axis = 0; axis < 3; axis++ ) {
-			const low = b ? b[axis]! : c[axis]! - r, high = b ? b[axis + 3]! : c[axis]! + r;
-			box[at + axis] = Math.min( box[at + axis]!, low - BOX_MARGIN );
-			box[at + axis + 3] = Math.max( box[at + axis + 3]!, high + BOX_MARGIN );
-		}
-	}
 }
 
 /*

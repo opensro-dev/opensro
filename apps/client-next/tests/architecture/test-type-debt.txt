@@ -260,7 +260,6 @@ tests/runtime/snapshot-age.test.mjs
 tests/runtime/sound-presentation.test.mjs
 tests/runtime/status-notices.test.mjs
 tests/runtime/target-status.test.mjs
-tests/runtime/terrain-visibility.test.mjs
 tests/runtime/tooltip-coverage.test.mjs
 tests/runtime/tooltips.test.mjs
 tests/runtime/travel.test.mjs
