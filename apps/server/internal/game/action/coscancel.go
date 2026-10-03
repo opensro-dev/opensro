@@ -101,6 +101,34 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 
 /*
 ================
+releaseRiddenVehicleInDoor
+
+CGObjPC_ProcessNormalDeath (529B10) releases the vehicle the player rides
+(the COS manager's +0x30, bound by TryBindRideActor and cleared on dismount)
+through ReleaseCOSOrExit: a rider who dies loses the horse or transport it
+sat on. The caller holds c's door. public carries the dismount, the speed
+refresh and the despawn; private the owner's item state.
+================
+*/
+func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Character, now int64) (public, private []wire.Frame) {
+	ride := c.ActiveCOS
+	if ride == nil || !ride.Summoned || !ride.Mounted {
+		return nil, nil
+	}
+	gid := ride.GID
+	ride.Mounted = false
+	ride.Summoned = false
+	ride.StateFlags &^= cosStateSummoned
+	public = append(public, wire.Frame{Opcode: wire.OpCosRideState,
+		Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(c), false, gid)})
+	public = append(public, rt.refreshMovementEffects(division, c, now)...)
+	public = append(public, rt.retireCosRuntime(division, c, gid)...)
+	public = append(public, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()})
+	return public, companionItemStateFrames(c, ride)
+}
+
+/*
+================
 retireCompanionCorpses
 
 A successful re-entry (rebirth, return scroll, portal, GM warp) rebuilds the

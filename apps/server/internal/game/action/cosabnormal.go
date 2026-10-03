@@ -202,6 +202,12 @@ func (o *cosAbnormalOwner) commit() {
 			// The port's persisted summon flag must agree with native LIFE=2
 			// (529DE0 -> 490210), or the revival item rejects the dead pet.
 			pet.StateFlags &^= 1
+			// CGObjCOS_ProcessNormalDeath (52A000; pets 529F70, summoned
+			// 529F10) releases the dead COS from its owner at once
+			// (ReleaseCOSOrExit -> CCOSManager_RemoveRecordAndRetire, 0x30C9):
+			// the corpse leaves the world and the record stays on its item.
+			pet.Summoned = false
+			pet.StateFlags &^= cosStateSummoned
 			o.private = append(o.private, companionItemStateFrames(o.c, pet)...)
 			if pet.Mounted {
 				pet.Mounted = false
@@ -491,6 +497,10 @@ func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wir
 		baseline, dead := life.publishDeathBaseline(), life.publishDead()
 		frames = append(frames, wire.Frame{Opcode: baseline.opcode, Payload: baseline.payload},
 			wire.Frame{Opcode: dead.opcode, Payload: dead.payload})
+		// The release follows the death (52A000): the actor's transient work
+		// retires and the released COS leaves every view.
+		frames = append(frames, rt.retireCosRuntime(o.division, o.c, gid)...)
+		frames = append(frames, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()})
 	}
 	if o.changed {
 		block := rt.cosAbnormal(o.division, o.c.Name, gid)
