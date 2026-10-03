@@ -129,6 +129,13 @@ variable "beta_player_map" {
   default = "on"
 }
 
+# Beta builds share the 5000 total mastery budget. Set off for native
+# CH 300 / EU min(2 * level, 240); individual mastery ceilings never change.
+variable "beta_mastery" {
+  type    = string
+  default = "on"
+}
+
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
 # multiplies skill EXP by beta_skill_exp_rate on top, rolls drop passes
 # beta_drop_rate times and multiplies gold heaps by beta_gold_rate. "off"
@@ -285,6 +292,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOVE_CLIENT_CLIP               = var.move_client_clip
         SRO_BETA_STARTER_KIT               = var.beta_starter_kit
         SRO_BETA_PLAYER_MAP                = var.beta_player_map
+        SRO_BETA_MASTERY                   = var.beta_mastery
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate

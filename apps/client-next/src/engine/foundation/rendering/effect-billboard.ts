@@ -26,6 +26,18 @@ type Vector3 = [number, number, number];
 
 /*
 ================
+length3
+
+The length of a 3-vector as the native vector length takes it: the root of
+the summed squares (no Math.hypot, which allocates its arguments).
+================
+*/
+function length3( x: number, y: number, z: number ): number {
+	return Math.sqrt( x * x + y * y + z * z );
+}
+
+/*
+================
 cross
 ================
 */
@@ -50,7 +62,7 @@ The unit vector, or null for a zero-length one.
 ================
 */
 function normalized( v: readonly number[] ): Vector3 | null {
-	const length = Math.hypot( v[0]!, v[1]!, v[2]! );
+	const length = length3( v[0]!, v[1]!, v[2]! );
 	return length > 0 ? [ v[0]! / length, v[1]! / length, v[2]! / length ] : null;
 }
 
@@ -82,7 +94,7 @@ column vectors, nine values). Runs per drawn particle per frame, so it
 writes into the caller's scratch instead of building arrays.
 ================
 */
-function cameraAxes( view: Float32Array, mode: "camera" | "y", axes: Float64Array ): void {
+export function cameraAxes( view: Float32Array, mode: "camera" | "y", axes: Float64Array ): void {
 	axes[0] = view[0]!;
 	axes[1] = view[4]!;
 	axes[2] = view[8]!;
@@ -93,11 +105,11 @@ function cameraAxes( view: Float32Array, mode: "camera" | "y", axes: Float64Arra
 	axes[7] = view[7]!;
 	axes[8] = view[11]!;
 	if ( mode === "camera" ) return;
-	const fwdX = view[3]!, fwdZ = view[11]!, fwdLen = Math.hypot( fwdX, fwdZ );
+	const fwdX = view[3]!, fwdZ = view[11]!, fwdLen = Math.sqrt( fwdX * fwdX + fwdZ * fwdZ );
 	if ( fwdLen < 1e-12 ) {
 		// The camera basis stands unless one of its axes has collapsed.
 		for ( let column = 0; column < 3; column++ ) {
-			if ( !(Math.hypot( axes[column * 3]!, axes[column * 3 + 1]!, axes[column * 3 + 2]! ) > 1e-12) ) {
+			if ( !(length3( axes[column * 3]!, axes[column * 3 + 1]!, axes[column * 3 + 2]! ) > 1e-12) ) {
 				axes.fill( 0 );
 				axes[0] = axes[4] = axes[8] = 1;
 				return;
@@ -172,14 +184,14 @@ export function faceEffectMesh(
 		axes[7] = p21;
 		axes[8] = p22;
 	}
-	const s0 = !kept && p01 === 0 && p02 === 0 ? p00 : Math.hypot( p00, p01, p02 );
-	const s1 = !kept && p10 === 0 && p12 === 0 ? p11 : Math.hypot( p10, p11, p12 );
-	const s2 = !kept && p20 === 0 && p21 === 0 ? p22 : Math.hypot( p20, p21, p22 );
-	const scale0 = Math.hypot( a0, a1, a2 ) * s0,
-		scale1 = Math.hypot( b0, b1, b2 ) * s1,
-		scale2 = Math.hypot( c0, c1, c2 ) * s2;
+	const s0 = !kept && p01 === 0 && p02 === 0 ? p00 : length3( p00, p01, p02 );
+	const s1 = !kept && p10 === 0 && p12 === 0 ? p11 : length3( p10, p11, p12 );
+	const s2 = !kept && p20 === 0 && p21 === 0 ? p22 : length3( p20, p21, p22 );
+	const scale0 = length3( a0, a1, a2 ) * s0,
+		scale1 = length3( b0, b1, b2 ) * s1,
+		scale2 = length3( c0, c1, c2 ) * s2;
 	for ( let col = 0; col < 3; col++ ) {
-		const x = axes[col * 3]!, y = axes[col * 3 + 1]!, z = axes[col * 3 + 2]!, length = Math.hypot( x, y, z );
+		const x = axes[col * 3]!, y = axes[col * 3 + 1]!, z = axes[col * 3 + 2]!, length = length3( x, y, z );
 		if ( !Number.isFinite( length ) || length < 1e-12 ) throw new Error( "Invalid effect camera basis" );
 		const scale = col === 0 ? scale0 : col === 1 ? scale1 : scale2;
 		palette[offset + col * 4] = (r00 * x + r01 * y + r02 * z) / det / length * scale;

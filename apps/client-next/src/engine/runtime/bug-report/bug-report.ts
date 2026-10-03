@@ -38,6 +38,9 @@ const REPORT_ID = /\bBR-\d{6}-\d{4}-[0-9A-F]{4}\b/;
 const WHISPER_CHANNEL = 2;
 const MAX_SEEN_LINES = 256;
 const SAMPLE_MS = 1000;
+// Reading performance.memory makes Chrome total the heap: about 1 ms of a
+// frame. A report needs the heap trend, so every tenth sample carries it.
+const HEAP_SAMPLE_EVERY = 10;
 // Per top-level field of the game state in state.json; larger ones are
 // catalogs (skills, item mall, guide) the developer already has.
 const MAX_STATE_FIELD_BYTES = 256 * 1024;
@@ -106,7 +109,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	const recorder = createReplayRecorder( options.canvas, options.sound );
 	const archive = createReportArchive();
 	const journal = createJournal( options.canvas );
-	let lastSampleMs = -Infinity;
+	let lastSampleMs = -Infinity, samples = 0;
 	let settings: ServerSettings | null = null;
 	let replayEnabled = false;
 	let draft = false;
@@ -357,7 +360,9 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		const { session, gameplay, target, entities } = options.state();
 		const pose = gameplay?.pose;
 		const vitals = gameplay?.vitals.find( row => row.gid === gameplay.localGid );
-		const memory = (performance as Performance & { memory?: { usedJSHeapSize: number; }; }).memory;
+		const memory = samples++ % HEAP_SAMPLE_EVERY === 0 ?
+			(performance as Performance & { memory?: { usedJSHeapSize: number; }; }).memory :
+			undefined;
 		return {
 			phase: session?.phase ?? "starting",
 			...(pose ?
@@ -547,21 +552,46 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		open,
 		note,
 		replayDraft: () => draft,
+		/*
+		================
+		toggleReplayDraft
+		================
+		*/
 		toggleReplayDraft() {
 			draft = !draft;
 		},
+		/*
+		================
+		resetReplayDraft
+		================
+		*/
 		resetReplayDraft() {
 			draft = replayEnabled;
 		},
+		/*
+		================
+		defaultReplayDraft
+		================
+		*/
 		defaultReplayDraft() {
 			draft = settings?.replayDefault ?? false;
 		},
+		/*
+		================
+		applyReplayDraft
+		================
+		*/
 		applyReplayDraft() {
 			if ( !settings?.enabled || draft === replayEnabled ) return;
 			replayEnabled = draft;
 			localStorage.setItem( PREFERENCE_KEY, JSON.stringify( { enabled: replayEnabled } ) );
 			void followPreference();
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose() {
 			disposed = true;
 			lifetime.abort();

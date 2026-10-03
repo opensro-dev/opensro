@@ -141,10 +141,9 @@ export async function buildApplication( { base = root, directory, source, mode =
 			minify: "esbuild",
 			rollupOptions: { output: {} }
 		},
-		esbuild: { legalComments: "eof" },
-		// Not a profile build: runtime.ts folds its probe lookups away, so no
-		// diagnostic global name reaches the release (policy.mjs checks it).
-		define: { __SRO_PROFILE_BUILD__: "false" }
+		// frame-probes.ts folds its probe lookup away outside development, so
+		// no diagnostic global name reaches the release (policy.mjs checks it).
+		esbuild: { legalComments: "eof" }
 	} );
 	// Vite may emit worker maps after generateBundle. Final filesystem outputs
 	// are the authority; intermediate compiler output never enters the web root.

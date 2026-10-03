@@ -14,6 +14,8 @@ they are ad hoc views of runtime state, not a contract.
 */
 
 declare module "/src/*";
+// Test helpers the page imports the same way (tests/helpers/particle-reference.mjs).
+declare module "/tests/*";
 
 declare var __arrowActors: any;
 declare var __castActors: any;

@@ -119,7 +119,8 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 			}
 		} ]
 	};
-	const owner = createCharacters();
+	const { createParticleReference } = await import( "../helpers/particle-reference.mjs" );
+	const owner = createCharacters(), reference = createParticleReference();
 	owner.model( "effect", model, [] );
 	owner.model( "ordinary", {
 		...model,
@@ -133,11 +134,17 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 			if ( !deferred ) ordinaryWrites++;
 			return { deferred, instances: [ ...g.instances ] };
 		},
-		release() {},
+		release( d ) {
+			reference.release( d );
+		},
 		updateInstances( d, v ) {
 			if ( !d.deferred ) ordinaryWrites++;
 			d.instances = [ ...v ];
 			return d;
+		},
+		presentParticles( d, particles ) {
+			if ( !d.deferred ) ordinaryWrites++;
+			d.instances = [ ...reference.present( d, particles ).matrices ];
 		},
 		updateBones( d ) {
 			if ( !d.deferred ) ordinaryWrites++;

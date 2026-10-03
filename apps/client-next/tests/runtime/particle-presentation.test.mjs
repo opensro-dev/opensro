@@ -15,9 +15,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const load = file => import( sourceFileUrl( file ).href );
-const { createPresentedParticle, presentParticle, snapshotParticleTick, continueRotation } = await load(
+const { snapshotParticleTick, continueRotation, createStepCache, ROTATION_WORK } = await load(
 	"src/engine/foundation/animation/particle-presentation.ts"
 );
+const { writeEmittedRecord, writeGraphRecord, PARTICLE_RECORD, PARTICLE_ACTOR, ACTOR_PALETTE, ACTOR_FRACTION } =
+	await load(
+		"src/engine/foundation/animation/particle-records.ts"
+	);
+const { presentSlot } = await import( "../helpers/particle-reference.mjs" );
 const { createParticleGraph, advanceParticleGraph, particleElementMatrix } = await load(
 	"src/engine/foundation/animation/particle-graph.ts"
 );
@@ -42,32 +47,77 @@ const particle = overrides => ({
 	...overrides
 });
 
+/*
+================
+drawParticle
+
+The palette the presentation pass draws for one program particle born at
+0, at fraction of the tick after its latest one, from an identity actor
+palette and birth matrix.
+================
+*/
+function drawParticle( state, fraction ) {
+	const records = new Float32Array( PARTICLE_RECORD ), actors = new Float32Array( PARTICLE_ACTOR );
+	writeEmittedRecord( records, 0, identity(), 0, 0, state, new Float64Array( ROTATION_WORK ) );
+	actors[0] = (state.frame + fraction) / 20;
+	actors.set( identity(), ACTOR_PALETTE );
+	const particles = { rows: 1, slots: 1, graph: false, view: 0, lifetime: 100, loop: false, actors };
+	const drawn = presentSlot( particles, records, 0 );
+	assert.ok( drawn, "the particle is drawn" );
+	return drawn.palette;
+}
+
 test("a drawn particle continues its last tick between ticks", () => {
 	const state = particle( { position: [ 0, 0, 0 ], scale: [ 1, 1, 1 ], rotation: spinZ( .2 ) } );
 	snapshotParticleTick( state );
 	state.position = [ 4, 0, -2 ];
 	state.scale = [ 2, 2, 2 ];
 	state.rotation = spinZ( .4 );
-	const out = createPresentedParticle();
-	presentParticle( state, .5, out );
-	assert.deepEqual( out.position, [ 6, 0, -3 ] );
-	assert.deepEqual( out.scale, [ 2.5, 2.5, 2.5 ] );
-	assert.ok( Math.abs( angleZ( out.rotation ) - .5 ) < 1e-5, "spin continues by half a tick" );
+	state.frame = 1;
+	const palette = drawParticle( state, .5 );
+	assert.deepEqual( [ ...palette.subarray( 12, 15 ) ], [ 6, 0, -3 ] );
+	assert.ok( Math.abs( Math.hypot( palette[0], palette[1], palette[2] ) - 2.5 ) < 1e-5, "scale continues" );
+	assert.ok( Math.abs( angleZ( palette ) - .5 ) < 1e-5, "spin continues by half a tick" );
 	// The tick state is presentation input only.
 	assert.deepEqual( state.position, [ 4, 0, -2 ] );
 	assert.ok( Math.abs( angleZ( state.rotation ) - .4 ) < 1e-6 );
-	assert.notEqual( out.rotation, state.rotation, "the scratch never aliases the particle" );
 });
 
 test("fraction zero and a fresh particle draw the tick state", () => {
-	const state = particle( { position: [ 1, 2, 3 ], rotation: spinZ( .3 ) } ), out = createPresentedParticle();
-	presentParticle( state, .7, out );
-	assert.deepEqual( out.position, [ 1, 2, 3 ] );
+	const state = particle( { position: [ 1, 2, 3 ], rotation: spinZ( .3 ) } );
+	assert.deepEqual( [ ...drawParticle( state, .7 ).subarray( 12, 15 ) ], [ 1, 2, 3 ] );
 	snapshotParticleTick( state );
 	state.position = [ 5, 2, 3 ];
-	presentParticle( state, 0, out );
-	assert.deepEqual( out.position, [ 5, 2, 3 ] );
-	assert.ok( Math.abs( angleZ( out.rotation ) - .3 ) < 1e-6 );
+	const palette = drawParticle( state, 0 );
+	assert.deepEqual( [ ...palette.subarray( 12, 15 ) ], [ 5, 2, 3 ] );
+	assert.ok( Math.abs( angleZ( palette ) - .3 ) < 1e-6 );
+});
+
+test("a graph record draws the frame particleElementMatrix draws, between ticks and across a reset", () => {
+	const state = particle( { position: [ 1, 2, 3 ], rotation: spinZ( .1 ) } ), matrix = spinZ( .4 );
+	const element = { matrix, previousPosition: [ 1, 2, 3 ], state, clockBirth: 0 };
+	snapshotParticleTick( state, matrix );
+	for ( const [turn, position] of [ [ .7, [ 2, 2, 5 ] ], [ 3, [ 2, 4, 5 ] ], [ .7, [ 2, 4, 5 ] ] ] ) {
+		element.previousPosition.splice( 0, 3, ...state.position );
+		snapshotParticleTick( state, matrix );
+		matrix.set( spinZ( turn ) );
+		state.position = position;
+		state.frame++;
+		const records = new Float32Array( PARTICLE_RECORD ), actors = new Float32Array( PARTICLE_ACTOR );
+		writeGraphRecord( records, 0, element, new Float64Array( ROTATION_WORK ) );
+		actors.set( identity(), ACTOR_PALETTE );
+		for ( const fraction of [ 0, .3, .9 ] ) {
+			actors[0] = state.frame / 20;
+			actors[ACTOR_FRACTION] = fraction;
+			const particles = { rows: 1, slots: 1, graph: true, view: 0, lifetime: 100, loop: false, actors };
+			const slot = presentSlot( particles, records, 0 ), expected = new Float32Array( 16 );
+			assert.ok( slot, "the element is drawn" );
+			particleElementMatrix( element, expected, 0, fraction );
+			slot.matrix.forEach( ( value, i ) =>
+				assert.ok( Math.abs( value - expected[i] ) < 1e-5, `${turn} ${fraction} ${i}` )
+			);
+		}
+	}
 });
 
 test("a rotation reset is drawn as is, not swept", () => {
@@ -138,4 +188,62 @@ test("the drawn zoom glides to the wheel distance and lands", () => {
 	assert.ok( Math.abs( a - b ) < 1e-9 );
 	ease.reset();
 	assert.equal( ease.step( 150, 2000 ), 150, "a reset draws the target at once" );
+});
+
+test("a step cache gives the uncached rotation exactly, across ticks, hits and resets", () => {
+	let seed = 9;
+	const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+	// A rotation about a random axis, scaled, as a tick pose.
+	const pose = () => {
+		const m = identity(), x = random() - .5, y = random() - .5, z = random() - .5, length = Math.hypot( x, y, z );
+		const angle = random() * 6,
+			c = Math.cos( angle ),
+			s = Math.sin( angle ),
+			t = 1 - c,
+			u = x / length,
+			v = y / length,
+			w = z / length,
+			scale = .5 + random();
+		const r = [
+			t * u * u + c,
+			t * u * v + s * w,
+			t * u * w - s * v,
+			t * u * v - s * w,
+			t * v * v + c,
+			t * v * w + s * u,
+			t * u * w + s * v,
+			t * v * w - s * u,
+			t * w * w + c
+		];
+		for ( let column = 0; column < 3; column++ ) {
+			for ( let row = 0; row < 3; row++ ) m[column * 4 + row] = r[column * 3 + row] * scale;
+		}
+		m[12] = random() * 100;
+		return m;
+	};
+	const cache = createStepCache(), cached = new Float32Array( 16 ), plain = new Float32Array( 16 );
+	let rotated = 0, previous = pose();
+	for ( let tick = 0; tick < 400; tick++ ) {
+		// Small steps (drawn turning), large ones (a reset) and unchanged ones.
+		const kind = tick % 3, current = kind === 2 ? previous.slice() : kind === 1 ? pose() : previous.map( v => v );
+		if ( kind === 0 ) {
+			const step = spinZ( random() * .8 - .4 );
+			const out = new Float32Array( 16 );
+			for ( let c = 0; c < 4; c++ ) {
+				for ( let r = 0; r < 4; r++ ) {
+					out[c * 4 + r] = previous[r] * step[c * 4] + previous[4 + r] * step[c * 4 + 1] +
+						previous[8 + r] * step[c * 4 + 2] + previous[12 + r] * step[c * 4 + 3];
+				}
+			}
+			current.set( out );
+		}
+		for ( const fraction of [ .1, .5, .9, .5 ] ) {
+			continueRotation( previous, current, fraction, cached, 0, undefined, cache );
+			continueRotation( previous, current, fraction, plain, 0 );
+			assert.deepEqual( [ ...cached ], [ ...plain ], `tick ${tick} fraction ${fraction}` );
+			if ( cached.some( ( v, i ) => v !== current[i] ) ) rotated++;
+		}
+		previous = current;
+	}
+	assert.ok( rotated > 100, `only ${rotated} frames rotated` );
 });

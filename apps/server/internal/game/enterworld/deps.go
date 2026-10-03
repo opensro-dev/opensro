@@ -55,6 +55,8 @@ type Deps struct {
 	EquipItemsEnabled bool
 	// StarterKit is the beta starter kit (starterkit.go); empty when disabled.
 	StarterKit []WireItem
+	// MasteryTotalOverride is shared with progression; zero means native.
+	MasteryTotalOverride int64
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

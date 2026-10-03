@@ -18,6 +18,7 @@ import type { Renderer } from "@/engine/contracts/runtime";
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { CameraInput } from "@/engine/contracts/input";
 import { createCameraScripts } from "./camera/camera";
+import { createTerrainParts } from "./terrain-parts";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { CameraScript } from "@/engine/contracts/camera-script";
 
@@ -25,7 +26,19 @@ type Transaction =
 	| { phase: "idle"; }
 	| { phase: "catalog" | "loading" | "ready"; region: number; }
 	| { phase: "failed"; region: number; error: string; };
-type Job = { kind: "catalog" | "world" | "texture"; path: string; };
+// An outdoor scene: its centre and the regions whose terrain it composes.
+type Outdoor = { readonly region: number; readonly regions: readonly number[]; };
+type Job = { kind: "catalog" | "world" | "texture"; path: string; outdoor?: Outdoor; };
+type WorldResult = Extract<AssetResult, { kind: "world"; }>;
+
+/*
+================
+regionKey
+================
+*/
+function regionKey( region: number ): string {
+	return `0x${region.toString( 16 ).padStart( 4, "0" )}`;
+}
 
 /*
 ================
@@ -46,7 +59,7 @@ export function createWorldStream(
 	================
 	*/
 	function missionRegion( region: number ) {
-		const rows = catalog?.[`0x${region.toString( 16 ).padStart( 4, "0" )}`];
+		const rows = catalog?.[regionKey( region )];
 		// Title/create routes overlap mission sectors. Catalog order is not a
 		// scene-purpose contract; never admit a frontend route into gameplay.
 		return rows?.find( row => row.source === "mission-outdoor-global" ) ??
@@ -59,8 +72,26 @@ export function createWorldStream(
 	// One predicted neighbouring scene, derived from movement near a sector edge.
 	// It never mutates the renderer until that region becomes authoritative.
 	let future:
-		| { region: number; path: string; job: number; result?: Extract<AssetResult, { kind: "world"; }>; }
+		| {
+			region: number;
+			path: string;
+			job: number;
+			anchor: number;
+			outdoor: Outdoor;
+			result?: WorldResult;
+		}
 		| null = null;
+	// Region terrain composed into outdoor scenes (terrain-parts.ts). The
+	// worker resolves a neighbour only when it has an outdoor bundle.
+	const terrain = createTerrainParts(
+		assets,
+		origin,
+		region => missionRegion( region )?.bundlePublicPath,
+		region => !!catalog?.[regionKey( region )]?.some( row => row.area === "outdoor" )
+	);
+	// The outdoor scene loading now, and its objects once decoded: it is
+	// admitted when every region of its terrain is resident.
+	let outdoor: Outdoor | null = null, waiting: WorldResult | null = null;
 	let previous: Pose | null = null, failedFuture: number | null = null;
 	/*
 	================
@@ -82,6 +113,9 @@ export function createWorldStream(
 	function cancelTransaction() {
 		for ( const id of jobs.keys() ) assets.cancel( id );
 		jobs.clear();
+		if ( waiting ) { for ( const row of waiting.images ?? [] ) row.image.close(); }
+		waiting = null;
+		outdoor = null;
 		renderer.cancelWorldUpdate();
 	}
 	/*
@@ -89,10 +123,11 @@ export function createWorldStream(
 	admit
 	================
 	*/
-	function admit( result: Extract<AssetResult, { kind: "world"; }> ) {
+	function admit( result: WorldResult, scene?: Outdoor ) {
 		let transferred = 0;
 		try {
-			renderer.adoptWorld( result.world );
+			renderer.adoptWorld( result.world, undefined, scene ? terrain.parts( scene.regions ) : undefined );
+			if ( scene ) terrain.keepAround( scene.region );
 			soundTerrain = result.soundTerrain ?? [];
 			for ( const row of result.images ?? [] ) {
 				transferred++;
@@ -108,7 +143,7 @@ export function createWorldStream(
 	load
 	================
 	*/
-	function load( path: string, kind: Job["kind"] ) {
+	function load( path: string, kind: Job["kind"], scene?: Outdoor ) {
 		if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) || path.includes( "\\" ) ) {
 			throw new Error( "World asset path is not published" );
 		}
@@ -123,15 +158,38 @@ export function createWorldStream(
 			// The worker returns a DDS texture's picking mask with it (pick-alpha.ts).
 			kind === "texture" ? { pickAlpha: true } : undefined
 		);
-		jobs.set( id, { kind, path } );
+		jobs.set( id, { kind, path, ...(scene ? { outdoor: scene } : {}) } );
+	}
+	/*
+	================
+	objectsPath
+
+	An outdoor scene's objects in the anchor's coordinates; its terrain
+	arrives as region parts.
+	================
+	*/
+	function objectsPath( bundle: string, anchor: number ): string {
+		return `${bundle}#anchor=${anchor.toString( 16 ).padStart( 4, "0" )}&part=objects`;
+	}
+	/*
+	================
+	startOutdoor
+	================
+	*/
+	function startOutdoor( region: number, bundle: string ) {
+		const anchor = terrain.begin( region );
+		outdoor = { region, regions: terrain.neighbourhood( region ) };
+		load( objectsPath( bundle, anchor ), "world", outdoor );
+		terrain.request( outdoor.regions );
 	}
 	const zoomEase = createZoomEase();
 	/*
 	================
 	updateCamera
+
+	Camera presentation is independent of asset transaction success.
 	================
 	*/
-	// Camera presentation is independent of asset transaction success.
 	function updateCamera(
 		pose: Pose,
 		camera: CameraInput | undefined,
@@ -193,7 +251,8 @@ export function createWorldStream(
 				catalog = value.regionsById;
 				transaction = { phase: "idle" };
 			} else if ( job.kind === "world" && result.kind === "world" ) {
-				admit( result );
+				if ( job.outdoor ) waiting = result;
+				else admit( result );
 			} else if ( job.kind === "texture" && result.kind === "bytes" && job.path.endsWith( ".texture" ) ) {
 				renderer.setWorldTexture( job.path, decodeNativeTexture( new Uint8Array( result.buffer ) ) );
 			} else if ( job.kind === "texture" && result.kind === "image" ) {
@@ -203,13 +262,25 @@ export function createWorldStream(
 				throw new Error( "World asset result type mismatch" );
 			}
 		}
+		terrain.poll();
+		if ( outdoor && transaction.phase === "loading" ) {
+			terrain.request( outdoor.regions );
+			if ( waiting && terrain.ready( outdoor.regions ) ) {
+				const result = waiting;
+				waiting = null;
+				admit( result, outdoor );
+			}
+		}
+		if ( future && !failedFuture && future.anchor === terrain.anchorFor( future.region ) ) {
+			terrain.request( future.outdoor.regions, 1 );
+		}
 		if ( transaction.phase === "loading" || transaction.phase === "ready" ) {
 			for ( const path of renderer.neededWorldTextures() ) {
 				if ( jobs.size >= 3 || assets.available() === 0 ) break;
 				if ( ![ ...jobs.values() ].some( job => job.path === path ) ) load( path, "texture" );
 			}
 			const stats = renderer.worldStats();
-			if ( !jobs.size && stats.pendingTextures === 0 && stats.pendingGroups === 0 ) {
+			if ( !jobs.size && !waiting && stats.pendingTextures === 0 && stats.pendingGroups === 0 ) {
 				displayedRegion = transaction.region;
 				transaction = { phase: "ready", region: transaction.region };
 			}
@@ -243,10 +314,13 @@ export function createWorldStream(
 					if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) || path.includes( "\\" ) ) {
 						throw Error( "Invalid future region path" );
 					}
+					const anchor = terrain.anchorFor( candidate ), objects = objectsPath( path, anchor );
 					future = {
 						region: candidate,
-						path,
-						job: assets.request( new URL( path, origin ).href, 128 << 20, "world" )
+						path: objects,
+						anchor,
+						outdoor: { region: candidate, regions: terrain.neighbourhood( candidate ) },
+						job: assets.request( new URL( objects, origin ).href, 128 << 20, "world" )
 					};
 				}
 			} else if ( !entry && (dx !== 0 || dz !== 0) ) {
@@ -265,18 +339,23 @@ export function createWorldStream(
 			transaction = { phase: "ready", region: pose.regionId };
 			return;
 		}
-		if ( future && future.region === pose.regionId ) {
+		if ( future && future.region === pose.regionId && future.anchor === terrain.anchorFor( pose.regionId ) ) {
 			const prepared = future;
 			future = null;
 			transaction = { phase: "loading", region: pose.regionId };
-			if ( prepared.result ) admit( prepared.result );
-			else jobs.set( prepared.job, { kind: "world", path: prepared.path } );
+			terrain.begin( pose.regionId );
+			outdoor = prepared.outdoor;
+			if ( prepared.result ) waiting = prepared.result;
+			else jobs.set( prepared.job, { kind: "world", path: prepared.path, outdoor } );
+			terrain.request( outdoor.regions );
 			return;
 		}
 		if ( future && future.region !== pose.regionId ) clearFuture();
 		if ( assets.available() === 0 ) return;
 		if ( pose.regionId & 0x8000 ) {
 			transaction = { phase: "loading", region: pose.regionId };
+			// A dungeon has its own coordinates; outdoor terrain is not kept meanwhile.
+			terrain.clear();
 			load( `/assets/world/dungeon/regions/0x${pose.regionId.toString( 16 ).padStart( 4, "0" )}.json`, "world" );
 		} else if ( !catalog ) {
 			transaction = { phase: "catalog", region: pose.regionId };
@@ -285,12 +364,18 @@ export function createWorldStream(
 			transaction = { phase: "loading", region: pose.regionId };
 			const entry = missionRegion( pose.regionId );
 			if ( !entry ) throw new Error( `No published region ${pose.regionId}` );
-			load( entry.bundlePublicPath, "world" );
+			startOutdoor( pose.regionId, entry.bundlePublicPath );
 		}
 	}
 	return {
-		// A0F567 pumps state timers before the process update (+2C), hence
-		// before action callbacks can consume projectile/particle random draws.
+		/*
+		================
+		pumpCameraScripts
+
+		A0F567 pumps state timers before the process update (+2C), hence
+		before action callbacks can consume projectile/particle random draws.
+		================
+		*/
 		pumpCameraScripts( nowMs: number ) {
 			if ( !disposed ) scripts.step( nowMs, [] );
 		},
@@ -319,10 +404,15 @@ export function createWorldStream(
 		},
 		soundSurface: ( pose: Pose ) => sampleSoundTerrain( soundTerrain, pose ),
 		ready: () => transaction.phase === "ready" && previous?.regionId === transaction.region,
+		/*
+		================
+		progress
+		================
+		*/
 		progress() {
 			const stats = renderer.worldStats();
 			const admitted = transaction.phase === "loading" || transaction.phase === "ready";
-			const pendingWorld = [ ...jobs.values() ].some( job => job.kind === "world" );
+			const pendingWorld = !!waiting || [ ...jobs.values() ].some( job => job.kind === "world" );
 			return !admitted ?
 				0 :
 				pendingWorld ?
@@ -331,6 +421,11 @@ export function createWorldStream(
 				0.5 * stats.residentGroups /
 					Math.max( 1, stats.residentGroups + stats.pendingGroups + stats.pendingTextures );
 		},
+		/*
+		================
+		loadingRegion
+		================
+		*/
 		loadingRegion() {
 			if (
 				!previous || displayedRegion === null || displayedRegion === previous.regionId ||
@@ -343,15 +438,26 @@ export function createWorldStream(
 			return adjacent ? undefined : region;
 		},
 		error: () => transaction.phase === "failed" ? transaction.error : null,
+		/*
+		================
+		retry
+		================
+		*/
 		retry() {
 			if ( !disposed && transaction.phase === "failed" ) transaction = { phase: "idle" };
 		},
+		/*
+		================
+		reset
+		================
+		*/
 		reset() {
 			if ( disposed ) return;
 			scripts.reset();
 			zoomEase.reset();
 			cancelTransaction();
 			clearFuture();
+			terrain.clear();
 			previous = null;
 			failedFuture = null;
 			soundTerrain = [];
@@ -359,12 +465,18 @@ export function createWorldStream(
 			transaction = { phase: "idle" };
 			renderer.setWorld( null );
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose() {
 			if ( disposed ) return;
 			disposed = true;
 			scripts.dispose();
 			cancelTransaction();
 			clearFuture();
+			terrain.clear();
 			previous = null;
 			failedFuture = null;
 			soundTerrain = [];

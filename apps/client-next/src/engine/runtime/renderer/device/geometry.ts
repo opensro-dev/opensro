@@ -11,6 +11,7 @@ with dynamicVertices keep a CPU mirror for position updates.
 */
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { createCharacterShadows } from "./character-shadows";
+import type { createParticlePresentation } from "./particles";
 import type { createGpuAnimationResources } from "./animation";
 import { DEFAULT_BLEND, type GeometryPipelineState } from "./pipelines";
 import { D3DBLEND_SRCCOLOR, D3DBLEND_ZERO, type BlendPair } from "@/engine/foundation/rendering/blend-state";
@@ -46,6 +47,88 @@ export function geometryPipelineState( mat: Geometry["material"] ): GeometryPipe
 
 /*
 ================
+DeviceDraw
+
+A draw handle. Consumers only read it: assigning a count throws. Its
+counts, binding and capacity change in place, through select and rebind,
+which only this module calls. Every handle is one class, one shape, so the
+per-frame reads of its counts are monomorphic.
+================
+*/
+class DeviceDraw implements GeometryDraw {
+	readonly deferredParticle: boolean | undefined;
+	readonly blended: boolean;
+	readonly pipeline: GPURenderPipeline;
+	readonly vertices: GPUBuffer;
+	readonly indices: GPUBuffer;
+	readonly count: number;
+	#binding: GPUBindGroup;
+	#instanceCapacity: number;
+	#indexCount: number;
+	#instanceCount: number;
+
+	constructor(
+		fixed: Pick<GeometryDraw, "deferredParticle" | "blended" | "pipeline" | "vertices" | "indices" | "count">,
+		binding: GPUBindGroup,
+		instanceCapacity: number,
+		instanceCount: number
+	) {
+		this.deferredParticle = fixed.deferredParticle;
+		this.blended = fixed.blended ?? false;
+		this.pipeline = fixed.pipeline;
+		this.vertices = fixed.vertices;
+		this.indices = fixed.indices;
+		this.count = fixed.count;
+		this.#binding = binding;
+		this.#instanceCapacity = instanceCapacity;
+		this.#indexCount = fixed.count;
+		this.#instanceCount = instanceCount;
+		Object.freeze( this );
+	}
+
+	get binding() {
+		return this.#binding;
+	}
+
+	get instanceCapacity() {
+		return this.#instanceCapacity;
+	}
+
+	get indexCount() {
+		return this.#indexCount;
+	}
+
+	get instanceCount() {
+		return this.#instanceCount;
+	}
+
+	/*
+	================
+	select
+
+	The index and instance counts the draw submits.
+	================
+	*/
+	static select( draw: DeviceDraw, indexCount: number, instanceCount: number ) {
+		draw.#indexCount = indexCount;
+		draw.#instanceCount = instanceCount;
+	}
+
+	/*
+	================
+	rebind
+
+	A new binding, and with grown instance storage its capacity.
+	================
+	*/
+	static rebind( draw: DeviceDraw, binding: GPUBindGroup, instanceCapacity = draw.#instanceCapacity ) {
+		draw.#binding = binding;
+		draw.#instanceCapacity = instanceCapacity;
+	}
+}
+
+/*
+================
 createGeometryResources
 ================
 */
@@ -60,7 +143,8 @@ export function createGeometryResources(
 	environment: GPUBuffer,
 	sampling?: ( filtered: boolean, detail: number ) => GPUSampler,
 	animation?: ReturnType<typeof createGpuAnimationResources>,
-	format: GPUTextureFormat = "rgba8unorm"
+	format: GPUTextureFormat = "rgba8unorm",
+	particles?: ReturnType<typeof createParticlePresentation>
 ) {
 	let filtered = true, detail = 2, mixedCpuUploadBytes = 0;
 	const geometryBuffers = new Map<GeometryDraw, GPUBuffer[]>();
@@ -75,6 +159,34 @@ export function createGeometryResources(
 	// writeBuffer copies its source bytes before returning. One device-owned
 	// scratch stream can serve every synchronous update without per-draw storage.
 	let instanceScratch = new Float32Array( 0 );
+	/*
+	================
+	finiteValues
+	================
+	*/
+	function finiteValues( values: Float32Array ): boolean {
+		for ( let i = 0; i < values.length; i++ ) if ( !Number.isFinite( values[i] ) ) return false;
+		return true;
+	}
+	/*
+	================
+	unitValues
+
+	Every value finite and within 0..1.
+	================
+	*/
+	function unitValues( values: Float32Array ): boolean {
+		for ( let i = 0; i < values.length; i++ ) {
+			const v = values[i]!;
+			if ( !(Number.isFinite( v ) && v >= 0 && v <= 1) ) return false;
+		}
+		return true;
+	}
+	/*
+	================
+	packInstances
+	================
+	*/
 	function packInstances(
 		instances: Float32Array,
 		opacity?: Float32Array,
@@ -83,14 +195,14 @@ export function createGeometryResources(
 		paletteOffsets?: Uint32Array
 	) {
 		const count = instances.length / 16;
-		if (
-			!Number.isInteger( count ) ||
-			opacity && (opacity.length !== count || !opacity.every( v => Number.isFinite( v ) && v >= 0 && v <= 1 ))
-		) throw new Error( "Invalid instance opacity" );
-		if ( pointLights && (pointLights.length !== count * 12 || !pointLights.every( Number.isFinite )) ) {
+		// Plain loops: these run on every instance upload, every frame.
+		if ( !Number.isInteger( count ) || opacity && (opacity.length !== count || !unitValues( opacity )) ) {
+			throw new Error( "Invalid instance opacity" );
+		}
+		if ( pointLights && (pointLights.length !== count * 12 || !finiteValues( pointLights )) ) {
 			throw Error( "Invalid point light stream" );
 		}
-		if ( appearance && (appearance.length !== count * 8 || !appearance.every( Number.isFinite )) ) {
+		if ( appearance && (appearance.length !== count * 8 || !finiteValues( appearance )) ) {
 			throw new Error( "Invalid instance appearance" );
 		}
 		if ( paletteOffsets && (paletteOffsets.length !== count || paletteOffsets.some( v => v >= 16777216 )) ) {
@@ -118,6 +230,11 @@ export function createGeometryResources(
 		defaultBones = created.createBuffer( { size: 64, usage: GPUBufferUsage.STORAGE } );
 	type SharedPalette = { source: Float32Array; buffer: GPUBuffer; refs: number; revision: number; };
 	const sharedPalettes = new Map<Float32Array, SharedPalette>();
+	/*
+	================
+	releasePalette
+	================
+	*/
 	function releasePalette( palette: SharedPalette | undefined ) {
 		if ( palette && !--palette.refs ) {
 			animation?.release( palette.source );
@@ -125,13 +242,16 @@ export function createGeometryResources(
 			sharedPalettes.delete( palette.source );
 		}
 	}
-	function validatePaletteOffsets(
-		offsets: Uint32Array | undefined,
-		bones: GPUBuffer | undefined,
-		jointMaximum: number
-	) {
-		if ( !offsets || !bones || offsets.some( offset => offset + jointMaximum >= bones.size / 64 ) ) {
-			throw Error( "Palette offset outside bone storage" );
+	/*
+	================
+	validatePaletteOffsets
+	================
+	*/
+	function validatePaletteOffsets( offsets: Uint32Array | undefined, boneBytes: number, jointMaximum: number ) {
+		if ( !offsets ) throw Error( "Palette offset outside bone storage" );
+		const joints = boneBytes / 64;
+		for ( let i = 0; i < offsets.length; i++ ) {
+			if ( offsets[i]! + jointMaximum >= joints ) throw Error( "Palette offset outside bone storage" );
 		}
 	}
 	const geometryBinding = (
@@ -174,13 +294,18 @@ export function createGeometryResources(
 		vertices?: Float32Array;
 		skin: GPUBuffer;
 		bones: GPUBuffer;
+		// The bone and index buffers' sizes, read once: a GPUBuffer's size
+		// crosses into the browser on every read, and updates run every frame.
+		boneBytes: number;
+		indexBytes: number;
 		palette?: SharedPalette;
 		jointMaximum: number;
 		// Lightmaps and decals sample with clamped addressing.
 		clampedSampling: boolean;
 		// The material uniform's TEXTUREFACTOR offset in bytes (its last vec4).
 		textureFactorOffset: number;
-		selection: { indexCount: number; instanceCount: number; binding: GPUBindGroup; };
+		// The draw handle itself, which this owner updates in place.
+		selection: DeviceDraw;
 	}>();
 	let shadows: ReturnType<typeof createCharacterShadows> | undefined;
 	const commands: GeometryCommands = Object.freeze( {
@@ -242,9 +367,30 @@ export function createGeometryResources(
 				}
 			} :
 			{}),
+		/*
+		================
+		presentParticles
+		================
+		*/
+		presentParticles( draw: GeometryDraw, presentation: import("../internal/gpu-contract").ParticlePresentation ) {
+			const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
+			if ( !particles ) throw Error( "Particle presentation unavailable" );
+			if ( !meta || !buffers || meta.bones === defaultBones || meta.palette ) {
+				throw Error( "Particle presentation requires an owned skinned draw" );
+			}
+			if ( meta.selection.instanceCount !== presentation.rows * presentation.slots ) {
+				throw Error( "Particle presentation must draw one instance a slot" );
+			}
+			particles.present( draw, buffers[3]!, meta.bones, presentation );
+		},
+		/*
+		================
+		updateBones
+		================
+		*/
 		updateBones( draw: GeometryDraw, bones: Float32Array, revision?: number ) {
 			const meta = metadata.get( draw );
-			if ( !meta || meta.bones === defaultBones || bones.byteLength > meta.bones.size ) {
+			if ( !meta || meta.bones === defaultBones || bones.byteLength > meta.boneBytes ) {
 				throw new Error( "Invalid bone palette" );
 			}
 			if ( meta.palette ) {
@@ -266,9 +412,14 @@ export function createGeometryResources(
 			if ( meta.palette ) meta.palette.revision = revision!;
 			return bones.byteLength;
 		},
+		/*
+		================
+		updateIndices
+		================
+		*/
 		updateIndices( draw: GeometryDraw, indices: Uint32Array ) {
-			const gpu = current(), buffers = geometryBuffers.get( draw );
-			if ( !buffers || indices.byteLength > buffers[1]!.size ) {
+			const gpu = current(), buffers = geometryBuffers.get( draw ), meta = metadata.get( draw );
+			if ( !buffers || !meta || indices.byteLength > meta.indexBytes ) {
 				throw new Error( "Invalid index selection" );
 			}
 			if ( indices.byteLength ) {
@@ -280,25 +431,29 @@ export function createGeometryResources(
 					indices.byteLength
 				);
 			}
-			const selection = metadata.get( draw )!.selection;
-			selection.indexCount = indices.length;
-			selection.instanceCount = 1;
+			DeviceDraw.select( meta.selection, indices.length, 1 );
 		},
 		updatePositions(
 			draw: GeometryDraw,
 			positions: Float32Array,
 			colors?: Float32Array,
 			uvs?: Float32Array,
-			ranges?: readonly (readonly [number, number])[]
+			ranges?: readonly (readonly [number, number])[],
+			slot?: number
 		) {
 			const gpu = current(), meta = metadata.get( draw ), count = positions.length / 3;
 			if ( !meta ) throw Error( "Invalid position update" );
-			const vertices = meta.vertices;
-			if ( !vertices ) throw Error( "Geometry was uploaded without dynamicVertices" );
+			const mirror = meta.vertices;
+			if ( !mirror ) throw Error( "Geometry was uploaded without dynamicVertices" );
+			// A whole mesh (no slot) covers its draw exactly; a layer member at
+			// any slot, the first one included, fits inside it.
+			const base = slot ?? 0;
 			if (
-				count !== vertices.length / 14 || colors && colors.length !== count * 4 ||
-				uvs && uvs.length !== count * 2
+				!Number.isInteger( base ) || base < 0 ||
+				(slot === undefined ? count !== mirror.length / 14 : base + count > mirror.length / 14) ||
+				colors && colors.length !== count * 4 || uvs && uvs.length !== count * 2
 			) throw Error( "Invalid position update" );
+			const vertices = mirror.subarray( base * 14, (base + count) * 14 );
 			// Ranges are vertex start/count pairs. Validate the complete transaction
 			// before changing the retained CPU mirror or submitting any GPU writes.
 			const spans: [number, number][] = [];
@@ -343,12 +498,33 @@ export function createGeometryResources(
 				const offset = start * 56;
 				gpu.queue.writeBuffer(
 					draw.vertices,
-					offset,
+					base * 56 + offset,
 					vertices.buffer as ArrayBuffer,
 					vertices.byteOffset + offset,
 					(end - start) * 56
 				);
 			}
+		},
+		/*
+		================
+		writeVertices
+		================
+		*/
+		writeVertices( draw: GeometryDraw, base: number, vertices: Float32Array ) {
+			const meta = metadata.get( draw ), mirror = meta?.vertices;
+			if ( !mirror ) throw Error( "Geometry was uploaded without dynamicVertices" );
+			if (
+				!Number.isInteger( base ) || base < 0 || vertices.length % 14 ||
+				base * 14 + vertices.length > mirror.length
+			) throw Error( "Invalid vertex write" );
+			mirror.set( vertices, base * 14 );
+			current().queue.writeBuffer(
+				draw.vertices,
+				base * 56,
+				mirror.buffer as ArrayBuffer,
+				mirror.byteOffset + base * 56,
+				vertices.byteLength
+			);
 		},
 		updateInstances(
 			draw: GeometryDraw,
@@ -363,7 +539,7 @@ export function createGeometryResources(
 				throw new Error( "Stale geometry handle" );
 			}
 			const meta = metadata.get( draw )!;
-			if ( meta.palette ) validatePaletteOffsets( paletteOffsets, meta.bones, meta.jointMaximum );
+			if ( meta.palette ) validatePaletteOffsets( paletteOffsets, meta.boneBytes, meta.jointMaximum );
 			else if ( paletteOffsets ) throw Error( "Palette offsets require shared bone storage" );
 			const count = instances.length / 16,
 				packed = packInstances( instances, opacity, appearance, pointLights, paletteOffsets );
@@ -379,9 +555,7 @@ export function createGeometryResources(
 						packed.byteLength
 					);
 				}
-				const selection = metadata.get( draw )!.selection;
-				selection.indexCount = draw.count;
-				selection.instanceCount = count;
+				DeviceDraw.select( meta.selection, draw.count, count );
 				return draw;
 			}
 			gpu.pushErrorScope( "validation" );
@@ -400,46 +574,30 @@ export function createGeometryResources(
 							packed.byteOffset,
 							packed.byteLength
 						);
-						const selection = metadata.get( draw )!.selection;
-						selection.binding = geometryBinding(
-							metadata.get( draw )!.uniform,
-							storage,
-							metadata.get( draw )!.material,
-							draw.pipeline,
-							metadata.get( draw )!.clampedSampling,
-							metadata.get( draw )!.image,
-							metadata.get( draw )!.skin,
-							metadata.get( draw )!.bones,
-							metadata.get( draw )!.environmentImage
+						DeviceDraw.rebind(
+							meta.selection,
+							geometryBinding(
+								meta.uniform,
+								storage,
+								meta.material,
+								draw.pipeline,
+								meta.clampedSampling,
+								meta.image,
+								meta.skin,
+								meta.bones,
+								meta.environmentImage
+							),
+							capacity
 						);
-						const replacement = Object.freeze( {
-							...draw,
-							get indexCount() {
-								return selection.indexCount;
-							},
-							get instanceCount() {
-								return selection.instanceCount;
-							},
-							get binding() {
-								return selection.binding;
-							},
-							instanceCapacity: capacity
-						} );
+						shadows?.forget( draw );
 						buffers[3]!.destroy();
 						buffers[3] = storage;
-						geometryBuffers.delete( draw );
-						geometryBuffers.set( replacement, buffers );
-						metadata.set( replacement, metadata.get( draw )! );
-						metadata.delete( draw );
-						draw = replacement;
 					} catch ( error ) {
 						storage.destroy();
 						throw error;
 					}
 				}
-				const selection = metadata.get( draw )!.selection;
-				selection.indexCount = draw.count;
-				selection.instanceCount = count;
+				DeviceDraw.select( meta.selection, draw.count, count );
 				return draw;
 			} finally {
 				gpu.popErrorScope().then( error => {
@@ -465,6 +623,11 @@ export function createGeometryResources(
 			}
 			current().queue.writeBuffer( meta.material, meta.textureFactorOffset, rgba as Float32Array<ArrayBuffer> );
 		},
+		/*
+		================
+		updateMaterialColors
+		================
+		*/
 		updateMaterialColors( draw: GeometryDraw, rgb: Float32Array, flags: number ) {
 			const meta = metadata.get( draw );
 			if ( !meta ) throw Error( "Unknown geometry draw" );
@@ -492,12 +655,22 @@ export function createGeometryResources(
 				Float32Array.of( ...color, enabled ? gain : 0, ...uv, alphaTest ? 1 : 0, 0 )
 			);
 		},
+		/*
+		================
+		updateTextureTransform
+		================
+		*/
 		updateTextureTransform( draw: GeometryDraw, matrix: Float32Array ) {
 			const meta = metadata.get( draw );
 			if ( !meta ) throw Error( "Unknown geometry draw" );
 			if ( matrix.length !== 8 || !matrix.every( Number.isFinite ) ) throw Error( "Invalid texture transform" );
 			current().queue.writeBuffer( meta.material, 144, matrix as Float32Array<ArrayBuffer> );
 		},
+		/*
+		================
+		updateTransform
+		================
+		*/
 		updateTransform( draw: GeometryDraw, transform: Float32Array ) {
 			const gpu = current(), buffers = geometryBuffers.get( draw );
 			if ( !buffers ) {
@@ -511,6 +684,11 @@ export function createGeometryResources(
 				transform.byteLength
 			);
 		},
+		/*
+		================
+		upload
+		================
+		*/
 		upload( data: Geometry, image?: ImageDraw, paletteOffsets?: Uint32Array, environmentImage?: ImageDraw ) {
 			const gpu = current(), buffers: GPUBuffer[] = [];
 			let palette: SharedPalette | undefined;
@@ -522,7 +700,10 @@ export function createGeometryResources(
 				return result;
 			};
 			try {
-				const interleaved = packGeometryVertices( data );
+				// The asset worker packs terrain (Geometry.vertices); pack anything else here.
+				const interleaved = data.vertices?.length === data.positions.length / 3 * 14 ?
+					data.vertices :
+					packGeometryVertices( data );
 				const vertices = buffer( interleaved, GPUBufferUsage.VERTEX ),
 					indices = buffer( data.indices, GPUBufferUsage.INDEX ),
 					uniform = buffer( data.transform, GPUBufferUsage.UNIFORM );
@@ -577,7 +758,7 @@ export function createGeometryResources(
 				}
 				if ( paletteOffsets ) {
 					if ( !palette ) throw Error( "Palette offsets require skinned geometry" );
-					validatePaletteOffsets( paletteOffsets, boneBuffer, jointMaximum );
+					validatePaletteOffsets( paletteOffsets, boneBuffer.size, jointMaximum );
 				}
 				const mat = data.material;
 				if ( mat?.environmentReflection && !environmentImage ) {
@@ -633,7 +814,7 @@ export function createGeometryResources(
 						0,
 						mat?.environmentReflection ? 1 : 0,
 						mat?.alphaCompare ?? 7,
-						mat?.textureAlphaSquared ? 1 : 0,
+						0,
 						0,
 						0,
 						0,
@@ -666,25 +847,19 @@ export function createGeometryResources(
 					boneBuffer,
 					environmentImage
 				);
-				const selection = { indexCount: data.indices.length, instanceCount: count, binding };
-				const draw = Object.freeze( {
-					deferredParticle: mat?.deferredParticle,
-					blended: data.material?.sky ? false : data.material?.blend ?? false,
-					pipeline: selected,
-					get binding() {
-						return selection.binding;
+				const draw = new DeviceDraw(
+					{
+						deferredParticle: mat?.deferredParticle,
+						blended: data.material?.sky ? false : data.material?.blend ?? false,
+						pipeline: selected,
+						vertices,
+						indices,
+						count: data.indices.length
 					},
-					vertices,
-					indices,
-					instanceCapacity: capacity,
-					count: data.indices.length,
-					get indexCount() {
-						return selection.indexCount;
-					},
-					get instanceCount() {
-						return selection.instanceCount;
-					}
-				} );
+					binding,
+					capacity,
+					count
+				);
 				geometryBuffers.set( draw, buffers );
 				metadata.set( draw, {
 					uniform: data.world ? worldUniform! : uniform,
@@ -694,11 +869,13 @@ export function createGeometryResources(
 					...(data.dynamicVertices ? { vertices: interleaved } : {}),
 					skin: skinBuffer,
 					bones: boneBuffer,
+					boneBytes: boneBuffer.size,
+					indexBytes: indices.size,
 					palette,
 					jointMaximum,
 					clampedSampling,
 					textureFactorOffset: materialData.byteLength - 16,
-					selection
+					selection: draw
 				} );
 				return draw;
 			} catch ( error ) {
@@ -715,22 +892,40 @@ export function createGeometryResources(
 				} ).catch( fail );
 			}
 		},
+		/*
+		================
+		release
+		================
+		*/
 		release( draw: GeometryDraw ) {
+			shadows?.forget( draw );
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
 				buffer.destroy();
 			}
 			releasePalette( metadata.get( draw )?.palette );
+			particles?.release( draw );
 			geometryBuffers.delete( draw );
 			metadata.delete( draw );
 		}
 	} );
 	return {
 		commands,
-		ready: animation?.ready ?? Promise.resolve(),
+		ready: Promise.all( [ animation?.ready, particles?.ready ] ),
+		/*
+		================
+		prepare
+		================
+		*/
 		prepare( encoder: GPUCommandEncoder, timing?: import("../internal/gpu-contract").GpuTimingFrame ) {
 			animation?.encode( encoder, timing );
+			particles?.encode( encoder, timing );
 			shadows?.encode( encoder );
 		},
+		/*
+		================
+		textureOptions
+		================
+		*/
 		textureOptions( nextFiltered: boolean, nextDetail: number ) {
 			if ( filtered === nextFiltered && detail === nextDetail ) return;
 			if ( !Number.isInteger( nextDetail ) || nextDetail < 0 || nextDetail > 2 ) {
@@ -741,25 +936,39 @@ export function createGeometryResources(
 			if ( !sampling ) throw Error( "Texture settings capability unavailable" );
 			worldSampler = sampling( filtered, detail );
 			for ( const [draw, meta] of metadata ) {
-				meta.selection.binding = geometryBinding(
-					meta.uniform,
-					geometryBuffers.get( draw )![3]!,
-					meta.material,
-					draw.pipeline,
-					meta.clampedSampling,
-					meta.image,
-					meta.skin,
-					meta.bones,
-					meta.environmentImage
+				DeviceDraw.rebind(
+					meta.selection,
+					geometryBinding(
+						meta.uniform,
+						geometryBuffers.get( draw )![3]!,
+						meta.material,
+						draw.pipeline,
+						meta.clampedSampling,
+						meta.image,
+						meta.skin,
+						meta.bones,
+						meta.environmentImage
+					)
 				);
 			}
 		},
+		/*
+		================
+		worldView
+		================
+		*/
 		worldView( transform: Float32Array ) {
 			current().queue.writeBuffer( worldUniform, 0, transform.buffer as ArrayBuffer, transform.byteOffset, 64 );
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose() {
 			shadows?.dispose();
 			animation?.dispose();
+			particles?.dispose();
 			for ( const buffers of geometryBuffers.values() ) {
 				for ( const buffer of buffers ) {
 					buffer.destroy();

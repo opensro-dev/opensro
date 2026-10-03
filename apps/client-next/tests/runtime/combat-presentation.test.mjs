@@ -97,6 +97,43 @@ test("damage world anchors are copied, region-correct, survive target removal an
 		/anchor/
 	);
 });
+test("frame damage text follows the scene's labels and windows, and leaves with the world", () => {
+	const row = damageText( { kind: "monster", regionId: 257, x: 0, y: -20, z: 0 }, {
+		damage: 7,
+		flags: 0,
+		secondaryAmount: 0
+	}, 0 );
+	const label = {
+		rect: [ -5, -5, 10, 10 ],
+		clip: [ 0, 0, 1600, 1200 ],
+		uv: [ 0, 0, 1, 1 ],
+		texture: "name",
+		color: [ 1, 1, 1, 1 ],
+		characterAnchor: 9
+	};
+	const window = {
+		rect: [ 0, 0, 50, 50 ],
+		clip: [ 0, 0, 1600, 1200 ],
+		uv: [ 0, 0, 1, 1 ],
+		texture: "window",
+		color: [ 1, 1, 1, 1 ]
+	};
+	const scene = { revision: 1, width: 1600, height: 1200, quads: [ label, window ], damageText: true };
+	const live = damageTextQuads( [ row ], 0, 1600, 1200 ),
+		matrix = Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
+	const projected = projectCharacterLabels( scene, new Map( [ [ 9, [ 100, 100, .5 ] ] ] ), {
+		origin: 257,
+		matrix
+	}, live );
+	assert.deepEqual( projected.quads.map( q => q.texture ), [ "name", "window", ...live.map( q => q.texture ) ] );
+	assert.ok( projected.quads.slice( 2 ).every( q => q.depth !== undefined && !q.worldAnchor ) );
+	assert.equal(
+		projectCharacterLabels( scene, new Map( [ [ 9, [ 100, 100, .5 ] ] ] ), undefined, live ).quads.length,
+		2
+	);
+	assert.equal( copyUi( scene ).damageText, true );
+	assert.equal( copyUi( { ...scene, damageText: false } ).damageText, undefined );
+});
 test("monster hover honors server attack flags and native sibling pickup/talk/gate cursors", () => {
 	const local = { kind: "local-player" };
 	assert.equal( worldCursor( { kind: "monster" }, local ), 0x97 );

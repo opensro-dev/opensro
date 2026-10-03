@@ -11,6 +11,7 @@ import { uiTextureResidency } from "@/engine/foundation/rendering/ui-texture-res
 import { cameraBasis } from "@/engine/foundation/rendering/world-math";
 import { createPortrait } from "./characters/portrait";
 import { projectCharacterLabels } from "@/engine/foundation/ui/character-labels";
+import { damageTextAssets, damageTextQuads } from "@/engine/foundation/ui/damage-text";
 import { pickDestination } from "@/engine/foundation/rendering/pick-destination";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { readPickAlpha } from "./readback/readback";
@@ -26,6 +27,7 @@ import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw } from "./internal/gpu-contract";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 const INVENTORY_DOLL_WIDTH = 176;
 const INVENTORY_DOLL_HEIGHT = 318;
 
@@ -41,21 +43,25 @@ export function createRenderer(
 	diagnostics: import("@/engine/contracts/runtime").RuntimeDiagnostics = {}
 ): Renderer {
 	let video = defaultVideoOptions();
-	const portrait = createPortrait( createCharacters( diagnostics.animationPose ) );
+	const portrait = createPortrait( createCharacters() );
 	let portraitDepth: import("./internal/gpu-contract").DepthTarget | null = null;
 	const partyPortraits = Array.from(
 		{ length: 7 },
-		() => createPortrait( createCharacters( diagnostics.animationPose ) )
+		() => createPortrait( createCharacters() )
 	);
-	const doll = createPortrait( createCharacters( diagnostics.animationPose ) );
+	const doll = createPortrait( createCharacters() );
 	let dollWidth = 0, dollHeight = 0;
 	let dollDepth: import("./internal/gpu-contract").DepthTarget | null = null;
 	const uiPreparation = createUiPreparation();
 	let uiProduct: ReturnType<typeof prepareUi> | null = null;
 	const uiTextures = new Map<string, ImageBitmap | ImageData>(), dirtyUi = new Set<string>();
 	let residentUi = new Set<string>(), residentUiProduct: ReturnType<typeof prepareUi> | null = null;
+	// The damage text a scene's world annotations show (setDamageText), drawn
+	// each frame; its glyphs stay resident while such a scene is.
+	let damageRows: readonly import("@/engine/contracts/damage-text").DamageText[] = [];
+	const damageTextures = damageTextAssets();
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
-		characters = createCharacters( diagnostics.animationPose );
+		characters = createCharacters();
 	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
 	let surface: SurfaceOwner | null = null, frame: FrameOwner | null = null;
 	let transformDirty = false, instancesDirty = false;
@@ -104,7 +110,7 @@ export function createRenderer(
 			if ( disposed || failure || !pickView || device.phase() !== "running" || !pickOrigin ) return null;
 			const raw = pickRay( pickView, x, y );
 			if ( !raw ) return null;
-			const length = Math.hypot( ...raw.delta );
+			const length = hypot3( raw.delta[0]!, raw.delta[1]!, raw.delta[2]! );
 			if ( !length ) return null;
 			const ray = { start: raw.start, delta: raw.delta.map( v => v / length * 1000 ) };
 			return { originRegion: pickOrigin, ray, terrainDepth: world.pickGround( ray ) };
@@ -170,7 +176,9 @@ export function createRenderer(
 				}
 			}
 			let hit = characters.pick( rays, excluded, blindHeld ),
-				best = hit ? hit.depth * Math.hypot( ...rays[hit.ray]!.delta ) : Infinity;
+				best = hit ?
+					hit.depth * hypot3( rays[hit.ray]!.delta[0]!, rays[hit.ray]!.delta[1]!, rays[hit.ray]!.delta[2]! ) :
+					Infinity;
 			// CITeleportGate 8764C0: translation-only box, independent of map meshes.
 			for ( const gate of gates ) {
 				const b = gate.teleport;
@@ -203,7 +211,7 @@ export function createRenderer(
 						b.radius
 					], matrix );
 					if ( depth === null ) continue;
-					const distance = depth * Math.hypot( ...rays[r]!.delta );
+					const distance = depth * hypot3( rays[r]!.delta[0]!, rays[r]!.delta[1]!, rays[r]!.delta[2]! );
 					if ( distance < best || (hit?.ray !== 4 && r === 4) ) {
 						hit = { gid: gate.gid, depth, ray: r };
 						best = distance;
@@ -217,6 +225,14 @@ export function createRenderer(
 		setUi: scene => {
 			if ( disposed ) throw new Error( "Renderer disposed" );
 			uiProduct = uiPreparation.prepare( scene );
+		},
+		/*
+		================
+		setDamageText
+		================
+		*/
+		setDamageText( rows ) {
+			damageRows = rows;
 		},
 		/*
 		================
@@ -249,7 +265,7 @@ export function createRenderer(
 		characterActors: characters.currentActors,
 		cancelWorldUpdate: () => world.cancelPending(),
 		setWorld: scene => world.scene( scene ),
-		adoptWorld: ( lease, detail ) => world.adopt( lease, detail ),
+		adoptWorld: ( lease, detail, terrain ) => world.adopt( lease, detail, terrain ),
 		setWorldCamera: camera => world.camera( camera ),
 		setWorldTexture: ( path, image, alpha ) => world.texture( path, image, alpha ),
 		neededWorldTextures: () => world.neededTextures(),
@@ -374,9 +390,10 @@ export function createRenderer(
 				if ( residentUiProduct !== uiProduct || dirtyUi.size ) {
 					const demand = uiTextureResidency(
 						uiProduct?.scene ?? null,
-						new Set( uiTextures.keys() ),
+						uiTextures,
 						residentUi,
-						dirtyUi
+						dirtyUi,
+						uiProduct?.scene.damageText ? damageTextures : []
 					);
 					// Release first so window replacement cannot transiently
 					// exceed the device budget. CPU bitmaps stay warm for reopen.
@@ -456,11 +473,16 @@ export function createRenderer(
 				);
 				probe?.renderMark( "character-prepare" );
 				const uiScene = uiProduct?.scene ?? null, anchored = uiProduct?.anchors;
+				// Damage text rises and fades with the frame's clock, the same clock
+				// the interface used when it drew it into its own product.
+				const damage = uiScene?.damageText && damageRows.length && !preview ?
+					damageTextQuads( damageRows, timeSeconds, uiScene.width, uiScene.height ) :
+					[];
 				// Anchors are UI scene pixels, like the world anchors projected
 				// beside them. The GPU viewport is the backing store (CSS size
 				// times devicePixelRatio); projecting into it put every name at
 				// 1.25x its actor under 125% display scaling (BUG-043).
-				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors) ?
+				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors || damage.length) ?
 					projectCharacterLabels(
 						uiScene,
 						preview || !anchored?.size ?
@@ -472,7 +494,8 @@ export function createRenderer(
 								uiScene.height,
 								anchored!
 							),
-						preview ? undefined : { origin: scene.originRegion, matrix: scene.matrix }
+						preview ? undefined : { origin: scene.originRegion, matrix: scene.matrix },
+						damage
 					) :
 					uiScene;
 				const portraitGid = uiProduct?.portraitGid;
@@ -554,7 +577,6 @@ export function createRenderer(
 								finishDeferred()
 					} :
 					undefined;
-				frame!.profile( probe );
 				const pending = frame!.draw(
 					color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),

@@ -59,6 +59,7 @@ const bloom = runtime + "renderer/device/bloom.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
+const particles = runtime + "renderer/device/particles.ts";
 const deviceInternals = [
 	bloom,
 	device,
@@ -71,6 +72,7 @@ const deviceInternals = [
 	timing,
 	animation,
 	particleQuery,
+	particles,
 	shadows
 ];
 export const rules = {
@@ -80,7 +82,8 @@ export const rules = {
 	getMappedRange: [ timing ],
 	Audio: [ runtime + "audio/music/music.ts" ],
 	createElement: [ uiBridge, runtime + "platform/ui/cursor.ts", bugRecorder, bugDialog, bugTrimmer ],
-	OffscreenCanvas: [ runtime + "renderer/readback/readback.ts", bugRecorder ],
+	// The picking mask readback, shared by the renderer and the asset worker.
+	OffscreenCanvas: [ "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder ],
 	AudioContext: [ runtime + "audio/audio.ts" ],
 	decodeAudioData: [ runtime + "audio/audio.ts" ],
 	createPanner: [ runtime + "audio/audio.ts" ],
@@ -105,7 +108,7 @@ export const rules = {
 	submit: [ frame, device ],
 	createImageBitmap: [ runtime + "assets/worker/loader.ts" ],
 	createSampler: [ device ],
-	getContext: [ surface, runtime + "renderer/readback/readback.ts", bugRecorder, bugTrimmer ],
+	getContext: [ surface, "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder, bugTrimmer ],
 	createBuffer: [ device ],
 	createTexture: [ device ],
 	createBindGroup: [ device ],
@@ -214,6 +217,18 @@ for (
 		"beginComputePass"
 	]
 ) rules[name].push( animation );
+// The particle presentation pass, like skinning, is encoded by geometry
+// preparation on the frame encoder into the draws' own buffers.
+for (
+	const name of [
+		"createShaderModule",
+		"createComputePipelineAsync",
+		"createBuffer",
+		"createBindGroup",
+		"writeBuffer",
+		"beginComputePass"
+	]
+) rules[name].push( particles );
 // Geometry preparation encodes device-owned skinning and shadow prepasses on
 // the frame encoder; it cannot create, submit, or finish an encoder.
 for (
@@ -258,12 +273,22 @@ for (
 		"getMappedRange"
 	]
 ) rules[name].push( particleQuery );
+/*
+================
+verifyCapabilities
+================
+*/
 export function verifyCapabilities( base = root ) {
 	const model = project( base ), issues = [];
 	const contractPath = path.join( base, "execution-contract.json" ),
 		barriers = fs.existsSync( contractPath ) ?
 			JSON.parse( fs.readFileSync( contractPath, "utf8" ) ).frameBarriers ?? [] :
 			[];
+	/*
+	================
+	nativeBarrier
+	================
+	*/
 	function nativeBarrier( file, n ) {
 		let fn = n;
 		while ( fn && !ts.isFunctionLike( fn ) ) fn = fn.parent;
@@ -316,7 +341,7 @@ export function verifyCapabilities( base = root ) {
 			}
 			if (
 				ts.isIdentifier( n ) && [ "GPUCommandEncoder", "GPURenderBundleEncoder" ].includes( n.text ) &&
-				!([ animation, geometry, shadows ].includes( file ) && n.text === "GPUCommandEncoder") &&
+				!([ animation, particles, geometry, shadows ].includes( file ) && n.text === "GPUCommandEncoder") &&
 				![ frame, runtime + "renderer/internal/gpu-contract.ts" ].includes( file )
 			) {
 				issues.push( `${file}: raw command encoder outside frame capability` );

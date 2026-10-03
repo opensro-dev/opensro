@@ -59,6 +59,7 @@ import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { nativeHeadingYaw, radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 /*
 ================
 stageAttachmentBasis
@@ -1348,7 +1349,7 @@ export function createCharacterEffects(
 												(dungeon ?
 													0 :
 													((caster.regionId >>> 8) - (entity.regionId >>> 8)) * 1920),
-											length = Math.hypot( dx, dy, dz ),
+											length = hypot3( dx, dy, dz ),
 											k = length ? -az / length : 0;
 										source = {
 											regionId: pose.regionId,
@@ -2012,7 +2013,7 @@ export function createCharacterEffects(
 															(dungeon ?
 																0 :
 																((hawk.region >>> 8) - (target.regionId >>> 8)) * 1920),
-														length = Math.hypot( dx, dy, dz ),
+														length = hypot3( dx, dy, dz ),
 														k = length ? -az / length : 0;
 													const blood = presentation.get( target.gid )?.bloodEffects
 														?.[bloodEnabled ? 0 : 1];

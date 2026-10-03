@@ -5,7 +5,7 @@ frame.ts - the frame owner: render passes and bundles
 
 Records and submits one frame's passes (world, overlays, UI, portraits)
 from the prepared draw lists, retaining render bundles while their inputs
-are unchanged. Diagnostics observe it only through the frame probe.
+are unchanged.
 
 ===========================================================================
 */
@@ -43,14 +43,34 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			bundle: GPURenderBundle;
 		}
 	>();
-	let anchors = new Set<GeometryDraw>();
+	let anchors = new Set<GeometryDraw>(), nextAnchors = new Set<GeometryDraw>();
+	// The frame's drawable geometry, refilled every frame.
+	const live: GeometryDraw[] = [];
 	let recordedImage: ImageDraw | undefined, imageBundle: GPURenderBundle | null = null;
-	// Optional measurements from the frame owner; the profiler never rewrites this source.
-	let probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined;
+	/*
+	================
+	bundleCurrent
+
+	True when cached still records live[start..end): the same draws, with
+	the same counts and bindings.
+	================
+	*/
+	function bundleCurrent(
+		cached: { draws: readonly GeometryDraw[]; counts: readonly number[]; bindings: readonly GPUBindGroup[]; },
+		start: number,
+		end: number
+	): boolean {
+		if ( cached.draws.length !== end - start ) return false;
+		for ( let i = 0; i < end - start; i++ ) {
+			const draw = live[start + i]!;
+			if (
+				draw !== cached.draws[i] || draw.binding !== cached.bindings[i] ||
+				draw.indexCount !== cached.counts[i * 2] || draw.instanceCount !== cached.counts[i * 2 + 1]
+			) return false;
+		}
+		return true;
+	}
 	return {
-		profile( value ) {
-			probe = value;
-		},
 		draw(
 			view,
 			image,
@@ -68,19 +88,6 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			deferred,
 			bloom
 		) {
-			probe?.frameDraw?.(
-				frameId,
-				image,
-				geometry,
-				world,
-				ui,
-				preview,
-				flares,
-				thunder,
-				portrait,
-				doll,
-				partyPortraits
-			);
 			const sceneView = bloom?.view ?? view;
 			if ( ui !== recordedUi ) {
 				function record( layer: UiDraw["layer"] ) {
@@ -113,25 +120,22 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			// Retain bounded contiguous runs. Individual bundles add submission overhead;
 			// one whole-world bundle makes a terrain change re-record the entire city.
 			const bundles: GPURenderBundle[] = imageBundle ? [ imageBundle ] : [];
-			const all = (geometry ? [ geometry, ...world ] : world).filter( draw =>
-					draw.indexCount > 0 && draw.instanceCount > 0
-				),
-				nextAnchors = new Set<GeometryDraw>();
-			for ( let start = 0; start < all.length; ) {
+			live.length = 0;
+			if ( geometry && geometry.indexCount > 0 && geometry.instanceCount > 0 ) live.push( geometry );
+			for ( const draw of world ) if ( draw.indexCount > 0 && draw.instanceCount > 0 ) live.push( draw );
+			nextAnchors.clear();
+			for ( let start = 0; start < live.length; ) {
 				let end = start + 1;
-				while ( end < all.length && end - start < 32 && (end - start < 16 || !anchors.has( all[end]! )) ) end++;
-				const first = all[start]!, draws = all.slice( start, end ), counts: number[] = [];
-				for ( const draw of draws ) counts.push( draw.indexCount, draw.instanceCount );
+				while ( end < live.length && end - start < 32 && (end - start < 16 || !anchors.has( live[end]! )) ) {
+					end++;
+				}
+				const first = live[start]!;
 				let cached = geometryBundles.get( first );
-				if (
-					!cached || cached.draws.length !== draws.length || draws.some( ( draw, i ) =>
-						draw !== cached!.draws[i]
-					) || counts.some( ( count, i ) => count !== cached!.counts[i] ) || draws.some( ( draw, i ) =>
-						draw.binding !== cached!.bindings[i]
-					)
-				) {
+				if ( !cached || !bundleCurrent( cached, start, end ) ) {
+					const draws = live.slice( start, end ), counts: number[] = [];
 					const encoder = commands.createBundleEncoder();
 					for ( const draw of draws ) {
+						counts.push( draw.indexCount, draw.instanceCount );
 						encoder.setPipeline( draw.pipeline );
 						encoder.setBindGroup( 0, draw.binding );
 						encoder.setVertexBuffer( 0, draw.vertices );
@@ -145,7 +149,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				nextAnchors.add( first );
 				start = end;
 			}
+			const previousAnchors = anchors;
 			anchors = nextAnchors;
+			nextAnchors = previousAnchors;
 			if ( (flares?.entries ?? null) !== recordedFlares ) {
 				recordedFlares = flares?.entries ?? null;
 				flareBundle = null;

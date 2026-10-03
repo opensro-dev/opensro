@@ -32,7 +32,7 @@ import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
 import { createBugReport } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
-import { animationProbe, frameProbe } from "./frame-probes";
+import { frameProbe } from "./frame-probes";
 import { createRenderer } from "./renderer/renderer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
@@ -121,10 +121,7 @@ export function startRuntime(
 		const input = createInput();
 		const simulation = own( createSimulationHost() );
 		const renderer = own(
-			createRenderer( canvas, random, audio.enqueue, {
-				...diagnostics,
-				animationPose: diagnostics.animationPose ?? animationProbe()
-			} )
+			createRenderer( canvas, random, audio.enqueue, diagnostics )
 		);
 		const frontend = own(
 			createFrontend(
@@ -715,7 +712,6 @@ export function startRuntime(
 						worldTransitionRegion: world.loadingRegion(),
 						loadingProgress,
 						berserkGauge: characters.orbGauge(),
-						damageText: characters.damageText(),
 						frontend: frontendState,
 						session: sessionState,
 						gameplay: presentation.gameplay(),
@@ -759,6 +755,7 @@ export function startRuntime(
 				// A server's 426 is the same news, learned from a refused request.
 				platform.presentUpdate( releaseWatch.newerAvailable() || sessionState?.releaseOutdated === true );
 				markStage( "ui" );
+				renderer.setDamageText( characters.damageText() );
 				const rendered = renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() );
 				if ( rendered ) await rendered;
 				if ( disposed ) return;

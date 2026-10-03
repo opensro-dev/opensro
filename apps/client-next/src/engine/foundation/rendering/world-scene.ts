@@ -15,6 +15,7 @@ import type { PreparedWorldScene } from "@/engine/contracts/world-admission";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { finiteGeometryValues, finiteNumbers, geometryIndicesInRange, numbersWithin } from "./geometry-validation";
 import { PICK_BLOCK_INDICES } from "./picking";
+import { packGeometryVertices } from "./geometry-vertices";
 // Frontend stage manifests intentionally retain the complete scripted route.
 // Constantinople reference measurement: 406 MiB scene, 731 MiB decode scratch.
 export const FRONTEND_SCENE_BYTES = 536870912;
@@ -444,8 +445,12 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 			weights: g.weights,
 			bones: g.bones ? mutable( g.bones ) : undefined,
 			// Terrain stitches its seams by rewriting positions (world.ts).
-			dynamicVertices: group.ranges !== undefined
+			dynamicVertices: group.ranges !== undefined,
+			vertices: undefined as Float32Array | undefined
 		} satisfies Record<keyof Geometry, unknown>;
+		// Terrain is most of a scene's upload; packing it here keeps the
+		// interleave off the main thread, which keeps it as the seam mirror.
+		if ( geometry.dynamicVertices ) geometry.vertices = packGeometryVertices( geometry );
 		return {
 			...group,
 			ranges: group.ranges && sharedSeamVertices( group.ranges, geometry.positions ),
@@ -457,10 +462,105 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 	if ( stars.length > 1 ) throw new Error( "Duplicate world star groups" );
 	const starBytes = worldSceneBytes( { id: "stars", originRegion: 0, warnings: [], groups: stars } );
 	return {
-		scene: { ...scene, dungeonVisibility: scene.dungeonVisibility?.map( row => row.slice() ), groups },
+		scene: {
+			...scene,
+			dungeonVisibility: scene.dungeonVisibility?.map( row => row.slice() ),
+			groups: packGroupStreams( groups )
+		},
 		bytes,
 		starBytes
 	};
+}
+
+// Stream offsets within the arena keep every view aligned for any element type.
+const STREAM_ALIGNMENT = 8;
+type StreamView =
+	| Float32Array
+	| Float64Array
+	| Uint32Array
+	| Uint16Array
+	| Uint8Array
+	| Int32Array
+	| Int16Array
+	| Int8Array;
+
+/*
+================
+streamView
+
+A view of the same element type as view, over as many elements of arena.
+================
+*/
+function streamView( view: StreamView, arena: ArrayBuffer, offset: number ): StreamView {
+	if ( view instanceof Float32Array ) return new Float32Array( arena, offset, view.length );
+	if ( view instanceof Uint32Array ) return new Uint32Array( arena, offset, view.length );
+	if ( view instanceof Uint16Array ) return new Uint16Array( arena, offset, view.length );
+	if ( view instanceof Uint8Array ) return new Uint8Array( arena, offset, view.length );
+	if ( view instanceof Float64Array ) return new Float64Array( arena, offset, view.length );
+	if ( view instanceof Int32Array ) return new Int32Array( arena, offset, view.length );
+	if ( view instanceof Int16Array ) return new Int16Array( arena, offset, view.length );
+	return new Int8Array( arena, offset, view.length );
+}
+
+/*
+================
+packGroupStreams
+
+Moves every typed array the groups hold (geometry streams and terrain seam
+plans) into one ArrayBuffer, as views at aligned offsets. A scene of a few
+hundred groups otherwise transfers thousands of buffers, and the receiving
+structured clone pays per buffer: a town's objects took 10 ms on the main
+thread, half of it buffer bookkeeping. A view shared by several groups stays
+shared. Writers (terrain seams, animation bones) write within their own view.
+================
+*/
+function packGroupStreams( groups: readonly WorldScene["groups"][number][] ): WorldScene["groups"][number][] {
+	const views = new Map<ArrayBufferView, ArrayBufferView | null>();
+	let bytes = 0;
+	/*
+	================
+	reserve
+	================
+	*/
+	function reserve( view: ArrayBufferView | undefined ) {
+		if ( !view || views.has( view ) ) return;
+		views.set( view, null );
+		bytes += Math.ceil( view.byteLength / STREAM_ALIGNMENT ) * STREAM_ALIGNMENT;
+	}
+	for ( const group of groups ) {
+		for ( const value of Object.values( group.geometry ) ) if ( ArrayBuffer.isView( value ) ) reserve( value );
+		for ( const range of group.ranges ?? [] ) reserve( range.seamVertices );
+	}
+	const arena = new ArrayBuffer( bytes );
+	let offset = 0;
+	for ( const view of views.keys() ) {
+		const typed = view as StreamView;
+		new Uint8Array( arena, offset, typed.byteLength ).set(
+			new Uint8Array( typed.buffer, typed.byteOffset, typed.byteLength )
+		);
+		views.set( view, streamView( typed, arena, offset ) );
+		offset += Math.ceil( typed.byteLength / STREAM_ALIGNMENT ) * STREAM_ALIGNMENT;
+	}
+	/*
+	================
+	moved
+	================
+	*/
+	function moved<T>( value: T ): T {
+		return ArrayBuffer.isView( value ) ? views.get( value ) as T : value;
+	}
+	return groups.map( group => {
+		const geometry = Object.fromEntries(
+			Object.entries( group.geometry ).map( ( [key, value] ) => [ key, moved( value ) ] )
+		) as unknown as typeof group.geometry;
+		return group.ranges ?
+			{
+				...group,
+				geometry,
+				ranges: group.ranges.map( range => ({ ...range, seamVertices: moved( range.seamVertices ) }) )
+			} :
+			{ ...group, geometry };
+	} );
 }
 
 /*

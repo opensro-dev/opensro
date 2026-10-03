@@ -29,7 +29,12 @@ import {
 	type ParticleProgram,
 	type ParticleVectorCommand
 } from "@/engine/foundation/animation/particle-program";
-import { snapshotParticleTick, continueRotation } from "@/engine/foundation/animation/particle-presentation";
+import {
+	snapshotParticleTick,
+	continueRotation,
+	createStepCache
+} from "@/engine/foundation/animation/particle-presentation";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 
 export interface ParticleEmitter {
 	readonly emission?: EmissionParameters;
@@ -221,7 +226,7 @@ strength / distance.
 function attract( element: ParticleElement, source: ParticleElement, strength: number ): void {
 	const position = element.state.position, from = source.state.position, velocity = element.state.velocity;
 	const d0 = position[0]! - from[0]!, d1 = position[1]! - from[1]!, d2 = position[2]! - from[2]!;
-	const length = Math.hypot( d0, d1, d2 );
+	const length = hypot3( d0, d1, d2 );
 	// Not a negated test: a NaN distance skips the pull, as native does.
 	if ( !(length > 1e-6) ) return;
 	velocity[0] = Math.fround( velocity[0]! + d0 * strength / length );
@@ -449,7 +454,10 @@ export function advanceParticleGraph(
 	const target = Math.min( Math.floor( time * TICKS_PER_SECOND + 1e-6 ), tickHorizon( graph ) );
 	if ( target < history.frame || !Number.isSafeInteger( target ) ) throw Error( "Invalid particle graph time" );
 	const scratch = history.scratch, elements = history.elements;
-	for ( let n = 0; n < elements.length; n++ ) {
+	// Only a region crossing shifts the origin. Every other call walked every
+	// retained element slot to add zero: a skill trace showed it as the
+	// largest single cost of its effects (0.8 ms of every frame).
+	for ( let n = 0; (shiftX !== 0 || shiftZ !== 0) && n < elements.length; n++ ) {
 		const rows = elements[n]!;
 		for ( let b = 0; b < rows.length; b++ ) {
 			const e = rows[b];
@@ -737,8 +745,17 @@ export function particleElementMatrix(
 	work?: Float64Array
 ): void {
 	const blend = Math.max( 0, Math.min( 1, fraction ) ), previous = element.state.previous;
-	if ( previous && blend > 0 ) continueRotation( previous.matrix, element.matrix, blend, out, offset, work );
-	else out.set( element.matrix, offset );
+	if ( previous && blend > 0 ) {
+		continueRotation(
+			previous.matrix,
+			element.matrix,
+			blend,
+			out,
+			offset,
+			work,
+			previous.matrixStep ??= createStepCache()
+		);
+	} else out.set( element.matrix, offset );
 	for ( let axis = 0; axis < 3; axis++ ) {
 		out[offset + 12 + axis] = element.state.position[axis]! +
 			(element.state.position[axis]! - element.previousPosition[axis]!) * blend;

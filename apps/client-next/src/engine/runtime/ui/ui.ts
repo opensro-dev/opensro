@@ -262,7 +262,7 @@ import { textBoardLines } from "@/engine/foundation/ui/text-lines";
 import { createSpeech } from "./hud/speech";
 import { createMessageScroll } from "./hud/scroll";
 import { createHudMessages } from "./hud/messages";
-import { damageTextAssets, damageTextQuads } from "@/engine/foundation/ui/damage-text";
+import { damageTextAssets } from "@/engine/foundation/ui/damage-text";
 import { targetStatus } from "@/engine/foundation/ui/target-status";
 import {
 	loadingPresentation,
@@ -277,6 +277,8 @@ import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout } from "@/engine/foundation/ui/chat-layout";
 import {
 	worldMapImagePaths,
+	worldMapDemand,
+	MAP_LOCAL_MARKER,
 	worldMapPageAt,
 	worldMapPages,
 	worldMapPresentation,
@@ -712,6 +714,7 @@ export function createUi(
 	let lastProduct: {
 		width: number;
 		height: number;
+		damageText: boolean;
 		quads: readonly UiQuad[];
 		semantics: import("@/engine/contracts/ui").UiSemantics;
 	} | null = null;
@@ -4621,7 +4624,7 @@ export function createUi(
 			const stableWorld = next.session?.phase === "world" && next.frontend?.phase === "world" &&
 				view?.frontend?.phase === "world" &&
 				!loading && !next.travel && next.worldTransitionRegion === undefined && next.worldReady &&
-				!next.damageText?.length && !view.damageText?.length && now < hudMessages.deadline() &&
+				now < hudMessages.deadline() &&
 				now < speech.deadline() &&
 				view.resourceError === next.resourceError && view.worldError === next.worldError &&
 				view.worldReady === next.worldReady && view.travel === next.travel &&
@@ -7027,7 +7030,12 @@ export function createUi(
 						} );
 					}
 				}
-				const mapProjection = pose ?
+				// A closed map only demands its images, so opening it is instant: the
+				// demand is computed without the projection (worldMapDemand). Its label
+				// glyphs (the largest allocation of a HUD step) and click hits are built
+				// while it is open. The font atlas is demanded either way.
+				const mapOpen = panel === "Map";
+				const mapProjection = pose && mapOpen ?
 					worldMapPresentation(
 						pose,
 						mapPage,
@@ -7050,11 +7058,13 @@ export function createUi(
 				// can never be hidden by a shop icon or a zone label.
 				// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
 				// its own font extent, subtracting the integer half-width from the anchor.
+				const fontPath = text.path();
+				if ( !mapOpen && fontPath ) paths.push( fontPath );
 				const mapImages = mapProjection ?
 					[
 						...mapProjection.background,
 						...mapProjection.overlay,
-						...mapProjection.labels.flatMap( ( { label: entry, x, y, clip } ) => {
+						...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
 							const width = text.run( entry.text, 0, entry.font ).width,
 								height = text.extentHeight( entry.font ),
 								left = x - Math.floor( width / 2 );
@@ -7070,7 +7080,7 @@ export function createUi(
 						...mapProjection.markers
 					] :
 					[];
-				for ( const { icon, rect: r } of mapProjection?.hits ?? [] ) {
+				for ( const { icon, rect: r } of mapOpen ? mapProjection?.hits ?? [] : [] ) {
 					const page = worldMapPages().find( p => p.id === icon.destination );
 					if ( page ) {
 						mapHits.push( {
@@ -7082,7 +7092,19 @@ export function createUi(
 						} );
 					}
 				}
-				paths.push( ...mapImages.map( q => q.texture ) );
+				if ( mapOpen ) paths.push( ...mapImages.map( q => q.texture ) );
+				else if ( pose ) {
+					worldMapDemand(
+						mapPage,
+						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapPan,
+						mapCenter ?? pose,
+						hudData?.mapIcons ?? [],
+						paths
+					);
+					for ( const row of mapMarkers ) paths.push( row.path );
+					paths.push( MAP_LOCAL_MARKER );
+				}
 				if ( panel === "Map" && hudData ) {
 					// Map tiles and icons stream in as a pan reveals them (demanded above, and
 					// absent textures simply do not draw). Gating admission on them disabled
@@ -9061,11 +9083,11 @@ export function createUi(
 					authoredText( page.GDR_SKILL_TEXT_SP_NUM!, ox, oy, String( game?.progression?.skillPoints ?? 0 ) );
 					const model = next.entities.find( e => e.gid === game?.localGid )?.refObjId,
 						country = model === undefined ? game?.guide?.country : hudData.countries[model],
-						cap = country === 0 ?
+						cap = game?.masteryTotalOverride ?? (country === 0 ?
 							300 :
 							country === 1 ?
 							Math.min( 2 * (game?.progression?.level ?? 0), 240 ) :
-							0;
+							0);
 					authoredText(
 						page.GDR_SKILL_TEXT_TOTAL_MASTERYLEV_NUM!,
 						ox,
@@ -10960,12 +10982,9 @@ export function createUi(
 						)
 					);
 				}
-				// After nametags/speech: world UI does not depth-write, so later quads cover earlier ones.
-				quads.push(
-					...damageTextQuads( next.damageText ?? [], now / 1000, w, h ).filter( q =>
-						resources.has( q.texture )
-					)
-				);
+				// Damage text follows the nametags and speech: world UI does not
+				// depth-write, so later quads cover earlier ones. The renderer draws
+				// it each frame (UiScene.damageText); this only demands its glyphs.
 				// World annotations precede CIF windows; they must not bleed through menus.
 				quads.unshift( ...quads.splice( worldLabelStart ) );
 			}
@@ -13764,12 +13783,13 @@ export function createUi(
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&
-				sameUiQuads( lastProduct.quads, quads ) && sameUiSemantics( lastProduct.semantics, semantics );
+				lastProduct.damageText === worldVisible && sameUiQuads( lastProduct.quads, quads ) &&
+				sameUiSemantics( lastProduct.semantics, semantics );
 			probe?.detailEnd( "ui-compare" );
 			if ( unchanged ) return null;
 			probe?.detailBegin( "ui-publish" );
-			lastProduct = { width: w, height: h, quads, semantics };
-			publish( { revision: ++revision, width: w, height: h, quads } );
+			lastProduct = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			publish( { revision: ++revision, width: w, height: h, quads, damageText: worldVisible } );
 			probe?.detailEnd( "ui-publish" );
 			return semantics;
 		},

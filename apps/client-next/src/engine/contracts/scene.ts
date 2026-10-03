@@ -15,7 +15,6 @@ export interface WorldMaterial {
 	readonly environmentReflection?: boolean;
 	/** D3DCMPFUNC, default GREATEREQUAL. */
 	readonly alphaCompare?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-	readonly textureAlphaSquared?: boolean;
 	readonly colorTimeline?: import("@/engine/foundation/rendering/material-timeline").MaterialTimeline;
 	readonly uvAtlas?: import("@/engine/foundation/rendering/texture-atlas").TextureAtlas;
 	readonly surfaceAlpha?: boolean;

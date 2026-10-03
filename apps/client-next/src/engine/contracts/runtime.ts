@@ -43,26 +43,6 @@ export interface RenderFrameProbe {
 	sampleDetails?(): boolean;
 	detailBegin?( name: string ): void;
 	detailEnd?( name: string ): void;
-	// Animation ceiling: replay the retained world selection this frame.
-	worldReplay?( hasView: boolean ): boolean;
-	// One exact pick test against a world group.
-	pickCensus?( row: WorldPickSample ): void;
-	// The submitted frame's draw lists (renderer/frame/frame.ts), sampled.
-	frameDraw?( frameId: number | undefined, ...draws: readonly unknown[] ): void;
-}
-
-/*
-================
-WorldPickSample
-================
-*/
-export interface WorldPickSample {
-	readonly group: string;
-	readonly ms: number;
-	readonly triangles: number;
-	readonly vertices: number;
-	readonly ranges: boolean;
-	readonly skinned: boolean;
 }
 
 /*
@@ -73,7 +53,6 @@ A read-only snapshot of runtime failures and bounded resource statistics.
 ================
 */
 export interface RuntimeDiagnostics {
-	readonly animationPose?: import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe;
 	readonly gpuAnimation?: boolean;
 	readonly gpuTiming?: boolean;
 	readonly hoverPicking?: boolean;
@@ -211,6 +190,8 @@ export interface Renderer extends Disposable {
 	setWeather( value: import("@/engine/foundation/gameplay/weather").WeatherOptions | null ): void;
 	setWorldClock( value: { timeOfDay: number; lunarDay: number; } | null ): void;
 	setUi( scene: import("./ui").UiScene | null ): void;
+	/** The damage text a scene's world annotations show this frame (UiScene.damageText). */
+	setDamageText( rows: readonly import("./damage-text").DamageText[] ): void;
 	setUiTexture( id: string, image: ImageBitmap | ImageData | null ): void;
 	retainCharacterModels( ids: readonly string[] ): void;
 	setCharacterAssembly( id: string, base: string, parts: readonly import("./character").CharacterAttachment[] ): void;
@@ -230,9 +211,11 @@ export interface Renderer extends Disposable {
 	characterActors(): readonly import("./character").CharacterActor[];
 
 	setWorld( scene: import("./scene").WorldScene | null ): void;
+	/** terrain: the outdoor region parts this scene composes with (world-admission.ts). */
 	adoptWorld(
 		world: import("./world-admission").WorldSceneLease,
-		detail?: import("./scene").WorldScene["terrainDetail"]
+		detail?: import("./scene").WorldScene["terrainDetail"],
+		terrain?: readonly import("./world-admission").WorldTerrainPart[]
 	): void;
 	cancelWorldUpdate(): void;
 	setWorldCamera( camera: import("./scene").WorldCamera ): void;

@@ -45,7 +45,7 @@ The ownership tree is summarized in
 | --- | --- |
 | `src/` | Bootstrap and the owned engine; shared foundation code by domain |
 | `tests/` | `architecture/`, `runtime/`, `browser/` tests; `fixtures/native/` reference captures; `oracles/legacy/` differential oracles |
-| `tools/` | Checks, execution-map generation, published-asset access, profiling, `publish-*` asset publishers, beta packaging |
+| `tools/` | Checks, execution-map generation, published-asset access, profiling (`perf/`, see [PROFILING.md](../../docs/PROFILING.md)), `publish-*` asset publishers, beta packaging |
 | `docs/` | [HOSTING.md](docs/HOSTING.md) |
 | `temp/` | Ignored build output and scratch files |
 

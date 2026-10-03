@@ -16,6 +16,7 @@ const { particleEmission, particleBirthFrames } = await import(
 	"../../src/engine/foundation/animation/particle-emission.ts"
 );
 const { createCharacters } = await import( "../../src/engine/runtime/renderer/characters/characters.ts" );
+const { createParticleReference } = await import( "../helpers/particle-reference.mjs" );
 const emitter = { start: 2, duration: 10, period: 2, limit: 3, rate: .5 };
 test("fractional emission accumulates across opportunities and stops at its cumulative cap", () => {
 	assert.deepEqual( particleBirthFrames( emitter, 20 ), [ 4, 8 ] );
@@ -37,7 +38,7 @@ test("finite particle populations reject malformed schedules and cumulative expa
 });
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
 function fixture( frames = true ) {
-	const c = createCharacters(), matrices = [], colors = [];
+	const c = createCharacters(), matrices = [], colors = [], opacities = [], reference = createParticleReference();
 	let uploads = 0, releases = 0;
 	const model = {
 		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
@@ -69,13 +70,14 @@ function fixture( frames = true ) {
 			uploads++;
 			return {};
 		},
-		updateInstances( draw, value, opacity, appearance ) {
-			matrices.push( value.slice() );
-			colors.push( appearance?.slice() );
-			return draw;
+		presentParticles( draw, particles ) {
+			const drawn = reference.present( draw, particles );
+			matrices.push( drawn.matrices );
+			colors.push( drawn.appearance );
+			opacities.push( drawn.opacities );
 		},
-		updateBones() {},
-		release() {
+		release( draw ) {
+			reference.release( draw );
 			releases++;
 		}
 	};
@@ -104,6 +106,9 @@ function fixture( frames = true ) {
 		get colors() {
 			return colors.at( -1 );
 		},
+		get opacities() {
+			return opacities.at( -1 );
+		},
 		step( rows, origin = 1, view ) {
 			c.actors( rows );
 			return c.prepare(
@@ -121,20 +126,15 @@ function fixture( frames = true ) {
 	};
 }
 test("arrival stops new births while existing particles retain transforms, fade packing and natural expiration", () => {
-	const f = fixture(), fades = [];
-	const update = f.gpu.updateInstances;
-	f.gpu.updateInstances = ( draw, value, opacity, appearance ) => {
-		if ( opacity ) fades.push( opacity.slice() );
-		return update( draw, value, opacity, appearance );
-	};
+	const f = fixture();
 	f.step( [ f.actor( -2, 0, 5 ) ] );
 	f.step( [ { ...f.actor( -2, .2, 55 ), emissionEnd: .1, opacity: .5 } ] );
 	assert.equal( f.matrices.length, 16 );
 	assert.equal( f.matrices[12], 5 );
-	assert.deepEqual( [ ...fades.at( -1 ) ], [ .5 ] );
+	assert.deepEqual( [ ...f.opacities ], [ .5 ] );
 	f.step( [ { ...f.actor( -2, .3, 85 ), emissionEnd: .1, opacity: .25 } ] );
 	assert.equal( f.matrices.length, 0 );
-	assert.equal( fades.at( -1 ).length, 0 );
+	assert.equal( f.opacities.length, 0 );
 	f.c.dispose( f.gpu, null );
 });
 
@@ -228,7 +228,7 @@ test("looped particle effects reset birth positions even when a frame skips whol
 });
 
 test("BAN parent motion evaluates hierarchy at actor.time without smearing late births across particle ages", () => {
-	const c = createCharacters(), matrices = [], bones = [];
+	const c = createCharacters(), matrices = [], bones = [], reference = createParticleReference();
 	let uploads = 0;
 	const model = {
 		nodes: [
@@ -268,14 +268,14 @@ test("BAN parent motion evaluates hierarchy at actor.time without smearing late 
 			uploads++;
 			return {};
 		},
-		updateInstances( draw, value ) {
-			matrices.push( value.slice() );
-			return draw;
+		presentParticles( draw, particles ) {
+			const drawn = reference.present( draw, particles );
+			matrices.push( drawn.matrices );
+			bones.push( drawn.palettes );
 		},
-		updateBones( draw, value ) {
-			bones.push( value.slice() );
-		},
-		release() {}
+		release( draw ) {
+			reference.release( draw );
+		}
 	};
 	const actor = ( time, x ) => ({
 		gid: -10,

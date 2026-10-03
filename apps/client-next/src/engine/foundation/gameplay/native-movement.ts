@@ -10,6 +10,7 @@ sample, so predicted and received movement share one set of transitions.
 ===========================================================================
 */
 import type { Pose } from "@/engine/contracts/gameplay";
+import { hypot2 } from "@/engine/foundation/math/hypot";
 
 // World units per region side; region-local x/z span [0, REGION_SIZE).
 export const REGION_SIZE = 1920;
@@ -136,9 +137,9 @@ poseDistance
 export function poseDistance( a: Pose, b: Pose ) {
 	if ( (a.regionId | b.regionId) & 0x8000 ) {
 		if ( a.regionId !== b.regionId ) throw new Error( "Dungeon transition requires teleport" );
-		return Math.hypot( b.x - a.x, b.z - a.z );
+		return hypot2( b.x - a.x, b.z - a.z );
 	}
-	return Math.hypot(
+	return hypot2(
 		b.x - a.x + ((b.regionId & 255) - (a.regionId & 255)) * REGION_SIZE,
 		b.z - a.z + ((b.regionId >>> 8) - (a.regionId >>> 8)) * REGION_SIZE
 	);

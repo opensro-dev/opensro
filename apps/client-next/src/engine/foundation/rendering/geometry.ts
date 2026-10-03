@@ -16,11 +16,15 @@ import type { Geometry } from "@/engine/contracts/geometry";
 import type { WorldMaterial } from "@/engine/contracts/scene";
 import { finiteGeometryValues, geometryIndicesInRange } from "./geometry-validation";
 
+/*
+================
+copyMaterial
+================
+*/
 export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 	if (
 		material.alphaCompare !== undefined &&
-			(!Number.isInteger( material.alphaCompare ) || material.alphaCompare < 1 || material.alphaCompare > 8) ||
-		material.textureAlphaSquared !== undefined && typeof material.textureAlphaSquared !== "boolean"
+		(!Number.isInteger( material.alphaCompare ) || material.alphaCompare < 1 || material.alphaCompare > 8)
 	) throw Error( "Invalid native alpha state" );
 	if ( material.deferredParticle !== undefined && typeof material.deferredParticle !== "boolean" ) {
 		throw Error( "Invalid deferred material" );
@@ -103,7 +107,13 @@ export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 	};
 }
 
-// Admission completes before the caller replaces any live GPU resource.
+/*
+================
+validateGeometry
+
+Admission completes before the caller replaces any live GPU resource.
+================
+*/
 export function validateGeometry(
 	data: Geometry,
 	byteLimit = 64 << 20,
@@ -115,7 +125,11 @@ export function validateGeometry(
 		!(data.indices instanceof Uint32Array) || !data.indices.length || data.indices.length % 3 ||
 		!geometryIndicesInRange( data.indices, vertices ) ||
 		!(data.transform instanceof Float32Array) || data.transform.length !== 16 ||
-		data.world !== undefined && typeof data.world !== "boolean"
+		data.world !== undefined && typeof data.world !== "boolean" ||
+		// A worker-packed stream belongs to a dynamic mesh and covers every vertex.
+		data.vertices !== undefined &&
+			(!(data.vertices instanceof Float32Array) || data.vertices.length !== vertices * 14 ||
+				!data.dynamicVertices)
 	) {
 		throw new Error( "Invalid geometry dimensions" );
 	}
@@ -169,6 +183,11 @@ export function validateGeometry(
 	return data.material ? copyMaterial( data.material ) : undefined;
 }
 
+/*
+================
+copyGeometry
+================
+*/
 export function copyGeometry( data: Geometry, byteLimit = 64 << 20, instanceLimit = 4096 ): Geometry {
 	const material = validateGeometry( data, byteLimit, instanceLimit );
 	// A new Geometry field must be explicitly handled here, even when optional.
@@ -186,7 +205,8 @@ export function copyGeometry( data: Geometry, byteLimit = 64 << 20, instanceLimi
 		joints: data.joints?.slice(),
 		weights: data.weights?.slice(),
 		bones: data.bones?.slice(),
-		dynamicVertices: data.dynamicVertices
+		dynamicVertices: data.dynamicVertices,
+		vertices: data.vertices?.slice()
 	} satisfies Record<keyof Geometry, unknown>;
 	return owned;
 }

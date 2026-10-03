@@ -20,7 +20,9 @@ async function load( file ) {
 }
 const { createClock } = await load( "src/engine/runtime/simulation/worker/clock/clock.ts" );
 const { createSimulation } = await load( "src/engine/runtime/simulation/worker/simulation.ts" );
-test("worker acknowledges camera events without owning or returning camera state", t => {
+// Camera input stays on the display thread (contracts/input.ts); the worker
+// receives keys and focus release only.
+test("worker acknowledges input without owning or returning camera state", t => {
 	const timers = scheduler( t ), messages = [];
 	const simulation = createSimulation( ( message, transfer ) =>
 		messages.push( structuredClone( message, { transfer } ) )
@@ -31,14 +33,11 @@ test("worker acknowledges camera events without owning or returning camera state
 		batch: {
 			first: 1,
 			last: 3,
-			commands: [ { kind: "pointer", sequence: 1, x: 10, y: 10, buttons: 2, timeMs: 1 }, {
-				kind: "pointer",
-				sequence: 2,
-				x: 110,
-				y: 20,
-				buttons: 2,
-				timeMs: 2
-			}, { kind: "wheel", sequence: 3, delta: -100, timeMs: 3 } ]
+			commands: [
+				{ kind: "key", sequence: 1, code: "KeyW", down: true, timeMs: 1 },
+				{ kind: "key", sequence: 2, code: "KeyW", down: false, timeMs: 2 },
+				{ kind: "release", sequence: 3, timeMs: 3 }
+			]
 		}
 	} );
 	timers.wake( 16 );

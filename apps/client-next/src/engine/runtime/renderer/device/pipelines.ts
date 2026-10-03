@@ -330,7 +330,7 @@ var light=vec4f(1);if(material.skin.y>0.5){light=textureSampleBias(albedo,textur
  let distant=env.terrainBand.w>0.5&&dot(cellDelta,cellDelta)>env.terrainBand.z;
  if(distant&&material.skin.y>0.5){discard;}
  if(distant&&material.options.z>0.5){return vec4f(env.fog.rgb,1);}
-let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(select(tex.a,tex.a*tex.a,material.reflection.z>0.5),1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
+let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(tex.a,1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
  let illumination=clamp(select(material.color.rgb,input.materialTint,material.policy.w>0.5)*env.diffuse.rgb*max(0.0,dot(normalize(input.normal),vec3f(0.70710678,0.70710678,0)))+env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x,vec3f(0),vec3f(1));
  let surfaceLight=select(illumination,input.objectLighting,material.lighting.y>0.5);
  // B153A0 (effects) and sub_aed240 (BSR material modifiers) set stage 0 from
