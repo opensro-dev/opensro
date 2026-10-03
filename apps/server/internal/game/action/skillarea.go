@@ -268,9 +268,10 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 			// 4A9C80 publishes LIFE for every alive-to-dead transition, area
 			// victims included; without it the client keeps moving the corpse.
 			deaths = append(deaths, monsterLifeDeadFrame(gid))
-		} else {
-			rt.commitSkillHostility(division, enterworld.ObjectIDForCharacter(snapshot), gid, skill, impacts, nowMs)
 		}
+		// A fatal victim records no aggression; its damage still feeds a
+		// Mana Switch link.
+		rt.commitSkillHostility(division, enterworld.ObjectIDForCharacter(snapshot), gid, skill, impacts, nowMs)
 	}
 	var token uint32
 	if release != nil {

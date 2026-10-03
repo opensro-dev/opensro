@@ -22,6 +22,8 @@ const (
 	tagTimedIntellect          = 0x696e7469
 	tagTimedLink               = 0x6c6e6b73
 	tagTimedLinkedThreat       = 0x6c6b6167
+	tagTimedLinkPerTarget      = 0x6c6b7332
+	tagTimedLinkedDamage       = 0x6c6b6468
 	tagTimedRequireNot         = 0x7265716e
 	tagTimedMaxHP              = 0x687069
 	tagTimedAttack             = 0x61706175
@@ -43,6 +45,10 @@ const (
 	// maxLinkedThreatPercent bounds lkag's share: v1.150 authors 36..60 and a
 	// share above the whole aggression has no proven meaning.
 	maxLinkedThreatPercent = 100
+
+	// maxLinkedDamagePercent bounds lkdh's MP share the same way: Mana
+	// Switch authors 50 on every tier.
+	maxLinkedDamagePercent = 100
 )
 
 /*
@@ -179,6 +185,16 @@ lnks {group, max distance, max outgoing, board}. A zero board word hides the
 source half from the caster's board; both halves still exist on the server.
 Threat is lkag {percent, 0}: the share of the recipient's aggression that
 5A03A0 (combat.SplitLinkedThreat) hands to the link source.
+
+Mana is lkdh {HP percent, MP percent, cap} (the Bard's Mana Switch): the
+MP share of each hit the recipient deals, at most cap per hit, goes to
+the source. Inferred from the three words (0, 50, 305..1596 on every
+tier) and the description ("When the target damages an enemy, some part
+of the damage will be converted to mana and your MP will be recovered"):
+word 1 is the MP percent, word 2 the per-hit ceiling, which grows with
+the tier, and word 0, by symmetry with dmgt, an HP share no row authors.
+PerTarget is lks2, which makes lnks' outgoing count per recipient
+(skillperiodic.go).
 ================
 */
 type SkillEffectLink struct {
@@ -187,6 +203,9 @@ type SkillEffectLink struct {
 	Board                           uint32
 	Threat                          bool
 	ThreatPercent                   uint32
+	PerTarget                       bool
+	Mana                            bool
+	ManaPercent, ManaCap            uint32
 }
 
 /*
@@ -226,6 +245,14 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	if err != nil {
 		return
 	}
+	// Mana Switch also names Enemy_M and Enemy_P (columns 29, 30). Inferred:
+	// the link binds two players (acceptTimedTargetEffect refuses anything
+	// else with 0x3006), so those bytes only widen 58D7A0's player check;
+	// they are tolerated on a targeted lkdh row alone.
+	damageLink := false
+	for i := 0; i < program.Len(); i++ {
+		damageLink = damageLink || program.Instruction(i).Tag == tagTimedLinkedDamage
+	}
 	for i := 0; i < program.Len(); i++ {
 		if op := program.Instruction(i); op.Tag == tagEfr {
 			kind, shape, radius, most, reduction, sel := op.Arguments[0], op.Arguments[1], op.Arguments[2], op.Arguments[3], op.Arguments[4], op.Arguments[5]
@@ -237,6 +264,9 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	for _, col := range []int{15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 56} {
 		if targeted && (col == 21 || col == 22 || col == 23 || col == 26 || col == 27 || col == 28) {
+			continue
+		}
+		if targeted && damageLink && (col == 29 || col == 30) {
 			continue
 		}
 		if result.Area.Present && col == 21 {
@@ -349,6 +379,22 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Link.Threat, result.Link.ThreatPercent = true, op.Arguments[0]
+		case tagTimedLinkPerTarget:
+			// lks2 rides an lnks that sets an outgoing count; Mana Switch
+			// authors none (word 2 is 0), so the per-recipient count has
+			// nothing to change. A counted link would need it ported first.
+			if !result.Link.Present || result.Link.PerTarget || result.Link.MaxOutgoing != 0 {
+				return
+			}
+			result.Link.PerTarget = true
+		case tagTimedLinkedDamage:
+			// lkdh after lnks, as lkag: the HP word has no owner and a zero
+			// ceiling an unproven meaning, so both stay refused.
+			if !result.Link.Present || result.Link.Mana || op.Count != 3 || op.Arguments[0] != 0 ||
+				op.Arguments[1] == 0 || op.Arguments[1] > maxLinkedDamagePercent || op.Arguments[2] == 0 {
+				return
+			}
+			result.Link.Mana, result.Link.ManaPercent, result.Link.ManaCap = true, op.Arguments[1], op.Arguments[2]
 		case tagTimedIncomingReduction:
 			// odar is installed from BuffModifiers for every recipient (594AC0);
 			// the program only has to agree with that projection.
@@ -397,6 +443,12 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// would need the source-half rule of 5951FC checked first. The linked
 	// runtime installs only stri/inti writes, so a threat link with blk or
 	// odar would silently drop them and stays refused.
+	// A damage link carries lkdh alone: the linked runtime has no rule for
+	// it beside a threat share or stat writes.
+	if result.Link.Mana && (result.Link.Threat || result.Strength.Present || result.Intellect.Present ||
+		result.Block.Present || result.IncomingReduction || len(attributeTags) != 0) {
+		return
+	}
 	if result.Link.Threat && (result.Block.Present || result.IncomingReduction) ||
 		result.Link.Present && (defense || result.Area.Present || result.Persistent) ||
 		result.StrengthAddend && !result.Strength.Present || result.IntellectAddend && !result.Intellect.Present ||
@@ -405,7 +457,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	partySelection := result.Area.Select == SelectParty || result.Area.Select == SelectParty|SelectCaster
 	if movement && (targeted || !result.Area.Present || !partySelection || result.Persistent || result.Link.Present || row.EffectDurationMs == 0) ||
-		musicParameters && !movement && !result.Preemptive.Present {
+		musicParameters && !movement && !result.Preemptive.Present && !result.Link.Mana {
 		return
 	}
 	result.Defense = defense
@@ -416,7 +468,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
-		result.Intellect.Present || result.IncomingReduction || result.Link.Present && result.Link.Threat ||
+		result.Intellect.Present || result.IncomingReduction || result.Link.Present && (result.Link.Threat || result.Link.Mana) ||
 		result.Preemptive.Present)
 	result.Targeted = targeted
 	row.TimedEffect = result

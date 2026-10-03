@@ -13,8 +13,11 @@ type Link struct {
 	SourceGID, TargetGID                                                uint32
 	SourceToken, TargetToken                                            uint32
 	SkillID, SkillGroup, Group, MaxDistance, MaxOutgoing, ThreatPercent uint32
-	ExpiresAtMs, StartedAtMs                                            int64
-	ClientCancelable                                                    bool
+	// ManaPercent and ManaCap are lkdh's MP share of the recipient's dealt
+	// damage and its per-hit ceiling (Mana Switch); zero means no share.
+	ManaPercent, ManaCap     uint32
+	ExpiresAtMs, StartedAtMs int64
+	ClientCancelable         bool
 	// TargetModifiers are the recipient half's parameter writes (594AC0 in
 	// mode 2: stri/inti). 594F53 skips them for the source half, so a link
 	// never carries source modifiers.
@@ -201,4 +204,30 @@ func (r *Registry) ThreatLink(division, target string, nowMs int64) (Link, bool)
 		}
 	}
 	return Link{}, false
+}
+
+// ManaLinks are the logically active links whose recipient is target and
+// that hand the source a share of target's dealt damage as MP (lkdh). Unlike
+// the single +210 threat pointer, every such link counts: each source owns
+// its own share. A stop disables the share at once, as for ThreatLink.
+func (r *Registry) ManaLinks(division, target string, nowMs int64) []Link {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := ownerKey(division, target)
+	var out []Link
+	for _, e := range r.byOwner[key] {
+		if e.LinkToken == 0 || e.Phase != 2 || e.StopRequested {
+			continue
+		}
+		l, ok := r.links[linkKey(division, e.LinkToken)]
+		if !ok || l.ManaPercent == 0 || l.sourceRetired || l.targetRetired || (Effect{ExpiresAtMs: l.ExpiresAtMs}).Expired(nowMs) {
+			continue
+		}
+		l.TargetModifiers = Modifiers{}
+		out = append(out, l)
+	}
+	return out
 }

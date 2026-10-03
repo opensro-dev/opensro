@@ -23,10 +23,13 @@ import (
 commitSkillHostility
 
 Each impact contributes to the cumulative aggression (5903EC), while damage
-remains separate. Fatal results no longer own a live opponent ledger.
+remains separate. Fatal results no longer own a live opponent ledger, but
+their damage still feeds the attacker's Mana Switch links (linkedmana.go),
+so the area owners call this for a killed victim too.
 ================
 */
 func (rt *Runtime) commitSkillHostility(division string, attacker, target uint32, skill enterworld.SkillRow, impacts []simulation.MonsterDamageResult, now int64) {
+	rt.commitLinkedMana(division, attacker, impacts, now)
 	if len(impacts) == 0 || impacts[len(impacts)-1].Fatal {
 		return
 	}

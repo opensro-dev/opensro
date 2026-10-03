@@ -255,6 +255,9 @@ func (rt *Runtime) explodeCombatTrap(object skillobject.Object, c, snapshot *ent
 		if final.Fatal {
 			rt.queueMonsterDefeat(object.Division, gid, now+monsterDeathPresentationRetention.Milliseconds())
 			after = append(after, monsterLifeDeadFrame(gid))
+			// No aggression for a dead victim; its damage still feeds a
+			// Mana Switch link.
+			rt.commitSkillHostility(object.Division, owner, gid, strike, impacts, now)
 			continue
 		}
 		after = append(after, rt.monsterImpactAbnormalFrames(object.Division, gid, impacts)...)

@@ -145,6 +145,9 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 		if final.Fatal {
 			rt.queueMonsterDefeat(division, target, now+monsterDeathPresentationRetention.Milliseconds())
 			deaths = append(deaths, monsterLifeDeadFrame(target))
+			// No aggression for a dead victim; its damage still feeds a
+			// Mana Switch link.
+			rt.commitSkillHostility(division, gid, target, skill, impacts, now)
 			continue
 		}
 		after = append(after, rt.monsterImpactAbnormalFrames(division, target, impacts)...)

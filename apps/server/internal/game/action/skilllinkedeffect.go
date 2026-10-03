@@ -12,7 +12,9 @@ The caster sees the source half on its own board through the private
 B5ED, which names the subject; everyone sees the recipient through B419.
 The Warrior's Protect (GUARDA_AGGRO) is the same pair with lkag and no
 writes: the link carries the threat share commitAggression hands to the
-source (594EAC, 5A03A0).
+source (594EAC, 5A03A0). The Bard's Mana Switch (BATTLAA_MPSTEAL) is the
+pair with lkdh: the link hands the Bard MP from the member's dealt damage
+(linkedmana.go).
 
 ===========================================================================
 */
@@ -79,6 +81,7 @@ func (rt *Runtime) acceptLinkedTargetEffect(division string, c, snapshot, target
 		SourceToken: atomic.AddUint32(&rt.castTokenCounter, 1), TargetToken: atomic.AddUint32(&rt.castTokenCounter, 1),
 		SkillID: skill.ID, SkillGroup: skill.Group,
 		Group: d.Link.Group, MaxDistance: d.Link.MaxDistance, MaxOutgoing: d.Link.MaxOutgoing, ThreatPercent: d.Link.ThreatPercent,
+		ManaPercent: d.Link.ManaPercent, ManaCap: d.Link.ManaCap,
 		StartedAtMs: now, ExpiresAtMs: now + int64(skill.EffectDurationMs),
 		ClientCancelable: !skill.VoluntaryCancelBlocked, TargetModifiers: modifiers,
 	}
