@@ -7,6 +7,11 @@ Renders each shadow caster's silhouette from the fixed light (8A3AE0),
 filters it, and draws it on the terrain receiver. Slots persist across
 frames; a receiver that has not changed is neither packed nor uploaded.
 
+A slot's caster parts are borrowed actor draws. They are valid only for the
+frame that prepared them: encode renders a slot once, after its prepare, and
+geometry calls forget when a borrowed draw's buffers are destroyed (its
+release, or its instance storage growing) so no submit reads a dead buffer.
+
 ===========================================================================
 */
 
@@ -139,7 +144,8 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 		indices: GPUBuffer;
 		draw: GeometryDraw;
 		parts: { draw: GeometryDraw; instance: number; binding: GPUBindGroup; }[];
-		dynamic: boolean;
+		// Prepared this frame and not yet rendered: a silhouette to generate.
+		fresh: boolean;
 		uploaded?: object;
 	};
 	// Packed receiver vertices per receiver: a still character keeps its
@@ -159,9 +165,23 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 		s.indices.destroy();
 	}
 	return {
+		/*
+		================
+		prepare
+
+		This frame's receiver draws. Every slot first drops last frame's
+		borrowed parts, so a request skipped below (its blob image not resident
+		yet) cannot render a caster from an earlier frame.
+		================
+		*/
 		prepare( requests: readonly CharacterShadowRequest[], blob?: ImageDraw ): readonly GeometryDraw[] {
 			if ( requests.length > 10 ) throw Error( "Character shadow limit exceeded" );
 			while ( slots.length > requests.length ) retire( slots.pop()! );
+			for ( const s of slots ) {
+				if ( !s ) continue;
+				s.parts = [];
+				s.fresh = false;
+			}
 			const draws: GeometryDraw[] = [];
 			for ( let i = 0; i < requests.length; i++ ) {
 				const r = requests[i]!;
@@ -211,11 +231,11 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 						} ),
 						draw: null!,
 						parts: [],
-						dynamic: !r.blob
+						fresh: false
 					};
 					slots[i] = s;
 				}
-				s.dynamic = !r.blob;
+				s.fresh = !r.blob;
 				device.queue.writeBuffer( s.projection, 0, r.matrix as Float32Array<ArrayBuffer> );
 				if ( s.uploaded !== r.receiver ) {
 					device.queue.writeBuffer( s.vertices, 0, vertices as Float32Array<ArrayBuffer> );
@@ -262,9 +282,19 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 			}
 			return draws;
 		},
+		/*
+		================
+		encode
+
+		Generates and filters the silhouette of each slot prepared since the
+		last encode. A frame that encodes twice (the deferred particle tail)
+		renders each slot once.
+		================
+		*/
 		encode( encoder: GPUCommandEncoder ) {
 			for ( const s of slots ) {
-				if ( !s?.dynamic ) continue;
+				if ( !s?.fresh ) continue;
+				s.fresh = false;
 				const p = encoder.beginRenderPass( {
 					label: "character-shadow-generate",
 					colorAttachments: [ {
@@ -299,6 +329,25 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 				f.end();
 			}
 		},
+		/*
+		================
+		forget
+
+		draw's buffers are being destroyed: no slot may still render it.
+		================
+		*/
+		forget( draw: GeometryDraw ) {
+			for ( const s of slots ) {
+				if ( s?.parts.some( part => part.draw === draw ) ) {
+					s.parts = s.parts.filter( part => part.draw !== draw );
+				}
+			}
+		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose() {
 			for ( const s of slots ) if ( s ) retire( s );
 			slots.length = 0;

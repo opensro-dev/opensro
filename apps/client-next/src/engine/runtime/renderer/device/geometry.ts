@@ -557,6 +557,7 @@ export function createGeometryResources(
 							),
 							capacity
 						);
+						shadows?.forget( draw );
 						buffers[3]!.destroy();
 						buffers[3] = storage;
 					} catch ( error ) {
@@ -867,6 +868,7 @@ export function createGeometryResources(
 		================
 		*/
 		release( draw: GeometryDraw ) {
+			shadows?.forget( draw );
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
 				buffer.destroy();
 			}

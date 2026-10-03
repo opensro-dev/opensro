@@ -178,8 +178,17 @@ test("receivers follow submitted LOD/seam heights and do not double-darken terra
 		"culled/unsubmitted terrain must not receive a floating shadow"
 	);
 });
-test("shadow GPU lifecycle draws the selected batch instance, filters before receiving, and retires disabled resources", () => {
-	const old = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
+/*
+================
+shadowHarness
+
+The shadow owner on a recording fake device: draw is a borrowed caster,
+calls records pass labels, viewports and indexed draws, owned every
+resource the owner created. restore puts navigator back.
+================
+*/
+function shadowHarness() {
+	const previous = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
 	Object.defineProperty( globalThis, "navigator", {
 		configurable: true,
 		value: { gpu: { getPreferredCanvasFormat: () => "rgba8unorm" } }
@@ -264,6 +273,20 @@ test("shadow GPU lifecycle draws the selected batch instance, filters before rec
 			};
 		}
 	};
+	/*
+	================
+	restore
+	================
+	*/
+	const restore = () => {
+		if ( previous ) Object.defineProperty( globalThis, "navigator", previous );
+		else delete globalThis.navigator;
+	};
+	return { owner, request, encoder, calls, owned, draw, restore };
+}
+
+test("shadow GPU lifecycle draws the selected batch instance, filters before receiving, and retires disabled resources", () => {
+	const { owner, request, encoder, calls, owned, restore } = shadowHarness();
 	try {
 		assert.equal( owner.prepare( [ request ] ).length, 1 );
 		owner.encode( encoder );
@@ -280,10 +303,40 @@ test("shadow GPU lifecycle draws the selected batch instance, filters before rec
 		assert.ok( owned.every( r => r.destroyed ) );
 		owner.dispose();
 	} finally {
-		if ( old ) Object.defineProperty( globalThis, "navigator", old );
-		else delete globalThis.navigator;
+		restore();
 	}
 });
+
+test("borrowed caster draws are rendered only in the frame that prepared them", () => {
+	const { owner, request, encoder, calls, draw, restore } = shadowHarness();
+	const drawn = () => calls.filter( a => Array.isArray( a ) && a.length === 5 ).length;
+	try {
+		// A slot renders once per prepare: the deferred tail encodes again.
+		owner.prepare( [ request ] );
+		owner.encode( encoder );
+		owner.encode( encoder );
+		assert.equal( drawn(), 1 );
+		// No prepare this frame: last frame's casters are not rendered again.
+		calls.length = 0;
+		owner.encode( encoder );
+		assert.equal( calls.length, 0 );
+		// A blob request whose image is not resident yet is skipped; the slot
+		// must not keep the dynamic caster it held last frame.
+		owner.prepare( [ request ] );
+		owner.prepare( [ { ...request, blob: true } ] );
+		owner.encode( encoder );
+		assert.equal( calls.length, 0 );
+		// A caster released between prepare and encode is dropped.
+		owner.prepare( [ request ] );
+		owner.forget( draw );
+		owner.encode( encoder );
+		assert.equal( drawn(), 0 );
+		owner.dispose();
+	} finally {
+		restore();
+	}
+});
+
 test("new players default to shadows: nothing (UIIT_STT_NONE)", async () => {
 	const { defaultVideoOptions, videoRows } = await import( "../../src/engine/foundation/rendering/video-options.ts" );
 	const options = defaultVideoOptions();
