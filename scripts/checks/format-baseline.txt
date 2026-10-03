@@ -287,7 +287,6 @@ apps/client-next/tests/architecture/ownership-fixtures.test.mjs
 apps/client-next/tests/architecture/panel-navigation.test.mjs
 apps/client-next/tests/browser/absorption-orbs.test.mjs
 apps/client-next/tests/browser/action-refresh.test.mjs
-apps/client-next/tests/browser/arrow-trail.test.mjs
 apps/client-next/tests/browser/asset-delivery.test.mjs
 apps/client-next/tests/browser/attached-effect-wire.test.mjs
 apps/client-next/tests/browser/attack-blend.test.mjs
@@ -338,7 +337,6 @@ apps/client-next/tests/browser/ground-item-input.test.mjs
 apps/client-next/tests/browser/ground-item-label.test.mjs
 apps/client-next/tests/browser/guide-text-live.test.mjs
 apps/client-next/tests/browser/hawk.test.mjs
-apps/client-next/tests/browser/helper-effects.test.mjs
 apps/client-next/tests/browser/helpers/follow-recorder.mjs
 apps/client-next/tests/browser/helpers/hold-runtime.mjs
 apps/client-next/tests/browser/helpers/native-button-oracle.mjs
