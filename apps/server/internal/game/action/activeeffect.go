@@ -538,6 +538,20 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 			}
 		}
 	}
+	// 594AC0 0x5962C1..0x596316: rhru raises the healing received, word 0
+	// on parameter 0xAA (HP) and word 1 on 0xAB (MP), the scale the heal
+	// already applies (skillheal.go healScale).
+	if m.Rhru {
+		writes = append(writes,
+			paramkeeper.Write{Parameter: 0xaa, Channel: paramkeeper.Flat, Value: float32(m.RhruWords[0])},
+			paramkeeper.Write{Parameter: 0xab, Channel: paramkeeper.Flat, Value: float32(m.RhruWords[1])},
+		)
+	}
+	// 594AC0 0x5963F7..0x596423: dcmp lowers the MP consumption rate
+	// (parameter 0x8D) by its word, negated with FCHS.
+	if m.Dcmp {
+		writes = append(writes, paramkeeper.Write{Parameter: 0x8d, Channel: paramkeeper.Flat, Value: float32(-float64(m.DcmpPercent))})
+	}
 	if m.Odar {
 		value := float32(-float64(m.OdarWord))
 		for _, slot := range [...]struct {

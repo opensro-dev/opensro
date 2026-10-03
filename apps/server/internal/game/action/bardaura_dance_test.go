@@ -99,8 +99,9 @@ func TestDanceNeedsAnotherBardsMusic(t *testing.T) {
 TestDancingOfHealingRaisesTheHealReceived
 
 A heal on a member of the Dancing of Healing (rhru 18) and of the Dancing
-of Vitality (rhru 38) is raised by that percent; the heal of a member
-outside any dance is not.
+of Vitality (rhru 38) is raised by that percent: rhru writes parameters
+0xAA/0xAB (594AC0 0x5962C1), the scale every heal applies. The heal of a
+member outside any dance is not.
 ================
 */
 func TestDancingOfHealingRaisesTheHealReceived(t *testing.T) {
@@ -131,8 +132,9 @@ func TestDancingOfHealingRaisesTheHealReceived(t *testing.T) {
 ================
 TestDancingOfManaLowersTheMPCost
 
-A member of the Dancing of Mana (dcmp 22) pays 22 % less MP for a cast,
-cut the way MP Decrease cuts it.
+dcmp(22) writes -22 to parameter 0x8D (594AC0 0x5963F7), so a member of the
+Dancing of Mana is charged at rate 78 instead of 100: the prepared cost
+scales by the rate before the getv cuts (58312C, 583232).
 ================
 */
 func TestDancingOfManaLowersTheMPCost(t *testing.T) {
@@ -143,12 +145,41 @@ func TestDancingOfManaLowersTheMPCost(t *testing.T) {
 		t.Fatalf("plain cost %d, %v", plain, err)
 	}
 	rt, _, c, _ = dancingParty(t, danceOfManaID)
+	stats, _, err := rt.playerCombatStats(testDivision, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rate := combat.MPConsumptionRate(stats); rate != 78 {
+		t.Fatalf("MP consumption rate %v under Dancing of Mana, want 78", rate)
+	}
 	cost, err := rt.preparedExecutionMPCost(testDivision, c, row)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := int64(combat.CutMPCost(int32(plain), 22)); cost != want || cost >= plain {
+	_, _, _, currentMP := rt.playerKeeperVitals(testDivision, c)
+	want := combat.PreparedCost(uint32(currentMP), row.Consumption.MP, row.Consumption.MPPercent, row.TimedEffect.Pinned, true, 78)
+	want = combat.ApplyMPDecrease(want, row.Attack.Parameters, stats.SkillParameters)
+	if cost != int64(want) || cost >= plain {
 		t.Fatalf("cost under Dancing of Mana %d, want %d (plain %d)", cost, want, plain)
+	}
+}
+
+/*
+================
+TestPlayerMPConsumptionRateStartsAtTheNativeBase
+
+CGObjPC_InitializeParameterGraph writes 100 to parameter 0x8D (4E36AC):
+without a dcmp buff a player is charged its whole cost.
+================
+*/
+func TestPlayerMPConsumptionRateStartsAtTheNativeBase(t *testing.T) {
+	rt, _, c, _ := marchFixtureWithRival(t)
+	stats, _, err := rt.playerCombatStats(testDivision, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rate := combat.MPConsumptionRate(stats); rate != combat.FullMPConsumptionRate {
+		t.Fatalf("base MP consumption rate %v, want %d", rate, combat.FullMPConsumptionRate)
 	}
 }
 

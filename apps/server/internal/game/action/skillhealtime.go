@@ -140,11 +140,9 @@ heal eight times, the last at 16000.
 
 Each pulse gives the whole heal block, the rule the eshp aura already
 applies on every update of Recovery Division (skillparty.go healAura):
-puls spaces the heals, it does not split the amount. Inferred: the
-recipient's healing received (rhru, applyHealReceived) and its 0xAA / 0xAB
-scale are read on every pulse, through skillHealAmounts, which applies
-rhru once to the pulse's final amounts inside the recipient's door before
-applySkillRecovery.
+puls spaces the heals, it does not split the amount. The recipient's
+0xAA / 0xAB scale (raised by rhru buffs) is read on every pulse, through
+skillHealAmounts, inside the recipient's door before applySkillRecovery.
 
 A heal whose effect instance stopped (cancelled, replaced, expired, the
 recipient gone) is dropped without a pulse.

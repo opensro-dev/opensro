@@ -371,8 +371,9 @@ func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skil
 ==================
 auraPulseCost
 
-onff word 1 cut by the caster's BDMD (Music Life) and then its dcmp
-(Dancing of Mana): what one pulse charges.
+onff word 1 at the caster's MP consumption rate (parameter 0x8D, lowered
+by Dancing of Mana's dcmp), cut by its BDMD (Music Life): what one pulse
+charges.
 ==================
 */
 func (rt *Runtime) auraPulseCost(division string, caster *enterworld.Character, skill enterworld.SkillRow) (int64, bool) {
@@ -380,8 +381,10 @@ func (rt *Runtime) auraPulseCost(division string, caster *enterworld.Character, 
 	if err != nil {
 		return 0, false
 	}
-	cut := combat.ApplyMPDecrease(int32(skill.Aura.PulseMP), skill.Attack.Parameters, stats.SkillParameters)
-	return int64(rt.cutMPConsumption(division, caster, cut)), true
+	// 583224..583262: the pulse's MP at the caster's 0x8D rate, then the
+	// getv cuts (58327A..).
+	cost := combat.PreparedCost(0, skill.Aura.PulseMP, 0, true, true, combat.MPConsumptionRate(stats))
+	return int64(combat.ApplyMPDecrease(cost, skill.Attack.Parameters, stats.SkillParameters)), true
 }
 
 // retireAura ends the caster's instance and every child.

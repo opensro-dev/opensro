@@ -49,24 +49,17 @@ The odar parser (588C3B / 588C52) ORs 1|2 into kinds 4, 8 and 0xC and 4|8
 into kinds 1, 2 and 3; other kinds keep their own bits.
 
 	ru   +0x250  5958E7  MP recovery rate modifier 0x21
-	hr   +0x24C  595825  hit rate 11: word 1 percent sum, then word 0 flat
-	                     (the item path's er/hr order; not HP recovery)
+	hr   +0x24C  595825  hit rate 0xB: word 1 on the percent-sum channel,
+	                     then word 0 flat (595825..595875)
 
-The hr semantics come from the 594AC0 note that er/hr write parameters
-9/11, which the timed-item path already follows. 595825 is the label this
-comment carried before (when it read HP recovery 0x0A/0x0B); it has not been
-re-checked as the hr sub-site, so treat that one address as unverified.
+Two more blocks are parameter writes of 594AC0 (action.buffModifierWrites):
 
-Two blocks write no parameter; their holder's own paths read them:
-
-	rhru         healing received: word 0 raises HP, word 1 MP, in percent
-	             (Dancing of Healing / Vitality; action.applyHealReceived)
-	dcmp         MP consumption cut, in percent (Dancing of Mana;
-	             action.mpConsumptionCut)
-
-Owner's rule: rhru is +% healing received, dcmp is -% MP consumption.
-Inferred: rhru's word 1 is the MP share, by the pair layout of heal; every
-shipped row authors it 0.
+	rhru         word 0 -> parameter 0xAA, word 1 -> 0xAB, flat (0x5962C1):
+	             the healing-received scale every heal applies
+	             (Dancing of Healing / Vitality)
+	dcmp         -word -> parameter 0x8D, flat (0x5963F7): the MP
+	             consumption rate player costs are scaled by
+	             (Dancing of Mana)
 
 ==================
 */

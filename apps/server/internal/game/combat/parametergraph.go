@@ -27,6 +27,32 @@ import (
 // ownership, not native allocator pointer ordering.
 const parameterNodeKeyBase uint32 = 0x40000000
 
+const (
+	// paramMPConsumptionRate is parameter 0x8D, the percent of its MP cost a
+	// player is charged (base 100, 4E36AC).
+	paramMPConsumptionRate uint16 = 0x8d
+
+	// FullMPConsumptionRate is the rate of an actor without the parameter
+	// (native scales only players by 0x8D, 58E24A..58E277) and of a cost-free
+	// row, which no rate changes.
+	FullMPConsumptionRate = 100
+)
+
+/*
+================
+MPConsumptionRate
+
+The percent of an MP cost s is charged: its parameter 0x8D, 100 for
+stats that do not keep it.
+================
+*/
+func MPConsumptionRate(s Stats) float32 {
+	if rate, ok := s.Param(paramMPConsumptionRate); ok {
+		return rate
+	}
+	return FullMPConsumptionRate
+}
+
 /*
 ================
 playerParameterDefinitions
@@ -39,8 +65,8 @@ func playerParameterDefinitions() ([]paramkeeper.NodeDefinition, error) {
 	ids := [...]uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
 		44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
-		0x80, 0x81, 0x82, 0x83, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96,
-		0xa9, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xbc}
+		0x80, 0x81, 0x82, 0x83, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96,
+		0xa9, 0xaa, 0xab, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xbc}
 	definitions := make([]paramkeeper.NodeDefinition, 0, len(ids))
 	for _, id := range ids {
 		d, ok := paramkeeper.NativeDefinition(id)
@@ -111,7 +137,10 @@ func playerParameterGraph(level uint8) (*paramkeeper.Graph, []paramkeeper.Write,
 		paramkeeper.Write{Parameter: 54, Channel: paramkeeper.FactorProduct, Value: growth},
 		paramkeeper.Write{Parameter: 55, Channel: paramkeeper.FactorProduct, Value: growth},
 		// 4E3567..: movement and damage-scale bases the abnormal callbacks rewrite.
-		paramkeeper.Write{Parameter: 0x8c, Value: 100})
+		paramkeeper.Write{Parameter: 0x8c, Value: 100},
+		// 4E36AC: the MP consumption rate every player cost is scaled by
+		// (58E25F, 583232); dcmp lowers it.
+		paramkeeper.Write{Parameter: paramMPConsumptionRate, Value: 100})
 	return g, writes, nil
 }
 
