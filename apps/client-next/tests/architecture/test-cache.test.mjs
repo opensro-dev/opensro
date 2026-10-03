@@ -83,3 +83,15 @@ test("a pass is reused until an input it read changes; a failure is never reused
 		fs.rmSync( suite, { recursive: true, force: true } );
 	}
 });
+
+test("only the test's own temporary files are excluded from its inputs", async () => {
+	const os = await import( "node:os" );
+	const { scratchPath } = await import( "../../tools/lib/test-input-recorder.mjs" );
+	const temp = path.resolve( os.tmpdir() );
+	assert.equal( scratchPath( path.join( temp, "fixture", "a.bin" ) ), true );
+	// A sibling sharing the prefix is not inside the temporary directory.
+	assert.equal( scratchPath( temp + "-sibling" + path.sep + "a.bin" ), false );
+	// The checkout's files are inputs wherever the checkout lives.
+	assert.equal( scratchPath( path.join( root, "src", "bootstrap.ts" ) ), false );
+	assert.equal( scratchPath( path.join( root, "temp", "fixture.mjs" ) ), false );
+});

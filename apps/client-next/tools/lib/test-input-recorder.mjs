@@ -28,6 +28,34 @@ import { fileURLToPath } from "node:url";
 
 const LOG_DIR = process.env.SRO_TEST_INPUT_LOG;
 const TEMP_ROOT = path.resolve( os.tmpdir() ).toLowerCase();
+// The repository checkout (this file is apps/client-next/tools/lib/).
+const CHECKOUT_ROOT = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "../../../.." ).toLowerCase();
+
+/*
+================
+within
+
+Whether file is root or lies under it, on a path-segment boundary (so
+D:\Temp does not contain D:\Temperature). Both are resolved, lower-case.
+================
+*/
+function within( file, root ) {
+	return file === root || file.startsWith( root.endsWith( path.sep ) ? root : root + path.sep );
+}
+
+/*
+================
+scratchPath
+
+A test's own temporary file: under the OS temporary directory and outside
+the checkout. A checkout may itself live under the temporary directory (an
+agent worktree); its files are still inputs.
+================
+*/
+export function scratchPath( target ) {
+	const file = path.resolve( target ).toLowerCase();
+	return within( file, TEMP_ROOT ) && !within( file, CHECKOUT_ROOT );
+}
 
 /*
 ================
@@ -83,7 +111,7 @@ function install() {
 		} catch {
 			return;
 		}
-		if ( file.toLowerCase().startsWith( TEMP_ROOT ) ) return;
+		if ( scratchPath( file ) ) return;
 		const line = kind + "\t" + file;
 		if ( seen.has( line ) ) return;
 		seen.add( line );
@@ -159,8 +187,7 @@ function install() {
 			const tempTool = program === "unzip" && args.length > 0 &&
 				args.filter( arg => !String( arg ).startsWith( "-" ) )
 					.every( arg =>
-						path.resolve( String( options?.cwd ?? process.cwd() ), String( arg ) ).toLowerCase()
-							.startsWith( TEMP_ROOT )
+						scratchPath( path.resolve( String( options?.cwd ?? process.cwd() ), String( arg ) ) )
 					);
 			// Vite maps Windows network drives with `net use`; no file input.
 			// exec() reaches spawn() with the whole command line as the program.
