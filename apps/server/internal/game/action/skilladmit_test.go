@@ -306,6 +306,38 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 	if *mate.CurrentHP != min(maxHP, mateBefore+gain) || *c.CurrentHP != casterBefore {
 		t.Fatalf("lowest ratio mate %d want %d, caster %d", *mate.CurrentHP, min(maxHP, mateBefore+gain), *c.CurrentHP)
 	}
+
+	// 59FF80 retires every unprotected row at death, a party aura included:
+	// the dead mate loses its child, the dead caster its aura and the set.
+	auraOn := func(name string) bool {
+		for _, effect := range rt.effects.Snapshot(testDivision, name) {
+			if effect.SkillID == skill.ID && !effect.StopRequested {
+				return true
+			}
+		}
+		return false
+	}
+	if !auraOn(mate.Name) || !auraOn(c.Name) {
+		t.Fatal("fixture: the aura is not on both")
+	}
+	rt.deps.Update(mate, "test-death", func() bool {
+		mate.CurrentHP = testInt64(0)
+		rt.settlePlayerDeathInDoor(testDivision, mate, clock.NowMs())
+		return true
+	})
+	if auraOn(mate.Name) {
+		t.Fatal("the dead mate kept Recovery Division")
+	}
+	rt.deps.Update(c, "test-death", func() bool {
+		c.CurrentHP = testInt64(0)
+		rt.settlePlayerDeathInDoor(testDivision, c, clock.NowMs())
+		return true
+	})
+	clock.Advance(time.Duration(skill.Abnormal.Pulse) * time.Millisecond)
+	rt.TickHook()(clock.NowMs())
+	if auraOn(c.Name) {
+		t.Fatal("the dead caster kept Recovery Division")
+	}
 }
 
 /*
