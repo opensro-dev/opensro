@@ -28,7 +28,6 @@ apps/client-next/src/engine/foundation/animation/animation-timelines.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
 apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
-apps/client-next/src/engine/foundation/animation/character-bounds.ts
 apps/client-next/src/engine/foundation/animation/character-render-plan.ts
 apps/client-next/src/engine/foundation/animation/character-selection.ts
 apps/client-next/src/engine/foundation/animation/combat-stance.ts
@@ -41,7 +40,6 @@ apps/client-next/src/engine/foundation/animation/emote.ts
 apps/client-next/src/engine/foundation/animation/entity-lod.ts
 apps/client-next/src/engine/foundation/animation/equipment-particles.ts
 apps/client-next/src/engine/foundation/animation/fortress-appearance.ts
-apps/client-next/src/engine/foundation/animation/gpu-animation-plan.ts
 apps/client-next/src/engine/foundation/animation/ground-visual.ts
 apps/client-next/src/engine/foundation/animation/hawk.ts
 apps/client-next/src/engine/foundation/animation/hit-light.ts
@@ -140,19 +138,16 @@ apps/client-next/src/engine/foundation/navigation/spatial-index.ts
 apps/client-next/src/engine/foundation/navigation/vertex-direction.ts
 apps/client-next/src/engine/foundation/rendering/camera-options.ts
 apps/client-next/src/engine/foundation/rendering/camera-wheel.ts
-apps/client-next/src/engine/foundation/rendering/character-shadow.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts
 apps/client-next/src/engine/foundation/rendering/dock-slots.ts
 apps/client-next/src/engine/foundation/rendering/dungeon-water.ts
 apps/client-next/src/engine/foundation/rendering/equipment-glow.ts
 apps/client-next/src/engine/foundation/rendering/flares.ts
-apps/client-next/src/engine/foundation/rendering/footprints.ts
 apps/client-next/src/engine/foundation/rendering/frontend-camera.ts
 apps/client-next/src/engine/foundation/rendering/geometry-vertices.ts
 apps/client-next/src/engine/foundation/rendering/material-timeline.ts
 apps/client-next/src/engine/foundation/rendering/modifier-delta.ts
 apps/client-next/src/engine/foundation/rendering/monster-scale.ts
-apps/client-next/src/engine/foundation/rendering/object-visibility.ts
 apps/client-next/src/engine/foundation/rendering/particle-ribbon.ts
 apps/client-next/src/engine/foundation/rendering/pick-destination.ts
 apps/client-next/src/engine/foundation/rendering/pick-volume.ts
@@ -162,11 +157,9 @@ apps/client-next/src/engine/foundation/rendering/screen-point.ts
 apps/client-next/src/engine/foundation/rendering/sky-geometry.ts
 apps/client-next/src/engine/foundation/rendering/star-construction.ts
 apps/client-next/src/engine/foundation/rendering/star-flicker.ts
-apps/client-next/src/engine/foundation/rendering/terrain-visibility.ts
 apps/client-next/src/engine/foundation/rendering/texture-atlas.ts
 apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
-apps/client-next/src/engine/foundation/rendering/ui-texture-residency.ts
 apps/client-next/src/engine/foundation/rendering/world-environment.ts
 apps/client-next/src/engine/foundation/rendering/world-material.ts
 apps/client-next/src/engine/foundation/rendering/world-math.ts
@@ -267,7 +260,6 @@ apps/client-next/src/engine/runtime/presentation/effective-hp.ts
 apps/client-next/src/engine/runtime/random/random.ts
 apps/client-next/src/engine/runtime/renderer/characters/actor-snapshots.ts
 apps/client-next/src/engine/runtime/renderer/characters/palette-streams.ts
-apps/client-next/src/engine/runtime/renderer/device/animation-shader.ts
 apps/client-next/src/engine/runtime/renderer/device/bloom.ts
 apps/client-next/src/engine/runtime/renderer/device/flares.ts
 apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
@@ -349,7 +341,6 @@ apps/client-next/tests/browser/game-options.test.mjs
 apps/client-next/tests/browser/geometry.test.mjs
 apps/client-next/tests/browser/glb-compression.test.mjs
 apps/client-next/tests/browser/gm-item-live.test.mjs
-apps/client-next/tests/browser/gpu-animation.test.mjs
 apps/client-next/tests/browser/ground-item-input.test.mjs
 apps/client-next/tests/browser/ground-item-label.test.mjs
 apps/client-next/tests/browser/guide-text-live.test.mjs
@@ -364,7 +355,6 @@ apps/client-next/tests/browser/helpers/pursuit-recorder.mjs
 apps/client-next/tests/browser/helpers/ui-admission-reference.mjs
 apps/client-next/tests/browser/hit-light.test.mjs
 apps/client-next/tests/browser/hud-readouts.test.mjs
-apps/client-next/tests/browser/ice-ground-pick.test.mjs
 apps/client-next/tests/browser/karakoram-ice-live.test.mjs
 apps/client-next/tests/browser/live-champion-aggro.test.mjs
 apps/client-next/tests/browser/live-pursuit.test.mjs

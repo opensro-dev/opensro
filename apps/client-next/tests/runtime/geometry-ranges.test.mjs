@@ -140,6 +140,24 @@ test("invalid later ranges and attributes fail before any mutation; empty update
 	f.resources.dispose();
 });
 
+test("a layer member updates its slot, the first slot included; a whole-mesh update must cover the draw", () => {
+	const f = fixture(), member = f.data.positions.slice( 0, 30 );
+	member.fill( 7 );
+	for ( const slot of [ 0, 40 ] ) {
+		f.writes.length = 0;
+		f.resources.commands.updatePositions( f.draw, member, undefined, undefined, [ [ 2, 3 ] ], slot );
+		assert.deepEqual( f.writes, [ { offset: (slot + 2) * 56, length: 3 * 56 } ] );
+		const floats = new Float32Array( f.draw.vertices.bytes.buffer, (slot + 2) * 56, 14 );
+		assert.deepEqual( [ ...floats.subarray( 0, 3 ) ], [ 7, 7, 7 ] );
+	}
+	assert.throws(
+		() => f.resources.commands.updatePositions( f.draw, member, undefined, undefined, [ [ 0, 1 ] ], 95 ),
+		/update/
+	);
+	assert.throws( () => f.resources.commands.updatePositions( f.draw, member ), /update/ );
+	f.resources.dispose();
+});
+
 test("a mesh uploaded without dynamicVertices keeps no vertex mirror and refuses a position update", () => {
 	const f = fixture( false );
 	assert.throws(

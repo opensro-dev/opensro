@@ -33,8 +33,8 @@ test("published map labels resolve and share the scrolling tile origin", () => {
 	const p = { regionId: 0x62a8, x: 0, y: 0, z: 0, angle: 0 }, clip = [ 10, 20, 640, 384 ];
 	const q = worldMapPresentation( p, 1, clip, [ 0, 0 ], p, labels );
 	const got = q.labels.find( r => r.label === label );
-	assert.equal( defined( got ).x, q.quads[0].rect[0] + 413 );
-	assert.equal( defined( got ).y, q.quads[0].rect[1] + 459 );
+	assert.equal( defined( got ).x, q.background[0].rect[0] + 413 );
+	assert.equal( defined( got ).y, q.background[0].rect[1] + 459 );
 	assert.ok( q.labels.every( r => r.label.page === 1 ) );
 });
 test("retail action records occupy the authored group/index slots", () => {
@@ -59,16 +59,16 @@ test("retail action records occupy the authored group/index slots", () => {
 test("world map drag keeps the clamped position so reversing moves at once (579920)", () => {
 	const p = { regionId: 97 * 256 + 168, x: 960, y: 0, z: 960, angle: 0 }, clip = [ 0, 0, 640, 384 ];
 	const edge = worldMapPresentation( p, 1, clip, [ 5000, 0 ], p );
-	assert.equal( edge.quads[0].rect[0], 0, "overshoot pins the left edge" );
+	assert.equal( edge.background[0].rect[0], 0, "overshoot pins the left edge" );
 	const back = worldMapPresentation( p, 1, clip, [ edge.pan[0] - 10, edge.pan[1] ], p );
-	assert.equal( back.quads[0].rect[0], -10, "the stored pan has no overshoot to unwind" );
+	assert.equal( back.background[0].rect[0], -10, "the stored pan has no overshoot to unwind" );
 	// Opening Jangan from Donhwang centres far off the page (57A570 clamps it);
 	// the returned pan is the pinned edge, so the first drag step moves the map.
 	const far = { regionId: 101 * 256 + 152, x: 0, y: 0, z: 0, angle: 0 },
 		pinned = worldMapPresentation( p, 1, clip, [ 0, 0 ], far );
-	assert.equal( pinned.quads[0].rect[0], 0 );
+	assert.equal( pinned.background[0].rect[0], 0 );
 	const moved = worldMapPresentation( p, 1, clip, [ pinned.pan[0] - 10, pinned.pan[1] ], far );
-	assert.equal( moved.quads[0].rect[0], -10 );
+	assert.equal( moved.background[0].rect[0], -10 );
 });
 test("world map admits native town and fortress icons and clips town click areas", () => {
 	const icons = decodeMapIcons( asset( "data/worldmap-localinfo.json" ) ),
@@ -78,7 +78,7 @@ test("world map admits native town and fortress icons and clips town click areas
 	assert.ok( icons.some( i => i.path.includes( "/icon/npc/fortress_manager.png" ) ) );
 	const p = { regionId: 0x62a8, x: 0, y: 0, z: 0, angle: 0 };
 	const q = worldMapPresentation( p, 0, [ 0, 0, 640, 384 ], [ 0, 0 ], p, [], icons );
-	assert.ok( q.quads.some( q => q.texture.endsWith( "city_jangan.png" ) ) );
+	assert.ok( q.overlay.some( q => q.texture.endsWith( "city_jangan.png" ) ) );
 	assert.ok( q.hits.some( h => h.icon.destination === 1 ) );
 	assert.ok( q.hits.every( ( { rect: r } ) => r[0] >= 0 && r[1] >= 0 && r[0] + r[2] <= 640 && r[1] + r[3] <= 384 ) );
 });
@@ -99,7 +99,6 @@ test("world map paints in 57FE60 order and projects every marker like the player
 	assert.ok(
 		q.overlay.length > 0 && q.overlay.every( r => r.texture.includes( "/xy_" ) || r.texture.includes( "/icon/" ) )
 	);
-	assert.deepEqual( q.quads, [ ...q.background, ...q.overlay, ...q.markers ] );
 	assert.equal(
 		defined( q.markers.at( -1 ) ).texture,
 		"/assets/images/Media_extracted/interface/minimap/mm_sign_character.png"

@@ -2,6 +2,17 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/renderer/world/terrain-layers.ts",
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"functions": [
+				"upload",
+				"release",
+				"writeVertices",
+				"updateIndices",
+				"updatePositions"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/world/terrain-parts.ts",
 			"provider": "src/engine/runtime/assets/assets.ts",
 			"functions": [

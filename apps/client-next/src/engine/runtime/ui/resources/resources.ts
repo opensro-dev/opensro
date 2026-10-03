@@ -194,13 +194,21 @@ export function createUiAssets(
 			}
 			return changed;
 		},
-		stats: () => ({
-			pending:
-				[ ...wanted ].filter( path =>
-					!loaded.has( path ) && !failures.has( path ) && !missingCrests.has( path )
-				).length,
-			failed: [ ...failures.keys() ]
-		}),
+		/*
+		================
+		stats
+
+		Counts in place: wanted holds every HUD image path, and copying it to
+		count the pending ones allocated a large array on every report.
+		================
+		*/
+		stats() {
+			let pending = 0;
+			for ( const path of wanted ) {
+				if ( !loaded.has( path ) && !failures.has( path ) && !missingCrests.has( path ) ) pending++;
+			}
+			return { pending, failed: [ ...failures.keys() ] };
+		},
 		has: ( path: string ) => loaded.has( path ),
 		/*
 		================

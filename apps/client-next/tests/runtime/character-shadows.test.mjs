@@ -18,10 +18,11 @@ const { shadowProjection, characterShadowReceiver } = await import(
 	"../../src/engine/foundation/rendering/character-shadow.ts"
 );
 const { createCharacterShadows } = await import( "../../src/engine/runtime/renderer/device/character-shadows.ts" );
+const { terrainCellKey } = await import( "../../src/engine/foundation/rendering/terrain-interaction.ts" );
 const { createCharacters } = await import( "../../src/engine/runtime/renderer/characters/characters.ts" );
 const cells = new Map();
 for ( let z = -1; z <= 1; z++ ) {
-	for ( let x = -1; x <= 1; x++ ) cells.set( x + ":" + z, { heights: new Float32Array( 289 ) } );
+	for ( let x = -1; x <= 1; x++ ) cells.set( terrainCellKey( x, z ), { heights: new Float32Array( 289 ) } );
 }
 test("shadow projection is translation invariant, casts away from +X light, and follows terrain heights", () => {
 	const a = shadowProjection( [ 0, 0, 0 ], 20 ), b = shadowProjection( [ 320, 10, -320 ], 20 );
@@ -95,13 +96,28 @@ test("visible character selection caps at ten, excludes effects, preserves attac
 		attachment: { gid: 1, root: true, offset: [ 0, 0, 0 ] }
 	} );
 	const gpu = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload( data ) {
 			return { instanceCount: data.instances.length / 16, indexCount: 3 };
 		},
+		/*
+		================
+		updateInstances
+		================
+		*/
 		updateInstances( d, data ) {
 			d.instanceCount = data.length / 16;
 			return d;
 		},
+		/*
+		================
+		updateBones
+		================
+		*/
 		updateBones() {
 			return 0;
 		},
@@ -131,7 +147,7 @@ test("receivers follow submitted LOD/seam heights and do not double-darken terra
 			start: 0,
 			count: 6
 		};
-	const actual = new Map( [ [ "0:0", [ surface, surface ] ] ] );
+	const actual = new Map( [ [ terrainCellKey( 0, 0 ), [ surface, surface ] ] ] );
 	for ( const size of [ 20 ] ) {
 		const mesh = characterShadowReceiver( cells, projection, size, actual );
 		assert.equal( defined( mesh ).indices.length, 6 );
@@ -176,6 +192,11 @@ test("shadow GPU lifecycle draws the selected batch instance, filters before rec
 			...data,
 			destroyed: false,
 			createView: () => ({}),
+			/*
+			================
+			destroy
+			================
+			*/
 			destroy() {
 				assert.equal( this.destroyed, false );
 				this.destroyed = true;
@@ -210,9 +231,19 @@ test("shadow GPU lifecycle draws the selected batch instance, filters before rec
 			parts: [ { draw, instance: 2 } ]
 		};
 	const encoder = {
+		/*
+		================
+		beginRenderPass
+		================
+		*/
 		beginRenderPass( d ) {
 			calls.push( d.label );
 			return {
+				/*
+				================
+				setViewport
+				================
+				*/
 				setViewport( ...a ) {
 					calls.push( a );
 				},
@@ -220,6 +251,11 @@ test("shadow GPU lifecycle draws the selected batch instance, filters before rec
 				setBindGroup() {},
 				setVertexBuffer() {},
 				setIndexBuffer() {},
+				/*
+				================
+				drawIndexed
+				================
+				*/
 				drawIndexed( ...a ) {
 					calls.push( a );
 				},
@@ -269,7 +305,7 @@ test("detailed shadow keeps the native fade band on coarse terrain while followi
 		cells,
 		shadowProjection( [ 0, 8, 0 ], 60 ),
 		undefined,
-		new Map( [ [ "0:0", [ surface ] ] ] )
+		new Map( [ [ terrainCellKey( 0, 0 ), [ surface ] ] ] )
 	);
 	let found = false;
 	for ( let i = 0; i < defined( mesh ).positions.length / 3; i++ ) {

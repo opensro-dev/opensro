@@ -325,6 +325,11 @@ export function worldMapPresentation(
 		py = Math.min( 0, Math.max( clip[3] - height, cy + pan[1] ) );
 	const ox = clip[0] + px,
 		oy = clip[1] + py;
+	/*
+	================
+	sprite
+	================
+	*/
 	function sprite(
 		layer: UiQuad[],
 		texture: string,
@@ -341,8 +346,14 @@ export function worldMapPresentation(
 			layer.push( { texture, rect, uv, color: white, clip, rotation } );
 		}
 	}
-	// 57b1c0/57b550/57ce80 reuse the local-player projection verbatim for every
-	// other marker, so one helper owns it.
+	/*
+	================
+	marker
+
+	57b1c0/57b550/57ce80 reuse the local-player projection verbatim for every
+	other marker, so one helper owns it.
+	================
+	*/
 	function marker(
 		regionId: number,
 		x: number,
@@ -411,9 +422,6 @@ export function worldMapPresentation(
 		background,
 		overlay,
 		markers: markerQuads,
-		// Paint order without the text layer; callers that render labels splice
-		// their glyph quads between `background` and `overlay` instead.
-		quads: [ ...background, ...overlay, ...markerQuads ],
 		hits,
 		labels: labels
 			.filter( ( label ) => label.page === pageId )
@@ -435,7 +443,10 @@ export function worldMapQuads(
 	pan: readonly [number, number],
 	center: Pose = p
 ): readonly UiQuad[] {
-	return worldMapPresentation( p, pageId, clip, pan, center ).quads;
+	// Paint order without the text layer; callers that render labels splice
+	// their glyph quads between background and overlay instead.
+	const presentation = worldMapPresentation( p, pageId, clip, pan, center );
+	return [ ...presentation.background, ...presentation.overlay, ...presentation.markers ];
 }
 
 // Glyph ink may reach past a label's measured box (bearings, descent).

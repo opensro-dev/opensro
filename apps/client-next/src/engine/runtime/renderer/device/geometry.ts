@@ -15,6 +15,11 @@ import type { createGpuAnimationResources } from "./animation";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { packGeometryVertices } from "@/engine/foundation/rendering/geometry-vertices";
 import type { GeometryCommands, GeometryDraw, ImageDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
+/*
+================
+createGeometryResources
+================
+*/
 export function createGeometryResources(
 	created: GPUDevice,
 	current: () => GPUDevice,
@@ -41,6 +46,11 @@ export function createGeometryResources(
 	// writeBuffer copies its source bytes before returning. One device-owned
 	// scratch stream can serve every synchronous update without per-draw storage.
 	let instanceScratch = new Float32Array( 0 );
+	/*
+	================
+	packInstances
+	================
+	*/
 	function packInstances(
 		instances: Float32Array,
 		opacity?: Float32Array,
@@ -84,6 +94,11 @@ export function createGeometryResources(
 		defaultBones = created.createBuffer( { size: 64, usage: GPUBufferUsage.STORAGE } );
 	type SharedPalette = { source: Float32Array; buffer: GPUBuffer; refs: number; revision: number; };
 	const sharedPalettes = new Map<Float32Array, SharedPalette>();
+	/*
+	================
+	releasePalette
+	================
+	*/
 	function releasePalette( palette: SharedPalette | undefined ) {
 		if ( palette && !--palette.refs ) {
 			animation?.release( palette.source );
@@ -91,6 +106,11 @@ export function createGeometryResources(
 			sharedPalettes.delete( palette.source );
 		}
 	}
+	/*
+	================
+	validatePaletteOffsets
+	================
+	*/
 	function validatePaletteOffsets(
 		offsets: Uint32Array | undefined,
 		bones: GPUBuffer | undefined,
@@ -206,6 +226,11 @@ export function createGeometryResources(
 				}
 			} :
 			{}),
+		/*
+		================
+		updateBones
+		================
+		*/
 		updateBones( draw: GeometryDraw, bones: Float32Array, revision?: number ) {
 			const meta = metadata.get( draw );
 			if ( !meta || meta.bones === defaultBones || bones.byteLength > meta.bones.size ) {
@@ -230,6 +255,11 @@ export function createGeometryResources(
 			if ( meta.palette ) meta.palette.revision = revision!;
 			return bones.byteLength;
 		},
+		/*
+		================
+		updateIndices
+		================
+		*/
 		updateIndices( draw: GeometryDraw, indices: Uint32Array ) {
 			const gpu = current(), buffers = geometryBuffers.get( draw );
 			if ( !buffers || indices.byteLength > buffers[1]!.size ) {
@@ -253,16 +283,22 @@ export function createGeometryResources(
 			positions: Float32Array,
 			colors?: Float32Array,
 			uvs?: Float32Array,
-			ranges?: readonly (readonly [number, number])[]
+			ranges?: readonly (readonly [number, number])[],
+			slot?: number
 		) {
 			const gpu = current(), meta = metadata.get( draw ), count = positions.length / 3;
 			if ( !meta ) throw Error( "Invalid position update" );
-			const vertices = meta.vertices;
-			if ( !vertices ) throw Error( "Geometry was uploaded without dynamicVertices" );
+			const mirror = meta.vertices;
+			if ( !mirror ) throw Error( "Geometry was uploaded without dynamicVertices" );
+			// A whole mesh (no slot) covers its draw exactly; a layer member at
+			// any slot, the first one included, fits inside it.
+			const base = slot ?? 0;
 			if (
-				count !== vertices.length / 14 || colors && colors.length !== count * 4 ||
-				uvs && uvs.length !== count * 2
+				!Number.isInteger( base ) || base < 0 ||
+				(slot === undefined ? count !== mirror.length / 14 : base + count > mirror.length / 14) ||
+				colors && colors.length !== count * 4 || uvs && uvs.length !== count * 2
 			) throw Error( "Invalid position update" );
+			const vertices = mirror.subarray( base * 14, (base + count) * 14 );
 			// Ranges are vertex start/count pairs. Validate the complete transaction
 			// before changing the retained CPU mirror or submitting any GPU writes.
 			const spans: [number, number][] = [];
@@ -307,12 +343,33 @@ export function createGeometryResources(
 				const offset = start * 56;
 				gpu.queue.writeBuffer(
 					draw.vertices,
-					offset,
+					base * 56 + offset,
 					vertices.buffer as ArrayBuffer,
 					vertices.byteOffset + offset,
 					(end - start) * 56
 				);
 			}
+		},
+		/*
+		================
+		writeVertices
+		================
+		*/
+		writeVertices( draw: GeometryDraw, base: number, vertices: Float32Array ) {
+			const meta = metadata.get( draw ), mirror = meta?.vertices;
+			if ( !mirror ) throw Error( "Geometry was uploaded without dynamicVertices" );
+			if (
+				!Number.isInteger( base ) || base < 0 || vertices.length % 14 ||
+				base * 14 + vertices.length > mirror.length
+			) throw Error( "Invalid vertex write" );
+			mirror.set( vertices, base * 14 );
+			current().queue.writeBuffer(
+				draw.vertices,
+				base * 56,
+				mirror.buffer as ArrayBuffer,
+				mirror.byteOffset + base * 56,
+				vertices.byteLength
+			);
 		},
 		updateInstances(
 			draw: GeometryDraw,
@@ -412,6 +469,11 @@ export function createGeometryResources(
 				} ).catch( fail );
 			}
 		},
+		/*
+		================
+		updateMaterialColors
+		================
+		*/
 		updateMaterialColors( draw: GeometryDraw, rgb: Float32Array, flags: number ) {
 			const meta = metadata.get( draw );
 			if ( !meta ) throw Error( "Unknown geometry draw" );
@@ -439,12 +501,22 @@ export function createGeometryResources(
 				Float32Array.of( ...color, enabled ? gain : 0, ...uv, alphaTest ? 1 : 0, 0 )
 			);
 		},
+		/*
+		================
+		updateTextureTransform
+		================
+		*/
 		updateTextureTransform( draw: GeometryDraw, matrix: Float32Array ) {
 			const meta = metadata.get( draw );
 			if ( !meta ) throw Error( "Unknown geometry draw" );
 			if ( matrix.length !== 8 || !matrix.every( Number.isFinite ) ) throw Error( "Invalid texture transform" );
 			current().queue.writeBuffer( meta.material, 144, matrix as Float32Array<ArrayBuffer> );
 		},
+		/*
+		================
+		updateTransform
+		================
+		*/
 		updateTransform( draw: GeometryDraw, transform: Float32Array ) {
 			const gpu = current(), buffers = geometryBuffers.get( draw );
 			if ( !buffers ) {
@@ -458,6 +530,11 @@ export function createGeometryResources(
 				transform.byteLength
 			);
 		},
+		/*
+		================
+		upload
+		================
+		*/
 		upload( data: Geometry, image?: ImageDraw, paletteOffsets?: Uint32Array, environmentImage?: ImageDraw ) {
 			const gpu = current(), buffers: GPUBuffer[] = [];
 			let palette: SharedPalette | undefined;
@@ -469,7 +546,10 @@ export function createGeometryResources(
 				return result;
 			};
 			try {
-				const interleaved = packGeometryVertices( data );
+				// The asset worker packs terrain (Geometry.vertices); pack anything else here.
+				const interleaved = data.vertices?.length === data.positions.length / 3 * 14 ?
+					data.vertices :
+					packGeometryVertices( data );
 				const vertices = buffer( interleaved, GPUBufferUsage.VERTEX ),
 					indices = buffer( data.indices, GPUBufferUsage.INDEX ),
 					uniform = buffer( data.transform, GPUBufferUsage.UNIFORM );
@@ -680,6 +760,11 @@ export function createGeometryResources(
 				} ).catch( fail );
 			}
 		},
+		/*
+		================
+		release
+		================
+		*/
 		release( draw: GeometryDraw ) {
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
 				buffer.destroy();
@@ -692,10 +777,20 @@ export function createGeometryResources(
 	return {
 		commands,
 		ready: animation?.ready ?? Promise.resolve(),
+		/*
+		================
+		prepare
+		================
+		*/
 		prepare( encoder: GPUCommandEncoder, timing?: import("../internal/gpu-contract").GpuTimingFrame ) {
 			animation?.encode( encoder, timing );
 			shadows?.encode( encoder );
 		},
+		/*
+		================
+		textureOptions
+		================
+		*/
 		textureOptions( nextFiltered: boolean, nextDetail: number ) {
 			if ( filtered === nextFiltered && detail === nextDetail ) return;
 			if ( !Number.isInteger( nextDetail ) || nextDetail < 0 || nextDetail > 2 ) {
@@ -718,9 +813,19 @@ export function createGeometryResources(
 				);
 			}
 		},
+		/*
+		================
+		worldView
+		================
+		*/
 		worldView( transform: Float32Array ) {
 			current().queue.writeBuffer( worldUniform, 0, transform.buffer as ArrayBuffer, transform.byteOffset, 64 );
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose() {
 			shadows?.dispose();
 			animation?.dispose();

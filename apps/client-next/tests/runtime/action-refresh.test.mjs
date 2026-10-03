@@ -13,12 +13,18 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( "src/engine/foundation/" + file + ".ts" ).href );
 }
 const { movementEntryRate, refreshActionStates, transitionActionStates } = await load( "animation/action-refresh" );
 const { defaultWearFrozen, refreshDefaultWear } = await load( "animation/default-wear-policy" );
 const { footprintGeometry } = await load( "rendering/footprints" );
+const { terrainCellKey } = await load( "rendering/terrain-interaction" );
 const trace = row =>
 	row.effects.map( e =>
 		e.kind === "enter" || e.kind === "leave" ?
@@ -111,7 +117,7 @@ test("native language gate uses original case-sensitive shard marker and preserv
 	assert.deepEqual( refreshDefaultWear( [], desired, true ), [] );
 });
 test("footprints clip real terrain, rotate, mirror only U and reject absent/high terrain", () => {
-	const cells = new Map( [ [ "0:0", { cell: [ 0, 0 ], heights: new Float32Array( 289 ) } ] ] ),
+	const cells = new Map( [ [ terrainCellKey( 0, 0 ), { cell: [ 0, 0 ], heights: new Float32Array( 289 ) } ] ] ),
 		point = [ 150, 0, 150 ];
 	for ( const yaw of [ 0, Math.PI / 2, .07853981852531433 ] ) {
 		const left = footprintGeometry( cells, point, yaw, false ),

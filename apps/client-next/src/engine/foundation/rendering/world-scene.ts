@@ -15,6 +15,7 @@ import type { PreparedWorldScene } from "@/engine/contracts/world-admission";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { finiteGeometryValues, finiteNumbers, geometryIndicesInRange, numbersWithin } from "./geometry-validation";
 import { PICK_BLOCK_INDICES } from "./picking";
+import { packGeometryVertices } from "./geometry-vertices";
 // Frontend stage manifests intentionally retain the complete scripted route.
 // Constantinople reference measurement: 406 MiB scene, 731 MiB decode scratch.
 export const FRONTEND_SCENE_BYTES = 536870912;
@@ -444,8 +445,12 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 			weights: g.weights,
 			bones: g.bones ? mutable( g.bones ) : undefined,
 			// Terrain stitches its seams by rewriting positions (world.ts).
-			dynamicVertices: group.ranges !== undefined
+			dynamicVertices: group.ranges !== undefined,
+			vertices: undefined as Float32Array | undefined
 		} satisfies Record<keyof Geometry, unknown>;
+		// Terrain is most of a scene's upload; packing it here keeps the
+		// interleave off the main thread, which keeps it as the seam mirror.
+		if ( geometry.dynamicVertices ) geometry.vertices = packGeometryVertices( geometry );
 		return {
 			...group,
 			ranges: group.ranges && sharedSeamVertices( group.ranges, geometry.positions ),

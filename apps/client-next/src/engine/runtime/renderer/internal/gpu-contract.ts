@@ -186,13 +186,20 @@ export interface GeometryCommands {
 	updateTextureTransform( draw: GeometryDraw, matrix: Float32Array ): void;
 	updateBones( draw: GeometryDraw, bones: Float32Array, revision?: number ): number;
 	updateIndices( draw: GeometryDraw, indices: Uint32Array ): void;
+	// ranges are vertex start/count pairs within positions. Without a slot the
+	// positions cover the whole draw; with one (0 included) they are a terrain
+	// layer member's vertices at that vertex offset of the draw.
 	updatePositions(
 		draw: GeometryDraw,
 		positions: Float32Array,
 		colors?: Float32Array,
 		uvs?: Float32Array,
-		ranges?: readonly (readonly [number, number])[]
+		ranges?: readonly (readonly [number, number])[],
+		slot?: number
 	): void;
+	// Writes a packed vertex stream (14 floats a vertex) at vertex base of a
+	// dynamicVertices draw: a terrain layer member taking its slot.
+	writeVertices( draw: GeometryDraw, base: number, vertices: Float32Array ): void;
 	updateInstances(
 		draw: GeometryDraw,
 		instances: Float32Array,

@@ -374,7 +374,7 @@ export function createRenderer(
 				if ( residentUiProduct !== uiProduct || dirtyUi.size ) {
 					const demand = uiTextureResidency(
 						uiProduct?.scene ?? null,
-						new Set( uiTextures.keys() ),
+						uiTextures,
 						residentUi,
 						dirtyUi
 					);

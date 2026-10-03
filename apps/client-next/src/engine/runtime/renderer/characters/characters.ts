@@ -50,7 +50,7 @@ import {
 } from "@/engine/foundation/animation/particle-presentation";
 import { type PickBounds, type PickRay } from "@/engine/foundation/rendering/picking";
 import { faceEffectPlate, faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
-import { characterRadius } from "@/engine/foundation/animation/character-bounds";
+import { characterRadius, createCharacterBoundsCache } from "@/engine/foundation/animation/character-bounds";
 import {
 	CHARACTER_ASSEMBLIES,
 	CHARACTER_MODELS,
@@ -107,6 +107,8 @@ export function createCharacters(
 	animationProbe?: import("@/engine/foundation/animation/animation-pose").AnimationPoseProbe
 ) {
 	let probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined;
+	// Per-geometry radius work: an assembled character reuses its parts'.
+	const bounds = createCharacterBoundsCache();
 	const models = new Map<string, {
 		model: CharacterModel;
 		plan: ReturnType<typeof createCharacterRenderPlan>;
@@ -753,7 +755,7 @@ export function createCharacters(
 				textures: [],
 				owned: false,
 				bytes: 0,
-				radius: characterRadius( model )
+				radius: characterRadius( model, bounds )
 			} );
 			residencyDirty = true;
 		},
@@ -946,7 +948,7 @@ export function createCharacters(
 					textures: [],
 					owned: true,
 					bytes,
-					radius: characterRadius( model )
+					radius: characterRadius( model, bounds )
 				} );
 				residentBytes += bytes;
 				ownedModels++;
@@ -1036,7 +1038,7 @@ export function createCharacters(
 				images: pixels,
 				textures: [],
 				owned: false,
-				radius: characterRadius( assembled ),
+				radius: characterRadius( assembled, bounds ),
 				dependencies: [ base, ...parts.map( part => part.model ) ],
 				bytes: 0
 			} );

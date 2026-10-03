@@ -136,7 +136,7 @@ Geometry and image commands that record uploads and releases.
 ================
 */
 function devices() {
-	const uploads = [], releases = [];
+	const uploads = [], releases = [], written = [];
 	/** @type {any} Records calls; the renderer reads only these commands. */
 	const geometry = {
 		/*
@@ -159,11 +159,21 @@ function devices() {
 		},
 		updateInstances: draw => draw,
 		updateIndices() {},
-		updatePositions() {}
+		updatePositions() {},
+		/*
+		================
+		writeVertices
+
+		A terrain layer member taking its slot (terrain-layers.ts).
+		================
+		*/
+		writeVertices( draw, base, vertices ) {
+			written.push( vertices );
+		}
 	};
 	/** @type {any} */
 	const textures = { upload: () => ({}), release() {} };
-	return { geometry, textures, uploads, releases };
+	return { geometry, textures, uploads, releases, written };
 }
 
 /*
@@ -192,16 +202,16 @@ test("a crossing uploads only the terrain it adds and releases only the terrain 
 	const west = terrainPart( 0x0100 ), centre = terrainPart( 0x0101 ), east = terrainPart( 0x0102 );
 	world.adopt( createWorldLease( transfer( objects( 0x0100 ) ) ), undefined, [ west, centre ] );
 	settle( world, d, "objects:256" );
-	assert.equal( d.uploads.length, 3 );
+	// Both regions' terrain share one texture key: one layer draw, two slots.
+	assert.equal( d.uploads.length, 2 );
+	assert.equal( d.written.length, 2 );
 	world.adopt( createWorldLease( transfer( objects( 0x0101 ) ) ), undefined, [ centre, east ] );
 	settle( world, d, "objects:257" );
-	const added = d.uploads.slice( 3 ).map( draw => draw.data );
-	assert.equal( added.length, 2, "the kept region is not uploaded again" );
-	assert.ok( added.includes( east.groups[0].geometry ), "the added region is uploaded" );
-	assert.ok( !added.includes( centre.groups[0].geometry ) );
-	const released = d.releases.map( draw => draw.data );
-	assert.ok( released.includes( west.groups[0].geometry ), "the dropped region is released" );
-	assert.ok( !released.includes( centre.groups[0].geometry ), "the kept region keeps its draw" );
+	assert.deepEqual( d.written.slice( 2 ), [ east.groups[0].geometry.vertices ], "only the added region is written" );
+	assert.equal( d.uploads.length, 3, "the new scene uploads its objects, not its terrain" );
+	const layer = d.uploads[1];
+	assert.ok( !d.releases.includes( layer ), "the kept region keeps the layer" );
+	assert.ok( d.releases.some( draw => draw.data.positions.length === 9 ), "the old objects are released" );
 	assert.equal( world.stats().residentGroups, 3 );
 	world.dispose( d.geometry, d.textures );
 });
@@ -251,4 +261,96 @@ test("camera collision reuses a kept region's parts and projects only new ones",
 	assert.equal( first.length, 1 );
 	assert.ok( second.includes( first[0] ), "the kept region's part is the same object" );
 	assert.equal( second.length, 2 );
+});
+
+/*
+================
+layerMember
+
+A terrain group with n vertices and its packed stream, as the worker
+prepares it (only what terrain-layers.ts reads).
+================
+*/
+/** @returns {any} */
+function layerMember( n, value ) {
+	return {
+		id: `member:${value}`,
+		terrainSector: 1,
+		ranges: [],
+		material: { terrain: true, texture: "/t.png", blend: false, order: 7 },
+		geometry: {
+			positions: new Float32Array( n * 3 ).fill( value ),
+			indices: Uint32Array.from( { length: 3 }, ( _, i ) => i ),
+			vertices: new Float32Array( n * 14 ).fill( value )
+		}
+	};
+}
+
+test("a terrain layer merges member indices at their slots and survives growth", async () => {
+	const { createTerrainLayers } = await import( "../../src/engine/runtime/renderer/world/terrain-layers.ts" );
+	/** @type {any} Only the anchor keys a layer. */
+	const scene = { originRegion: ANCHOR };
+	const layers = createTerrainLayers();
+	const draws = [], writes = [], indices = new Map();
+	/** @type {any} */
+	const geometry = {
+		/*
+		================
+		upload
+		================
+		*/
+		upload( data ) {
+			const draw = { id: draws.length, capacity: data.vertices.length / 14 };
+			draws.push( draw );
+			return draw;
+		},
+		/*
+		================
+		release
+		================
+		*/
+		release( draw ) {
+			draw.released = true;
+		},
+		/*
+		================
+		writeVertices
+		================
+		*/
+		writeVertices( draw, base, vertices ) {
+			writes.push( { draw, base, value: vertices[0] } );
+		},
+		/*
+		================
+		updateIndices
+		================
+		*/
+		updateIndices( draw, values ) {
+			indices.set( draw, [ ...values ] );
+		},
+		updatePositions() {}
+	};
+	const a = layerMember( 600, 1 ), b = layerMember( 600, 2 );
+	/** @type {any} */
+	const first = layers.admit( geometry, scene, a, undefined );
+	assert.equal( layers.admit( geometry, scene, b, undefined ), first, "one texture key, one draw" );
+	layers.select( a, Uint32Array.of( 0, 1, 2 ), 3 );
+	layers.select( b, Uint32Array.of( 2, 1, 0 ), 3 );
+	layers.flush( geometry );
+	assert.deepEqual( indices.get( first ), [ 0, 1, 2, 602, 601, 600 ], "b's indices are offset by its slot" );
+	// Past the capacity (2048 vertices): the layer rebuilds on a new draw.
+	const c = layerMember( 1500, 3 );
+	/** @type {any} */
+	const grown = layers.admit( geometry, scene, c, undefined );
+	assert.notEqual( grown, first );
+	assert.ok( first.released );
+	assert.equal( layers.drawOf( a ), grown, "older members resolve the rebuilt draw" );
+	assert.deepEqual( writes.filter( w => w.draw === grown ).map( w => [ w.base, w.value ] ), [ [ 0, 1 ], [ 600, 2 ], [
+		1200,
+		3
+	] ] );
+	layers.remove( geometry, a );
+	layers.remove( geometry, b );
+	layers.remove( geometry, c );
+	assert.ok( grown.released, "an empty layer releases its draw" );
 });

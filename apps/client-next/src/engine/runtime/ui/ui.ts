@@ -7050,11 +7050,17 @@ export function createUi(
 				// can never be hidden by a shop icon or a zone label.
 				// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
 				// its own font extent, subtracting the integer half-width from the anchor.
+				// A closed map only demands its images, so opening it is instant: its
+				// label glyphs (the largest allocation of a HUD step) and click hits
+				// are built while it is open. The font atlas is demanded either way.
+				const mapOpen = panel === "Map";
+				const fontPath = text.path();
+				if ( !mapOpen && fontPath ) paths.push( fontPath );
 				const mapImages = mapProjection ?
 					[
 						...mapProjection.background,
 						...mapProjection.overlay,
-						...mapProjection.labels.flatMap( ( { label: entry, x, y, clip } ) => {
+						...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
 							const width = text.run( entry.text, 0, entry.font ).width,
 								height = text.extentHeight( entry.font ),
 								left = x - Math.floor( width / 2 );
@@ -7070,7 +7076,7 @@ export function createUi(
 						...mapProjection.markers
 					] :
 					[];
-				for ( const { icon, rect: r } of mapProjection?.hits ?? [] ) {
+				for ( const { icon, rect: r } of mapOpen ? mapProjection?.hits ?? [] : [] ) {
 					const page = worldMapPages().find( p => p.id === icon.destination );
 					if ( page ) {
 						mapHits.push( {

@@ -14,7 +14,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
-const { pickTerrainCells, selectionDecalGeometry } = await import(
+const { pickTerrainCells, selectionDecalGeometry, terrainCellKey } = await import(
 	"../../src/engine/foundation/rendering/terrain-interaction.ts"
 );
 const { pickNavigationGround } = await import( "../../src/engine/foundation/navigation/ground-pick.ts" );
@@ -23,7 +23,8 @@ const cell = ( height = 0, water ) => ({
 	heights: Float32Array.from( { length: 289 }, () => height ),
 	water
 });
-const cells = ( value ) => new Map( [ [ "0:0", value ] ] ), ray = { start: [ 10, 100, 10 ], delta: [ 0, -200, 0 ] };
+const cells = ( value ) => new Map( [ [ terrainCellKey( 0, 0 ), value ] ] ),
+	ray = { start: [ 10, 100, 10 ], delta: [ 0, -200, 0 ] };
 test("ground picks the nearest raw terrain or special-water surface and rejects misses", () => {
 	assert.equal( pickTerrainCells( cells( cell( 20 ) ), ray ), .4 );
 	assert.equal( pickTerrainCells( cells( cell( 20, { type: 1, waveType: 1, height: 50 } ) ), ray ), .25 );

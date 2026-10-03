@@ -13,15 +13,25 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+/*
+================
+load
+================
+*/
 async function load( path ) {
 	return import( sourceFileUrl( path ).href );
 }
-const { createCharacterPose, createPaletteStreams, createGpuAnimationPlan } = {
+const { createCharacterPose, createPaletteStreams, createGpuClipPlan, createGpuSkeletonPlan } = {
 	...(await load( "src/engine/foundation/animation/animation-pose.ts" )),
 	...(await load( "src/engine/runtime/renderer/characters/palette-streams.ts" )),
 	...(await load( "src/engine/foundation/animation/gpu-animation-plan.ts" ))
 };
 const I = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
+/*
+================
+model
+================
+*/
 function model() {
 	return {
 		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] }, {
@@ -113,12 +123,33 @@ test("CPU fallback restores every palette after GPU ownership, including unchang
 	assert.deepEqual( bank.streams[0].data, expected );
 });
 test("GPU admission bounds rigs and packs all bindings without changing model inputs", () => {
-	const m = model(), snapshot = structuredClone( m ), plan = createGpuAnimationPlan( m );
-	assert.ok( plan );
-	assert.equal( plan.configurations.get( m.primitives[0] )[0], 2 );
+	const m = model(), snapshot = structuredClone( m ), clips = createGpuClipPlan( m.clips );
+	assert.ok( clips );
+	const skeleton = createGpuSkeletonPlan( m, clips.nodes );
+	assert.ok( skeleton );
+	assert.equal( skeleton.configurations.get( m.primitives[0] )[0], 2 );
+	assert.equal( skeleton.configurations.get( m.primitives[0] )[9], clips.nodes, "the shader bounds clip tables" );
 	assert.deepEqual( m, snapshot );
-	assert.equal( createGpuAnimationPlan( { ...m, nodes: Array.from( { length: 129 }, () => m.nodes[0] ) } ), null );
-	assert.throws( () => createGpuAnimationPlan( { ...m, nodes: [ { ...m.nodes[0], parent: 0 } ] } ), /hierarchy/ );
+	assert.equal(
+		createGpuSkeletonPlan( { ...m, nodes: Array.from( { length: 129 }, () => m.nodes[0] ) }, clips.nodes ),
+		null
+	);
+	assert.throws(
+		() => createGpuSkeletonPlan( { ...m, nodes: [ { ...m.nodes[0], parent: 0 } ] }, clips.nodes ),
+		/hierarchy/
+	);
+});
+
+test("models that share clips share one clip plan; a skeleton is per model", () => {
+	const m = model(), assembled = { ...m, nodes: [ ...m.nodes ] }, clips = createGpuClipPlan( m.clips );
+	assert.ok( clips );
+	// The clip set does not depend on the skeleton: an assembled model built
+	// on the same clips reads the same tables.
+	assert.deepEqual( createGpuClipPlan( assembled.clips )?.data, clips.data );
+	const a = createGpuSkeletonPlan( m, clips.nodes ), b = createGpuSkeletonPlan( assembled, clips.nodes );
+	assert.ok( a && b );
+	assert.deepEqual( a.data, b.data );
+	assert.ok( a.data.length < clips.data.length + a.data.length, "skeleton holds no keyframes" );
 });
 
 test("one layered pose cannot force eligible siblings onto CPU", () => {

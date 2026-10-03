@@ -17,6 +17,7 @@ Options:
   --children FN       direct callees of functions whose key starts with FN
   --lines FN          self time by source line inside FN
   --compare TRACE[@A:B]  per-function ms/frame change against another trace
+  --timeline          per-second fps, busy time and what grew
   --json              machine-readable output
 
 Sections: threads and their busy time (workers named by script), the GPU
@@ -56,6 +57,7 @@ function parseArgs( argv ) {
 		else if ( arg === "--lines" ) options.lines = value();
 		else if ( arg === "--compare" ) options.compare = value();
 		else if ( arg === "--json" ) options.json = true;
+		else if ( arg === "--timeline" ) options.timeline = true;
 		else rest.push( arg );
 	}
 	if ( !rest[0] ) throw new Error( "usage: analyze.mjs TRACE.json [options] (see the file banner)" );
@@ -240,6 +242,48 @@ function table( map, scale, top, unit ) {
 
 /*
 ================
+timeline
+
+Per second: frames, main-thread and GPU-process busy ms per frame, and the
+functions whose inclusive ms per frame grew most over the fastest second.
+Every slow second names its own causes, not only the first suspect.
+================
+*/
+function timeline( analysis, options ) {
+	const { trace, main, mainProfile, symbolizer, frames } = analysis;
+	const gpu = [ ...trace.threads.values() ].find( t => t.name === "CrGpuMain" );
+	const seconds = [ ...frames.perSecond.keys() ].filter( s => (frames.perSecond.get( s ) ?? 0) > 20 );
+	const rows = seconds.map( second => {
+		const window = [ trace.start + second * 1e6, trace.start + (second + 1) * 1e6 ];
+		const count = frames.perSecond.get( second ), { busy } = windowBusy( trace, window );
+		const cost = attribute( mainProfile, window, symbolizer, options.gap );
+		const perFrame = new Map( [ ...cost.total ].map( ( [k, v] ) => [ k.replace( /:\d+$/, "" ), v / US / count ] ) );
+		return {
+			second,
+			count,
+			main: (busy.get( main.key ) ?? 0) / US / count,
+			gpu: gpu ? (busy.get( gpu.key ) ?? 0) / US / count : 0,
+			perFrame
+		};
+	} );
+	const best = rows.reduce( ( a, b ) => b.count > a.count ? b : a, rows[0] );
+	const out = [ `\n## Timeline (baseline: second ${best?.second}, ${best?.count} frames)` ];
+	for ( const row of rows ) {
+		const grew = [ ...row.perFrame ].map( ( [k, v] ) => [ k, v - (best.perFrame.get( k ) ?? 0) ] )
+			.filter( ( [k, v] ) => v > .05 && !/^\((root|program|idle)\)/.test( k ) )
+			.sort( ( x, y ) => y[1] - x[1] ).slice( 0, options.top >= 25 ? 8 : 5 )
+			.map( ( [k, v] ) => `+${v.toFixed( 2 )} ${k}` ).join( " | " );
+		out.push(
+			`${String( row.second ).padStart( 3 )} s ${String( row.count ).padStart( 4 )} f  main ${
+				row.main.toFixed( 2 )
+			}  gpu ${row.gpu.toFixed( 2 )} ms/f  ${grew}`
+		);
+	}
+	return out;
+}
+
+/*
+================
 analyzeTrace
 
 Everything the report needs for one trace and window.
@@ -315,6 +359,7 @@ async function report( options ) {
 		out.push( "### self\n" + table( mainCost.self, perFrame, options.top, "ms/f" ) );
 		out.push( "### inclusive\n" + table( mainCost.total, perFrame, options.top, "ms/f" ) );
 	}
+	if ( mainProfile && options.timeline ) out.push( ...timeline( a, options ) );
 	for ( const profile of trace.profiles.values() ) {
 		if ( profile === mainProfile ) continue;
 		if ( options.thread && !profile.thread.label.includes( options.thread ) ) continue;

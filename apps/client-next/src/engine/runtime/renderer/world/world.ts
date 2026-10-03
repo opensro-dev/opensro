@@ -9,14 +9,22 @@ world. Diagnostics observe it only through the frame probe (profile).
 
 ===========================================================================
 */
-import { characterShadowReceiver, BLOB_SHADOW_TEXTURE } from "@/engine/foundation/rendering/character-shadow";
+import {
+	characterShadowReceiver,
+	shadowReceiverBounds,
+	BLOB_SHADOW_TEXTURE
+} from "@/engine/foundation/rendering/character-shadow";
+import { createShadowSurfaces } from "./shadow-surfaces";
 import { footprintGeometry, footprintTextures } from "@/engine/foundation/rendering/footprints";
 import { createMaterialTimeline } from "@/engine/foundation/rendering/material-timeline";
 import { createTextureAtlas } from "@/engine/foundation/rendering/texture-atlas";
 import { createTerrainVisibility } from "@/engine/foundation/rendering/terrain-visibility";
 import { createWorldResidency } from "./residency";
+import { createTerrainLayers } from "./terrain-layers";
 import {
 	terrainInteractionCells,
+	terrainCellKey,
+	createTerrainPickCache,
 	pickTerrainCells,
 	selectionDecalGeometry,
 	selectionTextures
@@ -77,6 +85,7 @@ import {
 	prepareViewFrustum,
 	visibleFrustumSphere,
 	visibleFrustumBox,
+	visibleFrustumAabb,
 	terrainLod
 } from "@/engine/foundation/rendering/world-math";
 import { validPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
@@ -188,6 +197,8 @@ export function createWorldRenderer(
 ) {
 	const weather = createWeather( random, sound );
 	let interactionScene: WorldScene | null = null, interactionCells = terrainInteractionCells( null );
+	// Ground pick bounds and triangles of resident terrain cells (terrain-interaction.ts).
+	const terrainPicks = createTerrainPickCache();
 	let decalState:
 		| { readonly pose: import("@/engine/contracts/gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; }
 		| null = null;
@@ -324,6 +335,25 @@ export function createWorldRenderer(
 	let weatherOptions: import("@/engine/foundation/gameplay/weather").WeatherOptions | null = null;
 	let stars = initialStarFlicker(), starTimerStarted = false;
 	let startupStars: WorldGroup | undefined;
+	// The admitted copy of the startup stars and its byte size, made once: every
+	// outdoor adoption composes it, and a crossing keeps its draw like any group.
+	let ownedStars: { readonly group: WorldGroup; readonly bytes: number; } | null = null;
+	/*
+	================
+	ownedStarGroup
+	================
+	*/
+	function ownedStarGroup() {
+		if ( !random ) throw Error( "Missing shared presentation RNG" );
+		startupStars ??= skyGroups( { starPrimitive: random.sky() } ).find( group => group.material.sky === 2 )!;
+		if ( !ownedStars ) {
+			// The application, not the asset worker, owns the shared star RNG. Only this
+			// small generated group needs local admission; the transferred city does not.
+			const stars: WorldScene = { id: "stars", originRegion: 0, warnings: [], groups: [ startupStars ] };
+			ownedStars = { group: copyWorldScene( stars ).groups[0]!, bytes: worldSceneBytes( stars ) };
+		}
+		return ownedStars;
+	}
 	let clock: { timeOfDay: number; lunarDay: number; } | null = null;
 	let hasStars = false;
 	let pickGroups: WorldGroup[] = [], pickSeconds = 0;
@@ -341,6 +371,8 @@ export function createWorldRenderer(
 	let currentVisibility: TerrainVisibility[] = [];
 	// Camera collision parts of a region's terrain survive crossings with it.
 	const terrainCollision = new WeakMap<WorldGroup, RegionCollision>();
+	// Region terrain associations draw through shared layers (terrain-layers.ts).
+	const layers = createTerrainLayers();
 	/*
 	================
 	visibilityFor
@@ -462,11 +494,15 @@ export function createWorldRenderer(
 			alphas?: Uint8Array;
 			fadeRows?: FadeRow[];
 			resident?: Uint8Array;
+			// The resident slots in order: the walk visits only these.
+			residentSlots?: Uint32Array;
 			targetCellX?: number;
 			targetCellZ?: number;
 			seams?: Map<number, { mask: number; cellX: number; cellZ: number; }>;
 			candidates?: readonly TerrainRange[];
 			candidateVolumes?: Uint32Array;
+			// The array the next frame fills with its chosen ranges (no per-frame allocation).
+			scratch?: TerrainRange[];
 			previousCandidates?: {
 				cellX: number;
 				cellZ: number;
@@ -516,6 +552,12 @@ export function createWorldRenderer(
 						)
 				);
 			}
+			let resident = 0;
+			for ( let slot = 0; slot < cache.resident.length; slot++ ) resident += cache.resident[slot]!;
+			cache.residentSlots = new Uint32Array( resident );
+			for ( let slot = 0, at = 0; slot < cache.resident.length; slot++ ) {
+				if ( cache.resident[slot] ) cache.residentSlots[at++] = slot;
+			}
 			cache.targetCellX = targetCellX;
 			cache.targetCellZ = targetCellZ;
 		}
@@ -528,50 +570,60 @@ export function createWorldRenderer(
 	// Optional measurements from the frame owner (runtime.ts frameProbe). The
 	// profiler never rewrites this source; it observes these explicit hooks.
 	let probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined;
-	// Shadow receivers by terrain cell. The visible terrain ranges change only
-	// when a group's selection does, so the map is rebuilt on that change, not
-	// every frame (it was the largest self cost of the frame).
-	type ShadowSurfaces = Map<string, import("@/engine/foundation/rendering/character-shadow").ShadowTerrainSurface[]>;
+	// Terrain triangles by cell for shadow receivers, revised per cell as the
+	// selection walk changes a group's chosen ranges (shadow-surfaces.ts).
+	const shadowSurfaces = createShadowSurfaces();
 	// Receivers by shadow key, kept only while a shadow uses them this frame.
+	// A receiver is rebuilt when a terrain cell under it changes, not when any
+	// selection anywhere does: a dragged camera changes one nearly every frame.
 	const shadowReceivers = new Map<string, {
 		readonly cells: ReturnType<typeof terrainInteractionCells>;
-		readonly surfaces: ShadowSurfaces;
+		readonly stamp: number;
 		readonly receiver: ReturnType<typeof characterShadowReceiver>;
 	}>();
-	let shadowSurfaces: ShadowSurfaces = new Map(), shadowSurfaceInputs: readonly unknown[] = [];
 	/*
 	================
-	terrainShadowSurfaces
+	receiverChanged
+
+	True when a terrain cell under the receiver of a shadow at point changed
+	after stamp.
 	================
 	*/
-	function terrainShadowSurfaces(): ShadowSurfaces {
-		const inputs: unknown[] = [ orderedGroups ];
-		for ( const group of orderedGroups ) {
-			if ( group.material.terrain ) inputs.push( selections.get( group )?.chosen );
-		}
-		if (
-			inputs.length === shadowSurfaceInputs.length &&
-			inputs.every( ( input, i ) => input === shadowSurfaceInputs[i] )
-		) return shadowSurfaces;
-		const surfaces: ShadowSurfaces = new Map();
-		for ( const group of orderedGroups ) {
-			if ( group.material.terrain ) {
-				for ( const range of selections.get( group )?.chosen ?? [] ) {
-					const key = range.cell.join( ":" ), rows = surfaces.get( key ) ?? [];
-					rows.push( {
-						positions: group.geometry.positions,
-						indices: group.geometry.indices,
-						start: range.indexStart,
-						count: range.indexCount
-					} );
-					surfaces.set( key, rows );
-				}
-			}
-		}
-		shadowSurfaces = surfaces;
-		shadowSurfaceInputs = inputs;
-		return surfaces;
+	function receiverChanged( stamp: number, point: readonly [number, number, number], blobSize?: number ) {
+		const bounds = shadowReceiverBounds( point, blobSize );
+		return shadowSurfaces.changedSince(
+			stamp,
+			Math.floor( bounds.loX / 320 ),
+			Math.floor( bounds.loZ / 320 ),
+			Math.floor( bounds.hiX / 320 ),
+			Math.floor( bounds.hiZ / 320 )
+		);
 	}
+	// Each ordered group's index in orderedGroups.
+	let groupOrder = new Map<WorldGroup, number>();
+	// Visible marks by draw order: the walk marks, ordering reads them back.
+	let visibleMarks = new Uint8Array( 0 );
+	/*
+	================
+	orderGroups
+
+	Sets the draw order of the current scene. Shadow surfaces follow that
+	order, so they are rebuilt from the retained selections.
+	================
+	*/
+	function orderGroups( groups: WorldGroup[] ) {
+		orderedGroups = groups;
+		groupOrder = new Map( groups.map( ( group, index ) => [ group, index ] ) );
+		visibleMarks = new Uint8Array( groups.length );
+		shadowSurfaces.reset();
+		for ( let index = 0; index < groups.length; index++ ) {
+			const group = groups[index]!, chosen = selections.get( group )?.chosen;
+			if ( group.material.terrain && chosen ) shadowSurfaces.replace( group, index, undefined, chosen );
+		}
+		shadowSurfaces.commit();
+	}
+	// Triangles of each group when it was last visible; read only for groups in
+	// previousVisible, so an invisible group's entry is never consulted.
 	let previousVisible = new Set<WorldGroup>(), previousTriangles = new Map<WorldGroup, number>();
 	/*
 	================
@@ -783,7 +835,8 @@ export function createWorldRenderer(
 		// Groups another held scene still uses (a retained region) keep their draws.
 		for ( const group of residency.release( scene, [ current, pending, ...retired ] ) ) {
 			const draw = draws.get( group );
-			if ( draw ) geometry.release( draw );
+			if ( layers.member( group ) ) layers.remove( geometry, group );
+			else if ( draw ) geometry.release( draw );
 			draws.delete( group );
 			selections.delete( group );
 		}
@@ -904,7 +957,7 @@ export function createWorldRenderer(
 					}
 				}
 			}
-			const surfaces = terrainShadowSurfaces();
+			const surfaces = shadowSurfaces.surfaces();
 			// A receiver depends only on the shadow's point and size, the blob
 			// size and the terrain. A still character reuses last frame's mesh.
 			const used = new Set<string>();
@@ -914,10 +967,12 @@ export function createWorldRenderer(
 					key = `${c.blobSize ?? ""}:${c.projection.size}:${point[0]}:${point[1]}:${point[2]}`;
 				used.add( key );
 				let cached = shadowReceivers.get( key );
-				if ( !cached || cached.cells !== interactionCells || cached.surfaces !== surfaces ) {
+				if (
+					!cached || cached.cells !== interactionCells || receiverChanged( cached.stamp, point, c.blobSize )
+				) {
 					cached = {
 						cells: interactionCells,
-						surfaces,
+						stamp: shadowSurfaces.revision(),
 						receiver: characterShadowReceiver( interactionCells, c.projection, c.blobSize, surfaces )
 					};
 					shadowReceivers.set( key, cached );
@@ -1005,7 +1060,7 @@ export function createWorldRenderer(
 		*/
 		pickGround( ray: PickRay ) {
 			updateInteractionCells();
-			return pickTerrainCells( interactionCells, ray );
+			return pickTerrainCells( interactionCells, ray, terrainPicks );
 		},
 		/*
 		================
@@ -1068,19 +1123,12 @@ export function createWorldRenderer(
 				prepared.starBytes < 0 || prepared.starBytes > size
 			) throw new Error( "Invalid world admission receipt" );
 			if ( replacement.groups.some( group => group.material.sky === 2 ) ) {
-				if ( !random ) throw Error( "Missing shared presentation RNG" );
-				startupStars ??= skyGroups( { starPrimitive: random.sky() } ).find( group =>
-					group.material.sky === 2
-				)!;
-				// The application, not the asset worker, owns the shared star RNG. Only this
-				// small generated group needs local admission; the transferred city does not.
-				const stars: WorldScene = { id: "stars", originRegion: 0, warnings: [], groups: [ startupStars ] };
-				size += worldSceneBytes( stars ) - prepared.starBytes;
-				const ownedStars = copyWorldScene( stars ).groups[0]!;
+				const stars = ownedStarGroup();
+				size += stars.bytes - prepared.starBytes;
 				replacement = {
 					...replacement,
 					starRandomState: undefined,
-					groups: replacement.groups.map( group => group.material.sky === 2 ? ownedStars : group )
+					groups: replacement.groups.map( group => group.material.sky === 2 ? stars.group : group )
 				};
 			}
 			if ( detail !== undefined ) replacement = { ...replacement, terrainDetail: detail };
@@ -1277,7 +1325,12 @@ export function createWorldRenderer(
 					if ( !group.geometry.bones && !group.ranges && !pickBlocks.has( group ) ) {
 						pickBlocks.set( group, geometryPickBlocks( group.geometry ) );
 					}
-					draws.set( group, geometry.upload( group.geometry, imageDraw ) );
+					draws.set(
+						group,
+						layers.eligible( group ) ?
+							layers.admit( geometry, pending, group, imageDraw ) :
+							geometry.upload( group.geometry, imageDraw )
+					);
 					if ( group.instanceRadius !== undefined ) {
 						const shift = camera.originRegion ? camera.originRegion : pending.originRegion;
 						instanceSelection(
@@ -1349,7 +1402,7 @@ export function createWorldRenderer(
 						const key = group.materialOrder?.set ?? group.id;
 						if ( !objectOrder.has( key ) ) objectOrder.set( key, objectOrder.size );
 					}
-					orderedGroups = [ ...current.groups ].sort( compareGroups );
+					orderGroups( [ ...current.groups ].sort( compareGroups ) );
 					previousVisible.clear();
 					previousTriangles.clear();
 					prune = true;
@@ -1534,6 +1587,9 @@ export function createWorldRenderer(
 			terrainMasks.clear();
 			for ( const visibility of currentVisibility ) terrainMasks.set( visibility, visibility.begin( frustum ) );
 			const eyeCellX = Math.floor( localCamera.eye[0] / 320 ), eyeCellZ = Math.floor( localCamera.eye[2] / 320 );
+			// The fade range of scenery objects follows the background distance.
+			const sceneryRange = Math.min( 2500, Math.fround( (backgroundDistance ?? 3500) * Math.fround( .8 ) ) ) -
+				480;
 			const selectTerrainLod = ( distanceSquared: number ) =>
 				current?.terrainDetail === "full" ? 0 : terrainLod( distanceSquared );
 			for ( const group of current?.groups ?? [] ) {
@@ -1590,15 +1646,25 @@ export function createWorldRenderer(
 					}
 					cache.cellX = eyeCellX;
 					cache.cellZ = eyeCellZ;
-					const chosen = cache.candidates.filter( ( range, i ) =>
-						terrainMask[cache.candidateVolumes![i]!] === 1
-					);
+					// Fill the reusable array, then keep it only if the choice changed: a
+					// moving camera walks every terrain group of every resident region.
+					const candidates = cache.candidates, volumes = cache.candidateVolumes!;
+					const scratch = cache.scratch ?? [];
+					scratch.length = 0;
+					for ( let i = 0; i < candidates.length; i++ ) {
+						if ( terrainMask[volumes[i]!] === 1 ) scratch.push( candidates[i]! );
+					}
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-candidates" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-indices" );
-					const indicesDirty = !cache.chosen || chosen.length !== cache.chosen.length ||
-						chosen.some( ( range, i ) => range !== cache.chosen![i] );
+					let indicesDirty = !cache.chosen || scratch.length !== cache.chosen.length;
+					for ( let i = 0; !indicesDirty && i < scratch.length; i++ ) {
+						indicesDirty = scratch[i] !== cache.chosen![i];
+					}
+					const chosen: readonly TerrainRange[] = indicesDirty ? scratch : cache.chosen!;
+					// The replaced choice becomes next frame's scratch.
+					cache.scratch = indicesDirty ? (cache.chosen as TerrainRange[] | undefined) ?? [] : scratch;
 					let count = 0;
-					const positionRanges: [number, number][] = [];
+					let positionRanges: [number, number][] | null = null;
 					for ( const range of chosen ) {
 						if ( indicesDirty ) {
 							cache.indices.set(
@@ -1660,32 +1726,42 @@ export function createWorldRenderer(
 								lastChanged = i;
 							}
 						}
-						if ( lastChanged >= 0 ) positionRanges.push( [ firstChanged, lastChanged - firstChanged + 1 ] );
+						if ( lastChanged >= 0 ) {
+							(positionRanges ??= []).push( [ firstChanged, lastChanged - firstChanged + 1 ] );
+						}
 					}
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-seams" );
 					cache.indexCount = count;
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-index-upload" );
 					if ( indicesDirty ) {
-						geometry.updateIndices( draws.get( group )!, cache.indices.subarray( 0, count ) );
+						if ( layers.member( group ) ) layers.select( group, cache.indices, count );
+						else geometry.updateIndices( draws.get( group )!, cache.indices.subarray( 0, count ) );
+						if ( group.material.terrain ) {
+							shadowSurfaces.replace( group, groupOrder.get( group )!, cache.chosen, chosen );
+						}
 						cache.chosen = chosen;
 					}
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-index-upload" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-position-upload" );
-					if ( positionRanges.length ) {
-						geometry.updatePositions(
-							draws.get( group )!,
-							group.geometry.positions,
-							undefined,
-							undefined,
-							positionRanges
-						);
+					if ( positionRanges ) {
+						if ( layers.member( group ) ) {
+							layers.updatePositions( geometry, group, group.geometry.positions, positionRanges );
+						} else {
+							geometry.updatePositions(
+								draws.get( group )!,
+								group.geometry.positions,
+								undefined,
+								undefined,
+								positionRanges
+							);
+						}
 					}
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-position-upload" );
 					if ( count ) {
 						visible.push( group );
 						triangles += count / 3;
+						previousTriangles.set( group, triangles - trianglesBefore );
 					}
-					previousTriangles.set( group, triangles - trianglesBefore );
 					continue;
 				}
 				if ( group.instanceRadius !== undefined ) {
@@ -1711,11 +1787,13 @@ export function createWorldRenderer(
 						probe?.detailEnd?.( "world-instance-setup" );
 						probe?.detailBegin?.( "world-instance-loop" );
 					}
-					for ( let i = 0; i < source.length; i += 16 ) {
-						const descriptor = group.visibility?.[i / 16];
+					// Slots outside the target cell's association are not resident and
+					// keep their fades untouched; only resident slots are walked.
+					const slots = cache.residentSlots, total = slots ? slots.length : source.length / 16;
+					for ( let n = 0; n < total; n++ ) {
+						const i = (slots ? slots[n]! : n) * 16, descriptor = group.visibility?.[i / 16];
 						let alpha = 255, visible = false;
 						if ( descriptor ) {
-							if ( !cache.resident![i / 16] ) continue;
 							const row = cache.fadeRows![i / 16]!;
 							if ( row.visited !== fadeFrame ) {
 								row.visited = fadeFrame;
@@ -1738,12 +1816,7 @@ export function createWorldRenderer(
 										state,
 										distance,
 										descriptor.radius,
-										descriptor.sceneryRange ?
-											Math.min(
-												2500,
-												Math.fround( (backgroundDistance ?? 3500) * Math.fround( .8 ) )
-											) - 480 :
-											descriptor.range,
+										descriptor.sceneryRange ? sceneryRange : descriptor.range,
 										dt,
 										fadeFrame,
 										state
@@ -1806,8 +1879,8 @@ export function createWorldRenderer(
 					if ( count ) {
 						visible.push( group );
 						triangles += group.geometry.indices.length / 3 * count;
+						previousTriangles.set( group, triangles - trianglesBefore );
 					}
-					previousTriangles.set( group, triangles - trianglesBefore );
 					continue;
 				}
 				if (
@@ -1815,12 +1888,14 @@ export function createWorldRenderer(
 				) {
 					visible.push( group );
 					triangles += group.geometry.indices.length / 3 * (group.geometry.instances!.length / 16);
+					previousTriangles.set( group, triangles - trianglesBefore );
 				}
-				previousTriangles.set( group, triangles - trianglesBefore );
 			}
 			// CObjRenderer::QueueObject (0xAAE9C0) appends; 0xA5EE80 consumes
 			// that order. Keep scene submission order between resource batches:
 			// sorting filenames can put a fading prop before the solid structure behind it.
+			layers.flush( geometry );
+			shadowSurfaces.commit();
 			selectedFadeFrame = fadeFrame;
 			probe?.worldMark?.( "world-selection" );
 			fadesChanging = changing;
@@ -1828,7 +1903,17 @@ export function createWorldRenderer(
 			retainedTargetZ = targetCellZ;
 			const visibleSet = new Set( visible );
 			previousVisible = visibleSet;
-			const ordered = orderedGroups.filter( group => visibleSet.has( group ) );
+			// Draw order of the visible groups, without walking every resident one.
+			for ( const group of visible ) {
+				const index = groupOrder.get( group );
+				if ( index !== undefined ) visibleMarks[index] = 1;
+			}
+			const ordered: WorldGroup[] = [];
+			for ( let index = 0; index < visibleMarks.length; index++ ) {
+				if ( !visibleMarks[index] ) continue;
+				visibleMarks[index] = 0;
+				ordered.push( orderedGroups[index]! );
+			}
 			terrainEnd = ordered.findIndex( group => drawPhase( group ) >= 3 );
 			if ( terrainEnd < 0 ) terrainEnd = ordered.length;
 			transparentStart = ordered.findIndex( group => drawPhase( group ) === 4 );
@@ -1852,7 +1937,22 @@ export function createWorldRenderer(
 			// Upload gives every admitted group a unique resource handle. Its identity
 			// already covers scene replacement and binding growth; rebuilding a string
 			// of every asset name each frame adds no invalidation information.
-			const nextDraws = ordered.map( group => draws.get( group )! );
+			// Layer members share their layer's draw: submit it once, at its first
+			// member. Members are terrain, so only the opaque phases shift.
+			const nextDraws: GeometryDraw[] = [], submitted = new Set<GeometryDraw>();
+			let shifted = 0;
+			for ( let i = 0; i < ordered.length; i++ ) {
+				const group = ordered[i]!, member = layers.member( group );
+				const draw = member ? layers.drawOf( group ) : draws.get( group )!;
+				if ( submitted.has( draw ) ) {
+					if ( i < terrainEnd ) shifted++;
+					continue;
+				}
+				if ( member ) submitted.add( draw );
+				nextDraws.push( draw );
+			}
+			terrainEnd -= shifted;
+			transparentStart -= shifted;
 			if (
 				nextDraws.length !== selected.length || nextDraws.some( ( draw, index ) => draw !== selected[index] )
 			) {
@@ -1892,7 +1992,7 @@ export function createWorldRenderer(
 			interactionScene = null;
 			interactionCells.clear();
 			weather.invalidate();
-			orderedGroups = [];
+			orderGroups( [] );
 			objectOrder.clear();
 			previousVisible.clear();
 			previousTriangles.clear();
@@ -1900,6 +2000,7 @@ export function createWorldRenderer(
 			pickGroups = [];
 			resetAnimations( undefined, true );
 			draws.clear();
+			layers.clear();
 			selections.clear();
 			retired.length = 0;
 			imageDraws.clear();
@@ -1944,7 +2045,7 @@ export function createWorldRenderer(
 			interactionScene = null;
 			decalState = null;
 			weather.dispose( geometry );
-			orderedGroups = [];
+			orderGroups( [] );
 			objectOrder.clear();
 			previousVisible.clear();
 			previousTriangles.clear();
@@ -1957,7 +2058,10 @@ export function createWorldRenderer(
 			activeFades.length = 0;
 			fadeScene = null;
 			resetAnimations();
-			if ( geometry ) { for ( const draw of draws.values() ) geometry.release( draw ); }
+			if ( geometry ) {
+				for ( const [group, draw] of draws ) if ( !layers.member( group ) ) geometry.release( draw );
+			}
+			layers.dispose( geometry );
 			retired.length = 0;
 			if ( textures ) { for ( const draw of imageDraws.values() ) textures.release( draw ); }
 			imageDraws.clear();

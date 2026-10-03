@@ -1,10 +1,41 @@
-import type {UiScene} from '@/engine/contracts/ui';
+/*
+===========================================================================
 
-// Preloading is CPU/cache readiness, not GPU residency. Derive GPU demand
-// from the committed draw product (including masks), never all known assets.
-// Renderer owns uploads/releases and clears its resident set on device loss.
-export function uiTextureResidency(scene:UiScene|null,available:ReadonlySet<string>,resident:ReadonlySet<string>,dirty:ReadonlySet<string>){
- const needed=new Set<string>();
- for(const quad of scene?.quads??[])for(const id of [quad.texture,quad.mask?.texture])if(id&&available.has(id))needed.add(id);
- return {release:[...resident].filter(id=>!needed.has(id)),upload:[...needed].filter(id=>!resident.has(id)||dirty.has(id)),needed};
+ui-texture-residency.ts - which UI textures the GPU must hold
+
+Preloading is CPU/cache readiness, not GPU residency. GPU demand derives
+from the committed draw product (including masks), never all known assets.
+The renderer owns uploads and releases and clears its resident set on
+device loss. This runs on every UI republish, so it allocates only its
+answer.
+
+===========================================================================
+*/
+import type { UiScene } from "@/engine/contracts/ui";
+
+/*
+================
+uiTextureResidency
+
+needed: textures the scene draws that the renderer has. release: resident
+ones no longer needed. upload: needed ones not resident, or dirty.
+available is the renderer's texture map, keyed by texture id.
+================
+*/
+export function uiTextureResidency(
+	scene: UiScene | null,
+	available: ReadonlyMap<string, unknown>,
+	resident: ReadonlySet<string>,
+	dirty: ReadonlySet<string>
+) {
+	const needed = new Set<string>();
+	for ( const quad of scene?.quads ?? [] ) {
+		if ( quad.texture && available.has( quad.texture ) ) needed.add( quad.texture );
+		const mask = quad.mask?.texture;
+		if ( mask && available.has( mask ) ) needed.add( mask );
+	}
+	const release: string[] = [], upload: string[] = [];
+	for ( const id of resident ) if ( !needed.has( id ) ) release.push( id );
+	for ( const id of needed ) if ( !resident.has( id ) || dirty.has( id ) ) upload.push( id );
+	return { release, upload, needed };
 }
