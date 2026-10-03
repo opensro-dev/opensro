@@ -32,7 +32,7 @@ import { createBackgroundInstaller } from "./install";
 import { pageEntryBundle } from "@/engine/foundation/assets/page-entry";
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
 import type { AssetRequest, AssetWorkerMessage } from "@/engine/contracts/assets";
-import { rgbaPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
+import { rgbaPickAlpha, bitmapPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
 // Loading-screen progress publications are coalesced to this interval.
 const PROGRESS_INTERVAL_MS = 150;
 /*
@@ -518,8 +518,13 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						image.close();
 						return;
 					}
+					// World textures read their picking mask here, off the main thread.
+					const alpha = request.pickAlpha ? bitmapPickAlpha( image ) : undefined;
 					pending.delete( request.id );
-					send( { kind: "image", id: request.id, image }, [ image ] );
+					send(
+						{ kind: "image", id: request.id, image, ...(alpha ? { alpha } : {}) },
+						alpha ? [ image, alpha.pixels.buffer ] : [ image ]
+					);
 				} else if ( request.decode === "release" ) {
 					// The live page (fetched no-cache): report the entry bundle it names.
 					const html = new TextDecoder( "utf-8" ).decode( bytes );

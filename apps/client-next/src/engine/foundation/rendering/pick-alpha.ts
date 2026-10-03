@@ -7,8 +7,9 @@ Picking tests a ray's texel against the surface's alpha. The mask used to
 be read back on the main thread for every world texture as it arrived (a
 canvas draw plus getImageData), which stalled frames on region changes.
 The asset worker now takes it from the pixels it decodes for DDS world
-textures; the main thread reads a bitmap back (readback.ts) only for a
-texture that arrives without one.
+textures, and reads its own PNG bitmaps back (bitmapPickAlpha); the main
+thread reads a bitmap back (readback.ts) only for a texture that arrives
+without one.
 
 ===========================================================================
 */
@@ -38,4 +39,22 @@ A mask that fits its image: anything else is ignored and read back instead.
 export function validPickAlpha( alpha: PickAlpha | undefined, width: number, height: number ): alpha is PickAlpha {
 	return !!alpha && alpha.width === width && alpha.height === height &&
 		alpha.pixels instanceof Uint8Array && alpha.pixels.length === width * height;
+}
+
+/*
+================
+bitmapPickAlpha
+
+The alpha channel of a decoded bitmap, read back through a 2D canvas.
+Works on the main thread and in workers (OffscreenCanvas). A region
+transition trace showed this readback at 0.46 ms of every main-thread
+frame while PNG world textures arrived; the asset worker now does it.
+================
+*/
+export function bitmapPickAlpha( image: ImageBitmap ): PickAlpha {
+	const canvas = new OffscreenCanvas( image.width, image.height ),
+		context = canvas.getContext( "2d", { willReadFrequently: true } );
+	if ( !context ) throw new Error( "Picking alpha readback unavailable" );
+	context.drawImage( image, 0, 0 );
+	return rgbaPickAlpha( image.width, image.height, context.getImageData( 0, 0, image.width, image.height ).data );
 }

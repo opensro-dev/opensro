@@ -274,7 +274,6 @@ apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
 apps/client-next/src/engine/runtime/renderer/device/pipelines.ts
 apps/client-next/src/engine/runtime/renderer/device/thunder.ts
 apps/client-next/src/engine/runtime/renderer/device/timing.ts
-apps/client-next/src/engine/runtime/renderer/readback/readback.ts
 apps/client-next/src/engine/runtime/renderer/surface/surface.ts
 apps/client-next/src/engine/runtime/runtime-errors.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts

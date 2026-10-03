@@ -80,7 +80,8 @@ export const rules = {
 	getMappedRange: [ timing ],
 	Audio: [ runtime + "audio/music/music.ts" ],
 	createElement: [ uiBridge, runtime + "platform/ui/cursor.ts", bugRecorder, bugDialog, bugTrimmer ],
-	OffscreenCanvas: [ runtime + "renderer/readback/readback.ts", bugRecorder ],
+	// The picking mask readback, shared by the renderer and the asset worker.
+	OffscreenCanvas: [ "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder ],
 	AudioContext: [ runtime + "audio/audio.ts" ],
 	decodeAudioData: [ runtime + "audio/audio.ts" ],
 	createPanner: [ runtime + "audio/audio.ts" ],
@@ -105,7 +106,7 @@ export const rules = {
 	submit: [ frame, device ],
 	createImageBitmap: [ runtime + "assets/worker/loader.ts" ],
 	createSampler: [ device ],
-	getContext: [ surface, runtime + "renderer/readback/readback.ts", bugRecorder, bugTrimmer ],
+	getContext: [ surface, "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder, bugTrimmer ],
 	createBuffer: [ device ],
 	createTexture: [ device ],
 	createBindGroup: [ device ],
@@ -256,12 +257,22 @@ for (
 		"getMappedRange"
 	]
 ) rules[name].push( particleQuery );
+/*
+================
+verifyCapabilities
+================
+*/
 export function verifyCapabilities( base = root ) {
 	const model = project( base ), issues = [];
 	const contractPath = path.join( base, "execution-contract.json" ),
 		barriers = fs.existsSync( contractPath ) ?
 			JSON.parse( fs.readFileSync( contractPath, "utf8" ) ).frameBarriers ?? [] :
 			[];
+	/*
+	================
+	nativeBarrier
+	================
+	*/
 	function nativeBarrier( file, n ) {
 		let fn = n;
 		while ( fn && !ts.isFunctionLike( fn ) ) fn = fn.parent;
