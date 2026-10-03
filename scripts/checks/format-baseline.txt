@@ -146,7 +146,6 @@ apps/client-next/src/engine/foundation/rendering/geometry-vertices.ts
 apps/client-next/src/engine/foundation/rendering/material-timeline.ts
 apps/client-next/src/engine/foundation/rendering/modifier-delta.ts
 apps/client-next/src/engine/foundation/rendering/monster-scale.ts
-apps/client-next/src/engine/foundation/rendering/particle-ribbon.ts
 apps/client-next/src/engine/foundation/rendering/pick-destination.ts
 apps/client-next/src/engine/foundation/rendering/pick-volume.ts
 apps/client-next/src/engine/foundation/rendering/scenery-modifiers.ts

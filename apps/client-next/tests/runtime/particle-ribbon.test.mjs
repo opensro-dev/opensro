@@ -17,23 +17,46 @@ import { readFileSync } from "node:fs";
 async function load( file ) {
 	return import( sourceFileUrl( "src/engine/foundation/" + file ).href );
 }
-const { ribbonPolyline, ribbonSpline, ribbonStrip } = await load( "rendering/particle-ribbon.ts" );
+const { createRibbonChain, pushRibbonPoint, ribbonPolyline, ribbonSpline, ribbonStrip } = await load(
+	"rendering/particle-ribbon.ts"
+);
 const { particleProgram, initializeParticle, advanceParticle } = await load( "animation/particle-program.ts" );
-const point = ( x, width = 1 ) => ({ position: [ x, 0, 0 ], width, color: [ 1, .5, 0, 1 ] });
+/*
+================
+chainOf
+
+A ribbon chain through points on the x axis: [ x, width ] each.
+================
+*/
+const chainOf = points => {
+	const chain = createRibbonChain( 1 );
+	for ( const [x, width] of points ) pushRibbonPoint( chain, [ x, 0, 0 ], 0, [ 1, .5, 0, 1 ], 0, 1, width );
+	return chain;
+};
 test("linked trails require distinct neighbours and use uniform B-spline endpoint weights", () => {
-	assert.deepEqual( ribbonSpline( [ point( 0 ), point( 0 ) ] ), [] );
-	const points = ribbonSpline( [ point( 0 ), point( 0 ), point( 6, 0 ) ] );
-	assert.equal( points.length, 4 );
-	assert.equal( points[0].position[0], 1 );
-	assert.equal( points.at( -1 ).position[0], 6 );
-	assert.ok( Math.abs( points[1].width - 2 / 3 ) < 1e-12 );
-	const strip = ribbonStrip( points, new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ) );
-	assert.equal( strip.positions.length, 24 );
-	assert.equal( strip.indices.length, 18 );
+	const drawn = createRibbonChain( 1 ), work = createRibbonChain( 1 );
+	ribbonSpline( chainOf( [ [ 0, 1 ], [ 0, 1 ] ] ), drawn, work );
+	assert.equal( drawn.count, 0 );
+	ribbonSpline( chainOf( [ [ 0, 1 ], [ 0, 1 ], [ 6, 0 ] ] ), drawn, work );
+	assert.equal( drawn.count, 4 );
+	assert.equal( drawn.positions[0], 1 );
+	assert.equal( drawn.positions[9], 6 );
+	assert.ok( Math.abs( drawn.widths[1] - 2 / 3 ) < 1e-12 );
+	const strip = {
+		positions: new Float32Array( 24 ),
+		colors: new Float32Array( 32 ),
+		uvs: new Float32Array( 16 ),
+		indices: new Uint32Array( 18 )
+	};
+	ribbonStrip( drawn, new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ), strip, 0, 0, work );
 	assert.equal( Math.abs( strip.positions[1] ), 1 );
 	assert.equal( strip.uvs.at( -2 ), 1 );
 	assert.equal( strip.uvs[4], Math.fround( 1 / 3 ) );
+	assert.deepEqual( [ ...strip.indices.subarray( 6, 12 ) ], [ 2, 3, 4, 4, 3, 5 ] );
 	assert.ok( strip.positions.every( Number.isFinite ) );
+	// The raw chain keeps a point that moved by exactly the threshold.
+	ribbonPolyline( chainOf( [ [ 0, 1 ], [ 1e-6, 1 ], [ 1e-6, 1 ] ] ), drawn );
+	assert.equal( drawn.count, 2 );
 });
 test("cone execution uses the converted radian vector and advances independent element velocity", () => {
 	const program = particleProgram( [ {
@@ -207,10 +230,18 @@ test("SetConePos samples conical spawn displacement and offsets initial position
 });
 
 test("LinkDPipe keeps the raw chain: no spline points, only exact repeats dropped", () => {
-	const point = ( x, y = 0 ) => ({ position: [ x, y, 0 ], color: [ 1, 1, 1, 1 ], width: 2 });
-	const chain = [ point( 0 ), point( 0 ), point( 10, 5 ), point( 10, 5 + 1e-7 ), point( 20 ) ];
-	const raw = ribbonPolyline( chain );
-	assert.deepEqual( raw.map( p => p.position[0] ), [ 0, 10, 20 ], "AF8E80 drops only sub-1e-6 repeats" );
-	assert.ok( ribbonSpline( chain ).length > raw.length, "LinkPipe's AF9020 spline adds points" );
-	assert.deepEqual( ribbonPolyline( [ point( 0 ) ] ), [] );
+	const chain = createRibbonChain( 1 ), raw = createRibbonChain( 1 ), splined = createRibbonChain( 1 );
+	for ( const [x, y] of [ [ 0, 0 ], [ 0, 0 ], [ 10, 5 ], [ 10, 5 + 1e-7 ], [ 20, 0 ] ] ) {
+		pushRibbonPoint( chain, [ x, y, 0 ], 0, [ 1, 1, 1, 1 ], 0, 1, 2 );
+	}
+	ribbonPolyline( chain, raw );
+	assert.deepEqual(
+		Array.from( { length: raw.count }, ( _, i ) => raw.positions[i * 3] ),
+		[ 0, 10, 20 ],
+		"AF8E80 drops only sub-1e-6 repeats"
+	);
+	ribbonSpline( chain, splined, createRibbonChain( 1 ) );
+	assert.ok( splined.count > raw.count, "LinkPipe's AF9020 spline adds points" );
+	ribbonPolyline( chainOf( [ [ 0, 1 ] ] ), raw );
+	assert.equal( raw.count, 0 );
 });

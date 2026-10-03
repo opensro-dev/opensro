@@ -30,10 +30,12 @@ import { characterBindBounds, characterPickVolume } from "@/engine/foundation/an
 import { meshUnderRays, selectPickCandidate, type PickCandidate } from "@/engine/foundation/animation/character-pick";
 import { pickVolume, pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import {
+	createRibbonChain,
+	pushRibbonPoint,
 	ribbonPolyline,
 	ribbonSpline,
 	ribbonStrip,
-	type RibbonPoint
+	type RibbonChain
 } from "@/engine/foundation/rendering/particle-ribbon";
 import { particleRandomTable, initializeParticle } from "@/engine/foundation/animation/particle-program";
 import { PARTICLE_TICKS_PER_SECOND, ROTATION_WORK } from "@/engine/foundation/animation/particle-presentation";
@@ -139,6 +141,12 @@ export function createCharacters() {
 	const billboardAxes = new Float64Array( 9 );
 	// The vertex range a ribbon upload covers, [ start, count ].
 	const ribbonRange: [number, number][] = [ [ 0, 0 ] ];
+	// Ribbon scratch, reused every frame: the chains of one actor's groups
+	// (ribbonChains[k] for its k-th group, found by groupChains), their drawn
+	// form, the spline's work, and its elements' order.
+	const ribbonChains: RibbonChain[] = [], groupChains = new Map<unknown, RibbonChain>();
+	const ribbonGroups: RibbonChain[] = [], ribbonDrawn = createRibbonChain(), ribbonWork = createRibbonChain();
+	let ribbonOrder = new Int32Array( 64 );
 	const particleSnapshots = new Map<number, { matrix: Float32Array; regionId: number; }>();
 	let hasDeferred = false, deferredVisible = new Set<number>();
 	const hierarchy = createCharacterHierarchy(), snapshots = createActorSnapshots();
@@ -1726,26 +1734,50 @@ export function createCharacters() {
 						const { positions, colors, uvs, indices } = ribbon;
 						let vertex = 0, index = 0;
 						for ( const actor of rows ) {
-							const groups = new Map<unknown, RibbonPoint[]>(),
-								emission = primitive.emission!,
+							const emission = primitive.emission!,
 								history = particleBirths.get( actor.gid )!,
-								matrices = history.matrices[p]!;
+								matrices = history.matrices[p]!,
+								material = primitive.materialFrames!,
+								alpha = opacity( actor );
 							const elements = primitive.particleEmitter === undefined ?
 								undefined :
 								history.graph?.elements[primitive.particleEmitter];
-							const order = elements ?
-								elements.map( ( _, i ) => i ).filter( i => elements[i]?.alive ).sort( ( a, b ) =>
-									elements[b]!.born - elements[a]!.born
-								) :
-								emission.births.map( ( _, i ) => i ).reverse();
-							for ( const b of order ) {
-								const element = elements?.[b],
+							// Newest first: live graph elements by birth (ties keep slot
+							// order), or the emission's births in reverse.
+							let count = 0;
+							const total = elements ? elements.length : emission.births.length;
+							if ( ribbonOrder.length < total ) ribbonOrder = new Int32Array( total * 2 );
+							for ( let i = 0; i < total; i++ ) {
+								const b = elements ? i : total - 1 - i;
+								if ( elements && !elements[b]?.alive ) continue;
+								let at = count++;
+								while (
+									elements && at > 0 && elements[ribbonOrder[at - 1]!]!.born < elements[b]!.born
+								) {
+									ribbonOrder[at] = ribbonOrder[at - 1]!;
+									at--;
+								}
+								ribbonOrder[at] = b;
+							}
+							groupChains.clear();
+							ribbonGroups.length = 0;
+							for ( let k = 0; k < count; k++ ) {
+								const b = ribbonOrder[k]!,
+									element = elements?.[b],
 									birth = element ? element.clockBirth / 20 : emission.births[b]!;
 								if ( !elements && actor.emissionEnd !== undefined && birth >= actor.emissionEnd ) {
 									continue;
 								}
-								const group = element?.parent ?? 0, points = groups.get( group ) ?? [];
-								groups.set( group, points );
+								// A group opens at its first element, drawn or not: the
+								// groups keep the order the elements first name them.
+								const key = element?.parent ?? 0;
+								let points = groupChains.get( key );
+								if ( !points ) {
+									points = ribbonChains[ribbonGroups.length] ??= createRibbonChain();
+									points.count = 0;
+									groupChains.set( key, points );
+									ribbonGroups.push( points );
+								}
 								const elapsed = actor.time - birth,
 									age = emission.loop && elapsed >= 0 ? elapsed % emission.lifetime : elapsed;
 								if (
@@ -1755,29 +1787,27 @@ export function createCharacters() {
 										primitive.ribbon.widths.length - 1,
 										Math.floor( age * primitive.ribbon.fps )
 									),
-									material = primitive.materialFrames!,
 									at = Math.min( material.colors.length / 4 - 1, Math.floor( age * material.fps ) );
 								const scale =
 									Math.hypot( matrices[b * 16]!, matrices[b * 16 + 1]!, matrices[b * 16 + 2]! ) *
 									model.nodes[0]!.scale[0]!;
-								const color = Array.from( material.colors.subarray( at * 4, at * 4 + 4 ) );
-								color[3]! *= opacity( actor );
-								points.push( {
-									position: Array.from( matrices.subarray( b * 16 + 12, b * 16 + 15 ) ),
-									color,
-									width: (primitive.ribbon.widths[frame] ?? 1) * scale
-								} );
-							}
-							for ( const group of groups.values() ) {
-								const strip = ribbonStrip(
-									primitive.ribbon.spline ? ribbonSpline( group ) : ribbonPolyline( group ),
-									view!
+								pushRibbonPoint(
+									points,
+									matrices,
+									b * 16 + 12,
+									material.colors,
+									at * 4,
+									alpha,
+									(primitive.ribbon.widths[frame] ?? 1) * scale
 								);
-								positions.set( strip.positions, vertex * 3 );
-								colors.set( strip.colors, vertex * 4 );
-								uvs.set( strip.uvs, vertex * 2 );
-								for ( const value of strip.indices ) indices[index++] = value + vertex;
-								vertex += strip.positions.length / 3;
+							}
+							for ( const points of ribbonGroups ) {
+								if ( primitive.ribbon.spline ) ribbonSpline( points, ribbonDrawn, ribbonWork );
+								else ribbonPolyline( points, ribbonDrawn );
+								if ( !ribbonDrawn.count ) continue;
+								ribbonStrip( ribbonDrawn, view!, ribbon, vertex, index, ribbonWork );
+								vertex += ribbonDrawn.count * 2;
+								index += (ribbonDrawn.count - 1) * 6;
 							}
 						}
 						// The stream is reused: clear what the last frame wrote past this one.
