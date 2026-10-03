@@ -17,6 +17,7 @@ import { createCharacterPose } from "@/engine/foundation/animation/animation-pos
 import { characterRadius } from "@/engine/foundation/animation/character-bounds";
 import { skyGroups } from "@/engine/foundation/rendering/sky-geometry";
 import { radians } from "@/engine/foundation/math/angles";
+import { admitMesh } from "./mesh-admission/mesh-admission";
 import { createWorldResources } from "./resources/resources";
 import {
 	FRONTEND_SCENE_BYTES,
@@ -31,7 +32,7 @@ import type { Bundle, Material, Mesh, ObjectBranch } from "./internal/resource-c
 import { sceneryMaterial } from "@/engine/foundation/rendering/scenery-modifiers";
 import { sceneryParticles } from "@/engine/foundation/rendering/scenery-particles";
 import { worldObjectMaterial } from "@/engine/foundation/rendering/world-material";
-import { finiteNumbers, integerIndicesInRange } from "@/engine/foundation/rendering/geometry-validation";
+import { finiteNumbers } from "@/engine/foundation/rendering/geometry-validation";
 
 /*
 ================
@@ -180,6 +181,11 @@ export function createWorldDecoder( budget = WORLD_DECODE_BYTES ) {
 		*/
 		decode( bytes: Uint8Array | Bundle, frontend = false, options: WorldDecodeOptions = {} ): WorldScene {
 			let reserved = 0;
+			/*
+================
+reserve
+================
+			*/
 			const reserve = ( bytes: number ) => {
 				reserved += bytes;
 				if ( !Number.isSafeInteger( reserved ) || reserved > (frontend ? FRONTEND_DECODE_BYTES : budget) ) {
@@ -253,6 +259,11 @@ export function createWorldDecoder( budget = WORLD_DECODE_BYTES ) {
 			// Per-resource results. A town places the same meshes and references
 			// hundreds of times; everything here depends only on the resource.
 			const lowered = new Map<string, string>();
+			/*
+================
+lower
+================
+			*/
 			const lower = ( text: string ): string => {
 				let value = lowered.get( text );
 				if ( value === undefined ) {
@@ -261,22 +272,22 @@ export function createWorldDecoder( budget = WORLD_DECODE_BYTES ) {
 				}
 				return value;
 			};
-			const meshChecks = new Map<Mesh, { valid: boolean; radius: number; material: string; }>();
+			const meshChecks = new Map<
+				Mesh,
+				{ valid: boolean; radius: number; material: string; uvs: Float32Array; }
+			>();
+			/*
+================
+meshCheck
+
+Cache UV admission with geometry checks so repeated placements share the same
+finite conversion of authored missing texture coordinates.
+================
+			*/
 			const meshCheck = ( mesh: Mesh ) => {
 				let check = meshChecks.get( mesh );
 				if ( !check ) {
-					let extent = 0;
-					for ( const value of mesh.bounds.min ) extent = Math.max( extent, Math.abs( value ) );
-					for ( const value of mesh.bounds.max ) extent = Math.max( extent, Math.abs( value ) );
-					check = {
-						valid: !(!mesh.positions.length || mesh.positions.length % 3 ||
-							mesh.normals.length !== mesh.positions.length ||
-							mesh.uvs.length !== mesh.positions.length / 3 * 2 || !finiteNumbers( mesh.positions ) ||
-							!finiteNumbers( mesh.normals ) || !finiteNumbers( mesh.uvs ) || mesh.indices.length % 3 ||
-							!integerIndicesInRange( mesh.indices, mesh.positions.length / 3 )),
-						radius: extent * Math.sqrt( 3 ),
-						material: lower( mesh.metadata.materialName )
-					};
+					check = admitMesh( mesh );
 					meshChecks.set( mesh, check );
 				}
 				return check;
@@ -287,6 +298,11 @@ export function createWorldDecoder( budget = WORLD_DECODE_BYTES ) {
 				key: string;
 				set: string;
 			}>();
+			/*
+================
+refMaterial
+================
+			*/
 			const refMaterial = ( ref: ObjectBranch ) => {
 				let entry = refMaterials.get( ref );
 				if ( !entry ) {
@@ -315,6 +331,11 @@ export function createWorldDecoder( budget = WORLD_DECODE_BYTES ) {
 				}
 				return entry;
 			};
+			/*
+================
+materialFor
+================
+			*/
 			const materialFor = ( ref: ObjectBranch, material: Material, index: number ): WorldMaterial =>
 				sceneryMaterial(
 					worldObjectMaterial( material ),
@@ -326,6 +347,11 @@ export function createWorldDecoder( budget = WORLD_DECODE_BYTES ) {
 			// existed. A group still builds its own (no shared nested arrays); other
 			// instances only need its warnings, once per reference and material.
 			const warned = new Map<ObjectBranch, Set<Material>>();
+			/*
+================
+noteMaterial
+================
+			*/
 			const noteMaterial = ( ref: ObjectBranch, material: Material, index: number ): void => {
 				let seenMaterials = warned.get( ref );
 				if ( !seenMaterials ) {
@@ -526,7 +552,7 @@ export function createWorldDecoder( budget = WORLD_DECODE_BYTES ) {
 						world: true,
 						positions: new Float32Array( g.mesh.positions ),
 						normals: new Float32Array( g.mesh.normals ),
-						uvs: new Float32Array( g.mesh.uvs ),
+						uvs: meshCheck( g.mesh ).uvs.slice(),
 						indices: new Uint32Array( g.mesh.indices ),
 						instances: new Float32Array( g.matrices ),
 						transform: identity()

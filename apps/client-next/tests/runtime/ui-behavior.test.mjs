@@ -1263,18 +1263,17 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		assert.deepEqual( sent, [] );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		assert.deepEqual( sent, [ { kind: "gameplay", command: { kind: "rebirth", choice: 2 } } ] );
-		f.state.gameplay = { ...f.state.gameplay, rebirthPending: true };
 		scene = step( 5100 );
 		assert.ok(
 			defined( scene ).controls.filter( c => c.id === "rebirth-point" || c.id === "rebirth-alternate" ).every(
-				c => c.disabled
+				c => !c.disabled
 			)
 		);
 		f.ui.event( { kind: "activate", id: "rebirth-point" } );
-		assert.equal( sent.length, 1 );
+		assert.equal( sent.length, 2 );
 		life( 1 );
 		vitals( false );
-		f.state.gameplay = { ...f.state.gameplay, rebirthPending: false, progression: { level: 11, masteries: [] } };
+		f.state.gameplay = { ...f.state.gameplay, progression: { level: 11, masteries: [] } };
 		step( 5200 );
 		life( 2 );
 		vitals( true );
@@ -1282,7 +1281,7 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		assert.equal( prompt( 8300 ), true );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		scene = step( 8400 );
-		assert.equal( sent.length, 1, "high-level alternate waits for rescue without sending choice 2" );
+		assert.equal( sent.length, 2, "high-level alternate waits for rescue without sending choice 2" );
 		assert.ok( !defined( scene ).controls.some( c => c.id === "rebirth-point" ) );
 		f.ui.event( { kind: "world-select", gid: 2 } );
 		assert.equal( prompt( 8410 ), false, "another corpse cannot reopen the local prompt" );
@@ -1305,11 +1304,9 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		);
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		assert.equal( prompt( 8450 ), false );
-		f.state.gameplay = { ...f.state.gameplay, rebirthPending: true };
 		step( 8460 );
 		f.ui.event( { kind: "world-select", gid: 1 } );
-		assert.equal( prompt( 8470 ), false, "pending resurrection cannot be reopened" );
-		f.state.gameplay = { ...f.state.gameplay, rebirthPending: false };
+		assert.equal( prompt( 8470 ), true, "a silent resurrection refusal must not block corpse selection" );
 		step( 8480 );
 		f.ui.event( { kind: "world-select", gid: 1 } );
 		assert.equal( prompt( 8490 ), true );
@@ -1318,7 +1315,7 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 			[ 600, 345, 400, 210 ],
 			"a new prompt is centered"
 		);
-		assert.equal( sent.length, 1, "corpse selection and high-level rescue dismissal are local UI actions" );
+		assert.equal( sent.length, 2, "corpse selection and high-level rescue dismissal are local UI actions" );
 		life( 1 );
 		vitals( false );
 		step( 8500 );

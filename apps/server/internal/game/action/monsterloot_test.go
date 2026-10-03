@@ -10,6 +10,7 @@ package action
 
 import (
 	"bytes"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -144,6 +145,28 @@ func TestMonsterGoldTableAndNativeRollBoundaries(t *testing.T) {
 	rt.DropRoll = dropRollSequence(100)
 	if rt.admitMonsterDrop(8, target) {
 		t.Fatal("level-gap admission accepted roll 100 above threshold 72")
+	}
+}
+
+/*
+================
+TestBetaGoldRateScalesTheNativeHeapWithoutExtraDraws
+
+The rate multiplies the built heap; the two native draws stay the only RNG
+consumed, and an oversized heap clamps instead of vanishing.
+================
+*/
+func TestBetaGoldRateScalesTheNativeHeapWithoutExtraDraws(t *testing.T) {
+	rt, _, _, target := newCombatTestRuntime(t, 1)
+	rt.GoldRate = 50
+	rt.DropRoll = dropRollSequence(0, 32767)
+	if amount, ok := rt.rollMonsterGoldAmount(target); !ok || amount != 59*50 {
+		t.Fatalf("beta maximum roll = %d/%v, want %d", amount, ok, 59*50)
+	}
+	rt.GoldRate = 1 << 30
+	rt.DropRoll = dropRollSequence(0, 0)
+	if amount, ok := rt.rollMonsterGoldAmount(target); !ok || amount != math.MaxInt32 {
+		t.Fatalf("oversized beta heap = %d/%v, want the dword clamp", amount, ok)
 	}
 }
 

@@ -9,6 +9,7 @@ them into ImageBitmaps and hands the page only their sizes.
 
 ===========================================================================
 */
+import { textureCoordinate } from "@/engine/foundation/rendering/geometry-validation";
 import { NATIVE_TEXTURE_MIME } from "@/engine/foundation/assets/native-texture";
 import { validateEquipmentGlows } from "@/engine/foundation/rendering/equipment-glow";
 import { sceneryMaterial, type SceneryModifiers } from "@/engine/foundation/rendering/scenery-modifiers";
@@ -23,6 +24,11 @@ import type {
 } from "@/engine/contracts/character";
 import { identity } from "@/engine/foundation/rendering/world-math";
 import type { PickBounds } from "@/engine/foundation/rendering/picking";
+/*
+================
+Document
+================
+*/
 interface Document {
 	extras?: {
 		sroAggregateBox?: readonly number[];
@@ -140,13 +146,26 @@ decode
 				throw new Error( "Character node/mesh budget exceeded" );
 			}
 			let expanded = 0;
+			/*
+================
+reserve
+================
+			*/
 			function reserve( bytes: number ) {
 				expanded += bytes;
 				if ( !Number.isSafeInteger( bytes ) || bytes < 0 || expanded > CHARACTER_MODEL_BYTES ) {
 					throw new Error( "Character expansion exceeds decoded byte budget" );
 				}
 			}
-			function accessor( index: number, width: number ): Float32Array {
+			/*
+================
+accessor
+
+Only the explicit UV semantic admits authored missing coordinates. All other
+channels retain strict finite-value validation before GPU allocation.
+================
+			*/
+			function accessor( index: number, width: number, semantic?: "TEXCOORD_0" ): Float32Array {
 				const a = j.accessors[index], v = a?.bufferView === undefined ? undefined : j.bufferViews[a.bufferView];
 				if (
 					!a || !v || a.sparse ||
@@ -186,6 +205,7 @@ decode
 								value / 65535 :
 								Math.max( -1, value / (a.componentType === 5120 ? 127 : 32767) );
 						}
+						if ( semantic === "TEXCOORD_0" ) value = textureCoordinate( value );
 						if ( !Number.isFinite( value ) ) {
 							throw new Error( "Non-finite character accessor" );
 						}
@@ -335,7 +355,7 @@ decode
 								accessor( p.attributes.NORMAL, 3 ),
 							uvs: p.attributes.TEXCOORD_0 === undefined ?
 								new Float32Array( count * 2 ) :
-								accessor( p.attributes.TEXCOORD_0, 2 ),
+								accessor( p.attributes.TEXCOORD_0, 2, "TEXCOORD_0" ),
 							joints: jointIndices,
 							weights,
 							transform: identity(),

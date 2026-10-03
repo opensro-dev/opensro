@@ -171,32 +171,33 @@ test("376F updates local entity channels and live movement through the productio
 	assert.throws( () => core.receive( { opcode: 0x376f, payload: invalid }, 2001 ), /speed channels/ );
 	core.dispose();
 });
-test("rebirth sends the native choice once, gates level and life, and releases only on local revival", async () => {
+test("rebirth remains retryable after silence and still gates local life and level", async () => {
 	const { createGameplay } = await load( "gameplay" ), sent = [], game = createGameplay( f => sent.push( f ) );
 	const local = { ...pose, gid: 7, heading: 0, appearanceState: [ 2, 0, 0 ] };
 	game.bootstrap( { character: { level: 10 } } );
 	game.seed( local );
-	assert.equal(
-		game.command( { kind: "rebirth", choice: 2 }, 0, undefined, { ...local, appearanceState: [ 1, 0, 0 ] } ),
-		null
-	);
-	game.command( { kind: "rebirth", choice: 2 }, 1, undefined, local );
-	assert.deepEqual( sent, [ { opcode: 0x32dc, payload: Uint8Array.of( 2 ) } ] );
-	assert.equal( game.take().rebirthPending, true );
-	game.command( { kind: "rebirth", choice: 1 }, 2, undefined, local );
-	assert.equal( sent.length, 1 );
-	game.receive( { opcode: 0x3122, payload: Uint8Array.of( 8, 0, 0, 0, 0, 1 ) }, 3 );
-	game.command( { kind: "rebirth", choice: 1 }, 4, undefined, local );
-	assert.equal( sent.length, 1 );
-	game.receive( { opcode: 0x3122, payload: Uint8Array.of( 7, 0, 0, 0, 0, 1 ) }, 5 );
-	assert.equal( game.take().rebirthPending, false );
+	for ( const choice of [ 1, 2 ] ) {
+		assert.equal(
+			game.command( { kind: "rebirth", choice }, 0, undefined, { ...local, appearanceState: [ 1, 0, 0 ] } ),
+			null
+		);
+		assert.equal( game.command( { kind: "rebirth", choice }, 0, undefined, { ...local, gid: 8 } ), null );
+		game.command( { kind: "rebirth", choice }, 1, undefined, local );
+		// Rejected preparation and admission drops send no rebirth reply.
+		// A later explicit click must reach the server without a fresh login.
+		game.command( { kind: "rebirth", choice }, 10001, undefined, local );
+	}
+	assert.deepEqual( sent.map( frame => [ frame.opcode, ...frame.payload ] ), [
+		[ 0x32dc, 1 ],
+		[ 0x32dc, 1 ],
+		[ 0x32dc, 2 ],
+		[ 0x32dc, 2 ]
+	] );
 	game.bootstrap( { character: { level: 11 } } );
 	game.seed( local );
-	assert.equal( game.command( { kind: "rebirth", choice: 2 }, 6, undefined, local ), null );
-	game.command( { kind: "rebirth", choice: 1 }, 7, undefined, local );
-	assert.equal( sent.length, 2 );
-	game.resetWorld();
-	assert.equal( game.take().rebirthPending, false );
+	assert.equal( game.command( { kind: "rebirth", choice: 2 }, 10002, undefined, local ), null );
+	game.command( { kind: "rebirth", choice: 1 }, 10003, undefined, local );
+	assert.equal( sent.length, 5 );
 	game.dispose();
 });
 test("inventory icons survive baseline, reference replacement, item movement and reset", () => {

@@ -1589,7 +1589,7 @@ export function createUi(
 			return;
 		}
 		if ( id === "rebirth-point" || id === "rebirth-alternate" ) {
-			if ( !rebirthDue || deathDismissed || view.gameplay?.rebirthPending ) return;
+			if ( !rebirthDue || deathDismissed ) return;
 			if ( id === "rebirth-alternate" && (view.gameplay?.progression?.level ?? Infinity) > 10 ) {
 				deathDismissed = true;
 				dirty = true;
@@ -2870,7 +2870,7 @@ export function createUi(
 			if ( event.kind === "world-select" ) {
 				if (
 					view?.session?.phase === "world" && event.gid === deathIdentity &&
-					event.gid === view.gameplay?.localGid && !view.gameplay?.rebirthPending &&
+					event.gid === view.gameplay?.localGid &&
 					(!rebirthDue || deathDismissed)
 				) {
 					deathRequested = true;
@@ -12613,14 +12613,13 @@ export function createUi(
 						layout.alternate
 					] ] as const
 				) {
-					const disabled = !!game?.rebirthPending,
-						down = !disabled && pressed === id && hover === id,
+					const down = pressed === id && hover === id,
 						path = down ?
 							base.replace( ".png", "_press.png" ) :
-							!disabled && (hover === id || focus === id) ?
+							(hover === id || focus === id) ?
 							base.replace( ".png", "_focus.png" ) :
 							base;
-					controls.push( { id, label: hudCopy( key ), kind: "button", rect: r, disabled } );
+					controls.push( { id, label: hudCopy( key ), kind: "button", rect: r } );
 					if ( resources.has( path ) ) rect( r, white, path );
 					quads.push(
 						...text.quads(

@@ -66,18 +66,34 @@ type resurrectionOffer struct {
 	expiresMs int64
 }
 
-// resurrectionOffers is the table of unanswered proposals, keyed by the
-// dead player.
+/*
+================
+resurrectionOffers
+
+The table of unanswered proposals, keyed by the dead player.
+================
+*/
 type resurrectionOffers struct {
 	mu       sync.Mutex
 	byTarget map[string]resurrectionOffer
 }
 
+/*
+================
+resurrectionKey
+================
+*/
 func resurrectionKey(divisionID, name string) string {
 	return divisionID + "\x00" + strings.ToLower(name)
 }
 
-// pending reports an offer still inside its answer window.
+/*
+================
+pending
+
+Reports an offer still inside its answer window.
+================
+*/
 func (o *resurrectionOffers) pending(divisionID, name string, nowMs int64) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -85,13 +101,24 @@ func (o *resurrectionOffers) pending(divisionID, name string, nowMs int64) bool 
 	return ok && nowMs <= offer.expiresMs
 }
 
+/*
+================
+put
+================
+*/
 func (o *resurrectionOffers) put(divisionID, name string, offer resurrectionOffer) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.byTarget[resurrectionKey(divisionID, name)] = offer
 }
 
-// take consumes the offer; an expired one is consumed and reported absent.
+/*
+================
+take
+
+Consumes the offer; an expired one is consumed and reported absent.
+================
+*/
 func (o *resurrectionOffers) take(divisionID, name string, nowMs int64) (resurrectionOffer, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -101,6 +128,11 @@ func (o *resurrectionOffers) take(divisionID, name string, nowMs int64) (resurre
 	return offer, ok && nowMs <= offer.expiresMs
 }
 
+/*
+================
+drop
+================
+*/
 func (o *resurrectionOffers) drop(divisionID, name string) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -222,17 +254,35 @@ type ResurrectionConsent struct {
 	rt *Runtime
 }
 
-// ResurrectionConsent returns the lane the composition root registers.
+/*
+================
+ResurrectionConsent
+
+Returns the lane the composition root registers.
+================
+*/
 func (rt *Runtime) ResurrectionConsent() *ResurrectionConsent {
 	return &ResurrectionConsent{rt: rt}
 }
 
-// HasPendingInvite reports a proposal still inside its answer window.
+/*
+================
+HasPendingInvite
+
+Reports a proposal still inside its answer window.
+================
+*/
 func (c *ResurrectionConsent) HasPendingInvite(divisionID, name string) bool {
 	return c.rt.resurrections.pending(divisionID, name, c.rt.Now().UnixMilli())
 }
 
-// DropPendingInvite forgets the proposal for a character.
+/*
+================
+DropPendingInvite
+
+Forgets the proposal for a character.
+================
+*/
 func (c *ResurrectionConsent) DropPendingInvite(divisionID, name string) bool {
 	return c.rt.resurrections.drop(divisionID, name)
 }
@@ -297,7 +347,7 @@ func (rt *Runtime) acceptResurrection(division, name string, offer resurrectionO
 	worldKey := simulation.WorldKey(division, name)
 	var at simulation.Spawn
 	var revivedVitals []byte
-	var progression, recovery, effects []wire.Frame
+	var progression, recovery, effects, untouchable []wire.Frame
 	if !rt.deps.Update(character, "resurrection-accept", func() bool {
 		if character.DeletePending || enterworld.CharacterAlive(character) {
 			return false
@@ -317,6 +367,10 @@ func (rt *Runtime) acceptResurrection(division, name string, offer resurrectionO
 		revived := int64(1)
 		character.CurrentHP = &revived
 		character.LastExpLoss = 0
+		// 46CB30 revives through 4DF290 before applying the offered recovery.
+		// Use the same protection owner as self-rebirth so expiry and replacement
+		// cannot leave the player permanently protected or immediately vulnerable.
+		untouchable = rt.grantReviveUntouchable(division, character, nowMs)
 		revivedVitals = enterworld.BuildVitalsRefreshPayload(character)
 
 		if offer.exp > 0 && rt.UpdateExperience != nil {
@@ -346,9 +400,11 @@ func (rt *Runtime) acceptResurrection(division, name string, offer resurrectionO
 	rt.ClearCombatIntent(division, name)
 
 	correction, vitals, life := rebirthFrames(enterworld.ObjectIDForCharacter(character), at, revivedVitals)
-	actor = append([]wire.Frame{correction, vitals, life}, progression...)
+	actor = append([]wire.Frame{correction, vitals, life}, untouchable...)
+	actor = append(actor, progression...)
 	actor = append(actor, recovery...)
 	actor = append(actor, effects...)
-	peers = append([]wire.Frame{correction, life}, effects...)
+	peers = append([]wire.Frame{correction, life}, untouchable...)
+	peers = append(peers, effects...)
 	return actor, peers
 }
