@@ -74,10 +74,22 @@ func ApplyMPDecrease(cost int32, mask enterworld.SkillParameterMask, values ente
 		if !mask.Has(slot) {
 			continue
 		}
-		factor := 1 - float64(values[slot])/100
-		cost = int32(fistpLow(factor * float64(uint32(cost))))
+		cost = CutMPCost(cost, values[slot])
 	}
 	return cost
+}
+
+/*
+==================
+CutMPCost
+
+One percent cut of a prepared MP cost, the 5868F1 arithmetic every MP
+Decrease key uses: cost x (1 - percent / 100), stored by FISTP.
+==================
+*/
+func CutMPCost(cost int32, percent uint32) int32 {
+	factor := 1 - float64(percent)/100
+	return int32(fistpLow(factor * float64(uint32(cost))))
 }
 
 // fistpLow is FISTP qword under truncation, keeping the low dword. An

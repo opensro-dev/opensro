@@ -57,23 +57,40 @@ The hr semantics come from the 594AC0 note that er/hr write parameters
 comment carried before (when it read HP recovery 0x0A/0x0B); it has not been
 re-checked as the hr sub-site, so treat that one address as unverified.
 
+Two blocks write no parameter; their holder's own paths read them:
+
+	rhru         healing received: word 0 raises HP, word 1 MP, in percent
+	             (Dancing of Healing / Vitality; action.applyHealReceived)
+	dcmp         MP consumption cut, in percent (Dancing of Mana;
+	             action.mpConsumptionCut)
+
+Owner's rule: rhru is +% healing received, dcmp is -% MP consumption.
+Inferred: rhru's word 1 is the MP share, by the pair layout of heal; every
+shipped row authors it 0.
+
 ==================
 */
 type SkillBuffModifiers struct {
-	Dru      bool
-	DruWords [2]uint32
-	Odar     bool
-	OdarBits uint32 // after the parser's fix-up
-	OdarWord uint32
-	Ru       bool
-	RuRate   uint32
-	Hr       bool
-	HrFlat   uint32
-	HrRate   uint32
+	Dru         bool
+	DruWords    [2]uint32
+	Odar        bool
+	OdarBits    uint32 // after the parser's fix-up
+	OdarWord    uint32
+	Ru          bool
+	RuRate      uint32
+	Hr          bool
+	HrFlat      uint32
+	HrRate      uint32
+	Rhru        bool
+	RhruWords   [2]uint32
+	Dcmp        bool
+	DcmpPercent uint32
 }
 
 // Present reports a block 594AC0 would install.
-func (m SkillBuffModifiers) Present() bool { return m.Dru || m.Odar || m.Ru || m.Hr }
+func (m SkillBuffModifiers) Present() bool {
+	return m.Dru || m.Odar || m.Ru || m.Hr || m.Rhru || m.Dcmp
+}
 
 /*
 ==================

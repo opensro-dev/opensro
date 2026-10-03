@@ -260,7 +260,7 @@ func (rt *Runtime) instanceLive(division, name string, skillID, token uint32) bo
 pulseAura
 
 585262: current MP below onff word 1 retires the aura; otherwise that word,
-cut by the caster's BDMD, is paid.
+cut by the caster's BDMD and then its dcmp (Dancing of Mana), is paid.
 ==================
 */
 func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skill enterworld.SkillRow) ([]simulation.DivisionFrames, bool) {
@@ -272,7 +272,7 @@ func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skil
 	if err != nil {
 		return nil, false
 	}
-	cost := int64(combat.ApplyMPDecrease(int32(skill.Aura.PulseMP), skill.Attack.Parameters, stats.SkillParameters))
+	cost := int64(rt.cutMPConsumption(division, caster, combat.ApplyMPDecrease(int32(skill.Aura.PulseMP), skill.Attack.Parameters, stats.SkillParameters)))
 
 	gid := enterworld.ObjectIDForCharacter(caster)
 	var vitals []simulation.Frame

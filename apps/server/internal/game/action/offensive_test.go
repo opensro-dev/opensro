@@ -573,7 +573,9 @@ func TestReqcDanceRequiresSelectorBit(t *testing.T) {
 		mp := int64(50000)
 		c.CurrentMP = &mp
 		if dancing {
-			if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: guard.ID, SkillGroup: guard.Group}) {
+			// Another Bard's Guard Tambour: a child instance naming its
+			// caster's instance (reqc 32 needs another Bard's music).
+			if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: guard.ID, SkillGroup: guard.Group, AuraParentToken: 1}) {
 				t.Fatal("guard effect refused")
 			}
 		}

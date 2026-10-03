@@ -926,10 +926,19 @@ danceSelectorActive is CSkillManager_CheckOwnerCondition 59DDF0: bit 0 of
 skill-manager +0x1D0. 5842AC installs it from an active persistent skill's
 scls word and 582C76 clears it when that skill retires, so it is set exactly
 while such an effect is live.
+
+Owner's rule: a Dancing needs the dancer inside ANOTHER Bard's music. Only
+an instance handed out by someone else's aura counts (a child, with an
+AuraParentToken); the dancer's own tambour or march does not. Inferred:
+the requirement is the cast's; a running dance does not end when the
+music does (it has its own MP, death, loading and hit rules).
 ==================
 */
 func (rt *Runtime) danceSelectorActive(division string, c *enterworld.Character) bool {
 	for _, effect := range rt.effects.Snapshot(division, c.Name) {
+		if effect.AuraParentToken == 0 || effect.StopRequested {
+			continue
+		}
 		row, ok := rt.deps.SkillData().SkillByID(effect.SkillID)
 		if ok && row.SelectorMask&1 != 0 {
 			return true

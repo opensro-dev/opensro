@@ -115,7 +115,8 @@ decodeSkillOffense only validates them.
 	reqn                 +0x3B4                every reqi pair must match
 	efr kind 2, onff     +0x290, +0x284        persistent aura (SkillAura)
 	efr kind 3           +0x294                qest radius word
-	dru, odar, ru, hr    +0x3E4, +0x270, ...   SkillBuffModifiers
+	dru, odar, ru, hr,
+	rhru, dcmp           +0x3E4, +0x270, ...   SkillBuffModifiers
 	heal, mwhh, mwmh     +0x324..+0x32C        SkillHeal
 	eshp                 +0x298                aura heals the lowest HP ratio
 	nmf, tele/tel2/tel3,
@@ -228,6 +229,18 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			if firstOK && secondOK {
 				row.BuffModifiers.Dru = true
 				row.BuffModifiers.DruWords = [2]uint32{first, second}
+			}
+		case 0x72687275: // rhru: healing received, HP and MP percent
+			hp, hpOK := word(i + 1)
+			mp, mpOK := word(i + 2)
+			if hpOK && mpOK {
+				row.BuffModifiers.Rhru = true
+				row.BuffModifiers.RhruWords = [2]uint32{hp, mp}
+			}
+		case 0x64636d70: // dcmp: MP consumption cut, percent
+			if percent, ok := word(i + 1); ok {
+				row.BuffModifiers.Dcmp = true
+				row.BuffModifiers.DcmpPercent = percent
 			}
 		case 0x6f646172: // odar +0x270
 			bits, bitsOK := word(i + 1)

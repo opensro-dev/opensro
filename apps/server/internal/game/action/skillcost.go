@@ -201,22 +201,66 @@ preparedExecutionMPCost
 The charged amount (combat.PreparedCost), then the caster's MP Decrease
 cuts. Instant and persistent casts take the cuts; SkillAction_Projectile,
 picked by RefSkill+0x168 in SkillActionHandler (589B50), does not.
+
+Last comes the caster's dcmp (mpConsumptionCut), on every handler.
+Inferred: dcmp is a buff the caster holds, not a getv key of the cast row,
+so the projectile handler's skip of the getv cuts does not apply to it.
 ==================
 */
 func (rt *Runtime) preparedExecutionMPCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, error) {
 	_, _, _, currentMP := rt.playerKeeperVitals(division, c)
 	cost := combat.PreparedCost(uint32(currentMP), skill.Consumption.MP,
 		skill.Consumption.MPPercent, skill.TimedEffect.Pinned, true, 100)
-	if skill.ActionHandler == enterworld.SkillActionProjectile {
-		return int64(cost), nil
+	if skill.ActionHandler != enterworld.SkillActionProjectile {
+		stats, _, err := rt.playerCombatStats(division, c)
+		if err != nil {
+			return 0, err
+		}
+		cost = combat.ApplyMPDecrease(cost, skill.Attack.Parameters, stats.SkillParameters)
 	}
-
-	stats, _, err := rt.playerCombatStats(division, c)
-	if err != nil {
-		return 0, err
-	}
-	return int64(combat.ApplyMPDecrease(cost, skill.Attack.Parameters, stats.SkillParameters)), nil
+	return int64(rt.cutMPConsumption(division, c, cost)), nil
 }
+
+/*
+==================
+cutMPConsumption
+
+cost after c's dcmp, the Dancing of Mana's MP consumption cut
+(mpConsumptionCut), with the MP Decrease arithmetic.
+==================
+*/
+func (rt *Runtime) cutMPConsumption(division string, c *enterworld.Character, cost int32) int32 {
+	if percent := rt.mpConsumptionCut(division, c); percent != 0 {
+		cost = combat.CutMPCost(cost, percent)
+	}
+	return cost
+}
+
+/*
+==================
+mpConsumptionCut
+
+The percent c's MP costs are cut by: the dcmp of every live effect on c
+(Dancing of Mana, on the dancing Bard and every member it joined), summed
+and held at maxMPConsumptionCut.
+
+Owner's rule: Dancing of Mana gives -% MP consumption. Inferred: it cuts
+every prepared skill cost and an aura's pulse; two Bards' Dancings of Mana
+add up, never past a free cast.
+==================
+*/
+func (rt *Runtime) mpConsumptionCut(division string, c *enterworld.Character) uint32 {
+	var percent uint32
+	for _, row := range rt.liveEffectRows(division, c) {
+		if row.BuffModifiers.Dcmp {
+			percent += row.BuffModifiers.DcmpPercent
+		}
+	}
+	return min(percent, maxMPConsumptionCut)
+}
+
+// maxMPConsumptionCut keeps summed dcmp cuts from wrapping the FISTP cost.
+const maxMPConsumptionCut = 100
 
 /*
 ===============================================================================
