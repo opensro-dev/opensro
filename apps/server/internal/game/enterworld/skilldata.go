@@ -828,11 +828,15 @@ type SkillUiRow struct {
 	SPCost             int64               `json:"spCost"`
 	Trainable          bool                `json:"trainable"`
 	TargetRequired     bool                `json:"targetRequired"`
-	GroundTarget       bool                `json:"groundTarget,omitempty"`
-	CooldownGroup      uint8               `json:"cooldownGroup,omitempty"`
-	CooldownMs         uint32              `json:"cooldownMs"`
-	Masteries          [2]SkillRequirement `json:"masteries"`
-	Prerequisites      [3]SkillRequirement `json:"prerequisites"`
+	// TargetSelf marks a target-required row that also admits its caster
+	// (column 26, TargetGroup_Self): the client aims a cast with nothing
+	// selected at its own character. Omitted when false.
+	TargetSelf    bool                `json:"targetSelf,omitempty"`
+	GroundTarget  bool                `json:"groundTarget,omitempty"`
+	CooldownGroup uint8               `json:"cooldownGroup,omitempty"`
+	CooldownMs    uint32              `json:"cooldownMs"`
+	Masteries     [2]SkillRequirement `json:"masteries"`
+	Prerequisites [3]SkillRequirement `json:"prerequisites"`
 }
 
 /*
@@ -906,7 +910,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 		projection := SpawnSkillRow{LinkedSkillID: row.LinkedSkillID, CancellationDeferred: row.CancellationDeferred, NameAttackContent: row.NameAttackContent, Level: uint8(row.Level), Group: row.Group, ID: row.ID, Token: row.SpawnToken, Status: row.SpawnStatus, EffectRider: row.EffectRider, EffectDurationMs: row.EffectDurationMs, ZeroEffectDuration: row.EffectDurationPresent && row.EffectDurationMs == 0, HideDetectionBuff: row.HideDetectionBuff, IndefiniteBuffTimer: row.IndefiniteBuffTimer}
 		projection.HuntingPoint, projection.StealthDuration = row.HuntingPoint, row.StealthDuration
 		if row.Icon != "" || strings.HasPrefix(row.Codename, "SKILL_CH_") || strings.HasPrefix(row.Codename, "SKILL_EU_") {
-			projection.UI = &SkillUiRow{BuffSecondary: row.BuffSecondary, Name: row.Codename, SPCost: row.SPCost, Trainable: !row.ChainSub && row.SPCost > 0, TargetRequired: row.TargetRequired, GroundTarget: row.PositionEffect.Pinned, CooldownMs: row.CoolTimeMs, CooldownGroup: row.CoolTimeGroup, Masteries: row.Masteries, Prerequisites: row.Prerequisites}
+			projection.UI = &SkillUiRow{BuffSecondary: row.BuffSecondary, Name: row.Codename, SPCost: row.SPCost, Trainable: !row.ChainSub && row.SPCost > 0, TargetRequired: row.TargetRequired, TargetSelf: row.TargetRequired && row.Targets.Self, GroundTarget: row.PositionEffect.Pinned, CooldownMs: row.CoolTimeMs, CooldownGroup: row.CoolTimeGroup, Masteries: row.Masteries, Prerequisites: row.Prerequisites}
 			projection.UI.BuffCancel = "" // Omitted means the native ordinary/direct branch.
 			if row.VoluntaryCancelBlocked && !row.BuffCancelInstance {
 				projection.UI.BuffCancel = "blocked"

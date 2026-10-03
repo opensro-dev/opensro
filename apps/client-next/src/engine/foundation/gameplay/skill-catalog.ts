@@ -34,6 +34,9 @@ export interface SkillMetadata {
 	readonly reqInt?: number;
 	readonly trainable: boolean;
 	readonly targetRequired: boolean;
+	// Column 26 (TargetGroup_Self) of a target-required row: the caster is an
+	// admitted target, so a cast with nothing selected aims at the caster.
+	readonly targetSelf?: boolean;
 	readonly groundTarget?: boolean;
 	readonly cooldownMs: number;
 	readonly cooldownGroup?: number;
@@ -103,7 +106,10 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 		) throw Error( "Invalid speed buff metadata" );
 		const statusLevel = ( value: StatusLevel | undefined ) =>
 			value === undefined ? undefined : { mask: uint( value?.mask ), level: uint( value?.level ) };
-		if ( ui.groundTarget !== undefined && typeof ui.groundTarget !== "boolean" ) {
+		if (
+			ui.groundTarget !== undefined && typeof ui.groundTarget !== "boolean" ||
+			ui.targetSelf !== undefined && typeof ui.targetSelf !== "boolean"
+		) {
 			throw Error( "Invalid skill target kind" );
 		}
 		seen.add( id );
@@ -135,6 +141,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			reqInt: uint( ui.reqInt ?? 0, 65535 ),
 			trainable: ui.trainable,
 			targetRequired: ui.targetRequired,
+			targetSelf: ui.targetSelf ?? false,
 			groundTarget: ui.groundTarget ?? false,
 			cooldownMs: uint( ui.cooldownMs ),
 			cooldownGroup: uint( ui.cooldownGroup ?? 0, 255 ),

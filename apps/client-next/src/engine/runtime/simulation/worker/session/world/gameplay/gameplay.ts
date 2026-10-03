@@ -1403,7 +1403,14 @@ state here before a command can claim a native wire conversation.
 					return sendFrame( frame );
 				}
 				if ( metadata && !metadata.targetRequired ) command = { kind: "skill", skillId: command.skillId };
-				else if ( metadata?.targetRequired && !command.gid ) throw Error( "This skill requires a target" );
+				else if ( metadata?.targetRequired && !command.gid ) {
+					// A row that admits its caster (targetSelf) aims at the caster when
+					// nothing is selected, as the server resolves the same row.
+					if ( !metadata.targetSelf || !localGid ) throw Error( "This skill requires a target" );
+					const frame = combat.skill( skillId, localGid );
+					movement.holdForCast( now );
+					return sendFrame( frame );
+				}
 			}
 			if ( command.kind === "skill" && command.gid === undefined ) {
 				return sendFrame( combat.skill( command.skillId ) );
