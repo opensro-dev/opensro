@@ -100,6 +100,14 @@ func (rt *Runtime) queueObjectAction(division string, c *enterworld.Character, p
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || snapshot.NativeTeleportMode == 1 || mountedOnCOS(snapshot) {
 		return OpResult{}, false
 	}
+	// 4ACC40 validates a skill command (mask 0x37, call at 4ACED4) before it
+	// may enter the queue. A refused press (cooldown, MP, weapon, ammunition)
+	// answers its error and leaves the running attack and its continuation in
+	// place; queueing it unchecked replaced the auto-attack with a command
+	// that was then refused when the swing closed, and every attack stopped.
+	if code := rt.queuedSkillAdmission(division, snapshot, payload); code != 0 {
+		return offensiveRefusal(code), true
+	}
 	pending := basicAttackIntent{
 		DivisionID: division, CharacterName: c.Name, SingleCast: true,
 		Deferred: &deferredObjectAction{payload: bytes.Clone(payload)},
@@ -111,6 +119,30 @@ func (rt *Runtime) queueObjectAction(division string, c *enterworld.Character, p
 	state.State = pairedActionCount
 	frame := wire.Frame{Opcode: wire.OpActionState, Payload: state.Encode()}
 	return OpResult{Frames: []wire.Frame{frame}, ActorPrivate: []wire.Frame{frame}}, true
+}
+
+/*
+================
+queuedSkillAdmission
+
+The command-phase admission of a skill press about to be queued; zero for
+anything else (attack, follow, pickup) and for the base attack, which
+4ACC40 sends straight to the queue.
+================
+*/
+func (rt *Runtime) queuedSkillAdmission(division string, snapshot *enterworld.Character, payload []byte) uint16 {
+	if wire.ClassifyTargetActionLane(payload) != wire.TargetActionSkill {
+		return 0
+	}
+	cast, err := wire.DecodeSkillAction(payload)
+	if err != nil {
+		return 0
+	}
+	skill, exists := rt.deps.SkillData().SkillByID(cast.ActionId)
+	if !exists || isPinnedBaseAttack(snapshot, skill.Codename) {
+		return 0
+	}
+	return rt.skillAdmission(division, snapshot, skill, rt.Now().UnixMilli(), nil, nil, admitCommand)
 }
 
 /*

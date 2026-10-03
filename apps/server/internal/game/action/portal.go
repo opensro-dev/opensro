@@ -350,7 +350,8 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 	rt.clearSkillFinalizes(division, c.Name)
 	rt.clearCompoundJob(compoundKey{division, c.Name})
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
-	return OpResult{Frames: missionReentryFrames(packets), Broadcast: []wire.Frame{{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()}}}
+	corpses, corpseDespawns := rt.retireCompanionCorpses(division, c)
+	return OpResult{Frames: append(missionReentryFrames(packets), corpses...), Broadcast: append(corpseDespawns, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})}
 }
 
 // 4F2D05: the quest bit blocks buildings and the special GATE_TD route;

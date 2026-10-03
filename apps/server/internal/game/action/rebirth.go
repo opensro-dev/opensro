@@ -284,7 +284,9 @@ func (rt *Runtime) HandleLocalRebirth(
 		}
 	}
 	rt.retireReturnForReentry(divisionID, character)
+	corpses, corpseDespawns := rt.retireCompanionCorpses(divisionID, character)
 	frames := missionReentryFrames(prepared.Packets)
+	frames = append(frames, corpses...)
 	// Re-entry reconstructs the client actor. A retained runtime body status
 	// must be replayed after construction; rebirth does not blanket-clear it.
 	if snapshot := rt.characterSnapshot(divisionID, character); snapshot != nil && snapshot.NativeBodyStatus != 0 {
@@ -293,7 +295,7 @@ func (rt *Runtime) HandleLocalRebirth(
 	frames = append(frames, life)
 	return OpResult{
 		Frames:    frames,
-		Broadcast: append([]wire.Frame{correction, life}, untouchable...),
+		Broadcast: append(append([]wire.Frame{correction, life}, untouchable...), corpseDespawns...),
 	}
 }
 

@@ -86,18 +86,14 @@ func (rt *Runtime) HandleCosCommand(
 		return rt.changeCosRide(divisionID, character, snapshot, true)
 
 	case wire.CosCommandAttackTag:
-		if !snapshot.CompanionByGID(command.CosGid).Mounted || snapshot.CompanionByGID(command.CosGid).CurrentHP == 0 ||
-			ref.MountedAttackCapability210 == 0 || command.TargetGid == 0 {
-			return OpResult{}
-		}
-		// After the COS identity/capability gates, mounted and on-foot attacks
-		// intentionally converge on the same server-authoritative pursuit,
-		// weapon, posture, cooldown, damage and moving-target re-steer machine.
-		// The native difference is the admitted C->S composer, not a second
-		// damage authority.
-		return rt.beginBasicAttack(divisionID, character, wire.BasicAttackEngage{
-			TargetGid: command.TargetGid,
-		}, rt.Now().UnixMilli())
+		// CGObjCOS_DispatchOwnedCommand (4D2200) case 1 validates the target and
+		// posts AI event 0x19 to the vehicle's own controller (+0x188 slot
+		// 0x1C): the order belongs to the COS, never to its rider. A ride or
+		// transport vehicle has no attack skill, so nothing strikes. The client
+		// sends this order for any vehicle with characterdata column 88 set
+		// (every ride horse carries 3000, 692CB0); it is not a rider-attack
+		// licence. Riders dismount to fight.
+		return OpResult{DiagnosticRefusal: "mounted-attack-is-the-vehicle-order"}
 	default:
 		log.Debugf("action: decoded unsupported COS tag 0x%02X", command.Tag)
 		return OpResult{}

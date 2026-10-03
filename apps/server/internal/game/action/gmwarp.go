@@ -76,7 +76,9 @@ func (rt *Runtime) WarpGM(division, name string, p wire.Position) bool {
 	if ok && len(packets) > 0 && packets[0].NativeOpcode == enterworld.OpcodeResetClient {
 		rt.bindResidentRegion(simulation.WorldKey(division, name), rt.Now().UnixMilli())
 		rt.retireReturnForReentry(division, c)
-		frames := missionReentryFrames(packets)
+		// GM warp refuses a summoned transport (above); a dead pet still retires.
+		corpses, _ := rt.retireCompanionCorpses(division, c)
+		frames := append(missionReentryFrames(packets), corpses...)
 		if snapshot := rt.characterSnapshot(division, c); snapshot != nil && snapshot.NativeBodyStatus != 0 {
 			frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), snapshot.NativeBodyStatus))
 		}

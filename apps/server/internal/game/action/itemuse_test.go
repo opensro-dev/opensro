@@ -301,10 +301,14 @@ func TestCosMountAndMountedAttackShareAuthorityOnlyAfterCosGates(t *testing.T) {
 
 /*
 ================
-TestMountedAttackEntersTheSharedAuthoritativeCombatMachine
+TestMountedAttackOrderNeverMakesTheRiderFight
+
+4D2200 hands the attack order to the vehicle's AI (event 0x19). A rider on a
+horse or transport never swings its own weapon from the saddle: no strike,
+no attack intent, whatever the rider carries (a bow included).
 ================
 */
-func TestMountedAttackEntersTheSharedAuthoritativeCombatMachine(t *testing.T) {
+func TestMountedAttackOrderNeverMakesTheRiderFight(t *testing.T) {
 	rt, _, character, target := newCombatTestRuntime(t, 100)
 	deps, ok := rt.deps.(*enterworld.Deps)
 	if !ok {
@@ -325,15 +329,14 @@ func TestMountedAttackEntersTheSharedAuthoritativeCombatMachine(t *testing.T) {
 		U8(wire.CosCommandAttackTag).
 		U32(target.Gid).
 		Payload())
-	_, damage, fatal := assertSkillDamageOpen(
-		t, result.Frames, 2, enterworld.ObjectIDForCharacter(character), target.Gid,
-	)
-	if damage == 0 || fatal {
-		t.Fatalf("mounted first strike = damage %d fatal %v, want positive nonfatal", damage, fatal)
+	if len(result.Frames) != 0 || len(result.Broadcast) != 0 {
+		t.Fatalf("mounted attack order struck: %+v", result)
 	}
-	intents := rt.combatIntentSnapshot()
-	if len(intents) != 1 || intents[0].TargetGid != target.Gid {
-		t.Fatalf("mounted engage intents = %+v, want retained target gid %d", intents, target.Gid)
+	if intents := rt.combatIntentSnapshot(); len(intents) != 0 {
+		t.Fatalf("mounted attack order installed rider intents %+v", intents)
+	}
+	if !character.ActiveCOS.Mounted {
+		t.Fatal("the refused order changed ride state")
 	}
 }
 

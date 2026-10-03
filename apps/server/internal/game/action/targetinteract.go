@@ -127,15 +127,16 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			}
 		}
 
-		// 4ACED4 admits a command with mask 0x37 (no targets) before it
-		// replaces anything: a refused skill (cooldown, MP, range) leaves the
-		// running basic attack and its continuation untouched. A command that
-		// arrives mid-action waits, so a busy caster is left to the action
-		// owners below.
+		// CGCharAutoCommandActor_ProcessCommand (4ACC40, call at 4ACED4) admits
+		// a skill command with mask 0x37 (cooldown, replacement, equipment,
+		// resources, ammunition) before it touches the queue, busy or not: a
+		// refused press answers its error and the running attack, its swing and
+		// its continuation stay untouched. Auto-attack is always mid-swing, so
+		// skipping this while an action is open dropped the attack whenever a
+		// cooling-down skill was pressed.
 		if source := rt.deps.SkillData(); source != nil {
 			if skill, ok := source.SkillByID(cast.ActionId); ok &&
-				!isPinnedBaseAttack(snapshot, skill.Codename) &&
-				!rt.hasOpenSkillCast(divisionID, snapshot.Name) {
+				!isPinnedBaseAttack(snapshot, skill.Codename) {
 				if code := rt.skillAdmission(
 					divisionID,
 					snapshot,
@@ -150,73 +151,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			}
 		}
 
-		rt.ClearCombatIntent(divisionID, snapshot.Name)
-
-		if source := rt.deps.SkillData(); source != nil {
-			if skill, ok := source.SkillByID(cast.ActionId); ok &&
-				!isPinnedBaseAttack(snapshot, skill.Codename) {
-
-				if skill.Duplicate.Pinned {
-					return rt.acceptDuplicate(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
-				}
-
-				if skill.MonsterCapture.Pinned {
-					return rt.acceptMonsterCapture(divisionID, character, snapshot, cast, skill)
-				}
-
-				if skill.PositionEffect.Pinned {
-					return rt.acceptPositionSkill(divisionID, character, snapshot, cast, skill)
-				}
-				if skill.Threat.Only && !skill.TargetRequired {
-					return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill}, cast)
-				}
-
-				if skill.Recovery.SelfFlatPinned ||
-					(skill.Heal.Present || skill.Abnormal.AdmitDeadParty) && skill.TargetRequired ||
-					skill.Abnormal.CurePresent() {
-					return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
-				}
-
-				if skill.TimedEffect.Pinned && skill.TimedEffect.Targeted {
-					return rt.acceptTimedTargetEffect(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
-				}
-
-				if skill.TimedEffect.Pinned || skill.Concealment.Pinned {
-					result, _ := rt.acceptTimedSelfEffect(
-						divisionID,
-						character,
-						snapshot,
-						cast,
-						skill,
-						rt.Now().UnixMilli(),
-						nil,
-					)
-					return result
-				}
-
-				if skill.Aura.Present && (skill.BuffModifiers.Present() || skill.Aura.Eshp) {
-					return rt.acceptPartyBuff(divisionID, character, snapshot, cast, skill)
-				}
-
-				if skill.Wall.Pinned {
-					return rt.acceptWall(divisionID, character, snapshot, cast, skill)
-				}
-
-				if skill.StatusCast && !skill.TargetRequired {
-					result, _ := rt.acceptUntargetedStatusCast(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
-					return result
-				}
-
-				if skill.CombatTrap.Pinned {
-					result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
-					return result
-				}
-
-				return rt.beginOffensiveSkill(divisionID, character, snapshot, cast)
-			}
-		}
-
-		return rt.acceptSkillCast(divisionID, character, snapshot, cast)
+		return rt.dispatchRetainingAttack(divisionID, character, snapshot, cast)
 
 	case wire.TargetActionFortressStructure:
 		// 692CB0's CICATStruct [02][01][01][gid] form is retail-valid,
@@ -362,4 +297,137 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 	rt.Pending.Clear(pendingKey)
 
 	return prependOpResult(stopped, rt.grantPickup(divisionID, worldKey, character, snapshot, groundItem))
+}
+
+/*
+================
+dispatchSkillCommand
+
+The admitted skill command's owner. Each owner may still refuse (busy
+caster, posture, target): dispatchRetainingAttack restores the replaced
+attack when it does.
+================
+*/
+func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction) OpResult {
+
+	if source := rt.deps.SkillData(); source != nil {
+		if skill, ok := source.SkillByID(cast.ActionId); ok &&
+			!isPinnedBaseAttack(snapshot, skill.Codename) {
+
+			if skill.Duplicate.Pinned {
+				return rt.acceptDuplicate(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
+			}
+
+			if skill.MonsterCapture.Pinned {
+				return rt.acceptMonsterCapture(divisionID, character, snapshot, cast, skill)
+			}
+
+			if skill.PositionEffect.Pinned {
+				return rt.acceptPositionSkill(divisionID, character, snapshot, cast, skill)
+			}
+			if skill.Threat.Only && !skill.TargetRequired {
+				return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill}, cast)
+			}
+
+			if skill.Recovery.SelfFlatPinned ||
+				(skill.Heal.Present || skill.Abnormal.AdmitDeadParty) && skill.TargetRequired ||
+				skill.Abnormal.CurePresent() {
+				return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
+			}
+
+			if skill.TimedEffect.Pinned && skill.TimedEffect.Targeted {
+				return rt.acceptTimedTargetEffect(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
+			}
+
+			if skill.TimedEffect.Pinned || skill.Concealment.Pinned {
+				result, _ := rt.acceptTimedSelfEffect(
+					divisionID,
+					character,
+					snapshot,
+					cast,
+					skill,
+					rt.Now().UnixMilli(),
+					nil,
+				)
+				return result
+			}
+
+			if skill.Aura.Present && (skill.BuffModifiers.Present() || skill.Aura.Eshp) {
+				return rt.acceptPartyBuff(divisionID, character, snapshot, cast, skill)
+			}
+
+			if skill.Wall.Pinned {
+				return rt.acceptWall(divisionID, character, snapshot, cast, skill)
+			}
+
+			if skill.StatusCast && !skill.TargetRequired {
+				result, _ := rt.acceptUntargetedStatusCast(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
+				return result
+			}
+
+			if skill.CombatTrap.Pinned {
+				result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
+				return result
+			}
+
+			return rt.beginOffensiveSkill(divisionID, character, snapshot, cast)
+		}
+	}
+
+	return rt.acceptSkillCast(divisionID, character, snapshot, cast)
+}
+
+/*
+================
+dispatchRetainingAttack
+
+4ACC40 never lets a refused command touch the queue: the attack it would
+have replaced keeps swinging, its continuation keeps its place. Owners here
+refuse after the intent is cleared (an open action, a seated or masked
+caster, a vanished target), so a refused or empty answer that installed no
+command of its own puts the running attack and its queued continuation back.
+Only movement and an accepted command end auto-attack.
+================
+*/
+func (rt *Runtime) dispatchRetainingAttack(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction) OpResult {
+	key := simulation.WorldKey(divisionID, snapshot.Name)
+	prior, attacking := rt.combatIntentFor(divisionID, snapshot.Name)
+	session, published := rt.actionSessions.Load(key)
+	rt.ClearCombatIntent(divisionID, snapshot.Name)
+	result := rt.dispatchSkillCommand(divisionID, character, snapshot, cast)
+	if !attacking || !commandRefused(result) {
+		return result
+	}
+	if _, replaced := rt.combatIntentFor(divisionID, snapshot.Name); replaced {
+		return result
+	}
+	rt.setCombatIntent(prior)
+	if published {
+		rt.actionSessions.Store(key, session)
+	}
+	return result
+}
+
+/*
+================
+commandRefused
+
+A refusal installs nothing: a diagnostic, a lone skill error (B245 [2, code])
+or no answer at all. Anything published to others or a pending pickup is an
+accepted command.
+================
+*/
+func commandRefused(result OpResult) bool {
+	if result.DiagnosticRefusal != "" {
+		return true
+	}
+	if len(result.Broadcast) != 0 || len(result.Recipients) != 0 || result.Pending != nil {
+		return false
+	}
+	for _, frame := range result.Frames {
+		if frame.Opcode != wire.OpSkillCastResult || len(frame.Payload) == 0 || frame.Payload[0] != 2 {
+			return false
+		}
+	}
+	return true
 }

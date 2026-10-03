@@ -101,6 +101,43 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 
 /*
 ================
+retireCompanionCorpses
+
+A successful re-entry (rebirth, return scroll, portal, GM warp) rebuilds the
+owner's world. CCOSManager_RestoreLoadedActors (4FA430) admits only records
+whose alive and summoned bits are both set: a dead COS stays on its summoner
+item for revival and never follows its owner into the new world. Native gives
+the teleport no separate branch for corpses, so the re-entry applies the same
+admission rule here (inference from 4FA430; restoreCharacterCOS applies it at
+login). The caller holds the division operation lock. Returns the owner's
+item-state frames and the despawn the old neighbourhood must receive.
+================
+*/
+func (rt *Runtime) retireCompanionCorpses(division string, c *enterworld.Character) (owner, public []wire.Frame) {
+	var corpses []*enterworld.CharacterCOS
+	rt.deps.Update(c, "cos-reentry-corpses", func() bool {
+		corpses = corpses[:0]
+		for _, pet := range c.Companions() {
+			if !pet.Summoned || pet.CurrentHP != 0 {
+				continue
+			}
+			pet.Summoned = false
+			pet.StateFlags &^= cosStateSummoned
+			pet.Mounted = false
+			corpses = append(corpses, pet)
+		}
+		return len(corpses) > 0
+	})
+	for _, pet := range corpses {
+		owner = append(owner, rt.retireCosRuntime(division, c, pet.GID)...)
+		owner = append(owner, companionItemStateFrames(c, pet)...)
+		public = append(public, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: pet.GID}.Encode()})
+	}
+	return owner, public
+}
+
+/*
+================
 retireCosRuntime
 
 Retire the actor's transient work after the durable cancellation or horse

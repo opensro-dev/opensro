@@ -155,6 +155,80 @@ func TestDesignatedRebirthRestoresWorldVitalsAndLife(t *testing.T) {
 
 /*
 ================
+TestTownRebirthLeavesADeadCompanionBehind
+
+4FA430 admits only alive and summoned records into a rebuilt world: a horse
+that died with its owner does not return to town with it.
+================
+*/
+func TestTownRebirthLeavesADeadCompanionBehind(t *testing.T) {
+	character := rebirthTestCharacter(20, 0)
+	character.World.RebirthPoint = worldSpawnFromMission(simulation.EuropeStartProfile())
+	rt, _ := newTestRuntime(character, testItems())
+	equipCombatTestPet(t, rt, character, 1)
+	character.ActiveCOS.CurrentHP = 0
+	gid := character.ActiveCOS.GID
+
+	result := rt.HandleLocalRebirth(testDivision, character, []byte{1})
+	if character.CurrentHP == nil || *character.CurrentHP <= 0 {
+		t.Fatalf("owner was not revived: %+v", result)
+	}
+	for _, frame := range result.Frames {
+		if frame.Opcode == wire.OpCosRecordCreate {
+			t.Fatal("the re-entry stream rebuilt the corpse in the new world")
+		}
+	}
+	if character.ActiveCOS.Summoned || character.ActiveCOS.StateFlags&cosStateSummoned != 0 {
+		t.Fatal("the dead horse is still summoned after re-entry")
+	}
+	if character.CompanionByGID(gid) != nil {
+		t.Fatal("the dead horse still owns a world GID")
+	}
+	despawned := false
+	for _, frame := range result.Broadcast {
+		if frame.Opcode == wire.OpObjectDespawn && binary.LittleEndian.Uint32(frame.Payload) == gid {
+			despawned = true
+		}
+	}
+	if !despawned {
+		t.Fatal("the corpse's old neighbourhood never received its despawn")
+	}
+}
+
+/*
+================
+TestTownRebirthKeepsALiveCompanion
+================
+*/
+func TestTownRebirthKeepsALiveCompanion(t *testing.T) {
+	character := rebirthTestCharacter(20, 0)
+	character.World.RebirthPoint = worldSpawnFromMission(simulation.EuropeStartProfile())
+	rt, _ := newTestRuntime(character, testItems())
+	equipCombatTestPet(t, rt, character, 1)
+
+	result := rt.HandleLocalRebirth(testDivision, character, []byte{1})
+	if character.CurrentHP == nil || *character.CurrentHP <= 0 {
+		t.Fatalf("owner was not revived: %+v", result)
+	}
+	rebuilt := false
+	for _, frame := range result.Frames {
+		rebuilt = rebuilt || frame.Opcode == wire.OpCosRecordCreate
+	}
+	if !rebuilt {
+		t.Fatal("the living companion was not rebuilt with its owner")
+	}
+	if !character.ActiveCOS.Summoned {
+		t.Fatal("a living companion was retired by the owner's rebirth")
+	}
+	for _, frame := range result.Broadcast {
+		if frame.Opcode == wire.OpObjectDespawn {
+			t.Fatalf("a living companion was despawned: %+v", frame)
+		}
+	}
+}
+
+/*
+================
 TestDevelopmentRestoreViewerRevivesThroughPresentRebirth
 ================
 */

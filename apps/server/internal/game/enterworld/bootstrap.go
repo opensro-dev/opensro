@@ -319,7 +319,11 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	var activeCOSRows []Packet
 	var activeCOSRide *Packet
 	for _, cos := range character.Companions() {
-		if !cos.Summoned {
+		// CCOSManager_RestoreLoadedActors (4FA430) admits a record into a built
+		// world only when its alive and summoned bits are both set. A corpse stays
+		// on its summoner item; login and every re-entry (rebirth, return scroll,
+		// portal, GM warp) serialize the same rule.
+		if !cos.Summoned || cos.CurrentHP == 0 {
 			continue
 		}
 		characters, ok := deps.Items.(CharacterRefSource)
