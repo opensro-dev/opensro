@@ -49,6 +49,10 @@ export interface BloomDraw {
 	encode( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
 }
 export interface DeviceOwner extends Disposable {
+	/** Bracket one frame, from its first preparation to its last submit: a GPU
+	 * resource released in between outlives the command buffers that name it. */
+	beginFrame(): void;
+	endFrame(): void;
 	particleQuery(
 		points: Float32Array,
 		matrix: Float32Array,

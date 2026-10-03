@@ -17,6 +17,7 @@ import { createPipelines } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
 import type { DeviceOwner, FrameCommands, SurfaceCommands } from "@/engine/runtime/renderer/internal/gpu-contract";
+import { createRetirement } from "./retirement";
 import type { RuntimePhase } from "@/engine/contracts/runtime";
 
 const DEFAULT_TEXTURE_DETAIL = 2;
@@ -44,6 +45,9 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
 	const depthTextures = new Set<GPUTexture>();
+	// Every owner below hands its released buffers and textures to this queue;
+	// beginFrame/endFrame bracket the span in which a frame may still name them.
+	const retirement = createRetirement();
 	let epoch = 1, recoverable = false;
 	let commands: FrameCommands | null = null, surface: SurfaceCommands | null = null;
 	const generation = epoch;
@@ -202,7 +206,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 						================
 						*/
 						dispose() {
-							if ( depthTextures.delete( texture ) ) texture.destroy();
+							if ( depthTextures.delete( texture ) ) retirement.retire( texture );
 						}
 					} );
 				},
@@ -233,7 +237,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 						*/
 						dispose() {
 							if ( depthTextures.delete( texture ) ) {
-								texture.destroy();
+								retirement.retire( texture );
 							}
 						}
 					} );
@@ -255,6 +259,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			} );
 			const pipelines = createPipelines( created, navigator.gpu.getPreferredCanvasFormat() );
 			images = createImages( {
+				retire: retirement.retire,
 				current,
 				fail,
 				pipeline: pipelines.image,
@@ -310,6 +315,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				}
 			} );
 			environmentBuffer = created.createBuffer( {
+				label: "environment",
 				size: ENVIRONMENT_UNIFORM_BYTES,
 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 			} );
@@ -323,17 +329,18 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				pipelines.lightmapSampler,
 				environmentBuffer,
 				pipelines.worldSampling,
-				gpuAnimationEnabled ? createGpuAnimationResources( created ) : undefined,
+				gpuAnimationEnabled ? createGpuAnimationResources( created, retirement.retire ) : undefined,
 				navigator.gpu.getPreferredCanvasFormat(),
-				createParticlePresentation( created )
+				createParticlePresentation( created, retirement.retire ),
+				retirement.retire
 			);
-			ui = createUiResources( created, navigator.gpu.getPreferredCanvasFormat() );
+			ui = createUiResources( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
 			thunder = createThunder( created, navigator.gpu.getPreferredCanvasFormat() );
 
 			flares = createFlares( created, navigator.gpu.getPreferredCanvasFormat(), images.texture );
 
-			bloom = createBloom( created, navigator.gpu.getPreferredCanvasFormat() );
+			bloom = createBloom( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
 			particleQuery = createParticleQuery( created, navigator.gpu.getPreferredCanvasFormat() );
 			Promise.all( [
@@ -360,6 +367,27 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		} ).catch( fail );
 	}
 	return {
+		/*
+		================
+		beginFrame
+
+		The renderer starts preparing a frame: from here until endFrame no
+		retired buffer or texture is destroyed (retirement.ts).
+		================
+		*/
+		beginFrame() {
+			retirement.open();
+		},
+		/*
+		================
+		endFrame
+
+		The frame's last command buffer is submitted, or the frame was abandoned.
+		================
+		*/
+		endFrame() {
+			retirement.close();
+		},
 		/*
 		================
 		bloom
@@ -583,6 +611,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			surface = null;
 			timing?.dispose();
 			timing = null;
+			// The owners above retired into the queue if a frame was still open.
+			retirement.close();
 			device?.destroy();
 			device = null;
 		}

@@ -10,6 +10,7 @@ five-pass chain (SWorld_RenderBloom 8A99B0) onto the frame's encoder.
 */
 import type { BloomDraw } from "../internal/gpu-contract";
 import { BLOOM_BLEND_BYTE } from "@/engine/foundation/rendering/blend-state";
+import { destroyNow, type Retire } from "./retirement";
 
 /*
 ================
@@ -21,7 +22,7 @@ Constructor 8BB530 installs radius 13, alpha 198, blend 192, input scale
 128, threshold 40 and kernel alpha bytes 80,70,50.
 ================
 */
-export function createBloom( device: GPUDevice, format: GPUTextureFormat ) {
+export function createBloom( device: GPUDevice, format: GPUTextureFormat, retire: Retire = destroyNow ) {
 	const module = device.createShaderModule( {
 		label: "native-bloom",
 		code: `
@@ -117,7 +118,7 @@ export function createBloom( device: GPUDevice, format: GPUTextureFormat ) {
 	*/
 	function clear() {
 		revision++;
-		for ( const t of targets ) t.destroy();
+		for ( const t of targets ) retire( t );
 		targets = [];
 		views = [];
 		bindings = [];

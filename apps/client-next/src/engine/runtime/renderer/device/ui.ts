@@ -11,13 +11,14 @@ resourceRevision so no retained bind group can refer to a retired texture.
 import type { UiScene, UiQuad } from "@/engine/contracts/ui";
 import type { UiDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { uiRecordCount, UI_RECORD_LIMIT } from "@/engine/foundation/rendering/text-run";
+import { destroyNow, type Retire } from "./retirement";
 // Device-owned UI resources. Stable instance storage and draw bundles survive data edits.
 /*
 ================
 createUiResources
 ================
 */
-export function createUiResources( device: GPUDevice, format: GPUTextureFormat ) {
+export function createUiResources( device: GPUDevice, format: GPUTextureFormat, retire: Retire = destroyNow ) {
 	const shader = device.createShaderModule( {
 		label: "ui-quads",
 		code: `
@@ -157,7 +158,11 @@ fs
 		size: 8192 * 112,
 		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
 	} );
-	const viewport = device.createBuffer( { size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST } );
+	const viewport = device.createBuffer( {
+		label: "ui-viewport",
+		size: 16,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+	} );
 	const sampler = device.createSampler( { magFilter: "linear", minFilter: "linear" } );
 	const nearestSampler = device.createSampler( { magFilter: "nearest", minFilter: "nearest" } );
 	const textures = new Map<string, { texture: GPUTexture; width: number; height: number; }>();
@@ -176,7 +181,8 @@ fs
 	function texture( id: string, image: ImageBitmap | ImageData | null ) {
 		if ( disposed ) return;
 		if ( !image ) {
-			textures.get( id )?.texture.destroy();
+			const released = textures.get( id );
+			if ( released ) retire( released.texture );
 			if ( textures.delete( id ) ) resourceRevision++;
 			return;
 		}
@@ -194,7 +200,7 @@ fs
 						(resident + image.width * image.height * 4) + " path=" + id
 				);
 			}
-			slot?.texture.destroy();
+			if ( slot ) retire( slot.texture );
 			slot = {
 				texture: device.createTexture( {
 					label: "ui:" + id,
@@ -238,7 +244,7 @@ fs
 			) throw Error( "Invalid portrait extent" );
 			let slot = textures.get( id );
 			if ( !slot || slot.width !== width || slot.height !== height ) {
-				slot?.texture.destroy();
+				if ( slot ) retire( slot.texture );
 				slot = {
 					texture: device.createTexture( {
 						label: id,

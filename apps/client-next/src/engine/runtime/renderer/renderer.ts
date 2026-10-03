@@ -354,6 +354,10 @@ export function createRenderer(
 			if ( disposed || failure ) {
 				return;
 			}
+			// The device whose frame is open. Everything below prepares, records and
+			// submits inside that bracket, so a resource an owner releases on the way
+			// outlives the command buffers that name it (device/retirement.ts).
+			let open: ReturnType<typeof createDevice> | null = null;
 			try {
 				if ( device.phase() === "failed" && device.recoverable() && recoveries < 3 ) {
 					// Only renderer state restarts. The runtime's simulation and assets remain owned and live.
@@ -382,6 +386,8 @@ export function createRenderer(
 				if ( device.phase() !== "running" ) {
 					return;
 				}
+				open = device;
+				open.beginFrame();
 				if ( !surface ) {
 					surface = createSurface( canvas, device.surfaceCommands()!, device.format() );
 					frame = createFrame( device.commands()! );
@@ -610,15 +616,21 @@ export function createRenderer(
 				);
 				probe?.renderMark( "submit" );
 				if ( pending ) {
+					// The deferred pass records its second command buffer after the
+					// visibility query: the frame stays open until that one is submitted.
+					const frameDevice = open;
+					open = null;
 					return pending.then( () => {
 						if ( !disposed ) targetSurface.present();
 					} ).catch( error => {
 						if ( !disposed ) failure = String( error );
-					} );
+					} ).finally( () => frameDevice.endFrame() );
 				}
 				targetSurface.present();
 			} catch ( error ) {
 				failure = String( error );
+			} finally {
+				open?.endFrame();
 			}
 		},
 		/*

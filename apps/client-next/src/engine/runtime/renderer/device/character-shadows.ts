@@ -17,6 +17,7 @@ release, or its instance storage growing) so no submit reads a dead buffer.
 
 import type { CharacterShadowRequest, GeometryDraw, ImageDraw } from "../internal/gpu-contract";
 import { packGeometryVertices } from "@/engine/foundation/rendering/geometry-vertices";
+import { destroyNow, type Retire } from "./retirement";
 export interface ShadowBinding {
 	readonly instances: GPUBuffer;
 	readonly material: GPUBuffer;
@@ -35,7 +36,9 @@ export function createCharacterShadows(
 	view: GPUBuffer,
 	texture: ( image: ImageDraw ) => GPUTexture,
 	binding: ( draw: GeometryDraw ) => ShadowBinding | undefined,
-	format: GPUTextureFormat
+	format: GPUTextureFormat,
+	// The frame that drew a slot may still be recording: the device destroys it.
+	retire: Retire = destroyNow
 ) {
 	const caster = device.createShaderModule( {
 		label: "character-shadow-caster",
@@ -154,15 +157,15 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 	const slots: Slot[] = [];
 	/*
 	================
-	retire
+	retireSlot
 	================
 	*/
-	function retire( s: Slot ) {
-		s.projection.destroy();
-		s.source.destroy();
-		s.filtered.destroy();
-		s.vertices.destroy();
-		s.indices.destroy();
+	function retireSlot( s: Slot ) {
+		retire( s.projection );
+		retire( s.source );
+		retire( s.filtered );
+		retire( s.vertices );
+		retire( s.indices );
 	}
 	return {
 		/*
@@ -176,7 +179,7 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 		*/
 		prepare( requests: readonly CharacterShadowRequest[], blob?: ImageDraw ): readonly GeometryDraw[] {
 			if ( requests.length > 10 ) throw Error( "Character shadow limit exceeded" );
-			while ( slots.length > requests.length ) retire( slots.pop()! );
+			while ( slots.length > requests.length ) retireSlot( slots.pop()! );
 			for ( const s of slots ) {
 				if ( !s ) continue;
 				s.parts = [];
@@ -194,7 +197,7 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 				const indices = r.receiver.indices;
 				let s = slots[i];
 				if ( s && (s.vertices.size < vertices.byteLength || s.indices.size < indices.byteLength) ) {
-					retire( s );
+					retireSlot( s );
 					s = undefined;
 				}
 				if ( !s ) {
@@ -214,6 +217,7 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 						source,
 						filtered,
 						projection: device.createBuffer( {
+							label: "character-shadow-projection",
 							size: 64,
 							usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 						} ),
@@ -222,10 +226,12 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 							entries: [ { binding: 0, resource: source.createView() } ]
 						} ),
 						vertices: device.createBuffer( {
+							label: "character-shadow-vertices",
 							size: Math.max( 56, vertices.byteLength ),
 							usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
 						} ),
 						indices: device.createBuffer( {
+							label: "character-shadow-indices",
 							size: Math.max( 4, indices.byteLength ),
 							usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
 						} ),
@@ -349,7 +355,7 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 		================
 		*/
 		dispose() {
-			for ( const s of slots ) if ( s ) retire( s );
+			for ( const s of slots ) if ( s ) retireSlot( s );
 			slots.length = 0;
 		}
 	};

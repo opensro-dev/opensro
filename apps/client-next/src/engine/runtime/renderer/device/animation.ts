@@ -24,6 +24,7 @@ import {
 } from "@/engine/foundation/animation/gpu-animation-plan";
 import type { GpuTimingFrame } from "../internal/gpu-contract";
 import { animationShader } from "./animation-shader";
+import { destroyNow, type Retire } from "./retirement";
 type Sample = { readonly clip: CharacterClip; readonly time: number; };
 // A resident clip set; refs counts the admitted models that bind it.
 type ClipSet = {
@@ -64,7 +65,7 @@ Device owns every GPU reference. Geometry owns output palettes; this owner
 borrows them only while their source stream is live. No readback is needed.
 ================
 */
-export function createGpuAnimationResources( device: GPUDevice ) {
+export function createGpuAnimationResources( device: GPUDevice, retire: Retire = destroyNow ) {
 	let failure: string | null = null;
 	let disposed = false,
 		pipeline: GPUComputePipeline | undefined,
@@ -153,11 +154,11 @@ export function createGpuAnimationResources( device: GPUDevice ) {
 	================
 	*/
 	function retireModel( key: CharacterModel, model: Model ) {
-		model.buffer.destroy();
+		retire( model.buffer );
 		staticBytes -= model.bytes;
 		models.delete( key );
 		if ( !--model.clips.refs ) {
-			model.clips.buffer.destroy();
+			retire( model.clips.buffer );
 			staticBytes -= model.clips.bytes;
 			clipSets.delete( model.clips.clips );
 		}
@@ -232,8 +233,9 @@ export function createGpuAnimationResources( device: GPUDevice ) {
 		const row = streams.get( source );
 		if ( !row ) return;
 		pending.delete( row );
-		row.input.destroy();
-		row.configuration.destroy();
+		// A pass encoded earlier this frame may still bind the row.
+		retire( row.input );
+		retire( row.configuration );
 		streamBytes -= row.data.byteLength + CONFIGURATION_BYTES;
 		streams.delete( source );
 		if ( !--row.model.refs ) {

@@ -23,6 +23,7 @@ released.
 import { PARTICLE_ACTOR, PARTICLE_RECORD } from "@/engine/foundation/animation/particle-records";
 import type { GeometryDraw, GpuTimingFrame, ParticlePresentation } from "../internal/gpu-contract";
 import { particleShader } from "./particle-shader";
+import { destroyNow, type Retire } from "./retirement";
 
 // The Params struct at the head of particle-shader.ts's Frame block.
 const PARAMS_FLOATS = 24;
@@ -52,7 +53,7 @@ type Stream = {
 createParticlePresentation
 ================
 */
-export function createParticlePresentation( device: GPUDevice ) {
+export function createParticlePresentation( device: GPUDevice, retire: Retire = destroyNow ) {
 	let pipeline: GPUComputePipeline | undefined, disposed = false, dispatches = 0, slots = 0;
 	const streams = new Map<GeometryDraw, Stream>(), pending = new Set<Stream>();
 	// A primitive without material frames reads none; the binding still needs a buffer.
@@ -131,7 +132,9 @@ export function createParticlePresentation( device: GPUDevice ) {
 				grown = Math.max( capacity * 2, capacity + units - tail );
 			const replacement = createArena( grown ), copy = new Float32Array( grown * ARENA_UNIT / 4 );
 			copy.set( mirror );
-			arena.destroy();
+			// A pass encoded earlier this frame still binds the old arena (the
+			// deferred continuation presents after the first encode).
+			retire( arena );
 			arena = replacement;
 			mirror = copy;
 			words = new Uint32Array( mirror.buffer );
@@ -234,8 +237,8 @@ export function createParticlePresentation( device: GPUDevice ) {
 		const stream = streams.get( draw );
 		if ( !stream ) return;
 		pending.delete( stream );
-		stream.records.destroy();
-		stream.materialFrames?.destroy();
+		retire( stream.records );
+		if ( stream.materialFrames ) retire( stream.materialFrames );
 		reclaim( stream.start, stream.units );
 		streams.delete( draw );
 	}
