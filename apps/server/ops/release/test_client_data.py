@@ -129,6 +129,26 @@ class DataStoreTests(DataFixture, unittest.TestCase):
 		self.assertEqual(names, ["payload.json", sha(b"new publication")])
 
 	# ================
+	# test_a_slow_link_splits_the_payload
+	#
+	# Each needed blob above the requested size starts its own batch; no
+	# batch ever passes the host's ceiling.
+	# ================
+	def test_a_slow_link_splits_the_payload(self):
+		changed = release(self.root / "changed", b"new", b"changed pack", b"new publication", self.CONTRACT)
+		self.plan.update(release=changed["releaseId"])
+		whole = client_data.bundle(self.root / "changed", self.base, self.plan, self.root / "whole")
+		split = client_data.bundle(self.root / "changed", self.base, self.plan, self.root / "split", 1)
+		self.assertEqual(len(whole), 1)
+		self.assertEqual(len(split), 2)
+		names = []
+		for path in split:
+			with tarfile.open(path) as batch:
+				names += batch.getnames()[1:]
+		with tarfile.open(whole[0]) as batch:
+			self.assertEqual(sorted(names), sorted(batch.getnames()[1:]))
+
+	# ================
 	# test_the_store_verifies_and_resumes
 	# ================
 	def test_the_store_verifies_and_resumes(self):

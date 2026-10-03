@@ -69,8 +69,12 @@ A release that changes the asset data (a new `ASSET_SCHEMA` in
 produce it, so the operator stages it with `data_release.py`:
 
 ```sh
-python data_release.py PACKAGE OUTPUT --origin https://game.example.com   --ssh-target sro-stage@host --identity ~/.ssh/operator-stage [--coordinated]
+python data_release.py PACKAGE OUTPUT --origin https://game.example.com   --ssh-target sro-stage@host --identity ~/.ssh/operator-stage [--coordinated] [--max-batch-mib 16]
 ```
+
+On a slow link (a VPN), `--max-batch-mib` makes smaller batches. Each
+upload's time limit grows with its size (at least 32 KiB/s), and a timed-out
+upload is retried like any other transport failure.
 
 It reads the live release from the origin and uploads, in payload batches under
 the upload limit, only the content the live release lacks (keyed by sha256).
