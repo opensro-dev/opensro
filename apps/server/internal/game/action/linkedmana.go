@@ -30,17 +30,25 @@ import (
 ================
 linkedManaShare
 
-lkdh's MP for one batch of impacts: percent of each impact's HP debit,
-truncated, each capped at the link's ceiling. Inferred: "per hit" is per
-impact record, so a multi-impact skill caps every impact on its own, and
-the damage is the HP the impact took, as Tuning drains it.
+lkdh's MP for one batch of impacts, per impact as
+CSkillManager_DistributeSharedDamage (5A04A0) runs per hit record: the HP
+the impact took (SkillCombat_ApplyResultRecipients passes the damage, or
+the remaining HP on a fatal hit) is skipped when it is 1 or less
+(593BDD), divided by the links the attacker holds and stored as a float32
+share; the MP is ftol(share * (word 1 / 100.0)), held at word 2.
 ================
 */
-func linkedManaShare(impacts []simulation.MonsterDamageResult, percent, ceiling uint32) int64 {
+func linkedManaShare(impacts []simulation.MonsterDamageResult, percent, ceiling uint32, held int) int64 {
+	if held <= 0 {
+		return 0
+	}
 	var mp int64
 	for _, impact := range impacts {
-		share := uint64(impact.Applied) * uint64(percent) / fullDamagePercent
-		mp += int64(min(share, uint64(ceiling)))
+		if impact.Applied <= 1 {
+			continue
+		}
+		share := float32(impact.Applied / uint32(held))
+		mp += int64(min(uint32(crtFtol(float64(share)*(float64(percent)/fullDamagePercent))), ceiling))
 	}
 	return mp
 }
@@ -66,8 +74,9 @@ func (rt *Runtime) commitLinkedMana(division string, attacker uint32, impacts []
 	if c == nil {
 		return
 	}
-	for _, link := range rt.effects.ManaLinks(division, c.Name, now) {
-		mp := linkedManaShare(impacts, link.ManaPercent, link.ManaCap)
+	links, held := rt.effects.ManaLinks(division, c.Name, now)
+	for _, link := range links {
+		mp := linkedManaShare(impacts, link.ManaPercent, link.ManaCap, held)
 		source := rt.findCharacter(division, link.SourceName)
 		if mp == 0 || source == nil || enterworld.ObjectIDForCharacter(source) != link.SourceGID {
 			continue

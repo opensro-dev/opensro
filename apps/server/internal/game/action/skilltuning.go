@@ -49,17 +49,17 @@ func fixedDamageResult(fixed enterworld.SkillFixedDamage) combat.Result {
 ================
 drainedShare
 
-percent of the HP the impacts actually took, the damage "dealt": a hit
-on a monster with less HP left than the amount drains only that HP.
-Inferred: the share is truncated, like the integer damage words.
+SkillCombat_ApplyResultRecipients (5939E5..593AC0) per hit: the dmgt
+share of the hit's damage, ftol(percent / 100.0 * damage), held at the
+HP the victim had before the hit, summed over the cast's hits.
 ================
 */
 func drainedShare(impacts []simulation.MonsterDamageResult, percent uint32) int64 {
-	var dealt uint64
+	var share int64
 	for _, impact := range impacts {
-		dealt += uint64(impact.Applied)
+		share += min(crtFtol(float64(percent)/fullDamagePercent*float64(impact.Damage)), int64(impact.BeforeHP))
 	}
-	return int64(dealt * uint64(percent) / fullDamagePercent)
+	return share
 }
 
 /*

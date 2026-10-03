@@ -206,13 +206,23 @@ func (r *Registry) ThreatLink(division, target string, nowMs int64) (Link, bool)
 	return Link{}, false
 }
 
-// ManaLinks are the logically active links whose recipient is target and
-// that hand the source a share of target's dealt damage as MP (lkdh). Unlike
-// the single +210 threat pointer, every such link counts: each source owns
-// its own share. A stop disables the share at once, as for ThreatLink.
-func (r *Registry) ManaLinks(division, target string, nowMs int64) []Link {
+/*
+==================
+ManaLinks
+
+The logically active links whose recipient is target and that hand the
+source a share of target's dealt damage (lkdh), and held, the number of
+links target receives of any kind. CSkillManager_DistributeSharedDamage
+(5A04A0) divides the damage by the size of that list (+0x2E8) before it
+pays each lkdh link its share. Unlike the single +210 threat pointer,
+every lkdh link counts: each source owns its own share. A stop disables
+the share at once, as for ThreatLink. Inferred: a stopped half has left
+the native list, so it is not counted.
+==================
+*/
+func (r *Registry) ManaLinks(division, target string, nowMs int64) (links []Link, held int) {
 	if r == nil {
-		return nil
+		return nil, 0
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -222,6 +232,7 @@ func (r *Registry) ManaLinks(division, target string, nowMs int64) []Link {
 		if e.LinkToken == 0 || e.Phase != 2 || e.StopRequested {
 			continue
 		}
+		held++
 		l, ok := r.links[linkKey(division, e.LinkToken)]
 		if !ok || l.ManaPercent == 0 || l.sourceRetired || l.targetRetired || (Effect{ExpiresAtMs: l.ExpiresAtMs}).Expired(nowMs) {
 			continue
@@ -229,5 +240,5 @@ func (r *Registry) ManaLinks(division, target string, nowMs int64) []Link {
 		l.TargetModifiers = Modifiers{}
 		out = append(out, l)
 	}
-	return out
+	return out, held
 }
