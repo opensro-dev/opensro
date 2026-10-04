@@ -8,6 +8,15 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+const (
+	// RefGameWorld +0x20: zero marks a world the shard opens at boot.
+	permanentWorldType = 0
+	// 65C200: the first layer a world hands out; zero is its controller.
+	firstResidentLayer = 1
+	// INS_DEFAULT, the field every character starts in.
+	defaultWorldDefinition instance.DefinitionID = 1
+)
+
 type populationKey struct {
 	division string
 	lease    instance.Lease

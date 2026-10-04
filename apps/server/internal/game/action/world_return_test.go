@@ -67,8 +67,12 @@ func TestReturnLocationDefinitionAndLayerGate(t *testing.T) {
 			packed := uint32(id)
 			old := domain.SavedReturnLocation{Definition: 1, RegionID: 99, X: 123}
 			c.World = &domain.CharacterWorld{PackedInstance: &packed, SavedReturn: &old}
-			if _, status := rt.Monsters.AllocatePopulation(testDivision, id); status != instance.Success {
-				t.Fatal(status)
+			// The shard opens type-0 worlds (INS_FORT_JA) at boot; others on demand.
+			rt.Monsters.StartDivision(testDivision)
+			if _, open := rt.Monsters.PopulationLease(testDivision, id); !open {
+				if _, status := rt.Monsters.AllocatePopulation(testDivision, id); status != instance.Success {
+					t.Fatal(status)
+				}
 			}
 			if err := rt.AdmitCharacterSession(testDivision, c.Name, 1); err != nil {
 				t.Fatal(err)
@@ -90,7 +94,11 @@ func TestReturnLocationRejectsRetiredPopulation(t *testing.T) {
 	id := instance.Pack(2, 1)
 	packed := uint32(id)
 	c.World = &domain.CharacterWorld{PackedInstance: &packed}
-	lease, _ := rt.Monsters.AllocatePopulation(testDivision, id)
+	rt.Monsters.StartDivision(testDivision)
+	lease, open := rt.Monsters.PopulationLease(testDivision, id)
+	if !open {
+		t.Fatal("the shard did not open the fortress world at boot")
+	}
 	if err := rt.AdmitCharacterSession(testDivision, c.Name, 1); err != nil {
 		t.Fatal(err)
 	}

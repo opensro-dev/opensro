@@ -31,6 +31,36 @@ func TestDefaultPopulationDoesNotOwnForeignWorldNests(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDivisionOpensEveryPermanentWorld
+
+SR_ShardManager 65BD60 opens layer 1 of every type-0 RefGameWorld at boot,
+so the fortress worlds exist (and own their authored nests) before anyone
+travels there; instance worlds stay closed until requested.
+================
+*/
+func TestDivisionOpensEveryPermanentWorld(t *testing.T) {
+	nests := []monster.NestRow{
+		{WorldCode: "INS_DEFAULT", SpawnPoint: monster.SpawnPoint{RegionID: 1}},
+		{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RegionID: 2}},
+	}
+	s := NewMonsterState(monster.TemplateFromParts(nil, nests))
+	s.SetTimeSource(func() time.Time { return time.UnixMilli(1) })
+	s.StartDivision("a")
+	for _, definition := range instance.Shipped() {
+		_, open := s.PopulationLease("a", instance.Pack(definition.ID, 1))
+		if open != (definition.NativeType == 0) {
+			t.Fatalf("%s (type %d) open=%v at boot", definition.CodeName, definition.NativeType, open)
+		}
+	}
+	fort, _ := s.PopulationLease("a", instance.Pack(2, 1))
+	state := s.worldPopulations[populationKey{"a", fort}]
+	if state == nil || len(state.nests) != 1 || state.nests[1] == nil {
+		t.Fatalf("INS_FORT_JA population does not own its nest: %+v", state)
+	}
+}
+
 func TestAllocatedPopulationsHaveIndependentNestsAndLifetimes(t *testing.T) {
 	definition, _ := instance.Lookup(10)
 	nest := lifecycleNest(100)

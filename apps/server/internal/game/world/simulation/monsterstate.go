@@ -244,6 +244,14 @@ func (s *MonsterState) ReferenceByCodename(code string) (monster.MonsterRef, boo
 /*
 ================
 division
+
+Opens a division the way the shard boots. SR_ShardManager 65BD60 runs
+_GameWorldInitialize, then walks every RefGameWorld and opens the first
+layer (65C200 -> world vtable +0x18) of each record whose type byte (+0x20)
+is zero; the GameServer builds that layer when the job arrives (5F7BD0 ->
+CGameWorld_AllocateLayer). INS_DEFAULT and the INS_FORT_* siege worlds are
+the shipped type-0 rows. One process plays both roles here, so the
+division owner opens them directly, in authored row order.
 ================
 */
 func (s *MonsterState) division(divisionID string) *divisionMonsterState {
@@ -253,13 +261,31 @@ func (s *MonsterState) division(divisionID string) *divisionMonsterState {
 	if s.worldAllocators == nil {
 		s.worldAllocators = make(map[string]*instance.Registry)
 	}
-	allocator := instance.NewRegistry(instance.Shipped())
-	lease, status := allocator.Allocate(instance.Pack(1, 1))
-	if status != instance.Success {
-		panic("default world allocation failed")
+	if s.worldPopulations == nil {
+		s.worldPopulations = make(map[populationKey]*divisionMonsterState)
 	}
+	definitions := instance.Shipped()
+	allocator := instance.NewRegistry(definitions)
 	s.worldAllocators[divisionID] = allocator
-	state := s.createPopulation(lease, "INS_DEFAULT")
+	var state *divisionMonsterState
+	for _, definition := range definitions {
+		if definition.NativeType != permanentWorldType {
+			continue
+		}
+		lease, status := allocator.Allocate(instance.Pack(definition.ID, firstResidentLayer))
+		if status != instance.Success {
+			panic("permanent world allocation failed: " + definition.CodeName)
+		}
+		population := s.createPopulation(lease, definition.CodeName)
+		if definition.ID == defaultWorldDefinition {
+			state = population
+			continue
+		}
+		s.worldPopulations[populationKey{divisionID, lease}] = population
+	}
+	if state == nil {
+		panic("catalog has no default world")
+	}
 	s.divs[divisionID] = state
 	return state
 }
@@ -326,6 +352,9 @@ func (s *MonsterState) AdvancePopulation(nowMs int64) {
 	keys := s.populationKeys()
 	players := s.players
 	s.mu.Unlock()
+	// The snapshot covers every world of a division and the sampler filters
+	// by world, so each division is queried once however many layers it has.
+	snapshots := make(map[string][]PopulationPlayer)
 	for _, key := range keys {
 		s.mu.Lock()
 		state := s.populationForLease(key.division, key.lease)
@@ -337,7 +366,12 @@ func (s *MonsterState) AdvancePopulation(nowMs int64) {
 		s.mu.Unlock()
 		var snapshot []PopulationPlayer
 		if due && players != nil {
-			snapshot = players(key.division, nowMs)
+			cached, queried := snapshots[key.division]
+			if !queried {
+				cached = players(key.division, nowMs)
+				snapshots[key.division] = cached
+			}
+			snapshot = cached
 		}
 		s.mu.Lock()
 		state = s.populationForLease(key.division, key.lease)
