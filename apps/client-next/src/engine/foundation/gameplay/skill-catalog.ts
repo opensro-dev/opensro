@@ -50,6 +50,9 @@ export interface SkillMetadata {
 	// reach. A target within it is always in the server's reach, which adds
 	// both bodies (cast-prediction.ts).
 	readonly range?: number;
+	// The authored MP cost: flat plus percent of maximum MP (skillMpCost).
+	readonly mp?: number;
+	readonly mpPercent?: number;
 	readonly cooldownGroup?: number;
 	readonly masteries: readonly Requirement[];
 	readonly prerequisites: readonly Requirement[];
@@ -61,6 +64,19 @@ export interface StatusLevel {
 interface Requirement {
 	readonly ID: number;
 	readonly Level: number;
+}
+/*
+================
+skillMpCost
+
+The MP a cast of skill takes from a caster with maxMp, before the caster's
+consumption rate (parameter 0x8D), which only the server knows: flat plus a
+truncated percent of maximum MP (58E20A..58E2B1, skillcost.go
+resourceCostAt). A caster whose rate lowers the cost may pay less.
+================
+*/
+export function skillMpCost( skill: SkillMetadata, maxMp: number ): number {
+	return (skill.mp ?? 0) + Math.trunc( maxMp * (skill.mpPercent ?? 0) / 100 );
 }
 export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 	const source = (value as {
@@ -160,6 +176,8 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			...(ui.actionMs === undefined ? {} : { actionMs: uint( ui.actionMs ) }),
 			haltsWalk: ui.haltsWalk ?? false,
 			...(ui.range ? { range: ui.range } : {}),
+			...(ui.mp ? { mp: uint( ui.mp ) } : {}),
+			...(ui.mpPercent ? { mpPercent: uint( ui.mpPercent, 65535 ) } : {}),
 			cooldownGroup: uint( ui.cooldownGroup ?? 0, 255 ),
 			masteries: requirements( ui.masteries, 2 ),
 			prerequisites: requirements( ui.prerequisites, 3 )

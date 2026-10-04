@@ -386,6 +386,34 @@ test("a press the server must run to first shows no cooldown until the cast star
 	assert.equal( cooldownAfterPress( 200 ), null, "an out-of-range press showed a cooldown that would vanish" );
 });
 
+/*
+================
+cooldownAfterPressWithMp
+
+Presses an untargeted skill costing 50 MP (5 s cooldown) with mp of 100
+maximum and returns the cooldown the client shows right after.
+================
+*/
+function cooldownAfterPressWithMp( mp ) {
+	const game = createGameplay( () => {} );
+	const row = skillRef( SLOW, 5000 );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ SLOW ], mp, maxMp: 100 },
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, mp: 50 } } ]
+	} );
+	game.seed( local );
+	game.command( { kind: "skill", skillId: SLOW }, 1000, undefined, local );
+	const shown = cooldowns.skillCooldown( game.take()?.skillCooldowns ?? [], SLOW, 0, 1010 );
+	game.dispose();
+	return shown;
+}
+
+test("a press the caster cannot pay MP for shows no cooldown", () => {
+	assert.ok( cooldownAfterPressWithMp( 60 ), "a paid press stands in for its cooldown" );
+	assert.equal( cooldownAfterPressWithMp( 10 ), null, "a press the server refuses for MP showed a cooldown" );
+});
+
 test("a press the server queues drops its cooldown stand-in", () => {
 	const { game } = presser();
 	game.command( { kind: "skill", skillId: SLOW }, 1000, undefined, local );

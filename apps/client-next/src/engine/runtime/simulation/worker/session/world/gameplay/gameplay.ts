@@ -130,6 +130,7 @@ import {
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
 import {
 	skillCatalog,
+	skillMpCost,
 	skillTrainingReason,
 	trainingRequest,
 	type SkillMetadata
@@ -311,10 +312,26 @@ when the cast finally started.
 		const oneWay = skillPress.oneWayMs();
 		sendFrame( frame );
 		skillPress.sent( now, skillId );
-		if ( immediate ) combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
-		// The HUD shows it as next while the server runs the caster there.
+		if ( immediate && affordable( catalog.find( row => row.id === skillId ) ) ) {
+			combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
+		} // The HUD shows it as next while the server runs the caster there.
 		else skillPress.approach( skillId, target, now );
 		return frame;
+	}
+	/*
+================
+affordable
+
+Whether the caster's MP covers the skill's authored cost. A press it does
+not cover is still sent (a consumption rate the server alone knows may
+lower the cost), but the server all but surely refuses it (0x3004), so it
+neither stands a cooldown in nor starts its cast: either showed a cooldown,
+and an animation, for a cast that never came. Unknown vitals count as paid.
+================
+	*/
+	function affordable( metadata: SkillMetadata | undefined ): boolean {
+		if ( !metadata || !potionFacts.maxMp ) return true;
+		return skillMpCost( metadata, potionFacts.maxMp ) <= potionFacts.mp;
 	}
 	/*
 ================
@@ -355,7 +372,7 @@ would turn it.
 	) {
 		const walking = movement.state(), pose = walking.pose;
 		if (
-			!metadata?.actionMs || !pose || walking.moving || !local || local.mountedOn ||
+			!metadata?.actionMs || !affordable( metadata ) || !pose || walking.moving || !local || local.mountedOn ||
 			local.appearanceState?.[0] === 2 || localCastHolds( now ) || combat.predicting() ||
 			combat.guidedActive( localGid, now )
 		) return;

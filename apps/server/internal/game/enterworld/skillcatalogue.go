@@ -63,7 +63,13 @@ type SkillUiRow struct {
 	// that takes its reach from the weapon. The server's reach adds both
 	// bodies to it, so a target within Range is always in reach: the
 	// client starts a cast's animation at the press only then.
-	Range         float64             `json:"range,omitempty"`
+	Range float64 `json:"range,omitempty"`
+	// MP and MPPercent are the cast's authored MP cost (flat plus percent of
+	// maximum MP), before the caster's consumption rate (parameter 0x8D):
+	// the client does not stand a cooldown in for a press the caster cannot
+	// pay for, which the server refuses with 0x3004 (58E2B1).
+	MP            uint32              `json:"mp,omitempty"`
+	MPPercent     uint16              `json:"mpPercent,omitempty"`
 	Masteries     [2]SkillRequirement `json:"masteries"`
 	Prerequisites [3]SkillRequirement `json:"prerequisites"`
 }
@@ -138,7 +144,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 	for _, row := range t.rows.values() {
 		projection := SpawnSkillRow{LinkedSkillID: row.LinkedSkillID, CancellationDeferred: row.CancellationDeferred, NameAttackContent: row.NameAttackContent, Level: uint8(row.Level), Group: row.Group, ID: row.ID, Token: row.SpawnToken, Status: row.SpawnStatus, EffectRider: row.EffectRider, EffectDurationMs: row.EffectDurationMs, ZeroEffectDuration: row.EffectDurationPresent && row.EffectDurationMs == 0, HideDetectionBuff: row.HideDetectionBuff, IndefiniteBuffTimer: row.IndefiniteBuffTimer}
 		projection.HuntingPoint, projection.StealthDuration = row.HuntingPoint, row.StealthDuration
-		if row.Icon != "" || strings.HasPrefix(row.Codename, "SKILL_CH_") || strings.HasPrefix(row.Codename, "SKILL_EU_") {
+		if row.Icon != "" || playerSkillCodename(row.Codename) {
 			projection.UI = &SkillUiRow{BuffSecondary: row.BuffSecondary, Name: row.Codename, SPCost: row.SPCost, Trainable: !row.ChainSub && row.SPCost > 0, TargetRequired: row.TargetRequired, TargetSelf: row.TargetRequired && row.Targets.Self, GroundTarget: row.PositionEffect.Pinned, CooldownMs: row.CoolTimeMs, CooldownGroup: row.CoolTimeGroup, Masteries: row.Masteries, Prerequisites: row.Prerequisites}
 			projection.UI.BuffCancel = "" // Omitted means the native ordinary/direct branch.
 			if row.VoluntaryCancelBlocked && !row.BuffCancelInstance {
@@ -153,6 +159,11 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 			projection.UI.HaltsWalk = row.HaltsWalk()
 			if row.ActionRangePinned && row.ActionRange > 0 {
 				projection.UI.Range = row.ActionRange
+			}
+			// Only a player's own skill is pressed from a shortcut slot; a
+			// monster row's cost would only grow the catalogue every client loads.
+			if row.Consumption.Pinned && playerSkillCodename(row.Codename) {
+				projection.UI.MP, projection.UI.MPPercent = row.Consumption.MP, row.Consumption.MPPercent
 			}
 			if row.SpeedBuff.Present {
 				projection.UI.SpeedBuff = &SkillUiSpeedBuff{Active: row.SpeedBuff.Active}
@@ -178,4 +189,15 @@ func spawnSkillSnapshot(source SkillDataSource) []SpawnSkillRow {
 		return source.SpawnSkillRows()
 	}
 	return nil
+}
+
+/*
+================
+playerSkillCodename
+
+Whether a codename names a Chinese or European player skill line.
+================
+*/
+func playerSkillCodename(codename string) bool {
+	return strings.HasPrefix(codename, "SKILL_CH_") || strings.HasPrefix(codename, "SKILL_EU_")
 }

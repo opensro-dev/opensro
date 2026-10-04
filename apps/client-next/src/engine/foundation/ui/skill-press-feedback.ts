@@ -9,8 +9,8 @@ cooldown, or by the server behind its open command) outlines its slot with a
 pulsing gold border, and a small chip above the main shortcut bar shows its
 icon wherever it was pressed from (the skill window, a hidden bar page). A
 held press also fills a thin strip under the chip until it goes out. A
-denied press (too long to wait) tints its slot red and shakes it for
-DENIAL_FLASH_MS, silently, instead of sending a press the server would
+denied press (too long to wait) shakes its slot for DENIAL_FLASH_MS,
+silently and without a tint (a red flash on every early press annoyed), instead of sending a press the server would
 refuse. Presentation only: a deliberate addition to the original's HUD,
 which shows none of it.
 
@@ -35,13 +35,10 @@ const CHIP_PAD_PX = 2;
 const CHIP_FADE_MS = 140;
 const CHIP_RISE_PX = 4;
 const CHIP_STRIP_PX = 2;
-// Gold for a held press, red for a denied one.
+// The held press's gold.
 const QUEUED_R = 1;
 const QUEUED_G = 0.82;
 const QUEUED_B = 0.25;
-const DENIED_R = 1;
-const DENIED_G = 0.15;
-const DENIED_B = 0.1;
 
 /*
 ================
@@ -105,13 +102,6 @@ export function skillPressFeedback(
 	if ( denied?.skill === skill && now >= denied.atMs && now - denied.atMs < DENIAL_FLASH_MS ) {
 		const t = (now - denied.atMs) / DENIAL_FLASH_MS;
 		offsetX = Math.round( SHAKE_PX * (1 - t) * Math.sin( t * SHAKE_SWINGS * 2 * Math.PI ) );
-		quads.push( {
-			rect: [ r[0] + offsetX, r[1], r[2], r[3] ],
-			clip,
-			color: [ DENIED_R, DENIED_G, DENIED_B, 0.45 * (1 - t) ],
-			texture: "",
-			uv: [ 0, 0, 1, 1 ]
-		} );
 	}
 	return { offsetX, quads };
 }
