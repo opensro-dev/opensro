@@ -662,6 +662,49 @@ spawn
 	owner.dispose();
 });
 
+test("a rider's walk/run switches the vehicle that carries the path", () => {
+	const owner = createEntities();
+	owner.bootstrap( {
+		...bootstrap,
+		refObjSnapshot: [ { refObjId: 2023, kind: "npc" }, { refObjId: 2183, kind: "cos", tidWord: 0x11c6 } ]
+	} );
+	flush( owner );
+	const spawn = ( ref, gid, cos = false ) => {
+		const p = Buffer.alloc( cos ? 57 : 49 );
+		p.writeUInt32LE( ref );
+		p.writeUInt32LE( gid, 4 );
+		p.writeUInt16LE( 257, 8 );
+		p[25] = 1;
+		p.writeFloatLE( 10, 32 );
+		p.writeFloatLE( 20, 36 );
+		p.writeFloatLE( 1, 40 );
+		p[45] = 1;
+		return { opcode: 0x30d7, payload: p };
+	};
+	owner.receive( spawn( 2023, 1 ), 0 );
+	owner.receive( spawn( 2183, 2, true ), 0 );
+	const ride = Buffer.alloc( 10 );
+	ride[0] = 1;
+	ride.writeUInt32LE( 1, 1 );
+	ride[5] = 1;
+	ride.writeUInt32LE( 2, 6 );
+	owner.receive( { opcode: 0xb4b5, payload: ride }, 0 );
+	// The rider's move moves its vehicle (85E000): 100 units at run 20/s.
+	const move = Buffer.alloc( 14 );
+	move.writeUInt32LE( 1 );
+	move[4] = 1;
+	move.writeUInt16LE( 257, 5 );
+	move.writeInt16LE( 100, 7 );
+	owner.receive( { opcode: 0xb738, payload: move }, 0 );
+	flush( owner );
+	const x = owner.read( 2 ).x;
+	owner.receive( { opcode: 0x3122, payload: Uint8Array.of( 1, 0, 0, 0, 1, 2 ) }, 1000 );
+	assert.equal( owner.read( 1 ).movementMode, 2, "the rider keeps its gait for the action icon" );
+	assert.equal( owner.read( 2 ).movementMode, 2, "777B60 applies it to the active mover" );
+	assert.ok( owner.read( 2 ).x > x, "the vehicle was re-timed from its live point" );
+	owner.dispose();
+});
+
 test("motion preserves authoritative gait and mount metadata across ticks and stops", () => {
 	const owner = createEntities();
 	owner.bootstrap( {

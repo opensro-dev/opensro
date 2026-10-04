@@ -663,22 +663,16 @@ mode
 			mode = value;
 			speed = value === 2 ? walkSpeed : runSpeed;
 			if ( !segment ) return;
-			const next = movementModeTransition( segment, value, speed, now, segment.timing === "server" );
+			// A displacement (knockback, dash) is action state 4/5, not the
+			// navigation channel 858450 switches: its authored timing stands.
+			if ( segment.fixedTiming && value !== 0 && value !== 4 ) return;
+			const next = movementModeTransition( segment, value, speed, now );
 			pose = navigation.surface( next.pose, pose ?? next.pose, owner );
 			poseAtMs = now;
+			// A server-led walk was re-timed by the server from its own live point.
 			if ( segment.timing === "server" || !next.segment ) authoritative = pose;
 			if ( !next.segment ) walk = null;
-			segment = next.segment ?
-				(segment.timing === "server" ?
-					segment :
-					bindOwners( {
-						...next.segment,
-						from: pose,
-						timing: segment.timing,
-						lead: segment.lead,
-						direction: segment.direction
-					} )) :
-				null;
+			segment = next.segment ? bindOwners( { ...segment, ...next.segment, from: pose } ) : null;
 		},
 		/*
 ================

@@ -214,19 +214,23 @@ export function sampleMovement( segment: MovementSegment, now: number ): Pose {
 /*
 ================
 movementModeTransition
+
+CICharactor_ApplyMovementMode (858450) only switches the navigation speed
+channel (+0x660: 0 walk, 1 run) and restarts the move state; the remaining
+path continues from where the mover is at the new channel's speed. Nothing
+keeps an earlier arrival time, a receipt's included: the server re-times its
+own segment from its live point the same way (applyMotionCode). Stand and
+sit stop the walk.
 ================
 */
 export function movementModeTransition(
 	segment: MovementSegment,
 	mode: number,
 	speed: number,
-	now: number,
-	serverTimed = false
+	now: number
 ): { pose: Pose; segment: MovementSegment | null; } {
 	const pose = sampleMovement( segment, now );
 	if ( mode === 0 || mode === 4 ) return { pose, segment: null };
-	// A receipt's authoritative arrival time is not replaced by client speed.
-	if ( serverTimed ) return { pose, segment };
 	const distance = poseDistance( pose, segment.to );
 	if ( distance && (!Number.isFinite( speed ) || speed <= 0) ) throw new Error( "Moving entity has no speed" );
 	return {

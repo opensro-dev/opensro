@@ -918,6 +918,18 @@ export function createEntities(
 					const next = { ...entity, movementMode: p[5]! };
 					const pose = motion.mode( next, now );
 					apply( { kind: "state", entity: Object.freeze( { ...next, ...pose } ) } );
+					// 777B60 applies the gait to CCharactor_GetActiveMoverEntity: a
+					// rider's walk/run switches its vehicle, which carries the path.
+					const vehicle = p[5] === 2 || p[5] === 3 ?
+						next.mountedOn === undefined ? undefined : entities.get( next.mountedOn ) :
+						undefined;
+					if ( vehicle ) {
+						const ridden = { ...vehicle, movementMode: p[5]! };
+						apply( {
+							kind: "state",
+							entity: Object.freeze( { ...ridden, ...motion.mode( ridden, now ) } )
+						} );
+					}
 					return;
 				}
 				// 777B60 channel 4 -> 85EC00: the third spawn status byte
