@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	nomad "github.com/hashicorp/nomad/api"
+	"opensro.online/server/internal/agent/bugreport"
 )
 
 const (
@@ -165,7 +166,7 @@ func (deployment *deployment) planVariables(
 	changedJobs := make(map[string]string)
 	desiredPaths := make(map[string]struct{}, len(desired))
 
-	for _, variable := range desired {
+	for index, variable := range desired {
 		desiredPaths[variable.path] = struct{}{}
 		existing, _, err := client.api.Variables().Peek(
 			variable.path,
@@ -178,9 +179,13 @@ func (deployment *deployment) planVariables(
 				err,
 			)
 		}
+		if variable.path == agentVariablePath {
+			variable.items = keepBugReportWebhook(variable.items, existing, deployment.BugReports.Off)
+			desired[index] = variable
+		}
 		current[variable.path] = existing
 		if existing == nil ||
-			!stringMapsEqual(existing.Items, variable.items) {
+			!stringMapsEqual(existing.Items, variable.items) && !onlyBugReportWebhookDiffers(existing.Items, variable.items) {
 			changedJobs[variable.jobID] = variable.path
 		}
 	}
@@ -216,6 +221,56 @@ func (deployment *deployment) planVariables(
 		current:            current,
 		staleAccountChunks: staleAccountChunks,
 	}, nil
+}
+
+/*
+================
+keepBugReportWebhook
+
+The bug report webhook is set once by an operator and then lives only in
+the Agent's credential variable. A deploy that names none (every release:
+deploy.py runs with a clean environment) keeps the stored one; before, it
+rewrote the variable without it, which turned bug reports off on every
+release (or refused the release while the Agent ran). Only an explicit
+SRO_BUG_REPORT_DISCORD_WEBHOOK=off removes it.
+================
+*/
+func keepBugReportWebhook(items nomad.VariableItems, existing *nomad.Variable, off bool) nomad.VariableItems {
+	if off {
+		delete(items, bugReportWebhookItem)
+		return items
+	}
+	if _, named := items[bugReportWebhookItem]; named || existing == nil {
+		return items
+	}
+	if stored := existing.Items[bugReportWebhookItem]; bugreport.ValidWebhookURL(stored) {
+		items[bugReportWebhookItem] = stored
+	}
+	return items
+}
+
+/*
+================
+onlyBugReportWebhookDiffers
+
+Whether the two Agent credential sets differ in the bug report webhook
+alone. That item reaches the Agent through its own template (change_mode
+restart), so Nomad restarts the Agent with it: unlike the session keyring
+or the account catalog it needs no stop, and a release may set, change or
+remove it while the Agent runs.
+================
+*/
+func onlyBugReportWebhookDiffers(current, desired nomad.VariableItems) bool {
+	strip := func(items nomad.VariableItems) map[string]string {
+		out := make(map[string]string, len(items))
+		for name, value := range items {
+			if name != bugReportWebhookItem {
+				out[name] = value
+			}
+		}
+		return out
+	}
+	return stringMapsEqual(strip(current), strip(desired))
 }
 
 /*

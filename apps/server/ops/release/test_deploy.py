@@ -22,6 +22,23 @@ import deploy
 # ================
 class DeployTests(unittest.TestCase):
 	# ================
+	# test_bug_report_webhook_comes_from_the_host_file
+	#
+	# A release runs with a clean environment: the webhook reaches sro-nomad
+	# only from the root-only file, and a missing or empty file names none.
+	# ================
+	def test_bug_report_webhook_comes_from_the_host_file(self):
+		with tempfile.TemporaryDirectory() as directory:
+			path = Path(directory) / "bug-report-webhook"
+			config = {"bug_report_webhook": str(path)}
+			self.assertEqual(deploy.bug_report_environment(config), {})
+			path.write_text("\n")
+			self.assertEqual(deploy.bug_report_environment(config), {})
+			path.write_text("https://discord.com/api/webhooks/1/abc\n")
+			self.assertEqual(deploy.bug_report_environment(config),
+				{"SRO_BUG_REPORT_DISCORD_WEBHOOK": "https://discord.com/api/webhooks/1/abc"})
+
+	# ================
 	# test_preflight_and_token_lifecycle
 	# ================
 	def test_preflight_and_token_lifecycle(self):

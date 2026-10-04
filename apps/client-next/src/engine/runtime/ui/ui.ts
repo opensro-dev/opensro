@@ -373,6 +373,7 @@ const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 // The bug reporter (issue #90): its chat command and its Option window row.
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
+const BUG_REPORTS_UNAVAILABLE = "The bug reporter is not reachable right now. Try /bug again in a moment.";
 const BUG_REPLAY_OPTION = "option-bug-replay";
 const BUG_REPLAY_LABEL = "Record bug replay";
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
@@ -2390,7 +2391,9 @@ export function createUi(
 		) {
 			// /bug opens the bug reporter (issue #90); it is never sent as chat.
 			const text = chatText.slice( chatTabPrefix( chatTab ).length ).trim().replace( BUG_COMMAND, "" );
-			if ( !bugReport?.open( text ) ) hudMessages.append( BUG_REPORTS_DISABLED );
+			const opened = bugReport ? bugReport.open( text ) : "off";
+			if ( opened === "off" ) hudMessages.append( BUG_REPORTS_DISABLED );
+			else if ( opened === "unavailable" ) hudMessages.append( BUG_REPORTS_UNAVAILABLE );
 			chatText = chatTabPrefix( chatTab );
 			selection = [ chatText.length, chatText.length ];
 			focus = null;

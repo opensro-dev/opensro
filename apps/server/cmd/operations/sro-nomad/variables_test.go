@@ -152,3 +152,56 @@ func TestDesiredVariablesCarryBugReportWebhookOnlyWhenSet(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestDeployKeepsTheStoredBugReportWebhook
+
+A release names no webhook (deploy.py's clean environment): the stored one
+stays, so bug reports survive every release. Only "off" removes it, and a
+named webhook replaces it.
+================
+*/
+func TestDeployKeepsTheStoredBugReportWebhook(t *testing.T) {
+	const stored = "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz0123"
+	const named = "https://discord.com/api/webhooks/223456789012345678/zyxwvutsrqponmlkjihgfedcba3210"
+	existing := &nomad.Variable{Items: nomad.VariableItems{bugReportWebhookItem: stored, "agent_session_keyring": "old"}}
+	fresh := func() nomad.VariableItems { return nomad.VariableItems{"agent_session_keyring": "k"} }
+
+	if got := keepBugReportWebhook(fresh(), existing, false)[bugReportWebhookItem]; got != stored {
+		t.Fatalf("a release without a webhook dropped the stored one: %q", got)
+	}
+	if _, kept := keepBugReportWebhook(fresh(), existing, true)[bugReportWebhookItem]; kept {
+		t.Fatal("off kept the webhook")
+	}
+	items := fresh()
+	items[bugReportWebhookItem] = named
+	if got := keepBugReportWebhook(items, existing, false)[bugReportWebhookItem]; got != named {
+		t.Fatalf("a named webhook did not replace the stored one: %q", got)
+	}
+	if _, kept := keepBugReportWebhook(fresh(), nil, false)[bugReportWebhookItem]; kept {
+		t.Fatal("a first deploy without a webhook invented one")
+	}
+	broken := &nomad.Variable{Items: nomad.VariableItems{bugReportWebhookItem: "https://example.com/hook"}}
+	if _, kept := keepBugReportWebhook(fresh(), broken, false)[bugReportWebhookItem]; kept {
+		t.Fatal("a stored value that is not a Discord webhook was carried forward")
+	}
+}
+
+/*
+================
+TestAWebhookChangeAloneNeedsNoStop
+================
+*/
+func TestAWebhookChangeAloneNeedsNoStop(t *testing.T) {
+	current := nomad.VariableItems{"agent_session_keyring": "k", bugReportWebhookItem: "a"}
+	if !onlyBugReportWebhookDiffers(current, nomad.VariableItems{"agent_session_keyring": "k", bugReportWebhookItem: "b"}) {
+		t.Fatal("a changed webhook demanded a stop")
+	}
+	if !onlyBugReportWebhookDiffers(current, nomad.VariableItems{"agent_session_keyring": "k"}) {
+		t.Fatal("a removed webhook demanded a stop")
+	}
+	if onlyBugReportWebhookDiffers(current, nomad.VariableItems{"agent_session_keyring": "rotated", bugReportWebhookItem: "a"}) {
+		t.Fatal("a rotated keyring slipped past the stop rule")
+	}
+}
