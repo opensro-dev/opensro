@@ -76,6 +76,11 @@ func (rt *Runtime) queueObjectAction(division string, c *enterworld.Character, p
 		return OpResult{}, false
 	}
 	casting := rt.hasOpenSkillCast(division, c.Name)
+	// Only a skill press can be grace-queued; anything else with no cast open
+	// goes straight on without the snapshot.
+	if !casting && wire.ClassifyTargetActionLane(payload) != wire.TargetActionSkill {
+		return OpResult{}, false
+	}
 	snapshot := rt.characterSnapshot(division, c)
 	readyAtMs := rt.graceReadyAtMs(snapshot, payload)
 	if !casting && readyAtMs == 0 {

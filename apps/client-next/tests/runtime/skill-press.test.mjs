@@ -10,6 +10,7 @@ never sent to be refused
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 const queue = await import( "../../src/engine/foundation/gameplay/skill-queue.ts" );
 const cooldowns = await import( "../../src/engine/foundation/gameplay/skill-cooldowns.ts" );
 const { createGameplay } = await import(
@@ -17,6 +18,10 @@ const { createGameplay } = await import(
 );
 
 const { QUEUE_WINDOW_MS, ARRIVAL_MARGIN_MS, decidePress, createSkillPressQueue } = queue;
+const FIXTURE = new URL(
+	"../../../server/internal/game/item/wire/testdata/skill_action_result_fixture.json",
+	import.meta.url
+);
 
 // ============================================================================
 // decidePress
@@ -239,5 +244,92 @@ test("a refusal frees the skill for an immediate retry", () => {
 	game.receive( { opcode: 0xb245, payload: Uint8Array.of( 2, 4 ) }, 1100 );
 	game.command( { kind: "skill", skillId: SLOW }, 1150, undefined, local );
 	assert.equal( presses().length, 2 );
+	game.dispose();
+});
+
+test("only the local player's own answers time the round trip", () => {
+	const { game } = presser();
+	const fixture = JSON.parse( readFileSync( FIXTURE, "utf8" ) ), peerCast = fixture.scenarios[0];
+	assert.notEqual( fixture.expect.casterGid, LOCAL_GID );
+	game.command( { kind: "skill", skillId: QUICK }, 1000, undefined, local );
+	// A nearby caster's cast lands first; the press's own admission at 1060.
+	game.receive( { opcode: peerCast.opcode, payload: Buffer.from( peerCast.payloadHex, "hex" ) }, 1020 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 1060 );
+	assert.equal( game.command( { kind: "skill", skillId: QUICK }, 1100, undefined, local ), null );
+	// One delivery is 30 ms: 200 ms left, sent 30 ms early, plus the margin.
+	assert.equal( game.take()?.skillQueue?.fireAtMs, 1100 + 200 - 30 + ARRIVAL_MARGIN_MS );
+	game.dispose();
+});
+
+/*
+================
+targetedPresser
+
+A gameplay owner knowing TARGETED (300 ms cooldown, target required) and
+two monsters it can read: 9 and 10, which dead makes a corpse.
+================
+*/
+function targetedPresser( dead = false ) {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	/** @type {Map<number, import("../../src/engine/contracts/world.ts").EntityState>} */
+	const entities = new Map();
+	for ( const gid of [ 9, 10 ] ) {
+		entities.set( gid, {
+			...local,
+			gid,
+			kind: "monster",
+			name: "mob",
+			x: local.x + 10,
+			...(gid === 10 && dead ? { appearanceState: [ 2, 0, 0 ] } : {})
+		} );
+	}
+	const game = createGameplay( f => sent.push( f ), () => {}, () => {}, gid => entities.get( gid ) );
+	const row = skillRef( TARGETED, 300 );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ TARGETED ] },
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true } } ]
+	} );
+	game.seed( local );
+	// The target gid of each skill press (SkillAction +7).
+	const targets = () =>
+		sent.filter( f => f.opcode === 0x72cd && f.payload[1] === 4 ).map( f =>
+			Buffer.from( f.payload ).readUInt32LE( 7 )
+		);
+	// A select, granted at once (B45A [1, gid, 0, ...]).
+	const select = ( gid, now ) => {
+		game.command( { kind: "select", gid }, now, entities.get( gid ), local );
+		const grant = Buffer.alloc( 11 );
+		grant[0] = 1;
+		grant.writeUInt32LE( gid, 1 );
+		game.receive( { opcode: 0xb45a, payload: grant }, now );
+	};
+	const press = ( gid, now ) =>
+		game.command( { kind: "skill", skillId: TARGETED, gid }, now, entities.get( gid ), local );
+	return { game, targets, select, press };
+}
+
+const TARGETED = 503;
+
+test("a held press goes to the newest selection, as a fresh press would", () => {
+	const { game, targets, select, press } = targetedPresser();
+	select( 9, 900 );
+	press( 9, 1000 );
+	assert.equal( press( 9, 1100 ), null, "the re-press was not held" );
+	select( 10, 1150 );
+	for ( let now = 1166; now <= 1400; now += 16 ) game.step( now, local );
+	assert.deepEqual( targets(), [ 9, 10 ] );
+	game.dispose();
+});
+
+test("a held press at a monster that died lapses", () => {
+	const { game, targets, select, press } = targetedPresser( true );
+	select( 9, 900 );
+	press( 9, 1000 );
+	press( 9, 1100 );
+	select( 10, 1150 );
+	for ( let now = 1166; now <= 1400; now += 16 ) game.step( now, local );
+	assert.deepEqual( targets(), [ 9 ] );
 	game.dispose();
 });

@@ -377,6 +377,15 @@ export function createCombat(
 		predicting: () => prediction.open(),
 		/*
 		================
+		cancelPrediction
+
+		The press was queued behind an open command (B2CD arm, count 2): its
+		cast starts only when that command ends. True when the plane changed.
+		================
+		*/
+		cancelPrediction: ( now: number ) => prediction.cancel( now ),
+		/*
+		================
 		pressed
 
 		A skill press went out: its cooldown stands in from when the press
@@ -648,7 +657,7 @@ export function createCombat(
 				error = `Cast rejected: ${p[1]}`;
 				// The press it answers never started a cooldown or a cast.
 				cooldowns.refused();
-				prediction.refused( now );
+				prediction.cancel( now );
 				return true;
 			}
 			if ( p.length < 19 ) throw Error( "Truncated cast header" );
@@ -681,6 +690,13 @@ export function createCombat(
 					fatal = impacts.some( hit => hit.fatal );
 				applyPhase( token, caster, phase );
 				const predictedToken = caster === localGid ? prediction.adopt( caster, skill ) : undefined;
+				// Another local cast that holds the caster (anything but a known
+				// instant row) opened first: the press waits behind it, so its
+				// predicted animation would run early.
+				if (
+					caster === localGid && predictedToken === undefined &&
+					skillMetadata.find( row => row.id === skill )?.haltsWalk !== false
+				) prediction.cancel( now );
 				active = {
 					token,
 					caster,

@@ -180,6 +180,33 @@ const PICKUP_EXECUTE_RANGE = 10;
 // How long past two round trips a sent skill press's cooldown stand-in waits
 // for its answer.
 const SKILL_ANSWER_SLACK_MS = 500;
+// B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
+const ACTION_STATE_ARM = 1;
+const QUEUED_COMMANDS = 2;
+
+/*
+================
+skillPressAnswer
+
+What a frame says about the local player's newest skill press. B2CD is the
+local interface's command count: kind 1 (arm) admits the press, count 2
+queues it. B245 refuses it ([2, code]) or opens a cast; only a cast of the
+local caster (+6) answers a press. Monster and peer casts nearby, and the
+B2CD releases of earlier commands, answer nothing: timing the round trip
+by them made it short.
+================
+*/
+function skillPressAnswer( frame: WireFrame, localGid: number ): "answered" | "queued" | null {
+	const p = frame.payload;
+	if ( frame.opcode === 0xb2cd ) {
+		if ( p[0] !== ACTION_STATE_ARM ) return null;
+		return p[1] === QUEUED_COMMANDS ? "queued" : "answered";
+	}
+	if ( frame.opcode !== 0xb245 || !localGid ) return null;
+	if ( p[0] !== 1 ) return "answered";
+	if ( p.length < 10 ) return null;
+	return ((p[6]! | p[7]! << 8 | p[8]! << 16 | p[9]! << 24) >>> 0) === localGid ? "answered" : null;
+}
 
 /*
 ================
@@ -264,9 +291,11 @@ predictCast
 
 Start the press's cast animation now when the server will all but surely
 start the cast at once (cast-prediction.ts): an action skill, a living
-caster on foot with no cast in flight, and no target or one within the
-skill's authored range (the server's reach adds both bodies to it). The
-caster turns to the target at once, as the cast would turn it.
+caster standing on foot (a walk the server leads goes on until the server's
+stop: an action there would slide) with no cast in flight, and no target or
+a living one within the skill's authored range (the server's reach adds
+both bodies to it). The caster turns to the target at once, as the cast
+would turn it.
 ================
 	*/
 	function predictCast(
@@ -275,13 +304,17 @@ caster turns to the target at once, as the cast would turn it.
 		local: EntityState | undefined,
 		now: number
 	) {
-		const pose = movement.state().pose;
+		const walking = movement.state(), pose = walking.pose;
 		if (
-			!metadata?.actionMs || !pose || !local || local.mountedOn || local.appearanceState?.[0] === 2 ||
-			localCastHolds() || combat.predicting() || combat.guidedActive( localGid, now )
+			!metadata?.actionMs || !pose || walking.moving || !local || local.mountedOn ||
+			local.appearanceState?.[0] === 2 || localCastHolds() || combat.predicting() ||
+			combat.guidedActive( localGid, now )
 		) return;
 		if ( target && target.gid !== localGid ) {
-			if ( !metadata.range || (target.regionId | pose.regionId) & 0x8000 && target.regionId !== pose.regionId ) {
+			if (
+				!metadata.range || target.kind === "monster" && target.appearanceState?.[0] === 2 ||
+				(target.regionId | pose.regionId) & 0x8000 && target.regionId !== pose.regionId
+			) {
 				return;
 			}
 			const dx = target.x - pose.x + ((target.regionId & 255) - (pose.regionId & 255)) * 1920,
@@ -1618,7 +1651,9 @@ Packet handling must not depend on which HUD panel is currently open.
 		receive( frame: WireFrame, now: number, chatSender?: EntityState ) {
 			const inventoryBefore = inventory.state().inventory;
 			// Every skill press is answered at once by B245 or B2CD.
-			if ( frame.opcode === 0xb245 || frame.opcode === 0xb2cd ) skillPress.answered( now );
+			const answer = skillPressAnswer( frame, localGid );
+			if ( answer ) skillPress.answered( now );
+			if ( answer === "queued" && combat.cancelPrediction( now ) ) dirty = true;
 			try {
 				if ( betaMap.receive( frame ) ) {
 					dirty = true;
@@ -2482,18 +2517,21 @@ before take assembles the presentation snapshot.
 				}
 			}
 			// A held skill press goes out when due, through the same command
-			// path as a fresh one; death forfeits it.
+			// path as a fresh one: aimed at the newest selection, as core.ts
+			// aims a fresh press. Death forfeits it, and so does a monster
+			// that died while it was held.
 			const duePress = skillPress.due( now );
 			if ( duePress ) {
 				dirty = true;
-				if ( local && local.appearanceState?.[0] !== 2 ) {
+				const { gid: _held, ...press } = duePress.command, gid = targeting.selectionIntent() || undefined;
+				const command = gid ? { ...press, gid } : press;
+				const target = gid === undefined ? undefined : readEntity( gid );
+				if (
+					local && local.appearanceState?.[0] !== 2 &&
+					!(target?.kind === "monster" && target.appearanceState?.[0] === 2)
+				) {
 					try {
-						api.command(
-							duePress.command,
-							now,
-							duePress.command.gid === undefined ? undefined : readEntity( duePress.command.gid ),
-							local
-						);
+						api.command( command, now, target, local );
 					} catch {
 						// The press lost its target or skill while held: it lapses.
 					}

@@ -13,8 +13,9 @@ cooldowns still come from the server's cast alone.
 
 The server's matching cast (same caster and skill) adopts the prediction:
 it carries predictedToken, and the presentation moves the running action
-clock to it, so the animation never restarts. A refusal, or no answer by
-the deadline, cancels the prediction instead; it stays published for
+clock to it, so the animation never restarts. A refusal, a queued answer,
+another local cast opening first, or no answer by the deadline cancels the
+prediction instead; it stays published for
 ROLLBACK_MS with cancelledAtMs so the action blends out through the
 ordinary cancellation path, never a snap.
 
@@ -99,12 +100,14 @@ export function createCastPrediction() {
 		},
 		/*
 		================
-		refused
+		cancel
 
-		The server refused the press (B245 [2, code]).
+		The press will not start its cast now: the server refused it (B245
+		[2, code]), queued it behind an open command, or another cast of the
+		caster opened first.
 		================
 		*/
-		refused: cancel,
+		cancel,
 		/*
 		================
 		step

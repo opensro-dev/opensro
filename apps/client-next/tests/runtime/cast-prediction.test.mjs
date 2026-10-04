@@ -40,7 +40,7 @@ test("a prediction is adopted only by the same caster's cast of the same skill",
 test("a refusal or a missing answer blends the prediction out, then drops it", () => {
 	const p = createCastPrediction();
 	p.predict( 7, 30, 9, 1000, 1500 );
-	assert.equal( p.refused( 1200 ), true );
+	assert.equal( p.cancel( 1200 ), true );
 	assert.equal( p.state()?.cancelledAtMs, 1200 );
 	assert.equal( p.adopt( 7, 30 ), undefined, "a cancelled prediction is not adopted" );
 	assert.equal( p.step( 1699 ), false );
@@ -243,10 +243,11 @@ const local = {
 pressAt
 
 Presses skill 30 (range 60, an action of 1 s) at a monster dx away and
-returns the published prediction.
+returns the published prediction. before runs ahead of the press, after
+right behind it; ui.monster overrides the monster's fields.
 ================
 */
-function pressAt( dx, ui = {} ) {
+function pressAt( dx, ui = {}, before = game => {}, after = game => {} ) {
 	const game = createGameplay( () => {} );
 	game.bootstrap( {
 		simulationProtocolVersion: 1,
@@ -272,9 +273,11 @@ function pressAt( dx, ui = {} ) {
 		} ]
 	} );
 	game.seed( local );
+	before( game );
 	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
-	const monster = { ...local, gid: 9, kind: "monster", name: "mob", x: local.x + dx };
+	const monster = { ...local, gid: 9, kind: "monster", name: "mob", x: local.x + dx, ...ui.monster };
 	game.command( { kind: "skill", skillId: 30, gid: 9 }, 1000, monster, local );
+	after( game );
 	const prediction = game.take()?.castPrediction;
 	game.dispose();
 	return prediction;
@@ -290,4 +293,41 @@ test("a press at a target within the skill's range starts its animation at once"
 test("a press out of range, or for a weapon-reach skill, waits for the server", () => {
 	assert.equal( pressAt( 61 ), undefined, "the server chases first" );
 	assert.equal( pressAt( 10, { range: undefined } ), undefined, "the reach is the weapon's" );
+});
+
+test("a press at a dead monster waits for the server", () => {
+	assert.equal( pressAt( 50, { monster: { appearanceState: [ 2, 0, 0 ] } } ), undefined );
+});
+
+test("a press during a walk the server leads waits for the server's stop", () => {
+	const walk = Buffer.alloc( 14 );
+	walk.writeUInt32LE( LOCAL_GID );
+	walk[4] = 1;
+	walk.writeUInt16LE( 257, 5 );
+	walk.writeInt16LE( 400, 7 );
+	walk.writeInt16LE( 0, 9 );
+	walk.writeInt16LE( 100, 11 );
+	const prediction = pressAt( 50, {}, game => {
+		assert.equal( game.receive( { opcode: 0xb738, payload: walk }, 500 ), true );
+		for ( let now = 516; now <= 1000; now += 16 ) game.step( now, local );
+	} );
+	assert.equal( prediction, undefined, "the action would slide along the walk" );
+});
+
+test("a press the server queues behind an open command stops predicting", () => {
+	const prediction = pressAt( 50, {}, undefined, game => {
+		// B2CD arm, count 2: the press waits for the open command.
+		game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 1300 );
+	} );
+	assert.equal( prediction?.cancelledAtMs, 1300 );
+});
+
+test("another local cast opening first stops the prediction", () => {
+	const fixture = JSON.parse( readFileSync( FIXTURE, "utf8" ) ), row = fixture.scenarios[0];
+	const combat = createCombat();
+	combat.cooldownReferences( fixture.expect.casterGid, [] );
+	combat.predict( fixture.expect.skillId + 1, fixture.expect.targetGid, 100, 600 );
+	assert.equal( combat.receive( row.opcode, Buffer.from( row.payloadHex, "hex" ), 300 ), true );
+	assert.equal( combat.state().castPrediction?.cancelledAtMs, 300 );
+	assert.equal( combat.state().casts[0]?.predictedToken, undefined );
 });
