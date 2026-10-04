@@ -278,16 +278,46 @@ sendFrame
 ================
 sendSkillPress
 
-A skill press leaves: its answer times the round trip, and its cooldown
-stands in from when it reaches the server until that answer.
+A skill press leaves: its answer times the round trip. When the server will
+start the cast as the press arrives (immediate: no target, or one within the
+skill's reach), its cooldown stands in from then until that answer. A press
+the server first walks the caster for starts nothing on arrival: a stand-in
+there showed a cooldown that vanished when it lapsed mid-run and came back
+when the cast finally started.
 ================
 	*/
-	function sendSkillPress( frame: WireFrame, skillId: number, now: number ): WireFrame {
+	function sendSkillPress(
+		frame: WireFrame,
+		skillId: number,
+		now: number,
+		immediate: boolean,
+		target = 0
+	): WireFrame {
 		const oneWay = skillPress.oneWayMs();
 		sendFrame( frame );
 		skillPress.sent( now, skillId );
-		combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
+		if ( immediate ) combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
+		// The HUD shows it as next while the server runs the caster there.
+		else skillPress.approach( skillId, target, now );
 		return frame;
+	}
+	/*
+================
+withinReach
+
+Whether target stands within the skill's authored range of the caster's
+pose. The server's reach adds both bodies, so within it the server never
+walks the caster first. A skill whose reach is the weapon's has no authored
+range: unknown, so not within.
+================
+	*/
+	function withinReach( metadata: SkillMetadata | undefined, target: EntityState ): boolean {
+		const pose = movement.state().pose;
+		if ( !pose || !metadata?.range ) return false;
+		if ( (target.regionId | pose.regionId) & 0x8000 && target.regionId !== pose.regionId ) return false;
+		const dx = target.x - pose.x + ((target.regionId & 255) - (pose.regionId & 255)) * 1920,
+			dz = target.z - pose.z + ((target.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
+		return Math.hypot( dx, dz ) <= metadata.range;
 	}
 	/*
 ================
@@ -315,15 +345,9 @@ would turn it.
 			combat.guidedActive( localGid, now )
 		) return;
 		if ( target && target.gid !== localGid ) {
-			if (
-				!metadata.range || target.kind === "monster" && target.appearanceState?.[0] === 2 ||
-				(target.regionId | pose.regionId) & 0x8000 && target.regionId !== pose.regionId
-			) {
+			if ( target.kind === "monster" && target.appearanceState?.[0] === 2 || !withinReach( metadata, target ) ) {
 				return;
 			}
-			const dx = target.x - pose.x + ((target.regionId & 255) - (pose.regionId & 255)) * 1920,
-				dz = target.z - pose.z + ((target.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
-			if ( Math.hypot( dx, dz ) > metadata.range ) return;
 			movement.heading( movementHeading( pose, { ...target, angle: target.heading } ) );
 		}
 		const oneWay = skillPress.oneWayMs();
@@ -338,8 +362,10 @@ attack can arrive in the same batch as the previous close and starve the walk.
 ================
 	*/
 	function cancelActionForMovement() {
-		// A ground click also drops a skill press held for its cooldown.
+		// A ground click also drops a skill press held for its cooldown, and
+		// the run-up to a pressed skill's target.
 		if ( skillPress.cancel() ) dirty = true;
+		if ( skillPress.approachEnded() ) dirty = true;
 		const cancel = actionSession.cancelForMovement();
 		if ( !cancel ) return;
 		sendFrame( cancel );
@@ -836,6 +862,7 @@ Entity removal retires targeting and combat references in the same frame.
 				pickup.remove( event.gid );
 				targeting.remove( event.gid );
 				if ( skillPress.queued()?.command.gid === event.gid && skillPress.cancel() ) dirty = true;
+				if ( skillPress.targetGone( event.gid ) ) dirty = true;
 				const conversation = npcConversation.state();
 				if ( conversation.phase !== "closed" && conversation.gid === event.gid ) npcConversation.clear();
 			}
@@ -1529,7 +1556,7 @@ state here before a command can claim a native wire conversation.
 					if ( !to ) return null;
 					const frame = positionSkillRequest( skillId, to );
 					if ( metadata.haltsWalk ) movement.holdForCast( now );
-					return sendSkillPress( frame, skillId, now );
+					return sendSkillPress( frame, skillId, now, true );
 				}
 				if ( metadata && !metadata.targetRequired ) command = { kind: "skill", skillId: command.skillId };
 				else if ( metadata?.targetRequired && !command.gid ) {
@@ -1539,7 +1566,7 @@ state here before a command can claim a native wire conversation.
 					const frame = combat.skill( skillId, localGid );
 					movement.holdForCast( now );
 					predictCast( metadata, undefined, local, now );
-					return sendSkillPress( frame, skillId, now );
+					return sendSkillPress( frame, skillId, now, true );
 				}
 			}
 			if ( command.kind === "skill" && command.gid === undefined ) {
@@ -1550,7 +1577,7 @@ state here before a command can claim a native wire conversation.
 				const skillId = command.skillId, metadata = catalog.find( row => row.id === skillId );
 				if ( metadata?.haltsWalk ) movement.holdForCast( now );
 				predictCast( metadata, undefined, local, now );
-				return sendSkillPress( frame, skillId, now );
+				return sendSkillPress( frame, skillId, now, true );
 			}
 			if ( !entity || (entity.gid === localGid && command.kind !== "skill") ) {
 				throw new Error( "Target is absent or local player" );
@@ -1614,8 +1641,15 @@ state here before a command can claim a native wire conversation.
 			const frame = combat.skill( command.skillId, entity.gid );
 			movement.holdForCast( now );
 			const pressedSkill = command.skillId;
-			predictCast( catalog.find( row => row.id === pressedSkill ), entity, local, now );
-			return sendSkillPress( frame, command.skillId, now );
+			const pressedMetadata = catalog.find( row => row.id === pressedSkill );
+			predictCast( pressedMetadata, entity, local, now );
+			return sendSkillPress(
+				frame,
+				command.skillId,
+				now,
+				entity.gid === localGid || withinReach( pressedMetadata, entity ),
+				entity.gid
+			);
 		},
 		/*
 ================
@@ -1655,11 +1689,15 @@ Packet handling must not depend on which HUD panel is currently open.
 			// Every skill press is answered at once by B245 or B2CD.
 			const answer = skillPressAnswer( frame, localGid );
 			if ( answer ) skillPress.answered( now );
+			// A local cast opened or a press was refused: no run-up waits.
+			if ( answer && frame.opcode === 0xb245 && skillPress.approachEnded() ) dirty = true;
 			if ( frame.opcode === 0xb2cd && frame.payload.length >= 2 ) {
 				if ( skillPress.commandCount( frame.payload[0]!, frame.payload[1]!, now ) ) dirty = true;
 			}
 			if ( answer === "queued" ) {
-				if ( combat.cancelPrediction( now ) ) dirty = true;
+				// Its cast, and with it its cooldown, starts only when the open
+				// command ends.
+				if ( combat.pressQueued( now ) ) dirty = true;
 				// The server queued the command instead of acting on it: it never
 				// stopped its walk, so a walk held at the press follows it again
 				// (held, the player fell behind by the whole queue time and the
@@ -2263,6 +2301,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					targeting.remove( gid );
 					combat.remove( gid );
 					if ( skillPress.queued()?.command.gid === gid ) skillPress.cancel();
+					skillPress.targetGone( gid );
 					dirty = true;
 					return false;
 				}

@@ -377,13 +377,18 @@ export function createCombat(
 		predicting: () => prediction.open(),
 		/*
 		================
-		cancelPrediction
+		pressQueued
 
 		The press was queued behind an open command (B2CD arm, count 2): its
-		cast starts only when that command ends. True when the plane changed.
+		cast and its cooldown start only when that command ends, so neither
+		its prediction nor its cooldown stand-in holds. True when the plane
+		changed.
 		================
 		*/
-		cancelPrediction: ( now: number ) => prediction.cancel( now ),
+		pressQueued( now: number ): boolean {
+			const standIns = cooldowns.refused();
+			return prediction.cancel( now ) || standIns;
+		},
 		/*
 		================
 		pressed

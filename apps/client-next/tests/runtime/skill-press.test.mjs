@@ -310,7 +310,8 @@ function targetedPresser( dead = false ) {
 	game.bootstrap( {
 		simulationProtocolVersion: 1,
 		character: { skills: [ TARGETED ] },
-		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true } } ]
+		// Range 60: the monsters stand within it, so the server casts at once.
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60 } } ]
 	} );
 	game.seed( local );
 	// The target gid of each skill press (SkillAction +7).
@@ -352,5 +353,66 @@ test("a held press at a monster that died lapses", () => {
 	select( 10, 1150 );
 	for ( let now = 1166; now <= 1400; now += 16 ) game.step( now, local );
 	assert.deepEqual( targets(), [ 9 ] );
+	game.dispose();
+});
+
+/*
+================
+cooldownAfterPress
+
+Presses a targeted skill (range 60, 5 s cooldown) at a monster dx away and
+returns the cooldown the client shows right after.
+================
+*/
+function cooldownAfterPress( dx ) {
+	const game = createGameplay( () => {} );
+	const row = skillRef( TARGETED, 5000 );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ TARGETED ] },
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60 } } ]
+	} );
+	game.seed( local );
+	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
+	const monster = { ...local, gid: 9, kind: "monster", name: "mob", x: local.x + dx };
+	game.command( { kind: "skill", skillId: TARGETED, gid: 9 }, 1000, monster, local );
+	const shown = cooldowns.skillCooldown( game.take()?.skillCooldowns ?? [], TARGETED, 0, 1010 );
+	game.dispose();
+	return shown;
+}
+
+test("a press the server must run to first shows no cooldown until the cast starts", () => {
+	assert.ok( cooldownAfterPress( 50 ), "an in-range press stands in for its cooldown" );
+	assert.equal( cooldownAfterPress( 200 ), null, "an out-of-range press showed a cooldown that would vanish" );
+});
+
+test("a press the server queues drops its cooldown stand-in", () => {
+	const { game } = presser();
+	game.command( { kind: "skill", skillId: SLOW }, 1000, undefined, local );
+	assert.ok( cooldowns.skillCooldown( game.take()?.skillCooldowns ?? [], SLOW, 0, 1010 ) );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 1050 );
+	assert.equal( cooldowns.skillCooldown( game.take()?.skillCooldowns ?? [], SLOW, 0, 1060 ), null );
+	game.dispose();
+});
+
+test("a press the server runs to its target for shows as next until its cast starts", () => {
+	const game = createGameplay( () => {} );
+	const row = skillRef( TARGETED, 5000 );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ TARGETED ] },
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60 } } ]
+	} );
+	game.seed( local );
+	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
+	const monster = { ...local, gid: 9, kind: "monster", name: "mob", x: local.x + 200 };
+	game.command( { kind: "skill", skillId: TARGETED, gid: 9 }, 1000, monster, local );
+	assert.deepEqual( game.take()?.skillQueue, { skill: TARGETED, sinceMs: 1000 } );
+	// The admission (B2CD arm, count 1) leaves the run-up in place.
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 1100 );
+	assert.equal( game.take()?.skillQueue?.skill, TARGETED );
+	// In range the cast is refused or opens: nothing waits any more.
+	game.receive( { opcode: 0xb245, payload: Uint8Array.of( 2, 4 ) }, 3000 );
+	assert.equal( game.take()?.skillQueue, undefined );
 	game.dispose();
 });

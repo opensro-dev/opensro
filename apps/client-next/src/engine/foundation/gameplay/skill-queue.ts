@@ -19,9 +19,10 @@ aims to send at (cooldown end - one delivery + ARRIVAL_MARGIN_MS). The
 server's grace window (cooldownGraceMs, 150 ms) absorbs what the round-trip
 estimate gets wrong.
 
-The published queue (skillQueue) is either that held press or a press the
-server queued behind its open command (B2CD count 2, 75BAA0): the HUD
-shows the player which skill comes next either way.
+The published queue (skillQueue) is that held press, a press the server
+queued behind its open command (B2CD count 2, 75BAA0), or a press the
+server is running the caster to its target for (approach): the HUD shows
+the player which skill comes next in every case.
 
 The round trip is measured from the commands themselves: every skill press
 is answered at once by B245 or B2CD, and the time to that first answer is a
@@ -120,6 +121,7 @@ round-trip estimate.
 export function createSkillPressQueue<Command>() {
 	let queued: QueuedPress<Command> | null = null, queuedSince = 0, denied: DeniedPress | null = null;
 	let serverQueued: SkillQueueState | null = null, lastSent: number | undefined;
+	let approaching: SkillQueueState | null = null, approachTarget = 0;
 	let rtt = 0, answerPendingSince: number | null = null;
 	return {
 		/*
@@ -186,6 +188,8 @@ export function createSkillPressQueue<Command>() {
 		sent( now: number, skill: number ) {
 			lastSent = skill;
 			answerPendingSince = now;
+			// A newer press replaces the command the server was running for.
+			approaching = null;
 		},
 		/*
 		================
@@ -197,6 +201,48 @@ export function createSkillPressQueue<Command>() {
 		*/
 		commandSent() {
 			lastSent = undefined;
+			approaching = null;
+		},
+		/*
+		================
+		approach
+
+		A sent press the server first runs the caster to its target for: it
+		is next until its cast starts or is refused (approachEnded), or a
+		newer command replaces it.
+		================
+		*/
+		approach( skill: number, target: number, now: number ) {
+			approaching = approaching?.skill === skill && approachTarget === target ?
+				approaching :
+				{ skill, sinceMs: now };
+			approachTarget = target;
+		},
+		/*
+		================
+		targetGone
+
+		The run-up's target left the world: the server's run ends with it.
+		True when the published queue changed.
+		================
+		*/
+		targetGone( gid: number ): boolean {
+			if ( !approaching || approachTarget !== gid ) return false;
+			approaching = null;
+			return true;
+		},
+		/*
+		================
+		approachEnded
+
+		A cast of the caster opened, or a press was refused: nothing waits
+		for an arrival any more. True when the published queue changed.
+		================
+		*/
+		approachEnded(): boolean {
+			const had = approaching !== null;
+			approaching = null;
+			return had;
 		},
 		/*
 		================
@@ -256,7 +302,7 @@ export function createSkillPressQueue<Command>() {
 		state() {
 			const next: SkillQueueState | undefined = queued ?
 				{ skill: queued.skill, sinceMs: queuedSince, fireAtMs: queued.fireAtMs } :
-				serverQueued ?? undefined;
+				serverQueued ?? approaching ?? undefined;
 			return {
 				skillQueue: next,
 				skillDenied: denied ?? undefined
@@ -273,6 +319,7 @@ export function createSkillPressQueue<Command>() {
 			denied = null;
 			serverQueued = null;
 			lastSent = undefined;
+			approaching = null;
 			rtt = 0;
 			answerPendingSince = null;
 		}
