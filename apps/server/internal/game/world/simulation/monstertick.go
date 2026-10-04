@@ -52,13 +52,9 @@ whenever the monster population is enabled - which is the DEFAULT
 type MonsterMoverOps struct {
 	divisionID     string // set by the owning ticker shard; empty only in direct fixtures
 	MessageBlockAt func(Spawn) (worldgeom.MessageBlock, bool)
-	// SafeZone reports a region that is not a battlefield (a town): a
-	// monster there vanishes (vanishInSafeZone). Production passes
-	// SafeZoneRegion; nil keeps every region open.
-	SafeZone   func(region uint16) bool
-	activity   *monsterActivitySnapshot
-	Monsters   *MonsterState
-	TacticsFor monster.TacticsResolver
+	activity       *monsterActivitySnapshot
+	Monsters       *MonsterState
+	TacticsFor     monster.TacticsResolver
 	// TerrainHeight resolves the navmesh ground height for a candidate
 	// destination (movement TerrainHeightAt; nil = keep the anchor Y).
 	// Must be non-blocking: it reads preloaded region bundles.
@@ -402,11 +398,8 @@ nest respawns it (560D00). This is why monsters never walk into a town.
 ================
 */
 func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowMs int64) {
-	if ops.SafeZone == nil {
-		return
-	}
 	mover, ok := ops.Monsters.Mover(divisionID, gid)
-	if ok && ops.SafeZone(mover.LivePoseAt(nowMs, nil).RegionID) {
+	if ok && SafeZoneRegion(mover.LivePoseAt(nowMs, nil).RegionID) {
 		ops.Monsters.Defeat(divisionID, gid, time.UnixMilli(nowMs))
 	}
 }

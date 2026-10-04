@@ -72,7 +72,6 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 			PlanPathFrom:   game.water.PlanMonsterPathFrom,
 			PlanRoute:      game.water.PlanMonsterRoute,
 			MessageBlockAt: game.water.MessageBlockAt,
-			SafeZone:       simulation.SafeZoneRegion,
 			Rand:           rand.Float64,
 			AttackPlan:     game.items.MonsterAttackPlan,
 			RunAction:      game.items.RunMonsterAction,

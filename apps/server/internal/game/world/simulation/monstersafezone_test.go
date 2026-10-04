@@ -43,12 +43,13 @@ leaves; its nest schedules a respawn. Outside a town it stays.
 func TestMonsterInTownVanishes(t *testing.T) {
 	ops, instance := monsterLegFixture(t, passiveTactics())
 	now := time.Now().UnixMilli()
-	ops.SafeZone = func(region uint16) bool { return region != 25000 }
 	ops.vanishInSafeZone(monsterTestDivision, instance.Gid, now)
 	if _, ok := ops.Monsters.Mover(monsterTestDivision, instance.Gid); !ok {
 		t.Fatal("a monster outside every town vanished")
 	}
-	ops.SafeZone = SafeZoneRegion
+	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	mover.Pose.RegionID = 25000 // inside Jangan
+	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
 	ops.vanishInSafeZone(monsterTestDivision, instance.Gid, now)
 	if _, ok := ops.Monsters.Mover(monsterTestDivision, instance.Gid); ok {
 		t.Fatal("a monster standing in Jangan stayed")

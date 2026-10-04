@@ -22,8 +22,8 @@ func TestHeadingWordTowardUsesNativeYawConvention(t *testing.T) {
 		{"west/-x is yaw 3pi/2", -10, 0, 3 * math.Pi / 2},
 	}
 	for _, tc := range cases {
-		from := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
-		to := monster.Pose{RegionID: 25000, X: from.X + tc.dx, Y: 20, Z: from.Z + tc.dz}
+		from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
+		to := monster.Pose{RegionID: monsterTestRegion, X: from.X + tc.dx, Y: 20, Z: from.Z + tc.dz}
 		want := uint16(int(math.Round(math.Mod(tc.wantRad+3*math.Pi/2, twoPi)/twoPi*0xffff)) & 0xffff)
 		got := headingWordToward(from, to)
 		// One unit of slack: the wire unit is 1/65535 of a circle, so a
@@ -40,8 +40,8 @@ func TestHeadingWordTowardUsesNativeYawConvention(t *testing.T) {
 		{7, 7}, {-7, 7}, {7, -7}, {-7, -7},
 		{13, 5}, {-3, 17},
 	} {
-		from := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
-		to := monster.Pose{RegionID: 25000, X: from.X + d.dx, Y: 20, Z: from.Z + d.dz}
+		from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
+		to := monster.Pose{RegionID: monsterTestRegion, X: from.X + d.dx, Y: 20, Z: from.Z + d.dz}
 		monster := headingWordToward(from, to)
 		player, ok := HeadingFromMovement(
 			Spawn{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z},
@@ -57,8 +57,8 @@ func TestHeadingWordTowardUsesNativeYawConvention(t *testing.T) {
 	}
 
 	// +Z is a quarter-circle wire bearing, not zero or model yaw pi.
-	from := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
-	to := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1100}
+	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
+	to := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1100}
 	if got := headingWordToward(from, to); got < 0x3000 || got > 0x5000 {
 		t.Errorf("southward travel produced heading %d; the mirrored Atan2(dx, dz) form returns ~0 here (BUG-11)", got)
 	}

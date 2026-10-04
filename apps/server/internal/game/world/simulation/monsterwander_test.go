@@ -65,7 +65,7 @@ func TestIdleExpiryPrecedesSightAcquisition(t *testing.T) {
 	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	mover.BehaviorDeadlineMs = 1000
 	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
-	players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1060, Y: 20, Z: 1000}, BodyRadius: 4}}
+	players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1060, Y: 20, Z: 1000}, BodyRadius: 4}}
 	ops.advanceInstance(monsterTestDivision, instance, players, 1001)
 	current, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	if current.Mode() != monster.MoverWandering || current.TargetGID() != 0 {
