@@ -11,6 +11,8 @@ current state; dragging references never moves items or grants skills.
 import { itemActivation } from "./item-activation";
 
 export const TRACE_ACTION_ID = 1003;
+// actionwnddata 1011 "Helper status" (UIIT_STT_HELPER, icon_cha_helper).
+export const HELPER_ACTION_ID = 1011;
 const HOTBAR_PAGE_COUNT = 4;
 const HOTBAR_PAGE_SLOTS = 10;
 const EQUIPMENT_SLOT_COUNT = 13;
@@ -111,6 +113,7 @@ export function quickSlotCommand(
 			return { kind: "action-command", id };
 		}
 		if ( id === 1002 && state.target ) return { kind: "attack", gid: state.target };
+		if ( id === HELPER_ACTION_ID ) return { kind: "helper-mark" };
 		if ( id === TRACE_ACTION_ID && state.target && !state.targetPending && !mountedOn ) {
 			return { kind: "action-command", id };
 		}

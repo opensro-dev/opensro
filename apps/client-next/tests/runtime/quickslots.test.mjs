@@ -51,6 +51,11 @@ test("bag hotbar resolves current occupancy and never caches a consumed item", (
 	assert.equal( quickSlotCommand( binding, { ...state, inventoryPending: true } ), null );
 	assert.equal( quickSlotCommand( { slot: 1, kind: 0x4e, payload: 0 }, state ), null );
 });
+test("a bound Helper status action toggles the helper mark", () => {
+	assert.deepEqual( quickSlotCommand( { slot: 2, kind: 0x4a, payload: 1011 }, { inventory: [] } ), {
+		kind: "helper-mark"
+	} );
+});
 test("native emotes and pet charm use their own commands, independent of mounted attack", () => {
 	assert.deepEqual( Array.from( { length: 7 }, ( _, i ) => actionEmote( 4000 + i ) ), [ 0, 6, 1, 5, 2, 3, 4 ] );
 	const state = { inventory: [], activeCos: { gid: 72, dead: false }, target: 91 };

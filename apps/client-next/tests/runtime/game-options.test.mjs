@@ -144,6 +144,17 @@ test("GM eligibility resets and beginner gate uses maximum attained level", () =
 	g.dispose();
 });
 
+test("Helper status toggles the helper mark and keeps the beginner mark", () => {
+	const sent = [], g = createGameplay( f => sent.push( f ) );
+	g.bootstrap( { character: { level: 30 } } );
+	g.seed( local );
+	// 695420 action 1011: flip +0x779 bit 1, send the whole byte in 0x7683.
+	g.command( { kind: "helper-mark" }, 0, undefined, { ...local, visualFlags: 1 } );
+	g.command( { kind: "helper-mark" }, 0, undefined, { ...local, visualFlags: 3 } );
+	assert.deepEqual( sent.map( f => [ f.opcode, ...f.payload ] ), [ [ 0x7683, 3 ], [ 0x7683, 1 ] ] );
+	g.dispose();
+});
+
 test("startup disables warnings and every overhead status category; Reset remains separate", () => {
 	const initial = initialGameOptions();
 	assert.deepEqual( Object.keys( initial ).filter( k => !initial[k] ), [

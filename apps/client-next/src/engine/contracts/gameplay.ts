@@ -139,6 +139,7 @@ export type GameplayCommand =
 	| { readonly kind: "whisper-block"; readonly name: string; readonly blocked: boolean; }
 	| { readonly kind: "stat-increase"; readonly stat: "str" | "int"; }
 	| { readonly kind: "beginner-mark"; readonly enabled: boolean; }
+	| { readonly kind: "helper-mark"; }
 	| {
 		readonly kind: "auto-potion-save";
 		readonly settings: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;

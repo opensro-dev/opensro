@@ -1175,6 +1175,12 @@ state here before a command can claim a native wire conversation.
 					payload: Uint8Array.of( ((local.visualFlags ?? 0) & 2) | (command.enabled ? 1 : 0) )
 				} );
 			}
+			if ( command.kind === "helper-mark" ) {
+				// CGInterface_ExecuteActionCommand (695420) action 1011: toggle the
+				// helper bit of the local +0x779 flags and send the whole byte.
+				if ( !local || !localGid ) throw Error( "Missing helper mark authority" );
+				return sendFrame( { opcode: 0x7683, payload: Uint8Array.of( ((local.visualFlags ?? 0) & 3) ^ 2 ) } );
+			}
 			if ( command.kind === "auto-potion-save" ) {
 				const next = autoPotionSettings( command.settings ), frame = autoPotionSave( next );
 				send( frame );

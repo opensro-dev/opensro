@@ -26,7 +26,7 @@ const (
 	FriendMaxCount       = domain.FriendMaxCount
 	BeginnerMarkMaxLevel = domain.BeginnerMarkMaxLevel
 	VisualFlagBeginner   = domain.VisualFlagBeginner
-	VisualFlagEffect     = domain.VisualFlagEffect
+	VisualFlagHelper     = domain.VisualFlagHelper
 	VisualFlagsKnownMask = domain.VisualFlagsKnownMask
 )
 

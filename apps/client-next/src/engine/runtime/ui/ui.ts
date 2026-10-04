@@ -332,6 +332,7 @@ import {
 	extendedSlot,
 	quickSlotDrag,
 	quickSlotDrop,
+	HELPER_ACTION_ID,
 	TRACE_ACTION_ID
 } from "@/engine/foundation/gameplay/quickslots";
 import { itemActivation } from "@/engine/foundation/gameplay/item-activation";
@@ -1081,6 +1082,10 @@ export function createUi(
 		}
 		if ( id === 1002 ) {
 			if ( game.target ) sendGameplay( { kind: "attack", gid: game.target } );
+			return;
+		}
+		if ( id === HELPER_ACTION_ID ) {
+			sendGameplay( { kind: "helper-mark" } );
 			return;
 		}
 		if ( id === 1000 || id === 1001 || id === TRACE_ACTION_ID || id === 5000 || id >= 4000 && id <= 4006 ) {
