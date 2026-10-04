@@ -27,6 +27,7 @@
     "src/engine/runtime/renderer/device/device.ts": "src/engine/runtime/renderer/renderer.ts",
     "src/engine/runtime/renderer/surface/surface.ts": "src/engine/runtime/renderer/renderer.ts",
     "src/engine/runtime/renderer/frame/frame.ts": "src/engine/runtime/renderer/renderer.ts",
+    "src/engine/runtime/renderer/frame/stale-draws.ts": "src/engine/runtime/renderer/renderer.ts",
     "src/engine/runtime/simulation/host.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/simulation/worker/entry.ts": "src/engine/runtime/simulation/host.ts",
     "src/engine/runtime/simulation/worker/simulation.ts": "src/engine/runtime/simulation/worker/entry.ts",

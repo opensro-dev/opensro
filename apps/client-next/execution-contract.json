@@ -409,7 +409,8 @@
 				"upload",
 				"release",
 				"updateTransform",
-				"updateInstances"
+				"updateInstances",
+				"releasedDraw"
 			],
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"consumer": "src/engine/runtime/renderer/renderer.ts"
@@ -1797,6 +1798,14 @@
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
 				"sound"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/stale-draws.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"callback:createStaleDrawGuard:0",
+				"callback:createStaleDrawGuard:1"
 			]
 		}
 	],

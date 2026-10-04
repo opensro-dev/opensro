@@ -25,6 +25,7 @@ import type { Geometry } from "@/engine/contracts/geometry";
 import { createDevice } from "./device/device";
 import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
+import { createStaleDrawGuard } from "./frame/stale-draws";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw } from "./internal/gpu-contract";
 import { hypot3 } from "@/engine/foundation/math/hypot";
@@ -44,6 +45,16 @@ export function createRenderer(
 ): Renderer {
 	let video = defaultVideoOptions();
 	const portrait = createPortrait( createCharacters() );
+	// A released draw never reaches a submit; the report names who kept it.
+	const staleDraws = createStaleDrawGuard(
+		draw => device.geometry()?.releasedDraw?.( draw ),
+		stale =>
+			console.error(
+				`[SRO renderer] stale draw: list "${stale.list}" still held a released draw ` +
+					`(index ${stale.index} of ${stale.listLength}, released ${stale.releasedMsAgo} ms ago); ` +
+					"dropped it instead of submitting destroyed storage. Released by:\n" + stale.releaseStack
+			)
+	);
 	let portraitDepth: import("./internal/gpu-contract").DepthTarget | null = null;
 	const partyPortraits = Array.from(
 		{ length: 7 },
@@ -583,33 +594,52 @@ export function createRenderer(
 								finishDeferred()
 					} :
 					undefined;
+				// Each owner's list is checked under its own name.
+				// Slices keep the scene's terrain/transparent boundaries exact.
+				const terrainDraws = staleDraws.live( "world", scene.draws.slice( 0, scene.terrainEnd ?? 0 ) ),
+					opaqueDraws = staleDraws.live(
+						"world",
+						scene.draws.slice( scene.terrainEnd ?? 0, scene.transparentStart )
+					),
+					transparentDraws = staleDraws.live( "world", scene.draws.slice( scene.transparentStart ) ),
+					liveCharacters = staleDraws.live( "characters", characterDraws ),
+					liveShadows = staleDraws.live( "character-shadows", shadowDraws );
 				const pending = frame!.draw(
 					color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
-					meshDraw ?? undefined,
+					staleDraws.single( "mesh", meshDraw ?? undefined ),
 					surface.depth(),
 					[
-						...scene.draws.slice( 0, scene.terrainEnd ?? 0 ),
-						...(scene.groundDecalDraws ?? []),
-						...shadowDraws,
-						...scene.draws.slice( scene.terrainEnd ?? 0, scene.transparentStart ),
-						...(preview ? [] : characterDraws.filter( draw => !draw.blended )),
-						...scene.draws.slice( scene.transparentStart ),
-						...(scene.decalDraws ?? []),
-						...(preview ? [] : characterDraws.filter( draw => draw.blended )),
-						...(preview ? [] : scene.weatherDraws ?? [])
+						...terrainDraws,
+						...staleDraws.live( "ground-decals", scene.groundDecalDraws ?? [] ),
+						...liveShadows,
+						...opaqueDraws,
+						...(preview ? [] : liveCharacters.filter( draw => !draw.blended )),
+						...transparentDraws,
+						...staleDraws.live( "decals", scene.decalDraws ?? [] ),
+						...(preview ? [] : liveCharacters.filter( draw => draw.blended )),
+						...(preview ? [] : staleDraws.live( "weather", scene.weatherDraws ?? [] ))
 					],
 					device.ui( projectedUi ),
-					preview ? characterDraws : [],
+					preview ? liveCharacters : [],
 					scene.flares && video.records[video.active][10] === 1 ?
 						device.flares( scene.flares, surface.depth() ) :
 						undefined,
 					scene.thunder ? device.thunder( scene.thunder ) : undefined,
 					portraitTarget ?
-						{ target: portraitTarget, depth: portraitDepth!.view, draws: portraitDraws } :
+						{
+							target: portraitTarget,
+							depth: portraitDepth!.view,
+							draws: staleDraws.live( "portrait", portraitDraws )
+						} :
 						undefined,
-					dollTarget ? { target: dollTarget, depth: dollDepth!.view, draws: dollDraws } : undefined,
-					partyDraws,
+					dollTarget ?
+						{ target: dollTarget, depth: dollDepth!.view, draws: staleDraws.live( "doll", dollDraws ) } :
+						undefined,
+					partyDraws.map( ( party, i ) => ({
+						...party,
+						draws: staleDraws.live( "party-portrait-" + (i + 1), party.draws )
+					}) ),
 					frameId,
 					deferredPass,
 					device.bloom( viewport.width, viewport.height, !preview && video.records[video.active][11] === 1 )

@@ -34,6 +34,7 @@ async function load( file ) {
 const { createRetirement, destroyNow } = await load( "src/engine/runtime/renderer/device/retirement.ts" );
 const { createParticlePresentation } = await load( "src/engine/runtime/renderer/device/particles.ts" );
 const { createGeometryResources } = await load( "src/engine/runtime/renderer/device/geometry.ts" );
+const { createStaleDrawGuard } = await load( "src/engine/runtime/renderer/frame/stale-draws.ts" );
 const { createRenderer } = await load( "src/engine/runtime/renderer/renderer.ts" );
 const { PARTICLE_ACTOR, PARTICLE_RECORD } = await load( "src/engine/foundation/animation/particle-records.ts" );
 
@@ -128,6 +129,23 @@ instance storage before the submit. Returns the submit.
 ================
 */
 function releaseAfterRecord( gpu, retire ) {
+	const { commands, draws } = geometryOwner( gpu, retire );
+	const encoder = gpu.device.createCommandEncoder( { label: "frame" } );
+	record( encoder, draws );
+	commands.release( draws[1] );
+	// Two instances outgrow the single slot the draw was uploaded with.
+	commands.updateInstances( draws[2], new Float32Array( 32 ) );
+	return () => gpu.device.queue.submit( [ encoder.finish() ] );
+}
+
+/*
+================
+geometryOwner
+
+Geometry resources over the strict device, with three uploaded draws.
+================
+*/
+function geometryOwner( gpu, retire ) {
 	const resources = createGeometryResources(
 		gpu.device,
 		() => gpu.device,
@@ -157,9 +175,21 @@ function releaseAfterRecord( gpu, retire ) {
 		indices: Uint32Array.of( 0, 1, 2 ),
 		transform: identity()
 	});
-	const draws = [ commands.upload( geometry() ), commands.upload( geometry() ), commands.upload( geometry() ) ];
-	const encoder = gpu.device.createCommandEncoder( { label: "frame" } ),
-		pass = encoder.beginRenderPass( { colorAttachments: [] } );
+	return {
+		commands,
+		draws: [ commands.upload( geometry() ), commands.upload( geometry() ), commands.upload( geometry() ) ]
+	};
+}
+
+/*
+================
+record
+
+One render pass drawing each draw.
+================
+*/
+function record( encoder, draws ) {
+	const pass = encoder.beginRenderPass( { colorAttachments: [] } );
 	for ( const draw of draws ) {
 		pass.setBindGroup( 0, draw.binding );
 		pass.setVertexBuffer( 0, draw.vertices );
@@ -167,11 +197,38 @@ function releaseAfterRecord( gpu, retire ) {
 		pass.drawIndexed( draw.indexCount, draw.instanceCount );
 	}
 	pass.end();
-	commands.release( draws[1] );
-	// Two instances outgrow the single slot the draw was uploaded with.
-	commands.updateInstances( draws[2], new Float32Array( 32 ) );
-	return () => gpu.device.queue.submit( [ encoder.finish() ] );
 }
+
+test("a draw an owner still lists after its release frame never reaches a later submit, and names its owner", () => {
+	const gpu = createStrictGpu(),
+		retirement = createRetirement(),
+		{ commands, draws } = geometryOwner(
+			gpu,
+			retirement.retire
+		);
+	// Frame 1 releases the draw; its storage is destroyed when the frame closes.
+	retirement.open();
+	commands.release( draws[1] );
+	retirement.close();
+	// Frame 2: an owner hands the frame its stale list.
+	const unguarded = gpu.device.createCommandEncoder( { label: "unguarded" } );
+	record( unguarded, draws );
+	assert.throws( () => gpu.device.queue.submit( [ unguarded.finish() ] ), DESTROYED );
+	const reports = [], guard = createStaleDrawGuard( draw => commands.releasedDraw( draw ), r => reports.push( r ) );
+	const guarded = gpu.device.createCommandEncoder( { label: "guarded" } );
+	const live = guard.live( "characters", draws );
+	record( guarded, live );
+	gpu.device.queue.submit( [ guarded.finish() ] );
+	assert.deepEqual( live, [ draws[0], draws[2] ] );
+	assert.equal( reports.length, 1 );
+	assert.equal( reports[0].list, "characters" );
+	assert.equal( reports[0].index, 1 );
+	assert.match( reports[0].releaseStack, /geometry release/ );
+	// The same stale site recurs every frame but is reported once.
+	guard.live( "characters", draws );
+	assert.equal( reports.length, 1 );
+	assert.equal( guard.live( "characters", [ draws[0] ] )[0], draws[0], "a clean list passes through unchanged" );
+});
 
 test("a draw released or regrown after it is recorded outlives that frame's submit", () => {
 	const unguarded = createStrictGpu();

@@ -182,7 +182,23 @@ export interface ParticlePresentation {
 	dirtyStart: number;
 	dirtyEnd: number;
 }
+/*
+================
+DrawRelease
+
+When and from where a draw was released. A released draw's buffers are
+retired at the end of the releasing frame, so any later frame that still
+lists it would submit destroyed storage ("used in submit while destroyed").
+================
+*/
+export interface DrawRelease {
+	readonly atMs: number;
+	readonly stack: string;
+}
 export interface GeometryCommands {
+	// The release record of a draw no owner may draw any more; undefined
+	// while the draw is live.
+	releasedDraw?( draw: GeometryDraw ): DrawRelease | undefined;
 	characterShadows?( requests: readonly CharacterShadowRequest[], blob?: ImageDraw ): readonly GeometryDraw[];
 	// Null samples are CPU-owned slots already materialized in source; GPU samples preserve their canonical indices.
 	prepareGpuBones?(
