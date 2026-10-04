@@ -69,6 +69,10 @@ createTerrainLayers
 */
 export function createTerrainLayers() {
 	const layers = new Map<string, Layer>(), members = new Map<WorldGroup, Member>();
+	// Bumped whenever a layer's draw is replaced or released. A list built
+	// before the bump may hold a draw whose buffers are destroyed when the
+	// releasing frame closes, so it must not be drawn again.
+	let revision = 0;
 
 	/*
 	================
@@ -121,6 +125,7 @@ export function createTerrainLayers() {
 		layer.vertexCapacity = Math.max( layer.vertexCapacity, capacityFor( vertices ) );
 		layer.indexCapacity = Math.max( layer.indexCapacity, capacityFor( indices ) );
 		geometry.release( layer.draw );
+		revision++;
 		layer.draw = allocate( geometry, layer, layer.vertexCapacity, layer.indexCapacity );
 		layer.indices = new Uint32Array( layer.indexCapacity );
 		layer.top = 0;
@@ -246,6 +251,7 @@ export function createTerrainLayers() {
 			layer.dirty = true;
 			if ( !layer.members.size ) {
 				geometry.release( layer.draw );
+				revision++;
 				layers.delete( layer.key );
 			}
 		},
@@ -316,6 +322,7 @@ export function createTerrainLayers() {
 		clear() {
 			layers.clear();
 			members.clear();
+			revision++;
 		},
 		/*
 		================
@@ -326,7 +333,17 @@ export function createTerrainLayers() {
 			if ( geometry ) { for ( const layer of layers.values() ) geometry.release( layer.draw ); }
 			layers.clear();
 			members.clear();
+			revision++;
 		},
+		/*
+		================
+		revision
+
+		Changes whenever any layer's draw was replaced or released: a draw
+		list built at an older revision must be rebuilt before it is drawn.
+		================
+		*/
+		revision: () => revision,
 		stats: () => ({ layers: layers.size, members: members.size })
 	};
 }

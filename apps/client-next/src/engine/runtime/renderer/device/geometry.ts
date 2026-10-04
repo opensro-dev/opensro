@@ -859,7 +859,13 @@ export function createGeometryResources(
 		*/
 		release( draw: GeometryDraw ) {
 			// The releasing stack names the owner if another one still lists it.
-			releasedDraws.set( draw, { atMs: performance.now(), stack: new Error( "geometry release" ).stack ?? "" } );
+			// Keep the first record: a repeated release must not hide the original.
+			if ( !releasedDraws.has( draw ) ) {
+				releasedDraws.set( draw, {
+					atMs: performance.now(),
+					stack: new Error( "geometry release" ).stack ?? ""
+				} );
+			}
 			shadows?.forget( draw );
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
 				retire( buffer );

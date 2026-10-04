@@ -532,9 +532,14 @@ export function createRenderer(
 							device.geometry()!,
 							device.images()!
 						);
+					// Checked before empty slots drop, so a report names the real slot.
 					return gid === undefined ?
 						null :
-						{ target: device.portraitTarget( "__portrait" + (i + 1) ), depth: portraitDepth!.view, draws };
+						{
+							target: device.portraitTarget( "__portrait" + (i + 1) ),
+							depth: portraitDepth!.view,
+							draws: staleDraws.live( "party-portrait-" + (i + 1), draws )
+						};
 				} ).filter( ( r ): r is NonNullable<typeof r> => r !== null );
 				const dollInput = uiProduct?.doll;
 				// A hidden doll stays borrowed and warm for the local character, so
@@ -574,15 +579,19 @@ export function createRenderer(
 				const finishDeferred = ( results?: readonly boolean[] ) => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
 					characters.completeDeferred( results );
-					return characters.prepare(
-						device.geometry()!,
-						device.images()!,
-						scene.originRegion,
-						scene.matrix,
-						false,
-						timeSeconds,
-						true
-					).filter( draw => draw.deferredParticle );
+					// The continuation's draws reach the second submit: same rule.
+					return staleDraws.live(
+						"deferred-particles",
+						characters.prepare(
+							device.geometry()!,
+							device.images()!,
+							scene.originRegion,
+							scene.matrix,
+							false,
+							timeSeconds,
+							true
+						).filter( draw => draw.deferredParticle )
+					);
 				};
 				const deferredPass = deferredPlan ?
 					{
@@ -596,12 +605,15 @@ export function createRenderer(
 					undefined;
 				// Each owner's list is checked under its own name.
 				// Slices keep the scene's terrain/transparent boundaries exact.
-				const terrainDraws = staleDraws.live( "world", scene.draws.slice( 0, scene.terrainEnd ?? 0 ) ),
+				const terrainDraws = staleDraws.live( "world-terrain", scene.draws.slice( 0, scene.terrainEnd ?? 0 ) ),
 					opaqueDraws = staleDraws.live(
-						"world",
+						"world-opaque",
 						scene.draws.slice( scene.terrainEnd ?? 0, scene.transparentStart )
 					),
-					transparentDraws = staleDraws.live( "world", scene.draws.slice( scene.transparentStart ) ),
+					transparentDraws = staleDraws.live(
+						"world-transparent",
+						scene.draws.slice( scene.transparentStart )
+					),
 					liveCharacters = staleDraws.live( "characters", characterDraws ),
 					liveShadows = staleDraws.live( "character-shadows", shadowDraws );
 				const pending = frame!.draw(
@@ -636,10 +648,7 @@ export function createRenderer(
 					dollTarget ?
 						{ target: dollTarget, depth: dollDepth!.view, draws: staleDraws.live( "doll", dollDraws ) } :
 						undefined,
-					partyDraws.map( ( party, i ) => ({
-						...party,
-						draws: staleDraws.live( "party-portrait-" + (i + 1), party.draws )
-					}) ),
+					partyDraws,
 					frameId,
 					deferredPass,
 					device.bloom( viewport.width, viewport.height, !preview && video.records[video.active][11] === 1 )

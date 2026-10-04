@@ -216,6 +216,98 @@ test("a crossing uploads only the terrain it adds and releases only the terrain 
 	world.dispose( d.geometry, d.textures );
 });
 
+/*
+================
+grownTerrainPart
+
+A terrain part sharing the anchor's layer key with more vertices than the
+layer holds (2048), so admitting it rebuilds that layer on a new draw.
+================
+*/
+function grownTerrainPart( region, vertexCount ) {
+	const positions = new Float32Array( vertexCount * 3 );
+	for ( let i = 0; i < vertexCount; i++ ) positions.set( [ i % 320, 0, Math.floor( i / 320 ) ], i * 3 );
+	const prepared = transfer( {
+		id: `terrain:${region}`,
+		originRegion: ANCHOR,
+		warnings: [],
+		groups: [ {
+			id: `terrain-batch:${region}`,
+			terrainSector: region,
+			center: [ 160, 0, 160 ],
+			radius: 10000,
+			ranges: [ {
+				bounds: [ 0, 0, 0, 320, 0, 320 ],
+				cell: [ 0, 0 ],
+				lod: 0,
+				indexStart: 0,
+				indexCount: 3,
+				vertexStart: 0,
+				vertexCount,
+				center: [ 160, 0, 160 ],
+				radius: 227,
+				heights: new Array( 289 ).fill( 0 )
+			} ],
+			material: {
+				color: [ 1, 1, 1, 1 ],
+				alphaCutoff: 0,
+				blend: false,
+				doubleSided: true,
+				terrain: true,
+				unlit: true
+			},
+			geometry: {
+				positions,
+				normals: new Float32Array( vertexCount * 3 ),
+				uvs: new Float32Array( vertexCount * 2 ),
+				indices: new Uint32Array( [ 0, 1, 2 ] ),
+				instances: identity(),
+				transform: identity()
+			}
+		} ]
+	} );
+	return { region, origin: ANCHOR, groups: prepared.scene.groups, bytes: prepared.bytes };
+}
+
+test("a pending scene that grows a shared terrain layer never leaves its released draw in a still frame", () => {
+	const world = createWorldRenderer(), d = devices(), layerDraws = new Set();
+	// Only terrain layers write member vertices: that names the layer draws.
+	const write = d.geometry.writeVertices;
+	d.geometry.writeVertices = ( draw, base, vertices ) => {
+		layerDraws.add( draw );
+		write( draw, base, vertices );
+	};
+	world.camera( {
+		originRegion: ANCHOR,
+		// Straight down on the centre terrain cell (0..320).
+		eye: [ 160, 500, 160 ],
+		target: [ 160, 0, 161 ],
+		near: 1,
+		far: 3500,
+		fov: 1
+	} );
+	const west = terrainPart( 0x0100 ), centre = terrainPart( 0x0101 );
+	world.adopt( createWorldLease( transfer( objects( 0x0100 ) ) ), undefined, [ west, centre ] );
+	settle( world, d, "objects:256" );
+	let drawn = world.prepare( d.geometry, d.textures, 1, 1 ).draws;
+	const layer = drawn.find( draw => layerDraws.has( draw ) );
+	assert.ok( layer, "the current scene draws its terrain layer" );
+	// The next scene grows that layer past its capacity, but stays pending on
+	// a texture that never arrives, so the current scene keeps drawing.
+	const blocked = objects( 0x0101 );
+	blocked.groups[0].material.texture = "/never-loads.png";
+	world.adopt( createWorldLease( transfer( blocked ) ), undefined, [ centre, grownTerrainPart( 0x0102, 2100 ) ] );
+	for ( let frame = 0; frame < 8; frame++ ) {
+		drawn = world.prepare( d.geometry, d.textures, 1, 1 ).draws;
+		const stale = drawn.filter( draw => d.releases.includes( draw ) );
+		assert.deepEqual( stale, [], `frame ${frame} returned a released draw` );
+	}
+	assert.equal( world.stats().sceneId, "objects:256", "the blocked scene never committed" );
+	assert.ok( d.releases.includes( layer ), "admission rebuilt the shared layer" );
+	assert.ok( drawn.some( draw => layerDraws.has( draw ) && draw !== layer ), "its replacement is drawn" );
+	world.dispose( d.geometry, d.textures );
+});
+
 test("a terrain part counts once however many held scenes compose it", () => {
 	const residency = createWorldResidency(), part = { region: 1, origin: 1, groups: [], bytes: 1000 };
 	const a = { id: "a", originRegion: 1, warnings: [], groups: [] }, b = { ...a, id: "b" };

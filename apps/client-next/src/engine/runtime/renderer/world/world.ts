@@ -611,6 +611,7 @@ export function createWorldRenderer(
 	let retainedFadeFrame: number | null = null,
 		fadesChanging = true,
 		retainedTargetX = NaN,
+		selectedLayerRevision = -1,
 		retainedTargetZ = NaN;
 	const poses = new Map<
 		string,
@@ -1510,7 +1511,8 @@ export function createWorldRenderer(
 			const targetCellX = Math.floor( localCamera.target[0] / 320 ),
 				targetCellZ = Math.floor( localCamera.target[2] / 320 );
 			if (
-				!viewChanged && !fadesChanging && targetCellX === retainedTargetX && targetCellZ === retainedTargetZ
+				!viewChanged && !fadesChanging && targetCellX === retainedTargetX && targetCellZ === retainedTargetZ &&
+				layers.revision() === selectedLayerRevision
 			) {
 				// Every resident object would receive this frame stamp without changing
 				// selection or opacity. Materialize those stamps only on the next walk.
@@ -1876,6 +1878,10 @@ export function createWorldRenderer(
 			// that order. Keep scene submission order between resource batches:
 			// sorting filenames can put a fading prop before the solid structure behind it.
 			layers.flush( geometry );
+			// The selection below resolves every layer's current draw. A pending
+			// scene's admission can grow (replace) a layer the current one shares
+			// while the camera stands still; that must reopen this walk.
+			selectedLayerRevision = layers.revision();
 			shadowSurfaces.commit();
 			selectedFadeFrame = fadeFrame;
 			probe?.worldMark?.( "world-selection" );
