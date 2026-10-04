@@ -855,6 +855,9 @@ export function createEntities(
 					const tid = refs.get( event.entity.refObjId )?.tidWord ?? 0, band = tid >>> 11;
 					if ( (tid & 0x7fe) === 0x1c6 && (band === 3 || band === 4) ) {
 						append( { kind: "ui-sound", handle: "SND_COS_SUMMON", at: receivedAt } );
+						// CICCos_DeserializeSpawnSubState (854CD0): a fresh combat or
+						// fellowship pet also plays SYSTEM_PET_APPEAR (0x80000021).
+						append( { kind: "pet-appear", gid: event.entity.gid } );
 					}
 				}
 				return;

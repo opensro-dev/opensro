@@ -662,6 +662,46 @@ spawn
 	owner.dispose();
 });
 
+test("a freshly summoned combat pet plays its summon sound and SYSTEM_PET_APPEAR", () => {
+	const owner = createEntities();
+	owner.bootstrap( {
+		...bootstrap,
+		refObjSnapshot: [ { refObjId: 2190, kind: "cos", tidWord: 0x19c6 }, {
+			refObjId: 2183,
+			kind: "cos",
+			tidWord: 0x11c6
+		} ]
+	} );
+	flush( owner );
+	const spawn = ( ref, gid, fresh, band3 = true ) => {
+		const p = Buffer.alloc( 57 );
+		p.writeUInt32LE( ref );
+		p.writeUInt32LE( gid, 4 );
+		p.writeUInt16LE( 257, 8 );
+		p[25] = 1;
+		p.writeFloatLE( 10, 32 );
+		p.writeFloatLE( 20, 36 );
+		p.writeFloatLE( 1, 40 );
+		p[45] = 1;
+		p[56] = fresh ? 1 : 0;
+		// Band 3/4 read the pet's own name before the owner tail (owner name,
+		// hold, PvP, owner gid, sub-state: nine bytes).
+		const payload = band3 ? Buffer.concat( [ p.subarray( 0, 48 ), Buffer.alloc( 2 ), p.subarray( 48 ) ] ) : p;
+		return { opcode: 0x30d7, payload };
+	};
+	owner.receive( spawn( 2190, 5, true ), 0 );
+	let events = flush( owner ).events;
+	// 854CD0: sub-state 1 on a band 3/4 pet.
+	assert.ok( events.some( e => e.kind === "ui-sound" && e.handle === "SND_COS_SUMMON" ) );
+	assert.ok( events.some( e => e.kind === "pet-appear" && e.gid === 5 ) );
+	owner.receive( spawn( 2183, 6, true, false ), 0 );
+	events = flush( owner ).events;
+	assert.ok( !events.some( e => e.kind === "pet-appear" ), "a riding horse is no combat or fellowship pet" );
+	owner.receive( spawn( 2190, 7, false ), 0 );
+	assert.ok( !flush( owner ).events.some( e => e.kind === "pet-appear" ), "a pet already out spawns quietly" );
+	owner.dispose();
+});
+
 test("a rider's walk/run switches the vehicle that carries the path", () => {
 	const owner = createEntities();
 	owner.bootstrap( {
