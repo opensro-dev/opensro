@@ -185,24 +185,10 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 		spawn.Angle = clonePointer(source.Spawn.Angle)
 		clone.Spawn = &spawn
 	}
-	if source.AuthoredAreaReturn != nil {
-		authoredAreaReturn := *source.AuthoredAreaReturn
-		authoredAreaReturn.RegionID = clonePointer(source.AuthoredAreaReturn.RegionID)
-		authoredAreaReturn.X = clonePointer(source.AuthoredAreaReturn.X)
-		authoredAreaReturn.Y = clonePointer(source.AuthoredAreaReturn.Y)
-		authoredAreaReturn.Z = clonePointer(source.AuthoredAreaReturn.Z)
-		authoredAreaReturn.Angle = clonePointer(source.AuthoredAreaReturn.Angle)
-		clone.AuthoredAreaReturn = &authoredAreaReturn
-	}
-	if source.RebirthPoint != nil {
-		rebirthPoint := *source.RebirthPoint
-		rebirthPoint.RegionID = clonePointer(source.RebirthPoint.RegionID)
-		rebirthPoint.X = clonePointer(source.RebirthPoint.X)
-		rebirthPoint.Y = clonePointer(source.RebirthPoint.Y)
-		rebirthPoint.Z = clonePointer(source.RebirthPoint.Z)
-		rebirthPoint.Angle = clonePointer(source.RebirthPoint.Angle)
-		clone.RebirthPoint = &rebirthPoint
-	}
+	clone.AuthoredAreaReturn = cloneWorldSpawn(source.AuthoredAreaReturn)
+	clone.RebirthPoint = cloneWorldSpawn(source.RebirthPoint)
+	clone.LastRecallPoint = cloneWorldSpawn(source.LastRecallPoint)
+	clone.LastDeathPoint = cloneWorldSpawn(source.LastDeathPoint)
 	clone.DungeonFloorIndex = clonePointer(source.DungeonFloorIndex)
 	clone.PackedInstance = clonePointer(source.PackedInstance)
 	clone.MoveSegment = cloneSlice(source.MoveSegment)
@@ -265,4 +251,24 @@ func cloneTrackedQuests(source []TrackedQuestRecord) []TrackedQuestRecord {
 		clone[index].Tail6 = cloneSlice(source[index].Tail6)
 	}
 	return clone
+}
+
+/*
+================
+cloneWorldSpawn
+
+A deep copy of an optional world point.
+================
+*/
+func cloneWorldSpawn(source *WorldSpawn) *WorldSpawn {
+	if source == nil {
+		return nil
+	}
+	clone := *source
+	clone.RegionID = clonePointer(source.RegionID)
+	clone.X = clonePointer(source.X)
+	clone.Y = clonePointer(source.Y)
+	clone.Z = clonePointer(source.Z)
+	clone.Angle = clonePointer(source.Angle)
+	return &clone
 }

@@ -107,8 +107,15 @@ type CharacterWorld struct {
 	// Native char-data +0xa4 stores the appointed RefObj identity, not a runtime GID.
 	// RebirthPoint remains the durable fallback for legacy records and removed gates.
 	RebirthGateRefID uint32 `json:"rebirthGateRefId,omitempty"`
-	MovementMode     *int64 `json:"movementMode"`
-	SpawnSet         bool   `json:"spawnSet"`
+	// LastRecallPoint is where the player last used a return scroll (native
+	// char-data +0xCC.., CGObjPC_SaveLatestRecallPosition 4E0250, called from
+	// the return scroll's location check); LastDeathPoint is where the player
+	// last died (+0xDC.., 4E0330 from ProcessNormalDeath). The reverse return
+	// scroll takes the player back to either.
+	LastRecallPoint *WorldSpawn `json:"lastRecallPoint,omitempty"`
+	LastDeathPoint  *WorldSpawn `json:"lastDeathPoint,omitempty"`
+	MovementMode    *int64      `json:"movementMode"`
+	SpawnSet        bool        `json:"spawnSet"`
 	// DungeonFloorIndex is semantic game state. The browser combines it with
 	// its packed minimap catalogue; presentation prefixes, labels, tile paths
 	// and bounds never belong in the authority record.

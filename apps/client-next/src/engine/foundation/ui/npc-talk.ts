@@ -96,7 +96,8 @@ NpcTalkInput
 One frame of the talk window: the conversation, the authored layout and
 its origin, the text services, the pointer state and the NPC's service
 menu. Service flags left out are off, except talk; portalRows replaces
-the service menu with the teleport destinations.
+the service menu with the teleport destinations. canReverseReturn adds the
+reverse return scroll's two destinations (5D4410, capability 0x20000000).
 ================
 */
 export interface NpcTalkInput {
@@ -119,6 +120,7 @@ export interface NpcTalkInput {
 	readonly prompt?: string;
 	readonly canRecall?: boolean;
 	readonly canStorage?: boolean;
+	readonly canReverseReturn?: boolean;
 }
 
 /*
@@ -175,7 +177,20 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 					...(input.canRecall ?
 						[ { id: "npc-recall-designate", label: copy( "UIIT_CTL_RECALL_POSITION" ) } ] :
 						[]),
-					...(input.canPortal ? [ { id: "npc-portal-open", label: copy( "UIIT_CTL_TELEPORT_TARGET" ) } ] : [])
+					...(input.canPortal ?
+						[ { id: "npc-portal-open", label: copy( "UIIT_CTL_TELEPORT_TARGET" ) } ] :
+						[]),
+					// 5D4410: action 0x2B rows 1 and 2 send 0x7495 type 5 with 2 (the
+					// last recall point) or 3 (where the player died).
+					...(input.canReverseReturn ?
+						[ {
+							id: "npc-reverse-return:2",
+							label: copy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" )
+						}, {
+							id: "npc-reverse-return:3",
+							label: copy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" )
+						} ] :
+						[])
 				]),
 			{ id: "npc-talkend", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKEND" ) }
 		];

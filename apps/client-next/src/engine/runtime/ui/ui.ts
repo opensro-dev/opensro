@@ -1602,6 +1602,18 @@ export function createUi(
 			}
 			return;
 		}
+		if ( id.startsWith( "npc-reverse-return:" ) ) {
+			const conversation = view.gameplay?.npcConversation;
+			if ( conversation && conversation.phase === "menu" ) {
+				sendGameplay( {
+					kind: "travel-gate",
+					gid: conversation.gid,
+					type: 5,
+					target: Number( id.slice( 19 ) )
+				} );
+			}
+			return;
+		}
 		if ( id.startsWith( "npc-portal:" ) ) {
 			const conversation = view.gameplay?.npcConversation;
 			if ( conversation && conversation.phase === "menu" ) {
@@ -9952,7 +9964,8 @@ export function createUi(
 						hover,
 						pressed,
 						top: npcPanel.top(),
-						// NPC capability bits: 1 shop, 2 talk, 4 storage, 0x40 recall, 0x80 teleport.
+						// NPC capability bits: 1 shop, 2 talk, 4 storage, 0x40 recall, 0x80 teleport,
+						// 0x20000000 reverse return.
 						canShop: !!(capabilities & 1),
 						branches: target?.merchantBranches,
 						choiceColor: symbol =>
@@ -9973,6 +9986,7 @@ export function createUi(
 						canTalk: !!(capabilities & 2),
 						prompt: target?.kind === "teleport" ? target.name : "",
 						canRecall: !!(capabilities & 0x40),
+						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4)
 					} );
 					npcPanel.geometry( output );

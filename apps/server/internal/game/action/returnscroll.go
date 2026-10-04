@@ -26,6 +26,9 @@ type pendingReturn struct {
 	character      *enterworld.Character
 	due            int64
 	generation     uint64
+	// destination is a reverse return's chosen point; nil returns to the
+	// appointed rebirth point.
+	destination *simulation.Spawn
 }
 
 /*
@@ -37,26 +40,43 @@ func teleportState(c *enterworld.Character, mode uint8) wire.Frame {
 	return wire.Frame{Opcode: 0x3122, Payload: wire.NewWriter(6).U32(enterworld.ObjectIDForCharacter(c)).U8(11).U8(mode).Payload()}
 }
 
-// Inside the item-use character mutation door. v1.188 49B9F0 -> 4A0380
-// selects Param1 duration, Param2 blocking mode and Param3 destination.
-// v1.150 data expresses duration in milliseconds; v1.188 timers use seconds.
 /*
 ================
-bool
+returnScrollDuration
+
+v1.188 4A0380: Param1 is the cast duration (milliseconds in v1.150 data;
+v1.188 timers use seconds) and Param2 must be blocking mode 1. A zero
+duration takes 4E0B50's minimum timer interval.
 ================
 */
-func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, request wire.ItemUseRequest, now int64, result *OpResult) bool {
+func returnScrollDuration(ref *enterworld.ItemRef) (int64, bool) {
 	duration, present := ref.NativeFields.Lookup("itemParam1_29c")
 	blocking, hasBlocking := ref.NativeFields.Lookup("itemParam2_2a0")
-	if !present || !hasBlocking || math.IsNaN(duration) || math.IsInf(duration, 0) || duration < 0 || duration > math.MaxUint32 || math.Trunc(duration) != duration || blocking != 1 {
-		return false
+	if !present || !hasBlocking || math.IsNaN(duration) || math.IsInf(duration, 0) || duration < 0 ||
+		duration > math.MaxUint32 || math.Trunc(duration) != duration || blocking != 1 {
+		return 0, false
 	}
+	if duration == 0 {
+		return 100, true
+	}
+	return int64(duration), true
+}
+
+/*
+================
+returnScrollAdmission
+
+The player checks every return cast shares: the ordinary scroll (4A0380)
+and the reverse return (4A00C0). A native refusal sets *result; a silent
+one leaves it. v1.188 error low bytes agree with v1.150 689420 category 1.
+================
+*/
+func (rt *Runtime) returnScrollAdmission(division string, c *enterworld.Character, result *OpResult) bool {
 	// Native 4a0399 checks the quest mask before the active-cast test.
 	if rt.QuestTravelBlocks != nil && rt.QuestTravelBlocks(c)&0x20000 != 0 {
 		*result = itemUseFailure(0x5f)
 		return false
 	}
-	// v1.188 4A0380 error low bytes agree with v1.150 689420 category 1.
 	if c.NativeTeleportMode != 0 {
 		*result = itemUseFailure(0x5d)
 		return false
@@ -67,25 +87,76 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 		*result = itemUseFailure(0x75)
 		return false
 	}
-	// The ordinary RESURRECT family has no destination payload. Other return
-	// families must never silently teleport to the race start.
-	if ref.ReturnDestination != "RESURRECT" || rt.hasOpenSkillCast(division, c.Name) {
+	if rt.hasOpenSkillCast(division, c.Name) {
 		return false
 	}
 	if rt.hasSummonedTransportCOS(c) {
 		*result = itemUseFailure(0x5e)
 		return false
 	}
+	_, exists := rt.returnCasts.Load(simulation.WorldKey(division, c.Name))
+	return !exists
+}
+
+/*
+================
+beginReturnScroll
+
+Inside the item-use character mutation door. v1.188 49B9F0 -> 4A0380
+selects Param1 duration, Param2 blocking mode and Param3 destination. The
+ordinary RESURRECT family has no destination payload; other return
+families must never silently teleport to the race start. The location
+check records where the scroll was used (4E0250, slot 0x264): the reverse
+return's "last recall point".
+================
+*/
+func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, request wire.ItemUseRequest, now int64, result *OpResult) bool {
+	duration, ok := returnScrollDuration(ref)
+	if !ok || ref.ReturnDestination != "RESURRECT" || !rt.returnScrollAdmission(division, c, result) {
+		return false
+	}
+	at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
+	if !rt.startReturnCast(returnCast{division: division, character: c, row: row, slot: request.Slot,
+		typeWord: request.TypeWord, duration: duration, now: now}, result) {
+		return false
+	}
+	c.World.LastRecallPoint = worldSpawnFromMission(at)
+	return true
+}
+
+/*
+================
+returnCast
+
+One channel-11 return cast to start: the scroll row it consumes, its use
+reply identity, its duration and, for a reverse return, its destination.
+================
+*/
+type returnCast struct {
+	division    string
+	character   *enterworld.Character
+	row         int
+	slot        uint8
+	typeWord    uint16
+	duration    int64
+	destination *simulation.Spawn
+	now         int64
+}
+
+/*
+================
+startReturnCast
+
+Commits an admitted return cast: stops a walker, enters teleport mode 1,
+consumes the scroll and schedules completion (advanceReturnScrolls).
+================
+*/
+func (rt *Runtime) startReturnCast(cast returnCast, result *OpResult) bool {
+	c, division, now := cast.character, cast.division, cast.now
+	if now > math.MaxInt64-cast.duration {
+		return false
+	}
 	key := simulation.WorldKey(division, c.Name)
-	if _, exists := rt.returnCasts.Load(key); exists {
-		return false
-	}
-	if duration == 0 {
-		duration = 100
-	} // 4E0B50's minimum timer interval
-	if now > math.MaxInt64-int64(duration) {
-		return false
-	}
 	moving := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }).MoveSegment.Valid()
 	spawn := rt.liveSpawn(key, c, now)
 	state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
@@ -99,12 +170,13 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 	c.NativeTeleportMode = 1
 	rt.ClearCombatIntent(division, c.Name)
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
-	rt.returnCasts.Store(key, pendingReturn{division: division, name: c.Name, character: c, due: now + int64(duration), generation: rt.returnGeneration.Add(1)})
-	remaining := rt.consumeItemUseRow(c, row)
+	rt.returnCasts.Store(key, pendingReturn{division: division, name: c.Name, character: c, due: now + cast.duration,
+		generation: rt.returnGeneration.Add(1), destination: cast.destination})
+	remaining := rt.consumeItemUseRow(c, cast.row)
 	status := teleportState(c, 1)
 	stop := wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: spawn.RegionID, X: float32(spawn.X), Y: float32(spawn.Y), Z: float32(spawn.Z), Heading: spawn.Angle}}.Encode()}
 	// HandleItemUse publishes the item's visual after the success.
-	*result = OpResult{Frames: []wire.Frame{status, {Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}, Broadcast: []wire.Frame{status}}
+	*result = OpResult{Frames: []wire.Frame{status, {Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(cast.slot, remaining, cast.typeWord)}}, Broadcast: []wire.Frame{status}}
 	// 466F90 is a log record, not a state publication. 4A9430 emits
 	// the moving-only correction before 4E0B50 publishes channel 11.
 	if moving {
@@ -207,6 +279,9 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			return false
 		}
 		destination = rt.appointedRebirthPoint(c)
+		if job.destination != nil {
+			destination = *job.destination
+		}
 		previousWorld = c.World
 		state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
 			previous = *w

@@ -144,3 +144,29 @@ test("npcBranchLabel disambiguates duplicate shop group labels for multi-cultura
 	assert.equal( npcBranchLabel( branches[0], branches, patchedCopy ), "Purchase/sell/repair Chinese weapon" );
 	assert.equal( npcBranchLabel( branches[1], branches, patchedCopy ), "Purchase/sell/repair European weapon" );
 });
+
+test("a teleport gate lists the reverse return's two destinations only with its capability", () => {
+	const state = { phase: "menu", gid: 7 };
+	const render = canReverseReturn =>
+		npcTalkLayout( {
+			state,
+			layout,
+			origin: [ 100, 200 ],
+			copy: key => key,
+			measure,
+			draw: () => [],
+			size: () => [ 16, 16 ],
+			hover: null,
+			pressed: null,
+			top: 0,
+			canPortal: true,
+			canReverseReturn
+		} ).controls.map( control => control.id );
+	const offered = render( true );
+	// 5D4410 appends the rows after the teleport destinations' entry.
+	assert.deepEqual(
+		offered.filter( id => id.startsWith( "npc-portal" ) || id.startsWith( "npc-reverse-return" ) ),
+		[ "npc-portal-open", "npc-reverse-return:2", "npc-reverse-return:3" ]
+	);
+	assert.ok( !render( false ).some( id => id.startsWith( "npc-reverse-return" ) ) );
+});
