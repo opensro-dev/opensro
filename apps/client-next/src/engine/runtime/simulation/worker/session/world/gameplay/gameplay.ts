@@ -552,12 +552,24 @@ coming, so retain its menu, dialogue and lock until a new request.
 			reopen: npcConversation.state().phase === "closed"
 		} );
 		if ( frame ) npcConversation.clear();
+		markTarget( entity );
+		return frame;
+	}
+	/*
+================
+markTarget
+
+The one selection decal (CIODecal) rides entity. A ground click moves it to
+the clicked point; an attack or skill at a target brings it back, so the
+ring stays under what the player fights and the spent move marker goes.
+================
+	*/
+	function markTarget( entity: EntityState ) {
 		selectionDecal = {
 			kind: "target",
 			gid: entity.gid,
 			slot: entity.kind === "monster" || entity.kind === "cos" ? 3 : entity.kind === "player" ? 2 : 1
 		};
-		return frame;
 	}
 	/*
 ================
@@ -1708,11 +1720,13 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "attack" ) {
 				const frame = combat.attack( entity.gid );
 				movement.holdForCast( now );
+				markTarget( entity );
 				return sendFrame( frame );
 			}
 			if ( command.kind !== "skill" ) throw Error( "Unsupported gameplay command" );
 			const frame = combat.skill( command.skillId, entity.gid );
 			movement.holdForCast( now );
+			if ( entity.gid !== localGid ) markTarget( entity );
 			const pressedSkill = command.skillId;
 			const pressedMetadata = catalog.find( row => row.id === pressedSkill );
 			predictCast( pressedMetadata, entity, local, now );

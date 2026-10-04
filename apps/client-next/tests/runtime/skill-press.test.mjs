@@ -444,3 +444,16 @@ test("a press the server runs to its target for shows as next until its cast sta
 	assert.equal( game.take()?.skillQueue, undefined );
 	game.dispose();
 });
+
+test("a skill at the target brings the selection ring back from the move marker", () => {
+	const { game, select, press } = targetedPresser();
+	select( 9, 900 );
+	assert.equal( game.take()?.selectionDecal?.kind, "target" );
+	game.command( { kind: "move", destination: { ...local, x: local.x - 30, angle: 0 } }, 950, undefined, local );
+	assert.equal( game.take()?.selectionDecal?.kind, "ground", "the click marks its point" );
+	press( 9, 1000 );
+	const decal = game.take()?.selectionDecal;
+	assert.equal( decal?.kind, "target", "the press left the move marker up" );
+	assert.equal( decal?.gid, 9 );
+	game.dispose();
+});
