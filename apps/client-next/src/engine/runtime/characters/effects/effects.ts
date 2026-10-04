@@ -874,7 +874,11 @@ export function createCharacterEffects(
 					for ( const name of view.names ) if ( !revisions.has( name ) ) revisions.set( name, clock );
 					for ( const name of revisions.keys() ) if ( !view.names.includes( name ) ) revisions.delete( name );
 					statuses.set( entity.gid, { view, revisions } );
-					if ( view.tint ) {
+					// 85C590 skips every material call while +0x2B6 is 1 (berserk):
+					// a status view cached from before berserk must not repaint or
+					// clear the hwan material register either.
+					const enabled = entity.appearanceState?.[2] === 1;
+					if ( !enabled && view.tint ) {
 						const script: MaterialScript = {
 							kind: "material",
 							from: view.tint.from,
@@ -891,8 +895,7 @@ export function createCharacterEffects(
 								previous: clock
 							} );
 						}
-					} else if ( view.tint === null ) materials.delete( entity.gid );
-					const enabled = entity.appearanceState?.[2] === 1;
+					} else if ( !enabled && view.tint === null ) materials.delete( entity.gid );
 					let row = hwan.get( entity.gid );
 					if ( !row && !enabled ) continue;
 					if ( !row ) {

@@ -719,11 +719,16 @@ export function createCharacterPresentation(
 			nativeServerName?: string,
 			normalFortressClothes = false
 		) {
+			// The local player (and the mount it rides) is where its movement owner
+			// put it; its entity row can still hold the spawn point, and a LOD
+			// measured from that drifts while running (equipment glow, effects).
 			entityLod.step(
 				entities,
 				gameplay?.localGid,
 				renderer.presentationCamera?.() ?? null,
-				Math.trunc( seconds * 1000 )
+				Math.trunc( seconds * 1000 ),
+				gameplay?.pose ?? undefined,
+				entities.find( e => e.gid === gameplay?.localGid )?.mountedOn
 			);
 			const animationDeltaMs = animationDelta( seconds );
 			skillObjects.retain( entities );
