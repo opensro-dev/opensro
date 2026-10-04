@@ -26,11 +26,12 @@ const SHOT = "cold_gigongjang_shot_a.efp", HIT = "cold_gigongjang_hit_a.efp";
 ================
 castAt
 
-Steps a Cold Wave Arrest cast at a monster distance units away and returns
-the effect names drawn at each step time.
+Steps a Cold Wave Arrest cast at a monster distance units away, moving
+velocity units a second along x, and returns what is drawn at each step:
+effect names, the shot's x and the monster's x.
 ================
 */
-function castAt( distance ) {
+function castAt( distance, velocity = 0 ) {
 	const catalog = createEffectDecoder().decode(
 		new TextEncoder().encode( JSON.stringify( { [COLD_WAVE_ARREST]: raw[COLD_WAVE_ARREST] } ) )
 	);
@@ -91,7 +92,7 @@ function castAt( distance ) {
 			() => 10,
 			events,
 			// Every socket sits at its actor's feet.
-			/** @type {any} */ (gid => ({ regionId: 257, x: gid === 1 ? 0 : distance, y: 0, z: 0, yaw: 0 })),
+			/** @type {any} */ (gid => ({ regionId: 257, x: gid === 1 ? 0 : entities[1].x, y: 0, z: 0, yaw: 0 })),
 			[],
 			2
 		);
@@ -100,9 +101,15 @@ function castAt( distance ) {
 	const frames = [];
 	for ( let i = 0; i <= 40; i++ ) {
 		const now = .2 + i * .05;
+		entities[1].x = distance + velocity * i * .05;
 		const actors = step( now, i === 0 ? [ { cast, phase: "SHOT", event: 1, at: .2 } ] : [] );
+		const shot = actors.find( actor => decodeURIComponent( actor.model ?? "" ).endsWith( SHOT ) );
+		const hit = actors.find( actor => decodeURIComponent( actor.model ?? "" ).endsWith( HIT ) );
 		frames.push( {
 			now,
+			monster: entities[1].x,
+			shotX: shot?.pose.x,
+			hitX: hit?.pose.x,
 			drawn: actors.map( actor => decodeURIComponent( actor.model ?? "" ) ),
 			looping: actors.some( actor => decodeURIComponent( actor.model ?? "" ).endsWith( SHOT ) && actor.loop )
 		} );
@@ -119,4 +126,24 @@ test("the projectile is drawn, looping, until the impact replaces it", () => {
 		assert.ok( frame.drawn.some( name => name.endsWith( SHOT ) ), `no projectile at ${frame.now.toFixed( 2 )} s` );
 		assert.ok( frame.looping, `a one-shot projectile at ${frame.now.toFixed( 2 )} s` );
 	}
+});
+
+test("a shot at a monster that walks away follows it and lands on it", () => {
+	// 100 units away, retreating at 60 a second against the shot's 200.
+	const frames = castAt( 100, 60 );
+	const impact = frames.findIndex( frame => frame.hitX !== undefined );
+	assert.ok( impact > 0, "no impact effect" );
+	for ( const frame of frames.slice( 0, impact ) ) {
+		assert.ok(
+			frame.shotX !== undefined && frame.shotX <= frame.monster + 1e-6,
+			`the shot passed the monster at ${frame.now.toFixed( 2 )} s`
+		);
+	}
+	const landed = frames[impact], hitX = landed.hitX ?? NaN;
+	assert.ok(
+		Math.abs( hitX - landed.monster ) < 60 * .05 + 1e-6,
+		`landed at ${hitX}, the monster at ${landed.monster}`
+	);
+	// The captured end (100) would have landed 40-odd units short of it.
+	assert.ok( hitX > 130, "the shot flew to where the monster had been: " + hitX );
 });

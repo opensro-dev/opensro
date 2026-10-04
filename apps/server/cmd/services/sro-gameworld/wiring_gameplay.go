@@ -176,6 +176,7 @@ func newGameplayPlane(
 	movementRuntime.UsePendingTracker(items.Pending)
 	movementRuntime.ClearCombatIntent = items.ClearCombatIntent
 	movementRuntime.MovementBlocked = items.PlayerMovementBlocked
+	movementRuntime.RetireMoveEffects = items.RetireMoveEffects
 	movementRuntime.AttackLocked = items.PlayerAttackLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.CompanionPresentations = items.CompanionPresentations

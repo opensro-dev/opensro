@@ -973,7 +973,7 @@ test("socket projectiles capture launch once and keep flight independent of late
 	effects.dispose();
 });
 
-test("target-bone projectiles capture the evaluated endpoint and preserve arrival after target movement", () => {
+test("target-bone projectiles follow the evaluated endpoint to their arrival", () => {
 	const row = {
 		phase: "SHOT",
 		startEvent: 0,
@@ -1047,7 +1047,9 @@ test("target-bone projectiles capture the evaluated endpoint and preserve arriva
 	assert.equal( step( 1, [ { cast, phase: "SHOT", event: 0, at: 1 } ] ).length, 1 );
 	entities[1].x = 999;
 	assert.equal( step( 2 )[0].pose.x, 100 );
-	assert.equal( calls, 1 );
+	// A shot at another actor homes (stepHomingProjectile): its socket is
+	// evaluated again on every frame, not captured once at launch.
+	assert.ok( calls > 1, "the socket was read once: " + calls );
 	assert.deepEqual( step( 3 ), [] );
 	assert.equal( owner.error(), null );
 	owner.dispose();
