@@ -42,6 +42,18 @@ func (d *Deps) TrainingCampAuthority() TrainingCampStore {
 	return d.TrainingCamps
 }
 
+// PlayableModel answers a roster model's codename by RefObjID.
+func (d *Deps) PlayableModel(refObjID uint32) (string, bool) {
+	if d == nil || d.Roster == nil {
+		return "", false
+	}
+	model := d.Roster.ModelByRefObjID(refObjID)
+	if model == nil {
+		return "", false
+	}
+	return model.Codename, true
+}
+
 // CharacterModelRef resolves the roster-backed model reference used by social
 // rows without exposing the roster implementation.
 func (d *Deps) CharacterModelRef(character *Character) uint32 {

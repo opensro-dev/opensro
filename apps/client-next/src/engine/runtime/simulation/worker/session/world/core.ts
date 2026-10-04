@@ -44,6 +44,7 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 		);
 	gameplay.bindReferences( {
 		country: refObjId => entities.characterCountry( refObjId ),
+		playerModels: country => entities.playerModels( country ),
 		item: refObjId => entities.itemReference( refObjId )
 	} );
 

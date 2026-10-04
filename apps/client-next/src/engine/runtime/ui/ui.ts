@@ -114,6 +114,8 @@ import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createCosHud } from "./hud/cos-hud";
 import { createRepairHud } from "./hud/repair-hud";
+import { createSkinChangeHud } from "./hud/skin-change-hud";
+import { isSkinChangeScroll, skinDraftRange, type SkinDraftKey } from "@/engine/foundation/gameplay/skin-change";
 import { repairAllCost } from "@/engine/foundation/gameplay/repair";
 import { createSlotEffectClock } from "./hud/slot-effects";
 import { itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
@@ -383,6 +385,10 @@ const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
 const BUG_REPLAY_OPTION = "option-bug-replay";
 const BUG_REPLAY_LABEL = "Record bug replay";
+// The skin change scroll's window (CIFChangePlayerModel).
+const SKIN_PANEL = "Skin change";
+// The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
+const SKIN_SLIDER_TRAVEL = 85;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
 const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
@@ -571,6 +577,7 @@ export function createUi(
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
 	const repairHud = createRepairHud();
+	const skinHud = createSkinChangeHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
@@ -950,6 +957,7 @@ export function createUi(
 			return false;
 		}
 		shopOpenRequest = null;
+		if ( next !== SKIN_PANEL ) skinHud.close();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
 		blockDialog = null;
@@ -1171,6 +1179,14 @@ export function createUi(
 			const item = view?.gameplay?.inventory.find( row => row.slot === command.slot );
 			if ( item && isRestorationPotion( item ) ) {
 				withdrawal.open( item.refObjId );
+				dirty = true;
+				return;
+			}
+			// The skin scroll opens CIFChangePlayerModel; its confirm uses it.
+			if ( item && isSkinChangeScroll( item.typeFlags ) && !command.skin ) {
+				const game = view?.gameplay, local = view?.entities.find( e => e.gid === game?.localGid );
+				if ( !game?.playerModels?.length || !local || !setPanel( SKIN_PANEL ) ) return;
+				skinHud.open( item.slot, game.playerModels, local.refObjId, local.bodyShape ?? 0xff );
 				dirty = true;
 				return;
 			}
@@ -2550,6 +2566,23 @@ export function createUi(
 					cosSlot = -1;
 				}
 			}
+		} else if ( id === "skin-cancel" ) {
+			setPanel( "" );
+		} else if ( id === "skin-confirm" ) {
+			const open = skinHud.state(), choice = skinHud.choice();
+			if ( open && choice && skinHud.changed() ) {
+				sendGameplay( { kind: "item-use", slot: open.slot, skin: choice } );
+				setPanel( "" );
+			}
+		} else if ( id === "skin:male" || id === "skin:female" ) {
+			skinHud.set( "sex", id === "skin:male" ? 1 : 0 );
+		} else if ( id.startsWith( "skin:" ) ) {
+			const [, key, step] = id.split( ":" ), draft = skinHud.state()?.draft;
+			if ( draft && (key === "figure" || key === "height" || key === "volume") ) {
+				skinHud.set( key, draft[key] + (step === "next" ? 1 : -1) );
+			}
+		} else if ( id.startsWith( "skin-rotate:" ) ) {
+			skinHud.rotate( id === "skin-rotate:left" ? -1 : id === "skin-rotate:right" ? 1 : 0 );
 		} else if ( id.startsWith( "shop-repair:" ) ) {
 			// 5B1C00 arms the repair cursor; 5B2B10 totals the cost (789630)
 			// and asks before 0x746F mode 2, or says nothing needs it.
@@ -2813,6 +2846,16 @@ export function createUi(
 		*/
 		mallPreview() {
 			return itemMall.previewRequest();
+		},
+		/*
+		================
+		skinPreview
+
+		The skin change window's body for the mannequin, or null.
+		================
+		*/
+		skinPreview() {
+			return panel === SKIN_PANEL ? skinHud.preview() : null;
 		},
 		/*
 		================
@@ -10287,6 +10330,83 @@ export function createUi(
 						authoredText( { ...money, color: shown.color }, px, py, shown.text );
 					}
 					endWindow( admission, "service:Storage" );
+				}
+				const skin = skinHud.state();
+				if ( panel === SKIN_PANEL && skin && hudData?.windows.ifchangeplayermodel ) {
+					const admission = beginWindow(),
+						root = hudData.root.GDR_CHANGE_PLAYER_MODEL!,
+						layout = hudData.windows.ifchangeplayermodel,
+						nodes = Object.values( layout ),
+						byName = ( name: string ) => nodes.find( n => n.name === name ),
+						[px, py] = windowOrigin( SKIN_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] );
+					nativeFrame( root, px, py, hudCopy( "UIIT_PAG_CHAR_SKIN_CHANGE" ), "skin-cancel" );
+					// The sex buttons, sliders, rotate and confirm controls are live.
+					nativePage( layout, px, py, [ 17, 18, 31, 32, 33, 34, 35, 41, 42, 43, 71, 72, 73, 100 ] );
+					for (
+						const [id, sex, name] of [ [ "skin:male", 1, "MALE" ], [ "skin:female", 0, "FEMALE" ] ] as const
+					) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_INFO_BTN_" + name );
+						if ( node ) {
+							authoredLabeledButton( node, px, py, id, hudCopy( node.text ), skin.draft.sex === sex );
+						}
+					}
+					const prev = byName( "GDR_SLIDER_CTRL_BTN_PREV" ),
+						next = byName( "GDR_SLIDER_CTRL_BTN_NEXT" ),
+						thumb = byName( "GDR_SLIDER_CTRL_BTN_THUMB" );
+					for ( const key of [ "figure", "height", "volume" ] as const satisfies readonly SkinDraftKey[] ) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_INFO_SLI_" + key.toUpperCase() );
+						if ( !node || !prev || !next || !thumb ) continue;
+						const [min, max] = skinDraftRange( skin.models, skin.draft, key ),
+							value = skin.draft[key],
+							[sx, sy] = authoredRect( node, px, py );
+						authoredImage( node, px, py );
+						authoredButton( prev, sx, sy, "skin:" + key + ":prev", "", value <= min );
+						authoredButton( next, sx, sy, "skin:" + key + ":next", "", value >= max );
+						authoredImage(
+							thumb,
+							sx + (max > min ? (value - min) / (max - min) * SKIN_SLIDER_TRAVEL : 0),
+							sy
+						);
+					}
+					for (
+						const [id, name] of [ [ "skin-rotate:left", "LEFT" ], [ "skin-rotate:reset", "RESET" ], [
+							"skin-rotate:right",
+							"RIGHT"
+						] ] as const
+					) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_VIEW_BTN_" + name );
+						if ( node ) authoredButton( node, px, py, id, "" );
+					}
+					for ( const [id, name] of [ [ "skin-confirm", "OK" ], [ "skin-cancel", "CANCEL" ] ] as const ) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_INFO_BTN_" + name );
+						if ( node ) {
+							authoredLabeledButton(
+								node,
+								px,
+								py,
+								id,
+								hudCopy( node.text ),
+								id === "skin-confirm" && (!skinHud.changed() || !!game?.inventoryPending)
+							);
+						}
+					}
+					const view = byName( "GDR_CHANGE_PLAYER_MODEL_VIEW" ), doll = itemMall.previewGid();
+					if ( view && doll !== undefined ) {
+						quads.push( {
+							doll: { gid: doll, yaw: skin.yaw },
+							texture: "__doll",
+							rect: authoredRect( view, px, py ),
+							uv: [ 0, 0, 1, 1 ],
+							color: white,
+							clip: full
+						} );
+					}
+					endWindow( admission, "service:" + SKIN_PANEL );
 				}
 				if ( panel === "COS inventory" && hudData ) {
 					const admission = beginWindow(),

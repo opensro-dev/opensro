@@ -49,6 +49,7 @@ const (
 	itemUseFirework
 	itemUseRepairHammer
 	itemUseWarehouseTicket
+	itemUseSkinChange
 )
 
 /*
@@ -95,6 +96,10 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// 49C2B0 case 6 (type 4 = 7): the repair hammer (npcrepair.go).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 7} {
 		return itemUseRepairHammer
+	}
+	// 49C2B0 case 8 (type 4 = 9): the character skin change (skinchange.go).
+	if ref.TypeIDs == [4]int64{3, 3, 13, 9} {
+		return itemUseSkinChange
 	}
 	// Type 4 = 10: the remote warehouse ticket (storage.go).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 10} {

@@ -627,7 +627,10 @@ export function startRuntime(
 				world.pumpCameraScripts( now );
 				presentation.step( simulationTimeMs );
 				characters.profile( frameProbe() );
-				characters.mallOutfit( worldPresented ? ui.mallPreview() : null );
+				characters.mallOutfit(
+					worldPresented ? ui.mallPreview() : null,
+					worldPresented ? ui.skinPreview() : null
+				);
 				characters.step(
 					presentation.entities(),
 					presentation.gameplay(),

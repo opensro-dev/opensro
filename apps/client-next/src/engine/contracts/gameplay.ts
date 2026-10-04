@@ -245,6 +245,8 @@ export type GameplayCommand =
 		readonly companionGid?: number;
 		readonly revivalSlot?: number;
 		readonly summonerSlot?: number;
+		// The skin change window's choice (CIFChangePlayerModel_OnConfirm).
+		readonly skin?: import("@/engine/foundation/gameplay/skin-change").SkinChoice;
 	}
 	| {
 		readonly kind: "navigation";
@@ -445,6 +447,7 @@ export interface GameplayState {
 	readonly eligibility?: { readonly gm: boolean; readonly pcRoomEvent: boolean; };
 	readonly autoPotion?: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
 	readonly storage?: import("@/engine/foundation/gameplay/storage-room").StorageRoom | null;
+	readonly playerModels?: readonly import("@/engine/foundation/gameplay/skin-change").PlayerModel[];
 	readonly cosWindows?: readonly (import("@/engine/foundation/gameplay/cos-timer").CosItemWindow & {
 		readonly reference: import("@/engine/foundation/gameplay/cos-timer").CosItemWindowReference;
 	})[];

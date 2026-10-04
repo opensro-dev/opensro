@@ -542,8 +542,8 @@ export function createCharacterPresentation(
 		mallOutfit / mallPreviewState
 		================
 		*/
-		mallOutfit( items: readonly number[] | null ) {
-			mallPreview.request( items );
+		mallOutfit( items: readonly number[] | null, skin: import("./mall-preview").MallSkin | null = null ) {
+			mallPreview.request( items, skin );
 		},
 		/*
 		================
@@ -3358,16 +3358,22 @@ export function createCharacterPresentation(
 			// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
 			// It remains admitted even when no world entity exists for that member.
 			const portraits: CharacterActor[] = [];
-			const mallResource = local && catalog.get( local.refObjId );
-			if ( mallResource && local && gameplay && manifest >= 3 ) {
+			const skin = mallPreview.skin(), localResource = local && catalog.get( local.refObjId );
+			const mallResource = local && catalog.get( skin?.model ?? local.refObjId );
+			if ( mallResource && localResource && local && gameplay && manifest >= 3 ) {
+				// A body of the other sex cannot wear the worn set; 4EFE50 refuses
+				// that change until the armour and avatars are off anyway.
+				const worn = mallResource.codename.includes( "_WOMAN_" ) ===
+					localResource.codename.includes( "_WOMAN_" );
 				portraits.push( ...mallPreview.step(
 					{
 						resource: mallResource,
 						dress,
-						equipment: gameplay.inventory,
-						avatars: local.avatars ?? [],
+						equipment: worn ? gameplay.inventory : [],
+						avatars: worn ? local.avatars ?? [] : [],
 						seconds,
-						source: next.get( local.gid )
+						source: next.get( local.gid ),
+						shape: skin?.shape
 					},
 					resources,
 					renderer

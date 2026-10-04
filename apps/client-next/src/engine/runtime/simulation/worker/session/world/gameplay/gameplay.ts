@@ -11,6 +11,7 @@ commands and cannot bypass actor eligibility.
 */
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
+import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
 import { createPickup } from "./pickup";
 import { createActionSession } from "./action-session";
@@ -166,11 +167,13 @@ function unlimitedItemIds( value: unknown ): readonly number[] {
 WorldReferences
 
 The world catalog lookups gameplay reads but does not own (entities owns
-the catalog): a character reference's country and an item reference.
+the catalog): a character reference's country, a country's player models
+and an item reference.
 ================
 */
 interface WorldReferences {
 	readonly country: ( refObjId: number ) => number | undefined;
+	readonly playerModels: ( country: number ) => readonly PlayerModel[];
 	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
 }
 
@@ -384,7 +387,22 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
 	let social = emptySocial();
 	// The world catalog's lookups, bound by the composition root (core).
-	let worldReferences: WorldReferences = { country: () => undefined, item: () => undefined };
+	let worldReferences: WorldReferences = { country: () => undefined, playerModels: () => [], item: () => undefined };
+	// The session's catalog is fixed; one list per country keeps the
+	// published state's identity stable.
+	let playerModels: { readonly country: number; readonly models: readonly PlayerModel[]; } | null = null;
+	/*
+	================
+	localPlayerModels
+	================
+	*/
+	function localPlayerModels(): readonly PlayerModel[] {
+		if ( localCountry === undefined ) return [];
+		if ( playerModels?.country !== localCountry || !playerModels.models.length ) {
+			playerModels = { country: localCountry, models: worldReferences.playerModels( localCountry ) };
+		}
+		return playerModels.models;
+	}
 	let bindings = skillBindings( {} );
 	let catalog: readonly SkillMetadata[] = [];
 	// The local cast's action-state-2 window (CIDecoSkill 8E0A23 / 877240).
@@ -1515,7 +1533,8 @@ state here before a command can claim a native wire conversation.
 					records: [ ...cosRecords.values() ],
 					selectedGid: command.companionGid,
 					revivalSlot: command.revivalSlot,
-					summonerSlot: command.summonerSlot
+					summonerSlot: command.summonerSlot,
+					skin: command.skin
 				} );
 			}
 			if ( command.kind === "release-target" ) {
@@ -2779,6 +2798,7 @@ The published plane when something changed since the last take, else null.
 				guide,
 				paramJobs: paramJobs.state(),
 				storage: storage.state(),
+				playerModels: localPlayerModels(),
 				cosWindows: cosWindows.filter( row => cosItemRefs2.has( row.itemRefObjId ) ).map( row => ({
 					...row,
 					reference: cosItemRefs2.get( row.itemRefObjId )!

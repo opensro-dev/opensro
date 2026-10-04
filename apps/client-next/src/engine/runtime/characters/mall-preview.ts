@@ -6,6 +6,8 @@ mall-preview.ts - Item Mall mannequin lifetime and shared equipment assembly
 The mannequin borrows character resources and never changes the world actor
 or authoritative inventory. Cold replacements keep the last complete outfit.
 Native 6BBEA0 clones the player; 6BB0A0 replaces the matching avatar family.
+The skin change window (CIFChangePlayerModel) shows the same mannequin in
+another body and shape; its scale follows 6D0B40's height and volume steps.
 
 ===========================================================================
 */
@@ -25,6 +27,10 @@ import { radians } from "@/engine/foundation/math/angles";
 // Above both the unsigned wire GID range and the party portrait range.
 export const MALL_PREVIEW_GID = 0x200000000;
 const APPEARANCE_EQUIPMENT_SLOTS = 9;
+// Character creation's body scale: 0.94 plus 0.03 a step.
+const SHAPE_SCALE_BASE = .94;
+const SHAPE_SCALE_STEP = .03;
+const SHAPE_MAX_STEP = 4;
 
 /*
 ================
@@ -38,6 +44,20 @@ interface MallPreviewFrame {
 	readonly avatars: readonly { readonly refObjId: number; }[];
 	readonly seconds: number;
 	readonly source?: CharacterActor;
+	// The skin change window's shape byte: height low, volume high.
+	readonly shape?: number;
+}
+
+/*
+================
+MallSkin
+
+The body the skin change window shows.
+================
+*/
+export interface MallSkin {
+	readonly model: number;
+	readonly shape: number;
 }
 
 /*
@@ -47,6 +67,7 @@ createMallPreview
 */
 export function createMallPreview() {
 	let request: readonly number[] | null = null;
+	let skin: MallSkin | null = null;
 	let catalog: DressCatalog | undefined;
 	let body = "";
 	let state: MallPreviewState = { wearable: [] };
@@ -60,6 +81,7 @@ export function createMallPreview() {
 	*/
 	function reset() {
 		request = null;
+		skin = null;
 		catalog = undefined;
 		body = "";
 		state = { wearable: [] };
@@ -73,13 +95,20 @@ export function createMallPreview() {
 		request
 		================
 		*/
-		request( items: readonly number[] | null ) {
-			if ( items === null ) {
+		request( items: readonly number[] | null, body: MallSkin | null = null ) {
+			if ( items === null && body === null ) {
 				if ( request !== null ) reset();
 				return;
 			}
-			request = [ ...items ];
+			request = [ ...(items ?? []) ];
+			skin = body;
 		},
+		/*
+		================
+		skin
+		================
+		*/
+		skin: () => skin,
 		/*
 		================
 		step
@@ -164,10 +193,17 @@ export function createMallPreview() {
 					pose: { regionId: 0, x: 0, y: 0, z: 0, yaw: radians( 0 ) },
 					clip: "stand",
 					previewClip: frame.source?.previewClip,
-					bodyVolume: frame.source?.bodyVolume,
+					bodyVolume: frame.shape === undefined ? frame.source?.bodyVolume : {
+						index: Math.min( SHAPE_MAX_STEP, frame.shape >>> 4 & 15 ),
+						female: frame.resource.codename.includes( "_WOMAN_" )
+					},
 					time: frame.seconds,
 					loop: true,
-					scale: 1,
+					scale: frame.shape === undefined ?
+						1 :
+						Math.fround(
+							SHAPE_SCALE_BASE + Math.min( SHAPE_MAX_STEP, frame.shape & 15 ) * SHAPE_SCALE_STEP
+						),
 					pickable: false
 				};
 				const children: CharacterActor[] = planned.assembly.auxiliary.map( ( { entry }, index ) => ({

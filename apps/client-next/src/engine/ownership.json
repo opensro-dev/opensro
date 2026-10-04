@@ -15,6 +15,7 @@
     "src/engine/runtime/ui/hud/quest-timers.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/cos-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/repair-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/skin-change-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/slot-effects.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/departure.ts": "src/engine/runtime/simulation/worker/session/world/world.ts",
     "src/engine/runtime/ui/hud/skill-slot.ts": "src/engine/runtime/ui/ui.ts",

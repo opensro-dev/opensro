@@ -111,7 +111,7 @@ func (rt *Runtime) queueObjectAction(division string, c *enterworld.Character, p
 	default:
 		return OpResult{}, false
 	}
-	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || snapshot.NativeTeleportMode == 1 || mountedOnCOS(snapshot) {
+	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || snapshot.NativeTeleportMode != 0 || mountedOnCOS(snapshot) {
 		return OpResult{}, false
 	}
 	// 4ACC40 validates a skill command (mask 0x37, call at 4ACED4) before it

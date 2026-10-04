@@ -141,6 +141,9 @@ type returnCast struct {
 	duration    int64
 	destination *simulation.Spawn
 	now         int64
+	// mode is the channel-11 teleport mode; zero is a return's 1. The skin
+	// change reloads in place under mode 3 (4EFFC0).
+	mode uint8
 }
 
 /*
@@ -167,13 +170,17 @@ func (rt *Runtime) startReturnCast(cast returnCast, result *OpResult) bool {
 	})
 	writeBackWorld(c, state)
 	c.World.MoveSegment = nil
-	c.NativeTeleportMode = 1
+	mode := cast.mode
+	if mode == 0 {
+		mode = 1
+	}
+	c.NativeTeleportMode = mode
 	rt.ClearCombatIntent(division, c.Name)
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
 	rt.returnCasts.Store(key, pendingReturn{division: division, name: c.Name, character: c, due: now + cast.duration,
 		generation: rt.returnGeneration.Add(1), destination: cast.destination})
 	remaining := rt.consumeItemUseRow(c, cast.row)
-	status := teleportState(c, 1)
+	status := teleportState(c, mode)
 	stop := wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: spawn.RegionID, X: float32(spawn.X), Y: float32(spawn.Y), Z: float32(spawn.Z), Heading: spawn.Angle}}.Encode()}
 	// HandleItemUse publishes the item's visual after the success.
 	*result = OpResult{Frames: []wire.Frame{status, {Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(cast.slot, remaining, cast.typeWord)}}, Broadcast: []wire.Frame{status}}
@@ -205,7 +212,9 @@ func (rt *Runtime) HandleReturnCancel(division string, c *enterworld.Character, 
 		return OpResult{Frames: []wire.Frame{{Opcode: 0xb2dd, Payload: []byte{2, 6}}}}
 	}
 	if !rt.deps.Update(c, "return-scroll-cancel", func() bool {
-		if c.NativeTeleportMode == 0 {
+		// INFERENCE: only a return is cancelled; a skin change's mode-3
+		// reload carries a model already committed.
+		if c.NativeTeleportMode != 1 {
 			return false
 		}
 		c.NativeTeleportMode = 0

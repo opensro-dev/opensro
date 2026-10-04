@@ -9,6 +9,7 @@ Only admitted owner records can nominate a live pet or a dead summoner item.
 ===========================================================================
 */
 import type { CosRecord, GameplayCommand, InventoryItem } from "@/engine/contracts/gameplay";
+import { isSkinChangeScroll, skinChangeTail, type SkinChoice } from "./skin-change";
 
 /*
 ================
@@ -23,6 +24,7 @@ export interface CosItemUseContext {
 	readonly selectedGid?: number;
 	readonly revivalSlot?: number;
 	readonly summonerSlot?: number;
+	readonly skin?: SkinChoice;
 }
 
 /*
@@ -40,6 +42,10 @@ export function cosItemUseTail(
 ): Uint8Array {
 	const band = flags >>> 5 & 3, group = flags >>> 7 & 15, subtype = flags >>> 11 & 31;
 	if ( (flags & 0x1c) !== 0x0c || band !== 3 ) return new Uint8Array();
+	if ( isSkinChangeScroll( flags ) ) {
+		if ( !context?.skin ) throw Error( "Choose a skin in the change window" );
+		return skinChangeTail( context.skin );
+	}
 	if ( group === 1 && subtype === 6 ) {
 		const candidates = items.filter( row =>
 			row.slot >= 13 && row.summon?.state === 4 &&

@@ -59,6 +59,7 @@ export function createEntities(
 			level?: number;
 			maxHp?: number;
 			countryByte9c?: number;
+			sexSelector1ac?: number;
 			merchantBranches?: EntityState["merchantBranches"];
 		}>();
 	let receivedAt = 0;
@@ -288,6 +289,24 @@ export function createEntities(
 		},
 		/*
 		================
+		playerModels
+
+		The player models of one country in reference order, each with its
+		sex selector (+0x1AC): the lists CIFChangePlayerModel_BuildModelLists
+		(6D14C0) reads from the global data manager.
+		================
+		*/
+		playerModels( country: number ): readonly { readonly refObjId: number; readonly sex: number; }[] {
+			const models: { refObjId: number; sex: number; }[] = [];
+			for ( const [refObjId, row] of refs ) {
+				if ( row.kind === "player" && row.countryByte9c === country && row.sexSelector1ac !== undefined ) {
+					models.push( { refObjId, sex: row.sexSelector1ac } );
+				}
+			}
+			return models.sort( ( a, b ) => a.refObjId - b.refObjId );
+		},
+		/*
+		================
 		itemReference
 
 		An item reference's flags and display name, as ground drops resolve them.
@@ -408,7 +427,7 @@ export function createEntities(
 					const [field, max] of [ [ "level", 255 ], [ "maxHp", 0xffffffff ], [
 						"countryByte9c",
 						255
-					] ] as const
+					], [ "sexSelector1ac", 255 ] ] as const
 				) {
 					if (
 						row[field] !== undefined &&
@@ -443,6 +462,7 @@ export function createEntities(
 					level: row.level,
 					maxHp: row.maxHp,
 					countryByte9c: row.countryByte9c,
+					sexSelector1ac: row.sexSelector1ac,
 					...(row.kind === "npc" ? { merchantBranches: merchantBranches( row.npcTalkStoreGroups ) } : {})
 				} );
 			}

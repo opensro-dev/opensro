@@ -238,6 +238,11 @@ func (rt *Runtime) HandleItemUse(
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
 		}
+		if family == itemUseSkinChange {
+			return rt.useSkinChangeScroll(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
 		if family == itemUseWarehouseTicket {
 			if len(tail) != 0 || rt.storageAuthority == nil {
 				return false
@@ -349,7 +354,7 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			// v1.188 49B9F0 checks teleport mode before creating the companion.
-			if character.NativeTeleportMode == 1 {
+			if character.NativeTeleportMode != 0 {
 				result = itemUseFailure(0x69) // 49BB2B; v1.150 consumes this byte silently.
 				return false
 			}
