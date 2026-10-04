@@ -392,6 +392,9 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// Token 19 (RefObjData+0xA7): bit 0x80 admits the item to the warehouse
 	// (CIFStorage_OnSlotTransfer; 0 refuses with notice 1:0x43).
 	{19, "canBorrow", "int"},
+	// Token 22 (server ref +0x8C bit 6, client RefObjData+0xAA): itemdata
+	// CanRepair, read by CGObj_CanRepair 483E80 for NPC and hammer repair.
+	{22, "canRepair", "int"},
 	// Authored CanUse flags: bit 0 admits direct activation; other bits
 	// describe additional behavior (pet skill rows carry 129, not just 1).
 	{24, "canUse", "int"},

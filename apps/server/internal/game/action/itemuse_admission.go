@@ -47,6 +47,7 @@ const (
 	itemUseResurrection
 	itemUseStatRecall
 	itemUseFirework
+	itemUseRepairHammer
 )
 
 /*
@@ -89,6 +90,10 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// bomb, a siege item.
 	if ref.TypeIDs == [4]int64{3, 3, 6, 1} {
 		return itemUseFirework
+	}
+	// 49C2B0 case 6 (type 4 = 7): the repair hammer (npcrepair.go).
+	if ref.TypeIDs == [4]int64{3, 3, 13, 7} {
+		return itemUseRepairHammer
 	}
 	// Type 4 = 13: the stat point recall (progression/statrecall.go).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 13} {

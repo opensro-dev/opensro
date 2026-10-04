@@ -212,6 +212,22 @@ func (rt *Runtime) HandleItemUse(
 		if family == itemUseReturn {
 			return rt.beginReturnScroll(divisionID, character, ref, rowIndex, request, nowMs, &result)
 		}
+		if family == itemUseRepairHammer {
+			if len(tail) != 0 {
+				return false
+			}
+			repaired := rt.hammerRepair(divisionID, character)
+			if len(repaired.actor) == 0 {
+				result = itemUseFailure(errCodeNothingToRepair)
+				return false
+			}
+			remaining := rt.consumeItemUseRow(character, rowIndex)
+			result = OpResult{Frames: append([]wire.Frame{{Opcode: wire.OpItemUseResponse,
+				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}, repaired.actor...),
+				Broadcast: repaired.public}
+			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
+			return true
+		}
 		if family == itemUseFirework {
 			if len(tail) != 0 {
 				return false

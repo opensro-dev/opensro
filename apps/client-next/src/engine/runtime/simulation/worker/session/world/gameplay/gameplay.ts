@@ -22,6 +22,7 @@ import {
 	MASTERY_WITHDRAWAL_RESPONSE
 } from "@/engine/foundation/gameplay/withdrawal";
 import { positionSkillRequest } from "@/engine/foundation/gameplay/position-skill";
+import { repairNotice } from "@/engine/foundation/gameplay/repair";
 import { portalNotice } from "@/engine/foundation/gameplay/portal";
 import {
 	interactionApproach,
@@ -1352,6 +1353,12 @@ state here before a command can claim a native wire conversation.
 				) throw Error( "Select a merchant first" );
 				return inventory.openShop( command.gid, now );
 			}
+			if ( command.kind === "shop-repair" ) {
+				if ( inventory.state().shop?.npc !== targeting.state().target ) {
+					throw Error( "Merchant selection changed" );
+				}
+				return inventory.repair( command.mode, command.slot, now );
+			}
 			if ( command.kind === "shop-buyback" ) {
 				if ( inventory.state().shop?.npc !== targeting.state().target ) {
 					throw Error( "Merchant selection changed" );
@@ -2278,6 +2285,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				const refusal = recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
+					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??
 					skillNotice( frame.opcode, frame.payload, localCountry, fortressActive( fortress ) );
 				if ( refusal ) notices = [ ...notices.slice( -99 ), { ...refusal, sequence: ++noticeSequence } ];

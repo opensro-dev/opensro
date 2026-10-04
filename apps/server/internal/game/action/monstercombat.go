@@ -312,6 +312,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	// 593AE8: a record a standing wall absorbs (+0x10) skips the recipient
 	// branch; any other landed record reaches it.
 	struck := false
+	var wear wearFrames
 	hitContext := abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
 	committed := rt.deps.Update(character, "monster-basic-attack", func() bool {
 		// The detached admission snapshot can predate a status transition.
@@ -345,6 +346,20 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 			absorbRecords, absorbed = wallRecords(wall, splits, len(impacts))
 			rt.drainWall(divisionID, character.Name, wall.token, absorbed)
 			struck = !allWallAbsorbed(absorbRecords)
+		}
+		// 593C9F/593CB1: a struck player's landed hits wear its armour and
+		// its blocks its shield; a wall that absorbs the whole hit skips
+		// the recipient branch.
+		if struck {
+			var tally wearTally
+			for _, impact := range impacts {
+				tally.note(impact.Blocked, false)
+			}
+			for _, roll := range [...]struct{ mode, count uint8 }{{wearArmour, tally.armour}, {wearShield, tally.shield}} {
+				taken := rt.rollEquipmentWear(divisionID, character, roll.mode, roll.count)
+				wear.actor = append(wear.actor, taken.actor...)
+				wear.public = append(wear.public, taken.public...)
+			}
 		}
 		if fatal {
 			deathEffectFrames, deathProgressionFrames = rt.settlePlayerDeathInDoor(divisionID, character, nowMs)
@@ -407,6 +422,12 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 	}
 	for _, f := range abnormalFrames.actor {
+		result.TargetFrames = append(result.TargetFrames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
+	}
+	for _, f := range wear.public {
+		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
+	}
+	for _, f := range wear.actor {
 		result.TargetFrames = append(result.TargetFrames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 	}
 	if fatal {

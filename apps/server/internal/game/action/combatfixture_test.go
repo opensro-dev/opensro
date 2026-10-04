@@ -248,6 +248,8 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 	// Keep ordinary-action fixtures on the noncritical branch; dedicated
 	// critical tests exercise the inclusive zero/boundary outcomes.
 	rt.CombatRoll = func() (uint32, error) { return 100, nil }
+	// Equipment wears only where a test asks it to (equipmentwear_test.go).
+	rt.WearRoll = func() (uint32, error) { return 99, nil }
 	// Fixtures fight already in battle, so a strike changes no state+0xD;
 	// battle entry and exit are pinned by the battle-state tests.
 	character.BattleUntilMs = math.MaxInt64

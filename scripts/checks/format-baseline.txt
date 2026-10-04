@@ -182,7 +182,6 @@ apps/client-next/src/engine/foundation/ui/inventory-layout.ts
 apps/client-next/src/engine/foundation/ui/item-equipment-overlay.ts
 apps/client-next/src/engine/foundation/ui/item-tooltip-magic.ts
 apps/client-next/src/engine/foundation/ui/item-tooltip-recovery.ts
-apps/client-next/src/engine/foundation/ui/item-tooltip-stats.ts
 apps/client-next/src/engine/foundation/ui/item-tooltip.ts
 apps/client-next/src/engine/foundation/ui/loading-presentation.ts
 apps/client-next/src/engine/foundation/ui/main-popup.ts

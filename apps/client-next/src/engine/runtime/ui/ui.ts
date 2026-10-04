@@ -108,6 +108,8 @@ import {
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createCosHud } from "./hud/cos-hud";
+import { createRepairHud } from "./hud/repair-hud";
+import { repairAllCost } from "@/engine/foundation/gameplay/repair";
 import { createSlotEffectClock } from "./hud/slot-effects";
 import { itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
 import {
@@ -562,6 +564,7 @@ export function createUi(
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
+	const repairHud = createRepairHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
@@ -2545,6 +2548,19 @@ export function createUi(
 					cosSlot = -1;
 				}
 			}
+		} else if ( id.startsWith( "shop-repair:" ) ) {
+			// 5B1C00 arms the repair cursor; 5B2B10 totals the cost (789630)
+			// and asks before 0x746F mode 2, or says nothing needs it.
+			if ( id === "shop-repair:GDR_STORE_BTN_REPAIR" ) repairHud.arm();
+			else {
+				const cost = repairAllCost( view.gameplay?.inventory ?? [] );
+				if ( cost ) repairHud.ask( cost );
+				else hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_THERE_IS_NO_ITEM_TO_REPAIR" ), 0xffffffff );
+			}
+		} else if ( id.startsWith( "slot:" ) && repairHud.armed() ) {
+			// 567290: the armed cursor sends the clicked item (0x746F mode 1).
+			repairHud.disarm();
+			sendGameplay( { kind: "shop-repair", mode: 1, slot: Number( id.slice( 5 ) ) } );
 		} else if ( id.startsWith( "slot:" ) ) {
 			confirmDrop = "";
 			const slot = Number( id.slice( 5 ) );
@@ -3008,6 +3024,31 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			if ( repairHud.confirmCost() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "repair-all-cancel"
+				) {
+					repairHud.takeConfirm();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "repair-all-confirm"
+				) {
+					repairHud.takeConfirm();
+					dirty = true;
+					if ( view?.session?.phase === "world" ) sendGameplay( { kind: "shop-repair", mode: 2, slot: 0 } );
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( repairHud.armed() && event.kind === "key" && event.code === "Escape" ) {
+				repairHud.disarm();
+				dirty = true;
+				return;
 			}
 			if ( cosHud.cleanConfirm() !== null ) {
 				if (
@@ -10063,7 +10104,14 @@ export function createUi(
 					nativeSpin( page.GDR_STORE_SPIN_PAGE!, px, py, "shop-prev", "shop-next", shopPage, pages );
 					// Repair remains a typed gameplay operation; never route its button to buy/sell.
 					for ( const node of [ page.GDR_STORE_BTN_REPAIR!, page.GDR_STORE_BTN_REPAIRALL! ] ) {
-						authoredLabeledButton( node, px, py, "shop-repair:" + node.id, hudCopy( node.text ), true );
+						authoredLabeledButton(
+							node,
+							px,
+							py,
+							"shop-repair:" + node.id,
+							hudCopy( node.text ),
+							!valid || busy
+						);
 					}
 					endWindow( admission, "service:Shop" );
 				}
@@ -12241,6 +12289,46 @@ export function createUi(
 				);
 				button(
 					"recall-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
+			if ( panel !== "Shop" ) repairHud.reset();
+			const repairCost = repairHud.confirmCost();
+			if ( worldVisible && repairCost !== null ) {
+				// 5B2B10 raises box 0x0C: Repair All's question and its total.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads( hudCopy( "UIIT_MSG_MSGBOX_REPAIR_ITEM" ), layout.name, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads( repairCost.toLocaleString( "en-US" ), layout.question, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				button(
+					"repair-all-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"repair-all-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);

@@ -49,6 +49,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerMall(hub)
 	hub.Handle(0x7341, rt.hubHandler(hub, rt.HandleBerserk))
 	hub.Handle(0x7495, rt.hubHandler(hub, rt.HandlePortal))
+	hub.Handle(opNpcRepairRequest, rt.hubHandler(hub, rt.HandleNpcRepair))
 	hub.Handle(0x72dd, rt.hubHandler(hub, rt.HandleReturnCancel))
 	hub.Handle(wire.OpCosBehaviorRequest, rt.hubHandler(hub, rt.HandleCosBehavior))
 	hub.Handle(0x77e7, rt.hubHandler(hub, rt.HandleRetailBuyback))

@@ -371,6 +371,18 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		actor = append(actor, frames...)
 		private = append(frames, private...)
 	}
+	// 593832: every victim's unblocked attempts wear the attacker's weapon,
+	// rolled once for the execution.
+	var tally wearTally
+	for _, plan := range plans {
+		for _, formula := range plan.formulas {
+			tally.note(formula.Blocked, true)
+		}
+	}
+	wear := rt.applyEquipmentWear(division, character, tally)
+	actor = append(actor, wear.actor...)
+	private = append(private, wear.actor...)
+	public = append(public, wear.public...)
 	actor = append(actor, progression...)
 	public = append(public, settlements.public...)
 	actor = append(actor, settlements.otherPublic...)
