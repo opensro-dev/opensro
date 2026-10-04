@@ -4518,6 +4518,12 @@ export function createUi(
 				setPanel( "" );
 				dirty = true;
 			}
+			// A warehouse ticket opens the room without the talk menu's click.
+			if ( panel !== "Storage" && next.gameplay?.storage && !view?.gameplay?.storage && canLeavePanel() ) {
+				storagePanel.reset();
+				setPanel( "Storage" );
+				dirty = true;
+			}
 			if ( shopOpenRequest ) {
 				const request = shopOpenRequest, game = next.gameplay;
 				if ( next.session?.phase !== "world" || game?.target !== request.gid ) shopOpenRequest = null;

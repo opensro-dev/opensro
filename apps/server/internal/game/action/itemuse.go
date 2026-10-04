@@ -238,6 +238,17 @@ func (rt *Runtime) HandleItemUse(
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
 		}
+		if family == itemUseWarehouseTicket {
+			if len(tail) != 0 || rt.storageAuthority == nil {
+				return false
+			}
+			remaining := rt.consumeItemUseRow(character, rowIndex)
+			result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
+				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}}
+			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
+			after = func() { rt.openRemoteStorage(divisionID, character) }
+			return true
+		}
 		if family == itemUseStatRecall {
 			// The scroll is spent only when a point came back.
 			if len(tail) != 0 || rt.RecallStatPoints == nil {

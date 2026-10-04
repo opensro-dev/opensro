@@ -10,7 +10,7 @@ commands and cannot bypass actor eligibility.
 ===========================================================================
 */
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
-import { createStorageRoom } from "@/engine/foundation/gameplay/storage-room";
+import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
 import { createPickup } from "./pickup";
 import { createActionSession } from "./action-session";
@@ -2424,6 +2424,11 @@ Packet handling must not depend on which HUD panel is currently open.
 				// press, before touching movement (an empty MP pool is 0x3004).
 				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) movement.castRefused( now );
 				if ( item && cast ) returnScroll = cast;
+				// A spent warehouse ticket opens the room on the player's own gid.
+				if ( item && used && localGid && isWarehouseTicket( used.typeFlags ) ) {
+					storage.open( localGid );
+					dirty = true;
+				}
 				// A pickup into the gold slot (0xFE) prints the whole heap: pickup types
 				// 6/0x1C resolve to window 0x46 with slot 0xFE (7653D0), and that branch
 				// of CPSMission_ApplyInventoryOperation reads the u32 and prints
