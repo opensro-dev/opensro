@@ -70,6 +70,8 @@ export function createGeometryResources(
 ) {
 	let filtered = true, detail = 2, mixedCpuUploadBytes = 0;
 	const geometryBuffers = new Map<GeometryDraw, GPUBuffer[]>();
+	// Released draws and their release records (releasedDraw).
+	const releasedDraws = new WeakMap<GeometryDraw, import("../internal/gpu-contract").DrawRelease>();
 	// Every buffer is labelled: a validation error names the resource it rejects.
 	const worldUniform = created.createBuffer( {
 		label: "geometry-world",
@@ -844,10 +846,20 @@ export function createGeometryResources(
 		},
 		/*
 		================
+		releasedDraw
+		================
+		*/
+		releasedDraw( draw: GeometryDraw ) {
+			return releasedDraws.get( draw );
+		},
+		/*
+		================
 		release
 		================
 		*/
 		release( draw: GeometryDraw ) {
+			// The releasing stack names the owner if another one still lists it.
+			releasedDraws.set( draw, { atMs: performance.now(), stack: new Error( "geometry release" ).stack ?? "" } );
 			shadows?.forget( draw );
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
 				retire( buffer );
