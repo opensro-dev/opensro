@@ -87,6 +87,7 @@ import {
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { createOrbs } from "./orbs/orbs";
 import { advanceCharacterFade, type CharacterFade } from "@/engine/foundation/animation/character-fade";
+import { spawnFadeAlpha, spawnFadeKind } from "@/engine/foundation/animation/spawn-fade";
 import { advanceAction, actionLayers, type ActionSchedule } from "@/engine/foundation/animation/action-schedule";
 import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill-motion-resolve";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
@@ -479,6 +480,45 @@ export function createCharacterPresentation(
 	}
 	/*
 	================
+	applySpawnFades
+
+	CIDecoAppear for every spawned player, monster and COS (spawn-fade.ts),
+	scaling whatever opacity the other owners already chose. The ramp starts
+	on the actor's first drawable frame: natively the model exists at spawn,
+	here it may still be loading, and a ramp spent on an unloaded model would
+	pop in. A monster's linked ride carries its own equal ramp (861EE2).
+	================
+	*/
+	function applySpawnFades( entities: readonly EntityState[], next: Map<number, CharacterActor>, seconds: number ) {
+		fadePresent.clear();
+		for ( const entity of entities ) {
+			fadePresent.add( entity.gid );
+			if ( !spawnFadeKind( entity.kind ) ) continue;
+			if ( !fadeSeen.has( entity.gid ) ) {
+				fadeSeen.add( entity.gid );
+				spawnFades.set( entity.gid, null );
+			}
+			const start = spawnFades.get( entity.gid ), actor = next.get( entity.gid );
+			if ( start === undefined || !actor ) continue;
+			if ( start === null ) spawnFades.set( entity.gid, seconds );
+			const alpha = spawnFadeAlpha( seconds - (start ?? seconds) );
+			if ( alpha >= 1 ) {
+				spawnFades.delete( entity.gid );
+				continue;
+			}
+			next.set( entity.gid, { ...actor, opacity: (actor.opacity ?? 1) * alpha } );
+			const rideGid = linkedRides.get( entity.gid ),
+				ride = rideGid === undefined ? undefined : next.get( rideGid );
+			if ( ride ) next.set( rideGid!, { ...ride, opacity: (ride.opacity ?? 1) * alpha } );
+		}
+		for ( const gid of fadeSeen ) {
+			if ( fadePresent.has( gid ) ) continue;
+			fadeSeen.delete( gid );
+			spawnFades.delete( gid );
+		}
+	}
+	/*
+	================
 	resourceFor
 	================
 	*/
@@ -506,6 +546,10 @@ export function createCharacterPresentation(
 	// each live rider's presentation-owned ride actor (CICMonster_DeserializeSpawnPacket).
 	const ridesByRider = new Map<string, LinkedRide>();
 	const linkedRides = new Map<number, number>();
+	// CIDecoAppear (spawn-fade.ts): each spawned character's ramp start, null
+	// while armed and waiting for its first drawable frame. fadeSeen holds the
+	// gids already armed, so one present the whole time fades only once.
+	const spawnFades = new Map<number, number | null>(), fadeSeen = new Set<number>(), fadePresent = new Set<number>();
 	/*
 	================
 	Auxiliary
@@ -580,10 +624,16 @@ export function createCharacterPresentation(
 					groundClocks.clear();
 					retiring.clear();
 					disappearing.clear();
+					spawnFades.clear();
+					fadeSeen.clear();
 					next.length = 0;
 					next.push( { kind: "reset" } );
 				} else if ( event.kind === "spawn" || event.kind === "state" ) {
-					if ( event.kind === "spawn" ) combatStanceEnds.delete( event.entity.gid );
+					if ( event.kind === "spawn" ) {
+						combatStanceEnds.delete( event.entity.gid );
+						// A respawn under a live gid is a new CICharactor: fade it again.
+						fadeSeen.delete( event.entity.gid );
+					}
 					next.push( { kind: event.kind, gid: event.entity.gid, refObjId: event.entity.refObjId } );
 				} else if ( event.kind === "despawn" ) {
 					combatStanceEnds.delete( event.gid );
@@ -685,6 +735,22 @@ export function createCharacterPresentation(
 				undefined :
 				entities.find( entity => entity.gid === localGid )?.mountedOn;
 			const localMover = ( gid: number ) => !!gameplay?.pose && (gid === gameplay.localGid || gid === localMount);
+			// Natively the vehicle's model exists the moment 777F60 binds the ride,
+			// and CIDecoAppear fades it in under the seated rider. Here its model can
+			// still be loading; until the vehicle can draw, the rider is presented
+			// unmounted (standing where it is) rather than hidden behind a missing
+			// saddle, and it snaps onto the vehicle the frame the vehicle appears.
+			const vehicleWaiting = ( entity: EntityState ) => {
+				if ( entity.mountedOn === undefined ) return false;
+				const vehicle = entities.find( row => row.gid === entity.mountedOn ),
+					resource = vehicle && resourceFor( vehicle );
+				return !resource || !resources.ready( resource.glb );
+			};
+			if ( entities.some( vehicleWaiting ) ) {
+				entities = entities.map( entity =>
+					vehicleWaiting( entity ) ? { ...entity, mountedOn: undefined } : entity
+				);
+			}
 			/*
 			================
 			logicalPose
@@ -2678,6 +2744,11 @@ export function createCharacterPresentation(
 					state.locomotion = changeLocomotion( state.locomotion, clip, looping, seconds, baseRole );
 					if ( previousLocomotion !== state.locomotion ) {
 						state.locomotion.rate = baseRole === "run" || baseRole === "walk" ? entryRate : 1;
+						// 777F60 mounts and 85E930 dismounts with PlayAnimation(0,0,0,0,1,1):
+						// no blend, so the rider snaps into and out of the ride pose.
+						if ( (previousLocomotion?.clip === "ride") !== (clip === "ride") ) {
+							state.locomotion = { ...state.locomotion, enter: 0, outgoing: [] };
+						}
 					}
 					const layers: import("@/engine/contracts/character").CharacterLayer[] = locomotionLayers(
 						state.locomotion,
@@ -3320,6 +3391,7 @@ export function createCharacterPresentation(
 					if ( actor ) next.set( entity.gid, { ...actor, opacity: 0 } );
 				}
 			}
+			applySpawnFades( entities, next, seconds );
 			for ( const holder of particleHolders ) holder.actor = next.get( holder.actor.gid )!;
 			for (
 				const actor of modelEmission.step(
@@ -3471,6 +3543,8 @@ export function createCharacterPresentation(
 			combatStanceEnds.clear();
 			retiring.clear();
 			disappearing.clear();
+			spawnFades.clear();
+			fadeSeen.clear();
 			damageTexts = [];
 			rainEventActive = false;
 			rainEventEntities.clear();
@@ -3530,6 +3604,8 @@ export function createCharacterPresentation(
 			combatStanceEnds.clear();
 			retiring.clear();
 			disappearing.clear();
+			spawnFades.clear();
+			fadeSeen.clear();
 			damageTexts = [];
 			rainEventActive = false;
 			rainEventEntities.clear();
