@@ -15,6 +15,7 @@ import {
 } from "@/engine/foundation/gameplay/cast-results";
 import { retireBuffSlots, buffDepartureDurationMs, type BuffSlot } from "@/engine/foundation/gameplay/buff-slots";
 import { createSkillCooldowns } from "@/engine/foundation/gameplay/skill-cooldowns";
+import { createCastPrediction } from "@/engine/foundation/gameplay/cast-prediction";
 import { detectionEffect, huntingMovement, type HuntingPoint } from "@/engine/foundation/gameplay/hunting";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
@@ -47,6 +48,7 @@ export function createCombat(
 	let huntingPoints: readonly HuntingPoint[] = [];
 	let attackedName: string | undefined, attackedNameUntil = 0;
 	const cooldowns = createSkillCooldowns();
+	const prediction = createCastPrediction();
 	let localGid = 0;
 	let skillMetadata: readonly SkillMetadata[] = [];
 	let environmentalDamage: import("@/engine/contracts/combat-feedback").EnvironmentalDamage[] = [],
@@ -359,6 +361,22 @@ export function createCombat(
 		},
 		/*
 		================
+		predict
+
+		Start the local press's cast animation now (cast-prediction.ts).
+		================
+		*/
+		predict( skill: number, target: number, now: number, deadlineMs: number ) {
+			if ( localGid ) prediction.predict( localGid, skill, target, now, deadlineMs );
+		},
+		/*
+		================
+		predicting
+		================
+		*/
+		predicting: () => prediction.open(),
+		/*
+		================
 		pressed
 
 		A skill press went out: its cooldown stands in from when the press
@@ -628,8 +646,9 @@ export function createCombat(
 					throw new Error( "Invalid cast refusal" );
 				}
 				error = `Cast rejected: ${p[1]}`;
-				// The press it answers never started a cooldown.
+				// The press it answers never started a cooldown or a cast.
 				cooldowns.refused();
+				prediction.refused( now );
 				return true;
 			}
 			if ( p.length < 19 ) throw Error( "Truncated cast header" );
@@ -661,11 +680,13 @@ export function createCombat(
 					damage = impacts.reduce( ( sum, hit ) => sum + hit.damage, 0 ),
 					fatal = impacts.some( hit => hit.fatal );
 				applyPhase( token, caster, phase );
+				const predictedToken = caster === localGid ? prediction.adopt( caster, skill ) : undefined;
 				active = {
 					token,
 					caster,
 					target,
 					skill,
+					...(predictedToken === undefined ? {} : { predictedToken }),
 					damage,
 					fatal,
 					impacts,
@@ -764,6 +785,7 @@ export function createCombat(
 		*/
 		step( now: number ) {
 			let changed = cooldowns.step( now );
+			if ( prediction.step( now ) ) changed = true;
 			for ( const [token, at] of guidedArrivals ) {
 				if ( at !== null && now >= at ) {
 					guidedArrivals.delete( token );
@@ -847,6 +869,7 @@ export function createCombat(
 				buffSlots,
 				huntingPoints,
 				skillCooldowns: cooldowns.state(),
+				castPrediction: prediction.state(),
 				attachedEffects,
 				environmentalDamage,
 				casts: publishedCasts ?? (publishedCasts = [ ...casts.values() ]),
@@ -866,6 +889,7 @@ export function createCombat(
 			attackedNameUntil = 0;
 			huntingPoints = [];
 			cooldowns.clear();
+			prediction.clear();
 			temporaryToken = 0;
 			instanceSerial = 0;
 			castOrder.clear();

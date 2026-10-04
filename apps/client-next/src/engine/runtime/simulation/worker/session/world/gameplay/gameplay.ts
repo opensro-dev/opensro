@@ -126,6 +126,7 @@ import {
 } from "@/engine/foundation/gameplay/skill-catalog";
 import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
 import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
+import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import { bootstrapProgression, progressionPacket, type Progression } from "@/engine/foundation/gameplay/progression";
 import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/quickslots";
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
@@ -256,6 +257,40 @@ stands in from when it reaches the server until that answer.
 		skillPress.sent( now );
 		combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
 		return frame;
+	}
+	/*
+================
+predictCast
+
+Start the press's cast animation now when the server will all but surely
+start the cast at once (cast-prediction.ts): an action skill, a living
+caster on foot with no cast in flight, and no target or one within the
+skill's authored range (the server's reach adds both bodies to it). The
+caster turns to the target at once, as the cast would turn it.
+================
+	*/
+	function predictCast(
+		metadata: SkillMetadata | undefined,
+		target: EntityState | undefined,
+		local: EntityState | undefined,
+		now: number
+	) {
+		const pose = movement.state().pose;
+		if (
+			!metadata?.actionMs || !pose || !local || local.mountedOn || local.appearanceState?.[0] === 2 ||
+			localCastHolds() || combat.predicting() || combat.guidedActive( localGid, now )
+		) return;
+		if ( target && target.gid !== localGid ) {
+			if ( !metadata.range || (target.regionId | pose.regionId) & 0x8000 && target.regionId !== pose.regionId ) {
+				return;
+			}
+			const dx = target.x - pose.x + ((target.regionId & 255) - (pose.regionId & 255)) * 1920,
+				dz = target.z - pose.z + ((target.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
+			if ( Math.hypot( dx, dz ) > metadata.range ) return;
+			movement.heading( movementHeading( pose, { ...target, angle: target.heading } ) );
+		}
+		const oneWay = skillPress.oneWayMs();
+		combat.predict( metadata.id, target?.gid ?? 0, now, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS );
 	}
 	/*
 ================
@@ -1468,6 +1503,7 @@ state here before a command can claim a native wire conversation.
 					if ( !metadata.targetSelf || !localGid ) throw Error( "This skill requires a target" );
 					const frame = combat.skill( skillId, localGid );
 					movement.holdForCast( now );
+					predictCast( metadata, undefined, local, now );
 					return sendSkillPress( frame, skillId, now );
 				}
 			}
@@ -1476,8 +1512,9 @@ state here before a command can claim a native wire conversation.
 				// it (InitiateSkillCast 59B5F6): end the local walk at the press,
 				// as a targeted command does (movement.holdForCast).
 				const frame = combat.skill( command.skillId );
-				const skillId = command.skillId;
-				if ( catalog.find( row => row.id === skillId )?.haltsWalk ) movement.holdForCast( now );
+				const skillId = command.skillId, metadata = catalog.find( row => row.id === skillId );
+				if ( metadata?.haltsWalk ) movement.holdForCast( now );
+				predictCast( metadata, undefined, local, now );
 				return sendSkillPress( frame, skillId, now );
 			}
 			if ( !entity || (entity.gid === localGid && command.kind !== "skill") ) {
@@ -1541,6 +1578,8 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind !== "skill" ) throw Error( "Unsupported gameplay command" );
 			const frame = combat.skill( command.skillId, entity.gid );
 			movement.holdForCast( now );
+			const pressedSkill = command.skillId;
+			predictCast( catalog.find( row => row.id === pressedSkill ), entity, local, now );
 			return sendSkillPress( frame, command.skillId, now );
 		},
 		/*

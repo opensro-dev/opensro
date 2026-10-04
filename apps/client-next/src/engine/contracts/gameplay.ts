@@ -356,6 +356,9 @@ export interface CastState {
 	readonly cancellationDeferred?: boolean;
 	readonly cancellationRequestedAtMs?: number;
 	readonly cancelledAtMs?: number;
+	// The client prediction this server cast took over (cast-prediction.ts):
+	// the presentation keeps that prediction's running action.
+	readonly predictedToken?: number;
 	readonly results?: readonly CastTargetResult[];
 	readonly shotAtMs?: number;
 	readonly receivedAtMs?: number;
@@ -544,6 +547,9 @@ export interface GameplayState {
 	// (skill-queue.ts); the shortcut slots draw both.
 	readonly skillQueue?: { readonly skill: number; readonly fireAtMs: number; };
 	readonly skillDenied?: import("@/engine/foundation/gameplay/skill-queue").DeniedPress;
+	// The local press's predicted cast, animated until the server's cast
+	// adopts it or it blends out (cast-prediction.ts).
+	readonly castPrediction?: CastState;
 	readonly casts: readonly CastState[];
 	readonly error: string | null;
 }
