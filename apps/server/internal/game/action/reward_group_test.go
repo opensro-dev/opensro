@@ -9,9 +9,11 @@ reward_group_test.go - tests for reward_group.go
 package action
 
 import (
+	"math"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"testing"
 )
@@ -153,4 +155,31 @@ func TestPartyRewardRejectsOtherInstanceAtIdenticalCoordinates(t *testing.T) {
 		return nil, true
 	}
 	rt.HandleTargetInteract(testDivision, actor, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+}
+
+/*
+================
+TestPartyShareFloor
+
+A level 1 beside a level 23 takes 1/24 of the shared kill natively
+(5BCD43); with the beta floor it takes an even half, and the level 23
+keeps its level share.
+================
+*/
+func TestPartyShareFloor(t *testing.T) {
+	one, high := int64(1), int64(23)
+	members := []rewardActor{
+		{character: &enterworld.Character{Level: &one}},
+		{character: &enterworld.Character{Level: &high}},
+	}
+	native := partyRewardFactors(members, monster.Instance{}, false)
+	floored := partyRewardFactors(members, monster.Instance{}, true)
+	// The party bonus multiplies every share alike.
+	bonus := float64(native[1]) * 24 / 23
+	if math.Abs(float64(native[0])-bonus/24) > 1e-6 {
+		t.Fatalf("native level-1 factor %v, want 1/24 x %v", native[0], bonus)
+	}
+	if math.Abs(float64(floored[0])-bonus/2) > 1e-6 || floored[1] != native[1] {
+		t.Fatalf("floored factors %v, native %v", floored, native)
+	}
 }
