@@ -369,7 +369,12 @@ export function createCharacters() {
 		chain.add( actor.gid );
 		let matrix = placement( actor.pose.regionId, origin, actor.pose.x, actor.pose.y, actor.pose.z, actor.pose.yaw );
 		const ownerId = actor.attachment?.gid ?? actor.mountedOn;
-		if ( ownerId !== undefined ) {
+		// 777F60 binds a ride without resolving its vehicle, and 85E000 falls
+		// back to the rider when 85D870 finds none: a rider whose vehicle has
+		// no drawn row (not spawned yet, or its model still loading) stands
+		// on its own placement instead of vanishing until the vehicle draws.
+		const rider = !actor.attachment && actor.mountedOn !== undefined;
+		if ( ownerId !== undefined && !(rider && !rows.has( ownerId )) ) {
 			// The owner left this frame. Native deco and CRT updates run on a
 			// live object; there is no matrix to inherit.
 			const owner = rows.get( ownerId );

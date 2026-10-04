@@ -735,22 +735,6 @@ export function createCharacterPresentation(
 				undefined :
 				entities.find( entity => entity.gid === localGid )?.mountedOn;
 			const localMover = ( gid: number ) => !!gameplay?.pose && (gid === gameplay.localGid || gid === localMount);
-			// Natively the vehicle's model exists the moment 777F60 binds the ride,
-			// and CIDecoAppear fades it in under the seated rider. Here its model can
-			// still be loading; until the vehicle can draw, the rider is presented
-			// unmounted (standing where it is) rather than hidden behind a missing
-			// saddle, and it snaps onto the vehicle the frame the vehicle appears.
-			const vehicleWaiting = ( entity: EntityState ) => {
-				if ( entity.mountedOn === undefined ) return false;
-				const vehicle = entities.find( row => row.gid === entity.mountedOn ),
-					resource = vehicle && resourceFor( vehicle );
-				return !resource || !resources.ready( resource.glb );
-			};
-			if ( entities.some( vehicleWaiting ) ) {
-				entities = entities.map( entity =>
-					vehicleWaiting( entity ) ? { ...entity, mountedOn: undefined } : entity
-				);
-			}
 			/*
 			================
 			logicalPose
