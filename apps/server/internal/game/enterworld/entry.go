@@ -68,11 +68,21 @@ type LocalPlayerEntry struct {
 	CountryByte9C int `json:"countryByte9c"`
 	// SexSelector1AC is the native RefObjData+0x1ac selector: 0=female,
 	// nonzero=male - the INVERSE of this API's character.gender enum.
-	SexSelector1AC int           `json:"sexSelector1ac"`
-	ModelRef       uint32        `json:"modelRef"`
-	CameraHeight   float64       `json:"cameraHeight"`
-	VisualLoadout  VisualLoadout `json:"visualLoadout"`
-	StartProfile   StartProfile  `json:"startProfile"`
+	SexSelector1AC int `json:"sexSelector1ac"`
+	// JobType/JobGrade/JobExp/JobAlias are the local-only job block
+	// (CICUser_DeserializeSpawnState @0x00869f89..0x00869fc8): the joined
+	// job, its grade and experience, and the alias the job window shows.
+	JobType  uint8  `json:"jobType,omitempty"`
+	JobGrade uint8  `json:"jobGrade,omitempty"`
+	JobExp   uint32 `json:"jobExp,omitempty"`
+	JobAlias string `json:"jobAlias,omitempty"`
+	// BodyShape is the shape byte (+0x758; height low, volume high) the
+	// skin change window starts from.
+	BodyShape     *uint8        `json:"bodyShape,omitempty"`
+	ModelRef      uint32        `json:"modelRef"`
+	CameraHeight  float64       `json:"cameraHeight"`
+	VisualLoadout VisualLoadout `json:"visualLoadout"`
+	StartProfile  StartProfile  `json:"startProfile"`
 	// DungeonFloorIndex is the only dungeon-map value owned by the server.
 	// The browser resolves directory, prefix, labels, bounds and tiles from
 	// its packed presentation catalogue.
@@ -241,12 +251,26 @@ func ResolveLocalPlayerEntry(character *Character, roster *Roster) LocalPlayerEn
 		VisualFlags:       ResolveVisualFlags(character),
 		CountryByte9C:     countryByte9c,
 		SexSelector1AC:    sexSelector1ac,
+		JobType:           character.Job.Type,
+		JobGrade:          character.Job.Grade,
+		JobExp:            character.Job.Exp,
+		JobAlias:          character.Job.Alias,
+		BodyShape:         entryBodyShape(character),
 		ModelRef:          identity.ModelRef,
 		CameraHeight:      ResolveCharacterCameraHeight(character),
 		VisualLoadout:     visualLoadout,
 		StartProfile:      startProfile,
 		DungeonFloorIndex: dungeonFloorIndex,
 	}
+}
+
+// entryBodyShape is the persisted shape byte, or nil when none is set.
+func entryBodyShape(c *Character) *uint8 {
+	if c == nil || c.BodyShapeByte == nil || *c.BodyShapeByte < 0 || *c.BodyShapeByte > 0xff {
+		return nil
+	}
+	shape := uint8(*c.BodyShapeByte)
+	return &shape
 }
 
 // spawnUndergroundToleranceUnits absorbs the difference between the server's

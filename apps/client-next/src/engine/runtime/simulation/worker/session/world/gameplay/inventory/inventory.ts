@@ -1055,6 +1055,16 @@ packets.
 		},
 		/*
 ================
+holdForDress
+
+A job dress bar (0x3434) holds the suit move's answer for its seconds.
+================
+		*/
+		holdForDress( until: number ) {
+			if ( pending?.opcode === 0xb06d ) pending = { ...pending, deadline: Math.max( pending.deadline, until ) };
+		},
+		/*
+================
 use
 ================
 		*/

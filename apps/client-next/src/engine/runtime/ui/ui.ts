@@ -115,6 +115,14 @@ import { createQuestTimers } from "./hud/quest-timers";
 import { createCosHud } from "./hud/cos-hud";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
+import { createJobHud } from "./hud/job-hud";
+import {
+	JOB_ALIAS_CHECK,
+	JOB_ALIAS_CREATE,
+	jobGuildsOffered,
+	jobMenuRows,
+	noJob
+} from "@/engine/foundation/gameplay/job-guild";
 import { isSkinChangeScroll, skinDraftRange, type SkinDraftKey } from "@/engine/foundation/gameplay/skin-change";
 import { repairAllCost } from "@/engine/foundation/gameplay/repair";
 import { createSlotEffectClock } from "./hud/slot-effects";
@@ -578,6 +586,7 @@ export function createUi(
 	const cosHud = createCosHud();
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
+	const jobHud = createJobHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
@@ -1619,6 +1628,20 @@ export function createUi(
 				composing = false;
 				dirty = true;
 			}
+			return;
+		}
+		if ( id.startsWith( "npc-job-" ) ) {
+			// 5DA1B0 cases 0x1E, 0x1F and 0x20/0x21: the join and withdrawal
+			// questions and the alias window, for the guild NPC in conversation.
+			const conversation = view.gameplay?.npcConversation, job = Number( id.slice( id.indexOf( ":" ) + 1 ) );
+			if ( !conversation || conversation.phase !== "menu" ) return;
+			if ( id.startsWith( "npc-job-join:" ) ) jobHud.ask( "join", conversation.gid, job );
+			else if ( id.startsWith( "npc-job-withdraw:" ) ) jobHud.ask( "withdraw", conversation.gid, job );
+			else if ( id.startsWith( "npc-job-alias:" ) ) {
+				jobHud.openAlias( conversation.gid, !!view.gameplay?.job?.alias );
+				focusAtEnd( "job-alias-text", "" );
+			}
+			dirty = true;
 			return;
 		}
 		if ( id.startsWith( "npc-reverse-return:" ) ) {
@@ -3069,6 +3092,63 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			if ( jobHud.confirm() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "job-confirm-no"
+				) {
+					jobHud.takeConfirm();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "job-confirm-yes"
+				) {
+					const asked = jobHud.takeConfirm();
+					dirty = true;
+					if ( asked && view?.session?.phase === "world" ) {
+						sendGameplay(
+							asked.kind === "join" ?
+								{ kind: "job-join", gid: asked.npc, job: asked.job } :
+								{ kind: "job-withdraw", gid: asked.npc }
+						);
+					}
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			const aliasWindow = jobHud.alias();
+			if ( aliasWindow !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "job-alias-cancel"
+				) {
+					jobHud.closeAlias();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "edit" && event.id === "job-alias-text" ) {
+					jobHud.typeAlias( event.value );
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && (event.id === "job-alias-check" || event.id === "job-alias-ok") ) {
+					// 6461C0 asks whether the name is free (mode 0); 646470 takes it (mode 1).
+					if ( aliasWindow.text && view?.session?.phase === "world" ) {
+						sendGameplay( {
+							kind: "job-alias",
+							gid: aliasWindow.npc,
+							mode: event.id === "job-alias-ok" ? JOB_ALIAS_CREATE : JOB_ALIAS_CHECK,
+							alias: aliasWindow.text
+						} );
+						if ( event.id === "job-alias-ok" ) jobHud.closeAlias();
+					}
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" ) return;
 			}
 			if ( repairHud.confirmCost() !== null ) {
 				if (
@@ -10096,7 +10176,11 @@ export function createUi(
 						prompt: target?.kind === "teleport" ? target.name : "",
 						canRecall: !!(capabilities & 0x40),
 						canReverseReturn: !!(capabilities & 0x20000000),
-						canStorage: !!(capabilities & 4)
+						canStorage: !!(capabilities & 4),
+						jobRows: jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
+							id: row.id,
+							label: copy( row.symbol )
+						}) )
 					} );
 					npcPanel.geometry( output );
 					quads.push( ...output.quads );
@@ -12437,6 +12521,96 @@ export function createUi(
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
+			}
+			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) jobHud.reset();
+			const jobAsk = jobHud.confirm(), aliasWindow = jobHud.alias();
+			if ( worldVisible && (jobAsk || aliasWindow) ) {
+				// 5D26F0's question boxes (types 4 and 5) and CIFJobAlias.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads(
+						hudCopy(
+							jobAsk ?
+								"UIIT_STT_CONFIRM_BOX" :
+								aliasWindow?.modify ?
+								"UIIT_PAG_ALIAS_MODIFY" :
+								"UIIT_PAG_ALIAS_CREATE"
+						),
+						layout.title,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					),
+					...text.quads(
+						hudCopy(
+							jobAsk ?
+								(jobAsk.kind === "join" ?
+									"UIIT_STT_JOBGUILD_JOIN_WINDOW" :
+									"UIIT_STT_JOBGUILD_WITHD_WINDOW") :
+								aliasWindow?.modify ?
+								"UIIT_STT_ALIAS_MODIFY_WINDOW" :
+								"UIIT_STT_ALIAS_CREATE_WINDOW"
+						),
+						layout.name,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				if ( jobAsk ) {
+					button(
+						"job-confirm-yes",
+						hudCopy( "UIIT_CTL_YES" ),
+						...layout.accept.slice( 0, 3 ) as [number, number, number]
+					);
+					button(
+						"job-confirm-no",
+						hudCopy( "UIIT_CTL_NO" ),
+						...layout.refuse.slice( 0, 3 ) as [number, number, number]
+					);
+				} else if ( aliasWindow ) {
+					const field: UiRect = [ layout.question[0], layout.question[1], layout.question[2], 16 ];
+					controls.push( {
+						id: "job-alias-text",
+						label: hudCopy( "UIIT_STT_ALIAS_CREATE_WINDOW" ),
+						kind: "text",
+						value: aliasWindow.text,
+						rect: field,
+						maxLength: 12
+					} );
+					rect( field, [ 0, 0, 0, .6 ], "", [ 0, 0, 1, 1 ], full );
+					quads.push(
+						...text.quads( aliasWindow.text, field, field, white, {
+							hAlign: 1,
+							vAlign: 1,
+							overflow: "clip"
+						} )
+					);
+					if ( focus === "job-alias-text" && caretVisible ) {
+						const width = text.run( aliasWindow.text ).width;
+						rect(
+							[ field[0] + (field[2] + width) / 2, field[1] + 1, 2, 14 ],
+							white,
+							"",
+							[ 0, 0, 1, 1 ],
+							field
+						);
+					}
+					const [ax, ay, aw] = layout.accept, [rx, ry, rw] = layout.refuse;
+					button( "job-alias-check", hudCopy( "UIIT_CTL_CHECK" ), ax!, ay!, aw! );
+					button( "job-alias-ok", hudCopy( "UIIT_CTL_OK" ), rx!, ry!, rw! );
+					button( "job-alias-cancel", hudCopy( "UIIT_CTL_CANCEL" ), rx! + rw! + 8, ry!, rw! );
+				}
 			}
 			if ( panel !== "Shop" ) repairHud.reset();
 			const repairCost = repairHud.confirmCost();

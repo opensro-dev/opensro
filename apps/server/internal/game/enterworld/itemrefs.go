@@ -601,6 +601,9 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 	ref.NativeFields = buildItemNativeFields(fields)
 	if len(fields) > 123 && ref.TypeIDs == [4]int64{3, 3, 3, 1} {
 		ref.ReturnDestination = strings.TrimSpace(fields[123])
+		if len(fields) > 125 && strings.TrimSpace(fields[125]) != "xxx" {
+			ref.ReturnTeleport = strings.TrimSpace(fields[125])
+		}
 	}
 	ref.Combat = buildItemCombatRef(fields)
 	if len(fields) > 63 {

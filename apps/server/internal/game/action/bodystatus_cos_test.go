@@ -29,6 +29,7 @@ func TestGMStatusSummonMountAndSessionLifecycle(t *testing.T) {
 	for _, command := range []byte{gmcommand.SubInvisible, gmcommand.SubInvincible} {
 		c := testCharacter()
 		c.GMPrivilege = true
+		dressTrader(c)
 		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
 			Slot: 22, RefObjID: 3905, Codename: "ITEM_COS_T_DHORSE3",
 			TypeFlags: wire.PackTypeFlags(3, 3, 3, 2), StackCount: 1,

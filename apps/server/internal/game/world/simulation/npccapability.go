@@ -1,5 +1,7 @@
 package simulation
 
+import "strings"
+
 // NPC talk capability flags: the u32 dword the S->C 0xB45A select grant
 // carries and the client menu builder (folded sub_5d9100,
 // CIFNPCTalk_BuildMenuFromFlags) turns into talk-window rows.
@@ -40,6 +42,12 @@ const (
 	// The action click then sends 0x7338 [boundGid][0x10000], whose B338
 	// answer opens control 0x8c.
 	NpcTalkFlagGachaMachine uint32 = 0x10000
+	// NpcTalkFlagJobTrader, Thief and Hunter are the job guild menus
+	// (CIFNPCTalk_AppendJobMenuRows for job 1, 2 and 3): sub_4c6350
+	// registers options 0x14, 0x15 and 0x16 on the guild NPCs below.
+	NpcTalkFlagJobTrader uint32 = 0x80000
+	NpcTalkFlagJobThief  uint32 = 0x100000
+	NpcTalkFlagJobHunter uint32 = 0x200000
 
 	// NpcTalkImplementedFlags is the capability subset whose complete
 	// request -> authority -> response lifecycle exists in this port. The
@@ -53,8 +61,50 @@ const (
 		NpcTalkFlagTalk |
 		NpcTalkFlagStorage |
 		NpcTalkFlagRecallPoint |
-		NpcTalkFlagGachaMachine
+		NpcTalkFlagGachaMachine |
+		NpcTalkFlagJobTrader |
+		NpcTalkFlagJobThief |
+		NpcTalkFlagJobHunter
 )
+
+// jobGuildCodenames: sub_4c6350 matches these by substring (CRT_strstr)
+// and registers the guild option for the job beside them.
+var jobGuildCodenames = []struct {
+	part string
+	flag uint32
+}{
+	{"NPC_CH_DOCTOR", NpcTalkFlagJobTrader}, {"NPC_WC_DOCTOR", NpcTalkFlagJobTrader},
+	{"NPC_KT_DESIGNER", NpcTalkFlagJobTrader}, {"NPC_EU_MERCHANT", NpcTalkFlagJobTrader},
+	{"NPC_CA_MERCHANT", NpcTalkFlagJobTrader}, {"NPC_SD_M_AREA_MERCHANT", NpcTalkFlagJobTrader},
+	{"NPC_CH_GENARAL_SW", NpcTalkFlagJobHunter}, {"NPC_WC_GENARAL_SW", NpcTalkFlagJobHunter},
+	{"NPC_KT_MINISTER", NpcTalkFlagJobHunter}, {"NPC_EU_HUNTER", NpcTalkFlagJobHunter},
+	{"NPC_CA_HUNTER", NpcTalkFlagJobHunter}, {"NPC_SD_M_AREA_HUNTER", NpcTalkFlagJobHunter},
+	{"NPC_TD_THIEF_SELL", NpcTalkFlagJobThief}, {"NPC_SD_T_AREA_THIEF", NpcTalkFlagJobThief},
+}
+
+// NpcJobGuild answers the job (1 trader, 2 thief, 3 hunter) whose guild an
+// NPC keeps, or 0.
+func NpcJobGuild(codename string) uint8 {
+	switch npcJobGuildFlag(codename) {
+	case NpcTalkFlagJobTrader:
+		return 1
+	case NpcTalkFlagJobThief:
+		return 2
+	case NpcTalkFlagJobHunter:
+		return 3
+	}
+	return 0
+}
+
+// npcJobGuildFlag is the job guild capability bit of a codename, or 0.
+func npcJobGuildFlag(codename string) uint32 {
+	for _, row := range jobGuildCodenames {
+		if strings.Contains(codename, row.part) {
+			return row.flag
+		}
+	}
+	return 0
+}
 
 // npcTalkCapabilityByCodename maps a roster NPC codename to its 0xB45A
 // capability dword. Values must never carry 0x40000000: that bit makes
@@ -108,6 +158,7 @@ func NpcTalkCapabilityFlags(codename string) (uint32, bool) {
 // rows even when that switch registers no shop service.
 func ResolveNpcTalkFlags(npc NpcDef) uint32 {
 	flags, _ := NpcTalkCapabilityFlags(npc.Codename)
+	flags |= npcJobGuildFlag(npc.Codename)
 	if len(npc.NpcTalkStoreGroups) != 0 {
 		flags |= NpcTalkFlagShop
 	}

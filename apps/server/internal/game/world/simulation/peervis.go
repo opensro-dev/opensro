@@ -44,7 +44,11 @@ type PeerAppearance struct {
 	Name string
 	// BodyShapeByte rides the sub_869110 lead byte into +0x758.
 	BodyShapeByte uint8
-	VisualFlags   uint8
+	// JobType/JobGrade are a dressed job player's job and grade (+0x782 /
+	// +0x783); zero outside job mode.
+	JobType     uint8
+	JobGrade    uint8
+	VisualFlags uint8
 	// Skin is the transform the player wears (RefObjID 0: none).
 	Skin wire.TransformSkin
 	// Equipment is the WORN set (equipment-band inventory slots), in slot
@@ -117,6 +121,8 @@ func BuildPeerSpawnRow(appearance PeerAppearance, gid uint32, pose Spawn) []byte
 		RunSpeed:           run,
 		ScaleDenom:         PeerScaleDenom,
 		Name:               appearance.Name,
+		JobType:            appearance.JobType,
+		JobGrade:           appearance.JobGrade,
 		PVPState:           appearance.PVPState,
 		EventTeam:          appearance.EventTeam,
 		GuildName:          appearance.GuildName,

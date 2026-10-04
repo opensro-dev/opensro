@@ -67,7 +67,7 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
 		return itemUseQuestTool
 	}
-	if ref.TypeIDs == [4]int64{3, 3, 3, 1} && ref.ReturnDestination == "RESURRECT" {
+	if ref.TypeIDs == [4]int64{3, 3, 3, 1} && (ref.ReturnDestination == "RESURRECT" || ref.ReturnDestination == "THIEFDEN") {
 		return itemUseReturn
 	}
 	// CGItemMonsterCapsule (sub_42E750, TID 3/2/2): the monster mask.

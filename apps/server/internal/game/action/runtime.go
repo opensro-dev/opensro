@@ -55,6 +55,7 @@ type Runtime struct {
 	RewardActorPresent  func(division, name string) bool
 	returnGeneration    atomic.Uint64
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
 	criticals           criticalHistory
 	deps                Dependencies
 	Ground              *grounditem.Registry

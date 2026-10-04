@@ -84,6 +84,7 @@ func TestHorseLevelRefusalPreservesItemAndAllowsUseAtRequirement(t *testing.T) {
 	c := testCharacter()
 	level := int64(5)
 	c.Level = &level
+	dressTrader(c)
 	items := testCosSource(testItems())
 	ref := items.staticItemSource["ITEM_COS_T_DHORSE3"]
 	ref.ReqQuadTypes[0], ref.ReqQuadValues[0] = 1, 10
@@ -224,6 +225,7 @@ TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn
 */
 func TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn(t *testing.T) {
 	character := testCharacter()
+	dressTrader(character)
 	character.MissionInventory = append(character.MissionInventory, enterworld.InventoryRow{
 		Slot: 22, RefObjID: 3905, Codename: "ITEM_COS_T_DHORSE3",
 		TypeFlags: wire.PackTypeFlags(3, 3, 3, 2), StackCount: 1,
@@ -360,6 +362,7 @@ TestCosSummonDoesNotFabricateABoardWindow
 */
 func TestCosSummonDoesNotFabricateABoardWindow(t *testing.T) {
 	character := testCharacter()
+	dressTrader(character)
 	source := testCosSource(testItems())
 	item := source.staticItemSource["ITEM_COS_T_DHORSE3"]
 	// Summon admission must not interpret a summoner parameter as a timed

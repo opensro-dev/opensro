@@ -9,12 +9,22 @@ package action
 
 import (
 	"math"
+	"opensro.online/server/internal/domain"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+// The channel-11 teleport modes a return cast sets (4A0380).
+const (
+	teleportModeBlocking uint8 = 1
+	teleportModeFree     uint8 = 2
+)
+
+// errCodeThievesOnly is 4A0380's 0x186A (UIIT_MSG_STRGERR_ONLY_ROBBER_CAN_USE_THIS_ITEM).
+const errCodeThievesOnly uint8 = 0x6a
 
 /*
 ================
@@ -50,16 +60,47 @@ duration takes 4E0B50's minimum timer interval.
 ================
 */
 func returnScrollDuration(ref *enterworld.ItemRef) (int64, bool) {
+	duration, mode, ok := returnScrollTiming(ref)
+	return duration, ok && mode == teleportModeBlocking
+}
+
+/*
+================
+returnScrollTiming
+
+Param1's duration and the teleport mode Param2 selects: 4A0380 passes
+(Param2 == 0) + 1, so a blocking scroll (1) casts in mode 1 and the Thief
+Den scroll (0) in mode 2, which leaves the player free to move.
+================
+*/
+func returnScrollTiming(ref *enterworld.ItemRef) (int64, uint8, bool) {
 	duration, present := ref.NativeFields.Lookup("itemParam1_29c")
 	blocking, hasBlocking := ref.NativeFields.Lookup("itemParam2_2a0")
 	if !present || !hasBlocking || math.IsNaN(duration) || math.IsInf(duration, 0) || duration < 0 ||
-		duration > math.MaxUint32 || math.Trunc(duration) != duration || blocking != 1 {
-		return 0, false
+		duration > math.MaxUint32 || math.Trunc(duration) != duration || blocking != 0 && blocking != 1 {
+		return 0, 0, false
+	}
+	mode := teleportModeBlocking
+	if blocking == 0 {
+		mode = teleportModeFree
 	}
 	if duration == 0 {
-		return 100, true
+		return 100, mode, true
 	}
-	return int64(duration), true
+	return int64(duration), mode, true
+}
+
+/*
+================
+teleportBlocks
+
+True for the teleport modes that hold the player still: a return's 1 and
+the skin change's in-place reload 3. Mode 2 (the Thief Den scroll's long
+cast) lets the player move until the timer ends.
+================
+*/
+func teleportBlocks(mode uint8) bool {
+	return mode == teleportModeBlocking || mode == skinTeleportMode
 }
 
 /*
@@ -72,6 +113,26 @@ one leaves it. v1.188 error low bytes agree with v1.150 689420 category 1.
 ================
 */
 func (rt *Runtime) returnScrollAdmission(division string, c *enterworld.Character, result *OpResult) bool {
+	if !rt.returnCastAdmission(division, c, result) {
+		return false
+	}
+	if rt.hasSummonedTransportCOS(c) {
+		*result = itemUseFailure(0x5e)
+		return false
+	}
+	return true
+}
+
+/*
+================
+returnCastAdmission
+
+The checks every return cast shares before its destination's own: the
+Thief Den scroll skips RESURRECT's transport refusal (4A0380 tests it only
+on that branch).
+================
+*/
+func (rt *Runtime) returnCastAdmission(division string, c *enterworld.Character, result *OpResult) bool {
 	// Native 4a0399 checks the quest mask before the active-cast test.
 	if rt.QuestTravelBlocks != nil && rt.QuestTravelBlocks(c)&0x20000 != 0 {
 		*result = itemUseFailure(0x5f)
@@ -88,10 +149,6 @@ func (rt *Runtime) returnScrollAdmission(division string, c *enterworld.Characte
 		return false
 	}
 	if rt.hasOpenSkillCast(division, c.Name) {
-		return false
-	}
-	if rt.hasSummonedTransportCOS(c) {
-		*result = itemUseFailure(0x5e)
 		return false
 	}
 	_, exists := rt.returnCasts.Load(simulation.WorldKey(division, c.Name))
@@ -111,13 +168,37 @@ return's "last recall point".
 ================
 */
 func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, request wire.ItemUseRequest, now int64, result *OpResult) bool {
-	duration, ok := returnScrollDuration(ref)
-	if !ok || ref.ReturnDestination != "RESURRECT" || !rt.returnScrollAdmission(division, c, result) {
+	duration, mode, ok := returnScrollTiming(ref)
+	if !ok {
+		return false
+	}
+	var destination *simulation.Spawn
+	switch ref.ReturnDestination {
+	case "RESURRECT":
+		if mode != teleportModeBlocking || !rt.returnScrollAdmission(division, c, result) {
+			return false
+		}
+	case "THIEFDEN":
+		// 4A0380: only a thief in job mode (job state 2) returns to the den,
+		// at the gate Param4 names.
+		if !rt.returnCastAdmission(division, c, result) {
+			return false
+		}
+		if enterworld.DressedJob(c) != domain.JobThief {
+			*result = itemUseFailure(errCodeThievesOnly)
+			return false
+		}
+		gate, found := rt.buildingGateSpawn(ref.ReturnTeleport)
+		if !found {
+			return false
+		}
+		destination = &gate
+	default:
 		return false
 	}
 	at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
 	if !rt.startReturnCast(returnCast{division: division, character: c, row: row, slot: request.Slot,
-		typeWord: request.TypeWord, duration: duration, now: now}, result) {
+		typeWord: request.TypeWord, duration: duration, destination: destination, now: now, mode: mode}, result) {
 		return false
 	}
 	c.World.LastRecallPoint = worldSpawnFromMission(at)
@@ -212,9 +293,9 @@ func (rt *Runtime) HandleReturnCancel(division string, c *enterworld.Character, 
 		return OpResult{Frames: []wire.Frame{{Opcode: 0xb2dd, Payload: []byte{2, 6}}}}
 	}
 	if !rt.deps.Update(c, "return-scroll-cancel", func() bool {
-		// INFERENCE: only a return is cancelled; a skin change's mode-3
-		// reload carries a model already committed.
-		if c.NativeTeleportMode != 1 {
+		// INFERENCE: a return cast cancels; a skin change's mode-3 reload
+		// carries a model already committed.
+		if c.NativeTeleportMode == 0 || c.NativeTeleportMode == skinTeleportMode {
 			return false
 		}
 		c.NativeTeleportMode = 0
@@ -365,6 +446,7 @@ retireReturnForReentry
 ================
 */
 func (rt *Runtime) retireReturnForReentry(division string, c *enterworld.Character) {
+	rt.jobDresses.Delete(simulation.WorldKey(division, c.Name))
 	rt.deps.Update(c, "return-scroll-retire-reentry", func() bool {
 		rt.returnCasts.Delete(simulation.WorldKey(division, c.Name))
 		if c.NativeTeleportMode == 0 {

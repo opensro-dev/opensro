@@ -97,6 +97,8 @@ export interface EntityState {
 	readonly spawnDestination?: Pose;
 	readonly jobType?: number;
 	readonly jobGrade?: number;
+	// The local player's job block (entry only): joined job, grade, exp, alias.
+	readonly localJob?: import("@/engine/foundation/gameplay/job-guild").LocalJob;
 	readonly guildName?: string;
 	readonly guildId?: number;
 	readonly guildGrantName?: string;

@@ -692,6 +692,13 @@ export function createEntities(
 						arenaTeam: Number( local.arenaTeam ?? 255 ),
 						pvpState: Number( local.pvpState ?? 0 ),
 						...(local.visualFlags !== undefined ? { visualFlags: Number( local.visualFlags ) } : {}),
+						...(local.bodyShape !== undefined ? { bodyShape: Number( local.bodyShape ) } : {}),
+						localJob: {
+							type: Number( local.jobType ?? 0 ),
+							grade: Number( local.jobGrade ?? 0 ),
+							exp: Number( local.jobExp ?? 0 ),
+							alias: String( local.jobAlias ?? "" )
+						},
 						regionId: finite( pose.regionId ),
 						x: finite( pose.x ),
 						y: finite( pose.y ),
