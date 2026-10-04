@@ -499,3 +499,25 @@ test("an enemy skill at the caster or an NPC is sent with no prediction and no c
 	const monster = pressAt( { ...local, gid: 9, kind: "monster", name: "mob", x: local.x + 10 } );
 	assert.ok( monster.cooldown && monster.predicted, "a monster in range still predicts and stands in" );
 });
+
+test("an enemy skill pressed with nothing selected never animates, cools down or sends", () => {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const game = createGameplay( f => sent.push( f ) );
+	const row = skillRef( TARGETED, 5000 );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ TARGETED ] },
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60, targets: 14, actionMs: 800 } } ]
+	} );
+	game.seed( local );
+	assert.throws(
+		() => game.command( { kind: "skill", skillId: TARGETED }, 1000, undefined, local ),
+		/requires a target/
+	);
+	const state = game.take();
+	assert.equal( cooldowns.skillCooldown( state?.skillCooldowns ?? [], TARGETED, 0, 1010 ), null );
+	assert.ok( !state?.castPrediction, "a targetless press predicted a cast" );
+	assert.equal( sent.filter( f => f.opcode === 0x72cd ).length, 0 );
+	game.dispose();
+});
