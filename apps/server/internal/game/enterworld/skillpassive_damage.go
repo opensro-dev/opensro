@@ -229,6 +229,11 @@ type SkillPassiveParameters struct {
 	// the flat block-rate parameter of each lane the normalized mask selects;
 	// see combat.BlockRateWrites.
 	Br SkillPassiveBlockRate
+	// HP, MP, Evasion and Accuracy are hpi/mpi/er/hr {flat, percent}: the
+	// same 594AC0 cases a timed buff runs (hpi at 595481 writes Param3
+	// percent-sum then flat). 59F0E0 (0x59F310) installs a learned passive
+	// through that installer once its reqi walk passes.
+	HP, MP, Evasion, Accuracy SkillFlatRate
 }
 
 /*
@@ -266,11 +271,14 @@ encodedPassiveParameters
 Native stores up to five three-argument setv blocks. Repeated keys overwrite
 in source order. reat, real and the reqi/reqn gate complete the resistance
 passives; br is the block-rate passive (a duplicate br, a zero mask or a
-value above maxBlockRatePercent is malformed). Refuse the whole program if
-any operation lacks execution.
+value above maxBlockRatePercent is malformed); hpi, mpi, er and hr are the
+Chinese maximum-HP, maximum-MP, parry and attack-rate passives (a duplicate
+block is malformed). Refuse the whole program if any operation lacks
+execution.
 
 Any one consumed block pins the program: none of the cited installers for
-reat (595542..59568F), real (59DF20) or br (0x595DFD) reads a setv.
+reat (595542..59568F), real (59DF20), br (0x595DFD) or hpi (595481) reads a
+setv.
 Protection is reat + real + reqi and Blockade br + reqi; a program holding
 only its reqi gate has nothing to install and stays unpinned.
 ================
@@ -318,13 +326,39 @@ func encodedPassiveParameters(fields []string) SkillPassiveParameters {
 				return SkillPassiveParameters{}
 			}
 			out.Br = SkillPassiveBlockRate{Mask: normalizeLaneMask(op.Arguments[0]), Value: op.Arguments[1]}
+		case itemEffectHP, itemEffectMP, itemEffectEvasion, itemEffectHit:
+			block := passiveFlatRateBlock(&out, op.Tag)
+			if block.Present || op.Count != 2 {
+				return SkillPassiveParameters{}
+			}
+			*block = SkillFlatRate{Present: true, Flat: op.Arguments[0], Percent: op.Arguments[1]}
 		case 0x72657169, 0x7265716e: // reqi/reqn: row.Reqi
 		default:
 			return SkillPassiveParameters{}
 		}
 	}
-	out.Pinned = count > 0 || out.Reat.Mask != 0 || out.Real.Mask != 0 || out.Br.Mask != 0
+	out.Pinned = count > 0 || out.Reat.Mask != 0 || out.Real.Mask != 0 || out.Br.Mask != 0 ||
+		out.HP.Present || out.MP.Present || out.Evasion.Present || out.Accuracy.Present
 	return out
+}
+
+/*
+================
+passiveFlatRateBlock
+
+The program field an hpi, mpi, er or hr instruction fills.
+================
+*/
+func passiveFlatRateBlock(out *SkillPassiveParameters, tag uint32) *SkillFlatRate {
+	switch tag {
+	case itemEffectHP:
+		return &out.HP
+	case itemEffectMP:
+		return &out.MP
+	case itemEffectEvasion:
+		return &out.Evasion
+	}
+	return &out.Accuracy
 }
 
 /*

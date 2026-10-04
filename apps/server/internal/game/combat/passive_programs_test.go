@@ -181,3 +181,51 @@ func TestProtectionResistsOnlyWithADualAxe(t *testing.T) {
 	c.MissionInventory[0].Durability = 0
 	check(false)
 }
+
+/*
+================
+TestChineseFlatRatePassivesRaiseTheirParameters
+
+SKILL_CH_SPEAR_PASSIVE_A_09 (Cheolsam Force) is hpi 2826 0 with no reqi:
+59F0E0 installs it through 594AC0, whose hpi case (595481) adds flat 2826
+to maximum HP. The Cold Force mpi, Pacheon hr and Lightning er passives
+are the same flat/percent blocks on Params 4, 11 and 9.
+================
+*/
+func TestChineseFlatRatePassivesRaiseTheirParameters(t *testing.T) {
+	for _, tc := range []struct {
+		codename  string
+		parameter uint16
+		flat      float32
+	}{
+		{"SKILL_CH_SPEAR_PASSIVE_A_09", passiveParamMaxHP, 2826},
+		{"SKILL_CH_WATER_PASSIVE_A_09", passiveParamMaxMP, 0},
+		{"SKILL_CH_BOW_PASSIVE_A_09", passiveParamAccuracy, 0},
+		{"SKILL_CH_LIGHTNING_PASSIVE_A_09", passiveParamEvasion, 0},
+	} {
+		row := shippedPassive(t, tc.codename)
+		c := &domain.Character{Skills: []uint32{row.ID}}
+		writes, _, err := learnedPassives(c, passiveSkills{row.ID: row}, itemRefs{}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var flat, percent int
+		for _, w := range writes {
+			if w.Parameter != tc.parameter || w.Source <= 2048 {
+				t.Fatalf("%s: stray write %+v", tc.codename, w)
+			}
+			switch w.Channel {
+			case paramkeeper.Flat:
+				flat++
+				if tc.flat != 0 && w.Value != tc.flat || w.Value <= 0 {
+					t.Fatalf("%s: flat %+v", tc.codename, w)
+				}
+			case paramkeeper.PercentSum:
+				percent++
+			}
+		}
+		if flat != 1 || percent != 1 {
+			t.Fatalf("%s: writes %+v", tc.codename, writes)
+		}
+	}
+}

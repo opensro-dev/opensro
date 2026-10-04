@@ -4,7 +4,8 @@
 passives.go - learned passive skills projected onto the keeper
 
 Each learned passive group's highest rank contributes its setv parameter
-values, keeper writes (reat, br, passive defense, passive cr) and status
+values, keeper writes (reat, br, hpi/mpi/er/hr, passive defense, passive
+cr) and status
 resistance buckets. A program declaring reqi is gated by the 59F0E0
 equipment walk; passive cr follows the equipped weapon kind instead.
 Nothing here is cached: Character.Snapshot is the only input.
@@ -20,6 +21,13 @@ import (
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/paramkeeper"
+)
+
+const (
+	passiveParamMaxHP    = 3
+	passiveParamMaxMP    = 4
+	passiveParamEvasion  = 9
+	passiveParamAccuracy = 11
 )
 
 /*
@@ -116,6 +124,7 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 					writes = append(writes, w)
 				}
 			}
+			writes = append(writes, passiveFlatRateWrites(source, p)...)
 		}
 		if d := selected.PassiveDefense; d.Pinned && !selected.ChainSub && selected.ChainNext == 0 && eligible {
 			defense, err := defenseModifierWrites(source, DefenseModifierInput{Physical: d.Physical, Magical: d.Magical})
@@ -130,6 +139,35 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 		}
 	}
 	return writes, power, nil
+}
+
+/*
+==================
+passiveFlatRateWrites
+
+594AC0's hpi/mpi/er/hr cases (hpi at 595481): percent-sum then flat on
+Params 3/4/9/11, each unsigned word rounded to float32 at the call, the
+same writes timedItemModifierWrites files for a timed item.
+==================
+*/
+func passiveFlatRateWrites(source uint32, p enterworld.SkillPassiveParameters) []paramkeeper.Write {
+	var writes []paramkeeper.Write
+	for _, block := range [...]struct {
+		parameter uint16
+		value     enterworld.SkillFlatRate
+	}{
+		{passiveParamMaxHP, p.HP}, {passiveParamMaxMP, p.MP},
+		{passiveParamEvasion, p.Evasion}, {passiveParamAccuracy, p.Accuracy},
+	} {
+		if !block.value.Present {
+			continue
+		}
+		writes = append(writes,
+			paramkeeper.Write{Parameter: block.parameter, Channel: paramkeeper.PercentSum, Source: source, Value: float32(block.value.Percent)},
+			paramkeeper.Write{Parameter: block.parameter, Channel: paramkeeper.Flat, Source: source, Value: float32(block.value.Flat)},
+		)
+	}
+	return writes
 }
 
 /*
