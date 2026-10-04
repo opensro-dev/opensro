@@ -283,13 +283,13 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	for range skill.Attack.ImpactCount {
 		split, resolveErr := rt.resolveCombatBehindWall(criticalActor{division: divisionID, monster: instance.Gid}, skill, attacker, defender, wallRule)
 		formula := split.Defender
-		if resolveErr != nil || formula.Damage == 0 && !walled && !formula.Blocked {
+		if resolveErr != nil || formula.Damage == 0 && !walled && !formula.Blocked && !formula.Slain {
 			return result
 		}
 		splits = append(splits, wallSplit{absorbed: split.Absorbed, flags: formula.ResultFlags, covered: split.Covered})
 		formulas = append(formulas, formula)
-		if formula.Blocked {
-			continue // 5905FB: no status roll for a blocked impact
+		if formula.Blocked || formula.Slain {
+			continue // 5905FB: no status roll for a blocked or ck-killed impact
 		}
 		records, rollErr := rt.rollMonsterOnPlayer(divisionID, instance, &skill.Abnormal, snapshot, defender, wallRule)
 		if rollErr != nil {
@@ -326,6 +326,9 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		for _, formula := range formulas {
 			hitContext.Magical = hitContext.Magical || formula.MagicalDamage != 0
 			debit := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
+			if formula.Slain {
+				debit = remaining // 58F778: the ck kill marks the target dead
+			}
 			remaining -= debit
 			fatal = remaining == 0
 			impacts = append(impacts, wire.SkillCastTargetImpact{
@@ -334,6 +337,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 				Damage:  formula.Damage,
 				Fatal:   fatal,
 				Blocked: formula.Blocked,
+				Slain:   formula.Slain,
 			})
 			if fatal {
 				break
@@ -353,7 +357,11 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		if struck {
 			var tally wearTally
 			for _, impact := range impacts {
-				tally.note(impact.Blocked, false)
+				// 58F784 jumps past the landed count (58F79F): a ck kill
+				// wears nothing.
+				if !impact.Slain {
+					tally.note(impact.Blocked, false)
+				}
 			}
 			for _, roll := range [...]struct{ mode, count uint8 }{{wearArmour, tally.armour}, {wearShield, tally.shield}} {
 				taken := rt.rollEquipmentWear(divisionID, character, roll.mode, roll.count)

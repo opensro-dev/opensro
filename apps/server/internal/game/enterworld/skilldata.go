@@ -176,7 +176,10 @@ type SkillRow struct {
 	// defender's wall absorb record.
 	WallBypass bool
 	// Ck is the ck block (+0x248): no block chance for its hits (58E624).
-	Ck                   bool
+	Ck bool
+	// CkChance is ck's kill chance (58EC63 copies it to the target group's
+	// +0xF; 58F74E rolls it).
+	CkChance             uint8
 	Recovery             SkillRecovery
 	TimedEffect          SkillTimedEffect
 	Concealment          SkillConcealment

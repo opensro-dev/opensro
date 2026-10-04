@@ -292,7 +292,13 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 		case 0x636b, 0x6c667374, 0x70646d67, 0x70646d32: // ck, lfst, pdmg, pdm2 (589EE0)
 			row.WallBypass = true
 			// ck (+0x248) also takes the target's block chance away (58E624).
-			row.Ck = row.Ck || tag == 0x636b
+			if tag == 0x636b {
+				row.Ck = true
+				// 58EC61: the low byte of ck's first word is the kill chance.
+				if chance, ok := word(i + 1); ok {
+					row.CkChance = uint8(chance)
+				}
+			}
 		case 0x6f6e6666: // onff
 			period, periodOK := word(i + 1)
 			cost, costOK := word(i + 2)

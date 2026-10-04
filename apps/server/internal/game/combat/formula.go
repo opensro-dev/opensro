@@ -72,6 +72,9 @@ type Result struct {
 	// Blocked is a type-2 record (0x58F0EF): no damage, no imbue share, no
 	// status roll, no knockdown (the defender's +0xD2C is never set).
 	Blocked bool
+	// Slain is a ck kill, record 0x86 (58F774): no damage, and the
+	// defender dies outright.
+	Slain bool
 }
 
 /*

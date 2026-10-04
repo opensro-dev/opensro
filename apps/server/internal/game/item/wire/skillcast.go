@@ -216,10 +216,12 @@ type SkillCastTargetImpact struct {
 	Knockdown SkillCastFacingPoint
 	Knockback SkillCastFacingPoint
 	// Absorb makes this a Force wall's type-7 record; Skipped a bare type 8;
-	// Blocked a bare type 2 (5855F0 writes only the kind byte).
+	// Blocked a bare type 2; Slain a ck kill, the bare 0x86 (5855F0 writes
+	// only the kind byte).
 	Absorb  *SkillCastAbsorb
 	Skipped bool
 	Blocked bool
+	Slain   bool
 }
 
 // SkillCastAbsorb is the rest of a type-7 record (5855F0): the pool left
@@ -453,6 +455,10 @@ func (impact SkillCastTargetImpact) writeTo(writer *Writer) {
 	}
 	if impact.Blocked {
 		writer.U8(2)
+		return
+	}
+	if impact.Slain {
+		writer.U8(0x86)
 		return
 	}
 	if a := impact.Absorb; a != nil {
