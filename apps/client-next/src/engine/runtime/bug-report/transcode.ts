@@ -16,7 +16,7 @@ while both have room, waiting on their "dequeue" events.
 */
 import type { Mp4Sample, Mp4Track } from "@/engine/foundation/media/mp4";
 import { replayBitrate, replayTrackBytes } from "@/engine/foundation/media/replay-window";
-import { copyBytes, VIDEO_CODEC } from "./recorder";
+import { copyBytes, REPLAY_HARDWARE, VIDEO_CODEC } from "./recorder";
 
 const MAX_QUEUE = 8;
 const KEY_FRAME_US = 2000000;
@@ -78,7 +78,7 @@ async function reencode( track: Mp4Track, bitrate: number, progress: ( fraction:
 		bitrate,
 		framerate: 30,
 		latencyMode: "quality",
-		hardwareAcceleration: "prefer-hardware",
+		hardwareAcceleration: REPLAY_HARDWARE,
 		avc: { format: "avc" }
 	} );
 	const decoder = new VideoDecoder( {
@@ -104,7 +104,7 @@ async function reencode( track: Mp4Track, bitrate: number, progress: ( fraction:
 		codedWidth: track.width,
 		codedHeight: track.height,
 		description: track.avcC,
-		hardwareAcceleration: "prefer-hardware"
+		hardwareAcceleration: REPLAY_HARDWARE
 	} );
 	try {
 		for ( const sample of track.samples ) {

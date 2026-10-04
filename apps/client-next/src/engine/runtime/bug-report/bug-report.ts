@@ -21,7 +21,7 @@ it in the Option window; otherwise it follows the server's default.
 import type { BugReportControl, BugReportField } from "@/engine/contracts/bug-report";
 import { RELEASE_PROTOCOL, RELEASE_PROTOCOL_HEADER } from "@/engine/foundation/release/protocol";
 import { muxMp4, type Mp4Track } from "@/engine/foundation/media/mp4";
-import { replayTrackBytes } from "@/engine/foundation/media/replay-window";
+import { replayReportState, replayTrackBytes } from "@/engine/foundation/media/replay-window";
 import { createReplayRecorder } from "./recorder";
 import { createBugReportDialog, type OutgoingReport, type SendOutcome } from "./dialog";
 import { createReportArchive } from "./archive";
@@ -316,7 +316,10 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 							(replayTrackBytes( sent ) / MEGABYTE).toFixed( 1 )
 						} MB`)
 			} );
-		} else fields.push( { name: "Replay", value: replayEnabled ? "recording, not attached" : "off" } );
+		} else {fields.push( {
+				name: "Replay",
+				value: replayReportState( replayEnabled, report.replay !== null, recorder.lastError() )
+			} );}
 		if ( report.replay ) {
 			fields.push( {
 				name: "Full quality",

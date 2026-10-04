@@ -182,3 +182,18 @@ export function replaySnapStart(
 	}
 	return best;
 }
+
+/*
+================
+replayReportState
+
+The report's Replay line when no clip went with it. A player who sees only
+a screenshot is told nothing, so the line carries the recorder's own reason
+for staff to read.
+================
+*/
+export function replayReportState( enabled: boolean, buffered: boolean, lastError: string | null ): string {
+	if ( !enabled ) return "off";
+	if ( buffered ) return "recording, not attached";
+	return lastError ? "not recording: " + lastError : "recording, nothing buffered yet";
+}

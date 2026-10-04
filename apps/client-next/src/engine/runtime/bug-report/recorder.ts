@@ -38,6 +38,14 @@ export const RECORD_BITRATE = 5000000;
 // Key frames by wall time, not frame count: the game's frame rate varies,
 // and clip cuts snap back to the previous key frame.
 const KEY_FRAME_MS = 2000;
+// Chrome reads "prefer-hardware" as hardware only: on a PC without an H.264
+// encoder (older or blocklisted GPUs, remote desktops, most Linux) the
+// config is unsupported and the replay never starts. Let it fall back.
+export const REPLAY_HARDWARE: HardwareAcceleration = "no-preference";
+// After an encoder failure (Chrome reclaims idle codecs in background tabs)
+// the loop reopens one this long after the error instead of stopping for
+// the rest of the session.
+const ENCODER_RETRY_MS = 5000;
 // Frames waiting in the encoder before new ones are skipped instead of
 // queueing memory and latency behind a slow encoder.
 const MAX_ENCODE_QUEUE = 4;
@@ -108,6 +116,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 	let lastFrameMs = -Infinity;
 	let dropped = 0;
 	let error: string | null = null;
+	let failedAtMs = -Infinity;
 	let audioTrack: MediaStreamTrack | null = null;
 	let audioEncoder: AudioEncoder | null = null;
 	let audioSamples: Mp4Sample[] = [];
@@ -129,7 +138,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 			bitrate: RECORD_BITRATE,
 			framerate: CAPTURE_FPS,
 			latencyMode: "realtime",
-			hardwareAcceleration: "prefer-hardware",
+			hardwareAcceleration: REPLAY_HARDWARE,
 			avc: { format: "avc" }
 		};
 	}
@@ -168,7 +177,9 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 			error: failure => {
 				if ( owner !== generation ) return;
 				error = "Replay encoder: " + String( failure );
-				stop();
+				failedAtMs = performance.now();
+				// The ring restarts with the next encoder (openEncoder).
+				encoder = null;
 			}
 		} );
 		encoder.configure( encoderConfig( width, height ) );
@@ -189,6 +200,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 		if ( !audioTrack ) listen( owner );
 		const [width, height] = replaySize( video.videoWidth, video.videoHeight );
 		if ( width !== size[0] || height !== size[1] || !encoder || encoder.state === "closed" ) {
+			if ( now - failedAtMs < ENCODER_RETRY_MS ) return;
 			openEncoder( width, height );
 		}
 		if ( !encoder || !context || !scaled ) return;
@@ -385,6 +397,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 		size = [ 0, 0 ];
 		settings = null;
 		lastFrameMs = -Infinity;
+		failedAtMs = -Infinity;
 		dropped = 0;
 	}
 
