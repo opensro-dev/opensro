@@ -264,6 +264,7 @@ import {
 	blindableCharacter,
 	hiddenSilkCos,
 	nameInRange,
+	riderBoardPosition,
 	overheadBoardVisible
 } from "@/engine/foundation/ui/name-visibility";
 import { chatBlocks, chatBlockError } from "@/engine/foundation/gameplay/chat-blocks";
@@ -378,6 +379,7 @@ import { guideTokens } from "@/engine/foundation/ui/guide-content";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/contracts/session";
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
+import type { EntityState } from "@/engine/contracts/world";
 
 // CIFCosInfo_RefreshSatietyDependentStats (6A4600) font colour 0xFF999999.
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
@@ -11085,6 +11087,9 @@ export function createUi(
 				const overlaid = new Set<number>();
 				// Mounts carrying a rider: their ride link hides their name board.
 				const ridden = new Set( next.entities.flatMap( e => e.mountedOn ? [ e.mountedOn ] : [] ) );
+				const rides = new Map( next.entities.filter( e => ridden.has( e.gid ) ).map( e => [ e.gid, e ] ) );
+				const boardAt = ( entity: EntityState ) =>
+					riderBoardPosition( entity, entity.mountedOn ? rides.get( entity.mountedOn ) : undefined );
 				if ( game && hud.data() ) {
 					for ( const entity of next.entities ) {
 						if (
@@ -11094,7 +11099,7 @@ export function createUi(
 						const overlay = overheads.get( entity.gid );
 						if (
 							!overlay ||
-							entity.gid !== next.hoveredEntity && !nameInRange( entity, local, game.pose )
+							entity.gid !== next.hoveredEntity && !nameInRange( boardAt( entity ), local, game.pose )
 						) continue;
 						if ( overlay.fortressMark || overlay.guildText || overlay.status ) overlaid.add( entity.gid );
 						if ( overlay.fortressMark ) {
@@ -11250,7 +11255,7 @@ export function createUi(
 					// shows without its name (name-visibility.ts header).
 					const named = !hiddenSilkCos( entity, options.hideSilkCos ) &&
 						overheadBoardVisible(
-							entity,
+							boardAt( entity ),
 							local,
 							hovered,
 							options,

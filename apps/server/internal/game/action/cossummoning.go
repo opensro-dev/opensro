@@ -156,7 +156,9 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		Position: wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle},
 		Walk:     ref.WalkSpeed, Run: ref.RunSpeed, Scale: ref.Scale, Name: pet.Name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c),
 	})}
-	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, 1, use.request.TypeWord)}, {Opcode: wire.OpCosRecordCreate, Payload: record}, spawn}, Broadcast: []wire.Frame{spawn}}
+	// Viewers meet the pet through the peer COS lane alone: a spawn sent from
+	// here as well reached each of them twice (see the vehicle summon).
+	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, 1, use.request.TypeWord)}, {Opcode: wire.OpCosRecordCreate, Payload: record}, spawn}}
 	result.Frames = append(result.Frames, companionItemStateFrames(c, pet)...)
 	return true
 }

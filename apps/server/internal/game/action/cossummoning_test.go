@@ -49,6 +49,12 @@ func useSummonerFixture(t *testing.T, rt *Runtime, c *enterworld.Character, slot
 	if len(result.Frames) == 0 || result.Frames[0].Opcode != wire.OpItemUseResponse || result.Frames[0].Payload[0] != 1 {
 		t.Fatalf("summon refused: %+v", result)
 	}
+	// The peer COS lane is the only door that introduces a pet to viewers.
+	for _, frame := range result.Broadcast {
+		if frame.Opcode == wire.OpSingleObjectSpawn {
+			t.Fatal("summon spawned the pet for viewers outside the peer COS lane")
+		}
+	}
 }
 
 /*

@@ -527,14 +527,18 @@ export function createCharacters() {
 				const actor = rows.get( gid );
 				if ( !actor || actor.attachment || (actor.opacity ?? 1) <= 0 ) continue;
 				// 85f57b: riding labels use the ride's height, not the rider's saddle.
-				const body = actor.mountedOn !== undefined ? rows.get( actor.mountedOn ) : actor;
-				if ( !body ) continue;
-				const resource = models.get( body.model );
+				// 85f58e: without a resolvable ride (85D870 null) the rider's own
+				// height and lift place it; a ride whose model is still loading
+				// has no height yet either.
+				const ride = actor.mountedOn !== undefined ? rows.get( actor.mountedOn ) : undefined,
+					rideResource = ride && models.get( ride.model );
+				const body = rideResource ? ride! : actor;
+				const resource = rideResource || models.get( actor.model );
 				if ( !resource ) continue;
 				const bounds = bindBoundsOf( resource.model );
 				const matrix = transformFor( body, rows, origin, transforms );
 				if ( !matrix || !Number.isFinite( bounds[4] ) ) continue;
-				const lift = actor.mountedOn !== undefined ? 7 : 2;
+				const lift = rideResource ? 7 : 2;
 				const x = matrix[12]!,
 					y = matrix[13]! + (actor.groundItem ? 5 : bounds[4] * body.scale + lift),
 					z = matrix[14]!;

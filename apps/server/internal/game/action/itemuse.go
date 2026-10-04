@@ -440,20 +440,20 @@ func (rt *Runtime) HandleItemUse(
 				OwnerGid:  enterworld.ObjectIDForCharacter(character),
 			})
 			rt.rememberTransportCOS(divisionID, character, live)
+			// Only the owner hears the summon here. Viewers meet the vehicle
+			// through the peer COS lane (runPeerCOSVisibility), which spawns
+			// it, binds the ride and keeps its own record of what each viewer
+			// holds; a second spawn from this door reached every viewer
+			// twice, and the client drops the session on a duplicate gid.
 			result = OpResult{
 				Frames: []wire.Frame{
 					{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
 					{Opcode: wire.OpCosRecordCreate, Payload: record},
 					{Opcode: wire.OpSingleObjectSpawn, Payload: spawn},
+					{Opcode: wire.OpCosRideState, Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(character), true, gid)},
 				},
-				Broadcast: []wire.Frame{{Opcode: wire.OpSingleObjectSpawn, Payload: spawn}},
 			}
-			ride := wire.Frame{Opcode: wire.OpCosRideState, Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(character), true, gid)}
-			result.Frames = append(result.Frames, ride)
-			result.Broadcast = append(result.Broadcast, ride)
-			speeds := rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(divisionID, character, nowMs))
-			result.Frames = append(result.Frames, speeds...)
-			result.Broadcast = append(result.Broadcast, speeds...)
+			result.Frames = append(result.Frames, rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(divisionID, character, nowMs))...)
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
 		}

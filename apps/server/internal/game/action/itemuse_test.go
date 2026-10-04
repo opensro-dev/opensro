@@ -241,8 +241,8 @@ func TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn(t *testing.T) {
 		wire.OpCosRideState,
 		movementSpeedOpcode,
 	)
-	assertOpcodes(t, result.Broadcast, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode,
-		opCommerceItemReferences, wire.OpItemUseVisual)
+	// The peer COS lane alone introduces the vehicle to viewers.
+	assertOpcodes(t, result.Broadcast, opCommerceItemReferences, wire.OpItemUseVisual)
 	if character.ActiveCOS == nil || character.ActiveCOS.GID != 0x00C00003 ||
 		character.ActiveCOS.RefObjID != 3914 || !character.ActiveCOS.Summoned || !character.ActiveCOS.Mounted {
 		t.Fatalf("active COS = %+v", character.ActiveCOS)

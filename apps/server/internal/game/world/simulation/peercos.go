@@ -129,6 +129,14 @@ func (t *Ticker) runPeerCOSVisibility(state *divisionTickState, nowMs int64, ses
 				continue
 			}
 			gid := p.Row.Gid
+			// A ride names its rider (777F60 has no absent-actor arm), so a
+			// mounted vehicle is shown only to viewers the player lane has
+			// shown the rider to this tick. The two lanes read separate world
+			// snapshots and the player lane skips unchanged ticks, so the
+			// vehicle can briefly land in a cell the rider has not reached.
+			if p.Mounted && !state.shownPeers[viewer.SessionID][p.Row.OwnerGid] {
+				continue
+			}
 			present[gid] = true
 			old, exists := shown[gid]
 			sameLife := exists && old.ref == p.Row.RefObjID && old.session == p.Session && old.generation == p.Generation

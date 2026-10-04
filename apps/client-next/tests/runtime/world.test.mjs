@@ -653,6 +653,12 @@ spawn
 	const events = flush( owner ).events;
 	assert.equal( events.find( event => event.kind === "state" ).entity.mountedOn, undefined );
 	assert.equal( events.at( -1 ).kind, "despawn" );
+	// 777F60 stores the mount gid unresolved: a ride ahead of its vehicle's
+	// spawn binds the rider instead of failing the viewer's world session.
+	owner.receive( { opcode: 0xb4b5, payload: ride } );
+	assert.equal( owner.read( 1 ).mountedOn, 2, "a ride may precede its vehicle" );
+	owner.receive( cosSpawn );
+	assert.equal( owner.read( 1 ).mountedOn, 2 );
 	owner.dispose();
 });
 

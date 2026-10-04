@@ -669,7 +669,10 @@ export function createEntities(
 				if ( p.length === 2 && p[0] === 2 ) return;
 				if ( p.length !== 10 || p[0] !== 1 || p[5]! > 1 ) throw new Error( "Invalid ride state" );
 				const rider = entities.get( v.getUint32( 1, true ) ), mount = v.getUint32( 6, true );
-				if ( !rider || p[5] === 1 && (!entities.has( mount ) || mount === rider.gid) ) {
+				// 777F60 stores the mount gid at +0x298 without resolving it: a ride
+				// may precede its vehicle's spawn, and 85E000/85D870 fall back to
+				// the rider until the vehicle arrives.
+				if ( !rider || p[5] === 1 && (mount === 0 || mount === rider.gid) ) {
 					throw new Error( "Ride state references absent entity" );
 				}
 				if (
@@ -935,7 +938,7 @@ export function createEntities(
 				const channels = decodeMovementSpeeds( p ), source = entities.get( channels.gid );
 				// CPSMission_OnEntitySpeedUpdate0x376F (0x775E40) consumes server speeds;
 				// CCharactor_GetActiveMoverEntity (0x85E000) resolves the riding actor.
-				const entity = source?.mountedOn ? entities.get( source.mountedOn ) : source;
+				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				if ( entity ) {
 					const next = { ...entity, walkSpeed: channels.walkSpeed, runSpeed: channels.runSpeed };
 					apply( {
@@ -973,7 +976,7 @@ export function createEntities(
 				const source = entities.get( v.getUint32( 0, true ) );
 				if ( !source || source.kind === "local-player" || source.appearanceState?.[0] === 2 ) return;
 				// CCharactor_GetActiveMoverEntity (0x85E000): a rider steers its mount.
-				const entity = source.mountedOn ? entities.get( source.mountedOn ) : source;
+				const entity = source.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				if ( !entity ) return;
 				const steered = motion.steer( entity, v.getUint16( 4, true ), now );
 				if ( steered ) {
