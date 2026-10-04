@@ -238,6 +238,16 @@ func (rt *Runtime) HandleItemUse(
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
 		}
+		if family == itemUsePremiumTicket || family == itemUseSkillTimeTicket {
+			return rt.usePremiumTicket(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, family == itemUseSkillTimeTicket, &result)
+		}
+		if family == itemUseGenderTool {
+			return rt.useGenderTool(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
 		if family == itemUseSkinChange {
 			return rt.useSkinChangeScroll(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,

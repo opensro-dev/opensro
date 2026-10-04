@@ -94,11 +94,14 @@ func paramJobPackets(deps *Deps, character *Character, nowMs int64) []Packet {
 	}
 	owner := ObjectIDForCharacter(character)
 	var packets []Packet
+	// One row per item: a premium ticket raises two keepers under one row.
+	shown := map[uint32]bool{}
 	for _, job := range character.ParamJobs {
 		remaining := PetSkillWindowRemaining(job.EndUnixMs, nowMs)
-		if remaining == 0 {
+		if remaining == 0 || shown[job.ItemRefObjID] {
 			continue
 		}
+		shown[job.ItemRefObjID] = true
 		ref, ok := deps.Items.ItemRefByCodename(job.Codename)
 		if !ok || ref == nil || ref.RefObjID != job.ItemRefObjID {
 			continue

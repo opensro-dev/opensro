@@ -251,6 +251,7 @@ export type GameplayCommand =
 		readonly summonerSlot?: number;
 		// The skin change window's choice (CIFChangePlayerModel_OnConfirm).
 		readonly skin?: import("@/engine/foundation/gameplay/skin-change").SkinChoice;
+		readonly targetSlot?: number;
 	}
 	| {
 		readonly kind: "navigation";

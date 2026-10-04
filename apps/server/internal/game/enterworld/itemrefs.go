@@ -493,6 +493,10 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// fixed HP/MP amount, Param2 their percentage, Param3 the EXP refund.
 	{120, "itemParam2_2a0", "int"},
 	{122, "itemParam3_2a4", "int"},
+	// The premium time tickets (49C2B0 cases 3 and 4) read the EXP and
+	// skill-EXP bonus percentages from Param4 and Param5.
+	{124, "itemParam4_2a8", "int"},
+	{126, "itemParam5_2ac", "int"},
 	// 80BFAC/80BFBC store the two tokens after the 20 (value,label)
 	// pairs. 8093C0 returns CItemData+8, hence record offsets 51C/51D.
 	{158, "maxMagicOptions51c", "byte"},

@@ -1561,7 +1561,8 @@ state here before a command can claim a native wire conversation.
 					selectedGid: command.companionGid,
 					revivalSlot: command.revivalSlot,
 					summonerSlot: command.summonerSlot,
-					skin: command.skin
+					skin: command.skin,
+					targetSlot: command.targetSlot
 				} );
 			}
 			if ( command.kind === "release-target" ) {

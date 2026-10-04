@@ -25,6 +25,8 @@ export interface CosItemUseContext {
 	readonly revivalSlot?: number;
 	readonly summonerSlot?: number;
 	readonly skin?: SkinChoice;
+	// The bag item an armour gender change tool was dropped on.
+	readonly targetSlot?: number;
 }
 
 /*
@@ -42,6 +44,12 @@ export function cosItemUseTail(
 ): Uint8Array {
 	const band = flags >>> 5 & 3, group = flags >>> 7 & 15, subtype = flags >>> 11 & 31;
 	if ( (flags & 0x1c) !== 0x0c || band !== 3 ) return new Uint8Array();
+	// 3/3/13/8, the armour gender change: CIFInventory_ExecuteItemAction
+	// appends the bag slot the tool was dropped on (49C2B0 case 7).
+	if ( group === 13 && subtype === 8 ) {
+		if ( context?.targetSlot === undefined ) throw Error( "Drop the tool on the armour to change" );
+		return Uint8Array.of( context.targetSlot );
+	}
 	if ( isSkinChangeScroll( flags ) ) {
 		if ( !context?.skin ) throw Error( "Choose a skin in the change window" );
 		return skinChangeTail( context.skin );
@@ -93,10 +101,13 @@ export function companionItemTargetCommand(
 	source: InventoryItem,
 	target: InventoryItem
 ): GameplayCommand | null {
-	if ( source.slot < 13 || target.slot < 13 || !target.summon ) return null;
+	if ( source.slot < 13 || target.slot < 13 ) return null;
 	const flags = source.typeFlags;
 	if ( (flags & 0x7c) !== 0x6c ) return null;
 	const group = flags >>> 7 & 15, subtype = flags >>> 11 & 31;
+	// The gender change tool dropped on a bag item uses itself on it.
+	if ( group === 13 && subtype === 8 ) return { kind: "item-use", slot: source.slot, targetSlot: target.slot };
+	if ( !target.summon ) return null;
 	if ( group === 1 && subtype === 6 && target.summon.state === 4 ) {
 		return { kind: "item-use", slot: source.slot, revivalSlot: target.slot };
 	}

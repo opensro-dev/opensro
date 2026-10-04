@@ -56,3 +56,12 @@ test("the use carries [u32 model][u8 shape] and needs the window's choice", () =
 	] );
 	assert.throws( () => cos.cosItemUseTail( flags, [], { records: [] } ), /Choose a skin/ );
 });
+
+test("the gender change tool dropped on armour uses itself with the target slot", () => {
+	// Only the slot and type word take part in the drop.
+	const tool = /** @type {any} */ ({ slot: 25, typeFlags: word( 3, 3, 13, 8 ) }),
+		helmet = /** @type {any} */ ({ slot: 21, typeFlags: word( 3, 1, 1, 1 ) });
+	assert.deepEqual( cos.companionItemTargetCommand( tool, helmet ), { kind: "item-use", slot: 25, targetSlot: 21 } );
+	assert.deepEqual( [ ...cos.cosItemUseTail( tool.typeFlags, [], { records: [], targetSlot: 21 } ) ], [ 21 ] );
+	assert.throws( () => cos.cosItemUseTail( tool.typeFlags, [], { records: [] } ), /Drop the tool/ );
+});
