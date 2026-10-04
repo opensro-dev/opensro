@@ -41,10 +41,10 @@ func TestGMStatusSummonMountAndSessionLifecycle(t *testing.T) {
 		}
 		want := c.NativeBodyStatus
 		result := rt.HandleItemUse(testDivision, c, []byte{22, 0xEC, 0x11})
-		assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpCosRecordCreate, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode)
+		assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual, wire.OpCosRecordCreate, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode)
 		// Shared spawn grammar: 24 position bytes + 5 movement bytes + life,
 		// motion, body. Both owner and peer packets must initialize the body.
-		if c.ActiveCOS.NativeBodyStatus != want || result.Frames[2].Payload[31] != want || result.Broadcast[0].Payload[31] != want {
+		if c.ActiveCOS.NativeBodyStatus != want || result.Frames[3].Payload[31] != want || result.Broadcast[0].Payload[31] != want {
 			t.Fatal("summon lost inherited status", c.ActiveCOS, result)
 		}
 		if !c.ActiveCOS.Mounted {

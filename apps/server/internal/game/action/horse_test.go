@@ -34,20 +34,20 @@ func TestRidingHorseSummonMovesAndRetiresOnDismount(t *testing.T) {
 	rt, _ := newTestRuntime(c, source)
 	rt.BindPetSession(testDivision, c, 1)
 	summoned := rt.HandleItemUse(testDivision, c, []byte{22, 0xec, 0x11})
-	assertOpcodes(t, summoned.Frames, wire.OpItemUseResponse, wire.OpCosRecordCreate, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode)
+	assertOpcodes(t, summoned.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual, wire.OpCosRecordCreate, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode)
 	if c.ActiveCOS == nil || !c.ActiveCOS.Mounted || c.ActiveCOS.StateFlags != 3 {
 		t.Fatalf("summon did not bind the riding horse: %+v", c.ActiveCOS)
 	}
 	gid := c.ActiveCOS.GID
-	if len(summoned.Frames[1].Payload) != 17 || binary.LittleEndian.Uint32(summoned.Frames[1].Payload) != gid {
-		t.Fatalf("horse record must omit death word: %x", summoned.Frames[1].Payload)
+	if len(summoned.Frames[2].Payload) != 17 || binary.LittleEndian.Uint32(summoned.Frames[2].Payload) != gid {
+		t.Fatalf("horse record must omit death word: %x", summoned.Frames[2].Payload)
 	}
 	presented := rt.PetPresentation(testDivision, c.Name)
 	if presented == nil || !presented.Mounted || presented.Row.Band != 1 {
 		t.Fatalf("horse missing from peer presentation: %+v", presented)
 	}
 	rider := enterworld.ObjectIDForCharacter(c)
-	if !reflect.DeepEqual(summoned.Frames[3].Payload, wire.EncodeCosRideState(rider, true, gid)) {
+	if !reflect.DeepEqual(summoned.Frames[4].Payload, wire.EncodeCosRideState(rider, true, gid)) {
 		t.Fatal("summon did not publish native ride binding")
 	}
 	stopCalled := false

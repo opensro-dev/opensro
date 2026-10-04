@@ -125,7 +125,7 @@ func TestHandleItemUseConsumesPotionRecoversHPAndAnswersNativeBurst(t *testing.T
 	rt, _ := newTestRuntime(character, testItems())
 
 	result := rt.HandleItemUse(testDivision, character, []byte{21, 0xEC, 0x08})
-	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, simulation.OpVitalsUpdate)
+	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual, simulation.OpVitalsUpdate)
 	if got, want := result.Frames[0].Payload,
 		wire.EncodeItemUseSuccess(21, 1, 0x08EC); !reflect.DeepEqual(got, want) {
 		t.Fatalf("0xB5BD = % X, want % X", got, want)
@@ -160,7 +160,7 @@ func TestHandleItemUseLastPotionRemovesRow(t *testing.T) {
 	rt, _ := newTestRuntime(character, testItems())
 
 	result := rt.HandleItemUse(testDivision, character, []byte{21, 0xEC, 0x08})
-	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, simulation.OpVitalsUpdate)
+	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual, simulation.OpVitalsUpdate)
 	if got := result.Frames[0].Payload; !reflect.DeepEqual(
 		got,
 		wire.EncodeItemUseSuccess(21, 0, 0x08EC),
@@ -233,17 +233,19 @@ func TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn(t *testing.T) {
 	result := rt.HandleItemUse(testDivision, character, []byte{22, 0xEC, 0x11})
 	assertOpcodes(t, result.Frames,
 		wire.OpItemUseResponse,
+		wire.OpItemUseVisual,
 		wire.OpCosRecordCreate,
 		wire.OpSingleObjectSpawn,
 		wire.OpCosRideState,
 		movementSpeedOpcode,
 	)
-	assertOpcodes(t, result.Broadcast, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode)
+	assertOpcodes(t, result.Broadcast, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode,
+		opCommerceItemReferences, wire.OpItemUseVisual)
 	if character.ActiveCOS == nil || character.ActiveCOS.GID != 0x00C00003 ||
 		character.ActiveCOS.RefObjID != 3914 || !character.ActiveCOS.Summoned || !character.ActiveCOS.Mounted {
 		t.Fatalf("active COS = %+v", character.ActiveCOS)
 	}
-	if got := binary.LittleEndian.Uint32(result.Frames[1].Payload[0:4]); got != character.ActiveCOS.GID {
+	if got := binary.LittleEndian.Uint32(result.Frames[2].Payload[0:4]); got != character.ActiveCOS.GID {
 		t.Fatalf("3158 gid = 0x%X, want 0x%X", got, character.ActiveCOS.GID)
 	}
 	for _, row := range character.MissionInventory {

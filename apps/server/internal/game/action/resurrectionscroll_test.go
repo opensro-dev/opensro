@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-resurrectionscroll_test.go - the resurrection scroll through HandleItemUse
+resurrectionscroll_test.go - scrolls and fireworks through HandleItemUse
 
 ===========================================================================
 */
@@ -9,6 +9,7 @@ resurrectionscroll_test.go - the resurrection scroll through HandleItemUse
 package action
 
 import (
+	"encoding/binary"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -117,4 +118,38 @@ func TestResurrectionScrollRefusesTheLiving(t *testing.T) {
 	c, items, body := resurrectionScrollFixture(50)
 	rt, _ := newTestRuntime(c, items)
 	assertItemUseRefusedUnchanged(t, rt, c, body, errCodeOnlyDeadResurrect)
+}
+
+/*
+================
+TestFireworkPublishesItsVisualToEveryone
+
+49ACA0 family 6 succeeds for a living user; 510980 then sends the item's
+0x305C (v1.150 0x3449) to the user and the nearby sessions.
+================
+*/
+func TestFireworkPublishesItsVisualToEveryone(t *testing.T) {
+	c := testCharacter()
+	items := testItems()
+	ref := &enterworld.ItemRef{
+		RefObjID: 2700, Codename: "ITEM_ETC_FIREWORK_BOOMB_R", TypeIDs: [4]int64{3, 3, 6, 1},
+		ReqQuadTypes: [4]int64{-1, -1, -1, -1},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50, "canUse": 1}),
+	}
+	items[ref.Codename] = ref
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+		Slot: 21, RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), StackCount: 3,
+	})
+	rt, _ := newTestRuntime(c, items)
+	result := rt.HandleItemUse(testDivision, c, wire.NewWriter(3).U8(21).U16(ref.TypeFlags()).Payload())
+	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual)
+	assertOpcodes(t, result.Broadcast, opCommerceItemReferences, wire.OpItemUseVisual)
+	visual := result.Frames[1].Payload
+	if binary.LittleEndian.Uint32(visual) != enterworld.ObjectIDForCharacter(c) ||
+		binary.LittleEndian.Uint32(visual[4:]) != ref.RefObjID {
+		t.Fatalf("visual %x does not name the user and the firework", visual)
+	}
+	if c.MissionInventory[len(c.MissionInventory)-1].StackCount != 2 {
+		t.Fatal("the firework was not consumed")
+	}
 }

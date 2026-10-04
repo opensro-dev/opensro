@@ -12,7 +12,6 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
-	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -104,8 +103,8 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 	remaining := rt.consumeItemUseRow(c, row)
 	status := teleportState(c, 1)
 	stop := wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: spawn.RegionID, X: float32(spawn.X), Y: float32(spawn.Y), Z: float32(spawn.Z), Heading: spawn.Angle}}.Encode()}
-	visual := wire.Frame{Opcode: 0x3449, Payload: wire.NewWriter(8).U32(enterworld.ObjectIDForCharacter(c)).U32(ref.RefObjID).Payload()}
-	*result = OpResult{Frames: []wire.Frame{status, {Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}, visual}, Broadcast: []wire.Frame{status, rt.commerceReferences([]inventory.Item{{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: request.TypeWord}}, nil), visual}}
+	// HandleItemUse publishes the item's visual after the success.
+	*result = OpResult{Frames: []wire.Frame{status, {Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}, Broadcast: []wire.Frame{status}}
 	// 466F90 is a log record, not a state publication. 4A9430 emits
 	// the moving-only correction before 4E0B50 publishes channel 11.
 	if moving {

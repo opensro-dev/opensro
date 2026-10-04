@@ -124,6 +124,7 @@ func (rt *Runtime) HandleItemUse(
 	// A use that revives the player publishes after its commit (revivalFrames
 	// rebinds the resident region, which reads the committed character).
 	var after func()
+	var used *enterworld.ItemRef
 	committed := rt.deps.Update(character, "item-use", func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil {
 			return false
@@ -154,6 +155,7 @@ func (rt *Runtime) HandleItemUse(
 			return false
 		}
 		family := admittedItemUseFamily(ref)
+		used = ref
 		// Only the resurrection scroll is usable dead; it refuses the living
 		// itself (49FF20).
 		if family != itemUseResurrection && !enterworld.CharacterAlive(character) {
@@ -209,6 +211,16 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if family == itemUseReturn {
 			return rt.beginReturnScroll(divisionID, character, ref, rowIndex, request, nowMs, &result)
+		}
+		if family == itemUseFirework {
+			if len(tail) != 0 {
+				return false
+			}
+			remaining := rt.consumeItemUseRow(character, rowIndex)
+			result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
+				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}}
+			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
+			return true
 		}
 		if family == itemUseStatRecall {
 			// The scroll is spent only when a point came back.
@@ -558,5 +570,38 @@ func (rt *Runtime) HandleItemUse(
 	if committed && after != nil {
 		after()
 	}
+	if committed && used != nil {
+		rt.publishItemUseVisual(character, used, &result)
+	}
 	return result
+}
+
+/*
+================
+publishItemUseVisual
+
+CGObjPC_HandleUseItem (v1.188 510980) ends every successful use the same
+way: the 0xB04C success, then 0x305C {gid, item reference} to the nearby
+sessions, v1.150's 0x3449 (the client's external item effect, 74F540):
+the potion sparkle, the scroll glow, the firework. Observers resolve the
+reference before the visual names it.
+================
+*/
+func (rt *Runtime) publishItemUseVisual(character *enterworld.Character, ref *enterworld.ItemRef, result *OpResult) {
+	at := -1
+	for index, frame := range result.Frames {
+		if frame.Opcode == wire.OpItemUseResponse && len(frame.Payload) > 0 && frame.Payload[0] == wire.ResultSuccess {
+			at = index
+			break
+		}
+	}
+	if at < 0 {
+		return
+	}
+	visual := wire.Frame{Opcode: wire.OpItemUseVisual,
+		Payload: wire.NewWriter(8).U32(enterworld.ObjectIDForCharacter(character)).U32(ref.RefObjID).Payload()}
+	result.Frames = append(result.Frames[:at+1], append([]wire.Frame{visual}, result.Frames[at+1:]...)...)
+	result.Broadcast = append(result.Broadcast,
+		rt.commerceReferences([]inventory.Item{{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags()}}, nil),
+		visual)
 }
