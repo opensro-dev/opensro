@@ -267,7 +267,11 @@ sendFrame
 	function sendFrame( frame: WireFrame ): WireFrame {
 		send( frame );
 		pickup.sent( frame );
-		if ( frame.opcode === 0x72cd && frame.payload[0] === 1 ) moveReservation.clear();
+		if ( frame.opcode === 0x72cd && frame.payload[0] === 1 ) {
+			moveReservation.clear();
+			// sendSkillPress names the skill right after.
+			skillPress.commandSent();
+		}
 		return frame;
 	}
 	/*
@@ -281,7 +285,7 @@ stands in from when it reaches the server until that answer.
 	function sendSkillPress( frame: WireFrame, skillId: number, now: number ): WireFrame {
 		const oneWay = skillPress.oneWayMs();
 		sendFrame( frame );
-		skillPress.sent( now );
+		skillPress.sent( now, skillId );
 		combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
 		return frame;
 	}
@@ -1506,14 +1510,12 @@ state here before a command can claim a native wire conversation.
 					now
 				);
 				if ( decision.kind === "queue" ) {
-					skillPress.queue( { skill: skillId, command, fireAtMs: decision.fireAtMs } );
+					skillPress.queue( { skill: skillId, command, fireAtMs: decision.fireAtMs }, now );
 					dirty = true;
 					return null;
 				}
 				if ( decision.kind === "deny" ) {
-					if ( skillPress.deny( { skill: skillId, atMs: now, remainingMs: decision.remainingMs } ) ) {
-						play( "SND_WARNING", now );
-					}
+					skillPress.deny( { skill: skillId, atMs: now, remainingMs: decision.remainingMs } );
 					dirty = true;
 					return null;
 				}
@@ -1653,7 +1655,17 @@ Packet handling must not depend on which HUD panel is currently open.
 			// Every skill press is answered at once by B245 or B2CD.
 			const answer = skillPressAnswer( frame, localGid );
 			if ( answer ) skillPress.answered( now );
-			if ( answer === "queued" && combat.cancelPrediction( now ) ) dirty = true;
+			if ( frame.opcode === 0xb2cd && frame.payload.length >= 2 ) {
+				if ( skillPress.commandCount( frame.payload[0]!, frame.payload[1]!, now ) ) dirty = true;
+			}
+			if ( answer === "queued" ) {
+				if ( combat.cancelPrediction( now ) ) dirty = true;
+				// The server queued the command instead of acting on it: it never
+				// stopped its walk, so a walk held at the press follows it again
+				// (held, the player fell behind by the whole queue time and the
+				// next correction pulled it 40 to 70 units forward).
+				movement.castRefused( now );
+			}
 			try {
 				if ( betaMap.receive( frame ) ) {
 					dirty = true;

@@ -77,7 +77,7 @@ the x at the press and 1000 ms later. A "client" run is the player's own
 ground click; a "server" run is a walk the server drives (0xB738).
 ================
 */
-function pressWhileRunning( skill, lead ) {
+function pressWhileRunning( skill, lead, answer ) {
 	/** @type {{ opcode: number, payload: Uint8Array }[]} */
 	const sent = [];
 	const game = createGameplay( f => sent.push( f ) );
@@ -107,6 +107,7 @@ function pressWhileRunning( skill, lead ) {
 	const pressed = game.take()?.pose?.x;
 	game.command( { kind: "skill", skillId: skill }, 1000, undefined, local );
 	assert.equal( sent.at( -1 )?.opcode, 0x72cd );
+	if ( answer ) game.receive( answer, 1010 );
 	let later = pressed;
 	for ( let now = 1016; now <= 2000; now += 16 ) {
 		game.step( now, local );
@@ -140,4 +141,13 @@ test("a self buff pressed during a server walk keeps walking until the server's 
 test("an instant skill pressed on a click run keeps walking", () => {
 	const { pressed, later } = pressWhileRunning( IMBUE_SKILL, "client" );
 	assert.ok( pressed !== undefined && later !== undefined && later > pressed + 10, `walk ${pressed} -> ${later}` );
+});
+
+test("a press the server queues behind its open command never holds the click run", () => {
+	// B2CD arm, count 2: the server waits for its open command and walks on.
+	const { pressed, later } = pressWhileRunning( GUARD_SKILL, "client", {
+		opcode: 0xb2cd,
+		payload: Uint8Array.of( 1, 2 )
+	} );
+	assert.ok( pressed !== undefined && later !== undefined && later > pressed + 40, `walk ${pressed} -> ${later}` );
 });

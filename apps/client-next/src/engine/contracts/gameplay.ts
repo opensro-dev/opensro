@@ -543,9 +543,10 @@ export interface GameplayState {
 	readonly vitals: readonly VitalState[];
 	readonly itemCooldowns?: readonly import("@/engine/foundation/gameplay/item-cooldowns").ItemCooldown[];
 	readonly skillCooldowns?: readonly import("@/engine/foundation/gameplay/skill-cooldowns").SkillCooldown[];
-	// A skill press held for its cooldown, and the newest denied press
-	// (skill-queue.ts); the shortcut slots draw both.
-	readonly skillQueue?: { readonly skill: number; readonly fireAtMs: number; };
+	// The skill that casts next, held by the client for its cooldown or by
+	// the server behind its open command, and the newest denied press
+	// (skill-queue.ts); the HUD draws both.
+	readonly skillQueue?: import("@/engine/foundation/gameplay/skill-queue").SkillQueueState;
 	readonly skillDenied?: import("@/engine/foundation/gameplay/skill-queue").DeniedPress;
 	// The local press's predicted cast, animated until the server's cast
 	// adopts it or it blends out (cast-prediction.ts).

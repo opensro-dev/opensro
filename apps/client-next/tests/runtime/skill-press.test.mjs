@@ -55,8 +55,8 @@ test("a skill further off than the queue window is denied", () => {
 
 test("one held press: a newer press replaces it, and it fires once when due", () => {
 	const q = createSkillPressQueue();
-	q.queue( { skill: 1, command: "a", fireAtMs: 500 } );
-	q.queue( { skill: 2, command: "b", fireAtMs: 600 } );
+	q.queue( { skill: 1, command: "a", fireAtMs: 500 }, 0 );
+	q.queue( { skill: 2, command: "b", fireAtMs: 600 }, 0 );
 	assert.equal( q.due( 599 ), null );
 	assert.equal( q.due( 600 )?.command, "b" );
 	assert.equal( q.due( 700 ), null );
@@ -65,7 +65,7 @@ test("one held press: a newer press replaces it, and it fires once when due", ()
 test("cancel drops the held press", () => {
 	const q = createSkillPressQueue();
 	assert.equal( q.cancel(), false );
-	q.queue( { skill: 1, command: "a", fireAtMs: 500 } );
+	q.queue( { skill: 1, command: "a", fireAtMs: 500 }, 0 );
 	assert.equal( q.cancel(), true );
 	assert.equal( q.due( 1000 ), null );
 });
@@ -73,27 +73,48 @@ test("cancel drops the held press", () => {
 test("the round trip is the smoothed time to each press's first answer", () => {
 	const q = createSkillPressQueue();
 	assert.equal( q.oneWayMs(), 0 );
-	q.sent( 0 );
+	q.sent( 0, 1 );
 	q.answered( 200 );
 	assert.equal( q.oneWayMs(), 100 );
 	// A second answer to the same press is not a sample.
 	q.answered( 900 );
 	assert.equal( q.oneWayMs(), 100 );
-	q.sent( 1000 );
+	q.sent( 1000, 1 );
 	q.answered( 1360 );
 	assert.equal( q.oneWayMs(), (200 + (360 - 200) / 8) / 2 );
 	// A stall is not a sample.
-	q.sent( 2000 );
+	q.sent( 2000, 1 );
 	q.answered( 9000 );
 	assert.equal( q.oneWayMs(), (200 + (360 - 200) / 8) / 2 );
 });
 
-test("a denial sounds at most every 400 ms", () => {
+test("a press the server queues is published until its count drains", () => {
 	const q = createSkillPressQueue();
-	assert.equal( q.deny( { skill: 1, atMs: 0, remainingMs: 2000 } ), true );
-	assert.equal( q.deny( { skill: 1, atMs: 100, remainingMs: 1900 } ), false );
-	assert.equal( q.deny( { skill: 1, atMs: 400, remainingMs: 1600 } ), true );
-	assert.equal( q.state().skillDenied?.atMs, 400 );
+	q.sent( 1000, 5 );
+	assert.equal( q.commandCount( 1, 2, 1010 ), true );
+	assert.deepEqual( q.state().skillQueue, { skill: 5, sinceMs: 1010 } );
+	// A refused replacement keeps the count and what waits.
+	q.sent( 1100, 6 );
+	assert.equal( q.commandCount( 3, 2, 1110 ), false );
+	assert.equal( q.state().skillQueue?.skill, 5 );
+	// A queued attack replaces the skill.
+	q.commandSent();
+	assert.equal( q.commandCount( 1, 2, 1200 ), true );
+	assert.equal( q.state().skillQueue, undefined );
+	q.sent( 1300, 7 );
+	q.commandCount( 1, 2, 1310 );
+	// Promotion releases the count to one.
+	assert.equal( q.commandCount( 2, 1, 1500 ), true );
+	assert.equal( q.state().skillQueue, undefined );
+});
+
+test("a client-held press outranks the server's and keeps its start across re-presses", () => {
+	const q = createSkillPressQueue();
+	q.sent( 0, 5 );
+	q.commandCount( 1, 2, 10 );
+	q.queue( { skill: 8, command: "a", fireAtMs: 400 }, 100 );
+	q.queue( { skill: 8, command: "a", fireAtMs: 420 }, 200 );
+	assert.deepEqual( q.state().skillQueue, { skill: 8, sinceMs: 100, fireAtMs: 420 } );
 });
 
 // ============================================================================
@@ -216,12 +237,12 @@ test("a re-press inside the cooldown is held and goes out once the skill is read
 	game.dispose();
 });
 
-test("a press far from ready is denied with a sound and nothing sent", () => {
+test("a press far from ready is denied silently and nothing sent", () => {
 	const { game, presses, sounds } = presser();
 	game.command( { kind: "skill", skillId: SLOW }, 1000, undefined, local );
 	game.command( { kind: "skill", skillId: SLOW }, 1100, undefined, local );
 	assert.equal( presses().length, 1 );
-	assert.deepEqual( sounds, [ "SND_WARNING" ] );
+	assert.deepEqual( sounds, [] );
 	const state = game.take();
 	assert.equal( state?.skillDenied?.skill, SLOW );
 	assert.equal( state?.skillQueue, undefined );

@@ -574,10 +574,11 @@ and reaching range pulled the player 28 to 120 units forward at once
 ================
 castRefused
 
-The server refused the command the walk was held for (B245 [2, code], or the
-B2CD action notice). It refuses before touching movement (offensiveCost runs
-at the press, 58D8F0), so its walk went on: rejoin it now rather than when
-the hold lapses.
+The server did not act on the command the walk was held for: it refused it
+(B245 [2, code], or the B2CD action notice) or queued it behind its open
+command (B2CD count 2). Either way it never touched movement (offensiveCost
+runs at the press, 58D8F0; a queued command waits in 4AD630), so its walk
+went on: rejoin it now rather than when the hold lapses.
 ================
 		*/
 		castRefused( now: number ) {

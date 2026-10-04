@@ -83,7 +83,11 @@ import {
 } from "@/engine/foundation/ui/quickslot-cooldown";
 import { extendedQuickslotOptions, type ExtendedQuickslotOptions } from "@/engine/foundation/ui/extended-quickslot";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
-import { skillPressFeedback, skillPressFeedbackActive } from "@/engine/foundation/ui/skill-press-feedback";
+import {
+	skillPressFeedback,
+	skillPressFeedbackActive,
+	skillQueueChip
+} from "@/engine/foundation/ui/skill-press-feedback";
 import {
 	masteryTrainingReason,
 	skillMetadataById,
@@ -6989,6 +6993,24 @@ export function createUi(
 					);
 					const number = hudData!.bar["GDR_QS_NUMBER_" + (n === 0 ? "M" : n % 10)];
 					if ( number ) authoredImage( number, barX, barY );
+				}
+				// The skill that casts next, above the main bar (skill-press-feedback.ts).
+				const firstCell = hudData?.bar.GDR_TMPQS_0, lastCell = hudData?.bar.GDR_TMPQS_10;
+				if ( firstCell && lastCell ) {
+					const left = authoredRect( firstCell, barX, barY ), right = authoredRect( lastCell, barX, barY );
+					const chip = skillQueueChip(
+						game,
+						{ left: left[0], right: right[0] + right[2], top: Math.min( left[1], right[1] ) },
+						full,
+						quickslotTime
+					);
+					const icon = chip ? iconPath( training.skill( game!.skillQueue!.skill )?.icon ) : undefined;
+					if ( chip && icon ) {
+						paths.push( icon );
+						quads.push( ...chip.under );
+						if ( resources.has( icon ) ) rect( chip.icon, [ 1, 1, 1, chip.alpha ], icon );
+						quads.push( ...chip.over );
+					}
 				}
 				if ( hudData ) {
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!,
