@@ -775,7 +775,7 @@ export function startRuntime(
 						null;
 				hoveredEntity = hoverGid;
 				platform.presentWorldCursor(
-					worldCursor(
+					ui.cursor() ?? worldCursor(
 						hoverGid === null ? undefined : presentation.read( hoverGid ),
 						hoverLocal ? presentation.read( hoverLocal ) : undefined
 					)

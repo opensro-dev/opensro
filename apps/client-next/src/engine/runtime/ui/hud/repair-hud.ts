@@ -12,6 +12,11 @@ CIFStore_OnRepairAllButton (5B2B10) raises the cost confirmation (box
 ===========================================================================
 */
 
+import type { WorldCursor } from "@/engine/foundation/ui/world-cursor";
+
+// CIFStore_OnRepairButton (5B1C00): CGInterface_SetCursorMode( 0x96 ).
+const REPAIR_CURSOR: WorldCursor = 0x96;
+
 /*
 ================
 createRepairHud
@@ -44,6 +49,16 @@ export function createRepairHud() {
 		*/
 		disarm() {
 			armed = false;
+		},
+		/*
+		================
+		cursor
+
+		The armed hammer, or null for the ordinary hover cursor.
+		================
+		*/
+		cursor(): WorldCursor | null {
+			return armed ? REPAIR_CURSOR : null;
 		},
 		/*
 		================

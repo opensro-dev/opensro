@@ -69,7 +69,7 @@ import { rebuildRoot } from "./world/paths.mjs";
 import { formatOptimizationSummary } from "./jsonAssetCompression.mjs";
 import { packPublicTree } from "./packPublicTree.mjs";
 
-const RETAIL_CURSOR_IDS = [ "0x95", "0x97", "0x98", "0x99", "0x9a", "0xa0", "0xa1", "0xa3" ];
+const RETAIL_CURSOR_IDS = [ "0x95", "0x96", "0x97", "0x98", "0x99", "0x9a", "0xa0", "0xa1", "0xa3" ];
 const DEFAULT_RESOURCE_BUILD_LANES = 2;
 
 /*

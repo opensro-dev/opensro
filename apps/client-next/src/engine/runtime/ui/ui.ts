@@ -2609,17 +2609,20 @@ export function createUi(
 		} else if ( id.startsWith( "skin-rotate:" ) ) {
 			skinHud.rotate( id === "skin-rotate:left" ? -1 : id === "skin-rotate:right" ? 1 : 0 );
 		} else if ( id.startsWith( "shop-repair:" ) ) {
-			// 5B1C00 arms the repair cursor; 5B2B10 totals the cost (789630)
-			// and asks before 0x746F mode 2, or says nothing needs it.
-			if ( id === "shop-repair:GDR_STORE_BTN_REPAIR" ) repairHud.arm();
-			else {
+			// 5B1C00 arms the repair cursor, or puts an armed one away; 5B2B10
+			// totals the cost (789630) and asks before 0x746F mode 2, or says
+			// nothing needs it.
+			if ( id === "shop-repair:GDR_STORE_BTN_REPAIR" ) {
+				if ( repairHud.armed() ) repairHud.disarm();
+				else repairHud.arm();
+			} else {
 				const cost = repairAllCost( view.gameplay?.inventory ?? [] );
 				if ( cost ) repairHud.ask( cost );
 				else hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_THERE_IS_NO_ITEM_TO_REPAIR" ), 0xffffffff );
 			}
 		} else if ( id.startsWith( "slot:" ) && repairHud.armed() ) {
-			// 567290: the armed cursor sends the clicked item (0x746F mode 1).
-			repairHud.disarm();
+			// 567290: the armed cursor judges each clicked item and stays armed,
+			// so several items can be repaired in a row (gameplay owns the verdict).
 			sendGameplay( { kind: "shop-repair", mode: 1, slot: Number( id.slice( 5 ) ) } );
 		} else if ( id.startsWith( "slot:" ) ) {
 			confirmDrop = "";
@@ -4619,6 +4622,17 @@ export function createUi(
 		*/
 		blocks( x: number, y: number ) {
 			return blocks.some( r => containsPoint( r, x, y ) );
+		},
+		/*
+		================
+		cursor
+
+		A UI cursor mode that replaces the hover cursor everywhere, as
+		CGInterface_SetCursorMode does: the armed repair hammer (0x96).
+		================
+		*/
+		cursor(): import("@/engine/foundation/ui/world-cursor").WorldCursor | null {
+			return repairHud.cursor();
 		},
 		/*
 		================
@@ -10262,7 +10276,8 @@ export function createUi(
 							node,
 							px,
 							py,
-							"shop-repair:" + node.id,
+							// The control name, not its numeric resource id, names the button.
+							"shop-repair:" + node.name,
 							hudCopy( node.text ),
 							!valid || busy
 						);

@@ -32,7 +32,13 @@ import {
 	MASTERY_WITHDRAWAL_RESPONSE
 } from "@/engine/foundation/gameplay/withdrawal";
 import { positionSkillRequest } from "@/engine/foundation/gameplay/position-skill";
-import { repairNotice } from "@/engine/foundation/gameplay/repair";
+import {
+	REPAIR_ONE_SLOT,
+	REPAIR_REFUSED_BY_OPTIONS,
+	REPAIR_RESPONSE_OPCODE,
+	repairClick,
+	repairNotice
+} from "@/engine/foundation/gameplay/repair";
 import { portalNotice } from "@/engine/foundation/gameplay/portal";
 import {
 	interactionApproach,
@@ -1552,6 +1558,20 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "shop-repair" ) {
 				if ( inventory.state().shop?.npc !== targeting.state().target ) {
 					throw Error( "Merchant selection changed" );
+				}
+				if ( command.mode === REPAIR_ONE_SLOT ) {
+					// 567290 judges the clicked item before anything is sent.
+					const slot = command.slot,
+						verdict = repairClick( inventory.state().inventory.find( i => i.slot === slot ) );
+					if ( verdict === "refuse" ) {
+						const notice = repairNotice(
+							REPAIR_RESPONSE_OPCODE,
+							Uint8Array.of( 2, REPAIR_REFUSED_BY_OPTIONS )
+						);
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						dirty = true;
+					}
+					if ( verdict !== "send" ) return null;
 				}
 				return inventory.repair( command.mode, command.slot, now );
 			}
