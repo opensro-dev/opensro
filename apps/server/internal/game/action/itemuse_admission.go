@@ -44,6 +44,8 @@ const (
 	itemUseComposite
 	itemUsePersistentSummoner
 	itemUsePetExtension
+	itemUseResurrection
+	itemUseStatRecall
 )
 
 /*
@@ -76,6 +78,14 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 13, 12} {
 		return itemUsePetExtension
+	}
+	// 49C2B0 case 5 (type 4 = 6): the resurrection scroll, usable only dead.
+	if ref.TypeIDs == [4]int64{3, 3, 13, 6} {
+		return itemUseResurrection
+	}
+	// Type 4 = 13: the stat point recall (progression/statrecall.go).
+	if ref.TypeIDs == [4]int64{3, 3, 13, 13} {
+		return itemUseStatRecall
 	}
 	// 49F590: the composite scroll (UIU1 param jobs).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {

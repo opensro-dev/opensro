@@ -256,6 +256,12 @@ type Runtime struct {
 	// gain, so the growth rates never scale it. Nil grants no refund.
 	RefundExperience func(character *enterworld.Character, exp int64) ([]wire.Frame, bool)
 
+	// RecallStatPoints is the stat authority's door-free stat point recall
+	// (progression/statrecall.go): STR and INT back to their automatic values
+	// and the spent points back to the pool. False changes nothing. Nil
+	// refuses the recall scroll.
+	RecallStatPoints func(character *enterworld.Character) ([]wire.Frame, bool)
+
 	// ApplyDeathPenalty is progression' door-free ordinary-death updater. Monster
 	// combat invokes it from inside the fatal-HP character transaction; levels
 	// <= 10 legitimately return no frames under the retail protection gate.

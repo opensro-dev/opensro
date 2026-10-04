@@ -121,12 +121,11 @@ func (rt *Runtime) HandleItemUse(
 	defer unlock()
 
 	result := itemUseFailure(wire.ErrCodeInvalidRequest)
-	rt.deps.Update(character, "item-use", func() bool {
+	// A use that revives the player publishes after its commit (revivalFrames
+	// rebinds the resident region, which reads the committed character).
+	var after func()
+	committed := rt.deps.Update(character, "item-use", func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil {
-			return false
-		}
-		if !enterworld.CharacterAlive(character) {
-			result = itemUseFailure(wire.ErrCodeItemUseDead)
 			return false
 		}
 
@@ -155,6 +154,12 @@ func (rt *Runtime) HandleItemUse(
 			return false
 		}
 		family := admittedItemUseFamily(ref)
+		// Only the resurrection scroll is usable dead; it refuses the living
+		// itself (49FF20).
+		if family != itemUseResurrection && !enterworld.CharacterAlive(character) {
+			result = itemUseFailure(wire.ErrCodeItemUseDead)
+			return false
+		}
 		if family == itemUseUnsupported {
 			result.DiagnosticRefusal = "item-use: unsupported reference family " + ref.Codename
 			return false
@@ -204,6 +209,27 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if family == itemUseReturn {
 			return rt.beginReturnScroll(divisionID, character, ref, rowIndex, request, nowMs, &result)
+		}
+		if family == itemUseStatRecall {
+			// The scroll is spent only when a point came back.
+			if len(tail) != 0 || rt.RecallStatPoints == nil {
+				return false
+			}
+			recalled, ok := rt.RecallStatPoints(character)
+			if !ok {
+				result.DiagnosticRefusal = "item-use: no stat point to recall"
+				return false
+			}
+			remaining := rt.consumeItemUseRow(character, rowIndex)
+			result = OpResult{Frames: append([]wire.Frame{{Opcode: wire.OpItemUseResponse,
+				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}, recalled...)}
+			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
+			return true
+		}
+		if family == itemUseResurrection {
+			return rt.useResurrectionScroll(character, skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, tail, &result, &after)
 		}
 
 		if family == itemUseSkill {
@@ -529,5 +555,8 @@ func (rt *Runtime) HandleItemUse(
 		result = OpResult{Frames: frames, Broadcast: public}
 		return true
 	})
+	if committed && after != nil {
+		after()
+	}
 	return result
 }

@@ -330,13 +330,8 @@ func (c *ResurrectionConsent) ApplyConsent(_ *transport.Session, divisionID stri
 ==================
 acceptResurrection
 
-46CB30 for a yes. The player must still be dead. One character door
-commits the revival where the corpse lies with 1 HP (4DF290 arg 1: every
-revival also clears the recorded EXP loss), the EXP (vfunc +0x170, a
-refund of the loss, outside the port's growth rates), the HP
-and MP (applySkillRecovery is ApplyReducedRecovery) and the rmut skill.
-Native starts rmut as an indirect cast (CSkillManager_BeginIndirectSkill);
-this port installs its effect directly.
+46CB30 for a yes. The player must still be dead; the revival itself is
+reviveWhereDead, shared with the resurrection scroll.
 ==================
 */
 func (rt *Runtime) acceptResurrection(division, name string, offer resurrectionOffer, nowMs int64) (actor, peers []wire.Frame) {
@@ -347,73 +342,116 @@ func (rt *Runtime) acceptResurrection(division, name string, offer resurrectionO
 	if character == nil {
 		return nil, nil
 	}
+	var revived revivedWhereDead
+	if !rt.deps.Update(character, "resurrection-accept", func() bool {
+		if character.DeletePending || enterworld.CharacterAlive(character) {
+			return false
+		}
+		revived = rt.reviveWhereDead(division, character, offer, nowMs)
+		return true
+	}) {
+		return nil, nil
+	}
+	return rt.revivalFrames(division, character, revived, nowMs)
+}
+
+/*
+==================
+revivedWhereDead
+
+What reviveWhereDead committed, for revivalFrames to publish.
+==================
+*/
+type revivedWhereDead struct {
+	at                                          simulation.Spawn
+	vitals                                      []byte
+	progression, recovery, effects, untouchable []wire.Frame
+}
+
+/*
+==================
+reviveWhereDead
+
+Revives a dead player where the corpse lies with 1 HP (4DF290 arg 1: every
+revival also clears the recorded EXP loss), then adds the offer's EXP
+(vfunc +0x170, a refund of the loss, outside the port's growth rates), HP
+and MP (applySkillRecovery is ApplyReducedRecovery) and rmut skill. Native
+starts rmut as an indirect cast (CSkillManager_BeginIndirectSkill); this
+port installs its effect directly. Callers hold the division lock, run
+inside the character's Update and have checked the player is dead:
+46CB30 for a resurrection skill, 49FF20 for a resurrection scroll.
+==================
+*/
+func (rt *Runtime) reviveWhereDead(division string, character *enterworld.Character, offer resurrectionOffer, nowMs int64) revivedWhereDead {
+	var done revivedWhereDead
 	var rmut enterworld.SkillRow
 	hasRmut := false
 	if skills := rt.deps.SkillData(); skills != nil && offer.rmut != 0 {
 		rmut, hasRmut = skills.SkillByID(offer.rmut)
 	}
+	worldKey := simulation.WorldKey(division, character.Name)
+	state := rt.Worlds.Update(worldKey,
+		func() simulation.WorldState { return simulation.SeedWorldState(character) },
+		func(world *simulation.WorldState) {
+			world.MoveSegment = nil
+			world.LifeRevision++
+			world.Sitting = false
+			world.PostureTransitionUntilMs = 0
+		})
+	writeBackWorld(character, state)
+	character.World.MoveSegment = nil
+	done.at = state.Spawn
 
-	worldKey := simulation.WorldKey(division, name)
-	var at simulation.Spawn
-	var revivedVitals []byte
-	var progression, recovery, effects, untouchable []wire.Frame
-	if !rt.deps.Update(character, "resurrection-accept", func() bool {
-		if character.DeletePending || enterworld.CharacterAlive(character) {
-			return false
-		}
-		state := rt.Worlds.Update(worldKey,
-			func() simulation.WorldState { return simulation.SeedWorldState(character) },
-			func(world *simulation.WorldState) {
-				world.MoveSegment = nil
-				world.LifeRevision++
-				world.Sitting = false
-				world.PostureTransitionUntilMs = 0
-			})
-		writeBackWorld(character, state)
-		character.World.MoveSegment = nil
-		at = state.Spawn
+	revived := int64(1)
+	character.CurrentHP = &revived
+	character.LastExpLoss = 0
+	// 46CB30 revives through 4DF290 before applying the offered recovery.
+	// Use the same protection owner as self-rebirth so expiry and replacement
+	// cannot leave the player permanently protected or immediately vulnerable.
+	done.untouchable = rt.grantReviveUntouchable(division, character, nowMs)
+	done.vitals = enterworld.BuildVitalsRefreshPayload(character)
 
-		revived := int64(1)
-		character.CurrentHP = &revived
-		character.LastExpLoss = 0
-		// 46CB30 revives through 4DF290 before applying the offered recovery.
-		// Use the same protection owner as self-rebirth so expiry and replacement
-		// cannot leave the player permanently protected or immediately vulnerable.
-		untouchable = rt.grantReviveUntouchable(division, character, nowMs)
-		revivedVitals = enterworld.BuildVitalsRefreshPayload(character)
-
-		if offer.exp > 0 && rt.RefundExperience != nil {
-			progression, _ = rt.RefundExperience(character, offer.exp)
-		}
-		if offer.hp != 0 || offer.mp != 0 {
-			frame, ok := rt.applySkillRecovery(division, character, offer.hp, offer.mp)
-			if !ok {
-				log.Warnf("action: resurrection of %s revived without its HP/MP: no combat stats", name)
-			} else if frame.Opcode != 0 {
-				recovery = append(recovery, frame)
-			}
-		}
-		if hasRmut {
-			token := atomic.AddUint32(&rt.castTokenCounter, 1)
-			installed, ok := rt.commitCharacterEffect(division, character, rmut, token, statuseffect.StateActive, false, EffectPresentation{Phase: 2}, nowMs)
-			if !ok {
-				log.Warnf("action: resurrection of %s could not install rmut skill %d", name, offer.rmut)
-			}
-			effects = installed
-		}
-		return true
-	}) {
-		return nil, nil
+	if offer.exp > 0 && rt.RefundExperience != nil {
+		done.progression, _ = rt.RefundExperience(character, offer.exp)
 	}
-	rt.bindResidentRegion(worldKey, nowMs)
-	rt.ClearCombatIntent(division, name)
+	if offer.hp != 0 || offer.mp != 0 {
+		frame, ok := rt.applySkillRecovery(division, character, offer.hp, offer.mp)
+		if !ok {
+			log.Warnf("action: revival of %s without its HP/MP: no combat stats", character.Name)
+		} else if frame.Opcode != 0 {
+			done.recovery = append(done.recovery, frame)
+		}
+	}
+	if hasRmut {
+		token := atomic.AddUint32(&rt.castTokenCounter, 1)
+		installed, ok := rt.commitCharacterEffect(division, character, rmut, token, statuseffect.StateActive, false, EffectPresentation{Phase: 2}, nowMs)
+		if !ok {
+			log.Warnf("action: resurrection of %s could not install rmut skill %d", character.Name, offer.rmut)
+		}
+		done.effects = installed
+	}
+	return done
+}
 
-	correction, vitals, life := rebirthFrames(enterworld.ObjectIDForCharacter(character), at, revivedVitals)
-	actor = append([]wire.Frame{correction, vitals, life}, untouchable...)
-	actor = append(actor, progression...)
-	actor = append(actor, recovery...)
-	actor = append(actor, effects...)
-	peers = append([]wire.Frame{correction, life}, untouchable...)
-	peers = append(peers, effects...)
+/*
+==================
+revivalFrames
+
+After reviveWhereDead commits, still under the division lock: rebinds the
+resident region, drops combat intent and builds the revived player's frames
+and its observers'.
+==================
+*/
+func (rt *Runtime) revivalFrames(division string, character *enterworld.Character, done revivedWhereDead, nowMs int64) (actor, peers []wire.Frame) {
+	rt.bindResidentRegion(simulation.WorldKey(division, character.Name), nowMs)
+	rt.ClearCombatIntent(division, character.Name)
+
+	correction, vitals, life := rebirthFrames(enterworld.ObjectIDForCharacter(character), done.at, done.vitals)
+	actor = append([]wire.Frame{correction, vitals, life}, done.untouchable...)
+	actor = append(actor, done.progression...)
+	actor = append(actor, done.recovery...)
+	actor = append(actor, done.effects...)
+	peers = append([]wire.Frame{correction, life}, done.untouchable...)
+	peers = append(peers, done.effects...)
 	return actor, peers
 }

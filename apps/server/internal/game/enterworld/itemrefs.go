@@ -486,6 +486,9 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// the ITEM_MALL_PET_SKILL_* and GOLD_TIME_SERVICE families that match the
 	// kind-3 contract. Publish both unscaled and let the consumer decide.
 	{118, "itemParam1_29c", "int"},
+	// The resurrection scroll (v1.188 49FF20) reads all three: Param1 a
+	// fixed HP/MP amount, Param2 their percentage, Param3 the EXP refund.
+	{120, "itemParam2_2a0", "int"},
 	{122, "itemParam3_2a4", "int"},
 	// 80BFAC/80BFBC store the two tokens after the 20 (value,label)
 	// pairs. 8093C0 returns CItemData+8, hence record offsets 51C/51D.
