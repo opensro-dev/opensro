@@ -36,6 +36,14 @@ const (
 	cosItemStateOpcode           uint16 = 0x3645
 	cosItemStateMask             uint8  = 0x40
 	cosItemLeaseMask             uint8  = 0x80
+	// Spawn sub-state 1: the pet was just called out (854CD0 plays
+	// SYSTEM_PET_APPEAR and the summon sound for it).
+	cosSpawnFresh uint8 = 1
+	// Observers first meet a summoned pet through the peer COS lane on its
+	// next tick. Inference: the retail summon broadcast reached everyone in
+	// range at once, so a first sight this soon after the summon is that
+	// broadcast and carries sub-state 1; later scope entries carry 0.
+	petAppearWindowMs = 1000
 )
 
 /*
@@ -148,13 +156,15 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	owner := rt.petSessions[petOwnerKey{division: use.division, name: strings.ToLower(c.Name)}]
 	rt.petMu.Unlock()
 	if owner != nil {
-		rt.bindCompanionSession(use.division, owner, pet)
+		rt.bindCompanionSession(use.division, owner, pet).summonedAtMs = use.nowMs
 	}
 	pose := rt.companionLiveSpawn(use.division, c, pet, use.nowMs)
 	spawn := wire.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
 		Band: uint8(ref.TidWord >> 11), RefObjID: ref.RefObjID, Gid: gid, BodyStatus: pet.NativeBodyStatus,
 		Position: wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle},
 		Walk:     ref.WalkSpeed, Run: ref.RunSpeed, Scale: ref.Scale, Name: pet.Name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c),
+		// CICCos_DeserializeSpawnSubState (854CD0): 1 is a fresh summon.
+		State: cosSpawnFresh,
 	})}
 	// Viewers meet the pet through the peer COS lane alone: a spawn sent from
 	// here as well reached each of them twice (see the vehicle summon).

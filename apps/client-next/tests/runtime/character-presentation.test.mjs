@@ -3238,6 +3238,52 @@ test("berserk hair publishes compound attachments only after the resource is rea
 	}
 });
 
+test("a characterInfo ride that loads after its rider fades in on its own clock", () => {
+	const ride = {
+		kind: "ride",
+		codename: "res/mob/ride.bsr",
+		glb: "/assets/npc/mob/ride.glb",
+		clips: [ "stand", "walk" ],
+		requiredBy: [ "NPC_1" ]
+	};
+	const admission = { blockedPaths: new Set( [ "http://localhost" + ride.glb ] ) };
+	const f = fixture(
+		{},
+		1,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{ ...admission, rows: [ { codename: "NPC_1", soundProfileName: "MOB_TEST", riderTransformMode: 1 } ] },
+		{ rides: [ ride ] }
+	);
+	try {
+		f.warm();
+		const rider = [ entity( 1, { kind: "monster" } ) ];
+		for ( let i = 0; i < 50; i++ ) f.step( rider, i / 10 );
+		assert.equal( f.actors.find( actor => actor.gid === 1 )?.opacity ?? 1, 1, "the rider finished its ramp" );
+		admission.blockedPaths.clear();
+		let first;
+		for ( let i = 0; i < 20 && !first; i++ ) {
+			f.step( rider, 5 + i / 10 );
+			first = f.actors.find( actor => actor.model === ride.glb );
+		}
+		assert.ok( first, "the ride eventually draws" );
+		// 861EE2: the ride's own CIDecoAppear starts with the ride.
+		assert.equal( first.opacity, 0 );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a characterInfo ride joins its rider, follows its motions and links by the native ride mode", () => {
 	const ride = {
 		kind: "ride",

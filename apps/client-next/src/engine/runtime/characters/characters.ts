@@ -497,25 +497,45 @@ export function createCharacterPresentation(
 			if ( !fadeSeen.has( entity.gid ) ) {
 				fadeSeen.add( entity.gid );
 				spawnFades.set( entity.gid, null );
+				rideFades.set( entity.gid, null );
 			}
-			const start = spawnFades.get( entity.gid ), actor = next.get( entity.gid );
-			if ( start === undefined || !actor ) continue;
-			if ( start === null ) spawnFades.set( entity.gid, seconds );
-			const alpha = spawnFadeAlpha( seconds - (start ?? seconds) );
-			if ( alpha >= 1 ) {
-				spawnFades.delete( entity.gid );
-				continue;
-			}
-			next.set( entity.gid, { ...actor, opacity: (actor.opacity ?? 1) * alpha } );
-			const rideGid = linkedRides.get( entity.gid ),
-				ride = rideGid === undefined ? undefined : next.get( rideGid );
-			if ( ride ) next.set( rideGid!, { ...ride, opacity: (ride.opacity ?? 1) * alpha } );
+			fadeActor( spawnFades, entity.gid, entity.gid, next, seconds );
+			// 861EE2 gives the linked ride its own CIDecoAppear: its ramp starts
+			// when the ride itself can draw, which may be after the rider's ends.
+			const rideGid = linkedRides.get( entity.gid );
+			if ( rideGid !== undefined ) fadeActor( rideFades, entity.gid, rideGid, next, seconds );
 		}
 		for ( const gid of fadeSeen ) {
 			if ( fadePresent.has( gid ) ) continue;
 			fadeSeen.delete( gid );
 			spawnFades.delete( gid );
+			rideFades.delete( gid );
 		}
+	}
+	/*
+	================
+	fadeActor
+
+	Advances one armed ramp, keyed by its spawned entity, onto one drawn actor:
+	the clock starts on the actor's first drawable frame and retires at 1.
+	================
+	*/
+	function fadeActor(
+		ramps: Map<number, number | null>,
+		key: number,
+		gid: number,
+		next: Map<number, CharacterActor>,
+		seconds: number
+	) {
+		const start = ramps.get( key ), actor = next.get( gid );
+		if ( start === undefined || !actor ) return;
+		if ( start === null ) ramps.set( key, seconds );
+		const alpha = spawnFadeAlpha( seconds - (start ?? seconds) );
+		if ( alpha >= 1 ) {
+			ramps.delete( key );
+			return;
+		}
+		next.set( gid, { ...actor, opacity: (actor.opacity ?? 1) * alpha } );
 	}
 	/*
 	================
@@ -550,6 +570,8 @@ export function createCharacterPresentation(
 	// while armed and waiting for its first drawable frame. fadeSeen holds the
 	// gids already armed, so one present the whole time fades only once.
 	const spawnFades = new Map<number, number | null>(), fadeSeen = new Set<number>(), fadePresent = new Set<number>();
+	// The linked ride's own ramp, keyed by its rider's entity gid.
+	const rideFades = new Map<number, number | null>();
 	/*
 	================
 	Auxiliary
@@ -625,6 +647,7 @@ export function createCharacterPresentation(
 					retiring.clear();
 					disappearing.clear();
 					spawnFades.clear();
+					rideFades.clear();
 					fadeSeen.clear();
 					next.length = 0;
 					next.push( { kind: "reset" } );
@@ -3536,6 +3559,7 @@ export function createCharacterPresentation(
 			retiring.clear();
 			disappearing.clear();
 			spawnFades.clear();
+			rideFades.clear();
 			fadeSeen.clear();
 			damageTexts = [];
 			rainEventActive = false;
@@ -3597,6 +3621,7 @@ export function createCharacterPresentation(
 			retiring.clear();
 			disappearing.clear();
 			spawnFades.clear();
+			rideFades.clear();
 			fadeSeen.clear();
 			damageTexts = [];
 			rainEventActive = false;

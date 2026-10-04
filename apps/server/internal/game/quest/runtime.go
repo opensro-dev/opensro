@@ -413,7 +413,7 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 	}
 	var completes, offers []NpcOption
 	for _, def := range rt.Defs.All() {
-		if def.StartNpcCodename == "" || (def.CountryByte != 3 && int(def.CountryByte) != country) || int64(def.Level) > level {
+		if def.StartNpcCodename == "" || (def.CountryByte != 3 && int(def.CountryByte) != country) {
 			continue
 		}
 		active := activeQuestIndex(character, def.RefID) >= 0
@@ -444,7 +444,9 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 			})
 			continue
 		}
-		if !active && canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) && questNpcMatches(def, def.StartNpcCodename, npcCodename) {
+		// The level gates taking a quest, never reporting one already taken:
+		// a character that lost a level keeps its turn-in (as MarkerStates).
+		if !active && int64(def.Level) <= level && canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) && questNpcMatches(def, def.StartNpcCodename, npcCodename) {
 			prompt := def.OfferPromptSymbol
 			// Native 9206ec..92073f: DifferentString only selects the
 			// after-one-clear offer when the persisted completion count > 0.

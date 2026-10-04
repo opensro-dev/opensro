@@ -47,6 +47,9 @@ type petSession struct {
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState
 	generation     uint64
+	// summonedAtMs marks a pet just called out of its item (not restored at
+	// entry): its first publication carries spawn sub-state 1.
+	summonedAtMs   int64
 	pickup         *wire.ItemMoveRequest
 	pickupDeadline int64
 	pickupCommand  bool
@@ -378,6 +381,7 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 	}
 	block := rt.cosAbnormal(division, c.Name, cos.GID)
 	result = &simulation.PeerCOS{Mounted: cos.Mounted, NativeBodyStatus: cos.NativeBodyStatus, World: world, Revision: revision, Session: state.session, Generation: state.generation,
+		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs,
 		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: cosParameter(ref, cos, block, movementWalkParameter), Run: cosParameter(ref, cos, block, movementRunParameter),
 			Scale: ref.Scale, Name: name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c)}}

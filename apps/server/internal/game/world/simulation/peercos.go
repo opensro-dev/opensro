@@ -21,7 +21,10 @@ PeerCOS
 ================
 */
 type PeerCOS struct {
-	Mounted          bool
+	Mounted bool
+	// Fresh: the pet was summoned a moment ago; its first sight is the
+	// summon itself (spawn sub-state 1).
+	Fresh            bool
 	NativeBodyStatus uint8
 	LifeState        uint8
 	AbnormalVitals   []byte
@@ -58,6 +61,9 @@ func (p PeerCOS) frames(nowMs int64, spawn bool) []Frame {
 		row := p.Row
 		row.BodyStatus = p.NativeBodyStatus
 		row.Position = position
+		if p.Fresh {
+			row.State = 1
+		}
 		frames = append(frames, Frame{ScopeGID: row.Gid, ScopeVisible: true, Opcode: wire.OpSingleObjectSpawn, Payload: wire.EncodeCosSpawnBand2(row)})
 		if len(p.AbnormalVitals) != 0 {
 			frames = append(frames, Frame{Opcode: OpVitalsUpdate, Payload: append([]byte(nil), p.AbnormalVitals...)})
