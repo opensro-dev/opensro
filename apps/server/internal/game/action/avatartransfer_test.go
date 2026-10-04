@@ -20,6 +20,9 @@ func TestAvatarTransferRoundtripPreservesBodyAndVisualOrder(t *testing.T) {
 	if len(equip.Frames) != 2 || equip.Frames[0].Opcode != wire.OpItemMoveResponse || equip.Frames[1].Opcode != 0x3314 {
 		t.Fatalf("equip: %+v", equip)
 	}
+	if !reflect.DeepEqual(equip.Broadcast, equip.Frames[1:]) {
+		t.Fatalf("viewers: %+v", equip.Broadcast)
+	}
 	if len(c.MissionInventory) != 0 || c.AvatarInventory == nil || len(c.AvatarInventory.Rows) != 1 {
 		t.Fatal("not committed")
 	}
@@ -73,6 +76,9 @@ func TestAvatarDressRemovalMovesAttachmentAtomicallyAndUsesFirstFreeSlots(t *tes
 			}
 			if binary.LittleEndian.Uint32(result.Frames[1].Payload[5:]) != 90003 || binary.LittleEndian.Uint32(result.Frames[2].Payload[5:]) != 90002 {
 				t.Fatal("attachment must disappear before dress")
+			}
+			if !reflect.DeepEqual(result.Broadcast, result.Frames[1:]) {
+				t.Fatalf("viewers: %+v", result.Broadcast)
 			}
 			dress.Slot = 43
 			attachment.Slot = 44

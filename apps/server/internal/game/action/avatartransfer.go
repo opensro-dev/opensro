@@ -115,6 +115,8 @@ func (rt *Runtime) applyAvatarTransfer(c *enterworld.Character, q wire.ItemMoveR
 			result.Frames = append(result.Frames, wire.UnequipVisualFrame(wire.UnequipVisual{Gid: enterworld.ObjectIDForCharacter(c), Slot: attachment.Slot, RefObjID: attachment.RefObjID}))
 		}
 		result.Frames = append(result.Frames, visual)
+		// Viewers see the dress change as the owner does (applyInventoryMove).
+		result.Broadcast = result.Frames[1:]
 		return true
 	})
 	return result

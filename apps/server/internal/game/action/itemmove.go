@@ -218,6 +218,10 @@ func (rt *Runtime) applyInventoryMove(
 					),
 				},
 			}, visuals...),
+			// The spawn row is the only other carrier of worn equipment, so a
+			// viewer that already sees this character needs the same pushes:
+			// 777800/777980 resolve any gid, not just the local player's.
+			Broadcast: visuals,
 		}
 
 		if statFrame != nil {

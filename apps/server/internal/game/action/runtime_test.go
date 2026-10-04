@@ -9,6 +9,7 @@ runtime_test.go - tests for runtime.go
 package action
 
 import (
+	"bytes"
 	"encoding/binary"
 	"math"
 	"testing"
@@ -471,7 +472,8 @@ TestM1VisualsAlwaysRideBehindSocketTransfers
 
 THE M1 EMIT PIN: every transfer touching a socket < 13 appends its visual
 pushes behind the 0xB06D row - equip, unequip and swap; a bag-only move
-appends nothing.
+appends nothing. Viewers already holding the spawn row receive the same
+visual pushes, or they keep drawing the old gear until it respawns.
 ==================
 */
 func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
@@ -494,6 +496,10 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 			MovementType: wire.MoveTypeInventory, SourceSlot: 20, DestSlot: 6, Quantity: 1,
 		}))
 		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpEquipVisual, wire.OpBaseStats)
+		assertOpcodes(t, result.Broadcast, wire.OpEquipVisual)
+		if !bytes.Equal(result.Broadcast[0].Payload, result.Frames[1].Payload) {
+			t.Fatal("viewers were sent a different equip visual than the owner")
+		}
 		stats := result.Frames[2].Payload
 		if got := binary.LittleEndian.Uint32(stats[0x00:]); got != 33 {
 			t.Fatalf("equipped physical attack minimum = %d, want base+weapon projection 33", got)
@@ -520,6 +526,7 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 			MovementType: wire.MoveTypeInventory, SourceSlot: 6, DestSlot: 25, Quantity: 1,
 		}))
 		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpUnequipVisual, wire.OpBaseStats)
+		assertOpcodes(t, result.Broadcast, wire.OpUnequipVisual)
 		stats := result.Frames[2].Payload
 		if got := binary.LittleEndian.Uint32(stats[0x00:]); got != 6 {
 			t.Fatalf("unequipped physical attack minimum = %d, want base projection 6", got)
@@ -547,10 +554,11 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 			MovementType: wire.MoveTypeInventory, SourceSlot: 6, DestSlot: 20, Quantity: 1,
 		}))
 		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpEquipVisual, wire.OpBaseStats)
+		assertOpcodes(t, result.Broadcast, wire.OpEquipVisual)
 
-		visual, _ := wire.DecodeEquipVisual(result.Frames[1].Payload, equipWord)
+		visual, _ := wire.DecodeEquipVisual(result.Broadcast[0].Payload, equipWord)
 		if visual.RefObjID != 11459 || visual.OptLevel != 5 {
-			t.Fatalf("visual = %+v, want the swapped-in 11459 opt 5", visual)
+			t.Fatalf("viewer visual = %+v, want the swapped-in 11459 opt 5", visual)
 		}
 	})
 
@@ -560,6 +568,7 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 			MovementType: wire.MoveTypeInventory, SourceSlot: 20, DestSlot: 30, Quantity: 1,
 		}))
 		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse)
+		assertOpcodes(t, result.Broadcast)
 	})
 
 	t.Run("a refused equip pushes nothing", func(t *testing.T) {
