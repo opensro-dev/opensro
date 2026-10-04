@@ -19,7 +19,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { withGeneratedAssetsLock } from "../../rebuildLock.mjs";
 import { loadCharacterDataRows } from "../char/resolveCharRoster.mjs";
-import { publicRoot, rebuildRoot, retailTextdataRoot, serverGameDataRoot } from "../world/paths.mjs";
+import { dataExtractedRoot, publicRoot, rebuildRoot, retailTextdataRoot, serverGameDataRoot } from "../world/paths.mjs";
+import { buildStructureZoneProjection } from "./structureZones.mjs";
 import { buildServerGameDataArchive } from "./serverGameDataArchive.mjs";
 import { completeItemTextProjection, completeItemReferenceProjection } from "../shared/itemTextCompletions.mjs";
 import { completeEnglishTextProjection, ENGLISH_COMPLETION_FILES } from "../shared/englishCompletions.mjs";
@@ -32,6 +33,8 @@ const GAME_VERSION = "1.150";
 const PROJECTION = "server";
 const PROTOCOL_VERSION = 2;
 const WORLD_PUBLIC_ROOT = path.join( publicRoot, "assets", "world" );
+// CObjectStringIfo_Load (98C7F0) reads this Data.pk2 file.
+const OBJECT_STRING_FILE = path.join( dataExtractedRoot, "navmesh", "objectstring.ifo" );
 
 export const defaultServerGameDataRoot = serverGameDataRoot;
 
@@ -56,6 +59,7 @@ export async function buildServerGameDataBundle( options ) {
 		await buildCharacterAuthorityProjection( temporaryRoot, textdataRoot );
 		await buildAreaProjection( temporaryRoot, worldPublicRoot );
 		await buildMovementProjection( temporaryRoot, worldPublicRoot );
+		await buildStructureZoneProjection( temporaryRoot, options.objectStringFile ?? OBJECT_STRING_FILE );
 
 		const files = await describeProjectionFiles( temporaryRoot );
 		const manifest = {
