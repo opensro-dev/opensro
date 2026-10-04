@@ -242,3 +242,29 @@ func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
 	}
 	t.Logf("%d executable definitions; %d authored NPC identities", defs.Len(), len(anchors))
 }
+
+/*
+================
+TestOfferMarkerFollowsTheNativeLevelGap
+
+925D20 / 40FE90: below the quest's level the NPC shows the red scroll;
+within six levels above it the offer mark; further above, nothing.
+================
+*/
+func TestOfferMarkerFollowsTheNativeLevelGap(t *testing.T) {
+	for _, tc := range []struct {
+		level, questLevel int64
+		state             uint8
+		shown             bool
+	}{
+		{1, 10, markerStateTooLow, true},
+		{9, 10, markerStateTooLow, true},
+		{10, 10, markerStateOffer, true},
+		{16, 10, markerStateOffer, true},
+		{17, 10, 0, false},
+	} {
+		if state, shown := offerMarkerState(tc.level, tc.questLevel); state != tc.state || shown != tc.shown {
+			t.Fatalf("level %d quest %d = (%d, %v), want (%d, %v)", tc.level, tc.questLevel, state, shown, tc.state, tc.shown)
+		}
+	}
+}

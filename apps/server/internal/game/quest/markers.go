@@ -22,12 +22,18 @@ import (
 	"sort"
 )
 
-// Marker states 856500 maps to the start, in-progress and report effects.
+// Marker states CICharactor_QuestMarkerStateEffect (856500) maps to the
+// start, in-progress, report and red-scroll (SYSTEM_QUEST_MARK2) effects.
 const (
 	markerStateOffer      = 1
 	markerStateInProgress = 2
 	markerStateReport     = 3
+	markerStateTooLow     = 4
 )
+
+// Formulae_ClassifyLevelDiff_Extended (40FE90) category 4: the quest is more
+// than this many levels below the character, and its NPC shows no offer.
+const markerTrivialLevelGap = 6
 
 // SQuestInfo flag 0x40: the NPC target list follows the contents.
 const questFlagTargets = 0x40
@@ -47,7 +53,7 @@ func (rt *Runtime) MarkerStates(c *enterworld.Character) map[uint32]NpcMarker {
 		level = *c.Level
 	}
 	for _, def := range rt.Defs.All() {
-		if def.StartNpcCodename == "" || (def.CountryByte != 3 && int(def.CountryByte) != country) || int64(def.Level) > level {
+		if def.StartNpcCodename == "" || (def.CountryByte != 3 && int(def.CountryByte) != country) {
 			continue
 		}
 		at := activeQuestIndex(c, def.RefID)
@@ -55,7 +61,9 @@ func (rt *Runtime) MarkerStates(c *enterworld.Character) map[uint32]NpcMarker {
 			// 925D20 calls condition slot +11C with arg4=1: the marker
 			// checks the hour but bypasses the first-come quota (926B01).
 			if canAcceptAgain(c, def) && prerequisitesMet(c, def) && rt.calendarAvailable(def, true) {
-				out[def.RefID] = NpcMarker{Codename: def.StartNpcCodename, State: markerStateOffer}
+				if state, shown := offerMarkerState(level, int64(def.Level)); shown {
+					out[def.RefID] = NpcMarker{Codename: def.StartNpcCodename, State: state}
+				}
 			}
 			continue
 		}
@@ -73,6 +81,27 @@ func (rt *Runtime) MarkerStates(c *enterworld.Character) map[uint32]NpcMarker {
 		}
 	}
 	return out
+}
+
+/*
+================
+offerMarkerState
+
+925D20's level rule for a quest the character has not taken:
+QuestGameServer_ClassifyLevelDiff (57BE00 -> 40FE90) of the quest level
+(+0x23) against the character's hides a quest more than six levels below
+it; a quest above the character's level shows the red scroll, any other the
+offer mark.
+================
+*/
+func offerMarkerState(level, questLevel int64) (uint8, bool) {
+	if questLevel-level < -markerTrivialLevelGap {
+		return 0, false
+	}
+	if level < questLevel {
+		return markerStateTooLow, true
+	}
+	return markerStateOffer, true
 }
 
 /*
