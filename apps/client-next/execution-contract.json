@@ -38,6 +38,11 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [ "callback:createCombat:2" ]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/combat-result.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
 			"functions": [ "callback:skillPulse:1" ]

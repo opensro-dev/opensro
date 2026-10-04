@@ -3256,8 +3256,10 @@ test("retail extended quickslot layouts, fixed bindings, locks and bottom-bar ac
 		assert.deepEqual( commands.pop(), { kind: "skill", skillId: 7 } );
 		f.state.gameplay.skillCooldowns = [ { skill: 7, group: 0, startedAtMs: now, durationMs: 2000 } ];
 		draw();
+		// A cooling-down press is forwarded: the worker holds or denies it
+		// (skill-queue.ts) and the slot keeps drawing the cooldown.
 		click( "hotbar:41" );
-		assert.equal( commands.length, 0 );
+		assert.deepEqual( commands.pop(), { kind: "skill", skillId: 7 } );
 		assert.ok( f.scenes.at( -1 ).quads.some( q => q.texture.endsWith( "/skill_delay.png" ) ) );
 	} finally {
 		f.dispose();
@@ -4813,7 +4815,13 @@ test("learned skill icons and shortcut bars share casting and cooldown admission
 		f.ui.event( { kind: "right-activate", id: "skill:3" } );
 		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
 		f.ui.event( { kind: "activate", id: "hotbar:1" } );
-		assert.equal( sent.length, 0, "board and shortcuts reject the same active cooldown" );
+		// The board and both bars forward a cooling-down press alike; the
+		// worker decides it (skill-queue.ts).
+		assert.equal( sent.length, 3, "board and shortcuts forward the same cooling-down press" );
+		for ( const command of sent ) {
+			assert.deepEqual( command, { kind: "gameplay", command: { kind: "skill", skillId: 3, gid: 2 } } );
+		}
+		sent.length = 0;
 		f.state.gameplay = { ...f.state.gameplay, skills: [], skillCooldowns: [] };
 		f.ui.step( f.state, 1600 );
 		f.ui.event( { kind: "right-activate", id: "skill:3" } );

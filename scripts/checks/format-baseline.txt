@@ -111,7 +111,6 @@ apps/client-next/src/engine/foundation/gameplay/quest.ts
 apps/client-next/src/engine/foundation/gameplay/quickslot-inventory.ts
 apps/client-next/src/engine/foundation/gameplay/recall-appointment.ts
 apps/client-next/src/engine/foundation/gameplay/return-scroll.ts
-apps/client-next/src/engine/foundation/gameplay/skill-cooldowns.ts
 apps/client-next/src/engine/foundation/gameplay/skill-notices.ts
 apps/client-next/src/engine/foundation/gameplay/spawn-skills.ts
 apps/client-next/src/engine/foundation/gameplay/system-notices.ts

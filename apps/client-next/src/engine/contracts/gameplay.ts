@@ -540,6 +540,10 @@ export interface GameplayState {
 	readonly vitals: readonly VitalState[];
 	readonly itemCooldowns?: readonly import("@/engine/foundation/gameplay/item-cooldowns").ItemCooldown[];
 	readonly skillCooldowns?: readonly import("@/engine/foundation/gameplay/skill-cooldowns").SkillCooldown[];
+	// A skill press held for its cooldown, and the newest denied press
+	// (skill-queue.ts); the shortcut slots draw both.
+	readonly skillQueue?: { readonly skill: number; readonly fireAtMs: number; };
+	readonly skillDenied?: import("@/engine/foundation/gameplay/skill-queue").DeniedPress;
 	readonly casts: readonly CastState[];
 	readonly error: string | null;
 }

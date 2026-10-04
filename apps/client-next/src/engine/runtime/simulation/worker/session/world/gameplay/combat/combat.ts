@@ -39,7 +39,10 @@ optionally retaining immutable reference metadata across reconnect.
 */
 export function createCombat(
 	readEntity: ( gid: number ) => import("@/engine/contracts/world").EntityState | undefined = () => undefined,
-	publishHp: ( event: import("@/engine/contracts/effective-hp").CombatPresentationEvent ) => void = () => {}
+	publishHp: ( event: import("@/engine/contracts/effective-hp").CombatPresentationEvent ) => void = () => {},
+	// One delivery, server to client (skill-queue.ts): a cast-start answer
+	// started its cooldown that long ago.
+	oneWayMs: () => number = () => 0
 ) {
 	let huntingPoints: readonly HuntingPoint[] = [];
 	let attackedName: string | undefined, attackedNameUntil = 0;
@@ -356,6 +359,18 @@ export function createCombat(
 		},
 		/*
 		================
+		pressed
+
+		A skill press went out: its cooldown stands in from when the press
+		reaches the server (arrivesAtMs) until its answer, or untilMs.
+		================
+		*/
+		pressed( id: number, arrivesAtMs: number, untilMs: number, now: number ) {
+			const metadata = skillMetadata.find( row => row.id === id );
+			if ( metadata ) cooldowns.pressed( metadata, arrivesAtMs, untilMs, now );
+		},
+		/*
+		================
 		skill
 		A skill request carries an optional object target, never client damage.
 		================
@@ -613,6 +628,8 @@ export function createCombat(
 					throw new Error( "Invalid cast refusal" );
 				}
 				error = `Cast rejected: ${p[1]}`;
+				// The press it answers never started a cooldown.
+				cooldowns.refused();
 				return true;
 			}
 			if ( p.length < 19 ) throw Error( "Truncated cast header" );
@@ -674,7 +691,7 @@ export function createCombat(
 			const metadata = caster === localGid ?
 				skillMetadata.find( r => r.id === v.getUint32( 2, true ) ) :
 				undefined;
-			if ( metadata ) cooldowns.accepted( metadata, now );
+			if ( metadata ) cooldowns.accepted( metadata, now - oneWayMs(), now );
 			// This snapshot is authority for worker decisions. Effective HP is owned
 			// separately by result application and ordered HP checkpoint retirement.
 			error = null;

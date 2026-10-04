@@ -83,6 +83,7 @@ import {
 } from "@/engine/foundation/ui/quickslot-cooldown";
 import { extendedQuickslotOptions, type ExtendedQuickslotOptions } from "@/engine/foundation/ui/extended-quickslot";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
+import { skillPressFeedback, skillPressFeedbackActive } from "@/engine/foundation/ui/skill-press-feedback";
 import {
 	masteryTrainingReason,
 	skillMetadataById,
@@ -1193,21 +1194,15 @@ export function createUi(
 	================
 	executeSkill
 
-	The learned skill board and both shortcut bars share cooldown admission.
-	The worker and server remain responsible for target and actor eligibility.
+	The learned skill board and both shortcut bars share one press path. The
+	worker decides a cooling-down press (skill-queue.ts: send, hold or deny),
+	so it is forwarded here like any other; the worker and server remain
+	responsible for target and actor eligibility.
 	================
 	*/
 	function executeSkill( id: number ) {
 		const game = view?.gameplay;
 		if ( !game?.skills?.includes( id ) || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
-		if (
-			skillCooldown(
-				game.skillCooldowns ?? [],
-				id,
-				skillMetadataById( game, id )?.cooldownGroup ?? 0,
-				quickslotTime
-			)
-		) return;
 		sendGameplay( { kind: "skill", skillId: id, ...(game.target ? { gid: game.target } : {}) } );
 	}
 	/*
@@ -4553,7 +4548,8 @@ export function createUi(
 				Math.floor( (next.simulationTimeMs ?? 0) / 100 ) :
 				-1;
 			const slotTick = (next.gameplay?.skillCooldowns?.length || next.gameplay?.itemCooldowns?.length ||
-					next.gameplay?.returnScroll || next.gameplay?.questGathering) ?
+					next.gameplay?.returnScroll || next.gameplay?.questGathering ||
+					skillPressFeedbackActive( next.gameplay, quickslotTime )) ?
 				Math.floor( quickslotTime / 16 ) :
 				-1;
 			if ( slotTick !== quickslotTick ) {
@@ -6946,9 +6942,12 @@ export function createUi(
 					} );
 					blocks.push( r );
 					const icon = iconPath( skill?.icon ?? item?.icon ?? action?.icon );
+					// A held press outlines the slot; a denied one shakes and tints it.
+					const feedback = skill ? skillPressFeedback( game, skill.id, r, full, quickslotTime ) : undefined;
 					if ( icon ) {
 						paths.push( icon );
-						if ( resources.has( icon ) ) rect( r, [ 1, 1, 1, iconAlpha ], icon );
+						const ir: UiRect = feedback?.offsetX ? [ r[0] + feedback.offsetX, r[1], r[2], r[3] ] : r;
+						if ( resources.has( icon ) ) rect( ir, [ 1, 1, 1, iconAlpha ], icon );
 					}
 					const cooldown = skill ?
 						skillCooldown( game?.skillCooldowns ?? [], skill.id, skill.cooldownGroup ?? 0, quickslotTime ) :
@@ -6964,6 +6963,7 @@ export function createUi(
 							full
 						);
 						quads.push( ...timer.filter( q => resources.has( q.texture ) ) );
+						if ( feedback ) quads.push( ...feedback.quads );
 					}
 					if ( item ) {
 						paths.push( ...quickslotTimerPaths() );
