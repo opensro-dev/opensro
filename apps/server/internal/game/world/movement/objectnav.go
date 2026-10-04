@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
@@ -746,7 +747,10 @@ func (v *WaterValidator) spawnObjectDeckStand(surface *groundSurface, baseX, bas
 	pointSectorX := worldgeom.SectorX(point.RegionID)
 	pointSectorZ := worldgeom.SectorY(point.RegionID)
 	gridPoint := worldgeom.ExpandGrid(worldgeom.RegionXZ{RegionID: surface.seedRegionID, X: baseX, Z: baseZ})
-	checked := make(map[objectNavSetKey]struct{}, 18)
+	// A handful of sets (nine anchors on at most two surfaces): a scan of a
+	// stack array, not a map that allocated its buckets every monster step.
+	var checkedBuf [18]objectNavSetKey
+	checked := checkedBuf[:0]
 
 	probe := func(candidate *groundSurface, anchorX, anchorZ int) {
 		if candidate == nil {
@@ -755,10 +759,10 @@ func (v *WaterValidator) spawnObjectDeckStand(surface *groundSurface, baseX, bas
 		dx := anchorX - simulation.SectorX(candidate.seedRegionID)
 		dz := anchorZ - simulation.SectorY(candidate.seedRegionID)
 		key := objectNavSetKey{surface: candidate, offset: offsetKey(dx, dz)}
-		if _, alreadyChecked := checked[key]; alreadyChecked {
+		if slices.Contains(checked, key) {
 			return
 		}
-		checked[key] = struct{}{}
+		checked = append(checked, key)
 		set := v.objectNavSetForOffset(candidate, dx, dz)
 		anchorRegion := worldgeom.RegionIDForSectors(anchorX, anchorZ)
 		anchorLocal := worldgeom.LocalFromGrid(anchorRegion, gridPoint)

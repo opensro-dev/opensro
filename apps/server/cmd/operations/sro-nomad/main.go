@@ -241,6 +241,7 @@ type commandOptions struct {
 	AgentPort       int
 	PrivateNet      bool
 	Build           bool
+	Pprof           bool
 	TaskUser        string
 	AgentCPU        int
 	AgentMemoryMB   int
@@ -320,6 +321,12 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 		"acknowledge that a non-loopback host network is private behind TLS ingress",
 	)
 	flags.BoolVar(&options.Build, "build", false, "build the agent and gameworld binaries before deploy")
+	flags.BoolVar(
+		&options.Pprof,
+		"pprof",
+		false,
+		"serve /debug/pprof/ on the GameWorld loopback control listener (loopback host network only)",
+	)
 	flags.StringVar(&options.TaskUser, "task-user", "", "OS account the services run as (Linux: a dedicated unprivileged user)")
 	flags.IntVar(&options.AgentCPU, "agent-cpu", 0, "Agent CPU reservation in MHz (default: the job's)")
 	flags.IntVar(&options.AgentMemoryMB, "agent-memory-mb", 0, "Agent memory reservation in MB (default: the job's)")

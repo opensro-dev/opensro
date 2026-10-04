@@ -2,6 +2,7 @@ package movement
 
 import (
 	"math"
+	"slices"
 
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
@@ -362,7 +363,10 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 		sectors[sector] = struct{}{}
 		return false
 	})
-	checked := map[objectNavSetKey]struct{}{}
+	// A few sets per crossed sector: a scan of a stack array, not a map
+	// that allocated its buckets on every chord.
+	var checkedBuf [32]objectNavSetKey
+	checked := checkedBuf[:0]
 	var best *objectDeckStand
 	bestT, bestKey := math.Inf(1), math.Inf(1)
 	probe := func(surface *groundSurface, anchorX, anchorZ int) {
@@ -372,10 +376,10 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 		dx := anchorX - simulation.SectorX(surface.seedRegionID)
 		dz := anchorZ - simulation.SectorY(surface.seedRegionID)
 		key := objectNavSetKey{surface: surface, offset: offsetKey(dx, dz)}
-		if _, seen := checked[key]; seen {
+		if slices.Contains(checked, key) {
 			return
 		}
-		checked[key] = struct{}{}
+		checked = append(checked, key)
 		set := v.objectNavSetForOffset(surface, dx, dz)
 		baseX, baseZ := float64(anchorX)*simulation.NativeRegionSize, float64(anchorZ)*simulation.NativeRegionSize
 		for i := range set {

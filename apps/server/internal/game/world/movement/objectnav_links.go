@@ -95,10 +95,9 @@ func (p objectPassages) covers(t float64) bool {
 func resolveObjectPassages(set []resolvedObjectNav, x0, y0, z0, x1, y1, z1 float64) objectPassages {
 	dx, dz := x1-x0, z1-z0
 	var passages objectPassages
-	indices := map[int]int{}
-	for i, p := range set {
-		indices[p.placement.ordinal] = i
-	}
+	// Built at the first link: most placements have none, and building it
+	// for every monster step allocated about 60 MB a minute.
+	var indices map[int]int
 	crossing := func(obj resolvedObjectNav, edge int, leaving bool) (float64, bool) {
 		if len(obj.meshes) != 1 {
 			return 0, false
@@ -140,6 +139,12 @@ func resolveObjectPassages(set []resolvedObjectNav, x0, y0, z0, x1, y1, z1 float
 	}
 	for i, p := range set {
 		for _, link := range p.placement.links {
+			if indices == nil {
+				indices = make(map[int]int, len(set))
+				for k, q := range set {
+					indices[q.placement.ordinal] = k
+				}
+			}
 			j, ok := indices[link.target]
 			if !ok || link.target == 65535 {
 				continue

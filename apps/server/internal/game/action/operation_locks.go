@@ -1,40 +1,93 @@
+/*
+===========================================================================
+
+operation_locks.go - one ordered lane per division
+
+Ordinary gameplay in one division runs under that division's lane; lanes of
+different divisions run concurrently. The maintenance barrier lets the
+all-division TTL sweep stop every lane briefly without acquiring an
+open-ended set of locks.
+
+===========================================================================
+*/
+
 package action
 
-import "sync"
+import (
+	"sync"
 
-// divisionOperationLocks gives each division an independent item-operation
-// lane. The short map lock owns lock discovery only; gameplay runs under the
-// returned division lock.
+	"opensro.online/server/internal/game/world/simulation"
+)
+
+/*
+================
+divisionLane
+
+A division's lock and its release (the lane, then the maintenance
+barrier), made once with the lane: lockDivision hands out that same func
+value, where building a closure per call allocated twice for every monster
+action and every command.
+================
+*/
+type divisionLane struct {
+	sync.Mutex
+	release func()
+	// monsterAttack is the lane's monster attack capability, made at the
+	// first monster action and only ever used under the lane
+	// (RunMonsterAction).
+	monsterAttack simulation.MonsterAttackOperation
+}
+
+/*
+================
+divisionOperationLocks
+
+The short map lock owns lane discovery only; gameplay runs under the
+returned lane.
+================
+*/
 type divisionOperationLocks struct {
 	mu       sync.Mutex
-	division map[string]*sync.Mutex
+	division map[string]*divisionLane
 }
 
-func (locks *divisionOperationLocks) lock(divisionID string) func() {
+/*
+================
+lane
+
+The lane of divisionID, created on first use with release bound to
+maintenance.
+================
+*/
+func (locks *divisionOperationLocks) lane(divisionID string, maintenance *sync.RWMutex) *divisionLane {
 	locks.mu.Lock()
+	defer locks.mu.Unlock()
 	if locks.division == nil {
-		locks.division = make(map[string]*sync.Mutex)
+		locks.division = make(map[string]*divisionLane)
 	}
-	divisionLock := locks.division[divisionID]
-	if divisionLock == nil {
-		divisionLock = &sync.Mutex{}
-		locks.division[divisionID] = divisionLock
+	lane := locks.division[divisionID]
+	if lane == nil {
+		lane = &divisionLane{}
+		lane.release = func() {
+			lane.Unlock()
+			maintenance.RUnlock()
+		}
+		locks.division[divisionID] = lane
 	}
-	locks.mu.Unlock()
-
-	divisionLock.Lock()
-	return divisionLock.Unlock
+	return lane
 }
 
-// lockDivision admits ordinary work concurrently across divisions while
-// keeping one division's ground, pending, world, and character transitions in
-// order. The maintenance barrier lets the all-division TTL sweep stop those
-// lanes briefly without acquiring an open-ended set of locks.
+/*
+================
+lockDivision
+
+Admit ordinary work concurrently across divisions while keeping one
+division's ground, pending, world and character transitions in order.
+================
+*/
 func (rt *Runtime) lockDivision(divisionID string) func() {
 	rt.maintenance.RLock()
-	unlockDivision := rt.operations.lock(divisionID)
-	return func() {
-		unlockDivision()
-		rt.maintenance.RUnlock()
-	}
+	lane := rt.operations.lane(divisionID, &rt.maintenance)
+	lane.Lock()
+	return lane.release
 }
