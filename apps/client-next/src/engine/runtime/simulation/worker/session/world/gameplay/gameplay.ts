@@ -129,6 +129,7 @@ import {
 } from "@/engine/foundation/gameplay/social";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
 import {
+	skillAdmitsPredictedTarget,
 	skillCatalog,
 	skillMpCost,
 	skillTrainingReason,
@@ -376,6 +377,10 @@ would turn it.
 			local.appearanceState?.[0] === 2 || localCastHolds( now ) || combat.predicting() ||
 			combat.guidedActive( localGid, now )
 		) return;
+		// The native press animates only on the server's answer (6FCD50), so
+		// a target the row may not admit (an NPC, a player in town, the caster
+		// for an enemy skill) predicts nothing: it would animate and snap back.
+		if ( target && !skillAdmitsPredictedTarget( metadata, target, localGid ) ) return;
 		if ( target && target.gid !== localGid ) {
 			if ( target.kind === "monster" && target.appearanceState?.[0] === 2 || !withinReach( metadata, target ) ) {
 				return;
@@ -1730,6 +1735,14 @@ state here before a command can claim a native wire conversation.
 			const pressedSkill = command.skillId;
 			const pressedMetadata = catalog.find( row => row.id === pressedSkill );
 			predictCast( pressedMetadata, entity, local, now );
+			// Only a target the row admits stands a cooldown in: any other is the
+			// server's to refuse, and its stand-in showed a cooldown that vanished.
+			const admitted = !!pressedMetadata && skillAdmitsPredictedTarget( pressedMetadata, entity, localGid );
+			if ( !admitted ) {
+				sendFrame( frame );
+				skillPress.sent( now, command.skillId );
+				return frame;
+			}
 			return sendSkillPress(
 				frame,
 				command.skillId,

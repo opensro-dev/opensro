@@ -311,7 +311,7 @@ function targetedPresser( dead = false ) {
 		simulationProtocolVersion: 1,
 		character: { skills: [ TARGETED ] },
 		// Range 60: the monsters stand within it, so the server casts at once.
-		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60 } } ]
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60, targets: 6 } } ]
 	} );
 	game.seed( local );
 	// The target gid of each skill press (SkillAction +7).
@@ -370,7 +370,7 @@ function cooldownAfterPress( dx ) {
 	game.bootstrap( {
 		simulationProtocolVersion: 1,
 		character: { skills: [ TARGETED ] },
-		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60 } } ]
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60, targets: 6 } } ]
 	} );
 	game.seed( local );
 	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
@@ -429,7 +429,7 @@ test("a press the server runs to its target for shows as next until its cast sta
 	game.bootstrap( {
 		simulationProtocolVersion: 1,
 		character: { skills: [ TARGETED ] },
-		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60 } } ]
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60, targets: 6 } } ]
 	} );
 	game.seed( local );
 	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
@@ -456,4 +456,46 @@ test("a skill at the target brings the selection ring back from the move marker"
 	assert.equal( decal?.kind, "target", "the press left the move marker up" );
 	assert.equal( decal?.gid, 9 );
 	game.dispose();
+});
+
+/*
+================
+pressAt
+
+Presses an enemy-only targeted skill (Cold Wave Arrest's groups: animal,
+monster, player; range 60, 5 s cooldown) at entity and returns what the
+client shows right after: a cooldown, a prediction, and the frames sent.
+================
+*/
+function pressAt( entity ) {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const game = createGameplay( f => sent.push( f ) );
+	const row = skillRef( TARGETED, 5000 );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ TARGETED ] },
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, targetRequired: true, range: 60, targets: 14, actionMs: 800 } } ]
+	} );
+	game.seed( local );
+	game.command( { kind: "skill", skillId: TARGETED, gid: entity.gid }, 1000, entity, local );
+	const state = game.take();
+	const shown = {
+		cooldown: cooldowns.skillCooldown( state?.skillCooldowns ?? [], TARGETED, 0, 1010 ),
+		predicted: !!state?.castPrediction,
+		presses: sent.filter( f => f.opcode === 0x72cd ).length
+	};
+	game.dispose();
+	return shown;
+}
+
+test("an enemy skill at the caster or an NPC is sent with no prediction and no cooldown", () => {
+	for ( const entity of [ local, { ...local, gid: 77, kind: "npc", name: "npc", x: local.x + 10 } ] ) {
+		const shown = pressAt( entity );
+		assert.equal( shown.presses, 1, "the press is still the server's to answer (6FCD50)" );
+		assert.equal( shown.cooldown, null, `a ${entity.kind} target stood a cooldown in` );
+		assert.equal( shown.predicted, false, `a ${entity.kind} target predicted the cast` );
+	}
+	const monster = pressAt( { ...local, gid: 9, kind: "monster", name: "mob", x: local.x + 10 } );
+	assert.ok( monster.cooldown && monster.predicted, "a monster in range still predicts and stands in" );
 });

@@ -263,6 +263,8 @@ function pressAt( dx, ui = {}, before = game => {}, after = game => {} ) {
 				trainable: true,
 				spCost: 1,
 				targetRequired: true,
+				// Animal and monster groups: an enemy skill, as the shipped rows author.
+				targets: 6,
 				cooldownMs: 0,
 				actionMs: 1000,
 				range: 60,
