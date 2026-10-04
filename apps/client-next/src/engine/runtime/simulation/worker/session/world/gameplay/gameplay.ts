@@ -497,7 +497,10 @@ holds until it ends, as before.
 	function localCastHolds( now: number ): boolean {
 		return combat.state().casts.some( c => {
 			if ( c.caster !== localGid || c.cancelledAtMs !== undefined ) return false;
-			const actionMs = catalog.find( row => row.id === c.skill )?.actionMs;
+			const row = catalog.find( row => row.id === c.skill );
+			// A wall's cast holds until the wall retires (cast-motion-lock).
+			if ( row?.holdsCaster ) return true;
+			const actionMs = row?.actionMs;
 			return !actionMs || c.receivedAtMs === undefined || now - c.receivedAtMs < actionMs;
 		} );
 	}

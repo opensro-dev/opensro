@@ -167,10 +167,16 @@ char+C08 is set, i.e. a skill action has not yet released its positive-time
 step. CGObjPC_IsMotionChangeLocked (4EF880) feeds it to
 CGObjChar_HandleMoveCommand (4B0EA0), which drops a ground command in that
 state instead of queueing it: a player cannot walk out of a cast.
+
+A standing wall keeps its cast there: the wall path of 5830B0 never releases
+or closes it until the wall retires, and CGObjChar_OnTick (4A8976) stops any
+walk of a caster whose C08 cast is an ordinary one (activity 2). Its caster
+is rooted for the wall's life (the client agrees: its WAIT holds action
+state 2, CanPerformLocomotion 877240).
 ================
 */
 func (rt *Runtime) PlayerAttackLocked(division, name string) bool {
-	return rt.chainStageBlocked(division, name)
+	return rt.chainStageBlocked(division, name) || rt.wallStanding(division, name)
 }
 
 /*

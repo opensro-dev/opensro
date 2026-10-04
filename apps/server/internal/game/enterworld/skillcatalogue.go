@@ -75,7 +75,11 @@ type SkillUiRow struct {
 	// ActionAtTarget 6FCD50) sends whatever is selected and animates only
 	// on the server's answer; the client predicts a cast and stands its
 	// cooldown in only for a target these groups admit.
-	Targets       uint16              `json:"targets,omitempty"`
+	Targets uint16 `json:"targets,omitempty"`
+	// HoldsCaster marks a cast whose WAIT the server never releases while
+	// its object stands (a Force wall, pw): the client keeps the caster in
+	// action state 2, rooted, until the object's retirement cancels it.
+	HoldsCaster   bool                `json:"holdsCaster,omitempty"`
 	Masteries     [2]SkillRequirement `json:"masteries"`
 	Prerequisites [3]SkillRequirement `json:"prerequisites"`
 }
@@ -208,6 +212,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 			if playerSkillCodename(row.Codename) {
 				projection.UI.Targets = skillUiTargets(row.Targets)
 			}
+			projection.UI.HoldsCaster = row.Wall.Pinned
 			if row.SpeedBuff.Present {
 				projection.UI.SpeedBuff = &SkillUiSpeedBuff{Active: row.SpeedBuff.Active}
 			}

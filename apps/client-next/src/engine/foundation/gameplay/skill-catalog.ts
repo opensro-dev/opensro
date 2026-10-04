@@ -55,6 +55,9 @@ export interface SkillMetadata {
 	readonly mpPercent?: number;
 	// The authored target groups as SKILL_TARGET_* bits (columns 22..33).
 	readonly targets?: number;
+	// A Force wall's cast: the server never releases its WAIT while the wall
+	// stands, so the caster stays in action state 2, rooted (cast-motion-lock).
+	readonly holdsCaster?: boolean;
 	readonly cooldownGroup?: number;
 	readonly masteries: readonly Requirement[];
 	readonly prerequisites: readonly Requirement[];
@@ -207,6 +210,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			...(ui.mp ? { mp: uint( ui.mp ) } : {}),
 			...(ui.mpPercent ? { mpPercent: uint( ui.mpPercent, 65535 ) } : {}),
 			...(ui.targets ? { targets: uint( ui.targets, 0xffff ) } : {}),
+			...(ui.holdsCaster === true ? { holdsCaster: true } : {}),
 			cooldownGroup: uint( ui.cooldownGroup ?? 0, 255 ),
 			masteries: requirements( ui.masteries, 2 ),
 			prerequisites: requirements( ui.prerequisites, 3 )

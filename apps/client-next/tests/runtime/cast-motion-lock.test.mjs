@@ -99,3 +99,16 @@ test("a skill without a known window keeps the committed-command fallback", () =
 	lock.clear();
 	assert.equal( lock.locked( [ cast( {} ) ], LOCAL, 10, false ), false );
 });
+
+test("a Force wall's cast roots its caster until the wall retires", () => {
+	// SKILL_CH_COLD_BINGBYEOK_A_01 (Crystal Wall): its WAIT is never released.
+	const CRYSTAL_WALL = 99;
+	const lock = createCastMotionLock();
+	lock.catalog( [ { ...skill( CRYSTAL_WALL, 1500 ), holdsCaster: true } ] );
+	const wall = cast( { skill: CRYSTAL_WALL, receivedAtMs: 0 } );
+	assert.ok( lock.locked( [ wall ], LOCAL, 60_000, false ), "the wall's caster walked a minute in" );
+	assert.ok(
+		!lock.locked( [ { ...wall, cancelledAtMs: 60_000 } ], LOCAL, 60_001, false ),
+		"the wall's retirement left the caster rooted"
+	);
+});
