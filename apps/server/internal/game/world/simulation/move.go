@@ -62,7 +62,9 @@ NormalizeMovementRequest
 
 Applies the reference coercion ranges (coerceMissionMovementRequest): x/z
 clamp into [0, 0xffff], y into [-0x8000, 0x7fff], and a zero mode takes the
-destination default. The transport layer owns rejecting structurally absent
+destination default. A dungeon region (bit 15) is a signed 16-bit plane, as
+the client admits it (movement-wire.ts admitPose): its x/z keep their sign.
+Clamping them to 0 sent a click at dungeon x=-100 to x=0. The transport layer owns rejecting structurally absent
 fields; by the time a typed request exists the reference behavior is
 clamping, not refusal.
 
@@ -77,9 +79,13 @@ func NormalizeMovementRequest(m MovementRequest) MovementRequest {
 	if m.Mode < 1 {
 		m.Mode = MovementAckDestinationMode
 	}
-	m.X = clampFloat(m.X, 0, 0xffff)
+	low := 0.0
+	if IsDungeonRegion(m.RegionID) {
+		low = -0x8000
+	}
+	m.X = clampFloat(m.X, low, 0xffff)
 	m.Y = clampFloat(m.Y, -0x8000, 0x7fff)
-	m.Z = clampFloat(m.Z, 0, 0xffff)
+	m.Z = clampFloat(m.Z, low, 0xffff)
 	return m
 }
 

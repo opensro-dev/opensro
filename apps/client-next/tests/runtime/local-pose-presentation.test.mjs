@@ -108,6 +108,30 @@ test("a small stop correction glides back instead of snapping", () => {
 	assert.equal( presentation.moving( GID ), false );
 });
 
+test("a re-anchor while walking never becomes velocity: no backward frames of many units", () => {
+	const presentation = createPosePresentation(), RENDER = .004, FAST = 100;
+	presentation.origin( 0 );
+	// A 100 unit/s walk; a receipt re-anchors it 19 units back 8 ms after the
+	// previous sample, and the walk goes on from there (production 22.7 s).
+	const at = ( ms, back ) => ({ ...walkAt( 0 ), x: 100 + FAST * ms / 1000 - back });
+	const drawn = [];
+	let latest = 0, revision = 1, back = 0;
+	for ( let now = .5; now < 1.4; now += RENDER ) {
+		const ms = Math.floor( now * 1000 );
+		if ( revision === 1 && ms >= 1008 ) {
+			revision = 2;
+			back = 19;
+			latest = ms;
+		} else if ( ms - latest >= STEP_MS ) latest = ms - (ms - latest) % STEP_MS;
+		presentation.samples( new Map( [ [ GID, { atMs: latest, revision, moving: true, to: at( 4000, back ) } ] ] ) );
+		drawn.push( presentation.pose( GID, at( latest, back ), now ).x );
+	}
+	for ( const delta of steps( drawn ).slice( 20 ) ) {
+		assert.ok( Math.abs( delta ) < 1.5, `frame step ${delta.toFixed( 2 )} units` );
+	}
+	assert.ok( Math.abs( drawn.at( -1 ) - at( 1400, 19 ).x ) < 1, "settles on the re-anchored walk" );
+});
+
 test("a relocation beyond the smoothing range snaps at once", () => {
 	const presentation = createPosePresentation();
 	presentation.origin( 0 );

@@ -697,13 +697,14 @@ export function createCharacterPresentation(
 					{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 			// Timed samples draw on the frame clock: the local player from its
 			// movement owner, every other character from its stepped path.
-			// Entity rows and the local movement state publish the same three fields.
-			type Sampled = Pick<EntityState, "poseAtMs" | "moving" | "movementPath">;
+			// Entity rows and the local movement state publish the same four fields.
+			type Sampled = Pick<EntityState, "poseAtMs" | "moving" | "movementPath" | "movementRevision">;
 			const samples = new Map<number, import("./pose-presentation").SampleInput>();
 			const sample = ( gid: number, source: Sampled ) => {
 				if ( source.poseAtMs === undefined ) return;
 				samples.set( gid, {
 					atMs: source.poseAtMs,
+					revision: source.movementRevision ?? 0,
 					moving: !!source.moving,
 					...(source.movementPath ? { to: source.movementPath.to } : {})
 				} );

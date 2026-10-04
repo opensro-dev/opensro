@@ -23,6 +23,7 @@ import {
 	poseDistance,
 	sampleMovement,
 	interpolateMovement as interpolate,
+	REGION_SIZE,
 	movementModeTransition,
 	movementSpeedTransition
 } from "@/engine/foundation/gameplay/native-movement";
@@ -69,6 +70,60 @@ interface DirectionReference {
 	limit: number;
 }
 
+// A receipt that moves the player further than this from the predicted pose
+// is reported: it is visible on screen.
+const REANCHOR_REPORT_UNITS = 1;
+// The first reports in full, then every REANCHOR_REPORT_EVERY-th with the
+// running count, so a recurring snap never goes silent.
+const MAX_REANCHOR_REPORTS = 32;
+const REANCHOR_REPORT_EVERY = 50;
+
+/*
+================
+sameNavigationSpace
+
+Outdoor regions form one plane, so any two outdoor poses can be measured
+and walked between; a dungeon region is its own space.
+================
+*/
+function sameNavigationSpace( a: Pose, b: Pose ): boolean {
+	if ( !((a.regionId | b.regionId) & 0x8000) ) return true;
+	return a.regionId === b.regionId;
+}
+
+/*
+================
+planarOffset
+
+b - a on the ground plane in world units. Outdoor regions share one plane;
+callers check sameNavigationSpace first.
+================
+*/
+function planarOffset( a: Pose, b: Pose ): [number, number] {
+	return [
+		b.x - a.x + ((b.regionId & 255) - (a.regionId & 255)) * REGION_SIZE,
+		b.z - a.z + ((b.regionId >>> 8) - (a.regionId >>> 8)) * REGION_SIZE
+	];
+}
+
+/*
+================
+ReceiptReconciliation
+
+What a latest-command receipt does to the predicted walk: keep it (and walk
+on to the server's stop over segment), settle on the stop the prediction has
+already passed, or take the server's pose. tail and remaining are the
+predicted and the server's distances to the stop, for the report.
+================
+*/
+interface ReceiptReconciliation<Segment> {
+	readonly kind: "keep" | "settle" | "server";
+	readonly reason: string;
+	readonly segment?: Segment | null;
+	readonly tail?: number;
+	readonly remaining?: number;
+}
+
 /*
 ================
 createMovement
@@ -109,10 +164,10 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 	// A walk stopped where a cast command left it (holdForCast): the held
 	// pose, when the hold lapses, and the server walk to follow if it does.
 	let castHold: { pose: Pose; until: number; resume: Parameters<typeof bindOwners>[0] | null; } | null = null;
+	let reanchorReports = 0;
 	const pending = new Map<number, {
 		to: Pose;
 		sent: number;
-		predictedEnd: Pose | null;
 		direction?: number;
 	}>();
 	/*
@@ -152,6 +207,74 @@ reconcile
 bindOwners
 ================
 	*/
+	/*
+================
+noteReanchor
+
+The player's pose moved by more than REANCHOR_REPORT_UNITS for a reason
+other than walking: say what moved it, how far and with what inputs, so a
+reported snap is never a guess. Called with the final committed pose.
+================
+	*/
+	function noteReanchor( source: string, before: Pose, after: Pose, details: object ) {
+		const jump = sameNavigationSpace( before, after ) ? poseDistance( before, after ) : Infinity;
+		if ( jump < REANCHOR_REPORT_UNITS ) return;
+		reanchorReports++;
+		if ( reanchorReports > MAX_REANCHOR_REPORTS && reanchorReports % REANCHOR_REPORT_EVERY !== 0 ) return;
+		console.warn(
+			`[SRO movement] ${source} moved the player ${jump.toFixed( 1 )} units (report ${reanchorReports})`,
+			{ before, after, ...details }
+		);
+	}
+	/*
+================
+reconcileReceipt
+
+Decides what the latest command's receipt does to the predicted walk (see
+receive). authoritative is the server's pose at the receipt, to its stop.
+
+The prediction is kept only while it is still short of the stop: the
+projection of predicted - authoritative onto the server's remaining walk
+must not pass its end. A clear route alone does not prove that: with the
+server stopped at 110, a prediction at 119 is 9 from the stop and 10 from
+the server, yet past it. A prediction behind the server walks on and
+catches up no faster than CATCHUP_SPEED_FACTOR.
+================
+	*/
+	function reconcileReceipt(
+		accepted: boolean,
+		predicted: Pose | null,
+		predictedOwner: NavOwner | undefined,
+		server: NonNullable<typeof segment>,
+		to: Pose
+	): ReceiptReconciliation<NonNullable<typeof segment>> {
+		if ( !accepted ) return { kind: "server", reason: "rejected" };
+		if ( !predicted || !authoritative ) return { kind: "server", reason: "no prediction" };
+		if ( !sameNavigationSpace( predicted, to ) || !sameNavigationSpace( authoritative, to ) ) {
+			return { kind: "server", reason: "other dungeon" };
+		}
+		const tail = poseDistance( predicted, to ), remaining = poseDistance( authoritative, to );
+		const walked = planarOffset( authoritative, predicted ), ahead = planarOffset( authoritative, to );
+		if ( walked[0] * ahead[0] + walked[1] * ahead[1] > remaining * (remaining + ENDPOINT_EPSILON) ) {
+			return { kind: "settle", reason: "passed the server's stop", tail, remaining };
+		}
+		const route = navigation.clip( predicted, to, { slide: false, sourceOwner: predictedOwner } );
+		if (
+			!route || poseDistance( route, to ) >= ENDPOINT_EPSILON ||
+			(to.regionId & 0x8000) !== 0 && Math.abs( route.y - to.y ) >= DUNGEON_HEIGHT_EPSILON
+		) return { kind: "server", reason: "route blocked", tail, remaining };
+		if ( tail < ENDPOINT_EPSILON ) return { kind: "keep", reason: "at the stop", segment: null, tail, remaining };
+		const duration = tail <= remaining ?
+			server.duration * tail / remaining :
+			Math.max( server.duration, tail / (speed * CATCHUP_SPEED_FACTOR) * 1000 );
+		return {
+			kind: "keep",
+			reason: tail <= remaining ? "ahead of the server" : "behind the server",
+			segment: { ...server, duration },
+			tail,
+			remaining
+		};
+	}
 	/*
 ================
 keepCastHold
@@ -554,6 +677,7 @@ native
 				return;
 			}
 			pose = authoritative;
+			noteReanchor( "native move from its source", current, pose, { kind: decoded.kind } );
 			if ( decoded.kind === "direction" ) {
 				const heading = decoded.heading!;
 				walk = {
@@ -636,10 +760,12 @@ correct
 			movementRevision++;
 			castHold = null;
 			if ( now !== undefined ) advanceTo( now );
+			const before = pose;
 			// A live source correction ends motion, but is not a new spawn.
 			// Resolve its surface through the existing navigation owner before
 			// retiring the segment; server endpoint Y can be below a hill/deck.
 			pose = authoritative = reconcile( admitPose( value ) );
+			if ( before ) noteReanchor( "server correction", before, pose, { pending: pending.size, latest: nextId } );
 			predicted = null;
 			surfaceCursor = {};
 			segment = null;
@@ -658,7 +784,6 @@ correct
 					sourceOwner: owner
 				};
 				const clipped = navigation.clip( pose, latest.to, query );
-				pending.set( nextId, { ...latest, predictedEnd: clipped } );
 				if ( clipped ) {
 					segment = {
 						from: pose,
@@ -714,7 +839,7 @@ request
 			send( frame );
 			nextId = id;
 			movementRevision++;
-			pending.set( id, { to, sent: now, predictedEnd: clipped } );
+			pending.set( id, { to, sent: now } );
 			error = null;
 			walk = null;
 			predicted = null;
@@ -834,7 +959,6 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 			pending.set( id, {
 				to: leg?.to ?? directionLegEnd( pose, heading ),
 				sent: now,
-				predictedEnd: leg?.to ?? null,
 				direction: heading
 			} );
 			error = null;
@@ -918,32 +1042,32 @@ receive
 			if ( command.direction !== undefined ) walk = null;
 			const predictedOwner = owner;
 			authoritative = reconcile( replacement?.from ?? to );
-			// A receipt confirms an endpoint, not the client's old frame. Turning
-			// during transit changes the two start positions; collinearity and
-			// a fixed distance cap cannot prove whether that intent was accepted.
-			// Retain progress only for the confirmed endpoint and a still-clear
-			// route from the predicted position. Server clipping/rejection wins.
-			const predicted = pose, predictedEnd = command.predictedEnd;
-			let confirmedPrediction = false;
-			if (
-				r.accepted && replacement && predicted && predictedEnd &&
-				predicted.regionId === authoritative.regionId && predictedEnd.regionId === to.regionId &&
-				poseDistance( predictedEnd, to ) < ENDPOINT_EPSILON &&
-				(!(to.regionId & 0x8000) || Math.abs( predictedEnd.y - to.y ) < DUNGEON_HEIGHT_EPSILON)
-			) {
-				const remaining = poseDistance( authoritative, to ), tail = poseDistance( predicted, to );
-				const route = navigation.clip( predicted, to, { slide: false, sourceOwner: predictedOwner } );
-				confirmedPrediction = tail <= remaining && !!route &&
-					poseDistance( route, to ) < ENDPOINT_EPSILON &&
-					(!(to.regionId & 0x8000) || Math.abs( route.y - to.y ) < DUNGEON_HEIGHT_EPSILON);
-				if ( confirmedPrediction ) {
-					replacement = tail < ENDPOINT_EPSILON ?
-						null :
-						{ ...replacement, duration: replacement.duration * tail / remaining };
-				}
-			}
-			pose = confirmedPrediction && predicted ? predicted : authoritative;
-			if ( confirmedPrediction ) owner = predictedOwner;
+			// A receipt confirms an endpoint, not the client's old frame. The
+			// server's endpoint is the one that counts, and it is accepted from
+			// wherever the prediction has walked to as long as that walk can
+			// still reach it. Do not require the client's own clip to land on
+			// the same point: the two clips run on separate navigation copies
+			// and differ by fractions of a unit at walls (the client backs the
+			// whole chord off a contact, the server only the crossed axis), and
+			// the predicted pose may have crossed a region seam the server's
+			// sample has not. Either mismatch put the player back where the
+			// server stood at the receipt, one round trip of walking behind
+			// (a ~19 unit snap at 190 ms on production). Server clipping,
+			// rejection or a blocked route still wins.
+			const predicted = pose;
+			const reconciled: ReceiptReconciliation<NonNullable<typeof segment>> = replacement ?
+				reconcileReceipt( r.accepted, predicted, predictedOwner, replacement, to ) :
+				{ kind: "server", reason: r.accepted ? "no server walk" : "rejected" };
+			if ( reconciled.kind === "keep" ) {
+				pose = predicted!;
+				owner = predictedOwner;
+				replacement = reconciled.segment ?? null;
+			} else if ( reconciled.kind === "settle" ) {
+				// The prediction already passed the server's stop: settle on the
+				// stop, never back at the server's start.
+				pose = authoritative = reconcile( to );
+				replacement = null;
+			} else pose = authoritative;
 			movementRevision++;
 			segment = replacement ? bindOwners( { ...replacement, from: pose } ) : null;
 			acknowledged = r.id;
@@ -954,6 +1078,18 @@ receive
 			}
 			error = r.accepted ? null : r.error ?? "Movement rejected";
 			keepCastHold();
+			if ( predicted ) {
+				noteReanchor( "receipt " + reconciled.kind + ": " + reconciled.reason, predicted, pose!, {
+					id: r.id,
+					latest: nextId,
+					ageMs: now - command.sent,
+					serverTimeMs: r.serverTimeMs,
+					accepted: r.accepted,
+					tail: reconciled.tail,
+					remaining: reconciled.remaining,
+					to
+				} );
+			}
 		},
 		/*
 ================

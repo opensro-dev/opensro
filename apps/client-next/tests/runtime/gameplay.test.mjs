@@ -324,8 +324,10 @@ test("movement request IDs survive resets and authoritative clipped segments win
 	m.step( 100 );
 	assert.equal( m.state().pose.x, 65 );
 	m.receive( receipt( 1, { ...pose, x: 80 } ), 100 );
+	// The server clipped the walk at 80: the player walks on from the
+	// predicted 65 to the server's end, never back to its start.
 	m.step( 600 );
-	assert.equal( m.state().pose.x, 70 );
+	assert.equal( m.state().pose.x, 75 );
 	m.step( 1100 );
 	assert.equal( m.state().pose.x, 80 );
 	assert.equal( m.state().pendingMoves, 0 );

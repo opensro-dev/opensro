@@ -63,12 +63,14 @@ interface Track {
 ================
 Sample
 
-A logical pose and the frame-clock time (seconds) it was sampled at.
+A logical pose, the frame-clock time (seconds) it was sampled at, and the
+movement revision of the walk it was sampled from.
 ================
 */
 interface Sample {
 	readonly pose: Pose;
 	readonly at: number;
+	readonly revision: number;
 }
 
 /*
@@ -93,12 +95,19 @@ interface SampleTrack {
 SampleInput
 
 What characters publishes each frame for a character with timed samples:
-the simulation time of its latest pose, whether it is walking, and the end
-of the leg being walked.
+the simulation time of its latest pose, the movement revision it belongs to,
+whether it is walking, and the end of the leg being walked.
+
+The movement owner bumps the revision whenever it re-anchors a walk (a new
+click, a receipt, a correction, a native move). Two samples define a
+velocity only within one revision: across a re-anchor their difference is
+a jump, not motion, and extrapolating it turned a 19-unit receipt
+correction 8 ms after the previous sample into -2,275 units/s.
 ================
 */
 export interface SampleInput {
 	readonly atMs: number;
+	readonly revision: number;
 	readonly moving: boolean;
 	readonly to?: Pose;
 }
@@ -231,7 +240,7 @@ export function createPosePresentation() {
 			discontinuity( row.latest.pose, target )
 		) {
 			row = {
-				latest: { pose: { ...target }, at },
+				latest: { pose: { ...target }, at, revision: input.revision },
 				moving: input.moving,
 				to: input.to,
 				offset: [ 0, 0, 0 ],
@@ -249,15 +258,18 @@ export function createPosePresentation() {
 			row.last = now;
 		}
 		const latest = row.latest.pose;
-		const changed = at !== row.latest.at || latest.regionId !== target.regionId || latest.x !== target.x ||
-			latest.y !== target.y || latest.z !== target.z;
+		const changed = at !== row.latest.at || input.revision !== row.latest.revision ||
+			latest.regionId !== target.regionId || latest.x !== target.x || latest.y !== target.y ||
+			latest.z !== target.z;
 		if ( changed || row.moving !== input.moving || row.to !== input.to ) {
 			const before = sampledModel( row, now );
 			if ( changed ) {
-				// Keep the previous sample only when this one is strictly newer;
-				// a correction at the same time replaces the model outright.
-				row.previous = at > row.latest.at ? row.latest : undefined;
-				row.latest = { pose: { ...target }, at };
+				// Keep the previous sample only when this one is strictly newer
+				// and on the same walk; a correction at the same time, or any
+				// re-anchor, replaces the model outright and its jump becomes
+				// the decaying offset below.
+				row.previous = at > row.latest.at && input.revision === row.latest.revision ? row.latest : undefined;
+				row.latest = { pose: { ...target }, at, revision: input.revision };
 			}
 			row.moving = input.moving;
 			row.to = input.to;
