@@ -356,7 +356,7 @@ would turn it.
 		const walking = movement.state(), pose = walking.pose;
 		if (
 			!metadata?.actionMs || !pose || walking.moving || !local || local.mountedOn ||
-			local.appearanceState?.[0] === 2 || localCastHolds() || combat.predicting() ||
+			local.appearanceState?.[0] === 2 || localCastHolds( now ) || combat.predicting() ||
 			combat.guidedActive( localGid, now )
 		) return;
 		if ( target && target.gid !== localGid ) {
@@ -463,12 +463,21 @@ fails; retry persistence without restoring stale slot occupancy.
 ================
 localCastHolds
 
-The local player's own cast is live (not cancelled): the server's attack
-lock (4AAB40) drops ground commands until it releases.
+The local player's own cast is live (not cancelled) and its action still
+runs: the server's attack lock (4AAB40) drops ground commands until it
+releases. A persistent cast (a wall, an aura) stays in the cast table for
+the object's whole life, but its action ends with the authored action
+time (actionMs); counted for its whole life it blocked the predicted cast
+and the pickup run-up for minutes. A cast whose action time is unknown
+holds until it ends, as before.
 ================
 	*/
-	function localCastHolds(): boolean {
-		return combat.state().casts.some( c => c.caster === localGid && c.cancelledAtMs === undefined );
+	function localCastHolds( now: number ): boolean {
+		return combat.state().casts.some( c => {
+			if ( c.caster !== localGid || c.cancelledAtMs !== undefined ) return false;
+			const actionMs = catalog.find( row => row.id === c.skill )?.actionMs;
+			return !actionMs || c.receivedAtMs === undefined || now - c.receivedAtMs < actionMs;
+		} );
 	}
 	/*
 ================
@@ -502,7 +511,7 @@ and a refusal walks it back (movement.predictApproach).
 	*/
 	function predictPickupRunUp( entity: EntityState, local: EntityState | undefined, now: number ) {
 		const pose = movement.state().pose;
-		if ( !pose || localCastHolds() || local?.mountedOn || local?.appearanceState?.[0] === 2 ) return;
+		if ( !pose || localCastHolds( now ) || local?.mountedOn || local?.appearanceState?.[0] === 2 ) return;
 		const dx = entity.x - pose.x + ((entity.regionId & 255) - (pose.regionId & 255)) * 1920,
 			dz = entity.z - pose.z + ((entity.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
 		if ( (entity.regionId | pose.regionId) & 0x8000 && entity.regionId !== pose.regionId ) return;

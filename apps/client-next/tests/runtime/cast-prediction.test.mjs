@@ -331,3 +331,16 @@ test("another local cast opening first stops the prediction", () => {
 	assert.equal( combat.state().castPrediction?.cancelledAtMs, 300 );
 	assert.equal( combat.state().casts[0]?.predictedToken, undefined );
 });
+
+test("a standing wall or aura holds the prediction only for its action time", () => {
+	const fixture = JSON.parse( readFileSync( FIXTURE, "utf8" ) ), row = fixture.scenarios[0];
+	// The fixture's cast, re-addressed to the local caster and skill 30 (an
+	// action of 1 s) and never cancelled: a persistent cast stays in the
+	// table for the object's whole life. The press comes at 1000 ms.
+	const payload = Buffer.from( row.payloadHex, "hex" );
+	payload.writeUInt32LE( 30, 2 );
+	payload.writeUInt32LE( LOCAL_GID, 6 );
+	const castAt = at => game => game.receive( { opcode: row.opcode, payload }, at );
+	assert.equal( pressAt( 50, {}, castAt( 500 ) ), undefined, "an action still running must hold" );
+	assert.equal( pressAt( 50, {}, castAt( 0 ) )?.skill, 30, "a finished action held the press" );
+});

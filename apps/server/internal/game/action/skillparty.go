@@ -173,6 +173,7 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 		}
 		return OpResult{DiagnosticRefusal: "party-buff-commit-refused"}
 	}
+	rt.queuePersistentRelease(division, c, token, skill, now)
 	broadcast := append([]wire.Frame(nil), frames...)
 	private := rt.auraStatsFrames(division, c, skill, token)
 	frames = append(frames, private...)

@@ -1604,8 +1604,15 @@ export function createCharacterEffects(
 											pose: source,
 											clip: traded?.actor.clip ?? model.clips[0] ?? "",
 											time: trigger.at,
+											// A flight's object lives until its arrival removes it
+											// (8D8AD0). Inferred: its effect runs as long, so a
+											// one-shot .efp shorter than the flight (Cold Wave
+											// Arrest's 10-frame shot, about 0.33 s against 0.5 to
+											// 0.8 s of flight) loops instead of vanishing mid-air
+											// before the impact.
 											loop: traded?.actor.loop ??
-												(stage.action === "AT_LOOP" || !!flight && model.clipLoop),
+												(stage.action === "AT_LOOP" ||
+													!!flight && (model.clipLoop || stage.resource.endsWith( ".efp" ))),
 											scale: traded?.actor.scale ??
 												(stage.resource.endsWith( ".efp" ) ?
 													stageEffectScale(

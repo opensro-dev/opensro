@@ -97,6 +97,7 @@ func (rt *Runtime) acceptWall(division string, c, snapshot *enterworld.Character
 		}
 		return OpResult{DiagnosticRefusal: "wall-commit-refused"}
 	}
+	rt.queuePersistentRelease(division, c, token, skill, now)
 
 	rt.wallMu.Lock()
 	if rt.walls == nil {
@@ -253,4 +254,23 @@ func (rt *Runtime) retireWall(w *standingWall) {
 func (rt *Runtime) wallStanding(division, name string) bool {
 	_, ok := rt.standingWallOf(division, name)
 	return ok
+}
+
+/*
+==================
+queuePersistentRelease
+
+CastLifecycle_ProcessPersistent (5830B0) sends the mode-1 release (B071 in
+v1.188, B505 here) once the persistent object stands:
+SkillPacket_SendCancelAction (59AE10) right after GameObject_CreateFromRecord
+succeeds. The port installs the object at the press, so the release lands
+at the end of the authored casting time, where the native lifecycle reaches
+it. The client's WAIT then ends, the shot motion plays and the caster goes
+back to idle while the wall or aura stands; without it the caster held the
+casting pose for the object's whole life (Crystal Wall, every party aura).
+No mode-2 close follows: the object's own retirement (B6A0) ends the cast.
+==================
+*/
+func (rt *Runtime) queuePersistentRelease(division string, c *enterworld.Character, token uint32, skill enterworld.SkillRow, now int64) {
+	rt.queueSkillFinalize(division, c.Name, enterworld.ObjectIDForCharacter(c), now+int64(skill.ActionCastingTimeMs), wire.SkillCastReleaseFrame(token, 0))
 }

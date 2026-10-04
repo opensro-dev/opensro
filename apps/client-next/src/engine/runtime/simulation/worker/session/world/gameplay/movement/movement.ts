@@ -822,6 +822,14 @@ correct
 		*/
 		correct( value: Pose, now?: number ) {
 			movementRevision++;
+			// What the walk was doing when the correction came, for the report:
+			// a large one names its cause (a hold the server never settled, a
+			// walk of the wrong lead) instead of only its size.
+			const context = {
+				held: castHold && now !== undefined ? now - castHold.since : null,
+				lead: segment?.lead ?? castHold?.resume?.lead ?? null,
+				moving: !!segment
+			};
 			castHold = null;
 			if ( now !== undefined ) advanceTo( now );
 			const before = pose;
@@ -829,7 +837,13 @@ correct
 			// Resolve its surface through the existing navigation owner before
 			// retiring the segment; server endpoint Y can be below a hill/deck.
 			pose = authoritative = reconcile( admitPose( value ) );
-			if ( before ) noteReanchor( "server correction", before, pose, { pending: pending.size, latest: nextId } );
+			if ( before ) {
+				noteReanchor( "server correction", before, pose, {
+					pending: pending.size,
+					latest: nextId,
+					...context
+				} );
+			}
 			predicted = null;
 			surfaceCursor = {};
 			segment = null;
