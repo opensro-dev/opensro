@@ -570,6 +570,11 @@ export function createCombat(
 							const first = huntingPoints.find( row => row.token === token );
 							if ( first ) huntingPoints = huntingPoints.filter( row => row !== first );
 						}
+						// One token, one native deco: a cast whose effect attached
+						// under its own token (Crystal Wall's ice, an aura) ends with
+						// it. Kept, it stayed in the cast table for good and its
+						// looping visuals stood around the caster forever.
+						if ( cast ) requestCancellation( cast, now );
 					} else if ( cast ) {
 						requestCancellation( cast, now );
 						if ( cast.caster === localGid ) retireBuff( cast.skill, token, now );

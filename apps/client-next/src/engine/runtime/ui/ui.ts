@@ -6994,16 +6994,10 @@ export function createUi(
 					const number = hudData!.bar["GDR_QS_NUMBER_" + (n === 0 ? "M" : n % 10)];
 					if ( number ) authoredImage( number, barX, barY );
 				}
-				// The skill that casts next, above the main bar (skill-press-feedback.ts).
-				const firstCell = hudData?.bar.GDR_TMPQS_0, lastCell = hudData?.bar.GDR_TMPQS_10;
-				if ( firstCell && lastCell ) {
-					const left = authoredRect( firstCell, barX, barY ), right = authoredRect( lastCell, barX, barY );
-					const chip = skillQueueChip(
-						game,
-						{ left: left[0], right: right[0] + right[2], top: Math.min( left[1], right[1] ) },
-						full,
-						quickslotTime
-					);
+				// The skill that casts next, over shortcut slot 1 (skill-press-feedback.ts).
+				const slotOne = hudData?.bar.GDR_TMPQS_1;
+				if ( slotOne ) {
+					const chip = skillQueueChip( game, authoredRect( slotOne, barX, barY ), full, quickslotTime );
 					const icon = chip ? iconPath( training.skill( game!.skillQueue!.skill )?.icon ) : undefined;
 					if ( chip && icon ) {
 						paths.push( icon );

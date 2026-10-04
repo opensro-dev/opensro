@@ -26,12 +26,14 @@ const PULSE_MS = 600;
 // The denial shake's amplitude and number of swings.
 const SHAKE_PX = 2;
 const SHAKE_SWINGS = 3;
-// The next-skill chip: icon size, gap above the bar, backing padding, the
-// fade-in and the held press's progress strip.
-const CHIP_PX = 26;
-const CHIP_GAP_PX = 6;
+// The next-skill chip: a small icon (about half a slot) centred over shortcut
+// slot 1, the gap above the slot, the backing's padding, the fade-in and the
+// rise it makes while fading in, and the held press's progress strip.
+const CHIP_PX = 18;
+const CHIP_GAP_PX = 5;
 const CHIP_PAD_PX = 2;
-const CHIP_FADE_MS = 120;
+const CHIP_FADE_MS = 140;
+const CHIP_RISE_PX = 4;
 const CHIP_STRIP_PX = 2;
 // Gold for a held press, red for a denied one.
 const QUEUED_R = 1;
@@ -143,26 +145,30 @@ export interface SkillQueueChip {
 ================
 skillQueueChip
 
-The chip for the skill that casts next, centred above the bar whose top
-edge runs from barLeft to barRight at barTop; null when nothing waits.
+The chip for the skill that casts next, centred above the slot rect anchor
+(shortcut slot 1); null when nothing waits. It fades in while rising
+CHIP_RISE_PX into place, on a dark backing with a breathing gold edge.
 ================
 */
 export function skillQueueChip(
 	game: SkillPressFeedbackState | null | undefined,
-	bar: { readonly left: number; readonly right: number; readonly top: number; },
+	anchor: UiRect,
 	clip: UiRect,
 	now: number
 ): SkillQueueChip | null {
 	const queue = game?.skillQueue;
 	if ( !queue ) return null;
 	const alpha = Math.min( 1, Math.max( 0, (now - queue.sinceMs) / CHIP_FADE_MS ) );
-	const x = Math.round( (bar.left + bar.right - CHIP_PX) / 2 ), y = bar.top - CHIP_GAP_PX - CHIP_PX;
+	// Ease out: quick at first, settling into place.
+	const rise = Math.round( CHIP_RISE_PX * (1 - alpha) * (1 - alpha) );
+	const x = Math.round( anchor[0] + (anchor[2] - CHIP_PX) / 2 ),
+		y = anchor[1] - CHIP_GAP_PX - CHIP_PAD_PX - CHIP_PX + rise;
 	const icon: UiRect = [ x, y, CHIP_PX, CHIP_PX ];
 	const backing: UiRect = [ x - CHIP_PAD_PX, y - CHIP_PAD_PX, CHIP_PX + 2 * CHIP_PAD_PX, CHIP_PX + 2 * CHIP_PAD_PX ];
 	const under: UiQuad[] = [ {
 		rect: backing,
 		clip,
-		color: [ 0, 0, 0, 0.55 * alpha ],
+		color: [ 0, 0, 0, 0.6 * alpha ],
 		texture: "",
 		uv: [ 0, 0, 1, 1 ]
 	} ];
