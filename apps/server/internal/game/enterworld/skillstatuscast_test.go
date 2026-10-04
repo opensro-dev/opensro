@@ -85,7 +85,8 @@ func TestStatusCastAdmissionBoundaries(t *testing.T) {
 		{"reqi-twice", true},
 		{"tant-and-tnt2", true},
 		{"tnt2-then-tant", true},
-		{"continue-two", false},
+		// 4AECA4 tests the byte against zero: 2 resumes the attack as 1 does.
+		{"continue-two", true},
 		{"duplicate-status", false},
 		{"duplicate-tnt2", false},
 		{"unknown", false},

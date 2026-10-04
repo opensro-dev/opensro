@@ -68,7 +68,11 @@ type SkillTimedEffect struct {
 	Pinned                    bool
 	Persistent                bool
 	// IncomingReduction marks an admitted odar block (Earth Barrier).
-	IncomingReduction             bool
+	IncomingReduction bool
+	// HitRate and Range mark an admitted hr block (White Hawk Summon) and
+	// ru block (Demon Soul Arrow): like odar, 594AC0 installs both from the
+	// row's BuffModifiers, so the program only has to agree with them.
+	HitRate, Range                bool
 	Physical, Magical, CapPercent uint32
 	// Targeted rows (Warrior guards, Cleric blessings) install on a player
 	// within column 21's range instead of the caster.
@@ -205,6 +209,12 @@ type SkillEffectLink struct {
 	ManaHPPercent, ManaPercent, ManaCap uint32
 }
 
+// The hr and ru instruction tags (big-endian ASCII, as the program stores them).
+const (
+	skillTagHitRate = 0x6872
+	skillTagRange   = 0x7275
+)
+
 /*
 ================
 parseSkillTimedEffect
@@ -259,7 +269,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			result.Area = SkillRecipientArea{Present: true, Radius: radius, MaxTargets: most, Select: sel}
 		}
 	}
-	for _, col := range []int{15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 56} {
+	// Column 19 (continueBasicAttackColumn) is not among them: it only says
+	// whether the basic attack resumes after the cast, which the bow buffs
+	// (White Hawk Summon, Demon Soul Arrow) author as 2.
+	if _, ok := textdataByte(fields[continueBasicAttackColumn]); !ok {
+		return
+	}
+	for _, col := range []int{15, 16, 17, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 56} {
 		if targeted && (col == 21 || col == 22 || col == 23 || col == 26 || col == 27 || col == 28) {
 			continue
 		}
@@ -403,6 +419,21 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.IncomingReduction = true
+		case skillTagHitRate:
+			// hr {flat, rate}: 594AC0 0x59583F writes the hit-rate keeper (0xB).
+			if result.HitRate || op.Count != 2 || targeted || result.Area.Present || !row.BuffModifiers.Hr ||
+				op.Arguments[0] != row.BuffModifiers.HrFlat || op.Arguments[1] != row.BuffModifiers.HrRate {
+				return
+			}
+			result.HitRate = true
+		case skillTagRange:
+			// ru {distance}: 594AC0 0x5958E7 adds to the attack-range keeper
+			// (0x21), the reach of a skill without its own range.
+			if result.Range || op.Count != 1 || targeted || result.Area.Present || !row.BuffModifiers.Ru ||
+				op.Arguments[0] != row.BuffModifiers.RuRate {
+				return
+			}
+			result.Range = true
 		case tagTimedPreemptive:
 			// A self-only guard: the protection is the owner's, so it
 			// never rides a target, an area or a link.
@@ -478,8 +509,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
-		result.Intellect.Present || result.IncomingReduction || result.Link.Present && (result.Link.Threat || result.Link.Mana) ||
-		result.Preemptive.Present)
+		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Range ||
+		result.Link.Present && (result.Link.Threat || result.Link.Mana) || result.Preemptive.Present)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {

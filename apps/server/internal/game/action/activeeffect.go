@@ -513,7 +513,11 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 ================
 buffModifierWrites
 
-The dru (595A97), odar (596004) and hr part of 594AC0.
+The dru (595A97), odar (596004), hr and ru part of 594AC0.
+
+ru (+0x250, 0x5958E7..0x59591A) adds its word to the attack-range keeper
+(0x21) in the flat channel: Demon Soul Arrow lengthens the bow's reach
+while it runs (skillActionReach).
 
 hr (+0x24C) writes parameter 11, the hit rate: word 1 enters the percent-sum
 channel, then word 0 the flat channel, the same order the timed item path
@@ -530,6 +534,9 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.PercentSum, Value: float32(m.HrRate)},
 			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.Flat, Value: float32(m.HrFlat)},
 		)
+	}
+	if m.Ru {
+		writes = append(writes, paramkeeper.Write{Parameter: combat.AttackRangeParameter, Channel: paramkeeper.Flat, Value: float32(m.RuRate)})
 	}
 	if m.Dru {
 		for i, params := range [2][2]uint16{{0x80, 0x81}, {0x82, 0x83}} {

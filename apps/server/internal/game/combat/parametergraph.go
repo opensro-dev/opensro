@@ -61,9 +61,10 @@ playerParameterDefinitions
 func playerParameterDefinitions() ([]paramkeeper.NodeDefinition, error) {
 	// The nodes the combat closure, the magic-option switch (498690), the
 	// abnormal-state callbacks and the block chance (410C20: 0x88..0x8B,
-	// written by br) read or write.
+	// written by br) read or write, and the attack-range keeper (33, 0x21:
+	// the weapon's reach plus every ru, CGObjChar_GetAttackRangeParam 4AC890).
 	ids := [...]uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
+		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
 		44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
 		0x80, 0x81, 0x82, 0x83, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96,
 		0xa9, 0xaa, 0xab, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xbc}

@@ -60,7 +60,12 @@ func skillActionReach(skill enterworld.SkillRow, loadout combat.Loadout, caster 
 	case skill.ActionRange > 0:
 		reach = float32(skill.ActionRange)
 	case loadout.HasWeapon:
+		// 4AC890 truncates the keeper: the weapon's range plus every ru
+		// an active buff adds (Demon Soul Arrow), else the weapon alone.
 		reach = float32(loadout.ActionRange)
+		if keeper, ok := caster.Param(combat.AttackRangeParameter); ok && keeper > 0 {
+			reach = float32(int32(keeper))
+		}
 	default:
 		reach = defaultUnarmedActionRange
 	}

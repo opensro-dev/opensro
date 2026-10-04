@@ -101,6 +101,10 @@ type Catalogs struct {
 	MagicOptions enterworld.MagicOptionSource
 }
 
+// AttackRangeParameter is the attack-range keeper (CGObjChar_GetAttackRangeParam
+// 4AC890): the weapon's reach plus every active ru.
+const AttackRangeParameter uint16 = 0x21
+
 /*
 ================
 Param
@@ -304,6 +308,15 @@ func PlayerStatsWithModifiers(
 			loadout.HasWeapon = true
 			loadout.WeaponKind = uint8(ref.TypeIDs[3])
 			loadout.ActionRange = ref.Combat.ActionRange
+			// Inferred: the weapon's range is the attack-range keeper (0x21).
+			// CGObjChar_GetAttackRangeParam (4AC890) reads it as the reach
+			// of a skill without its own range, and a buff's ru (594AC0
+			// 0x5958E7) adds to it.
+			writes = append(writes, paramkeeper.Write{
+				Parameter: AttackRangeParameter,
+				Source:    source,
+				Value:     float32(ref.Combat.ActionRange),
+			})
 		}
 	}
 	passives, power, err := learnedPassives(character, skills, catalogs.Items, passiveWeaponKind)

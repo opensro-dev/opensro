@@ -212,7 +212,7 @@ func areaBaseRange(skill enterworld.SkillRow, attacker combat.Stats) float32 {
 	if skill.ActionRange > 0 {
 		return float32(uint16(skill.ActionRange))
 	}
-	param, _ := attacker.Param(0x21)
+	param, _ := attacker.Param(combat.AttackRangeParameter)
 	return float32(uint16(int32(param)))
 }
 
