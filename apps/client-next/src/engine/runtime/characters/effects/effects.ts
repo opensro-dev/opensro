@@ -630,13 +630,20 @@ export function createCharacterEffects(
 					} );
 					continue;
 				}
+				// A loop stage, and an active-phase stage with no authored life (the
+				// White and Blue Hawks' follower: AT_ONE_FOLLOW whitehawk.bsr with no
+				// SCT_MOVER), live as long as their attachment, looping their clip
+				// until its deactivation. Inferred from the data: no other ACT_L
+				// stage is unlooped, and a one-shot follower vanished one clip after
+				// the summon while its buff ran on for minutes.
+				const persists = stage.action === "AT_LOOP" || stage.phase === "ACT_L" && !stage.life;
 				const actor: CharacterActor = {
 					gid: allocate(),
 					model: model.glb,
 					pose: owner.pose,
 					clip: model.clips[0] ?? "",
 					time: 0,
-					loop: stage.action === "AT_LOOP",
+					loop: persists,
 					scale: stage.resource.endsWith( ".efp" ) ?
 						stageEffectScale(
 							stage.native?.scale,
@@ -658,7 +665,7 @@ export function createCharacterEffects(
 				};
 				const control = {
 					life: stage.life,
-					keep: stage.action === "AT_LOOP" && !stop,
+					keep: persists && !stop,
 					started: now,
 					slot: stage.native?.slot ?? 0,
 					fade: (stage.native?.fadeInMs ?? 0) / 1000

@@ -1235,6 +1235,65 @@ test("attached effects select both activation families, wait for assets, restore
 	fx.dispose();
 });
 
+test("an active-phase follower with no authored life stays as long as its attachment", () => {
+	// The White Hawk's summon: AT_ONE_FOLLOW in ACT_L, life 0, no SCT_MOVER.
+	const stages = [ {
+		phase: "ACT_L",
+		resource: "follower.efp",
+		damageEvent: false,
+		startEvent: 0,
+		action: "AT_ONE_FOLLOW",
+		move: "MOV_NONE",
+		bone: null,
+		offset: [ 0, 20, 0 ],
+		life: 0,
+		count: 1,
+		scripts: []
+	} ];
+	let id = 0;
+	const jobs = new Map();
+	const fx = createCharacterEffects(
+		{
+			available: () => 4,
+			request( url, limit, decode ) {
+				jobs.set(
+					++id,
+					decode === "effects" ?
+						{ kind: "effects", catalog: { 7: { clips: [], stages } } } :
+						{ kind: "bytes", buffer: encode( { format: "sro-skill-stage-models", models: {} } ).buffer }
+				);
+				return id;
+			},
+			take( id ) {
+				const r = jobs.get( id );
+				jobs.delete( id );
+				return r;
+			},
+			cancel( id ) {
+				jobs.delete( id );
+			}
+		},
+		"http://localhost",
+		() => {},
+		createPresentationRandom( 1 )
+	);
+	const entity = { gid: 1, regionId: 257, x: 0, y: 0, z: 0, heading: 0 };
+	const actor = { gid: 1, model: "body", pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 }, height: 10 };
+	const game = { casts: [], attachedEffects: [ { gid: 1, skill: 7, token: 9, phase: 2, receivedAtMs: 0 } ] };
+	// The follower's clip lasts one second.
+	const step = t => fx.step( [ entity ], game, t, () => true, () => 1, [], undefined, [ actor ] );
+	step( 0 );
+	step( .1 );
+	assert.equal( step( .2 ).length, 1 );
+	const later = step( 30 );
+	assert.equal( later.length, 1, "the follower vanished one clip after the summon" );
+	assert.ok( later[0].loop, "the follower's clip must loop while it stays" );
+	game.attachedEffects = [];
+	step( 31 );
+	assert.equal( step( 40 ).length, 0, "the follower outlived its attachment" );
+	fx.dispose();
+});
+
 test("native overlap flag changes only the stop vector after initial phase selection", () => {
 	const stages = [ "ACT_S", "ACT_L", "DEACT", "ACT_OE" ].map( phase => ({
 		phase,

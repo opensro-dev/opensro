@@ -57,6 +57,7 @@ type SkillAmmunition struct{ TID3, TID4, Count uint32 }
 
 const (
 	crossbowWeaponKind     = 12
+	bowWeaponKind          = 6
 	maximumAmmunitionStack = 0xffff
 )
 
@@ -417,10 +418,14 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			// bow-shot record lands. Only the MP rule follows the handler so far.
 			if row.ProjectileSpeed != 0 || seen[0x636e736d] {
 				crossbow := row.RequiredWeaponKinds == ([2]uint8{crossbowWeaponKind, 255})
+				// SkillAction_Projectile (5857B0) links stages for any
+				// launcher: the bow's Arrow Combo C and D chain zero-preparation
+				// shots exactly as the crossbow's lines do.
+				chained := crossbow || row.RequiredWeaponKinds == ([2]uint8{bowWeaponKind, 255})
 				// Several mc impacts resolve at release together and spend
 				// cnsm count x impacts arrows (585AF0).
 				if row.ProjectileSpeed == 0 ||
-					!crossbow && (row.ActionCastingTimeMs == 0 || row.ChainSub || row.ChainNext != 0) ||
+					!chained && (row.ActionCastingTimeMs == 0 || row.ChainSub || row.ChainNext != 0) ||
 					row.Attack.ImpactCount == 0 ||
 					!(row.Ammunition == (SkillAmmunition{4, 1, 1}) && row.RequiredWeaponKinds == ([2]uint8{6, 255}) ||
 						row.Ammunition.TID3 == 4 && row.Ammunition.TID4 == 2 &&
@@ -450,10 +455,10 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		}
 		switch tag {
 		case 0x7275: // ru: flat weapon-range addend, 4AE849..4AE87A
+			// 4AE849 adds it to any equipment-derived reach, whatever the
+			// weapon: the crossbow's Dual Shot and the bow's Arrow Combo D
+			// and Strong Bow C author it alike (skillActionReach).
 			arity = 1
-			if row.RequiredWeaponKinds != ([2]uint8{crossbowWeaponKind, 255}) {
-				return "offense:range-weapon"
-			}
 			if i+arity >= len(fields) {
 				return "offense:range-arguments"
 			}
@@ -475,6 +480,15 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		case skillPulseTag:
 			arity = 1
 			if i+arity >= len(fields) {
+				return "offense:invalid-envelope-or-arguments"
+			}
+		case 0x6872: // hr {flat, rate}: the attack's own hit-rate bonus
+			// SkillCombat_EngageSkill (593540) installs the engaged skill's
+			// modifier block through 594AC0 (+0x24C, parameter 11), so the
+			// attack's hits roll with it (action/skillengage.go). The bow's
+			// Arrow Rain lines (AREA_A..C) author it.
+			arity = 2
+			if i+arity >= len(fields) || !row.BuffModifiers.Hr {
 				return "offense:invalid-envelope-or-arguments"
 			}
 		case 0x6b6f: // ko: victim-level rank and probability; full action consequence

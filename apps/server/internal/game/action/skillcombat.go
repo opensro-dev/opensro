@@ -211,7 +211,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		return OpResult{}, skillCastRefused
 	}
 
-	attacker, loadout, err := rt.playerCombatStats(divisionID, snapshot)
+	attacker, loadout, err := rt.playerAttackStats(divisionID, snapshot, skill)
 	if err != nil {
 		return OpResult{}, skillCastRefused
 	}
