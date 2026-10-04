@@ -41,6 +41,7 @@ const REPORT_ID = /\bBR-\d{6}-\d{4}-[0-9A-F]{4}\b/;
 const WHISPER_CHANNEL = 2;
 // Waits before asking for the settings again after a failed read.
 const SETTINGS_RETRY_MS = [ 5000, 15000, 30000, 60000 ] as const;
+const PENDING_OPEN_MS = 30000;
 const SAMPLE_MS = 1000;
 // Reading performance.memory makes Chrome total the heap: about 1 ms of a
 // frame. A report needs the heap trend, so every tenth sample carries it.
@@ -120,6 +121,11 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	// A failed read is asked again from the frame (chat) once performance.now()
 	// passes retryAtMs: timers belong to the clock owners.
 	let settingsLoading = false, settingsRetry = 0, retryAtMs = Infinity;
+	// The text of a /bug made while the settings were unknown: the window
+	// opens with it when they arrive, so the player need not type it again.
+	// It lapses after PENDING_OPEN_MS: a window popping up minutes later, in
+	// the middle of a fight, would be worse than typing /bug again.
+	let pendingOpen: string | null = null, pendingOpenAtMs = 0;
 	let replayEnabled = false;
 	let draft = false;
 	const errors: string[] = [];
@@ -234,6 +240,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		if ( disposed ) return;
 		if ( !value.enabled ) {
 			availability = "off";
+			pendingOpen = null;
 			return;
 		}
 		settings = {
@@ -247,6 +254,11 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		draft = replayEnabled;
 		dialog.showLauncher( true );
 		followPreference();
+		if ( pendingOpen !== null ) {
+			const text = pendingOpen;
+			pendingOpen = null;
+			if ( performance.now() - pendingOpenAtMs < PENDING_OPEN_MS ) open( text );
+		}
 	}
 
 	/*
@@ -257,7 +269,10 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	function open( text: string ): "opened" | "off" | "unavailable" {
 		if ( availability === "off" ) return "off";
 		if ( !settings?.enabled ) {
-			// Ask now rather than at the next backoff step.
+			// Ask now rather than at the next backoff step, and open when the
+			// answer comes (adoptSettings).
+			pendingOpen = text;
+			pendingOpenAtMs = performance.now();
 			loadSettings();
 			return "unavailable";
 		}

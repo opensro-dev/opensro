@@ -373,7 +373,7 @@ const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 // The bug reporter (issue #90): its chat command and its Option window row.
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
-const BUG_REPORTS_UNAVAILABLE = "The bug reporter is not reachable right now. Try /bug again in a moment.";
+const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
 const BUG_REPLAY_OPTION = "option-bug-replay";
 const BUG_REPLAY_LABEL = "Record bug replay";
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
