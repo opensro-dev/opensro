@@ -259,7 +259,11 @@ function intersectGeometry(
 		blocks = query.blocks ?? (surface?.ranges ? undefined : surface?.blocks);
 	// Shared triangle vertices are skinned once per query, not three times per
 	// incident triangle. Query-local storage cannot outlive a changing pose.
+	// An unskinned mesh transforms each corner directly into a nine-value
+	// scratch: a mesh-sized cache per query cost more to allocate and clear
+	// than the three matrix products it saved.
 	let vertices: Float64Array | undefined, ready: Uint8Array | undefined;
+	const corners = palette && geometry.joints && geometry.weights ? undefined : new Float64Array( 9 );
 	const vertex = ( index: number ) => {
 		if ( !vertices ) {
 			vertices = new Float64Array( geometry.positions.length );
@@ -299,10 +303,18 @@ function intersectGeometry(
 			i += PICK_BLOCK_INDICES - 3;
 			continue;
 		}
-		const a = vertex( geometry.indices[i]! ),
-			b = vertex( geometry.indices[i + 1]! ),
+		let a = 0, b = 3, c = 6, points: Float64Array;
+		if ( corners ) {
+			writeGeometryVertex( geometry, instance, geometry.indices[i]!, undefined, corners, 0 );
+			writeGeometryVertex( geometry, instance, geometry.indices[i + 1]!, undefined, corners, 3 );
+			writeGeometryVertex( geometry, instance, geometry.indices[i + 2]!, undefined, corners, 6 );
+			points = corners;
+		} else {
+			a = vertex( geometry.indices[i]! );
+			b = vertex( geometry.indices[i + 1]! );
 			c = vertex( geometry.indices[i + 2]! );
-		const points = vertices!;
+			points = vertices!;
+		}
 		const ex = points[b]! - points[a]!, ey = points[b + 1]! - points[a + 1]!, ez = points[b + 2]! - points[a + 2]!;
 		const fx = points[c]! - points[a]!, fy = points[c + 1]! - points[a + 1]!, fz = points[c + 2]! - points[a + 2]!;
 		const dx = ray.delta[0]!,
