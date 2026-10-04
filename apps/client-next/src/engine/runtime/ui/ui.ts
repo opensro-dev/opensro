@@ -11229,6 +11229,22 @@ export function createUi(
 						![ "local-player", "player", "monster", "npc", "cos" ].includes( entity.kind ) ||
 						next.blindHeld && blindableCharacter( entity, game?.localGid )
 					) continue;
+					// 86AB90: the dress bar under the head, 4.8 px a second, shrinking
+					// 0.48 px every 100 ms, in ARGB FFFFEE1F, whether or not the name shows.
+					const progress = entity.actionProgress, clock = next.simulationTimeMs ?? now;
+					if ( progress && clock - progress.startedAtMs < progress.seconds * 1000 ) {
+						const tenths = Math.floor( Math.max( 0, clock - progress.startedAtMs ) / 100 );
+						quads.push( {
+							characterAnchor: entity.gid,
+							occlusion: "none" as const,
+							rect: [ -24, 10, progress.seconds * 4.8 - tenths * 0.48, 2 ],
+							clip: full,
+							uv: [ 0, 0, 1, 1 ],
+							texture: "",
+							color: [ 1, 0xee / 255, 0x1f / 255, 1 ]
+						} );
+						dirty = true;
+					}
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
 					// One decision for the name and every overhead icon: an icon never
 					// shows without its name (name-visibility.ts header).

@@ -578,6 +578,26 @@ export function createEntities(
 				if ( entity ) apply( { kind: "state", entity: { ...entity, transformSkin: skin } } );
 				return;
 			}
+			if ( frame.opcode === 0x3434 || frame.opcode === 0x3514 ) {
+				// 75D130 starts a kind-2 action bar ([u32 gid][2][1|2][u8 seconds]);
+				// 75D1E0 clears it ([u32 gid], the strip cancel).
+				const entity = entities.get( v.getUint32( 0, true ) );
+				if ( frame.opcode === 0x3434 ) {
+					if ( p.length !== 7 || p[4] !== 2 ) return;
+					if ( entity ) {
+						apply( {
+							kind: "state",
+							entity: { ...entity, actionProgress: { seconds: p[6]!, startedAtMs: now } }
+						} );
+					}
+					return;
+				}
+				if ( p.length !== 4 ) throw Error( "Invalid strip cancel" );
+				if ( entity?.actionProgress ) {
+					apply( { kind: "state", entity: { ...entity, actionProgress: undefined } } );
+				}
+				return;
+			}
 			if ( frame.opcode === 0x324b ) {
 				if ( p.length !== 5 ) throw Error( "Invalid emote broadcast" );
 				const entity = entities.get( v.getUint32( 0, true ) );

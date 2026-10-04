@@ -99,6 +99,9 @@ export interface EntityState {
 	readonly jobGrade?: number;
 	// The local player's job block (entry only): joined job, grade, exp, alias.
 	readonly localJob?: import("@/engine/foundation/gameplay/job-guild").LocalJob;
+	// The overhead dress bar (CICUser +0x780/+0x77C, 0x3434): its seconds and
+	// the simulation time it started.
+	readonly actionProgress?: { readonly seconds: number; readonly startedAtMs: number; };
 	readonly guildName?: string;
 	readonly guildId?: number;
 	readonly guildGrantName?: string;
