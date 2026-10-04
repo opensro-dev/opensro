@@ -96,7 +96,7 @@ func (rt *Runtime) acceptDiscordWave(division string, c, snapshot *enterworld.Ch
 		if refusal = code; code != 0 {
 			return false
 		}
-		rt.startSkillCast(division, c, now)
+		rt.startSkillCast(division, c, skill, now)
 		rt.commitOffensivePhaseCost(division, c, skill, charge, now, false)
 		return true
 	}) {

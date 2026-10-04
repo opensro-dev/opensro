@@ -189,11 +189,14 @@ func (rt *Runtime) skillDurationRider(division string, caster *enterworld.Charac
 ================
 startSkillCast
 
-InitiateSkillCast's event retirement (59B745), before a fresh cast installs or
-strikes. Basic attacks share this event; the caller holds the character door.
+InitiateSkillCast (59B480) before a fresh cast installs or strikes: the
+caster's walk stops (haltCasterWalk, 59B5F6), then the event retirement
+(59B745). Basic attacks share this event; the caller holds the character
+door.
 ================
 */
-func (rt *Runtime) startSkillCast(division string, c *enterworld.Character, now int64) {
+func (rt *Runtime) startSkillCast(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64) {
+	rt.haltCasterWalk(division, c, skill, now)
 	rt.retireEffectsOnEvent(division, c, effectEventSkillCast, now)
 }
 

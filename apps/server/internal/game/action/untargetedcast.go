@@ -43,7 +43,7 @@ func (rt *Runtime) beginUntargetedCast(division string, c, snapshot *enterworld.
 		if refusal != 0 {
 			return false
 		}
-		rt.startSkillCast(division, c, now)
+		rt.startSkillCast(division, c, skill, now)
 		rt.registerPlayerSkillCooldown(division, c, skill, now)
 		return true
 	}) {

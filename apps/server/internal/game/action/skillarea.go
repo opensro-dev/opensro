@@ -280,7 +280,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 			return false
 		}
 		if release == nil {
-			rt.startSkillCast(division, character, nowMs)
+			rt.startSkillCast(division, character, skill, nowMs)
 		}
 		battleFrames = rt.enterBattleState(division, character, nowMs)
 		if consumeAmmo {

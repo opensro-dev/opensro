@@ -65,7 +65,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 		if code != 0 {
 			return false
 		}
-		rt.startSkillCast(division, character, now)
+		rt.startSkillCast(division, character, skill, now)
 		if !rt.requestSelfEffectReplacement(division, character, skill) {
 			refusal = 0x300c
 			return false

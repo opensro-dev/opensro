@@ -750,17 +750,7 @@ func (rt *Runtime) enterBasicAttackRange(
 		return OpResult{}, false
 	}
 	rt.bindResidentRegion(worldKey, nowMs)
-	correction := wire.Frame{
-		Opcode: wire.OpObjectSourceCorrection,
-		Payload: wire.ObjectSourceCorrection{
-			Gid: enterworld.ObjectIDForCharacter(snapshot),
-			Position: wire.Position{
-				RegionID: committed.RegionID,
-				X:        float32(committed.X), Y: float32(committed.Y), Z: float32(committed.Z),
-				Heading: committed.Angle,
-			},
-		}.Encode(),
-	}
+	correction := sourceCorrectionFrame(snapshot, committed)
 	return OpResult{Frames: []wire.Frame{correction}, Broadcast: []wire.Frame{correction}}, true
 }
 

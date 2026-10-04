@@ -171,7 +171,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 				return false
 			}
 
-			rt.startSkillCast(division, character, now)
+			rt.startSkillCast(division, character, skill, now)
 			rt.registerPlayerSkillCooldown(division, character, skill, now)
 			return true
 		}) {
@@ -220,7 +220,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		}
 
 		if release == nil {
-			rt.startSkillCast(division, character, now)
+			rt.startSkillCast(division, character, skill, now)
 		}
 		rt.commitOffensivePhaseCost(division, character, skill, cost, now, release != nil)
 		if cure {

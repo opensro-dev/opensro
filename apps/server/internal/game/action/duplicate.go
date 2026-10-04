@@ -125,7 +125,7 @@ func (rt *Runtime) acceptDuplicate(division string, c, snapshot *enterworld.Char
 			return false
 		}
 		// The cast's own event ends an earlier Duplicate first (skc 2).
-		rt.startSkillCast(division, c, now)
+		rt.startSkillCast(division, c, skill, now)
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, false)
 		var ok bool
 		installed, ok = rt.commitCharacterEffect(division, c, skill, token, statuseffect.StateActive, false, look, now)

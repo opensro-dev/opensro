@@ -1405,6 +1405,7 @@ state here before a command can claim a native wire conversation.
 					const to = movement.groundSkillGoal( command.query, now );
 					if ( !to ) return null;
 					const frame = positionSkillRequest( skillId, to );
+					if ( metadata.haltsWalk ) movement.holdForCast( now );
 					return sendFrame( frame );
 				}
 				if ( metadata && !metadata.targetRequired ) command = { kind: "skill", skillId: command.skillId };
@@ -1418,7 +1419,13 @@ state here before a command can claim a native wire conversation.
 				}
 			}
 			if ( command.kind === "skill" && command.gid === undefined ) {
-				return sendFrame( combat.skill( command.skillId ) );
+				// An ordinary cast stops the server's walk where the command finds
+				// it (InitiateSkillCast 59B5F6): end the local walk at the press,
+				// as a targeted command does (movement.holdForCast).
+				const frame = combat.skill( command.skillId );
+				const skillId = command.skillId;
+				if ( catalog.find( row => row.id === skillId )?.haltsWalk ) movement.holdForCast( now );
+				return sendFrame( frame );
 			}
 			if ( !entity || (entity.gid === localGid && command.kind !== "skill") ) {
 				throw new Error( "Target is absent or local player" );

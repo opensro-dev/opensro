@@ -343,6 +343,23 @@ func (r SkillRow) ActionLifecycleMs() (uint64, bool) {
 	return uint64(r.ActionCastingTimeMs) + uint64(r.ActionDurationMs), true
 }
 
+// skillActivityQueued is the activity (column 8) of an ordinary cast;
+// InitiateSkillCast compares ref +0x65 with 2 at 59B5F6.
+const skillActivityQueued uint8 = 2
+
+/*
+==================
+HaltsWalk
+
+Whether a cast of this row stops its caster's walk: CSkillManager_
+InitiateSkillCast (59B480) calls StopMove for activity 2. Instant
+activities (imbues, speed skills) run beside the walk (4AD870).
+==================
+*/
+func (r SkillRow) HaltsWalk() bool {
+	return r.ActionKind == skillActivityQueued
+}
+
 /*
 ==================
 SkillDataSource
@@ -839,7 +856,11 @@ type SkillUiRow struct {
 	// 12 + 13): the client holds the caster's action state 2, and with it
 	// every ground click, for this long (CIDecoSkill 8E0A23, 877240).
 	// Omitted when either column is unpinned.
-	ActionMs      uint64              `json:"actionMs,omitempty"`
+	ActionMs uint64 `json:"actionMs,omitempty"`
+	// HaltsWalk marks an ordinary cast (activity 2, column 8): it stops the
+	// caster's walk where it stands (InitiateSkillCast 59B5F6), so the
+	// client ends its own walk at the press. Omitted for instant rows.
+	HaltsWalk     bool                `json:"haltsWalk,omitempty"`
 	Masteries     [2]SkillRequirement `json:"masteries"`
 	Prerequisites [3]SkillRequirement `json:"prerequisites"`
 }
@@ -926,6 +947,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 			if lifecycle, pinned := row.ActionLifecycleMs(); pinned {
 				projection.UI.ActionMs = lifecycle
 			}
+			projection.UI.HaltsWalk = row.HaltsWalk()
 			if row.SpeedBuff.Present {
 				projection.UI.SpeedBuff = &SkillUiSpeedBuff{Active: row.SpeedBuff.Active}
 			}

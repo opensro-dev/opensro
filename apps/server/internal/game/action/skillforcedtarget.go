@@ -110,7 +110,7 @@ func (rt *Runtime) acceptForcedTarget(c tauntPlayerCast) OpResult {
 		if code != 0 {
 			return false
 		}
-		rt.startSkillCast(c.division, c.caster, c.now)
+		rt.startSkillCast(c.division, c.caster, c.skill, c.now)
 		rt.commitOffensivePhaseCost(c.division, c.caster, c.skill, cost, c.now, false)
 		battleFrames = rt.enterBattleState(c.division, c.caster, c.now)
 		return true

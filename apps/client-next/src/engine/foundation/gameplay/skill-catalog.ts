@@ -42,6 +42,10 @@ export interface SkillMetadata {
 	// Action_CastingTime + Action_ActionDuration (columns 12 + 13): the action
 	// actor's lifetime, which holds the caster's action state 2 (cast-motion-lock).
 	readonly actionMs?: number;
+	// An ordinary cast (activity 2): it stops the caster's walk where it stands
+	// (InitiateSkillCast 59B5F6 server side, CICharactor_Action_CastSkill
+	// 8E67E0 client side). Instant rows (imbues, speed skills) keep walking.
+	readonly haltsWalk?: boolean;
 	readonly cooldownGroup?: number;
 	readonly masteries: readonly Requirement[];
 	readonly prerequisites: readonly Requirement[];
@@ -111,7 +115,8 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			value === undefined ? undefined : { mask: uint( value?.mask ), level: uint( value?.level ) };
 		if (
 			ui.groundTarget !== undefined && typeof ui.groundTarget !== "boolean" ||
-			ui.targetSelf !== undefined && typeof ui.targetSelf !== "boolean"
+			ui.targetSelf !== undefined && typeof ui.targetSelf !== "boolean" ||
+			ui.haltsWalk !== undefined && typeof ui.haltsWalk !== "boolean"
 		) {
 			throw Error( "Invalid skill target kind" );
 		}
@@ -148,6 +153,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			groundTarget: ui.groundTarget ?? false,
 			cooldownMs: uint( ui.cooldownMs ),
 			...(ui.actionMs === undefined ? {} : { actionMs: uint( ui.actionMs ) }),
+			haltsWalk: ui.haltsWalk ?? false,
 			cooldownGroup: uint( ui.cooldownGroup ?? 0, 255 ),
 			masteries: requirements( ui.masteries, 2 ),
 			prerequisites: requirements( ui.prerequisites, 3 )

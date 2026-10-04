@@ -80,7 +80,7 @@ func (rt *Runtime) acceptWall(division string, c, snapshot *enterworld.Character
 		if refusal = code; code != 0 {
 			return false
 		}
-		rt.startSkillCast(division, c, now)
+		rt.startSkillCast(division, c, skill, now)
 		installed, ok := rt.commitCharacterEffect(division, c, skill, token, statuseffect.StateActive, true, EffectPresentation{Phase: 1}, now)
 		if !ok {
 			return false

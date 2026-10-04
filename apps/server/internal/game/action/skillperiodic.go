@@ -122,7 +122,7 @@ func (rt *Runtime) installPeriodicCast(p periodicCast) (OpResult, skillCastDecis
 			}
 		}
 		if p.release == nil {
-			rt.startSkillCast(p.division, p.character, p.now)
+			rt.startSkillCast(p.division, p.character, p.skill, p.now)
 		}
 		rt.commitOffensivePhaseCost(p.division, p.character, p.skill, cost, p.now, p.release != nil)
 		return true

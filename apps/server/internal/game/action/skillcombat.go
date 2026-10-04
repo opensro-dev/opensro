@@ -302,7 +302,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 					return false
 				}
 			}
-			rt.startSkillCast(divisionID, character, nowMs)
+			rt.startSkillCast(divisionID, character, skill, nowMs)
 			rt.registerPlayerSkillCooldown(divisionID, character, skill, nowMs)
 			return true
 		}) {
@@ -395,7 +395,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				return false
 			}
 			if release == nil {
-				rt.startSkillCast(divisionID, character, nowMs)
+				rt.startSkillCast(divisionID, character, skill, nowMs)
 			}
 			battleFrames = rt.enterBattleState(divisionID, character, nowMs)
 			if consumeAmmo {
