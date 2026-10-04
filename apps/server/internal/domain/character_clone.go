@@ -187,8 +187,8 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 	}
 	clone.AuthoredAreaReturn = cloneWorldSpawn(source.AuthoredAreaReturn)
 	clone.RebirthPoint = cloneWorldSpawn(source.RebirthPoint)
-	clone.LastRecallPoint = cloneWorldSpawn(source.LastRecallPoint)
-	clone.LastDeathPoint = cloneWorldSpawn(source.LastDeathPoint)
+	clone.LastRecallPoint = cloneWorldPoint(source.LastRecallPoint)
+	clone.LastDeathPoint = cloneWorldPoint(source.LastDeathPoint)
 	clone.DungeonFloorIndex = clonePointer(source.DungeonFloorIndex)
 	clone.PackedInstance = clonePointer(source.PackedInstance)
 	clone.MoveSegment = cloneSlice(source.MoveSegment)
@@ -260,6 +260,15 @@ cloneWorldSpawn
 A deep copy of an optional world point.
 ================
 */
+func cloneWorldPoint(source *WorldPoint) *WorldPoint {
+	if source == nil {
+		return nil
+	}
+	clone := *source
+	clone.WorldSpawn = *cloneWorldSpawn(&source.WorldSpawn)
+	return &clone
+}
+
 func cloneWorldSpawn(source *WorldSpawn) *WorldSpawn {
 	if source == nil {
 		return nil

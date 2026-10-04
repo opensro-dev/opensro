@@ -228,3 +228,66 @@ func TestCompanionUpgradePreservesExistingWarehouseAndBackup(t *testing.T) {
 		t.Fatal("warehouse lost", storage, err)
 	}
 }
+
+/*
+================
+TestWorldPointUpgradeKeepsSchema15Records
+
+Schema 15 records have no point worlds. The upgrade leaves them byte-for-byte
+in place and the upgraded store then keeps a fortress death point's world.
+================
+*/
+func TestWorldPointUpgradeKeepsSchema15Records(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	if err := s.CreateCharacter(testDivision, "account", seededCharacter()); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	db, err := connectDB(filepath.Join(dir, DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record string
+	if err := db.QueryRow("SELECT record FROM characters").Scan(&record); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preWorldPointVersion, metaKeySchemaVersion); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
+		t.Fatal("upgrade", backup, err)
+	}
+	db, err = connectDB(filepath.Join(dir, DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var upgraded string
+	if err := db.QueryRow("SELECT record FROM characters").Scan(&upgraded); err != nil || upgraded != record {
+		t.Fatal("schema 15 record was rewritten", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened := openTest(t, dir, newTestClock())
+	c := reopened.Characters().CharactersForDivision(testDivision)[0]
+	region, x := int64(17221), 812.0
+	if !reopened.UpdateCharacter(c, "death-point", func() bool {
+		if c.World == nil {
+			c.World = &domain.CharacterWorld{}
+		}
+		c.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: domain.WorldSpawn{RegionID: &region, X: &x}, World: 2}
+		return true
+	}) {
+		t.Fatal("death point not committed")
+	}
+	reopened.Close()
+	again := openTest(t, dir, newTestClock())
+	point := again.Characters().CharactersForDivision(testDivision)[0].World.LastDeathPoint
+	if point == nil || point.World != 2 || *point.RegionID != region {
+		t.Fatalf("death point world lost: %+v", point)
+	}
+}

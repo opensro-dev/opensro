@@ -13,8 +13,10 @@ import (
 	"reflect"
 	"strings"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -28,6 +30,28 @@ func worldSpawnFromMission(spawn simulation.Spawn) *enterworld.WorldSpawn {
 	x, y, z := spawn.X, spawn.Y, spawn.Z
 	angle := int64(spawn.Angle)
 	return &enterworld.WorldSpawn{RegionID: &regionID, X: &x, Y: &y, Z: &z, Angle: &angle}
+}
+
+/*
+================
+recordedPoint
+
+The point a recall or death records (CGObjPC_SaveLatestRecallPosition
+4E0250, SaveLatestDeathPosition 4E0330): the position and the PC's world,
+or nothing when that world is not a type-0 world (the RefGameWorld byte
++0x20 test), in which case the previous point stands.
+================
+*/
+func recordedPoint(c *enterworld.Character, spawn simulation.Spawn) (*domain.WorldPoint, bool) {
+	definition, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	if !ok || definition.NativeType != 0 {
+		return nil, false
+	}
+	point := &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(spawn)}
+	if uint32(instance.Pack(definition.ID, 1)) != domain.DefaultWorldInstance {
+		point.World = uint16(definition.ID)
+	}
+	return point, true
 }
 
 /*

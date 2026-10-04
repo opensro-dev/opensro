@@ -632,7 +632,9 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 	c.World.MoveSegment = nil
 	// 529B98: ProcessNormalDeath records where the player died (4E0330), the
 	// reverse return's second destination.
-	c.World.LastDeathPoint = worldSpawnFromMission(state.Spawn)
+	if point, ok := recordedPoint(c, state.Spawn); ok {
+		c.World.LastDeathPoint = point
+	}
 	effects = rt.retireBodyEffectsOnDeath(division, c)
 	// 529B10: the ridden vehicle is released with its rider's death.
 	released, owned := rt.releaseRiddenVehicleInDoor(division, c, now)
