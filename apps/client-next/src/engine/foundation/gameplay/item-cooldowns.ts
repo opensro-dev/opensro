@@ -26,7 +26,9 @@ ItemCooldown
 ================
 */
 export interface ItemCooldown {
-	readonly category: PotionCategory;
+	readonly category: PotionCategory | 18;
+	readonly group?: number;
+	readonly refObjId?: number;
 	readonly startedAtMs: number;
 	readonly durationMs: number;
 }
@@ -52,11 +54,21 @@ itemCooldown
 */
 export function itemCooldown(
 	rows: readonly ItemCooldown[],
-	typeFlags: number,
+	target: number | {
+		readonly typeFlags: number;
+		readonly refObjId: number;
+		readonly tooltip?: { readonly fields: Readonly<Record<string, number>>; };
+	},
 	now: number
 ): ItemCooldown | undefined {
+	const typeFlags = typeof target === "number" ? target : target.typeFlags;
 	const category = potionCategory( typeFlags );
-	return rows.find( row => row.category === category && now < row.startedAtMs + row.durationMs );
+	const group = typeof target === "number" ? 0 : target.tooltip?.fields.useCooldownGroup524 ?? 0;
+	return rows.find( row =>
+		now < row.startedAtMs + row.durationMs &&
+		(row.category === category || typeof target !== "number" && category === null && row.category === 18 &&
+				(group ? row.group === group : !row.group && row.refObjId === target.refObjId))
+	);
 }
 // Native receipt 755FF4..756084. The server independently owns its reuse guard.
 /*

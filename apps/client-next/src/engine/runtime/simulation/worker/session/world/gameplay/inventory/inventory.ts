@@ -1604,13 +1604,16 @@ receive
 					throw new Error( "Stale item use result" );
 				}
 				const category = potionCategory( item.typeFlags );
-				if ( category ) {
+				const potionFamily = (item.typeFlags & 0x7fe) === 0xec || (item.typeFlags & 0x7fe) === 0x16c;
+				if ( potionFamily ) {
 					// The server's published unlimited-item extension acknowledges use
 					// without spending a stack. It still requires this pending request.
 					const unlimited = quantity === item.quantity &&
 						recovery?.unlimitedItems?.includes( item.refObjId ) &&
 						pending?.opcode === op && pending.source === n;
 					if ( !unlimited && quantity !== item.quantity - 1 ) throw Error( "Stale recovery item use result" );
+				}
+				if ( category ) {
 					// Read the reference before last-stack removal; failed receipts never reach here.
 					{
 						const durationMs = potionCooldownMs(
@@ -1625,6 +1628,25 @@ receive
 							durationMs
 						} ];
 					}
+				}
+				// 755F02 registers authored cooldowns separately from potion lanes.
+				const fields = tooltipRefs.get( item.refObjId )?.fields ?? {};
+				const durationMs = fields.useCooldownDuration528 ?? 0;
+				if ( durationMs > 0 ) {
+					const group = fields.useCooldownGroup524 ?? 0;
+					itemCooldowns = [
+						...itemCooldowns.filter( row =>
+							row.category !== 18 ||
+							(group ? row.group !== group : !!row.group || row.refObjId !== item.refObjId)
+						),
+						{
+							category: 18,
+							group,
+							refObjId: item.refObjId,
+							startedAtMs: now,
+							durationMs
+						}
+					];
 				}
 				if ( quantity ) {
 					next.set( n, { ...item, quantity } );

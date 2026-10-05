@@ -7760,7 +7760,7 @@ export function createUi(
 						quads.push(
 							...quickslotItemCooldownQuads(
 								game?.itemCooldowns ?? [],
-								item.typeFlags,
+								item,
 								quickslotTime,
 								r,
 								full
@@ -9539,7 +9539,7 @@ export function createUi(
 							for (
 								const q of inventoryItemCooldownQuads(
 									game?.itemCooldowns ?? [],
-									item.typeFlags,
+									item,
 									quickslotTime,
 									r,
 									full

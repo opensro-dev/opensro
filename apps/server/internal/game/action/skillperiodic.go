@@ -169,7 +169,15 @@ func (rt *Runtime) periodicRetirement(effect linkedpulse.Effect) []wire.Frame {
 	if rt.Monsters != nil {
 		rt.Monsters.RemoveMonsterLinkedEffect(effect.Division, effect.TargetGID, effect.TargetToken)
 	}
-	payload, err := (wire.EndedEffectInstances{InstanceTokens: []uint32{effect.SourceToken, effect.TargetToken}}).Encode()
+	tokens := []uint32{effect.SourceToken, effect.TargetToken}
+	if effect.StructureRepair {
+		// Damage cancellation may already have published the source retirement.
+		ended := rt.effects.RetireInstances(effect.Division, effect.SourceName, []uint32{effect.SourceToken})
+		if len(ended) == 0 {
+			tokens = []uint32{effect.TargetToken}
+		}
+	}
+	payload, err := (wire.EndedEffectInstances{InstanceTokens: tokens}).Encode()
 	if err != nil {
 		panic(err)
 	}
@@ -197,6 +205,9 @@ func (rt *Runtime) advancePeriodicEffects(now int64) []simulation.DivisionFrames
 		}
 		live := snapshot != nil && enterworld.CharacterAlive(snapshot) && !snapshot.DeletePending &&
 			rt.periodicEffects.Active(effect.Division, effect.SourceToken)
+		if effect.StructureRepair {
+			live = live && rt.structureRepairSourceActive(effect)
+		}
 		if effect.SourceSession != 0 {
 			owner, ok := rt.characterAdmissions.Load(simulation.WorldKey(effect.Division, effect.SourceName))
 			live = live && ok && owner.(populationAdmission).session == effect.SourceSession
@@ -265,6 +276,9 @@ HP door. It does not admit a new cast, charge resources or test cast range.
 */
 func (rt *Runtime) applyPeriodicPulse(effect linkedpulse.Effect, c, snapshot *enterworld.Character, target monster.Instance, now int64) OpResult {
 	skill, known := rt.deps.SkillData().SkillByID(effect.SkillID)
+	if known && effect.StructureRepair && skill.StructureRepair.Pinned {
+		return rt.pulseStructureRepair(effect, skill, target)
+	}
 	if !known || !skill.TimedEffect.Periodic.Pinned {
 		return OpResult{}
 	}

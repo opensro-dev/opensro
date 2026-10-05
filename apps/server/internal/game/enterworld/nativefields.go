@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+nativefields.go - immutable numeric item-reference metadata
+
+A presence bitmap distinguishes absent metadata from authored zero values.
+JSON keeps names stable across schema changes; packed bytes stay process-local.
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -12,12 +22,22 @@ import (
 // NativeFields is an immutable schema-indexed RefItemData projection. Presence
 // bits distinguish absent fields from zero; all float64 value bits are retained.
 // The loader constructs it, and updates produce detached immutable values.
+/*
+================
+NativeFields
+================
+*/
 type NativeFields string
 
 var nativeFieldNames, nativeFieldIDs = nativeFieldSchema()
 
+/*
+================
+nativeFieldSchema
+================
+*/
 func nativeFieldSchema() ([]string, map[string]int) {
-	names := []string{"maxDurability"}
+	names := []string{"maxDurability", "useCooldownGroup524", "useCooldownDuration528", "useSkillId", "useSkillDurationMs"}
 	for _, c := range itemdataRecordColumns {
 		names = append(names, c.Name)
 	}
@@ -35,7 +55,19 @@ func nativeFieldSchema() ([]string, map[string]int) {
 	}
 	return out, ids
 }
+
+/*
+================
+nativeFieldHeader
+================
+*/
 func nativeFieldHeader() int { return (len(nativeFieldNames) + 7) / 8 }
+
+/*
+================
+NewNativeFields
+================
+*/
 func NewNativeFields(values map[string]float64) NativeFields {
 	if len(values) == 0 {
 		return ""
@@ -51,6 +83,12 @@ func NewNativeFields(values map[string]float64) NativeFields {
 	}
 	return NativeFields(data)
 }
+
+/*
+================
+Lookup
+================
+*/
 func (f NativeFields) Lookup(key string) (float64, bool) {
 	i, ok := nativeFieldIDs[key]
 	if !ok || len(f) == 0 || f[i/8]&(1<<uint(i%8)) == 0 {
@@ -59,7 +97,19 @@ func (f NativeFields) Lookup(key string) (float64, bool) {
 	offset := nativeFieldHeader() + i*8
 	return math.Float64frombits(binary.LittleEndian.Uint64([]byte(f[offset : offset+8]))), true
 }
+
+/*
+================
+Get
+================
+*/
 func (f NativeFields) Get(key string) float64 { v, _ := f.Lookup(key); return v }
+
+/*
+================
+With
+================
+*/
 func (f NativeFields) With(key string, v float64) NativeFields {
 	i, ok := nativeFieldIDs[key]
 	if !ok {
@@ -73,6 +123,12 @@ func (f NativeFields) With(key string, v float64) NativeFields {
 	binary.LittleEndian.PutUint64(data[nativeFieldHeader()+i*8:], math.Float64bits(v))
 	return NativeFields(data)
 }
+
+/*
+================
+Without
+================
+*/
 func (f NativeFields) Without(key string) NativeFields {
 	i, ok := nativeFieldIDs[key]
 	if !ok || len(f) == 0 {
@@ -88,6 +144,12 @@ func (f NativeFields) Without(key string) NativeFields {
 	}
 	return ""
 }
+
+/*
+================
+MarshalJSON
+================
+*/
 func (f NativeFields) MarshalJSON() ([]byte, error) {
 	values := make(map[string]float64)
 	for _, key := range nativeFieldNames {
@@ -97,6 +159,12 @@ func (f NativeFields) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(values)
 }
+
+/*
+================
+UnmarshalJSON
+================
+*/
 func (f *NativeFields) UnmarshalJSON(data []byte) error {
 	var values map[string]float64
 	if err := json.Unmarshal(data, &values); err != nil {
