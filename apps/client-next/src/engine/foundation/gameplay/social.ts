@@ -11,6 +11,7 @@ is decoded completely before any state is published.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
+import { unionRequest, type UnionCommand } from "./guild-union";
 export interface PartyMember {
 	readonly guild?: string;
 	readonly native41?: number;
@@ -160,18 +161,7 @@ export type SocialCommand = {
 	kind: "guild-role";
 	id: number;
 	role: number;
-} | {
-	kind: "guild-union-invite";
-	gid: number;
-} | {
-	kind: "guild-union-leave";
-} | {
-	kind: "guild-union-kick";
-	id: number;
-} | {
-	kind: "guild-permissions";
-	grants: readonly { readonly id: number; readonly permissions: number; }[];
-};
+} | UnionCommand;
 
 /*
 ================
@@ -337,29 +327,13 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 			u8( c.role );
 			opcode = 0x765f;
 			break;
-		// CIFAllianceGuild 5F7860 / 5F5690: invite the selected player's
-		// guild, leave, or expel a guild by id.
+		// The union's requests and the rights grant (guild-union.ts).
 		case "guild-union-invite":
-			u32( c.gid );
-			opcode = 0x7379;
-			break;
 		case "guild-union-leave":
-			opcode = 0x7795;
-			break;
 		case "guild-union-kick":
-			u32( c.id );
-			opcode = 0x7680;
-			break;
-		// CIFGuildGrantPower 5EE1C0: [u8 count] and [u32 jid][u32 rights].
 		case "guild-permissions":
-			if ( c.grants.length > 255 ) throw Error( "Too many rights" );
-			u8( c.grants.length );
-			for ( const grant of c.grants ) {
-				u32( grant.id );
-				u32( grant.permissions );
-			}
-			opcode = 0x744e;
-			break;
+			if ( !state.guild ) throw Error( "You are not in a guild" );
+			return unionRequest( c );
 	}
 	if ( c.kind.startsWith( "guild-" ) && c.kind !== "guild-create" && !state.guild ) {
 		throw Error( "You are not in a guild" );
