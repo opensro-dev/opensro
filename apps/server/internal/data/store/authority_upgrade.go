@@ -103,7 +103,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if _, err := loadDB(db, schema, sourceLayout); err != nil {
 		return "", fmt.Errorf("authority upgrade: source validation: %w", err)
 	}
-	added := []string{"fortresses", "fortress_requests", "fortress_structures"}
+	added := []string{"fortresses", "fortress_requests", "fortress_structures", "alliances"}
 	if sourceLayout == preMallLayoutVersion {
 		added = append(added, "mall_accounts", "account_storage")
 	}
@@ -159,7 +159,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return backupPath, err
 		}
 	}
-	if _, err := tx.Exec(fortressSchema); err != nil {
+	if _, err := tx.Exec(fortressSchema + allianceSchema); err != nil {
 		return backupPath, err
 	}
 	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprint(CurrentLayoutVersion)); err != nil {
