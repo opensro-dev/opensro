@@ -412,7 +412,7 @@ import { itemActivation } from "@/engine/foundation/gameplay/item-activation";
 import { iconPath } from "@/engine/foundation/ui/icon";
 import { createLocalization } from "./localization/localization";
 import { createTitleUi } from "./title/title";
-import { titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
+import { serverListRefreshDue, titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
 import { createUiText } from "./text/text";
 import { createUiAssets } from "./resources/resources";
@@ -834,6 +834,7 @@ export function createUi(
 	let nextPoll = 0,
 		lastSessionRevision = -1,
 		serversRequested = false,
+		serversRetryAt = 0,
 		lastNativeTitleStatus: number | undefined,
 		loginReplyPending = false;
 	let view: UiView | null = null,
@@ -5756,6 +5757,18 @@ export function createUi(
 			}
 			if ( !serversRequested && phase === "signed-out" ) {
 				serversRequested = true;
+				requestServers();
+			}
+			// Every shard "Check" (maintenance): keep asking until one runs.
+			const serversRetry = serverListRefreshDue(
+				servers,
+				serverList && phase === "signed-out",
+				pending,
+				now,
+				serversRetryAt
+			);
+			if ( serversRetry !== null ) {
+				serversRetryAt = serversRetry;
 				requestServers();
 			}
 			if ( next.session?.characters ) roster = next.session.characters;

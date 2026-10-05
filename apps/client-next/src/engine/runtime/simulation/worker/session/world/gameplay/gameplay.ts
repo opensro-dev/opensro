@@ -1980,6 +1980,15 @@ state here before a command can claim a native wire conversation.
 				}
 				// A press sent now supersedes any held one.
 				if ( skillPress.cancel() ) dirty = true;
+				// 58E0BF refuses an ao/pw row to a rider with 0x3009, which the
+				// native client answers with nothing: send it bare, with no
+				// cooldown stand-in or animation that would snap back.
+				if ( metadata?.needsFooting && local?.mountedOn ) {
+					const frame = command.gid ? combat.skill( skillId, command.gid ) : combat.skill( skillId );
+					sendFrame( frame );
+					skillPress.sent( now, skillId );
+					return frame;
+				}
 				if ( metadata?.groundTarget ) {
 					const from = movement.state().pose;
 					if ( !from || !command.query ) throw Error( "Point into the world to cast this skill" );

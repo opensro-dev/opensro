@@ -25,13 +25,15 @@ FILES = {
 	"sro-nomad": "bin/sro-nomad",
 	"sro-provision-identity": "bin/sro-provision-identity",
 	"sro-authority-upgrade": "bin/sro-authority-upgrade",
+	# The release's verdict on the host's server game data (server_data.py).
+	"sro-game-data-check": "bin/sro-game-data-check",
 	"go.mod": "go.mod",
 	"ops/nomad/jobs/agent.nomad.hcl": "ops/nomad/jobs/agent.nomad.hcl",
 	"ops/nomad/jobs/gameworld.nomad.hcl": "ops/nomad/jobs/gameworld.nomad.hcl",
 }
 # Files added to FILES after the first release. A release built before one was
 # added does not carry it; every other name is required. FILES only grows.
-ADDED_FILES = frozenset({"sro-authority-upgrade"})
+ADDED_FILES = frozenset({"sro-authority-upgrade", "sro-game-data-check"})
 MAX_ARCHIVE_BYTES = 256 << 20
 MAX_MANIFEST_BYTES = 256 << 10
 COPY_CHUNK_BYTES = 1 << 20

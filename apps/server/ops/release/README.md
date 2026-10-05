@@ -84,6 +84,32 @@ from the store, and the sha256 of every served file is recorded. Publication
 re-verifies the whole served tree against that record. Interrupted uploads
 resume; stored payloads unused for 14 days are pruned.
 
+### Server game data
+
+The GameWorld opens the licensed server game-data archive at the host's
+`game_data` path; a server release carries binaries, not that archive
+(`server_data.py`). When a server change needs newer data (a new catalogue
+version, a new authority file), stage the archive built from the release's
+commit, with or without a client package:
+
+```sh
+python data_release.py [PACKAGE OUTPUT] --server-data apps/server/.generated/game-data/1.150/server.srogz   --origin https://game.example.com --ssh-target sro-stage@host --identity ~/.ssh/operator-stage
+```
+
+Every server publication runs the release's own `sro-game-data-check` on
+the archive it will open before the backup, the notice or any stop: a
+staged archive must pass, else the installed one; a revert whose release
+refuses the installed archive uses the newest retained archive it accepts.
+A refusal leaves the running server untouched and says what to stage. The
+chosen archive is installed inside the maintenance window, unpacked as
+root, and the replaced one is retained by digest (three are kept).
+
+A publication onto a fleet whose GameWorld processes are all down skips the
+notice and its wait: nobody is connected to warn. Each publication also
+writes `maintenance-servers.json` (every shard, none operating) beside
+`production.json`; the edge serves it for `/api/title/servers` while the
+Agent is down, so the title lists each shard as "Check".
+
 ## Coordinated releases
 
 A new browser protocol (`releaseprotocol.Current` in the server,

@@ -17,10 +17,10 @@ func TestMonsterRefusalKeepsCombatAndReselectsOnlyAfterCommandError(t *testing.T
 			}
 			choices, draws, calls := 0, 0, 0
 			ops.Rand = func() float64 { draws++; return .5 }
-			ops.AttackPlan = func(_ monster.Instance, requested uint32, sample float64) (MonsterAttackPlan, bool) {
+			ops.AttackPlan = func(_ monster.Instance, requested uint32, pick AttackPick) (MonsterAttackPlan, bool) {
 				if requested == 0 {
 					choices++
-				} else if requested != 7 || sample != 0 {
+				} else if requested != 7 || pick.Sample != 0 {
 					t.Fatal("retained selection changed")
 				}
 				return MonsterAttackPlan{SkillID: 7, Reach: 6, CooldownMs: 1000, ActionLifecycleMs: 500}, true

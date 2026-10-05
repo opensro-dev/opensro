@@ -15,6 +15,52 @@ type OpponentCandidate struct {
 	GID      uint32
 	Eligible bool
 	Distance float64
+	// ActorDistance is CAITactics_DistanceBetweenActors (53D7A0) from the
+	// struck monster, which 5473C0's sight test reads.
+	ActorDistance float32
+}
+
+// gradeUnique is CGObjMob_GetBaseGrade's unique grade (vtable +0x12C).
+const gradeUnique = 3
+
+/*
+==================
+IgnoresDistantHate
+
+5473C0's first branch (5473F7..547486): a unique whose live walk and run
+speeds are both at most zero takes no hate from an attacker beyond its
+tactics SightRange (the row's +0x14, without the body radius). That
+attacker's record loses its aggression, and nothing else is credited: no
+damage, no hit, not the damage since the last summon (+0xB0).
+==================
+*/
+func (i Instance) IgnoresDistantHate(distance float32) bool {
+	if !i.Nest.HasControls || i.Rarity()&0x0f != gradeUnique {
+		return false
+	}
+	if float32(i.WalkSpeed()) > 0 || float32(i.RunSpeed()) > 0 {
+		return false
+	}
+	return float32(i.Nest.Controls.SightRange) < distance
+}
+
+/*
+==================
+ZeroOpponentAggression
+
+The record update of that branch: the primary's aggression (+0xC4) when the
+attacker is the primary, otherwise the secondary's (+0xD8) when it is the
+secondary.
+==================
+*/
+func ZeroOpponentAggression(records *[2]Opponent, attacker uint32) {
+	if records[0].GID == attacker {
+		records[0].Aggression = 0
+		return
+	}
+	if records[1].GID == attacker {
+		records[1].Aggression = 0
+	}
 }
 
 // RecordOpponentHit is 5473C0's record update followed by 548090/545680's

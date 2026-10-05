@@ -84,7 +84,7 @@ func TestHigherLevelFatalDropReferencePickupAndRestore(t *testing.T) {
 	}
 	clock.Advance(pick.Pending.Eta + time.Millisecond)
 	pick = rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: row.Gid}.Encode())
-	assertOpcodes(t, pick.Frames, wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn)
+	assertOpcodes(t, pick.Frames, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn, wire.OpActionState)
 	if rt.Ground.Count(testDivision) != 0 {
 		t.Fatal("pickup left item on ground")
 	}

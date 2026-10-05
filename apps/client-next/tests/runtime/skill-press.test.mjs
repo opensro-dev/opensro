@@ -414,6 +414,39 @@ test("a press the caster cannot pay MP for shows no cooldown", () => {
 	assert.equal( cooldownAfterPressWithMp( 10 ), null, "a press the server refuses for MP showed a cooldown" );
 });
 
+/*
+================
+cooldownAfterRidingPress
+
+Presses an untargeted ao/pw skill (5 s cooldown) as a rider or on foot and
+returns whether it was sent and the cooldown the client shows right after.
+================
+*/
+function cooldownAfterRidingPress( mountedOn ) {
+	/** @type {{ opcode: number, payload: Uint8Array }[]} */
+	const sent = [];
+	const game = createGameplay( f => sent.push( f ) );
+	const row = skillRef( SLOW, 5000 );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ SLOW ] },
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, needsFooting: true } } ]
+	} );
+	const rider = { ...local, ...(mountedOn ? { mountedOn } : {}) };
+	game.seed( rider );
+	game.command( { kind: "skill", skillId: SLOW }, 1000, undefined, rider );
+	const shown = cooldowns.skillCooldown( game.take()?.skillCooldowns ?? [], SLOW, 0, 1010 );
+	game.dispose();
+	return { sent: sent.filter( f => f.opcode === 0x72cd && f.payload[1] === 4 ).length, shown };
+}
+
+test("a rider's footing press is sent with no cooldown stand-in", () => {
+	const riding = cooldownAfterRidingPress( 88 ), walking = cooldownAfterRidingPress( 0 );
+	assert.equal( riding.sent, 1, "the press never left: the server answers it" );
+	assert.equal( riding.shown, null, "a press the server refuses to a rider showed a cooldown" );
+	assert.ok( walking.shown, "an on-foot press stands in for its cooldown" );
+});
+
 test("a press the server queues drops its cooldown stand-in", () => {
 	const { game } = presser();
 	game.command( { kind: "skill", skillId: SLOW }, 1000, undefined, local );

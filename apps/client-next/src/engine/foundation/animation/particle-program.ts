@@ -17,6 +17,16 @@ import { multiply } from "@/engine/foundation/math/pose-math";
 import { particleCommandFrames } from "@/engine/foundation/animation/particle-command-frames";
 import { particleRotation, particleCone } from "@/engine/foundation/animation/particle-rotation";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+/*
+SetSpherePos flags (AF4410 opcode 0x37 + flag). 0x37 adds to the element's
+own position; the original samples into the position and then adds the
+radius times an uninitialised stack temp (the vector 0x1f fills), which no
+other op of the element writes. Ported as the evident intent, own position
+plus the scaled sample, like the relative cone position 0x1f.
+*/
+export const SPHERE_POS_SELF = 0;
+export const SPHERE_POS_PARENT = 1;
+export const SPHERE_POS_SIBLING = 2;
 export interface ParticleVectorCommand {
 	readonly name: "SetPosition" | "SetVelocity" | "Force";
 	readonly flags: number;
@@ -30,6 +40,7 @@ export interface ParticleProgram {
 	readonly order?: readonly string[];
 	readonly scaleFrames?: readonly number[];
 	readonly sphere?: readonly number[];
+	readonly sphereFlags?: number;
 	readonly cone?: readonly number[];
 	readonly coneFlags?: number;
 	readonly conePos?: readonly number[];
@@ -102,6 +113,7 @@ export function particleProgram(
 		order?: string[];
 		scaleFrames?: number[];
 		sphere?: number[];
+		sphereFlags?: number;
 		cone?: number[];
 		coneFlags?: number;
 		conePos?: number[];
@@ -152,8 +164,14 @@ export function particleProgram(
 			].includes( op.name )
 		) (result.order ??= []).push( op.name );
 		if ( op.name === "SetSpherePos" ) {
-			if ( op.flags !== 1 ) throw Error( "Unsupported absolute sphere position" );
+			// AF4410 opcodes 0x37..0x39: the flag picks the base the unit-ball
+			// sample lands on - the element itself, its parent, or its sibling.
+			const flags = op.flags ?? 0;
+			if ( !Number.isInteger( flags ) || flags < 0 || flags > SPHERE_POS_SIBLING ) {
+				throw Error( "Invalid sphere position flags" );
+			}
 			result.sphere = vector( op.parameter?.value, 3 );
+			result.sphereFlags = flags;
 		} else if ( op.name === "SetConeVel" ) {
 			if ( !Number.isInteger( op.flags ) || op.flags! < 0 || op.flags! > 3 ) {
 				throw Error( "Unsupported relative cone velocity" );
@@ -235,7 +253,9 @@ export function initializeParticle(
 	const position = [ 0, 0, 0 ], velocity = [ 0, 0, 0 ];
 	let scale = [ 1, 1, 1 ];
 	for ( const op of program.order ?? [ "SetSpherePos", "SetGraphRandomScale", "SetConeVel" ] ) {
-		if ( op === "SetSpherePos" && program.sphere ) {
+		// The sibling base (0x39) is skipped without a sibling, and a birth
+		// sampled here has none; particle-graph.ts supplies one when it exists.
+		if ( op === "SetSpherePos" && program.sphere && program.sphereFlags !== SPHERE_POS_SIBLING ) {
 			let attempts = 0;
 			do {
 				for ( let i = 0; i < 3; i++ ) position[i] = Math.fround( (random() - 0.5) * 2 );

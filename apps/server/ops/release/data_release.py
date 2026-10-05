@@ -15,17 +15,25 @@ stage role verifies everything it receives; this tool never publishes.
 On a slow link (a VPN), smaller batches let each upload finish within its
 size-scaled timeout and a rerun resume after the last stored batch.
 
+--server-data PATH stages the server game-data archive too (server_data.py):
+the next server publication checks it with its own code and installs it
+inside its maintenance window. Omit PACKAGE and OUTPUT to stage it alone.
+
 ===========================================================================
 """
 
 import argparse
+import hashlib
+import io
 import json
 from pathlib import Path
 import subprocess
+import tarfile
 import time
 import urllib.request
 
 import client_data
+import server_data
 from plan import build_plan
 from release_state import compatibility
 
@@ -94,19 +102,50 @@ def send(archive, target, identity, run=subprocess.run):
 
 
 # ================
+# server_data_upload
+#
+# The stage upload for one server game-data archive: its declaration, then
+# the archive (server_data.stage verifies both).
+# ================
+def server_data_upload(archive, directory):
+	with archive.open("rb") as stream:
+		sha = hashlib.file_digest(stream, "sha256").hexdigest()
+	declaration = json.dumps({"format": server_data.FORMAT, "sha256": sha, "length": archive.stat().st_size}).encode()
+	directory.mkdir(parents=True, exist_ok=True)
+	target = directory / "server-data.tar"
+	with tarfile.open(target, "w") as package:
+		entry = tarfile.TarInfo(server_data.DECLARATION)
+		entry.size = len(declaration)
+		package.addfile(entry, io.BytesIO(declaration))
+		package.add(archive, arcname=server_data.ARCHIVE)
+	return target
+
+
+# ================
 # main
 # ================
 def main():
 	parser = argparse.ArgumentParser()
-	parser.add_argument("package", type=Path)
-	parser.add_argument("output", type=Path)
+	parser.add_argument("package", type=Path, nargs="?")
+	parser.add_argument("output", type=Path, nargs="?")
 	parser.add_argument("--origin", required=True)
 	parser.add_argument("--ssh-target", required=True)
 	parser.add_argument("--identity", type=Path, required=True)
 	parser.add_argument("--coordinated", action="store_true", help="publish only together with a server candidate")
 	parser.add_argument("--max-batch-mib", type=int, default=client_data.MAX_BATCH_BYTES >> 20,
 		help="split the payload into smaller uploads for a slow link")
+	parser.add_argument("--server-data", type=Path, help="also stage this server game-data archive (server.srogz)")
 	arguments = parser.parse_args()
+	if (arguments.package is None) != (arguments.output is None):
+		parser.error("PACKAGE and OUTPUT go together")
+	if arguments.package is None and not arguments.server_data:
+		parser.error("nothing to stage: give PACKAGE OUTPUT and/or --server-data")
+	if arguments.server_data:
+		upload = server_data_upload(arguments.server_data, arguments.output or arguments.server_data.parent)
+		print("server data", json.dumps(send(upload, arguments.ssh_target, arguments.identity), sort_keys=True),
+			flush=True)
+		if arguments.package is None:
+			return
 	state = fetch_json(arguments.origin, "/releases/production.json")
 	base = fetch_json(arguments.origin, "/releases/client.json")
 	if base["releaseId"] != state["client"]["release"]:
