@@ -2696,6 +2696,22 @@ export function createUi(
 					executeAction( binding.payload & 0xffffff );
 					return;
 				}
+				// 0x25 dispatches the pet command bar's own command (6F2520 ->
+				// CICCos_ExecuteActionCommand 6A2350).
+				if ( binding?.kind === 0x25 ) {
+					const mountedOn = view.entities.find( e => e.gid === game?.localGid )?.mountedOn;
+					// Attack while riding the active COS strikes from the saddle
+					// (0x769E command 2 for the ridden COS), as a world click does.
+					if (
+						binding.payload === COS_COMMAND_ATTACK && game?.activeCos && mountedOn === game.activeCos.gid &&
+						!game.activeCos.dead && game.target
+					) {
+						sendGameplay( { kind: "cos-attack", gid: game.target } );
+					} else executeCosCommand( binding.payload );
+					return;
+				}
+				// 572770 uses a bag item only while nothing is held on the cursor.
+				if ( binding?.kind === 0x46 && carriedItem ) return;
 				const command = binding && game ?
 					quickSlotCommand( binding, game, view.entities.find( e => e.gid === game.localGid )?.mountedOn ) :
 					null;

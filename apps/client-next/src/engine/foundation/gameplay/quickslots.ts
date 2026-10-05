@@ -88,6 +88,14 @@ export function actionEmote( id: number ): number | null {
 ================
 quickSlotCommand
 
+CIFUnderBar_DispatchQuickslotAction (572770) through its kind table
+(57295C, kinds 0x25..0x4A): 0x46 uses the bag item the binding still names,
+0x49 a skill, 0x4A an action, and 0x25 a pet command (the UI runs that
+through the command bar's owner). Every other kind, the equipment binding
+0x47 included, does nothing: a worn item is never taken off from the bar.
+The bindings follow their items (574800, reconcileQuickslotInventory), so a
+weapon equipped from the bar leaves its binding at 0x47.
+
 Trace reaches the same worker command as the action panel. Actor life and
 target type are checked there against admitted entities, not cached here.
 ================
@@ -97,9 +105,13 @@ export function quickSlotCommand(
 	state: import("@/engine/contracts/gameplay").GameplayState,
 	mountedOn = 0
 ): import("@/engine/contracts/gameplay").GameplayCommand | null {
-	const slot = quickSlotItemSlot( row );
-	if ( slot !== null ) {
-		return itemActivation( slot, state.inventory, state.inventorySlotCount, state.inventoryPending );
+	if ( row.kind === 0x46 ) {
+		return itemActivation(
+			row.payload + EQUIPMENT_SLOT_COUNT,
+			state.inventory,
+			state.inventorySlotCount,
+			state.inventoryPending
+		);
 	}
 	if ( row.kind === 0x49 && state.skills?.includes( row.payload ) ) {
 		return { kind: "skill", skillId: row.payload, ...(state.target ? { gid: state.target } : {}) };
@@ -118,10 +130,6 @@ export function quickSlotCommand(
 			return { kind: "action-command", id };
 		}
 	}
-	if (
-		row.kind === 0x25 && row.payload === 2 && state.activeCos && mountedOn === state.activeCos.gid &&
-		!state.activeCos.dead && state.target
-	) return { kind: "cos-attack", gid: state.target };
 	return null;
 }
 /*
