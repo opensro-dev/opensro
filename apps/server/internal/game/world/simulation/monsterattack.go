@@ -63,8 +63,7 @@ The pick against target, measured from the monster's live pose.
 ================
 */
 func attackPickFor(sample float64, from monster.Pose, target playerPose) AttackPick {
-	to := monster.Pose{RegionID: target.Pose.RegionID, X: target.Pose.X, Y: target.Pose.Y, Z: target.Pose.Z}
-	return AttackPick{Sample: sample, Target: &AttackTarget{Distance: monster.NativeActorDistance(from, to), BodyRadius: float64(target.BodyRadius)}}
+	return AttackPick{Sample: sample, Target: &AttackTarget{Distance: monster.NativeActorDistance(from, spawnToPose(target.Pose)), BodyRadius: float64(target.BodyRadius)}}
 }
 
 /*
@@ -172,6 +171,9 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	// Selection must gate both pursuit and fresh skill selection, including
 	// a cast whose duration exceeds the ordinary selector interval.
 	if !ops.Monsters.selectedAITimerReady(divisionID, instance.Gid, nowMs) {
+		return nil, nil, true
+	}
+	if ops.switchToSecondaryOpponent(divisionID, instance, mover, target, players, live, nowMs) {
 		return nil, nil, true
 	}
 	if frames, handled := ops.advancePursuitControls(divisionID, instance, mover, target, live, nowMs); handled {
