@@ -2,6 +2,7 @@ package action
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
@@ -57,7 +58,7 @@ func officialFixture(t *testing.T) (*Runtime, *enterworld.Character) {
 	c.GuildID = &guildID
 	members := []domain.GuildMemberRecord{{CharID: c.ID, Grade: 0}}
 	for i := 1; i < 7; i++ {
-		members = append(members, domain.GuildMemberRecord{CharID: c.ID + int64(i), Grade: 1})
+		members = append(members, domain.GuildMemberRecord{CharID: c.ID + int64(i), Name: fmt.Sprint("member", i), Grade: 1})
 	}
 	rt.Guilds = fortressGuilds{guild: domain.GuildRecord{ID: guildID, Level: 3}, members: members}
 	gold := int64(6000000)
@@ -86,7 +87,12 @@ registered, the master hears [7][1][fortress][kind] and everyone hears
 */
 func TestGuildMasterAppliesForTheFortressWar(t *testing.T) {
 	rt, c := officialFixture(t)
+	pushed := map[string]byte{}
+	rt.PushCharacterFrames = func(_, name string, frames []wire.Frame) { pushed[name] = frames[0].Payload[0] }
 	out := rt.HandleFortressInteraction(testDivision, c, applyFrame(fortressApply, 0))
+	if len(pushed) != 6 || pushed["member1"] != fortressWarApplied {
+		t.Fatalf("guild members heard %v", pushed)
+	}
 	want := wire.NewWriter(7).U8(fortressApply).U8(1).U32(1).U8(0).Payload()
 	if len(out.Frames) < 2 || !bytes.Equal(out.Frames[0].Payload, want) || out.Frames[1].Payload[0] != fortressWarApplied {
 		t.Fatalf("apply answer %+v", out.Frames)

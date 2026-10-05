@@ -10,7 +10,9 @@ CGInterface_SendFortressInteraction71E1 703130; v1.188's 0x705E):
 is 0xB1E1 [u8 subtype][u8 1][u32 fortress][u8 kind], or [u8 subtype][u8 2]
 [u8 code] with the low byte of v1.188's 0x28xx error, shown as notice
 category 0x1E (CPSMission_OnFortressManagerResponse0xB1E1 754A40). Every
-player then hears 0x3887 [0x0C or 0x0D][u32 fortress][u8 kind].
+member of the guild then hears 0x3887 [0x0C or 0x0D][u32 fortress][u8 kind]
+(v1.188 61E620 / 61E7E0 send it to the guild through 5C4260; the client
+stores the fortress as its guild's and shows the notice).
 
 Admission is v1.188 633910 (apply) and 633C40 (withdraw), in their order.
 
@@ -140,8 +142,12 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 		announce = fortressWarWithdrawn
 	}
 	state := wire.Frame{Opcode: opFortressWarState, Payload: wire.NewWriter(6).U8(announce).U32(fortressID).U8(kindByte).Payload()}
-	if rt.PushDivisionPeerFrames != nil {
-		rt.PushDivisionPeerFrames(division, c.Name, []wire.Frame{state})
+	if _, members, ok := rt.Guilds.Guild(division, guildID); ok && rt.PushCharacterFrames != nil {
+		for _, member := range members {
+			if member.CharID != c.ID {
+				rt.PushCharacterFrames(division, member.Name, []wire.Frame{state})
+			}
+		}
 	}
 	result := wire.Frame{Opcode: opFortressInteractionResult, Payload: wire.NewWriter(7).U8(subtype).U8(1).U32(fortressID).U8(kindByte).Payload()}
 	frames := []wire.Frame{result, state}
