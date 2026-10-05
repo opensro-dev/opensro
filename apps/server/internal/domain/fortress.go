@@ -5,9 +5,11 @@ fortress.go - the persisted fortress state
 
 The shard rows a fortress war leaves behind: who occupies each fortress
 and who holds it during a war (_SiegeFortress GuildID and TempGuildID),
-and the guilds registered for the coming war (_SiegeFortressRequest). They
-are cross-character state, so they live in the authority store's
-fortresses and fortress_requests tables, reached through FortressStore.
+the guilds registered for the coming war (_SiegeFortressRequest), and the
+structures standing on its event zones with their hit points and state
+(_SiegeFortressStruct). They are cross-character state, so they live in
+the authority store's fortresses, fortress_requests and
+fortress_structures tables, reached through FortressStore.
 
 ===========================================================================
 */
@@ -42,6 +44,23 @@ type FortressRequestRecord struct {
 
 /*
 ================
+FortressStructureRecord
+
+One _SiegeFortressStruct row: the structure installed on an event zone,
+its owner, hit points and state word.
+================
+*/
+type FortressStructureRecord struct {
+	FortressID    uint32 `json:"fortressId"`
+	EventStructID uint32 `json:"eventStructId"`
+	RefObjID      uint32 `json:"refObjId"`
+	OwnerGuildID  int64  `json:"ownerGuildId,omitempty"`
+	HP            uint32 `json:"hp"`
+	State         uint16 `json:"state,omitempty"`
+}
+
+/*
+================
 FortressStore
 
 The authority store's fortress door. Each save commits before it
@@ -56,4 +75,9 @@ type FortressStore interface {
 	SaveFortress(divisionID string, record FortressRecord) error
 	// SaveFortressRequest writes (present) or removes one request.
 	SaveFortressRequest(divisionID string, request FortressRequestRecord, present bool) error
+	// FortressStructures returns a division's stored structures in
+	// fortress and event-zone order.
+	FortressStructures(divisionID string) ([]FortressStructureRecord, error)
+	// SaveFortressStructure writes (present) or removes one zone's structure.
+	SaveFortressStructure(divisionID string, structure FortressStructureRecord, present bool) error
 }

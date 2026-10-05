@@ -37,6 +37,10 @@ func TestFortressStateSurvivesReopen(t *testing.T) {
 	if err := door.SaveFortressRequest(testDivision, domain.FortressRequestRecord{FortressID: 1, GuildID: 11}, false); err != nil {
 		t.Fatal(err)
 	}
+	tower := domain.FortressStructureRecord{FortressID: 1, EventStructID: 85, RefObjID: 19536, OwnerGuildID: 7, HP: 120, State: 1}
+	if err := door.SaveFortressStructure(testDivision, tower, true); err != nil {
+		t.Fatal(err)
+	}
 	s.Close()
 	reopened := openTest(t, dir, newTestClock())
 	records, requests, err := reopened.Fortresses().FortressState(testDivision)
@@ -48,6 +52,10 @@ func TestFortressStateSurvivesReopen(t *testing.T) {
 	}
 	if len(requests) != 1 || requests[0].GuildID != 9 {
 		t.Fatalf("requests %+v", requests)
+	}
+	structures, err := reopened.Fortresses().FortressStructures(testDivision)
+	if err != nil || len(structures) != 1 || structures[0] != tower {
+		t.Fatalf("structures %+v (%v)", structures, err)
 	}
 	if other, _, err := reopened.Fortresses().FortressState("other"); err != nil || len(other) != 0 {
 		t.Fatalf("another division sees %+v (%v)", other, err)

@@ -26,7 +26,7 @@ Removes layout 6's fortress tables from a current test authority.
 */
 func dropFortressTables(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests"); err != nil {
+	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures"); err != nil {
 		t.Fatal(err)
 	}
 }

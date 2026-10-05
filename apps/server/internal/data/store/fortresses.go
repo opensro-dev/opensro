@@ -30,6 +30,13 @@ CREATE TABLE IF NOT EXISTS fortresses (
   record      TEXT    NOT NULL,
   PRIMARY KEY (division, fortress_id)
 );
+CREATE TABLE IF NOT EXISTS fortress_structures (
+  division        TEXT    NOT NULL,
+  fortress_id     INTEGER NOT NULL,
+  event_struct_id INTEGER NOT NULL,
+  record          TEXT    NOT NULL,
+  PRIMARY KEY (division, fortress_id, event_struct_id)
+);
 CREATE TABLE IF NOT EXISTS fortress_requests (
   division     TEXT    NOT NULL,
   fortress_id  INTEGER NOT NULL,
@@ -126,7 +133,7 @@ func decodeFortressRecord(id uint32, raw string) (domain.FortressRecord, error) 
 ================
 validateFortresses
 
-Every stored fortress row decodes and names its own fortress.
+Every stored fortress and structure row decodes and names its own keys.
 ================
 */
 func validateFortresses(db *sql.DB) error {
@@ -134,18 +141,38 @@ func validateFortresses(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 	for rows.Next() {
 		var id uint32
 		var raw string
 		if err := rows.Scan(&id, &raw); err != nil {
+			rows.Close()
 			return err
 		}
 		if _, err := decodeFortressRecord(id, raw); err != nil {
+			rows.Close()
 			return err
 		}
 	}
-	return rows.Err()
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	structures, err := db.Query("SELECT fortress_id, event_struct_id, record FROM fortress_structures")
+	if err != nil {
+		return err
+	}
+	defer structures.Close()
+	for structures.Next() {
+		var fortressID, zone uint32
+		var raw string
+		if err := structures.Scan(&fortressID, &zone, &raw); err != nil {
+			return err
+		}
+		if _, err := decodeFortressStructure(fortressID, zone, raw); err != nil {
+			return err
+		}
+	}
+	return structures.Err()
 }
 
 /*
@@ -196,6 +223,90 @@ func (door storeFortressDoor) SaveFortressRequest(divisionID string, request dom
 	}
 	if err != nil {
 		s.recordWriteFailureLocked("fortress-request", err)
+	}
+	return err
+}
+
+/*
+================
+FortressStructures
+================
+*/
+func (door storeFortressDoor) FortressStructures(divisionID string) ([]domain.FortressStructureRecord, error) {
+	door.s.mu.RLock()
+	defer door.s.mu.RUnlock()
+	if door.s.db == nil {
+		return nil, errFortressUnavailable
+	}
+	rows, err := door.s.db.Query("SELECT fortress_id, event_struct_id, record FROM fortress_structures WHERE division = ? ORDER BY fortress_id, event_struct_id", divisionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.FortressStructureRecord
+	for rows.Next() {
+		var fortressID, zone uint32
+		var raw string
+		if err := rows.Scan(&fortressID, &zone, &raw); err != nil {
+			return nil, err
+		}
+		structure, err := decodeFortressStructure(fortressID, zone, raw)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, structure)
+	}
+	return out, rows.Err()
+}
+
+/*
+================
+decodeFortressStructure
+
+A row's JSON must name the row's own fortress and event zone.
+================
+*/
+func decodeFortressStructure(fortressID, zone uint32, raw string) (domain.FortressStructureRecord, error) {
+	var structure domain.FortressStructureRecord
+	if err := decodeJSONStrict([]byte(raw), &structure); err != nil {
+		return structure, fmt.Errorf("fortress %d structure %d: %w", fortressID, zone, err)
+	}
+	if structure.FortressID != fortressID || structure.EventStructID != zone || structure.RefObjID == 0 || structure.OwnerGuildID < 0 {
+		return structure, fmt.Errorf("fortress %d structure %d: inconsistent record", fortressID, zone)
+	}
+	return structure, nil
+}
+
+/*
+================
+SaveFortressStructure
+================
+*/
+func (door storeFortressDoor) SaveFortressStructure(divisionID string, structure domain.FortressStructureRecord, present bool) error {
+	s := door.s
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil || divisionID == "" || structure.FortressID == 0 || structure.EventStructID == 0 {
+		return errFortressUnavailable
+	}
+	var err error
+	if present {
+		if structure.RefObjID == 0 || structure.OwnerGuildID < 0 {
+			return fmt.Errorf("fortress %d structure %d: inconsistent record", structure.FortressID, structure.EventStructID)
+		}
+		var raw []byte
+		if raw, err = json.Marshal(structure); err != nil {
+			return err
+		}
+		_, err = s.db.Exec(
+			"INSERT INTO fortress_structures (division, fortress_id, event_struct_id, record) VALUES (?, ?, ?, ?) ON CONFLICT(division, fortress_id, event_struct_id) DO UPDATE SET record = excluded.record",
+			divisionID, structure.FortressID, structure.EventStructID, string(raw))
+	} else {
+		_, err = s.db.Exec("DELETE FROM fortress_structures WHERE division = ? AND fortress_id = ? AND event_struct_id = ?",
+			divisionID, structure.FortressID, structure.EventStructID)
+	}
+	if err != nil {
+		s.recordWriteFailureLocked("fortress-structure", err)
 	}
 	return err
 }
