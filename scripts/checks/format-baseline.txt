@@ -1,6 +1,5 @@
 # Files written before dprint was adopted. This ledger may only shrink:
 # format a file, then delete its line. See scripts/checks/check_formatting.mjs.
-apps/client-next/src/bootstrap.ts
 apps/client-next/src/engine/contracts/camera-script.ts
 apps/client-next/src/engine/contracts/combat-feedback.ts
 apps/client-next/src/engine/contracts/damage-text.ts
@@ -152,7 +151,6 @@ apps/client-next/src/engine/foundation/rendering/star-flicker.ts
 apps/client-next/src/engine/foundation/rendering/texture-atlas.ts
 apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
-apps/client-next/src/engine/foundation/rendering/world-environment.ts
 apps/client-next/src/engine/foundation/rendering/world-material.ts
 apps/client-next/src/engine/foundation/ui/academy-layout.ts
 apps/client-next/src/engine/foundation/ui/action-layout.ts

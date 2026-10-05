@@ -6,6 +6,7 @@ device.ts - WebGPU generation and resource lifecycle
 ===========================================================================
 */
 import { createBloom } from "./bloom";
+import { createFinish } from "./finish";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
 import { createParticlePresentation } from "./particles";
@@ -31,7 +32,7 @@ createDevice
 Initialize one device generation and grant checked capabilities after its pipelines are ready.
 ================
 */
-export function createDevice( timingEnabled = false, gpuAnimationEnabled = true ): DeviceOwner {
+export function createDevice( timingEnabled = false, gpuAnimationEnabled = true, finishEnabled = false ): DeviceOwner {
 	let textureFiltered = true, textureDetail = DEFAULT_TEXTURE_DETAIL;
 	let timing: ReturnType<typeof createGpuTiming> | null = null;
 	let phase: RuntimePhase = "starting", failure: string | null = null, device: GPUDevice | null = null;
@@ -43,6 +44,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	let thunder: ReturnType<typeof createThunder> | null = null;
 	let flares: ReturnType<typeof createFlares> | null = null;
 	let bloom: ReturnType<typeof createBloom> | null = null;
+	let finish: ReturnType<typeof createFinish> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
 	const depthTextures = new Set<GPUTexture>();
 	// Every owner below hands its released buffers and textures to this queue;
@@ -178,7 +180,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 						label: "deferred-frame-color",
 						size: [ width, height ],
 						format: navigator.gpu.getPreferredCanvasFormat(),
-						usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+						usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC |
+							GPUTextureUsage.TEXTURE_BINDING
 					} );
 					depthTextures.add( texture );
 					return Object.freeze( {
@@ -188,11 +191,16 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 						================
 						present
 
-						Copy the intermediate frame into the current presentation target.
+						Publish the intermediate frame: through the presentation pass
+						when the renderer enabled it, else the byte-exact native copy.
 						================
 						*/
 						present( target: GPUTexture ) {
 							if ( !depthTextures.has( texture ) ) throw Error( "Disposed frame color" );
+							if ( finishEnabled && finish ) {
+								finish.present( texture, target );
+								return;
+							}
 							const encoder = current().createCommandEncoder( { label: "deferred-frame-present" } );
 							encoder.copyTextureToTexture( { texture }, { texture: target }, [ width, height ] );
 							current().queue.submit( [ encoder.finish() ] );
@@ -342,6 +350,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 
 			bloom = createBloom( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
+			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
+
 			particleQuery = createParticleQuery( created, navigator.gpu.getPreferredCanvasFormat() );
 			Promise.all( [
 				pipelines.ready,
@@ -350,7 +360,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				thunder.ready,
 				geometry.ready,
 				particleQuery.ready,
-				bloom.ready
+				bloom.ready,
+				finish.ready
 			] ).then( () => {
 				if ( generation === epoch && phase === "starting" ) {
 					sky = {
@@ -601,6 +612,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			flares = null;
 			bloom?.dispose();
 			bloom = null;
+			finish?.dispose();
+			finish = null;
 			particleQuery?.dispose();
 			particleQuery = null;
 			geometry?.dispose();

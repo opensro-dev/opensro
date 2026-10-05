@@ -143,6 +143,7 @@
     "src/engine/runtime/renderer/device/ui.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/ui/title/creation.ts": "src/engine/runtime/ui/title/title.ts",
     "src/engine/runtime/renderer/device/bloom.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/finish.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/flares.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/assets/world-lease.ts": "src/engine/runtime/assets/assets.ts",
     "src/engine/runtime/renderer/device/thunder.ts": "src/engine/runtime/renderer/device/device.ts",

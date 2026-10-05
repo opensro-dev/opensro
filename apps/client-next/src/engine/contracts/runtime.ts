@@ -56,6 +56,7 @@ export interface RuntimeDiagnostics {
 	readonly gpuAnimation?: boolean;
 	readonly gpuTiming?: boolean;
 	readonly hoverPicking?: boolean;
+	readonly postProcessing?: boolean;
 	readonly stages?: boolean;
 }
 /*

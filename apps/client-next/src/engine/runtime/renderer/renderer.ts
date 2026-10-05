@@ -44,6 +44,9 @@ export function createRenderer(
 	diagnostics: import("@/engine/contracts/runtime").RuntimeDiagnostics = {}
 ): Renderer {
 	let video = defaultVideoOptions();
+	// One presentation-grade decision for the whole renderer lifetime: the
+	// offscreen frame path is retained every frame it is enabled.
+	const postProcessing = diagnostics.postProcessing !== false;
 	const portrait = createPortrait( createCharacters() );
 	// A released draw never reaches a submit; the report names who kept it.
 	const staleDraws = createStaleDrawGuard(
@@ -73,7 +76,8 @@ export function createRenderer(
 	const damageTextures = damageTextAssets();
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
 		characters = createCharacters();
-	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
+	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false, postProcessing ),
+		recoveries = 0;
 	let surface: SurfaceOwner | null = null, frame: FrameOwner | null = null;
 	let transformDirty = false, instancesDirty = false;
 	let mesh: Geometry | null = null, meshDraw: GeometryDraw | null = null;
@@ -390,7 +394,7 @@ export function createRenderer(
 					recoveries++;
 					residentUi.clear();
 					residentUiProduct = null;
-					device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false );
+					device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false, postProcessing );
 					device.textureOptions( video.records[video.active][8] === 1, video.records[video.active][9]! );
 					for ( const id of uiTextures.keys() ) dirtyUi.add( id );
 				}
@@ -575,7 +579,7 @@ export function createRenderer(
 							world.night()
 						),
 					targetSurface = surface;
-				const color = surface.acquire( viewport, !!deferredPlan?.query );
+				const color = surface.acquire( viewport, postProcessing || !!deferredPlan?.query );
 				const finishDeferred = ( results?: readonly boolean[] ) => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
 					characters.completeDeferred( results );
