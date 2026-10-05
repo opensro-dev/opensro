@@ -125,6 +125,9 @@ func newGameplayPlane(
 	if err := items.ConfigureGacha(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("gacha catalogue: %w", err)
 	}
+	if err := items.ConfigureStallNetwork(devPaths.TextdataDir); err != nil {
+		return nil, err
+	}
 	if err := items.ConfigureCommerce(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
@@ -195,6 +198,7 @@ func newGameplayPlane(
 	}
 	items.Unions = unionAuthority
 	movementRuntime.Unions = unionAuthority
+	movementRuntime.Stalls = items.Stalls
 	unions := guild.NewUnionRuntime(deps, presence, unionAuthority, items.Fortresses)
 	communitySeeds := community.SeedFramesFunc(presence, deps.Letters)
 	deps.CommunitySeedFramesFor = func(

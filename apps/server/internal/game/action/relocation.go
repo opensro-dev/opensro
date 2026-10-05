@@ -108,6 +108,7 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 	rt.clearSkillFinalizes(division, name)
 	rt.clearCompoundJob(compoundKey{division, name})
 	rt.AbandonExchange(division, name)
+	rt.AbandonStall(division, name)
 	if rt.PushDivisionPeerFrames != nil {
 		rt.PushDivisionPeerFrames(division, name, []wire.Frame{{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()}})
 	}

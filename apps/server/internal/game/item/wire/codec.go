@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"unicode/utf16"
 )
 
 // ErrShortPayload is returned when a payload ends before the native reader
@@ -128,6 +129,24 @@ func (r *Reader) Str() (string, error) {
 	return string(raw), nil
 }
 
+// WStr reads a u16 character count and that many UTF-16LE units
+// (CMsgStreamBuffer_ReadWideString 5E2BA0).
+func (r *Reader) WStr() (string, error) {
+	n, err := r.U16()
+	if err != nil {
+		return "", err
+	}
+	raw, err := r.take(int(n) * 2)
+	if err != nil {
+		return "", err
+	}
+	units := make([]uint16, n)
+	for i := range units {
+		units[i] = binary.LittleEndian.Uint16(raw[2*i:])
+	}
+	return string(utf16.Decode(units)), nil
+}
+
 // Done reports ErrTrailingBytes when the payload was longer than the layout.
 func (r *Reader) Done() error {
 	if remaining := r.Remaining(); remaining > 0 {
@@ -191,6 +210,17 @@ func (w *Writer) Bytes(values []byte) *Writer {
 // and the client's ASCII string reader take.
 func (w *Writer) Str(value string) *Writer {
 	return w.U16(uint16(len(value))).Bytes([]byte(value))
+}
+
+// WStr appends a u16 character count and the UTF-16LE units, the shape
+// Reader.WStr and the client's wide string reader take.
+func (w *Writer) WStr(value string) *Writer {
+	units := utf16.Encode([]rune(value))
+	w.U16(uint16(len(units)))
+	for _, unit := range units {
+		w.U16(unit)
+	}
+	return w
 }
 
 // Payload returns the accumulated bytes.

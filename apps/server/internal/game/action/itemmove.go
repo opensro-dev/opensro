@@ -59,6 +59,10 @@ func (rt *Runtime) HandleItemMove(
 	// interact latch is one slot).
 	rt.Pending.Clear(grounditem.PendingKey(divisionID, character.Name))
 
+	// A stall's owner keeps its bag as the stall shows it (stall.go).
+	if rt.Stalls.Keeping(divisionID, character.Name) {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
 	// The bag is locked to the exchange while one is open (exchange.go).
 	if rt.Exchanges.Trading(divisionID, character.Name) {
 		switch request.MovementType {

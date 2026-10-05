@@ -125,6 +125,11 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 		cos = p.rt.PetPresentation(p.divisionID, captured.name)
 	}
 	appearance := peerAppearance(p.rt.deps.GuildAuthority(), p.rt.Unions, p.divisionID, captured)
+	if appearance != nil && p.rt.Stalls != nil {
+		if s, ok := p.rt.Stalls.Get(p.divisionID, captured.name); ok {
+			appearance.StallTitle = s.Title
+		}
+	}
 	if appearance != nil && p.rt.SpawnSkills != nil {
 		appearance.SpawnSkills = peerSpawnSkills(p.rt.SpawnSkills(p.divisionID, captured.name))
 	}

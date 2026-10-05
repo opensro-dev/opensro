@@ -24,6 +24,7 @@ import (
 	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/stall"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
@@ -371,6 +372,11 @@ type Runtime struct {
 	// Exchanges holds the open player-to-player exchanges and their
 	// requests (exchange.go).
 	Exchanges *exchange.Registry
+	// Stalls holds the street stalls and their visitors (stall.go), and
+	// StallCategories the stall network's TypeID -> category table
+	// (stall_network.go, ConfigureStallNetwork).
+	Stalls          *stall.Registry
+	StallCategories map[[4]int64]uint32
 	// resurrections holds the unanswered resurrection proposals, one per
 	// dead player (resurrection.go).
 	resurrections resurrectionOffers
@@ -418,6 +424,7 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 		basicAttackIntents: make(map[string]basicAttackIntent),
 		resurrections:      resurrectionOffers{byTarget: make(map[string]resurrectionOffer)},
 		Exchanges:          exchange.New(),
+		Stalls:             stall.New(),
 	}
 
 	if monsters != nil {
