@@ -43,6 +43,8 @@ const (
 	tagDamageReturn            = 0x646d6772
 	tagTimedOverlap            = 0x6f766c32
 	tagTimedPreemptive         = 0x706f6c61
+	tagTimedStatusReduction    = 0x72656174 // reat
+	tagTimedStatusResistance   = 0x7265616c // real
 	parameterWizardMP          = 0x57494d44
 	parameterBardMP            = 0x42444d44
 	parameterMusicArea         = 0x4d554552
@@ -71,8 +73,16 @@ type SkillTimedEffect struct {
 	HP, MP, Evasion, Accuracy SkillFlatRate
 	Recovery                  SkillRecoveryRates
 	GoldDropPercent           uint32
-	Pinned                    bool
-	Persistent                bool
+	// Reat and Real are a buff's reat and real, the blocks the resistance
+	// passives (Protection) author: 594AC0 installs a buff's reat on the
+	// keeper as it does a learned passive's (595542..59568F), and real files
+	// its resistance under the instance's execution context (59DF20), so
+	// both last as long as the instance. Holy Word / Holy Spell and Poison
+	// Circle / Vein Circle carry them.
+	Reat       SkillPassiveReat
+	Real       SkillPassiveReal
+	Pinned     bool
+	Persistent bool
 	// IncomingReduction marks an admitted odar block (Earth Barrier).
 	IncomingReduction bool
 	// Hawk is summ (+0x308): the attacking hawk of Black and Light Hawk
@@ -541,6 +551,16 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Preemptive = SkillPreemptiveGuard{Present: true, Mask: op.Arguments[0], Level: op.Arguments[1]}
+		case tagTimedStatusReduction:
+			if result.Reat.Mask != 0 || op.Count != 2 || op.Arguments[0] == 0 || op.Arguments[0]&^0x3f != 0 {
+				return
+			}
+			result.Reat = SkillPassiveReat{Mask: op.Arguments[0], Value: op.Arguments[1]}
+		case tagTimedStatusResistance:
+			if result.Real.Mask != 0 || op.Count != 3 || op.Arguments[0] == 0 {
+				return
+			}
+			result.Real = SkillPassiveReal{Mask: op.Arguments[0], Flat: op.Arguments[1], Grade: op.Arguments[2]}
 		case tagTimedOverlap: // ovl2: the replacement descriptor's casting-state word
 		case tagNbuf, tagBbuf: // cancellation policy and secondary board, already projected
 		case tagReqi, tagTimedRequireNot: // 58D480 admits, 59F0E0 re-checks on equipment change
@@ -620,7 +640,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Range || result.Hawk.Present ||
 		result.Link.Present && (result.Link.Threat || result.Link.Mana) || result.Preemptive.Present ||
 		result.DamageReturn.Present ||
-		result.DamageToMP)
+		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {
