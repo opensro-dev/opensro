@@ -10,9 +10,10 @@ server would show why. Before it disconnects, the client posts what failed
 Agent writes one structured warning line to its log, which is where an
 operator diagnoses it.
 
-The account comes from the session bearer token, never from the body; the
-character and region in the body are what the client says and are logged as
-such. Reports are paced per account so a client stuck in a failure loop
+The account comes from the session bearer token, never from the body, and
+must still be a stored account on an enabled shard (liveSession). The log
+line names that identity, never the token. The character and region in the
+body are what the client says and are logged as such. Reports are paced per account so a client stuck in a failure loop
 cannot flood the log.
 
 ===========================================================================
@@ -108,7 +109,8 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	claims, ok := server.bearerClaims(r)
-	if !ok {
+	definition, live := server.liveSession(claims)
+	if !ok || !live {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "code": "UNAUTHORIZED"})
 		return
 	}
@@ -124,7 +126,7 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 	}
 	fields := log.Fields{
 		"account":   claims.AccountID,
-		"shard":     claims.ShardID,
+		"shard":     definition.ID,
 		"kind":      incident.Kind,
 		"message":   strings.ToValidUTF8(incident.Message, "?"),
 		"phase":     incident.Phase,

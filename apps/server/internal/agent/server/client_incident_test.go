@@ -22,10 +22,10 @@ incidentSession
 Logs in through the real handler and returns the session bearer token.
 ================
 */
-func incidentSession(t *testing.T) (agentFixture, string) {
+func incidentSession(t *testing.T, configure ...func(*Config)) (agentFixture, string) {
 	t.Helper()
 	worker := http.NotFoundHandler()
-	fixture := newAgentFixture(t, worker, worker)
+	fixture := newAgentFixture(t, worker, worker, configure...)
 	publishFixtureLease(t, fixture, "alpha", "worker-alpha", 1, 0)
 	login := performJSON(t, fixture.handler, http.MethodPost, "/title/login",
 		`{"id":"tester","password":"123123","serverId":"alpha"}`, "")
@@ -58,7 +58,7 @@ func TestClientIncidentIsLoggedWithTheFailingFrame(t *testing.T) {
 		t.Fatalf("no incident log line: %+v", entry)
 	}
 	want := map[string]any{
-		"account": "tester", "kind": "packet", "opcode": "0x376F", "payload": "2a000000000000000000",
+		"account": "tester", "shard": "alpha", "kind": "packet", "opcode": "0x376F", "payload": "2a000000000000000000",
 		"payloadSize": 12, "character": "asd3", "region": 23960, "phase": "world", "build": "abc123",
 	}
 	for key, value := range want {
@@ -117,5 +117,57 @@ func TestClientIncidentIsPacedPerAccount(t *testing.T) {
 	}
 	if !limited {
 		t.Fatal("a burst past the bound was never paced")
+	}
+}
+
+/*
+================
+revocableAccounts
+
+The test accounts with one account that can be deleted after login.
+================
+*/
+type revocableAccounts struct {
+	AccountAuthority
+	revoked string
+}
+
+/*
+================
+revocableAccounts.PasswordHash
+================
+*/
+func (accounts *revocableAccounts) PasswordHash(accountID string) ([]byte, bool) {
+	if accountID == accounts.revoked {
+		return nil, false
+	}
+	return accounts.AccountAuthority.PasswordHash(accountID)
+}
+
+/*
+================
+TestClientIncidentRefusesADeletedAccountsSession
+
+A token stays correctly signed after its account is deleted; the report is
+refused and nothing is logged for it.
+================
+*/
+func TestClientIncidentRefusesADeletedAccountsSession(t *testing.T) {
+	accounts := &revocableAccounts{}
+	fixture, token := incidentSession(t, func(config *Config) {
+		accounts.AccountAuthority = config.Accounts
+		config.Accounts = accounts
+	})
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+	accounts.revoked = "tester"
+	body := `{"kind":"packet","message":"x"}`
+	if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token).Code; code != http.StatusUnauthorized {
+		t.Fatalf("deleted account = %d", code)
+	}
+	for _, entry := range hook.AllEntries() {
+		if entry.Message == "agent: client incident" {
+			t.Fatalf("a deleted account's report was logged: %+v", entry.Data)
+		}
 	}
 }
