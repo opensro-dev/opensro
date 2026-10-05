@@ -373,7 +373,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			rt.returnCasts.Store(key, job)
 			return false
 		}
-		arrival = rt.appointedRebirth(c)
+		arrival = rt.appointedRebirth(job.division, c)
 		if job.destination != nil {
 			arrival = *job.destination
 		}

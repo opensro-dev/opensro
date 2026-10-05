@@ -102,7 +102,7 @@ are the fallback, so old saves and subsequently removed gates remain usable.
 ==================
 */
 func (rt *Runtime) appointedRebirthPoint(character *enterworld.Character) simulation.Spawn {
-	return rt.appointedRebirth(character).spawn
+	return rt.appointedRebirth("", character).spawn
 }
 
 /*
@@ -112,14 +112,18 @@ appointedRebirth
 The appointed town and the world it lies in. CGObjPC_ResolveTownRecallPosition
 (4E08A0) reads the appointed teleport through CRefTeleport_ResolveSpawnCoords,
 which also yields the teleport's GenWorldID. The stored fallback is a field
-position.
+position. During a fortress war a PC inside a fortress world revives where
+that world says instead (siege vtable +0x90, fortress_revival.go).
 ================
 */
-func (rt *Runtime) appointedRebirth(character *enterworld.Character) travelPoint {
+func (rt *Runtime) appointedRebirth(division string, character *enterworld.Character) travelPoint {
 	field := instance.ID(domain.DefaultWorldInstance)
 	fallback := defaultRebirthPoint(character)
 	if character == nil || character.World == nil {
 		return travelPoint{spawn: fallback, world: field}
+	}
+	if point, ok := rt.fortressRevival(division, character); ok {
+		return point
 	}
 	world := character.World
 	if rt.portals != nil && world.RebirthGateRefID != 0 {
@@ -277,7 +281,7 @@ func (rt *Runtime) HandleLocalRebirth(
 		}
 	}()
 	if choice == wire.RebirthAtSpecifiedPoint {
-		arrival := rt.appointedRebirth(before)
+		arrival := rt.appointedRebirth(divisionID, before)
 		destination = arrival.spawn
 		preview := corpse
 		preview.Spawn = destination

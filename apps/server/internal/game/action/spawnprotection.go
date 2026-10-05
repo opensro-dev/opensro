@@ -6,8 +6,8 @@ spawnprotection.go - the untouchable grace after a revival
 CGObjPC_TeleportToTown (4DF290), the revival arm (arg2 == 1), clears the
 abnormal states, changes LIFE and motion, and then calls
 CGObjChar_SetBodyModeAndScheduleRestore (4A9FC0, vtable +0x318) with body
-mode 2 for 6.0 seconds (11.0 where CGameWorldMgr_CallGameWorldSlot31 marks
-the world; the port runs only the field world, so 6). Body mode 2 makes the
+mode 2 for 6.0 seconds, 11.0 in a siege world (CGameWorldMgr_CallGameWorldSlot31
+is CGameWorld_Siege_IsSiege 600C50). Body mode 2 makes the
 character untouchable: monsters skip it as a target (540DE0) and attackers
 are refused (5291D0), so a revived player is not killed again before they
 can act. When the time is up the scheduled restore returns the body mode,
@@ -26,10 +26,15 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 )
 
-// reviveUntouchableMs is the 6.0 s float 4DF484 passes for the field world.
-const reviveUntouchableMs = 6000
+// reviveUntouchableMs is the 6.0 s float 4DF484 passes for an ordinary
+// world, siegeReviveUntouchableMs the 11.0 s for a siege world.
+const (
+	reviveUntouchableMs      = 6000
+	siegeReviveUntouchableMs = 11000
+)
 
 /*
 ================
@@ -118,11 +123,15 @@ func (rt *Runtime) grantReviveUntouchable(division string, character *enterworld
 		character.BodyStatusOwner != owner {
 		return nil
 	}
+	grace := int64(reviveUntouchableMs)
+	if definition, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(character)).Definition()); ok && definition.Siege() {
+		grace = siegeReviveUntouchableMs
+	}
 	rt.bodyRestores.schedule(bodyRestore{
 		division: division,
 		name:     character.Name,
 		owner:    owner,
-		dueMs:    nowMs + reviveUntouchableMs,
+		dueMs:    nowMs + grace,
 	})
 	return []wire.Frame{bodyStatusFrame(enterworld.ObjectIDForCharacter(character), untouchableBodyStatus)}
 }

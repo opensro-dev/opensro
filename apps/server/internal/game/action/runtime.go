@@ -50,7 +50,10 @@ type Runtime struct {
 	aggressionActors sync.Map // scheduled counters; character owns aggression entries
 	BerserkRoll      combat.Roll32767
 	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
-	WearRoll            combat.Roll32767
+	WearRoll combat.Roll32767
+	// RevivalRoll is 51D260's rand() for a fortress revival gate; nil is the
+	// secure roll.
+	RevivalRoll         combat.Roll32767
 	RewardParties       func(division string) []RewardParty
 	NextPartyLootMember func(division, name string) uint32
 	RewardActorPresent  func(division, name string) bool

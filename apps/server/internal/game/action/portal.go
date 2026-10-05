@@ -35,7 +35,11 @@ type portalDestination struct {
 	// fortressGate is a building of TypeID 4/1/1/1 (TypeId_IsFortressGate
 	// 4F8820): the field gates of a fortress, not its town portal.
 	fortressGate bool
-	recall       bool
+	// gateKind is the TID4 of a 4/1/1 teleport building, which
+	// CRefData_FindWorldTeleportByKind (51D260) selects revival gates by: 1
+	// a fortress gate, 2 a fortress's revival gate.
+	gateKind uint8
+	recall   bool
 	// world is GenWorldID, the RefGameWorld the gate spawn lies in.
 	world instance.DefinitionID
 	spawn simulation.Spawn
@@ -85,6 +89,7 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	number := func(s string) (uint32, error) { v, e := strconv.ParseUint(s, 10, 32); return uint32(v), e }
 	buildings := map[uint32]bool{}
 	fortressGates := map[uint32]bool{}
+	gateKinds := map[uint32]uint8{}
 	buildingRows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportbuilding.txt"))
 	if len(buildingRows) == 0 {
 		return nil, fmt.Errorf("teleportbuilding is absent or empty")
@@ -102,8 +107,11 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 		}
 		buildings[id] = true
 		// Columns 9-12 are TypeID1-4.
-		if len(r) > 12 && r[9] == "4" && r[10] == "1" && r[11] == "1" && r[12] == "1" {
-			fortressGates[id] = true
+		if len(r) > 12 && r[9] == "4" && r[10] == "1" && r[11] == "1" {
+			if kind, e := strconv.ParseUint(r[12], 10, 8); e == nil {
+				gateKinds[id] = uint8(kind)
+			}
+			fortressGates[id] = r[12] == "1"
 		}
 		if len(r) > 2 {
 			c.buildings[r[2]] = id
@@ -155,7 +163,7 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 			return nil, fmt.Errorf("teleportdata row %d names unknown world %d", i+1, world)
 		}
 		c.destinations[id] = portalDestination{id: id, ref: ref, code: r[2], building: buildings[ref],
-			fortressGate: fortressGates[ref], recall: recall == 1, world: instance.DefinitionID(world),
+			fortressGate: fortressGates[ref], gateKind: gateKinds[ref], recall: recall == 1, world: instance.DefinitionID(world),
 			spawn: simulation.Spawn{RegionID: uint16(region), X: xyz[0], Y: xyz[1], Z: xyz[2]}}
 		if ref != 0 {
 			if _, exists := c.sources[ref]; exists {
