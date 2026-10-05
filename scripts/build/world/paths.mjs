@@ -34,16 +34,28 @@ else the parent of the main checkout. A linked worktree's .git is a file
 function resolveGameRoot() {
 	const configured = process.env.SRO_GAME_ROOT?.trim();
 	if ( configured ) return path.resolve( configured );
+	return path.resolve( mainCheckoutRoot, ".." );
+}
+
+/*
+================
+resolveMainCheckout
+
+The main checkout: this one, or the one a linked worktree's .git file names.
+================
+*/
+function resolveMainCheckout() {
 	const dotGit = path.join( rebuildRoot, ".git" );
 	if ( fs.existsSync( dotGit ) && fs.statSync( dotGit ).isFile() ) {
 		const match = /^gitdir:\s*(.+)$/m.exec( fs.readFileSync( dotGit, "utf8" ) );
 		if ( !match ) throw new Error( `Unreadable worktree link ${dotGit}` );
 		const worktreeGitDir = path.resolve( rebuildRoot, match[1].trim() );
-		const mainCheckout = path.resolve( worktreeGitDir, "..", "..", ".." );
-		return path.resolve( mainCheckout, ".." );
+		return path.resolve( worktreeGitDir, "..", "..", ".." );
 	}
-	return path.resolve( rebuildRoot, ".." );
+	return rebuildRoot;
 }
+
+export const mainCheckoutRoot = resolveMainCheckout();
 
 export const gameRoot = resolveGameRoot();
 export const extractedRoot = path.join( gameRoot, "extracted" );
@@ -83,11 +95,29 @@ export const imagePublicRoot = path.join( publicAssetsRoot, "images" );
 
 /*
 ================
+gameRelativePath
+
+value relative to the game root, with a file inside this checkout named as
+the main checkout's file. Built assets record these paths, so a linked
+worktree - even one on another drive, where no relative path exists - builds
+the same bytes the main checkout does.
+================
+*/
+export function gameRelativePath( value, roots ) {
+	const inCheckout = path.relative( roots.checkout, value );
+	const named = inCheckout.startsWith( ".." ) || path.isAbsolute( inCheckout ) ?
+		value :
+		path.join( roots.mainCheckout, inCheckout );
+	return path.relative( roots.game, named ).replaceAll( "\\", "/" );
+}
+
+/*
+================
 toGameRelative
 ================
 */
 export function toGameRelative( value, sourceGameRoot = gameRoot ) {
-	return path.relative( sourceGameRoot, value ).replaceAll( "\\", "/" );
+	return gameRelativePath( value, { checkout: rebuildRoot, mainCheckout: mainCheckoutRoot, game: sourceGameRoot } );
 }
 
 /*
