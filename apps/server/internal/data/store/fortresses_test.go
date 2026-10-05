@@ -96,3 +96,31 @@ func TestLayout5AuthorityGainsTheFortressTables(t *testing.T) {
 		t.Fatalf("fresh fortress tables %+v %+v (%v)", records, requests, err)
 	}
 }
+
+/*
+================
+TestFortressReturnCooldownSurvivesReopen
+
+The fortress-return cooldown (51A5B0's owner timed job) is part of the
+character record.
+================
+*/
+func TestFortressReturnCooldownSurvivesReopen(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	if err := s.CreateCharacter(testDivision, "account", seededCharacter()); err != nil {
+		t.Fatal(err)
+	}
+	c := s.Characters().CharactersForDivision(testDivision)[0]
+	if !s.UpdateCharacter(c, "fortress-return", func() bool {
+		c.FortressReturnUntilMs = 1234567
+		return true
+	}) {
+		t.Fatal("cooldown not committed")
+	}
+	s.Close()
+	again := openTest(t, dir, newTestClock())
+	if got := again.Characters().CharactersForDivision(testDivision)[0].FortressReturnUntilMs; got != 1234567 {
+		t.Fatalf("cooldown after reopen = %d", got)
+	}
+}

@@ -271,6 +271,10 @@ type Character struct {
 	// ItemGroupCooldowns maps an item COOLTIME group to its absolute end.
 	ItemGroupCooldowns map[uint32]int64 `json:"itemGroupCooldowns,omitempty"`
 	TimedSkillJobs     []TimedSkillJob  `json:"timedSkillJobs,omitempty"`
+	// FortressReturnUntilMs ends the fortress-return cooldown, the owner
+	// timed job (2, 5) of 600 s CGObjPC_HandleSiegeReturn705D (51A5B0)
+	// creates; zero when none runs.
+	FortressReturnUntilMs int64 `json:"fortressReturnUntilMs,omitempty"`
 
 	// AvatarInventory is the persisted costume inventory. Rows reuse the
 	// equipment item body and occupy native avatar slots 0..3. Every row's
