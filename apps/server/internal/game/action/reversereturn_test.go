@@ -10,6 +10,7 @@ package action
 
 import (
 	"bytes"
+	"opensro.online/server/internal/domain"
 	"testing"
 	"time"
 
@@ -97,7 +98,7 @@ TestReverseReturnTakesThePlayerToWhereItDied
 func TestReverseReturnTakesThePlayerToWhereItDied(t *testing.T) {
 	rt, c, clock := reverseReturnFixture(t)
 	died := simulation.Spawn{RegionID: 25000, X: 812, Y: 30, Z: 1204, Angle: 0}
-	c.World.LastDeathPoint = worldSpawnFromMission(died)
+	c.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(died)}
 	out := reverseReturn(rt, c, reverseReturnLastDeath)
 	assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, wire.OpItemUseVisual)
 	if out.Frames[1].Payload[1] != 23 || c.MissionInventory[len(c.MissionInventory)-1].StackCount != 1 || c.NativeTeleportMode != 1 {
@@ -124,11 +125,40 @@ func TestReturnScrollAndDeathRecordTheReverseReturnPoints(t *testing.T) {
 	rt, c, clock := reverseReturnFixture(t)
 	at := rt.liveSpawn(simulation.WorldKey(testDivision, c.Name), c, clock.NowMs())
 	useReturn(rt, c)
-	if c.World.LastRecallPoint == nil || missionSpawnFromWorld(c.World.LastRecallPoint, simulation.Spawn{}) != at {
+	if c.World.LastRecallPoint == nil || missionSpawnFromWorld(&c.World.LastRecallPoint.WorldSpawn, simulation.Spawn{}) != at {
 		t.Fatalf("the return scroll recorded %+v, want %+v", c.World.LastRecallPoint, at)
 	}
 	rt.settlePlayerDeathInDoor(testDivision, c, clock.NowMs())
-	if c.World.LastDeathPoint == nil || missionSpawnFromWorld(c.World.LastDeathPoint, simulation.Spawn{}).RegionID != at.RegionID {
+	if c.World.LastDeathPoint == nil || missionSpawnFromWorld(&c.World.LastDeathPoint.WorldSpawn, simulation.Spawn{}).RegionID != at.RegionID {
 		t.Fatalf("death recorded %+v", c.World.LastDeathPoint)
+	}
+}
+
+/*
+================
+TestRecordedPointsKeepTheirWorld
+
+4E0250 / 4E0330 record a point only in a type-0 world and keep its
+GameWorldID: the field is the absent default, a fortress names itself, and
+an instance dungeon (type 1) records nothing.
+================
+*/
+func TestRecordedPointsKeepTheirWorld(t *testing.T) {
+	at := simulation.Spawn{RegionID: 17221, X: 812, Z: 677}
+	c := &enterworld.Character{}
+	if point, ok := recordedPoint(c, at); !ok || point.World != 0 {
+		t.Fatalf("field point %+v %v", point, ok)
+	}
+	for _, tc := range []struct {
+		packed uint32
+		world  uint16
+		ok     bool
+	}{{0x10002, 2, true}, {0x1000a, 0, false}} {
+		packed := tc.packed
+		c.World = &domain.CharacterWorld{PackedInstance: &packed}
+		point, ok := recordedPoint(c, at)
+		if ok != tc.ok || ok && point.World != tc.world {
+			t.Fatalf("world %08x: %+v %v", tc.packed, point, ok)
+		}
 	}
 }

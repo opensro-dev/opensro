@@ -23,7 +23,7 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 			PackedInstance:     &instance,
 			Spawn:              &WorldSpawn{X: &spawnX},
 			AuthoredAreaReturn: &WorldSpawn{X: &returnX},
-			LastDeathPoint:     &WorldSpawn{X: &deathX},
+			LastDeathPoint:     &WorldPoint{WorldSpawn: WorldSpawn{X: &deathX}, World: 2},
 			DungeonFloorIndex:  &floor,
 			MoveSegment:        []byte(`{"x":1}`),
 		},

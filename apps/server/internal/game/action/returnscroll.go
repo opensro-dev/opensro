@@ -201,7 +201,9 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 		typeWord: request.TypeWord, duration: duration, destination: destination, now: now, mode: mode}, result) {
 		return false
 	}
-	c.World.LastRecallPoint = worldSpawnFromMission(at)
+	if point, ok := recordedPoint(c, at); ok {
+		c.World.LastRecallPoint = point
+	}
 	return true
 }
 

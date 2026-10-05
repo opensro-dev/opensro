@@ -74,6 +74,21 @@ type WorldSpawn struct {
 }
 
 /*
+================
+WorldPoint
+
+A recorded position and the RefGameWorld it lies in: the native char-data
+point blocks keep the world's u16 GameWorldID beside the region and
+coordinates (recall +0xEE, death +0xF0). World is omitted for INS_DEFAULT,
+so a field point stays the record it always was.
+================
+*/
+type WorldPoint struct {
+	WorldSpawn
+	World uint16 `json:"world,omitempty"`
+}
+
+/*
 ==================
 CharacterWorld
 
@@ -110,10 +125,11 @@ type CharacterWorld struct {
 	// LastRecallPoint is where the player last used a return scroll (native
 	// char-data +0xCC.., CGObjPC_SaveLatestRecallPosition 4E0250, called from
 	// the return scroll's location check); LastDeathPoint is where the player
-	// last died (+0xDC.., 4E0330 from ProcessNormalDeath). The reverse return
-	// scroll takes the player back to either.
-	LastRecallPoint *WorldSpawn `json:"lastRecallPoint,omitempty"`
-	LastDeathPoint  *WorldSpawn `json:"lastDeathPoint,omitempty"`
+	// last died (+0xDC.., CGObjPC_SaveLatestDeathPosition 4E0330 from
+	// ProcessNormalDeath). Both record only in a type-0 world. The reverse
+	// return scroll takes the player back to either, in its world.
+	LastRecallPoint *WorldPoint `json:"lastRecallPoint,omitempty"`
+	LastDeathPoint  *WorldPoint `json:"lastDeathPoint,omitempty"`
 	MovementMode    *int64      `json:"movementMode"`
 	SpawnSet        bool        `json:"spawnSet"`
 	// DungeonFloorIndex is semantic game state. The browser combines it with

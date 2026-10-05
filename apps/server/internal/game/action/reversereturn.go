@@ -26,6 +26,7 @@ cannot do.
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
@@ -103,7 +104,7 @@ The recorded point a choice names, or the refusal for a missing one.
 ================
 */
 func reverseReturnPoint(c *enterworld.Character, choice uint8) (simulation.Spawn, uint8) {
-	var point *enterworld.WorldSpawn
+	var point *domain.WorldPoint
 	refusal := errCodeNoRecallPoint
 	if c.World != nil && choice == reverseReturnLastRecall {
 		point = c.World.LastRecallPoint
@@ -117,7 +118,7 @@ func reverseReturnPoint(c *enterworld.Character, choice uint8) (simulation.Spawn
 	if point == nil || point.RegionID == nil || *point.RegionID == 0 {
 		return simulation.Spawn{}, refusal
 	}
-	return missionSpawnFromWorld(point, simulation.Spawn{}), 0
+	return missionSpawnFromWorld(&point.WorldSpawn, simulation.Spawn{}), 0
 }
 
 /*

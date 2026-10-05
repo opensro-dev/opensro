@@ -3,11 +3,12 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13/14 to schema 15. Takes the same exclusive authority lock
-as the game server, validates every existing record and keeps an independent
-backup. Schema 13 also gains the two account tables from layout 5; schema 14
-already owns those tables and their records must survive unchanged. The new
-record fields are optional, so neither path rewrites existing JSON.
+Brings schemas 13/14/15 to schema 16. Takes the same exclusive authority
+lock as the game server, validates every existing record and keeps an
+independent backup. Schema 13 also gains the two account tables from layout
+5; schemas 14 and 15 already own those tables and their records must
+survive unchanged. The new record fields are optional, so no path rewrites
+existing JSON.
 This operation is never called by server startup or a network request.
 
 ===========================================================================
@@ -28,6 +29,7 @@ const UpgradeFromVersion = 13
 
 const preMallLayoutVersion = 4
 const preCompanionVersion = 14
+const preWorldPointVersion = 15
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -88,7 +90,7 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	switch schema {
 	case UpgradeFromVersion:
 		sourceLayout = preMallLayoutVersion
-	case preCompanionVersion:
+	case preCompanionVersion, preWorldPointVersion:
 	default:
 		return "", fmt.Errorf("authority upgrade: unsupported source schema %d", schema)
 	}
