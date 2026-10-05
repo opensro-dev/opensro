@@ -34,6 +34,7 @@ type residentMonster struct {
 	spawn               monster.SpawnPoint
 	nestDetached        bool
 	spawnHeading        uint16
+	tradeVariant        uint8
 	currentHP           uint32
 	damageSinceSummon   uint32
 	lastSummonCommandMs uint32
@@ -120,7 +121,7 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 		nest = unique.Make(row.Nest)
 	}
 	s.hot[gid] = residentMonster{row.ConditionalUsed, ref, nest, row.Help, row.Motion, row.Spawn,
-		row.NestDetached, row.SpawnHeading, row.CurrentHP, row.DamageSinceSummon, row.LastSummonCommandMs,
+		row.NestDetached, row.SpawnHeading, row.TradeVariant, row.CurrentHP, row.DamageSinceSummon, row.LastSummonCommandMs,
 		row.Opponents, row.SummonActionUntilMs, row.SummonerGID,
 		row.SummonSightRange, row.SummonerFollowRange}
 }
@@ -135,7 +136,7 @@ Expand shared catalog handles without exposing mutable population storage.
 func (r residentMonster) value(gid uint32) monster.Instance {
 	return monster.Instance{ConditionalUsed: r.conditionalUsed, Gid: gid, Ref: r.ref.Value(), Nest: r.nest.Value(), Help: r.help,
 		Motion: r.motion, Spawn: r.spawn, NestDetached: r.nestDetached,
-		SpawnHeading: r.spawnHeading, CurrentHP: r.currentHP, DamageSinceSummon: r.damageSinceSummon,
+		SpawnHeading: r.spawnHeading, TradeVariant: r.tradeVariant, CurrentHP: r.currentHP, DamageSinceSummon: r.damageSinceSummon,
 		LastSummonCommandMs: r.lastSummonCommandMs,
 		Opponents:           r.opponents, SummonActionUntilMs: r.summonActionUntilMs, SummonerGID: r.summonerGID,
 		SummonSightRange: r.summonSightRange, SummonerFollowRange: r.summonerFollowRange}

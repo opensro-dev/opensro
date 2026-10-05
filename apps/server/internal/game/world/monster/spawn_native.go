@@ -36,6 +36,20 @@ func NativeTypeWord(ref MonsterRef) uint16 {
 	return ref.TidWord | uint16(ref.TypeID4&0x1f)<<11
 }
 
+// TradeNpcMonster is CGObj_IsThiefMonster (482640) or CGObj_IsHunterMonster
+// (4826E0): the monster class with TID4 2 (thief) or 3 (hunter).
+func TradeNpcMonster(ref MonsterRef) bool {
+	tid := NativeTypeWord(ref)
+	band := tid & typeID4Mask
+	return nativeMonsterClass(tid) && (band == thiefTypeID4Band || band == hunterTypeID4Band)
+}
+
+const (
+	typeID4Mask       uint16 = 0xf800
+	thiefTypeID4Band  uint16 = 0x1000
+	hunterTypeID4Band uint16 = 0x1800
+)
+
 // nativeMonsterClass is the 560836..560868 gate: bionic bit, TID1 character,
 // TID2 NPC, TID3 monster. Only this class receives spawn grades and random
 // headings.

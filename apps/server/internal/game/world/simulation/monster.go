@@ -76,6 +76,9 @@ type MonsterDef struct {
 	EventStructID  uint32
 	StructureState uint16
 	TypeID4        uint8
+	// TradeNpc rows end with TradeVariant (CGObjMob_WriteSpawnData 4C1930).
+	TradeNpc     bool
+	TradeVariant uint8
 }
 
 // MonsterRarityNormal is the +0x770 low-nibble value for an ordinary
@@ -167,6 +170,9 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 	name := []byte(def.Name)
 	w.U16(uint16(len(name))).Bytes(name)
 	w.U8(def.Rarity)
+	if def.TradeNpc {
+		w.U8(def.TradeVariant)
+	}
 	return w.Payload()
 }
 
@@ -250,6 +256,7 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 		MotionState: instance.Motion.StateAt(nowMs),
 		Structure:   ref.Structure, CurrentHP: instance.CurrentHP,
 		EventStructID: instance.Nest.EventStructID, TypeID4: ref.TypeID4,
+		TradeNpc: monster.TradeNpcMonster(ref), TradeVariant: instance.TradeVariant,
 	}
 	if instance.CurrentHP == 0 {
 		def.LifeState = wire.LifeStateDead

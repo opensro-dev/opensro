@@ -252,7 +252,7 @@ export function createEntities(
 				entity: { ...ref, ...decodePeerAppearance( p, itemRefs, frame.opcode === 0x30d7, refs, skillRefs ) }
 			};
 		}
-		if ( !ref || ![ "npc", "monster", "cos" ].includes( ref.kind ) ) {
+		if ( !ref || ![ "npc", "monster", "cos", "structure" ].includes( ref.kind ) ) {
 			return raw( frame );
 		}
 		const entity = decodeCharacterSpawn( p, ref.kind, ref.tidWord, frame.opcode === 0x30d7, skillRefs );

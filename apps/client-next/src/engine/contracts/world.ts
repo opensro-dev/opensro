@@ -88,7 +88,12 @@ export interface EntityState {
 	readonly countryByte9c?: number;
 	readonly rarity?: number;
 	readonly rarityAuxIcon?: number;
-	readonly monsterSkin?: number;
+	// 861B00: a thief or hunter trade NPC's equipment variant (861720 indexes the trade equipment table).
+	readonly tradeVariant?: number;
+	// 4FA0B0: a fortress structure's hit points, event zone (RefEventStructID) and state word.
+	readonly structureHp?: number;
+	readonly eventStructId?: number;
+	readonly structureState?: number;
 	readonly spawnSkills?: readonly SpawnSkill[];
 	readonly titleText?: string;
 	readonly titleId?: number;

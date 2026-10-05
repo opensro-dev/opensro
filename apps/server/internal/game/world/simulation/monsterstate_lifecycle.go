@@ -483,6 +483,13 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 		Spawn:        spawn,
 		SpawnHeading: HeadingWordFromRadians(float64(roll.HeadingRadians)),
 	}
+	// INFERENCE: 4C1030 draws the variant for every mob, but no other mob
+	// reads it, and this server's draws do not replay the CRT rand stream;
+	// only the thief and hunter draw, so ordinary spawn rolls keep their
+	// sequence.
+	if monster.TradeNpcMonster(ref) {
+		instance.TradeVariant = uint8(s.randomWord())
+	}
 	instance.CurrentHP = instance.EffectiveMaxHP()
 	state.instances.set(gid, instance)
 	if instance.Rarity()&15 == 3 {
