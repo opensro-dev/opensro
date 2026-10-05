@@ -281,7 +281,14 @@ test("the renderer keeps its frame open until the submit: a resized depth target
 		// The resize replaces the depth target while this frame is preparing.
 		renderer.frame( { width: 200, height: 200 } );
 		assert.equal( renderer.phase(), "running", renderer.error() );
-		assert.deepEqual( gpu.log, [ "submit sro-frame", "destroy surface-depth" ] );
+		// The frame submits, the presentation pass publishes the retained
+		// offscreen copy, then the resize retires that copy and the old depth.
+		assert.deepEqual( gpu.log, [
+			"submit sro-frame",
+			"submit presentation-finish",
+			"destroy deferred-frame-color",
+			"destroy surface-depth"
+		] );
 	} finally {
 		renderer.dispose();
 	}

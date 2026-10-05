@@ -244,6 +244,7 @@ test("device loss rebuilds only renderer resources and bounds repeated recovery"
 	let configured = 0,
 		unconfigured = 0,
 		submissions = 0,
+		finishSubmissions = 0,
 		mipSubmissions = 0,
 		uploads = 0,
 		textureDisposals = 0,
@@ -365,6 +366,7 @@ test("device loss rebuilds only renderer resources and bounds repeated recovery"
 								submit( buffers ) {
 									for ( const buffer of buffers ) {
 										if ( buffer.label === "sro-frame" ) submissions++;
+										else if ( buffer.label === "presentation-finish" ) finishSubmissions++;
 										else if ( buffer.label === "upload-texture-mips" ) mipSubmissions++;
 										else assert.fail( "Unexpected submission" );
 									}
@@ -408,6 +410,8 @@ test("device loss rebuilds only renderer resources and bounds repeated recovery"
 		assert.equal( configured, 4 );
 		assert.equal( unconfigured, 3 );
 		assert.equal( submissions, 4 );
+		// Every running frame also publishes through the presentation pass.
+		assert.equal( finishSubmissions, 4 );
 		assert.equal( mipSubmissions, 4 );
 		devices[3].lose( { reason: "unknown", message: "repeated loss" } );
 		await settle();
@@ -418,9 +422,10 @@ test("device loss rebuilds only renderer resources and bounds repeated recovery"
 		assert.equal( imageDisposals, 0 );
 		renderer.dispose();
 		assert.equal( imageDisposals, 1 );
-		assert.equal( textureDisposals, 16 );
+		// 16 renderer textures plus each device's retained finish-pass color.
+		assert.equal( textureDisposals, 20 );
 		renderer.dispose();
-		assert.equal( textureDisposals, 16 );
+		assert.equal( textureDisposals, 20 );
 		assert.equal( imageDisposals, 1 );
 	} finally {
 		if ( old ) Object.defineProperty( globalThis, "navigator", old );
