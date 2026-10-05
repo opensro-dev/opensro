@@ -82,11 +82,12 @@ func (door storeAllianceDoor) Alliances(divisionID string) ([]domain.AllianceRec
 ================
 checkAllianceRecord
 
-A union is led by slot 0 and names at least two distinct guilds.
+A union is led by slot 0, takes its leading guild's id, and names at
+least two distinct guilds.
 ================
 */
 func checkAllianceRecord(record domain.AllianceRecord) error {
-	if record.AllianceID <= 0 || record.Guilds[0] <= 0 {
+	if record.AllianceID <= 0 || record.Guilds[0] != record.AllianceID {
 		return fmt.Errorf("alliance %d: inconsistent record", record.AllianceID)
 	}
 	seen := make(map[int64]bool, domain.AllianceSlots)
