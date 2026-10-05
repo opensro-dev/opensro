@@ -197,3 +197,17 @@ export function replayReportState( enabled: boolean, buffered: boolean, lastErro
 	if ( buffered ) return "recording, not attached";
 	return lastError ? "not recording: " + lastError : "recording, nothing buffered yet";
 }
+
+/*
+================
+replayRecoveryLink
+
+The link that offers a saved full-quality replay back to its player. The
+replay lives in that browser's storage for the game page it was recorded
+on, so the link is that page, path included: the game served from a
+subpath (/play) keeps it, one served at the root stays /#bug=<id>.
+================
+*/
+export function replayRecoveryLink( origin: string, pathname: string, id: string ): string {
+	return `${origin}${pathname}#bug=${id}`;
+}

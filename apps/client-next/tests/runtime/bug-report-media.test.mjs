@@ -13,7 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const { muxMp4 } = await import( "../../src/engine/foundation/media/mp4.ts" );
-const { replayKeepFrom, replayClip, replayBitrate, replaySize, replayBytes } = await import(
+const { replayKeepFrom, replayClip, replayBitrate, replaySize, replayBytes, replayRecoveryLink } = await import(
 	"../../src/engine/foundation/media/replay-window.ts"
 );
 
@@ -300,4 +300,16 @@ test("muxMp4 keeps audio after a skipped frame on its own time", async () => {
 		runs.push( [ view.getUint32( sttsAt + 16 + index * 8 ), view.getUint32( sttsAt + 20 + index * 8 ) ] );
 	}
 	assert.deepEqual( runs, [ [ 9, 1024 ], [ 1, 6 * 1024 ], [ 10, 1024 ] ] );
+});
+
+test("the replay recovery link keeps the game page's path", () => {
+	assert.equal(
+		replayRecoveryLink( "https://example.org", "/play", "AB12CD" ),
+		"https://example.org/play#bug=AB12CD"
+	);
+	assert.equal(
+		replayRecoveryLink( "https://example.org", "/play/", "AB12CD" ),
+		"https://example.org/play/#bug=AB12CD"
+	);
+	assert.equal( replayRecoveryLink( "http://127.0.0.1:5180", "/", "AB12CD" ), "http://127.0.0.1:5180/#bug=AB12CD" );
 });

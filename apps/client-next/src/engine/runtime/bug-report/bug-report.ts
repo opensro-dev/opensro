@@ -21,7 +21,7 @@ it in the Option window; otherwise it follows the server's default.
 import type { BugReportControl, BugReportField, ReplayState } from "@/engine/contracts/bug-report";
 import { RELEASE_PROTOCOL, RELEASE_PROTOCOL_HEADER } from "@/engine/foundation/release/protocol";
 import { muxMp4, type Mp4Track } from "@/engine/foundation/media/mp4";
-import { replayReportState, replayTrackBytes } from "@/engine/foundation/media/replay-window";
+import { replayRecoveryLink, replayReportState, replayTrackBytes } from "@/engine/foundation/media/replay-window";
 import { createReplayRecorder } from "./recorder";
 import { createBugReportDialog, type OutgoingReport, type SendOutcome } from "./dialog";
 import { createReportArchive } from "./archive";
@@ -363,7 +363,8 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			fields.push( {
 				name: "Full quality",
 				value: `${seconds( report.replay ).toFixed( 0 )} s replay on the player's device. ` +
-					`To get it, whisper the player ${id} in game (or send ${location.origin}/#bug=${id})`
+					`To get it, whisper the player ${id} in game ` +
+					`(or send ${replayRecoveryLink( location.origin, location.pathname, id )})`
 			} );
 		}
 		return fields.slice( 0, MAX_CONTEXT_FIELDS ).map( field => ({
