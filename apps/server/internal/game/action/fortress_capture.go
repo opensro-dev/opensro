@@ -192,6 +192,7 @@ func (rt *Runtime) captureFortress(division string, record fortress.Record, worl
 		return nil
 	}
 	rt.Monsters.ReinstallStructures(division, world, nowMs)
+	rt.forceFortressSave(division)
 	gate, haveGate := rt.fortressTownGate(record.TownGate)
 	for _, c := range rt.fortressResidents(division, world) {
 		if c.GuildID != nil && *c.GuildID == guild {
@@ -269,6 +270,7 @@ func (rt *Runtime) finishFortressWar(division string, nowMs int64) []simulation.
 		}
 		owner, changed := rt.Fortresses.FinishWar(division, fortressID)
 		rt.Monsters.ReinstallStructures(division, instance.Pack(definition.ID, portalWorldLayer), nowMs)
+		rt.forceFortressSave(division)
 		if changed && owner != 0 {
 			out = append(out, rt.conquestFrames(division, fortressID, owner)...)
 		}

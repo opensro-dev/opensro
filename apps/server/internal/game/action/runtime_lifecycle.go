@@ -61,6 +61,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		rt.advanceJobDresses(nowMs)
 		rt.advanceFortressPhases(nowMs)
 		fortressFrames := rt.drainStructureDeaths(nowMs)
+		rt.advanceFortressStructures(nowMs)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.

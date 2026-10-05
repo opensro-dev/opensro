@@ -20,6 +20,8 @@ package fortress
 import (
 	"sync"
 
+	"opensro.online/server/internal/domain"
+
 	"opensro.online/server/internal/game/world/instance"
 )
 
@@ -106,6 +108,9 @@ type Authority struct {
 	mu        sync.Mutex
 	catalog   []Catalog
 	divisions map[string]*division
+	// store keeps the occupation and request rows (persist.go); nil keeps
+	// them in memory only.
+	store domain.FortressStore
 }
 
 type division struct {
@@ -263,7 +268,7 @@ func (a *Authority) SetApplication(divisionID string, fortressID uint32, guildID
 	if !ok || guildID == 0 {
 		return false
 	}
-	_, present := record.Applicants[guildID]
+	previous, present := record.Applicants[guildID]
 	if applied == present {
 		return false
 	}
@@ -274,6 +279,15 @@ func (a *Authority) SetApplication(divisionID string, fortressID uint32, guildID
 		record.Applicants[guildID] = kind
 	} else {
 		delete(record.Applicants, guildID)
+	}
+	if err := a.saveRequestLocked(divisionID, fortressID, guildID, kind, applied); err != nil {
+		// The official must not confirm what the store does not hold.
+		if applied {
+			delete(record.Applicants, guildID)
+		} else {
+			record.Applicants[guildID] = previous
+		}
+		return false
 	}
 	return true
 }
@@ -295,6 +309,7 @@ func (a *Authority) Occupy(divisionID string, fortressID uint32, guildID int64) 
 		return false
 	}
 	record.GuildID, record.TempGuildID = guildID, 0
+	_ = a.saveRecordLocked(divisionID, record)
 	return true
 }
 

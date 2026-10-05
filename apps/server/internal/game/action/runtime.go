@@ -138,6 +138,10 @@ type Runtime struct {
 	// tick (fortress_capture.go).
 	structureDeathsMu sync.Mutex
 	structureDeaths   []structureDeath
+	// FortressStore keeps the fortress structures' rows (fortress_persist.go).
+	FortressStore     enterworld.FortressStore
+	fortressPersistMu sync.Mutex
+	fortressPersist   fortressPersistence
 
 	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
 	// The composition root installs it before Register admits 0x7338/0x7053.

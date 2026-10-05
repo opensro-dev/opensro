@@ -131,6 +131,8 @@ type Deps struct {
 	Letters       LetterStore
 	Guilds        GuildStore
 	TrainingCamps TrainingCampStore
+	// Fortresses keeps fortress occupation and the war's requests.
+	Fortresses FortressStore
 }
 
 // NpcSpawnPolicy exposes the composition-owned static NPC world through a

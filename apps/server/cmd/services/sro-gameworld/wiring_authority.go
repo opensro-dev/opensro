@@ -225,6 +225,7 @@ func newBootstrapDependencies(
 	deps.Letters = authorityStore.Letters()
 	deps.Guilds = authorityStore.Guilds()
 	deps.TrainingCamps = authorityStore.TrainingCamps()
+	deps.Fortresses = authorityStore.Fortresses()
 	return deps, nil
 }
 

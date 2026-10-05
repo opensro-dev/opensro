@@ -154,3 +154,56 @@ func (s *MonsterState) removeInstanceLocked(state *divisionMonsterState, gid uin
 	delete(state.gidNests, gid)
 	removeRegionGid(state.byRegion, row.Spawn.RegionID, gid)
 }
+
+/*
+================
+WorldStructures
+
+Every structure of a world's population, standing or destroyed.
+================
+*/
+func (s *MonsterState) WorldStructures(divisionID string, world instance.ID) []monster.Instance {
+	lease, ok := s.PopulationLease(divisionID, world)
+	if !ok {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(divisionID, lease)
+	if state == nil {
+		return nil
+	}
+	var out []monster.Instance
+	for _, row := range state.instances.values() {
+		if row.Ref.Structure {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+/*
+================
+RestoreStructure
+
+Puts a stored structure's hit points and state back on the instance that
+stands on its event zone (never above its maximum). Reports whether a
+structure was there.
+================
+*/
+func (s *MonsterState) RestoreStructure(divisionID string, gid uint32, hp uint32, state uint16) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	population := s.populationForObject(divisionID, gid)
+	row, ok := population.instances.lookup(gid)
+	if !ok || !row.Ref.Structure {
+		return false
+	}
+	row.CurrentHP = min(hp, row.EffectiveMaxHP())
+	row.StructureState = state
+	if row.StructureState&structureStateDestroyed != 0 {
+		row.CurrentHP = 0
+	}
+	population.instances.set(gid, row)
+	return true
+}

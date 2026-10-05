@@ -124,6 +124,7 @@ func (a *Authority) Capture(divisionID string, fortressID uint32, guildID int64,
 	record.TempGuildID = guildID
 	record.EntryOpen = false
 	record.EntryClosedUntilMs = nowMs + CaptureWaitMs
+	_ = a.saveRecordLocked(divisionID, record)
 	return true
 }
 
@@ -171,8 +172,11 @@ func (a *Authority) Advance(nowMs int64) {
 FinishWar
 
 The war ended (_SiegeFortressFinished, result 0x1E): a temporary holder
-occupies the fortress, and the war's capture state is cleared. Returns the
-occupying guild and whether it changed.
+occupies the fortress, and the war's capture state and requests are
+cleared. Returns the occupying guild and whether it changed.
+
+INFERENCE: requests belong to one war, so they end with it; the next
+request period takes new applications.
 ================
 */
 func (a *Authority) FinishWar(divisionID string, fortressID uint32) (int64, bool) {
@@ -189,5 +193,10 @@ func (a *Authority) FinishWar(divisionID string, fortressID uint32) (int64, bool
 	record.TempGuildID = 0
 	record.EntryOpen = true
 	record.capture = capture{}
+	_ = a.saveRecordLocked(divisionID, record)
+	for guild, kind := range record.Applicants {
+		_ = a.saveRequestLocked(divisionID, fortressID, guild, kind, false)
+	}
+	record.Applicants = nil
 	return record.GuildID, changed
 }

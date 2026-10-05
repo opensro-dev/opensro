@@ -245,6 +245,10 @@ func newGameplayPlane(
 	matches.MentorJoinPrecheck = mentorInvites.MatchJoinPrecheck
 	matches.CommitMentorJoin = mentorInvites.CommitMatchJoin
 
+	if err := items.Fortresses.Restore(ownedShard.ID, deps.Fortresses); err != nil {
+		return nil, err
+	}
+	items.FortressStore = deps.Fortresses
 	siegeRuntime, err := siege.NewLane(siege.LaneConfig{
 		Division:   ownedShard.ID,
 		Fortresses: items.Fortresses,
