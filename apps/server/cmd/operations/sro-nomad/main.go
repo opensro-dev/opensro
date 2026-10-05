@@ -68,6 +68,8 @@ func main() {
 		err = runNotice(ctx, os.Args[2:])
 	case "rotate-session-key":
 		err = runRotateSessionKey(ctx, os.Args[2:])
+	case "maintenance-list":
+		err = runMaintenanceList(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -387,6 +389,6 @@ usage
 func usage() {
 	fmt.Fprintln(
 		os.Stderr,
-		"usage: sro-nomad <dev-agent|validate|deploy|stop|status|notice|rotate-session-key> [options]",
+		"usage: sro-nomad <dev-agent|validate|deploy|stop|status|notice|rotate-session-key|maintenance-list> [options]",
 	)
 }

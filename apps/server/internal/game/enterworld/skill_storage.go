@@ -106,6 +106,7 @@ type residentSkill struct {
 	CoolTimeGroup           uint8
 	TimingPinned            bool
 	ActionRange             float64
+	AIWeight                uint8
 	ActionRangePinned       bool
 	Masteries               unique.Handle[[2]SkillRequirement]
 	ReqStr                  int64
@@ -212,6 +213,7 @@ func compactSkill(row SkillRow) residentSkill {
 		CoolTimeGroup:           row.CoolTimeGroup,
 		TimingPinned:            row.TimingPinned,
 		ActionRange:             row.ActionRange,
+		AIWeight:                row.AIWeight,
 		ActionRangePinned:       row.ActionRangePinned,
 		Masteries:               unique.Make(row.Masteries),
 		ReqStr:                  row.ReqStr,
@@ -318,6 +320,7 @@ func (r residentSkill) value() SkillRow {
 		CoolTimeGroup:           r.CoolTimeGroup,
 		TimingPinned:            r.TimingPinned,
 		ActionRange:             r.ActionRange,
+		AIWeight:                r.AIWeight,
 		ActionRangePinned:       r.ActionRangePinned,
 		Masteries:               r.Masteries.Value(),
 		ReqStr:                  r.ReqStr,

@@ -248,11 +248,21 @@ nearestEligiblePlayer
 ================
 */
 func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
-	if !IsDungeonRegion(from.RegionID) && actor.Nest.NativeTacticsFlags&0x184 == 0 {
-		return ordinaryPlayerAcquisition(actor, from, divisionPlayers, sightRange)
+	flags := actor.Nest.NativeTacticsFlags
+	if !IsDungeonRegion(from.RegionID) {
+		// 5478F0 picks the selector by flags: 4 first, then 0x80, then 0x100.
+		switch {
+		case flags&0x4 != 0:
+			return jobQueryAcquisition(actor, from, divisionPlayers, sightRange, jobQuery{})
+		case flags&0x80 != 0:
+			return jobQueryAcquisition(actor, from, divisionPlayers, sightRange, jobQuery{thieves: true})
+		case flags&0x100 == 0:
+			return ordinaryPlayerAcquisition(actor, from, divisionPlayers, sightRange)
+		}
 	}
-	// Special selectors 3/4/5 and dungeon cell queries are not selector 2.
-	// Retain their existing projection until those distinct contracts close.
+	// Selector 5 (flag 0x100, 547070) queries fortress gates, towers and
+	// camps beside players, and dungeon cells are queried apart; both keep
+	// this projection until the fortress war and dungeon queries land.
 	best := playerPose{}
 	bestDistance := sightRange
 	found := false

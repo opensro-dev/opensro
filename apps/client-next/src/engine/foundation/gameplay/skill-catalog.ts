@@ -46,6 +46,9 @@ export interface SkillMetadata {
 	// (InitiateSkillCast 59B5F6 server side, CICharactor_Action_CastSkill
 	// 8E67E0 client side). Instant rows (imbues, speed skills) keep walking.
 	readonly haltsWalk?: boolean;
+	// Cast gate ao or pw: refused while seated, behind a wall or riding
+	// (58E0BF, 0x3009, which the client answers with no notice).
+	readonly needsFooting?: boolean;
 	// The authored action range (column 21), absent when the weapon sets the
 	// reach. A target within it is always in the server's reach, which adds
 	// both bodies (cast-prediction.ts).
@@ -168,6 +171,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			ui.groundTarget !== undefined && typeof ui.groundTarget !== "boolean" ||
 			ui.targetSelf !== undefined && typeof ui.targetSelf !== "boolean" ||
 			ui.haltsWalk !== undefined && typeof ui.haltsWalk !== "boolean" ||
+			ui.needsFooting !== undefined && typeof ui.needsFooting !== "boolean" ||
 			ui.range !== undefined && (typeof ui.range !== "number" || !Number.isFinite( ui.range ) || ui.range < 0)
 		) {
 			throw Error( "Invalid skill target kind" );
@@ -206,6 +210,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			cooldownMs: uint( ui.cooldownMs ),
 			...(ui.actionMs === undefined ? {} : { actionMs: uint( ui.actionMs ) }),
 			haltsWalk: ui.haltsWalk ?? false,
+			...(ui.needsFooting ? { needsFooting: true } : {}),
 			...(ui.range ? { range: ui.range } : {}),
 			...(ui.mp ? { mp: uint( ui.mp ) } : {}),
 			...(ui.mpPercent ? { mpPercent: uint( ui.mpPercent, 65535 ) } : {}),

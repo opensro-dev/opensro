@@ -226,9 +226,11 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 			ActionDurationPinned:    true,
 			CoolTimeMs:              1000,
 			TimingPinned:            true,
-			ActionRange:             6,
-			ActionRangePinned:       true,
-			RequiredWeaponKinds:     [2]uint8{2, 3},
+			// The weight a shipped basic attack carries (column 66).
+			AIWeight:            100,
+			ActionRange:         6,
+			ActionRangePinned:   true,
+			RequiredWeaponKinds: [2]uint8{2, 3},
 			Attack: enterworld.SkillAttack{
 				Present:     true,
 				Flags:       5,

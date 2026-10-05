@@ -64,7 +64,7 @@ func monsterLegFixture(t *testing.T, tactics monster.Tactics) (*MonsterMoverOps,
 		TacticsFor: fixedTactics(tactics),
 		Rand:       func() float64 { return 0.5 },
 	}
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: 0x1234, Reach: ActionReach(6), CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}
 	return ops, instance
@@ -375,7 +375,7 @@ func TestMonsterAggroTransitionsToRepeatedBasicAttackAndBackToChase(t *testing.T
 	)
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
 	attackCalls := 0
-	ops.AttackPlan = func(got monster.Instance, requested uint32, _ float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(got monster.Instance, requested uint32, _ AttackPick) (MonsterAttackPlan, bool) {
 		if got.Gid != instance.Gid {
 			t.Fatalf("attack plan instance gid = %d, want %d", got.Gid, instance.Gid)
 		}
@@ -459,7 +459,7 @@ func TestMonsterFatalConsequencesStaySameTurnAndTargetOnly(t *testing.T) {
 		skillID = uint32(0x1234)
 	)
 	ops, _ := monsterLegFixture(t, aggressiveTactics())
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: skillID, Reach: ActionReach(rangeU), CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}
 	ops.BasicAttack = func(_ string, _ monster.Instance, targetGid, _ uint32, _ int64) MonsterAttackResult {
@@ -523,7 +523,7 @@ func TestPassiveMonsterRetaliatesAfterPlayerDamage(t *testing.T) {
 	configureAttack := func(t *testing.T, ops *MonsterMoverOps, instance monster.Instance) *int {
 		t.Helper()
 		attackCalls := new(int)
-		ops.AttackPlan = func(got monster.Instance, requested uint32, _ float64) (MonsterAttackPlan, bool) {
+		ops.AttackPlan = func(got monster.Instance, requested uint32, _ AttackPick) (MonsterAttackPlan, bool) {
 			if got.Gid != instance.Gid || (requested != 0 && requested != skillID) {
 				t.Fatalf("attack plan args = gid %d skill %#x", got.Gid, requested)
 			}
@@ -800,7 +800,7 @@ func TestMonsterMidMotionScopeExit(t *testing.T) {
 				TacticsFor: fixedTactics(arm.tactics),
 				Rand:       func() float64 { return 0.25 }, // nonzero wander leg
 			}
-			ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+			ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 				return MonsterAttackPlan{SkillID: 0x1234, Reach: ActionReach(6), CooldownMs: 1000, ActionLifecycleMs: 600}, true
 			}
 			ops.Monsters.StartDivision(monsterTestDivision)

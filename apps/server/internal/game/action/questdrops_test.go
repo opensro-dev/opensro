@@ -52,7 +52,7 @@ func TestFatalQuestDropPublishesReferenceBeforeSpawnAndSurvivesPickup(t *testing
 	}
 	clock.Advance(pick.Pending.Eta + time.Millisecond)
 	pick = rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: drops[0].Gid}.Encode())
-	assertOpcodes(t, pick.Frames, wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn)
+	assertOpcodes(t, pick.Frames, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn, wire.OpActionState)
 	count := 0
 	for _, item := range c.MissionInventory {
 		if item.RefObjID == ref.RefObjID {

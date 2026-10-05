@@ -29,6 +29,10 @@ func TestAcquisitionGateSurvivesEmptyScanAndMoverCommit(t *testing.T) {
 		// Whole-value movement commits cannot rewind the cadence owner.
 		ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
 		players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4}}
+		if flags&0x80 != 0 {
+			// Selector 4 (546A30) takes thieves only.
+			players[0].JobState = jobStateThief
+		}
 		ops.advanceInstance(monsterTestDivision, instance, players, start+interval-1)
 		got, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 		if got.TargetGID() != 0 {

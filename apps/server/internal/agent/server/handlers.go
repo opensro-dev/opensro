@@ -9,11 +9,13 @@ package agentserver
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"opensro.online/server/internal/releaseprotocol"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	"opensro.online/server/internal/cluster/shard"
@@ -43,7 +45,17 @@ func (server *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	statuses := server.directory.Snapshot(server.now())
+	writeJSON(w, http.StatusOK, serverRows(server.directory.Snapshot(server.now())))
+}
+
+/*
+================
+serverRows
+
+The public server list rows of a directory snapshot.
+================
+*/
+func serverRows(statuses []shard.Status) []serverInfo {
 	rows := make([]serverInfo, 0, len(statuses))
 	for _, status := range statuses {
 		rows = append(rows, serverInfo{
@@ -58,7 +70,25 @@ func (server *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 			TransportURL:   status.AdvertisedTransportURL(),
 		})
 	}
-	writeJSON(w, http.StatusOK, rows)
+	return rows
+}
+
+/*
+================
+OfflineServerList
+
+The /title/servers body this catalog's Agent serves while no GameWorld has
+a lease: every shard listed, none operating, so the title shows each one as
+native "Check" (CPSTitle 0x747E1F). The release edge serves it in place of
+the Agent while the Agent itself is down for maintenance.
+================
+*/
+func OfflineServerList(catalog *shard.Catalog, now time.Time) ([]byte, error) {
+	directory, err := shard.NewDirectory(catalog, time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(serverRows(directory.Snapshot(now)))
 }
 
 /*

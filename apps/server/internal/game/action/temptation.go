@@ -211,7 +211,7 @@ func (rt *Runtime) temptedOpponentCandidate(division string, struck monster.Inst
 	}
 	pose := mover.LivePoseAt(now, nil)
 	to := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
-	return monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, to)}, true
+	return monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, to), ActorDistance: monster.NativeActorDistance(monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}, pose)}, true
 }
 
 /*
