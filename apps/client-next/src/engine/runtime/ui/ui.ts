@@ -210,6 +210,7 @@ import { barChrome } from "@/engine/foundation/ui/bar";
 import {
 	partyDistanceShade,
 	partyMembers,
+	partyLocalPose,
 	partyOverlay,
 	partyPortraitGid,
 	partyRosterPose,
@@ -6585,7 +6586,7 @@ export function createUi(
 				if ( hudData && game?.social?.leader ) {
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
 						slot = hudData.windows.ifquickpartyslot!,
-						localPose = next.entities.find( e => e.gid === game.localGid ) ?? null;
+						localPose = partyLocalPose( game, next.entities );
 					for (
 						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
 					) {

@@ -26,7 +26,7 @@ async function load( path, name ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
 const { overheadLayout } = await load( "foundation/ui/overhead-layout.ts", "overhead" );
-const { partyDistanceShade, partyOverlay, partyRosterPose, partyShadeImage } = await load(
+const { partyDistanceShade, partyLocalPose, partyOverlay, partyRosterPose, partyShadeImage } = await load(
 	"foundation/ui/party-overlay.ts",
 	"party"
 );
@@ -154,6 +154,15 @@ test("party rows list the member's trained masteries left of the buff row", () =
 	assert.deepEqual( rows[1].masteries.map( m => m.id ), [ 513 ] );
 	assert.deepEqual( rows[2].masteries, [] );
 	assert.deepEqual( rows[3].masteries, [] );
+});
+test("the distance shade measures from the live pose, not the lagging local entity", () => {
+	const at = ( x, regionId = 0x6a48 ) => ({ regionId, x, y: 0, z: 0, angle: 0 });
+	const stale = { ...local, regionId: 0x6a48, x: 0, y: 0, z: 0 };
+	const walked = { ...game, pose: at( 900 ) };
+	assert.equal( partyLocalPose( walked, [ stale ] ), walked.pose );
+	assert.equal( partyDistanceShade( partyLocalPose( walked, [ stale ] ), at( 0 ) ), 4 );
+	assert.equal( partyLocalPose( { ...game, pose: null }, [ stale ] ), stale );
+	assert.equal( partyLocalPose( { ...game, pose: null }, [] ), null );
 });
 test("party portraits shade by the member's squared distance (5BD0A0)", () => {
 	const at = ( regionId, x, z, y = 0 ) => ({ regionId, x, y, z, angle: 0 });

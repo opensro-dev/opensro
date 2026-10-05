@@ -115,6 +115,20 @@ export function partyRosterPose( member: { readonly region: number; readonly x: 
 
 /*
 ================
+partyLocalPose
+
+Where the distance shade measures from. The local player's live pose is the
+one the map follows; the local entity record lags it while the player walks,
+so measuring from the entity left every member looking near to a player who
+had walked away. The entity stands in until the first pose arrives.
+================
+*/
+export function partyLocalPose( game: GameplayState, entities: readonly EntityState[] ): PartyShadePosition | null {
+	return game.pose ?? entities.find( e => e.gid === game.localGid ) ?? null;
+}
+
+/*
+================
 partyDistanceShade
 
 CIFQuickPartyWnd_UpdateDistanceOverlays (5BD0A0): the squared 3D distance
