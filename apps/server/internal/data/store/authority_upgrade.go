@@ -3,12 +3,13 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13/14/15 to schema 16. Takes the same exclusive authority
-lock as the game server, validates every existing record and keeps an
-independent backup. Schema 13 also gains the two account tables from layout
-5; schemas 14 and 15 already own those tables and their records must
-survive unchanged. The new record fields are optional, so no path rewrites
-existing JSON.
+Brings schemas 13/14/15 (and a schema 16 authority still at layout 5) to
+schema 16, layout 6. Takes the same exclusive authority lock as the game
+server, validates every existing record and keeps an independent backup.
+Schema 13 also gains the two account tables from layout 5; every layout 5
+source gains the empty fortress tables of layout 6. Existing tables and
+their records survive unchanged; the new record fields are optional, so no
+path rewrites existing JSON.
 This operation is never called by server startup or a network request.
 
 ===========================================================================
@@ -28,6 +29,7 @@ import (
 const UpgradeFromVersion = 13
 
 const preMallLayoutVersion = 4
+const preFortressLayoutVersion = 5
 const preCompanionVersion = 14
 const preWorldPointVersion = 15
 
@@ -86,26 +88,32 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		}
 		return "", ErrAuthorityCurrent
 	}
-	sourceLayout := CurrentLayoutVersion
+	sourceLayout := preFortressLayoutVersion
 	switch schema {
 	case UpgradeFromVersion:
 		sourceLayout = preMallLayoutVersion
 	case preCompanionVersion, preWorldPointVersion:
+	case CurrentVersion:
+		if layout != preFortressLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
 	default:
 		return "", fmt.Errorf("authority upgrade: unsupported source schema %d", schema)
 	}
 	if _, err := loadDB(db, schema, sourceLayout); err != nil {
 		return "", fmt.Errorf("authority upgrade: source validation: %w", err)
 	}
+	added := []string{"fortresses", "fortress_requests", "fortress_structures"}
 	if sourceLayout == preMallLayoutVersion {
-		for _, table := range []string{"mall_accounts", "account_storage"} {
-			var existing int
-			if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&existing); err != nil {
-				return "", err
-			}
-			if existing != 0 {
-				return "", fmt.Errorf("authority upgrade: layout 4 unexpectedly contains %s", table)
-			}
+		added = append(added, "mall_accounts", "account_storage")
+	}
+	for _, table := range added {
+		var existing int
+		if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&existing); err != nil {
+			return "", err
+		}
+		if existing != 0 {
+			return "", fmt.Errorf("authority upgrade: layout %d unexpectedly contains %s", sourceLayout, table)
 		}
 	}
 	if !commit {
@@ -150,6 +158,9 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		if _, err := tx.Exec(mallAccountsSchema + accountStorageSchema); err != nil {
 			return backupPath, err
 		}
+	}
+	if _, err := tx.Exec(fortressSchema); err != nil {
+		return backupPath, err
 	}
 	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprint(CurrentLayoutVersion)); err != nil {
 		return backupPath, err
