@@ -9,6 +9,7 @@ Child owners handle process-specific state while this owner commits item rows.
 ===========================================================================
 */
 import { cosItemUseTail, type CosItemUseContext } from "@/engine/foundation/gameplay/cos-item-use";
+import { planContainerMove, stackable } from "@/engine/foundation/gameplay/container-transfer";
 import { createMall } from "./mall/mall";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 import {
@@ -302,30 +303,28 @@ transfer
 		if ( !a ) {
 			throw new Error( "Inventory result references empty source" );
 		}
-		const stack = (a.typeFlags & 0x60) === 0x60;
 		// Equipment moves swap whole records, including ammunition. Only bag-to-bag
 		// moves may split/merge counts; companion moves obey the same rule.
-		if (
-			stack && source >= (equipmentSlotCount ?? 13) && destination >= (equipmentSlotCount ?? 13) &&
-			(!b || b.refObjId === a.refObjId)
-		) {
-			if ( quantity < 1 || quantity > a.quantity || (b?.quantity ?? 0) + quantity > 65535 ) {
-				throw new Error( "Invalid inventory stack transfer" );
-			}
-			next.set( destination, { ...a, slot: destination, quantity: (b?.quantity ?? 0) + quantity } );
-			if ( quantity === a.quantity ) {
-				next.delete( source );
-			} else {
-				next.set( source, { ...a, quantity: a.quantity - quantity } );
-			}
-		} else {
-			next.set( destination, { ...a, slot: destination } );
-			if ( b ) {
-				next.set( source, { ...b, slot: source } );
-			} else {
-				next.delete( source );
-			}
+		if ( source >= (equipmentSlotCount ?? 13) && destination >= (equipmentSlotCount ?? 13) ) {
+			// 756A60 uses full counts for occupied stacks; the echoed wire quantity
+			// only selects a split into an empty slot. The reference owns the cap.
+			const cap = tooltipRefs.get( a.refObjId )?.fields.maxStack;
+			const caps = new Map<number, number>();
+			if ( cap !== undefined ) caps.set( a.refObjId, cap );
+			const rows = planContainerMove(
+				[ ...next.values() ],
+				{ source, destination, quantity },
+				caps,
+				"inventory"
+			);
+			next.clear();
+			for ( const row of rows ) next.set( row.slot, row );
+			return stackable( a ) && (cap ?? 0) > 1 && (!b || b.refObjId === a.refObjId);
 		}
+		next.set( destination, { ...a, slot: destination } );
+		if ( b ) next.set( source, { ...b, slot: source } );
+		else next.delete( source );
+		return false;
 	}
 	return {
 		/*
@@ -1578,10 +1577,8 @@ receive
 			const committedMoves: typeof bindingMoves = [];
 			const moveCues: { item: InventoryItem; warn: boolean; }[] = [];
 			const applyMove = ( source: number, destination: number, quantity: number ) => {
-				const a = next.get( source ), b = next.get( destination );
-				const stacking = !!a && (a.typeFlags & 0x60) === 0x60 && source >= (equipmentSlotCount ?? 13) &&
-					destination >= (equipmentSlotCount ?? 13) && (!b || b.refObjId === a.refObjId);
-				transfer( next, source, destination, quantity );
+				const b = next.get( destination );
+				const stacking = transfer( next, source, destination, quantity );
 				committedMoves.push( {
 					source,
 					destination,

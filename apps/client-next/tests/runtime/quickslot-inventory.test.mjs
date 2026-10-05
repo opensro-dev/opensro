@@ -20,6 +20,11 @@ const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
 const facts = { country: 0, progression: { level: 20, masteries: [] }, maxHp: 1000, maxMp: 2000 };
+/*
+================
+potion
+================
+*/
 const potion = ( slot, id, amount, category = 2, extra = {} ) => ({
 	slot,
 	refObjId: id,
@@ -27,6 +32,11 @@ const potion = ( slot, id, amount, category = 2, extra = {} ) => ({
 	quantity: 50,
 	tooltip: { fields: { country: 3, [category === 1 ? "itemParam1_29c" : "itemParam3_2a4"]: amount, ...extra } }
 });
+/*
+================
+binding
+================
+*/
 const binding = ( slot, item ) => ({ slot, kind: item < 13 ? 0x47 : 0x46, payload: item < 13 ? item : item - 13 });
 
 test("depleted potion picks strongest usable same category, then deterministic same-reference stacks", () => {
@@ -103,26 +113,41 @@ test("swap, merge, split and bag/equipment moves preserve each reference", () =>
 });
 
 const local = { gid: 1, countryByte9c: 0, regionId: 257, x: 0, y: 0, z: 0, heading: 0, appearanceState: [ 1, 0, 0 ] };
+/*
+================
+fixture
+================
+*/
 function fixture() {
 	return {
 		inventorySlotCount: 58,
 		equipmentSlotCount: 13,
 		character: { hp: 100, mp: 100, maxHp: 100, maxMp: 1000, quickSlots: [ binding( 9, 13 ), binding( 10, 14 ) ] },
 		refItemSnapshot: [
-			{ refObjId: 1, typeFlags: 0x8ec, nativeFields: { itemParam1_29c: 100 } },
-			{ refObjId: 2, typeFlags: 0x10ec, nativeFields: { itemParam3_2a4: 100 } },
-			{ refObjId: 3, typeFlags: 0x10ec, nativeFields: { itemParam3_2a4: 500 } },
-			{ refObjId: 4, typeFlags: 0x6c }
+			{ refObjId: 1, typeFlags: 0x8ec, nativeFields: { maxStack: 50, itemParam1_29c: 100 } },
+			{ refObjId: 2, typeFlags: 0x10ec, nativeFields: { maxStack: 50, itemParam3_2a4: 100 } },
+			{ refObjId: 3, typeFlags: 0x10ec, nativeFields: { maxStack: 50, itemParam3_2a4: 500 } },
+			{ refObjId: 4, typeFlags: 0x6c, nativeFields: { maxStack: 1 } }
 		],
 		equipItems: [ [ 13, 1, 50 ], [ 14, 2, 1 ], [ 15, 2, 50 ], [ 16, 3, 50 ], [ 17, 4, 1 ] ].map( (
 			[slot, id, n]
 		) => ({ slot, refObjId: id, body: [ id, 0, 0, 0, n, 0 ] }) )
 	};
 }
+/*
+================
+move
+================
+*/
 const move = ( source, dest, count = 0 ) => ({
 	opcode: 0xb06d,
 	payload: Uint8Array.of( 1, 0, source, dest, count, 0, 0 )
 });
+/*
+================
+consume
+================
+*/
 const consume = ( slot, count ) => ({ opcode: 0xb5bd, payload: Uint8Array.of( 1, slot, count, 0, 0xec, 0x10 ) });
 
 test("authoritative swap and exhaustion repair display/activation bindings and persist 7541", () => {
