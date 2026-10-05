@@ -127,6 +127,34 @@ test("party wraps with the native bottom reserve and option-specific row pitch",
 	] );
 	assert.deepEqual( partyOverlay( state, [], 600, 4, 137, false )[1].position, [ 17, 193 ] );
 });
+test("party rows list the member's trained masteries left of the buff row", () => {
+	const member = ( id, primaryMastery, secondaryMastery ) => ({
+		id,
+		name: "M" + id,
+		status: 0xaa,
+		primaryMastery,
+		secondaryMastery
+	});
+	const state = {
+		...game,
+		social: {
+			...game.social,
+			members: [ member( 20, 258, 273 ), member( 21, 513, 0 ), member( 22, 0, 0 ), {
+				id: 23,
+				name: "M23",
+				status: 0xaa
+			} ]
+		}
+	};
+	const rows = partyOverlay( state, [], 900, 4, 137, true );
+	assert.deepEqual( rows[0].masteries, [
+		{ id: 258, rect: [ rows[0].position[0] + 2, 137 + 39, 12, 12 ] },
+		{ id: 273, rect: [ rows[0].position[0] + 17, 137 + 39, 12, 12 ] }
+	] );
+	assert.deepEqual( rows[1].masteries.map( m => m.id ), [ 513 ] );
+	assert.deepEqual( rows[2].masteries, [] );
+	assert.deepEqual( rows[3].masteries, [] );
+});
 test("party portraits shade by the member's squared distance (5BD0A0)", () => {
 	const at = ( regionId, x, z, y = 0 ) => ({ regionId, x, y, z, angle: 0 });
 	const local = at( 0x6a48, 100, 100 );

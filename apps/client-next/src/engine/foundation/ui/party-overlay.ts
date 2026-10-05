@@ -18,6 +18,13 @@ const PARTY_SHADE_SQUARED_2 = 490000; // 700
 const PARTY_SHADE_SQUARED_3 = 640000; // 800
 const PARTY_SHADE_SQUARED_4 = 810000; // 900
 const PARTY_SHADE_SQUARED_5 = 1000000; // 1000
+// The two main mastery icons sit left of the buff row (GDR_QPS_PARTY_BUFF is
+// at x 32, pitch 15), on the same 12px cells. A port addition, sent by the
+// server only while SRO_PARTY_MASTERIES is on.
+const PARTY_MASTERY_X = 2;
+const PARTY_MASTERY_PITCH = 15;
+const PARTY_MASTERY_Y = 39;
+const PARTY_MASTERY_CELL = 12;
 const PARTY_REGION_SIZE = 1920;
 const PARTY_DUNGEON_REGION = 0x8000;
 // Only the position matters to the distance shade; entities carry no heading.
@@ -56,8 +63,21 @@ export function partyOverlay(
 		const entity = entities.find( e => e.kind === "player" && e.name === member.name ),
 			position = [ x + column + 13, y + rowY ] as const;
 		rowY += buffs ? 73 : 56;
+		// An untrained slot is 0 and stays empty; a roster without the pair
+		// (switch off) yields nothing.
+		const masteries = [ member.primaryMastery, member.secondaryMastery ].flatMap( ( id, slot ) => {
+			if ( !id ) return [];
+			const rect = [
+				position[0] + PARTY_MASTERY_X + PARTY_MASTERY_PITCH * slot,
+				position[1] + PARTY_MASTERY_Y,
+				PARTY_MASTERY_CELL,
+				PARTY_MASTERY_CELL
+			] as const;
+			return [ { id, rect } ];
+		} );
 		return {
 			member,
+			masteries,
 			entity,
 			position,
 			hp: Math.min( 10, member.status & 15 ) / 10,

@@ -15,24 +15,7 @@ type PartyApplicant struct {
 
 func partyApplicant(character *domain.Character) PartyApplicant {
 	out := PartyApplicant{JobClass: activePartyJob(character)}
-	// Native mastery tree is ID ordered; 5A87E0 sorts descending trained level
-	// without moving equal levels. Select the first two without sorting/mutating
-	// the persisted slice. Removed records are absent from this domain model.
-	var first, second domain.CharacterMastery
-	better := func(a, b domain.CharacterMastery) bool {
-		return a.Level > b.Level || a.Level == b.Level && a.ID < b.ID
-	}
-	for _, mastery := range character.Masteries {
-		if mastery.Level <= 0 {
-			continue
-		}
-		if better(mastery, first) {
-			second, first = first, mastery
-		} else if better(mastery, second) {
-			second = mastery
-		}
-	}
-	out.Primary, out.Secondary = first.ID, second.ID
+	out.Primary, out.Secondary = domain.TopMasteries(character.Masteries)
 	return out
 }
 

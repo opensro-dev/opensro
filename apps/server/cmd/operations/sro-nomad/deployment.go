@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/security/auth"
 )
@@ -56,16 +57,18 @@ deployment
 ================
 */
 type deployment struct {
-	ModuleRoot      string
-	Catalog         string
-	StateDir        string
-	ReleaseDir      string
-	JobsDir         string
-	Namespace       string
-	Network         string
-	AllowedOrigins  string
-	GMCharacters    string
-	BetaMastery     string
+	ModuleRoot     string
+	Catalog        string
+	StateDir       string
+	ReleaseDir     string
+	JobsDir        string
+	Namespace      string
+	Network        string
+	AllowedOrigins string
+	GMCharacters   string
+	BetaMastery    string
+	// PartyMasteries comes from the deployer's SRO_PARTY_MASTERIES.
+	PartyMasteries  bool
 	TransportCert   string
 	TransportKey    string
 	TransportTLSID  string
@@ -373,6 +376,7 @@ func resolveDeployment(
 		AllowedOrigins:  allowedOrigins,
 		GMCharacters:    gmCharacters,
 		BetaMastery:     betaMastery,
+		PartyMasteries:  party.MasteriesFromEnv(),
 		TransportCert:   transportCert,
 		TransportKey:    transportKey,
 		TransportTLSID:  transportTLSID,
@@ -652,6 +656,7 @@ func (deployment *deployment) gameVariables(
 		"allowed_origins":     deployment.AllowedOrigins,
 		"gm_characters":       deployment.GMCharacters,
 		"beta_mastery":        deployment.BetaMastery,
+		"party_masteries":     boolEnvValue(deployment.PartyMasteries),
 		"transport_pprof":     boolEnvValue(deployment.Pprof),
 	})
 }
