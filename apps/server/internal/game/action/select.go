@@ -341,6 +341,12 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 			Payload: wire.EncodeMonsterObjectSelectResult(gid, target.monster.CurrentHP),
 		}}
 	}
+	if target.cos {
+		outcome.Frames = []wire.Frame{{
+			Opcode:  wire.OpObjectSelectResult,
+			Payload: wire.EncodeMonsterObjectSelectResult(gid, target.cosHP),
+		}}
+	}
 	return outcome
 }
 
@@ -352,6 +358,11 @@ selectedObject
 type selectedObject struct {
 	npc     *simulation.NpcDef
 	monster *monster.Instance
+	// cosHP is a selected companion's current HP. CGObjCOS inherits
+	// CGObjNPC_WriteSelectInfo (4A95A0), the monster's writer, and the
+	// client reads CICCos through the same non-user arm (7651F1).
+	cosHP uint32
+	cos   bool
 }
 
 /*
@@ -394,6 +405,26 @@ func (rt *Runtime) resolveLiveObject(
 		if instance, ok := rt.characterMonster(divisionID, character, gid); ok &&
 			regionInScope(instance.Spawn.RegionID, simulation.RegionScopeRing(viewerRegion)) {
 			return selectedObject{monster: &instance}, true
+		}
+	}
+	// Summoned companions, every owner's (52B040 takes any character in
+	// hit range): the presented pose decides the same visibility ring.
+	for _, peer := range peers {
+		if peer == nil || peer.DeletePending {
+			continue
+		}
+		record := peer.CompanionByGID(gid)
+		if record == nil {
+			continue
+		}
+		for _, pet := range rt.companionPresentations(divisionID, peer.Name) {
+			if pet.Row.Gid != gid || pet.LifeState == wire.LifeStateDead {
+				continue
+			}
+			pose := pet.World.LiveSpawnAt(rt.Now().UnixMilli())
+			if regionInScope(pose.RegionID, simulation.RegionScopeRing(viewerRegion)) {
+				return selectedObject{cos: true, cosHP: record.CurrentHP}, true
+			}
 		}
 	}
 	// Live ground drops.
