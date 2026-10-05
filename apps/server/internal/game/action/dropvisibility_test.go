@@ -96,9 +96,9 @@ func TestGroundDropStoreLifecycleImmediatelyVisible(t *testing.T) {
 	pick := rt.HandleTargetInteract(testDivision, character,
 		wire.TargetInteract{Gid: row.Gid}.Encode())
 	assertOpcodes(t, pick.Frames,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpObjectDespawn)
-	despawn, err := wire.DecodeObjectDespawn(pick.Frames[3].Payload)
+		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpObjectDespawn, wire.OpActionState)
+	despawn, err := wire.DecodeObjectDespawn(pick.Frames[2].Payload)
 	if err != nil || despawn.Gid != row.Gid {
 		t.Fatalf("grant despawn = %+v (%v), want gid %d", despawn, err, row.Gid)
 	}

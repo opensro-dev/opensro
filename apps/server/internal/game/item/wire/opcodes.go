@@ -213,8 +213,14 @@ const (
 	// durability attribute (instance blob (+0xc0)[5]; itemdata Dur_U > 0)
 	// refuses to equip while its current durability reads 0.
 	ErrCodeCantEquipRazed uint8 = 0x37
+	// ErrCodeTargetGone is UIIT_MSG_STRGERR_INVALID_TARGET (01:03, "Cannot
+	// find target"): the ground item is already gone. v1.188 4A9050 sets 3
+	// before its object lookup and returns it when the gid resolves to
+	// nothing, so a pickup that lost the race to another grant reads this.
+	ErrCodeTargetGone uint8 = 0x03
 	// ErrCodeCannotBePicked is UIIT_MSG_STRGERR_CANNOT_BE_PICKED (01:39):
-	// the ground item is already gone.
+	// the drop exists but this character may not take it (v1.188 4A9050
+	// returns 0x1839 when the object's pickable check fails).
 	ErrCodeCannotBePicked uint8 = 0x39
 	// ErrCodeCannotDropEquipped is the equipment-source ground-drop refusal
 	// (01:6d). PINNED in v1.150: the drop-confirm dialog sub_68d430
