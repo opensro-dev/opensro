@@ -164,7 +164,7 @@ learnedStatusResistance
 
 The CSkillManager status-resistance buckets real fills (59DF20): each
 masked status's bucket keys its flats by grade. StatusResistance_Read
-(5999E0) reports the lowest grade and the first flat filed under it; no
+(5999E0) reports the highest unsigned grade and its highest unsigned flat; no
 v1.150 source fills the percent side. Eligibility is 59F0E0's, as for
 every other passive contribution.
 ==================

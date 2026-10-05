@@ -1,12 +1,10 @@
 /*
 ===========================================================================
 
-temptation.go - which monsters the Bard's Temptation turns on their own
+temptation.go - active Confusion participation in monster combat
 
-Temptation and Curious Temptation (SKILL_EU_BARD_FORGETA_TARGET_A/B) roll
-the Confusion status (ca, abnormal slot 16). The skill's text limits it to
-"regular monsters and regular party Monsters": a tempted monster attacks
-the monsters around it instead of players while the status lasts.
+Cast admission owns the base-grade restriction. The native 4A4F70
+callback starts the AI event on any live monster carrying Confusion.
 
 ===========================================================================
 */
@@ -34,27 +32,12 @@ const (
 
 /*
 ================
-RegularMonster
-
-An ordinary MOB (TID4 1) of the normal grade, solo or party. Champions,
-giants, titans, elites, uniques, and thief, hunter or quest monsters are
-not regular.
-================
-*/
-func (i Instance) RegularMonster() bool {
-	return NativeTypeWord(i.Ref)&typeWordFlagMask == regularMonsterTypeWord &&
-		i.Rarity()&rarityGradeMask == 0
-}
-
-/*
-================
 Tempted
 
-A live regular monster whose Confusion slot is active. Owner's rule: the
-status has no effect on any other monster, so the predicate, not only the
-roll, refuses them.
+4A4F70 tests monster identity and alive state; it does not repeat target
+admission or restrict the RefObj's TypeID4.
 ================
 */
 func (i Instance) Tempted() bool {
-	return i.CurrentHP != 0 && i.Abnormal != nil && i.Abnormal.Slots[abnormal.Confusion].Active && i.RegularMonster()
+	return i.CurrentHP != 0 && i.Abnormal != nil && i.Abnormal.Slots[abnormal.Confusion].Active
 }

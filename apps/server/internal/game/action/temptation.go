@@ -11,11 +11,8 @@ module resolves that hit, and the struck monster's answer, through the
 shared combat formula and the one monster HP door, and publishes it as the
 same B245 bracket a monster's attack on a player uses.
 
-Owner's rule: a tempted monster attacks other monsters nearby for the
-duration instead of players, and only regular monsters and regular party
-monsters are affected (monster.Instance.RegularMonster). A Temptation cast
-on any other monster is refused as an invalid target (0x3006) before it
-costs anything, so the caster sees why nothing happened.
+58D2F2..58D30A rejects a Confusion cast against a nonzero base monster
+grade with 0x3033. Party grade flags and TID4 are not part of that test.
 
 Inferred, recorded deliberately:
   - a monster fight rolls no abnormal status and resolves a casting
@@ -224,39 +221,14 @@ const confusionTag = 0x6361
 ================
 temptationTargetRefusal
 
-Owner's rule: a skill that rolls Confusion (only Temptation and Curious
-Temptation among player skills) on a champion, giant, unique, event or
-quest monster answers 0x3006, the invalid-target refusal every other
-target check uses, at the press and again at execution.
+58D2F2..58D30A tests ca (+0x458), then the monster's base-grade getter
+(vtable +0x12C). Nonzero base grade returns 0x3033 at 58D424.
 ================
 */
 func temptationTargetRefusal(skill enterworld.SkillRow, target monster.Instance) uint16 {
 	index, ok := abnormal.SourceIndex(confusionTag)
-	if !ok || !skill.Abnormal.Params[index].Present || target.RegularMonster() {
+	if !ok || !skill.Abnormal.Params[index].Present || target.Rarity()&0x0f == 0 {
 		return 0
 	}
-	return 0x3006
-}
-
-/*
-================
-untemptableConfusion
-
-Owner's rule: Temptation does not affect champions, giants, uniques or
-event and quest monsters. Their rolled Confusion record is dropped, so the
-status never lands (no icon, no AI event); the roll's random draws were
-already consumed in native order.
-================
-*/
-func untemptableConfusion(target monster.Instance, records []abnormal.Record) []abnormal.Record {
-	if target.RegularMonster() {
-		return records
-	}
-	kept := records[:0]
-	for _, record := range records {
-		if record.Status != abnormal.Confusion {
-			kept = append(kept, record)
-		}
-	}
-	return kept
+	return 0x3033
 }

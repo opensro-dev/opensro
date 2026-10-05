@@ -481,7 +481,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	var stolen wire.Frame
 	if !rt.deps.UpdateMany(roster.characters, "player-area-attack", func() bool {
 		var cost skillCharge
-		if charged && rootID == 0 {
+		if charged {
 			cost, refusal = rt.offensivePhaseCost(division, character, skill, nowMs, release)
 			if refusal != 0 {
 				return false
@@ -506,7 +506,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		if consumeAmmo {
 			ammo = applyAmmunitionDebit(character, debit)
 		}
-		if charged && rootID == 0 {
+		if charged {
 			rt.commitOffensivePhaseCost(division, character, skill, cost, nowMs, release != nil)
 		} else if release == nil {
 			rt.registerPlayerSkillCooldown(division, character, skill, nowMs)
@@ -557,7 +557,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	}
 	actor := append([]wire.Frame{}, public...)
 	private := wire.ProgressionPrivateFrames(commit.progression)
-	if rootID == 0 {
+	if charged {
 		vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(enterworld.ObjectIDForCharacter(character), rt.publishedVitals(division, character))}
 		actor = append(actor, vitals)
 		private = append(private, vitals)

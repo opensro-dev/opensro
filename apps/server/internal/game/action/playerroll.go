@@ -124,7 +124,7 @@ fileEffectResistance
 59DF20 files a real under the execution context that installs it, so a
 resistance buff (Holy Word, Poison Circle) resists like a learned passive
 while its instance lives. The victim's installed effects join the learned
-buckets with the same lowest-grade rule (combat.FileStatusResistance).
+buckets with the same highest-grade/highest-flat rule (combat.FileStatusResistance).
 ==================
 */
 func (rt *Runtime) fileEffectResistance(division string, target *enterworld.Character, buckets *[17]abnormal.Resistance) {

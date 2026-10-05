@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+skillsequence_test.go - validate linked offense plans and authored costs
+
+Every linked row needs supported execution data, but its own resource price
+may differ from the root. Admission evaluates that price at each stage.
+
+===========================================================================
+*/
+
 package enterworld
 
 import (
@@ -5,10 +16,28 @@ import (
 	"testing"
 )
 
+/*
+================
+sequenceSource
+================
+*/
 type sequenceSource map[uint32]SkillRow
 
-func (s sequenceSource) SkillByID(id uint32) (SkillRow, bool) { r, ok := s[id]; return r, ok }
+/*
+================
+SkillByID
+================
+*/
+func (s sequenceSource) SkillByID(id uint32) (SkillRow, bool) {
+	r, ok := s[id]
+	return r, ok
+}
 
+/*
+================
+TestOffensiveSequenceRejectsIncompleteGraphs
+================
+*/
 func TestOffensiveSequenceRejectsIncompleteGraphs(t *testing.T) {
 	for _, mode := range []string{"valid", "missing", "cycle", "foreign-group", "foreign-level", "unsupported-tail", "paid-tail", "hp-ratio-tail", "repeated-hp-ratio", "foreign-hp-ratio", "unmarked-tail", "zero-duration", "sub-root"} {
 		t.Run(mode, func(t *testing.T) {
@@ -35,7 +64,7 @@ func TestOffensiveSequenceRejectsIncompleteGraphs(t *testing.T) {
 			case "hp-ratio-tail":
 				tail.Consumption.HPPercent = 10
 			case "repeated-hp-ratio":
-				// Dare Devil: the root's HP ratio, repeated, is charged once.
+				// Dare Devil: each stage pays its own authored HP ratio.
 				root.Consumption.HPPercent, tail.Consumption.HPPercent = 10, 10
 			case "foreign-hp-ratio":
 				root.Consumption.HPPercent, tail.Consumption.HPPercent = 10, 20
@@ -47,7 +76,7 @@ func TestOffensiveSequenceRejectsIncompleteGraphs(t *testing.T) {
 				root.ChainSub = true
 			}
 			rows, ok := OffensiveSequence(sequenceSource{6: root, 7: tail}, 6)
-			if ok != (mode == "valid" || mode == "repeated-hp-ratio") {
+			if ok != (mode == "valid" || mode == "repeated-hp-ratio" || mode == "paid-tail" || mode == "hp-ratio-tail" || mode == "foreign-hp-ratio") {
 				t.Fatalf("%s accepted=%v rows=%v", mode, ok, rows)
 			}
 		})

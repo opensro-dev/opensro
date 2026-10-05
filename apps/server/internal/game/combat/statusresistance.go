@@ -42,9 +42,9 @@ func StatusReductionWrites(reat enterworld.SkillPassiveReat) []paramkeeper.Write
 FileStatusResistance
 
 59DF20: file real's flat under its grade in each masked status's bucket.
-StatusResistance_Read (5999E0) reports the lowest grade and the first flat
-filed under it, so a bucket only changes for a lower grade. filed marks
-the buckets something has already filed into.
+5999E0 and 599740 decrement the ends of unsigned-key trees: highest grade,
+then highest flat within that grade. Preserve the independent percent side.
+filed distinguishes an empty bucket from a present zero-grade contribution.
 ==================
 */
 func FileStatusResistance(out *[17]abnormal.Resistance, filed *[17]bool, real enterworld.SkillPassiveReal) {
@@ -56,7 +56,8 @@ func FileStatusResistance(out *[17]abnormal.Resistance, filed *[17]bool, real en
 			continue
 		}
 		bucket := &out[source.Resist]
-		if !filed[source.Resist] || int32(real.Grade) < bucket.Grade {
+		if !filed[source.Resist] || real.Grade > uint32(bucket.Grade) ||
+			real.Grade == uint32(bucket.Grade) && real.Flat > uint32(bucket.Flat) {
 			bucket.Grade, bucket.Flat = int32(real.Grade), int32(real.Flat)
 			filed[source.Resist] = true
 		}

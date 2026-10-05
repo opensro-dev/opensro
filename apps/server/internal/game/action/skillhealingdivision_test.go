@@ -82,3 +82,38 @@ func TestHealingDivisionHealsTheLowestAndHalfTheNearest(t *testing.T) {
 		t.Fatalf("caster HP %d -> %d", casterHP, enterworld.CurrentHP(c))
 	}
 }
+
+/*
+================
+TestHealingDivisionIncludesCasterAsSecondary
+
+Select 5 includes the caster, who receives the secondary share when another
+party member has the lowest ratio and the caster is nearest to that member.
+================
+*/
+func TestHealingDivisionIncludesCasterAsSecondary(t *testing.T) {
+	rt, _, caster := concealmentFixture(t, healingDivisionA1)
+	row := rt.deps.SkillData().(staticSkillSource)[healingDivisionA1]
+	row.Consumption.MP = 10
+	rt.deps.SkillData().(staticSkillSource)[healingDivisionA1] = row
+	low := nearbyCharacter(rt, caster, 12, "low", 20)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(caster), enterworld.ObjectIDForCharacter(low)}}}
+	}
+	maxCaster, _, _, _ := rt.playerKeeperVitals(testDivision, caster)
+	maxLow, _, _, _ := rt.playerKeeperVitals(testDivision, low)
+	caster.CurrentHP = testInt64(maxCaster / 2)
+	low.CurrentHP = testInt64(maxLow / 10)
+	before := enterworld.CurrentHP(caster)
+	amount, _, ok := rt.skillHealAmounts(testDivision, caster, caster, row, healCast)
+	if !ok {
+		t.Fatal("missing heal amount")
+	}
+	if result := castSelf(rt, caster, row.ID); len(result.Frames) == 0 || result.Frames[0].Payload[0] != 1 {
+		t.Fatal(result)
+	}
+	want := min(maxCaster, before+amount*50/100)
+	if got := enterworld.CurrentHP(caster); got != want || got == before {
+		t.Fatalf("caster HP %d, want %d after secondary heal", got, want)
+	}
+}

@@ -1048,6 +1048,29 @@ test("Academy main popup and matching board have separate native entry lifecycle
 	}
 });
 
+test("the player panel selects the local character and frames itself while selected", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	const framed = () => f.scenes.at( -1 ).quads.some( q => q.texture?.endsWith( "/playerminiinfo/pmi_select.png" ) );
+	try {
+		let semantics;
+		for ( let t = 0; t < 1200; t += 100 ) semantics = f.ui.step( f.state, t ) ?? semantics;
+		const panel = semantics.controls.find( c => c.id === "self-target" );
+		assert.ok( panel );
+		// The panel's own buttons stay above it.
+		const order = id => semantics.controls.findIndex( c => c.id === id );
+		assert.ok( order( "ability-details" ) > order( "self-target" ) );
+		assert.equal( framed(), false );
+		sent.length = 0;
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		assert.deepEqual( sent.map( c => c.command ), [ { kind: "select", gid: f.state.gameplay.localGid } ] );
+		f.state.gameplay = { ...f.state.gameplay, target: f.state.gameplay.localGid };
+		for ( let t = 1200; t < 2400; t += 100 ) f.ui.step( f.state, t );
+		assert.equal( framed(), true );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("contextual Shop entry leaves Alchemy through the same lifecycle; locked Magic Pop rejects entry", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
