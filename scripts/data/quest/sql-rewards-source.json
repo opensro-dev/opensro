@@ -1,0 +1,1450 @@
+{
+	"format": "sro-quest-sql-rewards-v1",
+	"refqusetrewardSHA256": "de88c9b6aa6ff1e65acbb1100d2b310dfd16711ff62f9ca150f97a951f85d5eb",
+	"refquestrewarditemsSHA256": "570406e9e94c12bba30d0f0bb35478e9a9cd2ade606c8bcdfbc15e3415d09d61",
+	"quests": {
+		"QNO_CH_PRIEST_1": {
+			"gold": 3800,
+			"exp": 12450,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_COS_C_HORSE1",
+					"count": 1
+				}
+			]
+		},
+		"QNO_CH_SHAMAN_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 1,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_CH_SWORD_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_CH_BLADE_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_CH_SPEAR_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_CH_TBLADE_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_CH_BOW_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_SWORD_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_TSWORD_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_AXE_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_DARKSTAFF_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_TSTAFF_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_CROSSBOW_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_DAGGER_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_HARP_02_B",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_STAFF_02_B",
+					"count": 1
+				}
+			]
+		},
+		"QNO_WC_ARMOR_1": {
+			"gold": 13500,
+			"exp": 75000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_WC_PRIEST1_1": {
+			"gold": 3000,
+			"exp": 12000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_KT_SMITH_2": {
+			"gold": 0,
+			"exp": 15475300,
+			"skillExp": 90000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_KT_ACCESSORY_2": {
+			"gold": 925000,
+			"exp": 12075300,
+			"skillExp": 90000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_KT_SMITH_3": {
+			"gold": 0,
+			"exp": 17367600,
+			"skillExp": 96000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_KT_ACCESSORY_3": {
+			"gold": 1000000,
+			"exp": 13367600,
+			"skillExp": 96000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_KT_HORSE_1": {
+			"gold": 375000,
+			"exp": 9231000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CH_POTION_2": {
+			"gold": 3800,
+			"exp": 14400,
+			"skillExp": 3600,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CH_SHAMAN_2": {
+			"gold": 4000,
+			"exp": 12700,
+			"skillExp": 4500,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CH_POTION_4": {
+			"gold": 0,
+			"exp": 18000,
+			"skillExp": 4500,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_MP_POTION_02",
+					"count": 50
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_MP_POTION_02",
+					"count": 50
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_MP_POTION_02",
+					"count": 25
+				}
+			]
+		},
+		"QNO_CH_LOTTERY_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CH_POTION_5": {
+			"gold": 0,
+			"exp": 2188000,
+			"skillExp": 18700,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CH_POTION_5_04",
+					"count": 3
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CH_POTION_5_05",
+					"count": 3
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CH_POTION_5_06",
+					"count": 3
+				}
+			]
+		},
+		"QNO_CH_EUROPE_3": {
+			"gold": 0,
+			"exp": 2188000,
+			"skillExp": 18700,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CH_EUROPE_3_04",
+					"count": 3
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CH_EUROPE_3_05",
+					"count": 3
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CH_EUROPE_3_06",
+					"count": 3
+				}
+			]
+		},
+		"QNO_CH_LOTTERY_2": {
+			"gold": 340000,
+			"exp": 929160,
+			"skillExp": 187500,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CH_LOTTERY_2_02",
+					"count": 1
+				}
+			]
+		},
+		"QNO_CH_BIGMAN_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CH_BIGMAN_1_01",
+					"count": 1
+				}
+			]
+		},
+		"QNO_WC_SOLDIER_EA2_3": {
+			"gold": 0,
+			"exp": 107000,
+			"skillExp": 3000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_HP_POTION_03",
+					"count": 50
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_HP_POTION_03",
+					"count": 50
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_HP_POTION_03",
+					"count": 50
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_HP_POTION_03",
+					"count": 50
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_ETC_HP_POTION_03",
+					"count": 50
+				}
+			]
+		},
+		"QNO_WC_ACCESSORY_3": {
+			"gold": 0,
+			"exp": 120000,
+			"skillExp": 3000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_WC_ACCESSORY_3_03",
+					"count": 1
+				}
+			]
+		},
+		"QNO_WC_WAREHOUSE_W_2": {
+			"gold": 0,
+			"exp": 359560,
+			"skillExp": 20000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_WC_POTION_3": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_WC_SMITH_3": {
+			"gold": 0,
+			"exp": 221500,
+			"skillExp": 50000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_WC_SMITH_3_02",
+					"count": 5
+				}
+			]
+		},
+		"QNO_WC_WAREHOUSE_W_3": {
+			"gold": 0,
+			"exp": 813400,
+			"skillExp": 40000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_WC_WAREHOUSE_W_2_04",
+					"count": 1
+				}
+			]
+		},
+		"QNO_WC_POTION_4": {
+			"gold": 0,
+			"exp": 167000,
+			"skillExp": 3000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_WC_POTION_4_01",
+					"count": 2
+				}
+			]
+		},
+		"QNO_RM_FLYSHIP2_2": {
+			"gold": 0,
+			"exp": 8020600,
+			"skillExp": 20000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_FLYSHIP2_2_03",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_FLYSHIP2_2_02",
+					"count": 10
+				}
+			]
+		},
+		"QNO_RM_FLYSHIP1_2": {
+			"gold": 0,
+			"exp": 2705000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_MALL_REPAIR_HAMMER",
+					"count": 5
+				}
+			]
+		},
+		"QNO_RM_FLYSHIP1_3": {
+			"gold": 0,
+			"exp": 2863000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_FLYSHIP1_3_02",
+					"count": 3
+				}
+			]
+		},
+		"QNO_RM_SLAVE1_3": {
+			"gold": 0,
+			"exp": 2693000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_RM_OLDWOMAN_2": {
+			"gold": 0,
+			"exp": 10832400,
+			"skillExp": 67000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_OLDWOMAN_2_02",
+					"count": 3
+				}
+			]
+		},
+		"QNO_RM_OLDWOMAN_3": {
+			"gold": 0,
+			"exp": 2826000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_RM_OLDWOMAN_4": {
+			"gold": 0,
+			"exp": 2684000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_RM_OLDWOMAN_5": {
+			"gold": 0,
+			"exp": 4773000,
+			"skillExp": 320000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_RM_OLDWOMAN_6": {
+			"gold": 0,
+			"exp": 2573000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_RM_OLDWOMAN_7": {
+			"gold": 0,
+			"exp": 3513000,
+			"skillExp": 12000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_OLDWOMAN_7_02",
+					"count": 1
+				}
+			]
+		},
+		"QNO_EU_CONS_2": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 300,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_CONS_4": {
+			"gold": 0,
+			"exp": 350,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_CONS_6": {
+			"gold": 0,
+			"exp": 350,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_CONS_7": {
+			"gold": 0,
+			"exp": 1050,
+			"skillExp": 750,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_CONS_7_01",
+					"count": 1
+				}
+			]
+		},
+		"QNO_EU_CONS_11": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 1,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_EU_DAGGER_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_SWORD_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_TSWORD_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_AXE_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_CROSSBOW_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_STAFF_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_TSTAFF_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_EU_HARP_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_CH_SWORD_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_CH_BLADE_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_CH_SPEAR_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_CH_TBLADE_02_C",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_CH_BOW_02_C",
+					"count": 1
+				}
+			]
+		},
+		"QNO_RM_SLAVE2_2": {
+			"gold": 0,
+			"exp": 2573000,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_RM_SLAVE2_2_01",
+					"count": 5
+				}
+			]
+		},
+		"QNO_EU_EASTEU_1": {
+			"gold": 0,
+			"exp": 14250,
+			"skillExp": 500,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_EASTEU_1_01",
+					"count": 1
+				}
+			]
+		},
+		"QNO_EU_EASTEU_2": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 250,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_3": {
+			"gold": 0,
+			"exp": 45400,
+			"skillExp": 7500,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_EASTEU_3_02",
+					"count": 10
+				}
+			]
+		},
+		"QNO_EU_EASTEU_4": {
+			"gold": 10000,
+			"exp": 61840,
+			"skillExp": 10000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_5": {
+			"gold": 0,
+			"exp": 5100,
+			"skillExp": 1800,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 1,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_EASTEU_5_02",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_EASTEU_5_03",
+					"count": 1
+				}
+			]
+		},
+		"QNO_EU_EASTEU_8": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_EASTEU_8_02",
+					"count": 1
+				}
+			]
+		},
+		"QNO_EU_EASTEU_9": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 750,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_11": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 750,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_12": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 750,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_14": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 750,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_15": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 750,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_17": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 750,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_19": {
+			"gold": 0,
+			"exp": 20340,
+			"skillExp": 2500,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_21": {
+			"gold": 0,
+			"exp": 28300,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_EASTEU_21_02",
+					"count": 1
+				}
+			]
+		},
+		"QNO_EU_FERRY2_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_FERRY2_1_02",
+					"count": 1
+				},
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_FERRY2_1_03",
+					"count": 1
+				}
+			]
+		},
+		"QNO_EU_GENERAL_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_GENERAL_1_03",
+					"count": 1
+				}
+			]
+		},
+		"QNO_EU_GENERAL_2": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_GENERAL_2_02",
+					"count": 5
+				}
+			]
+		},
+		"QNO_EU_WITCH_1": {
+			"gold": 0,
+			"exp": 162190,
+			"skillExp": 20000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_ADVENTURER_1": {
+			"gold": 8000,
+			"exp": 156700,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_HORSE_3": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_WAREHOUSE_1": {
+			"gold": 0,
+			"exp": 58760,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_WAREHOUSE_2": {
+			"gold": 9000,
+			"exp": 125800,
+			"skillExp": 4300,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_IVY_1": {
+			"gold": 0,
+			"exp": 88800,
+			"skillExp": 2800,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_IVY_1_02",
+					"count": 5
+				}
+			]
+		},
+		"QNO_EU_IVY_2": {
+			"gold": 15000,
+			"exp": 533540,
+			"skillExp": 8000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_IVY_2_01",
+					"count": 5
+				}
+			]
+		},
+		"QNO_EU_IVY_3": {
+			"gold": 0,
+			"exp": 148000,
+			"skillExp": 4000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_IVY_3_07",
+					"count": 20
+				}
+			]
+		},
+		"QNO_EU_CONS_3_1": {
+			"gold": 500,
+			"exp": 750,
+			"skillExp": 1000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_TRADE_CH_SPECIAL2_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_COS_T_CAMEL1",
+					"count": 5
+				}
+			]
+		},
+		"QNO_TRADE_WC_SPECIAL2_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_COS_T_CAMEL2",
+					"count": 5
+				}
+			]
+		},
+		"QNO_TRADE_TK_SPECIAL_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_COS_T_COW1",
+					"count": 5
+				}
+			]
+		},
+		"QNO_TRADE_RM_SPECIAL_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_COS_T_COW1",
+					"count": 10
+				}
+			]
+		},
+		"QNO_EU_EASTEU_11_1": {
+			"gold": 0,
+			"exp": 5100,
+			"skillExp": 1400,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_EU_EASTEU_14_1": {
+			"gold": 0,
+			"exp": 8500,
+			"skillExp": 2100,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_EASTEU_14_1_01",
+					"count": 3
+				}
+			]
+		},
+		"QNO_EU_EASTEU_17_1": {
+			"gold": 0,
+			"exp": 9500,
+			"skillExp": 2300,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_EASTEU_17_1_02",
+					"count": 1
+				}
+			]
+		},
+		"QNO_EU_WITCH_1_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_EU_WITCH_1_03",
+					"count": 1
+				}
+			]
+		},
+		"QSP_CH_EXINVENTORY_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 10,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QSP_WC_EXINVENTORY_2": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 4,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QSP_KT_EXINVENTORY_3": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 4,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QSP_RM_EXINVENTORY_4": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 4,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_THIEF_2": {
+			"gold": 1500,
+			"exp": 19140,
+			"skillExp": 750,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_THIEF_4": {
+			"gold": 300,
+			"exp": 4060,
+			"skillExp": 150,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_THIEF_5": {
+			"gold": 0,
+			"exp": 302300,
+			"skillExp": 3500,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CA_THIEF_5_02",
+					"count": 1
+				}
+			]
+		},
+		"QNO_CA_TREASURE_4": {
+			"gold": 2300,
+			"exp": 31900,
+			"skillExp": 1100,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_TREASURE_5": {
+			"gold": 0,
+			"exp": 11890,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CA_TREASURE_5_03",
+					"count": 1
+				}
+			]
+		},
+		"QNO_CA_WAREHOUSE_3": {
+			"gold": 22000,
+			"exp": 692752,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_WAREHOUSE_4": {
+			"gold": 23000,
+			"exp": 720250,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_GORIA_2": {
+			"gold": 12400,
+			"exp": 415800,
+			"skillExp": 5000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_GORIA_3": {
+			"gold": 750,
+			"exp": 11890,
+			"skillExp": 300,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QNO_CA_GORIA_6": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CA_GORIA_6_03",
+					"count": 1
+				}
+			]
+		},
+		"QNO_CA_GORIA_7": {
+			"gold": 0,
+			"exp": 159500,
+			"skillExp": 4000,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 0,
+			"itemRewardType": 0,
+			"items": [
+				{
+					"choice": 0,
+					"item": "ITEM_QNO_CA_GORIA_7_04",
+					"count": 1
+				}
+			]
+		},
+		"QSP_EU_EXINVENTORY_1": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 10,
+			"itemRewardType": 0,
+			"items": []
+		},
+		"QSP_CA_EXINVENTORY_2": {
+			"gold": 0,
+			"exp": 0,
+			"skillExp": 0,
+			"skillPoints": 0,
+			"ap": 0,
+			"hwan": 0,
+			"inventorySlots": 4,
+			"itemRewardType": 0,
+			"items": []
+		}
+	}
+}

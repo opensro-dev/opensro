@@ -352,15 +352,21 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					t.Fatal("objective item was not consumed")
 				}
 			}
+			// A reward may list one item in several rows (one stack each,
+			// QNO_WC_SOLDIER_EA2_3's five stacks of 50): compare totals.
+			want := map[string]int64{}
 			for _, reward := range def.RewardItems {
+				want[reward.ItemCodename] += int64(reward.Count)
+			}
+			for codename, total := range want {
 				var count int64
 				for _, row := range character.MissionInventory {
-					if row.Codename == reward.ItemCodename {
+					if row.Codename == codename {
 						count += row.StackCount
 					}
 				}
-				if count != int64(reward.Count) {
-					t.Fatalf("reward %s count %d", reward.ItemCodename, count)
+				if count != total {
+					t.Fatalf("reward %s count %d, want %d", codename, count, total)
 				}
 			}
 			restart()
