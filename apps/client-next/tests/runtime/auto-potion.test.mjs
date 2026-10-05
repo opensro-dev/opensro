@@ -465,4 +465,3 @@ for ( const close of [ "npc-close", "server-release", "despawn" ] ) {
 		g.dispose();
 	});
 }
-
