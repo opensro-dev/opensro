@@ -271,7 +271,6 @@ apps/client-next/tests/browser/beta-release-live.test.mjs
 apps/client-next/tests/browser/blocking.test.mjs
 apps/client-next/tests/browser/bloom.test.mjs
 apps/client-next/tests/browser/buff-dismiss.test.mjs
-apps/client-next/tests/browser/cerberus-weather-live.test.mjs
 apps/client-next/tests/browser/champion-material.test.mjs
 apps/client-next/tests/browser/character-capacity.test.mjs
 apps/client-next/tests/browser/character-create.test.mjs
