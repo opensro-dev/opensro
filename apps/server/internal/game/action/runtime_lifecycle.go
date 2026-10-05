@@ -59,10 +59,14 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		rt.advanceDepartures(nowMs)
 		rt.advanceReturnScrolls(nowMs)
 		rt.advanceJobDresses(nowMs)
+		rt.advanceGuildVotes(nowMs)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
 		rt.drainMonsterDefeats(nowMs)
+		if rt.Monsters != nil {
+			rt.Monsters.ExpireMonsterLifetimes(nowMs)
+		}
 		rt.retireMonsterCriticals()
 		if rt.Monsters != nil {
 			rt.Monsters.AdvancePopulation(nowMs)
@@ -89,6 +93,8 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		out = append(out, rt.advancePartyAuras(nowMs)...)
 		out = append(out, rt.advanceWalls(nowMs)...)
 		out = append(out, rt.advancePeriodicEffects(nowMs)...)
+		out = append(out, rt.advanceHawks(nowMs)...)
+		out = append(out, rt.advancePulseAreas(nowMs)...)
 		// A heal over time pulses before expiry: its last pulse lands on
 		// the instant its effect's duration is reached.
 		out = append(out, rt.advanceHealsOverTime(nowMs)...)
@@ -96,15 +102,19 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		out = append(out, rt.drainStoppedCharacterEffects()...)
 		// 4A4390 per actor: expiry, damage over time, detonation, mask.
 		out = append(out, rt.advanceMonsterAbnormals(nowMs)...)
-		out = append(out, rt.drainMonsterFightRecipients()...)
+		out = append(out, rt.drainMonsterLegRecipients()...)
 		out = append(out, rt.advancePlayerAbnormals(nowMs)...)
 		out = append(out, rt.advanceCosAbnormals(nowMs)...)
 		out = append(out, rt.advanceQueuedActionSessions(nowMs)...)
 		out = append(out, rt.advanceBasicAttackIntents(nowMs, openActionOwners)...)
 		out = append(out, rt.advanceNaturalRecovery(nowMs)...)
 		out = append(out, rt.advancePets(nowMs)...)
+		// 60C684 after the pets: a fired caravan reads the transport's
+		// cargo and live position as this tick left them.
+		rt.advanceCaravans(nowMs)
 		rt.advancePetSkillWindows(nowMs)
 		rt.advanceParamJobs(nowMs)
+		rt.advancePKRecords()
 		out = append(out, rt.advancePendingPickups(nowMs)...)
 		rt.advanceBodyRestores(nowMs)
 		rt.advanceCompoundJobs(nowMs)
@@ -323,6 +333,7 @@ Release actor-owned runtime state while the division operation lock is held.
 func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.periodicEffects.StopSource(divisionID, characterName)
 	rt.returnCasts.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.playerDisplacements.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.jobDresses.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))
@@ -332,6 +343,8 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	var departedGID uint32
 	if c := rt.findCharacter(divisionID, characterName); c != nil {
 		departedGID = enterworld.ObjectIDForCharacter(c)
+		rt.noteLastSeen(c)
+		rt.releaseGuildStorage(divisionID, c.Name)
 	}
 	if rt.Monsters != nil {
 		rt.Monsters.ForgetAbnormalSource(divisionID, departedGID, characterName)

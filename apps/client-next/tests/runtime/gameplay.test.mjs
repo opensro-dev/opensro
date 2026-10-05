@@ -108,6 +108,44 @@ test("live speed changes retime local and peer travel from the current position 
 	assert.equal( remote.step( 2500 )[0].x, 235 );
 });
 
+test("a zero speed channel holds a mover in place and a later speed resumes it", async () => {
+	const { decodeMovementSpeeds } = await import(
+		sourceFileUrl( path.join( root, "src/engine/foundation/gameplay/native-movement.ts" ) ).href
+	);
+	// A slowed stationary monster (frostbite halves 0) publishes 0x376F {gid, 0, 0}.
+	const channels = Buffer.alloc( 12 );
+	channels.writeUInt32LE( 7 );
+	assert.deepEqual( decodeMovementSpeeds( channels ), { gid: 7, walkSpeed: 0, runSpeed: 0 } );
+	channels.writeFloatLE( -1, 4 );
+	assert.throws( () => decodeMovementSpeeds( channels ), /Invalid movement speed channels/ );
+	channels.writeFloatLE( Number.NaN, 4 );
+	assert.throws( () => decodeMovementSpeeds( channels ), /Invalid movement speed channels/ );
+	const packet = Buffer.alloc( 14 );
+	packet.writeUInt32LE( 7 );
+	packet[4] = 1;
+	packet.writeUInt16LE( pose.regionId, 5 );
+	packet.writeInt16LE( 260, 7 );
+	packet.writeInt16LE( 10, 9 );
+	packet.writeInt16LE( 100, 11 );
+	const remote = createEntityMotion(),
+		entity = { ...pose, gid: 7, heading: 0, movementMode: 3, walkSpeed: 20, runSpeed: 50 },
+		stopped = { ...entity, walkSpeed: 0, runSpeed: 0 };
+	remote.receive( packet, entity, 0 );
+	assert.equal( remote.speeds( entity, stopped, 1000 ).x, 110 );
+	assert.equal( remote.step( 5000 )[0].x, 110 );
+	assert.equal( remote.speeds( stopped, entity, 5000 ).x, 110 );
+	assert.equal( remote.step( 6000 )[0].x, 160 );
+	const local = createMovement( () => {} );
+	local.seed( pose );
+	local.native( packet, 0, 7 );
+	local.speeds( 0, 0, 1000 );
+	local.step( 5000 );
+	assert.equal( local.state().pose.x, 110 );
+	local.speeds( 20, 50, 5000 );
+	local.step( 6000 );
+	assert.equal( local.state().pose.x, 160 );
+});
+
 test("live speed changes preserve combat displacement timing", () => {
 	const local = createMovement( () => {} );
 	local.seed( pose );

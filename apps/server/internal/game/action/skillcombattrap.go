@@ -16,7 +16,6 @@ package action
 
 import (
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
@@ -152,21 +151,24 @@ func combatTrapOwnerNear(object skillobject.Object, owner simulation.Spawn) bool
 ================
 combatTrapVictims
 
-The triggering monster first, then living monsters in the explosion radius
-around the trap (efr shape 1 centred on the object), up to the authored cap.
+The triggering object first, then the living monsters and attackable
+players in the explosion radius around the trap (efr shape 1 centred on
+the object), up to the authored cap.
 ================
 */
-func (rt *Runtime) combatTrapVictims(object skillobject.Object, lease instance.Lease, primary monster.Instance, area enterworld.SkillOffensiveArea, now int64) []monster.Instance {
+func (rt *Runtime) combatTrapVictims(object skillobject.Object, planter *enterworld.Character, skill enterworld.SkillRow, lease instance.Lease, primary combatTarget, area enterworld.SkillOffensiveArea, now int64) []combatTarget {
 	from := simulation.Spawn{RegionID: object.Spawn.Region, X: float64(object.Spawn.X), Y: float64(object.Spawn.Y), Z: float64(object.Spawn.Z)}
-	out := []monster.Instance{primary}
-	for _, candidate := range rt.Monsters.CombatCandidatesInPopulation(object.Division, lease, from, float64(area.Radius), now, true) {
+	out := []combatTarget{primary}
+	q := areaQuery{division: object.Division, caster: planter, skill: skill, lease: lease, center: from,
+		reach: float64(area.Radius), nearest: true, now: now}
+	for _, candidate := range rt.areaCandidates(q) {
 		if len(out) >= int(area.MaxTargets) {
 			break
 		}
-		if candidate.Gid == primary.Gid || candidate.CurrentHP == 0 {
+		if candidate.target.gid == primary.gid {
 			continue
 		}
-		out = append(out, candidate)
+		out = append(out, candidate.target)
 	}
 	return out
 }
@@ -181,7 +183,7 @@ is not an actor on the wire: the result is a B3C6 pulse from the planter,
 who owns credit, rewards and hostility.
 ================
 */
-func (rt *Runtime) explodeCombatTrap(object skillobject.Object, c, snapshot *enterworld.Character, skill enterworld.SkillRow, primary monster.Instance, lease instance.Lease, now int64) []simulation.DivisionFrames {
+func (rt *Runtime) explodeCombatTrap(object skillobject.Object, c, snapshot *enterworld.Character, skill enterworld.SkillRow, primary combatTarget, lease instance.Lease, now int64) []simulation.DivisionFrames {
 	trap := skill.CombatTrap
 	attacker, _, err := rt.playerCombatStats(object.Division, snapshot)
 	if err != nil {
@@ -189,63 +191,41 @@ func (rt *Runtime) explodeCombatTrap(object skillobject.Object, c, snapshot *ent
 	}
 	strike := skill
 	strike.Attack = trap.Attack
-	victims := rt.combatTrapVictims(object, lease, primary, trap.Area, now)
+	victims := rt.combatTrapVictims(object, snapshot, strike, lease, primary, trap.Area, now)
 	// One impact a victim, every victim's pose kept: the explosion settles
 	// each kill where the monster stood.
-	plans, sequences, planned := rt.planAreaVictims(areaPlanInput{
-		division: object.Division, snapshot: snapshot, skill: strike, attacker: attacker, victims: victims,
+	plan, planned := rt.planAreaVictims(areaPlanInput{
+		division: object.Division, caster: c, snapshot: snapshot, skill: strike, attacker: attacker, victims: victims,
 		reduction: trap.Area.ReductionPercent, impacts: 1, poseAll: true, now: now,
 	})
 	if !planned {
 		return nil
 	}
-	var committed [][]simulation.MonsterDamageResult
-	var progression []wire.Frame
-	var settlements monsterSettlement
-	var drops []grounditem.Item
+	var commit areaCommit
 	roster := rt.monsterRewardRoster(object.Division, c, now)
 	if !rt.deps.UpdateMany(roster.characters, "combat-trap-explosion", func() bool {
 		var ok bool
-		if committed, ok = rt.Monsters.ApplyDamageSequences(object.Division, sequences); !ok {
-			return false
-		}
-		progression, drops, settlements = rt.settleAreaFatalities(object.Division, c, roster, committed, plans, now)
-		return true
+		commit, ok = rt.commitAreaInDoor(object.Division, c, roster, &plan, now)
+		return ok
 	}) {
 		return nil
 	}
-	owner := enterworld.ObjectIDForCharacter(snapshot)
-	var after []wire.Frame
-	var targets []wire.SkillAreaTarget
-	for index, impacts := range committed {
-		final := impacts[len(impacts)-1]
-		gid := final.Instance.Gid
-		records := []wire.SkillCastTargetImpact{committedSkillImpact(plans[index].formulas[0], impacts[0])}
-		targets = append(targets, wire.SkillAreaTarget{GID: gid, Impacts: records})
-		if final.Fatal {
-			rt.queueMonsterDefeat(object.Division, gid, now+monsterDeathPresentationRetention.Milliseconds())
-			after = append(after, monsterLifeDeadFrame(gid))
-			// No aggression for a dead victim; its damage still feeds a
-			// Mana Switch link.
-			rt.commitSkillHostility(object.Division, owner, gid, strike, impacts, now)
-			continue
-		}
-		after = append(after, rt.monsterImpactAbnormalFrames(object.Division, gid, impacts)...)
-		rt.commitSkillHostility(object.Division, owner, gid, strike, impacts, now)
-	}
+	published := rt.publishArea(object.Division, snapshot, strike, 1, plan, commit, now)
+	targets, after := published.targets, published.after
 	// 59B2A0 sends the trap identity, not its planter. Scope publication
 	// keeps the object available until this result has been consumed.
 	success := wire.SkillTrapResultsFrame(object.Spawn.GID, targets)
 	public := append([]wire.Frame{success}, after...)
-	public = append(public, rt.groundReferences(drops)...)
-	for _, drop := range drops {
-		public = append(public, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
-	}
-	public = append(public, settlements.public...)
+	public = append(public, commit.settlements.public...)
+	public = append(public, published.returned.Broadcast...)
 	out := []simulation.DivisionFrames{{DivisionID: object.Division, SourceGID: object.Spawn.GID, Frames: simFrames(public)}}
-	private := append(wire.ProgressionPrivateFrames(progression), settlements.otherPublic...)
+	private := append(wire.ProgressionPrivateFrames(commit.progression), commit.settlements.otherPublic...)
+	private = append(private, commit.playerActor...)
+	private = append(private, published.returned.ActorPrivate...)
 	if len(private) > 0 {
 		out = append(out, simulation.DivisionFrames{DivisionID: object.Division, OnlyCharacterID: c.ID, Frames: simFrames(private)})
 	}
-	return append(out, recipientDivisionFrames(object.Division, settlements.others)...)
+	recipients := append(commit.settlements.others, published.recipients...)
+	recipients = append(recipients, published.returned.Recipients...)
+	return append(out, recipientDivisionFrames(object.Division, recipients)...)
 }

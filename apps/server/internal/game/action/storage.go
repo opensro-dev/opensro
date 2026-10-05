@@ -268,7 +268,37 @@ func (rt *Runtime) applyStorageMove(divisionID string, character *enterworld.Cha
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 	var questFrames []wire.Frame
-	_, err := rt.storageAuthority.TransactStorage(character, func(next *domain.Character, storage *domain.AccountStorage) error {
+	_, err := rt.storageAuthority.TransactStorage(character, rt.storageMutation(q.MovementType, q))
+	var refusal storageRefusal
+	if errors.As(err, &refusal) {
+		return failureResult(uint8(refusal))
+	}
+	if err != nil {
+		log.Warnf("storage: %s move 0x%02X failed: %v", character.Name, q.MovementType, err)
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	frames := []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.EncodeStorageMoveSuccess(q)}}
+	if q.MovementType != wire.MoveTypeStorage {
+		frames = append(frames, goldFrame(character))
+	}
+	rt.deps.Update(character, "storage-quest-inventory", func() bool {
+		questFrames = rt.updateQuestInventory(character)
+		return len(questFrames) > 0
+	})
+	return OpResult{Frames: append(frames, questFrames...)}
+}
+
+/*
+================
+storageMutation
+
+One warehouse move on detached copies of the character and a room: the
+five personal types, which the guild warehouse's five stand for
+(wire.PersonalStorageMove).
+================
+*/
+func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(next *domain.Character, storage *domain.AccountStorage) error {
+	return func(next *domain.Character, storage *domain.AccountStorage) error {
 		room, fault := inventory.NewStorageRoom(invItemsFromRowsWithin(storage.Rows, storage.Capacity), uint8(storage.Capacity))
 		if fault != nil {
 			return fault
@@ -278,7 +308,7 @@ func (rt *Runtime) applyStorageMove(divisionID string, character *enterworld.Cha
 		if next.Gold != nil {
 			gold = *next.Gold
 		}
-		switch q.MovementType {
+		switch movement {
 		case wire.MoveTypeStorage:
 			item, present := room.At(q.SourceSlot)
 			if !present {
@@ -341,24 +371,7 @@ func (rt *Runtime) applyStorageMove(divisionID string, character *enterworld.Cha
 		next.MissionInventory = rowsFromInvItems(bag.Items())
 		next.Gold = &gold
 		return nil
-	})
-	var refusal storageRefusal
-	if errors.As(err, &refusal) {
-		return failureResult(uint8(refusal))
 	}
-	if err != nil {
-		log.Warnf("storage: %s move 0x%02X failed: %v", character.Name, q.MovementType, err)
-		return failureResult(wire.ErrCodeInvalidRequest)
-	}
-	frames := []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.EncodeStorageMoveSuccess(q)}}
-	if q.MovementType != wire.MoveTypeStorage {
-		frames = append(frames, goldFrame(character))
-	}
-	rt.deps.Update(character, "storage-quest-inventory", func() bool {
-		questFrames = rt.updateQuestInventory(character)
-		return len(questFrames) > 0
-	})
-	return OpResult{Frames: append(frames, questFrames...)}
 }
 
 /*

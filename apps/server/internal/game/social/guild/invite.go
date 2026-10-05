@@ -20,6 +20,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/transport"
 )
@@ -216,7 +217,7 @@ func (r *InviteRuntime) handleInvite(s *transport.Session, opcode uint16, payloa
 		return
 	}
 	guildID := *actor.GuildID
-	_, members, ok := r.deps.GuildAuthority().Guild(divisionID, guildID)
+	record, members, ok := r.deps.GuildAuthority().Guild(divisionID, guildID)
 	if !ok {
 		log.Debugf("guild: 0x73AD (invite) refused for %s: guildId %d resolves to no stored guild", actor.Name, guildID)
 		return
@@ -230,8 +231,8 @@ func (r *InviteRuntime) handleInvite(s *transport.Session, opcode uint16, payloa
 		log.Debugf("guild: 0x73AD (invite) refused for %s: permMask %#x lacks the invite bit %#x", actor.Name, actorMember.PermMask, PermMaskInvite)
 		return
 	}
-	if len(members) >= GuildWireMemberCap {
-		log.Debugf("guild: 0x73AD (invite) refused for %s: guild %d sits at the u8 wire member cap", actor.Name, guildID)
+	if len(members) >= min(GuildWireMemberCap, domain.GuildMemberCapacity(record.Level)) {
+		log.Debugf("guild: 0x73AD (invite) refused for %s: guild %d is full at level %d", actor.Name, guildID, record.Level)
 		return
 	}
 	target := findGuildCharacterByGid(r.deps, divisionID, targetRef)
@@ -361,7 +362,7 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 	online := func(name string) bool {
 		return r.presence != nil && r.presence.OnlineByName(divisionID, name)
 	}
-	_ = s.Send(OpGuildInfo, EncodeGuildInfo32C4(guild, joined, online))
+	_ = s.Send(OpGuildInfo, EncodeGuildInfo32C4(guild, joined, online, r.Now().UnixMilli()))
 	joinPush := EncodeMemberJoin3B29(row, online)
 	for _, member := range joined {
 		if member.CharID == actor.ID {

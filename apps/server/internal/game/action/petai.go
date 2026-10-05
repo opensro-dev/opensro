@@ -407,6 +407,8 @@ func (rt *Runtime) rememberTransportCOS(division string, c *enterworld.Character
 	state.transportCOS = c.ActiveCOS
 	state.transportWorld = simulation.WorldState{Spawn: pose}
 	state.generation++
+	// 4FA861: a transport summoned with goods aboard is a caravan.
+	rt.registerCaravan(division, c)
 }
 
 /*

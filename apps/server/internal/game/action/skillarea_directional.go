@@ -11,8 +11,9 @@ its line. Shape 3 measures from the caster, along the unit vector to the
 primary scaled by the action range; shape 4 measures from the caster along
 the whole caster-to-primary vector, gathering around the primary.
 
-Only monsters exist to be selected here; the second pass over non-character
-objects (select bit 0x10, 58B794 and 58BE17) has nothing to find.
+Monsters and attackable players are selected alike (areacandidates.go);
+the second pass over non-character objects (select bit 0x10, 58B794 and
+58BE17) has nothing to find.
 
 ===========================================================================
 */
@@ -24,8 +25,6 @@ import (
 	"sort"
 
 	worldgeom "opensro.online/server/internal/game/world"
-	"opensro.online/server/internal/game/world/instance"
-	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -121,46 +120,41 @@ func inDirectionalShape(rel, dir vec3, casterRadius, candidateRadius int32, widt
 ==================
 directionalVictims
 
-The primary first, then every living monster the shape accepts, in the
+The primary first, then every living candidate the shape accepts, in the
 port's GID order, up to MaxTargets. reach is the action's base range
 (58B29B: RefSkill +0x92, else the attack-range param at 58B2A9).
 ==================
 */
-func (rt *Runtime) directionalVictims(division string, lease instance.Lease, caster simulation.Spawn, casterRadius float64, primary monster.Instance, primaryAt simulation.Spawn, area areaShape, reach float32, nowMs int64) []monster.Instance {
-	out := []monster.Instance{primary}
+func (rt *Runtime) directionalVictims(q areaQuery, caster simulation.Spawn, casterRadius float64, primary combatTarget, area areaShape, reach float32) []combatTarget {
+	out := []combatTarget{primary}
 	if area.maxTargets <= 1 {
 		return out
 	}
 
-	toPrimary := relative(caster, primaryAt)
+	toPrimary := relative(caster, primary.at)
 	var dir vec3
-	center := primaryAt
+	q.center = primary.at
 	if area.shape == 3 {
 		// 58B293: the height is dropped before the direction is normalised.
 		toPrimary.y = 0
 		unit := toPrimary.normalized()
 		dir = vec3{unit.x * reach, unit.y * reach, unit.z * reach}
-		center = caster
+		q.center = caster
 	} else {
 		dir = toPrimary
 	}
+	q.reach, q.nearest = directionalSearchRadius, true
 
-	candidates := rt.Monsters.CombatCandidatesInPopulation(division, lease, center, directionalSearchRadius, nowMs, true)
-	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Gid < candidates[j].Gid })
+	candidates := rt.areaCandidates(q)
+	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].target.gid < candidates[j].target.gid })
 	for _, candidate := range candidates {
-		if candidate.Gid == primary.Gid || candidate.CurrentHP == 0 {
+		if candidate.target.gid == primary.gid {
 			continue
 		}
-		mover, ok := rt.Monsters.Mover(division, candidate.Gid)
-		if !ok {
+		if !inDirectionalShape(relative(caster, candidate.target.at), dir, int32(casterRadius), int32(candidate.radius), area.width) {
 			continue
 		}
-		pose := mover.LivePoseAt(nowMs, nil)
-		at := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
-		if !inDirectionalShape(relative(caster, at), dir, int32(casterRadius), int32(candidate.Ref.BodyRadius), area.width) {
-			continue
-		}
-		out = append(out, candidate)
+		out = append(out, candidate.target)
 		if len(out) == int(area.maxTargets) {
 			break
 		}

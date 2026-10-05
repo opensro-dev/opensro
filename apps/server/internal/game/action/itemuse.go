@@ -381,6 +381,12 @@ func (rt *Runtime) HandleItemUse(
 				(cosRef.TidWord>>11 != 1 && cosRef.TidWord>>11 != 2) || !cosRef.CanRide || cosRef.MaxHP == 0 {
 				return false
 			}
+			// 49BF24: a murderer may not summon a riding horse, 0x1876; the
+			// transport summon skips the check.
+			if cosRef.TidWord>>11 == cosBandRiding && murderer(character) {
+				result = itemUseFailure(errCodeMurdererTransport)
+				return false
+			}
 			if cosRef.TidWord>>11 == cosBandTransport && !transportJob(character) {
 				result = itemUseFailure(errCodeCantActivateCart)
 				return false
@@ -595,7 +601,7 @@ func (rt *Runtime) HandleItemUse(
 				Payload: simulation.HPRefreshPayload(enterworld.ObjectIDForCharacter(character), 0, uint32(nextHP))})
 		}
 		if nextHP == 0 {
-			effects, progression := rt.settlePlayerDeathInDoor(divisionID, character, nowMs)
+			effects, progression := rt.settlePlayerDeathInDoor(divisionID, character, deathKiller{}, nowMs)
 			public = append(public, effects...)
 			if owner := rt.clearPlayerAbnormalInDoor(divisionID, character, nowMs); owner != nil {
 				owner.fatal = true

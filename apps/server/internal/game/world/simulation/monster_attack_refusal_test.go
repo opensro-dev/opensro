@@ -11,7 +11,7 @@ func TestMonsterRefusalKeepsCombatAndReselectsOnlyAfterCommandError(t *testing.T
 		t.Run(map[MonsterAttackRefusal]string{MonsterAttackApproachRequired: "approach", MonsterAttackCommandRejected: "command-error"}[refusal], func(t *testing.T) {
 			ops, actor := monsterLegFixture(t, aggressiveTactics())
 			const now = int64(100000)
-			target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1005, Y: 20, Z: 1000}, BodyRadius: 4}
+			target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Y: 20, Z: 1000}, BodyRadius: 4}
 			if !ops.Monsters.ArmRetaliation(monsterTestDivision, actor.Gid, target.Gid) {
 				t.Fatal("retaliation not armed")
 			}
@@ -77,7 +77,7 @@ func TestMonsterRefusalKeepsCombatAndReselectsOnlyAfterCommandError(t *testing.T
 func TestMonsterRefusalCannotOverwriteRetaliationOrRetainLostTarget(t *testing.T) {
 	for _, newerTarget := range []bool{false, true} {
 		ops, actor := monsterLegFixture(t, aggressiveTactics())
-		target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1005, Y: 20, Z: 1000}, BodyRadius: 4}
+		target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Y: 20, Z: 1000}, BodyRadius: 4}
 		ops.Monsters.ArmRetaliation(monsterTestDivision, actor.Gid, target.Gid)
 		ops.BasicAttack = func(string, monster.Instance, uint32, uint32, int64) MonsterAttackResult {
 			if newerTarget {

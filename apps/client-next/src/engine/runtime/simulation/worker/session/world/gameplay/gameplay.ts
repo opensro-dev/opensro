@@ -41,6 +41,11 @@ import {
 } from "@/engine/foundation/gameplay/interaction-approach";
 import { targetNotice } from "@/engine/foundation/gameplay/target-notices";
 import { constantNativeNotice } from "@/engine/foundation/gameplay/native-notice";
+import {
+	AVATAR_MAGIC_OPTION_ANSWER,
+	AVATAR_MAGIC_OPTION_FUNCTION,
+	AVATAR_MAGIC_OPTION_NOTICE_CATEGORY
+} from "@/engine/foundation/gameplay/avatar-magic-option";
 import { skillNotice } from "@/engine/foundation/gameplay/skill-notices";
 import { returnScrollCast, type ReturnScrollCast } from "@/engine/foundation/gameplay/return-scroll";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
@@ -129,6 +134,7 @@ import {
 } from "@/engine/foundation/gameplay/social";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
 import {
+	skillAdmitsPredictedTarget,
 	skillCatalog,
 	skillMpCost,
 	skillTrainingReason,
@@ -154,6 +160,7 @@ import { createMoveReservation } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
+import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
 import type { WireFrame } from "@/engine/contracts/network";
 /*
 ================
@@ -376,6 +383,10 @@ would turn it.
 			local.appearanceState?.[0] === 2 || localCastHolds( now ) || combat.predicting() ||
 			combat.guidedActive( localGid, now )
 		) return;
+		// The native press animates only on the server's answer (6FCD50), so
+		// a target the row may not admit (an NPC, a player in town, the caster
+		// for an enemy skill) predicts nothing: it would animate and snap back.
+		if ( target && !skillAdmitsPredictedTarget( metadata, target, localGid ) ) return;
 		if ( target && target.gid !== localGid ) {
 			if ( target.kind === "monster" && target.appearanceState?.[0] === 2 || !withinReach( metadata, target ) ) {
 				return;
@@ -492,7 +503,10 @@ holds until it ends, as before.
 	function localCastHolds( now: number ): boolean {
 		return combat.state().casts.some( c => {
 			if ( c.caster !== localGid || c.cancelledAtMs !== undefined ) return false;
-			const actionMs = catalog.find( row => row.id === c.skill )?.actionMs;
+			const row = catalog.find( row => row.id === c.skill );
+			// A wall's cast holds until the wall retires (cast-motion-lock).
+			if ( row?.holdsCaster ) return true;
+			const actionMs = row?.actionMs;
 			return !actionMs || c.receivedAtMs === undefined || now - c.receivedAtMs < actionMs;
 		} );
 	}
@@ -552,12 +566,24 @@ coming, so retain its menu, dialogue and lock until a new request.
 			reopen: npcConversation.state().phase === "closed"
 		} );
 		if ( frame ) npcConversation.clear();
+		markTarget( entity );
+		return frame;
+	}
+	/*
+================
+markTarget
+
+The one selection decal (CIODecal) rides entity. A ground click moves it to
+the clicked point; an attack or skill at a target brings it back, so the
+ring stays under what the player fights and the spent move marker goes.
+================
+	*/
+	function markTarget( entity: EntityState ) {
 		selectionDecal = {
 			kind: "target",
 			gid: entity.gid,
 			slot: entity.kind === "monster" || entity.kind === "cos" ? 3 : entity.kind === "player" ? 2 : 1
 		};
-		return frame;
 	}
 	/*
 ================
@@ -905,6 +931,25 @@ localIdentity
 		},
 		/*
 ================
+pickupNearest
+
+The pickup shortcut's item among candidates (pickup-nearest.ts): from the
+live pose, and the party whose drops the server may share.
+================
+		*/
+		pickupNearest( candidates: readonly EntityState[] ): number | undefined {
+			const pose = movement.state().pose;
+			if ( !pose || !localGid ) return undefined;
+			const party = new Set( social.members.map( member => member.id ) );
+			return nearestPickable(
+				candidates,
+				{ gid: localGid, regionId: pose.regionId, x: pose.x, z: pose.z },
+				party
+			)
+				?.gid;
+		},
+		/*
+================
 entityLifecycle
 
 Entity removal retires targeting and combat references in the same frame.
@@ -1057,6 +1102,21 @@ state here before a command can claim a native wire conversation.
 				dirty = true;
 				return null;
 			}
+			if ( command.kind === "storage-open-guild" ) {
+				const target = targeting.state();
+				// The warehouse row exists only on a selected guild manager (0x4000).
+				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x4000) ) {
+					throw Error( "Select a guild manager" );
+				}
+				storage.openGuild( command.gid );
+				dirty = true;
+				return null;
+			}
+			if ( command.kind === "compensation-dismiss" ) {
+				social = { ...social, compensation: undefined };
+				dirty = true;
+				return null;
+			}
 			if ( command.kind === "storage-close" ) {
 				storage.close();
 				dirty = true;
@@ -1184,13 +1244,30 @@ state here before a command can claim a native wire conversation.
 				guide = next.state;
 				return next.frame;
 			}
-			if ( command.kind.startsWith( "alchemy-" ) || command.kind.startsWith( "gacha-" ) ) {
+			if (
+				command.kind.startsWith( "alchemy-" ) || command.kind.startsWith( "gacha-" ) ||
+				command.kind.startsWith( "magic-option-" )
+			) {
 				if ( !localGid ) throw Error( "Local player is not initialized" );
 				if (
 					command.kind === "gacha-open" &&
 					(!entity || entity.kind !== "npc" || entity.refObjId !== 9251 ||
 						targeting.state().target !== command.gid || targeting.state().targetPending)
 				) throw Error( "Select the Magic Pop NPC" );
+				// Row 0x2F exists only on a selected smith (0x80000000).
+				if (
+					command.kind === "magic-option-open" &&
+					(targeting.state().target !== command.gid || targeting.state().targetPending ||
+						!((targeting.state().targetCapabilities ?? 0) & AVATAR_MAGIC_OPTION_FUNCTION))
+				) throw Error( "Select a smith" );
+				if ( command.kind === "magic-option-take" || command.kind === "magic-option-grant" ) {
+					const key = inventory.magicOptionItem( command );
+					if ( key ) {
+						notices = [ ...notices.slice( -99 ), { key, value: 0, sequence: ++noticeSequence } ];
+						dirty = true;
+					}
+					return null;
+				}
 				return inventory.process(
 					command as import("@/engine/contracts/item-process").ItemProcessCommand,
 					now
@@ -1312,11 +1389,14 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "cos-pet-attack" ) {
 				// 6A2350 case 2: an attack pet (class 3) attacks the player's target
 				// with 0x769E [u32 pet][u8 2][u32 target] and remembers it at
-				// +0xAB2C. The client admits monster targets only, like its own
-				// basic attack.
+				// +0xAB2C. A monster is always a target; a player arrives only
+				// admitted by the core (player-attack.ts petPlayerAttack).
 				// command.gid names the target; the record set holds only owned pets.
 				const record = cosRecords.get( command.pet );
-				if ( !record || record.band !== 3 || record.dead || record.hp === 0 || entity?.kind !== "monster" ) {
+				if (
+					!record || record.band !== 3 || record.dead || record.hp === 0 ||
+					(entity?.kind !== "monster" && entity?.kind !== "player")
+				) {
 					throw Error( "No attack pet or attackable target" );
 				}
 				const payload = new Uint8Array( 9 ), v = new DataView( payload.buffer );
@@ -1700,7 +1780,8 @@ state here before a command can claim a native wire conversation.
 				}
 				return selectEntity( entity, now );
 			}
-			if ( command.kind === "attack" && entity.kind !== "monster" ) {
+			// A player arrives here only through player-attack.ts's admission.
+			if ( command.kind === "attack" && entity.kind !== "monster" && entity.kind !== "player" ) {
 				throw new Error( "Target is not attackable" );
 			}
 			// A targeted command settles the server's walk where it finds it: stop the
@@ -1708,14 +1789,24 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "attack" ) {
 				const frame = combat.attack( entity.gid );
 				movement.holdForCast( now );
+				markTarget( entity );
 				return sendFrame( frame );
 			}
 			if ( command.kind !== "skill" ) throw Error( "Unsupported gameplay command" );
 			const frame = combat.skill( command.skillId, entity.gid );
 			movement.holdForCast( now );
+			if ( entity.gid !== localGid ) markTarget( entity );
 			const pressedSkill = command.skillId;
 			const pressedMetadata = catalog.find( row => row.id === pressedSkill );
 			predictCast( pressedMetadata, entity, local, now );
+			// Only a target the row admits stands a cooldown in: any other is the
+			// server's to refuse, and its stand-in showed a cooldown that vanished.
+			const admitted = !!pressedMetadata && skillAdmitsPredictedTarget( pressedMetadata, entity, localGid );
+			if ( !admitted ) {
+				sendFrame( frame );
+				skillPress.sent( now, command.skillId );
+				return frame;
+			}
 			return sendSkillPress(
 				frame,
 				command.skillId,
@@ -1823,6 +1914,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					// its reason (code 4, UIIT_MSG_INTERACTION_FAIL_TOO_FAR).
 					const refusal = frame.payload[0] === 2 ? constantNativeNotice( 13, frame.payload[1]! ) : null;
 					if ( refusal ) notices = [ ...notices.slice( -99 ), { ...refusal, sequence: ++noticeSequence } ];
+					dirty = true;
+				}
+				if ( frame.opcode === AVATAR_MAGIC_OPTION_ANSWER ) {
+					// 770140: success prints UIIT_MSG_AVATAR_MAGICOPTION_ADD; [2][code]
+					// is a category 0x20 notice. The item itself is inventory's.
+					const notice = frame.payload[0] === 1 ?
+						{ key: "UIIT_MSG_AVATAR_MAGICOPTION_ADD", value: 0 } :
+						constantNativeNotice( AVATAR_MAGIC_OPTION_NOTICE_CATEGORY, frame.payload[1] ?? 0 );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					dirty = true;
 				}
 				if ( frame.opcode === 0xb5b6 ) {
@@ -1960,6 +2060,26 @@ Packet handling must not depend on which HUD panel is currently open.
 					return false;
 				}
 				if ( fortressNext ) return true;
+				if ( frame.opcode === 0x3508 && frame.payload[4] === 7 ) {
+					// 77A570 case 7: a growing pet becomes its next form (server
+					// 4EFD10). The owner's record takes the reference and the full
+					// satiety; the entity lane then swaps every viewer's model.
+					const p = frame.payload;
+					if ( p.length !== 9 ) throw Error( "Invalid COS reference change" );
+					const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+					const gid = v.getUint32( 0, true ), refObjId = v.getUint32( 5, true );
+					if ( !gid || !refObjId ) throw Error( "Invalid COS reference" );
+					const record = cosRecords.get( gid );
+					if ( record ) {
+						cosRecords.set( gid, {
+							...record,
+							refObjId,
+							...(record.band === 3 ? { satiety: 10000 } : {})
+						} );
+						dirty = true;
+					}
+					return false;
+				}
 				if ( frame.opcode === 0x3508 && frame.payload[4] === 4 ) {
 					const p = frame.payload;
 					if ( p.length !== 7 ) throw Error( "Invalid COS satiety update" );

@@ -35,7 +35,7 @@ func (rt *Runtime) playerToMonsterCombatSpacing(
 	}
 
 	spacing.ActorBodyRadius = simulation.BodyRadius(playerRadius)
-	spacing.TargetBodyRadius = simulation.BodyRadius(target.Ref.BodyRadius)
+	spacing.TargetBodyRadius = simulation.BodyRadius(target.BodyRadius())
 	spacing.ActionReach = reach
 
 	return spacing, spacing.Valid()
@@ -61,7 +61,7 @@ func (rt *Runtime) monsterToPlayerCombatSpacing(
 		return spacing, false
 	}
 
-	spacing.ActorBodyRadius = simulation.BodyRadius(attacker.Ref.BodyRadius)
+	spacing.ActorBodyRadius = simulation.BodyRadius(attacker.BodyRadius())
 	spacing.TargetBodyRadius = simulation.BodyRadius(playerRadius)
 	spacing.ActionReach = reach
 

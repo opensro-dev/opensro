@@ -176,10 +176,13 @@ Pointers distinguish absent legacy values from meaningful zero values.
 type Character struct {
 	// Actor-only teleport state. Character-store snapshots carry it; reconnect
 	// never resurrects a timer belonging to the previous native actor lifetime.
-	NativeTeleportMode uint8             `json:"-"`
-	PK                 *PKRecord         `json:"pk,omitempty"`
-	Aggressions        map[uint32]uint32 `json:"-"`
-	EventMembership    *EventMembership  `json:"-"`
+	NativeTeleportMode uint8     `json:"-"`
+	PK                 *PKRecord `json:"pk,omitempty"`
+	// LastSeenUnixMs is when the character last left the world (guild
+	// votes measure a master's and a voter's absence from it).
+	LastSeenUnixMs  int64             `json:"lastSeenUnixMs,omitempty"`
+	Aggressions     map[uint32]uint32 `json:"-"`
+	EventMembership *EventMembership  `json:"-"`
 	// NativeBodyStatus is runtime-only state, copied under the character store
 	// door. Writers use TransitionBodyStatus; presentation never owns it.
 	BerserkPoints  uint8 `json:"berserkPoints"`

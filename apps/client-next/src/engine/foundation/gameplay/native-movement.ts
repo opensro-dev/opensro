@@ -24,6 +24,35 @@ const ANGULAR_MODE = 0;
 
 /*
 ================
+validMovementSpeed
+
+A speed channel is any finite non-negative rate. Zero is authored data: a
+stationary monster (MOB_OA_DESERTTRUNKZ walks and runs at 0) keeps 0 under
+every slowing status, and CPSMission_OnEntitySpeedUpdate0x376F (775E40)
+stores the floats at mover +0x654/+0x658 without a check.
+================
+*/
+export function validMovementSpeed( speed: number ) {
+	return Number.isFinite( speed ) && speed >= 0;
+}
+
+/*
+================
+movementDuration
+
+Milliseconds to cover distance at speed. The native mover advances by
+speed times the frame delta, so at speed 0 it makes no progress: the leg
+holds where it is (unbounded duration) until a later speed resumes it.
+================
+*/
+export function movementDuration( distance: number, speed: number ) {
+	if ( !validMovementSpeed( speed ) ) throw new Error( "Invalid movement speed" );
+	if ( !distance ) return 0;
+	return speed ? distance / speed * 1000 : Infinity;
+}
+
+/*
+================
 decodeMovementSpeeds
 
 775E40 reads exactly {GID, walk, run}; these are live channels, not a new
@@ -36,7 +65,7 @@ export function decodeMovementSpeeds( p: Uint8Array ) {
 		gid = v.getUint32( 0, true ),
 		walkSpeed = v.getFloat32( 4, true ),
 		runSpeed = v.getFloat32( 8, true );
-	if ( !gid || ![ walkSpeed, runSpeed ].every( n => Number.isFinite( n ) && n > 0 ) ) {
+	if ( !gid || ![ walkSpeed, runSpeed ].every( validMovementSpeed ) ) {
 		throw Error( "Invalid movement speed channels" );
 	}
 	return { gid, walkSpeed, runSpeed };
@@ -45,6 +74,9 @@ export function decodeMovementSpeeds( p: Uint8Array ) {
 /*
 ================
 movementSpeedTransition
+
+Retimes the rest of a leg from the pose reached now: the remaining distance
+at the new speed. A leg held at speed 0 resumes from where it stopped.
 ================
 */
 export function movementSpeedTransition(
@@ -53,13 +85,9 @@ export function movementSpeedTransition(
 	next: number,
 	now: number
 ): MovementSegment {
-	if ( ![ previous, next ].every( n => Number.isFinite( n ) && n > 0 ) ) throw Error( "Invalid movement speed" );
-	return {
-		...segment,
-		from: sampleMovement( segment, now ),
-		start: now,
-		duration: Math.max( 0, segment.start + segment.duration - now ) * previous / next
-	};
+	if ( !validMovementSpeed( previous ) ) throw Error( "Invalid movement speed" );
+	const from = sampleMovement( segment, now );
+	return { ...segment, from, start: now, duration: movementDuration( poseDistance( from, segment.to ), next ) };
 }
 
 /*
@@ -227,11 +255,14 @@ export function movementModeTransition(
 	if ( mode === 0 || mode === 4 ) return { pose, segment: null };
 	// A receipt's authoritative arrival time is not replaced by client speed.
 	if ( serverTimed ) return { pose, segment };
-	const distance = poseDistance( pose, segment.to );
-	if ( distance && (!Number.isFinite( speed ) || speed <= 0) ) throw new Error( "Moving entity has no speed" );
 	return {
 		pose,
-		segment: { from: pose, to: segment.to, start: now, duration: distance ? distance / speed * 1000 : 0 }
+		segment: {
+			from: pose,
+			to: segment.to,
+			start: now,
+			duration: movementDuration( poseDistance( pose, segment.to ), speed )
+		}
 	};
 }
 

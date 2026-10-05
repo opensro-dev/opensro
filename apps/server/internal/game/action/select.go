@@ -15,7 +15,7 @@ the 0xB45A twin's encoder). The browser client folded sub_764c60's
 live-CICNPC arm REAL (npcTalkPlane.ts consumes it), retiring the old
 "0xB45A is unconsumable" ruling from server-wave seq 51: the GRANT for
 a live roster NPC now answers a real 0xB45A - result 1, the gid, the
-codename-resolved capability flags (simulation.NpcTalkCapabilityFlags) -
+capability flags its service set projects (simulation.ResolveNpcTalkFlags) -
 and the NPC talk window opens from live play. A live in-scope monster
 answers the same opcode with current HP and flags zero, updating the
 target HUD without opening the talk window. Player and ground-drop grants
@@ -250,9 +250,7 @@ lanes) attacker-chosen targets (coordinator ruling, seq 51). Every
 grant records the selection on the runtime store. The roster-NPC grant
 answers with the 0xB45A talk flags; the monster grant answers with its
 per-instance current HP and zero flags. Player and ground grants stay
-frameless (no native response bytes are proven for those outcomes), and so
-does an NPC whose codename has no capability row yet
-(simulation.NpcTalkCapabilityFlags documents that silence DECISION).
+frameless (no native response bytes are proven for those outcomes).
 ================
 */
 func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.Character, payload []byte) SelectOutcome {

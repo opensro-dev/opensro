@@ -12,6 +12,7 @@ package guild_test
 import (
 	"bytes"
 	"encoding/binary"
+	"opensro.online/server/internal/domain"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -82,6 +83,30 @@ func (s staticGuildStore) DissolveGuildAs(string, int64) (enterworld.GuildSnapsh
 // inert like the other write doors.
 func (s staticGuildStore) DonateGuildPoints(string, int64, uint32) (enterworld.GuildDonationResult, enterworld.GuildRefusal) {
 	return enterworld.GuildDonationResult{}, enterworld.GuildRefusalUpdateRejected
+}
+
+func (s staticGuildStore) ClaimWarCompensationAs(string, int64) (int64, enterworld.GuildRefusal) {
+	return 0, enterworld.GuildRefusalUpdateRejected
+}
+
+func (s staticGuildStore) OpenMasterReleaseVoteAs(string, int64, int64, func(int64) int64) (enterworld.GuildSnapshot, enterworld.GuildRefusal) {
+	return enterworld.GuildSnapshot{}, enterworld.GuildRefusalUpdateRejected
+}
+
+func (s staticGuildStore) CastGuildBallotAs(string, int64, uint32, uint8) (domain.GuildVoteBallot, enterworld.GuildRefusal) {
+	return domain.GuildVoteBallot{}, enterworld.GuildRefusalUpdateRejected
+}
+
+func (s staticGuildStore) CloseDueGuildVotes(string, int64, uint8, uint32) []domain.GuildVoteOutcome {
+	return nil
+}
+
+func (s staticGuildStore) TransactGuildStorageAs(string, int64, func(*domain.Character, *domain.AccountStorage) error) (domain.AccountStorage, enterworld.GuildRefusal, error) {
+	return domain.AccountStorage{}, enterworld.GuildRefusalUpdateRejected, nil
+}
+
+func (s staticGuildStore) LevelUpGuildAs(string, int64) (enterworld.GuildSnapshot, enterworld.GuildRefusal) {
+	return enterworld.GuildSnapshot{}, enterworld.GuildRefusalUpdateRejected
 }
 
 // oracle32C4 hand-rolls the pinned 0x32C4 layout (fold sub_826610;

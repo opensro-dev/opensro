@@ -27,7 +27,7 @@ import (
 
 const (
 	characterAuthorityFormat  = "sro-server-character-authority"
-	characterAuthorityVersion = 2
+	characterAuthorityVersion = 3
 )
 
 // RosterModel is one semantic playable-character identity extracted from
@@ -37,6 +37,10 @@ type RosterModel struct {
 	Codename   string  `json:"codename"`
 	RefObjID   uint32  `json:"refObjId"`
 	BodyRadius float64 `json:"bodyRadius"`
+	// Knockdown is RefObjChar column 87, the displacement flags (bit 0 a
+	// knockdown, 58E520; bit 1 a knockback, 58FF7A); KORecoverMs column 88.
+	Knockdown   uint32 `json:"knockdown"`
+	KORecoverMs uint32 `json:"koRecoverMs"`
 }
 
 // Roster is the server projection's semantic playable-character catalogue.

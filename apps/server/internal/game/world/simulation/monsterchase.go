@@ -114,7 +114,7 @@ func (ops *MonsterMoverOps) startChaseLeg(
 	// The target's sampled pose remains the only legal geometry input.
 	targetGuidance := target.chaseGuidance()
 	spacing := CombatSpacing{
-		ActorBodyRadius:  BodyRadius(instance.Ref.BodyRadius),
+		ActorBodyRadius:  BodyRadius(instance.BodyRadius()),
 		TargetBodyRadius: target.BodyRadius,
 		ActionReach:      ActionReach(mover.AttackReach),
 	}

@@ -12,7 +12,7 @@ func TestFreshMonsterRunsRetailSpawnIdleWanderLifecycle(t *testing.T) {
 	template := monster.TemplateFromParts(map[uint32]monster.MonsterRef{
 		1933: {RefObjID: 1933, Codename: "MOB_CH_MANGNYANG", WalkSpeed: 8, RunSpeed: 22},
 	}, []monster.NestRow{
-		{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: 25000, X: 1000, Y: 20, Z: 1000}},
+		{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}},
 	})
 	registry := NewMonsterState(template)
 	registry.SetTimeSource(func() time.Time { return time.UnixMilli(t0) })

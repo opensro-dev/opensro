@@ -98,6 +98,8 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 		if err != nil {
 			return combat.WallOutcome{}, err
 		}
+		// 58EB64: the defender's evade critical (0x39) cuts the chance.
+		rate = combat.EvadedCriticalRate(rate, defender)
 		critical, next, err = combat.CriticalOutcome(float64(rate), previous, rt.CombatRoll)
 		if err != nil {
 			return combat.WallOutcome{}, err

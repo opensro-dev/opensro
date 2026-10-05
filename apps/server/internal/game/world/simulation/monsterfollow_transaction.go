@@ -30,7 +30,7 @@ func (s *MonsterState) prepareFollow(division string, expected monster.Instance,
 	leader, moving := state.movers.lookup(mover.ControllerGID())
 	plan.leaderExists = exists && moving
 	plan.leader, plan.leaderHP = leader, parent.CurrentHP
-	plan.leaderRadius = parent.Ref.BodyRadius
+	plan.leaderRadius = parent.BodyRadius()
 	plan.timersBefore = *s.aiTimersLocked(state, instance, nowMs)
 	plan.timers = plan.timersBefore
 	return plan, true
@@ -49,7 +49,7 @@ func (s *MonsterState) commitFollow(plan monsterFollowPlan, mover monster.MoverS
 	timers := state.aiTimer(plan.instance.Gid)
 	if !exists || current.CurrentHP == 0 || current != plan.instance ||
 		state.movers.get(current.Gid) != plan.mover || timers == nil || *timers != plan.timersBefore ||
-		(parentExists && leaderExists) != plan.leaderExists || parent.CurrentHP != plan.leaderHP || parent.Ref.BodyRadius != plan.leaderRadius || leader != plan.leader {
+		(parentExists && leaderExists) != plan.leaderExists || parent.CurrentHP != plan.leaderHP || parent.BodyRadius() != plan.leaderRadius || leader != plan.leader {
 		return nil, false
 	}
 	// No callbacks follow validation. Publish staged cadence before entry;

@@ -324,3 +324,19 @@ test("sub-tick drawing predicts motion without changing simulation, births or ra
 	particleElementMatrix( element, out, 0, .5 );
 	assert.equal( out[12], 1930.5 );
 });
+
+test("a holder turn between ticks reaches the elements linked to it on the next tick", () => {
+	// A matrix-linked root emitter (EFP node int1 = 1, CEFElement_ResolveLinkAncestors).
+	const graph = [ emitter( { frames: 40, matrixDepth: 1 } ) ];
+	const down = new Float32Array( [ 1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1 ] );
+	const level = new Float32Array( [ 0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1 ] );
+	const state = createParticleGraph( graph, 0 );
+	advanceParticleGraph( state, graph, 0, down, table );
+	// Render frames outnumber 20 Hz ticks: the holder turns on a call that
+	// runs no tick, and the next tick must still carry the whole turn.
+	advanceParticleGraph( state, graph, .01, level, table );
+	advanceParticleGraph( state, graph, .02, level, table );
+	advanceParticleGraph( state, graph, .05, level, table );
+	const z = Array.from( state.elements[0][0].matrix.subarray( 8, 11 ), v => Math.round( v * 1e6 ) / 1e6 + 0 );
+	assert.deepEqual( z, [ 1, 0, 0 ] );
+});

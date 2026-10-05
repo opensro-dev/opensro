@@ -252,6 +252,21 @@ export function buybackEntries( value: unknown ): readonly BuybackOffer[] {
 	return value as readonly BuybackOffer[];
 }
 
+/*
+================
+restoreSlotEntry
+
+The entry the store's repurchase slot shows. CIFStore_RefreshTabSlots
+(5B6440) walks the restore list from its back, so slot 0 holds the newest
+sale (the highest list ordinal) and slot 4 the oldest, which the next sale
+evicts (CGInterface_AllocateNotice148 68F480). Entry indices are list
+ordinals, the ones the 0x77E7 request and its 0xB06D removal count.
+================
+*/
+export function restoreSlotEntry( entries: readonly BuybackOffer[], slot: number ): BuybackOffer | undefined {
+	return entries.find( row => row.index === entries.length - 1 - slot );
+}
+
 export interface CommerceItemReference {
 	readonly tooltip?: ItemTooltipReference;
 	readonly icon?: string;

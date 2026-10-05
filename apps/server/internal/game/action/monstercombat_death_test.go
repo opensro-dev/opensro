@@ -12,6 +12,7 @@ package action
 
 import (
 	"encoding/binary"
+	"opensro.online/server/internal/game/pk"
 	"testing"
 	"time"
 
@@ -209,7 +210,7 @@ func TestFatalMonsterAttackCommitsAndReturnsDeathProgression(t *testing.T) {
 	skills[2] = skill
 
 	penaltyCalls := 0
-	rt.ApplyDeathPenalty = func(c *enterworld.Character) ([]wire.Frame, bool) {
+	rt.ApplyDeathPenalty = func(c *enterworld.Character, _ pk.DeathPenalty) ([]wire.Frame, bool) {
 		penaltyCalls++
 		if c.CurrentHP == nil || *c.CurrentHP != 0 {
 			t.Fatalf("death updater observed HP %v, want fatal HP committed inside the same door", c.CurrentHP)

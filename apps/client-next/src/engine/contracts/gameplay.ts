@@ -117,6 +117,9 @@ export interface ChatLine {
 	readonly gid?: number;
 	readonly text: string;
 	readonly outgoing: boolean;
+	// A line from the server's replayed transcript (OpChatHistory): already
+	// said before this session, so never speech over a head.
+	readonly history?: boolean;
 }
 /*
 ================
@@ -156,6 +159,10 @@ export type GameplayCommand =
 	| { readonly kind: "cos-drop"; readonly gid: number; readonly slot: number; }
 	| { readonly kind: "guide-event"; readonly event: number; }
 	| { readonly kind: "storage-open"; readonly gid: number; }
+	// The guild manager's warehouse row (storage-room.ts openGuild) and the
+	// declined war compensation quote (guild-manager-hud.ts).
+	| { readonly kind: "storage-open-guild"; readonly gid: number; }
+	| { readonly kind: "compensation-dismiss"; }
 	// The job guild confirmations (job-guild.ts): join, withdraw and the alias.
 	| { readonly kind: "job-join"; readonly gid: number; readonly job: number; }
 	| { readonly kind: "job-withdraw"; readonly gid: number; }
@@ -216,6 +223,11 @@ export type GameplayCommand =
 	| { readonly kind: "chat"; readonly channel: number; readonly text: string; readonly target?: string; }
 	| { readonly kind: "mount"; readonly gid: number; }
 	| { readonly kind: "pickup"; readonly gid: number; }
+	// The pickup shortcut: the worker chooses the item (pickup-nearest.ts).
+	| { readonly kind: "pickup-nearest"; }
+	// A click on another player: the worker decides whether it attacks
+	// (player-attack.ts). Sent before the click's select.
+	| { readonly kind: "player-interact"; readonly gid: number; readonly alt: boolean; }
 	| {
 		readonly kind: "release-target";
 	}
@@ -469,6 +481,7 @@ export interface GameplayState {
 	readonly weather?: import("@/engine/foundation/gameplay/weather").WeatherOptions;
 	readonly alchemy?: import("./item-process").AlchemyState;
 	readonly gacha?: import("./item-process").GachaState;
+	readonly magicOption?: import("./item-process").MagicOptionGrantState;
 	readonly targetCapabilities?: number;
 	readonly targetTaxRate?: number;
 	readonly shopCompletionRevision?: number;

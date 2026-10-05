@@ -564,6 +564,16 @@ export function createEntities(
 				}
 				return;
 			}
+			if ( frame.opcode === 0x3508 && p[4] === 7 ) {
+				// 77A570 case 7 calls the entity's reference setter: the pet's
+				// next form replaces its model for every viewer.
+				if ( p.length !== 9 ) throw Error( "Invalid COS reference change" );
+				const entity = entities.get( v.getUint32( 0, true ) ), refObjId = v.getUint32( 5, true );
+				const tid = refs.get( refObjId )?.tidWord;
+				if ( tid === undefined ) throw Error( "Unknown COS reference " + refObjId );
+				if ( entity ) apply( { kind: "state", entity: { ...entity, refObjId, tidWord: tid } } );
+				return;
+			}
 			if ( frame.opcode === 0x323a ) {
 				// CPSMission_OnCharacterSkinChangeSuccess0x323A (7641D0): u32 gid, u32 skin.
 				if ( p.length < 8 ) throw Error( "Invalid skin change" );
@@ -1070,6 +1080,16 @@ export function createEntities(
 			}
 		},
 		read: ( gid: number ) => entities.get( gid ),
+		/*
+		================
+		groundItems
+
+		The ground items in the table now, every despawn already applied.
+		================
+		*/
+		groundItems(): EntityState[] {
+			return [ ...entities.values() ].filter( entity => entity.kind === "ground-item" );
+		},
 		/*
 		================
 		die

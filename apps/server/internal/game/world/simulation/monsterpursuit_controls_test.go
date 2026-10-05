@@ -16,7 +16,7 @@ func pursuitControlsFixture(t *testing.T) (*MonsterMoverOps, monster.Instance, m
 	instance.Nest.PolicyPinned = true
 	instance.Nest.Radius = 20
 	instance.Nest.Controls = monster.TacticsControls{TraceBoundary: 1, TraceData: 500}
-	target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1100, Y: 20, Z: 1000}, BodyRadius: 4}
+	target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1100, Y: 20, Z: 1000}, BodyRadius: 4}
 	s := ops.Monsters
 	s.mu.Lock()
 	s.division(monsterTestDivision).instances.set(instance.Gid, instance)

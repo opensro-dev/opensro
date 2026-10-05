@@ -333,3 +333,44 @@ test("distant cues allocate nothing; cold expired cues warm the cache without la
 	assert.equal( panners[0].panningModel, "equalpower" );
 	audio.dispose();
 });
+test("a listener without position parameters (Firefox) is placed through setPosition", t => {
+	const placed = [], turned = [];
+	const node = () => ({ connect() {}, disconnect() {} });
+	class Context {
+		state = "running";
+		destination = {};
+		listener = {
+			setPosition( ...xyz ) {
+				placed.push( xyz );
+			},
+			setOrientation( ...v ) {
+				turned.push( v );
+			}
+		};
+		resume() {
+			return Promise.resolve();
+		}
+		close() {
+			return Promise.resolve();
+		}
+		createGain() {
+			return { ...node(), gain: {} };
+		}
+	}
+	const old = globalThis.AudioContext;
+	globalThis.AudioContext = Context;
+	t.after( () => {
+		if ( old ) globalThis.AudioContext = old;
+		else delete globalThis.AudioContext;
+	} );
+	const audio = createAudio(
+		{ available: () => 4, request: () => 1, take: () => undefined, cancel() {} },
+		"http://fixture.invalid",
+		{ range: () => 0 }
+	);
+	audio.unlock();
+	audio.step( 0, [ 1, 2, 3 ], { forward: [ 0, 0, -1 ], up: [ 0, 1, 0 ] } );
+	assert.deepEqual( placed.at( -1 ), [ 1, 2, 3 ] );
+	assert.deepEqual( turned.at( -1 ), [ 0, 0, -1, 0, 1, 0 ] );
+	audio.dispose();
+});

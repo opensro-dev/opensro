@@ -45,6 +45,9 @@ type SkillFixedDamage struct {
 	Present   bool
 	Amount    uint32
 	MPPercent uint32
+	// Power is getv SAAA (+0x538): Formulae_CalculateFixedSkillDamage
+	// (40F5F0) adds the caster's ParameterFixedDamagePower to the amount.
+	Power bool
 }
 
 /*
@@ -90,9 +93,11 @@ func compileSkillFixedDamage(fields []string, row SkillRow) (SkillFixedDamage, b
 			}
 			out.MPPercent = op.Arguments[1]
 		case tagGetv: // BDMD: the prepared cost applies it (noteParameterIndex)
-			if _, known := SkillParameterFromKey(op.Arguments[0]); !known {
+			slot, known := SkillParameterFromKey(op.Arguments[0])
+			if !known {
 				return SkillFixedDamage{}, false
 			}
+			out.Power = out.Power || slot == ParameterFixedDamagePower
 		default:
 			return SkillFixedDamage{}, false
 		}

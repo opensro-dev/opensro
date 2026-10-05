@@ -14,8 +14,10 @@ param-job board like any other.
 
 INFERENCE: the tickets' Param3 is a daily allotment (milliseconds a day)
 kept by a v1.188 timed-job clock this port does not carry; the bonus runs
-for the ticket's whole period. Param2 (EXP recovered on death) is zero in
-every shipped ticket.
+for the ticket's whole period. Param2 is the EXP a death keeps
+(CTJ_PremiumKeeper's ParamKeeper 0x101, read by the death penalty
+4E6B74); every shipped ticket authors zero, and a nonzero one raises it as
+a third param job.
 
 ===========================================================================
 */
@@ -46,6 +48,7 @@ func (rt *Runtime) usePremiumTicket(use skillItemUse, c *enterworld.Character, t
 	seconds, _ := use.ref.NativeFields.Lookup("itemParam1_29c")
 	expPercent, _ := use.ref.NativeFields.Lookup("itemParam4_2a8")
 	skillPercent, _ := use.ref.NativeFields.Lookup("itemParam5_2ac")
+	keepPercent, _ := use.ref.NativeFields.Lookup("itemParam2_2a0")
 	if seconds <= 0 {
 		return false
 	}
@@ -64,6 +67,10 @@ func (rt *Runtime) usePremiumTicket(use skillItemUse, c *enterworld.Character, t
 	if skillPercent > 0 {
 		jobs = append(jobs, domain.ParamJob{ItemRefObjID: use.ref.RefObjID, Codename: use.ref.Codename,
 			Param: paramPremiumSkillExpRate, Value: int64(skillPercent), EndUnixMs: end})
+	}
+	if !skillOnly && keepPercent > 0 {
+		jobs = append(jobs, domain.ParamJob{ItemRefObjID: use.ref.RefObjID, Codename: use.ref.Codename,
+			Param: paramDeathExpKept, Value: int64(keepPercent), EndUnixMs: end})
 	}
 	if len(jobs) == 0 {
 		return false

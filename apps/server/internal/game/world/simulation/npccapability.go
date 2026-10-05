@@ -1,169 +1,109 @@
+/*
+===========================================================================
+
+npccapability.go - the 0xB45A talk word an NPC's select answer carries
+
+The client menu builder (CIFNPCTalk_BuildMenuFromCapabilities 5D9100) turns
+the u32 into talk-window rows, and a row's click sends that bit back as the
+0x7338 mask. The word is the NPC's service set (npcservice.go) in the
+v1.150 bit layout, plus the services other owners grant: the shop of a
+refshopgroup association, the talk row of npcchat speech, the teleport
+bits of teleportdata (ConfigurePortals) and the Magic POP binding.
+
+===========================================================================
+*/
+
 package simulation
 
-import "strings"
-
-// NPC talk capability flags: the u32 dword the S->C 0xB45A select grant
-// carries and the client menu builder (folded sub_5d9100,
-// CIFNPCTalk_BuildMenuFromFlags) turns into talk-window rows.
-//
-// Retail has no single data column for this word. The v1.188 server composes
-// it from three owners: sub_4c6350's codename service registrations,
-// refshopgroup's NPC association, and script/session-owned conversation
-// options. The port therefore resolves the final word onto NpcDef at media
-// load; packet handlers consume that row instead of maintaining a short
-// parallel allowlist.
+// NPC talk capability bits: bit 1 << (option - 1) of the service option.
 const (
-	// NpcTalkFlagShop is the shop row (client action 1). PINNED: the
-	// refshopgroup.txt association carries every roster codename we seed,
-	// and the v1.188 switch registers option 1 alongside it for
-	// warehouse/guild arms.
-	NpcTalkFlagShop uint32 = 0x1
-	// NpcTalkFlagTalk is the talk-start row (client action 4). The v1.188
-	// switch registers option 4 only on the smith/armor list (~214184+).
-	NpcTalkFlagTalk uint32 = 0x2
-	// NpcTalkFlagStorage is the storage row (client action 3). PINNED:
-	// the switch's "WAREHOUSE" substring arm registers option 3
-	// (~214134).
-	NpcTalkFlagStorage uint32 = 0x4
-	// NpcTalkFlagAction0B is the label-less client action 0xb row
-	// (repair-adjacent; the fold carries no label). The switch's second
-	// smith pass registers option 0x20 on the same list (~214337+).
-	NpcTalkFlagAction0B uint32 = 0x20
-	// NpcTalkFlagRecallPoint is the teleport-guide row (client action 9)
-	// that opens the retail return-point designation agreement.
-	NpcTalkFlagRecallPoint uint32 = 0x40
-	// NpcTalkFlagGuild is the guild set (client action 0x12 create /
-	// management when in guild). The switch's NPC_*_GUILD arm registers
-	// the guild token 0xf (~214481+); the client's guild set reads bit
-	// 0x4000.
-	NpcTalkFlagGuild uint32 = 0x4000
-	// NpcTalkFlagGachaMachine is the Magic Pop row: client
-	// CIFNPCTalk_BuildMenuFromFlags tests 0x10000 and appends action 0x27.
-	// The action click then sends 0x7338 [boundGid][0x10000], whose B338
-	// answer opens control 0x8c.
-	NpcTalkFlagGachaMachine uint32 = 0x10000
-	// NpcTalkFlagJobTrader, Thief and Hunter are the job guild menus
-	// (CIFNPCTalk_AppendJobMenuRows for job 1, 2 and 3): sub_4c6350
-	// registers options 0x14, 0x15 and 0x16 on the guild NPCs below.
-	NpcTalkFlagJobTrader uint32 = 0x80000
-	NpcTalkFlagJobThief  uint32 = 0x100000
-	NpcTalkFlagJobHunter uint32 = 0x200000
+	NpcTalkFlagShop          uint32 = 0x1     // option 1, row 1
+	NpcTalkFlagTalk          uint32 = 0x2     // option 2, row 4
+	NpcTalkFlagStorage       uint32 = 0x4     // option 3, rows 3, 0x2D, 0x2E
+	NpcTalkFlagRepair        uint32 = 0x8     // option 4, no row; shows the NPC quest tab
+	NpcTalkFlagRecallPoint   uint32 = 0x40    // option 7, row 9
+	NpcTalkFlagTeleport      uint32 = 0x80    // option 8, row 0xA
+	NpcTalkFlagStable        uint32 = 0x400   // option 0xB, no row
+	NpcTalkFlagSpecialTrade  uint32 = 0x800   // option 0xC, the shop row sends 0x800
+	NpcTalkFlagThiefBuy      uint32 = 0x1000  // option 0xD, no row
+	NpcTalkFlagGeneral       uint32 = 0x2000  // option 0xE, no row
+	NpcTalkFlagGuild         uint32 = 0x4000  // option 0xF, rows 0x12..0x1D
+	NpcTalkFlagGachaMachine  uint32 = 0x10000 // option 0x11, row 0x27
+	NpcTalkFlagJobTrader     uint32 = 0x80000
+	NpcTalkFlagJobThief      uint32 = 0x100000
+	NpcTalkFlagJobHunter     uint32 = 0x200000
+	NpcTalkFlagReverseReturn uint32 = 0x20000000 // option 0x1E, rows 0x2B
+	NpcTalkFlagGatePulley    uint32 = 0x40000000 // option 0x1F, a u16 tail follows
+	NpcTalkFlagMagicOption   uint32 = 0x80000000 // option 0x20, row 0x2F
 
-	// NpcTalkImplementedFlags is the capability subset whose complete
-	// request -> authority -> response lifecycle exists in this port. The
-	// v1.188 registration table below remains the evidence catalogue, but a
-	// retail row must not be advertised to the client until its gameplay
-	// owner exists: otherwise CIFNPCTalk renders a button that can only be
-	// rejected by HandleNpcAction. Repair-adjacent action 0x0b and guild
-	// management therefore stay fail-closed at the media boundary; storage
-	// has its owner (action/storage.go).
-	NpcTalkImplementedFlags uint32 = NpcTalkFlagShop |
-		NpcTalkFlagTalk |
-		NpcTalkFlagStorage |
-		NpcTalkFlagRecallPoint |
-		NpcTalkFlagGachaMachine |
-		NpcTalkFlagJobTrader |
-		NpcTalkFlagJobThief |
-		NpcTalkFlagJobHunter
+	// NpcTalkImplementedFlags is the subset whose request -> authority ->
+	// response lifecycle exists in this port; a row the client would draw
+	// for any other bit could only be refused. Bits without a row (repair,
+	// stable, thief buy, general) carry nothing to refuse. Still closed:
+	// the fortress staff and gate pulleys.
+	NpcTalkImplementedFlags uint32 = NpcTalkFlagShop | NpcTalkFlagTalk | NpcTalkFlagStorage |
+		NpcTalkFlagRepair | NpcTalkFlagRecallPoint | NpcTalkFlagTeleport | NpcTalkFlagStable |
+		NpcTalkFlagSpecialTrade | NpcTalkFlagThiefBuy | NpcTalkFlagGeneral | NpcTalkFlagGachaMachine |
+		NpcTalkFlagJobTrader | NpcTalkFlagJobThief | NpcTalkFlagJobHunter | NpcTalkFlagReverseReturn |
+		NpcTalkFlagGuild | NpcTalkFlagMagicOption
 )
 
-// jobGuildCodenames: sub_4c6350 matches these by substring (CRT_strstr)
-// and registers the guild option for the job beside them.
-var jobGuildCodenames = []struct {
-	part string
-	flag uint32
-}{
-	{"NPC_CH_DOCTOR", NpcTalkFlagJobTrader}, {"NPC_WC_DOCTOR", NpcTalkFlagJobTrader},
-	{"NPC_KT_DESIGNER", NpcTalkFlagJobTrader}, {"NPC_EU_MERCHANT", NpcTalkFlagJobTrader},
-	{"NPC_CA_MERCHANT", NpcTalkFlagJobTrader}, {"NPC_SD_M_AREA_MERCHANT", NpcTalkFlagJobTrader},
-	{"NPC_CH_GENARAL_SW", NpcTalkFlagJobHunter}, {"NPC_WC_GENARAL_SW", NpcTalkFlagJobHunter},
-	{"NPC_KT_MINISTER", NpcTalkFlagJobHunter}, {"NPC_EU_HUNTER", NpcTalkFlagJobHunter},
-	{"NPC_CA_HUNTER", NpcTalkFlagJobHunter}, {"NPC_SD_M_AREA_HUNTER", NpcTalkFlagJobHunter},
-	{"NPC_TD_THIEF_SELL", NpcTalkFlagJobThief}, {"NPC_SD_T_AREA_THIEF", NpcTalkFlagJobThief},
+// npcGachaMachines are the NPCs the reference data binds a Magic POP to
+// (4C6350 registers option 0x11 when CRefData_FindNpcGachaName finds one).
+// INFERENCE: the v1.150 media ships no gacha binding table; the one machine
+// the client knows (row 0x27, SN_TALK_CH_GACHA_MACHINE_2) is the binding.
+var npcGachaMachines = map[string]bool{"NPC_CH_GACHA_MACHINE": true}
+
+/*
+================
+ResolveNpcServices
+
+The service set of a roster row: 4C6350's codename chains, the shop a
+refshopgroup association grants, the talk row of npcchat speech and the
+Magic POP binding. INFERENCE: v1.188 registers option 2 nowhere in 4C6350;
+the quest and Lua plane adds conversation, which npcchat speech stands for.
+================
+*/
+func ResolveNpcServices(npc NpcDef) NpcServices {
+	services := NpcServicesForCodename(npc.Codename)
+	if len(npc.NpcTalkStoreGroups) != 0 {
+		services = services.With(NpcServiceShop)
+	}
+	if npc.BaseSpeechSymbol != "" || npc.QuestSpeechSymbol != "" {
+		services = services.With(NpcServiceTalk)
+	}
+	if npcGachaMachines[npc.Codename] {
+		services = services.With(NpcServiceGachaMachine)
+	}
+	return services
 }
 
-// NpcJobGuild answers the job (1 trader, 2 thief, 3 hunter) whose guild an
-// NPC keeps, or 0.
-func NpcJobGuild(codename string) uint8 {
-	switch npcJobGuildFlag(codename) {
-	case NpcTalkFlagJobTrader:
+/*
+================
+ResolveNpcTalkFlags
+
+The talk word composed at the data boundary, limited to implemented rows.
+================
+*/
+func ResolveNpcTalkFlags(npc NpcDef) uint32 {
+	return npc.Services.TalkFlags() & NpcTalkImplementedFlags
+}
+
+/*
+================
+NpcJobGuild
+
+The job (1 trader, 2 thief, 3 hunter) whose guild an NPC keeps, or 0.
+================
+*/
+func NpcJobGuild(npc NpcDef) uint8 {
+	switch {
+	case npc.Services.Has(NpcServiceJobTrader):
 		return 1
-	case NpcTalkFlagJobThief:
+	case npc.Services.Has(NpcServiceJobThief):
 		return 2
-	case NpcTalkFlagJobHunter:
+	case npc.Services.Has(NpcServiceJobHunter):
 		return 3
 	}
 	return 0
-}
-
-// npcJobGuildFlag is the job guild capability bit of a codename, or 0.
-func npcJobGuildFlag(codename string) uint32 {
-	for _, row := range jobGuildCodenames {
-		if strings.Contains(codename, row.part) {
-			return row.flag
-		}
-	}
-	return 0
-}
-
-// npcTalkCapabilityByCodename maps a roster NPC codename to its 0xB45A
-// capability dword. Values must never carry 0x40000000: that bit makes
-// the client expect a u16 job-transport tail the encoder does not write
-// and no job-transport plane exists on either side (pinned by the
-// encoder's contract and the test suite).
-//
-// DECISIONS on the PROBABLE bits (per-bit grades in the recon doc §6):
-//
-//   - Talk 0x2 is NOT implicit for every talkable NPC: it is emitted only
-//     where the v1.188 switch registers option 4, which is the smith list
-//     and not the warehouse/guild arms. Emitting it there anyway would put
-//     a talk-start row on screen that retail's registration never granted
-//   - a guess dressed as a capability. If a live 0xB045/0xB45A capture
-//     proves the bit, add it to the row then.
-//   - Smith 0x20 is included: the switch registers option 0x20 on the
-//     same smith list and the client consumes bit 0x20; both sides agree
-//     on the bit position even though the row's label is unpinned.
-//   - Guild 0x4000 is included: the option-0xf -> bit-0x4000 numeric
-//     conversion is PROBABLE rather than pinned, but a guild NPC without
-//     the guild set is pointless (the create flow is the reason the
-//     codename exists), and the client bit is unambiguous in the folded
-//     menu builder.
-//
-// NPC_EU_WAREHOUSE and NPC_EU_GUILD are seeded ahead of the roster (only
-// NPC_EU_SMITH spawns today) so growing the roster is a one-line diff
-// with the flags decision already reviewed.
-var reconstructedNpcServiceFlagsByCodename = map[string]uint32{
-	"NPC_EU_SMITH":         NpcTalkFlagShop | NpcTalkFlagTalk | NpcTalkFlagAction0B, // 0x23
-	"NPC_EU_WAREHOUSE":     NpcTalkFlagShop | NpcTalkFlagStorage,                    // 0x05
-	"NPC_EU_GUILD":         NpcTalkFlagShop | NpcTalkFlagGuild,                      // 0x4001
-	"NPC_CH_GACHA_MACHINE": NpcTalkFlagGachaMachine,
-	"NPC_EU_ADVICE3":       NpcTalkFlagTalk, // Recall eligibility comes from teleportdata, not the codename.
-}
-
-// NpcTalkCapabilityFlags answers the 0xB45A capability dword for a roster
-// codename. ok is false for a codename with no table row - DECISION: the
-// select handler then grants SILENTLY (no 0xB45A) instead of emitting
-// flags 0. A zero dword would open a talk window whose empty menu claims
-// "this NPC offers nothing", a positive assertion we cannot back;
-// silence asserts nothing and is exactly the pre-landing behavior the
-// client already handles (no window until the row is decided).
-func NpcTalkCapabilityFlags(codename string) (uint32, bool) {
-	flags, ok := reconstructedNpcServiceFlagsByCodename[codename]
-	return flags, ok
-}
-
-// ResolveNpcTalkFlags composes the capability word at the data boundary.
-// npcchat-backed talk is deliberately independent from sub_4c6350's static
-// service switch: the retail Lua/session plane can add ordinary conversation
-// rows even when that switch registers no shop service.
-func ResolveNpcTalkFlags(npc NpcDef) uint32 {
-	flags, _ := NpcTalkCapabilityFlags(npc.Codename)
-	flags |= npcJobGuildFlag(npc.Codename)
-	if len(npc.NpcTalkStoreGroups) != 0 {
-		flags |= NpcTalkFlagShop
-	}
-	if npc.BaseSpeechSymbol != "" || npc.QuestSpeechSymbol != "" {
-		flags |= NpcTalkFlagTalk
-	}
-	return flags & NpcTalkImplementedFlags
 }

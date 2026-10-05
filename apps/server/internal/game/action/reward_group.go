@@ -14,6 +14,7 @@ package action
 import (
 	"math"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/pk"
 	"reflect"
 	"sort"
 
@@ -203,9 +204,15 @@ func rewardLevel(c *enterworld.Character) int64 {
 partyRewardFactors
 
 5BCD43..5BCED7 spills bonus and level shares independently to float32.
+
+evenFloor is a deliberate beta deviation (the growth switch turns it on):
+native CParty_DistributeKillExperience weights each share by level alone,
+so a level 1 beside a level 23 took 1/24 of its own kill EXP and party
+power-levelling fell ~13x behind soloing. With the floor no member's share
+drops below an even 1/N split; higher levels keep their larger share.
 ================
 */
-func partyRewardFactors(members []rewardActor, target monster.Instance) []float32 {
+func partyRewardFactors(members []rewardActor, target monster.Instance, evenFloor bool) []float32 {
 	var chinese, other, sum, maxLevel int64
 	for _, a := range members {
 		l := rewardLevel(a.character)
@@ -233,6 +240,9 @@ func partyRewardFactors(members []rewardActor, target monster.Instance) []float3
 	var out []float32
 	for _, a := range members {
 		share := float32(float64(rewardLevel(a.character)) / float64(sum))
+		if even := float32(1 / float64(len(members))); evenFloor && share < even {
+			share = even
+		}
 		b := bonus
 		if float64(share) > .7 && len(members) >= 3 && maxLevel >= 21 {
 			b = float32(1 + (float64(bonus)-1)*.5)
@@ -303,6 +313,24 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 			out.others = append(out.others, award)
 		}
 	}
+	// CGObjMob_CreditKillerOnDeath (4C42F0) -> 4EB6B0: the player whose
+	// blow killed the monster eases a murder penalty by the level gap.
+	if actor != nil && actor.PK != nil && actor.PK.Penalty > 0 {
+		before := actor.PVPState()
+		relief := pk.MonsterKillRelief(impact.Instance.Ref.Level, uint8(min(rewardLevel(actor), 0xff)))
+		out.actorFrames = append(out.actorFrames, pkRecordFrames(actor, pk.AddPenalty(actor, relief, rt.Now()))...)
+		rt.notePKRecord(division, actor)
+		if before != actor.PVPState() {
+			out.public = append(out.public, playerPVPStateFrame(actor))
+		}
+	}
+	// 4E27C0 -> 4E1F60: the killing blow's job wearer earns job EXP for a
+	// thief or hunter monster (pkreward.go).
+	if actor != nil {
+		jobFrames, others := rt.payMonsterJobKillInDoor(division, actor, impact.Instance, pose, now)
+		out.actorFrames = append(out.actorFrames, jobFrames...)
+		out.others = append(out.others, others...)
+	}
 	groups := monsterRewardGroups(impact.Contributions, roster.actors)
 	var winner uint32
 	var best uint32
@@ -340,7 +368,7 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 				}
 			}
 			count = uint16(len(members)) // each party call overwrites, even a non-winning group
-			factors = partyRewardFactors(members, impact.Instance)
+			factors = partyRewardFactors(members, impact.Instance, rt.PartyShareFloor)
 		}
 		for i, a := range members {
 			exp, sexp := monsterContributionReward(a.character, impact.Instance, rt.deps.LevelData(), g.damage, factors[i], a.party != nil && a.party.Options&1 != 0)
@@ -357,6 +385,15 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 				out.actorFrames = append(out.actorFrames, frames...)
 			} else if private := wire.ProgressionPrivateFrames(frames); len(private) > 0 {
 				out.others = append(out.others, RecipientFrames{a.character.ID, private})
+			}
+			// 4EAC24: the recipient's attack pets share the award even when
+			// the owner's own EXP came to nothing.
+			petFrames, petArea := rt.awardAttackPetExperience(a.character, impact.Instance, g.damage, factors[i], now)
+			out.public = append(out.public, petArea...)
+			if a.character == actor {
+				out.actorFrames = append(out.actorFrames, petFrames...)
+			} else if len(petFrames) > 0 {
+				out.others = append(out.others, RecipientFrames{a.character.ID, petFrames})
 			}
 		}
 	}

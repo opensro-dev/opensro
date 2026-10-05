@@ -1,6 +1,8 @@
 package guild
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -36,6 +38,6 @@ func AppendSeedFrame(
 	}
 	return append(
 		frames,
-		enterworld.NewPacket(OpGuildInfo, EncodeGuildInfo32C4(record, members, online)),
+		enterworld.NewPacket(OpGuildInfo, EncodeGuildInfo32C4(record, members, online, time.Now().UnixMilli())),
 	)
 }

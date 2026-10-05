@@ -53,6 +53,15 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(opJobJoinRequest, rt.hubHandler(hub, rt.HandleJobJoin))
 	hub.Handle(opJobWithdrawRequest, rt.hubHandler(hub, rt.HandleJobWithdraw))
 	hub.Handle(opJobAliasRequest, rt.hubHandler(hub, rt.HandleJobAlias))
+	hub.Handle(opGuildLevelUpRequest, rt.hubHandler(hub, rt.HandleGuildLevelUp))
+	hub.Handle(opGuildMasterLeave, rt.hubHandler(hub, rt.HandleGuildMasterLeave))
+	hub.Handle(opGuildCompensation, rt.hubHandler(hub, rt.HandleGuildCompensation))
+	hub.Handle(opGuildCompensationPay, rt.hubHandler(hub, rt.HandleGuildCompensationClaim))
+	hub.Handle(opGuildMasterRelease, rt.hubHandler(hub, rt.HandleGuildMasterRelease))
+	hub.Handle(opGuildBallot, rt.hubHandler(hub, rt.HandleGuildBallot))
+	hub.Handle(opGuildStorageOpen, rt.hubHandler(hub, rt.HandleGuildStorageOpen))
+	hub.Handle(opGuildStorageList, rt.hubHandler(hub, rt.HandleGuildStorageList))
+	hub.Handle(opGuildStorageClose, rt.hubHandler(hub, rt.HandleGuildStorageClose))
 	hub.Handle(0x72dd, rt.hubHandler(hub, rt.HandleReturnCancel))
 	hub.Handle(wire.OpCosBehaviorRequest, rt.hubHandler(hub, rt.HandleCosBehavior))
 	hub.Handle(0x77e7, rt.hubHandler(hub, rt.HandleRetailBuyback))
@@ -90,6 +99,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	}
 	if rt.Alchemy != nil {
 		rt.registerAlchemy(hub)
+		rt.registerAvatarBless(hub)
 	}
 }
 

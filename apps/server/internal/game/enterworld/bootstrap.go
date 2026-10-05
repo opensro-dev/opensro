@@ -259,6 +259,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		RefSkillSnapshot:     skillSnapshot,
 		RefItemSnapshot:      buildRefItemSnapshot(deps, divisionID, character),
 		MagicOptionSnapshot:  buildMagicOptionSnapshot(deps, character),
+		AvatarMagicOptions:   buildAvatarMagicOptions(deps),
 		SiegeItemForgeGroups: DefaultSiegeItemForgeGroups(),
 		SiegeFortressData:    DefaultSiegeFortressDataRows(),
 		GameWorldData:        DefaultGameWorldDataRows(),

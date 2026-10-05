@@ -97,8 +97,12 @@ test("an attack pet attacks the selected monster with 0x769E tag 2", () => {
 	const monster = { ...LOCAL, gid: 40, kind: "monster" };
 	gameplay.command( { kind: "cos-pet-attack", gid: 40, pet: 2 }, 1, monster, LOCAL );
 	assert.deepEqual( sent, [ { opcode: 0x769e, payload: Uint8Array.of( 2, 0, 0, 0, 2, 40, 0, 0, 0 ) } ] );
+	// 6A2350 case 2 also sends a pet at a player the core admitted
+	// (player-attack.ts); nothing else is a target.
+	gameplay.command( { kind: "cos-pet-attack", gid: 41, pet: 2 }, 2, { ...monster, gid: 41, kind: "player" }, LOCAL );
+	assert.deepEqual( sent[1], { opcode: 0x769e, payload: Uint8Array.of( 2, 0, 0, 0, 2, 41, 0, 0, 0 ) } );
 	assert.throws( () =>
-		gameplay.command( { kind: "cos-pet-attack", gid: 40, pet: 2 }, 2, { ...monster, kind: "player" }, LOCAL )
+		gameplay.command( { kind: "cos-pet-attack", gid: 40, pet: 2 }, 3, { ...monster, kind: "npc" }, LOCAL )
 	);
 	const pickup = owned( 4, 0x21c6 );
 	assert.throws( () => pickup.gameplay.command( { kind: "cos-pet-attack", gid: 40, pet: 2 }, 1, monster, LOCAL ) );

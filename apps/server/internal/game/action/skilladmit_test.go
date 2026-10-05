@@ -324,7 +324,7 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 	}
 	rt.deps.Update(mate, "test-death", func() bool {
 		mate.CurrentHP = testInt64(0)
-		rt.settlePlayerDeathInDoor(testDivision, mate, clock.NowMs())
+		rt.settlePlayerDeathInDoor(testDivision, mate, deathKiller{}, clock.NowMs())
 		return true
 	})
 	if auraOn(mate.Name) {
@@ -332,7 +332,7 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 	}
 	rt.deps.Update(c, "test-death", func() bool {
 		c.CurrentHP = testInt64(0)
-		rt.settlePlayerDeathInDoor(testDivision, c, clock.NowMs())
+		rt.settlePlayerDeathInDoor(testDivision, c, deathKiller{}, clock.NowMs())
 		return true
 	})
 	clock.Advance(time.Duration(skill.Abnormal.Pulse) * time.Millisecond)

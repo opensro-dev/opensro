@@ -7,6 +7,7 @@ package store
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"opensro.online/server/internal/domain"
@@ -241,6 +242,9 @@ func (door storeGuildDoor) KickGuildMember(
 	if members[targetIndex].Grade == 0 {
 		return refused, domain.GuildRefusalTargetLeader
 	}
+	if guild.Vote != nil && guild.Vote.Involves(members[targetIndex].JID) {
+		return refused, domain.GuildRefusalVoteInProgress
+	}
 	return door.removeGuildMemberLocked(
 		divisionID,
 		guildID,
@@ -269,6 +273,9 @@ func (door storeGuildDoor) LeaveGuild(
 	}
 	if members[actorIndex].Grade == 0 {
 		return refused, domain.GuildRefusalLeaderCannotLeave
+	}
+	if guild.Vote != nil && guild.Vote.Involves(members[actorIndex].JID) {
+		return refused, domain.GuildRefusalVoteInProgress
 	}
 	return door.removeGuildMemberLocked(
 		divisionID,
@@ -309,7 +316,7 @@ func (door storeGuildDoor) AddGuildMemberAs(
 	if member.Grade == 0 {
 		return refused, domain.GuildRefusalInvalidMember
 	}
-	if len(members) >= domain.GuildMemberMaxCount {
+	if len(members) >= min(domain.GuildMemberMaxCount, domain.GuildMemberCapacity(guild.Level)) {
 		return refused, domain.GuildRefusalRosterFull
 	}
 	for _, existing := range members {
@@ -475,6 +482,78 @@ func (door storeGuildDoor) DonateGuildPoints(
 		},
 		Donor: committedMembers[memberIndex],
 	}, domain.GuildRefusalNone
+}
+
+// LevelUpGuildAs is the ATOMIC level-up door (the guild manager's 0x73F0,
+// v1.188 0x70FA -> 5C63D0, guild job 9): the acting
+// leader's guild pays the next level's GP, the leader pays its gold, and
+// the level rises by one, under ONE lock hold and ONE commit. 5C6240 tests
+// the gold (0x4C31) before the GP (0x4C32).
+func (door storeGuildDoor) LevelUpGuildAs(divisionID string, actorID int64) (domain.GuildSnapshot, domain.GuildRefusal) {
+	var refused domain.GuildSnapshot
+	s := door.s
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	guildID, guild, members, _, leader, refusal := door.authorizedGuildActorLocked(
+		divisionID, actorID, domain.GuildAuthorization{LeaderOnly: true})
+	if refusal.Refused() {
+		return refused, refusal
+	}
+	cost, ok := domain.GuildLevelUpCostAt(guild.Level)
+	if !ok {
+		return refused, domain.GuildRefusalMaxLevel
+	}
+	if leader.Gold == nil || *leader.Gold < cost.Gold {
+		return refused, domain.GuildRefusalGoldDeficit
+	}
+	if guild.GP < cost.GP {
+		return refused, domain.GuildRefusalGPDeficit
+	}
+	gold := *leader.Gold - cost.Gold
+	leader.Gold = &gold
+	guild.GP -= cost.GP
+	guild.Level++
+	s.guilds[divisionID][guildID] = guild
+	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
+	s.changes.characters[leader] = true
+	s.commitLocked(fmt.Sprintf("guild-level-up %s/%d", divisionID, guildID))
+	return domain.GuildSnapshot{Guild: guild, Members: members}, domain.GuildRefusalNone
+}
+
+// ClaimWarCompensationAs is the ATOMIC compensation door (the guild
+// manager's 0x73F7, v1.188 0x7113 -> 5C7330, guild job 0x1E): the acting
+// leader is paid what guild wars owe the guild and the debt clears, under
+// ONE lock hold and ONE commit. Nothing owed refuses (0x4C45).
+func (door storeGuildDoor) ClaimWarCompensationAs(divisionID string, actorID int64) (int64, domain.GuildRefusal) {
+	s := door.s
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	guildID, guild, _, _, leader, refusal := door.authorizedGuildActorLocked(
+		divisionID, actorID, domain.GuildAuthorization{LeaderOnly: true})
+	if refusal.Refused() {
+		return 0, refusal
+	}
+	amount := guild.WarCompensation
+	if amount <= 0 {
+		return 0, domain.GuildRefusalNoCompensation
+	}
+	gold := int64(0)
+	if leader.Gold != nil {
+		gold = *leader.Gold
+	}
+	if gold > math.MaxInt64-amount {
+		return 0, domain.GuildRefusalNumericOverflow
+	}
+	gold += amount
+	leader.Gold = &gold
+	guild.WarCompensation = 0
+	s.guilds[divisionID][guildID] = guild
+	s.changes.guilds[guildKey{division: divisionID, guildID: guildID}] = true
+	s.changes.characters[leader] = true
+	s.commitLocked(fmt.Sprintf("guild-war-compensation %s/%d", divisionID, guildID))
+	return amount, domain.GuildRefusalNone
 }
 
 func (door storeGuildDoor) guildOfCharacterLocked(

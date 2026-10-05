@@ -381,14 +381,15 @@ func (q ItemMoveRequest) Encode() ([]byte, error) {
 	case MoveTypeGroundDrop:
 		// sub_697e80 @0x006980d0
 		w.U8(q.SourceSlot)
-	case MoveTypeGoldDrop, MoveTypeStorageGoldWithdraw, MoveTypeStorageGoldDeposit:
+	case MoveTypeGoldDrop, MoveTypeStorageGoldWithdraw, MoveTypeStorageGoldDeposit,
+		MoveTypeGuildStorageGoldDeposit, MoveTypeGuildStorageGoldWithdraw:
 		// sub_697e80 @0x006984cb, amount pre-clamped at @0x00697eb5
 		w.U32(ClampGold(uint64(q.GoldAmount)))
-	case MoveTypeStorage:
+	case MoveTypeStorage, MoveTypeGuildStorage:
 		// ItemMoveRequest_Serialize case 1: [src][dst][u16 count][u32 npc].
 		w.U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity).U32(q.NpcGID)
-	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw:
-		// Cases 2 and 3: [src][dst][u32 npc], no count.
+	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw, MoveTypeGuildStorageDeposit, MoveTypeGuildStorageWithdraw:
+		// Cases 2 and 3 (and 0x1E / 0x1F): [src][dst][u32 npc], no count.
 		w.U8(q.SourceSlot).U8(q.DestSlot).U32(q.NpcGID)
 	default:
 		return nil, ErrUnsupportedMovementType(q.MovementType)
@@ -502,11 +503,12 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 		if out.SourceSlot, err = r.U8(); err != nil {
 			return out, err
 		}
-	case MoveTypeGoldDrop, MoveTypeStorageGoldWithdraw, MoveTypeStorageGoldDeposit:
+	case MoveTypeGoldDrop, MoveTypeStorageGoldWithdraw, MoveTypeStorageGoldDeposit,
+		MoveTypeGuildStorageGoldDeposit, MoveTypeGuildStorageGoldWithdraw:
 		if out.GoldAmount, err = r.U32(); err != nil {
 			return out, err
 		}
-	case MoveTypeStorage:
+	case MoveTypeStorage, MoveTypeGuildStorage:
 		if out.SourceSlot, err = r.U8(); err != nil {
 			return out, err
 		}
@@ -519,7 +521,7 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 		if out.NpcGID, err = r.U32(); err != nil {
 			return out, err
 		}
-	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw:
+	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw, MoveTypeGuildStorageDeposit, MoveTypeGuildStorageWithdraw:
 		if out.SourceSlot, err = r.U8(); err != nil {
 			return out, err
 		}

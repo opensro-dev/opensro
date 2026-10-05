@@ -240,11 +240,13 @@ func (rt *Runtime) ConfigurePortals(dir string) error {
 	rt.portals = catalog
 	for i := range rt.NpcRoster {
 		if id, ok := catalog.sources[rt.NpcRoster[i].RefObjID]; ok {
-			rt.NpcRoster[i].TalkFlags = (rt.NpcRoster[i].TalkFlags &^ simulation.NpcTalkFlagRecallPoint) | 0x80
+			rt.NpcRoster[i].TalkFlags = (rt.NpcRoster[i].TalkFlags &^ simulation.NpcTalkFlagRecallPoint) | simulation.NpcTalkFlagTeleport
+			rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceTeleport)
 			rt.NpcRoster[i].RebirthPoint = simulation.Spawn{}
 			destination := catalog.destinations[id]
 			if destination.recall && destination.spawn.RegionID != 0 && destination.spawn.RegionID&0x8000 == 0 {
 				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagRecallPoint
+				rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceRecallPoint)
 				rt.NpcRoster[i].RebirthPoint = destination.spawn
 			}
 		}
@@ -291,6 +293,11 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(refusal)
 	}
 	source := rt.portals.destinations[sourceID]
+	// 4F30E1: a murderer (PvP state 2) may not pass a building gate (the
+	// source object's vtable +0x44), 0x1C16; a ferry still carries one.
+	if source.building && murderer(c) {
+		return portalFailure(errCodeMurdererGate)
+	}
 
 	link, ok := rt.portals.links[[2]uint32{sourceID, target}]
 	if !ok {
@@ -300,28 +307,47 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 	if destination.RegionID == 0 || destination.RegionID&0x8000 != 0 {
 		return portalFailure(2)
 	}
-	var previous simulation.WorldState
-	rt.bindResidentRegion(simulation.WorldKey(division, c.Name), rt.Now().UnixMilli())
-	previousWorld := c.World
-	previousGold := c.Gold
-	failure := byte(2)
-	key := simulation.WorldKey(division, c.Name)
-	if !rt.deps.Update(c, "portal-travel", func() bool {
+	return rt.commitGateTravel(division, c, destination, "portal-travel", func() (int64, OpResult, bool) {
 		mask := uint32(0)
 		if rt.QuestTravelBlocks != nil {
 			mask = rt.QuestTravelBlocks(c)
 		}
 		fee, valid := commerce.AdjustPrice(uint64(link.fee), rt.commerceTax(division, npc.RefObjID, c), true)
 		if !valid {
-			failure = 2
-			return false
+			return 0, portalFailure(2), false
 		}
 		link.fee = int64(fee)
-		if failure = portalAdmission(c, source, link, mask, rt.hasSummonedTransportCOS(c)); failure != 0 {
-			return false
+		if failure := portalAdmission(c, source, link, mask, rt.hasSummonedTransportCOS(c)); failure != 0 {
+			return 0, portalFailure(failure), false
 		}
 		if c.NativeTeleportMode != 0 || rt.hasOpenSkillCast(division, c.Name) {
-			failure = 0x14
+			return 0, portalFailure(0x14), false
+		}
+		return link.fee, OpResult{}, true
+	})
+}
+
+/*
+================
+commitGateTravel
+
+Moves the character through a gate to destination: admit runs inside the
+character transaction and answers the fee to charge, or the refusal to
+send. A failed re-entry rolls the move and the fee back. The caller holds
+the division lock.
+================
+*/
+func (rt *Runtime) commitGateTravel(division string, c *enterworld.Character, destination simulation.Spawn, reason string, admit func() (int64, OpResult, bool)) OpResult {
+	var previous simulation.WorldState
+	rt.bindResidentRegion(simulation.WorldKey(division, c.Name), rt.Now().UnixMilli())
+	previousWorld := c.World
+	previousGold := c.Gold
+	refusal := portalFailure(2)
+	key := simulation.WorldKey(division, c.Name)
+	if !rt.deps.Update(c, reason, func() bool {
+		fee, answer, ok := admit()
+		if !ok {
+			refusal = answer
 			return false
 		}
 		state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
@@ -339,11 +365,11 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		if c.Gold != nil {
 			gold = *c.Gold
 		}
-		gold -= link.fee
+		gold -= fee
 		c.Gold = &gold
 		return true
 	}) {
-		return portalFailure(failure)
+		return refusal
 	}
 	rt.endTransformForLoading(division, c)
 	rt.endPartyAurasForLoading(division, c)

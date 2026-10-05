@@ -1595,25 +1595,33 @@ export function createCharacterPresentation(
 				const cancelledAt = stopAt !== undefined ?
 					seconds + (stopAt - (simulationMs ?? seconds * 1000)) / 1000 :
 					undefined;
-				const events = [ ...adopted, ...advanceAction( clock, seconds, shotAt, cancelledAt ).events ];
+				const events = [
+					...adopted.map( event => ({ ...event, adopted: true }) ),
+					...advanceAction( clock, seconds, shotAt, cancelledAt ).events
+				];
+				const attackKind = clock.phases[2]?.clip.startsWith( "native:" ) ?
+					Number( clock.phases[2].clip.split( ":" )[2] ) :
+					({ attack1: 2, attack2: 5, attack3: 16, attack4: 17 } as Record<string, number>)[
+						clock.phases[2]?.clip.split( "-" )[0] ?? ""
+					] ?? 0;
+				let presented = events;
 				if ( cast.token === predictionToken ) {
-					predictedEvents.set( cast.token, [ ...(predictedEvents.get( cast.token ) ?? []), ...events ] );
+					// The windup (READY, WAIT) presents at the press, sound and all;
+					// the release and its impacts wait for the server's answer, which
+					// adopts the prediction's visuals (effects.ts adoptCast).
+					presented = events.filter( event => event.phase === "READY" || event.phase === "WAIT" );
+					predictedEvents.set( cast.token, [
+						...(predictedEvents.get( cast.token ) ?? []),
+						...events.filter( event => event.phase !== "READY" && event.phase !== "WAIT" )
+					] );
+				}
+				for ( const event of presented ) triggers.push( { cast, ...event, attackKind } );
+				if ( cast.token === predictionToken ) {
 					actionLayersByActor.set( cast.caster, [
 						...actionLayers( clock, seconds ),
 						...(actionLayersByActor.get( cast.caster ) ?? [])
 					] );
 					continue;
-				}
-				for ( const event of events ) {
-					triggers.push( {
-						cast,
-						...event,
-						attackKind: clock.phases[2]?.clip.startsWith( "native:" ) ?
-							Number( clock.phases[2].clip.split( ":" )[2] ) :
-							({ attack1: 2, attack2: 5, attack3: 16, attack4: 17 } as Record<string, number>)[
-								clock.phases[2]?.clip.split( "-" )[0] ?? ""
-							] ?? 0
-					} );
 				}
 				actionLayersByActor.set( cast.caster, [
 					...actionLayers( clock, seconds ),
@@ -1662,9 +1670,13 @@ export function createCharacterPresentation(
 			} );
 			// Sample sockets from the admitted models at the current mechanical pose
 			// and authored callback cursor; flight ownership precedes hit feedback.
+			// The press's prediction is a cast of its own until the server adopts it.
+			const effectGameplay = gameplay?.castPrediction ?
+				{ ...gameplay, casts: [ ...gameplay.casts, gameplay.castPrediction ] } :
+				gameplay;
 			const effectActors = effects.step(
 				effectEntities,
-				gameplay && drawnLocal ? { ...gameplay, pose: drawnLocal } : gameplay,
+				effectGameplay && drawnLocal ? { ...effectGameplay, pose: drawnLocal } : effectGameplay,
 				seconds,
 				resources.ready,
 				resources.duration,
@@ -1893,9 +1905,11 @@ export function createCharacterPresentation(
 							anchor ?
 							damageAnchor( victim.pose, source.pose, anchor.offset, bone, saddle ) :
 							victim.pose;
+						// 8D5440 copies the caster's native world matrix: an imported
+						// body's placement x Ry(PI). The program draws native space.
 						const basis = Array.from(
 							{ length: 9 },
-							( _, i ) => matrix[Math.floor( i / 3 ) * 4 + i % 3]! * (i >= 6 ? -1 : 1)
+							( _, i ) => matrix[Math.floor( i / 3 ) * 4 + i % 3]! * (i >= 3 && i < 6 ? 1 : -1)
 						) as unknown as NonNullable<CharacterActor["effectBasis"]>;
 						effectActors.push(
 							...effects.damage(
@@ -3209,6 +3223,8 @@ export function createCharacterPresentation(
 					cameraTarget = {
 						height,
 						mounted: !!riding,
+						// Actor yaw is pi minus the native yaw (characterHeadingYaw).
+						yaw: Math.PI - rendered.yaw,
 						pose: {
 							regionId: rendered.regionId,
 							x: rendered.x,

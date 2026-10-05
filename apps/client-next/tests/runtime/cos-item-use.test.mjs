@@ -107,6 +107,38 @@ test("native satiety publication updates only the named attack-pet record", () =
 	gameplay.dispose();
 });
 
+test("a growing pet's next form replaces its record reference and fills satiety", () => {
+	const gameplay = createGameplay( () => {} );
+	gameplay.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 6106, tidWord: 0x19c6 } ] } );
+	gameplay.seed( {
+		gid: 1,
+		refObjId: 1,
+		kind: "local-player",
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		name: "Owner"
+	} );
+	const record = new Uint8Array( 39 ), v = new DataView( record.buffer );
+	v.setUint32( 0, 9001, true );
+	v.setUint32( 4, 6106, true );
+	v.setUint32( 8, 10, true );
+	record[24] = 1;
+	v.setUint16( 25, 2999, true );
+	gameplay.receive( { opcode: 0x3158, payload: record }, 0 );
+	gameplay.take();
+	const change = Uint8Array.of( 41, 35, 0, 0, 7, 0xdb, 0x17, 0, 0 );
+	// The entity lane still needs the frame: it swaps the model.
+	assert.equal( gameplay.receive( { opcode: 0x3508, payload: change }, 1 ), false );
+	const grown = gameplay.take()?.cosRecords?.[0];
+	assert.equal( grown?.refObjId, 6107 );
+	assert.equal( grown?.satiety, 10000 );
+	assert.throws( () => gameplay.receive( { opcode: 0x3508, payload: change.slice( 0, 8 ) }, 2 ), /reference change/ );
+	gameplay.dispose();
+});
+
 test("renewal and revival drag targets use owned summoner slots", () => {
 	const source = {
 		slot: 25,

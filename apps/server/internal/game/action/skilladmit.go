@@ -261,7 +261,7 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 				return code
 			}
 		}
-		if skill.Reqc.KnockedDown && target.motion != 8 {
+		if skill.Reqc.KnockedDown && target.motion != motionKnockedDown {
 			return 0x3006
 		}
 	}

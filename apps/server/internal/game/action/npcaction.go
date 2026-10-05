@@ -160,6 +160,18 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		// The storage function state, which warehouse moves check.
 		rt.Selected.OpenFunction(divisionID, character.Name, gid)
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
+	case simulation.NpcTalkFlagMagicOption:
+		// B338 lock 0x80000000 opens the avatar grant window beside the
+		// inventory; 0x361A (avatarbless.go) checks this function state.
+		if rt.Alchemy == nil {
+			return nil, "alchemy catalogue is not configured"
+		}
+		rt.Selected.OpenFunction(divisionID, character.Name, gid)
+		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
+	case guildStorageFunction:
+		// B338 lock 0x4000 makes the client ask for the guild warehouse
+		// (0x7515, npcguildstorage.go); the admission runs there.
+		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	default:
 		return nil, fmt.Sprintf("action mask 0x%X has no reconstructed gameplay owner", mask)
 	}

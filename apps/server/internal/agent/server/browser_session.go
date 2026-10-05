@@ -151,9 +151,8 @@ func (server *Server) resolveBrowserIdentity(r *http.Request) (identity browserI
 	if err != nil {
 		return browserIdentity{}, true, false
 	}
-	_, exists := server.accounts.PasswordHash(claims.AccountID)
-	definition, known := server.catalog.Resolve(claims.ShardID)
-	if !exists || !known || !definition.Enabled {
+	definition, live := server.liveSession(claims)
+	if !live {
 		return browserIdentity{}, true, false
 	}
 	character := ""
@@ -237,4 +236,21 @@ func (server *Server) handleBrowserCharacterSelect(w http.ResponseWriter, r *htt
 	}
 	server.setBrowserCharacter(w, r, "", time.Unix(1, 0))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+/*
+================
+liveSession
+
+A verified session still names a stored account and an enabled shard. A
+signature outlives the account it was minted for, so every path that acts on
+a session's identity checks both, not the signature alone.
+================
+*/
+func (server *Server) liveSession(claims auth.AgentSessionClaims) (shard.Definition, bool) {
+	if _, exists := server.accounts.PasswordHash(claims.AccountID); !exists {
+		return shard.Definition{}, false
+	}
+	definition, known := server.catalog.Resolve(claims.ShardID)
+	return definition, known && definition.Enabled
 }

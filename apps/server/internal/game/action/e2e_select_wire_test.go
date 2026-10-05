@@ -14,7 +14,7 @@ package action_test
 //	               VERY NEXT frame on the session's reliable ordered
 //	               stream is the exact 0xB45A talk grant - result 1, the
 //	               gid, vitalsMask 0, NPC_EU_SMITH's capability word
-//	               0x03, npcExtra 0 - implemented shop|talk rows only,
+//	               0x8000000B, npcExtra 0 - shop|talk|repair|magic grant (4C6350 option 4),
 //	               byte-equal to the hand-rolled
 //	               oracle. Had the player or ground grant emitted
 //	               anything, it would have arrived first and failed the
@@ -310,7 +310,7 @@ func TestNpcSelectTalkGrantEndToEndOverWire(t *testing.T) {
 	want := []byte{0x01}
 	want = binary.LittleEndian.AppendUint32(want, npcGid)
 	want = append(want, 0x00)
-	want = binary.LittleEndian.AppendUint32(want, 0x03) // NPC_EU_SMITH: implemented shop|talk
+	want = binary.LittleEndian.AppendUint32(want, 0x8000000b) // NPC_EU_SMITH: shop|talk|repair|magic grant
 	want = append(want, 0x00)
 	if !bytes.Equal(got, want) {
 		t.Fatalf("0xB45A payload\n got % X\nwant % X", got, want)

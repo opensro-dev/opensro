@@ -124,8 +124,17 @@ export async function buildCharacterAuthorityProjection( bundleRoot, textdataRoo
 		if ( !Number.isFinite( bodyRadius ) || bodyRadius <= 0 ) {
 			throw new Error( `Playable-character ${codename} has invalid RefObjChar BCRadius ${columns[50]}` );
 		}
+		// RefObjChar columns 87/88: the displacement flags SkillCombat_AllowsDisplacementOutcome
+		// (58E520, bit 0 knockdown) and 58FF7A (bit 1 knockback) read, and the knockdown recovery.
+		const knockdown = Number( columns[87] ), koRecoverMs = Number( columns[88] );
+		if ( !Number.isInteger( knockdown ) || knockdown < 0 || knockdown > 0xffffffff ) {
+			throw new Error( `Playable-character ${codename} has invalid RefObjChar knockdown ${columns[87]}` );
+		}
+		if ( !Number.isInteger( koRecoverMs ) || koRecoverMs < 0 || koRecoverMs > 0xffffffff ) {
+			throw new Error( `Playable-character ${codename} has invalid RefObjChar KORecover ${columns[88]}` );
+		}
 		seenRefObjIds.set( refObjId, codename );
-		models.push( { codename, refObjId, bodyRadius } );
+		models.push( { codename, refObjId, bodyRadius, knockdown, koRecoverMs } );
 	}
 	models.sort( ( left, right ) => left.refObjId - right.refObjId || left.codename.localeCompare( right.codename ) );
 	if ( models.length < 4 ) {
@@ -133,7 +142,7 @@ export async function buildCharacterAuthorityProjection( bundleRoot, textdataRoo
 	}
 	await writeJson(
 		path.join( bundleRoot, "character-authority", "catalog.json" ),
-		{ format: "sro-server-character-authority", version: 2, models }
+		{ format: "sro-server-character-authority", version: 3, models }
 	);
 }
 

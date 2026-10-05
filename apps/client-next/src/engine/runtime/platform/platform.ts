@@ -27,7 +27,7 @@ import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foun
 import { createUiBridge } from "./ui/ui";
 import { createCursor } from "./ui/cursor";
 import type { UiEvent } from "@/engine/contracts/ui";
-import type { RawInput } from "@/engine/contracts/input";
+import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
 import type { Platform } from "@/engine/contracts/runtime";
 import type { AssetProgress } from "@/engine/contracts/assets";
 import { loadingDetailText } from "@/engine/foundation/ui/loading-detail";
@@ -51,7 +51,7 @@ export function createPlatform(
 	onGesture: () => void = () => {},
 	onUi: ( event: UiEvent ) => void = () => {},
 	blocksUi: ( x: number, y: number ) => boolean = () => false,
-	onWorldClick: ( x: number, y: number, doubleClick?: boolean, shift?: boolean ) => void = () => {},
+	onWorldClick: ( x: number, y: number, click?: WorldClickInput ) => void = () => {},
 	onWorldHover: ( point: readonly [number, number] | null ) => void = () => {}
 ): Platform {
 	const lifetime = new AbortController();
@@ -397,13 +397,13 @@ export function createPlatform(
 			onUi( { kind: "activate", id: "hotbar:0" } );
 		}
 		if ( event.button === 0 && !blocked && r.width > 0 && r.height > 0 ) {
-			onWorldClick( x / r.width, y / r.height, false, event.shiftKey );
+			onWorldClick( x / r.width, y / r.height, { shift: event.shiftKey, alt: event.altKey } );
 		}
 	}, { signal: lifetime.signal } );
 	canvas.addEventListener( "dblclick", event => {
 		const r = canvas.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
 		if ( event.button === 0 && !blocksUi( ...uiPoint( event ) ) && r.width > 0 && r.height > 0 ) {
-			onWorldClick( x / r.width, y / r.height, true, event.shiftKey );
+			onWorldClick( x / r.width, y / r.height, { double: true, shift: event.shiftKey, alt: event.altKey } );
 		}
 	}, { signal: lifetime.signal } );
 	canvas.addEventListener( "pointercancel", event => {

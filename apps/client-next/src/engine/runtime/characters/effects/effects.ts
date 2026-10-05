@@ -21,7 +21,10 @@ import { createPresentationIds } from "@/engine/foundation/animation/presentatio
 import { itemEffectClock, type ItemEffectClock } from "@/engine/foundation/animation/item-effect-clock";
 import { createHitLights } from "@/engine/foundation/animation/hit-light";
 import { advanceProjectileCurve } from "@/engine/foundation/animation/projectile-curve";
-import { modelAmbientParticles as ambientModelParticles } from "@/engine/foundation/animation/model-emission";
+import {
+	modelAmbientParticles as ambientModelParticles,
+	modelParticleAttachment
+} from "@/engine/foundation/animation/model-emission";
 import { modelAnimationParticles } from "@/engine/foundation/animation/animation-emission";
 import { modelAnimationBindings, modelModifierSets } from "@/engine/foundation/animation/model-animation";
 import {
@@ -54,12 +57,36 @@ import {
 } from "@/engine/foundation/animation/moving-stage";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SoundEvent } from "@/engine/contracts/audio";
-import type { EffectCatalog, EffectVisual, EffectTrigger } from "@/engine/contracts/effects";
+import type { EffectCatalog, EffectStage, EffectVisual, EffectTrigger } from "@/engine/contracts/effects";
+import { importedModelBasis, nativeRootOffset } from "@/engine/foundation/rendering/world-math";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
-import { nativeHeadingYaw, radians } from "@/engine/foundation/math/angles";
+import { characterHeadingYaw, nativeHeadingYaw, radians, type Radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+/*
+================
+importedProjectileBasis
+
+A flying BSR's world basis: projectileBasis is the native object basis
+(right, up, back along the flight), carried into the imported mesh's space.
+================
+*/
+function importedProjectileBasis(
+	start: Parameters<typeof projectileBasis>[0],
+	end: Parameters<typeof projectileBasis>[1],
+	verticalFallback = true
+): CharacterActor["effectBasis"] {
+	const basis = projectileBasis( start, end, verticalFallback );
+	return basis && importedModelBasis( basis );
+}
+/** One decoded stage binding; see stageBinding. */
+type StageBinding = {
+	readonly bone: string | null;
+	readonly keepRotation: boolean;
+	readonly addHeight: boolean;
+	readonly offset: readonly [number, number, number];
+};
 /*
 ================
 stageAttachmentBasis
@@ -72,6 +99,57 @@ Only the asset space differs: compiled BSR vertices are Z-flipped.
 */
 function stageAttachmentBasis( resource: string ): "native" | "native-bsr" {
 	return resource.endsWith( ".efp" ) ? "native" : "native-bsr";
+}
+/*
+================
+stageBinding
+
+One of a stage's two 0x18-byte attachment bindings (+0x3C start, +0x54
+target): the bone sub_91e720 decoded from its token, the +0x08 / +0x09
+flags, and the authored native model-space offset.
+================
+*/
+function stageBinding( stage: EffectStage, target: boolean ): StageBinding {
+	return target ?
+		{
+			bone: stage.targetBone ?? null,
+			keepRotation: stage.targetKeepRotation ?? true,
+			addHeight: stage.targetAddHeight ?? false,
+			offset: stage.targetOffset ?? [ 0, 0, 0 ]
+		} :
+		{
+			bone: stage.bone,
+			keepRotation: stage.keepRotation ?? true,
+			addHeight: stage.addHeight ?? false,
+			offset: stage.offset
+		};
+}
+/*
+================
+stageAttachment
+
+The renderer attachment for one binding on a holder, resolved as 8D6880
+does: a named bone or the holder root, the native offset turned by the
+root (characters.ts transformFor), the '*' height added to that offset so
+it scales with the holder like the native +0x220 height, and the +0x08
+rotation flag.
+================
+*/
+function stageAttachment(
+	holder: { readonly gid: number; readonly height?: number; },
+	binding: StageBinding,
+	resource: string
+) {
+	if ( binding.addHeight && holder.height === undefined ) throw Error( "Missing native effect anchor height" );
+	const [x, y, z] = binding.offset;
+	return {
+		gid: holder.gid,
+		bone: binding.bone ?? "",
+		root: !binding.bone,
+		basis: stageAttachmentBasis( resource ),
+		offset: [ x, y + (binding.addHeight ? holder.height! : 0), z ] as const,
+		...(binding.keepRotation ? {} : { keepRotation: false })
+	};
 }
 /*
 ================
@@ -163,6 +241,38 @@ export function createCharacterEffects(
 	const impactIndexes = new Map<number, ReadonlyMap<string, number>>();
 	const seen = new Set<string>(), active = new Map<number, EffectVisual>(), unsupported = new Set<string>();
 	const pendingTriggers = new Map<string, EffectTrigger>();
+	/*
+	================
+	adoptCast
+
+	The server's cast takes over its press's prediction: the windup visuals,
+	callbacks and weapon hiding the prediction started continue under the
+	server's token instead of retiring with the prediction.
+	================
+	*/
+	function adoptCast( from: number, cast: import("@/engine/contracts/gameplay").CastState ) {
+		const prefix = `${from}:`;
+		for ( const [gid, visual] of active ) {
+			if ( visual.token === from ) active.set( gid, { ...visual, token: cast.token } );
+		}
+		for ( const key of [ ...seen ] ) {
+			if ( key.startsWith( prefix ) ) {
+				seen.delete( key );
+				seen.add( `${cast.token}:${key.slice( prefix.length )}` );
+			}
+		}
+		for ( const [key, trigger] of [ ...pendingTriggers ] ) {
+			if ( key.startsWith( prefix ) ) {
+				pendingTriggers.delete( key );
+				pendingTriggers.set( `${cast.token}:${key.slice( prefix.length )}`, { ...trigger, cast } );
+			}
+		}
+		const weaponOwner = weaponOwners.get( from );
+		if ( weaponOwner !== undefined ) {
+			weaponOwners.delete( from );
+			weaponOwners.set( cast.token, weaponOwner );
+		}
+	}
 	const visualStarts = new Map<number, number>();
 	const system = new Map<
 		number,
@@ -579,11 +689,8 @@ export function createCharacterEffects(
 				unsupported.add( stage.resource );
 				continue;
 			}
-			const target = stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F",
-				bone = (target ? stage.targetBone : stage.bone) ?? "",
-				offset = target ? (stage.targetOffset ?? [ 0, 0, 0 ]) : stage.offset,
-				overhead = bone === "*";
-			if ( overhead && owner.height === undefined ) throw Error( "Missing attached effect anchor height" );
+			const binding = stageBinding( stage, stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ),
+				offset = binding.offset;
 			if ( !Number.isInteger( stage.count ) || stage.count < 1 || stage.count > 128 ) {
 				throw Error( "Invalid attached effect instance count" );
 			}
@@ -598,11 +705,12 @@ export function createCharacterEffects(
 					if (
 						!states || ![ 0, 2, 7 ].every( id => states[id] && model.clips.includes( states[id]!.clip ) )
 					) throw Error( "Missing hawk animation states" );
-					const position = {
-						x: owner.pose.x + offset[0],
-						y: owner.pose.y + offset[1],
-						z: owner.pose.z + offset[2]
-					};
+					const turned = nativeRootOffset( owner.pose.yaw, owner.scale, offset ),
+						position = {
+							x: owner.pose.x + turned[0],
+							y: owner.pose.y + turned[1],
+							z: owner.pose.z + turned[2]
+						};
 					const state = hawkInitial( position, Math.fround( Math.PI - owner.pose.yaw ) );
 					result.push( {
 						actor: {
@@ -654,13 +762,10 @@ export function createCharacterEffects(
 					absoluteEffectScale: stage.resource.endsWith( ".efp" ),
 					pickable: false,
 					attachment: {
-						gid: owner.gid,
-						bone: overhead ? "" : bone,
-						root: overhead || !bone,
-						offset: [ offset[0], offset[1] + (overhead ? owner.height! : 0), -offset[2] ],
+						...stageAttachment( owner, binding, stage.resource ),
 						// A root effect (a speed buff's ring) stands on the ground: under
 						// a rider that is the ride's position, as retail draws it.
-						...(!overhead && !bone ? { ground: true } : {})
+						...(!binding.addHeight && !binding.bone ? { ground: true } : {})
 					}
 				};
 				const control = {
@@ -683,12 +788,11 @@ export function createCharacterEffects(
 								loop: actor.loop,
 								scale: 1,
 								pickable: false,
-								attachment: {
-									gid: actor.gid,
-									bone: particle.bone,
-									root: particle.root,
-									offset: particle.offset
-								}
+								attachment: modelParticleAttachment(
+									actor.gid,
+									particle,
+									particle.scale ?? actor.scale
+								)
 							},
 							...control
 						} );
@@ -743,7 +847,7 @@ export function createCharacterEffects(
 			triggers: readonly EffectTrigger[] = [],
 			socket?: (
 				gid: number,
-				bone: string,
+				bone: string | null,
 				offset: readonly [number, number, number],
 				trigger: EffectTrigger
 			) => EffectVisual["actor"]["pose"] | null,
@@ -808,12 +912,7 @@ export function createCharacterEffects(
 						[ cast.caster ];
 					for ( const gid of sources ) {
 						if ( !byGid.has( gid ) ) continue;
-						const pose = socket(
-							gid,
-							stage.bone,
-							[ stage.offset[0], stage.offset[1], -stage.offset[2] ],
-							trigger
-						);
+						const pose = socket( gid, stage.bone, stage.offset, trigger );
 						launchSockets.set( launchKey( trigger, index, gid ), pose );
 						if ( !pose ) cold = true;
 					}
@@ -830,6 +929,11 @@ export function createCharacterEffects(
 			);
 			failure = null;
 			try {
+				for ( const cast of gameplay?.casts ?? [] ) {
+					if ( cast.predictedToken !== undefined && cast.predictedToken !== cast.token ) {
+						adoptCast( cast.predictedToken, cast );
+					}
+				}
 				const castStates = new Map( gameplay?.casts.map( cast => [ cast.token, cast ] ) ?? [] );
 				const current = new Set( castStates.keys() );
 				const byGid = new Map( entities.map( entity => [ entity.gid, entity ] ) );
@@ -843,6 +947,46 @@ export function createCharacterEffects(
 				hitLights.step( now, new Set( byGid.keys() ) );
 				const wantedPersistent = new Set<string>(),
 					presentation = new Map( presented.map( actor => [ actor.gid, actor ] ) );
+				/*
+				================
+				stageAnchor
+
+				The world point one authored binding names on a holder entity,
+				resolved as 8D6880 does: the named bone (a missing bone falls back
+				to the root inside the socket query), or for no bone the holder's
+				own root, which is its live entity pose; plus the native offset
+				turned by the root, plus the holder's height for the '*' token. A
+				named bone on a model that is not resident yet answers from the
+				root by the same rule. Null while a '*' holder's height is
+				unknown. The caller supplies the yaw: only the position is
+				resolved here.
+				================
+				*/
+				function stageAnchor(
+					holder: EntityState,
+					binding: Omit<StageBinding, "keepRotation">,
+					trigger: EffectTrigger,
+					yaw: Radians
+				): CharacterActor["pose"] | null {
+					const actor = presentation.get( holder.gid );
+					if ( binding.addHeight && actor?.height === undefined ) return null;
+					const [x, y, z] = binding.offset,
+						offset = [ x, y + (binding.addHeight ? actor!.height! : 0), z ] as const;
+					const sampled = binding.bone ? socket?.( holder.gid, binding.bone, offset, trigger ) : null;
+					if ( sampled ) return { ...sampled, yaw };
+					const turned = nativeRootOffset(
+						characterHeadingYaw( holder.heading ),
+						actor?.scale ?? 1,
+						offset
+					);
+					return {
+						regionId: holder.regionId,
+						x: holder.x + turned[0],
+						y: holder.y + turned[1],
+						z: holder.z + turned[2],
+						yaw
+					};
+				}
 				const clock = Math.trunc( now * 1000 );
 				for ( const [token, gid] of weaponOwners ) {
 					if (
@@ -967,10 +1111,6 @@ export function createCharacterEffects(
 									if ( !model.clips.length && model.particleModifiers === undefined ) {
 										throw Error( "Stale effect manifest lacks particle attachments" );
 									}
-									const overhead = stage.bone === "*";
-									if ( overhead && owner.height === undefined ) {
-										throw Error( "Missing native effect anchor height" );
-									}
 									const gid = allocate();
 									actors.push( {
 										gid,
@@ -983,17 +1123,11 @@ export function createCharacterEffects(
 										pickable: false,
 										// 8D6880: missing bone retries on the mount, else root
 										// orientation. The offset is still applied.
-										attachment: {
-											gid: owner.gid,
-											bone: overhead ? "" : stage.bone ?? "",
-											root: overhead || !stage.bone,
-											basis: stageAttachmentBasis( stage.resource ),
-											offset: [
-												stage.offset[0],
-												stage.offset[1] + (overhead ? owner.height! : 0),
-												stage.offset[2]
-											]
-										}
+										attachment: stageAttachment(
+											owner,
+											stageBinding( stage, false ),
+											stage.resource
+										)
 									} );
 									for ( const particle of ambientModelParticles( model.particleModifiers ) ) {
 										actors.push( {
@@ -1007,12 +1141,7 @@ export function createCharacterEffects(
 											scale: 1,
 											pickable: false,
 											// Same 8D6880 miss: the particle stays on the effect root.
-											attachment: {
-												gid,
-												bone: particle.bone,
-												root: particle.root,
-												offset: particle.offset
-											}
+											attachment: modelParticleAttachment( gid, particle, particle.scale ?? 1 )
 										} );
 									}
 								}
@@ -1160,7 +1289,7 @@ export function createCharacterEffects(
 										x: (pose.regionId & 255) * 1920 + pose.x,
 										y: pose.y,
 										z: (pose.regionId >>> 8) * 1920 + pose.z,
-										expires: trigger.at + 0.25
+										expires: (trigger.adopted ? now : trigger.at) + 0.25
 									} );
 								}
 								if ( !stage.resource ) {
@@ -1213,19 +1342,14 @@ export function createCharacterEffects(
 								// target-local offsets; this lane does not sample bones.
 								const sourceSocket = flying && !targetLocal && stage.bone ?
 									launchSockets.get( launchKey( trigger, index, entity.gid ) ) ??
-										socket?.( entity.gid, stage.bone, [
-											stage.offset[0],
-											stage.offset[1],
-											-stage.offset[2]
-										], trigger ) :
+										socket?.( entity.gid, stage.bone, stage.offset, trigger ) :
 									undefined;
 								const targetOffset = stage.targetOffset ?? [ 0, 0, 0 ];
 								const targetSocket = flying && !radial && !targetLocal && target && stage.targetBone ?
-									socket?.( target.gid, stage.targetBone, [
-										targetOffset[0],
-										targetOffset[1],
-										-targetOffset[2]
-									], { ...trigger, sampleCurrent: true } ) :
+									socket?.( target.gid, stage.targetBone, targetOffset, {
+										...trigger,
+										sampleCurrent: true
+									} ) :
 									undefined;
 								const supportedFlight = flying && target &&
 									(targetLocal || !stage.bone || sourceSocket) &&
@@ -1296,33 +1420,40 @@ export function createCharacterEffects(
 											undefined;
 									const gid = traded?.actor.gid ?? allocate();
 									if ( traded ) active.delete( gid );
+									// Effect world poses carry the native heading yaw; only the
+									// position comes from the binding (stageAnchor).
 									let source = sourceSocket ??
-										{
-											regionId: pose.regionId,
-											x: pose.x + stage.offset[0],
-											y: pose.y + stage.offset[1],
-											z: pose.z + stage.offset[2],
-											yaw: victimFacing ?? nativeHeadingYaw( pose.angle )
-										};
+										stageAnchor(
+											entity,
+											stageBinding( stage, false ),
+											trigger,
+											victimFacing ?? nativeHeadingYaw( pose.angle )
+										);
+									if ( !source ) {
+										unsupported.add( `anchor-height:${entity.refObjId}` );
+										continue;
+									}
 									if ( targetLocal && !flying && !targetFollow ) {
-										const anchor = stage.targetBone ?
-											socket?.( entity.gid, stage.targetBone, [
-												targetOffset[0],
-												targetOffset[1],
-												-targetOffset[2]
-											], trigger ) :
-											{
-												regionId: pose.regionId,
-												x: pose.x + targetOffset[0],
-												y: pose.y + targetOffset[1],
-												z: pose.z + targetOffset[2],
-												yaw: nativeHeadingYaw( pose.angle )
-											};
+										const anchor = stageAnchor(
+											entity,
+											stageBinding( stage, true ),
+											trigger,
+											nativeHeadingYaw( pose.angle )
+										);
 										if ( !anchor ) {
-											unsupported.add( `target-socket:${entity.refObjId}/${stage.targetBone}` );
+											unsupported.add( `anchor-height:${entity.refObjId}` );
 											continue;
 										}
 										source = anchor;
+									}
+									// The renderer attachment's holder; a '*' binding needs its height.
+									const holder = { gid: entity.gid, height: presentation.get( entity.gid )?.height };
+									if (
+										holder.height === undefined &&
+										(targetFollow ? stage.targetAddHeight : stage.addHeight)
+									) {
+										unsupported.add( `anchor-height:${entity.refObjId}` );
+										continue;
 									}
 									if ( rotation && caster ) {
 										const anchor = presentation.get( entity.gid )?.effectAnchor;
@@ -1382,13 +1513,12 @@ export function createCharacterEffects(
 										) :
 										targetSocket ??
 											(target ?
-												{
-													regionId: target.regionId,
-													x: target.x + targetOffset[0],
-													y: target.y + targetOffset[1],
-													z: target.z + targetOffset[2],
-													yaw: nativeHeadingYaw( target.heading )
-												} :
+												stageAnchor(
+													target,
+													stageBinding( stage, true ),
+													trigger,
+													nativeHeadingYaw( target.heading )
+												) ?? source :
 												source);
 									if ( radial ) source = { ...source, yaw: destination.yaw };
 									const dungeon = !!(source.regionId & 0x8000);
@@ -1434,6 +1564,7 @@ export function createCharacterEffects(
 												pending: null,
 												trigger,
 												bone: stage.targetBone ?? null,
+												addHeight: stage.targetAddHeight ?? false,
 												offset: targetOffset
 											} :
 											undefined;
@@ -1461,6 +1592,7 @@ export function createCharacterEffects(
 														},
 														target: targetGid,
 														bone: stage.targetBone ?? null,
+														addHeight: stage.targetAddHeight ?? false,
 														offset: targetOffset,
 														trigger
 													} :
@@ -1529,12 +1661,17 @@ export function createCharacterEffects(
 													// 8D4020: bone vfunc +0x44 null keeps the owner world
 													// matrix and still adds the offset. bKeepRotation (+8)
 													// == 0 resets the rotation. Only this .bsr Bone01 path.
+													// Its socket desc 0xCCC8B8 is {"Bone01", offset 0,
+													// keep 1}, and the program is an .efp: the same 8D6880
+													// native basis as every stage .efp on a named bone, so
+													// it draws particle x Bone01 x arrow in native space.
 													attachment: resource?.endsWith( ".bsr" ) ?
 														{
 															gid,
 															bone: "Bone01",
 															offset: [ 0, 0, 0 ],
-															rootIfMissing: true
+															rootIfMissing: true,
+															basis: stageAttachmentBasis( path )
 														} :
 														undefined
 												},
@@ -1600,27 +1737,21 @@ export function createCharacterEffects(
 										actor: {
 											gid,
 											effectBasis: flight && resource?.endsWith( ".bsr" ) ?
-												projectileBasis( source, destination ) :
+												importedProjectileBasis( source, destination ) :
 												undefined,
 											effectRotation,
 											pickable: false,
 											attachment: targetFollow ?
-												{
-													gid: entity.gid,
-													bone: stage.targetBone ?? "",
-													root: !stage.targetBone,
-													basis: stageAttachmentBasis( stage.resource ),
-													offset: [ targetOffset[0], targetOffset[1], -targetOffset[2] ]
-												} :
+												stageAttachment( holder, stageBinding( stage, true ), stage.resource ) :
 												(stage.bone ||
 														[ "AT_ONE_FOLLOW", "AT_LOOP" ].includes( stage.action )) &&
 													!supportedFlight && !targetLocal ?
 												{
-													gid: entity.gid,
-													bone: stage.bone ?? "",
-													root: !stage.bone,
-													basis: stageAttachmentBasis( stage.resource ),
-													offset: [ stage.offset[0], stage.offset[1], stage.offset[2] ],
+													...stageAttachment(
+														holder,
+														stageBinding( stage, false ),
+														stage.resource
+													),
 													...(victimFacing !== undefined && !stage.bone ?
 														{ facing: victimFacing } :
 														{})
@@ -2305,19 +2436,12 @@ export function createCharacterEffects(
 							const homing = flight.homing, entity = byGid.get( homing.target );
 							const live = !entity ?
 								undefined :
-								homing.bone ?
-								socket?.( homing.target, homing.bone, [
-									homing.offset[0],
-									homing.offset[1],
-									-homing.offset[2]
-								], { ...homing.trigger, at: now, sampleCurrent: true } ) :
-								{
-									regionId: entity.regionId,
-									x: entity.x + homing.offset[0],
-									y: entity.y + homing.offset[1],
-									z: entity.z + homing.offset[2],
-									yaw: flight.destination.yaw
-								};
+								stageAnchor(
+									entity,
+									homing,
+									{ ...homing.trigger, at: now, sampleCurrent: true },
+									flight.destination.yaw
+								);
 							if ( live && projectileSpace( homing.state.position.regionId, live.regionId ) ) {
 								flight.destination = live;
 							}
@@ -2376,22 +2500,13 @@ export function createCharacterEffects(
 										route.pending = null;
 										while ( route.cursor < route.targets.length ) {
 											const target = route.targets[route.cursor++]!, entity = byGid.get( target );
-											const offset = route.offset;
 											const endpoint = entity ?
-												(route.bone ?
-													socket?.(
-														target,
-														route.bone,
-														[ offset[0], offset[1], -offset[2] ],
-														{ ...route.trigger, at: now, sampleCurrent: true }
-													) :
-													{
-														regionId: entity.regionId,
-														x: entity.x + offset[0],
-														y: entity.y + offset[1],
-														z: entity.z + offset[2],
-														yaw: sample.pose.yaw
-													}) :
+												stageAnchor(
+													entity,
+													route,
+													{ ...route.trigger, at: now, sampleCurrent: true },
+													sample.pose.yaw
+												) :
 												null;
 											if (
 												!endpoint || !projectileSpace( sample.pose.regionId, endpoint.regionId )
@@ -2536,7 +2651,10 @@ export function createCharacterEffects(
 						if ( dx * dx + dy * dy + dz * dz > 1 ) {
 							visual = {
 								...visual,
-								actor: { ...visual.actor, effectBasis: projectileBasis( previous, current, false ) }
+								actor: {
+									...visual.actor,
+									effectBasis: importedProjectileBasis( previous, current, false )
+								}
 							};
 							active.set( gid, visual );
 						}
@@ -2592,7 +2710,11 @@ export function createCharacterEffects(
 						const anchor = entity.gid === gameplay?.localGid && gameplay.pose ?
 							gameplay.pose :
 							{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
-						const offset = visual.attachment.offset;
+						const offset = nativeRootOffset(
+							characterHeadingYaw( anchor.angle ),
+							presentation.get( entity.gid )?.scale ?? 1,
+							visual.attachment.offset
+						);
 						pose = {
 							regionId: anchor.regionId,
 							x: anchor.x + offset[0],

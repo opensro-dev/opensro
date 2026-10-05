@@ -119,6 +119,7 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 		if pinned, found := fixtureByCode[row.Codename]; found {
 			row.RebirthPoint = pinned.RebirthPoint
 		}
+		row.Services = ResolveNpcServices(row)
 		row.TalkFlags = ResolveNpcTalkFlags(row)
 		roster = append(roster, row)
 	}

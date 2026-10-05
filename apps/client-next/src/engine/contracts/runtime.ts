@@ -183,7 +183,8 @@ export interface Renderer extends Disposable {
 	characterSocket(
 		actors: readonly import("./character").CharacterActor[],
 		gid: number,
-		bone: string | { name: string; fallback: "mount-root"; },
+		bone: string | { name: string | null; fallback: "mount-root"; },
+		/** A native model-space offset, turned by the holder's root (8D6880). */
 		offset: readonly [number, number, number]
 	): import("./character").CharacterActor["pose"] | null;
 	pickEntity( x: number, y: number, excluded: number, blindHeld?: boolean ): number | null;

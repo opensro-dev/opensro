@@ -25,7 +25,9 @@ import {
 	interpolateMovement as interpolate,
 	REGION_SIZE,
 	movementModeTransition,
-	movementSpeedTransition
+	movementSpeedTransition,
+	validMovementSpeed,
+	movementDuration
 } from "@/engine/foundation/gameplay/native-movement";
 import { createNavigation } from "./navigation/navigation";
 import { admitPose, decodeMovementReceipt, receiptWorld } from "@/engine/foundation/gameplay/movement-wire";
@@ -360,7 +362,7 @@ CATCHUP_SPEED_FACTOR, so it reads as walking and not as a slide or a jump.
 				start: now,
 				timing: "speed",
 				lead: "server",
-				duration: refused ? remaining / speed * 1000 : Math.max( arrival - now, fastest )
+				duration: refused ? movementDuration( remaining, speed ) : Math.max( arrival - now, fastest )
 			} ) :
 			null;
 	}
@@ -686,7 +688,7 @@ speeds
 ================
 		*/
 		speeds( walk: number, run: number, now: number ) {
-			if ( ![ walk, run ].every( n => Number.isFinite( n ) && n > 0 ) ) {
+			if ( ![ walk, run ].every( validMovementSpeed ) ) {
 				throw Error( "Invalid movement speed channels" );
 			}
 			const previous = speed;
@@ -735,7 +737,7 @@ native
 					start: now,
 					timing: "speed",
 					lead: "client",
-					duration: poseDistance( current, decoded.to ) / speed * 1000
+					duration: movementDuration( poseDistance( current, decoded.to ), speed )
 				} );
 				return;
 			}
@@ -759,7 +761,7 @@ native
 				start: now,
 				timing: "speed",
 				lead: "server",
-				duration: poseDistance( pose, decoded.to ) / speed * 1000
+				duration: movementDuration( poseDistance( pose, decoded.to ), speed )
 			} );
 		},
 		/*
@@ -869,7 +871,7 @@ correct
 						start: now,
 						timing: "speed",
 						lead: "client",
-						duration: poseDistance( pose, clipped ) / speed * 1000,
+						duration: movementDuration( poseDistance( pose, clipped ), speed ),
 						owners: query.owners
 					};
 				}
@@ -929,7 +931,7 @@ request
 					start: now,
 					timing: "speed",
 					lead: "client",
-					duration: poseDistance( pose, clipped ) / speed * 1000,
+					duration: movementDuration( poseDistance( pose, clipped ), speed ),
 					owners: query.owners
 				};
 			}
@@ -965,7 +967,7 @@ walk (native); a refusal ends it (endPrediction).
 				start: now,
 				timing: "speed",
 				lead: "client",
-				duration: poseDistance( current, clipped ) / speed * 1000,
+				duration: movementDuration( poseDistance( current, clipped ), speed ),
 				owners: query.owners
 			};
 			return true;
@@ -990,7 +992,7 @@ start, so walk back there.
 				start: now,
 				timing: "speed",
 				lead: "server",
-				duration: poseDistance( current, from ) / speed * 1000
+				duration: movementDuration( poseDistance( current, from ), speed )
 			} );
 		},
 		/*

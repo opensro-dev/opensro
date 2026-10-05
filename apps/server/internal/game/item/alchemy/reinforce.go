@@ -1,17 +1,39 @@
+/*
+===========================================================================
+
+reinforce.go - elixir reinforcement and the shared alchemy plan types
+
+Reinforce plans one +N attempt over a detached copy of the bag; the action
+lane commits the plan. Roll, Outcome and Refusal are shared by every
+alchemy owner in this package.
+
+===========================================================================
+*/
+
 package alchemy
 
 import (
 	"fmt"
-	"math"
 
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// Roll returns the native CRT rand domain [0,32767]. Keeping draws explicit
-// allows failure/protection paths to be replayed without a mutable global RNG.
+/*
+================
+Roll
+
+Roll returns the native CRT rand domain [0,32767]. Keeping draws explicit
+allows failure/protection paths to be replayed without a mutable global RNG.
+================
+*/
 type Roll func() (uint32, error)
 
+/*
+================
+Outcome
+================
+*/
 type Outcome struct {
 	Items     []inventory.Item
 	Target    uint8
@@ -19,10 +41,27 @@ type Outcome struct {
 	Destroyed bool
 }
 
+/*
+================
+Refusal
+
+An alchemy answer code; the low byte of the client's 0x54xx notice.
+================
+*/
 type Refusal uint8
 
+/*
+================
+Refusal.Error
+================
+*/
 func (e Refusal) Error() string { return fmt.Sprintf("alchemy refusal 0x54%02x", uint8(e)) }
 
+/*
+================
+draw
+================
+*/
 func draw(roll Roll, modulus uint32) (uint32, error) {
 	if roll == nil || modulus == 0 {
 		return 0, fmt.Errorf("alchemy: missing random source or domain")
@@ -37,6 +76,11 @@ func draw(roll Roll, modulus uint32) (uint32, error) {
 	return n % modulus, nil
 }
 
+/*
+================
+clone
+================
+*/
 func clone(items []inventory.Item) []inventory.Item {
 	out := append([]inventory.Item(nil), items...)
 	for i := range out {
@@ -45,8 +89,14 @@ func clone(items []inventory.Item) []inventory.Item {
 	return out
 }
 
-// Probability is 505F00: three packed groups, high byte first. Beyond +11
-// the final byte remains authoritative (it is not a guessed exponential).
+/*
+================
+probability
+
+505F00: three packed groups, high byte first. Beyond +11 the final byte
+remains authoritative (it is not a guessed exponential).
+================
+*/
 func probability(r Reference, plus uint8) int {
 	i := int(plus)
 	if i > 11 {
@@ -55,6 +105,13 @@ func probability(r Reference, plus uint8) int {
 	return int(r.Params[1+i/4] >> uint((3-i%4)*8) & 255)
 }
 
+/*
+================
+charge
+
+Spends one charge of the item's tag option, dropping it at zero.
+================
+*/
 func (c *Catalog) charge(item *inventory.Item, tag uint32) bool {
 	for i, v := range item.MagicOptions {
 		m, ok := c.Magic[uint16(v)]
@@ -72,6 +129,14 @@ func (c *Catalog) charge(item *inventory.Item, tag uint32) bool {
 	return false
 }
 
+/*
+================
+curse
+
+A failed +5 attempt adds the level-3 durability curse, stacking onto an
+existing one and clamped to 1..99.
+================
+*/
 func (c *Catalog) curse(item *inventory.Item, roll Roll) error {
 	m, ok := c.Option("MATTR_DEC_MAXDUR", 3)
 	if !ok {
@@ -80,13 +145,10 @@ func (c *Catalog) curse(item *inventory.Item, roll Roll) error {
 	if !m.Allows(item.TypeFlags) {
 		return nil
 	}
-	// mfunc_single_range, 72FC60: round rand/32767 to float32, then
-	// truncate min + ratio*(max-min). Both endpoints are reachable.
-	n, err := draw(roll, 32768)
+	value, err := RollSingleRange(m, roll)
 	if err != nil {
 		return err
 	}
-	value := uint32(math.Trunc(float64(m.Params[1]) + float64(float32(float64(n)/32767))*float64(m.Params[2]-m.Params[1])))
 	index := -1
 	for i, v := range item.MagicOptions {
 		if old, ok := c.Magic[uint16(v)]; ok && old.Tag == 0x64757261 {
@@ -114,9 +176,15 @@ func (c *Catalog) curse(item *inventory.Item, roll Roll) error {
 	return nil
 }
 
-// Reinforce plans one attempt over detached inventory. Validation and random
-// source errors return no plan; failures are committed outcomes that consume
-// the elixir/powder and, when applicable, protection charges.
+/*
+================
+Reinforce
+
+Plans one attempt over detached inventory. Validation and random source
+errors return no plan; failures are committed outcomes that consume the
+elixir/powder and, when applicable, protection charges.
+================
+*/
 func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, roll Roll) (Outcome, error) {
 	var zero Outcome
 	if len(slots) < 2 || len(slots) > 3 {

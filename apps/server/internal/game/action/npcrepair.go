@@ -29,6 +29,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const (
@@ -48,17 +49,6 @@ const (
 	// notice 392, UIIT_MSG_STRGERR_THERE_IS_NO_ITEM_TO_REPAIR).
 	errCodeNothingToRepair uint8 = 0x88
 )
-
-// repairNpcCodenames: the NPCs 4C6350 registers service 4 for.
-var repairNpcCodenames = map[string]bool{
-	"NPC_CH_SMITH": true, "NPC_CH_ARMOR": true, "NPC_WC_SMITH": true, "NPC_WC_ARMOR": true,
-	"NPC_KT_SMITH": true, "NPC_KT_ARMOR": true, "NPC_EU_SMITH": true, "NPC_EU_ARMOR": true,
-	"NPC_CA_SMITH": true, "NPC_CA_ARMOR": true,
-	"NPC_SD_M_AREA_SMITH": true, "NPC_SD_M_AREA_ARMOR": true, "NPC_SD_T_AREA_SMITH": true, "NPC_SD_T_AREA_ARMOR": true,
-	"NPC_CH_FORTRESS_SMITH1": true, "NPC_CH_FORTRESS_SMITH2": true, "NPC_WC_FORTRESS_SMITH1": true,
-	"NPC_WC_FORTRESS_SMITH2": true, "NPC_KT_FORTRESS_SMITH": true, "NPC_EU_FORTRESS_SMITH": true,
-	"NPC_CA_FORTRESS_SMITH1": true, "NPC_CA_FORTRESS_SMITH2": true,
-}
 
 /*
 ================
@@ -96,7 +86,7 @@ func (rt *Runtime) HandleNpcRepair(division string, c *enterworld.Character, pay
 		return repairRefusal(repairErrNotService)
 	}
 	npc, ok := rt.npcForCurrentViewer(division, c, gid)
-	if !ok || !repairNpcCodenames[npc.Codename] {
+	if !ok || !npc.Services.Has(simulation.NpcServiceRepair) {
 		return repairRefusal(repairErrNotService)
 	}
 	if !rt.npcWithinHitRange(division, c, npc) {

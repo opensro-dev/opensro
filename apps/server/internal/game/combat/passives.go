@@ -116,6 +116,32 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 					writes = append(writes, w)
 				}
 			}
+			// 594AC0: hr, er, hpi and mpi put word 1 on the percent channel
+			// and word 0 on the flat channel of parameters 11, 9, 3 and 4.
+			for _, fr := range [...]struct {
+				rate  enterworld.SkillFlatRate
+				param uint16
+			}{{p.HitRate, 11}, {p.Evasion, 9}, {p.MaxHP, 3}, {p.MaxMP, 4}} {
+				if fr.rate.Present {
+					writes = append(writes,
+						paramkeeper.Write{Parameter: fr.param, Channel: paramkeeper.PercentSum, Source: source, Value: float32(fr.rate.Percent)},
+						paramkeeper.Write{Parameter: fr.param, Channel: paramkeeper.Flat, Source: source, Value: float32(fr.rate.Flat)})
+				}
+			}
+			if p.CriticalEvasion != 0 {
+				writes = append(writes, CriticalEvasionWrite(p.CriticalEvasion, source))
+			}
+			if m := selected.BuffModifiers; p.IncomingReduction && m.Odar {
+				writes = append(writes, IncomingReductionWrites(m.OdarBits, m.OdarWord, source)...)
+			}
+			// 595A97: dru word 0 on 0x80/0x81, word 1 on 0x82/0x83.
+			if p.Dru != [2]uint32{} {
+				for i, params := range [2][2]uint16{{0x80, 0x81}, {0x82, 0x83}} {
+					for _, param := range params {
+						writes = append(writes, paramkeeper.Write{Parameter: param, Channel: paramkeeper.Flat, Source: source, Value: float32(p.Dru[i])})
+					}
+				}
+			}
 		}
 		if d := selected.PassiveDefense; d.Pinned && !selected.ChainSub && selected.ChainNext == 0 && eligible {
 			defense, err := defenseModifierWrites(source, DefenseModifierInput{Physical: d.Physical, Magical: d.Magical})

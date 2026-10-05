@@ -24,11 +24,13 @@ package progression
 // The diagnostic opcode is separately admitted at registration and request time.
 
 import (
+	"math"
 	"os"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/pk"
 )
 
 // LevelCap is the Legend III era character level cap: 90, pinned by the
@@ -221,35 +223,46 @@ func (rt *Runtime) ExperienceRefundUpdater() func(*enterworld.Character, int64) 
 
 /*
 ==================
-DeathPenaltyUpdater
+OrdinaryDeathPenalty
 
-DeathPenaltyUpdater returns the door-free ordinary monster-death updater.
-Monster combat calls it from inside the SAME character transaction that
-commits fatal HP, so a crash cannot persist a corpse without its applicable
-progression consequence. Packet delivery remains a downstream concern.
+A monster kill of a non-murderer: two percent, leveldata cap * 100.
 ==================
 */
-func (rt *Runtime) DeathPenaltyUpdater() func(*enterworld.Character) ([]wire.Frame, bool) {
-	return rt.applyOrdinaryDeathPenalty
+func OrdinaryDeathPenalty() pk.DeathPenalty {
+	rule, _ := pk.DeathLoss(pk.DeathMonster, uint8(DeathPenaltyProtectedMaxLevel+1), 0, false, false)
+	return pk.DeathPenalty{Rule: rule}
 }
 
 /*
 ==================
-ApplyOrdinaryDeathPenalty
+DeathPenaltyUpdater
 
-ApplyOrdinaryDeathPenalty is the standalone transactional entry used by
-focused tests and future non-combat death owners. Live monster combat uses
-DeathPenaltyUpdater to avoid opening a nested authority door.
+DeathPenaltyUpdater returns the door-free death updater. Combat calls it
+from inside the SAME character transaction that commits fatal HP, so a
+crash cannot persist a corpse without its progression consequence.
+Packet delivery remains a downstream concern.
 ==================
 */
-func (rt *Runtime) ApplyOrdinaryDeathPenalty(character *enterworld.Character) OpResult {
+func (rt *Runtime) DeathPenaltyUpdater() func(*enterworld.Character, pk.DeathPenalty) ([]wire.Frame, bool) {
+	return rt.applyDeathPenalty
+}
+
+/*
+==================
+ApplyDeathPenalty
+
+The standalone transactional entry; live combat uses DeathPenaltyUpdater
+to avoid opening a nested authority door.
+==================
+*/
+func (rt *Runtime) ApplyDeathPenalty(character *enterworld.Character, penalty pk.DeathPenalty) OpResult {
 	if character == nil {
 		return OpResult{}
 	}
 	var frames []wire.Frame
-	rt.deps.Update(character, "ordinary-death-exp-penalty", func() bool {
+	rt.deps.Update(character, "death-exp-penalty", func() bool {
 		var changed bool
-		frames, changed = rt.applyOrdinaryDeathPenalty(character)
+		frames, changed = rt.applyDeathPenalty(character, penalty)
 		return changed
 	})
 	return OpResult{
@@ -260,59 +273,130 @@ func (rt *Runtime) ApplyOrdinaryDeathPenalty(character *enterworld.Character) Op
 
 /*
 ==================
-ordinaryDeathPenaltyLoss
+deathPenaltyLoss
 
-ordinaryDeathPenaltyLoss reproduces the unmodified v1.188 GameServer
-branch at 0x004e6ae6..0x004e6b74:
-
-	min(trunc(ExpRequired(level) * 0.02), leveldata[column 5] * 100), >= 1
-
-Rizin corrects the decompiler's phantom x87 argument: an optional
-character modifier is read by sub_4b3740(0x101, PC+0x1ec). This rebuild
-has no such effect plane yet, so the evidenced base loss is applied. Missing
-curve/cap authority refuses rather than inventing a penalty.
+4E6A3E..4E6B74: loss = trunc(ExpRequired * percent) with the float32
+percent constant, cap = leveldata column 5 * factor (halved and truncated
+for a thief killer). A cap below one is raised to one, and a loss below
+one logs the native CLAMP error and loses nothing; the result is
+min(loss, cap). Then the 0x101 percent of it, truncated, is kept.
 ==================
 */
-func ordinaryDeathPenaltyLoss(levels enterworld.LevelDataSource, level int64) (int64, bool) {
-	if level <= DeathPenaltyProtectedMaxLevel || levels == nil {
-		return 0, level <= DeathPenaltyProtectedMaxLevel
+func deathPenaltyLoss(levels enterworld.LevelDataSource, level int64, penalty pk.DeathPenalty) (int64, bool) {
+	rule := penalty.Rule
+	if rule.Percent == 0 || level <= DeathPenaltyProtectedMaxLevel {
+		return 0, true
+	}
+	if levels == nil {
+		return 0, false
 	}
 	required, requiredOK := levels.ExpRequired(level)
 	basis, basisOK := levels.MonsterExpBasis(level)
 	if !requiredOK || !basisOK || required <= 0 || basis < 0 {
 		return 0, false
 	}
-	loss := required / 50 // trunc(2%) for a positive integer requirement.
-	cap := basis * 100
-	if loss > cap {
-		loss = cap
+	loss := int64(math.Trunc(float64(required) * float64(rule.Percent)))
+	limit := basis * rule.CapFactor
+	if rule.HalveCap {
+		limit = int64(math.Trunc(float64(limit) * 0.5))
 	}
 	if loss < 1 {
-		loss = 1
+		log.Warnf("progression: CLAMP() ==> min(%d) exceeded max(1) in the death penalty at level %d", loss, level)
 	}
-	return loss, true
+	limit = max(limit, 1)
+	loss = min(loss, limit)
+	if kept := int64(math.Trunc(float64(penalty.ReductionPercent) / 100 * float64(loss))); kept > 0 {
+		loss -= kept
+	}
+	return max(loss, 0), true
 }
 
 /*
 ================
-applyOrdinaryDeathPenalty
+applyDeathPenalty
 
-Called inside the fatal-HP transaction; protected levels need no curve row.
+Called inside the fatal-HP transaction: the EXP loss, then the SP the
+rule takes, capped by the points held (vtable +0x174 with notify 1: the
+client's "SP deprived" notice).
 ================
 */
-func (rt *Runtime) applyOrdinaryDeathPenalty(character *enterworld.Character) ([]wire.Frame, bool) {
+func (rt *Runtime) applyDeathPenalty(character *enterworld.Character, penalty pk.DeathPenalty) ([]wire.Frame, bool) {
 	if character == nil || character.DeletePending {
 		return nil, false
 	}
-	loss, ok := ordinaryDeathPenaltyLoss(rt.deps.LevelData(), characterLevel(character))
+	if penalty.Job {
+		return rt.applyJobDeathPenalty(character, penalty)
+	}
+	loss, ok := deathPenaltyLoss(rt.deps.LevelData(), characterLevel(character), penalty)
 	if !ok {
 		log.Warnf("progression: death exp penalty refused - incomplete leveldata row for level %d", characterLevel(character))
 		return nil, false
 	}
-	if loss == 0 {
-		return nil, false
+	var frames []wire.Frame
+	changed := false
+	if loss > 0 {
+		frames, changed = rt.applyExperience(character, -loss, 0, 0)
 	}
-	return rt.applyExperience(character, -loss, 0, 0)
+	if sp := min(penalty.Rule.SP, coercePoints(character.SkillPoints)); sp > 0 {
+		left := coercePoints(character.SkillPoints) - sp
+		character.SkillPoints = &left
+		frames = append(frames, wire.Frame{Opcode: wire.OpPointsUpdate, Payload: wire.EncodePointsSkillUpdate(uint32(left), true)})
+		changed = true
+	}
+	return frames, changed
+}
+
+/*
+================
+applyJobDeathPenalty
+
+CGObjPC_ApplyJobDeathPenalty (4E6820): the job experience
+Formulae_CalculateDeathExpLoss (410370) gives,
+trunc(GoldMin(level) * 10 * 0.125) * 3, then the EXP of leveldata column
+5 of the lower of the two levels times six, less its 0x101 share. No
+level protects a job death.
+================
+*/
+func (rt *Runtime) applyJobDeathPenalty(character *enterworld.Character, penalty pk.DeathPenalty) ([]wire.Frame, bool) {
+	levels := rt.deps.LevelData()
+	level := characterLevel(character)
+	var frames []wire.Frame
+	changed := false
+	if gold, ok := levels.(goldBasisSource); ok {
+		if basis, found := gold.WithdrawalGoldBasis(level); found {
+			jobLevels, _ := levels.(enterworld.JobLevelDataSource)
+			loss := int64(math.Trunc(float64(basis*10)*0.125)) * 3
+			if jf, ok := AddJobExp(character, jobLevels, -loss); ok {
+				frames, changed = append(frames, jf...), true
+			}
+		}
+	}
+	basis, ok := levels.MonsterExpBasis(min(level, int64(penalty.KillerLevel)))
+	if !ok {
+		return frames, changed
+	}
+	loss := basis * 6
+	if kept := int64(math.Trunc(float64(penalty.ReductionPercent) / 100 * float64(loss))); kept > 0 {
+		loss -= kept
+	}
+	if loss > 0 {
+		if ef, ok := rt.applyExperience(character, -loss, 0, 0); ok {
+			frames, changed = append(frames, ef...), true
+		}
+	}
+	return frames, changed
+}
+
+/*
+================
+goldBasisSource
+
+dg.txt column 1 (CRefData_GetDropGoldMinimum), which the job formulas
+read beside the level curve.
+================
+*/
+type goldBasisSource interface {
+	WithdrawalGoldBasis(level int64) (int64, bool)
 }
 
 /*

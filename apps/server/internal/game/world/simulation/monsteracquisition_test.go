@@ -10,7 +10,7 @@ import (
 )
 
 func TestOrdinaryAcquisitionRankingAndOrder(t *testing.T) {
-	from := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
+	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
 	player := func(gid uint32, dx, dy, dz float64) playerPose {
 		return playerPose{Gid: gid, Pose: Spawn{RegionID: from.RegionID, X: from.X + dx, Y: from.Y + dy, Z: from.Z + dz}}
 	}
@@ -58,10 +58,10 @@ func TestAcquisitionOrdinarySelectorScope(t *testing.T) {
 	for _, flags := range []uint32{4, 0x80, 0x100} {
 		actor := monster.Instance{}
 		actor.Nest.NativeTacticsFlags = flags
-		from := monster.Pose{RegionID: 25000, X: 1000, Z: 1000}
+		from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Z: 1000}
 		players := []playerPose{
-			{Gid: 1, Pose: Spawn{RegionID: 25000, X: 1005, Y: 200, Z: 1000}},
-			{Gid: 2, Pose: Spawn{RegionID: 25000, X: 1050, Z: 1000}},
+			{Gid: 1, Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Y: 200, Z: 1000}},
+			{Gid: 2, Pose: Spawn{RegionID: monsterTestRegion, X: 1050, Z: 1000}},
 		}
 		got, _ := nearestEligiblePlayer(actor, from, players, 115)
 		if got.Gid != 1 {
@@ -71,10 +71,10 @@ func TestAcquisitionOrdinarySelectorScope(t *testing.T) {
 }
 
 func TestAcquisitionBlockOrderPrecedesGID(t *testing.T) {
-	from := monster.Pose{RegionID: 25000, X: 320, Z: 320}
+	from := monster.Pose{RegionID: monsterTestRegion, X: 320, Z: 320}
 	for _, poses := range [][2]Spawn{
-		{{RegionID: 25000, X: 319, Z: 320}, {RegionID: 25000, X: 321, Z: 320}},
-		{{RegionID: 25000, X: 321, Z: 319}, {RegionID: 25000, X: 319, Z: 321}},
+		{{RegionID: monsterTestRegion, X: 319, Z: 320}, {RegionID: monsterTestRegion, X: 321, Z: 320}},
+		{{RegionID: monsterTestRegion, X: 321, Z: 319}, {RegionID: monsterTestRegion, X: 319, Z: 321}},
 	} {
 		players := []playerPose{{Gid: 1, Pose: poses[1]}, {Gid: 9, Pose: poses[0]}}
 		got, ok := nearestEligiblePlayer(monster.Instance{}, from, players, 10)
@@ -101,8 +101,8 @@ func TestAcquisitionDrivesOrdinaryWanderAndSummonChase(t *testing.T) {
 				ops.Monsters.division(monsterTestDivision).instances.set(instance.Gid, instance)
 			}
 			players := []playerPose{
-				{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1005, Y: 220, Z: 1000}, BodyRadius: 4},
-				{Gid: PlayerObjectID(2), Pose: Spawn{RegionID: 25000, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4},
+				{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Y: 220, Z: 1000}, BodyRadius: 4},
+				{Gid: PlayerObjectID(2), Pose: Spawn{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4},
 			}
 			frames, _ := ops.advanceInstance(monsterTestDivision, instance, players, 100000)
 			got, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)

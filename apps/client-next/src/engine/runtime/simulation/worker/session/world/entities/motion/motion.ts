@@ -18,7 +18,8 @@ import {
 	movementGait,
 	sampleMovement as sample,
 	movementModeTransition,
-	movementSpeedTransition
+	movementSpeedTransition,
+	movementDuration
 } from "@/engine/foundation/gameplay/native-movement";
 import type { EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
@@ -41,10 +42,8 @@ duration
 ================
 */
 function duration( from: Pose, to: Pose, entity: EntityState ): number {
-	const distance = poseDistance( from, to ),
-		speed = (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0;
-	if ( (!Number.isFinite( speed ) || speed <= 0) && distance > 0 ) throw new Error( "Moving entity has no speed" );
-	return distance ? distance / speed * 1000 : 0;
+	const speed = (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0;
+	return movementDuration( poseDistance( from, to ), speed );
 }
 /*
 ================

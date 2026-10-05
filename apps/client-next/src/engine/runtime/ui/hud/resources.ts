@@ -136,6 +136,7 @@ export function createHudResources(
 		"ifcossetup",
 		"ifstorageroom",
 		"ifchangeplayermodel",
+		"ifgrantmagicattributewnd",
 		"ifnewalchemybox",
 		"ifalchemyprocess",
 		"ifnewalchemyreinforce",

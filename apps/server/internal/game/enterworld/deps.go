@@ -96,7 +96,10 @@ type Deps struct {
 	TrackTimedWindows func(divisionID, characterName string)
 	// ExtraMagicOptionIDs names options live item producers can create after
 	// bootstrap. Their definitions must precede the first result body.
-	ExtraMagicOptionIDs   func() []uint32
+	ExtraMagicOptionIDs func() []uint32
+	// AvatarMagicOptions are the options the smith may grant each avatar
+	// part (magicoptionassign.txt), which the grant window lists.
+	AvatarMagicOptions    func() []AvatarMagicOptionRow
 	SpawnTerrainHeight    func(regionID uint16, x, z float64) (float64, bool)
 	SpawnSurfaceHeight    func(regionID uint16, x, authoredY, z float64) (float64, bool)
 	RelocateStrandedSpawn func(spawn simulation.Spawn) (

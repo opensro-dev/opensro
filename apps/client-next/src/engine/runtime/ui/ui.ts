@@ -29,6 +29,7 @@ import {
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
+import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import type { BugReportControl } from "@/engine/contracts/bug-report";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
 import { itemEquipmentOverlay, equipmentWarningUv } from "@/engine/foundation/ui/item-equipment-overlay";
@@ -117,6 +118,17 @@ import { createCosHud } from "./hud/cos-hud";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
+import { createGuildManagerHud } from "./hud/guild-manager-hud";
+import { createMagicOptionHud, MAGIC_OPTION_LIST_ROWS } from "./hud/magic-option-hud";
+import {
+	AVATAR_MAGIC_OPTION_FUNCTION,
+	avatarMagicOptionCount,
+	avatarMagicOptionText,
+	avatarPartSymbol,
+	grantableAvatarPart
+} from "@/engine/foundation/gameplay/avatar-magic-option";
+import { guildLevelUpPrice, guildManagerRows, MASTER_RELEASE_VOTE } from "@/engine/foundation/gameplay/guild-manager";
+import { noticeText } from "@/engine/foundation/ui/notice-text";
 import {
 	JOB_ALIAS_CHECK,
 	JOB_ALIAS_CREATE,
@@ -396,6 +408,8 @@ const BUG_REPLAY_OPTION = "option-bug-replay";
 const BUG_REPLAY_LABEL = "Record bug replay";
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
+// The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
+const GRANT_PANEL = "Magic option";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
 const SKIN_SLIDER_TRAVEL = 85;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
@@ -588,6 +602,8 @@ export function createUi(
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
 	const jobHud = createJobHud();
+	const guildManagerHud = createGuildManagerHud();
+	const magicOptionHud = createMagicOptionHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
@@ -991,6 +1007,7 @@ export function createUi(
 		if ( panel === "Option" ) audioPreference( audioSaved, false );
 		if ( panel === "Alchemy" ) sendGameplay( { kind: "alchemy-close" } );
 		if ( panel === "Magic Pop" ) sendGameplay( { kind: "gacha-close" } );
+		if ( panel === GRANT_PANEL ) sendGameplay( { kind: "magic-option-close" } );
 		if ( panel && !next ) sound( "close" );
 		if ( !next ) admittedWindows.clear();
 		const wasOpen = !!panel;
@@ -1069,14 +1086,8 @@ export function createUi(
 			return;
 		}
 		if ( id === 1008 ) {
-			const pose = game.pose,
-				item = pose ?
-					view!.entities.filter( e => e.kind === "ground-item" && e.regionId === pose.regionId ).sort( (
-						a,
-						b
-					) => Math.hypot( a.x - pose.x, a.z - pose.z ) - Math.hypot( b.x - pose.x, b.z - pose.z ) )[0] :
-					undefined;
-			if ( item ) sendGameplay( { kind: "pickup", gid: item.gid } );
+			// The worker picks the item; this frame's view may still hold the last.
+			sendGameplay( { kind: "pickup-nearest" } );
 			return;
 		}
 		if ( id === 1002 ) {
@@ -1630,6 +1641,29 @@ export function createUi(
 				composing = false;
 				dirty = true;
 			}
+			return;
+		}
+		if ( id.startsWith( "npc-guild:" ) ) {
+			// 5DA1B0 cases 0x12..0x1D: the guild manager's rows (guild-manager.ts).
+			const conversation = view.gameplay?.npcConversation, social = view.gameplay?.social;
+			if ( !conversation || conversation.phase !== "menu" ) return;
+			const npc = conversation.gid, row = id.slice( 10 );
+			if ( row === "create" || row === "master-leave" ) {
+				guildManagerHud.openField( row, npc );
+				focusAtEnd( "guild-manager-text", "" );
+			} else if ( row === "level-up" ) guildManagerHud.ask( "level-up", npc, social?.guild?.level ?? 0 );
+			else if ( row === "dissolve" || row === "secede" || row === "release" ) guildManagerHud.ask( row, npc );
+			else if ( row === "compensation" ) sendGameplay( { kind: "guild-compensation", gid: npc } );
+			else if ( row === "vote" ) {
+				const vote = social?.guild?.votes?.find( v => v.kind === MASTER_RELEASE_VOTE );
+				if ( vote ) guildManagerHud.showVote( vote.remainingMs );
+			} else if ( row === "warehouse" ) {
+				if ( !canLeavePanel() ) return;
+				sendGameplay( { kind: "storage-open-guild", gid: npc } );
+				storagePanel.reset();
+				setPanel( "Storage" );
+			}
+			dirty = true;
 			return;
 		}
 		if ( id.startsWith( "npc-job-" ) ) {
@@ -2684,7 +2718,23 @@ export function createUi(
 				focus = null;
 				goldAmount = "";
 			}
-		} else if ( id === "storage-open" && view.gameplay?.target ) {
+		} else if ( id === "magic-option-open" && view.gameplay?.target ) {
+			// 5DA1B0 case 0x2F; B338 lock 0x80000000 then shows the window.
+			sendGameplay( { kind: "magic-option-open", gid: view.gameplay.target } );
+		} else if ( id.startsWith( "magic-option-row:" ) ) magicOptionHud.choose( id.slice( 17 ) );
+		else if ( id === "magic-option-up" || id === "magic-option-down" ) {
+			const grant = view.gameplay?.magicOption,
+				item = view.gameplay?.inventory.find( r => r.slot === grant?.item ),
+				part = item ? grantableAvatarPart( item.typeFlags ) : null;
+			magicOptionHud.scroll(
+				id === "magic-option-up" ? -1 : 1,
+				grant?.parts.find( p => p.part === part )?.options.length ?? 0
+			);
+		} else if ( id === "magic-option-confirm" ) {
+			const codename = magicOptionHud.state().codename;
+			if ( codename ) sendGameplay( { kind: "magic-option-grant", codename } );
+		} else if ( id === "magic-option-cancel" ) setPanel( "" );
+		else if ( id === "storage-open" && view.gameplay?.target ) {
 			if ( !canLeavePanel() ) return;
 			sendGameplay( { kind: "storage-open", gid: view.gameplay.target } );
 			storagePanel.reset();
@@ -3094,6 +3144,63 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			if ( guildManagerHud.question() || guildManagerHud.field() || guildManagerHud.vote() ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "guild-manager-no"
+				) {
+					// A declined claim box drops the quote (5D4050's No).
+					if ( guildManagerHud.takeQuestion()?.kind === "compensation" ) {
+						sendGameplay( { kind: "compensation-dismiss" } );
+					}
+					guildManagerHud.reset();
+					dirty = true;
+					return;
+				}
+				if ( guildManagerHud.field() && event.kind === "edit" && event.id === "guild-manager-text" ) {
+					guildManagerHud.type( event.value );
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "guild-manager-yes"
+				) {
+					dirty = true;
+					if ( guildManagerHud.vote() ) {
+						guildManagerHud.reset();
+						return;
+					}
+					if ( view?.session?.phase !== "world" ) return;
+					const asked = guildManagerHud.takeQuestion();
+					if ( asked ) {
+						if ( asked.kind === "level-up" ) sendGameplay( { kind: "guild-level-up", gid: asked.npc } );
+						else if ( asked.kind === "dissolve" ) {
+							sendGameplay( { kind: "guild-dissolve", gid: asked.npc } );
+						} else if ( asked.kind === "secede" ) sendGameplay( { kind: "guild-leave", gid: asked.npc } );
+						else if ( asked.kind === "release" ) sendGameplay( { kind: "guild-release", gid: asked.npc } );
+						else {
+							sendGameplay( { kind: "guild-compensation-claim", gid: asked.npc } );
+							sendGameplay( { kind: "compensation-dismiss" } );
+						}
+						return;
+					}
+					const entry = guildManagerHud.field();
+					if ( entry?.text && entry.kind === "create" ) {
+						guildManagerHud.takeField();
+						sendGameplay( { kind: "guild-create", gid: entry.npc, name: entry.text } );
+					} else if ( entry?.text ) {
+						// 5D3EB0: the master names a member; only a member may take over.
+						const member = view.gameplay?.social?.guild?.members.find( m => m.name === entry.text );
+						if ( member && member.grade !== 0 ) {
+							guildManagerHud.takeField();
+							sendGameplay( { kind: "guild-master-leave", gid: entry.npc, id: member.id } );
+						}
+					}
+					return;
+				}
+				if ( event.kind === "activate" ) return;
 			}
 			if ( jobHud.confirm() !== null ) {
 				if (
@@ -3761,7 +3868,7 @@ export function createUi(
 				if (
 					carried &&
 					(carried.avatar ? event.id.startsWith( "avatar:" ) : event.id === "slot:" + carried.slot) &&
-					[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel ) &&
+					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
 					view?.session?.phase === "world" && !view.gameplay?.inventoryPending && controls.some( c =>
 						c.id === event.id && c.draggable && !c.disabled
 					)
@@ -3780,6 +3887,11 @@ export function createUi(
 						item && target && !target.disabled && panel === "Alchemy" && target.id.startsWith( "alchemy-" )
 					) {
 						activate( "alchemy-slot:" + item.slot );
+						return;
+					}
+					// 6EB570: an inventory item dropped on the grant window's slot.
+					if ( item && target?.id === "magic-option-slot" && !target.disabled && panel === GRANT_PANEL ) {
+						sendGameplay( { kind: "magic-option-take", slot: item.slot } );
 						return;
 					}
 					const room = view?.gameplay?.storage;
@@ -3898,6 +4010,11 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				if ( panel === GRANT_PANEL && event.id.startsWith( "slot:" ) ) {
+					sendGameplay( { kind: "magic-option-take", slot: Number( event.id.slice( 5 ) ) } );
+					dirty = true;
+					return;
+				}
 				if (
 					panel === "COS inventory" && (event.id.startsWith( "slot:" ) || event.id.startsWith( "cos-slot:" ))
 				) {
@@ -3956,7 +4073,7 @@ export function createUi(
 			}
 			if (
 				event.kind === "drag" && ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) ) &&
-				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
+				[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel )
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
 				if ( !node ) return;
@@ -5014,6 +5131,13 @@ export function createUi(
 				setPanel( "Magic Pop" );
 			}
 			gachaWasVisible = gachaVisible;
+			// B338 lock 0x80000000 (75AE50) shows the grant window with the inventory.
+			if (
+				magicOptionHud.sync(
+					phase === "world" && !!next.gameplay?.magicOption?.visible,
+					next.gameplay?.magicOption?.item ?? null
+				)
+			) setPanel( GRANT_PANEL );
 			if ( next.session && next.session.revision !== lastSessionRevision ) {
 				if (
 					(loginReplyPending || next.session.nativeTitleStatus !== lastNativeTitleStatus) && titleProcess &&
@@ -8834,7 +8958,10 @@ export function createUi(
 						blocks.push( full );
 					}
 				}
-				if ( [ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel ) && hudData ) {
+				if (
+					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
+					hudData
+				) {
 					const admission = beginWindow();
 					const popup = mainPopupGeometry( "Inventory", hudData.windows.ifmainpopup!, w, h, popupPosition ),
 						[px, py] = popup.frame,
@@ -10221,10 +10348,20 @@ export function createUi(
 						canRecall: !!(capabilities & 0x40),
 						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4),
-						jobRows: jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
-							id: row.id,
-							label: copy( row.symbol )
-						}) )
+						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
+						// 5D9100 lists the guild set ahead of the job menu.
+						jobRows: [
+							...guildManagerRows( capabilities, game.social?.guild, game.social?.localName ?? "" ).map(
+								row => ({
+									id: "npc-guild:" + row.row,
+									label: copy( row.symbol )
+								})
+							),
+							...jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
+								id: row.id,
+								label: copy( row.symbol )
+							}) )
+						]
 					} );
 					npcPanel.geometry( output );
 					quads.push( ...output.quads );
@@ -10287,7 +10424,7 @@ export function createUi(
 						);
 					}
 					for ( let i = 0; i < 5; i++ ) {
-						const entry = shop?.buyback?.find( row => row.index === i ),
+						const entry = restoreSlotEntry( shop?.buyback ?? [], i ),
 							index = shop?.buyback?.indexOf( entry! ) ?? -1,
 							node = page["GDR_STORE_ICON_SLOT_0" + (i + 1)]!;
 						nativeItem(
@@ -10458,6 +10595,107 @@ export function createUi(
 						authoredText( { ...money, color: shown.color }, px, py, shown.text );
 					}
 					endWindow( admission, "service:Storage" );
+				}
+				const grant = game?.magicOption;
+				if ( panel === GRANT_PANEL && grant && hudData?.windows.ifgrantmagicattributewnd ) {
+					// CIFGrantMagicAttributeWnd (6EB3E0): the item slot (8), its count
+					// line (9), the five option rows (0x28..0x2C) and the buttons are live.
+					const admission = beginWindow(),
+						root = hudData.root.GDR_GRANT_MAGIC_ATTRIBUTE!,
+						layout = hudData.windows.ifgrantmagicattributewnd,
+						nodes = Object.values( layout ),
+						at = ( id: number ) => nodes.find( n => n.id === id ),
+						[px, py] = windowOrigin( GRANT_PANEL, [
+							Math.max( 0, w - 388 - root.rect[2] - 8 ),
+							Math.max( 0, h - 478 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						item = game?.inventory.find( r => r.slot === grant.item ),
+						part = item ? grantableAvatarPart( item.typeFlags ) : null,
+						options = grant.parts.find( p => p.part === part )?.options ?? [],
+						choice = magicOptionHud.state(),
+						busy = !!game?.inventoryPending || grant.phase !== "idle";
+					nativeFrame( root, px, py, hudCopy( root.text ), "magic-option-cancel" );
+					nativePage( layout, px, py, [ 5, 6, 8, 9, 40, 41, 42, 43, 44 ] );
+					const slot = at( 8 );
+					if ( slot ) nativeItem( "magic-option-slot", item, authoredRect( slot, px, py ), busy );
+					// 6EA540: "<part> - <ADD_COUNT>: <free><UNIT>".
+					const count = at( 9 ), symbol = part === null ? null : avatarPartSymbol( part );
+					if ( count && item && symbol ) {
+						const free = (item.tooltip?.fields.maxMagicOptions51c ?? 0) - avatarMagicOptionCount( item );
+						authoredText(
+							count,
+							px,
+							py,
+							hudCopy( symbol ) + " - " + hudCopy( "UIIT_STT_AVATAR_MAGICOPTION_ADD_COUNT" ) + ": " +
+								free +
+								hudCopy( "UIIT_STT_UNIT" )
+						);
+					}
+					// 6EB3E0 backs every row with gil_bar02; the chosen row is selected.
+					const select = ROOT + "interface/guild/gil_bar02_select.png",
+						deselect = ROOT + "interface/guild/gil_bar02_deselect.png";
+					paths.push( select, deselect );
+					for ( let i = 0; i < MAGIC_OPTION_LIST_ROWS; i++ ) {
+						const bar = at( 0x28 + i ), option = options[choice.top + i];
+						if ( !bar ) continue;
+						const r = authoredRect( bar, px, py );
+						if ( resources.has( select ) && resources.has( deselect ) ) {
+							rect( r, white, option && option.codename === choice.codename ? select : deselect );
+						}
+						if ( !option ) continue;
+						quads.push(
+							...text.quads(
+								avatarMagicOptionText( option.codename, option.value, hudCopy ),
+								[ r[0] + 8, r[1], r[2] - 16, r[3] ],
+								full,
+								white,
+								{ vAlign: 1 }
+							)
+						);
+						controls.push( {
+							id: "magic-option-row:" + option.codename,
+							label: option.codename,
+							rect: r,
+							kind: "button",
+							disabled: busy,
+							selected: option.codename === choice.codename
+						} );
+					}
+					const list = at( 32 );
+					if ( list && options.length > MAGIC_OPTION_LIST_ROWS ) {
+						const r = authoredRect( list, px, py ), range = options.length - MAGIC_OPTION_LIST_ROWS;
+						const scroll = chatScrollbar(
+							"magic-option",
+							[ r[0] + r[2] - 16, r[1] + 16, 16, r[3] - 48 ],
+							options.length,
+							MAGIC_OPTION_LIST_ROWS,
+							range - choice.top,
+							resources.size,
+							full,
+							hover,
+							pressed
+						);
+						paths.push( ...scroll.paths );
+						quads.push( ...scroll.quads );
+						controls.push( ...scroll.controls );
+					}
+					for (
+						const [id, nodeId] of [ [ "magic-option-confirm", 5 ], [ "magic-option-cancel", 6 ] ] as const
+					) {
+						const node = at( nodeId );
+						if ( !node ) continue;
+						authoredLabeledButton(
+							node,
+							px,
+							py,
+							id,
+							hudCopy( node.text ),
+							id === "magic-option-confirm" && (busy || !item || !choice.codename)
+						);
+					}
+					endWindow( admission, "service:" + GRANT_PANEL );
 				}
 				const skin = skinHud.state();
 				if ( panel === SKIN_PANEL && skin && hudData?.windows.ifchangeplayermodel ) {
@@ -12672,6 +12910,110 @@ export function createUi(
 					button( "job-alias-cancel", hudCopy( "UIIT_CTL_CANCEL" ), rx! + rw! + 8, ry!, rw! );
 				}
 			}
+			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) guildManagerHud.reset();
+			else if ( game.social?.compensation !== undefined && !guildManagerHud.question() ) {
+				guildManagerHud.ask( "compensation", game.npcConversation.gid, game.social.compensation );
+			}
+			const guildAsk = guildManagerHud.question(),
+				guildField = guildManagerHud.field(),
+				guildVote = guildManagerHud.vote();
+			if ( worldVisible && (guildAsk || guildField || guildVote) ) {
+				// The guild manager's boxes (guild-manager-hud.ts) in the job box's frame.
+				const layout = guildProposalLayout( w, h );
+				const say = ( key: string, ...args: string[] ) =>
+					noticeText( hudCopy, { key, value: 0, arguments: args } );
+				const price = guildAsk?.kind === "level-up" ? guildLevelUpPrice( guildAsk.value ) : undefined;
+				const title = guildField?.kind === "create" ?
+					"UIIT_CTL_GUILD_CREATE" :
+					guildField ?
+					"UIIT_STT_MLEAVE_WINDOWS" :
+					guildVote ?
+					"UIIT_STT_MRELEASE_VOTESTATE" :
+					"UIIT_STT_CONFIRM_BOX";
+				const lines: Record<string, readonly [string, string]> = {
+					"level-up": [
+						say( "UIIT_MSG_GUILD_LEVEL_UP_CONDITION", String( (guildAsk?.value ?? 0) + 1 ) ),
+						price ?
+							hudCopy( "UIIT_STT_NEED_GP" ) + " : " + price.gp + "   " +
+							hudCopy( "UIIT_STT_CIRCULATION_NEEDMONEY" ) + " : " + price.gold :
+							hudCopy( "UIIT_MSG_ERROR_GUILD_LEVEL_UP_FULL" )
+					],
+					"dissolve": [
+						hudCopy( "UIIT_MSG_GUILD_BREAK_CONFIRM" ),
+						hudCopy( "UIIT_MSG_GUILD_BREAK_ANOTHER_EXPLAIN" )
+					],
+					"secede": [ hudCopy( "UIIT_MSG_GUILD_SECESSION_CONFIRM" ), "" ],
+					"release": [ hudCopy( "UIIT_MSG_MRELEASE_CONFIRM" ), "" ],
+					"compensation": [
+						say( "UIIT_CTL_GUILDWAR_COMPENSATION_01", String( guildAsk?.value ?? 0 ) ),
+						hudCopy( "UIIT_CTL_GUILDWAR_COMPENSATION_02" )
+					],
+					"master-leave": [ hudCopy( "UIIT_MSG_MLEAVE_INPUTID" ), "" ],
+					"create": [ "", "" ],
+					"vote": [
+						Math.ceil( (guildVote?.remainingMs ?? 0) / 60000 ) + " " + hudCopy( "PARAM_MINUTE" ),
+						""
+					]
+				};
+				const [first, second] = lines[guildAsk?.kind ?? guildField?.kind ?? "vote"]!;
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( title ), layout.title, full, white, { hAlign: 1, vAlign: 0 } ),
+					...text.quads( first, layout.name, full, white, { hAlign: 1, vAlign: 0 } )
+				);
+				if ( guildField ) {
+					const field: UiRect = [ layout.question[0], layout.question[1], layout.question[2], 16 ];
+					controls.push( {
+						id: "guild-manager-text",
+						label: hudCopy( title ),
+						kind: "text",
+						value: guildField.text,
+						rect: field,
+						maxLength: 12
+					} );
+					rect( field, [ 0, 0, 0, .6 ], "", [ 0, 0, 1, 1 ], full );
+					quads.push(
+						...text.quads( guildField.text, field, field, white, {
+							hAlign: 1,
+							vAlign: 1,
+							overflow: "clip"
+						} )
+					);
+					if ( focus === "guild-manager-text" && caretVisible ) {
+						const width = text.run( guildField.text ).width;
+						rect(
+							[ field[0] + (field[2] + width) / 2, field[1] + 1, 2, 14 ],
+							white,
+							"",
+							[ 0, 0, 1, 1 ],
+							field
+						);
+					}
+				} else {
+					quads.push( ...text.quads( second, layout.question, full, white, { hAlign: 1 } ) );
+				}
+				button(
+					"guild-manager-yes",
+					hudCopy( guildAsk ? "UIIT_CTL_YES" : "UIIT_CTL_OK" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				if ( !guildVote ) {
+					button(
+						"guild-manager-no",
+						hudCopy( guildAsk ? "UIIT_CTL_NO" : "UIIT_CTL_CANCEL" ),
+						...layout.refuse.slice( 0, 3 ) as [number, number, number]
+					);
+				}
+			}
 			if ( panel !== "Shop" ) repairHud.reset();
 			const repairCost = repairHud.confirmCost();
 			if ( worldVisible && repairCost !== null ) {
@@ -13120,7 +13462,7 @@ export function createUi(
 			}
 			if (
 				worldVisible && carriedItem &&
-				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
+				[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel )
 			) {
 				const item = carriedRow( carriedItem, game ), path = iconPath( item?.icon );
 				if ( path ) {

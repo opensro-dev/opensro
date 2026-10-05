@@ -4,7 +4,7 @@
 skillperiodic.go - release and damage authority for linked hostile effects
 
 Cast admission and preparation belong to the ordinary action lane. Release
-installs one pair per selected monster; the pulse owner only supplies clocks.
+installs one pair per selected recipient (a monster or a player); the pulse owner only supplies clocks.
 Health, abnormalities, hostility and kill rewards retain their existing owners.
 
 ===========================================================================
@@ -36,7 +36,7 @@ type periodicCast struct {
 	character, snapshot *enterworld.Character
 	skill               enterworld.SkillRow
 	cast                wire.SkillAction
-	target              monster.Instance
+	target              combatTarget
 	attacker            combat.Stats
 	now                 int64
 	release             *pendingProjectileCast
@@ -53,9 +53,9 @@ The division operation lock serializes installation with retirement.
 */
 func (rt *Runtime) installPeriodicCast(p periodicCast) (OpResult, skillCastDecision) {
 	d := p.skill.TimedEffect.Periodic
-	targets := []monster.Instance{p.target}
+	targets := []combatTarget{p.target}
 	if d.Area.Radius != 0 {
-		targets = rt.areaVictims(p.division, p.snapshot, p.target, d.Area, areaBaseRange(p.skill, p.attacker), p.now)
+		targets = rt.areaVictims(p.division, p.snapshot, p.skill, p.target, d.Area, areaBaseRange(p.skill, p.attacker), p.now)
 	}
 	duration := d.DurationMs
 	if d.Attack.Parameters.Has(enterworld.ParameterDotDuration) {
@@ -67,28 +67,30 @@ func (rt *Runtime) installPeriodicCast(p periodicCast) (OpResult, skillCastDecis
 	}
 	caster := enterworld.ObjectIDForCharacter(p.snapshot)
 	var effects []linkedpulse.Effect
+	var monsters []bool
 	var public, private []wire.Frame
 	for _, target := range targets {
 		effect := linkedpulse.Effect{Division: p.division, SourceName: p.snapshot.Name, SourceSession: session,
-			SourceGID: caster, TargetGID: target.Gid, SkillID: p.skill.ID, LinkGroup: d.Link.Group,
+			SourceGID: caster, TargetGID: target.gid, SkillID: p.skill.ID, LinkGroup: d.Link.Group,
 			MaxPerTarget: d.Link.MaxOutgoing, StartedMs: p.now, DurationMs: duration, PeriodMs: d.PeriodMs,
 			SourceToken: atomic.AddUint32(&rt.castTokenCounter, 1), TargetToken: atomic.AddUint32(&rt.castTokenCounter, 1)}
 		if code := rt.periodicEffects.Refusal(effect); code != 0 {
-			if target.Gid == p.target.Gid {
+			if target.gid == p.target.gid {
 				return offensiveRefusal(code), skillCastRefused
 			}
 			continue
 		}
-		recipient, err := (wire.AttachedEffect{GID: target.Gid, SkillID: p.skill.ID, InstanceToken: effect.TargetToken,
+		recipient, err := (wire.AttachedEffect{GID: target.gid, SkillID: p.skill.ID, InstanceToken: effect.TargetToken,
 			Phase: 2, Rider: duration - d.DurationMs}).Encode(wire.AttachedEffectLayout{Status: p.skill.SpawnStatus, Rider: p.skill.EffectRider})
 		if err != nil {
 			return OpResult{DiagnosticRefusal: "periodic-recipient-layout"}, skillCastRefused
 		}
-		source, err := (wire.SourceEffect{SkillID: p.skill.ID, InstanceToken: effect.SourceToken, SubjectGID: target.Gid}).Encode(p.skill.StealthDuration)
+		source, err := (wire.SourceEffect{SkillID: p.skill.ID, InstanceToken: effect.SourceToken, SubjectGID: target.gid}).Encode(p.skill.StealthDuration)
 		if err != nil {
 			return OpResult{DiagnosticRefusal: "periodic-source-layout"}, skillCastRefused
 		}
 		effects = append(effects, effect)
+		monsters = append(monsters, target.monster != nil)
 		public = append(public, wire.Frame{Opcode: wire.OpAttachedEffect, Payload: recipient})
 		private = append(private, wire.Frame{Opcode: wire.OpSourceEffect, Payload: source})
 	}
@@ -108,12 +110,16 @@ func (rt *Runtime) installPeriodicCast(p periodicCast) (OpResult, skillCastDecis
 				return false
 			}
 		}
+		// A monster recipient also carries the attachment in its own state;
+		// a player recipient's is the published 0x3015 alone.
 		projections := make([]simulation.MonsterLinkedEffect, 0, len(effects))
-		for _, effect := range effects {
-			projections = append(projections, simulation.MonsterLinkedEffect{GID: effect.TargetGID,
-				Effect: monster.AttachedSkill{SkillID: effect.SkillID, Token: effect.TargetToken}})
+		for i, effect := range effects {
+			if monsters[i] {
+				projections = append(projections, simulation.MonsterLinkedEffect{GID: effect.TargetGID,
+					Effect: monster.AttachedSkill{SkillID: effect.SkillID, Token: effect.TargetToken}})
+			}
 		}
-		if !rt.Monsters.InstallMonsterLinkedEffects(p.division, projections) {
+		if len(projections) > 0 && !rt.Monsters.InstallMonsterLinkedEffects(p.division, projections) {
 			return false
 		}
 		for _, effect := range effects {
@@ -133,12 +139,12 @@ func (rt *Runtime) installPeriodicCast(p periodicCast) (OpResult, skillCastDecis
 	var start wire.Frame
 	if p.release != nil {
 		token = p.release.token
-		start = wire.SkillCastReleaseFrame(token, p.target.Gid)
+		start = wire.SkillCastReleaseFrame(token, p.target.gid)
 	} else {
 		token = atomic.AddUint32(&rt.castTokenCounter, 1)
 		start = wire.SkillCastAtTargetFrame(wire.SkillCastSuccess{SkillId: p.skill.ID, CasterGid: caster,
-			InstanceToken: token, OwnerOrTargetGid: p.target.Gid})
-		rt.queueSkillFinalize(p.division, p.snapshot.Name, caster, p.now, wire.SkillCastReleaseFrame(token, p.target.Gid))
+			InstanceToken: token, OwnerOrTargetGid: p.target.gid})
+		rt.queueSkillFinalize(p.division, p.snapshot.Name, caster, p.now, wire.SkillCastReleaseFrame(token, p.target.gid))
 	}
 	rt.queueSkillCastClose(p.division, p.snapshot.Name, caster, token, p.skill, 0, p.now+int64(p.skill.ActionDurationMs))
 	public = append([]wire.Frame{start}, public...)
@@ -160,7 +166,9 @@ func (rt *Runtime) periodicRetirement(effect linkedpulse.Effect) []wire.Frame {
 	if _, ok := rt.periodicEffects.Remove(effect.Division, effect.SourceToken); !ok {
 		return nil
 	}
-	rt.Monsters.RemoveMonsterLinkedEffect(effect.Division, effect.TargetGID, effect.TargetToken)
+	if rt.Monsters != nil {
+		rt.Monsters.RemoveMonsterLinkedEffect(effect.Division, effect.TargetGID, effect.TargetToken)
+	}
 	payload, err := (wire.EndedEffectInstances{InstanceTokens: []uint32{effect.SourceToken, effect.TargetToken}}).Encode()
 	if err != nil {
 		panic(err)
@@ -193,12 +201,16 @@ func (rt *Runtime) advancePeriodicEffects(now int64) []simulation.DivisionFrames
 			owner, ok := rt.characterAdmissions.Load(simulation.WorldKey(effect.Division, effect.SourceName))
 			live = live && ok && owner.(populationAdmission).session == effect.SourceSession
 		}
-		target, exists := rt.characterMonster(effect.Division, snapshot, effect.TargetGID)
-		live = live && exists && target.CurrentHP > 0
+		target, exists := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now)
+		live = live && exists
 		var result OpResult
 		if live && step.Pulse {
-			result = rt.applyPeriodicPulse(effect, c, snapshot, target, now)
-			if current, ok := rt.characterMonster(effect.Division, snapshot, effect.TargetGID); !ok || current.CurrentHP == 0 {
+			if target.monster != nil {
+				result = rt.applyPeriodicPulse(effect, c, snapshot, *target.monster, now)
+			} else {
+				result = rt.applyPeriodicPlayerPulse(effect, c, snapshot, target, now)
+			}
+			if _, ok := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now); !ok {
 				live = false
 			}
 		}
@@ -270,53 +282,43 @@ func (rt *Runtime) applyPeriodicPulse(effect linkedpulse.Effect, c, snapshot *en
 	if err != nil {
 		return OpResult{}
 	}
-	plans, ok := rt.planMonsterImpacts(effect.Division, snapshot, skill, target, []combat.Result{formula}, now)
+	hit, ok := rt.commitCreditedMonsterHit(effect.Division, c, snapshot, skill, target, formula, "linked-skill-kill", now)
 	if !ok {
 		return OpResult{}
 	}
-	roster := rt.monsterRewardRoster(effect.Division, c, now)
-	var impacts []simulation.MonsterDamageResult
-	var settlement monsterSettlement
-	commit := func() bool {
-		impacts = rt.Monsters.ApplyDamageSequence(effect.Division, target.Gid, target.CurrentHP, plans)
-		if len(impacts) == 0 {
-			return false
-		}
-		if impacts[0].Fatal {
-			pose := monster.Pose{}
-			if mover, exists := rt.Monsters.Mover(effect.Division, target.Gid); exists {
-				pose = mover.LivePoseAt(now, nil)
-			}
-			settlement = rt.settleMonsterInsideDoor(effect.Division, c, roster, impacts[0], pose, now)
-		}
-		return true
-	}
-	// A surviving hit mutates only the monster. Its abnormal application
-	// resolves the source through the character read door, so holding that
-	// door's write lock here would recursively deadlock. Only a fatal hit
-	// changes character rewards; dead victims skip abnormal application.
-	committed := false
-	if plans[0].Damage >= target.CurrentHP {
-		committed = rt.deps.UpdateMany(roster.characters, "linked-skill-kill", commit)
-	} else {
-		committed = commit()
-	}
-	if !committed {
+	public := []wire.Frame{wire.SkillPulseFrame(effect.SourceGID, skill.ID, []wire.SkillAreaTarget{
+		{GID: target.Gid, Impacts: []wire.SkillCastTargetImpact{committedSkillImpact(formula, hit.impacts[0])}},
+	})}
+	public = append(public, rt.monsterImpactAbnormalFrames(effect.Division, target.Gid, hit.impacts)...)
+	return rt.creditedHitResult(effect.Division, target, hit, public, now)
+}
+
+/*
+================
+applyPeriodicPlayerPulse
+
+A pulse on a player recipient: the periodic attack's record as the
+caster's credited hit (pvpstrike.go), published as the monster pulse is.
+================
+*/
+func (rt *Runtime) applyPeriodicPlayerPulse(effect linkedpulse.Effect, c, snapshot *enterworld.Character, target combatTarget, now int64) OpResult {
+	skill, known := rt.deps.SkillData().SkillByID(effect.SkillID)
+	if !known || !skill.TimedEffect.Periodic.Pinned || c == nil {
 		return OpResult{}
 	}
-	rt.commitSkillHostility(effect.Division, effect.SourceGID, target.Gid, skill, impacts, now)
-	public := []wire.Frame{wire.SkillPulseFrame(effect.SourceGID, skill.ID, []wire.SkillAreaTarget{
-		{GID: target.Gid, Impacts: []wire.SkillCastTargetImpact{committedSkillImpact(formula, impacts[0])}},
-	})}
-	public = append(public, rt.monsterImpactAbnormalFrames(effect.Division, target.Gid, impacts)...)
-	if impacts[0].Fatal {
-		public = append(public, monsterLifeDeadFrame(target.Gid))
-		public = append(public, rt.groundReferences(settlement.drops)...)
-		for _, drop := range settlement.drops {
-			public = append(public, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
-		}
-		public = append(public, settlement.public...)
-		rt.queueMonsterDefeat(effect.Division, target.Gid, now+monsterDeathPresentationRetention.Milliseconds())
+	skill.Attack = skill.TimedEffect.Periodic.Attack
+	attacker, _, err := rt.playerCombatStats(effect.Division, snapshot)
+	if err != nil {
+		return OpResult{}
 	}
-	return OpResult{Broadcast: public, ActorPrivate: wire.ProgressionPrivateFrames(settlement.actorFrames), Recipients: settlement.others}
+	hit, result, landed := rt.creditPlayerHit(playerHitInput{division: effect.Division, caster: c, snapshot: snapshot,
+		attacker: attacker, skill: skill, target: target, impacts: 1, now: now})
+	if !landed {
+		return OpResult{}
+	}
+	pulse := wire.SkillPulseFrame(effect.SourceGID, skill.ID, []wire.SkillAreaTarget{
+		{GID: target.gid, Impacts: hit.struck.impacts},
+	})
+	result.Broadcast = append([]wire.Frame{pulse}, result.Broadcast...)
+	return result
 }

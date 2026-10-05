@@ -11,6 +11,7 @@ package action
 import (
 	"math"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/caravan"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
+	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/skillobject"
 )
@@ -55,15 +57,24 @@ type Runtime struct {
 	RewardActorPresent  func(division, name string) bool
 	returnGeneration    atomic.Uint64
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
-	criticals           criticalHistory
-	deps                Dependencies
-	Ground              *grounditem.Registry
-	Pending             *grounditem.PendingTracker
-	Worlds              *simulation.WorldStore
-	SkillObjects        skillobject.Registry
-	CanPlaceQuestTrap   func(*enterworld.Character, string) ([]wire.Frame, bool)
-	CaptureQuestTrap    func(*enterworld.Character, string, string, func() bool) ([]wire.Frame, bool)
+	// caravans are the registered trade caravans (caravan.go); caravanMu
+	// serializes the registry and caravanTickMs is its last advance.
+	caravanMu     sync.Mutex
+	caravans      *caravan.Registry
+	caravanTickMs int64
+	// guildStorageUsers is each guild warehouse's single user
+	// (npcguildstorage.go): guildStorageKey -> character name.
+	guildStorageUsers sync.Map
+	criticals         criticalHistory
+	deps              Dependencies
+	Ground            *grounditem.Registry
+	Pending           *grounditem.PendingTracker
+	Worlds            *simulation.WorldStore
+	SkillObjects      skillobject.Registry
+	CanPlaceQuestTrap func(*enterworld.Character, string) ([]wire.Frame, bool)
+	CaptureQuestTrap  func(*enterworld.Character, string, string, func() bool) ([]wire.Frame, bool)
 
 	// effects is the server-owned active character-effect collection behind
 	// 0x72CD cancel-active-effect. It stays private so packet handlers cannot
@@ -83,6 +94,11 @@ type Runtime struct {
 	// walls are the actors' Force-wall slots (+0xC0C), keyed by wallKey.
 	walls  map[string]*standingWall
 	wallMu sync.Mutex
+
+	// hawks are the casters' attacking-hawk records (+0xC10), keyed by
+	// hawkKey (skillhawk.go).
+	hawks  map[string]*summonedHawk
+	hawkMu sync.Mutex
 
 	// playerAbnormals owns each character's abnormal-state block.
 	playerAbnormals playerAbnormalStore
@@ -134,11 +150,15 @@ type Runtime struct {
 	petSessions      map[petOwnerKey]*petSession
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
-	characterAdmissions   sync.Map // simulation.WorldKey -> populationAdmission
-	recoveryMu            sync.Mutex
-	recoverySessions      map[recoveryKey]*recoverySession
-	petSkillWindows       petSkillWindowIndex
-	paramJobOwners        petSkillWindowIndex
+	characterAdmissions sync.Map // simulation.WorldKey -> populationAdmission
+	recoveryMu          sync.Mutex
+	recoverySessions    map[recoveryKey]*recoverySession
+	petSkillWindows     petSkillWindowIndex
+	paramJobOwners      petSkillWindowIndex
+	// pkOwners are the players whose PK record runs a clock (pkrecord.go).
+	pkOwners petSkillWindowIndex
+	// pulseAreas are the owners of live pulse areas (skillpulsearea.go).
+	pulseAreas            pulseAreaClock
 	commercePolicyMu      sync.RWMutex
 	commerceTaxes         map[merchantTaxKey]merchantTax
 	commerceReferenceSeed []wire.Frame
@@ -174,6 +194,10 @@ type Runtime struct {
 	// this native rand() domain in order.
 	DropRoll combat.Roll32767
 
+	// CaravanRoll is the caravan owner's rand() domain: spawn timers and
+	// every bandit draw (60BF30), in native order.
+	CaravanRoll combat.Roll32767
+
 	// DropPassRate multiplies a kill's drop passes (gold, equipment and
 	// consumable rolls), still bounded by the monster's native drop
 	// capacity. 0 or 1 is native; the closed-beta growth switch raises it.
@@ -182,6 +206,11 @@ type Runtime struct {
 	// GoldRate multiplies every monster gold heap after the native rarity
 	// multipliers. 0 or 1 is native; the closed-beta growth switch raises it.
 	GoldRate int
+
+	// PartyShareFloor raises every party member's EXP share to at least an
+	// even split (partyRewardFactors). Off is native; the closed-beta growth
+	// switch turns it on.
+	PartyShareFloor bool
 
 	// Now abstracts the clock for deterministic tests.
 	Now         func() time.Time
@@ -265,10 +294,15 @@ type Runtime struct {
 	// refuses the recall scroll.
 	RecallStatPoints func(character *enterworld.Character) ([]wire.Frame, bool)
 
-	// ApplyDeathPenalty is progression' door-free ordinary-death updater. Monster
-	// combat invokes it from inside the fatal-HP character transaction; levels
-	// <= 10 legitimately return no frames under the retail protection gate.
-	ApplyDeathPenalty func(character *enterworld.Character) ([]wire.Frame, bool)
+	// ApplyDeathPenalty is progression's door-free death updater: the EXP
+	// and SP a death costs (pkdeath.go resolves which). Combat invokes it
+	// from inside the fatal-HP character transaction.
+	ApplyDeathPenalty func(character *enterworld.Character, penalty pk.DeathPenalty) ([]wire.Frame, bool)
+
+	// UpdateJobExperience is progression's door-free job EXP updater
+	// (CGObjPC_AddJobExp 4E2830): a job kill's share (pkreward.go). Nil pays
+	// no job EXP.
+	UpdateJobExperience func(character *enterworld.Character, delta int64) ([]wire.Frame, bool)
 
 	// PushCharacterFrames delivers the actor's complete ordered progression
 	// burst after the authority door closes. It also delivers the private half
@@ -319,11 +353,12 @@ type Runtime struct {
 	pendingMonsterDefeatsMu sync.Mutex
 	pendingMonsterDefeats   []pendingMonsterDefeat
 
-	// monsterFightRecipients holds the private reward frames of kills made
-	// in a Temptation fight (temptation.go) until the action tick delivers
-	// them; the monster leg that commits the kill publishes only to viewers.
-	monsterFightRecipientsMu sync.Mutex
-	monsterFightRecipients   []simulation.DivisionFrames
+	// monsterLegRecipients holds the private reward frames of kills made
+	// inside a monster's attack (a Temptation fight, a returned hit) until
+	// the action tick delivers them; the monster leg that commits the kill
+	// publishes only to viewers and its target (creditedhit.go).
+	monsterLegRecipientsMu sync.Mutex
+	monsterLegRecipients   []simulation.DivisionFrames
 
 	// basicAttackIntents is the server-owned continuation behind native
 	// 0x72CD [01 01 01 gid]/[01 03 01 gid]. One intent per character replaces
@@ -378,6 +413,8 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 		AlchemyRoll:        secureAlchemyRoll,
 		CombatRoll:         combat.SecureRoll32767,
 		DropRoll:           combat.SecureRoll32767,
+		CaravanRoll:        combat.SecureRoll32767,
+		caravans:           caravan.NewRegistry(),
 		Now:                time.Now,
 		basicAttackIntents: make(map[string]basicAttackIntent),
 		resurrections:      resurrectionOffers{byTarget: make(map[string]resurrectionOffer)},

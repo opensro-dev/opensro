@@ -31,6 +31,7 @@ type residentSkill struct {
 	Knockdown               unique.Handle[SkillKnockdown]
 	Reqc                    SkillReqc
 	SelectorMask            uint32
+	ExpIncrease             [2]uint32
 	Reqi                    SkillReqi
 	Aura                    SkillAura
 	BuffModifiers           SkillBuffModifiers
@@ -69,6 +70,7 @@ type residentSkill struct {
 	StatusCast              bool
 	AreaBurst               bool
 	FixedDamage             SkillFixedDamage
+	LifeSteal               SkillLifeSteal
 	CombatTrap              SkillCombatTrap
 	OffensiveArea           unique.Handle[SkillOffensiveArea]
 	AlchemyStoneBonus       uint32
@@ -132,6 +134,7 @@ func compactSkill(row SkillRow) residentSkill {
 		Knockdown:               unique.Make(row.Knockdown),
 		Reqc:                    row.Reqc,
 		SelectorMask:            row.SelectorMask,
+		ExpIncrease:             row.ExpIncrease,
 		Reqi:                    row.Reqi,
 		Aura:                    row.Aura,
 		BuffModifiers:           row.BuffModifiers,
@@ -170,6 +173,7 @@ func compactSkill(row SkillRow) residentSkill {
 		StatusCast:              row.StatusCast,
 		AreaBurst:               row.AreaBurst,
 		FixedDamage:             row.FixedDamage,
+		LifeSteal:               row.LifeSteal,
 		CombatTrap:              row.CombatTrap,
 		OffensiveArea:           unique.Make(row.OffensiveArea),
 		AlchemyStoneBonus:       row.AlchemyStoneBonus,
@@ -235,6 +239,7 @@ func (r residentSkill) value() SkillRow {
 		Knockdown:               r.Knockdown.Value(),
 		Reqc:                    r.Reqc,
 		SelectorMask:            r.SelectorMask,
+		ExpIncrease:             r.ExpIncrease,
 		Reqi:                    r.Reqi,
 		Aura:                    r.Aura,
 		BuffModifiers:           r.BuffModifiers,
@@ -273,6 +278,7 @@ func (r residentSkill) value() SkillRow {
 		StatusCast:              r.StatusCast,
 		AreaBurst:               r.AreaBurst,
 		FixedDamage:             r.FixedDamage,
+		LifeSteal:               r.LifeSteal,
 		CombatTrap:              r.CombatTrap,
 		OffensiveArea:           r.OffensiveArea.Value(),
 		AlchemyStoneBonus:       r.AlchemyStoneBonus,

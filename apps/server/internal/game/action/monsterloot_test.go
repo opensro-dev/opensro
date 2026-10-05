@@ -97,13 +97,38 @@ func dropRollSequence(values ...uint32) func() (uint32, error) {
 
 /*
 ================
+assignedDropMisses
+
+The rolls that make every assigned reward of the combat fixture's monster
+miss. Assigned rewards roll before gold (7245C0), and the fixture monster
+(MOB_CH_MANGNYANG) carries its own characterdata materials: a constant
+32767 keeps each count at its minimum and lands each million roll at 741823,
+above every authored chance, so its consumption is measured, not assumed.
+================
+*/
+func assignedDropMisses() []uint32 {
+	n := 0
+	loot.AssignedDrops("MOB_CH_MANGNYANG", 255, func() (uint32, error) {
+		n++
+		return 32767, nil
+	})
+	values := make([]uint32, n)
+	for i := range values {
+		values[i] = 32767
+	}
+	return values
+}
+
+/*
+================
 goldOnlyMonsterDropRoll
 ================
 */
 func goldOnlyMonsterDropRoll(amountRoll, admissionRoll uint32) func() (uint32, error) {
-	// gold chance+amount; ordinary equipment rarity+two-draw class miss;
-	// sixteen class/family draws that reject all consumables; gold admission.
-	values := []uint32{0, amountRoll, 0, 32767, 32767}
+	// assigned misses; gold chance+amount; ordinary equipment rarity+two-draw
+	// class miss; sixteen class/family draws that reject all consumables;
+	// gold admission.
+	values := append(assignedDropMisses(), 0, amountRoll, 0, 32767, 32767)
 	for i := 0; i < 16; i++ {
 		values = append(values, 32767)
 	}
@@ -312,5 +337,27 @@ func TestMonsterDropBootstrapCatalogResolvesAgainstShippedV1150Media(t *testing.
 	}
 	if len(missing) > 0 {
 		t.Fatalf("v1.188 natural drop keys missing from v1.150 media: %v", missing)
+	}
+}
+
+/*
+================
+TestDropAdmissionNegativeThresholdAndGradeSeven
+
+4C1840: thirty levels above the monster the threshold is -20 and even
+roll 0 admits nothing; a grade-7 monster quadruples a 60 threshold to the
+cap of 100.
+================
+*/
+func TestDropAdmissionNegativeThresholdAndGradeSeven(t *testing.T) {
+	rt, _, _, target := newCombatTestRuntime(t, 1)
+	rt.DropRoll = dropRollSequence(0)
+	if rt.admitMonsterDrop(31, target) {
+		t.Fatal("a negative threshold admitted roll 0")
+	}
+	target.Nest.HasRarityOverride, target.Nest.RarityOverride = true, 7
+	rt.DropRoll = dropRollSequence(100)
+	if !rt.admitMonsterDrop(11, target) {
+		t.Fatal("a grade-7 monster's quadrupled threshold refused roll 100")
 	}
 }

@@ -15,6 +15,7 @@ export default {
 	runner: "node",
 	files: [
 		"scripts/test/assets/bsrParticleModifiers.test.mjs",
+		"scripts/test/assets/skillEffectBinding.test.mjs",
 		"scripts/test/assets/assetDeliveryOwnership.test.mjs",
 		"scripts/test/assets/nativeUiTexture.test.mjs",
 		"scripts/test/assets/nativeLensResources.test.mjs",

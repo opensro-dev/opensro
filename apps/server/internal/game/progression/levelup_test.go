@@ -448,7 +448,7 @@ func TestOrdinaryDeathPenaltyProtectsThroughLevelTen(t *testing.T) {
 		character.Experience = int64Ptr(123)
 		rt := newTestRuntime(character)
 
-		result := rt.ApplyOrdinaryDeathPenalty(character)
+		result := rt.ApplyDeathPenalty(character, OrdinaryDeathPenalty())
 		if len(result.Frames) != 0 || *character.Experience != 123 || *character.Level != level {
 			t.Fatalf("protected level %d death moved progression: frames=%+v level/exp=%d/%d",
 				level, result.Frames, *character.Level, *character.Experience)
@@ -475,7 +475,7 @@ func TestOrdinaryDeathPenaltyUsesRetailTwoPercentAndCanDelevel(t *testing.T) {
 	character.CurrentMP = int64Ptr(100)
 	rt := newTestRuntime(character)
 
-	result := rt.ApplyOrdinaryDeathPenalty(character)
+	result := rt.ApplyDeathPenalty(character, OrdinaryDeathPenalty())
 	if len(result.Frames) != 2 {
 		t.Fatalf("death-loss frames = %d, want 343C + 30D2 after delevel", len(result.Frames))
 	}
@@ -515,7 +515,7 @@ func TestOrdinaryDeathPenaltyUsesLeveldataCeiling(t *testing.T) {
 	character.Experience = int64Ptr(1_000_000)
 	rt := newTestRuntime(character)
 
-	result := rt.ApplyOrdinaryDeathPenalty(character)
+	result := rt.ApplyDeathPenalty(character, OrdinaryDeathPenalty())
 	// 2% is 5,633,447, so leveldata basis 6949 * 100 caps it at 694,900.
 	if len(result.Frames) != 1 || *character.Experience != 305_100 {
 		t.Fatalf("capped death loss = frames %d exp %d, want one frame / 305100",

@@ -631,7 +631,7 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	}
 	monsterPose := mover.LivePoseAt(nowMs, nil)
 	petPose := rt.companionLiveSpawn(divisionID, snapshot, snapshot.CompanionByGID(recipient.gid), nowMs)
-	spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(instance.Ref.BodyRadius),
+	spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(instance.BodyRadius()),
 		TargetBodyRadius: simulation.BodyRadius(ref.Parameters.BodyRadius), ActionReach: rt.monsterActionReach(instance, skill)}
 	if !spacing.Valid() || simulation.IsDungeonRegion(monsterPose.RegionID) != simulation.IsDungeonRegion(petPose.RegionID) {
 		return result

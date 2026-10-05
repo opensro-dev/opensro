@@ -44,7 +44,15 @@ export interface GuildMember {
 	readonly role: number;
 	readonly offline: number;
 }
+// One open guild vote (826610's vote tail, 0x3A6C type 1): the master
+// release vote is kind 0. remainingMs is as of its arrival.
+export interface GuildVote {
+	readonly id: number;
+	readonly kind: number;
+	readonly remainingMs: number;
+}
 export interface Guild {
+	readonly votes?: readonly GuildVote[];
 	readonly crest?: number;
 	readonly flags?: number;
 	readonly id: number;
@@ -112,6 +120,9 @@ export interface SocialState {
 	// Diagnostic state, not player-facing invented text. These native bodies
 	// require a formatted message/modal owner beyond the constant dispatcher.
 	readonly unresolvedNotice?: { readonly category: number; readonly code: number; };
+	// The war compensation the guild manager quoted (0xB140 [1][u32]); the
+	// claim box (5D4050) asks before 0x73F7 collects it.
+	readonly compensation?: number;
 	readonly error: string | null;
 }
 export type SocialCommand = {
@@ -158,6 +169,18 @@ export type SocialCommand = {
 	kind: "guild-role";
 	id: number;
 	role: number;
+} | {
+	kind: "guild-level-up" | "guild-compensation" | "guild-compensation-claim" | "guild-release";
+	gid: number;
+} | {
+	kind: "guild-master-leave";
+	gid: number;
+	id: number;
+} | {
+	kind: "guild-vote";
+	gid: number;
+	vote: number;
+	option: number;
 };
 
 /*
@@ -314,6 +337,33 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 			u8( c.role );
 			opcode = 0x765f;
 			break;
+		// The guild manager's rows (5DA1B0): level-up window 0x73F0 (5EF8B0),
+		// war compensation 0x7140 then the claim box's 0x73F7, the release
+		// box's 0x76DC, the master-leave box's 0x77D4 [npc][member] and the
+		// election window's 0x7330 [npc][vote][option] (5EFF00).
+		case "guild-level-up":
+		case "guild-compensation":
+		case "guild-compensation-claim":
+		case "guild-release":
+			u32( c.gid );
+			opcode = {
+				"guild-level-up": 0x73f0,
+				"guild-compensation": 0x7140,
+				"guild-compensation-claim": 0x73f7,
+				"guild-release": 0x76dc
+			}[c.kind];
+			break;
+		case "guild-master-leave":
+			u32( c.gid );
+			u32( c.id );
+			opcode = 0x77d4;
+			break;
+		case "guild-vote":
+			u32( c.gid );
+			u32( c.vote );
+			u8( c.option );
+			opcode = 0x7330;
+			break;
 	}
 	if ( c.kind.startsWith( "guild-" ) && c.kind !== "guild-create" && !state.guild ) {
 		throw Error( "You are not in a guild" );
@@ -372,7 +422,15 @@ export function socialPacket(
 			0x341e,
 			0x32bb,
 			0x34f3,
-			0x37d4
+			0x37d4,
+			0xb3f0,
+			0xb7d4,
+			0xb140,
+			0xb3f7,
+			0xb6dc,
+			0xb330,
+			0xb515,
+			0x3a6c
 		].includes( op )
 	) {
 		return null;
@@ -446,10 +504,9 @@ export function socialPacket(
 		}
 		const members = Array.from( { length: n }, guildMember );
 		unique( members, 250 );
-		if ( u8() !== 0 ) {
-			throw Error( "Unsupported guild vote block" );
-		}
-		return { id, name, level, gp, subject, contents, members, crest };
+		const votes = Array.from( { length: u8() }, () => ({ id: u32(), kind: u8(), remainingMs: u32() }) );
+		unique( votes, 255 );
+		return { id, name, level, gp, subject, contents, members, crest, ...(votes.length ? { votes } : {}) };
 	}
 	function readWar(): GuildWar | null {
 		const id = u32();
@@ -639,6 +696,55 @@ export function socialPacket(
 		}
 	} else if ( op === 0x32c4 ) {
 		next = { ...next, guild: guildBlock() };
+	} else if ( op === 0x3a6c ) {
+		// 7603D0: 1 opens a vote, 3 closes it (1 elected, 2 broken), 4 moves
+		// a ballot, 5 restates the time; 2 is an assert in v1.150.
+		const type = u8(), id = u32(), guild = next.guild;
+		const votes = guild?.votes ?? [];
+		if ( type === 1 ) {
+			const vote = { id, kind: u8(), remainingMs: u32() };
+			if ( guild ) {
+				next = {
+					...next,
+					guild: { ...guild, votes: [ ...votes.filter( row => row.id !== id ), vote ] }
+				};
+			}
+		} else if ( type === 3 ) {
+			const result = u8();
+			if ( result === 1 ) {
+				const heir = u32(), name = guild?.members.find( m => m.id === heir )?.name ?? "";
+				next = {
+					...next,
+					notice: {
+						key: "UIIT_MSG_MRELEASE_BEELETED",
+						value: 0,
+						nativeType: 0,
+						arguments: [ name, guild?.name ?? "" ]
+					}
+				};
+			} else if ( result === 2 ) {
+				next = { ...next, notice: { key: "UIIT_MSG_MRELEASE_BROKEN", value: 0, nativeType: 0 } };
+			} else {
+				throw Error( "Invalid guild vote result" );
+			}
+			if ( guild ) next = { ...next, guild: { ...guild, votes: votes.filter( row => row.id !== id ) } };
+		} else if ( type === 4 ) {
+			// The window keeps no candidate list in v1.150, so a ballot only
+			// moves counts the client cannot show.
+			u8();
+			u8();
+			u8();
+		} else if ( type === 5 ) {
+			const remainingMs = u32();
+			if ( guild ) {
+				next = {
+					...next,
+					guild: { ...guild, votes: votes.map( row => row.id === id ? { ...row, remainingMs } : row ) }
+				};
+			}
+		} else {
+			throw Error( "Unsupported guild vote update" );
+		}
 	} else if ( op === 0x3b29 ) {
 		const type = u8();
 		// 762040 dispatches through the byte table at 7637DC. Slot 0 only
@@ -779,7 +885,19 @@ export function socialPacket(
 					throw Error( "Unsupported guild info mask" );
 				}
 				if ( mask & 2 ) guild = { ...guild, name: str() };
-				if ( mask & 4 ) guild = { ...guild, level: u8() };
+				if ( mask & 4 ) {
+					// 5E4710: the new level announces itself in chat.
+					guild = { ...guild, level: u8() };
+					next = {
+						...next,
+						notice: {
+							key: "UIIT_MSG_GUILD_LEVEL_UP_RESULT",
+							value: guild.level,
+							nativeType: 0,
+							arguments: [ String( guild.level ) ]
+						}
+					};
+				}
 				if ( mask & 8 ) {
 					guild = { ...guild, gp: u32() };
 				}
@@ -843,8 +961,25 @@ export function socialPacket(
 						arguments: [ String( Math.floor( hours / 24 ) ), String( hours % 24 ), String( minutes % 60 ) ]
 					}
 				};
+			} else if ( op === 0xb515 && code === 0x48 ) {
+				// 7682F0: the warehouse is in a member's hands; it names them.
+				next = {
+					...next,
+					error: null,
+					unresolvedNotice: undefined,
+					notice: { key: "UIIT_MSG_GUILD_WAREHOUSE_USE", value: 0, nativeType: 0, arguments: [ str() ] }
+				};
+			} else if ( op === 0xb6dc && code === 0x33 ) {
+				// 760270 names this one itself, outside the category table.
+				next = {
+					...next,
+					error: null,
+					unresolvedNotice: undefined,
+					notice: { key: "UIIT_MSG_MRELEASEERR_NOTVOTETIME", value: 0, nativeType: 0 }
+				};
 			} else {
-				const resolution = resolveNativeNotice( 16, code );
+				// 75CC50 reads the ballot's refusal in category 0x15.
+				const resolution = resolveNativeNotice( op === 0xb330 ? 0x15 : 16, code );
 				next = {
 					...next,
 					error: null,
@@ -856,6 +991,21 @@ export function socialPacket(
 			}
 		} else if ( result !== 1 ) {
 			throw Error( "Invalid guild result" );
+		} else if ( op === 0xb515 ) {
+			// The warehouse owner (storage-room.ts) carries the open path.
+		} else if ( op === 0xb140 ) {
+			next = { ...next, compensation: u32() };
+		} else if ( op === 0xb7d4 || op === 0xb6dc ) {
+			next = {
+				...next,
+				notice: {
+					key: op === 0xb7d4 ? "UIIT_MSG_MLEAVE_SUCCESS" : "UIIT_MSG_MRELEASE_VOTING",
+					value: 0,
+					nativeType: 0
+				}
+			};
+		} else if ( op === 0xb3f7 ) {
+			next = { ...next, compensation: undefined };
 		} else if ( op === 0xb663 ) {
 			next = { ...next, guild: guildBlock() };
 		} else if ( op === 0xb56e || op === 0xb66e ) {

@@ -45,6 +45,9 @@ const (
 	// time tickets raise them (premiumticket.go).
 	paramPremiumExpRate      uint16 = 0xba
 	paramPremiumSkillExpRate uint16 = 0xca
+	// paramDeathExpKept is the percent of a death's EXP loss kept (0x101,
+	// premiumticket.go; read by the death penalty, pkdeath.go).
+	paramDeathExpKept uint16 = 0x101
 )
 
 // paramJobFourCC maps the internal item's Param2 to a ParamKeeper id.

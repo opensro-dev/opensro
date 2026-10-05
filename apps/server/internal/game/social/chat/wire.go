@@ -54,6 +54,14 @@ const (
 	// @0x00753904); types 2/4/5/0x0B carry {u16 len + ANSI sender name,
 	// sized wide text} (label_753d94 / the type-4 arm @0x00753ba7).
 	OpChatBroadcast uint16 = 0x3667
+	// OpChatHistory is a browser extension, not a retail opcode: the beta
+	// public transcript replayed at world admission, one frame of
+	// {u8 version=1, u8 count, count x (u16 length, 0x3667 payload)}. Retail
+	// replays nothing; sending the lines as live 0x3667 made the client show
+	// them as just said (an old line over its speaker's head on entry).
+	OpChatHistory uint16 = 16
+	// chatHistoryVersion is the extension frame's layout version.
+	chatHistoryVersion uint8 = 1
 )
 
 // Chat types on the 0x7367/0x3667 wire (the sub_6aebd0 prefix switch and

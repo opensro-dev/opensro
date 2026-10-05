@@ -30,11 +30,13 @@ import {
 	STORAGE_MOVE_DEPOSIT,
 	STORAGE_MOVE_WITHDRAW,
 	type StorageMove,
-	type StorageRoom
+	type StorageRoom,
+	storageWireType
 } from "@/engine/foundation/gameplay/storage-room";
 import { createAlchemy } from "./alchemy/alchemy";
 import { REPAIR_ONE_SLOT, REPAIR_RESPONSE_OPCODE, repairRequest } from "@/engine/foundation/gameplay/repair";
 import { createGacha } from "./gacha/gacha";
+import { createMagicOptionGrant } from "./magic-option/magic-option";
 import { itemStateDelta } from "@/engine/foundation/gameplay/item-state-delta";
 import { itemSlotFlashKinds } from "@/engine/foundation/ui/item-slot-effects";
 import type { ItemProcessCommand } from "@/engine/contracts/item-process";
@@ -59,7 +61,7 @@ export function createInventory(
 	play: ( handle: import("@/engine/foundation/ui/sound-catalog").UiSoundHandle ) => void = () => {},
 	playItem: ( cue: import("@/engine/contracts/audio").ItemSoundRequest ) => void = () => {}
 ) {
-	const alchemy = createAlchemy(), gacha = createGacha(), mall = createMall();
+	const alchemy = createAlchemy(), gacha = createGacha(), mall = createMall(), magicOption = createMagicOptionGrant();
 	let mallDelivery: { prepared: ReturnType<typeof decodeShopItems>; slots: number[]; } | null = null;
 	let avatars = new Map<number, InventoryItem>();
 	let slots = new Map<number, InventoryItem>(),
@@ -260,7 +262,7 @@ busy
 	*/
 	function busy() {
 		return pending !== null || mall.pending() || timedOut || alchemy.state().pending ||
-			[ "rolling", "waiting" ].includes( gacha.state().phase );
+			[ "rolling", "waiting" ].includes( gacha.state().phase ) || magicOption.state().phase === "waiting";
 	}
 	/*
 ================
@@ -424,6 +426,7 @@ bootstrap
 			mallDelivery = null;
 			tooltipRefs.clear();
 			magicRefs = itemMagicReferences( (value as { magicOptionSnapshot?: unknown; }).magicOptionSnapshot );
+			magicOption.bootstrap( (value as { avatarMagicOptions?: unknown; }).avatarMagicOptions, magicRefs );
 			const b = value as {
 				inventorySlotCount?: number;
 				equipmentSlotCount?: number;
@@ -527,7 +530,20 @@ process
 				gacha.close();
 				return null;
 			}
+			if ( command.kind === "magic-option-close" ) {
+				magicOption.close();
+				return null;
+			}
+			// The window's item and confirm answer with notices (magicOptionItem).
+			if ( command.kind === "magic-option-take" || command.kind === "magic-option-grant" ) {
+				throw Error( "Magic option item commands go through magicOptionItem" );
+			}
 			if ( busy() ) throw Error( "Inventory process unavailable" );
+			if ( command.kind === "magic-option-open" ) {
+				const frame = magicOption.open( command.gid );
+				send( frame );
+				return frame;
+			}
 			if ( command.kind === "gacha-roll" ) {
 				for ( const cue of gacha.start( command.entry, command.slot, slots.get( command.slot ), now ) ) {
 					play( cue );
@@ -539,6 +555,27 @@ process
 				alchemy.start( command.mode, command.slots, slots, now, command.quantity );
 			send( frame );
 			return frame;
+		},
+		/*
+================
+magicOptionItem
+
+The grant window's item drop and confirm: the request it sends, or the
+notice symbol of a refusal the client makes itself.
+================
+		*/
+		magicOptionItem(
+			command: { readonly kind: "magic-option-take"; readonly slot: number; } | {
+				readonly kind: "magic-option-grant";
+				readonly codename: string;
+			}
+		): string | null {
+			if ( command.kind === "magic-option-take" ) return magicOption.take( slots.get( command.slot ) );
+			if ( busy() ) throw Error( "Inventory process unavailable" );
+			const item = slots.get( magicOption.state().item ?? -1 ),
+				result = magicOption.grant( command.codename, item );
+			if ( result.frame ) send( result.frame );
+			return result.notice ?? null;
 		},
 		/*
 ================
@@ -675,7 +712,7 @@ so an impossible request never leaves the client.
 				move,
 				caps
 			);
-			const frame = storageMoveRequest( room.npc, move );
+			const frame = storageMoveRequest( room.npc, move, room.guild );
 			send( frame );
 			pending = {
 				opcode: 0xb06d,
@@ -700,7 +737,9 @@ frame is not that echo (a rejection takes the generic receive path).
 ================
 		*/
 		storageSettle( room: StorageRoom, p: Uint8Array, caps: ReadonlyMap<number, number> ): StorageRoom | null {
-			if ( !pending?.storage || p[0] !== 1 || p[1] !== pending.movementType ) return null;
+			if ( !pending?.storage || p[0] !== 1 || p[1] !== storageWireType( pending.movementType!, room.guild ) ) {
+				return null;
+			}
 			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 			const echo = pending.movementType === STORAGE_MOVE_ROOM ?
 				p.length === 6 && p[2] === pending.source && p[3] === pending.destination &&
@@ -1130,7 +1169,18 @@ receive
 					error = null;
 					return true;
 				}
-				return gacha.opened( p );
+				return magicOption.opened( p ) || gacha.opened( p );
+			}
+			if ( op === 0x32d9 ) {
+				// CPSMission_OnAvatarMagicOptionAdd0x32D9 (770140): the granted
+				// item replaces its bag row; a refusal is the gameplay notice.
+				const n = magicOption.result( p );
+				if ( n === null ) return true;
+				const next = body( p, 3 );
+				if ( !next || !slots.has( n ) ) throw Error( "Magic option grant references absent item" );
+				slots.set( n, { ...next, slot: n } );
+				published = null;
+				return true;
 			}
 			if ( op === 0xb053 ) {
 				for ( const cue of gacha.result( p, slots.get( gacha.state().slot ?? -1 ) ) ) play( cue );
@@ -1587,6 +1637,7 @@ state
 				avatarInventory: [ ...avatars.values() ].map( present ),
 				alchemy: alchemy.state(),
 				gacha: gacha.state(),
+				magicOption: magicOption.state(),
 				shop: presentShop(),
 				shopCompletionRevision,
 				inventorySlotCount,
@@ -1612,6 +1663,7 @@ clear
 			magicRefs = itemMagicReferences( undefined );
 			alchemy.reset();
 			gacha.reset();
+			magicOption.reset();
 			mall.reset();
 			mallDelivery = null;
 			shop = undefined;
