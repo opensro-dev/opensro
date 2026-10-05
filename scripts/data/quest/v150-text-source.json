@@ -5,12 +5,11 @@
 		"QNO_CA_GORIA_2": {
 			"objectives": {
 				"SN_CON_QNO_CA_GORIA_2": {
-					"text": "정기가 담긴 돌 100개 수집 (%d)",
 					"count": 100
 				}
 			},
 			"reward": {
-				"text": "경험치 65000 / GOLD 12400 / 스킬경험치 5000",
+				"choices": false,
 				"exp": 65000,
 				"skillExp": 5000,
 				"gold": 12400
@@ -35,12 +34,11 @@
 		"QNO_CA_GORIA_3": {
 			"objectives": {
 				"SN_CON_QNO_CA_GORIA_3": {
-					"text": "주합에게 훈족에 대한 정보 얻기",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 4100 / GOLD 750 / 스킬경험치 300",
+				"choices": false,
 				"exp": 4100,
 				"skillExp": 300,
 				"gold": 750
@@ -66,7 +64,7 @@
 		"QNO_CA_GORIA_6": {
 			"objectives": {},
 			"reward": {
-				"text": "용기의 주문서 [데미지 20% 증가 주문서, 유효시간 1시간]",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -141,12 +139,11 @@
 		"QNO_CA_HORSE_3": {
 			"objectives": {
 				"SN_CON_QNO_CA_HORSE_3": {
-					"text": "부드러운 가죽을 새사에게 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "을 해드리지요. 귀여운 마르텔양을 위해서라면 무엇을 못하겠습니까?! 아하하하.",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -170,28 +167,23 @@
 		"QNO_CA_THIEF_2": {
 			"objectives": {
 				"SN_CON_QNO_CA_THIEF_2_01": {
-					"text": "창고 관리인 새사에게서 정보 수집",
 					"count": null
 				},
 				"SN_CON_QNO_CA_THIEF_2_02": {
-					"text": "무기상인 트리시아에게서 정보 수집",
 					"count": null
 				},
 				"SN_CON_QNO_CA_THIEF_2_03": {
-					"text": "방어구 상인 아려안에게서 정보 수집",
 					"count": null
 				},
 				"SN_CON_QNO_CA_THIEF_2_04": {
-					"text": "수녀 마르텔에게서 정보 수집",
 					"count": null
 				},
 				"SN_CON_QNO_CA_THIEF_2_05": {
-					"text": "상인조합 카르엔에게서 정보 수집",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 6600 / GOLD 1500 / 스킬경험치 750",
+				"choices": false,
 				"exp": 6600,
 				"skillExp": 750,
 				"gold": 1500
@@ -231,12 +223,11 @@
 		"QNO_CA_THIEF_4": {
 			"objectives": {
 				"SN_CON_QNO_CA_THIEF_4": {
-					"text": "토손에게 파란진주 보여주기",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 1400 / GOLD 300 / 스킬경험치 150",
+				"choices": false,
 				"exp": 1400,
 				"skillExp": 150,
 				"gold": 300
@@ -267,12 +258,11 @@
 		"QNO_CA_THIEF_5": {
 			"objectives": {
 				"SN_CON_QNO_CA_THIEF_5": {
-					"text": "노란진주 15개 수집 (%d)",
 					"count": 15
 				}
 			},
 			"reward": {
-				"text": "경험치 30000 /스킬경험치 3500 /빠른 회복의 기원[HP 회복속도 증가, 유효시간 1시간]",
+				"choices": false,
 				"exp": 30000,
 				"skillExp": 3500,
 				"gold": 0
@@ -299,20 +289,17 @@
 		"QNO_CA_TREASURE_4": {
 			"objectives": {
 				"SN_CON_QNO_CA_TREASURE_4_01": {
-					"text": "굶주린 혈옹의 눈물 수집 (%d)",
 					"count": null
 				},
 				"SN_CON_QNO_CA_TREASURE_4_02": {
-					"text": "옹의 꼬리침 수집 (%d)",
 					"count": null
 				},
 				"SN_CON_QNO_CA_TREASURE_4_03": {
-					"text": "사마르칸트의 우물물 얻기",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 11000 / GOLD 2300 / 스킬경험치 1100",
+				"choices": false,
 				"exp": 11000,
 				"skillExp": 1100,
 				"gold": 2300
@@ -340,12 +327,11 @@
 		"QNO_CA_TREASURE_5": {
 			"objectives": {
 				"SN_CON_QNO_CA_TREASURE_5": {
-					"text": "보물 구하기 (%d)",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 4100 /요정의 선물[명중률 20% 상승, 유효시간 2시간]",
+				"choices": false,
 				"exp": 4100,
 				"skillExp": 0,
 				"gold": 0
@@ -379,12 +365,11 @@
 		"QNO_CA_WAREHOUSE_1": {
 			"objectives": {
 				"SN_CON_QNO_CA_WAREHOUSE_1": {
-					"text": "푸른 가시풀 10개 수집 (%d)",
 					"count": 10
 				}
 			},
 			"reward": {
-				"text": "없음",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -411,16 +396,14 @@
 		"QNO_CA_WAREHOUSE_2": {
 			"objectives": {
 				"SN_CON_QNO_CA_WAREHOUSE_2": {
-					"text": "마르텔에게 포장된 상자 배달",
 					"count": null
 				},
 				"SN_CON_QNO_CA_WAREHOUSE_2_1": {
-					"text": "호연에게 마르텔의 향주머니 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 34000 / GOLD 9000 / 스킬경험치 4300",
+				"choices": false,
 				"exp": 34000,
 				"skillExp": 4300,
 				"gold": 9000
@@ -455,12 +438,11 @@
 		"QNO_CA_WAREHOUSE_3": {
 			"objectives": {
 				"SN_CON_QNO_CA_WAREHOUSE_3": {
-					"text": "더럽혀진 활 20개 수집 (%d)",
 					"count": 20
 				}
 			},
 			"reward": {
-				"text": "경험치 110000 / GOLD 22000",
+				"choices": false,
 				"exp": 110000,
 				"skillExp": 0,
 				"gold": 22000
@@ -488,12 +470,11 @@
 		"QNO_CA_WAREHOUSE_4": {
 			"objectives": {
 				"SN_CON_QNO_CA_WAREHOUSE_4": {
-					"text": "훈족의 갑옷 20개 수집 (%d)",
 					"count": 20
 				}
 			},
 			"reward": {
-				"text": "경험치 113000 / GOLD 23000",
+				"choices": false,
 				"exp": 113000,
 				"skillExp": 0,
 				"gold": 23000
@@ -571,15 +552,12 @@
 		"QNO_CH_EUROPE_3": {
 			"objectives": {
 				"SN_CON_QNO_CH_EUROPE_3_01": {
-					"text": "토귀마인의 눈썹 100개 수집 (%d)",
 					"count": 100
 				},
 				"SN_CON_QNO_CH_EUROPE_3_02": {
-					"text": "혈사화의 잎 100개 수집 (%d)",
 					"count": 100
 				},
 				"SN_CON_QNO_CH_EUROPE_3_03": {
-					"text": "적사갈의 다리 100개 수집 (%d)",
 					"count": 100
 				}
 			},
@@ -627,7 +605,6 @@
 		"QNO_CH_LOTTERY_2": {
 			"objectives": {
 				"SN_CON_QNO_CH_LOTTERY_2": {
-					"text": "허호안의 장부 전달",
 					"count": null
 				}
 			},
@@ -650,7 +627,6 @@
 		"QNO_CH_POTION_2": {
 			"objectives": {
 				"SN_CON_QNO_CH_POTION_2": {
-					"text": "약초 배달",
 					"count": null
 				}
 			},
@@ -676,11 +652,9 @@
 		"QNO_CH_POTION_4": {
 			"objectives": {
 				"SN_CON_QNO_CH_POTION_4_01": {
-					"text": "도지의 약 배달",
 					"count": null
 				},
 				"SN_CON_QNO_CH_POTION_4_02": {
-					"text": "보리의 책 배달",
 					"count": null
 				}
 			},
@@ -711,15 +685,12 @@
 		"QNO_CH_POTION_5": {
 			"objectives": {
 				"SN_CON_QNO_CH_POTION_5_01": {
-					"text": "형천의 가루 100개 수집 (%d)",
 					"count": 100
 				},
 				"SN_CON_QNO_CH_POTION_5_02": {
-					"text": "옹의 더듬이 100개 수집 (%d)",
 					"count": 100
 				},
 				"SN_CON_QNO_CH_POTION_5_03": {
-					"text": "소적사갈의 다리 100개 수집 (%d)",
 					"count": 100
 				}
 			},
@@ -749,35 +720,27 @@
 		"QNO_CH_PRIEST_1": {
 			"objectives": {
 				"SN_CON_QNO_CH_PRIEST_1_01": {
-					"text": "석판조각(반)(%d)",
 					"count": null
 				},
 				"SN_CON_QNO_CH_PRIEST_1_02": {
-					"text": "석판조각(야)(%d)",
 					"count": null
 				},
 				"SN_CON_QNO_CH_PRIEST_1_03": {
-					"text": "석판조각(바)(%d)",
 					"count": null
 				},
 				"SN_CON_QNO_CH_PRIEST_1_04": {
-					"text": "석판조각(라)(%d)",
 					"count": null
 				},
 				"SN_CON_QNO_CH_PRIEST_1_05": {
-					"text": "석판조각(밀)(%d)",
 					"count": null
 				},
 				"SN_CON_QNO_CH_PRIEST_1_06": {
-					"text": "석판조각(다)(%d)",
 					"count": null
 				},
 				"SN_CON_QNO_CH_PRIEST_1_07": {
-					"text": "석판조각(심)(%d)",
 					"count": null
 				},
 				"SN_CON_QNO_CH_PRIEST_1_08": {
-					"text": "석판조각(경)(%d)",
 					"count": null
 				}
 			},
@@ -810,7 +773,6 @@
 		"QNO_CH_SHAMAN_1": {
 			"objectives": {
 				"SN_CON_QNO_CH_SHAMAN_1": {
-					"text": "여하의 검은피 30개 수집 (%d)",
 					"count": 30
 				}
 			},
@@ -834,7 +796,6 @@
 		"QNO_CH_SHAMAN_2": {
 			"objectives": {
 				"SN_CON_QNO_CH_SHAMAN_2": {
-					"text": "법력을 깃들인 검은피 수집 (%d)",
 					"count": null
 				}
 			},
@@ -864,12 +825,11 @@
 		"QNO_EU_ADVENTURER_1": {
 			"objectives": {
 				"SN_CON_QNO_EU_ADVENTURER_1": {
-					"text": "노란 알 5개 수집 (%d)",
 					"count": 5
 				}
 			},
 			"reward": {
-				"text": "경험치 33000 / GOLD 8000",
+				"choices": false,
 				"exp": 33000,
 				"skillExp": 0,
 				"gold": 8000
@@ -895,12 +855,11 @@
 		"QNO_EU_CONS_11": {
 			"objectives": {
 				"SN_CON_QNO_EU_CONS_11": {
-					"text": "향유 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "무기",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -924,12 +883,11 @@
 		"QNO_EU_CONS_2": {
 			"objectives": {
 				"SN_CON_QNO_EU_CONS_2": {
-					"text": "타나에게 손수건 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "스킬경험치 300",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 300,
 				"gold": 0
@@ -953,12 +911,11 @@
 		"QNO_EU_CONS_3_1": {
 			"objectives": {
 				"SN_CON_QNO_EU_CONS_3_1": {
-					"text": "반짝이는 머리핀 티나에게 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 750 / GOLD 500 / 스킬경험치 1000",
+				"choices": false,
 				"exp": 750,
 				"skillExp": 1000,
 				"gold": 500
@@ -984,12 +941,11 @@
 		"QNO_EU_CONS_4": {
 			"objectives": {
 				"SN_CON_QNO_EU_CONS_4": {
-					"text": "경험치/아이템 분배파티 가입 후 티나와 대화",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 350",
+				"choices": false,
 				"exp": 350,
 				"skillExp": 0,
 				"gold": 0
@@ -1013,12 +969,11 @@
 		"QNO_EU_CONS_6": {
 			"objectives": {
 				"SN_CON_QNO_EU_CONS_6": {
-					"text": "조합장 카프로스와 대화",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 350",
+				"choices": false,
 				"exp": 350,
 				"skillExp": 0,
 				"gold": 0
@@ -1041,12 +996,11 @@
 		"QNO_EU_CONS_7": {
 			"objectives": {
 				"SN_CON_QNO_EU_CONS_7": {
-					"text": "상단을 습격한 범인 알아오기",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 1050 / 스킬경험치 750 /축복의 발걸음[이동속도 20% 상승,유효시간 1시간]",
+				"choices": false,
 				"exp": 1050,
 				"skillExp": 750,
 				"gold": 0
@@ -1079,16 +1033,14 @@
 		"QNO_EU_EASTEU_1": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_1_01": {
-					"text": "마구간 보초 10마리 사냥 (%d)",
 					"count": 10
 				},
 				"SN_CON_QNO_EU_EASTEU_1_02": {
-					"text": "마구간의 오물 5개 수거 (%d)",
 					"count": 5
 				}
 			},
 			"reward": {
-				"text": "경험치 1300 / 스킬경험치 500 / 마녀의 입맞춤 [이동속도 20% 상승, 유효시간 1시간]",
+				"choices": false,
 				"exp": 1300,
 				"skillExp": 500,
 				"gold": 0
@@ -1328,12 +1280,11 @@
 		"QNO_EU_EASTEU_11": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_11": {
-					"text": "석양의 마녀에게 바람의 향주머니 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "스킬경험치 750",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
 				"gold": 0
@@ -1383,12 +1334,11 @@
 		"QNO_EU_EASTEU_11_1": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_11_1": {
-					"text": "씨모스 라돈 포획",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 5100 / 스킬경험치 1400",
+				"choices": false,
 				"exp": 5100,
 				"skillExp": 1400,
 				"gold": 0
@@ -1425,12 +1375,11 @@
 		"QNO_EU_EASTEU_12": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_12": {
-					"text": "모험가 데메트리 방문",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "스킬경험치 750",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
 				"gold": 0
@@ -1453,12 +1402,11 @@
 		"QNO_EU_EASTEU_14": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_14": {
-					"text": "석양의 마녀에게 데메트리의 덫 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "스킬 경험치 750",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
 				"gold": 0
@@ -1508,7 +1456,7 @@
 		"QNO_EU_EASTEU_14_1": {
 			"objectives": {},
 			"reward": {
-				"text": "경험치 8500 /스킬경험치 2100 /초급 방어구 성별전환 주문서 (3개)",
+				"choices": false,
 				"exp": 8500,
 				"skillExp": 2100,
 				"gold": 0
@@ -1545,12 +1493,11 @@
 		"QNO_EU_EASTEU_15": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_15": {
-					"text": "장군 라첼과 대화",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "스킬경험치 750",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
 				"gold": 0
@@ -1573,12 +1520,11 @@
 		"QNO_EU_EASTEU_17": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_17": {
-					"text": "석양의 마녀에게 하프 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "스킬경험치 750",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
 				"gold": 0
@@ -1629,12 +1575,11 @@
 		"QNO_EU_EASTEU_17_1": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_17_1": {
-					"text": "세이레네스 포획",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 9500 / 스킬경험치 2300 /마녀의 축복 (MP회복 속도 증가, 유효시간 1시간 )",
+				"choices": false,
 				"exp": 9500,
 				"skillExp": 2300,
 				"gold": 0
@@ -1672,12 +1617,11 @@
 		"QNO_EU_EASTEU_19": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_19": {
-					"text": "핏빛 수정 20개 수집 (%d)",
 					"count": 20
 				}
 			},
 			"reward": {
-				"text": "경험치 11400 / 스킬경험치 2500",
+				"choices": false,
 				"exp": 11400,
 				"skillExp": 2500,
 				"gold": 0
@@ -1708,12 +1652,11 @@
 		"QNO_EU_EASTEU_2": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_2": {
-					"text": "우베티노에게 모자 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "스킬경험치 250",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 250,
 				"gold": 0
@@ -1811,12 +1754,11 @@
 		"QNO_EU_EASTEU_3": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_3": {
-					"text": "도우 겐네토스의 뿔 30개 수집 (%d)",
 					"count": 30
 				}
 			},
 			"reward": {
-				"text": "경험치 19500 / 스킬경험치 7500 / 가브리엘의 성수",
+				"choices": false,
 				"exp": 19500,
 				"skillExp": 7500,
 				"gold": 0
@@ -1846,12 +1788,11 @@
 		"QNO_EU_EASTEU_4": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_4": {
-					"text": "키클로페스의 눈 40개 수집 (%d)",
 					"count": 40
 				}
 			},
 			"reward": {
-				"text": "경험치 28000 / GOLD 10000 / 스킬경험치 10000",
+				"choices": false,
 				"exp": 28000,
 				"skillExp": 10000,
 				"gold": 10000
@@ -1876,12 +1817,11 @@
 		"QNO_EU_EASTEU_5": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_5": {
-					"text": "도우 겐네마 포획",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "선택 보상 [선택1] 경험치 5100 /스킬경험치 1800 /완력의 주문서 (힘+5, 유효시간 1시간) [선택2] 경험치 5100 /스킬경험치 1800 /지능의 주문서 (지력+5, 유효시간 1시간)",
+				"choices": true,
 				"exp": 5100,
 				"skillExp": 1800,
 				"gold": 0
@@ -1921,12 +1861,11 @@
 		"QNO_EU_EASTEU_8": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_8": {
-					"text": "석양의 마녀에게 상자 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "추적의 종료 [명중률 20% 상승, 유효시간 1시간]",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -1955,12 +1894,11 @@
 		"QNO_EU_EASTEU_9": {
 			"objectives": {
 				"SN_CON_QNO_EU_EASTEU_9": {
-					"text": "아드리아 방문",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "스킬경험치 750",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
 				"gold": 0
@@ -1983,12 +1921,11 @@
 		"QNO_EU_FERRY2_1": {
 			"objectives": {
 				"SN_CON_QNO_EU_FERRY2_1": {
-					"text": "도난당한 하프 1개 수집 (%d)",
 					"count": 1
 				}
 			},
 			"reward": {
-				"text": "선택 보상 [선택1] 우정의 증표 (HP+300, 유효시간 2시간) [선택2] 감사의 증표 (MP+300, 유효시간 2시간)",
+				"choices": true,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2016,7 +1953,7 @@
 		"QNO_EU_GENERAL_1": {
 			"objectives": {},
 			"reward": {
-				"text": "군대의 포상 [HP 회복 속도 증가, 유효시간 2시간]",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2052,12 +1989,11 @@
 		"QNO_EU_GENERAL_2": {
 			"objectives": {
 				"SN_CON_QNO_EU_GENERAL_2": {
-					"text": "돌격대장의 전리품 1개 수집",
 					"count": 1
 				}
 			},
 			"reward": {
-				"text": "을 해주겠소. 해적 돌격대장은 콘스탄티노플 침략을 위해 파이럿 브리간드 챔피언들에게 그들만이 알 수 있는 의미가 담긴 깃발을 나누어 주었다고 하오. 그 깃발을 흔들면 자세한 내용을 알아보기 위해 해적 돌격대장이 나타난다고 들었소. 현재 해적 돌격대장은 시기아 선착장 남동쪽에 있는 할리카르나소스성 폐허에서 머무르고 있는데 파이럿 브리간드 챔피언에게서 얻은 해적의 깃발을 성 근처에서 흔들면 그를 만날 수 있을 것이오. 해적 돌격대장은 무리를 지어 다니기 때문에 혼자의 힘으로는 상대하기 버거울 테니 꼭 파티를 이루어 가도록 하시오. 그리고 빨리 해치우지 못하면 자신의 불리함을 깨닫고 도망가기 때문에 서둘러 무찔러야 할 것이오.",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2085,7 +2021,7 @@
 		"QNO_EU_IVY_1": {
 			"objectives": {},
 			"reward": {
-				"text": "경험치 24000/ 스킬경험치 2800 / 군영의 수리망치 5개",
+				"choices": false,
 				"exp": 24000,
 				"skillExp": 2800,
 				"gold": 0
@@ -2120,12 +2056,11 @@
 		"QNO_EU_IVY_2": {
 			"objectives": {
 				"SN_CON_QNO_EU_IVY_2": {
-					"text": "덩쿨나무 줄기 20개 수집 (%d)",
 					"count": 20
 				}
 			},
 			"reward": {
-				"text": "경험치 60000 / GOLD 15000 / 스킬경험치 8000 /이블오더 포획용 덫 (5개)",
+				"choices": false,
 				"exp": 60000,
 				"skillExp": 8000,
 				"gold": 15000
@@ -2197,12 +2132,11 @@
 		"QNO_EU_WITCH_1": {
 			"objectives": {
 				"SN_CON_QNO_EU_WITCH_1": {
-					"text": "열리지 않는 상자의 저주 풀기 (%d)",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 126000 / 스킬경험치 20000",
+				"choices": false,
 				"exp": 126000,
 				"skillExp": 20000,
 				"gold": 0
@@ -2243,12 +2177,11 @@
 		"QNO_EU_WITCH_1_1": {
 			"objectives": {
 				"SN_CON_QNO_EU_WITCH_1_1": {
-					"text": "라첼에게 저주풀린 상자배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "황제의 포상 [회피율 20% 증가, 유효시간 2시간]",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2274,7 +2207,6 @@
 		"QNO_KT_ACCESSORY_2": {
 			"objectives": {
 				"SN_CON_QNO_KT_ACCESSORY_2": {
-					"text": "요괴의 눈 300개 수집 (%d)",
 					"count": 300
 				}
 			},
@@ -2297,7 +2229,6 @@
 		"QNO_KT_ACCESSORY_3": {
 			"objectives": {
 				"SN_CON_QNO_KT_ACCESSORY_3": {
-					"text": "니야 병사의 목걸이 200개 수집 (%d)",
 					"count": 200
 				}
 			},
@@ -2320,7 +2251,6 @@
 		"QNO_KT_HORSE_1": {
 			"objectives": {
 				"SN_CON_QNO_KT_HORSE_1": {
-					"text": "살리합의 말발굽 400개 수집 (%d)",
 					"count": 400
 				}
 			},
@@ -2345,7 +2275,6 @@
 		"QNO_KT_SMITH_2": {
 			"objectives": {
 				"SN_CON_QNO_KT_SMITH_2": {
-					"text": "요괴의 눈 300개 수집 (%d)",
 					"count": 300
 				}
 			},
@@ -2372,7 +2301,6 @@
 		"QNO_KT_SMITH_3": {
 			"objectives": {
 				"SN_CON_QNO_KT_SMITH_3": {
-					"text": "니야 병사의 창 200개 수집 (%d)",
 					"count": 200
 				}
 			},
@@ -2395,12 +2323,11 @@
 		"QNO_RM_FLYSHIP1_2": {
 			"objectives": {
 				"SN_CON_QNO_RM_FLYSHIP1_2": {
-					"text": "살리한에게 아자티의 편지 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 132000 / 아자티의 수리망치 5개",
+				"choices": false,
 				"exp": 132000,
 				"skillExp": 0,
 				"gold": 0
@@ -2427,12 +2354,11 @@
 		"QNO_RM_FLYSHIP1_3": {
 			"objectives": {
 				"SN_CON_QNO_RM_FLYSHIP1_3": {
-					"text": "느림보 앤티노크 포획",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 290000 /인내의 결실 3개 [이동속도 75% 상승, 유효시간 3시간]",
+				"choices": false,
 				"exp": 290000,
 				"skillExp": 0,
 				"gold": 0
@@ -2468,12 +2394,11 @@
 		"QNO_RM_FLYSHIP2_2": {
 			"objectives": {
 				"SN_CON_QNO_RM_FLYSHIP2_2": {
-					"text": "영혼이 깃든 구슬 100개 만들기 (%d)",
 					"count": 100
 				}
 			},
 			"reward": {
-				"text": "스킬경험치 20000 / 고급 방어구 성별전환 증서 1개 /영혼의 조각 10개 [환게이지 100%]",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 20000,
 				"gold": 0
@@ -2498,16 +2423,14 @@
 		"QNO_RM_OLDWOMAN_2": {
 			"objectives": {
 				"SN_CON_QNO_RM_OLDWOMAN_2_01": {
-					"text": "로키의 깃털 200개 수집 (%d)",
 					"count": 200
 				},
 				"SN_CON_QNO_RM_OLDWOMAN_2_02": {
-					"text": "두 달 기다리기 (게임 내 시간)",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "[선택1] 로키의 깃털 200개 수집 경험치 4400000 / 스킬경험치 67000 / 능력의 회귀 주문서 3개 [선택2] 두 달 기다리기 없음",
+				"choices": true,
 				"exp": 4400000,
 				"skillExp": 67000,
 				"gold": 0
@@ -2540,12 +2463,11 @@
 		"QNO_RM_OLDWOMAN_3": {
 			"objectives": {
 				"SN_CON_QNO_RM_OLDWOMAN_3_01": {
-					"text": "아력목에게서 라히드의 정보 얻기",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 253000",
+				"choices": false,
 				"exp": 253000,
 				"skillExp": 0,
 				"gold": 0
@@ -2575,12 +2497,11 @@
 		"QNO_RM_OLDWOMAN_4": {
 			"objectives": {
 				"SN_CON_QNO_RM_OLDWOMAN_4": {
-					"text": "노예들에게서 라히드의 흔적 찾기",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 111000",
+				"choices": false,
 				"exp": 111000,
 				"skillExp": 0,
 				"gold": 0
@@ -2607,12 +2528,11 @@
 		"QNO_RM_OLDWOMAN_5": {
 			"objectives": {
 				"SN_CON_QNO_RM_OLDWOMAN_5_08": {
-					"text": "무지개 풀 무더기 수집",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 2200000/ 스킬 경험치 320000",
+				"choices": false,
 				"exp": 2200000,
 				"skillExp": 320000,
 				"gold": 0
@@ -2654,7 +2574,7 @@
 		"QNO_RM_OLDWOMAN_6": {
 			"objectives": {},
 			"reward": {
-				"text": "없음",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2707,12 +2627,11 @@
 		"QNO_RM_OLDWOMAN_7": {
 			"objectives": {
 				"SN_CON_QNO_RM_OLDWOMAN_7": {
-					"text": "이산에게 은빛 초승달 목걸이 배달",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 940000 /스킬경험치 12000 /모정의 손길 [HP 20% 증가, MP 20% 증가, 유효시간 3시간]",
+				"choices": false,
 				"exp": 940000,
 				"skillExp": 12000,
 				"gold": 0
@@ -2739,16 +2658,14 @@
 		"QNO_RM_SLAVE1_3": {
 			"objectives": {
 				"SN_CON_QNO_RM_SLAVE1_3_02": {
-					"text": "쉬프르의 탈출계획서",
 					"count": null
 				},
 				"SN_CON_QNO_RM_SLAVE1_3_03": {
-					"text": "샤푸르의 탈출계획서",
 					"count": null
 				}
 			},
 			"reward": {
-				"text": "경험치 120000",
+				"choices": false,
 				"exp": 120000,
 				"skillExp": 0,
 				"gold": 0
@@ -2786,12 +2703,11 @@
 		"QNO_RM_SLAVE2_2": {
 			"objectives": {
 				"SN_CON_QNO_RM_SLAVE2_2": {
-					"text": "노예의 감시자 10마리 사냥 (%d)",
 					"count": 10
 				}
 			},
 			"reward": {
-				"text": "강한 부활의 주문서 (5개)",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2817,16 +2733,14 @@
 		"QNO_TRADE_CH_SPECIAL2_1": {
 			"objectives": {
 				"SN_CON_QNO_TRADE_CH_SPECIAL2_1_01": {
-					"text": "아진에게 물건 전해주고 확인증 받아오기",
 					"count": null
 				},
 				"SN_CON_QNO_TRADE_CH_SPECIAL2_1_02": {
-					"text": "백호 20마리 사냥 (%d)",
 					"count": 20
 				}
 			},
 			"reward": {
-				"text": "서역단봉낙타 5마리",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2857,16 +2771,14 @@
 		"QNO_TRADE_RM_SPECIAL_1": {
 			"objectives": {
 				"SN_CON_QNO_TRADE_RM_SPECIAL_1_01": {
-					"text": "살리한에게 물건 전해주고 확인증 받아오기",
 					"count": null
 				},
 				"SN_CON_QNO_TRADE_RM_SPECIAL_1_02": {
-					"text": "페더 클로크 20마리 사냥 (%d)",
 					"count": 20
 				}
 			},
 			"reward": {
-				"text": "화염건각황소 10마리",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2897,16 +2809,14 @@
 		"QNO_TRADE_TK_SPECIAL_1": {
 			"objectives": {
 				"SN_CON_QNO_TRADE_TK_SPECIAL_1_01": {
-					"text": "사지극에게 물건 전해주고 확인증 받아오기",
 					"count": null
 				},
 				"SN_CON_QNO_TRADE_TK_SPECIAL_1_02": {
-					"text": "샤크람 20마리 사냥 (%d)",
 					"count": 20
 				}
 			},
 			"reward": {
-				"text": "화염건각황소 5마리",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2937,16 +2847,14 @@
 		"QNO_TRADE_WC_SPECIAL2_1": {
 			"objectives": {
 				"SN_CON_QNO_TRADE_WC_SPECIAL2_1_01": {
-					"text": "패도에게 물건 전해주고 확인증 받아오기",
 					"count": null
 				},
 				"SN_CON_QNO_TRADE_WC_SPECIAL2_1_02": {
-					"text": "형천 20마리 사냥 (%d)",
 					"count": 20
 				}
 			},
 			"reward": {
-				"text": "천지쌍봉낙타 5마리",
+				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
 				"gold": 0
@@ -2977,7 +2885,6 @@
 		"QNO_WC_ACCESSORY_3": {
 			"objectives": {
 				"SN_CON_QNO_WC_ACCESSORY_3": {
-					"text": "폭죽 묶음 배달",
 					"count": null
 				}
 			},
@@ -3006,7 +2913,6 @@
 		"QNO_WC_ARMOR_1": {
 			"objectives": {
 				"SN_CON_QNO_WC_ARMOR_1": {
-					"text": "붉은껍질 20개 수집 (%d)",
 					"count": 20
 				}
 			},
@@ -3029,7 +2935,6 @@
 		"QNO_WC_POTION_3": {
 			"objectives": {
 				"SN_CON_QNO_WC_POTION_3": {
-					"text": "진진에게 정제된 보약과 보리의 편지 배달",
 					"count": null
 				}
 			},
@@ -3064,7 +2969,6 @@
 		"QNO_WC_POTION_4": {
 			"objectives": {
 				"SN_CON_QNO_WC_POTION_4": {
-					"text": "아사덕에게 포장된 생일선물 배달",
 					"count": null
 				}
 			},
@@ -3088,7 +2992,6 @@
 		"QNO_WC_PRIEST1_1": {
 			"objectives": {
 				"SN_CON_QNO_WC_PRIEST1_1": {
-					"text": "흉노귀병 30마리 사냥 (%d)",
 					"count": 30
 				}
 			},
@@ -3105,7 +3008,6 @@
 		"QNO_WC_SMITH_3": {
 			"objectives": {
 				"SN_CON_QNO_WC_SMITH_3": {
-					"text": "튼튼한 노 50개 배달",
 					"count": 50
 				}
 			},
@@ -3129,7 +3031,6 @@
 		"QNO_WC_SOLDIER_EA2_3": {
 			"objectives": {
 				"SN_CON_QNO_WC_SOLDIER_EA2_3": {
-					"text": "비무대회 신청서 2개 배달",
 					"count": 2
 				}
 			},
@@ -3156,7 +3057,6 @@
 		"QNO_WC_WAREHOUSE_W_2": {
 			"objectives": {
 				"SN_CON_QNO_WC_WAREHOUSE_W_2_01": {
-					"text": "진품부적 100개 수집 (%d)",
 					"count": 100
 				}
 			},
@@ -3186,7 +3086,6 @@
 		"QNO_WC_WAREHOUSE_W_3": {
 			"objectives": {
 				"SN_CON_QNO_WC_WAREHOUSE_W_2_02": {
-					"text": "진품부적 200개 수집 (%d)",
 					"count": 200
 				}
 			},
@@ -3210,7 +3109,6 @@
 		"QSP_CA_EXINVENTORY_2": {
 			"objectives": {
 				"SN_CON_QSP_CA_EXINVENTORY_2": {
-					"text": "이계의 털 20개 수집 (%d)",
 					"count": 20
 				}
 			},
@@ -3233,7 +3131,6 @@
 		"QSP_CH_EXINVENTORY_1": {
 			"objectives": {
 				"SN_CON_QSP_CH_EXINVENTORY_1": {
-					"text": "튼튼한 지푸라기 10개 수집 (%d)",
 					"count": 10
 				}
 			},
@@ -3256,7 +3153,6 @@
 		"QSP_EU_EXINVENTORY_1": {
 			"objectives": {
 				"SN_CON_QSP_EU_EXINVENTORY_1": {
-					"text": "모보이의 풀 10개 수집 (%d)",
 					"count": 10
 				}
 			},
@@ -3279,7 +3175,6 @@
 		"QSP_KT_EXINVENTORY_3": {
 			"objectives": {
 				"SN_CON_QSP_KT_EXINVENTORY_3": {
-					"text": "질긴 거미줄 30개 수집 (%d)",
 					"count": 30
 				}
 			},
@@ -3303,7 +3198,6 @@
 		"QSP_RM_EXINVENTORY_4": {
 			"objectives": {
 				"SN_CON_QSP_RM_EXINVENTORY_4": {
-					"text": "가벼운 깃털 50개 수집 (%d)",
 					"count": 50
 				}
 			},
@@ -3326,7 +3220,6 @@
 		"QSP_WC_EXINVENTORY_2": {
 			"objectives": {
 				"SN_CON_QSP_WC_EXINVENTORY_2": {
-					"text": "주술의 부적 20개 수집 (%d)",
 					"count": 20
 				}
 			},

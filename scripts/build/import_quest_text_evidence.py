@@ -69,7 +69,7 @@ def advertised_rewards(body):
 	paragraph = re.split(r"(관련 시나리오|相关剧情|剧情介绍|◈)", paragraph)[0]
 	number = lambda pattern: (lambda m: int(m.group(1).replace(",", "")) if m else 0)(re.search(pattern, paragraph))
 	return {
-		"text": paragraph.strip(),
+		"choices": "선택" in paragraph,
 		"exp": number(r"(?<!스킬)(?<!스킬 )경험치\s*([\d,]+)"),
 		"skillExp": number(r"스킬\s*경험치\s*([\d,]+)"),
 		"gold": number(r"(?i)(?:GOLD|골드)\s*([\d,]+)"),
@@ -106,7 +106,8 @@ def main():
 		for mission in quests[code]["missions"]:
 			symbol = mission["fields"].get("0xd")
 			if isinstance(symbol, str) and symbol in text:
-				symbols[symbol] = {"text": text[symbol], "count": objective_count(text[symbol])}
+				# Only the count is evidence; the media's prose stays out of git.
+				symbols[symbol] = {"count": objective_count(text[symbol])}
 		body = text.get("SN_PAYCON_" + code)
 		snapshot["quests"][code] = {
 			"objectives": symbols,
