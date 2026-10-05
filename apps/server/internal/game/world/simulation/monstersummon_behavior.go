@@ -26,6 +26,26 @@ func (ops *MonsterMoverOps) summonedTarget(divisionID string, instance monster.I
 	if !ops.acquisitionReady(divisionID, instance, nowMs) {
 		return playerPose{}, false
 	}
+	target, found := ops.summonedCandidate(divisionID, instance, mover, players, nowMs)
+	if !found {
+		return playerPose{}, false
+	}
+	// 547F06: SetCombatTarget(candidate, 0) can refuse a full squad, and the
+	// state then takes no target this pass.
+	if !instance.AcquisitionForced() && !ops.Monsters.squadAdmits(divisionID, instance.Gid, target.Gid) {
+		return playerPose{}, false
+	}
+	return target, true
+}
+
+/*
+==================
+summonedCandidate
+
+The one candidate 547C70 offers SetCombatTarget.
+==================
+*/
+func (ops *MonsterMoverOps) summonedCandidate(divisionID string, instance monster.Instance, mover monster.MoverState, players []playerPose, nowMs int64) (playerPose, bool) {
 	if target, ok := nearestEligiblePlayer(instance, mover.LivePoseAt(nowMs, nil), players, instance.SummonSightRange); instance.SummonSightRange > 0 && ok {
 		return target, true
 	}

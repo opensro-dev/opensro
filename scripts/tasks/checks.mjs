@@ -82,6 +82,15 @@ export const CHECK_TASKS = [
 		timeoutClass: "long",
 		pipeline: "source"
 	} ),
+	pipelineTask( {
+		name: "check:source-portable",
+		description: "Run the source pipeline without the Go gate (CI runs that on Linux)",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "long",
+		pipeline: "source-portable"
+	} ),
 	commandTask( {
 		name: "check:source-size",
 		description: "Enforce source-file size policy",
@@ -238,6 +247,13 @@ export const CHECK_PIPELINES = Object.freeze( {
 	// The source gates are independent, so they all start at once; the Go
 	// gate is the critical path and the rest finish inside it.
 	source: sourceTasks.map( ( task ) => ({
+		id: task.replaceAll( ":", "-" ),
+		task,
+		after: []
+	}) ),
+	// CI's Windows job: the Go gate runs once, on the faster Linux runner
+	// (source-linux.yml), with a GOOS=windows vet for the Windows build.
+	"source-portable": sourceTasks.filter( ( task ) => task !== "check:server" ).map( ( task ) => ({
 		id: task.replaceAll( ":", "-" ),
 		task,
 		after: []

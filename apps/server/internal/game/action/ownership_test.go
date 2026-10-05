@@ -28,7 +28,7 @@ func TestOwnedPickupAllowsSelfAndItemSharingPartyOnly(t *testing.T) {
 		rt, clock := newTestRuntime(character, testItems())
 		drop := ownedGoldAtPlayer(t, rt, clock, character, 100099)
 		result := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: drop.Gid}.Encode())
-		assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpItemMoveResponse)
+		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpActionState)
 		if rt.Ground.Count(testDivision) != 1 || character.Gold == nil || *character.Gold != 5000 {
 			t.Fatalf("foreign pickup mutated state: ground=%d gold=%v", rt.Ground.Count(testDivision), character.Gold)
 		}
@@ -39,8 +39,8 @@ func TestOwnedPickupAllowsSelfAndItemSharingPartyOnly(t *testing.T) {
 		rt, clock := newTestRuntime(character, testItems())
 		drop := ownedGoldAtPlayer(t, rt, clock, character, enterworld.ObjectIDForCharacter(character))
 		result := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: drop.Gid}.Encode())
-		assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpPickupAnim,
-			wire.OpItemMoveResponse, wire.OpPointsUpdate, wire.OpObjectDespawn)
+		assertOpcodes(t, result.Frames, wire.OpPickupAnim,
+			wire.OpItemMoveResponse, wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 	})
 
 	t.Run("item-sharing party grants", func(t *testing.T) {
@@ -51,8 +51,8 @@ func TestOwnedPickupAllowsSelfAndItemSharingPartyOnly(t *testing.T) {
 			return divisionID == testDivision && characterName == character.Name && ownerJID == 100099
 		}
 		result := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: drop.Gid}.Encode())
-		assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpPickupAnim,
-			wire.OpItemMoveResponse, wire.OpPointsUpdate, wire.OpObjectDespawn)
+		assertOpcodes(t, result.Frames, wire.OpPickupAnim,
+			wire.OpItemMoveResponse, wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 	})
 }
 

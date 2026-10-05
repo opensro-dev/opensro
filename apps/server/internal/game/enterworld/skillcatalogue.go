@@ -59,6 +59,11 @@ type SkillUiRow struct {
 	// caster's walk where it stands (InitiateSkillCast 59B5F6), so the
 	// client ends its own walk at the press. Omitted for instant rows.
 	HaltsWalk bool `json:"haltsWalk,omitempty"`
+	// NeedsFooting marks a row whose cast gate is ao or pw: the server
+	// refuses it while the caster is seated, behind a wall or riding
+	// (Skill_ValidatePrerequisitesAndCost 58E0BF, 0x3009), so the client
+	// stands no cooldown in for it while mounted.
+	NeedsFooting bool `json:"needsFooting,omitempty"`
 	// Range is the authored action range (column 21), omitted for a row
 	// that takes its reach from the weapon. The server's reach adds both
 	// bodies to it, so a target within Range is always in reach: the
@@ -201,6 +206,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 				projection.UI.ActionMs = lifecycle
 			}
 			projection.UI.HaltsWalk = row.HaltsWalk()
+			projection.UI.NeedsFooting = row.CastGate.Ao || row.CastGate.Pw
 			if row.ActionRangePinned && row.ActionRange > 0 {
 				projection.UI.Range = row.ActionRange
 			}

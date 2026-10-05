@@ -139,8 +139,8 @@ func TestPickupReachMeasuresFromLivePosition(t *testing.T) {
 			wire.TargetInteract{Gid: heap.Gid}.Encode())
 
 		assertOpcodes(t, result.Frames,
-			wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-			wire.OpPointsUpdate, wire.OpObjectDespawn)
+			wire.OpPickupAnim, wire.OpItemMoveResponse,
+			wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 		if character.Gold == nil || *character.Gold != 5777 {
 			t.Fatalf("gold = %v, want 5000+777", character.Gold)
 		}
@@ -221,8 +221,8 @@ func TestPickupApproachCompletesOnServerTickWithoutClientReplay(t *testing.T) {
 		t.Fatalf("pickup completion escaped through division-wide tick route: %+v", routed)
 	}
 	assertOpcodes(t, private,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpPointsUpdate, wire.OpObjectDespawn)
+		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 	assertOpcodes(t, peers, wire.OpPickupAnim, wire.OpObjectDespawn)
 	if character.Gold == nil || *character.Gold != 6000 {
 		t.Fatalf("gold = %v, want 5000+1000", character.Gold)
@@ -308,8 +308,8 @@ func TestPickupApproachMaturesIntoGrant(t *testing.T) {
 	clock.Advance(rearmed.Pending.Eta + 10*time.Millisecond)
 	granted := rt.HandleTargetInteract(testDivision, character, interact)
 	assertOpcodes(t, granted.Frames,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpPointsUpdate, wire.OpObjectDespawn)
+		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 	if character.Gold == nil || *character.Gold != 6000 {
 		t.Fatalf("gold = %v, want 5000+1000", character.Gold)
 	}
@@ -631,7 +631,7 @@ func TestPickupOverCapLeavesRemainderOnGround(t *testing.T) {
 
 	// No despawn: the heap still lives with the remainder.
 	assertOpcodes(t, result.Frames,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse)
+		wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpActionState)
 	assertOpcodes(t, result.Broadcast, wire.OpPickupAnim)
 
 	remaining, ok := rt.Ground.Get(testDivision, added.Gid)
@@ -674,8 +674,8 @@ func TestPickupFullBagRefuses(t *testing.T) {
 	result := rt.HandleTargetInteract(testDivision, character,
 		wire.TargetInteract{Gid: added.Gid}.Encode())
 
-	assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpItemMoveResponse)
-	if got := result.Frames[1].Payload; got[0] != 0x02 || got[1] != wire.ErrCodeStorageFull {
+	assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpActionState)
+	if got := result.Frames[0].Payload; got[0] != 0x02 || got[1] != wire.ErrCodeStorageFull {
 		t.Fatalf("refusal = % X, want [02 07] inventory-full", got)
 	}
 	if rt.Ground.Count(testDivision) != 1 {
@@ -685,19 +685,19 @@ func TestPickupFullBagRefuses(t *testing.T) {
 
 /*
 ================
-TestPickupMissingItemAnswersCannotBePicked
+TestPickupMissingItemAnswersTargetGone
 ================
 */
-func TestPickupMissingItemAnswersCannotBePicked(t *testing.T) {
+func TestPickupMissingItemAnswersTargetGone(t *testing.T) {
 	character := testCharacter()
 	rt, _ := newTestRuntime(character, testItems())
 
 	result := rt.HandleTargetInteract(testDivision, character,
 		wire.TargetInteract{Gid: 300999}.Encode())
 
-	assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpItemMoveResponse)
-	if got := result.Frames[1].Payload; got[1] != wire.ErrCodeCannotBePicked {
-		t.Fatalf("refusal = % X, want the 0x39 cannot-be-picked notice", got)
+	assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpActionState)
+	if got := result.Frames[0].Payload; got[1] != wire.ErrCodeTargetGone {
+		t.Fatalf("refusal = % X, want the 0x03 cannot-find-target notice", got)
 	}
 }
 

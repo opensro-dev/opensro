@@ -106,7 +106,7 @@ func (rt *Runtime) recordSkillHostility(division string, target uint32, events [
 			continue
 		}
 		to := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
-		candidates[gid] = monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, to)}
+		candidates[gid] = monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, to), ActorDistance: monster.NativeActorDistance(pose, monster.Pose{RegionID: to.RegionID, X: to.X, Y: to.Y, Z: to.Z})}
 	}
 	rt.Monsters.RecordHostilitySequence(division, target, events, candidates, now)
 }

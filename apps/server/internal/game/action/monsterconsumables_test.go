@@ -114,7 +114,7 @@ func TestAlchemyFatalPublishesReferenceSpawnAndPickup(t *testing.T) {
 	}
 	clock.Advance(r.Pending.Eta + time.Millisecond)
 	r = rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: row.Gid}.Encode())
-	assertOpcodes(t, r.Frames, wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn)
+	assertOpcodes(t, r.Frames, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn, wire.OpActionState)
 	count := 0
 	for _, item := range c.MissionInventory {
 		if item.RefObjID == ref.RefObjID {

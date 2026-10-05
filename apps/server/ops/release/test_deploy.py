@@ -79,6 +79,7 @@ class DeployTests(unittest.TestCase):
 					return SimpleNamespace(stdout="")
 
 				with patch.object(deploy, "run", side_effect=execute), patch.object(deploy.shutil, "chown"), \
+					patch.object(deploy.server_data, "choose", return_value=None), \
 					patch.object(deploy, "warning", side_effect=RuntimeError("refused") if failure == "notice" else None), \
 					patch.object(deploy, "announce") as announcement, patch.object(deploy, "NOTICE_SECONDS", 0):
 					if failure:
@@ -140,6 +141,74 @@ class DeployTests(unittest.TestCase):
 			with patch.object(deploy, "run") as run, self.assertRaisesRegex(ValueError, "sro-authority-upgrade"):
 				deploy.deploy({"module": str(module)}, staging, {"commit": "a" * 40, "files": dict.fromkeys(names, "d")}, upgrade=True)
 			run.assert_not_called()
+
+	# ================
+	# test_refused_game_data_changes_nothing
+	#
+	# The release's own game-data verdict comes before the backup, the inputs
+	# and the notice: a refusal leaves the running server as it is.
+	# ================
+	def test_refused_game_data_changes_nothing(self):
+		with tempfile.TemporaryDirectory() as directory:
+			module = Path(directory)
+			calls = []
+
+			# ================
+			# execute
+			# ================
+			def execute(arguments, **options):
+				calls.append(arguments)
+				return SimpleNamespace(stdout="Nomad v2.0.7\n")
+
+			refusal = RuntimeError("this release refuses the installed server game data")
+			with patch.object(deploy, "run", side_effect=execute), \
+				patch.object(deploy.server_data, "choose", side_effect=refusal), \
+				patch.object(deploy, "copy_inputs") as copied, patch.object(deploy, "announce") as announcement, \
+				self.assertRaisesRegex(RuntimeError, "refuses the installed server game data"):
+				deploy.deploy({"module": str(module), "nomad_version": "2.0.7"}, module,
+					{"commit": "a" * 40, "files": dict.fromkeys(FILES, "d")})
+			self.assertEqual(calls, [["nomad", "version"]])
+			copied.assert_not_called()
+			announcement.assert_not_called()
+
+	# ================
+	# test_nobody_to_warn_when_no_shard_runs
+	#
+	# A failed notice with every enabled shard's GameWorld down is a restart
+	# with nobody to warn; with one running, it still refuses the restart.
+	# ================
+	def test_nobody_to_warn_when_no_shard_runs(self):
+		with tempfile.TemporaryDirectory() as directory:
+			module = Path(directory)
+			(module / "config").mkdir()
+			(module / "config/shards.json").write_text(json.dumps({"shards": [
+				{"id": "global-official", "enabled": True, "controlUrl": "http://127.0.0.1:8791"},
+				{"id": "test", "enabled": False, "controlUrl": "http://127.0.0.1:8792"}]}))
+			failed = SimpleNamespace(returncode=1, stdout="", stderr="connection refused")
+			with patch.object(deploy.subprocess, "run", return_value=failed):
+				with patch.object(deploy, "shard_listening", return_value=False) as listening:
+					self.assertFalse(deploy.warning({}, module, "sro-nomad"))
+					self.assertEqual(listening.call_count, 1, "only enabled shards are probed")
+				with patch.object(deploy, "shard_listening", return_value=True), \
+					self.assertRaisesRegex(RuntimeError, "restart refused"):
+					deploy.warning({}, module, "sro-nomad")
+			delivered = SimpleNamespace(returncode=0, stdout="", stderr="")
+			with patch.object(deploy.subprocess, "run", return_value=delivered):
+				self.assertTrue(deploy.warning({}, module, "sro-nomad"))
+
+	# ================
+	# test_shard_listening_reads_the_loopback_control_port
+	# ================
+	def test_shard_listening_reads_the_loopback_control_port(self):
+		import socket
+		with socket.socket() as listener:
+			listener.bind(("127.0.0.1", 0))
+			listener.listen()
+			port = listener.getsockname()[1]
+			self.assertTrue(deploy.shard_listening({"controlUrl": f"http://127.0.0.1:{port}"}))
+		self.assertFalse(deploy.shard_listening({"controlUrl": f"http://127.0.0.1:{port}"}))
+		with self.assertRaisesRegex(RuntimeError, "loopback"):
+			deploy.shard_listening({"controlUrl": "http://10.0.0.1:8791"})
 
 
 if __name__ == "__main__":

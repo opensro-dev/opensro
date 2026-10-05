@@ -170,9 +170,9 @@ func testMonsterCastCadence(t *testing.T, delayed bool) {
 	}
 	plans := 0
 	ops := &simulation.MonsterMoverOps{Monsters: state, Rand: func() float64 { return 0 },
-		AttackPlan: func(i monster.Instance, requested uint32, sample float64) (simulation.MonsterAttackPlan, bool) {
+		AttackPlan: func(i monster.Instance, requested uint32, pick simulation.AttackPick) (simulation.MonsterAttackPlan, bool) {
 			plans++
-			return rt.MonsterAttackPlan(i, requested, sample)
+			return rt.MonsterAttackPlan(i, requested, pick)
 		}, RunAction: rt.RunMonsterAction}
 	tick := func() { ops.RunMonsterLeg(clock.NowMs(), []simulation.SessionSnapshot{viewer}, &summonTickPusher{}) }
 	start, hp := clock.Now(), enterworld.CurrentHP(c)

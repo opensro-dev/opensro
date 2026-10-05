@@ -9,7 +9,11 @@ Before tagging a release:
 1. `pnpm install --frozen-lockfile`
 2. `pnpm check source` (includes the Go server gates).
 3. On a licensed client extraction: `pnpm assets build`,
-   `pnpm task build server-game-data`, then the full `pnpm check`.
+   `pnpm task build server-game-data`, then the full `pnpm check`. For a
+   data release, build the packs against the live layout so unchanged packs
+   keep the bytes and URLs players have cached (assetPackLayout.mjs):
+   `curl -o live-manifest.json https://opensro.online/assets/packs/manifest.json`,
+   then `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`.
 4. `git status --ignored` must list `.generated/`, `temp/` and `.state/` as
    ignored, and nothing generated as tracked.
 5. `pnpm assets compact` and `pnpm assets check compact`. Publish the compact

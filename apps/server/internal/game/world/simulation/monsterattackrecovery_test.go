@@ -40,7 +40,7 @@ func TestMonsterAttackReleaseTransitionsCannotStrandReturningMover(t *testing.T)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ops, instance := monsterLegFixture(t, aggressiveTactics())
-			ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+			ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 				return MonsterAttackPlan{
 					SkillID: skillID, Reach: ActionReach(rangeU), CooldownMs: 1000, ActionLifecycleMs: actionLifecycleMs,
 				}, true

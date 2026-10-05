@@ -42,7 +42,7 @@ func testShippedSummonedChildDecisions(t *testing.T, rt *Runtime, refs map[uint3
 	ops := &simulation.MonsterMoverOps{Monsters: s, Rand: func() float64 { return 0 }, AttackPlan: rt.MonsterAttackPlan}
 	ops.BasicAttack = func(_ string, actor monster.Instance, target, skill uint32, _ int64) simulation.MonsterAttackResult {
 		if actor.Gid == child.Gid {
-			plan, known := rt.MonsterAttackPlan(actor, skill, 0)
+			plan, known := rt.MonsterAttackPlan(actor, skill, simulation.AttackPick{})
 			if !known || plan.Summon || plan.SkillID != skill || target != wantedTarget {
 				t.Fatal("child selected invalid ordinary attack")
 			}

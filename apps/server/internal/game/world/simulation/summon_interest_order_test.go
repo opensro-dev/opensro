@@ -33,7 +33,9 @@ func TestSummonEntersShownMonstersAfterTheBeforeHook(t *testing.T) {
 		t.Fatal("parent has no population")
 	}
 	ops := &MonsterMoverOps{Monsters: registry, Rand: func() float64 { return 0 }}
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) { return MonsterAttackPlan{}, false }
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
+		return MonsterAttackPlan{}, false
+	}
 	push := &fakePusher{}
 	source := &fakeSource{sessions: []SessionSnapshot{{
 		SessionID: "viewer", DivisionID: "summon", CharacterID: 1, Population: lease, CombatEligible: true,
