@@ -138,7 +138,7 @@ append
 ================
 	*/
 	function append( line: ChatLine ) {
-		lines = [ ...lines.slice( 1 - CHAT_LINE_LIMIT ), { ...line, sequence: ++sequence } ];
+		lines = [ ...lines.slice( 1 - CHAT_LINE_LIMIT ), { ...line, sequence: ++sequence, sentAt: Date.now() } ];
 	}
 	return {
 		/*

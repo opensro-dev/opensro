@@ -9,7 +9,7 @@ through the gameplay owner. Neither entity visibility nor travel owns history.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 const { createChat } = await import( "../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts" );
 const { createGameplay } = await import(
@@ -35,6 +35,7 @@ function globalFrame( name, text ) {
 }
 
 test("global chat renders the authoritative name without an entity lookup", () => {
+	mock.method( Date, "now", () => 1000 );
 	const chat = createChat( () => {} );
 	chat.bootstrap( { character: { name: "Local" } } );
 	assert.equal( chat.receive( globalFrame( "FarAway", "hello from Jangan" ), 1 ), true );
@@ -44,8 +45,10 @@ test("global chat renders the authoritative name without an entity lookup", () =
 		gid: undefined,
 		text: "hello from Jangan",
 		outgoing: false,
-		sequence: 1
+		sequence: 1,
+		sentAt: 1000
 	} ] );
+	mock.restoreAll();
 	chat.request( 1, "hello back", "", 0 );
 	chat.receive( globalFrame( "Local", "hello back" ), 1 );
 	assert.equal( chat.state().pending, true, "public echo must not release the native receipt gate" );
