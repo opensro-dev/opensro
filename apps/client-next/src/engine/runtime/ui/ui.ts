@@ -116,6 +116,7 @@ import { npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
 import {
 	merchantBinding,
 	merchantSelection,
+	merchantCommand,
 	merchantQuote,
 	merchantPage,
 	merchantDialogPage,
@@ -1376,6 +1377,16 @@ export function createUi(
 	}
 	/*
 	================
+	merchantRows
+	================
+	*/
+	function merchantRows( game: UiView["gameplay"] | undefined ) {
+		return game?.shop?.cosGid ?
+			game.cosRecords?.find( record => record.gid === game.shop?.cosGid )?.inventory ?? [] :
+			game?.inventory ?? [];
+	}
+	/*
+	================
 	openShopSale
 	================
 	*/
@@ -1387,10 +1398,11 @@ export function createUi(
 		const game = view?.gameplay;
 		if ( !game?.shop ) return;
 		if ( game.inventoryPending || game.shop.error || game.target !== game.shop.npc ) return;
-		const choice = merchantSelection( "sell", item.slot, game.shop, game.inventory );
-		if ( !choice ) return;
+		const choice = merchantSelection( "sell", item.slot, game.shop, merchantRows( game ) );
+		if ( !choice || choice.binding !== merchantBinding( item ) ) return;
 		const sale = game.shop.saleQuotes?.find( q =>
-			q.slot === item.slot && q.refObjId === item.refObjId && q.quantity === item.quantity
+			q.slot === item.slot && (q.cosGid ?? 0) === (game.shop?.cosGid ?? 0) && q.refObjId === item.refObjId &&
+			q.quantity === item.quantity
 		);
 		if ( !acknowledged && sale?.noBuyback ) {
 			shopWarning = { selection: choice, name: item.name ?? "", quick };
@@ -1400,7 +1412,7 @@ export function createUi(
 			return;
 		}
 		if ( quick ) {
-			sendGameplay( { kind: "shop-sell", slot: item.slot, quantity: item.quantity } );
+			sendGameplay( merchantCommand( choice, item.quantity ) );
 			return;
 		}
 		beginShopDialog( choice, String( item.quantity ) );
@@ -1493,7 +1505,7 @@ export function createUi(
 		shopPosition = null;
 		composing = false;
 		const game = view?.gameplay,
-			quote = merchantQuote( choice, game?.shop, game?.inventory ?? [], quantity, game?.progression?.gold );
+			quote = merchantQuote( choice, game?.shop, merchantRows( game ), quantity, game?.progression?.gold );
 		if ( quote?.quantityMode === "editable" ) focusAndSelect( "shop-quantity", 0, quantity.length );
 		else {
 			focus = null;
@@ -3086,7 +3098,7 @@ export function createUi(
 						id.startsWith( "shop-offer:" ) ? "buy" : "buyback",
 						Number( id.slice( id.indexOf( ":" ) + 1 ) ),
 						view.gameplay.shop,
-						view.gameplay.inventory
+						merchantRows( view.gameplay )
 					),
 					"1"
 				);
@@ -3096,7 +3108,7 @@ export function createUi(
 			const q = merchantQuote(
 				shopChoice,
 				view.gameplay?.shop,
-				view.gameplay?.inventory ?? [],
+				merchantRows( view.gameplay ),
 				shopQuantity,
 				view.gameplay?.progression?.gold
 			);
@@ -3175,7 +3187,7 @@ export function createUi(
 				quote = merchantQuote(
 					shopChoice,
 					game?.shop,
-					game?.inventory ?? [],
+					merchantRows( game ),
 					shopQuantity,
 					game?.progression?.gold
 				);
@@ -3183,17 +3195,7 @@ export function createUi(
 				shopDialog && shopChoice && quote?.valid && game && !game.inventoryPending &&
 				game.target === shopChoice.npc
 			) {
-				const command = shopChoice.kind === "buy" ?
-					{
-						kind: "shop-buy" as const,
-						tab: shopChoice.tab,
-						slot: shopChoice.slot,
-						quantity: quote.quantity
-					} :
-					shopChoice.kind === "sell" ?
-					{ kind: "shop-sell" as const, slot: shopChoice.slot, quantity: quote.quantity } :
-					{ kind: "shop-buyback" as const, id: shopChoice.id };
-				sendGameplay( command );
+				sendGameplay( merchantCommand( shopChoice, quote.quantity ) );
 				closeShopDialog();
 			}
 		} else if ( id === "mount" && view.gameplay?.target ) {
@@ -3430,11 +3432,12 @@ export function createUi(
 					shopWarning = null;
 					dirty = true;
 					const game = view?.gameplay,
-						item = game?.inventory.find( i =>
+						item = merchantRows( game ).find( i =>
 							pending.selection.kind === "sell" && i.slot === pending.selection.slot
 						);
 					if (
 						item && game?.shop && pending.selection.npc === game.shop.npc &&
+						(pending.selection.kind === "buyback" || pending.selection.cosGid === game.shop.cosGid) &&
 						merchantBinding( item ) === pending.selection.binding
 					) openShopSale( item, pending.quick, true );
 					return;
@@ -3764,7 +3767,7 @@ export function createUi(
 					merchantQuote(
 							shopChoice,
 							view?.gameplay?.shop,
-							view?.gameplay?.inventory ?? [],
+							merchantRows( view?.gameplay ),
 							shopQuantity,
 							view?.gameplay?.progression?.gold
 						)?.quantityMode !== "editable"
@@ -4214,7 +4217,8 @@ export function createUi(
 					return;
 				}
 				if (
-					panel === "COS inventory" && event.id.startsWith( "cos-slot:" ) && view?.gameplay &&
+					(panel === "COS inventory" || panel === "Shop" && view?.gameplay?.shop?.cosGid === cosGid) &&
+					event.id.startsWith( "cos-slot:" ) && view?.gameplay &&
 					!view.gameplay.inventoryPending
 				) {
 					const target = topmostControlAt( controls, event.x, event.y );
@@ -4222,7 +4226,8 @@ export function createUi(
 						record = view.gameplay.cosRecords?.find( r => r.gid === cosGid ),
 						item = record?.inventory?.find( r => r.slot === source );
 					if ( record && item && target && !target.disabled ) {
-						if ( target.id.startsWith( "slot:" ) ) {
+						if ( panel === "Shop" && target.id.startsWith( "shop-" ) ) openShopSale( item );
+						else if ( target.id.startsWith( "slot:" ) ) {
 							sendGameplay( {
 								kind: "cos-transfer",
 								gid: cosGid,
@@ -4403,9 +4408,11 @@ export function createUi(
 			}
 			if ( event.kind === "double-activate" && (event.ctrl || event.shift || event.alt) ) return;
 			if ( event.kind === "double-activate" && view?.gameplay && !view.gameplay.inventoryPending ) {
-				if ( panel === "Shop" && event.id.startsWith( "slot:" ) ) {
-					const item = view.gameplay.inventory.find( r => r.slot === Number( event.id.slice( 5 ) ) );
-					if ( item && item.slot >= 13 ) {
+				if ( panel === "Shop" && event.id.startsWith( view.gameplay.shop?.cosGid ? "cos-slot:" : "slot:" ) ) {
+					const item = merchantRows( view.gameplay ).find( r =>
+						r.slot === Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) )
+					);
+					if ( item ) {
 						openShopSale( item );
 						dirty = true;
 					}
@@ -4788,23 +4795,34 @@ export function createUi(
 				// 570120 / 567290: CTRL shop transaction takes priority over SHIFT/ALT.
 				if (
 					event.ctrl && panel === "Shop" && view?.gameplay?.shop &&
-					(event.id.startsWith( "shop-offer:" ) || event.id.startsWith( "slot:" ))
+					(event.id.startsWith( "shop-offer:" ) ||
+						event.id.startsWith( view.gameplay.shop.cosGid ? "cos-slot:" : "slot:" ))
 				) {
 					const game = view.gameplay, shop = game.shop!;
 					if ( game.inventoryPending || shop.error || game.target !== shop.npc ) return;
 					if ( event.id.startsWith( "shop-offer:" ) ) {
 						const offer = shop.offers[Number( event.id.slice( 11 ) )];
 						if ( offer ) {
-							sendGameplay( {
-								kind: "shop-buy",
-								tab: offer.tab,
-								slot: offer.slot,
-								quantity: (offer.contents?.length ?? 1) > 1 ? 1 : offer.maxStack
-							} );
+							const choice = merchantSelection(
+								"buy",
+								Number( event.id.slice( 11 ) ),
+								shop,
+								merchantRows( game )
+							);
+							if ( choice ) {
+								sendGameplay(
+									merchantCommand(
+										choice,
+										(offer.contents?.length ?? 1) > 1 ? 1 : offer.purchaseLimit ?? offer.maxStack
+									)
+								);
+							}
 						}
 					} else {
-						const item = game.inventory.find( row => row.slot === Number( event.id.slice( 5 ) ) );
-						if ( item && item.slot >= 13 ) {
+						const item = merchantRows( game ).find( row =>
+							row.slot === Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) )
+						);
+						if ( item ) {
 							if ( (item.typeFlags & 0x1f) === 0xd || item.summon?.state === 2 ) {
 								message = hud.data()?.strings["UIIT_MSG_STRGERR_CANT_QUICKSELL_CASHITEM"] ?? "";
 								dirty = true;
@@ -5017,7 +5035,7 @@ export function createUi(
 					const quote = merchantQuote(
 						shopChoice,
 						game?.shop,
-						game?.inventory ?? [],
+						merchantRows( game ),
 						event.value,
 						game?.progression?.gold
 					);
@@ -9448,7 +9466,7 @@ export function createUi(
 				}
 				if (
 					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
-					hudData
+					!(panel === "Shop" && game?.shop?.cosGid) && hudData
 				) {
 					const admission = beginWindow();
 					const popup = mainPopupGeometry( "Inventory", hudData.windows.ifmainpopup!, w, h, popupPosition ),
@@ -10858,7 +10876,7 @@ export function createUi(
 						top: npcPanel.top(),
 						// NPC capability bits: 1 shop, 2 talk, 4 storage, 0x40 recall, 0x80 teleport,
 						// 0x20000000 reverse return.
-						canShop: !!(capabilities & 1),
+						canShop: !!(capabilities & 0x801),
 						branches: target?.merchantBranches,
 						choiceColor: symbol =>
 							npcChoiceColor(
@@ -11395,17 +11413,21 @@ export function createUi(
 					}
 					endWindow( admission, "service:" + SKIN_PANEL );
 				}
-				if ( panel === "COS inventory" && hudData ) {
+				if ( (panel === "COS inventory" || panel === "Shop" && game?.shop?.cosGid) && hudData ) {
 					const admission = beginWindow(),
 						root = hudData.root.GDR_COS_WND!,
 						[px, py] = windowOrigin( "COS inventory", [
-							Math.max( 0, w - 388 - 371 ),
+							panel === "Shop" ? Math.max( 0, w - 371 ) : Math.max( 0, w - 388 - 371 ),
 							Math.max( 0, h - 478 ),
 							root.rect[2],
 							root.rect[3]
 						] ),
 						records = game?.cosRecords?.filter( r => !r.dead && r.hp > 0 ) ?? [];
-					if ( !records.some( r => r.gid === cosGid ) ) {
+					if ( panel === "Shop" ) {
+						cosGid = game?.shop?.cosGid ?? 0;
+						cosTab = 1;
+					}
+					if ( panel !== "Shop" && !records.some( r => r.gid === cosGid ) ) {
 						cosGid = records[0]?.gid ?? 0;
 						cosSlot = -1;
 						cosPage = 0;
@@ -11426,7 +11448,7 @@ export function createUi(
 							[ px + 18 + i * 78, py + 44, 72, 24 ],
 							cosTab === i,
 							"com_long_tab",
-							i === 1 ? !record?.inventory : i === 2 ? record?.band !== 4 : false
+							panel === "Shop" || (i === 1 ? !record?.inventory : i === 2 ? record?.band !== 4 : false)
 						)
 					);
 					const ox = px + 12,
@@ -13642,7 +13664,13 @@ export function createUi(
 					layout = messageBox( w, h, 327, confirm ? 175 : 177, shopPosition ),
 					[mx, my] = layout.frame,
 					shop = game.shop,
-					quote = merchantQuote( shopChoice, shop, game.inventory, shopQuantity, game.progression?.gold ),
+					quote = merchantQuote(
+						shopChoice,
+						shop,
+						merchantRows( game ),
+						shopQuantity,
+						game.progression?.gold
+					),
 					item = quote?.item;
 				const page = confirm ?
 						merchantDialogPage( hud.data()!.windows.ifmessagebox!, true ) :

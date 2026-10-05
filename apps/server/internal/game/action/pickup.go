@@ -247,6 +247,7 @@ func (rt *Runtime) grantPickup(
 	}
 
 	body := wire.ItemBody{
+		TradeOwner:        grantedItem.TradeOwner,
 		TypeFlags:         grantedItem.TypeFlags,
 		Quantity:          grantedItem.Quantity,
 		RefObjID:          grantedItem.RefObjID,

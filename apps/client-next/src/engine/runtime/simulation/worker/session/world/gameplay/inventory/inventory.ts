@@ -1,6 +1,14 @@
 /*
 ===========================================================================
 
+inventory.ts - authoritative inventory packets and pending item operations
+
+===========================================================================
+*/
+import { sameStackIdentity } from "@/engine/foundation/gameplay/container-transfer";
+/*
+===========================================================================
+
 inventory.ts - inventory authority publications and serialized item commands
 
 Owns player and avatar slots, reference projections and pending native moves.
@@ -307,7 +315,7 @@ transfer
 		// moves may split/merge counts; companion moves obey the same rule.
 		if (
 			stack && source >= (equipmentSlotCount ?? 13) && destination >= (equipmentSlotCount ?? 13) &&
-			(!b || b.refObjId === a.refObjId)
+			(!b || sameStackIdentity( a, b ))
 		) {
 			if ( quantity < 1 || quantity > a.quantity || (b?.quantity ?? 0) + quantity > 65535 ) {
 				throw new Error( "Invalid inventory stack transfer" );
@@ -1580,7 +1588,7 @@ receive
 			const applyMove = ( source: number, destination: number, quantity: number ) => {
 				const a = next.get( source ), b = next.get( destination );
 				const stacking = !!a && (a.typeFlags & 0x60) === 0x60 && source >= (equipmentSlotCount ?? 13) &&
-					destination >= (equipmentSlotCount ?? 13) && (!b || b.refObjId === a.refObjId);
+					destination >= (equipmentSlotCount ?? 13) && (!b || sameStackIdentity( a, b ));
 				transfer( next, source, destination, quantity );
 				committedMoves.push( {
 					source,

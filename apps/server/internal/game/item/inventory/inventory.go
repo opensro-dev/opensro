@@ -102,6 +102,7 @@ Body
 */
 func (i Item) Body() wire.ItemBody {
 	return wire.ItemBody{
+		TradeOwner:        i.TradeOwner,
 		RefObjID:          i.RefObjID,
 		TypeFlags:         i.TypeFlags,
 		Plus:              i.Plus,

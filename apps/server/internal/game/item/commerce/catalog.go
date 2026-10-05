@@ -63,8 +63,10 @@ Catalog
 ================
 */
 type Catalog struct {
-	Tabs  map[int32][]Offer
-	Magic enterworld.MagicOptionSource
+	TradeQuotations map[[2]uint32]TradeQuotation
+	TradeQuests     map[string]uint32
+	Tabs            map[int32][]Offer
+	Magic           enterworld.MagicOptionSource
 }
 
 /*
@@ -154,7 +156,7 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		admitted := true
 		for _, content := range contents {
 			ref := content.Ref
-			if (ref.TypeIDs[1] != 1 && ref.TypeIDs[1] != 3) || ref.TypeIDs[1] == 3 && (ref.TypeIDs[2] == 5 || ref.TypeIDs[2] == 8) {
+			if (ref.TypeIDs[1] != 1 && ref.TypeIDs[1] != 3) || ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 5 {
 				admitted = false
 				break
 			}
@@ -165,6 +167,9 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		first := contents[0]
 		c.Tabs[tab] = append(c.Tabs[tab], Offer{Slot: uint8(slot), Ref: first.Ref, Price: prices[r[3]], Currency: currencies[r[3]], Stack: first.Stack, Contents: contents})
 
+	}
+	if err := c.loadTradeCatalog(dir); err != nil {
+		return nil, err
 	}
 	return c, nil
 }

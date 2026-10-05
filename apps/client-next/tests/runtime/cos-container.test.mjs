@@ -238,3 +238,39 @@ test("cross-container swaps preserve both bodies and missing caps cannot mutate 
 	);
 	assert.deepEqual( { record, player }, before );
 });
+
+/*
+================
+tradeOwnerContainerTransfers
+================
+*/
+test("trade cargo merges only stacks carrying the same original owner", async () => {
+	const { planContainerMove, planWholeTransfer } = await import(
+		"../../src/engine/foundation/gameplay/container-transfer.ts"
+	);
+	const a = {
+		slot: 0,
+		refObjId: 2151,
+		typeFlags: 0xc6c,
+		quantity: 3,
+		label: "A",
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: []
+	};
+	const b = { ...a, slot: 1, quantity: 4, label: "B" };
+	const caps = new Map( [ [ 2151, 40 ] ] );
+	const moved = planContainerMove( [ a, b ], { source: 0, destination: 1, quantity: 3 }, caps, "cargo" );
+	assert.deepEqual( moved.map( i => [ i.slot, i.quantity, i.label ] ), [ [ 0, 4, "B" ], [ 1, 3, "A" ] ] );
+	const merged = planContainerMove(
+		[ a, { ...b, label: "A" } ],
+		{ source: 0, destination: 1, quantity: 3 },
+		caps,
+		"cargo"
+	);
+	assert.deepEqual( merged.map( i => [ i.quantity, i.label ] ), [ [ 7, "A" ] ] );
+	const transferred = planWholeTransfer( [ a ], [ b ], 0, 1, caps );
+	assert.equal( transferred.to[0].label, "A" );
+	assert.equal( transferred.from[0].label, "B" );
+});

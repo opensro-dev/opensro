@@ -1847,7 +1847,7 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "shop-open" ) {
 				if (
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||
-					!((targeting.state().targetCapabilities ?? 0) & 1)
+					!((targeting.state().targetCapabilities ?? 0) & 0x801)
 				) throw Error( "Select a merchant first" );
 				return inventory.openShop( command.gid, now, targeting.state().targetCapabilities ?? 0 );
 			}
