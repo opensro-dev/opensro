@@ -42,12 +42,12 @@ func monsterOwnsDefaultSkill(instance monster.Instance, skillID uint32) bool {
 MonsterAttackPlan
 
 MonsterAttackPlan resolves the authored RefObjChar default-skill set. A
-requested id must still belong to that set; zero samples uniformly from
-only the complete attack rows, so malformed data can never become a
-visual-only monster swing.
+requested id must still belong to that set; zero makes 561B00's weighted
+choice among only the complete attack rows, so malformed data can never
+become a visual-only monster swing.
 ==================
 */
-func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID uint32, sample float64) (simulation.MonsterAttackPlan, bool) {
+func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID uint32, pick simulation.AttackPick) (simulation.MonsterAttackPlan, bool) {
 	var zero simulation.MonsterAttackPlan
 	// Structures do not act as monsters do; a guard tower's fire is the
 	// fortress war's (fortress structures never chase or retaliate).
@@ -55,7 +55,7 @@ func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID
 		return zero, false
 	}
 	if requestedSkillID == 0 {
-		if plan, ok := rt.monsterSummonPlan(instance, sample); ok {
+		if plan, ok := rt.monsterSummonPlan(instance, pick.Sample); ok {
 			return plan, true
 		}
 	} else if monsterOwnsDefaultSkill(instance, requestedSkillID) {
@@ -93,21 +93,68 @@ func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID
 		}
 		valid = append(valid, skill)
 	}
-	if len(valid) == 0 {
-		return zero, false
+	var skill enterworld.SkillRow
+	if requestedSkillID != 0 {
+		// A retained skill is reused as it is (5472A0); its weight was read
+		// when it was chosen.
+		if len(valid) == 0 {
+			return zero, false
+		}
+		skill = valid[0]
+	} else {
+		chosen := false
+		if skill, chosen = monsterWeightedSkill(instance, valid, pick); !chosen {
+			return zero, false
+		}
 	}
-	if sample < 0 || math.IsNaN(sample) {
-		sample = 0
-	}
-	if sample >= 1 {
-		sample = math.Nextafter(1, 0)
-	}
-	skill := valid[int(sample*float64(len(valid)))]
 	actionLifecycleMs, _ := skill.ActionLifecycleMs()
 	return simulation.MonsterAttackPlan{
 		SkillID: skill.ID, Reach: rt.monsterActionReach(instance, skill), CooldownMs: int64(skill.CooldownDurationMs((monsterAbnormalContext{rt}).Param(instance, actionSpeedParameter))),
 		ActionLifecycleMs: int64(actionLifecycleMs),
 	}, true
+}
+
+/*
+==================
+monsterWeightedSkill
+
+CAISkill_Basic_SelectConditionalThenWeighted (561B00): each default skill
+with a non-zero weight (RefSkill +0x164, column 66) enters with that
+weight, raised by half of what its reach - the target's body radius, the
+skill's range and the monster's own - exceeds the target's distance
+(truncated). One CRT draw modulo the total plus one then takes the first
+skill whose running total reaches it. A choice without a target weighs
+the authored weights alone; with no weighted skill there is no choice.
+==================
+*/
+func monsterWeightedSkill(instance monster.Instance, skills []enterworld.SkillRow, pick simulation.AttackPick) (enterworld.SkillRow, bool) {
+	totals := make([]uint32, len(skills))
+	total := uint32(0)
+	for i, skill := range skills {
+		if skill.AIWeight == 0 {
+			continue
+		}
+		weight := uint32(skill.AIWeight)
+		if pick.Target != nil {
+			reach := float32(pick.Target.BodyRadius + float64(uint16(skill.ActionRange)) + instance.BodyRadius())
+			slack := float32(float64(reach) - float64(pick.Target.Distance))
+			if slack >= 0 {
+				weight += uint32(int32(float64(slack) * 5.0 / 10.0))
+			}
+		}
+		total += weight
+		totals[i] = total
+	}
+	if total == 0 {
+		return enterworld.SkillRow{}, false
+	}
+	draw := monster.SummonRandomWord(pick.Sample) % (total + 1)
+	for i, skill := range skills {
+		if totals[i] != 0 && totals[i] >= draw {
+			return skill, true
+		}
+	}
+	return enterworld.SkillRow{}, false
 }
 
 /*

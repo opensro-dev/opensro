@@ -84,7 +84,7 @@ func TestAggressiveMonsterChasesTheNearerPet(t *testing.T) {
 	const t0 = int64(1_784_000_000_000)
 	const petGID = 0x02000007
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: 0x1234, Reach: ActionReach(50), CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}
 	var struck uint32

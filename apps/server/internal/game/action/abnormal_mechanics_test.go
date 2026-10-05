@@ -347,7 +347,7 @@ func TestMonsterMyopiaChangesPursuitAndBothVictimKinds(t *testing.T) {
 			t.Fatal("myopia admission failed")
 		}
 		m.Abnormal = impacts[0].Instance.Abnormal
-		plan, valid := rt.MonsterAttackPlan(m, 2, 0)
+		plan, valid := rt.MonsterAttackPlan(m, 2, simulation.AttackPick{})
 		if !valid || plan.Reach != 10 {
 			t.Fatalf("myopic plan %+v", plan)
 		}

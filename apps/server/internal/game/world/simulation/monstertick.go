@@ -74,9 +74,10 @@ type MonsterMoverOps struct {
 	// AttackPlan resolves one of RefObjChar's ten default-skill ids against
 	// the shipped v1.150 skill table. requestedSkillID preserves a choice
 	// while the mover approaches; zero chooses from the valid authored set.
-	// Retained-ID resolution receives sample zero and must not reselect based
-	// on changed health/damage. New selections alone consume choice entropy.
-	AttackPlan func(instance monster.Instance, requestedSkillID uint32, sample float64) (MonsterAttackPlan, bool)
+	// Retained-ID resolution receives a zero pick and must not reselect based
+	// on changed health/damage. New selections alone consume choice entropy,
+	// and they carry the target the weighted choice (561B00) measures.
+	AttackPlan func(instance monster.Instance, requestedSkillID uint32, pick AttackPick) (MonsterAttackPlan, bool)
 	// BasicAttack commits one monster->player hit and returns the same B245
 	// action bracket the browser already uses for player attacks.
 	BasicAttack func(divisionID string, instance monster.Instance, targetGid, skillID uint32, nowMs int64) MonsterAttackResult

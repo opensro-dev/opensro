@@ -167,7 +167,7 @@ func TestFollowRetaliationBypassesClosedGatesAndRemovalRetiresTimers(t *testing.
 	mover := startFixtureFollow(t, ops, child, now)
 	ops.stopOrAdvanceFollow("summon", child, mover, now+1)
 	before := followTimers(s, child.Gid)
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: 1, Reach: 20, CooldownMs: 1000, ActionLifecycleMs: 500}, true
 	}
 	attacker := playerPose{Gid: PlayerObjectID(1), Pose: poseToSpawn(mover.LivePoseAt(now+2, nil)), BodyRadius: 4}
