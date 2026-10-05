@@ -932,6 +932,12 @@ Entity removal retires targeting and combat references in the same frame.
 			cosPickup.track( event );
 			if ( event.kind === "spawn" ) {
 				combat.seedEffects( event.entity.gid, event.entity.spawnSkills ?? [], soundClock );
+				// 4FA0B0: a structure's spawn row sets its hit points
+				// (CICharactor_SetCurrentHP) beside its record's maximum.
+				const { structureHp, maxHp } = event.entity;
+				if ( event.entity.kind === "structure" && structureHp !== undefined ) {
+					combat.seed( event.entity.gid, { hp: structureHp, ...(maxHp === undefined ? {} : { maxHp }) } );
+				}
 			} else {
 				approach = interactionApproachTransition( approach, { kind: "despawn", gid: event.gid } );
 				combat.remove( event.gid, soundClock );
