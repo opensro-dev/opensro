@@ -22,6 +22,7 @@ no outdoor region group; the standalone rebuild packs what is on disk).
 
 ===========================================================================
 */
+import { STALL_NETWORK_FILES } from "./data/buildStallNetworkAssets.mjs";
 import path from "node:path";
 import { listPublicAssetFiles } from "./assetPacks.mjs";
 import { collectDedicatedModelGroups } from "./assetPackOwnership.mjs";
@@ -181,7 +182,11 @@ export async function collectAssetPackGroups( {
 	} );
 	const nameFilterData =
 		(await listPublicAssetFiles( { publicRoot, roots: [ "/assets/textdata" ], extensions: [ ".txt" ] } )).filter(
-			publicPath => publicPath.toLowerCase() === "/assets/textdata/abusefilter.txt"
+			publicPath =>
+				[
+					"/assets/textdata/abusefilter.txt",
+					...STALL_NETWORK_FILES.map( name => "/assets/textdata/" + name )
+				].includes( publicPath.toLowerCase() )
 		);
 
 	// Dev-only character labs consume this catalog on demand. Keep it out of

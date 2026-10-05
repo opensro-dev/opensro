@@ -14,6 +14,7 @@ import type { UiQuad, UiRect, UiControl } from "@/engine/contracts/ui";
 import type { AuthoredLayout } from "./authored-layout";
 import { chatScrollbar } from "./chat-scrollbar";
 import { textLines } from "./text-lines";
+import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 // 6aeaa0 seeds two 56px rows; 6acd30 cycles 0..6. The bottom anchor is 52px.
 /*
 ================
@@ -156,8 +157,9 @@ button
 					recipient: undefined as string | undefined
 				}) ) :
 				[]),
-			...lines.filter( l => tab === 0 || l.channel === channel ).flatMap( l =>
-				textLines( chatLineText( l, copy ), 365, measure, true ).map( value => ({
+			// Stall lines belong to the stall window's own chat box.
+			...lines.filter( l => l.channel !== STALL_CHAT_CHANNEL && (tab === 0 || l.channel === channel) ).flatMap(
+				l => textLines( chatLineText( l, copy ), 365, measure, true ).map( value => ({
 					value,
 					color: chatLineColor( l.channel ),
 					recipient: l.channel !== 7 ? l.name : undefined

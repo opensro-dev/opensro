@@ -274,7 +274,8 @@ export type GameplayCommand =
 	| { readonly kind: "npc-choice"; readonly choice: number; }
 	| { readonly kind: "npc-close"; }
 	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand
-	| import("@/engine/foundation/gameplay/exchange").ExchangeCommand;
+	| import("@/engine/foundation/gameplay/exchange").ExchangeCommand
+	| import("@/engine/foundation/gameplay/stall").StallCommand;
 /*
 ================
 InventoryItem
@@ -482,6 +483,7 @@ export interface GameplayState {
 	readonly alchemy?: import("./item-process").AlchemyState;
 	readonly gacha?: import("./item-process").GachaState;
 	readonly exchange?: import("./item-process").ExchangeState;
+	readonly stall?: import("@/engine/foundation/gameplay/stall").StallState;
 	readonly targetCapabilities?: number;
 	readonly targetTaxRate?: number;
 	readonly shopCompletionRevision?: number;

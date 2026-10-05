@@ -14,6 +14,18 @@ Visibility gates new requests, never collection of outstanding work.
 // CGInterface_ExecuteActionCommand 695420 case 1006: trade with the
 // selected player.
 const ACTION_EXCHANGE = 1006;
+// 695420 case 9 opens the own stall's title prompt, case 0xD toggles the
+// stall network window (CGInterface_ToggleStallNetworkWindow 69DB80).
+const ACTION_STALL = 1009;
+const ACTION_STALL_NETWORK = 1013;
+// 5A2890: a title CStringCheck_IsTextAllowed refuses raises 0x0A/0x38.
+const STALL_TITLE_REFUSED = "UIIT_MSG_FLEAMARKET_ERR_NOT_ALLOWED_FMARKETNAME";
+const STALL_PROMPT_TEXT = "stall-prompt-text";
+const STALL_PROMPT_QUANTITY = "stall-prompt-quantity";
+const STALL_PROMPT_PRICE = "stall-prompt-price";
+const STALL_CHAT_TEXT = "stall-chat-text";
+// CIFChatModule rows are 16 pixels; the input row sits under them.
+const STALL_CHAT_ROW = 16;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import { companionItemTargetCommand } from "@/engine/foundation/gameplay/cos-item-use";
 import {
@@ -123,6 +135,25 @@ import { createJobHud } from "./hud/job-hud";
 import { createFortressWarHud } from "./hud/fortress-war-hud";
 import { createUnionHud } from "./hud/union-hud";
 import { createExchangeHud } from "./hud/exchange-hud";
+import {
+	createStallHud,
+	stallNetworkOrder,
+	stallPromptCommand,
+	stallPromptLive,
+	STALL_CELL_PITCH_X,
+	STALL_CELL_PITCH_Y,
+	STALL_COMBO_DEGREE,
+	STALL_COMBO_LARGE,
+	STALL_COMBO_MEDIUM,
+	STALL_CHAT_LIMIT,
+	STALL_PROMPT_SIZE,
+	STALL_TEXT_LIMIT,
+	type StallNetworkSort,
+	type StallPrompt
+} from "./hud/stall-hud";
+import { createStallNetworkCategories } from "./hud/stall-network-categories";
+import { STALL_CHAT_CHANNEL, STALL_SLOTS, type StallListing } from "@/engine/foundation/gameplay/stall";
+import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { allianceButtons, allianceLeader } from "@/engine/foundation/ui/alliance-guild";
 import {
@@ -615,6 +646,7 @@ export function createUi(
 	const fortressWarHud = createFortressWarHud();
 	const unionHud = createUnionHud();
 	const exchangeHud = createExchangeHud();
+	const stallHud = createStallHud();
 	const grantPowerHud = createGrantPowerHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
@@ -627,7 +659,8 @@ export function createUi(
 	let academyWasVisible = false;
 	const hud = createHudResources( assets, base ),
 		guideResources = createGuideResources( assets, base ),
-		minimapResources = createMinimapResources( assets, base );
+		minimapResources = createMinimapResources( assets, base ),
+		stallCategories = createStallNetworkCategories( assets, base );
 	const npcPanel = createNpcPanel(), windowPlacement = createWindowPlacement();
 	// The warehouse window's page (storage-panel.ts).
 	const storagePanel = createStoragePanel();
@@ -1136,6 +1169,14 @@ export function createUi(
 			if ( game.target ) sendGameplay( { kind: "attack", gid: game.target } );
 			return;
 		}
+		if ( id === ACTION_STALL ) {
+			sendGameplay( { kind: "stall-name", alchemy: panel === "Alchemy" } );
+			return;
+		}
+		if ( id === ACTION_STALL_NETWORK ) {
+			sendGameplay( { kind: "stall-network-open", open: !game.stall?.network.open } );
+			return;
+		}
 		if ( id === HELPER_ACTION_ID ) {
 			sendGameplay( { kind: "helper-mark" } );
 			return;
@@ -1378,6 +1419,44 @@ export function createUi(
 		focus = id;
 		selection = [ start, end ];
 		focusRequest = { id, revision: ++focusRevision, caret: end, anchor: start };
+	}
+	/*
+	================
+	openStallPrompt
+	================
+	*/
+	function openStallPrompt( prompt: StallPrompt ) {
+		stallHud.open( prompt );
+		if ( prompt.kind === "title" || prompt.kind === "greeting" ) {
+			focusAndSelect( STALL_PROMPT_TEXT, 0, prompt.text.length );
+		} else if ( prompt.kind === "price" ) focusAndSelect( STALL_PROMPT_PRICE, 0, prompt.price.length );
+		dirty = true;
+	}
+	/*
+	================
+	answerStallPrompt
+
+	CIFStall_OnTitleDialogResult 5A2890: a title the abuse filter refuses
+	(CStringCheck_IsTextAllowed 790B60) raises 0x0A/0x38 and gives up the
+	stall being named.
+	================
+	*/
+	function answerStallPrompt( accept: boolean ) {
+		const prompt = stallHud.prompt(), stall = view?.gameplay?.stall;
+		stallHud.close();
+		focus = null;
+		focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+		dirty = true;
+		if ( !prompt || !stall ) return;
+		const rules = hud.data()?.nameRules;
+		if ( accept && prompt.kind === "title" && rules && !textAllowed( prompt.text, rules ) ) {
+			hudMessages.append( hudCopy( STALL_TITLE_REFUSED ) );
+			if ( stall.phase === "naming" ) sendGameplay( { kind: "stall-name-cancel" } );
+			return;
+		}
+		const greeting = hudCopy( "UIIT_STT_STALL_DEFAULT_OWNERMSG" ).replace( "%s", view?.session?.character ?? "" );
+		const command = stallPromptCommand( prompt, stall, accept, greeting );
+		if ( command ) sendGameplay( command );
 	}
 	/*
 	================
@@ -1752,6 +1831,13 @@ export function createUi(
 			dirty = true;
 			return;
 		}
+		if ( stallHud.prompt() ) {
+			if ( id === "submit" ) id = "stall-prompt-ok";
+			if ( id === "stall-prompt-ok" || id === "stall-prompt-cancel" ) {
+				answerStallPrompt( id === "stall-prompt-ok" );
+			}
+			return;
+		}
 		if ( splitStack ) {
 			if ( id === "submit" ) id = "split-confirm";
 			if ( ![ "split-confirm", "split-cancel" ].includes( id ) ) return;
@@ -1798,6 +1884,7 @@ export function createUi(
 			}
 			return;
 		}
+		if ( id === "submit" && focus === STALL_CHAT_TEXT ) id = "stall-chat-send";
 		if ( id === "submit" && shopDialog && panel === "Shop" ) {
 			if ( composing ) return;
 			id = "shop-trade";
@@ -2100,6 +2187,76 @@ export function createUi(
 		} else if ( id === "guild-union-invite" ) {
 			// 701190 sends the selected player (a mounted COS stands for its rider).
 			if ( view.gameplay?.target ) sendGameplay( { kind: id, gid: view.gameplay.target } );
+		} else if ( id === "stall-chat-send" ) {
+			const text = stallHud.chat();
+			if ( text.trim() && !view.gameplay?.chat?.pending && view.gameplay?.stall?.phase !== "none" ) {
+				sendGameplay( { kind: "chat", channel: STALL_CHAT_CHANNEL, text } );
+				stallHud.typeChat( "" );
+			}
+		} else if ( id === "stall-close" || id === "stall-leave" ) {
+			sendGameplay( { kind: id } );
+		} else if ( id === "stall-trading" ) {
+			const stall = view.gameplay?.stall;
+			// 0x71A8 kind 5: an open stall closes for modification at once.
+			if ( stall?.phase === "owner" && stall.open ) {
+				sendGameplay( { kind: "stall-open", open: false, network: false } );
+			} else if ( stall?.phase === "owner" ) openStallPrompt( { kind: "register" } );
+		} else if ( id === "stall-change-title" ) {
+			const stall = view.gameplay?.stall;
+			if ( stall?.phase === "owner" && !stall.open ) openStallPrompt( { kind: "title", text: stall.title } );
+		} else if ( id === "stall-change-greeting" ) {
+			const stall = view.gameplay?.stall;
+			if ( stall?.phase === "owner" ) openStallPrompt( { kind: "greeting", text: stall.greeting } );
+		} else if ( id.startsWith( "stall-slot:" ) ) {
+			const stall = view.gameplay?.stall, slot = Number( id.slice( 11 ) );
+			if ( stall?.phase === "visitor" && stall.open && stall.offers.some( row => row.slot === slot ) ) {
+				openStallPrompt( { kind: "buy", slot } );
+			}
+		} else if ( id.startsWith( "stall-modify:" ) ) {
+			const stall = view.gameplay?.stall,
+				slot = Number( id.slice( 13 ) ),
+				offer = stall?.offers.find( row => row.slot === slot );
+			if ( stall?.phase === "owner" && !stall.open && offer ) {
+				const carried = view.gameplay?.inventory.find( item => item.slot === offer.bagSlot )?.quantity ??
+					offer.quantity;
+				openStallPrompt( {
+					kind: "price",
+					slot,
+					bagSlot: offer.bagSlot,
+					carried,
+					quantity: String( offer.quantity ),
+					price: String( offer.price ),
+					modify: true
+				} );
+			}
+		} else if ( id === "stall-net-close" ) {
+			sendGameplay( { kind: "stall-network-open", open: false } );
+		} else if ( id.startsWith( "stall-net-combo:" ) ) {
+			stallHud.toggleCombo( Number( id.slice( 16 ) ) );
+		} else if ( id.startsWith( "stall-net-choice:" ) ) {
+			stallHud.choose( Number( id.slice( 17 ) ) );
+		} else if ( id.startsWith( "stall-net-sort:" ) ) {
+			stallHud.sortBy( id.slice( 15 ) as StallNetworkSort );
+		} else if ( id.startsWith( "stall-net-row:" ) ) {
+			stallHud.selectRow( Number( id.slice( 14 ) ) );
+		} else if ( id === "stall-net-search" || id === "stall-net-prev" || id === "stall-net-next" ) {
+			const draft = stallHud.network(),
+				network = view.gameplay?.stall?.network,
+				child = stallCategories.roots()?.[draft.large]?.children[draft.medium];
+			if ( network && stallHud.searchReady( uiNow ) ) {
+				// The pages walk the last search; a new search starts at its first.
+				const step = id === "stall-net-next" ? 1 : -1,
+					page = id === "stall-net-search" ? 0 : network.page + step,
+					category = id === "stall-net-search" ? child?.id ?? 0 : network.category;
+				if ( category && page >= 0 && (id === "stall-net-search" || page < network.pages) ) {
+					stallHud.searched( uiNow );
+					stallHud.selectRow( -1 );
+					sendGameplay( { kind: "stall-network-search", category, page, degree: draft.degree } );
+				}
+			}
+		} else if ( id === "stall-net-buy" ) {
+			const row = stallHud.network().row;
+			if ( row >= 0 && view.gameplay?.stall?.network.rows[row] ) openStallPrompt( { kind: "network-buy", row } );
 		} else if ( id === "exchange-confirm" || id === "exchange-cancel" ) {
 			sendGameplay( { kind: id } );
 		} else if ( id === "exchange-gold-set" ) {
@@ -3503,6 +3660,23 @@ export function createUi(
 					event.kind === "scroll" ||
 					event.kind === "edit")
 			) return;
+			if ( stallHud.prompt() ) {
+				if ( event.kind === "key" ) {
+					if ( event.code === "Escape" ) activate( "stall-prompt-cancel" );
+					else if ( event.code === "Enter" && !composing ) activate( "stall-prompt-ok" );
+					return;
+				}
+				if (
+					event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "double-activate"
+				) return;
+				if (
+					"id" in event && event.id !== null && !event.id.startsWith( "stall-prompt-" ) &&
+					event.id !== "submit"
+				) {
+					return;
+				}
+			}
 			if ( splitStack ) {
 				if ( event.kind === "key" ) {
 					if ( event.code === "Escape" ) activate( "split-cancel" );
@@ -3806,6 +3980,17 @@ export function createUi(
 					carriedItem = null;
 					dirty = true;
 				}
+				// CIFStall: an offer dragged back onto the bag leaves the stall.
+				if ( event.id.startsWith( "stall-slot:" ) && view?.gameplay?.stall?.phase === "owner" ) {
+					const target = topmostControlAt( controls, event.x, event.y ),
+						slot = Number( event.id.slice( 11 ) ),
+						stall = view.gameplay.stall;
+					if (
+						target?.id.startsWith( "slot:" ) && !stall.open && stall.offers.some( row => row.slot === slot )
+					) sendGameplay( { kind: "stall-remove", slot } );
+					dirty = true;
+					return;
+				}
 				if (
 					panel === "Storage" && event.id.startsWith( "storage-slot:" ) && view?.gameplay?.storage &&
 					!view.gameplay.inventoryPending
@@ -3895,6 +4080,26 @@ export function createUi(
 					// CIFExchange: a bag item dropped on the own side goes on the table.
 					if ( item && target && !target.disabled && target.id.startsWith( "exchange-my:" ) ) {
 						sendGameplay( { kind: "exchange-put", slot: item.slot } );
+						return;
+					}
+					// CIFStall_OnInventorySlotDrop 5A11C0: a bag item dropped on an
+					// empty cell of the own stall asks its count and price (5A1A40).
+					const stall = view?.gameplay?.stall;
+					if ( item && target && !target.disabled && target.id.startsWith( "stall-slot:" ) ) {
+						const slot = Number( target.id.slice( 11 ) );
+						if (
+							stall?.phase === "owner" && !stall.open && !stall.offers.some( row => row.slot === slot )
+						) {
+							openStallPrompt( {
+								kind: "price",
+								slot,
+								bagSlot: item.slot,
+								carried: item.quantity,
+								quantity: String( item.quantity ),
+								price: "",
+								modify: false
+							} );
+						}
 						return;
 					}
 					if (
@@ -4634,6 +4839,10 @@ export function createUi(
 				else if ( event.id === "social-subject" ) socialSubject = event.value;
 				else if ( event.id === "social-contents" ) socialContents = event.value;
 				else if ( event.id === "social-amount" ) socialAmount = event.value;
+				else if ( event.id === STALL_CHAT_TEXT ) stallHud.typeChat( event.value );
+				else if ( event.id === STALL_PROMPT_TEXT ) stallHud.type( "text", event.value );
+				else if ( event.id === STALL_PROMPT_QUANTITY ) stallHud.type( "quantity", event.value );
+				else if ( event.id === STALL_PROMPT_PRICE ) stallHud.type( "price", event.value );
 				else if ( event.id === "exchange-gold" ) {
 					exchangeHud.type( event.value, Number( view?.gameplay?.progression?.gold ?? 0 ) );
 				} else if ( event.id === "gm-input" ) consoleText = event.value;
@@ -4932,6 +5141,21 @@ export function createUi(
 				dirty = true;
 				layoutResourcesRevision++;
 			}
+			// The stall prompts follow the stall: naming opens the title entry
+			// with the default title (5A1DF0 mode 1); a stall that moved on
+			// closes its prompt.
+			const stallState = next.gameplay?.stall, stallPrompt = stallHud.prompt();
+			if ( stallState?.phase === "naming" && !stallPrompt ) {
+				openStallPrompt( {
+					kind: "title",
+					text: hudCopy( "UIIT_STT_STALL_DEFAULT_TITLE" ).replace( "%s", next.session?.character ?? "" )
+				} );
+			} else if ( stallPrompt && !stallPromptLive( stallPrompt, stallState ) ) {
+				stallHud.close();
+				dirty = true;
+			}
+			if ( !stallState?.network.open ) stallHud.resetNetwork();
+			if ( stallCategories.step( !!stallState?.network.open ) ) dirty = true;
 			if ( localization.step( now, next.session?.phase === "world" ) ) {
 				dirty = true;
 				tooltipMemo = null;
@@ -11070,6 +11294,315 @@ export function createUi(
 				exchangeWindow();
 				/*
 				================
+				stallWindow
+
+				CIFStall (ginterface GDR_STALL, resinfo\ifstall.txt): the title and
+				greeting with their change buttons (5, 6), the trading-state button
+				(4) and line (14), and ten ifstallslot cells over the display (12).
+				The owner drops bag items on empty cells and drags offers back to the
+				bag while the stall is being modified; a visitor buys from an open
+				stall.
+				================
+				*/
+				function stallWindow() {
+					const state = game?.stall,
+						root = hudData?.root.GDR_STALL,
+						page = hudData?.windows.ifstall,
+						cell = hudData?.windows.ifstallslot;
+					if ( !state || (state.phase !== "owner" && state.phase !== "visitor") || !root || !page || !cell ) {
+						return;
+					}
+					const admission = beginWindow(),
+						[px, py] = windowOrigin( "Stall", [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						part = ( id: number ) => Object.values( cell ).find( n => n.id === id )!,
+						owner = state.phase === "owner",
+						keeper = next.entities.find( e => e.gid === state.owner ),
+						title = owner ? state.title : keeper?.titleText ?? "";
+					nativeFrame( root, px, py, hudCopy( root.text ), owner ? "stall-close" : "stall-leave" );
+					nativePage( page, px, py, [ 3, 4, 5, 6, 14 ] );
+					// The chat module (3): the latest stall lines over the input row.
+					const box = authoredRect( at( 3 ), px, py ),
+						rows = Math.max( 0, Math.floor( box[3] / STALL_CHAT_ROW ) - 1 ),
+						said = (game.chat?.lines ?? []).filter( line => line.channel === STALL_CHAT_CHANNEL ).slice(
+							-rows
+						);
+					for ( const [i, line] of said.entries() ) {
+						const row: UiRect = [ box[0] + 4, box[1] + i * STALL_CHAT_ROW, box[2] - 8, STALL_CHAT_ROW ];
+						quads.push(
+							...text.quads( line.name + ":" + line.text, row, box, white, { overflow: "clip" } )
+						);
+					}
+					partyEdit(
+						{
+							...at( 3 ),
+							rect: [
+								at( 3 ).rect[0] + 4,
+								at( 3 ).rect[1] + at( 3 ).rect[3] - STALL_CHAT_ROW,
+								at( 3 ).rect[2] - 8,
+								14
+							]
+						},
+						px,
+						py,
+						STALL_CHAT_TEXT,
+						stallHud.chat(),
+						STALL_CHAT_LIMIT
+					);
+					authoredText( at( 10 ), px, py, title );
+					authoredText( at( 11 ), px, py, state.greeting );
+					authoredText(
+						at( 14 ),
+						px,
+						py,
+						hudCopy( state.open ? "UIIT_STT_STALL_CONDITION_START" : "UIIT_STT_STALL_CONDITION_END" )
+					);
+					if ( owner ) {
+						authoredButton(
+							at( 4 ),
+							px,
+							py,
+							"stall-trading",
+							hudCopy( state.open ? "UIIT_STT_END_STALL" : "UIIT_STT_START_STALL" )
+						);
+						authoredButton(
+							at( 5 ),
+							px,
+							py,
+							"stall-change-title",
+							hudCopy( "UIIT_STT_INSERT_STALL_NAME" ),
+							state.open
+						);
+						authoredButton( at( 6 ), px, py, "stall-change-greeting", hudCopy( "UIIT_STT_STALL" ) );
+					}
+					const display = at( 12 ).rect;
+					for ( let slot = 0; slot < STALL_SLOTS; slot++ ) {
+						const ox = px + display[0] + (slot % 2) * STALL_CELL_PITCH_X,
+							oy = py + display[1] + Math.floor( slot / 2 ) * STALL_CELL_PITCH_Y,
+							offer = state.offers.find( row => row.slot === slot ),
+							r = authoredRect( part( 1 ), ox, oy );
+						nativePage( cell, ox, oy, [ 2, 3, 4, 5 ] );
+						const icon = offer ? iconPath( offer.item.icon ) : null;
+						if ( offer && icon ) {
+							image( r, icon );
+							itemCount( offer.item, r );
+						}
+						if ( offer ) {
+							authoredText( part( 2 ), ox, oy, offer.item.name ?? "" );
+							authoredText( part( 3 ), ox, oy, String( offer.quantity ) );
+							authoredText( part( 4 ), ox, oy, String( offer.price ) );
+						}
+						controls.push( {
+							id: "stall-slot:" + slot,
+							label: offer?.item.name ?? "Stall slot " + slot,
+							rect: r,
+							kind: "button",
+							disabled: owner ? state.open : !state.open || !offer,
+							draggable: owner && !state.open && !!offer
+						} );
+						if ( owner && !state.open && offer ) {
+							authoredButton(
+								part( 5 ),
+								ox,
+								oy,
+								"stall-modify:" + slot,
+								hudCopy( "UIIT_STT_STALL_MODIFYING" )
+							);
+						}
+					}
+					endWindow( admission );
+				}
+				stallWindow();
+				/*
+				================
+				stallNetworkWindow
+
+				CIFStallNetwork (ginterface GDR_STALL_NETWORK, resinfo\ifstallnetwork
+				.txt): the category combos (41..43) and search button (51), fifteen
+				ifstallnetworkslot result rows (100..114) under the sort buttons
+				(60..64), the page manager (80), the carried gold (55) and the
+				purchase button (50).
+				================
+				*/
+				function stallNetworkWindow() {
+					const state = game?.stall,
+						root = hudData?.root.GDR_STALL_NETWORK,
+						page = hudData?.windows.ifstallnetwork,
+						cell = hudData?.windows.ifstallnetworkslot;
+					if ( !state?.network.open || !root || !page || !cell ) return;
+					const network = state.network,
+						draft = stallHud.network(),
+						roots = stallCategories.roots(),
+						large = roots?.[draft.large],
+						medium = large?.children[draft.medium],
+						admission = beginWindow(),
+						[px, py] = windowOrigin( "Stall network", [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						part = ( id: number ) => Object.values( cell ).find( n => n.id === id )!,
+						level = ( row: StallListing ) => {
+							const fields = row.item.tooltip?.fields;
+							return fields?.reqLevelType1 === 1 ? fields.requiredLevel ?? 0 : 0;
+						};
+					nativeFrame( root, px, py, hudCopy( root.text ), "stall-net-close" );
+					const rowIds = Array.from( { length: 15 }, ( _, i ) => 100 + i );
+					nativePage( page, px, py, [
+						41,
+						42,
+						43,
+						44,
+						45,
+						46,
+						47,
+						50,
+						51,
+						52,
+						53,
+						55,
+						60,
+						61,
+						62,
+						63,
+						64,
+						65,
+						80,
+						...rowIds
+					] );
+					for ( const id of [ 44, 45, 46, 47, 52, 53, 65 ] ) {
+						authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
+					}
+					const choose = hudCopy( "UIIT_CTL_WARENETWORK_SCAN_SELECT" );
+					const combos = [
+						{
+							id: STALL_COMBO_LARGE,
+							entries: (roots ?? []).map( row => hudCopy( row.label ) ),
+							value: large ? hudCopy( large.label ) : choose,
+							disabled: !roots
+						},
+						{
+							id: STALL_COMBO_MEDIUM,
+							entries: (large?.children ?? []).map( row => hudCopy( row.label ) ),
+							value: medium ? hudCopy( medium.label ) : choose,
+							disabled: !large
+						},
+						{
+							id: STALL_COMBO_DEGREE,
+							entries: [
+								hudCopy( "UIIT_CTL_WARENETWORK_SCAN_END" ),
+								...Array.from( { length: medium?.degrees ?? 0 }, ( _, i ) => String( i + 1 ) )
+							],
+							value: draft.degree ? String( draft.degree ) : hudCopy( "UIIT_CTL_WARENETWORK_SCAN_END" ),
+							disabled: !medium?.degrees
+						}
+					];
+					for ( const combo of combos ) {
+						comboBox(
+							authoredRect( at( combo.id ), px, py ),
+							"stall-net-combo:" + combo.id,
+							hudCopy( at( combo.id - 41 + 44 ).text ),
+							combo.value,
+							combo.disabled
+						);
+					}
+					authoredLabeledButton(
+						at( 51 ),
+						px,
+						py,
+						"stall-net-search",
+						hudCopy( at( 51 ).text ),
+						!medium || !stallHud.searchReady( uiNow )
+					);
+					const sorts: readonly [number, StallNetworkSort][] = [
+						[ 60, "number" ],
+						[ 61, "name" ],
+						[ 62, "quantity" ],
+						[ 63, "level" ],
+						[ 64, "price" ]
+					];
+					for ( const [id, sort] of sorts ) {
+						authoredLabeledButton( at( id ), px, py, "stall-net-sort:" + sort, hudCopy( at( id ).text ) );
+					}
+					const order = stallNetworkOrder( network.rows, draft, network.rows.map( level ) );
+					for ( let i = 0; i < rowIds.length; i++ ) {
+						const index = order[i], row = index === undefined ? undefined : network.rows[index];
+						const [ox, oy] = authoredRect( at( rowIds[i]! ), px, py );
+						nativePage( cell, ox, oy, [ 11, 12, 13, 14, 15, 16 ] );
+						if ( !row || index === undefined ) continue;
+						const r = authoredRect( part( 12 ), ox, oy ), icon = iconPath( row.item.icon );
+						if ( icon ) {
+							image( r, icon );
+							itemCount( row.item, r );
+						}
+						authoredText( part( 11 ), ox, oy, String( network.page * 15 + index + 1 ) );
+						authoredText( part( 13 ), ox, oy, row.item.name ?? "" );
+						authoredText( part( 14 ), ox, oy, String( row.quantity ) );
+						authoredText( part( 15 ), ox, oy, String( level( row ) || "" ) );
+						authoredText( part( 16 ), ox, oy, String( row.price ) );
+						controls.push( {
+							id: "stall-net-row:" + index,
+							label: row.item.name ?? "Stall network row " + index,
+							rect: authoredRect( at( rowIds[i]! ), px, py ),
+							kind: "button",
+							selected: draft.row === index
+						} );
+					}
+					// The page manager (80): previous and next around page / pages.
+					const pager = authoredRect( at( 80 ), px, py ), pagerY = pager[1] + 1;
+					button( "stall-net-prev", "<", pager[0], pagerY, 40, network.page <= 0 );
+					button(
+						"stall-net-next",
+						">",
+						pager[0] + pager[2] - 40,
+						pagerY,
+						40,
+						network.page + 1 >= network.pages
+					);
+					quads.push(
+						...text.quads(
+							network.pages ? `${network.page + 1} / ${network.pages}` : "",
+							[ pager[0] + 40, pager[1], pager[2] - 80, pager[3] ],
+							full,
+							white,
+							{ hAlign: 1, vAlign: 1 }
+						)
+					);
+					authoredText( at( 55 ), px, py, String( game?.progression?.gold ?? 0 ) );
+					authoredLabeledButton(
+						at( 50 ),
+						px,
+						py,
+						"stall-net-buy",
+						hudCopy( at( 50 ).text ),
+						draft.row < 0 || network.buying !== null
+					);
+					const open = combos.find( combo => combo.id === draft.combo && !combo.disabled );
+					if ( open ) {
+						const r = authoredRect( at( open.id ), px, py ),
+							list: UiRect = [ r[0], r[1] + r[3], r[2], open.entries.length * 18 ];
+						rect( list, [ 0, 0, 0, 1 ] );
+						blocks.push( list );
+						for ( const [i, value] of open.entries.entries() ) {
+							const entry: UiRect = [ list[0], list[1] + i * 18, list[2], 18 ];
+							quads.push(
+								...text.quads( value, [ entry[0] + 4, entry[1], entry[2] - 8, 18 ], entry, white )
+							);
+							controls.push( { id: "stall-net-choice:" + i, label: value, rect: entry, kind: "button" } );
+						}
+					}
+					endWindow( admission );
+				}
+				stallNetworkWindow();
+				/*
+				================
 				grantPanel
 
 				CIFGuildGrantPower (resinfo\ifguildgrantpower.txt) at its GrantPower
@@ -11571,7 +12104,34 @@ export function createUi(
 							!overlay ||
 							entity.gid !== next.hoveredEntity && !nameInRange( boardAt( entity ), local, game.pose )
 						) continue;
-						if ( overlay.fortressMark || overlay.guildText || overlay.status ) overlaid.add( entity.gid );
+						if ( overlay.fortressMark || overlay.guildText || overlay.status || overlay.stallText ) {
+							overlaid.add( entity.gid );
+						}
+						if ( overlay.stallText ) {
+							const value = overlay.stallText,
+								width = text.run( value ).width,
+								height = text.boardHeight(),
+								left = -(width >> 1),
+								top = overlay.stallY - (height >> 1);
+							quads.push( {
+								characterAnchor: entity.gid,
+								rect: [ left - 1, top - 1, width + 2, height + 2 ],
+								clip: full,
+								uv: [ 0, 0, 1, 1 ],
+								texture: "",
+								color: [ 0, 0, 0, 96 / 255 ]
+							} );
+							quads.push(
+								...text.quads( value, [ left, top, width, height ], full, [
+									0xfe / 255,
+									0xb5 / 255,
+									1,
+									1
+								], {
+									vAlign: 0
+								} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
+							);
+						}
 						if ( overlay.fortressMark ) {
 							const mark = overlay.fortressMark;
 							paths.push( mark.path );
@@ -13603,6 +14163,106 @@ export function createUi(
 				button( "drop-gold", hudCopy( "UIIT_CTL_CONFIRM" ), x + 123, y + 101, 76, !!game?.inventoryPending );
 				button( "gold-cancel", hudCopy( "UIIT_CTL_CANCEL" ), x + 203, y + 101, 76 );
 			}
+			const stallBox = stallHud.prompt(), stallPage = hud.data()?.windows.ifstall;
+			if ( worldVisible && stallBox && game?.stall && stallPage ) {
+				// CIFStall's message boxes (5A1DF0, 5A1A40): one modal box at a time.
+				const [boxWidth, boxHeight] = STALL_PROMPT_SIZE[stallBox.kind],
+					layout = messageBox( w, h, boxWidth, boxHeight ),
+					[x, y] = layout.frame,
+					template = Object.values( stallPage ).find( n => n.id === 11 )!,
+					line = ( value: string, dy: number ) => {
+						quads.push(
+							...text.quads( value, [ x + 20, y + dy, boxWidth - 40, 14 ], full, white, {
+								hAlign: 1,
+								vAlign: 0
+							} )
+						);
+					},
+					edit = ( id: string, value: string, r: UiRect, maxLength: number ) => {
+						image(
+							[ r[0] - 4, r[1] - 3, r[2] + 8, r[3] + 6 ],
+							ROOT + "interface/messagebox/msgbox_quantity.png"
+						);
+						partyEdit( { ...template, name: id, rect: r }, 0, 0, id, value, maxLength );
+					};
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					)
+				);
+				quads.push(
+					...text.quads(
+						hudCopy( stallBox.kind === "price" ? "UIIT_STT_INPUT_BOX" : "UIIT_STT_CONFIRM_BOX" ),
+						layout.title,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				const stall = game.stall;
+				if ( stallBox.kind === "title" || stallBox.kind === "greeting" ) {
+					line( hudCopy( stallBox.kind === "title" ? "UIIT_STT_INSERT_STALL_NAME" : "UIIT_STT_STALL" ), 48 );
+					edit( STALL_PROMPT_TEXT, stallBox.text, [ x + 28, y + 76, boxWidth - 56, 14 ], STALL_TEXT_LIMIT );
+				} else if ( stallBox.kind === "price" ) {
+					const item = game.inventory.find( row => row.slot === stallBox.bagSlot );
+					line( item?.name ?? "", 46 );
+					quads.push(
+						...text.quads(
+							hudCopy( "UIIT_CTL_WARENETWORK_RESULT_FIGURE" ),
+							[ x + 30, y + 72, 80, 14 ],
+							full,
+							white
+						),
+						...text.quads(
+							hudCopy( "UIIT_CTL_WARENETWORK_RESULT_PRICE" ),
+							[ x + 30, y + 96, 80, 14 ],
+							full,
+							white
+						)
+					);
+					edit( STALL_PROMPT_QUANTITY, stallBox.quantity, [ x + 120, y + 72, 60, 14 ], 5 );
+					edit( STALL_PROMPT_PRICE, stallBox.price, [ x + 120, y + 96, 150, 14 ], 10 );
+				} else if ( stallBox.kind === "buy" || stallBox.kind === "network-buy" ) {
+					const offer = stallBox.kind === "buy" ?
+						stall.offers.find( row => row.slot === stallBox.slot ) :
+						stall.network.rows[stallBox.row];
+					line(
+						hudCopy( "UIIT_MSG_WARENETWORK_BUY_CONFIRM" ).replace( "%s", offer?.item.name ?? "" ).replace(
+							"%d",
+							String( offer?.quantity ?? 0 )
+						),
+						56
+					);
+					line( String( offer?.price ?? "" ), 76 );
+				} else {
+					for ( const [i, key] of [ "01", "02", "03" ].entries() ) {
+						line( hudCopy( "UIIT_MSG_WARENETWORK_REGIST_" + key ), 50 + i * 18 );
+					}
+				}
+				const pending = stallBox.kind === "network-buy" && stall.network.buying !== null;
+				button(
+					"stall-prompt-ok",
+					hudCopy( "UIIT_CTL_CONFIRM" ),
+					x + boxWidth / 2 - 80,
+					y + boxHeight - 40,
+					76,
+					pending
+				);
+				button(
+					"stall-prompt-cancel",
+					hudCopy( "UIIT_CTL_CANCEL" ),
+					x + boxWidth / 2 + 4,
+					y + boxHeight - 40,
+					76
+				);
+			}
 			if (
 				worldVisible && carriedItem &&
 				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
@@ -14961,7 +15621,18 @@ export function createUi(
 			blocks = [];
 			paths = [];
 			const errors: unknown[] = [];
-			for ( const owner of [ resources, hud, guideResources, minimapResources, localization, title, text ] ) {
+			for (
+				const owner of [
+					resources,
+					hud,
+					guideResources,
+					minimapResources,
+					stallCategories,
+					localization,
+					title,
+					text
+				]
+			) {
 				try {
 					owner.dispose();
 				} catch ( error ) {

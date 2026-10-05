@@ -55,6 +55,14 @@ import {
 	type ExchangeCommand
 } from "@/engine/foundation/gameplay/exchange";
 import type { ExchangeState } from "@/engine/contracts/item-process";
+import {
+	emptyStall,
+	stallFrame,
+	stallRequest,
+	type StallCommand,
+	type StallOutcome,
+	type StallState
+} from "@/engine/foundation/gameplay/stall";
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 /*
@@ -94,6 +102,9 @@ export function createInventory(
 	// The open player exchange (exchange.ts): its offers name bag slots, so
 	// the swap it reports lands on this owner's slots.
 	let exchange: ExchangeState = emptyExchange();
+	// The street stall the player keeps or stands at, and the stall network
+	// window (stall.ts); a purchase lands on this owner's slots.
+	let stall: StallState = emptyStall();
 	let timedOut = false;
 	let bindingMoves: import("@/engine/foundation/gameplay/quickslot-inventory").QuickslotInventoryMove[] = [];
 	let shop: import("@/engine/foundation/gameplay/commerce").ShopState | undefined;
@@ -432,6 +443,7 @@ bootstrap
 			alchemy.reset();
 			gacha.reset();
 			exchange = emptyExchange();
+			stall = emptyStall();
 			mall.reset();
 			mallDelivery = null;
 			tooltipRefs.clear();
@@ -541,6 +553,58 @@ exchange's, else the category-1 notice code it raised (0 for none).
 			}
 			exchange = outcome.state;
 			return outcome.notice ?? 0;
+		},
+		/*
+================
+stallReceive
+
+Folds a stall frame and applies its bag changes; null when the frame is
+not the stall's.
+================
+		*/
+		stallReceive( frame: import("@/engine/contracts/network").WireFrame, localGid: number ): StallOutcome | null {
+			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs } );
+			if ( !outcome ) return null;
+			const firstBag = equipmentSlotCount ?? 13, endBag = inventorySlotCount ?? 45;
+			if ( outcome.receive?.length || outcome.give?.length ) {
+				const next = new Map( slots );
+				for ( const item of outcome.receive ?? [] ) {
+					let slot = firstBag;
+					while ( slot < endBag && next.has( slot ) ) slot++;
+					if ( slot >= endBag ) throw Error( "Stall purchase exceeds the bag" );
+					next.set( slot, { ...item, slot } );
+				}
+				for ( const give of outcome.give ?? [] ) {
+					const row = next.get( give.bagSlot );
+					if ( !row ) continue;
+					if ( row.quantity > give.quantity ) {
+						next.set( give.bagSlot, { ...row, quantity: row.quantity - give.quantity } );
+					} else next.delete( give.bagSlot );
+				}
+				slots = next;
+				published = null;
+			}
+			stall = outcome.state;
+			return outcome;
+		},
+		/*
+================
+stallPhase
+================
+		*/
+		stallPhase(): StallState["phase"] {
+			return stall.phase;
+		},
+		/*
+================
+stallCommand
+================
+		*/
+		stallCommand( command: StallCommand ) {
+			const request = stallRequest( stall, command );
+			stall = request.state;
+			for ( const frame of request.frames ) send( frame );
+			return request.frames.at( -1 ) ?? null;
 		},
 		/*
 ================
@@ -1635,6 +1699,16 @@ state
 						theirs: exchange.theirs.map( row => ({ ...row, item: present( row.item ) }) )
 					} :
 					undefined,
+				stall: stall.phase === "none" && !stall.network.open ?
+					undefined :
+					{
+						...stall,
+						offers: stall.offers.map( row => ({ ...row, item: present( row.item ) }) ),
+						network: {
+							...stall.network,
+							rows: stall.network.rows.map( row => ({ ...row, item: present( row.item ) }) )
+						}
+					},
 				shop: presentShop(),
 				shopCompletionRevision,
 				inventorySlotCount,
@@ -1661,6 +1735,7 @@ clear
 			alchemy.reset();
 			gacha.reset();
 			exchange = emptyExchange();
+			stall = emptyStall();
 			mall.reset();
 			mallDelivery = null;
 			shop = undefined;

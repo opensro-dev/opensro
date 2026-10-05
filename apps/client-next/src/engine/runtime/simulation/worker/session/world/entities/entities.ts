@@ -562,6 +562,37 @@ export function createEntities(
 				}
 				return;
 			}
+			if ( frame.opcode === 0x30df || frame.opcode === 0x34b7 || frame.opcode === 0x33d1 ) {
+				// 751430 opens a stall (title mode 4, its title and decoration),
+				// 751520 renames it, 74F8F0 takes it down (CICharactor_SetStallState).
+				const entity = entities.get( v.getUint32( 0, true ) );
+				if ( !entity ) return;
+				if ( frame.opcode === 0x33d1 ) {
+					const appearanceState = entity.appearanceState ? [ ...entity.appearanceState ] : undefined;
+					if ( appearanceState ) appearanceState[6] = 0;
+					apply( {
+						kind: "state",
+						entity: {
+							...entity,
+							titleText: undefined,
+							titleId: undefined,
+							...(appearanceState ? { appearanceState } : {})
+						}
+					} );
+					return;
+				}
+				const n = v.getUint16( 4, true );
+				if ( 6 + n * 2 > p.length ) throw Error( "Invalid stall title" );
+				const titleText = new TextDecoder( "utf-16le" ).decode( p.subarray( 6, 6 + n * 2 ) );
+				const titleId = frame.opcode === 0x30df ? v.getUint32( 6 + n * 2, true ) : entity.titleId;
+				const appearanceState = entity.appearanceState ? [ ...entity.appearanceState ] : undefined;
+				if ( appearanceState ) appearanceState[6] = 4;
+				apply( {
+					kind: "state",
+					entity: { ...entity, titleText, titleId, ...(appearanceState ? { appearanceState } : {}) }
+				} );
+				return;
+			}
 			if ( frame.opcode === 0x31e2 ) {
 				// 777af0 clears CIItem owner flag/JID, preserving the item itself.
 				if ( p.length !== 4 ) throw new Error( "Invalid ground ownership expiry" );

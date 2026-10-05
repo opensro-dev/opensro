@@ -14,6 +14,7 @@ import { blockedWhisperers, whisperBlockRequest, whisperBlockResult } from "@/en
 import { chatRejectionKey, type ChatFeedback } from "@/engine/foundation/gameplay/chat-feedback";
 import type { ChatLine } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
+import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 const CHAT_LINE_LIMIT = 128;
 const CHAT_FEEDBACK_LIMIT = 100;
 const CHAT_TEXT_LIMIT = 100;
@@ -121,7 +122,8 @@ request
 		request( channel: number, text: string, target: string, now: number ) {
 			if ( pending ) throw new Error( "Chat acknowledgement pending" );
 			if (
-				![ 1, 2, 3, 4, 5, 11 ].includes( channel ) || !text.trim() || text.length > CHAT_TEXT_LIMIT ||
+				![ 1, 2, 3, 4, 5, 11, STALL_CHAT_CHANNEL ].includes( channel ) || !text.trim() ||
+				text.length > CHAT_TEXT_LIMIT ||
 				text.includes( "\0" )
 			) throw new Error( "Invalid chat message" );
 			const targetBytes = new TextEncoder().encode( target );
@@ -222,7 +224,7 @@ take
 			const channel = v.getUint8( take( 1 ) );
 			let sender = "", gid: number | undefined;
 			if ( channel === 1 || channel === 3 ) gid = v.getUint32( take( 4 ), true );
-			else if ( [ 2, 4, 5, 6, 11 ].includes( channel ) ) {
+			else if ( [ 2, 4, 5, 6, 11, STALL_CHAT_CHANNEL ].includes( channel ) ) {
 				const n = v.getUint16( take( 2 ), true );
 				if ( n >= CHAT_NAME_LIMIT ) throw new Error( "Chat name budget" );
 				const at = take( n );

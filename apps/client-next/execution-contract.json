@@ -279,6 +279,16 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/hud/stall-network-categories.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"request",
+				"take",
+				"cancel"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/navigation/region-move.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
 			"functions": [

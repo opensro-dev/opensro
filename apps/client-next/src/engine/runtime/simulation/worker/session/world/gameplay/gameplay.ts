@@ -53,10 +53,19 @@ import { portalNotice } from "@/engine/foundation/gameplay/portal";
 import {
 	interactionApproach,
 	interactionApproachTransition,
+	keepsStall,
 	type InteractionApproachState
 } from "@/engine/foundation/gameplay/interaction-approach";
 import { targetNotice } from "@/engine/foundation/gameplay/target-notices";
 import { constantNativeNotice } from "@/engine/foundation/gameplay/native-notice";
+import {
+	STALL_ALCHEMY_CATEGORY,
+	STALL_ALCHEMY_CODE,
+	STALL_JOB_SUIT_CODE,
+	STALL_NO_JOB_CLASS,
+	STALL_NOTICE_CATEGORY,
+	type StallCommand
+} from "@/engine/foundation/gameplay/stall";
 import { skillNotice } from "@/engine/foundation/gameplay/skill-notices";
 import { returnScrollCast, type ReturnScrollCast } from "@/engine/foundation/gameplay/return-scroll";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
@@ -587,6 +596,19 @@ coming, so retain its menu, dialogue and lock until a new request.
 			slot: entity.kind === "monster" || entity.kind === "cos" ? 3 : entity.kind === "player" ? 2 : 1
 		};
 		return frame;
+	}
+	/*
+================
+visitStall
+
+0x761F for the stall a player keeps, unless the reader already keeps or
+stands at one (the server would refuse it).
+================
+	*/
+	function visitStall( entity: EntityState ) {
+		if ( inventory.stallPhase() !== "none" ) return;
+		inventory.stallCommand( { kind: "stall-visit", gid: entity.gid } );
+		dirty = true;
 	}
 	/*
 ================
@@ -1496,6 +1518,32 @@ state here before a command can claim a native wire conversation.
 				);
 				return null;
 			}
+			if ( command.kind === "stall-name" ) {
+				// 695420 case 9: a job suit (active class +4F5 other than 4)
+				// refuses first, then an open alchemy window; else the title
+				// prompt opens.
+				const refusal = partyActiveJob( inventory.state().inventory ) !== STALL_NO_JOB_CLASS ?
+					{ category: STALL_NOTICE_CATEGORY, code: STALL_JOB_SUIT_CODE } :
+					command.alchemy ?
+					{ category: STALL_ALCHEMY_CATEGORY, code: STALL_ALCHEMY_CODE } :
+					null;
+				if ( refusal ) {
+					const notice = constantNativeNotice( refusal.category, refusal.code );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return null;
+				}
+				if ( inventory.stallPhase() !== "none" ) return null;
+				inventory.stallCommand( { kind: "stall-name" } );
+				dirty = true;
+				return null;
+			}
+			if ( command.kind.startsWith( "stall-" ) ) {
+				if ( !localGid ) throw Error( "Local player is not initialized" );
+				const frame = inventory.stallCommand( command as StallCommand );
+				dirty = true;
+				return frame;
+			}
 			if ( command.kind.startsWith( "exchange-" ) ) {
 				if ( !localGid ) throw Error( "Local player is not initialized" );
 				return inventory.exchangeCommand(
@@ -1780,6 +1828,23 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "select" ) {
 				const pose = movement.state().pose;
+				// 698740: a player keeping a stall is selected at once, then
+				// visited in reach or after the walk (693AD0 type 2).
+				if ( keepsStall( entity ) && entity.gid !== localGid ) {
+					const frame = selectEntity( entity, now );
+					const destination = pose ? interactionApproach( pose, entity ) : null;
+					if ( destination ) {
+						movement.request( destination, now, local?.mountedOn || undefined );
+						pickup.clear();
+						approach = interactionApproachTransition( approach, {
+							kind: "begin",
+							target: entity,
+							visit: true
+						} );
+						npcConversation.clear();
+					} else visitStall( entity );
+					return frame;
+				}
 				// 698740: an NPC or gate out of reach is walked to first; the
 				// select follows when the walk ends (the arrival block below).
 				if ( pose ) {
@@ -2202,6 +2267,27 @@ Packet handling must not depend on which HUD panel is currently open.
 						if ( gid === localGid || cosRecords.has( gid ) ) play( "SND_LEVUP", now );
 					}
 					return true;
+				}
+				// The stall window (inventory owner) folds its frames; the stall
+				// title frames also reach the entities (751430, 751520, 74F8F0).
+				const stallOutcome = inventory.stallReceive( frame, localGid ?? 0 );
+				if ( stallOutcome ) {
+					dirty = true;
+					if ( stallOutcome.notice ) {
+						const notice = constantNativeNotice( stallOutcome.notice.category, stallOutcome.notice.code );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+					// 755960: the owner's sale line, [buyer] bought item [name].
+					if ( stallOutcome.message ) {
+						notices = [ ...notices.slice( -99 ), {
+							key: stallOutcome.message.key,
+							value: 0,
+							arguments: stallOutcome.message.args,
+							nativeType: 0,
+							sequence: ++noticeSequence
+						} ];
+					}
+					if ( frame.opcode !== 0x33d1 ) return true;
 				}
 				// The exchange window (inventory owner) folds its frames first; its
 				// confirm, approve and cancel refusals stay the social lane's notices.
@@ -2829,7 +2915,8 @@ before take assembles the presentation snapshot.
 					// 693AD0 via CNavigationDeadreckon_OnTick: the pending select is
 					// dispatched once in reach or when the walk ends, wherever that is;
 					// the server's 4A8E10 range check decides.
-					selectEntity( approachingTarget, now );
+					if ( approach.visit ) visitStall( approachingTarget );
+					else selectEntity( approachingTarget, now );
 					approach = interactionApproachTransition( approach, { kind: "arrived" } );
 					dirty = true;
 				}
