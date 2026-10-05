@@ -225,11 +225,14 @@ type Runtime struct {
 	// UpdateQuestInventory is the quest lane's collect-objective updater. It
 	// runs inside the item authority transaction so inventory and derived
 	// quest progress cannot tear across a crash.
-	UpdateQuestInventory        func(character *enterworld.Character) ([]wire.Frame, bool)
-	AdvanceQuestMinute          func(character *enterworld.Character) []wire.Frame
-	AdvanceQuestItem            func(*enterworld.Character, int64) []wire.Frame
-	ForgetQuestItem             func(*enterworld.Character)
-	UseQuestItem                func(*enterworld.Character, string, simulation.Spawn, int64) ([]wire.Frame, bool)
+	UpdateQuestInventory func(character *enterworld.Character) ([]wire.Frame, bool)
+	AdvanceQuestMinute   func(character *enterworld.Character) []wire.Frame
+	AdvanceQuestItem     func(*enterworld.Character, int64) []wire.Frame
+	ForgetQuestItem      func(*enterworld.Character)
+	UseQuestItem         func(*enterworld.Character, string, simulation.Spawn, int64) ([]wire.Frame, bool)
+	// CapturedFollowerDied tells a capture-escort quest its captured monster
+	// died (CGObjCOS_Captured); called inside the owner's character door.
+	CapturedFollowerDied        func(*enterworld.Character) []wire.Frame
 	AdvanceQuestCalendar        func(nowMs int64)
 	ReleaseQuestCapturesOnDeath func(*enterworld.Character) ([]wire.Frame, bool)
 	QuestMonsterDrops           func(*enterworld.Character, string, func() (uint32, error)) []inventory.ItemAmount

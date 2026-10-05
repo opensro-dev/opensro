@@ -215,6 +215,7 @@ func (o *cosAbnormalOwner) commit() {
 					Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(o.c), false, pet.GID)})
 				o.public = append(o.public, o.rt.refreshMovementEffects(o.division, o.c, o.now)...)
 			}
+			o.rt.settleCompanionDeath(o)
 		}
 		o.changed = o.block.ClearAll(o) || o.changed
 		o.fatal = true

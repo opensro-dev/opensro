@@ -87,6 +87,10 @@ type MonsterMoverOps struct {
 	// FirstAttackGuard reads a player's live first-attack protection (the
 	// Bard's Noise) from the effect owner. nil protects nobody.
 	FirstAttackGuard func(divisionID string, playerGID uint32, nowMs int64) monster.FirstAttackGuard
+	// Companions lists a player's summoned, living, unmounted companions in
+	// its owner's container order (CCOSManager_AppendOwnedActorsInContainerOrder).
+	// nil means no companion is ever a target.
+	Companions func(divisionID string, ownerGID uint32, nowMs int64) []CompanionTarget
 
 	// shownMonsters tracks which monster gids each viewer session has
 	// been sent a spawn for (the peervis shownPeers pattern). On first sight,
@@ -252,6 +256,27 @@ type playerPose struct {
 	// Guard is the player's first-attack protection (the Bard's Noise),
 	// read from the action owner when the leg samples its players.
 	Guard monster.FirstAttackGuard
+	// OwnerGid names the player a companion entry belongs to; zero for a
+	// player. Companions are targets, never acquisition candidates.
+	OwnerGid uint32
+	// Band is a companion's COS band (TypeID 4).
+	Band uint8
+}
+
+/*
+================
+CompanionTarget
+
+One summoned, living companion a monster may strike: the action owner's
+projection of its world pose, body and status.
+================
+*/
+type CompanionTarget struct {
+	Gid              uint32
+	Pose             Spawn
+	BodyRadius       BodyRadius
+	NativeBodyStatus uint8
+	Band             uint8
 }
 
 /*
@@ -343,6 +368,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				player.Guard = ops.FirstAttackGuard(divisionID, player.Gid, nowMs)
 			}
 			players = append(players, player)
+			players = appendCompanionTargets(players, ops.companionTargets(divisionID, player, nowMs))
 		}
 		for _, gid := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.

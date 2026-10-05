@@ -9,6 +9,7 @@ petai.go - session-owned summoned-pet movement, pickup and peer presentation
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/grounditem"
 	"sort"
 	"strings"
@@ -234,7 +235,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		return frames
 	}
 	ref, found := refs.CharacterRefByCodename(cos.Codename)
-	if !found || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 3 || ref.TidWord>>11 > 4 {
+	if !found || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || !followingCOSBand(ref.TidWord>>11) {
 		state.follower = nil
 		return nil
 	}
@@ -354,7 +355,7 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		return nil
 	}
 	ref, ok := refs.CharacterRefByCodename(cos.Codename)
-	if !ok || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 1 || ref.TidWord>>11 > 4 {
+	if !ok || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 1 || ref.TidWord>>11 > 4 && ref.TidWord>>11 != domain.CapturedCOSBand {
 		return nil
 	}
 	var world simulation.WorldState
@@ -501,4 +502,51 @@ func (rt *Runtime) restoreCompanionRelocation(previous map[petOwnerKey]petSessio
 			*current = state
 		}
 	}
+}
+
+/*
+================
+followingCOSBand
+
+Pets (3, 4) and a captured quest monster (6) follow their owner on foot;
+transports (1, 2) move only with their rider.
+================
+*/
+func followingCOSBand(band uint16) bool {
+	return band == 3 || band == 4 || band == domain.CapturedCOSBand
+}
+
+/*
+================
+CompanionTargets
+
+The monster tick's companion targets for one owner: every summoned,
+living, unmounted companion in container order (5464E0), at its presented
+pose. A mounted ride is struck through its rider (monsterAttackStage).
+================
+*/
+func (rt *Runtime) CompanionTargets(division string, ownerGID uint32, nowMs int64) []simulation.CompanionTarget {
+	owner := rt.findCharacterByGid(division, ownerGID)
+	if owner == nil {
+		return nil
+	}
+	var out []simulation.CompanionTarget
+	for _, pet := range rt.CompanionPresentations(division, owner.Name) {
+		if pet.Mounted || pet.LifeState == wire.LifeStateDead {
+			continue
+		}
+		var record enterworld.CharacterCOS
+		rt.deps.Read(division, func() {
+			if live := owner.CompanionByGID(pet.Row.Gid); live != nil {
+				record = *live
+			}
+		})
+		ref, found := rt.cosReference(&record)
+		if !found {
+			continue
+		}
+		out = append(out, simulation.CompanionTarget{Gid: pet.Row.Gid, Pose: pet.World.LiveSpawnAt(nowMs),
+			BodyRadius: simulation.BodyRadius(ref.Parameters.BodyRadius), NativeBodyStatus: pet.NativeBodyStatus, Band: pet.Row.Band})
+	}
+	return out
 }
