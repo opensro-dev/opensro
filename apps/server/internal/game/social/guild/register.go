@@ -38,7 +38,7 @@ type Presence interface {
 // B77A; their typed policy lives in NoticeRefusalPayload. Every success send is presence-targeted (never a
 // division broadcast). Sends run AFTER the store doors return - never
 // inside the store lock.
-func Register(hub *transport.Hub, deps Dependencies, presence Presence) {
+func Register(hub *transport.Hub, deps Dependencies, presence Presence, unions *UnionRuntime) {
 	hub.Handle(OpGuildCreateRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
 		if !bound {
@@ -95,12 +95,14 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence) {
 			log.Debugf("guild: 0x%04X (kick) from unbound session %d discarded", opcode, s.ID)
 			return
 		}
+		guildID := characterGuild(actor)
 		outcome := HandleKick(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" {
 			log.Debugf("guild: 0x74B1 (kick) refused for %s: %s", actor.Name, outcome.Refusal)
 			return
 		}
 		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+		unions.GuildMembersChanged(divisionID, guildID)
 		log.Debugf("guild: %s kicked %s (subOp-3 fanned to the online members)", actor.Name, outcome.KickedName)
 	})
 	hub.Handle(OpGuildLeaveRequest, func(s *transport.Session, opcode uint16, payload []byte) {
@@ -109,6 +111,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence) {
 			log.Debugf("guild: 0x%04X (leave) from unbound session %d discarded", opcode, s.ID)
 			return
 		}
+		guildID := characterGuild(actor)
 		outcome := HandleLeave(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" {
 			log.Debugf("guild: 0x756E (leave) refused for %s: %s", actor.Name, outcome.Refusal)
@@ -116,6 +119,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence) {
 		}
 		_ = s.Send(OpGuildLeaveAck, outcome.AckPayload)
 		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+		unions.GuildMembersChanged(divisionID, guildID)
 		log.Debugf("guild: %s left their guild (selectedTargetGid=%d decoded, not validated; subOp-3 kind-1 fanned to %d named member(s))", actor.Name, outcome.SelectedTargetGid, len(outcome.MemberNames))
 	})
 	hub.Handle(OpGuildBreakRequest, func(s *transport.Session, opcode uint16, payload []byte) {
@@ -124,6 +128,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence) {
 			log.Debugf("guild: 0x%04X (break) from unbound session %d discarded", opcode, s.ID)
 			return
 		}
+		guildID := characterGuild(actor)
 		outcome := HandleBreak(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" {
 			log.Debugf("guild: 0x766E (break) refused for %s: %s", actor.Name, outcome.Refusal)
@@ -131,6 +136,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence) {
 		}
 		_ = s.Send(OpGuildBreakAck, outcome.AckPayload)
 		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+		unions.GuildBroken(divisionID, guildID)
 		log.Debugf("guild: %s dissolved their guild (selectedTargetGid=%d decoded, not validated; subOp-1 fanned to %d named member(s))", actor.Name, outcome.SelectedTargetGid, len(outcome.MemberNames))
 	})
 	hub.Handle(OpGuildNameGrantRequest, func(s *transport.Session, opcode uint16, payload []byte) {
@@ -163,6 +169,22 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence) {
 		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
 		log.Debugf("guild: %s granted a fortress position to %s (0xB65F acked; subOp-6 &0x40 fanned to %d named member(s))", actor.Name, outcome.TargetName, len(outcome.MemberNames))
 	})
+	hub.Handle(OpGuildPermissionRequest, func(s *transport.Session, opcode uint16, payload []byte) {
+		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
+		if !bound {
+			log.Debugf("guild: 0x%04X (permission) from unbound session %d discarded", opcode, s.ID)
+			return
+		}
+		outcome := HandlePermissionUpdate(deps, divisionID, actor, payload)
+		if outcome.Refusal != "" {
+			if outcome.ErrorPayload != nil {
+				_ = s.Send(OpGuildPermissionResult, outcome.ErrorPayload)
+			}
+			log.Debugf("guild: 0x744E (permission) refused for %s: %s", actor.Name, outcome.Refusal)
+			return
+		}
+		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+	})
 	hub.Handle(OpGuildGpDonateRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
 		if !bound {
@@ -192,4 +214,18 @@ func sendToOnlineMembers(presence Presence, divisionID string, names []string, p
 			_ = peer.Send(OpGuildUpdatePush, payload)
 		}
 	}
+}
+
+/*
+================
+characterGuild
+
+The guild a character stands in before a membership change (0 for none).
+================
+*/
+func characterGuild(c *enterworld.Character) int64 {
+	if c == nil || c.GuildID == nil {
+		return 0
+	}
+	return *c.GuildID
 }

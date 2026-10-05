@@ -242,8 +242,7 @@ type PlayerSpawnRow struct {
 	// G{prefix}_{guildId}_{crestParamA}.crb (@0x833e42) and
 	// A{prefix}_{crestParamB}_{crestParamC}.crb (@0x833e75). B/C are the
 	// alliance crest plane (the client globals data_ced398/data_ced394 on
-	// the 0x32C4 path, default 0); the gateway has no alliance state, so
-	// callers leave them 0.
+	// the 0x32C4 path, default 0): the guild's union id and emblem.
 	GuildID        uint32
 	GuildGrantName string
 	CrestParamA    uint32

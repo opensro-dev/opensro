@@ -3,6 +3,7 @@ package action
 import (
 	"testing"
 
+	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/instance"
 )
@@ -52,5 +53,39 @@ func TestFortressWarRevivesBySide(t *testing.T) {
 	}
 	if ended := rt.bodyRestores.due(1000 + siegeReviveUntouchableMs); len(ended) != 1 {
 		t.Fatal("the siege revival grace did not end at eleven seconds")
+	}
+}
+
+/*
+================
+TestFortressAllyRevivesAtTheFortressGate
+
+601700: a guild in the holder's union revives at a fortress gate inside
+the fortress world (TID4 1), not at the holder's revival gate.
+================
+*/
+func TestFortressAllyRevivesAtTheFortressGate(t *testing.T) {
+	rt, c, _ := fortressFixtureWithClock(t, testFieldFortGate)
+	rt.PushCharacterFrames, rt.PushDivisionPeerFrames = nil, nil
+	enterFortress(t, rt, c)
+	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, true)
+	rt.RevivalRoll = func() (uint32, error) { return 0, nil }
+	holder, ally := int64(77), int64(88)
+	for _, record := range rt.Fortresses.Records(testDivision) {
+		if record.CodeName == "FORTRESS_JANGAN" {
+			rt.Fortresses.Capture(testDivision, record.ID, holder, 0)
+		}
+	}
+	rt.Unions = union.New()
+	if _, err := rt.Unions.Join(testDivision, holder, ally); err != nil {
+		t.Fatal(err)
+	}
+	c.GuildID = &ally
+	point, ok := rt.fortressRevival(testDivision, c)
+	if !ok || point.world != instance.Pack(2, portalWorldLayer) || point.spawn.RegionID == 17735 {
+		t.Fatalf("the ally revived at %+v, want a fortress gate inside Jangan", point)
+	}
+	if len(rt.worldGates(2, gateKindFortressGate)) == 0 {
+		t.Fatal("Jangan has no fortress gate inside")
 	}
 }

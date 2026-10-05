@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/game/social/match"
 	"opensro.online/server/internal/game/social/mentor"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
@@ -58,6 +59,7 @@ type gameplayPlane struct {
 	chat          *chat.Runtime
 	parties       *party.Runtime
 	guildInvites  *guild.InviteRuntime
+	unions        *guild.UnionRuntime
 	mentorInvites *mentor.InviteRuntime
 	matches       *match.Runtime
 	siege         *siege.Lane
@@ -187,13 +189,24 @@ func newGameplayPlane(
 	deps.RelocateStrandedSpawn = water.RelocateStrandedSpawn
 
 	presence := livepresence.NewDirectory(ts.Hub)
+	unionAuthority := union.New()
+	if err := unionAuthority.Restore(ownedShard.ID, deps.Alliances); err != nil {
+		return nil, err
+	}
+	items.Unions = unionAuthority
+	movementRuntime.Unions = unionAuthority
+	unions := guild.NewUnionRuntime(deps, presence, unionAuthority, items.Fortresses)
 	communitySeeds := community.SeedFramesFunc(presence, deps.Letters)
 	deps.CommunitySeedFramesFor = func(
 		divisionID string,
 		character *enterworld.Character,
 	) []enterworld.Packet {
 		frames := communitySeeds(divisionID, character)
-		return guild.AppendSeedFrame(frames, deps.Guilds, presence, divisionID, character)
+		frames = guild.AppendSeedFrame(frames, deps.Guilds, presence, divisionID, character)
+		if frame, ok := unions.SeedFrame(divisionID, character); ok {
+			frames = append(frames, frame)
+		}
+		return frames
 	}
 
 	parties := party.NewRuntime(deps, presence)
@@ -228,8 +241,9 @@ func newGameplayPlane(
 		return false
 	}
 	guildInvites := guild.NewInviteRuntime(deps, presence)
+	guildInvites.Unions = unions
 	mentorInvites := mentor.NewInviteRuntime(deps, presence)
-	connectInvitationLanes(parties, guildInvites, mentorInvites, items)
+	connectInvitationLanes(parties, guildInvites, unions, mentorInvites, items)
 
 	matches := match.NewRuntime(deps, presence)
 	matches.MemberCountFor = func(divisionID, characterName string) int {
@@ -279,6 +293,7 @@ func newGameplayPlane(
 		presence:      presence,
 		parties:       parties,
 		guildInvites:  guildInvites,
+		unions:        unions,
 		mentorInvites: mentorInvites,
 		matches:       matches,
 		siege:         siegeRuntime,
@@ -320,11 +335,13 @@ and resurrection invitations without moving their state ownership.
 func connectInvitationLanes(
 	parties *party.Runtime,
 	guildInvites *guild.InviteRuntime,
+	unions *guild.UnionRuntime,
 	mentorInvites *mentor.InviteRuntime,
 	items *action.Runtime,
 ) {
 	resurrections := items.ResurrectionConsent()
 	parties.AddConsentArm(guildInvites)
+	parties.AddConsentArm(unions)
 	parties.AddConsentArm(mentorInvites)
 	parties.AddConsentArm(resurrections)
 
@@ -334,17 +351,26 @@ func connectInvitationLanes(
 	partyPending := parties.Registry().HasPendingInviteFor
 	guildInvites.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
+			unions.HasPendingInvite(divisionID, name) ||
+			mentorInvites.HasPendingInvite(divisionID, name) ||
+			resurrections.HasPendingInvite(divisionID, name)
+	}
+	unions.PeerPending = func(divisionID, name string) bool {
+		return partyPending(divisionID, name) ||
+			guildInvites.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
 			resurrections.HasPendingInvite(divisionID, name)
 	}
 	mentorInvites.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
+			unions.HasPendingInvite(divisionID, name) ||
 			resurrections.HasPendingInvite(divisionID, name)
 	}
 	items.ProposalPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
+			unions.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name)
 	}
 }
@@ -523,10 +549,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	community.RegisterFriend(hub, game.deps, game.presence)
 	community.RegisterLetter(hub, game.deps, game.presence)
 	game.chat = chat.Register(hub, game.deps, game.presence, game.parties.Registry())
+	game.chat.Unions = game.unions
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)
-	guild.Register(hub, game.deps, game.presence)
+	guild.Register(hub, game.deps, game.presence, game.unions)
+	game.unions.Register(hub)
 	game.guildInvites.Register(hub)
 	game.mentorInvites.Register(hub)
 	return nil

@@ -274,9 +274,9 @@ func (rt *Runtime) fortressApplicationRefusal(division string, c *enterworld.Cha
 	if _, owns := rt.Fortresses.OwnedFortress(division, guildID); owns {
 		return fortressErrOwns
 	}
-	// 61D300: an ally of the owning guild must apply as one. Guild unions
-	// are not part of this server, so every guild stands alone.
-	if kind != fortress.RequestAttack {
+	// 61D300: an ally of the owning guild must apply as one, and only an
+	// ally may.
+	if allied := record.GuildID != 0 && rt.Unions.Allied(division, record.GuildID, guildID); allied != (kind == fortress.RequestAlly) {
 		return fortressErrAlliance
 	}
 	if guild.Level < fortressApplyMinGuildLevel {

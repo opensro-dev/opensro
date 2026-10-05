@@ -194,7 +194,6 @@ apps/client-next/src/engine/foundation/ui/normal-tile.ts
 apps/client-next/src/engine/foundation/ui/notice-dialog.ts
 apps/client-next/src/engine/foundation/ui/notice-text.ts
 apps/client-next/src/engine/foundation/ui/overhead-layout.ts
-apps/client-next/src/engine/foundation/ui/party-proposal.ts
 apps/client-next/src/engine/foundation/ui/progression-bars.ts
 apps/client-next/src/engine/foundation/ui/quest-guide.ts
 apps/client-next/src/engine/foundation/ui/quest-presentation.ts

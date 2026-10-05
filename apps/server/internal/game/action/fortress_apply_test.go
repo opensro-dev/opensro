@@ -9,6 +9,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -198,5 +199,32 @@ func TestOfficialOpensTheApplicationWindow(t *testing.T) {
 	want := append(append([]byte{6, 1}, quads...), 1, 1, 0, 0, 0, 0)
 	if !bytes.Equal(out.Frames[0].Payload, want) {
 		t.Fatalf("status after applying %x", out.Frames[0].Payload)
+	}
+}
+
+/*
+================
+TestUnionAllyAppliesAsAnAlly
+
+61D300: a guild in the occupier's union must apply as an ally (kind 1),
+which registers it; applying to attack is refused.
+================
+*/
+func TestUnionAllyAppliesAsAnAlly(t *testing.T) {
+	rt, c := officialFixture(t)
+	rt.PushCharacterFrames = func(string, string, []wire.Frame) {}
+	occupier := int64(90)
+	rt.Fortresses.Occupy(testDivision, 1, occupier)
+	rt.Unions = union.New()
+	if _, err := rt.Unions.Join(testDivision, occupier, *c.GuildID); err != nil {
+		t.Fatal(err)
+	}
+	out := rt.HandleFortressInteraction(testDivision, c, applyFrame(fortressApply, 0))
+	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{fortressApply, 2, fortressErrAlliance}) {
+		t.Fatalf("an ally applying to attack answered %+v", out.Frames)
+	}
+	rt.HandleFortressInteraction(testDivision, c, applyFrame(fortressApply, 1))
+	if record, _ := rt.Fortresses.Get(testDivision, 1); record.Applicants[*c.GuildID] != fortress.RequestAlly {
+		t.Fatalf("the ally is not registered: %+v", record.Applicants)
 	}
 }

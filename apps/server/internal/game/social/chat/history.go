@@ -42,6 +42,9 @@ type Runtime struct {
 	mu      sync.Mutex
 	history map[string][][]byte
 	members map[uint64]publicMember
+
+	// Unions answers union chat; set by wiring before the hub serves.
+	Unions UnionView
 }
 
 /*

@@ -62,12 +62,15 @@ type PeerAppearance struct {
 	// size field at +0x7bc), so crests and banner labels can resolve for
 	// peers at all; CrestParam is the wire crestParamA - the
 	// G{prefix}_{guildId}_{crestParamA}.crb filename parameter
-	// (sub_833d40 @0x833e42). The alliance params B/C stay 0 (no alliance
-	// state exists - the client-global default).
+	// (sub_833d40 @0x833e42). AllianceID/AllianceCrest are params B/C: the
+	// peer guild's union and its emblem (the A{prefix}_{B}_{C}.crb file),
+	// zero outside a union.
 	GuildName      string
 	GuildID        uint32
 	GuildGrantName string
 	CrestParam     uint32
+	AllianceID     uint32
+	AllianceCrest  uint32
 	// FortSiegeAuthority is the guild sub-block's trailing team byte
 	// (client sub_869df0 @0x0086a1b2 -> sub_869940 -> CICPlayer+0x7e0),
 	// sourced from the member row's FortressRole - the SAME byte the
@@ -129,6 +132,8 @@ func BuildPeerSpawnRow(appearance PeerAppearance, gid uint32, pose Spawn) []byte
 		GuildID:            appearance.GuildID,
 		GuildGrantName:     appearance.GuildGrantName,
 		CrestParamA:        appearance.CrestParam,
+		CrestParamB:        appearance.AllianceID,
+		CrestParamC:        appearance.AllianceCrest,
 		FortSiegeAuthority: appearance.FortSiegeAuthority,
 		SpawnSkills:        appearance.SpawnSkills,
 		WithAppearTail:     true,

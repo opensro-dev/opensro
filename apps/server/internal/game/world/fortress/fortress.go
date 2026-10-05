@@ -405,6 +405,33 @@ func (a *Authority) Records(divisionID string) []Record {
 
 /*
 ================
+GuildInWar
+
+A guild fighting a running war: it holds, temporarily holds or applied
+to a fortress (SiegeManager_IsGuildOutOfWar 635470 asks every fortress
+whether the guild takes part). Union changes are refused then.
+================
+*/
+func (a *Authority) GuildInWar(divisionID string, guildID int64) bool {
+	if a == nil || guildID == 0 {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	state := a.divisionLocked(divisionID)
+	if !state.warActive {
+		return false
+	}
+	for _, record := range state.records {
+		if _, applied := record.Applicants[guildID]; applied || record.GuildID == guildID || record.TempGuildID == guildID {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
 WarActive
 ================
 */

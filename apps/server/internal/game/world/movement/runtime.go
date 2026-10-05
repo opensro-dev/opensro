@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
@@ -43,6 +44,8 @@ independently; the shared WorldStore protects cross-lane reads.
 type Runtime struct {
 	deps   Dependencies
 	Worlds *simulation.WorldStore
+	// Unions names a peer's guild union on its spawn row (nil: none).
+	Unions *union.Authority
 	// Validator is the deep-water destination gate; nil accepts everything
 	// (the reference behavior when the surface asset is unreadable).
 	Validator simulation.MovementValidator

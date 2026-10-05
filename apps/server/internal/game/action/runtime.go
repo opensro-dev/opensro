@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
+	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/skillobject"
@@ -124,6 +125,9 @@ type Runtime struct {
 	// Fortresses is the fortress occupation and war-mode authority
 	// (ConfigurePortals installs it from siegefortress.txt).
 	Fortresses *fortress.Authority
+	// Unions is the guild union authority the fortress war asks for the
+	// holder's allies (fortress_allies.go).
+	Unions *union.Authority
 	// Guilds is the persisted guild topology the fortress official reads
 	// (level, members, master).
 	Guilds enterworld.GuildStore

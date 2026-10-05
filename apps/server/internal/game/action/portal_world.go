@@ -173,7 +173,7 @@ job suit while no war runs (CSiegeFortressMgr_CheckWarEntry 61D3D0 returns
 before its war checks when MainProcess_IsMode42425 is clear); every other
 portal of the fortress takes only the owning guild
 (CSiegeFortressMgr_IsGuildOwner 6353F0) or an allied one (IsGuildAllied
-635440). Guild unions are not part of this server, so no guild is allied.
+635440, fortress_allies.go).
 ================
 */
 func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, destination portalDestination, world instance.Definition) byte {
@@ -196,7 +196,10 @@ func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, desti
 		guildID = *c.GuildID
 	}
 	if !rt.Fortresses.GuildOwns(division, fortressID, guildID) {
-		return portalFortressOwnersOnly
+		record, _ := rt.Fortresses.Get(division, fortressID)
+		if guildID == 0 || record.GuildID == 0 || !rt.Unions.Allied(division, record.GuildID, guildID) {
+			return portalFortressOwnersOnly
+		}
 	}
 	return 0
 }
@@ -227,9 +230,8 @@ func (rt *Runtime) fortressWarEntry(division string, c *enterworld.Character, fo
 	if _, applied := record.Applicants[guild]; !(occupied && record.GuildID == guild) && !applied {
 		return portalFortressNotInWar
 	}
-	holder := record.Holder()
-	defender := holder != 0 && holder == guild
-	defenders, attackers := rt.fortressSides(division, fortressID, holder)
+	defender := rt.fortressDefender(division, record, guild)
+	defenders, attackers := rt.fortressSides(division, record)
 	if defender {
 		if record.MaxEntrance>>1 <= defenders {
 			return portalFortressFull
@@ -253,11 +255,12 @@ func (rt *Runtime) fortressWarEntry(division string, c *enterworld.Character, fo
 ================
 fortressSides
 
-The PCs admitted to the fortress's world, split into the occupying guild
-and everyone else.
+The PCs admitted to the fortress's world, split into its defenders (the
+holder and its allies) and everyone else.
 ================
 */
-func (rt *Runtime) fortressSides(division string, fortressID uint32, owner int64) (defenders, attackers uint32) {
+func (rt *Runtime) fortressSides(division string, record fortress.Record) (defenders, attackers uint32) {
+	fortressID := record.ID
 	var world instance.ID
 	for _, definition := range instance.Shipped() {
 		if id, ok := rt.Fortresses.ForWorld(definition); ok && id == fortressID {
@@ -273,7 +276,7 @@ func (rt *Runtime) fortressSides(division string, fortressID uint32, owner int64
 		if c == nil {
 			return true
 		}
-		if owner != 0 && c.GuildID != nil && *c.GuildID == owner {
+		if c.GuildID != nil && rt.fortressDefender(division, record, *c.GuildID) {
 			defenders++
 		} else {
 			attackers++

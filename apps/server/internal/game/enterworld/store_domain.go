@@ -16,6 +16,7 @@ type GuildDonationResult = domain.GuildDonationResult
 type GuildRefusal = domain.GuildRefusal
 type GuildStore = domain.GuildStore
 type FortressStore = domain.FortressStore
+type AllianceStore = domain.AllianceStore
 
 const (
 	GuildRefusalNone                   = domain.GuildRefusalNone

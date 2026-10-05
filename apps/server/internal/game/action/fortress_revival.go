@@ -19,9 +19,8 @@ Each kind picks one matching teleport at random (51D260, rand() % count).
 INFERENCE: 51D260 joins a field gate to its fortress through the
 building's fortress codename, which the v1.150 teleportbuilding rows leave
 empty for STORE_CH_FORT_GATE1..3; this server joins them through the
-teleport link that leads from the gate into the fortress world. Without
-guild unions no guild is an ally, and no camps are placed yet, so an
-attacker revives at a field gate.
+teleport link that leads from the gate into the fortress world. No camps
+are placed yet, so an attacker revives at a field gate.
 
 ===========================================================================
 */
@@ -62,8 +61,19 @@ func (rt *Runtime) fortressRevival(division string, c *enterworld.Character) (tr
 		return travelPoint{}, false
 	}
 	record, _ := rt.Fortresses.Get(division, fortressID)
-	if c.GuildID != nil && *c.GuildID != 0 && *c.GuildID == record.Holder() {
-		if point, ok := rt.randomGate(rt.worldGates(definition.ID, gateKindRevival)); ok {
+	var guildID int64
+	if c.GuildID != nil {
+		guildID = *c.GuildID
+	}
+	kind := uint8(0)
+	switch {
+	case guildID != 0 && guildID == record.Holder():
+		kind = gateKindRevival
+	case rt.alliedWithFortress(division, record, guildID):
+		kind = gateKindFortressGate
+	}
+	if kind != 0 {
+		if point, ok := rt.randomGate(rt.worldGates(definition.ID, kind)); ok {
 			return point, true
 		}
 	}

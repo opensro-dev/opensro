@@ -19,9 +19,9 @@ and for the fort stone, while guard towers stand 0x3040 and during the
 countdown after the last falls 0x3046 (the fortress authority's
 capture.go).
 
-INFERENCE: the guild-owner tests also refuse the owner's allies through
-CGObjPC_GetFortressOrArenaContext; without guild unions that context is
-the attacker's own guild, so only the owner's members are refused.
+INFERENCE: the guild-owner tests read the attacker's side through
+CGObjPC_GetFortressOrArenaContext, so the owner's allies are refused the
+owner's structures as its members are (fortress_allies.go).
 
 ===========================================================================
 */
@@ -76,7 +76,7 @@ func (rt *Runtime) structureAttackRefusal(division string, attacker *enterworld.
 	// own (none are placed yet).
 	owner := record.Holder()
 	if target.Ref.TypeID4 == structureKindHeadquarters || owner == 0 ||
-		attacker.GuildID == nil || *attacker.GuildID != owner {
+		attacker.GuildID == nil || !rt.fortressDefender(division, record, *attacker.GuildID) {
 		return 0
 	}
 	switch target.Ref.TypeID4 {

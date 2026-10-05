@@ -100,6 +100,7 @@ func (game *gameplayPlane) worldBound(
 	game.parties.WorldBound(divisionID, character)
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)
+	game.unions.DropPendingInvite(divisionID, character.Name)
 	game.mentorInvites.WorldBound(session, divisionID, character)
 	var guildID int64
 	var cooldown []wire.Frame
@@ -126,6 +127,7 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session) {
 	game.parties.SessionClosed(session)
 	game.matches.SessionClosed(session)
 	game.guildInvites.SessionClosed(session)
+	game.unions.SessionClosed(session)
 	game.mentorInvites.SessionClosed(session)
 
 	character, divisionID, bound := enterworld.SessionCharacter(game.deps, session)

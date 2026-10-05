@@ -60,6 +60,9 @@ type InviteRuntime struct {
 
 	// Now is the clock the 30 s answer window runs on.
 	Now func() time.Time
+
+	// Unions patches the joined guild's union row (nil: no union lane).
+	Unions *UnionRuntime
 }
 
 // NewInviteRuntime builds the runtime over an empty pending table and retains
@@ -371,6 +374,7 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 			_ = peer.Send(OpGuildUpdatePush, joinPush)
 		}
 	}
+	r.Unions.GuildMembersChanged(divisionID, invite.GuildID)
 	log.Debugf("guild: %s joined guild %d on %s's invitation (%d member(s))", actor.Name, invite.GuildID, inviter.Name, len(joined))
 }
 

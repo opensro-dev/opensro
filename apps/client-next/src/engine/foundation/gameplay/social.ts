@@ -71,6 +71,8 @@ export interface GuildWar {
 export const RESURRECTION_PROPOSAL = 4;
 // The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).
 export const MUTATION_PROPOSAL = 8;
+// 7644E0 case 6: a guild master proposes a union (confirm box 0x1D).
+export const UNION_PROPOSAL = 6;
 export interface SocialState {
 	readonly wars?: readonly GuildWar[];
 	readonly roleUpdates?: readonly { name: string; role: number; }[];
@@ -98,7 +100,7 @@ export interface SocialState {
 	readonly allianceMaster?: number;
 	readonly allianceCrests?: readonly [number, number];
 	readonly invitation: {
-		readonly type: 1 | 2 | 3 | 5;
+		readonly type: 1 | 2 | 3 | 5 | 6;
 		readonly options?: number;
 		readonly gid: number;
 	} | null;
@@ -158,6 +160,17 @@ export type SocialCommand = {
 	kind: "guild-role";
 	id: number;
 	role: number;
+} | {
+	kind: "guild-union-invite";
+	gid: number;
+} | {
+	kind: "guild-union-leave";
+} | {
+	kind: "guild-union-kick";
+	id: number;
+} | {
+	kind: "guild-permissions";
+	grants: readonly { readonly id: number; readonly permissions: number; }[];
 };
 
 /*
@@ -253,8 +266,18 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 				u8( 1 );
 				u8( 1 );
 			} else if ( state.invitation.type !== 1 ) {
+				// CGInterface_OnMsgBoxResult 6971B0: the union box (case 0x1A)
+				// refuses with {2, 0}, the guild box (case 0xC) {2, 0x16}.
 				u8( 2 );
-				u8( state.invitation.type === 2 ? 0x0c : state.invitation.type === 3 ? 0x17 : 0x16 );
+				u8(
+					state.invitation.type === 2 ?
+						0x0c :
+						state.invitation.type === 3 ?
+						0x17 :
+						state.invitation.type === UNION_PROPOSAL ?
+						0 :
+						0x16
+				);
 			} else {
 				u8( 1 );
 				u8( c.automatic ? 0 : 2 );
@@ -314,6 +337,29 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 			u8( c.role );
 			opcode = 0x765f;
 			break;
+		// CIFAllianceGuild 5F7860 / 5F5690: invite the selected player's
+		// guild, leave, or expel a guild by id.
+		case "guild-union-invite":
+			u32( c.gid );
+			opcode = 0x7379;
+			break;
+		case "guild-union-leave":
+			opcode = 0x7795;
+			break;
+		case "guild-union-kick":
+			u32( c.id );
+			opcode = 0x7680;
+			break;
+		// CIFGuildGrantPower 5EE1C0: [u8 count] and [u32 jid][u32 rights].
+		case "guild-permissions":
+			if ( c.grants.length > 255 ) throw Error( "Too many rights" );
+			u8( c.grants.length );
+			for ( const grant of c.grants ) {
+				u32( grant.id );
+				u32( grant.permissions );
+			}
+			opcode = 0x744e;
+			break;
 	}
 	if ( c.kind.startsWith( "guild-" ) && c.kind !== "guild-create" && !state.guild ) {
 		throw Error( "You are not in a guild" );
@@ -369,6 +415,13 @@ export function socialPacket(
 			0xb40f,
 			0xb2bc,
 			0xb65f,
+			// Union invite/leave/expel and the rights grant answer
+			// [1] or [2][code] as category 0x10 notices (75CCA0, 75CCF0,
+			// 75CD40, 75CB80).
+			0xb379,
+			0xb795,
+			0xb680,
+			0xb44e,
 			0x341e,
 			0x32bb,
 			0x34f3,
@@ -538,7 +591,7 @@ export function socialPacket(
 		const type = u8();
 		if (
 			type !== 1 && type !== 2 && type !== 3 && type !== RESURRECTION_PROPOSAL && type !== 5 &&
-			type !== MUTATION_PROPOSAL
+			type !== UNION_PROPOSAL && type !== MUTATION_PROPOSAL
 		) {
 			return null;
 		}

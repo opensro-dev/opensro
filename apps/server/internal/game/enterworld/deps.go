@@ -133,6 +133,8 @@ type Deps struct {
 	TrainingCamps TrainingCampStore
 	// Fortresses keeps fortress occupation and the war's requests.
 	Fortresses FortressStore
+	// Alliances keeps the guild unions.
+	Alliances AllianceStore
 }
 
 // NpcSpawnPolicy exposes the composition-owned static NPC world through a

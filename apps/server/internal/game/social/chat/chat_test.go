@@ -281,7 +281,7 @@ TestHandleChatMalformedFrameSilent
 */
 func TestHandleChatMalformedFrameSilent(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
-	outcome := HandleChat(testDeps(sender), stubPresence{}, stubParties{}, testDivision, sender, []byte{0x01})
+	outcome := HandleChat(testDeps(sender), Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, []byte{0x01})
 	if outcome.Ack != nil || outcome.Broadcast != nil || len(outcome.Deliveries) != 0 || outcome.Refusal == "" {
 		t.Fatalf("malformed frame outcome %+v, want silent refusal", outcome)
 	}
@@ -296,7 +296,7 @@ TestHandleChatAllBroadcastByteExact
 */
 func TestHandleChatAllBroadcastByteExact(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
-	outcome := HandleChat(testDeps(sender), stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeAll, 0xFF, "", "hi"))
+	outcome := HandleChat(testDeps(sender), Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeAll, 0xFF, "", "hi"))
 	if !bytes.Equal(outcome.Ack, []byte{0x01, 0x01, 0xFF}) {
 		t.Fatalf("ack = % X, want 01 01 FF", outcome.Ack)
 	}
@@ -353,7 +353,7 @@ TestHandleChatWhisperDelivered
 func TestHandleChatWhisperDelivered(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	target := &enterworld.Character{ID: 8, Name: "Berk"}
-	outcome := HandleChat(testDeps(sender, target), stubPresence{"berk": true}, stubParties{}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Berk", "yo"))
+	outcome := HandleChat(testDeps(sender, target), Views{Presence: stubPresence{"berk": true}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Berk", "yo"))
 	if !bytes.Equal(outcome.Ack, []byte{0x01, 0x02, 0xFF}) {
 		t.Fatalf("ack = % X, want 01 02 FF", outcome.Ack)
 	}
@@ -383,7 +383,7 @@ func TestHandleChatWhisperBlockedAcksSuccessDeliversNothing(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "berk"}
 	target := &enterworld.Character{ID: 8, Name: "Cale", BlockedWhisperers: []string{"Berk"}}
 	deps := testDeps(sender, target)
-	outcome := HandleChat(deps, stubPresence{"cale": true}, stubParties{}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Cale", "yo"))
+	outcome := HandleChat(deps, Views{Presence: stubPresence{"cale": true}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Cale", "yo"))
 	if !bytes.Equal(outcome.Ack, []byte{0x01, 0x02, 0xFF}) {
 		t.Fatalf("blocked-whisper ack = % X, want the SUCCESS 01 02 FF", outcome.Ack)
 	}
@@ -392,7 +392,7 @@ func TestHandleChatWhisperBlockedAcksSuccessDeliversNothing(t *testing.T) {
 	}
 	// The GM flag changes nothing (no bypass).
 	sender.GMPrivilege = true
-	outcome = HandleChat(deps, stubPresence{"cale": true}, stubParties{}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Cale", "yo"))
+	outcome = HandleChat(deps, Views{Presence: stubPresence{"cale": true}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Cale", "yo"))
 	if len(outcome.Deliveries) != 0 {
 		t.Fatal("GM sender bypassed the whisper block")
 	}
@@ -408,17 +408,17 @@ func TestHandleChatWhisperTargetMissing(t *testing.T) {
 	offline := &enterworld.Character{ID: 8, Name: "Berk"}
 	deps := testDeps(sender, offline)
 	// Nonexistent name -> error 3, echoing {type, second}.
-	outcome := HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Nobody", "yo"))
+	outcome := HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Nobody", "yo"))
 	if !bytes.Equal(outcome.Ack, []byte{0x02, 0x03, 0x02, 0xFF}) {
 		t.Fatalf("nonexistent-target ack = % X, want 02 03 02 FF", outcome.Ack)
 	}
 	// Existing but OFFLINE -> the same error 3 (no cross-shard forward).
-	outcome = HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Berk", "yo"))
+	outcome = HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "Berk", "yo"))
 	if !bytes.Equal(outcome.Ack, []byte{0x02, 0x03, 0x02, 0xFF}) {
 		t.Fatalf("offline-target ack = % X, want 02 03 02 FF", outcome.Ack)
 	}
 	// Empty name -> error 3 too (the dump's empty-name arm).
-	outcome = HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "", "yo"))
+	outcome = HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "", "yo"))
 	if !bytes.Equal(outcome.Ack, []byte{0x02, 0x03, 0x02, 0xFF}) {
 		t.Fatalf("empty-target ack = % X, want 02 03 02 FF", outcome.Ack)
 	}
@@ -433,7 +433,7 @@ func TestHandleChatWhisperSelf(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	// Success, NO delivery - even with the sender online and the casing
 	// differing (names are CI-unique).
-	outcome := HandleChat(testDeps(sender), stubPresence{"alfa": true}, stubParties{}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "ALFA", "yo"))
+	outcome := HandleChat(testDeps(sender), Views{Presence: stubPresence{"alfa": true}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeWhisper, 0xFF, "ALFA", "yo"))
 	if !bytes.Equal(outcome.Ack, []byte{0x01, 0x02, 0xFF}) {
 		t.Fatalf("self-whisper ack = % X, want 01 02 FF", outcome.Ack)
 	}
@@ -453,7 +453,7 @@ func TestHandleChatPartyMembershipGate(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	deps := testDeps(sender)
 	// No party -> error 0x0A.
-	outcome := HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeParty, 0xFF, "", "hi"))
+	outcome := HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeParty, 0xFF, "", "hi"))
 	if !bytes.Equal(outcome.Ack, []byte{0x02, 0x0A, 0x04, 0xFF}) {
 		t.Fatalf("partyless ack = % X, want 02 0A 04 FF", outcome.Ack)
 	}
@@ -463,7 +463,7 @@ func TestHandleChatPartyMembershipGate(t *testing.T) {
 		{MemberID: 2, Name: "Berk"},
 		{MemberID: 3, Name: "Cale"},
 	}}}
-	outcome = HandleChat(deps, stubPresence{}, parties, testDivision, sender, chatFrame(ChatTypeParty, 0xFF, "", "hi"))
+	outcome = HandleChat(deps, Views{Presence: stubPresence{}, Parties: parties}, testDivision, sender, chatFrame(ChatTypeParty, 0xFF, "", "hi"))
 	if !bytes.Equal(outcome.Ack, []byte{0x01, 0x04, 0xFF}) {
 		t.Fatalf("party ack = % X, want 01 04 FF", outcome.Ack)
 	}
@@ -485,22 +485,22 @@ func TestHandleChatGuildAndUnionGates(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	deps := testDeps(sender)
 	// No guild door at all -> 0x0B for guild chat, 0x0B for union chat.
-	outcome := HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeGuild, 0xFF, "", "hi"))
+	outcome := HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeGuild, 0xFF, "", "hi"))
 	if !bytes.Equal(outcome.Ack, []byte{0x02, 0x0B, 0x05, 0xFF}) {
 		t.Fatalf("guildless ack = % X, want 02 0B 05 FF", outcome.Ack)
 	}
-	outcome = HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeUnion, 0xFF, "", "hi"))
+	outcome = HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeUnion, 0xFF, "", "hi"))
 	if !bytes.Equal(outcome.Ack, []byte{0x02, 0x0B, 0x0B, 0xFF}) {
 		t.Fatalf("guildless union ack = % X, want 02 0B 0B FF", outcome.Ack)
 	}
 
 	// In a guild: guild chat fans to members except the sender (by
-	// CharID); union chat still refuses 0x0C (no alliance machinery).
+	// CharID); union chat with no union lane refuses 0x0C (no union).
 	deps.Guilds = stubGuilds{guildID: 3, members: []enterworld.GuildMemberRecord{
 		{CharID: 7, Name: "Alfa"},
 		{CharID: 8, Name: "Berk"},
 	}}
-	outcome = HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeGuild, 0xFF, "", "hi"))
+	outcome = HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeGuild, 0xFF, "", "hi"))
 	if !bytes.Equal(outcome.Ack, []byte{0x01, 0x05, 0xFF}) {
 		t.Fatalf("guild ack = % X, want 01 05 FF", outcome.Ack)
 	}
@@ -511,10 +511,39 @@ func TestHandleChatGuildAndUnionGates(t *testing.T) {
 	if !bytes.Equal(outcome.Deliveries[0].Payload, want) {
 		t.Fatalf("guild 0x3667 = % X, want % X", outcome.Deliveries[0].Payload, want)
 	}
-	outcome = HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeUnion, 0xFF, "", "hi"))
+	outcome = HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeUnion, 0xFF, "", "hi"))
 	if !bytes.Equal(outcome.Ack, []byte{0x02, 0x0C, 0x0B, 0xFF}) {
 		t.Fatalf("in-guild union ack = % X, want 02 0C 0B FF", outcome.Ack)
 	}
+
+	// A union lane answers the audience and the right.
+	views := Views{Unions: stubUnions{names: []string{"Cale"}}}
+	outcome = HandleChat(deps, views, testDivision, sender, chatFrame(ChatTypeUnion, 0xFF, "", "hi"))
+	if !bytes.Equal(outcome.Ack, []byte{0x01, 0x0B, 0xFF}) || len(outcome.Deliveries) != 1 || outcome.Deliveries[0].TargetName != "Cale" {
+		t.Fatalf("union line ack % X deliveries %+v", outcome.Ack, outcome.Deliveries)
+	}
+	if want := append([]byte{0x0B, 0x04, 0x00, 'A', 'l', 'f', 'a'}, utf16LE("hi")...); !bytes.Equal(outcome.Deliveries[0].Payload, want) {
+		t.Fatalf("union 0x3667 = % X, want % X", outcome.Deliveries[0].Payload, want)
+	}
+	views = Views{Unions: stubUnions{code: 0x0E}}
+	outcome = HandleChat(deps, views, testDivision, sender, chatFrame(ChatTypeUnion, 0xFF, "", "hi"))
+	if !bytes.Equal(outcome.Ack, []byte{0x02, 0x0E, 0x0B, 0xFF}) {
+		t.Fatalf("no-right union ack = % X, want 02 0E 0B FF", outcome.Ack)
+	}
+}
+
+/*
+================
+stubUnions
+================
+*/
+type stubUnions struct {
+	names []string
+	code  uint8
+}
+
+func (s stubUnions) UnionChatAudience(string, *enterworld.Character) ([]string, uint8) {
+	return s.names, s.code
 }
 
 /*
@@ -527,7 +556,7 @@ func TestHandleChatUncomposableTypeAcksInvalidCommand(t *testing.T) {
 	deps := testDeps(sender)
 	// A forged notice (7) or stall (9) must NEVER broadcast - error 8.
 	for _, chatType := range []uint8{6, 7, 9, 0x0D, 0x10, 0xFE} {
-		outcome := HandleChat(deps, stubPresence{}, stubParties{}, testDivision, sender, chatFrame(chatType, 0xFF, "", "hi"))
+		outcome := HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(chatType, 0xFF, "", "hi"))
 		if !bytes.Equal(outcome.Ack, []byte{0x02, 0x08, chatType, 0xFF}) {
 			t.Fatalf("type 0x%02X ack = % X, want 02 08 %02X FF", chatType, outcome.Ack, chatType)
 		}
@@ -546,7 +575,7 @@ TestHandleChatSecondByteEchoed
 */
 func TestHandleChatSecondByteEchoed(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
-	outcome := HandleChat(testDeps(sender), stubPresence{}, stubParties{}, testDivision, sender, chatFrame(ChatTypeAll, 0x2A, "", "hi"))
+	outcome := HandleChat(testDeps(sender), Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(ChatTypeAll, 0x2A, "", "hi"))
 	if !bytes.Equal(outcome.Ack, []byte{0x01, 0x01, 0x2A}) {
 		t.Fatalf("ack = % X, want 01 01 2A", outcome.Ack)
 	}
