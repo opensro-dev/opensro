@@ -267,9 +267,12 @@ field; anything else (extra, missing or different) is a failed step.
 function matchesDeclaredServerContract( output ) {
 	const declared =
 		JSON.parse( readFileSync( path.join( serverRoot, "ops/release/compatibility.json" ), "utf8" ) ).server;
+	// The step's output also carries Go's own progress ("go: downloading ..."
+	// on a cold module cache): the contract is the one JSON line it prints.
+	const line = output.split( /\r?\n/ ).reverse().find( ( row ) => row.trim().startsWith( "{" ) );
 	let compiled;
 	try {
-		compiled = JSON.parse( output );
+		compiled = JSON.parse( line ?? "" );
 	} catch {
 		return false;
 	}
