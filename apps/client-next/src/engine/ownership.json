@@ -80,6 +80,7 @@
     "src/engine/runtime/renderer/characters/palette-streams.ts": "src/engine/runtime/renderer/characters/characters.ts",
     "src/engine/runtime/renderer/characters/particle-streams.ts": "src/engine/runtime/renderer/characters/characters.ts",
     "src/engine/runtime/characters/state-index.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/characters/structure-visuals.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/skill-objects.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/renderer/characters/portrait.ts": "src/engine/runtime/renderer/renderer.ts",
     "src/engine/runtime/renderer/characters/animation/animation.ts": "src/engine/runtime/renderer/characters/characters.ts",

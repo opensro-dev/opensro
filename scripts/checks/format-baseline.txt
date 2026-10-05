@@ -43,9 +43,7 @@ apps/client-next/src/engine/foundation/animation/impact-source.ts
 apps/client-next/src/engine/foundation/animation/item-effect-clock.ts
 apps/client-next/src/engine/foundation/animation/locomotion-blend.ts
 apps/client-next/src/engine/foundation/animation/model-animation.ts
-apps/client-next/src/engine/foundation/animation/model-emission.ts
 apps/client-next/src/engine/foundation/animation/model-material-clock.ts
-apps/client-next/src/engine/foundation/animation/model-particles.ts
 apps/client-next/src/engine/foundation/animation/moving-stage.ts
 apps/client-next/src/engine/foundation/animation/native-clip.ts
 apps/client-next/src/engine/foundation/animation/one-shot-layers.ts

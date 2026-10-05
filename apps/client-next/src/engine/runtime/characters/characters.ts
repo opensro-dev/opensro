@@ -49,6 +49,8 @@ import { createModifierDelta } from "@/engine/foundation/rendering/modifier-delt
 import { animationActivation, type AnimationActivation } from "@/engine/foundation/animation/animation-activation";
 import { createPresentationIds } from "@/engine/foundation/animation/presentation-ids";
 import { createModelEmission, modelAmbientParticles } from "@/engine/foundation/animation/model-emission";
+import { readStructureVisuals, type StructureVisuals } from "@/engine/foundation/rendering/structure-stage";
+import { createStructureVisuals } from "./structure-visuals";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
 import {
 	groundVisualClock,
@@ -127,6 +129,11 @@ interface Resource {
 	modifierSelectors?: readonly ModifierSelector[];
 	modifierBindings?: readonly ModelAnimationBinding[];
 	ambientParticles?: readonly ModelParticle[];
+	// The manifest's atstructeffect fields, read into structureVisuals.
+	structureStages?: unknown;
+	structureSounds?: unknown;
+	structureDamageEffects?: unknown;
+	structureVisuals?: StructureVisuals;
 	materialKind?: number;
 	materialVariants?: Readonly<Record<string, string>>;
 	scalePercent?: number;
@@ -382,6 +389,7 @@ export function createCharacterPresentation(
 		}
 	>();
 	const modelEmission = createModelEmission( allocateActor );
+	const structureVisuals = createStructureVisuals();
 	const orbs = createOrbs( play, random, allocateActor ), scenery = createSceneryEmission( allocateActor );
 	const statusOwner = createStatusOwner();
 	const skillObjects = createSkillObjects( allocateActor );
@@ -544,6 +552,9 @@ export function createCharacterPresentation(
 	*/
 	function resourceFor( entity: EntityState ): Resource | undefined {
 		const resource = catalog.get( appearanceRef( entity ) );
+		const staged = resource?.structureVisuals &&
+			structureVisuals.appearance( entity.gid, resource.glb, resource.ambientParticles ?? [] );
+		if ( resource && staged ) return { ...resource, glb: staged.glb, ambientParticles: staged.particles };
 		const variant = resource && entity.kind === "monster" ?
 			resource.materialVariants
 				?.[String( monsterMaterialSlot( entity.rarity ?? 0, entity.tidWord ?? 0, resource.materialKind ) )] :
@@ -641,6 +652,7 @@ export function createCharacterPresentation(
 				if ( event.kind === "reset" ) {
 					combatStanceEnds.clear();
 					modelEmission.reset();
+					structureVisuals.reset();
 					animationEmission.reset();
 					stageAnimations.clear();
 					groundClocks.clear();
@@ -680,6 +692,7 @@ export function createCharacterPresentation(
 				if ( event.kind === "reset" ) {
 					combatStanceEnds.clear();
 					modelEmission.reset();
+					structureVisuals.reset();
 					animationEmission.reset();
 					stageAnimations.clear();
 					groundClocks.clear();
@@ -900,8 +913,10 @@ export function createCharacterPresentation(
 									!path.endsWith( ".glb" )
 								))
 						) throw Error( "Invalid monster material variants" );
+						const staged = readStructureVisuals( row, modelAmbientParticles );
 						nextCatalog.set( row.refObjId, {
 							...row,
+							...(staged ? { structureVisuals: staged } : {}),
 							ambientParticles: modelAmbientParticles( row.particleModifiers ),
 							animationParticles: modelAnimationParticles( row.particleModifiers ),
 							animationParticlePaths: [
@@ -1569,6 +1584,34 @@ export function createCharacterPresentation(
 					critical,
 					berserk: entity.appearanceState?.[2] === 1
 				};
+			}
+			// 4F7CC0: every staged structure re-evaluates on its own one-second
+			// timer; a stage reached by rising damage plays its sound (4F78A0).
+			for (
+				const event of structureVisuals.step(
+					entities.flatMap( entity => {
+						const staged = entity.kind === "structure" ?
+							catalog.get( appearanceRef( entity ) )?.structureVisuals :
+							undefined;
+						return staged ? [ { entity, visuals: staged, hp: vitalsByGid.get( entity.gid )?.hp } ] : [];
+					} ),
+					simulationMs ?? seconds * 1000
+				)
+			) {
+				// Camera scripts run on the presentation clock, like the skill shakes.
+				if ( event.shake ) effects.structureShake( seconds * 1000 );
+				const entity = entitiesByGid.get( event.gid ),
+					resource = entity ? catalog.get( appearanceRef( entity ) ) : undefined;
+				if ( !entity || !resource || !event.handle ) continue;
+				const pose = logicalPose( entity );
+				sounds.emit(
+					`structure:${event.gid}:${event.handle}:${seconds}`,
+					resource.soundProfileName ?? soundProfiles.get( resource.codename ) ?? resource.codename,
+					[ event.handle ],
+					soundContext( entity ),
+					[ (pose.regionId & 255) * 1920 + pose.x, pose.y, (pose.regionId >>> 8) * 1920 + pose.z ],
+					seconds
+				);
 			}
 			// The local press's prediction animates beside the server's casts.
 			const animated = gameplay?.castPrediction ?
@@ -3541,6 +3584,7 @@ export function createCharacterPresentation(
 			scenery.reset();
 			entityLod.reset();
 			modelEmission.reset();
+			structureVisuals.reset();
 			animationEmission.reset();
 			stageAnimations.clear();
 			groundClocks.clear();
@@ -3603,6 +3647,7 @@ export function createCharacterPresentation(
 			scenery.reset();
 			entityLod.reset();
 			modelEmission.reset();
+			structureVisuals.reset();
 			animationEmission.reset();
 			stageAnimations.clear();
 			groundClocks.clear();

@@ -22,6 +22,7 @@ var evidenceCommands = []evidenceCommand{
 	{name: "performance-ring", summary: "measure worst-case scoped monster population", run: runPerformanceRing},
 	{name: "spawnable-npcs", summary: "emit the evidence-filtered NPC asset roster", run: runSpawnableNPCs},
 	{name: "spawnable-monsters", summary: "emit the evidence-filtered monster asset roster", run: runSpawnableMonsters},
+	{name: "fortress-structures", summary: "emit the fortress structure asset roster", run: runFortressStructures},
 }
 
 func main() {

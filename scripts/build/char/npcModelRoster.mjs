@@ -133,6 +133,18 @@ export function loadSpawnableNpcRoster() {
 
 /*
 ================
+loadFortressStructureRoster
+
+Every fortress structure reference with hit points (sro-evidence
+fortress-structures): a guild may install any of them.
+================
+*/
+export function loadFortressStructureRoster() {
+	return loadServerRoster( "fortress-structures", "sro-fortress-structure-roster", "fortress structure" );
+}
+
+/*
+================
 enabledCosReferences
 
 Every enabled COS reference the world can spawn, in every TypeID4 band: 1

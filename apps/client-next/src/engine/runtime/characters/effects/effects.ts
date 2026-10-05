@@ -2781,6 +2781,18 @@ export function createCharacterEffects(
 		},
 		/*
 		================
+		structureShake
+
+		CICATStruct_SetVisualStage (4F78A0) shakes the camera on a stage its
+		atstructeffect sound marks: CGInterface_TriggerCameraShake (68F6D0)
+		mode 0, amplitude 50, 500 ms, a 20 ms period.
+		================
+		*/
+		structureShake( atMs: number ) {
+			cameraEvents.push( { atMs: Math.trunc( atMs ), amplitude: 50, durationMs: 500, periodMs: 20 } );
+		},
+		/*
+		================
 		takeCameraScripts
 		Hands over the queued camera scripts.
 		================
