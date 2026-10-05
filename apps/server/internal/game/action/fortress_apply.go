@@ -78,8 +78,8 @@ func fortressRefusal(subtype, code uint8) OpResult {
 ================
 HandleFortressInteraction
 
-0x71E1. Subtypes other than the war application belong to the fortress
-manager's other functions and answer as an unknown operation.
+0x71E1. Decoding is shared with the manager services; each authority owns
+the corresponding state and admission.
 ================
 */
 func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Character, payload []byte) OpResult {
@@ -95,6 +95,11 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 		return OpResult{}
 	}
 	gid := request.Target
+	if subtype == siege.ActionSchedule || subtype == siege.ActionAide {
+		unlock := rt.lockDivision(division)
+		defer unlock()
+		return rt.fortressServiceQuery(division, c, request)
+	}
 	if subtype == fortressWarStatus {
 		unlock := rt.lockDivision(division)
 		defer unlock()
