@@ -125,15 +125,32 @@ func (c MonsterSpawnConfig) MonsterRefObjSnapshot(registry *simulation.MonsterSt
 	rows := make([]RefObjRow, 0, len(refs))
 	for _, ref := range refs {
 		rows = append(rows, RefObjRow{
-			RefObjID:  ref.RefObjID,
-			TidWord:   ref.TidWord,
+			RefObjID: ref.RefObjID,
+			// The client's RefObj word carries TID4 in bits 11-15: its
+			// thief/hunter (861B00) and headquarters (4FA0B0) rows read
+			// extra fields by it.
+			TidWord:   monster.NativeTypeWord(ref),
 			Codename:  ref.Codename,
 			NameStrID: ref.NameStrID,
 			Name:      ref.DisplayName(),
 			Level:     ref.Level,
 			MaxHP:     ref.MaxHP,
-			Kind:      "monster",
+			Kind:      refObjKind(ref),
 		})
 	}
 	return rows
+}
+
+/*
+================
+refObjKind
+
+The mirror row's kind: fortress structures decode as CICATStruct.
+================
+*/
+func refObjKind(ref monster.MonsterRef) string {
+	if ref.Structure {
+		return "structure"
+	}
+	return "monster"
 }

@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+select_test.go - Object selection admission and native response payloads.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -20,6 +28,11 @@ import (
 // oracle bytes below); player and ground grants and every refusal stay
 // frameless - see the select.go package comment.
 
+/*
+================
+selectBody
+================
+*/
 func selectBody(gid uint32) []byte {
 	out := make([]byte, 4)
 	binary.LittleEndian.PutUint32(out, gid)
@@ -29,12 +42,22 @@ func selectBody(gid uint32) []byte {
 // selectTestRuntime pins the env-derived NPC gate OFF so an ambient
 // MISSION_SPAWN_NPCS=1 cannot flake the suite (the movement testRuntime
 // precedent); tests that want the roster set NpcSpawn explicitly.
+/*
+================
+selectTestRuntime
+================
+*/
 func selectTestRuntime(character *enterworld.Character) *Runtime {
 	rt, _ := newTestRuntime(character, testItems())
 	rt.NpcSpawn = enterworld.NpcSpawnConfig{}
 	return rt
 }
 
+/*
+================
+setSelectCharacters
+================
+*/
 func setSelectCharacters(t *testing.T, rt *Runtime, characters enterworld.StaticCharacterSource) {
 	t.Helper()
 	deps, ok := rt.deps.(*enterworld.Deps)
@@ -44,6 +67,11 @@ func setSelectCharacters(t *testing.T, rt *Runtime, characters enterworld.Static
 	deps.Characters = characters
 }
 
+/*
+================
+TestObjectSelectRecordsSelfAndPeerAndGround
+================
+*/
 func TestObjectSelectRecordsSelfAndPeerAndGround(t *testing.T) {
 	character := testCharacter()
 	peer := &enterworld.Character{ID: 9, Name: "peerChar", ModelCodename: "CHAR_EU_MAN1"}
@@ -79,6 +107,11 @@ func TestObjectSelectRecordsSelfAndPeerAndGround(t *testing.T) {
 	}
 }
 
+/*
+================
+TestObjectSelectNpcGidsFollowTheSpawnGate
+================
+*/
 func TestObjectSelectNpcGidsFollowTheSpawnGate(t *testing.T) {
 	character := testCharacter()
 	rt := selectTestRuntime(character)
@@ -102,6 +135,11 @@ func TestObjectSelectNpcGidsFollowTheSpawnGate(t *testing.T) {
 	}
 }
 
+/*
+================
+TestObjectSelectMonsterGrantCarriesCurrentHPAndEnforcesViewerScope
+================
+*/
 func TestObjectSelectMonsterGrantCarriesCurrentHPAndEnforcesViewerScope(t *testing.T) {
 	character := testCharacter()
 	const (
@@ -183,6 +221,11 @@ func TestObjectSelectMonsterGrantCarriesCurrentHPAndEnforcesViewerScope(t *testi
 	}
 }
 
+/*
+================
+TestObjectSelectRefusesUnknownAndMalformedSilently
+================
+*/
 func TestObjectSelectRefusesUnknownAndMalformedSilently(t *testing.T) {
 	character := testCharacter()
 	rt := selectTestRuntime(character)
@@ -231,6 +274,11 @@ func TestObjectSelectRefusesUnknownAndMalformedSilently(t *testing.T) {
 // 200001 is the stable identity of the first explicit test-roster row. The
 // bytes are pasted, not rebuilt through the same encoder the handler uses,
 // so an endianness or base drift on either side fails here.
+/*
+================
+TestObjectSelectAcceptsTheLiveNativeTraceBytes
+================
+*/
 func TestObjectSelectAcceptsTheLiveNativeTraceBytes(t *testing.T) {
 	// The traced NPC identity was 200001.
 	character := &enterworld.Character{ID: 1, Name: "asd2", ModelCodename: "CHAR_CH_MAN_ADVENTURER"}
@@ -253,6 +301,11 @@ func TestObjectSelectAcceptsTheLiveNativeTraceBytes(t *testing.T) {
 // TestObjectSelectIsDivisionScoped pins the isolation a missing division
 // filter would break: a character in ANOTHER division is not a selectable
 // object, and a recorded selection is keyed to the acting division only.
+/*
+================
+TestObjectSelectIsDivisionScoped
+================
+*/
 func TestObjectSelectIsDivisionScoped(t *testing.T) {
 	character := testCharacter()
 	stranger := &enterworld.Character{ID: 21, Name: "stranger", ModelCodename: "CHAR_EU_MAN1"}
@@ -288,6 +341,11 @@ func TestObjectSelectIsDivisionScoped(t *testing.T) {
 // liveness gate: a drop is selectable only while the division registry still
 // holds it - once picked up (removed), the same gid must refuse, and the
 // refusal must not disturb the previously recorded selection.
+/*
+================
+TestObjectSelectGroundLivenessFollowsTheRegistry
+================
+*/
 func TestObjectSelectGroundLivenessFollowsTheRegistry(t *testing.T) {
 	character := testCharacter()
 	rt := selectTestRuntime(character)
@@ -318,6 +376,11 @@ func TestObjectSelectGroundLivenessFollowsTheRegistry(t *testing.T) {
 // encoding/binary (never wire's Writer, so the assertion cannot
 // inherit an encoder bug): {u8 result 1}{u32le gid}{u8 vitalsMask 0}
 // {u32le capabilityFlags}{u8 npcExtra 0}.
+/*
+================
+b45aGrantOracle
+================
+*/
 func b45aGrantOracle(gid, flags uint32) []byte {
 	out := []byte{0x01}
 	out = binary.LittleEndian.AppendUint32(out, gid)
@@ -330,9 +393,13 @@ func b45aGrantOracle(gid, flags uint32) []byte {
 // TestObjectSelectNpcGrantAnswersTheTalkGrant pins the emission the NPC
 // talk window opens from: the live roster-NPC grant carries exactly one
 // 0xB45A frame whose bytes match the hand-rolled oracle - NPC_EU_SMITH's
-// runtime capability row is 0x03 (shop|talk). The evidence catalogue also
-// records action-0xb, but runtime must not advertise that button until its
-// gameplay owner is reconstructed.
+// word is 0x8000000B: shop, talk, repair and the smith avatar magic grant
+// (4C6350 option 0x20; 75AE50 dispatches the client grant window).
+/*
+================
+TestObjectSelectNpcGrantAnswersTheTalkGrant
+================
+*/
 func TestObjectSelectNpcGrantAnswersTheTalkGrant(t *testing.T) {
 	character := testCharacter()
 	rt := selectTestRuntime(character)
@@ -351,7 +418,7 @@ func TestObjectSelectNpcGrantAnswersTheTalkGrant(t *testing.T) {
 	if frame.Opcode != wire.OpObjectSelectResult {
 		t.Fatalf("grant frame opcode = 0x%04X, want 0xB45A", frame.Opcode)
 	}
-	if want := b45aGrantOracle(npcGid, 0x03); !bytes.Equal(frame.Payload, want) {
+	if want := b45aGrantOracle(npcGid, 0x8000000b); !bytes.Equal(frame.Payload, want) {
 		t.Errorf("0xB45A payload\n got % X\nwant % X", frame.Payload, want)
 	}
 	// The grant still records the selection (guild create reads it).
@@ -365,6 +432,11 @@ func TestObjectSelectNpcGrantAnswersTheTalkGrant(t *testing.T) {
 // select, so both record selection WITHOUT inventing a 0xB45A body. The
 // complete client fold can consume those class arms if a future authority
 // supplies a measured shape.
+/*
+================
+TestObjectSelectPlayerAndGroundGrantsStayFrameless
+================
+*/
 func TestObjectSelectPlayerAndGroundGrantsStayFrameless(t *testing.T) {
 	character := testCharacter()
 	rt := selectTestRuntime(character)
@@ -396,6 +468,11 @@ func TestObjectSelectPlayerAndGroundGrantsStayFrameless(t *testing.T) {
 //
 // The test appends a synthetic def to this runtime's owned roster. Global
 // world policy and parallel runtimes remain isolated.
+/*
+================
+TestObjectSelectUnknownCodenameNpcStillRefreshesBinding
+================
+*/
 func TestObjectSelectUnknownCodenameNpcStillRefreshesBinding(t *testing.T) {
 	character := testCharacter()
 	rt := selectTestRuntime(character)

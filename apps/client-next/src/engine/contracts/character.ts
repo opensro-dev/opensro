@@ -231,6 +231,10 @@ export interface CharacterActor {
 		/** native: the 8D6880 holder matrix for an .efp program; native-bsr: the
 		 * same matrix for a compiled (Z-flipped) BSR mesh. */
 		readonly basis?: "native" | "native-bsr" | "bsr" | "compound";
+		/** native / native-bsr named bones: false is binding +0x08 == 0 ('@Bone'),
+		 * where 8D6880 replaces the bone and root rotation with identity and
+		 * keeps only the position. Absent keeps the rotation. */
+		readonly keepRotation?: boolean;
 		readonly modelScale?: number;
 		readonly rotation?: Float32Array;
 		/** Root attachments only: a fixed world yaw replacing the owner's rotation

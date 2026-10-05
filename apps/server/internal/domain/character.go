@@ -74,6 +74,21 @@ type WorldSpawn struct {
 }
 
 /*
+================
+WorldPoint
+
+A recorded position and the RefGameWorld it lies in: the native char-data
+point blocks keep the world's u16 GameWorldID beside the region and
+coordinates (recall +0xEE, death +0xF0). World is omitted for INS_DEFAULT,
+so a field point stays the record it always was.
+================
+*/
+type WorldPoint struct {
+	WorldSpawn
+	World uint16 `json:"world,omitempty"`
+}
+
+/*
 ==================
 CharacterWorld
 
@@ -110,10 +125,11 @@ type CharacterWorld struct {
 	// LastRecallPoint is where the player last used a return scroll (native
 	// char-data +0xCC.., CGObjPC_SaveLatestRecallPosition 4E0250, called from
 	// the return scroll's location check); LastDeathPoint is where the player
-	// last died (+0xDC.., 4E0330 from ProcessNormalDeath). The reverse return
-	// scroll takes the player back to either.
-	LastRecallPoint *WorldSpawn `json:"lastRecallPoint,omitempty"`
-	LastDeathPoint  *WorldSpawn `json:"lastDeathPoint,omitempty"`
+	// last died (+0xDC.., CGObjPC_SaveLatestDeathPosition 4E0330 from
+	// ProcessNormalDeath). Both record only in a type-0 world. The reverse
+	// return scroll takes the player back to either, in its world.
+	LastRecallPoint *WorldPoint `json:"lastRecallPoint,omitempty"`
+	LastDeathPoint  *WorldPoint `json:"lastDeathPoint,omitempty"`
 	MovementMode    *int64      `json:"movementMode"`
 	SpawnSet        bool        `json:"spawnSet"`
 	// DungeonFloorIndex is semantic game state. The browser combines it with
@@ -176,10 +192,13 @@ Pointers distinguish absent legacy values from meaningful zero values.
 type Character struct {
 	// Actor-only teleport state. Character-store snapshots carry it; reconnect
 	// never resurrects a timer belonging to the previous native actor lifetime.
-	NativeTeleportMode uint8             `json:"-"`
-	PK                 *PKRecord         `json:"pk,omitempty"`
-	Aggressions        map[uint32]uint32 `json:"-"`
-	EventMembership    *EventMembership  `json:"-"`
+	NativeTeleportMode uint8     `json:"-"`
+	PK                 *PKRecord `json:"pk,omitempty"`
+	// LastSeenUnixMs is when the character last left the world (guild
+	// votes measure a master's and a voter's absence from it).
+	LastSeenUnixMs  int64             `json:"lastSeenUnixMs,omitempty"`
+	Aggressions     map[uint32]uint32 `json:"-"`
+	EventMembership *EventMembership  `json:"-"`
 	// NativeBodyStatus is runtime-only state, copied under the character store
 	// door. Writers use TransitionBodyStatus; presentation never owns it.
 	BerserkPoints  uint8 `json:"berserkPoints"`
@@ -247,14 +266,28 @@ type Character struct {
 	// The item use that creates it consumes the ITEM_COS_* row and persists
 	// this identity in the same character transaction; later 0x769E commands
 	// must match this exact GID and never trust a client-proposed vehicle.
-	ActiveCOS       *CharacterCOS    `json:"activeCos,omitempty"`
+	ActiveCOS *CharacterCOS `json:"activeCos,omitempty"`
+	// CapturedCOS is a capture-escort quest's captured monster (TypeID
+	// 1/2/3/6, client 692260): runtime-only, never persisted. The quest
+	// record keeps the capture; a relog either re-summons it or fails it.
+	CapturedCOS     *CharacterCOS    `json:"-"`
 	PetSkillWindows []PetSkillWindow `json:"petSkillWindows,omitempty"`
 	// ParamJobs are the live item parameter jobs (CTJ_CharParamKeeper):
 	// EXP/skill-EXP scroll bonuses with an absolute deadline.
 	ParamJobs []ParamJob `json:"paramJobs,omitempty"`
+	// CompositeJobs are the premium package's limited uses and booth buffs
+	// (CTJ_CompositeItemKeeper works UIL1, UQL1, BFI1).
+	CompositeJobs []CompositeJob `json:"compositeJobs,omitempty"`
+	// PremiumClock is the running premium ticket's daily allotment
+	// (CTJ_PremiumKeeper); nil when no ticket runs.
+	PremiumClock *PremiumClock `json:"premiumClock,omitempty"`
 	// ItemGroupCooldowns maps an item COOLTIME group to its absolute end.
 	ItemGroupCooldowns map[uint32]int64 `json:"itemGroupCooldowns,omitempty"`
 	TimedSkillJobs     []TimedSkillJob  `json:"timedSkillJobs,omitempty"`
+	// FortressReturnUntilMs ends the fortress-return cooldown, the owner
+	// timed job (2, 5) of 600 s CGObjPC_HandleSiegeReturn705D (51A5B0)
+	// creates; zero when none runs.
+	FortressReturnUntilMs int64 `json:"fortressReturnUntilMs,omitempty"`
 
 	// AvatarInventory is the persisted costume inventory. Rows reuse the
 	// equipment item body and occupy native avatar slots 0..3. Every row's
@@ -473,6 +506,60 @@ type ParamJob struct {
 	Param        uint16 `json:"param"`
 	Value        int64  `json:"value"`
 	EndUnixMs    int64  `json:"endUnixMs"`
+}
+
+// Composite work kinds (49F590 entry tags; CTJ_CompositeItemKeeper 654C40).
+const (
+	CompositeUsedItemLimit  = "UIL1" // CUsedItemLimit: an item's effect N times a period
+	CompositeUsedQuestLimit = "UQL1" // CUsedQuestLimit: a premium quest N times a period
+	CompositeBuffItem       = "BFI1" // CBuffItem: a stall booth decoration for a period
+)
+
+/*
+================
+CompositeJob
+
+One CTJ_CompositeItemKeeper work, identified by its package and target.
+The package's reference id is the client board's kind-5 slot (its icon and
+period); Target is the limited item's or booth item's reference id, the
+board's count key, or zero for a quest limit, whose quest is QuestCodename. A limited work holds Uses of
+MaxUses until NextRefillUnixMs, when every PeriodSeconds the count returns
+to MaxUses (CUsedObjectLimit_Refill 653A40). The work ends at EndUnixMs.
+================
+*/
+type CompositeJob struct {
+	Kind             string `json:"kind"`
+	PackageRefObjID  uint32 `json:"packageRefObjId"`
+	Target           uint32 `json:"target,omitempty"`
+	TargetCodename   string `json:"targetCodename,omitempty"`
+	QuestCodename    string `json:"questCodename,omitempty"`
+	Uses             uint8  `json:"uses,omitempty"`
+	MaxUses          uint8  `json:"maxUses,omitempty"`
+	PeriodSeconds    int64  `json:"periodSeconds,omitempty"`
+	NextRefillUnixMs int64  `json:"nextRefillUnixMs,omitempty"`
+	EndUnixMs        int64  `json:"endUnixMs"`
+}
+
+/*
+================
+PremiumClock
+
+CTJ_PremiumKeeper's daily allotment (CTJ_PremiumKeeper_Tick 6529D0). The
+ticket's period starts at StartUnixMs; each 86,400 s day grants
+DailyAllotmentMs, and what a day leaves unspent carries into the next day
+only (CarriedMs), spent first. Today is what remains of the current day's
+grant; Day is the day index both were computed for. While both are spent
+the EXP and skill-EXP keepers are off until the next day.
+================
+*/
+type PremiumClock struct {
+	ItemRefObjID     uint32 `json:"itemRefObjId"`
+	StartUnixMs      int64  `json:"startUnixMs"`
+	EndUnixMs        int64  `json:"endUnixMs"`
+	DailyAllotmentMs int64  `json:"dailyAllotmentMs"`
+	Day              int64  `json:"day"`
+	TodayMs          int64  `json:"todayMs"`
+	CarriedMs        int64  `json:"carriedMs"`
 }
 
 /*

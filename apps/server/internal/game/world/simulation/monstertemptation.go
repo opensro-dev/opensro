@@ -82,7 +82,7 @@ still holding a player was sent home by the confusion start event
 (applyTacticsEvents) and acquires from HOMING here.
 ================
 */
-func (ops *MonsterMoverOps) acquireTemptationFoe(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, foes []playerPose, nowMs int64) ([]Frame, *monsterTargetFrames, bool) {
+func (ops *MonsterMoverOps) acquireTemptationFoe(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, foes []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames, bool) {
 	if !instance.Tempted() || mover.TargetGID() != 0 || len(foes) == 0 {
 		return nil, nil, false
 	}
@@ -97,7 +97,7 @@ func (ops *MonsterMoverOps) acquireTemptationFoe(divisionID string, instance mon
 		return nil, nil, false
 	}
 	mustMoverTransition(&mover, monster.MoverEventAggroAcquired, foe.Gid)
-	if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0); planned {
+	if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, live, foe); planned {
 		ops.adoptMonsterAttack(&mover, plan)
 		if frames, targeted, handled := ops.tryMonsterAttack(divisionID, instance, tactics, mover, foes, nowMs); handled {
 			return frames, targeted, true
@@ -196,6 +196,6 @@ func (s *MonsterState) monsterFoe(division string, gid uint32, nowMs int64) (pla
 	return playerPose{
 		Gid:        gid,
 		Pose:       poseToSpawn(mover.LivePoseAt(nowMs, nil)),
-		BodyRadius: BodyRadius(instance.Ref.BodyRadius),
+		BodyRadius: BodyRadius(instance.BodyRadius()),
 	}, true
 }

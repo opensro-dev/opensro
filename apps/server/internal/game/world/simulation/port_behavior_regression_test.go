@@ -60,7 +60,7 @@ func TestPortAuditRefusedAttackIsNotFatalRecovery(t *testing.T) {
 	for _, targetAlive := range []bool{false, true} {
 		t.Run(fmt.Sprint(targetAlive), func(t *testing.T) {
 			ops, actor := monsterLegFixture(t, aggressiveTactics())
-			target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1005, Y: 20, Z: 1000}, BodyRadius: 4}
+			target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Y: 20, Z: 1000}, BodyRadius: 4}
 			ops.BasicAttack = func(string, monster.Instance, uint32, uint32, int64) MonsterAttackResult {
 				return MonsterAttackResult{TargetAlive: targetAlive}
 			}

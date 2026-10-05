@@ -91,3 +91,15 @@ test("native crowd pose cadence samples immediately and resets on fraction chang
 	assert.equal( lod.sample( .74, true, 8 ), true );
 	assert.equal( lod.sample( .74, true, 9 ), true );
 });
+
+test("the scan measures where an entity is, not a lagging row", () => {
+	const owner = createEntityLod();
+	// The local row still holds its spawn point 800 units back; its movement
+	// owner has carried it under the camera.
+	const stale = { ...local, x: -800 };
+	owner.step( [ stale ], 1, point, 0 );
+	owner.step( [ stale ], 1, point, 1000 );
+	assert.equal( owner.fraction( 1 ), 1, "a row-measured LOD drifts with the run" );
+	owner.step( [ stale ], 1, point, 2000, point );
+	assert.equal( owner.fraction( 1 ), 0 );
+});

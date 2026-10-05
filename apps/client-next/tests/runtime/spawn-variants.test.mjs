@@ -205,3 +205,53 @@ test("4DD6B0: a Duplicate wears the copied player; only slotted equipment is dre
 		/skin equipment/
 	);
 });
+
+/*
+================
+standingRow
+
+A standing actor's shared block (85FB20) with no buffs and a named mask,
+after the RefObjID and an optional class prefix.
+================
+*/
+function standingRow( refObjId, prefix, name ) {
+	const block = Buffer.alloc( 40 );
+	block.writeUInt32LE( 7, 0 );
+	block.writeUInt16LE( 17991, 4 );
+	block.writeFloatLE( 849, 6 );
+	block.writeFloatLE( 1065, 14 );
+	block[21] = 2;
+	block.writeFloatLE( 10, 28 );
+	block.writeFloatLE( 20, 32 );
+	block.writeFloatLE( 100, 36 );
+	return Buffer.concat( [ u32( refObjId ), prefix, block, Buffer.from( [ 0, 1 ] ), str( name ) ] );
+}
+
+test("a fortress structure's hit points, zone and state precede the shared block (4FA0B0)", () => {
+	const prefix = Buffer.concat( [ u32( 1170000 ), u32( 84 ), Buffer.from( [ 4, 0 ] ) ] );
+	const stone = decodeCharacterSpawn( standingRow( 19553, prefix, "Stone" ), "structure", 0x2c6, false );
+	assert.deepEqual( [ stone.structureHp, stone.eventStructId, stone.structureState, stone.gid, stone.name ], [
+		1170000,
+		84,
+		4,
+		7,
+		"Stone"
+	] );
+	const headquarters = Buffer.concat( [ standingRow( 19553, prefix, "HQ" ), u32( 0 ), Buffer.from( [ 1 ] ) ] );
+	const hq = decodeCharacterSpawn( headquarters, "structure", 0x2c6 | (5 << 11), true );
+	assert.equal( hq.guildId, 0 );
+	assert.equal( hq.guildName, undefined, "an unheld headquarters sends no guild name" );
+	assert.equal( hq.spawnAppearance, 1 );
+});
+
+test("a thief or hunter monster ends with its trade equipment variant (861B00)", () => {
+	for ( const band of [ 1, 2, 3, 4 ] ) {
+		const trade = band === 2 || band === 3;
+		const row = Buffer.concat( [
+			standingRow( 1, Buffer.alloc( 0 ), "Thief" ),
+			Buffer.from( trade ? [ 0, 9 ] : [ 0 ] )
+		] );
+		const e = decodeCharacterSpawn( row, "monster", 0xc6 | (band << 11), false );
+		assert.equal( e.tradeVariant, trade ? 9 : undefined );
+	}
+});

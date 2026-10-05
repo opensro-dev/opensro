@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+e2e_select_wire_test.go - NPC selection over the reliable session transport.
+
+===========================================================================
+*/
+
 package action_test
 
 // End-to-end exercise of the NPC-select talk grant over the REAL
@@ -14,7 +22,7 @@ package action_test
 //	               VERY NEXT frame on the session's reliable ordered
 //	               stream is the exact 0xB45A talk grant - result 1, the
 //	               gid, vitalsMask 0, NPC_EU_SMITH's capability word
-//	               0x03, npcExtra 0 - implemented shop|talk rows only,
+//	               0x8000000B, npcExtra 0 - shop|talk|repair|magic grant (4C6350 option 4),
 //	               byte-equal to the hand-rolled
 //	               oracle. Had the player or ground grant emitted
 //	               anything, it would have arrived first and failed the
@@ -51,6 +59,11 @@ const (
 // invariant refuses an unseeded CreateCharacter): the same racial id
 // sets, without a textdata dependency. The select plane never reads
 // skills - the seeder exists only to satisfy the store's invariant.
+/*
+================
+selectE2ESkillSeeder
+================
+*/
 func selectE2ESkillSeeder(raceKey string, learned []uint32) ([]uint32, error) {
 	ids := []uint32{1, 7127, 7128, 7129, 7909, 7910, 8454, 9069, 9606, 9970}
 	if raceKey == enterworld.RaceKeyChina {
@@ -69,6 +82,11 @@ func selectE2ESkillSeeder(raceKey string, learned []uint32) ([]uint32, error) {
 	return missing, nil
 }
 
+/*
+================
+selectE2EServer
+================
+*/
 type selectE2EServer struct {
 	srv       *transport.Server
 	authority *store.Store
@@ -82,6 +100,11 @@ type selectE2EServer struct {
 // of the seam - the object-list rows (bootstrap) and the 0x745A liveness
 // gate (action) must agree or the click targets a gid the other half
 // denies.
+/*
+================
+startSelectServer
+================
+*/
 func startSelectServer(t *testing.T, dir string, seeds []*enterworld.Character) selectE2EServer {
 	t.Helper()
 
@@ -159,6 +182,11 @@ func startSelectServer(t *testing.T, dir string, seeds []*enterworld.Character) 
 	return selectE2EServer{srv: srv, authority: authority, actions: actions}
 }
 
+/*
+================
+selectDialWS
+================
+*/
 func selectDialWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	t.Helper()
 	url := fmt.Sprintf("ws://%s%s", srv.WSAddr(), transport.PathWS)
@@ -170,6 +198,11 @@ func selectDialWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	return c
 }
 
+/*
+================
+selectSendFrame
+================
+*/
 func selectSendFrame(t *testing.T, c *websocket.Conn, opcode uint16, payload []byte) {
 	t.Helper()
 	f := transport.Frame{Opcode: opcode, Payload: payload}
@@ -178,6 +211,11 @@ func selectSendFrame(t *testing.T, c *websocket.Conn, opcode uint16, payload []b
 	}
 }
 
+/*
+================
+selectNextFrame
+================
+*/
 func selectNextFrame(t *testing.T, c *websocket.Conn, what string) transport.Frame {
 	t.Helper()
 	c.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -200,6 +238,11 @@ func selectNextFrame(t *testing.T, c *websocket.Conn, what string) transport.Fra
 	}
 }
 
+/*
+================
+selectExpectFrame
+================
+*/
 func selectExpectFrame(t *testing.T, c *websocket.Conn, opcode uint16, what string) []byte {
 	t.Helper()
 	f := selectNextFrame(t, c, what)
@@ -209,6 +252,11 @@ func selectExpectFrame(t *testing.T, c *websocket.Conn, opcode uint16, what stri
 	return f.Payload
 }
 
+/*
+================
+selectHelloWS
+================
+*/
 func selectHelloWS(t *testing.T, c *websocket.Conn) {
 	t.Helper()
 	selectSendFrame(t, c, transport.OpHello, transport.EncodeHello(transport.Hello{AdmissionToken: []byte("test-admission")}))
@@ -222,6 +270,11 @@ func selectHelloWS(t *testing.T, c *websocket.Conn) {
 // frozen bootstrap sequence WITH the NPC roster riding the object list:
 // one 0x3417 create row per roster NPC between start and finalize (the
 // row bytes themselves are pinned by bootstrap's objectlist tests).
+/*
+================
+selectEnterWorld
+================
+*/
 func selectEnterWorld(t *testing.T, c *websocket.Conn, name string) {
 	t.Helper()
 	selectSendFrame(t, c, transport.OpEnterWorld, transport.EncodeEnterWorld(
@@ -248,6 +301,11 @@ func selectEnterWorld(t *testing.T, c *websocket.Conn, name string) {
 }
 
 // selectE2ECharacter resolves a live store record by name.
+/*
+================
+selectE2ECharacter
+================
+*/
 func selectE2ECharacter(t *testing.T, authority *store.Store, name string) *enterworld.Character {
 	t.Helper()
 	var found *enterworld.Character
@@ -266,6 +324,11 @@ func selectE2ECharacter(t *testing.T, authority *store.Store, name string) *ente
 }
 
 // selectGidBody hand-rolls the 4-byte 0x745A body.
+/*
+================
+selectGidBody
+================
+*/
 func selectGidBody(gid uint32) []byte {
 	out := make([]byte, 4)
 	binary.LittleEndian.PutUint32(out, gid)
@@ -276,6 +339,11 @@ func selectGidBody(gid uint32) []byte {
 // NPC talk window's opening frame: the roster-NPC 0x745A elicits the
 // exact 0xB45A bytes, and neither a player nor a ground-drop selection
 // leaks one.
+/*
+================
+TestNpcSelectTalkGrantEndToEndOverWire
+================
+*/
 func TestNpcSelectTalkGrantEndToEndOverWire(t *testing.T) {
 	t.Parallel()
 	dir := filepath.Join(t.TempDir(), "authority")
@@ -310,7 +378,7 @@ func TestNpcSelectTalkGrantEndToEndOverWire(t *testing.T) {
 	want := []byte{0x01}
 	want = binary.LittleEndian.AppendUint32(want, npcGid)
 	want = append(want, 0x00)
-	want = binary.LittleEndian.AppendUint32(want, 0x03) // NPC_EU_SMITH: implemented shop|talk
+	want = binary.LittleEndian.AppendUint32(want, 0x8000000b) // NPC_EU_SMITH: shop|talk|repair|magic grant
 	want = append(want, 0x00)
 	if !bytes.Equal(got, want) {
 		t.Fatalf("0xB45A payload\n got % X\nwant % X", got, want)

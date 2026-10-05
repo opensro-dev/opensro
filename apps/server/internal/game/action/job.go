@@ -102,7 +102,7 @@ func (rt *Runtime) jobGuildNpc(division string, c *enterworld.Character, gid uin
 	if !ok || !rt.npcWithinHitRange(division, c, npc) {
 		return jobErrTooFar
 	}
-	if simulation.NpcJobGuild(npc.Codename) != job {
+	if simulation.NpcJobGuild(npc) != job {
 		return jobErrNotGuild
 	}
 	return 0

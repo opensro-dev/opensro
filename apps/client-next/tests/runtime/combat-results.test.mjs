@@ -245,3 +245,27 @@ test("only accepted local casts start cooldowns; duplicates, refusals and cast r
 	c.receive( 0xb245, other, 6000 );
 	assert.deepEqual( c.state().skillCooldowns, [] );
 });
+/*
+================
+knockback decoration
+
+CIDecoDamageEffect_Initialize (8D5440) attaches SYSTEM_KNOCKBACK only for a
+type-5 knockback; a type-4 knockdown walks its waypoint undecorated.
+================
+*/
+test("a type-5 knockback decorates its target with SYSTEM_KNOCKBACK", () => {
+	for ( const type of [ 4, 5 ] ) {
+		const events = [], c = createCombat( undefined, e => events.push( e ) );
+		hp( c, 3, 99 );
+		c.receive(
+			0xb245,
+			header().u8( 1 ).u8( 1 ).u8( 1 ).u32( 3 ).u8( type ).u32( 8 << 8 ).u32( 0 ).u16( 0x5c87 ).u16( 100 ).u16(
+				-2
+			)
+				.u16( 200 ).bytes()
+		);
+		const marks = events.filter( e => e.kind === "system-effect" );
+		assert.deepEqual( marks, type === 5 ? [ { kind: "system-effect", gid: 3, effect: 0x8000001d } ] : [] );
+		assert.equal( c.takeDisplacements()[0].kind, type );
+	}
+});

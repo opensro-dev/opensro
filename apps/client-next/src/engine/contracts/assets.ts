@@ -118,6 +118,9 @@ export type AssetResult =
 		kind: "error";
 		id: number;
 		error: string;
+		// The published manifest lacks the path (packs AssetAbsentError): no
+		// retry will find it in this release.
+		absent?: true;
 	};
 /*
 ================

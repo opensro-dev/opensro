@@ -218,7 +218,8 @@ On Apple Silicon `dev-agent` also writes and loads
 `apps/server/.state/nomad/dev-agent-platform.hcl`: Nomad fingerprints those
 cores at a few MHz, so it declares the real core count at a nominal per-core
 compute; without it no job can be placed (`cannot place task groups`, CPU
-exhausted).
+exhausted). Linux on arm64 gets the same
+file, because a virtual machine without a CPU frequency reads as zero compute.
 
 **Known gaps.** Native verification tools that execute the retail PE
 (`apps/client-next/tools/verify-*`, `audit-*`) still need Windows, and

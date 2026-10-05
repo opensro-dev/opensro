@@ -164,37 +164,51 @@ imbue damage only.
 ==================
 */
 func (rt *Runtime) resolvePlayerImpact(division, name string, skill enterworld.SkillRow, attacker, defender combat.Stats, nowMs int64, chained bool) (combat.Result, error) {
+	out, err := rt.resolvePlayerImpactBehindWall(division, name, skill, attacker, defender, nowMs, chained, nil)
+	return out.Defender, err
+}
+
+/*
+==================
+resolvePlayerImpactBehindWall
+
+resolvePlayerImpact against a defender that may stand behind a wall
+(58EC6C splits the attack's own lanes). The imbue share joins the
+defender's part afterwards: 58F435 adds it after the split.
+==================
+*/
+func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill enterworld.SkillRow, attacker, defender combat.Stats, nowMs int64, chained bool, wall *enterworld.SkillWall) (combat.WallOutcome, error) {
 	// A status cast has no att block: its record is a successful zero-damage
 	// result with no critical, block or imbue roll (skillstatuscast.go).
 	if skill.StatusCast {
-		return combat.Result{ResultFlags: 1}, nil
+		return combat.WallOutcome{Defender: combat.Result{ResultFlags: 1}}, nil
 	}
 	// A pdmg hit is its authored amount (skilltuning.go).
 	if skill.FixedDamage.Present {
-		return fixedDamageResult(skill.FixedDamage), nil
+		return combat.WallOutcome{Defender: fixedDamageResult(skill.FixedDamage, attacker, defender)}, nil
 	}
 	actor := criticalActor{division: division, character: name}
 	lanes := skill.Attack.Flags & 0xc
 	if chained {
 		lanes &^= 4
 	}
-	var result combat.Result
+	var split combat.WallOutcome
 	var err error
 	if chained && lanes == 0 {
-		result = combat.Result{ResultFlags: 1}
+		split.Defender = combat.Result{ResultFlags: 1}
 	} else {
-		split, resolveErr := rt.resolveCombatRequest(combatRequest{
-			actor: actor, skill: skill, attacker: attacker, defender: defender, lanes: lanes,
+		split, err = rt.resolveCombatRequest(combatRequest{
+			actor: actor, skill: skill, attacker: attacker, defender: defender, wall: wall, lanes: lanes,
 		})
-		result, err = split.Defender, resolveErr
 	}
+	result := split.Defender
 	// A blocked impact takes no imbue share (5905FB skips it).
 	if err != nil || skill.Attack.Value5 == 0 || result.Blocked {
-		return result, err
+		return split, err
 	}
 	imbue, imbueAbnormal := rt.activeWeaponImbue(division, name, nowMs)
 	if !imbue.Pinned {
-		return result, nil
+		return split, nil
 	}
 	imbueLanes := imbue.Attack.Flags & 0xc
 	if chained {
@@ -207,12 +221,15 @@ func (rt *Runtime) resolvePlayerImpact(division, name string, skill enterworld.S
 		}, rt.CombatRoll)
 	}
 	if err != nil {
-		return combat.Result{}, err
+		return combat.WallOutcome{}, err
 	}
 	result.Damage = uint32(min(uint64(wire.MaxSkillActionDamage), uint64(result.Damage)+uint64(uint16(extra.Damage))*uint64(skill.Attack.Value5)/100))
-	// 58F43C adds the imbue's magical word before scaling its damage share.
+	// 58F435 / 58F43C add the imbue's physical and magical words before
+	// scaling its damage share.
+	result.PhysicalDamage += uint32(uint16(extra.PhysicalDamage))
 	result.MagicalDamage += uint32(uint16(extra.MagicalDamage))
 	// The imbue's bu block is rolled with the hit's statuses in 590680.
 	result.Imbue = imbueAbnormal
-	return result, nil
+	split.Defender = result
+	return split, nil
 }

@@ -14,7 +14,7 @@ func TestRejectedSegmentCannotPublishGoalOrChannel(t *testing.T) {
 	ops.Monsters.checkAITimer(monsterTestDivision, instance.Gid, 1, 100000)
 	ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(2))
 	frames := ops.commitSegment(monsterTestDivision, instance, stale,
-		monster.Pose{RegionID: 25000, X: 1100, Y: 20, Z: 1000}, 22, wire.MoveStateRun, 100001)
+		monster.Pose{RegionID: monsterTestRegion, X: 1100, Y: 20, Z: 1000}, 22, wire.MoveStateRun, 100001)
 	if len(frames) != 0 {
 		t.Fatalf("rejected plan published %d movement/channel frames", len(frames))
 	}
@@ -30,7 +30,7 @@ func TestRejectedSegmentCannotPublishGoalOrChannel(t *testing.T) {
 func TestRetaliationDuringAdmittedAttackPreservesCastAndCooldown(t *testing.T) {
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
 	ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(1))
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: 1, Reach: 50, CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}
 	ops.BasicAttack = func(string, monster.Instance, uint32, uint32, int64) MonsterAttackResult {
@@ -38,7 +38,7 @@ func TestRetaliationDuringAdmittedAttackPreservesCastAndCooldown(t *testing.T) {
 		// Stub cast proves publication ownership, not native serialization.
 		return MonsterAttackResult{Accepted: true, TargetAlive: true, Frames: []Frame{{Opcode: 0xb245}}}
 	}
-	players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1010, Y: 20, Z: 1000}, BodyRadius: 4}}
+	players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1010, Y: 20, Z: 1000}, BodyRadius: 4}}
 	frames, _ := ops.advanceInstance(monsterTestDivision, instance, players, 100000)
 	if len(frames) == 0 || frames[len(frames)-1].Opcode != 0xb245 {
 		t.Fatal("accepted attack was hidden by later retaliation")
@@ -72,7 +72,7 @@ func TestRejectedArrivalCannotPublishCorrection(t *testing.T) {
 func TestRejectedAttackPlanCannotApplyDamageOrPublishCorrection(t *testing.T) {
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
 	ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(1))
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(2))
 		return MonsterAttackPlan{SkillID: 1, Reach: 50, CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}
@@ -81,7 +81,7 @@ func TestRejectedAttackPlanCannotApplyDamageOrPublishCorrection(t *testing.T) {
 		called = true
 		return MonsterAttackResult{Accepted: true, TargetAlive: true}
 	}
-	players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1010, Y: 20, Z: 1000}, BodyRadius: 4}}
+	players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1010, Y: 20, Z: 1000}, BodyRadius: 4}}
 	frames, _ := ops.advanceInstance(monsterTestDivision, instance, players, 100000)
 	if called || len(frames) != 0 {
 		t.Fatalf("rejected attack executed=%v frames=%d", called, len(frames))

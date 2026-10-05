@@ -273,8 +273,8 @@ func TestEveryMutationSiteSurvivesRestart(t *testing.T) {
 		}
 		grant := d.rt.HandleTargetInteract(testDivision, d.character, wire.TargetInteract{Gid: heap.Gid}.Encode())
 		assertOpcodes(t, grant.Frames,
-			wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-			wire.OpPointsUpdate, wire.OpObjectDespawn)
+			wire.OpPickupAnim, wire.OpItemMoveResponse,
+			wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 
 		r := d.reboot(t)
 		if got := goldOfT(t, r.character); got != 5000 {
@@ -297,8 +297,8 @@ func TestEveryMutationSiteSurvivesRestart(t *testing.T) {
 		}
 		grant := d.rt.HandleTargetInteract(testDivision, d.character, wire.TargetInteract{Gid: dropped.Gid}.Encode())
 		assertOpcodes(t, grant.Frames,
-			wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-			wire.OpObjectDespawn)
+			wire.OpPickupAnim, wire.OpItemMoveResponse,
+			wire.OpObjectDespawn, wire.OpActionState)
 
 		r := d.reboot(t)
 		row := bagRowByCodename(r.character, "ITEM_CH_SWORD_01_A_RARE")

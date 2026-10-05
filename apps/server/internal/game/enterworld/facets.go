@@ -83,6 +83,25 @@ func (d *Deps) CharacterBodyRadius(character *Character) (float64, bool) {
 	return model.BodyRadius, true
 }
 
+/*
+==================
+CharacterKnockdown
+
+The RefObjChar displacement flags and knockdown recovery of the
+character's concrete model (roster columns 87/88).
+==================
+*/
+func (d *Deps) CharacterKnockdown(character *Character) (flags, recoveryMs uint32, ok bool) {
+	if d == nil || d.Roster == nil {
+		return 0, 0, false
+	}
+	model := d.Roster.ModelByRefObjID(CharacterModelRef(character, d.Roster))
+	if model == nil {
+		return 0, 0, false
+	}
+	return model.Knockdown, model.KORecoverMs, true
+}
+
 // ItemReferences exposes itemdata lookup to item operations.
 func (d *Deps) ItemReferences() ItemRefSource {
 	if d == nil {

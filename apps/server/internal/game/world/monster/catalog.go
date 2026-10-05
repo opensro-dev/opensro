@@ -43,6 +43,9 @@ type NestRow struct {
 	ConditionalSkills [8]ConditionalSkill
 	TargetPolicy      uint8 // native tactics+20: 0 retain, 1 latest, 2 scored
 	SpawnPoint
+	// EventStructID is a fortress structure's event zone (eventzonedata id):
+	// the RefEventStructID its spawn row carries (CICATStruct 4FA0B0).
+	EventStructID uint32
 	// RetailEvidence reports that the server-side fields below came from a
 	// matched population row. An unmatched v1.150 anchor remains passive but
 	// receives the class-wide idle-wander primitive when its RefObj row has
@@ -434,6 +437,15 @@ type Instance struct {
 	// SpawnHeading is the wire heading word of the native creation heading
 	// (5607B0: random for monsters, wInitialDir for uniques).
 	SpawnHeading uint16
+	// TradeVariant picks a thief or hunter trade NPC's equipment
+	// (TradeNpcMonster): CGObjMob_ResetRuntimeState (4C1030) draws it as
+	// rand() & 0xFF, CGObjMob_WriteSpawnData (4C1930) sends it after the
+	// spawn grade, and CICMonster_InitializeTradeEquipmentAndSkill (client
+	// 861720) indexes the trade equipment table with it.
+	TradeVariant uint8
+	// StructureState is a fortress structure's state word (+0x764 on the
+	// client, CGObjSiegeStruct_GetStateWord 4CED50): bit 0 destroyed.
+	StructureState uint16
 	// CurrentHP is mutable instance state. Ref.MaxHP is only the static
 	// RefObjChar base; EffectiveMaxHP applies the client-pinned rarity and
 	// party-monster multipliers used by the target-status plane.

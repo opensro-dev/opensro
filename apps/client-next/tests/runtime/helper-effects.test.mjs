@@ -293,3 +293,75 @@ test("missing marker metadata reports its identity without suppressing another a
 	assert.equal( owner.error(), null );
 	owner.dispose();
 });
+
+test("berserk owns the material register even over a status tint set before it", () => {
+	let id = 0;
+	const jobs = new Map(), catalog = createEffectDecoder().decode( records );
+	const owner = createCharacterEffects(
+		{
+			available: () => 4,
+			request( url, limit, kind ) {
+				jobs.set(
+					++id,
+					kind === "effects" ?
+						{ kind: "effects", catalog } :
+						{ kind: "bytes", buffer: Uint8Array.from( manifest ).buffer }
+				);
+				return id;
+			},
+			take( id ) {
+				const r = jobs.get( id );
+				jobs.delete( id );
+				return r;
+			},
+			cancel( id ) {
+				jobs.delete( id );
+			}
+		},
+		"http://localhost",
+		() => {},
+		createPresentationRandom( 1 )
+	);
+	const body = {
+		gid: 10,
+		height: 20,
+		heightFactor: 1,
+		model: "/assets/body.glb",
+		pose: { regionId: 257, x: 100, y: 0, z: 100, yaw: 0 },
+		clip: "stand",
+		time: 0,
+		loop: true,
+		scale: 1
+	};
+	// Frostbite (abnormal 0x2) tints first; its mask never changes afterwards.
+	const gameplay = { casts: [], vitals: [ { gid: 10, abnormal: 2 } ] };
+	const step = ( t, status ) =>
+		owner.step(
+			[ {
+				gid: 10,
+				kind: "player",
+				refObjId: 1907,
+				regionId: 257,
+				x: 100,
+				y: 0,
+				z: 100,
+				heading: 0,
+				appearanceState: [ 1, 0, status ]
+			} ],
+			gameplay,
+			t,
+			() => true,
+			() => 1,
+			[],
+			undefined,
+			[ body ]
+		);
+	for ( let f = 0; f < 6; f++ ) step( f / 60, 0 );
+	const frost = owner.appearance( 10 ).materialTint;
+	assert.ok( frost && frost[2] === 1, "frostbite's blue tint" );
+	for ( let f = 6; f < 60; f++ ) step( f / 60, 1 );
+	const tint = owner.appearance( 10 ).materialTint;
+	// 85C590 skips status material calls while berserk; hwan's SCT_MAT is red.
+	assert.ok( tint && tint[0] > tint[2], "the hwan material wins: " + tint );
+	owner.dispose();
+});

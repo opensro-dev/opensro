@@ -112,11 +112,17 @@ Outgoing intent and received chat share display data, not delivery status.
 */
 export interface ChatLine {
 	readonly sequence?: number;
+	// Epoch milliseconds on this client's clock when the line arrived. The wire
+	// carries no send time, so arrival is the closest available answer.
+	readonly sentAt?: number;
 	readonly channel: number;
 	readonly name: string;
 	readonly gid?: number;
 	readonly text: string;
 	readonly outgoing: boolean;
+	// A line from the server's replayed transcript (OpChatHistory): already
+	// said before this session, so never speech over a head.
+	readonly history?: boolean;
 }
 /*
 ================
@@ -139,6 +145,7 @@ export type GameplayCommand =
 	| { readonly kind: "whisper-block"; readonly name: string; readonly blocked: boolean; }
 	| { readonly kind: "stat-increase"; readonly stat: "str" | "int"; }
 	| { readonly kind: "beginner-mark"; readonly enabled: boolean; }
+	| { readonly kind: "helper-mark"; }
 	| {
 		readonly kind: "auto-potion-save";
 		readonly settings: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
@@ -156,6 +163,20 @@ export type GameplayCommand =
 	| { readonly kind: "cos-drop"; readonly gid: number; readonly slot: number; }
 	| { readonly kind: "guide-event"; readonly event: number; }
 	| { readonly kind: "storage-open"; readonly gid: number; }
+	// The fortress official (fortress.ts): the application window's status,
+	// then an application or withdrawal for one fortress.
+	| { readonly kind: "fortress-war-status"; readonly gid: number; }
+	| {
+		readonly kind: "fortress-war-apply";
+		readonly gid: number;
+		readonly fortress: number;
+		readonly request: number;
+		readonly withdraw: boolean;
+	}
+	// The guild manager's warehouse row (storage-room.ts openGuild) and the
+	// declined war compensation quote (guild-manager-hud.ts).
+	| { readonly kind: "storage-open-guild"; readonly gid: number; }
+	| { readonly kind: "compensation-dismiss"; }
 	// The job guild confirmations (job-guild.ts): join, withdraw and the alias.
 	| { readonly kind: "job-join"; readonly gid: number; readonly job: number; }
 	| { readonly kind: "job-withdraw"; readonly gid: number; }
@@ -214,8 +235,21 @@ export type GameplayCommand =
 	| { readonly kind: "quest-abandon"; readonly refId: number; }
 	| { readonly kind: "quest-reward"; readonly refId: number; }
 	| { readonly kind: "chat"; readonly channel: number; readonly text: string; readonly target?: string; }
+	// The premium chat commands (count-job.ts); a reverse return's second
+	// command carries its point.
+	| {
+		readonly kind: "premium-command";
+		readonly command: import("@/engine/foundation/gameplay/count-job").PremiumCommand;
+		readonly choice?: number;
+	}
+	| { readonly kind: "premium-command-cancel"; }
 	| { readonly kind: "mount"; readonly gid: number; }
 	| { readonly kind: "pickup"; readonly gid: number; }
+	// The pickup shortcut: the worker chooses the item (pickup-nearest.ts).
+	| { readonly kind: "pickup-nearest"; }
+	// A click on another player: the worker decides whether it attacks
+	// (player-attack.ts). Sent before the click's select.
+	| { readonly kind: "player-interact"; readonly gid: number; readonly alt: boolean; }
 	| {
 		readonly kind: "release-target";
 	}
@@ -259,10 +293,14 @@ export type GameplayCommand =
 		readonly regionId: number;
 		readonly bundle: unknown;
 	}
+	| { readonly kind: "auto-potion-input"; readonly blocked: boolean; readonly itemMallOpen?: boolean; }
+	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
 	| { readonly kind: "npc-close"; }
-	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand;
+	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand
+	| import("@/engine/foundation/gameplay/exchange").ExchangeCommand
+	| import("@/engine/foundation/gameplay/stall").StallCommand;
 /*
 ================
 InventoryItem
@@ -460,6 +498,13 @@ export interface GameplayState {
 	readonly paramJobs?: readonly (import("@/engine/foundation/gameplay/param-job").ParamJobRow & {
 		readonly reference: import("@/engine/foundation/gameplay/param-job").ParamJobReference;
 	})[];
+	// A premium package's limited uses (count-job.ts), and a reverse return
+	// waiting for its point.
+	readonly countJobs?: readonly (import("@/engine/foundation/gameplay/count-job").CountJobRow & {
+		readonly reference: import("@/engine/foundation/gameplay/count-job").CountJobReference;
+		readonly itemName?: string;
+	})[];
+	readonly reverseReturnChoice?: boolean;
 	readonly abnormalRecords?: readonly import("@/engine/foundation/gameplay/abnormal-snapshot").AbnormalRecord[];
 	readonly selectionDecal?: SelectionDecal | null;
 	readonly notices?: readonly import("@/engine/foundation/gameplay/system-notices").SystemNotice[];
@@ -469,6 +514,9 @@ export interface GameplayState {
 	readonly weather?: import("@/engine/foundation/gameplay/weather").WeatherOptions;
 	readonly alchemy?: import("./item-process").AlchemyState;
 	readonly gacha?: import("./item-process").GachaState;
+	readonly exchange?: import("./item-process").ExchangeState;
+	readonly stall?: import("@/engine/foundation/gameplay/stall").StallState;
+	readonly magicOption?: import("./item-process").MagicOptionGrantState;
 	readonly targetCapabilities?: number;
 	readonly targetTaxRate?: number;
 	readonly shopCompletionRevision?: number;
@@ -478,6 +526,14 @@ export interface GameplayState {
 	readonly trainingError?: string | null;
 	// Journal omission retains the previous projection; reset sends a complete replacement.
 	readonly fortress?: import("@/engine/foundation/gameplay/fortress").FortressState;
+	// The official's last answer; sequence advances with every answer, which
+	// opens or refreshes the application window.
+	readonly fortressApplication?:
+		& import("@/engine/foundation/gameplay/fortress").FortressApplication
+		& { readonly sequence: number; };
+	// When the action window's fortress portal (1015) may be used again,
+	// on the simulation clock.
+	readonly fortressPortalUntilMs?: number;
 	readonly musicMode?: number;
 	readonly social?: import("@/engine/foundation/gameplay/social").SocialState;
 	readonly skillCatalog?: readonly import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata[];
@@ -488,6 +544,8 @@ export interface GameplayState {
 	readonly skills?: readonly number[];
 	readonly quickSlots?: readonly import("@/engine/foundation/gameplay/quickslots").QuickSlot[];
 	readonly cosRecords?: readonly CosRecord[];
+	readonly selectedCosGid?: number;
+	readonly cosStatusRecords?: readonly CosRecord[];
 	readonly worldClock?: WorldClockSeed;
 	readonly questMarkers?: readonly QuestMarker[];
 	readonly completedQuests?: readonly number[];

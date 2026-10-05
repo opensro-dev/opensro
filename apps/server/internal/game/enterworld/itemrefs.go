@@ -350,6 +350,7 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 		RefObjID:                   uint32(refObjID),
 		TidWord:                    tidWord,
 		Codename:                   strings.TrimSpace(fields[2]),
+		NextCodename:               characterNextCodename(fields[6]),
 		NameStrID:                  nameStrID,
 		Name:                       names[nameStrID],
 		WalkSpeed:                  float32(walk),
@@ -360,6 +361,21 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 		MaxMP:                      uint32(maxMP),
 		MountedAttackCapability210: uint32(capability),
 	}
+}
+
+/*
+==================
+characterNextCodename
+
+Column 6 names the next form, or "xxx" / blank for none.
+==================
+*/
+func characterNextCodename(field string) string {
+	name := strings.TrimSpace(field)
+	if name == "xxx" {
+		return ""
+	}
+	return name
 }
 
 /*
@@ -386,6 +402,9 @@ type itemdataRecordColumn struct {
 var itemdataRecordColumns = []itemdataRecordColumn{
 	{14, "country", "int"},
 	{15, "rarity", "int"},
+	// Token 16 is RefObjCommon CanTrade, beside CanSell (17) and CanBorrow
+	// (19): 0 keeps an item off the exchange table (exchange.go).
+	{16, "canTrade", "int"},
 	// 808AD0 reads token 17 into RefObjData+A5; 5B6D22 tests this byte
 	// before merchant sale. Shop membership is not a sale permission.
 	{17, "canSell", "int"},
@@ -562,6 +581,13 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 		if v, ok := textdataInt(fields[14]); ok {
 			ref.Country = v
 		}
+	}
+	if len(fields) > 20 {
+		cash, _ := textdataInt(fields[7])
+		ref.CashItem = cash != 0
+		ref.Rarity, _ = textdataInt(fields[15])
+		drop, _ := textdataInt(fields[20])
+		ref.CanDropOnDeath = drop&2 != 0
 	}
 	// The four typed requirement pairs: types at 32/34/36/38, values at
 	// 33/35/37/39 (interleaved; verified against the shipped rows - CH

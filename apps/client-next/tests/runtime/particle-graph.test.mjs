@@ -112,6 +112,45 @@ test("position modes retain additive, parent and previous-sibling semantics", ()
 		assert.equal( state.elements[0][1].state.position[0], 3 );
 	}
 });
+test("sphere positions land on the element itself, its parent or its previous sibling", () => {
+	// Two siblings drift at 1 unit per frame under a root at x 10; a zero-radius
+	// SetSpherePos at age 2 moves each onto the base its flag selects.
+	const expected = [ [ 14, 13 ], [ 12, 11 ], [ 14, 14 ] ];
+	for ( const flags of [ 0, 1, 2 ] ) {
+		const sphere = particleProgram( [ {
+			name: "SetSpherePos",
+			flags,
+			parameter: { kind: "Vector", value: [ 0, 0, 0 ] }
+		} ] );
+		const graph = [
+			emitter( {
+				births: [ 0, 1 ],
+				parents: [ 0, 0 ],
+				commands: [
+					{
+						name: "SetVelocity",
+						frames: [ 0 ],
+						program: { vectors: [ vector( "SetVelocity", [ 1, 0, 0 ] ) ] }
+					},
+					{ name: "SetSpherePos", frames: [ 2 ], program: sphere }
+				]
+			} )
+		];
+		const root = identity();
+		root[12] = 10;
+		const state = run( graph, [ .05, .1, .15, .2 ], root );
+		assert.deepEqual( state.elements[0].map( e => e.state.position[0] ), expected[flags] );
+	}
+	assert.throws(
+		() =>
+			particleProgram( [ {
+				name: "SetSpherePos",
+				flags: 3,
+				parameter: { kind: "Vector", value: [ 1, 1, 1 ] }
+			} ] ),
+		/sphere position flags/
+	);
+});
 test("region rebasing shifts retained parents and children together without changing velocity", () => {
 	const graph = [
 		emitter( { program: { vectors: [ vector( "SetVelocity", [ 1, 0, 0 ] ) ] } } ),
@@ -323,4 +362,20 @@ test("sub-tick drawing predicts motion without changing simulation, births or ra
 	advanceParticleGraph( state, graph, .15, identity(), table, Infinity, 1920, 0 );
 	particleElementMatrix( element, out, 0, .5 );
 	assert.equal( out[12], 1930.5 );
+});
+
+test("a holder turn between ticks reaches the elements linked to it on the next tick", () => {
+	// A matrix-linked root emitter (EFP node int1 = 1, CEFElement_ResolveLinkAncestors).
+	const graph = [ emitter( { frames: 40, matrixDepth: 1 } ) ];
+	const down = new Float32Array( [ 1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1 ] );
+	const level = new Float32Array( [ 0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1 ] );
+	const state = createParticleGraph( graph, 0 );
+	advanceParticleGraph( state, graph, 0, down, table );
+	// Render frames outnumber 20 Hz ticks: the holder turns on a call that
+	// runs no tick, and the next tick must still carry the whole turn.
+	advanceParticleGraph( state, graph, .01, level, table );
+	advanceParticleGraph( state, graph, .02, level, table );
+	advanceParticleGraph( state, graph, .05, level, table );
+	const z = Array.from( state.elements[0][0].matrix.subarray( 8, 11 ), v => Math.round( v * 1e6 ) / 1e6 + 0 );
+	assert.deepEqual( z, [ 1, 0, 0 ] );
 });

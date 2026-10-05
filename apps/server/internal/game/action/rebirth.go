@@ -13,8 +13,10 @@ import (
 	"reflect"
 	"strings"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -28,6 +30,28 @@ func worldSpawnFromMission(spawn simulation.Spawn) *enterworld.WorldSpawn {
 	x, y, z := spawn.X, spawn.Y, spawn.Z
 	angle := int64(spawn.Angle)
 	return &enterworld.WorldSpawn{RegionID: &regionID, X: &x, Y: &y, Z: &z, Angle: &angle}
+}
+
+/*
+================
+recordedPoint
+
+The point a recall or death records (CGObjPC_SaveLatestRecallPosition
+4E0250, SaveLatestDeathPosition 4E0330): the position and the PC's world,
+or nothing when that world is not a type-0 world (the RefGameWorld byte
++0x20 test), in which case the previous point stands.
+================
+*/
+func recordedPoint(c *enterworld.Character, spawn simulation.Spawn) (*domain.WorldPoint, bool) {
+	definition, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	if !ok || definition.NativeType != 0 {
+		return nil, false
+	}
+	point := &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(spawn)}
+	if uint32(instance.Pack(definition.ID, 1)) != domain.DefaultWorldInstance {
+		point.World = uint16(definition.ID)
+	}
+	return point, true
 }
 
 /*
@@ -78,20 +102,39 @@ are the fallback, so old saves and subsequently removed gates remain usable.
 ==================
 */
 func (rt *Runtime) appointedRebirthPoint(character *enterworld.Character) simulation.Spawn {
+	return rt.appointedRebirth("", character).spawn
+}
+
+/*
+================
+appointedRebirth
+
+The appointed town and the world it lies in. CGObjPC_ResolveTownRecallPosition
+(4E08A0) reads the appointed teleport through CRefTeleport_ResolveSpawnCoords,
+which also yields the teleport's GenWorldID. The stored fallback is a field
+position. During a fortress war a PC inside a fortress world revives where
+that world says instead (siege vtable +0x90, fortress_revival.go).
+================
+*/
+func (rt *Runtime) appointedRebirth(division string, character *enterworld.Character) travelPoint {
+	field := instance.ID(domain.DefaultWorldInstance)
 	fallback := defaultRebirthPoint(character)
 	if character == nil || character.World == nil {
-		return fallback
+		return travelPoint{spawn: fallback, world: field}
+	}
+	if point, ok := rt.fortressRevival(division, character); ok {
+		return point
 	}
 	world := character.World
 	if rt.portals != nil && world.RebirthGateRefID != 0 {
 		if id, ok := rt.portals.sources[world.RebirthGateRefID]; ok {
 			d := rt.portals.destinations[id]
 			if d.recall && d.spawn.RegionID != 0 && d.spawn.RegionID&0x8000 == 0 {
-				return d.spawn
+				return travelPoint{spawn: d.spawn, world: portalWorld(d)}
 			}
 		}
 	}
-	return missionSpawnFromWorld(world.RebirthPoint, fallback)
+	return travelPoint{spawn: missionSpawnFromWorld(world.RebirthPoint, fallback), world: field}
 }
 
 /*
@@ -225,17 +268,31 @@ func (rt *Runtime) HandleLocalRebirth(
 	candidate.CurrentHP, candidate.CurrentMP = &restoredHP, &restoredMP
 	var prepared enterworld.PreparedReentry
 	var previousPets map[petOwnerKey]petSession
+	currentWorld := instance.ID(domain.CharacterWorldInstance(before))
+	arrivalWorld := currentWorld
+	var membership populationAdmission
 	committed := false
 	defer func() {
 		if !committed {
 			rt.restoreCompanionRelocation(previousPets)
+			if arrivalWorld != currentWorld {
+				rt.restorePopulationSession(membership)
+			}
 		}
 	}()
 	if choice == wire.RebirthAtSpecifiedPoint {
-		destination = rt.appointedRebirthPoint(before)
+		arrival := rt.appointedRebirth(divisionID, before)
+		destination = arrival.spawn
 		preview := corpse
 		preview.Spawn = destination
 		writeBackWorld(candidate, preview)
+		setCharacterWorld(candidate, arrival.world)
+		// Re-entry is built against the destination world's membership.
+		var moved bool
+		if membership, moved = rt.moveWorldMembership(divisionID, before, currentWorld, arrival.world); !moved {
+			return OpResult{DiagnosticRefusal: "rebirth-world-unavailable"}
+		}
+		arrivalWorld = arrival.world
 		previousPets = rt.relocateReturningPet(divisionID, character, destination)
 		var ok bool
 		prepared, ok = rt.deps.PrepareReentry(divisionID, candidate)
@@ -263,6 +320,7 @@ func (rt *Runtime) HandleLocalRebirth(
 		})
 		writeBackWorld(character, state)
 		character.World.MoveSegment = nil
+		setCharacterWorld(character, arrivalWorld)
 		character.CurrentHP, character.CurrentMP = &restoredHP, &restoredMP
 		character.LastExpLoss = 0 // CGObjPC_TeleportToTown 4DF2E8
 		untouchable = rt.grantReviveUntouchable(divisionID, character, rt.Now().UnixMilli())

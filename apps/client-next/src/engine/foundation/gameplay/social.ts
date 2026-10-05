@@ -4,18 +4,24 @@
 social.ts - party, guild and invitation state and wire
 
 Owns the decoded party roster (the shared 75DB30 member record), guild
-updates and pending invitations, and builds the matching requests. A frame
+updates and pending invitations. Outgoing commands live in social-request. A frame
 is decoded completely before any state is published.
 
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
+/*
+================
+PartyMember
+================
+*/
 export interface PartyMember {
 	readonly guild?: string;
 	readonly native41?: number;
-	readonly native50?: number;
-	readonly native54?: number;
+	// 75DB30 +0x50/+0x54 (mask bit 8): the member's main mastery ids, 0 when untrained.
+	readonly primaryMastery?: number;
+	readonly secondaryMastery?: number;
 	// Resolved from the member's model reference by the world catalog (0 China, 1 Europe).
 	readonly country?: number;
 	readonly id: number;
@@ -29,6 +35,11 @@ export interface PartyMember {
 	readonly z: number;
 	readonly war: number;
 }
+/*
+================
+GuildMember
+================
+*/
 export interface GuildMember {
 	readonly warScore?: number;
 	readonly warKills?: number;
@@ -44,7 +55,25 @@ export interface GuildMember {
 	readonly role: number;
 	readonly offline: number;
 }
+// One open guild vote (826610's vote tail, 0x3A6C type 1): the master
+// release vote is kind 0. remainingMs is as of its arrival.
+/*
+================
+GuildVote
+================
+*/
+export interface GuildVote {
+	readonly id: number;
+	readonly kind: number;
+	readonly remainingMs: number;
+}
+/*
+================
+Guild
+================
+*/
 export interface Guild {
+	readonly votes?: readonly GuildVote[];
 	readonly crest?: number;
 	readonly flags?: number;
 	readonly id: number;
@@ -56,6 +85,11 @@ export interface Guild {
 	readonly members: readonly GuildMember[];
 }
 // 75AD90 / 828D50: peer-relative projection; retain opaque native words by offset.
+/*
+================
+GuildWar
+================
+*/
 export interface GuildWar {
 	readonly id: number;
 	readonly enemyId: number;
@@ -71,6 +105,13 @@ export interface GuildWar {
 export const RESURRECTION_PROPOSAL = 4;
 // The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).
 export const MUTATION_PROPOSAL = 8;
+// 7644E0 case 6: a guild master proposes a union (confirm box 0x1D).
+export const UNION_PROPOSAL = 6;
+/*
+================
+SocialState
+================
+*/
 export interface SocialState {
 	readonly wars?: readonly GuildWar[];
 	readonly roleUpdates?: readonly { name: string; role: number; }[];
@@ -98,7 +139,7 @@ export interface SocialState {
 	readonly allianceMaster?: number;
 	readonly allianceCrests?: readonly [number, number];
 	readonly invitation: {
-		readonly type: 1 | 2 | 3 | 5;
+		readonly type: 1 | 2 | 3 | 5 | 6;
 		readonly options?: number;
 		readonly gid: number;
 	} | null;
@@ -112,53 +153,12 @@ export interface SocialState {
 	// Diagnostic state, not player-facing invented text. These native bodies
 	// require a formatted message/modal owner beyond the constant dispatcher.
 	readonly unresolvedNotice?: { readonly category: number; readonly code: number; };
+	// The war compensation the guild manager quoted (0xB140 [1][u32]); the
+	// claim box (5D4050) asks before 0x73F7 collects it.
+	readonly compensation?: number;
 	readonly error: string | null;
 }
-export type SocialCommand = {
-	kind: "party-invite";
-	gid: number;
-	options: number;
-} | {
-	kind: "party-kick";
-	id: number;
-} | {
-	kind: "party-leave";
-} | {
-	kind: "social-consent";
-	accept: boolean;
-	automatic?: boolean;
-} | {
-	kind: "resurrection-consent";
-	accept: boolean;
-} | {
-	kind: "guild-create";
-	gid: number;
-	name: string;
-} | {
-	kind: "guild-invite";
-	gid: number;
-} | {
-	kind: "guild-kick";
-	name: string;
-} | {
-	kind: "guild-leave" | "guild-dissolve";
-	gid: number;
-} | {
-	kind: "guild-notice";
-	subject: string;
-	contents: string;
-} | {
-	kind: "guild-donate";
-	amount: number;
-} | {
-	kind: "guild-title";
-	id: number;
-	name: string;
-} | {
-	kind: "guild-role";
-	id: number;
-	role: number;
-};
+export { socialRequest, type SocialCommand } from "./social-request";
 
 /*
 ================
@@ -184,141 +184,6 @@ export function withoutResurrection( state: SocialState ): SocialState {
 	}
 	const { resurrection: _closed, ...rest } = state;
 	return rest;
-}
-
-/*
-================
-socialRequest
-================
-*/
-export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame {
-	const bytes: number[] = [];
-	function uint( n: number, max: number ) {
-		if ( !Number.isInteger( n ) || n < 0 || n > max ) {
-			throw Error( "Invalid social reference" );
-		}
-	}
-	function u8( n: number ) {
-		uint( n, 255 );
-		bytes.push( n );
-	}
-	function u32( n: number ) {
-		uint( n, 0xffffffff );
-		bytes.push( n & 255, n >>> 8 & 255, n >>> 16 & 255, n >>> 24 );
-	}
-	function str( value: string, max: number ) {
-		const encoded = new TextEncoder().encode( value );
-		if ( !encoded.length || encoded.length > max || value.includes( "\0" ) ) {
-			throw Error( "Invalid social text" );
-		}
-		bytes.push( encoded.length & 255, encoded.length >>> 8 );
-		bytes.push( ...encoded );
-	}
-	let opcode: number;
-	switch ( c.kind ) {
-		case "party-invite":
-			if ( c.options & ~7 ) {
-				throw Error( "Invalid party options" );
-			}
-			if ( state.leader && state.self !== state.leader && !(state.options & 4) ) {
-				throw Error( "Only the party leader may invite" );
-			}
-			u32( c.gid );
-			if ( !state.leader ) {
-				u8( c.options );
-			}
-			opcode = state.leader ? 0x751a : 0x70d5;
-			break;
-		case "party-kick":
-			if (
-				!state.self || state.self !== state.leader || c.id === state.self ||
-				!state.members.some( m => m.id === c.id )
-			) {
-				throw Error( "Invalid party removal" );
-			}
-			u32( c.id );
-			opcode = 0x7664;
-			break;
-		case "party-leave":
-			if ( !state.leader ) {
-				throw Error( "You are not in a party" );
-			}
-			opcode = 0x704f;
-			break;
-		case "social-consent":
-			if ( !state.invitation ) {
-				throw Error( "Invitation is no longer available" );
-			}
-			if ( c.accept ) {
-				u8( 1 );
-				u8( 1 );
-			} else if ( state.invitation.type !== 1 ) {
-				u8( 2 );
-				u8( state.invitation.type === 2 ? 0x0c : state.invitation.type === 3 ? 0x17 : 0x16 );
-			} else {
-				u8( 1 );
-				u8( c.automatic ? 0 : 2 );
-			}
-			opcode = 0x3393;
-			break;
-		case "resurrection-consent":
-			if ( !state.resurrection ) {
-				throw Error( "Resurrection is no longer available" );
-			}
-			// Box kind 4 answers through CGInterface_OnMsgBoxResult case 1 as
-			// {1, button}: button 1 is yes (526020), 2 is no (52C800).
-			u8( 1 );
-			u8( c.accept ? 1 : 2 );
-			opcode = 0x3393;
-			break;
-		case "guild-create":
-			if ( state.guild ) {
-				throw Error( "You are already in a guild" );
-			}
-			u32( c.gid );
-			str( c.name, 127 );
-			opcode = 0x7663;
-			break;
-		case "guild-invite":
-			u32( c.gid );
-			opcode = 0x73ad;
-			break;
-		case "guild-kick":
-			str( c.name, 127 );
-			opcode = 0x74b1;
-			break;
-		case "guild-leave":
-		case "guild-dissolve":
-			u32( c.gid );
-			opcode = c.kind === "guild-leave" ? 0x756e : 0x766e;
-			break;
-		case "guild-notice":
-			str( c.subject, 128 );
-			str( c.contents, 1024 );
-			opcode = 0x777a;
-			break;
-		case "guild-donate":
-			if ( !c.amount ) {
-				throw Error( "Donation must be positive" );
-			}
-			u32( c.amount );
-			opcode = 0x740f;
-			break;
-		case "guild-title":
-			u32( c.id );
-			str( c.name, 127 );
-			opcode = 0x72bc;
-			break;
-		case "guild-role":
-			u32( c.id );
-			u8( c.role );
-			opcode = 0x765f;
-			break;
-	}
-	if ( c.kind.startsWith( "guild-" ) && c.kind !== "guild-create" && !state.guild ) {
-		throw Error( "You are not in a guild" );
-	}
-	return { opcode, payload: Uint8Array.from( bytes ) };
 }
 
 /*
@@ -369,16 +234,36 @@ export function socialPacket(
 			0xb40f,
 			0xb2bc,
 			0xb65f,
+			// Union invite/leave/expel and the rights grant answer
+			// [1] or [2][code] as category 0x10 notices (75CCA0, 75CCF0,
+			// 75CD40, 75CB80).
+			0xb379,
+			0xb795,
+			0xb680,
+			0xb44e,
 			0x341e,
 			0x32bb,
 			0x34f3,
-			0x37d4
+			0x37d4,
+			0xb3f0,
+			0xb7d4,
+			0xb140,
+			0xb3f7,
+			0xb6dc,
+			0xb330,
+			0xb515,
+			0x3a6c
 		].includes( op )
 	) {
 		return null;
 	}
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	let o = 0;
+	/*
+	================
+	take
+	================
+	*/
 	function take( n: number ) {
 		if ( o + n > p.length ) {
 			throw Error( "Truncated social frame" );
@@ -391,6 +276,11 @@ export function socialPacket(
 		u16 = () => v.getUint16( take( 2 ), true ),
 		i16 = () => v.getInt16( take( 2 ), true ),
 		u32 = () => v.getUint32( take( 4 ), true );
+	/*
+	================
+	str
+	================
+	*/
 	function str() {
 		const n = u16();
 		if ( n > 2048 ) {
@@ -399,11 +289,21 @@ export function socialPacket(
 		const at = take( n );
 		return new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( at, at + n ) );
 	}
+	/*
+	================
+	partyMember
+	================
+	*/
 	function partyMember( old?: PartyMember ): PartyMember {
 		const decoded = readPartyMember( p, o, old );
 		o = decoded.end;
 		return decoded.member;
 	}
+	/*
+	================
+	guildMember
+	================
+	*/
 	function guildMember(): GuildMember {
 		const id = u32(), name = str(), grade = u8(), level = u8(), donated = u32(), permissions = u32();
 		const warScore = u32(), warKills = u32(), warDeaths = u32();
@@ -427,6 +327,11 @@ export function socialPacket(
 			warDeaths
 		};
 	}
+	/*
+	================
+	unique
+	================
+	*/
 	function unique<
 		T extends {
 			id: number;
@@ -436,6 +341,11 @@ export function socialPacket(
 			throw Error( "Invalid social roster" );
 		}
 	}
+	/*
+	================
+	guildBlock
+	================
+	*/
 	function guildBlock(): Guild {
 		const id = u32(), name = str(), level = u8(), gp = u32(), subject = str(), contents = str();
 		const crest = u32();
@@ -446,11 +356,15 @@ export function socialPacket(
 		}
 		const members = Array.from( { length: n }, guildMember );
 		unique( members, 250 );
-		if ( u8() !== 0 ) {
-			throw Error( "Unsupported guild vote block" );
-		}
-		return { id, name, level, gp, subject, contents, members, crest };
+		const votes = Array.from( { length: u8() }, () => ({ id: u32(), kind: u8(), remainingMs: u32() }) );
+		unique( votes, 255 );
+		return { id, name, level, gp, subject, contents, members, crest, ...(votes.length ? { votes } : {}) };
 	}
+	/*
+	================
+	readWar
+	================
+	*/
 	function readWar(): GuildWar | null {
 		const id = u32();
 		if ( !id ) return null;
@@ -475,6 +389,11 @@ export function socialPacket(
 			word3c
 		};
 	}
+	/*
+	================
+	mergeWar
+	================
+	*/
 	function mergeWar( rows: readonly GuildWar[], row: GuildWar | null ) {
 		if ( !row ) return rows;
 		const result = rows.filter( r => r.id !== row.id );
@@ -498,6 +417,11 @@ export function socialPacket(
 		};
 	} else if ( op === 0x34f3 ) {
 		const type = u8(), updates = [ ...(state.crestUpdates ?? []) ];
+		/*
+		================
+		update
+		================
+		*/
 		function update( row: NonNullable<SocialState["crestUpdates"]>[number] ) {
 			const i = updates.findIndex( r => r.name === row.name );
 			if ( i < 0 ) updates.push( row );
@@ -538,7 +462,7 @@ export function socialPacket(
 		const type = u8();
 		if (
 			type !== 1 && type !== 2 && type !== 3 && type !== RESURRECTION_PROPOSAL && type !== 5 &&
-			type !== MUTATION_PROPOSAL
+			type !== UNION_PROPOSAL && type !== MUTATION_PROPOSAL
 		) {
 			return null;
 		}
@@ -639,6 +563,55 @@ export function socialPacket(
 		}
 	} else if ( op === 0x32c4 ) {
 		next = { ...next, guild: guildBlock() };
+	} else if ( op === 0x3a6c ) {
+		// 7603D0: 1 opens a vote, 3 closes it (1 elected, 2 broken), 4 moves
+		// a ballot, 5 restates the time; 2 is an assert in v1.150.
+		const type = u8(), id = u32(), guild = next.guild;
+		const votes = guild?.votes ?? [];
+		if ( type === 1 ) {
+			const vote = { id, kind: u8(), remainingMs: u32() };
+			if ( guild ) {
+				next = {
+					...next,
+					guild: { ...guild, votes: [ ...votes.filter( row => row.id !== id ), vote ] }
+				};
+			}
+		} else if ( type === 3 ) {
+			const result = u8();
+			if ( result === 1 ) {
+				const heir = u32(), name = guild?.members.find( m => m.id === heir )?.name ?? "";
+				next = {
+					...next,
+					notice: {
+						key: "UIIT_MSG_MRELEASE_BEELETED",
+						value: 0,
+						nativeType: 0,
+						arguments: [ name, guild?.name ?? "" ]
+					}
+				};
+			} else if ( result === 2 ) {
+				next = { ...next, notice: { key: "UIIT_MSG_MRELEASE_BROKEN", value: 0, nativeType: 0 } };
+			} else {
+				throw Error( "Invalid guild vote result" );
+			}
+			if ( guild ) next = { ...next, guild: { ...guild, votes: votes.filter( row => row.id !== id ) } };
+		} else if ( type === 4 ) {
+			// The window keeps no candidate list in v1.150, so a ballot only
+			// moves counts the client cannot show.
+			u8();
+			u8();
+			u8();
+		} else if ( type === 5 ) {
+			const remainingMs = u32();
+			if ( guild ) {
+				next = {
+					...next,
+					guild: { ...guild, votes: votes.map( row => row.id === id ? { ...row, remainingMs } : row ) }
+				};
+			}
+		} else {
+			throw Error( "Unsupported guild vote update" );
+		}
 	} else if ( op === 0x3b29 ) {
 		const type = u8();
 		// 762040 dispatches through the byte table at 7637DC. Slot 0 only
@@ -779,7 +752,19 @@ export function socialPacket(
 					throw Error( "Unsupported guild info mask" );
 				}
 				if ( mask & 2 ) guild = { ...guild, name: str() };
-				if ( mask & 4 ) guild = { ...guild, level: u8() };
+				if ( mask & 4 ) {
+					// 5E4710: the new level announces itself in chat.
+					guild = { ...guild, level: u8() };
+					next = {
+						...next,
+						notice: {
+							key: "UIIT_MSG_GUILD_LEVEL_UP_RESULT",
+							value: guild.level,
+							nativeType: 0,
+							arguments: [ String( guild.level ) ]
+						}
+					};
+				}
 				if ( mask & 8 ) {
 					guild = { ...guild, gp: u32() };
 				}
@@ -843,8 +828,25 @@ export function socialPacket(
 						arguments: [ String( Math.floor( hours / 24 ) ), String( hours % 24 ), String( minutes % 60 ) ]
 					}
 				};
+			} else if ( op === 0xb515 && code === 0x48 ) {
+				// 7682F0: the warehouse is in a member's hands; it names them.
+				next = {
+					...next,
+					error: null,
+					unresolvedNotice: undefined,
+					notice: { key: "UIIT_MSG_GUILD_WAREHOUSE_USE", value: 0, nativeType: 0, arguments: [ str() ] }
+				};
+			} else if ( op === 0xb6dc && code === 0x33 ) {
+				// 760270 names this one itself, outside the category table.
+				next = {
+					...next,
+					error: null,
+					unresolvedNotice: undefined,
+					notice: { key: "UIIT_MSG_MRELEASEERR_NOTVOTETIME", value: 0, nativeType: 0 }
+				};
 			} else {
-				const resolution = resolveNativeNotice( 16, code );
+				// 75CC50 reads the ballot's refusal in category 0x15.
+				const resolution = resolveNativeNotice( op === 0xb330 ? 0x15 : 16, code );
 				next = {
 					...next,
 					error: null,
@@ -856,6 +858,21 @@ export function socialPacket(
 			}
 		} else if ( result !== 1 ) {
 			throw Error( "Invalid guild result" );
+		} else if ( op === 0xb515 ) {
+			// The warehouse owner (storage-room.ts) carries the open path.
+		} else if ( op === 0xb140 ) {
+			next = { ...next, compensation: u32() };
+		} else if ( op === 0xb7d4 || op === 0xb6dc ) {
+			next = {
+				...next,
+				notice: {
+					key: op === 0xb7d4 ? "UIIT_MSG_MLEAVE_SUCCESS" : "UIIT_MSG_MRELEASE_VOTING",
+					value: 0,
+					nativeType: 0
+				}
+			};
+		} else if ( op === 0xb3f7 ) {
+			next = { ...next, compensation: undefined };
 		} else if ( op === 0xb663 ) {
 			next = { ...next, guild: guildBlock() };
 		} else if ( op === 0xb56e || op === 0xb66e ) {
@@ -903,6 +920,11 @@ Shared 75DB30 member record: roster and matching approval use the same wire owne
 export function readPartyMember( p: Uint8Array, start = 0, old?: PartyMember ): { member: PartyMember; end: number; } {
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	let at = start;
+	/*
+	================
+	take
+	================
+	*/
 	function take( n: number ) {
 		if ( at + n > p.length ) throw Error( "Truncated party member" );
 		const out = at;
@@ -927,8 +949,8 @@ export function readPartyMember( p: Uint8Array, start = 0, old?: PartyMember ): 
 		war: number;
 		guild?: string;
 		native41?: number;
-		native50?: number;
-		native54?: number;
+		primaryMastery?: number;
+		secondaryMastery?: number;
 	} = { id: 0, name: "", model: 0, level: 0, status: 0, region: 0, x: 0, y: 0, z: 0, war: 0, ...old };
 	if ( mask & 16 ) member.id = u32();
 	if ( mask & 1 ) {
@@ -955,8 +977,8 @@ export function readPartyMember( p: Uint8Array, start = 0, old?: PartyMember ): 
 	}
 	if ( mask & 128 ) member.native41 = u8();
 	if ( mask & 8 ) {
-		member.native50 = u32();
-		member.native54 = u32();
+		member.primaryMastery = u32();
+		member.secondaryMastery = u32();
 	}
 	if ( !member.id ) throw Error( "Missing party member identity" );
 	return { member, end: at };

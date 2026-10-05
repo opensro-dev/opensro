@@ -9,7 +9,23 @@ commands and cannot bypass actor eligibility.
 
 ===========================================================================
 */
+// CGInterface_ExecuteActionCommand 695420: 1000 + 6 asks the selected
+// player to trade.
+const ACTION_EXCHANGE = 1006;
+import {
+	ACTION_FORTRESS_RETURN,
+	FORTRESS_PORTAL_NOTICE_CATEGORY,
+	fortressPortalCooldown,
+	fortressReturnRefusal,
+	fortressReturnRequest
+} from "@/engine/foundation/gameplay/fortress-return";
+import {
+	autoPotionTarget,
+	autoPotionTargetNotice,
+	createCosSelection
+} from "@/engine/foundation/gameplay/cos-item-use";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
+import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
 import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
 import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
 import {
@@ -32,18 +48,39 @@ import {
 	MASTERY_WITHDRAWAL_RESPONSE
 } from "@/engine/foundation/gameplay/withdrawal";
 import { positionSkillRequest } from "@/engine/foundation/gameplay/position-skill";
-import { repairNotice } from "@/engine/foundation/gameplay/repair";
+import {
+	REPAIR_ONE_SLOT,
+	REPAIR_REFUSED_BY_OPTIONS,
+	REPAIR_RESPONSE_OPCODE,
+	repairClick,
+	repairNotice
+} from "@/engine/foundation/gameplay/repair";
 import { portalNotice } from "@/engine/foundation/gameplay/portal";
 import {
 	interactionApproach,
 	interactionApproachTransition,
+	keepsStall,
 	type InteractionApproachState
 } from "@/engine/foundation/gameplay/interaction-approach";
 import { targetNotice } from "@/engine/foundation/gameplay/target-notices";
 import { constantNativeNotice } from "@/engine/foundation/gameplay/native-notice";
+import {
+	STALL_ALCHEMY_CATEGORY,
+	STALL_ALCHEMY_CODE,
+	STALL_JOB_SUIT_CODE,
+	STALL_NO_JOB_CLASS,
+	STALL_NOTICE_CATEGORY,
+	type StallCommand
+} from "@/engine/foundation/gameplay/stall";
+import {
+	AVATAR_MAGIC_OPTION_ANSWER,
+	AVATAR_MAGIC_OPTION_FUNCTION,
+	AVATAR_MAGIC_OPTION_NOTICE_CATEGORY
+} from "@/engine/foundation/gameplay/avatar-magic-option";
 import { skillNotice } from "@/engine/foundation/gameplay/skill-notices";
 import { returnScrollCast, type ReturnScrollCast } from "@/engine/foundation/gameplay/return-scroll";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
+import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
@@ -59,7 +96,17 @@ import {
 	fortressBootstrap,
 	fortressPacket,
 	fortressMusicActive,
-	fortressMusicMode
+	fortressMusicMode,
+	fortressInteraction,
+	fortressManagerReply,
+	fortressRegistrationNotice,
+	fortressCaptureNotice,
+	fortressStructureState,
+	FORTRESS_NOTICE_CATEGORY,
+	FORTRESS_WAR_APPLY,
+	FORTRESS_WAR_STATUS,
+	FORTRESS_WAR_WITHDRAW,
+	type FortressApplication
 } from "@/engine/foundation/gameplay/fortress";
 import {
 	cosTimerPacket,
@@ -74,9 +121,10 @@ import {
 	autoPotionSettings,
 	autoPotionSave,
 	autoPotionEntry,
-	autoPotionDelay,
-	autoPotionEligible,
-	autoPotionActive,
+	emptyAutoPotionTimer,
+	checkAutoPotionTimer,
+	autoPotionChannelChanged,
+	type AutoPotionTimer,
 	autoPotionItemSlot,
 	type AutoPotionFacts
 } from "@/engine/foundation/gameplay/auto-potion";
@@ -129,6 +177,7 @@ import {
 } from "@/engine/foundation/gameplay/social";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
 import {
+	skillAdmitsPredictedTarget,
 	skillCatalog,
 	skillMpCost,
 	skillTrainingReason,
@@ -154,6 +203,7 @@ import { createMoveReservation } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
+import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
 import type { WireFrame } from "@/engine/contracts/network";
 /*
 ================
@@ -199,6 +249,8 @@ const SKILL_ANSWER_SLACK_MS = 500;
 // B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
 const ACTION_STATE_ARM = 1;
 const QUEUED_COMMANDS = 2;
+const ITEM_NOTICE_CATEGORY = 1;
+const ITEM_INTERACTION_REFUSAL = 0x35;
 
 /*
 ================
@@ -251,9 +303,14 @@ export function createGameplay(
 	let warnings = [ false, false ];
 	let options = initialGameOptions();
 	let eligibility = { gm: false, pcRoomEvent: false };
+	let autoPotionInputBlocked = false, autoPotionItemMallOpen = false;
 	let autoPotion = autoPotionBootstrap( {} );
 	let potionFacts: AutoPotionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
-	const potionDue: [number | null, number | null, number | null] = [ null, null, null ];
+	const potionTimers: [AutoPotionTimer, AutoPotionTimer, AutoPotionTimer] = [
+		emptyAutoPotionTimer(),
+		emptyAutoPotionTimer(),
+		emptyAutoPotionTimer()
+	];
 	const guideSummons = new Map<number, number>();
 	let guide: GameplayState["guide"];
 	let academy: GameplayState["academy"];
@@ -376,6 +433,10 @@ would turn it.
 			local.appearanceState?.[0] === 2 || localCastHolds( now ) || combat.predicting() ||
 			combat.guidedActive( localGid, now )
 		) return;
+		// The native press animates only on the server's answer (6FCD50), so
+		// a target the row may not admit (an NPC, a player in town, the caster
+		// for an enemy skill) predicts nothing: it would animate and snap back.
+		if ( target && !skillAdmitsPredictedTarget( metadata, target, localGid ) ) return;
 		if ( target && target.gid !== localGid ) {
 			if ( target.kind === "monster" && target.appearanceState?.[0] === 2 || !withinReach( metadata, target ) ) {
 				return;
@@ -414,6 +475,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
+	let fortressApplication: (FortressApplication & { readonly sequence: number; }) | null = null;
+	// CIFActionTabPanel +0x390: when the fortress portal may be used again.
+	let fortressPortalUntilMs = 0;
 	let social = emptySocial();
 	// The world catalog's lookups, bound by the composition root (core).
 	let worldReferences: WorldReferences = { country: () => undefined, playerModels: () => [], item: () => undefined };
@@ -462,12 +526,14 @@ fails; retry persistence without restoring stale slot occupancy.
 	let cosError: string | null = null;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
+	const cosSelection = createCosSelection();
 	let activeCos: GameplayState["activeCos"], cosResult: GameplayState["cosResult"];
 	// 6E6150 keys a kind-3 row by its item id, so distinct items stack.
 	let cosWindows: readonly CosItemWindow[] = [];
 	const cosItemRefs2 = new Map<number, CosItemWindowReference>();
 	// Kind-4 board rows of the EXP/SP scroll jobs (param-job.ts).
 	const paramJobs = createParamJobs();
+	const countJobs = createCountJobs();
 	let abnormalRecords: readonly AbnormalRecord[] = [];
 	let abnormalMask = 0;
 	const chat = createChat( send ), quests = createQuests( send );
@@ -475,6 +541,57 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The NPC warehouse (storage-room.ts).
 	const storage = createStorageRoom( send );
 	let previousLockedQuestNotice = "";
+	/*
+================
+checkAutomaticPotion
+
+All automatic attempts enter the same inventory transaction and category
+reuse gate as manual activation. Recovery completion is server-owned.
+================
+	*/
+	function checkAutomaticPotion( kind: 0 | 1 | 2, now: number, event: "vitals" | "timer" ) {
+		const result = checkAutoPotionTimer( potionTimers[kind], {
+			kind,
+			settings: autoPotion,
+			facts: potionFacts,
+			now,
+			event
+		} );
+		potionTimers[kind] = result.timer;
+		if ( !result.use || autoPotionInputBlocked ) return;
+		const entry = autoPotionEntry( [ autoPotion.hp, autoPotion.mp, autoPotion.cure ][kind]! );
+		const binding = bindings.quickSlots.find( row => row.slot === entry.slot );
+		const slot = binding ? autoPotionItemSlot( binding, inventory.state().inventory ) : null;
+		// 561D50 checks the NPC interaction latch (69F870 includes storage)
+		// and the return-delay control. The retry timer itself stays armed.
+		if ( slot === null ) return;
+		if ( autoPotionItemMallOpen || returnScroll || inventory.state().shop || storage.state() ) {
+			const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, ITEM_INTERACTION_REFUSAL );
+			if ( notice ) api.notice( notice );
+			return;
+		}
+		const item = inventory.state().inventory.find( row => row.slot === slot )!;
+		if ( itemCooldown( inventory.state().itemCooldowns, item.typeFlags, now ) ) return;
+		const context = autoPotionTarget(
+			item.typeFlags,
+			[ ...cosRecords.values() ],
+			cosSelection.selected(),
+			targeting.state().target ?? 0
+		);
+		if ( !context ) {
+			const notice = autoPotionTargetNotice(
+				item.typeFlags,
+				[ ...cosRecords.values() ],
+				cosSelection.selected()
+			);
+			if ( notice ) api.notice( notice );
+			return;
+		}
+		if ( inventory.state().inventoryPending ) return;
+		inventory.use( slot, now, context );
+		dirty = true;
+	}
+
 	let localGid = 0, revision = 0, dirty = false, protocol = 0, localCountry: number | undefined;
 	/*
 ================
@@ -492,7 +609,10 @@ holds until it ends, as before.
 	function localCastHolds( now: number ): boolean {
 		return combat.state().casts.some( c => {
 			if ( c.caster !== localGid || c.cancelledAtMs !== undefined ) return false;
-			const actionMs = catalog.find( row => row.id === c.skill )?.actionMs;
+			const row = catalog.find( row => row.id === c.skill );
+			// A wall's cast holds until the wall retires (cast-motion-lock).
+			if ( row?.holdsCaster ) return true;
+			const actionMs = row?.actionMs;
 			return !actionMs || c.receivedAtMs === undefined || now - c.receivedAtMs < actionMs;
 		} );
 	}
@@ -552,12 +672,37 @@ coming, so retain its menu, dialogue and lock until a new request.
 			reopen: npcConversation.state().phase === "closed"
 		} );
 		if ( frame ) npcConversation.clear();
+		markTarget( entity );
+		return frame;
+	}
+	/*
+================
+markTarget
+
+The one selection decal (CIODecal) rides entity. A ground click moves it to
+the clicked point; an attack or skill at a target brings it back, so the
+ring stays under what the player fights and the spent move marker goes.
+================
+	*/
+	function markTarget( entity: EntityState ) {
 		selectionDecal = {
 			kind: "target",
 			gid: entity.gid,
 			slot: entity.kind === "monster" || entity.kind === "cos" ? 3 : entity.kind === "player" ? 2 : 1
 		};
-		return frame;
+	}
+	/*
+================
+visitStall
+
+0x761F for the stall a player keeps, unless the reader already keeps or
+stands at one (the server would refuse it).
+================
+	*/
+	function visitStall( entity: EntityState ) {
+		if ( inventory.stallPhase() !== "none" ) return;
+		inventory.stallCommand( { kind: "stall-visit", gid: entity.gid } );
+		dirty = true;
 	}
 	/*
 ================
@@ -577,7 +722,9 @@ selected entities, cooldowns or world-entry state.
 		eligibility = { gm: false, pcRoomEvent: false };
 		autoPotion = autoPotionBootstrap( {} );
 		potionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
-		potionDue.fill( null );
+		potionTimers.fill( emptyAutoPotionTimer() );
+		autoPotionInputBlocked = false;
+		autoPotionItemMallOpen = false;
 		selectionDecal = null;
 		uniqueRefs = uniqueReferences( {} );
 		gmItems.clear();
@@ -590,6 +737,8 @@ selected entities, cooldowns or world-entry state.
 		training.reset();
 		social = emptySocial();
 		fortress = fortressBootstrap( {} );
+		fortressApplication = null;
+		fortressPortalUntilMs = 0;
 		musicMode = 0;
 		bindings = skillBindings( {} );
 		catalog = [];
@@ -616,6 +765,7 @@ selected entities, cooldowns or world-entry state.
 		localCountry = undefined;
 		job = noJob();
 		cosRecords.clear();
+		cosSelection.reset();
 		cosRefs.clear();
 		cosItemRefs.clear();
 		cosItemCaps.clear();
@@ -696,7 +846,9 @@ packets own subsequent mutations; bootstrap owns only initial state.
 				if ( flag !== undefined && typeof flag !== "boolean" ) throw Error( "Invalid entry eligibility" );
 			}
 			eligibility = { gm: identity?.gmPrivilege === true, pcRoomEvent: identity?.pcRoomEvent === true };
-			potionDue.fill( null );
+			potionTimers.fill( emptyAutoPotionTimer() );
+			autoPotionInputBlocked = false;
+			autoPotionItemMallOpen = false;
 			const pc =
 				(value as { character?: { hp?: number; mp?: number; maxHp?: number; maxMp?: number; }; }).character;
 			entryVitals = { hp: pc?.hp, mp: pc?.mp, maxHp: pc?.maxHp, maxMp: pc?.maxMp };
@@ -781,6 +933,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			cosResult = undefined;
 			cosError = null;
 			cosRecords.clear();
+			cosSelection.reset();
 			cosRefs.clear();
 			cosItemRefs.clear();
 			cosItemCaps.clear();
@@ -804,6 +957,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			cosItemRefs2.clear();
 			cosWindows = [];
 			paramJobs.reset();
+			countJobs.reset();
 			for (
 				const row of (value as {
 					refItemSnapshot?: ({ refObjId: number; } & Parameters<typeof cosTimerReference>[0])[];
@@ -812,6 +966,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 				const reference = cosTimerReference( row );
 				if ( reference ) cosItemRefs2.set( row.refObjId, reference );
 				paramJobs.reference( row );
+				countJobs.reference( row );
 			}
 			protocol = (value as {
 				simulationProtocolVersion?: number;
@@ -862,6 +1017,7 @@ Bind the admitted local actor and initialize its authoritative movement.
 		*/
 		seed( entity: EntityState ) {
 			localCountry = entity.countryByte9c;
+			potionFacts = { ...potionFacts, alive: ((entity.appearanceState?.[0] ?? 1) & 1) !== 0 };
 			job = entity.localJob ?? noJob();
 			if ( localGid !== entity.gid ) {
 				localGid = entity.gid;
@@ -905,6 +1061,25 @@ localIdentity
 		},
 		/*
 ================
+pickupNearest
+
+The pickup shortcut's item among candidates (pickup-nearest.ts): from the
+live pose, and the party whose drops the server may share.
+================
+		*/
+		pickupNearest( candidates: readonly EntityState[] ): number | undefined {
+			const pose = movement.state().pose;
+			if ( !pose || !localGid ) return undefined;
+			const party = new Set( social.members.map( member => member.id ) );
+			return nearestPickable(
+				candidates,
+				{ gid: localGid, regionId: pose.regionId, x: pose.x, z: pose.z },
+				party
+			)
+				?.gid;
+		},
+		/*
+================
 entityLifecycle
 
 Entity removal retires targeting and combat references in the same frame.
@@ -916,6 +1091,12 @@ Entity removal retires targeting and combat references in the same frame.
 			cosPickup.track( event );
 			if ( event.kind === "spawn" ) {
 				combat.seedEffects( event.entity.gid, event.entity.spawnSkills ?? [], soundClock );
+				// 4FA0B0: a structure's spawn row sets its hit points
+				// (CICharactor_SetCurrentHP) beside its record's maximum.
+				const { structureHp, maxHp } = event.entity;
+				if ( event.entity.kind === "structure" && structureHp !== undefined ) {
+					combat.seed( event.entity.gid, { hp: structureHp, ...(maxHp === undefined ? {} : { maxHp }) } );
+				}
 			} else {
 				approach = interactionApproachTransition( approach, { kind: "despawn", gid: event.gid } );
 				combat.remove( event.gid, soundClock );
@@ -956,6 +1137,16 @@ grant round trip and a deselection by one publish.
 		*/
 		skillTarget() {
 			return targeting.selectionIntent() || undefined;
+		},
+		/*
+================
+selectedTarget
+
+The granted selection (CGInterface_GetSelectedTargetGid), or 0 for none.
+================
+		*/
+		selectedTarget() {
+			return targeting.state().target ?? 0;
 		},
 		/*
 ================
@@ -1047,6 +1238,23 @@ state here before a command can claim a native wire conversation.
 						jobAliasRequest( command.gid, command.mode, command.alias )
 				);
 			}
+			if ( command.kind === "fortress-war-status" || command.kind === "fortress-war-apply" ) {
+				// The official's row exists only on the selected official (0x800000).
+				const target = targeting.state();
+				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x800000) ) {
+					throw Error( "Select a fortress official" );
+				}
+				return sendFrame(
+					command.kind === "fortress-war-status" ?
+						fortressInteraction( command.gid, FORTRESS_WAR_STATUS ) :
+						fortressInteraction(
+							command.gid,
+							command.withdraw ? FORTRESS_WAR_WITHDRAW : FORTRESS_WAR_APPLY,
+							command.fortress,
+							command.request
+						)
+				);
+			}
 			if ( command.kind === "storage-open" ) {
 				const target = targeting.state();
 				// The storage row exists only on a selected warehouse NPC (0x4).
@@ -1054,6 +1262,21 @@ state here before a command can claim a native wire conversation.
 					throw Error( "Select a warehouse NPC" );
 				}
 				storage.open( command.gid );
+				dirty = true;
+				return null;
+			}
+			if ( command.kind === "storage-open-guild" ) {
+				const target = targeting.state();
+				// The warehouse row exists only on a selected guild manager (0x4000).
+				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x4000) ) {
+					throw Error( "Select a guild manager" );
+				}
+				storage.openGuild( command.gid );
+				dirty = true;
+				return null;
+			}
+			if ( command.kind === "compensation-dismiss" ) {
+				social = { ...social, compensation: undefined };
 				dirty = true;
 				return null;
 			}
@@ -1169,11 +1392,24 @@ state here before a command can claim a native wire conversation.
 					payload: Uint8Array.of( ((local.visualFlags ?? 0) & 2) | (command.enabled ? 1 : 0) )
 				} );
 			}
+			if ( command.kind === "helper-mark" ) {
+				// CGInterface_ExecuteActionCommand (695420) action 1011: toggle the
+				// helper bit of the local +0x779 flags and send the whole byte.
+				if ( !local || !localGid ) throw Error( "Missing helper mark authority" );
+				return sendFrame( { opcode: 0x7683, payload: Uint8Array.of( ((local.visualFlags ?? 0) & 3) ^ 2 ) } );
+			}
 			if ( command.kind === "auto-potion-save" ) {
-				const next = autoPotionSettings( command.settings ), frame = autoPotionSave( next );
+				const next = autoPotionSettings( command.settings );
+				const changed = ([ 0, 1, 2 ] as const).map( kind =>
+					autoPotionChannelChanged( autoPotion, next, kind )
+				);
+				if ( !changed.some( Boolean ) && next.timing === autoPotion.timing ) return null;
+				const frame = autoPotionSave( next );
 				send( frame );
 				autoPotion = next;
-				potionDue.fill( null );
+				for ( const kind of [ 0, 1, 2 ] as const ) {
+					if ( changed[kind] ) potionTimers[kind] = { ...potionTimers[kind], active: false };
+				}
 				return frame;
 			}
 			if ( command.kind === "guide-event" ) {
@@ -1184,13 +1420,30 @@ state here before a command can claim a native wire conversation.
 				guide = next.state;
 				return next.frame;
 			}
-			if ( command.kind.startsWith( "alchemy-" ) || command.kind.startsWith( "gacha-" ) ) {
+			if (
+				command.kind.startsWith( "alchemy-" ) || command.kind.startsWith( "gacha-" ) ||
+				command.kind.startsWith( "magic-option-" )
+			) {
 				if ( !localGid ) throw Error( "Local player is not initialized" );
 				if (
 					command.kind === "gacha-open" &&
 					(!entity || entity.kind !== "npc" || entity.refObjId !== 9251 ||
 						targeting.state().target !== command.gid || targeting.state().targetPending)
 				) throw Error( "Select the Magic Pop NPC" );
+				// Row 0x2F exists only on a selected smith (0x80000000).
+				if (
+					command.kind === "magic-option-open" &&
+					(targeting.state().target !== command.gid || targeting.state().targetPending ||
+						!((targeting.state().targetCapabilities ?? 0) & AVATAR_MAGIC_OPTION_FUNCTION))
+				) throw Error( "Select a smith" );
+				if ( command.kind === "magic-option-take" || command.kind === "magic-option-grant" ) {
+					const key = inventory.magicOptionItem( command );
+					if ( key ) {
+						notices = [ ...notices.slice( -99 ), { key, value: 0, sequence: ++noticeSequence } ];
+						dirty = true;
+					}
+					return null;
+				}
 				return inventory.process(
 					command as import("@/engine/contracts/item-process").ItemProcessCommand,
 					now
@@ -1312,11 +1565,14 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "cos-pet-attack" ) {
 				// 6A2350 case 2: an attack pet (class 3) attacks the player's target
 				// with 0x769E [u32 pet][u8 2][u32 target] and remembers it at
-				// +0xAB2C. The client admits monster targets only, like its own
-				// basic attack.
+				// +0xAB2C. A monster is always a target; a player arrives only
+				// admitted by the core (player-attack.ts petPlayerAttack).
 				// command.gid names the target; the record set holds only owned pets.
 				const record = cosRecords.get( command.pet );
-				if ( !record || record.band !== 3 || record.dead || record.hp === 0 || entity?.kind !== "monster" ) {
+				if (
+					!record || record.band !== 3 || record.dead || record.hp === 0 ||
+					(entity?.kind !== "monster" && entity?.kind !== "player")
+				) {
 					throw Error( "No attack pet or attackable target" );
 				}
 				const payload = new Uint8Array( 9 ), v = new DataView( payload.buffer );
@@ -1327,14 +1583,14 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "cos-clean" ) {
 				// CICCos_ExecuteActionCommand (6A2350) case 5: a riding mount or a
-				// transport (record class 0/1, bands 1/2) is retired with 0x7618
+				// transport (class 0/1; quest band 6 also defaults to class 0) uses 0x7618
 				// [u32 gid] (6FF800); a guild soldier (class 4, band 5) with an
 				// empty 0x7458 (6FE850). Pets leave through cancellation instead.
 				const record = cosRecords.get( command.gid );
 				// A riding mount spawns without an owner GID (as cos-ride allows);
 				// the owner's own record set proves it is ours.
 				if (
-					!record || ![ 1, 2, 5 ].includes( record.band ) || entity?.gid !== record.gid ||
+					!record || ![ 1, 2, 5, 6 ].includes( record.band ) || entity?.gid !== record.gid ||
 					entity.kind !== "cos" || (record.band !== 1 && entity.ownerGid !== localGid) ||
 					entity.refObjId !== record.refObjId
 				) throw Error( "No owned COS to clean" );
@@ -1436,7 +1692,53 @@ state here before a command can claim a native wire conversation.
 				);
 				return null;
 			}
+			if ( command.kind === "stall-name" ) {
+				// 695420 case 9: a job suit (active class +4F5 other than 4)
+				// refuses first, then an open alchemy window; else the title
+				// prompt opens.
+				const refusal = partyActiveJob( inventory.state().inventory ) !== STALL_NO_JOB_CLASS ?
+					{ category: STALL_NOTICE_CATEGORY, code: STALL_JOB_SUIT_CODE } :
+					command.alchemy ?
+					{ category: STALL_ALCHEMY_CATEGORY, code: STALL_ALCHEMY_CODE } :
+					null;
+				if ( refusal ) {
+					const notice = constantNativeNotice( refusal.category, refusal.code );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return null;
+				}
+				if ( inventory.stallPhase() !== "none" ) return null;
+				inventory.stallCommand( { kind: "stall-name" } );
+				dirty = true;
+				return null;
+			}
+			if ( command.kind.startsWith( "stall-" ) ) {
+				if ( !localGid ) throw Error( "Local player is not initialized" );
+				const frame = inventory.stallCommand( command as StallCommand );
+				dirty = true;
+				return frame;
+			}
+			if ( command.kind.startsWith( "exchange-" ) ) {
+				if ( !localGid ) throw Error( "Local player is not initialized" );
+				return inventory.exchangeCommand(
+					command as import("@/engine/foundation/gameplay/exchange").ExchangeCommand
+				);
+			}
 			if ( command.kind === "action-command" ) {
+				// 695420 case 1006: the selected player is asked to trade (0x7237).
+				if ( command.id === ACTION_EXCHANGE ) {
+					const target = readEntity( targeting.state().target ?? 0 );
+					if ( !localGid || !target || target.kind !== "player" || target.gid === localGid ) return null;
+					return inventory.exchangeCommand( { kind: "exchange-request", gid: target.gid } );
+				}
+				if ( command.id === ACTION_FORTRESS_RETURN ) {
+					const request = fortressReturnRequest( fortress, social.guild?.name, fortressPortalUntilMs - now );
+					if ( "frame" in request ) return sendFrame( request.frame );
+					const notice = constantNativeNotice( FORTRESS_PORTAL_NOTICE_CATEGORY, request.code );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return null;
+				}
 				if ( command.id === TRACE_ACTION_ID ) {
 					const selection = targeting.state();
 					const target = readEntity( selection.target ?? 0 );
@@ -1547,11 +1849,25 @@ state here before a command can claim a native wire conversation.
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||
 					!((targeting.state().targetCapabilities ?? 0) & 1)
 				) throw Error( "Select a merchant first" );
-				return inventory.openShop( command.gid, now );
+				return inventory.openShop( command.gid, now, targeting.state().targetCapabilities ?? 0 );
 			}
 			if ( command.kind === "shop-repair" ) {
 				if ( inventory.state().shop?.npc !== targeting.state().target ) {
 					throw Error( "Merchant selection changed" );
+				}
+				if ( command.mode === REPAIR_ONE_SLOT ) {
+					// 567290 judges the clicked item before anything is sent.
+					const slot = command.slot,
+						verdict = repairClick( inventory.state().inventory.find( i => i.slot === slot ) );
+					if ( verdict === "refuse" ) {
+						const notice = repairNotice(
+							REPAIR_RESPONSE_OPCODE,
+							Uint8Array.of( 2, REPAIR_REFUSED_BY_OPTIONS )
+						);
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						dirty = true;
+					}
+					if ( verdict !== "send" ) return null;
 				}
 				return inventory.repair( command.mode, command.slot, now );
 			}
@@ -1581,15 +1897,54 @@ state here before a command can claim a native wire conversation.
 				) throw Error( "Insufficient gold" );
 				return inventory.dropGold( command.amount, now );
 			}
+			if ( command.kind === "auto-potion-input" ) {
+				autoPotionInputBlocked = command.blocked;
+				autoPotionItemMallOpen = command.itemMallOpen ?? false;
+				return null;
+			}
+			if ( command.kind === "cos-select" ) {
+				cosSelection.select( command.gid, cosRecords );
+				dirty = true;
+				return null;
+			}
 			if ( command.kind === "item-use" ) {
 				return inventory.use( command.slot, now, {
 					records: [ ...cosRecords.values() ],
-					selectedGid: command.companionGid,
+					selectedGid: command.companionGid ?? (cosSelection.selected() || undefined),
+					targetGid: targeting.state().target ?? 0,
 					revivalSlot: command.revivalSlot,
 					summonerSlot: command.summonerSlot,
 					skin: command.skin,
 					targetSlot: command.targetSlot
 				} );
+			}
+			if ( command.kind === "premium-command" ) {
+				// 6AD990: the client's own checks raise their notice; a reverse
+				// return then waits for its point (the type 0x24 confirm box).
+				const chosen = countJobs.choosing();
+				if ( command.command === "reverse-return" && command.choice !== undefined && chosen ) {
+					countJobs.choose( null );
+					return countJobUseRequest( chosen, command.choice );
+				}
+				const admission = countJobs.admit( command.command, {
+					alive: potionFacts.alive,
+					transportOut: [ ...cosRecords.values() ].some( c => c.band === 2 && !c.dead ),
+					pvpState: local?.pvpState ?? 0
+				} );
+				if ( "code" in admission ) {
+					const notice = constantNativeNotice( 1, admission.code );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					return null;
+				}
+				if ( command.command === "reverse-return" ) {
+					countJobs.choose( admission.row );
+					return null;
+				}
+				return countJobUseRequest( admission.row );
+			}
+			if ( command.kind === "premium-command-cancel" ) {
+				countJobs.choose( null );
+				return null;
 			}
 			if ( command.kind === "release-target" ) {
 				if ( skillPress.cancel() ) dirty = true;
@@ -1621,6 +1976,15 @@ state here before a command can claim a native wire conversation.
 				}
 				// A press sent now supersedes any held one.
 				if ( skillPress.cancel() ) dirty = true;
+				// 58E0BF refuses an ao/pw row to a rider with 0x3009, which the
+				// native client answers with nothing: send it bare, with no
+				// cooldown stand-in or animation that would snap back.
+				if ( metadata?.needsFooting && local?.mountedOn ) {
+					const frame = command.gid ? combat.skill( skillId, command.gid ) : combat.skill( skillId );
+					sendFrame( frame );
+					skillPress.sent( now, skillId );
+					return frame;
+				}
 				if ( metadata?.groundTarget ) {
 					const from = movement.state().pose;
 					if ( !from || !command.query ) throw Error( "Point into the world to cast this skill" );
@@ -1686,6 +2050,23 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "select" ) {
 				const pose = movement.state().pose;
+				// 698740: a player keeping a stall is selected at once, then
+				// visited in reach or after the walk (693AD0 type 2).
+				if ( keepsStall( entity ) && entity.gid !== localGid ) {
+					const frame = selectEntity( entity, now );
+					const destination = pose ? interactionApproach( pose, entity ) : null;
+					if ( destination ) {
+						movement.request( destination, now, local?.mountedOn || undefined );
+						pickup.clear();
+						approach = interactionApproachTransition( approach, {
+							kind: "begin",
+							target: entity,
+							visit: true
+						} );
+						npcConversation.clear();
+					} else visitStall( entity );
+					return frame;
+				}
 				// 698740: an NPC or gate out of reach is walked to first; the
 				// select follows when the walk ends (the arrival block below).
 				if ( pose ) {
@@ -1700,7 +2081,8 @@ state here before a command can claim a native wire conversation.
 				}
 				return selectEntity( entity, now );
 			}
-			if ( command.kind === "attack" && entity.kind !== "monster" ) {
+			// A player arrives here only through player-attack.ts's admission.
+			if ( command.kind === "attack" && entity.kind !== "monster" && entity.kind !== "player" ) {
 				throw new Error( "Target is not attackable" );
 			}
 			// A targeted command settles the server's walk where it finds it: stop the
@@ -1708,14 +2090,24 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "attack" ) {
 				const frame = combat.attack( entity.gid );
 				movement.holdForCast( now );
+				markTarget( entity );
 				return sendFrame( frame );
 			}
 			if ( command.kind !== "skill" ) throw Error( "Unsupported gameplay command" );
 			const frame = combat.skill( command.skillId, entity.gid );
 			movement.holdForCast( now );
+			if ( entity.gid !== localGid ) markTarget( entity );
 			const pressedSkill = command.skillId;
 			const pressedMetadata = catalog.find( row => row.id === pressedSkill );
 			predictCast( pressedMetadata, entity, local, now );
+			// Only a target the row admits stands a cooldown in: any other is the
+			// server's to refuse, and its stand-in showed a cooldown that vanished.
+			const admitted = !!pressedMetadata && skillAdmitsPredictedTarget( pressedMetadata, entity, localGid );
+			if ( !admitted ) {
+				sendFrame( frame );
+				skillPress.sent( now, command.skillId );
+				return frame;
+			}
 			return sendSkillPress(
 				frame,
 				command.skillId,
@@ -1735,6 +2127,9 @@ references
 				cosItemRefs.set( row.refObjId, row.typeFlags );
 				if ( row.maxStack !== undefined ) cosItemCaps.set( row.refObjId, row.maxStack );
 				paramJobs.reference(
+					row as typeof row & { readonly nativeFields?: { readonly itemParam1_29c?: number; }; }
+				);
+				countJobs.reference(
 					row as typeof row & { readonly nativeFields?: { readonly itemParam1_29c?: number; }; }
 				);
 			}
@@ -1823,6 +2218,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					// its reason (code 4, UIIT_MSG_INTERACTION_FAIL_TOO_FAR).
 					const refusal = frame.payload[0] === 2 ? constantNativeNotice( 13, frame.payload[1]! ) : null;
 					if ( refusal ) notices = [ ...notices.slice( -99 ), { ...refusal, sequence: ++noticeSequence } ];
+					dirty = true;
+				}
+				if ( frame.opcode === AVATAR_MAGIC_OPTION_ANSWER ) {
+					// 770140: success prints UIIT_MSG_AVATAR_MAGICOPTION_ADD; [2][code]
+					// is a category 0x20 notice. The item itself is inventory's.
+					const notice = frame.payload[0] === 1 ?
+						{ key: "UIIT_MSG_AVATAR_MAGICOPTION_ADD", value: 0 } :
+						constantNativeNotice( AVATAR_MAGIC_OPTION_NOTICE_CATEGORY, frame.payload[1] ?? 0 );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					dirty = true;
 				}
 				if ( frame.opcode === 0xb5b6 ) {
@@ -1930,6 +2334,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				const countUpdate = countJobs.receive( frame, now );
+				if ( countUpdate ) {
+					// 770820: a refused limited use is a category-1 notice.
+					const notice = countUpdate.kind === "refused" ? constantNativeNotice( 1, countUpdate.code ) : null;
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return true;
+				}
 				const windowUpdate = cosTimerPacket( frame, now );
 				if ( windowUpdate ) {
 					const id = windowUpdate.kind === "remove" ?
@@ -1944,15 +2356,50 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				const portalSeconds = fortressPortalCooldown( frame );
+				if ( portalSeconds !== null ) {
+					fortressPortalUntilMs = now + portalSeconds * 1000;
+					dirty = true;
+					return true;
+				}
+				const portalRefusal = fortressReturnRefusal( frame );
+				if ( portalRefusal !== null ) {
+					const notice = constantNativeNotice( FORTRESS_PORTAL_NOTICE_CATEGORY, portalRefusal );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return true;
+				}
+				const official = fortressManagerReply( frame, fortressApplication );
+				if ( official ) {
+					if ( official.ok ) {
+						fortressApplication = {
+							...official.application!,
+							sequence: (fortressApplication?.sequence ?? 0) + 1
+						};
+					} else {
+						const notice = constantNativeNotice( FORTRESS_NOTICE_CATEGORY, official.code );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+					dirty = true;
+					return true;
+				}
 				const fortressNext = fortressPacket( fortress, frame );
 				if ( fortressNext ) {
-					musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );
+					if ( frame.opcode === 0x3887 ) {
+						musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );
+					}
 					fortress = fortressNext;
 					dirty = true;
 				}
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
 					uniqueNotice( frame.opcode, frame.payload, uniqueRefs ) ??
-					fortressNotice( frame.opcode, frame.payload ) ?? serverNotification( frame.opcode, frame.payload );
+					fortressNotice( frame.opcode, frame.payload ) ?? fortressRegistrationNotice( fortress, frame ) ??
+					fortressCaptureNotice(
+						fortress,
+						frame,
+						readEntity( fortressStructureState( frame )?.gid ?? 0 )?.name
+					) ??
+					serverNotification( frame.opcode, frame.payload );
 				if ( notice ) {
 					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					if ( frame.opcode === 0x3667 && frame.payload[0] === 7 ) chat.receive( frame, localGid );
@@ -1960,6 +2407,26 @@ Packet handling must not depend on which HUD panel is currently open.
 					return false;
 				}
 				if ( fortressNext ) return true;
+				if ( frame.opcode === 0x3508 && frame.payload[4] === 7 ) {
+					// 77A570 case 7: a growing pet becomes its next form (server
+					// 4EFD10). The owner's record takes the reference and the full
+					// satiety; the entity lane then swaps every viewer's model.
+					const p = frame.payload;
+					if ( p.length !== 9 ) throw Error( "Invalid COS reference change" );
+					const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+					const gid = v.getUint32( 0, true ), refObjId = v.getUint32( 5, true );
+					if ( !gid || !refObjId ) throw Error( "Invalid COS reference" );
+					const record = cosRecords.get( gid );
+					if ( record ) {
+						cosRecords.set( gid, {
+							...record,
+							refObjId,
+							...(record.band === 3 ? { satiety: 10000 } : {})
+						} );
+						dirty = true;
+					}
+					return false;
+				}
 				if ( frame.opcode === 0x3508 && frame.payload[4] === 4 ) {
 					const p = frame.payload;
 					if ( p.length !== 7 ) throw Error( "Invalid COS satiety update" );
@@ -2075,6 +2542,38 @@ Packet handling must not depend on which HUD panel is currently open.
 						if ( gid === localGid || cosRecords.has( gid ) ) play( "SND_LEVUP", now );
 					}
 					return true;
+				}
+				// The stall window (inventory owner) folds its frames; the stall
+				// title frames also reach the entities (751430, 751520, 74F8F0).
+				const stallOutcome = inventory.stallReceive( frame, localGid ?? 0 );
+				if ( stallOutcome ) {
+					dirty = true;
+					if ( stallOutcome.notice ) {
+						const notice = constantNativeNotice( stallOutcome.notice.category, stallOutcome.notice.code );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+					// 755960: the owner's sale line, [buyer] bought item [name].
+					if ( stallOutcome.message ) {
+						notices = [ ...notices.slice( -99 ), {
+							key: stallOutcome.message.key,
+							value: 0,
+							arguments: stallOutcome.message.args,
+							nativeType: 0,
+							sequence: ++noticeSequence
+						} ];
+					}
+					if ( frame.opcode !== 0x33d1 ) return true;
+				}
+				// The exchange window (inventory owner) folds its frames first; its
+				// confirm, approve and cancel refusals stay the social lane's notices.
+				const exchangeNotice = inventory.exchangeReceive( frame );
+				if ( exchangeNotice !== null ) {
+					dirty = true;
+					if ( exchangeNotice ) {
+						const notice = inventoryNotice( 0xb06d, Uint8Array.of( 2, exchangeNotice ), localCountry );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+					if ( ![ 0xb095, 0xb34a, 0xb2db ].includes( frame.opcode ) ) return true;
 				}
 				const nextSocial = socialPacket( social, frame, { country: localCountry } );
 				if ( nextSocial ) {
@@ -2242,6 +2741,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					inventory.bindCompanion( record );
 					cosRecords.set( record.gid, record );
+					cosSelection.add( record, cosRecords );
 					if ( record.band === 1 || record.band === 2 ) activeCos = record;
 					dirty = true;
 					return true;
@@ -2337,6 +2837,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true ) === localGid
 				) {
 					movement.life( frame.payload[5] as 1 | 2, now );
+					potionFacts = { ...potionFacts, alive: (frame.payload[5]! & 1) !== 0 };
 					dirty = true;
 				}
 				if (
@@ -2364,6 +2865,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// 0x3691 zero pair or the 0x3369/0x366A reset sweep (6E6270).
 				if ( frame.opcode === 0x36ab && frame.payload.length === 4 ) {
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true );
+					cosSelection.remove( gid, cosRecords );
 					cosRecords.delete( gid );
 					if ( selectionDecal?.kind === "target" && selectionDecal.gid === gid ) selectionDecal = null;
 					if ( activeCos?.gid === gid ) {
@@ -2489,10 +2991,35 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				const item = inventory.receive( frame.opcode, frame.payload, now, {
 						country: localCountry,
-						abnormal: potionFacts.abnormal
+						abnormal: potionFacts.abnormal,
+						unlimitedItems
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				if (
+					fight && frame.opcode === 0x33a6 &&
+					new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
+							0,
+							true
+						) === localGid
+				) {
+					const vital = combat.state().vitals.find( row => row.gid === localGid )!;
+					// 77A080 processes HP, MP, then abnormal state. Inactive
+					// channels can attempt use here; armed channels wait for Tick.
+					if ( frame.payload[6]! & 1 ) {
+						potionFacts = { ...potionFacts, hp: vital.hp ?? potionFacts.hp };
+						checkAutomaticPotion( 0, now, "vitals" );
+					}
+					if ( frame.payload[6]! & 2 ) {
+						potionFacts = { ...potionFacts, mp: vital.mp ?? potionFacts.mp };
+						checkAutomaticPotion( 1, now, "vitals" );
+					}
+					if ( frame.payload[6]! & 4 ) {
+						potionFacts = { ...potionFacts, abnormal: vital.abnormal ?? potionFacts.abnormal };
+						checkAutomaticPotion( 2, now, "vitals" );
+					}
+				}
+
 				// B245 [2, code]: the server refused the targeted command at the
 				// press, before touching movement (an empty MP pool is 0x3004).
 				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) movement.castRefused( now );
@@ -2691,7 +3218,8 @@ before take assembles the presentation snapshot.
 					// 693AD0 via CNavigationDeadreckon_OnTick: the pending select is
 					// dispatched once in reach or when the walk ends, wherever that is;
 					// the server's 4A8E10 range check decides.
-					selectEntity( approachingTarget, now );
+					if ( approach.visit ) visitStall( approachingTarget );
+					else selectEntity( approachingTarget, now );
 					approach = interactionApproachTransition( approach, { kind: "arrived" } );
 					dirty = true;
 				}
@@ -2713,7 +3241,7 @@ before take assembles the presentation snapshot.
 			const vital = combat.state().vitals.find( v => v.gid === localGid );
 			potionFacts = {
 				...potionFacts,
-				alive: !!local && local.appearanceState?.[0] !== 2 && (vital?.hp ?? potionFacts.hp) > 0,
+				alive: !!local && ((local.appearanceState?.[0] ?? 1) & 1) !== 0,
 				hp: vital?.hp ?? potionFacts.hp,
 				mp: vital?.mp ?? potionFacts.mp,
 				abnormal: vital?.abnormal ?? potionFacts.abnormal
@@ -2729,24 +3257,8 @@ before take assembles the presentation snapshot.
 				) play( "SND_ALARM", now );
 			}
 			warnings = local ? low : [ false, false ];
-			for ( const kind of [ 0, 1, 2 ] as const ) {
-				const entry = autoPotionEntry( [ autoPotion.hp, autoPotion.mp, autoPotion.cure ][kind]! );
-				if ( !autoPotionActive( kind, entry, potionFacts ) ) {
-					potionDue[kind] = null;
-					continue;
-				}
-				if ( potionDue[kind] !== null && now < potionDue[kind]! ) continue;
-				potionDue[kind] = now + autoPotionDelay( autoPotion );
-				if ( !autoPotionEligible( kind, entry, potionFacts ) ) continue;
-				const binding = bindings.quickSlots.find( row => row.slot === entry.slot ),
-					slot = binding ? autoPotionItemSlot( binding, inventory.state().inventory ) : null;
-				if (
-					slot === null || inventory.state().inventoryPending ||
-					!inventory.state().inventory.some( row => row.slot === slot )
-				) continue;
-				inventory.use( slot, now, { records: [ ...cosRecords.values() ] } );
-				dirty = true;
-			}
+			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
+
 			const combatChanged = combat.step( now ), inventoryChanged = inventory.step( now );
 			const trained = training.step( now ), moved = movement.step( now ), targeted = targeting.step( now );
 			dirty = combatChanged || inventoryChanged || trained || chat.step( now ) || moved || targeted || dirty;
@@ -2760,6 +3272,7 @@ die
 			combat.cancelGuided( gid, now );
 			if ( gid === localGid ) {
 				movement.life( 2, now );
+				potionFacts = { ...potionFacts, alive: false };
 				selectionDecal = null;
 				dirty = true;
 			}
@@ -2863,6 +3376,8 @@ The published plane when something changed since the last take, else null.
 				academy,
 				guide,
 				paramJobs: paramJobs.state(),
+				countJobs: countJobs.state(),
+				reverseReturnChoice: countJobs.choosing() !== null,
 				storage: storage.state(),
 				playerModels: localPlayerModels(),
 				job,
@@ -2874,8 +3389,12 @@ The published plane when something changed since the last take, else null.
 				...training.state(),
 				social,
 				fortress,
+				...(fortressApplication ? { fortressApplication } : {}),
+				...(fortressPortalUntilMs ? { fortressPortalUntilMs } : {}),
 				skillCatalog: catalog,
 				progression,
+				selectedCosGid: cosSelection.selected(),
+				cosStatusRecords: cosSelection.statusRecords( cosRecords ),
 				cosRecords: [ ...cosRecords.values() ].map( record => {
 					const v = c.vitals.find( row => row.gid === record.gid );
 					return {
@@ -2930,6 +3449,7 @@ World transfer retires spatial work while retaining character/session data.
 			storage.close();
 			cosWindows = [];
 			paramJobs.clear();
+			countJobs.clear();
 			const vital = combat.state().vitals.find( row => row.gid === localGid );
 			if ( vital ) {
 				entryVitals = {
@@ -2941,7 +3461,9 @@ World transfer retires spatial work while retaining character/session data.
 				};
 			}
 			warnings = [ false, false ];
-			potionDue.fill( null );
+			potionTimers.fill( emptyAutoPotionTimer() );
+			autoPotionInputBlocked = false;
+			autoPotionItemMallOpen = false;
 			potionFacts = { ...potionFacts, alive: false };
 			selectionDecal = null;
 			social = withoutResurrection( { ...social, invitation: null } );
@@ -2956,6 +3478,7 @@ World transfer retires spatial work while retaining character/session data.
 			cosResult = undefined;
 			cosError = null;
 			cosRecords.clear();
+			cosSelection.reset();
 			dirty = true;
 		},
 		/*

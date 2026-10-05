@@ -78,21 +78,3 @@ func TestActionEmotePushEncodeMatchesTheClientReadOrder(t *testing.T) {
 		}
 	}
 }
-
-// TestDecodeWarHornRequestStrictU32 pins the C->S 0x7025 shape: exactly the
-// u32 war id sub_703650 / CGInterface_SendRequest7025 appends.
-func TestDecodeWarHornRequestStrictU32(t *testing.T) {
-	warID, err := DecodeWarHornRequest([]byte{0x77, 0x00, 0x00, 0x00})
-	if err != nil {
-		t.Fatalf("pinned 4-byte body refused: %v", err)
-	}
-	if warID != 0x77 {
-		t.Errorf("warId = %d, want 0x77 (little-endian read)", warID)
-	}
-
-	for _, payload := range [][]byte{{}, {0x77}, {0x77, 0x00, 0x00}, {0x77, 0x00, 0x00, 0x00, 0x00}} {
-		if _, err := DecodeWarHornRequest(payload); err == nil {
-			t.Errorf("payload % X accepted, want error", payload)
-		}
-	}
-}

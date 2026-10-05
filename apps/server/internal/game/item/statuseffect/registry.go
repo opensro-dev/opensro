@@ -44,12 +44,14 @@ Effect
 ================
 */
 type Effect struct {
-	ForcedTargetGID  uint32 // hitm context+28; zero means no target constraint.
-	jobClock         relativeJobClock
-	jobClockPresent  bool
-	jobCheckpointDue bool
-	jobUpdatedAtMs   int64
-	Modifiers        Modifiers
+	DamageToMP        bool // dgmp instance contribution; retirement removes it with its owner.
+	DamageToMPPercent uint32
+	ForcedTargetGID   uint32 // hitm context+28; zero means no target constraint.
+	jobClock          relativeJobClock
+	jobClockPresent   bool
+	jobCheckpointDue  bool
+	jobUpdatedAtMs    int64
+	Modifiers         Modifiers
 	// InstalledStates records the state operations committed by the lifecycle
 	// producer. It is not inferred from visible icons or reference-counted.
 	InstalledStates  [2]uint32

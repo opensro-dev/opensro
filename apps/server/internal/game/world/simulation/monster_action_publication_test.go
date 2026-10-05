@@ -12,11 +12,11 @@ import (
 func TestMonsterActionPublishesBeforeCompetingDeath(t *testing.T) {
 	const now = int64(1_784_000_000_000)
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: 1, Reach: 50, CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}
 	attack := func(string, monster.Instance, uint32, uint32, int64) MonsterAttackResult {
-		return MonsterAttackResult{Accepted: true, TargetAlive: true, Frames: []Frame{{Opcode: wire.OpSkillCastResult}}, TargetFrames: []Frame{{Opcode: 0x3057}}}
+		return MonsterAttackResult{Accepted: true, TargetAlive: true, Frames: []Frame{{Opcode: wire.OpSkillCastResult}}, Private: []MonsterPrivateFrames{{CharacterID: 1, Frames: []Frame{{Opcode: 0x3057}}}}}
 	}
 	push := &fakePusher{}
 	ops.BasicAttack = func(d string, m monster.Instance, target, skill uint32, at int64) MonsterAttackResult {

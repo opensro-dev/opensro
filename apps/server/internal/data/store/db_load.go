@@ -50,6 +50,14 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, fmt.Errorf("validating mall accounts: %w", err)
 		}
 	}
+	if currentLayout >= 6 {
+		if err := validateFortresses(db); err != nil {
+			return nil, fmt.Errorf("validating fortresses: %w", err)
+		}
+		if err := validateAlliances(db); err != nil {
+			return nil, fmt.Errorf("validating alliances: %w", err)
+		}
+	}
 
 	out := &loadedDB{
 		characters:   map[string][]*domain.Character{},

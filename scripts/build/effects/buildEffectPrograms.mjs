@@ -47,6 +47,8 @@ import {
 } from "../world/paths.mjs";
 import { collectJmxEffectTexturePaths, parseJmxVisualEffect } from "./parseJmxVisualEffect.mjs";
 import { buildEffectRecordTable } from "../char/parseSkillEffect.mjs";
+import { loadCharacterDataRows } from "../char/resolveCharRoster.mjs";
+import { parseStructureEffects } from "../char/structureEffects.mjs";
 
 const particlesRoot = path.join( extractedRoot, "Particles_extracted" );
 const skillEffectPath = path.join(
@@ -196,6 +198,7 @@ export function collectEffectReferences() {
 	const modelParticleReferences = collectModelParticleReferences( { ...table, ...namedTable } );
 	const sceneryParticleReferences = collectSceneryParticleReferences();
 	const entityParticleReferences = collectEntityParticleReferences();
+	const structureEffectReferences = collectStructureEffectReferences();
 	return {
 		references: [
 			...new Set( [
@@ -203,6 +206,7 @@ export function collectEffectReferences() {
 				...modelParticleReferences.map( row => row.effectPath ),
 				...sceneryParticleReferences.map( row => row.effectPath ),
 				...entityParticleReferences.map( row => row.effectPath ),
+				...structureEffectReferences.map( row => row.effectPath ),
 				...nativeExecutableReferences
 			] )
 		].sort(),
@@ -211,6 +215,7 @@ export function collectEffectReferences() {
 		modelParticleReferences,
 		sceneryParticleReferences,
 		entityParticleReferences,
+		structureEffectReferences,
 		effectRecordCount: Object.keys( table ).length
 	};
 }
@@ -261,6 +266,53 @@ export function collectEntityParticleReferences(
 		}
 	}
 	return references;
+}
+
+/*
+================
+collectStructureEffectReferences
+
+atstructeffect.txt, loaded whole at startup (Client_LoadGameDataTables
+722E20): each resolvable target's damage-level effects and the particle
+modifiers of its stage models (CICATStruct_SetVisualStage loads them).
+================
+*/
+export function collectStructureEffectReferences(
+	text = fs.readFileSync( path.join( retailTextdataRoot, "atstructeffect.txt" ), "utf16le" ),
+	known = codename => characterCodenames().has( codename ),
+	readModel = resourcePath => parseCharacterBsr( fs.readFileSync( dataAssetPath( resourcePath ) ), resourcePath )
+) {
+	const references = new Map();
+	for ( const [codename, target] of parseStructureEffects( text, known ) ) {
+		for ( const effects of Object.values( target.levels ) ) {
+			for ( const effect of effects ) {
+				references.set( codename + " " + effect.effectPath, { codename, effectPath: effect.effectPath } );
+			}
+		}
+		for ( const modelPath of Object.values( target.stages ) ) {
+			for ( const modifier of readModel( modelPath ).particleModifiers ) {
+				for ( const entry of modifier.entries ) {
+					const effectPath = normalizeAssetPath( entry.effectPath );
+					if ( !effectPath.endsWith( ".efp" ) ) {
+						throw Error( `Invalid structure stage particle: ${modelPath}` );
+					}
+					references.set( codename + " " + effectPath, { codename, modelPath, effectPath } );
+				}
+			}
+		}
+	}
+	return [ ...references.values() ].sort( ( a, b ) =>
+		a.codename.localeCompare( b.codename ) || a.effectPath.localeCompare( b.effectPath )
+	);
+}
+
+/*
+================
+characterCodenames
+================
+*/
+function characterCodenames() {
+	return new Set( loadCharacterDataRows( retailTextdataRoot, { codenamePattern: /./ } ).keys() );
 }
 
 /*

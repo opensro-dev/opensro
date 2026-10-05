@@ -149,3 +149,34 @@ func TestNativeSignedDamageDoesNotTurnNegativeIntoFatalHit(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestAreaCandidatesSkipStructures
+
+52BF90 admits only an aimed basic attack on a fortress structure, so the
+area, chain and secondary candidate scans never return one.
+================
+*/
+func TestAreaCandidatesSkipStructures(t *testing.T) {
+	s := NewMonsterState(monster.TemplateFromParts(
+		map[uint32]monster.MonsterRef{
+			1933:  {RefObjID: 1933, MaxHP: 54, WalkSpeed: 8, RunSpeed: 22, ScaleDenom: 100},
+			19536: {RefObjID: 19536, MaxHP: 500, ScaleDenom: 100, Structure: true},
+		},
+		[]monster.NestRow{
+			{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: 0x62AA, X: 100, Y: 20, Z: 100}},
+			{SpawnPoint: monster.SpawnPoint{RefObjID: 19536, RegionID: 0x62AA, X: 102, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1},
+		},
+	))
+	s.StartDivision("area")
+	s.AdvancePopulation(s.CurrentTimeMillis())
+	if n := len(s.InstancesInRegions("area", []uint16{0x62AA})); n != 2 {
+		t.Fatalf("fixture materialized %d instances, want the monster and the structure", n)
+	}
+	center := Spawn{RegionID: 0x62AA, X: 101, Y: 20, Z: 100}
+	got := s.CombatCandidatesInSphere("area", center, 20, s.CurrentTimeMillis())
+	if len(got) != 1 || got[0].Ref.Structure {
+		t.Fatalf("area candidates %+v, want only the monster", got)
+	}
+}

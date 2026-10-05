@@ -16,7 +16,11 @@ import { createWorldSession } from "./world/world";
 import { createSessionDecoder } from "./decode/decode";
 import { createSessionHttp } from "./http/http";
 import type { SessionOwner, SessionState } from "@/engine/contracts/session";
+import type { ClientIncident } from "@/engine/contracts/network";
+import { RELEASE_PROTOCOL } from "@/engine/foundation/release/protocol";
 
+// How long a failure report may take; it never holds up the session ending.
+const INCIDENT_TIMEOUT_MS = 5000;
 const RELEASE_OUTDATED_MESSAGE = "A newer version of the game is available. Refresh the page to continue.";
 /*
 ================
@@ -74,7 +78,22 @@ mintWorldToken
 			}
 		);
 	}
-	const world = createWorldSession( mintWorldToken, http.references );
+	/*
+================
+reportIncident
+
+Fire and forget: the session is already ending, and a report that cannot
+be delivered must not delay or change that.
+================
+	*/
+	function reportIncident( incident: ClientIncident ) {
+		if ( !identity ) return;
+		const body = { ...incident, build: String( RELEASE_PROTOCOL ) };
+		http.incident( identity.apiBase, identity.token, body, AbortSignal.timeout( INCIDENT_TIMEOUT_MS ) ).catch(
+			() => {}
+		);
+	}
+	const world = createWorldSession( mintWorldToken, http.references, reportIncident );
 	let worldRevision = 0;
 	// Only the active lifecycle may publish session state. Request generations
 	// protect replacement within title; this scope protects transitions out of it.

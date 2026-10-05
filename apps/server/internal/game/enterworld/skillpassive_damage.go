@@ -90,6 +90,12 @@ const (
 	// Dance, but no native code reads it (whole-image scan); it changes
 	// nothing and stays a known key only so those rows admit.
 	ParameterDanceCutResist
+	// The Warlock's Blood Increase keys. BSHP (getv slot +0x534) is added to
+	// a life steal's base (Formulae_CalculateSkillHeal 40F750, Life Drain);
+	// SAAA (+0x538) to a fixed hit's amount (Formulae_CalculateFixedSkillDamage
+	// 40F5F0, Soul Chaos).
+	ParameterLifeStealPower
+	ParameterFixedDamagePower
 	SkillParameterCount
 )
 
@@ -203,6 +209,10 @@ func SkillParameterFromKey(key uint32) (SkillParameter, bool) {
 		return ParameterMusicCutResist, true
 	case 0x44534352:
 		return ParameterDanceCutResist, true
+	case 0x42534850:
+		return ParameterLifeStealPower, true
+	case 0x53414141:
+		return ParameterFixedDamagePower, true
 	}
 	return 0, false
 }
@@ -229,6 +239,25 @@ type SkillPassiveParameters struct {
 	// the flat block-rate parameter of each lane the normalized mask selects;
 	// see combat.BlockRateWrites.
 	Br SkillPassiveBlockRate
+	// HitRate, Evasion, MaxHP and MaxMP are hr (+0x24C), er (+0x27C), hpi
+	// (+0x2AC) and mpi (+0x2B0), each {flat, percent}. A learned passive is
+	// a standing skill instance, so 594AC0 installs them on the keeper as
+	// it does a buff's: word 0 flat and word 1 percent on parameters 11, 9,
+	// 3 and 4 (0x59583F, 0x595883, 0x595481, 0x5954DF). The bow, lightning,
+	// spear and water mastery passives author one each.
+	HitRate, Evasion, MaxHP, MaxMP SkillFlatRate
+	// Dru is dru {word 0, word 1} (+0x3E4): 595A97 adds word 0 to
+	// parameters 0x80 and 0x81 and word 1 to 0x82 and 0x83 (the fire mastery
+	// passive).
+	Dru [2]uint32
+	// CriticalEvasion is dcri (+0x42C): 594AC0 0x595DCA adds it to the
+	// defender's evade-critical keeper 0x39 (the Warrior's shield passive).
+	CriticalEvasion uint32
+	// IncomingReduction marks odar (+0x270) in a passive (the Rogue's
+	// bow-absorb passive); its bits and word ride the row's BuffModifiers.
+	IncomingReduction bool
+	// DamageReturn is dmgr (+0x204, the Warrior's two-hand return passive).
+	DamageReturn SkillDamageReturn
 }
 
 /*
@@ -266,11 +295,14 @@ encodedPassiveParameters
 Native stores up to five three-argument setv blocks. Repeated keys overwrite
 in source order. reat, real and the reqi/reqn gate complete the resistance
 passives; br is the block-rate passive (a duplicate br, a zero mask or a
-value above maxBlockRatePercent is malformed). Refuse the whole program if
-any operation lacks execution.
+value above maxBlockRatePercent is malformed); hpi, mpi, er and hr are the
+Chinese maximum-HP, maximum-MP, parry and attack-rate passives (a duplicate
+block is malformed). Refuse the whole program if any operation lacks
+execution.
 
 Any one consumed block pins the program: none of the cited installers for
-reat (595542..59568F), real (59DF20) or br (0x595DFD) reads a setv.
+reat (595542..59568F), real (59DF20), br (0x595DFD) or hpi (595481) reads a
+setv.
 Protection is reat + real + reqi and Blockade br + reqi; a program holding
 only its reqi gate has nothing to install and stays unpinned.
 ================
@@ -318,12 +350,52 @@ func encodedPassiveParameters(fields []string) SkillPassiveParameters {
 				return SkillPassiveParameters{}
 			}
 			out.Br = SkillPassiveBlockRate{Mask: normalizeLaneMask(op.Arguments[0]), Value: op.Arguments[1]}
+		case skillTagHitRate, 0x6572, 0x687069, 0x6d7069: // hr, er, hpi, mpi
+			if op.Count != 2 {
+				return SkillPassiveParameters{}
+			}
+			slot := &out.HitRate
+			switch op.Tag {
+			case 0x6572:
+				slot = &out.Evasion
+			case 0x687069:
+				slot = &out.MaxHP
+			case 0x6d7069:
+				slot = &out.MaxMP
+			}
+			if slot.Present {
+				return SkillPassiveParameters{}
+			}
+			*slot = SkillFlatRate{Present: true, Flat: op.Arguments[0], Percent: op.Arguments[1]}
+		case 0x647275: // dru
+			if op.Count != 2 || out.Dru != [2]uint32{} || op.Arguments == [6]uint32{} {
+				return SkillPassiveParameters{}
+			}
+			out.Dru = [2]uint32{op.Arguments[0], op.Arguments[1]}
+		case 0x64637269: // dcri
+			if op.Count != 1 || out.CriticalEvasion != 0 || op.Arguments[0] == 0 {
+				return SkillPassiveParameters{}
+			}
+			out.CriticalEvasion = op.Arguments[0]
+		case 0x6f646172: // odar
+			if op.Count != 2 || out.IncomingReduction || op.Arguments[1] == 0 {
+				return SkillPassiveParameters{}
+			}
+			out.IncomingReduction = true
+		case tagDamageReturn:
+			rule, ok := parseDamageReturn(op)
+			if out.DamageReturn.Present || !ok {
+				return SkillPassiveParameters{}
+			}
+			out.DamageReturn = rule
 		case 0x72657169, 0x7265716e: // reqi/reqn: row.Reqi
 		default:
 			return SkillPassiveParameters{}
 		}
 	}
-	out.Pinned = count > 0 || out.Reat.Mask != 0 || out.Real.Mask != 0 || out.Br.Mask != 0
+	out.Pinned = count > 0 || out.Reat.Mask != 0 || out.Real.Mask != 0 || out.Br.Mask != 0 ||
+		out.HitRate.Present || out.Evasion.Present || out.MaxHP.Present || out.MaxMP.Present || out.Dru != [2]uint32{} ||
+		out.CriticalEvasion != 0 || out.IncomingReduction || out.DamageReturn.Present
 	return out
 }
 

@@ -122,6 +122,9 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 	if area.Present {
 		rt.installRecipientEffects(division, rt.concealmentRecipients(division, c, area, now), skill, rider, now)
 	}
+	if skill.TimedEffect.PulseArea.Present {
+		rt.trackPulseArea(division, c.Name)
+	}
 	gid := enterworld.ObjectIDForCharacter(c)
 	var frames, broadcast []wire.Frame
 	if pending == nil {

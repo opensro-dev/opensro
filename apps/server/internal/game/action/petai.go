@@ -9,6 +9,7 @@ petai.go - session-owned summoned-pet movement, pickup and peer presentation
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/grounditem"
 	"sort"
 	"strings"
@@ -47,6 +48,9 @@ type petSession struct {
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState
 	generation     uint64
+	// summonedAtMs marks a pet just called out of its item (not restored at
+	// entry): its first publication carries spawn sub-state 1.
+	summonedAtMs   int64
 	pickup         *wire.ItemMoveRequest
 	pickupDeadline int64
 	pickupCommand  bool
@@ -231,7 +235,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		return frames
 	}
 	ref, found := refs.CharacterRefByCodename(cos.Codename)
-	if !found || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 3 || ref.TidWord>>11 > 4 {
+	if !found || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || !followingCOSBand(ref.TidWord>>11) {
 		state.follower = nil
 		return nil
 	}
@@ -311,6 +315,17 @@ supplies its own world position to peer visibility, including parked mounts.
 func (rt *Runtime) CompanionPresentations(division, name string) []*simulation.PeerCOS {
 	unlock := rt.lockDivision(division)
 	defer unlock()
+	return rt.companionPresentations(division, name)
+}
+
+/*
+================
+companionPresentations
+
+CompanionPresentations for a caller that already holds the division lock.
+================
+*/
+func (rt *Runtime) companionPresentations(division, name string) []*simulation.PeerCOS {
 	rt.petMu.Lock()
 	owner := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(name)}]
 	rt.petMu.Unlock()
@@ -351,7 +366,7 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		return nil
 	}
 	ref, ok := refs.CharacterRefByCodename(cos.Codename)
-	if !ok || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 1 || ref.TidWord>>11 > 4 {
+	if !ok || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 < 1 || ref.TidWord>>11 > 4 && ref.TidWord>>11 != domain.CapturedCOSBand {
 		return nil
 	}
 	var world simulation.WorldState
@@ -378,6 +393,7 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 	}
 	block := rt.cosAbnormal(division, c.Name, cos.GID)
 	result = &simulation.PeerCOS{Mounted: cos.Mounted, NativeBodyStatus: cos.NativeBodyStatus, World: world, Revision: revision, Session: state.session, Generation: state.generation,
+		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs,
 		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: cosParameter(ref, cos, block, movementWalkParameter), Run: cosParameter(ref, cos, block, movementRunParameter),
 			Scale: ref.Scale, Name: name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c)}}
@@ -407,6 +423,8 @@ func (rt *Runtime) rememberTransportCOS(division string, c *enterworld.Character
 	state.transportCOS = c.ActiveCOS
 	state.transportWorld = simulation.WorldState{Spawn: pose}
 	state.generation++
+	// 4FA861: a transport summoned with goods aboard is a caravan.
+	rt.registerCaravan(division, c)
 }
 
 /*
@@ -497,4 +515,65 @@ func (rt *Runtime) restoreCompanionRelocation(previous map[petOwnerKey]petSessio
 			*current = state
 		}
 	}
+}
+
+/*
+================
+followingCOSBand
+
+Pets (3, 4) and a captured quest monster (6) follow their owner on foot;
+transports (1, 2) move only with their rider.
+================
+*/
+func followingCOSBand(band uint16) bool {
+	return band == 3 || band == 4 || band == domain.CapturedCOSBand
+}
+
+/*
+================
+CompanionTargets
+
+The monster tick's companion targets for one owner: every summoned,
+living, unmounted companion in container order (5464E0), at its presented
+pose. A mounted ride is struck through its rider (monsterAttackStage).
+================
+*/
+func (rt *Runtime) CompanionTargets(division string, ownerGID uint32, nowMs int64) []simulation.CompanionTarget {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	return rt.companionTargets(division, ownerGID, nowMs)
+}
+
+/*
+================
+companionTargets
+
+CompanionTargets for a caller that already holds the division lock (a
+monster area gathering its candidates at release).
+================
+*/
+func (rt *Runtime) companionTargets(division string, ownerGID uint32, nowMs int64) []simulation.CompanionTarget {
+	owner := rt.findCharacterByGid(division, ownerGID)
+	if owner == nil {
+		return nil
+	}
+	var out []simulation.CompanionTarget
+	for _, pet := range rt.companionPresentations(division, owner.Name) {
+		if pet.Mounted || pet.LifeState == wire.LifeStateDead {
+			continue
+		}
+		var record enterworld.CharacterCOS
+		rt.deps.Read(division, func() {
+			if live := owner.CompanionByGID(pet.Row.Gid); live != nil {
+				record = *live
+			}
+		})
+		ref, found := rt.cosReference(&record)
+		if !found {
+			continue
+		}
+		out = append(out, simulation.CompanionTarget{Gid: pet.Row.Gid, Pose: pet.World.LiveSpawnAt(nowMs),
+			BodyRadius: simulation.BodyRadius(ref.Parameters.BodyRadius), NativeBodyStatus: pet.NativeBodyStatus, Band: pet.Row.Band})
+	}
+	return out
 }

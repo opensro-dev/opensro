@@ -38,6 +38,14 @@ export const RECORD_BITRATE = 5000000;
 // Key frames by wall time, not frame count: the game's frame rate varies,
 // and clip cuts snap back to the previous key frame.
 const KEY_FRAME_MS = 2000;
+// Chrome reads "prefer-hardware" as hardware only: on a PC without an H.264
+// encoder (older or blocklisted GPUs, remote desktops, most Linux) the
+// config is unsupported and the replay never starts. Let it fall back.
+export const REPLAY_HARDWARE: HardwareAcceleration = "no-preference";
+// After an encoder failure (Chrome reclaims idle codecs in background tabs)
+// the loop reopens one this long after the error instead of stopping for
+// the rest of the session.
+const ENCODER_RETRY_MS = 5000;
 // Frames waiting in the encoder before new ones are skipped instead of
 // queueing memory and latency behind a slow encoder.
 const MAX_ENCODE_QUEUE = 4;
@@ -84,6 +92,13 @@ export interface ReplayRecorder {
 	lastError(): string | null;
 	/** Frames skipped because the encoder fell behind, since the loop started. */
 	dropped(): number;
+	/** True once the browser has said it cannot encode the replay at all. */
+	unsupported(): boolean;
+	/**
+	 * Keeps a running loop alive: resumes the source video when the browser
+	 * paused it and restarts the capture when its canvas track ended.
+	 */
+	watch(): void;
 }
 
 /*
@@ -108,6 +123,10 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 	let lastFrameMs = -Infinity;
 	let dropped = 0;
 	let error: string | null = null;
+	let failedAtMs = -Infinity;
+	let unsupported = false;
+	// A paused source is asked to play again no sooner than this.
+	let resumeAtMs = -Infinity;
 	let audioTrack: MediaStreamTrack | null = null;
 	let audioEncoder: AudioEncoder | null = null;
 	let audioSamples: Mp4Sample[] = [];
@@ -129,7 +148,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 			bitrate: RECORD_BITRATE,
 			framerate: CAPTURE_FPS,
 			latencyMode: "realtime",
-			hardwareAcceleration: "prefer-hardware",
+			hardwareAcceleration: REPLAY_HARDWARE,
 			avc: { format: "avc" }
 		};
 	}
@@ -168,7 +187,9 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 			error: failure => {
 				if ( owner !== generation ) return;
 				error = "Replay encoder: " + String( failure );
-				stop();
+				failedAtMs = performance.now();
+				// The ring restarts with the next encoder (openEncoder).
+				encoder = null;
 			}
 		} );
 		encoder.configure( encoderConfig( width, height ) );
@@ -189,6 +210,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 		if ( !audioTrack ) listen( owner );
 		const [width, height] = replaySize( video.videoWidth, video.videoHeight );
 		if ( width !== size[0] || height !== size[1] || !encoder || encoder.state === "closed" ) {
+			if ( now - failedAtMs < ENCODER_RETRY_MS ) return;
 			openEncoder( width, height );
 		}
 		if ( !encoder || !context || !scaled ) return;
@@ -315,6 +337,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 	function start( next: RecorderSettings ): Promise<boolean> {
 		if ( typeof VideoEncoder !== "function" || typeof canvas.captureStream !== "function" ) {
 			error = "Replay: this browser has no WebCodecs video encoder";
+			unsupported = true;
 			return Promise.resolve( false );
 		}
 		if ( video && settings?.windowSeconds === next.windowSeconds ) return Promise.resolve( true );
@@ -325,6 +348,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 			if ( owner !== generation ) return false;
 			if ( !support.supported ) {
 				error = "Replay: H.264 encoding is not supported";
+				unsupported = true;
 				return false;
 			}
 			return capture( next );
@@ -385,6 +409,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 		size = [ 0, 0 ];
 		settings = null;
 		lastFrameMs = -Infinity;
+		failedAtMs = -Infinity;
 		dropped = 0;
 	}
 
@@ -432,6 +457,34 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 		}
 	}
 
+	/*
+	================
+	watch
+
+	Chrome may pause a hidden muted video (power saving, a tab coming back)
+	and ends a capture track whose canvas it reclaimed; either leaves a
+	running loop that never sees another frame.
+	================
+	*/
+	function watch() {
+		if ( !video || !settings ) return;
+		if ( stream?.getVideoTracks()[0]?.readyState === "ended" ) {
+			const next = settings;
+			error = "Replay: the canvas capture ended; restarting";
+			stop();
+			void capture( next );
+			return;
+		}
+		const now = performance.now();
+		if ( !video.paused || now < resumeAtMs ) return;
+		const owner = generation;
+		resumeAtMs = now + ENCODER_RETRY_MS;
+		// The pending frame callback fires again once playback resumes.
+		video.play().catch( failure => {
+			if ( owner === generation ) error = "Replay: the capture paused and did not resume: " + String( failure );
+		} );
+	}
+
 	return {
 		start,
 		stop,
@@ -439,7 +492,9 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 		snapshot,
 		still,
 		lastError: () => error,
-		dropped: () => dropped
+		dropped: () => dropped,
+		unsupported: () => unsupported,
+		watch
 	};
 }
 

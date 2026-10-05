@@ -33,6 +33,34 @@ type PartyView interface {
 	PartyOf(divisionID, name string) (party.Snapshot, bool)
 }
 
+// UnionView answers who a union line reaches - the guild lane's
+// *guild.UnionRuntime satisfies it. code is the refusal (0x0C no union,
+// 0x0E no union chat right).
+type UnionView interface {
+	UnionChatAudience(divisionID string, sender *enterworld.Character) (names []string, code uint8)
+}
+
+// StallView answers who a stall line reaches - *stall.Registry satisfies
+// it.
+type StallView interface {
+	Participants(divisionID, name string) ([]string, bool)
+}
+
+/*
+================
+Views
+
+The other lanes a chat line consults. A nil view answers as if the lane
+held nothing.
+================
+*/
+type Views struct {
+	Presence PresenceView
+	Parties  PartyView
+	Unions   UnionView
+	Stalls   StallView
+}
+
 // Delivery is one presence-targeted 0x3667 send. The register glue resolves
 // TargetName through the shared live-session directory and drops it silently
 // when the target went offline in between.
@@ -96,7 +124,7 @@ func refusedChat(reason string) Outcome {
 HandleChat
 ================
 */
-func HandleChat(deps Dependencies, presence PresenceView, parties PartyView, divisionID string, sender *enterworld.Character, payload []byte) Outcome {
+func HandleChat(deps Dependencies, views Views, divisionID string, sender *enterworld.Character, payload []byte) Outcome {
 	if sender == nil {
 		return refusedChat("characterNotFound")
 	}
@@ -116,15 +144,20 @@ func HandleChat(deps Dependencies, presence PresenceView, parties PartyView, div
 	case ChatTypeAll, ChatTypeGM:
 		return handleAllChat(request, sender, ClosedBetaGlobalChat)
 	case ChatTypeWhisper:
-		return handleWhisper(deps, presence, divisionID, sender, request)
+		return handleWhisper(deps, views.Presence, divisionID, sender, request)
 	case ChatTypeParty:
-		return handlePartyChat(parties, divisionID, sender, request)
-	case ChatTypeGuild, ChatTypeUnion:
-		return handleGuildUnionChat(deps, divisionID, sender, request)
+		return handlePartyChat(views.Parties, divisionID, sender, request)
+	case ChatTypeGuild:
+		return handleGuildChat(deps, divisionID, sender, request)
+	case ChatTypeUnion:
+		return handleUnionChat(deps, views.Unions, divisionID, sender, request)
+	case ChatTypeStall:
+		return handleStallChat(views.Stalls, divisionID, sender, request)
 	default:
 		// Only 1/2/3/4/5/0x0B are composable by the retail prefix
-		// switch; anything else (a crafted notice 7, stall 9, academy
-		// 0x10, ...) acks UIIT_CHATERR_INVALID_COMMAND - never
+		// switch and 9 by the stall window's chat box; anything else (a
+		// crafted notice 7, academy 0x10, ...) acks
+		// UIIT_CHATERR_INVALID_COMMAND - never
 		// broadcast, so a forged type-7 frame cannot drive the notice
 		// banner.
 		return Outcome{
@@ -256,18 +289,49 @@ func handlePartyChat(parties PartyView, divisionID string, sender *enterworld.Ch
 	return outcome
 }
 
-// handleGuildUnionChat is the shared guild/union arm. Guild chat (type
-// 5) fans to the stored guild's members; no guild acks ChatErrNoGuild
-// (0x0B). Union chat (type 0x0B) resolves the same membership gate, then
-// ALWAYS acks ChatErrNoUnion (0x0C): no guild-alliance machinery exists
-// on this server, so no character holds union permission - the same
-// UIIT_CHATERR_ALLIANCE_PERMISSION_DENIED line either way.
 /*
 ================
-handleGuildUnionChat
+handleStallChat
+
+Stall chat (type 9) reaches everyone at the sender's stall
+(CFleaMarket_BroadcastChat 473BF0: [9][name][message]); a player at no
+stall acks ChatErrNoStall. Native sends the author its own line too and
+the client drops it by name (753760); the author is left out here, as in
+the party arm.
 ================
 */
-func handleGuildUnionChat(deps Dependencies, divisionID string, sender *enterworld.Character, request Request) Outcome {
+func handleStallChat(stalls StallView, divisionID string, sender *enterworld.Character, request Request) Outcome {
+	var names []string
+	atStall := false
+	if stalls != nil {
+		names, atStall = stalls.Participants(divisionID, sender.Name)
+	}
+	if !atStall {
+		return Outcome{
+			Refusal: fmt.Sprintf("%s is at no stall", sender.Name),
+			Ack:     EncodeChatAckError(ChatErrNoStall, request.ChatType, request.Second),
+		}
+	}
+	payload := EncodeChatBroadcastNamed(ChatTypeStall, sender.Name, request.Message)
+	outcome := Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second)}
+	for _, name := range names {
+		if strings.EqualFold(name, sender.Name) {
+			continue
+		}
+		outcome.Deliveries = append(outcome.Deliveries, Delivery{TargetName: name, Payload: payload})
+	}
+	return outcome
+}
+
+/*
+================
+handleGuildChat
+
+Guild chat (type 5) fans to the stored guild's members; no guild acks
+ChatErrNoGuild (0x0B).
+================
+*/
+func handleGuildChat(deps Dependencies, divisionID string, sender *enterworld.Character, request Request) Outcome {
 	guildID := int64(0)
 	inGuild := false
 	guilds := deps.GuildAuthority()
@@ -278,12 +342,6 @@ func handleGuildUnionChat(deps Dependencies, divisionID string, sender *enterwor
 		return Outcome{
 			Refusal: fmt.Sprintf("%s is not in a guild", sender.Name),
 			Ack:     EncodeChatAckError(ChatErrNoGuild, request.ChatType, request.Second),
-		}
-	}
-	if request.ChatType == ChatTypeUnion {
-		return Outcome{
-			Refusal: fmt.Sprintf("%s's guild is not in a union (no alliance machinery)", sender.Name),
-			Ack:     EncodeChatAckError(ChatErrNoUnion, request.ChatType, request.Second),
 		}
 	}
 	_, members, ok := guilds.Guild(divisionID, guildID)
@@ -300,6 +358,44 @@ func handleGuildUnionChat(deps Dependencies, divisionID string, sender *enterwor
 			continue
 		}
 		outcome.Deliveries = append(outcome.Deliveries, Delivery{TargetName: member.Name, Payload: payload})
+	}
+	return outcome
+}
+
+/*
+================
+handleUnionChat
+
+Union chat (type 0x0B, CGObjPC_OnChatRequest 4B1750 case 0xA): a
+guildless sender acks ChatErrNoGuild (0x0B), a guild outside a union
+ChatErrNoUnion (0x0C), a member without the union chat right 0x0E
+(UIIT_MSG_GUILD_UNION_CHAT_LIMIT); otherwise the line reaches the
+union's audience.
+================
+*/
+func handleUnionChat(deps Dependencies, unions UnionView, divisionID string, sender *enterworld.Character, request Request) Outcome {
+	if guilds := deps.GuildAuthority(); guilds == nil {
+		return Outcome{Refusal: "no guild store", Ack: EncodeChatAckError(ChatErrNoGuild, request.ChatType, request.Second)}
+	} else if _, inGuild := guilds.GuildOfCharacter(divisionID, sender.ID); !inGuild {
+		return Outcome{
+			Refusal: fmt.Sprintf("%s is not in a guild", sender.Name),
+			Ack:     EncodeChatAckError(ChatErrNoGuild, request.ChatType, request.Second),
+		}
+	}
+	names, code := []string(nil), ChatErrNoUnion
+	if unions != nil {
+		names, code = unions.UnionChatAudience(divisionID, sender)
+	}
+	if code != 0 {
+		return Outcome{
+			Refusal: fmt.Sprintf("%s may not speak in union chat (%#x)", sender.Name, code),
+			Ack:     EncodeChatAckError(code, request.ChatType, request.Second),
+		}
+	}
+	payload := EncodeChatBroadcastNamed(ChatTypeUnion, sender.Name, request.Message)
+	outcome := Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second)}
+	for _, name := range names {
+		outcome.Deliveries = append(outcome.Deliveries, Delivery{TargetName: name, Payload: payload})
 	}
 	return outcome
 }

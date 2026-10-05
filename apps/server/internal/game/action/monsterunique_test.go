@@ -180,7 +180,7 @@ func TestRecoveryKillPickupAndUse(t *testing.T) {
 			rt, clock, c, target := newCombatTestRuntime(t, 1)
 			installLootReferences(t, rt)
 			// Skip equipment, admit recovery and choose its actual weighted row.
-			prefix := []uint32{0, 0, 0, 32767, 32767, 0, 0, tc.selection, 0}
+			prefix := append(assignedDropMisses(), 0, 0, 0, 32767, 32767, 0, 0, tc.selection, 0)
 			calls := 0
 			rt.DropRoll = func() (uint32, error) {
 				calls++

@@ -381,6 +381,12 @@ func (rt *Runtime) HandleItemUse(
 				(cosRef.TidWord>>11 != 1 && cosRef.TidWord>>11 != 2) || !cosRef.CanRide || cosRef.MaxHP == 0 {
 				return false
 			}
+			// 49BF24: a murderer may not summon a riding horse, 0x1876; the
+			// transport summon skips the check.
+			if cosRef.TidWord>>11 == cosBandRiding && murderer(character) {
+				result = itemUseFailure(errCodeMurdererTransport)
+				return false
+			}
 			if cosRef.TidWord>>11 == cosBandTransport && !transportJob(character) {
 				result = itemUseFailure(errCodeCantActivateCart)
 				return false
@@ -440,20 +446,20 @@ func (rt *Runtime) HandleItemUse(
 				OwnerGid:  enterworld.ObjectIDForCharacter(character),
 			})
 			rt.rememberTransportCOS(divisionID, character, live)
+			// Only the owner hears the summon here. Viewers meet the vehicle
+			// through the peer COS lane (runPeerCOSVisibility), which spawns
+			// it, binds the ride and keeps its own record of what each viewer
+			// holds; a second spawn from this door reached every viewer
+			// twice, and the client drops the session on a duplicate gid.
 			result = OpResult{
 				Frames: []wire.Frame{
 					{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
 					{Opcode: wire.OpCosRecordCreate, Payload: record},
 					{Opcode: wire.OpSingleObjectSpawn, Payload: spawn},
+					{Opcode: wire.OpCosRideState, Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(character), true, gid)},
 				},
-				Broadcast: []wire.Frame{{Opcode: wire.OpSingleObjectSpawn, Payload: spawn}},
 			}
-			ride := wire.Frame{Opcode: wire.OpCosRideState, Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(character), true, gid)}
-			result.Frames = append(result.Frames, ride)
-			result.Broadcast = append(result.Broadcast, ride)
-			speeds := rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(divisionID, character, nowMs))
-			result.Frames = append(result.Frames, speeds...)
-			result.Broadcast = append(result.Broadcast, speeds...)
+			result.Frames = append(result.Frames, rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(divisionID, character, nowMs))...)
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
 		}
@@ -595,7 +601,7 @@ func (rt *Runtime) HandleItemUse(
 				Payload: simulation.HPRefreshPayload(enterworld.ObjectIDForCharacter(character), 0, uint32(nextHP))})
 		}
 		if nextHP == 0 {
-			effects, progression := rt.settlePlayerDeathInDoor(divisionID, character, nowMs)
+			effects, progression := rt.settlePlayerDeathInDoor(divisionID, character, deathKiller{}, nowMs)
 			public = append(public, effects...)
 			if owner := rt.clearPlayerAbnormalInDoor(divisionID, character, nowMs); owner != nil {
 				owner.fatal = true

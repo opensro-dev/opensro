@@ -29,6 +29,14 @@ func TestNativeTypeWordPacksTID4AboveTheClientWord(t *testing.T) {
 	if !partyRollExcluded(0x20C6) || partyRollExcluded(0x08C6) || partyRollExcluded(0x2146) {
 		t.Fatal("561020 excludes exactly monster TID4 4")
 	}
+	for tid4, want := range map[uint8]bool{1: false, 2: true, 3: true, 4: false} {
+		if got := TradeNpcMonster(MonsterRef{TidWord: 0x00C6, TypeID4: tid4}); got != want {
+			t.Errorf("TID4 %d trade NPC = %v, want %v (482640 / 4826E0)", tid4, got, want)
+		}
+	}
+	if TradeNpcMonster(MonsterRef{TidWord: 0x0146, TypeID4: 2}) {
+		t.Error("an NPC with TID4 2 is not a thief monster")
+	}
 }
 
 func TestRollNativeSpawnPartyAndPromotionGrades(t *testing.T) {

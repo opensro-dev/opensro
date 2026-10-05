@@ -25,6 +25,9 @@ import { multiply } from "@/engine/foundation/math/pose-math";
 import {
 	initializeParticle,
 	advanceParticle,
+	SPHERE_POS_PARENT,
+	SPHERE_POS_SELF,
+	SPHERE_POS_SIBLING,
 	type ParticleInstance,
 	type ParticleProgram,
 	type ParticleVectorCommand
@@ -276,18 +279,29 @@ function commands(
 		}
 		const flags = program.coneFlags ?? program.coneForceFlags ?? 0;
 		if ( flags === 3 && !sibling ) continue;
+		// 0x39 runs only with a sibling and draws no random numbers otherwise.
+		const sphereFlags = program.sphereFlags ?? SPHERE_POS_PARENT;
+		if ( program.sphere && sphereFlags === SPHERE_POS_SIBLING && !sibling ) continue;
 		const basis = flags === 1 ? element.matrix : flags === 3 ? sibling!.matrix : element.parent.matrix;
 		const sample = initializeParticle(
-			{ ...program, coneFlags: flags ? 2 : 0, coneForceFlags: flags ? 2 : 0 },
+			{
+				...program,
+				coneFlags: flags ? 2 : 0,
+				coneForceFlags: flags ? 2 : 0,
+				sphereFlags: SPHERE_POS_PARENT
+			},
 			table,
 			history.index,
 			basis
 		);
 		history.index = sample.index;
 		if ( program.sphere ) {
-			element.state.position = sample.state.position.map( ( v, i ) =>
-				Math.fround( v + element.parent.state.position[i]! )
-			);
+			const base = sphereFlags === SPHERE_POS_SELF ?
+				element.state.position :
+				sphereFlags === SPHERE_POS_SIBLING ?
+				sibling!.state.position :
+				element.parent.state.position;
+			element.state.position = sample.state.position.map( ( v, i ) => Math.fround( v + base[i]! ) );
 		}
 		if ( program.conePos ) {
 			element.state.position = sample.state.position.map( ( v, i ) =>
@@ -473,6 +487,12 @@ export function advanceParticleGraph(
 	const root = history.root;
 	root.state.position[0]! += shiftX;
 	root.state.position[2]! += shiftZ;
+	// The holder basis advances only with a tick: linked elements take the
+	// holder's turn from root.delta on the next tick, so a call that runs no
+	// tick (render frames outnumber 20 Hz ticks) must not consume it, or the
+	// turn is lost and they keep their birth frame (an arrow's markers stayed
+	// pointing where the hand held it at READY).
+	if ( target === history.frame ) return;
 	const oldRoot = scratch.oldRoot;
 	copy3( root.state.position, oldRoot );
 	scratch.previous.set( root.matrix );

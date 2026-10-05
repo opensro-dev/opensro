@@ -22,6 +22,22 @@ import { gunzipBytes } from "@/engine/foundation/assets/read-bytes";
 import { createPackBlocks } from "./blocks";
 export type { PackRange } from "./internal/pack-contract";
 
+/*
+================
+AssetAbsentError
+
+The published manifest has no entry for the path: no retry can find it in
+this release. Consumers whose native counterpart falls back on a failed
+load (the slot icons' icon_default) read this apart from transient faults.
+================
+*/
+export class AssetAbsentError extends Error {
+	constructor( pathname: string ) {
+		super( `Asset absent from published manifest: ${pathname}` );
+		this.name = "AssetAbsentError";
+	}
+}
+
 // Packs up to this size are fetched and persisted whole; larger ones by member.
 const SMALL_PACK_BYTES = 4 << 20;
 
@@ -238,7 +254,7 @@ export function createPacks(
 				entry = registry.assets.get( pathname + ".gz" );
 				gzip = Boolean( entry );
 			}
-			if ( !entry ) throw new Error( `Asset absent from published manifest: ${url.pathname}` );
+			if ( !entry ) throw new AssetAbsentError( url.pathname );
 			if ( entry.length > limit ) throw new Error( "Asset exceeds byte budget" );
 			if ( signal.aborted ) throw new Error( "Asset request cancelled" );
 			let bytes: Uint8Array<ArrayBuffer>;

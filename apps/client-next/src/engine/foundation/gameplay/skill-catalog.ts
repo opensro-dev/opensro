@@ -46,6 +46,9 @@ export interface SkillMetadata {
 	// (InitiateSkillCast 59B5F6 server side, CICharactor_Action_CastSkill
 	// 8E67E0 client side). Instant rows (imbues, speed skills) keep walking.
 	readonly haltsWalk?: boolean;
+	// Cast gate ao or pw: refused while seated, behind a wall or riding
+	// (58E0BF, 0x3009, which the client answers with no notice).
+	readonly needsFooting?: boolean;
 	// The authored action range (column 21), absent when the weapon sets the
 	// reach. A target within it is always in the server's reach, which adds
 	// both bodies (cast-prediction.ts).
@@ -53,6 +56,11 @@ export interface SkillMetadata {
 	// The authored MP cost: flat plus percent of maximum MP (skillMpCost).
 	readonly mp?: number;
 	readonly mpPercent?: number;
+	// The authored target groups as SKILL_TARGET_* bits (columns 22..33).
+	readonly targets?: number;
+	// A Force wall's cast: the server never releases its WAIT while the wall
+	// stands, so the caster stays in action state 2, rooted (cast-motion-lock).
+	readonly holdsCaster?: boolean;
 	readonly cooldownGroup?: number;
 	readonly masteries: readonly Requirement[];
 	readonly prerequisites: readonly Requirement[];
@@ -64,6 +72,32 @@ export interface StatusLevel {
 interface Requirement {
 	readonly ID: number;
 	readonly Level: number;
+}
+// SkillMetadata.targets bits (server enterworld SkillUiTarget).
+export const SKILL_TARGET_SELF = 1;
+export const SKILL_TARGET_MONSTER = 4;
+export const SKILL_TARGET_DEAD_BODY = 128;
+/*
+================
+skillAdmitsPredictedTarget
+
+Whether a press at target is one the server all but surely starts: the
+caster itself for a row that admits its caster, a living monster for a row
+that admits monsters, a corpse for a corpse row. Players, NPCs and pets are
+the server's call (relations, towns); the native press (6FCD50) sends them
+without any local effect, so the client predicts nothing for them.
+================
+*/
+export function skillAdmitsPredictedTarget(
+	skill: SkillMetadata,
+	target: { readonly gid: number; readonly kind: string; readonly appearanceState?: readonly number[]; },
+	localGid: number
+): boolean {
+	const targets = skill.targets ?? 0;
+	if ( target.gid === localGid ) return (targets & SKILL_TARGET_SELF) !== 0;
+	if ( target.kind !== "monster" ) return false;
+	const dead = target.appearanceState?.[0] === 2;
+	return (targets & (dead ? SKILL_TARGET_DEAD_BODY : SKILL_TARGET_MONSTER)) !== 0;
 }
 /*
 ================
@@ -137,6 +171,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			ui.groundTarget !== undefined && typeof ui.groundTarget !== "boolean" ||
 			ui.targetSelf !== undefined && typeof ui.targetSelf !== "boolean" ||
 			ui.haltsWalk !== undefined && typeof ui.haltsWalk !== "boolean" ||
+			ui.needsFooting !== undefined && typeof ui.needsFooting !== "boolean" ||
 			ui.range !== undefined && (typeof ui.range !== "number" || !Number.isFinite( ui.range ) || ui.range < 0)
 		) {
 			throw Error( "Invalid skill target kind" );
@@ -175,9 +210,12 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			cooldownMs: uint( ui.cooldownMs ),
 			...(ui.actionMs === undefined ? {} : { actionMs: uint( ui.actionMs ) }),
 			haltsWalk: ui.haltsWalk ?? false,
+			...(ui.needsFooting ? { needsFooting: true } : {}),
 			...(ui.range ? { range: ui.range } : {}),
 			...(ui.mp ? { mp: uint( ui.mp ) } : {}),
 			...(ui.mpPercent ? { mpPercent: uint( ui.mpPercent, 65535 ) } : {}),
+			...(ui.targets ? { targets: uint( ui.targets, 0xffff ) } : {}),
+			...(ui.holdsCaster === true ? { holdsCaster: true } : {}),
 			cooldownGroup: uint( ui.cooldownGroup ?? 0, 255 ),
 			masteries: requirements( ui.masteries, 2 ),
 			prerequisites: requirements( ui.prerequisites, 3 )

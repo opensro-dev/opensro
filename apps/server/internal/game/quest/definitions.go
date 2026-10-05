@@ -67,6 +67,20 @@ type RewardItemLead struct {
 
 /*
 ================
+RewardChoice
+
+One alternative item reward of a selection quest (_RefQuestReward
+SelectionCnt). The v1.150 client has no reward-selection window, so the
+NPC offers one completion row per choice, titled by TitleSymbol.
+================
+*/
+type RewardChoice struct {
+	TitleSymbol string
+	Items       []RewardItemLead
+}
+
+/*
+================
 QuestSpec
 
 Authored mechanics keyed by codename. Definition resolves media-owned fields.
@@ -122,6 +136,9 @@ type QuestSpec struct {
 	RewardSkillExp int64
 	// RewardItems are committed atomically through the inventory owner.
 	RewardItems []RewardItemLead
+	// RewardChoices are granted on top of RewardItems: exactly one, picked
+	// from the completing NPC's rows (RewardChoice).
+	RewardChoices []RewardChoice
 	// NPC/session fields are codename/symbol keyed because their numeric IDs
 	// are version-local. They are curated only where shipped dialogue text
 	// and the v1.188 mechanism establish a complete interaction segment.
@@ -371,7 +388,15 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 		if spec.DeliveryNpcCodename != "" && (spec.Objective != ObjectiveCollect || spec.DeliveryPromptSymbol == "" || spec.InventoryFullSymbol == "") {
 			return nil, fmt.Errorf("quest %s incomplete delivery contract", spec.Codename)
 		}
-		for _, reward := range spec.RewardItems {
+		rewards := append([]RewardItemLead(nil), spec.RewardItems...)
+		for _, choice := range spec.RewardChoices {
+			// A kind-2 reward window or a stage completion cannot carry a choice.
+			if choice.TitleSymbol == "" || len(choice.Items) == 0 || spec.KindByte == 2 || len(spec.Stages) > 0 || spec.EndNpcCodename == "" {
+				return nil, fmt.Errorf("quest %s invalid reward choice contract", spec.Codename)
+			}
+			rewards = append(rewards, choice.Items...)
+		}
+		for _, reward := range rewards {
 			if reward.Count == 0 || reward.Count > 65535 || items == nil {
 				return nil, fmt.Errorf("quest %s invalid reward item contract", spec.Codename)
 			}

@@ -11,6 +11,22 @@ Visibility gates new requests, never collection of outstanding work.
 ===========================================================================
 */
 
+// CGInterface_ExecuteActionCommand 695420 case 1006: trade with the
+// selected player.
+const ACTION_EXCHANGE = 1006;
+// 695420 case 9 opens the own stall's title prompt, case 0xD toggles the
+// stall network window (CGInterface_ToggleStallNetworkWindow 69DB80).
+const ACTION_STALL = 1009;
+const ACTION_STALL_NETWORK = 1013;
+// 5A2890: a title CStringCheck_IsTextAllowed refuses raises 0x0A/0x38.
+const STALL_TITLE_REFUSED = "UIIT_MSG_FLEAMARKET_ERR_NOT_ALLOWED_FMARKETNAME";
+const STALL_PROMPT_TEXT = "stall-prompt-text";
+const STALL_PROMPT_QUANTITY = "stall-prompt-quantity";
+const STALL_PROMPT_PRICE = "stall-prompt-price";
+const STALL_CHAT_TEXT = "stall-chat-text";
+// CIFChatModule rows are 16 pixels; the input row sits under them.
+const STALL_CHAT_ROW = 16;
+import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import { companionItemTargetCommand } from "@/engine/foundation/gameplay/cos-item-use";
 import {
 	createStoragePanel,
@@ -29,7 +45,8 @@ import {
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
-import type { BugReportControl } from "@/engine/contracts/bug-report";
+import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
+import { BUG_REPLAY_LABEL, type BugReportControl } from "@/engine/contracts/bug-report";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
 import { itemEquipmentOverlay, equipmentWarningUv } from "@/engine/foundation/ui/item-equipment-overlay";
 import { itemCountQuads } from "@/engine/foundation/ui/item-count";
@@ -113,10 +130,61 @@ import {
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
+import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
+import { createFortressWarHud } from "./hud/fortress-war-hud";
+import { createUnionHud } from "./hud/union-hud";
+import { createExchangeHud } from "./hud/exchange-hud";
+import {
+	createStallHud,
+	stallNetworkOrder,
+	stallPromptCommand,
+	stallPromptLive,
+	STALL_CELL_PITCH_X,
+	STALL_CELL_PITCH_Y,
+	STALL_COMBO_DEGREE,
+	STALL_COMBO_LARGE,
+	STALL_COMBO_MEDIUM,
+	STALL_CHAT_LIMIT,
+	STALL_PROMPT_SIZE,
+	STALL_TEXT_LIMIT,
+	type StallNetworkSort,
+	type StallPrompt
+} from "./hud/stall-hud";
+import { createStallNetworkCategories } from "./hud/stall-network-categories";
+import { STALL_CHAT_CHANNEL, STALL_SLOTS, type StallListing } from "@/engine/foundation/gameplay/stall";
+import { textAllowed } from "@/engine/foundation/ui/character-create";
+import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
+import { allianceButtons, allianceLeader } from "@/engine/foundation/ui/alliance-guild";
+import {
+	fortressWarDates,
+	fortressWarFormat,
+	fortressWarQuestionKey,
+	fortressWarRequest,
+	fortressWarSlots,
+	FORTRESS_WAR_APPLY_ROWS,
+	FORTRESS_WAR_APPLY_SLOT_HEIGHT,
+	FORTRESS_WAR_APPLY_SLOT_WIDTH
+} from "@/engine/foundation/ui/fortress-war-apply";
+import { createGuildManagerHud } from "./hud/guild-manager-hud";
+import { createMagicOptionHud, MAGIC_OPTION_LIST_ROWS } from "./hud/magic-option-hud";
+import {
+	premiumCommand,
+	REVERSE_RETURN_LAST_DEATH,
+	REVERSE_RETURN_LAST_RECALL
+} from "@/engine/foundation/gameplay/count-job";
+import {
+	AVATAR_MAGIC_OPTION_FUNCTION,
+	avatarMagicOptionCount,
+	avatarMagicOptionText,
+	avatarPartSymbol,
+	grantableAvatarPart
+} from "@/engine/foundation/gameplay/avatar-magic-option";
+import { guildLevelUpPrice, guildManagerRows, MASTER_RELEASE_VOTE } from "@/engine/foundation/gameplay/guild-manager";
+import { noticeText } from "@/engine/foundation/ui/notice-text";
 import {
 	JOB_ALIAS_CHECK,
 	JOB_ALIAS_CREATE,
@@ -210,10 +278,12 @@ import { barChrome } from "@/engine/foundation/ui/bar";
 import {
 	partyDistanceShade,
 	partyMembers,
+	partyLocalPose,
 	partyOverlay,
 	partyPortraitGid,
 	partyRosterPose,
-	partyShadeImage
+	partyShadeImage,
+	partyShadeImages
 } from "@/engine/foundation/ui/party-overlay";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import {
@@ -265,6 +335,7 @@ import {
 	blindableCharacter,
 	hiddenSilkCos,
 	nameInRange,
+	riderBoardPosition,
 	overheadBoardVisible
 } from "@/engine/foundation/ui/name-visibility";
 import { chatBlocks, chatBlockError } from "@/engine/foundation/gameplay/chat-blocks";
@@ -277,10 +348,12 @@ import {
 	type GameOptions
 } from "@/engine/foundation/gameplay/game-options";
 import {
+	autoPotionDraft,
+	autoPotionDraftChoice,
 	autoPotionEntry,
 	autoPotionWord,
 	defaultAutoPotion,
-	type AutoPotionSettings
+	type AutoPotionDraft
 } from "@/engine/foundation/gameplay/auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
 import { textBoardLines } from "@/engine/foundation/ui/text-lines";
@@ -332,13 +405,14 @@ import {
 	extendedSlot,
 	quickSlotDrag,
 	quickSlotDrop,
+	HELPER_ACTION_ID,
 	TRACE_ACTION_ID
 } from "@/engine/foundation/gameplay/quickslots";
 import { itemActivation } from "@/engine/foundation/gameplay/item-activation";
 import { iconPath } from "@/engine/foundation/ui/icon";
 import { createLocalization } from "./localization/localization";
 import { createTitleUi } from "./title/title";
-import { titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
+import { serverListRefreshDue, titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
 import { createUiText } from "./text/text";
 import { createUiAssets } from "./resources/resources";
@@ -357,6 +431,7 @@ import {
 	partyProposalAssets,
 	partyProposalLayout,
 	guildProposalLayout,
+	proposalLayout,
 	MESSAGE_FRAME,
 	MESSAGE_TILE,
 	PARTY_OPTION
@@ -379,6 +454,7 @@ import { guideTokens } from "@/engine/foundation/ui/guide-content";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/contracts/session";
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
+import type { EntityState } from "@/engine/contracts/world";
 
 // CIFCosInfo_RefreshSatietyDependentStats (6A4600) font colour 0xFF999999.
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
@@ -393,9 +469,12 @@ const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
 const BUG_REPLAY_OPTION = "option-bug-replay";
-const BUG_REPLAY_LABEL = "Record bug replay";
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
+// CIFFortressWarApplyWnd, opened by the fortress official's answer.
+const FORTRESS_WAR_PANEL = "Fortress war application";
+// The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
+const GRANT_PANEL = "Magic option";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
 const SKIN_SLIDER_TRAVEL = 85;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
@@ -460,7 +539,7 @@ export function createUi(
 	let beginnerDraft = false;
 	let potionCombo = "";
 	let potionComboOffset = 0;
-	let potionDraft: AutoPotionSettings = defaultAutoPotion();
+	let potionDraft: AutoPotionDraft = autoPotionDraft( defaultAutoPotion() );
 	const commonWindowPaths = [
 		BUTTON,
 		BUTTON_FOCUS,
@@ -585,9 +664,17 @@ export function createUi(
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
+	const autoPotionInput = createAutoPotionInput();
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
 	const jobHud = createJobHud();
+	const fortressWarHud = createFortressWarHud();
+	const unionHud = createUnionHud();
+	const exchangeHud = createExchangeHud();
+	const stallHud = createStallHud();
+	const grantPowerHud = createGrantPowerHud();
+	const guildManagerHud = createGuildManagerHud();
+	const magicOptionHud = createMagicOptionHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
@@ -600,7 +687,8 @@ export function createUi(
 	let academyWasVisible = false;
 	const hud = createHudResources( assets, base ),
 		guideResources = createGuideResources( assets, base ),
-		minimapResources = createMinimapResources( assets, base );
+		minimapResources = createMinimapResources( assets, base ),
+		stallCategories = createStallNetworkCategories( assets, base );
 	const npcPanel = createNpcPanel(), windowPlacement = createWindowPlacement();
 	// The warehouse window's page (storage-panel.ts).
 	const storagePanel = createStoragePanel();
@@ -744,6 +832,7 @@ export function createUi(
 	let nextPoll = 0,
 		lastSessionRevision = -1,
 		serversRequested = false,
+		serversRetryAt = 0,
 		lastNativeTitleStatus: number | undefined,
 		loginReplyPending = false;
 	let view: UiView | null = null,
@@ -952,6 +1041,29 @@ export function createUi(
 	setPanel
 	================
 	*/
+	/*
+	================
+	fortressWarView
+
+	The application window's content for the official in conversation:
+	his fortresses (matched by RefObjID, 662E80) and the guild's standing.
+	================
+	*/
+	function fortressWarView() {
+		const game = view?.gameplay, npc = fortressWarHud.npc();
+		const official = view?.entities.find( e => e.gid === npc );
+		if ( npc === null || !game?.fortress || !official ) return null;
+		const application = game.fortressApplication ?? null,
+			social = game.social,
+			slots = fortressWarSlots(
+				game.fortress,
+				official.refObjId,
+				application,
+				social?.guild?.name ?? "",
+				social?.alliances?.map( a => a.name ) ?? []
+			);
+		return { npc, application, slots };
+	}
 	function setPanel( next: string, intent: "open" | "toggle" | "select" | "warm" = "open" ) {
 		// An unseen warm build (window-warm.ts) switches the drawn window only:
 		// no enter/leave hooks, sounds or transient resets.
@@ -969,6 +1081,7 @@ export function createUi(
 		}
 		shopOpenRequest = null;
 		if ( next !== SKIN_PANEL ) skinHud.close();
+		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
 		blockDialog = null;
@@ -981,6 +1094,8 @@ export function createUi(
 		confirmDrop = "";
 		confirmAbandon = false;
 		confirmSocial = "";
+		unionHud.reset();
+		grantPowerHud.close();
 		if ( next !== "Guild tools" ) socialMember = 0;
 		socialPage = 0;
 		inventorySlot = -1;
@@ -991,6 +1106,7 @@ export function createUi(
 		if ( panel === "Option" ) audioPreference( audioSaved, false );
 		if ( panel === "Alchemy" ) sendGameplay( { kind: "alchemy-close" } );
 		if ( panel === "Magic Pop" ) sendGameplay( { kind: "gacha-close" } );
+		if ( panel === GRANT_PANEL ) sendGameplay( { kind: "magic-option-close" } );
 		if ( panel && !next ) sound( "close" );
 		if ( !next ) admittedWindows.clear();
 		const wasOpen = !!panel;
@@ -1018,7 +1134,7 @@ export function createUi(
 			cosPlayerPage = 0;
 		}
 		if ( next === "Auto Potion" ) {
-			potionDraft = { ...view?.gameplay?.autoPotion ?? defaultAutoPotion() };
+			potionDraft = autoPotionDraft( view?.gameplay?.autoPotion ?? defaultAutoPotion() );
 			potionCombo = "";
 		}
 		if ( next === "Alchemy" ) {
@@ -1069,21 +1185,30 @@ export function createUi(
 			return;
 		}
 		if ( id === 1008 ) {
-			const pose = game.pose,
-				item = pose ?
-					view!.entities.filter( e => e.kind === "ground-item" && e.regionId === pose.regionId ).sort( (
-						a,
-						b
-					) => Math.hypot( a.x - pose.x, a.z - pose.z ) - Math.hypot( b.x - pose.x, b.z - pose.z ) )[0] :
-					undefined;
-			if ( item ) sendGameplay( { kind: "pickup", gid: item.gid } );
+			// The worker picks the item; this frame's view may still hold the last.
+			sendGameplay( { kind: "pickup-nearest" } );
 			return;
 		}
 		if ( id === 1002 ) {
 			if ( game.target ) sendGameplay( { kind: "attack", gid: game.target } );
 			return;
 		}
-		if ( id === 1000 || id === 1001 || id === TRACE_ACTION_ID || id === 5000 || id >= 4000 && id <= 4006 ) {
+		if ( id === ACTION_STALL ) {
+			sendGameplay( { kind: "stall-name", alchemy: panel === "Alchemy" } );
+			return;
+		}
+		if ( id === ACTION_STALL_NETWORK ) {
+			sendGameplay( { kind: "stall-network-open", open: !game.stall?.network.open } );
+			return;
+		}
+		if ( id === HELPER_ACTION_ID ) {
+			sendGameplay( { kind: "helper-mark" } );
+			return;
+		}
+		if (
+			id === 1000 || id === 1001 || id === TRACE_ACTION_ID || id === 5000 || id >= 4000 && id <= 4006 ||
+			id === ACTION_FORTRESS_RETURN || id === ACTION_EXCHANGE
+		) {
 			sendGameplay( { kind: "action-command", id } );
 		}
 	}
@@ -1321,6 +1446,44 @@ export function createUi(
 	}
 	/*
 	================
+	openStallPrompt
+	================
+	*/
+	function openStallPrompt( prompt: StallPrompt ) {
+		stallHud.open( prompt );
+		if ( prompt.kind === "title" || prompt.kind === "greeting" ) {
+			focusAndSelect( STALL_PROMPT_TEXT, 0, prompt.text.length );
+		} else if ( prompt.kind === "price" ) focusAndSelect( STALL_PROMPT_PRICE, 0, prompt.price.length );
+		dirty = true;
+	}
+	/*
+	================
+	answerStallPrompt
+
+	CIFStall_OnTitleDialogResult 5A2890: a title the abuse filter refuses
+	(CStringCheck_IsTextAllowed 790B60) raises 0x0A/0x38 and gives up the
+	stall being named.
+	================
+	*/
+	function answerStallPrompt( accept: boolean ) {
+		const prompt = stallHud.prompt(), stall = view?.gameplay?.stall;
+		stallHud.close();
+		focus = null;
+		focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+		dirty = true;
+		if ( !prompt || !stall ) return;
+		const rules = hud.data()?.nameRules;
+		if ( accept && prompt.kind === "title" && rules && !textAllowed( prompt.text, rules ) ) {
+			hudMessages.append( hudCopy( STALL_TITLE_REFUSED ) );
+			if ( stall.phase === "naming" ) sendGameplay( { kind: "stall-name-cancel" } );
+			return;
+		}
+		const greeting = hudCopy( "UIIT_STT_STALL_DEFAULT_OWNERMSG" ).replace( "%s", view?.session?.character ?? "" );
+		const command = stallPromptCommand( prompt, stall, accept, greeting );
+		if ( command ) sendGameplay( command );
+	}
+	/*
+	================
 	beginShopDialog
 	================
 	*/
@@ -1435,6 +1598,7 @@ export function createUi(
 	function activate( id: string ) {
 		if ( id.startsWith( "cos-status:" ) ) {
 			cosHud.select( Number( id.slice( 11 ) ) );
+			sendGameplay( { kind: "cos-select", gid: cosHud.selected() } );
 			dirty = true;
 			return;
 		}
@@ -1632,6 +1796,29 @@ export function createUi(
 			}
 			return;
 		}
+		if ( id.startsWith( "npc-guild:" ) ) {
+			// 5DA1B0 cases 0x12..0x1D: the guild manager's rows (guild-manager.ts).
+			const conversation = view.gameplay?.npcConversation, social = view.gameplay?.social;
+			if ( !conversation || conversation.phase !== "menu" ) return;
+			const npc = conversation.gid, row = id.slice( 10 );
+			if ( row === "create" || row === "master-leave" ) {
+				guildManagerHud.openField( row, npc );
+				focusAtEnd( "guild-manager-text", "" );
+			} else if ( row === "level-up" ) guildManagerHud.ask( "level-up", npc, social?.guild?.level ?? 0 );
+			else if ( row === "dissolve" || row === "secede" || row === "release" ) guildManagerHud.ask( row, npc );
+			else if ( row === "compensation" ) sendGameplay( { kind: "guild-compensation", gid: npc } );
+			else if ( row === "vote" ) {
+				const vote = social?.guild?.votes?.find( v => v.kind === MASTER_RELEASE_VOTE );
+				if ( vote ) guildManagerHud.showVote( vote.remainingMs );
+			} else if ( row === "warehouse" ) {
+				if ( !canLeavePanel() ) return;
+				sendGameplay( { kind: "storage-open-guild", gid: npc } );
+				storagePanel.reset();
+				setPanel( "Storage" );
+			}
+			dirty = true;
+			return;
+		}
 		if ( id.startsWith( "npc-job-" ) ) {
 			// 5DA1B0 cases 0x1E, 0x1F and 0x20/0x21: the join and withdrawal
 			// questions and the alias window, for the guild NPC in conversation.
@@ -1692,6 +1879,13 @@ export function createUi(
 			dirty = true;
 			return;
 		}
+		if ( stallHud.prompt() ) {
+			if ( id === "submit" ) id = "stall-prompt-ok";
+			if ( id === "stall-prompt-ok" || id === "stall-prompt-cancel" ) {
+				answerStallPrompt( id === "stall-prompt-ok" );
+			}
+			return;
+		}
 		if ( splitStack ) {
 			if ( id === "submit" ) id = "split-confirm";
 			if ( ![ "split-confirm", "split-cancel" ].includes( id ) ) return;
@@ -1738,6 +1932,7 @@ export function createUi(
 			}
 			return;
 		}
+		if ( id === "submit" && focus === STALL_CHAT_TEXT ) id = "stall-chat-send";
 		if ( id === "submit" && shopDialog && panel === "Shop" ) {
 			if ( composing ) return;
 			id = "shop-trade";
@@ -1914,7 +2109,15 @@ export function createUi(
 			const key = id.slice( 14 );
 			if ( key === "hp" || key === "mp" || key === "cure" ) {
 				const entry = autoPotionEntry( potionDraft[key] );
-				potionDraft = { ...potionDraft, [key]: autoPotionWord( { ...entry, enabled: !entry.enabled } ) };
+				const saved = autoPotionEntry( (view.gameplay?.autoPotion ?? defaultAutoPotion())[key] );
+				// 63DC30 restores the committed threshold when re-enabling a slider.
+				const percent = !entry.enabled && key !== "cure" ?
+					Math.max( 1, Math.min( 100, saved.percent ) ) :
+					entry.percent;
+				potionDraft = {
+					...potionDraft,
+					[key]: autoPotionWord( { ...entry, percent, enabled: !entry.enabled } )
+				};
 			}
 		} else if ( id.startsWith( "potion-combo:" ) ) {
 			potionCombo = potionCombo === id ? "" : id;
@@ -1923,19 +2126,15 @@ export function createUi(
 			potionComboOffset = Math.max( 0, Math.min( 6, potionComboOffset + (id.endsWith( "-up" ) ? -1 : 1) ) );
 		} else if ( id.startsWith( "potion-choice:" ) ) {
 			const [, key, part, value] = id.split( ":" );
-			if ( key === "hp" || key === "mp" || key === "cure" ) {
-				const entry = autoPotionEntry( potionDraft[key] ),
-					page = entry.slot === 0 ? 0 : Math.floor( (entry.slot - 1) / 10 ),
-					keySlot = entry.slot === 0 ? 0 : (entry.slot - 1) % 10 + 1,
-					n = Number( value ),
-					slot = part === "page" ? (keySlot === 0 ? 0 : n * 10 + keySlot) : (n === 0 ? 0 : page * 10 + n);
-				potionDraft = { ...potionDraft, [key]: autoPotionWord( { ...entry, slot } ) };
+			if ( (key === "hp" || key === "mp" || key === "cure") && (part === "page" || part === "key") ) {
+				potionDraft = autoPotionDraftChoice( potionDraft, key, part, Number( value ) );
 			}
 			potionCombo = "";
 		} else if ( id.startsWith( "potion-step:" ) ) {
 			const [, key, delta] = id.split( ":" );
 			if ( key === "hp" || key === "mp" ) {
 				const entry = autoPotionEntry( potionDraft[key] );
+				if ( !entry.enabled ) return;
 				potionDraft = {
 					...potionDraft,
 					[key]: autoPotionWord( {
@@ -2037,6 +2236,104 @@ export function createUi(
 			sendGameplay( { kind: id, gid: view.gameplay?.target ?? 0, name: socialName } );
 		} else if ( id === "guild-invite" && view.gameplay?.target ) {
 			sendGameplay( { kind: id, gid: view.gameplay.target } );
+		} else if ( id === "guild-union-invite" ) {
+			// 701190 sends the selected player (a mounted COS stands for its rider).
+			if ( view.gameplay?.target ) sendGameplay( { kind: id, gid: view.gameplay.target } );
+		} else if ( id === "stall-chat-send" ) {
+			const text = stallHud.chat();
+			if ( text.trim() && !view.gameplay?.chat?.pending && view.gameplay?.stall?.phase !== "none" ) {
+				sendGameplay( { kind: "chat", channel: STALL_CHAT_CHANNEL, text } );
+				stallHud.typeChat( "" );
+			}
+		} else if ( id === "stall-close" || id === "stall-leave" ) {
+			sendGameplay( { kind: id } );
+		} else if ( id === "stall-trading" ) {
+			const stall = view.gameplay?.stall;
+			// 0x71A8 kind 5: an open stall closes for modification at once.
+			if ( stall?.phase === "owner" && stall.open ) {
+				sendGameplay( { kind: "stall-open", open: false, network: false } );
+			} else if ( stall?.phase === "owner" ) openStallPrompt( { kind: "register" } );
+		} else if ( id === "stall-change-title" ) {
+			const stall = view.gameplay?.stall;
+			if ( stall?.phase === "owner" && !stall.open ) openStallPrompt( { kind: "title", text: stall.title } );
+		} else if ( id === "stall-change-greeting" ) {
+			const stall = view.gameplay?.stall;
+			if ( stall?.phase === "owner" ) openStallPrompt( { kind: "greeting", text: stall.greeting } );
+		} else if ( id.startsWith( "stall-slot:" ) ) {
+			const stall = view.gameplay?.stall, slot = Number( id.slice( 11 ) );
+			if ( stall?.phase === "visitor" && stall.open && stall.offers.some( row => row.slot === slot ) ) {
+				openStallPrompt( { kind: "buy", slot } );
+			}
+		} else if ( id.startsWith( "stall-modify:" ) ) {
+			const stall = view.gameplay?.stall,
+				slot = Number( id.slice( 13 ) ),
+				offer = stall?.offers.find( row => row.slot === slot );
+			if ( stall?.phase === "owner" && !stall.open && offer ) {
+				const carried = view.gameplay?.inventory.find( item => item.slot === offer.bagSlot )?.quantity ??
+					offer.quantity;
+				openStallPrompt( {
+					kind: "price",
+					slot,
+					bagSlot: offer.bagSlot,
+					carried,
+					quantity: String( offer.quantity ),
+					price: String( offer.price ),
+					modify: true
+				} );
+			}
+		} else if ( id === "stall-net-close" ) {
+			sendGameplay( { kind: "stall-network-open", open: false } );
+		} else if ( id.startsWith( "stall-net-combo:" ) ) {
+			stallHud.toggleCombo( Number( id.slice( 16 ) ) );
+		} else if ( id.startsWith( "stall-net-choice:" ) ) {
+			stallHud.choose( Number( id.slice( 17 ) ) );
+		} else if ( id.startsWith( "stall-net-sort:" ) ) {
+			stallHud.sortBy( id.slice( 15 ) as StallNetworkSort );
+		} else if ( id.startsWith( "stall-net-row:" ) ) {
+			stallHud.selectRow( Number( id.slice( 14 ) ) );
+		} else if ( id === "stall-net-search" || id === "stall-net-prev" || id === "stall-net-next" ) {
+			const draft = stallHud.network(),
+				network = view.gameplay?.stall?.network,
+				child = stallCategories.roots()?.[draft.large]?.children[draft.medium];
+			if ( network && stallHud.searchReady( uiNow ) ) {
+				// The pages walk the last search; a new search starts at its first.
+				const step = id === "stall-net-next" ? 1 : -1,
+					page = id === "stall-net-search" ? 0 : network.page + step,
+					category = id === "stall-net-search" ? child?.id ?? 0 : network.category;
+				if ( category && page >= 0 && (id === "stall-net-search" || page < network.pages) ) {
+					stallHud.searched( uiNow );
+					stallHud.selectRow( -1 );
+					sendGameplay( { kind: "stall-network-search", category, page, degree: draft.degree } );
+				}
+			}
+		} else if ( id === "stall-net-buy" ) {
+			const row = stallHud.network().row;
+			if ( row >= 0 && view.gameplay?.stall?.network.rows[row] ) openStallPrompt( { kind: "network-buy", row } );
+		} else if ( id === "exchange-confirm" || id === "exchange-cancel" ) {
+			sendGameplay( { kind: id } );
+		} else if ( id === "exchange-gold-set" ) {
+			sendGameplay( { kind: "exchange-gold", amount: Number( exchangeHud.gold() || 0 ) } );
+		} else if ( id.startsWith( "exchange-my:" ) ) {
+			const slot = Number( id.slice( 12 ) );
+			if ( view.gameplay?.exchange?.own.some( row => row.slot === slot ) ) {
+				sendGameplay( { kind: "exchange-take", slot } );
+			}
+		} else if ( id === "union-sort:name" || id === "union-sort:level" ) {
+			unionHud.sortBy( id === "union-sort:name" ? "name" : "level" );
+		} else if ( id === "guild-union-exit" ) unionHud.ask( { kind: "exit", guild: 0, name: "" } );
+		else if ( id === "guild-union-expel" ) {
+			// 5F7670 asks only with a guild selected.
+			const ally = view.gameplay?.social?.alliances?.find( row => row.id === socialMember );
+			if ( ally ) unionHud.ask( { kind: "expel", guild: ally.id, name: ally.name } );
+		} else if ( id === "union-ask-yes" || id === "union-ask-no" ) {
+			const asked = unionHud.answer();
+			if ( asked && id === "union-ask-yes" ) {
+				sendGameplay(
+					asked.kind === "exit" ?
+						{ kind: "guild-union-leave" } :
+						{ kind: "guild-union-kick", id: asked.guild }
+				);
+			}
 		} else if ( id === "academy-notice-submit" ) {
 			sendGameplay( { kind: "academy-notice", subject: socialSubject, contents: socialContents } );
 			if ( socialSubject.split( "\0", 1 )[0] && socialContents.split( "\0", 1 )[0] ) guildDialog = "";
@@ -2399,6 +2696,22 @@ export function createUi(
 					executeAction( binding.payload & 0xffffff );
 					return;
 				}
+				// 0x25 dispatches the pet command bar's own command (6F2520 ->
+				// CICCos_ExecuteActionCommand 6A2350).
+				if ( binding?.kind === 0x25 ) {
+					const mountedOn = view.entities.find( e => e.gid === game?.localGid )?.mountedOn;
+					// Attack while riding the active COS strikes from the saddle
+					// (0x769E command 2 for the ridden COS), as a world click does.
+					if (
+						binding.payload === COS_COMMAND_ATTACK && game?.activeCos && mountedOn === game.activeCos.gid &&
+						!game.activeCos.dead && game.target
+					) {
+						sendGameplay( { kind: "cos-attack", gid: game.target } );
+					} else executeCosCommand( binding.payload );
+					return;
+				}
+				// 572770 uses a bag item only while nothing is held on the cursor.
+				if ( binding?.kind === 0x46 && carriedItem ) return;
 				const command = binding && game ?
 					quickSlotCommand( binding, game, view.entities.find( e => e.gid === game.localGid )?.mountedOn ) :
 					null;
@@ -2443,7 +2756,23 @@ export function createUi(
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 			dirty = true;
 			return;
-		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
+		} else if (
+			id === "chat-send" && premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )
+		) {
+			// 6AD990: /Return, /Reverse Return and /Resurrection spend a premium
+			// package's limited use; they are never sent as chat.
+			const command = premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )!;
+			sendGameplay( { kind: "premium-command", command } );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
+		} else if ( id.startsWith( "premium-reverse:" ) ) {
+			sendGameplay( { kind: "premium-command", command: "reverse-return", choice: Number( id.slice( 16 ) ) } );
+		} else if ( id === "premium-reverse-cancel" ) sendGameplay( { kind: "premium-command-cancel" } );
+		else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
 				panel === "Chat" ?
 					(chatChannel === 2 ?
@@ -2591,6 +2920,19 @@ export function createUi(
 					cosSlot = -1;
 				}
 			}
+		} else if ( id === "npc-fortress-war" ) {
+			// 5D8930 action 0x34 row 1: 0x71E1 subtype 6 asks for the status.
+			const conversation = view.gameplay?.npcConversation;
+			if ( conversation && conversation.phase === "menu" ) {
+				fortressWarHud.request( conversation.gid );
+				sendGameplay( { kind: "fortress-war-status", gid: conversation.gid } );
+			}
+		} else if ( id === "fortress-war-close" ) {
+			setPanel( "" );
+		} else if ( id.startsWith( "fortress-war-slot:" ) ) {
+			const fortress = Number( id.slice( "fortress-war-slot:".length ) ),
+				slot = fortressWarView()?.slots.find( r => r.fortress === fortress );
+			if ( slot?.enabled ) fortressWarHud.ask( slot.question, fortress );
 		} else if ( id === "skin-cancel" ) {
 			setPanel( "" );
 		} else if ( id === "skin-confirm" ) {
@@ -2609,17 +2951,20 @@ export function createUi(
 		} else if ( id.startsWith( "skin-rotate:" ) ) {
 			skinHud.rotate( id === "skin-rotate:left" ? -1 : id === "skin-rotate:right" ? 1 : 0 );
 		} else if ( id.startsWith( "shop-repair:" ) ) {
-			// 5B1C00 arms the repair cursor; 5B2B10 totals the cost (789630)
-			// and asks before 0x746F mode 2, or says nothing needs it.
-			if ( id === "shop-repair:GDR_STORE_BTN_REPAIR" ) repairHud.arm();
-			else {
+			// 5B1C00 arms the repair cursor, or puts an armed one away; 5B2B10
+			// totals the cost (789630) and asks before 0x746F mode 2, or says
+			// nothing needs it.
+			if ( id === "shop-repair:GDR_STORE_BTN_REPAIR" ) {
+				if ( repairHud.armed() ) repairHud.disarm();
+				else repairHud.arm();
+			} else {
 				const cost = repairAllCost( view.gameplay?.inventory ?? [] );
 				if ( cost ) repairHud.ask( cost );
 				else hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_THERE_IS_NO_ITEM_TO_REPAIR" ), 0xffffffff );
 			}
 		} else if ( id.startsWith( "slot:" ) && repairHud.armed() ) {
-			// 567290: the armed cursor sends the clicked item (0x746F mode 1).
-			repairHud.disarm();
+			// 567290: the armed cursor judges each clicked item and stays armed,
+			// so several items can be repaired in a row (gameplay owns the verdict).
 			sendGameplay( { kind: "shop-repair", mode: 1, slot: Number( id.slice( 5 ) ) } );
 		} else if ( id.startsWith( "slot:" ) ) {
 			confirmDrop = "";
@@ -2684,7 +3029,23 @@ export function createUi(
 				focus = null;
 				goldAmount = "";
 			}
-		} else if ( id === "storage-open" && view.gameplay?.target ) {
+		} else if ( id === "magic-option-open" && view.gameplay?.target ) {
+			// 5DA1B0 case 0x2F; B338 lock 0x80000000 then shows the window.
+			sendGameplay( { kind: "magic-option-open", gid: view.gameplay.target } );
+		} else if ( id.startsWith( "magic-option-row:" ) ) magicOptionHud.choose( id.slice( 17 ) );
+		else if ( id === "magic-option-up" || id === "magic-option-down" ) {
+			const grant = view.gameplay?.magicOption,
+				item = view.gameplay?.inventory.find( r => r.slot === grant?.item ),
+				part = item ? grantableAvatarPart( item.typeFlags ) : null;
+			magicOptionHud.scroll(
+				id === "magic-option-up" ? -1 : 1,
+				grant?.parts.find( p => p.part === part )?.options.length ?? 0
+			);
+		} else if ( id === "magic-option-confirm" ) {
+			const codename = magicOptionHud.state().codename;
+			if ( codename ) sendGameplay( { kind: "magic-option-grant", codename } );
+		} else if ( id === "magic-option-cancel" ) setPanel( "" );
+		else if ( id === "storage-open" && view.gameplay?.target ) {
 			if ( !canLeavePanel() ) return;
 			sendGameplay( { kind: "storage-open", gid: view.gameplay.target } );
 			storagePanel.reset();
@@ -2764,7 +3125,11 @@ export function createUi(
 		} else if ( id.startsWith( "guild-tab:" ) ) {
 			const tab = Number( id.slice( 10 ) );
 			if ( tab === 4 ) setPanel( "Blocking" );
-			else guildTab = tab;
+			else if ( tab !== guildTab ) {
+				guildTab = tab;
+				socialMember = 0;
+				socialPage = 0;
+			}
 		} // 5C50B0 / 81AFB0: only the local academy master opens mode 2.
 		else if ( id === "academy-notice" ) {
 			const camp = view.gameplay?.academy;
@@ -2773,7 +3138,18 @@ export function createUi(
 				socialSubject = "";
 				socialContents = "";
 			}
-		} else if ( id.startsWith( "guild-dialog:" ) ) {
+		} else if ( id === "guild-dialog:authority" ) {
+			const guild = view.gameplay?.social?.guild;
+			if ( guild ) grantPowerHud.open( guild.members );
+		} else if ( id.startsWith( "guild-grant:" ) ) {
+			const [member, right] = id.slice( 12 ).split( ":" ).map( Number );
+			grantPowerHud.toggle( member!, right! );
+		} else if ( id === "guild-grant-ok" ) {
+			const grants = grantPowerHud.grants();
+			if ( grants.length ) sendGameplay( { kind: "guild-permissions", grants } );
+			grantPowerHud.close();
+		} else if ( id === "guild-grant-cancel" ) grantPowerHud.close();
+		else if ( id.startsWith( "guild-dialog:" ) ) {
 			guildDialog = id.slice( 13 );
 			socialSubject = view.gameplay?.social?.guild?.subject ?? "";
 			socialContents = view.gameplay?.social?.guild?.contents ?? "";
@@ -3095,6 +3471,90 @@ export function createUi(
 				}
 				if ( event.kind !== "hover" ) return;
 			}
+			if ( fortressWarHud.question() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "fortress-war-no"
+				) {
+					fortressWarHud.takeQuestion();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "fortress-war-yes"
+				) {
+					const asked = fortressWarHud.takeQuestion(), npc = fortressWarHud.npc();
+					dirty = true;
+					if ( asked && npc !== null && view?.session?.phase === "world" ) {
+						sendGameplay( {
+							kind: "fortress-war-apply",
+							gid: npc,
+							fortress: asked.fortress,
+							...fortressWarRequest( asked.question )
+						} );
+					}
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( guildManagerHud.question() || guildManagerHud.field() || guildManagerHud.vote() ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "guild-manager-no"
+				) {
+					// A declined claim box drops the quote (5D4050's No).
+					if ( guildManagerHud.takeQuestion()?.kind === "compensation" ) {
+						sendGameplay( { kind: "compensation-dismiss" } );
+					}
+					guildManagerHud.reset();
+					dirty = true;
+					return;
+				}
+				if ( guildManagerHud.field() && event.kind === "edit" && event.id === "guild-manager-text" ) {
+					guildManagerHud.type( event.value );
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "guild-manager-yes"
+				) {
+					dirty = true;
+					if ( guildManagerHud.vote() ) {
+						guildManagerHud.reset();
+						return;
+					}
+					if ( view?.session?.phase !== "world" ) return;
+					const asked = guildManagerHud.takeQuestion();
+					if ( asked ) {
+						if ( asked.kind === "level-up" ) sendGameplay( { kind: "guild-level-up", gid: asked.npc } );
+						else if ( asked.kind === "dissolve" ) {
+							sendGameplay( { kind: "guild-dissolve", gid: asked.npc } );
+						} else if ( asked.kind === "secede" ) sendGameplay( { kind: "guild-leave", gid: asked.npc } );
+						else if ( asked.kind === "release" ) sendGameplay( { kind: "guild-release", gid: asked.npc } );
+						else {
+							sendGameplay( { kind: "guild-compensation-claim", gid: asked.npc } );
+							sendGameplay( { kind: "compensation-dismiss" } );
+						}
+						return;
+					}
+					const entry = guildManagerHud.field();
+					if ( entry?.text && entry.kind === "create" ) {
+						guildManagerHud.takeField();
+						sendGameplay( { kind: "guild-create", gid: entry.npc, name: entry.text } );
+					} else if ( entry?.text ) {
+						// 5D3EB0: the master names a member; only a member may take over.
+						const member = view.gameplay?.social?.guild?.members.find( m => m.name === entry.text );
+						if ( member && member.grade !== 0 ) {
+							guildManagerHud.takeField();
+							sendGameplay( { kind: "guild-master-leave", gid: entry.npc, id: member.id } );
+						}
+					}
+					return;
+				}
+				if ( event.kind === "activate" ) return;
+			}
 			if ( jobHud.confirm() !== null ) {
 				if (
 					event.kind === "key" && event.code === "Escape" ||
@@ -3355,7 +3815,8 @@ export function createUi(
 				if ( "id" in event && event.id !== null && !controls.some( c => c.id === event.id ) ) return;
 			}
 			if ( event.kind === "scroll" && panel === "Guild" ) {
-				socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
+				if ( grantPowerHud.isOpen() ) grantPowerHud.scroll( Math.sign( event.delta ) );
+				else socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
 				dirty = true;
 				return;
 			}
@@ -3387,6 +3848,23 @@ export function createUi(
 					event.kind === "scroll" ||
 					event.kind === "edit")
 			) return;
+			if ( stallHud.prompt() ) {
+				if ( event.kind === "key" ) {
+					if ( event.code === "Escape" ) activate( "stall-prompt-cancel" );
+					else if ( event.code === "Enter" && !composing ) activate( "stall-prompt-ok" );
+					return;
+				}
+				if (
+					event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "double-activate"
+				) return;
+				if (
+					"id" in event && event.id !== null && !event.id.startsWith( "stall-prompt-" ) &&
+					event.id !== "submit"
+				) {
+					return;
+				}
+			}
 			if ( splitStack ) {
 				if ( event.kind === "key" ) {
 					if ( event.code === "Escape" ) activate( "split-cancel" );
@@ -3690,6 +4168,17 @@ export function createUi(
 					carriedItem = null;
 					dirty = true;
 				}
+				// CIFStall: an offer dragged back onto the bag leaves the stall.
+				if ( event.id.startsWith( "stall-slot:" ) && view?.gameplay?.stall?.phase === "owner" ) {
+					const target = topmostControlAt( controls, event.x, event.y ),
+						slot = Number( event.id.slice( 11 ) ),
+						stall = view.gameplay.stall;
+					if (
+						target?.id.startsWith( "slot:" ) && !stall.open && stall.offers.some( row => row.slot === slot )
+					) sendGameplay( { kind: "stall-remove", slot } );
+					dirty = true;
+					return;
+				}
 				if (
 					panel === "Storage" && event.id.startsWith( "storage-slot:" ) && view?.gameplay?.storage &&
 					!view.gameplay.inventoryPending
@@ -3761,7 +4250,7 @@ export function createUi(
 				if (
 					carried &&
 					(carried.avatar ? event.id.startsWith( "avatar:" ) : event.id === "slot:" + carried.slot) &&
-					[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel ) &&
+					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
 					view?.session?.phase === "world" && !view.gameplay?.inventoryPending && controls.some( c =>
 						c.id === event.id && c.draggable && !c.disabled
 					)
@@ -3776,10 +4265,40 @@ export function createUi(
 						}
 						return;
 					}
+					// CIFExchange: a bag item dropped on the own side goes on the table.
+					if ( item && target && !target.disabled && target.id.startsWith( "exchange-my:" ) ) {
+						sendGameplay( { kind: "exchange-put", slot: item.slot } );
+						return;
+					}
+					// CIFStall_OnInventorySlotDrop 5A11C0: a bag item dropped on an
+					// empty cell of the own stall asks its count and price (5A1A40).
+					const stall = view?.gameplay?.stall;
+					if ( item && target && !target.disabled && target.id.startsWith( "stall-slot:" ) ) {
+						const slot = Number( target.id.slice( 11 ) );
+						if (
+							stall?.phase === "owner" && !stall.open && !stall.offers.some( row => row.slot === slot )
+						) {
+							openStallPrompt( {
+								kind: "price",
+								slot,
+								bagSlot: item.slot,
+								carried: item.quantity,
+								quantity: String( item.quantity ),
+								price: "",
+								modify: false
+							} );
+						}
+						return;
+					}
 					if (
 						item && target && !target.disabled && panel === "Alchemy" && target.id.startsWith( "alchemy-" )
 					) {
 						activate( "alchemy-slot:" + item.slot );
+						return;
+					}
+					// 6EB570: an inventory item dropped on the grant window's slot.
+					if ( item && target?.id === "magic-option-slot" && !target.disabled && panel === GRANT_PANEL ) {
+						sendGameplay( { kind: "magic-option-take", slot: item.slot } );
 						return;
 					}
 					const room = view?.gameplay?.storage;
@@ -3898,6 +4417,11 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				if ( panel === GRANT_PANEL && event.id.startsWith( "slot:" ) ) {
+					sendGameplay( { kind: "magic-option-take", slot: Number( event.id.slice( 5 ) ) } );
+					dirty = true;
+					return;
+				}
 				if (
 					panel === "COS inventory" && (event.id.startsWith( "slot:" ) || event.id.startsWith( "cos-slot:" ))
 				) {
@@ -3956,7 +4480,7 @@ export function createUi(
 			}
 			if (
 				event.kind === "drag" && ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) ) &&
-				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
+				[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel )
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
 				if ( !node ) return;
@@ -4009,13 +4533,10 @@ export function createUi(
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "invite-drag" && view ) {
-				const layout = view.gameplay?.social?.invitation?.type === 5 ?
-						guildProposalLayout( view.width, view.height, invitePosition ) :
-						partyProposalLayout( view.width, view.height, undefined, invitePosition ),
+				const type = view.gameplay?.social?.invitation?.type,
+					layout = proposalLayout( type, view.width, view.height, undefined, invitePosition ),
 					position: readonly [number, number] = [ layout.frame[0] + event.dx, layout.frame[1] + event.dy ],
-					next = view.gameplay?.social?.invitation?.type === 5 ?
-						guildProposalLayout( view.width, view.height, position ) :
-						partyProposalLayout( view.width, view.height, undefined, position );
+					next = proposalLayout( type, view.width, view.height, undefined, position );
 				invitePosition = [ next.frame[0], next.frame[1] ];
 				dirty = true;
 				return;
@@ -4353,6 +4874,7 @@ export function createUi(
 				if ( event.id.startsWith( "cos-status:" ) ) {
 					const gid = Number( event.id.slice( 11 ) );
 					cosHud.select( gid );
+					sendGameplay( { kind: "cos-select", gid } );
 					sendGameplay( { kind: "select", gid } );
 					dirty = true;
 					return;
@@ -4479,7 +5001,8 @@ export function createUi(
 				} else if ( event.id.startsWith( "potion-percent:" ) ) {
 					const key = event.id.slice( 15 ), percent = Number( event.value );
 					if (
-						(key === "hp" || key === "mp") && Number.isInteger( percent ) && percent >= 1 && percent <= 100
+						(key === "hp" || key === "mp") && autoPotionEntry( potionDraft[key] ).enabled &&
+						Number.isInteger( percent ) && percent >= 1 && percent <= 100
 					) {
 						potionDraft = {
 							...potionDraft,
@@ -4516,7 +5039,13 @@ export function createUi(
 				else if ( event.id === "social-subject" ) socialSubject = event.value;
 				else if ( event.id === "social-contents" ) socialContents = event.value;
 				else if ( event.id === "social-amount" ) socialAmount = event.value;
-				else if ( event.id === "gm-input" ) consoleText = event.value;
+				else if ( event.id === STALL_CHAT_TEXT ) stallHud.typeChat( event.value );
+				else if ( event.id === STALL_PROMPT_TEXT ) stallHud.type( "text", event.value );
+				else if ( event.id === STALL_PROMPT_QUANTITY ) stallHud.type( "quantity", event.value );
+				else if ( event.id === STALL_PROMPT_PRICE ) stallHud.type( "price", event.value );
+				else if ( event.id === "exchange-gold" ) {
+					exchangeHud.type( event.value, Number( view?.gameplay?.progression?.gold ?? 0 ) );
+				} else if ( event.id === "gm-input" ) consoleText = event.value;
 				else if ( event.id === "chat-text" ) chatText = event.value.slice( 0, 100 );
 				else if ( event.id === "chat-target" ) chatTarget = event.value;
 				else if ( event.id === "account" ) account = event.value;
@@ -4653,6 +5182,17 @@ export function createUi(
 		},
 		/*
 		================
+		cursor
+
+		A UI cursor mode that replaces the hover cursor everywhere, as
+		CGInterface_SetCursorMode does: the armed repair hammer (0x96).
+		================
+		*/
+		cursor(): import("@/engine/foundation/ui/world-cursor").WorldCursor | null {
+			return repairHud.cursor();
+		},
+		/*
+		================
 		step
 		================
 		*/
@@ -4671,6 +5211,16 @@ export function createUi(
 			}
 			// The worker closed the room (NPC released, travel, world leave).
 			if ( panel === "Storage" && !next.gameplay?.storage ) {
+				setPanel( "" );
+				dirty = true;
+			}
+			// The official's answer opens or refreshes the application window.
+			fortressWarHud.observe( next.gameplay?.fortressApplication?.sequence );
+			if ( fortressWarHud.npc() !== null && panel !== FORTRESS_WAR_PANEL && canLeavePanel() ) {
+				setPanel( FORTRESS_WAR_PANEL );
+				dirty = true;
+			}
+			if ( panel === FORTRESS_WAR_PANEL && next.gameplay?.npcConversation?.phase !== "menu" ) {
 				setPanel( "" );
 				dirty = true;
 			}
@@ -4791,6 +5341,26 @@ export function createUi(
 				dirty = true;
 				layoutResourcesRevision++;
 			}
+			// The stall prompts follow the stall: naming opens the title entry
+			// with the default title (5A1DF0 mode 1); a stall that moved on
+			// closes its prompt.
+			const stallState = next.gameplay?.stall, stallPrompt = stallHud.prompt();
+			if ( stallState?.phase === "naming" && !stallPrompt ) {
+				openStallPrompt( {
+					kind: "title",
+					text: hudCopy( "UIIT_STT_STALL_DEFAULT_TITLE" ).replace( "%s", next.session?.character ?? "" )
+				} );
+			} else if ( stallPrompt && !stallPromptLive( stallPrompt, stallState ) ) {
+				stallHud.close();
+				dirty = true;
+			}
+			if ( !stallState?.network.open ) stallHud.resetNetwork();
+			// 69FBB0: the exchange opens beside the inventory tab.
+			if ( exchangeHud.opened( !!next.gameplay?.exchange?.open ) && panel !== "Inventory" ) {
+				setPanel( "Inventory" );
+				dirty = true;
+			}
+			if ( stallCategories.step( !!stallState?.network.open ) ) dirty = true;
 			if ( localization.step( now, next.session?.phase === "world" ) ) {
 				dirty = true;
 				tooltipMemo = null;
@@ -5014,6 +5584,13 @@ export function createUi(
 				setPanel( "Magic Pop" );
 			}
 			gachaWasVisible = gachaVisible;
+			// B338 lock 0x80000000 (75AE50) shows the grant window with the inventory.
+			if (
+				magicOptionHud.sync(
+					phase === "world" && !!next.gameplay?.magicOption?.visible,
+					next.gameplay?.magicOption?.item ?? null
+				)
+			) setPanel( GRANT_PANEL );
 			if ( next.session && next.session.revision !== lastSessionRevision ) {
 				if (
 					(loginReplyPending || next.session.nativeTitleStatus !== lastNativeTitleStatus) && titleProcess &&
@@ -5052,8 +5629,22 @@ export function createUi(
 					dirty = true;
 				}
 			}
+			if ( phase !== "world" ) autoPotionInput.reset();
+			else {
+				// 572770 reads the selected/dragged control; 561D50 checks the
+				// Item Mall child (69B2E0), not arbitrary nonmodal windows.
+				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.read().visible;
+				if ( autoPotionInput.sync( blocked, itemMallOpen ) ) {
+					sendGameplay( { kind: "auto-potion-input", blocked, itemMallOpen } );
+				}
+			}
 			if ( phase !== "world" ) cosHud.reset();
-			else if ( cosHud.reconcile( next.gameplay?.cosRecords ?? [] ) ) dirty = true;
+			else if (
+				cosHud.reconcile(
+					next.gameplay?.cosStatusRecords ?? next.gameplay?.cosRecords ?? [],
+					next.gameplay?.selectedCosGid
+				)
+			) dirty = true;
 			if ( phase !== lastPhase ) {
 				if ( retainedWorld ) {
 					hover = null;
@@ -5162,6 +5753,18 @@ export function createUi(
 			}
 			if ( !serversRequested && phase === "signed-out" ) {
 				serversRequested = true;
+				requestServers();
+			}
+			// Every shard "Check" (maintenance): keep asking until one runs.
+			const serversRetry = serverListRefreshDue(
+				servers,
+				serverList && phase === "signed-out",
+				pending,
+				now,
+				serversRetryAt
+			);
+			if ( serversRetry !== null ) {
+				serversRetryAt = serversRetry;
 				requestServers();
 			}
 			if ( next.session?.characters ) roster = next.session.characters;
@@ -6585,7 +7188,8 @@ export function createUi(
 				if ( hudData && game?.social?.leader ) {
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
 						slot = hudData.windows.ifquickpartyslot!,
-						localPose = next.entities.find( e => e.gid === game.localGid ) ?? null;
+						localPose = partyLocalPose( game, next.entities );
+					for ( const shadeImage of partyShadeImages() ) paths.push( ROOT + shadeImage );
 					for (
 						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
 					) {
@@ -6651,6 +7255,21 @@ export function createUi(
 								selected: row.entity.gid === game.target
 							} );
 							blocks.push( r );
+						}
+						// The member's two main masteries: roster data, so they show for a member
+						// out of view and without the buff preference.
+						for ( const entry of row.masteries ) {
+							const mastery = hudData.skillUi.masteries.find( m => m.id === entry.id );
+							if ( !mastery ) continue;
+							const path = iconPath( mastery.icon ), r: UiRect = [ ...entry.rect ];
+							if ( path ) image( r, path );
+							controls.push( {
+								id: "party-mastery:" + row.member.id + ":" + entry.id,
+								label: hudCopy( mastery.name ),
+								helpText: hudCopy( mastery.name ),
+								kind: "region",
+								rect: r
+							} );
 						}
 						// 5BA840 passes no character, so party abnormal cells carry no grade.
 						const buff = authoredRect( slot.GDR_QPS_PARTY_BUFF!, x, y ),
@@ -6999,7 +7618,12 @@ export function createUi(
 						}
 					} );
 				}
-				if ( hudData && game?.cosRecords?.length ) drawCosHud( hudData, game.cosRecords, barX, barY );
+				if ( hudData && game?.cosRecords?.length ) {
+					const shown = (game.cosStatusRecords ?? game.cosRecords).map( record =>
+						game.cosRecords?.find( current => current.gid === record.gid ) ?? record
+					);
+					drawCosHud( hudData, shown, barX, barY );
+				}
 				if ( hudData && whispersOpen ) {
 					const wx = 0,
 						wy = h - 52 - (chatRows ? 62 + chatRows * 56 : 20),
@@ -7683,8 +8307,8 @@ export function createUi(
 					const combos: { key: string; part: string; r: UiRect; selected: number; count: number; }[] = [];
 					for ( const key of [ "hp", "mp", "cure" ] as const ) {
 						const entry = autoPotionEntry( potionDraft[key] ),
-							page = entry.slot === 0 ? 0 : Math.floor( (entry.slot - 1) / 10 ),
-							n = entry.slot === 0 ? 0 : (entry.slot - 1) % 10 + 1;
+							page = key === "cure" ? potionDraft.curePage : Math.floor( (entry.slot - 1) / 10 ),
+							n = key === "cure" ? potionDraft.cureKey + 1 : (entry.slot - 1) % 10 + 1;
 						if ( key !== "cure" ) {
 							const parent = layout["GDR_AUTO_POTION_SLOT_" + key.toUpperCase()]!,
 								sx = px + parent.rect[0],
@@ -7713,11 +8337,12 @@ export function createUi(
 									label: key.toUpperCase() + (delta < 0 ? " decrease" : " increase"),
 									kind: "button",
 									rect: [ delta < 0 ? r[0] : r[0] + r[2] - 20, r[1] + 2, 20, 16 ],
-									disabled: delta < 0 ? entry.percent <= 1 : entry.percent >= 100
+									disabled: !entry.enabled || (delta < 0 ? entry.percent <= 1 : entry.percent >= 100)
 								} );
 							}
 							controls.push( {
 								id: "potion-percent:" + key,
+								disabled: !entry.enabled,
 								label: key.toUpperCase() + " threshold",
 								kind: "range",
 								rect: [ r[0] + 20, r[1] + 2, 292, 16 ],
@@ -7727,7 +8352,7 @@ export function createUi(
 							} );
 							const thumb = ROOT + "interface/ifcommon/com_scroll_button.png";
 							paths.push( thumb );
-							if ( resources.has( thumb ) ) {
+							if ( entry.enabled && resources.has( thumb ) ) {
 								rect(
 									[ r[0] + 20 + (Math.max( 1, entry.percent ) - 1) / 99 * 276, r[1] + 2, 16, 16 ],
 									white,
@@ -7830,7 +8455,7 @@ export function createUi(
 							"potion-combo:" + combo.key + ":" + combo.part,
 							combo.key + " " + combo.part,
 							combo.part === "page" ?
-								"F" + (combo.selected + 1) :
+								combo.selected < 0 ? "" : "F" + (combo.selected + 1) :
 								combo.selected === 0 ?
 								"" :
 								String( combo.selected % 10 )
@@ -8249,7 +8874,7 @@ export function createUi(
 									id: "option-audio-step:" + key + ":" + delta,
 									label: hudCopy( caption.text ) +
 										(delta < 0 ?
-											" ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢" :
+											" -" :
 											" +"),
 									kind: "button",
 									rect: a,
@@ -8834,7 +9459,10 @@ export function createUi(
 						blocks.push( full );
 					}
 				}
-				if ( [ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel ) && hudData ) {
+				if (
+					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
+					hudData
+				) {
 					const admission = beginWindow();
 					const popup = mainPopupGeometry( "Inventory", hudData.windows.ifmainpopup!, w, h, popupPosition ),
 						[px, py] = popup.frame,
@@ -9757,6 +10385,50 @@ export function createUi(
 					) button( id, hudCopy( key ), r[0], r[1], r[2] );
 					endWindow( admission, "quest-abandon" );
 				}
+				if ( game?.reverseReturnChoice ) {
+					// 6AD990's type 0x24 confirm box: the reverse return's two points.
+					controls = [];
+					const admission = beginWindow(), box = guildProposalLayout( w, h );
+					blocks.push( full );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push(
+						...text.quads( hudCopy( "UIIT_CTL_PREMIUM_REVERSE_RETURN" ), box.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					for (
+						const [index, choice, key] of [
+							[ 0, REVERSE_RETURN_LAST_RECALL, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" ],
+							[ 1, REVERSE_RETURN_LAST_DEATH, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" ]
+						] as const
+					) {
+						button(
+							"premium-reverse:" + choice,
+							hudCopy( key ),
+							box.frame[0] + 16,
+							box.frame[1] + 44 + index * 26,
+							box.frame[2] - 32
+						);
+					}
+					button(
+						"premium-reverse-cancel",
+						hudCopy( "UIIT_CTL_CANCEL" ),
+						box.refuse[0],
+						box.refuse[1],
+						box.refuse[2]
+					);
+					endWindow( admission, "premium-reverse-return" );
+				}
 				if ( panel === "Blocking" && hudData ) {
 					const admission = beginWindow(),
 						[px, py] = windowOrigin( "Blocking", [
@@ -10221,10 +10893,21 @@ export function createUi(
 						canRecall: !!(capabilities & 0x40),
 						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4),
-						jobRows: jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
-							id: row.id,
-							label: copy( row.symbol )
-						}) )
+						canFortressOfficial: !!(capabilities & 0x800000),
+						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
+						// 5D9100 lists the guild set ahead of the job menu.
+						jobRows: [
+							...guildManagerRows( capabilities, game.social?.guild, game.social?.localName ?? "" ).map(
+								row => ({
+									id: "npc-guild:" + row.row,
+									label: copy( row.symbol )
+								})
+							),
+							...jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
+								id: row.id,
+								label: copy( row.symbol )
+							}) )
+						]
 					} );
 					npcPanel.geometry( output );
 					quads.push( ...output.quads );
@@ -10287,7 +10970,7 @@ export function createUi(
 						);
 					}
 					for ( let i = 0; i < 5; i++ ) {
-						const entry = shop?.buyback?.find( row => row.index === i ),
+						const entry = restoreSlotEntry( shop?.buyback ?? [], i ),
 							index = shop?.buyback?.indexOf( entry! ) ?? -1,
 							node = page["GDR_STORE_ICON_SLOT_0" + (i + 1)]!;
 						nativeItem(
@@ -10304,7 +10987,8 @@ export function createUi(
 							node,
 							px,
 							py,
-							"shop-repair:" + node.id,
+							// The control name, not its numeric resource id, names the button.
+							"shop-repair:" + node.name,
 							hudCopy( node.text ),
 							!valid || busy
 						);
@@ -10458,6 +11142,194 @@ export function createUi(
 						authoredText( { ...money, color: shown.color }, px, py, shown.text );
 					}
 					endWindow( admission, "service:Storage" );
+				}
+				const fortressWar = panel === FORTRESS_WAR_PANEL ? fortressWarView() : null;
+				if (
+					fortressWar && hudData?.windows.iffortresswarapplywnd &&
+					hudData.windows.iffortresswarapplywndslot &&
+					hudData.root.GDR_FORTRESS_WAR_APPLY_WND
+				) {
+					// CIFFortressWarApplyWnd (660930): the dates, the column heads and
+					// eight slots, the official's fortresses first (662E80, 662D00).
+					const admission = beginWindow(),
+						root = hudData.root.GDR_FORTRESS_WAR_APPLY_WND,
+						layout = hudData.windows.iffortresswarapplywnd,
+						slotLayout = hudData.windows.iffortresswarapplywndslot,
+						nodes = Object.values( layout ),
+						slotNodes = Object.values( slotLayout ),
+						byId = ( id: number ) => nodes.find( n => n.id === id ),
+						[px, py] = windowOrigin( FORTRESS_WAR_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] );
+					nativeFrame( root, px, py, hudCopy( root.text ), "fortress-war-close" );
+					// The dates, the headers and the list are drawn below.
+					nativePage( layout, px, py, [ 504, 505, 511, 512, 513, 514, 515 ] );
+					const start = fortressWarView()?.application?.warStart;
+					if ( start ) {
+						const dates = fortressWarDates( start ), warLine = byId( 505 ), applyLine = byId( 504 );
+						if ( warLine ) {
+							authoredText(
+								warLine,
+								px,
+								py,
+								hudCopy( "UIIT_STT_FORT_OFFICAL_TEXT1" ) + " : " +
+									fortressWarFormat( hudCopy( "UIIT_STT_FORT_ETC_SCHEDULE1" ), dates.war )
+							);
+						}
+						if ( applyLine ) {
+							authoredText(
+								applyLine,
+								px,
+								py,
+								hudCopy( "UIIT_STT_FORT_OFFICAL_TEXT2" ) + " : " +
+									fortressWarFormat( hudCopy( "UIIT_STT_FORT_ETC_SCHEDULE2" ), dates.apply )
+							);
+						}
+					}
+					for ( const id of [ 511, 512, 513 ] ) {
+						const head = byId( id );
+						if ( head ) {
+							authoredLabeledButton(
+								head,
+								px,
+								py,
+								"fortress-war-head:" + id,
+								hudCopy( head.text ),
+								true
+							);
+						}
+					}
+					const list = byId( 515 );
+					if ( list ) {
+						const [lx, ly] = authoredRect( list, px, py ),
+							sw = FORTRESS_WAR_APPLY_SLOT_WIDTH,
+							sh = FORTRESS_WAR_APPLY_SLOT_HEIGHT;
+						for ( let row = 0; row < FORTRESS_WAR_APPLY_ROWS; row++ ) {
+							const sy = ly + row * sh, slot = fortressWar.slots[row];
+							image( [ lx, sy, sw, sh ], ROOT + "interface/guild/gil_bar02_deselect.png" );
+							if ( !slot ) continue;
+							const name = slotNodes.find( n => n.id === 600 ),
+								owner = slotNodes.find( n => n.id === 601 ),
+								button = slotNodes.find( n => n.id === 602 );
+							if ( name ) authoredText( name, lx, sy, hudCopy( slot.nameSymbol ) );
+							if ( owner ) authoredText( owner, lx, sy, slot.owner );
+							if ( button ) {
+								authoredLabeledButton(
+									button,
+									lx,
+									sy,
+									"fortress-war-slot:" + slot.fortress,
+									hudCopy( slot.caption ),
+									!slot.enabled || !!fortressWarHud.question()
+								);
+							}
+						}
+					}
+					endWindow( admission, "service:" + FORTRESS_WAR_PANEL );
+				}
+				const grant = game?.magicOption;
+				if ( panel === GRANT_PANEL && grant && hudData?.windows.ifgrantmagicattributewnd ) {
+					// CIFGrantMagicAttributeWnd (6EB3E0): the item slot (8), its count
+					// line (9), the five option rows (0x28..0x2C) and the buttons are live.
+					const admission = beginWindow(),
+						root = hudData.root.GDR_GRANT_MAGIC_ATTRIBUTE!,
+						layout = hudData.windows.ifgrantmagicattributewnd,
+						nodes = Object.values( layout ),
+						at = ( id: number ) => nodes.find( n => n.id === id ),
+						[px, py] = windowOrigin( GRANT_PANEL, [
+							Math.max( 0, w - 388 - root.rect[2] - 8 ),
+							Math.max( 0, h - 478 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						item = game?.inventory.find( r => r.slot === grant.item ),
+						part = item ? grantableAvatarPart( item.typeFlags ) : null,
+						options = grant.parts.find( p => p.part === part )?.options ?? [],
+						choice = magicOptionHud.state(),
+						busy = !!game?.inventoryPending || grant.phase !== "idle";
+					nativeFrame( root, px, py, hudCopy( root.text ), "magic-option-cancel" );
+					nativePage( layout, px, py, [ 5, 6, 8, 9, 40, 41, 42, 43, 44 ] );
+					const slot = at( 8 );
+					if ( slot ) nativeItem( "magic-option-slot", item, authoredRect( slot, px, py ), busy );
+					// 6EA540: "<part> - <ADD_COUNT>: <free><UNIT>".
+					const count = at( 9 ), symbol = part === null ? null : avatarPartSymbol( part );
+					if ( count && item && symbol ) {
+						const free = (item.tooltip?.fields.maxMagicOptions51c ?? 0) - avatarMagicOptionCount( item );
+						authoredText(
+							count,
+							px,
+							py,
+							hudCopy( symbol ) + " - " + hudCopy( "UIIT_STT_AVATAR_MAGICOPTION_ADD_COUNT" ) + ": " +
+								free +
+								hudCopy( "UIIT_STT_UNIT" )
+						);
+					}
+					// 6EB3E0 backs every row with gil_bar02; the chosen row is selected.
+					const select = ROOT + "interface/guild/gil_bar02_select.png",
+						deselect = ROOT + "interface/guild/gil_bar02_deselect.png";
+					paths.push( select, deselect );
+					for ( let i = 0; i < MAGIC_OPTION_LIST_ROWS; i++ ) {
+						const bar = at( 0x28 + i ), option = options[choice.top + i];
+						if ( !bar ) continue;
+						const r = authoredRect( bar, px, py );
+						if ( resources.has( select ) && resources.has( deselect ) ) {
+							rect( r, white, option && option.codename === choice.codename ? select : deselect );
+						}
+						if ( !option ) continue;
+						quads.push(
+							...text.quads(
+								avatarMagicOptionText( option.codename, option.value, hudCopy ),
+								[ r[0] + 8, r[1], r[2] - 16, r[3] ],
+								full,
+								white,
+								{ vAlign: 1 }
+							)
+						);
+						controls.push( {
+							id: "magic-option-row:" + option.codename,
+							label: option.codename,
+							rect: r,
+							kind: "button",
+							disabled: busy,
+							selected: option.codename === choice.codename
+						} );
+					}
+					const list = at( 32 );
+					if ( list && options.length > MAGIC_OPTION_LIST_ROWS ) {
+						const r = authoredRect( list, px, py ), range = options.length - MAGIC_OPTION_LIST_ROWS;
+						const scroll = chatScrollbar(
+							"magic-option",
+							[ r[0] + r[2] - 16, r[1] + 16, 16, r[3] - 48 ],
+							options.length,
+							MAGIC_OPTION_LIST_ROWS,
+							range - choice.top,
+							resources.size,
+							full,
+							hover,
+							pressed
+						);
+						paths.push( ...scroll.paths );
+						quads.push( ...scroll.quads );
+						controls.push( ...scroll.controls );
+					}
+					for (
+						const [id, nodeId] of [ [ "magic-option-confirm", 5 ], [ "magic-option-cancel", 6 ] ] as const
+					) {
+						const node = at( nodeId );
+						if ( !node ) continue;
+						authoredLabeledButton(
+							node,
+							px,
+							py,
+							id,
+							hudCopy( node.text ),
+							id === "magic-option-confirm" && (busy || !item || !choice.codename)
+						);
+					}
+					endWindow( admission, "service:" + GRANT_PANEL );
 				}
 				const skin = skinHud.state();
 				if ( panel === SKIN_PANEL && skin && hudData?.windows.ifchangeplayermodel ) {
@@ -10766,6 +11638,501 @@ export function createUi(
 					}
 					endWindow( admission, "service:COS inventory" );
 				}
+				/*
+				================
+				exchangeWindow
+
+				CIFExchange (ginterface GDR_EXCHANGE, resinfo\ifexchange.txt): the
+				partner's twelve slots and gold above, the own below, the money
+				button and the confirm button that locks and then approves (6B2280).
+				================
+				*/
+				function exchangeWindow() {
+					const state = game?.exchange, root = hudData?.root.GDR_EXCHANGE, page = hudData?.windows.ifexchange;
+					if ( !state?.open || !root || !page ) {
+						exchangeHud.reset();
+						return;
+					}
+					const admission = beginWindow(),
+						[px, py] = windowOrigin( "Exchange", [
+							Math.max( 0, w / 2 - root.rect[2] - 8 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						partner = next.entities.find( e => e.gid === state.partner );
+					nativeFrame(
+						root,
+						px,
+						py,
+						hudCopy( root.text ) + (partner ? " - " + partner.name : ""),
+						"exchange-cancel"
+					);
+					nativePage( page, px, py, [ 11, 12, 15 ] );
+					for ( const id of [ 13, 14 ] ) authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
+					for (
+						const [rows, base, mine] of [ [ state.theirs, 100, false ], [ state.own, 200, true ] ] as const
+					) {
+						for ( let slot = 0; slot < 12; slot++ ) {
+							const node = at( base + slot ),
+								r = authoredRect( node, px, py ),
+								row = rows.find( offer => offer.slot === slot );
+							const icon = row ? iconPath( row.item.icon ) : null;
+							if ( row && icon ) {
+								image( r, icon );
+								itemCount( row.item, r );
+							}
+							controls.push( {
+								id: (mine ? "exchange-my:" : "exchange-their:") + slot,
+								label: row?.item.name ?? "Exchange slot " + slot,
+								rect: r,
+								kind: "button",
+								disabled: mine && state.ownLocked
+							} );
+						}
+					}
+					authoredText( { ...at( 18 ), rect: [ 71, 152, 100, 16 ] }, px, py, String( state.theirGold ) );
+					partyEdit(
+						{ ...at( 19 ), rect: [ 71, 296, 100, 16 ] },
+						px,
+						py,
+						"exchange-gold",
+						exchangeHud.gold() || String( state.ownGold ),
+						12
+					);
+					authoredButton(
+						at( 15 ),
+						px,
+						py,
+						"exchange-gold-set",
+						hudCopy( "UIIT_STT_GOLD" ),
+						state.ownLocked
+					);
+					authoredLabeledButton(
+						at( 11 ),
+						px,
+						py,
+						"exchange-confirm",
+						hudCopy( at( 11 ).text ),
+						state.approved || state.ownLocked && !state.theirLocked
+					);
+					authoredLabeledButton( at( 12 ), px, py, "exchange-cancel", hudCopy( at( 12 ).text ) );
+					endWindow( admission );
+				}
+				exchangeWindow();
+				/*
+				================
+				stallWindow
+
+				CIFStall (ginterface GDR_STALL, resinfo\ifstall.txt): the title and
+				greeting with their change buttons (5, 6), the trading-state button
+				(4) and line (14), and ten ifstallslot cells over the display (12).
+				The owner drops bag items on empty cells and drags offers back to the
+				bag while the stall is being modified; a visitor buys from an open
+				stall.
+				================
+				*/
+				function stallWindow() {
+					const state = game?.stall,
+						root = hudData?.root.GDR_STALL,
+						page = hudData?.windows.ifstall,
+						cell = hudData?.windows.ifstallslot;
+					if ( !state || (state.phase !== "owner" && state.phase !== "visitor") || !root || !page || !cell ) {
+						return;
+					}
+					const admission = beginWindow(),
+						[px, py] = windowOrigin( "Stall", [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						part = ( id: number ) => Object.values( cell ).find( n => n.id === id )!,
+						owner = state.phase === "owner",
+						keeper = next.entities.find( e => e.gid === state.owner ),
+						title = owner ? state.title : keeper?.titleText ?? "";
+					nativeFrame( root, px, py, hudCopy( root.text ), owner ? "stall-close" : "stall-leave" );
+					nativePage( page, px, py, [ 3, 4, 5, 6, 14 ] );
+					// The chat module (3): the latest stall lines over the input row.
+					const box = authoredRect( at( 3 ), px, py ),
+						rows = Math.max( 0, Math.floor( box[3] / STALL_CHAT_ROW ) - 1 ),
+						said = (game.chat?.lines ?? []).filter( line => line.channel === STALL_CHAT_CHANNEL ).slice(
+							-rows
+						);
+					for ( const [i, line] of said.entries() ) {
+						const row: UiRect = [ box[0] + 4, box[1] + i * STALL_CHAT_ROW, box[2] - 8, STALL_CHAT_ROW ];
+						quads.push(
+							...text.quads( line.name + ":" + line.text, row, box, white, { overflow: "clip" } )
+						);
+					}
+					partyEdit(
+						{
+							...at( 3 ),
+							rect: [
+								at( 3 ).rect[0] + 4,
+								at( 3 ).rect[1] + at( 3 ).rect[3] - STALL_CHAT_ROW,
+								at( 3 ).rect[2] - 8,
+								14
+							]
+						},
+						px,
+						py,
+						STALL_CHAT_TEXT,
+						stallHud.chat(),
+						STALL_CHAT_LIMIT
+					);
+					authoredText( at( 10 ), px, py, title );
+					authoredText( at( 11 ), px, py, state.greeting );
+					authoredText(
+						at( 14 ),
+						px,
+						py,
+						hudCopy( state.open ? "UIIT_STT_STALL_CONDITION_START" : "UIIT_STT_STALL_CONDITION_END" )
+					);
+					if ( owner ) {
+						authoredButton(
+							at( 4 ),
+							px,
+							py,
+							"stall-trading",
+							hudCopy( state.open ? "UIIT_STT_END_STALL" : "UIIT_STT_START_STALL" )
+						);
+						authoredButton(
+							at( 5 ),
+							px,
+							py,
+							"stall-change-title",
+							hudCopy( "UIIT_STT_INSERT_STALL_NAME" ),
+							state.open
+						);
+						authoredButton( at( 6 ), px, py, "stall-change-greeting", hudCopy( "UIIT_STT_STALL" ) );
+					}
+					const display = at( 12 ).rect;
+					for ( let slot = 0; slot < STALL_SLOTS; slot++ ) {
+						const ox = px + display[0] + (slot % 2) * STALL_CELL_PITCH_X,
+							oy = py + display[1] + Math.floor( slot / 2 ) * STALL_CELL_PITCH_Y,
+							offer = state.offers.find( row => row.slot === slot ),
+							r = authoredRect( part( 1 ), ox, oy );
+						nativePage( cell, ox, oy, [ 2, 3, 4, 5 ] );
+						const icon = offer ? iconPath( offer.item.icon ) : null;
+						if ( offer && icon ) {
+							image( r, icon );
+							itemCount( offer.item, r );
+						}
+						if ( offer ) {
+							authoredText( part( 2 ), ox, oy, offer.item.name ?? "" );
+							authoredText( part( 3 ), ox, oy, String( offer.quantity ) );
+							authoredText( part( 4 ), ox, oy, String( offer.price ) );
+						}
+						controls.push( {
+							id: "stall-slot:" + slot,
+							label: offer?.item.name ?? "Stall slot " + slot,
+							rect: r,
+							kind: "button",
+							disabled: owner ? state.open : !state.open || !offer,
+							draggable: owner && !state.open && !!offer
+						} );
+						if ( owner && !state.open && offer ) {
+							authoredButton(
+								part( 5 ),
+								ox,
+								oy,
+								"stall-modify:" + slot,
+								hudCopy( "UIIT_STT_STALL_MODIFYING" )
+							);
+						}
+					}
+					endWindow( admission );
+				}
+				stallWindow();
+				/*
+				================
+				stallNetworkWindow
+
+				CIFStallNetwork (ginterface GDR_STALL_NETWORK, resinfo\ifstallnetwork
+				.txt): the category combos (41..43) and search button (51), fifteen
+				ifstallnetworkslot result rows (100..114) under the sort buttons
+				(60..64), the page manager (80), the carried gold (55) and the
+				purchase button (50).
+				================
+				*/
+				function stallNetworkWindow() {
+					const state = game?.stall,
+						root = hudData?.root.GDR_STALL_NETWORK,
+						page = hudData?.windows.ifstallnetwork,
+						cell = hudData?.windows.ifstallnetworkslot;
+					if ( !state?.network.open || !root || !page || !cell ) return;
+					const network = state.network,
+						draft = stallHud.network(),
+						roots = stallCategories.roots(),
+						large = roots?.[draft.large],
+						medium = large?.children[draft.medium],
+						admission = beginWindow(),
+						[px, py] = windowOrigin( "Stall network", [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						part = ( id: number ) => Object.values( cell ).find( n => n.id === id )!,
+						level = ( row: StallListing ) => {
+							const fields = row.item.tooltip?.fields;
+							return fields?.reqLevelType1 === 1 ? fields.requiredLevel ?? 0 : 0;
+						};
+					nativeFrame( root, px, py, hudCopy( root.text ), "stall-net-close" );
+					const rowIds = Array.from( { length: 15 }, ( _, i ) => 100 + i );
+					nativePage( page, px, py, [
+						41,
+						42,
+						43,
+						44,
+						45,
+						46,
+						47,
+						50,
+						51,
+						52,
+						53,
+						55,
+						60,
+						61,
+						62,
+						63,
+						64,
+						65,
+						80,
+						...rowIds
+					] );
+					for ( const id of [ 44, 45, 46, 47, 52, 53, 65 ] ) {
+						authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
+					}
+					const choose = hudCopy( "UIIT_CTL_WARENETWORK_SCAN_SELECT" );
+					const combos = [
+						{
+							id: STALL_COMBO_LARGE,
+							entries: (roots ?? []).map( row => hudCopy( row.label ) ),
+							value: large ? hudCopy( large.label ) : choose,
+							disabled: !roots
+						},
+						{
+							id: STALL_COMBO_MEDIUM,
+							entries: (large?.children ?? []).map( row => hudCopy( row.label ) ),
+							value: medium ? hudCopy( medium.label ) : choose,
+							disabled: !large
+						},
+						{
+							id: STALL_COMBO_DEGREE,
+							entries: [
+								hudCopy( "UIIT_CTL_WARENETWORK_SCAN_END" ),
+								...Array.from( { length: medium?.degrees ?? 0 }, ( _, i ) => String( i + 1 ) )
+							],
+							value: draft.degree ? String( draft.degree ) : hudCopy( "UIIT_CTL_WARENETWORK_SCAN_END" ),
+							disabled: !medium?.degrees
+						}
+					];
+					for ( const combo of combos ) {
+						comboBox(
+							authoredRect( at( combo.id ), px, py ),
+							"stall-net-combo:" + combo.id,
+							hudCopy( at( combo.id - 41 + 44 ).text ),
+							combo.value,
+							combo.disabled
+						);
+					}
+					authoredLabeledButton(
+						at( 51 ),
+						px,
+						py,
+						"stall-net-search",
+						hudCopy( at( 51 ).text ),
+						!medium || !stallHud.searchReady( uiNow )
+					);
+					const sorts: readonly [number, StallNetworkSort][] = [
+						[ 60, "number" ],
+						[ 61, "name" ],
+						[ 62, "quantity" ],
+						[ 63, "level" ],
+						[ 64, "price" ]
+					];
+					for ( const [id, sort] of sorts ) {
+						authoredLabeledButton( at( id ), px, py, "stall-net-sort:" + sort, hudCopy( at( id ).text ) );
+					}
+					const order = stallNetworkOrder( network.rows, draft, network.rows.map( level ) );
+					for ( let i = 0; i < rowIds.length; i++ ) {
+						const index = order[i], row = index === undefined ? undefined : network.rows[index];
+						const [ox, oy] = authoredRect( at( rowIds[i]! ), px, py );
+						nativePage( cell, ox, oy, [ 11, 12, 13, 14, 15, 16 ] );
+						if ( !row || index === undefined ) continue;
+						const r = authoredRect( part( 12 ), ox, oy ), icon = iconPath( row.item.icon );
+						if ( icon ) {
+							image( r, icon );
+							itemCount( row.item, r );
+						}
+						authoredText( part( 11 ), ox, oy, String( network.page * 15 + index + 1 ) );
+						authoredText( part( 13 ), ox, oy, row.item.name ?? "" );
+						authoredText( part( 14 ), ox, oy, String( row.quantity ) );
+						authoredText( part( 15 ), ox, oy, String( level( row ) || "" ) );
+						authoredText( part( 16 ), ox, oy, String( row.price ) );
+						controls.push( {
+							id: "stall-net-row:" + index,
+							label: row.item.name ?? "Stall network row " + index,
+							rect: authoredRect( at( rowIds[i]! ), px, py ),
+							kind: "button",
+							selected: draft.row === index
+						} );
+					}
+					// The page manager (80): previous and next around page / pages.
+					const pager = authoredRect( at( 80 ), px, py ), pagerY = pager[1] + 1;
+					button( "stall-net-prev", "<", pager[0], pagerY, 40, network.page <= 0 );
+					button(
+						"stall-net-next",
+						">",
+						pager[0] + pager[2] - 40,
+						pagerY,
+						40,
+						network.page + 1 >= network.pages
+					);
+					quads.push(
+						...text.quads(
+							network.pages ? `${network.page + 1} / ${network.pages}` : "",
+							[ pager[0] + 40, pager[1], pager[2] - 80, pager[3] ],
+							full,
+							white,
+							{ hAlign: 1, vAlign: 1 }
+						)
+					);
+					authoredText( at( 55 ), px, py, String( game?.progression?.gold ?? 0 ) );
+					authoredLabeledButton(
+						at( 50 ),
+						px,
+						py,
+						"stall-net-buy",
+						hudCopy( at( 50 ).text ),
+						draft.row < 0 || network.buying !== null
+					);
+					const open = combos.find( combo => combo.id === draft.combo && !combo.disabled );
+					if ( open ) {
+						const r = authoredRect( at( open.id ), px, py ),
+							list: UiRect = [ r[0], r[1] + r[3], r[2], open.entries.length * 18 ];
+						rect( list, [ 0, 0, 0, 1 ] );
+						blocks.push( list );
+						for ( const [i, value] of open.entries.entries() ) {
+							const entry: UiRect = [ list[0], list[1] + i * 18, list[2], 18 ];
+							quads.push(
+								...text.quads( value, [ entry[0] + 4, entry[1], entry[2] - 8, 18 ], entry, white )
+							);
+							controls.push( { id: "stall-net-choice:" + i, label: value, rect: entry, kind: "button" } );
+						}
+					}
+					endWindow( admission );
+				}
+				stallNetworkWindow();
+				/*
+				================
+				grantPanel
+
+				CIFGuildGrantPower (resinfo\ifguildgrantpower.txt) at its GrantPower
+				section: the column titles, five member rows with their rights
+				checkboxes (ifguildgrantpowerslot), confirm and cancel. Only the
+				master may change a right.
+				================
+				*/
+				function grantPanel(
+					page: AuthoredLayout,
+					slot: AuthoredLayout,
+					ox: number,
+					oy: number,
+					editable: boolean
+				) {
+					const at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						slotAt = ( id: number ) => Object.values( slot ).find( n => n.id === id )!,
+						list = at( 6 );
+					nativePage( page, ox, oy, [ 4, 5, 11 ] );
+					for ( const id of [ 12, 13, 14, 15, 16 ] ) {
+						authoredText( at( id ), ox, oy, hudCopy( at( id ).text ) );
+					}
+					authoredText( at( 11 ), ox, oy, hudCopy( at( 11 ).text ) );
+					grantPowerHud.visible().forEach( ( { row, mask }, i ) => {
+						const rx = ox + list.rect[0], ry = oy + list.rect[1] + i * 23;
+						authoredText( slotAt( 10 ), rx, ry, row.name );
+						GRANT_RIGHTS.forEach( ( right, column ) => {
+							const box = slotAt( 11 + column ),
+								path = box.texture.replace( "_off", mask & right ? "_on" : "_off" );
+							authoredImage( box, rx, ry, path );
+							controls.push( {
+								id: "guild-grant:" + row.id + ":" + right,
+								label: hudCopy( at( 12 + column ).text ),
+								rect: authoredRect( box, rx, ry ),
+								kind: "button",
+								selected: !!(mask & right),
+								disabled: !editable
+							} );
+						} );
+					} );
+					authoredLabeledButton( at( 4 ), ox, oy, "guild-grant-ok", hudCopy( at( 4 ).text ), !editable );
+					authoredLabeledButton( at( 5 ), ox, oy, "guild-grant-cancel", hudCopy( at( 5 ).text ) );
+				}
+				/*
+				================
+				unionPage
+
+				CIFAllianceGuild (resinfo\ifallianceguild.txt): the leading guild and
+				the union's size, the selected guild's details, the union's guilds
+				(ifallianceguildslot rows of 23 px, 5FB6F0) and the three commands
+				CIFAllianceGuild_RefreshButtons (5F6880) arms.
+				================
+				*/
+				function unionPage( page: AuthoredLayout, slot: AuthoredLayout, gx: number, gy: number ) {
+					const social = game?.social,
+						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						slotAt = ( id: number ) => Object.values( slot ).find( n => n.id === id )!,
+						alliances = social?.alliances ?? [],
+						leader = allianceLeader( social ),
+						selected = alliances.find( row => row.id === socialMember ),
+						armed = allianceButtons( social );
+					nativePage( page, gx, gy, [ 63, 64, 81, 82, 83 ] );
+					for ( const id of [ 21, 22, 23, 24, 42, 43, 44, 45 ] ) {
+						authoredText( at( id ), gx, gy, hudCopy( at( id ).text ) );
+					}
+					if ( !leader ) authoredText( at( 30 ), gx, gy, hudCopy( "UIIT_STT_NOT_EXIST_GUILD_RESPECT_ALLY" ) );
+					else {
+						authoredText( at( 26 ), gx, gy, leader.name );
+						authoredText( at( 28 ), gx, gy, leader.master );
+						authoredText( at( 29 ), gx, gy, String( alliances.length ) );
+					}
+					if ( !selected ) authoredText( at( 52 ), gx, gy, hudCopy( "UIIT_STT_NOT_EXIST_GUILD" ) );
+					else {
+						authoredText( at( 47 ), gx, gy, selected.name );
+						authoredText( { ...at( 48 ), color: gold }, gx, gy, String( selected.level ) );
+						authoredText( at( 50 ), gx, gy, selected.master );
+						authoredText( at( 51 ), gx, gy, String( selected.flags ) );
+					}
+					authoredLabeledButton( at( 63 ), gx, gy, "union-sort:name", hudCopy( at( 63 ).text ) );
+					authoredLabeledButton( at( 64 ), gx, gy, "union-sort:level", hudCopy( at( 64 ).text ) );
+					const list = at( 62 ), rows = unionHud.order( alliances );
+					rows.slice( 0, Math.floor( list.rect[3] / 23 ) ).forEach( ( row, i ) => {
+						const ox = gx + list.rect[0], oy = gy + list.rect[1] + i * 23;
+						authoredText( slotAt( 11 ), ox, oy, row.name );
+						authoredText( slotAt( 12 ), ox, oy, String( row.level ) );
+						controls.push( {
+							id: "social-member:" + row.id,
+							label: row.name,
+							rect: [ ox, oy, list.rect[2], 23 ],
+							kind: "button",
+							selected: row.id === socialMember
+						} );
+					} );
+					for (
+						const [id, action, allowed] of [
+							[ 81, "guild-union-invite", armed.invite ],
+							[ 82, "guild-union-exit", armed.exit ],
+							[ 83, "guild-union-expel", armed.expel ]
+						] as const
+					) authoredLabeledButton( at( id ), gx, gy, action, hudCopy( at( id ).text ), !allowed );
+				}
 				if ( (panel === "Guild" || panel === "Guild tools") && hudData ) {
 					const admission = beginWindow(),
 						root = hudData.root.GDR_COMMUNITY!,
@@ -10794,7 +12161,7 @@ export function createUi(
 							[ px + 15 + i * 75, py + 39, 72, 24 ],
 							guildTab === i,
 							"com_long_tab",
-							![ 0, 4 ].includes( i )
+							![ 0, 1, 4 ].includes( i )
 						)
 					);
 					authoredChrome(
@@ -10802,150 +12169,173 @@ export function createUi(
 						px,
 						py
 					);
-					// 5EA9D0 creates Create before the subsequent resource sections. Their
-					// insertion lists reverse within a section, not across constructor calls.
-					for ( const id of [ 1, 2, 3 ] ) {
-						authoredChrome( Object.values( page ).find( n => n.id === id )!, gx, gy );
-					}
-					nativePage( page, gx, gy, [ 1, 2, 3, 104 ] );
-					/*
-					================
-					at
-					================
-					*/
-					const at = ( id: number ) => Object.values( page ).find( n => n.id === id )!;
-					const notice = at( 61 ), noticePath = ROOT + "interface/guild/gil_windo02_off.png";
-					authoredImage( notice, gx, gy, noticePath );
-					authoredText( at( 63 ), gx, gy, hudCopy( at( 63 ).text ) );
-					for ( const id of [ 121, 122, 123, 124, 126 ] ) {
-						const node = at( id ),
-							caption = hudCopy(
-								id === 121 ?
-									[
-										"UIIT_STT_GUILDSMAN",
-										"UIIT_STT_TITLE",
-										"UIIT_STT_GUILD_POSITION"
-									][guildNameMode]! :
-									node.text
-							);
-						authoredLabeledButton( node, gx, gy, "guild-sort:" + id, caption );
-					}
-					// 5E8850 creates empty 312x24 rows until six exist. Those native row
-					// textures are the backing; a bare scroll-manager rectangle is transparent.
-					for ( let i = 0; i < 6; i++ ) {
-						const path = ROOT + "interface/guild/gil_bar02_deselect.png";
-						paths.push( path );
-						if ( resources.has( path ) ) rect( [ gx + 17, gy + 163 + i * 23, 312, 24 ], white, path );
-					}
-					if ( !guild ) authoredText( at( 38 ), gx, gy, hudCopy( "UIIT_STT_NO_GUILD" ) );
-					if ( guild ) {
-						const leader = guild.members.find( m => m.grade === 0 ),
-							self = guild.members.find( m => m.id === game?.social?.self );
-						for (
-							const [id, value] of [
-								[ 38, guild.name ],
-								[ 39, String( guild.level ) ],
-								[ 41, leader?.name ?? "" ],
-								[ 42, String( guild.members.length ) ],
-								[ 44, String( guild.gp ) ]
-							] as const
-						) authoredText( { ...at( id ), ...(id === 39 ? { color: gold } : {}) }, gx, gy, value );
-						authoredText(
-							{ ...notice, client: [ 70, 7, 0, 0 ] },
-							gx,
-							gy,
-							guild.subject || hudCopy( "UIIT_MSG_GUILD_COMMON_NOTEXIST" )
-						);
-						const rows = [ ...guild.members ].sort( ( a, b ) =>
-								(guildSort === 122 ?
-									a.level - b.level :
-									guildSort === 123 ?
-									a.grade - b.grade :
-									guildSort === 124 ?
-									a.donated - b.donated :
-									a.name.localeCompare( b.name )) * (guildDescending ? -1 : 1)
-							),
-							s = at( 82 ),
-							slot = hudData.windows.ifguildmemberslot!;
-						socialPage = Math.min( socialPage, Math.max( 0, Math.ceil( rows.length / 6 ) - 1 ) );
-						rows.slice( socialPage * 6, socialPage * 6 + 6 ).forEach( ( row, i ) => {
-							const ox = gx + s.rect[0], oy = gy + s.rect[1] + i * 23;
-							nativePage( slot, ox, oy, [ 9, 10 ] );
-							const roleSymbol = ({
-								1: "COMMANDER",
-								2: "SUBCOMMANDER",
-								4: "BATTLEMANAGER",
-								8: "PRODUCTMANAGER",
-								16: "TRAINERMANAGER",
-								32: "ENGINEER"
-							} as Record<number, string>)[row.role];
-							const memberCaption = guildNameMode === 0 ?
-								row.name :
-								guildNameMode === 1 ?
-								row.grant :
-								roleSymbol ?
-								hudCopy( "UIIT_STT_FORT_GUILD_" + roleSymbol ) :
-								"";
-							for (
-								const [id, value] of [ [ 11, memberCaption ], [ 12, String( row.level ) ], [
-									13,
-									row.grant
-								], [ 14, String( row.donated ) ] ] as const
-							) authoredText( Object.values( slot ).find( n => n.id === id )!, ox, oy, value );
-							const online = Object.values( slot ).find( n => n.id === 9 )!;
-							authoredImage(
-								online,
-								ox,
-								oy,
-								online.texture.replace( "_off", row.offline ? "_off" : "_on" )
-							);
-							const race = Object.values( slot ).find( n => n.id === 10 )!;
-							authoredImage(
-								race,
-								ox,
-								oy,
-								race.texture.replace( "china", hudData.countries[row.model] === 1 ? "europe" : "china" )
-							);
-							controls.push( {
-								id: "social-member:" + row.id,
-								label: row.name,
-								rect: [ ox, oy, 312, 23 ],
-								kind: "button",
-								selected: row.id === socialMember
-							} );
-						} );
-						for (
-							const [id, action] of [
-								[ 101, "guild-invite" ],
-								[ 102, "guild-dialog:authority" ],
-								[ 103, "guild-kick" ],
-								[ 105, "guild-dialog:title" ],
-								[ 106, "guild-dialog:role" ],
-								[ 45, "guild-dialog:donate" ],
-								[ 62, "guild-dialog:notice" ]
-							] as const
-						) {
-							const node = id === 105 ? { ...at( id ), rect: [ 353, 223, 0, 0 ] as UiRect } : at( id );
-							const allowed = id === 45 ?
-								!!self :
-								id === 101 ?
-								!!(self?.permissions! & 1) :
-								id === 103 ?
-								!!(self?.permissions! & 2) :
-								id === 62 ?
-								!!(self?.permissions! & 16) :
-								id === 102 ?
-								false :
-								self?.grade === 0 && (id !== 105 || guild.level >= 4);
-							authoredButton( node, gx, gy, action, hudCopy( node.text ), !allowed );
-							if ( node.text ) authoredText( node, gx, gy, hudCopy( node.text ) );
+					if ( guildTab === 1 && hudData.windows.ifallianceguild && hudData.windows.ifallianceguildslot ) {
+						unionPage( hudData.windows.ifallianceguild, hudData.windows.ifallianceguildslot, gx, gy );
+					} else {
+						// 5EA9D0 creates Create before the subsequent resource sections. Their
+						// insertion lists reverse within a section, not across constructor calls.
+						for ( const id of [ 1, 2, 3 ] ) {
+							authoredChrome( Object.values( page ).find( n => n.id === id )!, gx, gy );
 						}
-						controls.push( {
-							id: "guild-list",
-							label: hudCopy( "UIIT_STT_GUILD_INFO" ),
-							rect: authoredRect( s, gx, gy ),
-							kind: "region"
-						} );
+						nativePage( page, gx, gy, [ 1, 2, 3, 104 ] );
+						/*
+						================
+						at
+						================
+						*/
+						const at = ( id: number ) => Object.values( page ).find( n => n.id === id )!;
+						const notice = at( 61 ), noticePath = ROOT + "interface/guild/gil_windo02_off.png";
+						authoredImage( notice, gx, gy, noticePath );
+						authoredText( at( 63 ), gx, gy, hudCopy( at( 63 ).text ) );
+						for ( const id of [ 121, 122, 123, 124, 126 ] ) {
+							const node = at( id ),
+								caption = hudCopy(
+									id === 121 ?
+										[
+											"UIIT_STT_GUILDSMAN",
+											"UIIT_STT_TITLE",
+											"UIIT_STT_GUILD_POSITION"
+										][guildNameMode]! :
+										node.text
+								);
+							authoredLabeledButton( node, gx, gy, "guild-sort:" + id, caption );
+						}
+						// 5E8850 creates empty 312x24 rows until six exist. Those native row
+						// textures are the backing; a bare scroll-manager rectangle is transparent.
+						for ( let i = 0; i < 6; i++ ) {
+							const path = ROOT + "interface/guild/gil_bar02_deselect.png";
+							paths.push( path );
+							if ( resources.has( path ) ) rect( [ gx + 17, gy + 163 + i * 23, 312, 24 ], white, path );
+						}
+						if ( !guild ) authoredText( at( 38 ), gx, gy, hudCopy( "UIIT_STT_NO_GUILD" ) );
+						if ( guild ) {
+							const leader = guild.members.find( m => m.grade === 0 ),
+								self = guild.members.find( m => m.id === game?.social?.self );
+							for (
+								const [id, value] of [
+									[ 38, guild.name ],
+									[ 39, String( guild.level ) ],
+									[ 41, leader?.name ?? "" ],
+									[ 42, String( guild.members.length ) ],
+									[ 44, String( guild.gp ) ]
+								] as const
+							) authoredText( { ...at( id ), ...(id === 39 ? { color: gold } : {}) }, gx, gy, value );
+							authoredText(
+								{ ...notice, client: [ 70, 7, 0, 0 ] },
+								gx,
+								gy,
+								guild.subject || hudCopy( "UIIT_MSG_GUILD_COMMON_NOTEXIST" )
+							);
+							const rows = [ ...guild.members ].sort( ( a, b ) =>
+									(guildSort === 122 ?
+										a.level - b.level :
+										guildSort === 123 ?
+										a.grade - b.grade :
+										guildSort === 124 ?
+										a.donated - b.donated :
+										a.name.localeCompare( b.name )) * (guildDescending ? -1 : 1)
+								),
+								s = at( 82 ),
+								slot = hudData.windows.ifguildmemberslot!;
+							socialPage = Math.min( socialPage, Math.max( 0, Math.ceil( rows.length / 6 ) - 1 ) );
+							if (
+								grantPowerHud.isOpen() && hudData.windows.ifguildgrantpower &&
+								hudData.windows.ifguildgrantpowerslot
+							) {
+								grantPanel(
+									hudData.windows.ifguildgrantpower,
+									hudData.windows.ifguildgrantpowerslot,
+									gx + at( 150 ).rect[0],
+									gy + at( 150 ).rect[1],
+									self?.grade === 0
+								);
+							} else {rows.slice( socialPage * 6, socialPage * 6 + 6 ).forEach( ( row, i ) => {
+									const ox = gx + s.rect[0], oy = gy + s.rect[1] + i * 23;
+									nativePage( slot, ox, oy, [ 9, 10 ] );
+									const roleSymbol = ({
+										1: "COMMANDER",
+										2: "SUBCOMMANDER",
+										4: "BATTLEMANAGER",
+										8: "PRODUCTMANAGER",
+										16: "TRAINERMANAGER",
+										32: "ENGINEER"
+									} as Record<number, string>)[row.role];
+									const memberCaption = guildNameMode === 0 ?
+										row.name :
+										guildNameMode === 1 ?
+										row.grant :
+										roleSymbol ?
+										hudCopy( "UIIT_STT_FORT_GUILD_" + roleSymbol ) :
+										"";
+									for (
+										const [id, value] of [ [ 11, memberCaption ], [ 12, String( row.level ) ], [
+											13,
+											row.grant
+										], [ 14, String( row.donated ) ] ] as const
+									) authoredText( Object.values( slot ).find( n => n.id === id )!, ox, oy, value );
+									const online = Object.values( slot ).find( n => n.id === 9 )!;
+									authoredImage(
+										online,
+										ox,
+										oy,
+										online.texture.replace( "_off", row.offline ? "_off" : "_on" )
+									);
+									const race = Object.values( slot ).find( n => n.id === 10 )!;
+									authoredImage(
+										race,
+										ox,
+										oy,
+										race.texture.replace(
+											"china",
+											hudData.countries[row.model] === 1 ? "europe" : "china"
+										)
+									);
+									controls.push( {
+										id: "social-member:" + row.id,
+										label: row.name,
+										rect: [ ox, oy, 312, 23 ],
+										kind: "button",
+										selected: row.id === socialMember
+									} );
+								} );}
+							// 5E3090 mode 3 hides the command section beneath the panel.
+							if ( !grantPowerHud.isOpen() ) {
+								for (
+									const [id, action] of [
+										[ 101, "guild-invite" ],
+										[ 102, "guild-dialog:authority" ],
+										[ 103, "guild-kick" ],
+										[ 105, "guild-dialog:title" ],
+										[ 106, "guild-dialog:role" ],
+										[ 45, "guild-dialog:donate" ],
+										[ 62, "guild-dialog:notice" ]
+									] as const
+								) {
+									const node = id === 105 ?
+										{ ...at( id ), rect: [ 353, 223, 0, 0 ] as UiRect } :
+										at( id );
+									const allowed = id === 45 ?
+										!!self :
+										id === 101 ?
+										!!(self?.permissions! & 1) :
+										id === 103 ?
+										!!(self?.permissions! & 2) :
+										id === 62 ?
+										!!(self?.permissions! & 16) :
+										id === 102 ?
+										true :
+										self?.grade === 0 && (id !== 105 || guild.level >= 4);
+									authoredButton( node, gx, gy, action, hudCopy( node.text ), !allowed );
+									if ( node.text ) authoredText( node, gx, gy, hudCopy( node.text ) );
+								}
+							}
+							controls.push( {
+								id: "guild-list",
+								label: hudCopy( "UIIT_STT_GUILD_INFO" ),
+								rect: authoredRect( s, gx, gy ),
+								kind: "region"
+							} );
+						}
 					}
 					endWindow( admission );
 				}
@@ -11129,6 +12519,9 @@ export function createUi(
 				const overlaid = new Set<number>();
 				// Mounts carrying a rider: their ride link hides their name board.
 				const ridden = new Set( next.entities.flatMap( e => e.mountedOn ? [ e.mountedOn ] : [] ) );
+				const rides = new Map( next.entities.filter( e => ridden.has( e.gid ) ).map( e => [ e.gid, e ] ) );
+				const boardAt = ( entity: EntityState ) =>
+					riderBoardPosition( entity, entity.mountedOn ? rides.get( entity.mountedOn ) : undefined );
 				if ( game && hud.data() ) {
 					for ( const entity of next.entities ) {
 						if (
@@ -11138,9 +12531,36 @@ export function createUi(
 						const overlay = overheads.get( entity.gid );
 						if (
 							!overlay ||
-							entity.gid !== next.hoveredEntity && !nameInRange( entity, local, game.pose )
+							entity.gid !== next.hoveredEntity && !nameInRange( boardAt( entity ), local, game.pose )
 						) continue;
-						if ( overlay.fortressMark || overlay.guildText || overlay.status ) overlaid.add( entity.gid );
+						if ( overlay.fortressMark || overlay.guildText || overlay.status || overlay.stallText ) {
+							overlaid.add( entity.gid );
+						}
+						if ( overlay.stallText ) {
+							const value = overlay.stallText,
+								width = text.run( value ).width,
+								height = text.boardHeight(),
+								left = -(width >> 1),
+								top = overlay.stallY - (height >> 1);
+							quads.push( {
+								characterAnchor: entity.gid,
+								rect: [ left - 1, top - 1, width + 2, height + 2 ],
+								clip: full,
+								uv: [ 0, 0, 1, 1 ],
+								texture: "",
+								color: [ 0, 0, 0, 96 / 255 ]
+							} );
+							quads.push(
+								...text.quads( value, [ left, top, width, height ], full, [
+									0xfe / 255,
+									0xb5 / 255,
+									1,
+									1
+								], {
+									vAlign: 0
+								} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
+							);
+						}
 						if ( overlay.fortressMark ) {
 							const mark = overlay.fortressMark;
 							paths.push( mark.path );
@@ -11294,7 +12714,7 @@ export function createUi(
 					// shows without its name (name-visibility.ts header).
 					const named = !hiddenSilkCos( entity, options.hideSilkCos ) &&
 						overheadBoardVisible(
-							entity,
+							boardAt( entity ),
 							local,
 							hovered,
 							options,
@@ -11853,7 +13273,7 @@ export function createUi(
 			}
 			if (
 				game?.social?.invitation && worldVisible &&
-				(game.social.invitation.type !== 5 ||
+				(game.social.invitation.type !== 5 && game.social.invitation.type !== 6 ||
 					next.entities.some( e => e.gid === game.social!.invitation!.gid && e.guildName ))
 			) {
 				controls = [];
@@ -11864,15 +13284,21 @@ export function createUi(
 				}
 				paths.push( ...partyProposalAssets() );
 				const invite = game.social.invitation,
-					guild = invite.type === 5,
+					union = invite.type === 6,
+					guild = invite.type === 5 || union,
 					exchange = invite.type === 1,
 					inviter = next.entities.find( e => e.gid === invite.gid ),
-					layout = guild ?
-						guildProposalLayout( w, h, invitePosition ) :
-						partyProposalLayout( w, h, resources.size( PARTY_OPTION ), invitePosition );
+					layout = proposalLayout( invite.type, w, h, resources.size( PARTY_OPTION ), invitePosition ),
+					// 52F460 case 0x1C titles the union box and asks with the
+					// inviter's guild name on its single line.
+					heading = union ?
+						"UIIT_STT_GUILD_RESPECT_ALLY_JOIN" :
+						guild ?
+						"UIIT_STT_AGREEMENT_BOX" :
+						"UIIT_STT_CONFIRM_BOX";
 				controls.push( {
 					id: "invite-drag",
-					label: hudCopy( guild ? "UIIT_STT_AGREEMENT_BOX" : "UIIT_STT_CONFIRM_BOX" ),
+					label: hudCopy( heading ),
 					kind: "region",
 					draggable: true,
 					rect: layout.drag
@@ -11899,23 +13325,27 @@ export function createUi(
 				*/
 				const line = ( value: string, r: UiRect ) =>
 					quads.push( ...text.quads( value, r, full, white, { hAlign: 1, vAlign: 0 } ) );
+				line( copy( heading, "Confirmation window" ), layout.title );
 				line(
-					copy( guild ? "UIIT_STT_AGREEMENT_BOX" : "UIIT_STT_CONFIRM_BOX", "Confirmation window" ),
-					layout.title
-				);
-				line(
-					copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s]has" ).replace(
-						"%s",
-						() => inviter?.name ?? ""
-					),
+					union ?
+						copy( "UIIT_MSG_QUESTION_GUILD_RESPECT_ALLY_JOIN", "[%s]" ).replace(
+							"%s",
+							() => inviter?.guildName ?? ""
+						) :
+						copy( guild ? "UIIT_MSG_GUILD_JOIN_REQUEST" : "UIIT_STT_PARTY_SOMEUSER", "[%s]has" ).replace(
+							"%s",
+							() => inviter?.name ?? ""
+						),
 					layout.name
 				);
-				line(
-					guild ?
-						copy( "UIIT_MSG_GUILD_QUESTION_JOIN", "" ).replace( "%s", () => inviter?.guildName ?? "" ) :
-						copy( exchange ? "UIIT_MSG_DEAL_ASK" : "UIIT_STT_PARTY_PROPOSAL_ASK", "" ),
-					layout.question
-				);
+				if ( !union ) {
+					line(
+						guild ?
+							copy( "UIIT_MSG_GUILD_QUESTION_JOIN", "" ).replace( "%s", () => inviter?.guildName ?? "" ) :
+							copy( exchange ? "UIIT_MSG_DEAL_ASK" : "UIIT_STT_PARTY_PROPOSAL_ASK", "" ),
+						layout.question
+					);
+				}
 				if ( !exchange ) {
 					layout.options.forEach( ( option, i ) => {
 						rect( option.image, white, PARTY_OPTION );
@@ -12546,6 +13976,41 @@ export function createUi(
 				}
 				endWindow( [ admission[0], 0, 0, admission[3] ], "modal:" + panel );
 			}
+			const unionAsk = unionHud.question();
+			if ( worldVisible && unionAsk ) {
+				// 5F7670: the union's question box over the MsgBoxINIF geometry.
+				const layout = guildProposalLayout( w, h ),
+					title = unionAsk.kind === "exit" ?
+						"UIIT_STT_GUILD_RESPECT_ALLY_EXIT" :
+						"UIIT_STT_GUILD_RESPECT_ALLY_EXPULSION",
+					question = unionAsk.kind === "exit" ?
+						hudCopy( "UIIT_MSG_GUILD_QUESTION_ALLY_EXIT" ) :
+						hudCopy( "UIIT_MSG_QUESTION_GUILD_RESPECT_ALLY_EXPEL" ).replace( "%s", () => unionAsk.name );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( title ), layout.title, full, white, { hAlign: 1, vAlign: 0 } ),
+					...text.quads( question, layout.name, full, white, { hAlign: 1, vAlign: 0 } )
+				);
+				button(
+					"union-ask-yes",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"union-ask-no",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
 			if ( worldVisible && recallConfirm !== null ) {
 				// 5C82D0 / 52F460 type 5 retain the 308x148 MsgBoxINIF geometry.
 				const layout = guildProposalLayout( w, h );
@@ -12583,6 +14048,49 @@ export function createUi(
 				);
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) jobHud.reset();
+			const fortressAsk = fortressWarHud.question();
+			if ( worldVisible && fortressAsk ) {
+				// 6649C0's question boxes 0x64-0x67.
+				const layout = guildProposalLayout( w, h ),
+					row = view?.gameplay?.fortress?.fortresses.find( r => r.id === fortressAsk.fortress ),
+					name = row?.nameStrId ? hudCopy( row.nameStrId ) : "";
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads(
+						fortressWarFormat(
+							hudCopy( fortressWarQuestionKey( fortressAsk.question ) ),
+							[ name, row?.requestFee ?? 0 ]
+						),
+						layout.name,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				button(
+					"fortress-war-yes",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"fortress-war-no",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
 			const jobAsk = jobHud.confirm(), aliasWindow = jobHud.alias();
 			if ( worldVisible && (jobAsk || aliasWindow) ) {
 				// 5D26F0's question boxes (types 4 and 5) and CIFJobAlias.
@@ -12670,6 +14178,110 @@ export function createUi(
 					button( "job-alias-check", hudCopy( "UIIT_CTL_CHECK" ), ax!, ay!, aw! );
 					button( "job-alias-ok", hudCopy( "UIIT_CTL_OK" ), rx!, ry!, rw! );
 					button( "job-alias-cancel", hudCopy( "UIIT_CTL_CANCEL" ), rx! + rw! + 8, ry!, rw! );
+				}
+			}
+			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) guildManagerHud.reset();
+			else if ( game.social?.compensation !== undefined && !guildManagerHud.question() ) {
+				guildManagerHud.ask( "compensation", game.npcConversation.gid, game.social.compensation );
+			}
+			const guildAsk = guildManagerHud.question(),
+				guildField = guildManagerHud.field(),
+				guildVote = guildManagerHud.vote();
+			if ( worldVisible && (guildAsk || guildField || guildVote) ) {
+				// The guild manager's boxes (guild-manager-hud.ts) in the job box's frame.
+				const layout = guildProposalLayout( w, h );
+				const say = ( key: string, ...args: string[] ) =>
+					noticeText( hudCopy, { key, value: 0, arguments: args } );
+				const price = guildAsk?.kind === "level-up" ? guildLevelUpPrice( guildAsk.value ) : undefined;
+				const title = guildField?.kind === "create" ?
+					"UIIT_CTL_GUILD_CREATE" :
+					guildField ?
+					"UIIT_STT_MLEAVE_WINDOWS" :
+					guildVote ?
+					"UIIT_STT_MRELEASE_VOTESTATE" :
+					"UIIT_STT_CONFIRM_BOX";
+				const lines: Record<string, readonly [string, string]> = {
+					"level-up": [
+						say( "UIIT_MSG_GUILD_LEVEL_UP_CONDITION", String( (guildAsk?.value ?? 0) + 1 ) ),
+						price ?
+							hudCopy( "UIIT_STT_NEED_GP" ) + " : " + price.gp + "   " +
+							hudCopy( "UIIT_STT_CIRCULATION_NEEDMONEY" ) + " : " + price.gold :
+							hudCopy( "UIIT_MSG_ERROR_GUILD_LEVEL_UP_FULL" )
+					],
+					"dissolve": [
+						hudCopy( "UIIT_MSG_GUILD_BREAK_CONFIRM" ),
+						hudCopy( "UIIT_MSG_GUILD_BREAK_ANOTHER_EXPLAIN" )
+					],
+					"secede": [ hudCopy( "UIIT_MSG_GUILD_SECESSION_CONFIRM" ), "" ],
+					"release": [ hudCopy( "UIIT_MSG_MRELEASE_CONFIRM" ), "" ],
+					"compensation": [
+						say( "UIIT_CTL_GUILDWAR_COMPENSATION_01", String( guildAsk?.value ?? 0 ) ),
+						hudCopy( "UIIT_CTL_GUILDWAR_COMPENSATION_02" )
+					],
+					"master-leave": [ hudCopy( "UIIT_MSG_MLEAVE_INPUTID" ), "" ],
+					"create": [ "", "" ],
+					"vote": [
+						Math.ceil( (guildVote?.remainingMs ?? 0) / 60000 ) + " " + hudCopy( "PARAM_MINUTE" ),
+						""
+					]
+				};
+				const [first, second] = lines[guildAsk?.kind ?? guildField?.kind ?? "vote"]!;
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( title ), layout.title, full, white, { hAlign: 1, vAlign: 0 } ),
+					...text.quads( first, layout.name, full, white, { hAlign: 1, vAlign: 0 } )
+				);
+				if ( guildField ) {
+					const field: UiRect = [ layout.question[0], layout.question[1], layout.question[2], 16 ];
+					controls.push( {
+						id: "guild-manager-text",
+						label: hudCopy( title ),
+						kind: "text",
+						value: guildField.text,
+						rect: field,
+						maxLength: 12
+					} );
+					rect( field, [ 0, 0, 0, .6 ], "", [ 0, 0, 1, 1 ], full );
+					quads.push(
+						...text.quads( guildField.text, field, field, white, {
+							hAlign: 1,
+							vAlign: 1,
+							overflow: "clip"
+						} )
+					);
+					if ( focus === "guild-manager-text" && caretVisible ) {
+						const width = text.run( guildField.text ).width;
+						rect(
+							[ field[0] + (field[2] + width) / 2, field[1] + 1, 2, 14 ],
+							white,
+							"",
+							[ 0, 0, 1, 1 ],
+							field
+						);
+					}
+				} else {
+					quads.push( ...text.quads( second, layout.question, full, white, { hAlign: 1 } ) );
+				}
+				button(
+					"guild-manager-yes",
+					hudCopy( guildAsk ? "UIIT_CTL_YES" : "UIIT_CTL_OK" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				if ( !guildVote ) {
+					button(
+						"guild-manager-no",
+						hudCopy( guildAsk ? "UIIT_CTL_NO" : "UIIT_CTL_CANCEL" ),
+						...layout.refuse.slice( 0, 3 ) as [number, number, number]
+					);
 				}
 			}
 			if ( panel !== "Shop" ) repairHud.reset();
@@ -13118,9 +14730,109 @@ export function createUi(
 				button( "drop-gold", hudCopy( "UIIT_CTL_CONFIRM" ), x + 123, y + 101, 76, !!game?.inventoryPending );
 				button( "gold-cancel", hudCopy( "UIIT_CTL_CANCEL" ), x + 203, y + 101, 76 );
 			}
+			const stallBox = stallHud.prompt(), stallPage = hud.data()?.windows.ifstall;
+			if ( worldVisible && stallBox && game?.stall && stallPage ) {
+				// CIFStall's message boxes (5A1DF0, 5A1A40): one modal box at a time.
+				const [boxWidth, boxHeight] = STALL_PROMPT_SIZE[stallBox.kind],
+					layout = messageBox( w, h, boxWidth, boxHeight ),
+					[x, y] = layout.frame,
+					template = Object.values( stallPage ).find( n => n.id === 11 )!,
+					line = ( value: string, dy: number ) => {
+						quads.push(
+							...text.quads( value, [ x + 20, y + dy, boxWidth - 40, 14 ], full, white, {
+								hAlign: 1,
+								vAlign: 0
+							} )
+						);
+					},
+					edit = ( id: string, value: string, r: UiRect, maxLength: number ) => {
+						image(
+							[ r[0] - 4, r[1] - 3, r[2] + 8, r[3] + 6 ],
+							ROOT + "interface/messagebox/msgbox_quantity.png"
+						);
+						partyEdit( { ...template, name: id, rect: r }, 0, 0, id, value, maxLength );
+					};
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					)
+				);
+				quads.push(
+					...text.quads(
+						hudCopy( stallBox.kind === "price" ? "UIIT_STT_INPUT_BOX" : "UIIT_STT_CONFIRM_BOX" ),
+						layout.title,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				const stall = game.stall;
+				if ( stallBox.kind === "title" || stallBox.kind === "greeting" ) {
+					line( hudCopy( stallBox.kind === "title" ? "UIIT_STT_INSERT_STALL_NAME" : "UIIT_STT_STALL" ), 48 );
+					edit( STALL_PROMPT_TEXT, stallBox.text, [ x + 28, y + 76, boxWidth - 56, 14 ], STALL_TEXT_LIMIT );
+				} else if ( stallBox.kind === "price" ) {
+					const item = game.inventory.find( row => row.slot === stallBox.bagSlot );
+					line( item?.name ?? "", 46 );
+					quads.push(
+						...text.quads(
+							hudCopy( "UIIT_CTL_WARENETWORK_RESULT_FIGURE" ),
+							[ x + 30, y + 72, 80, 14 ],
+							full,
+							white
+						),
+						...text.quads(
+							hudCopy( "UIIT_CTL_WARENETWORK_RESULT_PRICE" ),
+							[ x + 30, y + 96, 80, 14 ],
+							full,
+							white
+						)
+					);
+					edit( STALL_PROMPT_QUANTITY, stallBox.quantity, [ x + 120, y + 72, 60, 14 ], 5 );
+					edit( STALL_PROMPT_PRICE, stallBox.price, [ x + 120, y + 96, 150, 14 ], 10 );
+				} else if ( stallBox.kind === "buy" || stallBox.kind === "network-buy" ) {
+					const offer = stallBox.kind === "buy" ?
+						stall.offers.find( row => row.slot === stallBox.slot ) :
+						stall.network.rows[stallBox.row];
+					line(
+						hudCopy( "UIIT_MSG_WARENETWORK_BUY_CONFIRM" ).replace( "%s", offer?.item.name ?? "" ).replace(
+							"%d",
+							String( offer?.quantity ?? 0 )
+						),
+						56
+					);
+					line( String( offer?.price ?? "" ), 76 );
+				} else {
+					for ( const [i, key] of [ "01", "02", "03" ].entries() ) {
+						line( hudCopy( "UIIT_MSG_WARENETWORK_REGIST_" + key ), 50 + i * 18 );
+					}
+				}
+				const pending = stallBox.kind === "network-buy" && stall.network.buying !== null;
+				button(
+					"stall-prompt-ok",
+					hudCopy( "UIIT_CTL_CONFIRM" ),
+					x + boxWidth / 2 - 80,
+					y + boxHeight - 40,
+					76,
+					pending
+				);
+				button(
+					"stall-prompt-cancel",
+					hudCopy( "UIIT_CTL_CANCEL" ),
+					x + boxWidth / 2 + 4,
+					y + boxHeight - 40,
+					76
+				);
+			}
 			if (
 				worldVisible && carriedItem &&
-				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
+				[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel )
 			) {
 				const item = carriedRow( carriedItem, game ), path = iconPath( item?.icon );
 				if ( path ) {
@@ -14476,7 +16188,18 @@ export function createUi(
 			blocks = [];
 			paths = [];
 			const errors: unknown[] = [];
-			for ( const owner of [ resources, hud, guideResources, minimapResources, localization, title, text ] ) {
+			for (
+				const owner of [
+					resources,
+					hud,
+					guideResources,
+					minimapResources,
+					stallCategories,
+					localization,
+					title,
+					text
+				]
+			) {
 				try {
 					owner.dispose();
 				} catch ( error ) {

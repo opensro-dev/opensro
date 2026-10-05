@@ -29,14 +29,15 @@ func writeGuildString(w *wire.Writer, value string) {
 //	per member: u32 jid, {str} name, u8 grade, u8 level, u32 donatedGP,
 //	u32 permMask, u32 dword30, u32 dword34, u32 dword38, {str} grantName,
 //	u32 refObjId, u8 fortressRole, u8 offlineFlag,
-//	then u8 voteCount (always 0 here - votes are out of scope).
+//	then u8 voteCount and per vote u32 id, u8 kind, u32 remaining ms
+//	(826610 hands each to SGuildData's vote list, 82CDA0).
 //
 // The offline flag is DERIVED at encode time (0 = ONLINE, 1 = offline)
 // through the online func, never persisted - the friend roster's
 // state-byte rule. A nil online func honestly reads everyone offline.
-func EncodeGuildInfo32C4(guild enterworld.GuildRecord, members []enterworld.GuildMemberRecord, online func(name string) bool) []byte {
+func EncodeGuildInfo32C4(guild enterworld.GuildRecord, members []enterworld.GuildMemberRecord, online func(name string) bool, nowMs int64) []byte {
 	writer := wire.NewWriter(64 + 64*len(members))
-	writeGuildBlock(writer, guild, members, online)
+	writeGuildBlock(writer, guild, members, online, nowMs)
 	return writer.Payload()
 }
 
@@ -48,14 +49,14 @@ func EncodeGuildInfo32C4(guild enterworld.GuildRecord, members []enterworld.Guil
 func EncodeCreateAckB663(guild enterworld.GuildRecord, members []enterworld.GuildMemberRecord, online func(name string) bool) []byte {
 	writer := wire.NewWriter(65 + 64*len(members))
 	writer.U8(1)
-	writeGuildBlock(writer, guild, members, online)
+	writeGuildBlock(writer, guild, members, online, 0)
 	return writer.Payload()
 }
 
 // writeGuildBlock appends the guild block body shared by 0x32C4 and the
 // 0xB663 ack (both frames are opcode + result-byte-or-nothing + these
 // exact bytes; the layout doc lives on EncodeGuildInfo32C4).
-func writeGuildBlock(writer *wire.Writer, guild enterworld.GuildRecord, members []enterworld.GuildMemberRecord, online func(name string) bool) {
+func writeGuildBlock(writer *wire.Writer, guild enterworld.GuildRecord, members []enterworld.GuildMemberRecord, online func(name string) bool, nowMs int64) {
 	writer.U32(uint32(guild.ID))
 	writeGuildString(writer, guild.Name)
 	writer.U8(guild.Level)
@@ -68,7 +69,42 @@ func writeGuildBlock(writer *wire.Writer, guild enterworld.GuildRecord, members 
 	for _, member := range members {
 		writeGuildMemberRow(writer, member, online)
 	}
-	writer.U8(0)
+	if guild.Vote == nil {
+		writer.U8(0)
+		return
+	}
+	writer.U8(1)
+	writer.U32(guild.Vote.ID)
+	writer.U8(guild.Vote.Kind)
+	writer.U32(voteRemainingMs(guild.Vote, nowMs))
+}
+
+// voteRemainingMs is a vote's time left as the u32 the client counts down.
+func voteRemainingMs(vote *enterworld.GuildVote, nowMs int64) uint32 {
+	return uint32(min(max(vote.EndsAtUnixMs-nowMs, 0), int64(^uint32(0))))
+}
+
+// EncodeVoteOpened3A6C is 0x3A6C type 1 (7603D0): {u8 1}{u32 id}{u8 kind}
+// {u32 remaining ms}; the guild window lists the vote and the release row
+// turns to the vote row.
+func EncodeVoteOpened3A6C(vote *enterworld.GuildVote, nowMs int64) []byte {
+	return wire.NewWriter(10).U8(1).U32(vote.ID).U8(vote.Kind).U32(voteRemainingMs(vote, nowMs)).Payload()
+}
+
+// EncodeVoteBallot3A6C is 0x3A6C type 4 (v1.188 0x3908 type 4, 5E7A70):
+// {u8 4}{u32 id}{u8 previous option}{u8 option}{u8 option count}.
+func EncodeVoteBallot3A6C(id uint32, previous, option, count uint8) []byte {
+	return wire.NewWriter(8).U8(4).U32(id).U8(previous).U8(option).U8(count).Payload()
+}
+
+// EncodeVoteClosed3A6C is 0x3A6C type 3: {u8 3}{u32 id}{u8 1}{u32 heir jid}
+// names the elected master (UIIT_MSG_MRELEASE_BEELETED), {u8 2} a vote that
+// broke (UIIT_MSG_MRELEASE_BROKEN).
+func EncodeVoteClosed3A6C(id uint32, elected bool, heir uint32) []byte {
+	if !elected {
+		return wire.NewWriter(6).U8(3).U32(id).U8(2).Payload()
+	}
+	return wire.NewWriter(10).U8(3).U32(id).U8(1).U32(heir).Payload()
 }
 
 // writeGuildMemberRow appends ONE member row in the pinned 0x32C4

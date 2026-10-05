@@ -42,7 +42,7 @@ func testShippedSummonedChildDecisions(t *testing.T, rt *Runtime, refs map[uint3
 	ops := &simulation.MonsterMoverOps{Monsters: s, Rand: func() float64 { return 0 }, AttackPlan: rt.MonsterAttackPlan}
 	ops.BasicAttack = func(_ string, actor monster.Instance, target, skill uint32, _ int64) simulation.MonsterAttackResult {
 		if actor.Gid == child.Gid {
-			plan, known := rt.MonsterAttackPlan(actor, skill, 0)
+			plan, known := rt.MonsterAttackPlan(actor, skill, simulation.AttackPick{})
 			if !known || plan.Summon || plan.SkillID != skill || target != wantedTarget {
 				t.Fatal("child selected invalid ordinary attack")
 			}
@@ -79,14 +79,18 @@ func testShippedSummonedChildDecisions(t *testing.T, rt *Runtime, refs map[uint3
 	if !s.ArmRetaliation("child", parent.Gid, wantedTarget) {
 		t.Fatal("leader opponent refused")
 	}
+	// A graded child runs at its grade's speed (gradescale.go) and may reach
+	// the opponent within the window: pursuit is judged when it acquires.
+	pursuing := false
 	for now := int64(15101); now <= 17101; now += 100 {
 		tick(now)
 		m, _ = s.Mover("child", child.Gid)
 		if m.TargetGID() == wantedTarget {
+			pursuing = m.InFlight(now)
 			break
 		}
 	}
-	if m.TargetGID() != wantedTarget || !m.InFlight(17101) {
+	if m.TargetGID() != wantedTarget || !pursuing {
 		t.Fatalf("child did not assist/pursue leader opponent: mode=%v target=%d", m.Mode(), m.TargetGID())
 	}
 	// Personal retaliation must beat a competing leader opponent.

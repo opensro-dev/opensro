@@ -14,9 +14,18 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { itemRepairCost, repairAllCost, repairRequest, repairNotice, REPAIR_ONE_SLOT, REPAIR_ALL_SLOTS } = await import(
-	sourceFileUrl( "src/engine/foundation/gameplay/repair.ts" ).href
-);
+const {
+	itemRepairCost,
+	repairAllCost,
+	repairClick,
+	repairOptionsAllow,
+	repairRequest,
+	repairNotice,
+	REPAIR_ONE_SLOT,
+	REPAIR_ALL_SLOTS,
+	REPAIR_REFUSED_BY_OPTIONS
+} = await import( sourceFileUrl( "src/engine/foundation/gameplay/repair.ts" ).href );
+const { createRepairHud } = await import( sourceFileUrl( "src/engine/runtime/ui/hud/repair-hud.ts" ).href );
 
 /*
 ================
@@ -64,4 +73,47 @@ test("the request names the smith, the mode and only for one item its slot", () 
 	assert.deepEqual( [ ...all.payload ], [ 7, 0, 0, 0, 2 ] );
 	assert.equal( repairNotice( 0xb46f, Uint8Array.of( 1 ) ), null );
 	assert.ok( repairNotice( 0xb46f, Uint8Array.of( 2, 7 ) ), "a refusal raises its category-13 notice" );
+});
+
+/*
+================
+withOption
+
+The sword carrying one magic option: param id 9, amount in the high dword.
+================
+*/
+function withOption( item, optionName, paramName, amount ) {
+	return {
+		...item,
+		magic: [ String( (BigInt( amount ) << 32n) | 9n ) ],
+		magicReferences: [ { paramId: 9, optionName, paramName, degree: 1 } ]
+	};
+}
+
+test("the armed hammer repairs damaged items, refuses forbidden ones and ignores the rest", () => {
+	// CIFItemSlot_DispatchActivation (567290).
+	assert.equal( repairClick( sword( 40 ) ), "send" );
+	assert.equal( repairClick( sword( 0 ) ), "send", "a broken item is repaired" );
+	assert.equal( repairClick( sword( 100 ) ), "ignore", "a whole item sends nothing and says nothing" );
+	assert.equal( repairClick( sword( 40, { canRepair: 0 } ) ), "ignore", "RefObjData +0xAA gates first" );
+	assert.equal( repairClick( undefined ), "ignore" );
+	const forbidden = withOption( sword( 40 ), "MATTR_NOT_REPARABLE", "MATTR_NOT_REPARABLE-", 1 );
+	assert.equal( repairOptionsAllow( forbidden ), false );
+	assert.equal( repairClick( forbidden ), "refuse" );
+	assert.equal( repairClick( withOption( sword( 40 ), "MATTR_REPAIR", "MATTR_REPAIR+", 1 ) ), "refuse" );
+	assert.equal( repairClick( withOption( sword( 40 ), "MATTR_REPAIR", "MATTR_REPAIR+", 2 ) ), "send" );
+	assert.ok( repairNotice( 0xb46f, Uint8Array.of( 2, REPAIR_REFUSED_BY_OPTIONS ) ), "the local refusal is a notice" );
+});
+
+test("the repair button toggles the hammer cursor, which stays armed until put away", () => {
+	const hud = createRepairHud();
+	assert.equal( hud.cursor(), null );
+	hud.arm();
+	assert.equal( hud.cursor(), 0x96, "5B1C00 sets cursor mode 0x96" );
+	assert.equal( hud.armed(), true );
+	hud.disarm();
+	assert.equal( hud.cursor(), null );
+	hud.arm();
+	hud.ask( 120 );
+	assert.equal( hud.cursor(), null, "Repair All's confirmation puts the hammer away" );
 });

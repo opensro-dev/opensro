@@ -42,6 +42,9 @@ type DevPaths struct {
 	NpcSpawns         NpcSpawnConfig
 	MonsterSpawns     MonsterSpawnConfig
 	AuthoredAreas     *worldarea.Catalog
+	// StructureZones is world-authority/structure-zones.json: the event
+	// zones the fortress worlds' structures stand on.
+	StructureZones string
 }
 
 // DevPathsFromEnv resolves bootstrap-owned optional environment settings
@@ -154,6 +157,10 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
 		template = resolvedTemplate
+		template, err = appendFortressStructures(template, textdataDir, paths.StructureZones)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		template, err = withMonsterSummonReferences(template, skills)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)

@@ -19,7 +19,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { withGeneratedAssetsLock } from "../../rebuildLock.mjs";
 import { loadCharacterDataRows } from "../char/resolveCharRoster.mjs";
-import { publicRoot, rebuildRoot, retailTextdataRoot, serverGameDataRoot } from "../world/paths.mjs";
+import { dataExtractedRoot, publicRoot, rebuildRoot, retailTextdataRoot, serverGameDataRoot } from "../world/paths.mjs";
+import { buildStructureZoneProjection } from "./structureZones.mjs";
 import { buildServerGameDataArchive } from "./serverGameDataArchive.mjs";
 import { completeItemTextProjection, completeItemReferenceProjection } from "../shared/itemTextCompletions.mjs";
 import { completeEnglishTextProjection, ENGLISH_COMPLETION_FILES } from "../shared/englishCompletions.mjs";
@@ -32,6 +33,8 @@ const GAME_VERSION = "1.150";
 const PROJECTION = "server";
 const PROTOCOL_VERSION = 2;
 const WORLD_PUBLIC_ROOT = path.join( publicRoot, "assets", "world" );
+// CObjectStringIfo_Load (98C7F0) reads this Data.pk2 file.
+const OBJECT_STRING_FILE = path.join( dataExtractedRoot, "navmesh", "objectstring.ifo" );
 
 export const defaultServerGameDataRoot = serverGameDataRoot;
 
@@ -56,6 +59,7 @@ export async function buildServerGameDataBundle( options ) {
 		await buildCharacterAuthorityProjection( temporaryRoot, textdataRoot );
 		await buildAreaProjection( temporaryRoot, worldPublicRoot );
 		await buildMovementProjection( temporaryRoot, worldPublicRoot );
+		await buildStructureZoneProjection( temporaryRoot, options.objectStringFile ?? OBJECT_STRING_FILE );
 
 		const files = await describeProjectionFiles( temporaryRoot );
 		const manifest = {
@@ -124,8 +128,17 @@ export async function buildCharacterAuthorityProjection( bundleRoot, textdataRoo
 		if ( !Number.isFinite( bodyRadius ) || bodyRadius <= 0 ) {
 			throw new Error( `Playable-character ${codename} has invalid RefObjChar BCRadius ${columns[50]}` );
 		}
+		// RefObjChar columns 87/88: the displacement flags SkillCombat_AllowsDisplacementOutcome
+		// (58E520, bit 0 knockdown) and 58FF7A (bit 1 knockback) read, and the knockdown recovery.
+		const knockdown = Number( columns[87] ), koRecoverMs = Number( columns[88] );
+		if ( !Number.isInteger( knockdown ) || knockdown < 0 || knockdown > 0xffffffff ) {
+			throw new Error( `Playable-character ${codename} has invalid RefObjChar knockdown ${columns[87]}` );
+		}
+		if ( !Number.isInteger( koRecoverMs ) || koRecoverMs < 0 || koRecoverMs > 0xffffffff ) {
+			throw new Error( `Playable-character ${codename} has invalid RefObjChar KORecover ${columns[88]}` );
+		}
 		seenRefObjIds.set( refObjId, codename );
-		models.push( { codename, refObjId, bodyRadius } );
+		models.push( { codename, refObjId, bodyRadius, knockdown, koRecoverMs } );
 	}
 	models.sort( ( left, right ) => left.refObjId - right.refObjId || left.codename.localeCompare( right.codename ) );
 	if ( models.length < 4 ) {
@@ -133,7 +146,7 @@ export async function buildCharacterAuthorityProjection( bundleRoot, textdataRoo
 	}
 	await writeJson(
 		path.join( bundleRoot, "character-authority", "catalog.json" ),
-		{ format: "sro-server-character-authority", version: 2, models }
+		{ format: "sro-server-character-authority", version: 3, models }
 	);
 }
 

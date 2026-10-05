@@ -21,7 +21,9 @@ async function load( path ) {
 const { defaultGameOptions, initialGameOptions, gameOptions, gameOptionRows } = await load(
 	"foundation/gameplay/game-options.ts"
 );
-const { nameVisible, nameInRange, hiddenSilkCos } = await load( "foundation/ui/name-visibility.ts" );
+const { nameVisible, nameInRange, hiddenSilkCos, riderBoardPosition } = await load(
+	"foundation/ui/name-visibility.ts"
+);
 const { vitalWarning } = await load( "foundation/ui/vital-warning.ts" );
 const { createGameplay } = await load( "runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { quickStatus } = await load( "foundation/ui/quick-status.ts" );
@@ -142,6 +144,17 @@ test("GM eligibility resets and beginner gate uses maximum attained level", () =
 	g.dispose();
 });
 
+test("Helper status toggles the helper mark and keeps the beginner mark", () => {
+	const sent = [], g = createGameplay( f => sent.push( f ) );
+	g.bootstrap( { character: { level: 30 } } );
+	g.seed( local );
+	// 695420 action 1011: flip +0x779 bit 1, send the whole byte in 0x7683.
+	g.command( { kind: "helper-mark" }, 0, undefined, { ...local, visualFlags: 1 } );
+	g.command( { kind: "helper-mark" }, 0, undefined, { ...local, visualFlags: 3 } );
+	assert.deepEqual( sent.map( f => [ f.opcode, ...f.payload ] ), [ [ 0x7683, 3 ], [ 0x7683, 1 ] ] );
+	g.dispose();
+});
+
 test("startup disables warnings and every overhead status category; Reset remains separate", () => {
 	const initial = initialGameOptions();
 	assert.deepEqual( Object.keys( initial ).filter( k => !initial[k] ), [
@@ -191,4 +204,17 @@ test("the overhead board range is strict 300 units from the local player, across
 	// The neighbouring region's x = 100 lies 120 units east of x = 1900.
 	assert.equal( nameInRange( at( 2, 100 ), local ), true );
 	assert.equal( nameInRange( at( 1, 1900 ), undefined ), false );
+});
+
+test("a peer rider's board range follows its ride, not where it mounted", () => {
+	const local = { gid: 1, kind: "local-player", regionId: 1, x: 1900, y: 0, z: 0 };
+	// The rider's own row stays where it mounted (900 units away); the ride
+	// carried it beside the local player.
+	const rider = { gid: 2, kind: "player", regionId: 1, x: 1000, y: 0, z: 0, mountedOn: 3 };
+	const ride = { gid: 3, kind: "cos", regionId: 1, x: 1850, y: 0, z: 0 };
+	assert.equal( nameInRange( rider, local ), false );
+	assert.equal( nameInRange( riderBoardPosition( rider, ride ), local ), true );
+	// 85F58E: with no resolvable ride the rider's own row places the board.
+	assert.equal( riderBoardPosition( rider, undefined ), rider );
+	assert.equal( riderBoardPosition( { ...rider, mountedOn: undefined }, ride ).x, 1000 );
 });

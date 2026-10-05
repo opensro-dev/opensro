@@ -9,12 +9,17 @@ never retries a successfully received world.
 
 ===========================================================================
 */
-import { isCommerceControl } from "@/engine/foundation/gameplay/commerce-controls";
+import { isWorldControl } from "@/engine/foundation/gameplay/commerce-controls";
 import { createNetwork } from "@/engine/runtime/simulation/worker/network/network";
 import { createWorldCore } from "./core";
 import { createDeparture } from "./departure";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
-import type { WireFrame } from "@/engine/contracts/network";
+import {
+	type ClientIncident,
+	INCIDENT_DUMP_BYTES,
+	INCIDENT_MESSAGE_LENGTH,
+	type WireFrame
+} from "@/engine/contracts/network";
 const ADMISSION_TIMEOUT_MS = 10000;
 const REFERENCE_TIMEOUT_MS = 30000;
 const RECONNECT_DELAY_MS = 250;
@@ -38,7 +43,8 @@ export function createWorldSession(
 		value: unknown,
 		base: string,
 		signal: AbortSignal
-	) => Promise<{ refSkillSnapshot: unknown[]; refItemSnapshot: unknown[]; }>
+	) => Promise<{ refSkillSnapshot: unknown[]; refItemSnapshot: unknown[]; }>,
+	reportIncident: ( incident: ClientIncident ) => void
 ) {
 	let failure: string | null = null, epoch = 0, disposed = false, controller: AbortController | null = null;
 	/*
@@ -46,8 +52,24 @@ export function createWorldSession(
 onNetworkFailure
 ================
 	*/
-	function onNetworkFailure( error: string ) {
+	function onNetworkFailure( error: string, frame?: WireFrame ) {
 		failure = error;
+		// The socket closes on the client side, so the server only sees a
+		// disconnect. Report what failed and on which frame (client_incident.go).
+		const dump = frame?.payload.subarray( 0, INCIDENT_DUMP_BYTES );
+		reportIncident( {
+			kind: frame ? "packet" : "transport",
+			message: error.slice( 0, INCIDENT_MESSAGE_LENGTH ),
+			...(frame ?
+				{
+					opcode: frame.opcode,
+					payload: Array.from( dump!, byte => byte.toString( 16 ).padStart( 2, "0" ) ).join( "" ),
+					payloadSize: frame.payload.byteLength
+				} :
+				{}),
+			phase,
+			character
+		} );
 	}
 	const network = createNetwork( onNetworkFailure );
 	const core = createWorldCore( network.send );
@@ -210,8 +232,8 @@ receive
 			}
 			return;
 		}
-		if ( isCommerceControl( frame.opcode ) ) {
-			if ( !boundThisTransport ) throw Error( "Commerce packet before EnterWorld" );
+		if ( isWorldControl( frame.opcode ) ) {
+			if ( !boundThisTransport ) throw Error( "World control packet before EnterWorld" );
 			core.receive( frame, now );
 			return;
 		}

@@ -96,12 +96,20 @@ func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease ins
 		distance = math.Hypot(distance, pose.Y-center.Y)
 		limit := reach
 		if !nearest {
+			// The reference radius bounds the graded one (at most x3,
+			// gradescale.go) before the full instance is read.
 			_, radius := state.instances.metadata(gid)
-			limit += radius
+			limit += radius * float64(monster.GradeScale(4))
 		}
 		if distance <= limit {
 			instance, exists := state.instances.lookup(gid)
-			if !exists || instance.CurrentHP == 0 {
+			// A fortress structure takes only a weapon's basic attack aimed
+			// at it (CGObjPC_CanAttackTarget 52BF90), so it is never an
+			// area, chain or secondary victim.
+			if !exists || instance.CurrentHP == 0 || instance.Ref.Structure {
+				continue
+			}
+			if !nearest && distance > reach+instance.BodyRadius() {
 				continue
 			}
 			out = append(out, instance)

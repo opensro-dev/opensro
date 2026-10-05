@@ -152,15 +152,15 @@ func (rt *Runtime) advanceMonsterCasts(now int64) []simulation.DivisionFrames {
 			result.Frames = []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}}
 		}
 		if rt.PushMonsterCast != nil {
-			rt.PushMonsterCast(p.division, p.instance.Gid, p.characterName, result)
+			rt.PushMonsterCast(p.division, p.instance.Gid, result)
 			unlock()
 			continue
 		}
 		if len(result.Frames) > 0 {
 			out = append(out, simulation.DivisionFrames{DivisionID: p.division, SourceGID: p.instance.Gid, Frames: result.Frames})
 		}
-		if len(result.TargetFrames) > 0 {
-			out = append(out, simulation.DivisionFrames{DivisionID: p.division, OnlyCharacterID: p.characterID, Frames: result.TargetFrames})
+		for _, private := range result.Private {
+			out = append(out, simulation.DivisionFrames{DivisionID: p.division, OnlyCharacterID: private.CharacterID, Frames: private.Frames})
 		}
 		unlock()
 	}

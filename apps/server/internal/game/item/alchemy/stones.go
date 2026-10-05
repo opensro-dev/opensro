@@ -10,6 +10,7 @@ package alchemy
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"opensro.online/server/internal/game/item/inventory"
@@ -115,6 +116,27 @@ func RollMagicValue(m Magic, roll Roll) (uint32, error) {
 		return 0, e
 	}
 	return values[n], nil
+}
+
+/*
+================
+RollSingleRange
+
+mfunc_single_range (v1.188 72FC60): an option whose min and max match
+returns min without drawing; otherwise rand/32767 is rounded to float32 and
+min + ratio*(max-min) truncates. Both endpoints are reachable.
+================
+*/
+func RollSingleRange(m Magic, roll Roll) (uint32, error) {
+	low, high := m.Params[1], m.Params[2]
+	if low == high {
+		return low, nil
+	}
+	n, err := draw(roll, 32768)
+	if err != nil {
+		return 0, err
+	}
+	return uint32(math.Trunc(float64(low) + float64(float32(float64(n)/32767))*float64(high-low))), nil
 }
 
 /*

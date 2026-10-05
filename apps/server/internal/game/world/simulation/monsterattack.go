@@ -29,15 +29,70 @@ type MonsterAttackPlan struct {
 
 /*
 ================
+AttackPick
+
+What a new choice among a monster's default skills reads: the uniform
+sample its CRT draw is taken from, and the target it chooses against.
+561B00 weighs a skill up by how far its reach exceeds the target's
+distance, so a choice without a target weighs the authored weights alone.
+================
+*/
+type AttackPick struct {
+	Sample float64
+	Target *AttackTarget
+}
+
+/*
+================
+AttackTarget
+
+CAITactics_DistanceBetweenActors (53D7A0) from the monster to the target,
+and the target's body radius (its vtable +0x560).
+================
+*/
+type AttackTarget struct {
+	Distance   float32
+	BodyRadius float64
+}
+
+/*
+================
+attackPickFor
+
+The pick against target, measured from the monster's live pose.
+================
+*/
+func attackPickFor(sample float64, from monster.Pose, target playerPose) AttackPick {
+	return AttackPick{Sample: sample, Target: &AttackTarget{Distance: monster.NativeActorDistance(from, spawnToPose(target.Pose)), BodyRadius: float64(target.BodyRadius)}}
+}
+
+/*
+================
 MonsterAttackResult
 ================
 */
 type MonsterAttackResult struct {
-	Frames       []Frame
-	TargetFrames []Frame
-	Accepted     bool
-	TargetAlive  bool
-	Refusal      MonsterAttackRefusal
+	Frames []Frame
+	// Private holds each struck player's own consequences: a struck
+	// companion's go to its owner, and an area attack carries one per victim.
+	Private     []MonsterPrivateFrames
+	Accepted    bool
+	TargetAlive bool
+	Refusal     MonsterAttackRefusal
+}
+
+/*
+================
+MonsterPrivateFrames
+
+The frames one character's sessions alone receive from a monster action,
+named by id (the tick's sessions) and by name (the action owner's push).
+================
+*/
+type MonsterPrivateFrames struct {
+	CharacterID   int64
+	CharacterName string
+	Frames        []Frame
 }
 
 // Refusal is meaningful only for an unaccepted action. Unclassified failures
@@ -67,7 +122,7 @@ type MonsterAttackOperation func(divisionID string, instance monster.Instance, t
 selectMonsterAttack
 ================
 */
-func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance monster.Instance, requestedSkillID uint32) (MonsterAttackPlan, bool) {
+func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance monster.Instance, requestedSkillID uint32, from monster.Pose, target playerPose) (MonsterAttackPlan, bool) {
 	if ops.AttackPlan == nil {
 		return MonsterAttackPlan{}, false
 	}
@@ -75,14 +130,14 @@ func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance mons
 	// selector. Resolving a retained authored ID must not consume a choice
 	// draw; its interval draw was already consumed on adoption.
 	if requestedSkillID != 0 {
-		return ops.AttackPlan(instance, requestedSkillID, 0)
+		return ops.AttackPlan(instance, requestedSkillID, AttackPick{})
 	}
 	if ops.Monsters != nil {
 		if skill, selected := ops.Monsters.SelectConditionalSkill(divisionID, instance.Gid); selected {
-			return ops.AttackPlan(instance, skill, 0)
+			return ops.AttackPlan(instance, skill, AttackPick{})
 		}
 	}
-	return ops.AttackPlan(instance, requestedSkillID, ops.rand())
+	return ops.AttackPlan(instance, requestedSkillID, attackPickFor(ops.rand(), from, target))
 }
 
 /*
@@ -102,7 +157,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	mover monster.MoverState,
 	players []playerPose,
 	nowMs int64,
-) ([]Frame, *monsterTargetFrames, bool) {
+) ([]Frame, []MonsterPrivateFrames, bool) {
 	if mover.TargetGID() == 0 ||
 		(mover.Mode() != monster.MoverChasing && mover.Mode() != monster.MoverAttacking) {
 		return nil, nil, false
@@ -116,6 +171,10 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	// Selection must gate both pursuit and fresh skill selection, including
 	// a cast whose duration exceeds the ordinary selector interval.
 	if !ops.Monsters.selectedAITimerReady(divisionID, instance.Gid, nowMs) {
+		return nil, nil, true
+	}
+	if ops.switchToSecondaryOpponent(divisionID, instance, mover, target, players, live, nowMs) ||
+		ops.redirectToVehicle(divisionID, instance, mover, target, players, live, nowMs) {
 		return nil, nil, true
 	}
 	if frames, handled := ops.advancePursuitControls(divisionID, instance, mover, target, live, nowMs); handled {
@@ -136,7 +195,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	if monster.SummonDue(instance) && nowMs < mover.NextAttackMs {
 		return nil, nil, true
 	}
-	plan, planned := ops.selectMonsterAttack(divisionID, instance, mover.AttackSkillID)
+	plan, planned := ops.selectMonsterAttack(divisionID, instance, mover.AttackSkillID, live, target)
 	if !planned || (!plan.Summon && ((!plan.SelfEffect && plan.Reach <= 0) || plan.Reach < 0 || plan.ActionLifecycleMs <= 0)) || plan.CooldownMs <= 0 {
 		if mover.Retaliating() || mover.Mode() == monster.MoverAttacking {
 			// A malformed/missing authored action may never strand a
@@ -148,7 +207,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	}
 	ops.adoptMonsterAttack(&mover, plan)
 	spacing := CombatSpacing{
-		ActorBodyRadius:  BodyRadius(instance.Ref.BodyRadius),
+		ActorBodyRadius:  BodyRadius(instance.BodyRadius()),
 		TargetBodyRadius: target.BodyRadius,
 		ActionReach:      plan.Reach,
 	}
@@ -196,10 +255,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 		mover.LastBattleActivityMs = uint32(nowMs)
 	}
 	frames = append(frames, result.Frames...)
-	var targeted *monsterTargetFrames
-	if len(result.TargetFrames) > 0 {
-		targeted = &monsterTargetFrames{TargetGid: target.Gid, Frames: result.TargetFrames}
-	}
+	targeted := result.Private
 	// A refusal often returns the zero result, whose TargetAlive is false.
 	// Only an accepted action can own fatal-result animation recovery.
 	if !result.Accepted {

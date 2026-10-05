@@ -11,6 +11,7 @@ package simulation
 import (
 	"math"
 	"opensro.online/server/internal/domain"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/item/wire"
@@ -73,9 +74,10 @@ type MonsterMoverOps struct {
 	// AttackPlan resolves one of RefObjChar's ten default-skill ids against
 	// the shipped v1.150 skill table. requestedSkillID preserves a choice
 	// while the mover approaches; zero chooses from the valid authored set.
-	// Retained-ID resolution receives sample zero and must not reselect based
-	// on changed health/damage. New selections alone consume choice entropy.
-	AttackPlan func(instance monster.Instance, requestedSkillID uint32, sample float64) (MonsterAttackPlan, bool)
+	// Retained-ID resolution receives a zero pick and must not reselect based
+	// on changed health/damage. New selections alone consume choice entropy,
+	// and they carry the target the weighted choice (561B00) measures.
+	AttackPlan func(instance monster.Instance, requestedSkillID uint32, pick AttackPick) (MonsterAttackPlan, bool)
 	// BasicAttack commits one monster->player hit and returns the same B245
 	// action bracket the browser already uses for player attacks.
 	BasicAttack func(divisionID string, instance monster.Instance, targetGid, skillID uint32, nowMs int64) MonsterAttackResult
@@ -87,6 +89,10 @@ type MonsterMoverOps struct {
 	// FirstAttackGuard reads a player's live first-attack protection (the
 	// Bard's Noise) from the effect owner. nil protects nobody.
 	FirstAttackGuard func(divisionID string, playerGID uint32, nowMs int64) monster.FirstAttackGuard
+	// Companions lists a player's summoned, living, unmounted companions in
+	// its owner's container order (CCOSManager_AppendOwnedActorsInContainerOrder).
+	// nil means no companion is ever a target.
+	Companions func(divisionID string, ownerGID uint32, nowMs int64) []CompanionTarget
 
 	// shownMonsters tracks which monster gids each viewer session has
 	// been sent a spawn for (the peervis shownPeers pattern). On first sight,
@@ -252,6 +258,30 @@ type playerPose struct {
 	// Guard is the player's first-attack protection (the Bard's Noise),
 	// read from the action owner when the leg samples its players.
 	Guard monster.FirstAttackGuard
+	// OwnerGid names the player a companion entry belongs to; zero for a
+	// player. Companions are targets, never acquisition candidates.
+	OwnerGid uint32
+	// Band is a companion's COS band (TypeID 4).
+	Band uint8
+	// JobState is a player's job state (CGObjPC_GetJobState 4DDC80, +0x30
+	// +0xF): the dressed job, zero outside job mode.
+	JobState uint8
+}
+
+/*
+================
+CompanionTarget
+
+One summoned, living companion a monster may strike: the action owner's
+projection of its world pose, body and status.
+================
+*/
+type CompanionTarget struct {
+	Gid              uint32
+	Pose             Spawn
+	BodyRadius       BodyRadius
+	NativeBodyStatus uint8
+	Band             uint8
 }
 
 /*
@@ -339,10 +369,14 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				continue
 			}
 			player := playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs), MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius, NativeBodyStatus: session.NativeBodyStatus}
+			if session.Appearance != nil {
+				player.JobState = session.Appearance.JobType
+			}
 			if ops.FirstAttackGuard != nil {
 				player.Guard = ops.FirstAttackGuard(divisionID, player.Gid, nowMs)
 			}
 			players = append(players, player)
+			players = appendCompanionTargets(players, ops.companionTargets(divisionID, player, nowMs))
 		}
 		for _, gid := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
@@ -381,6 +415,39 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, instance monste
 	}
 	// Private consequences follow the public result in the same operation.
 	deliverMonsterTargetFrames(divisionID, targeted, sessions, push)
+	ops.vanishInSafeZone(divisionID, instance.Gid, nowMs)
+}
+
+/*
+================
+vanishInSafeZone
+
+CGObjMob_SetRegionLeavingSafeZone (CGObjMob vtable +0x3AC, 4C1270): a
+monster whose region changes to one that is not a battlefield (a town,
+_RefRegion.IsBattleField 0) is set to life state 3 through vtable +0x1F0
+(CGObjChar_SetLifeStateAndNotify 4A9C80). From alive that state skips the
+death broadcast: the monster vanishes without a kill or a reward, and its
+nest respawns it (560D00). This is why monsters never walk into a town.
+================
+*/
+func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowMs int64) {
+	mover, ok := ops.Monsters.Mover(divisionID, gid)
+	if ok && SafeZoneRegion(mover.LivePoseAt(nowMs, nil).RegionID) {
+		ops.Monsters.Defeat(divisionID, gid, time.UnixMilli(nowMs))
+	}
+}
+
+/*
+================
+SafeZoneRegion
+
+A region _RefRegion marks as no battlefield. A region the table does not
+know is not one, as 52943E refuses unknown regions separately.
+================
+*/
+func SafeZoneRegion(region uint16) bool {
+	allowed, known := worldgeom.RegionPlayerCombat(region)
+	return known && !allowed
 }
 
 /*
@@ -516,7 +583,7 @@ func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monst
 		// A stationary actor cannot complete this travel-dependent gate.
 		mover.HomingAcquireAfterMs = ^uint32(0)
 		if monster.HomingRuns(instance.Ref.RunSpeed) {
-			mover.HomingAcquireAfterMs = uint32(float64(float32(instance.Nest.SightRange+instance.Ref.BodyRadius)) / float64(float32(instance.RunSpeed())) * 1000)
+			mover.HomingAcquireAfterMs = uint32(float64(float32(instance.Nest.SightRange+instance.BodyRadius())) / float64(float32(instance.RunSpeed())) * 1000)
 		}
 	}
 	dest := anchorPose(instance)
@@ -828,6 +895,15 @@ poseToSpawn
 */
 func poseToSpawn(p monster.Pose) Spawn {
 	return Spawn{RegionID: p.RegionID, X: p.X, Y: p.Y, Z: p.Z, Angle: p.Heading}
+}
+
+/*
+================
+spawnToPose
+================
+*/
+func spawnToPose(p Spawn) monster.Pose {
+	return monster.Pose{RegionID: p.RegionID, X: p.X, Y: p.Y, Z: p.Z, Heading: p.Angle}
 }
 
 /*

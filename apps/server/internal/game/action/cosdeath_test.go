@@ -5,7 +5,8 @@ cosdeath_test.go - a dead COS, or a dead rider's vehicle, is released at once
 
 CGObjCOS_ProcessNormalDeath (52A000; pets 529F70, summoned 529F10) and
 CGObjPC_ProcessNormalDeath (529B10) both end in ReleaseCOSOrExit: the COS
-leaves the world and its record stays on the owner's item.
+leaves the world. A pet's record stays on its item (kind 8); a vehicle's
+is deleted (kind 1), and a vehicle's own death drops its cargo first.
 
 ===========================================================================
 */
@@ -14,6 +15,7 @@ package action
 import (
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -51,12 +53,15 @@ func TestRiderDeathReleasesTheRiddenVehicle(t *testing.T) {
 	zero := int64(0)
 	character.CurrentHP = &zero
 
-	effects, _ := rt.settlePlayerDeathInDoor(testDivision, character, 1000)
+	effects, _ := rt.settlePlayerDeathInDoor(testDivision, character, deathKiller{}, 1000)
 	if ride.Summoned || ride.Mounted || ride.StateFlags&cosStateSummoned != 0 {
 		t.Fatalf("the dead rider kept its vehicle: %+v", ride)
 	}
 	if ride.CurrentHP != 87829 {
 		t.Fatal("releasing the vehicle changed its HP", ride.CurrentHP)
+	}
+	if character.ActiveCOS != nil {
+		t.Fatal("the released vehicle kept its record (4FA8B0 kind 1 deletes it)")
 	}
 	dismount, found := findFrame(effects, wire.OpCosRideState)
 	if !found || dismount.Payload[4] != 0 {
@@ -85,7 +90,7 @@ func TestRiderDeathKeepsAnUnriddenCompanion(t *testing.T) {
 	zero := int64(0)
 	character.CurrentHP = &zero
 
-	effects, _ := rt.settlePlayerDeathInDoor(testDivision, character, 1000)
+	effects, _ := rt.settlePlayerDeathInDoor(testDivision, character, deathKiller{}, 1000)
 	if !pet.Summoned || despawnsGID(effects, pet.GID) {
 		t.Fatalf("an unridden companion died with its owner: %+v %+v", pet, effects)
 	}
@@ -135,5 +140,52 @@ func TestStarvedPetIsReleased(t *testing.T) {
 	}
 	if !despawnsGID(frames, pet.GID) {
 		t.Fatalf("the starved pet stayed in the world: %+v", frames)
+	}
+}
+
+/*
+================
+TestTransportDeathDropsCargoAndDeletesRecord
+
+4C42F0 -> 4D1FD0: a transport killed in the field drops its goods
+unowned around it, and 52A000's kind-1 release deletes its record; a pet
+of the same death keeps its record for revival.
+================
+*/
+func TestTransportDeathDropsCargoAndDeletesRecord(t *testing.T) {
+	for _, band := range []uint16{cosBandTransport, cosBandAttackPet} {
+		rt, clock, character, source := newCombatTestRuntime(t, 100)
+		equipCombatTestPet(t, rt, character, band)
+		pet := character.ActiveCOS
+		potion := testItems()["ITEM_ETC_HP_POTION_01"]
+		pet.Container = &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{{
+			Slot: 0, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 7}}}
+		pet.CurrentHP = 5
+		record := abnormal.Record{Status: abnormal.Burn, Level: 1, Grade: 1, DurationMs: 10000,
+			PeriodMs: 2000, SourceGID: source.Gid, Rate24: 10, Scale20: 1, Param38: 10}
+		owner := rt.newCosAbnormalOwner(testDivision, character, clock.NowMs())
+		owner.sources = rt.captureAbnormalSources(testDivision, owner.block, []abnormal.Record{record})
+		if !owner.block.Apply(owner, record, clock.NowMs()) {
+			t.Fatal("status refused")
+		}
+		owner.block.Update(owner, clock.NowMs())
+		owner.commit()
+		frames := rt.cosAbnormalPublication(pet.GID, owner)
+		ground := rt.Ground.All(testDivision)
+		if band == cosBandAttackPet {
+			if character.ActiveCOS != pet || len(ground) != 0 {
+				t.Fatalf("a dead pet lost its record or dropped %d items", len(ground))
+			}
+			continue
+		}
+		if character.ActiveCOS != nil {
+			t.Fatal("a dead transport kept its record")
+		}
+		if len(ground) != 1 || ground[0].Codename != potion.Codename || ground[0].StackCount != 7 || ground[0].DroppedBy != "" {
+			t.Fatalf("cargo %+v", ground)
+		}
+		if !saw(frames, wire.OpObjectDespawn) {
+			t.Fatal("the dead transport stayed in view")
+		}
 	}
 }

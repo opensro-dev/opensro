@@ -18,6 +18,13 @@ Moves ride 0x706D (ItemMoveRequest_Serialize) and answer on 0xB06D:
 	0x0B gold room to bag   [u32 amount]                    -> [u32 amount]
 	0x0C gold bag to room   [u32 amount]                    -> [u32 amount]
 
+The guild warehouse (window 0x91) at a guild manager takes another road:
+0x7338 [npc][0x4000] -> B338 lock 0x4000 -> 0x7515 [npc] (B515 [1], or
+[2][0x48][holder]) -> 0x733D [npc] -> gold 0x34A9, list 0x3363, B33D [1].
+It is listed on every visit, and hiding it sends 0x7428 [npc]. Its moves
+are the same five with the types 0x1D, 0x1E, 0x1F, 0x20 (gold in) and 0x21
+(gold out); this owner keeps the personal kinds and maps them on the wire.
+
 The remote warehouse ticket (3/3/13/10) has no native rule: v1.150 only
 starts cooldown 0x1A on its 0xB5BD success. INFERENCE (the server's
 storage.go owns it): the spent ticket opens this room with the player's own
@@ -48,16 +55,53 @@ export const STORAGE_MOVE_WITHDRAW = 0x03;
 export const STORAGE_GOLD_WITHDRAW = 0x0b;
 export const STORAGE_GOLD_DEPOSIT = 0x0c;
 
+// The guild warehouse's function mask and requests.
+export const GUILD_STORAGE_FUNCTION = 0x4000;
+const OP_GUILD_STORAGE_CLAIM = 0x7515;
+const OP_GUILD_STORAGE_CLAIMED = 0xb515;
+const OP_GUILD_STORAGE_LIST_REQUEST = 0x733d;
+const OP_GUILD_STORAGE_LISTED = 0xb33d;
+const OP_GUILD_STORAGE_RELEASE = 0x7428;
+const OP_GUILD_STORAGE_RELEASED = 0xb428;
+export const OP_GUILD_STORAGE_GOLD = 0x34a9;
+export const OP_GUILD_STORAGE_LIST = 0x3363;
+/*
+================
+storageWireType
+
+The 0x706D type of a move kind in a personal or the guild warehouse.
+================
+*/
+export function storageWireType( type: number, guild?: boolean ): number {
+	if ( !guild ) return type;
+	switch ( type ) {
+		case STORAGE_MOVE_ROOM:
+			return 0x1d;
+		case STORAGE_MOVE_DEPOSIT:
+			return 0x1e;
+		case STORAGE_MOVE_WITHDRAW:
+			return 0x1f;
+		case STORAGE_GOLD_DEPOSIT:
+			return 0x20;
+		case STORAGE_GOLD_WITHDRAW:
+			return 0x21;
+	}
+	return type;
+}
+
 /*
 ================
 StorageRoom
 
-phase: listing (0x72C3 sent), opening (0x7338 sent) or open (B338 seen).
+phase: listing (0x72C3 / 0x733D sent), opening (0x7338 sent) or open
+(B338 / B33D seen); a guild room passes function (0x7338 [0x4000] sent)
+and claiming (0x7515 sent) first.
 ================
 */
 export interface StorageRoom {
 	readonly npc: number;
-	readonly phase: "listing" | "opening" | "open";
+	readonly guild?: boolean;
+	readonly phase: "function" | "claiming" | "listing" | "opening" | "open";
 	readonly capacity: number;
 	readonly gold: string;
 	readonly items: readonly InventoryItem[];
@@ -119,13 +163,13 @@ export function storageOpenRequest( npc: number ): WireFrame {
 storageMoveRequest
 ================
 */
-export function storageMoveRequest( npc: number, move: StorageMove ): WireFrame {
+export function storageMoveRequest( npc: number, move: StorageMove, guild?: boolean ): WireFrame {
 	if ( move.type === STORAGE_GOLD_WITHDRAW || move.type === STORAGE_GOLD_DEPOSIT ) {
 		if ( !Number.isInteger( move.gold ) || move.gold < 1 || move.gold > 0xffffffff ) {
 			throw Error( "Invalid storage gold" );
 		}
 		const payload = new Uint8Array( 5 );
-		payload[0] = move.type;
+		payload[0] = storageWireType( move.type, guild );
 		new DataView( payload.buffer ).setUint32( 1, move.gold, true );
 		return { opcode: OP_ITEM_MOVE, payload };
 	}
@@ -134,7 +178,7 @@ export function storageMoveRequest( npc: number, move: StorageMove ): WireFrame 
 	}
 	const room = move.type === STORAGE_MOVE_ROOM;
 	const payload = new Uint8Array( room ? 9 : 7 ), v = new DataView( payload.buffer );
-	payload[0] = move.type;
+	payload[0] = storageWireType( move.type, guild );
 	payload[1] = move.source;
 	payload[2] = move.destination;
 	if ( room ) v.setUint16( 3, move.quantity, true );
@@ -184,7 +228,11 @@ export function storageMoveResult(
 	caps: ReadonlyMap<number, number>
 ): { readonly room: StorageRoom; readonly bag: readonly InventoryItem[]; } | null {
 	const p = frame.payload;
-	if ( frame.opcode !== OP_ITEM_MOVE_RESULT || p.length < 2 || p[1] !== pending.type ) return null;
+	if (
+		frame.opcode !== OP_ITEM_MOVE_RESULT || p.length < 2 || p[1] !== storageWireType( pending.type, room.guild )
+	) {
+		return null;
+	}
 	if ( p[0] !== 1 ) return { room, bag };
 	if ( pending.type === STORAGE_MOVE_ROOM ) {
 		const items = planContainerMove( room.items, pending, caps, "storage" );
@@ -216,6 +264,33 @@ export function storageOpened( frame: WireFrame ): boolean {
 	const p = frame.payload;
 	return frame.opcode === OP_NPC_INTERACTION && p.length === 5 && p[0] === 1 &&
 		new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true ) === STORAGE_FUNCTION;
+}
+
+/*
+================
+npcRequest
+
+A request whose body is the NPC alone.
+================
+*/
+function npcRequest( opcode: number, npc: number ): WireFrame {
+	const payload = new Uint8Array( 4 );
+	new DataView( payload.buffer ).setUint32( 0, npc, true );
+	return { opcode, payload };
+}
+
+/*
+================
+guildStorageFunctionRequest
+
+0x7338 [u32 npc][u32 0x4000]: the warehouse row (5DA1B0 case 0x1D).
+================
+*/
+export function guildStorageFunctionRequest( npc: number ): WireFrame {
+	const payload = new Uint8Array( 8 ), v = new DataView( payload.buffer );
+	v.setUint32( 0, npc, true );
+	v.setUint32( 4, GUILD_STORAGE_FUNCTION, true );
+	return { opcode: OP_NPC_ACTION, payload };
 }
 
 /*
@@ -252,12 +327,67 @@ The talk menu's storage row: list the room once, then ask for the function.
 		},
 		/*
 ================
+openGuild
+
+The guild manager's warehouse row: ask for the function, then the room.
+================
+		*/
+		openGuild( npc: number ) {
+			if ( !Number.isInteger( npc ) || npc < 1 || npc > 0xffffffff ) throw Error( "Invalid guild manager" );
+			room = { npc, guild: true, phase: "function", capacity: 0, gold: "0", items: [] };
+			send( guildStorageFunctionRequest( npc ) );
+		},
+		/*
+================
 receive
 
 True when the frame belonged to the warehouse.
 ================
 		*/
 		receive( frame: WireFrame, refs: ReadonlyMap<number, number> ): boolean {
+			const p = frame.payload;
+			if ( room?.guild ) {
+				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				// B338 lock 0x4000 sends the claim itself (75AE50).
+				if (
+					frame.opcode === OP_NPC_INTERACTION && p.length === 5 && p[0] === 1 &&
+					v.getUint32( 1, true ) === GUILD_STORAGE_FUNCTION
+				) {
+					if ( room.phase === "function" ) {
+						room = { ...room, phase: "claiming" };
+						send( npcRequest( OP_GUILD_STORAGE_CLAIM, room.npc ) );
+					}
+					return true;
+				}
+				if ( frame.opcode === OP_GUILD_STORAGE_CLAIMED ) {
+					// A refusal releases the room; the social owner names it.
+					if ( p[0] !== 1 ) {
+						room = null;
+						return false;
+					}
+					if ( p.length !== 1 ) throw Error( "Invalid guild storage claim" );
+					if ( room.phase === "claiming" ) {
+						room = { ...room, phase: "listing" };
+						send( npcRequest( OP_GUILD_STORAGE_LIST_REQUEST, room.npc ) );
+					}
+					return true;
+				}
+				if ( frame.opcode === OP_GUILD_STORAGE_GOLD ) {
+					if ( p.length !== 8 ) throw Error( "Invalid guild storage gold" );
+					room = { ...room, gold: v.getBigUint64( 0, true ).toString() };
+					return true;
+				}
+				if ( frame.opcode === OP_GUILD_STORAGE_LIST ) {
+					room = { ...room, ...decodeStorageList( p, refs ) };
+					return true;
+				}
+				if ( frame.opcode === OP_GUILD_STORAGE_LISTED ) {
+					if ( p[0] === 1 && room.phase === "listing" ) room = { ...room, phase: "open" };
+					else if ( p[0] !== 1 ) room = null;
+					return true;
+				}
+			}
+			if ( frame.opcode === OP_GUILD_STORAGE_RELEASED ) return true;
 			if ( frame.opcode === OP_STORAGE_GOLD ) {
 				if ( frame.payload.length !== 8 ) throw Error( "Invalid storage gold" );
 				gold = new DataView( frame.payload.buffer, frame.payload.byteOffset, 8 ).getBigUint64( 0, true )
@@ -294,6 +424,7 @@ The room after an acknowledged move; the session copy follows it.
 		*/
 		apply( next: StorageRoom ) {
 			room = next;
+			if ( next.guild ) return;
 			loaded = { capacity: next.capacity, gold: next.gold, items: next.items };
 			gold = next.gold;
 		},
@@ -305,6 +436,7 @@ Leaving the warehouse keeps the session copy (+0x7BC stays set).
 ================
 		*/
 		close() {
+			if ( room?.guild && room.phase !== "function" ) send( npcRequest( OP_GUILD_STORAGE_RELEASE, room.npc ) );
 			room = null;
 		},
 		/*

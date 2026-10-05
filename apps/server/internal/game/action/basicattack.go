@@ -372,12 +372,16 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 	if refusal != "" {
 		return OpResult{DiagnosticRefusal: refusal}
 	}
-	target, ok := rt.characterMonster(divisionID, snapshot, engage.TargetGid)
+	target, ok := rt.resolveCombatTarget(divisionID, snapshot, engage.TargetGid, nowMs)
 	if !ok {
 		return OpResult{DiagnosticRefusal: "target-unavailable"}
 	}
-	if target.CurrentHP == 0 {
-		return OpResult{DiagnosticRefusal: "target-dead"}
+	// CGObjPC_CanAttackTarget (52BF90 -> 5293A0): a player the attacker may
+	// not fight is refused at the command, before any walk.
+	if target.player != nil {
+		if code := rt.playerAttackTargetRefusal(divisionID, snapshot, target.snapshot, nowMs); code != 0 {
+			return offensiveRefusal(code)
+		}
 	}
 	// Command acceptance runs phase 0x37 (4ACED4) with the ammo bit 0x20
 	// (58E32D): an empty bow is refused at the double-click, before the
@@ -486,22 +490,16 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		}
 		return OpResult{DiagnosticRefusal: refusal}
 	}
-	target, ok := rt.characterMonster(intent.DivisionID, snapshot, intent.TargetGid)
-	if !ok || target.CurrentHP == 0 {
-		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
-		return OpResult{}
-	}
-	mover, ok := rt.Monsters.Mover(intent.DivisionID, target.Gid)
+	target, ok := rt.resolveCombatTarget(intent.DivisionID, snapshot, intent.TargetGid, nowMs)
 	if !ok {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}
 	}
-	targetPose := mover.LivePoseAt(nowMs, nil)
-	targetSpawn := simulation.Spawn{RegionID: targetPose.RegionID, X: targetPose.X, Y: targetPose.Y, Z: targetPose.Z}
+	targetSpawn := target.at
 	worldKey := simulation.WorldKey(intent.DivisionID, snapshot.Name)
 	live := rt.liveSpawn(worldKey, snapshot, nowMs)
 	actionReach := rt.playerActionReach(intent.DivisionID, snapshot, skill, loadout)
-	spacing, spacingOK := rt.playerToMonsterCombatSpacing(snapshot, target, actionReach)
+	spacing, spacingOK := rt.combatTargetSpacing(snapshot, target, actionReach)
 	if !spacingOK {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{DiagnosticRefusal: "combat-spacing-unavailable"}
@@ -557,8 +555,8 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	}
 	intent.ActionReach = actionReach
 	if intent.SingleCast {
-		remaining, alive := rt.Monsters.Get(intent.DivisionID, intent.TargetGid)
-		if skill.ChainNext != 0 && alive && remaining.CurrentHP > 0 {
+		_, alive := rt.resolveCombatTarget(intent.DivisionID, snapshot, intent.TargetGid, nowMs)
+		if skill.ChainNext != 0 && alive {
 			if intent.ComboRootID == 0 {
 				intent.ComboRootID = skill.ID
 			}
@@ -567,7 +565,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 			rt.setCombatIntent(intent)
 			return prependOpResult(combatTransition, result)
 		}
-		if skill.ContinueBasicAttack && alive && remaining.CurrentHP > 0 {
+		if skill.ContinueBasicAttack && alive {
 			intent.ResumeBasic = true
 			lifetime, _ := skill.ActionLifecycleMs()
 			// 4AEC9E..4AECB3: an authored basic-attack continuation also

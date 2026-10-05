@@ -96,8 +96,8 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 	from := simulation.Spawn{RegionID: actorPose.RegionID, X: actorPose.X, Y: actorPose.Y, Z: actorPose.Z}
 	to := simulation.Spawn{RegionID: targetPose.RegionID, X: targetPose.X, Y: targetPose.Y, Z: targetPose.Z}
 	spacing := simulation.CombatSpacing{
-		ActorBodyRadius:  simulation.BodyRadius(instance.Ref.BodyRadius),
-		TargetBodyRadius: simulation.BodyRadius(target.Ref.BodyRadius),
+		ActorBodyRadius:  simulation.BodyRadius(instance.BodyRadius()),
+		TargetBodyRadius: simulation.BodyRadius(target.BodyRadius()),
 		ActionReach:      rt.monsterActionReach(instance, skill),
 	}
 	if !spacing.Valid() || simulation.IsDungeonRegion(from.RegionID) != simulation.IsDungeonRegion(to.RegionID) {
@@ -183,7 +183,7 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 		rt.queueMonsterDefeat(division, target.Gid, nowMs+monsterDeathPresentationRetention.Milliseconds())
 		public = append(public, rt.monsterKillBurst(target.Gid, settlement.drops)...)
 		public = append(public, settlement.public...)
-		rt.queueMonsterFightRecipients(division, settlement.others)
+		rt.queueMonsterLegRecipients(division, settlement.others)
 	}
 	result.Frames = simFrames(public)
 	result.Accepted = true
@@ -211,7 +211,7 @@ func (rt *Runtime) temptedOpponentCandidate(division string, struck monster.Inst
 	}
 	pose := mover.LivePoseAt(now, nil)
 	to := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
-	return monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, to)}, true
+	return monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, to), ActorDistance: monster.NativeActorDistance(monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}, pose)}, true
 }
 
 /*
@@ -235,31 +235,4 @@ func untemptableConfusion(target monster.Instance, records []abnormal.Record) []
 		}
 	}
 	return kept
-}
-
-/*
-================
-queueMonsterFightRecipients
-================
-*/
-func (rt *Runtime) queueMonsterFightRecipients(division string, recipients []RecipientFrames) {
-	if len(recipients) == 0 {
-		return
-	}
-	rt.monsterFightRecipientsMu.Lock()
-	rt.monsterFightRecipients = append(rt.monsterFightRecipients, recipientDivisionFrames(division, recipients)...)
-	rt.monsterFightRecipientsMu.Unlock()
-}
-
-/*
-================
-drainMonsterFightRecipients
-================
-*/
-func (rt *Runtime) drainMonsterFightRecipients() []simulation.DivisionFrames {
-	rt.monsterFightRecipientsMu.Lock()
-	defer rt.monsterFightRecipientsMu.Unlock()
-	out := rt.monsterFightRecipients
-	rt.monsterFightRecipients = nil
-	return out
 }

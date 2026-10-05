@@ -13,8 +13,8 @@ import { createMall } from "./mall/mall";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 import {
 	itemCooldown,
-	recoveryCategory,
-	recoveryCooldownMs,
+	potionCategory,
+	potionCooldownMs,
 	type ItemCooldown
 } from "@/engine/foundation/gameplay/item-cooldowns";
 import {
@@ -30,11 +30,13 @@ import {
 	STORAGE_MOVE_DEPOSIT,
 	STORAGE_MOVE_WITHDRAW,
 	type StorageMove,
-	type StorageRoom
+	type StorageRoom,
+	storageWireType
 } from "@/engine/foundation/gameplay/storage-room";
 import { createAlchemy } from "./alchemy/alchemy";
 import { REPAIR_ONE_SLOT, REPAIR_RESPONSE_OPCODE, repairRequest } from "@/engine/foundation/gameplay/repair";
 import { createGacha } from "./gacha/gacha";
+import { createMagicOptionGrant } from "./magic-option/magic-option";
 import { itemStateDelta } from "@/engine/foundation/gameplay/item-state-delta";
 import { itemSlotFlashKinds } from "@/engine/foundation/ui/item-slot-effects";
 import type { ItemProcessCommand } from "@/engine/contracts/item-process";
@@ -47,8 +49,27 @@ import {
 	buybackEntries
 } from "@/engine/foundation/gameplay/commerce";
 import { decodeInventoryItem } from "@/engine/foundation/gameplay/inventory-item";
+import {
+	applyExchangeSwap,
+	emptyExchange,
+	exchangeFrame,
+	exchangeRequest,
+	type ExchangeCommand
+} from "@/engine/foundation/gameplay/exchange";
+import type { ExchangeState } from "@/engine/contracts/item-process";
+import {
+	emptyStall,
+	stallFrame,
+	stallRequest,
+	type StallCommand,
+	type StallOutcome,
+	type StallState
+} from "@/engine/foundation/gameplay/stall";
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+
+const NPC_SHOP_CAPABILITY = 0x1;
+const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
 /*
 ================
 createInventory
@@ -59,7 +80,7 @@ export function createInventory(
 	play: ( handle: import("@/engine/foundation/ui/sound-catalog").UiSoundHandle ) => void = () => {},
 	playItem: ( cue: import("@/engine/contracts/audio").ItemSoundRequest ) => void = () => {}
 ) {
-	const alchemy = createAlchemy(), gacha = createGacha(), mall = createMall();
+	const alchemy = createAlchemy(), gacha = createGacha(), mall = createMall(), magicOption = createMagicOptionGrant();
 	let mallDelivery: { prepared: ReturnType<typeof decodeShopItems>; slots: number[]; } | null = null;
 	let avatars = new Map<number, InventoryItem>();
 	let slots = new Map<number, InventoryItem>(),
@@ -83,6 +104,12 @@ export function createInventory(
 		} | null = null,
 		error: string | null = null;
 	let itemCooldowns: readonly ItemCooldown[] = [];
+	// The open player exchange (exchange.ts): its offers name bag slots, so
+	// the swap it reports lands on this owner's slots.
+	let exchange: ExchangeState = emptyExchange();
+	// The street stall the player keeps or stands at, and the stall network
+	// window (stall.ts); a purchase lands on this owner's slots.
+	let stall: StallState = emptyStall();
 	let timedOut = false;
 	let bindingMoves: import("@/engine/foundation/gameplay/quickslot-inventory").QuickslotInventoryMove[] = [];
 	let shop: import("@/engine/foundation/gameplay/commerce").ShopState | undefined;
@@ -260,7 +287,7 @@ busy
 	*/
 	function busy() {
 		return pending !== null || mall.pending() || timedOut || alchemy.state().pending ||
-			[ "rolling", "waiting" ].includes( gacha.state().phase );
+			[ "rolling", "waiting" ].includes( gacha.state().phase ) || magicOption.state().phase === "waiting";
 	}
 	/*
 ================
@@ -420,10 +447,13 @@ bootstrap
 			presentations = new WeakMap();
 			alchemy.reset();
 			gacha.reset();
+			exchange = emptyExchange();
+			stall = emptyStall();
 			mall.reset();
 			mallDelivery = null;
 			tooltipRefs.clear();
 			magicRefs = itemMagicReferences( (value as { magicOptionSnapshot?: unknown; }).magicOptionSnapshot );
+			magicOption.bootstrap( (value as { avatarMagicOptions?: unknown; }).avatarMagicOptions, magicRefs );
 			const b = value as {
 				inventorySlotCount?: number;
 				equipmentSlotCount?: number;
@@ -512,6 +542,87 @@ bootstrap
 process
 ================
 		*/
+		/*
+================
+exchangeReceive
+
+Folds an exchange frame; returns null when the frame is not the
+exchange's, else the category-1 notice code it raised (0 for none).
+================
+		*/
+		exchangeReceive( frame: import("@/engine/contracts/network").WireFrame ): number | null {
+			const outcome = exchangeFrame( exchange, frame, refs, objRefs );
+			if ( !outcome ) return null;
+			if ( outcome.swap ) {
+				slots = applyExchangeSwap( slots, outcome.swap, equipmentSlotCount ?? 13, inventorySlotCount ?? 45 );
+				published = null;
+			}
+			exchange = outcome.state;
+			return outcome.notice ?? 0;
+		},
+		/*
+================
+stallReceive
+
+Folds a stall frame and applies its bag changes; null when the frame is
+not the stall's.
+================
+		*/
+		stallReceive( frame: import("@/engine/contracts/network").WireFrame, localGid: number ): StallOutcome | null {
+			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs } );
+			if ( !outcome ) return null;
+			const firstBag = equipmentSlotCount ?? 13, endBag = inventorySlotCount ?? 45;
+			if ( outcome.receive?.length || outcome.give?.length ) {
+				const next = new Map( slots );
+				for ( const item of outcome.receive ?? [] ) {
+					let slot = firstBag;
+					while ( slot < endBag && next.has( slot ) ) slot++;
+					if ( slot >= endBag ) throw Error( "Stall purchase exceeds the bag" );
+					next.set( slot, { ...item, slot } );
+				}
+				for ( const give of outcome.give ?? [] ) {
+					const row = next.get( give.bagSlot );
+					if ( !row ) continue;
+					if ( row.quantity > give.quantity ) {
+						next.set( give.bagSlot, { ...row, quantity: row.quantity - give.quantity } );
+					} else next.delete( give.bagSlot );
+				}
+				slots = next;
+				published = null;
+			}
+			stall = outcome.state;
+			return outcome;
+		},
+		/*
+================
+stallPhase
+================
+		*/
+		stallPhase(): StallState["phase"] {
+			return stall.phase;
+		},
+		/*
+================
+stallCommand
+================
+		*/
+		stallCommand( command: StallCommand ) {
+			const request = stallRequest( stall, command );
+			stall = request.state;
+			for ( const frame of request.frames ) send( frame );
+			return request.frames.at( -1 ) ?? null;
+		},
+		/*
+================
+exchangeCommand
+================
+		*/
+		exchangeCommand( command: ExchangeCommand ) {
+			const frame = exchangeRequest( exchange, command );
+			if ( command.kind === "exchange-request" ) exchange = { ...exchange, requesting: true };
+			send( frame );
+			return frame;
+		},
 		process( command: ItemProcessCommand, now: number ) {
 			if ( command.kind === "alchemy-open" ) {
 				alchemy.open();
@@ -527,7 +638,20 @@ process
 				gacha.close();
 				return null;
 			}
+			if ( command.kind === "magic-option-close" ) {
+				magicOption.close();
+				return null;
+			}
+			// The window's item and confirm answer with notices (magicOptionItem).
+			if ( command.kind === "magic-option-take" || command.kind === "magic-option-grant" ) {
+				throw Error( "Magic option item commands go through magicOptionItem" );
+			}
 			if ( busy() ) throw Error( "Inventory process unavailable" );
+			if ( command.kind === "magic-option-open" ) {
+				const frame = magicOption.open( command.gid );
+				send( frame );
+				return frame;
+			}
 			if ( command.kind === "gacha-roll" ) {
 				for ( const cue of gacha.start( command.entry, command.slot, slots.get( command.slot ), now ) ) {
 					play( cue );
@@ -539,6 +663,27 @@ process
 				alchemy.start( command.mode, command.slots, slots, now, command.quantity );
 			send( frame );
 			return frame;
+		},
+		/*
+================
+magicOptionItem
+
+The grant window's item drop and confirm: the request it sends, or the
+notice symbol of a refusal the client makes itself.
+================
+		*/
+		magicOptionItem(
+			command: { readonly kind: "magic-option-take"; readonly slot: number; } | {
+				readonly kind: "magic-option-grant";
+				readonly codename: string;
+			}
+		): string | null {
+			if ( command.kind === "magic-option-take" ) return magicOption.take( slots.get( command.slot ) );
+			if ( busy() ) throw Error( "Inventory process unavailable" );
+			const item = slots.get( magicOption.state().item ?? -1 ),
+				result = magicOption.grant( command.codename, item );
+			if ( result.frame ) send( result.frame );
+			return result.notice ?? null;
 		},
 		/*
 ================
@@ -675,7 +820,7 @@ so an impossible request never leaves the client.
 				move,
 				caps
 			);
-			const frame = storageMoveRequest( room.npc, move );
+			const frame = storageMoveRequest( room.npc, move, room.guild );
 			send( frame );
 			pending = {
 				opcode: 0xb06d,
@@ -700,7 +845,9 @@ frame is not that echo (a rejection takes the generic receive path).
 ================
 		*/
 		storageSettle( room: StorageRoom, p: Uint8Array, caps: ReadonlyMap<number, number> ): StorageRoom | null {
-			if ( !pending?.storage || p[0] !== 1 || p[1] !== pending.movementType ) return null;
+			if ( !pending?.storage || p[0] !== 1 || p[1] !== storageWireType( pending.movementType!, room.guild ) ) {
+				return null;
+			}
 			const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 			const echo = pending.movementType === STORAGE_MOVE_ROOM ?
 				p.length === 6 && p[2] === pending.source && p[3] === pending.destination &&
@@ -957,12 +1104,16 @@ dropGold
 openShop
 ================
 		*/
-		openShop( gid: number, now: number ) {
+		openShop( gid: number, now: number, capabilities = NPC_SHOP_CAPABILITY ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
 			commerceInteger( gid, 0xffffffff, 1 );
 			const payload = new Uint8Array( 8 ), v = new DataView( payload.buffer );
 			v.setUint32( 0, gid, true );
-			v.setUint32( 4, 1, true );
+			// 5DA414..5DA426: the shop row selects special trade when granted.
+			const mask = capabilities & NPC_SPECIAL_TRADE_CAPABILITY ?
+				NPC_SPECIAL_TRADE_CAPABILITY :
+				NPC_SHOP_CAPABILITY;
+			v.setUint32( 4, mask, true );
 			const frame = { opcode: 0x7338, payload };
 			send( frame );
 			if ( shop?.npc !== gid ) shop = undefined;
@@ -1091,7 +1242,12 @@ use
 receive
 ================
 		*/
-		receive( op: number, p: Uint8Array, now = 0, recovery?: { country: number | undefined; abnormal: number; } ) {
+		receive(
+			op: number,
+			p: Uint8Array,
+			now = 0,
+			recovery?: { country: number | undefined; abnormal: number; unlimitedItems?: readonly number[]; }
+		) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
 			if ( op === 15 ) {
 				const items = mall.projection( p );
@@ -1130,7 +1286,18 @@ receive
 					error = null;
 					return true;
 				}
-				return gacha.opened( p );
+				return magicOption.opened( p ) || gacha.opened( p );
+			}
+			if ( op === 0x32d9 ) {
+				// CPSMission_OnAvatarMagicOptionAdd0x32D9 (770140): the granted
+				// item replaces its bag row; a refusal is the gameplay notice.
+				const n = magicOption.result( p );
+				if ( n === null ) return true;
+				const next = body( p, 3 );
+				if ( !next || !slots.has( n ) ) throw Error( "Magic option grant references absent item" );
+				slots.set( n, { ...next, slot: n } );
+				published = null;
+				return true;
 			}
 			if ( op === 0xb053 ) {
 				for ( const cue of gacha.result( p, slots.get( gacha.state().slot ?? -1 ) ) ) play( cue );
@@ -1436,17 +1603,21 @@ receive
 				if ( !item || item.typeFlags !== v.getUint16( 4, true ) ) {
 					throw new Error( "Stale item use result" );
 				}
-				const category = recoveryCategory( item.typeFlags );
+				const category = potionCategory( item.typeFlags );
 				if ( category ) {
-					if ( quantity !== item.quantity - 1 ) throw Error( "Stale recovery item use result" );
+					// The server's published unlimited-item extension acknowledges use
+					// without spending a stack. It still requires this pending request.
+					const unlimited = quantity === item.quantity &&
+						recovery?.unlimitedItems?.includes( item.refObjId ) &&
+						pending?.opcode === op && pending.source === n;
+					if ( !unlimited && quantity !== item.quantity - 1 ) throw Error( "Stale recovery item use result" );
 					// Read the reference before last-stack removal; failed receipts never reach here.
 					{
-						if ( recovery?.country === undefined ) throw Error( "Missing recovery cooldown country" );
-						const durationMs = recoveryCooldownMs(
+						const durationMs = potionCooldownMs(
 							category,
 							tooltipRefs.get( item.refObjId )?.fields ?? {},
-							recovery.country,
-							recovery.abnormal
+							recovery?.country,
+							recovery?.abnormal ?? 0
 						);
 						itemCooldowns = [ ...itemCooldowns.filter( row => row.category !== category ), {
 							category,
@@ -1587,14 +1758,31 @@ state
 				avatarInventory: [ ...avatars.values() ].map( present ),
 				alchemy: alchemy.state(),
 				gacha: gacha.state(),
+				exchange: exchange.open || exchange.requesting ?
+					{
+						...exchange,
+						own: exchange.own.map( row => ({ ...row, item: present( row.item ) }) ),
+						theirs: exchange.theirs.map( row => ({ ...row, item: present( row.item ) }) )
+					} :
+					undefined,
+				stall: stall.phase === "none" && !stall.network.open ?
+					undefined :
+					{
+						...stall,
+						offers: stall.offers.map( row => ({ ...row, item: present( row.item ) }) ),
+						network: {
+							...stall.network,
+							rows: stall.network.rows.map( row => ({ ...row, item: present( row.item ) }) )
+						}
+					},
+				magicOption: magicOption.state(),
 				shop: presentShop(),
 				shopCompletionRevision,
 				inventorySlotCount,
 				equipmentSlotCount,
 				inventory: published ?? (published = [ ...slots.values() ].map( present )),
 				itemFlashes,
-				inventoryPending: pending !== null || mall.pending() || alchemy.state().pending ||
-					[ "rolling", "waiting" ].includes( gacha.state().phase ),
+				inventoryPending: busy(),
 				error
 			};
 		},
@@ -1612,6 +1800,9 @@ clear
 			magicRefs = itemMagicReferences( undefined );
 			alchemy.reset();
 			gacha.reset();
+			exchange = emptyExchange();
+			stall = emptyStall();
+			magicOption.reset();
 			mall.reset();
 			mallDelivery = null;
 			shop = undefined;

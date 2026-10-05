@@ -2,16 +2,53 @@
 # check.yml - validate portable source on Windows without retail game assets.
 # The committed lockfile owns both pnpm itself and application dependencies;
 # installation must not quietly repair either part before the source gates run.
+# The Go gate runs once, on Linux (source-linux.yml): this job runs every
+# other source gate, and only for a change outside the Go server - a pull
+# request that touches apps/server alone has nothing here to check. A push
+# to main always runs.
 # ===========================================================================
 name: source-check
 
 on:
-  push:
   pull_request:
+  push:
+    branches: [ main ]
+
+# A newer push to the same pull request supersedes the running check.
+concurrency:
+  group: source-check-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+# The source gates only read the checkout; the change list reads the PR.
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      portable: ${{ steps.diff.outputs.portable }}
+    steps:
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$PR" ]; then echo "portable=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          files=$(gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate --jq '.[].filename')
+          if printf '%s\n' "$files" | grep -qvE '^apps/server/'; then
+            echo "portable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "portable=false" >> "$GITHUB_OUTPUT"
+          fi
+
   source-check:
+    needs: changes
+    if: needs.changes.outputs.portable == 'true'
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -28,19 +65,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      # check:server runs the Go gates: tidy, gofmt, vet, tests, race subset, govulncheck.
-      # go.mod names the exact release (no toolchain line), so this installs it directly.
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: apps/server/go.mod
-          cache-dependency-path: apps/server/go.sum
-
       - run: pnpm install --frozen-lockfile
       # check:client-preparation reads synthetic PK2 archives (pycryptodome).
       - run: python -m pip install --disable-pip-version-check -r requirements-build.txt
       - name: Require dependency inputs to remain unchanged
         run: git diff --exit-code HEAD -- pnpm-lock.yaml pnpm-workspace.yaml package.json ':(glob)apps/*/package.json'
-      - run: pnpm check source
+      - run: pnpm check source-portable
 
   # The asset pipeline and asset-dependent suites consume a locally extracted,
   # licensed v1.150 client and are intentionally not run on hosted machines.

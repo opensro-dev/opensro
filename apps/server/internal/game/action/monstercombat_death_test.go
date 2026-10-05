@@ -12,6 +12,7 @@ package action
 
 import (
 	"encoding/binary"
+	"opensro.online/server/internal/game/pk"
 	"testing"
 	"time"
 
@@ -34,7 +35,7 @@ func TestShippedMangnyangAttackPlanIsRunnable(t *testing.T) {
 		t.Skip("shipped characterdata is unavailable")
 	}
 	rt := NewRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
-	plan, ok := rt.MonsterAttackPlan(monster.Instance{Ref: ref}, 0, 0)
+	plan, ok := rt.MonsterAttackPlan(monster.Instance{Ref: ref}, 0, simulation.AttackPick{})
 	if !ok || plan.SkillID != 160 || plan.Reach != 10 || plan.CooldownMs != 3000 ||
 		plan.ActionLifecycleMs != 2400 {
 		t.Fatalf("Mangnyang attack plan = %+v/%v, want skill 160 range 10 cooldown 3000ms lifecycle 2400ms", plan, ok)
@@ -54,7 +55,7 @@ func TestShippedMoviaAttackPlanIncludesCastingAndRecoveryPhases(t *testing.T) {
 	}
 	rt := NewRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
 	for skillID, wantDuration := range map[uint32]int64{3598: 2000, 3599: 2000} {
-		plan, planned := rt.MonsterAttackPlan(monster.Instance{Ref: ref}, skillID, 0)
+		plan, planned := rt.MonsterAttackPlan(monster.Instance{Ref: ref}, skillID, simulation.AttackPick{})
 		if !planned || plan.SkillID != skillID || plan.ActionLifecycleMs != wantDuration ||
 			plan.CooldownMs != 2500 {
 			t.Fatalf("Movia skill %d plan = %+v/%v, want lifecycle %dms cooldown 2500ms",
@@ -209,7 +210,7 @@ func TestFatalMonsterAttackCommitsAndReturnsDeathProgression(t *testing.T) {
 	skills[2] = skill
 
 	penaltyCalls := 0
-	rt.ApplyDeathPenalty = func(c *enterworld.Character) ([]wire.Frame, bool) {
+	rt.ApplyDeathPenalty = func(c *enterworld.Character, _ pk.DeathPenalty) ([]wire.Frame, bool) {
 		penaltyCalls++
 		if c.CurrentHP == nil || *c.CurrentHP != 0 {
 			t.Fatalf("death updater observed HP %v, want fatal HP committed inside the same door", c.CurrentHP)
@@ -240,8 +241,8 @@ func TestFatalMonsterAttackCommitsAndReturnsDeathProgression(t *testing.T) {
 	if len(pushed) != 0 {
 		t.Fatalf("monster combat invoked an asynchronous character callback: %+v", pushed)
 	}
-	if len(result.TargetFrames) != 1 || result.TargetFrames[0].Opcode != wire.OpExpUpdate {
-		t.Fatalf("same-turn death progression = %+v, want one target-only 30D2", result.TargetFrames)
+	if private := privateFramesOf(result); len(private) != 1 || private[0].Opcode != wire.OpExpUpdate {
+		t.Fatalf("same-turn death progression = %+v, want one target-only 30D2", private)
 	}
 	assertOnlySkillReleases(t, rt.TickHook()(clock.NowMs()))
 	if len(pushed) != 0 {

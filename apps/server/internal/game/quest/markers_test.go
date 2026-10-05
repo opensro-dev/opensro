@@ -242,3 +242,65 @@ func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
 	}
 	t.Logf("%d executable definitions; %d authored NPC identities", defs.Len(), len(anchors))
 }
+
+/*
+================
+TestOfferMarkerFollowsTheNativeLevelGap
+
+925D20 / 40FE90: below the quest's level the NPC shows the red scroll;
+within six levels above it the offer mark; further above, nothing.
+================
+*/
+func TestOfferMarkerFollowsTheNativeLevelGap(t *testing.T) {
+	for _, tc := range []struct {
+		level, questLevel int64
+		state             uint8
+		shown             bool
+	}{
+		{1, 10, markerStateTooLow, true},
+		{9, 10, markerStateTooLow, true},
+		{10, 10, markerStateOffer, true},
+		{16, 10, markerStateOffer, true},
+		{17, 10, 0, false},
+	} {
+		if state, shown := offerMarkerState(tc.level, tc.questLevel); state != tc.state || shown != tc.shown {
+			t.Fatalf("level %d quest %d = (%d, %v), want (%d, %v)", tc.level, tc.questLevel, state, shown, tc.state, tc.shown)
+		}
+	}
+}
+
+/*
+================
+TestTurnInSurvivesALevelLoss
+
+A character that took a quest and then fell below its level (the death
+penalty) still sees the report marker and the turn-in it advertises.
+================
+*/
+func TestTurnInSurvivesALevelLoss(t *testing.T) {
+	licensed.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt, err := NewRuntime(&enterworld.Deps{}, defs, func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) { return nil, true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, ok := rt.Defs.ByCodename("QNO_EU_CONS_1")
+	if !ok || def.Level < 2 {
+		t.Fatal("missing generated quest above level 1")
+	}
+	race, level := int64(enterworld.RaceEurope), int64(def.Level)-1
+	c := &enterworld.Character{RaceIndex: &race, Level: &level, ActiveQuests: []enterworld.ActiveQuestRecord{BuildActiveQuestRecord(def, objectiveRequired(def))}}
+	if marker := rt.MarkerStates(c)[def.RefID]; marker.State != markerStateReport {
+		t.Fatalf("marker after level loss = %+v", marker)
+	}
+	for _, option := range rt.OptionsForNpc(c, def.EndNpcCodename) {
+		if option.Codename == def.Codename && option.Complete {
+			return
+		}
+	}
+	t.Fatal("the turn-in the report marker advertises is missing")
+}

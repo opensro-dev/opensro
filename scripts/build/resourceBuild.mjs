@@ -45,6 +45,7 @@ import { buildGInterfaceSectionsAsset } from "./data/buildGInterfaceSectionsAsse
 import { buildSiegeFortressDataAsset } from "./data/buildSiegeFortressDataAsset.mjs";
 import { buildMissionPresentationAsset } from "./data/buildMissionPresentationAsset.mjs";
 import { buildNameFilterAsset } from "./data/buildNameFilterAsset.mjs";
+import { buildStallNetworkAssets } from "./data/buildStallNetworkAssets.mjs";
 import { runPython } from "./shared/pythonRun.mjs";
 import { runConvertImages } from "./shared/convertImagesRunner.mjs";
 import { buildNativeLensResources } from "./shared/nativeLensResources.mjs";
@@ -69,7 +70,7 @@ import { rebuildRoot } from "./world/paths.mjs";
 import { formatOptimizationSummary } from "./jsonAssetCompression.mjs";
 import { packPublicTree } from "./packPublicTree.mjs";
 
-const RETAIL_CURSOR_IDS = [ "0x95", "0x97", "0x98", "0x99", "0x9a", "0xa0", "0xa1", "0xa3" ];
+const RETAIL_CURSOR_IDS = [ "0x95", "0x96", "0x97", "0x98", "0x99", "0x9a", "0xa0", "0xa1", "0xa3" ];
 const DEFAULT_RESOURCE_BUILD_LANES = 2;
 
 /*
@@ -146,6 +147,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildSiegeFortressDataAsset,
 	buildMissionPresentationAsset,
 	buildNameFilterAsset,
+	buildStallNetworkAssets,
 	runConvertImages,
 	buildNativeLensResources,
 	buildNativeCharacterTextures,
@@ -474,6 +476,8 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// Native character-name filter (textdata/abusefilter.txt, copied byte for
 	// byte). The game-data pack group claims it, so it must exist before packing.
 	const nameFilter = await steps.buildNameFilterAsset();
+	// The stall network's category tables, claimed by the same pack group.
+	await steps.buildStallNetworkAssets();
 	// EnterWorld v2 sends semantic ids only. This client projection is generated
 	// after NPC/item builders settle and owns every presentation resource path.
 	const missionPresentation = steps.buildMissionPresentationAsset();

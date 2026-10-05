@@ -16,7 +16,40 @@ func TestShippedEuropeanSwordBaseAttackResolves(t *testing.T) {
 	t.Parallel()
 
 	textdataDir := gamedatatest.TextdataDir(t)
-	character := &enterworld.Character{
+	character := shippedEuropeanSwordsman()
+	deps := &enterworld.Deps{
+		Items:  enterworld.NewTextdataItems(textdataDir),
+		Skills: enterworld.NewTextdataSkills(textdataDir),
+	}
+	runtime := NewRuntime(deps, nil)
+	runtime.WearRoll = func() (uint32, error) { return 99, nil }
+
+	skill, loadout, refusal := runtime.resolveBasicAttack(character)
+	if refusal != "" {
+		t.Fatalf(
+			"shipped EU sword base attack did not resolve (%s; race=%s, weapon=%d, range=%g, learned=%v)",
+			refusal, enterworld.ResolveCharacterRaceKey(character), loadout.WeaponKind,
+			skillActionReach(skill, loadout, combat.Stats{}), character.Skills,
+		)
+	}
+	if skill.ID != 7127 || skill.Codename != "SKILL_EU_SWORD_BASE_01" {
+		t.Fatalf("resolved skill = %d/%s, want shipped EU sword base row 7127", skill.ID, skill.Codename)
+	}
+	if !loadout.HasWeapon || loadout.WeaponKind != 7 || loadout.ActionRange <= 0 {
+		t.Fatalf("resolved loadout = %+v, want a positive-range weapon kind 7", loadout)
+	}
+}
+
+/*
+================
+shippedEuropeanSwordsman
+
+A level-1 European swordsman in shipped gear whose base attack resolves
+against the shipped item and skill data.
+================
+*/
+func shippedEuropeanSwordsman() *enterworld.Character {
+	return &enterworld.Character{
 		Name:          "Test2",
 		RaceIndex:     testInt64(0),
 		ModelCodename: "CHAR_EU_MAN_NOBLE",
@@ -42,26 +75,5 @@ func TestShippedEuropeanSwordBaseAttackResolves(t *testing.T) {
 				TypeFlags: 13740, VarianceBits: "0", Durability: 45, StackCount: 1,
 			},
 		},
-	}
-	deps := &enterworld.Deps{
-		Items:  enterworld.NewTextdataItems(textdataDir),
-		Skills: enterworld.NewTextdataSkills(textdataDir),
-	}
-	runtime := NewRuntime(deps, nil)
-	runtime.WearRoll = func() (uint32, error) { return 99, nil }
-
-	skill, loadout, refusal := runtime.resolveBasicAttack(character)
-	if refusal != "" {
-		t.Fatalf(
-			"shipped EU sword base attack did not resolve (%s; race=%s, weapon=%d, range=%g, learned=%v)",
-			refusal, enterworld.ResolveCharacterRaceKey(character), loadout.WeaponKind,
-			skillActionReach(skill, loadout, combat.Stats{}), character.Skills,
-		)
-	}
-	if skill.ID != 7127 || skill.Codename != "SKILL_EU_SWORD_BASE_01" {
-		t.Fatalf("resolved skill = %d/%s, want shipped EU sword base row 7127", skill.ID, skill.Codename)
-	}
-	if !loadout.HasWeapon || loadout.WeaponKind != 7 || loadout.ActionRange <= 0 {
-		t.Fatalf("resolved loadout = %+v, want a positive-range weapon kind 7", loadout)
 	}
 }

@@ -54,6 +54,14 @@ const (
 	// @0x00753904); types 2/4/5/0x0B carry {u16 len + ANSI sender name,
 	// sized wide text} (label_753d94 / the type-4 arm @0x00753ba7).
 	OpChatBroadcast uint16 = 0x3667
+	// OpChatHistory is a browser extension, not a retail opcode: the beta
+	// public transcript replayed at world admission, one frame of
+	// {u8 version=1, u8 count, count x (u16 length, 0x3667 payload)}. Retail
+	// replays nothing; sending the lines as live 0x3667 made the client show
+	// them as just said (an old line over its speaker's head on entry).
+	OpChatHistory uint16 = 16
+	// chatHistoryVersion is the extension frame's layout version.
+	chatHistoryVersion uint8 = 1
 )
 
 // Chat types on the 0x7367/0x3667 wire (the sub_6aebd0 prefix switch and
@@ -74,6 +82,9 @@ const (
 	ChatTypeGuild uint8 = 5
 	// ChatTypeUnion: the '%' prefix (guild alliance chat).
 	ChatTypeUnion uint8 = 0x0B
+	// ChatTypeStall: the stall window's own chat box composes it
+	// (CIFChatModule_HandleInputKey 545EF0 writes the module's type).
+	ChatTypeStall uint8 = 9
 )
 
 // 0xB367 result bytes (sub_753290 @0x007532dc: 1 = present the pending
@@ -104,6 +115,9 @@ const (
 	// what the v1.150 client reads.
 	ChatErrNoGuild uint8 = 0x0B
 	ChatErrNoUnion uint8 = 0x0C
+	// ChatErrNoStall: a stall line from a player at no stall (server
+	// CGObjPC_OnChatRequest 4B1750 type 9); the client shows no text.
+	ChatErrNoStall uint8 = 5
 )
 
 // ChatMessageMaxWideChars is the client-side compose cap: sub_6aebd0's

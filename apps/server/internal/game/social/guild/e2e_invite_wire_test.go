@@ -170,7 +170,7 @@ func startInviteServer(t *testing.T, dir string, seeds []*enterworld.Character) 
 
 	enterworld.Register(srv.Hub, deps)
 	partyRt.Register(srv.Hub)
-	guild.Register(srv.Hub, deps, directory)
+	guild.Register(srv.Hub, deps, directory, nil, nil)
 	invites.Register(srv.Hub)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)

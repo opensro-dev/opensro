@@ -1,87 +1,134 @@
+/*
+===========================================================================
+
+npccapability_test.go - 4C6350's service chains and the v1.150 talk word
+
+Expectations come from the native registrations and the client's menu
+builder (5D9100), not from the tables under test.
+
+===========================================================================
+*/
+
 package simulation
 
 import "testing"
 
-// Falsifiers for the NPC talk capability table (npccapability.go): the
-// recon-calibrated seed rows, the roster-coverage invariant that forces a
-// flags decision whenever the roster grows, and the encoder-contract
-// guard against the job-transport bit.
-
-// TestNpcTalkCapabilityTableCoversTheRoster is the growth ratchet: every
-// roster codename must carry a capability row. A new roster NPC without
-// one would fall to the documented silent-grant degradation (no talk
-// window) - this failure forces the flags DECISION at review time
-// instead of leaving the gap to be discovered in play.
-func TestNpcTalkCapabilityTableCoversTheRoster(t *testing.T) {
-	for _, npc := range DefaultNpcRoster() {
-		if _, ok := NpcTalkCapabilityFlags(npc.Codename); !ok {
-			t.Errorf("roster NPC %s has no capability row - decide its 0xB45A flags in npccapability.go", npc.Codename)
-		}
-	}
-}
-
-// TestNpcTalkCapabilitySeedRowsPinTheReconCalibration pins the three
-// calibrated words:
-// smith 0x23 (shop|talk|action-0xb), warehouse 0x05 (shop|storage,
-// deliberately WITHOUT the unproven talk bit), guild 0x4001 (shop|guild,
-// same talk-bit decision).
-func TestNpcTalkCapabilitySeedRowsPinTheReconCalibration(t *testing.T) {
+/*
+================
+TestServiceChainsRegisterTheNativeOptions
+================
+*/
+func TestServiceChainsRegisterTheNativeOptions(t *testing.T) {
 	cases := []struct {
 		codename string
-		want     uint32
+		want     []uint8
 	}{
-		{"NPC_EU_SMITH", 0x23},
-		{"NPC_EU_WAREHOUSE", 0x05},
-		{"NPC_EU_GUILD", 0x4001},
+		{"NPC_CH_WAREHOUSE_M", []uint8{NpcServiceStorage, NpcServiceShop}},
+		{"NPC_EU_SMITH", []uint8{NpcServiceRepair, NpcServiceMagicOption}},
+		{"NPC_CH_ARMOR", []uint8{NpcServiceRepair}},
+		{"NPC_KT_HORSE", []uint8{NpcServiceShop, NpcServiceStable}},
+		{"NPC_CH_GENARAL_SP", []uint8{NpcServiceGuild, NpcServiceShop}},
+		{"NPC_EU_ADVICE3", []uint8{NpcServiceReverseReturn}},
+		{"NPC_CH_SOLDIER_EM1", []uint8{NpcServiceReverseReturn}},
+		{"NPC_TD_THIEF_BUY", []uint8{NpcServiceSpecialTrade, NpcServiceThiefBuy}},
+		// The general keeps the hunter guild beside his own option.
+		{"NPC_CH_GENARAL_SW", []uint8{NpcServiceGeneral, NpcServiceJobHunter}},
+		{"NPC_WC_DOCTOR", []uint8{NpcServiceJobTrader}},
+		{"NPC_TD_THIEF_SELL", []uint8{NpcServiceJobThief}},
+		{"NPC_RM_SPECIAL", []uint8{NpcServiceSpecialTrade}},
+		{"NPC_CH_FORTRESS_SMITH1", []uint8{NpcServiceFortressSmith, NpcServiceRepair}},
+		{"NPC_CH_FORTRESS_BATTLEAIDE1", []uint8{NpcServiceFortressAide, NpcServiceShop}},
+		{"STRUCTURE_GATE_PULLEY_JA_02", []uint8{NpcServiceGatePulley}},
+		{"NPC_BATTLE_ARENA_MANAGER", []uint8{NpcServiceArenaManager}},
+		{"npc_siege_dungeon_teleport", []uint8{NpcServiceSiegeTeleport}},
+		{"NPC_CH_POTION", nil},
 	}
 	for _, c := range cases {
-		got, ok := NpcTalkCapabilityFlags(c.codename)
-		if !ok {
-			t.Errorf("%s has no capability row", c.codename)
-			continue
-		}
-		if got != c.want {
-			t.Errorf("%s flags = 0x%X, want 0x%X", c.codename, got, c.want)
+		if got, want := NpcServicesForCodename(c.codename), NpcServices(0).With(c.want...); got != want {
+			t.Errorf("%s services %#x, want %#x", c.codename, uint64(got), uint64(want))
 		}
 	}
 }
 
-// TestNpcTalkCapabilityRowsNeverCarryTheJobTransportBit guards the
-// encoder's caller contract: flags bit 0x40000000 makes the client expect
-// a u16 job-transport tail EncodeNpcObjectSelectResult does not write, so no
-// table row may ever carry it.
-func TestNpcTalkCapabilityRowsNeverCarryTheJobTransportBit(t *testing.T) {
-	for codename, flags := range reconstructedNpcServiceFlagsByCodename {
-		if flags&0x40000000 != 0 {
-			t.Errorf("%s carries the job-transport bit 0x40000000 - the encoder writes no u16 tail for it", codename)
+/*
+================
+TestTalkWordShiftsEachOptionBelowItsNumber
+
+The bits the client tests: option n is 1 << (n - 1); options past 32 have
+no bit in the v1.150 word.
+================
+*/
+func TestTalkWordShiftsEachOptionBelowItsNumber(t *testing.T) {
+	for option, want := range map[uint8]uint32{
+		NpcServiceShop: 0x1, NpcServiceStorage: 0x4, NpcServiceGuild: 0x4000, NpcServiceGachaMachine: 0x10000,
+		NpcServiceJobTrader: 0x80000, NpcServiceJobHunter: 0x200000, NpcServiceTeleportGate: 0x8000000,
+		NpcServiceReverseReturn: 0x20000000, NpcServiceGatePulley: 0x40000000, NpcServiceMagicOption: 0x80000000,
+		NpcServiceArenaManager: 0,
+	} {
+		if got := NpcServices(0).With(option).TalkFlags(); got != want {
+			t.Errorf("option %#x flags %#x, want %#x", option, got, want)
 		}
 	}
 }
 
-// TestNpcTalkCapabilityUnknownCodenameAnswersNotOk pins the lookup's
-// silent-grant contract: no row means ok=false, never a fabricated zero.
-func TestNpcTalkCapabilityUnknownCodenameAnswersNotOk(t *testing.T) {
-	if flags, ok := NpcTalkCapabilityFlags("NPC_TEST_NO_SUCH_ROW"); ok {
-		t.Errorf("unknown codename answered flags=0x%X ok=true, want ok=false", flags)
+/*
+================
+TestResolvedTalkWordAdvertisesOnlyOwnedRows
+
+A smith offers shop, talk, repair and the avatar magic grant. A guide
+offers reverse return; fortress pulleys still have no response owner.
+================
+*/
+func TestResolvedTalkWordAdvertisesOnlyOwnedRows(t *testing.T) {
+	smith := NpcDef{Codename: "NPC_EU_SMITH", BaseSpeechSymbol: "SN_NPC_EU_SMITH_BS",
+		NpcTalkStoreGroups: []NpcTalkStoreGroup{{StoreGroupID: 7495}}}
+	smith.Services = ResolveNpcServices(smith)
+	if got := ResolveNpcTalkFlags(smith); got != NpcTalkFlagShop|NpcTalkFlagTalk|NpcTalkFlagRepair|NpcTalkFlagMagicOption {
+		t.Fatalf("smith flags %#x", got)
+	}
+	guide := NpcDef{Codename: "NPC_EU_ADVICE3", BaseSpeechSymbol: "SN_NPC_EU_ADVICE_BS"}
+	guide.Services = ResolveNpcServices(guide)
+	if got := ResolveNpcTalkFlags(guide); got != NpcTalkFlagTalk|NpcTalkFlagReverseReturn {
+		t.Fatalf("guide flags %#x", got)
+	}
+	pulley := NpcDef{Codename: "STRUCTURE_GATE_PULLEY_JA_01"}
+	pulley.Services = ResolveNpcServices(pulley)
+	if ResolveNpcTalkFlags(pulley)&NpcTalkFlagGatePulley != 0 {
+		t.Fatal("a pulley advertised the bit whose u16 tail is not written")
 	}
 }
 
-// The reverse-engineered service catalogue and the runtime capability word
-// have different contracts. The former records every retail row; the latter
-// may expose only rows with an end-to-end gameplay owner in this port.
-func TestResolveNpcTalkFlagsDoesNotAdvertiseOwnerlessServiceRows(t *testing.T) {
-	flags := ResolveNpcTalkFlags(NpcDef{
-		Codename:         "NPC_EU_SMITH",
-		BaseSpeechSymbol: "SN_NPC_EU_SMITH_BS",
-		NpcTalkStoreGroups: []NpcTalkStoreGroup{{
-			StoreGroupID: 7495,
-			Tabs:         []NpcTalkStoreTab{{TabID: 2015, LabelSymbol: "SN_TAB_WEAPON"}},
-		}},
-	})
-	if flags != NpcTalkFlagShop|NpcTalkFlagTalk {
-		t.Fatalf("resolved smith flags = 0x%X, want implemented shop|talk only", flags)
+/*
+================
+TestEveryStorageKeeperOffersStorage
+
+4C6501's substring arm: every shipped storage keeper resolves shop|storage.
+================
+*/
+func TestEveryStorageKeeperOffersStorage(t *testing.T) {
+	for _, codename := range []string{
+		"NPC_EU_WAREHOUSE", "NPC_CA_WAREHOUSE", "NPC_CH_WAREHOUSE_M", "NPC_CH_WAREHOUSE_W",
+		"NPC_WC_WAREHOUSE_M", "NPC_WC_WAREHOUSE_W", "NPC_KT_WAREHOUSE",
+	} {
+		npc := NpcDef{Codename: codename}
+		npc.Services = ResolveNpcServices(npc)
+		if got := ResolveNpcTalkFlags(npc); got != NpcTalkFlagShop|NpcTalkFlagStorage {
+			t.Errorf("%s resolves %#x, want 0x05", codename, got)
+		}
 	}
-	if flags&NpcTalkFlagAction0B != 0 {
-		t.Fatalf("resolved smith flags advertise ownerless action 0x0b: 0x%X", flags)
+}
+
+/*
+================
+TestJobGuildFollowsTheServiceSet
+================
+*/
+func TestJobGuildFollowsTheServiceSet(t *testing.T) {
+	for codename, want := range map[string]uint8{
+		"NPC_CH_DOCTOR": 1, "NPC_TD_THIEF_SELL": 2, "NPC_KT_MINISTER": 3, "NPC_EU_SMITH": 0,
+	} {
+		if got := NpcJobGuild(NpcDef{Services: NpcServicesForCodename(codename)}); got != want {
+			t.Errorf("%s job %d, want %d", codename, got, want)
+		}
 	}
 }

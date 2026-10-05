@@ -309,6 +309,13 @@ func (rt *Runtime) queueMonsterDefeat(divisionID string, gid uint32, dueAtMs int
 	if divisionID == "" || gid == 0 {
 		return
 	}
+	// 52D2B0: a structure keeps standing in its destroyed state.
+	if rt.Monsters != nil {
+		if row, ok := rt.Monsters.Get(divisionID, gid); ok && row.Ref.Structure {
+			rt.queueStructureDeath(divisionID, gid)
+			return
+		}
+	}
 	rt.pendingMonsterDefeatsMu.Lock()
 	rt.pendingMonsterDefeats = append(rt.pendingMonsterDefeats, pendingMonsterDefeat{
 		divisionID: divisionID,

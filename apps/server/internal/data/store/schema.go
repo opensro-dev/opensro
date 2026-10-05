@@ -45,7 +45,12 @@ func isVersionMismatch(err error) bool {
 // Version 15 retains item-owned companions in player/warehouse/ground rows,
 // including independent leases and summon generations. Table layout stays 5.
 // The offline upgrader preserves schema 13 and 14 records and their backups.
-const CurrentVersion = 15
+// Version 16 adds the optional world of the recorded recall and death points
+// (world.lastRecallPoint.world, world.lastDeathPoint.world): native keeps the
+// GameWorldID beside each point, and the optional fortress-return cooldown
+// (fortressReturnUntilMs). Table layout 6 adds the fortress and union tables; schema 15
+// records convert unchanged.
+const CurrentVersion = 16
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

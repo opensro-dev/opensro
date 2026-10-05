@@ -25,7 +25,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
+	"opensro.online/server/internal/game/item/stall"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
@@ -43,6 +45,10 @@ independently; the shared WorldStore protects cross-lane reads.
 type Runtime struct {
 	deps   Dependencies
 	Worlds *simulation.WorldStore
+	// Unions names a peer's guild union on its spawn row (nil: none).
+	Unions *union.Authority
+	// Stalls titles a peer's stall on its spawn row (nil: none).
+	Stalls *stall.Registry
 	// Validator is the deep-water destination gate; nil accepts everything
 	// (the reference behavior when the surface asset is unreadable).
 	Validator simulation.MovementValidator
@@ -86,6 +92,9 @@ type Runtime struct {
 	// action holds the casting instance (char+C08) the command is dropped,
 	// not queued. Nil admits.
 	AttackLocked func(divisionID, characterName string) bool
+	// MotionLocked is 4B0EA0's motion gate: a knocked-down player (motion 8)
+	// drops its ground command. Nil admits.
+	MotionLocked func(divisionID, characterName string) bool
 	// AdvanceResidentRegion commits a crossed live region before this command
 	// replaces the segment. The population owner owns the saved-return effect.
 	AdvanceResidentRegion func(divisionID, characterName string, nowMs int64)
@@ -465,6 +474,9 @@ func (rt *Runtime) admitMove(divisionID string, character *enterworld.Character,
 	}
 	if rt.AttackLocked != nil && rt.AttackLocked(divisionID, character.Name) {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "attackLocked"}
+	}
+	if rt.MotionLocked != nil && rt.MotionLocked(divisionID, character.Name) {
+		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "knockedDown"}
 	}
 	return admission, nil
 }

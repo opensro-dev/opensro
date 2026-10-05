@@ -34,7 +34,7 @@ func TestMonsterDamageRevalidatesStatusAtCharacterCommit(t *testing.T) {
 			if !visited {
 				t.Fatal("fixture never reached the damage transaction")
 			}
-			if result.Accepted || !result.TargetAlive || len(result.Frames) != 0 || len(result.TargetFrames) != 0 ||
+			if result.Accepted || !result.TargetAlive || len(result.Frames) != 0 || len(result.Private) != 0 ||
 				enterworld.CurrentHP(character) != before || rt.castTokenCounter != 0 {
 				t.Fatalf("stale attack committed damage or publication: %+v hp=%d", result, enterworld.CurrentHP(character))
 			}

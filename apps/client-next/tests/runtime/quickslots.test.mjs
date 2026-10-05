@@ -51,6 +51,11 @@ test("bag hotbar resolves current occupancy and never caches a consumed item", (
 	assert.equal( quickSlotCommand( binding, { ...state, inventoryPending: true } ), null );
 	assert.equal( quickSlotCommand( { slot: 1, kind: 0x4e, payload: 0 }, state ), null );
 });
+test("a bound Helper status action toggles the helper mark", () => {
+	assert.deepEqual( quickSlotCommand( { slot: 2, kind: 0x4a, payload: 1011 }, { inventory: [] } ), {
+		kind: "helper-mark"
+	} );
+});
 test("native emotes and pet charm use their own commands, independent of mounted attack", () => {
 	assert.deepEqual( Array.from( { length: 7 }, ( _, i ) => actionEmote( 4000 + i ) ), [ 0, 6, 1, 5, 2, 3, 4 ] );
 	const state = { inventory: [], activeCos: { gid: 72, dead: false }, target: 91 };
@@ -66,12 +71,33 @@ test("native emotes and pet charm use their own commands, independent of mounted
 		} ),
 		{ kind: "action-command", id: 5000 }
 	);
-	assert.deepEqual( quickSlotCommand( { slot: 3, kind: 0x25, payload: 2 }, state, 72 ), {
-		kind: "cos-attack",
-		gid: 91
-	} );
-	assert.equal( quickSlotCommand( { slot: 3, kind: 0x25, payload: 2 }, { ...state, activeCos: undefined } ), null );
+	// Pet commands (0x25) run through the command bar's owner in the UI.
+	assert.equal( quickSlotCommand( { slot: 3, kind: 0x25, payload: 2 }, state, 72 ), null );
 	assert.equal( quickSlotCommand( { slot: 3, kind: 0x4a, payload: 9999 }, state ), null );
+});
+/*
+================
+equippedBindingIsInert
+
+572770's kind table gives the equipment binding (0x47) no action, so a
+weapon worn from the bar is never taken off by pressing it again; the bag
+binding still equips.
+================
+*/
+test("pressing a hotbar binding to a worn item does nothing; a bag item still equips", () => {
+	const weapon = 0x2c | (6 << 7) | (1 << 11);
+	const state = {
+		inventory: [ { slot: 6, refObjId: 9, typeFlags: weapon }, { slot: 15, refObjId: 8, typeFlags: weapon } ],
+		inventorySlotCount: 45,
+		inventoryPending: false
+	};
+	assert.equal( quickSlotCommand( { slot: 1, kind: 0x47, payload: 6 }, state ), null );
+	assert.deepEqual( quickSlotCommand( { slot: 2, kind: 0x46, payload: 2 }, state ), {
+		kind: "inventory-move",
+		source: 15,
+		destination: 6,
+		quantity: 0
+	} );
 });
 test("item bindings persist slot identity, send failure preserves configuration, actions use native bytes", () => {
 	let blocked = false;

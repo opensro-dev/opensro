@@ -18,6 +18,14 @@ type GuildRecord struct {
 	NoticeContents string `json:"noticeContents"`
 	CrestParam     uint32 `json:"crestParam"`
 	Byte10         uint8  `json:"byte10"`
+	// WarCompensation is the gold guild wars owe the guild (v1.188 guild
+	// +0x8C, paid to the master at a guild manager, 5C72A0 / 5C7330).
+	WarCompensation int64 `json:"warCompensation,omitempty"`
+	// Vote is the open master release vote (guildvote.go), or nil.
+	Vote *GuildVote `json:"vote,omitempty"`
+	// Storage is the guild warehouse's gold and rows; its capacity follows
+	// the level (GuildStorageCapacity), never the record.
+	Storage *AccountStorage `json:"storage,omitempty"`
 }
 
 // GuildMemberRecord is one guild membership row plus the read-model fields
@@ -102,6 +110,15 @@ const (
 	GuildRefusalInvalidAmount
 	GuildRefusalInsufficientPoints
 	GuildRefusalNumericOverflow
+	GuildRefusalMaxLevel
+	GuildRefusalGPDeficit
+	GuildRefusalGoldDeficit
+	GuildRefusalNoCompensation
+	GuildRefusalVoteOpen
+	GuildRefusalVoteNotTime
+	GuildRefusalNoVote
+	GuildRefusalNotCandidate
+	GuildRefusalVoteInProgress
 )
 
 // Refused reports whether a command made no change.
@@ -176,4 +193,26 @@ type GuildStore interface {
 	// the donor's new DonatedGP. A non-zero refusal means no mutation and
 	// no commit.
 	DonateGuildPoints(divisionID string, characterID int64, amount uint32) (GuildDonationResult, GuildRefusal)
+	// LevelUpGuildAs is the ATOMIC level-up door: the acting leader's
+	// guild pays the next level's GP and the leader pays its gold, and the
+	// level rises by one, in ONE commit. The refusals are the last level,
+	// a GP deficit and a gold deficit.
+	LevelUpGuildAs(divisionID string, actorID int64) (GuildSnapshot, GuildRefusal)
+	// ClaimWarCompensationAs is the ATOMIC compensation door: the acting
+	// leader receives the gold the guild is owed and the debt clears, in
+	// ONE commit. It answers the amount paid.
+	ClaimWarCompensationAs(divisionID string, actorID int64) (int64, GuildRefusal)
+	// OpenMasterReleaseVoteAs opens the acting member's guild vote when its
+	// master has been gone GuildMasterAbsenceMs. seen answers a member's
+	// last-seen time (now while online, 0 when never recorded).
+	OpenMasterReleaseVoteAs(divisionID string, actorID int64, nowMs int64, seen func(characterID int64) int64) (GuildSnapshot, GuildRefusal)
+	// CastGuildBallotAs places or moves the acting member's ballot.
+	CastGuildBallotAs(divisionID string, actorID int64, voteID uint32, option uint8) (GuildVoteBallot, GuildRefusal)
+	// CloseDueGuildVotes closes every vote past its end, electing where the
+	// tally allows; the replaced master takes formerGrade and formerPerm.
+	CloseDueGuildVotes(divisionID string, nowMs int64, formerGrade uint8, formerPerm uint32) []GuildVoteOutcome
+	// TransactGuildStorageAs runs mutate on detached copies of the acting
+	// member and their guild's warehouse; only the member's inventory and
+	// gold and the warehouse commit, together, or nothing does.
+	TransactGuildStorageAs(divisionID string, actorID int64, mutate func(next *Character, storage *AccountStorage) error) (AccountStorage, GuildRefusal, error)
 }

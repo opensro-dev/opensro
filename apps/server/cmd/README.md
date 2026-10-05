@@ -85,7 +85,8 @@ fleet operations.
   differential-oracle chords;
 - `performance-ring` measures worst-case scoped monster population;
 - `spawnable-npcs` emits the data-authored, evidence-filtered NPC asset roster;
-- `spawnable-monsters` emits the evidence-filtered monster asset roster.
+- `spawnable-monsters` emits the evidence-filtered monster asset roster;
+- `fortress-structures` emits every fortress structure reference with hit points.
 
 Run a utility from the module root:
 

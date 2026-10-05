@@ -39,6 +39,40 @@ const MAX_DECODES = 2, SOUND_INPUT_BYTES = 4 << 20, SOUND_RESIDENT_BYTES = 32 <<
 const RESIDENCY_RETRY_SECONDS = 2;
 /*
 ================
+placeListener
+
+Moves and turns the context's listener. Firefox's AudioListener has no
+position/forward/up AudioParams, only the older setPosition and
+setOrientation methods; reading positionX.value there failed the whole
+runtime at load.
+================
+*/
+function placeListener(
+	target: AudioListener,
+	position: readonly [number, number, number],
+	orientation?: Pick<import("@/engine/contracts/audio").SoundListener, "forward" | "up">
+) {
+	if ( target.positionX ) {
+		target.positionX.value = position[0];
+		target.positionY.value = position[1];
+		target.positionZ.value = position[2];
+		if ( orientation ) {
+			target.forwardX.value = orientation.forward[0];
+			target.forwardY.value = orientation.forward[1];
+			target.forwardZ.value = orientation.forward[2];
+			target.upX.value = orientation.up[0];
+			target.upY.value = orientation.up[1];
+			target.upZ.value = orientation.up[2];
+		}
+		return;
+	}
+	target.setPosition( position[0], position[1], position[2] );
+	if ( orientation ) {
+		target.setOrientation( ...orientation.forward, ...orientation.up );
+	}
+}
+/*
+================
 createAudio
 ================
 */
@@ -502,17 +536,7 @@ step
 			if ( !context ) {
 				return;
 			}
-			context.listener.positionX.value = listener[0];
-			context.listener.positionY.value = listener[1];
-			context.listener.positionZ.value = listener[2];
-			if ( orientation ) {
-				context.listener.forwardX.value = orientation.forward[0];
-				context.listener.forwardY.value = orientation.forward[1];
-				context.listener.forwardZ.value = orientation.forward[2];
-				context.listener.upX.value = orientation.up[0];
-				context.listener.upY.value = orientation.up[1];
-				context.listener.upZ.value = orientation.up[2];
-			}
+			placeListener( context.listener, listener, orientation );
 			// Cue expiry cancels playback, not a bounded resource load. A cold
 			// footstep must be able to populate the cache for its next occurrence.
 			if ( job ) {

@@ -24,7 +24,12 @@ const (
 	SkillObjectGIDLimit uint32 = 0x01ffffff
 	AttackPetGIDBase    uint32 = 0x02000000
 	PickupPetGIDBase    uint32 = 0x02400000
+	// One captured quest monster per owner (capture-escort quests).
+	CapturedCOSGIDBase uint32 = 0x02800000
 )
+
+// CapturedCOSBand is the captured quest monster's COS band (TypeID 4 = 6).
+const CapturedCOSBand = 6
 
 const (
 	MaxGroundItemGIDCounter = GroundItemGIDLimit - GroundItemGIDBase

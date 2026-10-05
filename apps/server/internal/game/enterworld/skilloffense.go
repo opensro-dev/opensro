@@ -166,6 +166,12 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			if mask, ok := word(i + 1); ok && mask != 0 {
 				row.SelectorMask = mask
 			}
+		case 0x65787069: // expi
+			first, firstOK := word(i + 1)
+			second, secondOK := word(i + 2)
+			if firstOK && secondOK {
+				row.ExpIncrease = [2]uint32{first, second}
+			}
 		case 0x72657163: // reqc
 			if flags, ok := word(i + 1); ok {
 				row.Reqc = SkillReqc{Present: true, KnockedDown: flags&1 != 0, LowHP: flags&4 != 0, Flag16: flags&0x10 != 0, Dance: flags&32 != 0}
@@ -180,12 +186,14 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			}
 		case 0x7265716e: // reqn
 			row.Reqi.All = true
-		case tagEfr: // efr; kind 2 is persistent area at +0x290, kind 3 at +0x294
+		case tagEfr: // efr; kind 1 is the action area at +0x28C, kind 2 a persistent area at +0x290, kind 3 at +0x294
 			kind, kindOK := word(i + 1)
 			radius, radiusOK := word(i + 3)
 			maxTargets, maxOK := word(i + 4)
 			selectWord, selectOK := word(i + 6)
-			if kindOK && kind == 2 && radiusOK && maxOK && selectOK {
+			if area, ok := actionAreaAt(fields, i); kindOK && kind == 1 && ok {
+				row.ActionArea = area
+			} else if kindOK && kind == 2 && radiusOK && maxOK && selectOK {
 				row.Aura.Present = true
 				row.Aura.Radius = radius
 				row.Aura.MaxTargets = maxTargets
@@ -314,6 +322,45 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 
 /*
 ==================
+actionAreaAt
+
+The efr kind-1 block whose tag sits at fields[i]: {kind 1, shape, radius,
+max targets, reduction percent, select}. Shapes 1-4 and 6 are the native
+selectors (TargetSelection_DispatchByShape); 10, 24 and 26 the shipped
+select words. Native shape 6 bounds its initial spatial search to 450
+units, so a larger authored radius needs a search volume no row has.
+==================
+*/
+func actionAreaAt(fields []string, i int) (SkillOffensiveArea, bool) {
+	if i+6 >= len(fields) {
+		return SkillOffensiveArea{}, false
+	}
+	var area [6]int64
+	for j := range area {
+		value, valid := textdataInt(fields[i+j+1])
+		if !valid {
+			return SkillOffensiveArea{}, false
+		}
+		area[j] = value
+	}
+	validShape := area[1] >= 1 && area[1] <= 4 || area[1] == 6
+	validSelect := area[5] == 10 || area[5] == 24 || area[5] == 26
+	if area[0] != 1 || !validShape || area[2] <= 0 || area[2] > 0xffff ||
+		area[3] <= 0 || area[3] > 255 || area[4] < 0 || area[4] > 100 || !validSelect ||
+		area[1] == 6 && area[2] > 450 {
+		return SkillOffensiveArea{}, false
+	}
+	return SkillOffensiveArea{
+		Radius:           uint32(area[2]),
+		MaxTargets:       uint8(area[3]),
+		ReductionPercent: uint8(area[4]),
+		Shape:            uint8(area[1]),
+		Select:           uint8(area[5]),
+	}, true
+}
+
+/*
+==================
 decodeSkillOffense
 
 Production and coverage reports share this gate. A partial parameter parse
@@ -363,6 +410,16 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		// One fixed-damage record (skillfixeddamage.go), released by the
 		// ordinary single-target offensive owner.
 		row.FixedDamage = fixed
+		row.Attack.ImpactCount = 1
+		row.OffensiveStagePinned = true
+		row.DirectOffensePinned = true
+		return ""
+	}
+	if steal, area, ok := compileSkillLifeSteal(fields, *row); ok {
+		// One life-steal record per victim (skilllifesteal.go), released by
+		// the ordinary offensive owner, single target or area.
+		row.LifeSteal = steal
+		row.OffensiveArea = area
 		row.Attack.ImpactCount = 1
 		row.OffensiveStagePinned = true
 		row.DirectOffensePinned = true
@@ -629,32 +686,11 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			if i+arity >= len(fields) || row.Attack.ImpactCount == 0 {
 				return "offense:invalid-envelope-or-arguments"
 			}
-			var area [6]int64
-			for j := range area {
-				value, valid := textdataInt(fields[i+j+1])
-				if !valid {
-					return "offense:invalid-envelope-or-arguments"
-				}
-				area[j] = value
-			}
-			validShape := area[1] >= 1 && area[1] <= 4 || area[1] == 6
-			validSelect := area[5] == 10 || area[5] == 24 || area[5] == 26
-			if area[0] != 1 || !validShape || area[2] <= 0 || area[2] > 0xffff ||
-				area[3] <= 0 || area[3] > 255 || area[4] < 0 || area[4] > 100 || !validSelect {
+			area, valid := actionAreaAt(fields, i)
+			if !valid {
 				return "offense:invalid-envelope-or-arguments"
 			}
-			// Native shape 6 bounds its initial spatial search to 450 units.
-			// Larger authored radii need that separate search-volume contract.
-			if area[1] == 6 && area[2] > 450 {
-				return "offense:invalid-envelope-or-arguments"
-			}
-			row.OffensiveArea = SkillOffensiveArea{
-				Radius:           uint32(area[2]),
-				MaxTargets:       uint8(area[3]),
-				ReductionPercent: uint8(area[4]),
-				Shape:            uint8(area[1]),
-				Select:           uint8(area[5]),
-			}
+			row.OffensiveArea = area
 		default:
 			return "offense:instruction:" + strconv.FormatInt(tag, 16)
 		}

@@ -51,6 +51,11 @@ type Stats struct {
 	// StatusResistance is the learned status-resistance buckets real fills,
 	// indexed like abnormal.Source.Resist (59DE50).
 	StatusResistance [17]abnormal.Resistance
+	// DamageReturn is the enabled learned dmgr passive (+0x204) and
+	// DamageReturnSkill its row; the runtime falls back to a live buff's
+	// (+0x208) when it is absent.
+	DamageReturn      enterworld.SkillDamageReturn
+	DamageReturnSkill uint32
 	// graph is the player's evaluated keeper; nil for monster snapshots. It is
 	// built once per snapshot and never mutated afterwards.
 	graph    *paramkeeper.Graph
@@ -325,6 +330,7 @@ func PlayerStatsWithModifiers(
 	}
 	out.SkillParameters = power
 	out.StatusResistance = learnedStatusResistance(character, skills, catalogs.Items)
+	out.DamageReturn, out.DamageReturnSkill = learnedDamageReturn(character, skills, catalogs.Items)
 	writes = append(writes, passives...)
 	// Source identity belongs to an application, not a parameter number. A
 	// modifier must not alias even a different parameter of a static owner.

@@ -242,8 +242,7 @@ type PlayerSpawnRow struct {
 	// G{prefix}_{guildId}_{crestParamA}.crb (@0x833e42) and
 	// A{prefix}_{crestParamB}_{crestParamC}.crb (@0x833e75). B/C are the
 	// alliance crest plane (the client globals data_ced398/data_ced394 on
-	// the 0x32C4 path, default 0); the gateway has no alliance state, so
-	// callers leave them 0.
+	// the 0x32C4 path, default 0): the guild's union id and emblem.
 	GuildID        uint32
 	GuildGrantName string
 	CrestParamA    uint32
@@ -258,11 +257,17 @@ type PlayerSpawnRow struct {
 	// 4 FortressWarAdministrator, 8 ProductionAdministrator,
 	// 16 TrainingAdministrator, 32 MilitaryEngineer.
 	FortSiegeAuthority uint8
+	// StallTitle is the title of the stall the player keeps (empty: none);
+	// it sets the title mode to 4 and rides after the guild sub-block.
+	StallTitle string
 	// WithAppearTail selects the 0x30D7 single-object form, which appends
 	// the appear byte the drop-in presentation reads (vt+0x68 sub_851590).
 	WithAppearTail bool
 	AppearFlag     uint8
 }
+
+// spawnTitleModeStall is +0x461's stall value (86A26D, 858310).
+const spawnTitleModeStall uint8 = 4
 
 // weaponHoldType computes the hold-type code the client's vt+0xac write
 // stores at +0x4f5 after the equip loop: sub_86afb0 @0x0086b08c reads the
@@ -413,9 +418,14 @@ func (p PlayerSpawnRow) Encode() []byte {
 	w.U8(0)
 
 	// Non-local block (@0x0086a067..0x0086a317), always on a peer row:
-	// +0x784, title mode (0 = no title sub-block @0x0086a26d), +0x4f6.
+	// +0x784, title mode (+0x461: 4 = a stall, whose title block follows
+	// the guild sub-block @0x0086a26d), +0x4f6.
 	w.U8(0)
-	w.U8(0)
+	if p.StallTitle != "" {
+		w.U8(spawnTitleModeStall)
+	} else {
+		w.U8(0)
+	}
 	w.U8(0)
 
 	// @0x0086a0cc: guild name -> +0x7a8. Natively +0x7bc is this embedded
@@ -434,6 +444,11 @@ func (p PlayerSpawnRow) Encode() []byte {
 		w.U32(p.CrestParamB)            // var_84 -> BindGuild crestParamB
 		w.U32(p.CrestParamC)            // var_8c -> BindGuild crestParamC
 		w.U8(p.FortSiegeAuthority)      // team byte -> sub_869940 +0x7e0 (0 clears +0x7c4)
+	}
+
+	// @0x0086a26d: a stall's [wstr title][u32 decoration] -> +0x75C/+0x754.
+	if p.StallTitle != "" {
+		w.WStr(p.StallTitle).U32(0)
 	}
 
 	// @0x0086a2ff: action-progress seconds -> +0x780 (sub_8686a0).
@@ -596,9 +611,14 @@ func DecodePlayerSpawnRowWithSkills(payload []byte, tidByRef map[uint32]uint16, 
 		return out, err
 	}
 	// Ride state, +0x781, then the non-local +0x784/title/+0x4f6.
+	var titleMode uint8
 	for i := 0; i < 5; i++ {
-		if _, err = r.U8(); err != nil {
+		value, err := r.U8()
+		if err != nil {
 			return out, err
+		}
+		if i == 3 {
+			titleMode = value
 		}
 	}
 	if out.GuildName, err = readString(); err != nil { // guild name
@@ -621,6 +641,14 @@ func DecodePlayerSpawnRowWithSkills(payload []byte, tidByRef map[uint32]uint16, 
 			return out, err
 		}
 		if out.FortSiegeAuthority, err = r.U8(); err != nil { // team byte -> +0x7e0
+			return out, err
+		}
+	}
+	if titleMode == spawnTitleModeStall {
+		if out.StallTitle, err = r.WStr(); err != nil {
+			return out, err
+		}
+		if _, err = r.U32(); err != nil { // decoration
 			return out, err
 		}
 	}

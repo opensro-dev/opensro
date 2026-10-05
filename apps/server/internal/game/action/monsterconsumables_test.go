@@ -41,7 +41,8 @@ func TestUniqueFatalCommitsItsAssignedTableOnlyOnce(t *testing.T) {
 	rt.Monsters.AdvancePopulation(rt.Monsters.CurrentTimeMillis())
 	target = rt.Monsters.InstancesInRegions(testDivision, []uint16{target.Spawn.RegionID})[0]
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
-	for _, chosen := range loot.AssignedDrops(ref.Codename, 60, func() (uint32, error) { return 0, nil }) {
+	assigned := loot.AssignedDrops(ref.Codename, 60, func() (uint32, error) { return 0, nil })
+	for _, chosen := range assigned {
 		item, ok := items.ItemRefByCodename(chosen.Codename)
 		if !ok {
 			t.Fatal("missing unique item")
@@ -51,7 +52,8 @@ func TestUniqueFatalCommitsItsAssignedTableOnlyOnce(t *testing.T) {
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	r := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
 	drops := rt.Ground.All(testDivision)
-	if len(drops) != 3 {
+	// Her vSRO rewards and her characterdata materials, each exactly once.
+	if len(drops) != len(assigned) || len(assigned) != 8 {
 		t.Fatalf("unique assigned drops: %+v frames=%v", drops, opcodesOf(r.Frames))
 	}
 	refsSeen := false
@@ -67,7 +69,7 @@ func TestUniqueFatalCommitsItsAssignedTableOnlyOnce(t *testing.T) {
 			spawns++
 		}
 	}
-	if spawns != 3 {
+	if spawns != len(assigned) {
 		t.Fatal("unique assigned spawn count")
 	}
 	for _, drop := range drops {
@@ -76,7 +78,7 @@ func TestUniqueFatalCommitsItsAssignedTableOnlyOnce(t *testing.T) {
 		}
 	}
 	rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
-	if rt.Ground.Count(testDivision) != 3 {
+	if rt.Ground.Count(testDivision) != len(assigned) {
 		t.Fatal("replayed unique fatal changed loot")
 	}
 }
@@ -112,7 +114,7 @@ func TestAlchemyFatalPublishesReferenceSpawnAndPickup(t *testing.T) {
 	}
 	clock.Advance(r.Pending.Eta + time.Millisecond)
 	r = rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: row.Gid}.Encode())
-	assertOpcodes(t, r.Frames, wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn)
+	assertOpcodes(t, r.Frames, wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpObjectDespawn, wire.OpActionState)
 	count := 0
 	for _, item := range c.MissionInventory {
 		if item.RefObjID == ref.RefObjID {

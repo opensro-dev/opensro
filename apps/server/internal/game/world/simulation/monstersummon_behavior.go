@@ -26,6 +26,26 @@ func (ops *MonsterMoverOps) summonedTarget(divisionID string, instance monster.I
 	if !ops.acquisitionReady(divisionID, instance, nowMs) {
 		return playerPose{}, false
 	}
+	target, found := ops.summonedCandidate(divisionID, instance, mover, players, nowMs)
+	if !found {
+		return playerPose{}, false
+	}
+	// 547F06: SetCombatTarget(candidate, 0) can refuse a full squad, and the
+	// state then takes no target this pass.
+	if !instance.AcquisitionForced() && !ops.Monsters.squadAdmits(divisionID, instance.Gid, target.Gid) {
+		return playerPose{}, false
+	}
+	return target, true
+}
+
+/*
+==================
+summonedCandidate
+
+The one candidate 547C70 offers SetCombatTarget.
+==================
+*/
+func (ops *MonsterMoverOps) summonedCandidate(divisionID string, instance monster.Instance, mover monster.MoverState, players []playerPose, nowMs int64) (playerPose, bool) {
 	if target, ok := nearestEligiblePlayer(instance, mover.LivePoseAt(nowMs, nil), players, instance.SummonSightRange); instance.SummonSightRange > 0 && ok {
 		return target, true
 	}
@@ -133,7 +153,7 @@ func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance mons
 	}
 	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
 	target := plan.leader.LivePoseAt(nowMs, ops.TerrainHeight)
-	motion := monster.NativeFollowMotion(live, target, instance.Ref.BodyRadius, plan.leaderRadius,
+	motion := monster.NativeFollowMotion(live, target, instance.BodyRadius(), plan.leaderRadius,
 		mover.InFlight(nowMs), mover.MovementGoal(), func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	if motion.Satisfied {
 		// Event 36 -> vA0 ->5599A0 enters IDLE without stopping movement.

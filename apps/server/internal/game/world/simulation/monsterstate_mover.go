@@ -100,7 +100,7 @@ func (s *MonsterState) ArmRetaliation(divisionID string, gid, attackerGID uint32
 
 	state := s.populationForObject(divisionID, gid)
 	instance, ok := state.instances.lookup(gid)
-	if !ok || instance.CurrentHP == 0 {
+	if !ok || instance.CurrentHP == 0 || instance.Ref.Structure {
 		return false
 	}
 	if state.movers == nil {

@@ -37,6 +37,35 @@ func DefaultMasteries(raceKey string) []CharacterMastery {
 	return masteries
 }
 
+/*
+================
+TopMasteries
+
+The two trained masteries a party shows for a character. The native mastery
+tree is ID ordered and 5A87E0 sorts it by descending trained level without
+moving equal levels (5A1890 picks the first two), so ties keep the lower ID.
+Untrained masteries never qualify; a missing slot is 0. The persisted slice
+is neither sorted nor mutated.
+================
+*/
+func TopMasteries(masteries []CharacterMastery) (primary, secondary uint32) {
+	var first, second CharacterMastery
+	better := func(a, b CharacterMastery) bool {
+		return a.Level > b.Level || a.Level == b.Level && a.ID < b.ID
+	}
+	for _, mastery := range masteries {
+		if mastery.Level <= 0 {
+			continue
+		}
+		if better(mastery, first) {
+			second, first = first, mastery
+		} else if better(mastery, second) {
+			second = mastery
+		}
+	}
+	return first.ID, second.ID
+}
+
 // SkillLearned reports whether the exact skill is learned.
 func SkillLearned(character *Character, skillID uint32) bool {
 	if character == nil {

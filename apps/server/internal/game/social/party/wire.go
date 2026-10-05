@@ -168,15 +168,19 @@ const (
 
 // Masked member-row bits (sub_75db30's MemberInfoFlag). The server
 // composes the full-info subset: id + name/model + level + hp/mp status
-// + region/position. Bits 0x40 (secondary/guild name), 0x80 (+0x41 byte)
-// and 0x08 (+0x50/+0x54 pair) stay unset - no guild/war state exists to
-// fill them, and the client's ctor defaults are the honest empty.
+// + region/position. Bits 0x40 (secondary/guild name) and 0x80 (+0x41 byte)
+// stay unset - no guild/war state exists to fill them, and the client's
+// ctor defaults are the honest empty. Bit 0x08 (+0x50/+0x54 pair) is the
+// member's primary and secondary mastery, inferred from the read order
+// 75DB30 shares with the 75BF join notify; it rides only while
+// SRO_PARTY_MASTERIES is on (see masteries.go).
 const (
 	MemberMaskID       uint8 = 0x10
 	MemberMaskName     uint8 = 0x01
 	MemberMaskLevel    uint8 = 0x02
 	MemberMaskStatus   uint8 = 0x04
 	MemberMaskPosition uint8 = 0x20
+	MemberMaskMastery  uint8 = 0x08
 	// MemberMaskFull is the composed subset above.
 	MemberMaskFull = MemberMaskID | MemberMaskName | MemberMaskLevel | MemberMaskStatus | MemberMaskPosition
 )
@@ -276,6 +280,10 @@ type MemberRow struct {
 	PosY          int16
 	PosZ          int16
 	War           uint32
+	// Masteries says the primary/secondary pair rides the row (bit 0x08).
+	Masteries        bool
+	PrimaryMastery   uint32
+	SecondaryMastery uint32
 }
 
 // EncodeMaskedMemberRow renders one standalone masked member-info
@@ -292,9 +300,14 @@ func EncodeMaskedMemberRow(row MemberRow) []byte {
 
 // appendMemberRow writes the masked row in sub_75db30's read order:
 // mask, bit 0x10 id, bit 0x01 name + model dword, bit 0x02 level, bit
-// 0x04 status nibbles, bit 0x20 region + x/y/z int16 triplet + war.
+// 0x04 status nibbles, bit 0x20 region + x/y/z int16 triplet + war, and
+// last bit 0x08's mastery pair when the row carries it.
 func appendMemberRow(writer *wire.Writer, row MemberRow) {
-	writer.U8(MemberMaskFull)
+	mask := MemberMaskFull
+	if row.Masteries {
+		mask |= MemberMaskMastery
+	}
+	writer.U8(mask)
 	writer.U32(row.MemberID)
 	writeSizedString(writer, row.Name)
 	writer.U32(row.ModelRefID)
@@ -305,6 +318,10 @@ func appendMemberRow(writer *wire.Writer, row MemberRow) {
 	writer.U16(uint16(row.PosY))
 	writer.U16(uint16(row.PosZ))
 	writer.U32(row.War)
+	if row.Masteries {
+		writer.U32(row.PrimaryMastery)
+		writer.U32(row.SecondaryMastery)
+	}
 }
 
 // EncodeCreatePartyAckB0D5 renders the 0xB0D5 result-1 body: u8 1, u32

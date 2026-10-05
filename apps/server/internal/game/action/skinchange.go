@@ -27,8 +27,10 @@ so a nibble above 4 is refused here.
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -112,7 +114,7 @@ func (rt *Runtime) useSkinChangeScroll(use skillItemUse, c *enterworld.Character
 		return false
 	}
 	key := simulation.WorldKey(use.division, c.Name)
-	here := rt.liveSpawn(key, c, use.nowMs)
+	here := travelPoint{spawn: rt.liveSpawn(key, c, use.nowMs), world: instance.ID(domain.CharacterWorldInstance(c))}
 	if !rt.startReturnCast(returnCast{division: use.division, character: c, row: use.row, slot: use.request.Slot,
 		typeWord: use.request.TypeWord, duration: skinReloadMs, destination: &here, now: use.nowMs,
 		mode: skinTeleportMode}, result) {

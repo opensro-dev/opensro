@@ -8,6 +8,7 @@ import "opensro.online/server/internal/domain"
 type LetterRecord = domain.LetterRecord
 type LetterStore = domain.LetterStore
 type GuildRecord = domain.GuildRecord
+type GuildVote = domain.GuildVote
 type GuildMemberRecord = domain.GuildMemberRecord
 type GuildAuthorization = domain.GuildAuthorization
 type GuildSnapshot = domain.GuildSnapshot
@@ -15,6 +16,8 @@ type GuildRemovalResult = domain.GuildRemovalResult
 type GuildDonationResult = domain.GuildDonationResult
 type GuildRefusal = domain.GuildRefusal
 type GuildStore = domain.GuildStore
+type FortressStore = domain.FortressStore
+type AllianceStore = domain.AllianceStore
 
 const (
 	GuildRefusalNone                   = domain.GuildRefusalNone
@@ -36,6 +39,15 @@ const (
 	GuildRefusalInvalidAmount          = domain.GuildRefusalInvalidAmount
 	GuildRefusalInsufficientPoints     = domain.GuildRefusalInsufficientPoints
 	GuildRefusalNumericOverflow        = domain.GuildRefusalNumericOverflow
+	GuildRefusalMaxLevel               = domain.GuildRefusalMaxLevel
+	GuildRefusalGPDeficit              = domain.GuildRefusalGPDeficit
+	GuildRefusalGoldDeficit            = domain.GuildRefusalGoldDeficit
+	GuildRefusalNoCompensation         = domain.GuildRefusalNoCompensation
+	GuildRefusalVoteOpen               = domain.GuildRefusalVoteOpen
+	GuildRefusalVoteNotTime            = domain.GuildRefusalVoteNotTime
+	GuildRefusalNoVote                 = domain.GuildRefusalNoVote
+	GuildRefusalNotCandidate           = domain.GuildRefusalNotCandidate
+	GuildRefusalVoteInProgress         = domain.GuildRefusalVoteInProgress
 )
 
 type TrainingCampRecord = domain.TrainingCampRecord

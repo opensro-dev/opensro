@@ -108,6 +108,44 @@ test("live speed changes retime local and peer travel from the current position 
 	assert.equal( remote.step( 2500 )[0].x, 235 );
 });
 
+test("a zero speed channel holds a mover in place and a later speed resumes it", async () => {
+	const { decodeMovementSpeeds } = await import(
+		sourceFileUrl( path.join( root, "src/engine/foundation/gameplay/native-movement.ts" ) ).href
+	);
+	// A slowed stationary monster (frostbite halves 0) publishes 0x376F {gid, 0, 0}.
+	const channels = Buffer.alloc( 12 );
+	channels.writeUInt32LE( 7 );
+	assert.deepEqual( decodeMovementSpeeds( channels ), { gid: 7, walkSpeed: 0, runSpeed: 0 } );
+	channels.writeFloatLE( -1, 4 );
+	assert.throws( () => decodeMovementSpeeds( channels ), /Invalid movement speed channels/ );
+	channels.writeFloatLE( Number.NaN, 4 );
+	assert.throws( () => decodeMovementSpeeds( channels ), /Invalid movement speed channels/ );
+	const packet = Buffer.alloc( 14 );
+	packet.writeUInt32LE( 7 );
+	packet[4] = 1;
+	packet.writeUInt16LE( pose.regionId, 5 );
+	packet.writeInt16LE( 260, 7 );
+	packet.writeInt16LE( 10, 9 );
+	packet.writeInt16LE( 100, 11 );
+	const remote = createEntityMotion(),
+		entity = { ...pose, gid: 7, heading: 0, movementMode: 3, walkSpeed: 20, runSpeed: 50 },
+		stopped = { ...entity, walkSpeed: 0, runSpeed: 0 };
+	remote.receive( packet, entity, 0 );
+	assert.equal( remote.speeds( entity, stopped, 1000 ).x, 110 );
+	assert.equal( remote.step( 5000 )[0].x, 110 );
+	assert.equal( remote.speeds( stopped, entity, 5000 ).x, 110 );
+	assert.equal( remote.step( 6000 )[0].x, 160 );
+	const local = createMovement( () => {} );
+	local.seed( pose );
+	local.native( packet, 0, 7 );
+	local.speeds( 0, 0, 1000 );
+	local.step( 5000 );
+	assert.equal( local.state().pose.x, 110 );
+	local.speeds( 20, 50, 5000 );
+	local.step( 6000 );
+	assert.equal( local.state().pose.x, 160 );
+});
+
 test("live speed changes preserve combat displacement timing", () => {
 	const local = createMovement( () => {} );
 	local.seed( pose );
@@ -689,24 +727,49 @@ test("local native motion shares stop and gait transitions without replaying pen
 	assert.equal( sent.length, 0 );
 	game.dispose();
 });
-test("mode changes preserve server arrival times and outstanding receipt identities", () => {
+test("a gait change re-times a server-led walk from its live point and keeps receipt identities", () => {
 	const m = createMovement( () => {} );
 	m.seed( pose );
+	m.speeds( 16, 50, 0 );
 	m.request( { ...pose, x: 80 }, 0 );
+	// The receipt installs 60 -> 80 over the server's 1000 ms from t=100.
 	m.receive( receipt( 1, { ...pose, x: 80 } ), 100 );
+	m.step( 300 );
+	assert.equal( m.state().pose.x, 64 );
+	// 858450 switches the speed channel; the rest of the path walks at 16/s,
+	// as the server's applyMotionCode re-times its own segment.
 	m.mode( 2, 300 );
 	m.step( 600 );
-	assert.equal( m.state().pose.x, 70, "server segment retains its arrival time" );
-	m.request( { ...pose, x: 90 }, 601 );
-	m.mode( 0, 700 );
+	assert.ok( Math.abs( m.state().pose.x - 68.8 ) < 1e-6, "walk speed from the live point" );
+	m.step( 1300 );
+	assert.equal( m.state().pose.x, 80, "arrives at the re-timed end, not the receipt's" );
+	m.request( { ...pose, x: 90 }, 1301 );
+	m.mode( 0, 1400 );
 	const stopped = m.state().pose.x;
-	m.step( 800 );
+	m.step( 1500 );
 	assert.equal( m.state().pose.x, stopped );
 	assert.equal( m.state().pendingMoves, 1 );
-	m.receive( receipt( 2, { ...pose, x: 90 } ), 900 );
-	m.step( 1900 );
+	m.receive( receipt( 2, { ...pose, x: 90 } ), 1600 );
+	m.step( 2600 );
 	assert.equal( m.state().pose.x, 90 );
 	assert.equal( m.state().pendingMoves, 0 );
+});
+
+test("a gait change leaves a displacement's authored timing alone", () => {
+	const m = createMovement( () => {} );
+	m.seed( pose );
+	m.speeds( 16, 50, 0 );
+	// Kind 5 travels at 250/s: 10 units land at 40 ms whatever the gait.
+	const ends = m.displace( {
+		gid: 7,
+		token: 1,
+		kind: 5,
+		destination: { regionId: pose.regionId, x: 70, y: pose.y, z: pose.z }
+	}, 0 );
+	assert.equal( ends, 40 );
+	m.mode( 2, 10 );
+	m.step( 40 );
+	assert.equal( m.state().pose.x, 70, "the knockback lands when it was authored to" );
 });
 
 test("frameless selections never block a following NPC selection", async () => {

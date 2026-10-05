@@ -53,6 +53,62 @@ export function placement( region: number, origin: number, x: number, y: number,
 }
 /*
 ================
+nativeModelOffset
+
+Carry a native model-space vector (a skilleffectset start/target offset,
+8D6880) into world space through an imported actor's model matrix, whose
+first three columns are its axes. The exporter mirrors native Z and the
+loader adds the Sx(-1) import root, so imported model space is Ry(PI) of
+native space: the native vector (x, y, z) is (-x, y, -z) on those axes.
+Columns that carry the actor's scale scale the vector too, as 8D6880
+scales it by the character's +0xC0 height scale.
+================
+*/
+export function nativeModelOffset( model: ArrayLike<number>, offset: readonly [number, number, number] ) {
+	const [x, y, z] = offset;
+	return [
+		-model[0]! * x + model[4]! * y - model[8]! * z,
+		-model[1]! * x + model[5]! * y - model[9]! * z,
+		-model[2]! * x + model[6]! * y - model[10]! * z
+	] as const;
+}
+/*
+================
+importedModelBasis
+
+The world basis an imported mesh needs to stand in a native world basis:
+imported model space is Ry(PI) of native space (exportGlb mirrors Z, the
+loader's __gltf_left_handed__ root adds Sx), so its first and third columns
+turn over. Columns are stored three floats each (CharacterActor effectBasis).
+================
+*/
+export function importedModelBasis( basis: readonly number[] ) {
+	return [
+		-basis[0]!,
+		-basis[1]!,
+		-basis[2]!,
+		basis[3]!,
+		basis[4]!,
+		basis[5]!,
+		-basis[6]!,
+		-basis[7]!,
+		-basis[8]!
+	] as const;
+}
+/*
+================
+nativeRootOffset
+
+nativeModelOffset through a character's own placement (pose yaw and scale)
+when no rendered matrix exists yet: the same root rule from the entity pose.
+================
+*/
+export function nativeRootOffset( yaw: Radians, scale: number, offset: readonly [number, number, number] ) {
+	const c = Math.cos( yaw ) * scale, s = Math.sin( yaw ) * scale;
+	return nativeModelOffset( [ c, 0, -s, 0, 0, scale, 0, 0, s, 0, c ], offset );
+}
+/*
+================
 mapPlacement
 
 MapLoader 0x441484 -> 0x451a10: m[2]=sin(yaw), m[8]=-sin(yaw). This maps

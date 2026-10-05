@@ -59,22 +59,41 @@ func (rt *Runtime) HandleItemMove(
 	// interact latch is one slot).
 	rt.Pending.Clear(grounditem.PendingKey(divisionID, character.Name))
 
+	// A stall's owner keeps its bag as the stall shows it (stall.go).
+	if rt.Stalls.Keeping(divisionID, character.Name) {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	// The bag is locked to the exchange while one is open (exchange.go).
+	if rt.Exchanges.Trading(divisionID, character.Name) {
+		switch request.MovementType {
+		case wire.MoveTypeExchangePut, wire.MoveTypeExchangeTake, wire.MoveTypeExchangeGold:
+			return rt.applyExchangeMove(divisionID, character, request)
+		}
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+
 	switch request.MovementType {
 	case wire.MoveTypeAvatarToPlayer, wire.MoveTypePlayerToAvatar:
 		return rt.applyAvatarTransfer(character, request)
 
 	case wire.MoveTypeCosPickup, wire.MoveTypeCosDrop:
-		return rt.applyCosGround(divisionID, character, request)
+		result := rt.applyCosGround(divisionID, character, request)
+		rt.registerCaravanForMove(divisionID, character, request.MovementType)
+		return result
 
 	case wire.MoveTypeCosToPlayer, wire.MoveTypePlayerToCos:
-		return rt.applyCosTransfer(character, request)
+		result := rt.applyCosTransfer(character, request)
+		rt.registerCaravanForMove(divisionID, character, request.MovementType)
+		return result
 
 	case wire.MoveTypeCosInventory:
 		return rt.applyCosContainerMove(character, request)
 
 	case wire.MoveTypeShopBuy, wire.MoveTypeShopSell,
 		wire.MoveTypeCosShopBuy, wire.MoveTypeCosShopSell:
-		return rt.applyCommerce(divisionID, character, request)
+		result := rt.applyCommerce(divisionID, character, request)
+		rt.registerCaravanForMove(divisionID, character, request.MovementType)
+		return result
 
 	case wire.MoveTypeInventory:
 		if jobSuitMove(character, request) {
@@ -91,6 +110,10 @@ func (rt *Runtime) HandleItemMove(
 	case wire.MoveTypeStorage, wire.MoveTypeStorageDeposit, wire.MoveTypeStorageWithdraw,
 		wire.MoveTypeStorageGoldWithdraw, wire.MoveTypeStorageGoldDeposit:
 		return rt.applyStorageMove(divisionID, character, request)
+
+	case wire.MoveTypeGuildStorage, wire.MoveTypeGuildStorageDeposit, wire.MoveTypeGuildStorageWithdraw,
+		wire.MoveTypeGuildStorageGoldDeposit, wire.MoveTypeGuildStorageGoldWithdraw:
+		return rt.applyGuildStorageMove(divisionID, character, request)
 
 	default:
 		return failureResult(wire.ErrCodeInvalidRequest)
@@ -218,6 +241,10 @@ func (rt *Runtime) applyInventoryMove(
 					),
 				},
 			}, visuals...),
+			// The spawn row is the only other carrier of worn equipment, so a
+			// viewer that already sees this character needs the same pushes:
+			// 777800/777980 resolve any gid, not just the local player's.
+			Broadcast: visuals,
 		}
 
 		if statFrame != nil {

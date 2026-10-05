@@ -49,8 +49,8 @@ function context( record, reference, extra = {} ) {
 	return { record, reference, ownerDead: false, mounted: false, ...extra };
 }
 
-test("830EC0 maps bands to record classes; quest companions get no HUD", () => {
-	assert.deepEqual( [ 1, 2, 3, 4, 5, 6 ].map( cos.cosClass ), [ 0, 1, 3, 2, 4, null ] );
+test("830EC0 maps bands to record classes; quest companions retain default class zero", () => {
+	assert.deepEqual( [ 1, 2, 3, 4, 5, 6 ].map( cos.cosClass ), [ 0, 1, 3, 2, 4, 0 ] );
 });
 
 test("6A3DF0 builds each class's command row in native order", () => {

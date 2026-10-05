@@ -55,10 +55,10 @@ func TestPreparingMonsterPublishesBeforeUnlockWithoutReplay(t *testing.T) {
 			rt.Monsters.ApplyDamage(testDivision, m.Gid, m.CurrentHP)
 		}
 		calls := 0
-		rt.PushMonsterCast = func(division string, source uint32, target string, result simulation.MonsterAttackResult) {
+		rt.PushMonsterCast = func(division string, source uint32, result simulation.MonsterAttackResult) {
 			calls++
 			assertMonsterOperationHeld(t, rt)
-			if division != testDivision || source != m.Gid || target != c.Name || len(result.Frames) == 0 {
+			if division != testDivision || source != m.Gid || len(result.Frames) == 0 {
 				t.Fatal("wrong publication route")
 			}
 			if dead {

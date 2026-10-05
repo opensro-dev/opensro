@@ -11,6 +11,20 @@ forwards the window's open, toggle, Default and OK/Apply moments.
 ===========================================================================
 */
 
+// The Option window's replay switch: ui.ts draws it, and the report window
+// names it when the replay is off.
+export const BUG_REPLAY_LABEL = "Record bug replay";
+
+/*
+================
+ReplayState
+
+What the report window says about the replay: switched off, starting,
+restarting after the recorder stopped, or impossible in this browser.
+================
+*/
+export type ReplayState = "off" | "starting" | "restarting" | "unsupported";
+
 /*
 ================
 BugReportField

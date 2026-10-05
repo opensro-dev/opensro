@@ -4,8 +4,11 @@
 repair.ts - equipment repair at a smith: what it costs and what it sends
 
 The shop window's Repair button arms a repair cursor (CIFStore_OnRepairButton
-5B1C00, cursor 0x96) and clicking an item sends 0x746F [u32 npcGid][u8 1]
-[u8 slot]; Repair All (CIFStore_OnRepairAllButton 5B2B10) totals the cost of
+5B1C00, cursor 0x96; a second press puts it away) and every item clicked
+while it is armed is judged by CIFItemSlot_DispatchActivation (567290): a
+damaged item sends 0x746F [u32 npcGid][u8 1][u8 slot], an item whose magic
+options forbid repair raises a local 0xB46F [2][0x11], and anything else is
+ignored; the cursor stays armed throughout. Repair All (CIFStore_OnRepairAllButton 5B2B10) totals the cost of
 every equipped and carried item, says there is nothing to repair when the
 total is zero, and after its confirmation sends 0x746F [u32 npcGid][u8 2]
 (CGInterface_SendNpcRepairRequest746F_758C 693860). 0xB46F answers [1] or
@@ -23,6 +26,8 @@ export const REPAIR_REQUEST_OPCODE = 0x746f;
 export const REPAIR_RESPONSE_OPCODE = 0xb46f;
 export const REPAIR_ONE_SLOT = 1;
 export const REPAIR_ALL_SLOTS = 2;
+// 567290 dispatches [2][0x11] to its own 0xB46F handler: options forbid repair.
+export const REPAIR_REFUSED_BY_OPTIONS = 0x11;
 // CSOItem_CalculateRepairCost clamps the per-point price here.
 // The float32 9.99999968e+37f at C461B0.
 const MAX_REPAIR_POINT_PRICE = 9.999999680285692e37;
@@ -40,6 +45,44 @@ export function repairableItem( item: InventoryItem ): boolean {
 	if ( (word & 2) !== 0 || (word & 0x1c) !== 0x0c || (word & 0x60) !== 0x20 ) return false;
 	if ( family === 5 || family === 12 || family === 7 ) return false;
 	return (item.tooltip?.fields.canRepair ?? 0) !== 0;
+}
+
+/*
+================
+repairOptionsAllow
+
+CSOItem_MagicOptionsAllowRepair (78B4A0), CGItemEquip_CanRepair's option
+half: only equipment is judged; a "-" option named MATTR_NOT_REPARABLE, or
+MATTR_REPAIR with one charge or fewer left, forbids repair.
+================
+*/
+export function repairOptionsAllow( item: InventoryItem ): boolean {
+	const word = item.typeFlags;
+	if ( (word & 2) !== 0 || (word & 0x1c) !== 0x0c || (word & 0x60) !== 0x20 ) return true;
+	const references = item.magicReferences ?? [];
+	for ( const encoded of item.magic ?? [] ) {
+		const bits = BigInt( encoded ), ref = references.find( r => r.paramId === Number( bits & 65535n ) );
+		if ( !ref ) continue;
+		if ( ref.paramName.includes( "-" ) && ref.optionName === "MATTR_NOT_REPARABLE" ) return false;
+		if ( ref.optionName === "MATTR_REPAIR" && Number( bits >> 32n ) <= 1 ) return false;
+	}
+	return true;
+}
+
+/*
+================
+repairClick
+
+What clicking an item with the armed repair cursor does (567290): "send" a
+one-slot repair, "refuse" with the local option notice, or "ignore". The
+item gate is itemdata CanRepair (RefObjData +0xAA, token 22); a whole item
+gives no message, as natively.
+================
+*/
+export function repairClick( item: InventoryItem | undefined ): "send" | "refuse" | "ignore" {
+	if ( !item || (item.tooltip?.fields.canRepair ?? 0) === 0 ) return "ignore";
+	if ( !repairOptionsAllow( item ) ) return "refuse";
+	return (item.durability ?? 0) < itemMaxDurability( item ) ? "send" : "ignore";
 }
 
 /*

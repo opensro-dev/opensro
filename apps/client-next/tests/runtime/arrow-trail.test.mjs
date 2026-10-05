@@ -139,7 +139,15 @@ test("arrow catalog exposes the two retail resources and never uses the trail as
 			JSON.stringify( {
 				1: {
 					arrowTrailEffectPath: "trail.efp",
-					authoredStages: [ { actionType: "AT_MOV_1TAR", startEvent: 1, startOffset: [ 0, 0, 0 ] } ]
+					authoredStages: [ {
+						actionType: "AT_MOV_1TAR",
+						startEvent: 1,
+						startOffset: [ 0, 0, 0 ],
+						startKeepRotation: true,
+						startAddHeight: false,
+						targetKeepRotation: true,
+						targetAddHeight: false
+					} ]
 				}
 			} )
 		)
@@ -216,6 +224,13 @@ test("arrival hides projectile geometry but drains trail particles at its retain
 	assert.equal( f.initial.length, 3 );
 	const alive = f.step( .7 );
 	assert.equal( defined( alive[1].attachment ).gid, alive[0].gid );
+	// The trail and force programs ride the arrow's Bone01 (socket desc
+	// 0xCCC8B8) in 8D6880 native space, like every .efp on a named bone:
+	// without it their Z axis reverses and they point away from the arrow.
+	assert.deepEqual(
+		alive.slice( 1 ).map( a => [ defined( a.attachment ).bone, defined( a.attachment ).basis ] ),
+		[ [ "Bone01", "native" ], [ "Bone01", "native" ] ]
+	);
 	const landed = f.step( 1.3 );
 	assert.equal( landed.length, 3 );
 	assert.equal( landed[0].drawGeometry, false );

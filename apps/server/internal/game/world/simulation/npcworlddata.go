@@ -119,6 +119,7 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 		if pinned, found := fixtureByCode[row.Codename]; found {
 			row.RebirthPoint = pinned.RebirthPoint
 		}
+		row.Services = ResolveNpcServices(row)
 		row.TalkFlags = ResolveNpcTalkFlags(row)
 		roster = append(roster, row)
 	}
@@ -197,7 +198,7 @@ func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) map
 		}
 		if len(tabs) != 0 {
 			result[npcCode] = []NpcTalkStoreGroup{{
-				StoreGroupID: int32(refIdByCode[npcCode]), Tabs: tabs,
+				StoreGroupID: refIdByCode[npcCode], Tabs: tabs,
 			}}
 		}
 	}

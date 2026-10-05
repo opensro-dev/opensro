@@ -38,13 +38,13 @@ func TestAreaCenterUsesLiveCasterOrPrimary(t *testing.T) {
 		secondary int
 	}{{1, 1}, {2, 2}} {
 		area := enterworld.SkillOffensiveArea{Shape: tc.shape, Radius: 10, MaxTargets: 5}
-		got := rt.areaVictims(testDivision, c, targets[0], area, 0, clock.Now().UnixMilli())
+		got := areaTestVictims(rt, c, targets[0], area, 0, clock.Now().UnixMilli())
 		if len(got) != 2 || got[0].Gid != targets[0].Gid || got[1].Gid != targets[tc.secondary].Gid {
 			t.Fatalf("shape %d picked %+v", tc.shape, got)
 		}
 	}
 	for _, shape := range []uint8{0, 5, 7, 255} {
-		if got := rt.areaVictims(testDivision, c, targets[0], enterworld.SkillOffensiveArea{Shape: shape, Radius: 1000, MaxTargets: 5}, 0, clock.Now().UnixMilli()); len(got) != 0 {
+		if got := areaTestVictims(rt, c, targets[0], enterworld.SkillOffensiveArea{Shape: shape, Radius: 1000, MaxTargets: 5}, 0, clock.Now().UnixMilli()); len(got) != 0 {
 			t.Fatalf("unknown shape %d became sphere", shape)
 		}
 	}
@@ -64,7 +64,7 @@ func TestTargetedChainNearestPrimaryCenterAndNoBodyExpansion(t *testing.T) {
 	rt.Monsters.AdvancePopulation(rt.Monsters.CurrentTimeMillis())
 	targets := rt.Monsters.InstancesInRegions(testDivision, []uint16{primary.Spawn.RegionID})
 	area := enterworld.SkillOffensiveArea{Shape: 6, Radius: 10, MaxTargets: 6}
-	got := rt.areaVictims(testDivision, c, targets[0], area, 0, clock.Now().UnixMilli())
+	got := areaTestVictims(rt, c, targets[0], area, 0, clock.Now().UnixMilli())
 	want := []int{0, 2, 4, 1, 6}
 	if len(got) != len(want) {
 		t.Fatalf("chain victims: %+v", got)
@@ -75,7 +75,7 @@ func TestTargetedChainNearestPrimaryCenterAndNoBodyExpansion(t *testing.T) {
 		}
 	}
 	area.MaxTargets = 2
-	if got = rt.areaVictims(testDivision, c, targets[0], area, 0, clock.Now().UnixMilli()); len(got) != 2 || got[1].Gid != targets[2].Gid {
+	if got = areaTestVictims(rt, c, targets[0], area, 0, clock.Now().UnixMilli()); len(got) != 2 || got[1].Gid != targets[2].Gid {
 		t.Fatal("chain cap did not include primary")
 	}
 }
@@ -128,4 +128,23 @@ func TestShippedNewAreaShapesExecuteThroughSkillAdmission(t *testing.T) {
 			}
 		})
 	}
+}
+
+/*
+================
+areaTestVictims
+
+areaVictims for a monster primary, as the monsters it selected (these
+fixtures stand no players in range).
+================
+*/
+func areaTestVictims(rt *Runtime, c *enterworld.Character, primary monster.Instance, area enterworld.SkillOffensiveArea, reach float32, now int64) []monster.Instance {
+	target := combatTarget{gid: primary.Gid, monster: &primary, at: rt.monsterSpawn(testDivision, primary.Gid, now)}
+	var out []monster.Instance
+	for _, victim := range rt.areaVictims(testDivision, c, enterworld.SkillRow{}, target, area, reach, now) {
+		if victim.monster != nil {
+			out = append(out, *victim.monster)
+		}
+	}
+	return out
 }

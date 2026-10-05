@@ -132,3 +132,53 @@ func TestMountedCOSLateViewerReceivesBodyBeforeRide(t *testing.T) {
 		t.Fatal("unchanged ride repeated")
 	}
 }
+
+/*
+================
+TestMountedCOSFollowsItsRiderVisibility
+
+A mounted vehicle whose snapshot pose reaches a viewer before its rider's
+does must not publish its ride to that viewer: the ride names a rider the
+viewer does not hold. Once the rider is shown, the vehicle and ride follow.
+================
+*/
+func TestMountedCOSFollowsItsRiderVisibility(t *testing.T) {
+	owner := peerSession("owner", "A", 1, "Owner")
+	viewer := peerSession("viewer", "A", 2, "Viewer")
+	near := owner.World
+	owner.World.Spawn.RegionID ^= 0x0101 // a region far from the viewer
+	owner.COS = &PeerCOS{Mounted: true, Row: wire.CosSpawnBand2{Band: 1, RefObjID: 9, Gid: 100, OwnerGid: PlayerObjectID(1)},
+		World: near, Session: 1, Generation: 1}
+	source := &fakeSource{sessions: []SessionSnapshot{owner, viewer}}
+	push := &fakePusher{}
+	ticker := newTestTicker(source, push)
+	ticker.RunTick(1000)
+	if len(peerFramesTo(push, "viewer", wire.OpSingleObjectSpawn)) != 0 || len(peerFramesTo(push, "viewer", wire.OpCosRideState)) != 0 {
+		t.Fatal("vehicle published ahead of its rider")
+	}
+	source.sessions[0].World = near
+	ticker.RunTick(1100)
+	if len(peerFramesTo(push, "viewer", wire.OpSingleObjectSpawn)) != 2 || len(peerFramesTo(push, "viewer", wire.OpCosRideState)) != 1 {
+		t.Fatal("rider and vehicle missing once both are in view")
+	}
+}
+
+/*
+================
+TestFreshCOSFirstSightCarriesTheSummonSubState
+
+A pet seen right after its summon spawns with sub-state 1; the same pet
+entering a later viewer's scope spawns with 0.
+================
+*/
+func TestFreshCOSFirstSightCarriesTheSummonSubState(t *testing.T) {
+	pet := PeerCOS{Fresh: true, Row: wire.CosSpawnBand2{Band: 3, RefObjID: 9, Gid: 100, OwnerGid: PlayerObjectID(1)}, Session: 1, Generation: 1}
+	frames := pet.frames(1000, true)
+	if row := frames[0].Payload; row[len(row)-1] != 1 {
+		t.Fatalf("fresh summon sub-state = %d", row[len(row)-1])
+	}
+	pet.Fresh = false
+	if row := pet.frames(5000, true)[0].Payload; row[len(row)-1] != 0 {
+		t.Fatalf("later scope entry sub-state = %d", row[len(row)-1])
+	}
+}

@@ -145,8 +145,12 @@ type SkillRow struct {
 	// SelectorMask is scls (0x73636C73) at RefSkill+0x380. Argument 1 is bit 0,
 	// installed by CSkillManager_InstallSelector while that skill is active.
 	SelectorMask uint32
-	Reqi         SkillReqi
-	Aura         SkillAura
+	// ExpIncrease is expi (0x65787069, RefSkill+0x3EC): the buff writes its
+	// first word to parameter 0xB9 and its second, the EXP percent an
+	// attack pet's award adds (4FCB00), to 0xBA (594D3B).
+	ExpIncrease [2]uint32
+	Reqi        SkillReqi
+	Aura        SkillAura
 	// BuffModifiers are the dru / odar blocks any buff installs (594AC0).
 	BuffModifiers SkillBuffModifiers
 	Heal          SkillHeal
@@ -199,9 +203,16 @@ type SkillRow struct {
 	// FixedDamage marks a pdmg hit (skillfixeddamage.go): its single impact
 	// deals the authored amount, and dmgt converts the damage into MP.
 	FixedDamage SkillFixedDamage
+	// LifeSteal marks an lfst hit (skilllifesteal.go): its damage is the
+	// life taken, which the caster recovers.
+	LifeSteal SkillLifeSteal
 	// CombatTrap is a planted hostile trap program (skilltrap.go).
 	CombatTrap    SkillCombatTrap
 	OffensiveArea SkillOffensiveArea
+	// ActionArea is efr kind 1 (RefSkill +0x28C) on any row, recorded by the
+	// parameter index: a monster's attack reads it although the player
+	// offense gate refuses its row. OffensiveArea is the admitted player copy.
+	ActionArea SkillOffensiveArea
 	// Native encoded alcu/luck blocks feed ParamKeeper AC/AD respectively.
 	AlchemyStoneBonus     uint32
 	AlchemyReinforceBonus uint32
@@ -287,6 +298,10 @@ type SkillRow struct {
 	// distinction from a malformed cell.
 	ActionRange       float64
 	ActionRangePinned bool
+	// AIWeight is column 66 (RefSkill +0x164, a byte): a monster's chance
+	// weight for this default skill in 561B00's weighted choice, and a
+	// summon's health band in 562060. Zero never takes part in the choice.
+	AIWeight uint8
 	// Masteries are the two required-mastery slots (cols 34/36, 35/37).
 	Masteries [2]SkillRequirement
 	// ReqStr/ReqInt gate on the character's STR/INT words (cols 38/39;
@@ -345,10 +360,15 @@ func (r SkillRow) ActionLifecycleMs() (uint64, bool) {
 	return uint64(r.ActionCastingTimeMs) + uint64(r.ActionDurationMs), true
 }
 
-// continueBasicAttackColumn is ref +0x90: 4AECA4 tests its byte against
-// zero, so every nonzero value (1, and the 2 the bow buffs author) resumes
-// the basic attack after the skill.
+// continueBasicAttackColumn is ref +0x90 (_RefSkill Action_AutoAttackType).
+// CGCharAutoCommandActor_Handler_SkillCast resumes the basic attack only
+// when the byte is exactly 1 (cmp byte [ref+0x90], 1 at 4AED19); the 2 that
+// 371 retail rows author (the bow buffs among them) and 0 end the attack.
+// 4AECA4's nonzero test only returns the borrowed chain latency.
 const continueBasicAttackColumn = 19
+
+// resumesBasicAttack is the one value 4AED19 accepts.
+const resumesBasicAttack = 1
 
 // skillActivityQueued is the activity (column 8) of an ordinary cast;
 // InitiateSkillCast compares ref +0x65 with 2 at 59B5F6.
@@ -410,6 +430,7 @@ const (
 	skilldataColTargetRequired = 22
 	skilldataColWeaponKind1    = 50
 	skilldataColWeaponKind2    = 51
+	skilldataColAIWeight       = 66
 	skilldataColActionHandler  = 68
 	skilldataColPrimaryTag     = 69
 	skilldataColAttackFlags    = 70
@@ -601,7 +622,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				continue
 			}
 			row := SkillRow{
-				ContinueBasicAttack:    textdataU32(fields[continueBasicAttackColumn]) != 0,
+				ContinueBasicAttack:    textdataU32(fields[continueBasicAttackColumn]) == resumesBasicAttack,
 				CancellationDeferred:   nativeSkillDefersCancellation(fields, spawnParamArity),
 				NameAttackContent:      nativeNameAttackContent(fields),
 				PassiveCritical:        encodedPassiveCritical(fields),
@@ -677,6 +698,9 @@ func (t *TextdataSkills) parse(shards []string) {
 				actionRange >= 0 {
 				row.ActionRange = float64(actionRange)
 				row.ActionRangePinned = true
+			}
+			if weight, ok := textdataByte(fields[skilldataColAIWeight]); ok {
+				row.AIWeight = weight
 			}
 			if len(fields) > skilldataColAttackValue5 {
 				targetRequired, targetOK := textdataInt(fields[skilldataColTargetRequired])

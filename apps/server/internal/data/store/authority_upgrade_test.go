@@ -8,6 +8,7 @@ authority_upgrade_test.go - preserving upgrades, writer exclusion and recovery
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,6 +16,36 @@ import (
 
 	"opensro.online/server/internal/domain"
 )
+
+/*
+================
+dropFortressTables
+
+Removes layout 6's fortress and union tables from a current test
+authority.
+================
+*/
+func dropFortressTables(t *testing.T, db *sql.DB) {
+	t.Helper()
+	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures; DROP TABLE alliances"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+/*
+================
+downgradeToLayout5
+
+A current test authority as layout 5 left it.
+================
+*/
+func downgradeToLayout5(t *testing.T, db *sql.DB) {
+	t.Helper()
+	dropFortressTables(t, db)
+	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preFortressLayoutVersion, metaKeyLayoutVersion); err != nil {
+		t.Fatal(err)
+	}
+}
 
 /*
 ================
@@ -36,6 +67,7 @@ func makePreMallAuthority(t *testing.T, dir string) {
 	if _, err := db.Exec("DROP TABLE mall_accounts; DROP TABLE account_storage"); err != nil {
 		t.Fatal(err)
 	}
+	dropFortressTables(t, db)
 	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preMallLayoutVersion, metaKeyLayoutVersion); err != nil {
 		t.Fatal(err)
 	}
@@ -192,6 +224,7 @@ func TestCompanionUpgradePreservesExistingWarehouseAndBackup(t *testing.T) {
 	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preCompanionVersion, metaKeySchemaVersion); err != nil {
 		t.Fatal(err)
 	}
+	downgradeToLayout5(t, db)
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +248,7 @@ func TestCompanionUpgradePreservesExistingWarehouseAndBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if _, err := loadDB(old, preCompanionVersion, CurrentLayoutVersion); err != nil {
+	if _, err := loadDB(old, preCompanionVersion, preFortressLayoutVersion); err != nil {
 		t.Fatal("backup invalid", err)
 	}
 	reopened := openTest(t, dir, newTestClock())
@@ -226,5 +259,69 @@ func TestCompanionUpgradePreservesExistingWarehouseAndBackup(t *testing.T) {
 	storage, err := reopened.AccountStorage(characters[0])
 	if err != nil || len(storage.Rows) != 1 || storage.Rows[0].Slot != 0 {
 		t.Fatal("warehouse lost", storage, err)
+	}
+}
+
+/*
+================
+TestWorldPointUpgradeKeepsSchema15Records
+
+Schema 15 records have no point worlds. The upgrade leaves them byte-for-byte
+in place and the upgraded store then keeps a fortress death point's world.
+================
+*/
+func TestWorldPointUpgradeKeepsSchema15Records(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	if err := s.CreateCharacter(testDivision, "account", seededCharacter()); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	db, err := connectDB(filepath.Join(dir, DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record string
+	if err := db.QueryRow("SELECT record FROM characters").Scan(&record); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preWorldPointVersion, metaKeySchemaVersion); err != nil {
+		t.Fatal(err)
+	}
+	downgradeToLayout5(t, db)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
+		t.Fatal("upgrade", backup, err)
+	}
+	db, err = connectDB(filepath.Join(dir, DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var upgraded string
+	if err := db.QueryRow("SELECT record FROM characters").Scan(&upgraded); err != nil || upgraded != record {
+		t.Fatal("schema 15 record was rewritten", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened := openTest(t, dir, newTestClock())
+	c := reopened.Characters().CharactersForDivision(testDivision)[0]
+	region, x := int64(17221), 812.0
+	if !reopened.UpdateCharacter(c, "death-point", func() bool {
+		if c.World == nil {
+			c.World = &domain.CharacterWorld{}
+		}
+		c.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: domain.WorldSpawn{RegionID: &region, X: &x}, World: 2}
+		return true
+	}) {
+		t.Fatal("death point not committed")
+	}
+	reopened.Close()
+	again := openTest(t, dir, newTestClock())
+	point := again.Characters().CharactersForDivision(testDivision)[0].World.LastDeathPoint
+	if point == nil || point.World != 2 || *point.RegionID != region {
+		t.Fatalf("death point world lost: %+v", point)
 	}
 }

@@ -314,12 +314,13 @@ test("projectile sockets sample the requested pose and rotate offsets in the mod
 		time: .5,
 		loop: false
 	};
+	// Native (3, 0, 0) turns with the root into imported space: -3 on X.
 	const anchor = c.socket( [ actor ], 1, "hand", [ 3, 0, 0 ] );
-	assert.equal( anchor.x, 113 );
+	assert.equal( anchor.x, 107 );
 	assert.equal( anchor.y, 30, "authored offset is not rotated by the hand bone" );
 	actor.time = 1;
-	assert.equal( c.socket( [ actor ], 1, "hand", [ 3, 0, 0 ] ).x, 123 );
-	assert.equal( anchor.x, 113, "launch captures a value, not a live socket buffer" );
+	assert.equal( c.socket( [ actor ], 1, "hand", [ 3, 0, 0 ] ).x, 117 );
+	assert.equal( anchor.x, 107, "launch captures a value, not a live socket buffer" );
 	assert.equal( c.socket( [], 1, "hand", [ 0, 0, 0 ] ), null );
 	assert.equal( c.socket( [ actor ], 1, "missing", [ 0, 0, 0 ] ), null );
 	c.dispose( null, null );

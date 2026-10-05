@@ -96,33 +96,55 @@ test("BSR particles cross real manifest admission for drops and NPCs and follow 
 		assert.equal( child.loop, true );
 		assert.equal( child.pickable, false );
 		assert.equal( child.attachment.root, true );
-		f.step( [ { ...body, x: 40, movement: { ...body, x: 40, speed: 10 } } ], 1 );
+		// CIDecoAppear (spawn-fade.ts) has finished before the holder changes.
+		f.step( [ { ...body, x: 40, movement: { ...body, x: 40, speed: 10 } } ], 3 );
 		const advanced = f.actors.find( a => a.gid === child.gid );
 		assert.ok( advanced );
 		assert.ok( advanced.time > child.time, "pose changes do not restart ambient emission" );
 		if ( drops ) {
-			f.step( [ { ...body, groundItem: { ...body.groundItem, claimantGid: 2 } } ], 1.1 );
+			f.step( [ { ...body, groundItem: { ...body.groundItem, claimantGid: 2 } } ], 3.1 );
 			assert.ok( !f.actors.some( a => a.attachment?.gid === 1 ) );
 		} else {
 			f.presentation.receiveLifecycle( [ { kind: "despawn", gid: 1 } ] );
-			f.step( [], 1.1 );
+			f.step( [], 3.1 );
 			const transferred = f.actors.find( a => a.gid === child.gid );
 			assert.ok( transferred );
 			assert.notEqual( transferred.attachment.gid, 1 );
 			assert.ok( transferred.time > advanced.time );
-			f.step( [], 1.85 );
+			f.step( [], 3.85 );
 			const fadingChild = f.actors.find( a => a.gid === child.gid );
 			assert.equal( fadingChild.opacity, undefined );
 			assert.ok( Math.abs( f.actors.find( a => a.gid === fadingChild.attachment.gid ).opacity - .5 ) < 1e-7 );
-			f.step( [], 2.61 );
+			f.step( [], 4.61 );
 			assert.ok( !f.actors.some( a => a.gid === child.gid ) );
 		}
-		f.step( [], 2 );
+		f.step( [], 4 );
 		assert.ok( !f.actors.some( a => a.attachment?.gid === 1 ) );
 		f.presentation.reset();
 		assert.equal( f.actors.length, 0 );
 		f.dispose();
 	}
+});
+
+test("spawned characters fade in over two seconds and NPCs appear at once", () => {
+	const f = fixture();
+	f.warm();
+	const alpha = ( kind, at ) => {
+		f.step( [ entity( 1, { kind } ) ], at );
+		const actor = f.actors.find( a => a.gid === 1 );
+		assert.ok( actor, kind + " is presented" );
+		return actor.opacity ?? 1;
+	};
+	// CIDecoAppear (8D4B60): the ramp starts at the first drawable frame.
+	assert.equal( alpha( "monster", 1 ), 0 );
+	assert.equal( alpha( "monster", 2 ), 127 / 255 );
+	assert.equal( alpha( "monster", 3 ), 1 );
+	f.presentation.receiveLifecycle( [ { kind: "despawn", gid: 1 } ] );
+	f.step( [], 3.5 );
+	f.presentation.receiveLifecycle( [ { kind: "spawn", entity: entity( 1, { kind: "npc" } ) } ] );
+	// 86EE85 clears the NPC's spawn-fade flag.
+	assert.equal( alpha( "npc", 4 ), 1 );
+	f.dispose();
 });
 
 test("another character keeps full alpha through every body status without a hide buff", () => {
@@ -131,8 +153,10 @@ test("another character keeps full alpha through every body status without a hid
 	// gives it concealment levels.
 	const f = fixture();
 	f.warm();
+	// Let CIDecoAppear (spawn-fade.ts) finish: this test pins 85D890 alone.
+	f.step( [ entity( 1, { kind: "player" } ) ], 1 );
 	for ( const status of [ 4, 4, 3, 6, 7, 0, 4, 0 ] ) {
-		f.step( [ entity( 1, { kind: "player", appearanceState: [ 1, 0, status ] } ) ], 1 );
+		f.step( [ entity( 1, { kind: "player", appearanceState: [ 1, 0, status ] } ) ], 3 );
 		assert.equal( f.actors.length, 1 );
 		assert.equal( f.actors[0].opacity ?? 1, 1 );
 		assert.equal( f.actors[0].pickable, true );
@@ -184,6 +208,9 @@ test("a stealthed character is hidden from strangers, translucent to its party a
 	};
 	const hide = { gid: 2, skill: 7929, token: 9, phase: 2 };
 	let clock = 1;
+	// Let CIDecoAppear (spawn-fade.ts) finish before measuring concealment.
+	for ( let i = 0; i < 5; i++ ) f.presentation.step( [ local, stealthed ], base, clock += 0.1 );
+	clock += 2;
 	const opacity = gameplay => {
 		for ( let i = 0; i < 5; i++ ) f.presentation.step( [ local, stealthed ], gameplay, clock += 0.1 );
 		const actor = f.actors.find( a => a.gid === 2 );
@@ -221,23 +248,25 @@ test("local body transparency survives settled camera state and stays off the mo
 	};
 	// This fixture has no rider socket; inspect the presentation owner's actors
 	// without asking the renderer to build an unrelated mount attachment.
+	// Let CIDecoAppear (spawn-fade.ts) finish before measuring body alpha.
 	for ( let i = 0; i < 5; i++ ) f.presentation.step( entities, gameplay, 1 + i / 10 );
+	for ( let i = 0; i < 5; i++ ) f.presentation.step( entities, gameplay, 3.5 + i / 10 );
 	assert.equal( f.actors.find( a => a.gid === 1 ).opacity, 80 / 255 );
 	// The mount is another character: its own 85D890 restores 0xFF.
 	assert.equal( f.actors.find( a => a.gid === 2 ).opacity ?? 1, 1 );
-	f.presentation.step( entities, gameplay, 2, undefined, -1 );
+	f.presentation.step( entities, gameplay, 4.5, undefined, -1 );
 	assert.equal(
 		f.actors.find( a => a.gid === 1 ).opacity,
 		0,
 		"active camera interpolation wins even on its completion frame"
 	);
-	f.presentation.step( entities, gameplay, 2.1, undefined, -1 );
+	f.presentation.step( entities, gameplay, 4.6, undefined, -1 );
 	assert.equal(
 		f.actors.find( a => a.gid === 1 ).opacity,
 		80 / 255,
 		"settled camera interpolation yields to native body alpha"
 	);
-	f.presentation.step( entities.map( e => ({ ...e, appearanceState: [ 1, 0, 0 ] }) ), gameplay, 3 );
+	f.presentation.step( entities.map( e => ({ ...e, appearanceState: [ 1, 0, 0 ] }) ), gameplay, 5.5 );
 	assert.equal( f.actors.find( a => a.gid === 1 ).opacity, 1 );
 	assert.equal( f.actors.find( a => a.gid === 2 ).opacity ?? 1, 1 );
 	f.dispose();
@@ -1946,10 +1975,12 @@ test("held native blind masks players and monsters without retiring presentation
 	const f = fixture();
 	f.warm();
 	const local = entity( 1, { kind: "player" } );
+	// Let CIDecoAppear (spawn-fade.ts) finish: this test pins the blind mask.
+	for ( let i = 0; i < 5; i++ ) f.presentation.step( [ local ], null, 1 + i / 10 );
 	f.presentation.step(
 		[ local ],
 		{ localGid: 1, pose: { ...local, angle: local.heading }, casts: [], inventory: [], vitals: [] },
-		1,
+		4,
 		undefined,
 		undefined,
 		undefined,
@@ -1965,14 +1996,14 @@ test("held native blind masks players and monsters without retiring presentation
 	);
 	for ( const kind of [ "monster", "player", "local-player", "npc", "cos", "ground-item" ] ) {
 		const body = entity( 1, { kind } );
-		f.presentation.step( [ body ], null, 1, undefined, undefined, undefined, undefined, false, 2, true, true );
+		f.presentation.step( [ body ], null, 4, undefined, undefined, undefined, undefined, false, 2, true, true );
 		const actor = f.actors.find( a => a.gid === 1 );
 		assert.ok( actor, kind + " remains resident" );
 		const hidden = [ "monster", "player" ].includes( kind );
 		assert.equal( actor.opacity ?? 1, hidden ? 0 : 1, kind );
 		if ( hidden ) assert.equal( actor.pickable, false );
 		assert.equal( f.presentation.ready( 1 ), true );
-		f.presentation.step( [ body ], null, 2 );
+		f.presentation.step( [ body ], null, 5 );
 		assert.equal( f.actors.find( a => a.gid === 1 ).opacity ?? 1, 1, kind + " restores on release" );
 	}
 	f.dispose();
@@ -2158,7 +2189,9 @@ test("quest marker waits for character metadata admission without reporting a mi
 			count: 1,
 			resource: "marker.bsr",
 			life: 0,
-			bone: "*",
+			// sub_91e720 decodes '*' into no bone plus binding +0x09.
+			bone: null,
+			addHeight: true,
 			offset: [ 0, 5, 0 ]
 		} ]
 	};
@@ -3203,6 +3236,52 @@ test("berserk hair publishes compound attachments only after the resource is rea
 		assert.equal( children().length, 2 );
 		f.presentation.step( [], null, now + 1 );
 		assert.equal( children().length, 0, "despawn retires private skeletons" );
+		f.dispose();
+	}
+});
+
+test("a characterInfo ride that loads after its rider fades in on its own clock", () => {
+	const ride = {
+		kind: "ride",
+		codename: "res/mob/ride.bsr",
+		glb: "/assets/npc/mob/ride.glb",
+		clips: [ "stand", "walk" ],
+		requiredBy: [ "NPC_1" ]
+	};
+	const admission = { blockedPaths: new Set( [ "http://localhost" + ride.glb ] ) };
+	const f = fixture(
+		{},
+		1,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{ ...admission, rows: [ { codename: "NPC_1", soundProfileName: "MOB_TEST", riderTransformMode: 1 } ] },
+		{ rides: [ ride ] }
+	);
+	try {
+		f.warm();
+		const rider = [ entity( 1, { kind: "monster" } ) ];
+		for ( let i = 0; i < 50; i++ ) f.step( rider, i / 10 );
+		assert.equal( f.actors.find( actor => actor.gid === 1 )?.opacity ?? 1, 1, "the rider finished its ramp" );
+		admission.blockedPaths.clear();
+		let first;
+		for ( let i = 0; i < 20 && !first; i++ ) {
+			f.step( rider, 5 + i / 10 );
+			first = f.actors.find( actor => actor.model === ride.glb );
+		}
+		assert.ok( first, "the ride eventually draws" );
+		// 861EE2: the ride's own CIDecoAppear starts with the ride.
+		assert.equal( first.opacity, 0 );
+	} finally {
 		f.dispose();
 	}
 });

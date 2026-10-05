@@ -17,6 +17,7 @@ import { spawnSkillReferences, entrySpawnSkills } from "@/engine/foundation/game
 import { merchantBranches } from "@/engine/foundation/gameplay/merchant-branches";
 import { decodeCharacterSpawn } from "@/engine/foundation/gameplay/character-spawn";
 import { decodeGroundItem } from "@/engine/foundation/gameplay/ground-item";
+import { fortressStructureState } from "@/engine/foundation/gameplay/fortress";
 import {
 	decodeSkillObject,
 	DYNAMIC_OBJECT_REFERENCE,
@@ -32,6 +33,10 @@ import { createEntityMotion } from "./motion/motion";
 import type { EntityState, WorldBatch, WorldEvent } from "@/engine/contracts/world";
 import { journalCost } from "@/engine/foundation/gameplay/journal-cost";
 import type { WireFrame } from "@/engine/contracts/network";
+import { SYSTEM_PET_APPEAR } from "@/engine/contracts/orb";
+// The kinds whose spawn builds a CICharactor (players, NPCs, monsters, COS,
+// fortress structures); ground items and skill objects are not characters.
+const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "cos", "structure" ] );
 // Wire authorities: server enterworld/{register,bootstrap,wire}.go,
 // world/simulation/{npc,monster}.go and item/wire/objectmove.go.
 /*
@@ -252,7 +257,7 @@ export function createEntities(
 				entity: { ...ref, ...decodePeerAppearance( p, itemRefs, frame.opcode === 0x30d7, refs, skillRefs ) }
 			};
 		}
-		if ( !ref || ![ "npc", "monster", "cos" ].includes( ref.kind ) ) {
+		if ( !ref || ![ "npc", "monster", "cos", "structure" ].includes( ref.kind ) ) {
 			return raw( frame );
 		}
 		const entity = decodeCharacterSpawn( p, ref.kind, ref.tidWord, frame.opcode === 0x30d7, skillRefs );
@@ -552,6 +557,46 @@ export function createEntities(
 				append( { kind: "item-effect", source: { ...source }, item, typeFlags } );
 				return;
 			}
+			const structureState = fortressStructureState( frame );
+			if ( structureState ) {
+				// 76C870 case 0xB -> CICATStruct_OnFortressWarState (4F7BF0).
+				const entity = entities.get( structureState.gid );
+				if ( entity?.kind === "structure" ) {
+					apply( { kind: "state", entity: { ...entity, structureState: structureState.state } } );
+				}
+				return;
+			}
+			if ( frame.opcode === 0x30df || frame.opcode === 0x34b7 || frame.opcode === 0x33d1 ) {
+				// 751430 opens a stall (title mode 4, its title and decoration),
+				// 751520 renames it, 74F8F0 takes it down (CICharactor_SetStallState).
+				const entity = entities.get( v.getUint32( 0, true ) );
+				if ( !entity ) return;
+				if ( frame.opcode === 0x33d1 ) {
+					const appearanceState = entity.appearanceState ? [ ...entity.appearanceState ] : undefined;
+					if ( appearanceState ) appearanceState[6] = 0;
+					apply( {
+						kind: "state",
+						entity: {
+							...entity,
+							titleText: undefined,
+							titleId: undefined,
+							...(appearanceState ? { appearanceState } : {})
+						}
+					} );
+					return;
+				}
+				const n = v.getUint16( 4, true );
+				if ( 6 + n * 2 > p.length ) throw Error( "Invalid stall title" );
+				const titleText = new TextDecoder( "utf-16le" ).decode( p.subarray( 6, 6 + n * 2 ) );
+				const titleId = frame.opcode === 0x30df ? v.getUint32( 6 + n * 2, true ) : entity.titleId;
+				const appearanceState = entity.appearanceState ? [ ...entity.appearanceState ] : undefined;
+				if ( appearanceState ) appearanceState[6] = 4;
+				apply( {
+					kind: "state",
+					entity: { ...entity, titleText, titleId, ...(appearanceState ? { appearanceState } : {}) }
+				} );
+				return;
+			}
 			if ( frame.opcode === 0x31e2 ) {
 				// 777af0 clears CIItem owner flag/JID, preserving the item itself.
 				if ( p.length !== 4 ) throw new Error( "Invalid ground ownership expiry" );
@@ -562,6 +607,16 @@ export function createEntities(
 						entity: { ...entity, groundItem: { ...entity.groundItem, ownerJid: undefined } }
 					} );
 				}
+				return;
+			}
+			if ( frame.opcode === 0x3508 && p[4] === 7 ) {
+				// 77A570 case 7 calls the entity's reference setter: the pet's
+				// next form replaces its model for every viewer.
+				if ( p.length !== 9 ) throw Error( "Invalid COS reference change" );
+				const entity = entities.get( v.getUint32( 0, true ) ), refObjId = v.getUint32( 5, true );
+				const tid = refs.get( refObjId )?.tidWord;
+				if ( tid === undefined ) throw Error( "Unknown COS reference " + refObjId );
+				if ( entity ) apply( { kind: "state", entity: { ...entity, refObjId, tidWord: tid } } );
 				return;
 			}
 			if ( frame.opcode === 0x323a ) {
@@ -669,7 +724,10 @@ export function createEntities(
 				if ( p.length === 2 && p[0] === 2 ) return;
 				if ( p.length !== 10 || p[0] !== 1 || p[5]! > 1 ) throw new Error( "Invalid ride state" );
 				const rider = entities.get( v.getUint32( 1, true ) ), mount = v.getUint32( 6, true );
-				if ( !rider || p[5] === 1 && (!entities.has( mount ) || mount === rider.gid) ) {
+				// 777F60 stores the mount gid at +0x298 without resolving it: a ride
+				// may precede its vehicle's spawn, and 85E000/85D870 fall back to
+				// the rider until the vehicle arrives.
+				if ( !rider || p[5] === 1 && (mount === 0 || mount === rider.gid) ) {
 					throw new Error( "Ride state references absent entity" );
 				}
 				if (
@@ -852,6 +910,9 @@ export function createEntities(
 					const tid = refs.get( event.entity.refObjId )?.tidWord ?? 0, band = tid >>> 11;
 					if ( (tid & 0x7fe) === 0x1c6 && (band === 3 || band === 4) ) {
 						append( { kind: "ui-sound", handle: "SND_COS_SUMMON", at: receivedAt } );
+						// CICCos_DeserializeSpawnSubState (854CD0): a fresh combat or
+						// fellowship pet also plays SYSTEM_PET_APPEAR (0x80000021).
+						append( { kind: "system-effect", gid: event.entity.gid, effect: SYSTEM_PET_APPEAR } );
 					}
 				}
 				return;
@@ -915,6 +976,18 @@ export function createEntities(
 					const next = { ...entity, movementMode: p[5]! };
 					const pose = motion.mode( next, now );
 					apply( { kind: "state", entity: Object.freeze( { ...next, ...pose } ) } );
+					// 777B60 applies the gait to CCharactor_GetActiveMoverEntity: a
+					// rider's walk/run switches its vehicle, which carries the path.
+					const vehicle = p[5] === 2 || p[5] === 3 ?
+						next.mountedOn === undefined ? undefined : entities.get( next.mountedOn ) :
+						undefined;
+					if ( vehicle ) {
+						const ridden = { ...vehicle, movementMode: p[5]! };
+						apply( {
+							kind: "state",
+							entity: Object.freeze( { ...ridden, ...motion.mode( ridden, now ) } )
+						} );
+					}
 					return;
 				}
 				// 777B60 channel 4 -> 85EC00: the third spawn status byte
@@ -935,7 +1008,7 @@ export function createEntities(
 				const channels = decodeMovementSpeeds( p ), source = entities.get( channels.gid );
 				// CPSMission_OnEntitySpeedUpdate0x376F (0x775E40) consumes server speeds;
 				// CCharactor_GetActiveMoverEntity (0x85E000) resolves the riding actor.
-				const entity = source?.mountedOn ? entities.get( source.mountedOn ) : source;
+				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				if ( entity ) {
 					const next = { ...entity, walkSpeed: channels.walkSpeed, runSpeed: channels.runSpeed };
 					apply( {
@@ -973,7 +1046,7 @@ export function createEntities(
 				const source = entities.get( v.getUint32( 0, true ) );
 				if ( !source || source.kind === "local-player" || source.appearanceState?.[0] === 2 ) return;
 				// CCharactor_GetActiveMoverEntity (0x85E000): a rider steers its mount.
-				const entity = source.mountedOn ? entities.get( source.mountedOn ) : source;
+				const entity = source.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				if ( !entity ) return;
 				const steered = motion.steer( entity, v.getUint16( 4, true ), now );
 				if ( steered ) {
@@ -1072,6 +1145,16 @@ export function createEntities(
 		read: ( gid: number ) => entities.get( gid ),
 		/*
 		================
+		groundItems
+
+		The ground items in the table now, every despawn already applied.
+		================
+		*/
+		groundItems(): EntityState[] {
+			return [ ...entities.values() ].filter( entity => entity.kind === "ground-item" );
+		},
+		/*
+		================
 		die
 		================
 		*/
@@ -1084,6 +1167,18 @@ export function createEntities(
 			apply( { kind: "state", entity: { ...entity, moving: false, appearanceState } } );
 		},
 		castArrival: motion.castArrival,
+		/*
+		================
+		markCaptured
+
+		7786E0 attaches the capture mark only to a character (CICharactor).
+		================
+		*/
+		markCaptured( gid: number ) {
+			const entity = entities.get( gid );
+			if ( !entity || !CHARACTER_KINDS.has( entity.kind ) ) return;
+			apply( { kind: "state", entity: { ...entity, captureMark: true } } );
+		},
 		/*
 		================
 		displace

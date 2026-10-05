@@ -11,6 +11,7 @@ import (
 type combatRewardLevels struct {
 	exp   map[int64]int64
 	basis map[int64]int64
+	gold  map[int64]int64
 }
 
 func (levels combatRewardLevels) SkillPointCost(int64) (int64, bool) { return 0, false }
@@ -22,6 +23,11 @@ func (levels combatRewardLevels) ExpRequired(level int64) (int64, bool) {
 
 func (levels combatRewardLevels) MonsterExpBasis(level int64) (int64, bool) {
 	value, ok := levels.basis[level]
+	return value, ok
+}
+
+func (levels combatRewardLevels) WithdrawalGoldBasis(level int64) (int64, bool) {
+	value, ok := levels.gold[level]
 	return value, ok
 }
 

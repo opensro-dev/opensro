@@ -8,6 +8,15 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+const (
+	// RefGameWorld +0x20: zero marks a world the shard opens at boot.
+	permanentWorldType = 0
+	// 65C200: the first layer a world hands out; zero is its controller.
+	firstResidentLayer = 1
+	// INS_DEFAULT, the field every character starts in.
+	defaultWorldDefinition instance.DefinitionID = 1
+)
+
 type populationKey struct {
 	division string
 	lease    instance.Lease
@@ -96,6 +105,21 @@ func (s *MonsterState) PopulationLease(division string, id instance.ID) (instanc
 		return instance.Lease{}, false
 	}
 	return allocator.Lookup(id)
+}
+
+/*
+================
+CheckPopulationTransfer
+
+CGameWorld_CheckTransfer (5EC5B0): the non-mutating door a teleport asks
+before it moves a PC into another world. Nothing is reserved.
+================
+*/
+func (s *MonsterState) CheckPopulationTransfer(division string, destination instance.ID, capacityBypass bool) instance.Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.division(division)
+	return s.worldAllocators[division].CheckTransfer(destination, capacityBypass)
 }
 
 func (s *MonsterState) AdmitPopulationPC(division string, lease instance.Lease, gid uint32, capacityBypass bool) instance.Status {

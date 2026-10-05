@@ -15,7 +15,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/community"
 	"opensro.online/server/internal/transport"
 )
@@ -98,8 +100,22 @@ func (game *gameplayPlane) worldBound(
 	game.parties.WorldBound(divisionID, character)
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)
+	game.unions.DropPendingInvite(divisionID, character.Name)
+	game.items.AbandonExchange(divisionID, character.Name)
+	game.items.AbandonStall(divisionID, character.Name)
 	game.mentorInvites.WorldBound(session, divisionID, character)
-	game.siege.WorldBound(session)
+	var guildID int64
+	var cooldown []wire.Frame
+	authorityStore.ReadState(func() {
+		if character.GuildID != nil {
+			guildID = *character.GuildID
+		}
+		cooldown = action.FortressReturnCooldownFrames(character, game.items.Now().UnixMilli())
+	})
+	game.siege.WorldBound(session, guildID)
+	for _, frame := range cooldown {
+		_ = session.Send(frame.Opcode, frame.Payload)
+	}
 	game.chat.WorldBound(session, divisionID)
 }
 
@@ -113,11 +129,14 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session) {
 	game.parties.SessionClosed(session)
 	game.matches.SessionClosed(session)
 	game.guildInvites.SessionClosed(session)
+	game.unions.SessionClosed(session)
 	game.mentorInvites.SessionClosed(session)
 
 	character, divisionID, bound := enterworld.SessionCharacter(game.deps, session)
 	if bound {
 		game.items.EndCommerceSession(divisionID, character, session.ID)
+		game.items.AbandonExchange(divisionID, character.Name)
+		game.items.AbandonStall(divisionID, character.Name)
 		game.items.ForgetCharacterSession(divisionID, character.Name, session.ID)
 	}
 }

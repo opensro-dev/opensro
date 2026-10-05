@@ -8,12 +8,14 @@ Draft selection remains with the HUD, and never sends a message by itself.
 ===========================================================================
 */
 import { chatLineText, chatLineColor } from "./chat-presentation";
+import { chatLineTime } from "./chat-time";
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
 import type { ChatLine } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect, UiControl } from "@/engine/contracts/ui";
 import type { AuthoredLayout } from "./authored-layout";
 import { chatScrollbar } from "./chat-scrollbar";
 import { textLines } from "./text-lines";
+import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 // 6aeaa0 seeds two 56px rows; 6acd30 cycles 0..6. The bottom anchor is 52px.
 /*
 ================
@@ -153,14 +155,17 @@ button
 				textLines( welcome, 365, measure, true ).map( value => ({
 					value,
 					color: gold,
-					recipient: undefined as string | undefined
+					recipient: undefined as string | undefined,
+					sentAt: undefined as number | undefined
 				}) ) :
 				[]),
-			...lines.filter( l => tab === 0 || l.channel === channel ).flatMap( l =>
-				textLines( chatLineText( l, copy ), 365, measure, true ).map( value => ({
+			// Stall lines belong to the stall window's own chat box.
+			...lines.filter( l => l.channel !== STALL_CHAT_CHANNEL && (tab === 0 || l.channel === channel) ).flatMap(
+				l => textLines( chatLineText( l, copy ), 365, measure, true ).map( value => ({
 					value,
 					color: chatLineColor( l.channel ),
-					recipient: l.channel !== 7 ? l.name : undefined
+					recipient: l.channel !== 7 ? l.name : undefined,
+					sentAt: l.sentAt
 				}) )
 			)
 		];
@@ -192,7 +197,8 @@ button
 				label: line.value,
 				kind: line.recipient ? "button" : "region",
 				rect: r,
-				whisperTarget: line.recipient
+				whisperTarget: line.recipient,
+				helpText: chatLineTime( line.sentAt ) || undefined
 			} );
 			if ( hover === id ) {
 				quads.push( {

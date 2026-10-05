@@ -644,6 +644,34 @@ func (inv *Inventory) Drop(sourceSlot uint8) (Item, *Fault) {
 	return dropped, nil
 }
 
+/*
+================
+DeathDrop
+
+The death penalty's drop (move 0x17, re-typed to 7 by 5264E0 for any
+slot but the weapon): unlike Drop it may take a worn item. The weapon
+socket refuses (0x1806, "Can't drop equipped weapon forcely by server").
+================
+*/
+func (inv *Inventory) DeathDrop(sourceSlot uint8) (Item, *Fault) {
+	if !inv.validSlot(sourceSlot) {
+		return Item{}, newFault(wire.ErrCodeInvalidRequest, "slotOutOfRange")
+	}
+	if sourceSlot == deathDropWeaponSlot {
+		return Item{}, newFault(wire.ErrCodeCannotDropEquipped, "deathDropWeapon")
+	}
+	sourceIndex := inv.indexOf(sourceSlot)
+	if sourceIndex < 0 {
+		return Item{}, newFault(wire.ErrCodeInvalidRequest, "sourceSlotEmpty")
+	}
+	dropped := inv.items[sourceIndex]
+	inv.items = append(inv.items[:sourceIndex], inv.items[sourceIndex+1:]...)
+	return dropped, nil
+}
+
+// deathDropWeaponSlot is the weapon socket 5264E0 refuses.
+const deathDropWeaponSlot = 6
+
 // DropQuantity removes count units from the row at a wire slot. FIXTURE
 // POLICY, NOT NATIVE: the native type-7 wire has no quantity field, so this
 // only serves the fixture's out-of-band partial-drop request; absent that,

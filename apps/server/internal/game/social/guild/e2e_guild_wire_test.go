@@ -128,7 +128,7 @@ func startGuildServer(t *testing.T, dir string, seeds []*enterworld.Character) g
 		srv.Hub.BindExclusive(presence.BindKey(divisionID, character.Name), s)
 	}
 	enterworld.Register(srv.Hub, deps)
-	guild.Register(srv.Hub, deps, directory)
+	guild.Register(srv.Hub, deps, directory, nil, nil)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}

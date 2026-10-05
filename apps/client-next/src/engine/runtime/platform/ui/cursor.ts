@@ -39,6 +39,7 @@ The hotspot extracted with each retail cursor resource.
 ================
 */
 function hotspotOf( value: WorldCursor ): string {
+	if ( value === 0x96 ) return "11 10";
 	if ( value === 0x98 ) return "2 26";
 	if ( value === 0x99 ) return "9 6";
 	if ( value === 0x9a ) return "9 4";

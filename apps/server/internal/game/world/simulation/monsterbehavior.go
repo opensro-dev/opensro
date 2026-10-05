@@ -19,7 +19,7 @@ it emitted. All registry access is value-copy in / whole-value commit
 out (the CloneWorldState discipline).
 ==================
 */
-func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, *monsterTargetFrames) {
+func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	// A fatal B245 keeps the registry row alive briefly so the client can play
 	// death, stage reward particles, and then receive the ordinary despawn
 	// dissolve. That corpse is presentation-retained, not behavior-live: it
@@ -103,9 +103,10 @@ func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.
 			return ops.commitIdleEntry(divisionID, instance, mover, []Frame{correctionFrame(instance.Gid, mover.Pose)}, nowMs), nil
 		}
 		if elapsed > mover.HomingAcquireAfterMs && ops.acquisitionReady(divisionID, instance, nowMs) && tactics.Aggressive {
-			if target, found := nearestEligiblePlayer(instance, mover.LivePoseAt(nowMs, ops.TerrainHeight), divisionPlayers, tactics.SightRange); found {
+			from := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+			if target, found := ops.acquireSightTarget(divisionID, instance, from, divisionPlayers, tactics); found {
 				mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
-				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0); planned {
+				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, from, target); planned {
 					ops.adoptMonsterAttack(&mover, plan)
 					if frames, targeted, handled := ops.tryMonsterAttack(divisionID, instance, tactics, mover, divisionPlayers, nowMs); handled {
 						return frames, targeted
@@ -165,9 +166,9 @@ func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.
 		}
 		if mover.Mode() == monster.MoverWandering && tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
 			live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
-			if target, ok := nearestEligiblePlayer(instance, live, divisionPlayers, tactics.SightRange); ok {
+			if target, ok := ops.acquireSightTarget(divisionID, instance, live, divisionPlayers, tactics); ok {
 				mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
-				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0); planned {
+				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, live, target); planned {
 					ops.adoptMonsterAttack(&mover, plan)
 					if frames, targeted, handled := ops.tryMonsterAttack(
 						divisionID, instance, tactics, mover, divisionPlayers, nowMs,
@@ -230,7 +231,7 @@ func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.
 	return ops.advanceIdle(divisionID, instance, tactics, mover, divisionPlayers, nowMs)
 }
 
-func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, *monsterTargetFrames) {
+func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	// 55A8B0 checks state expiry before the acquisition callback.
 	if nowMs > mover.BehaviorDeadlineMs {
 		return ops.decideIdle(divisionID, instance, tactics, mover, nowMs), nil
@@ -239,9 +240,10 @@ func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Inst
 	// In particular an empty scan consumes the gate; entering sight does not
 	// re-arm it. Damage retaliation above is independent of this sight gate.
 	if tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
-		if target, ok := nearestEligiblePlayer(instance, mover.LivePoseAt(nowMs, ops.TerrainHeight), divisionPlayers, tactics.SightRange); ok {
+		from := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+		if target, ok := ops.acquireSightTarget(divisionID, instance, from, divisionPlayers, tactics); ok {
 			mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
-			if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0); planned {
+			if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, from, target); planned {
 				ops.adoptMonsterAttack(&mover, plan)
 				if frames, targeted, handled := ops.tryMonsterAttack(
 					divisionID, instance, tactics, mover, divisionPlayers, nowMs,

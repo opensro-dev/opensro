@@ -112,6 +112,12 @@ func (rt *Runtime) rollMonsterGoldAmount(monster monster.Instance) (uint32, bool
 /*
 ================
 admitMonsterDrop
+
+CGObjMob_RollDropAdmission (4C1840, vtable +0x634): 100, or past six
+levels above the monster ftol((1 - gap * 0.04f) * 100), times the killer's
+fatigue factor (+0x2280; 1.0 outside the anti-addiction service the port
+does not run), four times for a grade-7 monster (+0x1CF4), capped at 100.
+A negative threshold admits nothing: rand() % 101 is never below zero.
 ================
 */
 func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance) bool {
@@ -121,10 +127,10 @@ func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance)
 	threshold := int32(100)
 	gap := int32(playerLevel) - int32(monster.Ref.Level)
 	if gap > 6 {
-		threshold = int32((1 - float64(gap)*0.04) * 100)
+		threshold = int32((1 - float64(gap)*float64(float32(0.04))) * 100)
 	}
-	if threshold < 0 {
-		threshold = 0
+	if monster.Rarity()&15 == dropGradeSeven {
+		threshold *= 4
 	}
 	if threshold > 100 {
 		threshold = 100
@@ -132,6 +138,9 @@ func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance)
 	roll, err := rt.DropRoll()
 	return err == nil && int32(roll%101) <= threshold
 }
+
+// dropGradeSeven is the grade whose timer flag (+0x1CF4) quadruples 4C1840.
+const dropGradeSeven = 7
 
 /*
 ================

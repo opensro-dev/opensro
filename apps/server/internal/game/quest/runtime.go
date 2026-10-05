@@ -413,7 +413,7 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 	}
 	var completes, offers []NpcOption
 	for _, def := range rt.Defs.All() {
-		if def.StartNpcCodename == "" || (def.CountryByte != 3 && int(def.CountryByte) != country) || int64(def.Level) > level {
+		if def.StartNpcCodename == "" || (def.CountryByte != 3 && int(def.CountryByte) != country) {
 			continue
 		}
 		active := activeQuestIndex(character, def.RefID) >= 0
@@ -438,13 +438,19 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 		}
 
 		if active && questNpcMatches(def, def.EndNpcCodename, npcCodename) && (def.Objective == ObjectiveTalk || objectiveMet(character, def, character.ActiveQuests[activeQuestIndex(character, def.RefID)])) {
+			if len(def.RewardChoices) > 0 {
+				completes = append(completes, rewardChoiceOptions(def)...)
+				continue
+			}
 			completes = append(completes, NpcOption{
 				Codename: def.Codename, TitleSymbol: def.TitleSymbol,
 				PromptSymbol: def.CompletePromptSymbol, Complete: true,
 			})
 			continue
 		}
-		if !active && canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) && questNpcMatches(def, def.StartNpcCodename, npcCodename) {
+		// The level gates taking a quest, never reporting one already taken:
+		// a character that lost a level keeps its turn-in (as MarkerStates).
+		if !active && int64(def.Level) <= level && canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) && questNpcMatches(def, def.StartNpcCodename, npcCodename) {
 			prompt := def.OfferPromptSymbol
 			// Native 9206ec..92073f: DifferentString only selects the
 			// after-one-clear offer when the persisted completion count > 0.
@@ -607,8 +613,26 @@ and exchange quantities are rechecked inside the same character door.
 ================
 */
 func (rt *Runtime) completeRewardAt(character *enterworld.Character, def *Definition, expectedStage *uint16, npc string) (OpResult, error) {
+	return rt.completeRewardChoice(character, def, expectedStage, npc, noRewardChoice)
+}
+
+/*
+================
+completeRewardChoice
+
+completeRewardAt with the picked reward choice (noRewardChoice for a quest
+without choices). A selection quest refuses any completion without one.
+================
+*/
+func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *Definition, expectedStage *uint16, npc string, choice int) (OpResult, error) {
 	refID := def.RefID
-	if (len(def.RewardItems) != 0 || collectsItems(def)) && rt.PlanInventory == nil {
+	if len(def.RewardChoices) > 0 && (choice < 0 || choice >= len(def.RewardChoices)) {
+		return OpResult{}, fmt.Errorf("quest reward: %s needs one of its %d reward choices", def.Codename, len(def.RewardChoices))
+	}
+	if len(def.RewardChoices) == 0 && choice != noRewardChoice {
+		return OpResult{}, fmt.Errorf("quest reward: %s offers no reward choice", def.Codename)
+	}
+	if (len(def.RewardItems) != 0 || len(def.RewardChoices) != 0 || collectsItems(def)) && rt.PlanInventory == nil {
 		return OpResult{}, fmt.Errorf("quest reward: %s requires an item reward owner", def.Codename)
 	}
 	var refusal error
@@ -644,7 +668,7 @@ func (rt *Runtime) completeRewardAt(character *enterworld.Character, def *Defini
 				return false
 			}
 		}
-		if (len(def.RewardItems) > 0 || collectsItems(def)) && rt.PlanInventory == nil {
+		if (len(def.RewardItems) > 0 || len(def.RewardChoices) > 0 || collectsItems(def)) && rt.PlanInventory == nil {
 			refusal = fmt.Errorf("quest stage inventory owner unavailable")
 			return false
 		}
@@ -657,7 +681,7 @@ func (rt *Runtime) completeRewardAt(character *enterworld.Character, def *Defini
 			return false
 		}
 		var inventoryRows []enterworld.InventoryRow
-		if len(def.RewardItems) > 0 || collectsItems(def) {
+		if len(def.RewardItems) > 0 || len(def.RewardChoices) > 0 || collectsItems(def) {
 			count, err := resuscitationExchangeCount(character, def)
 			if err != nil {
 				refusal = err
@@ -670,7 +694,7 @@ func (rt *Runtime) completeRewardAt(character *enterworld.Character, def *Defini
 			consume = append(consume, captureSupplyCleanup(character, def)...)
 			consume = append(consume, questToolCleanup(character, def)...)
 			var grants []inventory.ItemAmount
-			for _, r := range def.RewardItems {
+			for _, r := range rewardItemsWithChoice(def, choice) {
 				grants = append(grants, inventory.ItemAmount{Codename: rewardItemForCharacter(character, r.ItemCodename), Count: r.Count * count})
 			}
 			inventoryRows, inventoryFrames, err = rt.PlanInventory(character, consume, grants)

@@ -31,6 +31,7 @@ type residentSkill struct {
 	Knockdown               unique.Handle[SkillKnockdown]
 	Reqc                    SkillReqc
 	SelectorMask            uint32
+	ExpIncrease             [2]uint32
 	Reqi                    SkillReqi
 	Aura                    SkillAura
 	BuffModifiers           SkillBuffModifiers
@@ -69,8 +70,10 @@ type residentSkill struct {
 	StatusCast              bool
 	AreaBurst               bool
 	FixedDamage             SkillFixedDamage
+	LifeSteal               SkillLifeSteal
 	CombatTrap              SkillCombatTrap
 	OffensiveArea           unique.Handle[SkillOffensiveArea]
+	ActionArea              unique.Handle[SkillOffensiveArea]
 	AlchemyStoneBonus       uint32
 	AlchemyReinforceBonus   uint32
 	SpawnToken              bool
@@ -103,6 +106,7 @@ type residentSkill struct {
 	CoolTimeGroup           uint8
 	TimingPinned            bool
 	ActionRange             float64
+	AIWeight                uint8
 	ActionRangePinned       bool
 	Masteries               unique.Handle[[2]SkillRequirement]
 	ReqStr                  int64
@@ -132,6 +136,7 @@ func compactSkill(row SkillRow) residentSkill {
 		Knockdown:               unique.Make(row.Knockdown),
 		Reqc:                    row.Reqc,
 		SelectorMask:            row.SelectorMask,
+		ExpIncrease:             row.ExpIncrease,
 		Reqi:                    row.Reqi,
 		Aura:                    row.Aura,
 		BuffModifiers:           row.BuffModifiers,
@@ -170,8 +175,10 @@ func compactSkill(row SkillRow) residentSkill {
 		StatusCast:              row.StatusCast,
 		AreaBurst:               row.AreaBurst,
 		FixedDamage:             row.FixedDamage,
+		LifeSteal:               row.LifeSteal,
 		CombatTrap:              row.CombatTrap,
 		OffensiveArea:           unique.Make(row.OffensiveArea),
+		ActionArea:              unique.Make(row.ActionArea),
 		AlchemyStoneBonus:       row.AlchemyStoneBonus,
 		AlchemyReinforceBonus:   row.AlchemyReinforceBonus,
 		SpawnToken:              row.SpawnToken,
@@ -206,6 +213,7 @@ func compactSkill(row SkillRow) residentSkill {
 		CoolTimeGroup:           row.CoolTimeGroup,
 		TimingPinned:            row.TimingPinned,
 		ActionRange:             row.ActionRange,
+		AIWeight:                row.AIWeight,
 		ActionRangePinned:       row.ActionRangePinned,
 		Masteries:               unique.Make(row.Masteries),
 		ReqStr:                  row.ReqStr,
@@ -235,6 +243,7 @@ func (r residentSkill) value() SkillRow {
 		Knockdown:               r.Knockdown.Value(),
 		Reqc:                    r.Reqc,
 		SelectorMask:            r.SelectorMask,
+		ExpIncrease:             r.ExpIncrease,
 		Reqi:                    r.Reqi,
 		Aura:                    r.Aura,
 		BuffModifiers:           r.BuffModifiers,
@@ -273,8 +282,10 @@ func (r residentSkill) value() SkillRow {
 		StatusCast:              r.StatusCast,
 		AreaBurst:               r.AreaBurst,
 		FixedDamage:             r.FixedDamage,
+		LifeSteal:               r.LifeSteal,
 		CombatTrap:              r.CombatTrap,
 		OffensiveArea:           r.OffensiveArea.Value(),
+		ActionArea:              r.ActionArea.Value(),
 		AlchemyStoneBonus:       r.AlchemyStoneBonus,
 		AlchemyReinforceBonus:   r.AlchemyReinforceBonus,
 		SpawnToken:              r.SpawnToken,
@@ -309,6 +320,7 @@ func (r residentSkill) value() SkillRow {
 		CoolTimeGroup:           r.CoolTimeGroup,
 		TimingPinned:            r.TimingPinned,
 		ActionRange:             r.ActionRange,
+		AIWeight:                r.AIWeight,
 		ActionRangePinned:       r.ActionRangePinned,
 		Masteries:               r.Masteries.Value(),
 		ReqStr:                  r.ReqStr,

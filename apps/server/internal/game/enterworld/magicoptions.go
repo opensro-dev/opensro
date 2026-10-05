@@ -305,3 +305,30 @@ func buildMagicOptionSnapshot(deps *Deps, character *Character) []MagicOptionRow
 	}
 	return snapshot
 }
+
+/*
+==================
+AvatarMagicOptionRow
+
+One avatar part's grantable options: the TID4 (1 hat, 2 dress,
+3 attachment) and the codenames of its magicoptionassign.txt row. The
+grant window (CSOItem_FillAvatarMagicOptionCandidates 78C720) lists
+these, resolved through the magicOptionSnapshot definitions.
+==================
+*/
+type AvatarMagicOptionRow struct {
+	Part    uint8    `json:"part"`
+	Options []string `json:"options"`
+}
+
+/*
+==================
+buildAvatarMagicOptions
+==================
+*/
+func buildAvatarMagicOptions(deps *Deps) []AvatarMagicOptionRow {
+	if deps.AvatarMagicOptions == nil {
+		return nil
+	}
+	return deps.AvatarMagicOptions()
+}

@@ -106,8 +106,12 @@ releaseRiddenVehicleInDoor
 CGObjPC_ProcessNormalDeath (529B10) releases the vehicle the player rides
 (the COS manager's +0x30, bound by TryBindRideActor and cleared on dismount)
 through ReleaseCOSOrExit: a rider who dies loses the horse or transport it
-sat on. The caller holds c's door. public carries the dismount, the speed
-refresh and the despawn; private the owner's item state.
+sat on. Its kind-1 release (CCOSManager_RetireOwnedActorAndPersist 4FA8B0,
+database operation 1, _DeleteCharCOS) deletes the vehicle's record; the
+cargo goes with it, since only the vehicle's own death reaches
+DropTransportCargo (cosdeath.go). The caller holds c's door. public
+carries the dismount, the speed refresh and the despawn; private the
+owner's item state.
 ================
 */
 func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Character, now int64) (public, private []wire.Frame) {
@@ -124,7 +128,9 @@ func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Cha
 	public = append(public, rt.refreshMovementEffects(division, c, now)...)
 	public = append(public, rt.retireCosRuntime(division, c, gid)...)
 	public = append(public, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()})
-	return public, companionItemStateFrames(c, ride)
+	private = companionItemStateFrames(c, ride)
+	c.ActiveCOS = nil
+	return public, private
 }
 
 /*

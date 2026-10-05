@@ -94,9 +94,11 @@ type Server struct {
 	dummyHash               []byte
 	passwordSlots           chan struct{}
 	loginAttempts           *loginLimiter
-	passwordFailures        passwordFailures
-	readiness               *readiness.Gate
-	bugReports              *bugreport.Service
+	// incidentReports paces /client/incident per account.
+	incidentReports  *loginLimiter
+	passwordFailures passwordFailures
+	readiness        *readiness.Gate
+	bugReports       *bugreport.Service
 }
 
 /*
@@ -160,6 +162,7 @@ func New(config Config) (*Server, error) {
 		dummyHash:               dummyHash,
 		passwordSlots:           make(chan struct{}, 16),
 		loginAttempts:           newLoginLimiter(now),
+		incidentReports:         newLoginLimiter(now),
 		readiness:               config.Readiness,
 		bugReports:              config.BugReports,
 	}, nil
@@ -191,6 +194,7 @@ func (server *Server) Handler() http.Handler {
 	mux.Handle("/title/logout", browser(http.HandlerFunc(server.handleBrowserLogout)))
 	mux.Handle("/title/character-select", browser(http.HandlerFunc(server.handleBrowserCharacterSelect)))
 	mux.Handle(bugReportPath, browser(server.requireRunning(http.HandlerFunc(server.handleBugReport))))
+	mux.Handle(clientIncidentPath, browser(http.HandlerFunc(server.handleClientIncident)))
 	mux.HandleFunc("/internal/cluster/shards/heartbeat", server.handleHeartbeat)
 	mux.HandleFunc("/internal/cluster/shards/release", server.handleLeaseRelease)
 	mux.HandleFunc("/internal/accounts", server.handleAccountDirectory)

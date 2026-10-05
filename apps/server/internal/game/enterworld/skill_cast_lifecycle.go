@@ -2,6 +2,7 @@ package enterworld
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 )
@@ -58,7 +59,9 @@ func nativeSkillDefersCancellation(fields []string, arity func(uint32) int) bool
 	matched := false
 	for i := 69; i < end; {
 		n, err := strconv.ParseInt(fields[i], 10, 64)
-		if err != nil {
+		// A tag cell is one DWORD, written signed or unsigned; anything
+		// wider is malformed rather than a wrapped tag.
+		if err != nil || n < math.MinInt32 || n > math.MaxUint32 {
 			return false
 		}
 		tag := uint32(n)

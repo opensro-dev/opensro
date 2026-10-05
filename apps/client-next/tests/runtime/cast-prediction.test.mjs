@@ -86,7 +86,7 @@ The action-time harness: one actor whose skill 1 plays ready01, wait01,
 attack1, each authored at one second.
 ================
 */
-function presenter() {
+function presenter( stages = [], sounds = [] ) {
 	const names = [ "stand", "ready01", "wait01", "attack1" ], pending = new Map();
 	/** @type {any[]} */
 	let actors = [];
@@ -112,7 +112,7 @@ function presenter() {
 						"1": {
 							clips: [ "attack1" ],
 							phaseClips: [ [ "ready01" ], [ "wait01" ], [ "attack1" ] ],
-							stages: []
+							stages
 						}
 					}
 				};
@@ -162,7 +162,7 @@ function presenter() {
 			}
 		}),
 		"http://localhost",
-		() => {},
+		event => sounds.push( event ),
 		createPresentationRandom( 1 )
 	);
 	/** @type {any} */
@@ -263,6 +263,8 @@ function pressAt( dx, ui = {}, before = game => {}, after = game => {} ) {
 				trainable: true,
 				spCost: 1,
 				targetRequired: true,
+				// Animal and monster groups: an enemy skill, as the shipped rows author.
+				targets: 6,
 				cooldownMs: 0,
 				actionMs: 1000,
 				range: 60,
@@ -343,4 +345,41 @@ test("a standing wall or aura holds the prediction only for its action time", ()
 	const castAt = at => game => game.receive( { opcode: row.opcode, payload }, at );
 	assert.equal( pressAt( 50, {}, castAt( 500 ) ), undefined, "an action still running must hold" );
 	assert.equal( pressAt( 50, {}, castAt( 0 ) )?.skill, 30, "a finished action held the press" );
+});
+
+test("the windup sound plays at the press, not when the server answers", () => {
+	// Soft Guard of Ice: READY authors csk_cold_ready.wav. Held until the
+	// answer, its 0.25 s window had passed at production latency.
+	const stages = [ {
+		phase: "READY",
+		action: "AT_LOOP",
+		move: "MOV_NONE",
+		startEvent: 0,
+		sound: "/assets/audio/sfx/prim/snd/skill/csk_cold_ready.wav",
+		scripts: []
+	} ];
+	const sounds = [];
+	const { p, gameplay, step } = presenter( stages, sounds );
+	gameplay.castPrediction = { ...PREDICTED, receivedAtMs: 2000 };
+	step( 2 );
+	step( 2.05 );
+	const windup = () => sounds.filter( s => s.path.endsWith( "csk_cold_ready.wav" ) );
+	assert.equal( windup().length, 1, "no windup sound at the press" );
+	assert.ok( windup()[0].expires >= 2.05, "the windup sound is already stale" );
+	gameplay.castPrediction = undefined;
+	gameplay.casts = [ {
+		token: 1,
+		caster: 1,
+		target: 1,
+		skill: 1,
+		receivedAtMs: 2360,
+		damage: 0,
+		fatal: false,
+		predictedToken: PREDICTED.token
+	} ];
+	step( 2.4 );
+	step( 2.5 );
+	assert.equal( windup().length, 1, "the adopted cast replayed the windup" );
+	assert.equal( p.error(), null );
+	p.dispose();
 });

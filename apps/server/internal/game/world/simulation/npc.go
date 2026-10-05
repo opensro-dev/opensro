@@ -42,6 +42,9 @@ type NpcDef struct {
 	// server-service data are joined; packet handlers must not re-derive it
 	// from a second codename allowlist.
 	TalkFlags uint32
+	// Services is the NPC's service option set (npcservice.go), which
+	// handlers check (CGObj_HasService 484DF0) and TalkFlags projects.
+	Services NpcServices
 	// AuthoredSpawn distinguishes npcpos.txt world coordinates from the
 	// synthetic anchor used by the old fixture.
 	AuthoredSpawn bool
@@ -94,7 +97,8 @@ type NpcTalkStoreTab struct {
 }
 
 type NpcTalkStoreGroup struct {
-	StoreGroupID int32
+	// StoreGroupID is the NPC's reference ID, a DWORD.
+	StoreGroupID uint32
 	Tabs         []NpcTalkStoreTab
 }
 
@@ -110,11 +114,8 @@ var defaultNpcRoster = [...]NpcDef{
 		NameStrID: "SN_NPC_EU_SMITH",
 		Name:      "Weapon Trader Balbardo",
 		Patrol:    true,
-		// The v1.188 service catalogue also proves action 0x0b for smiths,
-		// but its repair gameplay owner is not reconstructed yet. Never put a
-		// dead button on the wire; ResolveNpcTalkFlags applies the same rule to
-		// the shipped data-driven roster.
-		TalkFlags: NpcTalkFlagShop | NpcTalkFlagTalk,
+		// The fixture smith talks; DefaultNpcRoster adds 4C6350's services.
+		Services: NpcServices(0).With(NpcServiceShop, NpcServiceTalk),
 		// Media v1.150:
 		// refshopgroup GROUP_STORE_EU_SMITH -> NPC_EU_SMITH;
 		// refshoptab STORE_EU_SMITH_TAB1..3 ids 2015..2017 and the three
@@ -136,7 +137,6 @@ var defaultNpcRoster = [...]NpcDef{
 		Codename:     "NPC_CH_GACHA_MACHINE",
 		NameStrID:    "SN_NPC_CH_GACHA_MACHINE",
 		Name:         "Magic Pop",
-		TalkFlags:    NpcTalkFlagGachaMachine,
 		SpawnOffsetX: 24,
 		Patrol:       false,
 	},
@@ -147,7 +147,7 @@ var defaultNpcRoster = [...]NpcDef{
 		Codename:     "NPC_EU_ADVICE3",
 		NameStrID:    "SN_NPC_EU_ADVICE3",
 		Name:         "Guide Riise",
-		TalkFlags:    NpcTalkFlagTalk,
+		Services:     NpcServices(0).With(NpcServiceTalk),
 		SpawnOffsetX: 48,
 		Patrol:       false,
 	},
@@ -168,6 +168,8 @@ func DefaultNpcRoster() []NpcDef {
 			)
 		}
 		roster[index].NpcTalkStoreGroups = groups
+		roster[index].Services |= ResolveNpcServices(roster[index])
+		roster[index].TalkFlags = ResolveNpcTalkFlags(roster[index])
 	}
 	return roster
 }

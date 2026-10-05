@@ -25,6 +25,16 @@ export const CHECK_TASKS = [
 		args: [ "-B", "scripts/build/generate_loot_catalog.py", "--check" ]
 	} ),
 	commandTask( {
+		name: "check:compiled-quests",
+		description: "Verify the compiled quest catalog against its committed evidence",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "python",
+		args: [ "-B", "scripts/build/generate_compiled_quests.py", "--check" ]
+	} ),
+	commandTask( {
 		name: "check:client-preparation",
 		description: "Test the PK2 reader and the client preparation tool on synthetic archives",
 		kind: "check",
@@ -71,6 +81,15 @@ export const CHECK_TASKS = [
 		requires: [],
 		timeoutClass: "long",
 		pipeline: "source"
+	} ),
+	pipelineTask( {
+		name: "check:source-portable",
+		description: "Run the source pipeline without the Go gate (CI runs that on Linux)",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "long",
+		pipeline: "source-portable"
 	} ),
 	commandTask( {
 		name: "check:source-size",
@@ -211,6 +230,7 @@ export const CHECK_TASKS = [
 const sourceTasks = [
 	"check:release",
 	"check:loot-catalog",
+	"check:compiled-quests",
 	"check:client-preparation",
 	"check:pipeline-contracts",
 	"check:source-size",
@@ -231,6 +251,13 @@ export const CHECK_PIPELINES = Object.freeze( {
 		task,
 		after: []
 	}) ),
+	// CI's Windows job: the Go gate runs once, on the faster Linux runner
+	// (source-linux.yml), with a GOOS=windows vet for the Windows build.
+	"source-portable": sourceTasks.filter( ( task ) => task !== "check:server" ).map( ( task ) => ({
+		id: task.replaceAll( ":", "-" ),
+		task,
+		after: []
+	}) ),
 	tests: [
 		{ id: "build-resources", task: "assets:build:full", after: [] },
 		// The full build does not produce the focused families (assets.mjs), and
@@ -246,6 +273,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 	full: [
 		{ id: "release", task: "check:release", after: [] },
 		{ id: "loot-catalog", task: "check:loot-catalog", after: [] },
+		{ id: "compiled-quests", task: "check:compiled-quests", after: [] },
 		{ id: "client-preparation", task: "check:client-preparation", after: [] },
 		{ id: "pipeline-contracts", task: "check:pipeline-contracts", after: [] },
 		{ id: "source-size", task: "check:source-size", after: [] },

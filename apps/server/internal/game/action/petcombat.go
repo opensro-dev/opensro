@@ -13,7 +13,10 @@ BATTLE state - the same state machine monsters fight in. The follow order
 This module owns that per-pet combat intent. The pet tick (petai.go) pursues
 the target with the pet's movement owner and strikes through the shared
 combat formula and the one monster HP door, crediting the kill to the owner
-so experience, party sharing and loot need no pet-specific path.
+so experience, party sharing and loot need no pet-specific path. A player
+target is struck through the player-victim path with the owner as killer
+(4E6590: a COS killer stands for its owner), and only when the owner may
+attack it (5293A0).
 
 Deviation, recorded deliberately: native monsters retaliate against the pet
 that hit them. The port's monster acquisition targets players only, so the
@@ -29,6 +32,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -81,8 +85,11 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	if ref, ok := rt.cosReference(pet); !ok || ref.TidWord>>11 != attackPetBand {
 		return OpResult{}
 	}
-	target, ok := rt.characterMonster(division, snapshot, targetGID)
-	if !ok || target.CurrentHP == 0 {
+	target, ok := rt.resolveCombatTarget(division, snapshot, targetGID, nowMs)
+	if !ok {
+		return OpResult{}
+	}
+	if target.player != nil && rt.playerAttackTargetRefusal(division, snapshot, target.snapshot, nowMs) != 0 {
 		return OpResult{}
 	}
 	state := rt.petSessionFor(division, character.Name, cosGID)
@@ -152,15 +159,19 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) ([]simulation.Frame, boo
 	if intent == nil || step.ref.TidWord>>11 != attackPetBand {
 		return nil, false
 	}
-	target, ok := rt.characterMonster(step.key.division, step.snapshot, intent.target)
-	mover, live := rt.Monsters.Mover(step.key.division, intent.target)
-	if !ok || !live || target.CurrentHP == 0 {
+	target, ok := rt.resolveCombatTarget(step.key.division, step.snapshot, intent.target, step.nowMs)
+	if !ok || target.player != nil && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0 {
 		step.state.combat = nil
 		return nil, false
 	}
 	owner := rt.liveSpawn(simulation.WorldKey(step.key.division, step.snapshot.Name), step.snapshot, step.nowMs)
-	pose := mover.LivePoseAt(step.nowMs, nil)
-	targetAt := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
+	targetAt := target.at
+	targetRadius := float64(0)
+	if target.monster != nil {
+		targetRadius = target.monster.BodyRadius()
+	} else if radius, valid := rt.deps.CharacterBodyRadius(target.snapshot); valid {
+		targetRadius = radius
+	}
 	// INFERENCE: the pet's BATTLE leash is its owner's neighbourhood. A target
 	// that leaves the owner's sector and its neighbours (the same
 	// Pos_AreSamePlaneAndAdjacentSectors test 4D2200 applies to its position
@@ -177,7 +188,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) ([]simulation.Frame, boo
 	block := rt.cosAbnormal(step.key.division, step.snapshot.Name, step.pet.GID)
 	spacing := simulation.CombatSpacing{
 		ActorBodyRadius:  simulation.BodyRadius(step.ref.Parameters.BodyRadius),
-		TargetBodyRadius: simulation.BodyRadius(target.Ref.BodyRadius),
+		TargetBodyRadius: simulation.BodyRadius(targetRadius),
 		ActionReach:      reducedActionReach(float32(skill.ActionRange), cosParameter(step.ref, step.pet, block, actionRangeCutParameter)),
 	}
 	if !spacing.Valid() {
@@ -192,7 +203,12 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) ([]simulation.Frame, boo
 	if step.nowMs < intent.nextAttackMs {
 		return frames, true
 	}
-	strike, ok := rt.petStrike(step, target, skill, targetAt)
+	var strike petStrikeResult
+	if target.player != nil {
+		strike, ok = rt.petStrikePlayer(step, target, skill)
+	} else {
+		strike, ok = rt.petStrike(step, *target.monster, skill, targetAt)
+	}
 	if !ok {
 		return frames, true
 	}
@@ -367,6 +383,76 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	}
 	step.state.public = append(step.state.public, public...)
 	return petStrikeResult{frames: simFrames(actorFrames), fatal: fatal}, true
+}
+
+/*
+================
+petStrikePlayer
+
+One instant pet hit on a player: the pet's formula behind the victim's
+wall and its statuses (590680 with the pet's level), then the recipient
+side in a door holding the owner and the victim, the owner standing for
+the pet as attacker and killer. Published under the pet's GID.
+================
+*/
+func (rt *Runtime) petStrikePlayer(step petCombatStep, target combatTarget, skill enterworld.SkillRow) (petStrikeResult, bool) {
+	division, owner, victim := step.key.division, step.state.character, target.snapshot
+	block := rt.cosAbnormal(division, step.snapshot.Name, step.pet.GID)
+	attacker, err := cosCombatStats(step.ref, step.pet, block)
+	if err != nil {
+		return petStrikeResult{}, false
+	}
+	defender, _, err := rt.playerCombatStats(division, victim)
+	if err != nil {
+		return petStrikeResult{}, false
+	}
+	actor := criticalActor{division: division, monster: step.pet.GID}
+	level := step.pet.Level
+	if level == 0 {
+		level = step.ref.Level
+	}
+	hit := playerHit{target: target, defender: defender, kill: rt.classifyPlayerKill(division, owner, victim)}
+	hit.strike = playerStrike{division: division, victim: target.player, killer: deathKiller{player: owner}, skill: skill, now: step.nowMs}
+	if !rt.planPlayerStrike(&hit.strike,
+		func(wall *enterworld.SkillWall) (combat.WallOutcome, error) {
+			return rt.resolveCombatBehindWall(actor, skill, attacker, defender, wall)
+		},
+		func(wall *enterworld.SkillWall, _ combat.Result) ([]abnormal.Record, error) {
+			return rt.rollCreatureOnPlayer(division, step.pet.GID, level, &skill.Abnormal, victim, defender, wall)
+		}) {
+		return petStrikeResult{}, false
+	}
+	from := step.state.follower.Position(step.nowMs)
+	if err := rt.planStrikeDisplacement(&hit.strike, actor, from, target.at); err != nil {
+		return petStrikeResult{}, false
+	}
+	var commit playerHitCommit
+	if !rt.deps.UpdateMany([]*enterworld.Character{owner, target.player}, "pet-attack-player", func() bool {
+		commit = rt.commitPlayerHitInDoor(division, owner, &hit, step.nowMs)
+		return len(hit.struck.impacts) > 0
+	}) {
+		return petStrikeResult{}, false
+	}
+	token := atomic.AddUint32(&rt.castTokenCounter, 1)
+	result := wire.NewStationarySkillCastSingleTargetResult(
+		wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: step.pet.GID, InstanceToken: token}, target.gid, hit.struck.impacts)
+	if hit.struck.absorb != nil {
+		result = result.WithAbsorb(hit.struck.absorb)
+	}
+	success := wire.SkillCastSingleTargetResultFrame(result)
+	bracket := fmt.Sprintf("@pet:%d", step.pet.GID)
+	lifecycle, _ := skill.ActionLifecycleMs()
+	closeAt := step.nowMs + max(int64(lifecycle), projectileFlightMs(from, target.at, skill.ProjectileSpeed)+1)
+	rt.queueSkillFinalize(division, bracket, step.pet.GID, step.nowMs, wire.SkillCastReleaseFrame(token, target.gid))
+	rt.queueSkillFinalize(division, bracket, step.pet.GID, closeAt, wire.SkillCastFinalizeFrame(token))
+	public, recipient := rt.publishPlayerHit(division, hit, step.nowMs)
+	public = append([]wire.Frame{success}, public...)
+	public = append(public, commit.public...)
+	actorFrames := append(append([]wire.Frame(nil), public...), commit.actor...)
+	step.state.public = append(step.state.public, public...)
+	step.state.others = append(step.state.others, recipient)
+	step.state.others = append(step.state.others, rt.payJobKillShares(commit.shares)...)
+	return petStrikeResult{frames: simFrames(actorFrames), fatal: hit.struck.fatal}, true
 }
 
 /*

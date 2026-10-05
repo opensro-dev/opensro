@@ -120,6 +120,7 @@ def extract_cursor(pe, group_id: int) -> bytes | None:
 def main() -> int:
     ids = [int(arg, 0) for arg in sys.argv[1:]] or [
         0x95,
+        0x96,
         0x97,
         0x98,
         0x99,

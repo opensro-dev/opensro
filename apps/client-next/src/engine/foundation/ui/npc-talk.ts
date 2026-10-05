@@ -97,7 +97,8 @@ One frame of the talk window: the conversation, the authored layout and
 its origin, the text services, the pointer state and the NPC's service
 menu. Service flags left out are off, except talk; portalRows replaces
 the service menu with the teleport destinations. canReverseReturn adds the
-reverse return scroll's two destinations (5D4410, capability 0x20000000).
+reverse return's two destinations (5D4410, capability 0x20000000): the
+beginner guides' free return, or a gate's while a scroll is held.
 ================
 */
 export interface NpcTalkInput {
@@ -120,7 +121,11 @@ export interface NpcTalkInput {
 	readonly prompt?: string;
 	readonly canRecall?: boolean;
 	readonly canStorage?: boolean;
+	// canMagicOption is the smith's row 0x2F (capability 0x80000000).
+	readonly canMagicOption?: boolean;
 	readonly canReverseReturn?: boolean;
+	// 5D8FF0 0x800000: the fortress official's application row.
+	readonly canFortressOfficial?: boolean;
 	// jobRows are the job guild rows (job-guild.ts jobMenuRows).
 	readonly jobRows?: readonly { readonly id: string; readonly label: string; }[];
 }
@@ -176,6 +181,13 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 					...(input.canStorage ?
 						[ { id: "storage-open", label: copy( "UIIT_STT_UNITY_SERVER_USE_STORAGEROOM" ) } ] :
 						[]),
+					// 5D9100 lists row 0x2F after the storage rows.
+					...(input.canMagicOption ?
+						[ {
+							id: "magic-option-open",
+							label: copy( "UIIT_STT_AVATAR_MAGICOPTION_ENCHANT_MAGIC_PARAM" )
+						} ] :
+						[]),
 					...(input.canRecall ?
 						[ { id: "npc-recall-designate", label: copy( "UIIT_CTL_RECALL_POSITION" ) } ] :
 						[]),
@@ -193,7 +205,11 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 							label: copy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" )
 						} ] :
 						[]),
-					...(input.jobRows ?? [])
+					...(input.jobRows ?? []),
+					// 5D7AD0 action 0x34: the official's one row.
+					...(input.canFortressOfficial ?
+						[ { id: "npc-fortress-war", label: copy( "SN_FORTRESS_OFFICIAL_WARAPPLY" ) } ] :
+						[])
 				]),
 			{ id: "npc-talkend", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKEND" ) }
 		];

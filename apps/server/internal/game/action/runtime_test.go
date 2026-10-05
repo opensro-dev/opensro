@@ -9,6 +9,7 @@ runtime_test.go - tests for runtime.go
 package action
 
 import (
+	"bytes"
 	"encoding/binary"
 	"math"
 	"testing"
@@ -138,8 +139,8 @@ func TestPickupReachMeasuresFromLivePosition(t *testing.T) {
 			wire.TargetInteract{Gid: heap.Gid}.Encode())
 
 		assertOpcodes(t, result.Frames,
-			wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-			wire.OpPointsUpdate, wire.OpObjectDespawn)
+			wire.OpPickupAnim, wire.OpItemMoveResponse,
+			wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 		if character.Gold == nil || *character.Gold != 5777 {
 			t.Fatalf("gold = %v, want 5000+777", character.Gold)
 		}
@@ -220,8 +221,8 @@ func TestPickupApproachCompletesOnServerTickWithoutClientReplay(t *testing.T) {
 		t.Fatalf("pickup completion escaped through division-wide tick route: %+v", routed)
 	}
 	assertOpcodes(t, private,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpPointsUpdate, wire.OpObjectDespawn)
+		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 	assertOpcodes(t, peers, wire.OpPickupAnim, wire.OpObjectDespawn)
 	if character.Gold == nil || *character.Gold != 6000 {
 		t.Fatalf("gold = %v, want 5000+1000", character.Gold)
@@ -307,8 +308,8 @@ func TestPickupApproachMaturesIntoGrant(t *testing.T) {
 	clock.Advance(rearmed.Pending.Eta + 10*time.Millisecond)
 	granted := rt.HandleTargetInteract(testDivision, character, interact)
 	assertOpcodes(t, granted.Frames,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpPointsUpdate, wire.OpObjectDespawn)
+		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 	if character.Gold == nil || *character.Gold != 6000 {
 		t.Fatalf("gold = %v, want 5000+1000", character.Gold)
 	}
@@ -471,7 +472,8 @@ TestM1VisualsAlwaysRideBehindSocketTransfers
 
 THE M1 EMIT PIN: every transfer touching a socket < 13 appends its visual
 pushes behind the 0xB06D row - equip, unequip and swap; a bag-only move
-appends nothing.
+appends nothing. Viewers already holding the spawn row receive the same
+visual pushes, or they keep drawing the old gear until it respawns.
 ==================
 */
 func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
@@ -494,6 +496,10 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 			MovementType: wire.MoveTypeInventory, SourceSlot: 20, DestSlot: 6, Quantity: 1,
 		}))
 		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpEquipVisual, wire.OpBaseStats)
+		assertOpcodes(t, result.Broadcast, wire.OpEquipVisual)
+		if !bytes.Equal(result.Broadcast[0].Payload, result.Frames[1].Payload) {
+			t.Fatal("viewers were sent a different equip visual than the owner")
+		}
 		stats := result.Frames[2].Payload
 		if got := binary.LittleEndian.Uint32(stats[0x00:]); got != 33 {
 			t.Fatalf("equipped physical attack minimum = %d, want base+weapon projection 33", got)
@@ -520,6 +526,7 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 			MovementType: wire.MoveTypeInventory, SourceSlot: 6, DestSlot: 25, Quantity: 1,
 		}))
 		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpUnequipVisual, wire.OpBaseStats)
+		assertOpcodes(t, result.Broadcast, wire.OpUnequipVisual)
 		stats := result.Frames[2].Payload
 		if got := binary.LittleEndian.Uint32(stats[0x00:]); got != 6 {
 			t.Fatalf("unequipped physical attack minimum = %d, want base projection 6", got)
@@ -547,10 +554,11 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 			MovementType: wire.MoveTypeInventory, SourceSlot: 6, DestSlot: 20, Quantity: 1,
 		}))
 		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpEquipVisual, wire.OpBaseStats)
+		assertOpcodes(t, result.Broadcast, wire.OpEquipVisual)
 
-		visual, _ := wire.DecodeEquipVisual(result.Frames[1].Payload, equipWord)
+		visual, _ := wire.DecodeEquipVisual(result.Broadcast[0].Payload, equipWord)
 		if visual.RefObjID != 11459 || visual.OptLevel != 5 {
-			t.Fatalf("visual = %+v, want the swapped-in 11459 opt 5", visual)
+			t.Fatalf("viewer visual = %+v, want the swapped-in 11459 opt 5", visual)
 		}
 	})
 
@@ -560,6 +568,7 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 			MovementType: wire.MoveTypeInventory, SourceSlot: 20, DestSlot: 30, Quantity: 1,
 		}))
 		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse)
+		assertOpcodes(t, result.Broadcast)
 	})
 
 	t.Run("a refused equip pushes nothing", func(t *testing.T) {
@@ -622,7 +631,7 @@ func TestPickupOverCapLeavesRemainderOnGround(t *testing.T) {
 
 	// No despawn: the heap still lives with the remainder.
 	assertOpcodes(t, result.Frames,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse)
+		wire.OpPickupAnim, wire.OpItemMoveResponse, wire.OpActionState)
 	assertOpcodes(t, result.Broadcast, wire.OpPickupAnim)
 
 	remaining, ok := rt.Ground.Get(testDivision, added.Gid)
@@ -665,8 +674,8 @@ func TestPickupFullBagRefuses(t *testing.T) {
 	result := rt.HandleTargetInteract(testDivision, character,
 		wire.TargetInteract{Gid: added.Gid}.Encode())
 
-	assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpItemMoveResponse)
-	if got := result.Frames[1].Payload; got[0] != 0x02 || got[1] != wire.ErrCodeStorageFull {
+	assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpActionState)
+	if got := result.Frames[0].Payload; got[0] != 0x02 || got[1] != wire.ErrCodeStorageFull {
 		t.Fatalf("refusal = % X, want [02 07] inventory-full", got)
 	}
 	if rt.Ground.Count(testDivision) != 1 {
@@ -676,19 +685,19 @@ func TestPickupFullBagRefuses(t *testing.T) {
 
 /*
 ================
-TestPickupMissingItemAnswersCannotBePicked
+TestPickupMissingItemAnswersTargetGone
 ================
 */
-func TestPickupMissingItemAnswersCannotBePicked(t *testing.T) {
+func TestPickupMissingItemAnswersTargetGone(t *testing.T) {
 	character := testCharacter()
 	rt, _ := newTestRuntime(character, testItems())
 
 	result := rt.HandleTargetInteract(testDivision, character,
 		wire.TargetInteract{Gid: 300999}.Encode())
 
-	assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpItemMoveResponse)
-	if got := result.Frames[1].Payload; got[1] != wire.ErrCodeCannotBePicked {
-		t.Fatalf("refusal = % X, want the 0x39 cannot-be-picked notice", got)
+	assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpActionState)
+	if got := result.Frames[0].Payload; got[1] != wire.ErrCodeTargetGone {
+		t.Fatalf("refusal = % X, want the 0x03 cannot-find-target notice", got)
 	}
 }
 

@@ -224,7 +224,10 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 		if !exists || target.CurrentHP == 0 || !known || !skill.CombatTrap.Pinned {
 			return nil
 		}
-		return rt.explodeCombatTrap(object, c, snapshot, skill, target, lease, nowMs)
+		// Only a monster triggers (48D690 reads its AI's first opponent); the
+		// explosion strikes players too (combatTrapVictims).
+		primary := combatTarget{gid: target.Gid, monster: &target, at: rt.monsterSpawn(object.Division, target.Gid, nowMs)}
+		return rt.explodeCombatTrap(object, c, snapshot, skill, primary, lease, nowMs)
 	}
 	if !retired || targetGID == 0 || rt.CaptureQuestTrap == nil {
 		return nil

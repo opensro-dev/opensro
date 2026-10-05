@@ -29,6 +29,9 @@ latches the status's source-death flag; a vanished source receives no credit.
 type abnormalSourceState struct {
 	exists bool
 	dead   bool
+	// killer is the source as a death's killer (pkdeath.go), captured
+	// here because the fatal status hit runs inside the victim's write.
+	killer deathKiller
 }
 
 /*
@@ -72,7 +75,7 @@ monster falls through to the character registry. Never call from a write.
 func (rt *Runtime) captureAbnormalSource(division string, gid uint32) abnormalSourceState {
 	if rt.Monsters != nil {
 		if instance, exists := rt.Monsters.Get(division, gid); exists {
-			return abnormalSourceState{exists: true, dead: instance.CurrentHP == 0}
+			return abnormalSourceState{exists: true, dead: instance.CurrentHP == 0, killer: deathKiller{monster: &instance}}
 		}
 	}
 	character := rt.findCharacterByGid(division, gid)
@@ -80,5 +83,5 @@ func (rt *Runtime) captureAbnormalSource(division string, gid uint32) abnormalSo
 		return abnormalSourceState{}
 	}
 	snapshot := rt.characterSnapshot(division, character)
-	return abnormalSourceState{exists: true, dead: snapshot == nil || !enterworld.CharacterAlive(snapshot)}
+	return abnormalSourceState{exists: true, dead: snapshot == nil || !enterworld.CharacterAlive(snapshot), killer: deathKiller{player: snapshot}}
 }

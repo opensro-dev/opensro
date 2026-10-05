@@ -1,0 +1,68 @@
+{
+  "generator": "rebuild/.state/potion-audit/verify_core.py (Unicorn original x86 bytes)",
+  "binarySha256": "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a",
+  "filter": {
+    "address": "0x5503a0",
+    "words": 65536,
+    "sha256": "25cfa4e9a92398b54ce6dcfcc4d36f670b6864539588aeaa40cc49b98ca4c24b"
+  },
+  "packed": {
+    "address": "0x70c3d0",
+    "words": 65536,
+    "sha256": "3317996657fc88df8c0bf38541568c3637de02208adca193be9fea653ab210cc"
+  },
+  "checks": {
+    "addresses": [
+      "0x70c550",
+      "0x70c5d0",
+      "0x70c640"
+    ],
+    "domains": {
+      "kind": [
+        0,
+        1,
+        2
+      ],
+      "enabled": [
+        0,
+        1
+      ],
+      "active": [
+        0,
+        1
+      ],
+      "life": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "current": [
+        49,
+        50,
+        51
+      ],
+      "abnormal": [
+        0,
+        1,
+        32,
+        16384,
+        16417,
+        2147483648
+      ],
+      "timing": [
+        0,
+        128,
+        138,
+        255
+      ]
+    },
+    "cases": 3456,
+    "activeAndUseSha256": "5eba14c47c0c0c48229009cff1251018684831366e7f5c70e63b8db4f69b9cfc",
+    "interceptedServices": [
+      "0x70c300 use dispatch",
+      "0xa00980 clear timer",
+      "0xa00b30 schedule timer"
+    ]
+  }
+}

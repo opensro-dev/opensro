@@ -18,7 +18,8 @@ import {
 	movementGait,
 	sampleMovement as sample,
 	movementModeTransition,
-	movementSpeedTransition
+	movementSpeedTransition,
+	movementDuration
 } from "@/engine/foundation/gameplay/native-movement";
 import type { EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
@@ -41,10 +42,8 @@ duration
 ================
 */
 function duration( from: Pose, to: Pose, entity: EntityState ): number {
-	const distance = poseDistance( from, to ),
-		speed = (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0;
-	if ( (!Number.isFinite( speed ) || speed <= 0) && distance > 0 ) throw new Error( "Moving entity has no speed" );
-	return distance ? distance / speed * 1000 : 0;
+	const speed = (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0;
+	return movementDuration( poseDistance( from, to ), speed );
 }
 /*
 ================
@@ -323,8 +322,11 @@ mode
 		mode( entity: EntityState, now: number ): MotionUpdate | null {
 			const segment = active.get( entity.gid );
 			if ( !segment ) return null;
+			const mode = entity.movementMode ?? 3;
+			// Displacement keeps its authored timing (action state 4/5, not 858450's channel).
+			if ( segment.fixedTiming && mode !== 0 && mode !== 4 ) return null;
 			const speed = (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0;
-			const next = movementModeTransition( segment, entity.movementMode ?? 3, speed, now );
+			const next = movementModeTransition( segment, mode, speed, now );
 			const pose = resolve( entity.gid, next.pose, segment.previous ?? segment.from );
 			if ( next.segment ) {
 				active.set( entity.gid, { ...next.segment, from: pose, previous: pose, direction: segment.direction } );

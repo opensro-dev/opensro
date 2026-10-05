@@ -42,6 +42,9 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 	}
 	ordered := make([]candidate, 0, len(players))
 	for _, player := range players {
+		if player.OwnerGid != 0 {
+			continue // a companion is weighed with its owner (5464E0)
+		}
 		block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{
 			RegionID: player.Pose.RegionID, X: float64(float32(player.Pose.X)), Z: float64(float32(player.Pose.Z)),
 		})
@@ -63,12 +66,60 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 	var best playerPose
 	var bestDistance uint32
 	for _, candidate := range ordered {
-		distance := acquisitionDistance(from, candidate.player.Pose)
+		target, distance := nearestOwnerOrCompanion(actor, from, candidate.player, players)
 		if acquisitionRankAccepts(best.Gid, bestDistance, distance, sight) {
-			best, bestDistance = candidate.player, uint32(distance)
+			best, bestDistance = target, uint32(distance)
 		}
 	}
 	return best, best.Gid != 0
+}
+
+/*
+================
+nearestOwnerOrCompanion
+
+CAITactics_SelectNearestOwnerOrCompanion (5464E0): a candidate player
+stands for itself and each companion it owns that the monster may strike
+(status and hostility, 5298C0 with the COS's own identity); the nearest
+wins, a tie keeping the earlier (the player first, then container order).
+================
+*/
+func nearestOwnerOrCompanion(actor monster.Instance, from monster.Pose, owner playerPose, players []playerPose) (playerPose, float32) {
+	best, bestDistance := owner, acquisitionDistance(from, owner.Pose)
+	for _, companion := range players {
+		if companion.OwnerGid != owner.Gid ||
+			!monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, companion.NativeBodyStatus) ||
+			!ordinaryCompanionHostility(actor, companion) {
+			continue
+		}
+		if distance := acquisitionDistance(from, companion.Pose); distance < bestDistance {
+			best, bestDistance = companion, distance
+		}
+	}
+	return best, bestDistance
+}
+
+/*
+================
+ordinaryCompanionHostility
+
+5298C0 for a COS target: 5299E0 reads the companion's own identity and
+body status (a Fear exclusion names the companion), the fellow band (5,
+CGObj_IsFellowCOS 483980) is never hostile, and the first-attack
+protection is its owner's (COS+0x1CD8).
+================
+*/
+func ordinaryCompanionHostility(actor monster.Instance, companion playerPose) bool {
+	observer := actor.Observer()
+	if actor.Abnormal != nil {
+		fear := actor.Abnormal.Slots[abnormal.Fear]
+		observer.RestrictionD34 = actor.Abnormal.Mask
+		observer.Restriction118C = fear.Active
+		observer.ExcludedGID = fear.SourceGID
+	}
+	return monster.AllowsHostility(observer, companion.Guard.Protect(monster.HostilityTarget{
+		GID: companion.Gid, BodyStatus: companion.NativeBodyStatus, RejectedType3C: companion.Band == fellowCOSBand,
+	}))
 }
 
 /*
@@ -197,16 +248,26 @@ nearestEligiblePlayer
 ================
 */
 func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
-	if !IsDungeonRegion(from.RegionID) && actor.Nest.NativeTacticsFlags&0x184 == 0 {
-		return ordinaryPlayerAcquisition(actor, from, divisionPlayers, sightRange)
+	flags := actor.Nest.NativeTacticsFlags
+	if !IsDungeonRegion(from.RegionID) {
+		// 5478F0 picks the selector by flags: 4 first, then 0x80, then 0x100.
+		switch {
+		case flags&0x4 != 0:
+			return jobQueryAcquisition(actor, from, divisionPlayers, sightRange, jobQuery{})
+		case flags&0x80 != 0:
+			return jobQueryAcquisition(actor, from, divisionPlayers, sightRange, jobQuery{thieves: true})
+		case flags&0x100 == 0:
+			return ordinaryPlayerAcquisition(actor, from, divisionPlayers, sightRange)
+		}
 	}
-	// Special selectors 3/4/5 and dungeon cell queries are not selector 2.
-	// Retain their existing projection until those distinct contracts close.
+	// Selector 5 (flag 0x100, 547070) queries fortress gates, towers and
+	// camps beside players, and dungeon cells are queried apart; both keep
+	// this projection until the fortress war and dungeon queries land.
 	best := playerPose{}
 	bestDistance := sightRange
 	found := false
 	for _, player := range divisionPlayers {
-		if !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) {
+		if player.OwnerGid != 0 || !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) {
 			continue
 		}
 		// The first-attack protection holds for every acquisition scan.
@@ -244,4 +305,39 @@ func eligiblePlayerByGid(actor monster.Instance, players []playerPose, gid uint3
 	player, exists := playerByGid(players, gid)
 	return player, exists &&
 		monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus)
+}
+
+// fellowCOSBand is CGObj_IsFellowCOS's band (TypeID 4 = 5, 483980).
+const fellowCOSBand = 5
+
+/*
+================
+companionTargets
+================
+*/
+func (ops *MonsterMoverOps) companionTargets(divisionID string, owner playerPose, nowMs int64) []CompanionTarget {
+	if ops.Companions == nil {
+		return nil
+	}
+	return ops.Companions(divisionID, owner.Gid, nowMs)
+}
+
+/*
+================
+appendCompanionTargets
+
+Companion entries follow their owner, carrying its first-attack guard;
+their motion is the follower's settled pose.
+================
+*/
+func appendCompanionTargets(players []playerPose, companions []CompanionTarget) []playerPose {
+	if len(companions) == 0 {
+		return players
+	}
+	owner := players[len(players)-1]
+	for _, c := range companions {
+		players = append(players, playerPose{Gid: c.Gid, Pose: c.Pose, BodyRadius: c.BodyRadius,
+			NativeBodyStatus: c.NativeBodyStatus, Guard: owner.Guard, OwnerGid: owner.Gid, Band: c.Band})
+	}
+	return players
 }

@@ -100,8 +100,13 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 			device = created;
 			if ( timingEnabled && created.features.has( "timestamp-query" ) ) timing = createGpuTiming( created );
 			created.lost.then( info => {
+				// This owner destroys a device only from dispose(), which leaves
+				// running first: a loss seen while running was the browser's, even
+				// with reason "destroyed" (Chrome destroys a page's device after a
+				// GPU-process or driver reset). The renderer recreates the device
+				// (renderer.ts, at most three times) instead of ending the session.
 				if ( phase === "running" || phase === "starting" ) {
-					fail( `Device lost: ${info.message}`, info.reason !== "destroyed" );
+					fail( `Device lost (${info.reason}): ${info.message}`, true );
 				}
 			} );
 			created.addEventListener( "uncapturederror", event => fail( event.error.message ) );

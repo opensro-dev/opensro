@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -123,7 +124,12 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 	if p.rt.CompanionPresentations == nil && p.rt.PetPresentation != nil {
 		cos = p.rt.PetPresentation(p.divisionID, captured.name)
 	}
-	appearance := peerAppearance(p.rt.deps.GuildAuthority(), p.divisionID, captured)
+	appearance := peerAppearance(p.rt.deps.GuildAuthority(), p.rt.Unions, p.divisionID, captured)
+	if appearance != nil && p.rt.Stalls != nil {
+		if s, ok := p.rt.Stalls.Get(p.divisionID, captured.name); ok {
+			appearance.StallTitle = s.Title
+		}
+	}
 	if appearance != nil && p.rt.SpawnSkills != nil {
 		appearance.SpawnSkills = peerSpawnSkills(p.rt.SpawnSkills(p.divisionID, captured.name))
 	}
@@ -268,7 +274,7 @@ accessors (Go mutexes do not re-enter - inside the door this lookup
 would deadlock, which is why the FK copies out and resolves here).
 ==================
 */
-func peerAppearance(guilds enterworld.GuildStore, divisionID string, captured peerAppearanceCapture) *simulation.PeerAppearance {
+func peerAppearance(guilds enterworld.GuildStore, unions *union.Authority, divisionID string, captured peerAppearanceCapture) *simulation.PeerAppearance {
 	if !captured.hasModel {
 		return nil
 	}
@@ -291,6 +297,9 @@ func peerAppearance(guilds enterworld.GuildStore, divisionID string, captured pe
 			appearance.GuildName = record.Name
 			appearance.GuildID = uint32(record.ID)
 			appearance.CrestParam = record.CrestParam
+			if alliance, ok := unions.Of(divisionID, record.ID); ok {
+				appearance.AllianceID, appearance.AllianceCrest = uint32(alliance.AllianceID), alliance.Crest
+			}
 			for _, member := range members {
 				if member.CharID == captured.charID {
 					appearance.GuildGrantName = member.GrantName

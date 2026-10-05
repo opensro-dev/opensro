@@ -88,7 +88,12 @@ export interface EntityState {
 	readonly countryByte9c?: number;
 	readonly rarity?: number;
 	readonly rarityAuxIcon?: number;
-	readonly monsterSkin?: number;
+	// 861B00: a thief or hunter trade NPC's equipment variant (861720 indexes the trade equipment table).
+	readonly tradeVariant?: number;
+	// 4FA0B0: a fortress structure's hit points, event zone (RefEventStructID) and state word.
+	readonly structureHp?: number;
+	readonly eventStructId?: number;
+	readonly structureState?: number;
 	readonly spawnSkills?: readonly SpawnSkill[];
 	readonly titleText?: string;
 	readonly titleId?: number;
@@ -125,6 +130,9 @@ export interface EntityState {
 	readonly avatars?: readonly EntityEquipment[];
 	readonly bodyShape?: number;
 	readonly visualFlags?: number;
+	// CPSMission_OnTargetActionState0x314D (7786E0): a caught result put
+	// SYSTEM_CAPTURE_MARK in this character's state-decoration slot.
+	readonly captureMark?: boolean;
 	readonly mountedOn?: number;
 	readonly movementPath?: { readonly from: Pose; readonly to: Pose; };
 	readonly movementRevision?: number;

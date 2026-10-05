@@ -25,7 +25,9 @@ import {
 	interpolateMovement as interpolate,
 	REGION_SIZE,
 	movementModeTransition,
-	movementSpeedTransition
+	movementSpeedTransition,
+	validMovementSpeed,
+	movementDuration
 } from "@/engine/foundation/gameplay/native-movement";
 import { createNavigation } from "./navigation/navigation";
 import { admitPose, decodeMovementReceipt, receiptWorld } from "@/engine/foundation/gameplay/movement-wire";
@@ -360,7 +362,7 @@ CATCHUP_SPEED_FACTOR, so it reads as walking and not as a slide or a jump.
 				start: now,
 				timing: "speed",
 				lead: "server",
-				duration: refused ? remaining / speed * 1000 : Math.max( arrival - now, fastest )
+				duration: refused ? movementDuration( remaining, speed ) : Math.max( arrival - now, fastest )
 			} ) :
 			null;
 	}
@@ -663,22 +665,16 @@ mode
 			mode = value;
 			speed = value === 2 ? walkSpeed : runSpeed;
 			if ( !segment ) return;
-			const next = movementModeTransition( segment, value, speed, now, segment.timing === "server" );
+			// A displacement (knockback, dash) is action state 4/5, not the
+			// navigation channel 858450 switches: its authored timing stands.
+			if ( segment.fixedTiming && value !== 0 && value !== 4 ) return;
+			const next = movementModeTransition( segment, value, speed, now );
 			pose = navigation.surface( next.pose, pose ?? next.pose, owner );
 			poseAtMs = now;
+			// A server-led walk was re-timed by the server from its own live point.
 			if ( segment.timing === "server" || !next.segment ) authoritative = pose;
 			if ( !next.segment ) walk = null;
-			segment = next.segment ?
-				(segment.timing === "server" ?
-					segment :
-					bindOwners( {
-						...next.segment,
-						from: pose,
-						timing: segment.timing,
-						lead: segment.lead,
-						direction: segment.direction
-					} )) :
-				null;
+			segment = next.segment ? bindOwners( { ...segment, ...next.segment, from: pose } ) : null;
 		},
 		/*
 ================
@@ -686,7 +682,7 @@ speeds
 ================
 		*/
 		speeds( walk: number, run: number, now: number ) {
-			if ( ![ walk, run ].every( n => Number.isFinite( n ) && n > 0 ) ) {
+			if ( ![ walk, run ].every( validMovementSpeed ) ) {
 				throw Error( "Invalid movement speed channels" );
 			}
 			const previous = speed;
@@ -735,7 +731,7 @@ native
 					start: now,
 					timing: "speed",
 					lead: "client",
-					duration: poseDistance( current, decoded.to ) / speed * 1000
+					duration: movementDuration( poseDistance( current, decoded.to ), speed )
 				} );
 				return;
 			}
@@ -759,7 +755,7 @@ native
 				start: now,
 				timing: "speed",
 				lead: "server",
-				duration: poseDistance( pose, decoded.to ) / speed * 1000
+				duration: movementDuration( poseDistance( pose, decoded.to ), speed )
 			} );
 		},
 		/*
@@ -869,7 +865,7 @@ correct
 						start: now,
 						timing: "speed",
 						lead: "client",
-						duration: poseDistance( pose, clipped ) / speed * 1000,
+						duration: movementDuration( poseDistance( pose, clipped ), speed ),
 						owners: query.owners
 					};
 				}
@@ -929,7 +925,7 @@ request
 					start: now,
 					timing: "speed",
 					lead: "client",
-					duration: poseDistance( pose, clipped ) / speed * 1000,
+					duration: movementDuration( poseDistance( pose, clipped ), speed ),
 					owners: query.owners
 				};
 			}
@@ -965,7 +961,7 @@ walk (native); a refusal ends it (endPrediction).
 				start: now,
 				timing: "speed",
 				lead: "client",
-				duration: poseDistance( current, clipped ) / speed * 1000,
+				duration: movementDuration( poseDistance( current, clipped ), speed ),
 				owners: query.owners
 			};
 			return true;
@@ -990,7 +986,7 @@ start, so walk back there.
 				start: now,
 				timing: "speed",
 				lead: "server",
-				duration: poseDistance( current, from ) / speed * 1000
+				duration: movementDuration( poseDistance( current, from ), speed )
 			} );
 		},
 		/*

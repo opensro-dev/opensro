@@ -10,6 +10,7 @@ package action
 import (
 	"fmt"
 	"math"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/commerce"
 	"path/filepath"
 	"strconv"
@@ -17,6 +18,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/fortress"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -29,8 +32,17 @@ type portalDestination struct {
 	id, ref  uint32
 	code     string
 	building bool
+	// fortressGate is a building of TypeID 4/1/1/1 (TypeId_IsFortressGate
+	// 4F8820): the field gates of a fortress, not its town portal.
+	fortressGate bool
+	// gateKind is the TID4 of a 4/1/1 teleport building, which
+	// CRefData_FindWorldTeleportByKind (51D260) selects revival gates by: 1
+	// a fortress gate, 2 a fortress's revival gate.
+	gateKind uint8
 	recall   bool
-	spawn    simulation.Spawn
+	// world is GenWorldID, the RefGameWorld the gate spawn lies in.
+	world instance.DefinitionID
+	spawn simulation.Spawn
 }
 
 /*
@@ -76,6 +88,8 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 		buildings: map[string]uint32{}}
 	number := func(s string) (uint32, error) { v, e := strconv.ParseUint(s, 10, 32); return uint32(v), e }
 	buildings := map[uint32]bool{}
+	fortressGates := map[uint32]bool{}
+	gateKinds := map[uint32]uint8{}
 	buildingRows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportbuilding.txt"))
 	if len(buildingRows) == 0 {
 		return nil, fmt.Errorf("teleportbuilding is absent or empty")
@@ -92,6 +106,13 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 			return nil, e
 		}
 		buildings[id] = true
+		// Columns 9-12 are TypeID1-4.
+		if len(r) > 12 && r[9] == "4" && r[10] == "1" && r[11] == "1" {
+			if kind, e := strconv.ParseUint(r[12], 10, 8); e == nil {
+				gateKinds[id] = uint8(kind)
+			}
+			fortressGates[id] = r[12] == "1"
+		}
 		if len(r) > 2 {
 			c.buildings[r[2]] = id
 		}
@@ -134,7 +155,16 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 		if e != nil || recall > 1 {
 			return nil, fmt.Errorf("teleportdata recall eligibility at row %d", i+1)
 		}
-		c.destinations[id] = portalDestination{id: id, ref: ref, code: r[2], building: buildings[ref], recall: recall == 1, spawn: simulation.Spawn{RegionID: uint16(region), X: xyz[0], Y: xyz[1], Z: xyz[2]}}
+		world, e := strconv.ParseUint(r[12], 10, 16)
+		if e != nil {
+			return nil, fmt.Errorf("teleportdata world at row %d", i+1)
+		}
+		if _, known := instance.Lookup(instance.DefinitionID(world)); !known {
+			return nil, fmt.Errorf("teleportdata row %d names unknown world %d", i+1, world)
+		}
+		c.destinations[id] = portalDestination{id: id, ref: ref, code: r[2], building: buildings[ref],
+			fortressGate: fortressGates[ref], gateKind: gateKinds[ref], recall: recall == 1, world: instance.DefinitionID(world),
+			spawn: simulation.Spawn{RegionID: uint16(region), X: xyz[0], Y: xyz[1], Z: xyz[2]}}
 		if ref != 0 {
 			if _, exists := c.sources[ref]; exists {
 				return nil, fmt.Errorf("ambiguous teleport source ref %d", ref)
@@ -202,20 +232,20 @@ return scroll's Param4 (4A0380 reads it through the reference data's
 +0x190 teleport link).
 ================
 */
-func (rt *Runtime) buildingGateSpawn(code string) (simulation.Spawn, bool) {
+func (rt *Runtime) buildingGateSpawn(code string) (travelPoint, bool) {
 	if rt.portals == nil {
-		return simulation.Spawn{}, false
+		return travelPoint{}, false
 	}
 	ref, ok := rt.portals.buildings[code]
 	if !ok {
-		return simulation.Spawn{}, false
+		return travelPoint{}, false
 	}
 	for _, destination := range rt.portals.destinations {
 		if destination.ref == ref {
-			return destination.spawn, true
+			return travelPoint{spawn: destination.spawn, world: portalWorld(destination)}, true
 		}
 	}
-	return simulation.Spawn{}, false
+	return travelPoint{}, false
 }
 
 /*
@@ -238,13 +268,27 @@ func (rt *Runtime) ConfigurePortals(dir string) error {
 		return err
 	}
 	rt.portals = catalog
+	fortresses, err := loadFortressCatalog(dir)
+	if err != nil {
+		return err
+	}
+	rt.Fortresses = fortress.New(fortresses)
+	for i := range rt.NpcRoster {
+		for _, row := range fortresses {
+			if rt.NpcRoster[i].Codename == row.OfficialNpc {
+				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagFortressOfficial
+			}
+		}
+	}
 	for i := range rt.NpcRoster {
 		if id, ok := catalog.sources[rt.NpcRoster[i].RefObjID]; ok {
-			rt.NpcRoster[i].TalkFlags = (rt.NpcRoster[i].TalkFlags &^ simulation.NpcTalkFlagRecallPoint) | 0x80
+			rt.NpcRoster[i].TalkFlags = (rt.NpcRoster[i].TalkFlags &^ simulation.NpcTalkFlagRecallPoint) | simulation.NpcTalkFlagTeleport
+			rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceTeleport)
 			rt.NpcRoster[i].RebirthPoint = simulation.Spawn{}
 			destination := catalog.destinations[id]
 			if destination.recall && destination.spawn.RegionID != 0 && destination.spawn.RegionID&0x8000 == 0 {
 				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagRecallPoint
+				rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceRecallPoint)
 				rt.NpcRoster[i].RebirthPoint = destination.spawn
 			}
 		}
@@ -291,37 +335,85 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(refusal)
 	}
 	source := rt.portals.destinations[sourceID]
+	// 4F30E1: a murderer (PvP state 2) may not pass a building gate (the
+	// source object's vtable +0x44), 0x1C16; a ferry still carries one.
+	if source.building && murderer(c) {
+		return portalFailure(errCodeMurdererGate)
+	}
 
 	link, ok := rt.portals.links[[2]uint32{sourceID, target}]
 	if !ok {
 		return portalFailure(2)
 	}
-	destination := rt.portals.destinations[target].spawn
+	arrival := rt.portals.destinations[target]
+	destination := arrival.spawn
 	if destination.RegionID == 0 || destination.RegionID&0x8000 != 0 {
 		return portalFailure(2)
 	}
-	var previous simulation.WorldState
-	rt.bindResidentRegion(simulation.WorldKey(division, c.Name), rt.Now().UnixMilli())
-	previousWorld := c.World
-	previousGold := c.Gold
-	failure := byte(2)
-	key := simulation.WorldKey(division, c.Name)
-	if !rt.deps.Update(c, "portal-travel", func() bool {
+	destinationWorld, refusal := rt.portalWorldAdmission(division, c, arrival)
+	if refusal != 0 {
+		return portalFailure(refusal)
+	}
+	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: destination, world: destinationWorld, reason: "portal-travel"}, func() (int64, OpResult, bool) {
 		mask := uint32(0)
 		if rt.QuestTravelBlocks != nil {
 			mask = rt.QuestTravelBlocks(c)
 		}
 		fee, valid := commerce.AdjustPrice(uint64(link.fee), rt.commerceTax(division, npc.RefObjID, c), true)
 		if !valid {
-			failure = 2
-			return false
+			return 0, portalFailure(2), false
 		}
 		link.fee = int64(fee)
-		if failure = portalAdmission(c, source, link, mask, rt.hasSummonedTransportCOS(c)); failure != 0 {
-			return false
+		if failure := portalAdmission(c, source, link, mask, rt.hasSummonedTransportCOS(c)); failure != 0 {
+			return 0, portalFailure(failure), false
 		}
 		if c.NativeTeleportMode != 0 || rt.hasOpenSkillCast(division, c.Name) {
-			failure = 0x14
+			return 0, portalFailure(0x14), false
+		}
+		return link.fee, OpResult{}, true
+	})
+}
+
+/*
+================
+gateTravel
+
+One move through a gate: the destination point, the world it lies in
+(a fortress gate's is the fortress world) and the store reason.
+================
+*/
+type gateTravel struct {
+	division    string
+	character   *enterworld.Character
+	destination simulation.Spawn
+	world       instance.ID
+	reason      string
+}
+
+/*
+================
+commitGateTravel
+
+Moves the character through a gate to destination: admit runs inside the
+character transaction and answers the fee to charge, or the refusal to
+send. A move into another world transfers the population session; a
+failed transfer or re-entry rolls the move and the fee back. The caller
+holds the division lock.
+================
+*/
+func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpResult, bool)) OpResult {
+	division, c, destination, destinationWorld, reason := travel.division, travel.character, travel.destination, travel.world, travel.reason
+	currentWorld := instance.ID(domain.CharacterWorldInstance(c))
+	var previous simulation.WorldState
+	rt.bindResidentRegion(simulation.WorldKey(division, c.Name), rt.Now().UnixMilli())
+	previousWorld := c.World
+	previousGold := c.Gold
+	refusal := portalFailure(2)
+	key := simulation.WorldKey(division, c.Name)
+	if !rt.deps.Update(c, reason, func() bool {
+		fee, answer, ok := admit()
+		if !ok {
+			refusal = answer
 			return false
 		}
 		state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
@@ -335,21 +427,39 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		})
 		writeBackWorld(c, state)
 		c.World.MoveSegment = nil
+		setCharacterWorld(c, destinationWorld)
 		gold := int64(0)
 		if c.Gold != nil {
 			gold = *c.Gold
 		}
-		gold -= link.fee
+		gold -= fee
 		c.Gold = &gold
 		return true
 	}) {
-		return portalFailure(failure)
+		return refusal
+	}
+	var membership populationAdmission
+	if destinationWorld != currentWorld {
+		previousMembership, status := rt.transferPopulationSession(division, c.Name, destinationWorld, c.GMPrivilege)
+		if status != instance.Success {
+			rt.deps.Update(c, "portal-world-rollback", func() bool {
+				rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
+				c.World = previousWorld
+				c.Gold = previousGold
+				return true
+			})
+			return portalFailure(portalTransferError(status))
+		}
+		membership = previousMembership
 	}
 	rt.endTransformForLoading(division, c)
 	rt.endPartyAurasForLoading(division, c)
 	previousPets := rt.relocateReturningPet(division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(division, c.Name)
 	if !accepted || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {
+		if destinationWorld != currentWorld {
+			rt.restorePopulationSession(membership)
+		}
 		rt.restoreCompanionRelocation(previousPets)
 		rt.deps.Update(c, "portal-entry-rollback", func() bool {
 			rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })

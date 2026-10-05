@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/game/social/match"
 	"opensro.online/server/internal/game/social/mentor"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
@@ -58,9 +59,10 @@ type gameplayPlane struct {
 	chat          *chat.Runtime
 	parties       *party.Runtime
 	guildInvites  *guild.InviteRuntime
+	unions        *guild.UnionRuntime
 	mentorInvites *mentor.InviteRuntime
 	matches       *match.Runtime
-	siege         *siege.Runtime
+	siege         *siege.Lane
 	quests        *quest.Runtime
 }
 
@@ -94,6 +96,7 @@ func newGameplayPlane(
 		return nil, err
 	}
 	items := action.NewRuntime(deps, deps.MonsterState)
+	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
 		return nil, fmt.Errorf("loot catalogue: %w", err)
@@ -122,6 +125,9 @@ func newGameplayPlane(
 	if err := items.ConfigureGacha(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("gacha catalogue: %w", err)
 	}
+	if err := items.ConfigureStallNetwork(devPaths.TextdataDir); err != nil {
+		return nil, err
+	}
 	if err := items.ConfigureCommerce(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
@@ -133,6 +139,7 @@ func newGameplayPlane(
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
 	deps.StaticRefItemCodenames = items.StaticRefItemCodenames
 	deps.ExtraMagicOptionIDs = items.AlchemyMagicOptionIDs
+	deps.AvatarMagicOptions = items.AvatarMagicOptions
 	items.Ground.Restore(authorityStore.GroundSnapshotForRestore())
 	authorityStore.AttachGround(items.Ground)
 
@@ -178,6 +185,7 @@ func newGameplayPlane(
 	movementRuntime.MovementBlocked = items.PlayerMovementBlocked
 	movementRuntime.RetireMoveEffects = items.RetireMoveEffects
 	movementRuntime.AttackLocked = items.PlayerAttackLocked
+	movementRuntime.MotionLocked = items.PlayerMotionLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.CompanionPresentations = items.CompanionPresentations
 	movementRuntime.SpawnSkills = items.EntrySkills
@@ -186,18 +194,34 @@ func newGameplayPlane(
 	deps.RelocateStrandedSpawn = water.RelocateStrandedSpawn
 
 	presence := livepresence.NewDirectory(ts.Hub)
+	unionAuthority := union.New()
+	if err := unionAuthority.Restore(ownedShard.ID, deps.Alliances); err != nil {
+		return nil, err
+	}
+	items.Unions = unionAuthority
+	movementRuntime.Unions = unionAuthority
+	movementRuntime.Stalls = items.Stalls
+	unions := guild.NewUnionRuntime(deps, presence, unionAuthority, items.Fortresses)
 	communitySeeds := community.SeedFramesFunc(presence, deps.Letters)
 	deps.CommunitySeedFramesFor = func(
 		divisionID string,
 		character *enterworld.Character,
 	) []enterworld.Packet {
 		frames := communitySeeds(divisionID, character)
-		return guild.AppendSeedFrame(frames, deps.Guilds, presence, divisionID, character)
+		frames = guild.AppendSeedFrame(frames, deps.Guilds, presence, divisionID, character)
+		if frame, ok := unions.SeedFrame(divisionID, character); ok {
+			frames = append(frames, frame)
+		}
+		return frames
 	}
 
 	parties := party.NewRuntime(deps, presence)
 	parties.UseMemberVitals(items.GameplayVitals)
 	parties.UseLivePose(items.LiveSpawnFor)
+	parties.UseMasteries(party.MasteriesFromEnv())
+	if party.MasteriesFromEnv() {
+		log.Infof("party: member rows carry the two main masteries ON (%s=off disables)", party.EnvPartyMasteries)
+	}
 	items.NextPartyLootMember = parties.Registry().NextLootMember
 	items.RewardActorPresent = func(division, name string) bool {
 		s, ok := presence.SessionByName(division, name)
@@ -227,8 +251,9 @@ func newGameplayPlane(
 		return false
 	}
 	guildInvites := guild.NewInviteRuntime(deps, presence)
+	guildInvites.Unions = unions
 	mentorInvites := mentor.NewInviteRuntime(deps, presence)
-	connectInvitationLanes(parties, guildInvites, mentorInvites, items)
+	connectInvitationLanes(parties, guildInvites, unions, mentorInvites, items)
 
 	matches := match.NewRuntime(deps, presence)
 	matches.MemberCountFor = func(divisionID, characterName string) int {
@@ -244,10 +269,29 @@ func newGameplayPlane(
 	matches.MentorJoinPrecheck = mentorInvites.MatchJoinPrecheck
 	matches.CommitMentorJoin = mentorInvites.CommitMatchJoin
 
-	siegeRuntime, err := siege.NewRuntimeFromEnv(ts.Hub)
+	if err := items.Fortresses.Restore(ownedShard.ID, deps.Fortresses); err != nil {
+		return nil, err
+	}
+	items.FortressStore = deps.Fortresses
+	siegeRuntime, err := siege.NewLane(siege.LaneConfig{
+		Division:   ownedShard.ID,
+		Fortresses: items.Fortresses,
+		GuildName: func(guildID int64) string {
+			guild, _, ok := deps.Guilds.Guild(ownedShard.ID, guildID)
+			if !ok {
+				return ""
+			}
+			return guild.Name
+		},
+		WarChanged: func(nowMs int64, active bool) []simulation.DivisionFrames {
+			return items.FortressWarChanged(ownedShard.ID, nowMs, active)
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
+	items.FortressWindows = siegeRuntime.WarStart
+	items.FortressList = siegeRuntime.FortressList
 
 	return &gameplayPlane{
 		divisionID:    ownedShard.ID,
@@ -259,6 +303,7 @@ func newGameplayPlane(
 		presence:      presence,
 		parties:       parties,
 		guildInvites:  guildInvites,
+		unions:        unions,
 		mentorInvites: mentorInvites,
 		matches:       matches,
 		siege:         siegeRuntime,
@@ -300,11 +345,15 @@ and resurrection invitations without moving their state ownership.
 func connectInvitationLanes(
 	parties *party.Runtime,
 	guildInvites *guild.InviteRuntime,
+	unions *guild.UnionRuntime,
 	mentorInvites *mentor.InviteRuntime,
 	items *action.Runtime,
 ) {
 	resurrections := items.ResurrectionConsent()
+	exchanges := items.ExchangeConsent()
+	parties.AddConsentArm(exchanges)
 	parties.AddConsentArm(guildInvites)
+	parties.AddConsentArm(unions)
 	parties.AddConsentArm(mentorInvites)
 	parties.AddConsentArm(resurrections)
 
@@ -314,18 +363,31 @@ func connectInvitationLanes(
 	partyPending := parties.Registry().HasPendingInviteFor
 	guildInvites.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
+			unions.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name)
+			resurrections.HasPendingInvite(divisionID, name) ||
+			exchanges.HasPendingInvite(divisionID, name)
+	}
+	unions.PeerPending = func(divisionID, name string) bool {
+		return partyPending(divisionID, name) ||
+			guildInvites.HasPendingInvite(divisionID, name) ||
+			mentorInvites.HasPendingInvite(divisionID, name) ||
+			resurrections.HasPendingInvite(divisionID, name) ||
+			exchanges.HasPendingInvite(divisionID, name)
 	}
 	mentorInvites.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name)
+			unions.HasPendingInvite(divisionID, name) ||
+			resurrections.HasPendingInvite(divisionID, name) ||
+			exchanges.HasPendingInvite(divisionID, name)
 	}
 	items.ProposalPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
-			mentorInvites.HasPendingInvite(divisionID, name)
+			unions.HasPendingInvite(divisionID, name) ||
+			mentorInvites.HasPendingInvite(divisionID, name) ||
+			exchanges.HasPendingInvite(divisionID, name)
 	}
 }
 
@@ -371,6 +433,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d, gold x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.GoldRate)
 		game.items.DropPassRate = stats.Growth.DropRate
 		game.items.GoldRate = stats.Growth.GoldRate
+		game.items.PartyShareFloor = true
 	}
 	stats.Withdrawal = game.items.WithdrawalHooks()
 	stats.BaseStats = game.deps.PlayerBaseStats
@@ -449,6 +512,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.RecallStatPoints = stats.StatRecallUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()
+	game.items.UpdateJobExperience = stats.JobExperienceUpdater()
 	// Delivery resolves sessions from their bindings alone and never reads the
 	// character store: the action runtime publishes from inside character
 	// doors (the store's write lock), where any store read would deadlock.
@@ -477,18 +541,20 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		}
 	}
 
-	game.items.PushMonsterCast = func(division string, source uint32, targetName string, result simulation.MonsterAttackResult) {
+	game.items.PushMonsterCast = func(division string, source uint32, result simulation.MonsterAttackResult) {
 		public := make([]wire.Frame, len(result.Frames))
 		for i, f := range result.Frames {
 			public[i] = wire.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope}
 		}
 		action.BroadcastObservedFrames(hub, division, 0, source, public)
-		private := make([]wire.Frame, len(result.TargetFrames))
-		for i, f := range result.TargetFrames {
-			private[i] = wire.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope}
-		}
-		if len(private) > 0 {
-			game.items.PushCharacterFrames(division, targetName, private)
+		for _, recipient := range result.Private {
+			private := make([]wire.Frame, len(recipient.Frames))
+			for i, f := range recipient.Frames {
+				private[i] = wire.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope}
+			}
+			if len(private) > 0 {
+				game.items.PushCharacterFrames(division, recipient.CharacterName, private)
+			}
 		}
 	}
 
@@ -503,10 +569,13 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	community.RegisterFriend(hub, game.deps, game.presence)
 	community.RegisterLetter(hub, game.deps, game.presence)
 	game.chat = chat.Register(hub, game.deps, game.presence, game.parties.Registry())
+	game.chat.Unions = game.unions
+	game.chat.Stalls = game.items.Stalls
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)
-	guild.Register(hub, game.deps, game.presence)
+	guild.Register(hub, game.deps, game.presence, game.items, game.unions)
+	game.unions.Register(hub)
 	game.guildInvites.Register(hub)
 	game.mentorInvites.Register(hub)
 	return nil

@@ -93,6 +93,10 @@ character names; the prefix alone grants no permissions.
 
 ### Bug reports
 
+The quick party board shows each member's two main mastery trees. It is on
+by default; deploying with `SRO_PARTY_MASTERIES=off` in the environment
+(`off`, `0` or `false`) sends the native roster rows without them.
+
 In-game bug reports (the bug button and `/bug` in chat) are off unless the
 deployer sets a Discord webhook. `sro-nomad deploy` reads these variables from
 its own environment:

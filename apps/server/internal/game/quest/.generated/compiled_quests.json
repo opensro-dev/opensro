@@ -1,0 +1,556 @@
+[
+	{
+		"Codename": "QNO_CA_HORSE_3",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CA_HORSE",
+		"EndNpcCodename": "NPC_CA_WAREHOUSE",
+		"OfferPromptSymbol": "SN_TALK_QNO_CA_HORSE_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_CA_HORSE_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_CA_HORSE_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_CA_HORSE_3_06",
+		"RequiredQuests": [
+			"QNO_CA_HORSE_2"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_CA_HORSE_3_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_CA_HORSE_3_05",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_CA_HORSE_2_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_CA_THIEF_4",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CA_HUNTER",
+		"EndNpcCodename": "NPC_CA_SPECIAL",
+		"OfferPromptSymbol": "SN_TALK_QNO_CA_THIEF_4_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_CA_THIEF_4_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_CA_THIEF_4_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_CA_THIEF_4_06",
+		"RequiredQuests": [
+			"QNO_CA_THIEF_3"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_CA_THIEF_4_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_CA_THIEF_4_05",
+		"RewardExp": 1400,
+		"RewardGold": 300,
+		"RewardSkillExp": 150,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_CA_THIEF_2_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_CH_POTION_2",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CH_POTION",
+		"EndNpcCodename": "NPC_CH_FERRY2",
+		"OfferPromptSymbol": "SN_TALK_QNO_CH_POTION_2_02",
+		"AcceptResponseSymbol": "SN_TALK_QNO_CH_POTION_2_03",
+		"DenyResponseSymbol": "SN_TALK_QNO_CH_POTION_2_04",
+		"CompletePromptSymbol": "SN_TALK_QNO_CH_POTION_2_08",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_CH_POTION_2_06",
+		"InventoryFullSymbol": "SN_TALK_QNO_CH_POTION_2_05",
+		"RewardExp": 14400,
+		"RewardGold": 3800,
+		"RewardSkillExp": 3600,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_CH_POTION_2_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_CH_PRIEST_1",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CH_PRIEST",
+		"EndNpcCodename": "NPC_CH_PRIEST",
+		"OfferPromptSymbol": "SN_TALK_QNO_CH_PRIEST_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_CH_PRIEST_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_CH_PRIEST_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_CH_PRIEST_1_07",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_CH_PRIEST_1_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_CH_PRIEST_1_05",
+		"RewardExp": 12450,
+		"RewardGold": 3800,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_COS_C_HORSE1",
+				"Count": 1
+			}
+		],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_PRIEST_1_01",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CH_PRIEST_1_01",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_CH_TOMBSTONE",
+						"MOB_CH_TOMBSTONE_CLON"
+					],
+					"ChancePercent": 3.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_PRIEST_1_02",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CH_PRIEST_1_02",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_CH_TOMBSTONE",
+						"MOB_CH_TOMBSTONE_CLON"
+					],
+					"ChancePercent": 3.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_PRIEST_1_03",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CH_PRIEST_1_03",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_CH_TOMBSTONE",
+						"MOB_CH_TOMBSTONE_CLON"
+					],
+					"ChancePercent": 3.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_PRIEST_1_04",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CH_PRIEST_1_04",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_CH_TOMBSTONE",
+						"MOB_CH_TOMBSTONE_CLON"
+					],
+					"ChancePercent": 3.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_PRIEST_1_05",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CH_PRIEST_1_05",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_CH_TOMBSTONE",
+						"MOB_CH_TOMBSTONE_CLON"
+					],
+					"ChancePercent": 3.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_PRIEST_1_06",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CH_PRIEST_1_06",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_CH_TOMBSTONE",
+						"MOB_CH_TOMBSTONE_CLON"
+					],
+					"ChancePercent": 3.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_PRIEST_1_07",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CH_PRIEST_1_07",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_CH_TOMBSTONE",
+						"MOB_CH_TOMBSTONE_CLON"
+					],
+					"ChancePercent": 3.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_PRIEST_1_08",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CH_PRIEST_1_08",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_CH_TOMBSTONE",
+						"MOB_CH_TOMBSTONE_CLON"
+					],
+					"ChancePercent": 3.0
+				}
+			}
+		]
+	},
+	{
+		"Codename": "QNO_EU_ADVENTURER_1",
+		"MaxCompletions": 3,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_ADVENTURER",
+		"EndNpcCodename": "NPC_EU_ADVENTURER",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_ADVENTURER_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_ADVENTURER_1_03",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_ADVENTURER_1_04",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_ADVENTURER_1_06",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_ADVENTURER_1_05",
+		"RepeatOfferPromptSymbol": "SN_TALK_QNO_EU_ADVENTURER_1_02",
+		"RewardExp": 33000,
+		"RewardGold": 8000,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_EU_ADVENTURER_1",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_EU_ADVENTURER_1_02",
+				"CollectCount": 5,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_QT_01_CRAB"
+					],
+					"ChancePercent": 50.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_EU_ADVENTURER_1",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_EU_ADVENTURER_1_01",
+				"CollectCount": 5,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_AM_ARCHER_CLON"
+					],
+					"ChancePercent": 50.0
+				}
+			}
+		]
+	},
+	{
+		"Codename": "QNO_EU_CONS_2",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_POTION",
+		"EndNpcCodename": "NPC_EU_MERCHANT",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_CONS_2_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_CONS_2_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_CONS_2_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_CONS_2_05",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_CONS_2_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_EU_CONS_2_07",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 300,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_CONS_2_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_EU_CONS_3_1",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_MERCHANT",
+		"EndNpcCodename": "NPC_EU_SPECIAL",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_CONS_3_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_CONS_3_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_CONS_3_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_CONS_3_1_06",
+		"RequiredQuests": [
+			"QNO_EU_CONS_3"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_CONS_3_1_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_EU_CONS_3_1_05",
+		"RewardExp": 750,
+		"RewardGold": 500,
+		"RewardSkillExp": 1000,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_CONS_3_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_EU_EASTEU_11",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_HUNTER",
+		"EndNpcCodename": "NPC_EU_WITCH",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_11_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_11_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_11_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_11_06",
+		"RequiredQuests": [
+			"QNO_EU_EASTEU_10"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_11_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_EU_EASTEU_11_05",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 750,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_EASTEU_11_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_EU_EASTEU_14",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_ADVENTURER",
+		"EndNpcCodename": "NPC_EU_WITCH",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_14_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_14_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_14_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_14_06",
+		"RequiredQuests": [
+			"QNO_EU_EASTEU_13"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_14_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_EU_EASTEU_14_05",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 750,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_EASTEU_14_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_EU_EASTEU_8",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_WITCH",
+		"EndNpcCodename": "NPC_EU_SMITH",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_8_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_8_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_8_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_8_06",
+		"RequiredQuests": [
+			"QNO_EU_EASTEU_7"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_8_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_EU_EASTEU_8_05",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_EASTEU_8_02",
+				"Count": 1
+			}
+		],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_EASTEU_7_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_RM_FLYSHIP1_2",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_RM_FLYSHIP1",
+		"EndNpcCodename": "NPC_RM_YOUNGWOMAN1",
+		"OfferPromptSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_07",
+		"RequiredQuests": [
+			"QNO_RM_FLYSHIP1_1"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_05",
+		"RewardExp": 132000,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_MALL_REPAIR_HAMMER",
+				"Count": 5
+			}
+		],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_RM_FLYSHIP1_2_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_WC_ACCESSORY_3",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_WC_ACCESSORY",
+		"EndNpcCodename": "NPC_CH_ACCESSORY",
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_06",
+		"RequiredQuests": [
+			"QNO_WC_ACCESSORY_2"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_05",
+		"RewardExp": 120000,
+		"RewardGold": 0,
+		"RewardSkillExp": 3000,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_ACCESSORY_3_03",
+				"Count": 1
+			}
+		],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_ACCESSORY_3_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_WC_ARMOR_1",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_WC_ARMOR",
+		"EndNpcCodename": "NPC_WC_ARMOR",
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_ARMOR_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_WC_ARMOR_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_ARMOR_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_ARMOR_1_05",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_WC_ARMOR_1_04",
+		"RewardExp": 75000,
+		"RewardGold": 13500,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_WC_ARMOR_1",
+		"CollectCount": 20,
+		"MonsterDrop": {
+			"MonsterCodenames": [
+				"MOB_OA_REDSCORPION",
+				"MOB_OA_REDSCORPION_CLON"
+			],
+			"ChancePercent": 40.0
+		}
+	},
+	{
+		"Codename": "QNO_WC_PRIEST1_1",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_WC_PRIEST1",
+		"EndNpcCodename": "NPC_WC_PRIEST1",
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_PRIEST1_2",
+		"AcceptResponseSymbol": "SN_TALK_QNO_WC_PRIEST1_3",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_PRIEST1_4",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_PRIEST1_6",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_WC_PRIEST1_5",
+		"RewardExp": 12000,
+		"RewardGold": 3000,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"Objective": 2,
+		"KillMonsterCodenames": [
+			"MOB_WC_HYUNGNO",
+			"MOB_WC_HYUNGNO_CLON"
+		],
+		"KillCount": 30
+	},
+	{
+		"Codename": "QNO_WC_SOLDIER_EA2_3",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_WC_SOLDIER_EA2",
+		"EndNpcCodename": "NPC_CH_GENARAL",
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_06",
+		"RequiredQuests": [
+			"QNO_WC_SOLDIER_EA2_2"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_05",
+		"RewardExp": 107000,
+		"RewardGold": 0,
+		"RewardSkillExp": 3000,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_ETC_HP_POTION_03",
+				"Count": 50
+			},
+			{
+				"ItemCodename": "ITEM_ETC_HP_POTION_03",
+				"Count": 50
+			},
+			{
+				"ItemCodename": "ITEM_ETC_HP_POTION_03",
+				"Count": 50
+			},
+			{
+				"ItemCodename": "ITEM_ETC_HP_POTION_03",
+				"Count": 50
+			},
+			{
+				"ItemCodename": "ITEM_ETC_HP_POTION_03",
+				"Count": 50
+			}
+		],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_SOLDIER_EA2_3_01",
+				"Count": 2
+			}
+		]
+	}
+]

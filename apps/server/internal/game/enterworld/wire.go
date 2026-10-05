@@ -759,6 +759,8 @@ func PersistentCOSObjectID(c *Character, band uint16) (uint32, bool) {
 		return domain.AttackPetGIDBase + uint32(c.ID), true
 	case 4:
 		return domain.PickupPetGIDBase + uint32(c.ID), true
+	case domain.CapturedCOSBand:
+		return domain.CapturedCOSGIDBase + uint32(c.ID), true
 	default:
 		return 0, false
 	}

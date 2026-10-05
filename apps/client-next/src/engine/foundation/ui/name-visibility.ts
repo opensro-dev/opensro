@@ -46,6 +46,24 @@ export function nameInRange(
 
 /*
 ================
+riderBoardPosition
+
+Where a character's name board is measured from. Movement moves a rider's
+mount (85E000) and leaves the rider's own row where it mounted, so a peer
+rider is placed at its ride; with the ride absent (85D870 null) the rider
+falls back to its own row, as 85F58E does.
+================
+*/
+export function riderBoardPosition(
+	entity: EntityState,
+	ride: EntityState | undefined
+): EntityState {
+	if ( entity.mountedOn === undefined || !ride || ride.gid !== entity.mountedOn ) return entity;
+	return { ...entity, regionId: ride.regionId, x: ride.x, y: ride.y, z: ride.z };
+}
+
+/*
+================
 nameVisible
 
 CICCharacter 85E2E0: hover wins before distance/options. Guild equality is

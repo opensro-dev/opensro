@@ -15,10 +15,13 @@ import "opensro.online/server/internal/game/enterworld"
 // everyone). An offline kicked member gets no frame: their next login
 // self-heals - the cleared FK means no 0x32C4 seed.
 type KickOutcome struct {
-	PushPayload []byte
-	MemberNames []string
-	KickedName  string
-	Refusal     string
+	// ErrorPayload is 0xB4B1 [2][code] for the one refusal the client
+	// names: a voter or candidate of the running vote (0x39).
+	ErrorPayload []byte
+	PushPayload  []byte
+	MemberNames  []string
+	KickedName   string
+	Refusal      string
 }
 
 func refusedKick(reason string) KickOutcome {
@@ -67,6 +70,8 @@ func HandleKick(deps Dependencies, divisionID string, actor *enterworld.Characte
 			return refusedKick("cannot kick yourself")
 		case enterworld.GuildRefusalTargetLeader:
 			return refusedKick("cannot kick the leader")
+		case enterworld.GuildRefusalVoteInProgress:
+			return KickOutcome{ErrorPayload: EncodeGuildErrorResult(GuildErrVoteNoExpel), Refusal: guildRefusalReason(refusal)}
 		default:
 			return refusedKick(guildRefusalReason(refusal))
 		}
@@ -133,6 +138,9 @@ func HandleLeave(deps Dependencies, divisionID string, actor *enterworld.Charact
 		return refusedLeave(err.Error())
 	}
 	removal, refusal := deps.GuildAuthority().LeaveGuild(divisionID, actor.ID)
+	if refusal == enterworld.GuildRefusalVoteInProgress {
+		return LeaveOutcome{AckPayload: EncodeGuildErrorResult(GuildErrVoteNoLeave), Refusal: guildRefusalReason(refusal)}
+	}
 	if refusal.Refused() {
 		return refusedLeave(guildRefusalReason(refusal))
 	}

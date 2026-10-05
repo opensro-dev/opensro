@@ -87,23 +87,37 @@ TestUniqueSpecificDropsAndCaps
 ================
 */
 func TestUniqueSpecificDropsAndCaps(t *testing.T) {
+	// Three vSRO rewards, then her five v1.150 characterdata materials.
 	rows := AssignedDrops("MOB_CH_TIGERWOMAN", 60, zeroRoll)
-	if len(rows) != 3 || rows[0].Codename != "ITEM_MALL_GLOBAL_CHATTING" || rows[1].Codename != "ITEM_MALL_REVERSE_RETURN_SCROLL" {
+	if len(rows) != 8 || rows[0].Codename != "ITEM_MALL_GLOBAL_CHATTING" || rows[1].Codename != "ITEM_MALL_REVERSE_RETURN_SCROLL" ||
+		rows[3].Codename != "ITEM_ETC_ARCHEMY_MATERIAL_CH_TIGERWOMAN1" || rows[7].Codename != "ITEM_ETC_ARCHEMY_MATERIAL_CH_TIGERWOMAN5" {
 		t.Fatalf("Tiger Girl assigned loot: %+v", rows)
 	}
-	if len(AssignedDrops("MOB_CH_TIGER", 60, zeroRoll)) != 0 {
-		t.Fatal("ordinary tiger inherited unique table")
+	for _, row := range AssignedDrops("MOB_CH_TIGER", 60, zeroRoll) {
+		if !strings.HasPrefix(row.Codename, "ITEM_ETC_ARCHEMY_MATERIAL_CH_TIGER") ||
+			strings.Contains(row.Codename, "TIGERWOMAN") {
+			t.Fatalf("ordinary tiger inherited unique table: %+v", row)
+		}
 	}
 	if len(AssignedDrops("MOB_CH_TIGERWOMAN", 1, zeroRoll)) != 1 {
 		t.Fatal("assigned capacity exceeded")
 	}
+	// A certain roll grants every fixed row its minimum count; random-group
+	// drops of the same monster are counted by their own test.
 	for code, rows := range consumables.fixed {
-		n := 0
+		n, fixed := 0, map[string]bool{}
 		for _, r := range rows {
 			n += int(r.Min)
+			fixed[r.Item] = true
 		}
-		if got := AssignedDrops(code, 250, zeroRoll); len(got) != n {
-			t.Fatalf("%s assigned copies=%d want %d", code, len(got), n)
+		got := 0
+		for _, row := range AssignedDrops(code, 250, zeroRoll) {
+			if fixed[row.Codename] {
+				got++
+			}
+		}
+		if got != n {
+			t.Fatalf("%s assigned copies=%d want %d", code, got, n)
 		}
 	}
 }
@@ -215,5 +229,37 @@ func TestRecoveryPotionDropRate(t *testing.T) {
 			t.Fatalf("level %d recovery rate %.4f (hp %d, mp %d, vigor %d), want 5-12%% with both HP and MP", level, rate, hp, mp, vigor)
 		}
 		t.Logf("level %d: recovery %.2f%% (hp %d, mp %d, vigor %d of %d kills)", level, rate*100, hp, mp, vigor, kills)
+	}
+}
+
+/*
+================
+TestMonstersDropTheirOwnMaterials
+
+characterdata columns 99..108 name each monster's own alchemy materials;
+Black Yeowa (MOB_OA_YEOWA_CLON) drops the three CLON materials, the Red
+Yeowa its own, and a roll above the authored probability drops nothing.
+================
+*/
+func TestMonstersDropTheirOwnMaterials(t *testing.T) {
+	got := map[string]bool{}
+	for _, drop := range AssignedDrops("MOB_OA_YEOWA_CLON", 8, zeroRoll) {
+		got[drop.Codename] = drop.Count == 1 && drop.Assigned
+	}
+	for _, code := range []string{
+		"ITEM_ETC_ARCHEMY_MATERIAL_OA_YEOWA_CLON1",
+		"ITEM_ETC_ARCHEMY_MATERIAL_OA_YEOWA_CLON2",
+		"ITEM_ETC_ARCHEMY_MATERIAL_OA_YEOWA_CLON3",
+	} {
+		if !got[code] {
+			t.Fatalf("Black Yeowa does not drop %s: %v", code, got)
+		}
+	}
+	if got["ITEM_ETC_ARCHEMY_MATERIAL_OA_YEOWA1"] {
+		t.Fatal("Black Yeowa dropped the Red Yeowa's material")
+	}
+	miss := func() (uint32, error) { return 999999, nil }
+	if drops := AssignedDrops("MOB_OA_YEOWA_CLON", 8, miss); len(drops) != 0 {
+		t.Fatalf("missed rolls dropped %v", drops)
 	}
 }

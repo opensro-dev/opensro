@@ -117,19 +117,22 @@ test("camera anchor rides the locally driven mount, falls back to the rider, and
 	// CCharactor_GetActiveMoverEntity (0x85E000): the local movement owner
 	// drives the mount, so the anchor is the local pose raised by the mount's
 	// authored height (2 + 40 - 13), not the mount row's stale spawn point.
+	// yaw is the drawn body's native yaw (heading 0 -> pi/2), the one the
+	// third-person camera follows while the body turns (86CBA0).
 	assert.deepEqual( presenter.cameraTarget(), {
 		mounted: true,
 		height: 20,
+		yaw: Math.PI / 2,
 		pose: { regionId: 257, x: 1, y: 29, z: 3, angle: 0 }
 	} );
 	presenter.step( [ rider ], gameplay, 1 );
 	assert.deepEqual(
 		presenter.cameraTarget(),
-		{ mounted: false, height: 20, pose: gameplay.pose },
+		{ mounted: false, height: 20, yaw: Math.PI / 2, pose: gameplay.pose },
 		"a rider whose mount is absent is followed on foot, never lost"
 	);
 	presenter.step( [ { ...rider, mountedOn: undefined } ], gameplay, 2 );
-	assert.deepEqual( presenter.cameraTarget(), { mounted: false, height: 20, pose: gameplay.pose } );
+	assert.deepEqual( presenter.cameraTarget(), { mounted: false, height: 20, yaw: Math.PI / 2, pose: gameplay.pose } );
 	presenter.reset();
 	assert.equal( presenter.cameraTarget(), null );
 	presenter.dispose();

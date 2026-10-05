@@ -184,4 +184,8 @@ export interface FollowCameraTarget {
 	readonly pose: import("./gameplay").Pose;
 	readonly height: number;
 	readonly mounted: boolean;
+	// The drawn body's native yaw (CICharactor +0x88), which turns toward a
+	// new heading at 3*pi rad/s (86CBA0) while pose.angle has already
+	// snapped there. The third-person camera follows this one.
+	readonly yaw?: number;
 }

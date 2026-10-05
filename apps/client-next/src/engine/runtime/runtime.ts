@@ -18,6 +18,7 @@ import { createPresentationRandom } from "./random/random";
 import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
+import type { WorldClickInput } from "@/engine/contracts/input";
 import { createNavigationStream } from "./navigation/navigation";
 import { createFrontend } from "./frontend/frontend";
 import { createUi } from "./ui/ui";
@@ -310,7 +311,8 @@ export function startRuntime(
 		worldClick
 		================
 		*/
-		function worldClick( x: number, y: number, doubleClick = false, shift = false ) {
+		function worldClick( x: number, y: number, click: WorldClickInput = {} ) {
+			const doubleClick = click.double ?? false, shift = click.shift ?? false;
 			if ( doubleClick && frontend.snapshot().phase !== "world" ) return;
 			if ( frontend.isRace() ) {
 				const race = renderer.pickFrontendRace( x, y );
@@ -350,6 +352,15 @@ export function startRuntime(
 				// 698924 retains VK_SHIFT; 698BFD gates whisper prefill after selection.
 				if ( shift && !doubleClick && entity.kind === "player" ) {
 					ui.event( { kind: "whisper-target", gid: entity.gid } );
+				}
+				// 698740 -> 693E50: a press on another player may attack it; the
+				// worker decides against the selection this press is about to
+				// replace, so this precedes the select (player-attack.ts).
+				if ( entity.kind === "player" && !doubleClick ) {
+					simulation.session( {
+						kind: "gameplay",
+						command: { kind: "player-interact", gid: entity.gid, alt: click.alt ?? false }
+					} );
 				}
 				// Native 67AA60 reactivates the shared decal even for the same GID.
 				// The targeting owner deduplicates the wire request, not the click.
@@ -656,16 +667,21 @@ export function startRuntime(
 						{ ...(presentation.gameplay()?.weather ?? { mode: 1, amount: 0 }), eventRain } :
 						null
 				);
+				// CGInterface_UpdateCameraOrbitTarget (68F830) locks third person
+				// behind the drawn body's turning yaw (+0x88, written per step by
+				// 86CBA0), not the logical heading, which snaps on each click.
+				const cameraFollow = characters.cameraTarget();
 				world.step(
 					[ "loading-world", "world" ].includes( frontendState.phase ) ?
 						presentation.gameplay()?.pose ?? null :
 						null,
 					input.camera(
-						presentation.gameplay()?.pose ?
-							nativeHeadingYaw( presentation.gameplay()!.pose!.angle ) :
-							undefined
+						cameraFollow?.yaw ??
+							(presentation.gameplay()?.pose ?
+								nativeHeadingYaw( presentation.gameplay()!.pose!.angle ) :
+								undefined)
 					),
-					characters.cameraTarget(),
+					cameraFollow,
 					presentation.gameplay()?.navigationBlock,
 					now,
 					characters.takeCameraScripts()
@@ -775,7 +791,7 @@ export function startRuntime(
 						null;
 				hoveredEntity = hoverGid;
 				platform.presentWorldCursor(
-					worldCursor(
+					ui.cursor() ?? worldCursor(
 						hoverGid === null ? undefined : presentation.read( hoverGid ),
 						hoverLocal ? presentation.read( hoverLocal ) : undefined
 					)

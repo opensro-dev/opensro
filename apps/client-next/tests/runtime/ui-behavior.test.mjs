@@ -251,6 +251,46 @@ test("UI image disposal drains all releases even when cancellation and renderer 
 	assert.equal( next, 4 );
 });
 
+/*
+================
+absentIconFallback
+
+CIFSlotWithHelp (55B450) loads icon\icon_default.ddj when the requested icon
+fails: an icon the manifest lacks is served the default under its own path,
+without the blocking retry. Any other absent image settles blank, and a
+transient fault on an icon still retries.
+================
+*/
+test("an absent slot icon draws icon_default and an absent image settles blank", () => {
+	const f = assetFixture();
+	const icon = "/assets/images/Media_extracted/icon/item/etc/archemy_reinforce_recipe_a.png";
+	const art = "/assets/images/Media_extracted/interface/missing.png";
+	const paths = [ icon, art ];
+	f.resources.step( paths, 0 );
+	f.results.set( 1, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	f.results.set( 2, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	f.resources.step( paths, 1 );
+	assert.equal( f.resources.error(), null, "absence never blocks the interface" );
+	assert.deepEqual( f.resources.stats().failed, [] );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid/assets/images/Media_extracted/icon/icon_default.png" );
+	assert.equal( f.requests.length, 3, "the blank image is never requested again" );
+	const image = { width: 32, height: 32 };
+	f.results.set( 3, { kind: "image", image } );
+	f.resources.step( paths, 2 );
+	assert.deepEqual( f.published, [ [ icon, image ] ], "the default is published under the icon's own path" );
+	for ( let now = 3; now < 60_000; now += 1000 ) f.resources.step( paths, now );
+	assert.equal( f.requests.length, 3 );
+	f.resources.dispose();
+	const g = assetFixture();
+	g.resources.step( [ icon ], 0 );
+	g.results.set( 1, { kind: "error", error: "HTTP 503" } );
+	g.resources.step( [ icon ], 1 );
+	assert.match( g.resources.error(), /503/, "a transient fault keeps the retry" );
+	g.resources.step( [ icon ], 1001 );
+	assert.equal( g.requests.at( -1 ), "https://fixture.invalid" + icon );
+	g.resources.dispose();
+});
+
 test("UI image dimensions are captured before ownership is transferred to the renderer", () => {
 	const image = { width: 32, height: 64 };
 	let result = null;

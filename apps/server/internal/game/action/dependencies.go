@@ -17,6 +17,7 @@ import (
 type Dependencies interface {
 	domain.CharacterSource
 	CharacterBodyRadius(character *domain.Character) (float64, bool)
+	CharacterKnockdown(character *domain.Character) (flags, recoveryMs uint32, ok bool)
 	Mutate(character *domain.Character, label string, fn func())
 	Update(character *domain.Character, label string, update func() bool) bool
 	UpdateMany(characters []*domain.Character, label string, update func() bool) bool
@@ -25,6 +26,7 @@ type Dependencies interface {
 	LevelData() enterworld.LevelDataSource
 	SkillData() enterworld.SkillDataSource
 	MagicOptionDefinitions() enterworld.MagicOptionSource
+	GuildAuthority() enterworld.GuildStore
 	ReentryPackets(divisionID, characterName string) ([]enterworld.Packet, bool)
 	PrepareReentry(divisionID string, character *domain.Character) (enterworld.PreparedReentry, bool)
 }

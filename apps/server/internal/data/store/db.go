@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS mall_accounts (
 ) WITHOUT ROWID;
 `
 
-const dbSchema = mallAccountsSchema + accountStorageSchema + `
+const dbSchema = mallAccountsSchema + accountStorageSchema + fortressSchema + allianceSchema + `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -155,8 +155,9 @@ const (
 // JSON character-record schema. Adding a table bumps this value and requires an
 // reviewed offline upgrade before deployment. sro-authority-upgrade preserves
 // layout-4 records while adding the empty mall currency and warehouse tables
-// for layout 5 (authority_upgrade.go); the release receiver runs it.
-const CurrentLayoutVersion = 5
+// for layout 5, and the empty fortress and union tables for layout 6
+// (authority_upgrade.go); the release receiver runs it.
+const CurrentLayoutVersion = 6
 
 /*
 ==================

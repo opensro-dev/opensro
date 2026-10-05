@@ -59,7 +59,13 @@ import { assembleAvatar, primSlot, NATIVE_IDLE_STATE_CLIPS, NATIVE_EMOTE_STATE_C
 import { assembleStaticBsrModel } from "./compileBsrVisual.mjs";
 import { avatarToGlb } from "./exportGlb.mjs";
 import { loadCharacterDataRows } from "./resolveCharRoster.mjs";
-import { enabledCosReferences, loadSpawnableMobRoster, loadSpawnableNpcRoster } from "./npcModelRoster.mjs";
+import {
+	enabledCosReferences,
+	loadFortressStructureRoster,
+	loadSpawnableMobRoster,
+	loadSpawnableNpcRoster
+} from "./npcModelRoster.mjs";
+import { parseStructureEffects } from "./structureEffects.mjs";
 import { parseBan, parseCharacterBsr } from "./formats.mjs";
 import { SKILL_EFFECT_ANIMATION_ID_BY_NAME } from "./native/skillEffectAnimationRegistry.ts";
 import { loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
@@ -629,6 +635,9 @@ buildNpcModelAssets
 ================
 */
 export async function buildNpcModelAssets( options = {} ) {
+	// A scratch output root lets a branch verify its bake without rewriting
+	// the shared tree's manifest; the default is the published tree.
+	const publicAssets = options.publicAssetsRoot ?? publicAssetsRoot;
 	const eventRain = parseWeatherEvents( fs.readFileSync( path.join( textdataDir, "skilleffect.txt" ), "utf16le" ) );
 	const skipTextures = options.skipTextures ?? false;
 	if ( !skipTextures ) await convertTextures();
@@ -651,7 +660,13 @@ export async function buildNpcModelAssets( options = {} ) {
 		riderTransformMode: resolveCharacterInfo( codename )?.riderTransformMode
 	}) );
 	const cosNames = new Set( cosRoster.map( row => row.codename ) );
-	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster ];
+	const structureRoster = loadFortressStructureRoster();
+	const structureNames = new Set( structureRoster.map( row => row.codename ) );
+	const structureEffects = parseStructureEffects(
+		fs.readFileSync( path.join( textdataDir, "atstructeffect.txt" ), "utf16le" ),
+		codename => structureNames.has( codename )
+	);
+	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster, ...structureRoster ];
 	if ( new Set( roster.map( ( ref ) => ref.codename ) ).size !== roster.length ) {
 		throw new Error( "[npc] server NPC and monster rosters contain an overlapping codename" );
 	}
@@ -680,6 +695,13 @@ export async function buildNpcModelAssets( options = {} ) {
 		if ( !model ) {
 			console.warn( `[npc] ${codename}: no characterdata row / bsr path` );
 			models.push( { codename, error: "unresolved" } );
+			continue;
+		}
+		// characterdata enables the small guard towers (STRUCTURE_SMALL_*_TOWER),
+		// whose BSRs the v1.150 Data.pk2 does not hold: the client cannot draw
+		// them, so they are not part of this client's world.
+		if ( structureNames.has( codename ) && (await loadOptionalDataAsset( model.bsrPath )) === null ) {
+			console.log( `[npc] SKIP ${codename}: v1.150 data ships no ${model.bsrPath}` );
 			continue;
 		}
 		const isCos = cosNames.has( codename );
@@ -725,11 +747,12 @@ export async function buildNpcModelAssets( options = {} ) {
 			priorRide.transformModes.add( serverTransformMode );
 			rideResources.set( serverRideModelPath, priorRide );
 		}
+		const kind = isCos ? "cos" : isMob ? "monster" : structureNames.has( codename ) ? "structure" : "npc";
 		const entry = {
 			codename,
 			refObjId: model.refObjId,
 			eventRain: eventRain.get( codename ) ?? eventRain.get( model.baseCodename ) ?? false,
-			kind: isCos ? "cos" : isMob ? "monster" : "npc",
+			kind,
 			bsr: model.bsrPath,
 			glb: publicPath,
 			...(soundProfileName ? { soundProfileName } : {})
@@ -743,7 +766,7 @@ export async function buildNpcModelAssets( options = {} ) {
 		retailAnimationModels.set( codename, {
 			codename,
 			refObjId: model.refObjId,
-			kind: isCos ? "cos" : isMob ? "monster" : "npc",
+			kind,
 			bsr: model.bsrPath
 		} );
 		if ( isMob ) {
@@ -841,7 +864,44 @@ export async function buildNpcModelAssets( options = {} ) {
 		models.push( entry );
 	}
 
-	const preservedVat = preserveFreshNpcVatReferences( models, previousManifest );
+	// CICATStruct_SetVisualStage (4F78A0) reloads the model from the stage's
+	// atstructeffect BSR, falling back to the record's own; stage models are
+	// path-keyed resources like the rides, baked with the static NPC policy.
+	for ( const entry of models ) {
+		const effects = entry.kind === "structure" && !entry.error ? structureEffects.get( entry.codename ) : undefined;
+		if ( !effects ) continue;
+		const stages = {};
+		for ( const [stage, bsrPath] of Object.entries( effects.stages ) ) {
+			const prior = bakedByBsr.get( bsrPath );
+			if ( prior ) {
+				if ( prior.isMob ) throw new Error( `[npc] ${bsrPath}: structure stage shared with a monster bake` );
+				stages[stage] = { glb: prior.baked.glb, particleModifiers: prior.baked.particleModifiers };
+				reusedModels += 1;
+				continue;
+			}
+			const output = resourceGlbOutput( bsrPath, { namespace: "npc", publicAssetsRoot: publicAssets } );
+			claimResourceOutput( outputOwners, bsrPath, output.publicPath );
+			try {
+				const { retailAnimationCatalog: _catalog, ...baked } = await bakeCharacterResource(
+					bsrPath,
+					output,
+					false
+				);
+				bakedByBsr.set( bsrPath, { isMob: false, baked } );
+				stages[stage] = { glb: baked.glb, particleModifiers: baked.particleModifiers };
+				builtResources += 1;
+				console.log( `[npc] OK   ${entry.codename} stage ${stage} -> ${baked.glb}` );
+			} catch ( error ) {
+				entry.error = `stage ${stage} ${bsrPath}: ${error?.message ?? error}`;
+				console.warn( `[npc] FAIL ${entry.codename} ${entry.error}` );
+			}
+		}
+		entry.structureStages = stages;
+		entry.structureSounds = effects.sounds;
+		entry.structureDamageEffects = effects.levels;
+	}
+
+	const preservedVat = preserveFreshNpcVatReferences( models, previousManifest, { publicAssetsRoot: publicAssets } );
 	const manifest = {
 		format: "sro-mission-npc-models",
 		version: 7,
@@ -893,7 +953,11 @@ export async function buildNpcModelAssets( options = {} ) {
 		previousPublicPaths: previousGlbPaths,
 		currentPublicPaths: models.flatMap( (
 			model
-		) => [ model.glb, ...Object.values( model.materialVariants ?? {} ) ] ).filter( Boolean ),
+		) => [
+			model.glb,
+			...Object.values( model.materialVariants ?? {} ),
+			...Object.values( model.structureStages ?? {} ).map( stage => stage.glb )
+		] ).filter( Boolean ),
 		namespace: "npc",
 		publicAssetsRoot: publicAssets
 	} );
@@ -911,5 +975,9 @@ export async function buildNpcModelAssets( options = {} ) {
 }
 
 if ( isMainScript( import.meta.url ) ) {
-	await buildNpcModelAssets( { skipTextures: process.argv.includes( "--skip-textures" ) } );
+	const rootFlag = process.argv.find( arg => arg.startsWith( "--public-assets-root=" ) );
+	await buildNpcModelAssets( {
+		skipTextures: process.argv.includes( "--skip-textures" ),
+		...(rootFlag ? { publicAssetsRoot: path.resolve( rootFlag.slice( "--public-assets-root=".length ) ) } : {})
+	} );
 }

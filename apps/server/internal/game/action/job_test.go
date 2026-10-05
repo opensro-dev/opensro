@@ -44,6 +44,7 @@ func jobFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character) {
 		RefObjID: suit.RefObjID, Codename: suit.Codename, TypeFlags: suit.TypeFlags(), StackCount: 1})
 	rt, clock := newTestRuntime(c, items)
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: jobTestNpc, RefObjID: 3011, Codename: "NPC_CH_DOCTOR", TalkFlags: 1,
+		Services:      simulation.NpcServicesForCodename("NPC_CH_DOCTOR"),
 		AuthoredSpawn: true, Spawn: simulation.SeedWorldState(c).Spawn}}
 	rt.NpcSpawn.Enabled = true
 	rt.Selected.Set(testDivision, c.Name, jobTestNpc)

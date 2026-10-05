@@ -39,6 +39,7 @@ import { archiveGeneratedArtifact } from "./artifacts/generatedArtifactArchive.m
 import { livePackFiles } from "./assetPackLiveSet.mjs";
 import { collectPackGarbage } from "./assetPackGarbage.mjs";
 import { readJsonOrUndefined } from "./shared/jsonOut.mjs";
+import { baselinePacksOf, planPackLayout, packSlotOf } from "./assetPackLayout.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, "..", ".." );
@@ -128,7 +129,8 @@ export async function buildAssetPacks( options = {} ) {
 	// without it they write fixture hashes into the production .state cache (and, with
 	// SRO_BUILD_HASH_CACHE=0, used to truncate it - see fileHashCache.save()'s guard).
 	const hashCache = await openFileHashCache( options.hashCachePath );
-	const counters = { built: 0, reused: 0 };
+	const counters = { built: 0, reused: 0, kept: 0, fresh: 0 };
+	const baselineIndex = await layoutBaseline( options, root, outputRoot, indexPath );
 
 	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
 	const index = {
@@ -150,7 +152,8 @@ export async function buildAssetPacks( options = {} ) {
 			targetBytes: group.targetBytes ?? defaultTargetBytes,
 			reusablePacks,
 			hashCache,
-			counters
+			counters,
+			baselineIndex
 		} );
 		index.groups.push( groupResult.groupIndex );
 		index.assets.push( ...groupResult.assets );
@@ -209,9 +212,34 @@ export async function buildAssetPacks( options = {} ) {
 		),
 		builtPackCount: counters.built,
 		reusedPackCount: counters.reused,
+		keptPackCount: counters.kept,
+		freshPackCount: counters.fresh,
 		groups: index.groups,
 		assets: index.assets
 	};
+}
+
+/*
+================
+layoutBaseline
+
+The index the pack layout stays stable against (assetPackLayout.mjs): for
+the main index, options.baselineIndexPath or SRO_ASSET_PACK_BASELINE (a
+release passes the live publication, so unchanged packs keep the URLs
+players have cached); otherwise the previous local index. A named baseline
+that cannot be read stops the build: silently repacking everything would
+re-ship the whole data set.
+================
+*/
+async function layoutBaseline( options, root, outputRoot, indexPath ) {
+	const mainIndex = path.resolve( outputRoot ) === path.resolve( root, "assets", "packs" );
+	const named = options.baselineIndexPath ?? (mainIndex ? process.env.SRO_ASSET_PACK_BASELINE?.trim() : undefined);
+	if ( !named ) return readJsonOrUndefined( indexPath );
+	const baseline = await readJsonOrUndefined( path.resolve( named ) );
+	if ( baseline?.format !== "sro-asset-pack-index" || !Array.isArray( baseline.groups ) ) {
+		throw new Error( `Asset pack layout baseline is not a pack index: ${named}` );
+	}
+	return baseline;
 }
 
 /*
@@ -220,7 +248,7 @@ buildAssetPackGroup
 ================
 */
 async function buildAssetPackGroup(
-	{ publicRoot, outputRoot, group, targetBytes, reusablePacks, hashCache, counters }
+	{ publicRoot, outputRoot, group, targetBytes, reusablePacks, hashCache, counters, baselineIndex }
 ) {
 	const name = normalizeGroupName( group.name );
 	const publicPaths = uniquePublicPaths( group.files ?? [] );
@@ -244,7 +272,12 @@ async function buildAssetPackGroup(
 		file.sha256 = await hashCache.hashFile( file.absolutePath, file.stat );
 	} );
 
-	const chunks = chunkFilesByTargetBytes( files, targetBytes );
+	const ownDir = toPublicAssetPath( outputRoot, publicRoot );
+	const chunks = planPackLayout( { files, baseline: baselinePacksOf( baselineIndex, name, ownDir ), targetBytes } );
+	for ( const chunk of chunks ) {
+		if ( chunk.kept ) counters.kept += 1;
+		else counters.fresh += 1;
+	}
 	/** @type {AssetPackGroupIndex} */
 	const groupIndex = {
 		name,
@@ -258,10 +291,18 @@ async function buildAssetPackGroup(
 	const assets = [];
 
 	const results = await mapWithConcurrency(
-		chunks.map( ( chunk, chunkIndex ) => ({ chunk, chunkIndex }) ),
+		chunks,
 		PACK_BUILD_CONCURRENCY,
-		( { chunk, chunkIndex } ) =>
-			buildOrReusePack( { name, chunk, chunkIndex, outputRoot, publicRoot, reusablePacks, hashCache, counters } )
+		( plan ) =>
+			buildOrReusePack( {
+				name,
+				plan,
+				outputRoot: plan.dir ? resolvePublicAssetFile( publicRoot, plan.dir ) : outputRoot,
+				publicRoot,
+				reusablePacks,
+				hashCache,
+				counters
+			} )
 	);
 
 	for ( const result of results ) {
@@ -377,8 +418,9 @@ buildOrReusePack
 ================
 */
 async function buildOrReusePack(
-	{ name, chunk, chunkIndex, outputRoot, publicRoot, reusablePacks, hashCache, counters }
+	{ name, plan, outputRoot, publicRoot, reusablePacks, hashCache, counters }
 ) {
+	const { slot, files: chunk } = plan;
 	const plannedKey = packContentKey(
 		name,
 		chunk.map( ( file ) => ({
@@ -389,7 +431,13 @@ async function buildOrReusePack(
 		}) )
 	);
 	const reusable = reusablePacks.get( plannedKey );
-	if ( reusable && reusable.groupName === name && (await packOutputsIntact( publicRoot, reusable.pack )) ) {
+	// Folder and slot are part of the pack's URL: reuse only a pack built for both.
+	const packDir = toPublicAssetPath( outputRoot, publicRoot );
+	if (
+		reusable && reusable.groupName === name && packSlotOf( reusable.pack.path ) === slot &&
+		reusable.pack.path.slice( 0, reusable.pack.path.lastIndexOf( "/" ) ) === packDir &&
+		(await packOutputsIntact( publicRoot, reusable.pack ))
+	) {
 		counters.reused += 1;
 		return {
 			packEntry: { ...reusable.pack },
@@ -428,9 +476,17 @@ async function buildOrReusePack(
 	const buffer = Buffer.concat( [ header, headerJson, ...payloadParts ] );
 
 	const packHash = sha256Hex( buffer );
-	const packFileName = `${name}-${String( chunkIndex + 1 ).padStart( 3, "0" )}-${packHash.slice( 0, 12 )}.bin`;
+	const packFileName = `${name}-${String( slot ).padStart( 3, "0" )}-${packHash.slice( 0, 12 )}.bin`;
 	const packPath = path.join( outputRoot, packFileName );
 	const packPublicPath = toPublicAssetPath( packPath, publicRoot );
+	if ( plan.sha256 && plan.sha256 !== packHash ) {
+		// The baseline's members rebuilt to other bytes (the pack format changed):
+		// the pack is new to every client, so say so instead of hiding the cost.
+		console.warn(
+			`[asset-packs] kept pack ${packPublicPath} differs from its baseline ${plan.sha256.slice( 0, 12 )}`
+		);
+	}
+	await mkdir( outputRoot, { recursive: true } );
 
 	// zstd runs on the libuv threadpool; overlapping it with the pack write keeps the
 	// (rare, changed-pack-only) compression off the critical path as much as possible.
@@ -516,34 +572,6 @@ function compressAssetPackZstd( bytes ) {
 		level: ASSET_PACK_ZSTD_LEVEL,
 		windowLog: ASSET_PACK_ZSTD_WINDOW_LOG
 	} );
-}
-
-/*
-================
-chunkFilesByTargetBytes
-================
-*/
-function chunkFilesByTargetBytes( files, targetBytes ) {
-	const chunks = [];
-	let current = [];
-	let currentBytes = 0;
-
-	for ( const file of files ) {
-		if ( current.length > 0 && currentBytes + file.bytes > targetBytes ) {
-			chunks.push( current );
-			current = [];
-			currentBytes = 0;
-		}
-
-		current.push( file );
-		currentBytes += file.bytes;
-	}
-
-	if ( current.length > 0 ) {
-		chunks.push( current );
-	}
-
-	return chunks;
 }
 
 /*

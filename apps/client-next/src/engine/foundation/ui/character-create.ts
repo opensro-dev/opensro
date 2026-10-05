@@ -294,9 +294,22 @@ checkedNameError
 export function checkedNameError( name: string, rules: NameRules ): string | null {
 	const normalized = name.replace( /[A-Z]/g, c => c.toLowerCase() );
 	if (
-		Array.from( normalized ).some( c => !rules.allowed.has( c.codePointAt( 0 )! ) ) ||
-		rules.forbidden.some( word => normalized.includes( word ) ) ||
-		normalized.split( / +/ ).some( word => rules.wholeWords.includes( word ) )
+		Array.from( normalized ).some( c => !rules.allowed.has( c.codePointAt( 0 )! ) ) || !textAllowed( name, rules )
 	) return "UIO_MSG_ERROR_CHARACTER_WRONGSTRING";
 	return null;
+}
+
+/*
+================
+textAllowed
+
+CStringCheck_IsTextAllowed (790B60): the ASCII-folded text holds no
+forbidden substring and no forbidden space-separated word. Free text (a
+stall title) is not held to the name character table.
+================
+*/
+export function textAllowed( value: string, rules: NameRules ): boolean {
+	const normalized = value.replace( /[A-Z]/g, c => c.toLowerCase() );
+	return !rules.forbidden.some( word => normalized.includes( word ) ) &&
+		!normalized.split( / +/ ).some( word => rules.wholeWords.includes( word ) );
 }

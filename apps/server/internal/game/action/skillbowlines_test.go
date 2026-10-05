@@ -5,9 +5,9 @@ skillbowlines_test.go - every Pacheon (bow) skill line the server can cast
 
 Casts rank 1 of each SKILL_CH_BOW_* line from the shipped skilldata at a
 monster in reach and runs five seconds of ticks: each attack must land and
-spend its arrows, each buff must attach. Arrow Rain (hr), Strong Bow C and
-Arrow Combo D (ru on a bow) and Arrow Combo C and D (chained bow shots)
-were refused by the offense qualifier before.
+spend its arrows, each buff must attach. Berserker Arrow (hr), Strong Bow C and
+Arrow Combo D (ru on a bow), Arrow Combo C and D (chained bow shots) and
+the attacking hawks (summ) were refused before.
 
 ===========================================================================
 */
@@ -23,13 +23,9 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// bowLinesWithoutCast are the bow lines no cast admits: the passive, and the
-// attacking hawks (summ, Skill_ProcessPeriodicDamage 582750), which have no
-// owner yet.
+// bowLinesWithoutCast are the bow lines no cast admits: the passive.
 var bowLinesWithoutCast = map[string]bool{
 	"SKILL_CH_BOW_PASSIVE_A": true,
-	"SKILL_CH_BOW_CALL_B":    true,
-	"SKILL_CH_BOW_CALL_D":    true,
 }
 
 /*
@@ -107,17 +103,17 @@ func TestEveryBowLineCasts(t *testing.T) {
 
 /*
 ================
-TestArrowRainRollsWithItsHitRate
+TestBerserkerArrowRollsWithItsHitRate
 
-593540 installs the engaged attack's hr through 594AC0: Arrow Rain's hits
+593540 installs the engaged attack's hr through 594AC0: Berserker Arrow's hits
 roll with the caster's hit rate raised by its flat word.
 ================
 */
-func TestArrowRainRollsWithItsHitRate(t *testing.T) {
+func TestBerserkerArrowRollsWithItsHitRate(t *testing.T) {
 	rt, c, _, _, _ := arrowFixture(t)
 	skill := shippedOffense(t, "SKILL_CH_BOW_AREA_A_01")
 	if !skill.BuffModifiers.Hr || skill.BuffModifiers.HrFlat == 0 || skill.OffenseRefusal != "" {
-		t.Fatalf("Arrow Rain row: %+v refusal %q", skill.BuffModifiers, skill.OffenseRefusal)
+		t.Fatalf("Berserker Arrow row: %+v refusal %q", skill.BuffModifiers, skill.OffenseRefusal)
 	}
 	plain, _, err := rt.playerCombatStats(testDivision, c)
 	if err != nil {

@@ -65,8 +65,14 @@ func cloneCharacter(source *Character) *Character {
 	}
 	clone.World = cloneCharacterWorld(source.World)
 	clone.ActiveCOS = CloneCOS(source.ActiveCOS)
+	clone.CapturedCOS = CloneCOS(source.CapturedCOS)
 	clone.PetSkillWindows = cloneSlice(source.PetSkillWindows)
 	clone.ParamJobs = cloneSlice(source.ParamJobs)
+	clone.CompositeJobs = cloneSlice(source.CompositeJobs)
+	if source.PremiumClock != nil {
+		clock := *source.PremiumClock
+		clone.PremiumClock = &clock
+	}
 	if source.ItemGroupCooldowns != nil {
 		clone.ItemGroupCooldowns = make(map[uint32]int64, len(source.ItemGroupCooldowns))
 		for group, until := range source.ItemGroupCooldowns {
@@ -187,8 +193,8 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 	}
 	clone.AuthoredAreaReturn = cloneWorldSpawn(source.AuthoredAreaReturn)
 	clone.RebirthPoint = cloneWorldSpawn(source.RebirthPoint)
-	clone.LastRecallPoint = cloneWorldSpawn(source.LastRecallPoint)
-	clone.LastDeathPoint = cloneWorldSpawn(source.LastDeathPoint)
+	clone.LastRecallPoint = cloneWorldPoint(source.LastRecallPoint)
+	clone.LastDeathPoint = cloneWorldPoint(source.LastDeathPoint)
 	clone.DungeonFloorIndex = clonePointer(source.DungeonFloorIndex)
 	clone.PackedInstance = clonePointer(source.PackedInstance)
 	clone.MoveSegment = cloneSlice(source.MoveSegment)
@@ -260,6 +266,15 @@ cloneWorldSpawn
 A deep copy of an optional world point.
 ================
 */
+func cloneWorldPoint(source *WorldPoint) *WorldPoint {
+	if source == nil {
+		return nil
+	}
+	clone := *source
+	clone.WorldSpawn = *cloneWorldSpawn(&source.WorldSpawn)
+	return &clone
+}
+
 func cloneWorldSpawn(source *WorldSpawn) *WorldSpawn {
 	if source == nil {
 		return nil

@@ -120,6 +120,12 @@ type SiegeFortressDataRow struct {
 	CodeName        string `json:"codeName"`
 	NameStrID       string `json:"nameStrId"`
 	OfficialNpcCode string `json:"officialNpcCode"`
+	// RequestFee is the row's +0x80 gold, which the official's application
+	// question quotes (6649C0 box 0x64, 7E16A0).
+	RequestFee uint64 `json:"requestFee"`
+	// OfficialRefObjID resolves OfficialNpcCode for the browser, which
+	// knows NPCs by RefObjID (662E80 matches the official in conversation).
+	OfficialRefObjID uint32 `json:"officialRefObjId,omitempty"`
 }
 
 /*
@@ -203,6 +209,7 @@ type BootstrapResult struct {
 	RefSkillSnapshot     []SpawnSkillRow
 	RefItemSnapshot      []RefItemRow
 	MagicOptionSnapshot  []MagicOptionRow
+	AvatarMagicOptions   []AvatarMagicOptionRow
 	SiegeItemForgeGroups []SiegeItemForgeGroupRow
 	SiegeFortressData    []SiegeFortressDataRow
 	GameWorldData        []GameWorldDataRow
@@ -252,6 +259,7 @@ type bootstrapSuccessView struct {
 	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
 	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
 	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
@@ -320,6 +328,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		RefSkillSnapshot:          r.RefSkillSnapshot,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
+		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
 		GameWorldData:             r.GameWorldData,

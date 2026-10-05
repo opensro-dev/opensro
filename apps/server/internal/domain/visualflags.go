@@ -5,8 +5,11 @@ const (
 	// (sub_5cb550: CICPlayer_GetLevel() <= 0x13).
 	BeginnerMarkMaxLevel int64 = 19
 	VisualFlagBeginner   uint8 = 1 << 0
-	VisualFlagEffect     uint8 = 1 << 1
-	VisualFlagsKnownMask uint8 = VisualFlagBeginner | VisualFlagEffect
+	// VisualFlagHelper is the Helper status mark: CGInterface_ExecuteActionCommand
+	// (695420) action 1011 toggles +0x779 bit 1 and sends it in 0x7683, and
+	// the 0x8000001E state effect draws it over the character.
+	VisualFlagHelper     uint8 = 1 << 1
+	VisualFlagsKnownMask uint8 = VisualFlagBeginner | VisualFlagHelper
 )
 
 // ResolveVisualFlags supplies the retail creation fallback for records that

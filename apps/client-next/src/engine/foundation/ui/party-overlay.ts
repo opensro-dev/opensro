@@ -18,6 +18,13 @@ const PARTY_SHADE_SQUARED_2 = 490000; // 700
 const PARTY_SHADE_SQUARED_3 = 640000; // 800
 const PARTY_SHADE_SQUARED_4 = 810000; // 900
 const PARTY_SHADE_SQUARED_5 = 1000000; // 1000
+// The two main mastery icons sit left of the buff row (GDR_QPS_PARTY_BUFF is
+// at x 32, pitch 15), on the same 12px cells. A port addition, sent by the
+// server only while SRO_PARTY_MASTERIES is on.
+const PARTY_MASTERY_X = 2;
+const PARTY_MASTERY_PITCH = 15;
+const PARTY_MASTERY_Y = 39;
+const PARTY_MASTERY_CELL = 12;
 const PARTY_REGION_SIZE = 1920;
 const PARTY_DUNGEON_REGION = 0x8000;
 // Only the position matters to the distance shade; entities carry no heading.
@@ -56,8 +63,21 @@ export function partyOverlay(
 		const entity = entities.find( e => e.kind === "player" && e.name === member.name ),
 			position = [ x + column + 13, y + rowY ] as const;
 		rowY += buffs ? 73 : 56;
+		// An untrained slot is 0 and stays empty; a roster without the pair
+		// (switch off) yields nothing.
+		const masteries = [ member.primaryMastery, member.secondaryMastery ].flatMap( ( id, slot ) => {
+			if ( !id ) return [];
+			const rect = [
+				position[0] + PARTY_MASTERY_X + PARTY_MASTERY_PITCH * slot,
+				position[1] + PARTY_MASTERY_Y,
+				PARTY_MASTERY_CELL,
+				PARTY_MASTERY_CELL
+			] as const;
+			return [ { id, rect } ];
+		} );
 		return {
 			member,
+			masteries,
 			entity,
 			position,
 			hp: Math.min( 10, member.status & 15 ) / 10,
@@ -91,6 +111,20 @@ never copied, so y stays 0 (the zeroed local at 5BD17E).
 */
 export function partyRosterPose( member: { readonly region: number; readonly x: number; readonly z: number; } ): Pose {
 	return { regionId: member.region, x: member.x, y: 0, z: member.z, angle: 0 };
+}
+
+/*
+================
+partyLocalPose
+
+Where the distance shade measures from. The local player's live pose is the
+one the map follows; the local entity record lags it while the player walks,
+so measuring from the entity left every member looking near to a player who
+had walked away. The entity stands in until the first pose arrives.
+================
+*/
+export function partyLocalPose( game: GameplayState, entities: readonly EntityState[] ): PartyShadePosition | null {
+	return game.pose ?? entities.find( e => e.gid === game.localGid ) ?? null;
 }
 
 /*
@@ -137,4 +171,21 @@ export function partyShadeImage( shade: number ): string | null {
 	if ( shade <= 0 ) return null;
 	return "interface/quickparty/qpt_face_faraway_" + (PARTY_SHADE_BASE_PERCENT + shade * PARTY_SHADE_STEP_PERCENT) +
 		".png";
+}
+
+/*
+================
+partyShadeImages
+
+Every shade image, so the board can request them all while a party exists.
+A shade image is drawn only once it has loaded, and asking for one the
+first time its distance band is reached left that frame without the tint:
+the face flashed back for an instant at each band's first crossing.
+================
+*/
+export function partyShadeImages(): string[] {
+	const PARTY_SHADE_MAX = 5;
+	const images: string[] = [];
+	for ( let shade = 1; shade <= PARTY_SHADE_MAX; shade++ ) images.push( partyShadeImage( shade )! );
+	return images;
 }

@@ -37,7 +37,7 @@ run
 ================
 */
 func run() error {
-	dir := flag.String("authority-dir", "", "existing authority directory (schema 13/layout 4 or schema 14/layout 5)")
+	dir := flag.String("authority-dir", "", "existing authority directory (schema 13/layout 4, or schemas 14 to 16 at layout 5)")
 	commit := flag.Bool("commit", false, "retain a backup and commit the current authority schema")
 	flag.Parse()
 	if *dir == "" || flag.NArg() != 0 {

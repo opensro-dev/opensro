@@ -73,17 +73,24 @@ func ProgressionPrivateFrames(frames []Frame) []Frame {
 	return private
 }
 
+// Every pickup outcome ends with the 0xB2CD release. Native
+// CGCharAutoCommandActor_OnActionFinish (v1.188 4AD390) sends B074 only
+// after the queued pickup action ran its item move and despawn, so the
+// client keeps the drop claimed until the outcome has been applied. A
+// release sent first let a pickup-key press between it and the despawn ask
+// again for the drop the same burst had just granted.
+
 // PickupRefusalFrames is a failed pickup:
 //
-//	[0xB2CD release][0xB06D error]
+//	[0xB06D error][0xB2CD release]
 //
-// The latch release leads every refusal outcome because the client can never
-// self-clear +0x618; the error itself surfaces through the 0xB06D notice
-// (native notice category 0x01), not through 0xB2CD's kind-3 form.
+// The release is required because the client can never self-clear +0x618;
+// the error itself surfaces through the 0xB06D notice (native notice
+// category 0x01), not through 0xB2CD's kind-3 form.
 func PickupRefusalFrames(errorCode uint8) []Frame {
 	return []Frame{
-		{Opcode: OpActionState, Payload: ReleaseActionState().Encode()},
 		{Opcode: OpItemMoveResponse, Payload: EncodeItemMoveError(errorCode)},
+		{Opcode: OpActionState, Payload: ReleaseActionState().Encode()},
 	}
 }
 
@@ -96,8 +103,8 @@ func PickupApproachArmFrame() Frame {
 
 // PickupGoldGrantFrames is a successful gold pickup:
 //
-//	[0xB2CD release][0x35C7 anim][0xB06D [1][6][0xFE][amount]]
-//	[0x30B3 type 1 balance][0x36AB despawn]
+//	[0x35C7 anim][0xB06D [1][6][0xFE][amount]]
+//	[0x30B3 type 1 balance][0x36AB despawn][0xB2CD release]
 //
 // A gold heap is always consumed whole, so the despawn is unconditional. The
 // 0xFE result already prints UIIT_MSG_STATE_GAIN_GOLD for the whole heap
@@ -106,33 +113,37 @@ func PickupApproachArmFrame() Frame {
 // when a party split credited this recipient (CParty_DistributeGold).
 func PickupGoldGrantFrames(anim PickupAnim, amount uint32, balance uint64, itemGid uint32, notify bool) []Frame {
 	return []Frame{
-		{Opcode: OpActionState, Payload: ReleaseActionState().Encode()},
 		{Opcode: OpPickupAnim, Payload: anim.Encode()},
 		{Opcode: OpItemMoveResponse, Payload: EncodePickupGoldResult(amount)},
 		{Opcode: OpPointsUpdate, Payload: GoldRefresh{Balance: balance, Notify: notify}.Encode()},
 		{Opcode: OpObjectDespawn, Payload: ObjectDespawn{Gid: itemGid}.Encode(), Scope: []domain.ObjectScopeChange{{GID: itemGid}}},
+		{Opcode: OpActionState, Payload: ReleaseActionState().Encode()},
 	}
 }
 
 // PickupItemGrantFrames is a successful item pickup:
 //
-//	[0xB2CD release][0x35C7 anim][0xB06D [1][6][slot][CSOItem body]]
-//	[0x36AB despawn - only when groundRemainder == 0]
+//	[0x35C7 anim][0xB06D [1][6][slot][CSOItem body]]
+//	[0x36AB despawn - only when groundRemainder == 0][progress...]
+//	[0xB2CD release]
+//
+// progress is what the grant changed beyond the bag (quest collection
+// counts); it runs inside the action, so it precedes the release too.
 //
 // An over-cap pickup leaves the REMAINDER on the ground (the total > iMax arm
 // of sub_756a60): the heap keeps its gid and its rendered entity, so the
 // despawn is withheld - a client still drawing the drop is looking at a real,
 // pickable object.
-func PickupItemGrantFrames(anim PickupAnim, destSlot uint8, item ItemBody, itemGid uint32, groundRemainder uint16) []Frame {
+func PickupItemGrantFrames(anim PickupAnim, destSlot uint8, item ItemBody, itemGid uint32, groundRemainder uint16, progress []Frame) []Frame {
 	frames := []Frame{
-		{Opcode: OpActionState, Payload: ReleaseActionState().Encode()},
 		{Opcode: OpPickupAnim, Payload: anim.Encode()},
 		{Opcode: OpItemMoveResponse, Payload: EncodePickupItemResult(destSlot, item)},
 	}
 	if groundRemainder == 0 {
 		frames = append(frames, Frame{Opcode: OpObjectDespawn, Payload: ObjectDespawn{Gid: itemGid}.Encode(), Scope: []domain.ObjectScopeChange{{GID: itemGid}}})
 	}
-	return frames
+	frames = append(frames, progress...)
+	return append(frames, Frame{Opcode: OpActionState, Payload: ReleaseActionState().Encode()})
 }
 
 // PickupBroadcastFrames is what the rest of the division sees of a grant:

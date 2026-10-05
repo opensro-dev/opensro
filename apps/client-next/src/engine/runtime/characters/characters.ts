@@ -49,6 +49,8 @@ import { createModifierDelta } from "@/engine/foundation/rendering/modifier-delt
 import { animationActivation, type AnimationActivation } from "@/engine/foundation/animation/animation-activation";
 import { createPresentationIds } from "@/engine/foundation/animation/presentation-ids";
 import { createModelEmission, modelAmbientParticles } from "@/engine/foundation/animation/model-emission";
+import { readStructureVisuals, type StructureVisuals } from "@/engine/foundation/rendering/structure-stage";
+import { createStructureVisuals } from "./structure-visuals";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
 import {
 	groundVisualClock,
@@ -87,6 +89,7 @@ import {
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { createOrbs } from "./orbs/orbs";
 import { advanceCharacterFade, type CharacterFade } from "@/engine/foundation/animation/character-fade";
+import { spawnFadeAlpha, spawnFadeKind } from "@/engine/foundation/animation/spawn-fade";
 import { advanceAction, actionLayers, type ActionSchedule } from "@/engine/foundation/animation/action-schedule";
 import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill-motion-resolve";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
@@ -126,6 +129,11 @@ interface Resource {
 	modifierSelectors?: readonly ModifierSelector[];
 	modifierBindings?: readonly ModelAnimationBinding[];
 	ambientParticles?: readonly ModelParticle[];
+	// The manifest's atstructeffect fields, read into structureVisuals.
+	structureStages?: unknown;
+	structureSounds?: unknown;
+	structureDamageEffects?: unknown;
+	structureVisuals?: StructureVisuals;
 	materialKind?: number;
 	materialVariants?: Readonly<Record<string, string>>;
 	scalePercent?: number;
@@ -381,6 +389,7 @@ export function createCharacterPresentation(
 		}
 	>();
 	const modelEmission = createModelEmission( allocateActor );
+	const structureVisuals = createStructureVisuals();
 	const orbs = createOrbs( play, random, allocateActor ), scenery = createSceneryEmission( allocateActor );
 	const statusOwner = createStatusOwner();
 	const skillObjects = createSkillObjects( allocateActor );
@@ -479,11 +488,73 @@ export function createCharacterPresentation(
 	}
 	/*
 	================
+	applySpawnFades
+
+	CIDecoAppear for every spawned player, monster and COS (spawn-fade.ts),
+	scaling whatever opacity the other owners already chose. The ramp starts
+	on the actor's first drawable frame: natively the model exists at spawn,
+	here it may still be loading, and a ramp spent on an unloaded model would
+	pop in. A monster's linked ride carries its own equal ramp (861EE2).
+	================
+	*/
+	function applySpawnFades( entities: readonly EntityState[], next: Map<number, CharacterActor>, seconds: number ) {
+		fadePresent.clear();
+		for ( const entity of entities ) {
+			fadePresent.add( entity.gid );
+			if ( !spawnFadeKind( entity.kind ) ) continue;
+			if ( !fadeSeen.has( entity.gid ) ) {
+				fadeSeen.add( entity.gid );
+				spawnFades.set( entity.gid, null );
+				rideFades.set( entity.gid, null );
+			}
+			fadeActor( spawnFades, entity.gid, entity.gid, next, seconds );
+			// 861EE2 gives the linked ride its own CIDecoAppear: its ramp starts
+			// when the ride itself can draw, which may be after the rider's ends.
+			const rideGid = linkedRides.get( entity.gid );
+			if ( rideGid !== undefined ) fadeActor( rideFades, entity.gid, rideGid, next, seconds );
+		}
+		for ( const gid of fadeSeen ) {
+			if ( fadePresent.has( gid ) ) continue;
+			fadeSeen.delete( gid );
+			spawnFades.delete( gid );
+			rideFades.delete( gid );
+		}
+	}
+	/*
+	================
+	fadeActor
+
+	Advances one armed ramp, keyed by its spawned entity, onto one drawn actor:
+	the clock starts on the actor's first drawable frame and retires at 1.
+	================
+	*/
+	function fadeActor(
+		ramps: Map<number, number | null>,
+		key: number,
+		gid: number,
+		next: Map<number, CharacterActor>,
+		seconds: number
+	) {
+		const start = ramps.get( key ), actor = next.get( gid );
+		if ( start === undefined || !actor ) return;
+		if ( start === null ) ramps.set( key, seconds );
+		const alpha = spawnFadeAlpha( seconds - (start ?? seconds) );
+		if ( alpha >= 1 ) {
+			ramps.delete( key );
+			return;
+		}
+		next.set( gid, { ...actor, opacity: (actor.opacity ?? 1) * alpha } );
+	}
+	/*
+	================
 	resourceFor
 	================
 	*/
 	function resourceFor( entity: EntityState ): Resource | undefined {
 		const resource = catalog.get( appearanceRef( entity ) );
+		const staged = resource?.structureVisuals &&
+			structureVisuals.appearance( entity.gid, resource.glb, resource.ambientParticles ?? [] );
+		if ( resource && staged ) return { ...resource, glb: staged.glb, ambientParticles: staged.particles };
 		const variant = resource && entity.kind === "monster" ?
 			resource.materialVariants
 				?.[String( monsterMaterialSlot( entity.rarity ?? 0, entity.tidWord ?? 0, resource.materialKind ) )] :
@@ -506,6 +577,12 @@ export function createCharacterPresentation(
 	// each live rider's presentation-owned ride actor (CICMonster_DeserializeSpawnPacket).
 	const ridesByRider = new Map<string, LinkedRide>();
 	const linkedRides = new Map<number, number>();
+	// CIDecoAppear (spawn-fade.ts): each spawned character's ramp start, null
+	// while armed and waiting for its first drawable frame. fadeSeen holds the
+	// gids already armed, so one present the whole time fades only once.
+	const spawnFades = new Map<number, number | null>(), fadeSeen = new Set<number>(), fadePresent = new Set<number>();
+	// The linked ride's own ramp, keyed by its rider's entity gid.
+	const rideFades = new Map<number, number | null>();
 	/*
 	================
 	Auxiliary
@@ -575,15 +652,23 @@ export function createCharacterPresentation(
 				if ( event.kind === "reset" ) {
 					combatStanceEnds.clear();
 					modelEmission.reset();
+					structureVisuals.reset();
 					animationEmission.reset();
 					stageAnimations.clear();
 					groundClocks.clear();
 					retiring.clear();
 					disappearing.clear();
+					spawnFades.clear();
+					rideFades.clear();
+					fadeSeen.clear();
 					next.length = 0;
 					next.push( { kind: "reset" } );
 				} else if ( event.kind === "spawn" || event.kind === "state" ) {
-					if ( event.kind === "spawn" ) combatStanceEnds.delete( event.entity.gid );
+					if ( event.kind === "spawn" ) {
+						combatStanceEnds.delete( event.entity.gid );
+						// A respawn under a live gid is a new CICharactor: fade it again.
+						fadeSeen.delete( event.entity.gid );
+					}
 					next.push( { kind: event.kind, gid: event.entity.gid, refObjId: event.entity.refObjId } );
 				} else if ( event.kind === "despawn" ) {
 					combatStanceEnds.delete( event.gid );
@@ -607,6 +692,7 @@ export function createCharacterPresentation(
 				if ( event.kind === "reset" ) {
 					combatStanceEnds.clear();
 					modelEmission.reset();
+					structureVisuals.reset();
 					animationEmission.reset();
 					stageAnimations.clear();
 					groundClocks.clear();
@@ -643,6 +729,8 @@ export function createCharacterPresentation(
 				else if ( event.kind === "level-up" ) {
 					const entity = entities.find( e => e.gid === event.gid );
 					if ( entity ) effects.system( event.gid, entity.kind === "cos" ? -2147483614 : -2147483642 );
+				} else if ( event.kind === "system-effect" ) {
+					if ( entities.some( e => e.gid === event.gid ) ) effects.system( event.gid, event.effect | 0 );
 				} else orbs.receive( [ event ], entities );
 			}
 		},
@@ -666,11 +754,16 @@ export function createCharacterPresentation(
 			nativeServerName?: string,
 			normalFortressClothes = false
 		) {
+			// The local player (and the mount it rides) is where its movement owner
+			// put it; its entity row can still hold the spawn point, and a LOD
+			// measured from that drifts while running (equipment glow, effects).
 			entityLod.step(
 				entities,
 				gameplay?.localGid,
 				renderer.presentationCamera?.() ?? null,
-				Math.trunc( seconds * 1000 )
+				Math.trunc( seconds * 1000 ),
+				gameplay?.pose ?? undefined,
+				entities.find( e => e.gid === gameplay?.localGid )?.mountedOn
 			);
 			const animationDeltaMs = animationDelta( seconds );
 			skillObjects.retain( entities );
@@ -819,8 +912,10 @@ export function createCharacterPresentation(
 									!path.endsWith( ".glb" )
 								))
 						) throw Error( "Invalid monster material variants" );
+						const staged = readStructureVisuals( row, modelAmbientParticles );
 						nextCatalog.set( row.refObjId, {
 							...row,
+							...(staged ? { structureVisuals: staged } : {}),
 							ambientParticles: modelAmbientParticles( row.particleModifiers ),
 							animationParticles: modelAnimationParticles( row.particleModifiers ),
 							animationParticlePaths: [
@@ -1489,6 +1584,34 @@ export function createCharacterPresentation(
 					berserk: entity.appearanceState?.[2] === 1
 				};
 			}
+			// 4F7CC0: every staged structure re-evaluates on its own one-second
+			// timer; a stage reached by rising damage plays its sound (4F78A0).
+			for (
+				const event of structureVisuals.step(
+					entities.flatMap( entity => {
+						const staged = entity.kind === "structure" ?
+							catalog.get( appearanceRef( entity ) )?.structureVisuals :
+							undefined;
+						return staged ? [ { entity, visuals: staged, hp: vitalsByGid.get( entity.gid )?.hp } ] : [];
+					} ),
+					simulationMs ?? seconds * 1000
+				)
+			) {
+				// Camera scripts run on the presentation clock, like the skill shakes.
+				if ( event.shake ) effects.structureShake( seconds * 1000 );
+				const entity = entitiesByGid.get( event.gid ),
+					resource = entity ? catalog.get( appearanceRef( entity ) ) : undefined;
+				if ( !entity || !resource || !event.handle ) continue;
+				const pose = logicalPose( entity );
+				sounds.emit(
+					`structure:${event.gid}:${event.handle}:${seconds}`,
+					resource.soundProfileName ?? soundProfiles.get( resource.codename ) ?? resource.codename,
+					[ event.handle ],
+					soundContext( entity ),
+					[ (pose.regionId & 255) * 1920 + pose.x, pose.y, (pose.regionId >>> 8) * 1920 + pose.z ],
+					seconds
+				);
+			}
 			// The local press's prediction animates beside the server's casts.
 			const animated = gameplay?.castPrediction ?
 				[ ...(gameplay.casts ?? []), gameplay.castPrediction ] :
@@ -1595,25 +1718,33 @@ export function createCharacterPresentation(
 				const cancelledAt = stopAt !== undefined ?
 					seconds + (stopAt - (simulationMs ?? seconds * 1000)) / 1000 :
 					undefined;
-				const events = [ ...adopted, ...advanceAction( clock, seconds, shotAt, cancelledAt ).events ];
+				const events = [
+					...adopted.map( event => ({ ...event, adopted: true }) ),
+					...advanceAction( clock, seconds, shotAt, cancelledAt ).events
+				];
+				const attackKind = clock.phases[2]?.clip.startsWith( "native:" ) ?
+					Number( clock.phases[2].clip.split( ":" )[2] ) :
+					({ attack1: 2, attack2: 5, attack3: 16, attack4: 17 } as Record<string, number>)[
+						clock.phases[2]?.clip.split( "-" )[0] ?? ""
+					] ?? 0;
+				let presented = events;
 				if ( cast.token === predictionToken ) {
-					predictedEvents.set( cast.token, [ ...(predictedEvents.get( cast.token ) ?? []), ...events ] );
+					// The windup (READY, WAIT) presents at the press, sound and all;
+					// the release and its impacts wait for the server's answer, which
+					// adopts the prediction's visuals (effects.ts adoptCast).
+					presented = events.filter( event => event.phase === "READY" || event.phase === "WAIT" );
+					predictedEvents.set( cast.token, [
+						...(predictedEvents.get( cast.token ) ?? []),
+						...events.filter( event => event.phase !== "READY" && event.phase !== "WAIT" )
+					] );
+				}
+				for ( const event of presented ) triggers.push( { cast, ...event, attackKind } );
+				if ( cast.token === predictionToken ) {
 					actionLayersByActor.set( cast.caster, [
 						...actionLayers( clock, seconds ),
 						...(actionLayersByActor.get( cast.caster ) ?? [])
 					] );
 					continue;
-				}
-				for ( const event of events ) {
-					triggers.push( {
-						cast,
-						...event,
-						attackKind: clock.phases[2]?.clip.startsWith( "native:" ) ?
-							Number( clock.phases[2].clip.split( ":" )[2] ) :
-							({ attack1: 2, attack2: 5, attack3: 16, attack4: 17 } as Record<string, number>)[
-								clock.phases[2]?.clip.split( "-" )[0] ?? ""
-							] ?? 0
-					} );
 				}
 				actionLayersByActor.set( cast.caster, [
 					...actionLayers( clock, seconds ),
@@ -1662,9 +1793,13 @@ export function createCharacterPresentation(
 			} );
 			// Sample sockets from the admitted models at the current mechanical pose
 			// and authored callback cursor; flight ownership precedes hit feedback.
+			// The press's prediction is a cast of its own until the server adopts it.
+			const effectGameplay = gameplay?.castPrediction ?
+				{ ...gameplay, casts: [ ...gameplay.casts, gameplay.castPrediction ] } :
+				gameplay;
 			const effectActors = effects.step(
 				effectEntities,
-				gameplay && drawnLocal ? { ...gameplay, pose: drawnLocal } : gameplay,
+				effectGameplay && drawnLocal ? { ...effectGameplay, pose: drawnLocal } : effectGameplay,
 				seconds,
 				resources.ready,
 				resources.duration,
@@ -1893,9 +2028,11 @@ export function createCharacterPresentation(
 							anchor ?
 							damageAnchor( victim.pose, source.pose, anchor.offset, bone, saddle ) :
 							victim.pose;
+						// 8D5440 copies the caster's native world matrix: an imported
+						// body's placement x Ry(PI). The program draws native space.
 						const basis = Array.from(
 							{ length: 9 },
-							( _, i ) => matrix[Math.floor( i / 3 ) * 4 + i % 3]! * (i >= 6 ? -1 : 1)
+							( _, i ) => matrix[Math.floor( i / 3 ) * 4 + i % 3]! * (i >= 3 && i < 6 ? 1 : -1)
 						) as unknown as NonNullable<CharacterActor["effectBasis"]>;
 						effectActors.push(
 							...effects.damage(
@@ -2678,6 +2815,11 @@ export function createCharacterPresentation(
 					state.locomotion = changeLocomotion( state.locomotion, clip, looping, seconds, baseRole );
 					if ( previousLocomotion !== state.locomotion ) {
 						state.locomotion.rate = baseRole === "run" || baseRole === "walk" ? entryRate : 1;
+						// 777F60 mounts and 85E930 dismounts with PlayAnimation(0,0,0,0,1,1):
+						// no blend, so the rider snaps into and out of the ride pose.
+						if ( (previousLocomotion?.clip === "ride") !== (clip === "ride") ) {
+							state.locomotion = { ...state.locomotion, enter: 0, outgoing: [] };
+						}
 					}
 					const layers: import("@/engine/contracts/character").CharacterLayer[] = locomotionLayers(
 						state.locomotion,
@@ -3209,6 +3351,8 @@ export function createCharacterPresentation(
 					cameraTarget = {
 						height,
 						mounted: !!riding,
+						// Actor yaw is pi minus the native yaw (characterHeadingYaw).
+						yaw: Math.PI - rendered.yaw,
 						pose: {
 							regionId: rendered.regionId,
 							x: rendered.x,
@@ -3320,6 +3464,7 @@ export function createCharacterPresentation(
 					if ( actor ) next.set( entity.gid, { ...actor, opacity: 0 } );
 				}
 			}
+			applySpawnFades( entities, next, seconds );
 			for ( const holder of particleHolders ) holder.actor = next.get( holder.actor.gid )!;
 			for (
 				const actor of modelEmission.step(
@@ -3454,6 +3599,7 @@ export function createCharacterPresentation(
 			scenery.reset();
 			entityLod.reset();
 			modelEmission.reset();
+			structureVisuals.reset();
 			animationEmission.reset();
 			stageAnimations.clear();
 			groundClocks.clear();
@@ -3471,6 +3617,9 @@ export function createCharacterPresentation(
 			combatStanceEnds.clear();
 			retiring.clear();
 			disappearing.clear();
+			spawnFades.clear();
+			rideFades.clear();
+			fadeSeen.clear();
 			damageTexts = [];
 			rainEventActive = false;
 			rainEventEntities.clear();
@@ -3513,6 +3662,7 @@ export function createCharacterPresentation(
 			scenery.reset();
 			entityLod.reset();
 			modelEmission.reset();
+			structureVisuals.reset();
 			animationEmission.reset();
 			stageAnimations.clear();
 			groundClocks.clear();
@@ -3530,6 +3680,9 @@ export function createCharacterPresentation(
 			combatStanceEnds.clear();
 			retiring.clear();
 			disappearing.clear();
+			spawnFades.clear();
+			rideFades.clear();
+			fadeSeen.clear();
 			damageTexts = [];
 			rainEventActive = false;
 			rainEventEntities.clear();

@@ -17,6 +17,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { defined } from "../helpers/defined.mjs";
+
+/*
+================
+ignoreIncident
+
+The incident reporter for sessions whose test is not about incidents.
+================
+*/
+function ignoreIncident() {}
 /*
 ================
 load
@@ -396,7 +405,7 @@ function entered( value = bootstrap ) {
 }
 
 test("restart completion survives an immediate transport BYE and retires the admitted world once", async t => {
-	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket" );
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -436,10 +445,14 @@ test("restart completion survives an immediate transport BYE and retires the adm
 });
 test("fresh admission on reconnect; WELCOME cannot reuse an old bootstrap barrier", async t => {
 	const sockets = socketHarness( t ), mints = [];
-	const world = createWorldSession( async kind => {
-		mints.push( kind );
-		return `ticket-${mints.length}`;
-	} );
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return `ticket-${mints.length}`;
+		},
+		undefined,
+		ignoreIncident
+	);
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -509,7 +522,7 @@ test("fresh admission on reconnect; WELCOME cannot reuse an old bootstrap barrie
 test("logout/disposal rejects a late token and opens no socket", async t => {
 	const sockets = socketHarness( t );
 	let resolve;
-	const world = createWorldSession( () => new Promise( r => resolve = r ) );
+	const world = createWorldSession( () => new Promise( r => resolve = r ), undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	world.dispose();
 	defined( resolve )( "late" );
@@ -519,10 +532,14 @@ test("logout/disposal rejects a late token and opens no socket", async t => {
 });
 test("unexpected close retries with a new ticket and rejects a lost resume", async t => {
 	const sockets = socketHarness( t ), mints = [];
-	const world = createWorldSession( async kind => {
-		mints.push( kind );
-		return "ticket";
-	} );
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -558,7 +575,7 @@ test("unexpected close retries with a new ticket and rejects a lost resume", asy
 
 test("a dropped session keeps retrying through the resume grace, then gives up", async t => {
 	const sockets = socketHarness( t );
-	const world = createWorldSession( async () => "ticket" );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -653,6 +670,125 @@ spawn
 	const events = flush( owner ).events;
 	assert.equal( events.find( event => event.kind === "state" ).entity.mountedOn, undefined );
 	assert.equal( events.at( -1 ).kind, "despawn" );
+	// 777F60 stores the mount gid unresolved: a ride ahead of its vehicle's
+	// spawn binds the rider instead of failing the viewer's world session.
+	owner.receive( { opcode: 0xb4b5, payload: ride } );
+	assert.equal( owner.read( 1 ).mountedOn, 2, "a ride may precede its vehicle" );
+	owner.receive( cosSpawn );
+	assert.equal( owner.read( 1 ).mountedOn, 2 );
+	owner.dispose();
+});
+
+test("a freshly summoned combat pet plays its summon sound and SYSTEM_PET_APPEAR", () => {
+	const owner = createEntities();
+	owner.bootstrap( {
+		...bootstrap,
+		refObjSnapshot: [ { refObjId: 2190, kind: "cos", tidWord: 0x19c6 }, {
+			refObjId: 2183,
+			kind: "cos",
+			tidWord: 0x11c6
+		} ]
+	} );
+	flush( owner );
+	const spawn = ( ref, gid, fresh, band3 = true ) => {
+		const p = Buffer.alloc( 57 );
+		p.writeUInt32LE( ref );
+		p.writeUInt32LE( gid, 4 );
+		p.writeUInt16LE( 257, 8 );
+		p[25] = 1;
+		p.writeFloatLE( 10, 32 );
+		p.writeFloatLE( 20, 36 );
+		p.writeFloatLE( 1, 40 );
+		p[45] = 1;
+		p[56] = fresh ? 1 : 0;
+		// Band 3/4 read the pet's own name before the owner tail (owner name,
+		// hold, PvP, owner gid, sub-state: nine bytes).
+		const payload = band3 ? Buffer.concat( [ p.subarray( 0, 48 ), Buffer.alloc( 2 ), p.subarray( 48 ) ] ) : p;
+		return { opcode: 0x30d7, payload };
+	};
+	owner.receive( spawn( 2190, 5, true ), 0 );
+	let events = flush( owner ).events;
+	// 854CD0: sub-state 1 on a band 3/4 pet.
+	assert.ok( events.some( e => e.kind === "ui-sound" && e.handle === "SND_COS_SUMMON" ) );
+	assert.ok( events.some( e => e.kind === "system-effect" && e.gid === 5 && e.effect === 0x80000021 ) );
+	owner.receive( spawn( 2183, 6, true, false ), 0 );
+	events = flush( owner ).events;
+	assert.ok( !events.some( e => e.kind === "system-effect" ), "a riding horse is no combat or fellowship pet" );
+	owner.receive( spawn( 2190, 7, false ), 0 );
+	assert.ok( !flush( owner ).events.some( e => e.kind === "system-effect" ), "a pet already out spawns quietly" );
+	owner.dispose();
+});
+
+/*
+================
+capture mark
+
+7786E0 puts SYSTEM_CAPTURE_MARK on the selected character when a capture
+result says caught; a gid that names no character is left alone.
+================
+*/
+test("a caught capture result marks the selected character", () => {
+	const owner = createEntities();
+	owner.bootstrap( { ...bootstrap, refObjSnapshot: [ { refObjId: 2183, kind: "cos", tidWord: 0x11c6 } ] } );
+	flush( owner );
+	const p = Buffer.alloc( 57 );
+	p.writeUInt32LE( 2183 );
+	p.writeUInt32LE( 6, 4 );
+	p.writeUInt16LE( 257, 8 );
+	p[25] = 1;
+	p.writeFloatLE( 10, 32 );
+	p.writeFloatLE( 20, 36 );
+	p.writeFloatLE( 1, 40 );
+	p[45] = 1;
+	owner.receive( { opcode: 0x30d7, payload: p }, 0 );
+	flush( owner );
+	owner.markCaptured( 6 );
+	owner.markCaptured( 404 );
+	assert.equal( owner.read( 6 ).captureMark, true );
+	assert.equal( owner.read( 404 ), undefined );
+	owner.dispose();
+});
+
+test("a rider's walk/run switches the vehicle that carries the path", () => {
+	const owner = createEntities();
+	owner.bootstrap( {
+		...bootstrap,
+		refObjSnapshot: [ { refObjId: 2023, kind: "npc" }, { refObjId: 2183, kind: "cos", tidWord: 0x11c6 } ]
+	} );
+	flush( owner );
+	const spawn = ( ref, gid, cos = false ) => {
+		const p = Buffer.alloc( cos ? 57 : 49 );
+		p.writeUInt32LE( ref );
+		p.writeUInt32LE( gid, 4 );
+		p.writeUInt16LE( 257, 8 );
+		p[25] = 1;
+		p.writeFloatLE( 10, 32 );
+		p.writeFloatLE( 20, 36 );
+		p.writeFloatLE( 1, 40 );
+		p[45] = 1;
+		return { opcode: 0x30d7, payload: p };
+	};
+	owner.receive( spawn( 2023, 1 ), 0 );
+	owner.receive( spawn( 2183, 2, true ), 0 );
+	const ride = Buffer.alloc( 10 );
+	ride[0] = 1;
+	ride.writeUInt32LE( 1, 1 );
+	ride[5] = 1;
+	ride.writeUInt32LE( 2, 6 );
+	owner.receive( { opcode: 0xb4b5, payload: ride }, 0 );
+	// The rider's move moves its vehicle (85E000): 100 units at run 20/s.
+	const move = Buffer.alloc( 14 );
+	move.writeUInt32LE( 1 );
+	move[4] = 1;
+	move.writeUInt16LE( 257, 5 );
+	move.writeInt16LE( 100, 7 );
+	owner.receive( { opcode: 0xb738, payload: move }, 0 );
+	flush( owner );
+	const x = owner.read( 2 ).x;
+	owner.receive( { opcode: 0x3122, payload: Uint8Array.of( 1, 0, 0, 0, 1, 2 ) }, 1000 );
+	assert.equal( owner.read( 1 ).movementMode, 2, "the rider keeps its gait for the action icon" );
+	assert.equal( owner.read( 2 ).movementMode, 2, "777B60 applies it to the active mover" );
+	assert.ok( owner.read( 2 ).x > x, "the vehicle was re-timed from its live point" );
 	owner.dispose();
 });
 
@@ -816,7 +952,7 @@ test("jewelry equip notifications leave the visual model unchanged without refus
 });
 
 test("versioned shop controls cross the admitted world boundary only after EnterWorld", async t => {
-	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket" );
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -885,7 +1021,7 @@ test("presentation retains omitted shop projection but honors an explicit close"
 });
 
 test("reset acknowledgement and readiness are per travel generation for both native reset opcodes", async t => {
-	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket" );
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -1101,7 +1237,8 @@ test("movement activity clears on death, revival, teleport and explicit stop", (
 
 test("transport loss retains the admitted inventory and entities until explicit logout", async t => {
 	const sockets = socketHarness( t ),
-		world = createWorldSession( async () => "ticket" ),
+		incidents = [],
+		world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) ),
 		presentation = createPresentation();
 	const accept = () => {
 		let batch;
@@ -1143,6 +1280,9 @@ test("transport loss retains the admitted inventory and entities until explicit 
 	accept();
 	assert.equal( world.status().phase, "disconnected" );
 	assert.deepEqual( presentation.gameplay(), prior );
+	// The loss reaches the Agent as one incident from the world phase.
+	assert.equal( incidents.length, 1 );
+	assert.equal( incidents[0].phase, "world" );
 	assert.equal( presentation.count(), count );
 	assert.throws(
 		() => world.command( { kind: "inventory-move", source: 13, destination: 14, quantity: 3 } ),
@@ -1181,7 +1321,7 @@ test("reference admission holds native packets until verified data, and cancella
 		const request = http.references( ...args );
 		referenceCompletion = request.then( () => {}, () => {} );
 		return request;
-	} );
+	}, ignoreIncident );
 	/*
 ================
 begin
@@ -1259,7 +1399,7 @@ test("published static item rows join the login's own rows before the world is a
 		const request = http.references( ...args );
 		referenceCompletion = request.then( () => {}, () => {} );
 		return request;
-	} );
+	}, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -1326,7 +1466,7 @@ test("an edge-routed transport base carries its route to the socket and the refe
 		requested.push( String( url ) );
 		return new Response( data );
 	} );
-	const world = createWorldSession( async () => "ticket", createSessionHttp().references );
+	const world = createWorldSession( async () => "ticket", createSessionHttp().references, ignoreIncident );
 	world.enter( "fixture", "shard", "https://edge.invalid/shards/a" );
 	await settle();
 	world.step( 1 );
@@ -1369,7 +1509,9 @@ test("local entry preserves authoritative movement channels", () => {
 });
 
 test("town re-entry replaces corpse vitals and login coordinates before the local latch", async t => {
-	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket" ), view = createPresentation();
+	const sockets = socketHarness( t ),
+		world = createWorldSession( async () => "ticket", undefined, ignoreIncident ),
+		view = createPresentation();
 	let resets = 0;
 	const accept = () => {
 		let batch;
@@ -1536,10 +1678,14 @@ object bracket arrives. Network progress and rendering progress are distinct.
 */
 async function admitWaitingWorld( t, complete = true ) {
 	const sockets = socketHarness( t ), mints = [];
-	const world = createWorldSession( async kind => {
-		mints.push( kind );
-		return "ticket";
-	} );
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
 	t.after( () => world.dispose() );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();

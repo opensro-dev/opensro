@@ -78,3 +78,30 @@ func TestSkillUiRowCarriesMPCost(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestSkillUiRowCarriesTargetGroups
+
+Cold Wave Arrest admits a living monster or an enemy player, never its
+caster: the client predicts its cast only at such a target.
+================
+*/
+func TestSkillUiRowCarriesTargetGroups(t *testing.T) {
+	skills := sharedShippedSkills(t)
+	row, ok := skills.SkillByCodename("SKILL_CH_COLD_GIGONGJANG_A_01")
+	if !ok {
+		t.Fatal("Cold Wave Arrest missing")
+	}
+	for _, spawn := range skills.SpawnSkillRows() {
+		if spawn.ID != row.ID {
+			continue
+		}
+		want := uint16(SkillUiTargetAnimal | SkillUiTargetMonster | SkillUiTargetPlayer)
+		if spawn.UI == nil || spawn.UI.Targets != want {
+			t.Fatalf("Cold Wave Arrest targets %+v, want %b", spawn.UI, want)
+		}
+		return
+	}
+	t.Fatal("Cold Wave Arrest has no catalogue row")
+}

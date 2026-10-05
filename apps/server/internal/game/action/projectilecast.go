@@ -144,8 +144,8 @@ func (rt *Runtime) advanceProjectileCasts(now int64) []simulation.DivisionFrames
 		}
 		valid := snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
 		if !p.supportCast && !p.selfEffect && !p.trap && !p.statusArea {
-			target, exists := rt.characterMonster(p.divisionID, snapshot, p.cast.TargetGid)
-			valid = valid && exists && target.CurrentHP > 0
+			_, exists := rt.resolveCombatTarget(p.divisionID, snapshot, p.cast.TargetGid, now)
+			valid = valid && exists
 		}
 		// Instant 586C8D..586CA8 runs mask 0x1C before reading the
 		// timer at 586CE3; projectile 585C67 precedes 585CA9 likewise.

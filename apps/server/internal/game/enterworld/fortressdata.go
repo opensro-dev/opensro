@@ -19,8 +19,31 @@ func DefaultSiegeFortressDataRows() []SiegeFortressDataRow {
 			CodeName:        "FORTRESS_JANGAN",
 			NameStrID:       "SN_FORTRESS_JANGAN",
 			OfficialNpcCode: "NPC_CH_FORTRESS_OFFICIAL",
+			RequestFee:      5000000,
 		},
 	}
+}
+
+/*
+================
+siegeFortressRows
+
+The shipped rows with each official's RefObjID resolved from character
+data.
+================
+*/
+func siegeFortressRows(deps *Deps) []SiegeFortressDataRow {
+	rows := DefaultSiegeFortressDataRows()
+	characters, ok := deps.Items.(CharacterRefSource)
+	if !ok {
+		return rows
+	}
+	for i := range rows {
+		if ref, found := characters.CharacterRefByCodename(rows[i].OfficialNpcCode); found && ref != nil {
+			rows[i].OfficialRefObjID = ref.RefObjID
+		}
+	}
+	return rows
 }
 
 // DefaultGameWorldDataRows projects the browser's fortress-name fields from

@@ -309,5 +309,8 @@ func (rt *Runtime) advanceJobDresses(now int64) {
 		if rt.PushCharacterFrames != nil {
 			rt.PushCharacterFrames(dress.division, c.Name, result.Frames)
 		}
+		if len(result.Broadcast) != 0 && rt.PushDivisionPeerFrames != nil {
+			rt.PushDivisionPeerFrames(dress.division, c.Name, result.Broadcast)
+		}
 	}
 }

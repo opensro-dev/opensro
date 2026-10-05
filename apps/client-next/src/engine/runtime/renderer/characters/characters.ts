@@ -65,6 +65,7 @@ import { createCharacterPose } from "./animation/animation";
 import {
 	placement,
 	identity,
+	nativeModelOffset,
 	prepareViewFrustum,
 	visibleFrustumSphere
 } from "@/engine/foundation/rendering/world-math";
@@ -369,7 +370,12 @@ export function createCharacters() {
 		chain.add( actor.gid );
 		let matrix = placement( actor.pose.regionId, origin, actor.pose.x, actor.pose.y, actor.pose.z, actor.pose.yaw );
 		const ownerId = actor.attachment?.gid ?? actor.mountedOn;
-		if ( ownerId !== undefined ) {
+		// 777F60 binds a ride without resolving its vehicle, and 85E000 falls
+		// back to the rider when 85D870 finds none: a rider whose vehicle has
+		// no drawn row (not spawned yet, or its model still loading) stands
+		// on its own placement instead of vanishing until the vehicle draws.
+		const rider = !actor.attachment && actor.mountedOn !== undefined;
+		if ( ownerId !== undefined && !(rider && !rows.has( ownerId )) ) {
 			// The owner left this frame. Native deco and CRT updates run on a
 			// live object; there is no matrix to inherit.
 			const owner = rows.get( ownerId );
@@ -434,28 +440,36 @@ export function createCharacters() {
 						actor.attachment.rotation
 					);
 				} else if ( actor.attachment.basis === "native" || actor.attachment.basis === "native-bsr" ) {
-					// A894F0 returns the compound WORLD matrix, not a skeletal
-					// root. Undo the imported body's Ry(PI) for a root effect;
-					// a named imported socket instead has one remaining Sz(-1).
-					// A compiled BSR mesh is itself Z-flipped, so it keeps one
-					// more Sz(-1): its third column toggles back.
-					const bsr = actor.attachment.basis === "native-bsr";
-					const columns = actor.attachment.root ? (bsr ? [ 0 ] : [ 0, 2 ]) : (bsr ? [] : [ 2 ]);
+					// The 8D6880 holder matrix in native space. An imported model's
+					// space is Ry(PI) of native (exportGlb convPos mirrors Z, the
+					// loader's __gltf_left_handed__ root adds Sx), so its root is
+					// placement x Ry(PI) and a named socket is Ry(PI) x bone x
+					// Sz: undo the Ry(PI) for a root, the trailing Sz for a bone.
+					// An .efp program draws native coordinates through this
+					// matrix as is; an imported mesh takes Ry(PI) once more after
+					// the authored rotation (below).
+					const columns = actor.attachment.root ? [ 0, 2 ] : [ 2 ];
 					for ( const c of columns ) {
 						for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n] = -matrix[c * 4 + n]!;
 					}
+					// 8D6AFF: binding +0x08 == 0 (an '@Bone' token) writes an
+					// identity rotation over bone x root and keeps the position.
+					if ( actor.attachment.keepRotation === false && !actor.attachment.root ) {
+						for ( let c = 0; c < 3; c++ ) {
+							for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n] = c === n ? 1 : 0;
+						}
+					}
 					// 8D6880 rotates the offset by the holder matrix, separately
 					// from bone orientation, using character height scale C0.
-					const offset = [ x, y, z ];
+					const axes = new Float32Array( 12 );
 					for ( let c = 0; c < 3; c++ ) {
 						const size = hypot3( parent[c * 4]!, parent[c * 4 + 1]!, parent[c * 4 + 2]! );
 						if ( size ) {
-							for ( let n = 0; n < 3; n++ ) {
-								matrix[12 + n]! += parent[c * 4 + n]! / size * (c === 1 ? 1 : -1) * offset[c]! *
-									owner.scale;
-							}
+							for ( let n = 0; n < 3; n++ ) axes[c * 4 + n] = parent[c * 4 + n]! / size * owner.scale;
 						}
 					}
+					const delta = nativeModelOffset( axes, [ x, y, z ] );
+					for ( let n = 0; n < 3; n++ ) matrix[12 + n]! += delta[n]!;
 				} else {for ( let n = 0; n < 3; n++ ) {
 						matrix[12 + n]! += matrix[n]! * x + matrix[4 + n]! * y + matrix[8 + n]! * z;
 					}}
@@ -467,11 +481,11 @@ export function createCharacters() {
 				if ( size ) { for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n]! /= size; }
 			}
 		}
-		// Compiled BSR vertices are Z-flipped. Retail projectile bases are in
-		// world coordinates, so undo the asset-local flip on their third column.
+		// The producer states the exact world basis for this model's own
+		// space: native for an .efp program, importedModelBasis for a mesh.
 		if ( actor.effectBasis ) {
 			for ( let c = 0; c < 3; c++ ) {
-				for ( let r = 0; r < 3; r++ ) matrix[c * 4 + r] = actor.effectBasis[c * 3 + r]! * (c === 2 ? -1 : 1);
+				for ( let r = 0; r < 3; r++ ) matrix[c * 4 + r] = actor.effectBasis[c * 3 + r]!;
 			}
 		}
 		if ( actor.effectRotation ) {
@@ -498,6 +512,14 @@ export function createCharacters() {
 			const out = new Float32Array( 16 );
 			multiply( matrix, local, out );
 			matrix = out;
+		}
+		// 8D9EC0 rotates a stage object in its native space (Rotation x
+		// Attach). An imported mesh then leaves native space for its own
+		// Ry(PI) model space: M = holder x rotation x Ry(PI).
+		if ( actor.attachment?.basis === "native-bsr" ) {
+			for ( const c of [ 0, 2 ] ) {
+				for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n] = -matrix[c * 4 + n]!;
+			}
 		}
 		for ( let n = 0; n < 12; n++ ) matrix[n]! *= actor.scale;
 		cache.set( actor.gid, matrix );
@@ -527,14 +549,18 @@ export function createCharacters() {
 				const actor = rows.get( gid );
 				if ( !actor || actor.attachment || (actor.opacity ?? 1) <= 0 ) continue;
 				// 85f57b: riding labels use the ride's height, not the rider's saddle.
-				const body = actor.mountedOn !== undefined ? rows.get( actor.mountedOn ) : actor;
-				if ( !body ) continue;
-				const resource = models.get( body.model );
+				// 85f58e: without a resolvable ride (85D870 null) the rider's own
+				// height and lift place it; a ride whose model is still loading
+				// has no height yet either.
+				const ride = actor.mountedOn !== undefined ? rows.get( actor.mountedOn ) : undefined,
+					rideResource = ride && models.get( ride.model );
+				const body = rideResource ? ride! : actor;
+				const resource = rideResource || models.get( actor.model );
 				if ( !resource ) continue;
 				const bounds = bindBoundsOf( resource.model );
 				const matrix = transformFor( body, rows, origin, transforms );
 				if ( !matrix || !Number.isFinite( bounds[4] ) ) continue;
-				const lift = actor.mountedOn !== undefined ? 7 : 2;
+				const lift = rideResource ? 7 : 2;
 				const x = matrix[12]!,
 					y = matrix[13]! + (actor.groundItem ? 5 : bounds[4] * body.scale + lift),
 					z = matrix[14]!;
@@ -597,15 +623,18 @@ export function createCharacters() {
 		================
 		socket
 
-		Combine a local bone offset with the actor world transform. Effect queries
-		use 8D6330's mount/root fallback; strict geometry queries keep a missing
+		Combine a bone position with a native model-space offset (8D6880). The
+		offset turns with the holder's root, not with the bone, and is carried
+		into imported space by nativeModelOffset. Effect queries use 8D6330's
+		mount/root fallback; a null name is 8D6880's null bone, the holder's
+		own root with no mount retry. Strict geometry queries keep a missing
 		marker distinct from a real socket (for example, footstep contact).
 		================
 		*/
 		socket(
 			rows: readonly CharacterActor[],
 			gid: number,
-			bone: string | { name: string; fallback: "mount-root"; },
+			bone: string | { name: string | null; fallback: "mount-root"; },
 			offset: readonly [number, number, number]
 		) {
 			const byGid = new Map( rows.map( actor => [ actor.gid, actor ] ) ), actor = byGid.get( gid );
@@ -614,9 +643,9 @@ export function createCharacters() {
 			let holder = actor, pose = poseFor( holder );
 			// A cold model is not evidence that an authored marker is absent.
 			if ( !pose ) return null;
-			let socket = pose.socket( name );
+			let socket = name === null ? null : pose.socket( name );
 			const visited = new Set<number>( [ holder.gid ] );
-			while ( !socket && fallback && holder.mountedOn !== undefined ) {
+			while ( name !== null && !socket && fallback && holder.mountedOn !== undefined ) {
 				const mount = byGid.get( holder.mountedOn );
 				if ( !mount ) return null;
 				if ( visited.has( mount.gid ) ) throw new Error( "Cyclic character socket mount" );
@@ -626,7 +655,7 @@ export function createCharacters() {
 				if ( !pose ) return null;
 				socket = pose.socket( name );
 			}
-			if ( !socket && !fallback ) return null;
+			if ( name !== null && !socket && !fallback ) return null;
 			const matrix = transformFor( holder, byGid, actor.pose.regionId, new Map() );
 			if ( !matrix ) return null;
 			const world = new Float32Array( 16 );
@@ -634,11 +663,8 @@ export function createCharacters() {
 			// matrix and still apply the offset through the holder's basis.
 			if ( socket ) multiply( matrix, socket, world );
 			else world.set( matrix );
-			const [x, y, z] = offset, point = [ 0, 0, 0 ];
-			for ( let n = 0; n < 3; n++ ) {
-				point[n] = world[12 + n]! + matrix[n]! * x + matrix[4 + n]! * y + matrix[8 + n]! * z;
-			}
-			return { ...actor.pose, x: point[0]!, y: point[1]!, z: point[2]! };
+			const delta = nativeModelOffset( matrix, offset );
+			return { ...actor.pose, x: world[12]! + delta[0], y: world[13]! + delta[1], z: world[14]! + delta[2] };
 		},
 		/*
 		================
