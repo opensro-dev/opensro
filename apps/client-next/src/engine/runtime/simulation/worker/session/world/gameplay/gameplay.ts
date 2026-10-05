@@ -565,7 +565,10 @@ reuse gate as manual activation. Recovery completion is server-owned.
 		// 561D50 checks the NPC interaction latch (69F870 includes storage)
 		// and the return-delay control. The retry timer itself stays armed.
 		if ( slot === null ) return;
-		if ( autoPotionItemMallOpen || returnScroll || inventory.state().shop || storage.state() ) {
+		// 561E57..561E6B tests the visible stall control, including the owner
+		// editing a closed stall and a visitor. Naming and network are separate windows.
+		const stallVisible = inventory.stallPhase() === "owner" || inventory.stallPhase() === "visitor";
+		if ( stallVisible || autoPotionItemMallOpen || returnScroll || inventory.state().shop || storage.state() ) {
 			const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, ITEM_INTERACTION_REFUSAL );
 			if ( notice ) api.notice( notice );
 			return;

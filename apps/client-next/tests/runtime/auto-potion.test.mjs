@@ -429,3 +429,39 @@ test("Item Mall refusal publishes the native interaction notice while dragging s
 	assert.equal( sent.length, 1 );
 	g.dispose();
 });
+
+for ( const visitor of [ false, true ] ) {
+	test(`visible ${visitor ? "visitor" : "owner"} stall refuses automatic use until its close receipt`, () => {
+		const { g, local, sent } = automatic();
+		const opened = visitor ?
+			{ opcode: 0xb61f, payload: Uint8Array.of( 1, 2, 0, 0, 0, 0, 0, 1, 0, 255, 0 ) } :
+			{ opcode: 0xb049, payload: Uint8Array.of( 1 ) };
+		g.receive( opened, 0 );
+		g.receive( vitals( 40 ), 0 );
+		assert.equal( sent.length, 0 );
+		assert.equal( g.take().notices.at( -1 )?.key, "UIIT_MSG_STRGERR_CANT_USEITEM_WHILE_INTERACT" );
+		g.step( 1000, local );
+		assert.equal( sent.length, 0 );
+		g.receive(
+			visitor ?
+				{ opcode: 0xb6e7, payload: Uint8Array.of( 1 ) } :
+				{ opcode: 0xb42c, payload: Uint8Array.of( 1 ) },
+			1001
+		);
+		g.step( 1999, local );
+		assert.equal( sent.length, 0 );
+		g.step( 2000, local );
+		assert.equal( sent.length, 1 );
+		assert.equal( sent[0].opcode, 0x75bd );
+		g.dispose();
+	});
+}
+
+test("the separate stall network does not refuse automatic potion use", () => {
+	const { g, sent } = automatic();
+	g.command( { kind: "stall-network-open", open: true }, 0 );
+	g.receive( vitals( 40 ), 0 );
+	assert.equal( sent.length, 1 );
+	assert.equal( sent[0].opcode, 0x75bd );
+	g.dispose();
+});
