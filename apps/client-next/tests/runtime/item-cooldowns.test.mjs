@@ -215,3 +215,31 @@ test("published unlimited potions acknowledge once without spending or bypassing
 	assert.throws( () => owner.receive( 0xb5bd, receipt( 16, 3, 2 ), 1011, unlimited ), /Stale/ );
 	assert.throws( () => owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 1011, unlimited ), /Stale/ );
 });
+
+for ( const group of [ 0, 242 ] ) {
+	test(`authored cooldown ${group ? "group" : "reference"} survives last-stack removal and drives both icons`, () => {
+		const owner = createInventory( () => {} );
+		const data = fixture( 1 );
+		data.refItemSnapshot = data.refItemSnapshot.map( ref => ({
+			...ref,
+			typeFlags: word( 10 ),
+			nativeFields: { useCooldownDuration528: 600000, useCooldownGroup524: group }
+		}) );
+		owner.bootstrap( data );
+		const first = owner.state().inventory[0], other = owner.state().inventory[1];
+		owner.use( 13, 100, { targetGid: 7 } );
+		owner.receive( 0xb5bd, receipt( 13, 0, 10 ), 100, context );
+		const rows = owner.state().itemCooldowns;
+		assert.equal( p.itemCooldown( rows, first, 100 )?.durationMs, 600000 );
+		assert.equal( !!p.itemCooldown( rows, other, 100 ), !!group );
+		assert.equal( owner.state().inventory.some( row => row.slot === 13 ), false );
+		assert.equal( p.itemCooldown( rows, first, 600100 ), undefined );
+		const rect = [ 0, 0, 32, 32 ];
+		assert.ok( quickslotItemCooldownQuads( rows, first, 100, rect, rect ).length > 1 );
+		assert.equal( inventoryItemCooldownQuads( rows, first, 100, rect, rect ).length, 1 );
+		// 6961B0's recovery-family branch has no category for structure repair.
+		assert.equal( p.itemCooldown( rows, word( 10 ), 100 ), undefined );
+		owner.clear();
+		assert.deepEqual( owner.state().itemCooldowns, [] );
+	});
+}

@@ -1197,6 +1197,16 @@ state here before a command can claim a native wire conversation.
 				return null;
 			}
 			if ( command.kind === "return-cancel" ) {
+				if ( localGid && returnScroll?.skillId ) {
+					// 6FFFE9 passes zero for the optional instance; the delay cancel
+					// button addresses the repair skill, unlike a buff-icon click.
+					const payload = new Uint8Array( 7 );
+					payload[0] = 1;
+					payload[1] = 5;
+					const view = new DataView( payload.buffer );
+					view.setUint32( 2, returnScroll.skillId, true );
+					return sendFrame( { opcode: 0x72cd, payload } );
+				}
 				return localGid && returnScroll ?
 					sendFrame( { opcode: 0x72dd, payload: new Uint8Array( 0 ) } ) :
 					null;
@@ -3027,6 +3037,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				// press, before touching movement (an empty MP pool is 0x3004).
 				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) movement.castRefused( now );
 				if ( item && cast ) returnScroll = cast;
+				if ( returnScroll?.skillId && (fight || item && cast) ) {
+					const effect = combat.state().attachedEffects.find( row =>
+						row.gid === localGid && row.skill === returnScroll?.skillId && row.subject
+					);
+					if ( effect ) returnScroll = { ...returnScroll, token: effect.token };
+					if ( frame.opcode === 0xb6a0 && returnScroll.token && !effect ) returnScroll = undefined;
+				}
 				// A spent warehouse ticket opens the room on the player's own gid.
 				if ( item && used && localGid && isWarehouseTicket( used.typeFlags ) ) {
 					storage.open( localGid );
@@ -3260,6 +3277,13 @@ before take assembles the presentation snapshot.
 				) play( "SND_ALARM", now );
 			}
 			warnings = local ? low : [ false, false ];
+			if (
+				returnScroll?.skillId &&
+				(!potionFacts.alive || now >= returnScroll.startedAtMs + returnScroll.durationMs)
+			) {
+				returnScroll = undefined;
+				dirty = true;
+			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
 
 			const combatChanged = combat.step( now ), inventoryChanged = inventory.step( now );

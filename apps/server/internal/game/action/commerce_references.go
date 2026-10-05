@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+commerce_references.go - item reference deltas and immutable merchandise seeds
+
+Reference metadata is shared by bootstrap and live transactions. It never
+contains inventory ownership or quantities.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -16,6 +26,11 @@ import (
 // Publish before new equipment can appear in a peer's native equip/spawn packet.
 const opCommerceItemReferences uint16 = 14
 
+/*
+================
+commerceReferences
+================
+*/
 func (rt *Runtime) commerceReferences(items, before []inventory.Item) wire.Frame {
 	rows := []inventory.Item{}
 	for _, item := range items {
@@ -52,7 +67,7 @@ func (rt *Runtime) commerceReferences(items, before []inventory.Item) wire.Frame
 				name = reference.Name
 				icon = reference.Icon
 				descriptionSymbol = reference.DescriptionSymbol
-				nativeFields = reference.NativeFields
+				nativeFields = enterworld.ItemUseNativeFields(reference, rt.deps.SkillData())
 			}
 			refs = append(refs, ref{descriptionSymbol, row.RefObjID, row.TypeFlags, name, rt.maxStackFor(row.TypeFlags, row.Codename), icon, nativeFields})
 		}
@@ -67,6 +82,11 @@ func (rt *Runtime) commerceReferences(items, before []inventory.Item) wire.Frame
 // The immutable merchandise dictionary is retained compressed and decoded into
 // detached frames at world readiness; its wire encoding is unchanged.
 // It closes the bootstrap/purchase race without forwarding inventory contents.
+/*
+================
+CommerceReferenceSeed
+================
+*/
 func (rt *Runtime) CommerceReferenceSeed() []wire.Frame {
 	frames := make([]wire.Frame, len(rt.commerceReferenceSeed))
 	for i, f := range rt.commerceReferenceSeed {
@@ -83,6 +103,12 @@ func (rt *Runtime) CommerceReferenceSeed() []wire.Frame {
 	}
 	return frames
 }
+
+/*
+================
+prepareCommerceReferences
+================
+*/
 func (rt *Runtime) prepareCommerceReferences() {
 	rt.commerceReferenceSeed = nil
 	seen := map[uint32]bool{}

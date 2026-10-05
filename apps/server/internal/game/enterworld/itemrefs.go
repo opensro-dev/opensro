@@ -568,9 +568,11 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 		}
 	}
 	// Desc1 (RefItem+0x2A4) names the skill a scroll (TID3 13) or a
-	// monster mask (CGItemMonsterCapsule, TID 3/2/2; 493C30) casts.
+	// monster mask (CGItemMonsterCapsule, TID 3/2/2; 493C30), or a fortress
+	// repair kit (49CC80) casts.
 	capsule := ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 2 && ref.TypeIDs[2] == 2
-	if (ref.TypeIDs[2] == 13 || capsule) && len(fields) > 119 {
+	repair := ref.TypeIDs == [4]int64{3, 3, 1, 10}
+	if (ref.TypeIDs[2] == 13 || capsule || repair) && len(fields) > 119 {
 		ref.AssociatedSkillCodename = strings.TrimSpace(fields[119])
 	}
 	// The typed equip-requirement columns (see ItemRef field docs). All
@@ -804,6 +806,21 @@ func buildItemNativeFields(fields []string) NativeFields {
 			if value, ok := textdataInt(fields[column]); ok {
 				values["itemParam"+strconv.Itoa(i+1)+"_"+strconv.FormatInt(int64(0x29c+i*4), 16)] = float64(value)
 			}
+		}
+	}
+	// CItemData_ParseTextRow 80BEC4..80BF2E scans all twenty description
+	// pairs; the last COOLTIME declaration wins. The UI reads its group
+	// and duration independently of the consumable family.
+	for column := 119; column < len(fields) && column < 159; column += 2 {
+		kind, raw, found := strings.Cut(strings.TrimSpace(fields[column]), ":")
+		if !found || kind != "COOLTIME" {
+			continue
+		}
+		group, err := strconv.ParseUint(strings.TrimPrefix(strings.TrimSpace(raw), "0x"), 16, 32)
+		duration, valid := textdataInt(fields[column-1])
+		if err == nil && valid && duration >= 0 && duration <= 0x7fffffff {
+			values["useCooldownGroup524"] = float64(uint8(group))
+			values["useCooldownDuration528"] = float64(duration)
 		}
 	}
 	if itemdataMaxDurabilityColumn < len(fields) {
