@@ -25,11 +25,11 @@ func TestAlliancesSurviveReopen(t *testing.T) {
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	door := s.Alliances()
-	union := domain.AllianceRecord{AllianceID: 3, Guilds: [domain.AllianceSlots]int64{7, 9, 0, 11}}
+	union := domain.AllianceRecord{AllianceID: 7, Guilds: [domain.AllianceSlots]int64{7, 9, 0, 11}}
 	if err := door.SaveAlliance(testDivision, union, true); err != nil {
 		t.Fatal(err)
 	}
-	dissolved := domain.AllianceRecord{AllianceID: 4, Guilds: [domain.AllianceSlots]int64{12, 13}}
+	dissolved := domain.AllianceRecord{AllianceID: 12, Guilds: [domain.AllianceSlots]int64{12, 13}}
 	if err := door.SaveAlliance(testDivision, dissolved, true); err != nil {
 		t.Fatal(err)
 	}
@@ -37,9 +37,10 @@ func TestAlliancesSurviveReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, bad := range []domain.AllianceRecord{
-		{AllianceID: 5, Guilds: [domain.AllianceSlots]int64{7}},
-		{AllianceID: 5, Guilds: [domain.AllianceSlots]int64{0, 7, 9}},
-		{AllianceID: 5, Guilds: [domain.AllianceSlots]int64{7, 7}},
+		{AllianceID: 14, Guilds: [domain.AllianceSlots]int64{14}},
+		{AllianceID: 14, Guilds: [domain.AllianceSlots]int64{0, 14, 9}},
+		{AllianceID: 14, Guilds: [domain.AllianceSlots]int64{14, 14}},
+		{AllianceID: 14, Guilds: [domain.AllianceSlots]int64{15, 16}},
 	} {
 		if err := door.SaveAlliance(testDivision, bad, true); err == nil {
 			t.Fatalf("saved %+v", bad)

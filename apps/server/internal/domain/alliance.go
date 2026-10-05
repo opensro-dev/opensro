@@ -21,6 +21,8 @@ const AllianceSlots = 8
 AllianceRecord
 
 One union: its id, its emblem and the guild in each slot (0 = empty).
+A union lives as long as its leading guild leads it, so its id is that
+guild's id (guild ids are never reused).
 ================
 */
 type AllianceRecord struct {
