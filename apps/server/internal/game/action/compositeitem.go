@@ -186,10 +186,6 @@ func (rt *Runtime) planComposite(character *enterworld.Character, ref *enterworl
 	}
 	packageSeconds, _ := ref.NativeFields.Lookup("itemParam1_29c")
 	packageEnd := nowMs + int64(packageSeconds)*1000
-	nextID := uint32(0)
-	for _, job := range character.CompositeJobs {
-		nextID = max(nextID, job.ID)
-	}
 	items := rt.deps.ItemReferences()
 	for _, entry := range entries {
 		switch entry.tag {
@@ -227,8 +223,7 @@ func (rt *Runtime) planComposite(character *enterworld.Character, ref *enterworl
 			if !valid || packageSeconds <= 0 {
 				return plan, 0, "composite limit " + entry.args[0] + " is malformed"
 			}
-			nextID++
-			work := domain.CompositeJob{ID: nextID, Kind: entry.tag, PackageRefObjID: ref.RefObjID, Uses: count,
+			work := domain.CompositeJob{Kind: entry.tag, PackageRefObjID: ref.RefObjID, Uses: count,
 				MaxUses: count, PeriodSeconds: period, NextRefillUnixMs: nowMs + period*1000, EndUnixMs: packageEnd}
 			if entry.tag == domain.CompositeUsedQuestLimit {
 				work.QuestCodename = entry.args[0]
@@ -247,8 +242,7 @@ func (rt *Runtime) planComposite(character *enterworld.Character, ref *enterworl
 			if !valid || !found || booth == nil {
 				return plan, 0, "composite booth " + entry.args[0] + " is malformed"
 			}
-			nextID++
-			plan.works = append(plan.works, domain.CompositeJob{ID: nextID, Kind: entry.tag, PackageRefObjID: ref.RefObjID,
+			plan.works = append(plan.works, domain.CompositeJob{Kind: entry.tag, PackageRefObjID: ref.RefObjID,
 				Target: booth.RefObjID, TargetCodename: booth.Codename, EndUnixMs: nowMs + seconds*1000})
 		default:
 			return plan, 0, "composite entry " + entry.tag + " has no owner (" + ref.Codename + ")"

@@ -136,10 +136,10 @@ func TestGoldTimeLimitedResurrectionRefillsDaily(t *testing.T) {
 			job = candidate
 		}
 	}
-	if job.ID == 0 || job.Uses != 1 {
+	if job.Target == 0 || job.Uses != 1 {
 		t.Fatalf("resurrection work = %+v", job)
 	}
-	use := wire.NewWriter(8).U32(job.ID).U32(job.Target).Payload()
+	use := wire.NewWriter(8).U32(job.PackageRefObjID).U32(job.Target).Payload()
 	if out := rt.HandleCountJobUse(testDivision, c, use); out.Frames[0].Payload[0] != wire.ResultError ||
 		out.Frames[0].Payload[1] != errCodeOnlyDeadResurrect {
 		t.Fatalf("alive use = % X, want the scroll's 0x87", out.Frames[0].Payload)

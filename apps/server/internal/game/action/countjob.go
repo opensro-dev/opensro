@@ -79,7 +79,7 @@ countJobStartFrame
 ================
 */
 func countJobStartFrame(job domain.CompositeJob, nowMs int64) wire.Frame {
-	return wire.Frame{Opcode: wire.OpCountJobStart, Payload: wire.EncodeCountJobStart(job.ID,
+	return wire.Frame{Opcode: wire.OpCountJobStart, Payload: wire.EncodeCountJobStart(job.PackageRefObjID,
 		enterworld.PetSkillWindowRemaining(job.EndUnixMs, nowMs), job.Target, job.Uses)}
 }
 
@@ -116,7 +116,7 @@ func (rt *Runtime) HandleCountJobUse(division string, c *enterworld.Character, p
 	if c == nil {
 		return OpResult{}
 	}
-	id, item, choice, err := wire.DecodeCountJobUse(payload)
+	pack, item, choice, err := wire.DecodeCountJobUse(payload)
 	if err != nil {
 		return OpResult{}
 	}
@@ -129,12 +129,13 @@ func (rt *Runtime) HandleCountJobUse(division string, c *enterworld.Character, p
 	committed := rt.deps.Update(c, "count-job-use", func() bool {
 		index := -1
 		for i, job := range c.CompositeJobs {
-			if job.ID == id && job.Kind == domain.CompositeUsedItemLimit && job.EndUnixMs > now {
+			if job.PackageRefObjID == pack && job.Target == item && job.Kind == domain.CompositeUsedItemLimit &&
+				job.EndUnixMs > now {
 				index = i
 				break
 			}
 		}
-		if index < 0 || c.CompositeJobs[index].Target != item || c.DeletePending {
+		if index < 0 || c.DeletePending {
 			return false
 		}
 		job := c.CompositeJobs[index]
@@ -161,7 +162,7 @@ func (rt *Runtime) HandleCountJobUse(division string, c *enterworld.Character, p
 	if !committed {
 		return refuse(code)
 	}
-	result := OpResult{Frames: []wire.Frame{{Opcode: wire.OpCountJobAnswer, Payload: wire.EncodeCountJobSpent(id, item)}}}
+	result := OpResult{Frames: []wire.Frame{{Opcode: wire.OpCountJobAnswer, Payload: wire.EncodeCountJobSpent(pack, item)}}}
 	result.Frames = append(result.Frames, effect.Frames...)
 	result.Broadcast = effect.Broadcast
 	if revived != nil {
@@ -263,12 +264,12 @@ func (rt *Runtime) advanceCompositeJobs(character *enterworld.Character, nowMs i
 			board := job.Kind == domain.CompositeUsedItemLimit
 			if job.EndUnixMs <= nowMs {
 				if board {
-					frames = append(frames, wire.Frame{Opcode: wire.OpCountJobEnd, Payload: wire.EncodeCountJobEnd(job.ID, job.Target)})
+					frames = append(frames, wire.Frame{Opcode: wire.OpCountJobEnd, Payload: wire.EncodeCountJobEnd(job.PackageRefObjID, job.Target)})
 				}
 				continue
 			}
 			if refillCompositeJob(&job, nowMs) && board {
-				frames = append(frames, wire.Frame{Opcode: wire.OpCountJobEnd, Payload: wire.EncodeCountJobEnd(job.ID, job.Target)},
+				frames = append(frames, wire.Frame{Opcode: wire.OpCountJobEnd, Payload: wire.EncodeCountJobEnd(job.PackageRefObjID, job.Target)},
 					countJobStartFrame(job, nowMs))
 			}
 			kept = append(kept, job)

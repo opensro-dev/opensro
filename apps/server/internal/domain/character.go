@@ -495,15 +495,15 @@ const (
 ================
 CompositeJob
 
-One CTJ_CompositeItemKeeper work. ID is the client board key (0x3021).
-Target is the limited item's or booth item's reference id, or zero for a
-quest limit, whose quest is QuestCodename. A limited work holds Uses of
+One CTJ_CompositeItemKeeper work, identified by its package and target.
+The package's reference id is the client board's kind-5 slot (its icon and
+period); Target is the limited item's or booth item's reference id, the
+board's count key, or zero for a quest limit, whose quest is QuestCodename. A limited work holds Uses of
 MaxUses until NextRefillUnixMs, when every PeriodSeconds the count returns
 to MaxUses (CUsedObjectLimit_Refill 653A40). The work ends at EndUnixMs.
 ================
 */
 type CompositeJob struct {
-	ID               uint32 `json:"id"`
 	Kind             string `json:"kind"`
 	PackageRefObjID  uint32 `json:"packageRefObjId"`
 	Target           uint32 `json:"target,omitempty"`

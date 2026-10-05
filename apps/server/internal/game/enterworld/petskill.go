@@ -132,7 +132,7 @@ func countJobPackets(character *Character, nowMs int64) []Packet {
 		}
 		remaining := PetSkillWindowRemaining(job.EndUnixMs, nowMs)
 		packets = append(packets, NewPacket(wire.OpCountJobStart,
-			wire.EncodeCountJobStart(job.ID, remaining, job.Target, job.Uses)))
+			wire.EncodeCountJobStart(job.PackageRefObjID, remaining, job.Target, job.Uses)))
 	}
 	return packets
 }
