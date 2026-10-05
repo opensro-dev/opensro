@@ -99,6 +99,8 @@ type Server struct {
 	passwordFailures passwordFailures
 	readiness        *readiness.Gate
 	bugReports       *bugreport.Service
+	// startedAt is when this Agent was built, for /title/build's uptime.
+	startedAt time.Time
 }
 
 /*
@@ -165,6 +167,7 @@ func New(config Config) (*Server, error) {
 		incidentReports:         newLoginLimiter(now),
 		readiness:               config.Readiness,
 		bugReports:              config.BugReports,
+		startedAt:               now(),
 	}, nil
 }
 
@@ -194,6 +197,7 @@ func (server *Server) Handler() http.Handler {
 	mux.Handle("/title/logout", browser(http.HandlerFunc(server.handleBrowserLogout)))
 	mux.Handle("/title/character-select", browser(http.HandlerFunc(server.handleBrowserCharacterSelect)))
 	mux.Handle(bugReportPath, browser(server.requireRunning(http.HandlerFunc(server.handleBugReport))))
+	mux.Handle(buildPath, browser(http.HandlerFunc(server.handleBuild)))
 	mux.Handle(clientIncidentPath, browser(http.HandlerFunc(server.handleClientIncident)))
 	mux.HandleFunc("/internal/cluster/shards/heartbeat", server.handleHeartbeat)
 	mux.HandleFunc("/internal/cluster/shards/release", server.handleLeaseRelease)

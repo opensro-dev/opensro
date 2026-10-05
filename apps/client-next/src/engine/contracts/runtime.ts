@@ -112,6 +112,8 @@ export interface FrameTelemetry {
 	readonly actors: number;
 	readonly draws: number;
 	readonly visibleGroups: number;
+	/** The client and server builds, one line each when known (build-info.ts). */
+	readonly build: readonly string[];
 }
 /*
 ================
