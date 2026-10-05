@@ -267,7 +267,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		at:     simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z},
 	}
 	if target.Ref.Structure {
-		if code := rt.structureAttackRefusal(divisionID, snapshot, target, skill.ID); code != 0 {
+		if code := rt.structureAttackRefusal(divisionID, snapshot, target, skill.ID, nowMs); code != 0 {
 			return offensiveRefusal(code), skillCastRefused
 		}
 	}

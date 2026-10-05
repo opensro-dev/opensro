@@ -44,9 +44,21 @@ fortressFixtureWithClock
 */
 func fortressFixtureWithClock(t *testing.T, gateRef uint32) (*Runtime, *enterworld.Character, *fakeClock) {
 	t.Helper()
+	return fortressFixtureWithPopulation(t, gateRef, monster.TemplateFromParts(nil, nil))
+}
+
+/*
+================
+fortressFixtureWithPopulation
+
+The fortress fixture over a given monster template.
+================
+*/
+func fortressFixtureWithPopulation(t *testing.T, gateRef uint32, template monster.Template) (*Runtime, *enterworld.Character, *fakeClock) {
+	t.Helper()
 	licensed.RequireGameData(t)
 	rt, c, clock, _ := returnFixture(t, 30000)
-	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(nil, nil))
+	rt.Monsters = simulation.NewMonsterState(template)
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 900000 + gateRef, RefObjID: gateRef, Codename: "GATE",
 		Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25}}}

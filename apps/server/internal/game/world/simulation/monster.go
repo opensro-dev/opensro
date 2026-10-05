@@ -257,6 +257,7 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 		Structure:   ref.Structure, CurrentHP: instance.CurrentHP,
 		EventStructID: instance.Nest.EventStructID, TypeID4: ref.TypeID4,
 		TradeNpc: monster.TradeNpcMonster(ref), TradeVariant: instance.TradeVariant,
+		StructureState: instance.StructureState,
 	}
 	if instance.CurrentHP == 0 {
 		def.LifeState = wire.LifeStateDead

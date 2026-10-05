@@ -33,14 +33,14 @@ func TestStructuresTakeOnlyBasicAttacksDuringTheWar(t *testing.T) {
 		t.Fatalf("no basic attack: %s", why)
 	}
 	tower := monster.Instance{Gid: 7, Ref: monster.MonsterRef{Structure: true, TypeID4: 2}, Nest: monster.NestRow{WorldCode: "INS_FORT_JA"}}
-	if code := rt.structureAttackRefusal(testDivision, c, tower, basic.ID); code != structureRefusedOutsideWar {
+	if code := rt.structureAttackRefusal(testDivision, c, tower, basic.ID, 0); code != structureRefusedOutsideWar {
 		t.Fatalf("outside the war = %#x, want %#x", code, structureRefusedOutsideWar)
 	}
 	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, true)
-	if code := rt.structureAttackRefusal(testDivision, c, tower, basic.ID); code != 0 {
+	if code := rt.structureAttackRefusal(testDivision, c, tower, basic.ID, 0); code != 0 {
 		t.Fatalf("a basic attack during the war = %#x", code)
 	}
-	if code := rt.structureAttackRefusal(testDivision, c, tower, basic.ID+1); code != structureRefusedSkill {
+	if code := rt.structureAttackRefusal(testDivision, c, tower, basic.ID+1, 0); code != structureRefusedSkill {
 		t.Fatalf("another skill = %#x, want %#x", code, structureRefusedSkill)
 	}
 	guild := int64(77)
@@ -54,12 +54,12 @@ func TestStructuresTakeOnlyBasicAttacksDuringTheWar(t *testing.T) {
 	if !rt.Fortresses.Occupy(testDivision, fortressID, guild) {
 		t.Fatal("Jangan fortress missing")
 	}
-	if code := rt.structureAttackRefusal(testDivision, c, tower, basic.ID); code != structureRefusedOwnStructure {
+	if code := rt.structureAttackRefusal(testDivision, c, tower, basic.ID, 0); code != structureRefusedOwnStructure {
 		t.Fatalf("the holder's own tower = %#x, want %#x", code, structureRefusedOwnStructure)
 	}
 	gate := tower
 	gate.Ref.TypeID4 = structureKindGate
-	if code := rt.structureAttackRefusal(testDivision, c, gate, basic.ID); code != 0 {
+	if code := rt.structureAttackRefusal(testDivision, c, gate, basic.ID, 0); code != 0 {
 		t.Fatalf("the holder's gate = %#x, want admitted", code)
 	}
 }

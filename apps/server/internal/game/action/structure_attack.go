@@ -15,8 +15,9 @@ CICATStruct (TypeID band 0x2C6, CGObj_IsATStruct 482AB0):
 gate pulley opens it. No pulley is ported, so every gate stays shut and
 that test always admits.
 
-The fort stone's capture refusals (0x3040 while a capture holds, 0x3046
-while the war's end countdown runs) belong to the capture owner.
+and for the fort stone, while guard towers stand 0x3040 and during the
+countdown after the last falls 0x3046 (the fortress authority's
+capture.go).
 
 INFERENCE: the guild-owner tests also refuse the owner's allies through
 CGObjPC_GetFortressOrArenaContext; without guild unions that context is
@@ -28,7 +29,6 @@ package action
 
 import (
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -50,10 +50,11 @@ structureAttackRefusal
 
 The 52BF90 structure branch for skill `skillID` aimed at target; 0
 admits. A structure in a world no fortress owns keeps only the war and
-basic-attack tests, as 52BF90 skips the owner tests without a record.
+basic-attack tests, as 52BF90 skips the owner tests without a record;
+the fort stone answers to its capture guards first.
 ================
 */
-func (rt *Runtime) structureAttackRefusal(division string, attacker *enterworld.Character, target monster.Instance, skillID uint32) uint16 {
+func (rt *Runtime) structureAttackRefusal(division string, attacker *enterworld.Character, target monster.Instance, skillID uint32, nowMs int64) uint16 {
 	if !rt.Fortresses.WarActive(division) {
 		return structureRefusedOutsideWar
 	}
@@ -61,8 +62,21 @@ func (rt *Runtime) structureAttackRefusal(division string, attacker *enterworld.
 	if why != "" || basic.ID != skillID {
 		return structureRefusedSkill
 	}
-	owner := rt.structureOwnerGuild(division, target)
-	if owner == 0 || attacker.GuildID == nil || *attacker.GuildID != owner {
+	record, _, ok := rt.structureFortress(division, target)
+	if !ok {
+		return 0
+	}
+	if target.Ref.TypeID4 == structureKindFortStone {
+		if code := rt.Fortresses.StoneRefusal(division, record.ID, nowMs); code != 0 {
+			return code
+		}
+	}
+	// CGObjSiegeStruct +0x24: the fortress's structures belong to its
+	// holder; headquarters are placed by an attacking guild and carry their
+	// own (none are placed yet).
+	owner := record.Holder()
+	if target.Ref.TypeID4 == structureKindHeadquarters || owner == 0 ||
+		attacker.GuildID == nil || *attacker.GuildID != owner {
 		return 0
 	}
 	switch target.Ref.TypeID4 {
@@ -72,34 +86,4 @@ func (rt *Runtime) structureAttackRefusal(division string, attacker *enterworld.
 		return 0
 	}
 	return structureRefusedOwnStructure
-}
-
-/*
-================
-structureOwnerGuild
-
-The guild a structure belongs to (CGObjSiegeStruct +0x24, vtable +0x644):
-the guild holding its fortress. Headquarters are placed by an attacking
-guild and carry their own; none are placed yet.
-================
-*/
-func (rt *Runtime) structureOwnerGuild(division string, target monster.Instance) int64 {
-	if target.Ref.TypeID4 == structureKindHeadquarters || rt.Fortresses == nil {
-		return 0
-	}
-	for _, definition := range instance.Shipped() {
-		if definition.CodeName != target.Nest.WorldCode {
-			continue
-		}
-		fortressID, ok := rt.Fortresses.ForWorld(definition)
-		if !ok {
-			return 0
-		}
-		record, ok := rt.Fortresses.Get(division, fortressID)
-		if !ok {
-			return 0
-		}
-		return record.GuildID
-	}
-	return 0
 }

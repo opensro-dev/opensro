@@ -207,8 +207,9 @@ fortressWarEntry
 
 CSiegeFortressMgr_CheckWarEntry (61D3D0) past its war-mode test. The
 occupying guild needs no application; everyone else must have applied.
-Defenders (the occupying guild) may bring half of MaxEntrance; attackers
-the whole of it, or half once the fortress is occupied, and only after the
+Defenders (the holder, CSiegeFortress_GetHolderGuild 61D280: a temporary
+holder while one exists) may bring half of MaxEntrance; attackers the
+whole of it, or half once the fortress is occupied, and only after the
 post-capture wait. Each side counts the PCs already in the world's layer
 (siege slots 39 and 40).
 ================
@@ -223,11 +224,12 @@ func (rt *Runtime) fortressWarEntry(division string, c *enterworld.Character, fo
 		return 2
 	}
 	occupied := record.GuildID != 0
-	defender := occupied && record.GuildID == guild
-	if _, applied := record.Applicants[guild]; !defender && !applied {
+	if _, applied := record.Applicants[guild]; !(occupied && record.GuildID == guild) && !applied {
 		return portalFortressNotInWar
 	}
-	defenders, attackers := rt.fortressSides(division, fortressID, record.GuildID)
+	holder := record.Holder()
+	defender := holder != 0 && holder == guild
+	defenders, attackers := rt.fortressSides(division, fortressID, holder)
 	if defender {
 		if record.MaxEntrance>>1 <= defenders {
 			return portalFortressFull

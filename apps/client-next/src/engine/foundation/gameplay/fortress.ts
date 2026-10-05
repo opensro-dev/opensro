@@ -205,6 +205,102 @@ export function fortressRegistrationNotice( state: FortressState, frame: WireFra
 	return { key, value: 0, localizedArguments: [ name ], banner: true, bannerOnly: true };
 }
 
+export const FORTRESS_CONQUEST = 0x08;
+export const FORTRESS_TOWERS_FALLEN = 0x0a;
+export const FORTRESS_STRUCTURE_STATE = 0x0b;
+// 76C870 case 0xB: state bit 0 shows the destroyed stage and its notice.
+const STRUCTURE_STATE_DESTROYED = 1;
+
+/*
+================
+FortressStructureState
+
+76C870 case 0xB: u32 fortress, u32 object, u32 event zone, u16 state, and
+for a headquarters (4F3A80 on the zone's structure) its guild's name.
+================
+*/
+export interface FortressStructureState {
+	readonly fortressId: number;
+	readonly gid: number;
+	readonly eventStructId: number;
+	readonly state: number;
+	readonly guildName?: string;
+}
+
+/*
+================
+fortressStructureState
+
+Reads a subtype-0x0B frame; null for any other. The guild name follows
+only a headquarters' row, so whatever follows the state word is it.
+================
+*/
+export function fortressStructureState( frame: WireFrame ): FortressStructureState | null {
+	const p = frame.payload;
+	if ( frame.opcode !== OP_FORTRESS_WAR_STATE || p[0] !== FORTRESS_STRUCTURE_STATE ) return null;
+	if ( p.length < 15 ) throw Error( "Truncated fortress structure state" );
+	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	const row = {
+		fortressId: v.getUint32( 1, true ),
+		gid: v.getUint32( 5, true ),
+		eventStructId: v.getUint32( 9, true ),
+		state: v.getUint16( 13, true )
+	};
+	if ( p.length === 15 ) return row;
+	const n = v.getUint16( 15, true );
+	if ( p.length !== 17 + n ) throw Error( "Invalid fortress structure state length" );
+	return { ...row, guildName: new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 17 ) ) };
+}
+
+/*
+================
+fortressCaptureNotice
+
+76C870's capture arms: case 8 names the guild and the fortress it took
+(UIIT_MSG_FORT_WAR_CONQUER), case 0xA tells that the stone's guard is
+falling (UIIT_MSG_FORT_STRUCTURE_STATUS_CANCEL), and case 0xB names a
+destroyed structure, or a removed headquarters with its guild.
+structureName is the 0xB row's structure as the player sees it; a
+structure the player cannot see has no name to print and no notice.
+================
+*/
+export function fortressCaptureNotice(
+	state: FortressState,
+	frame: WireFrame,
+	structureName: string | undefined
+): SystemNotice | null {
+	const p = frame.payload;
+	if ( frame.opcode !== OP_FORTRESS_WAR_STATE ) return null;
+	if ( p[0] === FORTRESS_CONQUEST ) {
+		const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+		if ( p.length < 7 ) throw Error( "Truncated fortress conquest" );
+		const id = v.getUint32( 1, true ), n = v.getUint16( 5, true );
+		if ( p.length !== 23 + n ) throw Error( "Invalid fortress conquest length" );
+		const guild = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 7, 7 + n ) );
+		const fortress = state.fortresses.find( r => r.id === id )?.nameStrId ?? null;
+		return {
+			key: "UIIT_MSG_FORT_WAR_CONQUER",
+			value: 0,
+			arguments: [ guild, "" ],
+			localizedArguments: [ null, fortress ],
+			banner: true
+		};
+	}
+	if ( p[0] === FORTRESS_TOWERS_FALLEN ) {
+		if ( p.length !== 5 ) throw Error( "Invalid fortress tower fall" );
+		return { key: "UIIT_MSG_FORT_STRUCTURE_STATUS_CANCEL", value: 0, banner: true, bannerOnly: true };
+	}
+	const row = fortressStructureState( frame );
+	if ( !row ) return null;
+	const name = structureName;
+	if ( name === undefined ) return null;
+	if ( row.guildName !== undefined && row.state === 0 ) {
+		return { key: "UIIT_MSG_FORT_CAMP_STATUS_DESTROY", value: 0, arguments: [ row.guildName, name ], banner: true };
+	}
+	if ( !(row.state & STRUCTURE_STATE_DESTROYED) ) return null;
+	return { key: "UIIT_MSG_FORT_STRUCTURE_STATUS_DESTROY", value: 0, arguments: [ name ], banner: true };
+}
+
 /*
 ================
 fortressActive

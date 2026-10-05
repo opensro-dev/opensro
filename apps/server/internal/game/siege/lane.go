@@ -84,6 +84,9 @@ type Lane struct {
 	config LaneConfig
 	mu     sync.Mutex
 	active map[string]bool
+	// lastTickMs is the siege tick's clock, which the list's countdowns
+	// are read against (600F60 refreshes the seconds each tick).
+	lastTickMs int64
 }
 
 /*
@@ -132,6 +135,7 @@ func (l *Lane) Tick(nowMs int64) []simulation.DivisionFrames {
 	var frames []simulation.Frame
 	var warChanged, warActive bool
 	l.mu.Lock()
+	l.lastTickMs = nowMs
 	for _, edge := range edgeOrder {
 		running := l.config.Schedules[edge.name].Active(now)
 		if running == l.active[edge.name] {
@@ -173,8 +177,19 @@ func (l *Lane) FortressList(guildID int64) []byte {
 	records := l.config.Fortresses.Records(l.config.Division)
 	rows := make([]FortressRow, 0, len(records))
 	var guildFortress uint32
+	l.mu.Lock()
+	nowMs := l.lastTickMs
+	l.mu.Unlock()
 	for _, record := range records {
 		row := FortressRow{FortressID: record.ID}
+		// Slots 41/42 and 44/45: the seconds left of the capture wait and
+		// of the stone's countdown, sent while each runs.
+		if !record.EntryOpen && record.EntryClosedUntilMs > nowMs {
+			row.HasCaptureWait, row.CaptureWait = true, uint32((record.EntryClosedUntilMs-nowMs)/1000)
+		}
+		if record.CountdownUntilMs > nowMs {
+			row.HasEndCountdown, row.EndCountdown = true, uint32((record.CountdownUntilMs-nowMs)/1000)
+		}
 		if record.GuildID != 0 {
 			if l.config.GuildName != nil {
 				row.OwnerName = l.config.GuildName(record.GuildID)

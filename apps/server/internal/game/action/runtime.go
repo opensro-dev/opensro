@@ -134,6 +134,10 @@ type Runtime struct {
 	// fortressPhases are the fortress worlds' scheduled war phases.
 	fortressPhasesMu sync.Mutex
 	fortressPhases   []fortressPhase
+	// structureDeaths are the fortress structures killed since the last
+	// tick (fortress_capture.go).
+	structureDeathsMu sync.Mutex
+	structureDeaths   []structureDeath
 
 	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
 	// The composition root installs it before Register admits 0x7338/0x7053.

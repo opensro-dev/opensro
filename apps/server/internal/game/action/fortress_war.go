@@ -47,19 +47,24 @@ type fortressPhase struct {
 ================
 FortressWarChanged
 
-The fortress-war lane's war edge for one division: schedules the fortress
-worlds' phase.
+The fortress-war lane's war edge for one division: the fortresses' capture
+state begins or settles at once (fortress_capture.go), and the fortress
+worlds' phase is scheduled.
 ================
 */
 func (rt *Runtime) FortressWarChanged(division string, nowMs int64, active bool) []simulation.DivisionFrames {
 	phase := fortressPhase{division: division, mode: fortressPhaseEnd, dueMs: nowMs}
+	var out []simulation.DivisionFrames
 	if active {
 		phase.mode, phase.dueMs = fortressPhaseBegin, nowMs+fortressBeginDelayMs
+		rt.beginFortressWar(division)
+	} else {
+		out = rt.finishFortressWar(division, nowMs)
 	}
 	rt.fortressPhasesMu.Lock()
 	rt.fortressPhases = append(rt.fortressPhases, phase)
 	rt.fortressPhasesMu.Unlock()
-	return nil
+	return out
 }
 
 /*
@@ -68,6 +73,7 @@ advanceFortressPhases
 ================
 */
 func (rt *Runtime) advanceFortressPhases(nowMs int64) {
+	rt.Fortresses.Advance(nowMs)
 	rt.fortressPhasesMu.Lock()
 	var due []fortressPhase
 	kept := rt.fortressPhases[:0]

@@ -47,10 +47,13 @@ type Record struct {
 	// Applicants are the guilds registered for the coming war
 	// (_SiegeFortressRequest), each with its request kind.
 	Applicants map[int64]RequestKind
-	// EntryOpen is the siege world's +0x84 flag: set five minutes after a
-	// temporary capture (CGameWorld_Siege_Tick case 3, 0x493E0 ms), it lets
-	// attackers through the gates again (slot 41, 601C20).
+	// EntryOpen is the siege world's +0x84 flag: open from the world's
+	// construction (600C60), shut by a temporary capture and open again
+	// five minutes later (CGameWorld_Siege_Tick case 3, 0x493E0 ms); it
+	// lets attackers through the gates (slot 41, 601C20).
 	EntryOpen bool
+	// The capture state of a running war (capture.go).
+	capture
 }
 
 /*
@@ -155,7 +158,7 @@ func (a *Authority) divisionLocked(divisionID string) *division {
 	state := &division{records: make(map[uint32]*Record, len(a.catalog))}
 	for _, row := range a.catalog {
 		state.records[row.ID] = &Record{ID: row.ID, CodeName: row.CodeName, MaxEntrance: row.MaxEntrance,
-			RequestFee: row.RequestFee, OfficialNpc: row.OfficialNpc, TownGate: row.TownGate}
+			RequestFee: row.RequestFee, OfficialNpc: row.OfficialNpc, TownGate: row.TownGate, EntryOpen: true}
 	}
 	a.divisions[divisionID] = state
 	return state

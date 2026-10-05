@@ -443,6 +443,9 @@ type Instance struct {
 	// spawn grade, and CICMonster_InitializeTradeEquipmentAndSkill (client
 	// 861720) indexes the trade equipment table with it.
 	TradeVariant uint8
+	// StructureState is a fortress structure's state word (+0x764 on the
+	// client, CGObjSiegeStruct_GetStateWord 4CED50): bit 0 destroyed.
+	StructureState uint16
 	// CurrentHP is mutable instance state. Ref.MaxHP is only the static
 	// RefObjChar base; EffectiveMaxHP applies the client-pinned rarity and
 	// party-monster multipliers used by the target-status plane.

@@ -69,6 +69,8 @@ import {
 	fortressInteraction,
 	fortressManagerReply,
 	fortressRegistrationNotice,
+	fortressCaptureNotice,
+	fortressStructureState,
 	FORTRESS_NOTICE_CATEGORY,
 	FORTRESS_WAR_APPLY,
 	FORTRESS_WAR_STATUS,
@@ -2026,6 +2028,11 @@ Packet handling must not depend on which HUD panel is currently open.
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
 					uniqueNotice( frame.opcode, frame.payload, uniqueRefs ) ??
 					fortressNotice( frame.opcode, frame.payload ) ?? fortressRegistrationNotice( fortress, frame ) ??
+					fortressCaptureNotice(
+						fortress,
+						frame,
+						readEntity( fortressStructureState( frame )?.gid ?? 0 )?.name
+					) ??
 					serverNotification( frame.opcode, frame.payload );
 				if ( notice ) {
 					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];

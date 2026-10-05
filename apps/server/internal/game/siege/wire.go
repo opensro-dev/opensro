@@ -16,6 +16,9 @@ Subtypes this file writes:
 	1     war begins in 30 minutes        2    war begins
 	3/4/5 war ends in 30/20/10 minutes    9    war ends in 1 minute
 	6     war ends
+	8     a fortress changed hands (the conquest notice)
+	0x0A  the last guard tower fell: the stone's countdown starts
+	0x0B  a structure's state changed (destroyed)
 	0x10  the guilds registered for the war (clear and replace)
 	0x31/0x32  tax period on/off          0x33/0x34  request period on/off
 
@@ -40,7 +43,10 @@ const (
 	SubtypeWarEnds20         uint8 = 0x04
 	SubtypeWarEnds10         uint8 = 0x05
 	SubtypeWarEnd            uint8 = 0x06
+	SubtypeConquest          uint8 = 0x08
 	SubtypeWarEnds1          uint8 = 0x09
+	SubtypeTowersFallen      uint8 = 0x0a
+	SubtypeStructureState    uint8 = 0x0b
 	SubtypeWarGuildRegistry  uint8 = 0x10
 	SubtypeTaxPeriodBegin    uint8 = 0x31
 	SubtypeTaxPeriodEnd      uint8 = 0x32
@@ -138,6 +144,74 @@ A schedule edge the client acts on from its subtype alone (1-6, 9 and
 */
 func EncodeEdge3887(subtype uint8) []byte {
 	return []byte{subtype}
+}
+
+/*
+================
+EncodeConquest3887
+
+Subtype 8 (76C870 case 8): u32 the fortress, the holding guild's name and
+the row's four discarded u32s, the guild id first as in the list; the
+client prints UIIT_MSG_FORT_WAR_CONQUER and refreshes the fortress.
+================
+*/
+func EncodeConquest3887(row FortressRow) []byte {
+	writer := wire.NewWriter(23 + len(row.OwnerName))
+	writer.U8(SubtypeConquest)
+	writer.U32(row.FortressID)
+	writeSizedString(writer, row.OwnerName)
+	for _, value := range row.Discarded {
+		writer.U32(value)
+	}
+	return writer.Payload()
+}
+
+/*
+================
+EncodeTowersFallen3887
+
+Subtype 0x0A (case 0xA): u32 the fortress. The client shows
+UIIT_MSG_FORT_STRUCTURE_STATUS_CANCEL and counts down 0xB4 seconds.
+================
+*/
+func EncodeTowersFallen3887(fortressID uint32) []byte {
+	return wire.NewWriter(5).U8(SubtypeTowersFallen).U32(fortressID).Payload()
+}
+
+/*
+================
+StructureState
+
+One structure's state change (CGObjSiegeStruct_BroadcastState385F_0B
+4CF9A0): its fortress, object, event zone and state word; a headquarters
+also names its guild.
+================
+*/
+type StructureState struct {
+	FortressID    uint32
+	GID           uint32
+	EventStructID uint32
+	State         uint16
+	Headquarters  bool
+	GuildName     string
+}
+
+/*
+================
+EncodeStructureState3887
+
+Subtype 0x0B (case 0xB): u32 fortress, u32 object, u32 event zone, u16
+state, and for a headquarters the guild's name.
+================
+*/
+func EncodeStructureState3887(state StructureState) []byte {
+	writer := wire.NewWriter(17 + len(state.GuildName))
+	writer.U8(SubtypeStructureState)
+	writer.U32(state.FortressID).U32(state.GID).U32(state.EventStructID).U16(state.State)
+	if state.Headquarters {
+		writeSizedString(writer, state.GuildName)
+	}
+	return writer.Payload()
 }
 
 /*

@@ -17,6 +17,7 @@ import { spawnSkillReferences, entrySpawnSkills } from "@/engine/foundation/game
 import { merchantBranches } from "@/engine/foundation/gameplay/merchant-branches";
 import { decodeCharacterSpawn } from "@/engine/foundation/gameplay/character-spawn";
 import { decodeGroundItem } from "@/engine/foundation/gameplay/ground-item";
+import { fortressStructureState } from "@/engine/foundation/gameplay/fortress";
 import {
 	decodeSkillObject,
 	DYNAMIC_OBJECT_REFERENCE,
@@ -550,6 +551,15 @@ export function createEntities(
 				const typeFlags = itemRefs.get( item );
 				if ( typeFlags === undefined ) throw Error( "Missing external item reference " + item );
 				append( { kind: "item-effect", source: { ...source }, item, typeFlags } );
+				return;
+			}
+			const structureState = fortressStructureState( frame );
+			if ( structureState ) {
+				// 76C870 case 0xB -> CICATStruct_OnFortressWarState (4F7BF0).
+				const entity = entities.get( structureState.gid );
+				if ( entity?.kind === "structure" ) {
+					apply( { kind: "state", entity: { ...entity, structureState: structureState.state } } );
+				}
 				return;
 			}
 			if ( frame.opcode === 0x31e2 ) {

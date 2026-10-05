@@ -60,6 +60,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		rt.advanceReturnScrolls(nowMs)
 		rt.advanceJobDresses(nowMs)
 		rt.advanceFortressPhases(nowMs)
+		fortressFrames := rt.drainStructureDeaths(nowMs)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
@@ -76,7 +77,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// another B245. Closing and reopening in this same turn kept client
 		// motion-state 2 continuously owned and could strand click movement.
 		openActionOwners := rt.openSkillCastOwnerSnapshot()
-		out := rt.advanceBerserk(nowMs)
+		out := append(fortressFrames, rt.advanceBerserk(nowMs)...)
 		out = append(out, rt.advancePlayerAggressions(nowMs)...)
 		out = append(out, rt.advanceBattleStates(nowMs)...)
 		out = append(out, rt.drainSkillFinalizes(nowMs)...)
