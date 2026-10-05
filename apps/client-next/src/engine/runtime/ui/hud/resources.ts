@@ -135,6 +135,8 @@ export function createHudResources(
 		"ifcosinfo",
 		"ifcossetup",
 		"ifstorageroom",
+		"iffortresswarapplywnd",
+		"iffortresswarapplywndslot",
 		"ifchangeplayermodel",
 		"ifnewalchemybox",
 		"ifalchemyprocess",

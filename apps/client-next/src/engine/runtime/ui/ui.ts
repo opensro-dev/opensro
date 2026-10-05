@@ -116,6 +116,17 @@ import { createCosHud } from "./hud/cos-hud";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
+import { createFortressWarHud } from "./hud/fortress-war-hud";
+import {
+	fortressWarDates,
+	fortressWarFormat,
+	fortressWarQuestionKey,
+	fortressWarRequest,
+	fortressWarSlots,
+	FORTRESS_WAR_APPLY_ROWS,
+	FORTRESS_WAR_APPLY_SLOT_HEIGHT,
+	FORTRESS_WAR_APPLY_SLOT_WIDTH
+} from "@/engine/foundation/ui/fortress-war-apply";
 import {
 	JOB_ALIAS_CHECK,
 	JOB_ALIAS_CREATE,
@@ -398,6 +409,8 @@ const BUG_REPLAY_OPTION = "option-bug-replay";
 const BUG_REPLAY_LABEL = "Record bug replay";
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
+// CIFFortressWarApplyWnd, opened by the fortress official's answer.
+const FORTRESS_WAR_PANEL = "Fortress war application";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
 const SKIN_SLIDER_TRAVEL = 85;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
@@ -590,6 +603,7 @@ export function createUi(
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
 	const jobHud = createJobHud();
+	const fortressWarHud = createFortressWarHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
@@ -953,6 +967,29 @@ export function createUi(
 	setPanel
 	================
 	*/
+	/*
+	================
+	fortressWarView
+
+	The application window's content for the official in conversation:
+	his fortresses (matched by RefObjID, 662E80) and the guild's standing.
+	================
+	*/
+	function fortressWarView() {
+		const game = view?.gameplay, npc = fortressWarHud.npc();
+		const official = view?.entities.find( e => e.gid === npc );
+		if ( npc === null || !game?.fortress || !official ) return null;
+		const application = game.fortressApplication ?? null,
+			social = game.social,
+			slots = fortressWarSlots(
+				game.fortress,
+				official.refObjId,
+				application,
+				social?.guild?.name ?? "",
+				social?.alliances?.map( a => a.name ) ?? []
+			);
+		return { npc, application, slots };
+	}
 	function setPanel( next: string, intent: "open" | "toggle" | "select" | "warm" = "open" ) {
 		// An unseen warm build (window-warm.ts) switches the drawn window only:
 		// no enter/leave hooks, sounds or transient resets.
@@ -970,6 +1007,7 @@ export function createUi(
 		}
 		shopOpenRequest = null;
 		if ( next !== SKIN_PANEL ) skinHud.close();
+		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
 		blockDialog = null;
@@ -2596,6 +2634,19 @@ export function createUi(
 					cosSlot = -1;
 				}
 			}
+		} else if ( id === "npc-fortress-war" ) {
+			// 5D8930 action 0x34 row 1: 0x71E1 subtype 6 asks for the status.
+			const conversation = view.gameplay?.npcConversation;
+			if ( conversation && conversation.phase === "menu" ) {
+				fortressWarHud.request( conversation.gid );
+				sendGameplay( { kind: "fortress-war-status", gid: conversation.gid } );
+			}
+		} else if ( id === "fortress-war-close" ) {
+			setPanel( "" );
+		} else if ( id.startsWith( "fortress-war-slot:" ) ) {
+			const fortress = Number( id.slice( "fortress-war-slot:".length ) ),
+				slot = fortressWarView()?.slots.find( r => r.fortress === fortress );
+			if ( slot?.enabled ) fortressWarHud.ask( slot.question, fortress );
 		} else if ( id === "skin-cancel" ) {
 			setPanel( "" );
 		} else if ( id === "skin-confirm" ) {
@@ -3099,6 +3150,33 @@ export function createUi(
 						view?.session?.phase === "world" && g?.npcConversation?.phase === "menu" &&
 						g.npcConversation.gid === gid && g.target === gid && ((g.targetCapabilities ?? 0) & 0x40)
 					) sendGameplay( { kind: "recall-appoint", gid } );
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( fortressWarHud.question() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "fortress-war-no"
+				) {
+					fortressWarHud.takeQuestion();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "fortress-war-yes"
+				) {
+					const asked = fortressWarHud.takeQuestion(), npc = fortressWarHud.npc();
+					dirty = true;
+					if ( asked && npc !== null && view?.session?.phase === "world" ) {
+						sendGameplay( {
+							kind: "fortress-war-apply",
+							gid: npc,
+							fortress: asked.fortress,
+							...fortressWarRequest( asked.question )
+						} );
+					}
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
@@ -4659,6 +4737,16 @@ export function createUi(
 			}
 			// The worker closed the room (NPC released, travel, world leave).
 			if ( panel === "Storage" && !next.gameplay?.storage ) {
+				setPanel( "" );
+				dirty = true;
+			}
+			// The official's answer opens or refreshes the application window.
+			fortressWarHud.observe( next.gameplay?.fortressApplication?.sequence );
+			if ( fortressWarHud.npc() !== null && panel !== FORTRESS_WAR_PANEL && canLeavePanel() ) {
+				setPanel( FORTRESS_WAR_PANEL );
+				dirty = true;
+			}
+			if ( panel === FORTRESS_WAR_PANEL && next.gameplay?.npcConversation?.phase !== "menu" ) {
 				setPanel( "" );
 				dirty = true;
 			}
@@ -10198,6 +10286,7 @@ export function createUi(
 						canRecall: !!(capabilities & 0x40),
 						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4),
+						canFortressOfficial: !!(capabilities & 0x800000),
 						jobRows: jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
 							id: row.id,
 							label: copy( row.symbol )
@@ -10436,6 +10525,93 @@ export function createUi(
 						authoredText( { ...money, color: shown.color }, px, py, shown.text );
 					}
 					endWindow( admission, "service:Storage" );
+				}
+				const fortressWar = panel === FORTRESS_WAR_PANEL ? fortressWarView() : null;
+				if (
+					fortressWar && hudData?.windows.iffortresswarapplywnd &&
+					hudData.windows.iffortresswarapplywndslot &&
+					hudData.root.GDR_FORTRESS_WAR_APPLY_WND
+				) {
+					// CIFFortressWarApplyWnd (660930): the dates, the column heads and
+					// eight slots, the official's fortresses first (662E80, 662D00).
+					const admission = beginWindow(),
+						root = hudData.root.GDR_FORTRESS_WAR_APPLY_WND,
+						layout = hudData.windows.iffortresswarapplywnd,
+						slotLayout = hudData.windows.iffortresswarapplywndslot,
+						nodes = Object.values( layout ),
+						slotNodes = Object.values( slotLayout ),
+						byId = ( id: number ) => nodes.find( n => n.id === id ),
+						[px, py] = windowOrigin( FORTRESS_WAR_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] );
+					nativeFrame( root, px, py, hudCopy( root.text ), "fortress-war-close" );
+					// The dates, the headers and the list are drawn below.
+					nativePage( layout, px, py, [ 504, 505, 511, 512, 513, 514, 515 ] );
+					const start = fortressWarView()?.application?.warStart;
+					if ( start ) {
+						const dates = fortressWarDates( start ), warLine = byId( 505 ), applyLine = byId( 504 );
+						if ( warLine ) {
+							authoredText(
+								warLine,
+								px,
+								py,
+								hudCopy( "UIIT_STT_FORT_OFFICAL_TEXT1" ) + " : " +
+									fortressWarFormat( hudCopy( "UIIT_STT_FORT_ETC_SCHEDULE1" ), dates.war )
+							);
+						}
+						if ( applyLine ) {
+							authoredText(
+								applyLine,
+								px,
+								py,
+								hudCopy( "UIIT_STT_FORT_OFFICAL_TEXT2" ) + " : " +
+									fortressWarFormat( hudCopy( "UIIT_STT_FORT_ETC_SCHEDULE2" ), dates.apply )
+							);
+						}
+					}
+					for ( const id of [ 511, 512, 513 ] ) {
+						const head = byId( id );
+						if ( head ) {
+							authoredLabeledButton(
+								head,
+								px,
+								py,
+								"fortress-war-head:" + id,
+								hudCopy( head.text ),
+								true
+							);
+						}
+					}
+					const list = byId( 515 );
+					if ( list ) {
+						const [lx, ly] = authoredRect( list, px, py ),
+							sw = FORTRESS_WAR_APPLY_SLOT_WIDTH,
+							sh = FORTRESS_WAR_APPLY_SLOT_HEIGHT;
+						for ( let row = 0; row < FORTRESS_WAR_APPLY_ROWS; row++ ) {
+							const sy = ly + row * sh, slot = fortressWar.slots[row];
+							image( [ lx, sy, sw, sh ], ROOT + "interface/guild/gil_bar02_deselect.png" );
+							if ( !slot ) continue;
+							const name = slotNodes.find( n => n.id === 600 ),
+								owner = slotNodes.find( n => n.id === 601 ),
+								button = slotNodes.find( n => n.id === 602 );
+							if ( name ) authoredText( name, lx, sy, hudCopy( slot.nameSymbol ) );
+							if ( owner ) authoredText( owner, lx, sy, slot.owner );
+							if ( button ) {
+								authoredLabeledButton(
+									button,
+									lx,
+									sy,
+									"fortress-war-slot:" + slot.fortress,
+									hudCopy( slot.caption ),
+									!slot.enabled || !!fortressWarHud.question()
+								);
+							}
+						}
+					}
+					endWindow( admission, "service:" + FORTRESS_WAR_PANEL );
 				}
 				const skin = skinHud.state();
 				if ( panel === SKIN_PANEL && skin && hudData?.windows.ifchangeplayermodel ) {
@@ -12564,6 +12740,49 @@ export function createUi(
 				);
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) jobHud.reset();
+			const fortressAsk = fortressWarHud.question();
+			if ( worldVisible && fortressAsk ) {
+				// 6649C0's question boxes 0x64-0x67.
+				const layout = guildProposalLayout( w, h ),
+					row = view?.gameplay?.fortress?.fortresses.find( r => r.id === fortressAsk.fortress ),
+					name = row?.nameStrId ? hudCopy( row.nameStrId ) : "";
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads(
+						fortressWarFormat(
+							hudCopy( fortressWarQuestionKey( fortressAsk.question ) ),
+							[ name, row?.requestFee ?? 0 ]
+						),
+						layout.name,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				button(
+					"fortress-war-yes",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"fortress-war-no",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
 			const jobAsk = jobHud.confirm(), aliasWindow = jobHud.alias();
 			if ( worldVisible && (jobAsk || aliasWindow) ) {
 				// 5D26F0's question boxes (types 4 and 5) and CIFJobAlias.

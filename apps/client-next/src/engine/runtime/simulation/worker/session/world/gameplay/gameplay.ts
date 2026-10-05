@@ -65,7 +65,15 @@ import {
 	fortressBootstrap,
 	fortressPacket,
 	fortressMusicActive,
-	fortressMusicMode
+	fortressMusicMode,
+	fortressInteraction,
+	fortressManagerReply,
+	fortressRegistrationNotice,
+	FORTRESS_NOTICE_CATEGORY,
+	FORTRESS_WAR_APPLY,
+	FORTRESS_WAR_STATUS,
+	FORTRESS_WAR_WITHDRAW,
+	type FortressApplication
 } from "@/engine/foundation/gameplay/fortress";
 import {
 	cosTimerPacket,
@@ -420,6 +428,7 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
+	let fortressApplication: (FortressApplication & { readonly sequence: number; }) | null = null;
 	let social = emptySocial();
 	// The world catalog's lookups, bound by the composition root (core).
 	let worldReferences: WorldReferences = { country: () => undefined, playerModels: () => [], item: () => undefined };
@@ -596,6 +605,7 @@ selected entities, cooldowns or world-entry state.
 		training.reset();
 		social = emptySocial();
 		fortress = fortressBootstrap( {} );
+		fortressApplication = null;
 		musicMode = 0;
 		bindings = skillBindings( {} );
 		catalog = [];
@@ -1051,6 +1061,23 @@ state here before a command can claim a native wire conversation.
 						command.kind === "job-withdraw" ?
 						jobWithdrawRequest( command.gid ) :
 						jobAliasRequest( command.gid, command.mode, command.alias )
+				);
+			}
+			if ( command.kind === "fortress-war-status" || command.kind === "fortress-war-apply" ) {
+				// The official's row exists only on the selected official (0x800000).
+				const target = targeting.state();
+				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x800000) ) {
+					throw Error( "Select a fortress official" );
+				}
+				return sendFrame(
+					command.kind === "fortress-war-status" ?
+						fortressInteraction( command.gid, FORTRESS_WAR_STATUS ) :
+						fortressInteraction(
+							command.gid,
+							command.withdraw ? FORTRESS_WAR_WITHDRAW : FORTRESS_WAR_APPLY,
+							command.fortress,
+							command.request
+						)
 				);
 			}
 			if ( command.kind === "storage-open" ) {
@@ -1970,6 +1997,20 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				const official = fortressManagerReply( frame, fortressApplication );
+				if ( official ) {
+					if ( official.ok ) {
+						fortressApplication = {
+							...official.application!,
+							sequence: (fortressApplication?.sequence ?? 0) + 1
+						};
+					} else {
+						const notice = constantNativeNotice( FORTRESS_NOTICE_CATEGORY, official.code );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+					dirty = true;
+					return true;
+				}
 				const fortressNext = fortressPacket( fortress, frame );
 				if ( fortressNext ) {
 					musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );
@@ -1978,7 +2019,8 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
 					uniqueNotice( frame.opcode, frame.payload, uniqueRefs ) ??
-					fortressNotice( frame.opcode, frame.payload ) ?? serverNotification( frame.opcode, frame.payload );
+					fortressNotice( frame.opcode, frame.payload ) ?? fortressRegistrationNotice( fortress, frame ) ??
+					serverNotification( frame.opcode, frame.payload );
 				if ( notice ) {
 					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					if ( frame.opcode === 0x3667 && frame.payload[0] === 7 ) chat.receive( frame, localGid );
@@ -2900,6 +2942,7 @@ The published plane when something changed since the last take, else null.
 				...training.state(),
 				social,
 				fortress,
+				...(fortressApplication ? { fortressApplication } : {}),
 				skillCatalog: catalog,
 				progression,
 				cosRecords: [ ...cosRecords.values() ].map( record => {

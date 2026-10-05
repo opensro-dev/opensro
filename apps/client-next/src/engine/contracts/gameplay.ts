@@ -157,6 +157,16 @@ export type GameplayCommand =
 	| { readonly kind: "cos-drop"; readonly gid: number; readonly slot: number; }
 	| { readonly kind: "guide-event"; readonly event: number; }
 	| { readonly kind: "storage-open"; readonly gid: number; }
+	// The fortress official (fortress.ts): the application window's status,
+	// then an application or withdrawal for one fortress.
+	| { readonly kind: "fortress-war-status"; readonly gid: number; }
+	| {
+		readonly kind: "fortress-war-apply";
+		readonly gid: number;
+		readonly fortress: number;
+		readonly request: number;
+		readonly withdraw: boolean;
+	}
 	// The job guild confirmations (job-guild.ts): join, withdraw and the alias.
 	| { readonly kind: "job-join"; readonly gid: number; readonly job: number; }
 	| { readonly kind: "job-withdraw"; readonly gid: number; }
@@ -479,6 +489,11 @@ export interface GameplayState {
 	readonly trainingError?: string | null;
 	// Journal omission retains the previous projection; reset sends a complete replacement.
 	readonly fortress?: import("@/engine/foundation/gameplay/fortress").FortressState;
+	// The official's last answer; sequence advances with every answer, which
+	// opens or refreshes the application window.
+	readonly fortressApplication?:
+		& import("@/engine/foundation/gameplay/fortress").FortressApplication
+		& { readonly sequence: number; };
 	readonly musicMode?: number;
 	readonly social?: import("@/engine/foundation/gameplay/social").SocialState;
 	readonly skillCatalog?: readonly import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata[];

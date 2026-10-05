@@ -120,6 +120,12 @@ type SiegeFortressDataRow struct {
 	CodeName        string `json:"codeName"`
 	NameStrID       string `json:"nameStrId"`
 	OfficialNpcCode string `json:"officialNpcCode"`
+	// RequestFee is the row's +0x80 gold, which the official's application
+	// question quotes (6649C0 box 0x64, 7E16A0).
+	RequestFee uint64 `json:"requestFee"`
+	// OfficialRefObjID resolves OfficialNpcCode for the browser, which
+	// knows NPCs by RefObjID (662E80 matches the official in conversation).
+	OfficialRefObjID uint32 `json:"officialRefObjId,omitempty"`
 }
 
 /*
