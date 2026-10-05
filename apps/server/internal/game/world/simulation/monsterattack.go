@@ -173,7 +173,8 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	if !ops.Monsters.selectedAITimerReady(divisionID, instance.Gid, nowMs) {
 		return nil, nil, true
 	}
-	if ops.switchToSecondaryOpponent(divisionID, instance, mover, target, players, live, nowMs) {
+	if ops.switchToSecondaryOpponent(divisionID, instance, mover, target, players, live, nowMs) ||
+		ops.redirectToVehicle(divisionID, instance, mover, target, players, live, nowMs) {
 		return nil, nil, true
 	}
 	if frames, handled := ops.advancePursuitControls(divisionID, instance, mover, target, live, nowMs); handled {

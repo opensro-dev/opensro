@@ -148,3 +148,58 @@ func TestFixedQueryUniqueSwitchesToSecondaryOpponentInReach(t *testing.T) {
 		t.Fatalf("target %#x after the switch", after.TargetGID())
 	}
 }
+
+/*
+================
+TestFlagRowsRedirectBetweenTraderAndVehicle
+
+5481A0: a flag-4 row striking a trader turns on the trader's transport when
+it is at least 15 closer, and from a companion back to its owner; a thief
+(job 2) keeps the flag-4 row's aim but loses the flag-0x80 row's.
+================
+*/
+func TestFlagRowsRedirectBetweenTraderAndVehicle(t *testing.T) {
+	ops, actors, _ := squadFixture(t)
+	actor := actors[0]
+	actor.Nest.HasControls, actor.Nest.Controls.Flags = true, 0x21E
+	const owner, vehicle = uint32(0x7901), uint32(0x7902)
+	squadEngage(t, ops, actor.Gid, owner)
+	mover, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	live := mover.LivePoseAt(0, nil)
+	at := func(gid uint32, distance float64) playerPose {
+		return playerPose{Gid: gid, Pose: Spawn{RegionID: live.RegionID, X: live.X + distance, Y: live.Y, Z: live.Z}, BodyRadius: 4}
+	}
+	trader := at(owner, 40)
+	trader.JobState = 1
+	transport := at(vehicle, 25.5)
+	transport.OwnerGid, transport.Band = owner, 2
+	if ops.redirectToVehicle(monsterTestDivision, actor, mover, trader, []playerPose{trader, transport}, live, 1000) {
+		t.Fatal("a vehicle 14.5 closer was taken")
+	}
+	transport = at(vehicle, 25)
+	transport.OwnerGid, transport.Band = owner, 2
+	thief := trader
+	thief.JobState = 2
+	if ops.redirectToVehicle(monsterTestDivision, actor, mover, thief, []playerPose{thief, transport}, live, 1000) {
+		t.Fatal("a flag-4 row redirected from a thief")
+	}
+	if !ops.redirectToVehicle(monsterTestDivision, actor, mover, trader, []playerPose{trader, transport}, live, 1000) {
+		t.Fatal("a vehicle 15 closer was not taken")
+	}
+	mover, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if mover.TargetGID() != vehicle {
+		t.Fatalf("target %#x after the redirect", mover.TargetGID())
+	}
+	near := at(owner, 5)
+	far := at(vehicle, 30)
+	far.OwnerGid, far.Band = owner, 2
+	if !ops.redirectToVehicle(monsterTestDivision, actor, mover, far, []playerPose{near, far}, live, 1000) {
+		t.Fatal("a companion target did not give way to its nearer owner")
+	}
+	hunterRow := actor
+	hunterRow.Nest.Controls.Flags = 0x29A &^ 0x4
+	mover, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if !ops.redirectToVehicle(monsterTestDivision, hunterRow, mover, thief, []playerPose{thief, transport}, live, 1000) {
+		t.Fatal("a flag-0x80 row kept aiming at a thief beside its vehicle")
+	}
+}
