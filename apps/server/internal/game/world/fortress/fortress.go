@@ -277,6 +277,26 @@ func (a *Authority) SetApplication(divisionID string, fortressID uint32, guildID
 
 /*
 ================
+Occupy
+
+Hands the fortress to guildID (0 leaves it unoccupied) and ends any
+temporary capture: the occupation a war's end settles. Reports whether
+the fortress exists.
+================
+*/
+func (a *Authority) Occupy(divisionID string, fortressID uint32, guildID int64) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	record, ok := a.divisionLocked(divisionID).records[fortressID]
+	if !ok {
+		return false
+	}
+	record.GuildID, record.TempGuildID = guildID, 0
+	return true
+}
+
+/*
+================
 GuildOwns
 
 CSiegeFortressMgr_IsGuildOwner (6353F0): the fortress's occupying guild is

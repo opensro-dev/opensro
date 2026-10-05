@@ -101,7 +101,10 @@ func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease ins
 		}
 		if distance <= limit {
 			instance, exists := state.instances.lookup(gid)
-			if !exists || instance.CurrentHP == 0 {
+			// A fortress structure takes only a weapon's basic attack aimed
+			// at it (CGObjPC_CanAttackTarget 52BF90), so it is never an
+			// area, chain or secondary victim.
+			if !exists || instance.CurrentHP == 0 || instance.Ref.Structure {
 				continue
 			}
 			out = append(out, instance)
