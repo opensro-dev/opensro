@@ -130,6 +130,9 @@ export interface EntityState {
 	readonly avatars?: readonly EntityEquipment[];
 	readonly bodyShape?: number;
 	readonly visualFlags?: number;
+	// CPSMission_OnTargetActionState0x314D (7786E0): a caught result put
+	// SYSTEM_CAPTURE_MARK in this character's state-decoration slot.
+	readonly captureMark?: boolean;
 	readonly mountedOn?: number;
 	readonly movementPath?: { readonly from: Pose; readonly to: Pose; };
 	readonly movementRevision?: number;

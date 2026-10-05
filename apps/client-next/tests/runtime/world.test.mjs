@@ -693,12 +693,42 @@ test("a freshly summoned combat pet plays its summon sound and SYSTEM_PET_APPEAR
 	let events = flush( owner ).events;
 	// 854CD0: sub-state 1 on a band 3/4 pet.
 	assert.ok( events.some( e => e.kind === "ui-sound" && e.handle === "SND_COS_SUMMON" ) );
-	assert.ok( events.some( e => e.kind === "pet-appear" && e.gid === 5 ) );
+	assert.ok( events.some( e => e.kind === "system-effect" && e.gid === 5 && e.effect === 0x80000021 ) );
 	owner.receive( spawn( 2183, 6, true, false ), 0 );
 	events = flush( owner ).events;
-	assert.ok( !events.some( e => e.kind === "pet-appear" ), "a riding horse is no combat or fellowship pet" );
+	assert.ok( !events.some( e => e.kind === "system-effect" ), "a riding horse is no combat or fellowship pet" );
 	owner.receive( spawn( 2190, 7, false ), 0 );
-	assert.ok( !flush( owner ).events.some( e => e.kind === "pet-appear" ), "a pet already out spawns quietly" );
+	assert.ok( !flush( owner ).events.some( e => e.kind === "system-effect" ), "a pet already out spawns quietly" );
+	owner.dispose();
+});
+
+/*
+================
+capture mark
+
+7786E0 puts SYSTEM_CAPTURE_MARK on the selected character when a capture
+result says caught; a gid that names no character is left alone.
+================
+*/
+test("a caught capture result marks the selected character", () => {
+	const owner = createEntities();
+	owner.bootstrap( { ...bootstrap, refObjSnapshot: [ { refObjId: 2183, kind: "cos", tidWord: 0x11c6 } ] } );
+	flush( owner );
+	const p = Buffer.alloc( 57 );
+	p.writeUInt32LE( 2183 );
+	p.writeUInt32LE( 6, 4 );
+	p.writeUInt16LE( 257, 8 );
+	p[25] = 1;
+	p.writeFloatLE( 10, 32 );
+	p.writeFloatLE( 20, 36 );
+	p.writeFloatLE( 1, 40 );
+	p[45] = 1;
+	owner.receive( { opcode: 0x30d7, payload: p }, 0 );
+	flush( owner );
+	owner.markCaptured( 6 );
+	owner.markCaptured( 404 );
+	assert.equal( owner.read( 6 ).captureMark, true );
+	assert.equal( owner.read( 404 ), undefined );
 	owner.dispose();
 });
 

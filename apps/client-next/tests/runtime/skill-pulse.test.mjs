@@ -30,7 +30,7 @@ function pulsePacket() {
 }
 
 test("linked pulses damage once without opening a cast or cooldown", () => {
-	/** @type {import('../../src/engine/contracts/effective-hp').CombatPresentationEvent[]} */
+	/** @type {(import('../../src/engine/contracts/effective-hp').CombatPresentationEvent | import('../../src/engine/contracts/orb').SystemEffectFeedback)[]} */
 	const events = [];
 	const combat = createCombat( () => undefined, event => events.push( event ) );
 	combat.seed( 2, { hp: 100 } );

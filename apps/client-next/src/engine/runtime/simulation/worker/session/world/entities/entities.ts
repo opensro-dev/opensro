@@ -33,6 +33,10 @@ import { createEntityMotion } from "./motion/motion";
 import type { EntityState, WorldBatch, WorldEvent } from "@/engine/contracts/world";
 import { journalCost } from "@/engine/foundation/gameplay/journal-cost";
 import type { WireFrame } from "@/engine/contracts/network";
+import { SYSTEM_PET_APPEAR } from "@/engine/contracts/orb";
+// The kinds whose spawn builds a CICharactor (players, NPCs, monsters, COS,
+// fortress structures); ground items and skill objects are not characters.
+const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "cos", "structure" ] );
 // Wire authorities: server enterworld/{register,bootstrap,wire}.go,
 // world/simulation/{npc,monster}.go and item/wire/objectmove.go.
 /*
@@ -898,7 +902,7 @@ export function createEntities(
 						append( { kind: "ui-sound", handle: "SND_COS_SUMMON", at: receivedAt } );
 						// CICCos_DeserializeSpawnSubState (854CD0): a fresh combat or
 						// fellowship pet also plays SYSTEM_PET_APPEAR (0x80000021).
-						append( { kind: "pet-appear", gid: event.entity.gid } );
+						append( { kind: "system-effect", gid: event.entity.gid, effect: SYSTEM_PET_APPEAR } );
 					}
 				}
 				return;
@@ -1143,6 +1147,18 @@ export function createEntities(
 			apply( { kind: "state", entity: { ...entity, moving: false, appearanceState } } );
 		},
 		castArrival: motion.castArrival,
+		/*
+		================
+		markCaptured
+
+		7786E0 attaches the capture mark only to a character (CICharactor).
+		================
+		*/
+		markCaptured( gid: number ) {
+			const entity = entities.get( gid );
+			if ( !entity || !CHARACTER_KINDS.has( entity.kind ) ) return;
+			apply( { kind: "state", entity: { ...entity, captureMark: true } } );
+		},
 		/*
 		================
 		displace

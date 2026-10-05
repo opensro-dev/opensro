@@ -60,6 +60,9 @@ import type { EntityState } from "@/engine/contracts/world";
 import { nativeHeadingYaw, radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+import { SYSTEM_CAPTURE_MARK } from "@/engine/contracts/orb";
+// TID4 6 in the COS type word: the captured quest monster.
+const CAPTURED_MONSTER_TYPE = 6 << 11;
 /*
 ================
 stageAttachmentBasis
@@ -72,6 +75,18 @@ Only the asset space differs: compiled BSR vertices are Z-flipped.
 */
 function stageAttachmentBasis( resource: string ): "native" | "native-bsr" {
 	return resource.endsWith( ".efp" ) ? "native" : "native-bsr";
+}
+/*
+================
+isCapturedMonster
+
+CICCos_EquipOwnerReferenceAppearance (8554E0): a COS whose type word is band
+6 (a quest's captured monster) spawns with SYSTEM_CAPTURE_MARK attached.
+================
+*/
+function isCapturedMonster( entity: import("@/engine/contracts/world").EntityState ): boolean {
+	const tid = entity.tidWord ?? 0;
+	return entity.kind === "cos" && (tid & 0x7fe) === 0x1c6 && (tid & 0xf800) === CAPTURED_MONSTER_TYPE;
 }
 /*
 ================
@@ -935,6 +950,9 @@ export function createCharacterEffects(
 				const stateEffects = new Map<number, number[]>();
 				for ( const entity of entities ) {
 					if ( (entity.visualFlags ?? 0) & 2 ) stateEffects.set( entity.gid, [ 0x8000001e ] );
+					else if ( entity.captureMark || isCapturedMonster( entity ) ) {
+						stateEffects.set( entity.gid, [ SYSTEM_CAPTURE_MARK ] );
+					}
 				}
 				// 787DB0 builds the NPC index from flag 2 / optional gid, taking
 				// the first record in ascending registry-key order for each NPC.

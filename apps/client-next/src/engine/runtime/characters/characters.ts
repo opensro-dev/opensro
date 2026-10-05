@@ -729,9 +729,8 @@ export function createCharacterPresentation(
 				else if ( event.kind === "level-up" ) {
 					const entity = entities.find( e => e.gid === event.gid );
 					if ( entity ) effects.system( event.gid, entity.kind === "cos" ? -2147483614 : -2147483642 );
-				} else if ( event.kind === "pet-appear" ) {
-					// SYSTEM_PET_APPEAR (0x80000021).
-					if ( entities.some( e => e.gid === event.gid ) ) effects.system( event.gid, -2147483615 );
+				} else if ( event.kind === "system-effect" ) {
+					if ( entities.some( e => e.gid === event.gid ) ) effects.system( event.gid, event.effect | 0 );
 				} else orbs.receive( [ event ], entities );
 			}
 		},

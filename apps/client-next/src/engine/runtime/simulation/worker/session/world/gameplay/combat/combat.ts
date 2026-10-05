@@ -8,6 +8,7 @@ leave this owner after complete packet validation; animation never owns HP.
 
 ===========================================================================
 */
+import { SYSTEM_KNOCKBACK } from "@/engine/contracts/orb";
 import {
 	appendCastResults,
 	castResultStageCount,
@@ -40,7 +41,11 @@ optionally retaining immutable reference metadata across reconnect.
 */
 export function createCombat(
 	readEntity: ( gid: number ) => import("@/engine/contracts/world").EntityState | undefined = () => undefined,
-	publishHp: ( event: import("@/engine/contracts/effective-hp").CombatPresentationEvent ) => void = () => {},
+	publishHp: (
+		event:
+			| import("@/engine/contracts/effective-hp").CombatPresentationEvent
+			| import("@/engine/contracts/orb").SystemEffectFeedback
+	) => void = () => {},
 	// One delivery, server to client (skill-queue.ts): a cast-start answer
 	// started its cooldown that long ago.
 	oneWayMs: () => number = () => 0
@@ -132,6 +137,12 @@ export function createCombat(
 						kind: impact.type as 4 | 5,
 						destination: impact.displacement
 					} );
+					// CIDecoDamageEffect_Initialize (8D5440): a type-5 knockback is
+					// carried by a SYSTEM_KNOCKBACK decoration on the struck
+					// character, whose guided trajectory is the 250/s travel.
+					if ( impact.type === 5 ) {
+						publishHp( { kind: "system-effect", gid: row.target, effect: SYSTEM_KNOCKBACK } );
+					}
 				}
 			}
 		}

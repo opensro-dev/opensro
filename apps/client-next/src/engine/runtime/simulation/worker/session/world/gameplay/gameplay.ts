@@ -1018,6 +1018,16 @@ grant round trip and a deselection by one publish.
 		},
 		/*
 ================
+selectedTarget
+
+The granted selection (CGInterface_GetSelectedTargetGid), or 0 for none.
+================
+		*/
+		selectedTarget() {
+			return targeting.state().target ?? 0;
+		},
+		/*
+================
 command
 
 UI and quickslots share this dispatcher. Validate current actor and target

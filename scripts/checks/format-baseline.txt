@@ -12,7 +12,6 @@ apps/client-next/src/engine/contracts/message.ts
 apps/client-next/src/engine/contracts/model.ts
 apps/client-next/src/engine/contracts/navigation.ts
 apps/client-next/src/engine/contracts/network.ts
-apps/client-next/src/engine/contracts/orb.ts
 apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/contracts/scenery.ts
 apps/client-next/src/engine/contracts/simulation.ts
