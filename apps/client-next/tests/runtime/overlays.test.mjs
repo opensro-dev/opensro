@@ -26,10 +26,11 @@ async function load( path, name ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
 const { overheadLayout } = await load( "foundation/ui/overhead-layout.ts", "overhead" );
-const { partyDistanceShade, partyLocalPose, partyOverlay, partyRosterPose, partyShadeImage } = await load(
-	"foundation/ui/party-overlay.ts",
-	"party"
-);
+const { partyDistanceShade, partyLocalPose, partyOverlay, partyRosterPose, partyShadeImage, partyShadeImages } =
+	await load(
+		"foundation/ui/party-overlay.ts",
+		"party"
+	);
 const { buffViewerIcons, collectActiveBuffs, partyBuffViewer, rebuildBuffViewer, skillLookup } = await load(
 	"foundation/ui/buff-viewer.ts",
 	"buff-viewer"
@@ -154,6 +155,9 @@ test("party rows list the member's trained masteries left of the buff row", () =
 	assert.deepEqual( rows[1].masteries.map( m => m.id ), [ 513 ] );
 	assert.deepEqual( rows[2].masteries, [] );
 	assert.deepEqual( rows[3].masteries, [] );
+});
+test("every shade image is requested up front, in band order", () => {
+	assert.deepEqual( partyShadeImages(), [ 1, 2, 3, 4, 5 ].map( partyShadeImage ) );
 });
 test("the distance shade measures from the live pose, not the lagging local entity", () => {
 	const at = ( x, regionId = 0x6a48 ) => ({ regionId, x, y: 0, z: 0, angle: 0 });

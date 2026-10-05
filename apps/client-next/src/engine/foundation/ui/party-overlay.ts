@@ -172,3 +172,20 @@ export function partyShadeImage( shade: number ): string | null {
 	return "interface/quickparty/qpt_face_faraway_" + (PARTY_SHADE_BASE_PERCENT + shade * PARTY_SHADE_STEP_PERCENT) +
 		".png";
 }
+
+/*
+================
+partyShadeImages
+
+Every shade image, so the board can request them all while a party exists.
+A shade image is drawn only once it has loaded, and asking for one the
+first time its distance band is reached left that frame without the tint:
+the face flashed back for an instant at each band's first crossing.
+================
+*/
+export function partyShadeImages(): string[] {
+	const PARTY_SHADE_MAX = 5;
+	const images: string[] = [];
+	for ( let shade = 1; shade <= PARTY_SHADE_MAX; shade++ ) images.push( partyShadeImage( shade )! );
+	return images;
+}

@@ -214,7 +214,8 @@ import {
 	partyOverlay,
 	partyPortraitGid,
 	partyRosterPose,
-	partyShadeImage
+	partyShadeImage,
+	partyShadeImages
 } from "@/engine/foundation/ui/party-overlay";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import {
@@ -6587,6 +6588,7 @@ export function createUi(
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
 						slot = hudData.windows.ifquickpartyslot!,
 						localPose = partyLocalPose( game, next.entities );
+					for ( const shadeImage of partyShadeImages() ) paths.push( ROOT + shadeImage );
 					for (
 						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
 					) {
