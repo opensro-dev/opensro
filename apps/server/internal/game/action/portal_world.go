@@ -82,7 +82,7 @@ func loadFortressCatalog(dir string) ([]fortress.Catalog, error) {
 			return nil, fmt.Errorf("siegefortress row %d request fee", i+1)
 		}
 		out = append(out, fortress.Catalog{ID: uint32(id), CodeName: r[2], MaxEntrance: uint32(maximum),
-			RequestFee: fee, OfficialNpc: r[13]})
+			RequestFee: fee, OfficialNpc: r[13], TownGate: r[5]})
 	}
 	return out, nil
 }

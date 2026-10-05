@@ -255,11 +255,15 @@ func newGameplayPlane(
 			}
 			return guild.Name
 		},
+		WarChanged: func(nowMs int64, active bool) []simulation.DivisionFrames {
+			return items.FortressWarChanged(ownedShard.ID, nowMs, active)
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
 	items.FortressWindows = siegeRuntime.WarStart
+	items.FortressList = siegeRuntime.FortressList
 
 	return &gameplayPlane{
 		divisionID:    ownedShard.ID,

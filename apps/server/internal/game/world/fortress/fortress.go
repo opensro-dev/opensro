@@ -43,6 +43,7 @@ type Record struct {
 	MaxEntrance uint32
 	RequestFee  uint64
 	OfficialNpc string
+	TownGate    string
 	// Applicants are the guilds registered for the coming war
 	// (_SiegeFortressRequest), each with its request kind.
 	Applicants map[int64]RequestKind
@@ -71,6 +72,9 @@ type Catalog struct {
 	// OfficialNpc is the codename of the NPC that takes applications
 	// (column 14; 63BBC0 matches the selected NPC against it).
 	OfficialNpc string
+	// TownGate is the teleport code of the fortress's town gate (column 6),
+	// where the war's phases send the PCs that must leave (601690).
+	TownGate string
 }
 
 /*
@@ -151,7 +155,7 @@ func (a *Authority) divisionLocked(divisionID string) *division {
 	state := &division{records: make(map[uint32]*Record, len(a.catalog))}
 	for _, row := range a.catalog {
 		state.records[row.ID] = &Record{ID: row.ID, CodeName: row.CodeName, MaxEntrance: row.MaxEntrance,
-			RequestFee: row.RequestFee, OfficialNpc: row.OfficialNpc}
+			RequestFee: row.RequestFee, OfficialNpc: row.OfficialNpc, TownGate: row.TownGate}
 	}
 	a.divisions[divisionID] = state
 	return state

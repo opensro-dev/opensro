@@ -244,3 +244,35 @@ func TestGMWarpLeavesTheFortressForTheField(t *testing.T) {
 	}
 	inField(t, rt, c, "the GM warp")
 }
+
+/*
+================
+TestFortressWarBeginsByClearingTheFortress
+
+601170 mode 0, five seconds after the war begins: an unoccupied fortress
+sends everyone to its town gate (GATE_CH, in the field); the war's end
+(mode 2) does so at once.
+================
+*/
+func TestFortressWarBeginsByClearingTheFortress(t *testing.T) {
+	rt, c, clock := fortressFixtureWithClock(t, testFieldFortGate)
+	rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {}
+	rt.PushDivisionPeerFrames = func(_, _ string, _ []wire.Frame) {}
+	enterFortress(t, rt, c)
+	now := clock.NowMs()
+	rt.FortressWarChanged(testDivision, now, true)
+	rt.advanceFortressPhases(now + fortressBeginDelayMs - 1)
+	if c.World.PackedInstance == nil {
+		t.Fatal("expelled before the five-second wait")
+	}
+	rt.advanceFortressPhases(now + fortressBeginDelayMs)
+	inField(t, rt, c, "the war's beginning")
+	gate, _ := rt.fortressTownGate("GATE_CH")
+	if *c.World.Spawn.RegionID != int64(gate.spawn.RegionID) {
+		t.Fatalf("expelled to region %d, want the town gate's %d", *c.World.Spawn.RegionID, gate.spawn.RegionID)
+	}
+	enterFortress(t, rt, c)
+	rt.FortressWarChanged(testDivision, now, false)
+	rt.advanceFortressPhases(now)
+	inField(t, rt, c, "the war's end")
+}

@@ -128,6 +128,12 @@ type Runtime struct {
 	// which the fortress official shows; the fortress-war lane owns the
 	// schedule.
 	FortressWindows func(nowMs int64) time.Time
+	// FortressList is the lane's subtype-0 fortress list for a guild,
+	// re-sent to the owning guild when its war begins (4E0680).
+	FortressList func(guildID int64) []byte
+	// fortressPhases are the fortress worlds' scheduled war phases.
+	fortressPhasesMu sync.Mutex
+	fortressPhases   []fortressPhase
 
 	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
 	// The composition root installs it before Register admits 0x7338/0x7053.
