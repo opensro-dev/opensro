@@ -207,6 +207,11 @@ type Runtime struct {
 	// multipliers. 0 or 1 is native; the closed-beta growth switch raises it.
 	GoldRate int
 
+	// PartyShareFloor raises every party member's EXP share to at least an
+	// even split (partyRewardFactors). Off is native; the closed-beta growth
+	// switch turns it on.
+	PartyShareFloor bool
+
 	// Now abstracts the clock for deterministic tests.
 	Now         func() time.Time
 	departureMu sync.Mutex

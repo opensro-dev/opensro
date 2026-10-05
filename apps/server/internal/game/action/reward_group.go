@@ -204,9 +204,15 @@ func rewardLevel(c *enterworld.Character) int64 {
 partyRewardFactors
 
 5BCD43..5BCED7 spills bonus and level shares independently to float32.
+
+evenFloor is a deliberate beta deviation (the growth switch turns it on):
+native CParty_DistributeKillExperience weights each share by level alone,
+so a level 1 beside a level 23 took 1/24 of its own kill EXP and party
+power-levelling fell ~13x behind soloing. With the floor no member's share
+drops below an even 1/N split; higher levels keep their larger share.
 ================
 */
-func partyRewardFactors(members []rewardActor, target monster.Instance) []float32 {
+func partyRewardFactors(members []rewardActor, target monster.Instance, evenFloor bool) []float32 {
 	var chinese, other, sum, maxLevel int64
 	for _, a := range members {
 		l := rewardLevel(a.character)
@@ -234,6 +240,9 @@ func partyRewardFactors(members []rewardActor, target monster.Instance) []float3
 	var out []float32
 	for _, a := range members {
 		share := float32(float64(rewardLevel(a.character)) / float64(sum))
+		if even := float32(1 / float64(len(members))); evenFloor && share < even {
+			share = even
+		}
 		b := bonus
 		if float64(share) > .7 && len(members) >= 3 && maxLevel >= 21 {
 			b = float32(1 + (float64(bonus)-1)*.5)
@@ -359,7 +368,7 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 				}
 			}
 			count = uint16(len(members)) // each party call overwrites, even a non-winning group
-			factors = partyRewardFactors(members, impact.Instance)
+			factors = partyRewardFactors(members, impact.Instance, rt.PartyShareFloor)
 		}
 		for i, a := range members {
 			exp, sexp := monsterContributionReward(a.character, impact.Instance, rt.deps.LevelData(), g.damage, factors[i], a.party != nil && a.party.Options&1 != 0)
