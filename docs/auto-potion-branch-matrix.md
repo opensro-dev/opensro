@@ -38,6 +38,22 @@ service boundaries. They are evidence for the core predicates, not evidence
 that all downstream services ran inside that oracle. The remaining rows here
 identify their separate evidence and tests.
 
+
+The shop-close regression adds three production-worker cases: explicit NPC
+close, authoritative target release, and NPC despawn. Each refuses automatic
+use while the shop is active, retains its catalog after closing, and resumes
+the existing retry without another refusal. The opt-in connected browser case
+(`SRO_POTION_SHOP_CLOSE=1`) opens and closes the Samarkand stable shop and then
+observes three successful automatic MP receipts with the catalog still cached.
+It restores the scratch character's original position, bindings and settings.
+
+The cooldown descriptor's native instruction 80BF23 stores the low byte of the
+base-16 group. Its projection now explicitly masks to 0xFF, removing an implicit
+32-to-8-bit narrowing conversion. Boundary tests cover 0, 255, 256, 511, the
+largest 32-bit value, malformed groups and invalid durations, including retention
+of the preceding valid descriptor. This preserves the native byte-store rule
+instead of rejecting authored values merely because their high bits are set.
+
 ## Complete authored item census
 
 `TestAutoPotionEntireShippedCatalog` enumerates the licensed catalog through
@@ -122,8 +138,9 @@ exception. The probe requires `SRO_POTION_EXPECT_BETA_REFILL=1` to expect it;
 without that setting, any refill fails the persistence assertion. Strongest
 replacement is still the only exception authorized by this auto-potion task.
 
-The deployed server identifies source revision `ab43b4a5` with modified build
-inputs, so that browser capture alone does **not** certify the PR's server.
+The local server used for the original browser capture identified source revision
+`ab43b4a5` with modified build inputs, so that capture alone does **not** certify
+the PR's server. This is a historical capture identity, not current production state.
 The independent loopback transport test runs this checkout's Go action owner,
 real WebSocket envelope/receipt delivery and durable store, with no beta refill.
 It checks immediate and queued HP, exact reuse boundaries, overlapping use,
@@ -139,9 +156,15 @@ and actor binding are fixture boundaries; it does not retest the login service.
 - From `apps/client-next`, with the owned Vite URL in `SRO_PROBE_CLIENT_NEXT_BASE_URL`: `SRO_AUTO_POTION_LIVE=1 SRO_POTION_EXPECT_BETA_REFILL=1 node --test tests/browser/auto-potion-live.test.mjs` (set environment variables using the host shell).
 - `node --test tests/browser/game-options.test.mjs` against that same Vite server.
 
-The catalog, mapped application branches and listed lifecycle transitions have
-no known unported behavior after the existing fixes. The additional pass found
-no new runtime defect. This conclusion is supported by instruction review,
+The initial verification missed the distinction between cached merchant data
+and an active NPC interaction. A subsequent player report reproduced repeated
+item-use refusals after leaving the shop. PR #193 fixed that defect and shipped
+as client generation 39. The current matrix includes the resulting regression
+cases; the previous statement that the follow-up found no runtime defect must
+not be interpreted as exhaustive lifecycle coverage.
+
+The updated implementation and listed tests cover the identified catalog,
+dispatch and lifecycle cases. This evidence consists of instruction review,
 finite exhaustive core inputs, expanded queue comparisons and independent
-integration tests; it is not an unbounded whole-call-graph machine proof or a
-live original-client/original-server session capture.
+integration tests. It does not establish unbounded whole-call-graph machine
+proof or a live original-client/original-server session comparison.

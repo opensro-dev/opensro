@@ -68,9 +68,9 @@ The subsequent [branch and lifecycle verification](auto-potion-branch-matrix.md)
 adds the complete 64-item census, 35,424 original-machine queue calls, real
 WebSocket/store verification of this checkout, and an authenticated browser
 consumption/reconnect capture. It records the remaining oracle boundaries and
-the existing beta refill profile explicitly. No additional runtime defect was
-found. Whole-program machine equivalence and a live original-client/server
-capture are not claimed.
+the existing beta refill profile explicitly. The initial pass did not catch the shop-close defect described below.
+Whole-program machine equivalence and a live original-client/server capture
+are not claimed.
 
 
 ## Shop-close hotfix (2026-10-06)

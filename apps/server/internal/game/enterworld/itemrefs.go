@@ -27,6 +27,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const itemCooldownGroupMask = 0xff
+
 /*
 ==================
 TextdataItems
@@ -819,7 +821,9 @@ func buildItemNativeFields(fields []string) NativeFields {
 		group, err := strconv.ParseUint(strings.TrimPrefix(strings.TrimSpace(raw), "0x"), 16, 32)
 		duration, valid := textdataInt(fields[column-1])
 		if err == nil && valid && duration >= 0 && duration <= 0x7fffffff {
-			values["useCooldownGroup524"] = float64(uint8(group))
+			// 80BF23 stores AL after the base-16 parse. Bound the low byte
+			// explicitly instead of relying on a narrowing integer conversion.
+			values["useCooldownGroup524"] = float64(group & itemCooldownGroupMask)
 			values["useCooldownDuration528"] = float64(duration)
 		}
 	}
