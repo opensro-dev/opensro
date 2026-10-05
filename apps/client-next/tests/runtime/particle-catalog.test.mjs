@@ -28,7 +28,9 @@ test("stone keeps its native source-colour blend pair and temptation retains loo
 	assert.equal( temptation.particleGraph.filter( e => e.loop ).length, 2 );
 	assert.ok( temptation.particleGraph.filter( e => e.loop ).every( e => e.frames === 20 ) );
 });
-test("full published catalog has only the explicitly unresolved native sphere scratch input", () => {
+test("every effect in the full published catalog decodes", () => {
+	// battle/status_bad_sleep.efp carries the only SetSpherePos flag 0 (0x37),
+	// whose native scratch input is ported by its intent (particle-program.ts).
 	const decoder = createEffectPrograms(), catalog = JSON.parse( new TextDecoder().decode( bytes ) ), failures = [];
 	for ( const path of Object.keys( catalog.effects ) ) {
 		try {
@@ -37,8 +39,5 @@ test("full published catalog has only the explicitly unresolved native sphere sc
 			failures.push( { path, error: error.message } );
 		}
 	}
-	assert.deepEqual( failures, [ {
-		path: "battle/status_bad_sleep.efp",
-		error: "Unsupported absolute sphere position"
-	} ] );
+	assert.deepEqual( failures, [] );
 });

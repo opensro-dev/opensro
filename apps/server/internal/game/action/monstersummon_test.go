@@ -52,7 +52,7 @@ func TestShippedUniqueSummonActionsAcrossAllHealthBands(t *testing.T) {
 					state.AdvancePopulation(state.CurrentTimeMillis())
 					instance := state.InstancesInRegions("summon", []uint16{0x62aa})[0]
 					hit, _ := state.ApplyDamage("summon", instance.Gid, uint32((uint64(instance.EffectiveMaxHP())*uint64(100-hp)+99)/100))
-					plan, ok := rt.MonsterAttackPlan(hit.Instance, 0, sample)
+					plan, ok := rt.MonsterAttackPlan(hit.Instance, 0, simulation.AttackPick{Sample: sample})
 					var authored []monster.SummonSkill
 					for _, id := range ref.DefaultSkillIDs {
 						r, exists := skills.SkillByID(id)
@@ -136,7 +136,7 @@ func TestShippedUniqueSummonActionsAcrossAllHealthBands(t *testing.T) {
 							if child.SummonSightRange != tactics.SightRange || child.Nest.NativeTacticsFlags != tactics.NativeFlags || child.Nest.TargetPolicy != tactics.TargetPolicy {
 								t.Fatalf("child lost default tactics: %s grade=%d", child.Ref.Codename, child.Rarity())
 							}
-							attack, ok := rt.MonsterAttackPlan(child, 0, 0)
+							attack, ok := rt.MonsterAttackPlan(child, 0, simulation.AttackPick{})
 							if !ok || attack.Summon || attack.SkillID == 0 {
 								t.Fatalf("known child has no ordinary attack plan: %s %+v", child.Ref.Codename, attack)
 							}

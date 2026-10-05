@@ -204,7 +204,6 @@ apps/client-next/src/engine/foundation/ui/system-menu.ts
 apps/client-next/src/engine/foundation/ui/system-message-layout.ts
 apps/client-next/src/engine/foundation/ui/target-status.ts
 apps/client-next/src/engine/foundation/ui/text-lines.ts
-apps/client-next/src/engine/foundation/ui/title-status.ts
 apps/client-next/src/engine/foundation/ui/tooltip-rows.ts
 apps/client-next/src/engine/foundation/ui/unique-banner.ts
 apps/client-next/src/engine/foundation/ui/vertical-spin.ts

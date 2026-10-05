@@ -48,6 +48,14 @@ func (s *MonsterState) RecordHostilitySequence(division string, gid uint32, even
 		mover = monster.NewSpawnMover(instance, now)
 	}
 	for _, event := range events {
+		if attacker, known := byGID[event.Attacker]; known && instance.IgnoresDistantHate(attacker.ActorDistance) {
+			monster.ZeroOpponentAggression(&instance.Opponents, event.Attacker)
+			// The impact already credited the hit toward the next summon
+			// (applyDamageLocked); 5473C0 credits +0xB0 only past this branch.
+			instance.DamageSinceSummon -= min(instance.DamageSinceSummon, event.Damage)
+			state.instances.set(gid, instance)
+			continue
+		}
 		var candidates [3]monster.OpponentCandidate
 		for i, candidate := range [3]uint32{instance.Opponents[0].GID, instance.Opponents[1].GID, event.Attacker} {
 			candidates[i] = byGID[candidate]

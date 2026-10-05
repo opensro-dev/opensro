@@ -40,8 +40,8 @@ func TestQuestInventoryHookRidesTheItemBursts(t *testing.T) {
 	dropped := rt.Ground.All(testDivision)[0]
 	grant := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: dropped.Gid}.Encode())
 	assertOpcodes(t, grant.Frames,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpObjectDespawn, 0x31ED)
+		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpObjectDespawn, 0x31ED, wire.OpActionState)
 	if hookCalls != 2 {
 		t.Fatalf("hook calls after the pickup = %d, want 2", hookCalls)
 	}

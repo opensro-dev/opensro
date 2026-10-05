@@ -207,7 +207,7 @@ func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Ti
 	}
 	groundItem, ok := rt.characterGround(pending.DivisionID, snapshot, pending.ItemGid)
 	if !ok {
-		return pickupRefusal(wire.ErrCodeCannotBePicked), character
+		return pickupRefusal(wire.ErrCodeTargetGone), character
 	}
 	if groundItem.OwnerJID != 0 &&
 		groundItem.OwnerJID != enterworld.ObjectIDForCharacter(snapshot) &&

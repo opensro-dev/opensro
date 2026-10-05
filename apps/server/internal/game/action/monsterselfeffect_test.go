@@ -61,7 +61,7 @@ func TestConditionalChildBuffsCastInstallExpireAndScope(t *testing.T) {
 			}
 			hp := enterworld.CurrentHP(c)
 			now := clock.NowMs()
-			plan, ok := rt.MonsterAttackPlan(m, id, .9)
+			plan, ok := rt.MonsterAttackPlan(m, id, simulation.AttackPick{Sample: .9})
 			if !ok || !plan.SelfEffect || plan.Summon || plan.Reach != 0 {
 				t.Fatal("self plan", plan)
 			}

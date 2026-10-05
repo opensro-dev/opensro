@@ -165,7 +165,7 @@ func TestWanderingMonsterAcquiresAggroInFlight(t *testing.T) {
 func TestWanderingMonsterAcquiresAggroInAttackRangeInterruptsWithImmediateAttack(t *testing.T) {
 	const t0 = int64(1_784_000_000_000)
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: 0x1234, Reach: ActionReach(50), CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}
 	ops.BasicAttack = func(string, monster.Instance, uint32, uint32, int64) MonsterAttackResult {
@@ -242,7 +242,7 @@ func TestAggroLifecycleEndToEnd(t *testing.T) {
 	tactics.SightRange = 200
 	tactics.ChaseLeash = 300
 	ops, instance := monsterLegFixture(t, tactics)
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: 0x1234, Reach: ActionReach(20), CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}
 	ops.BasicAttack = func(string, monster.Instance, uint32, uint32, int64) MonsterAttackResult {

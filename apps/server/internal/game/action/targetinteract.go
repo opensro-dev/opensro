@@ -233,9 +233,9 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 
 	groundItem, ok := rt.characterGround(divisionID, snapshot, request.Gid)
 	if !ok {
-		// Already picked / despawned: the native "cannot be picked" notice.
+		// Already picked / despawned: native "Cannot find target" (01:03).
 		rt.Pending.Clear(pendingKey)
-		return pickupRefusal(wire.ErrCodeCannotBePicked)
+		return pickupRefusal(wire.ErrCodeTargetGone)
 	}
 
 	if groundItem.OwnerJID != 0 &&

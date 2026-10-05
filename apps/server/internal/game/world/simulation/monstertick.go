@@ -74,9 +74,10 @@ type MonsterMoverOps struct {
 	// AttackPlan resolves one of RefObjChar's ten default-skill ids against
 	// the shipped v1.150 skill table. requestedSkillID preserves a choice
 	// while the mover approaches; zero chooses from the valid authored set.
-	// Retained-ID resolution receives sample zero and must not reselect based
-	// on changed health/damage. New selections alone consume choice entropy.
-	AttackPlan func(instance monster.Instance, requestedSkillID uint32, sample float64) (MonsterAttackPlan, bool)
+	// Retained-ID resolution receives a zero pick and must not reselect based
+	// on changed health/damage. New selections alone consume choice entropy,
+	// and they carry the target the weighted choice (561B00) measures.
+	AttackPlan func(instance monster.Instance, requestedSkillID uint32, pick AttackPick) (MonsterAttackPlan, bool)
 	// BasicAttack commits one monster->player hit and returns the same B245
 	// action bracket the browser already uses for player attacks.
 	BasicAttack func(divisionID string, instance monster.Instance, targetGid, skillID uint32, nowMs int64) MonsterAttackResult
@@ -262,6 +263,9 @@ type playerPose struct {
 	OwnerGid uint32
 	// Band is a companion's COS band (TypeID 4).
 	Band uint8
+	// JobState is a player's job state (CGObjPC_GetJobState 4DDC80, +0x30
+	// +0xF): the dressed job, zero outside job mode.
+	JobState uint8
 }
 
 /*
@@ -365,6 +369,9 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				continue
 			}
 			player := playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs), MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius, NativeBodyStatus: session.NativeBodyStatus}
+			if session.Appearance != nil {
+				player.JobState = session.Appearance.JobType
+			}
 			if ops.FirstAttackGuard != nil {
 				player.Guard = ops.FirstAttackGuard(divisionID, player.Gid, nowMs)
 			}
@@ -888,6 +895,15 @@ poseToSpawn
 */
 func poseToSpawn(p monster.Pose) Spawn {
 	return Spawn{RegionID: p.RegionID, X: p.X, Y: p.Y, Z: p.Z, Angle: p.Heading}
+}
+
+/*
+================
+spawnToPose
+================
+*/
+func spawnToPose(p Spawn) monster.Pose {
+	return monster.Pose{RegionID: p.RegionID, X: p.X, Y: p.Y, Z: p.Z, Heading: p.Angle}
 }
 
 /*

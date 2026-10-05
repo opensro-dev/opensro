@@ -298,6 +298,10 @@ type SkillRow struct {
 	// distinction from a malformed cell.
 	ActionRange       float64
 	ActionRangePinned bool
+	// AIWeight is column 66 (RefSkill +0x164, a byte): a monster's chance
+	// weight for this default skill in 561B00's weighted choice, and a
+	// summon's health band in 562060. Zero never takes part in the choice.
+	AIWeight uint8
 	// Masteries are the two required-mastery slots (cols 34/36, 35/37).
 	Masteries [2]SkillRequirement
 	// ReqStr/ReqInt gate on the character's STR/INT words (cols 38/39;
@@ -426,6 +430,7 @@ const (
 	skilldataColTargetRequired = 22
 	skilldataColWeaponKind1    = 50
 	skilldataColWeaponKind2    = 51
+	skilldataColAIWeight       = 66
 	skilldataColActionHandler  = 68
 	skilldataColPrimaryTag     = 69
 	skilldataColAttackFlags    = 70
@@ -693,6 +698,9 @@ func (t *TextdataSkills) parse(shards []string) {
 				actionRange >= 0 {
 				row.ActionRange = float64(actionRange)
 				row.ActionRangePinned = true
+			}
+			if weight, ok := textdataByte(fields[skilldataColAIWeight]); ok {
+				row.AIWeight = weight
 			}
 			if len(fields) > skilldataColAttackValue5 {
 				targetRequired, targetOK := textdataInt(fields[skilldataColTargetRequired])
