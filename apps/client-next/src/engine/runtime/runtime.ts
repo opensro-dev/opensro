@@ -667,16 +667,21 @@ export function startRuntime(
 						{ ...(presentation.gameplay()?.weather ?? { mode: 1, amount: 0 }), eventRain } :
 						null
 				);
+				// CGInterface_UpdateCameraOrbitTarget (68F830) locks third person
+				// behind the drawn body's turning yaw (+0x88, written per step by
+				// 86CBA0), not the logical heading, which snaps on each click.
+				const cameraFollow = characters.cameraTarget();
 				world.step(
 					[ "loading-world", "world" ].includes( frontendState.phase ) ?
 						presentation.gameplay()?.pose ?? null :
 						null,
 					input.camera(
-						presentation.gameplay()?.pose ?
-							nativeHeadingYaw( presentation.gameplay()!.pose!.angle ) :
-							undefined
+						cameraFollow?.yaw ??
+							(presentation.gameplay()?.pose ?
+								nativeHeadingYaw( presentation.gameplay()!.pose!.angle ) :
+								undefined)
 					),
-					characters.cameraTarget(),
+					cameraFollow,
 					presentation.gameplay()?.navigationBlock,
 					now,
 					characters.takeCameraScripts()

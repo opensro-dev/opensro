@@ -26,8 +26,8 @@ func TestFearPreservesDetectionBranch(t *testing.T) {
 	a.Nest.NativeTacticsFlags = 0x200
 	a.Abnormal.Slots[abnormal.Fear].Active = true
 	a.Abnormal.Slots[abnormal.Fear].SourceGID = 7
-	from := monster.Pose{RegionID: 25000, X: 1000, Z: 1000}
-	p := playerPose{Gid: 7, NativeBodyStatus: 6, Pose: Spawn{RegionID: 25000, X: 1005, Z: 1000}}
+	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Z: 1000}
+	p := playerPose{Gid: 7, NativeBodyStatus: 6, Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Z: 1000}}
 	if !ordinaryPlayerHostility(a, p) {
 		t.Fatal("fixture did not admit native detection")
 	}
@@ -46,10 +46,10 @@ func TestFearAcquisitionAndRememberedOpponent(t *testing.T) {
 	actor.Ref.TidWord = 0x8c6
 	actor.Abnormal.Slots[abnormal.Fear].Active = true
 	actor.Abnormal.Slots[abnormal.Fear].SourceGID = 7
-	from := monster.Pose{RegionID: 25000, X: 1000, Z: 1000}
+	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Z: 1000}
 	players := []playerPose{
-		{Gid: 7, Pose: Spawn{RegionID: 25000, X: 1005, Z: 1000}},
-		{Gid: 8, Pose: Spawn{RegionID: 25000, X: 1010, Z: 1000}},
+		{Gid: 7, Pose: Spawn{RegionID: monsterTestRegion, X: 1005, Z: 1000}},
+		{Gid: 8, Pose: Spawn{RegionID: monsterTestRegion, X: 1010, Z: 1000}},
 	}
 	if got, ok := ordinaryPlayerAcquisition(actor, from, players, 100); !ok || got.Gid != 8 {
 		t.Fatalf("acquired feared source: %+v, %v", got, ok)

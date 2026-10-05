@@ -57,7 +57,7 @@ func TestMonsterChaseApproachesLiveTargetNotOppositeCommandDestination(t *testin
 	push := &fakePusher{}
 	target := playerSessionAt(1, 1200, 1000)
 	target.World.MoveSegment = &MoveSegment{
-		From:        Spawn{RegionID: 25000, X: 900, Y: 20, Z: 1000},
+		From:        Spawn{RegionID: monsterTestRegion, X: 900, Y: 20, Z: 1000},
 		StartedAtMs: t0,
 		ArrivesAtMs: t0 + 5000,
 	}
@@ -82,7 +82,7 @@ func TestMonsterChaseRefreshesMovingTargetBeforeTheCurrentGoalExpires(t *testing
 	push := &fakePusher{}
 	target := playerSessionAt(1, 1150, 1000)
 	target.World.MoveSegment = &MoveSegment{
-		From:        Spawn{RegionID: 25000, X: 1050, Y: 20, Z: 1000},
+		From:        Spawn{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000},
 		StartedAtMs: t0,
 		ArrivesAtMs: t0 + 5000,
 	}
@@ -149,7 +149,7 @@ func TestMonsterChasePublishesContinuousStraightGuidanceAtProductionCadence(t *t
 	push := &fakePusher{}
 	target := playerSessionAt(1, 1550, 1000)
 	target.World.MoveSegment = &MoveSegment{
-		From:        Spawn{RegionID: 25000, X: 1050, Y: 20, Z: 1000},
+		From:        Spawn{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000},
 		StartedAtMs: t0,
 		ArrivesAtMs: t0 + 5000,
 	}
@@ -181,7 +181,7 @@ func TestMonsterChaseRefreshesWhenTargetMovementSettles(t *testing.T) {
 	push := &fakePusher{}
 	target := playerSessionAt(1, 1100, 1000)
 	target.World.MoveSegment = &MoveSegment{
-		From:        Spawn{RegionID: 25000, X: 1090, Y: 20, Z: 1000},
+		From:        Spawn{RegionID: monsterTestRegion, X: 1090, Y: 20, Z: 1000},
 		StartedAtMs: t0,
 		ArrivesAtMs: t0 + 100,
 	}
@@ -205,7 +205,7 @@ func TestMonsterChaseRefreshesWhenTargetMovementSettles(t *testing.T) {
 }
 
 func TestMonsterMovementSourceTurnThresholdIsStrictlyGreaterThan45Degrees(t *testing.T) {
-	from := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
+	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
 	mover := monster.MoverState{Pose: from} // wire heading 0 faces +X
 	destinationAt := func(angle float64) monster.Pose {
 		return monster.Pose{

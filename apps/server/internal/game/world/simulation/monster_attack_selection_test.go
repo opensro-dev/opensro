@@ -22,7 +22,7 @@ func TestChaseTicksRetainAttackWithoutChoiceDraws(t *testing.T) {
 	if !ops.Monsters.ArmRetaliation(monsterTestDivision, actor.Gid, PlayerObjectID(1)) {
 		t.Fatal("retaliation refused")
 	}
-	target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1200, Y: 20, Z: 1000}, BodyRadius: 4}
+	target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1200, Y: 20, Z: 1000}, BodyRadius: 4}
 	for tick := int64(100000); tick <= 100500; tick += 100 {
 		ops.advanceInstance(monsterTestDivision, actor, []playerPose{target}, tick)
 		mover, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)

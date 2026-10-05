@@ -216,33 +216,35 @@ func TestWallBreaksRetiresAndBlocksASecondWall(t *testing.T) {
 
 /*
 ================
-TestWallCastReleasesItsWaitAtTheCastingTime
+TestWallRootsItsCasterUntilItRetires
 
-CastLifecycle_ProcessPersistent (5830B0) sends the mode-1 release once the
-wall stands. Without it the client held the casting pose for the wall's
-whole life.
+The wall path of CastLifecycle_ProcessPersistent (584337) never releases
+the cast (no mode-1 B505), and the caster's moves are dropped while the
+wall stands (4EF880 -> 4AAB40, char+C08). Once the wall breaks the caster
+walks again.
 ================
 */
-func TestWallCastReleasesItsWaitAtTheCastingTime(t *testing.T) {
-	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
-	skill := shippedOffense(t, "SKILL_CH_COLD_BINGBYEOK_A_01")
-	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
-	c.Skills = append(c.Skills, skill.ID)
-	c.CurrentMP = testInt64(10000)
-	start := clock.NowMs()
-	rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
-	released := int64(0)
-	for i := 0; i < 30 && released == 0; i++ {
+func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
+	rt, clock, c, mob := wallFixture(t, crystalWallA1, 5)
+	for i := 0; i < 50; i++ {
 		clock.Advance(100 * time.Millisecond)
 		for _, burst := range rt.TickHook()(clock.NowMs()) {
 			for _, f := range burst.Frames {
 				if f.Opcode == wire.OpSkillEffectControl && len(f.Payload) > 0 && f.Payload[0] == 1 {
-					released = clock.NowMs()
+					t.Fatal("the wall's cast was released (mode 1)")
 				}
 			}
 		}
 	}
-	if released == 0 || released-start < int64(skill.ActionCastingTimeMs) {
-		t.Fatalf("wall release at %d ms, casting time %d ms", released-start, skill.ActionCastingTimeMs)
+	if !rt.PlayerAttackLocked(testDivision, c.Name) {
+		t.Fatal("the caster may walk out of a standing wall")
+	}
+	rt.wallMu.Lock()
+	rt.walls[wallKey(testDivision, c.Name)].pool = 1
+	rt.wallMu.Unlock()
+	wallHit(t, rt, clock, c, mob)
+	rt.TickHook()(clock.NowMs() + 1)
+	if rt.PlayerAttackLocked(testDivision, c.Name) {
+		t.Fatal("the caster stays rooted after the wall broke")
 	}
 }

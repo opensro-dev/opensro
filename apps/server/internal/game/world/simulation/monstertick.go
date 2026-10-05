@@ -11,6 +11,7 @@ package simulation
 import (
 	"math"
 	"opensro.online/server/internal/domain"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/item/wire"
@@ -381,6 +382,39 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, instance monste
 	}
 	// Private consequences follow the public result in the same operation.
 	deliverMonsterTargetFrames(divisionID, targeted, sessions, push)
+	ops.vanishInSafeZone(divisionID, instance.Gid, nowMs)
+}
+
+/*
+================
+vanishInSafeZone
+
+CGObjMob_SetRegionLeavingSafeZone (CGObjMob vtable +0x3AC, 4C1270): a
+monster whose region changes to one that is not a battlefield (a town,
+_RefRegion.IsBattleField 0) is set to life state 3 through vtable +0x1F0
+(CGObjChar_SetLifeStateAndNotify 4A9C80). From alive that state skips the
+death broadcast: the monster vanishes without a kill or a reward, and its
+nest respawns it (560D00). This is why monsters never walk into a town.
+================
+*/
+func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowMs int64) {
+	mover, ok := ops.Monsters.Mover(divisionID, gid)
+	if ok && SafeZoneRegion(mover.LivePoseAt(nowMs, nil).RegionID) {
+		ops.Monsters.Defeat(divisionID, gid, time.UnixMilli(nowMs))
+	}
+}
+
+/*
+================
+SafeZoneRegion
+
+A region _RefRegion marks as no battlefield. A region the table does not
+know is not one, as 52943E refuses unknown regions separately.
+================
+*/
+func SafeZoneRegion(region uint16) bool {
+	allowed, known := worldgeom.RegionPlayerCombat(region)
+	return known && !allowed
 }
 
 /*

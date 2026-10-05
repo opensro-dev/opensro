@@ -134,6 +134,7 @@ import {
 } from "@/engine/foundation/gameplay/social";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
 import {
+	skillAdmitsPredictedTarget,
 	skillCatalog,
 	skillMpCost,
 	skillTrainingReason,
@@ -382,6 +383,10 @@ would turn it.
 			local.appearanceState?.[0] === 2 || localCastHolds( now ) || combat.predicting() ||
 			combat.guidedActive( localGid, now )
 		) return;
+		// The native press animates only on the server's answer (6FCD50), so
+		// a target the row may not admit (an NPC, a player in town, the caster
+		// for an enemy skill) predicts nothing: it would animate and snap back.
+		if ( target && !skillAdmitsPredictedTarget( metadata, target, localGid ) ) return;
 		if ( target && target.gid !== localGid ) {
 			if ( target.kind === "monster" && target.appearanceState?.[0] === 2 || !withinReach( metadata, target ) ) {
 				return;
@@ -498,7 +503,10 @@ holds until it ends, as before.
 	function localCastHolds( now: number ): boolean {
 		return combat.state().casts.some( c => {
 			if ( c.caster !== localGid || c.cancelledAtMs !== undefined ) return false;
-			const actionMs = catalog.find( row => row.id === c.skill )?.actionMs;
+			const row = catalog.find( row => row.id === c.skill );
+			// A wall's cast holds until the wall retires (cast-motion-lock).
+			if ( row?.holdsCaster ) return true;
+			const actionMs = row?.actionMs;
 			return !actionMs || c.receivedAtMs === undefined || now - c.receivedAtMs < actionMs;
 		} );
 	}
@@ -558,12 +566,24 @@ coming, so retain its menu, dialogue and lock until a new request.
 			reopen: npcConversation.state().phase === "closed"
 		} );
 		if ( frame ) npcConversation.clear();
+		markTarget( entity );
+		return frame;
+	}
+	/*
+================
+markTarget
+
+The one selection decal (CIODecal) rides entity. A ground click moves it to
+the clicked point; an attack or skill at a target brings it back, so the
+ring stays under what the player fights and the spent move marker goes.
+================
+	*/
+	function markTarget( entity: EntityState ) {
 		selectionDecal = {
 			kind: "target",
 			gid: entity.gid,
 			slot: entity.kind === "monster" || entity.kind === "cos" ? 3 : entity.kind === "player" ? 2 : 1
 		};
-		return frame;
 	}
 	/*
 ================
@@ -1769,14 +1789,24 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "attack" ) {
 				const frame = combat.attack( entity.gid );
 				movement.holdForCast( now );
+				markTarget( entity );
 				return sendFrame( frame );
 			}
 			if ( command.kind !== "skill" ) throw Error( "Unsupported gameplay command" );
 			const frame = combat.skill( command.skillId, entity.gid );
 			movement.holdForCast( now );
+			if ( entity.gid !== localGid ) markTarget( entity );
 			const pressedSkill = command.skillId;
 			const pressedMetadata = catalog.find( row => row.id === pressedSkill );
 			predictCast( pressedMetadata, entity, local, now );
+			// Only a target the row admits stands a cooldown in: any other is the
+			// server's to refuse, and its stand-in showed a cooldown that vanished.
+			const admitted = !!pressedMetadata && skillAdmitsPredictedTarget( pressedMetadata, entity, localGid );
+			if ( !admitted ) {
+				sendFrame( frame );
+				skillPress.sent( now, command.skillId );
+				return frame;
+			}
 			return sendSkillPress(
 				frame,
 				command.skillId,

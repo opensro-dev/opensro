@@ -3223,6 +3223,8 @@ export function createCharacterPresentation(
 					cameraTarget = {
 						height,
 						mounted: !!riding,
+						// Actor yaw is pi minus the native yaw (characterHeadingYaw).
+						yaw: Math.PI - rendered.yaw,
 						pose: {
 							regionId: rendered.regionId,
 							x: rendered.x,
