@@ -131,6 +131,7 @@ export function createHudResources(
 		"ifguildpositiongrant",
 		"ifguildgrantpower",
 		"ifallianceguild",
+		"ifexchange",
 		"ifallianceguildslot",
 		"ifcos",
 		"ifcosinventory",

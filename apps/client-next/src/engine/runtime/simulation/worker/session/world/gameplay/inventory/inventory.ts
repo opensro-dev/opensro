@@ -47,6 +47,14 @@ import {
 	buybackEntries
 } from "@/engine/foundation/gameplay/commerce";
 import { decodeInventoryItem } from "@/engine/foundation/gameplay/inventory-item";
+import {
+	applyExchangeSwap,
+	emptyExchange,
+	exchangeFrame,
+	exchangeRequest,
+	type ExchangeCommand
+} from "@/engine/foundation/gameplay/exchange";
+import type { ExchangeState } from "@/engine/contracts/item-process";
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 /*
@@ -83,6 +91,9 @@ export function createInventory(
 		} | null = null,
 		error: string | null = null;
 	let itemCooldowns: readonly ItemCooldown[] = [];
+	// The open player exchange (exchange.ts): its offers name bag slots, so
+	// the swap it reports lands on this owner's slots.
+	let exchange: ExchangeState = emptyExchange();
 	let timedOut = false;
 	let bindingMoves: import("@/engine/foundation/gameplay/quickslot-inventory").QuickslotInventoryMove[] = [];
 	let shop: import("@/engine/foundation/gameplay/commerce").ShopState | undefined;
@@ -420,6 +431,7 @@ bootstrap
 			presentations = new WeakMap();
 			alchemy.reset();
 			gacha.reset();
+			exchange = emptyExchange();
 			mall.reset();
 			mallDelivery = null;
 			tooltipRefs.clear();
@@ -512,6 +524,35 @@ bootstrap
 process
 ================
 		*/
+		/*
+================
+exchangeReceive
+
+Folds an exchange frame; returns null when the frame is not the
+exchange's, else the category-1 notice code it raised (0 for none).
+================
+		*/
+		exchangeReceive( frame: import("@/engine/contracts/network").WireFrame ): number | null {
+			const outcome = exchangeFrame( exchange, frame, refs, objRefs );
+			if ( !outcome ) return null;
+			if ( outcome.swap ) {
+				slots = applyExchangeSwap( slots, outcome.swap, equipmentSlotCount ?? 13, inventorySlotCount ?? 45 );
+				published = null;
+			}
+			exchange = outcome.state;
+			return outcome.notice ?? 0;
+		},
+		/*
+================
+exchangeCommand
+================
+		*/
+		exchangeCommand( command: ExchangeCommand ) {
+			const frame = exchangeRequest( exchange, command );
+			if ( command.kind === "exchange-request" ) exchange = { ...exchange, requesting: true };
+			send( frame );
+			return frame;
+		},
 		process( command: ItemProcessCommand, now: number ) {
 			if ( command.kind === "alchemy-open" ) {
 				alchemy.open();
@@ -1587,6 +1628,13 @@ state
 				avatarInventory: [ ...avatars.values() ].map( present ),
 				alchemy: alchemy.state(),
 				gacha: gacha.state(),
+				exchange: exchange.open || exchange.requesting ?
+					{
+						...exchange,
+						own: exchange.own.map( row => ({ ...row, item: present( row.item ) }) ),
+						theirs: exchange.theirs.map( row => ({ ...row, item: present( row.item ) }) )
+					} :
+					undefined,
 				shop: presentShop(),
 				shopCompletionRevision,
 				inventorySlotCount,
@@ -1612,6 +1660,7 @@ clear
 			magicRefs = itemMagicReferences( undefined );
 			alchemy.reset();
 			gacha.reset();
+			exchange = emptyExchange();
 			mall.reset();
 			mallDelivery = null;
 			shop = undefined;

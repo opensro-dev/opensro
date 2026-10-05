@@ -19,6 +19,7 @@
     "src/engine/runtime/ui/hud/job-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/fortress-war-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/union-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/exchange-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/grant-power-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/slot-effects.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/departure.ts": "src/engine/runtime/simulation/worker/session/world/world.ts",

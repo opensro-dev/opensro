@@ -9,6 +9,9 @@ commands and cannot bypass actor eligibility.
 
 ===========================================================================
 */
+// CGInterface_ExecuteActionCommand 695420: 1000 + 6 asks the selected
+// player to trade.
+const ACTION_EXCHANGE = 1006;
 import {
 	ACTION_FORTRESS_RETURN,
 	FORTRESS_PORTAL_NOTICE_CATEGORY,
@@ -1493,7 +1496,19 @@ state here before a command can claim a native wire conversation.
 				);
 				return null;
 			}
+			if ( command.kind.startsWith( "exchange-" ) ) {
+				if ( !localGid ) throw Error( "Local player is not initialized" );
+				return inventory.exchangeCommand(
+					command as import("@/engine/foundation/gameplay/exchange").ExchangeCommand
+				);
+			}
 			if ( command.kind === "action-command" ) {
+				// 695420 case 1006: the selected player is asked to trade (0x7237).
+				if ( command.id === ACTION_EXCHANGE ) {
+					const target = readEntity( targeting.state().target ?? 0 );
+					if ( !localGid || !target || target.kind !== "player" || target.gid === localGid ) return null;
+					return inventory.exchangeCommand( { kind: "exchange-request", gid: target.gid } );
+				}
 				if ( command.id === ACTION_FORTRESS_RETURN ) {
 					const request = fortressReturnRequest( fortress, social.guild?.name, fortressPortalUntilMs - now );
 					if ( "frame" in request ) return sendFrame( request.frame );
@@ -2187,6 +2202,17 @@ Packet handling must not depend on which HUD panel is currently open.
 						if ( gid === localGid || cosRecords.has( gid ) ) play( "SND_LEVUP", now );
 					}
 					return true;
+				}
+				// The exchange window (inventory owner) folds its frames first; its
+				// confirm, approve and cancel refusals stay the social lane's notices.
+				const exchangeNotice = inventory.exchangeReceive( frame );
+				if ( exchangeNotice !== null ) {
+					dirty = true;
+					if ( exchangeNotice ) {
+						const notice = inventoryNotice( 0xb06d, Uint8Array.of( 2, exchangeNotice ), localCountry );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+					if ( ![ 0xb095, 0xb34a, 0xb2db ].includes( frame.opcode ) ) return true;
 				}
 				const nextSocial = socialPacket( social, frame, { country: localCountry } );
 				if ( nextSocial ) {

@@ -273,7 +273,8 @@ export type GameplayCommand =
 	| { readonly kind: "npc-talk"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
 	| { readonly kind: "npc-close"; }
-	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand;
+	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand
+	| import("@/engine/foundation/gameplay/exchange").ExchangeCommand;
 /*
 ================
 InventoryItem
@@ -480,6 +481,7 @@ export interface GameplayState {
 	readonly weather?: import("@/engine/foundation/gameplay/weather").WeatherOptions;
 	readonly alchemy?: import("./item-process").AlchemyState;
 	readonly gacha?: import("./item-process").GachaState;
+	readonly exchange?: import("./item-process").ExchangeState;
 	readonly targetCapabilities?: number;
 	readonly targetTaxRate?: number;
 	readonly shopCompletionRevision?: number;

@@ -11,6 +11,9 @@ Visibility gates new requests, never collection of outstanding work.
 ===========================================================================
 */
 
+// CGInterface_ExecuteActionCommand 695420 case 1006: trade with the
+// selected player.
+const ACTION_EXCHANGE = 1006;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import { companionItemTargetCommand } from "@/engine/foundation/gameplay/cos-item-use";
 import {
@@ -119,6 +122,7 @@ import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
 import { createFortressWarHud } from "./hud/fortress-war-hud";
 import { createUnionHud } from "./hud/union-hud";
+import { createExchangeHud } from "./hud/exchange-hud";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { allianceButtons, allianceLeader } from "@/engine/foundation/ui/alliance-guild";
 import {
@@ -610,6 +614,7 @@ export function createUi(
 	const jobHud = createJobHud();
 	const fortressWarHud = createFortressWarHud();
 	const unionHud = createUnionHud();
+	const exchangeHud = createExchangeHud();
 	const grantPowerHud = createGrantPowerHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
@@ -1137,7 +1142,7 @@ export function createUi(
 		}
 		if (
 			id === 1000 || id === 1001 || id === TRACE_ACTION_ID || id === 5000 || id >= 4000 && id <= 4006 ||
-			id === ACTION_FORTRESS_RETURN
+			id === ACTION_FORTRESS_RETURN || id === ACTION_EXCHANGE
 		) {
 			sendGameplay( { kind: "action-command", id } );
 		}
@@ -2095,6 +2100,15 @@ export function createUi(
 		} else if ( id === "guild-union-invite" ) {
 			// 701190 sends the selected player (a mounted COS stands for its rider).
 			if ( view.gameplay?.target ) sendGameplay( { kind: id, gid: view.gameplay.target } );
+		} else if ( id === "exchange-confirm" || id === "exchange-cancel" ) {
+			sendGameplay( { kind: id } );
+		} else if ( id === "exchange-gold-set" ) {
+			sendGameplay( { kind: "exchange-gold", amount: Number( exchangeHud.gold() || 0 ) } );
+		} else if ( id.startsWith( "exchange-my:" ) ) {
+			const slot = Number( id.slice( 12 ) );
+			if ( view.gameplay?.exchange?.own.some( row => row.slot === slot ) ) {
+				sendGameplay( { kind: "exchange-take", slot } );
+			}
 		} else if ( id === "union-sort:name" || id === "union-sort:level" ) {
 			unionHud.sortBy( id === "union-sort:name" ? "name" : "level" );
 		} else if ( id === "guild-union-exit" ) unionHud.ask( { kind: "exit", guild: 0, name: "" } );
@@ -3878,6 +3892,11 @@ export function createUi(
 						}
 						return;
 					}
+					// CIFExchange: a bag item dropped on the own side goes on the table.
+					if ( item && target && !target.disabled && target.id.startsWith( "exchange-my:" ) ) {
+						sendGameplay( { kind: "exchange-put", slot: item.slot } );
+						return;
+					}
 					if (
 						item && target && !target.disabled && panel === "Alchemy" && target.id.startsWith( "alchemy-" )
 					) {
@@ -4615,7 +4634,9 @@ export function createUi(
 				else if ( event.id === "social-subject" ) socialSubject = event.value;
 				else if ( event.id === "social-contents" ) socialContents = event.value;
 				else if ( event.id === "social-amount" ) socialAmount = event.value;
-				else if ( event.id === "gm-input" ) consoleText = event.value;
+				else if ( event.id === "exchange-gold" ) {
+					exchangeHud.type( event.value, Number( view?.gameplay?.progression?.gold ?? 0 ) );
+				} else if ( event.id === "gm-input" ) consoleText = event.value;
 				else if ( event.id === "chat-text" ) chatText = event.value.slice( 0, 100 );
 				else if ( event.id === "chat-target" ) chatTarget = event.value;
 				else if ( event.id === "account" ) account = event.value;
@@ -10964,6 +10985,89 @@ export function createUi(
 					}
 					endWindow( admission, "service:COS inventory" );
 				}
+				/*
+				================
+				exchangeWindow
+
+				CIFExchange (ginterface GDR_EXCHANGE, resinfo\ifexchange.txt): the
+				partner's twelve slots and gold above, the own below, the money
+				button and the confirm button that locks and then approves (6B2280).
+				================
+				*/
+				function exchangeWindow() {
+					const state = game?.exchange, root = hudData?.root.GDR_EXCHANGE, page = hudData?.windows.ifexchange;
+					if ( !state?.open || !root || !page ) {
+						exchangeHud.reset();
+						return;
+					}
+					const admission = beginWindow(),
+						[px, py] = windowOrigin( "Exchange", [
+							Math.max( 0, w / 2 - root.rect[2] - 8 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						partner = next.entities.find( e => e.gid === state.partner );
+					nativeFrame(
+						root,
+						px,
+						py,
+						hudCopy( root.text ) + (partner ? " - " + partner.name : ""),
+						"exchange-cancel"
+					);
+					nativePage( page, px, py, [ 11, 12, 15 ] );
+					for ( const id of [ 13, 14 ] ) authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
+					for (
+						const [rows, base, mine] of [ [ state.theirs, 100, false ], [ state.own, 200, true ] ] as const
+					) {
+						for ( let slot = 0; slot < 12; slot++ ) {
+							const node = at( base + slot ),
+								r = authoredRect( node, px, py ),
+								row = rows.find( offer => offer.slot === slot );
+							const icon = row ? iconPath( row.item.icon ) : null;
+							if ( row && icon ) {
+								image( r, icon );
+								itemCount( row.item, r );
+							}
+							controls.push( {
+								id: (mine ? "exchange-my:" : "exchange-their:") + slot,
+								label: row?.item.name ?? "Exchange slot " + slot,
+								rect: r,
+								kind: "button",
+								disabled: mine && state.ownLocked
+							} );
+						}
+					}
+					authoredText( { ...at( 18 ), rect: [ 71, 152, 100, 16 ] }, px, py, String( state.theirGold ) );
+					partyEdit(
+						{ ...at( 19 ), rect: [ 71, 296, 100, 16 ] },
+						px,
+						py,
+						"exchange-gold",
+						exchangeHud.gold() || String( state.ownGold ),
+						12
+					);
+					authoredButton(
+						at( 15 ),
+						px,
+						py,
+						"exchange-gold-set",
+						hudCopy( "UIIT_STT_GOLD" ),
+						state.ownLocked
+					);
+					authoredLabeledButton(
+						at( 11 ),
+						px,
+						py,
+						"exchange-confirm",
+						hudCopy( at( 11 ).text ),
+						state.approved || state.ownLocked && !state.theirLocked
+					);
+					authoredLabeledButton( at( 12 ), px, py, "exchange-cancel", hudCopy( at( 12 ).text ) );
+					endWindow( admission );
+				}
+				exchangeWindow();
 				/*
 				================
 				grantPanel
