@@ -7,10 +7,22 @@ Loads the images the interface asks for, retries failures with backoff,
 and keeps recent inactive images below 48 MiB / 480 entries (LRU). Runs
 every frame while demand is unsettled, so it allocates nothing per entry.
 
+An image the published manifest lacks is not a fault to retry. The native
+slot icon setters (CIFSlotWithHelp 55B450, CIFSlotWithHelpForPackage
+56E4A0) load icon\icon_default.ddj when the requested icon fails, so an
+absent icon is served the default under its own path, and every window that
+draws that icon shows it. Any other absent image draws nothing, as a native
+static with no texture does.
+
 ===========================================================================
 */
 
 import type { AssetOwner } from "@/engine/contracts/assets";
+
+const ICON_ROOT = "/assets/images/Media_extracted/icon/";
+const DEFAULT_ICON = ICON_ROOT + "icon_default.png";
+// Remembered absent paths beyond current demand are dropped past this count.
+const MAX_REMEMBERED_ABSENT = 480;
 
 /*
 ================
@@ -33,7 +45,9 @@ export function createUiAssets(
 	const pending = new Map<string, number>();
 	const loaded = new Map<string, readonly [number, number]>();
 	const failures = new Map<string, { attempts: number; retryAt: number; message: string; }>();
-	const missingCrests = new Set<string>();
+	// Paths no load will deliver (absent images, unreadable crests) and absent
+	// icons that ride icon_default. Both outlive demand up to a bound.
+	const missing = new Set<string>(), fallback = new Set<string>();
 	const crest = ( path: string ) => /\/marks\/[GA][0-9]{1,10}_[0-9]{1,10}_[0-9]{1,10}\.crb$/.test( path );
 	let disposed = false;
 	let wanted = new Set<string>();
@@ -135,8 +149,10 @@ export function createUiAssets(
 				}
 			}
 			trim();
-			for ( const path of missingCrests ) {
-				if ( !wanted.has( path ) && missingCrests.size > 480 ) missingCrests.delete( path );
+			for ( const remembered of [ missing, fallback ] ) {
+				for ( const path of remembered ) {
+					if ( !wanted.has( path ) && remembered.size > MAX_REMEMBERED_ABSENT ) remembered.delete( path );
+				}
 			}
 			for ( const path of failures.keys() ) {
 				if ( !wanted.has( path ) ) {
@@ -156,7 +172,18 @@ export function createUiAssets(
 					clearFailure( path, "recovered" );
 					changed = true;
 				} else if ( crest( path ) ) {
-					missingCrests.add( path );
+					missing.add( path );
+					changed = true;
+				} else if ( result.kind === "error" && result.absent ) {
+					// The next pass requests icon_default under this path; a default
+					// that is itself absent, or any other image, stays blank.
+					if ( path.startsWith( ICON_ROOT ) && path !== DEFAULT_ICON && !fallback.has( path ) ) {
+						fallback.add( path );
+					} else {
+						missing.add( path );
+						report( { kind: "failed", path, attempts: 1, message: result.error } );
+					}
+					clearFailure( path, "released" );
 					changed = true;
 				} else {
 					fail( path, result.kind === "error" ? result.error : "Expected UI image", now );
@@ -165,7 +192,7 @@ export function createUiAssets(
 			}
 			for ( const path of wanted ) {
 				if (
-					missingCrests.has( path ) || loaded.has( path ) || pending.has( path ) ||
+					missing.has( path ) || loaded.has( path ) || pending.has( path ) ||
 					(failures.get( path )?.retryAt ?? -Infinity) > now
 				) continue;
 				if ( assets.available() === 0 ) break;
@@ -173,7 +200,7 @@ export function createUiAssets(
 					pending.set(
 						path,
 						assets.request(
-							new URL( path, base ).href,
+							new URL( fallback.has( path ) ? DEFAULT_ICON : path, base ).href,
 							crest( path ) ? 256 : 4 * 1024 * 1024,
 							crest( path ) ? "crest" : "png"
 						)
@@ -186,7 +213,7 @@ export function createUiAssets(
 			settled = pending.size === 0 && failures.size === 0;
 			if ( settled ) {
 				for ( const path of wanted ) {
-					if ( !loaded.has( path ) && !missingCrests.has( path ) ) {
+					if ( !loaded.has( path ) && !missing.has( path ) ) {
 						settled = false;
 						break;
 					}
@@ -205,7 +232,7 @@ export function createUiAssets(
 		stats() {
 			let pending = 0;
 			for ( const path of wanted ) {
-				if ( !loaded.has( path ) && !failures.has( path ) && !missingCrests.has( path ) ) pending++;
+				if ( !loaded.has( path ) && !failures.has( path ) && !missing.has( path ) ) pending++;
 			}
 			return { pending, failed: [ ...failures.keys() ] };
 		},
@@ -259,7 +286,8 @@ export function createUiAssets(
 			loaded.clear();
 			evictions++;
 			failures.clear();
-			missingCrests.clear();
+			missing.clear();
+			fallback.clear();
 			wanted.clear();
 			if ( errors.length ) throw new AggregateError( errors, "UI image cleanup failed" );
 		}

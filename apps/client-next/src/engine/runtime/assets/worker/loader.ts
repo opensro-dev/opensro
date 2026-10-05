@@ -27,7 +27,7 @@ import type { WorldTexture } from "@/engine/contracts/texture";
 import { pngBytes, DECODED_IMAGE_BYTES } from "@/engine/foundation/assets/image-budget";
 import { createWorldDecoder } from "./world/world";
 import { createModelDecoder } from "./model/model";
-import { createPacks } from "./packs/packs";
+import { AssetAbsentError, createPacks } from "./packs/packs";
 import { createBackgroundInstaller } from "./install";
 import { pageEntryBundle } from "@/engine/foundation/assets/page-entry";
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
@@ -538,7 +538,12 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		} catch ( error ) {
 			if ( !disposed && pending.get( request.id ) === controller ) {
 				pending.delete( request.id );
-				send( { kind: "error", id: request.id, error: String( error ) }, [] );
+				send( {
+					kind: "error",
+					id: request.id,
+					error: String( error ),
+					...(error instanceof AssetAbsentError ? { absent: true as const } : {})
+				}, [] );
 			}
 		} finally {
 			active.delete( controller );
