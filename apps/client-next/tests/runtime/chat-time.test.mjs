@@ -51,10 +51,29 @@ test("the chat owner stamps each received line with the wall clock", () => {
 });
 
 test("the time is shown in the viewer's time zone to the second", () => {
+	mock.method( Date, "now", () => NOON_UTC + 60_000 );
 	assert.equal( chatLineTime( NOON_UTC, { locale: "en-GB", timeZone: "UTC" } ), "12:00:05" );
 	assert.equal( chatLineTime( NOON_UTC, { locale: "en-GB", timeZone: "America/New_York" } ), "07:00:05" );
 	assert.equal( chatLineTime( undefined ), "" );
 	assert.equal( chatLineTime( Number.NaN ), "" );
+	mock.restoreAll();
+});
+
+test("a line from an earlier day also names its date; one from today does not", () => {
+	const tenPastNine = Date.UTC( 2026, 0, 16, 9, 10, 0 );
+	mock.method( Date, "now", () => tenPastNine );
+	// The day before in UTC: the date comes first.
+	assert.equal( chatLineTime( NOON_UTC, { locale: "en-GB", timeZone: "UTC" } ), "15/01/2026, 12:00:05" );
+	// Earlier the same day: time only.
+	assert.equal( chatLineTime( tenPastNine - 3_600_000, { locale: "en-GB", timeZone: "UTC" } ), "08:10:00" );
+	// "Today" is the viewer's day: 04:10 in New York is still the 16th, and
+	// 07:00 on the 15th there is the day before.
+	assert.equal(
+		chatLineTime( NOON_UTC, { locale: "en-GB", timeZone: "America/New_York" } ),
+		"15/01/2026, 07:00:05"
+	);
+	assert.equal( chatLineTime( tenPastNine - 60_000, { locale: "en-GB", timeZone: "America/New_York" } ), "04:09:00" );
+	mock.restoreAll();
 });
 
 test("a chat row publishes its line's time as hover text, and a line without one publishes none", () => {
