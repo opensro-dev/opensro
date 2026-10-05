@@ -2,11 +2,11 @@ package wire
 
 import "fmt"
 
-// Action-pane command wire contracts: the 0x324B emote/action channel and
-// the 0x7025 fortress war horn. Both requests are composed by the client's
-// Action-command dispatcher sub_695420 / CGInterface_ExecuteActionCommand;
-// every layout below is pinned to that fold and to the client's inbound
-// handlers (addresses cited per constant).
+// Action-pane command wire contracts: the 0x324B emote/action channel the
+// client's Action-command dispatcher sub_695420 /
+// CGInterface_ExecuteActionCommand composes; every layout below is pinned
+// to that fold and to the client's inbound handlers (addresses cited per
+// constant).
 
 // OpActionEmote is BOTH directions of the emote/action channel - the native
 // client sends AND receives opcode 0x324B with different bodies:
@@ -88,30 +88,4 @@ func DecodeActionEmotePush(payload []byte) (ActionEmotePush, error) {
 	out.Gid = gid
 	out.Action = action
 	return out, r.Done()
-}
-
-// OpWarHornRequest is the C->S fortress war horn: [u32 warId], the guild-war
-// id sub_7e24b0 / GuildWarTable_GetWarIdByGuildName resolved from the live
-// fortress-war name. Sender sub_703650 / CGInterface_SendRequest7025,
-// reached only from sub_695420 case 0xf (cmd 0x3f7) after the client's own
-// gates: fortress-war name non-empty, war id != 0, action cooldown == 0.
-const OpWarHornRequest uint16 = 0x7025
-
-// OpWarHornNotice is the S->C war-horn ack/notice channel the client
-// consumes (sub_7674c0 / CNetProcessSecond_OnPacket_B025): [u8 flag], then
-// [u8 code] ONLY when flag == 2, raised as system notice category 0x1f.
-// Any other flag is ignored by the client. The exact flag/code bytes the
-// retail GameServer emits are NOT pinned yet (open frontier, C2 verify
-// server-wave seq 43), so this server does not emit the opcode - the
-// constant documents the consumer for the day fortress-war state lands.
-const OpWarHornNotice uint16 = 0xB025
-
-// DecodeWarHornRequest parses a C->S 0x7025 body: exactly one u32 war id.
-func DecodeWarHornRequest(payload []byte) (uint32, error) {
-	r := NewReader(payload)
-	warID, err := r.U32()
-	if err != nil {
-		return 0, err
-	}
-	return warID, r.Done()
 }

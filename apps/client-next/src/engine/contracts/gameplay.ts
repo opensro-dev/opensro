@@ -494,6 +494,9 @@ export interface GameplayState {
 	readonly fortressApplication?:
 		& import("@/engine/foundation/gameplay/fortress").FortressApplication
 		& { readonly sequence: number; };
+	// When the action window's fortress portal (1015) may be used again,
+	// on the simulation clock.
+	readonly fortressPortalUntilMs?: number;
 	readonly musicMode?: number;
 	readonly social?: import("@/engine/foundation/gameplay/social").SocialState;
 	readonly skillCatalog?: readonly import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata[];

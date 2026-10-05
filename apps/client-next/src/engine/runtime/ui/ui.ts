@@ -11,6 +11,7 @@ Visibility gates new requests, never collection of outstanding work.
 ===========================================================================
 */
 
+import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import { companionItemTargetCommand } from "@/engine/foundation/gameplay/cos-item-use";
 import {
 	createStoragePanel,
@@ -1126,7 +1127,10 @@ export function createUi(
 			sendGameplay( { kind: "helper-mark" } );
 			return;
 		}
-		if ( id === 1000 || id === 1001 || id === TRACE_ACTION_ID || id === 5000 || id >= 4000 && id <= 4006 ) {
+		if (
+			id === 1000 || id === 1001 || id === TRACE_ACTION_ID || id === 5000 || id >= 4000 && id <= 4006 ||
+			id === ACTION_FORTRESS_RETURN
+		) {
 			sendGameplay( { kind: "action-command", id } );
 		}
 	}

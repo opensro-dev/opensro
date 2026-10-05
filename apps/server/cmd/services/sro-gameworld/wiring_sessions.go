@@ -15,7 +15,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/community"
 	"opensro.online/server/internal/transport"
 )
@@ -100,12 +102,17 @@ func (game *gameplayPlane) worldBound(
 	game.guildInvites.WorldBound(divisionID, character)
 	game.mentorInvites.WorldBound(session, divisionID, character)
 	var guildID int64
+	var cooldown []wire.Frame
 	authorityStore.ReadState(func() {
 		if character.GuildID != nil {
 			guildID = *character.GuildID
 		}
+		cooldown = action.FortressReturnCooldownFrames(character, game.items.Now().UnixMilli())
 	})
 	game.siege.WorldBound(session, guildID)
+	for _, frame := range cooldown {
+		_ = session.Send(frame.Opcode, frame.Payload)
+	}
 	game.chat.WorldBound(session, divisionID)
 }
 

@@ -50,6 +50,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(0x7341, rt.hubHandler(hub, rt.HandleBerserk))
 	hub.Handle(0x7495, rt.hubHandler(hub, rt.HandlePortal))
 	hub.Handle(opFortressInteraction, rt.hubHandler(hub, rt.HandleFortressInteraction))
+	hub.Handle(opFortressReturn, rt.hubHandler(hub, rt.HandleFortressReturn))
 	hub.Handle(opNpcRepairRequest, rt.hubHandler(hub, rt.HandleNpcRepair))
 	hub.Handle(opJobJoinRequest, rt.hubHandler(hub, rt.HandleJobJoin))
 	hub.Handle(opJobWithdrawRequest, rt.hubHandler(hub, rt.HandleJobWithdraw))

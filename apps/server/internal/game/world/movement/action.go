@@ -1,7 +1,7 @@
-// Action-pane commands on the motion lane: the 0x324B emote/action channel
-// and the 0x7025 fortress war horn. Both requests originate from the same
-// client dispatcher as sit/stand and run/walk (sub_695420 /
-// CGInterface_ExecuteActionCommand), and the emote's whole effect is a
+// Action-pane commands on the motion lane: the 0x324B emote/action channel.
+// The request originates from the same client dispatcher as sit/stand and
+// run/walk (sub_695420 / CGInterface_ExecuteActionCommand), and the emote's
+// whole effect is a
 // SetMotionState on every viewing client - the same plane the rest of this
 // package drives - so they live here rather than in the item or stat lanes
 // (progression is explicitly a no-broadcast plane; action is the item plane).
@@ -11,8 +11,6 @@
 package movement
 
 import (
-	"fmt"
-
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -23,10 +21,10 @@ import (
 // session, the frames for the division peers (origin excluded by the
 // register glue), and the refusal reason when the request was rejected.
 // Refusals ship NO packets: the emote channel has no error consumer in the
-// client at all (the only inbound 0x324B path is the play push), and the
-// war-horn notice bytes are unpinned (see HandleWarHorn) - so the wire
-// stays silent and the reason lives in the log, the same convention as a
-// refused move.
+// client at all (the only inbound 0x324B path is the play push) - so the
+// wire stays silent and the reason lives in the log, the same convention
+// as a refused move. The action window's fortress return (0x7025) belongs
+// to the action package (fortress_return.go).
 type ActionOutcome struct {
 	Frames    []wire.Frame
 	Broadcast []wire.Frame
@@ -37,12 +35,11 @@ func refusedAction(reason string) ActionOutcome {
 	return ActionOutcome{Refusal: reason}
 }
 
-// RegisterActions wires the action-pane handlers (0x324B emote, 0x7025 war
-// horn) onto the hub. Kept separate from Register so the movement lane and
+// RegisterActions wires the action-pane handler (0x324B emote) onto the
+// hub. Kept separate from Register so the movement lane and
 // the action lane can land independently; server.go calls both.
 func (rt *Runtime) RegisterActions(hub *transport.Hub) {
 	hub.Handle(wire.OpActionEmote, rt.actionHubHandler(hub, rt.HandleActionEmote))
-	hub.Handle(wire.OpWarHornRequest, rt.actionHubHandler(hub, rt.HandleWarHorn))
 }
 
 // actionOpFunc is one transport-free action operation.
@@ -123,41 +120,4 @@ func (rt *Runtime) HandleActionEmote(divisionID string, character *enterworld.Ch
 		Frames:    []wire.Frame{frame},
 		Broadcast: []wire.Frame{frame},
 	}
-}
-
-// HandleWarHorn answers a C->S 0x7025 fortress war horn: strict decode
-// (exactly one u32 war id), then an unconditional REFUSAL, because this
-// server holds no fortress-war state at all - there is no war table to
-// validate the id against, so every id is unknown and accepting any would
-// be more permissive than retail (which resolves the id against the live
-// GuildWarTable the client mirrored it from).
-//
-// The refusal is SILENT by evidence, not by laziness: the client's only
-// consumer is the 0xB025 notice (sub_7674c0, [u8 flag][u8 code if flag==2]
-// -> notice 0x1f), and the exact flag/code bytes the retail GameServer
-// emits are unpinned (C2 verify, server-wave seq 43) - emitting guessed
-// bytes would invent a wire contract. A retail-faithful ACCEPT would also
-// have to drive the 0x3792 [02][05][u32 seconds] action-cooldown re-arm;
-// both belong to the wave that lands fortress-war state. Until then the
-// request cannot even be composed by the retail UI here (the client
-// refuses locally while no fortress war is live), so anything arriving is
-// hostile or future - logged, never answered.
-func (rt *Runtime) HandleWarHorn(divisionID string, character *enterworld.Character, payload []byte) ActionOutcome {
-	if character == nil {
-		return refusedAction("characterNotFound")
-	}
-
-	unlock := rt.lockCharacter(divisionID, character.Name)
-	defer unlock()
-
-	snapshot := rt.characterSnapshot(divisionID, character)
-	if snapshot == nil || snapshot.DeletePending {
-		return refusedAction("deletePending")
-	}
-	warID, err := wire.DecodeWarHornRequest(payload)
-	if err != nil {
-		return refusedAction(err.Error())
-	}
-	return refusedAction(fmt.Sprintf(
-		"warId %d unknown: no fortress-war state on this server; 0xB025 refusal bytes unpinned vs retail, wire stays silent", warID))
 }

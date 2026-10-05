@@ -9,6 +9,13 @@ commands and cannot bypass actor eligibility.
 
 ===========================================================================
 */
+import {
+	ACTION_FORTRESS_RETURN,
+	FORTRESS_PORTAL_NOTICE_CATEGORY,
+	fortressPortalCooldown,
+	fortressReturnRefusal,
+	fortressReturnRequest
+} from "@/engine/foundation/gameplay/fortress-return";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
 import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
@@ -431,6 +438,8 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	const skillGroups = new Map<number, { group: number; level: number; }>();
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
 	let fortressApplication: (FortressApplication & { readonly sequence: number; }) | null = null;
+	// CIFActionTabPanel +0x390: when the fortress portal may be used again.
+	let fortressPortalUntilMs = 0;
 	let social = emptySocial();
 	// The world catalog's lookups, bound by the composition root (core).
 	let worldReferences: WorldReferences = { country: () => undefined, playerModels: () => [], item: () => undefined };
@@ -608,6 +617,7 @@ selected entities, cooldowns or world-entry state.
 		social = emptySocial();
 		fortress = fortressBootstrap( {} );
 		fortressApplication = null;
+		fortressPortalUntilMs = 0;
 		musicMode = 0;
 		bindings = skillBindings( {} );
 		catalog = [];
@@ -1484,6 +1494,14 @@ state here before a command can claim a native wire conversation.
 				return null;
 			}
 			if ( command.kind === "action-command" ) {
+				if ( command.id === ACTION_FORTRESS_RETURN ) {
+					const request = fortressReturnRequest( fortress, social.guild?.name, fortressPortalUntilMs - now );
+					if ( "frame" in request ) return sendFrame( request.frame );
+					const notice = constantNativeNotice( FORTRESS_PORTAL_NOTICE_CATEGORY, request.code );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return null;
+				}
 				if ( command.id === TRACE_ACTION_ID ) {
 					const selection = targeting.state();
 					const target = readEntity( selection.target ?? 0 );
@@ -2002,6 +2020,19 @@ Packet handling must not depend on which HUD panel is currently open.
 						if ( kept.length >= 8 ) throw Error( "COS window capacity" );
 						cosWindows = [ ...kept, windowUpdate.timer ];
 					}
+					dirty = true;
+					return true;
+				}
+				const portalSeconds = fortressPortalCooldown( frame );
+				if ( portalSeconds !== null ) {
+					fortressPortalUntilMs = now + portalSeconds * 1000;
+					dirty = true;
+					return true;
+				}
+				const portalRefusal = fortressReturnRefusal( frame );
+				if ( portalRefusal !== null ) {
+					const notice = constantNativeNotice( FORTRESS_PORTAL_NOTICE_CATEGORY, portalRefusal );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;
 				}
@@ -2956,6 +2987,7 @@ The published plane when something changed since the last take, else null.
 				social,
 				fortress,
 				...(fortressApplication ? { fortressApplication } : {}),
+				...(fortressPortalUntilMs ? { fortressPortalUntilMs } : {}),
 				skillCatalog: catalog,
 				progression,
 				cosRecords: [ ...cosRecords.values() ].map( record => {
