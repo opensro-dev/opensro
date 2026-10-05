@@ -14,6 +14,7 @@
     "src/engine/runtime/presentation/effective-hp.ts": "src/engine/runtime/presentation/presentation.ts",
     "src/engine/runtime/ui/hud/quest-timers.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/cos-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/auto-potion-input.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/repair-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/skin-change-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/job-hud.ts": "src/engine/runtime/ui/ui.ts",

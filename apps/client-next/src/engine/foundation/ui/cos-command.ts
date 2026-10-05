@@ -75,13 +75,14 @@ export interface CosReference {
 ================
 cosClass
 
-830EC0 @0x830FF6..0x831068. A band the original does not classify (quest
-companions) gets no HUD.
+830EC0 initializes the command class to zero at 830F66. Quest companions
+(band 6) retain that default and receive the riding-class HUD.
 ================
 */
 export function cosClass( band: number ): number | null {
 	switch ( band ) {
 		case 1:
+		case 6:
 			return COS_CLASS_RIDING;
 		case 2:
 			return COS_CLASS_TRANSPORT;

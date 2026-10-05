@@ -8,9 +8,10 @@ cos-item-use.test.mjs - pet item wire targets and satiety publication
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { cosItemUseTail, companionItemTargetCommand } = await import(
-	"../../src/engine/foundation/gameplay/cos-item-use.ts"
-);
+const { cosItemUseTail, companionItemTargetCommand, autoPotionTarget, autoPotionTargetNotice, createCosSelection } =
+	await import(
+		"../../src/engine/foundation/gameplay/cos-item-use.ts"
+	);
 
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
@@ -31,7 +32,11 @@ test("all pet recovery and cure families carry the selected owned GID", () => {
 	for ( const type of [ flags( 1, 4 ), flags( 1, 5 ), flags( 1, 7 ), flags( 1, 9 ), flags( 2, 7 ) ] ) {
 		assert.deepEqual( cosItemUseTail( type, [], { records: [ pet ] } ), Uint8Array.of( 41, 35, 0, 0 ) );
 		assert.throws( () => cosItemUseTail( type, [], { records: [ pet ], selectedGid: 99 } ), /owned companion/ );
-		assert.throws( () => cosItemUseTail( type, [], { records: [ { ...pet, dead: true } ] } ), /owned companion/ );
+		assert.deepEqual(
+			cosItemUseTail( type, [], { records: [ { ...pet, dead: true, hp: 0 } ] } ),
+			Uint8Array.of( 41, 35, 0, 0 ),
+			"native client lets server decide dead-target admission"
+		);
 	}
 	assert.deepEqual( cosItemUseTail( flags( 1, 1 ), [] ), new Uint8Array() );
 	assert.throws( () => cosItemUseTail( flags( 1, 9 ), [], { records: [ { ...pet, band: 4 } ] } ) );
@@ -165,4 +170,158 @@ test("renewal and revival drag targets use owned summoner slots", () => {
 		slot: 25,
 		revivalSlot: 24
 	} );
+});
+
+test("automatic pet use requires the selected compatible companion and preserves retries", () => {
+	for ( const group of [ 1, 2 ] ) {
+		for ( const subtype of group === 1 ? [ 4, 5, 7, 9 ] : [ 7 ] ) {
+			const tid = flags( group, subtype );
+			assert.equal( autoPotionTarget( tid, [], 9001 ), null );
+			assert.equal( autoPotionTarget( tid, [ pet ], 9999 ), null );
+			for ( const band of [ 4, 5 ] ) assert.equal( autoPotionTarget( tid, [ { ...pet, band } ], 9001 ), null );
+			assert.equal( autoPotionTarget( tid, [ pet, { ...pet, gid: 9002 } ], 9002 )?.selectedGid, 9002 );
+		}
+	}
+	assert.equal(
+		autoPotionTarget( flags( 1, 6 ), [ pet ], 9001 ),
+		null,
+		"quickslot revival has no dragged summoner slot"
+	);
+	for ( const satiety of [ 9900, 9999, 10000 ] ) {
+		assert.equal( autoPotionTarget( flags( 1, 9 ), [ { ...pet, satiety } ], 9001 ), null );
+	}
+	assert.ok( autoPotionTarget( flags( 1, 9 ), [ { ...pet, satiety: 9899 } ], 9001 ) );
+});
+
+test("structure repair carries the current target window GID, including no target", () => {
+	assert.deepEqual( cosItemUseTail( flags( 1, 10 ), [] ), Uint8Array.of( 0, 0, 0, 0 ) );
+	assert.deepEqual(
+		cosItemUseTail( flags( 1, 10 ), [], autoPotionTarget( flags( 1, 10 ), [], 0, 0x12345678 ) ?? undefined ),
+		Uint8Array.of( 0x78, 0x56, 0x34, 0x12 )
+	);
+});
+
+test("native guild representative selection survives additional soldiers and removal", () => {
+	const selection = createCosSelection(), records = new Map();
+	const first = { ...pet, gid: 100, band: 5 }, second = { ...first, gid: 101 };
+	for ( const record of [ first, pet, second ] ) {
+		records.set( record.gid, record );
+		selection.add( record, records );
+	}
+	assert.equal( selection.selected(), pet.gid, "additional soldier does not steal the selected pet" );
+	assert.deepEqual( selection.statusRecords( records ).map( record => record.gid ), [ first.gid, pet.gid ] );
+	selection.remove( first.gid, records );
+	records.delete( first.gid );
+	assert.equal( selection.selected(), pet.gid, "removing the representative preserves selection" );
+	assert.deepEqual( selection.statusRecords( records ).map( record => record.gid ), [ first.gid, pet.gid ] );
+	selection.remove( pet.gid, records );
+	records.delete( pet.gid );
+	assert.equal( selection.selected(), pet.gid, "native first-tab selection refuses its now missing representative" );
+	assert.equal( autoPotionTarget( flags( 1, 4 ), [ ...records.values() ], selection.selected() ), null );
+	selection.remove( second.gid, records );
+	records.delete( second.gid );
+	assert.equal( selection.selected(), 0 );
+	const next = { ...first, gid: 102 };
+	records.set( next.gid, next );
+	selection.add( next, records );
+	assert.equal( selection.selected(), next.gid );
+	assert.deepEqual( selection.statusRecords( records ).map( record => record.gid ), [ next.gid ] );
+	selection.reset();
+	assert.equal( selection.selected(), 0 );
+});
+
+test("quest companions select their native default class while unknown removals preserve selection", () => {
+	const selection = createCosSelection(), records = new Map();
+	for ( const record of [ pet, { ...pet, gid: 9002 }, { ...pet, gid: 9003, band: 6 } ] ) {
+		records.set( record.gid, record );
+		selection.add( record, records );
+	}
+	assert.equal( selection.selected(), 9003 );
+	assert.equal( autoPotionTarget( flags( 1, 4 ), [ ...records.values() ], selection.selected() )?.selectedGid, 9003 );
+	selection.remove( 9999, records );
+	assert.equal( selection.selected(), 9003 );
+	selection.remove( 9003, records );
+	records.delete( 9003 );
+	assert.equal( selection.selected(), 9001, "ordinary removal selects the first status tab" );
+	selection.select( 9002, records );
+	selection.select( 9999, records );
+	assert.equal( selection.selected(), 9002 );
+});
+
+test("owned COS packet lifecycle publishes the same selection used by automatic items", () => {
+	const gameplay = createGameplay( () => {} );
+	gameplay.bootstrap( {
+		refObjSnapshot: [
+			{ kind: "cos", refObjId: 6106, tidWord: 0x19c6 },
+			{ kind: "cos", refObjId: 8000, tidWord: 0x29c6 }
+		]
+	} );
+	gameplay.seed( {
+		gid: 1,
+		refObjId: 1,
+		kind: "local-player",
+		name: "Owner",
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0
+	} );
+	/*
+================
+add
+================
+	*/
+	function add( gid, guild ) {
+		const payload = new Uint8Array( guild ? 17 : 39 ), v = new DataView( payload.buffer );
+		v.setUint32( 0, gid, true );
+		v.setUint32( 4, guild ? 8000 : 6106, true );
+		v.setUint32( 8, 10, true );
+		if ( !guild ) payload[24] = 1;
+		gameplay.receive( { opcode: 0x3158, payload }, 0 );
+		return gameplay.take()?.selectedCosGid;
+	}
+	/*
+================
+remove
+================
+	*/
+	function remove( gid ) {
+		const payload = new Uint8Array( 4 );
+		new DataView( payload.buffer ).setUint32( 0, gid, true );
+		gameplay.receive( { opcode: 0x36ab, payload }, 1 );
+		return gameplay.take()?.selectedCosGid;
+	}
+	assert.equal( add( 100, true ), 100 );
+	assert.equal( add( 9001, false ), 9001 );
+	assert.equal( add( 101, true ), 9001 );
+	assert.equal( remove( 9999 ), 9001 );
+	assert.equal( remove( 100 ), 9001 );
+	assert.equal( remove( 9001 ), 9001 );
+	assert.equal( remove( 101 ), 0 );
+	assert.equal( add( 9002, false ), 9002 );
+	gameplay.resetWorld();
+	assert.equal( gameplay.take()?.selectedCosGid, 0 );
+	gameplay.dispose();
+});
+
+test("automatic companion refusal feedback distinguishes absent, incompatible, revival and full food", () => {
+	assert.deepEqual( autoPotionTargetNotice( flags( 1, 4 ), [], 0 ), {
+		key: "UIIT_MSG_COSPETERR_CANT_USEITEM",
+		value: 0,
+		nativeType: 5
+	} );
+	for ( const band of [ 4, 5 ] ) {
+		assert.equal(
+			autoPotionTargetNotice( flags( 1, 4 ), [ { ...pet, band } ], pet.gid )?.key,
+			"UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT"
+		);
+	}
+	assert.equal( autoPotionTargetNotice( flags( 1, 6 ), [], 0 )?.key, "UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT" );
+	assert.equal(
+		autoPotionTargetNotice( flags( 1, 9 ), [ { ...pet, satiety: 9900 } ], pet.gid )?.key,
+		"UIIT_MSG_COSPETERR_HGPFULL_NODRINK"
+	);
+	assert.equal( autoPotionTargetNotice( flags( 1, 9 ), [ { ...pet, satiety: 9899 } ], pet.gid ), null );
+	assert.equal( autoPotionTargetNotice( flags( 1, 1 ), [], 0 ), null );
 });
