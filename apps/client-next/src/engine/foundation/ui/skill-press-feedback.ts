@@ -133,6 +133,18 @@ export interface SkillQueueChip {
 
 /*
 ================
+skillQueueChipReach
+
+How far the chip's backing reaches above slot 1, in UI pixels (the
+onboarding tour lights that area).
+================
+*/
+export function skillQueueChipReach() {
+	return CHIP_GAP_PX + 2 * CHIP_PAD_PX + CHIP_PX;
+}
+
+/*
+================
 skillQueueChip
 
 The chip for the skill that casts next, centred above the slot rect anchor

@@ -8,14 +8,20 @@ original's own controls are left to the player and the native guide. Each
 step names the element it points at by a CSS selector: a DOM tool (the
 FPS chip, the bug launcher) or the transparent mirror the canvas UI keeps
 for every control (`data-ui-id`). A step waits until its element is on
-screen, so a contextual one (the party board) appears the first time the
-player is in a party instead of pointing at nothing.
+screen (the bug launcher shows only while bug reports are enabled) instead
+of pointing at nothing.
 
 The player's progress is the set of step ids seen, so a step added later
 is shown on its own to a player who already finished the tour.
 
 ===========================================================================
 */
+
+import { HOTBAR_PAGE_COUNT, hotbarSlot } from "@/engine/foundation/gameplay/quickslots";
+import { skillQueueChipReach } from "./skill-press-feedback";
+
+// GDR_TMPQS_* are 32 by 32 (ifunderbar).
+const QUICKSLOT_PX = 32;
 
 /*
 ================
@@ -25,8 +31,24 @@ TourStep
 export interface TourStep {
 	readonly id: string;
 	readonly target: string;
+	/** How far above its element the lit window reaches, in element heights. */
+	readonly reachAbove?: number;
 	readonly title: string;
 	readonly text: string;
+}
+
+/*
+================
+slotOneSelector
+
+Main bar key 1 on any page: the queued-skill chip sits above it
+(skill-press-feedback.ts), and its control id follows the page.
+================
+*/
+function slotOneSelector() {
+	const ids: string[] = [];
+	for ( let page = 0; page < HOTBAR_PAGE_COUNT; page++ ) ids.push( `[data-ui-id="hotbar:${hotbarSlot( page, 1 )}"]` );
+	return ids.join( "," );
 }
 
 /*
@@ -52,31 +74,12 @@ export function tourSteps(): readonly TourStep[] {
 				"if you allow it. Typing /bug in the chat opens it too."
 		},
 		{
-			id: "self-target",
-			target: '[data-ui-id="self-target"]',
-			title: "Target yourself",
-			text:
-				"Click your portrait to select your own character, so a buff or heal that needs a target lands on you."
-		},
-		{
 			id: "skill-queue",
-			target: '[data-ui-id="hotbar:0"]',
+			target: slotOneSelector(),
+			reachAbove: skillQueueChipReach() / QUICKSLOT_PX,
 			title: "Queued skills",
-			text:
-				"A skill pressed while another is still casting waits in a small icon over this slot and casts next. " +
+			text: "A skill pressed while another is still casting waits in a small icon above slot 1 and casts next. " +
 				"A refused press shakes its slot."
-		},
-		{
-			id: "chat-time",
-			target: '[data-ui-id^="chat-line:"]',
-			title: "Message time",
-			text: "Hover a chat line to see the local time it arrived."
-		},
-		{
-			id: "party-masteries",
-			target: '[data-ui-id^="party-target:"]',
-			title: "Party masteries",
-			text: "Each party member shows their two main masteries beside their name."
 		}
 	];
 }

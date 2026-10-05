@@ -13,7 +13,7 @@ import { itemActivation } from "./item-activation";
 export const TRACE_ACTION_ID = 1003;
 // actionwnddata 1011 "Helper status" (UIIT_STT_HELPER, icon_cha_helper).
 export const HELPER_ACTION_ID = 1011;
-const HOTBAR_PAGE_COUNT = 4;
+export const HOTBAR_PAGE_COUNT = 4;
 const HOTBAR_PAGE_SLOTS = 10;
 const EQUIPMENT_SLOT_COUNT = 13;
 const QUICK_SLOT_COUNT = 51;

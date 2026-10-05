@@ -213,10 +213,10 @@ export function createOnboarding( apiBase: string ) {
 			show( null );
 			return;
 		}
-		const box = element.getBoundingClientRect();
-		const left = box.left - SPOT_PADDING, top = box.top - SPOT_PADDING;
-		spot.style.left = left + "px";
-		spot.style.top = top + "px";
+		const elementBox = element.getBoundingClientRect(), reach = elementBox.height * (current!.reachAbove ?? 0);
+		const box = new DOMRect( elementBox.x, elementBox.y - reach, elementBox.width, elementBox.height + reach );
+		spot.style.left = box.left - SPOT_PADDING + "px";
+		spot.style.top = box.top - SPOT_PADDING + "px";
 		spot.style.width = box.width + SPOT_PADDING * 2 + "px";
 		spot.style.height = box.height + SPOT_PADDING * 2 + "px";
 		const width = bubble.offsetWidth, height = bubble.offsetHeight;
