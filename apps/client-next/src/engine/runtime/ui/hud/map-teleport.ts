@@ -3,6 +3,9 @@
 
 map-teleport.ts - world map double-click teleport target
 
+DELIBERATE ADDITION, NOT NATIVE: retail's world map handles only mouse move,
+down and up (CIFWorldMap_OnMouseMessage 57F430). This is a GM-only port tool.
+
 A double-click on the world map picks an outdoor point and asks
 for confirmation; Yes issues the existing GM coordinate warp. The server owns
 privilege, area, surface and stranding checks, and snaps the unknown height
@@ -15,6 +18,10 @@ import type { UiRect } from "@/engine/contracts/ui";
 import { worldMapPoint } from "@/engine/foundation/ui/world-map";
 
 const MAP_WARP_UNKNOWN_Y = -10000;
+// MAP_WARP_LOCAL_MAX keeps a printed coordinate inside its region: the server
+// rejects a local x or z of 1920 (ResolveGMWarpDestination), and toFixed(1)
+// would round 1919.96 up to it.
+const MAP_WARP_LOCAL_MAX = 1919.9;
 
 /*
 ================
@@ -52,7 +59,8 @@ export function createMapTeleport() {
 			pending = null;
 		},
 		command( target: MapTeleportTarget ): string {
-			return `/warp ${target.regionId} ${target.x.toFixed( 1 )} ${MAP_WARP_UNKNOWN_Y} ${target.z.toFixed( 1 )}`;
+			const x = Math.min( target.x, MAP_WARP_LOCAL_MAX ), z = Math.min( target.z, MAP_WARP_LOCAL_MAX );
+			return `/warp ${target.regionId} ${x.toFixed( 1 )} ${MAP_WARP_UNKNOWN_Y} ${z.toFixed( 1 )}`;
 		}
 	};
 }

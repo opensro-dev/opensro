@@ -411,13 +411,8 @@ export function createUiBridge(
 		const slot = current( event.target );
 		if ( slot?.value.kind === "region" ) {
 			// Regions report where, in UI pixels.
-			const box = canvas.getBoundingClientRect(), scale = displayScale();
-			emit( {
-				kind: "region-double",
-				id: slot.value.id,
-				x: (event.clientX - box.left) / scale,
-				y: (event.clientY - box.top) / scale
-			} );
+			const [x, y] = uiPoint( event );
+			emit( { kind: "region-double", id: slot.value.id, x, y } );
 			return;
 		}
 		if ( slot?.value.kind === "button" && !slot.value.disabled ) {

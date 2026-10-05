@@ -53,4 +53,9 @@ test("confirmed target becomes a terrain-snapped GM warp line", () => {
 	assert.equal( teleport.command( target ), "/warp 24744 980.0 -10000 1100.0" );
 	teleport.clear();
 	assert.equal( teleport.pending(), null );
+	assert.equal(
+		teleport.command( { regionId: 24744, x: 1919.96, z: 0.04 } ),
+		"/warp 24744 1919.9 -10000 0.0",
+		"a region-edge pick stays inside its region"
+	);
 });
