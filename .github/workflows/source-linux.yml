@@ -68,6 +68,17 @@ jobs:
     if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The Go gate spread over four runners: on one 4-core runner its steps
+    # fought for the CPU (race 271 s). Each shard gets the whole machine.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - { name: static, gates: "tidy,tidy (lint tool),gofmt,vet,govulncheck,release contract" }
+          - { name: lint, gates: "golangci-lint" }
+          - { name: tests, gates: "tests" }
+          - { name: race, gates: "race" }
+    name: server-source (${{ matrix.shard.name }})
     steps:
       - uses: actions/checkout@v7
         with:
@@ -78,14 +89,32 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: apps/server/go.mod
-          cache-dependency-path: apps/server/go.sum
-      # tidy, gofmt, vet, golangci-lint, tests, race, govulncheck, release contract.
-      - name: Go server gate
+          # The build, test and lint caches below are keyed per commit;
+          # setup-go's go.sum-only key never saved a newer cache.
+          cache: false
+      - name: Go build, test and lint caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          # Each run saves under its commit and restores the newest cache of
+          # the same shard and go.sum: unchanged packages keep their cached
+          # test results and compiled objects.
+          key: go-${{ matrix.shard.name }}-${{ hashFiles('apps/server/go.sum', 'apps/server/tools/golangci-lint/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ matrix.shard.name }}-${{ hashFiles('apps/server/go.sum', 'apps/server/tools/golangci-lint/go.sum') }}-
+      - name: Go server gate (${{ matrix.shard.gates }})
+        env:
+          SRO_GO_GATES: ${{ matrix.shard.gates }}
         run: node scripts/checks/check_go_server.mjs
       - name: Repeated handshake accounting
+        if: matrix.shard.name == 'race'
         working-directory: apps/server
         run: go test -race -count=100 -run '^TestTransportMetricsEndpoint$' ./internal/transport
       - name: Windows build of the server and its operator tools
+        if: matrix.shard.name == 'static'
         working-directory: apps/server
         env:
           GOOS: windows

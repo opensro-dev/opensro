@@ -31,6 +31,8 @@ Measured 2026-09-29: the projection outside the module made a fully cached
 run cost 105s, because Go resolved symlinks for each of ~89k logged file
 operations per package; inside it, a cached run of every package takes 10s.
 SRO_GO_TEST_CACHE=off restores -count=1 (flake hunting).
+SRO_GO_GATES=label,label runs only the named steps (CI spreads the gate
+over parallel runners); an unknown label is an error, never a silent pass.
 
 On Windows every Go command runs with the C compiler's own directory first
 on PATH. Git for Windows ships older copies of the MinGW runtime DLLs in
@@ -123,70 +125,95 @@ const testKeys = [
 ];
 
 const testArgs = [ "test", `-p=${packageParallelism}`, ...(testCache ? [] : [ "-count=1" ]), "./..." ];
-await wave( "all", [
-	{
-		label: "tidy",
-		command: "go",
-		args: [ "mod", "tidy", "-diff" ],
-		select: isModuleGo,
-		keys: [ toolchain, stepEnvironment ]
-	},
-	{
-		label: "tidy (lint tool)",
-		command: "go",
-		args: [ "-C", path.dirname( lintModfile ), "mod", "tidy", "-diff" ],
-		select: isLintTool,
-		keys: [ toolchain, stepEnvironment ]
-	},
-	{
-		label: "gofmt",
-		command: "gofmt",
-		args: [ "-l", "cmd", "internal" ],
-		accept: ( output ) => output.trim().length === 0,
-		select: isFormatted,
-		keys: [ toolchain, stepEnvironment ]
-	},
-	{ label: "vet", command: "go", args: [ "vet", "./..." ], select: isModuleGo, keys: [ toolchain, stepEnvironment ] },
-	{
-		label: "golangci-lint",
-		command: "go",
-		args: [ "tool", `-modfile=${lintModfile}`, "golangci-lint", "run", "./..." ],
-		select: ( file ) => isModuleGo( file ) || isLintTool( file ) || file === "apps/server/.golangci.yml",
-		keys: [ toolchain, stepEnvironment ]
-	},
-	{ label: "tests", command: "go", args: testArgs, select: () => true, keys: testKeys },
-	{
-		label: "race",
-		command: "go",
-		args: [ "test", "-race", ...(testCache ? [] : [ "-count=1" ]), ...racePackages ],
-		select: () => true,
-		keys: testKeys
-	},
-	{
-		// Only production code is scanned; the result also moves with the
-		// vulnerability database, so its modification time is a key.
-		label: "govulncheck",
-		command: "go",
-		args: [ "tool", "govulncheck", "./..." ],
-		select: isScannedGo,
-		keys: [ `=vulndb ${vulnerabilityDatabase}`, toolchain, stepEnvironment ]
-	},
-	{
-		// The compiled release protocol and schema must be what
-		// compatibility.json declares; release preparation checks the same.
-		label: "release contract",
-		command: "go",
-		args: [ "run", "./cmd/operations/sro-release-contract" ],
-		accept: matchesDeclaredServerContract,
-		select: ( file ) => isModuleGo( file ) || file === "apps/server/ops/release/compatibility.json",
-		keys: [ toolchain, stepEnvironment ]
-	}
-] );
+await wave(
+	"all",
+	selectSteps( process.env.SRO_GO_GATES, [
+		{
+			label: "tidy",
+			command: "go",
+			args: [ "mod", "tidy", "-diff" ],
+			select: isModuleGo,
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{
+			label: "tidy (lint tool)",
+			command: "go",
+			args: [ "-C", path.dirname( lintModfile ), "mod", "tidy", "-diff" ],
+			select: isLintTool,
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{
+			label: "gofmt",
+			command: "gofmt",
+			args: [ "-l", "cmd", "internal" ],
+			accept: ( output ) => output.trim().length === 0,
+			select: isFormatted,
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{
+			label: "vet",
+			command: "go",
+			args: [ "vet", "./..." ],
+			select: isModuleGo,
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{
+			label: "golangci-lint",
+			command: "go",
+			args: [ "tool", `-modfile=${lintModfile}`, "golangci-lint", "run", "./..." ],
+			select: ( file ) => isModuleGo( file ) || isLintTool( file ) || file === "apps/server/.golangci.yml",
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{ label: "tests", command: "go", args: testArgs, select: () => true, keys: testKeys },
+		{
+			label: "race",
+			command: "go",
+			args: [ "test", "-race", ...(testCache ? [] : [ "-count=1" ]), ...racePackages ],
+			select: () => true,
+			keys: testKeys
+		},
+		{
+			// Only production code is scanned; the result also moves with the
+			// vulnerability database, so its modification time is a key.
+			label: "govulncheck",
+			command: "go",
+			args: [ "tool", "govulncheck", "./..." ],
+			select: isScannedGo,
+			keys: [ `=vulndb ${vulnerabilityDatabase}`, toolchain, stepEnvironment ]
+		},
+		{
+			// The compiled release protocol and schema must be what
+			// compatibility.json declares; release preparation checks the same.
+			label: "release contract",
+			command: "go",
+			args: [ "run", "./cmd/operations/sro-release-contract" ],
+			accept: matchesDeclaredServerContract,
+			select: ( file ) => isModuleGo( file ) || file === "apps/server/ops/release/compatibility.json",
+			keys: [ toolchain, stepEnvironment ]
+		}
+	] )
+);
 
 console.log(
 	`server gates: PASS (${packageParallelism} package workers, test cache ${testCache ? "on" : "off"}, ` +
 		`${formatSeconds( performance.now() - startedAt )}s)`
 );
+
+/*
+================
+selectSteps
+
+The steps a comma-separated label list names, in gate order; every step
+when the list is empty. A label no step has is a configuration error.
+================
+*/
+function selectSteps( list, steps ) {
+	const wanted = (list ?? "").split( "," ).map( ( label ) => label.trim() ).filter( Boolean );
+	if ( !wanted.length ) return steps;
+	const unknown = wanted.filter( ( label ) => !steps.some( ( step ) => step.label === label ) );
+	if ( unknown.length ) throw new Error( `SRO_GO_GATES names unknown steps: ${unknown.join( ", " )}` );
+	return steps.filter( ( step ) => wanted.includes( step.label ) );
+}
 
 /*
 ================
