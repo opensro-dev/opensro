@@ -51,9 +51,21 @@ Native does not wait for the entire preceding potion recovery sequence.
 Reuse admission and queued recovery are separate; accepting another potion
 while prior pulses remain is not by itself a parity defect.
 
-The broad audit remains open. Client 561DAA also checks flag-war state
-`CE883C != 0xFF` with the player's timed interaction byte at `+780`.
-The flag-war feature/lifecycle has no corresponding current port owner;
-this follow-up does not manufacture a flag to pretend that branch is closed.
-A complete native lifecycle equivalence proof and connected-player comparison
-also remain outside the verification above.
+Client 561DAA also contains a flag-war condition: `CE883C != 0xFF` with
+the player's timed interaction byte at `+780`. This initially looked like
+another missing activation guard. The v1.150 constructor 4B2EE0 calls reset
+4B1560; instruction 4B1589 stores `0xFF`. All code/data references to the
+state at CE8830..CE8840 were inspected, including event receiver 4B2530,
+world entry, target restriction and the revival dialog. The event receiver
+resets the marker and updates the participant tree, but does not activate
+the marker. No reachable non-FF writer was found in this binary. The gate
+is therefore classified as dormant for this v1.150 mission lifecycle,
+rather than inventing event state in the port. The old Binary Ninja label
+on wrapper 74F350 incorrectly called it a quickslot assignment; it now
+names the flag-war event receiver it actually calls.
+
+No known implementation gap remains in the mapped stall/repair follow-up.
+The original core oracle and this branch matrix provide bounded evidence;
+a complete machine-equivalence proof of the entire reachable call graph
+and a connected native-versus-webport player capture were not performed.
+They must not be inferred from passing unit and browser fixture tests.
