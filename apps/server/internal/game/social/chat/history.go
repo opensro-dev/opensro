@@ -5,8 +5,10 @@ history.go - bounded beta public chat and ordered session admission
 
 One runtime owns the public transcript and its recipients. Admission replays
 the last ten public messages before subscribing to live delivery under the
-same lock, preventing a message from being missed or replayed twice. Private
-channels never enter this owner. History is ephemeral and ends with the shard.
+same lock, preventing a message from being missed or replayed twice. The
+replay is one OpChatHistory frame, never live 0x3667 lines, so the client
+can tell a transcript from speech. Private channels never enter this owner.
+History is ephemeral and ends with the shard.
 
 ===========================================================================
 */
@@ -66,8 +68,8 @@ func (rt *Runtime) WorldBound(session *transport.Session, division string) {
 	if _, exists := rt.members[session.ID]; exists {
 		return
 	}
-	for _, payload := range rt.history[division] {
-		if err := session.Send(OpChatBroadcast, payload); err != nil {
+	if rows := rt.history[division]; len(rows) != 0 {
+		if err := session.Send(OpChatHistory, encodeChatHistory(rows)); err != nil {
 			return
 		}
 	}
@@ -112,4 +114,22 @@ func (rt *Runtime) publish(division string, payload []byte) {
 			_ = member.session.Send(OpChatBroadcast, payload)
 		}
 	}
+}
+
+/*
+================
+encodeChatHistory
+
+The OpChatHistory payload: version, count, then each retained 0x3667
+payload with its u16 length. The transcript holds at most ten lines, each
+bounded by the chat text limit, so the frame stays small.
+================
+*/
+func encodeChatHistory(rows [][]byte) []byte {
+	out := []byte{chatHistoryVersion, byte(len(rows))}
+	for _, row := range rows {
+		out = append(out, byte(len(row)), byte(len(row)>>8))
+		out = append(out, row...)
+	}
+	return out
 }

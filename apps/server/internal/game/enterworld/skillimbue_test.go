@@ -76,3 +76,25 @@ func TestImbueRefusesPartialAndUnknownPrograms(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestBasicAttackResumesOnlyOnOne
+
+CGCharAutoCommandActor_Handler_SkillCast compares ref +0x90 with exactly
+1 at 4AED19: Strong Bow (1) resumes the basic attack, Cold Wave (0) and a
+row authoring 2 (Sword Geomgi D) end it.
+================
+*/
+func TestBasicAttackResumesOnlyOnOne(t *testing.T) {
+	licensed.RequireGameData(t)
+	source := NewTextdataSkills(licensed.RetailTextdataDir(t))
+	if err := source.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[uint32]bool{87: true, 97: false, 18896: false} {
+		if got := source.rows.get(id).ContinueBasicAttack; got != want {
+			t.Errorf("skill %d resumes the basic attack = %v, want %v", id, got, want)
+		}
+	}
+}

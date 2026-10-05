@@ -24,11 +24,20 @@ def write_json(path, value):
 	path.write_text(json.dumps(value, separators=(",", ":"), ensure_ascii=True) + "\n", encoding="utf-8", newline="\n")
 
 
+# characterdata columns 99..108: five (item RefObjID, float probability)
+# pairs, read by CCharacterData_ParseTextRow (client 808670) into +0x23C /
+# +0x250. v1.188 _RefObjChar no longer carries them; v1.150 monsters drop
+# their own alchemy materials through them.
+MATERIAL_DROP_COLUMN = 99
+MATERIAL_DROP_PAIRS = 5
+
+
 # ================
 # read_media
 # ================
 def read_media(directory):
 	items, monsters, hashes = {}, set(), {}
+	material_pairs = []
 	for path in sorted(directory.glob("*data*.txt")):
 		if not path.name.startswith(("itemdata", "characterdata")):
 			continue
@@ -41,6 +50,11 @@ def read_media(directory):
 			code = cells[2]
 			if code.startswith("MOB_"):
 				monsters.add(code)
+				for pair in range(MATERIAL_DROP_PAIRS):
+					at = MATERIAL_DROP_COLUMN + pair * 2
+					item, probability = int(cells[at]), float(cells[at + 1])
+					if item:
+						material_pairs.append((code, item, probability))
 			elif path.name.startswith("itemdata"):
 				items[code] = {
 					"id": int(cells[1]), "codename": code, "type": list(map(int, cells[9:13])),
@@ -63,7 +77,14 @@ def read_media(directory):
 			else:
 				assign.append({"country": int(cells[1]), "type3": int(cells[2]), "type4": int(cells[3]),
 					"options": [value for value in cells[4:] if value != "xxx"]})
-	return {"items": items, "monsters": sorted(monsters), "magic": magic, "magicAssignments": assign, "hashes": hashes}
+	by_id = {row["id"]: code for code, row in items.items()}
+	material_drops = []
+	for monster, item, probability in material_pairs:
+		if item not in by_id:
+			raise ValueError("Material drop names no enabled client item: " + monster + " " + str(item))
+		material_drops.append({"monster": monster, "item": by_id[item], "probability": probability})
+	return {"items": items, "monsters": sorted(monsters), "magic": magic, "magicAssignments": assign,
+		"materialDrops": material_drops, "hashes": hashes}
 
 
 # ================

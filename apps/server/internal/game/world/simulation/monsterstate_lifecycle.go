@@ -492,6 +492,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	}
 	instance.CurrentHP = instance.EffectiveMaxHP()
 	state.instances.set(gid, instance)
+	armLifetimeLocked(state, instance, nowMs)
 	if instance.Rarity()&15 == 3 {
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(5, ref.RefObjID, ""))
 	}
@@ -604,6 +605,7 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(6, instance.Ref.RefObjID, "???"))
 	}
 	delete(state.uniqueDeaths, gid)
+	delete(state.lifetimes, gid)
 	state.instances.remove(gid)
 	state.forgetDormant(gid)
 	delete(state.contributions, gid)

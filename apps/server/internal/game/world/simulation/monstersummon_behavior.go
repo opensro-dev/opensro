@@ -133,7 +133,7 @@ func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance mons
 	}
 	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
 	target := plan.leader.LivePoseAt(nowMs, ops.TerrainHeight)
-	motion := monster.NativeFollowMotion(live, target, instance.Ref.BodyRadius, plan.leaderRadius,
+	motion := monster.NativeFollowMotion(live, target, instance.BodyRadius(), plan.leaderRadius,
 		mover.InFlight(nowMs), mover.MovementGoal(), func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	if motion.Satisfied {
 		// Event 36 -> vA0 ->5599A0 enters IDLE without stopping movement.

@@ -58,10 +58,10 @@ func TestCrossPlaneDetachPrecedesActivityAndIdle(t *testing.T) {
 func TestDetachedHomeRetainsNestGeometryAndTacticsGate(t *testing.T) {
 	a := monster.Instance{NestDetached: true, Ref: monster.MonsterRef{RunSpeed: 10}}
 	a.Nest.HasControls = true
-	a.Nest.RegionID, a.Spawn.RegionID = 25000, 25000
+	a.Nest.RegionID, a.Spawn.RegionID = monsterTestRegion, monsterTestRegion
 	a.Nest.X, a.Nest.Z, a.Nest.Radius = 100, 100, 20
 	a.Spawn.X, a.Spawn.Z = 500, 500
-	p := monster.Pose{RegionID: 25000, X: 125, Z: 100}
+	p := monster.Pose{RegionID: monsterTestRegion, X: 125, Z: 100}
 	if needsHoming(a, p) {
 		t.Fatal("detached actor without HomingData was constrained by its former nest")
 	}

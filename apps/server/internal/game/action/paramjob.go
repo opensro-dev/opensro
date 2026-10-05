@@ -15,10 +15,8 @@ The scroll's own COOLTIME group (Param6 milliseconds, Desc6
 "COOLTIME:0x..") gates reuse, and equals the job length in every shipped
 scroll, so two jobs of one scroll never overlap.
 
-USU1, BFI1 and UQL1 entries belong to the premium item-mall composites;
-their USU1 buff (SKILL_MALL_PRE_APRU_*: luck, alchemy luck, drop and
-STR/INT keepers over four weeks) has no effect owner yet, so this owner
-refuses those composites whole rather than grant half of one.
+The composites themselves, including the premium packages' other entries,
+are compositeitem.go's.
 
 ===========================================================================
 */
@@ -31,7 +29,6 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -45,6 +42,9 @@ const (
 	// time tickets raise them (premiumticket.go).
 	paramPremiumExpRate      uint16 = 0xba
 	paramPremiumSkillExpRate uint16 = 0xca
+	// paramDeathExpKept is the percent of a death's EXP loss kept (0x101,
+	// premiumticket.go; read by the death penalty, pkdeath.go).
+	paramDeathExpKept uint16 = 0x101
 )
 
 // paramJobFourCC maps the internal item's Param2 to a ParamKeeper id.
@@ -55,42 +55,11 @@ var paramJobFourCC = map[uint32]uint16{
 	0x73657275: paramSkillExpRate, // "urse"
 }
 
-// compositeUseInternalItem is the 49F590 entry tag that creates a param job.
-const compositeUseInternalItem = "UIU1"
-
 // paramJobCapacity bounds one character's live jobs.
 const paramJobCapacity = 8
 
 // itemCooltimePrefix opens the COOLTIME description (Desc6).
 const itemCooltimePrefix = "COOLTIME:"
-
-/*
-================
-compositeEntries
-
-The "[TAG:VALUE],[TAG:VALUE]" list of a composite scroll's Desc2. Any
-malformed entry rejects the whole list.
-================
-*/
-func compositeEntries(ref *enterworld.ItemRef) ([][2]string, bool) {
-	text := strings.TrimSpace(ref.ParamDescriptions[1])
-	if text == "" {
-		return nil, false
-	}
-	var out [][2]string
-	for _, part := range strings.Split(text, ",") {
-		part = strings.TrimSpace(part)
-		if !strings.HasPrefix(part, "[") || !strings.HasSuffix(part, "]") {
-			return nil, false
-		}
-		tag, value, found := strings.Cut(part[1:len(part)-1], ":")
-		if !found || tag == "" || value == "" {
-			return nil, false
-		}
-		out = append(out, [2]string{strings.TrimSpace(tag), strings.TrimSpace(value)})
-	}
-	return out, len(out) > 0
-}
 
 /*
 ================
@@ -184,6 +153,12 @@ The live value written to one parameter.
 ================
 */
 func paramJobPercent(character *enterworld.Character, param uint16, nowMs int64) int64 {
+	// CTJ_PremiumKeeper removes the premium keepers while the day's
+	// allotment is spent (premiumclock.go).
+	if (param == paramPremiumExpRate || param == paramPremiumSkillExpRate) && character.PremiumClock != nil &&
+		!premiumClockLive(character.PremiumClock, nowMs) {
+		return 0
+	}
 	var total int64
 	for _, job := range character.ParamJobs {
 		if job.Param == param && job.EndUnixMs > nowMs {
@@ -217,72 +192,6 @@ func paramJobRewardBonus(character *enterworld.Character, exp, skillExp int64, n
 
 /*
 ================
-useCompositeScroll
-
-TID 3/3/13/14 inside the item-use door: verify every entry before any
-state changes, debit the cooldown, consume one scroll and raise each job.
-================
-*/
-func (rt *Runtime) useCompositeScroll(divisionID string, character *enterworld.Character, ref *enterworld.ItemRef, rowIndex int, request wire.ItemUseRequest, nowMs int64, result *OpResult) bool {
-	entries, ok := compositeEntries(ref)
-	if !ok {
-		result.DiagnosticRefusal = "item-use: malformed composite list " + ref.Codename
-		return false
-	}
-	group, cooltimeMs, hasCooltime := itemCooltime(ref)
-	if hasCooltime && character.ItemGroupCooldowns[group] > nowMs {
-		*result = itemUseFailure(wire.ErrCodeItemReuseDelay)
-		return false
-	}
-	var jobs []domain.ParamJob
-	var internals []inventory.Item
-	for _, entry := range entries {
-		if entry[0] != compositeUseInternalItem {
-			result.DiagnosticRefusal = "item-use: composite entry " + entry[0] + " needs the item-mall premium owner (" + ref.Codename + ")"
-			return false
-		}
-		internal, found := rt.deps.ItemReferences().ItemRefByCodename(entry[1])
-		job, valid := paramJobFromItem(internal, nowMs)
-		if !found || !valid {
-			result.DiagnosticRefusal = "item-use: composite internal item " + entry[1] + " is not a param item"
-			return false
-		}
-		jobs = append(jobs, job)
-		internals = append(internals, inventory.Item{RefObjID: internal.RefObjID, Codename: internal.Codename, TypeFlags: internal.TypeFlags()})
-	}
-	next := append([]domain.ParamJob(nil), character.ParamJobs...)
-	for _, job := range jobs {
-		var placed bool
-		if next, placed = upsertParamJob(next, job); !placed {
-			return false
-		}
-	}
-	character.ParamJobs = next
-	if hasCooltime {
-		if character.ItemGroupCooldowns == nil {
-			character.ItemGroupCooldowns = map[uint32]int64{}
-		}
-		character.ItemGroupCooldowns[group] = nowMs + cooltimeMs
-	}
-	remaining := rt.consumeItemUseRow(character, rowIndex)
-	owner := enterworld.ObjectIDForCharacter(character)
-	// The internal items are never carried, so their references (icon,
-	// duration) reach the browser here, ahead of the rows that need them.
-	frames := []wire.Frame{
-		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
-		rt.commerceReferences(internals, nil),
-	}
-	for _, job := range jobs {
-		frames = append(frames, wire.Frame{Opcode: wire.OpParamJobStart,
-			Payload: wire.EncodeParamJobRow(owner, paramJobRemaining(job, nowMs), job.ItemRefObjID)})
-	}
-	*result = OpResult{Frames: append(frames, rt.updateQuestInventory(character)...)}
-	rt.paramJobOwners.track(divisionID, character.Name)
-	return true
-}
-
-/*
-================
 advanceParamJobs
 
 655110 retires a job once its deadline passes; 655180 removes the modifier
@@ -301,6 +210,10 @@ func (rt *Runtime) advanceParamJobs(nowMs int64) {
 			rt.paramJobOwners.forget(key)
 			continue
 		}
+		rt.advancePremiumClock(key, character, nowMs)
+		if board := rt.advanceCompositeJobs(character, nowMs); len(board) > 0 {
+			due = append(due, retirement{key: key, frames: board})
+		}
 		var frames []wire.Frame
 		empty := false
 		rt.deps.Update(character, "param-job-expiry", func() bool {
@@ -318,7 +231,7 @@ func (rt *Runtime) advanceParamJobs(nowMs int64) {
 					frames = append(frames, wire.Frame{Opcode: wire.OpParamJobEnd, Payload: wire.EncodeParamJobEnd(owner, job.ItemRefObjID)})
 				}
 			}
-			empty = len(kept) == 0
+			empty = len(kept) == 0 && character.PremiumClock == nil && len(character.CompositeJobs) == 0
 			if len(frames) == 0 {
 				return false
 			}

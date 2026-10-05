@@ -79,14 +79,18 @@ func testShippedSummonedChildDecisions(t *testing.T, rt *Runtime, refs map[uint3
 	if !s.ArmRetaliation("child", parent.Gid, wantedTarget) {
 		t.Fatal("leader opponent refused")
 	}
+	// A graded child runs at its grade's speed (gradescale.go) and may reach
+	// the opponent within the window: pursuit is judged when it acquires.
+	pursuing := false
 	for now := int64(15101); now <= 17101; now += 100 {
 		tick(now)
 		m, _ = s.Mover("child", child.Gid)
 		if m.TargetGID() == wantedTarget {
+			pursuing = m.InFlight(now)
 			break
 		}
 	}
-	if m.TargetGID() != wantedTarget || !m.InFlight(17101) {
+	if m.TargetGID() != wantedTarget || !pursuing {
 		t.Fatalf("child did not assist/pursue leader opponent: mode=%v target=%d", m.Mode(), m.TargetGID())
 	}
 	// Personal retaliation must beat a competing leader opponent.

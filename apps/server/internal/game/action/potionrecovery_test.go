@@ -14,6 +14,8 @@ package action
 import (
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
+	"strings"
 	"testing"
 	"time"
 )
@@ -73,7 +75,7 @@ func TestPotionQueueRetiresWithCharacterLifetime(t *testing.T) {
 			switch end {
 			case "death":
 				c.CurrentHP = testInt64(0)
-				rt.settlePlayerDeathInDoor(testDivision, c, clock.NowMs())
+				rt.settlePlayerDeathInDoor(testDivision, c, deathKiller{}, clock.NowMs())
 				c.CurrentHP = testInt64(1)
 			case "disconnect":
 				rt.ForgetCharacter(testDivision, c.Name)
@@ -87,5 +89,58 @@ func TestPotionQueueRetiresWithCharacterLifetime(t *testing.T) {
 				t.Fatalf("%s leaked queued healing", end)
 			}
 		})
+	}
+}
+
+/*
+================
+TestPotionReuseCanPrecedeFinalRecoveryPulse
+
+49B710 admits another Chinese absolute potion after its 1.1-second reuse
+lock, while 49A510 still owes pulses from the first. Only the queue front
+advances; the second potion's immediate credit does not replace that front.
+================
+*/
+func TestPotionReuseCanPrecedeFinalRecoveryPulse(t *testing.T) {
+	c, items, body := recoveryFixture(1)
+	c.ModelCodename = "CHAR_CH_MAN_ADVENTURER"
+	items["ITEM_ETC_HP_POTION_01"].RecoveryHP = 20
+	rt, clock := newTestRuntime(c, items)
+	rt.BindRecoverySession(testDivision, c, 1)
+	first := rt.HandleItemUse(testDivision, c, body)
+	if first.Frames[0].Payload[0] != 1 || enterworld.CurrentHP(c) != 5 {
+		t.Fatalf("first potion: HP %d, result %+v", enterworld.CurrentHP(c), first)
+	}
+	clock.Advance(time.Second)
+	rt.TickHook()(clock.NowMs())
+	if enterworld.CurrentHP(c) != 9 {
+		t.Fatalf("first queued pulse: HP %d", enterworld.CurrentHP(c))
+	}
+	clock.Advance(99 * time.Millisecond)
+	assertItemUseRefusedUnchanged(t, rt, c, body, wire.ErrCodeItemReuseDelay)
+	clock.Advance(time.Millisecond)
+	second := rt.HandleItemUse(testDivision, c, body)
+	if second.Frames[0].Payload[0] != 1 || enterworld.CurrentHP(c) != 13 {
+		t.Fatalf("reuse before first potion finishes: HP %d, result %+v", enterworld.CurrentHP(c), second)
+	}
+	for _, row := range c.MissionInventory {
+		if row.Slot == 21 && row.StackCount != 18 {
+			t.Fatalf("two accepted uses consumed %d potions", 20-row.StackCount)
+		}
+	}
+	clock.Advance(900 * time.Millisecond)
+	rt.TickHook()(clock.NowMs())
+	if enterworld.CurrentHP(c) != 17 {
+		t.Fatalf("queue advanced more than its first potion: HP %d", enterworld.CurrentHP(c))
+	}
+	// The host path above proves wiring. Finish just the potion timer so
+	// natural regeneration does not add unrelated credits to this total.
+	key := recoveryKey{testDivision, strings.ToLower(c.Name)}
+	for range 6 {
+		clock.Advance(time.Second)
+		rt.recoverPotionResident(key, clock.NowMs())
+	}
+	if enterworld.CurrentHP(c) != 41 {
+		t.Fatalf("two five-pulse potions lost or duplicated credit: HP %d", enterworld.CurrentHP(c))
 	}
 }

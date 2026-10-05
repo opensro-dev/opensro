@@ -167,10 +167,16 @@ char+C08 is set, i.e. a skill action has not yet released its positive-time
 step. CGObjPC_IsMotionChangeLocked (4EF880) feeds it to
 CGObjChar_HandleMoveCommand (4B0EA0), which drops a ground command in that
 state instead of queueing it: a player cannot walk out of a cast.
+
+A standing wall keeps its cast there: the wall path of 5830B0 never releases
+or closes it until the wall retires, and CGObjChar_OnTick (4A8976) stops any
+walk of a caster whose C08 cast is an ordinary one (activity 2). Its caster
+is rooted for the wall's life (the client agrees: its WAIT holds action
+state 2, CanPerformLocomotion 877240).
 ================
 */
 func (rt *Runtime) PlayerAttackLocked(division, name string) bool {
-	return rt.chainStageBlocked(division, name)
+	return rt.chainStageBlocked(division, name) || rt.wallStanding(division, name)
 }
 
 /*
@@ -511,7 +517,7 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 	o.hits = append(o.hits, abnormalHit{source: source, credited: credited, damage: damage, reason: reason})
 	if remaining == 0 {
 		o.fatal = true
-		o.deathEffects, o.deathTarget = o.rt.settlePlayerDeathInDoor(o.division, o.c, o.now)
+		o.deathEffects, o.deathTarget = o.rt.settlePlayerDeathInDoor(o.division, o.c, o.sources[source].killer, o.now)
 	}
 }
 
@@ -621,7 +627,7 @@ at its live point, body effects retire, and the death penalty commits in
 the same door as the lethal HP.
 ==================
 */
-func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Character, now int64) (effects, progression []wire.Frame) {
+func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Character, killer deathKiller, now int64) (effects, progression []wire.Frame) {
 	rt.clearPotionRecovery(division, c.Name)
 	state := rt.Worlds.Update(simulation.WorldKey(division, c.Name),
 		func() simulation.WorldState { return simulation.SeedWorldState(c) },
@@ -641,12 +647,12 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 	effects = append(effects, released...)
 	// CGObjPC_ProcessNormalDeath leaves battle (529C93) before the life change.
 	effects = append(effects, rt.leaveBattleState(division, c, now)...)
-	if rt.ApplyDeathPenalty != nil {
-		// This updater is explicitly door-free. Keeping it inside the fatal
-		// HP closure makes corpse state and any level>10 EXP loss one durable
-		// transition; packet routing happens after the door closes.
-		progression, _ = rt.ApplyDeathPenalty(c)
-	}
+	// The death's cost (pkdeath.go) commits in the fatal HP closure, so the
+	// corpse and its EXP loss, drop and PK relief are one durable
+	// transition; packet routing happens after the door closes.
+	cost := rt.settleDeathCostInDoor(division, c, killer, now)
+	effects = append(effects, cost.public...)
+	progression = cost.actor
 	if rt.ReleaseQuestCapturesOnDeath != nil {
 		frames, _ := rt.ReleaseQuestCapturesOnDeath(c)
 		progression = append(progression, frames...)
@@ -811,48 +817,6 @@ func abnormalVitalsPayload(gid uint32, block *abnormal.Block) []byte {
 		w.U8(g)
 	}
 	return w.Payload()
-}
-
-/*
-==================
-rollMonsterOnPlayer
-
-rollMonsterOnPlayer ports 590680 for a monster's hit on a player: the
-victim's keeper supplies element resists (1B..20), flat reductions (91..96,
-which reat passives raise) and the disease bonus (A9); its learned real
-passives supply the status-resistance buckets (59DE50).
-==================
-*/
-func (rt *Runtime) rollMonsterOnPlayer(division string, instance monster.Instance, params *abnormal.SkillParams, target *enterworld.Character, defender combat.Stats, wall *enterworld.SkillWall) ([]abnormal.Record, error) {
-	if params == nil || !params.Present() {
-		return nil, nil
-	}
-	param := func(id uint16) float32 {
-		v, _ := defender.Param(id)
-		return v
-	}
-	in := abnormal.RollInput{
-		Params:      params,
-		TargetLevel: defender.Level,
-		TargetBonus: param(abnormalDiseaseBonusParam),
-		CasterLevel: instance.Ref.Level,
-		SourceGID:   instance.Gid,
-		TargetGID:   enterworld.ObjectIDForCharacter(target),
-		Resistance:  defender.StatusResistance,
-	}
-	if wall != nil {
-		in.WallMask = &wall.Mask
-	}
-
-	for i := range in.TargetResist {
-		// 5909FB reads shock from 1D; 590B39 reads burn from 1E. Keeper
-		// parameters follow roll order, not the block's Burn/ES slot order.
-		in.TargetResist[i] = param(abnormalElementResistBase + uint16(i))
-		in.TargetFlat[i] = param(abnormalFlatResistanceBase + uint16(i))
-	}
-	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, monster: instance.Gid}}
-	records := abnormal.Roll(in, random)
-	return records, random.err
 }
 
 /*

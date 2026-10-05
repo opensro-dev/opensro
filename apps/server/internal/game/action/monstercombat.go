@@ -160,6 +160,10 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		if release == nil && result.Refusal == simulation.MonsterAttackCommandRejected && skill.Summon.Present {
 			rt.Monsters.RejectSummonCommand(divisionID, instance.Gid, nowMs)
 		}
+		if result.Accepted {
+			// 4C1C30: a job monster's own attack rearms its idle timer.
+			rt.Monsters.RefreshJobMonster(divisionID, instance.Gid, nowMs)
+		}
 		if release == nil && result.Accepted {
 			// 5A1A40 reads the live action-speed keeper, including Frostbite
 			// and Slow. The verified helper owns its float32 store boundaries.
@@ -264,14 +268,13 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	if release == nil && skill.ActionCastingTimeMs > 0 {
 		return rt.prepareMonsterCast(divisionID, instance, monsterCastRecipient{snapshot, enterworld.ObjectIDForCharacter(snapshot)}, skill, nowMs)
 	}
-	in := monsterStrikeInput{division: divisionID, instance: instance, skill: skill, attacker: attacker, percent: fullAreaPercent, now: nowMs}
+	in := monsterStrikeInput{division: divisionID, instance: instance, skill: skill, attacker: attacker, from: monsterPose, percent: fullAreaPercent, now: nowMs}
 	outcome := rt.monsterStrikePlayer(in, character, snapshot, defender, playerPose)
 	if !outcome.committed {
 		result.TargetAlive, result.Refusal = outcome.alive, outcome.refusal
 		return result
 	}
-	from := simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}
-	return rt.publishMonsterStrikes(monsterPublication{strike: in, release: release, from: from}, outcome.strike)
+	return rt.publishMonsterStrikes(monsterPublication{strike: in, release: release}, outcome.strike)
 }
 
 /*

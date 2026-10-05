@@ -560,15 +560,7 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 		writes = append(writes, paramkeeper.Write{Parameter: 0x8d, Channel: paramkeeper.Flat, Value: float32(-float64(m.DcmpPercent))})
 	}
 	if m.Odar {
-		value := float32(-float64(m.OdarWord))
-		for _, slot := range [...]struct {
-			bits  uint32
-			param uint16
-		}{{4 | 1, 0xae}, {4 | 2, 0xaf}, {8 | 1, 0xb0}, {8 | 2, 0xb1}} {
-			if m.OdarBits&slot.bits == slot.bits {
-				writes = append(writes, paramkeeper.Write{Parameter: slot.param, Channel: paramkeeper.PercentProduct, Value: value})
-			}
-		}
+		writes = append(writes, combat.IncomingReductionWrites(m.OdarBits, m.OdarWord, 0)...)
 	}
 	return writes
 }

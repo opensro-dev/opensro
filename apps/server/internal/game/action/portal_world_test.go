@@ -229,7 +229,7 @@ func TestTownRevivalLeavesTheFortress(t *testing.T) {
 	enterFortress(t, rt, c)
 	zero := int64(0)
 	c.CurrentHP = &zero
-	rt.settlePlayerDeathInDoor(testDivision, c, clock.NowMs())
+	rt.settlePlayerDeathInDoor(testDivision, c, deathKiller{}, clock.NowMs())
 	out := rt.HandleLocalRebirth(testDivision, c, []byte{wire.RebirthAtSpecifiedPoint})
 	if len(out.Frames) == 0 {
 		t.Fatalf("revival refused: %+v", out)

@@ -103,7 +103,7 @@ func TestEncodeMemberJoin3B29(t *testing.T) {
 	// The row bytes after the subOp byte must be IDENTICAL to the
 	// 0x32C4 member-loop bytes for the same record - one layout, one
 	// writer (writeGuildMemberRow).
-	block := EncodeGuildInfo32C4(enterworld.GuildRecord{ID: 1, Name: "G"}, []enterworld.GuildMemberRecord{member}, online)
+	block := EncodeGuildInfo32C4(enterworld.GuildRecord{ID: 1, Name: "G"}, []enterworld.GuildMemberRecord{member}, online, 0)
 	rowLen := len(joinOracle(member, 0)) - 1
 	rowIn32C4 := block[len(block)-1-rowLen : len(block)-1]
 	if !bytes.Equal(EncodeMemberJoin3B29(member, online)[1:], rowIn32C4) {

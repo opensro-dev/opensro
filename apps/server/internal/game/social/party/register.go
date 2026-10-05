@@ -95,6 +95,7 @@ type Runtime struct {
 	memberVitals MemberVitals
 	livePose     LivePose
 	updates      memberUpdateState
+	masteries    bool
 }
 
 // NewRuntime builds the lane over a fresh in-memory registry. Construct
@@ -329,6 +330,10 @@ func (r *Runtime) memberRowFor(divisionID string, character *enterworld.Characte
 		return row
 	}
 	row.Name = character.Name
+	if r.masteries {
+		row.Masteries = true
+		row.PrimaryMastery, row.SecondaryMastery = domain.TopMasteries(character.Masteries)
+	}
 	row.ModelRefID = r.deps.CharacterModelRef(character)
 	if character.Level != nil && *character.Level >= 1 {
 		level := *character.Level

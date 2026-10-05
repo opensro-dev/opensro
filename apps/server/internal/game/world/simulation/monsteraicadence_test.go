@@ -28,7 +28,7 @@ func TestAcquisitionGateSurvivesEmptyScanAndMoverCommit(t *testing.T) {
 		}
 		// Whole-value movement commits cannot rewind the cadence owner.
 		ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
-		players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4}}
+		players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4}}
 		ops.advanceInstance(monsterTestDivision, instance, players, start+interval-1)
 		got, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 		if got.TargetGID() != 0 {
@@ -48,7 +48,7 @@ func TestRetaliationDoesNotWaitForAcquisitionTimer(t *testing.T) {
 	if !ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(1)) {
 		t.Fatal("retaliation refused")
 	}
-	players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4}}
+	players := []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4}}
 	ops.advanceInstance(monsterTestDivision, instance, players, 100001)
 	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	if !mover.Retaliating() || !mover.InFlight(100001) {

@@ -251,7 +251,8 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 	ref := instance.Ref
 	def := MonsterDef{
 		RefObjID: ref.RefObjID, TidWord: ref.TidWord, Codename: ref.Codename,
-		Name: ref.DisplayName(), WalkSpeed: ref.WalkSpeed, RunSpeed: ref.RunSpeed,
+		// The live speeds: graded (4C1690) and under any slowing status.
+		Name: ref.DisplayName(), WalkSpeed: instance.WalkSpeed(), RunSpeed: instance.RunSpeed(),
 		ScaleDenom: ref.ScaleDenom, Rarity: instance.Rarity(),
 		MotionState: instance.Motion.StateAt(nowMs),
 		Structure:   ref.Structure, CurrentHP: instance.CurrentHP,

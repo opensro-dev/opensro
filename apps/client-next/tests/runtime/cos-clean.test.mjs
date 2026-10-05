@@ -42,7 +42,7 @@ function owned( band, tidWord ) {
 	const gameplay = createGameplay( frame => sent.push( frame ) );
 	gameplay.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord } ] } );
 	gameplay.seed( LOCAL );
-	const RECORD_BYTES = { 1: 17, 2: 21, 3: 39, 4: 28 };
+	const RECORD_BYTES = { 1: 17, 2: 21, 3: 39, 4: 28, 6: 17 };
 	const record = new Uint8Array( RECORD_BYTES[band] );
 	const view = new DataView( record.buffer );
 	view.setUint32( 0, 2, true );
@@ -53,8 +53,8 @@ function owned( band, tidWord ) {
 	return { gameplay, sent, cos };
 }
 
-test("Clean retires a riding mount or a transport with 0x7618", () => {
-	for ( const [band, tid] of [ [ 1, 0x09c6 ], [ 2, 0x11c6 ] ] ) {
+test("Clean requests retirement of riding, transport and default-class quest companions", () => {
+	for ( const [band, tid] of [ [ 1, 0x09c6 ], [ 2, 0x11c6 ], [ 6, 0x31c6 ] ] ) {
 		const { gameplay, sent, cos } = owned( band, tid );
 		gameplay.command( { kind: "cos-clean", gid: 2 }, 1, cos, LOCAL );
 		assert.deepEqual( sent, [ { opcode: 0x7618, payload: Uint8Array.of( 2, 0, 0, 0 ) } ], `band ${band}` );
@@ -97,8 +97,12 @@ test("an attack pet attacks the selected monster with 0x769E tag 2", () => {
 	const monster = { ...LOCAL, gid: 40, kind: "monster" };
 	gameplay.command( { kind: "cos-pet-attack", gid: 40, pet: 2 }, 1, monster, LOCAL );
 	assert.deepEqual( sent, [ { opcode: 0x769e, payload: Uint8Array.of( 2, 0, 0, 0, 2, 40, 0, 0, 0 ) } ] );
+	// 6A2350 case 2 also sends a pet at a player the core admitted
+	// (player-attack.ts); nothing else is a target.
+	gameplay.command( { kind: "cos-pet-attack", gid: 41, pet: 2 }, 2, { ...monster, gid: 41, kind: "player" }, LOCAL );
+	assert.deepEqual( sent[1], { opcode: 0x769e, payload: Uint8Array.of( 2, 0, 0, 0, 2, 41, 0, 0, 0 ) } );
 	assert.throws( () =>
-		gameplay.command( { kind: "cos-pet-attack", gid: 40, pet: 2 }, 2, { ...monster, kind: "player" }, LOCAL )
+		gameplay.command( { kind: "cos-pet-attack", gid: 40, pet: 2 }, 3, { ...monster, kind: "npc" }, LOCAL )
 	);
 	const pickup = owned( 4, 0x21c6 );
 	assert.throws( () => pickup.gameplay.command( { kind: "cos-pet-attack", gid: 40, pet: 2 }, 1, monster, LOCAL ) );

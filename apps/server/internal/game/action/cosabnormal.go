@@ -631,7 +631,7 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	}
 	monsterPose := mover.LivePoseAt(nowMs, nil)
 	petPose := rt.companionLiveSpawn(divisionID, snapshot, snapshot.CompanionByGID(recipient.gid), nowMs)
-	spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(instance.Ref.BodyRadius),
+	spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(instance.BodyRadius()),
 		TargetBodyRadius: simulation.BodyRadius(ref.Parameters.BodyRadius), ActionReach: rt.monsterActionReach(instance, skill)}
 	if !spacing.Valid() || simulation.IsDungeonRegion(monsterPose.RegionID) != simulation.IsDungeonRegion(petPose.RegionID) {
 		return result
@@ -647,13 +647,12 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	if release == nil && skill.ActionCastingTimeMs > 0 {
 		return rt.prepareMonsterCast(divisionID, instance, monsterCastRecipient{snapshot, pet.GID}, skill, nowMs)
 	}
-	in := monsterStrikeInput{division: divisionID, instance: instance, skill: skill, attacker: attacker, percent: fullAreaPercent, now: nowMs}
+	in := monsterStrikeInput{division: divisionID, instance: instance, skill: skill, attacker: attacker, from: monsterPose, percent: fullAreaPercent, now: nowMs}
 	outcome := rt.monsterStrikeCOS(in, owner, pet, ref, petPose)
 	if !outcome.committed {
 		return result
 	}
-	from := simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}
-	return rt.publishMonsterStrikes(monsterPublication{strike: in, release: release, from: from}, outcome.strike)
+	return rt.publishMonsterStrikes(monsterPublication{strike: in, release: release}, outcome.strike)
 }
 
 /*

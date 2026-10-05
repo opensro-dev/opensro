@@ -71,14 +71,15 @@ func (i Instance) effectiveSpeed(param uint16, base float64) float64 {
 }
 
 // WalkSpeed and RunSpeed are parameters 17/18 (4CEFE0 seeds them from the
-// reference; frostbite and slow scale them), read by 4AA410.
+// reference, 4C1690 scales them by grade (gradescale.go); frostbite and slow
+// scale them), read by 4AA410.
 /*
 ================
 WalkSpeed
 ================
 */
 func (i Instance) WalkSpeed() float64 {
-	return i.effectiveSpeed(0x17, i.Ref.WalkSpeed)
+	return i.effectiveSpeed(0x17, i.gradeSpeed(i.Ref.WalkSpeed))
 }
 
 /*
@@ -87,5 +88,5 @@ RunSpeed
 ================
 */
 func (i Instance) RunSpeed() float64 {
-	return i.effectiveSpeed(0x18, i.Ref.RunSpeed)
+	return i.effectiveSpeed(0x18, i.gradeSpeed(i.Ref.RunSpeed))
 }

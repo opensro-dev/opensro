@@ -136,13 +136,15 @@ test("native AT_TARGET_F follows the target", () => {
 test("target decoration keeps its bone and offset after caster closure", () => {
 	const actors = movingTargetEffect( "AT_TARGET_F", { close: true, bone: "Bip01 Head", offset: [ 1, 2, 3 ] } );
 	assert.equal( actors.length, 1 );
-	assert.equal( actors[0].pose.x, 81 );
+	// The native offset turns with the target's root (8D6880): at heading 0
+	// (1, 2, 3) is (-3, 2, 1) in the world, and the renderer gets it raw.
+	assert.equal( actors[0].pose.x, 77 );
 	assert.deepEqual( actors[0].attachment, {
 		gid: 2,
 		bone: "Bip01 Head",
 		root: false,
 		basis: "native",
-		offset: [ 1, 2, -3 ]
+		offset: [ 1, 2, 3 ]
 	} );
 });
 

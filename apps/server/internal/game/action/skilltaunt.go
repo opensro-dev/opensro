@@ -75,7 +75,16 @@ Shape two uses the shared primary-centered selector and target ordering.
 func (rt *Runtime) tauntVictims(c tauntCast) []monster.Instance {
 	area := c.skill.Threat.Area
 	if c.skill.TargetRequired {
-		return rt.areaVictims(c.division, c.snapshot, c.primary, area, float32(c.skill.ActionRange), c.now)
+		// Hostility lives on monsters: a taunt keeps the monsters of the
+		// shared selection.
+		var out []monster.Instance
+		primary := combatTarget{gid: c.primary.Gid, monster: &c.primary, at: rt.monsterSpawn(c.division, c.primary.Gid, c.now)}
+		for _, victim := range rt.areaVictims(c.division, c.snapshot, c.skill, primary, area, float32(c.skill.ActionRange), c.now) {
+			if victim.monster != nil {
+				out = append(out, *victim.monster)
+			}
+		}
+		return out
 	}
 	radius, ok := rt.deps.CharacterBodyRadius(c.snapshot)
 	if !ok {

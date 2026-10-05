@@ -246,6 +246,10 @@ test("MOV_UP uses native zero arc coefficients and works within a dungeon region
 		"1": {
 			authoredShotAnimationNames: [ "ANI_ATTACK1" ],
 			authoredStages: [ {
+				startKeepRotation: true,
+				startAddHeight: false,
+				targetKeepRotation: true,
+				targetAddHeight: false,
 				animationPhase: "SHOT",
 				startEvent: 0,
 				actionType: "AT_MOV_1TAR",
@@ -405,6 +409,10 @@ test("resource-less stages remain resource-less and animation names survive cata
 				damageEffectPath: "hit.efp",
 				authoredShotAnimationNames: [ "ANI_ATTACK1" ],
 				authoredStages: [ {
+					startKeepRotation: true,
+					startAddHeight: false,
+					targetKeepRotation: true,
+					targetAddHeight: false,
 					animationPhase: "SHOT",
 					damageEvent: true,
 					startEvent: 1,
@@ -592,6 +600,21 @@ test("effect catalogs recover with backoff and admit queued callbacks exactly on
 	f.effects.dispose();
 	assert.deepEqual( f.step( 2 ), [] );
 });
+/*
+================
+assertNearPose
+
+A pose whose position went through float rotation: exact region and yaw,
+position within a thousandth.
+================
+*/
+function assertNearPose( actual, expected ) {
+	assert.equal( actual.regionId, expected.regionId );
+	assert.equal( actual.yaw, expected.yaw );
+	for ( const axis of [ "x", "y", "z" ] ) {
+		assert.ok( Math.abs( actual[axis] - expected[axis] ) < 1e-3, `${axis}: ${actual[axis]} != ${expected[axis]}` );
+	}
+}
 test("follow attachments resolve current region, heading and predicted local pose while world effects stay fixed", () => {
 	const f = effectFixture();
 	f.step( 0 );
@@ -602,22 +625,26 @@ test("follow attachments resolve current region, heading and predicted local pos
 	assert.equal( initial.length, 2 );
 	Object.assign( f.entity, { regionId: 258, x: 100, y: 200, z: 300, heading: 16384 } );
 	const moved = f.step( 2 );
-	assert.deepEqual( moved[0].pose, {
+	// The authored offset (1, 2, 3) is a native model vector turned by the
+	// holder's root (8D6880): at this heading the imported root faces +Z, so
+	// it lands at (-1, 2, -3).
+	assertNearPose( moved[0].pose, {
 		regionId: 258,
-		x: 101,
+		x: 99,
 		y: 202,
-		z: 303,
+		z: 297,
 		yaw: 16384 / 65535 * 2 * Math.PI + Math.PI / 2
 	} );
 	assert.deepEqual( moved[1].pose, initial[1].pose );
 	f.gameplay.localGid = 2;
 	f.gameplay.pose = { regionId: 259, x: 400, y: 500, z: 600, angle: 32768 };
 	const predicted = f.step( 3 );
-	assert.deepEqual( predicted[0].pose, {
+	// Half a turn later the same offset turns to (3, 2, -1).
+	assertNearPose( predicted[0].pose, {
 		regionId: 259,
-		x: 401,
+		x: 403,
 		y: 502,
-		z: 603,
+		z: 599,
 		yaw: 32768 / 65535 * 2 * Math.PI + Math.PI / 2
 	} );
 	assert.deepEqual( predicted[1].pose, initial[1].pose );
@@ -806,6 +833,10 @@ test("authored random-speed arc reaches live effects and reset preserves the sha
 		"1": {
 			authoredShotAnimationNames: [ "ANI_ATTACK1" ],
 			authoredStages: [ {
+				startKeepRotation: true,
+				startAddHeight: false,
+				targetKeepRotation: true,
+				targetAddHeight: false,
 				animationPhase: "SHOT",
 				startEvent: 0,
 				actionType: "AT_MOV_1TAR",
@@ -889,6 +920,10 @@ test("socket projectiles capture launch once and keep flight independent of late
 		"1": {
 			authoredShotAnimationNames: [ "ANI_ATTACK1" ],
 			authoredStages: [ {
+				startKeepRotation: true,
+				startAddHeight: false,
+				targetKeepRotation: true,
+				targetAddHeight: false,
 				animationPhase: "SHOT",
 				startEvent: 0,
 				actionType: "AT_MOV_1TAR",
@@ -950,7 +985,8 @@ test("socket projectiles capture launch once and keep flight independent of late
 		calls++;
 		assert.equal( gid, 1 );
 		assert.equal( bone, "hand" );
-		assert.deepEqual( offset, [ 1, 2, -3 ] );
+		// The authored native vector; the socket owner turns it (8D6880).
+		assert.deepEqual( offset, [ 1, 2, 3 ] );
 		assert.equal( trigger.at, 1 );
 		return { regionId: 257, x: 10, y: 0, z: 0, yaw: 0 };
 	};
@@ -1036,7 +1072,8 @@ test("target-bone projectiles follow the evaluated endpoint to their arrival", (
 		calls++;
 		assert.equal( gid, 2 );
 		assert.equal( bone, "chest" );
-		assert.deepEqual( offset, [ 1, 2, -3 ] );
+		// The authored native vector; the socket owner turns it (8D6880).
+		assert.deepEqual( offset, [ 1, 2, 3 ] );
 		return { regionId: 257, x: 200, y: 0, z: 0, yaw: 0 };
 	};
 	const step = ( at, triggers = [] ) => owner.step( entities, gameplay, at, () => true, () => 10, triggers, socket );
@@ -1470,11 +1507,15 @@ test("Tomb Stone projectiles capture live local target at launch, never its spaw
 	);
 	gameplay.pose = { ...gameplay.pose, x: 1100, z: 450 };
 	const arrivals = step( 2 ).filter( a => a.model.includes( "force_hit" ) );
-	assert.deepEqual( arrivals.map( a => [ a.pose.x, a.pose.y, a.pose.z ] ).sort( ( a, b ) => a[0] - b[0] ), [ [
-		946,
-		81,
-		325
-	], [ 950, 83, 325 ] ], "native straight flight retains the launch destination after subsequent movement" );
+	// The authored target offsets turn with the player's root (8D6880): at
+	// this heading their lateral X lands on world Z.
+	const round = value => Math.round( value * 100 ) / 100;
+	assert.deepEqual(
+		arrivals.map( a => [ round( a.pose.x ), round( a.pose.y ), round( a.pose.z ) ] )
+			.sort( ( a, b ) => a[0] - b[0] ),
+		[ [ 947.98, 83, 327 ], [ 948.02, 81, 323 ] ],
+		"native straight flight retains the launch destination after subsequent movement"
+	);
 	assert.equal( entities[1].x, 755, "effect sampling must not mutate the entity owner" );
 	effects.dispose();
 });

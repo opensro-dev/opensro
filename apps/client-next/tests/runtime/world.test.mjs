@@ -17,6 +17,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { defined } from "../helpers/defined.mjs";
+
+/*
+================
+ignoreIncident
+
+The incident reporter for sessions whose test is not about incidents.
+================
+*/
+function ignoreIncident() {}
 /*
 ================
 load
@@ -396,7 +405,7 @@ function entered( value = bootstrap ) {
 }
 
 test("restart completion survives an immediate transport BYE and retires the admitted world once", async t => {
-	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket" );
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -436,10 +445,14 @@ test("restart completion survives an immediate transport BYE and retires the adm
 });
 test("fresh admission on reconnect; WELCOME cannot reuse an old bootstrap barrier", async t => {
 	const sockets = socketHarness( t ), mints = [];
-	const world = createWorldSession( async kind => {
-		mints.push( kind );
-		return `ticket-${mints.length}`;
-	} );
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return `ticket-${mints.length}`;
+		},
+		undefined,
+		ignoreIncident
+	);
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -509,7 +522,7 @@ test("fresh admission on reconnect; WELCOME cannot reuse an old bootstrap barrie
 test("logout/disposal rejects a late token and opens no socket", async t => {
 	const sockets = socketHarness( t );
 	let resolve;
-	const world = createWorldSession( () => new Promise( r => resolve = r ) );
+	const world = createWorldSession( () => new Promise( r => resolve = r ), undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	world.dispose();
 	defined( resolve )( "late" );
@@ -519,10 +532,14 @@ test("logout/disposal rejects a late token and opens no socket", async t => {
 });
 test("unexpected close retries with a new ticket and rejects a lost resume", async t => {
 	const sockets = socketHarness( t ), mints = [];
-	const world = createWorldSession( async kind => {
-		mints.push( kind );
-		return "ticket";
-	} );
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -558,7 +575,7 @@ test("unexpected close retries with a new ticket and rejects a lost resume", asy
 
 test("a dropped session keeps retrying through the resume grace, then gives up", async t => {
 	const sockets = socketHarness( t );
-	const world = createWorldSession( async () => "ticket" );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -935,7 +952,7 @@ test("jewelry equip notifications leave the visual model unchanged without refus
 });
 
 test("versioned shop controls cross the admitted world boundary only after EnterWorld", async t => {
-	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket" );
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -1004,7 +1021,7 @@ test("presentation retains omitted shop projection but honors an explicit close"
 });
 
 test("reset acknowledgement and readiness are per travel generation for both native reset opcodes", async t => {
-	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket" );
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -1220,7 +1237,8 @@ test("movement activity clears on death, revival, teleport and explicit stop", (
 
 test("transport loss retains the admitted inventory and entities until explicit logout", async t => {
 	const sockets = socketHarness( t ),
-		world = createWorldSession( async () => "ticket" ),
+		incidents = [],
+		world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) ),
 		presentation = createPresentation();
 	const accept = () => {
 		let batch;
@@ -1262,6 +1280,9 @@ test("transport loss retains the admitted inventory and entities until explicit 
 	accept();
 	assert.equal( world.status().phase, "disconnected" );
 	assert.deepEqual( presentation.gameplay(), prior );
+	// The loss reaches the Agent as one incident from the world phase.
+	assert.equal( incidents.length, 1 );
+	assert.equal( incidents[0].phase, "world" );
 	assert.equal( presentation.count(), count );
 	assert.throws(
 		() => world.command( { kind: "inventory-move", source: 13, destination: 14, quantity: 3 } ),
@@ -1300,7 +1321,7 @@ test("reference admission holds native packets until verified data, and cancella
 		const request = http.references( ...args );
 		referenceCompletion = request.then( () => {}, () => {} );
 		return request;
-	} );
+	}, ignoreIncident );
 	/*
 ================
 begin
@@ -1378,7 +1399,7 @@ test("published static item rows join the login's own rows before the world is a
 		const request = http.references( ...args );
 		referenceCompletion = request.then( () => {}, () => {} );
 		return request;
-	} );
+	}, ignoreIncident );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
@@ -1445,7 +1466,7 @@ test("an edge-routed transport base carries its route to the socket and the refe
 		requested.push( String( url ) );
 		return new Response( data );
 	} );
-	const world = createWorldSession( async () => "ticket", createSessionHttp().references );
+	const world = createWorldSession( async () => "ticket", createSessionHttp().references, ignoreIncident );
 	world.enter( "fixture", "shard", "https://edge.invalid/shards/a" );
 	await settle();
 	world.step( 1 );
@@ -1488,7 +1509,9 @@ test("local entry preserves authoritative movement channels", () => {
 });
 
 test("town re-entry replaces corpse vitals and login coordinates before the local latch", async t => {
-	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket" ), view = createPresentation();
+	const sockets = socketHarness( t ),
+		world = createWorldSession( async () => "ticket", undefined, ignoreIncident ),
+		view = createPresentation();
 	let resets = 0;
 	const accept = () => {
 		let batch;
@@ -1655,10 +1678,14 @@ object bracket arrives. Network progress and rendering progress are distinct.
 */
 async function admitWaitingWorld( t, complete = true ) {
 	const sockets = socketHarness( t ), mints = [];
-	const world = createWorldSession( async kind => {
-		mints.push( kind );
-		return "ticket";
-	} );
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
 	t.after( () => world.dispose() );
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();

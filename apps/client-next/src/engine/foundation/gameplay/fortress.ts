@@ -14,6 +14,7 @@ the fortress official's protocol: 0x71E1 requests
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { SystemNotice } from "./system-notices";
+import { fortressServiceReply, FORTRESS_SERVICE_REPLY, type FortressServiceReply } from "./fortress-services";
 
 export const OP_FORTRESS_INTERACTION = 0x71e1;
 export const OP_FORTRESS_INTERACTION_RESULT = 0xb1e1;
@@ -66,6 +67,9 @@ export interface FortressState {
 	readonly wars: readonly { id: number; name: string; flags: number; }[];
 	readonly registered: readonly number[];
 	readonly listId: number;
+	// The last fortress staff answer (fortress-services.ts); the official's
+	// application answers also reach fortressManagerReply.
+	readonly service?: FortressServiceReply;
 }
 
 /*
@@ -115,10 +119,15 @@ export function fortressBootstrap( value: unknown ): FortressState {
 ================
 fortressPacket
 
-Folds one 0x3887 frame into the state; null for frames it does not own.
+Folds one 0x3887 frame, or a fortress staff 0xB1E1 answer, into the
+state; null for frames it does not own.
 ================
 */
 export function fortressPacket( state: FortressState, frame: WireFrame ): FortressState | null {
+	if ( frame.opcode === FORTRESS_SERVICE_REPLY ) {
+		const service = fortressServiceReply( frame );
+		return service ? { ...state, service } : null;
+	}
 	if ( frame.opcode !== OP_FORTRESS_WAR_STATE ) return null;
 	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	let o = 0;

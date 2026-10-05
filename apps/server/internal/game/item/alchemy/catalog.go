@@ -1,5 +1,16 @@
-// Package alchemy owns reference-driven Alchemy rules. It never mutates a
-// character or writes to a session; action commits its detached plans.
+/*
+===========================================================================
+
+catalog.go - the alchemy reference catalog
+
+Package alchemy owns reference-driven Alchemy rules. It never mutates a
+character or writes to a session; action commits its detached plans. The
+catalog is the itemdata, magicoption and magicoptionassign projection
+those rules read.
+
+===========================================================================
+*/
+
 package alchemy
 
 import (
@@ -12,6 +23,13 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 )
 
+/*
+================
+Reference
+
+One itemdata row as alchemy reads it.
+================
+*/
 type Reference struct {
 	ID           uint32
 	Name         string
@@ -25,6 +43,14 @@ type Reference struct {
 	Descriptions [5]string
 }
 
+/*
+================
+Magic
+
+One magicoption.txt row: param id, codename, degree, tag, the three
+generator params and the item categories it may land on.
+================
+*/
 type Magic struct {
 	ID         uint16
 	Name       string
@@ -34,14 +60,27 @@ type Magic struct {
 	Categories []string
 }
 
+/*
+================
+Catalog
+================
+*/
 type Catalog struct {
 	Items map[string]Reference
 	Magic map[uint16]Magic
 	// Loaded through the explicit v1.150 compatibility profile. Missing or
 	// malformed pools still refuse before mutation; no on-demand fallback.
 	DissolveDrops map[int]DissolvePool
+	// AvatarOptions are the option codenames magicoptionassign.txt gives
+	// each avatar part, keyed by TID4 (avatar.go).
+	AvatarOptions map[uint8][]string
 }
 
+/*
+================
+LoadCatalog
+================
+*/
 func LoadCatalog(dir string, source enterworld.ItemRefSource) (*Catalog, error) {
 	c := &Catalog{Items: map[string]Reference{}, Magic: map[uint16]Magic{}}
 	files, err := filepath.Glob(filepath.Join(dir, "itemdata*.txt"))
@@ -130,12 +169,22 @@ func LoadCatalog(dir string, source enterworld.ItemRefSource) (*Catalog, error) 
 	if _, ok := c.Option("MATTR_DEC_MAXDUR", 3); !ok {
 		return nil, fmt.Errorf("alchemy: missing native durability curse level 3")
 	}
+	if err := c.loadAvatarOptions(dir); err != nil {
+		return nil, err
+	}
 	if err := c.loadDissolveProfile(); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
+/*
+================
+Option
+
+The magicoption row with this codename at this degree.
+================
+*/
 func (c *Catalog) Option(name string, degree int) (Magic, bool) {
 	for _, m := range c.Magic {
 		if m.Name == name && m.Degree == degree {
@@ -145,6 +194,13 @@ func (c *Catalog) Option(name string, degree int) (Magic, bool) {
 	return Magic{}, false
 }
 
+/*
+================
+Reference.Degree
+
+The item's degree: equipment classes come in threes per degree.
+================
+*/
 func (r Reference) Degree() int {
 	if r.Class <= 0 {
 		return 0
@@ -155,6 +211,11 @@ func (r Reference) Degree() int {
 	return r.Class
 }
 
+/*
+================
+category
+================
+*/
 func category(flags uint16) string {
 	if flags&0x7e != 0x2c {
 		return ""
@@ -172,6 +233,11 @@ func category(flags uint16) string {
 	return ""
 }
 
+/*
+================
+Magic.Allows
+================
+*/
 func (m Magic) Allows(flags uint16) bool {
 	itemCategory := category(flags)
 	// magicoption.txt can constrain an option to a body part (HP/MP use

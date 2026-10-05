@@ -83,12 +83,12 @@ func TestAreaShapeThreeSelectsAlongTheLine(t *testing.T) {
 	targets := rt.Monsters.InstancesInRegions(testDivision, []uint16{primary.Spawn.RegionID})
 
 	area := enterworld.SkillOffensiveArea{Shape: 3, Radius: 10, MaxTargets: 5}
-	got := rt.areaVictims(testDivision, c, targets[0], area, 150, clock.Now().UnixMilli())
+	got := areaTestVictims(rt, c, targets[0], area, 150, clock.Now().UnixMilli())
 	if len(got) != 3 || got[0].Gid != targets[0].Gid || got[1].Gid != targets[1].Gid || got[2].Gid != targets[3].Gid {
 		t.Fatalf("shape 3 picked %+v", got)
 	}
 	area.MaxTargets = 2
-	if got := rt.areaVictims(testDivision, c, targets[0], area, 150, clock.Now().UnixMilli()); len(got) != 2 {
+	if got := areaTestVictims(rt, c, targets[0], area, 150, clock.Now().UnixMilli()); len(got) != 2 {
 		t.Fatalf("MaxTargets 2 picked %d", len(got))
 	}
 }

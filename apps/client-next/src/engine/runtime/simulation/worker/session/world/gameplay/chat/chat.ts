@@ -15,6 +15,7 @@ import { chatRejectionKey, type ChatFeedback } from "@/engine/foundation/gamepla
 import type { ChatLine } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
+import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 const CHAT_LINE_LIMIT = 128;
 const CHAT_FEEDBACK_LIMIT = 100;
 const CHAT_TEXT_LIMIT = 100;
@@ -22,6 +23,10 @@ const CHAT_NAME_LIMIT = 128;
 const CHAT_ACK_TIMEOUT_MS = 10000;
 const CHAT_RECEIPT_KEY = 255;
 const CHAT_GLOBAL_CHANNEL = 6;
+// The server's public transcript frame layout version and line bound
+// (history.go OpChatHistory).
+const CHAT_HISTORY_VERSION = 1;
+const CHAT_HISTORY_LIMIT = 10;
 
 /*
 ================
@@ -40,6 +45,77 @@ interface PendingChat {
 }
 
 // v1.150 social/chat/wire.go: 7367 requests, B367 keyed receipt, 3667 broadcast.
+/*
+================
+decodeChatBroadcast
+
+One 0x3667 line (sub_753760): channels 1 and 3 carry the speaker's gid,
+2, 4, 5, 6, 11 and the stall's a sized sender name, 7 neither. Null for a channel this
+owner does not present.
+================
+*/
+function decodeChatBroadcast(
+	p: Uint8Array
+): { channel: number; sender: string; gid: number | undefined; text: string; } | null {
+	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	let o = 0;
+	/*
+	================
+	take
+	================
+	*/
+	function take( n: number ) {
+		if ( o + n > p.length ) throw new Error( "Truncated chat message" );
+		const at = o;
+		o += n;
+		return at;
+	}
+	const channel = v.getUint8( take( 1 ) );
+	let sender = "", gid: number | undefined;
+	if ( channel === 1 || channel === 3 ) gid = v.getUint32( take( 4 ), true );
+	else if ( [ 2, 4, 5, 6, 11, STALL_CHAT_CHANNEL ].includes( channel ) ) {
+		const n = v.getUint16( take( 2 ), true );
+		if ( n >= CHAT_NAME_LIMIT ) throw new Error( "Chat name budget" );
+		const at = take( n );
+		sender = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( at, at + n ) );
+	} else if ( channel !== 7 ) return null;
+	const n = v.getUint16( take( 2 ), true );
+	if ( n > CHAT_TEXT_LIMIT ) throw new Error( "Chat text budget" );
+	const at = take( n * 2 ),
+		text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( at, at + n * 2 ) );
+	if ( o !== p.length ) throw new Error( "Chat trailing bytes" );
+	return { channel, sender, gid, text };
+}
+
+/*
+================
+decodeChatHistory
+
+The server's public transcript (history.go OpChatHistory, a browser
+extension): {u8 version, u8 count, count x (u16 length, 0x3667 payload)}.
+Only named public lines are admitted; anything else is a malformed frame.
+================
+*/
+export function decodeChatHistory( p: Uint8Array ): { channel: number; sender: string; text: string; }[] {
+	if ( p.length < 2 || p[0] !== CHAT_HISTORY_VERSION || p[1]! > CHAT_HISTORY_LIMIT ) {
+		throw new Error( "Invalid chat history" );
+	}
+	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ), lines = [];
+	let o = 2;
+	for ( let i = 0; i < p[1]!; i++ ) {
+		if ( o + 2 > p.length ) throw new Error( "Truncated chat history" );
+		const n = v.getUint16( o, true );
+		o += 2;
+		if ( o + n > p.length ) throw new Error( "Truncated chat history" );
+		const line = decodeChatBroadcast( p.subarray( o, o + n ) );
+		o += n;
+		if ( !line || !line.sender ) throw new Error( "Chat history line has no sender" );
+		lines.push( { channel: line.channel, sender: line.sender, text: line.text } );
+	}
+	if ( o !== p.length ) throw new Error( "Chat history trailing bytes" );
+	return lines;
+}
+
 /*
 ================
 createChat
@@ -63,7 +139,7 @@ append
 ================
 	*/
 	function append( line: ChatLine ) {
-		lines = [ ...lines.slice( 1 - CHAT_LINE_LIMIT ), { ...line, sequence: ++sequence } ];
+		lines = [ ...lines.slice( 1 - CHAT_LINE_LIMIT ), { ...line, sequence: ++sequence, sentAt: Date.now() } ];
 	}
 	return {
 		/*
@@ -208,33 +284,26 @@ receive
 				blockError = null;
 				return true;
 			}
-			if ( frame.opcode !== 0x3667 ) return false;
-			let o = 0;
-			/*
-================
-take
-================
-			*/
-			function take( n: number ) {
-				if ( o + n > p.length ) throw new Error( "Truncated chat message" );
-				const at = o;
-				o += n;
-				return at;
+			if ( frame.opcode === CHAT_HISTORY_CONTROL ) {
+				// The beta public transcript the server replays at admission: lines
+				// already said, filed as history so nothing presents them as speech.
+				for ( const line of decodeChatHistory( p ) ) {
+					if ( !chatIsBlocked( localBlocks, line.channel, line.sender ) ) {
+						append( {
+							channel: line.channel,
+							name: line.sender,
+							text: line.text,
+							outgoing: false,
+							history: true
+						} );
+					}
+				}
+				return true;
 			}
-			const channel = v.getUint8( take( 1 ) );
-			let sender = "", gid: number | undefined;
-			if ( channel === 1 || channel === 3 ) gid = v.getUint32( take( 4 ), true );
-			else if ( [ 2, 4, 5, 6, 11, STALL_CHAT_CHANNEL ].includes( channel ) ) {
-				const n = v.getUint16( take( 2 ), true );
-				if ( n >= CHAT_NAME_LIMIT ) throw new Error( "Chat name budget" );
-				const at = take( n );
-				sender = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( at, at + n ) );
-			} else if ( channel !== 7 ) return false;
-			const n = v.getUint16( take( 2 ), true );
-			if ( n > CHAT_TEXT_LIMIT ) throw new Error( "Chat text budget" );
-			const at = take( n * 2 ),
-				text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( at, at + n * 2 ) );
-			if ( o !== p.length ) throw new Error( "Chat trailing bytes" );
+			if ( frame.opcode !== 0x3667 ) return false;
+			const line = decodeChatBroadcast( p );
+			if ( !line ) return false;
+			const { channel, sender, gid, text } = line;
 			if ( channel === CHAT_GLOBAL_CHANNEL && sender === name ) {
 				// Native receipts retain the request's channel. The beta server
 				// sends this authoritative echo first, so the receipt must not

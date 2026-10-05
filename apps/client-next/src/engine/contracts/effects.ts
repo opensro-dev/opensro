@@ -69,6 +69,9 @@ export interface EffectStage {
 	readonly phase?: string;
 	readonly movement?: { readonly delayMs: number; readonly startSpeed: number; readonly endSpeed: number; };
 	readonly targetBone?: string | null;
+	/** Target binding +0x08 / +0x09 (sub_91e720 tokens '@Bone' / '*'). */
+	readonly targetKeepRotation?: boolean;
+	readonly targetAddHeight?: boolean;
 	readonly targetOffset?: readonly [number, number, number];
 	readonly arrivalResource?: string | null;
 	readonly soundEnd?: string | null;
@@ -78,6 +81,11 @@ export interface EffectStage {
 	readonly action: string;
 	readonly move: string;
 	readonly bone: string | null;
+	/** Start binding +0x08: 8D6880 keeps the bone rotation; false ('@Bone')
+	 * keeps only its position. Absent means a plain bone name (true). */
+	readonly keepRotation?: boolean;
+	/** Start binding +0x09 ('*'): 8D6880 adds the character height to Y. */
+	readonly addHeight?: boolean;
 	readonly offset: readonly [
 		number,
 		number,
@@ -227,6 +235,8 @@ export interface EffectFlight {
 		readonly state: import("@/engine/foundation/animation/projectile-time").HomingProjectile;
 		readonly target: number;
 		readonly bone: string | null;
+		/** The target binding's '*' token: the target's height is added. */
+		readonly addHeight: boolean;
 		readonly offset: readonly [number, number, number];
 		readonly trigger: EffectTrigger;
 	};
@@ -243,6 +253,7 @@ export interface EffectFlight {
 			pending: number | null;
 			readonly trigger: EffectTrigger;
 			readonly bone: string | null;
+			readonly addHeight: boolean;
 			readonly offset: readonly [number, number, number];
 		};
 	};
@@ -281,4 +292,7 @@ export interface EffectTrigger {
 	readonly phase: string;
 	readonly event: number;
 	readonly at: number;
+	// adopted marks an event a prediction held until the server's answer:
+	// it is delivered late on purpose, so its sound is not stale.
+	readonly adopted?: boolean;
 }

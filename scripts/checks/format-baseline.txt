@@ -7,11 +7,9 @@ apps/client-next/src/engine/contracts/damage-text.ts
 apps/client-next/src/engine/contracts/effective-hp.ts
 apps/client-next/src/engine/contracts/footprint.ts
 apps/client-next/src/engine/contracts/frontend.ts
-apps/client-next/src/engine/contracts/item-process.ts
 apps/client-next/src/engine/contracts/message.ts
 apps/client-next/src/engine/contracts/model.ts
 apps/client-next/src/engine/contracts/navigation.ts
-apps/client-next/src/engine/contracts/network.ts
 apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/contracts/scenery.ts
 apps/client-next/src/engine/contracts/simulation.ts
@@ -20,7 +18,6 @@ apps/client-next/src/engine/foundation/animation/action-schedule.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
 apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
-apps/client-next/src/engine/foundation/animation/animation-emission.ts
 apps/client-next/src/engine/foundation/animation/animation-timelines.ts
 apps/client-next/src/engine/foundation/animation/avatar-override.ts
 apps/client-next/src/engine/foundation/animation/body-shape.ts
@@ -71,7 +68,6 @@ apps/client-next/src/engine/foundation/audio/options.ts
 apps/client-next/src/engine/foundation/gameplay/abnormal-snapshot.ts
 apps/client-next/src/engine/foundation/gameplay/academy-notices.ts
 apps/client-next/src/engine/foundation/gameplay/academy.ts
-apps/client-next/src/engine/foundation/gameplay/auto-potion.ts
 apps/client-next/src/engine/foundation/gameplay/buff-slots.ts
 apps/client-next/src/engine/foundation/gameplay/cast-displacement.ts
 apps/client-next/src/engine/foundation/gameplay/cast-results.ts
@@ -91,7 +87,6 @@ apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/hunting.ts
 apps/client-next/src/engine/foundation/gameplay/inventory-notices.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
-apps/client-next/src/engine/foundation/gameplay/item-cooldowns.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
 apps/client-next/src/engine/foundation/gameplay/name-color.ts
@@ -173,7 +168,6 @@ apps/client-next/src/engine/foundation/ui/icon.ts
 apps/client-next/src/engine/foundation/ui/input-options.ts
 apps/client-next/src/engine/foundation/ui/inventory-layout.ts
 apps/client-next/src/engine/foundation/ui/item-equipment-overlay.ts
-apps/client-next/src/engine/foundation/ui/item-tooltip-magic.ts
 apps/client-next/src/engine/foundation/ui/item-tooltip-recovery.ts
 apps/client-next/src/engine/foundation/ui/item-tooltip.ts
 apps/client-next/src/engine/foundation/ui/loading-presentation.ts
@@ -215,7 +209,6 @@ apps/client-next/src/engine/foundation/ui/tooltip-rows.ts
 apps/client-next/src/engine/foundation/ui/unique-banner.ts
 apps/client-next/src/engine/foundation/ui/vertical-spin.ts
 apps/client-next/src/engine/foundation/ui/vital-warning.ts
-apps/client-next/src/engine/runtime/assets/worker/effects/effects.ts
 apps/client-next/src/engine/runtime/assets/worker/entry.ts
 apps/client-next/src/engine/runtime/assets/worker/model/model.ts
 apps/client-next/src/engine/runtime/assets/worker/navigation/navigation.ts
@@ -236,7 +229,6 @@ apps/client-next/src/engine/runtime/frontend/stage/stage.ts
 apps/client-next/src/engine/runtime/navigation/navigation.ts
 apps/client-next/src/engine/runtime/presentation/effective-hp.ts
 apps/client-next/src/engine/runtime/random/random.ts
-apps/client-next/src/engine/runtime/renderer/characters/actor-snapshots.ts
 apps/client-next/src/engine/runtime/renderer/characters/palette-streams.ts
 apps/client-next/src/engine/runtime/renderer/device/flares.ts
 apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
@@ -246,7 +238,6 @@ apps/client-next/src/engine/runtime/renderer/surface/surface.ts
 apps/client-next/src/engine/runtime/runtime-errors.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/codec/codec.ts
-apps/client-next/src/engine/runtime/simulation/worker/network/network.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/alchemy/alchemy.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts
@@ -311,7 +302,6 @@ apps/client-next/tests/browser/follow-camera.test.mjs
 apps/client-next/tests/browser/font-guide-regression.test.mjs
 apps/client-next/tests/browser/fortress-appearance.test.mjs
 apps/client-next/tests/browser/foundation.test.mjs
-apps/client-next/tests/browser/game-options.test.mjs
 apps/client-next/tests/browser/geometry.test.mjs
 apps/client-next/tests/browser/glb-compression.test.mjs
 apps/client-next/tests/browser/gm-item-live.test.mjs
@@ -491,8 +481,6 @@ scripts/build/char/materialVariants.mjs
 scripts/build/char/native/animationSetNames.ts
 scripts/build/char/native/scriptObjAnimationRegistry.ts
 scripts/build/char/native/skillEffectAnimationRegistry.ts
-scripts/build/char/native/skillEffectSetParseRow.ts
-scripts/build/char/native/skillEffectStage.ts
 scripts/build/char/publishEntityBsrModifiers.mjs
 scripts/build/char/resourceGlbOutput.mjs
 scripts/build/char/vatPipeline.mjs

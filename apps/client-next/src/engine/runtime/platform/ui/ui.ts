@@ -15,6 +15,33 @@ focus from a disabled element and never returns it.
 ===========================================================================
 */
 import type { UiBridge, UiControl, UiEvent, UiSemantics } from "@/engine/contracts/ui";
+// The title screen's login edits, the only controls a password manager may
+// save or fill. Value is the autocomplete token that identifies the field.
+const LOGIN_AUTOCOMPLETE: Readonly<Record<string, string>> = {
+	account: "username",
+	password: "current-password"
+};
+/*
+================
+configureCredentialHints
+
+Password managers ignore autocomplete="off", so every other edit (stat-point
+inputs and the like) carries the vendor opt-outs for 1Password, LastPass,
+Bitwarden and Dashlane; otherwise clicking one offers to save a login.
+================
+*/
+function configureCredentialHints( element: HTMLInputElement, id: string ): void {
+	const token = LOGIN_AUTOCOMPLETE[id];
+	if ( token ) {
+		element.autocomplete = token as AutoFill;
+		return;
+	}
+	element.autocomplete = "off";
+	element.setAttribute( "data-1p-ignore", "true" );
+	element.setAttribute( "data-lpignore", "true" );
+	element.setAttribute( "data-bwignore", "true" );
+	element.setAttribute( "data-form-type", "other" );
+}
 /*
 ================
 createUiBridge
@@ -409,6 +436,12 @@ export function createUiBridge(
 	}, { capture: true, signal: lifetime.signal } );
 	root.addEventListener( "dblclick", event => {
 		const slot = current( event.target );
+		if ( slot?.value.kind === "region" ) {
+			// Regions report where, in UI pixels.
+			const [x, y] = uiPoint( event );
+			emit( { kind: "region-double", id: slot.value.id, x, y } );
+			return;
+		}
 		if ( slot?.value.kind === "button" && !slot.value.disabled ) {
 			emit( {
 				kind: "double-activate",
@@ -568,7 +601,7 @@ export function createUiBridge(
 							"range" :
 							"text";
 						element.maxLength = control.maxLength ?? (control.kind === "password" ? 1024 : 256);
-						element.autocomplete = "off";
+						configureCredentialHints( element, control.id );
 						element.spellcheck = false;
 						element.setAttribute( "autocapitalize", "off" );
 						element.setAttribute( "autocorrect", "off" );

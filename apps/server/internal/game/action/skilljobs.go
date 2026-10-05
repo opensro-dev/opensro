@@ -225,6 +225,7 @@ func (rt *Runtime) AdmitCharacterSession(division, name string, session uint64) 
 	}
 	rt.restoreCharacterCOS(division, name)
 	rt.restoreSkillJobs(division, name)
+	rt.restorePKRecord(division, name)
 	if character := rt.findCharacter(division, name); character != nil {
 		rt.bindPetSession(division, character, session, false)
 	}

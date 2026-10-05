@@ -14,11 +14,16 @@ import (
 
 const monsterTestDivision = "DIV_A"
 
+// monsterTestRegion is the field the monster fixtures stand in: 0x60A8, a
+// battlefield just west of Jangan. It must not be a town: a monster whose
+// region is not a battlefield vanishes (vanishInSafeZone, 4C1270).
+const monsterTestRegion = 0x60a8
+
 func monsterInstanceByRef(t *testing.T, registry *MonsterState, refObjID uint32) monster.Instance {
 	t.Helper()
 	registry.StartDivision(monsterTestDivision)
 	registry.AdvancePopulation(registry.CurrentTimeMillis())
-	for _, instance := range registry.InstancesInRegions(monsterTestDivision, []uint16{25000}) {
+	for _, instance := range registry.InstancesInRegions(monsterTestDivision, []uint16{monsterTestRegion}) {
 		if instance.Ref.RefObjID == refObjID {
 			return instance
 		}
@@ -36,8 +41,8 @@ func monsterLegFixture(t *testing.T, tactics monster.Tactics) (*MonsterMoverOps,
 		},
 	}
 	registry := NewMonsterState(monster.TemplateFromParts(template.Refs, []monster.NestRow{
-		{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: 25000, X: 1000, Y: 20, Z: 1000}},
-		{SpawnPoint: monster.SpawnPoint{RefObjID: 2000, RegionID: 25000, X: 900, Y: 20, Z: 900}},
+		{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}},
+		{SpawnPoint: monster.SpawnPoint{RefObjID: 2000, RegionID: monsterTestRegion, X: 900, Y: 20, Z: 900}},
 	}))
 	registry.StartDivision(monsterTestDivision)
 	registry.AdvancePopulation(time.Now().UnixMilli())
@@ -68,7 +73,7 @@ func monsterLegFixture(t *testing.T, tactics monster.Tactics) (*MonsterMoverOps,
 func TestChaseEqualWalkAndRunSpeedsPreservesRunChannel(t *testing.T) {
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
 	instance.Ref.RunSpeed = instance.Ref.WalkSpeed
-	target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4}
+	target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4}
 	frames, _ := ops.advanceInstance(monsterTestDivision, instance, []playerPose{target}, 1000)
 	if len(frames) < 2 || frames[0].Opcode != wire.OpObjectStateRefresh {
 		t.Fatalf("chase must publish the run channel before its goal: %+v", frames)
@@ -120,7 +125,7 @@ func aggressiveTactics() monster.Tactics {
 }
 
 func playerSessionAt(characterID int64, x, z float64) SessionSnapshot {
-	world := WorldState{Spawn: Spawn{RegionID: 25000, X: x, Y: 20, Z: z}, SpawnSet: true}
+	world := WorldState{Spawn: Spawn{RegionID: monsterTestRegion, X: x, Y: 20, Z: z}, SpawnSet: true}
 	return SessionSnapshot{
 		SessionID:      "viewer",
 		DivisionID:     monsterTestDivision,
@@ -253,8 +258,8 @@ func TestMonsterWanderCycle(t *testing.T) {
 		t.Fatalf("tick1 frames = %+v, want one 0xB738 goal", frames)
 	}
 	gid, region, x, _, z, sourcePresent := decodeGoalPayload(t, frames[0].Payload)
-	if gid != instance.Gid || region != 25000 {
-		t.Fatalf("goal gid/region = %d/%d, want %d/25000", gid, region, instance.Gid)
+	if gid != instance.Gid || region != monsterTestRegion {
+		t.Fatalf("goal gid/region = %d/%d, want %d/monsterTestRegion", gid, region, instance.Gid)
 	}
 	if !sourcePresent {
 		t.Fatal("first goal turns >45 degrees from spawn facing and must carry a source block")

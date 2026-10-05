@@ -64,23 +64,31 @@ test("effect sockets fall back to the root while strict contact queries still mi
 	const renderer = createCharacters(), row = actor( 1, 10 );
 	renderer.model( "body", model(), [] );
 	assert.equal( renderer.socket( [ row ], 1, "ai_end", [ 0, 0, 0 ] ), null );
+	// The offset is a native model vector (8D6880): imported model space is
+	// Ry(PI) of native, so (1, 2, 3) lands at (-1, 2, -3) on the root's axes.
 	assert.deepEqual( renderer.socket( [ row ], 1, { name: "ai_end", fallback: "mount-root" }, [ 1, 2, 3 ] ), {
 		...row.pose,
-		x: 11,
+		x: 9,
 		y: 2,
-		z: 3
+		z: -3
 	} );
 	assert.deepEqual( renderer.socket( [ row ], 1, { name: "root", fallback: "mount-root" }, [ 1, 2, 3 ] ), {
 		...row.pose,
-		x: 13,
+		x: 11,
 		y: 5,
-		z: 7
+		z: 1
 	} );
+	// A null name is the holder's own root, the same as a missing marker.
+	assert.deepEqual(
+		renderer.socket( [ row ], 1, { name: null, fallback: "mount-root" }, [ 1, 2, 3 ] ),
+		renderer.socket( [ row ], 1, { name: "ai_end", fallback: "mount-root" }, [ 1, 2, 3 ] )
+	);
+	// The offset turns with the root: a quarter turn carries it to (-3, 2, 1).
 	row.pose.yaw = radians( Math.PI / 2 );
 	const rotated = renderer.socket( [ row ], 1, { name: "ai_end", fallback: "mount-root" }, [ 1, 2, 3 ] );
 	assert.ok( rotated );
-	assert.ok( Math.abs( rotated.x - 13 ) < 1e-5 );
-	assert.ok( Math.abs( rotated.z + 1 ) < 1e-5 );
+	assert.ok( Math.abs( rotated.x - 7 ) < 1e-5 );
+	assert.ok( Math.abs( rotated.z - 1 ) < 1e-5 );
 });
 
 test("effect sockets retry mounts and use the last mount root when all markers miss", () => {
@@ -171,6 +179,10 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 			8074: {
 				authoredShotAnimationNames: [ "ANI_SKILL_1" ],
 				authoredStages: [ {
+					startKeepRotation: true,
+					startAddHeight: false,
+					targetKeepRotation: true,
+					targetAddHeight: false,
 					animationPhase: "SHOT",
 					startEvent: 1,
 					actionType: "AT_MOV_1TAR",

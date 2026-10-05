@@ -50,3 +50,26 @@ test("tax-adjusted gold prices retain signed-64 bounds without Number conversion
 		assert.throws( () => buybackEntries( [ { ...entry, price } ] ) );
 	}
 });
+test("the repurchase tab shows the newest sale in slot 1 and the oldest in slot 5 (5B6440)", async () => {
+	const { restoreSlotEntry } = await import( sourceFileUrl( "src/engine/foundation/gameplay/commerce.ts" ).href );
+	const ledger = count => Array.from( { length: count }, ( _, index ) => ({ id: 100 + index, index }) );
+	const full = ledger( 5 );
+	assert.deepEqual( [ 0, 1, 2, 3, 4 ].map( slot => restoreSlotEntry( full, slot )?.id ), [
+		104,
+		103,
+		102,
+		101,
+		100
+	] );
+	// A sixth sale evicts the oldest (68F480); the server reindexes, and it lands in slot 1.
+	const after = [ ...full.slice( 1 ), { id: 105 } ].map( ( row, index ) => ({ ...row, index }) );
+	assert.deepEqual( [ 0, 1, 2, 3, 4 ].map( slot => restoreSlotEntry( after, slot )?.id ), [
+		105,
+		104,
+		103,
+		102,
+		101
+	] );
+	const two = ledger( 2 );
+	assert.deepEqual( [ 0, 1, 2 ].map( slot => restoreSlotEntry( two, slot )?.id ), [ 101, 100, undefined ] );
+});

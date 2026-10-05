@@ -18,6 +18,8 @@ import (
 
 const (
 	attributeMaxHP            = 3
+	attributePhysicalDefense  = 5
+	attributeMagicalDefense   = 6
 	attributePhysicalMin      = 0x0d
 	attributePhysicalMax      = 0x0e
 	attributeMagicalMin       = 0x0f
@@ -58,6 +60,12 @@ func AttributeEffectWrites(a enterworld.SkillAttributeBoost) []paramkeeper.Write
 		// percentage bonuses must add to this penalty before multiplication.
 		writes = append(writes,
 			paramkeeper.Write{Parameter: attributeMaxHP, Channel: paramkeeper.PercentSum, Value: float32(-float64(a.HPPenaltyPercent))})
+	}
+	if a.DefensePenalty {
+		// 0x596279 / 0x5962AC push channel 1 with the negated percents.
+		writes = append(writes,
+			paramkeeper.Write{Parameter: attributePhysicalDefense, Channel: paramkeeper.PercentSum, Value: float32(-float64(a.PhysicalDefensePenalty))},
+			paramkeeper.Write{Parameter: attributeMagicalDefense, Channel: paramkeeper.PercentSum, Value: float32(-float64(a.MagicalDefensePenalty))})
 	}
 	if a.DamagePenalty {
 		writes = append(writes,

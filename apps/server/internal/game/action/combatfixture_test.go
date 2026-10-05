@@ -207,11 +207,11 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 	deps := &enterworld.Deps{
 		Characters: enterworld.StaticCharacterSource{testDivision: {character}},
 		Roster: &enterworld.Roster{
-			Format: "sro-server-character-authority", Version: 2,
+			Format: "sro-server-character-authority", Version: 3,
 			Models: []enterworld.RosterModel{{
-				Codename: "CHAR_CH_MAN_ADVENTURER", RefObjID: 1907, BodyRadius: 4,
+				Codename: "CHAR_CH_MAN_ADVENTURER", RefObjID: 1907, BodyRadius: 4, Knockdown: 3, KORecoverMs: 3000,
 			}, {
-				Codename: "CHAR_EU_MAN_NOBLE", RefObjID: 14717, BodyRadius: 4,
+				Codename: "CHAR_EU_MAN_NOBLE", RefObjID: 14717, BodyRadius: 4, Knockdown: 3, KORecoverMs: 3000,
 			}},
 		},
 		Items:  staticItemSource{sword.Codename: sword},

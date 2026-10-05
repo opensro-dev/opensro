@@ -35,8 +35,8 @@ func TestImmobilizingStatusSettlesMonsterMovement(t *testing.T) {
 		if err := mover.Transition(monster.MoverEventStartWander, 0); err != nil {
 			t.Fatal(err)
 		}
-		mover.From = monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
-		mover.To = monster.Pose{RegionID: 25000, X: 1100, Y: 20, Z: 1000}
+		mover.From = monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
+		mover.To = monster.Pose{RegionID: monsterTestRegion, X: 1100, Y: 20, Z: 1000}
 		mover.Pose = mover.From
 		mover.DepartMs, mover.ArriveMs = now-500, now+500
 		state.CommitMover(monsterTestDivision, instance.Gid, mover)
@@ -84,8 +84,8 @@ func TestMonsterSlowRetimesOwnedPathWithoutChangingSurface(t *testing.T) {
 	if err := mover.Transition(monster.MoverEventStartWander, 0); err != nil {
 		t.Fatal(err)
 	}
-	mover.From = monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
-	mover.To = monster.Pose{RegionID: 25000, X: 1008, Y: 20, Z: 1000}
+	mover.From = monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
+	mover.To = monster.Pose{RegionID: monsterTestRegion, X: 1008, Y: 20, Z: 1000}
 	mover.Pose = mover.From
 	mover.DepartMs, mover.ArriveMs = now-500, now+500
 	mover.Channel = 2

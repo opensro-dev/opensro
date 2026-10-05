@@ -45,6 +45,7 @@ import {
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
+import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
 import type { BugReportControl } from "@/engine/contracts/bug-report";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
 import { itemEquipmentOverlay, equipmentWarningUv } from "@/engine/foundation/ui/item-equipment-overlay";
@@ -75,6 +76,7 @@ import {
 	WITHDRAWAL_SKILL_FRAME_HEIGHT
 } from "./hud/withdrawal";
 import { isRestorationPotion } from "@/engine/foundation/gameplay/withdrawal";
+import { createMapTeleport } from "./hud/map-teleport";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
 import { academyRank } from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
@@ -128,6 +130,7 @@ import {
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
+import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
@@ -166,6 +169,22 @@ import {
 	FORTRESS_WAR_APPLY_SLOT_HEIGHT,
 	FORTRESS_WAR_APPLY_SLOT_WIDTH
 } from "@/engine/foundation/ui/fortress-war-apply";
+import { createGuildManagerHud } from "./hud/guild-manager-hud";
+import { createMagicOptionHud, MAGIC_OPTION_LIST_ROWS } from "./hud/magic-option-hud";
+import {
+	premiumCommand,
+	REVERSE_RETURN_LAST_DEATH,
+	REVERSE_RETURN_LAST_RECALL
+} from "@/engine/foundation/gameplay/count-job";
+import {
+	AVATAR_MAGIC_OPTION_FUNCTION,
+	avatarMagicOptionCount,
+	avatarMagicOptionText,
+	avatarPartSymbol,
+	grantableAvatarPart
+} from "@/engine/foundation/gameplay/avatar-magic-option";
+import { guildLevelUpPrice, guildManagerRows, MASTER_RELEASE_VOTE } from "@/engine/foundation/gameplay/guild-manager";
+import { noticeText } from "@/engine/foundation/ui/notice-text";
 import {
 	JOB_ALIAS_CHECK,
 	JOB_ALIAS_CREATE,
@@ -259,10 +278,12 @@ import { barChrome } from "@/engine/foundation/ui/bar";
 import {
 	partyDistanceShade,
 	partyMembers,
+	partyLocalPose,
 	partyOverlay,
 	partyPortraitGid,
 	partyRosterPose,
-	partyShadeImage
+	partyShadeImage,
+	partyShadeImages
 } from "@/engine/foundation/ui/party-overlay";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import {
@@ -327,10 +348,12 @@ import {
 	type GameOptions
 } from "@/engine/foundation/gameplay/game-options";
 import {
+	autoPotionDraft,
+	autoPotionDraftChoice,
 	autoPotionEntry,
 	autoPotionWord,
 	defaultAutoPotion,
-	type AutoPotionSettings
+	type AutoPotionDraft
 } from "@/engine/foundation/gameplay/auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
 import { textBoardLines } from "@/engine/foundation/ui/text-lines";
@@ -451,6 +474,8 @@ const BUG_REPLAY_LABEL = "Record bug replay";
 const SKIN_PANEL = "Skin change";
 // CIFFortressWarApplyWnd, opened by the fortress official's answer.
 const FORTRESS_WAR_PANEL = "Fortress war application";
+// The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
+const GRANT_PANEL = "Magic option";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
 const SKIN_SLIDER_TRAVEL = 85;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
@@ -515,7 +540,7 @@ export function createUi(
 	let beginnerDraft = false;
 	let potionCombo = "";
 	let potionComboOffset = 0;
-	let potionDraft: AutoPotionSettings = defaultAutoPotion();
+	let potionDraft: AutoPotionDraft = autoPotionDraft( defaultAutoPotion() );
 	const commonWindowPaths = [
 		BUTTON,
 		BUTTON_FOCUS,
@@ -640,6 +665,7 @@ export function createUi(
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
+	const autoPotionInput = createAutoPotionInput();
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
 	const jobHud = createJobHud();
@@ -648,10 +674,13 @@ export function createUi(
 	const exchangeHud = createExchangeHud();
 	const stallHud = createStallHud();
 	const grantPowerHud = createGrantPowerHud();
+	const guildManagerHud = createGuildManagerHud();
+	const magicOptionHud = createMagicOptionHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
 	const withdrawal = createWithdrawalDialog();
+	const mapTeleport = createMapTeleport();
 	const gauges = createGaugePresentation();
 	const regionBanner = createRegionBanner();
 	const hudMessages = createHudMessages( chooseTip );
@@ -1077,6 +1106,7 @@ export function createUi(
 		if ( panel === "Option" ) audioPreference( audioSaved, false );
 		if ( panel === "Alchemy" ) sendGameplay( { kind: "alchemy-close" } );
 		if ( panel === "Magic Pop" ) sendGameplay( { kind: "gacha-close" } );
+		if ( panel === GRANT_PANEL ) sendGameplay( { kind: "magic-option-close" } );
 		if ( panel && !next ) sound( "close" );
 		if ( !next ) admittedWindows.clear();
 		const wasOpen = !!panel;
@@ -1104,7 +1134,7 @@ export function createUi(
 			cosPlayerPage = 0;
 		}
 		if ( next === "Auto Potion" ) {
-			potionDraft = { ...view?.gameplay?.autoPotion ?? defaultAutoPotion() };
+			potionDraft = autoPotionDraft( view?.gameplay?.autoPotion ?? defaultAutoPotion() );
 			potionCombo = "";
 		}
 		if ( next === "Alchemy" ) {
@@ -1155,14 +1185,8 @@ export function createUi(
 			return;
 		}
 		if ( id === 1008 ) {
-			const pose = game.pose,
-				item = pose ?
-					view!.entities.filter( e => e.kind === "ground-item" && e.regionId === pose.regionId ).sort( (
-						a,
-						b
-					) => Math.hypot( a.x - pose.x, a.z - pose.z ) - Math.hypot( b.x - pose.x, b.z - pose.z ) )[0] :
-					undefined;
-			if ( item ) sendGameplay( { kind: "pickup", gid: item.gid } );
+			// The worker picks the item; this frame's view may still hold the last.
+			sendGameplay( { kind: "pickup-nearest" } );
 			return;
 		}
 		if ( id === 1002 ) {
@@ -1574,6 +1598,7 @@ export function createUi(
 	function activate( id: string ) {
 		if ( id.startsWith( "cos-status:" ) ) {
 			cosHud.select( Number( id.slice( 11 ) ) );
+			sendGameplay( { kind: "cos-select", gid: cosHud.selected() } );
 			dirty = true;
 			return;
 		}
@@ -1769,6 +1794,29 @@ export function createUi(
 				composing = false;
 				dirty = true;
 			}
+			return;
+		}
+		if ( id.startsWith( "npc-guild:" ) ) {
+			// 5DA1B0 cases 0x12..0x1D: the guild manager's rows (guild-manager.ts).
+			const conversation = view.gameplay?.npcConversation, social = view.gameplay?.social;
+			if ( !conversation || conversation.phase !== "menu" ) return;
+			const npc = conversation.gid, row = id.slice( 10 );
+			if ( row === "create" || row === "master-leave" ) {
+				guildManagerHud.openField( row, npc );
+				focusAtEnd( "guild-manager-text", "" );
+			} else if ( row === "level-up" ) guildManagerHud.ask( "level-up", npc, social?.guild?.level ?? 0 );
+			else if ( row === "dissolve" || row === "secede" || row === "release" ) guildManagerHud.ask( row, npc );
+			else if ( row === "compensation" ) sendGameplay( { kind: "guild-compensation", gid: npc } );
+			else if ( row === "vote" ) {
+				const vote = social?.guild?.votes?.find( v => v.kind === MASTER_RELEASE_VOTE );
+				if ( vote ) guildManagerHud.showVote( vote.remainingMs );
+			} else if ( row === "warehouse" ) {
+				if ( !canLeavePanel() ) return;
+				sendGameplay( { kind: "storage-open-guild", gid: npc } );
+				storagePanel.reset();
+				setPanel( "Storage" );
+			}
+			dirty = true;
 			return;
 		}
 		if ( id.startsWith( "npc-job-" ) ) {
@@ -2061,7 +2109,15 @@ export function createUi(
 			const key = id.slice( 14 );
 			if ( key === "hp" || key === "mp" || key === "cure" ) {
 				const entry = autoPotionEntry( potionDraft[key] );
-				potionDraft = { ...potionDraft, [key]: autoPotionWord( { ...entry, enabled: !entry.enabled } ) };
+				const saved = autoPotionEntry( (view.gameplay?.autoPotion ?? defaultAutoPotion())[key] );
+				// 63DC30 restores the committed threshold when re-enabling a slider.
+				const percent = !entry.enabled && key !== "cure" ?
+					Math.max( 1, Math.min( 100, saved.percent ) ) :
+					entry.percent;
+				potionDraft = {
+					...potionDraft,
+					[key]: autoPotionWord( { ...entry, percent, enabled: !entry.enabled } )
+				};
 			}
 		} else if ( id.startsWith( "potion-combo:" ) ) {
 			potionCombo = potionCombo === id ? "" : id;
@@ -2070,19 +2126,15 @@ export function createUi(
 			potionComboOffset = Math.max( 0, Math.min( 6, potionComboOffset + (id.endsWith( "-up" ) ? -1 : 1) ) );
 		} else if ( id.startsWith( "potion-choice:" ) ) {
 			const [, key, part, value] = id.split( ":" );
-			if ( key === "hp" || key === "mp" || key === "cure" ) {
-				const entry = autoPotionEntry( potionDraft[key] ),
-					page = entry.slot === 0 ? 0 : Math.floor( (entry.slot - 1) / 10 ),
-					keySlot = entry.slot === 0 ? 0 : (entry.slot - 1) % 10 + 1,
-					n = Number( value ),
-					slot = part === "page" ? (keySlot === 0 ? 0 : n * 10 + keySlot) : (n === 0 ? 0 : page * 10 + n);
-				potionDraft = { ...potionDraft, [key]: autoPotionWord( { ...entry, slot } ) };
+			if ( (key === "hp" || key === "mp" || key === "cure") && (part === "page" || part === "key") ) {
+				potionDraft = autoPotionDraftChoice( potionDraft, key, part, Number( value ) );
 			}
 			potionCombo = "";
 		} else if ( id.startsWith( "potion-step:" ) ) {
 			const [, key, delta] = id.split( ":" );
 			if ( key === "hp" || key === "mp" ) {
 				const entry = autoPotionEntry( potionDraft[key] );
+				if ( !entry.enabled ) return;
 				potionDraft = {
 					...potionDraft,
 					[key]: autoPotionWord( {
@@ -2688,7 +2740,23 @@ export function createUi(
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 			dirty = true;
 			return;
-		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
+		} else if (
+			id === "chat-send" && premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )
+		) {
+			// 6AD990: /Return, /Reverse Return and /Resurrection spend a premium
+			// package's limited use; they are never sent as chat.
+			const command = premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )!;
+			sendGameplay( { kind: "premium-command", command } );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
+		} else if ( id.startsWith( "premium-reverse:" ) ) {
+			sendGameplay( { kind: "premium-command", command: "reverse-return", choice: Number( id.slice( 16 ) ) } );
+		} else if ( id === "premium-reverse-cancel" ) sendGameplay( { kind: "premium-command-cancel" } );
+		else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
 				panel === "Chat" ?
 					(chatChannel === 2 ?
@@ -2945,7 +3013,23 @@ export function createUi(
 				focus = null;
 				goldAmount = "";
 			}
-		} else if ( id === "storage-open" && view.gameplay?.target ) {
+		} else if ( id === "magic-option-open" && view.gameplay?.target ) {
+			// 5DA1B0 case 0x2F; B338 lock 0x80000000 then shows the window.
+			sendGameplay( { kind: "magic-option-open", gid: view.gameplay.target } );
+		} else if ( id.startsWith( "magic-option-row:" ) ) magicOptionHud.choose( id.slice( 17 ) );
+		else if ( id === "magic-option-up" || id === "magic-option-down" ) {
+			const grant = view.gameplay?.magicOption,
+				item = view.gameplay?.inventory.find( r => r.slot === grant?.item ),
+				part = item ? grantableAvatarPart( item.typeFlags ) : null;
+			magicOptionHud.scroll(
+				id === "magic-option-up" ? -1 : 1,
+				grant?.parts.find( p => p.part === part )?.options.length ?? 0
+			);
+		} else if ( id === "magic-option-confirm" ) {
+			const codename = magicOptionHud.state().codename;
+			if ( codename ) sendGameplay( { kind: "magic-option-grant", codename } );
+		} else if ( id === "magic-option-cancel" ) setPanel( "" );
+		else if ( id === "storage-open" && view.gameplay?.target ) {
 			if ( !canLeavePanel() ) return;
 			sendGameplay( { kind: "storage-open", gid: view.gameplay.target } );
 			storagePanel.reset();
@@ -3398,6 +3482,63 @@ export function createUi(
 				}
 				if ( event.kind !== "hover" ) return;
 			}
+			if ( guildManagerHud.question() || guildManagerHud.field() || guildManagerHud.vote() ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "guild-manager-no"
+				) {
+					// A declined claim box drops the quote (5D4050's No).
+					if ( guildManagerHud.takeQuestion()?.kind === "compensation" ) {
+						sendGameplay( { kind: "compensation-dismiss" } );
+					}
+					guildManagerHud.reset();
+					dirty = true;
+					return;
+				}
+				if ( guildManagerHud.field() && event.kind === "edit" && event.id === "guild-manager-text" ) {
+					guildManagerHud.type( event.value );
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "guild-manager-yes"
+				) {
+					dirty = true;
+					if ( guildManagerHud.vote() ) {
+						guildManagerHud.reset();
+						return;
+					}
+					if ( view?.session?.phase !== "world" ) return;
+					const asked = guildManagerHud.takeQuestion();
+					if ( asked ) {
+						if ( asked.kind === "level-up" ) sendGameplay( { kind: "guild-level-up", gid: asked.npc } );
+						else if ( asked.kind === "dissolve" ) {
+							sendGameplay( { kind: "guild-dissolve", gid: asked.npc } );
+						} else if ( asked.kind === "secede" ) sendGameplay( { kind: "guild-leave", gid: asked.npc } );
+						else if ( asked.kind === "release" ) sendGameplay( { kind: "guild-release", gid: asked.npc } );
+						else {
+							sendGameplay( { kind: "guild-compensation-claim", gid: asked.npc } );
+							sendGameplay( { kind: "compensation-dismiss" } );
+						}
+						return;
+					}
+					const entry = guildManagerHud.field();
+					if ( entry?.text && entry.kind === "create" ) {
+						guildManagerHud.takeField();
+						sendGameplay( { kind: "guild-create", gid: entry.npc, name: entry.text } );
+					} else if ( entry?.text ) {
+						// 5D3EB0: the master names a member; only a member may take over.
+						const member = view.gameplay?.social?.guild?.members.find( m => m.name === entry.text );
+						if ( member && member.grade !== 0 ) {
+							guildManagerHud.takeField();
+							sendGameplay( { kind: "guild-master-leave", gid: entry.npc, id: member.id } );
+						}
+					}
+					return;
+				}
+				if ( event.kind === "activate" ) return;
+			}
 			if ( jobHud.confirm() !== null ) {
 				if (
 					event.kind === "key" && event.code === "Escape" ||
@@ -3500,6 +3641,37 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			// Map teleport: confirmation modal, then the GM warp.
+			const teleportTarget = mapTeleport.pending();
+			if ( teleportTarget ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "map-teleport-cancel"
+				) {
+					mapTeleport.clear();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "map-teleport-confirm"
+				) {
+					mapTeleport.clear();
+					dirty = true;
+					if ( view?.session?.phase === "world" && view.gameplay?.eligibility?.gm ) {
+						sendGameplay( { kind: "gm-command", line: mapTeleport.command( teleportTarget ) } );
+					}
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if (
+				event.kind === "region-double" && event.id === "map-pan" &&
+				view?.session?.phase === "world" && view.gameplay?.eligibility?.gm
+			) {
+				if ( mapTeleport.pick( event.x, event.y ) ) dirty = true;
+				return;
 			}
 			if ( buffDismiss ) {
 				if (
@@ -4062,7 +4234,7 @@ export function createUi(
 				if (
 					carried &&
 					(carried.avatar ? event.id.startsWith( "avatar:" ) : event.id === "slot:" + carried.slot) &&
-					[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel ) &&
+					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
 					view?.session?.phase === "world" && !view.gameplay?.inventoryPending && controls.some( c =>
 						c.id === event.id && c.draggable && !c.disabled
 					)
@@ -4106,6 +4278,11 @@ export function createUi(
 						item && target && !target.disabled && panel === "Alchemy" && target.id.startsWith( "alchemy-" )
 					) {
 						activate( "alchemy-slot:" + item.slot );
+						return;
+					}
+					// 6EB570: an inventory item dropped on the grant window's slot.
+					if ( item && target?.id === "magic-option-slot" && !target.disabled && panel === GRANT_PANEL ) {
+						sendGameplay( { kind: "magic-option-take", slot: item.slot } );
 						return;
 					}
 					const room = view?.gameplay?.storage;
@@ -4224,6 +4401,11 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				if ( panel === GRANT_PANEL && event.id.startsWith( "slot:" ) ) {
+					sendGameplay( { kind: "magic-option-take", slot: Number( event.id.slice( 5 ) ) } );
+					dirty = true;
+					return;
+				}
 				if (
 					panel === "COS inventory" && (event.id.startsWith( "slot:" ) || event.id.startsWith( "cos-slot:" ))
 				) {
@@ -4282,7 +4464,7 @@ export function createUi(
 			}
 			if (
 				event.kind === "drag" && ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) ) &&
-				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
+				[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel )
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
 				if ( !node ) return;
@@ -4676,6 +4858,7 @@ export function createUi(
 				if ( event.id.startsWith( "cos-status:" ) ) {
 					const gid = Number( event.id.slice( 11 ) );
 					cosHud.select( gid );
+					sendGameplay( { kind: "cos-select", gid } );
 					sendGameplay( { kind: "select", gid } );
 					dirty = true;
 					return;
@@ -4802,7 +4985,8 @@ export function createUi(
 				} else if ( event.id.startsWith( "potion-percent:" ) ) {
 					const key = event.id.slice( 15 ), percent = Number( event.value );
 					if (
-						(key === "hp" || key === "mp") && Number.isInteger( percent ) && percent >= 1 && percent <= 100
+						(key === "hp" || key === "mp") && autoPotionEntry( potionDraft[key] ).enabled &&
+						Number.isInteger( percent ) && percent >= 1 && percent <= 100
 					) {
 						potionDraft = {
 							...potionDraft,
@@ -5384,6 +5568,13 @@ export function createUi(
 				setPanel( "Magic Pop" );
 			}
 			gachaWasVisible = gachaVisible;
+			// B338 lock 0x80000000 (75AE50) shows the grant window with the inventory.
+			if (
+				magicOptionHud.sync(
+					phase === "world" && !!next.gameplay?.magicOption?.visible,
+					next.gameplay?.magicOption?.item ?? null
+				)
+			) setPanel( GRANT_PANEL );
 			if ( next.session && next.session.revision !== lastSessionRevision ) {
 				if (
 					(loginReplyPending || next.session.nativeTitleStatus !== lastNativeTitleStatus) && titleProcess &&
@@ -5422,8 +5613,22 @@ export function createUi(
 					dirty = true;
 				}
 			}
+			if ( phase !== "world" ) autoPotionInput.reset();
+			else {
+				// 572770 reads the selected/dragged control; 561D50 checks the
+				// Item Mall child (69B2E0), not arbitrary nonmodal windows.
+				const blocked = !!(carriedItem || carriedShortcut), itemMallOpen = itemMall.read().visible;
+				if ( autoPotionInput.sync( blocked, itemMallOpen ) ) {
+					sendGameplay( { kind: "auto-potion-input", blocked, itemMallOpen } );
+				}
+			}
 			if ( phase !== "world" ) cosHud.reset();
-			else if ( cosHud.reconcile( next.gameplay?.cosRecords ?? [] ) ) dirty = true;
+			else if (
+				cosHud.reconcile(
+					next.gameplay?.cosStatusRecords ?? next.gameplay?.cosRecords ?? [],
+					next.gameplay?.selectedCosGid
+				)
+			) dirty = true;
 			if ( phase !== lastPhase ) {
 				if ( retainedWorld ) {
 					hover = null;
@@ -6955,7 +7160,8 @@ export function createUi(
 				if ( hudData && game?.social?.leader ) {
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
 						slot = hudData.windows.ifquickpartyslot!,
-						localPose = next.entities.find( e => e.gid === game.localGid ) ?? null;
+						localPose = partyLocalPose( game, next.entities );
+					for ( const shadeImage of partyShadeImages() ) paths.push( ROOT + shadeImage );
 					for (
 						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
 					) {
@@ -7021,6 +7227,21 @@ export function createUi(
 								selected: row.entity.gid === game.target
 							} );
 							blocks.push( r );
+						}
+						// The member's two main masteries: roster data, so they show for a member
+						// out of view and without the buff preference.
+						for ( const entry of row.masteries ) {
+							const mastery = hudData.skillUi.masteries.find( m => m.id === entry.id );
+							if ( !mastery ) continue;
+							const path = iconPath( mastery.icon ), r: UiRect = [ ...entry.rect ];
+							if ( path ) image( r, path );
+							controls.push( {
+								id: "party-mastery:" + row.member.id + ":" + entry.id,
+								label: hudCopy( mastery.name ),
+								helpText: hudCopy( mastery.name ),
+								kind: "region",
+								rect: r
+							} );
 						}
 						// 5BA840 passes no character, so party abnormal cells carry no grade.
 						const buff = authoredRect( slot.GDR_QPS_PARTY_BUFF!, x, y ),
@@ -7369,7 +7590,12 @@ export function createUi(
 						}
 					} );
 				}
-				if ( hudData && game?.cosRecords?.length ) drawCosHud( hudData, game.cosRecords, barX, barY );
+				if ( hudData && game?.cosRecords?.length ) {
+					const shown = (game.cosStatusRecords ?? game.cosRecords).map( record =>
+						game.cosRecords?.find( current => current.gid === record.gid ) ?? record
+					);
+					drawCosHud( hudData, shown, barX, barY );
+				}
 				if ( hudData && whispersOpen ) {
 					const wx = 0,
 						wy = h - 52 - (chatRows ? 62 + chatRows * 56 : 20),
@@ -7712,6 +7938,17 @@ export function createUi(
 				// glyphs (the largest allocation of a HUD step) and click hits are built
 				// while it is open. The font atlas is demanded either way.
 				const mapOpen = panel === "Map";
+				// The teleport's inverse pick must track the painted projection: it
+				// is only valid while the map is open and a pose exists, so record the
+				// frame under the same condition that builds the projection.
+				if ( mapOpen && pose ) {
+					mapTeleport.view(
+						mapPage,
+						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapPan,
+						mapCenter ?? pose
+					);
+				}
 				const mapProjection = pose && mapOpen ?
 					worldMapPresentation(
 						pose,
@@ -8042,8 +8279,8 @@ export function createUi(
 					const combos: { key: string; part: string; r: UiRect; selected: number; count: number; }[] = [];
 					for ( const key of [ "hp", "mp", "cure" ] as const ) {
 						const entry = autoPotionEntry( potionDraft[key] ),
-							page = entry.slot === 0 ? 0 : Math.floor( (entry.slot - 1) / 10 ),
-							n = entry.slot === 0 ? 0 : (entry.slot - 1) % 10 + 1;
+							page = key === "cure" ? potionDraft.curePage : Math.floor( (entry.slot - 1) / 10 ),
+							n = key === "cure" ? potionDraft.cureKey + 1 : (entry.slot - 1) % 10 + 1;
 						if ( key !== "cure" ) {
 							const parent = layout["GDR_AUTO_POTION_SLOT_" + key.toUpperCase()]!,
 								sx = px + parent.rect[0],
@@ -8072,11 +8309,12 @@ export function createUi(
 									label: key.toUpperCase() + (delta < 0 ? " decrease" : " increase"),
 									kind: "button",
 									rect: [ delta < 0 ? r[0] : r[0] + r[2] - 20, r[1] + 2, 20, 16 ],
-									disabled: delta < 0 ? entry.percent <= 1 : entry.percent >= 100
+									disabled: !entry.enabled || (delta < 0 ? entry.percent <= 1 : entry.percent >= 100)
 								} );
 							}
 							controls.push( {
 								id: "potion-percent:" + key,
+								disabled: !entry.enabled,
 								label: key.toUpperCase() + " threshold",
 								kind: "range",
 								rect: [ r[0] + 20, r[1] + 2, 292, 16 ],
@@ -8086,7 +8324,7 @@ export function createUi(
 							} );
 							const thumb = ROOT + "interface/ifcommon/com_scroll_button.png";
 							paths.push( thumb );
-							if ( resources.has( thumb ) ) {
+							if ( entry.enabled && resources.has( thumb ) ) {
 								rect(
 									[ r[0] + 20 + (Math.max( 1, entry.percent ) - 1) / 99 * 276, r[1] + 2, 16, 16 ],
 									white,
@@ -8189,7 +8427,7 @@ export function createUi(
 							"potion-combo:" + combo.key + ":" + combo.part,
 							combo.key + " " + combo.part,
 							combo.part === "page" ?
-								"F" + (combo.selected + 1) :
+								combo.selected < 0 ? "" : "F" + (combo.selected + 1) :
 								combo.selected === 0 ?
 								"" :
 								String( combo.selected % 10 )
@@ -8608,7 +8846,7 @@ export function createUi(
 									id: "option-audio-step:" + key + ":" + delta,
 									label: hudCopy( caption.text ) +
 										(delta < 0 ?
-											" ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢" :
+											" -" :
 											" +"),
 									kind: "button",
 									rect: a,
@@ -9193,7 +9431,10 @@ export function createUi(
 						blocks.push( full );
 					}
 				}
-				if ( [ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel ) && hudData ) {
+				if (
+					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
+					hudData
+				) {
 					const admission = beginWindow();
 					const popup = mainPopupGeometry( "Inventory", hudData.windows.ifmainpopup!, w, h, popupPosition ),
 						[px, py] = popup.frame,
@@ -10116,6 +10357,50 @@ export function createUi(
 					) button( id, hudCopy( key ), r[0], r[1], r[2] );
 					endWindow( admission, "quest-abandon" );
 				}
+				if ( game?.reverseReturnChoice ) {
+					// 6AD990's type 0x24 confirm box: the reverse return's two points.
+					controls = [];
+					const admission = beginWindow(), box = guildProposalLayout( w, h );
+					blocks.push( full );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push(
+						...text.quads( hudCopy( "UIIT_CTL_PREMIUM_REVERSE_RETURN" ), box.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					for (
+						const [index, choice, key] of [
+							[ 0, REVERSE_RETURN_LAST_RECALL, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" ],
+							[ 1, REVERSE_RETURN_LAST_DEATH, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" ]
+						] as const
+					) {
+						button(
+							"premium-reverse:" + choice,
+							hudCopy( key ),
+							box.frame[0] + 16,
+							box.frame[1] + 44 + index * 26,
+							box.frame[2] - 32
+						);
+					}
+					button(
+						"premium-reverse-cancel",
+						hudCopy( "UIIT_CTL_CANCEL" ),
+						box.refuse[0],
+						box.refuse[1],
+						box.refuse[2]
+					);
+					endWindow( admission, "premium-reverse-return" );
+				}
 				if ( panel === "Blocking" && hudData ) {
 					const admission = beginWindow(),
 						[px, py] = windowOrigin( "Blocking", [
@@ -10581,10 +10866,20 @@ export function createUi(
 						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4),
 						canFortressOfficial: !!(capabilities & 0x800000),
-						jobRows: jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
-							id: row.id,
-							label: copy( row.symbol )
-						}) )
+						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
+						// 5D9100 lists the guild set ahead of the job menu.
+						jobRows: [
+							...guildManagerRows( capabilities, game.social?.guild, game.social?.localName ?? "" ).map(
+								row => ({
+									id: "npc-guild:" + row.row,
+									label: copy( row.symbol )
+								})
+							),
+							...jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
+								id: row.id,
+								label: copy( row.symbol )
+							}) )
+						]
 					} );
 					npcPanel.geometry( output );
 					quads.push( ...output.quads );
@@ -10647,7 +10942,7 @@ export function createUi(
 						);
 					}
 					for ( let i = 0; i < 5; i++ ) {
-						const entry = shop?.buyback?.find( row => row.index === i ),
+						const entry = restoreSlotEntry( shop?.buyback ?? [], i ),
 							index = shop?.buyback?.indexOf( entry! ) ?? -1,
 							node = page["GDR_STORE_ICON_SLOT_0" + (i + 1)]!;
 						nativeItem(
@@ -10906,6 +11201,107 @@ export function createUi(
 						}
 					}
 					endWindow( admission, "service:" + FORTRESS_WAR_PANEL );
+				}
+				const grant = game?.magicOption;
+				if ( panel === GRANT_PANEL && grant && hudData?.windows.ifgrantmagicattributewnd ) {
+					// CIFGrantMagicAttributeWnd (6EB3E0): the item slot (8), its count
+					// line (9), the five option rows (0x28..0x2C) and the buttons are live.
+					const admission = beginWindow(),
+						root = hudData.root.GDR_GRANT_MAGIC_ATTRIBUTE!,
+						layout = hudData.windows.ifgrantmagicattributewnd,
+						nodes = Object.values( layout ),
+						at = ( id: number ) => nodes.find( n => n.id === id ),
+						[px, py] = windowOrigin( GRANT_PANEL, [
+							Math.max( 0, w - 388 - root.rect[2] - 8 ),
+							Math.max( 0, h - 478 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						item = game?.inventory.find( r => r.slot === grant.item ),
+						part = item ? grantableAvatarPart( item.typeFlags ) : null,
+						options = grant.parts.find( p => p.part === part )?.options ?? [],
+						choice = magicOptionHud.state(),
+						busy = !!game?.inventoryPending || grant.phase !== "idle";
+					nativeFrame( root, px, py, hudCopy( root.text ), "magic-option-cancel" );
+					nativePage( layout, px, py, [ 5, 6, 8, 9, 40, 41, 42, 43, 44 ] );
+					const slot = at( 8 );
+					if ( slot ) nativeItem( "magic-option-slot", item, authoredRect( slot, px, py ), busy );
+					// 6EA540: "<part> - <ADD_COUNT>: <free><UNIT>".
+					const count = at( 9 ), symbol = part === null ? null : avatarPartSymbol( part );
+					if ( count && item && symbol ) {
+						const free = (item.tooltip?.fields.maxMagicOptions51c ?? 0) - avatarMagicOptionCount( item );
+						authoredText(
+							count,
+							px,
+							py,
+							hudCopy( symbol ) + " - " + hudCopy( "UIIT_STT_AVATAR_MAGICOPTION_ADD_COUNT" ) + ": " +
+								free +
+								hudCopy( "UIIT_STT_UNIT" )
+						);
+					}
+					// 6EB3E0 backs every row with gil_bar02; the chosen row is selected.
+					const select = ROOT + "interface/guild/gil_bar02_select.png",
+						deselect = ROOT + "interface/guild/gil_bar02_deselect.png";
+					paths.push( select, deselect );
+					for ( let i = 0; i < MAGIC_OPTION_LIST_ROWS; i++ ) {
+						const bar = at( 0x28 + i ), option = options[choice.top + i];
+						if ( !bar ) continue;
+						const r = authoredRect( bar, px, py );
+						if ( resources.has( select ) && resources.has( deselect ) ) {
+							rect( r, white, option && option.codename === choice.codename ? select : deselect );
+						}
+						if ( !option ) continue;
+						quads.push(
+							...text.quads(
+								avatarMagicOptionText( option.codename, option.value, hudCopy ),
+								[ r[0] + 8, r[1], r[2] - 16, r[3] ],
+								full,
+								white,
+								{ vAlign: 1 }
+							)
+						);
+						controls.push( {
+							id: "magic-option-row:" + option.codename,
+							label: option.codename,
+							rect: r,
+							kind: "button",
+							disabled: busy,
+							selected: option.codename === choice.codename
+						} );
+					}
+					const list = at( 32 );
+					if ( list && options.length > MAGIC_OPTION_LIST_ROWS ) {
+						const r = authoredRect( list, px, py ), range = options.length - MAGIC_OPTION_LIST_ROWS;
+						const scroll = chatScrollbar(
+							"magic-option",
+							[ r[0] + r[2] - 16, r[1] + 16, 16, r[3] - 48 ],
+							options.length,
+							MAGIC_OPTION_LIST_ROWS,
+							range - choice.top,
+							resources.size,
+							full,
+							hover,
+							pressed
+						);
+						paths.push( ...scroll.paths );
+						quads.push( ...scroll.quads );
+						controls.push( ...scroll.controls );
+					}
+					for (
+						const [id, nodeId] of [ [ "magic-option-confirm", 5 ], [ "magic-option-cancel", 6 ] ] as const
+					) {
+						const node = at( nodeId );
+						if ( !node ) continue;
+						authoredLabeledButton(
+							node,
+							px,
+							py,
+							id,
+							hudCopy( node.text ),
+							id === "magic-option-confirm" && (busy || !item || !choice.codename)
+						);
+					}
+					endWindow( admission, "service:" + GRANT_PANEL );
 				}
 				const skin = skinHud.state();
 				if ( panel === SKIN_PANEL && skin && hudData?.windows.ifchangeplayermodel ) {
@@ -13756,6 +14152,110 @@ export function createUi(
 					button( "job-alias-cancel", hudCopy( "UIIT_CTL_CANCEL" ), rx! + rw! + 8, ry!, rw! );
 				}
 			}
+			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) guildManagerHud.reset();
+			else if ( game.social?.compensation !== undefined && !guildManagerHud.question() ) {
+				guildManagerHud.ask( "compensation", game.npcConversation.gid, game.social.compensation );
+			}
+			const guildAsk = guildManagerHud.question(),
+				guildField = guildManagerHud.field(),
+				guildVote = guildManagerHud.vote();
+			if ( worldVisible && (guildAsk || guildField || guildVote) ) {
+				// The guild manager's boxes (guild-manager-hud.ts) in the job box's frame.
+				const layout = guildProposalLayout( w, h );
+				const say = ( key: string, ...args: string[] ) =>
+					noticeText( hudCopy, { key, value: 0, arguments: args } );
+				const price = guildAsk?.kind === "level-up" ? guildLevelUpPrice( guildAsk.value ) : undefined;
+				const title = guildField?.kind === "create" ?
+					"UIIT_CTL_GUILD_CREATE" :
+					guildField ?
+					"UIIT_STT_MLEAVE_WINDOWS" :
+					guildVote ?
+					"UIIT_STT_MRELEASE_VOTESTATE" :
+					"UIIT_STT_CONFIRM_BOX";
+				const lines: Record<string, readonly [string, string]> = {
+					"level-up": [
+						say( "UIIT_MSG_GUILD_LEVEL_UP_CONDITION", String( (guildAsk?.value ?? 0) + 1 ) ),
+						price ?
+							hudCopy( "UIIT_STT_NEED_GP" ) + " : " + price.gp + "   " +
+							hudCopy( "UIIT_STT_CIRCULATION_NEEDMONEY" ) + " : " + price.gold :
+							hudCopy( "UIIT_MSG_ERROR_GUILD_LEVEL_UP_FULL" )
+					],
+					"dissolve": [
+						hudCopy( "UIIT_MSG_GUILD_BREAK_CONFIRM" ),
+						hudCopy( "UIIT_MSG_GUILD_BREAK_ANOTHER_EXPLAIN" )
+					],
+					"secede": [ hudCopy( "UIIT_MSG_GUILD_SECESSION_CONFIRM" ), "" ],
+					"release": [ hudCopy( "UIIT_MSG_MRELEASE_CONFIRM" ), "" ],
+					"compensation": [
+						say( "UIIT_CTL_GUILDWAR_COMPENSATION_01", String( guildAsk?.value ?? 0 ) ),
+						hudCopy( "UIIT_CTL_GUILDWAR_COMPENSATION_02" )
+					],
+					"master-leave": [ hudCopy( "UIIT_MSG_MLEAVE_INPUTID" ), "" ],
+					"create": [ "", "" ],
+					"vote": [
+						Math.ceil( (guildVote?.remainingMs ?? 0) / 60000 ) + " " + hudCopy( "PARAM_MINUTE" ),
+						""
+					]
+				};
+				const [first, second] = lines[guildAsk?.kind ?? guildField?.kind ?? "vote"]!;
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( title ), layout.title, full, white, { hAlign: 1, vAlign: 0 } ),
+					...text.quads( first, layout.name, full, white, { hAlign: 1, vAlign: 0 } )
+				);
+				if ( guildField ) {
+					const field: UiRect = [ layout.question[0], layout.question[1], layout.question[2], 16 ];
+					controls.push( {
+						id: "guild-manager-text",
+						label: hudCopy( title ),
+						kind: "text",
+						value: guildField.text,
+						rect: field,
+						maxLength: 12
+					} );
+					rect( field, [ 0, 0, 0, .6 ], "", [ 0, 0, 1, 1 ], full );
+					quads.push(
+						...text.quads( guildField.text, field, field, white, {
+							hAlign: 1,
+							vAlign: 1,
+							overflow: "clip"
+						} )
+					);
+					if ( focus === "guild-manager-text" && caretVisible ) {
+						const width = text.run( guildField.text ).width;
+						rect(
+							[ field[0] + (field[2] + width) / 2, field[1] + 1, 2, 14 ],
+							white,
+							"",
+							[ 0, 0, 1, 1 ],
+							field
+						);
+					}
+				} else {
+					quads.push( ...text.quads( second, layout.question, full, white, { hAlign: 1 } ) );
+				}
+				button(
+					"guild-manager-yes",
+					hudCopy( guildAsk ? "UIIT_CTL_YES" : "UIIT_CTL_OK" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				if ( !guildVote ) {
+					button(
+						"guild-manager-no",
+						hudCopy( guildAsk ? "UIIT_CTL_NO" : "UIIT_CTL_CANCEL" ),
+						...layout.refuse.slice( 0, 3 ) as [number, number, number]
+					);
+				}
+			}
 			if ( panel !== "Shop" ) repairHud.reset();
 			const repairCost = repairHud.confirmCost();
 			if ( worldVisible && repairCost !== null ) {
@@ -13831,6 +14331,40 @@ export function createUi(
 				);
 				button(
 					"cos-clean-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
+			const teleportShown = mapTeleport.pending();
+			if ( worldVisible && teleportShown ) {
+				// Map teleport: the recall-appoint message box geometry.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					)
+				);
+				const region = String( teleportShown.regionId ),
+					place = hud.data()?.zones[region] ?? "Region " + region;
+				quads.push(
+					...text.quads( "Teleport", layout.title, full, white, { hAlign: 1 } ),
+					...text.quads( place, layout.name, full, white, { hAlign: 1 } ),
+					...text.quads( "Teleport here?", layout.question, full, white, { hAlign: 1 } )
+				);
+				button(
+					"map-teleport-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"map-teleport-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
@@ -14270,7 +14804,7 @@ export function createUi(
 			}
 			if (
 				worldVisible && carriedItem &&
-				[ "Inventory", "Shop", "Alchemy", "COS inventory", "Storage" ].includes( panel )
+				[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel )
 			) {
 				const item = carriedRow( carriedItem, game ), path = iconPath( item?.icon );
 				if ( path ) {

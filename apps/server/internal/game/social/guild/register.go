@@ -38,7 +38,13 @@ type Presence interface {
 // B77A; their typed policy lives in NoticeRefusalPayload. Every success send is presence-targeted (never a
 // division broadcast). Sends run AFTER the store doors return - never
 // inside the store lock.
-func Register(hub *transport.Hub, deps Dependencies, presence Presence, unions *UnionRuntime) {
+// GuildManagers is the action owner's guild manager test: the selected
+// NPC with service 0xF in range (action/npcguild.go). Nil checks nothing.
+type GuildManagers interface {
+	GuildManagerInRange(divisionID string, actor *enterworld.Character, gid uint32) bool
+}
+
+func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers GuildManagers, unions *UnionRuntime) {
 	hub.Handle(OpGuildCreateRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
 		if !bound {
@@ -47,6 +53,15 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, unions *
 		}
 		online := func(name string) bool {
 			return presence != nil && presence.OnlineByName(divisionID, name)
+		}
+		// 5D2540's input belongs to the guild manager's create row: the
+		// selected manager in range, as every guild manager request, before
+		// the create door commits anything.
+		if request, err := DecodeCreateRequest(payload); err == nil && managers != nil &&
+			!managers.GuildManagerInRange(divisionID, actor, request.SelectedTargetGid) {
+			_ = s.Send(OpGuildCreateAck, EncodeGuildErrorResult(GuildErrManagerOutOfReach))
+			log.Debugf("guild: 0x7663 (create) refused for %s: no guild manager %d in range", actor.Name, request.SelectedTargetGid)
+			return
 		}
 		outcome := HandleCreate(deps, divisionID, actor, payload, online)
 		if outcome.Refusal != "" {
@@ -57,15 +72,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, unions *
 			return
 		}
 		_ = s.Send(OpGuildCreateAck, outcome.AckPayload)
-		// The NPC select plane exists now (action answers 0xB45A on the
-		// roster-NPC grant), so this gid COULD be checked against the
-		// selection store. DECISION: not enforced yet - the roster
-		// carries no guild-capable NPC (simulation.NpcTalkCapabilityFlags
-		// grants NpcTalkFlagGuild only to NPC_EU_GUILD, which does not
-		// spawn), and dev/e2e creates legitimately send gid 0, so
-		// enforcement today would refuse every live create. Revisit when
-		// a guild NPC joins the roster.
-		log.Debugf("guild: %s created guild %d (selectedTargetGid=%d decoded, not validated - see the enforcement decision above)", actor.Name, outcome.GuildID, outcome.SelectedTargetGid)
+		log.Debugf("guild: %s created guild %d at manager %d", actor.Name, outcome.GuildID, outcome.SelectedTargetGid)
 	})
 	hub.Handle(OpGuildNoticeEditRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
@@ -97,6 +104,9 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, unions *
 		}
 		guildID := characterGuild(actor)
 		outcome := HandleKick(deps, divisionID, actor, payload)
+		if outcome.ErrorPayload != nil {
+			_ = s.Send(OpGuildKickAck, outcome.ErrorPayload)
+		}
 		if outcome.Refusal != "" {
 			log.Debugf("guild: 0x74B1 (kick) refused for %s: %s", actor.Name, outcome.Refusal)
 			return
@@ -113,6 +123,9 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, unions *
 		}
 		guildID := characterGuild(actor)
 		outcome := HandleLeave(deps, divisionID, actor, payload)
+		if outcome.Refusal != "" && outcome.AckPayload != nil {
+			_ = s.Send(OpGuildLeaveAck, outcome.AckPayload)
+		}
 		if outcome.Refusal != "" {
 			log.Debugf("guild: 0x756E (leave) refused for %s: %s", actor.Name, outcome.Refusal)
 			return

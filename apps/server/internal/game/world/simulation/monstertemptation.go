@@ -196,6 +196,6 @@ func (s *MonsterState) monsterFoe(division string, gid uint32, nowMs int64) (pla
 	return playerPose{
 		Gid:        gid,
 		Pose:       poseToSpawn(mover.LivePoseAt(nowMs, nil)),
-		BodyRadius: BodyRadius(instance.Ref.BodyRadius),
+		BodyRadius: BodyRadius(instance.BodyRadius()),
 	}, true
 }

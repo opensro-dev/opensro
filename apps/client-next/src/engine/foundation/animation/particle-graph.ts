@@ -473,6 +473,12 @@ export function advanceParticleGraph(
 	const root = history.root;
 	root.state.position[0]! += shiftX;
 	root.state.position[2]! += shiftZ;
+	// The holder basis advances only with a tick: linked elements take the
+	// holder's turn from root.delta on the next tick, so a call that runs no
+	// tick (render frames outnumber 20 Hz ticks) must not consume it, or the
+	// turn is lost and they keep their birth frame (an arrow's markers stayed
+	// pointing where the hand held it at READY).
+	if ( target === history.frame ) return;
 	const oldRoot = scratch.oldRoot;
 	copy3( root.state.position, oldRoot );
 	scratch.previous.set( root.matrix );

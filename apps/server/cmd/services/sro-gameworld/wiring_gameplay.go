@@ -139,6 +139,7 @@ func newGameplayPlane(
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
 	deps.StaticRefItemCodenames = items.StaticRefItemCodenames
 	deps.ExtraMagicOptionIDs = items.AlchemyMagicOptionIDs
+	deps.AvatarMagicOptions = items.AvatarMagicOptions
 	items.Ground.Restore(authorityStore.GroundSnapshotForRestore())
 	authorityStore.AttachGround(items.Ground)
 
@@ -184,6 +185,7 @@ func newGameplayPlane(
 	movementRuntime.MovementBlocked = items.PlayerMovementBlocked
 	movementRuntime.RetireMoveEffects = items.RetireMoveEffects
 	movementRuntime.AttackLocked = items.PlayerAttackLocked
+	movementRuntime.MotionLocked = items.PlayerMotionLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.CompanionPresentations = items.CompanionPresentations
 	movementRuntime.SpawnSkills = items.EntrySkills
@@ -216,6 +218,10 @@ func newGameplayPlane(
 	parties := party.NewRuntime(deps, presence)
 	parties.UseMemberVitals(items.GameplayVitals)
 	parties.UseLivePose(items.LiveSpawnFor)
+	parties.UseMasteries(party.MasteriesFromEnv())
+	if party.MasteriesFromEnv() {
+		log.Infof("party: member rows carry the two main masteries ON (%s=off disables)", party.EnvPartyMasteries)
+	}
 	items.NextPartyLootMember = parties.Registry().NextLootMember
 	items.RewardActorPresent = func(division, name string) bool {
 		s, ok := presence.SessionByName(division, name)
@@ -427,6 +433,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d, gold x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.GoldRate)
 		game.items.DropPassRate = stats.Growth.DropRate
 		game.items.GoldRate = stats.Growth.GoldRate
+		game.items.PartyShareFloor = true
 	}
 	stats.Withdrawal = game.items.WithdrawalHooks()
 	stats.BaseStats = game.deps.PlayerBaseStats
@@ -505,6 +512,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.RecallStatPoints = stats.StatRecallUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()
+	game.items.UpdateJobExperience = stats.JobExperienceUpdater()
 	// Delivery resolves sessions from their bindings alone and never reads the
 	// character store: the action runtime publishes from inside character
 	// doors (the store's write lock), where any store read would deadlock.
@@ -566,7 +574,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)
-	guild.Register(hub, game.deps, game.presence, game.unions)
+	guild.Register(hub, game.deps, game.presence, game.items, game.unions)
 	game.unions.Register(hub)
 	game.guildInvites.Register(hub)
 	game.mentorInvites.Register(hub)

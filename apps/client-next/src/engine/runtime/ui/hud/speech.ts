@@ -6,7 +6,8 @@ speech.ts - the speech boards over talking players
 sub_856680 replaces a speaker's board text and rearms timer 10 for 10,000 ms
 when a chat line arrives. Lines are admitted by sequence once; the chat
 history the client keeps across a teleport or world entry is not speech
-being said again.
+being said again, and neither is the transcript the server replays at
+admission (lines marked history).
 
 ===========================================================================
 */
@@ -14,7 +15,8 @@ import type { ChatLine } from "@/engine/contracts/gameplay";
 
 // sub_856680 timer 10.
 const SPEECH_MS = 10000;
-// Channels whose lines show over the speaker: all, party, guild, union.
+// Channels whose lines show over the speaker (752800 at 7530BB): 1 all, 3 GM
+// all, 6 global and 13.
 const SPEECH_CHANNELS = [ 1, 3, 6, 13 ];
 
 /*
@@ -47,7 +49,7 @@ expired or whose speaker left view.
 			for ( const line of lines ) {
 				if ( line.sequence === undefined || line.sequence <= observed ) continue;
 				observed = line.sequence;
-				if ( !SPEECH_CHANNELS.includes( line.channel ) ) continue;
+				if ( line.history || !SPEECH_CHANNELS.includes( line.channel ) ) continue;
 				const gid = line.gid ?? players.find( p => p.name === line.name )?.gid;
 				if ( gid !== undefined && present.has( gid ) ) {
 					active.set( gid, { text: line.text, channel: line.channel, expires: now + SPEECH_MS } );

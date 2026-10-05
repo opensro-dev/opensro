@@ -20,6 +20,13 @@ type PKRecord struct {
 	DailyCount uint8  `json:"dailyCount"`
 	TotalCount uint16 `json:"totalCount"`
 	Penalty    uint32 `json:"penalty"`
+	// TotalDecayAt is the penalty keeper timed job (CTJ_PenaltyKeeper,
+	// type 2): the unix second at which TotalCount next drops by one.
+	// Zero while no keeper runs.
+	TotalDecayAt int64 `json:"totalDecayAt,omitempty"`
+	// DailyDay is the local day (yyyymmdd) DailyCount belongs to; a count
+	// from an earlier day is reset (pk.ResetDailyIfStale).
+	DailyDay int32 `json:"dailyDay,omitempty"`
 }
 
 // PVPState is CICUser+4F4. The aggression list is transient; a durable penalty

@@ -61,6 +61,18 @@ func textdataU32(value string) uint32 {
 	return uint32(v)
 }
 
+// textdataDword reads a skill parameter word. The shard writes each DWORD
+// as signed text, so a word above 0x7FFFFFFF (the four-week premium
+// buff's 2,419,200,000 ms duration) arrives negative and means its
+// two's-complement value.
+func textdataDword(value string) (uint32, bool) {
+	v, ok := textdataInt(value)
+	if !ok || v < -0x80000000 || v > 0xffffffff {
+		return 0, false
+	}
+	return uint32(v), true
+}
+
 // textdataNonNegative reads a count/level cell; malformed or negative
 // degrades to 0.
 func textdataNonNegative(value string) int64 {
@@ -205,7 +217,8 @@ func encodedEffectDuration(fields []string) uint32 {
 			return 0
 		}
 		if n == 0x64757261 && i+1 < len(fields) {
-			return textdataU32(fields[i+1])
+			duration, _ := textdataDword(fields[i+1])
+			return duration
 		}
 		i += 1 + spawnParamArity(uint32(n))
 	}

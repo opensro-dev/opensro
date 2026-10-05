@@ -23,6 +23,12 @@ with the request's body echoed (the serializer's response arm):
 	0x0B gold room to bag   [u32 amount]                    -> [u32 amount]
 	0x0C gold bag to room   [u32 amount]                    -> [u32 amount]
 
+The guild warehouse (CIFStorageRoom window 0x91) has its own five types
+with the same layouts, chosen by CGInterface_RequestItemMove (699250) and
+CGInterface_RequestCosItemMove for the window pair: 0x1D room to room,
+0x1E bag to room, 0x1F room to bag, 0x20 gold bag to room, 0x21 gold room
+to bag. Its gold and list ride 0x34A9 and 0x3363 in the personal layouts.
+
 ===========================================================================
 */
 package wire
@@ -39,7 +45,44 @@ const (
 	MoveTypeStorageWithdraw     uint8 = 0x03
 	MoveTypeStorageGoldWithdraw uint8 = 0x0B
 	MoveTypeStorageGoldDeposit  uint8 = 0x0C
+
+	MoveTypeGuildStorage             uint8 = 0x1D
+	MoveTypeGuildStorageDeposit      uint8 = 0x1E
+	MoveTypeGuildStorageWithdraw     uint8 = 0x1F
+	MoveTypeGuildStorageGoldDeposit  uint8 = 0x20
+	MoveTypeGuildStorageGoldWithdraw uint8 = 0x21
 )
+
+// The guild warehouse's gold and list pushes (CNetProcessSecond 0x34A9 ->
+// CIFStorageRoom_SetGold, 0x3363 -> 7665D0).
+const (
+	OpGuildStorageGold uint16 = 0x34A9
+	OpGuildStorageList uint16 = 0x3363
+)
+
+/*
+================
+PersonalStorageMove
+
+The personal warehouse type a guild warehouse type stands for, and
+whether it was one.
+================
+*/
+func PersonalStorageMove(movement uint8) (uint8, bool) {
+	switch movement {
+	case MoveTypeGuildStorage:
+		return MoveTypeStorage, true
+	case MoveTypeGuildStorageDeposit:
+		return MoveTypeStorageDeposit, true
+	case MoveTypeGuildStorageWithdraw:
+		return MoveTypeStorageWithdraw, true
+	case MoveTypeGuildStorageGoldDeposit:
+		return MoveTypeStorageGoldDeposit, true
+	case MoveTypeGuildStorageGoldWithdraw:
+		return MoveTypeStorageGoldWithdraw, true
+	}
+	return movement, false
+}
 
 // StorageFunctionMask is the NPC capability bit and the B338 lock value of
 // the warehouse (CPSMission_OnNpcInteractionResponse0xB338, lock 4).
@@ -106,9 +149,9 @@ EncodeStorageMoveSuccess
 func EncodeStorageMoveSuccess(q ItemMoveRequest) []byte {
 	w := NewWriter(8).U8(1).U8(q.MovementType)
 	switch q.MovementType {
-	case MoveTypeStorage:
+	case MoveTypeStorage, MoveTypeGuildStorage:
 		w.U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity)
-	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw:
+	case MoveTypeStorageDeposit, MoveTypeStorageWithdraw, MoveTypeGuildStorageDeposit, MoveTypeGuildStorageWithdraw:
 		w.U8(q.SourceSlot).U8(q.DestSlot)
 	default:
 		w.U32(q.GoldAmount)

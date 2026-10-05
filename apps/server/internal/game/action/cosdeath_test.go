@@ -53,7 +53,7 @@ func TestRiderDeathReleasesTheRiddenVehicle(t *testing.T) {
 	zero := int64(0)
 	character.CurrentHP = &zero
 
-	effects, _ := rt.settlePlayerDeathInDoor(testDivision, character, 1000)
+	effects, _ := rt.settlePlayerDeathInDoor(testDivision, character, deathKiller{}, 1000)
 	if ride.Summoned || ride.Mounted || ride.StateFlags&cosStateSummoned != 0 {
 		t.Fatalf("the dead rider kept its vehicle: %+v", ride)
 	}
@@ -90,7 +90,7 @@ func TestRiderDeathKeepsAnUnriddenCompanion(t *testing.T) {
 	zero := int64(0)
 	character.CurrentHP = &zero
 
-	effects, _ := rt.settlePlayerDeathInDoor(testDivision, character, 1000)
+	effects, _ := rt.settlePlayerDeathInDoor(testDivision, character, deathKiller{}, 1000)
 	if !pet.Summoned || despawnsGID(effects, pet.GID) {
 		t.Fatalf("an unridden companion died with its owner: %+v %+v", pet, effects)
 	}

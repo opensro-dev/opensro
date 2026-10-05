@@ -64,6 +64,23 @@ const leveldataExpColumn = 1
 // 24, level 4 -> 94, level 11 -> 259 and level 90 -> 6949.
 const leveldataMonsterExpBasisColumn = 5
 
+// leveldataJobExpColumn is the trader's job-EXP requirement (CRefLevel
+// +0x20); the thief's (+0x24) and the hunter's (+0x28) follow it.
+// CJobInfo_AddJobExp (60DD90) reads the row of the job grade.
+const leveldataJobExpColumn = 6
+
+/*
+================
+JobLevelDataSource
+
+The job-EXP curve: the EXP a job type needs to advance from grade to
+grade + 1 (job 1 trader, 2 thief, 3 hunter).
+================
+*/
+type JobLevelDataSource interface {
+	JobExpRequired(grade int64, job uint8) (int64, bool)
+}
+
 /*
 ================
 TextdataLevels
@@ -80,6 +97,7 @@ type TextdataLevels struct {
 	expByLvl         map[int64]int64
 	mobExpBasisByLvl map[int64]int64
 	goldBasisByLvl   map[int64]int64
+	jobExpByLvl      map[int64][3]int64
 }
 
 /*
@@ -126,6 +144,20 @@ func (t *TextdataLevels) MonsterExpBasis(level int64) (int64, bool) {
 
 /*
 ================
+JobExpRequired
+================
+*/
+func (t *TextdataLevels) JobExpRequired(grade int64, job uint8) (int64, bool) {
+	t.once.Do(t.load)
+	row, ok := t.jobExpByLvl[grade]
+	if !ok || job < 1 || job > 3 {
+		return 0, false
+	}
+	return row[job-1], true
+}
+
+/*
+================
 WithdrawalGoldBasis
 ================
 */
@@ -155,6 +187,7 @@ func (t *TextdataLevels) load() {
 	t.expByLvl = map[int64]int64{}
 	t.mobExpBasisByLvl = map[int64]int64{}
 	t.goldBasisByLvl = map[int64]int64{}
+	t.jobExpByLvl = map[int64][3]int64{}
 	const goldColumnCount = 3
 	for _, fields := range readTextdataFile(filepath.Join(t.dir, "dg.txt")) {
 		if len(fields) != goldColumnCount {
@@ -188,6 +221,18 @@ func (t *TextdataLevels) load() {
 		if len(fields) > leveldataMonsterExpBasisColumn {
 			if basis, ok := textdataInt(fields[leveldataMonsterExpBasisColumn]); ok && basis > 0 {
 				t.mobExpBasisByLvl[level] = basis
+			}
+		}
+		if len(fields) > leveldataJobExpColumn+2 {
+			var jobs [3]int64
+			valid := true
+			for i := range jobs {
+				v, ok := textdataInt(fields[leveldataJobExpColumn+i])
+				valid = valid && ok && v > 0
+				jobs[i] = v
+			}
+			if valid {
+				t.jobExpByLvl[level] = jobs
 			}
 		}
 	}

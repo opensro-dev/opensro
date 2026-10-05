@@ -31,18 +31,21 @@ const fullDamagePercent = 100
 ================
 fixedDamageResult
 
-The pdmg record: a normal result carrying the authored amount.
-
-Inferred: the record skips the CFormulae lanes entirely, as the port's
-other fixed producers do (the status-cast record, the abnormal damage
-over time): no defense, parry, level advantage or STR/INT balance, and
-no critical or block roll, since 58ED8C and 58F0C1 roll only for att
-lanes. This port has no evade roll to skip: hit and evasion rates only
-move the damage percentile of an att lane (combat.hitCenter).
+The pdmg record: a normal result carrying
+Formulae_CalculateFixedSkillDamage (40F5F0, 58F4FF): the amount plus the
+caster's SAAA when the row reads it (getv +0x538), cut by the target's
+level advantage. The record skips the CFormulae lanes: no defense, parry
+or STR/INT balance, and no critical or block roll, since 58ED8C and
+58F0C1 roll only for att lanes.
 ================
 */
-func fixedDamageResult(fixed enterworld.SkillFixedDamage) combat.Result {
-	return combat.Result{Damage: min(fixed.Amount, wire.MaxSkillActionDamage), ResultFlags: 1}
+func fixedDamageResult(fixed enterworld.SkillFixedDamage, attacker, defender combat.Stats) combat.Result {
+	var power uint32
+	if fixed.Power {
+		power = attacker.SkillParameters[enterworld.ParameterFixedDamagePower]
+	}
+	damage := combat.FixedSkillDamage(fixed.Amount, power, attacker.Level, defender.Level)
+	return combat.Result{Damage: min(damage, wire.MaxSkillActionDamage), ResultFlags: 1}
 }
 
 /*

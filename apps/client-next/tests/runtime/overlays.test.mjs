@@ -26,10 +26,11 @@ async function load( path, name ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
 const { overheadLayout } = await load( "foundation/ui/overhead-layout.ts", "overhead" );
-const { partyDistanceShade, partyOverlay, partyRosterPose, partyShadeImage } = await load(
-	"foundation/ui/party-overlay.ts",
-	"party"
-);
+const { partyDistanceShade, partyLocalPose, partyOverlay, partyRosterPose, partyShadeImage, partyShadeImages } =
+	await load(
+		"foundation/ui/party-overlay.ts",
+		"party"
+	);
 const { buffViewerIcons, collectActiveBuffs, partyBuffViewer, rebuildBuffViewer, skillLookup } = await load(
 	"foundation/ui/buff-viewer.ts",
 	"buff-viewer"
@@ -126,6 +127,46 @@ test("party wraps with the native bottom reserve and option-specific row pitch",
 		[ 283, 137 ]
 	] );
 	assert.deepEqual( partyOverlay( state, [], 600, 4, 137, false )[1].position, [ 17, 193 ] );
+});
+test("party rows list the member's trained masteries left of the buff row", () => {
+	const member = ( id, primaryMastery, secondaryMastery ) => ({
+		id,
+		name: "M" + id,
+		status: 0xaa,
+		primaryMastery,
+		secondaryMastery
+	});
+	const state = {
+		...game,
+		social: {
+			...game.social,
+			members: [ member( 20, 258, 273 ), member( 21, 513, 0 ), member( 22, 0, 0 ), {
+				id: 23,
+				name: "M23",
+				status: 0xaa
+			} ]
+		}
+	};
+	const rows = partyOverlay( state, [], 900, 4, 137, true );
+	assert.deepEqual( rows[0].masteries, [
+		{ id: 258, rect: [ rows[0].position[0] + 2, 137 + 39, 12, 12 ] },
+		{ id: 273, rect: [ rows[0].position[0] + 17, 137 + 39, 12, 12 ] }
+	] );
+	assert.deepEqual( rows[1].masteries.map( m => m.id ), [ 513 ] );
+	assert.deepEqual( rows[2].masteries, [] );
+	assert.deepEqual( rows[3].masteries, [] );
+});
+test("every shade image is requested up front, in band order", () => {
+	assert.deepEqual( partyShadeImages(), [ 1, 2, 3, 4, 5 ].map( partyShadeImage ) );
+});
+test("the distance shade measures from the live pose, not the lagging local entity", () => {
+	const at = ( x, regionId = 0x6a48 ) => ({ regionId, x, y: 0, z: 0, angle: 0 });
+	const stale = { ...local, regionId: 0x6a48, x: 0, y: 0, z: 0 };
+	const walked = { ...game, pose: at( 900 ) };
+	assert.equal( partyLocalPose( walked, [ stale ] ), walked.pose );
+	assert.equal( partyDistanceShade( partyLocalPose( walked, [ stale ] ), at( 0 ) ), 4 );
+	assert.equal( partyLocalPose( { ...game, pose: null }, [ stale ] ), stale );
+	assert.equal( partyLocalPose( { ...game, pose: null }, [] ), null );
 });
 test("party portraits shade by the member's squared distance (5BD0A0)", () => {
 	const at = ( regionId, x, z, y = 0 ) => ({ regionId, x, y, z, angle: 0 });

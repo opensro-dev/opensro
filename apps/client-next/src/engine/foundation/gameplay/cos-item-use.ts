@@ -1,13 +1,15 @@
 /*
 ===========================================================================
 
-cos-item-use.ts - native companion item targets and request tails
+cos-item-use.ts - native companion selection, item targets and request tails
 
 Every inventory activation path composes the same target-dependent bytes.
-Only admitted owner records can nominate a live pet or a dead summoner item.
+The worker owns selection; admitted records nominate pets or summoner items.
 
 ===========================================================================
 */
+import { constantNativeNotice } from "./native-notice";
+import type { SystemNotice } from "./system-notices";
 import type { CosRecord, GameplayCommand, InventoryItem } from "@/engine/contracts/gameplay";
 import { isSkinChangeScroll, skinChangeTail, type SkinChoice } from "./skin-change";
 
@@ -22,6 +24,7 @@ unambiguous; several candidates require an explicit selection.
 export interface CosItemUseContext {
 	readonly records: readonly CosRecord[];
 	readonly selectedGid?: number;
+	readonly targetGid?: number;
 	readonly revivalSlot?: number;
 	readonly summonerSlot?: number;
 	readonly skin?: SkinChoice;
@@ -54,6 +57,12 @@ export function cosItemUseTail(
 		if ( !context?.skin ) throw Error( "Choose a skin in the change window" );
 		return skinChangeTail( context.skin );
 	}
+	if ( group === 1 && subtype === 10 ) {
+		// 697036 / 67A5B0 append the target window's GID, including zero.
+		const tail = new Uint8Array( 4 );
+		new DataView( tail.buffer ).setUint32( 0, context?.targetGid ?? 0, true );
+		return tail;
+	}
 	if ( group === 1 && subtype === 6 ) {
 		const candidates = items.filter( row =>
 			row.slot >= 13 && row.summon?.state === 4 &&
@@ -77,12 +86,19 @@ export function cosItemUseTail(
 	const targeted = group === 1 && [ 4, 5, 7, 9 ].includes( subtype ) || group === 2 && subtype === 7;
 	if ( !targeted ) return new Uint8Array();
 	const candidates = context?.records.filter( record =>
-		!record.dead && record.hp > 0 &&
-		(group !== 1 || subtype !== 9 || record.band === 3) &&
+		record.band !== 4 && record.band !== 5 &&
 		(context.selectedGid === undefined || record.gid === context.selectedGid)
 	) ?? [];
 	if ( candidates.length !== 1 ) throw Error( "Select an available owned companion" );
-	const gid = candidates[0]!.gid;
+	const target = candidates[0]!;
+	// 69641F: the attack pet display rounds satiety down, then adds one.
+	if (
+		group === 1 && subtype === 9 && target.band === 3 &&
+		1 - Math.trunc( Math.fround( (target.satiety ?? 0) / 10000 ) * -100 ) >= 100
+	) {
+		throw Error( "Companion is already fed" );
+	}
+	const gid = target.gid;
 	if ( !Number.isInteger( gid ) || gid <= 0 || gid > 0xffffffff ) throw Error( "Invalid companion identity" );
 	const tail = new Uint8Array( 4 );
 	new DataView( tail.buffer ).setUint32( 0, gid, true );
@@ -118,4 +134,162 @@ export function companionItemTargetCommand(
 		return { kind: "item-use", slot: source.slot, summonerSlot: target.slot };
 	}
 	return null;
+}
+
+/*
+================
+autoPotionTarget
+
+The automatic quickslot has no dragged summoner slot (696490). Companion
+items use the COS panel selection (696365/696D22), never an arbitrary pet.
+A refused target leaves the channel's retry timer running.
+================
+*/
+export function autoPotionTarget(
+	flags: number,
+	records: readonly CosRecord[],
+	selectedGid: number,
+	targetGid = 0
+): CosItemUseContext | null {
+	const group = flags >>> 7 & 15, subtype = flags >>> 11 & 31;
+	if ( group === 1 && subtype === 6 ) return null;
+	const targeted = group === 1 && [ 4, 5, 7, 9 ].includes( subtype ) || group === 2 && subtype === 7;
+	if ( !targeted ) return { records, selectedGid, targetGid };
+	const target = records.find( r => r.gid === selectedGid );
+	if ( !target || target.band === 4 || target.band === 5 ) return null;
+	if (
+		group === 1 && subtype === 9 && target.band === 3 &&
+		1 - Math.trunc( Math.fround( (target.satiety ?? 0) / 10000 ) * -100 ) >= 100
+	) return null;
+	return { records, selectedGid, targetGid };
+}
+
+/*
+================
+createCosSelection
+
+6F2710/6F2900 keep one tab for all guild soldiers. Its original GID can
+outlive its record; removing another soldier must not select a different pet.
+The worker owns this state and publishes the selection to the HUD.
+================
+*/
+export function createCosSelection() {
+	const GUILD_BAND = 5, LAST_COS_BAND = 6;
+	let selected = 0, guildRepresentative: CosRecord | undefined;
+	let tabs: number[] = [];
+	return {
+		/*
+================
+add
+
+Called after the decoded record enters the owned COS map.
+================
+		*/
+		add( record: CosRecord, records: ReadonlyMap<number, CosRecord> ) {
+			if ( record.band === GUILD_BAND ) {
+				let count = 0;
+				for ( const row of records.values() ) if ( row.band === GUILD_BAND ) count++;
+				if ( count > 1 ) return;
+				guildRepresentative = record;
+			}
+			if ( record.band < 1 || record.band > LAST_COS_BAND ) return;
+			tabs.push( record.gid );
+			selected = record.gid;
+		},
+		/*
+================
+remove
+
+Called before erasing the record. 6F29BD returns early while other soldiers
+remain, even when this was the representative. 6F21F0 refuses missing GIDs.
+================
+		*/
+		remove( gid: number, records: ReadonlyMap<number, CosRecord> ) {
+			const record = records.get( gid );
+			if ( !record ) return;
+			let tab = gid;
+			if ( record.band === GUILD_BAND ) {
+				let count = 0;
+				for ( const row of records.values() ) if ( row.band === GUILD_BAND ) count++;
+				if ( count > 1 ) return;
+				tab = guildRepresentative?.gid ?? gid;
+			}
+			const index = tabs.indexOf( tab );
+			if ( index !== -1 ) tabs.splice( index, 1 );
+			if ( records.size === 1 ) {
+				tabs = [];
+				selected = 0;
+				return;
+			}
+			const first = tabs[0];
+			if ( first !== undefined && first !== gid && records.has( first ) ) selected = first;
+		},
+		/*
+================
+select
+================
+		*/
+		select( gid: number, records: ReadonlyMap<number, CosRecord> ) {
+			if ( records.has( gid ) ) selected = gid;
+		},
+		/*
+================
+statusRecords
+
+Only the first guild soldier creates a status control. Keep its binding until
+the last soldier is removed, even after that representative's own despawn.
+================
+		*/
+		statusRecords( records: ReadonlyMap<number, CosRecord> ) {
+			const shown: CosRecord[] = [];
+			for ( const gid of tabs ) {
+				const record = records.get( gid ) ??
+					(guildRepresentative?.gid === gid ? guildRepresentative : undefined);
+				if ( record ) shown.push( record );
+			}
+			return shown;
+		},
+		/*
+================
+selected
+================
+		*/
+		selected() {
+			return selected;
+		},
+		/*
+================
+reset
+================
+		*/
+		reset() {
+			selected = 0;
+			guildRepresentative = undefined;
+			tabs = [];
+		}
+	};
+}
+
+/*
+================
+autoPotionTargetNotice
+
+69691D reports incompatible targets, 696D22 reports a missing companion,
+and 696486 routes the full-food rejection through native category 1.
+================
+*/
+export function autoPotionTargetNotice(
+	flags: number,
+	records: readonly CosRecord[],
+	selectedGid: number
+): SystemNotice | null {
+	if ( autoPotionTarget( flags, records, selectedGid ) ) return null;
+	const group = flags >>> 7 & 15, subtype = flags >>> 11 & 31;
+	const target = records.find( row => row.gid === selectedGid );
+	if ( group === 1 && subtype === 6 || target?.band === 4 || target?.band === 5 ) {
+		return { key: "UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT", value: 0, nativeType: 5 };
+	}
+	if ( !target ) return { key: "UIIT_MSG_COSPETERR_CANT_USEITEM", value: 0, nativeType: 5 };
+	const ITEM_NOTICE_CATEGORY = 1, FULL_FOOD_REFUSAL = 0xb3;
+	return constantNativeNotice( ITEM_NOTICE_CATEGORY, FULL_FOOD_REFUSAL );
 }

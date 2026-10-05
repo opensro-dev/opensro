@@ -104,8 +104,8 @@ func TestWanderingMonsterAcquiresAggroInFlight(t *testing.T) {
 
 	// 1. Force the monster into MoverWandering with an in-flight walk segment.
 	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
-	from := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
-	dest := monster.Pose{RegionID: 25000, X: 1030, Y: 20, Z: 1000}
+	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
+	dest := monster.Pose{RegionID: monsterTestRegion, X: 1030, Y: 20, Z: 1000}
 	if err := mover.Transition(monster.MoverEventStartWander, 0); err != nil {
 		t.Fatalf("transition wander: %v", err)
 	}
@@ -175,8 +175,8 @@ func TestWanderingMonsterAcquiresAggroInAttackRangeInterruptsWithImmediateAttack
 
 	// 1. Put monster in MoverWandering with in-flight segment (from (1000, 1000) toward (1050, 1000)).
 	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
-	from := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
-	dest := monster.Pose{RegionID: 25000, X: 1050, Y: 20, Z: 1000}
+	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
+	dest := monster.Pose{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000}
 	if err := mover.Transition(monster.MoverEventStartWander, 0); err != nil {
 		t.Fatalf("transition wander: %v", err)
 	}
@@ -273,8 +273,8 @@ func TestAggroLifecycleEndToEnd(t *testing.T) {
 	mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
 	mover.BehaviorDeadlineMs = t0 + 6500
 	mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
-	from := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
-	dest := monster.Pose{RegionID: 25000, X: 1050, Y: 20, Z: 1000}
+	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
+	dest := monster.Pose{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000}
 	mover.From = from
 	mover.To = dest
 	mover.DepartMs = t0 + 1000

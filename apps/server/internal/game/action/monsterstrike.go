@@ -26,10 +26,6 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// fullAreaPercent is an unreduced hit: the primary victim, and every hit
-// of a skill without an action area.
-const fullAreaPercent = 100
-
 /*
 ================
 monsterStrike
@@ -79,8 +75,20 @@ type monsterStrikeInput struct {
 	instance monster.Instance
 	skill    enterworld.SkillRow
 	attacker combat.Stats
+	from     monster.Pose
 	percent  uint64
 	now      int64
+}
+
+/*
+================
+origin
+
+The monster's pose as a spawn point.
+================
+*/
+func (in monsterStrikeInput) origin() simulation.Spawn {
+	return simulation.Spawn{RegionID: in.from.RegionID, X: in.from.X, Y: in.from.Y, Z: in.from.Z}
 }
 
 /*
@@ -100,57 +108,33 @@ func scaleAreaDamage(formula combat.Result, percent uint64) combat.Result {
 ================
 monsterStrikePlayer
 
-One player victim: every authored impact behind its wall, the status
-rolls, then HP, wear, death or battle state under the character door.
-defender is the player's combat stats, read before the door.
+One player victim through the shared player strike (playervictim.go):
+every authored impact behind its wall at this victim's share, the status
+rolls and the displacement roll, then the victim's door, its publication
+and the damage it returns to the monster (5A0C2D, a fatal hit included).
 ================
 */
 func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapshot *enterworld.Character, defender combat.Stats, pose simulation.Spawn) monsterStrikeOutcome {
 	divisionID, instance, skill, nowMs := in.division, in.instance, in.skill, in.now
 	out := monsterStrikeOutcome{alive: true}
-	formulas := make([]combat.Result, 0, skill.Attack.ImpactCount)
-	// 58EC6C: a defender behind a wall splits every impact. ck / lfst /
-	// pdmg / pdm2 attacks get no absorb group (589EE0), yet the wall's
-	// lanes still leave the defender's record.
-	wall, walled := rt.standingWallOf(divisionID, snapshot.Name)
-	var wallRule *enterworld.SkillWall
-	if walled {
-		wallRule = &wall.wall
-	}
-	var splits []wallSplit
-	// 590680 rolls on every hit; 593F0C installs the records on a surviving
-	// victim after 58F491/593BEF's damage breaks (root, sleep, stun).
-	var abnormalRecords []abnormal.Record
-	for range skill.Attack.ImpactCount {
-		split, resolveErr := rt.resolveCombatBehindWall(criticalActor{division: divisionID, monster: instance.Gid}, skill, in.attacker, defender, wallRule)
-		formula := scaleAreaDamage(split.Defender, in.percent)
-		if resolveErr != nil || formula.Damage == 0 && !walled && !formula.Blocked && !formula.Slain {
-			return out
-		}
-		splits = append(splits, wallSplit{absorbed: split.Absorbed, flags: formula.ResultFlags, covered: split.Covered})
-		formulas = append(formulas, formula)
-		if formula.Blocked || formula.Slain {
-			continue // 5905FB: no status roll for a blocked or ck-killed impact
-		}
-		records, rollErr := rt.rollMonsterOnPlayer(divisionID, instance, &skill.Abnormal, snapshot, defender, wallRule)
-		if rollErr != nil {
-			return out
-		}
-		abnormalRecords = append(abnormalRecords, records...)
-	}
-	if len(formulas) == 0 {
+	strike := playerStrike{division: divisionID, victim: character, killer: deathKiller{monster: &instance}, skill: skill, now: nowMs}
+	actor := criticalActor{division: divisionID, monster: instance.Gid}
+	if !rt.planPlayerStrike(&strike,
+		func(wall *enterworld.SkillWall) (combat.WallOutcome, error) {
+			outcome, err := rt.resolveCombatBehindWall(actor, skill, in.attacker, defender, wall)
+			outcome.Defender = scaleAreaDamage(outcome.Defender, in.percent)
+			outcome.Absorbed = uint32(uint64(outcome.Absorbed) * in.percent / 100)
+			return outcome, err
+		},
+		func(wall *enterworld.SkillWall, _ combat.Result) ([]abnormal.Record, error) {
+			return rt.rollMonsterOnPlayer(divisionID, instance, &skill.Abnormal, snapshot, defender, wall)
+		}) {
 		return out
 	}
-	abnormalOwner := rt.newPlayerAbnormalOwner(divisionID, character, nowMs)
-	abnormalOwner.sources = rt.captureAbnormalSources(divisionID, abnormalOwner.block, abnormalRecords)
-
-	strike := monsterStrike{gid: enterworld.ObjectIDForCharacter(snapshot), owner: character, pose: pose}
-	var deathProgressionFrames, deathEffectFrames, battleFrames []wire.Frame
-	// 593AE8: a record a standing wall absorbs (+0x10) skips the recipient
-	// branch; any other landed record reaches it.
-	struck := false
-	var wear wearFrames
-	hitContext := abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
+	if err := rt.planStrikeDisplacement(&strike, actor, in.origin(), pose); err != nil {
+		return out
+	}
+	var struck playerStruck
 	committed := rt.deps.Update(character, "monster-basic-attack", func() bool {
 		// The detached admission snapshot can predate a status transition.
 		// Revalidate under the same mutation door that commits HP. Do not
@@ -159,65 +143,10 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 			!monster.AllowsTargetStatus(instance.Ref.TidWord, instance.Nest.NativeTacticsFlags, character.NativeBodyStatus) {
 			return false
 		}
-		_, _, remaining, _ := rt.playerKeeperVitals(divisionID, character)
-		for _, formula := range formulas {
-			hitContext.Magical = hitContext.Magical || formula.MagicalDamage != 0
-			debit := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
-			if formula.Slain {
-				debit = remaining // 58F778: the ck kill marks the target dead
-			}
-			remaining -= debit
-			strike.fatal = remaining == 0
-			strike.impacts = append(strike.impacts, wire.SkillCastTargetImpact{
-				ResultFlags: formula.ResultFlags,
-				// Native 585664 serializes the full hit independently of HP.
-				Damage:  formula.Damage,
-				Fatal:   strike.fatal,
-				Blocked: formula.Blocked,
-				Slain:   formula.Slain,
-			})
-			if strike.fatal {
-				break
-			}
-		}
-		character.CurrentHP = &remaining
-		struck = len(strike.impacts) > 0
-		if walled && !skill.WallBypass {
-			var absorbed uint32
-			strike.absorb, absorbed = wallRecords(wall, splits, len(strike.impacts))
-			rt.drainWall(divisionID, character.Name, wall.token, absorbed)
-			struck = !allWallAbsorbed(strike.absorb)
-		}
-		// 593C9F/593CB1: a struck player's landed hits wear its armour and
-		// its blocks its shield; a wall that absorbs the whole hit skips
-		// the recipient branch.
-		if struck {
-			var tally wearTally
-			for _, impact := range strike.impacts {
-				// 58F784 jumps past the landed count (58F79F): a ck kill
-				// wears nothing.
-				if !impact.Slain {
-					tally.note(impact.Blocked, false)
-				}
-			}
-			for _, roll := range [...]struct{ mode, count uint8 }{{wearArmour, tally.armour}, {wearShield, tally.shield}} {
-				taken := rt.rollEquipmentWear(divisionID, character, roll.mode, roll.count)
-				wear.actor = append(wear.actor, taken.actor...)
-				wear.public = append(wear.public, taken.public...)
-			}
-		}
-		if strike.fatal {
-			deathEffectFrames, deathProgressionFrames = rt.settlePlayerDeathInDoor(divisionID, character, nowMs)
-			abnormalOwner = rt.clearPlayerAbnormalInDoor(divisionID, character, nowMs)
-		} else {
-			battleFrames = rt.enterBattleState(divisionID, character, nowMs)
-			abnormalOwner.applyHit(hitContext, abnormalRecords)
-			// 58F72F: a landed hit tests the victim's skc damage masks.
-			rt.cancelEffectsOnDamage(divisionID, character, skill.Attack.Flags, nowMs)
-		}
-		return len(strike.impacts) > 0
+		struck = rt.strikePlayerInDoor(strike)
+		return len(struck.impacts) > 0
 	})
-	if !committed || len(strike.impacts) == 0 {
+	if !committed || len(struck.impacts) == 0 {
 		fresh := rt.characterSnapshot(divisionID, character)
 		out.alive = enterworld.CharacterAlive(fresh)
 		if out.alive && !fresh.DeletePending &&
@@ -226,42 +155,18 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 		}
 		return out
 	}
-	if strike.fatal {
+	if struck.fatal {
 		rt.bindResidentRegion(simulation.WorldKey(divisionID, character.Name), nowMs)
 	}
-	abnormalFrames := rt.playerAbnormalPublication(divisionID, character, abnormalOwner)
-	strike.public = append(strike.public, abnormalFrames.public...)
-	strike.private = append(strike.private, abnormalFrames.actor...)
-	strike.public = append(strike.public, wear.public...)
-	strike.private = append(strike.private, wear.actor...)
-	if strike.fatal {
-		if rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
-			// Native death retires effects before publishing the life change.
-			// Enqueue under the action lock, before a rebirth/new application can
-			// reuse these wire tokens. The simulation still owns combat delivery.
-			rt.publishBodyStatus(divisionID, character.Name, deathEffectFrames)
-		} else {
-			strike.public = append(strike.public, deathEffectFrames...)
-		}
-		lifePublication := beginFatalLifePublication(strike.gid)
-		// B245/B505 retains fatal damage until the client impact callback. The
-		// death-sourced 0x33A6 then advances its native wire baseline to zero
-		// without applying that damage twice. Present-point rebirth depends on
-		// this baseline: its source-zero 0x33A6 restores effective HP by delta.
-		baseline := lifePublication.publishDeathBaseline()
-		strike.public = append(strike.public, wire.Frame{Opcode: baseline.opcode, Payload: baseline.payload})
-		// 0x3122 owns the durable life-state transition, death timer, motion,
-		// and rebirth UI. It intentionally does not own HP reconciliation.
-		death := lifePublication.publishDead()
-		strike.public = append(strike.public, wire.Frame{Opcode: death.opcode, Payload: death.payload})
-	}
-	// Entering battle (4E1DF0, from ProcessNormalHit) follows the hit.
-	if struck && !strike.fatal {
-		strike.public = append(strike.public, rt.offensiveResultRecipient(divisionID, character, nowMs)...)
-	}
-	strike.public = append(strike.public, battleFrames...)
-	strike.private = append(strike.private, deathProgressionFrames...)
-	out.strike, out.committed, out.alive = strike, true, !strike.fatal
+	public, private := rt.playerStruckFrames(divisionID, character, struck, nowMs)
+	// 5A0C2D ran inside the hit outcome, before the hit landed, so a fatal
+	// hit still returns its share; the attacker takes it afterwards.
+	returned := rt.returnDamageToMonster(divisionID, character, instance, in.from, skill.ID, defender, strike.formulas[:len(struck.impacts)], nowMs)
+	rt.queueMonsterLegRecipients(divisionID, returned.Recipients)
+	out.strike = monsterStrike{gid: enterworld.ObjectIDForCharacter(snapshot), owner: character, pose: pose,
+		impacts: struck.impacts, absorb: struck.absorb, fatal: struck.fatal,
+		public: append(public, returned.Broadcast...), private: append(private, returned.ActorPrivate...)}
+	out.committed, out.alive = true, !struck.fatal
 	return out
 }
 
@@ -360,14 +265,12 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 ================
 monsterPublication
 
-The cast every victim's strike is published under. from is the monster's
-pose at the action.
+The cast every victim's strike is published under.
 ================
 */
 type monsterPublication struct {
 	strike  monsterStrikeInput
 	release *pendingMonsterCast
-	from    simulation.Spawn
 }
 
 /*
@@ -385,7 +288,7 @@ func (rt *Runtime) publishMonsterStrikes(p monsterPublication, primary monsterSt
 	strikes := []monsterStrike{primary}
 	if area := skill.ActionArea; area.Shape != 0 && area.MaxTargets > 1 {
 		percent := uint64(fullAreaPercent) * uint64(100-area.ReductionPercent) / 100
-		for _, victim := range rt.monsterAreaVictims(in, p.from, primary) {
+		for _, victim := range rt.monsterAreaVictims(in, in.origin(), primary) {
 			in.percent = percent
 			outcome := rt.strikeMonsterAreaVictim(in, victim)
 			if !outcome.committed {
@@ -420,7 +323,7 @@ func (rt *Runtime) publishMonsterStrikes(p monsterPublication, primary monsterSt
 		}
 	}
 	actionLifecycleMs, _ := skill.ActionLifecycleMs()
-	flight := projectileFlightMs(p.from, primary.pose, skill.ProjectileSpeed)
+	flight := projectileFlightMs(in.origin(), primary.pose, skill.ProjectileSpeed)
 	closeAt := in.now + max(int64(actionLifecycleMs), flight+1)
 	owner := monsterCastOwner(in.instance.Gid)
 	if p.release == nil {

@@ -44,11 +44,11 @@ func CompileSkillProgram(fields []string) (SkillProgram, error) {
 		}
 		i := SkillInstruction{Tag: uint32(n), Column: uint8(col), Count: uint8(arity)}
 		for a := 0; a < arity; a++ {
-			v, valid := textdataInt(fields[col+1+a])
-			if !valid || v < -0x80000000 || v > 0xffffffff {
+			v, valid := textdataDword(fields[col+1+a])
+			if !valid {
 				return SkillProgram{}, fmt.Errorf("skill program: invalid argument at %d", col+1+a)
 			}
-			i.Arguments[a] = uint32(v)
+			i.Arguments[a] = v
 		}
 		p.instructions = append(p.instructions, i)
 		if i.Tag == 0x73736f75 {

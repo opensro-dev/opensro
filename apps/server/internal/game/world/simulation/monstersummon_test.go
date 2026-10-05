@@ -246,7 +246,7 @@ func TestSummonChildAcquisitionAndLeaderLoss(t *testing.T) {
 func TestSummonRecoveryRetainsMovementOwnership(t *testing.T) {
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
 	instance.SummonActionUntilMs = 2000
-	if frames, targeted := ops.advanceInstance(monsterTestDivision, instance, []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: 25000, X: 1050, Z: 1000}}}, 1999); len(frames) != 0 || targeted != nil {
+	if frames, targeted := ops.advanceInstance(monsterTestDivision, instance, []playerPose{{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1050, Z: 1000}}}, 1999); len(frames) != 0 || targeted != nil {
 		t.Fatal("cast recovery allowed movement/combat")
 	}
 }

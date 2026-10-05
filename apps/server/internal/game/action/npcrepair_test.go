@@ -39,6 +39,7 @@ func repairFixture(t *testing.T, codename string) (*Runtime, *enterworld.Charact
 	items[sword.Codename] = &sword
 	rt, _ := newTestRuntime(c, items)
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 3001, RefObjID: 3011, Codename: codename, TalkFlags: 1,
+		Services:      simulation.NpcServicesForCodename(codename),
 		AuthoredSpawn: true, Spawn: simulation.SeedWorldState(c).Spawn}}
 	rt.NpcSpawn.Enabled = true
 	rt.Selected.Set(testDivision, c.Name, 3001)

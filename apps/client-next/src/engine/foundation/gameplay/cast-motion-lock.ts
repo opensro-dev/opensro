@@ -17,6 +17,11 @@ Action_ActionDuration (skilldata columns 12 and 13, the same lifetime the
 server closes the cast with). The lock is timed on the local clock from the
 cast's opening, so a slow round trip never lengthens it.
 
+A Force wall's cast never reaches its last stage while the wall stands: the
+server sends no WAIT release for it (CastLifecycle_ProcessPersistent 584337),
+so the caster holds action state 2, rooted in the casting pose, until the
+wall's retirement cancels the cast (holdsCaster).
+
 ===========================================================================
 */
 import type { CastState } from "@/engine/contracts/gameplay";
@@ -30,7 +35,7 @@ Owns the action window of each catalogued skill.
 ================
 */
 export function createCastMotionLock() {
-	let windows = new Map<number, number>();
+	let windows = new Map<number, number>(), held = new Set<number>();
 	return {
 		/*
 		================
@@ -40,9 +45,13 @@ export function createCastMotionLock() {
 		================
 		*/
 		catalog( rows: readonly SkillMetadata[] ) {
-			const next = new Map<number, number>();
-			for ( const row of rows ) if ( row.actionMs ) next.set( row.id, row.actionMs );
+			const next = new Map<number, number>(), holding = new Set<number>();
+			for ( const row of rows ) {
+				if ( row.actionMs ) next.set( row.id, row.actionMs );
+				if ( row.holdsCaster ) holding.add( row.id );
+			}
 			windows = next;
+			held = holding;
 		},
 		/*
 		================
@@ -50,13 +59,14 @@ export function createCastMotionLock() {
 
 		Whether a cast of caster still holds action state 2 at now: open (not
 		extinguished by a cancellation or the server's close) and inside its
-		skill's action window. A skill without a known window holds while its
+		skill's action window, or a held wall cast at all. A skill without a known window holds while its
 		cast is open and committed (the server-count fallback).
 		================
 		*/
 		locked( casts: readonly CastState[], caster: number, now: number, committed: boolean ): boolean {
 			for ( const cast of casts ) {
 				if ( cast.caster !== caster || cast.resultOnly || cast.cancelledAtMs !== undefined ) continue;
+				if ( held.has( cast.skill ) ) return true;
 				const window = windows.get( cast.skill );
 				if ( window === undefined ) {
 					if ( committed ) return true;
@@ -73,6 +83,7 @@ export function createCastMotionLock() {
 		*/
 		clear() {
 			windows = new Map();
+			held = new Set();
 		}
 	};
 }

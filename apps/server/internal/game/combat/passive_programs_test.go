@@ -198,10 +198,10 @@ func TestChineseFlatRatePassivesRaiseTheirParameters(t *testing.T) {
 		parameter uint16
 		flat      float32
 	}{
-		{"SKILL_CH_SPEAR_PASSIVE_A_09", passiveParamMaxHP, 2826},
-		{"SKILL_CH_WATER_PASSIVE_A_09", passiveParamMaxMP, 0},
-		{"SKILL_CH_BOW_PASSIVE_A_09", passiveParamAccuracy, 0},
-		{"SKILL_CH_LIGHTNING_PASSIVE_A_09", passiveParamEvasion, 0},
+		{"SKILL_CH_SPEAR_PASSIVE_A_09", 3, 2826},
+		{"SKILL_CH_WATER_PASSIVE_A_09", 4, 0},
+		{"SKILL_CH_BOW_PASSIVE_A_09", 11, 0},
+		{"SKILL_CH_LIGHTNING_PASSIVE_A_09", 9, 0},
 	} {
 		row := shippedPassive(t, tc.codename)
 		c := &domain.Character{Skills: []uint32{row.ID}}

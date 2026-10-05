@@ -3,7 +3,8 @@
 
 history_wire_test.go - public history bounds and ordered live delivery
 
-Real transport admission must replay only the last ten public messages.
+Real transport admission must replay only the last ten public messages, in
+one OpChatHistory frame rather than as live lines.
 Whispers never enter the transcript, and repeated game-ready cannot replay it.
 
 ===========================================================================
@@ -41,9 +42,13 @@ func TestPublicHistoryAdmissionAndLiveDelivery(t *testing.T) {
 	b := dialWS(t, server.srv)
 	helloWS(t, b)
 	enterChatWorld(t, b, division, e2eChatNameB)
+	history := []byte{1, 10}
 	for i := 2; i < 12; i++ {
-		expectExact(t, b, chat.OpChatBroadcast, namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, fmt.Sprintf("public %d", i)), "ordered history")
+		line := namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, fmt.Sprintf("public %d", i))
+		history = append(history, byte(len(line)), byte(len(line)>>8))
+		history = append(history, line...)
 	}
+	expectExact(t, b, chat.OpChatHistory, history, "ordered history in one frame")
 	gameReadyBarrier(t, b, "bounded public-only replay")
 	sendFrame(t, b, enterworld.OpcodeGameReady, nil)
 	gameReadyBarrier(t, b, "no second replay")

@@ -1,11 +1,13 @@
 /*
 ===========================================================================
 
-model-emission.ts - running a model's attached effect programs
+model-emission.ts - ambient particle emitters carried by a model resource
 
-Turns each holder's admitted model particles into effect actors attached
-to it, keeping one emitter identity and start clock per particle while
-the holder's model and particle set stay the same.
+A BSR's ambient modifier set names .efp programs bound to its bones. This
+module selects that set, owns each holder's emitter identities and clocks,
+and is the one place that turns a model particle into a renderer
+attachment, so every producer (equipment, drops, skill-stage meshes) draws
+the same 'bsr' particle transform.
 
 ===========================================================================
 */
@@ -34,10 +36,36 @@ export function modelAmbientParticles( value: unknown ): readonly ModelParticle[
 
 /*
 ================
+modelParticleAttachment
+
+The attachment of one model particle on its holder: the BSR particle
+transform (bsrParticleAttachment) with the holder's model scale and the
+particle's authored rotation override.
+================
+*/
+export function modelParticleAttachment(
+	holder: number,
+	particle: ModelParticle,
+	modelScale: number
+): NonNullable<CharacterActor["attachment"]> {
+	return {
+		gid: holder,
+		bone: particle.bone,
+		root: particle.root,
+		offset: particle.offset,
+		basis: "bsr",
+		modelScale,
+		rotation: particle.rotation
+	};
+}
+
+/*
+================
 createModelEmission
 
-The presentation owner supplies admitted holders. Each emitter identity lives
-with that holder/resource, independently of its changing animation clip.
+The presentation owner supplies admitted holders. Each emitter identity
+lives with that holder/resource, independently of its changing animation
+clip.
 ================
 */
 export function createModelEmission( allocate: () => number ) {
@@ -52,6 +80,11 @@ export function createModelEmission( allocate: () => number ) {
 		}
 	>();
 	return {
+		/*
+		================
+		transfer
+		================
+		*/
 		transfer( from: number, to: number ): readonly ModelParticle[] {
 			const row = rows.get( from );
 			if ( !row ) return [];
@@ -59,6 +92,11 @@ export function createModelEmission( allocate: () => number ) {
 			rows.set( to, row );
 			return row.particles;
 		},
+		/*
+		================
+		step
+		================
+		*/
 		step(
 			holders: readonly { actor: CharacterActor; particles: readonly ModelParticle[]; }[],
 			seconds: number,
@@ -100,21 +138,18 @@ export function createModelEmission( allocate: () => number ) {
 						loop: particle.loop ?? true,
 						scale: 1,
 						pickable: false,
-						attachment: {
-							gid: actor.gid,
-							bone: particle.bone,
-							root: particle.root,
-							offset: particle.offset,
-							basis: "bsr",
-							modelScale: particle.scale ?? row.scale,
-							rotation: particle.rotation
-						}
+						attachment: modelParticleAttachment( actor.gid, particle, particle.scale ?? row.scale )
 					} );
 				}
 			}
 			for ( const id of rows.keys() ) if ( !keep.has( id ) ) rows.delete( id );
 			return out;
 		},
+		/*
+		================
+		reset
+		================
+		*/
 		reset() {
 			rows.clear();
 		}

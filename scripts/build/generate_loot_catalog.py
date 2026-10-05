@@ -103,6 +103,17 @@ def compile_catalogs():
 			excluded.append({"item": row["item"], "monster": row["monster"], "reason": "material-degree-has-no-client-equipment"})
 		else:
 			consumables["fixed"].append(copy.deepcopy(row))
+	# v1.150 characterdata columns 99..108 give each monster up to five of its
+	# own alchemy materials with a drop probability; no newer server table
+	# carries them. INFERENCE: the server rolls each pair as a fixed
+	# per-monster reward (724A00), one item at the authored probability.
+	assigned = {(row["monster"], row["item"]) for row in consumables["fixed"]}
+	for row in client.get("materialDrops", []):
+		if (row["monster"], row["item"]) in assigned:
+			continue
+		assigned.add((row["monster"], row["item"]))
+		consumables["fixed"].append({"monster": row["monster"], "item": row["item"], "plus": 0, "min": 1, "max": 1,
+			"probability": row["probability"]})
 	consumables["random"] = []
 	consumables["groups"] = {}
 	seen = set()
@@ -153,7 +164,8 @@ def compile_catalogs():
 		"equipmentClassRebindings": equipment_rebindings,
 		"backupHashes": {"vsro": vsro["sha256"], "isro": isro["sha256"]},
 		"inferredRates": INFERRED_RATES, "bands": [1, 20, 40, 60, 80, 90],
-		"inferences": ["Ordinary family 7 follows the native ordinary categories using its authored class table."],
+		"inferences": ["Ordinary family 7 follows the native ordinary categories using its authored class table.",
+			"Monster material pairs (characterdata 99..108) roll as fixed per-monster rewards, one item each."],
 		"specialItems": SPECIAL_ITEMS, "eligibility": eligibility, "excludedMaterials": excluded,
 		"excludedSourceRows": {"vsro": vsro["excluded"], "isro": isro["excluded"]}}
 	return {"equipment.json": equipment, "consumables.json": consumables, "properties.json": properties, "audit.json": audit}

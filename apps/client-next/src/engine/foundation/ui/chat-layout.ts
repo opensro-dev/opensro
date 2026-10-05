@@ -8,6 +8,7 @@ Draft selection remains with the HUD, and never sends a message by itself.
 ===========================================================================
 */
 import { chatLineText, chatLineColor } from "./chat-presentation";
+import { chatLineTime } from "./chat-time";
 import type { GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
 import type { ChatLine } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect, UiControl } from "@/engine/contracts/ui";
@@ -154,7 +155,8 @@ button
 				textLines( welcome, 365, measure, true ).map( value => ({
 					value,
 					color: gold,
-					recipient: undefined as string | undefined
+					recipient: undefined as string | undefined,
+					sentAt: undefined as number | undefined
 				}) ) :
 				[]),
 			// Stall lines belong to the stall window's own chat box.
@@ -162,7 +164,8 @@ button
 				l => textLines( chatLineText( l, copy ), 365, measure, true ).map( value => ({
 					value,
 					color: chatLineColor( l.channel ),
-					recipient: l.channel !== 7 ? l.name : undefined
+					recipient: l.channel !== 7 ? l.name : undefined,
+					sentAt: l.sentAt
 				}) )
 			)
 		];
@@ -194,7 +197,8 @@ button
 				label: line.value,
 				kind: line.recipient ? "button" : "region",
 				rect: r,
-				whisperTarget: line.recipient
+				whisperTarget: line.recipient,
+				helpText: chatLineTime( line.sentAt ) || undefined
 			} );
 			if ( hover === id ) {
 				quads.push( {

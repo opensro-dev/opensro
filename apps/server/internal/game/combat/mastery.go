@@ -28,3 +28,15 @@ func masteryEnhancement(masteries []domain.CharacterMastery, attack enterworld.S
 	}
 	return result
 }
+
+/*
+================
+SkillMasteryRank
+
+CSkillManager_GetSkillMasteryRank (59E770) for a row the formula owners do
+not resolve themselves: the hawk's strike reads it on the summoning row.
+================
+*/
+func SkillMasteryRank(masteries []domain.CharacterMastery, attack enterworld.SkillAttack) uint8 {
+	return masteryEnhancement(masteries, attack)
+}

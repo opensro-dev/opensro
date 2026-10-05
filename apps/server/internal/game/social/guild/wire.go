@@ -175,6 +175,8 @@ const (
 	// PROBABLE only), so result=2 is NEVER emitted here - every leave
 	// refusal stays silent (errors.go posture).
 	OpGuildLeaveAck uint16 = 0xB56E
+	// OpGuildKickAck is 0x74B1's answer (75CB30): only [2][code] is read.
+	OpGuildKickAck uint16 = 0xB4B1
 	// OpGuildBreakAck is the 0xB66E break answer: {u8 1} with no
 	// payload beyond the result byte, emitted to the dissolving leader
 	// ONLY on success (client handler sub_75c730 @0x0075c730, mission
@@ -691,6 +693,19 @@ func EncodeGuildGp3B29(newGuildGp uint32) []byte {
 	return writer.Payload()
 }
 
+// EncodeGuildLevel3B29 composes the 0x3B29 subOp-5 guild-record delta
+// carrying the &0x04 level and &0x08 GP legs, in the applicator's read
+// order (5E4710): {u8 5}{u8 0x0C}{u8 level}{u32 gp}. The &0x04 arm prints
+// UIIT_MSG_GUILD_LEVEL_UP_RESULT and refreshes the member cap gauge.
+func EncodeGuildLevel3B29(level uint8, gp uint32) []byte {
+	writer := wire.NewWriter(7)
+	writer.U8(5)
+	writer.U8(0x04 | 0x08)
+	writer.U8(level)
+	writer.U32(gp)
+	return writer.Payload()
+}
+
 // EncodeMemberDonatedGp3B29 composes the 0x3B29 subOp-6 member delta
 // carrying ONLY the &0x08 donated-GP leg:
 // {u8 6}{u32 jid}{u8 0x08}{u32 newDonatedGp}. The applicator's &0x08 arm
@@ -704,6 +719,20 @@ func EncodeMemberDonatedGp3B29(jid uint32, newDonatedGp uint32) []byte {
 	writer.U32(jid)
 	writer.U8(0x08)
 	writer.U32(newDonatedGp)
+	return writer.Payload()
+}
+
+// EncodeMemberGrade3B29 composes the 0x3B29 subOp-6 member delta carrying
+// the &0x04 grade and &0x10 permission legs, in the applicator's read order
+// (5E9D20): {u8 6}{u32 jid}{u8 0x14}{u8 grade}{u32 permMask}. Grade 0 makes
+// the member the master the guild pane names.
+func EncodeMemberGrade3B29(jid uint32, grade uint8, permMask uint32) []byte {
+	writer := wire.NewWriter(11)
+	writer.U8(6)
+	writer.U32(jid)
+	writer.U8(0x04 | 0x10)
+	writer.U8(grade)
+	writer.U32(permMask)
 	return writer.Payload()
 }
 

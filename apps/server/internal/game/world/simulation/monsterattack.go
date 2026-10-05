@@ -164,7 +164,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	}
 	ops.adoptMonsterAttack(&mover, plan)
 	spacing := CombatSpacing{
-		ActorBodyRadius:  BodyRadius(instance.Ref.BodyRadius),
+		ActorBodyRadius:  BodyRadius(instance.BodyRadius()),
 		TargetBodyRadius: target.BodyRadius,
 		ActionReach:      plan.Reach,
 	}

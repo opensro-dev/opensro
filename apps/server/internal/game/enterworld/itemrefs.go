@@ -350,6 +350,7 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 		RefObjID:                   uint32(refObjID),
 		TidWord:                    tidWord,
 		Codename:                   strings.TrimSpace(fields[2]),
+		NextCodename:               characterNextCodename(fields[6]),
 		NameStrID:                  nameStrID,
 		Name:                       names[nameStrID],
 		WalkSpeed:                  float32(walk),
@@ -360,6 +361,21 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 		MaxMP:                      uint32(maxMP),
 		MountedAttackCapability210: uint32(capability),
 	}
+}
+
+/*
+==================
+characterNextCodename
+
+Column 6 names the next form, or "xxx" / blank for none.
+==================
+*/
+func characterNextCodename(field string) string {
+	name := strings.TrimSpace(field)
+	if name == "xxx" {
+		return ""
+	}
+	return name
 }
 
 /*
@@ -565,6 +581,13 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 		if v, ok := textdataInt(fields[14]); ok {
 			ref.Country = v
 		}
+	}
+	if len(fields) > 20 {
+		cash, _ := textdataInt(fields[7])
+		ref.CashItem = cash != 0
+		ref.Rarity, _ = textdataInt(fields[15])
+		drop, _ := textdataInt(fields[20])
+		ref.CanDropOnDeath = drop&2 != 0
 	}
 	// The four typed requirement pairs: types at 32/34/36/38, values at
 	// 33/35/37/39 (interleaved; verified against the shipped rows - CH

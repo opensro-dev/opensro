@@ -132,7 +132,7 @@ func ResolveTactics(instance Instance) Tactics {
 	tactics.ChaseLeash = nest.Radius
 	if nest.HasControls {
 		// 53FA37..53FA4F: effective sight includes the actor's body radius.
-		tactics.SightRange = float64(float32(nest.SightRange + instance.Ref.BodyRadius))
+		tactics.SightRange = float64(float32(nest.SightRange + instance.BodyRadius()))
 		// Native combat containment is TraceData relative to the target.
 		// Radius still owns nest/home geometry; it is not a battle leash.
 		tactics.ChaseLeash = 0

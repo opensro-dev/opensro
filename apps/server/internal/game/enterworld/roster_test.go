@@ -11,7 +11,7 @@ func TestLoadRoster(t *testing.T) {
 	path := filepath.Join(dir, "roster.json")
 	fixture := `{
 		"format": "sro-server-character-authority",
-		"version": 2,
+		"version": 3,
 		"models": [
 			{"codename": "CHAR_CH_MAN_ADVENTURER", "refObjId": 1907, "bodyRadius": 4}
 		]
@@ -47,7 +47,7 @@ func TestRosterNilAndZeroLookups(t *testing.T) {
 
 func TestLoadRosterRejectsBrowserPresentationFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "catalog.json")
-	fixture := `{"format":"sro-server-character-authority","version":2,"models":[{"codename":"CHAR_CH_MAN_ADVENTURER","refObjId":1907,"bodyRadius":4,"glb":"/assets/char/player.glb"}]}`
+	fixture := `{"format":"sro-server-character-authority","version":3,"models":[{"codename":"CHAR_CH_MAN_ADVENTURER","refObjId":1907,"bodyRadius":4,"glb":"/assets/char/player.glb"}]}`
 	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestLoadRosterRejectsBrowserPresentationFields(t *testing.T) {
 
 func TestLoadRosterRejectsMissingBodyRadius(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "catalog.json")
-	fixture := `{"format":"sro-server-character-authority","version":2,"models":[{"codename":"CHAR_CH_MAN_ADVENTURER","refObjId":1907}]}`
+	fixture := `{"format":"sro-server-character-authority","version":3,"models":[{"codename":"CHAR_CH_MAN_ADVENTURER","refObjId":1907}]}`
 	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
 		t.Fatal(err)
 	}

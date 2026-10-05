@@ -72,7 +72,14 @@ func TestVerifyExpired(t *testing.T) {
 func TestVerifyForgedAndMalformed(t *testing.T) {
 	token := mintOK(t, "asd2", testNow.Add(time.Minute))
 
-	tampered := token[:len(token)-2] + "AA"
+	// Replace the MAC's last two digits with ones that differ: a random MAC
+	// already ending in "AA" made the old "AA" tamper a no-op (1 in 4096).
+	// The final "A" keeps the digit canonical (its unused bits stay zero).
+	suffix := "AA"
+	if strings.HasSuffix(token, suffix) {
+		suffix = "BA"
+	}
+	tampered := token[:len(token)-2] + suffix
 	if err := Verify(testSecret, tampered, testDivision, "asd2", testNow); !errors.Is(err, ErrForged) {
 		t.Errorf("tampered mac = %v, want ErrForged", err)
 	}

@@ -87,7 +87,7 @@ class Backup:
 	# ================
 	# __init__
 	# ================
-	def __init__(self, path):
+	def __init__(self, path, extra_tables=()):
 		self.file = path.open("rb")
 		self.raw = mmap.mmap(self.file.fileno(), 0, access=mmap.ACCESS_READ)
 		self.pages = collections.defaultdict(list)
@@ -100,7 +100,7 @@ class Backup:
 			fields = variable_fields(page, at)
 			if fields:
 				name = fields[0].decode("utf-16le")
-				if name.startswith(("_Ref", "Tab_Ref")):
+				if name.startswith(("_Ref", "Tab_Ref")) or name in extra_tables:
 					objects[struct.unpack_from("<I", page, at + 4)[0]] = name
 		rowsets = {}
 		for _, at, page in self.rows(5):

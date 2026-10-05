@@ -85,7 +85,7 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 		headingFraction := float32(float64(monster.SummonRandomWord(s.random())) / 32767)
 		heading := float64(float32(float64(headingFraction) * 6.2831854820251465))
 		count := min(monster.SummonRandomWord(s.random())%(entry.Maximum-entry.Minimum+1)+entry.Minimum, 50)
-		radius := parent.Ref.BodyRadius + ref.BodyRadius + 30
+		radius := parent.BodyRadius() + ref.BodyRadius + 30
 		for i := uint32(0); i < count; i++ {
 			if s.counter >= domain.MaxMonsterGIDCounter {
 				break
@@ -126,6 +126,7 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 			}
 			child.SummonerFollowRange = 200 + actionRanges[parent.Ref.RefObjID]
 			state.instances.set(child.Gid, child)
+			armLifetimeLocked(state, child, nowMs)
 			childMover := monster.NewSpawnMover(child, nowMs)
 			childMover.Activity = monster.NewActivityCadence(uint32(nowMs), s.randomWord())
 			childMover.Pose.Heading = HeadingWordFromRadians(heading)

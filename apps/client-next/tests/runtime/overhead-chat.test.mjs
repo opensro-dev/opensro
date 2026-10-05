@@ -63,3 +63,58 @@ test("native boards wrap glyphs and preserve boundary spaces, newlines and long 
 	assert.deepEqual( textBoardLines( "a\n\nb\n", 5, measure ), [ "a", "", "b", "" ] );
 	assert.deepEqual( textBoardLines( "abcdefgh", 3, measure ), [ "abc", "def", "gh" ] );
 });
+
+const { decodeChatHistory } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts"
+);
+/*
+================
+historyFrame
+
+The server's OpChatHistory payload for global (6) lines {sender, text}.
+================
+*/
+function historyFrame( lines ) {
+	const parts = lines.map( ( [sender, text] ) => {
+		const name = new TextEncoder().encode( sender ),
+			line = new Uint8Array( 1 + 2 + name.length + 2 + text.length * 2 );
+		const v = new DataView( line.buffer );
+		line[0] = 6;
+		v.setUint16( 1, name.length, true );
+		line.set( name, 3 );
+		v.setUint16( 3 + name.length, text.length, true );
+		for ( let i = 0; i < text.length; i++ ) v.setUint16( 5 + name.length + i * 2, text.charCodeAt( i ), true );
+		return line;
+	} );
+	const out = new Uint8Array( 2 + parts.reduce( ( n, p ) => n + 2 + p.length, 0 ) ), v = new DataView( out.buffer );
+	out[0] = 1;
+	out[1] = parts.length;
+	let o = 2;
+	for ( const p of parts ) {
+		v.setUint16( o, p.length, true );
+		out.set( p, o + 2 );
+		o += 2 + p.length;
+	}
+	return out;
+}
+test("the replayed public transcript is history, never speech over a head on entry", () => {
+	const chat = createChat( () => {} ),
+		speech = createSpeech(),
+		players = [ { gid: 1, name: "Me" }, { gid: 2, name: "Peer" } ];
+	chat.bootstrap( { character: { name: "Me" } } );
+	assert.equal( speech.step( chat.state().lines, players, 0 ).size, 0 );
+	assert.equal(
+		chat.receive( { opcode: 16, payload: historyFrame( [ [ "Me", "my old line" ], [ "Peer", "older" ] ] ) }, 1 ),
+		true
+	);
+	const lines = chat.state().lines;
+	assert.deepEqual( lines.map( l => [ l.name, l.text, l.history ] ), [ [ "Me", "my old line", true ], [
+		"Peer",
+		"older",
+		true
+	] ] );
+	assert.equal( speech.step( lines, players, 100 ).size, 0 );
+	assert.throws( () => decodeChatHistory( Uint8Array.of( 2, 0 ) ), /Invalid chat history/ );
+	assert.throws( () => decodeChatHistory( Uint8Array.of( 1, 1, 9, 0 ) ), /Truncated chat history/ );
+	assert.throws( () => decodeChatHistory( Uint8Array.of( ...historyFrame( [ [ "Me", "x" ] ] ), 0 ) ), /trailing/ );
+});

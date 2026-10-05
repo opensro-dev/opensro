@@ -68,10 +68,54 @@ type SkillUiRow struct {
 	// maximum MP), before the caster's consumption rate (parameter 0x8D):
 	// the client does not stand a cooldown in for a press the caster cannot
 	// pay for, which the server refuses with 0x3004 (58E2B1).
-	MP            uint32              `json:"mp,omitempty"`
-	MPPercent     uint16              `json:"mpPercent,omitempty"`
+	MP        uint32 `json:"mp,omitempty"`
+	MPPercent uint16 `json:"mpPercent,omitempty"`
+	// Targets are the authored target groups (columns 22..33) as
+	// SkillUiTarget bits. The native press (CGInterface_ExecuteSelected
+	// ActionAtTarget 6FCD50) sends whatever is selected and animates only
+	// on the server's answer; the client predicts a cast and stands its
+	// cooldown in only for a target these groups admit.
+	Targets uint16 `json:"targets,omitempty"`
+	// HoldsCaster marks a cast whose WAIT the server never releases while
+	// its object stands (a Force wall, pw): the client keeps the caster in
+	// action state 2, rooted, until the object's retirement cancels it.
+	HoldsCaster   bool                `json:"holdsCaster,omitempty"`
 	Masteries     [2]SkillRequirement `json:"masteries"`
 	Prerequisites [3]SkillRequirement `json:"prerequisites"`
+}
+
+// SkillUiTarget bits of SkillUiRow.Targets.
+const (
+	SkillUiTargetSelf     = 1 << 0
+	SkillUiTargetAnimal   = 1 << 1
+	SkillUiTargetMonster  = 1 << 2 // Enemy_M
+	SkillUiTargetPlayer   = 1 << 3 // Enemy_P
+	SkillUiTargetAlly     = 1 << 4
+	SkillUiTargetParty    = 1 << 5
+	SkillUiTargetNeutral  = 1 << 6
+	SkillUiTargetDeadBody = 1 << 7
+)
+
+/*
+================
+skillUiTargets
+================
+*/
+func skillUiTargets(t SkillTargets) uint16 {
+	var bits uint16
+	for _, b := range []struct {
+		set bool
+		bit uint16
+	}{
+		{t.Self, SkillUiTargetSelf}, {t.Animal, SkillUiTargetAnimal}, {t.EnemyM, SkillUiTargetMonster},
+		{t.EnemyP, SkillUiTargetPlayer}, {t.Ally, SkillUiTargetAlly}, {t.Party, SkillUiTargetParty},
+		{t.Neutral, SkillUiTargetNeutral}, {t.DeadBody, SkillUiTargetDeadBody},
+	} {
+		if b.set {
+			bits |= b.bit
+		}
+	}
+	return bits
 }
 
 /*
@@ -165,6 +209,10 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 			if row.Consumption.Pinned && playerSkillCodename(row.Codename) {
 				projection.UI.MP, projection.UI.MPPercent = row.Consumption.MP, row.Consumption.MPPercent
 			}
+			if playerSkillCodename(row.Codename) {
+				projection.UI.Targets = skillUiTargets(row.Targets)
+			}
+			projection.UI.HoldsCaster = row.Wall.Pinned
 			if row.SpeedBuff.Present {
 				projection.UI.SpeedBuff = &SkillUiSpeedBuff{Active: row.SpeedBuff.Active}
 			}

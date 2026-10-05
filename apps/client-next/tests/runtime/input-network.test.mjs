@@ -317,3 +317,21 @@ test("native V blind action is held, rebindable, and released on focus loss", ()
 	input.blindBinding( 0 );
 	assert.equal( input.blindHeld(), false );
 });
+test("a frame the consumer cannot apply ends the session and names that frame for the incident report", t => {
+	const sockets = socketHarness( t ), failures = [];
+	const network = createNetwork( ( error, frame ) => failures.push( { error, frame } ) );
+	network.connect( "ws://localhost/transport", "abc" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( welcome() );
+	socket.receive( Uint8Array.of( 0, 1, 11 ) );
+	socket.receive( Uint8Array.of( 0x6f, 0x37, 1, 2, 3 ) );
+	network.drain( frame => {
+		if ( frame.opcode === 0x376f ) throw Error( "Invalid movement speed channels" );
+	} );
+	assert.equal( failures.length, 1 );
+	assert.match( failures[0].error, /^Packet application failed: Error: Invalid movement speed channels$/ );
+	assert.equal( failures[0].frame.opcode, 0x376f );
+	assert.deepEqual( [ ...failures[0].frame.payload ], [ 1, 2, 3 ] );
+	assert.ok( socket.closed );
+});

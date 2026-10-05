@@ -42,6 +42,8 @@ type divisionMonsterState struct {
 	instances       monsterStorage
 	uniqueNotices   []Frame
 	uniqueDeaths    map[uint32]bool
+	// lifetimes holds the CGObjMob tick timers (monsterlifetime.go).
+	lifetimes map[uint32]monsterLifetime
 	// byRegion indexes gids by their generated spawn region so scoped
 	// emission never scans a flat map on the 100ms tick.
 	byRegion map[uint16][]uint32
@@ -97,6 +99,9 @@ type MonsterState struct {
 	clock                func() time.Time
 	// objectLists holds bootstrap object-list gids until the first scope tick.
 	objectLists map[monsterObjectListKey][]uint32
+	// bandits is built once from the immutable template (BanditTables).
+	banditsOnce sync.Once
+	bandits     *monster.BanditTables
 }
 
 /*

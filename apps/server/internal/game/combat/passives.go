@@ -23,13 +23,6 @@ import (
 	"opensro.online/server/internal/game/paramkeeper"
 )
 
-const (
-	passiveParamMaxHP    = 3
-	passiveParamMaxMP    = 4
-	passiveParamEvasion  = 9
-	passiveParamAccuracy = 11
-)
-
 /*
 ==================
 groupRank
@@ -124,7 +117,32 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 					writes = append(writes, w)
 				}
 			}
-			writes = append(writes, passiveFlatRateWrites(source, p)...)
+			// 594AC0: hr, er, hpi and mpi put word 1 on the percent channel
+			// and word 0 on the flat channel of parameters 11, 9, 3 and 4.
+			for _, fr := range [...]struct {
+				rate  enterworld.SkillFlatRate
+				param uint16
+			}{{p.HitRate, 11}, {p.Evasion, 9}, {p.MaxHP, 3}, {p.MaxMP, 4}} {
+				if fr.rate.Present {
+					writes = append(writes,
+						paramkeeper.Write{Parameter: fr.param, Channel: paramkeeper.PercentSum, Source: source, Value: float32(fr.rate.Percent)},
+						paramkeeper.Write{Parameter: fr.param, Channel: paramkeeper.Flat, Source: source, Value: float32(fr.rate.Flat)})
+				}
+			}
+			if p.CriticalEvasion != 0 {
+				writes = append(writes, CriticalEvasionWrite(p.CriticalEvasion, source))
+			}
+			if m := selected.BuffModifiers; p.IncomingReduction && m.Odar {
+				writes = append(writes, IncomingReductionWrites(m.OdarBits, m.OdarWord, source)...)
+			}
+			// 595A97: dru word 0 on 0x80/0x81, word 1 on 0x82/0x83.
+			if p.Dru != [2]uint32{} {
+				for i, params := range [2][2]uint16{{0x80, 0x81}, {0x82, 0x83}} {
+					for _, param := range params {
+						writes = append(writes, paramkeeper.Write{Parameter: param, Channel: paramkeeper.Flat, Source: source, Value: float32(p.Dru[i])})
+					}
+				}
+			}
 		}
 		if d := selected.PassiveDefense; d.Pinned && !selected.ChainSub && selected.ChainNext == 0 && eligible {
 			defense, err := defenseModifierWrites(source, DefenseModifierInput{Physical: d.Physical, Magical: d.Magical})
@@ -139,35 +157,6 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 		}
 	}
 	return writes, power, nil
-}
-
-/*
-==================
-passiveFlatRateWrites
-
-594AC0's hpi/mpi/er/hr cases (hpi at 595481): percent-sum then flat on
-Params 3/4/9/11, each unsigned word rounded to float32 at the call, the
-same writes timedItemModifierWrites files for a timed item.
-==================
-*/
-func passiveFlatRateWrites(source uint32, p enterworld.SkillPassiveParameters) []paramkeeper.Write {
-	var writes []paramkeeper.Write
-	for _, block := range [...]struct {
-		parameter uint16
-		value     enterworld.SkillFlatRate
-	}{
-		{passiveParamMaxHP, p.HP}, {passiveParamMaxMP, p.MP},
-		{passiveParamEvasion, p.Evasion}, {passiveParamAccuracy, p.Accuracy},
-	} {
-		if !block.value.Present {
-			continue
-		}
-		writes = append(writes,
-			paramkeeper.Write{Parameter: block.parameter, Channel: paramkeeper.PercentSum, Source: source, Value: float32(block.value.Percent)},
-			paramkeeper.Write{Parameter: block.parameter, Channel: paramkeeper.Flat, Source: source, Value: float32(block.value.Flat)},
-		)
-	}
-	return writes
 }
 
 /*

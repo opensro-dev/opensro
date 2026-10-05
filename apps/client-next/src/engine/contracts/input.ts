@@ -72,3 +72,17 @@ export interface CameraInput {
 	readonly pitch: number;
 	readonly distance: number;
 }
+
+/*
+================
+WorldClickInput
+
+A left press on the world: double is the browser's dblclick, shift and alt
+the modifiers held (698924 keeps Shift, 693E50 reads Alt).
+================
+*/
+export interface WorldClickInput {
+	readonly double?: boolean;
+	readonly shift?: boolean;
+	readonly alt?: boolean;
+}

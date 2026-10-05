@@ -209,6 +209,7 @@ type BootstrapResult struct {
 	RefSkillSnapshot     []SpawnSkillRow
 	RefItemSnapshot      []RefItemRow
 	MagicOptionSnapshot  []MagicOptionRow
+	AvatarMagicOptions   []AvatarMagicOptionRow
 	SiegeItemForgeGroups []SiegeItemForgeGroupRow
 	SiegeFortressData    []SiegeFortressDataRow
 	GameWorldData        []GameWorldDataRow
@@ -258,6 +259,7 @@ type bootstrapSuccessView struct {
 	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
 	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
 	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
@@ -326,6 +328,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		RefSkillSnapshot:          r.RefSkillSnapshot,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
+		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
 		GameWorldData:             r.GameWorldData,
