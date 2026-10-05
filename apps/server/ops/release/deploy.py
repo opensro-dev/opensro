@@ -18,6 +18,7 @@ import hashlib
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -26,11 +27,16 @@ from urllib.parse import urlsplit
 from bundle import FILES, MAX_ARCHIVE_BYTES, release_files, unpack
 from release_state import admit, begin, complete, identity, read_state, store_upgrade_required, write_state
 from retention import preserve
+import server_data
 
 CONFIG = Path("/etc/opensro-release/config.json")
 CHUNK_BYTES = 1 << 20
 HTTP_TIMEOUT = 20
 NOTICE_SECONDS = 120
+LISTENER_TIMEOUT = 5
+# Served by the edge for /api/title/servers while the Agent is down
+# (sro-nomad maintenance-list); beside production.json in the public root.
+MAINTENANCE_SERVERS = "maintenance-servers.json"
 # Root-only, one line: the bug reporter's Discord webhook (bug_report_environment).
 BUG_REPORT_WEBHOOK = "/etc/opensro-release/bug-report-webhook"
 
@@ -119,17 +125,42 @@ def copy_inputs(source, module, names):
 
 
 # ================
+# shard_listening
+#
+# Whether a shard's GameWorld is running: its loopback control listener
+# accepts a connection. Players reach a shard only through that process.
+# ================
+def shard_listening(shard):
+	endpoint = urlsplit(shard["controlUrl"])
+	if endpoint.scheme != "http" or not ipaddress.ip_address(endpoint.hostname).is_loopback:
+		raise RuntimeError("shard control listeners must be loopback")
+	try:
+		socket.create_connection((endpoint.hostname, endpoint.port), timeout=LISTENER_TIMEOUT).close()
+		return True
+	except OSError:
+		return False
+
+
+# ================
 # warning
 #
-# The first upgrade can introduce the notice endpoint only while no players
-# are connected. Later upgrades require successful in-game announcements.
+# True once the players were warned; False when there is nobody to warn:
+# no enabled shard's GameWorld is running (the 2026-10-05 outage recovery
+# could not publish onto a stopped shard because the notice needs the very
+# process that was down). A notice a running shard refuses still refuses
+# the restart. The first upgrade can introduce the notice endpoint only
+# while no players are connected.
 # ================
 def warning(config, module, executable):
 	arguments = [str(executable), "notice", "-state-dir", str(module / ".state/cluster"),
 		"-catalog", str(module / "config/shards.json"), "-message", "Server restart in two minutes. Please find a safe place."]
 	result = subprocess.run(arguments, cwd=module, capture_output=True, text=True)
 	if result.returncode == 0:
-		return
+		return True
+	enabled = [shard for shard in json.loads((module / "config/shards.json").read_text())["shards"] if shard["enabled"]]
+	if not any(shard_listening(shard) for shard in enabled):
+		print("No shard is running: nobody to warn; restarting without a notice.", flush=True)
+		return False
 	if not config.get("bootstrap_notice", False):
 		raise RuntimeError("in-game maintenance notice failed; restart refused")
 	for shard in json.loads((module / "config/shards.json").read_text())["shards"]:
@@ -160,6 +191,39 @@ def warning(config, module, executable):
 	finally:
 		connection.close()
 	print("Initial notice installation: fleet is empty.", flush=True)
+	return True
+
+
+# ================
+# materialize
+#
+# Unpack the game data as root (sro-nomad validate resolves it) and let the
+# GameWorld's user read the cache: it cannot create the extraction itself.
+# ================
+def materialize(config, module, executable, arguments, environment):
+	run([executable, "validate", *arguments], cwd=module, env=environment)
+	cache = Path(config["game_data"]).parent / ".game-data-cache"
+	if cache.is_dir():
+		for path in [cache, *cache.rglob("*")]:
+			path.chmod(0o755 if path.is_dir() else 0o644)
+
+
+# ================
+# publish_maintenance_list
+#
+# The server list the edge serves while the Agent is down, from this
+# release's own code and the host catalog. A release built before the
+# command keeps the previous list.
+# ================
+def publish_maintenance_list(config, module, executable):
+	if "production_state" not in config:
+		return
+	target = Path(config["production_state"]).parent / MAINTENANCE_SERVERS
+	try:
+		run([str(executable), "maintenance-list", "-catalog", str(module / "config/shards.json"), "-out", str(target)],
+			cwd=module, capture=True)
+	except (subprocess.CalledProcessError, OSError) as error:
+		print("Maintenance server list not refreshed: " + type(error).__name__, flush=True)
 
 
 # ================
@@ -204,6 +268,9 @@ def deploy(config, staging, manifest, notice=True, upgrade=False):
 	version = run(["nomad", "version"], capture=True).stdout.splitlines()[0]
 	if version != "Nomad v" + config["nomad_version"]:
 		raise RuntimeError("Nomad version does not match the approved host configuration")
+	# The release's own verdict on the game data it will open, before any
+	# backup, notice or stop: a refusal leaves the running server untouched.
+	game_data = server_data.choose(config, staging)
 	# Complete a verified remote backup before touching deployment inputs.
 	run(["/usr/local/sbin/opensro-backup", "run"], env=clean_env)
 	management = dict(clean_env, NOMAD_ADDR="http://127.0.0.1:4646",
@@ -223,13 +290,9 @@ def deploy(config, staging, manifest, notice=True, upgrade=False):
 		cluster = module / ".state/cluster"
 		shutil.chown(cluster, user="root", group="sro")
 		cluster.chmod(0o710)
-		run([executable, "validate", *arguments], cwd=module, env=environment)
-		cache = Path(config["game_data"]).parent / ".game-data-cache"
-		if cache.is_dir():
-			for path in [cache, *cache.rglob("*")]:
-				path.chmod(0o755 if path.is_dir() else 0o644)
-		if notice:
-			warning(config, module, executable)
+		materialize(config, module, executable, arguments, environment)
+		publish_maintenance_list(config, module, executable)
+		if notice and warning(config, module, executable):
 			announce(config["public_webhook"], "OpenSRO will restart in two minutes for a server update. Please find a safe place.")
 			deadline = time.monotonic() + NOTICE_SECONDS
 			while time.monotonic() < deadline:
@@ -239,6 +302,9 @@ def deploy(config, staging, manifest, notice=True, upgrade=False):
 				warning(config, module, executable)
 		if upgrade:
 			upgrade_authorities(module, executable, arguments, environment)
+		if game_data:
+			server_data.install(config, game_data)
+			materialize(config, module, executable, arguments, environment)
 		run([executable, "deploy", *arguments], cwd=module, env=environment)
 		run([executable, "status", "-namespace", "sro"], cwd=module, env=environment)
 		write_state(module / "release.json", manifest)

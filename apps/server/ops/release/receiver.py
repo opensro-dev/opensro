@@ -25,6 +25,7 @@ import time
 from bundle import unpack as unpack_server
 from client_deploy import promote, record_smoke, stage
 import client_data
+import server_data
 import coordinated
 from deploy import publish_server, receive
 from release_state import admit, identity, read_state, write_state
@@ -122,9 +123,9 @@ def stage_server(config, archive, scratch):
 # ================
 # stage_upload
 #
-# A stage-role archive is one of four kinds, named by its declaration member:
-# a batch of data payloads for the store, a data candidate, an application
-# candidate or a server candidate.
+# A stage-role archive is one of five kinds, named by its declaration member:
+# a batch of data payloads for the store, server game data, a data
+# candidate, an application candidate or a server candidate.
 # ================
 def stage_upload(config, archive, scratch):
 	with tarfile.open(archive, "r:") as package:
@@ -134,6 +135,8 @@ def stage_upload(config, archive, scratch):
 			declaration = json.load(package.extractfile("candidate.json")).get("format")
 	if names and names[0] == "payload.json":
 		return client_data.store_payload(config, archive)
+	if names and names[0] == server_data.DECLARATION:
+		return server_data.stage(config, archive)
 	if declaration == client_data.FORMAT:
 		return client_data.stage(config, archive)
 	if "candidate.json" in names:
