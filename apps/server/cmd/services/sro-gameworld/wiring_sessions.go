@@ -101,6 +101,7 @@ func (game *gameplayPlane) worldBound(
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)
 	game.unions.DropPendingInvite(divisionID, character.Name)
+	game.items.AbandonExchange(divisionID, character.Name)
 	game.mentorInvites.WorldBound(session, divisionID, character)
 	var guildID int64
 	var cooldown []wire.Frame
@@ -133,6 +134,7 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session) {
 	character, divisionID, bound := enterworld.SessionCharacter(game.deps, session)
 	if bound {
 		game.items.EndCommerceSession(divisionID, character, session.ID)
+		game.items.AbandonExchange(divisionID, character.Name)
 		game.items.ForgetCharacterSession(divisionID, character.Name, session.ID)
 	}
 }

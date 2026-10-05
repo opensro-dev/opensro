@@ -459,6 +459,16 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 		if out.DestSlot, err = r.U8(); err != nil {
 			return out, err
 		}
+	case MoveTypeExchangePut, MoveTypeExchangeTake:
+		// 697E80 cases 4 and 5: the bag slot or the exchange slot.
+		if out.SourceSlot, err = r.U8(); err != nil {
+			return out, err
+		}
+	case MoveTypeExchangeGold:
+		// 697E80 case 0xD: the gold on the table.
+		if out.GoldAmount, err = r.U32(); err != nil {
+			return out, err
+		}
 	case MoveTypeCosInventory:
 		if out.CosGID, err = r.U32(); err != nil {
 			return out, err

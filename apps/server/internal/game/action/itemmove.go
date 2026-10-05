@@ -59,6 +59,15 @@ func (rt *Runtime) HandleItemMove(
 	// interact latch is one slot).
 	rt.Pending.Clear(grounditem.PendingKey(divisionID, character.Name))
 
+	// The bag is locked to the exchange while one is open (exchange.go).
+	if rt.Exchanges.Trading(divisionID, character.Name) {
+		switch request.MovementType {
+		case wire.MoveTypeExchangePut, wire.MoveTypeExchangeTake, wire.MoveTypeExchangeGold:
+			return rt.applyExchangeMove(divisionID, character, request)
+		}
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+
 	switch request.MovementType {
 	case wire.MoveTypeAvatarToPlayer, wire.MoveTypePlayerToAvatar:
 		return rt.applyAvatarTransfer(character, request)

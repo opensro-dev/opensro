@@ -340,6 +340,8 @@ func connectInvitationLanes(
 	items *action.Runtime,
 ) {
 	resurrections := items.ResurrectionConsent()
+	exchanges := items.ExchangeConsent()
+	parties.AddConsentArm(exchanges)
 	parties.AddConsentArm(guildInvites)
 	parties.AddConsentArm(unions)
 	parties.AddConsentArm(mentorInvites)
@@ -353,25 +355,29 @@ func connectInvitationLanes(
 		return partyPending(divisionID, name) ||
 			unions.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name)
+			resurrections.HasPendingInvite(divisionID, name) ||
+			exchanges.HasPendingInvite(divisionID, name)
 	}
 	unions.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name)
+			resurrections.HasPendingInvite(divisionID, name) ||
+			exchanges.HasPendingInvite(divisionID, name)
 	}
 	mentorInvites.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
 			unions.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name)
+			resurrections.HasPendingInvite(divisionID, name) ||
+			exchanges.HasPendingInvite(divisionID, name)
 	}
 	items.ProposalPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
 			unions.HasPendingInvite(divisionID, name) ||
-			mentorInvites.HasPendingInvite(divisionID, name)
+			mentorInvites.HasPendingInvite(divisionID, name) ||
+			exchanges.HasPendingInvite(divisionID, name)
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/exchange"
 	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
@@ -367,6 +368,9 @@ type Runtime struct {
 	// Existing continuation and cast owners execute and commit gameplay.
 	actionSessions sync.Map
 
+	// Exchanges holds the open player-to-player exchanges and their
+	// requests (exchange.go).
+	Exchanges *exchange.Registry
 	// resurrections holds the unanswered resurrection proposals, one per
 	// dead player (resurrection.go).
 	resurrections resurrectionOffers
@@ -413,6 +417,7 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 		Now:                time.Now,
 		basicAttackIntents: make(map[string]basicAttackIntent),
 		resurrections:      resurrectionOffers{byTarget: make(map[string]resurrectionOffer)},
+		Exchanges:          exchange.New(),
 	}
 
 	if monsters != nil {

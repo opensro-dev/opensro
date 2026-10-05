@@ -386,6 +386,9 @@ type itemdataRecordColumn struct {
 var itemdataRecordColumns = []itemdataRecordColumn{
 	{14, "country", "int"},
 	{15, "rarity", "int"},
+	// Token 16 is RefObjCommon CanTrade, beside CanSell (17) and CanBorrow
+	// (19): 0 keeps an item off the exchange table (exchange.go).
+	{16, "canTrade", "int"},
 	// 808AD0 reads token 17 into RefObjData+A5; 5B6D22 tests this byte
 	// before merchant sale. Shop membership is not a sale permission.
 	{17, "canSell", "int"},
