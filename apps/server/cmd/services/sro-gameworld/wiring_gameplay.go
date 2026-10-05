@@ -560,6 +560,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	community.RegisterLetter(hub, game.deps, game.presence)
 	game.chat = chat.Register(hub, game.deps, game.presence, game.parties.Registry())
 	game.chat.Unions = game.unions
+	game.chat.Stalls = game.items.Stalls
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
 	game.matches.Register(hub)
 	game.parties.Register(hub)

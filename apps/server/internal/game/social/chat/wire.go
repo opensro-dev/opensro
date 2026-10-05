@@ -74,6 +74,9 @@ const (
 	ChatTypeGuild uint8 = 5
 	// ChatTypeUnion: the '%' prefix (guild alliance chat).
 	ChatTypeUnion uint8 = 0x0B
+	// ChatTypeStall: the stall window's own chat box composes it
+	// (CIFChatModule_HandleInputKey 545EF0 writes the module's type).
+	ChatTypeStall uint8 = 9
 )
 
 // 0xB367 result bytes (sub_753290 @0x007532dc: 1 = present the pending
@@ -104,6 +107,9 @@ const (
 	// what the v1.150 client reads.
 	ChatErrNoGuild uint8 = 0x0B
 	ChatErrNoUnion uint8 = 0x0C
+	// ChatErrNoStall: a stall line from a player at no stall (server
+	// CGObjPC_OnChatRequest 4B1750 type 9); the client shows no text.
+	ChatErrNoStall uint8 = 5
 )
 
 // ChatMessageMaxWideChars is the client-side compose cap: sub_6aebd0's

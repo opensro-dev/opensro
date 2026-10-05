@@ -12,6 +12,10 @@ a page (CIFStallNetwork, 766FC0: rows * 0xF) and buys a row from afar
 (7671D0); the row must still be what the search showed (0x4F), and the
 owner pays the network's 1% commission.
 
+The search's last byte is the small-category combo's index (id 43,
+CIFStallNetwork_SendSearch 5ABB90): the degree, 0 for any. INFERENCE: an
+item's degree is (ItemClass-1)/3+1, as alchemy reads it.
+
 INFERENCE: outside a town a search answers 0x49, which closes the window
 (766FC0), and an untown purchase 0x49 too; the server keeps no search
 throttle beyond the client's ten seconds (UIIT_MSG_WARENETWORK_SCAN_TOOLTIP).
@@ -91,6 +95,25 @@ func (rt *Runtime) stallCategory(item inventory.Item) uint32 {
 
 /*
 ================
+stallDegree
+
+An item's degree (0 when it has none).
+================
+*/
+func (rt *Runtime) stallDegree(item inventory.Item) uint8 {
+	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
+	if !ok || ref == nil {
+		return 0
+	}
+	class := int(ref.NativeFields.Get("itemClass"))
+	if class <= 0 {
+		return 0
+	}
+	return uint8((class-1)/3 + 1)
+}
+
+/*
+================
 inTown
 
 A region that forbids player combat is a town (_RefRegion.IsBattleField).
@@ -114,7 +137,7 @@ func (rt *Runtime) characterRiding(_ string, c *enterworld.Character) bool {
 ================
 HandleStallNetworkSearch
 
-0x76F9 [u8 kind][u8 page][u32 category][u8].
+0x76F9 [u8 kind][u8 page][u32 category][u8 degree].
 ================
 */
 func (rt *Runtime) HandleStallNetworkSearch(division string, c *enterworld.Character, payload []byte) OpResult {
@@ -122,7 +145,7 @@ func (rt *Runtime) HandleStallNetworkSearch(division string, c *enterworld.Chara
 	_, _ = r.U8()
 	page, _ := r.U8()
 	category, _ := r.U32()
-	_, _ = r.U8()
+	degree, _ := r.U8()
 	if r.Done() != nil || c == nil {
 		return OpResult{}
 	}
@@ -131,27 +154,20 @@ func (rt *Runtime) HandleStallNetworkSearch(division string, c *enterworld.Chara
 	if !rt.inTown(division, c) {
 		return stallAnswer(wire.OpStallNetworkResult, wire.StallErrNetworkTown)
 	}
-	listings := rt.Stalls.Network(division, category)
-	pages := (len(listings) + stallNetworkPageRows - 1) / stallNetworkPageRows
-	start := int(page) * stallNetworkPageRows
-	if start > len(listings) {
-		start = len(listings)
-	}
-	end := min(start+stallNetworkPageRows, len(listings))
-	var rows []wire.StallListing
-	for _, listing := range listings[start:end] {
+	var found []wire.StallListing
+	for _, listing := range rt.Stalls.Network(division, category) {
 		owner := rt.findCharacter(division, listing.Owner)
 		if owner == nil {
 			continue
 		}
 		snapshot := rt.characterSnapshot(division, owner)
 		item, ok := inventory.New(invItemsFromRows(snapshot.MissionInventory)).At(listing.Slot.BagSlot)
-		if !ok {
+		if !ok || degree != 0 && rt.stallDegree(item) != degree {
 			continue
 		}
 		body := item.Body()
 		body.Quantity = listing.Slot.Quantity
-		rows = append(rows, wire.StallListing{
+		found = append(found, wire.StallListing{
 			Item:     body,
 			Owner:    enterworld.ObjectIDForCharacter(owner),
 			Slot:     listing.Index,
@@ -160,6 +176,9 @@ func (rt *Runtime) HandleStallNetworkSearch(division string, c *enterworld.Chara
 			Serial:   listing.Slot.Serial,
 		})
 	}
+	pages := (len(found) + stallNetworkPageRows - 1) / stallNetworkPageRows
+	start := min(int(page)*stallNetworkPageRows, len(found))
+	rows := found[start:min(start+stallNetworkPageRows, len(found))]
 	return OpResult{Frames: []wire.Frame{{Opcode: wire.OpStallNetworkResult, Payload: wire.EncodeStallNetworkResult(rows, uint8(min(pages, 0xFF)))}}}
 }
 

@@ -45,6 +45,8 @@ type Runtime struct {
 
 	// Unions answers union chat; set by wiring before the hub serves.
 	Unions UnionView
+	// Stalls answers stall chat; set by wiring before the hub serves.
+	Stalls StallView
 }
 
 /*

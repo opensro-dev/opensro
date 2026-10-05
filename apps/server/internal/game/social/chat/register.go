@@ -62,7 +62,7 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 		if restriction.Report(s, transport.CommandRestrictionChat) {
 			return
 		}
-		outcome := HandleChat(deps, Views{Presence: presence, Parties: parties, Unions: rt.Unions}, divisionID, character, payload)
+		outcome := HandleChat(deps, Views{Presence: presence, Parties: parties, Unions: rt.Unions, Stalls: rt.Stalls}, divisionID, character, payload)
 		if outcome.Refusal == "" && outcome.Broadcast != nil && ClosedBetaGlobalChat {
 			// The author's echo precedes the keyed receipt on the same reliable
 			// stream, so presentation uses the server's channel exactly once.

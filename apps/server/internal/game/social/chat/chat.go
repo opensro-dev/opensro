@@ -40,6 +40,12 @@ type UnionView interface {
 	UnionChatAudience(divisionID string, sender *enterworld.Character) (names []string, code uint8)
 }
 
+// StallView answers who a stall line reaches - *stall.Registry satisfies
+// it.
+type StallView interface {
+	Participants(divisionID, name string) ([]string, bool)
+}
+
 /*
 ================
 Views
@@ -52,6 +58,7 @@ type Views struct {
 	Presence PresenceView
 	Parties  PartyView
 	Unions   UnionView
+	Stalls   StallView
 }
 
 // Delivery is one presence-targeted 0x3667 send. The register glue resolves
@@ -144,10 +151,13 @@ func HandleChat(deps Dependencies, views Views, divisionID string, sender *enter
 		return handleGuildChat(deps, divisionID, sender, request)
 	case ChatTypeUnion:
 		return handleUnionChat(deps, views.Unions, divisionID, sender, request)
+	case ChatTypeStall:
+		return handleStallChat(views.Stalls, divisionID, sender, request)
 	default:
 		// Only 1/2/3/4/5/0x0B are composable by the retail prefix
-		// switch; anything else (a crafted notice 7, stall 9, academy
-		// 0x10, ...) acks UIIT_CHATERR_INVALID_COMMAND - never
+		// switch and 9 by the stall window's chat box; anything else (a
+		// crafted notice 7, academy 0x10, ...) acks
+		// UIIT_CHATERR_INVALID_COMMAND - never
 		// broadcast, so a forged type-7 frame cannot drive the notice
 		// banner.
 		return Outcome{
@@ -275,6 +285,40 @@ func handlePartyChat(parties PartyView, divisionID string, sender *enterworld.Ch
 			continue
 		}
 		outcome.Deliveries = append(outcome.Deliveries, Delivery{TargetName: member.Name, Payload: payload})
+	}
+	return outcome
+}
+
+/*
+================
+handleStallChat
+
+Stall chat (type 9) reaches everyone at the sender's stall
+(CFleaMarket_BroadcastChat 473BF0: [9][name][message]); a player at no
+stall acks ChatErrNoStall. Native sends the author its own line too and
+the client drops it by name (753760); the author is left out here, as in
+the party arm.
+================
+*/
+func handleStallChat(stalls StallView, divisionID string, sender *enterworld.Character, request Request) Outcome {
+	var names []string
+	atStall := false
+	if stalls != nil {
+		names, atStall = stalls.Participants(divisionID, sender.Name)
+	}
+	if !atStall {
+		return Outcome{
+			Refusal: fmt.Sprintf("%s is at no stall", sender.Name),
+			Ack:     EncodeChatAckError(ChatErrNoStall, request.ChatType, request.Second),
+		}
+	}
+	payload := EncodeChatBroadcastNamed(ChatTypeStall, sender.Name, request.Message)
+	outcome := Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second)}
+	for _, name := range names {
+		if strings.EqualFold(name, sender.Name) {
+			continue
+		}
+		outcome.Deliveries = append(outcome.Deliveries, Delivery{TargetName: name, Payload: payload})
 	}
 	return outcome
 }

@@ -92,6 +92,10 @@ func TestStallSellsToAVisitor(t *testing.T) {
 	if p := listed.Frames[0].Payload; p[0] != 1 || p[1] != 1 || p[2] != 1 {
 		t.Fatalf("network search % X", p)
 	}
+	// A potion has no degree: a third-degree search does not list it.
+	if p := rt.HandleStallNetworkSearch(testDivision, buyer, []byte{0, 0, 40, 0, 0, 0, 3}).Frames[0].Payload; p[1] != 0 {
+		t.Fatalf("degree search % X", p)
+	}
 
 	if out := rt.HandleStallBuy(testDivision, buyer, []byte{0}); !bytes.Equal(out.Frames[0].Payload, []byte{1, 0}) {
 		t.Fatalf("buy %+v", out.Frames)

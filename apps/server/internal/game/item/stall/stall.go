@@ -211,6 +211,29 @@ func (r *Registry) Visiting(divisionID, name string) (string, bool) {
 
 /*
 ================
+Participants
+
+Everyone at the stall a player keeps or stands at, owner first
+(CFleaMarket's participant list, server 473C60); false when the player is
+at no stall.
+================
+*/
+func (r *Registry) Participants(divisionID, name string) ([]string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner := name
+	if visited, ok := r.visiting[key(divisionID, name)]; ok {
+		owner = visited
+	}
+	s, ok := r.stalls[key(divisionID, owner)]
+	if !ok {
+		return nil, false
+	}
+	return append([]string{s.Owner}, s.Visitors...), true
+}
+
+/*
+================
 Enter
 ================
 */

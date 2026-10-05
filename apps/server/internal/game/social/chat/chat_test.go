@@ -546,6 +546,42 @@ func (s stubUnions) UnionChatAudience(string, *enterworld.Character) ([]string, 
 	return s.names, s.code
 }
 
+type stubStalls struct {
+	names []string
+}
+
+func (s stubStalls) Participants(string, string) ([]string, bool) {
+	return s.names, s.names != nil
+}
+
+/*
+================
+TestHandleChatStallReachesTheStall
+
+A stall line reaches everyone else at the sender's stall; a player at no
+stall acks error 5 and reaches no one.
+================
+*/
+func TestHandleChatStallReachesTheStall(t *testing.T) {
+	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
+	deps := testDeps(sender)
+	views := Views{Stalls: stubStalls{names: []string{"Bravo", "Alfa", "Cale"}}}
+	outcome := HandleChat(deps, views, testDivision, sender, chatFrame(ChatTypeStall, 0xFF, "", "hi"))
+	if !bytes.Equal(outcome.Ack, []byte{0x01, ChatTypeStall, 0xFF}) {
+		t.Fatalf("ack = % X", outcome.Ack)
+	}
+	if len(outcome.Deliveries) != 2 || outcome.Deliveries[0].TargetName != "Bravo" || outcome.Deliveries[1].TargetName != "Cale" {
+		t.Fatalf("deliveries %+v", outcome.Deliveries)
+	}
+	if outcome.Deliveries[0].Payload[0] != ChatTypeStall {
+		t.Fatalf("payload % X", outcome.Deliveries[0].Payload)
+	}
+	alone := HandleChat(deps, Views{Stalls: stubStalls{}}, testDivision, sender, chatFrame(ChatTypeStall, 0xFF, "", "hi"))
+	if !bytes.Equal(alone.Ack, []byte{0x02, ChatErrNoStall, ChatTypeStall, 0xFF}) || len(alone.Deliveries) != 0 {
+		t.Fatalf("no-stall outcome %+v", alone)
+	}
+}
+
 /*
 ================
 TestHandleChatUncomposableTypeAcksInvalidCommand
@@ -554,8 +590,8 @@ TestHandleChatUncomposableTypeAcksInvalidCommand
 func TestHandleChatUncomposableTypeAcksInvalidCommand(t *testing.T) {
 	sender := &enterworld.Character{ID: 7, Name: "Alfa"}
 	deps := testDeps(sender)
-	// A forged notice (7) or stall (9) must NEVER broadcast - error 8.
-	for _, chatType := range []uint8{6, 7, 9, 0x0D, 0x10, 0xFE} {
+	// A forged notice (7) must NEVER broadcast - error 8.
+	for _, chatType := range []uint8{6, 7, 0x0D, 0x10, 0xFE} {
 		outcome := HandleChat(deps, Views{Presence: stubPresence{}, Parties: stubParties{}}, testDivision, sender, chatFrame(chatType, 0xFF, "", "hi"))
 		if !bytes.Equal(outcome.Ack, []byte{0x02, 0x08, chatType, 0xFF}) {
 			t.Fatalf("type 0x%02X ack = % X, want 02 08 %02X FF", chatType, outcome.Ack, chatType)
