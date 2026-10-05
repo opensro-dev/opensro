@@ -395,7 +395,7 @@ func TestRecallReferenceUsesCurrentCatalogThenStoredFallback(t *testing.T) {
 	current := simulation.EuropeStartProfile()
 	c.World.RebirthPoint = worldSpawnFromMission(old)
 	c.World.RebirthGateRefID = 2094
-	rt.portals = &portalCatalog{sources: map[uint32]uint32{2094: 1}, destinations: map[uint32]portalDestination{1: {recall: true, spawn: current}}}
+	rt.portals = &portalCatalog{sources: map[uint32]uint32{2094: 1}, destinations: map[uint32]portalDestination{1: {recall: true, world: 1, spawn: current}}}
 	if rt.appointedRebirthPoint(c) != current {
 		t.Fatal("ignored reference")
 	}

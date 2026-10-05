@@ -102,20 +102,35 @@ are the fallback, so old saves and subsequently removed gates remain usable.
 ==================
 */
 func (rt *Runtime) appointedRebirthPoint(character *enterworld.Character) simulation.Spawn {
+	return rt.appointedRebirth(character).spawn
+}
+
+/*
+================
+appointedRebirth
+
+The appointed town and the world it lies in. CGObjPC_ResolveTownRecallPosition
+(4E08A0) reads the appointed teleport through CRefTeleport_ResolveSpawnCoords,
+which also yields the teleport's GenWorldID. The stored fallback is a field
+position.
+================
+*/
+func (rt *Runtime) appointedRebirth(character *enterworld.Character) travelPoint {
+	field := instance.ID(domain.DefaultWorldInstance)
 	fallback := defaultRebirthPoint(character)
 	if character == nil || character.World == nil {
-		return fallback
+		return travelPoint{spawn: fallback, world: field}
 	}
 	world := character.World
 	if rt.portals != nil && world.RebirthGateRefID != 0 {
 		if id, ok := rt.portals.sources[world.RebirthGateRefID]; ok {
 			d := rt.portals.destinations[id]
 			if d.recall && d.spawn.RegionID != 0 && d.spawn.RegionID&0x8000 == 0 {
-				return d.spawn
+				return travelPoint{spawn: d.spawn, world: portalWorld(d)}
 			}
 		}
 	}
-	return missionSpawnFromWorld(world.RebirthPoint, fallback)
+	return travelPoint{spawn: missionSpawnFromWorld(world.RebirthPoint, fallback), world: field}
 }
 
 /*
@@ -249,17 +264,31 @@ func (rt *Runtime) HandleLocalRebirth(
 	candidate.CurrentHP, candidate.CurrentMP = &restoredHP, &restoredMP
 	var prepared enterworld.PreparedReentry
 	var previousPets map[petOwnerKey]petSession
+	currentWorld := instance.ID(domain.CharacterWorldInstance(before))
+	arrivalWorld := currentWorld
+	var membership populationAdmission
 	committed := false
 	defer func() {
 		if !committed {
 			rt.restoreCompanionRelocation(previousPets)
+			if arrivalWorld != currentWorld {
+				rt.restorePopulationSession(membership)
+			}
 		}
 	}()
 	if choice == wire.RebirthAtSpecifiedPoint {
-		destination = rt.appointedRebirthPoint(before)
+		arrival := rt.appointedRebirth(before)
+		destination = arrival.spawn
 		preview := corpse
 		preview.Spawn = destination
 		writeBackWorld(candidate, preview)
+		setCharacterWorld(candidate, arrival.world)
+		// Re-entry is built against the destination world's membership.
+		var moved bool
+		if membership, moved = rt.moveWorldMembership(divisionID, before, currentWorld, arrival.world); !moved {
+			return OpResult{DiagnosticRefusal: "rebirth-world-unavailable"}
+		}
+		arrivalWorld = arrival.world
 		previousPets = rt.relocateReturningPet(divisionID, character, destination)
 		var ok bool
 		prepared, ok = rt.deps.PrepareReentry(divisionID, candidate)
@@ -287,6 +316,7 @@ func (rt *Runtime) HandleLocalRebirth(
 		})
 		writeBackWorld(character, state)
 		character.World.MoveSegment = nil
+		setCharacterWorld(character, arrivalWorld)
 		character.CurrentHP, character.CurrentMP = &restoredHP, &restoredMP
 		character.LastExpLoss = 0 // CGObjPC_TeleportToTown 4DF2E8
 		untouchable = rt.grantReviveUntouchable(divisionID, character, rt.Now().UnixMilli())

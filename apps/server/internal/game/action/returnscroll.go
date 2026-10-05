@@ -14,6 +14,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -38,7 +39,7 @@ type pendingReturn struct {
 	generation     uint64
 	// destination is a reverse return's chosen point; nil returns to the
 	// appointed rebirth point.
-	destination *simulation.Spawn
+	destination *travelPoint
 }
 
 /*
@@ -172,7 +173,7 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 	if !ok {
 		return false
 	}
-	var destination *simulation.Spawn
+	var destination *travelPoint
 	switch ref.ReturnDestination {
 	case "RESURRECT":
 		if mode != teleportModeBlocking || !rt.returnScrollAdmission(division, c, result) {
@@ -222,7 +223,7 @@ type returnCast struct {
 	slot        uint8
 	typeWord    uint16
 	duration    int64
-	destination *simulation.Spawn
+	destination *travelPoint
 	now         int64
 	// mode is the channel-11 teleport mode; zero is a return's 1. The skin
 	// change reloads in place under mode 3 (4EFFC0).
@@ -359,6 +360,8 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	var previous simulation.WorldState
 	var previousWorld *enterworld.CharacterWorld
 	var destination simulation.Spawn
+	var arrival travelPoint
+	currentWorld := instance.ID(domain.CharacterWorldInstance(c))
 	rt.bindResidentRegion(key, now)
 	if !rt.deps.Update(c, "return-scroll-complete", func() bool {
 		if c.DeletePending || c.NativeTeleportMode == 0 {
@@ -370,10 +373,11 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			rt.returnCasts.Store(key, job)
 			return false
 		}
-		destination = rt.appointedRebirthPoint(c)
+		arrival = rt.appointedRebirth(c)
 		if job.destination != nil {
-			destination = *job.destination
+			arrival = *job.destination
 		}
+		destination = arrival.spawn
 		previousWorld = c.World
 		state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
 			previous = *w
@@ -386,18 +390,32 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 		})
 		writeBackWorld(c, state)
 		c.World.MoveSegment = nil
+		setCharacterWorld(c, arrival.world)
 		c.NativeTeleportMode = 0
 		return true
 	}) {
 		return nil, nil
 	}
 	rt.returnCasts.Delete(key)
+	clearMode := teleportState(c, 0)
+	membership, moved := rt.moveWorldMembership(job.division, c, currentWorld, arrival.world)
+	if !moved {
+		rt.deps.Update(c, "return-scroll-world-rollback", func() bool {
+			rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
+			c.World = previousWorld
+			return true
+		})
+		return []wire.Frame{clearMode}, []wire.Frame{clearMode}
+	}
 	rt.endTransformForLoading(job.division, c)
 	rt.endPartyAurasForLoading(job.division, c)
 	previousPets := rt.relocateReturningPet(job.division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(job.division, job.name)
 	clear := teleportState(c, 0)
 	if !accepted || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {
+		if arrival.world != currentWorld {
+			rt.restorePopulationSession(membership)
+		}
 		rt.restoreCompanionRelocation(previousPets)
 		rt.deps.Update(c, "return-scroll-entry-rollback", func() bool {
 			rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })

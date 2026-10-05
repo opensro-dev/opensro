@@ -8,9 +8,11 @@ gmwarp.go - owns gmwarp behavior and its authority boundary
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -40,6 +42,12 @@ func (rt *Runtime) WarpGM(division, name string, p wire.Position) bool {
 	destination := simulation.Spawn{RegionID: p.RegionID, X: float64(p.X), Y: float64(p.Y), Z: float64(p.Z), Angle: p.Heading}
 	var previous simulation.WorldState
 	var previousWorld *enterworld.CharacterWorld
+	// INFERENCE: /warp names field coordinates (the GM tool targets the
+	// region grid the field map loads); a GM inside a fortress or instance
+	// is brought out to the field rather than left at field coordinates
+	// inside a world whose map does not hold them.
+	gmWarpWorld := instance.ID(domain.DefaultWorldInstance)
+	currentWorld := instance.ID(domain.CharacterWorldInstance(c))
 	rt.bindResidentRegion(simulation.WorldKey(division, name), rt.Now().UnixMilli())
 	if !rt.deps.Update(c, "gm-warp", func() bool {
 		if c.DeletePending || !c.GMPrivilege || !enterworld.CharacterAlive(c) {
@@ -66,8 +74,18 @@ func (rt *Runtime) WarpGM(division, name string, p wire.Position) bool {
 		})
 		writeBackWorld(c, state)
 		c.World.MoveSegment = nil
+		setCharacterWorld(c, gmWarpWorld)
 		return true
 	}) {
+		return false
+	}
+	membership, moved := rt.moveWorldMembership(division, c, currentWorld, gmWarpWorld)
+	if !moved {
+		rt.deps.Update(c, "gm-warp-world-rollback", func() bool {
+			rt.Worlds.Update(simulation.WorldKey(division, name), func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
+			c.World = previousWorld
+			return true
+		})
 		return false
 	}
 	rt.endTransformForLoading(division, c)
@@ -85,6 +103,9 @@ func (rt *Runtime) WarpGM(division, name string, p wire.Position) bool {
 		}
 		rt.PushCharacterFrames(division, name, frames)
 	} else {
+		if currentWorld != gmWarpWorld {
+			rt.restorePopulationSession(membership)
+		}
 		rt.restoreCompanionRelocation(previousPets)
 		// No partial reset may escape. Restore movement if entry construction
 		// refuses; never leave the actor staring at an unfinished loading screen.

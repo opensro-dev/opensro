@@ -3,6 +3,7 @@ package action
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -32,9 +33,19 @@ named gate standing at the player.
 ================
 */
 func fortressPortalFixture(t *testing.T, gateRef uint32) (*Runtime, *enterworld.Character) {
+	rt, c, _ := fortressFixtureWithClock(t, gateRef)
+	return rt, c
+}
+
+/*
+================
+fortressFixtureWithClock
+================
+*/
+func fortressFixtureWithClock(t *testing.T, gateRef uint32) (*Runtime, *enterworld.Character, *fakeClock) {
 	t.Helper()
 	licensed.RequireGameData(t)
-	rt, c, _, _ := returnFixture(t, 30000)
+	rt, c, clock, _ := returnFixture(t, 30000)
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(nil, nil))
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 900000 + gateRef, RefObjID: gateRef, Codename: "GATE",
@@ -45,7 +56,7 @@ func fortressPortalFixture(t *testing.T, gateRef uint32) (*Runtime, *enterworld.
 	if err := rt.AdmitCharacterSession(testDivision, c.Name, 1); err != nil {
 		t.Fatal(err)
 	}
-	return rt, c
+	return rt, c, clock
 }
 
 /*
@@ -132,4 +143,104 @@ func TestFortressPortalStoneServesOnlyTheOwningGuild(t *testing.T) {
 	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{2, portalFortressOwnersOnly}) {
 		t.Fatalf("portal stone served a non-owner: %+v", out)
 	}
+}
+
+/*
+================
+enterFortress
+================
+*/
+func enterFortress(t *testing.T, rt *Runtime, c *enterworld.Character) {
+	t.Helper()
+	if out := usePortal(rt, c, testFieldFortGate, 43); len(out.Frames) == 0 || out.Frames[0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("fortress gate did not enter: %+v", out)
+	}
+}
+
+/*
+================
+inField
+================
+*/
+func inField(t *testing.T, rt *Runtime, c *enterworld.Character, what string) {
+	t.Helper()
+	if c.World.PackedInstance != nil {
+		t.Fatalf("%s left the character in world %08x", what, *c.World.PackedInstance)
+	}
+	if lease, ok := rt.EntryPopulationLease(testDivision, c.Name); !ok || uint32(lease.ID) != domain.DefaultWorldInstance {
+		t.Fatalf("%s left the membership in %+v", what, lease)
+	}
+}
+
+/*
+================
+TestReturnScrollLeavesTheFortressForTheAppointedTown
+
+4E08A0 resolves the appointed town through its teleport, world included:
+a return from inside a fortress lands in the field world.
+================
+*/
+func TestReturnScrollLeavesTheFortressForTheAppointedTown(t *testing.T) {
+	rt, c, clock := fortressFixtureWithClock(t, testFieldFortGate)
+	enterFortress(t, rt, c)
+	useReturn(rt, c)
+	if c.World.LastRecallPoint == nil || c.World.LastRecallPoint.World != 2 {
+		t.Fatalf("recall point inside the fortress: %+v", c.World.LastRecallPoint)
+	}
+	clock.Advance(30 * time.Second)
+	rt.advanceReturnScrolls(clock.NowMs())
+	inField(t, rt, c, "the return scroll")
+}
+
+/*
+================
+TestReverseReturnGoesBackIntoTheRecordedWorld
+================
+*/
+func TestReverseReturnGoesBackIntoTheRecordedWorld(t *testing.T) {
+	region, x := int64(17221), 812.0
+	c := &enterworld.Character{World: &domain.CharacterWorld{
+		LastDeathPoint: &domain.WorldPoint{WorldSpawn: domain.WorldSpawn{RegionID: &region, X: &x}, World: 2}}}
+	point, refusal := reverseReturnPoint(c, reverseReturnLastDeath)
+	if refusal != 0 || point.world != instance.Pack(2, 1) || point.spawn.RegionID != 17221 {
+		t.Fatalf("reverse return point %+v (%d)", point, refusal)
+	}
+}
+
+/*
+================
+TestTownRevivalLeavesTheFortress
+================
+*/
+func TestTownRevivalLeavesTheFortress(t *testing.T) {
+	rt, c, clock := fortressFixtureWithClock(t, testFieldFortGate)
+	enterFortress(t, rt, c)
+	zero := int64(0)
+	c.CurrentHP = &zero
+	rt.settlePlayerDeathInDoor(testDivision, c, clock.NowMs())
+	out := rt.HandleLocalRebirth(testDivision, c, []byte{wire.RebirthAtSpecifiedPoint})
+	if len(out.Frames) == 0 {
+		t.Fatalf("revival refused: %+v", out)
+	}
+	inField(t, rt, c, "town revival")
+}
+
+/*
+================
+TestGMWarpLeavesTheFortressForTheField
+================
+*/
+func TestGMWarpLeavesTheFortressForTheField(t *testing.T) {
+	rt, c := fortressPortalFixture(t, testFieldFortGate)
+	enterFortress(t, rt, c)
+	deps := rt.deps.(*enterworld.Deps)
+	deps.CanEnterWorldRegion = func(_ *enterworld.Character, r uint16) bool { return r == 25416 }
+	deps.SpawnTerrainHeight = func(uint16, float64, float64) (float64, bool) { return 20, true }
+	rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {}
+	rt.PushDivisionPeerFrames = func(_, _ string, _ []wire.Frame) {}
+	c.GMPrivilege = true
+	if !rt.WarpGM(testDivision, c.Name, wire.Position{RegionID: 25416, X: 703, Y: 42, Z: 1575}) {
+		t.Fatal("warp refused")
+	}
+	inField(t, rt, c, "the GM warp")
 }

@@ -24,6 +24,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const (
@@ -79,6 +80,18 @@ func loadFortressCatalog(dir string) ([]fortress.Catalog, error) {
 		out = append(out, fortress.Catalog{ID: uint32(id), CodeName: r[2], MaxEntrance: uint32(maximum)})
 	}
 	return out, nil
+}
+
+/*
+================
+travelPoint
+
+A relocation's destination: a position and the world and layer it lies in.
+================
+*/
+type travelPoint struct {
+	spawn simulation.Spawn
+	world instance.ID
 }
 
 /*
@@ -261,6 +274,25 @@ func (rt *Runtime) fortressSides(division string, fortressID uint32, owner int64
 		return true
 	})
 	return defenders, attackers
+}
+
+/*
+================
+moveWorldMembership
+
+The population half of any relocation: when the destination lies in
+another world, the session's membership moves there (capacity bypassed:
+the PC is returning to a permanent world, never queueing into a war).
+Returns the previous membership for restorePopulationSession. The caller
+holds the division lock.
+================
+*/
+func (rt *Runtime) moveWorldMembership(division string, c *enterworld.Character, from, to instance.ID) (populationAdmission, bool) {
+	if from == to {
+		return populationAdmission{}, true
+	}
+	previous, status := rt.transferPopulationSession(division, c.Name, to, true)
+	return previous, status == instance.Success
 }
 
 /*

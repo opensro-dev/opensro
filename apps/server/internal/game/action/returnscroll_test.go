@@ -98,7 +98,7 @@ func TestReturnScrollCommitsConsumptionAndServerTimedReentry(t *testing.T) {
 			if duration == 15000 {
 				c.World.RebirthPoint = worldSpawnFromMission(simulation.ChinaStartProfile())
 				c.World.RebirthGateRefID = 2094
-				rt.portals = &portalCatalog{sources: map[uint32]uint32{2094: 1}, destinations: map[uint32]portalDestination{1: {recall: true, spawn: want}}}
+				rt.portals = &portalCatalog{sources: map[uint32]uint32{2094: 1}, destinations: map[uint32]portalDestination{1: {recall: true, world: 1, spawn: want}}}
 			}
 			out := useReturn(rt, c)
 			assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, 0x3449)

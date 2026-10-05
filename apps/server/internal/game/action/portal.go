@@ -224,20 +224,20 @@ return scroll's Param4 (4A0380 reads it through the reference data's
 +0x190 teleport link).
 ================
 */
-func (rt *Runtime) buildingGateSpawn(code string) (simulation.Spawn, bool) {
+func (rt *Runtime) buildingGateSpawn(code string) (travelPoint, bool) {
 	if rt.portals == nil {
-		return simulation.Spawn{}, false
+		return travelPoint{}, false
 	}
 	ref, ok := rt.portals.buildings[code]
 	if !ok {
-		return simulation.Spawn{}, false
+		return travelPoint{}, false
 	}
 	for _, destination := range rt.portals.destinations {
 		if destination.ref == ref {
-			return destination.spawn, true
+			return travelPoint{spawn: destination.spawn, world: portalWorld(destination)}, true
 		}
 	}
-	return simulation.Spawn{}, false
+	return travelPoint{}, false
 }
 
 /*

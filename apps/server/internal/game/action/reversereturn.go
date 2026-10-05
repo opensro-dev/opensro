@@ -30,6 +30,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -103,7 +104,7 @@ reverseReturnPoint
 The recorded point a choice names, or the refusal for a missing one.
 ================
 */
-func reverseReturnPoint(c *enterworld.Character, choice uint8) (simulation.Spawn, uint8) {
+func reverseReturnPoint(c *enterworld.Character, choice uint8) (travelPoint, uint8) {
 	var point *domain.WorldPoint
 	refusal := errCodeNoRecallPoint
 	if c.World != nil && choice == reverseReturnLastRecall {
@@ -116,9 +117,15 @@ func reverseReturnPoint(c *enterworld.Character, choice uint8) (simulation.Spawn
 		}
 	}
 	if point == nil || point.RegionID == nil || *point.RegionID == 0 {
-		return simulation.Spawn{}, refusal
+		return travelPoint{}, refusal
 	}
-	return missionSpawnFromWorld(&point.WorldSpawn, simulation.Spawn{}), 0
+	// The point keeps its GameWorldID; a recorded world is type 0, entered
+	// on layer 1. Absent means the field.
+	world := instance.ID(domain.DefaultWorldInstance)
+	if point.World != 0 {
+		world = instance.Pack(instance.DefinitionID(point.World), portalWorldLayer)
+	}
+	return travelPoint{spawn: missionSpawnFromWorld(&point.WorldSpawn, simulation.Spawn{}), world: world}, 0
 }
 
 /*
