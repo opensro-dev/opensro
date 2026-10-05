@@ -1,6 +1,7 @@
 package enterworld
 
 import (
+	"opensro.online/server/internal/domain"
 	"time"
 
 	wire "opensro.online/server/internal/game/item/wire"
@@ -107,6 +108,31 @@ func paramJobPackets(deps *Deps, character *Character, nowMs int64) []Packet {
 			continue
 		}
 		packets = append(packets, NewPacket(wire.OpParamJobResume, wire.EncodeParamJobRow(owner, remaining, job.ItemRefObjID)))
+	}
+	return packets
+}
+
+/*
+================
+countJobPackets
+
+0x3021 re-raises every live premium limited use (UIL1) after world entry,
+as paramJobPackets does for the param jobs. The other composite works have
+no board row.
+================
+*/
+func countJobPackets(character *Character, nowMs int64) []Packet {
+	if character == nil {
+		return nil
+	}
+	var packets []Packet
+	for _, job := range character.CompositeJobs {
+		if job.Kind != domain.CompositeUsedItemLimit || job.EndUnixMs <= nowMs {
+			continue
+		}
+		remaining := PetSkillWindowRemaining(job.EndUnixMs, nowMs)
+		packets = append(packets, NewPacket(wire.OpCountJobStart,
+			wire.EncodeCountJobStart(job.PackageRefObjID, remaining, job.Target, job.Uses)))
 	}
 	return packets
 }

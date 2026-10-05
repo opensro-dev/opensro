@@ -1438,6 +1438,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/count-job.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/avatar-magic-option.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [

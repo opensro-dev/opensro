@@ -9,6 +9,7 @@ suppressed slots left out.
 
 ===========================================================================
 */
+import { countJobFraction } from "@/engine/foundation/gameplay/count-job";
 import { buffDepartureFrame } from "@/engine/foundation/gameplay/buff-slots";
 import { abnormalBarFraction } from "@/engine/foundation/gameplay/abnormal-snapshot";
 import type { GameplayState } from "@/engine/contracts/gameplay";
@@ -94,6 +95,24 @@ export function buffBoard( game: GameplayState, timeMs: number, suppressed: Read
 				path,
 				label: job.reference.name ?? "",
 				fraction: paramJobFraction( job, job.reference, timeMs )
+			} );
+		}
+	}
+	// 6E6E00 kind 5: a premium package's limited uses, one slot per package
+	// with its icon and its period's bar; the help lists each item's uses.
+	const packages = new Map<number, NonNullable<typeof game.countJobs>[number][]>();
+	for ( const row of game.countJobs ?? [] ) {
+		packages.set( row.packageRefObjId, [ ...(packages.get( row.packageRefObjId ) ?? []), row ] );
+	}
+	for ( const [packageRefObjId, rows] of packages ) {
+		const reference = rows[0]!.reference, path = iconPath( reference.icon );
+		if ( path ) {
+			primary.push( {
+				helpText: [ reference.name ?? "", ...rows.map( r => (r.itemName ?? "") + " x" + r.uses ) ].join( "\n" ),
+				id: "count-job:" + packageRefObjId,
+				path,
+				label: reference.name ?? "",
+				fraction: countJobFraction( rows[0]!, reference.periodSec, timeMs )
 			} );
 		}
 	}

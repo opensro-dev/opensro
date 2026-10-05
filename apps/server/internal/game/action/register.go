@@ -63,6 +63,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(opGuildStorageList, rt.hubHandler(hub, rt.HandleGuildStorageList))
 	hub.Handle(opGuildStorageClose, rt.hubHandler(hub, rt.HandleGuildStorageClose))
 	hub.Handle(0x72dd, rt.hubHandler(hub, rt.HandleReturnCancel))
+	hub.Handle(wire.OpCountJobUse, rt.hubHandler(hub, rt.HandleCountJobUse))
 	hub.Handle(wire.OpCosBehaviorRequest, rt.hubHandler(hub, rt.HandleCosBehavior))
 	hub.Handle(0x77e7, rt.hubHandler(hub, rt.HandleRetailBuyback))
 	hub.Handle(opShopBuyback, rt.hubHandler(hub, rt.HandleBuyback))

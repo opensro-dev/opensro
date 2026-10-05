@@ -121,6 +121,11 @@ import { createJobHud } from "./hud/job-hud";
 import { createGuildManagerHud } from "./hud/guild-manager-hud";
 import { createMagicOptionHud, MAGIC_OPTION_LIST_ROWS } from "./hud/magic-option-hud";
 import {
+	premiumCommand,
+	REVERSE_RETURN_LAST_DEATH,
+	REVERSE_RETURN_LAST_RECALL
+} from "@/engine/foundation/gameplay/count-job";
+import {
 	AVATAR_MAGIC_OPTION_FUNCTION,
 	avatarMagicOptionCount,
 	avatarMagicOptionText,
@@ -2477,7 +2482,23 @@ export function createUi(
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 			dirty = true;
 			return;
-		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
+		} else if (
+			id === "chat-send" && premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )
+		) {
+			// 6AD990: /Return, /Reverse Return and /Resurrection spend a premium
+			// package's limited use; they are never sent as chat.
+			const command = premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )!;
+			sendGameplay( { kind: "premium-command", command } );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
+		} else if ( id.startsWith( "premium-reverse:" ) ) {
+			sendGameplay( { kind: "premium-command", command: "reverse-return", choice: Number( id.slice( 16 ) ) } );
+		} else if ( id === "premium-reverse-cancel" ) sendGameplay( { kind: "premium-command-cancel" } );
+		else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
 				panel === "Chat" ?
 					(chatChannel === 2 ?
@@ -9883,6 +9904,50 @@ export function createUi(
 						] ] as const
 					) button( id, hudCopy( key ), r[0], r[1], r[2] );
 					endWindow( admission, "quest-abandon" );
+				}
+				if ( game?.reverseReturnChoice ) {
+					// 6AD990's type 0x24 confirm box: the reverse return's two points.
+					controls = [];
+					const admission = beginWindow(), box = guildProposalLayout( w, h );
+					blocks.push( full );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					quads.push(
+						...text.quads( hudCopy( "UIIT_CTL_PREMIUM_REVERSE_RETURN" ), box.title, full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					for (
+						const [index, choice, key] of [
+							[ 0, REVERSE_RETURN_LAST_RECALL, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" ],
+							[ 1, REVERSE_RETURN_LAST_DEATH, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" ]
+						] as const
+					) {
+						button(
+							"premium-reverse:" + choice,
+							hudCopy( key ),
+							box.frame[0] + 16,
+							box.frame[1] + 44 + index * 26,
+							box.frame[2] - 32
+						);
+					}
+					button(
+						"premium-reverse-cancel",
+						hudCopy( "UIIT_CTL_CANCEL" ),
+						box.refuse[0],
+						box.refuse[1],
+						box.refuse[2]
+					);
+					endWindow( admission, "premium-reverse-return" );
 				}
 				if ( panel === "Blocking" && hudData ) {
 					const admission = beginWindow(),

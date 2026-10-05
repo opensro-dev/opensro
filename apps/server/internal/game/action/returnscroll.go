@@ -211,12 +211,14 @@ returnCast
 
 One channel-11 return cast to start: the scroll row it consumes, its use
 reply identity, its duration and, for a reverse return, its destination.
+A premium limited use (countjob.go) casts with no row: nothing is consumed
+and the item-use reply is the caller's.
 ================
 */
 type returnCast struct {
 	division    string
 	character   *enterworld.Character
-	row         int
+	row         int // -1: no scroll row (a premium limited use)
 	slot        uint8
 	typeWord    uint16
 	duration    int64
@@ -260,11 +262,15 @@ func (rt *Runtime) startReturnCast(cast returnCast, result *OpResult) bool {
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
 	rt.returnCasts.Store(key, pendingReturn{division: division, name: c.Name, character: c, due: now + cast.duration,
 		generation: rt.returnGeneration.Add(1), destination: cast.destination})
-	remaining := rt.consumeItemUseRow(c, cast.row)
 	status := teleportState(c, mode)
 	stop := wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: spawn.RegionID, X: float32(spawn.X), Y: float32(spawn.Y), Z: float32(spawn.Z), Heading: spawn.Angle}}.Encode()}
 	// HandleItemUse publishes the item's visual after the success.
-	*result = OpResult{Frames: []wire.Frame{status, {Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(cast.slot, remaining, cast.typeWord)}}, Broadcast: []wire.Frame{status}}
+	*result = OpResult{Frames: []wire.Frame{status}, Broadcast: []wire.Frame{status}}
+	if cast.row >= 0 {
+		remaining := rt.consumeItemUseRow(c, cast.row)
+		result.Frames = append(result.Frames, wire.Frame{Opcode: wire.OpItemUseResponse,
+			Payload: wire.EncodeItemUseSuccess(cast.slot, remaining, cast.typeWord)})
+	}
 	// 466F90 is a log record, not a state publication. 4A9430 emits
 	// the moving-only correction before 4E0B50 publishes channel 11.
 	if moving {

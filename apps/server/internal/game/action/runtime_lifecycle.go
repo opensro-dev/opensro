@@ -345,6 +345,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 		departedGID = enterworld.ObjectIDForCharacter(c)
 		rt.noteLastSeen(c)
 		rt.releaseGuildStorage(divisionID, c.Name)
+		rt.retirePremiumSpend(divisionID, c, rt.Now().UnixMilli())
 	}
 	if rt.Monsters != nil {
 		rt.Monsters.ForgetAbnormalSource(divisionID, departedGID, characterName)

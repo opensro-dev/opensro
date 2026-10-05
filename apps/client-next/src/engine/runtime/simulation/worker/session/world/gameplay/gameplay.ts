@@ -10,6 +10,7 @@ commands and cannot bypass actor eligibility.
 ===========================================================================
 */
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
+import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
 import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
 import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
 import {
@@ -479,6 +480,7 @@ fails; retry persistence without restoring stale slot occupancy.
 	const cosItemRefs2 = new Map<number, CosItemWindowReference>();
 	// Kind-4 board rows of the EXP/SP scroll jobs (param-job.ts).
 	const paramJobs = createParamJobs();
+	const countJobs = createCountJobs();
 	let abnormalRecords: readonly AbnormalRecord[] = [];
 	let abnormalMask = 0;
 	const chat = createChat( send ), quests = createQuests( send );
@@ -830,6 +832,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			cosItemRefs2.clear();
 			cosWindows = [];
 			paramJobs.reset();
+			countJobs.reset();
 			for (
 				const row of (value as {
 					refItemSnapshot?: ({ refObjId: number; } & Parameters<typeof cosTimerReference>[0])[];
@@ -838,6 +841,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 				const reference = cosTimerReference( row );
 				if ( reference ) cosItemRefs2.set( row.refObjId, reference );
 				paramJobs.reference( row );
+				countJobs.reference( row );
 			}
 			protocol = (value as {
 				simulationProtocolVersion?: number;
@@ -1671,6 +1675,34 @@ state here before a command can claim a native wire conversation.
 					targetSlot: command.targetSlot
 				} );
 			}
+			if ( command.kind === "premium-command" ) {
+				// 6AD990: the client's own checks raise their notice; a reverse
+				// return then waits for its point (the type 0x24 confirm box).
+				const chosen = countJobs.choosing();
+				if ( command.command === "reverse-return" && command.choice !== undefined && chosen ) {
+					countJobs.choose( null );
+					return countJobUseRequest( chosen, command.choice );
+				}
+				const admission = countJobs.admit( command.command, {
+					alive: potionFacts.alive,
+					transportOut: [ ...cosRecords.values() ].some( c => c.band === 2 && !c.dead ),
+					pvpState: local?.pvpState ?? 0
+				} );
+				if ( "code" in admission ) {
+					const notice = constantNativeNotice( 1, admission.code );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					return null;
+				}
+				if ( command.command === "reverse-return" ) {
+					countJobs.choose( admission.row );
+					return null;
+				}
+				return countJobUseRequest( admission.row );
+			}
+			if ( command.kind === "premium-command-cancel" ) {
+				countJobs.choose( null );
+				return null;
+			}
 			if ( command.kind === "release-target" ) {
 				if ( skillPress.cancel() ) dirty = true;
 				const frame = targeting.release( now );
@@ -1826,6 +1858,9 @@ references
 				cosItemRefs.set( row.refObjId, row.typeFlags );
 				if ( row.maxStack !== undefined ) cosItemCaps.set( row.refObjId, row.maxStack );
 				paramJobs.reference(
+					row as typeof row & { readonly nativeFields?: { readonly itemParam1_29c?: number; }; }
+				);
+				countJobs.reference(
 					row as typeof row & { readonly nativeFields?: { readonly itemParam1_29c?: number; }; }
 				);
 			}
@@ -2027,6 +2062,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					return false;
 				}
 				if ( paramJobs.receive( frame, now ) ) {
+					dirty = true;
+					return true;
+				}
+				const countUpdate = countJobs.receive( frame, now );
+				if ( countUpdate ) {
+					// 770820: a refused limited use is a category-1 notice.
+					const notice = countUpdate.kind === "refused" ? constantNativeNotice( 1, countUpdate.code ) : null;
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					dirty = true;
 					return true;
 				}
@@ -2983,6 +3026,8 @@ The published plane when something changed since the last take, else null.
 				academy,
 				guide,
 				paramJobs: paramJobs.state(),
+				countJobs: countJobs.state(),
+				reverseReturnChoice: countJobs.choosing() !== null,
 				storage: storage.state(),
 				playerModels: localPlayerModels(),
 				job,
@@ -3050,6 +3095,7 @@ World transfer retires spatial work while retaining character/session data.
 			storage.close();
 			cosWindows = [];
 			paramJobs.clear();
+			countJobs.clear();
 			const vital = combat.state().vitals.find( row => row.gid === localGid );
 			if ( vital ) {
 				entryVitals = {

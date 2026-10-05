@@ -67,6 +67,11 @@ func cloneCharacter(source *Character) *Character {
 	clone.ActiveCOS = CloneCOS(source.ActiveCOS)
 	clone.PetSkillWindows = cloneSlice(source.PetSkillWindows)
 	clone.ParamJobs = cloneSlice(source.ParamJobs)
+	clone.CompositeJobs = cloneSlice(source.CompositeJobs)
+	if source.PremiumClock != nil {
+		clock := *source.PremiumClock
+		clone.PremiumClock = &clock
+	}
 	if source.ItemGroupCooldowns != nil {
 		clone.ItemGroupCooldowns = make(map[uint32]int64, len(source.ItemGroupCooldowns))
 		for group, until := range source.ItemGroupCooldowns {

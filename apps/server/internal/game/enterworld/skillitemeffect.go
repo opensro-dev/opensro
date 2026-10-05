@@ -25,6 +25,11 @@ const (
 	itemEffectINT      = 0x696e7469
 	itemEffectRecovery = 0x69726763
 	itemEffectGold     = 0x676472
+	// luck/alcu raise the Alchemy reinforce and stone bonuses; the skill
+	// row carries them (AlchemyReinforceBonus/AlchemyStoneBonus) and the
+	// Alchemy owner reads them from the active effect (alchemybonus.go).
+	itemEffectAlchemyLuck  = 0x6c75636b
+	itemEffectAlchemyStone = 0x616c6375
 )
 
 /*
@@ -105,6 +110,8 @@ func compileTimedItemEffect(fields []string, row SkillRow) (SkillTimedEffect, bo
 			modifiers = true
 		case itemEffectGold:
 			result.GoldDropPercent = op.Arguments[0]
+			modifiers = true
+		case itemEffectAlchemyLuck, itemEffectAlchemyStone:
 			modifiers = true
 		case itemEffectDamage, itemEffectAbsorb:
 			// parseSkillOffense already decodes these shared modifier blocks;

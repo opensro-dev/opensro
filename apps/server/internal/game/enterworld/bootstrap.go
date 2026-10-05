@@ -410,6 +410,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	// character to the tick sweep, which owns retirement.
 	packets = append(packets, petSkillWindowPackets(deps, character, deps.clock().UnixMilli())...)
 	packets = append(packets, paramJobPackets(deps, character, deps.clock().UnixMilli())...)
+	packets = append(packets, countJobPackets(character, deps.clock().UnixMilli())...)
 	if (len(character.PetSkillWindows) > 0 || len(character.ParamJobs) > 0) && deps.TrackTimedWindows != nil {
 		deps.TrackTimedWindows(divisionID, character.Name)
 	}

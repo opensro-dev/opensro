@@ -221,6 +221,14 @@ export type GameplayCommand =
 	| { readonly kind: "quest-abandon"; readonly refId: number; }
 	| { readonly kind: "quest-reward"; readonly refId: number; }
 	| { readonly kind: "chat"; readonly channel: number; readonly text: string; readonly target?: string; }
+	// The premium chat commands (count-job.ts); a reverse return's second
+	// command carries its point.
+	| {
+		readonly kind: "premium-command";
+		readonly command: import("@/engine/foundation/gameplay/count-job").PremiumCommand;
+		readonly choice?: number;
+	}
+	| { readonly kind: "premium-command-cancel"; }
 	| { readonly kind: "mount"; readonly gid: number; }
 	| { readonly kind: "pickup"; readonly gid: number; }
 	// The pickup shortcut: the worker chooses the item (pickup-nearest.ts).
@@ -472,6 +480,13 @@ export interface GameplayState {
 	readonly paramJobs?: readonly (import("@/engine/foundation/gameplay/param-job").ParamJobRow & {
 		readonly reference: import("@/engine/foundation/gameplay/param-job").ParamJobReference;
 	})[];
+	// A premium package's limited uses (count-job.ts), and a reverse return
+	// waiting for its point.
+	readonly countJobs?: readonly (import("@/engine/foundation/gameplay/count-job").CountJobRow & {
+		readonly reference: import("@/engine/foundation/gameplay/count-job").CountJobReference;
+		readonly itemName?: string;
+	})[];
+	readonly reverseReturnChoice?: boolean;
 	readonly abnormalRecords?: readonly import("@/engine/foundation/gameplay/abnormal-snapshot").AbnormalRecord[];
 	readonly selectionDecal?: SelectionDecal | null;
 	readonly notices?: readonly import("@/engine/foundation/gameplay/system-notices").SystemNotice[];
