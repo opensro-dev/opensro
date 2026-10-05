@@ -688,7 +688,11 @@ ring stays under what the player fights and the spent move marker goes.
 		selectionDecal = {
 			kind: "target",
 			gid: entity.gid,
-			slot: entity.kind === "monster" || entity.kind === "cos" ? 3 : entity.kind === "player" ? 2 : 1
+			slot: entity.kind === "monster" || entity.kind === "cos" ?
+				3 :
+				entity.kind === "player" || entity.kind === "local-player" ?
+				2 :
+				1
 		};
 	}
 	/*
@@ -2007,6 +2011,10 @@ state here before a command can claim a native wire conversation.
 				predictCast( metadata, undefined, local, now );
 				return sendSkillPress( frame, skillId, now, true );
 			}
+			// The player's own character is selectable from its portrait (a port
+			// addition); the server accepts a self select (select.go). Every other
+			// command at yourself stays refused.
+			if ( entity && entity.gid === localGid && command.kind === "select" ) return selectEntity( entity, now );
 			if ( !entity || (entity.gid === localGid && command.kind !== "skill") ) {
 				throw new Error( "Target is absent or local player" );
 			}

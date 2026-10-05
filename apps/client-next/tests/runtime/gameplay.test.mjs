@@ -1186,6 +1186,21 @@ test("one decal is published with native target categories, ground replacement a
 	game.dispose();
 });
 
+test("the local player selects itself from its portrait, and nothing else is aimed at it", async () => {
+	const { createGameplay } = await load( "gameplay" ), sent = [], game = createGameplay( f => sent.push( f ) );
+	const self = { ...pose, gid: 7, kind: "local-player" };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( { ...pose, gid: 7, heading: 0 } );
+	game.command( { kind: "select", gid: 7 }, 0, self );
+	const requests = sent.map( f => [ f.opcode, new DataView( f.payload.buffer ).getUint32( 0, true ) ] );
+	assert.deepEqual( requests, [ [ 0x745a, 7 ] ] );
+	const state = game.take();
+	assert.equal( state.target, 7 );
+	assert.deepEqual( state.selectionDecal, { kind: "target", gid: 7, slot: 2 } );
+	assert.throws( () => game.command( { kind: "attack", gid: 7 }, 1, self ), /local player/ );
+	game.dispose();
+});
+
 test("same-target clicks restore the shared marker without duplicate grants, including pending and stopped movement", async () => {
 	const { createGameplay } = await load( "gameplay" );
 	for ( const kind of [ "monster", "cos", "player", "npc" ] ) {

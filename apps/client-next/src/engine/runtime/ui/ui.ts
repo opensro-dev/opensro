@@ -597,7 +597,9 @@ export function createUi(
 		const mask = ( gid: number ) => gid ? game?.vitals.find( v => v.gid === gid )?.abnormal ?? 0 : 0;
 		const target = game ? next.entities.find( e => e.gid === game.target ) : undefined;
 		// 5814D0: only CICMonster, CICCos and CICUser targets show the viewer.
-		const subject = target && [ "monster", "cos", "player" ].includes( target.kind ) ? target.gid : 0;
+		const subject = target && [ "monster", "cos", "player", "local-player" ].includes( target.kind ) ?
+			target.gid :
+			0;
 		let changed = false;
 		const targetState = targetBuffs.step( subject, now, effects, mask( subject ), skill );
 		if ( targetState !== targetBuffState ) {
@@ -3204,6 +3206,8 @@ export function createUi(
 			sendGameplay( { kind: "attack", gid: view.gameplay.target } );
 		} else if ( id.startsWith( "party-target:" ) ) {
 			sendGameplay( { kind: "select", gid: Number( id.slice( 13 ) ) } );
+		} else if ( id === "self-target" && view.gameplay?.localGid ) {
+			sendGameplay( { kind: "select", gid: view.gameplay.localGid } );
 		} else if ( id === "clear-target" ) sendGameplay( { kind: "release-target" } );
 		else if ( id === "inventory-next" ) {
 			inventoryPage = Math.min(
@@ -6907,6 +6911,14 @@ export function createUi(
 								color: white,
 								clip: full
 							} );
+							// Not native: the portrait selects its own character, so a
+							// targeted buff or heal can be aimed at yourself by mouse.
+							controls.push( {
+								id: "self-target",
+								label: "Select yourself",
+								kind: "button",
+								rect: authoredRect( p.GDR_PMI_PICTURE!, px, py )
+							} );
 						}
 						const country = game?.guide?.country;
 						if ( country === 0 || country === 1 ) {
@@ -7488,10 +7500,13 @@ export function createUi(
 						undefined;
 					const maxHp = target.maxHp ??
 						(target.kind === "cos" ? hudData.cosReferences.get( target.refObjId )?.maxHp : undefined);
+					// The local character, selected from its portrait, wears the
+					// player layout: the original never targets itself.
+					const shown = target.kind === "local-player" ? { ...target, kind: "player" as const } : target;
 					const hp = game?.vitals.find( v => v.gid === target.gid )?.hp ?? record?.hp,
 						output = targetStatus(
 							hudData.targets,
-							maxHp === target.maxHp ? target : { ...target, maxHp },
+							maxHp === target.maxHp ? shown : { ...shown, maxHp },
 							game?.progression?.level ?? character?.level ?? 1,
 							hp,
 							hudCopy,

@@ -1048,6 +1048,20 @@ test("Academy main popup and matching board have separate native entry lifecycle
 	}
 });
 
+test("the player portrait is a control that selects the local character", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		let semantics;
+		for ( let t = 0; t < 1200; t += 100 ) semantics = f.ui.step( f.state, t ) ?? semantics;
+		assert.ok( semantics.controls.some( c => c.id === "self-target" ) );
+		sent.length = 0;
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		assert.deepEqual( sent.map( c => c.command ), [ { kind: "select", gid: f.state.gameplay.localGid } ] );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("contextual Shop entry leaves Alchemy through the same lifecycle; locked Magic Pop rejects entry", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
