@@ -2,16 +2,52 @@
 # source-linux.yml - prove release inputs on a clean Linux checkout.
 # These checks need no extracted game data or deployment credentials. Asset
 # verification remains in the full client check on a licensed asset workspace.
+# The full Go gate (check_go_server.mjs) runs here, once: Linux runners build
+# and restore the Go cache several times faster than Windows ones, and a
+# GOOS=windows vet keeps the operator tools building for Windows. A pull
+# request runs only the jobs its files can affect; a push to main runs all.
 # ===========================================================================
 name: Validate Linux source
 
-on: [pull_request, push]
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+# A newer push to the same pull request supersedes the running validation.
+concurrency:
+  group: source-linux-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      client: ${{ steps.diff.outputs.client }}
+      server: ${{ steps.diff.outputs.server }}
+    steps:
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$PR" ]; then printf 'client=true\nserver=true\n' >> "$GITHUB_OUTPUT"; exit 0; fi
+          files=$(gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate --jq '.[].filename')
+          # Shared inputs (workflows, lockfile, task runner) affect both sides.
+          shared='^(\.github/|pnpm-lock\.yaml|pnpm-workspace\.yaml|package\.json|scripts/tasks/)'
+          match() { printf '%s\n' "$files" | grep -qE "$1|$shared" && echo true || echo false; }
+          echo "client=$(match '^(apps/client-next/|packages/)')" >> "$GITHUB_OUTPUT"
+          # The Go gate also reads the pipeline paths and its own scripts.
+          echo "server=$(match '^(apps/server/|scripts/checks/(check_go_server|checkStamps)\.mjs|scripts/build/world/paths\.mjs)')" >> "$GITHUB_OUTPUT"
+
   client-source:
+    needs: changes
+    if: needs.changes.outputs.client == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -28,18 +64,30 @@ jobs:
         run: node apps/client-next/tools/check.mjs --source
 
   server-source:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
       - uses: actions/setup-go@v7
         with:
           go-version-file: apps/server/go.mod
           cache-dependency-path: apps/server/go.sum
-      - name: Verify Linux server and repeated handshake accounting
+      # tidy, gofmt, vet, golangci-lint, tests, race, govulncheck, release contract.
+      - name: Go server gate
+        run: node scripts/checks/check_go_server.mjs
+      - name: Repeated handshake accounting
         working-directory: apps/server
-        run: |
-          go test -p 2 ./...
-          go test -race -count=100 -run '^TestTransportMetricsEndpoint$' ./internal/transport
+        run: go test -race -count=100 -run '^TestTransportMetricsEndpoint$' ./internal/transport
+      - name: Windows build of the server and its operator tools
+        working-directory: apps/server
+        env:
+          GOOS: windows
+          CGO_ENABLED: "0"
+        run: go vet ./...
