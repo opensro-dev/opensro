@@ -54,7 +54,9 @@ visual-only monster swing.
 */
 func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID uint32, sample float64) (simulation.MonsterAttackPlan, bool) {
 	var zero simulation.MonsterAttackPlan
-	if !instance.Ref.RewardActionPinned || rt.deps.SkillData() == nil {
+	// Structures do not act as monsters do; a guard tower's fire is the
+	// fortress war's (fortress structures never chase or retaliate).
+	if instance.Ref.Structure || !instance.Ref.RewardActionPinned || rt.deps.SkillData() == nil {
 		return zero, false
 	}
 	if requestedSkillID == 0 {

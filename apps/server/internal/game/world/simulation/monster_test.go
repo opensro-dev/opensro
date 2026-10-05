@@ -136,3 +136,27 @@ func TestBuildMonsterCreateRowUsesPerMonsterScale(t *testing.T) {
 		t.Fatalf("scale denom = %v, want the monster's characterdata value 135", got)
 	}
 }
+
+/*
+================
+TestStructureRowFollowsCICATStructOrder
+
+4FA0B0: RefObjID, HP, RefEventStructID, state, then the shared object
+block, the name, and a headquarters' guild.
+================
+*/
+func TestStructureRowFollowsCICATStructOrder(t *testing.T) {
+	def := MonsterDef{RefObjID: 19553, Structure: true, CurrentHP: 1170000, EventStructID: 84, StructureState: 4, Name: "Stone", ScaleDenom: 100}
+	row := BuildStructureCreateRow(def, 7, Spawn{RegionID: 17991, X: 849, Z: 1065})
+	head := []byte{0x61, 0x4c, 0, 0, 0x50, 0xda, 0x11, 0, 84, 0, 0, 0, 4, 0, 7, 0, 0, 0}
+	if !bytes.Equal(row[:len(head)], head) {
+		t.Fatalf("row head %x", row[:len(head)])
+	}
+	if !bytes.HasSuffix(row, append([]byte{0, 1, 5, 0}, "Stone"...)) {
+		t.Fatalf("row tail %x", row[len(row)-10:])
+	}
+	def.TypeID4 = 5
+	if headquarters := BuildStructureCreateRow(def, 7, Spawn{RegionID: 17991}); !bytes.HasSuffix(headquarters, []byte{0, 0, 0, 0}) {
+		t.Fatal("headquarters row lacks its guild")
+	}
+}

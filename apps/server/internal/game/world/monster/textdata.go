@@ -50,6 +50,8 @@ type MonsterRef struct {
 	// bits11-15 are never set by the packer), the canonical value for
 	// create-row/refObjSnapshot emission.
 	TidWord uint16
+	// Structure is a fortress structure (structureTidGate).
+	Structure bool
 	// TypeID4 is characterdata column 12. The client classification gates
 	// ignore it, but the GameServer spawn routine reads the full TypeID word:
 	// monster TID4 4 (the MOB_QT_* quest monsters) never becomes a party
@@ -228,6 +230,21 @@ func monsterTidGate(w uint16) bool {
 
 /*
 ==================
+structureTidGate
+
+The fortress structures' band: TID1=1, TID2=2, TID3=5 packs to 0x02C6, the
+word RefObjTypeFlags_IsATStruct (4F3A50) selects CLASS_CICATStruct by.
+v1.188 keeps them as CGObjChar subclasses beside the monsters, so they
+share the population owner, its targeting and its damage; Structure marks
+the rows whose spawn row, behavior and damage rules differ.
+==================
+*/
+func structureTidGate(w uint16) bool {
+	return w&0x7FE == 0x02C6
+}
+
+/*
+==================
 LoadMonsterRefs
 
 LoadMonsterRefs scans every characterdata*.txt under textdataDir and
@@ -278,7 +295,8 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 				continue
 			}
 			word := tidWordFromColumns(charBit, tid1, tid2, tid3)
-			if !monsterTidGate(word) {
+			structure := structureTidGate(word)
+			if !monsterTidGate(word) && !structure {
 				continue
 			}
 			refObjID, ok := columnUint32(cols, colRefObjID)
@@ -293,7 +311,10 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 				math.IsNaN(walk) || math.IsInf(walk, 0) || walk < 0 ||
 				math.IsNaN(run) || math.IsInf(run, 0) || run < 0 ||
 				math.IsNaN(scale) || math.IsInf(scale, 0) || scale <= 0 ||
-				math.IsNaN(bodyRadius) || math.IsInf(bodyRadius, 0) || bodyRadius <= 0 {
+				math.IsNaN(bodyRadius) || math.IsInf(bodyRadius, 0) || bodyRadius < 0 ||
+				// A structure's body is its model's collision (its record
+				// radius is zero); every character has a radius.
+				bodyRadius == 0 && !structure {
 				continue
 			}
 			level, levelOK := columnUint(cols, colLevel)
@@ -338,6 +359,7 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 			refs[refObjID] = MonsterRef{
 				RefObjID:           refObjID,
 				TidWord:            word,
+				Structure:          structure,
 				TypeID4:            uint8(tid4),
 				Codename:           codename,
 				OriginalCodename:   strings.TrimSpace(cols[4]),

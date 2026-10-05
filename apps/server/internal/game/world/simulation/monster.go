@@ -69,6 +69,13 @@ type MonsterDef struct {
 	MotionState uint8
 	// Zero preserves the existing live-row encoding. Retained corpses use DEAD.
 	LifeState uint8
+	// Structure selects the CICATStruct row (BuildStructureCreateRow) and
+	// carries its fields: hit points, event zone, state, TypeID4.
+	Structure      bool
+	CurrentHP      uint32
+	EventStructID  uint32
+	StructureState uint16
+	TypeID4        uint8
 }
 
 // MonsterRarityNormal is the +0x770 low-nibble value for an ordinary
@@ -107,6 +114,9 @@ Serialize one complete native actor row, including active recipient identities.
 ================
 */
 func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
+	if def.Structure {
+		return BuildStructureCreateRow(def, gid, spawn)
+	}
 	x := clampFloat(spawn.X, 0, 0xffff)
 	z := clampFloat(spawn.Z, 0, 0xffff)
 	// Indoor local coordinates are signed F32 values, not outdoor unsigned
@@ -160,6 +170,53 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 	return w.Payload()
 }
 
+/*
+================
+BuildStructureCreateRow
+
+A fortress structure's row, in CICATStruct_DeserializeSpawnData's order
+(4FA0B0): RefObjID, its hit points, its event zone (RefEventStructID),
+its state word (bit 2 the destroyed pose), the shared 85FB20 object
+block, the 859D40 name mask and name, and for a headquarters (TID4 5) the
+holding guild's id, zero here, with no name.
+================
+*/
+func BuildStructureCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
+	w := wire.NewWriter(64)
+	w.U32(def.RefObjID).
+		U32(def.CurrentHP).
+		U32(def.EventStructID).
+		U16(def.StructureState).
+		U32(gid).
+		U16(spawn.RegionID).
+		F32(float32(clampFloat(spawn.X, 0, 0xffff))).
+		F32(float32(spawn.Y)).
+		F32(float32(clampFloat(spawn.Z, 0, 0xffff))).
+		U16(spawn.Angle).
+		U8(0).
+		U8(MonsterSpawnSpeedChannel).
+		U8(0).
+		U16(spawn.Angle).
+		U8(def.LifeState).
+		U8(def.MotionState).
+		U8(0).
+		F32(float32(def.WalkSpeed)).
+		F32(float32(def.RunSpeed)).
+		F32(float32(def.ScaleDenom)).
+		// A structure carries no buffs.
+		U8(0).
+		U8(1)
+	name := []byte(def.Name)
+	w.U16(uint16(len(name))).Bytes(name)
+	if def.TypeID4 == structureHeadquarters {
+		w.U32(0)
+	}
+	return w.Payload()
+}
+
+// structureHeadquarters is TID4 5, whose row ends with its guild.
+const structureHeadquarters = 5
+
 // BuildMonsterSpawnSingle encodes the 0x30D7 single-spawn body: the same
 // create row plus the trailing vt+0x68 appear byte (sub_777220 single
 // mode reads it; the list path does not).
@@ -191,6 +248,8 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 		Name: ref.DisplayName(), WalkSpeed: ref.WalkSpeed, RunSpeed: ref.RunSpeed,
 		ScaleDenom: ref.ScaleDenom, Rarity: instance.Rarity(),
 		MotionState: instance.Motion.StateAt(nowMs),
+		Structure:   ref.Structure, CurrentHP: instance.CurrentHP,
+		EventStructID: instance.Nest.EventStructID, TypeID4: ref.TypeID4,
 	}
 	if instance.CurrentHP == 0 {
 		def.LifeState = wire.LifeStateDead

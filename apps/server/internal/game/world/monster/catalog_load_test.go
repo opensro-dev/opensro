@@ -241,8 +241,18 @@ func TestShippedTemplateCanary(t *testing.T) {
 	}
 
 	template := LoadTemplate(dir)
-	if got := len(template.Refs); got != 5986 {
+	structures := 0
+	for _, ref := range template.Refs {
+		if ref.Structure {
+			structures++
+		}
+	}
+	if got := len(template.Refs) - structures; got != 5986 {
 		t.Fatalf("monster refs = %d, want 5986 (RZ seq234 admit set over shipped characterdata)", got)
+	}
+	// The fortress structures (TID 1/2/5) with hit points or a placeholder.
+	if structures != 52 {
+		t.Fatalf("structure refs = %d, want 52", structures)
 	}
 	if got := len(template.Nests); got != 8753 {
 		t.Fatalf("monster nest rows = %d, want 8753 (shipped npcpos)", got)
@@ -309,7 +319,9 @@ func TestShippedTemplateCanary(t *testing.T) {
 	}
 	monsterTypes := map[uint8]int{}
 	for _, ref := range template.Refs {
-		monsterTypes[ref.MonsterType]++
+		if !ref.Structure {
+			monsterTypes[ref.MonsterType]++
+		}
 	}
 	if monsterTypes[0] != 5967 || monsterTypes[3] != 19 || len(monsterTypes) != 2 {
 		t.Fatalf("monster type distribution = %v, want 5967 ordinary / 19 unique", monsterTypes)

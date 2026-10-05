@@ -132,8 +132,22 @@ func (c MonsterSpawnConfig) MonsterRefObjSnapshot(registry *simulation.MonsterSt
 			Name:      ref.DisplayName(),
 			Level:     ref.Level,
 			MaxHP:     ref.MaxHP,
-			Kind:      "monster",
+			Kind:      refObjKind(ref),
 		})
 	}
 	return rows
+}
+
+/*
+================
+refObjKind
+
+The mirror row's kind: fortress structures decode as CICATStruct.
+================
+*/
+func refObjKind(ref monster.MonsterRef) string {
+	if ref.Structure {
+		return "structure"
+	}
+	return "monster"
 }

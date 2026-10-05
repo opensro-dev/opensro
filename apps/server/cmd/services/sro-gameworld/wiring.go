@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -109,6 +110,7 @@ func newGameWorldApplication(
 		dataPaths.TextdataDir,
 	)
 	devPaths.AuthoredAreas = authoredAreas
+	devPaths.StructureZones = filepath.Join(dataPaths.WorldAuthorityDir, "structure-zones.json")
 	characterRoster, err := enterworld.LoadRoster(devPaths.RosterPath)
 	if err != nil {
 		return nil, fmt.Errorf("character roster: %w", err)
