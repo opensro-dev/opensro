@@ -110,6 +110,9 @@ type EffectPresentation struct {
 	// DefenseAddend is a recipient context's +0x34/+0x38 (58381F): the
 	// caster's getv HLBP or HLSM value, added to defp's physical/magical.
 	DefenseAddend [2]uint32
+	// AuraParent is the caster instance token a party aura's child joins
+	// under (skillparty.go joinAura); zero for any other application.
+	AuraParent uint32
 }
 
 /*
@@ -240,6 +243,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		State:           state,
 		Phase:           presentation.Phase, Rider: presentation.Rider, ExpiresAtMs: expires,
 		ClientCancelable: !row.VoluntaryCancelBlocked || canStop,
+		AuraParentToken:  presentation.AuraParent,
 	}
 	if row.ReplacementPinned && row.Replacement.Activity != 0 && presentation.Phase == 1 {
 		effect.EventCancelMask = row.Replacement.EventCancelMask
@@ -266,7 +270,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	}
 	var statusFrames []wire.Frame
 	// 594AC0 installs every block the row carries in one pass.
-	writes := buffModifierWrites(row.BuffModifiers)
+	writes := buffModifierWrites(row.BuffModifiers, itemProgramWritesAccuracy(row.TimedEffect))
 	itemWrites, err := rt.timedItemModifierWrites(divisionID, character, row.TimedEffect)
 	if err != nil {
 		return nil, false
@@ -509,17 +513,51 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 ================
 buffModifierWrites
 
-The dru (595A97) and odar (596004) part of 594AC0.
+The dru (595A97), odar (596004), hr and ru part of 594AC0.
+
+ru (+0x250, 0x5958E7..0x59591A) adds its word to the attack-range keeper
+(0x21) in the flat channel: Demon Soul Arrow lengthens the bow's reach
+while it runs (skillActionReach).
+
+hr (+0x24C) writes parameter 11, the hit rate: word 1 enters the percent-sum
+channel, then word 0 the flat channel, the same order the timed item path
+already installs for the same tag (timeditemmodifier.go). Both parsers read
+hr from one row, so an item program that already files its Accuracy block
+owns the write and the skill-side copy is skipped (itemAccuracy): 594AC0
+installs the block once.
 ================
 */
-func buffModifierWrites(m enterworld.SkillBuffModifiers) []paramkeeper.Write {
+func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []paramkeeper.Write {
 	var writes []paramkeeper.Write
+	if m.Hr && !itemAccuracy {
+		writes = append(writes,
+			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.PercentSum, Value: float32(m.HrRate)},
+			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.Flat, Value: float32(m.HrFlat)},
+		)
+	}
+	if m.Ru {
+		writes = append(writes, paramkeeper.Write{Parameter: combat.AttackRangeParameter, Channel: paramkeeper.Flat, Value: float32(m.RuRate)})
+	}
 	if m.Dru {
 		for i, params := range [2][2]uint16{{0x80, 0x81}, {0x82, 0x83}} {
 			for _, param := range params {
 				writes = append(writes, paramkeeper.Write{Parameter: param, Channel: paramkeeper.Flat, Value: float32(m.DruWords[i])})
 			}
 		}
+	}
+	// 594AC0 0x5962C1..0x596316: rhru raises the healing received, word 0
+	// on parameter 0xAA (HP) and word 1 on 0xAB (MP), the scale the heal
+	// already applies (skillheal.go healScale).
+	if m.Rhru {
+		writes = append(writes,
+			paramkeeper.Write{Parameter: 0xaa, Channel: paramkeeper.Flat, Value: float32(m.RhruWords[0])},
+			paramkeeper.Write{Parameter: 0xab, Channel: paramkeeper.Flat, Value: float32(m.RhruWords[1])},
+		)
+	}
+	// 594AC0 0x5963F7..0x596423: dcmp lowers the MP consumption rate
+	// (parameter 0x8D) by its word, negated with FCHS.
+	if m.Dcmp {
+		writes = append(writes, paramkeeper.Write{Parameter: 0x8d, Channel: paramkeeper.Flat, Value: float32(-float64(m.DcmpPercent))})
 	}
 	if m.Odar {
 		value := float32(-float64(m.OdarWord))

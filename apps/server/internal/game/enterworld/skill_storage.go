@@ -59,6 +59,7 @@ type residentSkill struct {
 	Wall                    unique.Handle[SkillWall]
 	WallBypass              bool
 	Ck                      bool
+	CkChance                uint8
 	Recovery                unique.Handle[SkillRecovery]
 	TimedEffect             unique.Handle[SkillTimedEffect]
 	MonsterSelfEffect       unique.Handle[SkillMonsterSelfEffect]
@@ -66,6 +67,8 @@ type residentSkill struct {
 	DirectOffensePinned     bool
 	OffensiveStagePinned    bool
 	StatusCast              bool
+	AreaBurst               bool
+	FixedDamage             SkillFixedDamage
 	CombatTrap              SkillCombatTrap
 	OffensiveArea           unique.Handle[SkillOffensiveArea]
 	AlchemyStoneBonus       uint32
@@ -157,6 +160,7 @@ func compactSkill(row SkillRow) residentSkill {
 		Wall:                    unique.Make(row.Wall),
 		WallBypass:              row.WallBypass,
 		Ck:                      row.Ck,
+		CkChance:                row.CkChance,
 		Recovery:                unique.Make(row.Recovery),
 		TimedEffect:             unique.Make(row.TimedEffect),
 		MonsterSelfEffect:       unique.Make(row.MonsterSelfEffect),
@@ -164,6 +168,8 @@ func compactSkill(row SkillRow) residentSkill {
 		DirectOffensePinned:     row.DirectOffensePinned,
 		OffensiveStagePinned:    row.OffensiveStagePinned,
 		StatusCast:              row.StatusCast,
+		AreaBurst:               row.AreaBurst,
+		FixedDamage:             row.FixedDamage,
 		CombatTrap:              row.CombatTrap,
 		OffensiveArea:           unique.Make(row.OffensiveArea),
 		AlchemyStoneBonus:       row.AlchemyStoneBonus,
@@ -257,6 +263,7 @@ func (r residentSkill) value() SkillRow {
 		Wall:                    r.Wall.Value(),
 		WallBypass:              r.WallBypass,
 		Ck:                      r.Ck,
+		CkChance:                r.CkChance,
 		Recovery:                r.Recovery.Value(),
 		TimedEffect:             r.TimedEffect.Value(),
 		MonsterSelfEffect:       r.MonsterSelfEffect.Value(),
@@ -264,6 +271,8 @@ func (r residentSkill) value() SkillRow {
 		DirectOffensePinned:     r.DirectOffensePinned,
 		OffensiveStagePinned:    r.OffensiveStagePinned,
 		StatusCast:              r.StatusCast,
+		AreaBurst:               r.AreaBurst,
+		FixedDamage:             r.FixedDamage,
 		CombatTrap:              r.CombatTrap,
 		OffensiveArea:           r.OffensiveArea.Value(),
 		AlchemyStoneBonus:       r.AlchemyStoneBonus,

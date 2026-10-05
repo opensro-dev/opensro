@@ -30,16 +30,18 @@ CHECKS
 ==================
 resourceCostAt
 
-The admission MP check: flat plus a percent of maximum MP against the
-current gauge. 58E2B1 compares strictly, so exact MP is enough. A row
-without parsed consumption is refused 0x3003.
+The admission MP check (58E20A..58E2B1): flat plus vitalPercent of maximum
+MP, then a player's parameter 0x8D rate (ftol(rate / 100 * cost),
+58E25F), against the current gauge. 58E2B1 compares strictly, so exact MP
+is enough. A row without parsed consumption is refused 0x3003.
 ==================
 */
-func resourceCostAt(currentMP, maxMP int64, skill enterworld.SkillRow) (int64, uint16) {
+func resourceCostAt(currentMP, maxMP int64, skill enterworld.SkillRow, rate float32) (int64, uint16) {
 	if !skill.Consumption.Pinned || skill.Group == 0 {
 		return 0, 0x3003
 	}
-	cost := int64(skill.Consumption.MP) + maxMP*int64(skill.Consumption.MPPercent)/100
+	cost := int64(skill.Consumption.MP) + vitalPercent(maxMP, uint32(skill.Consumption.MPPercent))
+	cost = crtFtol(float64(rate) / 100 * float64(int32(cost)))
 	if cost > currentMP {
 		return 0, 0x3004
 	}
@@ -56,10 +58,7 @@ before the MP check.
 ==================
 */
 func hpCostRefusal(currentHP, maxHP int64, skill enterworld.SkillRow) uint16 {
-	cost := int64(skill.Consumption.HP)
-	if skill.Consumption.HPPercent != 0 {
-		cost += int64(crtFtol(float64(int32(maxHP)) * float64(skill.Consumption.HPPercent) / 100))
-	}
+	cost := int64(skill.Consumption.HP) + vitalPercent(maxHP, uint32(skill.Consumption.HPPercent))
 	if cost > 0 && currentHP < cost {
 		return 0x3013
 	}
@@ -71,7 +70,7 @@ func hpCostRefusal(currentHP, maxHP int64, skill enterworld.SkillRow) uint16 {
 offensiveResourceCost
 
 offensiveResourceCost is the HP check, then resourceCostAt on the
-caster's keeper maximum (param 4) and stored current MP.
+caster's keeper maximum (param 4), stored current MP and parameter 0x8D.
 ================
 */
 func (rt *Runtime) offensiveResourceCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, uint16) {
@@ -79,7 +78,16 @@ func (rt *Runtime) offensiveResourceCost(division string, c *enterworld.Characte
 	if refusal := hpCostRefusal(currentHP, maxHP, skill); refusal != 0 {
 		return 0, refusal
 	}
-	return resourceCostAt(currentMP, maxMP, skill)
+	// A row that costs no MP is free at any rate; only a cost reads it.
+	rate := float32(combat.FullMPConsumptionRate)
+	if skill.Consumption.MP != 0 || skill.Consumption.MPPercent != 0 {
+		stats, _, err := rt.playerCombatStats(division, c)
+		if err != nil {
+			return 0, 0x3003
+		}
+		rate = combat.MPConsumptionRate(stats)
+	}
+	return resourceCostAt(currentMP, maxMP, skill, rate)
 }
 
 /*
@@ -178,12 +186,8 @@ of CURRENT HP (the admission used maximum HP), truncated.
 ================
 */
 func (rt *Runtime) preparedExecutionHPCost(division string, c *enterworld.Character, skill enterworld.SkillRow) int64 {
-	cost := int64(skill.Consumption.HP)
-	if skill.Consumption.HPPercent != 0 {
-		_, _, currentHP, _ := rt.playerKeeperVitals(division, c)
-		cost += int64(crtFtol(float64(int32(currentHP)) * float64(skill.Consumption.HPPercent) / 100))
-	}
-	return cost
+	_, _, currentHP, _ := rt.playerKeeperVitals(division, c)
+	return int64(skill.Consumption.HP) + vitalPercent(currentHP, uint32(skill.Consumption.HPPercent))
 }
 
 /*
@@ -198,24 +202,42 @@ PREPARED SNAPSHOT
 ==================
 preparedExecutionMPCost
 
-The charged amount (combat.PreparedCost), then the caster's MP Decrease
-cuts. Instant and persistent casts take the cuts; SkillAction_Projectile,
-picked by RefSkill+0x168 in SkillActionHandler (589B50), does not.
+The charged amount (combat.PreparedCost) at the caster's parameter 0x8D
+rate, then its MP Decrease cuts. Instant and persistent casts take the
+cuts; SkillAction_Projectile, picked by RefSkill+0x168 in
+SkillActionHandler (589B50), does not. The rate is 100 until a dcmp buff
+(Dancing of Mana) lowers it (594AC0 0x5963F7).
 ==================
 */
 func (rt *Runtime) preparedExecutionMPCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, error) {
 	_, _, _, currentMP := rt.playerKeeperVitals(division, c)
-	cost := combat.PreparedCost(uint32(currentMP), skill.Consumption.MP,
-		skill.Consumption.MPPercent, skill.TimedEffect.Pinned, true, 100)
-	if skill.ActionHandler == enterworld.SkillActionProjectile {
-		return int64(cost), nil
-	}
-
 	stats, _, err := rt.playerCombatStats(division, c)
 	if err != nil {
 		return 0, err
 	}
-	return int64(combat.ApplyMPDecrease(cost, skill.Attack.Parameters, stats.SkillParameters)), nil
+	cost := combat.PreparedCost(uint32(currentMP), skill.Consumption.MP,
+		skill.Consumption.MPPercent, skill.TimedEffect.Pinned, true, combat.MPConsumptionRate(stats))
+	if skill.ActionHandler != enterworld.SkillActionProjectile {
+		cost = combat.ApplyMPDecrease(cost, skill.Attack.Parameters, stats.SkillParameters)
+	}
+	return int64(cost), nil
+}
+
+/*
+==================
+vitalPercent
+
+percent of a vital as the native cost code forms it: fild vital, fild
+percent, fdiv 100.0, fmulp, then truncation (58E1D6, 58E214, 583170).
+The division comes first, so this is vital * (percent / 100), which is not
+(vital * percent) / 100: 41 % of 300 is 122 here.
+==================
+*/
+func vitalPercent(vital int64, percent uint32) int64 {
+	if percent == 0 {
+		return 0
+	}
+	return crtFtol(float64(int32(vital)) * (float64(percent) / 100))
 }
 
 /*

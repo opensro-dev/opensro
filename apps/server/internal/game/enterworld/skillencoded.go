@@ -95,7 +95,7 @@ func encodedEffectRider(fields []string) bool {
 		if !ok || n == 0x73736f75 {
 			return false
 		}
-		if n == 0x67657476 && i+1 < len(fields) {
+		if n == tagGetv && i+1 < len(fields) {
 			kind, ok := textdataInt(fields[i+1])
 			if ok && (kind == 0x52504255 || kind == 0x53544455 || kind == 0x44544452) {
 				return true
@@ -113,7 +113,7 @@ func encodedStealthDuration(fields []string) bool {
 		if !ok || n == 0x73736f75 {
 			return false
 		}
-		if n == 0x67657476 && i+1 < len(fields) {
+		if n == tagGetv && i+1 < len(fields) {
 			kind, ok := textdataInt(fields[i+1])
 			if ok && (kind == 0x52504255 || kind == 0x53544455) {
 				return true

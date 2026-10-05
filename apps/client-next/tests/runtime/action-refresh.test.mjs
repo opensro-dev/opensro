@@ -13,12 +13,18 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( "src/engine/foundation/" + file + ".ts" ).href );
 }
 const { movementEntryRate, refreshActionStates, transitionActionStates } = await load( "animation/action-refresh" );
 const { defaultWearFrozen, refreshDefaultWear } = await load( "animation/default-wear-policy" );
 const { footprintGeometry } = await load( "rendering/footprints" );
+const { terrainCellKey } = await load( "rendering/terrain-interaction" );
 const trace = row =>
 	row.effects.map( e =>
 		e.kind === "enter" || e.kind === "leave" ?
@@ -111,7 +117,7 @@ test("native language gate uses original case-sensitive shard marker and preserv
 	assert.deepEqual( refreshDefaultWear( [], desired, true ), [] );
 });
 test("footprints clip real terrain, rotate, mirror only U and reject absent/high terrain", () => {
-	const cells = new Map( [ [ "0:0", { cell: [ 0, 0 ], heights: new Float32Array( 289 ) } ] ] ),
+	const cells = new Map( [ [ terrainCellKey( 0, 0 ), { cell: [ 0, 0 ], heights: new Float32Array( 289 ) } ] ] ),
 		point = [ 150, 0, 150 ];
 	for ( const yaw of [ 0, Math.PI / 2, .07853981852531433 ] ) {
 		const left = footprintGeometry( cells, point, yaw, false ),
@@ -129,17 +135,41 @@ test("footprints clip real terrain, rotate, mirror only U and reject absent/high
 });
 
 test("ground decals disable depth writes without changing selection or ordinary alpha pipelines", async () => {
-	const { createPipelines } = await import( sourceFileUrl( "src/engine/runtime/renderer/device/pipelines.ts" ).href );
-	const device = { createShaderModule: x => x, createSampler: x => x, createRenderPipelineAsync: async x => x };
+	const { createPipelines, DEFAULT_BLEND } = await import(
+		sourceFileUrl( "src/engine/runtime/renderer/device/pipelines.ts" ).href
+	);
+	const { geometryPipelineState } = await import(
+		sourceFileUrl( "src/engine/runtime/renderer/device/geometry.ts" ).href
+	);
+	const base = { color: [ 1, 1, 1, 1 ], alphaCutoff: 0, blend: true, doubleSided: false };
+	// A ground decal blends normally, without the depth test or depth writes.
+	assert.deepEqual( geometryPipelineState( { ...base, groundDecal: true } ), {
+		blend: DEFAULT_BLEND,
+		cull: true,
+		depthWrite: false,
+		depthCompare: "always"
+	} );
+	// An ordinary blended material keeps the depth test and leaves depth alone.
+	assert.deepEqual( geometryPipelineState( base ), {
+		blend: DEFAULT_BLEND,
+		cull: true,
+		depthWrite: false,
+		depthCompare: "less-equal"
+	} );
+	// Opaque geometry writes depth.
+	assert.equal( geometryPipelineState( { ...base, blend: false } ).depthWrite, true );
+	const device = {
+		createShaderModule: x => x,
+		createSampler: x => x,
+		createRenderPipelineAsync: async x => x,
+		createRenderPipeline: x => x
+	};
 	const pipelines = createPipelines( device, "bgra8unorm" );
 	await pipelines.ready;
-	const all = pipelines.geometry();
-	assert.equal( all.length, 46 );
-	for ( const i of [ 44, 45 ] ) {
-		assert.equal( all[i].depthStencil.depthCompare, "always" );
-		assert.equal( all[i].depthStencil.depthWriteEnabled, false );
-		assert.equal( all[i].fragment.targets[0].blend.color.srcFactor, "src-alpha" );
-	}
-	assert.equal( all[2].depthStencil.depthCompare, "less-equal" );
-	assert.equal( all[0].depthStencil.depthWriteEnabled, true );
+	const decal = pipelines.geometry( geometryPipelineState( { ...base, groundDecal: true } ) );
+	assert.equal( decal.depthStencil.depthCompare, "always" );
+	assert.equal( decal.depthStencil.depthWriteEnabled, false );
+	assert.equal( decal.fragment.targets[0].blend.color.srcFactor, "src-alpha" );
+	// The same state is one pipeline.
+	assert.equal( pipelines.geometry( geometryPipelineState( { ...base, groundDecal: true } ) ), decal );
 });

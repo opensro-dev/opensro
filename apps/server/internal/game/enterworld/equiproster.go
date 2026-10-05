@@ -47,6 +47,9 @@ type ItemRef struct {
 	AssociatedSkillCodename string
 	// Return-scroll Param3 text (column 123), consumed by v1.188 4A0380.
 	ReturnDestination string
+	// ReturnTeleport is a THIEFDEN scroll's Param4 text (column 125): the
+	// teleport building whose gate it returns to (STORE_TD_GATE).
+	ReturnTeleport string
 	// Combat is the typed v1.150 RefItemData stat source consumed by the
 	// server damage plane. It is separate from NativeFields because Combat has
 	// a strict all-or-none

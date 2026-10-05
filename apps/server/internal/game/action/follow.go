@@ -61,7 +61,7 @@ are not live native objects and cannot be followed while offline.
 */
 func (rt *Runtime) beginFollow(division string, character *enterworld.Character, request wire.FollowTarget, nowMs int64) OpResult {
 	snapshot := rt.characterSnapshot(division, character)
-	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || snapshot.NativeTeleportMode == 1 {
+	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || teleportBlocks(snapshot.NativeTeleportMode) {
 		return OpResult{DiagnosticRefusal: "follow-character-unavailable"}
 	}
 	if mountedOnCOS(snapshot) {
@@ -101,11 +101,11 @@ port's explicit world-instance boundary to those native object checks.
 */
 func (rt *Runtime) followActors(actor *enterworld.Character, intent basicAttackIntent, nowMs int64) (*enterworld.Character, simulation.CombatSpacing, bool) {
 	var spacing simulation.CombatSpacing
-	if actor == nil || actor.DeletePending || !enterworld.CharacterAlive(actor) || actor.NativeTeleportMode == 1 || mountedOnCOS(actor) {
+	if actor == nil || actor.DeletePending || !enterworld.CharacterAlive(actor) || teleportBlocks(actor.NativeTeleportMode) || mountedOnCOS(actor) {
 		return nil, spacing, false
 	}
 	target := rt.characterSnapshot(intent.DivisionID, rt.findCharacterByGid(intent.DivisionID, intent.TargetGid))
-	if target == nil || target.ID == actor.ID || target.DeletePending || !enterworld.CharacterAlive(target) || target.NativeTeleportMode == 1 {
+	if target == nil || target.ID == actor.ID || target.DeletePending || !enterworld.CharacterAlive(target) || teleportBlocks(target.NativeTeleportMode) {
 		return nil, spacing, false
 	}
 	actorLease, actorOnline := rt.EntryPopulationLease(intent.DivisionID, actor.Name)
@@ -175,7 +175,7 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 	target, spacing, ok := rt.followActors(snapshot, intent, nowMs)
 	if !ok || rt.skillCastPostureBlocked(intent.DivisionID, snapshot, nowMs) {
 		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
-		if snapshot != nil && snapshot.NativeTeleportMode != 1 && enterworld.CharacterAlive(snapshot) {
+		if snapshot != nil && !teleportBlocks(snapshot.NativeTeleportMode) && enterworld.CharacterAlive(snapshot) {
 			key := simulation.WorldKey(intent.DivisionID, snapshot.Name)
 			from := rt.liveSpawn(key, snapshot, nowMs)
 			stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs)

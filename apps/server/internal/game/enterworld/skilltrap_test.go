@@ -31,7 +31,7 @@ func questTrapFields() []string {
 		questTrapQuest, 1, 5867, 0, 0,
 		questTrapLink, 0, 300, 1, 0,
 		questTrapDura, 300000,
-		questTrapArea, 3, 1, 20, 1, 0, 16,
+		tagEfr, 3, 1, 20, 1, 0, 16,
 		questTrapTag,
 	}
 	for index, word := range words {

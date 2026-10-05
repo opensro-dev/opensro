@@ -58,6 +58,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		}
 		rt.advanceDepartures(nowMs)
 		rt.advanceReturnScrolls(nowMs)
+		rt.advanceJobDresses(nowMs)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
@@ -88,10 +89,14 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		out = append(out, rt.advancePartyAuras(nowMs)...)
 		out = append(out, rt.advanceWalls(nowMs)...)
 		out = append(out, rt.advancePeriodicEffects(nowMs)...)
+		// A heal over time pulses before expiry: its last pulse lands on
+		// the instant its effect's duration is reached.
+		out = append(out, rt.advanceHealsOverTime(nowMs)...)
 		rt.effects.Expire(nowMs)
 		out = append(out, rt.drainStoppedCharacterEffects()...)
 		// 4A4390 per actor: expiry, damage over time, detonation, mask.
 		out = append(out, rt.advanceMonsterAbnormals(nowMs)...)
+		out = append(out, rt.drainMonsterFightRecipients()...)
 		out = append(out, rt.advancePlayerAbnormals(nowMs)...)
 		out = append(out, rt.advanceCosAbnormals(nowMs)...)
 		out = append(out, rt.advanceQueuedActionSessions(nowMs)...)
@@ -318,6 +323,7 @@ Release actor-owned runtime state while the division operation lock is held.
 func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.periodicEffects.StopSource(divisionID, characterName)
 	rt.returnCasts.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.jobDresses.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.aggressionActors.Delete(simulation.WorldKey(divisionID, characterName))

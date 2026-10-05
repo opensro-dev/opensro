@@ -65,10 +65,25 @@ queueObjectAction
 4AD630 keeps one pending back entry during EXECUTE/KEEP_UP. Apply that rule
 before individual skill owners: otherwise heals, buffs and Trace silently
 refuse a busy actor while offensive skills queue. Instant imbues bypass it.
+
+The same entry holds a skill press that arrives within cooldownGraceMs of
+the skill becoming ready, cast or no cast: it waits for readiness instead of
+being refused (a deliberate deviation, see cooldownGraceMs).
 ================
 */
 func (rt *Runtime) queueObjectAction(division string, c *enterworld.Character, payload []byte) (OpResult, bool) {
-	if c == nil || !rt.hasOpenSkillCast(division, c.Name) {
+	if c == nil {
+		return OpResult{}, false
+	}
+	casting := rt.hasOpenSkillCast(division, c.Name)
+	// Only a skill press can be grace-queued; anything else with no cast open
+	// goes straight on without the snapshot.
+	if !casting && wire.ClassifyTargetActionLane(payload) != wire.TargetActionSkill {
+		return OpResult{}, false
+	}
+	snapshot := rt.characterSnapshot(division, c)
+	readyAtMs := rt.graceReadyAtMs(snapshot, payload)
+	if !casting && readyAtMs == 0 {
 		return OpResult{}, false
 	}
 	switch wire.ClassifyTargetActionLane(payload) {
@@ -96,21 +111,96 @@ func (rt *Runtime) queueObjectAction(division string, c *enterworld.Character, p
 	default:
 		return OpResult{}, false
 	}
-	snapshot := rt.characterSnapshot(division, c)
-	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || snapshot.NativeTeleportMode == 1 || mountedOnCOS(snapshot) {
+	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || teleportBlocks(snapshot.NativeTeleportMode) || mountedOnCOS(snapshot) {
 		return OpResult{}, false
+	}
+	// 4ACC40 validates a skill command (mask 0x37, call at 4ACED4) before it
+	// may enter the queue. A refused press (cooldown, MP, weapon, ammunition)
+	// answers its error and leaves the running attack and its continuation in
+	// place; queueing it unchecked replaced the auto-attack with a command
+	// that was then refused when the swing closed, and every attack stopped.
+	// A press inside the grace window is admitted without its cooldown; the
+	// release replays it through full admission once it is ready.
+	mask := admitCommand
+	if readyAtMs != 0 {
+		mask &^= admitCooldown
+	}
+	if code := rt.queuedSkillAdmission(division, snapshot, payload, mask); code != 0 {
+		return offensiveRefusal(code), true
 	}
 	pending := basicAttackIntent{
 		DivisionID: division, CharacterName: c.Name, SingleCast: true,
 		Deferred: &deferredObjectAction{payload: bytes.Clone(payload)},
 	}
 	rt.actionSessions.Store(simulation.WorldKey(division, c.Name), actionSessionPublication{
-		division: division, name: c.Name, characterID: c.ID, queued: true, pending: &pending,
+		division: division, name: c.Name, characterID: c.ID, queued: true, pending: &pending, readyAtMs: readyAtMs,
 	})
 	state := wire.ArmActionState()
 	state.State = pairedActionCount
 	frame := wire.Frame{Opcode: wire.OpActionState, Payload: state.Encode()}
 	return OpResult{Frames: []wire.Frame{frame}, ActorPrivate: []wire.Frame{frame}}, true
+}
+
+/*
+================
+queuedSkillAdmission
+
+The command-phase admission of a skill press about to be queued; zero for
+anything else (attack, follow, pickup) and for the base attack, which
+4ACC40 sends straight to the queue.
+================
+*/
+func (rt *Runtime) queuedSkillAdmission(division string, snapshot *enterworld.Character, payload []byte, mask admitMask) uint16 {
+	skill, ok := rt.queuedSkill(snapshot, payload)
+	if !ok {
+		return 0
+	}
+	return rt.skillAdmission(division, snapshot, skill, rt.Now().UnixMilli(), nil, nil, mask)
+}
+
+/*
+================
+queuedSkill
+
+The skill a command payload presses, unless it is not a skill press or is
+the base attack (4ACC40 queues that unchecked).
+================
+*/
+func (rt *Runtime) queuedSkill(snapshot *enterworld.Character, payload []byte) (enterworld.SkillRow, bool) {
+	if snapshot == nil || rt.deps.SkillData() == nil || wire.ClassifyTargetActionLane(payload) != wire.TargetActionSkill {
+		return enterworld.SkillRow{}, false
+	}
+	cast, err := wire.DecodeSkillAction(payload)
+	if err != nil {
+		return enterworld.SkillRow{}, false
+	}
+	skill, exists := rt.deps.SkillData().SkillByID(cast.ActionId)
+	if !exists || isPinnedBaseAttack(snapshot, skill.Codename) {
+		return enterworld.SkillRow{}, false
+	}
+	return skill, true
+}
+
+/*
+================
+graceReadyAtMs
+
+When a skill press that is not ready yet will be (skillReadyAtMs), if that
+is within cooldownGraceMs; zero for a ready skill, one further off, an
+instant imbue (it never queues) and anything that is not a skill press.
+================
+*/
+func (rt *Runtime) graceReadyAtMs(snapshot *enterworld.Character, payload []byte) int64 {
+	skill, ok := rt.queuedSkill(snapshot, payload)
+	if !ok || skill.InstantSelfEffectPinned || skill.Imbue.Pinned {
+		return 0
+	}
+	now := rt.Now().UnixMilli()
+	ready := skillReadyAtMs(snapshot, skill)
+	if ready <= now || ready-now > cooldownGraceMs {
+		return 0
+	}
+	return ready
 }
 
 /*
@@ -123,6 +213,8 @@ type actionSessionPublication struct {
 	characterID    int64
 	queued         bool
 	pending        *basicAttackIntent
+	// readyAtMs holds a grace-queued press until its skill is ready (0: none).
+	readyAtMs int64
 }
 
 /*
@@ -276,13 +368,19 @@ func (rt *Runtime) retireActionSessions() []simulation.DivisionFrames {
 		_, intent := rt.combatIntentFor(session.division, session.name)
 		if value, exists := rt.actionSessions.Load(key); exists && !rt.hasOpenSkillCast(session.division, session.name) {
 			current := value.(actionSessionPublication)
+			// A grace-queued press stays queued until its skill is ready;
+			// advanceQueuedActionSessions promotes it then.
+			if current.queued && current.pending != nil && rt.Now().UnixMilli() < current.readyAtMs {
+				unlock()
+				continue
+			}
 			state := wire.ReleaseActionState()
 			if current.queued && current.pending != nil {
 				// 4AD390: the executing front finished (or was cancelled) in
 				// this tick; the pending back entry becomes the new front.
 				// Dropping it here lost an attack clicked during a swing.
 				rt.setCombatIntent(*current.pending)
-				current.queued, current.pending = false, nil
+				current.queued, current.pending, current.readyAtMs = false, nil, 0
 				rt.actionSessions.Store(key, current)
 				state.State = singleActionCount
 			} else if intent {
@@ -290,7 +388,7 @@ func (rt *Runtime) retireActionSessions() []simulation.DivisionFrames {
 					unlock()
 					continue
 				}
-				current.queued, current.pending = false, nil
+				current.queued, current.pending, current.readyAtMs = false, nil, 0
 				rt.actionSessions.Store(key, current)
 				state.State = singleActionCount
 			} else {
@@ -337,7 +435,7 @@ func (rt *Runtime) cancelObjectAction(division string, character, snapshot *ente
 		if publication.queued {
 			// 4ACCE4 removes only the pending back entry. The executing cast
 			// and its original repeating/linked continuation keep ownership.
-			publication.queued, publication.pending = false, nil
+			publication.queued, publication.pending, publication.readyAtMs = false, nil, 0
 			rt.actionSessions.Store(key, publication)
 			state := wire.ReleaseActionState()
 			state.State = singleActionCount
@@ -383,7 +481,7 @@ func (rt *Runtime) advanceQueuedActionSessions(nowMs int64) []simulation.Divisio
 			continue
 		}
 		session = latest.(actionSessionPublication)
-		if rt.hasOpenSkillCast(session.division, session.name) {
+		if rt.hasOpenSkillCast(session.division, session.name) || nowMs < session.readyAtMs {
 			unlock()
 			continue
 		}
@@ -401,7 +499,7 @@ func (rt *Runtime) advanceQueuedActionSessions(nowMs int64) []simulation.Divisio
 			continue
 		}
 		rt.setCombatIntent(*session.pending)
-		session.queued, session.pending = false, nil
+		session.queued, session.pending, session.readyAtMs = false, nil, 0
 		rt.actionSessions.Store(key, session)
 		state := wire.ReleaseActionState()
 		state.State = singleActionCount

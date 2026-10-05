@@ -180,7 +180,8 @@ HandleLocalRebirth
 
 HandleLocalRebirth owns native 0x32DC self-rebirth. Choice 1 restores at
 the persisted town point (or race start before one is appointed); choice 2
-is the retail level<=10 present-position concession. World, HP and MP commit
+is the retail level<=10 present-position concession, adding one HP and forty
+percent of the keeper maxima while retaining existing MP. World, HP and MP commit
 before publication. A town rebirth changes residency and therefore owns a
 reset/re-entry corpus; a present-position rebirth stays in the resident scene
 and publishes only correction, vitals, and LIFE-alive. Peers receive the
@@ -218,6 +219,9 @@ func (rt *Runtime) HandleLocalRebirth(
 	destination := corpse.Spawn
 	candidate := before.Snapshot()
 	restoredHP, restoredMP, _, _ := rt.playerKeeperVitals(divisionID, candidate)
+	if choice == wire.RebirthAtPresentPoint {
+		restoredHP, restoredMP = rt.presentRebirthVitals(divisionID, candidate)
+	}
 	candidate.CurrentHP, candidate.CurrentMP = &restoredHP, &restoredMP
 	var prepared enterworld.PreparedReentry
 	var previousPets map[petOwnerKey]petSession
@@ -280,7 +284,9 @@ func (rt *Runtime) HandleLocalRebirth(
 		}
 	}
 	rt.retireReturnForReentry(divisionID, character)
+	corpses, corpseDespawns := rt.retireCompanionCorpses(divisionID, character)
 	frames := missionReentryFrames(prepared.Packets)
+	frames = append(frames, corpses...)
 	// Re-entry reconstructs the client actor. A retained runtime body status
 	// must be replayed after construction; rebirth does not blanket-clear it.
 	if snapshot := rt.characterSnapshot(divisionID, character); snapshot != nil && snapshot.NativeBodyStatus != 0 {
@@ -289,7 +295,7 @@ func (rt *Runtime) HandleLocalRebirth(
 	frames = append(frames, life)
 	return OpResult{
 		Frames:    frames,
-		Broadcast: append([]wire.Frame{correction, life}, untouchable...),
+		Broadcast: append(append([]wire.Frame{correction, life}, untouchable...), corpseDespawns...),
 	}
 }
 

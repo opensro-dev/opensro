@@ -30,6 +30,7 @@ import {
 } from "@/engine/foundation/gameplay/peer-appearance";
 import { createEntityMotion } from "./motion/motion";
 import type { EntityState, WorldBatch, WorldEvent } from "@/engine/contracts/world";
+import { journalCost } from "@/engine/foundation/gameplay/journal-cost";
 import type { WireFrame } from "@/engine/contracts/network";
 // Wire authorities: server enterworld/{register,bootstrap,wire}.go,
 // world/simulation/{npc,monster}.go and item/wire/objectmove.go.
@@ -58,6 +59,7 @@ export function createEntities(
 			level?: number;
 			maxHp?: number;
 			countryByte9c?: number;
+			sexSelector1ac?: number;
 			merchantBranches?: EntityState["merchantBranches"];
 		}>();
 	let receivedAt = 0;
@@ -72,17 +74,17 @@ export function createEntities(
 	let localAvatars: import("@/engine/contracts/world").EntityEquipment[] = [];
 	let local: Record<string, unknown> | null = null;
 	/*
-================
-cost
-================
+	================
+	cost
+	================
 	*/
 	function cost( event: WorldEvent ) {
-		return event.kind === "native" ? event.payload.byteLength : JSON.stringify( event ).length * 2;
+		return event.kind === "native" ? event.payload.byteLength : journalCost( event );
 	}
 	/*
-================
-append
-================
+	================
+	append
+	================
 	*/
 	function append( event: WorldEvent, size = cost( event ) ) {
 		if ( events.length + (staged?.length ?? 0) >= 8192 || bytes + stagedBytes + size > journalByteLimit ) {
@@ -108,9 +110,9 @@ append
 		else if ( event.kind === "reset" || event.kind === "native" ) pendingPoses.clear();
 	}
 	/*
-================
-samplePose
-================
+	================
+	samplePose
+	================
 	*/
 	function samplePose( entity: EntityState ) {
 		const event: WorldEvent = { kind: "state", entity },
@@ -131,9 +133,9 @@ samplePose
 		entities.set( entity.gid, entity );
 	}
 	/*
-================
-groundedSpawn
-================
+	================
+	groundedSpawn
+	================
 	*/
 	function groundedSpawn( entity: EntityState ): EntityState {
 		if (
@@ -145,9 +147,9 @@ groundedSpawn
 		return y === entity.y ? entity : Object.freeze( { ...entity, y } );
 	}
 	/*
-================
-apply
-================
+	================
+	apply
+	================
 	*/
 	function apply( event: WorldEvent ) {
 		if ( event.kind === "spawn" ) {
@@ -179,9 +181,9 @@ apply
 		if ( event.kind === "spawn" || event.kind === "despawn" ) lifecycle?.( event );
 	}
 	/*
-================
-finite
-================
+	================
+	finite
+	================
 	*/
 	function finite( value: unknown ): number {
 		if ( typeof value !== "number" || !Number.isFinite( value ) ) {
@@ -190,9 +192,9 @@ finite
 		return value;
 	}
 	/*
-================
-position
-================
+	================
+	position
+	================
 	*/
 	function position( v: DataView, offset: number ) {
 		return {
@@ -204,17 +206,17 @@ position
 		};
 	}
 	/*
-================
-raw
-================
+	================
+	raw
+	================
 	*/
 	function raw( frame: WireFrame ): WorldEvent {
 		return { kind: "native", opcode: frame.opcode, payload: frame.payload.slice() };
 	}
 	/*
-================
-spawn
-================
+	================
+	spawn
+	================
 	*/
 	function spawn( frame: WireFrame ): WorldEvent {
 		const p = frame.payload;
@@ -257,9 +259,9 @@ spawn
 		return { kind: "spawn", entity: { ...ref, ...entity, name: entity.name || ref.name || "" } };
 	}
 	/*
-================
-recolor
-================
+	================
+	recolor
+	================
 	*/
 	function recolor( test: ( e: EntityState ) => boolean, white = false, context?: NameColorContext ) {
 		const c = context ?? nameContext?.();
@@ -274,23 +276,41 @@ recolor
 	return {
 		recolor,
 		/*
-================
-characterCountry
+		================
+		characterCountry
 
-The country byte (+0x9C) of a character reference: 0 China, 1 Europe.
-Party windows resolve a member's race mark from it whether or not the
-member is in view (5B93A0 reads GetCharCosDataById(member ref)+0x9C).
-================
+		The country byte (+0x9C) of a character reference: 0 China, 1 Europe.
+		Party windows resolve a member's race mark from it whether or not the
+		member is in view (5B93A0 reads GetCharCosDataById(member ref)+0x9C).
+		================
 		*/
 		characterCountry( refObjId: number ): number | undefined {
 			return refs.get( refObjId )?.countryByte9c;
 		},
 		/*
-================
-itemReference
+		================
+		playerModels
 
-An item reference's flags and display name, as ground drops resolve them.
-================
+		The player models of one country in reference order, each with its
+		sex selector (+0x1AC): the lists CIFChangePlayerModel_BuildModelLists
+		(6D14C0) reads from the global data manager.
+		================
+		*/
+		playerModels( country: number ): readonly { readonly refObjId: number; readonly sex: number; }[] {
+			const models: { refObjId: number; sex: number; }[] = [];
+			for ( const [refObjId, row] of refs ) {
+				if ( row.kind === "player" && row.countryByte9c === country && row.sexSelector1ac !== undefined ) {
+					models.push( { refObjId, sex: row.sexSelector1ac } );
+				}
+			}
+			return models.sort( ( a, b ) => a.refObjId - b.refObjId );
+		},
+		/*
+		================
+		itemReference
+
+		An item reference's flags and display name, as ground drops resolve them.
+		================
 		*/
 		itemReference( refObjId: number ): { typeFlags: number; name: string; } | undefined {
 			const typeFlags = itemRefs.get( refObjId );
@@ -300,9 +320,9 @@ An item reference's flags and display name, as ground drops resolve them.
 		// 86D5C0 -> 403D20); late navigation admission repeats that lookup
 		// at the current pose, without restarting an active movement segment.
 		/*
-================
-groundSpawns
-================
+		================
+		groundSpawns
+		================
 		*/
 		groundSpawns() {
 			for ( const entity of entities.values() ) {
@@ -312,9 +332,9 @@ groundSpawns
 			}
 		},
 		/*
-================
-references
-================
+		================
+		references
+		================
 		*/
 		references( rows: readonly import("@/engine/foundation/gameplay/commerce").CommerceItemReference[] ) {
 			for ( const row of rows ) {
@@ -328,9 +348,9 @@ references
 			}
 		},
 		/*
-================
-clear
-================
+		================
+		clear
+		================
 		*/
 		clear() {
 			entities.clear();
@@ -349,9 +369,9 @@ clear
 			append( { kind: "reset", epoch: ++epoch } );
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
 			entities.clear();
@@ -371,9 +391,9 @@ dispose
 			bytes = 0;
 		},
 		/*
-================
-bootstrap
-================
+		================
+		bootstrap
+		================
 		*/
 		bootstrap( value: unknown, resetAlreadyPublished = false ) {
 			if ( !value || typeof value !== "object" ) {
@@ -407,7 +427,7 @@ bootstrap
 					const [field, max] of [ [ "level", 255 ], [ "maxHp", 0xffffffff ], [
 						"countryByte9c",
 						255
-					] ] as const
+					], [ "sexSelector1ac", 255 ] ] as const
 				) {
 					if (
 						row[field] !== undefined &&
@@ -442,6 +462,7 @@ bootstrap
 					level: row.level,
 					maxHp: row.maxHp,
 					countryByte9c: row.countryByte9c,
+					sexSelector1ac: row.sexSelector1ac,
 					...(row.kind === "npc" ? { merchantBranches: merchantBranches( row.npcTalkStoreGroups ) } : {})
 				} );
 			}
@@ -515,9 +536,9 @@ bootstrap
 			} );
 		},
 		/*
-================
-receive
-================
+		================
+		receive
+		================
 		*/
 		receive( frame: WireFrame, now = 0 ) {
 			receivedAt = now;
@@ -555,6 +576,26 @@ receive
 				if ( (tail?.next ?? 8) !== p.length ) throw Error( "Invalid skin change length" );
 				const skin = tail?.skin;
 				if ( entity ) apply( { kind: "state", entity: { ...entity, transformSkin: skin } } );
+				return;
+			}
+			if ( frame.opcode === 0x3434 || frame.opcode === 0x3514 ) {
+				// 75D130 starts a kind-2 action bar ([u32 gid][2][1|2][u8 seconds]);
+				// 75D1E0 clears it ([u32 gid], the strip cancel).
+				const entity = entities.get( v.getUint32( 0, true ) );
+				if ( frame.opcode === 0x3434 ) {
+					if ( p.length !== 7 || p[4] !== 2 ) return;
+					if ( entity ) {
+						apply( {
+							kind: "state",
+							entity: { ...entity, actionProgress: { seconds: p[6]!, startedAtMs: now } }
+						} );
+					}
+					return;
+				}
+				if ( p.length !== 4 ) throw Error( "Invalid strip cancel" );
+				if ( entity?.actionProgress ) {
+					apply( { kind: "state", entity: { ...entity, actionProgress: undefined } } );
+				}
 				return;
 			}
 			if ( frame.opcode === 0x324b ) {
@@ -671,6 +712,13 @@ receive
 						arenaTeam: Number( local.arenaTeam ?? 255 ),
 						pvpState: Number( local.pvpState ?? 0 ),
 						...(local.visualFlags !== undefined ? { visualFlags: Number( local.visualFlags ) } : {}),
+						...(local.bodyShape !== undefined ? { bodyShape: Number( local.bodyShape ) } : {}),
+						localJob: {
+							type: Number( local.jobType ?? 0 ),
+							grade: Number( local.jobGrade ?? 0 ),
+							exp: Number( local.jobExp ?? 0 ),
+							alias: String( local.jobAlias ?? "" )
+						},
 						regionId: finite( pose.regionId ),
 						x: finite( pose.x ),
 						y: finite( pose.y ),
@@ -968,9 +1016,9 @@ receive
 			append( raw( frame ) );
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take(): WorldBatch | null {
 			if ( inflight || !events.length ) {
@@ -983,9 +1031,9 @@ take
 			return inflight;
 		},
 		/*
-================
-ack
-================
+		================
+		ack
+		================
 		*/
 		ack( value: number ) {
 			if ( !inflight || value !== inflight.sequence ) {
@@ -996,9 +1044,9 @@ ack
 		},
 		synchronized: () => synchronized,
 		/*
-================
-step
-================
+		================
+		step
+		================
 		*/
 		step( now: number ) {
 			// 86DB70/858310: claimant must be a live CICharactor (state-0 bit in +644).
@@ -1023,9 +1071,9 @@ step
 		},
 		read: ( gid: number ) => entities.get( gid ),
 		/*
-================
-die
-================
+		================
+		die
+		================
 		*/
 		die( gid: number ) {
 			const entity = entities.get( gid );
@@ -1037,18 +1085,18 @@ die
 		},
 		castArrival: motion.castArrival,
 		/*
-================
-displace
-================
+		================
+		displace
+		================
 		*/
 		displace( command: import("@/engine/contracts/gameplay").CastDisplacement, now: number ) {
 			const entity = entities.get( command.gid );
 			if ( entity ) apply( { kind: "state", entity: { ...entity, ...motion.displace( entity, command, now ) } } );
 		},
 		/*
-================
-cancelCast
-================
+		================
+		cancelCast
+		================
 		*/
 		cancelCast( token: number, now: number ) {
 			for ( const pose of motion.cancelCast( token, now ) ) {
@@ -1057,9 +1105,9 @@ cancelCast
 			}
 		},
 		/*
-================
-publish
-================
+		================
+		publish
+		================
 		*/
 		publish( event: WorldEvent ) {
 			append( event );

@@ -522,6 +522,12 @@ placeNativeSpawn
 func (s *MonsterState) placeNativeSpawn(nest monster.NestRow, ref monster.MonsterRef, grade uint8) (monster.SpawnPoint, spawnPlacement) {
 	centre := nest.SpawnPoint
 	candidate := centre
+	// The authored centre is grounded at its authored height. An admitted
+	// candidate keeps the height its walk from the centre came to rest at:
+	// 5F6EB0 spawns at the move test's written position, so a monster can
+	// only stand where walking reaches (never a bridge parapet above a gorge
+	// that nearest-height arbitration from the nest's Y would pick).
+	surfaceY := nest.Y
 	cx, cz := float32(nest.X), float32(nest.Z)
 	x, z, moved := monster.NativeSpawnPosition(cx, cz, float32(nest.GenerateRadius), s.randomWord)
 	// 98B320: a zero-length move test returns zero.
@@ -536,7 +542,8 @@ func (s *MonsterState) placeNativeSpawn(nest monster.NestRow, ref monster.Monste
 		admitted := ClampGeneratedSpawnRegion(spawnPointFrame(centre), spawnPointFrame(candidate), s.spawnRegionAvailable)
 		candidate.RegionID, candidate.X, candidate.Y, candidate.Z = admitted.RegionID, admitted.X, admitted.Y, admitted.Z
 		if s.collide != nil {
-			result := s.collide(spawnPointFrame(centre), spawnPointFrame(candidate))
+			move := s.collide(spawnPointFrame(centre), spawnPointFrame(candidate))
+			result := move.Result
 			if result&monster.NavResultBlocked != 0 {
 				if !monster.SpawnCollisionFallsBackToCentre(ref, grade) {
 					return monster.SpawnPoint{}, spawnPlacementRejected
@@ -546,9 +553,12 @@ func (s *MonsterState) placeNativeSpawn(nest monster.NestRow, ref monster.Monste
 			if result&monster.NavResultClipped != 0 {
 				return monster.SpawnPoint{}, spawnPlacementClipped
 			}
+			if result == 0 {
+				surfaceY = move.Rest.Y
+			}
 		}
 	}
-	grounded, ok := s.resolveSpawnGround(candidate, nest.Y)
+	grounded, ok := s.resolveSpawnGround(candidate, surfaceY)
 	if !ok {
 		return monster.SpawnPoint{}, spawnPlacementRejected
 	}

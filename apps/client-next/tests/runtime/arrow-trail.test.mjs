@@ -320,3 +320,21 @@ test("arrival EFP owns a new actor and does not inherit the flying BSR basis or 
 	assert.equal( defined( rows.find( a => a.gid === f.initial[0].gid ) ).drawGeometry, false );
 	f.owner.dispose();
 });
+test("speed-0 straight movers admit: a zero-distance one arrives, the rest stand at their start", () => {
+	// Navigation_StepTowards (879650) arrives once distance squared <= step
+	// squared, so speed 0 is a legal native mover, not an unsupported stage.
+	let count = 0;
+	for ( const id of [ "198", "216", "287", "3494" ] ) {
+		const record = defined( catalog[id] );
+		const stages = record.stages.filter( s =>
+			s.move === "MOV_STRAIGHT" && s.movement?.startSpeed === 0 && s.movement.endSpeed === 0
+		).map( s => ({ ...s, phase: "SHOT", startEvent: 1 }) );
+		assert.ok( stages.length, id );
+		const f = fixture( stages, { ...record, stages } );
+		for ( let t = .3; t < 1; t += .1 ) f.step( t );
+		assert.equal( f.owner.error(), null, id );
+		f.owner.dispose();
+		count += stages.length;
+	}
+	assert.equal( count, 7 );
+});

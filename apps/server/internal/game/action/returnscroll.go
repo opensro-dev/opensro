@@ -9,13 +9,22 @@ package action
 
 import (
 	"math"
+	"opensro.online/server/internal/domain"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
-	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+// The channel-11 teleport modes a return cast sets (4A0380).
+const (
+	teleportModeBlocking uint8 = 1
+	teleportModeFree     uint8 = 2
+)
+
+// errCodeThievesOnly is 4A0380's 0x186A (UIIT_MSG_STRGERR_ONLY_ROBBER_CAN_USE_THIS_ITEM).
+const errCodeThievesOnly uint8 = 0x6a
 
 /*
 ================
@@ -27,6 +36,9 @@ type pendingReturn struct {
 	character      *enterworld.Character
 	due            int64
 	generation     uint64
+	// destination is a reverse return's chosen point; nil returns to the
+	// appointed rebirth point.
+	destination *simulation.Spawn
 }
 
 /*
@@ -38,26 +50,94 @@ func teleportState(c *enterworld.Character, mode uint8) wire.Frame {
 	return wire.Frame{Opcode: 0x3122, Payload: wire.NewWriter(6).U32(enterworld.ObjectIDForCharacter(c)).U8(11).U8(mode).Payload()}
 }
 
-// Inside the item-use character mutation door. v1.188 49B9F0 -> 4A0380
-// selects Param1 duration, Param2 blocking mode and Param3 destination.
-// v1.150 data expresses duration in milliseconds; v1.188 timers use seconds.
 /*
 ================
-bool
+returnScrollDuration
+
+v1.188 4A0380: Param1 is the cast duration (milliseconds in v1.150 data;
+v1.188 timers use seconds) and Param2 must be blocking mode 1. A zero
+duration takes 4E0B50's minimum timer interval.
 ================
 */
-func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, request wire.ItemUseRequest, now int64, result *OpResult) bool {
+func returnScrollDuration(ref *enterworld.ItemRef) (int64, bool) {
+	duration, mode, ok := returnScrollTiming(ref)
+	return duration, ok && mode == teleportModeBlocking
+}
+
+/*
+================
+returnScrollTiming
+
+Param1's duration and the teleport mode Param2 selects: 4A0380 passes
+(Param2 == 0) + 1, so a blocking scroll (1) casts in mode 1 and the Thief
+Den scroll (0) in mode 2, which leaves the player free to move.
+================
+*/
+func returnScrollTiming(ref *enterworld.ItemRef) (int64, uint8, bool) {
 	duration, present := ref.NativeFields.Lookup("itemParam1_29c")
 	blocking, hasBlocking := ref.NativeFields.Lookup("itemParam2_2a0")
-	if !present || !hasBlocking || math.IsNaN(duration) || math.IsInf(duration, 0) || duration < 0 || duration > math.MaxUint32 || math.Trunc(duration) != duration || blocking != 1 {
+	if !present || !hasBlocking || math.IsNaN(duration) || math.IsInf(duration, 0) || duration < 0 ||
+		duration > math.MaxUint32 || math.Trunc(duration) != duration || blocking != 0 && blocking != 1 {
+		return 0, 0, false
+	}
+	mode := teleportModeBlocking
+	if blocking == 0 {
+		mode = teleportModeFree
+	}
+	if duration == 0 {
+		return 100, mode, true
+	}
+	return int64(duration), mode, true
+}
+
+/*
+================
+teleportBlocks
+
+True for the teleport modes that hold the player still: a return's 1 and
+the skin change's in-place reload 3. Mode 2 (the Thief Den scroll's long
+cast) lets the player move until the timer ends.
+================
+*/
+func teleportBlocks(mode uint8) bool {
+	return mode == teleportModeBlocking || mode == skinTeleportMode
+}
+
+/*
+================
+returnScrollAdmission
+
+The player checks every return cast shares: the ordinary scroll (4A0380)
+and the reverse return (4A00C0). A native refusal sets *result; a silent
+one leaves it. v1.188 error low bytes agree with v1.150 689420 category 1.
+================
+*/
+func (rt *Runtime) returnScrollAdmission(division string, c *enterworld.Character, result *OpResult) bool {
+	if !rt.returnCastAdmission(division, c, result) {
 		return false
 	}
+	if rt.hasSummonedTransportCOS(c) {
+		*result = itemUseFailure(0x5e)
+		return false
+	}
+	return true
+}
+
+/*
+================
+returnCastAdmission
+
+The checks every return cast shares before its destination's own: the
+Thief Den scroll skips RESURRECT's transport refusal (4A0380 tests it only
+on that branch).
+================
+*/
+func (rt *Runtime) returnCastAdmission(division string, c *enterworld.Character, result *OpResult) bool {
 	// Native 4a0399 checks the quest mask before the active-cast test.
 	if rt.QuestTravelBlocks != nil && rt.QuestTravelBlocks(c)&0x20000 != 0 {
 		*result = itemUseFailure(0x5f)
 		return false
 	}
-	// v1.188 4A0380 error low bytes agree with v1.150 689420 category 1.
 	if c.NativeTeleportMode != 0 {
 		*result = itemUseFailure(0x5d)
 		return false
@@ -68,25 +148,99 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 		*result = itemUseFailure(0x75)
 		return false
 	}
-	// The ordinary RESURRECT family has no destination payload. Other return
-	// families must never silently teleport to the race start.
-	if ref.ReturnDestination != "RESURRECT" || rt.hasOpenSkillCast(division, c.Name) {
+	if rt.hasOpenSkillCast(division, c.Name) {
 		return false
 	}
-	if rt.hasSummonedTransportCOS(c) {
-		*result = itemUseFailure(0x5e)
+	_, exists := rt.returnCasts.Load(simulation.WorldKey(division, c.Name))
+	return !exists
+}
+
+/*
+================
+beginReturnScroll
+
+Inside the item-use character mutation door. v1.188 49B9F0 -> 4A0380
+selects Param1 duration, Param2 blocking mode and Param3 destination. The
+ordinary RESURRECT family has no destination payload; other return
+families must never silently teleport to the race start. The location
+check records where the scroll was used (4E0250, slot 0x264): the reverse
+return's "last recall point".
+================
+*/
+func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, request wire.ItemUseRequest, now int64, result *OpResult) bool {
+	duration, mode, ok := returnScrollTiming(ref)
+	if !ok {
+		return false
+	}
+	var destination *simulation.Spawn
+	switch ref.ReturnDestination {
+	case "RESURRECT":
+		if mode != teleportModeBlocking || !rt.returnScrollAdmission(division, c, result) {
+			return false
+		}
+	case "THIEFDEN":
+		// 4A0380: only a thief in job mode (job state 2) returns to the den,
+		// at the gate Param4 names.
+		if !rt.returnCastAdmission(division, c, result) {
+			return false
+		}
+		if enterworld.DressedJob(c) != domain.JobThief {
+			*result = itemUseFailure(errCodeThievesOnly)
+			return false
+		}
+		gate, found := rt.buildingGateSpawn(ref.ReturnTeleport)
+		if !found {
+			return false
+		}
+		destination = &gate
+	default:
+		return false
+	}
+	at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
+	if !rt.startReturnCast(returnCast{division: division, character: c, row: row, slot: request.Slot,
+		typeWord: request.TypeWord, duration: duration, destination: destination, now: now, mode: mode}, result) {
+		return false
+	}
+	c.World.LastRecallPoint = worldSpawnFromMission(at)
+	return true
+}
+
+/*
+================
+returnCast
+
+One channel-11 return cast to start: the scroll row it consumes, its use
+reply identity, its duration and, for a reverse return, its destination.
+================
+*/
+type returnCast struct {
+	division    string
+	character   *enterworld.Character
+	row         int
+	slot        uint8
+	typeWord    uint16
+	duration    int64
+	destination *simulation.Spawn
+	now         int64
+	// mode is the channel-11 teleport mode; zero is a return's 1. The skin
+	// change reloads in place under mode 3 (4EFFC0).
+	mode uint8
+}
+
+/*
+================
+startReturnCast
+
+Commits an admitted return cast: stops a walker, enters teleport mode 1,
+consumes the scroll and schedules completion (advanceReturnScrolls).
+================
+*/
+func (rt *Runtime) startReturnCast(cast returnCast, result *OpResult) bool {
+	c, division, now := cast.character, cast.division, cast.now
+	if now > math.MaxInt64-cast.duration {
 		return false
 	}
 	key := simulation.WorldKey(division, c.Name)
-	if _, exists := rt.returnCasts.Load(key); exists {
-		return false
-	}
-	if duration == 0 {
-		duration = 100
-	} // 4E0B50's minimum timer interval
-	if now > math.MaxInt64-int64(duration) {
-		return false
-	}
 	moving := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }).MoveSegment.Valid()
 	spawn := rt.liveSpawn(key, c, now)
 	state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
@@ -97,15 +251,20 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 	})
 	writeBackWorld(c, state)
 	c.World.MoveSegment = nil
-	c.NativeTeleportMode = 1
+	mode := cast.mode
+	if mode == 0 {
+		mode = 1
+	}
+	c.NativeTeleportMode = mode
 	rt.ClearCombatIntent(division, c.Name)
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
-	rt.returnCasts.Store(key, pendingReturn{division: division, name: c.Name, character: c, due: now + int64(duration), generation: rt.returnGeneration.Add(1)})
-	remaining := rt.consumeItemUseRow(c, row)
-	status := teleportState(c, 1)
+	rt.returnCasts.Store(key, pendingReturn{division: division, name: c.Name, character: c, due: now + cast.duration,
+		generation: rt.returnGeneration.Add(1), destination: cast.destination})
+	remaining := rt.consumeItemUseRow(c, cast.row)
+	status := teleportState(c, mode)
 	stop := wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: spawn.RegionID, X: float32(spawn.X), Y: float32(spawn.Y), Z: float32(spawn.Z), Heading: spawn.Angle}}.Encode()}
-	visual := wire.Frame{Opcode: 0x3449, Payload: wire.NewWriter(8).U32(enterworld.ObjectIDForCharacter(c)).U32(ref.RefObjID).Payload()}
-	*result = OpResult{Frames: []wire.Frame{status, {Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}, visual}, Broadcast: []wire.Frame{status, rt.commerceReferences([]inventory.Item{{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: request.TypeWord}}, nil), visual}}
+	// HandleItemUse publishes the item's visual after the success.
+	*result = OpResult{Frames: []wire.Frame{status, {Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(cast.slot, remaining, cast.typeWord)}}, Broadcast: []wire.Frame{status}}
 	// 466F90 is a log record, not a state publication. 4A9430 emits
 	// the moving-only correction before 4E0B50 publishes channel 11.
 	if moving {
@@ -134,7 +293,9 @@ func (rt *Runtime) HandleReturnCancel(division string, c *enterworld.Character, 
 		return OpResult{Frames: []wire.Frame{{Opcode: 0xb2dd, Payload: []byte{2, 6}}}}
 	}
 	if !rt.deps.Update(c, "return-scroll-cancel", func() bool {
-		if c.NativeTeleportMode == 0 {
+		// INFERENCE: a return cast cancels; a skin change's mode-3 reload
+		// carries a model already committed.
+		if c.NativeTeleportMode == 0 || c.NativeTeleportMode == skinTeleportMode {
 			return false
 		}
 		c.NativeTeleportMode = 0
@@ -208,6 +369,9 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			return false
 		}
 		destination = rt.appointedRebirthPoint(c)
+		if job.destination != nil {
+			destination = *job.destination
+		}
 		previousWorld = c.World
 		state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
 			previous = *w
@@ -227,6 +391,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	}
 	rt.returnCasts.Delete(key)
 	rt.endTransformForLoading(job.division, c)
+	rt.endPartyAurasForLoading(job.division, c)
 	previousPets := rt.relocateReturningPet(job.division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(job.division, job.name)
 	clear := teleportState(c, 0)
@@ -245,11 +410,12 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	rt.ClearCombatIntent(job.division, job.name)
 	rt.clearSkillFinalizes(job.division, job.name)
 	rt.clearCompoundJob(compoundKey{job.division, job.name})
-	frames := missionReentryFrames(packets)
+	corpses, corpseDespawns := rt.retireCompanionCorpses(job.division, c)
+	frames := append(missionReentryFrames(packets), corpses...)
 	if snapshot := rt.characterSnapshot(job.division, c); snapshot != nil && snapshot.NativeBodyStatus != 0 {
 		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), snapshot.NativeBodyStatus))
 	}
-	return frames, []wire.Frame{clear, {Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()}}
+	return frames, append(corpseDespawns, clear, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})
 }
 
 // 4EC8A0 -> 4FD720 -> COS virtual +30 / 4827F0. Transport COS
@@ -280,6 +446,7 @@ retireReturnForReentry
 ================
 */
 func (rt *Runtime) retireReturnForReentry(division string, c *enterworld.Character) {
+	rt.jobDresses.Delete(simulation.WorldKey(division, c.Name))
 	rt.deps.Update(c, "return-scroll-retire-reentry", func() bool {
 		rt.returnCasts.Delete(simulation.WorldKey(division, c.Name))
 		if c.NativeTeleportMode == 0 {

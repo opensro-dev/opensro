@@ -17,7 +17,7 @@ import type { FrontendSnapshot } from "@/engine/contracts/frontend";
 import type { ServerRecord, CharacterRecord } from "@/engine/contracts/session";
 import { createTitleResources } from "./resources";
 import { drawCreation } from "./creation";
-import { titleGlyphs, titleTextBox, titleColoredText } from "@/engine/foundation/rendering/ui-glyphs";
+import { titleText, titleTextBox, titleColoredText } from "@/engine/foundation/rendering/ui-glyphs";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
 import type { ButtonAccess } from "@/engine/foundation/ui/button-state";
@@ -34,9 +34,19 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 	let listAlpha = 0, lastTime: number | null = null;
 	const nameAlpha = new Map<number, number>(), raceAlpha = [ 0, 0 ];
 	return {
+		/*
+		================
+		message
+		================
+		*/
 		message( value: string ) {
 			return resources.data()?.text[value] ?? value;
 		},
+		/*
+		================
+		catalog
+		================
+		*/
 		catalog( key: string ) {
 			return resources.data()?.text[key] ?? "";
 		},
@@ -154,13 +164,28 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 			lastTime = input.now;
 			// 0x741BD0 loads float 0.5 at 0xBD5034 for both server/main chrome fades.
 			listAlpha = Math.max( 0, Math.min( 1, listAlpha + (serverList ? 1 : -1) * elapsed / 500 ) );
+			/*
+			================
+			fill
+			================
+			*/
 			function fill( rect: UiRect, alpha = 1 ) {
 				quads.push( { rect, color: [ 0, 0, 0, alpha ], uv: [ 0, 0, 1, 1 ], clip: full, texture: "" } );
 			}
+			/*
+			================
+			image
+			================
+			*/
 			function image( path: string, rect: UiRect, alpha = 1, uv: UiRect = [ 0, 0, 1, 1 ], clip: UiRect = full ) {
 				paths.push( path );
 				quads.push( { rect, color: [ 1, 1, 1, alpha ], uv, clip, texture: path } );
 			}
+			/*
+			================
+			picture
+			================
+			*/
 			function picture( name: string, rect?: UiRect, alpha = 1 ) {
 				const n = nodes?.[name];
 				if ( n?.ddj ) {
@@ -177,6 +202,11 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 					);
 				}
 			}
+			/*
+			================
+			text
+			================
+			*/
 			function text(
 				value: string,
 				rect: UiRect,
@@ -190,7 +220,7 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 				if ( data ) {
 					paths.push( data.font.image );
 					quads.push(
-						...titleGlyphs( data.font, value, rect, clip, [
+						...titleText( data.font, value, rect, clip, [
 							color[0],
 							color[1],
 							color[2],
@@ -199,6 +229,11 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 					);
 				}
 			}
+			/*
+			================
+			authoredText
+			================
+			*/
 			function authoredText(
 				n: TitleNode,
 				value: string,
@@ -213,10 +248,20 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 					);
 				text( value, rect, alpha, n.hAlign ?? 0, color, full, n );
 			}
+			/*
+			================
+			local
+			================
+			*/
 			function local( name: string, parent: UiRect ): UiRect {
 				const r = nodes![name]!.rect;
 				return [ parent[0] + r.x, parent[1] + r.y, r.width, r.height ];
 			}
+			/*
+			================
+			button
+			================
+			*/
 			function button(
 				name: string,
 				id: string,
@@ -859,6 +904,11 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 			}
 			return { quads, controls, paths, labels, ready: !!data, error: resources.error() };
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose() {
 			resources.dispose();
 		}

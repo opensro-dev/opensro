@@ -65,6 +65,7 @@ type deployment struct {
 	Network         string
 	AllowedOrigins  string
 	GMCharacters    string
+	BetaMastery     string
 	TransportCert   string
 	TransportKey    string
 	TransportTLSID  string
@@ -73,22 +74,25 @@ type deployment struct {
 	AgentURL        string
 	AgentPort       int
 	PrivateNetwork  bool
-	TaskUser        string
-	TaskUID         int
-	TaskGID         int
-	AgentCPU        int
-	AgentMemoryMB   int
-	GameCPU         int
-	GameMemoryMB    int
-	AgentReleaseID  string
-	GameReleaseID   string
-	AgentSource     string
-	GameSource      string
-	AgentBinary     string
-	GameBinary      string
-	DataPaths       gamedata.Paths
-	Shards          []shardDeployment
-	Secrets         clusterSecrets
+	// Pprof turns on the GameWorld's profiling endpoints (TRANSPORT_PPROF),
+	// which serve only on its loopback control listener.
+	Pprof          bool
+	TaskUser       string
+	TaskUID        int
+	TaskGID        int
+	AgentCPU       int
+	AgentMemoryMB  int
+	GameCPU        int
+	GameMemoryMB   int
+	AgentReleaseID string
+	GameReleaseID  string
+	AgentSource    string
+	GameSource     string
+	AgentBinary    string
+	GameBinary     string
+	DataPaths      gamedata.Paths
+	Shards         []shardDeployment
+	Secrets        clusterSecrets
 	// BugReports comes from the deployer's SRO_BUG_REPORT_* environment;
 	// its webhook travels only as a Nomad variable item.
 	BugReports bugreport.Config
@@ -224,6 +228,9 @@ func resolveDeployment(
 	if namespace == "" {
 		namespace = defaultNomadNamespace
 	}
+	if options.Pprof && hostNetwork != "loopback" {
+		return nil, fmt.Errorf("-pprof is for a loopback development cluster, not host network %q", hostNetwork)
+	}
 	if hostNetwork != "loopback" &&
 		namespace == defaultNomadNamespace {
 		return nil, fmt.Errorf(
@@ -261,6 +268,10 @@ func resolveDeployment(
 		return nil, fmt.Errorf("GM allowlist: %w", err)
 	}
 	bugReports, warnings := bugreport.LoadConfig(os.Getenv)
+	betaMastery, err := configuredBetaMastery(stateDir)
+	if err != nil {
+		return nil, err
+	}
 	for _, warning := range warnings {
 		fmt.Printf("Bug reports: %s\n", warning)
 	}
@@ -361,6 +372,7 @@ func resolveDeployment(
 		Network:         hostNetwork,
 		AllowedOrigins:  allowedOrigins,
 		GMCharacters:    gmCharacters,
+		BetaMastery:     betaMastery,
 		TransportCert:   transportCert,
 		TransportKey:    transportKey,
 		TransportTLSID:  transportTLSID,
@@ -369,6 +381,7 @@ func resolveDeployment(
 		AgentURL:        agentURL,
 		AgentPort:       options.AgentPort,
 		PrivateNetwork:  options.PrivateNet,
+		Pprof:           options.Pprof,
 		TaskUser:        options.TaskUser,
 		TaskUID:         taskUID,
 		TaskGID:         taskGID,
@@ -638,6 +651,8 @@ func (deployment *deployment) gameVariables(
 		"private_network":     boolEnvValue(deployment.PrivateNetwork),
 		"allowed_origins":     deployment.AllowedOrigins,
 		"gm_characters":       deployment.GMCharacters,
+		"beta_mastery":        deployment.BetaMastery,
+		"transport_pprof":     boolEnvValue(deployment.Pprof),
 	})
 }
 

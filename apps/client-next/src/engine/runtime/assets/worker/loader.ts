@@ -32,6 +32,9 @@ import { createBackgroundInstaller } from "./install";
 import { pageEntryBundle } from "@/engine/foundation/assets/page-entry";
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
 import type { AssetRequest, AssetWorkerMessage } from "@/engine/contracts/assets";
+import { rgbaPickAlpha, bitmapPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
+// Loading-screen progress publications are coalesced to this interval.
+const PROGRESS_INTERVAL_MS = 150;
 /*
 ================
 createLoader
@@ -58,22 +61,38 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	const files = new Map<string, number>(), readyFiles = new Set<string>();
 	let bytesRead = 0;
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
+	let progressTimer: ReturnType<typeof setTimeout> | null = null;
 	/*
 	================
 	progress
 
-	Publish installation progress through the worker message contract.
+	Publish installation progress, at most once per PROGRESS_INTERVAL_MS.
+	A change inside the interval arms one trailing publication that carries
+	the latest state, so a settled queue still reaches the loading screen.
+	Publishing every settle instead posted a message per file read (0.8 s of
+	worker time in a 17 s streaming trace, plus its main-thread receipt).
 	================
 	*/
-	function progress( force = false ) {
-		const now = performance.now(), elapsed = now - lastProgress;
-		if ( !force && elapsed < 150 ) return;
-		if ( elapsed >= 150 ) {
-			const sample = (received - lastReceived) * 1000 / elapsed;
-			speed = sample;
-			lastReceived = received;
-			lastProgress = now;
+	function progress() {
+		const elapsed = performance.now() - lastProgress;
+		if ( elapsed >= PROGRESS_INTERVAL_MS ) {
+			publishProgress();
+			return;
 		}
+		progressTimer ??= setTimeout( publishProgress, PROGRESS_INTERVAL_MS - elapsed );
+	}
+	/*
+	================
+	publishProgress
+	================
+	*/
+	function publishProgress() {
+		if ( progressTimer !== null ) clearTimeout( progressTimer );
+		progressTimer = null;
+		const now = performance.now(), elapsed = now - lastProgress;
+		if ( elapsed > 0 ) speed = (received - lastReceived) * 1000 / elapsed;
+		lastReceived = received;
+		lastProgress = now;
 		if ( !disposed ) {
 			send( {
 				kind: "progress",
@@ -104,7 +123,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			if ( count ) files.set( path, count );
 			else files.delete( path );
 		}
-		progress( files.size === 0 );
+		progress();
 	}
 	/*
 	================
@@ -258,7 +277,24 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( total > (128 << 20) ) throw new Error( "World resource transaction exceeds budget" );
 						return resource;
 					}
-					const resolved = await worlds.resolve( bytes, readWorldResource );
+					// An outdoor scene names its coordinate anchor and which part it
+					// wants (world.ts WorldDecodeOptions); a terrain part is one region.
+					const hash = new URLSearchParams( url.hash.slice( 1 ) ),
+						anchor = hash.get( "anchor" ),
+						part = (hash.get( "part" ) ?? "all") as import("./world/world").WorldDecodePart,
+						origin = anchor === null ? undefined : Number.parseInt( anchor, 16 );
+					if ( anchor !== null && !/^[0-9a-f]{1,4}$/.test( anchor ) ) {
+						throw new Error( "Invalid world anchor" );
+					}
+					if ( part === "terrain" ) {
+						const terrain = await worlds.resolveTerrain( bytes, readWorldResource, url.pathname );
+						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
+						const prepared = prepareWorldScene( worlds.decode( terrain, false, { origin, part } ) );
+						send( { kind: "world", id: request.id, prepared }, worldSceneTransfers( prepared.scene ) );
+						pending.delete( request.id );
+						return;
+					}
+					const resolved = await worlds.resolve( bytes, readWorldResource, url.pathname );
 					if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
 					const placedIds = new Set( resolved.objects.placements.map( row => row.objectId ) );
 					const refs = new Set(
@@ -303,7 +339,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
 					}
 					resolved.animated = [ ...animated.values() ];
-					let scene = worlds.decode( resolved, request.decode === "frontend-world" );
+					let scene = worlds.decode( resolved, request.decode === "frontend-world", { origin, part } );
 					const propsPath = new URLSearchParams( url.hash.slice( 1 ) ).get( "props" );
 					if ( propsPath && request.decode === "frontend-world" ) {
 						const manifest = JSON.parse(
@@ -456,6 +492,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					send( { kind: "image", id: request.id, image }, [ image ] );
 				} else if ( request.decode === "dds" ) {
 					const decoded = decodeDxt1( bytes, DECODED_IMAGE_BYTES ),
+						alpha = request.pickAlpha ?
+							rgbaPickAlpha( decoded.width, decoded.height, decoded.pixels ) :
+							undefined,
 						image = await createImageBitmap(
 							new ImageData( decoded.pixels, decoded.width, decoded.height ),
 							{ premultiplyAlpha: "none", colorSpaceConversion: "none" }
@@ -465,7 +504,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						return;
 					}
 					pending.delete( request.id );
-					send( { kind: "image", id: request.id, image }, [ image ] );
+					send(
+						{ kind: "image", id: request.id, image, ...(alpha ? { alpha } : {}) },
+						alpha ? [ image, alpha.pixels.buffer ] : [ image ]
+					);
 				} else if ( request.decode === "png" ) {
 					pngBytes( bytes );
 					const image = await createImageBitmap( new Blob( [ bytes ], { type: "image/png" } ), {
@@ -476,8 +518,13 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						image.close();
 						return;
 					}
+					// World textures read their picking mask here, off the main thread.
+					const alpha = request.pickAlpha ? bitmapPickAlpha( image ) : undefined;
 					pending.delete( request.id );
-					send( { kind: "image", id: request.id, image }, [ image ] );
+					send(
+						{ kind: "image", id: request.id, image, ...(alpha ? { alpha } : {}) },
+						alpha ? [ image, alpha.pixels.buffer ] : [ image ]
+					);
 				} else if ( request.decode === "release" ) {
 					// The live page (fetched no-cache): report the entry bundle it names.
 					const html = new TextDecoder( "utf-8" ).decode( bytes );
@@ -545,6 +592,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				return;
 			}
 			disposed = true;
+			if ( progressTimer !== null ) clearTimeout( progressTimer );
+			progressTimer = null;
 			animationCatalogs.clear();
 			effectBytes = null;
 			effects.dispose();

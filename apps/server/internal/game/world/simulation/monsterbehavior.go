@@ -77,6 +77,12 @@ func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.
 		return nil, nil
 	}
 	tactics := ops.resolveTactics(instance)
+	// Temptation: a tempted monster, and a monster fighting one, plan
+	// against monsters (monstertemptation.go).
+	divisionPlayers, tactics = ops.temptationView(divisionID, instance, mover, divisionPlayers, tactics, nowMs)
+	if frames, targeted, handled := ops.acquireTemptationFoe(divisionID, instance, tactics, mover, divisionPlayers, nowMs); handled {
+		return frames, targeted
+	}
 	if mover.Mode() == monster.MoverWandering && mover.BehaviorDeadlineMs > 0 && nowMs > mover.BehaviorDeadlineMs {
 		// 559EB0 -> event 37 -> 5599A0: enter IDLE before scanning.
 		// WANDER::OnExit is a no-op; do not cancel the movement channel.
@@ -259,6 +265,10 @@ func (ops *MonsterMoverOps) decideIdle(divisionID string, instance monster.Insta
 	return ops.startWanderLeg(divisionID, instance, tactics, mover, nowMs)
 }
 
+// aiEventStart is the tactics event the abnormal callbacks post when a
+// status starts (4A4BD0 / 4A4F70: 0x14).
+const aiEventStart = 0x14
+
 /*
 ==================
 applyTacticsEvents
@@ -274,7 +284,7 @@ func (ops *MonsterMoverOps) applyTacticsEvents(divisionID string, instance monst
 	events := ops.Monsters.takeAIEvents(divisionID, instance.Gid)
 	battle := mover.Mode() == monster.MoverChasing || mover.Mode() == monster.MoverAttacking
 	for _, event := range events {
-		if event.Event != 0x14 || !battle || mover.TargetGID() == 0 {
+		if event.Event != aiEventStart || !battle || mover.TargetGID() == 0 {
 			continue
 		}
 		if event.Kind == 9 && mover.TargetGID() != event.Source {

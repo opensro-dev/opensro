@@ -13,31 +13,66 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+/*
+================
+load
+================
+*/
 async function load( path ) {
 	return import( sourceFileUrl( path ).href );
 }
 const { createGpuAnimationResources } = { ...(await load( "src/engine/runtime/renderer/device/animation.ts" )) };
 globalThis.GPUBufferUsage = { UNIFORM: 1, COPY_DST: 2, STORAGE: 4 };
 const I = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
+/*
+================
+fixture
+================
+*/
 function fixture( { reject = false, failBinding = false } = {} ) {
 	const buffers = [],
 		writes = [],
 		gpu = {
+			/*
+			================
+			createShaderModule
+			================
+			*/
 			createShaderModule() {
 				return {};
 			},
+			/*
+			================
+			createComputePipelineAsync
+			================
+			*/
 			createComputePipelineAsync() {
 				return reject ? Promise.reject( Error( "pipeline failed" ) ) : Promise.resolve( {
+					/*
+					================
+					getBindGroupLayout
+					================
+					*/
 					getBindGroupLayout() {
 						return {};
 					}
 				} );
 			},
+			/*
+			================
+			createBuffer
+			================
+			*/
 			createBuffer( { size, label } ) {
 				const b = {
 					size,
 					label,
 					destroyed: 0,
+					/*
+					================
+					destroy
+					================
+					*/
 					destroy() {
 						this.destroyed++;
 					}
@@ -45,11 +80,21 @@ function fixture( { reject = false, failBinding = false } = {} ) {
 				buffers.push( b );
 				return b;
 			},
+			/*
+			================
+			createBindGroup
+			================
+			*/
 			createBindGroup() {
 				if ( failBinding ) throw Error( "binding failed" );
 				return {};
 			},
 			queue: {
+				/*
+				================
+				writeBuffer
+				================
+				*/
 				writeBuffer( buffer, offset, data, start = 0, length = data.byteLength ) {
 					writes.push( { label: buffer.label, values: [ ...new Float32Array( data, start, length / 4 ) ] } );
 				}
@@ -98,6 +143,11 @@ test("STEP phase cannot round forward across a key; cancellation removes queued 
 	assert.ok( f.writes.at( -1 ).values[0] < .5 );
 	f.owner.cancel( f.source );
 	f.owner.encode( {
+		/*
+		================
+		beginComputePass
+		================
+		*/
 		beginComputePass() {
 			throw Error( "cancelled dispatch" );
 		}
@@ -156,10 +206,20 @@ test("sparse GPU inputs preserve destination indices around CPU-owned slots", as
 	assert.equal( inputs[6], 3 );
 	let count = 0;
 	f.owner.encode( {
+		/*
+		================
+		beginComputePass
+		================
+		*/
 		beginComputePass() {
 			return {
 				setPipeline() {},
 				setBindGroup() {},
+				/*
+				================
+				dispatchWorkgroups
+				================
+				*/
 				dispatchWorkgroups( n ) {
 					count = n;
 				},
@@ -168,5 +228,35 @@ test("sparse GPU inputs preserve destination indices around CPU-owned slots", as
 		}
 	} );
 	assert.equal( count, 2 );
+	f.owner.dispose();
+});
+
+/*
+================
+sharedClipSet
+
+An assembled character is a new model on its body's clips. It must bind
+the clip set already resident, upload only its skeleton, and the clip set
+must outlive every model but the last.
+================
+*/
+test("models on the same clips share one clip buffer until the last one is released", async () => {
+	const f = fixture();
+	await f.owner.ready;
+	const assembled = { ...f.model, nodes: [ ...f.model.nodes ], primitives: [ { ...f.primitive } ] };
+	const other = new Float32Array( 16 );
+	assert.ok( f.owner.prepare( f.source, f.output, f.model, f.primitive, [ { clip: f.clip, time: .1 } ] ) );
+	assert.ok( f.owner.prepare( other, f.output, assembled, assembled.primitives[0], [ { clip: f.clip, time: .2 } ] ) );
+	assert.equal( f.owner.stats().models, 2 );
+	assert.equal( f.owner.stats().clipSets, 1 );
+	assert.equal( f.buffers.filter( b => b.label === "animation-clips" ).length, 1 );
+	assert.equal( f.buffers.filter( b => b.label === "animation-skeleton" ).length, 2 );
+	f.owner.release( f.source );
+	const clips = f.buffers.find( b => b.label === "animation-clips" );
+	assert.equal( clips.destroyed, 0, "the other model still binds the clip set" );
+	f.owner.release( other );
+	assert.equal( clips.destroyed, 1 );
+	assert.equal( f.owner.stats().clipSets, 0 );
+	assert.equal( f.owner.stats().staticBytes, 0 );
 	f.owner.dispose();
 });

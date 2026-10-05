@@ -97,6 +97,13 @@ variable "private_network" {
   default = "0"
 }
 
+# "1" serves /debug/pprof/ on the loopback control listener (sro-nomad
+# deploy -pprof, loopback clusters only).
+variable "transport_pprof" {
+  type    = string
+  default = "0"
+}
+
 variable "allowed_origins" {
   type = string
 }
@@ -129,8 +136,17 @@ variable "beta_player_map" {
   default = "on"
 }
 
-# beta_growth holds every level to the level-3 kill pace and multiplies skill
-# EXP by beta_skill_exp_rate. "off" restores the native rates.
+# Beta builds share the 5000 total mastery budget. Set off for native
+# CH 300 / EU min(2 * level, 240); individual mastery ceilings never change.
+variable "beta_mastery" {
+  type    = string
+  default = "on"
+}
+
+# beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
+# multiplies skill EXP by beta_skill_exp_rate on top, rolls drop passes
+# beta_drop_rate times and multiplies gold heaps by beta_gold_rate. "off"
+# restores the native rates.
 variable "beta_growth" {
   type    = string
   default = "on"
@@ -144,6 +160,11 @@ variable "beta_skill_exp_rate" {
 variable "beta_drop_rate" {
   type    = string
   default = "5"
+}
+
+variable "beta_gold_rate" {
+  type    = string
+  default = "50"
 }
 
 variable "cpu" {
@@ -259,8 +280,12 @@ job "sro-gameworld-__SHARD_ID__" {
       }
 
       env {
-        # Soft Go-runtime budget; this is not a hard total-process RAM cap.
-        GOMEMLIMIT = "128MiB"
+        # Soft Go-runtime budget: three quarters of the task's memory, the
+        # rest left to non-heap memory. It was a flat 128MiB, below what one
+        # player's world already keeps live (about 100MB of monsters, nav and
+        # references): the collector then ran almost without pause and took
+        # 82% of 3.6 cores with one player online.
+        GOMEMLIMIT = "${floor(var.memory_mb * 3 / 4)}MiB"
         SRO_SHARD_CATALOG_PATH             = var.catalog_path
         SRO_SHARD_ID                       = var.shard_id
         SRO_AGENT_URL_REQUIRE              = "1"
@@ -278,9 +303,11 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOVE_CLIENT_CLIP               = var.move_client_clip
         SRO_BETA_STARTER_KIT               = var.beta_starter_kit
         SRO_BETA_PLAYER_MAP                = var.beta_player_map
+        SRO_BETA_MASTERY                   = var.beta_mastery
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate
+        SRO_BETA_GOLD_RATE                 = var.beta_gold_rate
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                 = var.cert_dir
@@ -288,6 +315,7 @@ job "sro-gameworld-__SHARD_ID__" {
         TRANSPORT_KEY_FILE                 = var.transport_key_file
         TRANSPORT_ALLOWED_ORIGINS          = var.allowed_origins
         SRO_TRANSPORT_TLS_ID               = var.transport_tls_id
+        TRANSPORT_PPROF                    = var.transport_pprof
         SRO_RELEASE_ID                     = var.release_id
       }
 

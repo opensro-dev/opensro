@@ -45,8 +45,13 @@ SkillDamageCancel
 
 skc words 0 and 2. CSkillManager_ProcessDamageEffects (5A1612) retires an
 effect when the landing attack's att flags (+0x230 word 0) share a bit
-with Mask, unless a keep roll of KeepPercent succeeds. Word 1, the event
-mask, is SkillReplacement.EventCancelMask.
+with Mask. Word 1, the event mask, is SkillReplacement.EventCancelMask.
+
+KeepPercent is word 2, the chance a masked hit leaves the effect running:
+5A160A..5A1691 adds the caster's getv MUCR and getv DSER modifiers to it
+and retires with RollProbability(100 - keep). The Bard's skc(15,0,80) keeps
+its aura on 80 % of the hits; the shipped hides author 0 and end on every
+masked hit.
 ==================
 */
 type SkillDamageCancel struct {
@@ -55,12 +60,20 @@ type SkillDamageCancel struct {
 	KeepPercent uint32
 }
 
+// FullKeepPercent is a certain keep: no masked hit ends the effect.
+const FullKeepPercent = 100
+
+/*
+==================
+encodedDamageCancel
+==================
+*/
 func encodedDamageCancel(fields []string) SkillDamageCancel {
 	values, ok := encodedLastParameters(fields, tagSkc)
 	if !ok || len(values) < 3 || values[0] == 0 {
 		return SkillDamageCancel{}
 	}
-	return SkillDamageCancel{Present: true, Mask: values[0], KeepPercent: min(values[2], 100)}
+	return SkillDamageCancel{Present: true, Mask: values[0], KeepPercent: min(values[2], FullKeepPercent)}
 }
 
 /*

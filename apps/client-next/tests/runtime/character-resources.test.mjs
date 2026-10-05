@@ -411,12 +411,13 @@ test("equipment reflection images preserve item ownership through assembly, fade
 			release() {}
 		},
 		images = {
-			upload: image => image, /*
-================
-release
+			upload: image => image,
+			/*
+			================
+			release
 
-Represent GPU retirement without granting the fixture device ownership.
-================
+			Represent GPU retirement without granting the fixture device ownership.
+			================
 			*/
 			release() {}
 		};
@@ -564,6 +565,8 @@ const actor = model => ({
 test("shared frame poses remain exact when actors diverge, seek sockets and rejoin", async () => {
 	const { createCharacterPose } = await load( "src/engine/foundation/animation/animation-pose.ts" );
 	const source = model();
+	// A body-volume bone: actors with equal clips but different volumes must not share.
+	source.nodes[0].name = "Bip01 Spine";
 	source.images = [];
 	source.primitives[0].image = -1;
 	source.clips = [ {
@@ -646,6 +649,7 @@ test("shared frame poses remain exact when actors diverge, seek sockets and rejo
 			gid,
 			clip: "move",
 			time: frame * .031 + (frame % 4 === 0 ? i * .17 : 0),
+			bodyVolume: frame % 5 === 0 ? { index: i, female: i === 2 } : undefined,
 			layers: frame % 7 === 0 ?
 				[ { clip: "move", time: i * .23, loop: false, weight: .4, lane: "event" }, {
 					clip: "move",
@@ -663,6 +667,7 @@ test("shared frame poses remain exact when actors diverge, seek sockets and rejo
 		const expected = new Float32Array( 48 );
 		for ( let i = 0; i < 3; i++ ) {
 			const row = rows[i];
+			oracle[i].bodyVolume( row.bodyVolume?.index, row.bodyVolume?.female );
 			oracle[i].evaluate( row.clip, row.time, row.loop, row.layers );
 			oracle[i].palette( source.primitives[0], expected, i * 16 );
 		}
@@ -1312,12 +1317,13 @@ test("one source class bounds both the decode and the reservation an undecoded s
 		() =>
 			createCharacters().model( "over", measured( [ { width: 2048, height: 2048 } ] ), [ {
 				width: 2048,
-				height: 2048, /*
-================
-close
+				height: 2048,
+				/*
+				================
+				close
 
-Expose bitmap retirement to the fixture without creating a browser resource.
-================
+				Expose bitmap retirement to the fixture without creating a browser resource.
+				================
 				*/
 				close() {}
 			} ] ),
@@ -1328,12 +1334,13 @@ Expose bitmap retirement to the fixture without creating a browser resource.
 	let serial = 0;
 	const image = {
 		width: 2048,
-		height: 1024, /*
-================
-close
+		height: 1024,
+		/*
+		================
+		close
 
-Expose bitmap retirement to the fixture without creating a browser resource.
-================
+		Expose bitmap retirement to the fixture without creating a browser resource.
+		================
 		*/
 		close() {}
 	};
@@ -1382,12 +1389,13 @@ Expose bitmap retirement to the fixture without creating a browser resource.
 			Admit the completed fixture model through the renderer boundary.
 			================
 			*/
-			setCharacterModel() {}, /*
-================
-retainCharacterModels
+			setCharacterModel() {},
+			/*
+			================
+			retainCharacterModels
 
-Observe the source membership requested by the resource owner.
-================
+			Observe the source membership requested by the resource owner.
+			================
 			*/
 			retainCharacterModels() {}
 		},
@@ -1488,12 +1496,13 @@ test("no interleaving of frames, loads and effects unadmits a decoded source", a
 						Admit the completed fixture model through the renderer boundary.
 						================
 						*/
-						setCharacterModel() {}, /*
-================
-retainCharacterModels
+						setCharacterModel() {},
+						/*
+						================
+						retainCharacterModels
 
-Observe the source membership requested by the resource owner.
-================
+						Observe the source membership requested by the resource owner.
+						================
 						*/
 						retainCharacterModels() {}
 					},
@@ -1696,22 +1705,9 @@ test("actor reordering and duplicate-model count changes do not invalidate model
 	renderer.dispose( geometry, images );
 });
 
-test("injected character profiling observes pose lifetime without changing palette output", () => {
-	const counts = [], stages = [], palettes = [], poseSamples = [];
-	const renderer = createCharacters( {
-		phases: {
-			/*
-			================
-			begin
-			The renderer must pass its observer to real pose materialization.
-			================
-			*/
-			begin( model, reason ) {
-				poseSamples.push( reason );
-				return null;
-			}
-		}
-	} );
+test("the injected frame probe observes character stages and pose lifetime without changing palette output", () => {
+	const counts = [], stages = [], palettes = [];
+	const renderer = createCharacters();
 	const source = model();
 	source.images = [];
 	source.primitives[0].image = -1;
@@ -1727,21 +1723,23 @@ test("injected character profiling observes pose lifetime without changing palet
 			palettes.push( [ ...data.bones ] );
 			return {};
 		},
-		updateInstances: draw => draw, /*
-================
-updateBones
+		updateInstances: draw => draw,
+		/*
+		================
+		updateBones
 
-Accept palette updates through the geometry capability under test.
-================
+		Accept palette updates through the geometry capability under test.
+		================
 		*/
 		updateBones( draw, bones ) {
 			palettes.push( [ ...bones ] );
-		}, /*
-================
-release
+		},
+		/*
+		================
+		release
 
-Represent GPU retirement without granting the fixture device ownership.
-================
+		Represent GPU retirement without granting the fixture device ownership.
+		================
 		*/
 		release() {}
 	};
@@ -1755,12 +1753,13 @@ Represent GPU retirement without granting the fixture device ownership.
 		*/
 		upload() {
 			return {};
-		}, /*
-================
-release
+		},
+		/*
+		================
+		release
 
-Represent GPU retirement without granting the fixture device ownership.
-================
+		Represent GPU retirement without granting the fixture device ownership.
+		================
 		*/
 		release() {}
 	};
@@ -1774,37 +1773,41 @@ Represent GPU retirement without granting the fixture device ownership.
 		Start the injected render profiling observation.
 		================
 		*/
-		renderBegin() {}, /*
-================
-renderMark
+		renderBegin() {},
+		/*
+		================
+		renderMark
 
-Observe a render phase without changing frame behavior.
-================
+		Observe a render phase without changing frame behavior.
+		================
 		*/
-		renderMark() {}, /*
-================
-characterBegin
+		renderMark() {},
+		/*
+		================
+		characterBegin
 
-Start the injected character profiling observation.
-================
+		Start the injected character profiling observation.
+		================
 		*/
 		characterBegin() {
 			stages.push( "begin" );
-		}, /*
-================
-characterMark
+		},
+		/*
+		================
+		characterMark
 
-Observe a character phase without changing pose behavior.
-================
+		Observe a character phase without changing pose behavior.
+		================
 		*/
 		characterMark( stage ) {
 			stages.push( stage );
-		}, /*
-================
-characterCount
+		},
+		/*
+		================
+		characterCount
 
-Record a profiling counter through the injected observer.
-================
+		Record a profiling counter through the injected observer.
+		================
 		*/
 		characterCount( name, value = 1 ) {
 			counts.push( [ name, value ] );
@@ -1815,7 +1818,6 @@ Record a profiling counter through the injected observer.
 		renderer.actors( [ actor( "body" ) ] );
 		renderer.prepare( geometry, images, 1 );
 		const observed = palettes.at( -1 );
-		assert.ok( poseSamples.length > 0, "constructor observer reaches pose materialization" );
 		assert.deepEqual( stages, [ "begin", "character-plan", "character-poses", "character-upload" ] );
 		assert.ok( counts.some( ( [name, value] ) => name === "pose-created" && value === 1 ) );
 		renderer.actors( [] );

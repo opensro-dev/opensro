@@ -17,6 +17,12 @@ const CASES = [
 	[ "textdataname.txt", "SN_ZONE_25031_2", "Karakoram South Sock", "Karakoram South Dock" ],
 	[ "textdataname.txt", "SN_ITEM_QNO_CH_EUROPE_3_02", "Blood Devil 's leaf", "Blood Devil's leaf" ],
 	[
+		"textuisystem.txt",
+		"UIIT_MSG_INTERACTION_FAIL_OUT_OF_REQUIRED_LEVEL_FOR_TELEPORT",
+		"Cannot transport because your level is too low.",
+		"Cannot transport because your level does not meet the requirement."
+	],
+	[
 		"textquest.txt",
 		"SN_CON_QSP_ALL_POTION_3_01",
 		"Collect  Purification Seed (%d)",

@@ -153,7 +153,7 @@ func (rt *Runtime) releaseTaunt(c tauntCast) (OpResult, skillCastDecision) {
 		if code != 0 {
 			return false
 		}
-		rt.startSkillCast(c.division, c.character, c.now)
+		rt.startSkillCast(c.division, c.character, c.skill, c.now)
 		rt.commitOffensivePhaseCost(c.division, c.character, c.skill, cost, c.now, false)
 		return true
 	}) {
@@ -167,7 +167,7 @@ func (rt *Runtime) releaseTaunt(c tauntCast) (OpResult, skillCastDecision) {
 	cast := wire.SkillCastSuccess{SkillId: c.skill.ID, CasterGid: gid, InstanceToken: token}
 	var targets []wire.SkillAreaTarget
 	for _, target := range victims {
-		rt.commitAggression(c.division, target.Gid, simulation.HostilityEvent{Attacker: gid, Aggression: aggression}, c.now)
+		rt.commitAggression(c.division, target.Gid, simulation.HostilityEvent{Attacker: gid, Aggression: int32(aggression)}, c.now)
 		targets = append(targets, wire.SkillAreaTarget{GID: target.Gid, Impacts: []wire.SkillCastTargetImpact{{ResultFlags: 1}}})
 	}
 	open := wire.SkillCastUntargetedFrame(cast)

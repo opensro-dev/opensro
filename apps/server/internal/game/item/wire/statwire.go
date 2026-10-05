@@ -249,6 +249,13 @@ const ErrCodeSkillLearnRefused uint8 = 0x01
 // is an arbitrary-but-harmless placeholder; the value is behaviourally inert.
 const ErrCodeStatAllocRefused uint8 = 0x02
 
+// EncodePointsStatUpdate is 0x30B3 type 3: [u8 3][u16 statPoints], the
+// ABSOLUTE remaining stat points. For a pool that moved without its own ack
+// (a stat recall); never alongside an allocation ack.
+func EncodePointsStatUpdate(statPoints uint16) []byte {
+	return NewWriter(3).U8(PointsTypeStat).U16(statPoints).Payload()
+}
+
 // EncodePointsSkillUpdate is 0x30B3 type 2: [u8 2][u32 skillPoints][u8
 // notify]. The value is the character's ABSOLUTE remaining skill points.
 //

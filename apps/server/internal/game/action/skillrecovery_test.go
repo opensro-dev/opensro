@@ -81,7 +81,13 @@ func TestSelfRecoveryCommitsHealingCostAndCompleteBracket(t *testing.T) {
 	}
 
 	token := binary.LittleEndian.Uint32(result.Frames[0].Payload[10:])
-	assertQueuedAction(t, rt.HandleTargetInteract(testDivision, c, request))
+	// 4ACC40 validates the press (mask 0x37) before the queue: the same skill,
+	// still cooling down, is refused and never replaces the running cast.
+	refused := rt.HandleTargetInteract(testDivision, c, request)
+	assertOpcodes(t, refused.Frames, wire.OpSkillCastResult)
+	if got := refused.Frames[0].Payload; len(got) != 2 || got[0] != 2 || got[1] != 0x05 {
+		t.Fatalf("busy press on cooldown = % X, want refusal 0x3005", got)
+	}
 	rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Cancel: true}.Encode())
 	if *c.CurrentHP != 90 {
 		t.Fatal("busy cast recovered twice")
@@ -370,8 +376,8 @@ func TestShippedTargetHealReachesPartyMember(t *testing.T) {
 	spawn := *world.Spawn
 	world.Spawn = &spawn
 	m.World = &world
-	deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision],
+	fixtureCharacters(deps.Characters)[testDivision] = append(
+		fixtureCharacters(deps.Characters)[testDivision],
 		&m,
 	)
 
@@ -452,8 +458,8 @@ func newSupportPair(t *testing.T, skills ...enterworld.SkillRow) supportPair {
 	world.Spawn = &spawn
 	m.World = &world
 	deps := rt.deps.(*enterworld.Deps)
-	deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision],
+	fixtureCharacters(deps.Characters)[testDivision] = append(
+		fixtureCharacters(deps.Characters)[testDivision],
 		&m,
 	)
 
@@ -728,7 +734,11 @@ func TestResurrectionProposalAndAnswer(t *testing.T) {
 	consent := p.rt.ResurrectionConsent()
 
 	var granted int64
-	p.rt.UpdateExperience = func(_ *enterworld.Character, exp, _ int64, _ uint32) ([]wire.Frame, bool) {
+	p.rt.UpdateExperience = func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) {
+		t.Fatal("a refund went through the gain updater")
+		return nil, false
+	}
+	p.rt.RefundExperience = func(_ *enterworld.Character, exp int64) ([]wire.Frame, bool) {
 		granted = exp
 		return []wire.Frame{{Opcode: wire.OpExpUpdate}}, true
 	}
@@ -850,7 +860,7 @@ func TestResurrectionProposalAndAnswer(t *testing.T) {
 	if err != nil || life.StateType != wire.StateChannelLife || life.Value == wire.LifeStateDead {
 		t.Fatalf("life frame %+v %v", life, err)
 	}
-	if len(peers) != 2 || peers[1].Opcode != wire.OpObjectStateRefresh {
+	if len(peers) != 3 || peers[1].Opcode != wire.OpObjectStateRefresh || peers[2].Opcode != wire.OpObjectStateRefresh {
 		t.Fatalf("peer frames %+v", peers)
 	}
 	consent.ApplyConsent(nil, testDivision, p.m, 1, 1)

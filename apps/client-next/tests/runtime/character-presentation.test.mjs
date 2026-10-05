@@ -276,9 +276,9 @@ function fixture(
 	const assets = {
 		available: () => 4,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request( url, limit, decode ) {
 			const id = ++next;
@@ -287,27 +287,27 @@ request
 			return id;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel( id ) {
 			pending.delete( id );
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take( id ) {
 			const job = pending.get( id );
 			if ( !job || metadataAdmission.blockedPaths?.has( job.url ) ) return null;
-			if ( metadataAdmission.failOnce && job.url.endsWith( "/data/skillData.json" ) ) {
+			if ( metadataAdmission.failOnce && job.url.endsWith( "/data/characterActionData.json" ) ) {
 				metadataAdmission.failOnce = false;
 				pending.delete( id );
 				return { kind: "error", error: "Metadata temporarily unavailable" };
 			}
-			if ( metadataAdmission.pending && job.url.endsWith( "/data/skillData.json" ) ) return null;
+			if ( metadataAdmission.pending && job.url.endsWith( "/data/characterActionData.json" ) ) return null;
 			pending.delete( id );
 			if ( metadataAdmission.appearance ) {
 				const value = job.url.endsWith( "/char/roster.json" ) ?
@@ -347,7 +347,7 @@ take
 					).buffer
 				};
 			}
-			if ( metadataAdmission.rows && job.url.endsWith( "/data/skillData.json" ) ) {
+			if ( metadataAdmission.rows && job.url.endsWith( "/data/characterActionData.json" ) ) {
 				return {
 					kind: "bytes",
 					buffer: new TextEncoder().encode(
@@ -355,14 +355,14 @@ take
 					).buffer
 				};
 			}
-			if ( reference && job.url.endsWith( "/data/skillData.json" ) ) {
+			if ( reference && job.url.endsWith( "/data/characterActionData.json" ) ) {
 				const data = JSON.parse(
-					readFileSync( path.join( publicRoot, "assets/data/skillData.json" ), "utf8" )
+					readFileSync( path.join( publicRoot, "assets/data/characterActionData.json" ), "utf8" )
 				);
 				data.effectAppearanceStores = [ [ 2 ], [ 2 ] ];
 				return { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( data ) ).buffer };
 			}
-			if ( audio && job.url.endsWith( "/data/skillData.json" ) ) {
+			if ( audio && job.url.endsWith( "/data/skillAudioData.json" ) ) {
 				return {
 					kind: "bytes",
 					buffer: new TextEncoder().encode(
@@ -392,7 +392,10 @@ take
 					).buffer
 				};
 			}
-			if ( job.url.endsWith( "/anim/manifest.json" ) || job.url.endsWith( "/data/skillData.json" ) ) {
+			if (
+				job.url.endsWith( "/anim/manifest.json" ) || job.url.endsWith( "/data/skillAudioData.json" ) ||
+				job.url.endsWith( "/data/characterActionData.json" )
+			) {
 				return { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( { models: {} } ) ).buffer };
 			}
 			if ( job.url.endsWith( "/itemdrop/manifest.json" ) ) {
@@ -476,72 +479,75 @@ take
 				kind: "bytes",
 				buffer: new TextEncoder().encode( JSON.stringify( {
 					recoveryByCodename: postures ? { NPC_1: 2000, NPC_2: 2000 } : undefined,
-					models: Array.from( { length: modelCount }, ( _, i ) => i + 1 ).map( refObjId => ({
-						refObjId,
-						eventRain,
-						codename: metadataAdmission.appearance?.roster.models.find( r =>
-							r.refObjId === refObjId
-						)?.codename ?? "NPC_" + refObjId,
-						particleModifiers: drops ? undefined : modifiers,
-						modifierSets: modifiers?.map( m => ({
-							kind: m.kind,
-							stateId: m.stateId,
-							animationSetName: m.animationSetName,
-							count: 1,
-							firstBaseWord4: m.baseWords?.[4] ?? 0
-						}) ),
-						animationBindings,
-						glb: `/assets/${refObjId}.glb`,
-						animationStates: metadataAdmission.appearance?.roster.models.find( r =>
-							r.refObjId === refObjId
-						)?.animationStates ?? animationAudio?.states ?? (host ?
-							{
-								"attached-default-188": {
-									loop: true,
-									durationMs: 1000,
-									soundEvents: [],
-									trackEvents: [],
-									timeWarpCurve: { scale: 0, records: [] }
-								}
-							} :
-							undefined),
-						clips: [
-							"stand",
-							"walk",
-							"run",
-							"pick",
-							"death",
-							...(metadataAdmission.appearance?.overrideTest ? [ "native:avatar_wing:7" ] : []),
-							...(metadataAdmission.appearance?.extraClips ?? []),
-							...(host ? [ "attached-default-188" ] : []),
-							...(idles ? [ "idle122", "idle61", "idle81" ] : []),
-							...(postures ?
-								[
-									"charselect-state13",
-									"charselect-state14",
-									"charselect-state15",
-									"deathloop",
-									"down",
-									"downwait",
-									"downdamage",
-									"wakeup",
-									"deathquick",
-									"emote0",
-									"emote2",
-									"emote6"
-								] :
-								[])
-						]
-					}) )
+					models: [
+						...(options.rides ?? []),
+						...Array.from( { length: modelCount }, ( _, i ) => i + 1 ).map( refObjId => ({
+							refObjId,
+							eventRain,
+							codename: metadataAdmission.appearance?.roster.models.find( r =>
+								r.refObjId === refObjId
+							)?.codename ?? "NPC_" + refObjId,
+							particleModifiers: drops ? undefined : modifiers,
+							modifierSets: modifiers?.map( m => ({
+								kind: m.kind,
+								stateId: m.stateId,
+								animationSetName: m.animationSetName,
+								count: 1,
+								firstBaseWord4: m.baseWords?.[4] ?? 0
+							}) ),
+							animationBindings,
+							glb: `/assets/${refObjId}.glb`,
+							animationStates: metadataAdmission.appearance?.roster.models.find( r =>
+								r.refObjId === refObjId
+							)?.animationStates ?? animationAudio?.states ?? (host ?
+								{
+									"attached-default-188": {
+										loop: true,
+										durationMs: 1000,
+										soundEvents: [],
+										trackEvents: [],
+										timeWarpCurve: { scale: 0, records: [] }
+									}
+								} :
+								undefined),
+							clips: [
+								"stand",
+								"walk",
+								"run",
+								"pick",
+								"death",
+								...(metadataAdmission.appearance?.overrideTest ? [ "native:avatar_wing:7" ] : []),
+								...(metadataAdmission.appearance?.extraClips ?? []),
+								...(host ? [ "attached-default-188" ] : []),
+								...(idles ? [ "idle122", "idle61", "idle81" ] : []),
+								...(postures ?
+									[
+										"charselect-state13",
+										"charselect-state14",
+										"charselect-state15",
+										"deathloop",
+										"down",
+										"downwait",
+										"downdamage",
+										"wakeup",
+										"deathquick",
+										"emote0",
+										"emote2",
+										"emote6"
+									] :
+									[])
+							]
+						}) )
+					]
 				} ) ).buffer
 			};
 		}
 	};
 	const renderer = {
 		/*
-================
-setFootprints
-================
+		================
+		setFootprints
+		================
 		*/
 		setFootprints( rows ) {
 			footprints.push( rows );
@@ -553,9 +559,9 @@ setFootprints
 		characterSocket: () => null,
 		setCharacterModel: characters.model,
 		/*
-================
-setCharacterAssembly
-================
+		================
+		setCharacterAssembly
+		================
 		*/
 		setCharacterAssembly( id, base, parts ) {
 			assemblies.push( { id, base, parts } );
@@ -563,9 +569,9 @@ setCharacterAssembly
 		},
 		retainCharacterModels: characters.retain,
 		/*
-================
-setCharacterActors
-================
+		================
+		setCharacterActors
+		================
 		*/
 		setCharacterActors( value, portraits = [] ) {
 			actors = value;
@@ -574,33 +580,33 @@ setCharacterActors
 	};
 	const gpu = {
 		/*
-================
-upload
-================
+		================
+		upload
+		================
 		*/
 		upload( data ) {
 			instances.push( data.instances.slice() );
 			return {};
 		},
 		/*
-================
-updateInstances
-================
+		================
+		updateInstances
+		================
 		*/
 		updateInstances( draw, value ) {
 			instances.push( value.slice() );
 			return draw;
 		},
 		/*
-================
-updateBones
-================
+		================
+		updateBones
+		================
 		*/
 		updateBones() {},
 		/*
-================
-release
-================
+		================
+		release
+		================
 		*/
 		release() {
 			released++;
@@ -634,33 +640,33 @@ release
 			return released;
 		},
 		/*
-================
-step
-================
+		================
+		step
+		================
 		*/
 		step( entities, time, gameplay = null ) {
 			presentation.step( entities, gameplay, time );
 			return characters.prepare( gpu, {
 				/*
-================
-upload
-================
+				================
+				upload
+				================
 				*/
 				upload() {
 					return {};
 				},
 				/*
-================
-release
-================
+				================
+				release
+				================
 				*/
 				release() {}
 			}, 1 );
 		},
 		/*
-================
-warm
-================
+		================
+		warm
+		================
 		*/
 		warm() {
 			for ( let t = 0; t < 30 && actors.length === 0; t++ ) this.step( [ entity( 1 ) ], t / 100 );
@@ -668,9 +674,9 @@ warm
 			assert.equal( presentation.error(), null );
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
 			presentation.dispose();
@@ -1075,9 +1081,9 @@ test("rejected manifest publishes no rows and repaired retry commits completely"
 	const assets = {
 		available: () => 4,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request( url, limit, decode ) {
 			jobs.set( ++id, { url, decode } );
@@ -1085,17 +1091,17 @@ request
 			return id;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel( id ) {
 			jobs.delete( id );
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take( id ) {
 			const job = jobs.get( id );
@@ -1377,9 +1383,9 @@ test("customization prepares both genders and swaps every figure without a new r
 	const assets = {
 		available: () => 4,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request( url, limit, decode ) {
 			pending.set( ++serial, { url, decode } );
@@ -1387,17 +1393,17 @@ request
 			return serial;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel( id ) {
 			pending.delete( id );
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take( id ) {
 			const job = pending.get( id );
@@ -1413,27 +1419,27 @@ take
 	};
 	const renderer = {
 		/*
-================
-setCharacterModel
-================
+		================
+		setCharacterModel
+		================
 		*/
 		setCharacterModel() {},
 		/*
-================
-setCharacterAssembly
-================
+		================
+		setCharacterAssembly
+		================
 		*/
 		setCharacterAssembly() {},
 		/*
-================
-retainCharacterModels
-================
+		================
+		retainCharacterModels
+		================
 		*/
 		retainCharacterModels() {},
 		/*
-================
-setCharacterActors
-================
+		================
+		setCharacterActors
+		================
 		*/
 		setCharacterActors( value ) {
 			actors = value;
@@ -3143,9 +3149,9 @@ test("berserk hair publishes compound attachments only after the resource is rea
 		);
 		let now = 0;
 		/*
-================
-step
-================
+		================
+		step
+		================
 		*/
 		function step( active ) {
 			for ( let i = 0; i < 30; i++ ) {
@@ -3169,9 +3175,9 @@ step
 			}
 		}
 		/*
-================
-children
-================
+		================
+		children
+		================
 		*/
 		function children() {
 			return f.actors.filter( a => a.model === hair.glb );
@@ -3197,6 +3203,64 @@ children
 		assert.equal( children().length, 2 );
 		f.presentation.step( [], null, now + 1 );
 		assert.equal( children().length, 0, "despawn retires private skeletons" );
+		f.dispose();
+	}
+});
+
+test("a characterInfo ride joins its rider, follows its motions and links by the native ride mode", () => {
+	const ride = {
+		kind: "ride",
+		codename: "res/mob/ride.bsr",
+		glb: "/assets/npc/mob/ride.glb",
+		clips: [ "stand", "walk" ],
+		requiredBy: [ "NPC_1", "NPC_2", "NPC_3" ]
+	};
+	// NPC_1 rides on the saddle (none), NPC_2 is RT_FIXED, NPC_3 is RT_DUMMY.
+	const rows = [ 0, 1, 2 ].map( mode => ({
+		codename: "NPC_" + (mode + 1),
+		soundProfileName: "MOB_TEST",
+		riderTransformMode: mode
+	}) );
+	const f = fixture(
+		{},
+		3,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{
+			rows
+		},
+		{ rides: [ ride ] }
+	);
+	try {
+		f.warm();
+		const riders = [ 1, 2, 3 ].map( gid => entity( gid, { kind: "monster" } ) );
+		for ( let i = 0; i < 40; i++ ) f.step( riders, i / 10 );
+		const rides = f.actors.filter( actor => actor.model === ride.glb );
+		assert.equal( rides.length, 3, "every rider owns one ride" );
+		const rideOf = gid => rides.find( actor => actor.pickOwner === gid );
+		const actorOf = gid => f.actors.find( actor => actor.gid === gid );
+		assert.equal( actorOf( 1 )?.mountedOn, rideOf( 1 )?.gid, "mode 0 seats the rider on the saddle" );
+		assert.equal( actorOf( 2 )?.mountedOn, undefined );
+		assert.equal( rideOf( 2 )?.attachment, undefined, "RT_FIXED links neither way" );
+		assert.equal( actorOf( 3 )?.mountedOn, undefined );
+		assert.deepEqual( rideOf( 3 )?.attachment, { gid: 3, bone: "", root: true, offset: [ 0, 0, 0 ] } );
+		for ( const gid of [ 1, 2, 3 ] ) {
+			assert.equal( rideOf( gid )?.clip, actorOf( gid )?.clip, "the ride plays the rider's motion" );
+			assert.equal( rideOf( gid )?.scale, 1 );
+		}
+		f.step( riders.slice( 1 ), 4 );
+		assert.equal( f.actors.some( actor => actor.pickOwner === 1 ), false, "the ride leaves with its rider" );
+	} finally {
 		f.dispose();
 	}
 });

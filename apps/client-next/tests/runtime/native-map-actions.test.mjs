@@ -16,9 +16,10 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 const asset = p => JSON.parse( readFileSync( "../../.generated/client-public/assets/" + p, "utf8" ) );
-const { decodeMapLabels, decodeMapIcons, worldMapPresentation } = await import(
+const { decodeMapLabels, decodeMapIcons, worldMapPresentation, worldMapDemand, worldMapPages } = await import(
 	"../../src/engine/foundation/ui/world-map.ts"
 );
+const { mapLabelVisible } = await import( "../../src/engine/foundation/ui/world-map.ts" );
 const { decodeActionSlots } = await import( "../../src/engine/foundation/ui/action-layout.ts" );
 const { rosterPositions } = await import( "../../src/engine/foundation/ui/minimap-markers.ts" );
 test("published map labels resolve and share the scrolling tile origin", () => {
@@ -32,8 +33,8 @@ test("published map labels resolve and share the scrolling tile origin", () => {
 	const p = { regionId: 0x62a8, x: 0, y: 0, z: 0, angle: 0 }, clip = [ 10, 20, 640, 384 ];
 	const q = worldMapPresentation( p, 1, clip, [ 0, 0 ], p, labels );
 	const got = q.labels.find( r => r.label === label );
-	assert.equal( defined( got ).x, q.quads[0].rect[0] + 413 );
-	assert.equal( defined( got ).y, q.quads[0].rect[1] + 459 );
+	assert.equal( defined( got ).x, q.background[0].rect[0] + 413 );
+	assert.equal( defined( got ).y, q.background[0].rect[1] + 459 );
 	assert.ok( q.labels.every( r => r.label.page === 1 ) );
 });
 test("retail action records occupy the authored group/index slots", () => {
@@ -58,16 +59,16 @@ test("retail action records occupy the authored group/index slots", () => {
 test("world map drag keeps the clamped position so reversing moves at once (579920)", () => {
 	const p = { regionId: 97 * 256 + 168, x: 960, y: 0, z: 960, angle: 0 }, clip = [ 0, 0, 640, 384 ];
 	const edge = worldMapPresentation( p, 1, clip, [ 5000, 0 ], p );
-	assert.equal( edge.quads[0].rect[0], 0, "overshoot pins the left edge" );
+	assert.equal( edge.background[0].rect[0], 0, "overshoot pins the left edge" );
 	const back = worldMapPresentation( p, 1, clip, [ edge.pan[0] - 10, edge.pan[1] ], p );
-	assert.equal( back.quads[0].rect[0], -10, "the stored pan has no overshoot to unwind" );
+	assert.equal( back.background[0].rect[0], -10, "the stored pan has no overshoot to unwind" );
 	// Opening Jangan from Donhwang centres far off the page (57A570 clamps it);
 	// the returned pan is the pinned edge, so the first drag step moves the map.
 	const far = { regionId: 101 * 256 + 152, x: 0, y: 0, z: 0, angle: 0 },
 		pinned = worldMapPresentation( p, 1, clip, [ 0, 0 ], far );
-	assert.equal( pinned.quads[0].rect[0], 0 );
+	assert.equal( pinned.background[0].rect[0], 0 );
 	const moved = worldMapPresentation( p, 1, clip, [ pinned.pan[0] - 10, pinned.pan[1] ], far );
-	assert.equal( moved.quads[0].rect[0], -10 );
+	assert.equal( moved.background[0].rect[0], -10 );
 });
 test("world map admits native town and fortress icons and clips town click areas", () => {
 	const icons = decodeMapIcons( asset( "data/worldmap-localinfo.json" ) ),
@@ -77,7 +78,7 @@ test("world map admits native town and fortress icons and clips town click areas
 	assert.ok( icons.some( i => i.path.includes( "/icon/npc/fortress_manager.png" ) ) );
 	const p = { regionId: 0x62a8, x: 0, y: 0, z: 0, angle: 0 };
 	const q = worldMapPresentation( p, 0, [ 0, 0, 640, 384 ], [ 0, 0 ], p, [], icons );
-	assert.ok( q.quads.some( q => q.texture.endsWith( "city_jangan.png" ) ) );
+	assert.ok( q.overlay.some( q => q.texture.endsWith( "city_jangan.png" ) ) );
 	assert.ok( q.hits.some( h => h.icon.destination === 1 ) );
 	assert.ok( q.hits.every( ( { rect: r } ) => r[0] >= 0 && r[1] >= 0 && r[0] + r[2] <= 640 && r[1] + r[3] <= 384 ) );
 });
@@ -98,7 +99,6 @@ test("world map paints in 57FE60 order and projects every marker like the player
 	assert.ok(
 		q.overlay.length > 0 && q.overlay.every( r => r.texture.includes( "/xy_" ) || r.texture.includes( "/icon/" ) )
 	);
-	assert.deepEqual( q.quads, [ ...q.background, ...q.overlay, ...q.markers ] );
 	assert.equal(
 		defined( q.markers.at( -1 ) ).texture,
 		"/assets/images/Media_extracted/interface/minimap/mm_sign_character.png"
@@ -177,4 +177,45 @@ test("macro world map resolves and projects town labels on page 0", () => {
 	// Jangan label and icon must coincide geographically
 	assert.ok( Math.abs( defined( jangan ).x - (janganIcon.rect[0] + janganIcon.rect[2] / 2) ) < 40 );
 	assert.ok( Math.abs( defined( jangan ).y - (janganIcon.rect[1] + janganIcon.rect[3] / 2) ) < 40 );
+});
+
+test("only labels reaching the map window are laid out", () => {
+	const labels = decodeMapLabels(
+		asset( "data/worldmap-localinfo.json" ),
+		asset( "text/textdataname.en.json" ).entries
+	);
+	const p = { regionId: 0x62a8, x: 0, y: 0, z: 0, angle: 0 }, clip = [ 10, 20, 640, 384 ];
+	const projected = worldMapPresentation( p, 1, clip, [ 0, 0 ], p, labels ).labels;
+	const shown = projected.filter( row => mapLabelVisible( [ row.x - 40, row.y, 80, 12 ], clip ) );
+	assert.ok( shown.length > 0 && shown.length < projected.length, `${shown.length} of ${projected.length}` );
+	// The ink margin keeps a label just past the edge, whose glyphs can still show.
+	assert.equal( mapLabelVisible( [ 0, 0, 10, 10 ], [ 25, 0, 100, 100 ] ), true );
+	assert.equal( mapLabelVisible( [ 0, 0, 10, 10 ], [ 27, 0, 100, 100 ] ), false );
+	assert.equal( mapLabelVisible( [ 200, 50, 10, 10 ], [ 0, 0, 100, 100 ] ), false );
+	assert.equal( mapLabelVisible( [ 50, 50, 10, 10 ], [ 0, 0, 100, 100 ] ), true );
+});
+
+test("a closed map demands exactly the page and icon images the open map draws", () => {
+	const icons = decodeMapIcons( asset( "data/worldmap-localinfo.json" ) ), clip = [ 100, 80, 700, 500 ];
+	let seed = 3, compared = 0;
+	const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+	for ( const pageId of [ 0, ...worldMapPages().map( page => page.id ) ] ) {
+		for ( let trial = 0; trial < 40; trial++ ) {
+			const pose = {
+				regionId: (90 + (random() * 30 | 0)) << 8 | (130 + (random() * 40 | 0)),
+				x: random() * 1920,
+				y: 0,
+				z: random() * 1920,
+				angle: 0
+			};
+			const pan = [ (random() - .5) * 4000, (random() - .5) * 1000 ];
+			const drawn = worldMapPresentation( pose, pageId, clip, pan, pose, [], icons );
+			const expected = [ ...drawn.background, ...drawn.overlay ].map( quad => quad.texture );
+			const demand = [];
+			worldMapDemand( pageId, clip, pan, pose, icons, demand );
+			assert.deepEqual( demand, expected, `page ${pageId} trial ${trial}` );
+			compared += expected.length;
+		}
+	}
+	assert.ok( compared > 200, `only ${compared} images compared` );
 });

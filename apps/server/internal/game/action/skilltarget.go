@@ -236,6 +236,9 @@ func (rt *Runtime) advanceSupportCastIntent(character *enterworld.Character, int
 	if skill.Duplicate.Pinned {
 		return prependOpResult(transition, rt.acceptDuplicate(division, character, rt.characterSnapshot(division, character), cast, skill, nowMs))
 	}
+	if skill.Threat.Decrease {
+		return prependOpResult(transition, rt.acceptDiscordWave(division, character, rt.characterSnapshot(division, character), cast, skill, nowMs))
+	}
 	result, _ := rt.acceptSupportSkillPhase(division, character, rt.characterSnapshot(division, character), cast, skill, nowMs, nil)
 	return prependOpResult(transition, result)
 }

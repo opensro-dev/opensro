@@ -7,7 +7,11 @@ growth_test.go - the closed-beta growth rates
 */
 package progression
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/game/enterworld"
+)
 
 /*
 ================
@@ -51,9 +55,14 @@ func TestNativeGrowthLeavesEveryGainUntouched(t *testing.T) {
 
 func TestBetaGrowthHoldsEveryLevelToTheLevelOnePace(t *testing.T) {
 	beta := GrowthRates{Enabled: true, SkillExpRate: 100}
-	// Level 50 needs 400 kills against level 1's 5: a gain is worth 80x.
-	if exp, sp := beta.scale(growthLevels{}, 50, 1_000, 7); exp != 80_000 || sp != 700 {
+	// Level 50 needs 400 kills against level 1's 5: a gain is worth 80x,
+	// and skill EXP keeps that pace before its own 100x.
+	if exp, sp := beta.scale(growthLevels{}, 50, 1_000, 7); exp != 80_000 || sp != 7*80*100 {
 		t.Fatalf("level 50 beta gain = %d/%d", exp, sp)
+	}
+	// Level 1 skill EXP gets only the flat rate.
+	if _, sp := beta.scale(growthLevels{}, 1, 0, 7); sp != 700 {
+		t.Fatalf("level 1 beta skill gain = %d", sp)
 	}
 	// Level 3 needs 10 kills: twice the level-1 pace.
 	if exp, _ := beta.scale(growthLevels{}, 3, 10, 0); exp != 20 {
@@ -79,7 +88,8 @@ func TestBetaGrowthSwitchReadsTheEnvironment(t *testing.T) {
 	}
 	t.Setenv(EnvBetaGrowth, "on")
 	t.Setenv(EnvBetaSkillExpRate, "25")
-	if rates := BetaGrowthFromEnv(); !rates.Enabled || rates.SkillExpRate != 25 || rates.DropRate != betaDropRateDefault {
+	if rates := BetaGrowthFromEnv(); !rates.Enabled || rates.SkillExpRate != 25 || rates.DropRate != betaDropRateDefault ||
+		rates.GoldRate != betaGoldRateDefault {
 		t.Fatalf("beta switch = %+v", rates)
 	}
 	t.Setenv(EnvBetaDropRate, "8")
@@ -91,5 +101,52 @@ func TestBetaGrowthSwitchReadsTheEnvironment(t *testing.T) {
 		if rates := BetaGrowthFromEnv(); rates.DropRate != betaDropRateDefault {
 			t.Fatalf("drop override %q = %+v", bad, rates)
 		}
+	}
+	t.Setenv(EnvBetaGoldRate, "200")
+	if rates := BetaGrowthFromEnv(); rates.GoldRate != 200 {
+		t.Fatalf("gold override = %+v", rates)
+	}
+	for _, bad := range []string{"0", "-3", "10001", "x"} {
+		t.Setenv(EnvBetaGoldRate, bad)
+		if rates := BetaGrowthFromEnv(); rates.GoldRate != betaGoldRateDefault {
+			t.Fatalf("gold override %q = %+v", bad, rates)
+		}
+	}
+}
+
+/*
+================
+TestBetaGrowthLeavesAResurrectionRefundNative
+
+A resurrection gives back a share of the EXP a death took. With beta
+growth on, a level-50 gain is worth 80 times its amount, but the refund
+is not a gain: it lands exactly as computed.
+================
+*/
+func TestBetaGrowthLeavesAResurrectionRefundNative(t *testing.T) {
+	const level, refund = 50, 1_000
+	fresh := func() (*Runtime, *enterworld.Character) {
+		character := levelupTestCharacter()
+		character.Level = int64Ptr(level)
+		character.MaxLevel = int64Ptr(level)
+		character.Experience = int64Ptr(0)
+		rt := NewRuntime(&enterworld.Deps{
+			Characters: enterworld.StaticCharacterSource{testDivision: {character}},
+			Items:      emptyItemRefs{},
+			Levels:     growthLevels{},
+		})
+		rt.Growth = GrowthRates{Enabled: true}
+		return rt, character
+	}
+
+	rt, character := fresh()
+	if _, ok := rt.ExperienceUpdater()(character, refund, 0, 0); !ok || *character.Experience != 80*refund {
+		t.Fatalf("gain landed as %d, want the beta %d", *character.Experience, 80*refund)
+	}
+
+	rt, character = fresh()
+	frames, ok := rt.ExperienceRefundUpdater()(character, refund)
+	if !ok || len(frames) == 0 || *character.Experience != refund {
+		t.Fatalf("refund landed as %d (ok %v), want %d", *character.Experience, ok, refund)
 	}
 }

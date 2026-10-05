@@ -58,6 +58,10 @@ type Effect struct {
 	OwnerGID       uint32
 	AreaSourceGID  uint32
 	AreaSourceName string
+	// AuraParentToken marks a party aura's child: the instance token of the
+	// caster's persistent instance (action/skillparty.go) it was handed out
+	// by. Zero for the caster's own instance and every other effect.
+	AuraParentToken uint32
 	// LinkToken identifies the shared source/target relationship. Only ApplyLink
 	// may create these rows; ordinary Apply cannot replace half of a pair.
 	LinkToken uint32
@@ -457,6 +461,13 @@ func (e Effect) Expired(nowMs int64) bool {
 		return nowMs >= e.ExpiresAtMs
 	}
 	if e.DurationPresent {
+		// Native installs and reads on one thread and one clock, so its
+		// unsigned elapsed never starts below zero. Here a reader's clock can
+		// trail an install made after it was sampled: that row has not
+		// started yet, it has not wrapped.
+		if nowMs < e.StartedAtMs {
+			return false
+		}
 		return uint32(nowMs-e.StartedAtMs) > uint32(e.ExpiresAtMs-e.StartedAtMs)
 	}
 	return nowMs > e.ExpiresAtMs
@@ -474,6 +485,9 @@ func (e Effect) RemainingMs(nowMs int64) uint32 {
 		return 0
 	}
 	if e.DurationPresent && !e.Persistent {
+		if nowMs < e.StartedAtMs {
+			return uint32(e.ExpiresAtMs - e.StartedAtMs)
+		}
 		return uint32(e.ExpiresAtMs-e.StartedAtMs) - uint32(nowMs-e.StartedAtMs)
 	}
 	if e.ExpiresAtMs > nowMs {
@@ -482,11 +496,19 @@ func (e Effect) RemainingMs(nowMs int64) uint32 {
 	return 0
 }
 
-// Expire uses the same retirement queue as explicit stops. Projection may omit
-// expired rows before the next tick, but only this owner removes live state.
 /*
 ================
 Expire
+
+Expire uses the same retirement queue as explicit stops. Projection may omit
+expired rows before the next tick, but only this owner removes live state.
+
+The simulation tick samples its clock when it fires and runs this update
+later, while operations install effects concurrently on their own clock. A
+row whose origin lies after nowMs was installed after this pass's clock was
+taken; Expired's uint32 elapsed would wrap and retire it at once. Native
+installs and updates on one thread and one clock, so its update never sees
+such a row: it waits for the next pass, whose clock has caught up.
 ================
 */
 func (r *Registry) Expire(nowMs int64) {
@@ -494,6 +516,9 @@ func (r *Registry) Expire(nowMs int64) {
 	defer r.mu.Unlock()
 	for key, rows := range r.byOwner {
 		for i := range rows {
+			if nowMs < rows[i].StartedAtMs {
+				continue
+			}
 			if !rows[i].StopRequested {
 				rows[i].advanceJob(nowMs)
 			}

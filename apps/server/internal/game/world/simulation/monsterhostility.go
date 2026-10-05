@@ -2,7 +2,20 @@ package simulation
 
 import "opensro.online/server/internal/game/world/monster"
 
-type HostilityEvent struct{ Attacker, Damage, Aggression uint32 }
+/*
+==================
+HostilityEvent
+
+One hate event for a monster's opponent ledger (5473C0): the damage and
+aggression it adds for Attacker, and Percent, the share of Attacker's held
+aggression it adds first. Aggression and Percent are signed: a threat
+decrease (dtnt) sends them negative and the ledger clamps at zero.
+==================
+*/
+type HostilityEvent struct {
+	Attacker, Damage    uint32
+	Aggression, Percent int32
+}
 
 // RecordHostility commits one completed action's damage/aggression event.
 // MonsterState owns both records and the resulting mover transition; a caller
@@ -12,7 +25,7 @@ func (s *MonsterState) RecordHostility(division string, gid, attacker, damage, a
 	for _, c := range candidates {
 		byGID[c.GID] = c
 	}
-	return s.RecordHostilitySequence(division, gid, []HostilityEvent{{attacker, damage, aggression}}, byGID, now)
+	return s.RecordHostilitySequence(division, gid, []HostilityEvent{{Attacker: attacker, Damage: damage, Aggression: int32(aggression)}}, byGID, now)
 }
 
 // Linked threat dispatches source then attacker. Both events must see the
@@ -40,7 +53,7 @@ func (s *MonsterState) RecordHostilitySequence(division string, gid uint32, even
 			candidates[i] = byGID[candidate]
 			candidates[i].GID = candidate
 		}
-		target := monster.RecordOpponentHit(&instance.Opponents, instance.Nest.TargetPolicy, event.Attacker, event.Damage, int32(event.Aggression), 0, uint32(now), mover.AttackIntervalMs, candidates)
+		target := monster.RecordOpponentHit(&instance.Opponents, instance.Nest.TargetPolicy, event.Attacker, event.Damage, event.Aggression, event.Percent, uint32(now), mover.AttackIntervalMs, candidates)
 		state.instances.set(gid, instance)
 		if target == 0 {
 			continue

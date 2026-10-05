@@ -10,7 +10,17 @@ commands and cannot bypass actor eligibility.
 ===========================================================================
 */
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
-import { createStorageRoom } from "@/engine/foundation/gameplay/storage-room";
+import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
+import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
+import {
+	jobAliasRequest,
+	jobDressSeconds,
+	jobGuildAnswer,
+	jobJoinRequest,
+	jobWithdrawRequest,
+	noJob,
+	type LocalJob
+} from "@/engine/foundation/gameplay/job-guild";
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
 import { createPickup } from "./pickup";
 import { createActionSession } from "./action-session";
@@ -22,6 +32,7 @@ import {
 	MASTERY_WITHDRAWAL_RESPONSE
 } from "@/engine/foundation/gameplay/withdrawal";
 import { positionSkillRequest } from "@/engine/foundation/gameplay/position-skill";
+import { repairNotice } from "@/engine/foundation/gameplay/repair";
 import { portalNotice } from "@/engine/foundation/gameplay/portal";
 import {
 	interactionApproach,
@@ -109,14 +120,24 @@ import { saleResult, soldInventory, commerceJson, commerceInteger } from "@/engi
 import { actionEmote, quickSlotItemSlot, quickSlot, TRACE_ACTION_ID } from "@/engine/foundation/gameplay/quickslots";
 import { reconcileQuickslotInventory } from "@/engine/foundation/gameplay/quickslot-inventory";
 import { createTraining } from "./training/training";
-import { emptySocial, socialPacket, socialRequest, type SocialCommand } from "@/engine/foundation/gameplay/social";
+import {
+	emptySocial,
+	socialPacket,
+	socialRequest,
+	withoutResurrection,
+	type SocialCommand
+} from "@/engine/foundation/gameplay/social";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
 import {
 	skillCatalog,
+	skillMpCost,
 	skillTrainingReason,
 	trainingRequest,
 	type SkillMetadata
 } from "@/engine/foundation/gameplay/skill-catalog";
+import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
+import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
+import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import { bootstrapProgression, progressionPacket, type Progression } from "@/engine/foundation/gameplay/progression";
 import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/quickslots";
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
@@ -156,17 +177,52 @@ function unlimitedItemIds( value: unknown ): readonly number[] {
 WorldReferences
 
 The world catalog lookups gameplay reads but does not own (entities owns
-the catalog): a character reference's country and an item reference.
+the catalog): a character reference's country, a country's player models
+and an item reference.
 ================
 */
 interface WorldReferences {
 	readonly country: ( refObjId: number ) => number | undefined;
+	readonly playerModels: ( country: number ) => readonly PlayerModel[];
 	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
 }
+
+// A dress answer may trail its bar by a server tick and the round trip.
+const JOB_DRESS_ANSWER_GRACE_MS = 5000;
 
 // grounditem.ExecuteRange: a pickup closer than this is granted in place;
 // farther away the server walks the player to the item first.
 const PICKUP_EXECUTE_RANGE = 10;
+// How long past two round trips a sent skill press's cooldown stand-in waits
+// for its answer.
+const SKILL_ANSWER_SLACK_MS = 500;
+// B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
+const ACTION_STATE_ARM = 1;
+const QUEUED_COMMANDS = 2;
+
+/*
+================
+skillPressAnswer
+
+What a frame says about the local player's newest skill press. B2CD is the
+local interface's command count: kind 1 (arm) admits the press, count 2
+queues it. B245 refuses it ([2, code]) or opens a cast; only a cast of the
+local caster (+6) answers a press. Monster and peer casts nearby, and the
+B2CD releases of earlier commands, answer nothing: timing the round trip
+by them made it short.
+================
+*/
+function skillPressAnswer( frame: WireFrame, localGid: number ): "answered" | "queued" | null {
+	const p = frame.payload;
+	if ( frame.opcode === 0xb2cd ) {
+		if ( p[0] !== ACTION_STATE_ARM ) return null;
+		return p[1] === QUEUED_COMMANDS ? "queued" : "answered";
+	}
+	if ( frame.opcode !== 0xb245 || !localGid ) return null;
+	if ( p[0] !== 1 ) return "answered";
+	if ( p.length < 10 ) return null;
+	return ((p[6]! | p[7]! << 8 | p[8]! << 16 | p[9]! << 24) >>> 0) === localGid ? "answered" : null;
+}
 
 /*
 ================
@@ -210,9 +266,12 @@ export function createGameplay(
 	const actionSession = createActionSession();
 	const cosPickup = createCosPickup();
 	const training = createTraining( send );
+	// The held skill press, the newest denial and the round-trip estimate
+	// (skill-queue.ts).
+	const skillPress = createSkillPressQueue<GameplayCommand & { kind: "skill"; }>();
 	const movement = createMovement( send ),
 		inventory = createInventory( send, handle => play( handle, soundClock ), cue => playItem( cue, soundClock ) ),
-		combat = createCombat( readEntity, publishFeedback ),
+		combat = createCombat( readEntity, publishFeedback, () => skillPress.oneWayMs() ),
 		targeting = createTargeting( send ),
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap();
@@ -224,8 +283,107 @@ sendFrame
 	function sendFrame( frame: WireFrame ): WireFrame {
 		send( frame );
 		pickup.sent( frame );
-		if ( frame.opcode === 0x72cd && frame.payload[0] === 1 ) moveReservation.clear();
+		if ( frame.opcode === 0x72cd && frame.payload[0] === 1 ) {
+			moveReservation.clear();
+			// sendSkillPress names the skill right after.
+			skillPress.commandSent();
+		}
 		return frame;
+	}
+	/*
+================
+sendSkillPress
+
+A skill press leaves: its answer times the round trip. When the server will
+start the cast as the press arrives (immediate: no target, or one within the
+skill's reach), its cooldown stands in from then until that answer. A press
+the server first walks the caster for starts nothing on arrival: a stand-in
+there showed a cooldown that vanished when it lapsed mid-run and came back
+when the cast finally started.
+================
+	*/
+	function sendSkillPress(
+		frame: WireFrame,
+		skillId: number,
+		now: number,
+		immediate: boolean,
+		target = 0
+	): WireFrame {
+		const oneWay = skillPress.oneWayMs();
+		sendFrame( frame );
+		skillPress.sent( now, skillId );
+		if ( immediate && affordable( catalog.find( row => row.id === skillId ) ) ) {
+			combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
+		} // The HUD shows it as next while the server runs the caster there.
+		else skillPress.approach( skillId, target, now );
+		return frame;
+	}
+	/*
+================
+affordable
+
+Whether the caster's MP covers the skill's authored cost. A press it does
+not cover is still sent (a consumption rate the server alone knows may
+lower the cost), but the server all but surely refuses it (0x3004), so it
+neither stands a cooldown in nor starts its cast: either showed a cooldown,
+and an animation, for a cast that never came. Unknown vitals count as paid.
+================
+	*/
+	function affordable( metadata: SkillMetadata | undefined ): boolean {
+		if ( !metadata || !potionFacts.maxMp ) return true;
+		return skillMpCost( metadata, potionFacts.maxMp ) <= potionFacts.mp;
+	}
+	/*
+================
+withinReach
+
+Whether target stands within the skill's authored range of the caster's
+pose. The server's reach adds both bodies, so within it the server never
+walks the caster first. A skill whose reach is the weapon's has no authored
+range: unknown, so not within.
+================
+	*/
+	function withinReach( metadata: SkillMetadata | undefined, target: EntityState ): boolean {
+		const pose = movement.state().pose;
+		if ( !pose || !metadata?.range ) return false;
+		if ( (target.regionId | pose.regionId) & 0x8000 && target.regionId !== pose.regionId ) return false;
+		const dx = target.x - pose.x + ((target.regionId & 255) - (pose.regionId & 255)) * 1920,
+			dz = target.z - pose.z + ((target.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
+		return Math.hypot( dx, dz ) <= metadata.range;
+	}
+	/*
+================
+predictCast
+
+Start the press's cast animation now when the server will all but surely
+start the cast at once (cast-prediction.ts): an action skill, a living
+caster standing on foot (a walk the server leads goes on until the server's
+stop: an action there would slide) with no cast in flight, and no target or
+a living one within the skill's authored range (the server's reach adds
+both bodies to it). The caster turns to the target at once, as the cast
+would turn it.
+================
+	*/
+	function predictCast(
+		metadata: SkillMetadata | undefined,
+		target: EntityState | undefined,
+		local: EntityState | undefined,
+		now: number
+	) {
+		const walking = movement.state(), pose = walking.pose;
+		if (
+			!metadata?.actionMs || !affordable( metadata ) || !pose || walking.moving || !local || local.mountedOn ||
+			local.appearanceState?.[0] === 2 || localCastHolds( now ) || combat.predicting() ||
+			combat.guidedActive( localGid, now )
+		) return;
+		if ( target && target.gid !== localGid ) {
+			if ( target.kind === "monster" && target.appearanceState?.[0] === 2 || !withinReach( metadata, target ) ) {
+				return;
+			}
+			movement.heading( movementHeading( pose, { ...target, angle: target.heading } ) );
+		}
+		const oneWay = skillPress.oneWayMs();
+		combat.predict( metadata.id, target?.gid ?? 0, now, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS );
 	}
 	/*
 ================
@@ -236,6 +394,10 @@ attack can arrive in the same batch as the previous close and starve the walk.
 ================
 	*/
 	function cancelActionForMovement() {
+		// A ground click also drops a skill press held for its cooldown, and
+		// the run-up to a pressed skill's target.
+		if ( skillPress.cancel() ) dirty = true;
+		if ( skillPress.approachEnded() ) dirty = true;
 		const cancel = actionSession.cancelForMovement();
 		if ( !cancel ) return;
 		sendFrame( cancel );
@@ -254,9 +416,28 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
 	let social = emptySocial();
 	// The world catalog's lookups, bound by the composition root (core).
-	let worldReferences: WorldReferences = { country: () => undefined, item: () => undefined };
+	let worldReferences: WorldReferences = { country: () => undefined, playerModels: () => [], item: () => undefined };
+	// The session's catalog is fixed; one list per country keeps the
+	// published state's identity stable.
+	let playerModels: { readonly country: number; readonly models: readonly PlayerModel[]; } | null = null;
+	// The local player's job guild membership (job-guild.ts).
+	let job: LocalJob = noJob();
+	/*
+	================
+	localPlayerModels
+	================
+	*/
+	function localPlayerModels(): readonly PlayerModel[] {
+		if ( localCountry === undefined ) return [];
+		if ( playerModels?.country !== localCountry || !playerModels.models.length ) {
+			playerModels = { country: localCountry, models: worldReferences.playerModels( localCountry ) };
+		}
+		return playerModels.models;
+	}
 	let bindings = skillBindings( {} );
 	let catalog: readonly SkillMetadata[] = [];
+	// The local cast's action-state-2 window (CIDecoSkill 8E0A23 / 877240).
+	const castMotion = createCastMotionLock();
 	const bindingRepairs = new Map<number, import("@/engine/foundation/gameplay/quickslots").QuickSlot>();
 	/*
 ================
@@ -279,7 +460,6 @@ fails; retry persistence without restoring stale slot occupancy.
 	let worldClock: GameplayState["worldClock"];
 	let environment = entryEnvironment( {} ).state;
 	let cosError: string | null = null;
-	let rebirthPending = false;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	let activeCos: GameplayState["activeCos"], cosResult: GameplayState["cosResult"];
@@ -300,12 +480,21 @@ fails; retry persistence without restoring stale slot occupancy.
 ================
 localCastHolds
 
-The local player's own cast is live (not cancelled): the server's attack
-lock (4AAB40) drops ground commands until it releases.
+The local player's own cast is live (not cancelled) and its action still
+runs: the server's attack lock (4AAB40) drops ground commands until it
+releases. A persistent cast (a wall, an aura) stays in the cast table for
+the object's whole life, but its action ends with the authored action
+time (actionMs); counted for its whole life it blocked the predicted cast
+and the pickup run-up for minutes. A cast whose action time is unknown
+holds until it ends, as before.
 ================
 	*/
-	function localCastHolds(): boolean {
-		return combat.state().casts.some( c => c.caster === localGid && c.cancelledAtMs === undefined );
+	function localCastHolds( now: number ): boolean {
+		return combat.state().casts.some( c => {
+			if ( c.caster !== localGid || c.cancelledAtMs !== undefined ) return false;
+			const actionMs = catalog.find( row => row.id === c.skill )?.actionMs;
+			return !actionMs || c.receivedAtMs === undefined || now - c.receivedAtMs < actionMs;
+		} );
 	}
 	/*
 ================
@@ -339,7 +528,7 @@ and a refusal walks it back (movement.predictApproach).
 	*/
 	function predictPickupRunUp( entity: EntityState, local: EntityState | undefined, now: number ) {
 		const pose = movement.state().pose;
-		if ( !pose || localCastHolds() || local?.mountedOn || local?.appearanceState?.[0] === 2 ) return;
+		if ( !pose || localCastHolds( now ) || local?.mountedOn || local?.appearanceState?.[0] === 2 ) return;
 		const dx = entity.x - pose.x + ((entity.regionId & 255) - (pose.regionId & 255)) * 1920,
 			dz = entity.z - pose.z + ((entity.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
 		if ( (entity.regionId | pose.regionId) & 0x8000 && entity.regionId !== pose.regionId ) return;
@@ -390,7 +579,6 @@ selected entities, cooldowns or world-entry state.
 		potionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
 		potionDue.fill( null );
 		selectionDecal = null;
-		rebirthPending = false;
 		uniqueRefs = uniqueReferences( {} );
 		gmItems.clear();
 		gmReplies = [];
@@ -405,6 +593,7 @@ selected entities, cooldowns or world-entry state.
 		musicMode = 0;
 		bindings = skillBindings( {} );
 		catalog = [];
+		castMotion.clear();
 		progression = { masteries: [] };
 		skillGroups.clear();
 		movement.clear();
@@ -422,8 +611,10 @@ selected entities, cooldowns or world-entry state.
 		inventory.takeBindingMoves();
 		targeting.clear();
 		combat.clear();
+		skillPress.clear();
 		localGid = 0;
 		localCountry = undefined;
+		job = noJob();
 		cosRecords.clear();
 		cosRefs.clear();
 		cosItemRefs.clear();
@@ -524,7 +715,6 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			};
 			gmReplies = [];
 			notices = entryEvents.notices.map( key => ({ key, value: 0, sequence: ++noticeSequence }) );
-			rebirthPending = false;
 			feedback.bootstrap( value );
 			const b = value as {
 				character?: {
@@ -574,11 +764,13 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			skillGroups.clear();
 			for ( const [id, ref] of nextGroups ) skillGroups.set( id, ref );
 			training.reset();
+			training.bootstrap( value );
 			fortress = fortressBootstrap( value );
 			musicMode = 0;
 			social = emptySocial( (value as { character?: { name?: string; }; }).character?.name ?? "" );
 			bindings = skillBindings( value );
 			catalog = nextCatalog;
+			castMotion.catalog( nextCatalog );
 			worldClock = undefined;
 			environment = entryEvents.state;
 			chat.bootstrap( value );
@@ -670,6 +862,7 @@ Bind the admitted local actor and initialize its authoritative movement.
 		*/
 		seed( entity: EntityState ) {
 			localCountry = entity.countryByte9c;
+			job = entity.localJob ?? noJob();
 			if ( localGid !== entity.gid ) {
 				localGid = entity.gid;
 				publishFeedback( { kind: "orb-gauge", value: feedback.gauge() } );
@@ -728,6 +921,8 @@ Entity removal retires targeting and combat references in the same frame.
 				combat.remove( event.gid, soundClock );
 				pickup.remove( event.gid );
 				targeting.remove( event.gid );
+				if ( skillPress.queued()?.command.gid === event.gid && skillPress.cancel() ) dirty = true;
+				if ( skillPress.targetGone( event.gid ) ) dirty = true;
 				const conversation = npcConversation.state();
 				if ( conversation.phase !== "closed" && conversation.gid === event.gid ) npcConversation.clear();
 			}
@@ -841,6 +1036,17 @@ state here before a command can claim a native wire conversation.
 				storage.close();
 				return frame;
 			}
+			if ( command.kind === "job-join" || command.kind === "job-withdraw" || command.kind === "job-alias" ) {
+				// The job menu exists only on the selected guild NPC (5D79E0).
+				if ( !localGid || targeting.state().target !== command.gid ) throw Error( "Select a job guild NPC" );
+				return sendFrame(
+					command.kind === "job-join" ?
+						jobJoinRequest( command.gid, command.job ) :
+						command.kind === "job-withdraw" ?
+						jobWithdrawRequest( command.gid ) :
+						jobAliasRequest( command.gid, command.mode, command.alias )
+				);
+			}
 			if ( command.kind === "storage-open" ) {
 				const target = targeting.state();
 				// The storage row exists only on a selected warehouse NPC (0x4).
@@ -878,12 +1084,14 @@ state here before a command can claim a native wire conversation.
 				return frame ? sendFrame( frame ) : null;
 			}
 			if ( command.kind === "rebirth" ) {
-				if ( local?.gid !== localGid || local?.appearanceState?.[0] !== 2 || rebirthPending ) return null;
+				if ( local?.gid !== localGid || local?.appearanceState?.[0] !== 2 ) return null;
 				if ( command.choice !== 1 && command.choice !== 2 ) throw Error( "Invalid rebirth choice" );
 				if ( command.choice === 2 && (progression.level === undefined || progression.level > 10) ) return null;
+				// Native 697215 sends 32DC without an opcode-group lock: CC9054 only
+				// registers 7338/B338. Silent refusals must leave later clicks usable.
+				// The server serializes revival and rejects already-living actors.
 				const frame = { opcode: 0x32dc, payload: Uint8Array.of( command.choice ) };
 				send( frame );
-				rebirthPending = true;
 				return frame;
 			}
 			if (
@@ -1145,7 +1353,7 @@ state here before a command can claim a native wire conversation.
 			}
 			if (
 				command.kind.startsWith( "party-" ) || command.kind.startsWith( "guild-" ) ||
-				command.kind === "social-consent"
+				command.kind === "social-consent" || command.kind === "resurrection-consent"
 			) {
 				// CIFCommunityNotice_SubmitText 5F46F0 checks subject first,
 				// then contents, before composing the guild notice request.
@@ -1157,9 +1365,11 @@ state here before a command can claim a native wire conversation.
 				}
 				// The worker may retire a prompt before its queued UI click arrives.
 				if ( command.kind === "social-consent" && !social.invitation ) return null;
+				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
 				const request = socialRequest( social, command as SocialCommand );
 				send( request );
 				if ( command.kind === "social-consent" ) social = { ...social, invitation: null };
+				if ( command.kind === "resurrection-consent" ) social = withoutResurrection( social );
 				return request;
 			}
 			if ( command.kind === "skill-withdraw" || command.kind === "mastery-withdraw" ) {
@@ -1271,7 +1481,7 @@ state here before a command can claim a native wire conversation.
 				if ( protocol !== 1 ) {
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
-				if ( localCastHolds() && !actionSession.released() ) {
+				if ( castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() ) ) {
 					// Resolve the click now, not when the cast releases: its ray belongs
 					// to the camera at click time, and the destination marker appears
 					// when the player clicks. A direction walk keeps its query.
@@ -1339,6 +1549,12 @@ state here before a command can claim a native wire conversation.
 				) throw Error( "Select a merchant first" );
 				return inventory.openShop( command.gid, now );
 			}
+			if ( command.kind === "shop-repair" ) {
+				if ( inventory.state().shop?.npc !== targeting.state().target ) {
+					throw Error( "Merchant selection changed" );
+				}
+				return inventory.repair( command.mode, command.slot, now );
+			}
 			if ( command.kind === "shop-buyback" ) {
 				if ( inventory.state().shop?.npc !== targeting.state().target ) {
 					throw Error( "Merchant selection changed" );
@@ -1370,10 +1586,13 @@ state here before a command can claim a native wire conversation.
 					records: [ ...cosRecords.values() ],
 					selectedGid: command.companionGid,
 					revivalSlot: command.revivalSlot,
-					summonerSlot: command.summonerSlot
+					summonerSlot: command.summonerSlot,
+					skin: command.skin,
+					targetSlot: command.targetSlot
 				} );
 			}
 			if ( command.kind === "release-target" ) {
+				if ( skillPress.cancel() ) dirty = true;
 				const frame = targeting.release( now );
 				npcConversation.clear();
 				return frame;
@@ -1382,9 +1601,26 @@ state here before a command can claim a native wire conversation.
 				const skillId = command.skillId;
 				if ( !bindings.skills.includes( command.skillId ) ) throw Error( "Skill is not learned" );
 				const metadata = catalog.find( row => row.id === skillId );
-				if ( skillCooldown( combat.state().skillCooldowns, skillId, metadata?.cooldownGroup ?? 0, now ) ) {
-					throw Error( "Skill is cooling down" );
+				// skill-queue.ts: never send a press the server would refuse for
+				// its cooldown; hold one that is nearly ready, deny the rest.
+				const decision = decidePress(
+					skillCooldown( combat.state().skillCooldowns, skillId, metadata?.cooldownGroup ?? 0, now )
+						?.remainingMs,
+					skillPress.oneWayMs(),
+					now
+				);
+				if ( decision.kind === "queue" ) {
+					skillPress.queue( { skill: skillId, command, fireAtMs: decision.fireAtMs }, now );
+					dirty = true;
+					return null;
 				}
+				if ( decision.kind === "deny" ) {
+					skillPress.deny( { skill: skillId, atMs: now, remainingMs: decision.remainingMs } );
+					dirty = true;
+					return null;
+				}
+				// A press sent now supersedes any held one.
+				if ( skillPress.cancel() ) dirty = true;
 				if ( metadata?.groundTarget ) {
 					const from = movement.state().pose;
 					if ( !from || !command.query ) throw Error( "Point into the world to cast this skill" );
@@ -1392,13 +1628,29 @@ state here before a command can claim a native wire conversation.
 					const to = movement.groundSkillGoal( command.query, now );
 					if ( !to ) return null;
 					const frame = positionSkillRequest( skillId, to );
-					return sendFrame( frame );
+					if ( metadata.haltsWalk ) movement.holdForCast( now );
+					return sendSkillPress( frame, skillId, now, true );
 				}
 				if ( metadata && !metadata.targetRequired ) command = { kind: "skill", skillId: command.skillId };
-				else if ( metadata?.targetRequired && !command.gid ) throw Error( "This skill requires a target" );
+				else if ( metadata?.targetRequired && !command.gid ) {
+					// A row that admits its caster (targetSelf) aims at the caster when
+					// nothing is selected, as the server resolves the same row.
+					if ( !metadata.targetSelf || !localGid ) throw Error( "This skill requires a target" );
+					const frame = combat.skill( skillId, localGid );
+					movement.holdForCast( now );
+					predictCast( metadata, undefined, local, now );
+					return sendSkillPress( frame, skillId, now, true );
+				}
 			}
 			if ( command.kind === "skill" && command.gid === undefined ) {
-				return sendFrame( combat.skill( command.skillId ) );
+				// An ordinary cast stops the server's walk where the command finds
+				// it (InitiateSkillCast 59B5F6): end the local walk at the press,
+				// as a targeted command does (movement.holdForCast).
+				const frame = combat.skill( command.skillId );
+				const skillId = command.skillId, metadata = catalog.find( row => row.id === skillId );
+				if ( metadata?.haltsWalk ) movement.holdForCast( now );
+				predictCast( metadata, undefined, local, now );
+				return sendSkillPress( frame, skillId, now, true );
 			}
 			if ( !entity || (entity.gid === localGid && command.kind !== "skill") ) {
 				throw new Error( "Target is absent or local player" );
@@ -1461,7 +1713,16 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind !== "skill" ) throw Error( "Unsupported gameplay command" );
 			const frame = combat.skill( command.skillId, entity.gid );
 			movement.holdForCast( now );
-			return sendFrame( frame );
+			const pressedSkill = command.skillId;
+			const pressedMetadata = catalog.find( row => row.id === pressedSkill );
+			predictCast( pressedMetadata, entity, local, now );
+			return sendSkillPress(
+				frame,
+				command.skillId,
+				now,
+				entity.gid === localGid || withinReach( pressedMetadata, entity ),
+				entity.gid
+			);
 		},
 		/*
 ================
@@ -1498,6 +1759,24 @@ Packet handling must not depend on which HUD panel is currently open.
 		*/
 		receive( frame: WireFrame, now: number, chatSender?: EntityState ) {
 			const inventoryBefore = inventory.state().inventory;
+			// Every skill press is answered at once by B245 or B2CD.
+			const answer = skillPressAnswer( frame, localGid );
+			if ( answer ) skillPress.answered( now );
+			// A local cast opened or a press was refused: no run-up waits.
+			if ( answer && frame.opcode === 0xb245 && skillPress.approachEnded() ) dirty = true;
+			if ( frame.opcode === 0xb2cd && frame.payload.length >= 2 ) {
+				if ( skillPress.commandCount( frame.payload[0]!, frame.payload[1]!, now ) ) dirty = true;
+			}
+			if ( answer === "queued" ) {
+				// Its cast, and with it its cooldown, starts only when the open
+				// command ends.
+				if ( combat.pressQueued( now ) ) dirty = true;
+				// The server queued the command instead of acting on it: it never
+				// stopped its walk, so a walk held at the press follows it again
+				// (held, the player fell behind by the whole queue time and the
+				// next correction pulled it 40 to 70 units forward).
+				movement.castRefused( now );
+			}
 			try {
 				if ( betaMap.receive( frame ) ) {
 					dirty = true;
@@ -1511,6 +1790,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					// inventory refusals still arrive separately on B06D.
 					const notice = frame.payload[0] === 3 ? constantNativeNotice( 0x19, frame.payload[2]! ) : null;
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					// A refused command leaves the server's walk running.
+					if ( frame.payload[0] === 3 ) movement.castRefused( now );
 					dirty = true;
 					return true;
 				}
@@ -1563,7 +1844,6 @@ Packet handling must not depend on which HUD panel is currently open.
 					frame.payload[5] === 1 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 ).getUint32( 0, true ) === localGid
 				) {
-					rebirthPending = false;
 					dirty = true;
 				}
 				const matched = partyMatchPacket( partyMatching, frame, social.localName, now, {
@@ -2093,6 +2373,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					targeting.remove( gid );
 					combat.remove( gid );
+					if ( skillPress.queued()?.command.gid === gid ) skillPress.cancel();
+					skillPress.targetGone( gid );
 					dirty = true;
 					return false;
 				}
@@ -2211,7 +2493,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				// B245 [2, code]: the server refused the targeted command at the
+				// press, before touching movement (an empty MP pool is 0x3004).
+				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) movement.castRefused( now );
 				if ( item && cast ) returnScroll = cast;
+				// A spent warehouse ticket opens the room on the player's own gid.
+				if ( item && used && localGid && isWarehouseTicket( used.typeFlags ) ) {
+					storage.open( localGid );
+					dirty = true;
+				}
 				// A pickup into the gold slot (0xFE) prints the whole heap: pickup types
 				// 6/0x1C resolve to window 0x46 with slot 0xFE (7653D0), and that branch
 				// of CPSMission_ApplyInventoryOperation reads the u32 and prints
@@ -2244,6 +2534,18 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					dirty = true;
 				}
+				const answer = jobGuildAnswer( frame, job );
+				if ( answer ) {
+					job = answer.job;
+					if ( answer.notice ) {
+						notices = [ ...notices.slice( -99 ), { ...answer.notice, sequence: ++noticeSequence } ];
+					}
+					dirty = true;
+					return true;
+				}
+				// The suit move's answer waits for the dress bar (jobdress.go).
+				const dress = jobDressSeconds( frame, localGid );
+				if ( dress !== null ) inventory.holdForDress( now + dress * 1000 + JOB_DRESS_ANSWER_GRACE_MS );
 				if ( frame.opcode === 0xb341 ) {
 					const p = frame.payload;
 					if ( !p.length || p.length !== (p[0] === 1 ? 1 : 2) ) throw Error( "Invalid Berserk response" );
@@ -2254,6 +2556,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				const refusal = recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
+					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??
 					skillNotice( frame.opcode, frame.payload, localCountry, fortressActive( fortress ) );
 				if ( refusal ) notices = [ ...notices.slice( -99 ), { ...refusal, sequence: ++noticeSequence } ];
@@ -2333,9 +2636,13 @@ before take assembles the presentation snapshot.
 			) {
 				sendFrame( frame );
 			}
-			// A click held through the cast walks as soon as the cast releases;
+			// A click held through the cast walks as soon as the caster leaves
+			// action state 2 (the skill's action window ends or it is cancelled);
 			// death forfeits it.
-			if ( moveReservation.holding() && (!localCastHolds() || actionSession.released()) ) {
+			if (
+				moveReservation.holding() &&
+				!castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() )
+			) {
 				const held = moveReservation.take()!;
 				if ( !local || local.appearanceState?.[0] === 2 ) {
 					// A forfeited click takes its marker with it.
@@ -2347,6 +2654,27 @@ before take assembles the presentation snapshot.
 					} catch ( error ) {
 						moveReservation.fail( String( error ) );
 						dirty = true;
+					}
+				}
+			}
+			// A held skill press goes out when due, through the same command
+			// path as a fresh one: aimed at the newest selection, as core.ts
+			// aims a fresh press. Death forfeits it, and so does a monster
+			// that died while it was held.
+			const duePress = skillPress.due( now );
+			if ( duePress ) {
+				dirty = true;
+				const { gid: _held, ...press } = duePress.command, gid = targeting.selectionIntent() || undefined;
+				const command = gid ? { ...press, gid } : press;
+				const target = gid === undefined ? undefined : readEntity( gid );
+				if (
+					local && local.appearanceState?.[0] !== 2 &&
+					!(target?.kind === "monster" && target.appearanceState?.[0] === 2)
+				) {
+					try {
+						api.command( command, now, target, local );
+					} catch {
+						// The press lost its target or skill while held: it lapses.
 					}
 				}
 			}
@@ -2529,7 +2857,6 @@ The published plane when something changed since the last take, else null.
 				gmReplies,
 				eligibility,
 				autoPotion,
-				rebirthPending,
 				selectionDecal,
 				notices,
 				partyMatching,
@@ -2537,6 +2864,8 @@ The published plane when something changed since the last take, else null.
 				guide,
 				paramJobs: paramJobs.state(),
 				storage: storage.state(),
+				playerModels: localPlayerModels(),
+				job,
 				cosWindows: cosWindows.filter( row => cosItemRefs2.has( row.itemRefObjId ) ).map( row => ({
 					...row,
 					reference: cosItemRefs2.get( row.itemRefObjId )!
@@ -2570,6 +2899,7 @@ The published plane when something changed since the last take, else null.
 				...i,
 				...c,
 				...targeting.state(),
+				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				unlimitedItems,
 				error: m.error ?? i.error ?? c.error ?? targeting.error() ?? progression.error ??
@@ -2613,12 +2943,12 @@ World transfer retires spatial work while retaining character/session data.
 			warnings = [ false, false ];
 			potionDue.fill( null );
 			potionFacts = { ...potionFacts, alive: false };
-			rebirthPending = false;
 			selectionDecal = null;
-			social = { ...social, invitation: null };
+			social = withoutResurrection( { ...social, invitation: null } );
 			movement.clear();
 			targeting.clear();
 			combat.clear( true );
+			skillPress.clear();
 			localGid = 0;
 			worldClock = undefined;
 			environment = entryEnvironment( {} ).state;

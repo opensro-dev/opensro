@@ -212,7 +212,7 @@ test("mastery UI prices current level and preserves the free first train at zero
 });
 test("accepted skill cooldowns share the native group, expire independently and draw retail atlas frames", () => {
 	const owner = createSkillCooldowns();
-	owner.accepted( { id: 7, cooldownGroup: 2, cooldownMs: 2000 }, 1000 );
+	owner.accepted( { id: 7, cooldownGroup: 2, cooldownMs: 2000 }, 1000, 1000 );
 	assert.deepEqual( skillCooldown( owner.state(), 9, 2, 2000 ), { remainingMs: 1000, fraction: .5 } );
 	assert.equal( skillCooldown( owner.state(), 9, 0, 2000 ), null );
 	assert.equal( skillCooldown( owner.state(), 7, 2, 3000 ), null );

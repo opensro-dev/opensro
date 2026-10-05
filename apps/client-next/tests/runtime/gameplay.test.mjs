@@ -171,32 +171,33 @@ test("376F updates local entity channels and live movement through the productio
 	assert.throws( () => core.receive( { opcode: 0x376f, payload: invalid }, 2001 ), /speed channels/ );
 	core.dispose();
 });
-test("rebirth sends the native choice once, gates level and life, and releases only on local revival", async () => {
+test("rebirth remains retryable after silence and still gates local life and level", async () => {
 	const { createGameplay } = await load( "gameplay" ), sent = [], game = createGameplay( f => sent.push( f ) );
 	const local = { ...pose, gid: 7, heading: 0, appearanceState: [ 2, 0, 0 ] };
 	game.bootstrap( { character: { level: 10 } } );
 	game.seed( local );
-	assert.equal(
-		game.command( { kind: "rebirth", choice: 2 }, 0, undefined, { ...local, appearanceState: [ 1, 0, 0 ] } ),
-		null
-	);
-	game.command( { kind: "rebirth", choice: 2 }, 1, undefined, local );
-	assert.deepEqual( sent, [ { opcode: 0x32dc, payload: Uint8Array.of( 2 ) } ] );
-	assert.equal( game.take().rebirthPending, true );
-	game.command( { kind: "rebirth", choice: 1 }, 2, undefined, local );
-	assert.equal( sent.length, 1 );
-	game.receive( { opcode: 0x3122, payload: Uint8Array.of( 8, 0, 0, 0, 0, 1 ) }, 3 );
-	game.command( { kind: "rebirth", choice: 1 }, 4, undefined, local );
-	assert.equal( sent.length, 1 );
-	game.receive( { opcode: 0x3122, payload: Uint8Array.of( 7, 0, 0, 0, 0, 1 ) }, 5 );
-	assert.equal( game.take().rebirthPending, false );
+	for ( const choice of [ 1, 2 ] ) {
+		assert.equal(
+			game.command( { kind: "rebirth", choice }, 0, undefined, { ...local, appearanceState: [ 1, 0, 0 ] } ),
+			null
+		);
+		assert.equal( game.command( { kind: "rebirth", choice }, 0, undefined, { ...local, gid: 8 } ), null );
+		game.command( { kind: "rebirth", choice }, 1, undefined, local );
+		// Rejected preparation and admission drops send no rebirth reply.
+		// A later explicit click must reach the server without a fresh login.
+		game.command( { kind: "rebirth", choice }, 10001, undefined, local );
+	}
+	assert.deepEqual( sent.map( frame => [ frame.opcode, ...frame.payload ] ), [
+		[ 0x32dc, 1 ],
+		[ 0x32dc, 1 ],
+		[ 0x32dc, 2 ],
+		[ 0x32dc, 2 ]
+	] );
 	game.bootstrap( { character: { level: 11 } } );
 	game.seed( local );
-	assert.equal( game.command( { kind: "rebirth", choice: 2 }, 6, undefined, local ), null );
-	game.command( { kind: "rebirth", choice: 1 }, 7, undefined, local );
-	assert.equal( sent.length, 2 );
-	game.resetWorld();
-	assert.equal( game.take().rebirthPending, false );
+	assert.equal( game.command( { kind: "rebirth", choice: 2 }, 10002, undefined, local ), null );
+	game.command( { kind: "rebirth", choice: 1 }, 10003, undefined, local );
+	assert.equal( sent.length, 5 );
 	game.dispose();
 });
 test("inventory icons survive baseline, reference replacement, item movement and reset", () => {
@@ -323,8 +324,10 @@ test("movement request IDs survive resets and authoritative clipped segments win
 	m.step( 100 );
 	assert.equal( m.state().pose.x, 65 );
 	m.receive( receipt( 1, { ...pose, x: 80 } ), 100 );
+	// The server clipped the walk at 80: the player walks on from the
+	// predicted 65 to the server's end, never back to its start.
 	m.step( 600 );
-	assert.equal( m.state().pose.x, 70 );
+	assert.equal( m.state().pose.x, 75 );
 	m.step( 1100 );
 	assert.equal( m.state().pose.x, 80 );
 	assert.equal( m.state().pendingMoves, 0 );
@@ -982,12 +985,15 @@ test("predicted and acknowledged local motion follow resident navigation between
 	m.step( 400 );
 	assert.equal( m.state().pose.x, 80 );
 	assert.equal( m.state().pose.y, 30 );
+	// The receipt lands 100 ms after the last step: the walk keeps that time
+	// (x = 60 + 50 t) and its surface, then finishes at the server's pace.
 	m.receive( receipt( 1, { ...pose, x: 100 } ), 500 );
-	assert.equal( m.state().pose.x, 80 );
-	assert.equal( m.state().pose.y, 30, "confirmation keeps the current hill surface" );
+	assert.equal( m.state().pose.x, 85 );
+	assert.equal( m.state().pose.y, 25, "confirmation resolves the live hill surface" );
+	assert.equal( m.state().poseAtMs, 500 );
 	m.step( 750 );
-	assert.equal( m.state().pose.x, 90 );
-	assert.equal( m.state().pose.y, 20 );
+	assert.equal( m.state().pose.x, 95 );
+	assert.equal( m.state().pose.y, 15 );
 	m.step( 1500 );
 	assert.equal( m.state().pose.y, 10 );
 });
@@ -1448,5 +1454,94 @@ test("a ground click during the local cast walks once the cast releases", async 
 	game.receive( { opcode: 0xb505, payload: Uint8Array.of( 2, 0, 1, 0, 0, 0 ) }, 13 );
 	for ( let now = 14; now < 2000 && sent.length < 2; now += 50 ) game.step( now, local );
 	assert.equal( sent.length, 2, "the newest held click walks after the release" );
+	game.dispose();
+});
+
+test("a ground click during a self skill waits for its action window, not the server count", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		fixture = JSON.parse(
+			fs.readFileSync(
+				path.resolve( root, "../server/internal/game/item/wire/testdata/skill_action_result_fixture.json" ),
+				"utf8"
+			)
+		),
+		local = { ...pose, gid: fixture.expect.casterGid, heading: 0, appearanceState: [ 1, 0, 0 ] },
+		none = { ID: 0, Level: 0 };
+	// 1000 ms cast + 1000 ms action, as Weak guard of ice authors it.
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		refSkillSnapshot: [ {
+			id: fixture.expect.skillId,
+			group: 1,
+			level: 1,
+			status: false,
+			effectRider: false,
+			ui: {
+				name: "SKILL_CH_COLD_GANGGI_A_01",
+				spCost: 0,
+				trainable: false,
+				targetRequired: false,
+				cooldownMs: 0,
+				actionMs: 2000,
+				masteries: [ none, none ],
+				prerequisites: [ none, none, none ]
+			}
+		} ]
+	} );
+	game.seed( local );
+	const row = fixture.scenarios[0];
+	game.receive( { opcode: row.opcode, payload: Buffer.from( row.payloadHex, "hex" ) }, 10 );
+	// A self skill queues no object command: B2CD reports none.
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 0 ) }, 10 );
+	// CanPerformLocomotion (877240): action state 2 stores the click.
+	assert.equal( game.command( { kind: "move", destination: { ...pose, x: 80 } }, 500, undefined, local ), null );
+	for ( let now = 550; now < 2000; now += 50 ) game.step( now, local );
+	assert.equal( sent.length, 0, "no walk while the action runs" );
+	for ( let now = 2000; now < 2200 && sent.length < 1; now += 50 ) game.step( now, local );
+	assert.equal( sent.length, 1, "the stored click walks when the action window ends" );
+	game.dispose();
+});
+test("a targeted command refused during a server walk never disturbs the walk", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		local = { ...pose, gid: 7, heading: 0 },
+		monster = { ...pose, x: 400, gid: 8, kind: "monster", heading: 0 };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( local );
+	// The server's run of the local player to x = 260: 4 s at 50 units/s.
+	const walk = Buffer.alloc( 14 );
+	walk.writeUInt32LE( 7 );
+	walk[4] = 1;
+	walk.writeUInt16LE( pose.regionId, 5 );
+	walk.writeInt16LE( 260, 7 );
+	walk.writeInt16LE( 10, 9 );
+	walk.writeInt16LE( 100, 11 );
+	assert.equal( game.receive( { opcode: 0xb738, payload: walk }, 0 ), true );
+	for ( let now = 16; now <= 1000; now += 16 ) game.step( now, local );
+	game.step( 1000, local );
+	let previous = game.take()?.pose?.x, largest = 0, smallest = Infinity, refused = false;
+	// A server-led walk is one delivery behind the server: the press does not
+	// hold it (movement.ts WalkLead).
+	game.command( { kind: "attack", gid: 8 }, 1000, monster, local );
+	assert.equal( sent.at( -1 ).opcode, 0x72cd );
+	for ( let now = 1016; now <= 4000; now += 16 ) {
+		// B245 [2, 0x04]: refused at the press (no MP); the server's run goes on.
+		if ( now >= 1100 && !refused ) {
+			game.receive( { opcode: 0xb245, payload: Uint8Array.of( 2, 4 ) }, 1100 );
+			refused = true;
+		}
+		game.step( now, local );
+		const x = game.take()?.pose?.x ?? previous;
+		largest = Math.max( largest, Math.abs( x - previous ) );
+		smallest = Math.min( smallest, Math.abs( x - previous ) );
+		previous = x;
+	}
+	assert.ok( largest <= 50 * 16 / 1000 + 1e-6, "the walk jumped " + largest );
+	assert.ok( smallest >= 50 * 16 / 1000 - 1e-6, "the walk stalled: " + smallest );
+	game.step( 4016, local );
+	assert.ok( Math.abs( (game.take()?.pose?.x ?? previous) - 260 ) < 1e-6, "arrived at " + previous );
 	game.dispose();
 });

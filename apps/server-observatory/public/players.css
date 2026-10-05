@@ -1,0 +1,217 @@
+/*
+===========================================================================
+players.css - guided recovery inside the shared operations dashboard
+===========================================================================
+*/
+.recovery-heading {
+ display: flex;
+ align-items: center;
+ justify-content: space-between;
+ gap: 24px;
+ margin-bottom: 26px;
+}
+.recovery-heading h2 {
+	font-size: 30px;
+	margin: 8px 0 12px;
+}
+.recovery-heading p {
+	color: var(--muted);
+	font-size: 13px;
+	line-height: 1.7;
+}
+.operator-badge {
+	padding: 10px 14px;
+	border: 1px solid var(--line);
+	border-radius: 24px;
+	color: var(--jade);
+	white-space: nowrap;
+	font-size: 12px;
+}
+.recovery-steps {
+	display: flex;
+	list-style: none;
+	gap: 32px;
+	padding: 0;
+	margin: 0 0 28px;
+	color: var(--muted);
+	font-size: 12px;
+}
+.recovery-steps li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.recovery-steps span {
+	color: var(--gold);
+	font-size: 10px;
+	letter-spacing: 1px;
+	border: 1px solid var(--line);
+	border-radius: 50%;
+	padding: 9px;
+}
+.recovery-search {
+	display: grid;
+	grid-template-columns: 1fr 2fr auto;
+	align-items: end;
+	gap: 18px;
+	padding: 24px;
+}
+#recovery label {
+	display: grid;
+	gap: 9px;
+	color: var(--muted);
+	font-size: 12px;
+}
+#recovery input, #recovery select, #recovery textarea {
+	width: 100%;
+	min-height: 43px;
+	padding: 12px 14px;
+	font: inherit;
+	color: var(--text);
+	border: 1px solid #40574f;
+	border-radius: 6px;
+	background: #101e1b;
+}
+#recovery input:focus, #recovery select:focus, #recovery textarea:focus {
+	outline: 2px solid var(--gold);
+	outline-offset: 2px;
+}
+#recovery input::placeholder, #recovery textarea::placeholder {
+	color: #80918a;
+}
+#recovery .button {
+	min-height: 43px;
+}
+#recovery .primary {
+	background: #37594a;
+	border-color: #6c967c;
+	color: #eef3e8;
+	padding-inline: 24px;
+}
+.recovery-notice {
+	padding: 16px 18px;
+	margin: 18px 0 26px;
+	border-radius: 6px;
+	border-left: 3px solid var(--jade);
+	color: #cbdcd0;
+	font-size: 13px;
+	line-height: 1.6;
+	background: #213a2d;
+}
+.recovery-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 24px;
+	align-items: start;
+}
+.recovery-facts {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	padding: 12px 24px 24px;
+	gap: 0 24px;
+}
+.recovery-facts div {
+	padding: 18px 0;
+	border-bottom: 1px solid var(--line);
+}
+.recovery-facts dt {
+	font-size: 11px;
+	color: var(--muted);
+	margin-bottom: 9px;
+}
+.recovery-facts dd {
+	margin: 0;
+	font-size: 18px;
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+.recovery-evidence {
+	padding: 0 24px 24px;
+}
+.recovery-evidence h3 {
+	font-size: 14px;
+	margin-bottom: 10px;
+	font-weight: 500;
+}
+.recovery-evidence p {
+	font-size: 12px;
+	line-height: 1.7;
+	color: var(--muted);
+	margin-bottom: 18px;
+}
+.recovery-raw {
+	border-top: 1px solid var(--line);
+}
+.recovery-raw summary {
+	padding: 18px 24px;
+	font-size: 12px;
+	color: var(--muted);
+	cursor: pointer;
+}
+.recovery-raw pre {
+	margin: 0;
+	max-height: 440px;
+	max-width: 100%;
+	overflow: auto;
+	padding: 18px 24px;
+	font-size: 11px;
+	background: #0c1714;
+}
+.recovery-form-body {
+	padding: 24px;
+	display: grid;
+	gap: 22px;
+}
+.recovery-note {
+	border: 1px solid #74613b;
+	border-radius: 6px;
+	background: #59472026;
+	padding: 14px 16px;
+	color: #d6cbae;
+	font-size: 12px;
+	line-height: 1.8;
+}
+#recovery .rescue-submit {
+	background: #614331;
+	border-color: #987047;
+	color: #f2dcb8;
+}
+#recovery .rescue-submit:hover {
+	background: #77523a;
+}
+.recovery-hint {
+	color: var(--muted);
+	font-size: 11px;
+	line-height: 1.6;
+}
+@media (max-width: 1000px) {
+ .recovery-grid {
+	grid-template-columns: 1fr;
+}
+ .recovery-search {
+	grid-template-columns: 1fr 2fr;
+}
+ .recovery-search button {
+	grid-column: 1 / -1;
+}
+}
+@media (max-width: 600px) {
+ .recovery-heading {
+	align-items: flex-start;
+	flex-direction: column;
+}
+ .recovery-search {
+	grid-template-columns: 1fr;
+	padding: 18px;
+}
+ .recovery-steps {
+	gap: 16px;
+	flex-direction: column;
+}
+ .recovery-heading h2 {
+	font-size: 25px;
+}
+ .recovery-facts {
+	gap: 0 14px;
+}
+}

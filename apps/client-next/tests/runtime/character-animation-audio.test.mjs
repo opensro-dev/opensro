@@ -1988,3 +1988,31 @@ release
 	assert.equal( sample( .6 ), 6 );
 	c.dispose( gpu, null );
 });
+test("portraits borrow the character's own parts, never the effects decorating it", () => {
+	const c = createCharacters();
+	for ( const id of [ "body", "hair", "buff" ] ) c.model( id, model(), [] );
+	const at = { regionId: 1, x: 0, y: 0, z: 0, yaw: 0 };
+	const actor = ( gid, id, attachment ) => ({
+		gid,
+		model: id,
+		pose: at,
+		scale: 1,
+		clip: "stand",
+		time: 0,
+		loop: true,
+		...(attachment ? { attachment } : {})
+	});
+	const hair = actor( 2, "hair", { gid: 1, bone: "root", offset: [ 0, 0, 0 ], basis: "compound" } );
+	// A stacked recovery buff: native and BSR effect stages, plus a particle
+	// riding one of them. None belongs to the appearance model.
+	const effects = [
+		actor( 10, "buff", { gid: 1, bone: "root", offset: [ 0, 0, 0 ], basis: "native" } ),
+		actor( 11, "buff", { gid: 1, bone: "", root: true, offset: [ 0, 0, 0 ], basis: "native-bsr" } ),
+		actor( 12, "buff", { gid: 10, bone: "", root: true, offset: [ 0, 0, 0 ] } )
+	];
+	c.actors( [ actor( 1, "body" ), hair, ...effects ] );
+	const portrait = c.portraitSource( 1 );
+	assert.ok( portrait );
+	assert.deepEqual( portrait.children?.map( part => part.actor.gid ), [ 2 ] );
+	c.dispose( null, null );
+});

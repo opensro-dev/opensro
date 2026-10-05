@@ -8,9 +8,10 @@ commitCharacterEffect sets body status 6 or 7 and the speed cut. What
 this file adds is who else receives a cast (efr kind 1 recipients) and
 the two ways effects end early:
 
-	event   CSkillManager_RetireEffectsForEventMask (5A16C0): a skill
-	        cast (bit 2, from InitiateSkillCast 59B745) ends every
-	        effect whose skc event mask holds the bit
+	event   CSkillManager_RetireEffectsForEventMask (5A16C0): an
+	        accepted move (bit 1, CGObjChar_HandleMoveCommand 4B0EA0)
+	        or a skill cast (bit 2, from InitiateSkillCast 59B745) ends
+	        every effect whose skc event mask holds the bit
 	damage  CSkillManager_ProcessDamageEffects (5A0B80): a landed or
 	        blocked hit whose att flags share a bit with the effect's
 	        skc damage mask ends it, unless the keep roll holds
@@ -37,6 +38,7 @@ import (
 
 // Event bits of the skc event mask (the second word).
 const (
+	effectEventMove      uint8 = 1 // an accepted move command (4B0EA0)
 	effectEventSkillCast uint8 = 2 // InitiateSkillCast, and a pet's attack command (4D2592)
 	effectEventBerserk   uint8 = 4 // berserk request (515C43)
 )
@@ -189,11 +191,14 @@ func (rt *Runtime) skillDurationRider(division string, caster *enterworld.Charac
 ================
 startSkillCast
 
-InitiateSkillCast's event retirement (59B745), before a fresh cast installs or
-strikes. Basic attacks share this event; the caller holds the character door.
+InitiateSkillCast (59B480) before a fresh cast installs or strikes: the
+caster's walk stops (haltCasterWalk, 59B5F6), then the event retirement
+(59B745). Basic attacks share this event; the caller holds the character
+door.
 ================
 */
-func (rt *Runtime) startSkillCast(division string, c *enterworld.Character, now int64) {
+func (rt *Runtime) startSkillCast(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64) {
+	rt.haltCasterWalk(division, c, skill, now)
 	rt.retireEffectsOnEvent(division, c, effectEventSkillCast, now)
 }
 
@@ -223,12 +228,42 @@ func (rt *Runtime) retireEffectsOnEvent(division string, c *enterworld.Character
 
 /*
 ==================
+RetireMoveEffects
+
+The movement event of CGObjChar_HandleMoveCommand (4B0EA0): once a player's
+move is accepted, every effect whose skc event mask holds bit 1 ends. The
+movement runtime calls it after releasing the character lock.
+==================
+*/
+func (rt *Runtime) RetireMoveEffects(division, name string, now int64) {
+	character := rt.findCharacter(division, name)
+	if character == nil {
+		return
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	rt.deps.Update(character, "move-event", func() bool {
+		rt.retireEffectsOnEvent(division, character, effectEventMove, now)
+		return true
+	})
+}
+
+/*
+==================
 cancelEffectsOnDamage
 
 5A15E0..5A1696 for one landed or blocked hit on c. flags are the
-attack's att word 0. The keep roll holds with KeepPercent (plus the
-victim's modifiers, none of which a shipped hide carries). The caller
-holds c's door.
+attack's att word 0. Each effect whose skc damage mask the hit matches
+ends with 100 - damageKeepPercent, rolled on the victim's probability
+stream.
+
+A party aura's child is never cut by a hit on the member holding it.
+Owner's rule: a tambour, instrument march or dance is cut when its Bard
+receives an attack; the Bard's own instance carries the roll, and its end
+retires every child at the aura's next update. Inferred: a hit on a member
+leaves that member's copy alone, since the rule names the Bard only.
+
+The caller holds c's door.
 ==================
 */
 func (rt *Runtime) cancelEffectsOnDamage(division string, c *enterworld.Character, flags uint32, now int64) {
@@ -242,16 +277,52 @@ func (rt *Runtime) cancelEffectsOnDamage(division string, c *enterworld.Characte
 	var tokens []uint32
 	for _, effect := range rt.effects.Snapshot(division, c.Name) {
 		row, ok := skills.SkillByID(effect.SkillID)
-		if !ok || !row.DamageCancel.Present || row.DamageCancel.Mask&flags == 0 {
+		if !ok || !row.DamageCancel.Present || row.DamageCancel.Mask&flags == 0 || effect.AuraParentToken != 0 {
 			continue
 		}
-		breaks, err := rt.effectOutcome(criticalActor{division: division, character: c.Name}, damageCancelRollKey, 100-row.DamageCancel.KeepPercent)
+		keep, ok := rt.damageKeepPercent(division, c, row)
+		if !ok {
+			continue
+		}
+		breaks, err := rt.effectOutcome(criticalActor{division: division, character: c.Name}, damageCancelRollKey, enterworld.FullKeepPercent-keep)
 		if err != nil || !breaks {
 			continue
 		}
 		tokens = append(tokens, effect.InstanceToken)
 	}
 	rt.publishEndedEffects(division, c, rt.effects.RetireInstances(division, c.Name, tokens), now)
+}
+
+/*
+==================
+damageKeepPercent
+
+The chance one masked hit leaves an effect of row on c running, as
+CSkillManager_ProcessDamageEffects (5A160A..5A1691) forms it: skc word 2,
+plus c's learned MUCR when the row reads getv MUCR (+0x548), plus c's
+learned DSER when it reads getv DSER (+0x54C), held at 100. The roll then
+ends the effect with 100 - keep. DSCR (+0x550) has no reader and adds
+nothing.
+
+ok is false when c's stats cannot be read; the hit then ends nothing.
+==================
+*/
+func (rt *Runtime) damageKeepPercent(division string, c *enterworld.Character, row enterworld.SkillRow) (uint32, bool) {
+	keep := row.DamageCancel.KeepPercent
+	addends := [...]enterworld.SkillParameter{enterworld.ParameterMusicCutResist, enterworld.ParameterDanceRange}
+	if !row.Attack.Parameters.Has(addends[0]) && !row.Attack.Parameters.Has(addends[1]) {
+		return keep, true
+	}
+	stats, _, err := rt.playerCombatStats(division, c)
+	if err != nil {
+		return 0, false
+	}
+	for _, key := range addends {
+		if row.Attack.Parameters.Has(key) {
+			keep += stats.SkillParameters[key]
+		}
+	}
+	return min(keep, enterworld.FullKeepPercent), true
 }
 
 /*

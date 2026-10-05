@@ -165,3 +165,46 @@ func TestStorageFollowsTheNpcRangeAndFunctionState(t *testing.T) {
 		t.Fatalf("far list = %+v / %q", frames, refusal)
 	}
 }
+
+/*
+================
+TestWarehouseTicketOpensTheRoomAnywhere
+
+A spent ticket selects the player's own gid with the storage function
+open: the list, the open and a deposit name that gid far from any keeper,
+and a new selection ends the session.
+================
+*/
+func TestWarehouseTicketOpensTheRoomAnywhere(t *testing.T) {
+	rt, c, authority := storageFixture(t)
+	moveMerchantAway(rt, npcHitRange+10)
+	ticket := &enterworld.ItemRef{RefObjID: 3788, Codename: "ITEM_MALL_WAREHOUSE_TICKET", Country: 3,
+		TypeIDs: [4]int64{3, 3, 13, 10}, ReqQuadTypes: [4]int64{-1, -1, -1, -1},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "maxStack": 50})}
+	rt.deps.ItemReferences().(staticItemSource)[ticket.Codename] = ticket
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 25, RefObjID: ticket.RefObjID,
+		Codename: ticket.Codename, TypeFlags: ticket.TypeFlags(), StackCount: 2})
+	self := enterworld.ObjectIDForCharacter(c)
+	use := rt.HandleItemUse(testDivision, c, wire.NewWriter(3).U8(25).U16(ticket.TypeFlags()).Payload())
+	if len(use.Frames) == 0 || use.Frames[0].Opcode != wire.OpItemUseResponse || use.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("ticket use = %+v", use.Frames)
+	}
+	frames, refusal := rt.HandleStorageList(testDivision, c, wire.NewWriter(5).U32(self).U8(0).Payload())
+	if refusal != "" || len(frames) != 3 || frames[2].Opcode != wire.OpStorageList {
+		t.Fatalf("remote list = %+v / %q", frames, refusal)
+	}
+	open, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(self).U32(wire.StorageFunctionMask).Payload())
+	if refusal != "" || len(open) != 1 || open[0].Opcode != wire.OpNpcInteractionAck {
+		t.Fatalf("remote open = %+v / %q", open, refusal)
+	}
+	slot := uint8(potionRow(t, c).Slot)
+	r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageDeposit, SourceSlot: slot, DestSlot: 0, NpcGID: self})
+	if r.Frames[0].Payload[0] != 1 || len(authority.room.Rows) != 1 {
+		t.Fatalf("remote deposit = %+v", r)
+	}
+	rt.Selected.Set(testDivision, c.Name, 17)
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageWithdraw, SourceSlot: 0, DestSlot: slot, NpcGID: self})
+	if r.Frames[0].Payload[0] != 2 || len(authority.room.Rows) != 1 {
+		t.Fatalf("withdraw after the session ended = %+v", r)
+	}
+}

@@ -205,13 +205,13 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	actionLifecycleMs, actionLifecyclePinned := skill.ActionLifecycleMs()
-	if !known || ((!skill.CombatPinned || !skill.Attack.Present) && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only && !skill.StatusCast) ||
+	if !known || ((!skill.CombatPinned || !skill.Attack.Present) && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only && !skill.StatusCast && !skill.FixedDamage.Present) ||
 		!actionLifecyclePinned || actionLifecycleMs == 0 && !skill.PositionEffect.Charge ||
 		!skill.TargetRequired || (!basic && !advanced) {
 		return OpResult{}, skillCastRefused
 	}
 
-	attacker, loadout, err := rt.playerCombatStats(divisionID, snapshot)
+	attacker, loadout, err := rt.playerAttackStats(divisionID, snapshot, skill)
 	if err != nil {
 		return OpResult{}, skillCastRefused
 	}
@@ -302,7 +302,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 					return false
 				}
 			}
-			rt.startSkillCast(divisionID, character, nowMs)
+			rt.startSkillCast(divisionID, character, skill, nowMs)
 			rt.registerPlayerSkillCooldown(divisionID, character, skill, nowMs)
 			return true
 		}) {
@@ -368,6 +368,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	var ammo ammunitionResult
 	var killProgressionFrames []wire.Frame
 	var battleFrames []wire.Frame
+	var tuning wire.Frame
 	var refusal uint16
 	{
 		// Character ammo and monster HP move under the same per-division lock
@@ -394,7 +395,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				return false
 			}
 			if release == nil {
-				rt.startSkillCast(divisionID, character, nowMs)
+				rt.startSkillCast(divisionID, character, skill, nowMs)
 			}
 			battleFrames = rt.enterBattleState(divisionID, character, nowMs)
 			if consumeAmmo {
@@ -404,6 +405,11 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				rt.commitOffensivePhaseCost(divisionID, character, skill, cost, nowMs, release != nil)
 			} else if release == nil {
 				rt.registerPlayerSkillCooldown(divisionID, character, skill, nowMs)
+			}
+			if skill.FixedDamage.Present {
+				// After the cost: the drained MP refills the gauge the
+				// cast just spent (skilltuning.go).
+				tuning = rt.commitTuningMana(divisionID, character, skill.FixedDamage, committed)
 			}
 			if skill.PositionEffect.Charge {
 				rt.commitSkillTravel(simulation.WorldKey(divisionID, character.Name), character, travel)
@@ -509,6 +515,14 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if consumeAmmo {
 		actorFrames = append(actorFrames, ammunitionFrames(ammo)...)
 	}
+	// 593832: the attacker's unblocked attempts wear its weapon.
+	var tally wearTally
+	for _, formula := range formulas {
+		tally.note(formula.Blocked, true)
+	}
+	wear := rt.applyEquipmentWear(divisionID, character, tally)
+	actorFrames = append(actorFrames, wear.actor...)
+	broadcastFrames = append(broadcastFrames, wear.public...)
 	// The actor sees the same fatal B245/drop prefix first, then the complete
 	// native progression burst. Peers see only its gid-bearing level-up
 	// presentation; the private complement is retained for the tick-owned
@@ -517,10 +531,15 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if consumeAmmo {
 		privateFrames = append(ammunitionFrames(ammo), privateFrames...)
 	}
+	privateFrames = append(privateFrames, wear.actor...)
 	if advanced && rootID == 0 {
 		vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(enterworld.ObjectIDForCharacter(character), rt.publishedVitals(divisionID, character))}
 		actorFrames = append(actorFrames, vitals)
 		privateFrames = append(privateFrames, vitals)
+	}
+	if tuning.Opcode != 0 {
+		actorFrames = append(actorFrames, tuning)
+		privateFrames = append(privateFrames, tuning)
 	}
 	actorFrames = append(actorFrames, killProgressionFrames...)
 	broadcastFrames = append(broadcastFrames, settlement.public...)
@@ -926,10 +945,19 @@ danceSelectorActive is CSkillManager_CheckOwnerCondition 59DDF0: bit 0 of
 skill-manager +0x1D0. 5842AC installs it from an active persistent skill's
 scls word and 582C76 clears it when that skill retires, so it is set exactly
 while such an effect is live.
+
+Owner's rule: a Dancing needs the dancer inside ANOTHER Bard's music. Only
+an instance handed out by someone else's aura counts (a child, with an
+AuraParentToken); the dancer's own tambour or march does not. Inferred:
+the requirement is the cast's; a running dance does not end when the
+music does (it has its own MP, death, loading and hit rules).
 ==================
 */
 func (rt *Runtime) danceSelectorActive(division string, c *enterworld.Character) bool {
 	for _, effect := range rt.effects.Snapshot(division, c.Name) {
+		if effect.AuraParentToken == 0 || effect.StopRequested {
+			continue
+		}
 		row, ok := rt.deps.SkillData().SkillByID(effect.SkillID)
 		if ok && row.SelectorMask&1 != 0 {
 			return true

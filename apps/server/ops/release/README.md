@@ -69,8 +69,12 @@ A release that changes the asset data (a new `ASSET_SCHEMA` in
 produce it, so the operator stages it with `data_release.py`:
 
 ```sh
-python data_release.py PACKAGE OUTPUT --origin https://game.example.com   --ssh-target sro-stage@host --identity ~/.ssh/operator-stage [--coordinated]
+python data_release.py PACKAGE OUTPUT --origin https://game.example.com   --ssh-target sro-stage@host --identity ~/.ssh/operator-stage [--coordinated] [--max-batch-mib 16]
 ```
+
+On a slow link (a VPN), `--max-batch-mib` makes smaller batches. Each
+upload's time limit grows with its size (at least 32 KiB/s), and a timed-out
+upload is retried like any other transport failure.
 
 It reads the live release from the origin and uploads, in payload batches under
 the upload limit, only the content the live release lacks (keyed by sha256).
@@ -198,6 +202,14 @@ and install it as root-only `/etc/opensro-release/config.json`:
   "staff_webhook": "/etc/opensro-backup/discord-webhook"
 }
 ```
+
+The in-game bug reporter (`/bug`) is on when root-only
+`/etc/opensro-release/bug-report-webhook` holds one line, a Discord webhook URL
+(a forum channel works: each report opens its own post). Each release passes
+it to `sro-nomad deploy`. A missing file keeps the webhook already stored, and
+the word `off` turns reports off. Changing it needs no stop: the Agent restarts
+itself with the new value. Override the path with `bug_report_webhook` in
+`config.json`.
 
 Webhook URLs and private keys never enter git. Include `/etc/opensro-release`
 in the encrypted host backup. Retain the management token root-only; it is

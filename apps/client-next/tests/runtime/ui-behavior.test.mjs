@@ -15,6 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
+const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const fontBytes = readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json" ),
 	fontAtlas = JSON.parse( fontBytes );
 /*
@@ -27,6 +28,7 @@ async function load( file ) {
 }
 const { createUiAssets } = await load( "src/engine/runtime/ui/resources/resources.ts" );
 const { createUi } = await load( "src/engine/runtime/ui/ui.ts" );
+const { topmostControlAt } = await load( "src/engine/foundation/ui/hit-test.ts" );
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createQuests } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts" );
@@ -41,18 +43,18 @@ function assetFixture() {
 	const assets = {
 		available: () => 8,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request( url ) {
 			requests.push( url );
 			return ++id;
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take( id ) {
 			const r = results.get( id );
@@ -95,6 +97,28 @@ test("UI textures recover with backoff, release demand and cannot restart after 
 	f.resources.step( paths, 99999 );
 	assert.equal( f.requests.length, 3 );
 });
+/*
+================
+residentListEviction
+
+A baseline list found resident is remembered, and the memo must not
+outlive an eviction: a 4096 x 4096 image is 64 MiB, over the 48 MiB cap,
+so it is evicted as soon as demand stops wanting it.
+================
+*/
+test("a resident image list stops reading resident once one of its images is evicted", () => {
+	const f = assetFixture(), baseline = [ "/a.png" ];
+	assert.equal( f.resources.residentAll( baseline ), false );
+	f.resources.step( baseline, 0 );
+	f.results.set( 1, { kind: "image", image: { width: 4096, height: 4096 } } );
+	f.resources.step( baseline, 1 );
+	assert.equal( f.resources.residentAll( baseline ), true );
+	assert.equal( f.resources.residentAll( baseline ), true, "remembered answer" );
+	f.resources.step( [ "/b.png" ], 2 );
+	assert.equal( f.resources.has( "/a.png" ), false );
+	assert.equal( f.resources.residentAll( baseline ), false );
+	f.resources.dispose();
+});
 test("UI request exceptions are recoverable and released failures do not poison re-entry", () => {
 	const f = assetFixture();
 	const request = f.assets.request;
@@ -126,9 +150,9 @@ test("released image failures invalidate retained error UI and report attributed
 				return r;
 			},
 			/*
-================
-cancel
-================
+			================
+			cancel
+			================
 			*/
 			cancel() {}
 		},
@@ -198,9 +222,9 @@ test("UI image disposal drains all releases even when cancellation and renderer 
 			return value;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel( id ) {
 			cancelled.push( id );
@@ -239,9 +263,9 @@ test("UI image dimensions are captured before ownership is transferred to the re
 			return value;
 		},
 		/*
-================
-cancel
-================
+		================
+		cancel
+		================
 		*/
 		cancel() {}
 	}, ( _path, bitmap ) => {
@@ -299,10 +323,11 @@ function uiFixture(
 							path,
 							image: {
 								width: bytes.readUInt32BE( 16 ),
-								height: bytes.readUInt32BE( 20 ), /*
-================
-close
-================
+								height: bytes.readUInt32BE( 20 ),
+								/*
+								================
+								close
+								================
 								*/
 								close() {}
 							}
@@ -314,7 +339,9 @@ close
 			cancel: id => pending.delete( id )
 		},
 		commands,
-		s => scenes.push( s ),
+		// Scenes are recorded as drawn: text runs expanded into the glyph quads the
+		// GPU packer writes (text-run.ts), so assertions read painted glyphs.
+		s => scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } ),
 		( ...args ) => textures.push( args ),
 		"https://fixture.invalid/",
 		"https://fixture.invalid/",
@@ -338,9 +365,9 @@ close
 		worldReady: true
 	};
 	/*
-================
-hasText
-================
+	================
+	hasText
+	================
 	*/
 	function hasText( value, font = "0", style = 0 ) {
 		const face = style === 2 ? fontAtlas.fonts[font].styles["2"] : fontAtlas.fonts[font];
@@ -364,13 +391,15 @@ hasText
 		ui: {
 			...ui,
 			/*
-================
-step
-================
+			================
+			step
+			================
 			*/
 			step( state, now ) {
 				let result = ui.step( state, now );
 				for ( let i = 0; i < 8 && pending.size; i++ ) result = ui.step( state, now ) ?? result;
+				// The skill catalogue decodes in bounded steps after its bytes arrive.
+				for ( let i = 0; i < 64 && ui.stats().hudSettling; i++ ) result = ui.step( state, now ) ?? result;
 				return result;
 			}
 		},
@@ -379,9 +408,9 @@ step
 		textures,
 		state,
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
 			ui.dispose();
@@ -498,9 +527,9 @@ test("NPC UI uses authored talk bounds and native fonts through option, accept, 
 	let now = 100;
 	game.seed( { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
 	/*
-================
-settle
-================
+	================
+	settle
+	================
 	*/
 	function settle() {
 		const state = game.take();
@@ -508,9 +537,9 @@ settle
 		for ( let i = 0; i < 50; i++ ) semantics = f.ui.step( f.state, now++ ) ?? semantics;
 	}
 	/*
-================
-select
-================
+	================
+	select
+	================
 	*/
 	function select() {
 		game.command( { kind: "select", gid: 7 }, now, npc );
@@ -518,9 +547,9 @@ select
 		settle();
 	}
 	/*
-================
-reply
-================
+	================
+	reply
+	================
 	*/
 	function reply( kind, prompt, options = [] ) {
 		const str = s => {
@@ -614,9 +643,9 @@ test("quest objectives repaint native progress, per-node status and color after 
 	const strings =
 		JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
 	/*
-================
-update
-================
+	================
+	update
+	================
 	*/
 	function update( kind, count ) {
 		const name = Buffer.from( symbol ), p = Buffer.alloc( 5 + 3 + 1 + 1 + 2 + 2 + name.length + 1 + 4 );
@@ -642,17 +671,17 @@ update
 	}
 	/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */ let semantics;
 	/*
-================
-settle
-================
+	================
+	settle
+	================
 	*/
 	function settle( now ) {
 		for ( let i = 0; i < 100; i++ ) semantics = f.rawStep( { ...f.state }, now + i ) ?? semantics;
 	}
 	/*
-================
-glyphRun
-================
+	================
+	glyphRun
+	================
 	*/
 	function glyphRun( value, color ) {
 		const glyphs = f.scenes.at( -1 ).quads.filter( q => q.texture === fontAtlas.image );
@@ -1235,18 +1264,17 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		assert.deepEqual( sent, [] );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		assert.deepEqual( sent, [ { kind: "gameplay", command: { kind: "rebirth", choice: 2 } } ] );
-		f.state.gameplay = { ...f.state.gameplay, rebirthPending: true };
 		scene = step( 5100 );
 		assert.ok(
 			defined( scene ).controls.filter( c => c.id === "rebirth-point" || c.id === "rebirth-alternate" ).every(
-				c => c.disabled
+				c => !c.disabled
 			)
 		);
 		f.ui.event( { kind: "activate", id: "rebirth-point" } );
-		assert.equal( sent.length, 1 );
+		assert.equal( sent.length, 2 );
 		life( 1 );
 		vitals( false );
-		f.state.gameplay = { ...f.state.gameplay, rebirthPending: false, progression: { level: 11, masteries: [] } };
+		f.state.gameplay = { ...f.state.gameplay, progression: { level: 11, masteries: [] } };
 		step( 5200 );
 		life( 2 );
 		vitals( true );
@@ -1254,7 +1282,7 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		assert.equal( prompt( 8300 ), true );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		scene = step( 8400 );
-		assert.equal( sent.length, 1, "high-level alternate waits for rescue without sending choice 2" );
+		assert.equal( sent.length, 2, "high-level alternate waits for rescue without sending choice 2" );
 		assert.ok( !defined( scene ).controls.some( c => c.id === "rebirth-point" ) );
 		f.ui.event( { kind: "world-select", gid: 2 } );
 		assert.equal( prompt( 8410 ), false, "another corpse cannot reopen the local prompt" );
@@ -1277,11 +1305,9 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		);
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		assert.equal( prompt( 8450 ), false );
-		f.state.gameplay = { ...f.state.gameplay, rebirthPending: true };
 		step( 8460 );
 		f.ui.event( { kind: "world-select", gid: 1 } );
-		assert.equal( prompt( 8470 ), false, "pending resurrection cannot be reopened" );
-		f.state.gameplay = { ...f.state.gameplay, rebirthPending: false };
+		assert.equal( prompt( 8470 ), true, "a silent resurrection refusal must not block corpse selection" );
 		step( 8480 );
 		f.ui.event( { kind: "world-select", gid: 1 } );
 		assert.equal( prompt( 8490 ), true );
@@ -1290,7 +1316,7 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 			[ 600, 345, 400, 210 ],
 			"a new prompt is centered"
 		);
-		assert.equal( sent.length, 1, "corpse selection and high-level rescue dismissal are local UI actions" );
+		assert.equal( sent.length, 2, "corpse selection and high-level rescue dismissal are local UI actions" );
 		life( 1 );
 		vitals( false );
 		step( 8500 );
@@ -1311,6 +1337,122 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		assert.equal( prompt( 16800 ), false );
 		f.ui.event( { kind: "world-select", gid: 1 } );
 		assert.equal( prompt( 16801 ), true, "explicit selection bypasses the automatic death timer" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a resurrection question retires the death box at native geometry; selecting oneself restores it", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		/** @type {any} */ let latest = null;
+		const step = now => (latest = f.ui.step( f.state, now ) ?? latest),
+			ids = () => defined( latest ).controls.map( c => c.id );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			progression: { level: 10, masteries: [] },
+			vitals: [ { gid: 1, hp: 0, mp: 0, deathState: true } ]
+		};
+		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 2, 0, 0 ] } ];
+		for ( let t = 0; t <= 3000; t += 100 ) step( t );
+		assert.ok( ids().includes( "rebirth-point" ) );
+		const confirmCaption = defined( latest ).controls.find( c => c.id === "rebirth-body" ).label;
+		// 7644E0 case 3: ClearStateTimer(0xF), retire kinds 3 and 4, open kind 4.
+		f.state.gameplay = { ...f.state.gameplay, social: { invitation: null, resurrection: { gid: 2 } } };
+		step( 3100 );
+		assert.deepEqual( ids(), [
+			"resurrection-body",
+			"resurrection-drag",
+			"resurrection-accept",
+			"resurrection-refuse"
+		], "the question retires the death box and holds the HUD" );
+		const body = defined( latest ).controls.find( c => c.id === "resurrection-body" );
+		// 5C82D0 centres 308x148 (1600x900: 646,376); 52F460 case 3 resizes to 400x210.
+		assert.deepEqual( body.rect, [ 646, 376, 400, 210 ] );
+		assert.ok( body.label && body.label !== confirmCaption, "kind 4 carries the agreement caption" );
+		assert.deepEqual(
+			defined( latest ).controls.filter( c => c.id.startsWith( "resurrection-" ) && c.kind === "button" ).map(
+				c => [ c.id, c.label, c.rect ]
+			),
+			[ [ "resurrection-accept", "Yes", [ 769, 544, 76, 24 ] ], [ "resurrection-refuse", "No", [
+				849,
+				544,
+				76,
+				24
+			] ] ]
+		);
+		assert.ok( f.hasText( "The warm light is hovering around your body." ) );
+		assert.ok( f.hasText( "You feel the soul entering your body." ) );
+		assert.ok( f.hasText( "Will you resurrect yourself to venture again?" ) );
+		f.ui.event( { kind: "drag", id: "resurrection-drag", dx: 40, dy: -30 } );
+		step( 3110 );
+		assert.deepEqual( defined( latest ).controls.find( c => c.id === "resurrection-accept" ).rect, [
+			809,
+			514,
+			76,
+			24
+		] );
+		f.ui.event( { kind: "activate", id: "logout" } );
+		assert.deepEqual( sent, [] );
+		f.ui.event( { kind: "activate", id: "resurrection-refuse" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "resurrection-consent", accept: false }
+		} );
+		// The refusal closes the slot; nothing reopens the death box by itself.
+		f.state.gameplay = { ...f.state.gameplay, social: { invitation: null } };
+		for ( let t = 3200; t <= 9000; t += 200 ) step( t );
+		assert.ok( !ids().includes( "rebirth-point" ), "the retired death box stays closed" );
+		// 6813E0: selecting oneself while dead opens kind 3 again.
+		f.ui.event( { kind: "world-select", gid: 1 } );
+		step( 9100 );
+		assert.ok( ids().includes( "rebirth-point" ), "selecting oneself restores the death box" );
+		// 7644E0 case 7: an rmut revival asks the mutation question instead.
+		f.state.gameplay = {
+			...f.state.gameplay,
+			social: { invitation: null, resurrection: { gid: 3, mutation: true } }
+		};
+		step( 9200 );
+		assert.ok( !ids().includes( "rebirth-point" ), "the mutation question retires the death box too" );
+		assert.ok( ids().includes( "resurrection-accept" ) );
+		assert.ok( !f.hasText( "The warm light is hovering around your body." ) );
+		f.ui.event( { kind: "activate", id: "resurrection-accept" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "resurrection-consent", accept: true }
+		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("an invitation box and the resurrection question stay open and answerable together", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		f.ui.step( f.state, 0 );
+		const invited = { invitation: { type: 2, gid: 1, options: 0 } },
+			both = { invitation: { type: 2, gid: 1, options: 0 }, resurrection: { gid: 2 } },
+			at = ( social, now ) => f.ui.step( { ...f.state, gameplay: { ...f.state.gameplay, social } }, now ),
+			buttons = semantic => semantic.controls.filter( c => c.kind === "button" ).map( c => [ c.id, c.rect ] );
+		const alone = buttons( at( invited, 100 ) );
+		assert.deepEqual( alone.map( ( [id] ) => id ), [ "invite-accept", "invite-refuse" ] );
+		const raced = buttons( at( both, 200 ) );
+		assert.deepEqual( raced.map( ( [id] ) => id ), [
+			"invite-accept",
+			"invite-refuse",
+			"resurrection-accept",
+			"resurrection-refuse"
+		] );
+		assert.deepEqual( raced.slice( 0, 2 ), alone, "the invitation box keeps its native controls" );
+		f.ui.event( { kind: "activate", id: "invite-refuse" } );
+		f.ui.event( { kind: "activate", id: "resurrection-accept" } );
+		assert.deepEqual( sent, [
+			{ kind: "gameplay", command: { kind: "social-consent", accept: false } },
+			{ kind: "gameplay", command: { kind: "resurrection-consent", accept: true } }
+		] );
+		const question = buttons( at( { invitation: null, resurrection: { gid: 2 } }, 300 ) );
+		assert.deepEqual( question.map( ( [id] ) => id ), [ "resurrection-accept", "resurrection-refuse" ] );
+		assert.deepEqual( buttons( at( invited, 400 ) ), alone, "the question leaves the invitation box as it was" );
 	} finally {
 		f.dispose();
 	}
@@ -2011,9 +2153,9 @@ test("merchant amount editor clamps to the authored limit before purchase", () =
 		f.state.entities.push( { ...f.state.entities[0], gid: 17, kind: "npc", name: "Merchant" } );
 		let now = 0;
 		/*
-================
-draw
-================
+		================
+		draw
+		================
 		*/
 		function draw() {
 			return f.ui.step( f.state, now += 100 );
@@ -2764,6 +2906,64 @@ test("native party join progress owns input for ten seconds and uses the 200ms g
 	}
 });
 
+test("a pending item move keeps inventory slots enabled and drops further moves", () => {
+	// 69B5A0 sets the native move flag for 3 s; 699359 drops a request while it
+	// is set, but the slots stay enabled (hover and tooltips keep working).
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventory: [ { slot: 14, refObjId: 1, typeFlags: 0x6c, quantity: 10, name: "Stack", magic: [] } ],
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventoryPending: true
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		const semantics = f.ui.step( state, ++now );
+		const slot = semantics?.controls.find( c => c.id === "slot:14" );
+		assert.equal( slot?.disabled, false, "a pending move does not disable the slot" );
+		f.ui.event( { kind: "double-activate", id: "slot:14" } );
+		f.ui.step( state, ++now );
+		assert.deepEqual( sent.filter( c => c?.kind === "inventory-move" ), [], "the second move is dropped" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("an edit normalized back to the published value still republishes the field", () => {
+	// 521A85: the edit replaces an oversized draft with its limit. When that
+	// limit is already the field's value the semantics compare equal; the UI
+	// must publish them anyway, or the field keeps the raw keystrokes.
+	const f = uiFixture();
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventory: [ { slot: 14, refObjId: 1, typeFlags: 0x6c, quantity: 10, name: "Stack", magic: [] } ],
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventoryPending: false
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "slot:14", shift: true } );
+		f.ui.step( state, ++now );
+		const field = semantics => semantics?.controls.find( c => c.id === "split-amount" )?.value;
+		f.ui.event( { kind: "edit", id: "split-amount", value: "99", start: 2, end: 2, composing: false } );
+		assert.equal( field( f.ui.step( state, ++now ) ), "9" );
+		assert.equal( f.ui.step( state, ++now ), null, "nothing changed, nothing published" );
+		f.ui.event( { kind: "edit", id: "split-amount", value: "999", start: 3, end: 3, composing: false } );
+		assert.equal( field( f.ui.step( state, ++now ) ), "9", "the clamped field is published again" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("native Shift split clamps to stack minus one, chooses first free bag slot and cancels without mutation", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
@@ -3056,8 +3256,10 @@ test("retail extended quickslot layouts, fixed bindings, locks and bottom-bar ac
 		assert.deepEqual( commands.pop(), { kind: "skill", skillId: 7 } );
 		f.state.gameplay.skillCooldowns = [ { skill: 7, group: 0, startedAtMs: now, durationMs: 2000 } ];
 		draw();
+		// A cooling-down press is forwarded: the worker holds or denies it
+		// (skill-queue.ts) and the slot keeps drawing the cooldown.
 		click( "hotbar:41" );
-		assert.equal( commands.length, 0 );
+		assert.deepEqual( commands.pop(), { kind: "skill", skillId: 7 } );
 		assert.ok( f.scenes.at( -1 ).quads.some( q => q.texture.endsWith( "/skill_delay.png" ) ) );
 	} finally {
 		f.dispose();
@@ -3180,9 +3382,14 @@ test("skill training UI rechecks SP at confirmation, waits for authority, and ex
 		click( "skill-confirm-ok" );
 		assert.deepEqual( commands.pop(), { kind: "skill-train", id: 291 } );
 		assert.deepEqual( game.skills, [ 3 ], "sending never invents the learned successor" );
+		// 588AF0 has no pending gate: the button stays while a request is in
+		// flight, and confirming it sends nothing until the first is answered.
 		game.trainingPending = true;
 		draw();
-		assert.ok( !defined( output ).controls.some( c => c.id === "skill-learn:291" ) );
+		assert.ok( defined( output ).controls.some( c => c.id === "skill-learn:291" ), "the button does not blink" );
+		click( "skill-learn:291" );
+		click( "skill-confirm-ok" );
+		assert.equal( commands.length, 0, "a pending request blocks a second one" );
 		game.trainingPending = false;
 		game.progression = { level: 10, skillPoints: 0, masteries: [ { id: 257, level: 0 } ] };
 		draw();
@@ -3340,11 +3547,11 @@ test("native window sisters retain drag placement, close on ESC and reject retir
 	f.state.gameplay.cosRecords = [ { gid: 7, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false } ];
 	/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */ let semantics;
 	/*
-================
-settle
+	================
+	settle
 
-Drain dependent window resources before asserting placement or capture state.
-================
+	Drain dependent window resources before asserting placement or capture state.
+	================
 	*/
 	const settle = () => {
 		for ( let i = 0; i < 50; i++ ) semantics = f.ui.step( f.state, 1000 + i ) ?? semantics;
@@ -3897,9 +4104,9 @@ test("open Skills and hotbar do not rescan the catalog during camera/hover UI re
 		let reads = 0;
 		const catalog = new Proxy( rows, {
 			/*
-================
-get
-================
+			================
+			get
+			================
 			*/
 			get( target, key, receiver ) {
 				if ( typeof key === "string" && /^\d+$/.test( key ) ) reads++;
@@ -4608,7 +4815,13 @@ test("learned skill icons and shortcut bars share casting and cooldown admission
 		f.ui.event( { kind: "right-activate", id: "skill:3" } );
 		f.ui.event( { kind: "right-activate", id: "hotbar:1" } );
 		f.ui.event( { kind: "activate", id: "hotbar:1" } );
-		assert.equal( sent.length, 0, "board and shortcuts reject the same active cooldown" );
+		// The board and both bars forward a cooling-down press alike; the
+		// worker decides it (skill-queue.ts).
+		assert.equal( sent.length, 3, "board and shortcuts forward the same cooling-down press" );
+		for ( const command of sent ) {
+			assert.deepEqual( command, { kind: "gameplay", command: { kind: "skill", skillId: 3, gid: 2 } } );
+		}
+		sent.length = 0;
 		f.state.gameplay = { ...f.state.gameplay, skills: [], skillCooldowns: [] };
 		f.ui.step( f.state, 1600 );
 		f.ui.event( { kind: "right-activate", id: "skill:3" } );

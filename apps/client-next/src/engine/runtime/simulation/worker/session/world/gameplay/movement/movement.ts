@@ -23,6 +23,7 @@ import {
 	poseDistance,
 	sampleMovement,
 	interpolateMovement as interpolate,
+	REGION_SIZE,
 	movementModeTransition,
 	movementSpeedTransition
 } from "@/engine/foundation/gameplay/native-movement";
@@ -48,8 +49,34 @@ const ENVELOPE_COS = 2;
 // 0x769E tag 1 carries the vehicle's 0x7738 body.
 const COS_MOVEMENT_TAG = 1;
 // How long a walk held for a cast waits for the server's settle before it
-// follows the server again: a refused or deferred cast never settles.
+// follows the server again: a deferred cast never settles.
 const CAST_HOLD_MS = 1500;
+// A held player rejoins the server's walk no faster than this multiple of its
+// own speed, so the catch-up reads as walking, never as a slide or a jump.
+const CATCHUP_SPEED_FACTOR = 1.3;
+
+/*
+================
+WalkLead
+
+Who is ahead on the local walk, by one delivery.
+
+	client  the client started it from its own command (a ground click, a
+	        direction walk, a predicted run-up). The server starts the same
+	        walk when the command reaches it, so the server stands where the
+	        client stood one delivery ago.
+	server  the client is replaying a walk the server started (a chase, a
+	        follow, a leg a receipt replaced). The client stands where the
+	        server stood one delivery ago.
+
+It decides what a command that may stop the walk does locally (holdForCast).
+The server acts where the command finds it. On a client-led walk that is
+where the client stands at the press: stop there. On a server-led walk it is
+where the client will stand when the answer arrives: keep walking, and the
+server's stop or new leg lands under the player's feet.
+================
+*/
+type WalkLead = "client" | "server";
 
 /*
 ================
@@ -66,6 +93,60 @@ interface DirectionReference {
 	limit: number;
 }
 
+// A receipt that moves the player further than this from the predicted pose
+// is reported: it is visible on screen.
+const REANCHOR_REPORT_UNITS = 1;
+// The first reports in full, then every REANCHOR_REPORT_EVERY-th with the
+// running count, so a recurring snap never goes silent.
+const MAX_REANCHOR_REPORTS = 32;
+const REANCHOR_REPORT_EVERY = 50;
+
+/*
+================
+sameNavigationSpace
+
+Outdoor regions form one plane, so any two outdoor poses can be measured
+and walked between; a dungeon region is its own space.
+================
+*/
+function sameNavigationSpace( a: Pose, b: Pose ): boolean {
+	if ( !((a.regionId | b.regionId) & 0x8000) ) return true;
+	return a.regionId === b.regionId;
+}
+
+/*
+================
+planarOffset
+
+b - a on the ground plane in world units. Outdoor regions share one plane;
+callers check sameNavigationSpace first.
+================
+*/
+function planarOffset( a: Pose, b: Pose ): [number, number] {
+	return [
+		b.x - a.x + ((b.regionId & 255) - (a.regionId & 255)) * REGION_SIZE,
+		b.z - a.z + ((b.regionId >>> 8) - (a.regionId >>> 8)) * REGION_SIZE
+	];
+}
+
+/*
+================
+ReceiptReconciliation
+
+What a latest-command receipt does to the predicted walk: keep it (and walk
+on to the server's stop over segment), settle on the stop the prediction has
+already passed, or take the server's pose. tail and remaining are the
+predicted and the server's distances to the stop, for the report.
+================
+*/
+interface ReceiptReconciliation<Segment> {
+	readonly kind: "keep" | "settle" | "server";
+	readonly reason: string;
+	readonly segment?: Segment | null;
+	readonly tail?: number;
+	readonly remaining?: number;
+}
+
 /*
 ================
 createMovement
@@ -79,6 +160,8 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 		segment:
 			| (MovementSegment & {
 				timing: "speed" | "server";
+				// Who is ahead on this walk (see WalkLead).
+				lead: WalkLead;
 				owners?: readonly NavOwnerSpan[];
 				castToken?: number;
 				fixedTiming?: boolean;
@@ -105,11 +188,16 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 	let predicted: { from: Pose; to: Pose; } | null = null;
 	// A walk stopped where a cast command left it (holdForCast): the held
 	// pose, when the hold lapses, and the server walk to follow if it does.
-	let castHold: { pose: Pose; until: number; resume: Parameters<typeof bindOwners>[0] | null; } | null = null;
+	let castHold: {
+		pose: Pose;
+		since: number;
+		until: number;
+		resume: Parameters<typeof bindOwners>[0] | null;
+	} | null = null;
+	let reanchorReports = 0;
 	const pending = new Map<number, {
 		to: Pose;
 		sent: number;
-		predictedEnd: Pose | null;
 		direction?: number;
 	}>();
 	/*
@@ -151,6 +239,77 @@ bindOwners
 	*/
 	/*
 ================
+noteReanchor
+
+The player's pose moved by more than REANCHOR_REPORT_UNITS for a reason
+other than walking: say what moved it, how far and with what inputs, so a
+reported snap is never a guess. Called with the final committed pose.
+================
+	*/
+	function noteReanchor( source: string, before: Pose, after: Pose, details: object ) {
+		const jump = sameNavigationSpace( before, after ) ? poseDistance( before, after ) : Infinity;
+		if ( jump < REANCHOR_REPORT_UNITS ) return;
+		reanchorReports++;
+		if ( reanchorReports > MAX_REANCHOR_REPORTS && reanchorReports % REANCHOR_REPORT_EVERY !== 0 ) return;
+		console.warn(
+			`[SRO movement] ${source} moved the player ${jump.toFixed( 1 )} units (report ${reanchorReports})`,
+			{ before, after, ...details }
+		);
+	}
+	/*
+================
+reconcileReceipt
+
+Decides what the latest command's receipt does to the predicted walk (see
+receive). authoritative is the server's pose at the receipt, to its stop.
+
+The prediction is kept only while it is still short of the stop: the
+projection of predicted - authoritative onto the server's remaining walk
+must not pass its end. A clear route alone does not prove that: with the
+server stopped at 110, a prediction at 119 is 9 from the stop and 10 from
+the server, yet past it. A prediction behind the server walks on and
+catches up no faster than CATCHUP_SPEED_FACTOR.
+================
+	*/
+	function reconcileReceipt(
+		accepted: boolean,
+		predicted: Pose | null,
+		predictedOwner: NavOwner | undefined,
+		server: NonNullable<typeof segment>,
+		to: Pose
+	): ReceiptReconciliation<NonNullable<typeof segment>> {
+		if ( !accepted ) return { kind: "server", reason: "rejected" };
+		if ( !predicted || !authoritative ) return { kind: "server", reason: "no prediction" };
+		if ( !sameNavigationSpace( predicted, to ) || !sameNavigationSpace( authoritative, to ) ) {
+			return { kind: "server", reason: "other dungeon" };
+		}
+		const tail = poseDistance( predicted, to ), remaining = poseDistance( authoritative, to );
+		const walked = planarOffset( authoritative, predicted ), ahead = planarOffset( authoritative, to );
+		if ( walked[0] * ahead[0] + walked[1] * ahead[1] > remaining * (remaining + ENDPOINT_EPSILON) ) {
+			return { kind: "settle", reason: "passed the server's stop", tail, remaining };
+		}
+		const route = navigation.clip( predicted, to, { slide: false, sourceOwner: predictedOwner } );
+		if (
+			!route || poseDistance( route, to ) >= ENDPOINT_EPSILON ||
+			(to.regionId & 0x8000) !== 0 && Math.abs( route.y - to.y ) >= DUNGEON_HEIGHT_EPSILON
+		) return { kind: "server", reason: "route blocked", tail, remaining };
+		if ( tail < ENDPOINT_EPSILON ) return { kind: "keep", reason: "at the stop", segment: null, tail, remaining };
+		const duration = tail <= remaining ?
+			server.duration * tail / remaining :
+			Math.max( server.duration, tail / (speed * CATCHUP_SPEED_FACTOR) * 1000 );
+		// A prediction short of the server's own distance to the stop is still
+		// ahead of it; one further away now follows the server.
+		const leads = tail <= remaining;
+		return {
+			kind: "keep",
+			reason: leads ? "ahead of the server" : "behind the server",
+			segment: { ...server, duration, lead: leads ? "client" : "server" },
+			tail,
+			remaining
+		};
+	}
+	/*
+================
 keepCastHold
 
 A receipt for a walk sent before the hold confirms the server's path; the
@@ -163,6 +322,47 @@ player stays held and that path becomes the one to follow if the hold lapses.
 		pose = castHold.pose;
 		segment = null;
 		walk = null;
+	}
+	/*
+================
+rejoinServerWalk
+
+The cast hold ends without a settle: the server never stopped, so its walk
+went on. Walk from the held pose to that walk's end; from here on the client
+follows the server (WalkLead "server").
+
+A refusal arrives one round trip after the press. The hold stopped a
+client-led walk where the server stood when the command reached it; one
+round trip later the server is one delivery further on, so the held player
+is exactly the server-led replica of that walk. Resume at walking speed:
+catching up instead would put the player ahead of where a later stop lands.
+
+A hold that lapsed (no answer at all) waited longer than that. It catches
+up, arriving when the walk it stopped would have, but never faster than
+CATCHUP_SPEED_FACTOR, so it reads as walking and not as a slide or a jump.
+================
+	*/
+	function rejoinServerWalk( now: number, refused: boolean ) {
+		if ( !castHold ) return;
+		const held = castHold.pose, resume = castHold.resume;
+		castHold = null;
+		movementRevision++;
+		if ( !resume ) return;
+		const remaining = poseDistance( held, resume.to ),
+			arrival = resume.start + resume.duration,
+			fastest = remaining / (speed * CATCHUP_SPEED_FACTOR) * 1000;
+		pose = held;
+		poseAtMs = now;
+		segment = remaining ?
+			bindOwners( {
+				from: held,
+				to: { ...resume.to, angle: movementHeading( held, resume.to ) },
+				start: now,
+				timing: "speed",
+				lead: "server",
+				duration: refused ? remaining / speed * 1000 : Math.max( arrival - now, fastest )
+			} ) :
+			null;
 	}
 	/*
 ================
@@ -189,7 +389,14 @@ way runs its full leg and the server's correction stops it where the
 server did.
 ================
 	*/
-	function directionSegment( from: Pose, heading: number, now: number, factor = 1, predictOnly = false ) {
+	function directionSegment(
+		from: Pose,
+		heading: number,
+		now: number,
+		lead: WalkLead,
+		factor = 1,
+		predictOnly = false
+	) {
 		const end = directionLegEnd( from, heading );
 		const query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; } = {
 			slide: false,
@@ -203,6 +410,7 @@ server did.
 			to: { ...to, angle: heading },
 			start: now,
 			timing: "speed" as const,
+			lead,
 			duration: travelled / (speed * factor) * 1000,
 			owners: clipped ? query.owners : undefined,
 			direction: { heading, blocked: !!clipped && directionLegBlocked( travelled ) }
@@ -235,7 +443,30 @@ new leg from the live pose; the walk's own heading is kept for later legs.
 		walk.factor = drift.factor;
 		owner = liveOwner( now );
 		pose = navigation.surface( local, pose ?? local, owner, surfaceCursor );
-		segment = directionSegment( pose, drift.heading, now, drift.factor );
+		poseAtMs = now;
+		segment = directionSegment( pose, drift.heading, now, segment.lead, drift.factor );
+	}
+	/*
+================
+advanceTo
+
+Bring the rest pose to now along the walk in progress, stamped with the
+time it was taken at. Every re-anchor (a click, a direction walk, a
+receipt, a server walk, a correction, a cast) starts here. Starting from
+the last stepped pose instead drops the time since that worker step: the
+presentation extrapolates every sample along its velocity, so the
+shortfall is drawn as a back-step of up to one step's travel, felt on
+every high-latency acknowledgement and skill press.
+================
+	*/
+	function advanceTo( now: number ) {
+		if ( !pose ) return;
+		if ( segment ) {
+			owner = liveOwner( now );
+			pose = navigation.surface( sampleMovement( segment, now ), pose, owner, surfaceCursor );
+			owner = surfaceCursor.owner ?? owner;
+		}
+		poseAtMs = now;
 	}
 	/*
 ================
@@ -294,11 +525,13 @@ displace
 			surfaceCursor = {};
 			walk = null;
 			pose = authoritative = navigation.surface( next.from, from, owner );
+			poseAtMs = now;
 			segment = next.duration ?
 				bindOwners( {
 					...next,
 					from: pose,
 					timing: "server",
+					lead: "server",
 					fixedTiming: true,
 					castToken: command.kind === 8 ? command.token : undefined
 				} ) :
@@ -318,16 +551,38 @@ the correction then pulled the player back, past MAX_CORRECTION_DISTANCE as
 a snap. End the local walk here; receipts still update the authority, the
 correction or a new move ends the hold, and a hold that lapses follows the
 server's walk again.
+
+That holds only for a walk the client leads (WalkLead). On a server-led walk
+(a chase) the client stands one delivery behind the server: the server acts
+on the command where the client will stand when the answer arrives, so the
+walk goes on and the stop or the re-planned leg lands under it. Holding such
+a walk froze it at every press of a skill spam and lost that walking time
+for good: the next leg started from the held point while the server ran on,
+and reaching range pulled the player 28 to 120 units forward at once
+(production recording, 2026-10-04, 360 ms round trip).
 ================
 		*/
 		holdForCast( now: number ) {
-			if ( !segment || !pose || segment.castToken !== undefined ) return;
-			pose = navigation.surface( sampleMovement( segment, now ), pose, owner, surfaceCursor );
-			poseAtMs = now;
-			castHold = { pose, until: now + CAST_HOLD_MS, resume: segment };
+			if ( !segment || !pose || segment.castToken !== undefined || segment.lead === "server" ) return;
+			advanceTo( now );
+			castHold = { pose, since: now, until: now + CAST_HOLD_MS, resume: segment };
 			segment = null;
 			walk = null;
 			movementRevision++;
+		},
+		/*
+================
+castRefused
+
+The server did not act on the command the walk was held for: it refused it
+(B245 [2, code], or the B2CD action notice) or queued it behind its open
+command (B2CD count 2). Either way it never touched movement (offensiveCost
+runs at the press, 58D8F0; a queued command waits in 4AD630), so its walk
+went on: rejoin it now rather than when the hold lapses.
+================
+		*/
+		castRefused( now: number ) {
+			rejoinServerWalk( now, true );
 		},
 		/*
 ================
@@ -341,6 +596,7 @@ cancelCast
 					pose ?? segment.from,
 					owner
 				);
+				poseAtMs = now;
 				segment = null;
 			}
 		},
@@ -409,6 +665,7 @@ mode
 			if ( !segment ) return;
 			const next = movementModeTransition( segment, value, speed, now, segment.timing === "server" );
 			pose = navigation.surface( next.pose, pose ?? next.pose, owner );
+			poseAtMs = now;
 			if ( segment.timing === "server" || !next.segment ) authoritative = pose;
 			if ( !next.segment ) walk = null;
 			segment = next.segment ?
@@ -418,6 +675,7 @@ mode
 						...next.segment,
 						from: pose,
 						timing: segment.timing,
+						lead: segment.lead,
 						direction: segment.direction
 					} )) :
 				null;
@@ -438,6 +696,7 @@ speeds
 			if ( segment && !segment.fixedTiming && speed !== previous ) {
 				const next = movementSpeedTransition( segment, previous, speed, now );
 				pose = navigation.surface( next.from, pose ?? next.from, owner );
+				poseAtMs = now;
 				segment = next.duration ? bindOwners( { ...segment, ...next, from: pose } ) : null;
 			}
 		},
@@ -450,13 +709,14 @@ native
 			if ( !pose || life === "dead" ) {
 				return;
 			}
-			const current = segment ? sampleMovement( segment, now ) : pose;
-			const decoded = decodeNativeMovement( p, current );
+			const decoded = decodeNativeMovement( p, segment ? sampleMovement( segment, now ) : pose );
 			if ( decoded.gid !== gid ) {
 				return;
 			}
 			// A source-less angular acknowledgement leaves the path running.
 			if ( decoded.kind === "keep" ) return;
+			advanceTo( now );
+			const current = pose;
 			castHold = null;
 			movementRevision++;
 			const adopt = predicted !== null && decoded.kind !== "direction" &&
@@ -474,11 +734,13 @@ native
 					to: decoded.to,
 					start: now,
 					timing: "speed",
+					lead: "client",
 					duration: poseDistance( current, decoded.to ) / speed * 1000
 				} );
 				return;
 			}
 			pose = authoritative;
+			noteReanchor( "native move from its source", current, pose, { kind: decoded.kind } );
 			if ( decoded.kind === "direction" ) {
 				const heading = decoded.heading!;
 				walk = {
@@ -487,7 +749,7 @@ native
 					nextDrift: now + DRIFT_PERIOD_MS,
 					reference: { from: pose, start: now, heading, limit: Infinity }
 				};
-				segment = directionSegment( pose, heading, now );
+				segment = directionSegment( pose, heading, now, "server" );
 				return;
 			}
 			walk = null;
@@ -496,6 +758,7 @@ native
 				to: decoded.to,
 				start: now,
 				timing: "speed",
+				lead: "server",
 				duration: poseDistance( pose, decoded.to ) / speed * 1000
 			} );
 		},
@@ -559,11 +822,28 @@ correct
 		*/
 		correct( value: Pose, now?: number ) {
 			movementRevision++;
+			// What the walk was doing when the correction came, for the report:
+			// a large one names its cause (a hold the server never settled, a
+			// walk of the wrong lead) instead of only its size.
+			const context = {
+				held: castHold && now !== undefined ? now - castHold.since : null,
+				lead: segment?.lead ?? castHold?.resume?.lead ?? null,
+				moving: !!segment
+			};
 			castHold = null;
+			if ( now !== undefined ) advanceTo( now );
+			const before = pose;
 			// A live source correction ends motion, but is not a new spawn.
 			// Resolve its surface through the existing navigation owner before
 			// retiring the segment; server endpoint Y can be below a hill/deck.
 			pose = authoritative = reconcile( admitPose( value ) );
+			if ( before ) {
+				noteReanchor( "server correction", before, pose, {
+					pending: pending.size,
+					latest: nextId,
+					...context
+				} );
+			}
 			predicted = null;
 			surfaceCursor = {};
 			segment = null;
@@ -582,13 +862,13 @@ correct
 					sourceOwner: owner
 				};
 				const clipped = navigation.clip( pose, latest.to, query );
-				pending.set( nextId, { ...latest, predictedEnd: clipped } );
 				if ( clipped ) {
 					segment = {
 						from: pose,
 						to: { ...clipped, angle: movementHeading( pose, clipped ) },
 						start: now,
 						timing: "speed",
+						lead: "client",
 						duration: poseDistance( pose, clipped ) / speed * 1000,
 						owners: query.owners
 					};
@@ -606,6 +886,7 @@ request
 			if ( !pose || pending.size >= 32 || nextId === 0xffffffff ) {
 				throw new Error( "Movement command capacity exceeded or player absent" );
 			}
+			advanceTo( now );
 			const p = admitPose( value ),
 				to = { ...p, x: Math.trunc( p.x ), y: Math.trunc( p.y ), z: Math.trunc( p.z ) },
 				id = nextId + 1;
@@ -637,7 +918,7 @@ request
 			send( frame );
 			nextId = id;
 			movementRevision++;
-			pending.set( id, { to, sent: now, predictedEnd: clipped } );
+			pending.set( id, { to, sent: now } );
 			error = null;
 			walk = null;
 			predicted = null;
@@ -647,6 +928,7 @@ request
 					to: { ...clipped, angle: movementHeading( pose, clipped ) },
 					start: now,
 					timing: "speed",
+					lead: "client",
 					duration: poseDistance( pose, clipped ) / speed * 1000,
 					owners: query.owners
 				};
@@ -682,6 +964,7 @@ walk (native); a refusal ends it (endPrediction).
 				to: { ...clipped, angle: movementHeading( current, clipped ) },
 				start: now,
 				timing: "speed",
+				lead: "client",
 				duration: poseDistance( current, clipped ) / speed * 1000,
 				owners: query.owners
 			};
@@ -706,6 +989,7 @@ start, so walk back there.
 				to: { ...from, angle: movementHeading( current, from ) },
 				start: now,
 				timing: "speed",
+				lead: "server",
 				duration: poseDistance( current, from ) / speed * 1000
 			} );
 		},
@@ -736,6 +1020,7 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 			if ( cosGid !== undefined && (!Number.isInteger( cosGid ) || cosGid < 1 || cosGid > 0xffffffff) ) {
 				throw Error( "Invalid COS owner" );
 			}
+			advanceTo( now );
 			const body = directionMoveBody( heading ),
 				id = nextId + 1,
 				offset = cosGid === undefined ? 0 : 5,
@@ -752,11 +1037,10 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 			send( frame );
 			nextId = id;
 			movementRevision++;
-			const leg = directionSegment( pose, heading, now, 1, true );
+			const leg = directionSegment( pose, heading, now, "client", 1, true );
 			pending.set( id, {
 				to: leg?.to ?? directionLegEnd( pose, heading ),
 				sent: now,
-				predictedEnd: leg?.to ?? null,
 				direction: heading
 			} );
 			error = null;
@@ -791,6 +1075,7 @@ receive
 					to,
 					start: now,
 					timing: "server",
+					lead: "server",
 					duration: Math.max( 0, s.arrivesAtMs - r.serverTimeMs )
 				};
 			}
@@ -803,6 +1088,7 @@ receive
 				for ( const id of pending.keys() ) if ( id <= r.id ) pending.delete( id );
 				return;
 			}
+			advanceTo( now );
 			if ( command.direction !== undefined && r.accepted && walk ) {
 				// The server walks from its live point; its first leg is the
 				// reference the local walk reconciles toward. A leg shorter than
@@ -839,32 +1125,32 @@ receive
 			if ( command.direction !== undefined ) walk = null;
 			const predictedOwner = owner;
 			authoritative = reconcile( replacement?.from ?? to );
-			// A receipt confirms an endpoint, not the client's old frame. Turning
-			// during transit changes the two start positions; collinearity and
-			// a fixed distance cap cannot prove whether that intent was accepted.
-			// Retain progress only for the confirmed endpoint and a still-clear
-			// route from the predicted position. Server clipping/rejection wins.
-			const predicted = pose, predictedEnd = command.predictedEnd;
-			let confirmedPrediction = false;
-			if (
-				r.accepted && replacement && predicted && predictedEnd &&
-				predicted.regionId === authoritative.regionId && predictedEnd.regionId === to.regionId &&
-				poseDistance( predictedEnd, to ) < ENDPOINT_EPSILON &&
-				(!(to.regionId & 0x8000) || Math.abs( predictedEnd.y - to.y ) < DUNGEON_HEIGHT_EPSILON)
-			) {
-				const remaining = poseDistance( authoritative, to ), tail = poseDistance( predicted, to );
-				const route = navigation.clip( predicted, to, { slide: false, sourceOwner: predictedOwner } );
-				confirmedPrediction = tail <= remaining && !!route &&
-					poseDistance( route, to ) < ENDPOINT_EPSILON &&
-					(!(to.regionId & 0x8000) || Math.abs( route.y - to.y ) < DUNGEON_HEIGHT_EPSILON);
-				if ( confirmedPrediction ) {
-					replacement = tail < ENDPOINT_EPSILON ?
-						null :
-						{ ...replacement, duration: replacement.duration * tail / remaining };
-				}
-			}
-			pose = confirmedPrediction && predicted ? predicted : authoritative;
-			if ( confirmedPrediction ) owner = predictedOwner;
+			// A receipt confirms an endpoint, not the client's old frame. The
+			// server's endpoint is the one that counts, and it is accepted from
+			// wherever the prediction has walked to as long as that walk can
+			// still reach it. Do not require the client's own clip to land on
+			// the same point: the two clips run on separate navigation copies
+			// and differ by fractions of a unit at walls (the client backs the
+			// whole chord off a contact, the server only the crossed axis), and
+			// the predicted pose may have crossed a region seam the server's
+			// sample has not. Either mismatch put the player back where the
+			// server stood at the receipt, one round trip of walking behind
+			// (a ~19 unit snap at 190 ms on production). Server clipping,
+			// rejection or a blocked route still wins.
+			const predicted = pose;
+			const reconciled: ReceiptReconciliation<NonNullable<typeof segment>> = replacement ?
+				reconcileReceipt( r.accepted, predicted, predictedOwner, replacement, to ) :
+				{ kind: "server", reason: r.accepted ? "no server walk" : "rejected" };
+			if ( reconciled.kind === "keep" ) {
+				pose = predicted!;
+				owner = predictedOwner;
+				replacement = reconciled.segment ?? null;
+			} else if ( reconciled.kind === "settle" ) {
+				// The prediction already passed the server's stop: settle on the
+				// stop, never back at the server's start.
+				pose = authoritative = reconcile( to );
+				replacement = null;
+			} else pose = authoritative;
 			movementRevision++;
 			segment = replacement ? bindOwners( { ...replacement, from: pose } ) : null;
 			acknowledged = r.id;
@@ -875,6 +1161,18 @@ receive
 			}
 			error = r.accepted ? null : r.error ?? "Movement rejected";
 			keepCastHold();
+			if ( predicted ) {
+				noteReanchor( "receipt " + reconciled.kind + ": " + reconciled.reason, predicted, pose!, {
+					id: r.id,
+					latest: nextId,
+					ageMs: now - command.sent,
+					serverTimeMs: r.serverTimeMs,
+					accepted: r.accepted,
+					tail: reconciled.tail,
+					remaining: reconciled.remaining,
+					to
+				} );
+			}
 		},
 		/*
 ================
@@ -885,16 +1183,8 @@ step
 			if ( pending.size && now - pending.values().next().value!.sent > 10000 ) {
 				throw new Error( "Movement receipt timed out; resynchronize session" );
 			}
-			if ( castHold && now >= castHold.until ) {
-				// No settle came: the server is still walking. Follow its path from
-				// where it stands now (a lapsed server leg samples to its end).
-				const resume = castHold.resume;
-				castHold = null;
-				if ( resume ) {
-					segment = resume;
-					movementRevision++;
-				}
-			}
+			// No settle came: the server is still walking. Rejoin its path.
+			if ( castHold && now >= castHold.until ) rejoinServerWalk( now, false );
 			driftWalk( now );
 			if ( !segment ) {
 				return false;
@@ -915,11 +1205,11 @@ step
 			owner = surfaceCursor.owner ?? owner;
 			if ( t === 1 ) {
 				authoritative = pose;
-				const direction = segment.direction;
+				const direction = segment.direction, lead = segment.lead;
 				segment = null;
 				// A direction walk renews its leg until one ends blocked.
 				if ( direction && !direction.blocked && walk ) {
-					segment = directionSegment( pose, direction.heading, now, walk.factor );
+					segment = directionSegment( pose, direction.heading, now, lead, walk.factor );
 				} else if ( direction ) walk = null;
 			}
 			return true;

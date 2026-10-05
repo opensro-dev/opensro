@@ -181,3 +181,23 @@ func TestDecodeClientMovementRequestClampsThroughReferenceRanges(t *testing.T) {
 		t.Errorf("x = %v, want clamp to 0", request.X)
 	}
 }
+
+/*
+================
+TestDecodeClientMovementRequestKeepsSignedDungeonCoordinates
+
+A dungeon region is a signed 16-bit plane: a click at x=-100, z=-7 must
+reach the clip as -100, -7, not the outdoor clamp's 0, 0.
+================
+*/
+func TestDecodeClientMovementRequestKeepsSignedDungeonCoordinates(t *testing.T) {
+	// Region 0x8001, x=-100 (0xFF9C), y=5, z=-7 (0xFFF9).
+	payload := []byte{0x01, 0x01, 0x80, 0x9C, 0xFF, 0x05, 0x00, 0xF9, 0xFF}
+	request, refusal := DecodeClientMovementRequest(payload)
+	if refusal != nil {
+		t.Fatalf("refused: %v", refusal)
+	}
+	if request.X != -100 || request.Y != 5 || request.Z != -7 {
+		t.Errorf("dungeon destination = (%v, %v, %v), want (-100, 5, -7)", request.X, request.Y, request.Z)
+	}
+}

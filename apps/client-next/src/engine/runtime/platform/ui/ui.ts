@@ -66,9 +66,17 @@ export function createUiBridge(
 	message.style.cssText = "position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden";
 	root.append( message );
 	document.body.append( root );
+	// Each control element and the layout this bridge last wrote to it: the
+	// bridge is the only writer, so it compares numbers instead of reading the
+	// element's style back (a CSSOM read and string per control per present).
 	const controls = new Map<
 		string,
-		{ element: HTMLInputElement | HTMLButtonElement | HTMLDivElement; value: UiControl; }
+		{
+			element: HTMLInputElement | HTMLButtonElement | HTMLDivElement;
+			value: UiControl;
+			order: number;
+			box: [number, number, number, number];
+		}
 	>();
 	let composing = false;
 	let drag: { id: string; pointer: number; x: number; y: number; moved?: boolean; } | null = null, focusRevision = -1;
@@ -593,11 +601,12 @@ export function createUiBridge(
 						element.setAttribute( "autocorrect", "off" );
 					}
 					root.append( element );
-					slot = { element, value: control };
+					slot = { element, value: control, order: NaN, box: [ NaN, NaN, NaN, NaN ] };
 					controls.set( control.id, slot );
 				}
 				const el = slot.element;
-				if ( el.style.zIndex !== String( order ) ) {
+				if ( slot.order !== order ) {
+					slot.order = order;
 					el.style.zIndex = String( order );
 					hitLayoutChanged = true;
 				}
@@ -655,18 +664,20 @@ export function createUiBridge(
 				// UI pixels to CSS pixels (platform displayScale: the chosen screen size).
 				const scale = displayScale(),
 					[x, y, w, h] = control.rect,
-					left = box.left + x * scale + "px",
-					top = box.top + y * scale + "px",
-					width = w * scale + "px",
-					height = h * scale + "px";
-				if (
-					el.style.left !== left || el.style.top !== top || el.style.width !== width ||
-					el.style.height !== height
-				) {
-					el.style.left = left;
-					el.style.top = top;
-					el.style.width = width;
-					el.style.height = height;
+					left = box.left + x * scale,
+					top = box.top + y * scale,
+					width = w * scale,
+					height = h * scale,
+					applied = slot.box;
+				if ( applied[0] !== left || applied[1] !== top || applied[2] !== width || applied[3] !== height ) {
+					applied[0] = left;
+					applied[1] = top;
+					applied[2] = width;
+					applied[3] = height;
+					el.style.left = left + "px";
+					el.style.top = top + "px";
+					el.style.width = width + "px";
+					el.style.height = height + "px";
 					hitLayoutChanged = true;
 				}
 				if ( !!slot.value.disabled !== !!control.disabled ) hitLayoutChanged = true;

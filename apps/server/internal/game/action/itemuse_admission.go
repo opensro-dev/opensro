@@ -44,6 +44,15 @@ const (
 	itemUseComposite
 	itemUsePersistentSummoner
 	itemUsePetExtension
+	itemUseResurrection
+	itemUseStatRecall
+	itemUseFirework
+	itemUseRepairHammer
+	itemUseWarehouseTicket
+	itemUseSkinChange
+	itemUseGenderTool
+	itemUsePremiumTicket
+	itemUseSkillTimeTicket
 )
 
 /*
@@ -61,7 +70,7 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
 		return itemUseQuestTool
 	}
-	if ref.TypeIDs == [4]int64{3, 3, 3, 1} && ref.ReturnDestination == "RESURRECT" {
+	if ref.TypeIDs == [4]int64{3, 3, 3, 1} && (ref.ReturnDestination == "RESURRECT" || ref.ReturnDestination == "THIEFDEN") {
 		return itemUseReturn
 	}
 	// CGItemMonsterCapsule (sub_42E750, TID 3/2/2): the monster mask.
@@ -76,6 +85,43 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 13, 12} {
 		return itemUsePetExtension
+	}
+	// 49C2B0 case 5 (type 4 = 6): the resurrection scroll, usable only dead.
+	if ref.TypeIDs == [4]int64{3, 3, 13, 6} {
+		return itemUseResurrection
+	}
+	// 49ACA0 family 6: a firework only needs a living user; its whole effect
+	// is the item visual every use publishes. Type 4 = 2 is the fortress shock
+	// bomb, a siege item.
+	if ref.TypeIDs == [4]int64{3, 3, 6, 1} {
+		return itemUseFirework
+	}
+	// 49C2B0 case 6 (type 4 = 7): the repair hammer (npcrepair.go).
+	if ref.TypeIDs == [4]int64{3, 3, 13, 7} {
+		return itemUseRepairHammer
+	}
+	// 49C2B0 cases 3 and 4 (type 4 = 4 and 5): the premium time tickets.
+	if ref.TypeIDs == [4]int64{3, 3, 13, 4} {
+		return itemUsePremiumTicket
+	}
+	if ref.TypeIDs == [4]int64{3, 3, 13, 5} {
+		return itemUseSkillTimeTicket
+	}
+	// 49C2B0 case 7 (type 4 = 8): the armour gender change (gendertool.go).
+	if ref.TypeIDs == [4]int64{3, 3, 13, 8} {
+		return itemUseGenderTool
+	}
+	// 49C2B0 case 8 (type 4 = 9): the character skin change (skinchange.go).
+	if ref.TypeIDs == [4]int64{3, 3, 13, 9} {
+		return itemUseSkinChange
+	}
+	// Type 4 = 10: the remote warehouse ticket (storage.go).
+	if ref.TypeIDs == [4]int64{3, 3, 13, 10} {
+		return itemUseWarehouseTicket
+	}
+	// Type 4 = 13: the stat point recall (progression/statrecall.go).
+	if ref.TypeIDs == [4]int64{3, 3, 13, 13} {
+		return itemUseStatRecall
 	}
 	// 49F590: the composite scroll (UIU1 param jobs).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {

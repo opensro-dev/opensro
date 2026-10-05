@@ -139,3 +139,145 @@ test("missing inviter and failed commit acknowledgements reach native player not
 		}
 	}
 });
+
+/*
+================
+invitationFrame
+
+The 0x3393 proposal of a shared invitation type; party types carry options.
+================
+*/
+function invitationFrame( type, gid = 7 ) {
+	return {
+		opcode: 0x3393,
+		payload: Uint8Array.from( [ type, gid, 0, 0, 0, ...([ 2, 3 ].includes( type ) ? [ 3 ] : []) ] )
+	};
+}
+
+/*
+================
+resurrectionFrame
+
+{u8 4, u32 casterGid}: the whole body the server writes.
+================
+*/
+function resurrectionFrame( gid = 0x12a ) {
+	return { opcode: 0x3393, payload: Uint8Array.of( 4, gid & 0xff, gid >> 8, 0, 0 ) };
+}
+
+/*
+================
+answerInvitation
+
+Receive one invitation of the given type, with a resurrection proposal
+arriving before it, after it or not at all, then answer the invitation.
+Returns what the invitation path observed and the state left behind.
+================
+*/
+function answerInvitation( type, accept, resurrection ) {
+	const { game, frames } = fixture();
+	if ( resurrection === "before" ) game.receive( resurrectionFrame(), 0 );
+	game.receive( invitationFrame( type ), 1 );
+	if ( resurrection === "after" ) game.receive( resurrectionFrame(), 2 );
+	const pending = defined( defined( game.take() ).social );
+	game.command( { kind: "social-consent", accept }, 3, undefined );
+	game.command( { kind: "social-consent", accept }, 4, undefined );
+	const answered = defined( defined( game.take() ).social );
+	const observed = {
+		invitation: pending.invitation,
+		replies: frames.map( f => [ f.opcode, ...f.payload ] ),
+		after: answered.invitation
+	};
+	return { game, frames, observed, pending, answered };
+}
+
+test("a resurrection proposal is held in its own slot until the player answers it", () => {
+	for ( const [accept, answer] of [ [ true, [ 1, 1 ] ], [ false, [ 1, 2 ] ] ] ) {
+		const { game, frames } = fixture();
+		assert.equal( game.receive( resurrectionFrame(), 0 ), true );
+		const social = defined( defined( game.take() ).social );
+		assert.deepEqual( social.resurrection, { gid: 0x12a } );
+		assert.equal( social.invitation, null, "the question is not an invitation" );
+		assert.doesNotThrow( () => game.command( { kind: "social-consent", accept: true }, 1, undefined ) );
+		assert.equal( frames.length, 0, "the invitation consent does not answer the question" );
+		game.command( { kind: "resurrection-consent", accept: Boolean( accept ) }, 2, undefined );
+		assert.equal( frames.length, 1 );
+		assert.equal( frames[0].opcode, 0x3393 );
+		assert.deepEqual( [ ...frames[0].payload ], answer );
+		assert.equal( defined( defined( game.take() ).social ).resurrection, undefined );
+		game.command( { kind: "resurrection-consent", accept: true }, 3, undefined );
+		assert.equal( frames.length, 1, "the answered proposal accepts no second reply" );
+		game.dispose();
+	}
+});
+
+test("an rmut revival (type 8) fills the same slot as a mutation and answers the same way", () => {
+	const { game, frames } = fixture();
+	assert.equal( game.receive( { opcode: 0x3393, payload: Uint8Array.of( 8, 0x2a, 1, 0, 0 ) }, 0 ), true );
+	assert.deepEqual( defined( defined( game.take() ).social ).resurrection, { gid: 0x12a, mutation: true } );
+	game.command( { kind: "resurrection-consent", accept: true }, 1, undefined );
+	assert.equal( frames.length, 1 );
+	assert.deepEqual( [ frames[0].opcode, ...frames[0].payload ], [ 0x3393, 1, 1 ] );
+	game.dispose();
+});
+
+test("resurrection proposals reject a missing caster and a truncated or padded body", () => {
+	for ( const payload of [ [ 4, 0, 0, 0, 0 ], [ 4, 7, 0, 0 ], [ 4, 7, 0, 0, 0, 0 ] ] ) {
+		const { game, frames } = fixture();
+		assert.throws( () => game.receive( { opcode: 0x3393, payload: Uint8Array.from( payload ) }, 0 ) );
+		assert.equal( frames.length, 0 );
+		game.dispose();
+	}
+});
+
+// The consent each shared invitation type answers with, yes then no: the
+// bytes the client sent before resurrection proposals were decoded.
+const INVITATION_REPLIES = {
+	1: [ [ 1, 1 ], [ 1, 2 ] ],
+	2: [ [ 1, 1 ], [ 2, 0x0c ] ],
+	3: [ [ 1, 1 ], [ 2, 0x17 ] ],
+	5: [ [ 1, 1 ], [ 2, 0x16 ] ]
+};
+
+test("a resurrection proposal arriving over a pending invitation leaves it answerable unchanged", () => {
+	for ( const type of [ 1, 2, 3, 5 ] ) {
+		for ( const accept of [ true, false ] ) {
+			const alone = answerInvitation( type, accept, "none" );
+			const raced = answerInvitation( type, accept, "after" );
+			assert.deepEqual( alone.observed.replies, [ [ 0x3393, ...INVITATION_REPLIES[type][accept ? 0 : 1] ] ] );
+			assert.equal( alone.observed.after, null );
+			assert.deepEqual( raced.observed, alone.observed, `type ${type} accept ${accept}` );
+			assert.deepEqual( raced.pending.resurrection, { gid: 0x12a } );
+			assert.deepEqual(
+				raced.answered.resurrection,
+				{ gid: 0x12a },
+				"answering the invitation keeps the question"
+			);
+			raced.game.command( { kind: "resurrection-consent", accept: true }, 5, undefined );
+			assert.deepEqual( [ ...defined( raced.frames.at( -1 ) ).payload ], [ 1, 1 ] );
+			assert.equal( raced.frames.length, alone.frames.length + 1 );
+			alone.game.dispose();
+			raced.game.dispose();
+		}
+	}
+});
+
+test("an invitation arriving over an open resurrection question is answered as without it", () => {
+	for ( const type of [ 1, 2, 3, 5 ] ) {
+		for ( const accept of [ true, false ] ) {
+			const alone = answerInvitation( type, accept, "none" );
+			const raced = answerInvitation( type, accept, "before" );
+			assert.deepEqual( raced.observed, alone.observed, `type ${type} accept ${accept}` );
+			assert.deepEqual(
+				raced.answered.resurrection,
+				{ gid: 0x12a },
+				"the invitation does not displace the question"
+			);
+			raced.game.command( { kind: "resurrection-consent", accept: false }, 5, undefined );
+			assert.deepEqual( [ ...defined( raced.frames.at( -1 ) ).payload ], [ 1, 2 ] );
+			assert.equal( defined( defined( raced.game.take() ).social ).resurrection, undefined );
+			alone.game.dispose();
+			raced.game.dispose();
+		}
+	}
+});

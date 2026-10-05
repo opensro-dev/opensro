@@ -6,6 +6,7 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 	level := int64(10)
 	spawnX := 20.0
 	returnX := 30.0
+	deathX := 40.0
 	floor := int64(3)
 	instance := uint32(0x20001)
 	character := &Character{
@@ -22,6 +23,7 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 			PackedInstance:     &instance,
 			Spawn:              &WorldSpawn{X: &spawnX},
 			AuthoredAreaReturn: &WorldSpawn{X: &returnX},
+			LastDeathPoint:     &WorldSpawn{X: &deathX},
 			DungeonFloorIndex:  &floor,
 			MoveSegment:        []byte(`{"x":1}`),
 		},
@@ -52,6 +54,7 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 	character.MissionInventory[0].MagicOptions[0] = 12
 	*character.World.Spawn.X = 21
 	*character.World.AuthoredAreaReturn.X = 31
+	*character.World.LastDeathPoint.X = 41
 	*character.World.DungeonFloorIndex = 4
 	*character.World.PackedInstance = 0x30001
 	character.World.MoveSegment[5] = '2'
@@ -76,7 +79,7 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 			snapshot.MissionInventory[0].MagicOptions[0],
 		)
 	}
-	if *snapshot.World.Spawn.X != 20 || *snapshot.World.AuthoredAreaReturn.X != 30 ||
+	if *snapshot.World.Spawn.X != 20 || *snapshot.World.AuthoredAreaReturn.X != 30 || *snapshot.World.LastDeathPoint.X != 40 ||
 		*snapshot.World.DungeonFloorIndex != 3 || *snapshot.World.PackedInstance != 0x20001 {
 		t.Errorf("snapshot world retained mutable pointers: %+v", snapshot.World)
 	}

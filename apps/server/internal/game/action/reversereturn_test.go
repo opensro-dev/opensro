@@ -1,0 +1,134 @@
+/*
+===========================================================================
+
+reversereturn_test.go - the reverse return through a teleport gate
+
+===========================================================================
+*/
+
+package action
+
+import (
+	"bytes"
+	"testing"
+	"time"
+
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
+)
+
+/*
+================
+reverseReturnFixture
+
+The return fixture's character beside a selected teleport gate (gid 2001),
+holding two reverse return scrolls in slot 23 (1000 ms cast).
+================
+*/
+func reverseReturnFixture(t *testing.T) (*Runtime, *enterworld.Character, *fakeClock) {
+	t.Helper()
+	rt, c, clock, _ := returnFixture(t, 30000)
+	ref := &enterworld.ItemRef{RefObjID: 3800, Codename: "ITEM_MALL_REVERSE_RETURN_SCROLL", Country: 3,
+		TypeIDs: [4]int64{3, 3, 3, 3}, ReturnDestination: "RESURRECT",
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "itemParam1_29c": 1000, "itemParam2_2a0": 1})}
+	rt.deps.(*enterworld.Deps).Items.(staticItemSource)[ref.Codename] = ref
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 23, RefObjID: ref.RefObjID,
+		Codename: ref.Codename, TypeFlags: ref.TypeFlags(), StackCount: 2, VarianceBits: "0"})
+	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 2001, RefObjID: 2011, Codename: "NPC_CH_FERRY", TalkFlags: 2 | talkFlagTeleport}}
+	rt.NpcSpawn.Enabled = true
+	rt.portals = &portalCatalog{sources: map[uint32]uint32{2011: 1}, destinations: map[uint32]portalDestination{1: {}}}
+	rt.Selected.Set(testDivision, c.Name, 2001)
+	return rt, c, clock
+}
+
+/*
+================
+reverseReturn
+================
+*/
+func reverseReturn(rt *Runtime, c *enterworld.Character, choice uint8) OpResult {
+	return rt.HandlePortal(testDivision, c, wire.NewWriter(6).U32(2001).U8(gateReverseReturn).U8(choice).Payload())
+}
+
+/*
+================
+TestReverseReturnRowsNeedAGateAndAScroll
+================
+*/
+func TestReverseReturnRowsNeedAGateAndAScroll(t *testing.T) {
+	rt, c, _ := reverseReturnFixture(t)
+	gate := rt.NpcRoster[0]
+	if rt.reverseReturnCapability(gate, c) != talkFlagReverseReturn {
+		t.Fatal("a gate did not offer the reverse return to a scroll holder")
+	}
+	if rt.reverseReturnCapability(simulation.NpcDef{TalkFlags: 1}, c) != 0 {
+		t.Fatal("a merchant offered the reverse return")
+	}
+	c.MissionInventory = c.MissionInventory[:len(c.MissionInventory)-1]
+	if rt.reverseReturnCapability(gate, c) != 0 {
+		t.Fatal("the reverse return was offered without a scroll")
+	}
+}
+
+/*
+================
+TestReverseReturnWithoutADeathRefusesAndKeepsTheScroll
+
+4A00C0: no recorded death answers 0x1886 (notice 390) and spends nothing.
+================
+*/
+func TestReverseReturnWithoutADeathRefusesAndKeepsTheScroll(t *testing.T) {
+	rt, c, _ := reverseReturnFixture(t)
+	out := reverseReturn(rt, c, reverseReturnLastDeath)
+	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, wire.EncodeItemUseError(errCodeNoDeathPoint)) {
+		t.Fatalf("missing death point answered %+v", out.Frames)
+	}
+	if c.MissionInventory[len(c.MissionInventory)-1].StackCount != 2 || c.NativeTeleportMode != 0 {
+		t.Fatal("a refused reverse return spent the scroll or started a cast")
+	}
+}
+
+/*
+================
+TestReverseReturnTakesThePlayerToWhereItDied
+================
+*/
+func TestReverseReturnTakesThePlayerToWhereItDied(t *testing.T) {
+	rt, c, clock := reverseReturnFixture(t)
+	died := simulation.Spawn{RegionID: 25000, X: 812, Y: 30, Z: 1204, Angle: 0}
+	c.World.LastDeathPoint = worldSpawnFromMission(died)
+	out := reverseReturn(rt, c, reverseReturnLastDeath)
+	assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, wire.OpItemUseVisual)
+	if out.Frames[1].Payload[1] != 23 || c.MissionInventory[len(c.MissionInventory)-1].StackCount != 1 || c.NativeTeleportMode != 1 {
+		t.Fatalf("the reverse return did not spend one scroll and start the cast: %+v", out.Frames)
+	}
+	var sent []wire.Frame
+	rt.PushCharacterFrames = func(_, _ string, f []wire.Frame) { sent = append(sent, f...) }
+	clock.Advance(time.Second)
+	rt.TickHook()(clock.NowMs())
+	if len(sent) == 0 || sent[0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("missing native reentry: %+v", sent)
+	}
+	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got.RegionID != died.RegionID || got.X != died.X || got.Z != died.Z {
+		t.Fatalf("arrived at %+v, not where the player died", got)
+	}
+}
+
+/*
+================
+TestReturnScrollAndDeathRecordTheReverseReturnPoints
+================
+*/
+func TestReturnScrollAndDeathRecordTheReverseReturnPoints(t *testing.T) {
+	rt, c, clock := reverseReturnFixture(t)
+	at := rt.liveSpawn(simulation.WorldKey(testDivision, c.Name), c, clock.NowMs())
+	useReturn(rt, c)
+	if c.World.LastRecallPoint == nil || missionSpawnFromWorld(c.World.LastRecallPoint, simulation.Spawn{}) != at {
+		t.Fatalf("the return scroll recorded %+v, want %+v", c.World.LastRecallPoint, at)
+	}
+	rt.settlePlayerDeathInDoor(testDivision, c, clock.NowMs())
+	if c.World.LastDeathPoint == nil || missionSpawnFromWorld(c.World.LastDeathPoint, simulation.Spawn{}).RegionID != at.RegionID {
+		t.Fatalf("death recorded %+v", c.World.LastDeathPoint)
+	}
+}

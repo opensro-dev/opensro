@@ -49,6 +49,7 @@ import { characterMaterialVariants } from "./materialVariants.mjs";
 import { parseWeatherEvents } from "./weatherEvents.mjs";
 import path from "node:path";
 import {
+	findDefaultAnimationSet,
 	findDefaultAnimationState,
 	pickDefaultSetSoundEvents,
 	pickDefaultSetStateTableMetadata,
@@ -60,6 +61,7 @@ import { avatarToGlb } from "./exportGlb.mjs";
 import { loadCharacterDataRows } from "./resolveCharRoster.mjs";
 import { enabledCosReferences, loadSpawnableMobRoster, loadSpawnableNpcRoster } from "./npcModelRoster.mjs";
 import { parseBan, parseCharacterBsr } from "./formats.mjs";
+import { SKILL_EFFECT_ANIMATION_ID_BY_NAME } from "./native/skillEffectAnimationRegistry.ts";
 import { loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
 import { normalizeAssetPath } from "../shared/assetPaths.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
@@ -492,6 +494,32 @@ export async function bakeCharacterResource( bsrPath, output, isMob ) {
 			soundEvents: [],
 			...pickAnimationStateTableMetadata( motion.state )
 		};
+	}
+	if ( isMob ) {
+		// A monster skill names its motion by ANI_* state (skilleffect.txt animation
+		// rows, data_ccd620): ANI_ATTACK5..9 are 183..190, beyond the movement table
+		// above. CICharactor_PlayAnimationByMotionId (85ED80) plays any state the
+		// BSR's default set authors, so publish each one a skill can name under its
+		// native role; the client resolves native:default:<id> directly
+		// (skill-motion-resolve.ts). Captain Ivy's ATTACK05..08 had no timeline.
+		const published = new Set( Object.values( animationStates ).map( state => state.stateId ) );
+		const reachable = new Set( SKILL_EFFECT_ANIMATION_ID_BY_NAME.values() );
+		for ( const state of findDefaultAnimationSet( bsr )?.states ?? [] ) {
+			if ( !state.animationPath || published.has( state.stateId ) || !reachable.has( state.stateId ) ) continue;
+			published.add( state.stateId );
+			const role = `native:default:${state.stateId}`;
+			// A state that reuses another state's BAN gets its own clip: the runtime
+			// keys a state's metadata by clip name.
+			const shared = clips.find( clip => clip.path === state.animationPath );
+			const clip = shared?.clip ?? parseBan( await loadDataAsset( state.animationPath ), state.animationPath );
+			clips.push( { role, path: state.animationPath, clip } );
+			animationStates[role] = {
+				stateId: state.stateId,
+				durationMs: clip.durationMs,
+				soundEvents: pickDefaultSetSoundEvents( bsr, state.stateId ),
+				...pickDefaultSetStateTableMetadata( bsr, state.stateId )
+			};
+		}
 	}
 	const allowedClips = Object.keys( animationStates );
 

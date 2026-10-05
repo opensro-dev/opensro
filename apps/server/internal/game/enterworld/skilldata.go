@@ -14,7 +14,6 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/world/monster"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 
@@ -177,7 +176,10 @@ type SkillRow struct {
 	// defender's wall absorb record.
 	WallBypass bool
 	// Ck is the ck block (+0x248): no block chance for its hits (58E624).
-	Ck                   bool
+	Ck bool
+	// CkChance is ck's kill chance (58EC63 copies it to the target group's
+	// +0xF; 58F74E rolls it).
+	CkChance             uint8
 	Recovery             SkillRecovery
 	TimedEffect          SkillTimedEffect
 	Concealment          SkillConcealment
@@ -191,6 +193,12 @@ type SkillRow struct {
 	// StatusCast marks a damage-free hostile status program (skillstatuscast.go):
 	// its single impact is a zero-damage record that only rolls statuses.
 	StatusCast bool
+	// AreaBurst marks an untargeted caster-centred attack (skillareaburst.go):
+	// no target, its victims are the hostile monsters around the caster.
+	AreaBurst bool
+	// FixedDamage marks a pdmg hit (skillfixeddamage.go): its single impact
+	// deals the authored amount, and dmgt converts the damage into MP.
+	FixedDamage SkillFixedDamage
 	// CombatTrap is a planted hostile trap program (skilltrap.go).
 	CombatTrap    SkillCombatTrap
 	OffensiveArea SkillOffensiveArea
@@ -335,6 +343,28 @@ func (r SkillRow) ActionLifecycleMs() (uint64, bool) {
 		return 0, false
 	}
 	return uint64(r.ActionCastingTimeMs) + uint64(r.ActionDurationMs), true
+}
+
+// continueBasicAttackColumn is ref +0x90: 4AECA4 tests its byte against
+// zero, so every nonzero value (1, and the 2 the bow buffs author) resumes
+// the basic attack after the skill.
+const continueBasicAttackColumn = 19
+
+// skillActivityQueued is the activity (column 8) of an ordinary cast;
+// InitiateSkillCast compares ref +0x65 with 2 at 59B5F6.
+const skillActivityQueued uint8 = 2
+
+/*
+==================
+HaltsWalk
+
+Whether a cast of this row stops its caster's walk: CSkillManager_
+InitiateSkillCast (59B480) calls StopMove for activity 2. Instant
+activities (imbues, speed skills) run beside the walk (4AD870).
+==================
+*/
+func (r SkillRow) HaltsWalk() bool {
+	return r.ActionKind == skillActivityQueued
 }
 
 /*
@@ -571,7 +601,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				continue
 			}
 			row := SkillRow{
-				ContinueBasicAttack:    textdataU32(fields[19]) == 1,
+				ContinueBasicAttack:    textdataU32(fields[continueBasicAttackColumn]) != 0,
 				CancellationDeferred:   nativeSkillDefersCancellation(fields, spawnParamArity),
 				NameAttackContent:      nativeNameAttackContent(fields),
 				PassiveCritical:        encodedPassiveCritical(fields),
@@ -585,7 +615,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				EffectDurationMs:       encodedEffectDuration(fields),
 				EffectDurationPresent:  encodedTailContainsTag(fields, 0x64757261),
 				HideDetectionBuff:      encodedPrimaryParameterEquals(fields, 0x6c6e6b73, 3, 0, false),
-				IndefiniteBuffTimer:    encodedPrimaryParameterEquals(fields, 0x656672, 0, 3, true),
+				IndefiniteBuffTimer:    encodedPrimaryParameterEquals(fields, tagEfr, 0, 3, true),
 				BodyStatus:             encodedBodyStatus(fields),
 				MovementModifier:       encodedMovementModifier(fields),
 				EffectRider:            encodedEffectRider(fields),
@@ -742,7 +772,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				{ID: textdataU32(fields[skilldataColReqMastery1]), Level: textdataNonNegative(fields[skilldataColReqMasteryLv1])},
 				{ID: textdataU32(fields[skilldataColReqMastery2]), Level: textdataNonNegative(fields[skilldataColReqMasteryLv2])},
 			}
-			row.Attack.MasteryEnhancement = encodedTailHasParameter(fields, 0x67657476, 0x4d414154)
+			row.Attack.MasteryEnhancement = encodedTailHasParameter(fields, tagGetv, 0x4d414154)
 			row.Attack.MasteryIDs = [2]uint32{row.Masteries[0].ID, row.Masteries[1].ID}
 			if row.Imbue.Pinned {
 				row.Imbue.Attack.MasteryEnhancement = row.Attack.MasteryEnhancement
@@ -795,143 +825,6 @@ func (t *TextdataSkills) parse(shards []string) {
 		t.plans[id] = compileExecutionPlan(t.rows, row)
 	}
 	log.Infof("bootstrap: skilldata loaded from %s (%d skill row(s))", t.dir, t.rows.len())
-}
-
-/*
-================
-SkillUiRow
-
-SkillUiRow is a read-only projection of the same table used by training and combat.
-The client never supplies prices or prerequisites back to the authority.
-================
-*/
-type SkillUiRow struct {
-	BuffCancel         string              `json:"buffCancel,omitempty"`
-	BuffCancelInstance bool                `json:"buffCancelInstance,omitempty"`
-	ReqStr             int64               `json:"reqStr,omitempty"`
-	ReqInt             int64               `json:"reqInt,omitempty"`
-	BuffSecondary      bool                `json:"buffSecondary,omitempty"`
-	SpeedBuff          *SkillUiSpeedBuff   `json:"speedBuff,omitempty"`
-	Hide               *SkillUiStatusLevel `json:"hide,omitempty"`
-	Detect             *SkillUiStatusLevel `json:"detect,omitempty"`
-	Sight              *SkillUiStatusLevel `json:"sight,omitempty"`
-	DetectRange        uint32              `json:"detectRange,omitempty"`
-	Name               string              `json:"name"`
-	NameSymbol         string              `json:"nameSymbol,omitempty"`
-	Icon               string              `json:"icon,omitempty"`
-	SPCost             int64               `json:"spCost"`
-	Trainable          bool                `json:"trainable"`
-	TargetRequired     bool                `json:"targetRequired"`
-	GroundTarget       bool                `json:"groundTarget,omitempty"`
-	CooldownGroup      uint8               `json:"cooldownGroup,omitempty"`
-	CooldownMs         uint32              `json:"cooldownMs"`
-	Masteries          [2]SkillRequirement `json:"masteries"`
-	Prerequisites      [3]SkillRequirement `json:"prerequisites"`
-}
-
-/*
-================
-SkillUiSpeedBuff
-
-SkillUiSpeedBuff is the buff-viewer speed stacking marker (6DE630).
-================
-*/
-type SkillUiSpeedBuff struct {
-	Active bool `json:"active"`
-}
-
-/*
-================
-SkillUiStatusLevel
-
-SkillUiStatusLevel is a [mask, level] pair read by 8608A0 / 85CE40.
-================
-*/
-type SkillUiStatusLevel struct {
-	Mask  uint32 `json:"mask"`
-	Level uint32 `json:"level"`
-}
-
-/*
-================
-skillUiStatusLevel
-================
-*/
-func skillUiStatusLevel(value SkillStatusLevel) *SkillUiStatusLevel {
-	if !value.Present {
-		return nil
-	}
-	return &SkillUiStatusLevel{Mask: value.Mask, Level: value.Level}
-}
-
-/*
-================
-SpawnSkillRow
-================
-*/
-type SpawnSkillRow struct {
-	LinkedSkillID        uint32      `json:"linkedSkillId,omitempty"`
-	CancellationDeferred bool        `json:"cancellationDeferred,omitempty"`
-	NameAttackContent    bool        `json:"nameHit,omitempty"`
-	UI                   *SkillUiRow `json:"ui,omitempty"`
-	Level                uint8       `json:"level"`
-	Group                uint32      `json:"group"`
-	ID                   uint32      `json:"id"`
-	Token                bool        `json:"token"`
-	Status               bool        `json:"status"`
-	EffectDurationMs     uint32      `json:"effectDurationMs"`
-	ZeroEffectDuration   bool        `json:"zeroEffectDuration,omitempty"`
-	HideDetectionBuff    bool        `json:"hideDetectionBuff,omitempty"`
-	IndefiniteBuffTimer  bool        `json:"indefiniteBuffTimer,omitempty"`
-	EffectRider          bool        `json:"effectRider"`
-	HuntingPoint         bool        `json:"huntingPoint,omitempty"`
-	StealthDuration      bool        `json:"stealthDuration,omitempty"`
-}
-
-/*
-================
-SpawnSkillRows
-================
-*/
-func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
-	t.once.Do(t.load)
-	rows := make([]SpawnSkillRow, 0, t.rows.len())
-	for _, row := range t.rows.values() {
-		projection := SpawnSkillRow{LinkedSkillID: row.LinkedSkillID, CancellationDeferred: row.CancellationDeferred, NameAttackContent: row.NameAttackContent, Level: uint8(row.Level), Group: row.Group, ID: row.ID, Token: row.SpawnToken, Status: row.SpawnStatus, EffectRider: row.EffectRider, EffectDurationMs: row.EffectDurationMs, ZeroEffectDuration: row.EffectDurationPresent && row.EffectDurationMs == 0, HideDetectionBuff: row.HideDetectionBuff, IndefiniteBuffTimer: row.IndefiniteBuffTimer}
-		projection.HuntingPoint, projection.StealthDuration = row.HuntingPoint, row.StealthDuration
-		if row.Icon != "" || strings.HasPrefix(row.Codename, "SKILL_CH_") || strings.HasPrefix(row.Codename, "SKILL_EU_") {
-			projection.UI = &SkillUiRow{BuffSecondary: row.BuffSecondary, Name: row.Codename, SPCost: row.SPCost, Trainable: !row.ChainSub && row.SPCost > 0, TargetRequired: row.TargetRequired, GroundTarget: row.PositionEffect.Pinned, CooldownMs: row.CoolTimeMs, CooldownGroup: row.CoolTimeGroup, Masteries: row.Masteries, Prerequisites: row.Prerequisites}
-			projection.UI.BuffCancel = "" // Omitted means the native ordinary/direct branch.
-			if row.VoluntaryCancelBlocked && !row.BuffCancelInstance {
-				projection.UI.BuffCancel = "blocked"
-			} else if row.BuffCancelConfirm {
-				projection.UI.BuffCancel = "confirm"
-			}
-			projection.UI.BuffCancelInstance = row.BuffCancelInstance
-			if row.SpeedBuff.Present {
-				projection.UI.SpeedBuff = &SkillUiSpeedBuff{Active: row.SpeedBuff.Active}
-			}
-			projection.UI.Hide, projection.UI.Detect = skillUiStatusLevel(row.Hide), skillUiStatusLevel(row.Detect)
-			projection.UI.Sight, projection.UI.DetectRange = skillUiStatusLevel(row.Sight), row.DetectRange
-			projection.UI.NameSymbol, projection.UI.Icon = row.NameSymbol, row.Icon
-			projection.UI.ReqStr, projection.UI.ReqInt = row.ReqStr, row.ReqInt
-		}
-		rows = append(rows, projection)
-	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
-	return rows
-}
-
-/*
-================
-spawnSkillSnapshot
-================
-*/
-func spawnSkillSnapshot(source SkillDataSource) []SpawnSkillRow {
-	if source, ok := source.(interface{ SpawnSkillRows() []SpawnSkillRow }); ok {
-		return source.SpawnSkillRows()
-	}
-	return nil
 }
 
 /*

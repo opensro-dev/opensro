@@ -101,6 +101,71 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 
 /*
 ================
+releaseRiddenVehicleInDoor
+
+CGObjPC_ProcessNormalDeath (529B10) releases the vehicle the player rides
+(the COS manager's +0x30, bound by TryBindRideActor and cleared on dismount)
+through ReleaseCOSOrExit: a rider who dies loses the horse or transport it
+sat on. The caller holds c's door. public carries the dismount, the speed
+refresh and the despawn; private the owner's item state.
+================
+*/
+func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Character, now int64) (public, private []wire.Frame) {
+	ride := c.ActiveCOS
+	if ride == nil || !ride.Summoned || !ride.Mounted {
+		return nil, nil
+	}
+	gid := ride.GID
+	ride.Mounted = false
+	ride.Summoned = false
+	ride.StateFlags &^= cosStateSummoned
+	public = append(public, wire.Frame{Opcode: wire.OpCosRideState,
+		Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(c), false, gid)})
+	public = append(public, rt.refreshMovementEffects(division, c, now)...)
+	public = append(public, rt.retireCosRuntime(division, c, gid)...)
+	public = append(public, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()})
+	return public, companionItemStateFrames(c, ride)
+}
+
+/*
+================
+retireCompanionCorpses
+
+A successful re-entry (rebirth, return scroll, portal, GM warp) rebuilds the
+owner's world. CCOSManager_RestoreLoadedActors (4FA430) admits only records
+whose alive and summoned bits are both set: a dead COS stays on its summoner
+item for revival and never follows its owner into the new world. Native gives
+the teleport no separate branch for corpses, so the re-entry applies the same
+admission rule here (inference from 4FA430; restoreCharacterCOS applies it at
+login). The caller holds the division operation lock. Returns the owner's
+item-state frames and the despawn the old neighbourhood must receive.
+================
+*/
+func (rt *Runtime) retireCompanionCorpses(division string, c *enterworld.Character) (owner, public []wire.Frame) {
+	var corpses []*enterworld.CharacterCOS
+	rt.deps.Update(c, "cos-reentry-corpses", func() bool {
+		corpses = corpses[:0]
+		for _, pet := range c.Companions() {
+			if !pet.Summoned || pet.CurrentHP != 0 {
+				continue
+			}
+			pet.Summoned = false
+			pet.StateFlags &^= cosStateSummoned
+			pet.Mounted = false
+			corpses = append(corpses, pet)
+		}
+		return len(corpses) > 0
+	})
+	for _, pet := range corpses {
+		owner = append(owner, rt.retireCosRuntime(division, c, pet.GID)...)
+		owner = append(owner, companionItemStateFrames(c, pet)...)
+		public = append(public, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: pet.GID}.Encode()})
+	}
+	return owner, public
+}
+
+/*
+================
 retireCosRuntime
 
 Retire the actor's transient work after the durable cancellation or horse

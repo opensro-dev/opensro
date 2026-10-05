@@ -16,6 +16,24 @@ One update runs, in native order:
 
 Steps 3-5 are throttled by puls (+0x384) when the row has it.
 
+The port runs that update in two passes over every open aura: first every
+retirement (steps 1-3 and the two-Bard rule below), then every installation
+(steps 4-5). A retired copy is removed at once, its 0xB6A0 queued ahead of
+any 0xB419 of the same update, and each character whose stats moved gets
+one 0x343C at the end. Native ends a member's copy synchronously inside its
+own update; this port's auras share one tick, so a new aura installed
+before an old one ended left the client a stale 0x343C, and an aura settled
+away after its children joined ended tokens whose installation reached the
+client afterwards.
+
+The Bard's auras follow the owner's rules on top of that update (rules 1
+and 4 of the Bard specification): a Bard keeps one instrument aura and one
+dance at a time, the new cast replacing the old; an aura ends when its
+caster runs out of MP, dies or goes through a loading screen; a member who
+left the radius, or whose child ended for any other reason, joins again
+when the walk finds it back in range. Rule 3 settles two Bards of one
+party after every update (settleRivalInstruments).
+
 ===========================================================================
 */
 
@@ -25,6 +43,7 @@ import (
 	"sort"
 	"sync/atomic"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
@@ -50,6 +69,41 @@ type partyAura struct {
 	nextPulse  int64
 	nextScan   int64
 	members    map[string]uint32
+	scanDue    bool
+}
+
+/*
+==================
+auraUpdate
+
+One pass of advancePartyAuras: the routed frames in delivery order, and
+the characters owed one 0x343C once every retirement and installation of
+the pass has landed.
+==================
+*/
+type auraUpdate struct {
+	frames []simulation.DivisionFrames
+	stats  []auraStatsOwner
+	owed   map[string]bool
+}
+
+// auraStatsOwner is one character owed a 0x343C.
+type auraStatsOwner struct {
+	division string
+	c        *enterworld.Character
+}
+
+// oweStats records that c's stats moved in this pass.
+func (u *auraUpdate) oweStats(division string, c *enterworld.Character) {
+	key := simulation.WorldKey(division, c.Name)
+	if u.owed[key] {
+		return
+	}
+	if u.owed == nil {
+		u.owed = map[string]bool{}
+	}
+	u.owed[key] = true
+	u.stats = append(u.stats, auraStatsOwner{division: division, c: c})
 }
 
 /*
@@ -65,7 +119,8 @@ CAST START
 acceptPartyBuff
 
 583657: charge the cast, install the caster's persistent instance and open
-the area. Members are chosen by the update, never here.
+the area. Members are chosen by the update, never here. The caster's new
+stats ride its own burst only; observers see the cast and the instance.
 ==================
 */
 func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow) OpResult {
@@ -100,11 +155,12 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 		if refusal = code; code != 0 {
 			return false
 		}
-		rt.startSkillCast(division, c, now)
+		rt.startSkillCast(division, c, skill, now)
 		installed, ok := rt.commitCharacterEffect(division, c, skill, token, statuseffect.StateActive, true, EffectPresentation{Phase: 1}, now)
 		if !ok {
 			return false
 		}
+		rt.replaceOwnAura(division, c, skill, token)
 		success := wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: enterworld.ObjectIDForCharacter(c), InstanceToken: token}
 		frames = append(frames, wire.SkillCastSelfFrame(success))
 		frames = append(frames, installed...)
@@ -117,6 +173,10 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 		}
 		return OpResult{DiagnosticRefusal: "party-buff-commit-refused"}
 	}
+	rt.queuePersistentRelease(division, c, token, skill, now)
+	broadcast := append([]wire.Frame(nil), frames...)
+	private := rt.auraStatsFrames(division, c, skill, token)
+	frames = append(frames, private...)
 
 	aura := partyAura{
 		division:   division,
@@ -131,7 +191,7 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 	rt.partyAuraMu.Lock()
 	rt.partyAuras = append(rt.partyAuras, aura)
 	rt.partyAuraMu.Unlock()
-	return OpResult{Frames: frames, Broadcast: frames}
+	return OpResult{Frames: frames, Broadcast: broadcast, ActorPrivate: private}
 }
 
 // auraRadius is the efr radius plus the caster's MUER (+0x544) and DSER
@@ -162,71 +222,112 @@ UPDATE
 ==================
 advancePartyAuras
 
-The 5830B0 update for every open aura. The list lock is held for the whole
-pass so a cast cannot add an aura mid-update.
+The 5830B0 update for every open aura in two passes (see the file
+header): every retirement, including the owner's two-Bard rule, then every
+heal and join on what stayed open, then the owed 0x343C frames. The list
+lock is held for the whole update so a cast cannot add an aura mid-update.
 ==================
 */
 func (rt *Runtime) advancePartyAuras(now int64) []simulation.DivisionFrames {
 	rt.partyAuraMu.Lock()
 	defer rt.partyAuraMu.Unlock()
 
-	var out []simulation.DivisionFrames
+	var u auraUpdate
 	kept := rt.partyAuras[:0]
 	for _, aura := range rt.partyAuras {
-		frames, open := rt.advanceAura(&aura, now)
-		out = append(out, frames...)
-		if open {
+		if rt.retireAuraStep(&u, &aura, now) {
 			kept = append(kept, aura)
 		}
 	}
 	rt.partyAuras = kept
-	return out
+	rt.settleRivalInstruments(&u)
+
+	for i := range rt.partyAuras {
+		rt.installAuraStep(&u, &rt.partyAuras[i], now)
+	}
+	for _, owner := range u.stats {
+		stats, err := rt.PlayerBaseStats(owner.division, owner.c)
+		if err != nil {
+			log.WithError(err).WithFields(log.Fields{"division": owner.division, "character": owner.c.Name}).Error("aura stat projection failed")
+			continue
+		}
+		frame := simulation.Frame{Opcode: wire.OpBaseStats, Payload: stats.Encode()}
+		u.frames = append(u.frames, simulation.DivisionFrames{DivisionID: owner.division, OnlyCharacterID: owner.c.ID, Frames: []simulation.Frame{frame}})
+	}
+	return u.frames
 }
 
 /*
 ==================
-advanceAura
+retireAuraStep
 
-One update of one aura. Returns false once the aura has retired.
+Steps 1-3 of one aura's update: the caster checks, the onff pulse and,
+when the puls throttle lets the walks run, the leave walk. Returns false
+once the aura has retired.
 ==================
 */
-func (rt *Runtime) advanceAura(aura *partyAura, now int64) ([]simulation.DivisionFrames, bool) {
+func (rt *Runtime) retireAuraStep(u *auraUpdate, aura *partyAura, now int64) bool {
+	aura.scanDue = false
 	caster := rt.findCharacter(aura.division, aura.casterName)
 	skill, known := rt.deps.SkillData().SkillByID(aura.skillID)
 	if caster == nil || !known || !enterworld.CharacterAlive(caster) || !rt.auraInstanceLive(*aura) {
-		rt.retireAura(*aura)
-		return nil, false
+		rt.retireAura(u, *aura)
+		return false
 	}
 
-	var frames []simulation.DivisionFrames
 	if skill.Aura.PulseMs != 0 && now >= aura.nextPulse {
 		paid, ok := rt.pulseAura(aura.division, caster, skill)
 		if !ok {
-			rt.retireAura(*aura)
-			return nil, false
+			rt.retireAura(u, *aura)
+			return false
 		}
-		frames = append(frames, paid...)
+		u.frames = append(u.frames, paid...)
 		aura.nextPulse = now + int64(skill.Aura.PulseMs)
 	}
 
 	if skill.Abnormal.PulsePresent {
 		if now < aura.nextScan {
-			return frames, true
+			return true
 		}
 		aura.nextScan = now + int64(skill.Abnormal.Pulse)
 	}
+	aura.scanDue = true
+	rt.leaveAura(u, aura, caster, now)
+	return true
+}
 
-	rt.leaveAura(aura, caster, now)
-	frames = append(frames, rt.healAura(aura, caster, skill)...)
-	frames = append(frames, rt.joinAura(aura, caster, skill, now)...)
-	return frames, true
+/*
+==================
+installAuraStep
+
+Steps 4-5 of one aura's update, run only when its retireAuraStep let the
+walks run.
+==================
+*/
+func (rt *Runtime) installAuraStep(u *auraUpdate, aura *partyAura, now int64) {
+	if !aura.scanDue {
+		return
+	}
+	caster := rt.findCharacter(aura.division, aura.casterName)
+	skill, known := rt.deps.SkillData().SkillByID(aura.skillID)
+	if caster == nil || !known {
+		return
+	}
+	u.frames = append(u.frames, rt.healAura(aura, caster, skill)...)
+	rt.joinAura(u, aura, caster, skill, now)
 }
 
 // auraInstanceLive reports the caster's persistent instance still installed
 // and not asked to stop.
 func (rt *Runtime) auraInstanceLive(aura partyAura) bool {
-	for _, effect := range rt.effects.Snapshot(aura.division, aura.casterName) {
-		if effect.SkillID == aura.skillID && effect.InstanceToken == aura.token {
+	return rt.instanceLive(aura.division, aura.casterName, aura.skillID, aura.token)
+}
+
+// instanceLive reports one instance of skillID still installed on name and
+// not asked to stop.
+func (rt *Runtime) instanceLive(division, name string, skillID, token uint32) bool {
+	for _, effect := range rt.effects.Snapshot(division, name) {
+		if effect.SkillID == skillID && effect.InstanceToken == token {
 			return !effect.StopRequested
 		}
 	}
@@ -237,8 +338,11 @@ func (rt *Runtime) auraInstanceLive(aura partyAura) bool {
 ==================
 pulseAura
 
-585262: current MP below onff word 1 retires the aura; otherwise that word,
-cut by the caster's BDMD, is paid.
+CastLifecycle_ProcessPersistent 585277..585284: current MP below the raw onff
+word 1 retires the aura (jl), before any cut; the charge that follows is the
+word at the caster's 0x8D rate cut by BDMD and getv (auraPulseCost). A Bard
+holding enough for the cut charge but not the raw word loses the aura, as
+native does.
 ==================
 */
 func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skill enterworld.SkillRow) ([]simulation.DivisionFrames, bool) {
@@ -246,11 +350,10 @@ func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skil
 	if current < int64(skill.Aura.PulseMP) {
 		return nil, false
 	}
-	stats, _, err := rt.playerCombatStats(division, caster)
-	if err != nil {
+	cost, ok := rt.auraPulseCost(division, caster, skill)
+	if !ok {
 		return nil, false
 	}
-	cost := int64(combat.ApplyMPDecrease(int32(skill.Aura.PulseMP), skill.Attack.Parameters, stats.SkillParameters))
 
 	gid := enterworld.ObjectIDForCharacter(caster)
 	var vitals []simulation.Frame
@@ -266,26 +369,76 @@ func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skil
 	return []simulation.DivisionFrames{{DivisionID: division, OnlyCharacterID: caster.ID, Frames: vitals}}, true
 }
 
-// retireAura stops the caster's instance and every child.
-func (rt *Runtime) retireAura(aura partyAura) {
-	rt.stopAuraInstance(aura, aura.casterName, aura.token)
+/*
+==================
+auraPulseCost
+
+onff word 1 at the caster's MP consumption rate (parameter 0x8D, lowered
+by Dancing of Mana's dcmp), cut by its BDMD (Music Life): what one pulse
+charges.
+==================
+*/
+func (rt *Runtime) auraPulseCost(division string, caster *enterworld.Character, skill enterworld.SkillRow) (int64, bool) {
+	stats, _, err := rt.playerCombatStats(division, caster)
+	if err != nil {
+		return 0, false
+	}
+	// 583224..583262: the pulse's MP at the caster's 0x8D rate, then the
+	// getv cuts (58327A..).
+	cost := combat.PreparedCost(0, skill.Aura.PulseMP, 0, true, true, combat.MPConsumptionRate(stats))
+	return int64(combat.ApplyMPDecrease(cost, skill.Attack.Parameters, stats.SkillParameters)), true
+}
+
+// retireAura ends the caster's instance and every child.
+func (rt *Runtime) retireAura(u *auraUpdate, aura partyAura) {
+	rt.endAuraInstance(u, aura, aura.casterName, aura.token)
 	for name, token := range aura.members {
-		rt.stopAuraInstance(aura, name, token)
+		rt.endAuraInstance(u, aura, name, token)
 	}
 }
 
-// stopAuraInstance asks one instance to stop, under its owner's door when
-// the owner is online.
-func (rt *Runtime) stopAuraInstance(aura partyAura, name string, token uint32) {
-	request := func() bool {
+/*
+==================
+endAuraInstance
+
+End one instance now, under its owner's door: the registry drops it, the
+character-effect teardown runs (finishEndedEffects) and its 0xB6A0 joins
+the pass's frames, so no later installation of the pass can reach a client
+ahead of it. Its 0x343C is owed to the end of the pass. An owner whose
+object is gone only has the instance asked to stop, for the next drain.
+==================
+*/
+func (rt *Runtime) endAuraInstance(u *auraUpdate, aura partyAura, name string, token uint32) {
+	owner := rt.findCharacter(aura.division, name)
+	if owner == nil {
 		rt.effects.RequestVoluntaryStop(aura.division, name, aura.skillID, token)
-		return true
-	}
-	if member := rt.findCharacter(aura.division, name); member != nil {
-		rt.deps.Update(member, "aura-retire", request)
 		return
 	}
-	request()
+	var public, actor []wire.Frame
+	stats := false
+	rt.deps.Update(owner, "aura-retire", func() bool {
+		ended := rt.effects.RetireInstances(aura.division, name, []uint32{token})
+		for _, e := range ended {
+			stats = stats || e.Modifiers.HasWrites()
+		}
+		public, actor = rt.finishEndedEffects(aura.division, owner, ended, rt.Now().UnixMilli())
+		return len(ended) != 0
+	})
+	if len(public) != 0 {
+		u.frames = append(u.frames, simulation.DivisionFrames{DivisionID: aura.division, Frames: simFrames(public)})
+	}
+	var private []wire.Frame
+	for _, frame := range actor {
+		if frame.Opcode != wire.OpBaseStats {
+			private = append(private, frame)
+		}
+	}
+	if len(private) != 0 {
+		u.frames = append(u.frames, simulation.DivisionFrames{DivisionID: aura.division, OnlyCharacterID: owner.ID, Frames: simFrames(private)})
+	}
+	if stats {
+		u.oweStats(aura.division, owner)
+	}
 }
 
 /*
@@ -303,9 +456,16 @@ leaveAura
 The set walk at 584C... A member whose object is gone is erased (and, since
 per-name effect state outlives a logged-out object here, its child is
 stopped too). Everyone else is tested by memberLeaves.
+
+A member whose child already ended is erased as well, so the join walk
+right after can hand it a new one. Inferred: native erases a set entry when
+the child's own retirement notifies the area (the child dies with the
+member's death, a loading screen or an equipment re-check); this port has
+no such callback, so the walk reads the child's liveness instead. Without
+it the set kept the dead token and the member never joined again.
 ==================
 */
-func (rt *Runtime) leaveAura(aura *partyAura, caster *enterworld.Character, now int64) {
+func (rt *Runtime) leaveAura(u *auraUpdate, aura *partyAura, caster *enterworld.Character, now int64) {
 	party := rt.auraParty(aura.division, caster)
 	from := rt.liveSpawn(simulation.WorldKey(aura.division, caster.Name), caster, now)
 
@@ -316,12 +476,16 @@ func (rt *Runtime) leaveAura(aura *partyAura, caster *enterworld.Character, now 
 			delete(aura.members, name)
 			continue
 		}
+		if !rt.instanceLive(aura.division, name, aura.skillID, token) {
+			delete(aura.members, name)
+			continue
+		}
 
 		to := rt.liveSpawn(simulation.WorldKey(aura.division, name), member, now)
 		if !memberLeaves(party, member, from, to, aura.radius) {
 			continue
 		}
-		rt.stopAuraInstance(*aura, name, token)
+		rt.endAuraInstance(u, *aura, name, token)
 		delete(aura.members, name)
 	}
 }
@@ -332,16 +496,22 @@ memberLeaves
 
 The native leave rule, in its order:
 
-  - with the caster in a party, another party leaves
+  - a member outside the caster's party leaves
   - another plane or sector stays: that branch jumps to the keep path
     (584D95) before distance is read
   - a 3D distance past the radius leaves
 
 Death is never read by this walk.
+
+Native skips the party test when the caster has no party. Owner's rule
+(Bard specification, rule 1: the aura is the party's): a caster with no
+party keeps the aura on itself only, so when its party dissolves every
+ex-member leaves at the next walk. Live, an ex-member of a dissolved
+two-member party kept its copy while in range.
 ==================
 */
 func memberLeaves(party map[uint32]bool, member *enterworld.Character, from, to simulation.Spawn, radius uint32) bool {
-	if len(party) != 0 && !party[enterworld.ObjectIDForCharacter(member)] {
+	if !party[enterworld.ObjectIDForCharacter(member)] {
 		return true
 	}
 	if !samePlaneAdjacent(from, to) {
@@ -356,15 +526,14 @@ joinAura
 
 The party walk after the heal: every other party member not in the set,
 alive, on the same plane, within the radius and admitted by buff
-replacement gets a child instance under its own authority. There is no
-target cap.
+replacement gets a child instance under its own authority; its new stats
+are owed to the end of the pass. There is no target cap.
 ==================
 */
-func (rt *Runtime) joinAura(aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow, now int64) []simulation.DivisionFrames {
+func (rt *Runtime) joinAura(u *auraUpdate, aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow, now int64) {
 	party := rt.auraParty(aura.division, caster)
 	from := rt.liveSpawn(simulation.WorldKey(aura.division, caster.Name), caster, now)
 
-	var out []simulation.DivisionFrames
 	for gid := range party {
 		member := rt.findCharacterByGid(aura.division, gid)
 		if member == nil || member.Name == aura.casterName || aura.members[member.Name] != 0 {
@@ -382,16 +551,52 @@ func (rt *Runtime) joinAura(aura *partyAura, caster *enterworld.Character, skill
 		var installed []wire.Frame
 		joined := rt.deps.Update(member, "aura-join", func() bool {
 			var ok bool
-			installed, ok = rt.commitCharacterEffect(aura.division, member, skill, child, statuseffect.StateActive, true, EffectPresentation{Phase: 1}, now)
+			installed, ok = rt.commitCharacterEffect(aura.division, member, skill, child, statuseffect.StateActive, true, EffectPresentation{Phase: 1, AuraParent: aura.token}, now)
 			return ok
 		})
 		if !joined {
 			continue
 		}
 		aura.members[member.Name] = child
-		out = append(out, simulation.DivisionFrames{DivisionID: aura.division, SourceGID: gid, Frames: simFrames(installed)})
+		u.frames = append(u.frames, simulation.DivisionFrames{DivisionID: aura.division, SourceGID: gid, Frames: simFrames(installed)})
+		if rt.instanceWrites(aura.division, member, child) {
+			u.oweStats(aura.division, member)
+		}
 	}
-	return out
+}
+
+/*
+==================
+auraStatsFrames
+
+The owner's private 0x343C after one aura instance was installed. The
+frame and its private routing follow the timed self effect's release
+(skilltimedeffect.go), which publishes unconditionally. The gate does not:
+the frame is sent only when that instance writes parameters, the condition
+under which its retirement republishes the block
+(drainStoppedCharacterEffects), so an eshp-only aura adds no frame.
+==================
+*/
+func (rt *Runtime) auraStatsFrames(division string, c *enterworld.Character, skill enterworld.SkillRow, token uint32) []wire.Frame {
+	if !rt.instanceWrites(division, c, token) {
+		return nil
+	}
+	stats, err := rt.PlayerBaseStats(division, c)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{"division": division, "character": c.Name, "skill": skill.ID}).Error("aura installation stat projection failed")
+		return nil
+	}
+	return []wire.Frame{{Opcode: wire.OpBaseStats, Payload: stats.Encode()}}
+}
+
+// instanceWrites reports that c's instance token writes parameters.
+func (rt *Runtime) instanceWrites(division string, c *enterworld.Character, token uint32) bool {
+	for _, effect := range rt.effects.Snapshot(division, c.Name) {
+		if effect.InstanceToken == token {
+			return effect.Modifiers.HasWrites()
+		}
+	}
+	return false
 }
 
 // auraParty is the caster's party (actor+0x1CB8) as a gid set, empty when
@@ -423,6 +628,184 @@ func (rt *Runtime) auraReplacementAllowed(division string, member *enterworld.Ch
 		return true
 	}
 	return rt.requestSelfEffectReplacement(division, member, skill)
+}
+
+/*
+===============================================================================
+
+THE BARD'S RULES
+
+===============================================================================
+*/
+
+/*
+==================
+replaceOwnAura
+
+Owner's rule 1: a Bard plays one instrument aura (Guard Tambour, Mana
+Tambour, Hit March, Clout March) at a time; casting another replaces the
+one already playing. Inferred: a dance replaces the Bard's previous dance
+the same way, since a Bard dances one Dancing at a time. Moving and Swing
+March are timed buffs of no family and are never touched here.
+
+The old caster instance is asked to stop, exactly as a client cancel does;
+the next update finds it stopped and retires its children (retireAuraStep).
+Only the caster's own instances are read: a child the Bard holds from
+another Bard's aura has an AuraParentToken. The caller holds c's door.
+==================
+*/
+func (rt *Runtime) replaceOwnAura(division string, c *enterworld.Character, skill enterworld.SkillRow, token uint32) {
+	family := skill.AuraFamily()
+	if family == enterworld.AuraFamilyNone {
+		return
+	}
+	for _, effect := range rt.effects.Snapshot(division, c.Name) {
+		if effect.InstanceToken == token || effect.AuraParentToken != 0 || effect.StopRequested {
+			continue
+		}
+		row, ok := rt.deps.SkillData().SkillByID(effect.SkillID)
+		if !ok || row.AuraFamily() != family {
+			continue
+		}
+		rt.effects.RequestVoluntaryStop(division, c.Name, effect.SkillID, effect.InstanceToken)
+	}
+}
+
+/*
+==================
+settleRivalInstruments
+
+Owner's rule 3: when two Bards of one party play instrument auras, the
+lower-level one is cancelled and the higher one stays; while a Dancing
+plays in that party, two DIFFERENT instruments may both stay. Two auras of
+one kind (the same ovl2 overlap word: both Guard Tambours, or Hit March
+and Clout March) never share a party.
+
+Inferred:
+  - the level is the row's required mastery level (skilldata column 36),
+    the one number that orders Guard Tambour against Mana Tambour; the
+    tier inside a line does not compare across lines
+  - the whole loser aura ends (its Bard's instance and every child), not
+    one member's copy: the Bard is the one the rule cancels
+  - on equal levels the newer cast stays, as the same Bard's new cast
+    replaces its old one
+  - the rule is settled after every update, so a dance that stops ends the
+    coexistence at the next update
+
+Settled in the retirement pass, before any join: a loser cast since the
+last update never hands out a child.
+
+The caller holds partyAuraMu.
+==================
+*/
+func (rt *Runtime) settleRivalInstruments(u *auraUpdate) {
+	for {
+		loser := rt.rivalInstrumentLoser()
+		if loser < 0 {
+			return
+		}
+		rt.retireAura(u, rt.partyAuras[loser])
+		rt.partyAuras = append(rt.partyAuras[:loser], rt.partyAuras[loser+1:]...)
+	}
+}
+
+/*
+==================
+rivalInstrumentLoser
+
+The index of the first aura rule 3 cancels, or -1. The list is in cast
+order, so of two equal levels the earlier index is the older cast.
+==================
+*/
+func (rt *Runtime) rivalInstrumentLoser() int {
+	skills := rt.deps.SkillData()
+	for i := range rt.partyAuras {
+		older := rt.partyAuras[i]
+		olderRow, ok := skills.SkillByID(older.skillID)
+		if !ok || olderRow.AuraFamily() != enterworld.AuraFamilyInstrument {
+			continue
+		}
+		caster := rt.findCharacter(older.division, older.casterName)
+		if caster == nil {
+			continue
+		}
+		party := rt.auraParty(older.division, caster)
+		for j := i + 1; j < len(rt.partyAuras); j++ {
+			newer := rt.partyAuras[j]
+			newerRow, ok := skills.SkillByID(newer.skillID)
+			if !ok || newerRow.AuraFamily() != enterworld.AuraFamilyInstrument ||
+				newer.division != older.division || newer.casterName == older.casterName {
+				continue
+			}
+			rival := rt.findCharacter(newer.division, newer.casterName)
+			if rival == nil || !party[enterworld.ObjectIDForCharacter(rival)] {
+				continue
+			}
+			sameKind := newerRow.Replacement.Ovl2 == olderRow.Replacement.Ovl2
+			if !sameKind && rt.danceInParty(older.division, party) {
+				continue
+			}
+			if auraLevel(olderRow) > auraLevel(newerRow) {
+				return j
+			}
+			return i
+		}
+	}
+	return -1
+}
+
+// danceInParty reports an open dance aura whose Bard is in party.
+func (rt *Runtime) danceInParty(division string, party map[uint32]bool) bool {
+	for _, aura := range rt.partyAuras {
+		row, ok := rt.deps.SkillData().SkillByID(aura.skillID)
+		if !ok || aura.division != division || row.AuraFamily() != enterworld.AuraFamilyDance {
+			continue
+		}
+		if caster := rt.findCharacter(division, aura.casterName); caster != nil && party[enterworld.ObjectIDForCharacter(caster)] {
+			return true
+		}
+	}
+	return false
+}
+
+// auraLevel is the level rule 3 compares: the row's first required mastery
+// level (see settleRivalInstruments).
+func auraLevel(row enterworld.SkillRow) int64 {
+	return row.Masteries[0].Level
+}
+
+/*
+==================
+endPartyAurasForLoading
+
+Owner's rule 1: a teleport, a portal or a return to town (any loading
+screen) ends the auras the character plays. Inferred: the children it holds
+from other casters' auras end with the same loading; it is out of every
+radius while it loads, and the join walk hands it a new child once it is
+back in range. Both are retired now, before the re-entry packets are built,
+so the rebuilt client never sees them; the aura's next update retires the
+remaining children of an ended caster instance.
+==================
+*/
+func (rt *Runtime) endPartyAurasForLoading(division string, c *enterworld.Character) {
+	if rt.effects == nil {
+		return
+	}
+	skills := rt.deps.SkillData()
+	if skills == nil {
+		return
+	}
+	rt.deps.Update(c, "aura-loading-end", func() bool {
+		var tokens []uint32
+		for _, effect := range rt.effects.Snapshot(division, c.Name) {
+			if row, ok := skills.SkillByID(effect.SkillID); ok && row.Aura.Present {
+				tokens = append(tokens, effect.InstanceToken)
+			}
+		}
+		ended := rt.effects.RetireInstances(division, c.Name, tokens)
+		rt.publishEndedEffects(division, c, ended, rt.Now().UnixMilli())
+		return len(ended) != 0
+	})
 }
 
 /*

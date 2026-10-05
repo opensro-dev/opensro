@@ -15,7 +15,7 @@ import type { TitleLayout, TitleNode, TitleInteraction } from "./internal/title-
 
 import type { CreationSnapshot } from "@/engine/contracts/frontend";
 import type { UiQuad, UiRect, UiControl } from "@/engine/contracts/ui";
-import { titleGlyphs, titleTextBox, type FontAtlas } from "@/engine/foundation/rendering/ui-glyphs";
+import { titleText, titleTextBox, type FontAtlas } from "@/engine/foundation/rendering/ui-glyphs";
 import { creationRange, creationModelCodename, creationProtectors } from "@/engine/foundation/ui/character-create";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
@@ -44,10 +44,20 @@ export function drawCreation(
 	const nodes = layout.controlsByName,
 		selection = state.selection,
 		enabled = interactive && state.phase === "editing" && state.ready;
+	/*
+	================
+	image
+	================
+	*/
 	function image( path: string, rect: UiRect, alpha = 1 ) {
 		paths.push( path );
 		quads.push( { rect, texture: path, color: [ 1, 1, 1, alpha ], clip: full, uv: [ 0, 0, 1, 1 ] } );
 	}
+	/*
+	================
+	text
+	================
+	*/
 	function text(
 		node: TitleNode,
 		value: string,
@@ -60,7 +70,7 @@ export function drawCreation(
 			tint = buttonTextColor( [ c.r / 255, c.g / 255, c.b / 255, c.a / 255 ], access ),
 			color: UiQuad["color"] = [ tint[0], tint[1], tint[2], tint[3] * alpha ];
 		quads.push(
-			...(wrap ? titleTextBox : titleGlyphs)(
+			...(wrap ? titleTextBox : titleText)(
 				font,
 				value,
 				rect,
@@ -70,15 +80,30 @@ export function drawCreation(
 			)
 		);
 	}
+	/*
+	================
+	rect
+	================
+	*/
 	function rect( node: TitleNode, parent: UiRect ): UiRect {
 		return [ parent[0] + node.rect.x, parent[1] + node.rect.y, node.rect.width, node.rect.height ];
 	}
+	/*
+	================
+	panel
+	================
+	*/
 	function panel( name: string, x: number, y: number ): UiRect {
 		const n = nodes[name]!;
 		const r: UiRect = [ x, y, n.rect.width, n.rect.height ];
 		if ( n.ddj ) image( n.ddj.publicPath, r );
 		return r;
 	}
+	/*
+	================
+	button
+	================
+	*/
 	function button( n: TitleNode, id: string, r: UiRect, disabled = !enabled, alpha = 1, path = n.ddj!.publicPath ) {
 		const focus = path.replace( /\.png$/, "_focus.png" ), press = path.replace( /\.png$/, "_press.png" );
 		paths.push( path, focus, press );

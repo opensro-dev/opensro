@@ -392,6 +392,9 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// Token 19 (RefObjData+0xA7): bit 0x80 admits the item to the warehouse
 	// (CIFStorage_OnSlotTransfer; 0 refuses with notice 1:0x43).
 	{19, "canBorrow", "int"},
+	// Token 22 (server ref +0x8C bit 6, client RefObjData+0xAA): itemdata
+	// CanRepair, read by CGObj_CanRepair 483E80 for NPC and hammer repair.
+	{22, "canRepair", "int"},
 	// Authored CanUse flags: bit 0 admits direct activation; other bits
 	// describe additional behavior (pet skill rows carry 129, not just 1).
 	{24, "canUse", "int"},
@@ -486,7 +489,14 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// the ITEM_MALL_PET_SKILL_* and GOLD_TIME_SERVICE families that match the
 	// kind-3 contract. Publish both unscaled and let the consumer decide.
 	{118, "itemParam1_29c", "int"},
+	// The resurrection scroll (v1.188 49FF20) reads all three: Param1 a
+	// fixed HP/MP amount, Param2 their percentage, Param3 the EXP refund.
+	{120, "itemParam2_2a0", "int"},
 	{122, "itemParam3_2a4", "int"},
+	// The premium time tickets (49C2B0 cases 3 and 4) read the EXP and
+	// skill-EXP bonus percentages from Param4 and Param5.
+	{124, "itemParam4_2a8", "int"},
+	{126, "itemParam5_2ac", "int"},
 	// 80BFAC/80BFBC store the two tokens after the 20 (value,label)
 	// pairs. 8093C0 returns CItemData+8, hence record offsets 51C/51D.
 	{158, "maxMagicOptions51c", "byte"},
@@ -595,6 +605,9 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 	ref.NativeFields = buildItemNativeFields(fields)
 	if len(fields) > 123 && ref.TypeIDs == [4]int64{3, 3, 3, 1} {
 		ref.ReturnDestination = strings.TrimSpace(fields[123])
+		if len(fields) > 125 && strings.TrimSpace(fields[125]) != "xxx" {
+			ref.ReturnTeleport = strings.TrimSpace(fields[125])
+		}
 	}
 	ref.Combat = buildItemCombatRef(fields)
 	if len(fields) > 63 {

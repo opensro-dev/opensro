@@ -76,6 +76,10 @@ func ReadItemUseRequest(payload []byte) (ItemUseRequest, []byte, error) {
 	return out, tail, nil
 }
 
+// OpItemUseVisual is v1.150's external item effect (client 74F540): [u32
+// gid][u32 item reference id]. v1.188 numbers it 0x305C.
+const OpItemUseVisual uint16 = 0x3449
+
 /*
 ==================
 EncodeItemUseSuccess

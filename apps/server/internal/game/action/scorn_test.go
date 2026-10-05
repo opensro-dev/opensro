@@ -206,7 +206,7 @@ func TestGrossScornSelectsPrimaryAreaAndLimitsRecipients(t *testing.T) {
 	skill.Consumption.MP = 1
 	p := scornOpponentPair(t, skill)
 	deps := p.rt.deps.(*enterworld.Deps)
-	source := deps.Characters.(enterworld.StaticCharacterSource)
+	source := fixtureCharacters(deps.Characters)
 	for i := int64(5); i <= 8; i++ {
 		other := *p.m
 		other.ID = i
@@ -257,7 +257,7 @@ func TestGrossScornSecondaryAdmissionAndRadius(t *testing.T) {
 			p := scornOpponentPair(t, skill)
 			other := p.m.Snapshot()
 			other.ID, other.Name = 9, "secondary"
-			source := p.rt.deps.(*enterworld.Deps).Characters.(enterworld.StaticCharacterSource)
+			source := fixtureCharacters(p.rt.deps.(*enterworld.Deps).Characters)
 			source[testDivision] = append(source[testDivision], other)
 			casterRadius, _ := p.rt.deps.CharacterBodyRadius(p.c)
 			otherRadius, _ := p.rt.deps.CharacterBodyRadius(other)

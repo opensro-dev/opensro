@@ -630,7 +630,13 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 	// Also retire the legacy persisted segment echo. A reconnect must seed
 	// the corpse, not the destination of its last living movement.
 	c.World.MoveSegment = nil
+	// 529B98: ProcessNormalDeath records where the player died (4E0330), the
+	// reverse return's second destination.
+	c.World.LastDeathPoint = worldSpawnFromMission(state.Spawn)
 	effects = rt.retireBodyEffectsOnDeath(division, c)
+	// 529B10: the ridden vehicle is released with its rider's death.
+	released, owned := rt.releaseRiddenVehicleInDoor(division, c, now)
+	effects = append(effects, released...)
 	// CGObjPC_ProcessNormalDeath leaves battle (529C93) before the life change.
 	effects = append(effects, rt.leaveBattleState(division, c, now)...)
 	if rt.ApplyDeathPenalty != nil {
@@ -643,7 +649,7 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 		frames, _ := rt.ReleaseQuestCapturesOnDeath(c)
 		progression = append(progression, frames...)
 	}
-	return effects, progression
+	return effects, append(progression, owned...)
 }
 
 /*

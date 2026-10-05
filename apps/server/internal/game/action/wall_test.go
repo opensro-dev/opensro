@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -210,5 +211,38 @@ func TestWallBreaksRetiresAndBlocksASecondWall(t *testing.T) {
 	}
 	if enterworld.CurrentHP(c) >= hp {
 		t.Fatal("hits still absorbed after the wall broke")
+	}
+}
+
+/*
+================
+TestWallCastReleasesItsWaitAtTheCastingTime
+
+CastLifecycle_ProcessPersistent (5830B0) sends the mode-1 release once the
+wall stands. Without it the client held the casting pose for the wall's
+whole life.
+================
+*/
+func TestWallCastReleasesItsWaitAtTheCastingTime(t *testing.T) {
+	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
+	skill := shippedOffense(t, "SKILL_CH_COLD_BINGBYEOK_A_01")
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c.Skills = append(c.Skills, skill.ID)
+	c.CurrentMP = testInt64(10000)
+	start := clock.NowMs()
+	rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
+	released := int64(0)
+	for i := 0; i < 30 && released == 0; i++ {
+		clock.Advance(100 * time.Millisecond)
+		for _, burst := range rt.TickHook()(clock.NowMs()) {
+			for _, f := range burst.Frames {
+				if f.Opcode == wire.OpSkillEffectControl && len(f.Payload) > 0 && f.Payload[0] == 1 {
+					released = clock.NowMs()
+				}
+			}
+		}
+	}
+	if released == 0 || released-start < int64(skill.ActionCastingTimeMs) {
+		t.Fatalf("wall release at %d ms, casting time %d ms", released-start, skill.ActionCastingTimeMs)
 	}
 }

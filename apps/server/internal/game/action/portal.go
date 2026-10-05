@@ -60,6 +60,8 @@ type portalCatalog struct {
 	destinations map[uint32]portalDestination
 	sources      map[uint32]uint32
 	links        map[[2]uint32]portalLink
+	// buildings maps a teleport building's codename to its RefObjID.
+	buildings map[string]uint32
 }
 
 // Both tables remain server-owned. The request carries neither a price nor a
@@ -70,7 +72,8 @@ loadPortalCatalog
 ================
 */
 func loadPortalCatalog(dir string) (*portalCatalog, error) {
-	c := &portalCatalog{destinations: map[uint32]portalDestination{}, sources: map[uint32]uint32{}, links: map[[2]uint32]portalLink{}}
+	c := &portalCatalog{destinations: map[uint32]portalDestination{}, sources: map[uint32]uint32{}, links: map[[2]uint32]portalLink{},
+		buildings: map[string]uint32{}}
 	number := func(s string) (uint32, error) { v, e := strconv.ParseUint(s, 10, 32); return uint32(v), e }
 	buildings := map[uint32]bool{}
 	buildingRows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportbuilding.txt"))
@@ -89,6 +92,9 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 			return nil, e
 		}
 		buildings[id] = true
+		if len(r) > 2 {
+			c.buildings[r[2]] = id
+		}
 	}
 	rows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportdata.txt"))
 	if len(rows) == 0 {
@@ -189,6 +195,31 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 
 /*
 ================
+buildingGateSpawn
+
+The gate spawn of the teleport whose object is the named building: a
+return scroll's Param4 (4A0380 reads it through the reference data's
++0x190 teleport link).
+================
+*/
+func (rt *Runtime) buildingGateSpawn(code string) (simulation.Spawn, bool) {
+	if rt.portals == nil {
+		return simulation.Spawn{}, false
+	}
+	ref, ok := rt.portals.buildings[code]
+	if !ok {
+		return simulation.Spawn{}, false
+	}
+	for _, destination := range rt.portals.destinations {
+		if destination.ref == ref {
+			return destination.spawn, true
+		}
+	}
+	return simulation.Spawn{}, false
+}
+
+/*
+================
 portalFailure
 ================
 */
@@ -239,6 +270,13 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(2)
 	}
 	kind, e := r.U8()
+	if e == nil && kind == gateReverseReturn {
+		choice, e := r.U8()
+		if e != nil || r.Done() != nil {
+			return portalFailure(2)
+		}
+		return rt.handleReverseReturn(division, c, gid, choice)
+	}
 	if e != nil || kind != 2 {
 		return portalFailure(0x0f)
 	}
@@ -248,34 +286,11 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 	}
 	unlock := rt.lockDivision(division)
 	defer unlock()
-	if rt.portals == nil {
-		return portalFailure(2)
-	}
-	selected, ok := rt.Selected.Get(division, c.Name)
-	if !ok || selected != gid {
-		return portalFailure(2)
-	}
-	npc, ok := rt.npcForCurrentViewer(division, c, gid)
-	if !ok {
-		return portalFailure(2)
-	}
-	sourceID, ok := rt.portals.sources[npc.RefObjID]
-	if !ok {
-		return portalFailure(2)
+	npc, sourceID, refusal := rt.portalSourceNpc(division, c, gid)
+	if refusal != 0 {
+		return portalFailure(refusal)
 	}
 	source := rt.portals.destinations[sourceID]
-	if npc.AuthoredSpawn {
-		live := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, rt.Now().UnixMilli())
-		planar := simulation.WorldDistance2D(live, npc.Spawn)
-		distance := math.Hypot(planar, live.Y-npc.Spawn.Y)
-		limit := 300.0
-		if source.building {
-			limit = 800
-		}
-		if math.IsNaN(distance) || math.IsInf(distance, 0) || distance > limit {
-			return portalFailure(4)
-		}
-	}
 
 	link, ok := rt.portals.links[[2]uint32{sourceID, target}]
 	if !ok {
@@ -331,6 +346,7 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(failure)
 	}
 	rt.endTransformForLoading(division, c)
+	rt.endPartyAurasForLoading(division, c)
 	previousPets := rt.relocateReturningPet(division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(division, c.Name)
 	if !accepted || len(packets) == 0 || packets[0].NativeOpcode != enterworld.OpcodeResetClient {
@@ -350,7 +366,48 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 	rt.clearSkillFinalizes(division, c.Name)
 	rt.clearCompoundJob(compoundKey{division, c.Name})
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
-	return OpResult{Frames: missionReentryFrames(packets), Broadcast: []wire.Frame{{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()}}}
+	corpses, corpseDespawns := rt.retireCompanionCorpses(division, c)
+	return OpResult{Frames: append(missionReentryFrames(packets), corpses...), Broadcast: append(corpseDespawns, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})}
+}
+
+/*
+================
+portalSourceNpc
+
+The selected, resident gate NPC a 0x7495 names, within its reach (300, or
+800 for a building gate). Returns the NPC, its portal source id, or the
+refusal byte. The caller holds the division lock.
+================
+*/
+func (rt *Runtime) portalSourceNpc(division string, c *enterworld.Character, gid uint32) (simulation.NpcDef, uint32, byte) {
+	if rt.portals == nil {
+		return simulation.NpcDef{}, 0, 2
+	}
+	selected, ok := rt.Selected.Get(division, c.Name)
+	if !ok || selected != gid {
+		return simulation.NpcDef{}, 0, 2
+	}
+	npc, ok := rt.npcForCurrentViewer(division, c, gid)
+	if !ok {
+		return simulation.NpcDef{}, 0, 2
+	}
+	sourceID, ok := rt.portals.sources[npc.RefObjID]
+	if !ok {
+		return simulation.NpcDef{}, 0, 2
+	}
+	if npc.AuthoredSpawn {
+		live := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, rt.Now().UnixMilli())
+		planar := simulation.WorldDistance2D(live, npc.Spawn)
+		distance := math.Hypot(planar, live.Y-npc.Spawn.Y)
+		limit := 300.0
+		if rt.portals.destinations[sourceID].building {
+			limit = 800
+		}
+		if math.IsNaN(distance) || math.IsInf(distance, 0) || distance > limit {
+			return simulation.NpcDef{}, 0, 4
+		}
+	}
+	return npc, sourceID, 0
 }
 
 // 4F2D05: the quest bit blocks buildings and the special GATE_TD route;

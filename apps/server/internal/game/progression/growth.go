@@ -15,13 +15,19 @@ the native kill count for that level. A gain at level L is multiplied by
 kills(L) / kills(1), never below 1, so every level after the first
 compresses to the level-1 pace (one level costs what 1 -> 2 costs). Every source scales the same way:
 kills, party shares and quest rewards all pass through applyExperience.
+A resurrection's refund of EXP lost at death is not a gain and stays
+native (ExperienceRefundUpdater).
 
-SP: skill EXP gains are multiplied by a flat rate so testers can train and
-try skills freely.
+SP: skill EXP gains get the same level compression as EXP, then a flat
+SkillExpRate on top. A flat rate alone fell behind: at level 42 EXP is worth
+~738x native but SP only 100x, so testers had to hold a mastery gap to keep
+their skills level with their character.
 
 Drops: a kill rolls its drop passes DropRate times over (each pass rolls
 gold, equipment and consumables), still bounded by the monster's native
-drop capacity, so more and richer loot falls without inventing items.
+drop capacity, so more and richer loot falls without inventing items. Every
+gold heap is GoldRate times its native amount, because levelling at the
+compressed pace outruns native gold income for gear.
 
 ===========================================================================
 */
@@ -44,6 +50,9 @@ const EnvBetaSkillExpRate = "SRO_BETA_SKILL_EXP_RATE"
 // EnvBetaDropRate overrides the beta drop-pass multiplier.
 const EnvBetaDropRate = "SRO_BETA_DROP_RATE"
 
+// EnvBetaGoldRate overrides the beta gold-heap multiplier.
+const EnvBetaGoldRate = "SRO_BETA_GOLD_RATE"
+
 // BetaReferenceLevel is the level whose kill pace every level is held to.
 const BetaReferenceLevel = 1
 
@@ -56,6 +65,12 @@ const betaDropRateDefault = 5
 // maxBetaDropRate bounds an operator override; capacity bounds the drops.
 const maxBetaDropRate = 100
 
+// betaGoldRateDefault makes each gold heap fifty times its native amount.
+const betaGoldRateDefault = 50
+
+// maxBetaGoldRate bounds an operator override; heaps also clamp to a dword.
+const maxBetaGoldRate = 10_000
+
 /*
 ================
 GrowthRates
@@ -67,6 +82,7 @@ type GrowthRates struct {
 	Enabled      bool
 	SkillExpRate int64
 	DropRate     int
+	GoldRate     int
 }
 
 /*
@@ -80,7 +96,12 @@ func BetaGrowthFromEnv() GrowthRates {
 	default:
 		return GrowthRates{}
 	}
-	rates := GrowthRates{Enabled: true, SkillExpRate: betaSkillExpRateDefault, DropRate: betaDropRateDefault}
+	rates := GrowthRates{
+		Enabled:      true,
+		SkillExpRate: betaSkillExpRateDefault,
+		DropRate:     betaDropRateDefault,
+		GoldRate:     betaGoldRateDefault,
+	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaSkillExpRate)); text != "" {
 		if n, err := strconv.ParseInt(text, 10, 64); err == nil && n >= 1 {
 			rates.SkillExpRate = n
@@ -89,6 +110,11 @@ func BetaGrowthFromEnv() GrowthRates {
 	if text := strings.TrimSpace(os.Getenv(EnvBetaDropRate)); text != "" {
 		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaDropRate {
 			rates.DropRate = n
+		}
+	}
+	if text := strings.TrimSpace(os.Getenv(EnvBetaGoldRate)); text != "" {
+		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaGoldRate {
+			rates.GoldRate = n
 		}
 	}
 	return rates
@@ -115,26 +141,45 @@ func levelKills(levels enterworld.LevelDataSource, level int64) (float64, bool) 
 
 /*
 ================
+levelPace
+
+How many native gains one gain at this level is worth: the level's kill
+count over the reference level's, never below 1. A level without both
+table rows keeps the native pace.
+================
+*/
+func levelPace(levels enterworld.LevelDataSource, level int64) float64 {
+	if levels == nil {
+		return 1
+	}
+	kills, ok := levelKills(levels, level)
+	reference, refOK := levelKills(levels, BetaReferenceLevel)
+	if !ok || !refOK || kills <= reference {
+		return 1
+	}
+	return kills / reference
+}
+
+/*
+================
 scale
 
-Positive gains only: the death penalty and every refusal stay native. A
-level without both table rows keeps the native amount.
+Positive gains only: the death penalty and every refusal stay native.
+clampExpDelta and clampSkillExpDelta bound the results to the wire's
+signed dword.
 ================
 */
 func (g GrowthRates) scale(levels enterworld.LevelDataSource, level, expDelta, skillExpDelta int64) (int64, int64) {
 	if !g.Enabled {
 		return expDelta, skillExpDelta
 	}
-	if expDelta > 0 && levels != nil {
-		kills, ok := levelKills(levels, level)
-		reference, refOK := levelKills(levels, BetaReferenceLevel)
-		if ok && refOK && kills > reference {
-			// clampExpDelta bounds the result to the wire's signed dword.
-			expDelta = int64(min(float64(expDelta)*kills/reference, float64(1<<62)))
-		}
+	pace := levelPace(levels, level)
+	if expDelta > 0 {
+		expDelta = int64(min(float64(expDelta)*pace, float64(1<<62)))
 	}
-	if skillExpDelta > 0 && g.SkillExpRate > 1 {
-		skillExpDelta = min(skillExpDelta, (1<<62)/g.SkillExpRate) * g.SkillExpRate
+	if skillExpDelta > 0 {
+		rate := float64(max(g.SkillExpRate, 1))
+		skillExpDelta = int64(min(float64(skillExpDelta)*pace*rate, float64(1<<62)))
 	}
 	return expDelta, skillExpDelta
 }

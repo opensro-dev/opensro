@@ -213,6 +213,9 @@ export interface CharacterActor {
 	readonly effectAnchor?: { readonly bone: string | null; readonly offset: readonly [number, number, number]; };
 	readonly height?: number;
 	readonly pickable?: boolean;
+	/** A linked ride's rider: a pick on the ride answers with this gid
+	 * (World_PickEntityAtScreenPoint 692680 reads the ride's +0x2A4). */
+	readonly pickOwner?: number;
 	readonly bodyVolume?: { readonly index: number; readonly female: boolean; };
 	readonly opacity?: number;
 	/** A skill/orb effect entity: its owner's model fades do not reach it
@@ -233,6 +236,9 @@ export interface CharacterActor {
 		/** Root attachments only: a fixed world yaw replacing the owner's rotation
 		 * (a victim-anchored hit effect keeps the caster's facing, 8D5440). */
 		readonly facing?: import("@/engine/foundation/math/angles").Radians;
+		/** Root attachments only: the effect stands at the character's ground
+		 * position. For a rider that is the ride's root, not the saddle. */
+		readonly ground?: boolean;
 	};
 	readonly mountedOn?: number;
 	readonly gid: number;

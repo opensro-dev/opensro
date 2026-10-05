@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+combat-stance.test.mjs - attack-stance entry on casts and hits
+
+Native 8E5ADE blends stance changes over 200 ms. These tests drive the
+character presentation through casts and hits and check the stance it
+enters and keeps.
+
+===========================================================================
+*/
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -44,6 +55,11 @@ const cast = ( extra = {} ) => ({
 	...extra
 });
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
+/*
+================
+ban
+================
+*/
 function ban() {
 	const rows = [],
 		u32 = n => {
@@ -78,6 +94,11 @@ function ban() {
 	const out = Buffer.concat( rows );
 	return out.buffer.slice( out.byteOffset, out.byteOffset + out.byteLength );
 }
+/*
+================
+fixture
+================
+*/
 function fixture(
 	{ wait = false, effectOnly = false, missingMotion = false, nativeBan = false, crossbow = false } = {}
 ) {
@@ -130,15 +151,30 @@ function fixture(
 	};
 	const assets = {
 		available: () => 4,
+		/*
+		================
+		request
+		================
+		*/
 		request( url, limit, decode ) {
 			const id = ++next;
 			pending.set( id, { url, decode } );
 			requests.push( url );
 			return id;
 		},
+		/*
+		================
+		cancel
+		================
+		*/
 		cancel( id ) {
 			pending.delete( id );
 		},
+		/*
+		================
+		take
+		================
+		*/
 		take( id ) {
 			const job = pending.get( id );
 			if ( !job ) return null;
@@ -168,7 +204,11 @@ function fixture(
 						{}
 				} );
 			}
-			if ( job.url.endsWith( "/data/skillData.json" ) ) return json( { models: {} } );
+			if (
+				job.url.endsWith( "/data/skillAudioData.json" ) || job.url.endsWith( "/data/characterActionData.json" )
+			) {
+				return json( { models: {} } );
+			}
 			if ( job.url.endsWith( "/skillfx/manifest.json" ) ) {
 				return json( {
 					format: "sro-skill-stage-models",
@@ -197,11 +237,21 @@ function fixture(
 	};
 	const renderer = {
 		setCharacterModel() {},
+		/*
+		================
+		setCharacterAnimation
+		================
+		*/
 		setCharacterAnimation( body, name, source ) {
 			installed.push( { body, name, source } );
 			return 4096;
 		},
 		retainCharacterModels() {},
+		/*
+		================
+		setCharacterActors
+		================
+		*/
 		setCharacterActors( value ) {
 			actors = value;
 		},
@@ -216,6 +266,11 @@ function fixture(
 		createPresentationRandom( 1 )
 	);
 	const entities = [ entity( 1 ), entity( 2 ), entity( 3, { kind: "monster", tidWord: 0x46 } ) ];
+	/*
+	================
+	step
+	================
+	*/
 	function step( time, casts = [], rows = entities, simulationMs = time * 1000 ) {
 		const local = rows.find( row => row.gid === 1 );
 		presentation.step(

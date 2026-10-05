@@ -127,29 +127,48 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 		if err != nil {
 			return combat.WallOutcome{}, err
 		}
-		if blockNext.Initialized {
-			if rt.criticals.actors == nil {
-				rt.criticals.actors = make(map[criticalActor]map[uint32]combat.Probability)
-			}
-			if rt.criticals.actors[actor] == nil {
-				rt.criticals.actors[actor] = make(map[uint32]combat.Probability)
-			}
-			rt.criticals.actors[actor][blockKey] = blockNext
-		}
+		rt.rememberProbability(actor, blockKey, blockNext)
 		if blocked {
 			out.Defender = combat.Result{ResultFlags: out.Defender.ResultFlags, Blocked: true}
+		} else if skill.CkChance != 0 {
+			// 58F74E: an unblocked ck impact rolls its kill chance (key
+			// 0x48000000 | skill). A kill is record 0x86 with no damage,
+			// and the target group is marked dead (58F774..58F784). Only
+			// the anti-bot stone's MSKILL_AUTOMOB_ATTACK01 carries ck.
+			killKey := 0x48000000 | skill.ID&0xffffff
+			slain, killNext, err := combat.CriticalOutcome(float64(skill.CkChance), rt.criticals.actors[actor][killKey], rt.CombatRoll)
+			if err != nil {
+				return combat.WallOutcome{}, err
+			}
+			rt.rememberProbability(actor, killKey, killNext)
+			if slain {
+				out.Defender = combat.Result{ResultFlags: out.Defender.ResultFlags, Slain: true}
+			}
 		}
 	}
-	if next.Initialized {
-		if rt.criticals.actors == nil {
-			rt.criticals.actors = make(map[criticalActor]map[uint32]combat.Probability)
-		}
-		if rt.criticals.actors[actor] == nil {
-			rt.criticals.actors[actor] = make(map[uint32]combat.Probability)
-		}
-		rt.criticals.actors[actor][key] = next
-	}
+	rt.rememberProbability(actor, key, next)
 	return out, nil
+}
+
+/*
+================
+rememberProbability
+
+Stores an actor's roll history under its key once the roll initialized
+it. The caller holds rt.criticals.mu.
+================
+*/
+func (rt *Runtime) rememberProbability(actor criticalActor, key uint32, next combat.Probability) {
+	if !next.Initialized {
+		return
+	}
+	if rt.criticals.actors == nil {
+		rt.criticals.actors = make(map[criticalActor]map[uint32]combat.Probability)
+	}
+	if rt.criticals.actors[actor] == nil {
+		rt.criticals.actors[actor] = make(map[uint32]combat.Probability)
+	}
+	rt.criticals.actors[actor][key] = next
 }
 
 /*
@@ -195,14 +214,8 @@ func (rt *Runtime) effectOutcome(actor criticalActor, key, chance uint32) (bool,
 	defer rt.criticals.mu.Unlock()
 	actor.character = strings.ToLower(actor.character)
 	proc, next, err := combat.CriticalOutcome(float64(chance), rt.criticals.actors[actor][key], rt.CombatRoll)
-	if err == nil && next.Initialized {
-		if rt.criticals.actors == nil {
-			rt.criticals.actors = make(map[criticalActor]map[uint32]combat.Probability)
-		}
-		if rt.criticals.actors[actor] == nil {
-			rt.criticals.actors[actor] = make(map[uint32]combat.Probability)
-		}
-		rt.criticals.actors[actor][key] = next
+	if err == nil {
+		rt.rememberProbability(actor, key, next)
 	}
 	return proc, err
 }

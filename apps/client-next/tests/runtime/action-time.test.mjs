@@ -113,6 +113,17 @@ test("projectile delay and 3D arrival are independent of render cadence and cros
 	assert.throws( () => sampleProjectile( { ...start, regionId: 0x8001 }, end, 100, 0, 1 ), /dungeon/ );
 });
 
+test("a speed-0 projectile arrives at once when its start is its end and otherwise never moves", () => {
+	const start = { regionId: 257, x: 10, y: 0, z: 30, yaw: 0 };
+	assert.deepEqual( sampleProjectile( start, { ...start }, 0, 0.2, 0.2 ), {
+		phase: "arrived",
+		at: 0.2,
+		pose: start
+	} );
+	assert.deepEqual( sampleProjectile( start, { ...start, x: 20 }, 0, 0, 50 ), { phase: "travel", pose: start } );
+	assert.throws( () => sampleProjectile( start, start, -1, 0, 0 ), /Invalid projectile clock/ );
+});
+
 test("dungeon projectiles preserve dungeon identity and unbounded local coordinates", () => {
 	const start = { regionId: 0x8001, x: -2000, y: 10, z: 5000, yaw: 0 }, end = { ...start, x: 2000, y: 3010 };
 	const middle = sampleProjectile( start, end, 1000, 0.2, 2.7 );

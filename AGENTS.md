@@ -15,7 +15,7 @@ Machine-specific notes belong in an untracked `CLAUDE.local.md`, not here.
 
 - `apps/server/` - Go Agent/GameWorld server.
 - `apps/client-next/` - browser client (TypeScript, WebGPU, Vite).
-- `apps/server-observatory/` - local read-only operations dashboard.
+- `apps/server-observatory/` - operations dashboard; read-only by default, with optional authenticated player recovery.
 - `scripts/` - asset pipeline, product checks, `pnpm task` runner.
 - `../research/` - reverse-engineering evidence and native reconstruction.
   Read it for evidence; never import from it.

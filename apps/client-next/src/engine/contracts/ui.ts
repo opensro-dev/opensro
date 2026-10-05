@@ -24,7 +24,40 @@ UiTextLayout
 */
 export interface UiTextLayout {
 	readonly box: UiRect;
-	readonly fitted?: readonly UiQuad[];
+	// The shortened (ellipsis) run that replaces this one when its ink would
+	// enter a neighbouring text box; null when no glyph of it fits, absent
+	// when the text fits its box.
+	readonly fitted?: UiQuad | null;
+}
+/*
+================
+UiTextGlyph
+
+One glyph of a text run: its rectangle relative to the run quad's rect
+origin, and its atlas window.
+================
+*/
+export interface UiTextGlyph {
+	readonly x: number;
+	readonly y: number;
+	readonly width: number;
+	readonly height: number;
+	readonly uv: UiRect;
+}
+/*
+================
+UiTextRun
+
+A laid-out string carried as one quad. The quad's rect is the glyphs'
+bounding box, so moving the rect moves every glyph; its color, clip,
+texture and anchors apply to each glyph. Layouts are frozen and cached, so
+a string costs one quad however many glyphs it has. Every text the UI
+draws is a run; the GPU packer writes one record per glyph, and
+expandTextRuns (text-run.ts) defines the glyph quads a run stands for.
+================
+*/
+export interface UiTextRun {
+	readonly glyphs: readonly UiTextGlyph[];
 }
 /*
 ================
@@ -33,6 +66,7 @@ UiQuad
 */
 export interface UiQuad {
 	readonly textLayout?: UiTextLayout;
+	readonly run?: UiTextRun;
 	readonly sampling?: "linear" | "nearest";
 	readonly depth?: number;
 	readonly occlusion?: "scene" | "none";
@@ -55,6 +89,11 @@ export interface UiQuad {
 /*
 ================
 UiScene
+
+damageText: the world's annotations show, so the renderer draws the
+current damage text after them every frame. Damage text rises and fades
+with time, so it is not part of the retained product: a rebuild per frame
+for it was most of a fight's interface cost.
 ================
 */
 export interface UiScene {
@@ -62,6 +101,7 @@ export interface UiScene {
 	readonly width: number;
 	readonly height: number;
 	readonly quads: readonly UiQuad[];
+	readonly damageText?: boolean;
 }
 // viewer: a CIFBuffViewer cell (6DE6F0). Its entry never carries a remaining
 // time, and an owner without a character (party) formats abnormal bits unlevelled.
@@ -188,7 +228,6 @@ export interface UiView {
 	readonly blindHeld?: boolean;
 	readonly simulationTimeMs?: number;
 	readonly hoveredEntity?: number | null;
-	readonly damageText?: readonly import("./damage-text").DamageText[];
 	readonly travel?: import("./world").WorldTravel | null;
 	readonly worldTransitionRegion?: number;
 	readonly loadingProgress?: number;

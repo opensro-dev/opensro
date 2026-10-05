@@ -11,6 +11,7 @@ import { uiTextureResidency } from "@/engine/foundation/rendering/ui-texture-res
 import { cameraBasis } from "@/engine/foundation/rendering/world-math";
 import { createPortrait } from "./characters/portrait";
 import { projectCharacterLabels } from "@/engine/foundation/ui/character-labels";
+import { damageTextAssets, damageTextQuads } from "@/engine/foundation/ui/damage-text";
 import { pickDestination } from "@/engine/foundation/rendering/pick-destination";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { readPickAlpha } from "./readback/readback";
@@ -24,8 +25,10 @@ import type { Geometry } from "@/engine/contracts/geometry";
 import { createDevice } from "./device/device";
 import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
+import { createStaleDrawGuard } from "./frame/stale-draws";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw } from "./internal/gpu-contract";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 const INVENTORY_DOLL_WIDTH = 176;
 const INVENTORY_DOLL_HEIGHT = 318;
 
@@ -41,21 +44,35 @@ export function createRenderer(
 	diagnostics: import("@/engine/contracts/runtime").RuntimeDiagnostics = {}
 ): Renderer {
 	let video = defaultVideoOptions();
-	const portrait = createPortrait( createCharacters( diagnostics.animationPose ) );
+	const portrait = createPortrait( createCharacters() );
+	// A released draw never reaches a submit; the report names who kept it.
+	const staleDraws = createStaleDrawGuard(
+		draw => device.geometry()?.releasedDraw?.( draw ),
+		stale =>
+			console.error(
+				`[SRO renderer] stale draw: list "${stale.list}" still held a released draw ` +
+					`(index ${stale.index} of ${stale.listLength}, released ${stale.releasedMsAgo} ms ago); ` +
+					"dropped it instead of submitting destroyed storage. Released by:\n" + stale.releaseStack
+			)
+	);
 	let portraitDepth: import("./internal/gpu-contract").DepthTarget | null = null;
 	const partyPortraits = Array.from(
 		{ length: 7 },
-		() => createPortrait( createCharacters( diagnostics.animationPose ) )
+		() => createPortrait( createCharacters() )
 	);
-	const doll = createPortrait( createCharacters( diagnostics.animationPose ) );
+	const doll = createPortrait( createCharacters() );
 	let dollWidth = 0, dollHeight = 0;
 	let dollDepth: import("./internal/gpu-contract").DepthTarget | null = null;
 	const uiPreparation = createUiPreparation();
 	let uiProduct: ReturnType<typeof prepareUi> | null = null;
 	const uiTextures = new Map<string, ImageBitmap | ImageData>(), dirtyUi = new Set<string>();
 	let residentUi = new Set<string>(), residentUiProduct: ReturnType<typeof prepareUi> | null = null;
+	// The damage text a scene's world annotations show (setDamageText), drawn
+	// each frame; its glyphs stay resident while such a scene is.
+	let damageRows: readonly import("@/engine/contracts/damage-text").DamageText[] = [];
+	const damageTextures = damageTextAssets();
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
-		characters = createCharacters( diagnostics.animationPose );
+		characters = createCharacters();
 	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
 	let surface: SurfaceOwner | null = null, frame: FrameOwner | null = null;
 	let transformDirty = false, instancesDirty = false;
@@ -69,9 +86,9 @@ export function createRenderer(
 	let disposed = false, failure: string | null = null;
 	return {
 		/*
-================
-setTeleportGates
-================
+		================
+		setTeleportGates
+		================
 		*/
 		setTeleportGates( entities ) {
 			gates = entities.filter( e => e.kind === "teleport" ).map( e => ({
@@ -79,10 +96,11 @@ setTeleportGates
 				teleport: e.teleport ? { ...e.teleport } : undefined
 			}) );
 		},
-		scenery: world.scenery, /*
-================
-videoOptions
-================
+		scenery: world.scenery,
+		/*
+		================
+		videoOptions
+		================
 		*/
 		videoOptions( value ) {
 			const next = videoOptions( value ), before = video.records[video.active], after = next.records[next.active];
@@ -93,23 +111,25 @@ videoOptions
 			}
 		},
 		setFootprints: world.footprints,
-		setSelectionDecal: world.selectionDecal, /*
-================
-pickGround
-================
+		setSelectionDecal: world.selectionDecal,
+		/*
+		================
+		pickGround
+		================
 		*/
 		pickGround( x, y ) {
 			if ( disposed || failure || !pickView || device.phase() !== "running" || !pickOrigin ) return null;
 			const raw = pickRay( pickView, x, y );
 			if ( !raw ) return null;
-			const length = Math.hypot( ...raw.delta );
+			const length = hypot3( raw.delta[0]!, raw.delta[1]!, raw.delta[2]! );
 			if ( !length ) return null;
 			const ray = { start: raw.start, delta: raw.delta.map( v => v / length * 1000 ) };
 			return { originRegion: pickOrigin, ray, terrainDepth: world.pickGround( ray ) };
-		}, /*
-================
-pickDestination
-================
+		},
+		/*
+		================
+		pickDestination
+		================
 		*/
 		pickDestination( x, y ) {
 			if ( disposed || failure || !pickView || device.phase() !== "running" ) return null;
@@ -117,35 +137,39 @@ pickDestination
 			if ( !ray ) return null;
 			const depth = world.pick( ray, 1, true );
 			return depth === null ? null : pickDestination( ray, depth, pickOrigin );
-		}, /*
-================
-pickFrontendCharacter
-================
+		},
+		/*
+		================
+		pickFrontendCharacter
+		================
 		*/
 		pickFrontendCharacter( x, y, ids ) {
 			if ( disposed || failure || !pickView || device.phase() !== "running" ) return null;
 			const ray = pickRay( pickView, x, y );
 			return ray ? characters.pickFrontend( ray, ids ) : null;
 		},
-		frontendRaceCenters: world.interfaceCenters, /*
-================
-pickFrontendRace
-================
+		frontendRaceCenters: world.interfaceCenters,
+		/*
+		================
+		pickFrontendRace
+		================
 		*/
 		pickFrontendRace( x, y ) {
 			const ray = pickView ? pickRay( pickView, x, y ) : null;
 			return ray ? world.pickInterface( ray ) : null;
-		}, /*
-================
-setCharacterPreview
-================
+		},
+		/*
+		================
+		setCharacterPreview
+		================
 		*/
 		setCharacterPreview( camera ) {
 			preview = camera ? structuredClone( camera ) : null;
-		}, /*
-================
-pickEntity
-================
+		},
+		/*
+		================
+		pickEntity
+		================
 		*/
 		pickEntity( x, y, excluded, blindHeld = false ) {
 			if ( disposed || failure || !pickView || device.phase() !== "running" ) return null;
@@ -163,7 +187,9 @@ pickEntity
 				}
 			}
 			let hit = characters.pick( rays, excluded, blindHeld ),
-				best = hit ? hit.depth * Math.hypot( ...rays[hit.ray]!.delta ) : Infinity;
+				best = hit ?
+					hit.depth * hypot3( rays[hit.ray]!.delta[0]!, rays[hit.ray]!.delta[1]!, rays[hit.ray]!.delta[2]! ) :
+					Infinity;
 			// CITeleportGate 8764C0: translation-only box, independent of map meshes.
 			for ( const gate of gates ) {
 				const b = gate.teleport;
@@ -196,7 +222,7 @@ pickEntity
 						b.radius
 					], matrix );
 					if ( depth === null ) continue;
-					const distance = depth * Math.hypot( ...rays[r]!.delta );
+					const distance = depth * hypot3( rays[r]!.delta[0]!, rays[r]!.delta[1]!, rays[r]!.delta[2]! );
 					if ( distance < best || (hit?.ray !== 4 && r === 4) ) {
 						hit = { gid: gate.gid, depth, ray: r };
 						best = distance;
@@ -210,10 +236,19 @@ pickEntity
 		setUi: scene => {
 			if ( disposed ) throw new Error( "Renderer disposed" );
 			uiProduct = uiPreparation.prepare( scene );
-		}, /*
-================
-setUiTexture
-================
+		},
+		/*
+		================
+		setDamageText
+		================
+		*/
+		setDamageText( rows ) {
+			damageRows = rows;
+		},
+		/*
+		================
+		setUiTexture
+		================
 		*/
 		setUiTexture( id, image ) {
 			const old = uiTextures.get( id );
@@ -241,15 +276,15 @@ setUiTexture
 		characterActors: characters.currentActors,
 		cancelWorldUpdate: () => world.cancelPending(),
 		setWorld: scene => world.scene( scene ),
-		adoptWorld: ( lease, detail ) => world.adopt( lease, detail ),
+		adoptWorld: ( lease, detail, terrain ) => world.adopt( lease, detail, terrain ),
 		setWorldCamera: camera => world.camera( camera ),
-		setWorldTexture: ( path, image ) => world.texture( path, image ),
+		setWorldTexture: ( path, image, alpha ) => world.texture( path, image, alpha ),
 		neededWorldTextures: () => world.neededTextures(),
 		worldStats: () => world.stats(),
 		/*
-================
-setGeometryInstances
-================
+		================
+		setGeometryInstances
+		================
 		*/
 		setGeometryInstances( instances ) {
 			if ( disposed || !mesh ) throw new Error( "No owned geometry" );
@@ -265,9 +300,9 @@ setGeometryInstances
 			instancesDirty = true;
 		},
 		/*
-================
-setGeometryTransform
-================
+		================
+		setGeometryTransform
+		================
 		*/
 		setGeometryTransform( transform ) {
 			if ( disposed || !mesh ) throw new Error( "No owned geometry" );
@@ -283,9 +318,9 @@ setGeometryTransform
 			}
 		},
 		/*
-================
-setGeometry
-================
+		================
+		setGeometry
+		================
 		*/
 		setGeometry( data ) {
 			if ( disposed ) throw new Error( "Renderer disposed" );
@@ -297,9 +332,9 @@ setGeometry
 			mesh = replacement;
 		},
 		/*
-================
-setImage
-================
+		================
+		setImage
+		================
 		*/
 		setImage( image ) {
 			if ( disposed ) {
@@ -319,9 +354,9 @@ setImage
 		phase: () => disposed ? "disposed" : failure ? "failed" : device.phase(),
 		error: () => failure ?? device.error(),
 		/*
-================
-frame
-================
+		================
+		frame
+		================
 		*/
 		frame( viewport, timeSeconds = 0, frameId, probe ) {
 			probe?.renderBegin();
@@ -330,6 +365,10 @@ frame
 			if ( disposed || failure ) {
 				return;
 			}
+			// The device whose frame is open. Everything below prepares, records and
+			// submits inside that bracket, so a resource an owner releases on the way
+			// outlives the command buffers that name it (device/retirement.ts).
+			let open: ReturnType<typeof createDevice> | null = null;
 			try {
 				if ( device.phase() === "failed" && device.recoverable() && recoveries < 3 ) {
 					// Only renderer state restarts. The runtime's simulation and assets remain owned and live.
@@ -358,6 +397,8 @@ frame
 				if ( device.phase() !== "running" ) {
 					return;
 				}
+				open = device;
+				open.beginFrame();
 				if ( !surface ) {
 					surface = createSurface( canvas, device.surfaceCommands()!, device.format() );
 					frame = createFrame( device.commands()! );
@@ -366,9 +407,10 @@ frame
 				if ( residentUiProduct !== uiProduct || dirtyUi.size ) {
 					const demand = uiTextureResidency(
 						uiProduct?.scene ?? null,
-						new Set( uiTextures.keys() ),
+						uiTextures,
 						residentUi,
-						dirtyUi
+						dirtyUi,
+						uiProduct?.scene.damageText ? damageTextures : []
 					);
 					// Release first so window replacement cannot transiently
 					// exceed the device budget. CPU bitmaps stay warm for reopen.
@@ -448,11 +490,16 @@ frame
 				);
 				probe?.renderMark( "character-prepare" );
 				const uiScene = uiProduct?.scene ?? null, anchored = uiProduct?.anchors;
+				// Damage text rises and fades with the frame's clock, the same clock
+				// the interface used when it drew it into its own product.
+				const damage = uiScene?.damageText && damageRows.length && !preview ?
+					damageTextQuads( damageRows, timeSeconds, uiScene.width, uiScene.height ) :
+					[];
 				// Anchors are UI scene pixels, like the world anchors projected
 				// beside them. The GPU viewport is the backing store (CSS size
 				// times devicePixelRatio); projecting into it put every name at
 				// 1.25x its actor under 125% display scaling (BUG-043).
-				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors) ?
+				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors || damage.length) ?
 					projectCharacterLabels(
 						uiScene,
 						preview || !anchored?.size ?
@@ -464,7 +511,8 @@ frame
 								uiScene.height,
 								anchored!
 							),
-						preview ? undefined : { origin: scene.originRegion, matrix: scene.matrix }
+						preview ? undefined : { origin: scene.originRegion, matrix: scene.matrix },
+						damage
 					) :
 					uiScene;
 				const portraitGid = uiProduct?.portraitGid;
@@ -484,9 +532,14 @@ frame
 							device.geometry()!,
 							device.images()!
 						);
+					// Checked before empty slots drop, so a report names the real slot.
 					return gid === undefined ?
 						null :
-						{ target: device.portraitTarget( "__portrait" + (i + 1) ), depth: portraitDepth!.view, draws };
+						{
+							target: device.portraitTarget( "__portrait" + (i + 1) ),
+							depth: portraitDepth!.view,
+							draws: staleDraws.live( "party-portrait-" + (i + 1), draws )
+						};
 				} ).filter( ( r ): r is NonNullable<typeof r> => r !== null );
 				const dollInput = uiProduct?.doll;
 				// A hidden doll stays borrowed and warm for the local character, so
@@ -526,15 +579,19 @@ frame
 				const finishDeferred = ( results?: readonly boolean[] ) => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
 					characters.completeDeferred( results );
-					return characters.prepare(
-						device.geometry()!,
-						device.images()!,
-						scene.originRegion,
-						scene.matrix,
-						false,
-						timeSeconds,
-						true
-					).filter( draw => draw.deferredParticle );
+					// The continuation's draws reach the second submit: same rule.
+					return staleDraws.live(
+						"deferred-particles",
+						characters.prepare(
+							device.geometry()!,
+							device.images()!,
+							scene.originRegion,
+							scene.matrix,
+							false,
+							timeSeconds,
+							true
+						).filter( draw => draw.deferredParticle )
+					);
 				};
 				const deferredPass = deferredPlan ?
 					{
@@ -546,33 +603,51 @@ frame
 								finishDeferred()
 					} :
 					undefined;
-				frame!.profile( probe );
+				// Each owner's list is checked under its own name.
+				// Slices keep the scene's terrain/transparent boundaries exact.
+				const terrainDraws = staleDraws.live( "world-terrain", scene.draws.slice( 0, scene.terrainEnd ?? 0 ) ),
+					opaqueDraws = staleDraws.live(
+						"world-opaque",
+						scene.draws.slice( scene.terrainEnd ?? 0, scene.transparentStart )
+					),
+					transparentDraws = staleDraws.live(
+						"world-transparent",
+						scene.draws.slice( scene.transparentStart )
+					),
+					liveCharacters = staleDraws.live( "characters", characterDraws ),
+					liveShadows = staleDraws.live( "character-shadows", shadowDraws );
 				const pending = frame!.draw(
 					color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
-					meshDraw ?? undefined,
+					staleDraws.single( "mesh", meshDraw ?? undefined ),
 					surface.depth(),
 					[
-						...scene.draws.slice( 0, scene.terrainEnd ?? 0 ),
-						...(scene.groundDecalDraws ?? []),
-						...shadowDraws,
-						...scene.draws.slice( scene.terrainEnd ?? 0, scene.transparentStart ),
-						...(preview ? [] : characterDraws.filter( draw => !draw.blended )),
-						...scene.draws.slice( scene.transparentStart ),
-						...(scene.decalDraws ?? []),
-						...(preview ? [] : characterDraws.filter( draw => draw.blended )),
-						...(preview ? [] : scene.weatherDraws ?? [])
+						...terrainDraws,
+						...staleDraws.live( "ground-decals", scene.groundDecalDraws ?? [] ),
+						...liveShadows,
+						...opaqueDraws,
+						...(preview ? [] : liveCharacters.filter( draw => !draw.blended )),
+						...transparentDraws,
+						...staleDraws.live( "decals", scene.decalDraws ?? [] ),
+						...(preview ? [] : liveCharacters.filter( draw => draw.blended )),
+						...(preview ? [] : staleDraws.live( "weather", scene.weatherDraws ?? [] ))
 					],
 					device.ui( projectedUi ),
-					preview ? characterDraws : [],
+					preview ? liveCharacters : [],
 					scene.flares && video.records[video.active][10] === 1 ?
 						device.flares( scene.flares, surface.depth() ) :
 						undefined,
 					scene.thunder ? device.thunder( scene.thunder ) : undefined,
 					portraitTarget ?
-						{ target: portraitTarget, depth: portraitDepth!.view, draws: portraitDraws } :
+						{
+							target: portraitTarget,
+							depth: portraitDepth!.view,
+							draws: staleDraws.live( "portrait", portraitDraws )
+						} :
 						undefined,
-					dollTarget ? { target: dollTarget, depth: dollDepth!.view, draws: dollDraws } : undefined,
+					dollTarget ?
+						{ target: dollTarget, depth: dollDepth!.view, draws: staleDraws.live( "doll", dollDraws ) } :
+						undefined,
 					partyDraws,
 					frameId,
 					deferredPass,
@@ -580,21 +655,27 @@ frame
 				);
 				probe?.renderMark( "submit" );
 				if ( pending ) {
+					// The deferred pass records its second command buffer after the
+					// visibility query: the frame stays open until that one is submitted.
+					const frameDevice = open;
+					open = null;
 					return pending.then( () => {
 						if ( !disposed ) targetSurface.present();
 					} ).catch( error => {
 						if ( !disposed ) failure = String( error );
-					} );
+					} ).finally( () => frameDevice.endFrame() );
 				}
 				targetSurface.present();
 			} catch ( error ) {
 				failure = String( error );
+			} finally {
+				open?.endFrame();
 			}
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
 			if ( disposed ) {

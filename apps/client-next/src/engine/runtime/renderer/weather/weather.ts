@@ -15,6 +15,7 @@ import { advanceWeatherAmount, initialWeatherAmount } from "@/engine/foundation/
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { GeometryCommands, GeometryDraw, ImageDraw } from "../internal/gpu-contract";
 import type { WorldCamera } from "@/engine/contracts/scene";
+import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
 type Particle = {
 	kind: number;
 	x: number;
@@ -195,13 +196,13 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 			const fx = camera.target[0] - camera.eye[0],
 				fy = camera.target[1] - camera.eye[1],
 				fz = camera.target[2] - camera.eye[2],
-				length = Math.hypot( fx, fy, fz ) || 1;
+				length = hypot3( fx, fy, fz ) || 1;
 			const cameraUp = camera.up ?? [ 0, 1, 0 ],
 				rx = cameraUp[1] * fz - cameraUp[2] * fy,
 				ry = cameraUp[2] * fx - cameraUp[0] * fz,
 				rz = cameraUp[0] * fy - cameraUp[1] * fx,
-				rl = Math.hypot( rx, ry, rz ) || 1;
-			const heading = Math.hypot( fx, fz ) || 1, rainRight = [ fz / heading, 0, -fx / heading ];
+				rl = hypot3( rx, ry, rz ) || 1;
+			const heading = hypot2( fx, fz ) || 1, rainRight = [ fz / heading, 0, -fx / heading ];
 			const right = [ rx / rl, ry / rl, rz / rl ],
 				up = [
 					(fy * right[2]! - fz * right[1]!) / length,
@@ -311,7 +312,10 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 							];
 					for ( let j = 0; j < vertices; j++ ) {
 						const c = corners[j]!;
-						batch.positions.set( [ p.x + c[0]!, p.y + c[1]!, p.z + c[2]! ], (i * vertices + j) * 3 );
+						const at = (i * vertices + j) * 3;
+						batch.positions[at] = p.x + c[0]!;
+						batch.positions[at + 1] = p.y + c[1]!;
+						batch.positions[at + 2] = p.z + c[2]!;
 						if ( kind === 1 ) {
 							batch.colors[(i * vertices + j) * 4 + 3] = (255 - Math.trunc( scale * 63 )) / 255;
 						}

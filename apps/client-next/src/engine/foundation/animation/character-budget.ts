@@ -69,7 +69,9 @@ export function characterMaterialClockBytes( model: CharacterModel ): number {
 				0
 			) :
 			0) +
-			(m?.colorTimeline ? 128 + m.colorTimeline.colors.length * 40 : 0) + (m?.uvVelocity || m?.uvAtlas ? 128 : 0);
+			(m?.colorTimeline ? 128 + m.colorTimeline.colors.length * 40 : 0) +
+			(m?.uvVelocity || m?.uvAtlas ? 128 : 0) +
+			(m?.textureFactorPulse ? 64 : 0);
 	}, 0 );
 }
 /*

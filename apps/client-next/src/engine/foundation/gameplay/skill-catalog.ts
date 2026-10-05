@@ -34,8 +34,25 @@ export interface SkillMetadata {
 	readonly reqInt?: number;
 	readonly trainable: boolean;
 	readonly targetRequired: boolean;
+	// Column 26 (TargetGroup_Self) of a target-required row: the caster is an
+	// admitted target, so a cast with nothing selected aims at the caster.
+	readonly targetSelf?: boolean;
 	readonly groundTarget?: boolean;
 	readonly cooldownMs: number;
+	// Action_CastingTime + Action_ActionDuration (columns 12 + 13): the action
+	// actor's lifetime, which holds the caster's action state 2 (cast-motion-lock).
+	readonly actionMs?: number;
+	// An ordinary cast (activity 2): it stops the caster's walk where it stands
+	// (InitiateSkillCast 59B5F6 server side, CICharactor_Action_CastSkill
+	// 8E67E0 client side). Instant rows (imbues, speed skills) keep walking.
+	readonly haltsWalk?: boolean;
+	// The authored action range (column 21), absent when the weapon sets the
+	// reach. A target within it is always in the server's reach, which adds
+	// both bodies (cast-prediction.ts).
+	readonly range?: number;
+	// The authored MP cost: flat plus percent of maximum MP (skillMpCost).
+	readonly mp?: number;
+	readonly mpPercent?: number;
 	readonly cooldownGroup?: number;
 	readonly masteries: readonly Requirement[];
 	readonly prerequisites: readonly Requirement[];
@@ -47,6 +64,19 @@ export interface StatusLevel {
 interface Requirement {
 	readonly ID: number;
 	readonly Level: number;
+}
+/*
+================
+skillMpCost
+
+The MP a cast of skill takes from a caster with maxMp, before the caster's
+consumption rate (parameter 0x8D), which only the server knows: flat plus a
+truncated percent of maximum MP (58E20A..58E2B1, skillcost.go
+resourceCostAt). A caster whose rate lowers the cost may pay less.
+================
+*/
+export function skillMpCost( skill: SkillMetadata, maxMp: number ): number {
+	return (skill.mp ?? 0) + Math.trunc( maxMp * (skill.mpPercent ?? 0) / 100 );
 }
 export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 	const source = (value as {
@@ -103,7 +133,12 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 		) throw Error( "Invalid speed buff metadata" );
 		const statusLevel = ( value: StatusLevel | undefined ) =>
 			value === undefined ? undefined : { mask: uint( value?.mask ), level: uint( value?.level ) };
-		if ( ui.groundTarget !== undefined && typeof ui.groundTarget !== "boolean" ) {
+		if (
+			ui.groundTarget !== undefined && typeof ui.groundTarget !== "boolean" ||
+			ui.targetSelf !== undefined && typeof ui.targetSelf !== "boolean" ||
+			ui.haltsWalk !== undefined && typeof ui.haltsWalk !== "boolean" ||
+			ui.range !== undefined && (typeof ui.range !== "number" || !Number.isFinite( ui.range ) || ui.range < 0)
+		) {
 			throw Error( "Invalid skill target kind" );
 		}
 		seen.add( id );
@@ -135,8 +170,14 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			reqInt: uint( ui.reqInt ?? 0, 65535 ),
 			trainable: ui.trainable,
 			targetRequired: ui.targetRequired,
+			targetSelf: ui.targetSelf ?? false,
 			groundTarget: ui.groundTarget ?? false,
 			cooldownMs: uint( ui.cooldownMs ),
+			...(ui.actionMs === undefined ? {} : { actionMs: uint( ui.actionMs ) }),
+			haltsWalk: ui.haltsWalk ?? false,
+			...(ui.range ? { range: ui.range } : {}),
+			...(ui.mp ? { mp: uint( ui.mp ) } : {}),
+			...(ui.mpPercent ? { mpPercent: uint( ui.mpPercent, 65535 ) } : {}),
 			cooldownGroup: uint( ui.cooldownGroup ?? 0, 255 ),
 			masteries: requirements( ui.masteries, 2 ),
 			prerequisites: requirements( ui.prerequisites, 3 )

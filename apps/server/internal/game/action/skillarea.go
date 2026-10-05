@@ -37,6 +37,103 @@ type areaVictimPlan struct {
 
 /*
 ==================
+areaPlanInput
+
+What one area strike's victim planning varies by. impacts is the records
+each victim takes; chained marks every victim after the first as a chained
+one (an imbue's spread); posePrimary keeps the first victim's pose (a
+projectile's flight), poseAll every victim's (a trap's explosion).
+==================
+*/
+type areaPlanInput struct {
+	division             string
+	snapshot             *enterworld.Character
+	skill                enterworld.SkillRow
+	attacker             combat.Stats
+	victims              []monster.Instance
+	reduction            uint8
+	impacts              int
+	chained              bool
+	posePrimary, poseAll bool
+	now                  int64
+}
+
+/*
+==================
+planAreaVictims
+
+SkillCombat_CalculateHitOutcome (58E5F0) per victim in selection order:
+every impact's formula at the area's running percent, which falls by the
+reduction after each victim, cumulatively. A victim the planned damage
+kills keeps its live pose for the reward settlement. ok is false when a
+victim's stats, formula, pose or impact plan cannot be formed.
+==================
+*/
+func (rt *Runtime) planAreaVictims(in areaPlanInput) (plans []areaVictimPlan, sequences [][]simulation.MonsterDamagePlan, ok bool) {
+	plans = make([]areaVictimPlan, 0, len(in.victims))
+	sequences = make([][]simulation.MonsterDamagePlan, 0, len(in.victims))
+	percent := uint64(100)
+	for index, target := range in.victims {
+		defender, err := combat.MonsterInstanceStats(target)
+		if err != nil {
+			return nil, nil, false
+		}
+		defender.MotionState = target.Motion.StateAt(in.now)
+		plan := areaVictimPlan{target: target}
+		total := uint64(0)
+		for range in.impacts {
+			formula, err := rt.resolvePlayerImpact(in.division, in.snapshot.Name, in.skill, in.attacker, defender, in.now, in.chained && index > 0)
+			if err != nil {
+				return nil, nil, false
+			}
+			formula.Damage = uint32(uint64(formula.Damage) * percent / 100)
+			total += uint64(formula.Damage)
+			plan.formulas = append(plan.formulas, formula)
+		}
+		percent = percent * uint64(100-in.reduction) / 100
+		if in.poseAll || total >= uint64(target.CurrentHP) || index == 0 && in.posePrimary {
+			mover, found := rt.Monsters.Mover(in.division, target.Gid)
+			if !found {
+				return nil, nil, false
+			}
+			plan.pose = mover.LivePoseAt(in.now, nil)
+		}
+		impacts, planned := rt.planMonsterImpacts(in.division, in.snapshot, in.skill, target, plan.formulas, in.now)
+		if !planned {
+			return nil, nil, false
+		}
+		plans = append(plans, plan)
+		sequences = append(sequences, impacts)
+	}
+	return plans, sequences, true
+}
+
+/*
+==================
+settleAreaFatalities
+
+Inside the roster's door: every victim whose last committed impact was
+fatal settles through the shared reward door at the pose its plan kept.
+==================
+*/
+func (rt *Runtime) settleAreaFatalities(division string, c *enterworld.Character, roster rewardRoster, committed [][]simulation.MonsterDamageResult, plans []areaVictimPlan, now int64) (progression []wire.Frame, drops []grounditem.Item, settlements monsterSettlement) {
+	for index, impacts := range committed {
+		impact := impacts[len(impacts)-1]
+		if !impact.Fatal {
+			continue
+		}
+		s := rt.settleMonsterInsideDoor(division, c, roster, impact, plans[index].pose, now)
+		progression = append(progression, s.actorFrames...)
+		drops = append(drops, s.drops...)
+		settlements.public = append(settlements.public, s.public...)
+		settlements.otherPublic = append(settlements.otherPublic, s.otherPublic...)
+		settlements.others = append(settlements.others, s.others...)
+	}
+	return progression, drops, settlements
+}
+
+/*
+==================
 areaVictims
 
 areaVictims samples live positions without materializing additional nests.
@@ -115,7 +212,7 @@ func areaBaseRange(skill enterworld.SkillRow, attacker combat.Stats) float32 {
 	if skill.ActionRange > 0 {
 		return float32(uint16(skill.ActionRange))
 	}
-	param, _ := attacker.Param(0x21)
+	param, _ := attacker.Param(combat.AttackRangeParameter)
 	return float32(uint16(int32(param)))
 }
 
@@ -145,40 +242,13 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	if len(victims) == 0 {
 		return OpResult{}, skillCastRefused
 	}
-	plans := make([]areaVictimPlan, 0, len(victims))
-	sequences := make([][]simulation.MonsterDamagePlan, 0, len(victims))
-	percent := uint64(100)
-	for index, target := range victims {
-		defender, err := combat.MonsterInstanceStats(target)
-		defender.MotionState = target.Motion.StateAt(nowMs)
-		if err != nil {
-			return OpResult{}, skillCastRefused
-		}
-		plan := areaVictimPlan{target: target}
-		total := uint64(0)
-		for range skill.Attack.ImpactCount {
-			formula, err := rt.resolvePlayerImpact(division, snapshot.Name, skill, attacker, defender, nowMs, chained && index > 0)
-			if err != nil {
-				return OpResult{}, skillCastRefused
-			}
-			formula.Damage = uint32(uint64(formula.Damage) * percent / 100)
-			total += uint64(formula.Damage)
-			plan.formulas = append(plan.formulas, formula)
-		}
-		percent = percent * uint64(100-area.ReductionPercent) / 100
-		if total >= uint64(target.CurrentHP) || index == 0 && skill.ProjectileSpeed != 0 {
-			mover, ok := rt.Monsters.Mover(division, target.Gid)
-			if !ok {
-				return OpResult{}, skillCastRefused
-			}
-			plan.pose = mover.LivePoseAt(nowMs, nil)
-		}
-		plans = append(plans, plan)
-		impactPlans, ok := rt.planMonsterImpacts(division, snapshot, skill, target, plan.formulas, nowMs)
-		if !ok {
-			return OpResult{}, skillCastRefused
-		}
-		sequences = append(sequences, impactPlans)
+	plans, sequences, planned := rt.planAreaVictims(areaPlanInput{
+		division: division, snapshot: snapshot, skill: skill, attacker: attacker, victims: victims,
+		reduction: area.ReductionPercent, impacts: int(skill.Attack.ImpactCount), chained: chained,
+		posePrimary: skill.ProjectileSpeed != 0, now: nowMs,
+	})
+	if !planned {
+		return OpResult{}, skillCastRefused
 	}
 	var committed [][]simulation.MonsterDamageResult
 	var progression []wire.Frame
@@ -210,7 +280,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 			return false
 		}
 		if release == nil {
-			rt.startSkillCast(division, character, nowMs)
+			rt.startSkillCast(division, character, skill, nowMs)
 		}
 		battleFrames = rt.enterBattleState(division, character, nowMs)
 		if consumeAmmo {
@@ -221,19 +291,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		} else if release == nil {
 			rt.registerPlayerSkillCooldown(division, character, skill, nowMs)
 		}
-		for index, impacts := range committed {
-			impact := impacts[len(impacts)-1]
-			if !impact.Fatal {
-				continue
-			}
-			plan := plans[index]
-			s := rt.settleMonsterInsideDoor(division, character, roster, impact, plan.pose, nowMs)
-			progression = append(progression, s.actorFrames...)
-			drops = append(drops, s.drops...)
-			settlements.public = append(settlements.public, s.public...)
-			settlements.otherPublic = append(settlements.otherPublic, s.otherPublic...)
-			settlements.others = append(settlements.others, s.others...)
-		}
+		progression, drops, settlements = rt.settleAreaFatalities(division, character, roster, committed, plans, nowMs)
 		return true
 	}) {
 		if refusal != 0 {
@@ -268,9 +326,10 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 			// 4A9C80 publishes LIFE for every alive-to-dead transition, area
 			// victims included; without it the client keeps moving the corpse.
 			deaths = append(deaths, monsterLifeDeadFrame(gid))
-		} else {
-			rt.commitSkillHostility(division, enterworld.ObjectIDForCharacter(snapshot), gid, skill, impacts, nowMs)
 		}
+		// A fatal victim records no aggression; its damage still feeds a
+		// Mana Switch link.
+		rt.commitSkillHostility(division, enterworld.ObjectIDForCharacter(snapshot), gid, skill, impacts, nowMs)
 	}
 	var token uint32
 	if release != nil {
@@ -312,6 +371,18 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		actor = append(actor, frames...)
 		private = append(frames, private...)
 	}
+	// 593832: every victim's unblocked attempts wear the attacker's weapon,
+	// rolled once for the execution.
+	var tally wearTally
+	for _, plan := range plans {
+		for _, formula := range plan.formulas {
+			tally.note(formula.Blocked, true)
+		}
+	}
+	wear := rt.applyEquipmentWear(division, character, tally)
+	actor = append(actor, wear.actor...)
+	private = append(private, wear.actor...)
+	public = append(public, wear.public...)
 	actor = append(actor, progression...)
 	public = append(public, settlements.public...)
 	actor = append(actor, settlements.otherPublic...)

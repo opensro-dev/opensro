@@ -18,6 +18,11 @@ Moves ride 0x706D (ItemMoveRequest_Serialize) and answer on 0xB06D:
 	0x0B gold room to bag   [u32 amount]                    -> [u32 amount]
 	0x0C gold bag to room   [u32 amount]                    -> [u32 amount]
 
+The remote warehouse ticket (3/3/13/10) has no native rule: v1.150 only
+starts cooldown 0x1A on its 0xB5BD success. INFERENCE (the server's
+storage.go owns it): the spent ticket opens this room with the player's own
+gid standing in for the NPC, through the same requests.
+
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
@@ -71,6 +76,19 @@ export interface StorageMove {
 	readonly destination: number;
 	readonly quantity: number;
 	readonly gold: number;
+}
+
+// The ticket's packed type word: 3/3/13 (0x6EC) with type 4 = 10.
+const WAREHOUSE_TICKET_FAMILY = 0x6ec;
+const WAREHOUSE_TICKET_TYPE = 10;
+
+/*
+================
+isWarehouseTicket
+================
+*/
+export function isWarehouseTicket( word: number ): boolean {
+	return !(word & 2) && (word & 0x7fc) === WAREHOUSE_TICKET_FAMILY && word >>> 11 === WAREHOUSE_TICKET_TYPE;
 }
 
 /*

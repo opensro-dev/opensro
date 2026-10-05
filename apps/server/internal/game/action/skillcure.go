@@ -17,44 +17,78 @@ import (
 )
 
 /*
+================
+cureTarget
+
+One resolved entry of the cure action vector: a player, or a summoned pet
+named by its owner and gid.
+================
+*/
+type cureTarget struct {
+	player *enterworld.Character
+	pet    monsterCastRecipient
+}
+
+/*
+==================
+resolveSkillCureTargets
+
+The 593F50 action vector, resolved to records. A non-empty vector keeps its
+order; a missing id is skipped. An empty vector names the caster only when
+RefSkill+0x98 (column 26 TargetGroup_Self) is set.
+
+Runs before the caster's door: the party selection, the gid index and the
+pet-owner scan all read the authority store, whose door is not reentrant.
+A read from inside the caster's Update callback waits on the lock that
+callback holds and stops the shard. caster is the live record (the Self
+entry is cured through it); view is its snapshot for the reads.
+==================
+*/
+func (rt *Runtime) resolveSkillCureTargets(division string, caster, view *enterworld.Character, skill enterworld.SkillRow, cast wire.SkillAction, now int64) []cureTarget {
+	vector := rt.skillCureVector(division, view, skill, cast, now)
+	if len(vector) == 0 {
+		if skill.Targets.Self {
+			return []cureTarget{{player: caster}}
+		}
+		return nil
+	}
+	var out []cureTarget
+	for _, gid := range vector {
+		if player := rt.findCharacterByGid(division, gid); player != nil {
+			out = append(out, cureTarget{player: player})
+		} else if owner := rt.characterByCosGID(division, gid); owner != nil {
+			out = append(out, cureTarget{pet: monsterCastRecipient{owner, gid}})
+		}
+	}
+	return out
+}
+
+/*
 ==================
 applySkillCure
 
-applySkillCure is the 593F50 cure at release. A non-empty action vector is
-cured entry by entry; a missing id is skipped. An empty vector cures the
-caster only when RefSkill+0x98 (column 26 TargetGroup_Self) is set.
-Each cured player's
-private snapshot (0x36C7) goes to that player: the caster's own in actor,
-everyone else's through recipients.
+applySkillCure is the 593F50 cure at release over the targets
+resolveSkillCureTargets prepared before the door. It reads no record
+through the store. Each cured player's private snapshot (0x36C7) goes to
+that player: the caster's own in actor, everyone else's through recipients.
 ==================
 */
-func (rt *Runtime) applySkillCure(division string, caster *enterworld.Character, skill enterworld.SkillRow, cast wire.SkillAction, now int64) (actor, public []wire.Frame, recipients []RecipientFrames) {
-	route := func(target *enterworld.Character, private, shared []wire.Frame) {
+func (rt *Runtime) applySkillCure(division string, caster *enterworld.Character, skill enterworld.SkillRow, targets []cureTarget, now int64) (actor, public []wire.Frame, recipients []RecipientFrames) {
+	for _, target := range targets {
+		if target.player == nil {
+			public = append(public, rt.curePet(division, target.pet, skill, now)...)
+			continue
+		}
+		private, shared := rt.cureCharacter(division, target.player, skill, now)
 		public = append(public, shared...)
 		if len(private) == 0 {
-			return
+			continue
 		}
-		if target.ID == caster.ID {
+		if target.player.ID == caster.ID {
 			actor = append(actor, private...)
-			return
+			continue
 		}
-		recipients = append(recipients, RecipientFrames{CharacterID: target.ID, Frames: private})
-	}
-	targets := rt.skillCureVector(division, caster, skill, cast, now)
-	if len(targets) == 0 {
-		if skill.Targets.Self {
-			private, shared := rt.cureCharacter(division, caster, skill, now)
-			route(caster, private, shared)
-		}
-		return actor, public, recipients
-	}
-	for _, gid := range targets {
-		if player := rt.findCharacterByGid(division, gid); player != nil {
-			private, shared := rt.cureCharacter(division, player, skill, now)
-			route(player, private, shared)
-		} else if owner := rt.characterByCosGID(division, gid); owner != nil {
-			public = append(public, rt.curePet(division, monsterCastRecipient{owner, gid}, skill, now)...)
-		}
+		recipients = append(recipients, RecipientFrames{CharacterID: target.player.ID, Frames: private})
 	}
 	return actor, public, recipients
 }
@@ -101,15 +135,29 @@ within the efr radius (+8) by 3D distance, inclusive.
 ==================
 */
 func (rt *Runtime) partyCureTargets(division string, caster *enterworld.Character, radius uint32, includeSelf, admitDead bool, now int64) []uint32 {
-	casterGID := enterworld.ObjectIDForCharacter(caster)
 	var out []uint32
 	if includeSelf {
-		out = append(out, casterGID)
+		out = append(out, enterworld.ObjectIDForCharacter(caster))
 	}
+	from := rt.liveSpawn(simulation.WorldKey(division, caster.Name), caster, now)
+	return append(out, rt.partyMembersAround(division, caster, from, radius, admitDead, now)...)
+}
+
+/*
+==================
+partyMembersAround
+
+The member walk of 58BEF0 around any centre: every party member of caster
+but the caster itself, alive unless admitDead, whose live position passes
+partyAreaReach from center. Party roster order.
+==================
+*/
+func (rt *Runtime) partyMembersAround(division string, caster *enterworld.Character, center simulation.Spawn, radius uint32, admitDead bool, now int64) []uint32 {
 	if rt.RewardParties == nil {
-		return out
+		return nil
 	}
-	var members []uint32
+	casterGID := enterworld.ObjectIDForCharacter(caster)
+	var out, members []uint32
 	for _, party := range rt.RewardParties(division) {
 		for _, gid := range party.Members {
 			if gid == casterGID {
@@ -117,7 +165,6 @@ func (rt *Runtime) partyCureTargets(division string, caster *enterworld.Characte
 			}
 		}
 	}
-	from := rt.liveSpawn(simulation.WorldKey(division, caster.Name), caster, now)
 	for _, gid := range members {
 		if gid == casterGID {
 			continue
@@ -127,7 +174,7 @@ func (rt *Runtime) partyCureTargets(division string, caster *enterworld.Characte
 			continue
 		}
 		to := rt.liveSpawn(simulation.WorldKey(division, other.Name), other, now)
-		if !partyAreaReach(from, to, radius) {
+		if !partyAreaReach(center, to, radius) {
 			continue
 		}
 		out = append(out, gid)

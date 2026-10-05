@@ -15,7 +15,6 @@ the trap and settles through the ordinary monster damage and reward doors.
 package action
 
 import (
-	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/statuseffect"
@@ -191,32 +190,14 @@ func (rt *Runtime) explodeCombatTrap(object skillobject.Object, c, snapshot *ent
 	strike := skill
 	strike.Attack = trap.Attack
 	victims := rt.combatTrapVictims(object, lease, primary, trap.Area, now)
-	plans := make([]areaVictimPlan, 0, len(victims))
-	sequences := make([][]simulation.MonsterDamagePlan, 0, len(victims))
-	percent := uint64(100)
-	for _, target := range victims {
-		defender, err := combat.MonsterInstanceStats(target)
-		if err != nil {
-			return nil
-		}
-		defender.MotionState = target.Motion.StateAt(now)
-		formula, err := rt.resolvePlayerImpact(object.Division, snapshot.Name, strike, attacker, defender, now, false)
-		if err != nil {
-			return nil
-		}
-		formula.Damage = uint32(uint64(formula.Damage) * percent / 100)
-		percent = percent * uint64(100-trap.Area.ReductionPercent) / 100
-		mover, ok := rt.Monsters.Mover(object.Division, target.Gid)
-		if !ok {
-			return nil
-		}
-		plan := areaVictimPlan{target: target, formulas: []combat.Result{formula}, pose: mover.LivePoseAt(now, nil)}
-		impacts, ok := rt.planMonsterImpacts(object.Division, snapshot, strike, target, plan.formulas, now)
-		if !ok {
-			return nil
-		}
-		plans = append(plans, plan)
-		sequences = append(sequences, impacts)
+	// One impact a victim, every victim's pose kept: the explosion settles
+	// each kill where the monster stood.
+	plans, sequences, planned := rt.planAreaVictims(areaPlanInput{
+		division: object.Division, snapshot: snapshot, skill: strike, attacker: attacker, victims: victims,
+		reduction: trap.Area.ReductionPercent, impacts: 1, poseAll: true, now: now,
+	})
+	if !planned {
+		return nil
 	}
 	var committed [][]simulation.MonsterDamageResult
 	var progression []wire.Frame
@@ -228,18 +209,7 @@ func (rt *Runtime) explodeCombatTrap(object skillobject.Object, c, snapshot *ent
 		if committed, ok = rt.Monsters.ApplyDamageSequences(object.Division, sequences); !ok {
 			return false
 		}
-		for index, impacts := range committed {
-			impact := impacts[len(impacts)-1]
-			if !impact.Fatal {
-				continue
-			}
-			s := rt.settleMonsterInsideDoor(object.Division, c, roster, impact, plans[index].pose, now)
-			progression = append(progression, s.actorFrames...)
-			drops = append(drops, s.drops...)
-			settlements.public = append(settlements.public, s.public...)
-			settlements.otherPublic = append(settlements.otherPublic, s.otherPublic...)
-			settlements.others = append(settlements.others, s.others...)
-		}
+		progression, drops, settlements = rt.settleAreaFatalities(object.Division, c, roster, committed, plans, now)
 		return true
 	}) {
 		return nil
@@ -255,6 +225,9 @@ func (rt *Runtime) explodeCombatTrap(object skillobject.Object, c, snapshot *ent
 		if final.Fatal {
 			rt.queueMonsterDefeat(object.Division, gid, now+monsterDeathPresentationRetention.Milliseconds())
 			after = append(after, monsterLifeDeadFrame(gid))
+			// No aggression for a dead victim; its damage still feeds a
+			// Mana Switch link.
+			rt.commitSkillHostility(object.Division, owner, gid, strike, impacts, now)
 			continue
 		}
 		after = append(after, rt.monsterImpactAbnormalFrames(object.Division, gid, impacts)...)

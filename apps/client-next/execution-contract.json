@@ -2,6 +2,47 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/renderer/world/terrain-layers.ts",
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"functions": [
+				"upload",
+				"release",
+				"writeVertices",
+				"updateIndices",
+				"updatePositions"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/world/terrain-parts.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"request",
+				"take",
+				"cancel",
+				"available"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/world/terrain-parts.ts",
+			"provider": "src/engine/runtime/world/world.ts",
+			"functions": [
+				"callback:createTerrainParts:2",
+				"callback:createTerrainParts:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/world/terrain-parts.ts",
+			"provider": "src/engine/runtime/assets/world-lease.ts",
+			"functions": [
+				"takeWorld"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [ "callback:createCombat:2" ]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/combat-result.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
 			"functions": [ "callback:skillPulse:1" ]
@@ -222,6 +263,13 @@
 		},
 		{
 			"consumer": "src/engine/runtime/ui/hud/resources.ts",
+			"provider": "src/engine/foundation/ui/skill-tooltip-catalog.ts",
+			"functions": [
+				"step"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/resources.ts",
 			"provider": "src/engine/runtime/assets/assets.ts",
 			"functions": [
 				"available",
@@ -366,7 +414,8 @@
 				"upload",
 				"release",
 				"updateTransform",
-				"updateInstances"
+				"updateInstances",
+				"releasedDraw"
 			],
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"consumer": "src/engine/runtime/renderer/renderer.ts"
@@ -398,7 +447,8 @@
 				"updateInstances",
 				"updateBones",
 				"updateTextureTransform",
-				"updateMaterialColors"
+				"updateMaterialColors",
+				"updateTextureFactor"
 			],
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"consumer": "src/engine/runtime/renderer/world/world.ts"
@@ -429,7 +479,8 @@
 			"consumer": "src/engine/runtime/assets/worker/loader.ts",
 			"provider": "src/engine/runtime/assets/worker/world/resources/resources.ts",
 			"functions": [
-				"resolve"
+				"resolve",
+				"resolveTerrain"
 			]
 		},
 		{
@@ -480,7 +531,9 @@
 				"updateIndices",
 				"updateMaterialColors",
 				"updateTextureTransform",
-				"updateEquipmentGlow"
+				"updateEquipmentGlow",
+				"presentParticles",
+				"updateTextureFactor"
 			]
 		},
 		{
@@ -1200,6 +1253,7 @@
 				"actors",
 				"prepare",
 				"borrowModel",
+				"hasModel",
 				"socket",
 				"dispose",
 				"invalidate"
@@ -1697,7 +1751,8 @@
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
-				"country"
+				"country",
+				"playerModels"
 			]
 		},
 		{
@@ -1750,6 +1805,14 @@
 			"functions": [
 				"sound"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/stale-draws.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"callback:createStaleDrawGuard:0",
+				"callback:createStaleDrawGuard:1"
+			]
 		}
 	],
 	"boundaries": [
@@ -1796,6 +1859,13 @@
 			"reason": "Optional device-owned GpuTimingFrame callback for the skeletal compute pass."
 		},
 		{
+			"file": "src/engine/runtime/renderer/device/particles.ts",
+			"expression": "timing?.pass",
+			"function": "encode",
+			"kind": "callback",
+			"reason": "Optional device-owned GpuTimingFrame callback for the particle presentation compute pass."
+		},
+		{
 			"file": "src/engine/runtime/assets/worker/loader.ts",
 			"expression": "resolve",
 			"function": "wakeIdleWaiters",
@@ -1807,21 +1877,21 @@
 			"expression": "frameProbe()?.begin",
 			"function": "frame",
 			"kind": "callback",
-			"reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+			"reason": "Optional benchmark frame probe (frame-probes.ts, installed by tools/perf/bench); undefined outside development benchmark runs."
 		},
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"expression": "frameProbe()?.end",
 			"function": "frame",
 			"kind": "callback",
-			"reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+			"reason": "Optional benchmark frame probe (frame-probes.ts, installed by tools/perf/bench); undefined outside development benchmark runs."
 		},
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"expression": "frameProbe()?.mark",
 			"function": "markStage",
 			"kind": "callback",
-			"reason": "Optional world-probe frame profiler hook (tools/lib/frame-profiler.mjs); undefined outside probe runs."
+			"reason": "Optional benchmark frame probe (frame-probes.ts, installed by tools/perf/bench); undefined outside development benchmark runs."
 		},
 		{
 			"file": "src/engine/runtime/ui/ui.ts",
@@ -1836,41 +1906,6 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "Optional frame-owned timing observer. Records UI assembly, comparison and publication without changing the product; covered by ui-resource-lifetime.test.mjs. Runtime supplies it only in development."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "probe?.phases?.begin",
-			"function": "materialize",
-			"kind": "callback",
-			"reason": "Optional injected diagnostic timer; observes the same pose evaluation. Compared against unobserved palettes in animation-phase-profiler.test.mjs."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "timer.start",
-			"function": "materialize",
-			"kind": "callback",
-			"reason": "Optional injected diagnostic timer; observes the same pose evaluation. Compared against unobserved palettes in animation-phase-profiler.test.mjs."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "timer.end",
-			"function": "materialize",
-			"kind": "callback",
-			"reason": "Optional injected diagnostic timer; observes the same pose evaluation. Compared against unobserved palettes in animation-phase-profiler.test.mjs."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "probe?.ceiling?.skip",
-			"function": "evaluate",
-			"kind": "callback",
-			"reason": "Diagnostic-only injected warmed-pose replay; animation-ceiling.test.mjs verifies capture lifetime."
-		},
-		{
-			"file": "src/engine/foundation/animation/animation-pose.ts",
-			"expression": "probe?.ceiling?.palette",
-			"function": "palette",
-			"kind": "callback",
-			"reason": "Injected diagnostic palette census; does not change palette output."
 		},
 		{
 			"file": "src/engine/runtime/characters/characters.ts",
@@ -1951,13 +1986,6 @@
 		},
 		{
 			"file": "src/engine/runtime/renderer/world/world.ts",
-			"expression": "probe?.worldReplay",
-			"function": "prepare",
-			"kind": "callback",
-			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
-		},
-		{
-			"file": "src/engine/runtime/renderer/world/world.ts",
 			"expression": "probe?.sampleDetails",
 			"function": "prepare",
 			"kind": "callback",
@@ -1974,20 +2002,6 @@
 			"file": "src/engine/runtime/renderer/world/world.ts",
 			"expression": "probe?.detailEnd",
 			"function": "prepare",
-			"kind": "callback",
-			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
-		},
-		{
-			"file": "src/engine/runtime/renderer/world/world.ts",
-			"expression": "probe?.pickCensus",
-			"function": "pick",
-			"kind": "callback",
-			"reason": "Optional pick-census observer (profile builds only); records one exact pick test without changing its result. Replaces source rewriting."
-		},
-		{
-			"file": "src/engine/runtime/renderer/frame/frame.ts",
-			"expression": "probe?.frameDraw",
-			"function": "draw",
 			"kind": "callback",
 			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
 		},
@@ -2047,7 +2061,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "fa1346fc24771293c8e07b503ac1cd83f10d573e87932a35498fe24e4fe94547",
+			"sourceSha256": "70ab07d5dba2a358c4c6527b115e136bfbe6edf25a53b04a13640417bed18ff6",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

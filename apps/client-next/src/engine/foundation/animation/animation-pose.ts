@@ -21,35 +21,12 @@ import { bodyBoneScale } from "./body-shape";
 const DEFAULT_BODY_VOLUME = 2;
 /*
 ================
-AnimationPoseProbe
-Optional diagnostics injected at construction; no globals or clocks are read
-by ordinary pose evaluation. A ceiling probe may freeze already-warm poses.
-================
-*/
-export interface AnimationPoseProbe {
-	ceiling?: {
-		skip( ready: boolean, eligible: boolean ): boolean;
-		palette( built: boolean, joints: number, eligible: boolean ): void;
-	};
-	phases?: {
-		begin(
-			model: CharacterModel,
-			reason: string,
-			layers: readonly { clip: CharacterClip | undefined; }[]
-		): { phases: boolean; start( name: string ): void; end( name: string ): void; } | null;
-	};
-}
-
-/*
-================
 createCharacterPose
 ================
 */
-export function createCharacterPose( model: CharacterModel, probe?: AnimationPoseProbe ) {
+export function createCharacterPose( model: CharacterModel ) {
 	const bindings = paletteBindings( model );
 	const attachmentBind = createAttachmentBindPose( model.nodes );
-	const ceilingEligible = !!probe?.ceiling && model.primitives.some( p => p.joints.length > 1 ) &&
-		!model.primitives.some( p => p.emission || p.ribbon );
 	let volume = DEFAULT_BODY_VOLUME, female = false;
 	// Body nodes precede attached handles. Keep that compound order for
 	// unqualified lookups; explicit branch names stay distinct even when both
@@ -166,10 +143,8 @@ gpuSample
 materialize
 ================
 	*/
-	function materialize( reason = "evaluate" ) {
+	function materialize() {
 		if ( !cpuPending ) return;
-		const timer = probe?.phases?.begin( model, reason, resolved );
-		if ( timer && !timer.phases ) timer.start( "materialization" );
 		// A single full-weight pass with one channel per node/path has no
 		// blending to accumulate. Sample with the identical interpolation,
 		// then commit directly. Layered/duplicate-channel inputs keep the
@@ -200,12 +175,7 @@ materialize
 					clocks = createAnimationTimelines( layer.clip );
 					timelines.set( layer.clip, clocks );
 				}
-				if ( timer?.phases ) timer.start( "timelines" );
 				clocks.sample( time );
-				if ( timer?.phases ) {
-					timer.end( "timelines" );
-					timer.start( "sampling" );
-				}
 				for ( let channelIndex = 0; channelIndex < layer.clip.channels.length; channelIndex++ ) {
 					const channel: CharacterClip["channels"][number] = layer.clip.channels[channelIndex]!;
 					const path = channel.path === "translation" ? 0 : channel.path === "rotation" ? 1 : 2,
@@ -234,7 +204,6 @@ materialize
 					} else if ( channel.interpolation === "STEP" || next === low ) {
 						for ( let c = 0; c < width; c++ ) target[c] = values[low * width + c]!;
 					} else if ( width === 4 ) {
-						if ( timer?.phases ) timer.start( "quaternion" );
 						const at = channelIndex * 4;
 						if ( rotationSamples[at] !== low ) {
 							let dot = 0;
@@ -255,7 +224,6 @@ materialize
 						for ( let i = 0; i < 4; i++ ) {
 							target[i] = values[low * 4 + i]! * left + values[next * 4 + i]! * right * sign;
 						}
-						if ( timer?.phases ) timer.end( "quaternion" );
 					} else {
 						for ( let c = 0; c < width; c++ ) {
 							target[c] = values[low * width + c]! * (1 - fraction) +
@@ -272,7 +240,6 @@ materialize
 						}}
 					weights[index] = total;
 				}
-				if ( timer?.phases ) timer.end( "sampling" );
 			}
 			if ( !direct ) {
 				for ( let n = 0; n < model.nodes.length; n++ ) {
@@ -298,25 +265,20 @@ materialize
 				if ( node.matrix ) {
 					locals[n]!.set( node.matrix );
 				} else {
-					if ( timer?.phases ) timer.start( "composition" );
 					compose( translations[n]!, rotations[n]!, scales[n]!, locals[n]! );
-					if ( timer?.phases ) timer.end( "composition" );
 				}
 			}
 			if ( !matricesInitialized || animatedGlobal[n] ) {
 				if ( node.parent < 0 ) {
 					globals[n]!.set( locals[n]! );
 				} else {
-					if ( timer?.phases ) timer.start( "propagation" );
 					multiply( globals[node.parent]!, locals[n]!, globals[n]! );
-					if ( timer?.phases ) timer.end( "propagation" );
 				}
 			}
 		}
 		matricesInitialized = true;
 		cpuPending = false;
 		cpuEvaluations++;
-		if ( timer && !timer.phases ) timer.end( "materialization" );
 	}
 	return {
 		/*
@@ -340,7 +302,6 @@ materialize
         ================
         */
 		evaluate( name: string, seconds: number, loop = true, layers?: readonly CharacterLayer[], defer = false ) {
-			if ( probe?.ceiling?.skip( hasPose, ceilingEligible ) ) return false;
 			// Several independent producers may each retain outgoing 200 ms fades.
 			// Their combined population is not bounded by eight. The mixer uses
 			// skeleton-sized scratch and must preserve every live sparse track.
@@ -399,7 +360,7 @@ materialize
         ================
         */
 		palette( primitive: CharacterPrimitive, out: Float32Array, offset = 0 ) {
-			materialize( "palette" );
+			materialize();
 			primitive = bindings.get( primitive ) ?? primitive;
 			let views = inverseViews.get( primitive );
 			if ( !views ) {
@@ -414,7 +375,6 @@ materialize
 				cached = { version: -1, data: new Float32Array( primitive.joints.length * 16 ) };
 				palettes.set( primitive, cached );
 			}
-			probe?.ceiling?.palette( cached.version !== poseVersion, primitive.joints.length, ceilingEligible );
 			if ( cached.version !== poseVersion ) {
 				for ( let i = 0; i < primitive.joints.length; i++ ) {
 					const joint = primitive.joints[i]!, factor = thickness[joint]!;
@@ -441,7 +401,7 @@ materialize
         ================
         */
 		socket( name: string, compound = false ) {
-			materialize( "socket:" + name );
+			materialize();
 			const index = sockets.get( name );
 			if ( index === undefined ) return null;
 			const current = globals[index]!;

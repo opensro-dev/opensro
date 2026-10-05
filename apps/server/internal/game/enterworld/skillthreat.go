@@ -30,6 +30,13 @@ type SkillThreat struct {
 	Only          bool
 	WeaponPercent uint32
 	Area          SkillOffensiveArea
+	// Decrease is a hostility-lowering program (Discord Wave,
+	// skillthreatdecrease.go): dtnt's flat and percent words and mwdt's
+	// weapon term, applied to the monsters Area selects around the target.
+	// Present stays false: nothing here adds aggression.
+	Decrease                      bool
+	DecreaseFlat, DecreasePercent uint32
+	DecreaseWeaponPercent         uint32
 }
 
 /*

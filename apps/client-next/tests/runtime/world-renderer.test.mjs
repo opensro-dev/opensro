@@ -31,6 +31,11 @@ test("retail object visibility advances offscreen and with a stationary camera, 
 	const geometry = {
 		upload: () => ({}),
 		release() {},
+		/*
+		================
+		updateInstances
+		================
+		*/
 		updateInstances( draw, matrices, opacity ) {
 			uploads.push( { count: matrices.length / 16, opacity: [ ...opacity ] } );
 			return draw;
@@ -69,6 +74,11 @@ test("retail object visibility advances offscreen and with a stationary camera, 
 	assert.equal( world.prepare( geometry, textures, 1, 3 ).draws.length, 0 );
 	world.dispose( geometry, textures );
 });
+/*
+================
+scene
+================
+*/
 function scene( id, texture ) {
 	return {
 		id,
@@ -147,6 +157,11 @@ test("settled fade reuse preserves native frame freshness when the camera leaves
 	const geometry = {
 			upload: () => ({}),
 			release() {},
+			/*
+			================
+			updateInstances
+			================
+			*/
 			updateInstances( draw, m, a ) {
 				uploads.push( [ ...a ] );
 				return draw;
@@ -175,12 +190,22 @@ test("settled fade reuse preserves native frame freshness when the camera leaves
 	world.dispose( geometry, textures );
 });
 test("retained world selection matches forced full walks through fades, cell gaps and recovery", () => {
+	/*
+	================
+	fixture
+	================
+	*/
 	function fixture() {
 		const world = createWorldRenderer();
 		let serial = 0;
 		const geometry = {
 				upload: () => ({ id: serial++, matrices: [], alpha: [] }),
 				release() {},
+				/*
+				================
+				updateInstances
+				================
+				*/
 				updateInstances( draw, m, a ) {
 					draw.matrices = [ ...m ];
 					draw.alpha = a ? [ ...a ] : [];
@@ -395,20 +420,40 @@ test("live star admission cannot replace the startup RNG with a published asset 
 	world.dispose( geometry, textures );
 	control.dispose( geometry, textures );
 });
+/*
+================
+fixture
+================
+*/
 function fixture() {
 	const released = new Set(), uploads = [];
 	const geometry = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload( data ) {
 			const draw = { data };
 			uploads.push( draw );
 			return draw;
 		},
+		/*
+		================
+		release
+		================
+		*/
 		release( draw ) {
 			assert.ok( !released.has( draw ), "draw released once" );
 			released.add( draw );
 		}
 	};
 	const images = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload( source ) {
 			return { source };
 		},
@@ -448,17 +493,37 @@ test("aborting a partially uploaded replacement releases only its resources", ()
 		released = [],
 		closed = [];
 	const geometry = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload( data, image ) {
 			return { data, image };
 		},
+		/*
+		================
+		release
+		================
+		*/
 		release( draw ) {
 			released.push( draw );
 		}
 	};
 	const textures = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload( source ) {
 			return { source };
 		},
+		/*
+		================
+		release
+		================
+		*/
 		release( draw ) {
 			released.push( draw );
 		}
@@ -467,6 +532,11 @@ test("aborting a partially uploaded replacement releases only its resources", ()
 	world.texture( "a", {
 		width: 1,
 		height: 1,
+		/*
+		================
+		close
+		================
+		*/
 		close() {
 			closed.push( "a" );
 		}
@@ -482,6 +552,11 @@ test("aborting a partially uploaded replacement releases only its resources", ()
 	world.texture( "b", {
 		width: 1,
 		height: 1,
+		/*
+		================
+		close
+		================
+		*/
 		close() {
 			closed.push( "b" );
 		}
@@ -505,17 +580,32 @@ test("GPU image identity includes ordered animation frames and survives loss", (
 		uploads = [],
 		released = [];
 	const geometry = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload( data, image ) {
 			return { image };
 		},
 		release() {}
 	};
 	const images = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload( source, frames ) {
 			const draw = { frames: frames.map( f => f.name ) };
 			uploads.push( draw );
 			return draw;
 		},
+		/*
+		================
+		release
+		================
+		*/
 		release( draw ) {
 			released.push( draw );
 		}
@@ -588,6 +678,11 @@ test("A to B to A requests evicted textures again and retains shared textures", 
 	f.world.texture( "a", {
 		width: 1,
 		height: 1,
+		/*
+		================
+		close
+		================
+		*/
 		close() {
 			closed++;
 		}
@@ -601,6 +696,11 @@ test("A to B to A requests evicted textures again and retains shared textures", 
 	f.world.texture( "b", {
 		width: 1,
 		height: 1,
+		/*
+		================
+		close
+		================
+		*/
 		close() {
 			closed++;
 		}
@@ -612,6 +712,11 @@ test("A to B to A requests evicted textures again and retains shared textures", 
 	f.world.texture( "a", {
 		width: 1,
 		height: 1,
+		/*
+		================
+		close
+		================
+		*/
 		close() {
 			closed++;
 		}
@@ -638,6 +743,11 @@ test("residency budget includes both current and pending scenes", async () => {
 	assert.ok( worldSceneBytes( a ) < limit && worldSceneBytes( b ) < limit, "each scene fits independently" );
 	const world = createWorldRenderer( limit ),
 		geometry = {
+			/*
+			================
+			upload
+			================
+			*/
 			upload( data ) {
 				return { data };
 			},
@@ -668,15 +778,30 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	let uploads = 0, indexWrites = 0, positionWrites = 0, lastIndexCount = 0;
 	let fullBytes = 0, sparseBytes = 0;
 	const geometry = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload( data ) {
 			uploads++;
 			return { data, positions: data.positions.slice() };
 		},
 		release() {},
+		/*
+		================
+		updateIndices
+		================
+		*/
 		updateIndices( draw, indices ) {
 			indexWrites++;
 			lastIndexCount = indices.length;
 		},
+		/*
+		================
+		updatePositions
+		================
+		*/
 		updatePositions( draw, positions, colors, uvs, ranges ) {
 			positionWrites++;
 			assert.ok( ranges?.length );
@@ -689,6 +814,11 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 		}
 	};
 	const images = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload() {
 			return {};
 		},
@@ -706,10 +836,12 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	assert.ok( edge.length );
 	assert.ok( edge.every( i => positions[i] === 0 ) );
 	assert.equal( lastIndexCount, 1536 );
-	// Cross the LOD boundary while looking away. Re-entering the frustum in the
-	// same cell must restore the authored edge, even though it was hidden at crossing.
+	// Cross the LOD boundary while looking away. Terrain is chosen by eye cell,
+	// not by view (the GPU clips what is behind), so the crossing stitches the
+	// edge at once and turning back changes nothing.
 	world.camera( { eye: [ -960, 500, 10 ], target: [ -2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-	assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
+	assert.equal( world.prepare( geometry, images, 1 ).draws[0], draw );
+	assert.ok( edge.every( i => positions[i] === 10 ) );
 	assert.equal( prepare( -960 ), draw );
 	assert.ok( edge.every( i => positions[i] === 10 ) );
 	const writes = [ indexWrites, positionWrites ];
@@ -726,7 +858,7 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	}
 	for ( const [x, height] of [ [ -960, 10 ], [ -1280, 0 ], [ -960, 10 ] ] ) {
 		world.camera( { eye: [ x, 500, 10 ], target: [ x - 2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-		assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
+		assert.equal( world.prepare( geometry, images, 1 ).draws[0], draw );
 		assert.equal( prepare( x ), draw );
 		assert.ok( edge.every( i => positions[i] === height ) );
 	}
@@ -777,16 +909,31 @@ test("title terrain stays detailed through movement and GPU loss; gameplay resto
 	const world = createWorldRenderer( undefined, undefined, createPresentationRandom( 1 ) );
 	let count = 0;
 	const geometry = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload( data ) {
 			return { data };
 		},
 		release() {},
+		/*
+		================
+		updateIndices
+		================
+		*/
 		updateIndices( draw, indices ) {
 			count = indices.length;
 		},
 		updatePositions() {}
 	};
 	const images = {
+		/*
+		================
+		upload
+		================
+		*/
 		upload() {
 			return {};
 		},
@@ -849,20 +996,40 @@ test("decal texture bindings are rebuilt after terrain retirement and reused whi
 		released = new Set(),
 		images = [],
 		geometry = {
+			/*
+			================
+			upload
+			================
+			*/
 			upload( data, image ) {
 				const draw = { data, image };
 				draws.push( draw );
 				return draw;
 			},
 			updatePositions() {},
+			/*
+			================
+			updateIndices
+			================
+			*/
 			updateIndices( draw ) {
 				return draw;
 			},
+			/*
+			================
+			release
+			================
+			*/
 			release( draw ) {
 				released.add( draw );
 			}
 		},
 		textures = {
+			/*
+			================
+			upload
+			================
+			*/
 			upload( source, frames, mips ) {
 				const image = { source, mips };
 				images.push( image );
@@ -907,19 +1074,44 @@ test("toe decals reuse geometry, fade at twenty seconds and survive device recre
 	const world = createWorldRenderer(),
 		released = new Set(),
 		geometry = {
+			/*
+			================
+			upload
+			================
+			*/
 			upload( data, image ) {
 				return { data, image };
 			},
 			updatePositions() {},
+			/*
+			================
+			updateIndices
+			================
+			*/
 			updateIndices( d ) {
 				return d;
 			},
+			/*
+			================
+			release
+			================
+			*/
 			release( d ) {
 				released.add( d );
 			},
+			/*
+			================
+			updateMaterialColors
+			================
+			*/
 			updateMaterialColors( d, c ) {
 				d.tint = [ ...c ];
 			},
+			/*
+			================
+			updateInstances
+			================
+			*/
 			updateInstances( d, m, a ) {
 				d.alpha = a[0];
 				return d;
@@ -1029,11 +1221,16 @@ test("selection texture demand follows scene admission, cancellation, replacemen
 	assert.deepEqual( demand(), [] );
 });
 
-test("sixteen material pieces share one fade tick and reset only with scene replacement", () => {
+test("sixteen material pieces share one fade tick; an outdoor scene switch keeps the placement fade", () => {
 	const world = createWorldRenderer(), textures = { upload: () => ({}), release() {} };
 	const geometry = {
 		upload: () => ({}),
 		release() {},
+		/*
+		================
+		updateInstances
+		================
+		*/
 		updateInstances( draw, m, a ) {
 			draw.alpha = a?.[0];
 			return draw;
@@ -1073,9 +1270,17 @@ test("sixteen material pieces share one fade tick and reset only with scene repl
 	world.camera( { eye: [ 0, 0, 0 ], target: [ 0, 0, 450 ], near: 1, far: 1000, fov: Math.PI / 3 } );
 	check( 1.25, 191 / 255 );
 	check( 1.375, 1 );
-	world.scene( { ...value, id: "replacement" } );
-	check( 1.5, 0 );
-	check( 1.625, 64 / 255 );
+	// A region crossing replaces the scene but keeps this placement: it must not
+	// fade in again. A placement the new scene does not have starts from zero.
+	world.scene( { ...value, id: "crossed" } );
+	check( 1.5, 1 );
+	const moved = value.groups.map( group => ({
+		...group,
+		visibility: [ { ...group.visibility[0], id: "another-building" } ]
+	}) );
+	world.scene( { ...value, id: "elsewhere", groups: moved } );
+	check( 1.625, 0 );
+	check( 1.75, 64 / 255 );
 	world.dispose( geometry, textures );
 });
 

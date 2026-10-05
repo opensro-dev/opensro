@@ -16,7 +16,6 @@ import "opensro.online/server/internal/game/abnormal"
 const (
 	questTrapTag     = 0x74726170
 	questTrapQuest   = 0x71657374
-	questTrapArea    = 0x656672
 	questTrapLink    = 0x6c6e6b73
 	questTrapDura    = 0x64757261
 	questTrapScanMs  = 300
@@ -73,7 +72,7 @@ func compileQuestTrap(fields []string) SkillQuestTrap {
 				return SkillQuestTrap{}
 			}
 			trap.DurationMs = words[0]
-		case questTrapArea:
+		case tagEfr:
 			if words[0] != 3 || words[1] != 1 || words[2] == 0 || words[3] != 1 ||
 				words[4] != 0 || words[5] != questTrapMobMask {
 				return SkillQuestTrap{}

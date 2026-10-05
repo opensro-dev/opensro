@@ -476,3 +476,90 @@ func TestAttackAfterMovementCancelResumesAttacking(t *testing.T) {
 		t.Fatalf("second attack never struck: hp %d -> %d", struck.CurrentHP, after.CurrentHP)
 	}
 }
+
+/*
+================
+TestCoolingDownSkillPressNeverStopsAutoAttack
+
+Ice River Force pressed again on cooldown dropped every attack: the press
+arrived mid-swing, was queued unchecked and replaced the auto-attack, then
+was refused when the swing closed. 4ACC40 validates first (mask 0x37): the
+press answers 0x3005 and the swings carry on.
+================
+*/
+func TestCoolingDownSkillPressNeverStopsAutoAttack(t *testing.T) {
+	rt, clock, c, target := newCombatTestRuntime(t, 1_000_000)
+	skill := shippedOffense(t, "SKILL_CH_SWORD_SMASH_A_01")
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c.Skills = append(c.Skills, skill.ID)
+	c.CurrentMP = testInt64(10000)
+	rt.HandleTargetInteract(testDivision, c, wire.BasicAttackEngage{TargetGid: target.Gid}.Encode())
+	if !rt.hasOpenSkillCast(testDivision, c.Name) {
+		t.Fatal("fixture: the first swing is not open")
+	}
+	// The skill's own cooldown, keyed as the server reads it (shared group
+	// first, 64C1A0).
+	if skill.CoolTimeGroup != 0 {
+		if c.SharedSkillCooldowns == nil {
+			c.SharedSkillCooldowns = map[uint8]int64{}
+		}
+		c.SharedSkillCooldowns[skill.CoolTimeGroup] = clock.NowMs() + 60_000
+	} else {
+		if c.OffensiveSkillCooldowns == nil {
+			c.OffensiveSkillCooldowns = map[uint32]int64{}
+		}
+		c.OffensiveSkillCooldowns[skill.Group] = clock.NowMs() + 60_000
+	}
+	if !skillCoolingDown(c, skill, clock.NowMs()) {
+		t.Fatal("fixture: the skill is not cooling down")
+	}
+
+	for _, swing := range []string{"mid-swing", "between swings"} {
+		refused := rt.HandleTargetInteract(testDivision, c,
+			wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target.Gid}.Encode())
+		if len(refused.Frames) != 1 || !bytes.Equal(refused.Frames[0].Payload, []byte{2, 0x05}) {
+			t.Fatalf("%s: cooling-down press = %+v, want refusal 0x3005", swing, refused.Frames)
+		}
+		intents := rt.combatIntentSnapshot()
+		if len(intents) != 1 || intents[0].TargetGid != target.Gid || intents[0].SingleCast {
+			t.Fatalf("%s: the refused press replaced the auto-attack: %+v", swing, intents)
+		}
+		tokens := rt.castTokenCounter
+		for tick := 0; tick < 30; tick++ {
+			clock.Advance(100 * time.Millisecond)
+			rt.TickHook()(clock.NowMs())
+		}
+		if rt.castTokenCounter == tokens {
+			t.Fatalf("%s: auto-attack stopped swinging after the refused press", swing)
+		}
+	}
+}
+
+/*
+================
+TestCommandRefusedSeesOnlyRefusals
+
+dispatchRetainingAttack restores the attack only for a press that installed
+nothing: a diagnostic, a lone skill error or no answer.
+================
+*/
+func TestCommandRefusedSeesOnlyRefusals(t *testing.T) {
+	accepted := wire.SkillCastSelfFrame(wire.SkillCastSuccess{SkillId: 1, CasterGid: 2, InstanceToken: 3})
+	cases := []struct {
+		name    string
+		result  OpResult
+		refused bool
+	}{
+		{"no answer", OpResult{}, true},
+		{"diagnostic", OpResult{DiagnosticRefusal: "party-buff-action-busy"}, true},
+		{"skill error", offensiveRefusal(0x3005), true},
+		{"accepted cast", OpResult{Frames: []wire.Frame{accepted}}, false},
+		{"published", OpResult{Broadcast: []wire.Frame{accepted}}, false},
+		{"error then cast", OpResult{Frames: append(offensiveRefusal(0x3004).Frames, accepted)}, false},
+	}
+	for _, c := range cases {
+		if got := commandRefused(c.result); got != c.refused {
+			t.Fatalf("%s: commandRefused = %v, want %v", c.name, got, c.refused)
+		}
+	}
+}

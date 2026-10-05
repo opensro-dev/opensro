@@ -80,7 +80,7 @@ test("authored effect mesh, scale, blend and atlas frames compile without genera
 		p = model.primitives[0];
 	assert.equal( model.clips[0].duration, 0.5 );
 	assert.deepEqual( [ ...model.clips[0].channels[0].values ], [ 1, 1, 1, 3, 3, 3 ] );
-	assert.equal( defined( p.geometry.material ).additive, true );
+	assert.deepEqual( defined( p.geometry.material ).blendPair, { source: 5, destination: 2 } );
 	assert.equal( defined( p.materialFrames ).colors.at( -1 ), 0 );
 	assert.deepEqual( [ ...defined( p.materialFrames ).windows.slice( -4 ) ], [ 0.5, 1, 0.5, 0 ] );
 	assert.deepEqual( decoded.imagePaths, [ "/assets/images/texture.png" ] );
@@ -176,21 +176,29 @@ test("SetBANPos and SetBANRot map frame tables to translation and rotation anima
 });
 
 test("Phase 6 native blend pairs, leaf anchor, lifetime budget, and inert rotation admit cleanly", () => {
-	const blends = [ [ 5, 7 ], [ 4, 3 ], [ 1, 6 ] ];
+	// Every pair D3D9 defines draws with its own factors (CEFEffect_Render
+	// B153A0 sets SRCBLEND/DESTBLEND from the resource), 9/9 included.
+	const blends = [ [ 5, 7 ], [ 4, 3 ], [ 1, 6 ], [ 9, 9 ] ];
 	for ( const [src, dst] of blends ) {
 		const value = catalog();
 		value.effects["hit.efp"].root.resource.srcBlend = src;
 		value.effects["hit.efp"].root.resource.dstBlend = dst;
 		const decoded = createEffectPrograms().decode( encode( value ), "hit.efp" );
-		assert.ok( decoded.model );
+		assert.deepEqual( defined( decoded.model.primitives[0].geometry.material ).blendPair, {
+			source: src,
+			destination: dst
+		} );
 	}
-	const invalid = catalog();
-	invalid.effects["hit.efp"].root.resource.srcBlend = 9;
-	invalid.effects["hit.efp"].root.resource.dstBlend = 9;
-	assert.throws(
-		() => createEffectPrograms().decode( encode( invalid ), "hit.efp" ),
-		/Unsupported native effect blend/
-	);
+	// A factor outside D3DBLEND, or a source-only factor as the destination.
+	for ( const [src, dst] of [ [ 16, 6 ], [ 5, 12 ], [ 0, 2 ] ] ) {
+		const invalid = catalog();
+		invalid.effects["hit.efp"].root.resource.srcBlend = src;
+		invalid.effects["hit.efp"].root.resource.dstBlend = dst;
+		assert.throws(
+			() => createEffectPrograms().decode( encode( invalid ), "hit.efp" ),
+			/Undefined native effect blend/
+		);
+	}
 
 	const leafVal = catalog();
 	const leafNode = leafVal.effects["hit.efp"].root;
@@ -965,7 +973,7 @@ test("socket projectiles capture launch once and keep flight independent of late
 	effects.dispose();
 });
 
-test("target-bone projectiles capture the evaluated endpoint and preserve arrival after target movement", () => {
+test("target-bone projectiles follow the evaluated endpoint to their arrival", () => {
 	const row = {
 		phase: "SHOT",
 		startEvent: 0,
@@ -1039,7 +1047,9 @@ test("target-bone projectiles capture the evaluated endpoint and preserve arriva
 	assert.equal( step( 1, [ { cast, phase: "SHOT", event: 0, at: 1 } ] ).length, 1 );
 	entities[1].x = 999;
 	assert.equal( step( 2 )[0].pose.x, 100 );
-	assert.equal( calls, 1 );
+	// A shot at another actor homes (stepHomingProjectile): its socket is
+	// evaluated again on every frame, not captured once at launch.
+	assert.ok( calls > 1, "the socket was read once: " + calls );
 	assert.deepEqual( step( 3 ), [] );
 	assert.equal( owner.error(), null );
 	owner.dispose();
@@ -1222,6 +1232,65 @@ test("attached effects select both activation families, wait for assets, restore
 	const n = sounds.length;
 	step( 11 );
 	assert.equal( sounds.length, n );
+	fx.dispose();
+});
+
+test("an active-phase follower with no authored life stays as long as its attachment", () => {
+	// The White Hawk's summon: AT_ONE_FOLLOW in ACT_L, life 0, no SCT_MOVER.
+	const stages = [ {
+		phase: "ACT_L",
+		resource: "follower.efp",
+		damageEvent: false,
+		startEvent: 0,
+		action: "AT_ONE_FOLLOW",
+		move: "MOV_NONE",
+		bone: null,
+		offset: [ 0, 20, 0 ],
+		life: 0,
+		count: 1,
+		scripts: []
+	} ];
+	let id = 0;
+	const jobs = new Map();
+	const fx = createCharacterEffects(
+		{
+			available: () => 4,
+			request( url, limit, decode ) {
+				jobs.set(
+					++id,
+					decode === "effects" ?
+						{ kind: "effects", catalog: { 7: { clips: [], stages } } } :
+						{ kind: "bytes", buffer: encode( { format: "sro-skill-stage-models", models: {} } ).buffer }
+				);
+				return id;
+			},
+			take( id ) {
+				const r = jobs.get( id );
+				jobs.delete( id );
+				return r;
+			},
+			cancel( id ) {
+				jobs.delete( id );
+			}
+		},
+		"http://localhost",
+		() => {},
+		createPresentationRandom( 1 )
+	);
+	const entity = { gid: 1, regionId: 257, x: 0, y: 0, z: 0, heading: 0 };
+	const actor = { gid: 1, model: "body", pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 }, height: 10 };
+	const game = { casts: [], attachedEffects: [ { gid: 1, skill: 7, token: 9, phase: 2, receivedAtMs: 0 } ] };
+	// The follower's clip lasts one second.
+	const step = t => fx.step( [ entity ], game, t, () => true, () => 1, [], undefined, [ actor ] );
+	step( 0 );
+	step( .1 );
+	assert.equal( step( .2 ).length, 1 );
+	const later = step( 30 );
+	assert.equal( later.length, 1, "the follower vanished one clip after the summon" );
+	assert.ok( later[0].loop, "the follower's clip must loop while it stays" );
+	game.attachedEffects = [];
+	step( 31 );
+	assert.equal( step( 40 ).length, 0, "the follower outlived its attachment" );
 	fx.dispose();
 });
 

@@ -64,6 +64,7 @@ declares the probes their page code reads.
 | Every client gate | `pnpm --filter @sro/client-next check` |
 | Unit and architecture tests | `pnpm --filter @sro/client-next test` |
 | Browser tests | `pnpm --filter @sro/client-next test:browser` |
+| Frame rate and allocations (goal: 500 fps in every scenario) | `node tools/perf/bench/fps-bench.mjs`; process in [docs/PROFILING.md](../../docs/PROFILING.md) |
 
 `verify:quick` runs the typecheck and the ownership, capability and
 execution-flow gates. A new module, async function, timer, stored callback

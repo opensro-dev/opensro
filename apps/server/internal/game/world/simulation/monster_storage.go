@@ -236,14 +236,11 @@ func (s *monsterStorage) contains(gid uint32) bool {
 ================
 removeCold
 
-Return an archive slot exactly once before removing its identity.
+Forget a sleeping monster's cold row.
 ================
 */
 func (s *monsterStorage) removeCold(gid uint32) {
-	if r, ok := s.cold[gid]; ok {
-		s.archive.free = append(s.archive.free, r.slot)
-		delete(s.cold, gid)
-	}
+	delete(s.cold, gid)
 }
 
 /*

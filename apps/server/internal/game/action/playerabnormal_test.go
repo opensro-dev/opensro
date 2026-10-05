@@ -196,7 +196,7 @@ TestForgetCharacterDropsBlockAndDetachesSource
 func TestForgetCharacterDropsBlockAndDetachesSource(t *testing.T) {
 	rt, _, c, _ := newCombatTestRuntime(t, 100)
 	deps := rt.deps.(*enterworld.Deps)
-	source := deps.Characters.(enterworld.StaticCharacterSource)
+	source := fixtureCharacters(deps.Characters)
 	peer := &enterworld.Character{ID: 9, Name: "peer", CurrentHP: testInt64(100), Level: testInt64(1)}
 	source[testDivision] = append(source[testDivision], peer)
 	rt.storePlayerAbnormal(testDivision, c.Name, &abnormal.Block{Mask: abnormal.Stun.Bit()})

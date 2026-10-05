@@ -13,6 +13,7 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mesh, product, pose } from "../helpers/navigation-fixture.mjs";
 import {
 	readPublishedAssetBytesSync as assetBytes,
 	readPublishedAssetJsonSync as assetJson
@@ -33,46 +34,6 @@ const { createNavigation } = await load(
 	{ createNavigationResources } = await load( "runtime/assets/worker/navigation/navigation.ts" ),
 	{ createNavigationStream } = await load( "runtime/navigation/navigation.ts" ),
 	{ interpolateMovement, poseDistance } = await load( "foundation/gameplay/native-movement.ts" );
-/*
-================
-mesh
-================
-*/
-function mesh( y = 10 ) {
-	return {
-		vertices: Float32Array.from( [ 0, y, 0, 100, y, 0, 100, y, 100, 0, y, 100 ] ),
-		cells: Uint16Array.from( [ 0, 1, 2, 0, 2, 3 ] ),
-		edges: Uint32Array.from( [ 1, 2, 0, 65535, 3, 0, 0, 2, 0, 1, 4, 1 ] ),
-		bounds: [ 0, y, 0, 100, y, 100 ],
-		passThrough: false
-	};
-}
-/*
-================
-product
-================
-*/
-function product( regionId = 257, blocked = false ) {
-	return {
-		regionId,
-		complete: true,
-		objects: [ { x: 0, y: 0, z: 0, yaw: 0, mesh: mesh() } ],
-		navmesh: {
-			regionSize: 1920,
-			tileSize: 20,
-			tilesPerAxis: 96,
-			regions: [ {
-				dx: 0,
-				dz: 0,
-				blockedTiles: Buffer.alloc( 9216, blocked ? 1 : 0 ).toString( "base64" ),
-				tileCellIds: Buffer.alloc( 36864 ).toString( "base64" ),
-				heightMap: Buffer.alloc( 97 * 97 * 4 ).toString( "base64" ),
-				cells: { count: 1 }
-			} ]
-		}
-	};
-}
-const pose = { regionId: 257, x: 10, y: 10, z: 50, angle: 0 };
 test("solid NVM plane bit raises the sampled ground, survives resource projection, and preserves hills", async () => {
 	const nav = createNavigation(), p = product();
 	p.objects = [];
@@ -227,39 +188,6 @@ test("Constantinople reported stair follows its cells down and up without invent
 	const clipped = nav.clip( { ...a, y: 1126.6672973632812 }, b );
 	assert.ok( clipped.z < 620, "terrain-owned input does not magically become an object owner" );
 	assert.ok( Math.abs( clipped.y - nav.surface( clipped ).y ) < .01 );
-});
-test("movement predicts an admitted seam before receipt and reconciles to authoritative state", async () => {
-	const { createMovement } = await load( "runtime/simulation/worker/session/world/gameplay/movement/movement.ts" );
-	const frames = [], movement = createMovement( frame => frames.push( frame ) ), p = product();
-	p.objects = [];
-	p.navmesh.regions.push( { ...p.navmesh.regions[0], dx: 1 } );
-	const from = { ...pose, x: 1910, y: 0 }, to = { ...pose, regionId: 258, x: 30, y: 0 };
-	movement.seed( from );
-	movement.navigation( 257, p );
-	movement.request( to, 0 );
-	movement.step( 400 );
-	assert.equal( movement.state().pose.regionId, 258 );
-	assert.equal( movement.state().pose.x, 10 );
-	assert.equal( movement.state().pendingMoves, 1 );
-	assert.equal( new DataView( frames[0].payload.buffer ).getUint16( 6, true ), 258 );
-	movement.receive(
-		new TextEncoder().encode(
-			JSON.stringify( {
-				v: 1,
-				id: 1,
-				gid: 7,
-				accepted: false,
-				serverTimeMs: 400,
-				error: "blocked",
-				world: { spawn: from }
-			} )
-		),
-		400,
-		7
-	);
-	assert.deepEqual( movement.state().pose, from );
-	assert.equal( movement.state().pendingMoves, 0 );
-	movement.clear();
 });
 test("prediction crosses admitted outdoor seams with destination heights and canonical coordinates", () => {
 	const nav = createNavigation(), p = product();

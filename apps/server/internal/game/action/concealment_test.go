@@ -147,7 +147,7 @@ func TestStealthEndsOnTheNextCast(t *testing.T) {
 TestDamageCancelFollowsTheMasks
 
 5A1612: a hit whose att flags share a bit with skc word 0 ends the hide
-(keep 0 %); a hit with other flags does not.
+(chance word 0: every such hit); a hit with other flags does not.
 ==================
 */
 func TestDamageCancelFollowsTheMasks(t *testing.T) {
@@ -179,7 +179,7 @@ func nearbyCharacter(rt *Runtime, c *enterworld.Character, id int64, name string
 	world.Spawn = &spawn
 	m.World = &world
 	deps := rt.deps.(*enterworld.Deps)
-	deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &m)
+	fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &m)
 	return &m
 }
 

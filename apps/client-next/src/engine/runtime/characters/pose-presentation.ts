@@ -25,6 +25,7 @@ which snaps; logical poses stay authoritative.
 import type { Pose } from "@/engine/contracts/gameplay";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { REGION_SIZE, interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
+import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
 // A discontinuity is a teleport, not motion: no interpolation or smoothing.
@@ -62,12 +63,14 @@ interface Track {
 ================
 Sample
 
-A logical pose and the frame-clock time (seconds) it was sampled at.
+A logical pose, the frame-clock time (seconds) it was sampled at, and the
+movement revision of the walk it was sampled from.
 ================
 */
 interface Sample {
 	readonly pose: Pose;
 	readonly at: number;
+	readonly revision: number;
 }
 
 /*
@@ -92,12 +95,19 @@ interface SampleTrack {
 SampleInput
 
 What characters publishes each frame for a character with timed samples:
-the simulation time of its latest pose, whether it is walking, and the end
-of the leg being walked.
+the simulation time of its latest pose, the movement revision it belongs to,
+whether it is walking, and the end of the leg being walked.
+
+The movement owner bumps the revision whenever it re-anchors a walk (a new
+click, a receipt, a correction, a native move). Two samples define a
+velocity only within one revision: across a re-anchor their difference is
+a jump, not motion, and extrapolating it turned a 19-unit receipt
+correction 8 ms after the previous sample into -2,275 units/s.
 ================
 */
 export interface SampleInput {
 	readonly atMs: number;
+	readonly revision: number;
 	readonly moving: boolean;
 	readonly to?: Pose;
 }
@@ -188,12 +198,12 @@ function sampledModel( row: SampleTrack, now: number ): Pose {
 	if ( gap <= 0 || gap > MAX_SAMPLE_GAP_SECONDS ) return latest.pose;
 	const span = worldVector( latest.pose, previous.pose );
 	if ( !span ) return latest.pose;
-	const stepped = Math.hypot( span[0], span[2] );
+	const stepped = hypot2( span[0], span[2] );
 	if ( stepped === 0 ) return latest.pose;
 	let ahead = Math.min( MAX_EXTRAPOLATION_SECONDS, Math.max( 0, now - latest.at ) ) / gap;
 	if ( row.to ) {
 		const rest = worldVector( row.to, latest.pose );
-		if ( rest ) ahead = Math.min( ahead, Math.hypot( rest[0], rest[2] ) / stepped );
+		if ( rest ) ahead = Math.min( ahead, hypot2( rest[0], rest[2] ) / stepped );
 	}
 	if ( ahead === 0 ) return latest.pose;
 	return {
@@ -230,7 +240,7 @@ export function createPosePresentation() {
 			discontinuity( row.latest.pose, target )
 		) {
 			row = {
-				latest: { pose: { ...target }, at },
+				latest: { pose: { ...target }, at, revision: input.revision },
 				moving: input.moving,
 				to: input.to,
 				offset: [ 0, 0, 0 ],
@@ -241,28 +251,31 @@ export function createPosePresentation() {
 		} else if ( now !== row.last ) {
 			const decay = Math.exp( -(now - row.last) / CORRECTION_TAU_SECONDS );
 			row.offset = [ row.offset[0] * decay, row.offset[1] * decay, row.offset[2] * decay ];
-			if ( Math.hypot( row.offset[0], row.offset[1], row.offset[2] ) < MIN_CORRECTION_DISTANCE ) {
+			if ( hypot3( row.offset[0], row.offset[1], row.offset[2] ) < MIN_CORRECTION_DISTANCE ) {
 				row.offset = [ 0, 0, 0 ];
 			}
 			row.angle = turn( row.angle, target.angle, now - row.last );
 			row.last = now;
 		}
 		const latest = row.latest.pose;
-		const changed = at !== row.latest.at || latest.regionId !== target.regionId || latest.x !== target.x ||
-			latest.y !== target.y || latest.z !== target.z;
+		const changed = at !== row.latest.at || input.revision !== row.latest.revision ||
+			latest.regionId !== target.regionId || latest.x !== target.x || latest.y !== target.y ||
+			latest.z !== target.z;
 		if ( changed || row.moving !== input.moving || row.to !== input.to ) {
 			const before = sampledModel( row, now );
 			if ( changed ) {
-				// Keep the previous sample only when this one is strictly newer;
-				// a correction at the same time replaces the model outright.
-				row.previous = at > row.latest.at ? row.latest : undefined;
-				row.latest = { pose: { ...target }, at };
+				// Keep the previous sample only when this one is strictly newer
+				// and on the same walk; a correction at the same time, or any
+				// re-anchor, replaces the model outright and its jump becomes
+				// the decaying offset below.
+				row.previous = at > row.latest.at && input.revision === row.latest.revision ? row.latest : undefined;
+				row.latest = { pose: { ...target }, at, revision: input.revision };
 			}
 			row.moving = input.moving;
 			row.to = input.to;
 			const jump = worldVector( before, sampledModel( row, now ) );
 			if ( jump ) row.offset = [ row.offset[0] + jump[0], row.offset[1] + jump[1], row.offset[2] + jump[2] ];
-			if ( !jump || Math.hypot( row.offset[0], row.offset[1], row.offset[2] ) > MAX_CORRECTION_DISTANCE ) {
+			if ( !jump || hypot3( row.offset[0], row.offset[1], row.offset[2] ) > MAX_CORRECTION_DISTANCE ) {
 				row.offset = [ 0, 0, 0 ];
 			}
 		}

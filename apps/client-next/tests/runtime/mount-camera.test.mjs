@@ -25,13 +25,28 @@ test("camera anchor rides the locally driven mount, falls back to the rider, and
 	const encode = value => new TextEncoder().encode( JSON.stringify( value ) ).buffer;
 	const assets = {
 		available: () => 4,
+		/*
+		================
+		request
+		================
+		*/
 		request( url, limit, decode ) {
 			jobs.set( ++id, { url, decode } );
 			return id;
 		},
+		/*
+		================
+		cancel
+		================
+		*/
 		cancel( id ) {
 			jobs.delete( id );
 		},
+		/*
+		================
+		take
+		================
+		*/
 		take( id ) {
 			const job = jobs.get( id );
 			if ( !job ) return null;
@@ -60,7 +75,7 @@ test("camera anchor rides the locally driven mount, falls back to the rider, and
 					} ]
 				};
 			}
-			if ( job.url.endsWith( "/skillData.json" ) ) {
+			if ( job.url.endsWith( "/characterActionData.json" ) ) {
 				value = {
 					characterActionEffectRows: [ { codename: "rider", soundProfileName: "rider", heightFactor: 1 }, {
 						codename: "mount",

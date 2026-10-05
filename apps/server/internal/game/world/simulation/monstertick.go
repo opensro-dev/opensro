@@ -84,6 +84,9 @@ type MonsterMoverOps struct {
 	// already owns that transaction and must not acquire it again. Production
 	// installs this; BasicAttack alone is the detached simulation test seam.
 	RunAction func(divisionID string, run func(MonsterAttackOperation))
+	// FirstAttackGuard reads a player's live first-attack protection (the
+	// Bard's Noise) from the effect owner. nil protects nobody.
+	FirstAttackGuard func(divisionID string, playerGID uint32, nowMs int64) monster.FirstAttackGuard
 
 	// shownMonsters tracks which monster gids each viewer session has
 	// been sent a spawn for (the peervis shownPeers pattern). On first sight,
@@ -246,6 +249,9 @@ type playerPose struct {
 	Pose             Spawn
 	MovementIntent   playerMovementIntent
 	BodyRadius       BodyRadius
+	// Guard is the player's first-attack protection (the Bard's Noise),
+	// read from the action owner when the leg samples its players.
+	Guard monster.FirstAttackGuard
 }
 
 /*
@@ -305,6 +311,24 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	ops.activity = ops.captureActivity(sessions, nowMs)
 	defer func() { ops.activity = nil }()
 	divisionSet := make(map[string]bool)
+	// One dispatch for the whole leg. A variable captured by the closure
+	// handed to RunAction escapes through that indirect call: captured per
+	// actor, every monster's Instance snapshot and the closure itself were a
+	// heap allocation per behaviour tick (1 GB a minute with one player
+	// online, which kept the collector busy on three cores). RunAction runs
+	// its closure before returning, so the slots are reused safely.
+	var dispatch struct {
+		division string
+		instance monster.Instance
+		players  []playerPose
+	}
+	act := func(attack MonsterAttackOperation) {
+		// Bind the capability to a value copy, not the shard's dependency
+		// set. Mutable actor state remains in MonsterState.
+		owned := *ops
+		owned.BasicAttack = attack
+		owned.advanceAndPublish(dispatch.division, dispatch.instance, dispatch.players, nowMs, sessions, push)
+	}
 	for _, batch := range ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID) {
 		divisionID := batch.key.division
 		divisionSet[divisionID] = true
@@ -314,7 +338,11 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			if session.DivisionID != divisionID || session.Population != batch.key.lease || !session.CombatEligible {
 				continue
 			}
-			players = append(players, playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs), MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius, NativeBodyStatus: session.NativeBodyStatus})
+			player := playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs), MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius, NativeBodyStatus: session.NativeBodyStatus}
+			if ops.FirstAttackGuard != nil {
+				player.Guard = ops.FirstAttackGuard(divisionID, player.Gid, nowMs)
+			}
+			players = append(players, player)
 		}
 		for _, gid := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
@@ -325,13 +353,8 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				continue
 			}
 			if ops.RunAction != nil {
-				ops.RunAction(divisionID, func(attack MonsterAttackOperation) {
-					// Bind the capability to a value copy, not the shard's
-					// dependency set. Mutable actor state remains in MonsterState.
-					owned := *ops
-					owned.BasicAttack = attack
-					owned.advanceAndPublish(divisionID, instance, players, nowMs, sessions, push)
-				})
+				dispatch.division, dispatch.instance, dispatch.players = divisionID, instance, players
+				ops.RunAction(divisionID, act)
 				continue
 			}
 			ops.advanceAndPublish(divisionID, instance, players, nowMs, sessions, push)

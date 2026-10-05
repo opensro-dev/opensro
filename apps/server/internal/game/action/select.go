@@ -312,17 +312,21 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 	rt.Selected.Set(divisionID, character.Name, gid)
 	rt.NpcDialogs.Clear(divisionID, character.Name)
 	outcome := SelectOutcome{Selected: gid}
+	var flags uint32
+	if target.npc != nil {
+		flags = target.npc.TalkFlags | rt.reverseReturnCapability(*target.npc, character)
+	}
 	if target.npc != nil {
 		// npcExtra 0: no forced action-0x38 menu row. Every live authored NPC
 		// receives a typed result, including a legitimate zero-capability row;
 		// silence used to leave the client's previous NPC binding alive.
 		outcome.Frames = []wire.Frame{{
 			Opcode:  wire.OpObjectSelectResult,
-			Payload: wire.EncodeNpcObjectSelectResult(gid, target.npc.TalkFlags, 0),
+			Payload: wire.EncodeNpcObjectSelectResult(gid, flags, 0),
 		}}
 	}
 	if target.npc != nil && target.npc.Teleport != nil {
-		w := wire.NewWriter(11).U8(1).U32(gid).U32(target.npc.TalkFlags)
+		w := wire.NewWriter(11).U8(1).U32(gid).U32(flags)
 		if target.npc.Teleport.FortressID != 0 {
 			tax := rt.commerceTax(divisionID, target.npc.RefObjID, character)
 			rate := tax.Percent

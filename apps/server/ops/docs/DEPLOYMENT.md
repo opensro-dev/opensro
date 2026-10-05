@@ -335,7 +335,8 @@ The bug report webhook (`SRO_BUG_REPORT_DISCORD_WEBHOOK`, see
 `ops/nomad/README.md`) is also an item of Agent's credential variable. To
 rotate it, delete the old webhook in Discord, create a new one, then run
 `sro-nomad stop` and `sro-nomad deploy` with the new value in the deployer's
-environment; deploying without it turns bug reports off.
+environment. A deploy without it keeps the stored webhook;
+`SRO_BUG_REPORT_DISCORD_WEBHOOK=off` turns bug reports off.
 
 ## 5. Shard catalog and leases
 

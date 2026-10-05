@@ -49,6 +49,10 @@ export interface BloomDraw {
 	encode( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
 }
 export interface DeviceOwner extends Disposable {
+	/** Bracket one frame, from its first preparation to its last submit: a GPU
+	 * resource released in between outlives the command buffers that name it. */
+	beginFrame(): void;
+	endFrame(): void;
 	particleQuery(
 		points: Float32Array,
 		matrix: Float32Array,
@@ -84,8 +88,6 @@ export interface DeferredDraw {
 	prepare(): readonly GeometryDraw[] | Promise<readonly GeometryDraw[]>;
 }
 export interface FrameOwner {
-	// Optional measurements from the frame owner (runtime.ts frameProbe).
-	profile( probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined ): void;
 	draw(
 		view: GPUTextureView,
 		image?: ImageDraw,
@@ -151,7 +153,52 @@ export interface CharacterShadowRequest {
 	readonly blob: boolean;
 	readonly parts: readonly { readonly draw: GeometryDraw; readonly instance: number; }[];
 }
+/*
+================
+ParticlePresentation
+
+One emitted primitive's particles for the GPU presentation pass
+(device/particle-shader.ts): rows actors of slots particle slots each.
+records and actors use the layouts of foundation/animation/
+particle-records.ts. The owner rewrites records only at a tick and marks
+the slots it rewrote in [dirtyStart, dirtyEnd); it writes actors and
+axes every frame.
+================
+*/
+export interface ParticlePresentation {
+	readonly rows: number;
+	readonly slots: number;
+	// The particles belong to a particle graph (one tick fraction an actor).
+	readonly graph: boolean;
+	// ParticleView: none, camera, y or v (effect-billboard.ts).
+	readonly view: number;
+	readonly lifetime: number;
+	readonly loop: boolean;
+	readonly frames?: import("@/engine/contracts/character").CharacterPrimitive["materialFrames"];
+	readonly records: Float32Array;
+	readonly actors: Float32Array;
+	// The camera basis of the view mode: three columns of four floats.
+	readonly axes: Float32Array;
+	dirtyStart: number;
+	dirtyEnd: number;
+}
+/*
+================
+DrawRelease
+
+When and from where a draw was released. A released draw's buffers are
+retired at the end of the releasing frame, so any later frame that still
+lists it would submit destroyed storage ("used in submit while destroyed").
+================
+*/
+export interface DrawRelease {
+	readonly atMs: number;
+	readonly stack: string;
+}
 export interface GeometryCommands {
+	// The release record of a draw no owner may draw any more; undefined
+	// while the draw is live.
+	releasedDraw?( draw: GeometryDraw ): DrawRelease | undefined;
 	characterShadows?( requests: readonly CharacterShadowRequest[], blob?: ImageDraw ): readonly GeometryDraw[];
 	// Null samples are CPU-owned slots already materialized in source; GPU samples preserve their canonical indices.
 	prepareGpuBones?(
@@ -175,6 +222,7 @@ export interface GeometryCommands {
 		poses: number;
 	};
 	updateMaterialColors( draw: GeometryDraw, rgb: Float32Array, flags: number ): void;
+	updateTextureFactor( draw: GeometryDraw, rgba: Float32Array ): void;
 	updateEquipmentGlow(
 		draw: GeometryDraw,
 		color: Float32Array,
@@ -185,14 +233,24 @@ export interface GeometryCommands {
 	): void;
 	updateTextureTransform( draw: GeometryDraw, matrix: Float32Array ): void;
 	updateBones( draw: GeometryDraw, bones: Float32Array, revision?: number ): number;
+	// The draw's instances and palettes come from the particle pass this
+	// frame; the draw has one instance and one joint a slot.
+	presentParticles( draw: GeometryDraw, particles: ParticlePresentation ): void;
 	updateIndices( draw: GeometryDraw, indices: Uint32Array ): void;
+	// ranges are vertex start/count pairs within positions. Without a slot the
+	// positions cover the whole draw; with one (0 included) they are a terrain
+	// layer member's vertices at that vertex offset of the draw.
 	updatePositions(
 		draw: GeometryDraw,
 		positions: Float32Array,
 		colors?: Float32Array,
 		uvs?: Float32Array,
-		ranges?: readonly (readonly [number, number])[]
+		ranges?: readonly (readonly [number, number])[],
+		slot?: number
 	): void;
+	// Writes a packed vertex stream (14 floats a vertex) at vertex base of a
+	// dynamicVertices draw: a terrain layer member taking its slot.
+	writeVertices( draw: GeometryDraw, base: number, vertices: Float32Array ): void;
 	updateInstances(
 		draw: GeometryDraw,
 		instances: Float32Array,

@@ -30,6 +30,18 @@ const (
 
 /*
 ================
+itemProgramWritesAccuracy
+
+Reports that timedItemModifierWrites files the row's hr block itself, so
+buffModifierWrites must not file it a second time.
+================
+*/
+func itemProgramWritesAccuracy(effect enterworld.SkillTimedEffect) bool {
+	return effect.Pinned && effect.ItemProgram && effect.Accuracy.Present
+}
+
+/*
+================
 timedItemModifierWrites
 
 Each authored word is unsigned and rounded to float32 at the native call

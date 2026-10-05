@@ -84,6 +84,7 @@ func TestHorseLevelRefusalPreservesItemAndAllowsUseAtRequirement(t *testing.T) {
 	c := testCharacter()
 	level := int64(5)
 	c.Level = &level
+	dressTrader(c)
 	items := testCosSource(testItems())
 	ref := items.staticItemSource["ITEM_COS_T_DHORSE3"]
 	ref.ReqQuadTypes[0], ref.ReqQuadValues[0] = 1, 10
@@ -125,7 +126,7 @@ func TestHandleItemUseConsumesPotionRecoversHPAndAnswersNativeBurst(t *testing.T
 	rt, _ := newTestRuntime(character, testItems())
 
 	result := rt.HandleItemUse(testDivision, character, []byte{21, 0xEC, 0x08})
-	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, simulation.OpVitalsUpdate)
+	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual, simulation.OpVitalsUpdate)
 	if got, want := result.Frames[0].Payload,
 		wire.EncodeItemUseSuccess(21, 1, 0x08EC); !reflect.DeepEqual(got, want) {
 		t.Fatalf("0xB5BD = % X, want % X", got, want)
@@ -160,7 +161,7 @@ func TestHandleItemUseLastPotionRemovesRow(t *testing.T) {
 	rt, _ := newTestRuntime(character, testItems())
 
 	result := rt.HandleItemUse(testDivision, character, []byte{21, 0xEC, 0x08})
-	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, simulation.OpVitalsUpdate)
+	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual, simulation.OpVitalsUpdate)
 	if got := result.Frames[0].Payload; !reflect.DeepEqual(
 		got,
 		wire.EncodeItemUseSuccess(21, 0, 0x08EC),
@@ -224,6 +225,7 @@ TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn
 */
 func TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn(t *testing.T) {
 	character := testCharacter()
+	dressTrader(character)
 	character.MissionInventory = append(character.MissionInventory, enterworld.InventoryRow{
 		Slot: 22, RefObjID: 3905, Codename: "ITEM_COS_T_DHORSE3",
 		TypeFlags: wire.PackTypeFlags(3, 3, 3, 2), StackCount: 1,
@@ -233,17 +235,19 @@ func TestHandleItemUseCreatesAuthoritativeCosBeforeSpawn(t *testing.T) {
 	result := rt.HandleItemUse(testDivision, character, []byte{22, 0xEC, 0x11})
 	assertOpcodes(t, result.Frames,
 		wire.OpItemUseResponse,
+		wire.OpItemUseVisual,
 		wire.OpCosRecordCreate,
 		wire.OpSingleObjectSpawn,
 		wire.OpCosRideState,
 		movementSpeedOpcode,
 	)
-	assertOpcodes(t, result.Broadcast, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode)
+	assertOpcodes(t, result.Broadcast, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode,
+		opCommerceItemReferences, wire.OpItemUseVisual)
 	if character.ActiveCOS == nil || character.ActiveCOS.GID != 0x00C00003 ||
 		character.ActiveCOS.RefObjID != 3914 || !character.ActiveCOS.Summoned || !character.ActiveCOS.Mounted {
 		t.Fatalf("active COS = %+v", character.ActiveCOS)
 	}
-	if got := binary.LittleEndian.Uint32(result.Frames[1].Payload[0:4]); got != character.ActiveCOS.GID {
+	if got := binary.LittleEndian.Uint32(result.Frames[2].Payload[0:4]); got != character.ActiveCOS.GID {
 		t.Fatalf("3158 gid = 0x%X, want 0x%X", got, character.ActiveCOS.GID)
 	}
 	for _, row := range character.MissionInventory {
@@ -301,10 +305,14 @@ func TestCosMountAndMountedAttackShareAuthorityOnlyAfterCosGates(t *testing.T) {
 
 /*
 ================
-TestMountedAttackEntersTheSharedAuthoritativeCombatMachine
+TestMountedAttackOrderNeverMakesTheRiderFight
+
+4D2200 hands the attack order to the vehicle's AI (event 0x19). A rider on a
+horse or transport never swings its own weapon from the saddle: no strike,
+no attack intent, whatever the rider carries (a bow included).
 ================
 */
-func TestMountedAttackEntersTheSharedAuthoritativeCombatMachine(t *testing.T) {
+func TestMountedAttackOrderNeverMakesTheRiderFight(t *testing.T) {
 	rt, _, character, target := newCombatTestRuntime(t, 100)
 	deps, ok := rt.deps.(*enterworld.Deps)
 	if !ok {
@@ -325,15 +333,14 @@ func TestMountedAttackEntersTheSharedAuthoritativeCombatMachine(t *testing.T) {
 		U8(wire.CosCommandAttackTag).
 		U32(target.Gid).
 		Payload())
-	_, damage, fatal := assertSkillDamageOpen(
-		t, result.Frames, 2, enterworld.ObjectIDForCharacter(character), target.Gid,
-	)
-	if damage == 0 || fatal {
-		t.Fatalf("mounted first strike = damage %d fatal %v, want positive nonfatal", damage, fatal)
+	if len(result.Frames) != 0 || len(result.Broadcast) != 0 {
+		t.Fatalf("mounted attack order struck: %+v", result)
 	}
-	intents := rt.combatIntentSnapshot()
-	if len(intents) != 1 || intents[0].TargetGid != target.Gid {
-		t.Fatalf("mounted engage intents = %+v, want retained target gid %d", intents, target.Gid)
+	if intents := rt.combatIntentSnapshot(); len(intents) != 0 {
+		t.Fatalf("mounted attack order installed rider intents %+v", intents)
+	}
+	if !character.ActiveCOS.Mounted {
+		t.Fatal("the refused order changed ride state")
 	}
 }
 
@@ -355,6 +362,7 @@ TestCosSummonDoesNotFabricateABoardWindow
 */
 func TestCosSummonDoesNotFabricateABoardWindow(t *testing.T) {
 	character := testCharacter()
+	dressTrader(character)
 	source := testCosSource(testItems())
 	item := source.staticItemSource["ITEM_COS_T_DHORSE3"]
 	// Summon admission must not interpret a summoner parameter as a timed

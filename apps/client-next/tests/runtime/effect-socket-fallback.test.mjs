@@ -195,10 +195,10 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 				install: () => {},
 				dispose: () => jobs.clear(),
 				/*
-			================
-			request
-			================
-			*/
+				================
+				request
+				================
+				*/
 				request( url, limit, kind ) {
 					jobs.set(
 						++serial,
@@ -215,20 +215,20 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 					return serial;
 				},
 				/*
-			================
-			take
-			================
-			*/
+				================
+				take
+				================
+				*/
 				take( id ) {
 					const result = jobs.get( id );
 					jobs.delete( id );
 					return result;
 				},
 				/*
-			================
-			cancel
-			================
-			*/
+				================
+				cancel
+				================
+				*/
 				cancel( id ) {
 					jobs.delete( id );
 				}
@@ -313,3 +313,25 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 		effects.dispose();
 	});
 }
+
+test("a rider's ground effect stands under the ride, a bone effect stays on the rider", () => {
+	const renderer = createCharacters();
+	renderer.model( "rider", adapted( "Bip01 R Hand", [ 1, 0, 0 ] ), [] );
+	renderer.model( "horse", adapted( "saddle", [ 0, 10, 0 ] ), [] );
+	renderer.model( "ring", model(), [] );
+	const pose = { regionId: 257, x: 0, y: 0, z: 0, yaw: radians( 0 ) };
+	const rider = { gid: 1, model: "rider", pose, scale: 1, clip: "", time: 0, loop: true, mountedOn: 2 };
+	const horse = { gid: 2, model: "horse", pose: { ...pose, x: 30 }, scale: 1, clip: "", time: 0, loop: true };
+	const effect = ( gid, attachment ) => ({ ...actor( gid ), model: "ring", attachment });
+	const ground = effect( 3, { gid: 1, bone: "", root: true, ground: true, offset: [ 0, 0, 0 ] } );
+	const saddle = effect( 4, { gid: 1, bone: "", root: true, offset: [ 0, 0, 0 ] } );
+	const onRide = renderer.matrix( [ rider, horse, ground ], 3 );
+	const onSaddle = renderer.matrix( [ rider, horse, saddle ], 4 );
+	assert.ok( onRide && onSaddle );
+	assert.ok( Math.abs( onRide[13] ) < 1e-5, "the speed ring sits on the ground, not at the rider's legs" );
+	assert.ok( Math.abs( onSaddle[13] - 10 ) < 1e-5, "an ordinary root attachment still follows the saddle" );
+	// Dismounted, the same ground effect follows the character again.
+	const walking = renderer.matrix( [ { ...rider, mountedOn: undefined }, ground ], 3 );
+	assert.ok( walking );
+	assert.ok( Math.abs( walking[12] ) < 1e-5 && Math.abs( walking[13] ) < 1e-5 );
+});

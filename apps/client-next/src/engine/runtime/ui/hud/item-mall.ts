@@ -364,6 +364,17 @@ export function createItemMall() {
 		},
 		/*
 		================
+		previewGid
+
+		The mannequin's actor once it is built; the skin change window shows
+		the same mannequin.
+		================
+		*/
+		previewGid(): number | undefined {
+			return preview.gid;
+		},
+		/*
+		================
 		previewState
 		================
 		*/

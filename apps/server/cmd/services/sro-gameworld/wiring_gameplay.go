@@ -147,7 +147,7 @@ func newGameplayPlane(
 	if deps.MonsterState != nil {
 		deps.MonsterState.EnableRegionDormancy()
 		deps.MonsterState.SetSpawnGroundResolver(water.WalkableSpawnHeightAt)
-		deps.MonsterState.SetSpawnCollisionTest(water.SpawnMoveTestResult)
+		deps.MonsterState.SetSpawnCollisionTest(water.SpawnMoveTest)
 		deps.MonsterState.SetSpawnRegionAvailability(water.SpawnRegionAvailable)
 		deps.MonsterState.SetPopulationPlayers(items.PopulationPlayers)
 		for _, division := range authorityStore.DivisionIDs() {
@@ -176,6 +176,7 @@ func newGameplayPlane(
 	movementRuntime.UsePendingTracker(items.Pending)
 	movementRuntime.ClearCombatIntent = items.ClearCombatIntent
 	movementRuntime.MovementBlocked = items.PlayerMovementBlocked
+	movementRuntime.RetireMoveEffects = items.RetireMoveEffects
 	movementRuntime.AttackLocked = items.PlayerAttackLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.CompanionPresentations = items.CompanionPresentations
@@ -355,11 +356,21 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err != nil {
 		return fmt.Errorf("quest definitions: %w", err)
 	}
+	masteryOverride, err := progression.BetaMasteryFromEnv()
+	if err != nil {
+		return err
+	}
+	game.deps.MasteryTotalOverride = masteryOverride
 	stats := progression.NewRuntime(game.deps)
+	stats.MasteryTotalOverride = masteryOverride
+	if masteryOverride != 0 {
+		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
+	}
 	stats.Growth = progression.BetaGrowthFromEnv()
 	if stats.Growth.Enabled {
-		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP x%d, drop passes x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate)
+		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d, gold x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.GoldRate)
 		game.items.DropPassRate = stats.Growth.DropRate
+		game.items.GoldRate = stats.Growth.GoldRate
 	}
 	stats.Withdrawal = game.items.WithdrawalHooks()
 	stats.BaseStats = game.deps.PlayerBaseStats
@@ -435,6 +446,8 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		},
 	}
 	game.items.UpdateExperience = stats.ExperienceUpdater()
+	game.items.RefundExperience = stats.ExperienceRefundUpdater()
+	game.items.RecallStatPoints = stats.StatRecallUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()
 	// Delivery resolves sessions from their bindings alone and never reads the
 	// character store: the action runtime publishes from inside character

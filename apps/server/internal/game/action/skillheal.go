@@ -6,8 +6,9 @@ skillheal.go - heal amounts and their application
 Both native heal routines, CSkillManager_ApplySkillHeal (5A0850) for a cast
 and CSkillManager_ApplyHealRecovery (5A09F0) for the eshp aura, run the
 same three steps: a base amount from the heal block, the recipient's
-0xAA / 0xAB scale, then the caster's weapon term. The result reaches the
-recipient through CGObjChar_ApplyReducedRecovery (4A86A0).
+0xAA / 0xAB scale (which rhru buffs raise, 594AC0), then the caster's
+weapon term. The total reaches the recipient through
+CGObjChar_ApplyReducedRecovery (4A86A0).
 
 ===========================================================================
 */
@@ -61,17 +62,20 @@ func (rt *Runtime) skillHealAmounts(division string, recipient, caster *enterwor
 	maxHP, maxMP, _, _ := rt.playerKeeperVitals(division, recipient)
 
 	heal := skill.Heal
-	// 59425E: a heal that reads getv HLRU raises both percent words by the
-	// caster's value (Faith).
+	var up uint32
 	if skill.Attack.Parameters.Has(enterworld.ParameterHealRecoveryUp) && caster != nil {
 		casterStats, _, err := rt.playerCombatStats(division, caster)
 		if err != nil {
 			return 0, 0, false
 		}
-		up := casterStats.SkillParameters[enterworld.ParameterHealRecoveryUp]
-		heal.HPPercent += up
-		heal.MPPercent += up
+		up = casterStats.SkillParameters[enterworld.ParameterHealRecoveryUp]
 	}
+	// 59425E: a heal that reads getv HLRU raises both percent words by the
+	// caster's value (Faith). The aura's pulse runs the same code: native
+	// CastLifecycle_ProcessPersistent reaches SkillCombat_ApplySkillEffectsToTargets
+	// through SkillCombat_EngageSkill (584337, 58547B), the only HLRU reader.
+	heal.HPPercent += up
+	heal.MPPercent += up
 	if routine == healAura {
 		hp, mp = auraHealBase(heal, maxHP, maxMP)
 	} else {
@@ -172,6 +176,41 @@ the caster's absorption ratio. An empty slot adds nothing.
 ==================
 */
 func (rt *Runtime) weaponHealBonus(division string, caster *enterworld.Character, heal enterworld.SkillHeal) (hp, mp int64, ok bool) {
+	weapon, ok := rt.casterMagicalWeapon(division, caster)
+	if !ok || !weapon.armed {
+		return 0, 0, ok
+	}
+	if heal.WeaponHP {
+		hp = int64(combat.WeaponHealBonus(weapon.low, weapon.high, weapon.ratio, heal.WeaponHPWord))
+	}
+	if heal.WeaponMP {
+		mp = int64(combat.WeaponHealBonus(weapon.low, weapon.high, weapon.ratio, heal.WeaponMPWord))
+	}
+	return hp, mp, true
+}
+
+/*
+================
+magicalWeapon
+
+The inputs of a magical weapon term: the slot-6 item's magical attack
+pair and the caster's absorption ratio. armed is false for an empty slot.
+================
+*/
+type magicalWeapon struct {
+	armed            bool
+	low, high, ratio float32
+}
+
+/*
+================
+casterMagicalWeapon
+
+The caster's magical weapon term inputs (411080's reads). A weapon whose
+reference or variance cannot be read fails; an empty slot does not.
+================
+*/
+func (rt *Runtime) casterMagicalWeapon(division string, caster *enterworld.Character) (magicalWeapon, bool) {
 	var weapon *enterworld.InventoryRow
 	for i := range caster.MissionInventory {
 		if caster.MissionInventory[i].Slot == 6 {
@@ -180,32 +219,25 @@ func (rt *Runtime) weaponHealBonus(division string, caster *enterworld.Character
 		}
 	}
 	if weapon == nil {
-		return 0, 0, true
+		return magicalWeapon{}, true
 	}
 
 	ref, found := rt.statCatalogs().Items.ItemRefByCodename(weapon.Codename)
 	if !found || ref.Combat == nil {
-		return 0, 0, false
+		return magicalWeapon{}, false
 	}
 	bits, err := strconv.ParseUint(weapon.VarianceBits, 10, 64)
 	if err != nil {
-		return 0, 0, false
+		return magicalWeapon{}, false
 	}
 	stats, _, err := rt.playerCombatStats(division, caster)
 	if err != nil {
-		return 0, 0, false
+		return magicalWeapon{}, false
 	}
 
 	intellect, _ := stats.Param(2)
-	ratio := combat.AbsorptionRatio(stats.Level, intellect)
 	low, high := combat.WeaponMagicalAttack(ref, bits, uint8(max(0, min(weapon.Plus, 255))))
-	if heal.WeaponHP {
-		hp = int64(combat.WeaponHealBonus(low, high, ratio, heal.WeaponHPWord))
-	}
-	if heal.WeaponMP {
-		mp = int64(combat.WeaponHealBonus(low, high, ratio, heal.WeaponMPWord))
-	}
-	return hp, mp, true
+	return magicalWeapon{armed: true, low: low, high: high, ratio: combat.AbsorptionRatio(stats.Level, intellect)}, true
 }
 
 /*

@@ -12,7 +12,6 @@ import "opensro.online/server/internal/game/abnormal"
 
 const (
 	skillPulseTag = 0x70756c73 // puls, tagRefSkill+384
-	skillGetvTag  = 0x67657476
 )
 
 /*
@@ -49,7 +48,7 @@ func encodedAbnormalParams(fields []string) abnormal.SkillParams {
 		switch uint32(n) {
 		case skillPulseTag:
 			out.Pulse, out.PulsePresent = args[0], true
-		case skillGetvTag:
+		case tagGetv:
 			switch args[0] {
 			case abnormal.KeyPoisonDamage:
 				out.PoisonDamageGetv = true
@@ -81,7 +80,7 @@ func encodedAbnormalParams(fields []string) abnormal.SkillParams {
 			out.ResuMaxLevel, out.ResuExpPercent = args[0], args[1]
 		case 0x726d7574: // rmut -> +0x4AC: the skill a revival starts
 			out.Rmut = args[0]
-		case 0x656672: // efr: the first word selects slot +0x28C/+0x290/+0x294
+		case tagEfr: // efr: the first word selects slot +0x28C/+0x290/+0x294
 			// Only kind 1 (+0x28C) is the action area: SkillAction_Instant and
 			// SkillAction_Projectile dispatch 58CB70 from it; kind 2 feeds
 			// CastLifecycle_ProcessPersistent and is not a cure area.

@@ -38,7 +38,7 @@ func TestCosPeriodicDamageEchoOnlyReachesCreditedPlayer(t *testing.T) {
 			rider.ActiveCOS.CurrentHP = 10
 			source := *rider
 			source.ID, source.Name, source.ActiveCOS = rider.ID+1, "PeriodicCaster", nil
-			characters := rt.deps.(*enterworld.Deps).Characters.(enterworld.StaticCharacterSource)
+			characters := fixtureCharacters(rt.deps.(*enterworld.Deps).Characters)
 			characters[testDivision] = append(characters[testDivision], &source)
 			record := abnormal.Record{Status: abnormal.Burn, Level: 1, DurationMs: 10000,
 				SourceGID: enterworld.ObjectIDForCharacter(&source), SourceName: source.Name,

@@ -178,7 +178,7 @@ export function createAssets(): AssetOwner {
 		Reserve a bounded handle before submitting work to the asset worker.
 		================
 		*/
-		request( value, limit = 16 << 20, decode ) {
+		request( value, limit = 16 << 20, decode, options ) {
 			if ( disposed || failure ) {
 				throw new Error( failure ?? "Assets disposed" );
 			}
@@ -192,7 +192,7 @@ export function createAssets(): AssetOwner {
 			jobs.set( id, { deadline: performance.now() + 120000, url, limit, decode, result: null } );
 
 			try {
-				send( { kind: "load", id, url, limit, decode } );
+				send( { kind: "load", id, url, limit, decode, ...(options?.pickAlpha ? { pickAlpha: true } : {}) } );
 			} catch ( error ) {
 				jobs.delete( id );
 				throw error;

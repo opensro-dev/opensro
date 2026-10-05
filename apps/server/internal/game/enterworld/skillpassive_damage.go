@@ -81,6 +81,15 @@ const (
 	ParameterDotDuration
 	// RPBU +0x508 adds milliseconds to the coating, not its poison victim.
 	ParameterPoisonCoatingDuration
+	// MUCR +0x548: the Bard's music keep addend. A row that reads getv MUCR
+	// adds the caster's value to its skc keep chance (5A160A); see
+	// action.damageKeepPercent. DSER (ParameterDanceRange) is the dance
+	// addend at 5A162E.
+	ParameterMusicCutResist
+	// DSCR +0x550: indexed by 587630 and authored by the dances and Screen
+	// Dance, but no native code reads it (whole-image scan); it changes
+	// nothing and stays a known key only so those rows admit.
+	ParameterDanceCutResist
 	SkillParameterCount
 )
 
@@ -190,6 +199,10 @@ func SkillParameterFromKey(key uint32) (SkillParameter, bool) {
 		return ParameterBlessIntellect, true
 	case 0x484c5255:
 		return ParameterHealRecoveryUp, true
+	case 0x4d554352:
+		return ParameterMusicCutResist, true
+	case 0x44534352:
+		return ParameterDanceCutResist, true
 	}
 	return 0, false
 }
@@ -212,6 +225,10 @@ type SkillPassiveParameters struct {
 	// Real is real {status mask, flat, grade} (+0x300): 59DF20 files the flat
 	// under the grade in each masked status's resistance bucket.
 	Real SkillPassiveReal
+	// Br is br {lane mask, value}: 594AC0 (0x595DFD..0x595EFA) adds value to
+	// the flat block-rate parameter of each lane the normalized mask selects;
+	// see combat.BlockRateWrites.
+	Br SkillPassiveBlockRate
 }
 
 /*
@@ -234,11 +251,28 @@ type SkillPassiveReal struct{ Mask, Flat, Grade uint32 }
 
 /*
 ================
+SkillPassiveBlockRate
+
+A passive block-rate addend. Mask is already normalized by the 587630 lane
+rule, the same form the timed br buff stores.
+================
+*/
+type SkillPassiveBlockRate struct{ Mask, Value uint32 }
+
+/*
+================
 encodedPassiveParameters
 
 Native stores up to five three-argument setv blocks. Repeated keys overwrite
 in source order. reat, real and the reqi/reqn gate complete the resistance
-passives. Refuse the whole program if any operation lacks execution.
+passives; br is the block-rate passive (a duplicate br, a zero mask or a
+value above maxBlockRatePercent is malformed). Refuse the whole program if
+any operation lacks execution.
+
+Any one consumed block pins the program: none of the cited installers for
+reat (595542..59568F), real (59DF20) or br (0x595DFD) reads a setv.
+Protection is reat + real + reqi and Blockade br + reqi; a program holding
+only its reqi gate has nothing to install and stays unpinned.
 ================
 */
 func encodedPassiveParameters(fields []string) SkillPassiveParameters {
@@ -279,12 +313,17 @@ func encodedPassiveParameters(fields []string) SkillPassiveParameters {
 				return SkillPassiveParameters{}
 			}
 			out.Real = SkillPassiveReal{Mask: op.Arguments[0], Flat: op.Arguments[1], Grade: op.Arguments[2]}
+		case tagTimedBlock:
+			if out.Br.Mask != 0 || op.Count != 2 || op.Arguments[0] == 0 || op.Arguments[1] > maxBlockRatePercent {
+				return SkillPassiveParameters{}
+			}
+			out.Br = SkillPassiveBlockRate{Mask: normalizeLaneMask(op.Arguments[0]), Value: op.Arguments[1]}
 		case 0x72657169, 0x7265716e: // reqi/reqn: row.Reqi
 		default:
 			return SkillPassiveParameters{}
 		}
 	}
-	out.Pinned = count > 0
+	out.Pinned = count > 0 || out.Reat.Mask != 0 || out.Real.Mask != 0 || out.Br.Mask != 0
 	return out
 }
 
@@ -307,7 +346,7 @@ func encodedAttackParameters(fields []string) SkillParameterMask {
 		if i+arity >= len(fields) {
 			return mask
 		}
-		if tag == 0x67657476 {
+		if tag == tagGetv {
 			key, valid := textdataInt(fields[i+1])
 			if valid && key >= 0 && key <= 0xffffffff {
 				if slot, known := SkillParameterFromKey(uint32(key)); known {

@@ -1,8 +1,176 @@
-import {NATIVE_CHARACTER_LIGHTING} from '@/engine/foundation/rendering/video-options';
-export function createPipelines(created: GPUDevice, format: GPUTextureFormat) {
-    let mipPipeline: GPURenderPipeline | null = null;
-    let pipeline: GPURenderPipeline | null = null, sampler: GPUSampler | null = null;
-    const shader = created.createShaderModule({ code: `
+/*
+===========================================================================
+
+pipelines.ts - the device's render pipelines and shaders
+
+Owns the WGSL for world, character and effect geometry, sky, images and
+mip generation, and the samplers they bind.
+
+===========================================================================
+*/
+import { NATIVE_CHARACTER_LIGHTING } from "@/engine/foundation/rendering/video-options";
+import {
+	D3DBLEND_BLENDFACTOR,
+	D3DBLEND_BOTHINVSRCALPHA,
+	D3DBLEND_BOTHSRCALPHA,
+	D3DBLEND_DESTALPHA,
+	D3DBLEND_DESTCOLOR,
+	D3DBLEND_INVBLENDFACTOR,
+	D3DBLEND_INVDESTALPHA,
+	D3DBLEND_INVDESTCOLOR,
+	D3DBLEND_INVSRCALPHA,
+	D3DBLEND_INVSRCCOLOR,
+	D3DBLEND_ONE,
+	D3DBLEND_SRCALPHA,
+	D3DBLEND_SRCALPHASAT,
+	D3DBLEND_SRCCOLOR,
+	D3DBLEND_ZERO,
+	type BlendPair,
+	validBlend
+} from "@/engine/foundation/rendering/blend-state";
+
+// The pair a material that blends without naming one draws with.
+export const DEFAULT_BLEND: BlendPair = Object.freeze( {
+	source: D3DBLEND_SRCALPHA,
+	destination: D3DBLEND_INVSRCALPHA
+} );
+
+/*
+================
+blendFactor
+
+One D3DBLEND factor as WebGPU's. The back buffer is X8R8G8B8, so
+DESTALPHA reads 1 and INVDESTALPHA 0; BLENDFACTOR reads the pass's blend
+constant (D3DRS_BLENDFACTOR, which the frame owner holds).
+================
+*/
+function blendFactor( factor: number ): GPUBlendFactor {
+	switch ( factor ) {
+		case D3DBLEND_ZERO:
+		case D3DBLEND_INVDESTALPHA:
+			return "zero";
+		case D3DBLEND_ONE:
+		case D3DBLEND_DESTALPHA:
+			return "one";
+		case D3DBLEND_SRCCOLOR:
+			return "src";
+		case D3DBLEND_INVSRCCOLOR:
+			return "one-minus-src";
+		case D3DBLEND_SRCALPHA:
+			return "src-alpha";
+		case D3DBLEND_INVSRCALPHA:
+			return "one-minus-src-alpha";
+		case D3DBLEND_DESTCOLOR:
+			return "dst";
+		case D3DBLEND_INVDESTCOLOR:
+			return "one-minus-dst";
+		case D3DBLEND_SRCALPHASAT:
+			return "src-alpha-saturated";
+		case D3DBLEND_BLENDFACTOR:
+			return "constant";
+		case D3DBLEND_INVBLENDFACTOR:
+			return "one-minus-constant";
+		default:
+			throw Error( "Undefined D3D blend factor" );
+	}
+}
+
+/*
+================
+blendState
+
+A D3D9 SRCBLEND/DESTBLEND pair as the WebGPU blend the fixed-function
+pipeline applies. Without D3DRS_SEPARATEALPHABLENDENABLE alpha blends with
+the same factors; BOTHSRCALPHA and BOTHINVSRCALPHA, as the source, set
+both factors.
+================
+*/
+export function blendState( pair: BlendPair ): GPUBlendState {
+	if ( !validBlend( pair ) ) throw Error( "Undefined D3D blend pair" );
+	let source = pair.source, destination = pair.destination;
+	if ( source === D3DBLEND_BOTHSRCALPHA ) {
+		source = D3DBLEND_SRCALPHA;
+		destination = D3DBLEND_INVSRCALPHA;
+	} else if ( source === D3DBLEND_BOTHINVSRCALPHA ) {
+		source = D3DBLEND_INVSRCALPHA;
+		destination = D3DBLEND_SRCALPHA;
+	}
+	const component: GPUBlendComponent = {
+		srcFactor: blendFactor( source ),
+		dstFactor: blendFactor( destination ),
+		operation: "add"
+	};
+	return { color: component, alpha: component };
+}
+
+/*
+================
+GeometryPipelineState
+
+What a geometry draw's pipeline varies by: its D3D blend pair (null draws
+opaque), back-face culling, depth writes and the depth test.
+================
+*/
+export interface GeometryPipelineState {
+	readonly blend: BlendPair | null;
+	readonly cull: boolean;
+	readonly depthWrite: boolean;
+	readonly depthCompare: "less-equal" | "always";
+}
+
+/*
+================
+geometryPipelineKey
+================
+*/
+export function geometryPipelineKey( state: GeometryPipelineState ): string {
+	const blend = state.blend ? `${state.blend.source}/${state.blend.destination}` : "opaque";
+	return `${blend}|${state.cull ? "cull" : "none"}|${state.depthWrite ? "write" : "keep"}|${state.depthCompare}`;
+}
+
+// The states every scene draws with, compiled before the device runs:
+// opaque, alpha blended (with and without depth writes), additive, the
+// lightmap multiply, and the no-test passes (sky, deferred particles,
+// ground decals), each culled and not.
+const COMMON_GEOMETRY_STATES: readonly GeometryPipelineState[] = [ false, true ].flatMap( cull => [
+	{ blend: null, cull, depthWrite: true, depthCompare: "less-equal" as const },
+	{ blend: DEFAULT_BLEND, cull, depthWrite: false, depthCompare: "less-equal" as const },
+	{ blend: DEFAULT_BLEND, cull, depthWrite: true, depthCompare: "less-equal" as const },
+	{
+		blend: { source: D3DBLEND_SRCALPHA, destination: D3DBLEND_ONE },
+		cull,
+		depthWrite: false,
+		depthCompare: "less-equal" as const
+	},
+	{
+		blend: { source: D3DBLEND_ZERO, destination: D3DBLEND_SRCCOLOR },
+		cull,
+		depthWrite: false,
+		depthCompare: "less-equal" as const
+	},
+	{ blend: DEFAULT_BLEND, cull, depthWrite: false, depthCompare: "always" as const },
+	{
+		blend: { source: D3DBLEND_SRCALPHA, destination: D3DBLEND_ONE },
+		cull,
+		depthWrite: false,
+		depthCompare: "always" as const
+	}
+] );
+/*
+================
+createPipelines
+
+Compiles every render pipeline and sampler once per device: the geometry
+pipelines (one per material policy and blend), sky, image and mip
+generation. The geometry shader mirrors the native fixed-function paths it
+names (stage-0 ops in texture-stage.ts, lighting, fog, alpha test).
+================
+*/
+export function createPipelines( created: GPUDevice, format: GPUTextureFormat ) {
+	let mipPipeline: GPURenderPipeline | null = null;
+	let pipeline: GPURenderPipeline | null = null, sampler: GPUSampler | null = null;
+	const shader = created.createShaderModule( {
+		code: `
 @group(0) @binding(0) var imageSampler:sampler;
 @group(0) @binding(1) var imageTexture:texture_2d<f32>;
 struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
@@ -10,34 +178,83 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
  let positions=array<vec2f,6>(vec2f(-1,1),vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(1,-1),vec2f(1,1));
  var out:Out;let p=positions[i];out.position=vec4f(p,0,1);out.uv=vec2f((p.x+1)*0.5,(1-p.y)*0.5);return out;
 }
-@fragment fn fs(input:Out)->@location(0) vec4f {return textureSample(imageTexture,imageSampler,input.uv);}` });
-    sampler = created.createSampler({ minFilter: "nearest", magFilter: "nearest" });
-    const prepared = created.createRenderPipelineAsync({ layout: "auto", vertex: { module: shader, entryPoint: "vs" }, fragment: { module: shader, entryPoint: "fs", targets: [{ format: format }] }, primitive: { topology: "triangle-list" }, depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" } });
-    const preparedMips = created.createRenderPipelineAsync({ layout: "auto", vertex: { module: shader, entryPoint: "vs" }, fragment: { module: shader, entryPoint: "fs", targets: [{ format: "rgba8unorm" }] }, primitive: { topology: "triangle-list" } });
-    const environmentStruct = `struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f}`;
-    const skyShader = created.createShaderModule({ code: environmentStruct + `
+@fragment fn fs(input:Out)->@location(0) vec4f {return textureSample(imageTexture,imageSampler,input.uv);}`
+	} );
+	sampler = created.createSampler( { minFilter: "nearest", magFilter: "nearest" } );
+	const prepared = created.createRenderPipelineAsync( {
+		layout: "auto",
+		vertex: { module: shader, entryPoint: "vs" },
+		fragment: { module: shader, entryPoint: "fs", targets: [ { format: format } ] },
+		primitive: { topology: "triangle-list" },
+		depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" }
+	} );
+	const preparedMips = created.createRenderPipelineAsync( {
+		layout: "auto",
+		vertex: { module: shader, entryPoint: "vs" },
+		fragment: { module: shader, entryPoint: "fs", targets: [ { format: "rgba8unorm" } ] },
+		primitive: { topology: "triangle-list" }
+	} );
+	const environmentStruct =
+		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f}`;
+	const skyShader = created.createShaderModule( {
+		code: environmentStruct + `
 @group(0) @binding(0) var<uniform> env:Environment;
 struct SkyOut {@builtin(position) position:vec4f,@location(0) ray:vec3f}
 @vertex fn vs(@builtin(vertex_index) i:u32)->SkyOut {
  let p=array<vec2f,6>(vec2f(-1,1),vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(1,-1),vec2f(1,1))[i];
  var o:SkyOut;o.position=vec4f(p,1,1);o.ray=env.forward.xyz+p.x*env.right.xyz+p.y*env.up.xyz;return o;
 }
-@fragment fn fs(o:SkyOut)->@location(0) vec4f {return vec4f(mix(env.horizon.rgb,env.zenith.rgb,clamp(normalize(o.ray).y*env.zenith.w,0,1)),1);}` });
-    const preparedSky = created.createRenderPipelineAsync({ layout: "auto", vertex: { module: skyShader, entryPoint: "vs" }, fragment: { module: skyShader, entryPoint: "fs", targets: [{ format }] }, primitive: { topology: "triangle-list" }, depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" } });
-    let skyPipeline: GPURenderPipeline | null = null;
-    const geometryShader = created.createShaderModule({ code: environmentStruct + `
+@fragment fn fs(o:SkyOut)->@location(0) vec4f {return vec4f(mix(env.horizon.rgb,env.zenith.rgb,clamp(normalize(o.ray).y*env.zenith.w,0,1)),1);}`
+	} );
+	const preparedSky = created.createRenderPipelineAsync( {
+		layout: "auto",
+		vertex: { module: skyShader, entryPoint: "vs" },
+		fragment: { module: skyShader, entryPoint: "fs", targets: [ { format } ] },
+		primitive: { topology: "triangle-list" },
+		depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" }
+	} );
+	let skyPipeline: GPURenderPipeline | null = null;
+	const geometryShader = created.createShaderModule( {
+		code: environmentStruct + `
 const nativeCharacterLighting:bool=${NATIVE_CHARACTER_LIGHTING};
 @group(0) @binding(0) var<uniform> transform:mat4x4f;
 struct Instance {matrix:mat4x4f,opacity:vec4f,color:vec4f,window:vec4f,pointPosition:vec4f,pointAmbient:vec4f,pointDiffuse:vec4f}
 @group(0) @binding(1) var<storage,read> instances:array<Instance>;
-struct Material {color:vec4f,options:vec4f,skin:vec4f,window:vec4f,lighting:vec4f,policy:vec4f,localFog:vec4f,localFogSettings:vec4f,ambient:vec4f,uvU:vec4f,uvV:vec4f,reflection:vec4f,equipmentColor:vec4f,equipmentUV:vec4f,stage:vec4f}
+struct Material {color:vec4f,options:vec4f,skin:vec4f,window:vec4f,lighting:vec4f,policy:vec4f,localFog:vec4f,localFogSettings:vec4f,ambient:vec4f,uvU:vec4f,uvV:vec4f,reflection:vec4f,equipmentColor:vec4f,equipmentUV:vec4f,stage:vec4f,stagePolicy:vec4f,textureFactor:vec4f}
 @group(0) @binding(2) var<uniform> material:Material;
-// texture-stage.ts: one native stage-0 op over TEXTURE (2) and DIFFUSE.
-fn stageArgument(arg:u32,texel:vec4f,diffuse:vec4f)->vec4f {return select(diffuse,texel,arg==2u);}
-fn stageOp(op:u32,a:vec4f,b:vec4f,diffuse:vec4f)->vec4f {
- var value=a*b;
- switch(op){case 1u:{value=diffuse;} case 2u:{value=a;} case 3u:{value=b;} case 5u:{value=a*b*2.0;} case 6u:{value=a*b*4.0;} default:{}}
- return clamp(value,vec4f(0),vec4f(1));
+// texture-stage.ts: D3D9 stage 0, every op it defines. CURRENT is the
+// diffuse colour at stage 0; TEMP starts at zero; SPECULAR is the vertex
+// specular, which the port's lighting does not produce (zero).
+struct StageInputs {texture:vec4f,diffuse:vec4f,specular:vec4f,factor:vec4f}
+fn stageArgument(arg:u32,i:StageInputs)->vec4f {
+ let selector=arg&15u;var value=i.diffuse;
+ if(selector==2u){value=i.texture;}else if(selector==3u){value=i.factor;}else if(selector==4u){value=i.specular;}else if(selector==5u){value=vec4f(0);}
+ if((arg&32u)!=0u){value=vec4f(value.a);}
+ if((arg&16u)!=0u){value=vec4f(1)-value;}
+ return value;
+}
+// validTextureStage admits only the ops listed here.
+fn stageEvaluate(op:u32,a:vec4f,b:vec4f,a0:vec4f,i:StageInputs)->vec4f {
+ switch(op){
+  case 2u:{return a;} case 3u:{return b;} case 4u:{return a*b;} case 5u:{return a*b*2.0;} case 6u:{return a*b*4.0;}
+  case 7u:{return a+b;} case 8u:{return a+b-0.5;} case 9u:{return (a+b-0.5)*2.0;} case 10u:{return a-b;}
+  case 11u:{return a+b-a*b;} case 12u,16u:{return a*i.diffuse.a+b*(1.0-i.diffuse.a);}
+  case 13u:{return a*i.texture.a+b*(1.0-i.texture.a);} case 14u:{return a*i.factor.a+b*(1.0-i.factor.a);}
+  case 15u:{return a+b*(1.0-i.texture.a);}
+  case 18u:{return a+a.a*b;} case 19u:{return a*b+a.a;} case 20u:{return (1.0-a.a)*b+a;} case 21u:{return (1.0-a)*b+a.a;}
+  case 24u:{return vec4f(4.0*dot(a.rgb-0.5,b.rgb-0.5));}
+  case 25u:{return a0+a*b;} case 26u:{return a0*a+(1.0-a0)*b;}
+  default:{return a*b;}
+ }
+}
+fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
+ let colorOp=u32(stage.x);let colorArgs=u32(stage.y);let alphaOp=u32(stage.z);let alphaArgs=u32(stage.w);
+ if(colorOp==1u){return i.diffuse;}
+ let rgb=clamp(stageEvaluate(colorOp,stageArgument(colorArgs/64u,i),stageArgument(colorArgs%64u,i),i.diffuse,i),vec4f(0),vec4f(1)).rgb;
+ if(colorOp==24u){return vec4f(rgb,rgb.r);}
+ if(alphaOp==1u){return vec4f(rgb,i.diffuse.a);}
+ let alpha=clamp(stageEvaluate(alphaOp,stageArgument(alphaArgs/64u,i),stageArgument(alphaArgs%64u,i),i.diffuse,i),vec4f(0),vec4f(1)).a;
+ return vec4f(rgb,alpha);
 }
 @group(0) @binding(3) var textureSampler:sampler;
 @group(0) @binding(4) var albedo:texture_2d_array<f32>;
@@ -113,14 +330,19 @@ var light=vec4f(1);if(material.skin.y>0.5){light=textureSampleBias(albedo,textur
  let distant=env.terrainBand.w>0.5&&dot(cellDelta,cellDelta)>env.terrainBand.z;
  if(distant&&material.skin.y>0.5){discard;}
  if(distant&&material.options.z>0.5){return vec4f(env.fog.rgb,1);}
-let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(select(tex.a,tex.a*tex.a,material.reflection.z>0.5),1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
- // B153A0: effects evaluate the resource's own stage-0 colour and alpha ops.
+let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(tex.a,1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
+ let illumination=clamp(select(material.color.rgb,input.materialTint,material.policy.w>0.5)*env.diffuse.rgb*max(0.0,dot(normalize(input.normal),vec3f(0.70710678,0.70710678,0)))+env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x,vec3f(0),vec3f(1));
+ let surfaceLight=select(illumination,input.objectLighting,material.lighting.y>0.5);
+ // B153A0 (effects) and sub_aed240 (BSR material modifiers) set stage 0 from
+ // the resource. Its DIFFUSE is the vertex colour as lit, or unlit the
+ // material colour (NOLIGHT object lighting writes oD0 = 1, no tint).
  if(material.stage.x>0.0){
-  let diffuse=material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
-  let colorArgs=u32(material.stage.y);let alphaArgs=u32(material.stage.w);
-  let rgb=stageOp(u32(material.stage.x),stageArgument(colorArgs/16u,tex,diffuse),stageArgument(colorArgs%16u,tex,diffuse),diffuse).rgb;
-  let alpha=stageOp(u32(material.stage.z),stageArgument(alphaArgs/16u,tex,diffuse),stageArgument(alphaArgs%16u,tex,diffuse),diffuse).a;
-  color=vec4f(rgb,alpha);
+  let unlitDiffuse=select(material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5),input.color,material.lighting.y>0.5);
+  let fixedDiffuse=select(vec4f(input.color.rgb*surfaceLight,unlitDiffuse.a),unlitDiffuse,material.options.y>0.5);
+  // A BSR vertex shader's oD0: N.L*c11+c10 with both w at 1, or 1 for NOLIGHT.
+  let shaderDiffuse=select(vec4f(surfaceLight,1),vec4f(1),material.options.y>0.5);
+  let diffuse=select(fixedDiffuse,shaderDiffuse,material.stagePolicy.x>0.5);
+  color=stageColor(material.stage,StageInputs(tex,diffuse,vec4f(0),material.textureFactor));
  }
  let fading=material.lighting.z>0.5&&input.opacity<1.0;
  // An effect fades its own stage alpha (diffuse animation included).
@@ -139,11 +361,10 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  }
  if(material.equipmentColor.w>0.0){accepted=material.equipmentUV.z<0.5||ceil(floor(clamp(tex.a,0.0,1.0)*4096.0)*(255.0/4096.0)-0.5)>=1.0;}
  if(!accepted){discard;}
- let illumination=clamp(select(material.color.rgb,input.materialTint,material.policy.w>0.5)*env.diffuse.rgb*max(0.0,dot(normalize(input.normal),vec3f(0.70710678,0.70710678,0)))+env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x,vec3f(0),vec3f(1));
- let surfaceLight=select(illumination,input.objectLighting,material.lighting.y>0.5);
  // Native NOLIGHT writes oD0=1, bypassing the material diffuse tint too.
  let unlitColor=select(color.rgb,tex.rgb*input.color.rgb,material.lighting.y>0.5);
- var lit=clamp(select(tex.rgb*input.color.rgb*surfaceLight,unlitColor,material.options.y>0.5)*material.options.w,vec3f(0),vec3f(1));
+ // A native stage is the whole colour: its op already carries any 2X/4X.
+ var lit=select(clamp(select(tex.rgb*input.color.rgb*surfaceLight,unlitColor,material.options.y>0.5)*material.options.w,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0);
  // AEE6D0: stage0 sphere*TFACTOR; stage1 base+base.a*current;
  // stage2 MODULATE2X with saturated vertex diffuse. Opacity gates RGB only.
  if(nativeCharacterLighting&&material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
@@ -163,11 +384,116 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  let fog=select(0.0,clamp((input.viewZ-fogSource.w)/max(0.001,fogEnd-fogSource.w),0,1),(env.settings.y>0.5||material.policy.y>0.5)&&material.policy.x<0.5);
  if(material.skin.y>0.5){return vec4f(mix(clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1)),env.terrainFog.rgb,fog),1);}
  return vec4f(mix(lit*select(vec3f(1),clamp(env.water.rgb,vec3f(0),vec3f(1)),animated),select(fogSource.rgb,env.terrainFog.rgb,material.options.z>0.5),fog),select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5));
-}` });
-    const preparedGeometry = Promise.all(Array.from({length:46},(_,index)=>{const groundDecal=index>=44,kind=groundDecal?2+index%2:index%22,deferred=index>=22&&index<44;return created.createRenderPipelineAsync({ layout: "auto", vertex: { module: geometryShader, entryPoint: "vs", buffers: [{ arrayStride: 56, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }, { shaderLocation: 1, offset: 12, format: "float32x3" }, { shaderLocation: 2, offset: 24, format: "float32x2" }, { shaderLocation: 3, offset: 32, format: "float32x4" }, { shaderLocation: 4, offset: 48, format: "float32x2" }] }] }, fragment: { module: geometryShader, entryPoint: "fs", targets: [{ format: format, ...(kind >= 2 ? { blend: { color: { srcFactor: (kind===6||kind===7) ? "zero" as const : kind>=20 ? "one" as const : kind>=18 ? "one-minus-src" as const : kind>=16 ? "src" as const : "src-alpha" as const, dstFactor: kind>=20 ? "src" as const : (kind===6||kind===7) ? "src" as const : (kind===4||kind===5) ? "one" as const : "one-minus-src-alpha" as const, operation: "add" as const }, alpha: { srcFactor: (kind===6||kind===7) ? "zero" as const : kind>=20 ? "one" as const : kind>=18 ? "one-minus-src-alpha" as const : kind>=16 ? "src-alpha" as const : "one" as const, dstFactor: kind>=20 ? "src-alpha" as const : (kind===6||kind===7) ? "one" as const : (kind===4||kind===5) ? "one" as const : "one-minus-src-alpha" as const, operation: "add" as const } } } : {}) }] }, primitive: { topology: "triangle-list", cullMode: kind % 2 ? "back" : "none", frontFace: "cw" }, depthStencil: { format: "depth24plus", depthWriteEnabled: !groundDecal&&!deferred&&(kind < 2 || kind>=12&&kind<16 || kind>=20), depthCompare: groundDecal||deferred?"always":kind>=8&&kind<=10?"always":"less-equal" } });}));
-    let geometryPipelines: GPURenderPipeline[] = [];
-    // Retail 87cbc0 sets MIN/MAG/MIP to LINEAR (2); no anisotropic filter.
-    const worldSampler = created.createSampler({ minFilter: "linear", magFilter: "linear", mipmapFilter: "linear", maxAnisotropy: 1, addressModeU: "repeat", addressModeV: "repeat" });
-    const lightmapSampler=created.createSampler({minFilter:"linear",magFilter:"linear",mipmapFilter:"linear",addressModeU:"clamp-to-edge",addressModeV:"clamp-to-edge"});
-    return { worldSampling(filtered:boolean,detail:number){return created.createSampler({minFilter:filtered?"linear":"nearest",magFilter:filtered?"linear":"nearest",mipmapFilter:filtered?"linear":"nearest",lodMinClamp:2-detail,addressModeU:"repeat",addressModeV:"repeat"});}, lightmapSampler, sky: () => skyPipeline!, mips: () => mipPipeline!, image: () => pipeline!, geometry: () => geometryPipelines, sampler: sampler!, worldSampler, ready: Promise.all([prepared, preparedGeometry, preparedMips, preparedSky]).then(([image, geometry, mips, sky]) => { skyPipeline = sky; mipPipeline = mips; pipeline = image; geometryPipelines = geometry; }) };
+}`
+	} );
+	/*
+	================
+	geometryDescriptor
+
+	The geometry pipeline for one state: the material's D3D blend pair (or
+	none), culling, depth writes and depth test.
+	================
+	*/
+	const geometryDescriptor = ( state: GeometryPipelineState ): GPURenderPipelineDescriptor => ({
+		layout: "auto",
+		vertex: {
+			module: geometryShader,
+			entryPoint: "vs",
+			buffers: [ {
+				arrayStride: 56,
+				attributes: [
+					{ shaderLocation: 0, offset: 0, format: "float32x3" },
+					{ shaderLocation: 1, offset: 12, format: "float32x3" },
+					{ shaderLocation: 2, offset: 24, format: "float32x2" },
+					{ shaderLocation: 3, offset: 32, format: "float32x4" },
+					{ shaderLocation: 4, offset: 48, format: "float32x2" }
+				]
+			} ]
+		},
+		fragment: {
+			module: geometryShader,
+			entryPoint: "fs",
+			targets: [ { format, ...(state.blend ? { blend: blendState( state.blend ) } : {}) } ]
+		},
+		primitive: { topology: "triangle-list", cullMode: state.cull ? "back" : "none", frontFace: "cw" },
+		depthStencil: {
+			format: "depth24plus",
+			depthWriteEnabled: state.depthWrite,
+			depthCompare: state.depthCompare
+		}
+	});
+	// Geometry pipelines by state. The states every scene uses are compiled
+	// before the device runs; any other is compiled at its first upload.
+	const geometryPipelines = new Map<string, GPURenderPipeline>();
+	const preparedGeometry = Promise.all(
+		COMMON_GEOMETRY_STATES.map( state =>
+			created.createRenderPipelineAsync( geometryDescriptor( state ) ).then( pipeline => {
+				geometryPipelines.set( geometryPipelineKey( state ), pipeline );
+			} )
+		)
+	);
+	// Retail 87cbc0 sets MIN/MAG/MIP to LINEAR (2); no anisotropic filter.
+	const worldSampler = created.createSampler( {
+		minFilter: "linear",
+		magFilter: "linear",
+		mipmapFilter: "linear",
+		maxAnisotropy: 1,
+		addressModeU: "repeat",
+		addressModeV: "repeat"
+	} );
+	const lightmapSampler = created.createSampler( {
+		minFilter: "linear",
+		magFilter: "linear",
+		mipmapFilter: "linear",
+		addressModeU: "clamp-to-edge",
+		addressModeV: "clamp-to-edge"
+	} );
+	return {
+		/*
+		================
+		worldSampling
+
+		The world texture sampler for the filtering and detail options.
+		================
+		*/
+		worldSampling( filtered: boolean, detail: number ) {
+			return created.createSampler( {
+				minFilter: filtered ? "linear" : "nearest",
+				magFilter: filtered ? "linear" : "nearest",
+				mipmapFilter: filtered ? "linear" : "nearest",
+				lodMinClamp: 2 - detail,
+				addressModeU: "repeat",
+				addressModeV: "repeat"
+			} );
+		},
+		lightmapSampler,
+		sky: () => skyPipeline!,
+		mips: () => mipPipeline!,
+		image: () => pipeline!,
+		/*
+		================
+		geometry
+
+		The geometry pipeline for state, compiled on first use.
+		================
+		*/
+		geometry( state: GeometryPipelineState ) {
+			const key = geometryPipelineKey( state );
+			let pipeline = geometryPipelines.get( key );
+			if ( !pipeline ) {
+				pipeline = created.createRenderPipeline( geometryDescriptor( state ) );
+				geometryPipelines.set( key, pipeline );
+			}
+			return pipeline;
+		},
+		sampler: sampler!,
+		worldSampler,
+		ready: Promise.all( [ prepared, preparedGeometry, preparedMips, preparedSky ] ).then(
+			( [image, , mips, sky] ) => {
+				skyPipeline = sky;
+				mipPipeline = mips;
+				pipeline = image;
+			}
+		)
+	};
 }

@@ -17,7 +17,7 @@ import { masteryCosts } from "@/engine/foundation/gameplay/skill-catalog";
 import { withdrawalGoldPrices } from "@/engine/foundation/gameplay/withdrawal";
 import { nativeWindowSections } from "@/engine/foundation/ui/native-window-sections";
 import { partyCharacterCountries } from "@/engine/foundation/gameplay/party-matching";
-import { decodeTooltipSkills } from "@/engine/foundation/ui/skill-tooltip-catalog";
+import { createTooltipSkillDecoder } from "@/engine/foundation/ui/skill-tooltip-catalog";
 import type { TooltipSkillCatalog } from "@/engine/foundation/ui/skill-tooltip-data";
 import { decodeActionSlots, type ActionSlot } from "@/engine/foundation/ui/action-layout";
 import { decodeMapLabels, decodeMapIcons, type MapLabel, type MapIcon } from "@/engine/foundation/ui/world-map";
@@ -28,12 +28,19 @@ import { decodeMessageTips, type MessageTip } from "@/engine/foundation/ui/messa
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
 import { decodeCosReferences, type CosReference } from "@/engine/foundation/ui/cos-command";
+// Skill catalogue rows decoded per HUD step: about 2.5 ms of a frame, so the
+// 27,835-row catalogue settles in under 30 frames.
+const TOOLTIP_ROWS_PER_STEP = 1024;
+// Authored button state images: normal, focus, press, disable.
+const BUTTON_STATE_SUFFIXES = [ "", "_focus", "_press", "_disable" ] as const;
 /*
 ================
 Load
 ================
 */
 type Load = { kind: "idle"; } | { kind: "loading"; id: number; } | { kind: "ready"; value: unknown; } | {
+	kind: "decoding";
+} | {
 	kind: "failed";
 	message: string;
 } | { kind: "disposed"; };
@@ -128,6 +135,7 @@ export function createHudResources(
 		"ifcosinfo",
 		"ifcossetup",
 		"ifstorageroom",
+		"ifchangeplayermodel",
 		"ifnewalchemybox",
 		"ifalchemyprocess",
 		"ifnewalchemyreinforce",
@@ -215,7 +223,15 @@ export function createHudResources(
 	let data: HudData | null = null;
 	let withdrawalPage: AuthoredLayout = {};
 	let goldPrices: Readonly<Record<number, number>> = {};
+	// The skill catalogue's decode while its state is "decoding".
+	let skillDecoder: ReturnType<typeof createTooltipSkillDecoder> | null = null;
 	const warm = new Set<string>();
+	// Resolved button families, valid for one admitted HUD data.
+	const families: {
+		data: HudData | null;
+		published: ReadonlySet<string> | null;
+		readonly byTexture: Map<string, readonly string[]>;
+	} = { data: null, published: null, byTexture: new Map() };
 	return {
 		/*
 		================
@@ -228,7 +244,22 @@ export function createHudResources(
 			let changed = false;
 			for ( let i = 0; i < states.length; i++ ) {
 				const state = states[i]!;
-				if ( state.kind === "loading" ) {
+				if ( state.kind === "decoding" ) {
+					// The skill catalogue decodes a bounded slice per step: 27,835
+					// rows in one frame froze the game for a third of a second.
+					try {
+						const value = skillDecoder!.step( TOOLTIP_ROWS_PER_STEP );
+						if ( value ) {
+							states[i] = { kind: "ready", value };
+							skillDecoder = null;
+							changed = true;
+						}
+					} catch ( e ) {
+						states[i] = { kind: "failed", message: String( e ) };
+						skillDecoder = null;
+						changed = true;
+					}
+				} else if ( state.kind === "loading" ) {
 					const r = assets.take( state.id );
 					if ( r ) {
 						changed = true;
@@ -271,8 +302,11 @@ export function createHudResources(
 								value = masteryCosts( raw );
 								goldPrices = withdrawalGoldPrices( raw );
 							} else if ( i === layouts.length + 10 ) value = partyCharacterCountries( raw );
-							else if ( i === layouts.length + 8 ) value = decodeTooltipSkills( raw );
-							else if ( i === layouts.length + 7 ) value = decodeActionSlots( raw );
+							else if ( i === layouts.length + 8 ) {
+								skillDecoder = createTooltipSkillDecoder( raw );
+								states[i] = { kind: "decoding" };
+								continue;
+							} else if ( i === layouts.length + 7 ) value = decodeActionSlots( raw );
 							else if ( i === layouts.length + 5 ) value = raw;
 							else if ( i === layouts.length + 4 ) value = creationNameRules( r.buffer );
 							else if ( i === layouts.length + 2 ) value = decodeMessageTips( raw );
@@ -385,15 +419,52 @@ export function createHudResources(
 				changed = true;
 			}
 			return changed;
-		}, /*
-================
-data
-================
+		},
+		/*
+		================
+		settling
+
+		True while an admitted catalogue is still decoding in bounded steps.
+		================
 		*/
-		data: () => data, /*
-================
-error
-================
+		settling: () => skillDecoder !== null,
+		/*
+		================
+		data
+		================
+		*/
+		data: () => data,
+		/*
+		================
+		buttonFamily
+
+		The four state images of an authored button (normal, focus, press,
+		disable). A state image the HUD does not publish falls back to the
+		normal one. Buttons draw every frame, so each family is resolved once
+		per admitted HUD data.
+		================
+		*/
+		buttonFamily( texture: string ): readonly string[] {
+			if ( families.data !== data ) {
+				families.data = data;
+				families.published = data ? new Set( data.warmPaths ) : null;
+				families.byTexture.clear();
+			}
+			let family = families.byTexture.get( texture );
+			if ( !family ) {
+				const published = families.published;
+				family = BUTTON_STATE_SUFFIXES.map( suffix => {
+					const path = texture.replace( ".png", suffix + ".png" );
+					return suffix && published && !published.has( path ) ? texture : path;
+				} );
+				families.byTexture.set( texture, family );
+			}
+			return family;
+		},
+		/*
+		================
+		error
+		================
 		*/
 		error: () => states.find( s => s.kind === "failed" )?.message ?? null,
 		/*
@@ -410,7 +481,11 @@ error
 				states[i] = { kind: "disposed" };
 			}
 			data = null;
+			skillDecoder = null;
 			warm.clear();
+			families.data = null;
+			families.published = null;
+			families.byTexture.clear();
 		}
 	};
 }

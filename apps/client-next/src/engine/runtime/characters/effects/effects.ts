@@ -44,7 +44,7 @@ import {
 import type { CharacterActor } from "@/engine/contracts/character";
 import { impactSource } from "@/engine/foundation/animation/impact-source";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
-import { projectileSpace, sampleProjectile } from "@/engine/foundation/animation/projectile-time";
+import { projectileSpace, sampleProjectile, stepHomingProjectile } from "@/engine/foundation/animation/projectile-time";
 import {
 	projectileBasis,
 	movingFade,
@@ -59,6 +59,7 @@ import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { nativeHeadingYaw, radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
+import { hypot3 } from "@/engine/foundation/math/hypot";
 /*
 ================
 stageAttachmentBasis
@@ -629,13 +630,20 @@ export function createCharacterEffects(
 					} );
 					continue;
 				}
+				// A loop stage, and an active-phase stage with no authored life (the
+				// White and Blue Hawks' follower: AT_ONE_FOLLOW whitehawk.bsr with no
+				// SCT_MOVER), live as long as their attachment, looping their clip
+				// until its deactivation. Inferred from the data: no other ACT_L
+				// stage is unlooped, and a one-shot follower vanished one clip after
+				// the summon while its buff ran on for minutes.
+				const persists = stage.action === "AT_LOOP" || stage.phase === "ACT_L" && !stage.life;
 				const actor: CharacterActor = {
 					gid: allocate(),
 					model: model.glb,
 					pose: owner.pose,
 					clip: model.clips[0] ?? "",
 					time: 0,
-					loop: stage.action === "AT_LOOP",
+					loop: persists,
 					scale: stage.resource.endsWith( ".efp" ) ?
 						stageEffectScale(
 							stage.native?.scale,
@@ -649,12 +657,15 @@ export function createCharacterEffects(
 						gid: owner.gid,
 						bone: overhead ? "" : bone,
 						root: overhead || !bone,
-						offset: [ offset[0], offset[1] + (overhead ? owner.height! : 0), -offset[2] ]
+						offset: [ offset[0], offset[1] + (overhead ? owner.height! : 0), -offset[2] ],
+						// A root effect (a speed buff's ring) stands on the ground: under
+						// a rider that is the ride's position, as retail draws it.
+						...(!overhead && !bone ? { ground: true } : {})
 					}
 				};
 				const control = {
 					life: stage.life,
-					keep: stage.action === "AT_LOOP" && !stop,
+					keep: persists && !stop,
 					started: now,
 					slot: stage.native?.slot ?? 0,
 					fade: (stage.native?.fadeInMs ?? 0) / 1000
@@ -753,6 +764,17 @@ export function createCharacterEffects(
 				}
 				return admitted;
 			}
+			// Launch sockets the hold below sampled this step, keyed by callback,
+			// stage and source. The launch reuses them: one sample per launch.
+			const launchSockets = new Map<string, EffectVisual["actor"]["pose"] | null>();
+			/*
+			================
+			launchKey
+			================
+			*/
+			function launchKey( trigger: EffectTrigger, index: number, gid: number ) {
+				return `${trigger.cast.token}:${trigger.phase}:${trigger.event}:${index}:${gid}`;
+			}
 			/*
 			================
 			moverSourceCold
@@ -765,17 +787,6 @@ export function createCharacterEffects(
 			sampled live at launch and again at each retarget.
 			================
 			*/
-			// Launch sockets the hold below sampled this step, keyed by callback,
-			// stage and source. The launch reuses them: one sample per launch.
-			const launchSockets = new Map<string, EffectVisual["actor"]["pose"] | null>();
-			/*
-			================
-			launchKey
-			================
-			*/
-			function launchKey( trigger: EffectTrigger, index: number, gid: number ) {
-				return `${trigger.cast.token}:${trigger.phase}:${trigger.event}:${index}:${gid}`;
-			}
 			function moverSourceCold(
 				record: import("@/engine/contracts/effects").EffectRecord,
 				trigger: EffectTrigger,
@@ -1222,7 +1233,9 @@ export function createCharacterEffects(
 									(curved || stage.move === "MOV_STRAIGHT" || stage.move === "MOV_ROUND" ||
 										[ "MOV_UP", "MOV_UPR" ].includes( stage.move ) &&
 											stage.parameters !== undefined) &&
-									motion && (curved || motion.startSpeed > 0) &&
+									// 8DE6C7: no speed gate. Navigation_StepTowards (879650)
+									// arrives a speed-0 mover whose start is its end at once.
+									motion && (curved || motion.startSpeed >= 0 && motion.endSpeed >= 0) &&
 									projectileSpace( pose.regionId, target.regionId ) &&
 									(!radial || stage.move === "MOV_STRAIGHT" && stage.native?.actionOptions.enabled);
 								if (
@@ -1345,7 +1358,7 @@ export function createCharacterEffects(
 												(dungeon ?
 													0 :
 													((caster.regionId >>> 8) - (entity.regionId >>> 8)) * 1920),
-											length = Math.hypot( dx, dy, dz ),
+											length = hypot3( dx, dy, dz ),
 											k = length ? -az / length : 0;
 										source = {
 											regionId: pose.regionId,
@@ -1433,6 +1446,25 @@ export function createCharacterEffects(
 												speed: launch!,
 												delay: curved ? 0 : motion.delayMs / 1000,
 												arrivalResource: stage.arrivalResource ?? null,
+												// A straight shot at one other actor follows it
+												// (stepHomingProjectile); arcs, curves, chains and
+												// radial volleys keep their captured paths, and so does
+												// a shot at the local player, whose live pose is the
+												// predicted one, not its entity row.
+												homing: !curved && !arc && !radial && !chain && !targetLocal &&
+														targetGid !== gameplay?.localGid &&
+														stage.action === "AT_MOV_1TAR" ?
+													{
+														state: {
+															position: source,
+															previous: trigger.at + motion.delayMs / 1000
+														},
+														target: targetGid,
+														bone: stage.targetBone ?? null,
+														offset: targetOffset,
+														trigger
+													} :
+													undefined,
 												soundEnd: stage.soundEnd ?? null,
 												soundBegin: curved && motion.delayMs !== 0 ? null : stage.sound ?? null,
 												moving: route ?
@@ -1598,8 +1630,15 @@ export function createCharacterEffects(
 											pose: source,
 											clip: traded?.actor.clip ?? model.clips[0] ?? "",
 											time: trigger.at,
+											// A flight's object lives until its arrival removes it
+											// (8D8AD0). Inferred: its effect runs as long, so a
+											// one-shot .efp shorter than the flight (Cold Wave
+											// Arrest's 10-frame shot, about 0.33 s against 0.5 to
+											// 0.8 s of flight) loops instead of vanishing mid-air
+											// before the impact.
 											loop: traded?.actor.loop ??
-												(stage.action === "AT_LOOP" || !!flight && model.clipLoop),
+												(stage.action === "AT_LOOP" ||
+													!!flight && (model.clipLoop || stage.resource.endsWith( ".efp" ))),
 											scale: traded?.actor.scale ??
 												(stage.resource.endsWith( ".efp" ) ?
 													stageEffectScale(
@@ -2009,7 +2048,7 @@ export function createCharacterEffects(
 															(dungeon ?
 																0 :
 																((hawk.region >>> 8) - (target.regionId >>> 8)) * 1920),
-														length = Math.hypot( dx, dy, dz ),
+														length = hypot3( dx, dy, dz ),
 														k = length ? -az / length : 0;
 													const blood = presentation.get( target.gid )?.bloodEffects
 														?.[bloodEnabled ? 0 : 1];
@@ -2066,9 +2105,17 @@ export function createCharacterEffects(
 												cursor % definition.durationMs :
 												Math.min( cursor, definition.durationMs )
 										};}
+									// A target the presenter cannot place (dead and
+									// faded, culled, or unloaded while its entity
+									// lingers) is no target: the hawk returns to its
+									// holder (stepHawk's rule for a lost target).
+									// Skipping the frame instead froze the hawk unseen
+									// for as long as that entity stayed listed.
 									const holder = byGid.get( row.effect.gid )!,
-										target = byGid.get( hawk.state.target ),
-										targetActor = target ? presentation.get( target.gid ) : undefined;
+										listed = byGid.get( hawk.state.target ),
+										placed = listed ? presentation.get( listed.gid ) : undefined,
+										target = placed?.heightFactor !== undefined ? listed : undefined,
+										targetActor = target ? placed : undefined;
 									const region = owner.pose.regionId;
 									if ( !projectileSpace( hawk.region, region ) ) continue;
 									const point = ( p: { regionId: number; x: number; y: number; z: number; } ) => ({
@@ -2081,7 +2128,6 @@ export function createCharacterEffects(
 										position: point( { ...hawk.state.position, regionId: hawk.region } )
 									};
 									hawk.region = region;
-									if ( target && targetActor?.heightFactor === undefined ) continue;
 									const mechanical = holder.gid === gameplay?.localGid && gameplay.pose ?
 										gameplay.pose :
 										holder;
@@ -2253,6 +2299,30 @@ export function createCharacterEffects(
 								active.delete( gid );
 								continue;
 							}
+						} else if ( flight.homing && elapsed >= flight.delay ) {
+							// Re-aim at the target's live socket; a target that left
+							// keeps the last one.
+							const homing = flight.homing, entity = byGid.get( homing.target );
+							const live = !entity ?
+								undefined :
+								homing.bone ?
+								socket?.( homing.target, homing.bone, [
+									homing.offset[0],
+									homing.offset[1],
+									-homing.offset[2]
+								], { ...homing.trigger, at: now, sampleCurrent: true } ) :
+								{
+									regionId: entity.regionId,
+									x: entity.x + homing.offset[0],
+									y: entity.y + homing.offset[1],
+									z: entity.z + homing.offset[2],
+									yaw: flight.destination.yaw
+								};
+							if ( live && projectileSpace( homing.state.position.regionId, live.regionId ) ) {
+								flight.destination = live;
+							}
+							const step = stepHomingProjectile( homing.state, flight.destination, flight.speed, now );
+							sample = step.phase === "arrived" ? { ...step, at: step.at - visual.actor.time } : step;
 						} else {sample = sampleProjectile(
 								visual.actor.pose,
 								flight.destination,
@@ -2506,9 +2576,13 @@ export function createCharacterEffects(
 						elapsed = now - visualStarts.get( gid )!;
 					}
 					const life = visual.life || duration( visual.actor.model, visual.actor.clip );
+					// 8D8580: a mover that cannot arrive (speed 0 short of its end) keeps
+					// ticking its visual; once that visual ends nothing of it is drawn.
+					const stationary = !!visual.flight && !visual.flight.moving && !visual.flight.curve &&
+						visual.flight.speed === 0;
 					if (
-						!visual.flight && !visual.landed && !command?.loop && command?.released === undefined &&
-						(!life || elapsed >= life)
+						(!visual.flight || stationary) && !visual.landed && !command?.loop &&
+						command?.released === undefined && (!life || elapsed >= life)
 					) {
 						active.delete( gid );
 						continue;

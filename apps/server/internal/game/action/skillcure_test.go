@@ -210,7 +210,7 @@ func TestShippedInnocentAreaCuresCasterAndParty(t *testing.T) {
 			world.Spawn = &spawn
 			m.World = &world
 		}
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &m)
+		fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &m)
 		seedPlayerStatus(rt, &m, abnormal.Burn, 300000, now, monster.Gid)
 		return &m
 	}
@@ -373,7 +373,7 @@ func TestResuTagAdmitsDeadPartyMember(t *testing.T) {
 	mate.Name = "dead"
 	mate.CurrentHP = testInt64(0)
 	deps := rt.deps.(*enterworld.Deps)
-	deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &mate)
+	fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &mate)
 	casterGID := enterworld.ObjectIDForCharacter(caster)
 	mateGID := enterworld.ObjectIDForCharacter(&mate)
 	rt.RewardParties = func(string) []RewardParty {

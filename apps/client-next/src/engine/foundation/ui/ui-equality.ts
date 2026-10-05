@@ -1,13 +1,37 @@
-import type { UiQuad, UiSemantics } from "@/engine/contracts/ui";
+/*
+===========================================================================
 
+ui-equality.ts - value equality of UI commands and semantics
+
+The UI owner republishes only what changed, and renderer admission retains
+equal commands. Both compare the contract field by field here instead of
+serializing whole scenes.
+
+===========================================================================
+*/
+
+import type { UiQuad, UiSemantics } from "@/engine/contracts/ui";
+import { sameTextRun } from "@/engine/foundation/rendering/text-run";
+
+/*
+================
+tuple
+================
+*/
 function tuple( a: readonly number[] | undefined, b: readonly number[] | undefined ): boolean {
 	if ( a === b ) return true;
 	if ( !a || !b || a.length !== b.length ) return false;
 	for ( let i = 0; i < a.length; i++ ) if ( !Object.is( a[i], b[i] ) ) return false;
 	return true;
 }
-// Compare the renderer contract directly. Avoid serializing thousands of glyph
-// quads into a new multi-megabyte string to discover an unchanged HUD.
+/*
+================
+sameUiQuads
+
+Compare the renderer contract directly. Avoid serializing thousands of glyph
+quads into a new multi-megabyte string to discover an unchanged HUD.
+================
+*/
 export function sameUiQuads( a: readonly UiQuad[], b: readonly UiQuad[] ): boolean {
 	if ( a === b ) return true;
 	if ( a.length !== b.length ) return false;
@@ -18,6 +42,11 @@ export function sameUiQuads( a: readonly UiQuad[], b: readonly UiQuad[] ): boole
 	}
 	return true;
 }
+/*
+================
+sameUiQuad
+================
+*/
 export function sameUiQuad( x: UiQuad, y: UiQuad ): boolean {
 	if ( x === y ) return true;
 	if (
@@ -26,7 +55,7 @@ export function sameUiQuad( x: UiQuad, y: UiQuad ): boolean {
 		!Object.is( x.alphaCutoff, y.alphaCutoff ) || x.characterAnchor !== y.characterAnchor ||
 		x.portraitGid !== y.portraitGid ||
 		!tuple( x.rect, y.rect ) || !tuple( x.uv, y.uv ) || !tuple( x.color, y.color ) ||
-		!tuple( x.rightColor, y.rightColor ) || !tuple( x.clip, y.clip )
+		!tuple( x.rightColor, y.rightColor ) || !tuple( x.clip, y.clip ) || !sameTextRun( x.run, y.run )
 	) return false;
 	if (
 		x.mask !== y.mask &&
@@ -43,6 +72,11 @@ export function sameUiQuad( x: UiQuad, y: UiQuad ): boolean {
 	) return false;
 	return true;
 }
+/*
+================
+sameUiSemantics
+================
+*/
 export function sameUiSemantics( a: UiSemantics, b: UiSemantics ): boolean {
 	if ( a === b ) return true;
 	if (

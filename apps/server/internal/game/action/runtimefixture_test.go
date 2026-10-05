@@ -110,6 +110,8 @@ func newTestRuntime(character *enterworld.Character, items enterworld.ItemRefSou
 	rt := NewRuntime(deps, nil)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
 	rt.BerserkRoll = func() (uint32, error) { return 9999, nil }
+	// 99 % 100 + 1 = 100: equipment wears only where a test asks it to.
+	rt.WearRoll = func() (uint32, error) { return 99, nil }
 	rt.Now = clock.Now
 	return rt, clock
 }

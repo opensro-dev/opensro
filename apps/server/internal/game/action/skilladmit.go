@@ -83,6 +83,43 @@ ADMISSION
 ===============================================================================
 */
 
+// cooldownGraceMs is how early a skill press may arrive and still cast: one
+// that reaches the server within this of the skill becoming ready waits in
+// the command queue until it is ready, instead of being refused with 0x3005.
+// A deliberate deviation from retail, which refuses it: the browser client
+// fires queued presses on its estimate of the server's clock (one delivery
+// ahead of the cooldown's end), and the estimate's error must never become a
+// refusal the player sees.
+const cooldownGraceMs = 150
+
+/*
+==================
+skillActionRecoveryApplies
+
+64C1A0 checks the common action-recovery timer only for an unchained skill
+with a cooldown and an authored action (activity 2).
+==================
+*/
+func skillActionRecoveryApplies(skill enterworld.SkillRow) bool {
+	return skill.CoolTimeMs != 0 && skill.ActionKind == 2 && skill.ActionDurationMs > 0 && skill.ChainNext == 0
+}
+
+/*
+==================
+skillReadyAtMs
+
+When c may next cast skill as far as time is concerned: the later of its
+cooldown entry and the action-recovery timer, where each applies.
+==================
+*/
+func skillReadyAtMs(c *enterworld.Character, skill enterworld.SkillRow) int64 {
+	ready := skillCooldownDeadline(c, skill)
+	if skillActionRecoveryApplies(skill) {
+		ready = max(ready, c.SkillActionRecoveryUntilMs)
+	}
+	return ready
+}
+
 /*
 ==================
 skillAdmission
@@ -190,8 +227,7 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 		return 0x3005
 	}
 	if mask&(admitCooldown|admitActionRecovery) == admitCooldown|admitActionRecovery && prepared == nil &&
-		skill.CoolTimeMs != 0 && skill.ActionKind == 2 && skill.ActionDurationMs > 0 && skill.ChainNext == 0 &&
-		now < c.SkillActionRecoveryUntilMs {
+		skillActionRecoveryApplies(skill) && now < c.SkillActionRecoveryUntilMs {
 		return 0x3005
 	}
 

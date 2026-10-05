@@ -31,8 +31,12 @@ BugReportControl
 export interface BugReportControl {
 	/** The server has bug reports enabled. */
 	reportsEnabled(): boolean;
-	/** Opens the report window with `text` prefilled; false when unavailable. */
-	open( text: string ): boolean;
+	/**
+	 * Opens the report window with `text` prefilled. "off": the server has
+	 * reporting switched off. "unavailable": its settings could not be read
+	 * yet (the Agent was restarting); the reporter is asking again.
+	 */
+	open( text: string ): "opened" | "off" | "unavailable";
 	/** The Option window's pending replay checkbox. */
 	replayDraft(): boolean;
 	toggleReplayDraft(): void;

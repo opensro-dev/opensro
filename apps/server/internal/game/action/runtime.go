@@ -44,15 +44,18 @@ barrier.
 ==================
 */
 type Runtime struct {
-	berserkActors       sync.Map // derived expiry index; character store owns state
-	battleActors        sync.Map // battle-state expiry index (battlestate.go)
-	aggressionActors    sync.Map // scheduled counters; character owns aggression entries
-	BerserkRoll         combat.Roll32767
+	berserkActors    sync.Map // derived expiry index; character store owns state
+	battleActors     sync.Map // battle-state expiry index (battlestate.go)
+	aggressionActors sync.Map // scheduled counters; character owns aggression entries
+	BerserkRoll      combat.Roll32767
+	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
+	WearRoll            combat.Roll32767
 	RewardParties       func(division string) []RewardParty
 	NextPartyLootMember func(division, name string) uint32
 	RewardActorPresent  func(division, name string) bool
 	returnGeneration    atomic.Uint64
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
 	criticals           criticalHistory
 	deps                Dependencies
 	Ground              *grounditem.Registry
@@ -72,6 +75,10 @@ type Runtime struct {
 	// partyAuras are open efr-kind-2 contexts (5830B0). The tick owns joins.
 	partyAuras  []partyAura
 	partyAuraMu sync.Mutex
+
+	// healsOverTime are the installed timed heals (skillhealtime.go).
+	healsOverTime  []healOverTime
+	healOverTimeMu sync.Mutex
 
 	// walls are the actors' Force-wall slots (+0xC0C), keyed by wallKey.
 	walls  map[string]*standingWall
@@ -172,6 +179,10 @@ type Runtime struct {
 	// capacity. 0 or 1 is native; the closed-beta growth switch raises it.
 	DropPassRate int
 
+	// GoldRate multiplies every monster gold heap after the native rarity
+	// multipliers. 0 or 1 is native; the closed-beta growth switch raises it.
+	GoldRate int
+
 	// Now abstracts the clock for deterministic tests.
 	Now         func() time.Time
 	departureMu sync.Mutex
@@ -243,6 +254,17 @@ type Runtime struct {
 		sourceGid uint32,
 	) ([]wire.Frame, bool)
 
+	// RefundExperience is the stat authority's door-free refund of EXP lost
+	// at death (a resurrection's share). Unlike UpdateExperience it is not a
+	// gain, so the growth rates never scale it. Nil grants no refund.
+	RefundExperience func(character *enterworld.Character, exp int64) ([]wire.Frame, bool)
+
+	// RecallStatPoints is the stat authority's door-free stat point recall
+	// (progression/statrecall.go): STR and INT back to their automatic values
+	// and the spent points back to the pool. False changes nothing. Nil
+	// refuses the recall scroll.
+	RecallStatPoints func(character *enterworld.Character) ([]wire.Frame, bool)
+
 	// ApplyDeathPenalty is progression' door-free ordinary-death updater. Monster
 	// combat invokes it from inside the fatal-HP character transaction; levels
 	// <= 10 legitimately return no frames under the retail protection gate.
@@ -296,6 +318,12 @@ type Runtime struct {
 	// remain registry-live until event 0x64 launches the staged absorption VFX.
 	pendingMonsterDefeatsMu sync.Mutex
 	pendingMonsterDefeats   []pendingMonsterDefeat
+
+	// monsterFightRecipients holds the private reward frames of kills made
+	// in a Temptation fight (temptation.go) until the action tick delivers
+	// them; the monster leg that commits the kill publishes only to viewers.
+	monsterFightRecipientsMu sync.Mutex
+	monsterFightRecipients   []simulation.DivisionFrames
 
 	// basicAttackIntents is the server-owned continuation behind native
 	// 0x72CD [01 01 01 gid]/[01 03 01 gid]. One intent per character replaces

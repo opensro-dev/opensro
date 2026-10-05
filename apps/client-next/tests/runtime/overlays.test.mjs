@@ -26,7 +26,10 @@ async function load( path, name ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
 const { overheadLayout } = await load( "foundation/ui/overhead-layout.ts", "overhead" );
-const { partyOverlay } = await load( "foundation/ui/party-overlay.ts", "party" );
+const { partyDistanceShade, partyOverlay, partyRosterPose, partyShadeImage } = await load(
+	"foundation/ui/party-overlay.ts",
+	"party"
+);
 const { buffViewerIcons, collectActiveBuffs, partyBuffViewer, rebuildBuffViewer, skillLookup } = await load(
 	"foundation/ui/buff-viewer.ts",
 	"buff-viewer"
@@ -123,6 +126,31 @@ test("party wraps with the native bottom reserve and option-specific row pitch",
 		[ 283, 137 ]
 	] );
 	assert.deepEqual( partyOverlay( state, [], 600, 4, 137, false )[1].position, [ 17, 193 ] );
+});
+test("party portraits shade by the member's squared distance (5BD0A0)", () => {
+	const at = ( regionId, x, z, y = 0 ) => ({ regionId, x, y, z, angle: 0 });
+	const local = at( 0x6a48, 100, 100 );
+	// Inclusive steps at 600, 700, 800, 900 and 1000 units.
+	assert.deepEqual(
+		[ 599, 600, 699, 700, 800, 900, 999, 1000, 5000 ].map( d =>
+			partyDistanceShade( local, at( 0x6a48, 100 + d, 100 ) )
+		),
+		[ 0, 1, 1, 2, 3, 4, 4, 5, 5 ]
+	);
+	// Distance crosses region borders and counts height.
+	assert.equal( partyDistanceShade( local, at( 0x6a49, 100 - 1920 + 650, 100 ) ), 1 );
+	assert.equal( partyDistanceShade( local, at( 0x6a48, 100, 100, 650 ) ), 1 );
+	// A member out of view is measured at its roster record with no height.
+	assert.deepEqual( partyRosterPose( { region: 0x6a48, x: 5, y: 77, z: 6 } ), at( 0x6a48, 5, 6 ) );
+	assert.equal( partyDistanceShade( at( 0x6a48, 0, 0, 650 ), partyRosterPose( { region: 0x6a48, x: 0, z: 0 } ) ), 1 );
+	// 888140: an indoor region adds no sector offset; local coordinates compare.
+	assert.equal( partyDistanceShade( local, at( 0x8001, 100, 100 ) ), 0 );
+	assert.equal( partyDistanceShade( at( 0x8001, 0, 0 ), at( 0x8002, 700, 0 ) ), 2 );
+	assert.deepEqual( [ 0, 1, 5 ].map( partyShadeImage ), [
+		null,
+		"interface/quickparty/qpt_face_faraway_60.png",
+		"interface/quickparty/qpt_face_faraway_100.png"
+	] );
 });
 test("fortress marks cover every status/team and native XOR end arm", () => {
 	const base = {

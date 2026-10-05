@@ -35,6 +35,16 @@ test("preloaded hidden windows never consume GPU descriptors; draw masks do", ()
 		[ "3" ]
 	);
 });
+test("a scene's live textures stay resident with the scene, never without one", () => {
+	const available = new Set( [ "1", "digit" ] ), scene = { quads: [ { texture: "1" } ] };
+	const shown = uiTextureResidency( scene, available, new Set(), new Set(), [ "digit", "missing" ] );
+	assert.deepEqual( [ ...shown.needed ].sort(), [ "1", "digit" ] );
+	assert.deepEqual( uiTextureResidency( null, available, shown.needed, new Set(), [ "digit" ] ).release.sort(), [
+		"1",
+		"digit"
+	] );
+	assert.deepEqual( uiTextureResidency( scene, available, shown.needed, new Set() ).release, [ "digit" ] );
+});
 test("repeated window transitions, resource replacement and device loss retain exact GPU demand", () => {
 	fc.assert(
 		fc.property(

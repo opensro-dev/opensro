@@ -41,7 +41,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	if _, _, err := combat.PlayerStats(snapshot, rt.statCatalogs()); err != nil {
 		return OpResult{DiagnosticRefusal: "instant-effect-loadout-invalid"}
 	}
-	if _, code := rt.offensiveCost(division, snapshot, skill, now); code != 0 {
+	if _, code := rt.instantSelfEffectCost(division, snapshot, skill, now); code != 0 {
 		return offensiveRefusal(code)
 	}
 	rider, ok := rt.skillDurationRider(division, snapshot, skill)
@@ -60,12 +60,12 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 		if !enterworld.CharacterAlive(character) || !enterworld.SkillLearned(character, skill.ID) {
 			return false
 		}
-		cost, code := rt.offensiveCost(division, character, skill, now)
+		cost, code := rt.instantSelfEffectCost(division, character, skill, now)
 		refusal = code
 		if code != 0 {
 			return false
 		}
-		rt.startSkillCast(division, character, now)
+		rt.startSkillCast(division, character, skill, now)
 		if !rt.requestSelfEffectReplacement(division, character, skill) {
 			refusal = 0x300c
 			return false
@@ -93,6 +93,41 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	frames := append([]wire.Frame{open, vitals, release, close}, effects...)
 	broadcast := append([]wire.Frame{open, release, close}, effects...)
 	return OpResult{Frames: frames, Broadcast: broadcast, ActorPrivate: []wire.Frame{vitals}}
+}
+
+/*
+================
+instantSelfEffectCost
+
+The 58D8F0 phases an instant self effect answers itself, in native bit
+order: cooldown (0x01 -> 0x3005), the weapon (0x04 -> 58D480, e.g. 0x300D
+for Scud's dagger-only 13/255 without a dagger) and then MP (0x10). The
+dispatch in targetinteract.go reaches this owner before the command
+admission, so without this phase a weapon-restricted row would never be
+checked. Only the equipment phase is added, not the whole execution mask:
+its action-recovery phase (0x80) would refuse the open attack 4AD870 lets
+an instant effect run beside.
+
+The phase is Skill_ValidateEquipmentRequirements (58D480) whole: a row
+with reqi pairs walks them (+0x3A0), any other row its weapon bytes. Native
+runs it at the press for every skill command but an onff pulse
+(CGCharAutoCommandActor_ProcessCommand 0x4ACED4, mask 0x37), so the Rogue's
+poison coatings (reqi 6 12 / 6 13) are refused 0x300D without a crossbow or
+a dagger, and Scud (13/255) without a dagger. The Chinese imbue and
+movement rows and the SKILL_MALL_PET_SKILL rows are 0xFF/0xFF without reqi
+and pass it unchanged.
+================
+*/
+func (rt *Runtime) instantSelfEffectCost(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64) (int64, uint16) {
+	cost, code := rt.offensiveCost(division, c, skill, now)
+	if code == 0x3003 || code == 0x3005 {
+		// An unparsed row or a cooling skill answers before the weapon.
+		return cost, code
+	}
+	if refusal := skillEquipmentRefusal(c, rt.statCatalogs().Items, skill); refusal != 0 {
+		return 0, refusal
+	}
+	return cost, code
 }
 
 /*
@@ -133,6 +168,10 @@ func (rt *Runtime) resolvePlayerImpact(division, name string, skill enterworld.S
 	// result with no critical, block or imbue roll (skillstatuscast.go).
 	if skill.StatusCast {
 		return combat.Result{ResultFlags: 1}, nil
+	}
+	// A pdmg hit is its authored amount (skilltuning.go).
+	if skill.FixedDamage.Present {
+		return fixedDamageResult(skill.FixedDamage), nil
 	}
 	actor := criticalActor{division: division, character: name}
 	lanes := skill.Attack.Flags & 0xc

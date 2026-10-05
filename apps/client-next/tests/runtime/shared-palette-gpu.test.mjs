@@ -69,12 +69,12 @@ function fixture() {
 		e => {
 			throw e;
 		},
-		() =>
-			Array( 18 ).fill( {
-				getBindGroupLayout() {
-					return {};
-				}
-			} ),
+		// One geometry pipeline per state.
+		() => ({
+			getBindGroupLayout() {
+				return {};
+			}
+		}),
 		() => {},
 		{},
 		{},

@@ -209,7 +209,8 @@ func TestCompanionLeaseRenewalPreservesRecordAndRemainingTime(t *testing.T) {
 			if result.Frames[0].Payload[0] != 1 || pet.RentalExpiresAtUnix != base+86400 || pet.Name != "Retained" || len(pet.Container.Rows) != 1 || pet.Summoned == expired || pet.StateFlags&1 == 0 {
 				t.Fatalf("incorrect renewal: %+v %+v", pet, result)
 			}
-			if len(result.Frames) < 2 || result.Frames[1].Opcode != 0x3645 || len(result.Frames[1].Payload) != 7 || binary.LittleEndian.Uint32(result.Frames[1].Payload[3:]) != uint32(pet.RentalRemainingSeconds) {
+			// Frames[1] is the item's visual (publishItemUseVisual).
+			if len(result.Frames) < 3 || result.Frames[2].Opcode != 0x3645 || len(result.Frames[2].Payload) != 7 || binary.LittleEndian.Uint32(result.Frames[2].Payload[3:]) != uint32(pet.RentalRemainingSeconds) {
 				t.Fatal("renewal omitted native state/time delta", result)
 			}
 			assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(4).U8(25).U16(ref.TypeFlags()).U8(23).Payload(), companionLeaseWrongTarget)
@@ -324,7 +325,8 @@ func TestLiveCompanionRevivalPublishesAliveAfterVitals(t *testing.T) {
 	refs.staticItemSource[scroll.Codename] = scroll
 	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 26, RefObjID: 999, Codename: scroll.Codename, TypeFlags: scroll.TypeFlags(), StackCount: 1})
 	result := rt.HandleItemUse(testDivision, c, wire.NewWriter(4).U8(26).U16(scroll.TypeFlags()).U8(23).Payload())
-	if pet.CurrentHP != 100 || len(result.Broadcast) != 2 || result.Broadcast[0].Opcode != simulation.OpVitalsUpdate || result.Broadcast[1].Opcode != wire.OpObjectStateRefresh {
+	// The broadcast ends with the item's reference and visual (publishItemUseVisual).
+	if pet.CurrentHP != 100 || len(result.Broadcast) != 4 || result.Broadcast[0].Opcode != simulation.OpVitalsUpdate || result.Broadcast[1].Opcode != wire.OpObjectStateRefresh || result.Broadcast[3].Opcode != wire.OpItemUseVisual {
 		t.Fatal("revival omitted world life/vitals", result)
 	}
 	life := result.Broadcast[1].Payload

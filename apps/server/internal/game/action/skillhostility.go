@@ -23,10 +23,13 @@ import (
 commitSkillHostility
 
 Each impact contributes to the cumulative aggression (5903EC), while damage
-remains separate. Fatal results no longer own a live opponent ledger.
+remains separate. Fatal results no longer own a live opponent ledger, but
+their damage still feeds the attacker's Mana Switch links (linkedmana.go),
+so the area owners call this for a killed victim too.
 ================
 */
 func (rt *Runtime) commitSkillHostility(division string, attacker, target uint32, skill enterworld.SkillRow, impacts []simulation.MonsterDamageResult, now int64) {
+	rt.commitLinkedMana(division, attacker, impacts, now)
 	if len(impacts) == 0 || impacts[len(impacts)-1].Fatal {
 		return
 	}
@@ -35,7 +38,7 @@ func (rt *Runtime) commitSkillHostility(division string, attacker, target uint32
 		damage += impact.Applied
 		aggression = combat.AccumulateThreat(aggression, impact.Applied, skill.Threat)
 	}
-	rt.commitAggression(division, target, simulation.HostilityEvent{Attacker: attacker, Damage: damage, Aggression: aggression}, now)
+	rt.commitAggression(division, target, simulation.HostilityEvent{Attacker: attacker, Damage: damage, Aggression: int32(aggression)}, now)
 }
 
 /*
@@ -46,7 +49,7 @@ Both damaging hits and taunts share link transfer and live target resolution.
 ================
 */
 func (rt *Runtime) commitAggression(division string, target uint32, event simulation.HostilityEvent, now int64) {
-	attacker, damage, aggression := event.Attacker, event.Damage, event.Aggression
+	attacker, damage, aggression := event.Attacker, event.Damage, uint32(event.Aggression)
 	if damage == 0 && aggression == 0 {
 		return
 	}
@@ -58,11 +61,11 @@ func (rt *Runtime) commitAggression(division string, target uint32, event simula
 			if rt.findCharacterByGid(division, link.SourceGID) != nil {
 				var transferred uint32
 				aggression, transferred = combat.SplitLinkedThreat(aggression, link.ThreatPercent)
-				events = append(events, simulation.HostilityEvent{Attacker: link.SourceGID, Aggression: transferred})
+				events = append(events, simulation.HostilityEvent{Attacker: link.SourceGID, Aggression: int32(transferred)})
 			}
 		}
 	}
-	events = append(events, simulation.HostilityEvent{Attacker: attacker, Damage: damage, Aggression: aggression})
+	events = append(events, simulation.HostilityEvent{Attacker: attacker, Damage: damage, Aggression: int32(aggression)})
 	rt.recordSkillHostility(division, target, events, now)
 }
 
@@ -92,6 +95,10 @@ func (rt *Runtime) recordSkillHostility(division string, target uint32, events [
 	for _, gid := range gids {
 		character := rt.findCharacterByGid(division, gid)
 		if character == nil {
+			// A monster in a Temptation fight (temptation.go).
+			if candidate, ok := rt.temptedOpponentCandidate(division, instance, gid, from, now); ok {
+				candidates[gid] = candidate
+			}
 			continue
 		}
 		snapshot := rt.characterSnapshot(division, character)

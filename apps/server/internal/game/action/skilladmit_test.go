@@ -55,7 +55,9 @@ func TestShippedDanceRefusedUntilSelector(t *testing.T) {
 		mp := int64(50000)
 		c.CurrentMP = &mp
 		if dancing {
-			if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: guard.ID, SkillGroup: guard.Group}) {
+			// Another Bard's Guard Tambour: a child instance naming its
+			// caster's instance (reqc 32 needs another Bard's music).
+			if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: guard.ID, SkillGroup: guard.Group, AuraParentToken: 1}) {
 				t.Fatal("guard effect refused")
 			}
 		}
@@ -71,7 +73,7 @@ func TestShippedDanceRefusedUntilSelector(t *testing.T) {
 			spawn.X = &x
 			world.Spawn = &spawn
 			m.World = &world
-			deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &m)
+			fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &m)
 			return &m
 		}
 		mate := member(4, "mate", 800)
@@ -185,7 +187,7 @@ func TestShippedGuardAuraAppliesOdar(t *testing.T) {
 		spawn.X = &x
 		world.Spawn = &spawn
 		m.World = &world
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &m)
+		fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &m)
 		return &m
 	}
 	mate := member(4, "mate", 800)
@@ -261,7 +263,7 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 		spawn := *world.Spawn
 		world.Spawn = &spawn
 		m.World = &world
-		deps.Characters.(enterworld.StaticCharacterSource)[testDivision] = append(deps.Characters.(enterworld.StaticCharacterSource)[testDivision], &m)
+		fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &m)
 		return &m
 	}
 	mate := member(4, "mate")
@@ -306,6 +308,38 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 	if *mate.CurrentHP != min(maxHP, mateBefore+gain) || *c.CurrentHP != casterBefore {
 		t.Fatalf("lowest ratio mate %d want %d, caster %d", *mate.CurrentHP, min(maxHP, mateBefore+gain), *c.CurrentHP)
 	}
+
+	// 59FF80 retires every unprotected row at death, a party aura included:
+	// the dead mate loses its child, the dead caster its aura and the set.
+	auraOn := func(name string) bool {
+		for _, effect := range rt.effects.Snapshot(testDivision, name) {
+			if effect.SkillID == skill.ID && !effect.StopRequested {
+				return true
+			}
+		}
+		return false
+	}
+	if !auraOn(mate.Name) || !auraOn(c.Name) {
+		t.Fatal("fixture: the aura is not on both")
+	}
+	rt.deps.Update(mate, "test-death", func() bool {
+		mate.CurrentHP = testInt64(0)
+		rt.settlePlayerDeathInDoor(testDivision, mate, clock.NowMs())
+		return true
+	})
+	if auraOn(mate.Name) {
+		t.Fatal("the dead mate kept Recovery Division")
+	}
+	rt.deps.Update(c, "test-death", func() bool {
+		c.CurrentHP = testInt64(0)
+		rt.settlePlayerDeathInDoor(testDivision, c, clock.NowMs())
+		return true
+	})
+	clock.Advance(time.Duration(skill.Abnormal.Pulse) * time.Millisecond)
+	rt.TickHook()(clock.NowMs())
+	if auraOn(c.Name) {
+		t.Fatal("the dead caster kept Recovery Division")
+	}
 }
 
 /*
@@ -335,7 +369,9 @@ func TestDancePulseCutByBDMD(t *testing.T) {
 	c.MissionInventory[0].TypeFlags = weapon.TypeFlags()
 	mp := int64(200)
 	c.CurrentMP = &mp
-	if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: guard.ID, SkillGroup: guard.Group}) {
+	// Another Bard's Guard Tambour: a child instance naming its caster's
+	// instance (reqc 32 needs another Bard's music).
+	if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: guard.ID, SkillGroup: guard.Group, AuraParentToken: 1}) {
 		t.Fatal("guard effect refused")
 	}
 	r := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target.Gid}.Encode())

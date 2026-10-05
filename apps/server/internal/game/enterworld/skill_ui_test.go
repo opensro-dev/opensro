@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+skill_ui_test.go - the skill rows' UI projection the client reads
+
+The projection (SkillUiRow) must carry the training, targeting and buff
+cancellation authority of the same table the server admits casts with.
+
+===========================================================================
+*/
+
 package enterworld
 
 import (
@@ -5,9 +16,15 @@ import (
 	"testing"
 )
 
-// These two optional flags default to false in attachedEffectReferences.
-// Omitting false values leaves room for the required linked-cast metadata
-// without raising the full-table reference budget or dropping skill rows.
+/*
+================
+TestSkillReferenceOptionalFlagsPreserveWireMeaning
+
+These two optional flags default to false in attachedEffectReferences.
+Omitting false values leaves room for the required linked-cast metadata
+without raising the full-table reference budget or dropping skill rows.
+================
+*/
 func TestSkillReferenceOptionalFlagsPreserveWireMeaning(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		row := SpawnSkillRow{ID: 12, LinkedSkillID: 6, HuntingPoint: enabled, StealthDuration: enabled}
@@ -40,6 +57,11 @@ func TestSkillReferenceOptionalFlagsPreserveWireMeaning(t *testing.T) {
 	}
 }
 
+/*
+================
+TestSkillUiProjectionUsesTrainingAuthority
+================
+*/
 func TestSkillUiProjectionUsesTrainingAuthority(t *testing.T) {
 	source := sharedShippedSkills(t)
 	rows := source.SpawnSkillRows()
@@ -50,7 +72,7 @@ func TestSkillUiProjectionUsesTrainingAuthority(t *testing.T) {
 		}
 		count++
 		authority, ok := source.SkillByID(row.ID)
-		if !ok || row.UI.SPCost != authority.SPCost || row.UI.Masteries != authority.Masteries || row.UI.Prerequisites != authority.Prerequisites || row.UI.Trainable != (!authority.ChainSub && authority.SPCost > 0) || row.UI.TargetRequired != authority.TargetRequired || row.UI.CooldownMs != authority.CoolTimeMs {
+		if !ok || row.UI.SPCost != authority.SPCost || row.UI.Masteries != authority.Masteries || row.UI.Prerequisites != authority.Prerequisites || row.UI.Trainable != (!authority.ChainSub && authority.SPCost > 0) || row.UI.TargetRequired != authority.TargetRequired || row.UI.TargetSelf != (authority.TargetRequired && authority.Targets.Self) || row.UI.CooldownMs != authority.CoolTimeMs {
 			t.Fatalf("divergent skill UI %d", row.ID)
 		}
 	}
@@ -62,7 +84,8 @@ func TestSkillUiProjectionUsesTrainingAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("%d skills, %d UI rows, %d bytes", len(rows), count, len(encoded))
-	if len(encoded) > 12<<20 {
+	// 12.6 MB once the player skills' MP costs joined (29 KB, 3181 rows).
+	if len(encoded) > 13<<20 {
 		t.Fatal("skill reference budget exceeded")
 	}
 	var wire []struct {
@@ -87,6 +110,11 @@ func TestSkillUiProjectionUsesTrainingAuthority(t *testing.T) {
 	t.Logf("spawn-only references: %d bytes", len(bare))
 }
 
+/*
+================
+TestBuffCancellationProjectionUsesNativeMarkers
+================
+*/
 func TestBuffCancellationProjectionUsesNativeMarkers(t *testing.T) {
 	source := sharedShippedSkills(t)
 	counts := map[string]int{}
@@ -118,5 +146,40 @@ func TestBuffCancellationProjectionUsesNativeMarkers(t *testing.T) {
 	fields[71] = "0"
 	if encodedTailContainsTag(fields, 0x63627566) {
 		t.Fatal("duration argument treated as cbuf")
+	}
+}
+
+/*
+================
+TestSkillUiProjectionMarksSelfTargets
+
+Mana Cycle and Discord Wave require a target that may be their caster; the
+client reads targetSelf to aim them at itself when nothing is selected. An
+enemy-only targeted row (Smashing Series) carries no such mark.
+================
+*/
+func TestSkillUiProjectionMarksSelfTargets(t *testing.T) {
+	source := sharedShippedSkills(t)
+	want := map[string]bool{
+		"SKILL_EU_BARD_RECOVERA_MPHEAL_A_01": true,
+		"SKILL_EU_BARD_FORGETA_AGGRO_A_11":   true,
+		"SKILL_CH_SWORD_SMASH_A_01":          false,
+	}
+	seen := map[string]bool{}
+	for _, ref := range source.SpawnSkillRows() {
+		row, ok := source.SkillByID(ref.ID)
+		self, listed := want[row.Codename]
+		if !ok || !listed || ref.UI == nil {
+			continue
+		}
+		seen[row.Codename] = true
+		if !ref.UI.TargetRequired || ref.UI.TargetSelf != self {
+			t.Errorf("%s: targetRequired %v targetSelf %v, want true and %v", row.Codename, ref.UI.TargetRequired, ref.UI.TargetSelf, self)
+		}
+	}
+	for code := range want {
+		if !seen[code] {
+			t.Errorf("%s has no UI row", code)
+		}
 	}
 }

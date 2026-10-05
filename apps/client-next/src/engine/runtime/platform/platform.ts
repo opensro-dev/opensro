@@ -55,6 +55,34 @@ export function createPlatform(
 	onWorldHover: ( point: readonly [number, number] | null ) => void = () => {}
 ): Platform {
 	const lifetime = new AbortController();
+	// The canvas CSS box, kept current by a ResizeObserver. Reading
+	// clientWidth every frame forces a synchronous layout whenever the UI
+	// touched the DOM that frame (a trace showed it among the top costs).
+	const canvasBox = { width: canvas.clientWidth, height: canvas.clientHeight };
+	const canvasObserver = typeof ResizeObserver === "undefined" ?
+		null :
+		new ResizeObserver( refreshCanvasBox );
+	canvasObserver?.observe( canvas );
+	/*
+	================
+	refreshCanvasBox
+	================
+	*/
+	function refreshCanvasBox(): void {
+		canvasBox.width = canvas.clientWidth;
+		canvasBox.height = canvas.clientHeight;
+	}
+	/*
+	================
+	canvasSize
+
+	The canvas CSS size; read live only where no ResizeObserver exists.
+	================
+	*/
+	function canvasSize(): { readonly width: number; readonly height: number; } {
+		if ( !canvasObserver ) refreshCanvasBox();
+		return canvasBox;
+	}
 	const blockKey = "sro:v1150:chatting-blocks:1";
 	let localBlocks: readonly string[] = [];
 	try {
@@ -119,26 +147,26 @@ export function createPlatform(
 	}
 	onUi( { kind: "video-preferences", value: video } );
 	/*
-================
-displayScale
+	================
+	displayScale
 
-CSS pixels per UI pixel. One, as in native window mode, unless a chosen
-screen size is larger than the page: then the game area shrinks to fit.
-================
+	CSS pixels per UI pixel. One, as in native window mode, unless a chosen
+	screen size is larger than the page: then the game area shrinks to fit.
+	================
 	*/
 	function displayScale(): number {
-		const size = video.displaySize, css = canvas.clientWidth;
+		const size = video.displaySize, css = canvasSize().width;
 		return size && css > 0 ? css / size[0] : 1;
 	}
 	/*
-================
-layoutCanvas
+	================
+	layoutCanvas
 
-A chosen screen size is the game area itself, centred on the full-screen
-page with black around it, not a stretched low-resolution image: the
-interface keeps its native pixel size and stays sharp. Without one the
-canvas fills the page.
-================
+	A chosen screen size is the game area itself, centred on the full-screen
+	page with black around it, not a stretched low-resolution image: the
+	interface keeps its native pixel size and stays sharp. Without one the
+	canvas fills the page.
+	================
 	*/
 	function layoutCanvas() {
 		const size = video.displaySize, style = canvas.style;
@@ -150,6 +178,7 @@ canvas fills the page.
 				style.height =
 					"";
 			document.body.style.background = "";
+			refreshCanvasBox();
 			return;
 		}
 		const scale = Math.min( 1, innerWidth / size[0], innerHeight / size[1] ),
@@ -161,24 +190,26 @@ canvas fills the page.
 		style.width = width + "px";
 		style.height = height + "px";
 		document.body.style.background = "#000";
+		// A chosen size takes effect this frame, not after the observer reports.
+		refreshCanvasBox();
 	}
 	layoutCanvas();
 	addEventListener( "resize", layoutCanvas, { signal: lifetime.signal } );
 	/*
-================
-uiPoint
+	================
+	uiPoint
 
-A pointer position in UI pixels.
-================
+	A pointer position in UI pixels.
+	================
 	*/
 	function uiPoint( event: { clientX: number; clientY: number; } ): [number, number] {
 		const r = canvas.getBoundingClientRect(), scale = displayScale();
 		return [ (event.clientX - r.left) / scale, (event.clientY - r.top) / scale ];
 	}
 	/*
-================
-publishPreferences
-================
+	================
+	publishPreferences
+	================
 	*/
 	function publishPreferences( next: GameOptions ) {
 		localStorage.setItem( preferenceKey, JSON.stringify( next ) );
@@ -223,12 +254,12 @@ publishPreferences
 	let assetProgress: AssetProgress | null = null, bytesSeen = -1, bytesGrewAt = 0, detailAt = 0;
 	let loadingState = { active: false, error: null as string | null, step: "Starting Silkroad Online" };
 	/*
-================
-refreshLoadingDetail
+	================
+	refreshLoadingDetail
 
-Asset work advances independently of retained UI snapshots. Refresh the
-visible status from both owners so an unchanged screen cannot freeze it.
-================
+	Asset work advances independently of retained UI snapshots. Refresh the
+	visible status from both owners so an unchanged screen cannot freeze it.
+	================
 	*/
 	function refreshLoadingDetail( now: number, force = false ) {
 		if ( !loadingDetail || (!loadingState.active && !loadingState.error) ) return;
@@ -248,9 +279,9 @@ visible status from both owners so an unchanged screen cannot freeze it.
 		)
 	);
 	/*
-================
-transferText
-================
+	================
+	transferText
+	================
 	*/
 	function transferText( key: string, text: string ) {
 		const node = transferFields.get( key );
@@ -418,9 +449,9 @@ transferText
 	return {
 		displayScale,
 		/*
-================
-saveVideoOptions
-================
+		================
+		saveVideoOptions
+		================
 		*/
 		saveVideoOptions( value: VideoOptions ) {
 			const next = videoOptions( value );
@@ -430,9 +461,9 @@ saveVideoOptions
 			onUi( { kind: "video-preferences", value: next } );
 		},
 		/*
-================
-saveQuickslotOptions
-================
+		================
+		saveQuickslotOptions
+		================
 		*/
 		saveQuickslotOptions( value: ExtendedQuickslotOptions ) {
 			const next = extendedQuickslotOptions( value );
@@ -440,9 +471,9 @@ saveQuickslotOptions
 			onUi( { kind: "quickslot-preferences", value: next } );
 		},
 		/*
-================
-saveInputOptions
-================
+		================
+		saveInputOptions
+		================
 		*/
 		saveInputOptions( value: InputOptions ) {
 			const next = inputOptions( value );
@@ -451,9 +482,9 @@ saveInputOptions
 			onUi( { kind: "input-preferences", value: next } );
 		},
 		/*
-================
-saveSightMode
-================
+		================
+		saveSightMode
+		================
 		*/
 		saveSightMode( value: SightMode ) {
 			const next = sightMode( value );
@@ -461,9 +492,9 @@ saveSightMode
 			onUi( { kind: "camera-preferences", value: next } );
 		},
 		/*
-================
-saveAudioOptions
-================
+		================
+		saveAudioOptions
+		================
 		*/
 		saveAudioOptions( value: AudioOptions ) {
 			const next = audioOptions( value );
@@ -471,9 +502,9 @@ saveAudioOptions
 			onUi( { kind: "audio-preferences", value: next } );
 		},
 		/*
-================
-saveChatBlocks
-================
+		================
+		saveChatBlocks
+		================
 		*/
 		saveChatBlocks( value: readonly string[] ) {
 			const next = chatBlocks( value );
@@ -481,9 +512,9 @@ saveChatBlocks
 			onUi( { kind: "chat-blocks", value: next } );
 		},
 		/*
-================
-saveGameOptions
-================
+		================
+		saveGameOptions
+		================
 		*/
 		saveGameOptions( value: GameOptions ) {
 			const next = gameOptions( value ), change = next.windowMode !== preferences.windowMode;
@@ -513,9 +544,9 @@ saveGameOptions
 		canvas,
 		presentWorldCursor: cursor.world,
 		/*
-================
-presentTelemetry
-================
+		================
+		presentTelemetry
+		================
 		*/
 		presentTelemetry( sample ) {
 			if ( !fpsReadout || fpsReadout.hidden ) return;
@@ -527,24 +558,26 @@ groups ${sample.visibleGroups}`;
 			if ( fpsReadout.textContent !== text ) fpsReadout.textContent = text;
 		},
 		/*
-================
-presentUi
-================
+		================
+		presentUi
+		================
 		*/
 		presentUi( state ) {
 			bridge.present( state );
 			if ( fpsChip ) {
 				const scale = displayScale(),
-					right = state.hudCorner ? Math.max( 4, canvas.clientWidth - state.hudCorner[0] * scale + 6 ) : 8,
+					right = state.hudCorner ? Math.max( 4, canvasSize().width - state.hudCorner[0] * scale + 6 ) : 8,
 					top = state.hudCorner ? Math.max( 4, state.hudCorner[1] * scale ) : 8;
-				fpsChip.style.right = right + "px";
-				fpsChip.style.top = top + "px";
+				// Write only changes: a style write invalidates layout every publication.
+				if ( fpsChip.style.right !== right + "px" ) fpsChip.style.right = right + "px";
+				if ( fpsChip.style.top !== top + "px" ) fpsChip.style.top = top + "px";
 			}
 			if ( loading ) {
 				const active = String( !!(state.loading || state.loadingVisible) ),
 					error = String( !!state.loadingError ),
 					hidden = String( !(state.loading || state.loadingVisible) );
-				loading.dataset.native = String( !state.loading && !!state.loadingVisible );
+				const native = String( !state.loading && !!state.loadingVisible );
+				if ( loading.dataset.native !== native ) loading.dataset.native = native;
 				if ( loading.dataset.active !== active ) loading.dataset.active = active;
 				if ( loading.dataset.error !== error ) loading.dataset.error = error;
 				if ( loading.getAttribute( "aria-hidden" ) !== hidden ) loading.setAttribute( "aria-hidden", hidden );
@@ -567,9 +600,9 @@ presentUi
 			refreshLoadingDetail( performance.now(), true );
 		},
 		/*
-================
-presentLoading
-================
+		================
+		presentLoading
+		================
 		*/
 		presentLoading( state ) {
 			const progress = state.progress, now = performance.now();
@@ -614,22 +647,24 @@ presentLoading
 					"Your character stays here until the server is ready"
 			);
 		},
+		canvasSize,
 		/*
-================
-readViewport
-================
+		================
+		readViewport
+		================
 		*/
 		readViewport() {
 			// Always the device pixels the canvas covers: a chosen screen size
 			// changes the canvas's CSS box (layoutCanvas), never its sharpness.
-			viewport.width = Math.max( 1, Math.round( canvas.clientWidth * devicePixelRatio ) );
-			viewport.height = Math.max( 1, Math.round( canvas.clientHeight * devicePixelRatio ) );
+			const box = canvasSize();
+			viewport.width = Math.max( 1, Math.round( box.width * devicePixelRatio ) );
+			viewport.height = Math.max( 1, Math.round( box.height * devicePixelRatio ) );
 			return viewport;
 		},
 		/*
-================
-report
-================
+		================
+		report
+		================
 		*/
 		report( text, error ) {
 			if ( status.textContent !== text ) status.textContent = text;
@@ -645,9 +680,9 @@ report
 			}
 		},
 		/*
-================
-runningEntry
-================
+		================
+		runningEntry
+		================
 		*/
 		runningEntry() {
 			// Only a release build loads a content-hashed entry; a development
@@ -657,9 +692,9 @@ runningEntry
 			return src ? new URL( src, location.origin ).pathname : null;
 		},
 		/*
-================
-visibilityReturned
-================
+		================
+		visibilityReturned
+		================
 		*/
 		visibilityReturned() {
 			const returned = visibleAgain;
@@ -667,21 +702,24 @@ visibilityReturned
 			return returned;
 		},
 		/*
-================
-presentUpdate
-================
+		================
+		presentUpdate
+		================
 		*/
 		presentUpdate( newer ) {
 			// The refresh is the player's choice: reloading on our own would
 			// drop a live session.
-			if ( updateNotice ) updateNotice.hidden = !newer;
+			// Called every frame: write only a change. Assigning hidden, even to its
+			// current value, invalidates style (1.8 ms a frame in a trace).
+			if ( updateNotice && updateNotice.hidden === newer ) updateNotice.hidden = !newer;
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
+			canvasObserver?.disconnect();
 			lifetime.abort();
 			bridge.dispose();
 			cursor.dispose();

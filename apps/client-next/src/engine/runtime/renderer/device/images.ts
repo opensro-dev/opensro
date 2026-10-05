@@ -16,6 +16,7 @@ import {
 	nativeTextureBlockBytes,
 	validateNativeTexture
 } from "@/engine/foundation/assets/native-texture";
+import { destroyNow, type Retire } from "./retirement";
 
 const BLOCK_SIDE = 4;
 const CHANNELS = 4;
@@ -29,6 +30,8 @@ The mip generator is used only for bitmaps, never authored native levels.
 ================
 */
 interface ImageDevice {
+	// A frame may still sample a released texture: the device decides when it dies.
+	readonly retire?: Retire;
 	readonly current: () => GPUDevice;
 	readonly fail: ( error: unknown ) => void;
 	readonly pipeline: () => GPURenderPipeline;
@@ -45,7 +48,7 @@ the partially initialized allocation before propagating to the caller.
 ================
 */
 export function createImages( device: ImageDevice ) {
-	const textures = new Map<ImageDraw, GPUTexture>();
+	const textures = new Map<ImageDraw, GPUTexture>(), retire = device.retire ?? destroyNow;
 	const commands: ImageCommands = Object.freeze( {
 		/*
 		================
@@ -153,7 +156,8 @@ export function createImages( device: ImageDevice ) {
 		================
 		*/
 		release( draw: ImageDraw ) {
-			textures.get( draw )?.destroy();
+			const texture = textures.get( draw );
+			if ( texture ) retire( texture );
 			textures.delete( draw );
 		}
 	} );

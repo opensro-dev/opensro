@@ -371,7 +371,7 @@ def add_bytes(archive, name, data):
 # with kind "data") against the production state it read with the base.
 # Returns the batch paths.
 # ================
-def bundle(package, base, plan, output):
+def bundle(package, base, plan, output, max_batch_bytes=MAX_BATCH_BYTES):
 	package, output = Path(package), Path(output)
 	raw = (package / "release.json").read_bytes()
 	if len(raw) > MAX_MANIFEST_BYTES:
@@ -400,10 +400,13 @@ def bundle(package, base, plan, output):
 	reusable = set(content_sources(base).values())
 	needed = sorted({source[0] for source in content_sources(manifest).values() if source not in reusable})
 	path_of = {row["sha256"]: name for name, row in rows.items()}
+	# The host refuses an archive over MAX_BATCH_BYTES; a slow link asks for
+	# smaller batches so each upload finishes and a rerun resumes after it.
+	limit = min(max_batch_bytes, MAX_BATCH_BYTES - (1 << 20))
 	batches, batch, size = [], [], 0
 	for sha in needed:
 		length = rows[path_of[sha]]["length"]
-		if batch and size + length > MAX_BATCH_BYTES - (1 << 20):
+		if batch and size + length > limit:
 			batches.append(batch)
 			batch, size = [], 0
 		batch.append(sha)

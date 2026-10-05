@@ -41,6 +41,39 @@ func (rt *Runtime) playerCombatStats(division string, c *enterworld.Character) (
 	return stats, loadout, err
 }
 
+// engagedSkillModifierSource keys the engaged attack's own writes apart from
+// every installed effect (whose sources count up from 0x80000000).
+const engagedSkillModifierSource uint32 = 0x7fffff00
+
+/*
+==================
+playerAttackStats
+
+playerCombatStats while skill is engaged. SkillCombat_EngageSkill (593540)
+installs the engaged skill's own modifier block through 594AC0, so an
+attack that authors hr (the bow's Arrow Rain lines) rolls its hits with
+that hit rate. A timed row's block belongs to its effect instead, and ru
+is the reach rule's (skillActionReach), so only an attack's hr is added.
+==================
+*/
+func (rt *Runtime) playerAttackStats(division string, c *enterworld.Character, skill enterworld.SkillRow) (combat.Stats, combat.Loadout, error) {
+	if c == nil || !skill.BuffModifiers.Hr || skill.TimedEffect.Pinned {
+		return rt.playerCombatStats(division, c)
+	}
+	block := rt.playerAbnormal(division, c.Name)
+	engaged := enterworld.SkillBuffModifiers{Hr: true, HrFlat: skill.BuffModifiers.HrFlat, HrRate: skill.BuffModifiers.HrRate}
+	writes := rt.effects.ModifierWrites(division, c.Name)
+	for _, w := range buffModifierWrites(engaged, false) {
+		w.Source = engagedSkillModifierSource
+		writes = append(writes, w)
+	}
+	stats, loadout, err := combat.PlayerStatsWithModifiers(c, rt.statCatalogs(), writes, block)
+	if err == nil && block != nil {
+		stats.AbnormalMask = block.Mask
+	}
+	return stats, loadout, err
+}
+
 /*
 ==================
 playerKeeperVitals

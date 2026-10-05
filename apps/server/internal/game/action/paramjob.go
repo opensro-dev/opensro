@@ -15,8 +15,10 @@ The scroll's own COOLTIME group (Param6 milliseconds, Desc6
 "COOLTIME:0x..") gates reuse, and equals the job length in every shipped
 scroll, so two jobs of one scroll never overlap.
 
-USU1, BFI1 and UQL1 entries belong to the premium item-mall tickets; this
-owner refuses them until the item-mall premium owner exists.
+USU1, BFI1 and UQL1 entries belong to the premium item-mall composites;
+their USU1 buff (SKILL_MALL_PRE_APRU_*: luck, alchemy luck, drop and
+STR/INT keepers over four weeks) has no effect owner yet, so this owner
+refuses those composites whole rather than grant half of one.
 
 ===========================================================================
 */
@@ -39,8 +41,8 @@ const (
 	paramSkillExpRate uint16 = 0x102
 	paramHPRate       uint16 = 0x3c
 	// paramPremiumExpRate / paramPremiumSkillExpRate are the second terms the
-	// distributor sums (4EA6A0: 0x100 + 0xBA, 0x102 + 0xCA). No v1.150 param
-	// item writes them; they stay in the sum for the native shape.
+	// distributor sums (4EA6A0: 0x100 + 0xBA, 0x102 + 0xCA). The premium
+	// time tickets raise them (premiumticket.go).
 	paramPremiumExpRate      uint16 = 0xba
 	paramPremiumSkillExpRate uint16 = 0xca
 )
@@ -150,7 +152,9 @@ The same internal item restarts its own row (the board keys by item id).
 */
 func upsertParamJob(jobs []domain.ParamJob, job domain.ParamJob) ([]domain.ParamJob, bool) {
 	for i := range jobs {
-		if jobs[i].ItemRefObjID == job.ItemRefObjID {
+		// One item may raise several keepers (a premium ticket's EXP and
+		// skill EXP); each keeper is its own job.
+		if jobs[i].ItemRefObjID == job.ItemRefObjID && jobs[i].Param == job.Param {
 			jobs[i] = job
 			return jobs, true
 		}
@@ -302,12 +306,17 @@ func (rt *Runtime) advanceParamJobs(nowMs int64) {
 		rt.deps.Update(character, "param-job-expiry", func() bool {
 			kept := make([]domain.ParamJob, 0, len(character.ParamJobs))
 			owner := enterworld.ObjectIDForCharacter(character)
+			ended := map[uint32]bool{}
 			for _, job := range character.ParamJobs {
 				if job.EndUnixMs > nowMs {
 					kept = append(kept, job)
 					continue
 				}
-				frames = append(frames, wire.Frame{Opcode: wire.OpParamJobEnd, Payload: wire.EncodeParamJobEnd(owner, job.ItemRefObjID)})
+				// The board shows one row per item, however many keepers it raised.
+				if !ended[job.ItemRefObjID] {
+					ended[job.ItemRefObjID] = true
+					frames = append(frames, wire.Frame{Opcode: wire.OpParamJobEnd, Payload: wire.EncodeParamJobEnd(owner, job.ItemRefObjID)})
+				}
 			}
 			empty = len(kept) == 0
 			if len(frames) == 0 {

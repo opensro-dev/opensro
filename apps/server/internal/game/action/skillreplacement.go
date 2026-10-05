@@ -1,3 +1,15 @@
+/*
+===========================================================================
+
+skillreplacement.go - buff replacement validation on one character
+
+CSkillManager_ValidateBuffReplacement (59D870) as the untargeted, unlinked
+casts call it (58E2F4): the new effect against the character's active list
+and its current command's casting states. A refusal is 0x300C.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -5,10 +17,44 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 )
 
-// Untargeted, unlinked validation calls 59D870 at 58E2F4; refusal is 300C.
-// Caller holds the character authority and division operation doors. This is
-// the validation phase, not the later effect insertion or timed-job restore.
+/*
+==================
+requestSelfEffectReplacement
+
+The validation phase, not the later effect insertion or timed-job restore.
+The caller holds the character authority and division operation doors.
+==================
+*/
 func (rt *Runtime) requestSelfEffectReplacement(division string, c *enterworld.Character, skill enterworld.SkillRow) bool {
+	return rt.requestEffectReplacement(division, c, skill, false)
+}
+
+/*
+==================
+requestReleasedEffectReplacement
+
+requestSelfEffectReplacement for the caster of skill at its own prepared
+cast's release. A positive-time cast keeps its command current through its
+release (currentcommand.go), so that command is the one being released,
+not another command in progress: native validates at admission (58E2F4),
+before the command is current, and its release installs without reading
+its own states as a conflict. Live, a heal over time with a cast time
+(Healing Orbit) was refused on its own caster by exactly that conflict.
+==================
+*/
+func (rt *Runtime) requestReleasedEffectReplacement(division string, c *enterworld.Character, skill enterworld.SkillRow) bool {
+	return rt.requestEffectReplacement(division, c, skill, true)
+}
+
+/*
+==================
+requestEffectReplacement
+
+The shared validation. released skips a current command of skill itself
+(requestReleasedEffectReplacement).
+==================
+*/
+func (rt *Runtime) requestEffectReplacement(division string, c *enterworld.Character, skill enterworld.SkillRow, released bool) bool {
 	if !skill.ReplacementPinned || skill.Replacement.Lnks {
 		return false
 	}
@@ -24,7 +70,7 @@ func (rt *Runtime) requestSelfEffectReplacement(division string, c *enterworld.C
 		Effect:      statuseffect.Effect{DivisionID: division, CharacterName: c.Name, SkillID: skill.ID, SkillGroup: skill.Group},
 		Descriptors: descriptors, CasterIsRecipient: true,
 	}
-	if current, exists := rt.currentSkillCommandFor(division, c); exists {
+	if current, exists := rt.currentSkillCommandFor(division, c); exists && !(released && current.skillID == skill.ID) {
 		if !current.pinned {
 			return false
 		}

@@ -75,6 +75,9 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 			Rand:           rand.Float64,
 			AttackPlan:     game.items.MonsterAttackPlan,
 			RunAction:      game.items.RunMonsterAction,
+			// The Bard's Noise: the acquisition scan reads each player's
+			// first-attack protection from the effect owner.
+			FirstAttackGuard: game.items.FirstAttackGuard,
 		}
 		log.Infof(
 			"simulation: monster mover wired with %d template nest row(s)",

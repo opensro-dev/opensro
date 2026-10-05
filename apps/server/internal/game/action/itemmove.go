@@ -77,6 +77,9 @@ func (rt *Runtime) HandleItemMove(
 		return rt.applyCommerce(divisionID, character, request)
 
 	case wire.MoveTypeInventory:
+		if jobSuitMove(character, request) {
+			return rt.beginJobDress(divisionID, character, request)
+		}
 		return rt.applyInventoryMove(divisionID, character, request)
 
 	case wire.MoveTypeGroundDrop:

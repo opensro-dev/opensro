@@ -12,6 +12,7 @@ import (
 	"math"
 	"time"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
@@ -96,6 +97,11 @@ func (rt *Runtime) rollMonsterGoldAmount(monster monster.Instance) (uint32, bool
 	scaled := uint64(amount) * multiplier
 	if scaled == 0 || scaled > math.MaxInt32 {
 		return 0, false
+	}
+	// The beta gold rate is port-only and applies after the native heap is
+	// built, so it never changes the RNG order; it clamps instead of refusing.
+	if rt.GoldRate > 1 {
+		scaled = min(scaled*uint64(rt.GoldRate), math.MaxInt32)
 	}
 	return uint32(scaled), true
 }
@@ -272,24 +278,7 @@ func (rt *Runtime) rollDroppedEquipmentVariance(ref *enterworld.ItemRef) (uint64
 		bits |= uint64(value&0x1f) << (field * 5)
 	}
 
-	minimum := int64(1)
-	if ref != nil && ref.VarianceIntMin1c0 != nil {
-		minimum = *ref.VarianceIntMin1c0
-	}
-	if minimum < 1 {
-		minimum = 1
-	}
-	maximum := minimum
-	if ref != nil && ref.MaxDurability > maximum {
-		maximum = ref.MaxDurability
-	}
-	delta := maximum - minimum
-	interpolated := int64(float32(delta) * (float32(first) / float32(31)))
-	durability := minimum + interpolated
-	if durability > math.MaxUint32 {
-		durability = math.MaxUint32
-	}
-	return bits, uint32(durability), true
+	return bits, combat.DurabilityFromVariance(ref, first), true
 }
 
 /*

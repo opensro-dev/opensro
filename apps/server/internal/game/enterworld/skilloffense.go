@@ -57,6 +57,7 @@ type SkillAmmunition struct{ TID3, TID4, Count uint32 }
 
 const (
 	crossbowWeaponKind     = 12
+	bowWeaponKind          = 6
 	maximumAmmunitionStack = 0xffff
 )
 
@@ -106,14 +107,17 @@ buffs and heals alike. It is the only writer of these fields;
 decodeSkillOffense only validates them.
 
 	getv WIMD/BDMD/HLMD  +0x4E4/+0x554/+0x55C  prepared MP cut
+	getv WIRU/CBRA       +0x4E8/+0x50C         cast reach addends (4AE87E)
 	getv MUER/DSER       +0x544/+0x54C         aura radius addends
+	getv MUCR/DSCR       -                     aura cut resistance (Prism, Screen Dance)
 	scls                 +0x380                selector bits (5842AC)
 	reqc                 +0x39C                bits 0, 4, 5 (SkillReqc)
 	reqi                 +0x3A0                up to five {kind, value}
 	reqn                 +0x3B4                every reqi pair must match
 	efr kind 2, onff     +0x290, +0x284        persistent aura (SkillAura)
 	efr kind 3           +0x294                qest radius word
-	dru, odar, ru, hr    +0x3E4, +0x270, ...   SkillBuffModifiers
+	dru, odar, ru, hr,
+	rhru, dcmp           +0x3E4, +0x270, ...   SkillBuffModifiers
 	heal, mwhh, mwmh     +0x324..+0x32C        SkillHeal
 	eshp                 +0x298                aura heals the lowest HP ratio
 	nmf, tele/tel2/tel3,
@@ -132,15 +136,29 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 	}
 	for i := skilldataColEncodedTail; i < len(fields); {
 		tag, ok := textdataInt(fields[i])
-		if !ok || tag == 0 || tag == 0x73736f75 {
+		if !ok || tag == 0x73736f75 {
 			return
 		}
+		// A zero word is padding, not the end of the program: the native
+		// indexers skip it, as CompileSkillProgram does, so a getv or reqi
+		// authored after a padded opcode ("odar 4 n 0 getv ...") still
+		// reaches the row.
+		if tag == 0 {
+			i++
+			continue
+		}
 		switch tag {
-		case 0x67657476: // getv
+		case tagGetv: // getv
+			// WIRU/CBRA (+0x4E8/+0x50C) sit beside WIMD (+0x4E4) in this
+			// per-row index, so a row without att records them too, and
+			// 4AE87E adds them to the cast's reach. Owners that never
+			// compute a reach simply ignore the bit.
 			if key, ok := word(i + 1); ok {
 				if slot, known := SkillParameterFromKey(key); known &&
 					(slot == ParameterWizardMPDecrease || slot == ParameterBardMPDecrease || slot == ParameterHealerMPDecrease ||
-						slot == ParameterMusicRange || slot == ParameterDanceRange || slot == ParameterHealRecoveryUp) {
+						slot == ParameterMusicRange || slot == ParameterDanceRange || slot == ParameterHealRecoveryUp ||
+						slot == ParameterWizardRange || slot == ParameterCrossbowRange ||
+						slot == ParameterMusicCutResist || slot == ParameterDanceCutResist) {
 					row.Attack.Parameters |= SkillParameterMask(1) << slot
 				}
 			}
@@ -162,7 +180,7 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			}
 		case 0x7265716e: // reqn
 			row.Reqi.All = true
-		case 0x656672: // efr; kind 2 is persistent area at +0x290, kind 3 at +0x294
+		case tagEfr: // efr; kind 2 is persistent area at +0x290, kind 3 at +0x294
 			kind, kindOK := word(i + 1)
 			radius, radiusOK := word(i + 3)
 			maxTargets, maxOK := word(i + 4)
@@ -212,6 +230,18 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			if firstOK && secondOK {
 				row.BuffModifiers.Dru = true
 				row.BuffModifiers.DruWords = [2]uint32{first, second}
+			}
+		case 0x72687275: // rhru: healing received, HP and MP percent
+			hp, hpOK := word(i + 1)
+			mp, mpOK := word(i + 2)
+			if hpOK && mpOK {
+				row.BuffModifiers.Rhru = true
+				row.BuffModifiers.RhruWords = [2]uint32{hp, mp}
+			}
+		case 0x64636d70: // dcmp: MP consumption cut, percent
+			if percent, ok := word(i + 1); ok {
+				row.BuffModifiers.Dcmp = true
+				row.BuffModifiers.DcmpPercent = percent
 			}
 		case 0x6f646172: // odar +0x270
 			bits, bitsOK := word(i + 1)
@@ -263,7 +293,13 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 		case 0x636b, 0x6c667374, 0x70646d67, 0x70646d32: // ck, lfst, pdmg, pdm2 (589EE0)
 			row.WallBypass = true
 			// ck (+0x248) also takes the target's block chance away (58E624).
-			row.Ck = row.Ck || tag == 0x636b
+			if tag == 0x636b {
+				row.Ck = true
+				// 58EC61: the low byte of ck's first word is the kill chance.
+				if chance, ok := word(i + 1); ok {
+					row.CkChance = uint8(chance)
+				}
+			}
 		case 0x6f6e6666: // onff
 			period, periodOK := word(i + 1)
 			cost, costOK := word(i + 2)
@@ -308,6 +344,10 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		row.Threat = taunt
 		return ""
 	}
+	if decrease, ok := compileSkillThreatDecrease(fields, *row); ok {
+		row.Threat = decrease
+		return ""
+	}
 	if threat, ok := compileSkillStatusCast(fields, *row); ok {
 		// Retail initializes the generated-result count to one even without
 		// att or cm; the single record carries the status roll.
@@ -315,6 +355,24 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		row.Threat = threat
 		row.OffensiveArea, row.Threat.Area = threat.Area, SkillOffensiveArea{}
 		row.Attack.ImpactCount = 1
+		row.OffensiveStagePinned = true
+		row.DirectOffensePinned = true
+		return ""
+	}
+	if fixed, ok := compileSkillFixedDamage(fields, *row); ok {
+		// One fixed-damage record (skillfixeddamage.go), released by the
+		// ordinary single-target offensive owner.
+		row.FixedDamage = fixed
+		row.Attack.ImpactCount = 1
+		row.OffensiveStagePinned = true
+		row.DirectOffensePinned = true
+		return ""
+	}
+	if area, ok := compileSkillAreaBurst(fields, *row); ok {
+		// Untargeted caster-centred attack (skillareaburst.go): the target
+		// gate below would refuse it, as it did before an owner existed.
+		row.AreaBurst = true
+		row.OffensiveArea = area
 		row.OffensiveStagePinned = true
 		row.DirectOffensePinned = true
 		return ""
@@ -360,10 +418,14 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			// bow-shot record lands. Only the MP rule follows the handler so far.
 			if row.ProjectileSpeed != 0 || seen[0x636e736d] {
 				crossbow := row.RequiredWeaponKinds == ([2]uint8{crossbowWeaponKind, 255})
+				// SkillAction_Projectile (5857B0) links stages for any
+				// launcher: the bow's Arrow Combo C and D chain zero-preparation
+				// shots exactly as the crossbow's lines do.
+				chained := crossbow || row.RequiredWeaponKinds == ([2]uint8{bowWeaponKind, 255})
 				// Several mc impacts resolve at release together and spend
 				// cnsm count x impacts arrows (585AF0).
 				if row.ProjectileSpeed == 0 ||
-					!crossbow && (row.ActionCastingTimeMs == 0 || row.ChainSub || row.ChainNext != 0) ||
+					!chained && (row.ActionCastingTimeMs == 0 || row.ChainSub || row.ChainNext != 0) ||
 					row.Attack.ImpactCount == 0 ||
 					!(row.Ammunition == (SkillAmmunition{4, 1, 1}) && row.RequiredWeaponKinds == ([2]uint8{6, 255}) ||
 						row.Ammunition.TID3 == 4 && row.Ammunition.TID4 == 2 &&
@@ -376,7 +438,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			row.DirectOffensePinned = row.OffensiveStagePinned && row.ChainNext == 0
 			return ""
 		}
-		if seen[tag] && tag != 0x67657476 && tag != 0x72657169 {
+		if seen[tag] && tag != tagGetv && tag != 0x72657169 {
 			return "offense:duplicate-instruction:" + strconv.FormatInt(tag, 16)
 		}
 		seen[tag] = true
@@ -393,10 +455,10 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		}
 		switch tag {
 		case 0x7275: // ru: flat weapon-range addend, 4AE849..4AE87A
+			// 4AE849 adds it to any equipment-derived reach, whatever the
+			// weapon: the crossbow's Dual Shot and the bow's Arrow Combo D
+			// and Strong Bow C author it alike (skillActionReach).
 			arity = 1
-			if row.RequiredWeaponKinds != ([2]uint8{crossbowWeaponKind, 255}) {
-				return "offense:range-weapon"
-			}
 			if i+arity >= len(fields) {
 				return "offense:range-arguments"
 			}
@@ -418,6 +480,15 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		case skillPulseTag:
 			arity = 1
 			if i+arity >= len(fields) {
+				return "offense:invalid-envelope-or-arguments"
+			}
+		case 0x6872: // hr {flat, rate}: the attack's own hit-rate bonus
+			// SkillCombat_EngageSkill (593540) installs the engaged skill's
+			// modifier block through 594AC0 (+0x24C, parameter 11), so the
+			// attack's hits roll with it (action/skillengage.go). The bow's
+			// Arrow Rain lines (AREA_A..C) author it.
+			arity = 2
+			if i+arity >= len(fields) || !row.BuffModifiers.Hr {
 				return "offense:invalid-envelope-or-arguments"
 			}
 		case 0x6b6f: // ko: victim-level rank and probability; full action consequence
@@ -537,7 +608,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			if !row.CriticalModifier.Present {
 				return "offense:critical-arguments" // shared parser must validate the unsigned pair first
 			}
-		case 0x67657476:
+		case tagGetv:
 			arity = 1
 			if i+1 >= len(fields) {
 				return "offense:invalid-envelope-or-arguments"
@@ -551,7 +622,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			if !known && key != 0x4d414154 && !abnormalKey {
 				return "offense:getv:" + strconv.FormatInt(key, 16)
 			}
-		case 0x656672:
+		case tagEfr:
 			arity = 6
 			// Every victim takes every mc impact (58E5F0 loops impacts per
 			// target group; action/skillarea.go).

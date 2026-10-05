@@ -117,9 +117,12 @@ logs a warning and leaves reports off; it never stops the Agent. The other
 two variables become the Agent job's `bug_report_replay_default` and
 `bug_report_max_bytes` variables.
 
-Setting, changing or removing the webhook changes the Agent's credential
-variable, so it follows the same rule as the account catalog: run
-`sro-nomad stop`, then `sro-nomad deploy` with the new environment.
+The webhook is set once. A later deploy that names none (every release
+runs with a clean environment) keeps the stored one;
+`SRO_BUG_REPORT_DISCORD_WEBHOOK=off` removes it. Setting, changing or
+removing it changes the Agent's credential variable, so it follows the same
+rule as the account catalog: run `sro-nomad stop`, then `sro-nomad deploy`
+with the new environment.
 
 For an operator rename, stop the authority through `sro-nomad stop`, then run
 `go run ./cmd/operations/sro-rename-character -shard SHARD -character OLD -name NEW`

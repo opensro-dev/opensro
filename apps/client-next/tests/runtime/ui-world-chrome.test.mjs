@@ -17,7 +17,10 @@ import { readFileSync } from "node:fs";
 import fc from "fast-check";
 import { defined } from "../helpers/defined.mjs";
 const { frameRing, frameParts } = await import( "../../src/engine/foundation/ui/frame-ring.ts" );
-const { decodeUiFont, titleGlyphs } = await import( "../../src/engine/foundation/rendering/ui-glyphs.ts" );
+const { decodeUiFont, titleText, resolveTextOverlaps } = await import(
+	"../../src/engine/foundation/rendering/ui-glyphs.ts"
+);
+const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { createUiText } = await import( "../../src/engine/runtime/ui/text/text.ts" );
 const { normalTile } = await import( "../../src/engine/foundation/ui/normal-tile.ts" );
 const { partyProposalLayout } = await import( "../../src/engine/foundation/ui/party-proposal.ts" );
@@ -98,9 +101,9 @@ test("new published popup resources prepare automatically without a runtime file
 	const hud = createHudResources( {
 		available: () => 4 - jobs.size,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request( url ) {
 			const path = decodeURIComponent( new URL( url ).pathname );
@@ -124,9 +127,9 @@ request
 			return serial;
 		},
 		/*
-================
-take
-================
+		================
+		take
+		================
 		*/
 		take( id ) {
 			const value = jobs.get( id );
@@ -237,9 +240,9 @@ test("world text uses the same published mask/advance contract for caret and gly
 	const owner = createUiText( {
 		available: () => 1,
 		/*
-================
-request
-================
+		================
+		request
+		================
 		*/
 		request() {
 			jobs.set( ++next, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( atlas ) ).buffer } );
@@ -253,6 +256,9 @@ request
 		cancel: id => jobs.delete( id )
 	}, "http://fixture.invalid" );
 	assert.deepEqual( owner.quads( "Loading", [ 0, 0, 100, 24 ], [ 0, 0, 100, 24 ], [ 1, 1, 1, 1 ] ), [] );
+	// What a label publishes: its quads through overlap resolution, with text
+	// runs expanded into their glyphs (text-run.ts).
+	const published = quads => expandTextRuns( resolveTextOverlaps( quads ) );
 	owner.step();
 	assert.equal( owner.step(), true );
 	for ( const value of [ "Inventory", "Guild notice", "A B", "", "日本語" ] ) {
@@ -262,8 +268,8 @@ request
 		).reduce( ( n, g ) => n + g.advanceX, 0 );
 		assert.equal( owner.run( value ).width, expected );
 		assert.deepEqual(
-			owner.quads( value, [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] ),
-			titleGlyphs( font, value, [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] )
+			published( owner.quads( value, [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] ) ),
+			published( titleText( font, value, [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] ) )
 		);
 	}
 	// The layout memo: a repeat is equal, each caller owns its array, and the
@@ -273,9 +279,10 @@ request
 	const again = owner.quads( "Inventory", [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] );
 	assert.notEqual( again, first );
 	assert.deepEqual(
-		again,
-		titleGlyphs( font, "Inventory", [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] )
+		published( again ),
+		published( titleText( font, "Inventory", [ 10, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] ) )
 	);
+	assert.equal( again.length, 1, "a string travels as one run quad" );
 	assert.ok( again.every( quad => Object.isFrozen( quad ) ) );
 	assert.notDeepEqual(
 		owner.quads( "Inventory", [ 11, 20, 200, 24 ], [ 0, 0, 500, 500 ], [ 1, 1, 1, 1 ] ),

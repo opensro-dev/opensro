@@ -119,7 +119,8 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 			}
 		} ]
 	};
-	const owner = createCharacters();
+	const { createParticleReference } = await import( "../helpers/particle-reference.mjs" );
+	const owner = createCharacters(), reference = createParticleReference();
 	owner.model( "effect", model, [] );
 	owner.model( "ordinary", {
 		...model,
@@ -133,11 +134,17 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 			if ( !deferred ) ordinaryWrites++;
 			return { deferred, instances: [ ...g.instances ] };
 		},
-		release() {},
+		release( d ) {
+			reference.release( d );
+		},
 		updateInstances( d, v ) {
 			if ( !d.deferred ) ordinaryWrites++;
 			d.instances = [ ...v ];
 			return d;
+		},
+		presentParticles( d, particles ) {
+			if ( !d.deferred ) ordinaryWrites++;
+			d.instances = [ ...reference.present( d, particles ).matrices ];
 		},
 		updateBones( d ) {
 			if ( !d.deferred ) ordinaryWrites++;
@@ -170,15 +177,92 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 		assert.equal( ordinaryWrites, writes, "deferred continuation repeated ordinary uploads" );
 		return draws.map( d => d.instances[12] );
 	}
+	// Each drawn particle sits at its tick position plus less than one tick of
+	// motion: presentation carries the pending fraction (particle-presentation.ts).
+	const atTick = ( drawn, ticks ) => {
+		assert.equal( drawn.length, ticks.length );
+		drawn.forEach( ( value, i ) =>
+			assert.ok( value >= ticks[i] - 1e-4 && value < ticks[i] + 1, `${value} vs ${ticks[i]}` )
+		);
+	};
 	try {
 		assert.deepEqual( frame( 0 ), [] );
 		assert.deepEqual( frame( .5 ), [] );
-		assert.deepEqual( frame( .501, true ), [ 0 ] );
-		assert.deepEqual( frame( .601 ), [ 2 ] );
-		assert.deepEqual( frame( .801 ), [ 6 ] );
+		atTick( frame( .501, true ), [ 0 ] );
+		atTick( frame( .601 ), [ 2 ] );
+		atTick( frame( .801 ), [ 6 ] );
 		assert.deepEqual( frame( 1.002, false ), [] );
 		assert.deepEqual( frame( 1.302 ), [] );
-		assert.deepEqual( frame( 1.503, true ), [ 10 ] );
+		atTick( frame( 1.503, true ), [ 10 ] );
+	} finally {
+		owner.dispose( gpu, null );
+	}
+});
+
+test("the deferred continuation never releases a draw the frame's first pass returned", async () => {
+	const { createCharacters } = await import(
+		sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
+	);
+	const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
+	const model = {
+		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
+		images: [],
+		clips: [ { name: "idle", duration: 1, channels: [] } ],
+		primitives: [ {
+			name: "body",
+			node: 0,
+			joints: [ 0 ],
+			inverseBind: identity(),
+			image: -1,
+			geometry: {
+				positions: new Float32Array( 9 ),
+				indices: Uint32Array.of( 0, 1, 2 ),
+				transform: identity(),
+				material: { color: [ 1, 1, 1, 1 ], alphaCutoff: 0, blend: false, doubleSided: true }
+			}
+		} ]
+	};
+	const owner = createCharacters(), released = [];
+	owner.model( "ordinary", model, [] );
+	const gpu = {
+		upload( g ) {
+			return { id: Symbol( "draw" ), instances: [ ...g.instances ] };
+		},
+		release( d ) {
+			released.push( d );
+		},
+		updateInstances( d, v ) {
+			d.instances = [ ...v ];
+			return d;
+		},
+		updateBones() {}
+	};
+	const ordinary = {
+		gid: 2,
+		model: "ordinary",
+		pose: { regionId: 257, x: 5, y: 0, z: 0, yaw: 0 },
+		clip: "idle",
+		time: 0,
+		loop: true,
+		scale: 1
+	};
+	try {
+		owner.actors( [ ordinary ] );
+		const first = owner.prepare( gpu, {}, 257, undefined, false, 0 );
+		assert.ok( first.length > 0, "the first pass drew the ordinary actor" );
+		// The continuation plans without the batch the first pass used (in play:
+		// the deferred actors it adds take the render budget first). Its draws are
+		// already recorded in the frame's command buffer: they must survive.
+		owner.actors( [] );
+		owner.prepare( gpu, {}, 257, undefined, false, 0, true );
+		assert.deepEqual(
+			released.filter( d => first.includes( d ) ),
+			[],
+			"the continuation released a recorded draw"
+		);
+		// The next full pass retires it.
+		owner.prepare( gpu, {}, 257, undefined, false, .1 );
+		assert.ok( first.every( d => released.includes( d ) ), "the next frame kept a draw nobody uses" );
 	} finally {
 		owner.dispose( gpu, null );
 	}

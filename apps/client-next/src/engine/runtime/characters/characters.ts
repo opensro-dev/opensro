@@ -58,7 +58,6 @@ import {
 import { advanceBodyShape, bodyVolumeIndex, type BodyShapeBlend } from "@/engine/foundation/animation/body-shape";
 import { createSceneryEmission } from "@/engine/foundation/animation/scenery-emission";
 import { damageAnchor } from "@/engine/foundation/animation/damage-anchor";
-import { decodeTooltipSkills } from "@/engine/foundation/ui/skill-tooltip-catalog";
 import {
 	createReferenceAppearances,
 	referenceAppearanceItems
@@ -143,6 +142,18 @@ interface Resource {
 }
 /*
 ================
+LinkedRide
+
+A characterInfo "ride" BSR (skilleffect.txt section characterInfo, columns
+Ride Type and ride), published as an npc manifest row of kind "ride".
+================
+*/
+interface LinkedRide {
+	readonly glb: string;
+	readonly clips: readonly string[];
+}
+/*
+================
 CharacterFrameProbe
 Optional measurements supplied by the runtime; presentation never discovers globals.
 ================
@@ -152,6 +163,11 @@ export interface CharacterFrameProbe {
 	detailEnd( stage: string ): void;
 	sampleDetails(): boolean;
 }
+
+// The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
+// table CCDB10: none = 0, RT_FIXED = 1, RT_DUMMY = 2).
+const RIDER_ON_SADDLE = 0;
+const RIDE_COPIES_RIDER = 2;
 
 const GOLD_DROP_MODELS = [
 	"item/etc/drop_ch_money_ing.bsr",
@@ -205,9 +221,9 @@ export function createCharacterPresentation(
 	let animationDelta = createModifierDelta();
 	let footprints: import("@/engine/contracts/footprint").Footprint[] = [], footprintSequence = 0;
 	/*
-================
-footContact
-================
+	================
+	footContact
+	================
 	*/
 	function footContact(
 		entity: EntityState,
@@ -237,9 +253,9 @@ footContact
 		}
 	}
 	/*
-================
-clearFootprints
-================
+	================
+	clearFootprints
+	================
 	*/
 	function clearFootprints() {
 		if ( footprints.length ) {
@@ -392,7 +408,10 @@ clearFootprints
 		"/assets/audio/effectsound.json",
 		"/assets/anim/manifest.json",
 		"/assets/itemdrop/manifest.json",
-		"/assets/data/skillData.json"
+		// The skill sound plane and the characterInfo plane, published apart from
+		// the 27,835-row skill catalogue the HUD owns (buildSkillDataAsset.mjs).
+		"/assets/data/skillAudioData.json",
+		"/assets/data/characterActionData.json"
 	];
 	const shadowSizes = new Map<number, number>();
 	const heights = new Map<string, number>(), heightFactors = new Map<string, number>();
@@ -405,6 +424,9 @@ clearFootprints
 	let cameraFade: ({ gid: number; time: number; } & CharacterFade) | null = null;
 	let cameraTarget: import("@/engine/contracts/scene").FollowCameraTarget | null = null;
 	const actionClocks = new Map<number, ActionSchedule>();
+	// Action events of a predicted cast (cast-prediction.ts), held until the
+	// server's cast adopts its clock: effects and sounds belong to that cast.
+	const predictedEvents = new Map<number, ReturnType<typeof advanceAction>["events"]>();
 	const deathFinalizes = new Map<number, number>();
 	const nativeMotionUrls = new Map<string, ReadonlyMap<string, string>>();
 	let warmSkills: readonly number[] | undefined, warmBody: string | undefined;
@@ -412,17 +434,17 @@ clearFootprints
 	// A mask's skin (msch 1) replaces the model outright; an msch 3 disguise
 	// keeps the body and redresses it.
 	/*
-================
-transformSkinRef
-================
+	================
+	transformSkinRef
+	================
 	*/
 	function transformSkinRef( entity: EntityState ) {
 		return referenceAppearances.skin( entity.gid, entity.transformSkin );
 	}
 	/*
-================
-appearanceRef
-================
+	================
+	appearanceRef
+	================
 	*/
 	function appearanceRef( entity: EntityState ) {
 		return transformSkinRef( entity ) ?? referenceAppearances.get( entity.gid )?.model ?? entity.refObjId;
@@ -430,17 +452,17 @@ appearanceRef
 	// The skin in force: a Duplicate (player skin) wears the copied player's
 	// items; a mask wears nothing of the player's (85C060).
 	/*
-================
-activeSkin
-================
+	================
+	activeSkin
+	================
 	*/
 	function activeSkin( entity: EntityState ) {
 		return transformSkinRef( entity ) !== undefined ? entity.transformSkin : undefined;
 	}
 	/*
-================
-wornEquipment
-================
+	================
+	wornEquipment
+	================
 	*/
 	function wornEquipment(
 		entity: EntityState,
@@ -456,9 +478,9 @@ wornEquipment
 		return entity.gid === gameplay?.localGid ? gameplay.inventory : entity.equipment ?? [];
 	}
 	/*
-================
-resourceFor
-================
+	================
+	resourceFor
+	================
 	*/
 	function resourceFor( entity: EntityState ): Resource | undefined {
 		const resource = catalog.get( appearanceRef( entity ) );
@@ -480,10 +502,14 @@ resourceFor
 	// Appearance topology is independent of pose time. Revalidate resource
 	// readiness each frame, but derive garment/cosmetic parts only on change.
 	const hwanHairActors = new Map<number, { gid: number; started: number; }>();
+	// characterInfo rides: the rider's codename -> its packetless ride model, and
+	// each live rider's presentation-owned ride actor (CICMonster_DeserializeSpawnPacket).
+	const ridesByRider = new Map<string, LinkedRide>();
+	const linkedRides = new Map<number, number>();
 	/*
-================
-Auxiliary
-================
+	================
+	Auxiliary
+	================
 	*/
 	type Auxiliary = { id: number; entry: SetEntry & { bone: string; clips: readonly string[]; }; };
 	const avatarOverrides = new Map<number, AvatarOverrideSelection>();
@@ -516,8 +542,8 @@ Auxiliary
 		mallOutfit / mallPreviewState
 		================
 		*/
-		mallOutfit( items: readonly number[] | null ) {
-			mallPreview.request( items );
+		mallOutfit( items: readonly number[] | null, skin: import("./mall-preview").MallSkin | null = null ) {
+			mallPreview.request( items, skin );
 		},
 		/*
 		================
@@ -528,9 +554,9 @@ Auxiliary
 			return mallPreview.state();
 		},
 		/*
-================
-options
-================
+		================
+		options
+		================
 		*/
 		options( value: import("@/engine/foundation/gameplay/game-options").GameOptions ) {
 			hideSilkCos = value.hideSilkCos;
@@ -538,9 +564,9 @@ options
 		// 856480 sets a global bit on admission; 85FA80 clears it on removal.
 		// It is not a count: a surviving actor cannot re-enable a cleared bit.
 		/*
-================
-receiveLifecycle
-================
+		================
+		receiveLifecycle
+		================
 		*/
 		receiveLifecycle( events: readonly import("@/engine/contracts/world").WorldEvent[] ) {
 			entityLod.receive( events );
@@ -570,9 +596,9 @@ receiveLifecycle
 			for ( const event of next ) rainEvents.push( event );
 		},
 		/*
-================
-eventRain
-================
+		================
+		eventRain
+		================
 		*/
 		eventRain() {
 			// Preserve delivery order while the character catalogs load.
@@ -604,9 +630,9 @@ eventRain
 			return rainEventActive;
 		},
 		/*
-================
-receiveFeedback
-================
+		================
+		receiveFeedback
+		================
 		*/
 		receiveFeedback(
 			events: readonly import("@/engine/contracts/orb").VisualFeedback[],
@@ -621,9 +647,9 @@ receiveFeedback
 			}
 		},
 		/*
-================
-step
-================
+		================
+		step
+		================
 		*/
 		step(
 			entities: readonly EntityState[],
@@ -650,15 +676,6 @@ step
 			skillObjects.retain( entities );
 			resources.begin( seconds );
 			failure = null;
-			/*
-			================
-			logicalPose
-
-			The worker's latest pose of a character: the local movement owner's for
-			the local player (its entity row can still hold the spawn position),
-			else the entity row. Presentation draws from it via posePresentation.
-			================
-			*/
 			// CCharactor_GetActiveMoverEntity (0x85E000): while the local player
 			// rides, its movement owner moves the mount and the rider sits on it.
 			// The mount takes the local pose, samples and movement state; the
@@ -668,19 +685,29 @@ step
 				undefined :
 				entities.find( entity => entity.gid === localGid )?.mountedOn;
 			const localMover = ( gid: number ) => !!gameplay?.pose && (gid === gameplay.localGid || gid === localMount);
+			/*
+			================
+			logicalPose
+
+			The worker's latest pose of a character: the local movement owner's for
+			the local player (its entity row can still hold the spawn position),
+			else the entity row. Presentation draws from it via posePresentation.
+			================
+			*/
 			const logicalPose = ( entity: EntityState ): import("@/engine/contracts/gameplay").Pose =>
 				localMover( entity.gid ) ?
 					gameplay!.pose! :
 					{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 			// Timed samples draw on the frame clock: the local player from its
 			// movement owner, every other character from its stepped path.
-			// Entity rows and the local movement state publish the same three fields.
-			type Sampled = Pick<EntityState, "poseAtMs" | "moving" | "movementPath">;
+			// Entity rows and the local movement state publish the same four fields.
+			type Sampled = Pick<EntityState, "poseAtMs" | "moving" | "movementPath" | "movementRevision">;
 			const samples = new Map<number, import("./pose-presentation").SampleInput>();
 			const sample = ( gid: number, source: Sampled ) => {
 				if ( source.poseAtMs === undefined ) return;
 				samples.set( gid, {
 					atMs: source.poseAtMs,
+					revision: source.movementRevision ?? 0,
 					moving: !!source.moving,
 					...(source.movementPath ? { to: source.movementPath.to } : {})
 				} );
@@ -707,6 +734,7 @@ step
 					const decoded = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) );
 					const value = decoded as {
 						effectAppearanceStores?: number[][];
+						effectAppearanceReferences?: readonly (readonly [number, number, number])[];
 						skillAudioRows?: string[];
 						recoveryByCodename?: Record<string, number>;
 						models?: Resource[] | Record<string, Resource>;
@@ -743,6 +771,26 @@ step
 						nextProfiles = new Map( soundProfiles ),
 						nextMotionUrls = new Map( nativeMotionUrls );
 					const rows = Object.values( value.models ?? {} ).filter( row => row.refObjId !== undefined );
+					const nextRides = new Map( ridesByRider );
+					for (
+						const row of Object.values( value.models ?? {} ) as (Resource & {
+							kind?: string;
+							requiredBy?: unknown;
+						})[]
+					) {
+						if ( row.kind !== "ride" ) continue;
+						if (
+							typeof row.glb !== "string" || !row.glb.startsWith( "/assets/npc/" ) ||
+							row.glb.includes( ".." ) ||
+							!Array.isArray( row.clips ) || row.clips.some( clip => typeof clip !== "string" ) ||
+							!Array.isArray( row.requiredBy ) || row.requiredBy.some( rider =>
+								typeof rider !== "string"
+							)
+						) throw new Error( "Invalid linked ride" );
+						for ( const rider of row.requiredBy as string[] ) {
+							nextRides.set( rider, { glb: row.glb, clips: row.clips } );
+						}
+					}
 					for ( const row of rows ) {
 						if (
 							(row.scalePercent !== undefined &&
@@ -1000,12 +1048,16 @@ step
 							pools.length !== 2 ||
 							pools.some( p => !Array.isArray( p ) || p.some( id => !Number.isInteger( id ) || id <= 0 ) )
 						) throw Error( "Invalid native appearance stores" );
+						// The msch (CSkillData+0x268) references, walked at build time by the
+						// client's own decoder (tooltipAppearanceReferences).
 						const refs = new Map<number, { type: number; cap: number; }>();
-						for ( const row of decodeTooltipSkills( value ).values() ) {
-							const block = row.directTooltipParams.nativeParamBlocks.slice().reverse().find( b =>
-								b.offset === 0x268
-							);
-							if ( block ) refs.set( row.id, { type: block.values[0]!, cap: block.values[1]! } );
+						for ( const row of value.effectAppearanceReferences ?? [] ) {
+							if (
+								!Array.isArray( row ) || row.length !== 3 || !Number.isSafeInteger( row[0] ) ||
+								!Number.isSafeInteger( row[1] ) || !Number.isSafeInteger( row[2] ) || row[0] <= 0 ||
+								refs.has( row[0] )
+							) throw Error( "Invalid native appearance references" );
+							refs.set( row[0], { type: row[1], cap: row[2] } );
 						}
 						referenceAppearances.setReferences( refs, pools );
 					}
@@ -1018,6 +1070,8 @@ step
 					for ( const [key, factor] of nextHeightFactors ) heightFactors.set( key, factor );
 					catalog.clear();
 					for ( const [key, row] of nextCatalog ) catalog.set( key, row );
+					ridesByRider.clear();
+					for ( const [key, row] of nextRides ) ridesByRider.set( key, row );
 					animationStates.clear();
 					for ( const [key, row] of nextAnimations ) animationStates.set( key, row );
 					nativeMotionUrls.clear();
@@ -1396,16 +1450,27 @@ step
 				}
 			}
 			const triggers: import("@/engine/contracts/effects").EffectTrigger[] = [];
-			for ( const token of actionClocks.keys() ) if ( !castTokens.has( token ) ) actionClocks.delete( token );
+			// A prediction's clock lives while it is published and until the
+			// server's cast that adopts it takes it over below.
+			const predictionToken = gameplay?.castPrediction?.token;
+			const adopting = new Set( (gameplay?.casts ?? []).map( cast => cast.predictedToken ) );
+			for ( const token of actionClocks.keys() ) {
+				if ( !castTokens.has( token ) && token !== predictionToken && !adopting.has( token ) ) {
+					actionClocks.delete( token );
+				}
+			}
+			for ( const token of predictedEvents.keys() ) {
+				if ( token !== predictionToken && !adopting.has( token ) ) predictedEvents.delete( token );
+			}
 			for ( const [gid, clock] of groundClocks ) {
 				const entity = entitiesByGid.get( gid );
 				if ( !entity ) groundClocks.delete( gid );
 				else advanceGroundVisual( clock, seconds, !!entity.groundItem?.claimantGid, clock.duration );
 			}
 			/*
-================
-soundContext
-================
+			================
+			soundContext
+			================
 			*/
 			function soundContext( entity: EntityState, skill = 0, critical = false ) {
 				const player = entity.kind === "player" || entity.kind === "local-player",
@@ -1424,11 +1489,27 @@ soundContext
 					berserk: entity.appearanceState?.[2] === 1
 				};
 			}
-			for ( const cast of gameplay?.casts ?? [] ) {
+			// The local press's prediction animates beside the server's casts.
+			const animated = gameplay?.castPrediction ?
+				[ ...(gameplay.casts ?? []), gameplay.castPrediction ] :
+				gameplay?.casts ?? [];
+			for ( const cast of animated ) {
 				if ( cast.resultOnly ) continue;
 				const entity = entitiesByGid.get( cast.caster ), resource = entity ? resourceFor( entity ) : undefined;
 				if ( !entity || !resource ) continue;
 				let clock = actionClocks.get( cast.token );
+				// The server's cast takes over the prediction's running action and
+				// fires the events it held back, so nothing restarts.
+				let adopted: ReturnType<typeof advanceAction>["events"] = [];
+				if ( !clock && cast.predictedToken !== undefined ) {
+					clock = actionClocks.get( cast.predictedToken );
+					if ( clock ) {
+						actionClocks.delete( cast.predictedToken );
+						actionClocks.set( cast.token, clock );
+						adopted = predictedEvents.get( cast.predictedToken ) ?? [];
+						predictedEvents.delete( cast.predictedToken );
+					}
+				}
 				if ( !clock ) {
 					const tables = effects.phases( cast.skill );
 					if ( !tables ) continue;
@@ -1514,7 +1595,16 @@ soundContext
 				const cancelledAt = stopAt !== undefined ?
 					seconds + (stopAt - (simulationMs ?? seconds * 1000)) / 1000 :
 					undefined;
-				for ( const event of advanceAction( clock, seconds, shotAt, cancelledAt ).events ) {
+				const events = [ ...adopted, ...advanceAction( clock, seconds, shotAt, cancelledAt ).events ];
+				if ( cast.token === predictionToken ) {
+					predictedEvents.set( cast.token, [ ...(predictedEvents.get( cast.token ) ?? []), ...events ] );
+					actionLayersByActor.set( cast.caster, [
+						...actionLayers( clock, seconds ),
+						...(actionLayersByActor.get( cast.caster ) ?? [])
+					] );
+					continue;
+				}
+				for ( const event of events ) {
 					triggers.push( {
 						cast,
 						...event,
@@ -2991,6 +3081,50 @@ soundContext
 				} );
 			}
 			for ( const gid of hwanHairActors.keys() ) if ( !hairOwners.has( gid ) ) hwanHairActors.delete( gid );
+			// CICMonster_DeserializeSpawnPacket (861B00): a characterInfo ride BSR
+			// becomes a second entity linked as the rider's ride (+0x2A0), its
+			// transform mode (+0x29D) copied from the rider's Ride Type. Every motion
+			// the rider plays is forwarded to it (CICharactor_PlayAnimationByMotionId
+			// 85ED80; CCObjCharacter_PlayAnimationWithFallback keeps a missing clip on
+			// "stand"), and it leaves with the rider (CICharactor_DespawnWithFade
+			// 855B00). CICUser_SubmitBodyRideAndAttachments (8602C0) composes them:
+			// mode 0 seats the rider on the ride's animated "saddle", mode 2 copies the
+			// rider's world matrix onto the ride, mode 1 (RT_FIXED) links neither. The
+			// ride carries no scale of its own (861B00 never calls SetModelScale on it).
+			const rideOwners = new Set<number>();
+			for ( const entity of entities ) {
+				const resource = resourceFor( entity ), owner = next.get( entity.gid );
+				const ride = resource ? ridesByRider.get( resource.codename ) : undefined;
+				if ( !owner || !ride || !resources.ready( ride.glb ) || next.size >= CHARACTER_ACTORS ) continue;
+				rideOwners.add( entity.gid );
+				let gid = linkedRides.get( entity.gid );
+				if ( gid === undefined ) {
+					gid = allocateActor();
+					linkedRides.set( entity.gid, gid );
+				}
+				const mode = riderModes.get( resource!.codename ) ?? 0;
+				const motion = ( clip: string ) => ride.clips.includes( clip ) ? clip : "stand";
+				next.set( gid, {
+					gid,
+					model: ride.glb,
+					pose: owner.pose,
+					clip: motion( owner.clip ),
+					layers: owner.layers?.map( layer => ({ ...layer, clip: motion( layer.clip ) }) ),
+					time: owner.time,
+					loop: owner.loop,
+					scale: 1,
+					opacity: owner.opacity,
+					height: owner.height,
+					// World_PickEntityAtScreenPoint (692680): a ride answers with its rider.
+					pickable: owner.pickable,
+					pickOwner: entity.gid,
+					...(mode === RIDE_COPIES_RIDER ?
+						{ attachment: { gid: entity.gid, bone: "", root: true, offset: [ 0, 0, 0 ] as const } } :
+						{})
+				} );
+				if ( mode === RIDER_ON_SADDLE ) next.set( entity.gid, { ...owner, mountedOn: gid } );
+			}
+			for ( const gid of linkedRides.keys() ) if ( !rideOwners.has( gid ) ) linkedRides.delete( gid );
 			// 8E9DD0 / 8EA7A0: auxiliary resource is the item's second animated
 			// handle. Its lifetime follows the COMMITTED body selection, including
 			// cold replacement fallback, not the newest unready inventory plan.
@@ -3224,16 +3358,22 @@ soundContext
 			// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
 			// It remains admitted even when no world entity exists for that member.
 			const portraits: CharacterActor[] = [];
-			const mallResource = local && catalog.get( local.refObjId );
-			if ( mallResource && local && gameplay && manifest >= 3 ) {
+			const skin = mallPreview.skin(), localResource = local && catalog.get( local.refObjId );
+			const mallResource = local && catalog.get( skin?.model ?? local.refObjId );
+			if ( mallResource && localResource && local && gameplay && manifest >= 3 ) {
+				// A body of the other sex cannot wear the worn set; 4EFE50 refuses
+				// that change until the armour and avatars are off anyway.
+				const worn = mallResource.codename.includes( "_WOMAN_" ) ===
+					localResource.codename.includes( "_WOMAN_" );
 				portraits.push( ...mallPreview.step(
 					{
 						resource: mallResource,
 						dress,
-						equipment: gameplay.inventory,
-						avatars: local.avatars ?? [],
+						equipment: worn ? gameplay.inventory : [],
+						avatars: worn ? local.avatars ?? [] : [],
 						seconds,
-						source: next.get( local.gid )
+						source: next.get( local.gid ),
+						shape: skin?.shape
 					},
 					resources,
 					renderer
@@ -3264,19 +3404,19 @@ soundContext
 		},
 		ready: ( gid: number ) => displayed.has( gid ),
 		/*
- ================
- entryReady
+		================
+		entryReady
 
- Keep first-use baseline work behind world entry without spawning fake drops.
- ================
- */
+		Keep first-use baseline work behind world entry without spawning fake drops.
+		================
+		*/
 		entryReady: () => commonReady && warmMotions.length === 0 && effects.loaded(),
 		previewReady: () => previewReady,
 		dockReady: () => dockReady,
 		/*
-================
-profile
-================
+		================
+		profile
+		================
 		*/
 		profile( value: CharacterFrameProbe | undefined ) {
 			probe = value;
@@ -3287,20 +3427,20 @@ profile
 		damageText: () => damageTexts as readonly import("@/engine/contracts/damage-text").DamageText[],
 		error: () => failure ?? resources.error() ?? effects.error(),
 		/*
-================
-simulationOrigin
+		================
+		simulationOrigin
 
-Frame-clock milliseconds of simulation time zero; local poses carry their
-simulation time (GameplayState.poseAtMs).
-================
+		Frame-clock milliseconds of simulation time zero; local poses carry their
+		simulation time (GameplayState.poseAtMs).
+		================
 		*/
 		simulationOrigin( ms: number ) {
 			posePresentation.origin( ms );
 		},
 		/*
-================
-reset
-================
+		================
+		reset
+		================
 		*/
 		reset() {
 			mallPreview.reset();
@@ -3351,6 +3491,7 @@ reset
 			resources.reset();
 			states.clear();
 			actionClocks.clear();
+			predictedEvents.clear();
 			deathFinalizes.clear();
 			displayed.clear();
 			displayedDependencies.clear();
@@ -3358,9 +3499,9 @@ reset
 			renderer.setCharacterActors( [] );
 		},
 		/*
-================
-dispose
-================
+		================
+		dispose
+		================
 		*/
 		dispose() {
 			mallPreview.reset();
@@ -3409,6 +3550,7 @@ dispose
 			resources.dispose();
 			states.clear();
 			actionClocks.clear();
+			predictedEvents.clear();
 			deathFinalizes.clear();
 			displayed.clear();
 			displayedDependencies.clear();

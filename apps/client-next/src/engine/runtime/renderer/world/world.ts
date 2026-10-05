@@ -9,13 +9,36 @@ world. Diagnostics observe it only through the frame probe (profile).
 
 ===========================================================================
 */
-import { characterShadowReceiver, BLOB_SHADOW_TEXTURE } from "@/engine/foundation/rendering/character-shadow";
+import { blendAdds } from "@/engine/foundation/rendering/blend-state";
+import {
+	characterShadowReceiver,
+	shadowReceiverBounds,
+	BLOB_SHADOW_TEXTURE
+} from "@/engine/foundation/rendering/character-shadow";
+import { createShadowSurfaces } from "./shadow-surfaces";
+import { createObjectFades } from "./object-fades";
+import {
+	compileWalkTable,
+	fadeKeeps,
+	residentSlots,
+	FADE_KEEPS_IN,
+	FADE_KEEPS_OUT,
+	SLOT_SCENERY,
+	SLOT_UNFADED,
+	WALK_INSTANCED,
+	WALK_SKY,
+	WALK_TERRAIN
+} from "./walk-table";
 import { footprintGeometry, footprintTextures } from "@/engine/foundation/rendering/footprints";
 import { createMaterialTimeline } from "@/engine/foundation/rendering/material-timeline";
+import { createTextureFactorPulse } from "@/engine/foundation/rendering/texture-factor-pulse";
 import { createTextureAtlas } from "@/engine/foundation/rendering/texture-atlas";
-import { createTerrainVisibility } from "@/engine/foundation/rendering/terrain-visibility";
+import { createWorldResidency } from "./residency";
+import { createTerrainLayers, type TerrainLayer } from "./terrain-layers";
 import {
 	terrainInteractionCells,
+	terrainCellKey,
+	createTerrainPickCache,
 	pickTerrainCells,
 	selectionDecalGeometry,
 	selectionTextures
@@ -41,11 +64,10 @@ import {
 	refitAnimatedCameraParts,
 	resolveFollowCamera,
 	followCameraQuery,
-	animatedCameraCandidates
+	animatedCameraCandidates,
+	type RegionCollision
 } from "@/engine/foundation/rendering/follow-camera";
 import { initialStarFlicker } from "@/engine/foundation/rendering/star-flicker";
-import { advanceObjectFade } from "@/engine/foundation/rendering/object-visibility";
-import type { ObjectFade } from "@/engine/foundation/rendering/object-visibility";
 import { createCharacterPose } from "@/engine/foundation/animation/animation-pose";
 import {
 	worldEnvironment,
@@ -77,8 +99,16 @@ import {
 	visibleFrustumBox,
 	terrainLod
 } from "@/engine/foundation/rendering/world-math";
-// Finish the ground before depth-writing objects blend against it. Asset names
-// cannot order these passes: even a zero-alpha native object writes depth.
+import { validPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
+import { hypot3 } from "@/engine/foundation/math/hypot";
+/*
+================
+drawPhase
+
+Finish the ground before depth-writing objects blend against it. Asset names
+cannot order these passes: even a zero-alpha native object writes depth.
+================
+*/
 function drawPhase( { material }: WorldGroup ): number {
 	if ( material.sky ) return -1;
 	if ( material.lightmap ) return 2;
@@ -86,6 +116,90 @@ function drawPhase( { material }: WorldGroup ): number {
 	if ( material.objectFade ) return 3;
 	return material.blend ? 4 : 3;
 }
+
+// followInput's slots: target xyz, yaw, pitch, distance, height, mounted,
+// offset xy, collision distance.
+const FOLLOW_INPUT_LENGTH = 11;
+// GPU geometry bytes admitted per frame while a scene loads. A region's
+// terrain arrives as a few megabytes; spreading it keeps crossings smooth.
+// At least one group is admitted each frame, whatever its size.
+const UPLOAD_BYTES_PER_FRAME = 4 << 20;
+
+/*
+================
+imageDrawKey
+
+The imageDraws key of an upload's ordered frame paths. Paths never contain
+a newline, so a single path is its own key and a multi-frame key can never
+equal one.
+================
+*/
+function imageDrawKey( paths: readonly string[] ): string {
+	return paths.length === 1 ? paths[0]! : paths.join( "\n" );
+}
+
+/*
+================
+followInput
+
+Writes the inputs the follow-camera collision resolve depends on into out
+and reports whether they differ from what out held. An absent optional is
+NaN; NaN slots compare equal to NaN, so they never force a resolve.
+Replaces a JSON key built every frame.
+================
+*/
+function followInput(
+	target: readonly [number, number, number],
+	follow: NonNullable<WorldCamera["follow"]>,
+	distance: number | null,
+	out: Float64Array
+): boolean {
+	let changed = false;
+	/*
+	================
+	write
+	================
+	*/
+	function write( slot: number, value: number ) {
+		const old = out[slot]!;
+		if ( old !== value && !(old !== old && value !== value) ) changed = true;
+		out[slot] = value;
+	}
+	write( 0, target[0] );
+	write( 1, target[1] );
+	write( 2, target[2] );
+	write( 3, follow.yaw );
+	write( 4, follow.pitch );
+	write( 5, follow.distance );
+	write( 6, follow.height ?? NaN );
+	write( 7, follow.mounted === undefined ? NaN : follow.mounted ? 1 : 0 );
+	write( 8, follow.offset?.[0] ?? NaN );
+	write( 9, follow.offset?.[1] ?? NaN );
+	write( 10, distance ?? NaN );
+	return changed;
+}
+
+/*
+================
+objectFadeDistance
+
+The eye-to-placement distance SWorld_AdvanceObjectFade (0x8C4C60) is fed,
+computed as its caller does at 8B988F..8B98F0: each delta stored as a
+float, ( dy*dy + dx*dx ) + dz*dz stored as a float, then CRT_sqrt stored
+as a float. The client runs x87 at 53-bit precision, so doubles reproduce
+the intermediate sums.
+================
+*/
+function objectFadeDistance( eye: ArrayLike<number>, x: number, y: number, z: number ): number {
+	const dx = Math.fround( eye[0]! - x ), dy = Math.fround( eye[1]! - y ), dz = Math.fround( eye[2]! - z );
+	return Math.fround( Math.sqrt( Math.fround( dy * dy + dx * dx + dz * dz ) ) );
+}
+
+/*
+================
+createWorldRenderer
+================
+*/
 export function createWorldRenderer(
 	budget?: number,
 	readAlpha?: ( image: ImageBitmap ) => PickAlpha,
@@ -94,10 +208,16 @@ export function createWorldRenderer(
 ) {
 	const weather = createWeather( random, sound );
 	let interactionScene: WorldScene | null = null, interactionCells = terrainInteractionCells( null );
+	// Ground pick bounds and triangles of resident terrain cells (terrain-interaction.ts).
+	const terrainPicks = createTerrainPickCache();
 	let decalState:
 		| { readonly pose: import("@/engine/contracts/gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; }
 		| null = null;
-	let decalDraw: GeometryDraw | null = null, decalKey = "", decalVertexCount = 0, decalSlot = -1;
+	let decalDraw: GeometryDraw | null = null, decalVertexCount = 0, decalSlot = -1;
+	// The point the retained decal geometry was built for; decalValid false
+	// forces a rebuild (new interaction cells, GPU loss).
+	let decalValid = false, decalBuiltSlot = -1;
+	const decalPoint: [number, number, number] = [ 0, 0, 0 ];
 	let decalImage: ImageDraw | null = null;
 	// Scene membership owns decal demand. indexPending refreshes it on admission,
 	// cancellation, commit, device recovery and disposal; camera and texture
@@ -106,6 +226,11 @@ export function createWorldRenderer(
 	const selectionPaths = () => selectionDemand;
 	let footprints: readonly import("@/engine/contracts/footprint").Footprint[] = [];
 	const footprintDraws = new Map<number, { draw: GeometryDraw; scene: WorldScene; image: ImageDraw; }>();
+	/*
+	================
+	prepareFootprints
+	================
+	*/
 	function prepareFootprints( geometry: GeometryCommands, textures: ImageCommands, seconds: number ): GeometryDraw[] {
 		const live = new Set( footprints.filter( p => seconds < p.started + 20 ).map( p => p.id ) );
 		for ( const [id, row] of footprintDraws ) {
@@ -122,11 +247,10 @@ export function createWorldRenderer(
 			if ( ((pose.regionId | current.originRegion) & 0x8000) && pose.regionId !== current.originRegion ) continue;
 			const path = footprintTextures()[footprint.surface === "SAND" ? 0 : 1], source = images.get( path )?.source;
 			if ( !source ) continue;
-			const key = JSON.stringify( [ path ] );
-			let image = imageDraws.get( key );
+			let image = imageDraws.get( path );
 			if ( !image ) {
 				image = textures.upload( source, [ source ], false );
-				imageDraws.set( key, image );
+				imageDraws.set( path, image );
 			}
 			let row = footprintDraws.get( footprint.id );
 			if ( row?.image !== image ) {
@@ -162,13 +286,23 @@ export function createWorldRenderer(
 		}
 		return result;
 	}
+	/*
+	================
+	updateInteractionCells
+	================
+	*/
 	function updateInteractionCells() {
 		if ( interactionScene !== current ) {
 			interactionScene = current;
 			interactionCells = terrainInteractionCells( current );
-			decalKey = "";
+			decalValid = false;
 		}
 	}
+	/*
+	================
+	prepareDecal
+	================
+	*/
 	function prepareDecal( geometry: GeometryCommands, textures: ImageCommands ): readonly GeometryDraw[] {
 		updateInteractionCells();
 		if ( !current || current.residency === "frontend" || !decalState ) return [];
@@ -176,22 +310,20 @@ export function createWorldRenderer(
 		if ( ((pose.regionId | current.originRegion) & 0x8000) && pose.regionId !== current.originRegion ) return [];
 		const path = selectionTextures()[slot]!, source = images.get( path )?.source;
 		if ( !source ) return [];
-		const point: [number, number, number] = [
-			pose.x + ((pose.regionId & 255) - (current.originRegion & 255)) * 1920,
-			pose.y,
-			pose.z + ((pose.regionId >>> 8) - (current.originRegion >>> 8)) * 1920
-		];
-		const key = JSON.stringify( [ slot, ...point ] );
-		if ( key === decalKey && decalDraw && decalImage === imageDraws.get( JSON.stringify( [ path ] ) ) ) {
-			return [ decalDraw ];
-		}
-		const data = selectionDecalGeometry( interactionCells, point );
+		const x = pose.x + ((pose.regionId & 255) - (current.originRegion & 255)) * 1920,
+			y = pose.y,
+			z = pose.z + ((pose.regionId >>> 8) - (current.originRegion >>> 8)) * 1920;
+		if (
+			decalValid && decalBuiltSlot === slot && decalPoint[0] === x && decalPoint[1] === y &&
+			decalPoint[2] === z &&
+			decalDraw && decalImage === imageDraws.get( path )
+		) return [ decalDraw ];
+		const data = selectionDecalGeometry( interactionCells, [ x, y, z ] );
 		if ( !data ) return [];
-		const imageKey = JSON.stringify( [ path ] );
-		let image = imageDraws.get( imageKey );
+		let image = imageDraws.get( path );
 		if ( !image ) {
 			image = textures.upload( source, [ source ], false );
-			imageDraws.set( imageKey, image );
+			imageDraws.set( path, image );
 		}
 		if ( decalDraw && decalVertexCount === data.positions.length && decalSlot === slot && decalImage === image ) {
 			geometry.updatePositions( decalDraw, data.positions, undefined, data.uvs );
@@ -202,7 +334,11 @@ export function createWorldRenderer(
 			decalSlot = slot;
 		}
 		decalImage = image;
-		decalKey = key;
+		decalValid = true;
+		decalBuiltSlot = slot;
+		decalPoint[0] = x;
+		decalPoint[1] = y;
+		decalPoint[2] = z;
 		return [ decalDraw ];
 	}
 
@@ -210,18 +346,46 @@ export function createWorldRenderer(
 	let weatherOptions: import("@/engine/foundation/gameplay/weather").WeatherOptions | null = null;
 	let stars = initialStarFlicker(), starTimerStarted = false;
 	let startupStars: WorldGroup | undefined;
+	// The admitted copy of the startup stars and its byte size, made once: every
+	// outdoor adoption composes it, and a crossing keeps its draw like any group.
+	let ownedStars: { readonly group: WorldGroup; readonly bytes: number; } | null = null;
+	/*
+	================
+	ownedStarGroup
+	================
+	*/
+	function ownedStarGroup() {
+		if ( !random ) throw Error( "Missing shared presentation RNG" );
+		startupStars ??= skyGroups( { starPrimitive: random.sky() } ).find( group => group.material.sky === 2 )!;
+		if ( !ownedStars ) {
+			// The application, not the asset worker, owns the shared star RNG. Only this
+			// small generated group needs local admission; the transferred city does not.
+			const stars: WorldScene = { id: "stars", originRegion: 0, warnings: [], groups: [ startupStars ] };
+			ownedStars = { group: copyWorldScene( stars ).groups[0]!, bytes: worldSceneBytes( stars ) };
+		}
+		return ownedStars;
+	}
 	let clock: { timeOfDay: number; lunarDay: number; } | null = null;
 	let hasStars = false;
 	let pickGroups: WorldGroup[] = [], pickSeconds = 0;
+	// The frustum of the last selection walk. Instanced groups submit placements
+	// outside it for the GPU to clip; picks keep to the ones inside it.
+	let pickFrustum: Float64Array | null = null;
 	const alphaMasks = new WeakMap<ImageBitmap, PickAlpha>();
 	// Immutable admitted positions own these bounds; replacement storage invalidates them.
 	const pickBounds = new WeakMap<Float32Array, PickBounds>();
 	const pickBlocks = new WeakMap<WorldGroup, Float64Array>();
-	const terrainVisibility = new WeakMap<WorldScene, ReturnType<typeof createTerrainVisibility>>();
+	// Camera collision parts of a region's terrain survive crossings with it.
+	const terrainCollision = new WeakMap<WorldGroup, RegionCollision>();
+	// Region terrain associations draw through shared layers (terrain-layers.ts).
+	const layers = createTerrainLayers();
 	let collisionScene: WorldScene | null = null,
 		collisionParts: ReturnType<typeof cameraCollisionParts> = [],
 		collisionDistance: number | null = null;
-	let collisionKey = "", collisionCamera: WorldCamera | null = null;
+	let collisionCamera: WorldCamera | null = null;
+	// The inputs the retained collisionCamera was resolved for (followInput).
+	const collisionInput = new Float64Array( FOLLOW_INPUT_LENGTH );
+	let collisionInputValid = false;
 	let current: WorldScene | null = null,
 		pending: WorldScene | null = null,
 		camera: WorldCamera = {
@@ -233,8 +397,15 @@ export function createWorldRenderer(
 		};
 	const images = new Map<string, { source: import("@/engine/contracts/texture").WorldTexture; }>(),
 		draws = new Map<WorldGroup, GeometryDraw>();
-	// Decoded pixels are shared by path; GPU arrays are shared by their ordered layers.
+	// Decoded pixels are shared by path; GPU arrays are shared by their ordered
+	// layers, keyed by imageDrawKey. A single path is its own key, so the
+	// per-frame lookups (footprints, decal, flares, weather) allocate nothing.
 	const imageDraws = new Map<string, ImageDraw>();
+	/*
+	================
+	texturePaths
+	================
+	*/
 	function texturePaths( group: WorldGroup ): readonly string[] {
 		return group.material.frames ?? (group.material.texture ? [ group.material.texture ] : []);
 	}
@@ -245,6 +416,11 @@ export function createWorldRenderer(
 	let pendingGroupCount = 0;
 	let collisionPreparation: ReturnType<typeof prepareCameraCollisionParts> | null = null,
 		preparedCollision: ReturnType<typeof cameraCollisionParts> | null = null;
+	/*
+	================
+	indexPending
+	================
+	*/
 	function indexPending() {
 		selectionDemand = [ current, pending ].some( scene =>
 				scene && scene.residency !== "frontend" &&
@@ -290,64 +466,128 @@ export function createWorldRenderer(
 			opacity?: Float32Array;
 			sourceInstances?: Int32Array;
 			alphas?: Uint8Array;
-			fadeRows?: FadeRow[];
-			resident?: Uint8Array;
-			targetCellX?: number;
-			targetCellZ?: number;
+			// Placement bounds (undefined for animated meshes), once resolved.
+			bounds?: PickBounds;
+			boundsResolved?: boolean;
 			seams?: Map<number, { mask: number; cellX: number; cellZ: number; }>;
+			// The ranges the eye cell selects, the previous cell's (a camera that
+			// steps back reuses them), and the ranges the group's draw holds.
 			candidates?: readonly TerrainRange[];
-			candidateVolumes?: Uint32Array;
-			previousCandidates?: {
-				cellX: number;
-				cellZ: number;
-				ranges: readonly TerrainRange[];
-				volumes: Uint32Array;
-			};
+			previousCandidates?: { cellX: number; cellZ: number; ranges: readonly TerrainRange[]; };
 			chosen?: readonly TerrainRange[];
 			cellX?: number;
 			cellZ?: number;
 		}
 	>();
+	/*
+	================
+	instanceSelection
+
+	The selection cache of an instanced group: the placements it shows and
+	their opacity. Admission builds it for every new group, a few per frame,
+	so the first frame of a new scene does not.
+	================
+	*/
+	function instanceSelection( group: WorldGroup ) {
+		const source = group.geometry.instances!;
+		let cache = selections.get( group );
+		if ( !cache ) {
+			cache = {
+				indices: new Uint32Array(),
+				instances: new Float32Array( source.length ),
+				sourceInstances: new Int32Array( source.length / 16 ).fill( -1 ),
+				alphas: new Uint8Array( source.length / 16 )
+			};
+			if ( group.visibility ) cache.opacity = new Float32Array( source.length / 16 );
+			selections.set( group, cache );
+		}
+		return cache;
+	}
 	// These are derived from owned scene metadata. Only blended depth order is
 	// camera-dependent; native material-set order remains fixed until replacement.
 	let orderedGroups: WorldGroup[] = [], objectOrder = new Map<string, number>();
 	// Optional measurements from the frame owner (runtime.ts frameProbe). The
 	// profiler never rewrites this source; it observes these explicit hooks.
 	let probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined;
-	// Shadow receivers by terrain cell. The visible terrain ranges change only
-	// when a group's selection does, so the map is rebuilt on that change, not
-	// every frame (it was the largest self cost of the frame).
-	type ShadowSurfaces = Map<string, import("@/engine/foundation/rendering/character-shadow").ShadowTerrainSurface[]>;
-	let shadowSurfaces: ShadowSurfaces = new Map(), shadowSurfaceInputs: readonly unknown[] = [];
-	function terrainShadowSurfaces(): ShadowSurfaces {
-		const inputs: unknown[] = [ orderedGroups ];
-		for ( const group of orderedGroups ) {
-			if ( group.material.terrain ) inputs.push( selections.get( group )?.chosen );
-		}
-		if (
-			inputs.length === shadowSurfaceInputs.length &&
-			inputs.every( ( input, i ) => input === shadowSurfaceInputs[i] )
-		) return shadowSurfaces;
-		const surfaces: ShadowSurfaces = new Map();
-		for ( const group of orderedGroups ) {
-			if ( group.material.terrain ) {
-				for ( const range of selections.get( group )?.chosen ?? [] ) {
-					const key = range.cell.join( ":" ), rows = surfaces.get( key ) ?? [];
-					rows.push( {
-						positions: group.geometry.positions,
-						indices: group.geometry.indices,
-						start: range.indexStart,
-						count: range.indexCount
-					} );
-					surfaces.set( key, rows );
-				}
-			}
-		}
-		shadowSurfaces = surfaces;
-		shadowSurfaceInputs = inputs;
-		return surfaces;
+	// Terrain triangles by cell for shadow receivers, revised per cell as the
+	// selection walk changes a group's chosen ranges (shadow-surfaces.ts).
+	const shadowSurfaces = createShadowSurfaces();
+	// Receivers by shadow key, kept only while a shadow uses them this frame.
+	// A receiver is rebuilt when a terrain cell under it changes, not when any
+	// selection anywhere does: a dragged camera changes one nearly every frame.
+	const shadowReceivers = new Map<string, {
+		readonly cells: ReturnType<typeof terrainInteractionCells>;
+		readonly stamp: number;
+		readonly receiver: ReturnType<typeof characterShadowReceiver>;
+	}>();
+	/*
+	================
+	receiverChanged
+
+	True when a terrain cell under the receiver of a shadow at point changed
+	after stamp.
+	================
+	*/
+	function receiverChanged( stamp: number, point: readonly [number, number, number], blobSize?: number ) {
+		const bounds = shadowReceiverBounds( point, blobSize );
+		return shadowSurfaces.changedSince(
+			stamp,
+			Math.floor( bounds.loX / 320 ),
+			Math.floor( bounds.loZ / 320 ),
+			Math.floor( bounds.hiX / 320 ),
+			Math.floor( bounds.hiZ / 320 )
+		);
 	}
-	let previousVisible = new Set<WorldGroup>(), previousTriangles = new Map<WorldGroup, number>();
+	// Each ordered group's index in orderedGroups.
+	let groupOrder = new Map<WorldGroup, number>();
+	// Visible marks by draw order: the walk marks, ordering reads them back.
+	// The draw phase of each group, by draw order.
+	let visibleMarks = new Uint8Array( 0 ), orderPhase = new Int8Array( 0 );
+	// Per order index: the terrain layer the group draws through, else its own
+	// draw (orderGroups), so submission reads arrays, not maps; and the
+	// selection walk's scratch (visible order indices, transparent depths).
+	let orderLayers: (TerrainLayer | undefined)[] = [], orderDraws: (GeometryDraw | undefined)[] = [];
+	let orderVisible = new Int32Array( 0 ), orderDepth = new Float64Array( 0 );
+	// The current scene's groups in walk order, with their typed bounds.
+	let walk = compileWalkTable( [], pickBounds );
+	// Instanced selection caches by walk index, so the walk does not look them up.
+	let walkCaches: (ReturnType<typeof instanceSelection> | undefined)[] = [];
+	/*
+	================
+	orderGroups
+
+	Sets the draw order of the current scene and compiles its walk table.
+	Shadow surfaces follow the draw order, so they are rebuilt from the
+	retained selections.
+	================
+	*/
+	function orderGroups( sceneGroups: readonly WorldGroup[] ) {
+		const groups = [ ...sceneGroups ].sort( compareGroups );
+		orderedGroups = groups;
+		groupOrder = new Map( groups.map( ( group, index ) => [ group, index ] ) );
+		visibleMarks = new Uint8Array( groups.length );
+		orderPhase = Int8Array.from( groups, drawPhase );
+		orderLayers = groups.map( group => layers.layerOf( group ) );
+		orderDraws = groups.map( group => draws.get( group ) );
+		orderVisible = new Int32Array( groups.length );
+		orderDepth = new Float64Array( groups.length );
+		walk = compileWalkTable( sceneGroups, pickBounds );
+		walkCaches = new Array( sceneGroups.length );
+		for ( let i = 0; i < sceneGroups.length; i++ ) walk.order[i] = groupOrder.get( sceneGroups[i]! )!;
+		shadowSurfaces.reset();
+		for ( let index = 0; index < groups.length; index++ ) {
+			const group = groups[index]!, chosen = selections.get( group )?.chosen;
+			if ( group.material.terrain && chosen ) shadowSurfaces.replace( group, index, undefined, chosen );
+		}
+		shadowSurfaces.commit();
+	}
+	// Selection walks so far (walk-table.ts seen), and layer submission passes.
+	let walkStamp = 0, submitPass = 0;
+	/*
+	================
+	compareGroups
+	================
+	*/
 	function compareGroups( a: WorldGroup, b: WorldGroup ): number {
 		const layerA = drawPhase( a ), layerB = drawPhase( b );
 		if ( layerA !== layerB ) return layerA - layerB;
@@ -362,13 +602,16 @@ export function createWorldRenderer(
 		}
 		return layerA === 4 ? 0 : a.id.localeCompare( b.id );
 	}
-	type FadeRow = { value: ObjectFade; visited: number; alpha: number; };
-	const fades = new Map<string, FadeRow>();
+	// Object fades by placement (object-fades.ts). Row numbers change when the
+	// fades are compacted or cleared; fadeEpoch tells a group to resolve its
+	// rows again.
+	const fades = createObjectFades();
+	let fadeEpoch = 0;
 	let selectedFadeFrame = -1, fadeFrame = 0, fadeSeconds: number | null = null, fadeScene: WorldScene | null = null;
-	let activeFades: FadeRow[] = [],
-		retainedFadeFrame: number | null = null,
+	let retainedFadeFrame: number | null = null,
 		fadesChanging = true,
 		retainedTargetX = NaN,
+		selectedLayerRevision = -1,
 		retainedTargetZ = NaN;
 	const poses = new Map<
 		string,
@@ -384,6 +627,17 @@ export function createWorldRenderer(
 	}[] = [];
 	let textureMotions: { group: WorldGroup; motion: ReturnType<typeof createTextureMotion>; draw?: GeometryDraw; }[] =
 		[];
+	// Groups whose material modifier pulses TEXTUREFACTOR (texture-factor-pulse.ts).
+	let texturePulses: {
+		group: WorldGroup;
+		pulse: ReturnType<typeof createTextureFactorPulse>;
+		draw?: GeometryDraw;
+	}[] = [];
+	/*
+	================
+	resetAnimations
+	================
+	*/
 	function resetAnimations( scene?: WorldScene, retainTextureMotion = false ) {
 		if ( !retainTextureMotion ) {
 			const old = new Map( materialTimelines.map( r => [ r.group.id, r ] ) );
@@ -395,6 +649,16 @@ export function createWorldRenderer(
 					old.get( group.id )!.clock :
 					createMaterialTimeline( group.material.colorTimeline! )
 			}) ) ?? [];
+			const pulses = new Map( texturePulses.map( r => [ r.group.id, r ] ) );
+			texturePulses = scene?.groups.filter( g => g.material.textureFactorPulse ).map( group => {
+				const kept = pulses.get( group.id );
+				const same = kept && JSON.stringify( kept.group.material.textureFactorPulse ) ===
+						JSON.stringify( group.material.textureFactorPulse );
+				return {
+					group,
+					pulse: same ? kept.pulse : createTextureFactorPulse( group.material.textureFactorPulse! )
+				};
+			} ) ?? [];
 		}
 		const previous = new Map( textureMotions.map( row => [ row.group.id, row ] ) );
 		if ( !retainTextureMotion ) {
@@ -424,6 +688,11 @@ export function createWorldRenderer(
 			animationKeys.set( group, JSON.stringify( [ group.animation!.model, group.animation!.clip ] ) );
 		}
 	}
+	/*
+	================
+	evaluateAnimations
+	================
+	*/
 	function evaluateAnimations( seconds: number, groups: readonly WorldGroup[] = activeAnimated ) {
 		const palettes = new Set<Float32Array>();
 		for ( const group of groups ) {
@@ -446,11 +715,23 @@ export function createWorldRenderer(
 		}
 		return palettes;
 	}
+	/*
+	================
+	animate
+	================
+	*/
 	function animate( geometry: GeometryCommands, seconds: number, force = false ) {
 		for ( const row of materialTimelines ) {
 			const changed = row.clock.step( seconds ), draw = draws.get( row.group );
 			if ( draw && draw.instanceCount > 0 && (changed || force || row.draw !== draw) ) {
 				geometry.updateMaterialColors( draw, row.clock.rgb, row.group.material.colorTimeline!.flags );
+				row.draw = draw;
+			}
+		}
+		for ( const row of texturePulses ) {
+			const changed = row.pulse.step( seconds ), draw = draws.get( row.group );
+			if ( draw && draw.instanceCount > 0 && (changed || force || row.draw !== draw) ) {
+				geometry.updateTextureFactor( draw, row.pulse.factor );
 				row.draw = draw;
 			}
 		}
@@ -471,22 +752,35 @@ export function createWorldRenderer(
 	}
 	const retired: WorldScene[] = [];
 	let lastView: Float32Array | null = null, lastEye: WorldCamera["eye"] | null = null;
-	const sizes = new Map<WorldScene, number>();
+	const residency = createWorldResidency();
 	let imageBytes = 0, disposed = false;
+	/*
+	================
+	capacity
+	================
+	*/
 	function capacity( scene?: WorldScene | null ) {
 		return budget ??
 			(scene?.residency === "frontend" || current?.residency === "frontend" || pending?.residency === "frontend" ?
 				FRONTEND_RESIDENCY_BYTES :
 				WORLD_RESIDENCY_BYTES);
 	}
+	/*
+	================
+	retainedBytes
+	================
+	*/
 	function retainedBytes() {
-		let bytes = imageBytes;
-		for ( const size of sizes.values() ) bytes += size;
-		return bytes;
+		return imageBytes + residency.retained();
 	}
 	let terrainEnd = 0, transparentStart = 0;
 	let selected: GeometryDraw[] = [], rebuilds = 0, triangles = 0;
 	let prune = false;
+	/*
+	================
+	collectUnused
+	================
+	*/
 	function collectUnused( textures: ImageCommands ) {
 		const groups = [ ...(current?.groups ?? []), ...(pending?.groups ?? []) ];
 		const flarePaths = [
@@ -496,8 +790,8 @@ export function createWorldRenderer(
 			...selectionPaths()
 		];
 		const usedDraws = new Set( [
-			...groups.map( group => JSON.stringify( texturePaths( group ) ) ),
-			...flarePaths.map( path => JSON.stringify( [ path ] ) )
+			...groups.map( group => imageDrawKey( texturePaths( group ) ) ),
+			...flarePaths
 		] );
 		for ( const [key, draw] of imageDraws ) {
 			if ( !usedDraws.has( key ) ) {
@@ -515,25 +809,42 @@ export function createWorldRenderer(
 		}
 		prune = false;
 	}
+	/*
+	================
+	release
+	================
+	*/
 	function release( scene: WorldScene | null, geometry: GeometryCommands ) {
-		for ( const group of scene?.groups ?? [] ) {
+		if ( !scene ) return;
+		// Groups another held scene still uses (a retained region) keep their draws.
+		for ( const group of residency.release( scene, [ current, pending, ...retired ] ) ) {
 			const draw = draws.get( group );
-			if ( draw ) geometry.release( draw );
+			if ( layers.member( group ) ) layers.remove( geometry, group );
+			else if ( draw ) geometry.release( draw );
 			draws.delete( group );
 			selections.delete( group );
 		}
-		if ( scene ) sizes.delete( scene );
 	}
+	/*
+	================
+	weatherGround
+	================
+	*/
 	function weatherGround( x: number, y: number, z: number ) {
 		const distance = pick( { start: [ x, y, z ], delta: [ 0, -1, 0 ] }, 1e6, true );
 		return distance === null ? null : y - distance;
 	}
+	/*
+	================
+	pick
+	================
+	*/
 	function pick( ray: PickRay, limit: number, excludeWater = false, terrainOnly = false, occlusionOnly = false ) {
 		let nearest = limit;
 		for ( const group of pickGroups ) {
 			if ( terrainOnly && !group.material.terrain && !group.material.water ) continue;
 			if (
-				group.material.sky || group.material.lightmap || group.material.additive ||
+				group.material.sky || group.material.lightmap || blendAdds( group.material ) ||
 				excludeWater && group.material.water
 			) continue;
 			const cache = selections.get( group ), draw = draws.get( group );
@@ -549,6 +860,18 @@ export function createWorldRenderer(
 			}
 			for ( let i = 0; i < count; i++ ) {
 				const matrix = instances.subarray( i * 16, i * 16 + 16 );
+				if ( group.instanceRadius !== undefined && pickFrustum ) {
+					const inFrustum = bounds ?
+						visibleFrustumBox( pickFrustum, bounds, instances, i * 16 ) :
+						visibleFrustumSphere(
+							pickFrustum,
+							instances[i * 16 + 12]!,
+							instances[i * 16 + 13]!,
+							instances[i * 16 + 14]!,
+							group.instanceRadius
+						);
+					if ( !inFrustum ) continue;
+				}
 				if ( bounds && !rayIntersectsBounds( ray, bounds, matrix, nearest ) ) continue;
 				const paths = texturePaths( group ),
 					path = paths.length ? paths[Math.floor( pickSeconds * 10 ) % paths.length] : undefined,
@@ -571,25 +894,26 @@ export function createWorldRenderer(
 					if ( occludesGeometry( ray, mesh, matrix, nearest, source.bones, surface ) ) return 0;
 					continue;
 				}
-				const pickStarted = probe?.pickCensus ? performance.now() : 0;
 				const depth = pickGeometry( ray, mesh, matrix, source.bones, surface );
-				probe?.pickCensus?.( {
-					group: group.id,
-					ms: performance.now() - pickStarted,
-					triangles: indices.length / 3,
-					vertices: source.positions.length / 3,
-					ranges: !!group.ranges,
-					skinned: !!source.bones
-				} );
 				if ( depth !== null && depth < nearest ) nearest = depth;
 			}
 		}
 		return nearest < limit ? nearest : null;
 	}
 	return {
+		/*
+		================
+		profile
+		================
+		*/
 		profile( value: import("@/engine/contracts/runtime").RenderFrameProbe | undefined ) {
 			probe = value;
 		},
+		/*
+		================
+		night
+		================
+		*/
 		night() {
 			if ( !current ) return false;
 			const time = environmentTime(
@@ -613,24 +937,46 @@ export function createWorldRenderer(
 			if ( candidates.some( c => c.blobSize !== undefined ) ) {
 				const source = images.get( BLOB_SHADOW_TEXTURE )?.source;
 				if ( source ) {
-					const key = JSON.stringify( [ BLOB_SHADOW_TEXTURE ] );
-					image = imageDraws.get( key );
+					image = imageDraws.get( BLOB_SHADOW_TEXTURE );
 					if ( !image ) {
 						image = textures.upload( source, [ source ], false );
-						imageDraws.set( key, image );
+						imageDraws.set( BLOB_SHADOW_TEXTURE, image );
 					}
 				}
 			}
-			const surfaces = terrainShadowSurfaces();
+			const surfaces = shadowSurfaces.surfaces();
+			// A receiver depends only on the shadow's point and size, the blob
+			// size and the terrain. A still character reuses last frame's mesh.
+			const used = new Set<string>();
 			const requests = candidates.flatMap( c => {
 				if ( c.blobSize !== undefined && !image ) return [];
-				const receiver = characterShadowReceiver( interactionCells, c.projection, c.blobSize, surfaces );
+				const point = c.projection.point,
+					key = `${c.blobSize ?? ""}:${c.projection.size}:${point[0]}:${point[1]}:${point[2]}`;
+				used.add( key );
+				let cached = shadowReceivers.get( key );
+				if (
+					!cached || cached.cells !== interactionCells || receiverChanged( cached.stamp, point, c.blobSize )
+				) {
+					cached = {
+						cells: interactionCells,
+						stamp: shadowSurfaces.revision(),
+						receiver: characterShadowReceiver( interactionCells, c.projection, c.blobSize, surfaces )
+					};
+					shadowReceivers.set( key, cached );
+				}
+				const receiver = cached.receiver;
 				return receiver ?
 					[ { matrix: c.projection.matrix, receiver, parts: c.parts, blob: c.blobSize !== undefined } ] :
 					[];
 			} );
+			for ( const key of shadowReceivers.keys() ) if ( !used.has( key ) ) shadowReceivers.delete( key );
 			return geometry.characterShadows?.( requests, image ) ?? [];
 		},
+		/*
+		================
+		scenery
+		================
+		*/
 		scenery() {
 			if ( !current?.scenery?.length ) return null;
 			const time = environmentTime(
@@ -639,13 +985,19 @@ export function createWorldRenderer(
 				current.residency === "frontend" ? null : clock
 			);
 			return {
-				emitters: current.scenery.filter( e =>
-					!fades.has( e.placement ) ||
-					(fades.get( e.placement )!.visited === selectedFadeFrame && fades.get( e.placement )!.alpha > 0)
-				),
+				emitters: current.scenery.filter( e => {
+					const row = fades.find( e.placement );
+					return row === undefined ||
+						fades.visited( row ) === selectedFadeFrame && fades.published( row ) > 0;
+				} ),
 				night: time < .25 || time > .75
 			};
 		},
+		/*
+		================
+		pickInterface
+		================
+		*/
 		pickInterface( ray: PickRay ) {
 			for ( const id of [ 2, 3 ] ) {
 				for ( const group of pickGroups ) {
@@ -656,6 +1008,11 @@ export function createWorldRenderer(
 			}
 			return null;
 		},
+		/*
+		================
+		interfaceCenters
+		================
+		*/
 		interfaceCenters() {
 			return [ 2, 3 ].map( id => {
 				const groups = pickGroups.filter( group => group.id.startsWith( "interface:" + id + ":" ) );
@@ -676,26 +1033,61 @@ export function createWorldRenderer(
 			} );
 		},
 		pick,
+		/*
+		================
+		occludes
+		================
+		*/
 		occludes( ray: PickRay, limit: number ) {
 			return pick( ray, limit, false, false, true ) !== null;
 		},
+		/*
+		================
+		pickGround
+		================
+		*/
 		pickGround( ray: PickRay ) {
 			updateInteractionCells();
-			return pickTerrainCells( interactionCells, ray );
+			return pickTerrainCells( interactionCells, ray, terrainPicks );
 		},
+		/*
+		================
+		footprints
+		================
+		*/
 		footprints( value: readonly import("@/engine/contracts/footprint").Footprint[] ) {
 			footprints = value;
 		},
+		/*
+		================
+		selectionDecal
+		================
+		*/
 		selectionDecal( value: typeof decalState ) {
 			decalState = value ? { pose: { ...value.pose }, slot: value.slot } : null;
 		},
+		/*
+		================
+		weather
+		================
+		*/
 		weather( value: import("@/engine/foundation/gameplay/weather").WeatherOptions | null ) {
 			weatherOptions = value;
 			weather.set( value );
 		},
+		/*
+		================
+		clock
+		================
+		*/
 		clock( value: { timeOfDay: number; lunarDay: number; } | null ) {
 			clock = value ? { ...value } : null;
 		},
+		/*
+		================
+		cancelPending
+		================
+		*/
 		cancelPending() {
 			if ( disposed ) return;
 			if ( pending ) retired.push( pending );
@@ -703,7 +1095,11 @@ export function createWorldRenderer(
 			indexPending();
 			prune = true;
 		},
-		adopt( lease: WorldSceneLease, detail?: WorldScene["terrainDetail"] ) {
+		adopt(
+			lease: WorldSceneLease,
+			detail?: WorldScene["terrainDetail"],
+			terrain: readonly import("@/engine/contracts/world-admission").WorldTerrainPart[] = []
+		) {
 			if ( disposed ) throw new Error( "World renderer disposed" );
 			if ( detail !== undefined && detail !== "full" && detail !== "distance" ) {
 				throw new Error( "Invalid terrain detail policy" );
@@ -715,25 +1111,35 @@ export function createWorldRenderer(
 				prepared.starBytes < 0 || prepared.starBytes > size
 			) throw new Error( "Invalid world admission receipt" );
 			if ( replacement.groups.some( group => group.material.sky === 2 ) ) {
-				if ( !random ) throw Error( "Missing shared presentation RNG" );
-				startupStars ??= skyGroups( { starPrimitive: random.sky() } ).find( group =>
-					group.material.sky === 2
-				)!;
-				// The application, not the asset worker, owns the shared star RNG. Only this
-				// small generated group needs local admission; the transferred city does not.
-				const stars: WorldScene = { id: "stars", originRegion: 0, warnings: [], groups: [ startupStars ] };
-				size += worldSceneBytes( stars ) - prepared.starBytes;
-				const ownedStars = copyWorldScene( stars ).groups[0]!;
+				const stars = ownedStarGroup();
+				size += stars.bytes - prepared.starBytes;
 				replacement = {
 					...replacement,
 					starRandomState: undefined,
-					groups: replacement.groups.map( group => group.material.sky === 2 ? ownedStars : group )
+					groups: replacement.groups.map( group => group.material.sky === 2 ? stars.group : group )
 				};
 			}
 			if ( detail !== undefined ) replacement = { ...replacement, terrainDetail: detail };
+			// Terrain parts join in the scene's own coordinates, each region once.
+			const regions = new Set<number>();
+			let whole = size;
+			for ( const part of terrain ) {
+				if (
+					part.origin !== replacement.originRegion || regions.has( part.region ) ||
+					!Number.isSafeInteger( part.bytes ) || part.bytes < 0 || replacement.residency === "frontend"
+				) throw new Error( "Invalid world terrain part" );
+				regions.add( part.region );
+				whole += part.bytes;
+			}
+			if ( terrain.length ) {
+				replacement = {
+					...replacement,
+					groups: [ ...replacement.groups, ...terrain.flatMap( part => part.groups ) ]
+				};
+			}
 			if (
-				size > (replacement.residency === "frontend" ? FRONTEND_SCENE_BYTES : WORLD_SCENE_BYTES) ||
-				retainedBytes() + size > capacity( replacement )
+				whole > (replacement.residency === "frontend" ? FRONTEND_SCENE_BYTES : WORLD_SCENE_BYTES) ||
+				retainedBytes() + residency.incoming( size, terrain ) > capacity( replacement )
 			) {
 				throw new Error(
 					`World CPU residency budget exceeded (incoming ${size}, retained ${retainedBytes()}, images ${imageBytes}, capacity ${
@@ -742,10 +1148,15 @@ export function createWorldRenderer(
 				);
 			}
 			if ( pending ) retired.push( pending );
-			sizes.set( replacement, size );
+			residency.hold( replacement, size, terrain );
 			pending = replacement;
 			indexPending();
 		},
+		/*
+		================
+		scene
+		================
+		*/
 		scene( scene: WorldScene | null ) {
 			if ( !scene ) {
 				environmentState = null;
@@ -774,10 +1185,15 @@ export function createWorldRenderer(
 				copyWorldScene( scene ) :
 				{ id: "empty", originRegion: 0, groups: [], warnings: [] };
 			if ( pending ) retired.push( pending );
-			sizes.set( replacement, size );
+			residency.hold( replacement, size );
 			pending = replacement;
 			indexPending();
 		},
+		/*
+		================
+		camera
+		================
+		*/
 		camera( value: WorldCamera ) {
 			if ( value.dungeonBlock !== camera.dungeonBlock ) lastView = null;
 			camera = {
@@ -787,6 +1203,11 @@ export function createWorldRenderer(
 				target: [ ...value.target ]
 			};
 		},
+		/*
+		================
+		neededTextures
+		================
+		*/
 		neededTextures() {
 			return [
 				...new Set( [
@@ -795,7 +1216,11 @@ export function createWorldRenderer(
 				] )
 			];
 		},
-		texture( path: string, image: import("@/engine/contracts/texture").WorldTexture ) {
+		texture(
+			path: string,
+			image: import("@/engine/contracts/texture").WorldTexture,
+			alpha?: PickAlpha
+		) {
 			if ( disposed ) {
 				if ( !("kind" in image) ) image.close();
 				throw new Error( "World renderer disposed" );
@@ -811,6 +1236,10 @@ export function createWorldRenderer(
 			}
 			imageBytes += bytes;
 			images.set( path, { source: image } );
+			// A mask decoded with the texture spares the main-thread readback.
+			if ( !("kind" in image) && validPickAlpha( alpha, image.width, image.height ) ) {
+				alphaMasks.set( image, alpha );
+			}
 			missingTextures.delete( path );
 			for ( const group of textureWaiters.get( path ) ?? [] ) {
 				const count = groupWaits.get( group )! - 1;
@@ -832,12 +1261,11 @@ export function createWorldRenderer(
 			backgroundDistance?: number
 		): PreparedWorld {
 			probe?.worldBegin?.();
-			for ( const scene of retired ) release( scene, geometry );
-			retired.length = 0;
-			let budget = 8;
+			while ( retired.length ) release( retired.pop()!, geometry );
+			let budget = 8, uploadBytes = UPLOAD_BYTES_PER_FRAME;
 			if ( pending ) {
 				if ( camera.follow && !preparedCollision ) {
-					collisionPreparation ??= prepareCameraCollisionParts( pending );
+					collisionPreparation ??= prepareCameraCollisionParts( pending, terrainCollision );
 					// Prepare the exact collision product alongside GPU admission. Keep the
 					// old scene until both are ready; never remove collision for a fast handoff.
 					for ( let work = 0; work < 40; work++ ) {
@@ -850,20 +1278,13 @@ export function createWorldRenderer(
 					}
 				}
 				for ( const group of readyGroups ) {
-					if ( !budget-- ) break;
+					if ( !budget-- || uploadBytes <= 0 ) break;
+					uploadBytes -= group.geometry.positions.length / 3 * 56 + group.geometry.indices.byteLength;
 					const paths = texturePaths( group );
-					if ( group.ranges ) {
-						let visibility = terrainVisibility.get( pending );
-						if ( !visibility ) {
-							visibility = createTerrainVisibility();
-							terrainVisibility.set( pending, visibility );
-						}
-						for ( const range of group.ranges ) visibility.admit( range );
-					}
 					// Alpha readback belongs to bounded resource admission, not the first
 					// hover over a resident object. Animated texture frames are admitted too.
 					if (
-						readAlpha && !group.material.sky && !group.material.lightmap && !group.material.additive
+						readAlpha && !group.material.sky && !group.material.lightmap && !blendAdds( group.material )
 					) {
 						for ( const path of paths ) {
 							const bitmap = images.get( path )?.source;
@@ -872,7 +1293,7 @@ export function createWorldRenderer(
 							}
 						}
 					}
-					const key = JSON.stringify( paths );
+					const key = imageDrawKey( paths );
 					let imageDraw = imageDraws.get( key );
 					if ( paths.length && !imageDraw ) {
 						const frames = paths.map( path => images.get( path )!.source );
@@ -887,25 +1308,46 @@ export function createWorldRenderer(
 					if ( !group.geometry.bones && !group.ranges && !pickBlocks.has( group ) ) {
 						pickBlocks.set( group, geometryPickBlocks( group.geometry ) );
 					}
-					draws.set( group, geometry.upload( group.geometry, imageDraw ) );
+					draws.set(
+						group,
+						layers.eligible( group ) ?
+							layers.admit( geometry, pending, group, imageDraw ) :
+							geometry.upload( group.geometry, imageDraw )
+					);
+					if ( group.instanceRadius !== undefined ) instanceSelection( group );
 					readyGroups.delete( group );
 					pendingGroupCount--;
 				}
 				if ( pendingGroupCount === 0 && missingTextures.size === 0 && (!camera.follow || preparedCollision) ) {
+					const previous = current;
 					release( current, geometry );
 					current = pending;
 					pending = null;
 					if ( preparedCollision ) {
 						collisionScene = current;
 						collisionParts = preparedCollision;
-						collisionKey = "";
+						collisionInputValid = false;
 						collisionCamera = null;
 						if ( !current.groups.length ) collisionDistance = null;
 					}
 					indexPending();
-					if ( fadeScene !== current ) {
+					// Placements keep their fade identity across outdoor scenes: a crossing
+					// must not fade every retained building in again.
+					const sameWorld = !!previous && fadeScene === previous &&
+						previous.residency === current.residency &&
+						!((previous.originRegion | current.originRegion) & 0x8000);
+					if ( sameWorld ) {
+						const placed = new Set<string>();
+						for ( const group of current.groups ) {
+							for ( const descriptor of group.visibility ?? [] ) placed.add( descriptor.id );
+						}
+						fades.keepOnly( placed );
+						fadeEpoch++;
+						fadeScene = current;
+						fadesChanging = true;
+					} else if ( fadeScene !== current ) {
 						fades.clear();
-						activeFades.length = 0;
+						fadeEpoch++;
 						retainedFadeFrame = null;
 						fadesChanging = true;
 						fadeScene = current;
@@ -927,9 +1369,7 @@ export function createWorldRenderer(
 						const key = group.materialOrder?.set ?? group.id;
 						if ( !objectOrder.has( key ) ) objectOrder.set( key, objectOrder.size );
 					}
-					orderedGroups = [ ...current.groups ].sort( compareGroups );
-					previousVisible.clear();
-					previousTriangles.clear();
+					orderGroups( current.groups );
 					prune = true;
 				}
 			}
@@ -949,8 +1389,8 @@ export function createWorldRenderer(
 			if ( camera.follow && current ) {
 				if ( collisionScene !== current ) {
 					collisionScene = current;
-					collisionParts = cameraCollisionParts( current );
-					collisionKey = "";
+					collisionParts = cameraCollisionParts( current, terrainCollision );
+					collisionInputValid = false;
 					collisionCamera = null;
 					if ( !current.groups.length ) collisionDistance = null;
 				}
@@ -964,22 +1404,26 @@ export function createWorldRenderer(
 				// A visible draw can update its palette after the previous camera query.
 				// Refresh ray candidates against current palettes, including that case.
 				refitAnimatedCameraParts( candidates );
-				if ( changed.size ) collisionKey = "";
+				if ( changed.size ) collisionInputValid = false;
 			}
 			if ( camera.follow ) {
-				const key = JSON.stringify( [ localCamera.target, camera.follow, collisionDistance ] );
-				if ( key !== collisionKey ) {
+				if (
+					followInput( localCamera.target, camera.follow, collisionDistance, collisionInput ) ||
+					!collisionInputValid
+				) {
 					const result = resolveFollowCamera( localCamera, collisionParts, collisionDistance );
 					collisionCamera = result.camera;
 					collisionDistance = result.collision;
-					collisionKey = key;
+					// The recorded inputs carry the pre-resolve distance: a resolve that
+					// moves it resolves once more next frame, as the string key did.
+					collisionInputValid = true;
 				}
 				localCamera = { ...localCamera, eye: collisionCamera!.eye, target: collisionCamera!.target };
 			} else {
 				collisionScene = null;
 				collisionParts = [];
 				collisionDistance = null;
-				collisionKey = "";
+				collisionInputValid = false;
 				collisionCamera = null;
 			}
 			probe?.worldMark?.( "world-camera" );
@@ -1035,11 +1479,10 @@ export function createWorldRenderer(
 				{
 					uniforms: flareFrame,
 					textures: current!.flareTextures!.map( path => {
-						const key = JSON.stringify( [ path ] );
-						let draw = imageDraws.get( key );
+						let draw = imageDraws.get( path );
 						if ( !draw ) {
 							draw = textures.upload( images.get( path )!.source );
-							imageDraws.set( key, draw );
+							imageDraws.set( path, draw );
 						}
 						return draw;
 					} )
@@ -1054,11 +1497,10 @@ export function createWorldRenderer(
 			for ( const path of weather.paths() ) {
 				const image = images.get( path );
 				if ( !image ) continue;
-				const key = JSON.stringify( [ path ] );
-				let draw = imageDraws.get( key );
+				let draw = imageDraws.get( path );
 				if ( !draw ) {
 					draw = textures.upload( image.source );
-					imageDraws.set( key, draw );
+					imageDraws.set( path, draw );
 				}
 				weatherImages.set( path, draw );
 			}
@@ -1069,8 +1511,8 @@ export function createWorldRenderer(
 			const targetCellX = Math.floor( localCamera.target[0] / 320 ),
 				targetCellZ = Math.floor( localCamera.target[2] / 320 );
 			if (
-				probe?.worldReplay?.( !!lastView ) ||
-				(!viewChanged && !fadesChanging && targetCellX === retainedTargetX && targetCellZ === retainedTargetZ)
+				!viewChanged && !fadesChanging && targetCellX === retainedTargetX && targetCellZ === retainedTargetZ &&
+				layers.revision() === selectedLayerRevision
 			) {
 				// Every resident object would receive this frame stamp without changing
 				// selection or opacity. Materialize those stamps only on the next walk.
@@ -1093,86 +1535,109 @@ export function createWorldRenderer(
 					originRegion: current?.originRegion ?? 0
 				};
 			}
-			if ( retainedFadeFrame !== null ) {
-				for ( const row of activeFades ) {
-					row.value.lastFrame = retainedFadeFrame;
-				}
-			}
+			if ( retainedFadeFrame !== null ) fades.stampActive( retainedFadeFrame );
 			// Only the stationary early-out defers frame stamps. An ordinary selection
 			// walk has already committed them; do not replay those writes next frame.
 			retainedFadeFrame = null;
-			activeFades.length = 0;
+			fades.clearActive();
 			let changing = false;
 			lastView = matrix;
 			const sampleDetails = probe?.sampleDetails?.() ?? false;
 			const frustum = prepareViewFrustum( matrix ), visible: WorldGroup[] = [];
+			pickFrustum = frustum;
 			triangles = 0;
-			const terrainVolumes = current ? terrainVisibility.get( current ) : undefined;
-			const terrainMask = terrainVolumes?.begin( frustum );
 			const eyeCellX = Math.floor( localCamera.eye[0] / 320 ), eyeCellZ = Math.floor( localCamera.eye[2] / 320 );
+			// The fade range of scenery objects follows the background distance.
+			const sceneryRange = Math.min( 2500, Math.fround( (backgroundDistance ?? 3500) * Math.fround( .8 ) ) ) -
+				480;
 			const selectTerrainLod = ( distanceSquared: number ) =>
 				current?.terrainDetail === "full" ? 0 : terrainLod( distanceSquared );
-			for ( const group of current?.groups ?? [] ) {
-				if ( group.dungeonBlock !== undefined && current?.dungeonVisibility ) {
+			const walkGroups = walk.groups, stamp = ++walkStamp;
+			for ( let walked = 0; walked < walkGroups.length; walked++ ) {
+				const group = walkGroups[walked]!, kind = walk.kind[walked]!;
+				if ( current?.dungeonVisibility && group.dungeonBlock !== undefined ) {
 					const visibleBlocks = camera.dungeonBlock === undefined ?
 						undefined :
 						current.dungeonVisibility[camera.dungeonBlock];
 					if ( !visibleBlocks?.includes( group.dungeonBlock ) ) continue;
 				}
-				if ( group.material.sky ) {
+				if ( kind === WALK_SKY ) {
 					visible.push( group );
+					visibleMarks[walk.order[walked]!] = 1;
+					walk.seen[walked] = stamp;
 					continue;
 				}
-				if ( !viewChanged && !group.visibility ) {
-					if ( previousVisible.has( group ) ) {
+				if ( !viewChanged && !walk.faded[walked] ) {
+					if ( walk.seen[walked] === stamp - 1 ) {
 						visible.push( group );
-						triangles += previousTriangles.get( group ) ?? 0;
+						visibleMarks[walk.order[walked]!] = 1;
+						walk.seen[walked] = stamp;
+						triangles += walk.triangles[walked]!;
 					}
 					continue;
 				}
 				const trianglesBefore = triangles;
-				if ( group.ranges ) {
+				// A terrain group's choice depends on the eye cell alone (below): an
+				// unchanged cell is decided from the table, without the group's objects.
+				if (
+					kind === WALK_TERRAIN && walk.cell[walked * 2] === eyeCellX &&
+					walk.cell[walked * 2 + 1] === eyeCellZ
+				) {
+					const indices = walk.count[walked]!;
+					if ( indices > 0 ) {
+						visible.push( group );
+						visibleMarks[walk.order[walked]!] = 1;
+						triangles += indices / 3;
+						walk.seen[walked] = stamp;
+						walk.triangles[walked] = indices / 3;
+					}
+					continue;
+				}
+				if ( kind === WALK_TERRAIN && group.ranges ) {
 					let cache = selections.get( group );
 					if ( !cache ) {
 						cache = { indices: new Uint32Array( group.geometry.indices.length ), seams: new Map() };
 						selections.set( group, cache );
 					}
-					if ( sampleDetails ) probe?.detailBegin?.( "terrain-candidates" );
+					// The terrain a group submits depends on the eye cell alone: every range
+					// at the LOD its distance from the eye cell selects. Native culls cells
+					// against the frustum each frame (A2D1B0); the GPU clips the off-screen
+					// ones here instead, at the cost of a few thousand clipped triangles, so
+					// turning the camera changes nothing to choose or upload.
 					const cellChanged = cache.cellX !== eyeCellX || cache.cellZ !== eyeCellZ;
+					if ( cache.chosen && !cellChanged ) {
+						if ( cache.indexCount ) {
+							visible.push( group );
+							visibleMarks[walk.order[walked]!] = 1;
+							triangles += cache.indexCount / 3;
+							walk.seen[walked] = stamp;
+							walk.triangles[walked] = cache.indexCount / 3;
+						}
+						continue;
+					}
+					if ( sampleDetails ) probe?.detailBegin?.( "terrain-candidates" );
 					if ( !cache.candidates || (cellChanged && current?.terrainDetail !== "full") ) {
-						// Retain only two cell-dependent plans. Frustum selection below remains
-						// live; geometry retirement owns both plans, including their volume slots.
+						// Retain only two cell-dependent plans; geometry retirement owns both.
 						const previous = cache.previousCandidates;
 						cache.previousCandidates = cache.candidates ?
-							{
-								cellX: cache.cellX!,
-								cellZ: cache.cellZ!,
-								ranges: cache.candidates,
-								volumes: cache.candidateVolumes!
-							} :
+							{ cellX: cache.cellX!, cellZ: cache.cellZ!, ranges: cache.candidates } :
 							undefined;
 						if ( previous && previous.cellX === eyeCellX && previous.cellZ === eyeCellZ ) {
 							cache.candidates = previous.ranges;
-							cache.candidateVolumes = previous.volumes;
 						} else {
 							cache.candidates = group.ranges.filter( range => {
 								const dx = range.cell[0] - eyeCellX, dz = range.cell[1] - eyeCellZ;
 								return range.lod === selectTerrainLod( dx * dx + dz * dz );
 							} );
-							cache.candidateVolumes = terrainVolumes!.indices( cache.candidates );
 						}
 					}
 					cache.cellX = eyeCellX;
 					cache.cellZ = eyeCellZ;
-					const chosen = cache.candidates.filter( ( range, i ) =>
-						terrainMask![cache.candidateVolumes![i]!] === 1
-					);
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-candidates" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-indices" );
-					const indicesDirty = !cache.chosen || chosen.length !== cache.chosen.length ||
-						chosen.some( ( range, i ) => range !== cache.chosen![i] );
+					const chosen = cache.candidates, indicesDirty = chosen !== cache.chosen;
 					let count = 0;
-					const positionRanges: [number, number][] = [];
+					let positionRanges: [number, number][] | null = null;
 					for ( const range of chosen ) {
 						if ( indicesDirty ) {
 							cache.indices.set(
@@ -1234,149 +1699,132 @@ export function createWorldRenderer(
 								lastChanged = i;
 							}
 						}
-						if ( lastChanged >= 0 ) positionRanges.push( [ firstChanged, lastChanged - firstChanged + 1 ] );
+						if ( lastChanged >= 0 ) {
+							(positionRanges ??= []).push( [ firstChanged, lastChanged - firstChanged + 1 ] );
+						}
 					}
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-seams" );
 					cache.indexCount = count;
+					walk.count[walked] = count;
+					walk.cell[walked * 2] = eyeCellX;
+					walk.cell[walked * 2 + 1] = eyeCellZ;
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-index-upload" );
 					if ( indicesDirty ) {
-						geometry.updateIndices( draws.get( group )!, cache.indices.subarray( 0, count ) );
+						if ( layers.member( group ) ) layers.select( group, cache.indices, count );
+						else geometry.updateIndices( draws.get( group )!, cache.indices.subarray( 0, count ) );
+						if ( group.material.terrain ) {
+							shadowSurfaces.replace( group, groupOrder.get( group )!, cache.chosen, chosen );
+						}
 						cache.chosen = chosen;
 					}
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-index-upload" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-position-upload" );
-					if ( positionRanges.length ) {
-						geometry.updatePositions(
-							draws.get( group )!,
-							group.geometry.positions,
-							undefined,
-							undefined,
-							positionRanges
-						);
+					if ( positionRanges ) {
+						if ( layers.member( group ) ) {
+							layers.updatePositions( geometry, group, group.geometry.positions, positionRanges );
+						} else {
+							geometry.updatePositions(
+								draws.get( group )!,
+								group.geometry.positions,
+								undefined,
+								undefined,
+								positionRanges
+							);
+						}
 					}
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-position-upload" );
 					if ( count ) {
 						visible.push( group );
+						visibleMarks[walk.order[walked]!] = 1;
 						triangles += count / 3;
+						walk.seen[walked] = stamp;
+						walk.triangles[walked] = triangles - trianglesBefore;
 					}
-					previousTriangles.set( group, triangles - trianglesBefore );
 					continue;
 				}
-				if ( group.instanceRadius !== undefined ) {
+				if ( kind === WALK_INSTANCED ) {
 					if ( sampleDetails ) probe?.detailBegin?.( "world-instance-setup" );
-					let cache = selections.get( group );
-					if ( !cache ) {
-						cache = {
-							indices: new Uint32Array(),
-							instances: new Float32Array( group.geometry.instances!.length ),
-							sourceInstances: new Int32Array( group.geometry.instances!.length / 16 ).fill( -1 ),
-							alphas: new Uint8Array( group.geometry.instances!.length / 16 )
-						};
-						selections.set( group, cache );
-					}
-					const source = group.geometry.instances!,
-						bounds = group.geometry.bones ? undefined : pickBounds.get( group.geometry.positions );
-					let count = 0, instancesDirty = false;
-					// Native association membership depends on the target cell, not on each
-					// sub-cell camera sample or animation clock. Fade state still ticks below.
-					if (
-						group.visibility &&
-						(!cache.resident || cache.targetCellX !== targetCellX || cache.targetCellZ !== targetCellZ)
-					) {
-						cache.resident ??= new Uint8Array( source.length / 16 );
-						for ( let slot = 0; slot < cache.resident.length; slot++ ) {
-							const descriptor = group.visibility[slot];
-							cache.resident[slot] = Number(
-								!descriptor ||
-									descriptor.cells.some( cell =>
-										Math.abs( cell[0] - targetCellX ) <= descriptor.cellRadius &&
-										Math.abs( cell[1] - targetCellZ ) <= descriptor.cellRadius
-									)
-							);
+					const base = walk.slotBase[walked]!, at = walked * 5, sphere = walk.sphere, eye = localCamera.eye;
+					const cellX = walk.residentCell[walked * 2], cellZ = walk.residentCell[walked * 2 + 1];
+					const resident = residentSlots( walk, walked, targetCellX, targetCellZ ),
+						faded = walk.faded[walked] === 1;
+					// A new resident list renumbers the per-slot alphas below.
+					let listChanged = walk.count[walked]! < 0 || cellX !== targetCellX || cellZ !== targetCellZ;
+					// Placement identity resolves once each fade epoch (rows change when
+					// the fades compact or clear). A building's material pieces share
+					// one row.
+					if ( faded && walk.rowsEpoch[walked] !== fadeEpoch ) {
+						const descriptors = group.visibility!;
+						for ( let slot = 0; slot < descriptors.length; slot++ ) {
+							walk.row[base + slot] = fades.row( descriptors[slot]!.id );
 						}
-						cache.targetCellX = targetCellX;
-						cache.targetCellZ = targetCellZ;
+						walk.rowsEpoch[walked] = fadeEpoch;
 					}
-					if ( group.visibility && !cache.opacity ) cache.opacity = new Float32Array( source.length / 16 );
-					// Resolve placement identity once for each admitted mesh. A building's
-					// material pieces share one fade owner; the render loop uses direct slots.
-					if ( group.visibility && !cache.fadeRows ) {
-						cache.fadeRows = group.visibility.map( descriptor => {
-							let row = fades.get( descriptor.id );
-							if ( !row ) {
-								row = { value: { state: 0, alpha: 0, lastFrame: 0 }, visited: -1, alpha: 0 };
-								fades.set( descriptor.id, row );
-							}
-							return row;
-						} );
-					}
+					// Objects in a steady state this group's eye distances cannot leave
+					// take only the frame stamp advanceObjectFade would give them.
+					const keeps = faded ? fadeKeeps( walk, walked, eye, sceneryRange ) : 0;
 					if ( sampleDetails ) {
 						probe?.detailEnd?.( "world-instance-setup" );
 						probe?.detailBegin?.( "world-instance-loop" );
 					}
-					for ( let i = 0; i < source.length; i += 16 ) {
-						const descriptor = group.visibility?.[i / 16];
-						let alpha = 255, visible = false;
-						if ( descriptor ) {
-							if ( !cache.resident![i / 16] ) continue;
-							const row = cache.fadeRows![i / 16]!;
-							if ( row.visited !== fadeFrame ) {
-								row.visited = fadeFrame;
-								activeFades.push( row );
-							}
-							let state = row.value;
-							if ( state.lastFrame !== fadeFrame ) {
+					// Fade state ticks for every resident object, whatever the frustum.
+					// Each resident slot keeps its published alpha, or -1 when out; the
+					// group's placement list changes only when one of those does.
+					for ( let n = 0; n < resident; n++ ) {
+						const slot = walk.resident[base + n]!, g = base + slot, slotKind = walk.slotKind[g]!;
+						let alpha = 255;
+						if ( slotKind !== SLOT_UNFADED ) {
+							const row = walk.row[g]!;
+							fades.visit( row, fadeFrame );
+							if ( fades.lastFrame( row ) !== fadeFrame ) {
+								const state = fades.state( row );
 								if (
-									!viewChanged && state.lastFrame === ((fadeFrame - 1) >>> 0) &&
-									(state.state === 0 || state.state === 2)
-								) state.lastFrame = fadeFrame;
+									!viewChanged && fades.lastFrame( row ) === ((fadeFrame - 1) >>> 0) &&
+										(state === 0 || state === 2) ||
+									state === 2 && keeps & FADE_KEEPS_IN || state === 0 && keeps & FADE_KEEPS_OUT
+								) fades.stamp( row, fadeFrame );
 								else {
-									const distance = Math.fround(
-										Math.hypot(
-											source[i + 12]! - localCamera.eye[0],
-											source[i + 13]! - localCamera.eye[1],
-											source[i + 14]! - localCamera.eye[2]
-										)
-									);
-									state = advanceObjectFade(
-										state,
-										distance,
-										descriptor.radius,
-										descriptor.sceneryRange ?
-											Math.min(
-												2500,
-												Math.fround( (backgroundDistance ?? 3500) * Math.fround( .8 ) )
-											) - 480 :
-											descriptor.range,
+									fades.advance(
+										row,
+										objectFadeDistance(
+											eye,
+											walk.origin[g * 3]!,
+											walk.origin[g * 3 + 1]!,
+											walk.origin[g * 3 + 2]!
+										),
+										walk.radius[g]!,
+										slotKind === SLOT_SCENERY ? sceneryRange : walk.range[g]!,
 										dt,
-										fadeFrame,
-										state
+										fadeFrame
 									);
 								}
-								// Placement-owned publication, shared by every material piece. Native
-								// 8B98FF..8B9932 likewise converts alpha after the object fade update.
-								row.alpha = Math.max( 0, Math.min( 255, Math.trunc( state.alpha ) ) );
 							}
-							if ( state.state === 1 || state.state === 3 ) changing = true;
-							// Range/fade admission is independent of camera visibility. Keep its
-							// clock current offscreen, then reject draws (and draw-only animation)
-							// using the decoder's conservative all-pose bound. Retail likewise
-							// tests object bounds before submission: 8AA9C5..8AA9D8, A2D410.
-							alpha = row.alpha;
-							visible = state.state !== 0;
-						} else visible = true;
-						if ( visible ) {
-							visible = bounds ?
-								visibleFrustumBox( frustum, bounds, source, i ) :
-								visibleFrustumSphere(
-									frustum,
-									source[i + 12]!,
-									source[i + 13]!,
-									source[i + 14]!,
-									group.instanceRadius
-								);
+							const state = fades.state( row );
+							if ( state === 1 || state === 3 ) changing = true;
+							alpha = state !== 0 ? fades.published( row ) : -1;
 						}
-						if ( visible ) {
+						if ( walk.alpha[base + n] !== alpha ) {
+							walk.alpha[base + n] = alpha;
+							listChanged = true;
+						}
+					}
+					if ( sampleDetails ) {
+						probe?.detailEnd?.( "world-instance-loop" );
+						probe?.detailBegin?.( "world-instance-upload" );
+					}
+					// The group draws every resident placement that is faded in, in slot
+					// order. Native rejects each placement's bound against the frustum
+					// before submission (8AA9C5..8AA9D8, A2D410); here the group's sphere
+					// is tested and the GPU clips placements outside the view, so turning
+					// the camera neither re-tests nor re-uploads placements.
+					if ( listChanged ) {
+						const cache = walkCaches[walked] ??= instanceSelection( group ),
+							source = group.geometry.instances!;
+						let count = 0, instancesDirty = false;
+						for ( let n = 0; n < resident; n++ ) {
+							const alpha = walk.alpha[base + n]!;
+							if ( alpha < 0 ) continue;
+							const i = walk.resident[base + n]! * 16;
 							if ( cache.sourceInstances![count] !== i ) {
 								cache.instances!.set( source.subarray( i, i + 16 ), count * 16 );
 								cache.sourceInstances![count] = i;
@@ -1389,73 +1837,107 @@ export function createWorldRenderer(
 							}
 							count++;
 						}
-					}
-					if ( sampleDetails ) {
-						probe?.detailEnd?.( "world-instance-loop" );
-						probe?.detailBegin?.( "world-instance-upload" );
-					}
-					instancesDirty ||= count !== (cache.instanceCount ?? 0);
-					cache.instanceCount = count;
-					if ( instancesDirty ) {
-						draws.set(
-							group,
-							geometry.updateInstances(
+						instancesDirty ||= count !== (cache.instanceCount ?? 0);
+						cache.instanceCount = count;
+						if ( instancesDirty ) {
+							const draw = geometry.updateInstances(
 								draws.get( group )!,
 								cache.instances!.subarray( 0, count * 16 ),
 								cache.opacity?.subarray( 0, count )
-							)
-						);
+							);
+							draws.set( group, draw );
+							orderDraws[walk.order[walked]!] = draw;
+						}
+						walk.count[walked] = count;
 					}
 					if ( sampleDetails ) probe?.detailEnd?.( "world-instance-upload" );
-					if ( count ) {
+					const count = walk.count[walked]!;
+					if (
+						count &&
+						visibleFrustumSphere( frustum, sphere[at]!, sphere[at + 1]!, sphere[at + 2]!, sphere[at + 3]! )
+					) {
 						visible.push( group );
-						triangles += group.geometry.indices.length / 3 * count;
+						visibleMarks[walk.order[walked]!] = 1;
+						triangles += walk.instanceTriangles[walked]! * count;
+						walk.seen[walked] = stamp;
+						walk.triangles[walked] = triangles - trianglesBefore;
 					}
-					previousTriangles.set( group, triangles - trianglesBefore );
 					continue;
 				}
 				if (
 					visibleFrustumSphere( frustum, group.center[0], group.center[1], group.center[2], group.radius )
 				) {
 					visible.push( group );
+					visibleMarks[walk.order[walked]!] = 1;
 					triangles += group.geometry.indices.length / 3 * (group.geometry.instances!.length / 16);
+					walk.seen[walked] = stamp;
+					walk.triangles[walked] = triangles - trianglesBefore;
 				}
-				previousTriangles.set( group, triangles - trianglesBefore );
 			}
 			// CObjRenderer::QueueObject (0xAAE9C0) appends; 0xA5EE80 consumes
 			// that order. Keep scene submission order between resource batches:
 			// sorting filenames can put a fading prop before the solid structure behind it.
+			layers.flush( geometry );
+			// The selection below resolves every layer's current draw. A pending
+			// scene's admission can grow (replace) a layer the current one shares
+			// while the camera stands still; that must reopen this walk.
+			selectedLayerRevision = layers.revision();
+			shadowSurfaces.commit();
 			selectedFadeFrame = fadeFrame;
 			probe?.worldMark?.( "world-selection" );
 			fadesChanging = changing;
 			retainedTargetX = targetCellX;
 			retainedTargetZ = targetCellZ;
-			const visibleSet = new Set( visible );
-			previousVisible = visibleSet;
-			const ordered = orderedGroups.filter( group => visibleSet.has( group ) );
-			terrainEnd = ordered.findIndex( group => drawPhase( group ) >= 3 );
-			if ( terrainEnd < 0 ) terrainEnd = ordered.length;
-			transparentStart = ordered.findIndex( group => drawPhase( group ) === 4 );
-			if ( transparentStart < 0 ) transparentStart = ordered.length;
-			const transparent = ordered.splice( transparentStart );
-			transparent.sort( ( a, b ) =>
-				Math.hypot(
-					b.center[0] - localCamera.eye[0],
-					b.center[1] - localCamera.eye[1],
-					b.center[2] - localCamera.eye[2]
-				) -
-				Math.hypot(
-					a.center[0] - localCamera.eye[0],
-					a.center[1] - localCamera.eye[1],
-					a.center[2] - localCamera.eye[2]
-				)
+			// Draw order of the visible groups, without walking every resident one;
+			// the phase boundaries fall out of the same pass.
+			activeAnimated = animated.filter( group => visibleMarks[groupOrder.get( group ) ?? -1] === 1 );
+			let visibleCount = 0;
+			terrainEnd = -1;
+			transparentStart = -1;
+			for ( let index = 0; index < visibleMarks.length; index++ ) {
+				if ( !visibleMarks[index] ) continue;
+				visibleMarks[index] = 0;
+				const phase = orderPhase[index]!;
+				if ( terrainEnd < 0 && phase >= 3 ) terrainEnd = visibleCount;
+				if ( transparentStart < 0 && phase === 4 ) transparentStart = visibleCount;
+				orderVisible[visibleCount++] = index;
+			}
+			if ( terrainEnd < 0 ) terrainEnd = visibleCount;
+			if ( transparentStart < 0 ) transparentStart = visibleCount;
+			// Far to near. Each group's distance is taken once, not per comparison;
+			// ties keep draw order.
+			for ( let i = transparentStart; i < visibleCount; i++ ) {
+				const index = orderVisible[i]!, group = orderedGroups[index]!;
+				orderDepth[index] = hypot3(
+					group.center[0] - localCamera.eye[0],
+					group.center[1] - localCamera.eye[1],
+					group.center[2] - localCamera.eye[2]
+				);
+			}
+			orderVisible.subarray( transparentStart, visibleCount ).sort( ( a, b ) =>
+				orderDepth[b]! - orderDepth[a]! || a - b
 			);
-			ordered.push( ...transparent );
+			const ordered: WorldGroup[] = new Array( visibleCount );
+			for ( let i = 0; i < visibleCount; i++ ) ordered[i] = orderedGroups[orderVisible[i]!]!;
 			pickGroups = ordered;
 			// Upload gives every admitted group a unique resource handle. Its identity
 			// already covers scene replacement and binding growth; rebuilding a string
 			// of every asset name each frame adds no invalidation information.
-			const nextDraws = ordered.map( group => draws.get( group )! );
+			// Layer members share their layer's draw: submit it once, at its first
+			// member. Members are terrain, so only the opaque phases shift.
+			const nextDraws: GeometryDraw[] = [], pass = ++submitPass;
+			let shifted = 0;
+			for ( let i = 0; i < visibleCount; i++ ) {
+				const index = orderVisible[i]!, layer = orderLayers[index];
+				const draw = layer ? layers.drawInPass( layer, pass ) : orderDraws[index]!;
+				if ( draw === null ) {
+					if ( i < terrainEnd ) shifted++;
+					continue;
+				}
+				nextDraws.push( draw );
+			}
+			terrainEnd -= shifted;
+			transparentStart -= shifted;
 			if (
 				nextDraws.length !== selected.length || nextDraws.some( ( draw, index ) => draw !== selected[index] )
 			) {
@@ -1463,7 +1945,6 @@ export function createWorldRenderer(
 				rebuilds++;
 			}
 
-			activeAnimated = animated.filter( g => visibleSet.has( g ) );
 			animate( geometry, seconds );
 			probe?.worldMark?.( "world-finalize" );
 			return {
@@ -1482,35 +1963,42 @@ export function createWorldRenderer(
 				originRegion: current?.originRegion ?? 0
 			};
 		},
+		/*
+		================
+		invalidate
+		================
+		*/
 		invalidate() {
 			footprintDraws.clear();
 			decalImage = null;
 			decalDraw = null;
-			decalKey = "";
+			decalValid = false;
 			interactionScene = null;
 			interactionCells.clear();
 			weather.invalidate();
-			orderedGroups = [];
+			orderGroups( [] );
 			objectOrder.clear();
-			previousVisible.clear();
-			previousTriangles.clear();
 			lastEye = null;
 			pickGroups = [];
 			resetAnimations( undefined, true );
 			draws.clear();
+			layers.clear();
 			selections.clear();
 			retired.length = 0;
 			imageDraws.clear();
 			pending = pending ?? current;
-			const size = pending ? sizes.get( pending ) ?? 0 : 0;
-			sizes.clear();
-			if ( pending ) sizes.set( pending, size );
+			residency.keepOnly( pending );
 			current = null;
 			selected = [];
 			lastView = null;
 			triangles = 0;
 			indexPending();
 		},
+		/*
+		================
+		stats
+		================
+		*/
 		stats(): WorldRenderStats {
 			return {
 				sceneId: current?.id ?? null,
@@ -1522,6 +2010,11 @@ export function createWorldRenderer(
 				bundleRebuilds: rebuilds
 			};
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose( geometry: GeometryCommands | null, textures: ImageCommands | null ) {
 			if ( disposed ) return;
 			disposed = true;
@@ -1534,31 +2027,28 @@ export function createWorldRenderer(
 			interactionScene = null;
 			decalState = null;
 			weather.dispose( geometry );
-			orderedGroups = [];
+			orderGroups( [] );
 			objectOrder.clear();
-			previousVisible.clear();
-			previousTriangles.clear();
 			lastEye = null;
 			pickGroups = [];
 			collisionScene = null;
 			collisionParts = [];
 			collisionCamera = null;
 			fades.clear();
-			activeFades.length = 0;
+			fadeEpoch++;
 			fadeScene = null;
 			resetAnimations();
 			if ( geometry ) {
-				release( current, geometry );
-				release( pending, geometry );
-				for ( const scene of retired ) release( scene, geometry );
-				retired.length = 0;
+				for ( const [group, draw] of draws ) if ( !layers.member( group ) ) geometry.release( draw );
 			}
+			layers.dispose( geometry );
+			retired.length = 0;
 			if ( textures ) { for ( const draw of imageDraws.values() ) textures.release( draw ); }
 			imageDraws.clear();
 			for ( const image of images.values() ) if ( !("kind" in image.source) ) image.source.close();
 			images.clear();
 			imageBytes = 0;
-			sizes.clear();
+			residency.clear();
 			retired.length = 0;
 			draws.clear();
 			selections.clear();

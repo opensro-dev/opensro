@@ -1,10 +1,28 @@
+/*
+===========================================================================
+
+skillmovement.go - movement-speed skill descriptors
+
+Compiles the hste / hst2 / hst3 movement programs and decides which of them
+run as an instant self effect (non-attack activity 1). The slot rules the
+three kinds follow at run time live in item/statuseffect/movement.go.
+
+===========================================================================
+*/
+
 package enterworld
 
 import "opensro.online/server/internal/game/item/statuseffect"
 
-// SkillMovementModifier is an executable descriptor admission, independent of
-// item/skill names. Compound programs remain closed until all their operations
-// and persistence rules are implemented. cbuf uses the native timed-job branch.
+/*
+================
+SkillMovementModifier
+
+An executable descriptor admission, independent of item/skill names.
+Compound programs remain closed until all their operations and persistence
+rules are implemented. cbuf uses the native timed-job branch.
+================
+*/
 type SkillMovementModifier struct {
 	Present, Supported bool
 	Percent            uint32
@@ -12,6 +30,16 @@ type SkillMovementModifier struct {
 	Persistent         bool
 }
 
+/*
+================
+encodedMovementModifier
+
+Compiles the hste/hst2/hst3 movement program of a skill row's encoded tail.
+The modifier is Present when any of the three tags appears, and Supported
+only when every parameter in the tail is one this owner understands, a
+positive dura is authored and the winning percent is nonzero.
+================
+*/
 func encodedMovementModifier(fields []string) SkillMovementModifier {
 	result := SkillMovementModifier{Present: encodedTailContainsTag(fields, 0x68737465) || encodedTailContainsTag(fields, 0x68737432) || encodedTailContainsTag(fields, 0x68737433)}
 	if !result.Present {
@@ -75,11 +103,26 @@ func encodedMovementModifier(fields []string) SkillMovementModifier {
 	return result
 }
 
-// Non-attack activity 1 runs events 0 and 2 directly (4AD890..4AD8D1).
-// Only the complete self movement/dura program is admitted here; timed item jobs
-// and target/area/delayed programs keep their separate activation contracts.
+/*
+================
+instantMovementSkill
+
+Non-attack activity 1 runs events 0 and 2 directly (4AD890..4AD8D1).
+Only the complete self movement/dura program is admitted here; timed item
+jobs and target/area/delayed programs keep their separate activation
+contracts.
+
+Column 18 is not pinned: it is the replacement descriptor's PackedStates
+word (skillreplacement.go), which the replacement owner consumes for any
+value. Columns 50/51 are not pinned either: they are the weapon kinds the
+action owner checks through 58D480 before charging, so a dagger-only row
+(the Rogue's Scud, 13/255) is admitted like an unrestricted one. They must
+still be bytes, or the row would keep the compiler's 0xFF/0xFF default and
+admit any weapon.
+================
+*/
 func instantMovementSkill(fields []string, row SkillRow) bool {
-	if len(fields) != 118 || fields[0] != "1" || fields[8] != "1" || fields[18] != "6" || fields[68] != "3" ||
+	if len(fields) != 118 || fields[0] != "1" || fields[8] != "1" || fields[68] != "3" ||
 		!row.MovementModifier.Supported || row.MovementModifier.Persistent || !row.Consumption.Pinned || !row.TimingPinned || row.Consumption.HP != 0 || row.Consumption.HPPercent != 0 {
 		return false
 	}
@@ -88,5 +131,7 @@ func instantMovementSkill(fields []string, row SkillRow) bool {
 			return false
 		}
 	}
-	return fields[50] == "255" && fields[51] == "255"
+	_, weapon1 := textdataByte(fields[skilldataColWeaponKind1])
+	_, weapon2 := textdataByte(fields[skilldataColWeaponKind2])
+	return weapon1 && weapon2
 }

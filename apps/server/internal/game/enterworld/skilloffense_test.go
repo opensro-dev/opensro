@@ -44,8 +44,9 @@ func TestShippedDirectOffenseCoverage(t *testing.T) {
 		}
 		if row.DirectOffensePinned {
 			admitted++
-			// A status cast is the one complete offense without att.
-			if !row.Consumption.Pinned || row.ChainNext != 0 || !row.CombatPinned && !row.StatusCast {
+			// A status cast and a pdmg hit are the complete offenses
+			// without att.
+			if !row.Consumption.Pinned || row.ChainNext != 0 || !row.CombatPinned && !row.StatusCast && !row.FixedDamage.Present {
 				t.Fatalf("incomplete admitted skill %s", row.Codename)
 			}
 		}

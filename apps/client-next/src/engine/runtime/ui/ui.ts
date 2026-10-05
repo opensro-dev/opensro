@@ -84,6 +84,11 @@ import {
 import { extendedQuickslotOptions, type ExtendedQuickslotOptions } from "@/engine/foundation/ui/extended-quickslot";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import {
+	skillPressFeedback,
+	skillPressFeedbackActive,
+	skillQueueChip
+} from "@/engine/foundation/ui/skill-press-feedback";
+import {
 	masteryTrainingReason,
 	skillMetadataById,
 	skillTrainingReason
@@ -108,6 +113,18 @@ import {
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createCosHud } from "./hud/cos-hud";
+import { createRepairHud } from "./hud/repair-hud";
+import { createSkinChangeHud } from "./hud/skin-change-hud";
+import { createJobHud } from "./hud/job-hud";
+import {
+	JOB_ALIAS_CHECK,
+	JOB_ALIAS_CREATE,
+	jobGuildsOffered,
+	jobMenuRows,
+	noJob
+} from "@/engine/foundation/gameplay/job-guild";
+import { isSkinChangeScroll, skinDraftRange, type SkinDraftKey } from "@/engine/foundation/gameplay/skin-change";
+import { repairAllCost } from "@/engine/foundation/gameplay/repair";
 import { createSlotEffectClock } from "./hud/slot-effects";
 import { itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
 import {
@@ -189,7 +206,14 @@ import { buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
 import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
-import { partyMembers, partyOverlay, partyPortraitGid } from "@/engine/foundation/ui/party-overlay";
+import {
+	partyDistanceShade,
+	partyMembers,
+	partyOverlay,
+	partyPortraitGid,
+	partyRosterPose,
+	partyShadeImage
+} from "@/engine/foundation/ui/party-overlay";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import {
 	admittanceOverlay,
@@ -262,7 +286,7 @@ import { textBoardLines } from "@/engine/foundation/ui/text-lines";
 import { createSpeech } from "./hud/speech";
 import { createMessageScroll } from "./hud/scroll";
 import { createHudMessages } from "./hud/messages";
-import { damageTextAssets, damageTextQuads } from "@/engine/foundation/ui/damage-text";
+import { damageTextAssets } from "@/engine/foundation/ui/damage-text";
 import { targetStatus } from "@/engine/foundation/ui/target-status";
 import {
 	loadingPresentation,
@@ -277,10 +301,13 @@ import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout } from "@/engine/foundation/ui/chat-layout";
 import {
 	worldMapImagePaths,
+	worldMapDemand,
+	MAP_LOCAL_MARKER,
 	worldMapPageAt,
 	worldMapPages,
 	worldMapPresentation,
-	type MapMarker
+	type MapMarker,
+	mapLabelVisible
 } from "@/engine/foundation/ui/world-map";
 import { experienceReadout, minimapCoordinates, minimapRotation } from "@/engine/foundation/ui/hud-readouts";
 import { tooltipBubble, hudTooltipKey } from "@/engine/foundation/ui/helper-bubble";
@@ -338,6 +365,13 @@ import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
 import { noticeDialog } from "@/engine/foundation/ui/notice-dialog";
 import { rebirthDialog } from "@/engine/foundation/ui/rebirth-dialog";
+import {
+	createResurrectionPrompt,
+	resurrectionBoxLayout,
+	resurrectionNoteColor,
+	resurrectionQuestion
+} from "@/engine/foundation/ui/resurrection-proposal";
+import { textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu } from "@/engine/foundation/ui/system-menu";
 import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
 import { guideTokens } from "@/engine/foundation/ui/guide-content";
@@ -356,8 +390,13 @@ const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 // The bug reporter (issue #90): its chat command and its Option window row.
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
+const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
 const BUG_REPLAY_OPTION = "option-bug-replay";
 const BUG_REPLAY_LABEL = "Record bug replay";
+// The skin change scroll's window (CIFChangePlayerModel).
+const SKIN_PANEL = "Skin change";
+// The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
+const SKIN_SLIDER_TRAVEL = 85;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
 const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
@@ -545,6 +584,9 @@ export function createUi(
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
+	const repairHud = createRepairHud();
+	const skinHud = createSkinChangeHud();
+	const jobHud = createJobHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
@@ -560,6 +602,7 @@ export function createUi(
 	const npcPanel = createNpcPanel(), windowPlacement = createWindowPlacement();
 	// The warehouse window's page (storage-panel.ts).
 	const storagePanel = createStoragePanel();
+	const resurrectionPrompt = createResurrectionPrompt();
 	const itemMall = createItemMall();
 	const windowWarm = createWindowWarm();
 
@@ -711,6 +754,7 @@ export function createUi(
 	let lastProduct: {
 		width: number;
 		height: number;
+		damageText: boolean;
 		quads: readonly UiQuad[];
 		semantics: import("@/engine/contracts/ui").UiSemantics;
 	} | null = null;
@@ -858,6 +902,28 @@ export function createUi(
 	}
 	/*
 	================
+	resurrectionLayout
+
+	Type 4 is confirm box kind 4 at its native geometry; type 8 (an rmut
+	revival) is a simple message box sized by its measured line.
+	================
+	*/
+	function resurrectionLayout(
+		width: number,
+		height: number,
+		position: readonly [number, number] | null,
+		mutation = false
+	) {
+		if ( !mutation ) return resurrectionBoxLayout( width, height, position );
+		return textMessageBoxLayout(
+			width,
+			height,
+			resurrectionQuestion( true ).map( key => text.run( hudCopy( key ) ).width ),
+			position
+		);
+	}
+	/*
+	================
 	skillWindowWarmPaths
 
 	Every icon the skill window can show for the player's masteries, with the
@@ -900,6 +966,7 @@ export function createUi(
 			return false;
 		}
 		shopOpenRequest = null;
+		if ( next !== SKIN_PANEL ) skinHud.close();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
 		blockDialog = null;
@@ -1124,6 +1191,14 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			// The skin scroll opens CIFChangePlayerModel; its confirm uses it.
+			if ( item && isSkinChangeScroll( item.typeFlags ) && !command.skin ) {
+				const game = view?.gameplay, local = view?.entities.find( e => e.gid === game?.localGid );
+				if ( !game?.playerModels?.length || !local || !setPanel( SKIN_PANEL ) ) return;
+				skinHud.open( item.slot, game.playerModels, local.refObjId, local.bodyShape ?? 0xff );
+				dirty = true;
+				return;
+			}
 		}
 		commands( { kind: "gameplay", command } );
 	}
@@ -1148,21 +1223,15 @@ export function createUi(
 	================
 	executeSkill
 
-	The learned skill board and both shortcut bars share cooldown admission.
-	The worker and server remain responsible for target and actor eligibility.
+	The learned skill board and both shortcut bars share one press path. The
+	worker decides a cooling-down press (skill-queue.ts: send, hold or deny),
+	so it is forwarded here like any other; the worker and server remain
+	responsible for target and actor eligibility.
 	================
 	*/
 	function executeSkill( id: number ) {
 		const game = view?.gameplay;
 		if ( !game?.skills?.includes( id ) || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
-		if (
-			skillCooldown(
-				game.skillCooldowns ?? [],
-				id,
-				skillMetadataById( game, id )?.cooldownGroup ?? 0,
-				quickslotTime
-			)
-		) return;
 		sendGameplay( { kind: "skill", skillId: id, ...(game.target ? { gid: game.target } : {}) } );
 	}
 	/*
@@ -1283,11 +1352,6 @@ export function createUi(
 	}
 	/*
 	================
-	activate
-	================
-	*/
-	/*
-	================
 	cosCommandContext
 
 	What the command bar reads about the selected companion (6A1BE0).
@@ -1361,6 +1425,11 @@ export function createUi(
 				return;
 		}
 	}
+	/*
+	================
+	activate
+	================
+	*/
 	function activate( id: string ) {
 		if ( id.startsWith( "cos-status:" ) ) {
 			cosHud.select( Number( id.slice( 11 ) ) );
@@ -1561,6 +1630,32 @@ export function createUi(
 			}
 			return;
 		}
+		if ( id.startsWith( "npc-job-" ) ) {
+			// 5DA1B0 cases 0x1E, 0x1F and 0x20/0x21: the join and withdrawal
+			// questions and the alias window, for the guild NPC in conversation.
+			const conversation = view.gameplay?.npcConversation, job = Number( id.slice( id.indexOf( ":" ) + 1 ) );
+			if ( !conversation || conversation.phase !== "menu" ) return;
+			if ( id.startsWith( "npc-job-join:" ) ) jobHud.ask( "join", conversation.gid, job );
+			else if ( id.startsWith( "npc-job-withdraw:" ) ) jobHud.ask( "withdraw", conversation.gid, job );
+			else if ( id.startsWith( "npc-job-alias:" ) ) {
+				jobHud.openAlias( conversation.gid, !!view.gameplay?.job?.alias );
+				focusAtEnd( "job-alias-text", "" );
+			}
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "npc-reverse-return:" ) ) {
+			const conversation = view.gameplay?.npcConversation;
+			if ( conversation && conversation.phase === "menu" ) {
+				sendGameplay( {
+					kind: "travel-gate",
+					gid: conversation.gid,
+					type: 5,
+					target: Number( id.slice( 19 ) )
+				} );
+			}
+			return;
+		}
 		if ( id.startsWith( "npc-portal:" ) ) {
 			const conversation = view.gameplay?.npcConversation;
 			if ( conversation && conversation.phase === "menu" ) {
@@ -1585,7 +1680,7 @@ export function createUi(
 			return;
 		}
 		if ( id === "rebirth-point" || id === "rebirth-alternate" ) {
-			if ( !rebirthDue || deathDismissed || view.gameplay?.rebirthPending ) return;
+			if ( !rebirthDue || deathDismissed ) return;
 			if ( id === "rebirth-alternate" && (view.gameplay?.progression?.level ?? Infinity) > 10 ) {
 				deathDismissed = true;
 				dirty = true;
@@ -1896,6 +1991,8 @@ export function createUi(
 		else if ( id === "process-prev" ) processPage = Math.max( 0, processPage - 1 );
 		else if ( id === "invite-accept" || id === "invite-refuse" ) {
 			sendGameplay( { kind: "social-consent", accept: id === "invite-accept" } );
+		} else if ( id === "resurrection-accept" || id === "resurrection-refuse" ) {
+			sendGameplay( { kind: "resurrection-consent", accept: id === "resurrection-accept" } );
 		} else if ( id === "party-invite" && view.gameplay?.target ) {
 			sendGameplay( {
 				kind: "party-invite",
@@ -2335,7 +2432,9 @@ export function createUi(
 		) {
 			// /bug opens the bug reporter (issue #90); it is never sent as chat.
 			const text = chatText.slice( chatTabPrefix( chatTab ).length ).trim().replace( BUG_COMMAND, "" );
-			if ( !bugReport?.open( text ) ) hudMessages.append( BUG_REPORTS_DISABLED );
+			const opened = bugReport ? bugReport.open( text ) : "off";
+			if ( opened === "off" ) hudMessages.append( BUG_REPORTS_DISABLED );
+			else if ( opened === "unavailable" ) hudMessages.append( BUG_REPORTS_UNAVAILABLE );
 			chatText = chatTabPrefix( chatTab );
 			selection = [ chatText.length, chatText.length ];
 			focus = null;
@@ -2490,6 +2589,36 @@ export function createUi(
 					cosSlot = -1;
 				}
 			}
+		} else if ( id === "skin-cancel" ) {
+			setPanel( "" );
+		} else if ( id === "skin-confirm" ) {
+			const open = skinHud.state(), choice = skinHud.choice();
+			if ( open && choice && skinHud.changed() ) {
+				sendGameplay( { kind: "item-use", slot: open.slot, skin: choice } );
+				setPanel( "" );
+			}
+		} else if ( id === "skin:male" || id === "skin:female" ) {
+			skinHud.set( "sex", id === "skin:male" ? 1 : 0 );
+		} else if ( id.startsWith( "skin:" ) ) {
+			const [, key, step] = id.split( ":" ), draft = skinHud.state()?.draft;
+			if ( draft && (key === "figure" || key === "height" || key === "volume") ) {
+				skinHud.set( key, draft[key] + (step === "next" ? 1 : -1) );
+			}
+		} else if ( id.startsWith( "skin-rotate:" ) ) {
+			skinHud.rotate( id === "skin-rotate:left" ? -1 : id === "skin-rotate:right" ? 1 : 0 );
+		} else if ( id.startsWith( "shop-repair:" ) ) {
+			// 5B1C00 arms the repair cursor; 5B2B10 totals the cost (789630)
+			// and asks before 0x746F mode 2, or says nothing needs it.
+			if ( id === "shop-repair:GDR_STORE_BTN_REPAIR" ) repairHud.arm();
+			else {
+				const cost = repairAllCost( view.gameplay?.inventory ?? [] );
+				if ( cost ) repairHud.ask( cost );
+				else hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_THERE_IS_NO_ITEM_TO_REPAIR" ), 0xffffffff );
+			}
+		} else if ( id.startsWith( "slot:" ) && repairHud.armed() ) {
+			// 567290: the armed cursor sends the clicked item (0x746F mode 1).
+			repairHud.disarm();
+			sendGameplay( { kind: "shop-repair", mode: 1, slot: Number( id.slice( 5 ) ) } );
 		} else if ( id.startsWith( "slot:" ) ) {
 			confirmDrop = "";
 			const slot = Number( id.slice( 5 ) );
@@ -2743,6 +2872,16 @@ export function createUi(
 		},
 		/*
 		================
+		skinPreview
+
+		The skin change window's body for the mannequin, or null.
+		================
+		*/
+		skinPreview() {
+			return panel === SKIN_PANEL ? skinHud.preview() : null;
+		},
+		/*
+		================
 		mallPreviewState
 		================
 		*/
@@ -2768,11 +2907,6 @@ export function createUi(
 				null,
 		/*
 		================
-		stats
-		================
-		*/
-		/*
-		================
 		entryReady
 
 		Basic HUD and Help artwork must be decoded before releasing world entry.
@@ -2781,8 +2915,14 @@ export function createUi(
 		*/
 		entryReady() {
 			const main = hud.data(), guide = guideResources.data();
-			return !!main && !!guide && main.warmPaths.every( resources.has ) && guide.warmPaths.every( resources.has );
+			return !!main && !!guide && resources.residentAll( main.warmPaths ) &&
+				resources.residentAll( guide.warmPaths );
 		},
+		/*
+		================
+		stats
+		================
+		*/
 		stats: () => ({
 			...resources.stats(),
 			layoutRetention: {
@@ -2794,6 +2934,7 @@ export function createUi(
 			panel,
 			windowMissing,
 			windowReady: !([ "Academy Matching", "Game Guide", "Quests" ].includes( panel ) && !guideResources.data()),
+			hudSettling: hud.settling(),
 			error: diagnosticError
 		}),
 		/*
@@ -2803,6 +2944,14 @@ export function createUi(
 		*/
 		event( event: UiEvent ) {
 			if ( disposed ) return;
+			// An edit's normalized value (a clamped quantity, a filtered digit) can
+			// equal the value already published, so value comparison would publish
+			// nothing and the field would keep the raw keystrokes. Forget the last
+			// product: the next step republishes and the bridge reconciles the field.
+			if ( event.kind === "edit" ) {
+				lastProduct = null;
+				dirty = true;
+			}
 			// Ahead of every modal gate: an abandoned carry must always clear.
 			if ( event.kind === "drag-cancel" ) {
 				if ( carriedItem?.source === event.id ) carriedItem = null;
@@ -2856,7 +3005,7 @@ export function createUi(
 			if ( event.kind === "world-select" ) {
 				if (
 					view?.session?.phase === "world" && event.gid === deathIdentity &&
-					event.gid === view.gameplay?.localGid && !view.gameplay?.rebirthPending &&
+					event.gid === view.gameplay?.localGid &&
 					(!rebirthDue || deathDismissed)
 				) {
 					deathRequested = true;
@@ -2943,6 +3092,88 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			if ( jobHud.confirm() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "job-confirm-no"
+				) {
+					jobHud.takeConfirm();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "job-confirm-yes"
+				) {
+					const asked = jobHud.takeConfirm();
+					dirty = true;
+					if ( asked && view?.session?.phase === "world" ) {
+						sendGameplay(
+							asked.kind === "join" ?
+								{ kind: "job-join", gid: asked.npc, job: asked.job } :
+								{ kind: "job-withdraw", gid: asked.npc }
+						);
+					}
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			const aliasWindow = jobHud.alias();
+			if ( aliasWindow !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "job-alias-cancel"
+				) {
+					jobHud.closeAlias();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "edit" && event.id === "job-alias-text" ) {
+					jobHud.typeAlias( event.value );
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && (event.id === "job-alias-check" || event.id === "job-alias-ok") ) {
+					// 6461C0 asks whether the name is free (mode 0); 646470 takes it (mode 1).
+					if ( aliasWindow.text && view?.session?.phase === "world" ) {
+						sendGameplay( {
+							kind: "job-alias",
+							gid: aliasWindow.npc,
+							mode: event.id === "job-alias-ok" ? JOB_ALIAS_CREATE : JOB_ALIAS_CHECK,
+							alias: aliasWindow.text
+						} );
+						if ( event.id === "job-alias-ok" ) jobHud.closeAlias();
+					}
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" ) return;
+			}
+			if ( repairHud.confirmCost() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "repair-all-cancel"
+				) {
+					repairHud.takeConfirm();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "repair-all-confirm"
+				) {
+					repairHud.takeConfirm();
+					dirty = true;
+					if ( view?.session?.phase === "world" ) sendGameplay( { kind: "shop-repair", mode: 2, slot: 0 } );
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( repairHud.armed() && event.kind === "key" && event.code === "Escape" ) {
+				repairHud.disarm();
+				dirty = true;
+				return;
 			}
 			if ( cosHud.cleanConfirm() !== null ) {
 				if (
@@ -3733,6 +3964,17 @@ export function createUi(
 					return;
 				}
 			}
+			if ( event.kind === "drag" && event.id === "resurrection-drag" && view ) {
+				const mutation = !!view.gameplay?.social?.resurrection?.mutation,
+					layout = resurrectionLayout( view.width, view.height, resurrectionPrompt.position(), mutation ),
+					next = resurrectionLayout( view.width, view.height, [
+						layout.frame[0] + event.dx,
+						layout.frame[1] + event.dy
+					], mutation );
+				resurrectionPrompt.place( [ next.frame[0], next.frame[1] ] );
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "drag" && event.id === "invite-drag" && view ) {
 				const layout = view.gameplay?.social?.invitation?.type === 5 ?
 						guildProposalLayout( view.width, view.height, invitePosition ) :
@@ -3811,7 +4053,9 @@ export function createUi(
 				}
 				return;
 			}
-			if ( (event.kind === "drag" || event.kind === "scroll") && controls.some( c => c.id === "invite-drag" ) ) {
+			// A proposal box (an invitation or the resurrection question) is modal.
+			const proposalOpen = controls.some( c => c.id === "invite-drag" || c.id === "resurrection-drag" );
+			if ( (event.kind === "drag" || event.kind === "scroll") && proposalOpen ) {
 				return;
 			}
 			if (
@@ -3983,7 +4227,7 @@ export function createUi(
 				}
 				return;
 			}
-			if ( controls.some( c => c.id === "invite-drag" ) ) {
+			if ( proposalOpen ) {
 				if ( event.kind === "key" || event.kind === "edit" || event.kind === "double-activate" ) return;
 				if ( event.id !== null && !controls.some( c => c.id === event.id ) ) return;
 			}
@@ -4397,6 +4641,12 @@ export function createUi(
 				setPanel( "" );
 				dirty = true;
 			}
+			// A warehouse ticket opens the room without the talk menu's click.
+			if ( panel !== "Storage" && next.gameplay?.storage && !view?.gameplay?.storage && canLeavePanel() ) {
+				storagePanel.reset();
+				setPanel( "Storage" );
+				dirty = true;
+			}
 			if ( shopOpenRequest ) {
 				const request = shopOpenRequest, game = next.gameplay;
 				if ( next.session?.phase !== "world" || game?.target !== request.gid ) shopOpenRequest = null;
@@ -4431,7 +4681,8 @@ export function createUi(
 				Math.floor( (next.simulationTimeMs ?? 0) / 100 ) :
 				-1;
 			const slotTick = (next.gameplay?.skillCooldowns?.length || next.gameplay?.itemCooldowns?.length ||
-					next.gameplay?.returnScroll || next.gameplay?.questGathering) ?
+					next.gameplay?.returnScroll || next.gameplay?.questGathering ||
+					skillPressFeedbackActive( next.gameplay, quickslotTime )) ?
 				Math.floor( quickslotTime / 16 ) :
 				-1;
 			if ( slotTick !== quickslotTick ) {
@@ -4610,7 +4861,7 @@ export function createUi(
 			const stableWorld = next.session?.phase === "world" && next.frontend?.phase === "world" &&
 				view?.frontend?.phase === "world" &&
 				!loading && !next.travel && next.worldTransitionRegion === undefined && next.worldReady &&
-				!next.damageText?.length && !view.damageText?.length && now < hudMessages.deadline() &&
+				now < hudMessages.deadline() &&
 				now < speech.deadline() &&
 				view.resourceError === next.resourceError && view.worldError === next.worldError &&
 				view.worldReady === next.worldReady && view.travel === next.travel &&
@@ -4701,7 +4952,10 @@ export function createUi(
 				splitStack = null;
 				groundDrop = null;
 			}
-			if ( phase !== "world" || next.gameplay?.inventoryPending || next.gameplay?.social?.invitation ) {
+			if (
+				phase !== "world" || next.gameplay?.inventoryPending || next.gameplay?.social?.invitation ||
+				next.gameplay?.social?.resurrection
+			) {
 				carriedItem = null;
 			}
 			const invitation = phase === "world" || retainedWorld ? next.gameplay?.social?.invitation : null,
@@ -4710,6 +4964,15 @@ export function createUi(
 				inviteIdentity = identity;
 				invitePosition = null;
 			}
+			// 7644E0 (types 4 and 8) clears the pending death-box timer 0xF and
+			// retires the death box (kind 3) when a question opens; selecting
+			// oneself while dead brings it back (6813E0, the world-select path).
+			const proposer = phase === "world" || retainedWorld ? next.gameplay?.social?.resurrection?.gid ?? 0 : 0;
+			if ( proposer && resurrectionPrompt.opens( proposer ) ) {
+				deathDismissed = true;
+				deathRequested = false;
+			}
+			resurrectionPrompt.sync( proposer );
 			if ( phase !== "disconnected" ) disconnectPosition = null;
 			const gachaVisible = phase === "world" && !!next.gameplay?.gacha?.visible;
 			if ( gachaVisible && !gachaWasVisible ) {
@@ -5358,12 +5621,7 @@ export function createUi(
 				label: string,
 				disabled = false
 			) {
-				const r = authoredRect( node, ox, oy ),
-					published = hud.data()?.warmPaths,
-					family = [ "", "_focus", "_press", "_disable" ].map( s => {
-						const path = node.texture.replace( ".png", s + ".png" );
-						return s && published && !published.includes( path ) ? node.texture : path;
-					} );
+				const r = authoredRect( node, ox, oy ), family = hud.buttonFamily( node.texture );
 				paths.push( ...family );
 				controls.push( { id, label, rect: r, kind: "button", disabled } );
 				blocks.push( r );
@@ -6293,7 +6551,8 @@ export function createUi(
 				}
 				if ( hudData && game?.social?.leader ) {
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
-						slot = hudData.windows.ifquickpartyslot!;
+						slot = hudData.windows.ifquickpartyslot!,
+						localPose = next.entities.find( e => e.gid === game.localGid ) ?? null;
 					for (
 						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
 					) {
@@ -6341,6 +6600,14 @@ export function createUi(
 							color: white,
 							clip: full
 						} );
+						// 5BD0A0: a visible member is measured at its live pose, one
+						// out of view at its roster record.
+						const shade = localPose ?
+							partyShadeImage(
+								partyDistanceShade( localPose, row.entity ?? partyRosterPose( row.member ) )
+							) :
+							null;
+						if ( shade ) authoredImage( slot.GDR_QPS_STATUS!, x, y, ROOT + shade );
 						if ( row.entity ) {
 							const r: UiRect = [ x, y, 122, 40 ];
 							controls.push( {
@@ -6808,9 +7075,12 @@ export function createUi(
 					} );
 					blocks.push( r );
 					const icon = iconPath( skill?.icon ?? item?.icon ?? action?.icon );
+					// A held press outlines the slot; a denied one shakes and tints it.
+					const feedback = skill ? skillPressFeedback( game, skill.id, r, full, quickslotTime ) : undefined;
 					if ( icon ) {
 						paths.push( icon );
-						if ( resources.has( icon ) ) rect( r, [ 1, 1, 1, iconAlpha ], icon );
+						const ir: UiRect = feedback?.offsetX ? [ r[0] + feedback.offsetX, r[1], r[2], r[3] ] : r;
+						if ( resources.has( icon ) ) rect( ir, [ 1, 1, 1, iconAlpha ], icon );
 					}
 					const cooldown = skill ?
 						skillCooldown( game?.skillCooldowns ?? [], skill.id, skill.cooldownGroup ?? 0, quickslotTime ) :
@@ -6826,6 +7096,7 @@ export function createUi(
 							full
 						);
 						quads.push( ...timer.filter( q => resources.has( q.texture ) ) );
+						if ( feedback ) quads.push( ...feedback.quads );
 					}
 					if ( item ) {
 						paths.push( ...quickslotTimerPaths() );
@@ -6851,6 +7122,18 @@ export function createUi(
 					);
 					const number = hudData!.bar["GDR_QS_NUMBER_" + (n === 0 ? "M" : n % 10)];
 					if ( number ) authoredImage( number, barX, barY );
+				}
+				// The skill that casts next, over shortcut slot 1 (skill-press-feedback.ts).
+				const slotOne = hudData?.bar.GDR_TMPQS_1;
+				if ( slotOne ) {
+					const chip = skillQueueChip( game, authoredRect( slotOne, barX, barY ), full, quickslotTime );
+					const icon = chip ? iconPath( training.skill( game!.skillQueue!.skill )?.icon ) : undefined;
+					if ( chip && icon ) {
+						paths.push( icon );
+						quads.push( ...chip.under );
+						if ( resources.has( icon ) ) rect( chip.icon, [ 1, 1, 1, chip.alpha ], icon );
+						quads.push( ...chip.over );
+					}
 				}
 				if ( hudData ) {
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!,
@@ -7021,7 +7304,12 @@ export function createUi(
 						} );
 					}
 				}
-				const mapProjection = pose ?
+				// A closed map only demands its images, so opening it is instant: the
+				// demand is computed without the projection (worldMapDemand). Its label
+				// glyphs (the largest allocation of a HUD step) and click hits are built
+				// while it is open. The font atlas is demanded either way.
+				const mapOpen = panel === "Map";
+				const mapProjection = pose && mapOpen ?
 					worldMapPresentation(
 						pose,
 						mapPage,
@@ -7044,15 +7332,20 @@ export function createUi(
 				// can never be hidden by a shop icon or a zone label.
 				// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
 				// its own font extent, subtracting the integer half-width from the anchor.
+				const fontPath = text.path();
+				if ( !mapOpen && fontPath ) paths.push( fontPath );
 				const mapImages = mapProjection ?
 					[
 						...mapProjection.background,
 						...mapProjection.overlay,
-						...mapProjection.labels.flatMap( ( { label: entry, x, y, clip } ) => {
-							const width = text.run( entry.text, 0, entry.font ).width;
+						...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
+							const width = text.run( entry.text, 0, entry.font ).width,
+								height = text.extentHeight( entry.font ),
+								left = x - Math.floor( width / 2 );
+							if ( !mapLabelVisible( [ left, y, width, height ], clip ) ) return [];
 							return text.quads(
 								entry.text,
-								[ x - Math.floor( width / 2 ), y, width, text.extentHeight( entry.font ) ],
+								[ left, y, width, height ],
 								clip,
 								entry.color,
 								{ fontIndex: entry.font, hAlign: 0, vAlign: 0 }
@@ -7061,7 +7354,7 @@ export function createUi(
 						...mapProjection.markers
 					] :
 					[];
-				for ( const { icon, rect: r } of mapProjection?.hits ?? [] ) {
+				for ( const { icon, rect: r } of mapOpen ? mapProjection?.hits ?? [] : [] ) {
 					const page = worldMapPages().find( p => p.id === icon.destination );
 					if ( page ) {
 						mapHits.push( {
@@ -7073,7 +7366,19 @@ export function createUi(
 						} );
 					}
 				}
-				paths.push( ...mapImages.map( q => q.texture ) );
+				if ( mapOpen ) paths.push( ...mapImages.map( q => q.texture ) );
+				else if ( pose ) {
+					worldMapDemand(
+						mapPage,
+						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapPan,
+						mapCenter ?? pose,
+						hudData?.mapIcons ?? [],
+						paths
+					);
+					for ( const row of mapMarkers ) paths.push( row.path );
+					paths.push( MAP_LOCAL_MARKER );
+				}
 				if ( panel === "Map" && hudData ) {
 					// Map tiles and icons stream in as a pan reveals them (demanded above, and
 					// absent textures simply do not draw). Gating admission on them disabled
@@ -8550,7 +8855,9 @@ export function createUi(
 								(slot < 13 ? "Equipment slot " + slot : "Empty bag slot " + (slot - 13)),
 							rect: r,
 							kind: "button",
-							disabled: !enabled || !!game?.inventoryPending,
+							// 699359: a move while one is pending is dropped (highlights reset);
+							// native slots stay enabled, so hover and tooltips keep working.
+							disabled: !enabled,
 							selected: inventorySlot === slot,
 							rightActivate: !!item,
 							draggable: !!item,
@@ -8603,7 +8910,8 @@ export function createUi(
 						label: "Equip item",
 						kind: "button",
 						rect: [ ex + 2, ey + 15, 176, 318 ],
-						disabled: !!game?.inventoryPending
+						// 699359 drops moves while one is pending; the drop zone stays enabled.
+						disabled: false
 					} );
 					for (
 						const node of Object.values( equipment ).filter( n =>
@@ -8648,7 +8956,8 @@ export function createUi(
 								label: item?.name ?? "Avatar slot " + type,
 								rect: r,
 								kind: "button",
-								disabled: !!game?.inventoryPending,
+								// 699359 drops moves while one is pending; avatar slots stay enabled.
+								disabled: false,
 								rightActivate: !!item,
 								draggable: !!item,
 								carry: !!item
@@ -8694,7 +9003,10 @@ export function createUi(
 						const money = moneyPresentation( game.progression.gold );
 						authoredText( { ...bag.GDR_INVENTORY_STA_MONEY!, color: money.color }, bx, by, money.text );
 					}
-					endWindow( admission );
+					// Beside a service window the inventory is a companion with its own close
+					// identity. It retains only its own admission: replaying the standalone
+					// window would publish a second "close" beside the service window's.
+					endWindow( admission, panel === "Inventory" ? "primary" : "companion:Inventory" );
 				}
 				if ( panel === "Actions" && hudData ) {
 					const admission = beginWindow(),
@@ -8934,8 +9246,7 @@ export function createUi(
 									candidates: catalog.slots[selectedMastery + ":" + group.row + ":" + col] ?? [],
 									training: learned,
 									masteries,
-									progression: game?.progression,
-									trainingPending: !!game?.trainingPending
+									progression: game?.progression
 								} ),
 								entry = slot.entry,
 								owned = slot.owned,
@@ -9049,11 +9360,11 @@ export function createUi(
 					authoredText( page.GDR_SKILL_TEXT_SP_NUM!, ox, oy, String( game?.progression?.skillPoints ?? 0 ) );
 					const model = next.entities.find( e => e.gid === game?.localGid )?.refObjId,
 						country = model === undefined ? game?.guide?.country : hudData.countries[model],
-						cap = country === 0 ?
+						cap = game?.masteryTotalOverride ?? (country === 0 ?
 							300 :
 							country === 1 ?
 							Math.min( 2 * (game?.progression?.level ?? 0), 240 ) :
-							0;
+							0);
 					authoredText(
 						page.GDR_SKILL_TEXT_TOTAL_MASTERYLEV_NUM!,
 						ox,
@@ -9842,7 +10153,8 @@ export function createUi(
 						hover,
 						pressed,
 						top: npcPanel.top(),
-						// NPC capability bits: 1 shop, 2 talk, 4 storage, 0x40 recall, 0x80 teleport.
+						// NPC capability bits: 1 shop, 2 talk, 4 storage, 0x40 recall, 0x80 teleport,
+						// 0x20000000 reverse return.
 						canShop: !!(capabilities & 1),
 						branches: target?.merchantBranches,
 						choiceColor: symbol =>
@@ -9863,7 +10175,12 @@ export function createUi(
 						canTalk: !!(capabilities & 2),
 						prompt: target?.kind === "teleport" ? target.name : "",
 						canRecall: !!(capabilities & 0x40),
-						canStorage: !!(capabilities & 4)
+						canReverseReturn: !!(capabilities & 0x20000000),
+						canStorage: !!(capabilities & 4),
+						jobRows: jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
+							id: row.id,
+							label: copy( row.symbol )
+						}) )
 					} );
 					npcPanel.geometry( output );
 					quads.push( ...output.quads );
@@ -9939,7 +10256,14 @@ export function createUi(
 					nativeSpin( page.GDR_STORE_SPIN_PAGE!, px, py, "shop-prev", "shop-next", shopPage, pages );
 					// Repair remains a typed gameplay operation; never route its button to buy/sell.
 					for ( const node of [ page.GDR_STORE_BTN_REPAIR!, page.GDR_STORE_BTN_REPAIRALL! ] ) {
-						authoredLabeledButton( node, px, py, "shop-repair:" + node.id, hudCopy( node.text ), true );
+						authoredLabeledButton(
+							node,
+							px,
+							py,
+							"shop-repair:" + node.id,
+							hudCopy( node.text ),
+							!valid || busy
+						);
 					}
 					endWindow( admission, "service:Shop" );
 				}
@@ -10090,6 +10414,83 @@ export function createUi(
 						authoredText( { ...money, color: shown.color }, px, py, shown.text );
 					}
 					endWindow( admission, "service:Storage" );
+				}
+				const skin = skinHud.state();
+				if ( panel === SKIN_PANEL && skin && hudData?.windows.ifchangeplayermodel ) {
+					const admission = beginWindow(),
+						root = hudData.root.GDR_CHANGE_PLAYER_MODEL!,
+						layout = hudData.windows.ifchangeplayermodel,
+						nodes = Object.values( layout ),
+						byName = ( name: string ) => nodes.find( n => n.name === name ),
+						[px, py] = windowOrigin( SKIN_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] );
+					nativeFrame( root, px, py, hudCopy( "UIIT_PAG_CHAR_SKIN_CHANGE" ), "skin-cancel" );
+					// The sex buttons, sliders, rotate and confirm controls are live.
+					nativePage( layout, px, py, [ 17, 18, 31, 32, 33, 34, 35, 41, 42, 43, 71, 72, 73, 100 ] );
+					for (
+						const [id, sex, name] of [ [ "skin:male", 1, "MALE" ], [ "skin:female", 0, "FEMALE" ] ] as const
+					) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_INFO_BTN_" + name );
+						if ( node ) {
+							authoredLabeledButton( node, px, py, id, hudCopy( node.text ), skin.draft.sex === sex );
+						}
+					}
+					const prev = byName( "GDR_SLIDER_CTRL_BTN_PREV" ),
+						next = byName( "GDR_SLIDER_CTRL_BTN_NEXT" ),
+						thumb = byName( "GDR_SLIDER_CTRL_BTN_THUMB" );
+					for ( const key of [ "figure", "height", "volume" ] as const satisfies readonly SkinDraftKey[] ) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_INFO_SLI_" + key.toUpperCase() );
+						if ( !node || !prev || !next || !thumb ) continue;
+						const [min, max] = skinDraftRange( skin.models, skin.draft, key ),
+							value = skin.draft[key],
+							[sx, sy] = authoredRect( node, px, py );
+						authoredImage( node, px, py );
+						authoredButton( prev, sx, sy, "skin:" + key + ":prev", "", value <= min );
+						authoredButton( next, sx, sy, "skin:" + key + ":next", "", value >= max );
+						authoredImage(
+							thumb,
+							sx + (max > min ? (value - min) / (max - min) * SKIN_SLIDER_TRAVEL : 0),
+							sy
+						);
+					}
+					for (
+						const [id, name] of [ [ "skin-rotate:left", "LEFT" ], [ "skin-rotate:reset", "RESET" ], [
+							"skin-rotate:right",
+							"RIGHT"
+						] ] as const
+					) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_VIEW_BTN_" + name );
+						if ( node ) authoredButton( node, px, py, id, "" );
+					}
+					for ( const [id, name] of [ [ "skin-confirm", "OK" ], [ "skin-cancel", "CANCEL" ] ] as const ) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_INFO_BTN_" + name );
+						if ( node ) {
+							authoredLabeledButton(
+								node,
+								px,
+								py,
+								id,
+								hudCopy( node.text ),
+								id === "skin-confirm" && (!skinHud.changed() || !!game?.inventoryPending)
+							);
+						}
+					}
+					const view = byName( "GDR_CHANGE_PLAYER_MODEL_VIEW" ), doll = itemMall.previewGid();
+					if ( view && doll !== undefined ) {
+						quads.push( {
+							doll: { gid: doll, yaw: skin.yaw },
+							texture: "__doll",
+							rect: authoredRect( view, px, py ),
+							uv: [ 0, 0, 1, 1 ],
+							color: white,
+							clip: full
+						} );
+					}
+					endWindow( admission, "service:" + SKIN_PANEL );
 				}
 				if ( panel === "COS inventory" && hudData ) {
 					const admission = beginWindow(),
@@ -10828,6 +11229,22 @@ export function createUi(
 						![ "local-player", "player", "monster", "npc", "cos" ].includes( entity.kind ) ||
 						next.blindHeld && blindableCharacter( entity, game?.localGid )
 					) continue;
+					// 86AB90: the dress bar under the head, 4.8 px a second, shrinking
+					// 0.48 px every 100 ms, in ARGB FFFFEE1F, whether or not the name shows.
+					const progress = entity.actionProgress, clock = next.simulationTimeMs ?? now;
+					if ( progress && clock - progress.startedAtMs < progress.seconds * 1000 ) {
+						const tenths = Math.floor( Math.max( 0, clock - progress.startedAtMs ) / 100 );
+						quads.push( {
+							characterAnchor: entity.gid,
+							occlusion: "none" as const,
+							rect: [ -24, 10, progress.seconds * 4.8 - tenths * 0.48, 2 ],
+							clip: full,
+							uv: [ 0, 0, 1, 1 ],
+							texture: "",
+							color: [ 1, 0xee / 255, 0x1f / 255, 1 ]
+						} );
+						dirty = true;
+					}
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
 					// One decision for the name and every overhead icon: an icon never
 					// shows without its name (name-visibility.ts header).
@@ -10948,12 +11365,9 @@ export function createUi(
 						)
 					);
 				}
-				// After nametags/speech: world UI does not depth-write, so later quads cover earlier ones.
-				quads.push(
-					...damageTextQuads( next.damageText ?? [], now / 1000, w, h ).filter( q =>
-						resources.has( q.texture )
-					)
-				);
+				// Damage text follows the nametags and speech: world UI does not
+				// depth-write, so later quads cover earlier ones. The renderer draws
+				// it each frame (UiScene.damageText); this only demands its glyphs.
 				// World annotations precede CIF windows; they must not bleed through menus.
 				quads.unshift( ...quads.splice( worldLabelStart ) );
 			}
@@ -12124,6 +12538,136 @@ export function createUi(
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
+			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) jobHud.reset();
+			const jobAsk = jobHud.confirm(), aliasWindow = jobHud.alias();
+			if ( worldVisible && (jobAsk || aliasWindow) ) {
+				// 5D26F0's question boxes (types 4 and 5) and CIFJobAlias.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads(
+						hudCopy(
+							jobAsk ?
+								"UIIT_STT_CONFIRM_BOX" :
+								aliasWindow?.modify ?
+								"UIIT_PAG_ALIAS_MODIFY" :
+								"UIIT_PAG_ALIAS_CREATE"
+						),
+						layout.title,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					),
+					...text.quads(
+						hudCopy(
+							jobAsk ?
+								(jobAsk.kind === "join" ?
+									"UIIT_STT_JOBGUILD_JOIN_WINDOW" :
+									"UIIT_STT_JOBGUILD_WITHD_WINDOW") :
+								aliasWindow?.modify ?
+								"UIIT_STT_ALIAS_MODIFY_WINDOW" :
+								"UIIT_STT_ALIAS_CREATE_WINDOW"
+						),
+						layout.name,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				if ( jobAsk ) {
+					button(
+						"job-confirm-yes",
+						hudCopy( "UIIT_CTL_YES" ),
+						...layout.accept.slice( 0, 3 ) as [number, number, number]
+					);
+					button(
+						"job-confirm-no",
+						hudCopy( "UIIT_CTL_NO" ),
+						...layout.refuse.slice( 0, 3 ) as [number, number, number]
+					);
+				} else if ( aliasWindow ) {
+					const field: UiRect = [ layout.question[0], layout.question[1], layout.question[2], 16 ];
+					controls.push( {
+						id: "job-alias-text",
+						label: hudCopy( "UIIT_STT_ALIAS_CREATE_WINDOW" ),
+						kind: "text",
+						value: aliasWindow.text,
+						rect: field,
+						maxLength: 12
+					} );
+					rect( field, [ 0, 0, 0, .6 ], "", [ 0, 0, 1, 1 ], full );
+					quads.push(
+						...text.quads( aliasWindow.text, field, field, white, {
+							hAlign: 1,
+							vAlign: 1,
+							overflow: "clip"
+						} )
+					);
+					if ( focus === "job-alias-text" && caretVisible ) {
+						const width = text.run( aliasWindow.text ).width;
+						rect(
+							[ field[0] + (field[2] + width) / 2, field[1] + 1, 2, 14 ],
+							white,
+							"",
+							[ 0, 0, 1, 1 ],
+							field
+						);
+					}
+					const [ax, ay, aw] = layout.accept, [rx, ry, rw] = layout.refuse;
+					button( "job-alias-check", hudCopy( "UIIT_CTL_CHECK" ), ax!, ay!, aw! );
+					button( "job-alias-ok", hudCopy( "UIIT_CTL_OK" ), rx!, ry!, rw! );
+					button( "job-alias-cancel", hudCopy( "UIIT_CTL_CANCEL" ), rx! + rw! + 8, ry!, rw! );
+				}
+			}
+			if ( panel !== "Shop" ) repairHud.reset();
+			const repairCost = repairHud.confirmCost();
+			if ( worldVisible && repairCost !== null ) {
+				// 5B2B10 raises box 0x0C: Repair All's question and its total.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads( hudCopy( "UIIT_MSG_MSGBOX_REPAIR_ITEM" ), layout.name, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads( repairCost.toLocaleString( "en-US" ), layout.question, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				button(
+					"repair-all-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"repair-all-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
 			if ( worldVisible && cosHud.cleanConfirm() !== null ) {
 				// 6A2350 case 5 raises the type 0xD box with the two
 				// UIIT_MSG_COS_CLEAN_CONFIRM lines before a transport is destroyed.
@@ -12242,12 +12786,8 @@ export function createUi(
 				button( "shop-warning-cancel", hudCopy( "UIIT_CTL_NO" ), x + (dw >> 1) + 5, y + 114, 76 );
 			}
 			if ( worldVisible && groundDrop ) {
-				// 6888C0 seeds 360x151; 52BCF0 grows body + (60,122); 52E720 body at (30,65).
 				const lines = [ "UIIT_MSG_DROP_WARNING_1", "UIIT_MSG_DROP_WARNING_2" ].map( key => hudCopy( key ) ),
-					lineHeight = 23,
-					dw = Math.max( 360, ...lines.map( line => Math.ceil( text.run( line ).width ) + 60 ) ),
-					dh = Math.max( 151, lines.length * lineHeight + 122 );
-				const layout = messageBox( w, h, dw, dh ), [x, y] = layout.frame;
+					layout = textMessageBoxLayout( w, h, lines.map( line => text.run( line ).width ) );
 				controls = [];
 				blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
@@ -12267,21 +12807,17 @@ export function createUi(
 					} )
 				);
 				for ( const [i, line] of lines.entries() ) {
-					quads.push(
-						...text.quads( line, [ x + 30, y + 65 + i * lineHeight, dw - 60, lineHeight ], full, white, {
-							vAlign: 0
-						} )
-					);
+					quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
 				}
 				button(
 					"ground-drop-confirm",
 					hudCopy( "UIIT_CTL_YES" ),
-					x + (dw >> 1) - 81,
-					y + dh - 37,
+					layout.accept[0],
+					layout.accept[1],
 					76,
 					!!game?.inventoryPending
 				);
-				button( "ground-drop-cancel", hudCopy( "UIIT_CTL_NO" ), x + (dw >> 1) + 5, y + dh - 37, 76 );
+				button( "ground-drop-cancel", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
 			}
 			const gathering = game?.questGathering;
 			const delayRows = [
@@ -12582,14 +13118,13 @@ export function createUi(
 						layout.alternate
 					] ] as const
 				) {
-					const disabled = !!game?.rebirthPending,
-						down = !disabled && pressed === id && hover === id,
+					const down = pressed === id && hover === id,
 						path = down ?
 							base.replace( ".png", "_press.png" ) :
-							!disabled && (hover === id || focus === id) ?
+							(hover === id || focus === id) ?
 							base.replace( ".png", "_focus.png" ) :
 							base;
-					controls.push( { id, label: hudCopy( key ), kind: "button", rect: r, disabled } );
+					controls.push( { id, label: hudCopy( key ), kind: "button", rect: r } );
 					if ( resources.has( path ) ) rect( r, white, path );
 					quads.push(
 						...text.quads(
@@ -12601,6 +13136,76 @@ export function createUi(
 						)
 					);
 				}
+			}
+			// The resurrection question comes while the player is dead. Opening it
+			// retired the death box (7644E0, see the proposal sync); a death box
+			// the player reopens by selecting themselves (6813E0) and a pending
+			// invitation box keep their controls. Every other open dialog loses
+			// its controls until the question is answered; the question is not
+			// dismissed by a revive or the server's 30 s expiry.
+			if ( game?.social?.resurrection && worldVisible ) {
+				/*
+				================
+				kept
+
+				Controls that survive the question: the death box, a pending
+				invitation box and the question itself.
+				================
+				*/
+				const kept = ( id: string | null ) =>
+					!!id &&
+					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ));
+				controls = controls.filter( c => kept( c.id ) );
+				blocks = [ full ];
+				if ( !kept( focus ) ) {
+					focus = null;
+					composing = false;
+				}
+				paths.push( ...partyProposalAssets() );
+				const mutation = !!game.social.resurrection.mutation,
+					layout = resurrectionLayout( w, h, resurrectionPrompt.position(), mutation );
+				controls.push( {
+					id: "resurrection-body",
+					label: hudCopy( "UIIT_STT_AGREEMENT_BOX" ),
+					kind: "region",
+					rect: layout.frame
+				}, {
+					id: "resurrection-drag",
+					label: hudCopy( "UIIT_STT_AGREEMENT_BOX" ),
+					kind: "region",
+					draggable: true,
+					rect: layout.drag
+				} );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					// Both boxes carry the agreement caption (52F460 case 3, 7644E0 case 7).
+					...text.quads( hudCopy( "UIIT_STT_AGREEMENT_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				// Kind 4's third line is the note in 0xFFFFF1D3 (52F460 case 3).
+				resurrectionQuestion( mutation ).forEach( ( key, i ) =>
+					quads.push(
+						...text.quads(
+							hudCopy( key ),
+							layout.lines[i]!,
+							full,
+							!mutation && i === 2 ?
+								resurrectionNoteColor() :
+								white,
+							{ vAlign: 0 }
+						)
+					)
+				);
+				button( "resurrection-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
+				button( "resurrection-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
 			}
 			const fatalAssetFailure = next.frontend?.error ?? next.resourceError ?? hud.error() ?? text.error() ??
 				guideResources.error() ??
@@ -13747,16 +14352,19 @@ export function createUi(
 				return null;
 			}
 			gauges.end();
+			// Text runs travel to the renderer whole: the GPU packer writes one record
+			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
 			quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&
-				sameUiQuads( lastProduct.quads, quads ) && sameUiSemantics( lastProduct.semantics, semantics );
+				lastProduct.damageText === worldVisible && sameUiQuads( lastProduct.quads, quads ) &&
+				sameUiSemantics( lastProduct.semantics, semantics );
 			probe?.detailEnd( "ui-compare" );
 			if ( unchanged ) return null;
 			probe?.detailBegin( "ui-publish" );
-			lastProduct = { width: w, height: h, quads, semantics };
-			publish( { revision: ++revision, width: w, height: h, quads } );
+			lastProduct = { width: w, height: h, damageText: worldVisible, quads, semantics };
+			publish( { revision: ++revision, width: w, height: h, quads, damageText: worldVisible } );
 			probe?.detailEnd( "ui-publish" );
 			return semantics;
 		},

@@ -108,7 +108,7 @@ func runPerformanceRing(_ []string) error {
 		return fmt.Errorf("production spawn authority unavailable: %w", err)
 	}
 	registry.SetSpawnGroundResolver(water.WalkableSpawnHeightAt)
-	registry.SetSpawnCollisionTest(water.SpawnMoveTestResult)
+	registry.SetSpawnCollisionTest(water.SpawnMoveTest)
 	authoredRegistry.SetTimeSource(func() time.Time { return auditNow })
 	registry.StartDivision("perf-audit")
 	authoredRegistry.StartDivision("perf-audit")
@@ -232,7 +232,7 @@ func runPerformanceRing(_ []string) error {
 	probeRandom := rand.New(rand.NewSource(0x1188))
 	probeRegistry.SetRandomSource(probeRandom.Float64)
 	probeRegistry.SetSpawnGroundResolver(water.WalkableSpawnHeightAt)
-	probeRegistry.SetSpawnCollisionTest(water.SpawnMoveTestResult)
+	probeRegistry.SetSpawnCollisionTest(water.SpawnMoveTest)
 	probeNow := time.UnixMilli(0)
 	probeRegistry.SetTimeSource(func() time.Time { return probeNow })
 	probeRegistry.StartDivision("asd2-probe")

@@ -1,33 +1,370 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101c20"><title>Silkroad Observatory</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/items.css"><script type="module" src="/app.js"></script><script type="module" src="/items.js"></script></head>
+<!-- index.html - observatory navigation, census, health and player recovery. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101c20">
+<title>Silkroad Observatory</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/items.css">
+<link rel="stylesheet" href="/players.css">
+<script type="module" src="/app.js">
+</script>
+<script type="module" src="/players.js"></script>
+<script type="module" src="/items.js">
+</script>
+</head>
 <body>
-<aside class="rail"><a class="seal" href="/" aria-label="Silkroad Observatory">S<span>✦</span></a><div class="rail-line"></div><span class="rail-label">SILKROAD ONLINE</span><span class="rail-bottom">1.150</span></aside>
+<aside class="rail">
+<a class="seal" href="/" aria-label="Silkroad Observatory">S<span>✦</span>
+</a>
+<div class="rail-line">
+</div>
+<span class="rail-label">SILKROAD ONLINE</span>
+<span class="rail-bottom">1.150</span>
+</aside>
 <div class="shell">
-<header><a class="brand" href="/">Observatory<span>WORLD OPERATIONS</span></a><nav aria-label="Dashboard views"><button data-view="overview" class="active">Overview</button><button data-view="players">Players</button><button data-view="world">World census</button><button data-view="health">Runtime</button><button data-view="items">Items</button></nav><span id="connection" class="connection">Connecting</span></header>
+<header>
+<a class="brand" href="/">Observatory<span>WORLD OPERATIONS</span>
+</a>
+<nav aria-label="Dashboard views">
+<button data-view="overview" class="active">Overview</button>
+<button data-view="players">Players</button>
+<button data-view="world">World census</button>
+<button data-view="health">Runtime</button>
+<button data-view="items">Items</button>
+<button data-view="recovery">Player recovery</button>
+</nav>
+<span id="connection" class="connection">Connecting</span>
+</header>
 <main>
-<div class="page-heading"><div><div class="eyebrow">SILKROAD ONLINE / LIVE OPERATIONS</div><h1>Guardians of <em>the Silk Road.</em></h1><p id="subtitle">A live window into the people, creatures and systems of Silkroad.</p></div><div class="heading-actions"><label class="sr-only" for="shard">Server</label><select id="shard"><option>Discovering servers…</option></select><button id="pause" class="button">Ⅱ Pause</button><button id="export" class="button square" title="Export current snapshot" aria-label="Export current snapshot">↓</button></div></div>
-<div id="warning" role="status" hidden></div>
-<div id="realm-strip" class="realm-strip" aria-label="Realm status"></div><div id="operator-alerts" role="status"></div><section id="metrics" class="metrics" aria-label="Server summary"></section>
-<section id="overview" class="view">
- <div class="feature-grid"><article class="panel map-panel"><div class="panel-heading"><div><div class="eyebrow">THE LIVING WORLD</div><h2>Population atlas</h2></div><span id="region-count" class="tag"></span></div><div id="atlas" class="atlas"></div><div class="map-footer"><span><i class="dot jade"></i> Monsters <i class="dot gold"></i> Unique <i class="dot white"></i> Player</span><span>OUTDOOR SECTOR COORDINATES</span></div></article>
- <article class="panel encounters"><div class="panel-heading"><div><div class="eyebrow">RARE ENCOUNTERS</div><h2>Uniques in the world</h2></div><span class="star">✧</span></div><div id="uniques"></div><p class="panel-note">Live resident uniques. Unvisited regions are not spawned by this dashboard.</p></article></div>
- <div class="lower-grid"><article class="panel"><div class="panel-heading"><div><div class="eyebrow">ACTIVITY / LAST 4 MINUTES</div><h2>World heartbeat</h2></div><span id="tick-label" class="tag"></span></div><div id="chart" class="chart"></div><div class="chart-legend"><span><i class="line jade"></i> Tick duration · ms</span><span id="history-label">Collecting samples</span></div></article><article class="panel"><div class="panel-heading"><div><div class="eyebrow">AT A GLANCE</div><h2>Shard health</h2></div><span id="health-mark"></span></div><div id="health-summary"></div></article></div>
+<div class="page-heading">
+<div>
+<div class="eyebrow">SILKROAD ONLINE / LIVE OPERATIONS</div>
+<h1 id="view-title">World overview</h1>
+<p id="subtitle">A live window into the people, creatures and systems of Silkroad.</p>
+</div>
+<div class="heading-actions">
+<label class="sr-only" for="shard">Server</label>
+<select id="shard">
+<option>Discovering servers…</option>
+</select>
+<button id="pause" class="button">Ⅱ Pause</button>
+<button id="export" class="button square" title="Export current snapshot" aria-label="Export current snapshot">↓</button>
+</div>
+</div>
+<div id="warning" role="status" hidden>
+</div>
+<div id="realm-strip" class="realm-strip" aria-label="Realm status">
+</div>
+<div id="operator-alerts" role="status">
+</div>
+<section id="metrics" class="metrics" aria-label="Server summary">
 </section>
-<section class="view" id="operations"><div class="lower-grid"><article class="panel"><div class="panel-heading"><h2>Population hotspots</h2></div><div id="hotspots"></div><p class="panel-note">Select a sector to inspect its creatures. Ranked by players, then population.</p></article><article class="panel"><div class="panel-heading"><h2>Realm chronicle</h2></div><div id="journal"></div><p class="panel-note">This browser session only. Two-second samples can miss brief events.</p></article></div></section><section id="players" class="view" hidden><article class="panel"><div class="panel-heading"><div><div class="eyebrow">CONNECTED CHARACTERS</div><h2>Adventurers online</h2></div><label><span class="sr-only">Search players</span><input id="player-search" type="search" placeholder="Search character…"></label></div><div id="player-table"></div></article></section>
-<section id="world" class="view" hidden><article class="panel"><div class="panel-heading"><div><div class="eyebrow">AUTHORITATIVE ENTITY SNAPSHOT</div><h2>Monster census</h2></div><div class="filters"><label><span class="sr-only">Search monsters</span><input id="monster-search" type="search" placeholder="Name, GID or region…"></label><select id="rarity" aria-label="Monster grade"><option value="all">All grades</option><option value="3">Unique</option><option value="1">Champion</option><option value="4">Giant</option><option value="0">Normal</option><option value="other">Other grades</option></select></div></div><div class="census-tools"><label>Sector <input id="sector-filter" type="number" min="0" max="65535" placeholder="All sectors"></label><label>Order <select id="monster-sort"><option value="gid">Entity ID</option><option value="level">Highest level</option><option value="health">Lowest health %</option><option value="name">Name</option></select></label><button class="button" id="clear-filters">Clear filters</button></div><div id="census-summary" class="census-summary"></div><div id="monster-table"></div><div class="pagination"><span id="page-label"></span><div><button class="button" id="previous">← Previous</button><button class="button" id="next">Next →</button></div></div></article></section>
-<section id="health" class="view" hidden><div id="runtime-grid" class="runtime-grid"></div></section>
+<section id="overview" class="view">
+<div class="feature-grid">
+<article class="panel map-panel">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">THE LIVING WORLD</div>
+<h2>Population atlas</h2>
+</div>
+<span id="region-count" class="tag">
+</span>
+</div>
+<div id="atlas" class="atlas">
+</div>
+<div class="map-footer">
+<span>
+<i class="dot jade">
+</i> Monsters <i class="dot gold">
+</i> Unique <i class="dot white">
+</i> Player</span>
+<span>OUTDOOR SECTOR COORDINATES</span>
+</div>
+</article>
+<article class="panel encounters">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">RARE ENCOUNTERS</div>
+<h2>Uniques in the world</h2>
+</div>
+<span class="star">✧</span>
+</div>
+<div id="uniques">
+</div>
+<p class="panel-note">Live resident uniques. Unvisited regions are not spawned by this dashboard.</p>
+</article>
+</div>
+<div class="lower-grid">
+<article class="panel">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">ACTIVITY / LAST 4 MINUTES</div>
+<h2>World heartbeat</h2>
+</div>
+<span id="tick-label" class="tag">
+</span>
+</div>
+<div id="chart" class="chart">
+</div>
+<div class="chart-legend">
+<span>
+<i class="line jade">
+</i> Tick duration · ms</span>
+<span id="history-label">Collecting samples</span>
+</div>
+</article>
+<article class="panel">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">AT A GLANCE</div>
+<h2>Shard health</h2>
+</div>
+<span id="health-mark">
+</span>
+</div>
+<div id="health-summary">
+</div>
+</article>
+</div>
+</section>
+<section class="view" id="operations">
+<div class="lower-grid">
+<article class="panel">
+<div class="panel-heading">
+<h2>Population hotspots</h2>
+</div>
+<div id="hotspots">
+</div>
+<p class="panel-note">Select a sector to inspect its creatures. Ranked by players, then population.</p>
+</article>
+<article class="panel">
+<div class="panel-heading">
+<h2>Realm chronicle</h2>
+</div>
+<div id="journal">
+</div>
+<p class="panel-note">This browser session only. Two-second samples can miss brief events.</p>
+</article>
+</div>
+</section>
+<section id="players" class="view" hidden>
+<article class="panel">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">CONNECTED CHARACTERS</div>
+<h2>Adventurers online</h2>
+</div>
+<label>
+<span class="sr-only">Search players</span>
+<input id="player-search" type="search" placeholder="Search character…">
+</label>
+</div>
+<div id="player-table">
+</div>
+</article>
+</section>
+<section id="world" class="view" hidden>
+<article class="panel">
+<div class="panel-heading">
+<div>
+<div class="eyebrow">AUTHORITATIVE ENTITY SNAPSHOT</div>
+<h2>Monster census</h2>
+</div>
+<div class="filters">
+<label>
+<span class="sr-only">Search monsters</span>
+<input id="monster-search" type="search" placeholder="Name, GID or region…">
+</label>
+<select id="rarity" aria-label="Monster grade">
+<option value="all">All grades</option>
+<option value="3">Unique</option>
+<option value="1">Champion</option>
+<option value="4">Giant</option>
+<option value="0">Normal</option>
+<option value="other">Other grades</option>
+</select>
+</div>
+</div>
+<div class="census-tools">
+<label>Sector <input id="sector-filter" type="number" min="0" max="65535" placeholder="All sectors">
+</label>
+<label>Order <select id="monster-sort">
+<option value="gid">Entity ID</option>
+<option value="level">Highest level</option>
+<option value="health">Lowest health %</option>
+<option value="name">Name</option>
+</select>
+</label>
+<button class="button" id="clear-filters">Clear filters</button>
+</div>
+<div id="census-summary" class="census-summary">
+</div>
+<div id="monster-table">
+</div>
+<div class="pagination">
+<span id="page-label">
+</span>
+<div>
+<button class="button" id="previous">← Previous</button>
+<button class="button" id="next">Next →</button>
+</div>
+</div>
+</article>
+</section>
+<section id="health" class="view" hidden>
+<div id="runtime-grid" class="runtime-grid">
+</div>
+</section>
 <section id="items" class="view" hidden>
- <article class="panel item-archive">
-  <div class="item-hero"><div><div class="eyebrow">THE MERCHANT'S LEDGER / V1.150</div><h2>The item archive<span>Every treasure. Its exact command.</span></h2><p>Find a potion, equip a legend, or inspect the small print.</p></div><div class="archive-seal" aria-hidden="true">物<small>ITEMS</small></div></div>
-  <div class="item-guide"><span class="tag">GM CONSOLE</span><code>/MAKEITEM &lt;CODENAME&gt; &lt;PARAMETER&gt;</code><span>Quantity for stacks · Plus level for equipment</span></div>
-  <div class="item-toolbar"><label>Search the archive<input id="item-search" type="search" placeholder="MP potion, sword, ITEM_ETC…, or ID" autocomplete="off"></label><label>Category<select id="item-category"><option value="">All items</option><option>Recovery</option><option>Equipment</option><option>Scrolls</option><option>Pets &amp; mounts</option><option>Other items</option></select></label></div>
-  <div id="item-shortcuts"><span>QUICK FINDS</span><button class="button" data-query="ITEM_ETC_MP_POTION">MP potions</button><button class="button" data-query="ITEM_ETC_HP_POTION">HP potions</button><button class="button" data-query="SCROLL">Scrolls</button><button class="button" data-query="">Browse all</button></div>
-  <div class="item-results"><span id="item-count" aria-live="polite">Opening archive</span><span>Hover for details · Select to build a command</span></div>
-  <div class="item-table-scroll"><table class="item-table"><thead><tr><th>Item / codename</th><th>Category</th><th>Reference</th><th>Max stack</th><th><span class="sr-only">Command</span></th></tr></thead><tbody id="item-rows"></tbody></table></div>
-  <div class="pagination"><div><span id="item-load" role="status"></span><button id="item-retry" class="button" hidden>Retry</button></div><div><button id="item-prev" class="button" disabled aria-label="Previous item page">←</button><span id="item-page">1 / 1</span><button id="item-next" class="button" disabled aria-label="Next item page">→</button></div></div>
-  <p class="panel-note">Reference catalog, not a promise of implemented item effects. Commands require GM permission and create a ground drop to pick up. This dashboard only copies commands; it never grants items.</p>
- </article>
-</section><footer><span><span class="tiny-star">✦</span> SILKROAD OBSERVATORY <span class="muted">/ READ-ONLY OPERATIONS</span></span><span id="timestamp">Waiting for first snapshot</span></footer>
-</main></div>
-<dialog id="detail"><button id="close-detail" class="button close" aria-label="Close entity details">×</button><div id="detail-content"></div><button id="copy" class="button">Copy coordinates</button><span id="copy-status" role="status"></span></dialog>
-<dialog id="item-dialog" aria-labelledby="item-title"><button id="item-close" class="button close" aria-label="Close item details">×</button><div id="item-detail"></div><div class="item-command-builder"><label><span id="item-amount-label">Quantity</span><input id="item-amount" type="number" step="1" min="1" value="1"></label><p id="item-parameter-help"></p><label class="sr-only" for="item-command">Generated MAKEITEM command</label><textarea id="item-command" readonly rows="2" spellcheck="false"></textarea><button id="item-copy" class="button item-copy">Copy /MAKEITEM command</button><p id="item-copy-status" role="status"></p></div><p class="panel-note">In game: open the GM console with Shift + Backquote (~), paste, then press Enter. Pick up the item from the ground.</p></dialog></body></html>
+<article class="panel item-archive">
+<div class="item-hero">
+<div>
+<div class="eyebrow">THE MERCHANT'S LEDGER / V1.150</div>
+<h2>The item archive<span>Every treasure. Its exact command.</span>
+</h2>
+<p>Find a potion, equip a legend, or inspect the small print.</p>
+</div>
+<div class="archive-seal" aria-hidden="true">物<small>ITEMS</small>
+</div>
+</div>
+<div class="item-guide">
+<span class="tag">GM CONSOLE</span>
+<code>/MAKEITEM &lt;CODENAME&gt; &lt;PARAMETER&gt;</code>
+<span>Quantity for stacks · Plus level for equipment</span>
+</div>
+<div class="item-toolbar">
+<label>Search the archive<input id="item-search" type="search" placeholder="MP potion, sword, ITEM_ETC…, or ID" autocomplete="off">
+</label>
+<label>Category<select id="item-category">
+<option value="">All items</option>
+<option>Recovery</option>
+<option>Equipment</option>
+<option>Scrolls</option>
+<option>Pets &amp; mounts</option>
+<option>Other items</option>
+</select>
+</label>
+</div>
+<div id="item-shortcuts">
+<span>QUICK FINDS</span>
+<button class="button" data-query="ITEM_ETC_MP_POTION">MP potions</button>
+<button class="button" data-query="ITEM_ETC_HP_POTION">HP potions</button>
+<button class="button" data-query="SCROLL">Scrolls</button>
+<button class="button" data-query="">Browse all</button>
+</div>
+<div class="item-results">
+<span id="item-count" aria-live="polite">Opening archive</span>
+<span>Hover for details · Select to build a command</span>
+</div>
+<div class="item-table-scroll">
+<table class="item-table">
+<thead>
+<tr>
+<th>Item / codename</th>
+<th>Category</th>
+<th>Reference</th>
+<th>Max stack</th>
+<th>
+<span class="sr-only">Command</span>
+</th>
+</tr>
+</thead>
+<tbody id="item-rows">
+</tbody>
+</table>
+</div>
+<div class="pagination">
+<div>
+<span id="item-load" role="status">
+</span>
+<button id="item-retry" class="button" hidden>Retry</button>
+</div>
+<div>
+<button id="item-prev" class="button" disabled aria-label="Previous item page">←</button>
+<span id="item-page">1 / 1</span>
+<button id="item-next" class="button" disabled aria-label="Next item page">→</button>
+</div>
+</div>
+<p class="panel-note">Reference catalog, not a promise of implemented item effects. Commands require GM permission and create a ground drop to pick up. This dashboard only copies commands; it never grants items.</p>
+</article>
+</section>
+<section id="recovery" class="view" hidden>
+ <div class="recovery-heading">
+  <div><span class="eyebrow">CHARACTER AUTHORITY</span><h2>Get players back on the road.</h2>
+  <p>Inspect first. Preserve the evidence. Return a stranded character to a safe town.</p></div>
+  <span class="operator-badge" id="recovery-operator">Authenticating...</span>
+ </div>
+ <ol class="recovery-steps" aria-label="Recovery process">
+  <li><span>01</span> Find the character</li><li><span>02</span> Save a diagnostic</li><li><span>03</span> Rescue to town</li>
+ </ol>
+ <form id="recovery-inspect" class="recovery-search panel">
+  <label>Server<select id="recovery-shard" required></select></label>
+  <label>Character name<input id="recovery-character" required maxlength="64" autocomplete="off" placeholder="e.g. Viper"></label>
+  <button class="button primary" id="recovery-inspect-button">Inspect character</button>
+ </form>
+ <p id="recovery-status" class="recovery-notice" role="status" aria-live="polite">Choose a character to begin.</p>
+ <section id="recovery-result" hidden>
+  <div class="recovery-grid">
+   <article class="panel recovery-profile">
+    <div class="panel-heading"><div><span class="eyebrow">INSPECTED CHARACTER</span><h2 id="recovery-player-title">Character</h2></div><span id="recovery-session" class="tag">Offline</span></div>
+    <dl id="recovery-facts" class="recovery-facts"></dl>
+    <div class="recovery-evidence"><h3>Keep the original evidence</h3><p>The snapshot includes position, session, companion and storage state. Save it before making changes.</p>
+    <button id="recovery-download" class="button" type="button">Download diagnostic JSON</button></div>
+    <details class="recovery-raw"><summary>View diagnostic state</summary><pre id="recovery-state"></pre></details>
+   </article>
+   <form id="recovery-rescue" class="panel recovery-form">
+    <div class="panel-heading"><div><span class="eyebrow">AUDITED OPERATION</span><h2>Rescue to town</h2></div><span class="tag">REQUIRES RELOGIN</span></div>
+    <div class="recovery-form-body">
+     <p class="recovery-note">Only this player will be disconnected. Inventory, progress and health are preserved. Dead characters stay dead.</p>
+     <label>Destination<select id="recovery-town" required></select></label>
+     <label>Reason<textarea id="recovery-reason" required minlength="5" maxlength="500" rows="3" placeholder="What happened, and why is rescue needed?"></textarea></label>
+     <label>Confirm character name<input id="recovery-confirmation" required autocomplete="off" placeholder="Type the exact name shown on the left"></label>
+     <button id="recovery-rescue-button" class="button rescue-submit" type="submit">Disconnect and rescue player</button>
+     <p class="recovery-hint">The original state and result are recorded in the private audit log.</p>
+    </div>
+   </form>
+  </div>
+ </section>
+</section>
+<footer>
+<span>
+<span class="tiny-star">✦</span> SILKROAD OBSERVATORY <span class="muted">/ WORLD OPERATIONS</span>
+</span>
+<span id="timestamp">Waiting for first snapshot</span>
+</footer>
+</main>
+</div>
+<dialog id="detail">
+<button id="close-detail" class="button close" aria-label="Close entity details">×</button>
+<div id="detail-content">
+</div>
+<button id="copy" class="button">Copy coordinates</button>
+<span id="copy-status" role="status">
+</span>
+</dialog>
+<dialog id="item-dialog" aria-labelledby="item-title">
+<button id="item-close" class="button close" aria-label="Close item details">×</button>
+<div id="item-detail">
+</div>
+<div class="item-command-builder">
+<label>
+<span id="item-amount-label">Quantity</span>
+<input id="item-amount" type="number" step="1" min="1" value="1">
+</label>
+<p id="item-parameter-help">
+</p>
+<label class="sr-only" for="item-command">Generated MAKEITEM command</label>
+<textarea id="item-command" readonly rows="2" spellcheck="false">
+</textarea>
+<button id="item-copy" class="button item-copy">Copy /MAKEITEM command</button>
+<p id="item-copy-status" role="status">
+</p>
+</div>
+<p class="panel-note">In game: open the GM console with Shift + Backquote (~), paste, then press Enter. Pick up the item from the ground.</p>
+</dialog>
+</body>
+</html>
