@@ -893,6 +893,15 @@ func poseToSpawn(p monster.Pose) Spawn {
 
 /*
 ================
+spawnToPose
+================
+*/
+func spawnToPose(p Spawn) monster.Pose {
+	return monster.Pose{RegionID: p.RegionID, X: p.X, Y: p.Y, Z: p.Z, Heading: p.Angle}
+}
+
+/*
+================
 planarDistance
 ================
 */
