@@ -39,11 +39,13 @@ type Record struct {
 	// TempGuildID holds the fortress between a war's capture and its end
 	// (UPDATE _SiegeFortress SET TempGuildID).
 	TempGuildID int64
-	// MaxEntrance copies the catalog row.
+	// MaxEntrance, RequestFee and OfficialNpc copy the catalog row.
 	MaxEntrance uint32
+	RequestFee  uint64
+	OfficialNpc string
 	// Applicants are the guilds registered for the coming war
-	// (_SiegeFortressRequest).
-	Applicants map[int64]bool
+	// (_SiegeFortressRequest), each with its request kind.
+	Applicants map[int64]RequestKind
 	// EntryOpen is the siege world's +0x84 flag: set five minutes after a
 	// temporary capture (CGameWorld_Siege_Tick case 3, 0x493E0 ms), it lets
 	// attackers through the gates again (slot 41, 601C20).
@@ -63,7 +65,28 @@ type Catalog struct {
 	// MaxEntrance is the row's u16 at +0x7A (siegefortress.txt column 8):
 	// how many PCs one side may bring into the fortress during its war.
 	MaxEntrance uint32
+	// RequestFee is the row's u32 at +0x80 (column 12), the gold an
+	// attacking guild pays to apply (633910, charged by the 0xA result).
+	RequestFee uint64
+	// OfficialNpc is the codename of the NPC that takes applications
+	// (column 14; 63BBC0 matches the selected NPC against it).
+	OfficialNpc string
 }
+
+/*
+================
+RequestKind
+
+The application's kind byte (0x71E1 subtype 7/8): an attacker, or a guild
+allied with the owner.
+================
+*/
+type RequestKind uint8
+
+const (
+	RequestAttack RequestKind = 0
+	RequestAlly   RequestKind = 1
+)
 
 /*
 ================
@@ -127,7 +150,8 @@ func (a *Authority) divisionLocked(divisionID string) *division {
 	}
 	state := &division{records: make(map[uint32]*Record, len(a.catalog))}
 	for _, row := range a.catalog {
-		state.records[row.ID] = &Record{ID: row.ID, CodeName: row.CodeName, MaxEntrance: row.MaxEntrance}
+		state.records[row.ID] = &Record{ID: row.ID, CodeName: row.CodeName, MaxEntrance: row.MaxEntrance,
+			RequestFee: row.RequestFee, OfficialNpc: row.OfficialNpc}
 	}
 	a.divisions[divisionID] = state
 	return state
@@ -170,11 +194,81 @@ func (a *Authority) Get(divisionID string, fortressID uint32) (Record, bool) {
 		return Record{}, false
 	}
 	copied := *record
-	copied.Applicants = make(map[int64]bool, len(record.Applicants))
-	for guild := range record.Applicants {
-		copied.Applicants[guild] = true
+	copied.Applicants = make(map[int64]RequestKind, len(record.Applicants))
+	for guild, kind := range record.Applicants {
+		copied.Applicants[guild] = kind
 	}
 	return copied, true
+}
+
+/*
+================
+AppliedFortress
+
+The fortress a guild has applied to, if any (5C3380 scans every
+fortress's requests).
+================
+*/
+func (a *Authority) AppliedFortress(divisionID string, guildID int64) (uint32, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for id, record := range a.divisionLocked(divisionID).records {
+		if _, ok := record.Applicants[guildID]; ok {
+			return id, true
+		}
+	}
+	return 0, false
+}
+
+/*
+================
+OwnedFortress
+
+The fortress a guild occupies, if any (5C5730).
+================
+*/
+func (a *Authority) OwnedFortress(divisionID string, guildID int64) (uint32, bool) {
+	if guildID == 0 {
+		return 0, false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for id, record := range a.divisionLocked(divisionID).records {
+		if record.GuildID == guildID {
+			return id, true
+		}
+	}
+	return 0, false
+}
+
+/*
+================
+SetApplication
+
+Adds (apply) or removes (cancel) a guild's request; reports whether the
+table changed.
+================
+*/
+func (a *Authority) SetApplication(divisionID string, fortressID uint32, guildID int64, kind RequestKind, applied bool) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	record, ok := a.divisionLocked(divisionID).records[fortressID]
+	if !ok || guildID == 0 {
+		return false
+	}
+	_, present := record.Applicants[guildID]
+	if applied == present {
+		return false
+	}
+	if applied {
+		if record.Applicants == nil {
+			record.Applicants = map[int64]RequestKind{}
+		}
+		record.Applicants[guildID] = kind
+	} else {
+		delete(record.Applicants, guildID)
+	}
+	return true
 }
 
 /*

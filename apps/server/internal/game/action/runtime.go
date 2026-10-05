@@ -121,6 +121,9 @@ type Runtime struct {
 	// Fortresses is the fortress occupation and war-mode authority
 	// (ConfigurePortals installs it from siegefortress.txt).
 	Fortresses *fortress.Authority
+	// Guilds is the persisted guild topology the fortress official reads
+	// (level, members, master).
+	Guilds enterworld.GuildStore
 
 	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
 	// The composition root installs it before Register admits 0x7338/0x7053.

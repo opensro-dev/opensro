@@ -66,7 +66,7 @@ func loadFortressCatalog(dir string) ([]fortress.Catalog, error) {
 		if r[0] != "1" {
 			continue
 		}
-		if len(r) < 8 {
+		if len(r) < 14 {
 			return nil, fmt.Errorf("siegefortress row %d is truncated", i+1)
 		}
 		id, err := strconv.ParseUint(r[1], 10, 32)
@@ -77,7 +77,12 @@ func loadFortressCatalog(dir string) ([]fortress.Catalog, error) {
 		if err != nil {
 			return nil, fmt.Errorf("siegefortress row %d entrance limit", i+1)
 		}
-		out = append(out, fortress.Catalog{ID: uint32(id), CodeName: r[2], MaxEntrance: uint32(maximum)})
+		fee, err := strconv.ParseUint(r[11], 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("siegefortress row %d request fee", i+1)
+		}
+		out = append(out, fortress.Catalog{ID: uint32(id), CodeName: r[2], MaxEntrance: uint32(maximum),
+			RequestFee: fee, OfficialNpc: r[13]})
 	}
 	return out, nil
 }
@@ -219,7 +224,7 @@ func (rt *Runtime) fortressWarEntry(division string, c *enterworld.Character, fo
 	}
 	occupied := record.GuildID != 0
 	defender := occupied && record.GuildID == guild
-	if !defender && !record.Applicants[guild] {
+	if _, applied := record.Applicants[guild]; !defender && !applied {
 		return portalFortressNotInWar
 	}
 	defenders, attackers := rt.fortressSides(division, fortressID, record.GuildID)

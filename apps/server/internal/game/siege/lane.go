@@ -182,7 +182,8 @@ func (l *Lane) FortressList(guildID int64) []byte {
 			row.Discarded[0] = uint32(record.GuildID)
 		}
 		rows = append(rows, row)
-		if guildID != 0 && (record.GuildID == guildID || record.Applicants[guildID]) {
+		_, applied := record.Applicants[guildID]
+		if guildID != 0 && (record.GuildID == guildID || applied) {
 			guildFortress = record.ID
 		}
 	}
