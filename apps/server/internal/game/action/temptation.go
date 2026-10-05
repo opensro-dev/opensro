@@ -13,7 +13,9 @@ same B245 bracket a monster's attack on a player uses.
 
 Owner's rule: a tempted monster attacks other monsters nearby for the
 duration instead of players, and only regular monsters and regular party
-monsters are affected (monster.Instance.RegularMonster).
+monsters are affected (monster.Instance.RegularMonster). A Temptation cast
+on any other monster is refused as an invalid target (0x3006) before it
+costs anything, so the caster sees why nothing happened.
 
 Inferred, recorded deliberately:
   - a monster fight rolls no abnormal status and resolves a casting
@@ -33,6 +35,7 @@ import (
 
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -212,6 +215,27 @@ func (rt *Runtime) temptedOpponentCandidate(division string, struck monster.Inst
 	pose := mover.LivePoseAt(now, nil)
 	to := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
 	return monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, to), ActorDistance: monster.NativeActorDistance(monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}, pose)}, true
+}
+
+// confusionTag is ca, the Confusion parameter block Temptation rolls.
+const confusionTag = 0x6361
+
+/*
+================
+temptationTargetRefusal
+
+Owner's rule: a skill that rolls Confusion (only Temptation and Curious
+Temptation among player skills) on a champion, giant, unique, event or
+quest monster answers 0x3006, the invalid-target refusal every other
+target check uses, at the press and again at execution.
+================
+*/
+func temptationTargetRefusal(skill enterworld.SkillRow, target monster.Instance) uint16 {
+	index, ok := abnormal.SourceIndex(confusionTag)
+	if !ok || !skill.Abnormal.Params[index].Present || target.RegularMonster() {
+		return 0
+	}
+	return 0x3006
 }
 
 /*
