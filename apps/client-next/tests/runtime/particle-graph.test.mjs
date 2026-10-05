@@ -112,6 +112,45 @@ test("position modes retain additive, parent and previous-sibling semantics", ()
 		assert.equal( state.elements[0][1].state.position[0], 3 );
 	}
 });
+test("sphere positions land on the element itself, its parent or its previous sibling", () => {
+	// Two siblings drift at 1 unit per frame under a root at x 10; a zero-radius
+	// SetSpherePos at age 2 moves each onto the base its flag selects.
+	const expected = [ [ 14, 13 ], [ 12, 11 ], [ 14, 14 ] ];
+	for ( const flags of [ 0, 1, 2 ] ) {
+		const sphere = particleProgram( [ {
+			name: "SetSpherePos",
+			flags,
+			parameter: { kind: "Vector", value: [ 0, 0, 0 ] }
+		} ] );
+		const graph = [
+			emitter( {
+				births: [ 0, 1 ],
+				parents: [ 0, 0 ],
+				commands: [
+					{
+						name: "SetVelocity",
+						frames: [ 0 ],
+						program: { vectors: [ vector( "SetVelocity", [ 1, 0, 0 ] ) ] }
+					},
+					{ name: "SetSpherePos", frames: [ 2 ], program: sphere }
+				]
+			} )
+		];
+		const root = identity();
+		root[12] = 10;
+		const state = run( graph, [ .05, .1, .15, .2 ], root );
+		assert.deepEqual( state.elements[0].map( e => e.state.position[0] ), expected[flags] );
+	}
+	assert.throws(
+		() =>
+			particleProgram( [ {
+				name: "SetSpherePos",
+				flags: 3,
+				parameter: { kind: "Vector", value: [ 1, 1, 1 ] }
+			} ] ),
+		/sphere position flags/
+	);
+});
 test("region rebasing shifts retained parents and children together without changing velocity", () => {
 	const graph = [
 		emitter( { program: { vectors: [ vector( "SetVelocity", [ 1, 0, 0 ] ) ] } } ),
