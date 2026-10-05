@@ -923,6 +923,20 @@ clicks stop at the tour.
 	pointer-events: none;
 }
 
+.sro-tour__sample {
+	position: absolute;
+	inset: 0;
+	box-sizing: border-box;
+	width: 100%;
+	height: 100%;
+	padding: 9%;
+	background: rgba(0, 0, 0, 0.6);
+}
+
+.sro-tour__sample[hidden] {
+	display: none;
+}
+
 .sro-tour__arrow {
 	position: fixed;
 	width: 0;

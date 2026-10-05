@@ -18,10 +18,24 @@ is shown on its own to a player who already finished the tour.
 */
 
 import { HOTBAR_PAGE_COUNT, hotbarSlot } from "@/engine/foundation/gameplay/quickslots";
-import { skillQueueChipReach } from "./skill-press-feedback";
+import { skillQueueChipBacking } from "./skill-press-feedback";
 
 // GDR_TMPQS_* are 32 by 32 (ifunderbar).
 const QUICKSLOT_PX = 32;
+// A basic skill icon for the queued-skill example.
+const SAMPLE_SKILL_ICON = "/assets/images/Media_extracted/icon/skill/china/bow_normal_a.png";
+
+/*
+================
+skillQueueArea
+
+The queued-skill chip's backing above slot 1, in slot widths and heights.
+================
+*/
+function skillQueueArea(): [number, number, number, number] {
+	const [x, y, width, height] = skillQueueChipBacking( [ 0, 0, QUICKSLOT_PX, QUICKSLOT_PX ] );
+	return [ x / QUICKSLOT_PX, y / QUICKSLOT_PX, width / QUICKSLOT_PX, height / QUICKSLOT_PX ];
+}
 
 /*
 ================
@@ -31,8 +45,13 @@ TourStep
 export interface TourStep {
 	readonly id: string;
 	readonly target: string;
-	/** How far above its element the lit window reaches, in element heights. */
-	readonly reachAbove?: number;
+	/**
+	 * The part of the element's box to light, as fractions of its width and
+	 * height ([x, y, width, height], y may be negative); the whole box without.
+	 */
+	readonly area?: readonly [number, number, number, number];
+	/** An example image shown inside the lit area. */
+	readonly sample?: string;
 	readonly title: string;
 	readonly text: string;
 }
@@ -76,9 +95,10 @@ export function tourSteps(): readonly TourStep[] {
 		{
 			id: "skill-queue",
 			target: slotOneSelector(),
-			reachAbove: skillQueueChipReach() / QUICKSLOT_PX,
+			area: skillQueueArea(),
+			sample: SAMPLE_SKILL_ICON,
 			title: "Queued skills",
-			text: "A skill pressed while another is still casting waits in a small icon above slot 1 and casts next. " +
+			text: "A skill pressed while another is still casting waits here, above slot 1, and casts next. " +
 				"A refused press shakes its slot."
 		}
 	];

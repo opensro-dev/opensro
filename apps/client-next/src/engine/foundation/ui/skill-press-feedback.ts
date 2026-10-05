@@ -133,14 +133,16 @@ export interface SkillQueueChip {
 
 /*
 ================
-skillQueueChipReach
+skillQueueChipBacking
 
-How far the chip's backing reaches above slot 1, in UI pixels (the
-onboarding tour lights that area).
+Where the chip's backing sits for a shortcut slot 1 at `anchor`, `rise`
+pixels low while it fades in. The onboarding tour lights the same box.
 ================
 */
-export function skillQueueChipReach() {
-	return CHIP_GAP_PX + 2 * CHIP_PAD_PX + CHIP_PX;
+export function skillQueueChipBacking( anchor: UiRect, rise = 0 ): UiRect {
+	const x = Math.round( anchor[0] + (anchor[2] - CHIP_PX) / 2 ),
+		y = anchor[1] - CHIP_GAP_PX - CHIP_PAD_PX - CHIP_PX + rise;
+	return [ x - CHIP_PAD_PX, y - CHIP_PAD_PX, CHIP_PX + 2 * CHIP_PAD_PX, CHIP_PX + 2 * CHIP_PAD_PX ];
 }
 
 /*
@@ -163,10 +165,8 @@ export function skillQueueChip(
 	const alpha = Math.min( 1, Math.max( 0, (now - queue.sinceMs) / CHIP_FADE_MS ) );
 	// Ease out: quick at first, settling into place.
 	const rise = Math.round( CHIP_RISE_PX * (1 - alpha) * (1 - alpha) );
-	const x = Math.round( anchor[0] + (anchor[2] - CHIP_PX) / 2 ),
-		y = anchor[1] - CHIP_GAP_PX - CHIP_PAD_PX - CHIP_PX + rise;
-	const icon: UiRect = [ x, y, CHIP_PX, CHIP_PX ];
-	const backing: UiRect = [ x - CHIP_PAD_PX, y - CHIP_PAD_PX, CHIP_PX + 2 * CHIP_PAD_PX, CHIP_PX + 2 * CHIP_PAD_PX ];
+	const backing = skillQueueChipBacking( anchor, rise );
+	const icon: UiRect = [ backing[0] + CHIP_PAD_PX, backing[1] + CHIP_PAD_PX, CHIP_PX, CHIP_PX ];
 	const under: UiQuad[] = [ {
 		rect: backing,
 		clip,

@@ -30,8 +30,10 @@ const START_DELAY_MS = 4000;
 // How often a hidden tour looks for an element that came on screen.
 const SEARCH_INTERVAL_MS = 1000;
 const SETTINGS_RETRY_MS = 30 * 1000;
-// Lit margin around the element, and the gap between it and the text.
+// Lit margin around an element (around a part of one: AREA_PADDING), and
+// the gap between it and the text.
 const SPOT_PADDING = 6;
+const AREA_PADDING = 1;
 const BUBBLE_GAP = 14;
 const BUBBLE_MARGIN = 8;
 
@@ -75,6 +77,7 @@ export function createOnboarding( apiBase: string ) {
 	let readySinceMs: number | null = null, searchAtMs = 0, current: TourStep | null = null;
 	const root = document.createElement( "div" ),
 		spot = document.createElement( "div" ),
+		sample = document.createElement( "img" ),
 		arrow = document.createElement( "div" ),
 		bubble = document.createElement( "section" ),
 		title = document.createElement( "h2" ),
@@ -85,6 +88,9 @@ export function createOnboarding( apiBase: string ) {
 	root.className = "sro-tour";
 	root.hidden = true;
 	spot.className = "sro-tour__spot";
+	sample.className = "sro-tour__sample";
+	sample.alt = "";
+	spot.append( sample );
 	arrow.className = "sro-tour__arrow";
 	bubble.className = "sro-tour__bubble";
 	bubble.setAttribute( "role", "dialog" );
@@ -166,6 +172,8 @@ export function createOnboarding( apiBase: string ) {
 		root.hidden = !step;
 		if ( !step ) return;
 		title.textContent = step.title;
+		sample.hidden = !step.sample;
+		if ( step.sample && sample.getAttribute( "src" ) !== step.sample ) sample.src = step.sample;
 		text.textContent = step.text;
 		place();
 		next.focus( { preventScroll: true } );
@@ -213,17 +221,24 @@ export function createOnboarding( apiBase: string ) {
 			show( null );
 			return;
 		}
-		const elementBox = element.getBoundingClientRect(), reach = elementBox.height * (current!.reachAbove ?? 0);
-		const box = new DOMRect( elementBox.x, elementBox.y - reach, elementBox.width, elementBox.height + reach );
-		spot.style.left = box.left - SPOT_PADDING + "px";
-		spot.style.top = box.top - SPOT_PADDING + "px";
-		spot.style.width = box.width + SPOT_PADDING * 2 + "px";
-		spot.style.height = box.height + SPOT_PADDING * 2 + "px";
+		const elementBox = element.getBoundingClientRect(), area = current!.area ?? [ 0, 0, 1, 1 ];
+		const box = new DOMRect(
+			elementBox.x + area[0] * elementBox.width,
+			elementBox.y + area[1] * elementBox.height,
+			area[2] * elementBox.width,
+			area[3] * elementBox.height
+		);
+		// A small area gets a tight frame, so it lights only what it names.
+		const padding = current!.area ? AREA_PADDING : SPOT_PADDING;
+		spot.style.left = box.left - padding + "px";
+		spot.style.top = box.top - padding + "px";
+		spot.style.width = box.width + padding * 2 + "px";
+		spot.style.height = box.height + padding * 2 + "px";
 		const width = bubble.offsetWidth, height = bubble.offsetHeight;
-		const below = box.bottom + SPOT_PADDING + BUBBLE_GAP + height + BUBBLE_MARGIN <= innerHeight;
+		const below = box.bottom + padding + BUBBLE_GAP + height + BUBBLE_MARGIN <= innerHeight;
 		const bubbleTop = below ?
-			box.bottom + SPOT_PADDING + BUBBLE_GAP :
-			Math.max( BUBBLE_MARGIN, box.top - SPOT_PADDING - BUBBLE_GAP - height );
+			box.bottom + padding + BUBBLE_GAP :
+			Math.max( BUBBLE_MARGIN, box.top - padding - BUBBLE_GAP - height );
 		const centre = box.left + box.width / 2;
 		const bubbleLeft = Math.max(
 			BUBBLE_MARGIN,
@@ -233,7 +248,7 @@ export function createOnboarding( apiBase: string ) {
 		bubble.style.top = bubbleTop + "px";
 		arrow.dataset.side = below ? "below" : "above";
 		arrow.style.left = centre + "px";
-		arrow.style.top = (below ? box.bottom + SPOT_PADDING : box.top - SPOT_PADDING - BUBBLE_GAP) + "px";
+		arrow.style.top = (below ? box.bottom + padding : box.top - padding - BUBBLE_GAP) + "px";
 	}
 
 	return {

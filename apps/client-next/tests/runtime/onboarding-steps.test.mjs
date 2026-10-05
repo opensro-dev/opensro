@@ -21,14 +21,19 @@ test("steps are offered in order, each once, and only while their element is on 
 	assert.equal( nextStep( steps, new Set( [ "fps-chip" ] ), visible )?.id, "bug-report" );
 });
 
-test("the queued-skill step lights main bar key 1 on every page and the chip above it", () => {
+test("the queued-skill step lights only the chip's place above key 1, with an example skill", async () => {
+	const { skillQueueChipBacking } = await import( "../../src/engine/foundation/ui/skill-press-feedback.ts" );
 	const step = tourSteps().find( row => row.id === "skill-queue" );
-	assert.ok( step );
-	const ids = step.target.split( "," ), reach = step.reachAbove ?? 0;
+	assert.ok( step && step.area );
+	const ids = step.target.split( "," );
 	assert.equal( ids.length, 4 );
 	assert.ok( ids.includes( '[data-ui-id="hotbar:1"]' ), "page 1, key 1" );
 	assert.ok( !ids.includes( '[data-ui-id="hotbar:0"]' ), "not the M slot" );
-	assert.ok( reach > 0.5 && reach < 1.5 );
+	// The same box the chip's backing takes over a 32 px slot, entirely above it.
+	const [x, y, width, height] = step.area;
+	assert.deepEqual( [ x, y, width, height ].map( v => v * 32 ), skillQueueChipBacking( [ 0, 0, 32, 32 ] ) );
+	assert.ok( y + height < 0 && width < 1 );
+	assert.match( step.sample ?? "", /^\/assets\/images\/Media_extracted\/icon\/skill\/.+\.png$/ );
 });
 
 test("step ids are unique so progress survives reordering and new steps", () => {
