@@ -47,8 +47,9 @@ func isVersionMismatch(err error) bool {
 // The offline upgrader preserves schema 13 and 14 records and their backups.
 // Version 16 adds the optional world of the recorded recall and death points
 // (world.lastRecallPoint.world, world.lastDeathPoint.world): native keeps the
-// GameWorldID beside each point. Table layout stays 5; schema 15 records
-// convert unchanged.
+// GameWorldID beside each point, and the optional fortress-return cooldown
+// (fortressReturnUntilMs). Table layout 6 adds the fortress tables; schema 15
+// records convert unchanged.
 const CurrentVersion = 16
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
