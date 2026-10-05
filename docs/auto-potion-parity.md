@@ -42,7 +42,7 @@ assets. Both were corrected before the final passing gates. The browser test
 uses a deterministic production-renderer fixture; it is not a connected-player
 native-versus-webport consumption capture.
 
-## Retained exception and remaining scope
+## Retained exception and verification scope
 
 The user explicitly retained strongest usable HP/MP potion replacement on
 exhaustion. Native 573390 replaces only with the same item reference.
@@ -64,8 +64,10 @@ rather than inventing event state in the port. The old Binary Ninja label
 on wrapper 74F350 incorrectly called it a quickslot assignment; it now
 names the flag-war event receiver it actually calls.
 
-No known implementation gap remains in the mapped stall/repair follow-up.
-The original core oracle and this branch matrix provide bounded evidence;
-a complete machine-equivalence proof of the entire reachable call graph
-and a connected native-versus-webport player capture were not performed.
-They must not be inferred from passing unit and browser fixture tests.
+The subsequent [branch and lifecycle verification](auto-potion-branch-matrix.md)
+adds the complete 64-item census, 35,424 original-machine queue calls, real
+WebSocket/store verification of this checkout, and an authenticated browser
+consumption/reconnect capture. It records the remaining oracle boundaries and
+the existing beta refill profile explicitly. No additional runtime defect was
+found. Whole-program machine equivalence and a live original-client/server
+capture are not claimed.
