@@ -321,10 +321,10 @@ type Runtime struct {
 	// PushMonsterCast publishes prepared-cast results before the division
 	// transaction ends. It must only enqueue (never perform network I/O).
 	// Detached runtimes leave it nil and inspect returned frames instead.
+	// Each result.Private entry names the character its frames go to.
 	PushMonsterCast func(
 		divisionID string,
 		sourceGID uint32,
-		targetName string,
 		result simulation.MonsterAttackResult,
 	)
 

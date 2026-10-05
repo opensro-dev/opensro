@@ -202,6 +202,10 @@ type SkillRow struct {
 	// CombatTrap is a planted hostile trap program (skilltrap.go).
 	CombatTrap    SkillCombatTrap
 	OffensiveArea SkillOffensiveArea
+	// ActionArea is efr kind 1 (RefSkill +0x28C) on any row, recorded by the
+	// parameter index: a monster's attack reads it although the player
+	// offense gate refuses its row. OffensiveArea is the admitted player copy.
+	ActionArea SkillOffensiveArea
 	// Native encoded alcu/luck blocks feed ParamKeeper AC/AD respectively.
 	AlchemyStoneBonus     uint32
 	AlchemyReinforceBonus uint32

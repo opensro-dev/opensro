@@ -19,7 +19,7 @@ it emitted. All registry access is value-copy in / whole-value commit
 out (the CloneWorldState discipline).
 ==================
 */
-func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, *monsterTargetFrames) {
+func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	// A fatal B245 keeps the registry row alive briefly so the client can play
 	// death, stage reward particles, and then receive the ordinary despawn
 	// dissolve. That corpse is presentation-retained, not behavior-live: it
@@ -230,7 +230,7 @@ func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.
 	return ops.advanceIdle(divisionID, instance, tactics, mover, divisionPlayers, nowMs)
 }
 
-func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, *monsterTargetFrames) {
+func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	// 55A8B0 checks state expiry before the acquisition callback.
 	if nowMs > mover.BehaviorDeadlineMs {
 		return ops.decideIdle(divisionID, instance, tactics, mover, nowMs), nil

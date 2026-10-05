@@ -33,11 +33,27 @@ MonsterAttackResult
 ================
 */
 type MonsterAttackResult struct {
-	Frames       []Frame
-	TargetFrames []Frame
-	Accepted     bool
-	TargetAlive  bool
-	Refusal      MonsterAttackRefusal
+	Frames []Frame
+	// Private holds each struck player's own consequences: a struck
+	// companion's go to its owner, and an area attack carries one per victim.
+	Private     []MonsterPrivateFrames
+	Accepted    bool
+	TargetAlive bool
+	Refusal     MonsterAttackRefusal
+}
+
+/*
+================
+MonsterPrivateFrames
+
+The frames one character's sessions alone receive from a monster action,
+named by id (the tick's sessions) and by name (the action owner's push).
+================
+*/
+type MonsterPrivateFrames struct {
+	CharacterID   int64
+	CharacterName string
+	Frames        []Frame
 }
 
 // Refusal is meaningful only for an unaccepted action. Unclassified failures
@@ -102,7 +118,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	mover monster.MoverState,
 	players []playerPose,
 	nowMs int64,
-) ([]Frame, *monsterTargetFrames, bool) {
+) ([]Frame, []MonsterPrivateFrames, bool) {
 	if mover.TargetGID() == 0 ||
 		(mover.Mode() != monster.MoverChasing && mover.Mode() != monster.MoverAttacking) {
 		return nil, nil, false
@@ -196,10 +212,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 		mover.LastBattleActivityMs = uint32(nowMs)
 	}
 	frames = append(frames, result.Frames...)
-	var targeted *monsterTargetFrames
-	if len(result.TargetFrames) > 0 {
-		targeted = &monsterTargetFrames{TargetGid: target.Gid, Frames: result.TargetFrames}
-	}
+	targeted := result.Private
 	// A refusal often returns the zero result, whose TargetAlive is false.
 	// Only an accepted action can own fatal-result animation recovery.
 	if !result.Accepted {

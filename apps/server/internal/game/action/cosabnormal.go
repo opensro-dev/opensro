@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
@@ -645,114 +644,16 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	if err != nil {
 		return result
 	}
-	ownerBlock := rt.newCosAbnormalOwnerForPet(divisionID, owner, pet, nowMs)
-	defender, err := cosCombatStats(ref, pet, ownerBlock.block)
-	if err != nil {
-		return result
-	}
 	if release == nil && skill.ActionCastingTimeMs > 0 {
 		return rt.prepareMonsterCast(divisionID, instance, monsterCastRecipient{snapshot, pet.GID}, skill, nowMs)
 	}
-	var records []abnormal.Record
-	var formulas []combat.Result
-	for range skill.Attack.ImpactCount {
-		formula, resolveErr := rt.resolveCombat(criticalActor{division: divisionID, monster: instance.Gid}, skill, attacker, defender)
-		if resolveErr != nil || formula.Damage == 0 && !formula.Blocked {
-			return result
-		}
-		formulas = append(formulas, formula)
-		if formula.Blocked {
-			continue // 5905FB: no damage and no status roll
-		}
-		rolled, rollErr := rt.rollMonsterOnCOS(cosAbnormalRoll{division: divisionID, caster: instance,
-			params: &skill.Abnormal, target: ownerBlock})
-		if rollErr != nil {
-			return result
-		}
-		records = append(records, rolled...)
-	}
-	ownerBlock.sources = rt.captureAbnormalSources(divisionID, ownerBlock.block, records)
-	var fatal bool
-	var impacts []wire.SkillCastTargetImpact
-	var battleFrames []wire.Frame
-	hitContext := abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
-	committed := rt.deps.Update(owner, "monster-cos-hit", func() bool {
-		live := owner.CompanionByGID(pet.GID)
-		if live == nil || live.GID != pet.GID || live.CurrentHP == 0 {
-			return false
-		}
-		// CGObjCOS_ProcessNormalHit (52A1E0): the owner (COS+0x1CD8) enters
-		// battle (4E1DF0) before the pet takes the hit, fatal or not.
-		if enterworld.CharacterAlive(owner) {
-			battleFrames = rt.enterBattleState(divisionID, owner, nowMs)
-		}
-		for _, formula := range formulas {
-			hitContext.Magical = hitContext.Magical || formula.MagicalDamage != 0
-			live.CurrentHP -= vitals.HitDebit(live.CurrentHP, formula.Damage)
-			fatal = live.CurrentHP == 0
-			impacts = append(impacts, wire.SkillCastTargetImpact{Damage: formula.Damage,
-				Fatal: fatal, Blocked: formula.Blocked, ResultFlags: formula.ResultFlags})
-			if fatal {
-				break
-			}
-		}
-		if fatal {
-			ownerBlock.changed = ownerBlock.block.ClearAll(ownerBlock)
-			ownerBlock.fatal = true
-		} else {
-			if ownerBlock.block.Mask != 0 {
-				ownerBlock.changed = ownerBlock.block.BreakOnHit(ownerBlock, hitContext) || ownerBlock.changed
-			}
-			for _, record := range records {
-				if ownerBlock.block.Apply(ownerBlock, record, nowMs) {
-					ownerBlock.changed = true
-				}
-			}
-		}
-		ownerBlock.commit()
-		return true
-	})
-	if !committed {
+	in := monsterStrikeInput{division: divisionID, instance: instance, skill: skill, attacker: attacker, percent: fullAreaPercent, now: nowMs}
+	outcome := rt.monsterStrikeCOS(in, owner, pet, ref, petPose)
+	if !outcome.committed {
 		return result
 	}
-	token := uint32(0)
-	if release != nil {
-		token = release.token
-	} else {
-		token = atomic.AddUint32(&rt.castTokenCounter, 1)
-	}
-	wireResult := wire.NewStationarySkillCastSingleTargetResult(
-		wire.SkillCastSuccess{SkillId: skillID, CasterGid: instance.Gid, InstanceToken: token},
-		pet.GID,
-		impacts,
-	)
-	frame := wire.SkillCastSingleTargetResultFrame(wireResult)
-	flight := projectileFlightMs(simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}, petPose, skill.ProjectileSpeed)
-	closeAt := nowMs + max(int64(actionLifecycleMs), flight+1)
-	if release == nil {
-		rt.queueSkillFinalize(divisionID, monsterCastOwner(instance.Gid), instance.Gid, nowMs, wire.SkillCastReleaseFrame(token, pet.GID))
-	} else {
-		frame = wire.SkillCastReleaseResultFrame(wireResult)
-		closeAt = nowMs + max(int64(skill.ActionDurationMs), flight+1)
-	}
-	rt.queueSkillFinalize(divisionID, monsterCastOwner(instance.Gid), instance.Gid, closeAt, wire.SkillCastFinalizeFrame(token))
-	result.Frames = []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}}
-	result.Frames = append(result.Frames, simulation.Frame{
-		Opcode:  simulation.OpVitalsUpdate,
-		Payload: simulation.HPRefreshPayload(pet.GID, 0, pet.CurrentHP),
-	})
-	for _, published := range rt.cosAbnormalPublication(pet.GID, ownerBlock) {
-		result.Frames = append(result.Frames, simulation.Frame{Opcode: published.Opcode, Payload: published.Payload})
-	}
-	for _, f := range battleFrames {
-		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload})
-	}
-	for _, frame := range ownerBlock.private {
-		result.TargetFrames = append(result.TargetFrames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
-	}
-	result.Accepted = true
-	result.TargetAlive = !fatal
-	return result
+	from := simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}
+	return rt.publishMonsterStrikes(monsterPublication{strike: in, release: release, from: from}, outcome.strike)
 }
 
 /*

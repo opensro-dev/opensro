@@ -533,18 +533,20 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		}
 	}
 
-	game.items.PushMonsterCast = func(division string, source uint32, targetName string, result simulation.MonsterAttackResult) {
+	game.items.PushMonsterCast = func(division string, source uint32, result simulation.MonsterAttackResult) {
 		public := make([]wire.Frame, len(result.Frames))
 		for i, f := range result.Frames {
 			public[i] = wire.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope}
 		}
 		action.BroadcastObservedFrames(hub, division, 0, source, public)
-		private := make([]wire.Frame, len(result.TargetFrames))
-		for i, f := range result.TargetFrames {
-			private[i] = wire.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope}
-		}
-		if len(private) > 0 {
-			game.items.PushCharacterFrames(division, targetName, private)
+		for _, recipient := range result.Private {
+			private := make([]wire.Frame, len(recipient.Frames))
+			for i, f := range recipient.Frames {
+				private[i] = wire.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope}
+			}
+			if len(private) > 0 {
+				game.items.PushCharacterFrames(division, recipient.CharacterName, private)
+			}
 		}
 	}
 

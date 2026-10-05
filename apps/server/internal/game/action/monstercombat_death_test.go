@@ -240,8 +240,8 @@ func TestFatalMonsterAttackCommitsAndReturnsDeathProgression(t *testing.T) {
 	if len(pushed) != 0 {
 		t.Fatalf("monster combat invoked an asynchronous character callback: %+v", pushed)
 	}
-	if len(result.TargetFrames) != 1 || result.TargetFrames[0].Opcode != wire.OpExpUpdate {
-		t.Fatalf("same-turn death progression = %+v, want one target-only 30D2", result.TargetFrames)
+	if private := privateFramesOf(result); len(private) != 1 || private[0].Opcode != wire.OpExpUpdate {
+		t.Fatalf("same-turn death progression = %+v, want one target-only 30D2", private)
 	}
 	assertOnlySkillReleases(t, rt.TickHook()(clock.NowMs()))
 	if len(pushed) != 0 {

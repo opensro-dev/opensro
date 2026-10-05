@@ -12,16 +12,11 @@ target HP and status changes together, then publish the resulting wire frames.
 package action
 
 import (
-	"fmt"
 	"math"
-	"sync/atomic"
 
 	"opensro.online/server/internal/domain"
-	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/internal/vitals"
-	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -269,222 +264,14 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	if release == nil && skill.ActionCastingTimeMs > 0 {
 		return rt.prepareMonsterCast(divisionID, instance, monsterCastRecipient{snapshot, enterworld.ObjectIDForCharacter(snapshot)}, skill, nowMs)
 	}
-	formulas := make([]combat.Result, 0, skill.Attack.ImpactCount)
-	// 58EC6C: a defender behind a wall splits every impact. ck / lfst /
-	// pdmg / pdm2 attacks get no absorb group (589EE0), yet the wall's
-	// lanes still leave the defender's record.
-	wall, walled := rt.standingWallOf(divisionID, snapshot.Name)
-	var wallRule *enterworld.SkillWall
-	if walled {
-		wallRule = &wall.wall
-	}
-	var splits []wallSplit
-	// 590680 rolls on every hit; 593F0C installs the records on a surviving
-	// victim after 58F491/593BEF's damage breaks (root, sleep, stun).
-	var abnormalRecords []abnormal.Record
-	for range skill.Attack.ImpactCount {
-		split, resolveErr := rt.resolveCombatBehindWall(criticalActor{division: divisionID, monster: instance.Gid}, skill, attacker, defender, wallRule)
-		formula := split.Defender
-		if resolveErr != nil || formula.Damage == 0 && !walled && !formula.Blocked && !formula.Slain {
-			return result
-		}
-		splits = append(splits, wallSplit{absorbed: split.Absorbed, flags: formula.ResultFlags, covered: split.Covered})
-		formulas = append(formulas, formula)
-		if formula.Blocked || formula.Slain {
-			continue // 5905FB: no status roll for a blocked or ck-killed impact
-		}
-		records, rollErr := rt.rollMonsterOnPlayer(divisionID, instance, &skill.Abnormal, snapshot, defender, wallRule)
-		if rollErr != nil {
-			return result
-		}
-		abnormalRecords = append(abnormalRecords, records...)
-	}
-	if len(formulas) == 0 {
+	in := monsterStrikeInput{division: divisionID, instance: instance, skill: skill, attacker: attacker, percent: fullAreaPercent, now: nowMs}
+	outcome := rt.monsterStrikePlayer(in, character, snapshot, defender, playerPose)
+	if !outcome.committed {
+		result.TargetAlive, result.Refusal = outcome.alive, outcome.refusal
 		return result
 	}
-	abnormalOwner := rt.newPlayerAbnormalOwner(divisionID, character, nowMs)
-	abnormalOwner.sources = rt.captureAbnormalSources(divisionID, abnormalOwner.block, abnormalRecords)
-
-	impacts := make([]wire.SkillCastTargetImpact, 0, len(formulas))
-	var absorbRecords []wire.SkillCastTargetImpact
-	var fatal bool
-	var deathProgressionFrames []wire.Frame
-	var deathEffectFrames []wire.Frame
-	var battleFrames []wire.Frame
-	// 593AE8: a record a standing wall absorbs (+0x10) skips the recipient
-	// branch; any other landed record reaches it.
-	struck := false
-	var wear wearFrames
-	hitContext := abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
-	committed := rt.deps.Update(character, "monster-basic-attack", func() bool {
-		// The detached admission snapshot can predate a status transition.
-		// Revalidate under the same mutation door that commits HP. Do not
-		// turn a living but ineligible target into a synthetic death result.
-		if character.DeletePending || !enterworld.CharacterAlive(character) ||
-			!monster.AllowsTargetStatus(instance.Ref.TidWord, instance.Nest.NativeTacticsFlags, character.NativeBodyStatus) {
-			return false
-		}
-		_, _, remaining, _ := rt.playerKeeperVitals(divisionID, character)
-		for _, formula := range formulas {
-			hitContext.Magical = hitContext.Magical || formula.MagicalDamage != 0
-			debit := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
-			if formula.Slain {
-				debit = remaining // 58F778: the ck kill marks the target dead
-			}
-			remaining -= debit
-			fatal = remaining == 0
-			impacts = append(impacts, wire.SkillCastTargetImpact{
-				ResultFlags: formula.ResultFlags,
-				// Native 585664 serializes the full hit independently of HP.
-				Damage:  formula.Damage,
-				Fatal:   fatal,
-				Blocked: formula.Blocked,
-				Slain:   formula.Slain,
-			})
-			if fatal {
-				break
-			}
-		}
-		character.CurrentHP = &remaining
-		struck = len(impacts) > 0
-		if walled && !skill.WallBypass {
-			var absorbed uint32
-			absorbRecords, absorbed = wallRecords(wall, splits, len(impacts))
-			rt.drainWall(divisionID, character.Name, wall.token, absorbed)
-			struck = !allWallAbsorbed(absorbRecords)
-		}
-		// 593C9F/593CB1: a struck player's landed hits wear its armour and
-		// its blocks its shield; a wall that absorbs the whole hit skips
-		// the recipient branch.
-		if struck {
-			var tally wearTally
-			for _, impact := range impacts {
-				// 58F784 jumps past the landed count (58F79F): a ck kill
-				// wears nothing.
-				if !impact.Slain {
-					tally.note(impact.Blocked, false)
-				}
-			}
-			for _, roll := range [...]struct{ mode, count uint8 }{{wearArmour, tally.armour}, {wearShield, tally.shield}} {
-				taken := rt.rollEquipmentWear(divisionID, character, roll.mode, roll.count)
-				wear.actor = append(wear.actor, taken.actor...)
-				wear.public = append(wear.public, taken.public...)
-			}
-		}
-		if fatal {
-			deathEffectFrames, deathProgressionFrames = rt.settlePlayerDeathInDoor(divisionID, character, nowMs)
-			abnormalOwner = rt.clearPlayerAbnormalInDoor(divisionID, character, nowMs)
-		} else {
-			battleFrames = rt.enterBattleState(divisionID, character, nowMs)
-			abnormalOwner.applyHit(hitContext, abnormalRecords)
-			// 58F72F: a landed hit tests the victim's skc damage masks.
-			rt.cancelEffectsOnDamage(divisionID, character, skill.Attack.Flags, nowMs)
-		}
-		return len(impacts) > 0
-	})
-	if !committed || len(impacts) == 0 {
-		fresh := rt.characterSnapshot(divisionID, character)
-		result.TargetAlive = enterworld.CharacterAlive(fresh)
-		if result.TargetAlive && !fresh.DeletePending &&
-			!monster.AllowsTargetStatus(instance.Ref.TidWord, instance.Nest.NativeTacticsFlags, fresh.NativeBodyStatus) {
-			result.Refusal = simulation.MonsterAttackCommandRejected
-		}
-		return result
-	}
-	var token uint32
-	if fatal {
-		rt.bindResidentRegion(simulation.WorldKey(divisionID, character.Name), nowMs)
-	}
-	abnormalFrames := rt.playerAbnormalPublication(divisionID, character, abnormalOwner)
-	if release != nil {
-		token = release.token
-	} else {
-		token = atomic.AddUint32(&rt.castTokenCounter, 1)
-	}
-	wireResult := wire.NewStationarySkillCastSingleTargetResult(
-		wire.SkillCastSuccess{
-			SkillId: skillID, CasterGid: instance.Gid, InstanceToken: token,
-		},
-		targetGid,
-		impacts,
-	)
-	if absorbRecords != nil {
-		wireResult = wireResult.WithAbsorb(absorbRecords)
-	}
-	frame := wire.SkillCastSingleTargetResultFrame(wireResult)
-	flight := projectileFlightMs(simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}, playerPose, skill.ProjectileSpeed)
-	closeAt := nowMs + max(int64(actionLifecycleMs), flight+1)
-	if release == nil {
-		rt.queueSkillFinalize(divisionID, fmt.Sprintf("@monster:%d", instance.Gid), instance.Gid, nowMs, wire.SkillCastReleaseFrame(token, targetGid))
-	} else {
-		frame = wire.SkillCastReleaseResultFrame(wireResult)
-		closeAt = nowMs + max(int64(skill.ActionDurationMs), flight+1)
-	}
-	rt.queueSkillFinalize(
-		divisionID,
-		fmt.Sprintf("@monster:%d", instance.Gid),
-		instance.Gid,
-		closeAt,
-		wire.SkillCastFinalizeFrame(token),
-	)
-	result.Frames = []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}}
-	for _, f := range abnormalFrames.public {
-		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
-	}
-	for _, f := range abnormalFrames.actor {
-		result.TargetFrames = append(result.TargetFrames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
-	}
-	for _, f := range wear.public {
-		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
-	}
-	for _, f := range wear.actor {
-		result.TargetFrames = append(result.TargetFrames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
-	}
-	if fatal {
-		if rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
-			// Native death retires effects before publishing the life change.
-			// Enqueue under the action lock, before a rebirth/new application can
-			// reuse these wire tokens. The simulation still owns combat delivery.
-			rt.publishBodyStatus(divisionID, character.Name, deathEffectFrames)
-		} else {
-			for _, ended := range deathEffectFrames {
-				result.Frames = append(result.Frames, simulation.Frame{Opcode: ended.Opcode, Payload: ended.Payload})
-			}
-		}
-		lifePublication := beginFatalLifePublication(targetGid)
-		// B245/B505 retains fatal damage until the client impact callback. The
-		// death-sourced 0x33A6 then advances its native wire baseline to zero
-		// without applying that damage twice. Present-point rebirth depends on
-		// this baseline: its source-zero 0x33A6 restores effective HP by delta.
-		baseline := lifePublication.publishDeathBaseline()
-		result.Frames = append(result.Frames, simulation.Frame{
-			Opcode: baseline.opcode, Payload: baseline.payload,
-		})
-
-		// 0x3122 owns the durable life-state transition, death timer, motion,
-		// and rebirth UI. It intentionally does not own HP reconciliation.
-		death := lifePublication.publishDead()
-		result.Frames = append(result.Frames, simulation.Frame{
-			Opcode: death.opcode, Payload: death.payload,
-		})
-	}
-	// Entering battle (4E1DF0, from ProcessNormalHit) follows the hit.
-	if struck && !fatal {
-		for _, f := range rt.offensiveResultRecipient(divisionID, character, nowMs) {
-			result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload})
-		}
-	}
-	for _, f := range battleFrames {
-		result.Frames = append(result.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload})
-	}
-	result.Accepted = true
-	result.TargetAlive = !fatal
-	for _, progression := range deathProgressionFrames {
-		result.TargetFrames = append(result.TargetFrames, simulation.Frame{
-			Opcode: progression.Opcode, Payload: progression.Payload,
-		})
-	}
-	return result
+	from := simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}
+	return rt.publishMonsterStrikes(monsterPublication{strike: in, release: release, from: from}, outcome.strike)
 }
 
 /*

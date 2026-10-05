@@ -315,6 +315,17 @@ supplies its own world position to peer visibility, including parked mounts.
 func (rt *Runtime) CompanionPresentations(division, name string) []*simulation.PeerCOS {
 	unlock := rt.lockDivision(division)
 	defer unlock()
+	return rt.companionPresentations(division, name)
+}
+
+/*
+================
+companionPresentations
+
+CompanionPresentations for a caller that already holds the division lock.
+================
+*/
+func (rt *Runtime) companionPresentations(division, name string) []*simulation.PeerCOS {
 	rt.petMu.Lock()
 	owner := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(name)}]
 	rt.petMu.Unlock()
@@ -526,12 +537,26 @@ pose. A mounted ride is struck through its rider (monsterAttackStage).
 ================
 */
 func (rt *Runtime) CompanionTargets(division string, ownerGID uint32, nowMs int64) []simulation.CompanionTarget {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	return rt.companionTargets(division, ownerGID, nowMs)
+}
+
+/*
+================
+companionTargets
+
+CompanionTargets for a caller that already holds the division lock (a
+monster area gathering its candidates at release).
+================
+*/
+func (rt *Runtime) companionTargets(division string, ownerGID uint32, nowMs int64) []simulation.CompanionTarget {
 	owner := rt.findCharacterByGid(division, ownerGID)
 	if owner == nil {
 		return nil
 	}
 	var out []simulation.CompanionTarget
-	for _, pet := range rt.CompanionPresentations(division, owner.Name) {
+	for _, pet := range rt.companionPresentations(division, owner.Name) {
 		if pet.Mounted || pet.LifeState == wire.LifeStateDead {
 			continue
 		}

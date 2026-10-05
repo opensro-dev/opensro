@@ -82,7 +82,7 @@ still holding a player was sent home by the confusion start event
 (applyTacticsEvents) and acquires from HOMING here.
 ================
 */
-func (ops *MonsterMoverOps) acquireTemptationFoe(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, foes []playerPose, nowMs int64) ([]Frame, *monsterTargetFrames, bool) {
+func (ops *MonsterMoverOps) acquireTemptationFoe(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, foes []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames, bool) {
 	if !instance.Tempted() || mover.TargetGID() != 0 || len(foes) == 0 {
 		return nil, nil, false
 	}

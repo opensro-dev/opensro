@@ -462,10 +462,10 @@ func TestMonsterFatalConsequencesStaySameTurnAndTargetOnly(t *testing.T) {
 			t.Fatalf("fatal target = %d, want actor gid %d", targetGid, PlayerObjectID(1))
 		}
 		return MonsterAttackResult{
-			Frames:       []Frame{{Opcode: wire.OpSkillCastResult}},
-			TargetFrames: []Frame{{Opcode: wire.OpExpUpdate}},
-			Accepted:     true,
-			TargetAlive:  false,
+			Frames:      []Frame{{Opcode: wire.OpSkillCastResult}},
+			Private:     []MonsterPrivateFrames{{CharacterID: 1, Frames: []Frame{{Opcode: wire.OpExpUpdate}}}},
+			Accepted:    true,
+			TargetAlive: false,
 		}
 	}
 	actor := playerSessionAt(1, 1005, 1000)

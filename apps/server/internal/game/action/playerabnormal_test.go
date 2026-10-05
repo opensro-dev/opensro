@@ -51,7 +51,7 @@ func TestMonsterStunLandsOnThePlayer(t *testing.T) {
 		t.Fatalf("stun block %+v", block)
 	}
 	var snapshot, shared bool
-	for _, frame := range result.TargetFrames {
+	for _, frame := range privateFramesOf(result) {
 		if frame.Opcode == 0x36C7 {
 			snapshot = true
 		}
@@ -62,7 +62,7 @@ func TestMonsterStunLandsOnThePlayer(t *testing.T) {
 		}
 	}
 	if !snapshot || !shared {
-		t.Fatalf("publication target=%v public=%v", result.TargetFrames, result.Frames)
+		t.Fatalf("publication target=%v public=%v", result.Private, result.Frames)
 	}
 }
 

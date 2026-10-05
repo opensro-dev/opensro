@@ -71,6 +71,7 @@ type residentSkill struct {
 	FixedDamage             SkillFixedDamage
 	CombatTrap              SkillCombatTrap
 	OffensiveArea           unique.Handle[SkillOffensiveArea]
+	ActionArea              unique.Handle[SkillOffensiveArea]
 	AlchemyStoneBonus       uint32
 	AlchemyReinforceBonus   uint32
 	SpawnToken              bool
@@ -172,6 +173,7 @@ func compactSkill(row SkillRow) residentSkill {
 		FixedDamage:             row.FixedDamage,
 		CombatTrap:              row.CombatTrap,
 		OffensiveArea:           unique.Make(row.OffensiveArea),
+		ActionArea:              unique.Make(row.ActionArea),
 		AlchemyStoneBonus:       row.AlchemyStoneBonus,
 		AlchemyReinforceBonus:   row.AlchemyReinforceBonus,
 		SpawnToken:              row.SpawnToken,
@@ -275,6 +277,7 @@ func (r residentSkill) value() SkillRow {
 		FixedDamage:             r.FixedDamage,
 		CombatTrap:              r.CombatTrap,
 		OffensiveArea:           r.OffensiveArea.Value(),
+		ActionArea:              r.ActionArea.Value(),
 		AlchemyStoneBonus:       r.AlchemyStoneBonus,
 		AlchemyReinforceBonus:   r.AlchemyReinforceBonus,
 		SpawnToken:              r.SpawnToken,
