@@ -68,6 +68,39 @@ func (c TacticsControls) ForcesCombatTarget() bool {
 
 /*
 ==================
+OrdinaryTargetCheck
+
+Whether +0x100 is CAITactics_CheckTargetByFleeType (548120), the check that
+abandons a target outside the home trace. Flag 4 installs 5481A0, flag 0x80
+548270 and the fixed query 548340 in its place.
+==================
+*/
+func (c TacticsControls) OrdinaryTargetCheck() bool {
+	return !c.ForcesCombatTarget() && !c.FixedQuery()
+}
+
+/*
+==================
+VehicleRedirect
+
+The +0x100 redirect a flag row runs: 5481A0 (flag 4) takes a trader's, a
+hunter's or a state-4 player's vehicle, CGObjPC_IsJobStateIn134 (4E59C0);
+548270 (flag 0x80) a thief's or a state-4 player's,
+CGObjPC_IsJobStateIn24 (4E59E0). Flag 4 is tested first.
+==================
+*/
+func (c TacticsControls) VehicleRedirect() (redirects bool, jobs [3]uint8) {
+	if c.Flags&tacticsFlagVehicleRedirect != 0 {
+		return true, [3]uint8{1, 3, 4}
+	}
+	if c.Flags&tacticsFlagJobRedirect != 0 {
+		return true, [3]uint8{2, 4, 2}
+	}
+	return false, jobs
+}
+
+/*
+==================
 AcquisitionForced
 
 Whether a sight acquisition registers its target past the squad limit:

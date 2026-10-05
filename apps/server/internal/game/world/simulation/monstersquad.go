@@ -135,3 +135,70 @@ func (s *MonsterState) switchCombatTarget(division string, gid uint32, mover mon
 	state.instances.set(gid, instance)
 	return true
 }
+
+/*
+==================
+vehicleRedirectMargin
+
+5481A0 / 548270 retarget only when the new actor is at least this much
+closer, after truncating the difference (CRT_ftol, then jl 0xF).
+==================
+*/
+const vehicleRedirectMargin = 15
+
+/*
+==================
+redirectToVehicle
+
+CAITactics_RedirectToTargetVehicle_Flag4 (5481A0) and _Flag80 (548270). A
+player target whose job state the row names gives way to its active
+vehicle; a companion target gives way to its owner. The new target must be
+valid and at least vehicleRedirectMargin closer, and SetCombatTarget takes
+it (forced by the flag). BATTLE then ends its tick (return 2).
+==================
+*/
+func (ops *MonsterMoverOps) redirectToVehicle(division string, instance monster.Instance, mover monster.MoverState, target playerPose, players []playerPose, live monster.Pose, now int64) bool {
+	if !instance.Nest.HasControls {
+		return false
+	}
+	redirects, jobs := instance.Nest.Controls.VehicleRedirect()
+	if !redirects {
+		return false
+	}
+	var next playerPose
+	found := false
+	if target.OwnerGid == 0 {
+		if target.JobState == jobs[0] || target.JobState == jobs[1] || target.JobState == jobs[2] {
+			next, found = activeVehicle(players, target.Gid)
+		}
+	} else {
+		next, found = eligiblePlayerByGid(instance, players, target.OwnerGid)
+	}
+	if !found {
+		return false
+	}
+	before := float64(tacticsDistance3D(live, spawnToPose(target.Pose)))
+	after := float64(tacticsDistance3D(live, spawnToPose(next.Pose)))
+	if int32(before-after) < vehicleRedirectMargin {
+		return false
+	}
+	return ops.Monsters.switchCombatTarget(division, instance.Gid, mover, next.Gid, now)
+}
+
+/*
+==================
+activeVehicle
+
+CGObjChar_GetActiveVehicle: the owner's summoned transport (COS bands 1
+and 2). The companion list carries only unmounted ones; a ridden vehicle
+stands under its rider and could never be the margin closer.
+==================
+*/
+func activeVehicle(players []playerPose, owner uint32) (playerPose, bool) {
+	for _, p := range players {
+		if p.OwnerGid == owner && (p.Band == 1 || p.Band == 2) {
+			return p, true
+		}
+	}
+	return playerPose{}, false
+}

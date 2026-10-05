@@ -56,8 +56,9 @@ func (ops *MonsterMoverOps) advancePursuitControls(division string, instance mon
 	// FleeType selects other 548120 branches; do not apply ordinary pursuit to them.
 	distance := tacticsDistance3D(live, monster.Pose{RegionID: target.Pose.RegionID, X: target.Pose.X, Y: target.Pose.Y, Z: target.Pose.Z})
 	decision := monster.TraceContinue
-	// The fixed-query uniques run 548340 in 548120's place (switchToSecondaryOpponent).
-	if instance.Nest.Controls.FleeType == 0 && !instance.Nest.Controls.FixedQuery() {
+	// The fixed-query uniques and the flag rows run 548340, 5481A0 or 548270
+	// in 548120's place (monstersquad.go).
+	if instance.Nest.Controls.FleeType == 0 && instance.Nest.Controls.OrdinaryTargetCheck() {
 		if !monsterWithinHomeTrace(instance, live, distance) {
 			decision = monster.TraceAbandon
 		}
