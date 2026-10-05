@@ -12,9 +12,9 @@ Param4 (EXP +%) and Param5 (skill EXP +%); the kill-reward distributor
 those two keepers as param jobs (paramjob.go), shown on the client's
 param-job board like any other.
 
-INFERENCE: the tickets' Param3 is a daily allotment (milliseconds a day)
-kept by a v1.188 timed-job clock this port does not carry; the bonus runs
-for the ticket's whole period. Param2 is the EXP a death keeps
+Param3 is the daily allotment in milliseconds: the keepers apply only
+while the day's allotment lasts (premiumclock.go). Param2 is the EXP a
+death keeps
 (CTJ_PremiumKeeper's ParamKeeper 0x101, read by the death penalty
 4E6B74); every shipped ticket authors zero, and a nonzero one raises it as
 a third param job.
@@ -49,7 +49,8 @@ func (rt *Runtime) usePremiumTicket(use skillItemUse, c *enterworld.Character, t
 	expPercent, _ := use.ref.NativeFields.Lookup("itemParam4_2a8")
 	skillPercent, _ := use.ref.NativeFields.Lookup("itemParam5_2ac")
 	keepPercent, _ := use.ref.NativeFields.Lookup("itemParam2_2a0")
-	if seconds <= 0 {
+	dailyMs, _ := use.ref.NativeFields.Lookup("itemParam3_2a4")
+	if seconds <= 0 || dailyMs <= 0 {
 		return false
 	}
 	for _, job := range c.ParamJobs {
@@ -83,6 +84,7 @@ func (rt *Runtime) usePremiumTicket(use skillItemUse, c *enterworld.Character, t
 		}
 	}
 	c.ParamJobs = next
+	c.PremiumClock = newPremiumClock(use.ref.RefObjID, use.nowMs, end, int64(dailyMs))
 	remaining := rt.consumeItemUseRow(c, use.row)
 	// One board row per ticket: both keepers share its reference.
 	*result = OpResult{Frames: []wire.Frame{

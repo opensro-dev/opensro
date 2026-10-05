@@ -187,6 +187,12 @@ The live value written to one parameter.
 ================
 */
 func paramJobPercent(character *enterworld.Character, param uint16, nowMs int64) int64 {
+	// CTJ_PremiumKeeper removes the premium keepers while the day's
+	// allotment is spent (premiumclock.go).
+	if (param == paramPremiumExpRate || param == paramPremiumSkillExpRate) && character.PremiumClock != nil &&
+		!premiumClockLive(character.PremiumClock, nowMs) {
+		return 0
+	}
 	var total int64
 	for _, job := range character.ParamJobs {
 		if job.Param == param && job.EndUnixMs > nowMs {
@@ -304,6 +310,7 @@ func (rt *Runtime) advanceParamJobs(nowMs int64) {
 			rt.paramJobOwners.forget(key)
 			continue
 		}
+		rt.advancePremiumClock(key, character, nowMs)
 		var frames []wire.Frame
 		empty := false
 		rt.deps.Update(character, "param-job-expiry", func() bool {
@@ -321,7 +328,7 @@ func (rt *Runtime) advanceParamJobs(nowMs int64) {
 					frames = append(frames, wire.Frame{Opcode: wire.OpParamJobEnd, Payload: wire.EncodeParamJobEnd(owner, job.ItemRefObjID)})
 				}
 			}
-			empty = len(kept) == 0
+			empty = len(kept) == 0 && character.PremiumClock == nil
 			if len(frames) == 0 {
 				return false
 			}

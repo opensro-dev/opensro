@@ -155,6 +155,9 @@ type Runtime struct {
 	recoverySessions    map[recoveryKey]*recoverySession
 	petSkillWindows     petSkillWindowIndex
 	paramJobOwners      petSkillWindowIndex
+	// premiumSpend is the online premium clocks' uncommitted spend
+	// (premiumclock.go).
+	premiumSpend premiumSpendLedger
 	// pkOwners are the players whose PK record runs a clock (pkrecord.go).
 	pkOwners petSkillWindowIndex
 	// pulseAreas are the owners of live pulse areas (skillpulsearea.go).
