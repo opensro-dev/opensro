@@ -241,6 +241,27 @@ the boot overlay so start-up frames remain measurable.
 	opacity: 1;
 }
 
+/* The FPS chip's hover text (platform.ts), in the tour's colours. */
+.sro-tip {
+	position: fixed;
+	z-index: 1012;
+	box-sizing: border-box;
+	max-width: 280px;
+	padding: 5px 8px;
+	border: 1px solid rgba(232, 196, 110, 0.75);
+	border-radius: 3px;
+	background: rgba(14, 16, 20, 0.96);
+	box-shadow: 0 3px 10px rgba(0, 0, 0, 0.6);
+	color: #e9dfc4;
+	font: 12px/1.4 Arial, sans-serif;
+	white-space: pre-line;
+	pointer-events: none;
+}
+
+.sro-tip[hidden] {
+	display: none;
+}
+
 .sro-fps-chip__readout {
 	min-width: 116px;
 	padding: 5px 7px;
@@ -935,6 +956,115 @@ clicks stop at the tour.
 
 .sro-tour__sample[hidden] {
 	display: none;
+}
+
+/*
+The box holding the step's button sits above the dimming (onboarding.ts lift),
+seen but not clickable: a click there would open a window behind the tour.
+*/
+.sro-tour-raised {
+	z-index: 1011 !important;
+	pointer-events: none;
+}
+
+.sro-tour-focus {
+	opacity: 1 !important;
+	border-color: #f2d27a !important;
+	color: #f2d27a !important;
+	box-shadow: 0 0 0 1px #f2d27a, 0 0 10px 3px rgba(242, 210, 122, 0.85);
+	animation: sro-tour-glow 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes sro-tour-glow {
+	from {
+		box-shadow: 0 0 0 1px #f2d27a, 0 0 6px 1px rgba(242, 210, 122, 0.6);
+	}
+
+	to {
+		box-shadow: 0 0 0 1px #f2d27a, 0 0 14px 4px rgba(242, 210, 122, 0.95);
+	}
+}
+
+.sro-tour[data-mode="welcome"] {
+	background: rgba(0, 0, 0, 0.72);
+}
+
+.sro-tour[data-mode="welcome"] > :not(.sro-welcome),
+.sro-tour:not([data-mode="welcome"]) > .sro-welcome {
+	display: none;
+}
+
+/*
+The welcome notice: laid out on the original launcher's background
+(700x419), its text in the launcher's news panel (content x 18-326, y 122-326;
+x 328-345 is the panel's scroll track) and its OK button in the bottom bar.
+onboarding.ts shows it at WELCOME_SCALE (1.4), so 12px reads as 12px / 1.4
+here; it scales down further to fit a small window.
+*/
+.sro-welcome {
+	position: fixed;
+	left: 50%;
+	top: 50%;
+	width: 700px;
+	height: 419px;
+	background: url("/assets/images/Media_extracted/launcher/bg_1.png") no-repeat 0 0 / 700px 419px;
+	box-shadow: 0 6px 28px rgba(0, 0, 0, 0.8);
+	transform-origin: 50% 50%;
+	color: #e9dfc4;
+	font: 8.6px/1.5 Arial, sans-serif;
+}
+
+.sro-welcome__title {
+	position: absolute;
+	left: 24px;
+	top: 100px;
+	width: 300px;
+	height: 20px;
+	margin: 0;
+	color: #f2d27a;
+	font-size: 9.3px;
+	font-weight: 700;
+	line-height: 20px;
+	text-shadow: 0 1px 1px #000;
+}
+
+.sro-welcome__body {
+	position: absolute;
+	left: 24px;
+	top: 128px;
+	width: 296px;
+	height: 194px;
+	overflow: auto;
+	text-shadow: 0 1px 1px #000;
+}
+
+.sro-welcome__body p {
+	margin: 0 0 6px;
+}
+
+.sro-welcome__body a {
+	color: #f2d27a;
+}
+
+.sro-welcome__ok {
+	position: absolute;
+	left: 322px;
+	top: 346px;
+	width: 56px;
+	height: 29px;
+	padding: 0;
+	border: 0;
+	background: url("/assets/images/Media_extracted/launcher/ok.png") no-repeat 0 0 / 168px 29px;
+	cursor: pointer;
+}
+
+.sro-welcome__ok:hover,
+.sro-welcome__ok:focus-visible {
+	background-position: -56px 0;
+}
+
+.sro-welcome__ok:active {
+	background-position: -112px 0;
 }
 
 .sro-tour__arrow {

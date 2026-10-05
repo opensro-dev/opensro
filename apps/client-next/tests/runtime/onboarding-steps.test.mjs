@@ -9,7 +9,9 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { nextStep, parseSeen, tourSteps } = await import( "../../src/engine/foundation/ui/onboarding-steps.ts" );
+const { nextStep, parseSeen, tourSteps, WELCOME_ID, welcomeCopy } = await import(
+	"../../src/engine/foundation/ui/onboarding-steps.ts"
+);
 
 test("steps are offered in order, each once, and only while their element is on screen", () => {
 	const steps = tourSteps(), onScreen = new Set( [ "#fps-toggle" ] );
@@ -45,4 +47,14 @@ test("step ids are unique so progress survives reordering and new steps", () => 
 test("stored progress keeps only step ids and tolerates anything unreadable", () => {
 	assert.deepEqual( [ ...parseSeen( '["fps-chip",3,null,"chat-time"]' ) ], [ "fps-chip", "chat-time" ] );
 	for ( const raw of [ null, "", "{", '{"fps-chip":true}', "42" ] ) assert.equal( parseSeen( raw ).size, 0 );
+});
+
+test("the welcome notice says what the server is, asks for bug reports and links the source", () => {
+	const copy = welcomeCopy(), text = copy.paragraphs.join( " " );
+	assert.ok( copy.title );
+	assert.match( text, /continuous development/ );
+	assert.match( text, /not a playable server yet/ );
+	assert.match( text, /\/bug/ );
+	assert.equal( copy.link.href, "https://github.com/opensro-dev/opensro" );
+	assert.ok( !tourSteps().some( step => step.id === WELCOME_ID ), "its id is apart from the steps'" );
 });

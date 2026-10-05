@@ -34,6 +34,13 @@ import { loadingDetailText } from "@/engine/foundation/ui/loading-detail";
 
 // How often the loading detail line may change while only its rate moves.
 const LOADING_DETAIL_REFRESH_MS = 250;
+// The chip's hover text keeps this far from its element and the window edge.
+const TIP_GAP = 6;
+// The FPS toggle's hover title (index.html carries the collapsed one).
+const FPS_TITLE_COLLAPSED =
+	"Performance readout: frame rate, frame timing and the builds you are playing on (click to show)";
+const FPS_TITLE_EXPANDED =
+	"Performance readout: frame rate, frame timing and the builds you are playing on (click to hide)";
 
 /*
 ================
@@ -294,6 +301,32 @@ export function createPlatform(
 		fpsToggle = document.getElementById( "fps-toggle" ),
 		fpsReadout = document.getElementById( "fps-readout" );
 	const fpsMs = ( value: number ) => `${value.toFixed( value < 10 ? 1 : 0 )}ms`;
+	// The chip's own hover text. The browser's title tooltip does not show
+	// while the game runs (it appears only when the page loses the pointer),
+	// so a title inside the chip moves to data-tip and this box shows it.
+	const tip = document.getElementById( "sro-tip" );
+	fpsChip?.addEventListener( "pointerover", event => {
+		const target = event.target instanceof Element ? event.target.closest( "[title], [data-tip]" ) : null;
+		if ( !tip || !(target instanceof HTMLElement) || !fpsChip.contains( target ) ) return;
+		if ( target.title ) {
+			target.dataset.tip = target.title;
+			target.removeAttribute( "title" );
+		}
+		if ( !target.dataset.tip ) return;
+		tip.textContent = target.dataset.tip;
+		tip.hidden = false;
+		// Below the element, its right edges aligned, kept inside the window.
+		const box = target.getBoundingClientRect();
+		tip.style.top = Math.min( box.bottom + TIP_GAP, innerHeight - tip.offsetHeight - TIP_GAP ) + "px";
+		tip.style.left =
+			Math.max( TIP_GAP, Math.min( box.right - tip.offsetWidth, innerWidth - tip.offsetWidth - TIP_GAP ) ) +
+			"px";
+	}, { signal: lifetime.signal } );
+	fpsChip?.addEventListener( "pointerout", event => {
+		if ( tip && !(event.relatedTarget instanceof Node && fpsChip.contains( event.relatedTarget )) ) {
+			tip.hidden = true;
+		}
+	}, { signal: lifetime.signal } );
 	fpsToggle?.addEventListener( "click", () => {
 		if ( !fpsReadout ) return;
 		const expanded = fpsReadout.hidden;
@@ -303,7 +336,10 @@ export function createPlatform(
 		fpsChip?.setAttribute( "data-expanded", String( expanded ) );
 		fpsToggle.setAttribute( "aria-expanded", String( expanded ) );
 		fpsToggle.setAttribute( "aria-label", label );
-		fpsToggle.title = label;
+		// The hover text says what the button is for, not only what a click does.
+		fpsToggle.removeAttribute( "title" );
+		fpsToggle.dataset.tip = expanded ? FPS_TITLE_EXPANDED : FPS_TITLE_COLLAPSED;
+		if ( tip && !tip.hidden ) tip.textContent = fpsToggle.dataset.tip;
 		fpsToggle.textContent = expanded ? "x" : "F";
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointerdown", onGesture, { signal: lifetime.signal, capture: true } );

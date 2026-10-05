@@ -132,7 +132,8 @@ export function createBugReportDialog( host: DialogHost ): BugReportDialog {
 	const launcher = element( "button", "sro-bug-launcher" );
 	launcher.type = "button";
 	launcher.textContent = "!";
-	launcher.title = "Report a bug (/bug)";
+	launcher.title = "Report a bug: describe what went wrong and send it to the team, with a short replay " +
+		"if you allow it (also /bug in the chat)";
 	launcher.setAttribute( "aria-label", "Report a bug" );
 	launcher.hidden = true;
 	launcher.addEventListener( "click", () => host.launch(), { signal } );

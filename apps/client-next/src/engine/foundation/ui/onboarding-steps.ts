@@ -11,8 +11,13 @@ for every control (`data-ui-id`). A step waits until its element is on
 screen (the bug launcher shows only while bug reports are enabled) instead
 of pointing at nothing.
 
-The player's progress is the set of step ids seen, so a step added later
-is shown on its own to a player who already finished the tour.
+Before the first step a welcome notice (welcomeCopy) says what this
+server is: a remake under continuous development, not yet playable, where
+every bug report helps.
+
+The player's progress is the set of step ids seen (the notice counts as
+WELCOME_ID), so a step added later is shown on its own to a player who
+already finished the tour.
 
 ===========================================================================
 */
@@ -54,6 +59,30 @@ export interface TourStep {
 	readonly sample?: string;
 	readonly title: string;
 	readonly text: string;
+}
+
+// The welcome notice's id in the stored progress.
+export const WELCOME_ID = "welcome";
+
+/*
+================
+welcomeCopy
+
+The welcome notice's title, paragraphs and source link.
+================
+*/
+export function welcomeCopy() {
+	return {
+		title: "Welcome to OpenSRO",
+		paragraphs: [
+			"OpenSRO is a remake of Silkroad Online that runs in your browser. It is open source and under " +
+			"continuous development.",
+			"This is not a playable server yet: expect missing features, rough edges and bugs.",
+			"Every bug you report helps us improve it. Use the bug report button next to the minimap, or type " +
+			"/bug in the chat."
+		],
+		link: { label: "github.com/opensro-dev/opensro", href: "https://github.com/opensro-dev/opensro" }
+	};
 }
 
 /*

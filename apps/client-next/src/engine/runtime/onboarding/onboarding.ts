@@ -6,7 +6,9 @@ onboarding.ts - the first-login tour of the port's additions
 Plain DOM over the canvas, like the FPS chip and the bug reporter: the
 tour explains tools around the original interface and is not part of it.
 It dims the screen, leaves a lit window around one element, points at it
-and says what it is for (onboarding-steps.ts chooses the step).
+and says what it is for (onboarding-steps.ts chooses the step). Before the
+first step a welcome notice, drawn on the original launcher's art, says
+what this server is and asks for bug reports.
 
 It runs only when the Agent says so (GET /title/onboarding, the deployer's
 SRO_ONBOARDING), once the world is up and has been on screen for
@@ -21,7 +23,14 @@ and the window's position; this owner keeps no timer.
 */
 
 import { RELEASE_PROTOCOL, RELEASE_PROTOCOL_HEADER } from "@/engine/foundation/release/protocol";
-import { nextStep, parseSeen, tourSteps, type TourStep } from "@/engine/foundation/ui/onboarding-steps";
+import {
+	nextStep,
+	parseSeen,
+	tourSteps,
+	type TourStep,
+	WELCOME_ID,
+	welcomeCopy
+} from "@/engine/foundation/ui/onboarding-steps";
 
 const ROUTE = "/title/onboarding";
 const STORAGE_KEY = "sro:onboarding:1";
@@ -36,6 +45,14 @@ const SPOT_PADDING = 6;
 const AREA_PADDING = 1;
 const BUBBLE_GAP = 14;
 const BUBBLE_MARGIN = 8;
+// The welcome notice is laid out on the original launcher's art (700 by 419,
+// its news panel on the left) and shown at WELCOME_SCALE, so its text (set
+// in loading.css at 12px / WELCOME_SCALE) reads at 12px with room in the
+// panel; a small window scales it down further.
+const WELCOME_WIDTH = 700;
+const WELCOME_HEIGHT = 419;
+const WELCOME_SCALE = 1.4;
+const WELCOME_MARGIN = 16;
 
 /*
 ================
@@ -84,7 +101,11 @@ export function createOnboarding( apiBase: string ) {
 		text = document.createElement( "p" ),
 		actions = document.createElement( "div" ),
 		skip = document.createElement( "button" ),
-		next = document.createElement( "button" );
+		next = document.createElement( "button" ),
+		welcome = document.createElement( "section" ),
+		welcomeTitle = document.createElement( "h2" ),
+		welcomeBody = document.createElement( "div" ),
+		welcomeOk = document.createElement( "button" );
 	root.className = "sro-tour";
 	root.hidden = true;
 	spot.className = "sro-tour__spot";
@@ -105,9 +126,34 @@ export function createOnboarding( apiBase: string ) {
 	next.textContent = "Next";
 	actions.append( skip, next );
 	bubble.append( title, text, actions );
-	root.append( spot, arrow, bubble );
+	const copy = welcomeCopy();
+	welcome.className = "sro-welcome";
+	welcome.setAttribute( "role", "dialog" );
+	welcome.setAttribute( "aria-labelledby", "sro-welcome-title" );
+	welcomeTitle.id = "sro-welcome-title";
+	welcomeTitle.className = "sro-welcome__title";
+	welcomeTitle.textContent = copy.title;
+	welcomeBody.className = "sro-welcome__body";
+	for ( const paragraph of copy.paragraphs ) {
+		const line = document.createElement( "p" );
+		line.textContent = paragraph;
+		welcomeBody.append( line );
+	}
+	const source = document.createElement( "p" ), link = document.createElement( "a" );
+	link.href = copy.link.href;
+	link.target = "_blank";
+	link.rel = "noopener noreferrer";
+	link.textContent = copy.link.label;
+	source.append( "Source code: ", link );
+	welcomeBody.append( source );
+	welcomeOk.type = "button";
+	welcomeOk.className = "sro-welcome__ok";
+	welcomeOk.setAttribute( "aria-label", "OK" );
+	welcome.append( welcomeTitle, welcomeBody, welcomeOk );
+	root.append( spot, arrow, bubble, welcome );
 	document.body.append( root );
 	next.addEventListener( "click", () => advance(), { signal } );
+	welcomeOk.addEventListener( "click", () => closeWelcome(), { signal } );
 	skip.addEventListener( "click", () => endTour(), { signal } );
 	// The game reads keys on window; the tour takes them first while it is up.
 	for ( const kind of [ "keydown", "keyup", "keypress" ] as const ) {
@@ -117,7 +163,9 @@ export function createOnboarding( apiBase: string ) {
 			event.preventDefault();
 			if ( kind !== "keydown" ) return;
 			const key = (event as KeyboardEvent).key;
-			if ( key === "Escape" ) endTour();
+			if ( root.dataset.mode === "welcome" ) {
+				if ( key === "Escape" || key === "Enter" ) closeWelcome();
+			} else if ( key === "Escape" ) endTour();
 			else if ( key === "Enter" ) advance();
 		}, { signal, capture: true } );
 	}
@@ -164,12 +212,82 @@ export function createOnboarding( apiBase: string ) {
 
 	/*
 	================
+	openWelcome
+	================
+	*/
+	function openWelcome() {
+		root.dataset.mode = "welcome";
+		root.hidden = false;
+		fitWelcome();
+		welcomeOk.focus( { preventScroll: true } );
+	}
+
+	/*
+	================
+	fitWelcome
+
+	Centred, and never larger than the window allows.
+	================
+	*/
+	function fitWelcome() {
+		const scale = Math.min(
+			WELCOME_SCALE,
+			(innerWidth - WELCOME_MARGIN * 2) / WELCOME_WIDTH,
+			(innerHeight - WELCOME_MARGIN * 2) / WELCOME_HEIGHT
+		);
+		const transform = `translate(-50%, -50%) scale(${scale.toFixed( 3 )})`;
+		if ( welcome.style.transform !== transform ) welcome.style.transform = transform;
+	}
+
+	/*
+	================
+	closeWelcome
+
+	The notice is seen; the first step follows at once.
+	================
+	*/
+	function closeWelcome() {
+		seen.add( WELCOME_ID );
+		remember();
+		delete root.dataset.mode;
+		root.hidden = true;
+		searchAtMs = 0;
+	}
+
+	/*
+	================
+	lift
+
+	A step that points at a whole DOM button (the FPS toggle, the bug
+	launcher) lifts the fixed box holding it above the dimming, so the button
+	shows at full strength and glows (loading.css keeps it unclickable there). A step
+	that lights part of an element (an area) leaves the page as it is.
+	================
+	*/
+	function lift( step: TourStep | null ) {
+		for ( const element of document.querySelectorAll( ".sro-tour-raised, .sro-tour-focus" ) ) {
+			element.classList.remove( "sro-tour-raised", "sro-tour-focus" );
+		}
+		const element = step && !step.area ? document.querySelector<HTMLElement>( step.target ) : null;
+		if ( !element ) return;
+		element.classList.add( "sro-tour-focus" );
+		for ( let box: HTMLElement | null = element; box; box = box.parentElement ) {
+			if ( getComputedStyle( box ).position === "fixed" ) {
+				box.classList.add( "sro-tour-raised" );
+				return;
+			}
+		}
+	}
+
+	/*
+	================
 	show
 	================
 	*/
 	function show( step: TourStep | null ) {
 		current = step;
 		root.hidden = !step;
+		lift( step );
 		if ( !step ) return;
 		title.textContent = step.title;
 		sample.hidden = !step.sample;
@@ -202,6 +320,7 @@ export function createOnboarding( apiBase: string ) {
 	*/
 	function endTour() {
 		for ( const step of steps ) seen.add( step.id );
+		seen.add( WELCOME_ID );
 		remember();
 		show( null );
 	}
@@ -270,15 +389,28 @@ export function createOnboarding( apiBase: string ) {
 			if ( !ready ) {
 				readySinceMs = null;
 				show( null );
+				if ( root.dataset.mode === "welcome" ) {
+					delete root.dataset.mode;
+					root.hidden = true;
+				}
 				return;
 			}
 			readySinceMs ??= nowMs;
+			if ( root.dataset.mode === "welcome" ) {
+				fitWelcome();
+				return;
+			}
 			if ( current ) {
 				place();
 				return;
 			}
 			if ( nowMs - readySinceMs < START_DELAY_MS || nowMs < searchAtMs ) return;
 			searchAtMs = nowMs + SEARCH_INTERVAL_MS;
+			// The notice comes first, once.
+			if ( !seen.has( WELCOME_ID ) ) {
+				openWelcome();
+				return;
+			}
 			if ( steps.every( step => seen.has( step.id ) ) ) return;
 			show( nextStep( steps, seen, onScreen ) );
 		},
@@ -289,6 +421,7 @@ export function createOnboarding( apiBase: string ) {
 		*/
 		dispose() {
 			lifetime.abort();
+			lift( null );
 			root.remove();
 		}
 	};
