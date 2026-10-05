@@ -107,6 +107,21 @@ func (s *MonsterState) PopulationLease(division string, id instance.ID) (instanc
 	return allocator.Lookup(id)
 }
 
+/*
+================
+CheckPopulationTransfer
+
+CGameWorld_CheckTransfer (5EC5B0): the non-mutating door a teleport asks
+before it moves a PC into another world. Nothing is reserved.
+================
+*/
+func (s *MonsterState) CheckPopulationTransfer(division string, destination instance.ID, capacityBypass bool) instance.Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.division(division)
+	return s.worldAllocators[division].CheckTransfer(destination, capacityBypass)
+}
+
 func (s *MonsterState) AdmitPopulationPC(division string, lease instance.Lease, gid uint32, capacityBypass bool) instance.Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()

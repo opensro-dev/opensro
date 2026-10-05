@@ -51,6 +51,68 @@ func (rt *Runtime) admitPopulationSession(division, name string, session uint64)
 	return nil
 }
 
+/*
+================
+transferPopulationSession
+
+Moves an admitted session's membership into another world's live layer:
+the population half of the PC world teleport (CGObjPC vtable +0x378, called
+by 4F2B50). The new membership is taken first so a full layer refuses
+without leaving the old one. Returns the previous admission for rollback.
+The caller holds the division lock.
+================
+*/
+func (rt *Runtime) transferPopulationSession(division, name string, destination instance.ID, capacityBypass bool) (populationAdmission, instance.Status) {
+	key := simulation.WorldKey(division, name)
+	value, exists := rt.characterAdmissions.Load(key)
+	if !exists || rt.Monsters == nil {
+		return populationAdmission{}, instance.NotMember
+	}
+	owner := value.(populationAdmission)
+	if owner.lease.ID == destination {
+		return owner, instance.Success
+	}
+	lease, open := rt.Monsters.PopulationLease(division, destination)
+	if !open {
+		return owner, instance.MissingLayer
+	}
+	if status := rt.Monsters.AdmitPopulationPC(division, lease, owner.gid, capacityBypass); status != instance.Success {
+		return owner, status
+	}
+	rt.Monsters.LeavePopulationPC(division, owner.lease, owner.gid)
+	moved := owner
+	moved.lease, moved.regionBound = lease, false
+	rt.characterAdmissions.Store(key, moved)
+	return owner, instance.Success
+}
+
+/*
+================
+restorePopulationSession
+
+Undoes transferPopulationSession when the re-entry that follows it fails.
+================
+*/
+func (rt *Runtime) restorePopulationSession(previous populationAdmission) {
+	key := simulation.WorldKey(previous.division, previous.name)
+	value, exists := rt.characterAdmissions.Load(key)
+	if !exists {
+		return
+	}
+	current := value.(populationAdmission)
+	if current.lease == previous.lease {
+		return
+	}
+	// The old layer is permanent or still holds the departing PC's slot
+	// request; readmission bypasses capacity because the PC never left it
+	// from the player's point of view.
+	if rt.Monsters.AdmitPopulationPC(previous.division, previous.lease, previous.gid, true) != instance.Success {
+		return
+	}
+	rt.Monsters.LeavePopulationPC(current.division, current.lease, current.gid)
+	rt.characterAdmissions.Store(key, previous)
+}
+
 func (rt *Runtime) leavePopulationSession(division, name string) {
 	previous, exists := rt.characterAdmissions.LoadAndDelete(simulation.WorldKey(division, name))
 	if !exists || rt.Monsters == nil {

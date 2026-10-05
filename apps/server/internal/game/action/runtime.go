@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
+	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/skillobject"
 )
@@ -117,6 +118,9 @@ type Runtime struct {
 	// another runtime or bootstrap's object list.
 	NpcRoster []simulation.NpcDef
 	portals   *portalCatalog
+	// Fortresses is the fortress occupation and war-mode authority
+	// (ConfigurePortals installs it from siegefortress.txt).
+	Fortresses *fortress.Authority
 
 	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
 	// The composition root installs it before Register admits 0x7338/0x7053.
