@@ -66,8 +66,13 @@ func validateOffensiveSequence(source SkillDataSource, rootID uint32) ([]SkillRo
 		if !valid || lifetime == 0 && !row.PositionEffect.Charge {
 			return nil, false
 		}
+		// A linked stage is charged by its root alone. Dare Devil and Crutial
+		// Rush (TWOHANDA_CRY_B, DUALA_WHIRLWIND_B) author their root's HP
+		// ratio again on the second stage; the owner's rule is that the HP is
+		// consumed once, at the start, so only that repetition is tolerated.
 		if len(sequence) > 0 && (!row.ChainSub || row.Consumption.HP != 0 || row.Consumption.MP != 0 ||
-			row.Consumption.HPPercent != 0 || row.Consumption.MPPercent != 0 || !row.Consumption.Pinned) {
+			row.Consumption.HPPercent != 0 && row.Consumption.HPPercent != root.Consumption.HPPercent ||
+			row.Consumption.MPPercent != 0 || !row.Consumption.Pinned) {
 			return nil, false
 		}
 		seen[row.ID] = true
