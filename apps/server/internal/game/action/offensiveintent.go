@@ -86,6 +86,12 @@ func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.
 	if !cast.HasTarget || cast.HasGroundTarget || cast.TargetGid == 0 {
 		return offensiveRefusal(0x3011)
 	}
+	if target, ok := rt.characterMonster(division, snapshot, cast.TargetGid); ok {
+		// Refused at the press, before the approach walks or the cost.
+		if code := temptationTargetRefusal(skill, target); code != 0 {
+			return offensiveRefusal(code)
+		}
+	}
 	now := rt.Now().UnixMilli()
 	if _, code := rt.offensiveCost(division, snapshot, skill, now); code != 0 {
 		return offensiveRefusal(code)

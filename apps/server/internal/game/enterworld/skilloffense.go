@@ -406,10 +406,11 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		row.DirectOffensePinned = true
 		return ""
 	}
-	if fixed, ok := compileSkillFixedDamage(fields, *row); ok {
-		// One fixed-damage record (skillfixeddamage.go), released by the
-		// ordinary single-target offensive owner.
+	if fixed, area, ok := compileSkillFixedDamage(fields, *row); ok {
+		// One fixed-damage record per victim (skillfixeddamage.go), released
+		// by the ordinary offensive owner, single target or area.
 		row.FixedDamage = fixed
+		row.OffensiveArea = area
 		row.Attack.ImpactCount = 1
 		row.OffensiveStagePinned = true
 		row.DirectOffensePinned = true

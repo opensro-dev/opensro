@@ -856,9 +856,7 @@ pickHealTarget
 plus the caster when select bit 0 put the caster in the set. Dead members
 are scored too.
 
-The ratio is float32(current / max * 100). The running minimum starts at 0
-and 0 means unset: the first scored actor is taken, a later one only when
-strictly lower, and an actor at 0 is always replaced by the next.
+The choice itself is lowestHPRatio's.
 ==================
 */
 func (rt *Runtime) pickHealTarget(aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow) *enterworld.Character {
@@ -871,6 +869,20 @@ func (rt *Runtime) pickHealTarget(aura *partyAura, caster *enterworld.Character,
 			set = append(set, member)
 		}
 	}
+	return rt.lowestHPRatio(aura.division, set)
+}
+
+/*
+==================
+lowestHPRatio
+
+584D95's choice over set, in ascending gid order. The ratio is
+float32(current / max * 100). The running minimum starts at 0 and 0 means
+unset: the first scored actor is taken, a later one only when strictly
+lower, and an actor at 0 is always replaced by the next.
+==================
+*/
+func (rt *Runtime) lowestHPRatio(division string, set []*enterworld.Character) *enterworld.Character {
 	sort.Slice(set, func(i, j int) bool {
 		return enterworld.ObjectIDForCharacter(set[i]) < enterworld.ObjectIDForCharacter(set[j])
 	})
@@ -878,7 +890,7 @@ func (rt *Runtime) pickHealTarget(aura *partyAura, caster *enterworld.Character,
 	var who *enterworld.Character
 	var lowest float32
 	for _, one := range set {
-		maxHP, _, currentHP, _ := rt.playerKeeperVitals(aura.division, one)
+		maxHP, _, currentHP, _ := rt.playerKeeperVitals(division, one)
 		ratio := float32(float64(currentHP) / float64(maxHP) * 100)
 		if lowest == 0 || ratio < lowest {
 			who, lowest = one, ratio

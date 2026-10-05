@@ -92,10 +92,11 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	resu := skill.Abnormal.AdmitDeadParty
 	targeted := ((skill.Heal.Present && !skill.Aura.Eshp) || resu) && skill.TargetRequired
 	partyHeal := skill.Recovery.PartyHealPinned
+	lowestHeal := skill.Recovery.LowestHealPinned
 	partyResu := skill.Recovery.PartyResurrectPinned
 	overTime := skill.Recovery.HealOverTimePinned
 	partyOverTime := overTime && !skill.TargetRequired
-	supported := skill.Recovery.SelfFlatPinned || cure || targeted || partyHeal || partyResu || partyOverTime
+	supported := skill.Recovery.SelfFlatPinned || cure || targeted || partyHeal || lowestHeal || partyResu || partyOverTime
 	selfHealOnly := skill.Recovery.SelfFlatPinned && !cure && !targeted
 	casterReady := enterworld.SkillLearned(snapshot, skill.ID) &&
 		enterworld.CharacterAlive(snapshot)
@@ -198,10 +199,28 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	if targeted && !resu && !overTime {
 		secondary = rt.secondaryHealTargets(division, snapshot, recipientView, primaryAt, skill.Abnormal.EffectArea, now)
 	}
+	// Healing Division: the lowest HP ratio of the party around the caster
+	// takes the whole heal, the members nearest it the reduction's share.
+	var lowest *enterworld.Character
+	if lowestHeal {
+		area := skill.Abnormal.EffectArea
+		var set []*enterworld.Character
+		for _, gid := range rt.partyCureTargets(division, snapshot, area.Radius, area.Select&1 != 0, false, now) {
+			if member := rt.characterSnapshot(division, rt.findCharacterByGid(division, gid)); member != nil {
+				set = append(set, member)
+			}
+		}
+		if lowest = rt.lowestHPRatio(division, set); lowest == nil {
+			return OpResult{DiagnosticRefusal: "recovery-admission-refused"}, skillCastRefused
+		}
+		at := rt.liveSpawn(simulation.WorldKey(division, lowest.Name), lowest, now)
+		secondary = rt.secondaryHealTargets(division, snapshot, lowest, at, area, now)
+	}
 	casterGID := enterworld.ObjectIDForCharacter(snapshot)
 	healCaster := !overTime && (skill.Recovery.SelfFlatPinned ||
 		targeted && recipient == character ||
-		partyHeal && slices.Contains(party, casterGID))
+		partyHeal && slices.Contains(party, casterGID) ||
+		lowest != nil && lowest.ID == snapshot.ID)
 
 	var refusal uint16
 	var vitals wire.Frame
@@ -237,7 +256,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		// self heal (Rave Melody) publish a charge-only 0x33A6; the other
 		// support rows keep the caster frames they always had
 		// (supportCostVitals).
-		chargeVitals := partyHeal || partyResu || overTime ||
+		chargeVitals := partyHeal || lowestHeal || partyResu || overTime ||
 			skill.Recovery.SelfFlatPinned && cost.hp != 0
 		if !healCaster {
 			if chargeVitals {
@@ -278,6 +297,10 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		cureRecipients = append(cureRecipients, rt.proposePartyResurrection(division, snapshot, skill, party, now)...)
 	case partyHeal:
 		cureRecipients = append(cureRecipients, rt.applyPartyHeal(division, character, skill, party, fullHealPercent)...)
+	case lowestHeal:
+		// applyPartyHeal skips the caster, healed in its own door above.
+		cureRecipients = append(cureRecipients, rt.applyPartyHeal(division, character, skill,
+			[]uint32{enterworld.ObjectIDForCharacter(lowest)}, fullHealPercent)...)
 	case resu:
 		if prompt := rt.proposeResurrection(division, snapshot, recipientView, skill, now); len(prompt) != 0 {
 			cureRecipients = append(cureRecipients, RecipientFrames{

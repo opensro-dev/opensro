@@ -265,13 +265,27 @@ func TestTemptationTurnsAMonsterOnItsNeighbour(t *testing.T) {
 ================
 TestTemptationLeavesAChampionAlone
 
-Owner's rule: a champion is not a regular monster. Confusion never lands
+Owner's rule: a champion is not a regular monster. The press answers the
+invalid-target refusal (0x3006) and costs nothing, Confusion never lands
 on it and it fights nobody.
 ================
 */
 func TestTemptationLeavesAChampionAlone(t *testing.T) {
 	f := newTemptationFight(t, temptationChampion)
-	f.castTemptation(t)
+	skill := shippedOffense(t, temptationCode)
+	equipStatusCastSkill(f.rt, f.c, skill, confusionTag, bardHarpKind)
+	f.c.Intellect = testInt64(2000)
+	f.c.CurrentMP = testInt64(100000)
+	_, _, _, mp := f.rt.playerKeeperVitals(testDivision, f.c)
+	out := f.rt.HandleTargetInteract(testDivision, f.c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: f.a.Gid}.Encode())
+	refused, ok := findFrame(out.Frames, wire.OpSkillCastResult)
+	if !ok || len(refused.Payload) != 2 || refused.Payload[0] != 2 || refused.Payload[1] != 0x06 {
+		t.Fatalf("Temptation on a champion was not refused as an invalid target: %+v", out)
+	}
+	if _, _, _, after := f.rt.playerKeeperVitals(testDivision, f.c); after != mp {
+		t.Fatalf("the refused cast cost MP: %d -> %d", mp, after)
+	}
+	f.rt.advanceMonsterAbnormals(f.clock.NowMs())
 	champion, _ := f.rt.Monsters.Get(testDivision, f.a.Gid)
 	if champion.Rarity() != temptationChampion || champion.Abnormal != nil && champion.Abnormal.Has(abnormal.Confusion) {
 		t.Fatalf("Confusion landed on a champion (rarity %d)", champion.Rarity())
