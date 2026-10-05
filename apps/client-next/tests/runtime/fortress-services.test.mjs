@@ -142,7 +142,7 @@ test("all native response bodies decode without borrowing previous fields", () =
 		[ "170140302010", { reference: 0x10203040 } ],
 		[ "180108070605014030201064000000", {
 			fortress: 0x05060708,
-			structures: [ { reference: 0x10203040, hp: 100 } ]
+			structures: [ { reference: 0x10203040, remainingMinutes: 100 } ]
 		} ]
 	];
 	for ( const [hex, fields] of rows ) {

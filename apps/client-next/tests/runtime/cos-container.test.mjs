@@ -274,3 +274,25 @@ test("trade cargo merges only stacks carrying the same original owner", async ()
 	assert.equal( transferred.to[0].label, "A" );
 	assert.equal( transferred.from[0].label, "B" );
 });
+
+/*
+================
+tradeOwnerNativeBody
+================
+*/
+test("server cargo body decodes its owner without consuming the next item", async () => {
+	const { decodeInventoryItem } = await import( "../../src/engine/foundation/gameplay/inventory-item.ts" );
+	const body = Uint8Array.of( 0x67, 8, 0, 0, 3, 0, 6, 0, 84, 114, 97, 100, 101, 114 );
+	const refs = new Map( [ [ 2151, 0xc6c ], [ 8, 0x86c ] ] );
+	const joined = Uint8Array.of( ...body, 8, 0, 0, 0, 4, 0 );
+	const first = decodeInventoryItem( joined, 0, refs );
+	assert.ok( first.item );
+	assert.equal( first.item.label, "Trader" );
+	assert.equal( first.item.quantity, 3 );
+	assert.equal( first.next, body.length );
+	const second = decodeInventoryItem( joined, first.next, refs );
+	assert.ok( second.item );
+	assert.equal( second.item.quantity, 4 );
+	assert.equal( second.next, joined.length );
+	for ( let n = 0; n < body.length; n++ ) assert.throws( () => decodeInventoryItem( body.slice( 0, n ), 0, refs ) );
+});
