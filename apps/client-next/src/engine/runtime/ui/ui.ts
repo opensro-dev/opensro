@@ -6837,6 +6837,7 @@ export function createUi(
 						mpGauge.current,
 						mpGauge.target,
 						game?.localGid,
+						game?.target === game?.localGid,
 						game?.guide?.country,
 						next.session?.character,
 						game?.progression?.level ?? character?.level,
@@ -6849,6 +6850,22 @@ export function createUi(
 						const root = hudData.root.GDR_PLAYER_MINI_INFO!, p = hudData.player, [px, py] = root.rect;
 						authoredImage( root, 0, 0 );
 						blocks.push( authoredRect( root, 0, 0 ) );
+						// GDR_PMI_SELECT (ID 200) frames the whole panel while the local
+						// character is the target, as GDR_QPS_SELECT frames a party slot.
+						if ( game?.localGid && game.target === game.localGid ) {
+							authoredImage( p.GDR_PMI_SELECT!, px, py );
+						}
+						// Clicking the panel anywhere but its buttons selects your own
+						// character, so a targeted buff or heal can be aimed at yourself.
+						// The buttons are pushed after this control and sit above it.
+						if ( game?.localGid ) {
+							controls.push( {
+								id: "self-target",
+								label: "Select yourself",
+								kind: "button",
+								rect: authoredRect( root, 0, 0 )
+							} );
+						}
 						for ( const vital of [ "HP", "MP" ] as const ) {
 							const current = vital === "HP" ? local?.hp : local?.mp,
 								max = vital === "HP" ?
@@ -6910,14 +6927,6 @@ export function createUi(
 								uv: [ 0, 0, 1, 1 ],
 								color: white,
 								clip: full
-							} );
-							// Not native: the portrait selects its own character, so a
-							// targeted buff or heal can be aimed at yourself by mouse.
-							controls.push( {
-								id: "self-target",
-								label: "Select yourself",
-								kind: "button",
-								rect: authoredRect( p.GDR_PMI_PICTURE!, px, py )
 							} );
 						}
 						const country = game?.guide?.country;
