@@ -29,11 +29,12 @@ func internalScroll(id uint32, codename string, fourCC, value float64) *enterwor
 
 func TestCompositeScrollListAndCooltimeParse(t *testing.T) {
 	ref := &enterworld.ItemRef{Codename: "ITEM_ETC_150EXP_BASIC", TypeIDs: [4]int64{3, 3, 13, 14},
-		NativeFields: enterworld.NewNativeFields(map[string]float64{"itemParam6_2b0": 3600000})}
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"itemParam2_2a0": 1, "itemParam6_2b0": 3600000})}
 	ref.ParamDescriptions[1] = "[UIU1:ITEM_ETC_INTERNAL_150EXP_SCROLL],[UIU1:ITEM_ETC_INTERNAL_150SP_SCROLL]"
 	ref.ParamDescriptions[5] = "COOLTIME:0x000000CA"
 	entries, ok := compositeEntries(ref)
-	if !ok || len(entries) != 2 || entries[1] != [2]string{"UIU1", "ITEM_ETC_INTERNAL_150SP_SCROLL"} {
+	if !ok || len(entries) != 2 || entries[1].tag != "UIU1" || len(entries[1].args) != 1 ||
+		entries[1].args[0] != "ITEM_ETC_INTERNAL_150SP_SCROLL" {
 		t.Fatalf("entries = %v/%v", entries, ok)
 	}
 	group, ms, ok := itemCooltime(ref)

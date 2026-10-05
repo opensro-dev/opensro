@@ -111,24 +111,11 @@ func (rt *Runtime) useResurrectionScroll(character *enterworld.Character, use sk
 	if len(tail) != 0 {
 		return false
 	}
-	if enterworld.CharacterAlive(character) {
-		*result = itemUseFailure(errCodeOnlyDeadResurrect)
+	revived, ok := rt.resurrectWithScroll(use.division, character, use.ref, use.nowMs, result)
+	if !ok {
 		return false
 	}
-	maxHP, maxMP, _, _ := rt.playerKeeperVitals(use.division, character)
-	hp, mp := resurrectionScrollVitals(
-		itemParamUint(use.ref, "itemParam1_29c"),
-		itemParamUint(use.ref, "itemParam2_2a0"),
-		maxHP, maxMP,
-	)
-	offer := resurrectionOffer{
-		exp: resurrectionScrollExp(character.LastExpLoss, itemParamUint(use.ref, "itemParam3_2a4"),
-			character.PVPState() == 2),
-		hp: hp,
-		mp: mp,
-	}
 	remaining := rt.consumeItemUseRow(character, use.row)
-	revived := rt.reviveWhereDead(use.division, character, offer, use.nowMs)
 	used := []wire.Frame{{Opcode: wire.OpItemUseResponse,
 		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}}
 	used = append(used, rt.updateQuestInventory(character)...)
@@ -137,4 +124,33 @@ func (rt *Runtime) useResurrectionScroll(character *enterworld.Character, use sk
 		*result = OpResult{Frames: append(used, actor...), Broadcast: peers}
 	}
 	return true
+}
+
+/*
+==================
+resurrectWithScroll
+
+The scroll's effect (49FF20), shared by the bag item and a premium limited
+use (countjob.go), which consumes nothing. A living player is refused with
+0x1887 in *result.
+==================
+*/
+func (rt *Runtime) resurrectWithScroll(division string, character *enterworld.Character, ref *enterworld.ItemRef, nowMs int64, result *OpResult) (revivedWhereDead, bool) {
+	if enterworld.CharacterAlive(character) {
+		*result = itemUseFailure(errCodeOnlyDeadResurrect)
+		return revivedWhereDead{}, false
+	}
+	maxHP, maxMP, _, _ := rt.playerKeeperVitals(division, character)
+	hp, mp := resurrectionScrollVitals(
+		itemParamUint(ref, "itemParam1_29c"),
+		itemParamUint(ref, "itemParam2_2a0"),
+		maxHP, maxMP,
+	)
+	offer := resurrectionOffer{
+		exp: resurrectionScrollExp(character.LastExpLoss, itemParamUint(ref, "itemParam3_2a4"),
+			character.PVPState() == 2),
+		hp: hp,
+		mp: mp,
+	}
+	return rt.reviveWhereDead(division, character, offer, nowMs), true
 }
