@@ -60,7 +60,7 @@ type gameplayPlane struct {
 	guildInvites  *guild.InviteRuntime
 	mentorInvites *mentor.InviteRuntime
 	matches       *match.Runtime
-	siege         *siege.Runtime
+	siege         *siege.Lane
 	quests        *quest.Runtime
 }
 
@@ -244,7 +244,17 @@ func newGameplayPlane(
 	matches.MentorJoinPrecheck = mentorInvites.MatchJoinPrecheck
 	matches.CommitMentorJoin = mentorInvites.CommitMatchJoin
 
-	siegeRuntime, err := siege.NewRuntimeFromEnv(ts.Hub)
+	siegeRuntime, err := siege.NewLane(siege.LaneConfig{
+		Division:   ownedShard.ID,
+		Fortresses: items.Fortresses,
+		GuildName: func(guildID int64) string {
+			guild, _, ok := deps.Guilds.Guild(ownedShard.ID, guildID)
+			if !ok {
+				return ""
+			}
+			return guild.Name
+		},
+	})
 	if err != nil {
 		return nil, err
 	}

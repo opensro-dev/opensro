@@ -1,133 +1,126 @@
-// Package siege is the fortress-war lane of the v1.150 gateway: the S->C
-// 0x3887 fortress-war state broadcast whose byte layout is pinned from the
-// v1.150 client handler sub_76c870 (CNetProcessSecond OnPacket 0x3887,
-// FortressWar).
-//
-// 0x3887 (native handler sub_76c870, registered on the CNetProcessSecond
-// connection by sub_76e850) is the ONLY writer of the client's "war
-// active" map at g_refObjDataManager+0x4f4 (two-writer xref proof). This
-// lane composes the three gate-critical subtypes:
-//
-//	subtype 0 - the war-list seed (per-war rows + globalFlags +
-//	            fortressListId -> FortressMgr+0x138+0x14 @0x76cb6d);
-//	subtype 2 - WAR_BEGIN: bit0 SIEGE_WAR set on every war node
-//	            (sub_7e2100(mgr,1,1) @0x76cd98); no payload;
-//	subtype 6 - WAR_END: bit0 cleared (@0x76d227); no payload.
-//
-// The lane registers NO C->S handler and is INERT unless the operator
-// enables it (register.go, the MISSION_SPAWN_MONSTERS env idiom): retail
-// war scheduling is unpinned, so nothing here runs by default.
+/*
+===========================================================================
+
+wire.go - the 0x3887 fortress-war frames the v1.150 client reads
+
+0x3887 (CNetProcessSecond_OnFortressWarState 76C870) is the client half of
+SR_GameServer's 0x385F: CSiegeFortressMgr_OnShardMessage (62EE90) relays
+each schedule edge with the same subtype byte, and the per-player fortress
+list is CGObjPC_SendFortressList (4E04D0 -> 62EBE0 -> 61D540). The subtype
+numbering is shared by both versions (0x0C/0x0D applications, 7 NPC
+refresh, 8 conquest, 0x10 war guilds all pair up).
+
+Subtypes this file writes:
+
+	0     the fortress list: rows, the period flags, the guild's fortress
+	1     war begins in 30 minutes        2    war begins
+	3/4/5 war ends in 30/20/10 minutes    9    war ends in 1 minute
+	6     war ends
+	0x10  the guilds registered for the war (clear and replace)
+	0x31/0x32  tax period on/off          0x33/0x34  request period on/off
+
+Strings are the sized narrow layout (u16 byte length, the bytes).
+
+===========================================================================
+*/
 package siege
 
 import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// OpFortressWarState is the S->C fortress-war status broadcast, handled
-// by the client's sub_76c870 (opcode 0x3887 in the sub_76e850 table).
+// OpFortressWarState is the S->C fortress-war broadcast (v1.188 0x385F).
 const OpFortressWarState uint16 = 0x3887
 
-// Subtype bytes of the gate-critical arms (sub_76c870's switch; the
-// full 0x00-0x34 domain is in the RE note - 0x13-0x30 are a proven
-// client no-op).
 const (
-	// SubtypeWarList: the full fortress-list refresh (case 0).
-	SubtypeWarList uint8 = 0
-	// SubtypeWarBegin: bit0 SIEGE_WAR set across the war map (case 2).
-	SubtypeWarBegin uint8 = 2
-	// SubtypeWarEnd: bit0 cleared across the war map (case 6).
-	SubtypeWarEnd uint8 = 6
-	// SubtypeWarGuildRegistry: the FortressMgr+0x2f4 war-fortress
-	// registry clear-and-replace (case 0x10) - the GetStatus 0xc9/0xca
-	// membership input (sub_81c1c0 clear @0x76e3fd + sub_829580 insert
-	// @0x76e43f; session-3 RE).
-	SubtypeWarGuildRegistry uint8 = 0x10
+	SubtypeFortressList      uint8 = 0x00
+	SubtypeWarSoon           uint8 = 0x01
+	SubtypeWarBegin          uint8 = 0x02
+	SubtypeWarEnds30         uint8 = 0x03
+	SubtypeWarEnds20         uint8 = 0x04
+	SubtypeWarEnds10         uint8 = 0x05
+	SubtypeWarEnd            uint8 = 0x06
+	SubtypeWarEnds1          uint8 = 0x09
+	SubtypeWarGuildRegistry  uint8 = 0x10
+	SubtypeTaxPeriodBegin    uint8 = 0x31
+	SubtypeTaxPeriodEnd      uint8 = 0x32
+	SubtypeRequestPeriodOpen uint8 = 0x33
+	SubtypeRequestPeriodEnd  uint8 = 0x34
 )
 
-// OpSiegeRelationList is the S->C 0x341E bulk siege-relation/alliance
-// list, handled by the client's sub_75ab60 (registration @0x74ea1a) ->
-// sub_82a560, whose per-entry sub_828c10 insert fills the relation
-// block's +0x94 map - the GetStatus 0xcb "ally" leg input.
+// OpSiegeRelationList is the S->C 0x341E alliance list (client 75AB60 ->
+// 82A560), the relation block the fortress status reads for allies.
 const OpSiegeRelationList uint16 = 0x341e
 
-// Global-flags bits of the subtype-0 trailing byte (the client case-0
-// [Debug] table @0x76cb16..0x76cb53); the byte is OR-ed into EVERY war
-// node via sub_7e2100 @0x76cae7.
-const (
-	// WarFlagSiegeWar is bit0 - the "war active" bit sub_7e1ae0 reads.
-	WarFlagSiegeWar uint8 = 0x1
-	// WarFlagRequestPeriod is bit1 (SIEGE_REQUEST_ALLOWED_PERIOD).
-	WarFlagRequestPeriod uint8 = 0x2
-	// WarFlagTaxPeriod is bit2 (SIEGE_TAX_ALLOWED_PERIOD).
-	WarFlagTaxPeriod uint8 = 0x4
-)
+/*
+================
+FortressRow
 
-// WarRow is one subtype-0 record in the client's proven read order
-// (sub_76c870 @0x76c960..0x76ca2b): u32 warId, sized string name, four
-// u32 stats, u8 hasA [+u32 A], u8 hasB [+u32 B].
-//
-// The four stats and the two optional u32s are read by the client to
-// keep the stream aligned and stored opaquely (+0x524/+0x530) - their
-// server-side MEANING IS UNPROVEN, so this composer carries them as
-// unnamed values and invents nothing.
-type WarRow struct {
-	WarID uint32
-	// Name lands in the client's +0x4e8 war-name map (its wstring is
-	// read by sub_4b1710: u16 length + length BYTES - a NARROW payload,
-	// NOT UTF-16).
-	Name string
-	// Stats are the four u32s @0x76c980..0x76c9b3 (meaning unproven).
-	Stats [4]uint32
-	// HasA/A: the first optional u32 (client +0x524; meaning unproven).
-	HasA bool
-	A    uint32
-	// HasB/B: the second optional u32 (client +0x530; meaning unproven).
-	HasB bool
-	B    uint32
+One fortress of the list, in CSiegeFortress_WriteListRow (61D540) order.
+Discarded are four u32s the v1.150 client reads and drops (76C980..); the
+server writes the occupying guild id first. CaptureWait is the siege
+world's post-capture wait in seconds (sent only while the gates are closed,
+slot 41/42); EndCountdown the war-end countdown (sent while it runs, slots
+44/45).
+================
+*/
+type FortressRow struct {
+	FortressID      uint32
+	OwnerName       string
+	Discarded       [4]uint32
+	HasCaptureWait  bool
+	CaptureWait     uint32
+	HasEndCountdown bool
+	EndCountdown    uint32
 }
 
-// EncodeWarList3887 renders the subtype-0 body: u8 0, u8 N, N rows in
-// the proven order, u8 globalFlags, u32 fortressListId. For a war to be
-// active without a follow-up SubtypeWarBegin frame, set WarFlagSiegeWar
-// in globalFlags (the client's per-row upsert flags byte is its own
-// CONSTANT 0 @0x76ca33 - activation only rides globalFlags or subtype 2).
-func EncodeWarList3887(rows []WarRow, globalFlags uint8, fortressListID uint32) []byte {
+/*
+================
+EncodeFortressList3887
+
+Subtype 0: u8 count, the rows, u8 period flags (war 1, request 2, tax 4),
+u32 the fortress the player's guild owns or applied to (client guild data
++0x14), zero for none.
+================
+*/
+func EncodeFortressList3887(rows []FortressRow, periods uint8, guildFortressID uint32) []byte {
 	writer := wire.NewWriter(7 + len(rows)*32)
-	writer.U8(SubtypeWarList)
+	writer.U8(SubtypeFortressList)
 	writer.U8(uint8(len(rows)))
 	for _, row := range rows {
-		writer.U32(row.WarID)
-		writeSizedString(writer, row.Name)
-		for _, stat := range row.Stats {
-			writer.U32(stat)
+		writer.U32(row.FortressID)
+		writeSizedString(writer, row.OwnerName)
+		for _, value := range row.Discarded {
+			writer.U32(value)
 		}
-		if row.HasA {
-			writer.U8(1).U32(row.A)
+		if row.HasCaptureWait {
+			writer.U8(1).U32(row.CaptureWait)
 		} else {
 			writer.U8(0)
 		}
-		if row.HasB {
-			writer.U8(1).U32(row.B)
+		if row.HasEndCountdown {
+			writer.U8(1).U32(row.EndCountdown)
 		} else {
 			writer.U8(0)
 		}
 	}
-	writer.U8(globalFlags)
-	writer.U32(fortressListID)
+	writer.U8(periods)
+	writer.U32(guildFortressID)
 	return writer.Payload()
 }
 
-// EncodeWarGuildRegistry3887 renders the subtype-0x10 body: u8 0x10,
-// u32 echo (the client parses then discards it @0x76e3e5 - the other
-// subtypes' "mgrPtr" convention), u8 N, N x u32 guildId. The client
-// CLEARS its FortressMgr+0x2f4 set before the loop (clear-and-replace,
-// no single-erase path exists), skips id 0 at the loop guard @0x76e424
-// AND inside the sub_829580 insert @0x829588, and unique-inserts the
-// rest. IDs are guild IDs, proven by 828150 reading SGuildData+30.
-func EncodeWarGuildRegistry3887(echo uint32, guildIDs []uint32) []byte {
+/*
+================
+EncodeWarGuildRegistry3887
+
+Subtype 0x10: u32 the fortress, u8 count, the guild ids. The client clears
+its registry first and skips id 0.
+================
+*/
+func EncodeWarGuildRegistry3887(fortressID uint32, guildIDs []uint32) []byte {
 	writer := wire.NewWriter(6 + len(guildIDs)*4)
 	writer.U8(SubtypeWarGuildRegistry)
-	writer.U32(echo)
+	writer.U32(fortressID)
 	writer.U8(uint8(len(guildIDs)))
 	for _, id := range guildIDs {
 		writer.U32(id)
@@ -135,33 +128,43 @@ func EncodeWarGuildRegistry3887(echo uint32, guildIDs []uint32) []byte {
 	return writer.Payload()
 }
 
-// AllianceRow is one 0x341E siege-relation entry in the client's proven
-// read order (sub_82a560 @0x82a63b..0x82a700). ID is the +0x94 map KEY:
-// 828150 and 826D40 compare target GUILD IDs, including on the war path.
-type AllianceRow struct {
-	ID uint32
-	// Name lands in the node's +0x04 wstring (narrow sized string) and
-	// feeds the per-entry sub_833d40 crest label update.
-	Name string
-	// Flag is the u8 the insert stores at node+0x20 (the guild level on
-	// the alliance path; semantics unnamed on the war path).
-	Flag uint8
-	// MasterName lands in the node's +0x24 wstring.
-	MasterName string
-	// RefObjID lands at node+0x40 (the master's model ref).
-	RefObjID uint32
-	// Byte44 lands at node+0x44 (semantics unnamed).
-	Byte44 uint8
+/*
+================
+EncodeEdge3887
+
+A schedule edge the client acts on from its subtype alone (1-6, 9 and
+0x31-0x34 read nothing further).
+================
+*/
+func EncodeEdge3887(subtype uint8) []byte {
+	return []byte{subtype}
 }
 
-// EncodeSiegeRelationList341E renders the 0x341E body per the pinned
-// read order: u32 -> FortressMgr+0x238, u32 -> +0x234 (both semantics
-// unnamed - re-read by the per-entry crest label call), u32 alliance
-// MASTER guild id (sub_8188d0 -> +0x230), u8 N, then N rows
-// { u32 id, str name, u8 flag, str masterName, u32 refObjId, u8 byte }.
-// NOTE: the client's sub_828c10 insert ASSERTS on a duplicate id
-// ("!IsAllianceGuild(dwGuildID)") - a reseed must follow a 0x32C4 (whose
-// handler resets the relation block) or carry disjoint ids.
+/*
+================
+AllianceRow
+
+One 0x341E entry in the client's read order (82A560).
+================
+*/
+type AllianceRow struct {
+	ID         uint32
+	Name       string
+	Flag       uint8
+	MasterName string
+	RefObjID   uint32
+	Byte44     uint8
+}
+
+/*
+================
+EncodeSiegeRelationList341E
+
+u32 -> relation block +0x238, u32 -> +0x234, u32 the alliance master guild,
+u8 count, then each row { u32 id, name, u8 flag, master name, u32 refObjId,
+u8 byte }. The client asserts on a duplicate id.
+================
+*/
 func EncodeSiegeRelationList341E(dword238, dword234, masterGuildID uint32, rows []AllianceRow) []byte {
 	writer := wire.NewWriter(13 + len(rows)*16)
 	writer.U32(dword238)
@@ -179,22 +182,13 @@ func EncodeSiegeRelationList341E(dword238, dword234, masterGuildID uint32, rows 
 	return writer.Payload()
 }
 
-// EncodeWarBegin3887 renders the subtype-2 WAR_BEGIN frame: the u8
-// subtype alone (the client case reads nothing further).
-func EncodeWarBegin3887() []byte {
-	return []byte{SubtypeWarBegin}
-}
+/*
+================
+writeSizedString
 
-// EncodeWarEnd3887 renders the subtype-6 WAR_END frame: the u8 subtype
-// alone.
-func EncodeWarEnd3887() []byte {
-	return []byte{SubtypeWarEnd}
-}
-
-// writeSizedString appends the sub_4b1710 sized layout: u16 byte length
-// + the bytes. The client reads exactly `length` BYTES into its wstring
-// storage (one code unit per byte) - this is NOT the sub_75d8a0
-// UTF-16LE layout the match lane writes.
+The client's sized narrow string: u16 byte length, then the bytes.
+================
+*/
 func writeSizedString(writer *wire.Writer, value string) {
 	bytes := []byte(value)
 	writer.U16(uint16(len(bytes)))

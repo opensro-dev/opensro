@@ -99,7 +99,13 @@ func (game *gameplayPlane) worldBound(
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)
 	game.mentorInvites.WorldBound(session, divisionID, character)
-	game.siege.WorldBound(session)
+	var guildID int64
+	authorityStore.ReadState(func() {
+		if character.GuildID != nil {
+			guildID = *character.GuildID
+		}
+	})
+	game.siege.WorldBound(session, guildID)
 	game.chat.WorldBound(session, divisionID)
 }
 

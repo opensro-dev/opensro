@@ -56,6 +56,8 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 			game.parties.ExpireInvitations(nowMs)
 			return game.parties.MemberUpdates(ticker.Source.SnapshotSessions(), nowMs)
 		},
+		// The fortress war's schedule edges run on the mission clock.
+		game.siege.Tick,
 	)
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
 	ticker.BeforeHooks = []simulation.TickHook{game.items.MonsterActionTickHook()}

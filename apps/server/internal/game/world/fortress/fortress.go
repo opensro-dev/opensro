@@ -83,7 +83,27 @@ type division struct {
 	// warActive is the shard's fortress-war mode (MainProcess +0x42425):
 	// one flag for every fortress, set while SiegeProgressing runs.
 	warActive bool
+	// requestPeriod is MainProcess +0x42424 (AllowSiegeRequest), taxPeriod
+	// +0x42426 (AllowSiegeTaxJob); CSiegeFortressMgr_OnShardMessage (62EE90)
+	// sets them on the 0x33/0x34 and 0x31/0x32 edges.
+	requestPeriod, taxPeriod bool
 }
+
+/*
+================
+Period
+
+The three shard-wide fortress periods, the flags byte of the fortress list
+(CSiegeFortressMgr_WriteFortressList 62EBE0: war 1, request 2, tax 4).
+================
+*/
+type Period uint8
+
+const (
+	PeriodWar     Period = 1
+	PeriodRequest Period = 2
+	PeriodTax     Period = 4
+)
 
 /*
 ================
@@ -171,6 +191,80 @@ func (a *Authority) GuildOwns(divisionID string, fortressID uint32, guildID int6
 	}
 	record, ok := a.Get(divisionID, fortressID)
 	return ok && record.GuildID == guildID
+}
+
+/*
+================
+SetPeriod
+
+Turns one period on or off; reports whether it changed.
+================
+*/
+func (a *Authority) SetPeriod(divisionID string, period Period, on bool) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	state := a.divisionLocked(divisionID)
+	var flag *bool
+	switch period {
+	case PeriodWar:
+		flag = &state.warActive
+	case PeriodRequest:
+		flag = &state.requestPeriod
+	case PeriodTax:
+		flag = &state.taxPeriod
+	default:
+		return false
+	}
+	if *flag == on {
+		return false
+	}
+	*flag = on
+	return true
+}
+
+/*
+================
+Periods
+================
+*/
+func (a *Authority) Periods(divisionID string) Period {
+	if a == nil {
+		return 0
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	state := a.divisionLocked(divisionID)
+	var out Period
+	if state.warActive {
+		out |= PeriodWar
+	}
+	if state.requestPeriod {
+		out |= PeriodRequest
+	}
+	if state.taxPeriod {
+		out |= PeriodTax
+	}
+	return out
+}
+
+/*
+================
+Records
+
+Every fortress of a division, in catalog order.
+================
+*/
+func (a *Authority) Records(divisionID string) []Record {
+	if a == nil {
+		return nil
+	}
+	out := make([]Record, 0, len(a.catalog))
+	for _, row := range a.catalog {
+		if record, ok := a.Get(divisionID, row.ID); ok {
+			out = append(out, record)
+		}
+	}
+	return out
 }
 
 /*
