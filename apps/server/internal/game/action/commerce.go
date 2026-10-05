@@ -293,6 +293,14 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			for index := range contents {
 				if contents[index].Ref != nil && inventory.IsTradeGoods(contents[index].Ref.TypeFlags()) {
 					contents[index].TradeOwner = c.Job.Alias
+					// INFERENCE: a newly materialized stack follows the same
+					// special-merchant, quest and active-transport admission
+					// as 617F70, with the buyer as its initial owner.
+					item := inventory.Item{TypeFlags: contents[index].Ref.TypeFlags(), TradeOwner: c.Job.Alias}
+					if code := rt.tradeAdmission(division, c, npc, item); code != 0 {
+						refusal = code
+						return false
+					}
 				}
 			}
 			capacity := uint16(inventory.BagSlotEnd - inventory.EquipmentSlotEnd)

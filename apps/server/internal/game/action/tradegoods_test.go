@@ -59,21 +59,21 @@ TestCargoPurchaseAssignsOwnerBeforeChoosingMergeTarget
 ================
 */
 func TestCargoPurchaseAssignsOwnerBeforeChoosingMergeTarget(t *testing.T) {
-	rt, c := merchantFixture(t)
+	rt, c := traderFixture(t, false)
 	c.Job.Alias = "Buyer"
-	offer := &rt.Commerce.Tabs[1][0]
-	offer.Ref.TypeIDs = [4]int64{3, 3, 8, 1}
-	offer.Contents = []commerce.Content{{Ref: offer.Ref, Stack: 50}}
-	c.MissionInventory = []domain.InventoryRow{{Slot: 13, RefObjID: offer.Ref.RefObjID, Codename: offer.Ref.Codename, TypeFlags: offer.Ref.TypeFlags(), StackCount: 10, TradeOwner: "Foreign"}}
+	ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
+	rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40, Contents: []commerce.Content{{Ref: ref, Stack: 40}}}}
+	c.MissionInventory[1].TradeOwner = "Foreign"
+	c.MissionInventory[1].StackCount = 10
 	trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3})
-	if len(c.MissionInventory) != 2 || c.MissionInventory[0].TradeOwner != "Foreign" || c.MissionInventory[0].StackCount != 10 || c.MissionInventory[1].TradeOwner != "Buyer" || c.MissionInventory[1].StackCount != 3 {
+	if len(c.MissionInventory) != 3 || c.MissionInventory[1].TradeOwner != "Foreign" || c.MissionInventory[1].StackCount != 10 || c.MissionInventory[2].TradeOwner != "Buyer" || c.MissionInventory[2].StackCount != 3 {
 		t.Fatalf("cargo origin or merge changed: %+v", c.MissionInventory)
 	}
-	if offer.Contents[0].TradeOwner != "" {
+	if rt.Commerce.Tabs[1][0].Contents[0].TradeOwner != "" {
 		t.Fatal("purchase mutated shared merchandise template")
 	}
 	trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 2})
-	if len(c.MissionInventory) != 2 || c.MissionInventory[1].StackCount != 5 || goldOf(c) != 4700 {
+	if len(c.MissionInventory) != 3 || c.MissionInventory[2].StackCount != 5 || goldOf(c) != 4700 {
 		t.Fatalf("same-owner purchase failed: %+v", c.MissionInventory)
 	}
 }

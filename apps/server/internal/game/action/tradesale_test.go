@@ -229,3 +229,33 @@ func TestTradeTransactionRefusalDoesNotPublishOrRemoveCargo(t *testing.T) {
 		t.Fatalf("refusal %+v", result)
 	}
 }
+
+/*
+================
+TestTradePurchaseRequiresMerchantJobQuestAndTransport
+================
+*/
+func TestTradePurchaseRequiresMerchantJobQuestAndTransport(t *testing.T) {
+	for _, reason := range []string{"merchant", "job", "quest", "vehicle"} {
+		t.Run(reason, func(t *testing.T) {
+			rt, c := traderFixture(t, false)
+			ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
+			rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40}}
+			switch reason {
+			case "merchant":
+				rt.NpcRoster[0].TalkFlags = simulation.NpcTalkFlagShop
+			case "job":
+				c.MissionInventory = c.MissionInventory[1:]
+			case "quest":
+				rt.NpcRoster[0].Codename = "NPC_CH_SPECIAL2"
+			case "vehicle":
+				c.ActiveCOS = nil
+			}
+			before := c.Snapshot()
+			result := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3})
+			if !reflect.DeepEqual(before, c.Snapshot()) || len(result.Frames) != 1 || result.Frames[0].Payload[0] != 2 {
+				t.Fatalf("purchase bypassed %s: %+v", reason, result)
+			}
+		})
+	}
+}
