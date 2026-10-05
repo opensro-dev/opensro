@@ -54,6 +54,9 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 		if err := validateFortresses(db); err != nil {
 			return nil, fmt.Errorf("validating fortresses: %w", err)
 		}
+		if err := validateAlliances(db); err != nil {
+			return nil, fmt.Errorf("validating alliances: %w", err)
+		}
 	}
 
 	out := &loadedDB{
