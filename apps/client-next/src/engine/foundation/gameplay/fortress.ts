@@ -14,7 +14,12 @@ the fortress official's protocol: 0x71E1 requests
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { SystemNotice } from "./system-notices";
-import { fortressServiceReply, FORTRESS_SERVICE_REPLY, type FortressServiceReply } from "./fortress-services";
+import {
+	fortressServiceRequest,
+	fortressServiceReply,
+	FORTRESS_SERVICE_REPLY,
+	type FortressServiceReply
+} from "./fortress-services";
 
 export const OP_FORTRESS_INTERACTION = 0x71e1;
 export const OP_FORTRESS_INTERACTION_RESULT = 0xb1e1;
@@ -382,15 +387,7 @@ fortressInteraction
 ================
 */
 export function fortressInteraction( npc: number, subtype: number, fortress = 0, kind = 0 ): WireFrame {
-	const status = subtype === FORTRESS_WAR_STATUS;
-	const payload = new Uint8Array( status ? 5 : 10 ), v = new DataView( payload.buffer );
-	v.setUint32( 0, npc >>> 0, true );
-	v.setUint8( 4, subtype );
-	if ( !status ) {
-		v.setUint32( 5, fortress >>> 0, true );
-		v.setUint8( 9, kind );
-	}
-	return { opcode: OP_FORTRESS_INTERACTION, payload };
+	return fortressServiceRequest( { target: npc, action: subtype, fortress, flag: kind } );
 }
 
 /*

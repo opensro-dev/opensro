@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/world/fortress"
 )
 
@@ -82,19 +83,19 @@ manager's other functions and answer as an unknown operation.
 ================
 */
 func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Character, payload []byte) OpResult {
-	r := wire.NewReader(payload)
-	gid, err := r.U32()
-	if err != nil || c == nil {
+	if c == nil || len(payload) < 5 {
 		return OpResult{}
 	}
-	subtype, err := r.U8()
+	subtype := payload[4]
+	request, err := siege.DecodeInteraction(payload)
 	if err != nil {
+		if subtype == fortressApply || subtype == fortressWithdraw {
+			return fortressRefusal(subtype, fortressErrInvalid)
+		}
 		return OpResult{}
 	}
+	gid := request.Target
 	if subtype == fortressWarStatus {
-		if r.Done() != nil {
-			return OpResult{}
-		}
 		unlock := rt.lockDivision(division)
 		defer unlock()
 		return rt.fortressWarStatus(division, c, gid)
@@ -102,12 +103,8 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 	if subtype != fortressApply && subtype != fortressWithdraw {
 		return fortressRefusal(subtype, fortressErrUnknown)
 	}
-	fortressID, err := r.U32()
-	if err != nil {
-		return fortressRefusal(subtype, fortressErrInvalid)
-	}
-	kindByte, err := r.U8()
-	if err != nil || r.Done() != nil || kindByte > uint8(fortress.RequestAlly) {
+	fortressID, kindByte := request.Fortress, request.Value8
+	if kindByte > uint8(fortress.RequestAlly) {
 		return fortressRefusal(subtype, fortressErrInvalid)
 	}
 	kind := fortress.RequestKind(kindByte)

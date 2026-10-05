@@ -275,9 +275,18 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				refusal = wire.ErrCodeNotEnoughGold
 				return false
 			}
-			contents := offer.Contents
+			contents := append([]commerce.Content(nil), offer.Contents...)
 			if len(contents) == 0 {
 				contents = []commerce.Content{{Ref: offer.Ref, Stack: offer.Stack}}
+			}
+			// INFERENCE from 490930/490230's owner checks: seed purchased goods
+			// with the buyer's original job alias,
+			// including when another holder later picks them up. Set it before
+			// GrantPackage chooses a merge destination, on a private template.
+			for index := range contents {
+				if contents[index].Ref != nil && inventory.IsTradeGoods(contents[index].Ref.TypeFlags()) {
+					contents[index].TradeOwner = c.Job.Alias
+				}
 			}
 			capacity := uint16(inventory.BagSlotEnd - inventory.EquipmentSlotEnd)
 			if container != nil {

@@ -576,6 +576,7 @@ func invItemsFromRowsWithin(rows []enterworld.InventoryRow, slotEnd int64) []inv
 
 		out = append(out, inventory.Item{
 			RecordID:          row.RecordID,
+			TradeOwner:        row.TradeOwner,
 			Slot:              uint8(row.Slot),
 			RefObjID:          row.RefObjID,
 			Codename:          row.Codename,
@@ -606,6 +607,7 @@ func rowsFromInvItems(items []inventory.Item) []enterworld.InventoryRow {
 	for _, item := range items {
 		out = append(out, enterworld.InventoryRow{
 			RecordID:          item.RecordID,
+			TradeOwner:        item.TradeOwner,
 			Slot:              int64(item.Slot),
 			RefObjID:          item.RefObjID,
 			Codename:          item.Codename,

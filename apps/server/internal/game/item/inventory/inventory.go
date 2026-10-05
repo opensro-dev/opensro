@@ -69,7 +69,8 @@ Item
 ================
 */
 type Item struct {
-	Summon *domain.CharacterCOS
+	TradeOwner string // original job alias, preserved when the holder changes
+	Summon     *domain.CharacterCOS
 	// Slot is the wire slot the row currently occupies.
 	Slot         uint8
 	RefObjID     uint32
@@ -500,7 +501,7 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	// MERGE: same active ref id, stackable class. Ignores the wire quantity
 	// and combines the FULL counts, exactly like native - the qty field only
 	// drives the split leg.
-	case stackable && destIndex >= 0 && inv.items[destIndex].RefObjID == inv.items[sourceIndex].RefObjID:
+	case stackable && destIndex >= 0 && stackIdentityMatches(inv.items[destIndex], inv.items[sourceIndex]):
 		destCount := inv.items[destIndex].Quantity
 		if destCount == 0 {
 			destCount = 1
@@ -771,10 +772,22 @@ MergeTargetSlot
 ================
 */
 func (inv *Inventory) MergeTargetSlot(refObjID uint32, stackCap uint16) (uint8, bool) {
+	return inv.mergeTargetSlot(Item{RefObjID: refObjID}, stackCap)
+}
+
+/*
+================
+mergeTargetSlot
+
+Cargo grants carry the owner name; reference-only callers cannot merge into
+an owned cargo stack without that identity.
+================
+*/
+func (inv *Inventory) mergeTargetSlot(item Item, stackCap uint16) (uint8, bool) {
 	best := -1
 	for index := range inv.items {
 		row := &inv.items[index]
-		if !inv.bagSlot(row.Slot) || row.RefObjID != refObjID {
+		if !inv.bagSlot(row.Slot) || !stackIdentityMatches(*row, item) {
 			continue
 		}
 		count := row.Quantity
@@ -851,7 +864,7 @@ func (inv *Inventory) GrantStack(item Item, stackCap uint16) (PickupGrant, *Faul
 	}
 
 	if stackCap > 1 {
-		if destSlot, ok := inv.MergeTargetSlot(item.RefObjID, stackCap); ok {
+		if destSlot, ok := inv.mergeTargetSlot(item, stackCap); ok {
 			destIndex := inv.indexOf(destSlot)
 			destCount := inv.items[destIndex].Quantity
 			if destCount == 0 {

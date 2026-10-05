@@ -24,12 +24,13 @@ Content
 ================
 */
 type Content struct {
-	Ref      *enterworld.ItemRef
-	Stack    uint16
-	Plus     uint8
-	Variance uint64
-	Data     uint32
-	Magic    []uint64
+	TradeOwner string
+	Ref        *enterworld.ItemRef
+	Stack      uint16
+	Plus       uint8
+	Variance   uint64
+	Data       uint32
+	Magic      []uint64
 }
 
 /*
