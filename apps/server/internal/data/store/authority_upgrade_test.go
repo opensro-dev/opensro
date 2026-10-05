@@ -8,6 +8,7 @@ authority_upgrade_test.go - preserving upgrades, writer exclusion and recovery
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,6 +16,35 @@ import (
 
 	"opensro.online/server/internal/domain"
 )
+
+/*
+================
+dropFortressTables
+
+Removes layout 6's fortress tables from a current test authority.
+================
+*/
+func dropFortressTables(t *testing.T, db *sql.DB) {
+	t.Helper()
+	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+/*
+================
+downgradeToLayout5
+
+A current test authority as layout 5 left it.
+================
+*/
+func downgradeToLayout5(t *testing.T, db *sql.DB) {
+	t.Helper()
+	dropFortressTables(t, db)
+	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preFortressLayoutVersion, metaKeyLayoutVersion); err != nil {
+		t.Fatal(err)
+	}
+}
 
 /*
 ================
@@ -36,6 +66,7 @@ func makePreMallAuthority(t *testing.T, dir string) {
 	if _, err := db.Exec("DROP TABLE mall_accounts; DROP TABLE account_storage"); err != nil {
 		t.Fatal(err)
 	}
+	dropFortressTables(t, db)
 	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preMallLayoutVersion, metaKeyLayoutVersion); err != nil {
 		t.Fatal(err)
 	}
@@ -192,6 +223,7 @@ func TestCompanionUpgradePreservesExistingWarehouseAndBackup(t *testing.T) {
 	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preCompanionVersion, metaKeySchemaVersion); err != nil {
 		t.Fatal(err)
 	}
+	downgradeToLayout5(t, db)
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +247,7 @@ func TestCompanionUpgradePreservesExistingWarehouseAndBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if _, err := loadDB(old, preCompanionVersion, CurrentLayoutVersion); err != nil {
+	if _, err := loadDB(old, preCompanionVersion, preFortressLayoutVersion); err != nil {
 		t.Fatal("backup invalid", err)
 	}
 	reopened := openTest(t, dir, newTestClock())
@@ -255,6 +287,7 @@ func TestWorldPointUpgradeKeepsSchema15Records(t *testing.T) {
 	if _, err := db.Exec("UPDATE meta SET value = ? WHERE key = ?", preWorldPointVersion, metaKeySchemaVersion); err != nil {
 		t.Fatal(err)
 	}
+	downgradeToLayout5(t, db)
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
