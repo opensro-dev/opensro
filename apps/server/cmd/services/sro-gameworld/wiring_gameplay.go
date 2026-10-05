@@ -259,7 +259,7 @@ func newGameplayPlane(
 	if err != nil {
 		return nil, err
 	}
-	items.FortressWindows = siegeRuntime.Windows
+	items.FortressWindows = siegeRuntime.WarStart
 
 	return &gameplayPlane{
 		divisionID:    ownedShard.ID,

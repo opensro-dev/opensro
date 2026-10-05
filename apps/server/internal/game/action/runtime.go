@@ -124,9 +124,10 @@ type Runtime struct {
 	// Guilds is the persisted guild topology the fortress official reads
 	// (level, members, master).
 	Guilds enterworld.GuildStore
-	// FortressWindows reports the war and request windows the fortress
-	// official shows; the fortress-war lane owns the schedule.
-	FortressWindows func(nowMs int64) (warStart, warEnd, requestStart, requestEnd time.Time)
+	// FortressWindows reports the start of the war running now or next,
+	// which the fortress official shows; the fortress-war lane owns the
+	// schedule.
+	FortressWindows func(nowMs int64) time.Time
 
 	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
 	// The composition root installs it before Register admits 0x7338/0x7053.

@@ -156,10 +156,13 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 fortressWarStatus
 
 Subtype 6, the official's "fortress war" row (CIFNpcTalk action 0x34 row
-1): v1.188 633610 answers [6][1], then month, day, hour and minute of the
-war window's start and end and of the request window's start and end,
-then whether the guild has applied and, if so, the fortress and kind. The
-client opens the application window on it (754A40 -> 69EA10, 663200).
+1): [6][1], the next war's start as a 16-byte SYSTEMTIME, then whether the
+guild has applied and, if so, the fortress and kind. The v1.150 client
+opens the application window on it (754A40 -> 69EA10, 663200) and derives
+every date it shows from that one time (660C70: the war until two hours
+later, applications from three days before to the day before). v1.188's
+633610 writes four month/day/hour/minute quadruples instead; the v1.150
+reader is the contract here.
 ================
 */
 func (rt *Runtime) fortressWarStatus(division string, c *enterworld.Character, gid uint32) OpResult {
@@ -173,10 +176,7 @@ func (rt *Runtime) fortressWarStatus(division string, c *enterworld.Character, g
 		return fortressRefusal(fortressWarStatus, fortressErrNoGuild)
 	}
 	w := wire.NewWriter(24).U8(fortressWarStatus).U8(1)
-	warStart, warEnd, requestStart, requestEnd := rt.FortressWindows(rt.Now().UnixMilli())
-	for _, at := range []time.Time{warStart, warEnd, requestStart, requestEnd} {
-		w.U8(uint8(at.Month())).U8(uint8(at.Day())).U8(uint8(at.Hour())).U8(uint8(at.Minute()))
-	}
+	writeSystemTime(w, rt.FortressWindows(rt.Now().UnixMilli()))
 	if fortressID, applied := rt.Fortresses.AppliedFortress(division, *c.GuildID); applied {
 		record, _ := rt.Fortresses.Get(division, fortressID)
 		w.U8(1).U32(fortressID).U8(uint8(record.Applicants[*c.GuildID]))
@@ -184,6 +184,19 @@ func (rt *Runtime) fortressWarStatus(division string, c *enterworld.Character, g
 		w.U8(0)
 	}
 	return OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: w.Payload()}}}
+}
+
+/*
+================
+writeSystemTime
+
+A Win32 SYSTEMTIME: year, month, weekday (0 Sunday), day, hour, minute,
+second, milliseconds, each a u16.
+================
+*/
+func writeSystemTime(w *wire.Writer, at time.Time) {
+	w.U16(uint16(at.Year())).U16(uint16(at.Month())).U16(uint16(at.Weekday())).U16(uint16(at.Day()))
+	w.U16(uint16(at.Hour())).U16(uint16(at.Minute())).U16(uint16(at.Second())).U16(uint16(at.Nanosecond() / 1e6))
 }
 
 /*

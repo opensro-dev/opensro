@@ -173,19 +173,16 @@ func TestFortressApplicationRefusals(t *testing.T) {
 ================
 TestOfficialOpensTheApplicationWindow
 
-633610: [6][1], four month/day/hour/minute quadruples, then the guild's
-application.
+[6][1], the war start as a SYSTEMTIME, then the guild's application.
 ================
 */
 func TestOfficialOpensTheApplicationWindow(t *testing.T) {
 	rt, c := officialFixture(t)
 	loc := time.FixedZone("shard", 8*3600)
-	rt.FortressWindows = func(int64) (time.Time, time.Time, time.Time, time.Time) {
-		day := func(d, h, m int) time.Time { return time.Date(2026, 10, d, h, m, 0, 0, loc) }
-		return day(7, 20, 0), day(7, 21, 30), day(5, 0, 0), day(5, 23, 59)
-	}
+	rt.FortressWindows = func(int64) time.Time { return time.Date(2026, 10, 7, 20, 0, 0, 0, loc) }
 	status := wire.NewWriter(2).U32(testOfficialGid).U8(fortressWarStatus).Payload()
-	quads := []byte{10, 7, 20, 0, 10, 7, 21, 30, 10, 5, 0, 0, 10, 5, 23, 59}
+	// SYSTEMTIME 2026-10-07 (Wednesday) 20:00:00.000.
+	quads := []byte{0xea, 0x07, 10, 0, 3, 0, 7, 0, 20, 0, 0, 0, 0, 0, 0, 0}
 	out := rt.HandleFortressInteraction(testDivision, c, status)
 	if want := append(append([]byte{6, 1}, quads...), 0); len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, want) {
 		t.Fatalf("status before applying %x", out.Frames[0].Payload)

@@ -68,3 +68,27 @@ func TestScheduleRefusesMalformedBlocks(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestScheduleWindowFindsTheRunningOrNextWar
+
+During a war its own window; after it, next Wednesday's.
+================
+*/
+func TestScheduleWindowFindsTheRunningOrNextWar(t *testing.T) {
+	loc := time.FixedZone("shard", 8*3600)
+	schedules, err := ParseSchedules(shippedSchedule, loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	war := schedules["SiegeProgressing"]
+	start, end, ok := war.Window(time.Date(2026, 10, 7, 20, 30, 0, 0, loc))
+	if !ok || !start.Equal(time.Date(2026, 10, 7, 20, 0, 0, 0, loc)) || !end.Equal(time.Date(2026, 10, 7, 21, 30, 0, 0, loc)) {
+		t.Fatalf("running war window %s - %s", start, end)
+	}
+	start, _, ok = war.Window(time.Date(2026, 10, 7, 21, 30, 0, 0, loc))
+	if !ok || !start.Equal(time.Date(2026, 10, 14, 20, 0, 0, 0, loc)) {
+		t.Fatalf("next war %s", start)
+	}
+}
