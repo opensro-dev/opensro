@@ -3,6 +3,7 @@ package action
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -165,5 +166,34 @@ func TestFortressApplicationRefusals(t *testing.T) {
 				t.Fatalf("answer %+v, want code %#x", out.Frames, tc.code)
 			}
 		})
+	}
+}
+
+/*
+================
+TestOfficialOpensTheApplicationWindow
+
+633610: [6][1], four month/day/hour/minute quadruples, then the guild's
+application.
+================
+*/
+func TestOfficialOpensTheApplicationWindow(t *testing.T) {
+	rt, c := officialFixture(t)
+	loc := time.FixedZone("shard", 8*3600)
+	rt.FortressWindows = func(int64) (time.Time, time.Time, time.Time, time.Time) {
+		day := func(d, h, m int) time.Time { return time.Date(2026, 10, d, h, m, 0, 0, loc) }
+		return day(7, 20, 0), day(7, 21, 30), day(5, 0, 0), day(5, 23, 59)
+	}
+	status := wire.NewWriter(2).U32(testOfficialGid).U8(fortressWarStatus).Payload()
+	quads := []byte{10, 7, 20, 0, 10, 7, 21, 30, 10, 5, 0, 0, 10, 5, 23, 59}
+	out := rt.HandleFortressInteraction(testDivision, c, status)
+	if want := append(append([]byte{6, 1}, quads...), 0); len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, want) {
+		t.Fatalf("status before applying %x", out.Frames[0].Payload)
+	}
+	rt.HandleFortressInteraction(testDivision, c, applyFrame(fortressApply, 0))
+	out = rt.HandleFortressInteraction(testDivision, c, status)
+	want := append(append([]byte{6, 1}, quads...), 1, 1, 0, 0, 0, 0)
+	if !bytes.Equal(out.Frames[0].Payload, want) {
+		t.Fatalf("status after applying %x", out.Frames[0].Payload)
 	}
 }

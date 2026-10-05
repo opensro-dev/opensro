@@ -266,6 +266,13 @@ func (rt *Runtime) ConfigurePortals(dir string) error {
 	}
 	rt.Fortresses = fortress.New(fortresses)
 	for i := range rt.NpcRoster {
+		for _, row := range fortresses {
+			if rt.NpcRoster[i].Codename == row.OfficialNpc {
+				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagFortressOfficial
+			}
+		}
+	}
+	for i := range rt.NpcRoster {
 		if id, ok := catalog.sources[rt.NpcRoster[i].RefObjID]; ok {
 			rt.NpcRoster[i].TalkFlags = (rt.NpcRoster[i].TalkFlags &^ simulation.NpcTalkFlagRecallPoint) | 0x80
 			rt.NpcRoster[i].RebirthPoint = simulation.Spawn{}

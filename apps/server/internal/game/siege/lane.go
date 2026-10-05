@@ -227,3 +227,19 @@ func (l *Lane) WorldBound(s *transport.Session, guildID int64) {
 		_ = s.Send(OpFortressWarState, l.WarGuilds(record))
 	}
 }
+
+/*
+================
+Windows
+
+The war and request windows the fortress official shows (v1.188 633610
+writes MainProcess +0x42438/+0x42448 and +0x42458/+0x42468): each the one
+running now or the next to come.
+================
+*/
+func (l *Lane) Windows(nowMs int64) (warStart, warEnd, requestStart, requestEnd time.Time) {
+	now := time.UnixMilli(nowMs).In(l.config.Location)
+	warStart, warEnd, _ = l.config.Schedules["SiegeProgressing"].Window(now)
+	requestStart, requestEnd, _ = l.config.Schedules["AllowSiegeRequest"].Window(now)
+	return warStart, warEnd, requestStart, requestEnd
+}

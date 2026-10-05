@@ -48,6 +48,12 @@ const (
 	NpcTalkFlagJobTrader uint32 = 0x80000
 	NpcTalkFlagJobThief  uint32 = 0x100000
 	NpcTalkFlagJobHunter uint32 = 0x200000
+	// NpcTalkFlagFortressOfficial is the fortress official's row: client
+	// 5D8FF0 tests 0x800000 and 5D7AD0 appends action 0x34
+	// (SN_FORTRESS_OFFICIAL_WARAPPLY), whose click sends 0x71E1 subtype 6.
+	// v1.188 registers function option 0x18 on the official; the port grants
+	// it to the official of every fortress in siegefortress.txt.
+	NpcTalkFlagFortressOfficial uint32 = 0x800000
 
 	// NpcTalkImplementedFlags is the capability subset whose complete
 	// request -> authority -> response lifecycle exists in this port. The

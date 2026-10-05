@@ -251,3 +251,31 @@ func (s Schedule) Active(t time.Time) bool {
 	}
 	return days%s.EveryDays == 0
 }
+
+// windowSearchDays bounds the next-window search: a weekly schedule repeats
+// within a week, every shipped one within a year.
+const windowSearchDays = 400
+
+/*
+================
+Schedule.Window
+
+The window running at t, or else the next one to start: the start and end
+instants of that day's Once span. ok is false when none remains inside the
+duration.
+================
+*/
+func (s Schedule) Window(t time.Time) (start, end time.Time, ok bool) {
+	t = t.In(s.Begin.Location())
+	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	for i := 0; i < windowSearchDays; i++ {
+		candidate := day.AddDate(0, 0, i)
+		start = candidate.Add(time.Duration(s.StartSecond) * time.Second)
+		end = candidate.Add(time.Duration(s.EndSecond) * time.Second)
+		if !end.After(t) || !s.Active(start) {
+			continue
+		}
+		return start, end, true
+	}
+	return time.Time{}, time.Time{}, false
+}

@@ -19,6 +19,8 @@ Admission is v1.188 633910 (apply) and 633C40 (withdraw), in their order.
 package action
 
 import (
+	"time"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -30,8 +32,9 @@ const (
 	opFortressInteractionResult uint16 = 0xb1e1
 	opFortressWarState          uint16 = 0x3887
 
-	fortressApply    uint8 = 7
-	fortressWithdraw uint8 = 8
+	fortressWarStatus uint8 = 6
+	fortressApply     uint8 = 7
+	fortressWithdraw  uint8 = 8
 
 	// 0x3887 subtypes announcing a registration change.
 	fortressWarApplied   uint8 = 0x0c
@@ -86,6 +89,14 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 	if err != nil {
 		return OpResult{}
 	}
+	if subtype == fortressWarStatus {
+		if r.Done() != nil {
+			return OpResult{}
+		}
+		unlock := rt.lockDivision(division)
+		defer unlock()
+		return rt.fortressWarStatus(division, c, gid)
+	}
 	if subtype != fortressApply && subtype != fortressWithdraw {
 		return fortressRefusal(subtype, fortressErrUnknown)
 	}
@@ -138,6 +149,64 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 		frames = append(frames, goldFrame(c))
 	}
 	return OpResult{Frames: frames}
+}
+
+/*
+================
+fortressWarStatus
+
+Subtype 6, the official's "fortress war" row (CIFNpcTalk action 0x34 row
+1): v1.188 633610 answers [6][1], then month, day, hour and minute of the
+war window's start and end and of the request window's start and end,
+then whether the guild has applied and, if so, the fortress and kind. The
+client opens the application window on it (754A40 -> 69EA10, 663200).
+================
+*/
+func (rt *Runtime) fortressWarStatus(division string, c *enterworld.Character, gid uint32) OpResult {
+	if rt.Fortresses == nil || rt.FortressWindows == nil {
+		return fortressRefusal(fortressWarStatus, fortressErrUnknown)
+	}
+	if !rt.selectedOfficial(division, c, gid) {
+		return fortressRefusal(fortressWarStatus, fortressErrInvalid)
+	}
+	if c.GuildID == nil || *c.GuildID == 0 {
+		return fortressRefusal(fortressWarStatus, fortressErrNoGuild)
+	}
+	w := wire.NewWriter(24).U8(fortressWarStatus).U8(1)
+	warStart, warEnd, requestStart, requestEnd := rt.FortressWindows(rt.Now().UnixMilli())
+	for _, at := range []time.Time{warStart, warEnd, requestStart, requestEnd} {
+		w.U8(uint8(at.Month())).U8(uint8(at.Day())).U8(uint8(at.Hour())).U8(uint8(at.Minute()))
+	}
+	if fortressID, applied := rt.Fortresses.AppliedFortress(division, *c.GuildID); applied {
+		record, _ := rt.Fortresses.Get(division, fortressID)
+		w.U8(1).U32(fortressID).U8(uint8(record.Applicants[*c.GuildID]))
+	} else {
+		w.U8(0)
+	}
+	return OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: w.Payload()}}}
+}
+
+/*
+================
+selectedOfficial
+
+The selected, visible NPC is a fortress official (function option 0x18).
+================
+*/
+func (rt *Runtime) selectedOfficial(division string, c *enterworld.Character, gid uint32) bool {
+	if selected, ok := rt.Selected.Get(division, c.Name); !ok || selected != gid {
+		return false
+	}
+	npc, ok := rt.npcForCurrentViewer(division, c, gid)
+	if !ok {
+		return false
+	}
+	for _, record := range rt.Fortresses.Records(division) {
+		if record.OfficialNpc == npc.Codename {
+			return true
+		}
+	}
+	return false
 }
 
 /*
