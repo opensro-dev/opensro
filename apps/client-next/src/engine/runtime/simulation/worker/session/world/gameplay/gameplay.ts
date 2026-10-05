@@ -565,7 +565,12 @@ reuse gate as manual activation. Recovery completion is server-owned.
 		// 561D50 checks the NPC interaction latch (69F870 includes storage)
 		// and the return-delay control. The retry timer itself stays armed.
 		if ( slot === null ) return;
-		if ( autoPotionItemMallOpen || returnScroll || inventory.state().shop || storage.state() ) {
+		// 69B040 reads the active interaction latch, not retained shop data.
+		// The catalog survives close/release/despawn so the same merchant can reopen.
+		const conversation = npcConversation.state();
+		const shopActive = conversation.phase !== "closed" &&
+			conversation.gid === targeting.state().target && inventory.state().shop?.npc === conversation.gid;
+		if ( autoPotionItemMallOpen || returnScroll || shopActive || storage.state() ) {
 			const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, ITEM_INTERACTION_REFUSAL );
 			if ( notice ) api.notice( notice );
 			return;

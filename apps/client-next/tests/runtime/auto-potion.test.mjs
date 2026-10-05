@@ -429,3 +429,40 @@ test("Item Mall refusal publishes the native interaction notice while dragging s
 	assert.equal( sent.length, 1 );
 	g.dispose();
 });
+
+for ( const close of [ "npc-close", "server-release", "despawn" ] ) {
+	test(`cached merchant catalog cannot block automatic potions after ${close}`, () => {
+		const { g, local, sent } = automatic();
+		const npc = { ...local, gid: 7, kind: "npc" };
+		g.command( { kind: "select", gid: 7 }, 0, npc );
+		g.receive( { opcode: 0xb45a, payload: Buffer.from( "0107000000000100000000", "hex" ) }, 1 );
+		g.command( { kind: "shop-open", gid: 7 }, 2, npc );
+		g.receive( { opcode: 0xb338, payload: Uint8Array.of( 1, 1, 0, 0, 0 ) }, 3 );
+		g.receive( {
+			opcode: 11,
+			payload: new TextEncoder().encode( JSON.stringify( {
+				version: 1,
+				npc: 7,
+				name: "Stable",
+				offers: []
+			} ) )
+		}, 4 );
+		sent.length = 0;
+		g.receive( vitals( 40 ), 5 );
+		assert.equal( sent.length, 0, "an active shop still blocks use" );
+		assert.equal( g.take().notices.at( -1 )?.key, "UIIT_MSG_STRGERR_CANT_USEITEM_WHILE_INTERACT" );
+		if ( close === "npc-close" ) g.command( { kind: "npc-close" }, 6 );
+		else if ( close === "server-release" ) g.receive( { opcode: 0xb4b3, payload: Uint8Array.of( 1 ) }, 6 );
+		else g.entityLifecycle( { kind: "despawn", gid: 7 } );
+		const closed = g.take();
+		assert.equal( closed.npcConversation.phase, "closed" );
+		assert.equal( closed.shop.npc, 7, "catalog remains cached independently of interaction" );
+		sent.length = 0;
+		g.step( 1005, local );
+		assert.equal( sent.length, 1, "the armed retry resumes after interaction closes" );
+		assert.equal( sent[0].opcode, 0x75bd );
+		assert.equal( g.take().notices.length, closed.notices.length, "no repeated interaction refusal" );
+		g.dispose();
+	});
+}
+
