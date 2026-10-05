@@ -16,6 +16,8 @@ a stale registration simply drops out.
 package action
 
 import (
+	"fmt"
+
 	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/game/caravan"
@@ -171,19 +173,24 @@ func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character,
 	}
 	tables := rt.Monsters.BanditTables()
 	player := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, nowMs)
-	zone, _ := world.RegionCaravanZone(player.RegionID)
+	zone, known := world.RegionCaravanZone(player.RegionID)
+	if !known {
+		return fmt.Errorf("caravan region %#x has no continent evidence", player.RegionID)
+	}
 	for range count {
 		level, err := caravan.BanditLevel(tier, characterLevelByte(c), maxMasteryByte(c), roll)
 		if err != nil {
 			return err
 		}
+		var drawErr error
 		ref, found := tables.Pick(caravan.Thieves(job), zone, level, func() uint32 {
-			value, err := roll()
-			if err != nil {
-				return 0
-			}
+			var value uint32
+			value, drawErr = roll()
 			return value
 		})
+		if drawErr != nil {
+			return drawErr
+		}
 		if !found {
 			continue
 		}

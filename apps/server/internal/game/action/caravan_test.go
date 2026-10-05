@@ -12,8 +12,10 @@ bandits around the vehicle once it stands in a battlefield region.
 package action
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,9 +42,12 @@ func caravanFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character) 
 	rt, clock, c, target := newCombatTestRuntime(t, 100)
 	refs := map[uint32]monster.MonsterRef{target.Ref.RefObjID: target.Ref}
 	for level := uint8(1); level <= 40; level++ {
-		id := 40000 + uint32(level)
-		refs[id] = monster.MonsterRef{RefObjID: id, Codename: fmt.Sprintf("MOB_THIEF_NPC_%04d", level),
-			TidWord: 0x00c6, TypeID4: 2, Level: level, MaxHP: 200, BodyRadius: 5, WalkSpeed: 16, RunSpeed: 50}
+		for family, prefix := range []string{"MOB_THIEF", "MOB_EU_THIEF", "MOB_HUNTER", "MOB_EU_HUNTER"} {
+			id := 40000 + uint32(family)*100 + uint32(level)
+			refs[id] = monster.MonsterRef{RefObjID: id, Codename: fmt.Sprintf("%s_NPC_%04d", prefix, level),
+				TidWord: 0x00c6, TypeID4: uint8(2 + family/2), Level: level, MaxHP: 200,
+				BodyRadius: 5, WalkSpeed: 16, RunSpeed: 50}
+		}
 	}
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(refs, []monster.NestRow{{
 		SpawnPoint: target.Spawn, RetailEvidence: true, MaxCount: 1,
@@ -69,6 +74,54 @@ func caravanFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character) 
 		t.Fatal(err)
 	}
 	return rt, clock, c
+}
+
+/*
+================
+TestCaravanUsesTraderContinentAndJobFamily
+
+60BF30 passes the trader to 60BDD0, while placing each bandit around the
+vehicle. Both imported tactics families must reach the population owner.
+================
+*/
+func TestCaravanUsesTraderContinentAndJobFamily(t *testing.T) {
+	for _, job := range []uint8{domain.JobTrader, domain.JobThief, domain.JobHunter} {
+		for _, western := range []bool{false, true} {
+			rt, clock, c := caravanFixture(t)
+			c.Job.Type = job
+			vehicle := simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960}
+			player := vehicle
+			prefix := "MOB_"
+			if western {
+				player.RegionID = 24900
+				prefix += "EU_"
+			}
+			flags := uint32(542)
+			if job == domain.JobTrader {
+				prefix += "THIEF_"
+			} else {
+				prefix += "HUNTER_"
+				flags = 666
+			}
+			rideCaravanTo(rt, c, player)
+			if err := rt.spawnCaravanBandits(testDivision, c, vehicle, clock.Now().UnixMilli()); err != nil {
+				t.Fatal(err)
+			}
+			count := 0
+			for _, actor := range rt.Monsters.InstancesInRegions(testDivision, []uint16{vehicle.RegionID}) {
+				if !actor.ThiefMonster() && !actor.HunterMonster() {
+					continue
+				}
+				count++
+				if !strings.HasPrefix(actor.Ref.Codename, prefix) || actor.Nest.NativeTacticsFlags != flags {
+					t.Fatalf("job %d west %v: wrong bandit %+v", job, western, actor)
+				}
+			}
+			if count == 0 {
+				t.Fatalf("job %d west %v spawned no bandits", job, western)
+			}
+		}
+	}
 }
 
 /*
@@ -156,5 +209,54 @@ func TestEmptiedTransportLeavesTheCaravanRegistry(t *testing.T) {
 	rt.advanceCaravans(clock.Now().UnixMilli())
 	if rt.caravans.Len() != 0 || len(caravanBandits(rt, caravanBattlefield)) != 0 {
 		t.Fatal("an emptied transport kept its caravan or drew bandits")
+	}
+}
+
+/*
+================
+TestCaravanRejectsMissingContinentEvidence
+
+An unknown reference region cannot silently borrow CHINA's bandit table.
+================
+*/
+func TestCaravanRejectsMissingContinentEvidence(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	field := simulation.Spawn{RegionID: 1, X: 960, Y: 20, Z: 960}
+	rideCaravanTo(rt, c, field)
+	if err := rt.spawnCaravanBandits(testDivision, c, field, clock.Now().UnixMilli()); err == nil {
+		t.Fatal("unknown region silently selected a bandit family")
+	}
+	if len(caravanBandits(rt, field.RegionID)) != 0 {
+		t.Fatal("unknown region spawned Chinese bandits")
+	}
+}
+
+/*
+================
+TestCaravanReferenceDrawFailureDoesNotSpawn
+
+The reference selection draw is fallible in the port. A failed draw must
+stop before heading, rarity and population mutation, not choose bucket zero.
+================
+*/
+func TestCaravanReferenceDrawFailureDoesNotSpawn(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	field := simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960}
+	rideCaravanTo(rt, c, field)
+	want := errors.New("reference entropy unavailable")
+	draws := 0
+	rt.CaravanRoll = func() (uint32, error) {
+		draws++
+		// Two count draws, tactics parity, two level draws, then reference.
+		if draws == 6 {
+			return 0, want
+		}
+		return 50, nil
+	}
+	if err := rt.spawnCaravanBandits(testDivision, c, field, clock.Now().UnixMilli()); !errors.Is(err, want) {
+		t.Fatalf("draw failure = %v, want %v", err, want)
+	}
+	if draws != 6 || len(caravanBandits(rt, field.RegionID)) != 0 {
+		t.Fatalf("failed reference draw continued: draws=%d", draws)
 	}
 }

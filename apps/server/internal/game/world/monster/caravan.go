@@ -61,7 +61,9 @@ func loadCaravanTactics(data []byte) map[uint32]SummonTactics {
 	}
 	out := make(map[uint32]SummonTactics, len(doc.Tactics))
 	for key, c := range doc.Tactics {
-		if fmt.Sprint(c.ID) != key || c.ID < 2001 || c.ID > 2014 || c.SightRange < 0 || c.ChampionID != 0 {
+		thief := c.ID >= 2001 && c.ID <= 2004
+		hunter := c.ID >= 2011 && c.ID <= 2014
+		if fmt.Sprint(c.ID) != key || (!thief && !hunter) || c.SightRange < 0 || c.ChampionID != 0 {
 			panic("invalid caravan tactics row " + key)
 		}
 		// The same projection the summon factory uses: ChangeTarget is the

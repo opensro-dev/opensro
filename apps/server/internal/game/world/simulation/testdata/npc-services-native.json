@@ -1,0 +1,1967 @@
+{
+  "binary_sha256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
+  "interval": [
+    5006566,
+    5011635
+  ],
+  "interval_sha256": "0aa584c1e682547c12ab267fadb9b22bbcfe5ce3dfac138b6156c43f5faf3d99",
+  "scope": "Native codename chains in service mode 0; no inherited refdata options or gacha binding. CRT strstr, CompareStringA, lstrlenA, service insertion and refdata lookup are explicit boundaries.",
+  "add_service_sites": [
+    5006719,
+    5006733,
+    5007235,
+    5007485,
+    5007699,
+    5007713,
+    5007963,
+    5007977,
+    5008055,
+    5008101,
+    5008115,
+    5008225,
+    5008439,
+    5008653,
+    5008731,
+    5009213,
+    5009391,
+    5009405,
+    5009691,
+    5009977,
+    5009991,
+    5010277,
+    5010291,
+    5010577,
+    5010863,
+    5010945,
+    5010991,
+    5011037,
+    5011083,
+    5011156,
+    5011451
+  ],
+  "cases": [
+    {
+      "codename": "",
+      "options": []
+    },
+    {
+      "codename": "NPC_BATTLE_ARENA_EXCHANGER",
+      "options": [
+        34
+      ]
+    },
+    {
+      "codename": "NPC_BATTLE_ARENA_MANAGER",
+      "options": [
+        33
+      ]
+    },
+    {
+      "codename": "NPC_BATTLE_ARENA_MANAGER_NPC_BATTLE_ARENA_EXCHANGER",
+      "options": [
+        33
+      ]
+    },
+    {
+      "codename": "NPC_CA_ARMOR",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "NPC_CA_FORTRESS_BATTLEAIDE1",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "NPC_CA_FORTRESS_BATTLEAIDE2",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "NPC_CA_FORTRESS_MANAGER1",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "NPC_CA_FORTRESS_MANAGER2",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "NPC_CA_FORTRESS_OFFICIAL",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "NPC_CA_FORTRESS_SMITH1",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "NPC_CA_FORTRESS_SMITH2",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "NPC_CA_FORTRESS_TRAINER1",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "NPC_CA_FORTRESS_TRAINER2",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "NPC_CA_GUILD",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "NPC_CA_HORSE",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "NPC_CA_HUNTER",
+      "options": [
+        22
+      ]
+    },
+    {
+      "codename": "NPC_CA_MERCHANT",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "NPC_CA_SMITH",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "NPC_CA_SPECIAL",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "NPC_CH_ARMOR",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "NPC_CH_DOCTOR",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "NPC_CH_FORTRESS_BATTLEAIDE1",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "NPC_CH_FORTRESS_BATTLEAIDE2",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "NPC_CH_FORTRESS_MANAGER1",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "NPC_CH_FORTRESS_MANAGER2",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "NPC_CH_FORTRESS_OFFICIAL",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "NPC_CH_FORTRESS_SMITH1",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "NPC_CH_FORTRESS_SMITH2",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "NPC_CH_FORTRESS_TRAINER1",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "NPC_CH_FORTRESS_TRAINER2",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "NPC_CH_GACHA_MACHINE",
+      "options": []
+    },
+    {
+      "codename": "NPC_CH_GACHA_OPERATOR",
+      "options": [
+        18
+      ]
+    },
+    {
+      "codename": "NPC_CH_GENARAL_SP",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "NPC_CH_GENARAL_SW",
+      "options": [
+        14,
+        22
+      ]
+    },
+    {
+      "codename": "NPC_CH_HORSE",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "NPC_CH_POTION",
+      "options": []
+    },
+    {
+      "codename": "NPC_CH_SMITH",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "NPC_CH_SMITH_NPC_CH_ARMOR_NPC_WC_GUILD",
+      "options": [
+        1,
+        4,
+        15,
+        32
+      ]
+    },
+    {
+      "codename": "NPC_CH_SOLDIER_EM1",
+      "options": [
+        30
+      ]
+    },
+    {
+      "codename": "NPC_CH_SPECIAL2",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "NPC_EU_ADVICE3",
+      "options": [
+        30
+      ]
+    },
+    {
+      "codename": "NPC_EU_ARMOR",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "NPC_EU_FORTRESS_BATTLEAIDE",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "NPC_EU_FORTRESS_MANAGER",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "NPC_EU_FORTRESS_OFFICIAL",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "NPC_EU_FORTRESS_SMITH",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "NPC_EU_FORTRESS_TRAINER",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "NPC_EU_GUILD",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "NPC_EU_HORSE",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "NPC_EU_HUNTER",
+      "options": [
+        22
+      ]
+    },
+    {
+      "codename": "NPC_EU_MERCHANT",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "NPC_EU_SMITH",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "NPC_EU_SPECIAL",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "NPC_FWORLD_RECALL_PARTY",
+      "options": [
+        39
+      ]
+    },
+    {
+      "codename": "NPC_INS_EXIT_TELEPORT",
+      "options": [
+        41
+      ]
+    },
+    {
+      "codename": "NPC_KT_ARMOR",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "NPC_KT_DESIGNER",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "NPC_KT_FORTRESS_BATTLEAIDE",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "NPC_KT_FORTRESS_MANAGER",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "NPC_KT_FORTRESS_OFFICIAL",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "NPC_KT_FORTRESS_SMITH",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "NPC_KT_FORTRESS_TRAINER",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "NPC_KT_GUILD",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "NPC_KT_HORSE",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "NPC_KT_MINISTER",
+      "options": [
+        14,
+        22
+      ]
+    },
+    {
+      "codename": "NPC_KT_SMITH",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "NPC_OPEN_MARKET_JUEL",
+      "options": [
+        35
+      ]
+    },
+    {
+      "codename": "NPC_RM_SPECIAL",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "NPC_SD_GUILD_AGENT",
+      "options": []
+    },
+    {
+      "codename": "NPC_SD_GUILD_AGENT2",
+      "options": []
+    },
+    {
+      "codename": "NPC_SD_GUILD_AGENT3",
+      "options": []
+    },
+    {
+      "codename": "NPC_SD_M_AREA_ARMOR",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "NPC_SD_M_AREA_GUILD",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "NPC_SD_M_AREA_HORSE",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "NPC_SD_M_AREA_HUNTER",
+      "options": [
+        22
+      ]
+    },
+    {
+      "codename": "NPC_SD_M_AREA_MERCHANT",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "NPC_SD_M_AREA_SMITH",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "NPC_SD_M_AREA_SPECIAL",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "NPC_SD_M_AREA_SPECIAL2",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "NPC_SD_M_AREA_SPECIAL3",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "NPC_SD_M_AREA_WAREHOUSE",
+      "options": [
+        1,
+        3
+      ]
+    },
+    {
+      "codename": "NPC_SD_THIEF_AGENT_CHANGER",
+      "options": []
+    },
+    {
+      "codename": "NPC_SD_T_AREA_ARMOR",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "NPC_SD_T_AREA_GUILD2",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "NPC_SD_T_AREA_SMITH",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "NPC_SD_T_AREA_THIEF",
+      "options": [
+        21
+      ]
+    },
+    {
+      "codename": "NPC_SD_T_AREA_WAREHOUSE2",
+      "options": [
+        1,
+        3
+      ]
+    },
+    {
+      "codename": "NPC_SIEGE_DUNGEON_TELEPORT",
+      "options": [
+        40
+      ]
+    },
+    {
+      "codename": "NPC_TD_THIEF_BUY",
+      "options": [
+        12,
+        13
+      ]
+    },
+    {
+      "codename": "NPC_TD_THIEF_SELL",
+      "options": [
+        21
+      ]
+    },
+    {
+      "codename": "NPC_TK_SPECIAL",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "NPC_WC_ARMOR",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "NPC_WC_DOCTOR",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "NPC_WC_FORTRESS_BATTLEAIDE1",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "NPC_WC_FORTRESS_BATTLEAIDE2",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "NPC_WC_FORTRESS_MANAGER1",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "NPC_WC_FORTRESS_MANAGER2",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "NPC_WC_FORTRESS_OFFICIAL",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "NPC_WC_FORTRESS_SMITH1",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "NPC_WC_FORTRESS_SMITH2",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "NPC_WC_FORTRESS_TRAINER1",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "NPC_WC_FORTRESS_TRAINER2",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "NPC_WC_GENARAL_SW",
+      "options": [
+        14,
+        22
+      ]
+    },
+    {
+      "codename": "NPC_WC_GUILD",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "NPC_WC_HORSE",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "NPC_WC_SMITH",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "NPC_WC_SPECIAL2",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_BATTLE_ARENA_EXCHANGER_SUFFIX",
+      "options": [
+        34
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_BATTLE_ARENA_MANAGER_SUFFIX",
+      "options": [
+        33
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_ARMOR_SUFFIX",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_FORTRESS_BATTLEAIDE1_SUFFIX",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_FORTRESS_BATTLEAIDE2_SUFFIX",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_FORTRESS_MANAGER1_SUFFIX",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_FORTRESS_MANAGER2_SUFFIX",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_FORTRESS_OFFICIAL_SUFFIX",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_FORTRESS_SMITH1_SUFFIX",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_FORTRESS_SMITH2_SUFFIX",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_FORTRESS_TRAINER1_SUFFIX",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_FORTRESS_TRAINER2_SUFFIX",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_GUILD_SUFFIX",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_HORSE_SUFFIX",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_HUNTER_SUFFIX",
+      "options": [
+        22
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_MERCHANT_SUFFIX",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_SMITH_SUFFIX",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CA_SPECIAL_SUFFIX",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_ARMOR_SUFFIX",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_DOCTOR_SUFFIX",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_FORTRESS_BATTLEAIDE1_SUFFIX",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_FORTRESS_BATTLEAIDE2_SUFFIX",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_FORTRESS_MANAGER1_SUFFIX",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_FORTRESS_MANAGER2_SUFFIX",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_FORTRESS_OFFICIAL_SUFFIX",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_FORTRESS_SMITH1_SUFFIX",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_FORTRESS_SMITH2_SUFFIX",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_FORTRESS_TRAINER1_SUFFIX",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_FORTRESS_TRAINER2_SUFFIX",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_GACHA_MACHINE_SUFFIX",
+      "options": []
+    },
+    {
+      "codename": "PREFIX_NPC_CH_GACHA_OPERATOR_SUFFIX",
+      "options": [
+        18
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_GENARAL_SP_SUFFIX",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_GENARAL_SW_SUFFIX",
+      "options": [
+        14,
+        22
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_HORSE_SUFFIX",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_SMITH_SUFFIX",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_SOLDIER_EM1_SUFFIX",
+      "options": [
+        30
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_CH_SPECIAL2_SUFFIX",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_ADVICE3_SUFFIX",
+      "options": [
+        30
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_ARMOR_SUFFIX",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_FORTRESS_BATTLEAIDE_SUFFIX",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_FORTRESS_MANAGER_SUFFIX",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_FORTRESS_OFFICIAL_SUFFIX",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_FORTRESS_SMITH_SUFFIX",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_FORTRESS_TRAINER_SUFFIX",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_GUILD_SUFFIX",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_HORSE_SUFFIX",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_HUNTER_SUFFIX",
+      "options": [
+        22
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_MERCHANT_SUFFIX",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_SMITH_SUFFIX",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_EU_SPECIAL_SUFFIX",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_FWORLD_RECALL_PARTY_SUFFIX",
+      "options": [
+        39
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_INS_EXIT_TELEPORT_SUFFIX",
+      "options": [
+        41
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_ARMOR_SUFFIX",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_DESIGNER_SUFFIX",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_FORTRESS_BATTLEAIDE_SUFFIX",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_FORTRESS_MANAGER_SUFFIX",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_FORTRESS_OFFICIAL_SUFFIX",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_FORTRESS_SMITH_SUFFIX",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_FORTRESS_TRAINER_SUFFIX",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_GUILD_SUFFIX",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_HORSE_SUFFIX",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_MINISTER_SUFFIX",
+      "options": [
+        14,
+        22
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_KT_SMITH_SUFFIX",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_OPEN_MARKET_JUEL_SUFFIX",
+      "options": [
+        35
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_RM_SPECIAL_SUFFIX",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_GUILD_AGENT2_SUFFIX",
+      "options": []
+    },
+    {
+      "codename": "PREFIX_NPC_SD_GUILD_AGENT3_SUFFIX",
+      "options": []
+    },
+    {
+      "codename": "PREFIX_NPC_SD_GUILD_AGENT_SUFFIX",
+      "options": []
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_ARMOR_SUFFIX",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_GUILD_SUFFIX",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_HORSE_SUFFIX",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_HUNTER_SUFFIX",
+      "options": [
+        22
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_MERCHANT_SUFFIX",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_SMITH_SUFFIX",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_SPECIAL2_SUFFIX",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_SPECIAL3_SUFFIX",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_SPECIAL_SUFFIX",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_M_AREA_WAREHOUSE_SUFFIX",
+      "options": [
+        1,
+        3
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_THIEF_AGENT_CHANGER_SUFFIX",
+      "options": []
+    },
+    {
+      "codename": "PREFIX_NPC_SD_T_AREA_ARMOR_SUFFIX",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_T_AREA_GUILD2_SUFFIX",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_T_AREA_SMITH_SUFFIX",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_T_AREA_THIEF_SUFFIX",
+      "options": [
+        21
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SD_T_AREA_WAREHOUSE2_SUFFIX",
+      "options": [
+        1,
+        3
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_SIEGE_DUNGEON_TELEPORT_SUFFIX",
+      "options": []
+    },
+    {
+      "codename": "PREFIX_NPC_TD_THIEF_BUY_SUFFIX",
+      "options": [
+        12,
+        13
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_TD_THIEF_SELL_SUFFIX",
+      "options": [
+        21
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_TK_SPECIAL_SUFFIX",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_ARMOR_SUFFIX",
+      "options": [
+        4
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_DOCTOR_SUFFIX",
+      "options": [
+        20
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_FORTRESS_BATTLEAIDE1_SUFFIX",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_FORTRESS_BATTLEAIDE2_SUFFIX",
+      "options": [
+        1,
+        25
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_FORTRESS_MANAGER1_SUFFIX",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_FORTRESS_MANAGER2_SUFFIX",
+      "options": [
+        23
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_FORTRESS_OFFICIAL_SUFFIX",
+      "options": [
+        1,
+        24
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_FORTRESS_SMITH1_SUFFIX",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_FORTRESS_SMITH2_SUFFIX",
+      "options": [
+        4,
+        26
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_FORTRESS_TRAINER1_SUFFIX",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_FORTRESS_TRAINER2_SUFFIX",
+      "options": [
+        27
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_GENARAL_SW_SUFFIX",
+      "options": [
+        14,
+        22
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_GUILD_SUFFIX",
+      "options": [
+        1,
+        15
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_HORSE_SUFFIX",
+      "options": [
+        1,
+        11
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_SMITH_SUFFIX",
+      "options": [
+        4,
+        32
+      ]
+    },
+    {
+      "codename": "PREFIX_NPC_WC_SPECIAL2_SUFFIX",
+      "options": [
+        12
+      ]
+    },
+    {
+      "codename": "PREFIX_STRUCTURE_GATE_PULLEY_BJ_01_SUFFIX",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "PREFIX_STRUCTURE_GATE_PULLEY_BJ_02_SUFFIX",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "PREFIX_STRUCTURE_GATE_PULLEY_HT_01_SUFFIX",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "PREFIX_STRUCTURE_GATE_PULLEY_HT_02_SUFFIX",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "PREFIX_STRUCTURE_GATE_PULLEY_HT_03_SUFFIX",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "PREFIX_STRUCTURE_GATE_PULLEY_JA_01_SUFFIX",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "PREFIX_STRUCTURE_GATE_PULLEY_JA_02_SUFFIX",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "PREFIX_STRUCTURE_GATE_PULLEY_JA_03_SUFFIX",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "PREFIX_WAREHOUSE_SUFFIX",
+      "options": [
+        1,
+        3
+      ]
+    },
+    {
+      "codename": "PREFIX_warehouse_SUFFIX",
+      "options": [
+        1,
+        3
+      ]
+    },
+    {
+      "codename": "STRUCTURE_GATE_PULLEY_BJ_01",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "STRUCTURE_GATE_PULLEY_BJ_02",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "STRUCTURE_GATE_PULLEY_HT_01",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "STRUCTURE_GATE_PULLEY_HT_02",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "STRUCTURE_GATE_PULLEY_HT_03",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "STRUCTURE_GATE_PULLEY_JA_01",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "STRUCTURE_GATE_PULLEY_JA_02",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "STRUCTURE_GATE_PULLEY_JA_03",
+      "options": [
+        31
+      ]
+    },
+    {
+      "codename": "WAREHOUSE",
+      "options": [
+        1,
+        3
+      ]
+    },
+    {
+      "codename": "npc_battle_arena_exchanger",
+      "options": []
+    },
+    {
+      "codename": "npc_battle_arena_manager",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_armor",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_fortress_battleaide1",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_fortress_battleaide2",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_fortress_manager1",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_fortress_manager2",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_fortress_official",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_fortress_smith1",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_fortress_smith2",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_fortress_trainer1",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_fortress_trainer2",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_guild",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_horse",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_hunter",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_merchant",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_smith",
+      "options": []
+    },
+    {
+      "codename": "npc_ca_special",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_armor",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_doctor",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_fortress_battleaide1",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_fortress_battleaide2",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_fortress_manager1",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_fortress_manager2",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_fortress_official",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_fortress_smith1",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_fortress_smith2",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_fortress_trainer1",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_fortress_trainer2",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_gacha_machine",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_gacha_operator",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_genaral_sp",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_genaral_sw",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_horse",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_smith",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_soldier_em1",
+      "options": []
+    },
+    {
+      "codename": "npc_ch_special2",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_advice3",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_armor",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_fortress_battleaide",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_fortress_manager",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_fortress_official",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_fortress_smith",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_fortress_trainer",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_guild",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_horse",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_hunter",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_merchant",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_smith",
+      "options": []
+    },
+    {
+      "codename": "npc_eu_special",
+      "options": []
+    },
+    {
+      "codename": "npc_fworld_recall_party",
+      "options": []
+    },
+    {
+      "codename": "npc_ins_exit_teleport",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_armor",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_designer",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_fortress_battleaide",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_fortress_manager",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_fortress_official",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_fortress_smith",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_fortress_trainer",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_guild",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_horse",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_minister",
+      "options": []
+    },
+    {
+      "codename": "npc_kt_smith",
+      "options": []
+    },
+    {
+      "codename": "npc_open_market_juel",
+      "options": []
+    },
+    {
+      "codename": "npc_rm_special",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_guild_agent",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_guild_agent2",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_guild_agent3",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_armor",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_guild",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_horse",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_hunter",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_merchant",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_smith",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_special",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_special2",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_special3",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_m_area_warehouse",
+      "options": [
+        1,
+        3
+      ]
+    },
+    {
+      "codename": "npc_sd_t_area_armor",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_t_area_guild2",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_t_area_smith",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_t_area_thief",
+      "options": []
+    },
+    {
+      "codename": "npc_sd_t_area_warehouse2",
+      "options": [
+        1,
+        3
+      ]
+    },
+    {
+      "codename": "npc_sd_thief_agent_changer",
+      "options": []
+    },
+    {
+      "codename": "npc_siege_dungeon_teleport",
+      "options": [
+        40
+      ]
+    },
+    {
+      "codename": "npc_td_thief_buy",
+      "options": []
+    },
+    {
+      "codename": "npc_td_thief_sell",
+      "options": []
+    },
+    {
+      "codename": "npc_tk_special",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_armor",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_doctor",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_fortress_battleaide1",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_fortress_battleaide2",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_fortress_manager1",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_fortress_manager2",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_fortress_official",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_fortress_smith1",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_fortress_smith2",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_fortress_trainer1",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_fortress_trainer2",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_genaral_sw",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_guild",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_horse",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_smith",
+      "options": []
+    },
+    {
+      "codename": "npc_wc_special2",
+      "options": []
+    },
+    {
+      "codename": "structure_gate_pulley_bj_01",
+      "options": []
+    },
+    {
+      "codename": "structure_gate_pulley_bj_02",
+      "options": []
+    },
+    {
+      "codename": "structure_gate_pulley_ht_01",
+      "options": []
+    },
+    {
+      "codename": "structure_gate_pulley_ht_02",
+      "options": []
+    },
+    {
+      "codename": "structure_gate_pulley_ht_03",
+      "options": []
+    },
+    {
+      "codename": "structure_gate_pulley_ja_01",
+      "options": []
+    },
+    {
+      "codename": "structure_gate_pulley_ja_02",
+      "options": []
+    },
+    {
+      "codename": "structure_gate_pulley_ja_03",
+      "options": []
+    },
+    {
+      "codename": "warehouse",
+      "options": [
+        1,
+        3
+      ]
+    }
+  ]
+}

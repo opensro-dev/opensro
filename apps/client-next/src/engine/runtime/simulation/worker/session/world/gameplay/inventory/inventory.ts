@@ -51,6 +51,9 @@ import {
 import { decodeInventoryItem } from "@/engine/foundation/gameplay/inventory-item";
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+
+const NPC_SHOP_CAPABILITY = 0x1;
+const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
 /*
 ================
 createInventory
@@ -996,12 +999,16 @@ dropGold
 openShop
 ================
 		*/
-		openShop( gid: number, now: number ) {
+		openShop( gid: number, now: number, capabilities = NPC_SHOP_CAPABILITY ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
 			commerceInteger( gid, 0xffffffff, 1 );
 			const payload = new Uint8Array( 8 ), v = new DataView( payload.buffer );
 			v.setUint32( 0, gid, true );
-			v.setUint32( 4, 1, true );
+			// 5DA414..5DA426: the shop row selects special trade when granted.
+			const mask = capabilities & NPC_SPECIAL_TRADE_CAPABILITY ?
+				NPC_SPECIAL_TRADE_CAPABILITY :
+				NPC_SHOP_CAPABILITY;
+			v.setUint32( 4, mask, true );
 			const frame = { opcode: 0x7338, payload };
 			send( frame );
 			if ( shop?.npc !== gid ) shop = undefined;
