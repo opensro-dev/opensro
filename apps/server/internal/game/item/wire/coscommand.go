@@ -303,6 +303,9 @@ func EncodeCosRecordCreateBand2(gid, refObjID, hp, mp uint32, status uint8, dead
 		Payload()
 }
 
+// CosBandCapturedMonster is the captured quest monster's COS band.
+const CosBandCapturedMonster = 6
+
 /*
 ================
 CosSpawnBand2
@@ -375,9 +378,14 @@ func EncodeCosSpawnBand2(row CosSpawnBand2) []byte {
 	if row.Band == 3 || row.Band == 4 {
 		w.U16(uint16(len(name))).Bytes(name)
 	}
-	w.U16(uint16(len(ownerName))).Bytes(ownerName).U8(0)
-	if row.Band != 4 {
-		w.U8(row.PvpState)
+	w.U16(uint16(len(ownerName))).Bytes(ownerName)
+	// 854FA0: a captured quest monster (band 6) carries neither the hold
+	// nor the PvP byte; a pickup pet (4) only the hold byte.
+	if row.Band != CosBandCapturedMonster {
+		w.U8(0)
+		if row.Band != 4 {
+			w.U8(row.PvpState)
+		}
 	}
 	return w.U32(row.OwnerGid).U8(row.State).Payload()
 }

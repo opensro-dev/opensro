@@ -263,7 +263,11 @@ type Character struct {
 	// The item use that creates it consumes the ITEM_COS_* row and persists
 	// this identity in the same character transaction; later 0x769E commands
 	// must match this exact GID and never trust a client-proposed vehicle.
-	ActiveCOS       *CharacterCOS    `json:"activeCos,omitempty"`
+	ActiveCOS *CharacterCOS `json:"activeCos,omitempty"`
+	// CapturedCOS is a capture-escort quest's captured monster (TypeID
+	// 1/2/3/6, client 692260): runtime-only, never persisted. The quest
+	// record keeps the capture; a relog either re-summons it or fails it.
+	CapturedCOS     *CharacterCOS    `json:"-"`
 	PetSkillWindows []PetSkillWindow `json:"petSkillWindows,omitempty"`
 	// ParamJobs are the live item parameter jobs (CTJ_CharParamKeeper):
 	// EXP/skill-EXP scroll bonuses with an absolute deadline.

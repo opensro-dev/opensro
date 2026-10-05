@@ -65,6 +65,7 @@ func cloneCharacter(source *Character) *Character {
 	}
 	clone.World = cloneCharacterWorld(source.World)
 	clone.ActiveCOS = CloneCOS(source.ActiveCOS)
+	clone.CapturedCOS = CloneCOS(source.CapturedCOS)
 	clone.PetSkillWindows = cloneSlice(source.PetSkillWindows)
 	clone.ParamJobs = cloneSlice(source.ParamJobs)
 	if source.ItemGroupCooldowns != nil {

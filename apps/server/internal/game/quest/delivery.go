@@ -85,6 +85,13 @@ func (rt *Runtime) AdvanceNpcQuest(c *enterworld.Character, code, npc string) (O
 	if strings.HasPrefix(code, captureSupplyPrefix) {
 		return rt.finishCaptureSupply(c, code, npc)
 	}
+	if base, choice, picked := parseRewardChoiceToken(code); picked {
+		def, ok := rt.Defs.ByCodename(base)
+		if !ok || !questNpcMatches(def, def.EndNpcCodename, npc) {
+			return OpResult{}, fmt.Errorf("quest %s wrong reward choice NPC", code)
+		}
+		return rt.completeRewardChoice(c, def, nil, npc, choice)
+	}
 	base, stage, staged := parseStageToken(code)
 	def, ok := rt.Defs.ByCodename(base)
 	if !ok {
