@@ -9,11 +9,44 @@ caravan_test.go - caravan bandit tactics and the native bandit tables
 package monster
 
 import (
+	"encoding/json"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 )
+
+/*
+================
+TestCaravanTacticsRejectUnboundNumbers
+
+Eight rows alone do not close the native IDs: 2005 must not substitute for
+one of 2001..2004 or 2011..2014, even with otherwise valid controls.
+================
+*/
+func TestCaravanTacticsRejectUnboundNumbers(t *testing.T) {
+	var document struct {
+		Source  string
+		Tactics map[string]TacticsControls
+	}
+	if err := json.Unmarshal(caravanTacticsJSON, &document); err != nil {
+		t.Fatal(err)
+	}
+	row := document.Tactics["2004"]
+	delete(document.Tactics, "2004")
+	row.ID = 2005
+	document.Tactics["2005"] = row
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("unbound tactics number replaced a required native row")
+		}
+	}()
+	loadCaravanTactics(data)
+}
 
 /*
 ================

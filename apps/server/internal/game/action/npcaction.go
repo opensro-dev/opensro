@@ -94,12 +94,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	if !ok {
 		return nil, fmt.Sprintf("gid %d is not a live in-scope NPC", gid)
 	}
-	capabilities := npc.TalkFlags
-	requiredCapability := mask
-	if mask == 0x800 {
-		requiredCapability = simulation.NpcTalkFlagShop
-	}
-	if capabilities&requiredCapability == 0 {
+	if npc.TalkFlags&mask == 0 {
 		return nil, fmt.Sprintf("NPC %s does not grant action mask 0x%X", npc.Codename, mask)
 	}
 	// 510250 runs 4A8E10 before any NPC function; a dialog the client kept
@@ -141,16 +136,20 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 			Opcode:  wire.OpNpcDialog,
 			Payload: wire.EncodeNpcDialogSymbol(npc.BaseSpeechSymbol),
 		}}, ""
-	case simulation.NpcTalkFlagShop, 0x800:
+	case simulation.NpcTalkFlagShop, simulation.NpcTalkFlagSpecialTrade:
+		ack := wire.EncodeNpcInteractionAck(mask)
+		if mask == simulation.NpcTalkFlagSpecialTrade {
+			// Client 75AF59 reads a mode byte after the special-trade mask.
+			// Server 510500 publishes +42405: the ordinary shard mode is 0.
+			ack = append(ack, 0)
+		}
+		frames := []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: ack}}
 		if rt.Commerce != nil {
 			// 510250 sets the shop function state (5); trades check it.
 			rt.Selected.OpenFunction(divisionID, character.Name, gid)
-			return []wire.Frame{rt.shopCatalog(divisionID, character, gid)}, ""
+			frames = append(frames, rt.shopCatalog(divisionID, character, gid))
 		}
-		return []wire.Frame{{
-			Opcode:  wire.OpNpcInteractionAck,
-			Payload: wire.EncodeNpcInteractionAck(mask),
-		}}, ""
+		return frames, ""
 	case simulation.NpcTalkFlagStorage:
 		// The room list (0x72C3) already reached the client; B338 [1][4]
 		// opens it beside the inventory (SetNpcShopVisible( 5 )).

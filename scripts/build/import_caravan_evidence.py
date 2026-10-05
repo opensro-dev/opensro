@@ -40,11 +40,11 @@ TACTICS_FIXED_END = 127
 DIVERSION_BASIS_DATA = 36
 DIVERSION_KEEP_BASIS_DATA = 69
 
-# Caravan_GetContinentZone 60BDD0: strcmp against the region's continent.
+# Caravan_GetContinentZone 60BDD0: CRT_stricmp against the region's continent.
 # Anything else is zone 2 (after a minidump), which holds no bandits.
 ZONE_BY_CONTINENT = {
-	"CHINA": 0, "West_China": 0, "Oasis_Kingdom": 0, "Roc": 0,
-	"Eu": 1, "Am": 1, "Ca": 1, "DELTA": 1, "SD": 1, "KingsValley": 1,
+	"CHINA": 0, "WEST_CHINA": 0, "OASIS_KINGDOM": 0, "ROC": 0,
+	"EU": 1, "AM": 1, "CA": 1, "DELTA": 1, "SD": 1, "KINGSVALLEY": 1,
 }
 OTHER_ZONE = 2
 
@@ -90,7 +90,7 @@ def read_zones(backup):
 		if not fields:
 			raise ValueError("Unreadable _RefRegion row")
 		region = struct.unpack_from("<H", page, at + 4)[0]
-		zone = ZONE_BY_CONTINENT.get(fields[0].decode("ascii"), OTHER_ZONE)
+		zone = ZONE_BY_CONTINENT.get(fields[0].decode("ascii").upper(), OTHER_ZONE)
 		if region in zones and zones[region] != zone:
 			raise ValueError("Conflicting caravan zones")
 		zones[region] = zone

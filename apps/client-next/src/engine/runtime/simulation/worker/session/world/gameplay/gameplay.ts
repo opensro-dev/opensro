@@ -1627,7 +1627,7 @@ state here before a command can claim a native wire conversation.
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||
 					!((targeting.state().targetCapabilities ?? 0) & 1)
 				) throw Error( "Select a merchant first" );
-				return inventory.openShop( command.gid, now );
+				return inventory.openShop( command.gid, now, targeting.state().targetCapabilities ?? 0 );
 			}
 			if ( command.kind === "shop-repair" ) {
 				if ( inventory.state().shop?.npc !== targeting.state().target ) {
@@ -2046,7 +2046,9 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				const fortressNext = fortressPacket( fortress, frame );
 				if ( fortressNext ) {
-					musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );
+					if ( frame.opcode === 0x3887 ) {
+						musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );
+					}
 					fortress = fortressNext;
 					dirty = true;
 				}

@@ -84,7 +84,6 @@ apps/client-next/src/engine/foundation/gameplay/cos-timer.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
 apps/client-next/src/engine/foundation/gameplay/event-environment.ts
 apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
-apps/client-next/src/engine/foundation/gameplay/fortress.ts
 apps/client-next/src/engine/foundation/gameplay/gacha-catalog.ts
 apps/client-next/src/engine/foundation/gameplay/game-options.ts
 apps/client-next/src/engine/foundation/gameplay/gm-command.ts

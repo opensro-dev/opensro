@@ -65,7 +65,13 @@ const (
 	npcServiceLastTalkBit uint8 = 32
 )
 
-// NpcServices is the service set as a bit per option (bit n is option n).
+/*
+================
+NpcServices
+
+The service set as a bit per option (bit n is option n).
+================
+*/
 type NpcServices uint64
 
 /*
@@ -119,7 +125,13 @@ func NpcServiceTalkBit(option uint8) uint32 {
 	return 1 << (option - 1)
 }
 
-// npcServiceArm is one strstr test of a chain and the options it adds.
+/*
+================
+npcServiceArm
+
+One strstr test of a chain and the options it adds.
+================
+*/
 type npcServiceArm struct {
 	part    string
 	options []uint8
@@ -220,8 +232,11 @@ NpcServicesForCodename
 4C6350's codename chains. Two arms are not codename tests and are left to
 their owners: option 0x11 follows the reference data's Magic POP binding
 (CRefData_FindNpcGachaName 4CCB70), and NPC_SIEGE_DUNGEON_TELEPORT (0x28)
-is an exact, case-blind compare. The service-off mode (+0x42404 != 0) that registers nothing and
-poses agents and machines instead never runs a v1.150 shard.
+is an exact, case-blind compare. This projects the ordinary shard mode
+(+0x42404 == 0). The alternate mode still registers the codename services,
+but disables the Magic POP binding/operator, poses certain later agents
+and machines, and removes the GATE_TD teleport service (4C76D4..4C78B1).
+Those alternate-mode effects are outside the v1.150 shard's configuration.
 ================
 */
 func NpcServicesForCodename(codename string) NpcServices {
