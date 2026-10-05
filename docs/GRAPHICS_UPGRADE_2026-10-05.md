@@ -2,8 +2,9 @@
 
 Five shipped stages: anisotropic filtering, the presentation pass (FXAA
 with a typography guard, adaptive sharpen, vibrance/contrast grade, output
-dither), exp2 height fog, water fresnel, garment sheen. The renderer is a
-faithful 2005 D3D9 reconstruction, so every stage here is a deliberate,
+dither), exp2 height fog, water fresnel, garment sheen. A sixth change on
+the asset side ships the world's block textures as authored. The renderer is
+a faithful 2005 D3D9 reconstruction, so every stage here is a deliberate,
 documented deviation - and each one is tuned, or reverted, through the
 named constants in its owning file. Nothing here changes a data format,
 a pipeline variant count or the render-bundle structure.
@@ -113,6 +114,34 @@ Blinn-Phong gloss (`SHEEN_POWER`, `SHEEN_STRENGTH`) against the fixed
 camera forward - exact at the frame centre. DXT1 parts are excluded by
 the format gate, hair cutouts by the opacity gate.
 
+## 6. World object textures shipped as authored GPU blocks
+
+`scripts/build/world/objects/buildTitleSectorObjectResources.mjs`
+
+The world's DDJ material textures are already authored in DXT (BC) block
+form - the 2005 client decompressed them on load and uploaded expanded
+RGBA. The publisher now probes each DDJ's DDS header and ships every
+power-of-two fourCC source (DXT1/DXT3/DXT5) verbatim as an NTX1
+`.texture` container - authored blocks byte-for-byte plus a box-filtered
+mip suffix (`scripts/build/native_texture_mips.py -Manifest`, the same
+encoder the character pipeline already uses). Non-block and non-PoT
+sources keep the converted PNG path unchanged.
+
+For the outdoor title sector: 2,671 of 2,689 material textures qualify
+(1,944 DXT1 + 727 DXT3), 18 stay PNG. The published tree drops from
+219 MB to 135 MB (-38%), the client stops decoding 2,671 images on the
+CPU during world load (the NTX1 route uploads authored blocks directly),
+and VRAM for those textures drops from ~664 MB expanded RGBA8 to
+~129 MB block-compressed. No renderer change: the client's existing
+`.texture` decode route (`world.ts`) admits the containers; materials
+reference the `.texture` public path instead of the `.png`.
+
+The retail look is byte-identical where it matters - the authored blocks
+are the same pixels the 2005 client uploaded - and the mip suffix only
+adds the levels the native minification filter wanted. Revert: the probe
+(`probeBlockTexture`) returning null restores the PNG path for every
+texture.
+
 ## Verification
 
 - `pnpm --filter @sro/client-next verify:quick` (typecheck, ownership,
@@ -125,3 +154,10 @@ the format gate, hair cutouts by the opacity gate.
 - Runtime tests: `tests/runtime/world-environment.test.mjs`,
   `tests/runtime/world-surfaces.test.mjs` PASS - the fog uniform packing
   change broke none of the pinned behaviour.
+- World block textures: one-region rebuild then full outdoor republish,
+  then a four-way audit - every material's `texturePublicPath` exists on
+  disk, every published `.texture` matches the manifest hash, the packs
+  serve the admitted bytes, and
+  `tests/runtime/world-stream.test.mjs` proves the published container
+  decodes to a native `bc1-rgba-unorm` GPU resource with its mip chain
+  through the stream (0 textures left pending).
