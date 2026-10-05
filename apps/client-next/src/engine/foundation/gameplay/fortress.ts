@@ -75,6 +75,7 @@ export interface FortressState {
 	// The last fortress staff answer (fortress-services.ts); the official's
 	// application answers also reach fortressManagerReply.
 	readonly service?: FortressServiceReply;
+	readonly serviceSequence?: number;
 }
 
 /*
@@ -131,7 +132,7 @@ state; null for frames it does not own.
 export function fortressPacket( state: FortressState, frame: WireFrame ): FortressState | null {
 	if ( frame.opcode === FORTRESS_SERVICE_REPLY ) {
 		const service = fortressServiceReply( frame );
-		return service ? { ...state, service } : null;
+		return service ? { ...state, service, serviceSequence: (state.serviceSequence ?? 0) + 1 } : null;
 	}
 	if ( frame.opcode !== OP_FORTRESS_WAR_STATE ) return null;
 	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );

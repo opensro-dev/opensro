@@ -62,6 +62,10 @@ TestTraderQuoteAndPartialSaleUseNativeProfitAndTax
 */
 func TestTraderQuoteAndPartialSaleUseNativeProfitAndTax(t *testing.T) {
 	rt, c := traderFixture(t, false)
+	pool := domain.TradeRewardPool{}
+	rt.deps.(*enterworld.Deps).UpdateTrade = func(_ []*enterworld.Character, _ string, update func(*domain.TradeRewardPool) bool) bool {
+		return update(&pool)
+	}
 	if err := rt.SetCommerceTax(testDivision, 2010, 20, 53, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -76,6 +80,9 @@ func TestTraderQuoteAndPartialSaleUseNativeProfitAndTax(t *testing.T) {
 	if goldOf(c) != 5178 || c.Job.Exp != 10 || c.Job.WeeklyReward != 17 || c.MissionInventory[1].StackCount != 1 || len(c.Buyback) != 0 {
 		t.Fatalf("sale %+v character %+v", out, c)
 	}
+	if pool != (domain.TradeRewardPool{Hunters: 17}) {
+		t.Fatalf("global pool %+v", pool)
+	}
 }
 
 /*
@@ -85,6 +92,10 @@ TestThiefQuoteRoundsTheWholeStolenQuantity
 */
 func TestThiefQuoteRoundsTheWholeStolenQuantity(t *testing.T) {
 	rt, c := traderFixture(t, true)
+	pool := domain.TradeRewardPool{}
+	rt.deps.(*enterworld.Deps).UpdateTrade = func(_ []*enterworld.Character, _ string, update func(*domain.TradeRewardPool) bool) bool {
+		return update(&pool)
+	}
 	c.MissionInventory[1].TradeOwner = "Victim"
 	row := c.MissionInventory[1]
 	row.Slot = 0
@@ -104,6 +115,9 @@ func TestThiefQuoteRoundsTheWholeStolenQuantity(t *testing.T) {
 	result := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeCosShopSell, CosGID: c.ActiveCOS.GID, NpcGID: 17, SourceSlot: 0, Quantity: 3})
 	if goldOf(c) != 5227 || c.Job.Exp != 121 || len(c.ActiveCOS.Container.Rows) != 0 || len(c.Buyback) != 0 {
 		t.Fatalf("thief sale gold=%d exp=%d rows=%+v response=%+v", goldOf(c), c.Job.Exp, c.ActiveCOS.Container.Rows, result)
+	}
+	if pool != (domain.TradeRewardPool{Thieves: 22}) {
+		t.Fatalf("global pool %+v", pool)
 	}
 }
 

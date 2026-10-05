@@ -136,7 +136,7 @@ import { createCosHud } from "./hud/cos-hud";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
-import { createFortressWarHud } from "./hud/fortress-war-hud";
+import { createFortressWarHud, createFortressScheduleHud, FORTRESS_SCHEDULE_ROWS } from "./hud/fortress-war-hud";
 import { createUnionHud } from "./hud/union-hud";
 import { createExchangeHud } from "./hud/exchange-hud";
 import {
@@ -474,6 +474,7 @@ const BUG_REPLAY_OPTION = "option-bug-replay";
 const SKIN_PANEL = "Skin change";
 // CIFFortressWarApplyWnd, opened by the fortress official's answer.
 const FORTRESS_WAR_PANEL = "Fortress war application";
+const FORTRESS_SCHEDULE_PANEL = "Fortress war schedule";
 // The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
 const GRANT_PANEL = "Magic option";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
@@ -670,6 +671,7 @@ export function createUi(
 	const skinHud = createSkinChangeHud();
 	const jobHud = createJobHud();
 	const fortressWarHud = createFortressWarHud();
+	const fortressScheduleHud = createFortressScheduleHud();
 	const unionHud = createUnionHud();
 	const exchangeHud = createExchangeHud();
 	const stallHud = createStallHud();
@@ -1082,6 +1084,7 @@ export function createUi(
 		shopOpenRequest = null;
 		if ( next !== SKIN_PANEL ) skinHud.close();
 		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
+		if ( next !== FORTRESS_SCHEDULE_PANEL ) fortressScheduleHud.close();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
 		blockDialog = null;
@@ -2931,6 +2934,21 @@ export function createUi(
 					cosSlot = -1;
 				}
 			}
+		} else if ( id === "npc-fortress-schedule" ) {
+			const game = view?.gameplay, conversation = game?.npcConversation, state = game?.fortress;
+			const world = state?.worlds.find( row => row.id === (state.worldId & 0xffff) );
+			const fortress = state?.fortresses.find( row => row.code === world?.code );
+			if ( conversation?.phase === "menu" && fortress ) {
+				fortressScheduleHud.request( conversation.gid, state?.serviceSequence ?? 0 );
+				sendGameplay( { kind: "fortress-schedule", gid: conversation.gid, fortress: fortress.id } );
+			}
+		} else if ( id === "fortress-schedule-close" ) {
+			setPanel( "" );
+		} else if ( id === "fortress-schedule-prev" || id === "fortress-schedule-next" ) {
+			fortressScheduleHud.page(
+				id === "fortress-schedule-prev" ? -1 : 1,
+				view?.gameplay?.fortress?.service?.applicants?.length ?? 0
+			);
 		} else if ( id === "npc-fortress-war" ) {
 			// 5D8930 action 0x34 row 1: 0x71E1 subtype 6 asks for the status.
 			const conversation = view.gameplay?.npcConversation;
@@ -5232,6 +5250,18 @@ export function createUi(
 				dirty = true;
 			}
 			// The official's answer opens or refreshes the application window.
+			fortressScheduleHud.observe( next.gameplay?.fortress, next.gameplay?.target ?? undefined );
+			if ( fortressScheduleHud.isOpen() && panel !== FORTRESS_SCHEDULE_PANEL && canLeavePanel() ) {
+				setPanel( FORTRESS_SCHEDULE_PANEL );
+				dirty = true;
+			}
+			if (
+				panel === FORTRESS_SCHEDULE_PANEL &&
+				(!fortressScheduleHud.isOpen() || next.gameplay?.npcConversation?.phase !== "menu")
+			) {
+				setPanel( "" );
+				dirty = true;
+			}
 			fortressWarHud.observe( next.gameplay?.fortressApplication?.sequence );
 			if ( fortressWarHud.npc() !== null && panel !== FORTRESS_WAR_PANEL && canLeavePanel() ) {
 				setPanel( FORTRESS_WAR_PANEL );
@@ -10899,6 +10929,7 @@ export function createUi(
 						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4),
 						canFortressOfficial: !!(capabilities & 0x800000),
+						canFortressManager: !!(capabilities & 0x400000),
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [
@@ -11147,6 +11178,88 @@ export function createUi(
 						authoredText( { ...money, color: shown.color }, px, py, shown.text );
 					}
 					endWindow( admission, "service:Storage" );
+				}
+				if (
+					panel === FORTRESS_SCHEDULE_PANEL && fortressScheduleHud.isOpen() &&
+					hudData?.windows.iffortressbusiness && hudData.windows.iffortressbusinessslot &&
+					hudData.root.GDR_FORTRESS_BUSINESS
+				) {
+					const admission = beginWindow(), root = hudData.root.GDR_FORTRESS_BUSINESS;
+					const layout = hudData.windows.iffortressbusiness, slots = hudData.windows.iffortressbusinessslot;
+					const [px, py] = windowOrigin( FORTRESS_SCHEDULE_PANEL, [
+						Math.max( 0, (w - root.rect[2]) / 2 ),
+						Math.max( 0, (h - root.rect[3]) / 2 ),
+						root.rect[2],
+						root.rect[3]
+					] );
+					nativeFrame( root, px, py, hudCopy( root.text ), "fortress-schedule-close" );
+					nativePage( layout, px, py, [ 520, 521, 550, 551, 552, 553, 554 ] );
+					for ( const [id, width] of [ [ 550, 146 ], [ 551, 48 ], [ 552, 96 ] ] as const ) {
+						const node = Object.values( layout ).find( row => row.id === id );
+						if ( node ) {
+							authoredLabeledButton(
+								{ ...node, rect: [ node.rect[0], node.rect[1], width, 20 ] },
+								px,
+								py,
+								"fortress-schedule-head:" + id,
+								hudCopy( node.text ),
+								true
+							);
+						}
+					}
+					const reply = game?.fortress?.service;
+					for (
+						const [index, name] of [
+							"GDR_FORTRESS_BUSINESS_PREWAR_EDIT",
+							"GDR_FORTRESS_BUSINESS_NEXTWAR_EDIT"
+						].entries()
+					) {
+						const node = layout[name], date = reply?.schedules?.[index];
+						if ( node && date?.[0] ) {
+							const weekday = [ "SUN", "MON", "TUS", "WED", "THU", "FRI", "SAT" ][date[2] ?? 0];
+							authoredText(
+								node,
+								px,
+								py,
+								fortressWarFormat( hudCopy( "UIIT_STT_FORT_MANAGER_WAR_SCHEDULE_TIME" ), [
+									date[0],
+									date[1] ?? 0,
+									date[3] ?? 0,
+									hudCopy( "UIIT_STT_FORT_MANAGER_WAR_SCHEDULE_" + weekday ),
+									date[4] ?? 0,
+									date[5] ?? 0
+								] )
+							);
+						}
+					}
+					const applicants = reply?.applicants ?? [], top = fortressScheduleHud.offset();
+					for ( const [index, guild] of applicants.slice( top, top + FORTRESS_SCHEDULE_ROWS ).entries() ) {
+						const lx = px + 26, ly = py + 268 + index * 25;
+						image( [ lx, ly, 290, 25 ], ROOT + "interface/guild/gil_bar02_deselect.png" );
+						for (
+							const [id, value] of [ [ 10, guild.name ], [ 11, String( guild.level ) ], [
+								12,
+								hudCopy(
+									guild.side === 0 ?
+										"UIIT_CTL_FORT_OFFICAL_OCCUPYAPPLY" :
+										"UIIT_CTL_FORT_OFFICAL_UNIONAPPLY"
+								)
+							] ] as const
+						) {
+							const node = Object.values( slots ).find( row => row.id === id );
+							if ( node ) authoredText( node, lx, ly, value );
+						}
+					}
+					button( "fortress-schedule-prev", "<", px + 260, py + 222, 28, top === 0 );
+					button(
+						"fortress-schedule-next",
+						">",
+						px + 292,
+						py + 222,
+						28,
+						top + FORTRESS_SCHEDULE_ROWS >= applicants.length
+					);
+					endWindow( admission, "service:" + FORTRESS_SCHEDULE_PANEL );
 				}
 				const fortressWar = panel === FORTRESS_WAR_PANEL ? fortressWarView() : null;
 				if (

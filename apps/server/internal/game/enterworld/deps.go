@@ -9,6 +9,7 @@ package enterworld
 
 import (
 	"fmt"
+	"opensro.online/server/internal/domain"
 	"strings"
 	"time"
 
@@ -114,6 +115,7 @@ type Deps struct {
 	MutateCharacters func(characters []*Character, label string, mutate func())
 	UpdateCharacter  func(character *Character, label string, update func() bool) bool
 	UpdateCharacters func(characters []*Character, label string, update func() bool) bool
+	UpdateTrade      func(characters []*Character, label string, update func(*domain.TradeRewardPool) bool) bool
 	ReadCharacter    func(divisionID string, read func())
 
 	SystemMessages    func(character *Character) interface{}
@@ -232,6 +234,24 @@ func (d *Deps) UpdateMany(characters []*Character, label string, update func() b
 		return changed
 	}
 	return update()
+}
+
+/*
+================
+SettleTrade
+
+Production supplies the shard pool transaction. The in-memory fallback is
+for isolated gameplay fixtures, which do not run a durable authority.
+================
+*/
+func (d *Deps) SettleTrade(characters []*Character, label string, update func(*domain.TradeRewardPool) bool) bool {
+	if d.UpdateTrade != nil {
+		return d.UpdateTrade(characters, label, update)
+	}
+	return d.UpdateMany(characters, label, func() bool {
+		pool := domain.TradeRewardPool{}
+		return update(&pool)
+	})
 }
 
 // Read routes mutable character reads through the authority read door.
@@ -353,6 +373,7 @@ func (d *Deps) Validate() error {
 	require("MutateCharacters", d.MutateCharacters == nil)
 	require("UpdateCharacter", d.UpdateCharacter == nil)
 	require("UpdateCharacters", d.UpdateCharacters == nil)
+	require("UpdateTrade", d.UpdateTrade == nil)
 	require("ReadCharacter", d.ReadCharacter == nil)
 	require("Letters", d.Letters == nil)
 	require("Guilds", d.Guilds == nil)

@@ -233,7 +233,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	// generic code covers requests the retail client cannot compose.
 	refusal := wire.ErrCodeInvalidRequest
 	roster := rt.commerceRoster(division, c)
-	committed := rt.deps.UpdateMany(roster.members, "shop-transaction", func() bool {
+	committed := rt.deps.SettleTrade(roster.members, "shop-transaction", func(pool *domain.TradeRewardPool) bool {
 		if c.DeletePending {
 			return false
 		}
@@ -253,6 +253,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		var response []byte
 		var payouts []tradePayout
 		var weeklyCredit uint64
+		settledPool := *pool
 		buyback, nextID := c.Buyback, c.BuybackNext
 		switch q.MovementType {
 		case wire.MoveTypeShopBuy:
@@ -359,6 +360,11 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				}
 				if profit > 0 {
 					weeklyCredit = credit
+					// 465220 routes the same ten-percent contribution to the
+					// shard's hunter pool for traders or thief pool for thieves.
+					if !settledPool.Credit(c.Job.Type, int64(float64(credit)*0.1)) {
+						return false
+					}
 				}
 				credit = uint64(payouts[0].Gold)
 			}
@@ -422,6 +428,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		if weeklyCredit > 0 && c.Job.Type == domain.JobTrader {
 			c.Job.WeeklyReward = commerce.AddWeeklyTradeReward(c.Job.WeeklyReward, int32(float64(weeklyCredit)*0.1))
 		}
+		*pool = settledPool
 		result = OpResult{Frames: frames, Broadcast: broadcasts, Recipients: recipients}
 		return true
 	})
