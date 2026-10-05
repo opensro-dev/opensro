@@ -568,7 +568,12 @@ reuse gate as manual activation. Recovery completion is server-owned.
 		// 561E57..561E6B tests the visible stall control, including the owner
 		// editing a closed stall and a visitor. Naming and network are separate windows.
 		const stallVisible = inventory.stallPhase() === "owner" || inventory.stallPhase() === "visitor";
-		if ( stallVisible || autoPotionItemMallOpen || returnScroll || inventory.state().shop || storage.state() ) {
+		// 69B040 reads the active interaction latch, not retained shop data.
+		// The catalog survives close/release/despawn so the same merchant can reopen.
+		const conversation = npcConversation.state();
+		const shopActive = conversation.phase !== "closed" &&
+			conversation.gid === targeting.state().target && inventory.state().shop?.npc === conversation.gid;
+		if ( stallVisible || autoPotionItemMallOpen || returnScroll || shopActive || storage.state() ) {
 			const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, ITEM_INTERACTION_REFUSAL );
 			if ( notice ) api.notice( notice );
 			return;

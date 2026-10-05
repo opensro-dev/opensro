@@ -71,3 +71,30 @@ consumption/reconnect capture. It records the remaining oracle boundaries and
 the existing beta refill profile explicitly. No additional runtime defect was
 found. Whole-program machine equivalence and a live original-client/server
 capture are not claimed.
+
+
+## Shop-close hotfix (2026-10-06)
+
+A subsequent player report exposed a lifecycle gap in the previous verification:
+the automatic item-use guard treated a retained shop catalog as an active NPC
+interaction. Closing the shop, receiving target release, or despawning its NPC
+left the catalog cached, so later combat kept producing the interaction refusal.
+The guard now requires the catalog's NPC conversation and selected target to
+remain active. PR #193 carries this two-file fix independently of the larger
+parity completion PR.
+
+Three production-worker regression cases fail before the fix and pass after it;
+each first proves that the open shop refuses use, then that the already armed
+retry resumes after closing while the catalog remains cached. A connected
+scratch-character browser capture opens and closes the Samarkand stable shop,
+then receives three successful automatic MP-use replies, disables automation,
+and reconnects. Run `SRO_AUTO_POTION_LIVE=1 SRO_POTION_SHOP_CLOSE=1` with the live
+auto-potion test; select `SRO_POTION_EXPECT_BETA_REFILL=1` only for that server
+profile. The fixture restores the scratch character's position and settings.
+The capture is under `temp/artifacts/auto-potion-connected/incident.json`.
+
+Binary Ninja assembly recheck: 561D50 tests 69B040, which reads active NPC
+interaction byte +794; 69F870 sets that byte separately from the shop UI.
+Retained catalog presence is not the native condition. The encountered helpers
+5DBD40 and 5B4A20 were inspected and named for selected NPC localization and the
+store NPC-name label respectively.

@@ -15,11 +15,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { CLIENT_NEXT_BASE_URL } from "../../../../scripts/lib/probeEndpoints.mjs";
 import { resolveProbeCredentials, resolveProbeDivisionId } from "../../../../scripts/lib/probeSession.mjs";
+import { resetMissionMovementFixture } from "../../../../scripts/lib/missionMovementFixture.mjs";
+import { openProbeAgentSession, readProbeCharacterSpawnFromSession } from "../../../../scripts/lib/probeSession.mjs";
 import { assertCharacterAllowed } from "../../../../scripts/lib/probeCharacter.mjs";
 import { decodeProbeAlphaFrame } from "../../../../scripts/lib/probeTransportProtocol.mjs";
 import { bindPlayableRuntime, waitPlayableWorld } from "./helpers/playable-session.mjs";
 
-const OBSERVED_OPCODES = new Set( [ 0x75bd, 0xb5bd, 0x33a6, 0x7541, 0xb541, 0x3122 ] );
+const OBSERVED_OPCODES = new Set( [ 0x75bd, 0xb5bd, 0x33a6, 0x7541, 0xb541, 0x3122, 0x7338, 0xb338, 0x74b3, 0xb4b3 ] );
 const DOCK_X = [ 180, 400, 615, 835 ];
 const MP_REFERENCE = 11;
 const HP_REFERENCE = 4;
@@ -79,6 +81,8 @@ async function snapshot( page, phase ) {
 			settings: game.autoPotion,
 			timers: game.itemCooldowns,
 			pending: game.inventoryPending,
+			shop: game.shop,
+			conversation: game.npcConversation,
 			vitals: game.vitals,
 			inventory: game.inventory.map( item => ({
 				slot: item.slot,
@@ -115,7 +119,7 @@ test( "automatic requests, receipts, full-gauge consumption, disable and reconne
 	const wire = [];
 	/** @type {{ verdict: string, character: string, samples: object[], errors: string[], failure?: string }} */
 	const report = { verdict: "FAIL", character, samples: [], errors: [] };
-	let original, binding, tracing = false;
+	let original, binding, authority, originalSpawn, tracing = false;
 	page.on( "pageerror", error => report.errors.push( String( error ) ) );
 	page.on( "websocket", socket => {
 		/*
@@ -135,6 +139,22 @@ test( "automatic requests, receipts, full-gauge consumption, disable and reconne
 	} );
 	try {
 		console.log( "[auto-potion] authenticated dock and world admission" );
+		if ( process.env.SRO_POTION_SHOP_CLOSE === "1" ) {
+			authority = await openProbeAgentSession();
+			originalSpawn = await readProbeCharacterSpawnFromSession( authority, character );
+			assert.ok( originalSpawn );
+			await resetMissionMovementFixture( {
+				session: authority,
+				characterName: character,
+				timeoutMs: 30000,
+				fixture: {
+					id: "potion-shop-close",
+					movementMode: 3,
+					start: { regionId: 27500, x: 686.56, y: 180, z: 216.67 },
+					startYawRadians: 0
+				}
+			} );
+		}
 		await boot( page, character );
 		await page.context().tracing.start( { screenshots: true, snapshots: true } );
 		tracing = true;
@@ -150,6 +170,51 @@ test( "automatic requests, receipts, full-gauge consumption, disable and reconne
 			cure: original.cure & 0x7fff
 		};
 		await command( page, { kind: "auto-potion-save", settings: disabled } );
+		if ( process.env.SRO_POTION_SHOP_CLOSE === "1" ) {
+			console.log( "[auto-potion] open and close a real merchant before automatic use" );
+			await page.waitForFunction( () => __playableRuntime.entities().some( row => row.kind === "npc" ), null, {
+				timeout: 15000
+			} );
+			const candidates = await page.evaluate( () => {
+				const pose = __playableRuntime.gameplay().pose;
+				return __playableRuntime.entities().filter( row => row.kind === "npc" ).map( row => ({
+					gid: row.gid,
+					distance: Math.hypot(
+						row.x + ((row.regionId & 255) - (pose.regionId & 255)) * 1920 - pose.x,
+						row.z + ((row.regionId >>> 8) - (pose.regionId >>> 8)) * 1920 - pose.z
+					)
+				}) ).sort( ( a, b ) => a.distance - b.distance ).slice( 0, 8 );
+			} );
+			console.log( "[auto-potion] NPC candidates", JSON.stringify( candidates ) );
+			let opened = false;
+			for ( const npc of candidates ) {
+				await command( page, { kind: "select", gid: npc.gid } );
+				await page.waitForFunction(
+					gid => {
+						const game = __playableRuntime.gameplay();
+						return game.target === gid && !game.targetPending && game.npcConversation?.phase === "menu";
+					},
+					npc.gid,
+					{ timeout: REPLY_TIMEOUT_MS }
+				);
+				if ( await page.evaluate( () => (__playableRuntime.gameplay().targetCapabilities & 1) !== 0 ) ) {
+					await command( page, { kind: "shop-open", gid: npc.gid } );
+					await page.waitForFunction( () => {
+						const game = __playableRuntime.gameplay();
+						return game.shop && !game.inventoryPending;
+					} );
+					opened = true;
+				}
+				await command( page, { kind: "npc-close" } );
+				await page.waitForFunction( () => {
+					const game = __playableRuntime.gameplay();
+					return game.target === 0 && !game.targetPending && game.npcConversation.phase === "closed";
+				} );
+				if ( opened ) break;
+			}
+			assert.ok( opened, "a real merchant catalog was opened" );
+			assert.ok( await page.evaluate( () => __playableRuntime.gameplay().shop ), "closed catalog stays cached" );
+		}
 		const initial = await snapshot( page, "initial" );
 		report.samples.push( initial );
 		const mp = initial.inventory.find( row => row.reference === MP_REFERENCE );
@@ -243,5 +308,18 @@ test( "automatic requests, receipts, full-gauge consumption, disable and reconne
 			)
 		);
 		await browser.close();
+		if ( authority && originalSpawn ) {
+			await resetMissionMovementFixture( {
+				session: authority,
+				characterName: character,
+				timeoutMs: 30000,
+				fixture: {
+					id: "restore-potion-shop-close",
+					movementMode: 3,
+					start: originalSpawn,
+					startYawRadians: originalSpawn.angle / 65535 * Math.PI * 2
+				}
+			} );
+		}
 	}
 } );
