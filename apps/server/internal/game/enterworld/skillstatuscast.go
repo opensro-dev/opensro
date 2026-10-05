@@ -30,8 +30,9 @@ const (
 	// statusCastContinueColumn is ContinueBasicAttack (skilldata column 19).
 	// Axis Quiver authors 1; the combat intent resumes the basic attack
 	// after the skill generically (basicattack.go, 4AEC9E..4AECB3), so the
-	// flag needs nothing from this owner. Any other value is not a flag.
-	statusCastContinueColumn = 19
+	// flag needs nothing from this owner. 4AECA4 tests the byte: any value
+	// from 0 to 255 is the flag or its absence.
+	statusCastContinueColumn = continueBasicAttackColumn
 )
 
 /*
@@ -65,7 +66,7 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 			return SkillThreat{}, false
 		}
 	}
-	if continueAttack := fields[statusCastContinueColumn]; continueAttack != "0" && continueAttack != "1" {
+	if _, ok := textdataByte(fields[statusCastContinueColumn]); !ok {
 		return SkillThreat{}, false
 	}
 	program, err := CompileSkillProgram(fields)

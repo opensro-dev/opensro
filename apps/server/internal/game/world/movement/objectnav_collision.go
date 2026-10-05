@@ -2,6 +2,7 @@ package movement
 
 import (
 	"math"
+	"slices"
 
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -320,7 +321,10 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 		},
 	)
 
-	checked := make(map[objectNavSetKey]struct{}, len(chordSectors)*9)
+	// Nine anchors per crossed sector: a scan of a stack array, not a map
+	// that allocated its buckets on every monster chord (57 MB a minute).
+	var checkedBuf [64]objectNavSetKey
+	checked := checkedBuf[:0]
 	bestT, bestKey := math.Inf(1), math.Inf(1)
 	var rest objectContactPoint
 	found := false
@@ -331,10 +335,10 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 		dx := anchorX - simulation.SectorX(surface.seedRegionID)
 		dz := anchorZ - simulation.SectorY(surface.seedRegionID)
 		key := objectNavSetKey{surface: surface, offset: offsetKey(dx, dz)}
-		if _, alreadyChecked := checked[key]; alreadyChecked {
+		if slices.Contains(checked, key) {
 			return
 		}
-		checked[key] = struct{}{}
+		checked = append(checked, key)
 		set := v.objectNavSetForOffset(surface, dx, dz)
 		if len(set) == 0 {
 			return

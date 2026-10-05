@@ -211,7 +211,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		return OpResult{}, skillCastRefused
 	}
 
-	attacker, loadout, err := rt.playerCombatStats(divisionID, snapshot)
+	attacker, loadout, err := rt.playerAttackStats(divisionID, snapshot, skill)
 	if err != nil {
 		return OpResult{}, skillCastRefused
 	}
@@ -302,7 +302,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 					return false
 				}
 			}
-			rt.startSkillCast(divisionID, character, nowMs)
+			rt.startSkillCast(divisionID, character, skill, nowMs)
 			rt.registerPlayerSkillCooldown(divisionID, character, skill, nowMs)
 			return true
 		}) {
@@ -395,7 +395,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				return false
 			}
 			if release == nil {
-				rt.startSkillCast(divisionID, character, nowMs)
+				rt.startSkillCast(divisionID, character, skill, nowMs)
 			}
 			battleFrames = rt.enterBattleState(divisionID, character, nowMs)
 			if consumeAmmo {
@@ -515,6 +515,14 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if consumeAmmo {
 		actorFrames = append(actorFrames, ammunitionFrames(ammo)...)
 	}
+	// 593832: the attacker's unblocked attempts wear its weapon.
+	var tally wearTally
+	for _, formula := range formulas {
+		tally.note(formula.Blocked, true)
+	}
+	wear := rt.applyEquipmentWear(divisionID, character, tally)
+	actorFrames = append(actorFrames, wear.actor...)
+	broadcastFrames = append(broadcastFrames, wear.public...)
 	// The actor sees the same fatal B245/drop prefix first, then the complete
 	// native progression burst. Peers see only its gid-bearing level-up
 	// presentation; the private complement is retained for the tick-owned
@@ -523,6 +531,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if consumeAmmo {
 		privateFrames = append(ammunitionFrames(ammo), privateFrames...)
 	}
+	privateFrames = append(privateFrames, wear.actor...)
 	if advanced && rootID == 0 {
 		vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(enterworld.ObjectIDForCharacter(character), rt.publishedVitals(divisionID, character))}
 		actorFrames = append(actorFrames, vitals)

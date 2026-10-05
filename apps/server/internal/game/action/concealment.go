@@ -8,9 +8,10 @@ commitCharacterEffect sets body status 6 or 7 and the speed cut. What
 this file adds is who else receives a cast (efr kind 1 recipients) and
 the two ways effects end early:
 
-	event   CSkillManager_RetireEffectsForEventMask (5A16C0): a skill
-	        cast (bit 2, from InitiateSkillCast 59B745) ends every
-	        effect whose skc event mask holds the bit
+	event   CSkillManager_RetireEffectsForEventMask (5A16C0): an
+	        accepted move (bit 1, CGObjChar_HandleMoveCommand 4B0EA0)
+	        or a skill cast (bit 2, from InitiateSkillCast 59B745) ends
+	        every effect whose skc event mask holds the bit
 	damage  CSkillManager_ProcessDamageEffects (5A0B80): a landed or
 	        blocked hit whose att flags share a bit with the effect's
 	        skc damage mask ends it, unless the keep roll holds
@@ -37,6 +38,7 @@ import (
 
 // Event bits of the skc event mask (the second word).
 const (
+	effectEventMove      uint8 = 1 // an accepted move command (4B0EA0)
 	effectEventSkillCast uint8 = 2 // InitiateSkillCast, and a pet's attack command (4D2592)
 	effectEventBerserk   uint8 = 4 // berserk request (515C43)
 )
@@ -189,11 +191,14 @@ func (rt *Runtime) skillDurationRider(division string, caster *enterworld.Charac
 ================
 startSkillCast
 
-InitiateSkillCast's event retirement (59B745), before a fresh cast installs or
-strikes. Basic attacks share this event; the caller holds the character door.
+InitiateSkillCast (59B480) before a fresh cast installs or strikes: the
+caster's walk stops (haltCasterWalk, 59B5F6), then the event retirement
+(59B745). Basic attacks share this event; the caller holds the character
+door.
 ================
 */
-func (rt *Runtime) startSkillCast(division string, c *enterworld.Character, now int64) {
+func (rt *Runtime) startSkillCast(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64) {
+	rt.haltCasterWalk(division, c, skill, now)
 	rt.retireEffectsOnEvent(division, c, effectEventSkillCast, now)
 }
 
@@ -219,6 +224,28 @@ func (rt *Runtime) retireEffectsOnEvent(division string, c *enterworld.Character
 		return
 	}
 	rt.publishEndedEffects(division, c, rt.effects.RetireEvent(division, c.Name, event), now)
+}
+
+/*
+==================
+RetireMoveEffects
+
+The movement event of CGObjChar_HandleMoveCommand (4B0EA0): once a player's
+move is accepted, every effect whose skc event mask holds bit 1 ends. The
+movement runtime calls it after releasing the character lock.
+==================
+*/
+func (rt *Runtime) RetireMoveEffects(division, name string, now int64) {
+	character := rt.findCharacter(division, name)
+	if character == nil {
+		return
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	rt.deps.Update(character, "move-event", func() bool {
+		rt.retireEffectsOnEvent(division, character, effectEventMove, now)
+		return true
+	})
 }
 
 /*

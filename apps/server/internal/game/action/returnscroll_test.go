@@ -57,6 +57,7 @@ func TestReturnBlocksMovementAndSummoningUntilServerCancellation(t *testing.T) {
 	items := testItems()
 	items[ref.Codename] = ref
 	rt.deps.(*enterworld.Deps).Items = testCosSource(items)
+	dressTrader(c)
 	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 22, RefObjID: 3905, Codename: "ITEM_COS_T_DHORSE3", TypeFlags: 0x11ec, StackCount: 1})
 	moves := movement.NewRuntime(rt.deps.(*enterworld.Deps), rt.Worlds)
 	moves.Now = func() time.Time { return time.UnixMilli(clock.NowMs()) }

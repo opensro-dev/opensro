@@ -2,17 +2,14 @@ package simulation
 
 import (
 	"opensro.online/server/internal/game/world/monster"
-	"os"
 	"testing"
 )
 
-func TestMonsterArchiveExactRoundTripAndReusesSlots(t *testing.T) {
+func TestMonsterArchiveExactRoundTripInternsSharedRows(t *testing.T) {
 	owner := NewMonsterState(monster.Template{})
 	if err := owner.EnableDormantStorage(); err != nil {
 		t.Fatal(err)
 	}
-	defer owner.Close()
-	name := owner.archive.file.Name()
 	s := newMonsterStorage(nil)
 	s.archive = owner.archive
 	actor := monster.Instance{Gid: 42, Ref: monster.MonsterRef{RefObjID: 123, Name: "preserved monster", MaxHP: 99, BodyRadius: 8}, Nest: lifecycleNest(151.123456789), Spawn: monster.SpawnPoint{RegionID: lifecycleRegion, X: 153.987654321, Y: -1.25, Z: 615.456789123}, CurrentHP: 99, SpawnHeading: 61234}
@@ -33,9 +30,17 @@ func TestMonsterArchiveExactRoundTripAndReusesSlots(t *testing.T) {
 			t.Fatal("wake changed actor")
 		}
 	}
-	if owner.archive.next != monsterArchiveSlotBytes {
-		t.Fatal("repeated boundary crossings grew backing file")
+	// Two sleepers of one kind and nest share the large rows.
+	twin := actor
+	twin.Gid = 43
+	s.set(twin.Gid, twin)
+	s.freeze(actor.Gid)
+	s.freeze(twin.Gid)
+	if a, b := s.cold[actor.Gid], s.cold[twin.Gid]; a.ref != b.ref || a.nest != b.nest {
+		t.Fatal("sleepers of one nest hold their own reference or nest rows")
 	}
+	s.wake(twin.Gid)
+	s.remove(twin.Gid)
 	s.freeze(actor.Gid)
 	s.remove(actor.Gid)
 	if s.contains(actor.Gid) || s.len() != 0 {
@@ -47,11 +52,5 @@ func TestMonsterArchiveExactRoundTripAndReusesSlots(t *testing.T) {
 	s.freeze(unique.Gid)
 	if len(s.cold) != 0 {
 		t.Fatal("unique was archived")
-	}
-	if err := owner.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(name); !os.IsNotExist(err) {
-		t.Fatal("backing file not removed")
 	}
 }

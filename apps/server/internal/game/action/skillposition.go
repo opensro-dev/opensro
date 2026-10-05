@@ -102,7 +102,7 @@ func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *ent
 			return false
 		}
 		point = plan.point
-		rt.startSkillCast(division, character, now)
+		rt.startSkillCast(division, character, skill, now)
 		rt.commitOffensivePhaseCost(division, character, skill, cost, now, false)
 		rt.commitSkillTravel(key, character, plan)
 		vitals = wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(division, character))}

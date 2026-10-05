@@ -60,6 +60,9 @@ type Config struct {
 	WebhookURL    string
 	ReplayDefault bool
 	MaxBytes      int64
+	// Off is the deployer's explicit "off": remove a stored webhook. A
+	// deploy that names no webhook keeps the stored one (sro-nomad).
+	Off bool
 }
 
 /*
@@ -100,7 +103,9 @@ func LoadConfig(getenv func(string) string) (Config, []string) {
 	config := Config{ReplayDefault: true, MaxBytes: DefaultMaxBytes}
 
 	webhook := strings.TrimSpace(getenv(EnvDiscordWebhook))
-	if webhook != "" {
+	if strings.EqualFold(webhook, "off") {
+		config.Off = true
+	} else if webhook != "" {
 		if ValidWebhookURL(webhook) {
 			config.WebhookURL = webhook
 		} else {

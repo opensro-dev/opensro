@@ -17,6 +17,16 @@ Admission rules:
   - a deposit charges KeepingFee (token 30) per unit. INFERENCE: the column
     is authored per unit (potion 1, a 890-gold sword 21).
 
+The remote warehouse ticket (ITEM_MALL_WAREHOUSE_TICKET, 3/3/13/10) has no
+native rule in either binary: v1.188 49C2B0 case 9 falls through, and the
+v1.150 client only starts cooldown 0x1A on its 0xB04C success
+(CPSMission_OnItemUseResponse0xB5BD). INFERENCE: the ticket opens the
+same room with the player standing in for the NPC. A spent ticket selects
+the player's own gid with its storage function open; the client then
+drives the ordinary 0x72C3 / 0x7338 / 0x706D flow naming that gid, and no
+range applies. Any new selection or release ends the session, exactly as
+it ends an NPC's.
+
 ===========================================================================
 */
 package action
@@ -91,6 +101,9 @@ func (rt *Runtime) storageNpc(divisionID string, character *enterworld.Character
 	if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok || selected != gid {
 		return simulation.NpcDef{}, false
 	}
+	if rt.remoteStorageOpen(divisionID, character, gid) {
+		return simulation.NpcDef{}, true
+	}
 	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
 	return npc, ok && npc.TalkFlags&simulation.NpcTalkFlagStorage != 0
 }
@@ -107,6 +120,31 @@ state, not distance.
 func (rt *Runtime) openStorageNpc(divisionID string, character *enterworld.Character, gid uint32) bool {
 	_, ok := rt.storageNpc(divisionID, character, gid)
 	return ok && rt.Selected.FunctionOpen(divisionID, character.Name, gid)
+}
+
+/*
+================
+openRemoteStorage
+
+A spent warehouse ticket: the player's own gid becomes the selection with
+its storage function open.
+================
+*/
+func (rt *Runtime) openRemoteStorage(divisionID string, character *enterworld.Character) {
+	self := enterworld.ObjectIDForCharacter(character)
+	rt.Selected.Set(divisionID, character.Name, self)
+	rt.Selected.OpenFunction(divisionID, character.Name, self)
+}
+
+/*
+================
+remoteStorageOpen
+
+True when gid is the player's own and a ticket opened its warehouse.
+================
+*/
+func (rt *Runtime) remoteStorageOpen(divisionID string, character *enterworld.Character, gid uint32) bool {
+	return gid == enterworld.ObjectIDForCharacter(character) && rt.Selected.FunctionOpen(divisionID, character.Name, gid)
 }
 
 /*
@@ -132,7 +170,7 @@ func (rt *Runtime) HandleStorageList(divisionID string, character *enterworld.Ch
 	}
 	// INFERENCE: the list request is the storage row's first step, so it
 	// takes the same 4A8E10 range gate as the function request that follows.
-	if !rt.npcWithinHitRange(divisionID, character, npc) {
+	if !rt.remoteStorageOpen(divisionID, character, gid) && !rt.npcWithinHitRange(divisionID, character, npc) {
 		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
 	}
 	storage, err := rt.storageAuthority.AccountStorage(character)

@@ -33,6 +33,7 @@ import {
 	type StorageRoom
 } from "@/engine/foundation/gameplay/storage-room";
 import { createAlchemy } from "./alchemy/alchemy";
+import { REPAIR_ONE_SLOT, REPAIR_RESPONSE_OPCODE, repairRequest } from "@/engine/foundation/gameplay/repair";
 import { createGacha } from "./gacha/gacha";
 import { itemStateDelta } from "@/engine/foundation/gameplay/item-state-delta";
 import { itemSlotFlashKinds } from "@/engine/foundation/ui/item-slot-effects";
@@ -1037,6 +1038,33 @@ buyback
 		},
 		/*
 ================
+repair
+
+0x746F at the shop's smith: one inventory slot, or every item. The answer
+is 0xB46F; each repaired item's durability and the balance ride their own
+packets.
+================
+		*/
+		repair( mode: 1 | 2, slot: number, now: number ) {
+			if ( busy() || !shop || shop.error ) throw Error( "Repair is unavailable" );
+			const frame = repairRequest( shop.npc, mode, mode === REPAIR_ONE_SLOT ? slot : 0 );
+			send( frame );
+			pending = { opcode: REPAIR_RESPONSE_OPCODE, source: slot, npc: shop.npc, deadline: now + 10000 };
+			error = null;
+			return frame;
+		},
+		/*
+================
+holdForDress
+
+A job dress bar (0x3434) holds the suit move's answer for its seconds.
+================
+		*/
+		holdForDress( until: number ) {
+			if ( pending?.opcode === 0xb06d ) pending = { ...pending, deadline: Math.max( pending.deadline, until ) };
+		},
+		/*
+================
 use
 ================
 		*/
@@ -1293,6 +1321,13 @@ receive
 						slots.delete( 7 );
 					}
 				}
+				return true;
+			}
+			if ( op === REPAIR_RESPONSE_OPCODE ) {
+				if ( p[0] === 1 ? p.length !== 1 : p.length !== 2 || p[0] !== 2 ) {
+					throw Error( "Invalid repair result" );
+				}
+				if ( pending?.opcode === REPAIR_RESPONSE_OPCODE ) pending = null;
 				return true;
 			}
 			if ( op !== 0xb06d && op !== 0xb5bd ) {

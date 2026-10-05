@@ -221,6 +221,15 @@ export interface EffectFlight {
 	readonly arrivalResource: string | null;
 	readonly soundEnd: string | null;
 	soundBegin: string | null;
+	// A shot at one target that follows it (stepHomingProjectile): the
+	// target's live socket replaces destination every frame.
+	readonly homing?: {
+		readonly state: import("@/engine/foundation/animation/projectile-time").HomingProjectile;
+		readonly target: number;
+		readonly bone: string | null;
+		readonly offset: readonly [number, number, number];
+		readonly trigger: EffectTrigger;
+	};
 	readonly moving?: {
 		pose: CharacterActor["pose"];
 		previous: number;

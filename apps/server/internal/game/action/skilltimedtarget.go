@@ -97,7 +97,7 @@ func (rt *Runtime) acceptTimedTargetEffect(division string, c, snapshot *enterwo
 		if refusal = code; code != 0 {
 			return false
 		}
-		rt.startSkillCast(division, c, now)
+		rt.startSkillCast(division, c, skill, now)
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, false)
 		return true
 	}) {

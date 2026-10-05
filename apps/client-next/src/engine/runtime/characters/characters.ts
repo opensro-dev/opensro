@@ -424,6 +424,9 @@ export function createCharacterPresentation(
 	let cameraFade: ({ gid: number; time: number; } & CharacterFade) | null = null;
 	let cameraTarget: import("@/engine/contracts/scene").FollowCameraTarget | null = null;
 	const actionClocks = new Map<number, ActionSchedule>();
+	// Action events of a predicted cast (cast-prediction.ts), held until the
+	// server's cast adopts its clock: effects and sounds belong to that cast.
+	const predictedEvents = new Map<number, ReturnType<typeof advanceAction>["events"]>();
 	const deathFinalizes = new Map<number, number>();
 	const nativeMotionUrls = new Map<string, ReadonlyMap<string, string>>();
 	let warmSkills: readonly number[] | undefined, warmBody: string | undefined;
@@ -539,8 +542,8 @@ export function createCharacterPresentation(
 		mallOutfit / mallPreviewState
 		================
 		*/
-		mallOutfit( items: readonly number[] | null ) {
-			mallPreview.request( items );
+		mallOutfit( items: readonly number[] | null, skin: import("./mall-preview").MallSkin | null = null ) {
+			mallPreview.request( items, skin );
 		},
 		/*
 		================
@@ -1447,7 +1450,18 @@ export function createCharacterPresentation(
 				}
 			}
 			const triggers: import("@/engine/contracts/effects").EffectTrigger[] = [];
-			for ( const token of actionClocks.keys() ) if ( !castTokens.has( token ) ) actionClocks.delete( token );
+			// A prediction's clock lives while it is published and until the
+			// server's cast that adopts it takes it over below.
+			const predictionToken = gameplay?.castPrediction?.token;
+			const adopting = new Set( (gameplay?.casts ?? []).map( cast => cast.predictedToken ) );
+			for ( const token of actionClocks.keys() ) {
+				if ( !castTokens.has( token ) && token !== predictionToken && !adopting.has( token ) ) {
+					actionClocks.delete( token );
+				}
+			}
+			for ( const token of predictedEvents.keys() ) {
+				if ( token !== predictionToken && !adopting.has( token ) ) predictedEvents.delete( token );
+			}
 			for ( const [gid, clock] of groundClocks ) {
 				const entity = entitiesByGid.get( gid );
 				if ( !entity ) groundClocks.delete( gid );
@@ -1475,11 +1489,27 @@ export function createCharacterPresentation(
 					berserk: entity.appearanceState?.[2] === 1
 				};
 			}
-			for ( const cast of gameplay?.casts ?? [] ) {
+			// The local press's prediction animates beside the server's casts.
+			const animated = gameplay?.castPrediction ?
+				[ ...(gameplay.casts ?? []), gameplay.castPrediction ] :
+				gameplay?.casts ?? [];
+			for ( const cast of animated ) {
 				if ( cast.resultOnly ) continue;
 				const entity = entitiesByGid.get( cast.caster ), resource = entity ? resourceFor( entity ) : undefined;
 				if ( !entity || !resource ) continue;
 				let clock = actionClocks.get( cast.token );
+				// The server's cast takes over the prediction's running action and
+				// fires the events it held back, so nothing restarts.
+				let adopted: ReturnType<typeof advanceAction>["events"] = [];
+				if ( !clock && cast.predictedToken !== undefined ) {
+					clock = actionClocks.get( cast.predictedToken );
+					if ( clock ) {
+						actionClocks.delete( cast.predictedToken );
+						actionClocks.set( cast.token, clock );
+						adopted = predictedEvents.get( cast.predictedToken ) ?? [];
+						predictedEvents.delete( cast.predictedToken );
+					}
+				}
 				if ( !clock ) {
 					const tables = effects.phases( cast.skill );
 					if ( !tables ) continue;
@@ -1565,7 +1595,16 @@ export function createCharacterPresentation(
 				const cancelledAt = stopAt !== undefined ?
 					seconds + (stopAt - (simulationMs ?? seconds * 1000)) / 1000 :
 					undefined;
-				for ( const event of advanceAction( clock, seconds, shotAt, cancelledAt ).events ) {
+				const events = [ ...adopted, ...advanceAction( clock, seconds, shotAt, cancelledAt ).events ];
+				if ( cast.token === predictionToken ) {
+					predictedEvents.set( cast.token, [ ...(predictedEvents.get( cast.token ) ?? []), ...events ] );
+					actionLayersByActor.set( cast.caster, [
+						...actionLayers( clock, seconds ),
+						...(actionLayersByActor.get( cast.caster ) ?? [])
+					] );
+					continue;
+				}
+				for ( const event of events ) {
 					triggers.push( {
 						cast,
 						...event,
@@ -3319,16 +3358,22 @@ export function createCharacterPresentation(
 			// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
 			// It remains admitted even when no world entity exists for that member.
 			const portraits: CharacterActor[] = [];
-			const mallResource = local && catalog.get( local.refObjId );
-			if ( mallResource && local && gameplay && manifest >= 3 ) {
+			const skin = mallPreview.skin(), localResource = local && catalog.get( local.refObjId );
+			const mallResource = local && catalog.get( skin?.model ?? local.refObjId );
+			if ( mallResource && localResource && local && gameplay && manifest >= 3 ) {
+				// A body of the other sex cannot wear the worn set; 4EFE50 refuses
+				// that change until the armour and avatars are off anyway.
+				const worn = mallResource.codename.includes( "_WOMAN_" ) ===
+					localResource.codename.includes( "_WOMAN_" );
 				portraits.push( ...mallPreview.step(
 					{
 						resource: mallResource,
 						dress,
-						equipment: gameplay.inventory,
-						avatars: local.avatars ?? [],
+						equipment: worn ? gameplay.inventory : [],
+						avatars: worn ? local.avatars ?? [] : [],
 						seconds,
-						source: next.get( local.gid )
+						source: next.get( local.gid ),
+						shape: skin?.shape
 					},
 					resources,
 					renderer
@@ -3446,6 +3491,7 @@ export function createCharacterPresentation(
 			resources.reset();
 			states.clear();
 			actionClocks.clear();
+			predictedEvents.clear();
 			deathFinalizes.clear();
 			displayed.clear();
 			displayedDependencies.clear();
@@ -3504,6 +3550,7 @@ export function createCharacterPresentation(
 			resources.dispose();
 			states.clear();
 			actionClocks.clear();
+			predictedEvents.clear();
 			deathFinalizes.clear();
 			displayed.clear();
 			displayedDependencies.clear();

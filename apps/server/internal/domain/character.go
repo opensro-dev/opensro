@@ -313,6 +313,9 @@ type Character struct {
 	// lane per pet-potion TID4 the v1.150 client sends (4, 5, 7).
 	PetPotionCooldowns [3]int64 `json:"petPotionCooldowns,omitempty"`
 
+	// Job is the job guild membership (v1.188 CJobInfo at CGObjPC+0x1FB4).
+	Job CharacterJob `json:"job,omitzero"`
+
 	// QuickSlots are the persisted CIFUnderBar bindings. The entered-player
 	// HUD-state block replays these records before mission reveal; live changes
 	// arrive through client opcode 0x7541. The list contains at most one
@@ -514,6 +517,32 @@ Capacity comes from admitted companion state, never from a client request.
 type COSContainer struct {
 	Capacity uint8          `json:"capacity"`
 	Rows     []InventoryRow `json:"rows"`
+}
+
+// Job types (v1.150 CICPlayer+0x782; v1.188 CJobInfo_GetJobType).
+const (
+	JobNone   uint8 = 0
+	JobTrader uint8 = 1
+	JobThief  uint8 = 2
+	JobHunter uint8 = 3
+)
+
+/*
+==================
+CharacterJob
+
+A job guild membership: the job type joined at a guild NPC, its grade
+(+0x783, 1 on joining) and experience (+0x18B4), the alias a dressed job
+player shows, and the time before a thief or hunter who withdrew may join
+again (v1.188 CGObjPC_HandleJobLeave70E2's seven-day timed job).
+==================
+*/
+type CharacterJob struct {
+	Type       uint8  `json:"type,omitempty"`
+	Grade      uint8  `json:"grade,omitempty"`
+	Exp        uint32 `json:"exp,omitempty"`
+	Alias      string `json:"alias,omitempty"`
+	RejoinAtMs int64  `json:"rejoinAtMs,omitempty"`
 }
 
 /*

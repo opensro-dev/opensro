@@ -121,6 +121,8 @@ export interface NpcTalkInput {
 	readonly canRecall?: boolean;
 	readonly canStorage?: boolean;
 	readonly canReverseReturn?: boolean;
+	// jobRows are the job guild rows (job-guild.ts jobMenuRows).
+	readonly jobRows?: readonly { readonly id: string; readonly label: string; }[];
 }
 
 /*
@@ -190,7 +192,8 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 							id: "npc-reverse-return:3",
 							label: copy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" )
 						} ] :
-						[])
+						[]),
+					...(input.jobRows ?? [])
 				]),
 			{ id: "npc-talkend", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKEND" ) }
 		];

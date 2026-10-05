@@ -77,7 +77,7 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 			}
 			battleFrames = rt.enterBattleState(division, c, now)
 		}
-		rt.startSkillCast(division, c, now)
+		rt.startSkillCast(division, c, skill, now)
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, false)
 		progression, drops, settlements = rt.settleAreaFatalities(division, c, roster, committed, plans, now)
 		return true

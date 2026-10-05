@@ -12,6 +12,7 @@ import (
 	"math"
 	"time"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
@@ -277,24 +278,7 @@ func (rt *Runtime) rollDroppedEquipmentVariance(ref *enterworld.ItemRef) (uint64
 		bits |= uint64(value&0x1f) << (field * 5)
 	}
 
-	minimum := int64(1)
-	if ref != nil && ref.VarianceIntMin1c0 != nil {
-		minimum = *ref.VarianceIntMin1c0
-	}
-	if minimum < 1 {
-		minimum = 1
-	}
-	maximum := minimum
-	if ref != nil && ref.MaxDurability > maximum {
-		maximum = ref.MaxDurability
-	}
-	delta := maximum - minimum
-	interpolated := int64(float32(delta) * (float32(first) / float32(31)))
-	durability := minimum + interpolated
-	if durability > math.MaxUint32 {
-		durability = math.MaxUint32
-	}
-	return bits, uint32(durability), true
+	return bits, combat.DurabilityFromVariance(ref, first), true
 }
 
 /*

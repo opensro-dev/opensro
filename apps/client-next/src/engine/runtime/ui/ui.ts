@@ -85,6 +85,11 @@ import {
 import { extendedQuickslotOptions, type ExtendedQuickslotOptions } from "@/engine/foundation/ui/extended-quickslot";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import {
+	skillPressFeedback,
+	skillPressFeedbackActive,
+	skillQueueChip
+} from "@/engine/foundation/ui/skill-press-feedback";
+import {
 	masteryTrainingReason,
 	skillMetadataById,
 	skillTrainingReason
@@ -109,6 +114,18 @@ import {
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createCosHud } from "./hud/cos-hud";
+import { createRepairHud } from "./hud/repair-hud";
+import { createSkinChangeHud } from "./hud/skin-change-hud";
+import { createJobHud } from "./hud/job-hud";
+import {
+	JOB_ALIAS_CHECK,
+	JOB_ALIAS_CREATE,
+	jobGuildsOffered,
+	jobMenuRows,
+	noJob
+} from "@/engine/foundation/gameplay/job-guild";
+import { isSkinChangeScroll, skinDraftRange, type SkinDraftKey } from "@/engine/foundation/gameplay/skin-change";
+import { repairAllCost } from "@/engine/foundation/gameplay/repair";
 import { createSlotEffectClock } from "./hud/slot-effects";
 import { itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
 import {
@@ -374,8 +391,13 @@ const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 // The bug reporter (issue #90): its chat command and its Option window row.
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
+const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
 const BUG_REPLAY_OPTION = "option-bug-replay";
 const BUG_REPLAY_LABEL = "Record bug replay";
+// The skin change scroll's window (CIFChangePlayerModel).
+const SKIN_PANEL = "Skin change";
+// The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
+const SKIN_SLIDER_TRAVEL = 85;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
 const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
@@ -563,6 +585,9 @@ export function createUi(
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
+	const repairHud = createRepairHud();
+	const skinHud = createSkinChangeHud();
+	const jobHud = createJobHud();
 	const slotEffects = createSlotEffectClock();
 	const spGauge = createSkillGauge();
 	const skillTraining = createSkillTrainingCache();
@@ -943,6 +968,7 @@ export function createUi(
 			return false;
 		}
 		shopOpenRequest = null;
+		if ( next !== SKIN_PANEL ) skinHud.close();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
 		blockDialog = null;
@@ -1167,6 +1193,14 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			// The skin scroll opens CIFChangePlayerModel; its confirm uses it.
+			if ( item && isSkinChangeScroll( item.typeFlags ) && !command.skin ) {
+				const game = view?.gameplay, local = view?.entities.find( e => e.gid === game?.localGid );
+				if ( !game?.playerModels?.length || !local || !setPanel( SKIN_PANEL ) ) return;
+				skinHud.open( item.slot, game.playerModels, local.refObjId, local.bodyShape ?? 0xff );
+				dirty = true;
+				return;
+			}
 		}
 		commands( { kind: "gameplay", command } );
 	}
@@ -1191,21 +1225,15 @@ export function createUi(
 	================
 	executeSkill
 
-	The learned skill board and both shortcut bars share cooldown admission.
-	The worker and server remain responsible for target and actor eligibility.
+	The learned skill board and both shortcut bars share one press path. The
+	worker decides a cooling-down press (skill-queue.ts: send, hold or deny),
+	so it is forwarded here like any other; the worker and server remain
+	responsible for target and actor eligibility.
 	================
 	*/
 	function executeSkill( id: number ) {
 		const game = view?.gameplay;
 		if ( !game?.skills?.includes( id ) || hud.data()?.tooltipSkills.get( id )?.basicActivity === 0 ) return;
-		if (
-			skillCooldown(
-				game.skillCooldowns ?? [],
-				id,
-				skillMetadataById( game, id )?.cooldownGroup ?? 0,
-				quickslotTime
-			)
-		) return;
 		sendGameplay( { kind: "skill", skillId: id, ...(game.target ? { gid: game.target } : {}) } );
 	}
 	/*
@@ -1602,6 +1630,20 @@ export function createUi(
 				composing = false;
 				dirty = true;
 			}
+			return;
+		}
+		if ( id.startsWith( "npc-job-" ) ) {
+			// 5DA1B0 cases 0x1E, 0x1F and 0x20/0x21: the join and withdrawal
+			// questions and the alias window, for the guild NPC in conversation.
+			const conversation = view.gameplay?.npcConversation, job = Number( id.slice( id.indexOf( ":" ) + 1 ) );
+			if ( !conversation || conversation.phase !== "menu" ) return;
+			if ( id.startsWith( "npc-job-join:" ) ) jobHud.ask( "join", conversation.gid, job );
+			else if ( id.startsWith( "npc-job-withdraw:" ) ) jobHud.ask( "withdraw", conversation.gid, job );
+			else if ( id.startsWith( "npc-job-alias:" ) ) {
+				jobHud.openAlias( conversation.gid, !!view.gameplay?.job?.alias );
+				focusAtEnd( "job-alias-text", "" );
+			}
+			dirty = true;
 			return;
 		}
 		if ( id.startsWith( "npc-reverse-return:" ) ) {
@@ -2392,7 +2434,9 @@ export function createUi(
 		) {
 			// /bug opens the bug reporter (issue #90); it is never sent as chat.
 			const text = chatText.slice( chatTabPrefix( chatTab ).length ).trim().replace( BUG_COMMAND, "" );
-			if ( !bugReport?.open( text ) ) hudMessages.append( BUG_REPORTS_DISABLED );
+			const opened = bugReport ? bugReport.open( text ) : "off";
+			if ( opened === "off" ) hudMessages.append( BUG_REPORTS_DISABLED );
+			else if ( opened === "unavailable" ) hudMessages.append( BUG_REPORTS_UNAVAILABLE );
 			chatText = chatTabPrefix( chatTab );
 			selection = [ chatText.length, chatText.length ];
 			focus = null;
@@ -2547,6 +2591,36 @@ export function createUi(
 					cosSlot = -1;
 				}
 			}
+		} else if ( id === "skin-cancel" ) {
+			setPanel( "" );
+		} else if ( id === "skin-confirm" ) {
+			const open = skinHud.state(), choice = skinHud.choice();
+			if ( open && choice && skinHud.changed() ) {
+				sendGameplay( { kind: "item-use", slot: open.slot, skin: choice } );
+				setPanel( "" );
+			}
+		} else if ( id === "skin:male" || id === "skin:female" ) {
+			skinHud.set( "sex", id === "skin:male" ? 1 : 0 );
+		} else if ( id.startsWith( "skin:" ) ) {
+			const [, key, step] = id.split( ":" ), draft = skinHud.state()?.draft;
+			if ( draft && (key === "figure" || key === "height" || key === "volume") ) {
+				skinHud.set( key, draft[key] + (step === "next" ? 1 : -1) );
+			}
+		} else if ( id.startsWith( "skin-rotate:" ) ) {
+			skinHud.rotate( id === "skin-rotate:left" ? -1 : id === "skin-rotate:right" ? 1 : 0 );
+		} else if ( id.startsWith( "shop-repair:" ) ) {
+			// 5B1C00 arms the repair cursor; 5B2B10 totals the cost (789630)
+			// and asks before 0x746F mode 2, or says nothing needs it.
+			if ( id === "shop-repair:GDR_STORE_BTN_REPAIR" ) repairHud.arm();
+			else {
+				const cost = repairAllCost( view.gameplay?.inventory ?? [] );
+				if ( cost ) repairHud.ask( cost );
+				else hudMessages.append( hudCopy( "UIIT_MSG_STRGERR_THERE_IS_NO_ITEM_TO_REPAIR" ), 0xffffffff );
+			}
+		} else if ( id.startsWith( "slot:" ) && repairHud.armed() ) {
+			// 567290: the armed cursor sends the clicked item (0x746F mode 1).
+			repairHud.disarm();
+			sendGameplay( { kind: "shop-repair", mode: 1, slot: Number( id.slice( 5 ) ) } );
 		} else if ( id.startsWith( "slot:" ) ) {
 			confirmDrop = "";
 			const slot = Number( id.slice( 5 ) );
@@ -2800,6 +2874,16 @@ export function createUi(
 		},
 		/*
 		================
+		skinPreview
+
+		The skin change window's body for the mannequin, or null.
+		================
+		*/
+		skinPreview() {
+			return panel === SKIN_PANEL ? skinHud.preview() : null;
+		},
+		/*
+		================
 		mallPreviewState
 		================
 		*/
@@ -3010,6 +3094,88 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			if ( jobHud.confirm() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "job-confirm-no"
+				) {
+					jobHud.takeConfirm();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "job-confirm-yes"
+				) {
+					const asked = jobHud.takeConfirm();
+					dirty = true;
+					if ( asked && view?.session?.phase === "world" ) {
+						sendGameplay(
+							asked.kind === "join" ?
+								{ kind: "job-join", gid: asked.npc, job: asked.job } :
+								{ kind: "job-withdraw", gid: asked.npc }
+						);
+					}
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			const aliasWindow = jobHud.alias();
+			if ( aliasWindow !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "job-alias-cancel"
+				) {
+					jobHud.closeAlias();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "edit" && event.id === "job-alias-text" ) {
+					jobHud.typeAlias( event.value );
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && (event.id === "job-alias-check" || event.id === "job-alias-ok") ) {
+					// 6461C0 asks whether the name is free (mode 0); 646470 takes it (mode 1).
+					if ( aliasWindow.text && view?.session?.phase === "world" ) {
+						sendGameplay( {
+							kind: "job-alias",
+							gid: aliasWindow.npc,
+							mode: event.id === "job-alias-ok" ? JOB_ALIAS_CREATE : JOB_ALIAS_CHECK,
+							alias: aliasWindow.text
+						} );
+						if ( event.id === "job-alias-ok" ) jobHud.closeAlias();
+					}
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" ) return;
+			}
+			if ( repairHud.confirmCost() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "repair-all-cancel"
+				) {
+					repairHud.takeConfirm();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "repair-all-confirm"
+				) {
+					repairHud.takeConfirm();
+					dirty = true;
+					if ( view?.session?.phase === "world" ) sendGameplay( { kind: "shop-repair", mode: 2, slot: 0 } );
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( repairHud.armed() && event.kind === "key" && event.code === "Escape" ) {
+				repairHud.disarm();
+				dirty = true;
+				return;
 			}
 			if ( cosHud.cleanConfirm() !== null ) {
 				if (
@@ -4508,6 +4674,12 @@ export function createUi(
 				setPanel( "" );
 				dirty = true;
 			}
+			// A warehouse ticket opens the room without the talk menu's click.
+			if ( panel !== "Storage" && next.gameplay?.storage && !view?.gameplay?.storage && canLeavePanel() ) {
+				storagePanel.reset();
+				setPanel( "Storage" );
+				dirty = true;
+			}
 			if ( shopOpenRequest ) {
 				const request = shopOpenRequest, game = next.gameplay;
 				if ( next.session?.phase !== "world" || game?.target !== request.gid ) shopOpenRequest = null;
@@ -4542,7 +4714,8 @@ export function createUi(
 				Math.floor( (next.simulationTimeMs ?? 0) / 100 ) :
 				-1;
 			const slotTick = (next.gameplay?.skillCooldowns?.length || next.gameplay?.itemCooldowns?.length ||
-					next.gameplay?.returnScroll || next.gameplay?.questGathering) ?
+					next.gameplay?.returnScroll || next.gameplay?.questGathering ||
+					skillPressFeedbackActive( next.gameplay, quickslotTime )) ?
 				Math.floor( quickslotTime / 16 ) :
 				-1;
 			if ( slotTick !== quickslotTick ) {
@@ -6935,9 +7108,12 @@ export function createUi(
 					} );
 					blocks.push( r );
 					const icon = iconPath( skill?.icon ?? item?.icon ?? action?.icon );
+					// A held press outlines the slot; a denied one shakes and tints it.
+					const feedback = skill ? skillPressFeedback( game, skill.id, r, full, quickslotTime ) : undefined;
 					if ( icon ) {
 						paths.push( icon );
-						if ( resources.has( icon ) ) rect( r, [ 1, 1, 1, iconAlpha ], icon );
+						const ir: UiRect = feedback?.offsetX ? [ r[0] + feedback.offsetX, r[1], r[2], r[3] ] : r;
+						if ( resources.has( icon ) ) rect( ir, [ 1, 1, 1, iconAlpha ], icon );
 					}
 					const cooldown = skill ?
 						skillCooldown( game?.skillCooldowns ?? [], skill.id, skill.cooldownGroup ?? 0, quickslotTime ) :
@@ -6953,6 +7129,7 @@ export function createUi(
 							full
 						);
 						quads.push( ...timer.filter( q => resources.has( q.texture ) ) );
+						if ( feedback ) quads.push( ...feedback.quads );
 					}
 					if ( item ) {
 						paths.push( ...quickslotTimerPaths() );
@@ -6978,6 +7155,18 @@ export function createUi(
 					);
 					const number = hudData!.bar["GDR_QS_NUMBER_" + (n === 0 ? "M" : n % 10)];
 					if ( number ) authoredImage( number, barX, barY );
+				}
+				// The skill that casts next, over shortcut slot 1 (skill-press-feedback.ts).
+				const slotOne = hudData?.bar.GDR_TMPQS_1;
+				if ( slotOne ) {
+					const chip = skillQueueChip( game, authoredRect( slotOne, barX, barY ), full, quickslotTime );
+					const icon = chip ? iconPath( training.skill( game!.skillQueue!.skill )?.icon ) : undefined;
+					if ( chip && icon ) {
+						paths.push( icon );
+						quads.push( ...chip.under );
+						if ( resources.has( icon ) ) rect( chip.icon, [ 1, 1, 1, chip.alpha ], icon );
+						quads.push( ...chip.over );
+					}
 				}
 				if ( hudData ) {
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!,
@@ -10031,7 +10220,11 @@ export function createUi(
 						prompt: target?.kind === "teleport" ? target.name : "",
 						canRecall: !!(capabilities & 0x40),
 						canReverseReturn: !!(capabilities & 0x20000000),
-						canStorage: !!(capabilities & 4)
+						canStorage: !!(capabilities & 4),
+						jobRows: jobMenuRows( jobGuildsOffered( capabilities ), game.job ?? noJob() ).map( row => ({
+							id: row.id,
+							label: copy( row.symbol )
+						}) )
 					} );
 					npcPanel.geometry( output );
 					quads.push( ...output.quads );
@@ -10107,7 +10300,14 @@ export function createUi(
 					nativeSpin( page.GDR_STORE_SPIN_PAGE!, px, py, "shop-prev", "shop-next", shopPage, pages );
 					// Repair remains a typed gameplay operation; never route its button to buy/sell.
 					for ( const node of [ page.GDR_STORE_BTN_REPAIR!, page.GDR_STORE_BTN_REPAIRALL! ] ) {
-						authoredLabeledButton( node, px, py, "shop-repair:" + node.id, hudCopy( node.text ), true );
+						authoredLabeledButton(
+							node,
+							px,
+							py,
+							"shop-repair:" + node.id,
+							hudCopy( node.text ),
+							!valid || busy
+						);
 					}
 					endWindow( admission, "service:Shop" );
 				}
@@ -10258,6 +10458,83 @@ export function createUi(
 						authoredText( { ...money, color: shown.color }, px, py, shown.text );
 					}
 					endWindow( admission, "service:Storage" );
+				}
+				const skin = skinHud.state();
+				if ( panel === SKIN_PANEL && skin && hudData?.windows.ifchangeplayermodel ) {
+					const admission = beginWindow(),
+						root = hudData.root.GDR_CHANGE_PLAYER_MODEL!,
+						layout = hudData.windows.ifchangeplayermodel,
+						nodes = Object.values( layout ),
+						byName = ( name: string ) => nodes.find( n => n.name === name ),
+						[px, py] = windowOrigin( SKIN_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] );
+					nativeFrame( root, px, py, hudCopy( "UIIT_PAG_CHAR_SKIN_CHANGE" ), "skin-cancel" );
+					// The sex buttons, sliders, rotate and confirm controls are live.
+					nativePage( layout, px, py, [ 17, 18, 31, 32, 33, 34, 35, 41, 42, 43, 71, 72, 73, 100 ] );
+					for (
+						const [id, sex, name] of [ [ "skin:male", 1, "MALE" ], [ "skin:female", 0, "FEMALE" ] ] as const
+					) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_INFO_BTN_" + name );
+						if ( node ) {
+							authoredLabeledButton( node, px, py, id, hudCopy( node.text ), skin.draft.sex === sex );
+						}
+					}
+					const prev = byName( "GDR_SLIDER_CTRL_BTN_PREV" ),
+						next = byName( "GDR_SLIDER_CTRL_BTN_NEXT" ),
+						thumb = byName( "GDR_SLIDER_CTRL_BTN_THUMB" );
+					for ( const key of [ "figure", "height", "volume" ] as const satisfies readonly SkinDraftKey[] ) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_INFO_SLI_" + key.toUpperCase() );
+						if ( !node || !prev || !next || !thumb ) continue;
+						const [min, max] = skinDraftRange( skin.models, skin.draft, key ),
+							value = skin.draft[key],
+							[sx, sy] = authoredRect( node, px, py );
+						authoredImage( node, px, py );
+						authoredButton( prev, sx, sy, "skin:" + key + ":prev", "", value <= min );
+						authoredButton( next, sx, sy, "skin:" + key + ":next", "", value >= max );
+						authoredImage(
+							thumb,
+							sx + (max > min ? (value - min) / (max - min) * SKIN_SLIDER_TRAVEL : 0),
+							sy
+						);
+					}
+					for (
+						const [id, name] of [ [ "skin-rotate:left", "LEFT" ], [ "skin-rotate:reset", "RESET" ], [
+							"skin-rotate:right",
+							"RIGHT"
+						] ] as const
+					) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_VIEW_BTN_" + name );
+						if ( node ) authoredButton( node, px, py, id, "" );
+					}
+					for ( const [id, name] of [ [ "skin-confirm", "OK" ], [ "skin-cancel", "CANCEL" ] ] as const ) {
+						const node = byName( "GDR_CHANGE_PLAYER_MODEL_INFO_BTN_" + name );
+						if ( node ) {
+							authoredLabeledButton(
+								node,
+								px,
+								py,
+								id,
+								hudCopy( node.text ),
+								id === "skin-confirm" && (!skinHud.changed() || !!game?.inventoryPending)
+							);
+						}
+					}
+					const view = byName( "GDR_CHANGE_PLAYER_MODEL_VIEW" ), doll = itemMall.previewGid();
+					if ( view && doll !== undefined ) {
+						quads.push( {
+							doll: { gid: doll, yaw: skin.yaw },
+							texture: "__doll",
+							rect: authoredRect( view, px, py ),
+							uv: [ 0, 0, 1, 1 ],
+							color: white,
+							clip: full
+						} );
+					}
+					endWindow( admission, "service:" + SKIN_PANEL );
 				}
 				if ( panel === "COS inventory" && hudData ) {
 					const admission = beginWindow(),
@@ -10996,6 +11273,22 @@ export function createUi(
 						![ "local-player", "player", "monster", "npc", "cos" ].includes( entity.kind ) ||
 						next.blindHeld && blindableCharacter( entity, game?.localGid )
 					) continue;
+					// 86AB90: the dress bar under the head, 4.8 px a second, shrinking
+					// 0.48 px every 100 ms, in ARGB FFFFEE1F, whether or not the name shows.
+					const progress = entity.actionProgress, clock = next.simulationTimeMs ?? now;
+					if ( progress && clock - progress.startedAtMs < progress.seconds * 1000 ) {
+						const tenths = Math.floor( Math.max( 0, clock - progress.startedAtMs ) / 100 );
+						quads.push( {
+							characterAnchor: entity.gid,
+							occlusion: "none" as const,
+							rect: [ -24, 10, progress.seconds * 4.8 - tenths * 0.48, 2 ],
+							clip: full,
+							uv: [ 0, 0, 1, 1 ],
+							texture: "",
+							color: [ 1, 0xee / 255, 0x1f / 255, 1 ]
+						} );
+						dirty = true;
+					}
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
 					// One decision for the name and every overhead icon: an icon never
 					// shows without its name (name-visibility.ts header).
@@ -12285,6 +12578,136 @@ export function createUi(
 				);
 				button(
 					"recall-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
+			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) jobHud.reset();
+			const jobAsk = jobHud.confirm(), aliasWindow = jobHud.alias();
+			if ( worldVisible && (jobAsk || aliasWindow) ) {
+				// 5D26F0's question boxes (types 4 and 5) and CIFJobAlias.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads(
+						hudCopy(
+							jobAsk ?
+								"UIIT_STT_CONFIRM_BOX" :
+								aliasWindow?.modify ?
+								"UIIT_PAG_ALIAS_MODIFY" :
+								"UIIT_PAG_ALIAS_CREATE"
+						),
+						layout.title,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					),
+					...text.quads(
+						hudCopy(
+							jobAsk ?
+								(jobAsk.kind === "join" ?
+									"UIIT_STT_JOBGUILD_JOIN_WINDOW" :
+									"UIIT_STT_JOBGUILD_WITHD_WINDOW") :
+								aliasWindow?.modify ?
+								"UIIT_STT_ALIAS_MODIFY_WINDOW" :
+								"UIIT_STT_ALIAS_CREATE_WINDOW"
+						),
+						layout.name,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				if ( jobAsk ) {
+					button(
+						"job-confirm-yes",
+						hudCopy( "UIIT_CTL_YES" ),
+						...layout.accept.slice( 0, 3 ) as [number, number, number]
+					);
+					button(
+						"job-confirm-no",
+						hudCopy( "UIIT_CTL_NO" ),
+						...layout.refuse.slice( 0, 3 ) as [number, number, number]
+					);
+				} else if ( aliasWindow ) {
+					const field: UiRect = [ layout.question[0], layout.question[1], layout.question[2], 16 ];
+					controls.push( {
+						id: "job-alias-text",
+						label: hudCopy( "UIIT_STT_ALIAS_CREATE_WINDOW" ),
+						kind: "text",
+						value: aliasWindow.text,
+						rect: field,
+						maxLength: 12
+					} );
+					rect( field, [ 0, 0, 0, .6 ], "", [ 0, 0, 1, 1 ], full );
+					quads.push(
+						...text.quads( aliasWindow.text, field, field, white, {
+							hAlign: 1,
+							vAlign: 1,
+							overflow: "clip"
+						} )
+					);
+					if ( focus === "job-alias-text" && caretVisible ) {
+						const width = text.run( aliasWindow.text ).width;
+						rect(
+							[ field[0] + (field[2] + width) / 2, field[1] + 1, 2, 14 ],
+							white,
+							"",
+							[ 0, 0, 1, 1 ],
+							field
+						);
+					}
+					const [ax, ay, aw] = layout.accept, [rx, ry, rw] = layout.refuse;
+					button( "job-alias-check", hudCopy( "UIIT_CTL_CHECK" ), ax!, ay!, aw! );
+					button( "job-alias-ok", hudCopy( "UIIT_CTL_OK" ), rx!, ry!, rw! );
+					button( "job-alias-cancel", hudCopy( "UIIT_CTL_CANCEL" ), rx! + rw! + 8, ry!, rw! );
+				}
+			}
+			if ( panel !== "Shop" ) repairHud.reset();
+			const repairCost = repairHud.confirmCost();
+			if ( worldVisible && repairCost !== null ) {
+				// 5B2B10 raises box 0x0C: Repair All's question and its total.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads( hudCopy( "UIIT_MSG_MSGBOX_REPAIR_ITEM" ), layout.name, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads( repairCost.toLocaleString( "en-US" ), layout.question, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				button(
+					"repair-all-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"repair-all-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);

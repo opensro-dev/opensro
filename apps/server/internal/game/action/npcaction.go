@@ -86,6 +86,10 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok || selected != gid {
 		return nil, "bound NPC is not the current selected object"
 	}
+	// A warehouse ticket's room (storage.go) opens without an NPC.
+	if mask == simulation.NpcTalkFlagStorage && rt.storageAuthority != nil && rt.remoteStorageOpen(divisionID, character, gid) {
+		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
+	}
 	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
 	if !ok {
 		return nil, fmt.Sprintf("gid %d is not a live in-scope NPC", gid)

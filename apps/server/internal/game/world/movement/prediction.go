@@ -46,6 +46,12 @@ func (rt *Runtime) registerPredictedMovement(hub *transport.Hub) {
 			}
 		} else {
 			result = rt.HandleMove(division, character, p[5:])
+			// 4B0EA0: the accepted move's event retires the mover's
+			// move-cancelled effects (the rider's own move only; a mount
+			// move moves the vehicle).
+			if result.Refusal == nil && result.Result != nil && rt.RetireMoveEffects != nil {
+				rt.RetireMoveEffects(division, character.Name, result.ServerTimeMs)
+			}
 		}
 		for _, frame := range predictionFeedback(result) {
 			if s.Send(frame.Opcode, frame.Payload) != nil {

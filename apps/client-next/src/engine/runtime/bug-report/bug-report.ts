@@ -10,7 +10,10 @@ and the upload (POST /title/bug-report).
 
 The server decides whether reporting exists at all. Until it answers, and
 whenever it says the feature is off, there is no button, no recording and
-/bug declines. The replay preference is the player's when they have set
+/bug declines. A settings read that fails (the Agent restarting during a
+release, a network drop) is retried with backoff, and /bug asks again at
+once: one failed read at page load used to switch reporting off for the
+whole session. The replay preference is the player's when they have set
 it in the Option window; otherwise it follows the server's default.
 
 ===========================================================================
@@ -36,7 +39,9 @@ const MEGABYTE = 1024 * 1024;
 // A report ID inside a whisper or a #bug= link (reportId()).
 const REPORT_ID = /\bBR-\d{6}-\d{4}-[0-9A-F]{4}\b/;
 const WHISPER_CHANNEL = 2;
-const MAX_SEEN_LINES = 256;
+// Waits before asking for the settings again after a failed read.
+const SETTINGS_RETRY_MS = [ 5000, 15000, 30000, 60000 ] as const;
+const PENDING_OPEN_MS = 30000;
 const SAMPLE_MS = 1000;
 // Reading performance.memory makes Chrome total the heap: about 1 ms of a
 // frame. A report needs the heap trend, so every tenth sample carries it.
@@ -111,12 +116,22 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	const journal = createJournal( options.canvas );
 	let lastSampleMs = -Infinity, samples = 0;
 	let settings: ServerSettings | null = null;
+	// "on" and "off" are the server's answer; "unknown" until it gives one.
+	let availability: "unknown" | "off" | "on" = "unknown";
+	// A failed read is asked again from the frame (chat) once performance.now()
+	// passes retryAtMs: timers belong to the clock owners.
+	let settingsLoading = false, settingsRetry = 0, retryAtMs = Infinity;
+	// The text of a /bug made while the settings were unknown: the window
+	// opens with it when they arrive, so the player need not type it again.
+	// It lapses after PENDING_OPEN_MS: a window popping up minutes later, in
+	// the middle of a fight, would be worse than typing /bug again.
+	let pendingOpen: string | null = null, pendingOpenAtMs = 0;
 	let replayEnabled = false;
 	let draft = false;
 	const errors: string[] = [];
-	// Chat lines already examined for a report request, by identity.
-	const seenLines = new Set<string>();
-	let chatPrimed = false;
+	// The newest chat sequence examined for a report request; lines at or
+	// below it are history. null until the first frame primes it.
+	let lastChatSequence: number | null = null;
 	let disposed = false;
 
 	const dialog = createBugReportDialog( {
@@ -125,7 +140,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		saved: () => archive.list(),
 		exportZip: id => archive.exportZip( id ),
 		forget: id => archive.remove( id ),
-		launch: () => open( "" )
+		launch: () => void open( "" )
 	} );
 
 	/*
@@ -188,34 +203,62 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	loadSettings
 	================
 	*/
-	async function loadSettings() {
-		try {
-			const response = await fetch( options.apiBase + ROUTE, {
-				headers: { [RELEASE_PROTOCOL_HEADER]: String( RELEASE_PROTOCOL ) },
-				credentials: "omit",
-				cache: "no-store",
-				redirect: "error",
-				signal: lifetime.signal
-			} );
-			const body = await response.json() as { bugReports?: Partial<ServerSettings>; };
-			const value = body.bugReports;
-			if ( !response.ok || !value?.enabled ) return;
-			settings = {
-				enabled: true,
-				replayDefault: value.replayDefault === true,
-				maxBytes: Number( value.maxBytes ) || 10 * 1024 * 1024,
-				replaySeconds: Number( value.replaySeconds ) || 60
-			};
-		} catch ( failure ) {
-			// No reporter is the safe answer to an Agent that cannot say.
-			if ( !disposed ) note( "Bug report settings unavailable: " + String( failure ) );
+	function loadSettings() {
+		if ( settingsLoading || availability !== "unknown" || disposed ) return;
+		settingsLoading = true;
+		retryAtMs = Infinity;
+		// A promise chain, not an async function: /bug and the frame start it.
+		fetch( options.apiBase + ROUTE, {
+			headers: { [RELEASE_PROTOCOL_HEADER]: String( RELEASE_PROTOCOL ) },
+			credentials: "omit",
+			cache: "no-store",
+			redirect: "error",
+			signal: lifetime.signal
+		} ).then( response =>
+			response.json().then( ( body: { bugReports?: Partial<ServerSettings>; } ) => {
+				if ( !response.ok || !body.bugReports ) throw Error( `HTTP ${response.status}` );
+				adoptSettings( body.bugReports );
+			} )
+		).catch( failure => {
+			// No reporter until the Agent can say, then ask again.
+			if ( disposed ) return;
+			note( "Bug report settings unavailable: " + String( failure ) );
+			const wait = SETTINGS_RETRY_MS[Math.min( settingsRetry++, SETTINGS_RETRY_MS.length - 1 )]!;
+			retryAtMs = performance.now() + wait;
+		} ).finally( () => {
+			settingsLoading = false;
+		} );
+	}
+	/*
+	================
+	adoptSettings
+
+	The server's answer: off for good, or on with its limits.
+	================
+	*/
+	function adoptSettings( value: Partial<ServerSettings> ) {
+		if ( disposed ) return;
+		if ( !value.enabled ) {
+			availability = "off";
+			pendingOpen = null;
 			return;
 		}
-		if ( disposed ) return;
+		settings = {
+			enabled: true,
+			replayDefault: value.replayDefault === true,
+			maxBytes: Number( value.maxBytes ) || 10 * 1024 * 1024,
+			replaySeconds: Number( value.replaySeconds ) || 60
+		};
+		availability = "on";
 		replayEnabled = storedPreference() ?? settings.replayDefault;
 		draft = replayEnabled;
 		dialog.showLauncher( true );
 		followPreference();
+		if ( pendingOpen !== null ) {
+			const text = pendingOpen;
+			pendingOpen = null;
+			if ( performance.now() - pendingOpenAtMs < PENDING_OPEN_MS ) open( text );
+		}
 	}
 
 	/*
@@ -223,16 +266,24 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	open
 	================
 	*/
-	function open( text: string ) {
-		if ( !settings?.enabled ) return false;
-		if ( dialog.isOpen() ) return true;
+	function open( text: string ): "opened" | "off" | "unavailable" {
+		if ( availability === "off" ) return "off";
+		if ( !settings?.enabled ) {
+			// Ask now rather than at the next backoff step, and open when the
+			// answer comes (adoptSettings).
+			pendingOpen = text;
+			pendingOpenAtMs = performance.now();
+			loadSettings();
+			return "unavailable";
+		}
+		if ( dialog.isOpen() ) return "opened";
 		dialog.open( {
 			text,
 			replay: recorder.snapshot(),
 			maxBytes: settings.maxBytes,
 			recording: recorder.running()
 		} );
-		return true;
+		return "opened";
 	}
 
 	/*
@@ -495,15 +546,21 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 
 	Called every frame with the whole chat. Lines present at the first call
 	are history and never trigger a request; after that each new incoming
-	whisper is examined once.
+	whisper is examined once, by its sequence (chat.ts numbers every line).
+	A sequence that went backwards is a new session's chat: its lines start
+	as history again. Nothing is built for lines already examined, where a
+	key string per line per frame used to be. Being the reporter's frame, it
+	also retries a failed settings read once its backoff has passed.
 	================
 	*/
 	function chat( lines: readonly import("@/engine/contracts/gameplay").ChatLine[] ) {
+		const newest = lines.length ? lines[lines.length - 1]!.sequence ?? 0 : 0;
+		// Unprimed, or a sequence that went backwards (a new session's chat):
+		// every line present now is history.
+		const after = lastChatSequence !== null && newest >= lastChatSequence ? lastChatSequence : newest;
+		lastChatSequence = newest;
 		for ( const line of lines ) {
-			const key = `${line.sequence ?? ""}:${line.channel}:${line.name}:${line.text}`;
-			if ( seenLines.has( key ) ) continue;
-			seenLines.add( key );
-			if ( !chatPrimed ) continue;
+			if ( (line.sequence ?? 0) <= after ) continue;
 			journal.record( "chat", {
 				channel: line.channel,
 				name: line.name,
@@ -514,14 +571,11 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			const id = REPORT_ID.exec( line.text )?.[0];
 			if ( id ) offer( id, line.name, false );
 		}
-		chatPrimed = true;
 		const now = performance.now();
+		if ( now >= retryAtMs ) loadSettings();
 		if ( now - lastSampleMs >= SAMPLE_MS ) {
 			lastSampleMs = now;
 			journal.record( "sample", sample() );
-		}
-		if ( seenLines.size > MAX_SEEN_LINES ) {
-			for ( const key of [ ...seenLines ].slice( 0, seenLines.size - MAX_SEEN_LINES ) ) seenLines.delete( key );
 		}
 	}
 
@@ -542,12 +596,12 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		}, failure => note( "Reading saved reports failed: " + String( failure ) ) );
 	}
 
-	void loadSettings();
+	loadSettings();
 	const linked = REPORT_ID.exec( new URLSearchParams( location.hash.slice( 1 ) ).get( "bug" ) ?? "" )?.[0];
 	if ( linked ) offer( linked, "", true );
 
 	return {
-		reportsEnabled: () => settings?.enabled === true,
+		reportsEnabled: () => availability === "on",
 		chat,
 		open,
 		note,
@@ -584,8 +638,12 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		applyReplayDraft() {
 			if ( !settings?.enabled || draft === replayEnabled ) return;
 			replayEnabled = draft;
-			localStorage.setItem( PREFERENCE_KEY, JSON.stringify( { enabled: replayEnabled } ) );
-			void followPreference();
+			try {
+				localStorage.setItem( PREFERENCE_KEY, JSON.stringify( { enabled: replayEnabled } ) );
+			} catch {
+				// Storage refused (private mode): the choice holds for this session.
+			}
+			followPreference();
 		},
 		/*
 		================

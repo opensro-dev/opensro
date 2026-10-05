@@ -155,7 +155,7 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 		if refusal = code; code != 0 {
 			return false
 		}
-		rt.startSkillCast(division, c, now)
+		rt.startSkillCast(division, c, skill, now)
 		installed, ok := rt.commitCharacterEffect(division, c, skill, token, statuseffect.StateActive, true, EffectPresentation{Phase: 1}, now)
 		if !ok {
 			return false
@@ -173,6 +173,7 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 		}
 		return OpResult{DiagnosticRefusal: "party-buff-commit-refused"}
 	}
+	rt.queuePersistentRelease(division, c, token, skill, now)
 	broadcast := append([]wire.Frame(nil), frames...)
 	private := rt.auraStatsFrames(division, c, skill, token)
 	frames = append(frames, private...)

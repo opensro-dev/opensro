@@ -59,6 +59,7 @@ type residentSkill struct {
 	Wall                    unique.Handle[SkillWall]
 	WallBypass              bool
 	Ck                      bool
+	CkChance                uint8
 	Recovery                unique.Handle[SkillRecovery]
 	TimedEffect             unique.Handle[SkillTimedEffect]
 	MonsterSelfEffect       unique.Handle[SkillMonsterSelfEffect]
@@ -159,6 +160,7 @@ func compactSkill(row SkillRow) residentSkill {
 		Wall:                    unique.Make(row.Wall),
 		WallBypass:              row.WallBypass,
 		Ck:                      row.Ck,
+		CkChance:                row.CkChance,
 		Recovery:                unique.Make(row.Recovery),
 		TimedEffect:             unique.Make(row.TimedEffect),
 		MonsterSelfEffect:       unique.Make(row.MonsterSelfEffect),
@@ -261,6 +263,7 @@ func (r residentSkill) value() SkillRow {
 		Wall:                    r.Wall.Value(),
 		WallBypass:              r.WallBypass,
 		Ck:                      r.Ck,
+		CkChance:                r.CkChance,
 		Recovery:                r.Recovery.Value(),
 		TimedEffect:             r.TimedEffect.Value(),
 		MonsterSelfEffect:       r.MonsterSelfEffect.Value(),

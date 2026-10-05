@@ -153,7 +153,7 @@ func (rt *Runtime) releaseTaunt(c tauntCast) (OpResult, skillCastDecision) {
 		if code != 0 {
 			return false
 		}
-		rt.startSkillCast(c.division, c.character, c.now)
+		rt.startSkillCast(c.division, c.character, c.skill, c.now)
 		rt.commitOffensivePhaseCost(c.division, c.character, c.skill, cost, c.now, false)
 		return true
 	}) {

@@ -97,6 +97,13 @@ variable "private_network" {
   default = "0"
 }
 
+# "1" serves /debug/pprof/ on the loopback control listener (sro-nomad
+# deploy -pprof, loopback clusters only).
+variable "transport_pprof" {
+  type    = string
+  default = "0"
+}
+
 variable "allowed_origins" {
   type = string
 }
@@ -273,8 +280,12 @@ job "sro-gameworld-__SHARD_ID__" {
       }
 
       env {
-        # Soft Go-runtime budget; this is not a hard total-process RAM cap.
-        GOMEMLIMIT = "128MiB"
+        # Soft Go-runtime budget: three quarters of the task's memory, the
+        # rest left to non-heap memory. It was a flat 128MiB, below what one
+        # player's world already keeps live (about 100MB of monsters, nav and
+        # references): the collector then ran almost without pause and took
+        # 82% of 3.6 cores with one player online.
+        GOMEMLIMIT = "${floor(var.memory_mb * 3 / 4)}MiB"
         SRO_SHARD_CATALOG_PATH             = var.catalog_path
         SRO_SHARD_ID                       = var.shard_id
         SRO_AGENT_URL_REQUIRE              = "1"
@@ -304,6 +315,7 @@ job "sro-gameworld-__SHARD_ID__" {
         TRANSPORT_KEY_FILE                 = var.transport_key_file
         TRANSPORT_ALLOWED_ORIGINS          = var.allowed_origins
         SRO_TRANSPORT_TLS_ID               = var.transport_tls_id
+        TRANSPORT_PPROF                    = var.transport_pprof
         SRO_RELEASE_ID                     = var.release_id
       }
 

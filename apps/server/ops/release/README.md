@@ -203,6 +203,14 @@ and install it as root-only `/etc/opensro-release/config.json`:
 }
 ```
 
+The in-game bug reporter (`/bug`) is on when root-only
+`/etc/opensro-release/bug-report-webhook` holds one line, a Discord webhook URL
+(a forum channel works: each report opens its own post). Each release passes
+it to `sro-nomad deploy`. A missing file keeps the webhook already stored, and
+the word `off` turns reports off. Changing it needs no stop: the Agent restarts
+itself with the new value. Override the path with `bug_report_webhook` in
+`config.json`.
+
 Webhook URLs and private keys never enter git. Include `/etc/opensro-release`
 in the encrypted host backup. Retain the management token root-only; it is
 used only to issue and revoke the scoped token and never enters the deployer's

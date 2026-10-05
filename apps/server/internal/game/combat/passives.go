@@ -24,6 +24,40 @@ import (
 
 /*
 ==================
+groupRank
+==================
+*/
+type groupRank struct {
+	id    uint32
+	level int64
+}
+
+/*
+==================
+learnedGroupRanks
+
+The highest learned rank of each skill group, by ID. Unresolved IDs are
+skipped (the learn owner's policy). Ranks, not rows: SkillRow is a large
+value, and a map of rows allocated its buckets on every stats projection
+(about 150 MB a minute with one player in combat).
+==================
+*/
+func learnedGroupRanks(c *domain.Character, skills enterworld.SkillDataSource) map[uint32]groupRank {
+	ranks := make(map[uint32]groupRank, len(c.Skills))
+	for _, id := range c.Skills {
+		row, ok := skills.SkillByID(id)
+		if !ok {
+			continue
+		}
+		if previous, exists := ranks[row.Group]; !exists || row.Level > previous.level {
+			ranks[row.Group] = groupRank{id: row.ID, level: row.Level}
+		}
+	}
+	return ranks
+}
+
+/*
+==================
 learnedPassives
 
 Invariant: each currently learned passive rank contributes at most once.
@@ -41,17 +75,7 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 	if skills == nil {
 		return nil, enterworld.SkillParameterValues{}, fmt.Errorf("combat: learned skills require skill references")
 	}
-	current := make(map[uint32]enterworld.SkillRow)
-	for _, id := range c.Skills {
-		row, ok := skills.SkillByID(id)
-		if !ok {
-			continue
-		} // Same unresolved-ID policy as the learn owner.
-		previous, exists := current[row.Group]
-		if !exists || row.Level > previous.Level {
-			current[row.Group] = row
-		}
-	}
+	current := learnedGroupRanks(c, skills)
 	var writes []paramkeeper.Write
 	var source uint32 = 2048
 	var power enterworld.SkillParameterValues
@@ -60,11 +84,11 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 		if !ok {
 			continue
 		}
-		selected, exists := current[row.Group]
-		if !exists || selected.ID != id {
+		if rank, exists := current[row.Group]; !exists || rank.id != id {
 			continue
 		}
 		delete(current, row.Group)
+		selected := row
 		source++ // distinct from parameter and equipment projection identities
 		// 59F0E0: a passive whose reqi the equipment fails contributes
 		// nothing - its setv entries, keeper writes and resistances alike.
@@ -125,26 +149,17 @@ func learnedStatusResistance(c *domain.Character, skills enterworld.SkillDataSou
 	if skills == nil {
 		return out
 	}
-	current := make(map[uint32]enterworld.SkillRow)
+	current := learnedGroupRanks(c, skills)
 	for _, id := range c.Skills {
 		row, ok := skills.SkillByID(id)
 		if !ok {
 			continue
 		}
-		if previous, exists := current[row.Group]; !exists || row.Level > previous.Level {
-			current[row.Group] = row
-		}
-	}
-	for _, id := range c.Skills {
-		row, ok := skills.SkillByID(id)
-		if !ok {
-			continue
-		}
-		selected, exists := current[row.Group]
-		if !exists || selected.ID != id {
+		if rank, exists := current[row.Group]; !exists || rank.id != id {
 			continue
 		}
 		delete(current, row.Group)
+		selected := row
 		rs := selected.PassiveParameters.Real
 		if !selected.PassiveParameters.Pinned || selected.ChainSub || rs.Mask == 0 ||
 			selected.Reqi.Present && ReqiRefusal(c, items, selected.Reqi) != 0 {

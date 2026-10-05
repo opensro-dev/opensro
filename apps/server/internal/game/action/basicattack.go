@@ -60,7 +60,12 @@ func skillActionReach(skill enterworld.SkillRow, loadout combat.Loadout, caster 
 	case skill.ActionRange > 0:
 		reach = float32(skill.ActionRange)
 	case loadout.HasWeapon:
+		// 4AC890 truncates the keeper: the weapon's range plus every ru
+		// an active buff adds (Demon Soul Arrow), else the weapon alone.
 		reach = float32(loadout.ActionRange)
+		if keeper, ok := caster.Param(combat.AttackRangeParameter); ok && keeper > 0 {
+			reach = float32(int32(keeper))
+		}
 	default:
 		reach = defaultUnarmedActionRange
 	}
@@ -750,17 +755,7 @@ func (rt *Runtime) enterBasicAttackRange(
 		return OpResult{}, false
 	}
 	rt.bindResidentRegion(worldKey, nowMs)
-	correction := wire.Frame{
-		Opcode: wire.OpObjectSourceCorrection,
-		Payload: wire.ObjectSourceCorrection{
-			Gid: enterworld.ObjectIDForCharacter(snapshot),
-			Position: wire.Position{
-				RegionID: committed.RegionID,
-				X:        float32(committed.X), Y: float32(committed.Y), Z: float32(committed.Z),
-				Heading: committed.Angle,
-			},
-		}.Encode(),
-	}
+	correction := sourceCorrectionFrame(snapshot, committed)
 	return OpResult{Frames: []wire.Frame{correction}, Broadcast: []wire.Frame{correction}}, true
 }
 

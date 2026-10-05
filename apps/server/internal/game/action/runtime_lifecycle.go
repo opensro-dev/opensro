@@ -58,6 +58,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		}
 		rt.advanceDepartures(nowMs)
 		rt.advanceReturnScrolls(nowMs)
+		rt.advanceJobDresses(nowMs)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
@@ -322,6 +323,7 @@ Release actor-owned runtime state while the division operation lock is held.
 func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.periodicEffects.StopSource(divisionID, characterName)
 	rt.returnCasts.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.jobDresses.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.aggressionActors.Delete(simulation.WorldKey(divisionID, characterName))

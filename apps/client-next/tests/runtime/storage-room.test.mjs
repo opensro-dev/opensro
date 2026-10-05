@@ -99,3 +99,11 @@ test("a refused open releases the room and leaves the notice to the caller", () 
 	assert.equal( handled, false, "the gameplay owner still shows the too-far notice" );
 	assert.equal( owner.state(), null );
 });
+
+test("only the 3/3/13/10 type word is the warehouse ticket", () => {
+	const word = ( t1, t2, t3, t4 ) => (t1 & 7) << 2 | (t2 & 3) << 5 | (t3 & 15) << 7 | (t4 & 31) << 11;
+	assert.equal( room.isWarehouseTicket( word( 3, 3, 13, 10 ) ), true );
+	assert.equal( room.isWarehouseTicket( word( 3, 3, 13, 7 ) ), false ); // the repair hammer
+	assert.equal( room.isWarehouseTicket( word( 3, 3, 12, 10 ) ), false );
+	assert.equal( room.isWarehouseTicket( word( 3, 3, 13, 10 ) | 2 ), false );
+});

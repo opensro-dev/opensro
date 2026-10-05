@@ -114,6 +114,20 @@ func (r *Reader) Bytes(n int) ([]byte, error) {
 	return out, nil
 }
 
+// Str reads a u16 length and that many single-byte characters
+// (CMsgStreamBuffer_ReadAsciiString).
+func (r *Reader) Str() (string, error) {
+	n, err := r.U16()
+	if err != nil {
+		return "", err
+	}
+	raw, err := r.take(int(n))
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // Done reports ErrTrailingBytes when the payload was longer than the layout.
 func (r *Reader) Done() error {
 	if remaining := r.Remaining(); remaining > 0 {
@@ -171,6 +185,12 @@ func (w *Writer) F32(value float32) *Writer {
 func (w *Writer) Bytes(values []byte) *Writer {
 	w.buf = append(w.buf, values...)
 	return w
+}
+
+// Str appends a u16 length and the string's bytes, the shape Reader.Str
+// and the client's ASCII string reader take.
+func (w *Writer) Str(value string) *Writer {
+	return w.U16(uint16(len(value))).Bytes([]byte(value))
 }
 
 // Payload returns the accumulated bytes.

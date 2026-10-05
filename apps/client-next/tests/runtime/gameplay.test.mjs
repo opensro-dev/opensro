@@ -1503,7 +1503,7 @@ test("a ground click during a self skill waits for its action window, not the se
 	assert.equal( sent.length, 1, "the stored click walks when the action window ends" );
 	game.dispose();
 });
-test("a refused targeted command lets the held walk rejoin the server's without a jump", async () => {
+test("a targeted command refused during a server walk never disturbs the walk", async () => {
 	const { createGameplay } = await load( "gameplay" ),
 		sent = [],
 		game = createGameplay( f => sent.push( f ) ),
@@ -1522,18 +1522,26 @@ test("a refused targeted command lets the held walk rejoin the server's without 
 	assert.equal( game.receive( { opcode: 0xb738, payload: walk }, 0 ), true );
 	for ( let now = 16; now <= 1000; now += 16 ) game.step( now, local );
 	game.step( 1000, local );
+	let previous = game.take()?.pose?.x, largest = 0, smallest = Infinity, refused = false;
+	// A server-led walk is one delivery behind the server: the press does not
+	// hold it (movement.ts WalkLead).
 	game.command( { kind: "attack", gid: 8 }, 1000, monster, local );
 	assert.equal( sent.at( -1 ).opcode, 0x72cd );
-	// B245 [2, 0x04]: refused at the press (no MP); the server's run goes on.
-	game.receive( { opcode: 0xb245, payload: Uint8Array.of( 2, 4 ) }, 1100 );
-	let previous = game.take()?.pose?.x ?? 110, largest = 0;
-	for ( let now = 1116; now <= 4016; now += 16 ) {
+	for ( let now = 1016; now <= 4000; now += 16 ) {
+		// B245 [2, 0x04]: refused at the press (no MP); the server's run goes on.
+		if ( now >= 1100 && !refused ) {
+			game.receive( { opcode: 0xb245, payload: Uint8Array.of( 2, 4 ) }, 1100 );
+			refused = true;
+		}
 		game.step( now, local );
 		const x = game.take()?.pose?.x ?? previous;
 		largest = Math.max( largest, Math.abs( x - previous ) );
+		smallest = Math.min( smallest, Math.abs( x - previous ) );
 		previous = x;
 	}
-	assert.ok( largest <= 50 * 1.3 * 16 / 1000 + 1e-6, "the rejoin jumped " + largest );
-	assert.ok( Math.abs( previous - 260 ) < 1e-6, "arrived at " + previous );
+	assert.ok( largest <= 50 * 16 / 1000 + 1e-6, "the walk jumped " + largest );
+	assert.ok( smallest >= 50 * 16 / 1000 - 1e-6, "the walk stalled: " + smallest );
+	game.step( 4016, local );
+	assert.ok( Math.abs( (game.take()?.pose?.x ?? previous) - 260 ) < 1e-6, "arrived at " + previous );
 	game.dispose();
 });

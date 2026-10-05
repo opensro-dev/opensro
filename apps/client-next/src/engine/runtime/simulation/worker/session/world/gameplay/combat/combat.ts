@@ -15,6 +15,7 @@ import {
 } from "@/engine/foundation/gameplay/cast-results";
 import { retireBuffSlots, buffDepartureDurationMs, type BuffSlot } from "@/engine/foundation/gameplay/buff-slots";
 import { createSkillCooldowns } from "@/engine/foundation/gameplay/skill-cooldowns";
+import { createCastPrediction } from "@/engine/foundation/gameplay/cast-prediction";
 import { detectionEffect, huntingMovement, type HuntingPoint } from "@/engine/foundation/gameplay/hunting";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
@@ -39,11 +40,15 @@ optionally retaining immutable reference metadata across reconnect.
 */
 export function createCombat(
 	readEntity: ( gid: number ) => import("@/engine/contracts/world").EntityState | undefined = () => undefined,
-	publishHp: ( event: import("@/engine/contracts/effective-hp").CombatPresentationEvent ) => void = () => {}
+	publishHp: ( event: import("@/engine/contracts/effective-hp").CombatPresentationEvent ) => void = () => {},
+	// One delivery, server to client (skill-queue.ts): a cast-start answer
+	// started its cooldown that long ago.
+	oneWayMs: () => number = () => 0
 ) {
 	let huntingPoints: readonly HuntingPoint[] = [];
 	let attackedName: string | undefined, attackedNameUntil = 0;
 	const cooldowns = createSkillCooldowns();
+	const prediction = createCastPrediction();
 	let localGid = 0;
 	let skillMetadata: readonly SkillMetadata[] = [];
 	let environmentalDamage: import("@/engine/contracts/combat-feedback").EnvironmentalDamage[] = [],
@@ -356,6 +361,48 @@ export function createCombat(
 		},
 		/*
 		================
+		predict
+
+		Start the local press's cast animation now (cast-prediction.ts).
+		================
+		*/
+		predict( skill: number, target: number, now: number, deadlineMs: number ) {
+			if ( localGid ) prediction.predict( localGid, skill, target, now, deadlineMs );
+		},
+		/*
+		================
+		predicting
+		================
+		*/
+		predicting: () => prediction.open(),
+		/*
+		================
+		pressQueued
+
+		The press was queued behind an open command (B2CD arm, count 2): its
+		cast and its cooldown start only when that command ends, so neither
+		its prediction nor its cooldown stand-in holds. True when the plane
+		changed.
+		================
+		*/
+		pressQueued( now: number ): boolean {
+			const standIns = cooldowns.refused();
+			return prediction.cancel( now ) || standIns;
+		},
+		/*
+		================
+		pressed
+
+		A skill press went out: its cooldown stands in from when the press
+		reaches the server (arrivesAtMs) until its answer, or untilMs.
+		================
+		*/
+		pressed( id: number, arrivesAtMs: number, untilMs: number, now: number ) {
+			const metadata = skillMetadata.find( row => row.id === id );
+			if ( metadata ) cooldowns.pressed( metadata, arrivesAtMs, untilMs, now );
+		},
+		/*
+		================
 		skill
 		A skill request carries an optional object target, never client damage.
 		================
@@ -523,6 +570,11 @@ export function createCombat(
 							const first = huntingPoints.find( row => row.token === token );
 							if ( first ) huntingPoints = huntingPoints.filter( row => row !== first );
 						}
+						// One token, one native deco: a cast whose effect attached
+						// under its own token (Crystal Wall's ice, an aura) ends with
+						// it. Kept, it stayed in the cast table for good and its
+						// looping visuals stood around the caster forever.
+						if ( cast ) requestCancellation( cast, now );
 					} else if ( cast ) {
 						requestCancellation( cast, now );
 						if ( cast.caster === localGid ) retireBuff( cast.skill, token, now );
@@ -613,6 +665,9 @@ export function createCombat(
 					throw new Error( "Invalid cast refusal" );
 				}
 				error = `Cast rejected: ${p[1]}`;
+				// The press it answers never started a cooldown or a cast.
+				cooldowns.refused();
+				prediction.cancel( now );
 				return true;
 			}
 			if ( p.length < 19 ) throw Error( "Truncated cast header" );
@@ -644,11 +699,20 @@ export function createCombat(
 					damage = impacts.reduce( ( sum, hit ) => sum + hit.damage, 0 ),
 					fatal = impacts.some( hit => hit.fatal );
 				applyPhase( token, caster, phase );
+				const predictedToken = caster === localGid ? prediction.adopt( caster, skill ) : undefined;
+				// Another local cast that holds the caster (anything but a known
+				// instant row) opened first: the press waits behind it, so its
+				// predicted animation would run early.
+				if (
+					caster === localGid && predictedToken === undefined &&
+					skillMetadata.find( row => row.id === skill )?.haltsWalk !== false
+				) prediction.cancel( now );
 				active = {
 					token,
 					caster,
 					target,
 					skill,
+					...(predictedToken === undefined ? {} : { predictedToken }),
 					damage,
 					fatal,
 					impacts,
@@ -674,7 +738,7 @@ export function createCombat(
 			const metadata = caster === localGid ?
 				skillMetadata.find( r => r.id === v.getUint32( 2, true ) ) :
 				undefined;
-			if ( metadata ) cooldowns.accepted( metadata, now );
+			if ( metadata ) cooldowns.accepted( metadata, now - oneWayMs(), now );
 			// This snapshot is authority for worker decisions. Effective HP is owned
 			// separately by result application and ordered HP checkpoint retirement.
 			error = null;
@@ -747,6 +811,7 @@ export function createCombat(
 		*/
 		step( now: number ) {
 			let changed = cooldowns.step( now );
+			if ( prediction.step( now ) ) changed = true;
 			for ( const [token, at] of guidedArrivals ) {
 				if ( at !== null && now >= at ) {
 					guidedArrivals.delete( token );
@@ -830,6 +895,7 @@ export function createCombat(
 				buffSlots,
 				huntingPoints,
 				skillCooldowns: cooldowns.state(),
+				castPrediction: prediction.state(),
 				attachedEffects,
 				environmentalDamage,
 				casts: publishedCasts ?? (publishedCasts = [ ...casts.values() ]),
@@ -849,6 +915,7 @@ export function createCombat(
 			attackedNameUntil = 0;
 			huntingPoints = [];
 			cooldowns.clear();
+			prediction.clear();
 			temporaryToken = 0;
 			instanceSerial = 0;
 			castOrder.clear();

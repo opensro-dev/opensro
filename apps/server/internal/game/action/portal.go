@@ -60,6 +60,8 @@ type portalCatalog struct {
 	destinations map[uint32]portalDestination
 	sources      map[uint32]uint32
 	links        map[[2]uint32]portalLink
+	// buildings maps a teleport building's codename to its RefObjID.
+	buildings map[string]uint32
 }
 
 // Both tables remain server-owned. The request carries neither a price nor a
@@ -70,7 +72,8 @@ loadPortalCatalog
 ================
 */
 func loadPortalCatalog(dir string) (*portalCatalog, error) {
-	c := &portalCatalog{destinations: map[uint32]portalDestination{}, sources: map[uint32]uint32{}, links: map[[2]uint32]portalLink{}}
+	c := &portalCatalog{destinations: map[uint32]portalDestination{}, sources: map[uint32]uint32{}, links: map[[2]uint32]portalLink{},
+		buildings: map[string]uint32{}}
 	number := func(s string) (uint32, error) { v, e := strconv.ParseUint(s, 10, 32); return uint32(v), e }
 	buildings := map[uint32]bool{}
 	buildingRows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportbuilding.txt"))
@@ -89,6 +92,9 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 			return nil, e
 		}
 		buildings[id] = true
+		if len(r) > 2 {
+			c.buildings[r[2]] = id
+		}
 	}
 	rows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportdata.txt"))
 	if len(rows) == 0 {
@@ -185,6 +191,31 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 		c.links[key] = link
 	}
 	return c, nil
+}
+
+/*
+================
+buildingGateSpawn
+
+The gate spawn of the teleport whose object is the named building: a
+return scroll's Param4 (4A0380 reads it through the reference data's
++0x190 teleport link).
+================
+*/
+func (rt *Runtime) buildingGateSpawn(code string) (simulation.Spawn, bool) {
+	if rt.portals == nil {
+		return simulation.Spawn{}, false
+	}
+	ref, ok := rt.portals.buildings[code]
+	if !ok {
+		return simulation.Spawn{}, false
+	}
+	for _, destination := range rt.portals.destinations {
+		if destination.ref == ref {
+			return destination.spawn, true
+		}
+	}
+	return simulation.Spawn{}, false
 }
 
 /*

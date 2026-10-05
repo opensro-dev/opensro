@@ -44,15 +44,18 @@ barrier.
 ==================
 */
 type Runtime struct {
-	berserkActors       sync.Map // derived expiry index; character store owns state
-	battleActors        sync.Map // battle-state expiry index (battlestate.go)
-	aggressionActors    sync.Map // scheduled counters; character owns aggression entries
-	BerserkRoll         combat.Roll32767
+	berserkActors    sync.Map // derived expiry index; character store owns state
+	battleActors     sync.Map // battle-state expiry index (battlestate.go)
+	aggressionActors sync.Map // scheduled counters; character owns aggression entries
+	BerserkRoll      combat.Roll32767
+	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
+	WearRoll            combat.Roll32767
 	RewardParties       func(division string) []RewardParty
 	NextPartyLootMember func(division, name string) uint32
 	RewardActorPresent  func(division, name string) bool
 	returnGeneration    atomic.Uint64
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
 	criticals           criticalHistory
 	deps                Dependencies
 	Ground              *grounditem.Registry

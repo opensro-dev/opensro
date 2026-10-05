@@ -56,7 +56,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 			if refusal != 0 {
 				return false
 			}
-			rt.startSkillCast(division, c, now)
+			rt.startSkillCast(division, c, skill, now)
 			rt.registerPlayerSkillCooldown(division, c, skill, now)
 			return true
 		}) {
@@ -98,7 +98,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 			return false
 		}
 		if pending == nil {
-			rt.startSkillCast(division, c, now)
+			rt.startSkillCast(division, c, skill, now)
 		}
 		if self {
 			if !rt.requestSelfEffectReplacement(division, c, skill) {

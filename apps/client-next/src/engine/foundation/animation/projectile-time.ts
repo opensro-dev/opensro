@@ -13,6 +13,9 @@ import type { CharacterActor } from "@/engine/contracts/character";
 
 type Position = CharacterActor["pose"];
 
+// Units a homing step may fall short of its end and still arrive.
+const ARRIVAL_EPSILON = 1e-6;
+
 /*
 ================
 ProjectileArc
@@ -110,4 +113,69 @@ export function sampleProjectile(
 			yaw: start.yaw
 		}
 	};
+}
+
+/*
+================
+HomingProjectile
+
+A straight mover that follows its target: where it is now (region-local,
+like any pose) and the scene time it was last stepped.
+================
+*/
+export interface HomingProjectile {
+	position: Position;
+	previous: number;
+}
+
+/*
+================
+stepHomingProjectile
+
+A deliberate deviation from 8D8580, which steps toward the end captured at
+launch: a monster that moves after the cast left the native shot landing
+where the monster had been, flying through or past the body. Here each step
+moves speed * dt toward the target's live end, as Navigation_StepTowards
+does toward its fixed one, and arrives once the remaining distance is at
+most the step: the shot always lands on the body, and exactly when it
+reaches it. now and the returned arrival time are scene seconds.
+================
+*/
+export function stepHomingProjectile(
+	state: HomingProjectile,
+	end: Position,
+	speed: number,
+	now: number
+): ProjectileSample {
+	if ( !Number.isFinite( speed ) || speed < 0 || !Number.isFinite( now ) ) {
+		throw new Error( "Invalid projectile clock" );
+	}
+	const start = state.position;
+	if ( !projectileSpace( start.regionId, end.regionId ) ) {
+		throw new Error( "Projectile requires linked dungeon coordinate projection" );
+	}
+	const dungeon = !!(start.regionId & 0x8000);
+	const dt = Math.max( 0, now - state.previous );
+	state.previous = now;
+	const dx = end.x + (dungeon ? 0 : ((end.regionId & 255) - (start.regionId & 255)) * 1920) - start.x;
+	const dz = end.z + (dungeon ? 0 : ((end.regionId >>> 8) - (start.regionId >>> 8)) * 1920) - start.z;
+	const dy = end.y - start.y;
+	const distance = Math.hypot( dx, dy, dz ), step = speed * dt;
+	// A step that ends exactly on the target arrives despite float rounding.
+	if ( distance <= step + ARRIVAL_EPSILON ) {
+		state.position = { ...end };
+		return { phase: "arrived", at: speed ? now - (step - distance) / speed : now, pose: { ...end } };
+	}
+	const k = step / distance;
+	const x = (dungeon ? 0 : (start.regionId & 255) * 1920) + start.x + dx * k;
+	const z = (dungeon ? 0 : (start.regionId >>> 8) * 1920) + start.z + dz * k;
+	const rx = dungeon ? 0 : Math.floor( x / 1920 ), rz = dungeon ? 0 : Math.floor( z / 1920 );
+	state.position = {
+		regionId: dungeon ? start.regionId : rx | (rz << 8),
+		x: x - rx * 1920,
+		y: start.y + dy * k,
+		z: z - rz * 1920,
+		yaw: start.yaw
+	};
+	return { phase: "travel", pose: state.position };
 }

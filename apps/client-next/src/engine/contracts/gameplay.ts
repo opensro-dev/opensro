@@ -156,6 +156,10 @@ export type GameplayCommand =
 	| { readonly kind: "cos-drop"; readonly gid: number; readonly slot: number; }
 	| { readonly kind: "guide-event"; readonly event: number; }
 	| { readonly kind: "storage-open"; readonly gid: number; }
+	// The job guild confirmations (job-guild.ts): join, withdraw and the alias.
+	| { readonly kind: "job-join"; readonly gid: number; readonly job: number; }
+	| { readonly kind: "job-withdraw"; readonly gid: number; }
+	| { readonly kind: "job-alias"; readonly gid: number; readonly mode: number; readonly alias: string; }
 	| { readonly kind: "storage-close"; }
 	| { readonly kind: "storage-move"; readonly move: import("@/engine/foundation/gameplay/storage-room").StorageMove; }
 	| {
@@ -187,6 +191,8 @@ export type GameplayCommand =
 	| { readonly kind: "cos-pet-attack"; readonly gid: number; readonly pet: number; }
 	| { readonly kind: "cos-ride"; readonly gid: number; readonly mounted: boolean; }
 	| { readonly kind: "shop-buyback"; readonly id: number; }
+	// 0x746F at the open shop's smith: mode 1 repairs one slot, 2 everything.
+	| { readonly kind: "shop-repair"; readonly mode: 1 | 2; readonly slot: number; }
 	| import("./item-process").ItemProcessCommand
 	| { readonly kind: "mall-open"; }
 	| {
@@ -243,6 +249,9 @@ export type GameplayCommand =
 		readonly companionGid?: number;
 		readonly revivalSlot?: number;
 		readonly summonerSlot?: number;
+		// The skin change window's choice (CIFChangePlayerModel_OnConfirm).
+		readonly skin?: import("@/engine/foundation/gameplay/skin-change").SkinChoice;
+		readonly targetSlot?: number;
 	}
 	| {
 		readonly kind: "navigation";
@@ -354,6 +363,9 @@ export interface CastState {
 	readonly cancellationDeferred?: boolean;
 	readonly cancellationRequestedAtMs?: number;
 	readonly cancelledAtMs?: number;
+	// The client prediction this server cast took over (cast-prediction.ts):
+	// the presentation keeps that prediction's running action.
+	readonly predictedToken?: number;
 	readonly results?: readonly CastTargetResult[];
 	readonly shotAtMs?: number;
 	readonly receivedAtMs?: number;
@@ -440,6 +452,8 @@ export interface GameplayState {
 	readonly eligibility?: { readonly gm: boolean; readonly pcRoomEvent: boolean; };
 	readonly autoPotion?: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
 	readonly storage?: import("@/engine/foundation/gameplay/storage-room").StorageRoom | null;
+	readonly playerModels?: readonly import("@/engine/foundation/gameplay/skin-change").PlayerModel[];
+	readonly job?: import("@/engine/foundation/gameplay/job-guild").LocalJob;
 	readonly cosWindows?: readonly (import("@/engine/foundation/gameplay/cos-timer").CosItemWindow & {
 		readonly reference: import("@/engine/foundation/gameplay/cos-timer").CosItemWindowReference;
 	})[];
@@ -538,6 +552,14 @@ export interface GameplayState {
 	readonly vitals: readonly VitalState[];
 	readonly itemCooldowns?: readonly import("@/engine/foundation/gameplay/item-cooldowns").ItemCooldown[];
 	readonly skillCooldowns?: readonly import("@/engine/foundation/gameplay/skill-cooldowns").SkillCooldown[];
+	// The skill that casts next, held by the client for its cooldown or by
+	// the server behind its open command, and the newest denied press
+	// (skill-queue.ts); the HUD draws both.
+	readonly skillQueue?: import("@/engine/foundation/gameplay/skill-queue").SkillQueueState;
+	readonly skillDenied?: import("@/engine/foundation/gameplay/skill-queue").DeniedPress;
+	// The local press's predicted cast, animated until the server's cast
+	// adopts it or it blends out (cast-prediction.ts).
+	readonly castPrediction?: CastState;
 	readonly casts: readonly CastState[];
 	readonly error: string | null;
 }

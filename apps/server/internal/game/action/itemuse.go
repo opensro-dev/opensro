@@ -212,6 +212,22 @@ func (rt *Runtime) HandleItemUse(
 		if family == itemUseReturn {
 			return rt.beginReturnScroll(divisionID, character, ref, rowIndex, request, nowMs, &result)
 		}
+		if family == itemUseRepairHammer {
+			if len(tail) != 0 {
+				return false
+			}
+			repaired := rt.hammerRepair(divisionID, character)
+			if len(repaired.actor) == 0 {
+				result = itemUseFailure(errCodeNothingToRepair)
+				return false
+			}
+			remaining := rt.consumeItemUseRow(character, rowIndex)
+			result = OpResult{Frames: append([]wire.Frame{{Opcode: wire.OpItemUseResponse,
+				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}, repaired.actor...),
+				Broadcast: repaired.public}
+			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
+			return true
+		}
 		if family == itemUseFirework {
 			if len(tail) != 0 {
 				return false
@@ -220,6 +236,32 @@ func (rt *Runtime) HandleItemUse(
 			result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
 				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}}
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
+			return true
+		}
+		if family == itemUsePremiumTicket || family == itemUseSkillTimeTicket {
+			return rt.usePremiumTicket(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, family == itemUseSkillTimeTicket, &result)
+		}
+		if family == itemUseGenderTool {
+			return rt.useGenderTool(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
+		if family == itemUseSkinChange {
+			return rt.useSkinChangeScroll(skillItemUse{
+				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
+			}, character, tail, &result)
+		}
+		if family == itemUseWarehouseTicket {
+			if len(tail) != 0 || rt.storageAuthority == nil {
+				return false
+			}
+			remaining := rt.consumeItemUseRow(character, rowIndex)
+			result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
+				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}}
+			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
+			after = func() { rt.openRemoteStorage(divisionID, character) }
 			return true
 		}
 		if family == itemUseStatRecall {
@@ -322,7 +364,7 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			// v1.188 49B9F0 checks teleport mode before creating the companion.
-			if character.NativeTeleportMode == 1 {
+			if teleportBlocks(character.NativeTeleportMode) {
 				result = itemUseFailure(0x69) // 49BB2B; v1.150 consumes this byte silently.
 				return false
 			}
@@ -337,6 +379,10 @@ func (rt *Runtime) HandleItemUse(
 			cosRef, found := characters.CharacterRefByCodename(ref.AssociatedCharacterCodename)
 			if !found || cosRef == nil || cosRef.RefObjID == 0 || cosRef.Codename != ref.AssociatedCharacterCodename ||
 				(cosRef.TidWord>>11 != 1 && cosRef.TidWord>>11 != 2) || !cosRef.CanRide || cosRef.MaxHP == 0 {
+				return false
+			}
+			if cosRef.TidWord>>11 == cosBandTransport && !transportJob(character) {
+				result = itemUseFailure(errCodeCantActivateCart)
 				return false
 			}
 			gid, gidOK := enterworld.CosObjectIDForCharacter(character)

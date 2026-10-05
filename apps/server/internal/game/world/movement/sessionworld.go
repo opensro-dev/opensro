@@ -167,6 +167,8 @@ type peerAppearanceCapture struct {
 	guildID       int64
 	bodyShapeByte uint8
 	visualFlags   uint8
+	jobType       uint8
+	jobGrade      uint8
 	skin          wire.TransformSkin
 	worn          []wornEquipRow
 }
@@ -220,6 +222,10 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 		captured.bodyShapeByte = uint8(*character.BodyShapeByte & 0xff)
 	}
 	captured.visualFlags = enterworld.ResolveVisualFlags(character)
+	// A worn job suit shows the job and its grade (job mode).
+	if job := enterworld.DressedJob(character); job != 0 {
+		captured.jobType, captured.jobGrade = job, character.Job.Grade
+	}
 	captured.skin = enterworld.CharacterTransformSkin(character)
 	captured.worn = make([]wornEquipRow, 0, len(character.MissionInventory))
 	for _, row := range character.MissionInventory {
@@ -272,6 +278,8 @@ func peerAppearance(guilds enterworld.GuildStore, divisionID string, captured pe
 		Name:          captured.name,
 		BodyShapeByte: captured.bodyShapeByte,
 		VisualFlags:   captured.visualFlags,
+		JobType:       captured.jobType,
+		JobGrade:      captured.jobGrade,
 		Skin:          captured.skin,
 	}
 	if captured.hasEvent {

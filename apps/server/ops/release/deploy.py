@@ -31,6 +31,8 @@ CONFIG = Path("/etc/opensro-release/config.json")
 CHUNK_BYTES = 1 << 20
 HTTP_TIMEOUT = 20
 NOTICE_SECONDS = 120
+# Root-only, one line: the bug reporter's Discord webhook (bug_report_environment).
+BUG_REPORT_WEBHOOK = "/etc/opensro-release/bug-report-webhook"
 
 
 # ================
@@ -67,6 +69,24 @@ def announce(path, message):
 		response.read()
 	finally:
 		connection.close()
+
+
+# ================
+# bug_report_environment
+#
+# The in-game bug reporter's Discord webhook, from a root-only file on the
+# host (beside the other webhooks): the deploy runs with a clean environment,
+# so without it every release left bug reports off. A missing or empty file
+# names no webhook, and sro-nomad then keeps the one already stored; "off"
+# removes it. The value is passed on, never logged.
+# ================
+def bug_report_environment(config):
+	path = Path(config.get("bug_report_webhook", BUG_REPORT_WEBHOOK))
+	try:
+		value = path.read_text().strip()
+	except FileNotFoundError:
+		return {}
+	return {"SRO_BUG_REPORT_DISCORD_WEBHOOK": value} if value else {}
 
 
 # ================
@@ -192,7 +212,8 @@ def deploy(config, staging, manifest, notice=True, upgrade=False):
 		"-global=false", "-policy", "sro-deployer", "-ttl", "1h", "-json"], env=management, capture=True)
 	token = json.loads(issued.stdout)
 	environment = dict(clean_env, NOMAD_ADDR="http://127.0.0.1:4646", NOMAD_NAMESPACE="sro",
-		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"])
+		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"],
+		**bug_report_environment(config))
 	arguments = ["-namespace", "sro", "-task-user", "sro", "-allowed-origins", config["origin"],
 		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"])]
 	executable = str(module / "sro-nomad")

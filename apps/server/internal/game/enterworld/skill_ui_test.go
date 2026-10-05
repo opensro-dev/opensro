@@ -84,7 +84,8 @@ func TestSkillUiProjectionUsesTrainingAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("%d skills, %d UI rows, %d bytes", len(rows), count, len(encoded))
-	if len(encoded) > 12<<20 {
+	// 12.6 MB once the player skills' MP costs joined (29 KB, 3181 rows).
+	if len(encoded) > 13<<20 {
 		t.Fatal("skill reference budget exceeded")
 	}
 	var wire []struct {

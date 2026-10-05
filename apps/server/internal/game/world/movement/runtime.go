@@ -76,6 +76,12 @@ type Runtime struct {
 	// MovementBlocked is the abnormal-state gate of 4B0EA0: a frozen, asleep,
 	// rooted or stunned mover's command is dropped silently. Nil admits.
 	MovementBlocked func(divisionID, characterName string) bool
+	// RetireMoveEffects is the movement event of the same handler: an
+	// accepted move ends every effect whose skc event mask holds bit 1
+	// (CSkillManager_RetireEffectsForEventMask 5A16C0, called by 4B0EA0
+	// once SetMoveCommand accepts). It runs after the character lock is
+	// released, keeping the action -> character lock order. Nil skips.
+	RetireMoveEffects func(divisionID, characterName string, nowMs int64)
 	// AttackLocked is 4EF880's attack lock in the same gate: while a skill
 	// action holds the casting instance (char+C08) the command is dropped,
 	// not queued. Nil admits.
