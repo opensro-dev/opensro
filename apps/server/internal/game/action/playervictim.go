@@ -6,7 +6,7 @@ playervictim.go - what a landed hit does to a player, whoever struck it
 SkillCombat_CalculateHitOutcome resolves each impact against the victim
 (the wall split of 58EC6C, the status rolls of 590680) and
 SkillCombat_ApplyResultRecipients (593800) commits them: the HP debit,
-the standing wall's drain, the armour and shield wear of a struck
+the damage-to-MP redirect (dgmp), the standing wall's drain, the armour and shield wear of a struck
 victim, then either the death (pkdeath.go) or the battle state, the
 statuses and the skc damage cancellation. A monster's hit and a player's
 hit take this one path; only the attacker's own rolls and bookkeeping
@@ -64,8 +64,10 @@ What the commit did.
 type playerStruck struct {
 	impacts, absorb []wire.SkillCastTargetImpact
 	// before is the victim's HP ahead of each impact (a drain's cap).
-	before           []uint32
-	fatal, struck    bool
+	before        []uint32
+	fatal, struck bool
+	// mpSpent is what dgmp (5A13FE) took from MP; mp is the MP it left.
+	mpSpent, mp      uint32
 	deathEffects     []wire.Frame
 	deathProgression []wire.Frame
 	// withdrawn closes the casts a displacement interrupted.
@@ -136,9 +138,18 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 	c := s.victim
 	out := playerStruck{owner: s.owner}
 	hit := abnormal.HitContext{Attack: s.skill.ReplacementPinned && s.skill.Replacement.MatchesExecutionSelector}
-	_, _, remaining, _ := rt.playerKeeperVitals(s.division, c)
+	_, _, remaining, remainingMP := rt.playerKeeperVitals(s.division, c)
+	redirect := rt.effects.DamageToMPPercent(s.division, c.Name)
 	for _, formula := range s.formulas {
 		hit.Magical = hit.Magical || formula.MagicalDamage != 0
+		// 58F72F runs dgmp per impact after the wall split, whoever struck;
+		// a ck kill takes the whole HP and redirects nothing.
+		if redirect != 0 && !formula.Slain {
+			var spent uint32
+			formula, spent = combat.RedirectDamageToMP(formula, uint32(remainingMP), redirect)
+			remainingMP -= int64(spent)
+			out.mpSpent += spent
+		}
 		out.before = append(out.before, uint32(remaining))
 		debit := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
 		if formula.Slain {
@@ -159,6 +170,10 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		}
 	}
 	c.CurrentHP = &remaining
+	if out.mpSpent != 0 {
+		c.CurrentMP = &remainingMP
+		out.mp = uint32(remainingMP)
+	}
 	out.struck = len(out.impacts) > 0
 	if s.walled && !s.skill.WallBypass {
 		var absorbed uint32
@@ -213,6 +228,11 @@ observer, victim to the victim alone.
 ================
 */
 func (rt *Runtime) playerStruckFrames(division string, victim *enterworld.Character, struck playerStruck, now int64) (public, private []wire.Frame) {
+	if struck.mpSpent != 0 {
+		// The redirected MP reaches its owner alone, as a combat-sourced 0x3057.
+		private = append(private, wire.Frame{Opcode: simulation.OpVitalsUpdate,
+			Payload: simulation.MPRefreshPayload(enterworld.ObjectIDForCharacter(victim), simulation.VitalsSourceCombatDamage, struck.mp)})
+	}
 	statuses := rt.playerAbnormalPublication(division, victim, struck.owner)
 	public = append(public, statuses.public...)
 	private = append(private, statuses.actor...)

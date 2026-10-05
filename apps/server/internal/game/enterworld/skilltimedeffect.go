@@ -37,6 +37,8 @@ const (
 	tagTimedDamageRate         = 0x647275
 	tagTimedMaxHPPenalty       = 0x706d6870
 	tagTimedDefensePenalty     = 0x706d6470
+	tagTimedDamageToMP         = 0x64676d70
+	maxDamageToMPPercent       = 100
 	tagTimedIncomingReduction  = 0x6f646172
 	tagDamageReturn            = 0x646d6772
 	tagTimedOverlap            = 0x6f766c32
@@ -59,7 +61,9 @@ An entire category-three program. Native 5830B0 owns preparation and release;
 ================
 */
 type SkillTimedEffect struct {
-	ForcedTarget bool // hitm: recipient may target only its caster (58CF7F).
+	DamageToMP        bool // dgmp installs the damage processor's single recipient instance.
+	DamageToMPPercent uint32
+	ForcedTarget      bool // hitm: recipient may target only its caster (58CF7F).
 	// Periodic has a separate execution contract from friendly timed buffs.
 	Periodic SkillPeriodicEffect
 	// ItemProgram marks an item-owned timed job (compileTimedItemEffect).
@@ -494,6 +498,11 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			linkDamage = true
 			linkDamageWords = [3]uint32{op.Arguments[0], op.Arguments[1], op.Arguments[2]}
+		case tagTimedDamageToMP:
+			if result.DamageToMP || op.Count != 1 || op.Arguments[0] > maxDamageToMPPercent {
+				return
+			}
+			result.DamageToMP, result.DamageToMPPercent = true, op.Arguments[0]
 		case tagTimedIncomingReduction:
 			// odar is installed from BuffModifiers for every recipient (594AC0);
 			// the program only has to agree with that projection.
@@ -610,7 +619,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
 		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Range || result.Hawk.Present ||
 		result.Link.Present && (result.Link.Threat || result.Link.Mana) || result.Preemptive.Present ||
-		result.DamageReturn.Present)
+		result.DamageReturn.Present ||
+		result.DamageToMP)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {
