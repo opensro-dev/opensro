@@ -53,10 +53,17 @@ through 0x822110, including the packed world even outside entity interest.
 ================
 */
 func encodeMemberUpdate(row MemberRow) []byte {
-	return wire.NewWriter(20).U8(partyUpdateMember).U32(row.MemberID).
-		U8(MemberMaskLevel | MemberMaskStatus | MemberMaskPosition).
+	mask := MemberMaskLevel | MemberMaskStatus | MemberMaskPosition
+	if row.Masteries {
+		mask |= MemberMaskMastery
+	}
+	writer := wire.NewWriter(28).U8(partyUpdateMember).U32(row.MemberID).U8(mask).
 		U8(row.Level).U8(row.StatusNibbles).U16(row.Region).
-		U16(uint16(row.PosX)).U16(uint16(row.PosY)).U16(uint16(row.PosZ)).U32(row.War).Payload()
+		U16(uint16(row.PosX)).U16(uint16(row.PosY)).U16(uint16(row.PosZ)).U32(row.War)
+	if row.Masteries {
+		writer.U32(row.PrimaryMastery).U32(row.SecondaryMastery)
+	}
+	return writer.Payload()
 }
 
 /*

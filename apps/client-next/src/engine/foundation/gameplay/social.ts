@@ -19,8 +19,9 @@ PartyMember
 export interface PartyMember {
 	readonly guild?: string;
 	readonly native41?: number;
-	readonly native50?: number;
-	readonly native54?: number;
+	// 75DB30 +0x50/+0x54 (mask bit 8): the member's main mastery ids, 0 when untrained.
+	readonly primaryMastery?: number;
+	readonly secondaryMastery?: number;
 	// Resolved from the member's model reference by the world catalog (0 China, 1 Europe).
 	readonly country?: number;
 	readonly id: number;
@@ -939,8 +940,8 @@ export function readPartyMember( p: Uint8Array, start = 0, old?: PartyMember ): 
 		war: number;
 		guild?: string;
 		native41?: number;
-		native50?: number;
-		native54?: number;
+		primaryMastery?: number;
+		secondaryMastery?: number;
 	} = { id: 0, name: "", model: 0, level: 0, status: 0, region: 0, x: 0, y: 0, z: 0, war: 0, ...old };
 	if ( mask & 16 ) member.id = u32();
 	if ( mask & 1 ) {
@@ -967,8 +968,8 @@ export function readPartyMember( p: Uint8Array, start = 0, old?: PartyMember ): 
 	}
 	if ( mask & 128 ) member.native41 = u8();
 	if ( mask & 8 ) {
-		member.native50 = u32();
-		member.native54 = u32();
+		member.primaryMastery = u32();
+		member.secondaryMastery = u32();
 	}
 	if ( !member.id ) throw Error( "Missing party member identity" );
 	return { member, end: at };

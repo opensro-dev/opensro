@@ -143,6 +143,13 @@ variable "beta_mastery" {
   default = "on"
 }
 
+# party_masteries puts each member's two main mastery trees on the quick party
+# board. Set off for the native roster rows.
+variable "party_masteries" {
+  type    = string
+  default = "on"
+}
+
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
 # multiplies skill EXP by beta_skill_exp_rate on top, rolls drop passes
 # beta_drop_rate times and multiplies gold heaps by beta_gold_rate. "off"
@@ -304,6 +311,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_STARTER_KIT               = var.beta_starter_kit
         SRO_BETA_PLAYER_MAP                = var.beta_player_map
         SRO_BETA_MASTERY                   = var.beta_mastery
+        SRO_PARTY_MASTERIES                = var.party_masteries
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate

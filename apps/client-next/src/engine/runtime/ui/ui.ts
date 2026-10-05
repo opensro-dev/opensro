@@ -228,10 +228,12 @@ import { barChrome } from "@/engine/foundation/ui/bar";
 import {
 	partyDistanceShade,
 	partyMembers,
+	partyLocalPose,
 	partyOverlay,
 	partyPortraitGid,
 	partyRosterPose,
-	partyShadeImage
+	partyShadeImage,
+	partyShadeImages
 } from "@/engine/foundation/ui/party-overlay";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import {
@@ -6755,7 +6757,8 @@ export function createUi(
 				if ( hudData && game?.social?.leader ) {
 					const origin = authoredRect( hudData.root.GDR_QUICKPARTYBOARD!, 0, 0 ),
 						slot = hudData.windows.ifquickpartyslot!,
-						localPose = next.entities.find( e => e.gid === game.localGid ) ?? null;
+						localPose = partyLocalPose( game, next.entities );
+					for ( const shadeImage of partyShadeImages() ) paths.push( ROOT + shadeImage );
 					for (
 						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
 					) {
@@ -6821,6 +6824,21 @@ export function createUi(
 								selected: row.entity.gid === game.target
 							} );
 							blocks.push( r );
+						}
+						// The member's two main masteries: roster data, so they show for a member
+						// out of view and without the buff preference.
+						for ( const entry of row.masteries ) {
+							const mastery = hudData.skillUi.masteries.find( m => m.id === entry.id );
+							if ( !mastery ) continue;
+							const path = iconPath( mastery.icon ), r: UiRect = [ ...entry.rect ];
+							if ( path ) image( r, path );
+							controls.push( {
+								id: "party-mastery:" + row.member.id + ":" + entry.id,
+								label: hudCopy( mastery.name ),
+								helpText: hudCopy( mastery.name ),
+								kind: "region",
+								rect: r
+							} );
 						}
 						// 5BA840 passes no character, so party abnormal cells carry no grade.
 						const buff = authoredRect( slot.GDR_QPS_PARTY_BUFF!, x, y ),

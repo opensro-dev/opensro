@@ -190,8 +190,8 @@ test("complete member mask retains guild and opaque native extension fields in w
 	const state = partyMatchPacket( emptyPartyMatching(), { ...frame, payload: p } );
 	assert.equal( state.request.member.guild, "Guild" );
 	assert.equal( state.request.member.native41, 9 );
-	assert.equal( state.request.member.native50, 1 );
-	assert.equal( state.request.member.native54, 2 );
+	assert.equal( state.request.member.primaryMastery, 1 );
+	assert.equal( state.request.member.secondaryMastery, 2 );
 	for ( let i = frame.payload.length; i < p.length; i++ ) {
 		assert.throws( () => partyMatchPacket( emptyPartyMatching(), { ...frame, payload: p.subarray( 0, i ) } ) );
 	}
