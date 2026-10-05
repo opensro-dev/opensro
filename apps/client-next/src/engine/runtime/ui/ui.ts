@@ -5155,6 +5155,11 @@ export function createUi(
 				dirty = true;
 			}
 			if ( !stallState?.network.open ) stallHud.resetNetwork();
+			// 69FBB0: the exchange opens beside the inventory tab.
+			if ( exchangeHud.opened( !!next.gameplay?.exchange?.open ) && panel !== "Inventory" ) {
+				setPanel( "Inventory" );
+				dirty = true;
+			}
 			if ( stallCategories.step( !!stallState?.network.open ) ) dirty = true;
 			if ( localization.step( now, next.session?.phase === "world" ) ) {
 				dirty = true;

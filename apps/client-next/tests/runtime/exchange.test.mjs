@@ -72,3 +72,21 @@ test("refusals and failures carry their category-1 codes", () => {
 	const gold = exchange.exchangeRequest( open, { kind: "exchange-gold", amount: 1000 } );
 	assert.deepEqual( [ ...gold.payload ], [ 0x0d, ...u32( 1000 ) ] );
 });
+
+test("the exchange window's opening is reported once, to open the inventory tab (69FBB0)", async () => {
+	const { createExchangeHud } = await import( "../../src/engine/runtime/ui/hud/exchange-hud.ts" );
+	const hud = createExchangeHud();
+	assert.deepEqual( [
+		hud.opened( false ),
+		hud.opened( true ),
+		hud.opened( true ),
+		hud.opened( false ),
+		hud.opened( true )
+	], [
+		false,
+		true,
+		false,
+		false,
+		true
+	] );
+});
