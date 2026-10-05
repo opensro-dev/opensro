@@ -97,7 +97,8 @@ type NpcTalkStoreTab struct {
 }
 
 type NpcTalkStoreGroup struct {
-	StoreGroupID int32
+	// StoreGroupID is the NPC's reference ID, a DWORD.
+	StoreGroupID uint32
 	Tabs         []NpcTalkStoreTab
 }
 

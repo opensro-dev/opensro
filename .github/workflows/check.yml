@@ -9,6 +9,10 @@ on:
   push:
   pull_request:
 
+# The source gates only read the checkout.
+permissions:
+  contents: read
+
 jobs:
   source-check:
     runs-on: windows-latest

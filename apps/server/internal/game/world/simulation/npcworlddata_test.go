@@ -45,7 +45,7 @@ func TestShippedNpcWorldRosterCarriesConversationAndShopAuthority(t *testing.T) 
 		if len(npc.NpcTalkStoreGroups) == 0 || npc.TalkFlags&NpcTalkFlagShop == 0 {
 			t.Fatalf("%s has no authored shop projection: %+v", code, npc)
 		}
-		if got := npc.NpcTalkStoreGroups[0].StoreGroupID; got != int32(npc.RefObjID) {
+		if got := npc.NpcTalkStoreGroups[0].StoreGroupID; got != npc.RefObjID {
 			t.Fatalf("%s menu storeGroupId0c = %d, want character RefObjID %d", code, got, npc.RefObjID)
 		}
 	}

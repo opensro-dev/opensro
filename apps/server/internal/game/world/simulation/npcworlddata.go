@@ -198,7 +198,7 @@ func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) map
 		}
 		if len(tabs) != 0 {
 			result[npcCode] = []NpcTalkStoreGroup{{
-				StoreGroupID: int32(refIdByCode[npcCode]), Tabs: tabs,
+				StoreGroupID: refIdByCode[npcCode], Tabs: tabs,
 			}}
 		}
 	}
