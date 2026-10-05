@@ -18,6 +18,7 @@ typing a description must not walk the character around.
 
 ===========================================================================
 */
+import { BUG_REPLAY_LABEL, type ReplayState } from "@/engine/contracts/bug-report";
 import type { Mp4Track } from "@/engine/foundation/media/mp4";
 import type { ArchivedSummary } from "./archive";
 import { createClipTrimmer, element, type ClipTrimmer } from "./trimmer";
@@ -77,7 +78,31 @@ export interface OpenRequest {
 	readonly text: string;
 	readonly replay: Mp4Track | null;
 	readonly maxBytes: number;
-	readonly recording: boolean;
+	readonly replayState: ReplayState;
+	readonly replayError: string | null;
+}
+
+/*
+================
+replayNote
+
+Why the report carries a screenshot instead of a clip, in words the player
+can act on: "(Options)" alone read as a setting nobody could find.
+================
+*/
+export function replayNote( state: ReplayState, error: string | null ): string {
+	const fallback = "A screenshot will be attached instead.";
+	switch ( state ) {
+		case "off":
+			return `Replay recording is off: turn on "${BUG_REPLAY_LABEL}" in the Option window to attach a video. ` +
+				fallback;
+		case "starting":
+			return "The replay is still starting. " + fallback;
+		case "unsupported":
+			return `This browser cannot record the replay${error ? ` (${error})` : ""}. ` + fallback;
+		case "restarting":
+			return `The replay stopped${error ? ` (${error})` : ""} and is restarting. ` + fallback;
+	}
 }
 
 /*
@@ -288,9 +313,7 @@ export function createBugReportDialog( host: DialogHost ): BugReportDialog {
 		if ( clipTrimmer ) panel.append( clipTrimmer.element );
 		else {
 			const note = element( "p", "sro-bug-report__note" );
-			note.textContent = request.recording ?
-				"The replay is still starting; a screenshot will be attached instead." :
-				"Replay recording is off (Options); a screenshot will be attached instead.";
+			note.textContent = replayNote( request.replayState, request.replayError );
 			panel.append( note );
 		}
 

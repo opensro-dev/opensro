@@ -18,7 +18,7 @@ it in the Option window; otherwise it follows the server's default.
 
 ===========================================================================
 */
-import type { BugReportControl, BugReportField } from "@/engine/contracts/bug-report";
+import type { BugReportControl, BugReportField, ReplayState } from "@/engine/contracts/bug-report";
 import { RELEASE_PROTOCOL, RELEASE_PROTOCOL_HEADER } from "@/engine/foundation/release/protocol";
 import { muxMp4, type Mp4Track } from "@/engine/foundation/media/mp4";
 import { replayReportState, replayTrackBytes } from "@/engine/foundation/media/replay-window";
@@ -42,6 +42,9 @@ const WHISPER_CHANNEL = 2;
 // Waits before asking for the settings again after a failed read.
 const SETTINGS_RETRY_MS = [ 5000, 15000, 30000, 60000 ] as const;
 const PENDING_OPEN_MS = 30000;
+// Waits before starting the replay again after it failed to start or
+// stopped on its own while the player has it switched on.
+const REPLAY_RETRY_MS = [ 5000, 15000, 30000, 60000 ] as const;
 const SAMPLE_MS = 1000;
 // Reading performance.memory makes Chrome total the heap: about 1 ms of a
 // frame. A report needs the heap trend, so every tenth sample carries it.
@@ -127,6 +130,8 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	// the middle of a fight, would be worse than typing /bug again.
 	let pendingOpen: string | null = null, pendingOpenAtMs = 0;
 	let replayEnabled = false;
+	// A start in flight, and when the frame may try again (followPreference).
+	let replayStarting = false, replayRetry = 0, replayRetryAtMs = -Infinity;
 	let draft = false;
 	const errors: string[] = [];
 	// The newest chat sequence examined for a report request; lines at or
@@ -193,9 +198,42 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			recorder.stop();
 			return;
 		}
+		if ( replayStarting ) return;
+		replayStarting = true;
+		replayRetryAtMs = performance.now() + REPLAY_RETRY_MS[Math.min( replayRetry++, REPLAY_RETRY_MS.length - 1 )]!;
 		recorder.start( { windowSeconds: settings.replaySeconds } ).then( started => {
-			if ( !started ) note( recorder.lastError() ?? "Replay did not start" );
-		}, failure => note( "Replay did not start: " + String( failure ) ) );
+			if ( started ) replayRetry = 0;
+			else note( recorder.lastError() ?? "Replay did not start" );
+		}, failure => note( "Replay did not start: " + String( failure ) ) ).finally( () => {
+			replayStarting = false;
+		} );
+	}
+
+	/*
+	================
+	keepReplay
+
+	Called every frame. A replay the player has switched on is kept running:
+	a recorder that failed to start or stopped on its own (a paused source,
+	an ended capture track) starts again with backoff, unless the browser
+	cannot encode at all. One failure used to cost the rest of the session.
+	================
+	*/
+	function keepReplay( now: number ) {
+		if ( !settings?.enabled || !replayEnabled ) return;
+		if ( recorder.running() ) recorder.watch();
+		else if ( !recorder.unsupported() && now >= replayRetryAtMs ) followPreference();
+	}
+
+	/*
+	================
+	replayState
+	================
+	*/
+	function replayState(): ReplayState {
+		if ( !replayEnabled ) return "off";
+		if ( recorder.running() ) return "starting";
+		return recorder.unsupported() ? "unsupported" : "restarting";
 	}
 
 	/*
@@ -281,7 +319,8 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			text,
 			replay: recorder.snapshot(),
 			maxBytes: settings.maxBytes,
-			recording: recorder.running()
+			replayState: replayState(),
+			replayError: recorder.lastError()
 		} );
 		return "opened";
 	}
@@ -576,6 +615,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		}
 		const now = performance.now();
 		if ( now >= retryAtMs ) loadSettings();
+		keepReplay( now );
 		if ( now - lastSampleMs >= SAMPLE_MS ) {
 			lastSampleMs = now;
 			journal.record( "sample", sample() );

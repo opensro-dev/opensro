@@ -46,7 +46,7 @@ import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hu
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
 import { portalMenu } from "@/engine/foundation/gameplay/portal";
 import { restoreSlotEntry } from "@/engine/foundation/gameplay/commerce";
-import type { BugReportControl } from "@/engine/contracts/bug-report";
+import { BUG_REPLAY_LABEL, type BugReportControl } from "@/engine/contracts/bug-report";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
 import { itemEquipmentOverlay, equipmentWarningUv } from "@/engine/foundation/ui/item-equipment-overlay";
 import { itemCountQuads } from "@/engine/foundation/ui/item-count";
@@ -469,7 +469,6 @@ const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
 const BUG_REPLAY_OPTION = "option-bug-replay";
-const BUG_REPLAY_LABEL = "Record bug replay";
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
 // CIFFortressWarApplyWnd, opened by the fortress official's answer.
