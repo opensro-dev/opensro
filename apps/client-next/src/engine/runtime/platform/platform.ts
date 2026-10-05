@@ -554,8 +554,10 @@ export function createPlatform(
 frame ${fpsMs( sample.frameMs )}/${fpsMs( sample.p95FrameMs )}
 cpu ${fpsMs( sample.cpuMs )}/${fpsMs( sample.p95CpuMs )}
 actors ${sample.actors}; draws ${sample.draws}
-groups ${sample.visibleGroups}${sample.build.map( line => "\n" + line ).join( "" )}`;
+groups ${sample.visibleGroups}${sample.build.lines.map( line => "\n" + line ).join( "" )}`;
 			if ( fpsReadout.textContent !== text ) fpsReadout.textContent = text;
+			// Hovering the readout names the commits it shows.
+			if ( fpsReadout.title !== sample.build.detail ) fpsReadout.title = sample.build.detail;
 		},
 		/*
 		================

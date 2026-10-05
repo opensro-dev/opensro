@@ -5,10 +5,12 @@ build-info.ts - which commit the client and the server are running
 
 The FPS chip names both builds so a stale deployment shows from inside the
 game: the client bundle and the Agent are built separately and can drift
-apart. The client revision is stamped by the build (vite.config.mjs
-defines import.meta.env.SRO_CLIENT_REVISION from git); the server's comes
-from the Agent's GET /title/build, asked once, and its uptime keeps
+apart. The client's revision and commit subject are stamped by the build
+(vite.config.mjs defines import.meta.env.SRO_CLIENT_REVISION and
+SRO_CLIENT_SUBJECT from git), and its uptime is this page's. The server's
+come from the Agent's GET /title/build, asked once, and its uptime keeps
 counting on this page's monotonic clock. Whatever is unknown is left out.
+The subjects are the chip's hover text.
 
 The frame clock drives the one request and its retry; this owner keeps no
 timer.
@@ -24,11 +26,26 @@ const RETRY_MS = 30 * 1000;
 // Seven hex digits, as git abbreviates.
 const SHORT_REVISION = 7;
 const REVISION_PATTERN = /^[0-9a-f]{7,64}$/;
+// A commit subject longer than this is cut for the hover text.
+const MAX_SUBJECT = 200;
 
 interface ServerBuild {
 	readonly revision: string;
+	readonly subject: string;
 	readonly uptimeSeconds: number;
 	readonly receivedAtMs: number;
+}
+
+/*
+================
+BuildReadout
+
+The chip's lines (one per known build) and their hover text.
+================
+*/
+export interface BuildReadout {
+	readonly lines: readonly string[];
+	readonly detail: string;
 }
 
 /*
@@ -41,6 +58,17 @@ one is unknown.
 */
 export function shortRevision( value: unknown ) {
 	return typeof value === "string" && REVISION_PATTERN.test( value ) ? value.slice( 0, SHORT_REVISION ) : null;
+}
+
+/*
+================
+commitSubject
+
+A commit subject on one line, or "" when there is none.
+================
+*/
+export function commitSubject( value: unknown ) {
+	return typeof value === "string" ? value.replace( /\s+/g, " " ).trim().slice( 0, MAX_SUBJECT ) : "";
 }
 
 /*
@@ -67,12 +95,14 @@ export function formatUptime( seconds: number ) {
 ================
 createBuildInfo
 
-`clientRevision` is the revision this bundle was built from (undefined
-when the build stamped none).
+`clientRevision` and `clientSubject` are what this bundle was built from
+(undefined when the build stamped none).
 ================
 */
-export function createBuildInfo( apiBase: string, clientRevision: unknown ) {
-	const lifetime = new AbortController(), client = shortRevision( clientRevision );
+export function createBuildInfo( apiBase: string, clientRevision: unknown, clientSubject: unknown ) {
+	const lifetime = new AbortController(),
+		client = shortRevision( clientRevision ),
+		clientDetail = client ? `client ${client}: ${commitSubject( clientSubject ) || "no commit subject"}` : "";
 	let server: ServerBuild | null = null, loading = false, retryAtMs = 0;
 
 	/*
@@ -92,11 +122,19 @@ export function createBuildInfo( apiBase: string, clientRevision: unknown ) {
 			redirect: "error",
 			signal: lifetime.signal
 		} ).then( response =>
-			response.json().then( ( body: { build?: { revision?: unknown; uptimeSeconds?: unknown; }; } ) => {
-				const revision = shortRevision( body.build?.revision ), uptime = Number( body.build?.uptimeSeconds );
-				if ( !response.ok || !revision || !Number.isFinite( uptime ) ) return;
-				server = { revision, uptimeSeconds: uptime, receivedAtMs: performance.now() };
-			} )
+			response.json().then(
+				( body: { build?: { revision?: unknown; subject?: unknown; uptimeSeconds?: unknown; }; } ) => {
+					const revision = shortRevision( body.build?.revision ),
+						uptime = Number( body.build?.uptimeSeconds );
+					if ( !response.ok || !revision || !Number.isFinite( uptime ) ) return;
+					server = {
+						revision,
+						subject: commitSubject( body.build?.subject ),
+						uptimeSeconds: uptime,
+						receivedAtMs: performance.now()
+					};
+				}
+			)
 		).catch( () => {
 			// Unknown until the next retry; the chip simply leaves it out.
 		} ).finally( () => {
@@ -107,21 +145,26 @@ export function createBuildInfo( apiBase: string, clientRevision: unknown ) {
 	return {
 		/*
 		================
-		lines
+		readout
 
-		The chip's build lines at `nowMs` (performance.now() time). The first
-		call starts the one request; a failed one is retried after RETRY_MS.
+		The chip's build lines at `nowMs` (performance.now() time, which is
+		also this page's age). The first call starts the one request; a failed
+		one is retried after RETRY_MS.
 		================
 		*/
-		lines( nowMs: number ): readonly string[] {
+		readout( nowMs: number ): BuildReadout {
 			if ( !server && !loading && nowMs >= retryAtMs && !lifetime.signal.aborted ) load( nowMs );
-			const lines: string[] = [];
-			if ( client ) lines.push( `client ${client}` );
+			const lines: string[] = [], details: string[] = [];
+			if ( client ) {
+				lines.push( `client ${client} up ${formatUptime( nowMs / 1000 )}` );
+				details.push( clientDetail );
+			}
 			if ( server ) {
 				const uptime = server.uptimeSeconds + (nowMs - server.receivedAtMs) / 1000;
 				lines.push( `server ${server.revision} up ${formatUptime( uptime )}` );
+				details.push( `server ${server.revision}: ${server.subject || "no commit subject"}` );
 			}
-			return lines;
+			return { lines, detail: details.join( "\n" ) };
 		},
 		/*
 		================

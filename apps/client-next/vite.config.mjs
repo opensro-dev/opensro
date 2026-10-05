@@ -18,15 +18,16 @@ import { sameOriginRelay, shardRoutes, tlsCertificate, tunnelHosts } from "./too
 
 /*
 ================
-gitRevision
+gitHead
 
-The commit this bundle is built from, for the FPS chip (build-info.ts).
-Outside a git checkout it is empty and the chip leaves the line out.
+One fact about the commit this bundle is built from, for the FPS chip
+(build-info.ts): `git log -1 --format=<format>`. Outside a git checkout it
+is empty and the chip leaves it out.
 ================
 */
-function gitRevision() {
+function gitHead( format ) {
 	try {
-		return execFileSync( "git", [ "rev-parse", "HEAD" ], {
+		return execFileSync( "git", [ "log", "-1", "--format=" + format ], {
 			cwd: fileURLToPath( new URL( ".", import.meta.url ) ),
 			encoding: "utf8",
 			stdio: [ "ignore", "pipe", "ignore" ]
@@ -64,7 +65,10 @@ export default defineConfig( ( { mode } ) => {
 	const https = mode === "https", certificate = https ? tlsCertificate( env ) : null;
 	return {
 		publicDir: false,
-		define: { "import.meta.env.SRO_CLIENT_REVISION": JSON.stringify( gitRevision() ) },
+		define: {
+			"import.meta.env.SRO_CLIENT_REVISION": JSON.stringify( gitHead( "%H" ) ),
+			"import.meta.env.SRO_CLIENT_SUBJECT": JSON.stringify( gitHead( "%s" ) )
+		},
 		server: {
 			proxy,
 			...hosts,

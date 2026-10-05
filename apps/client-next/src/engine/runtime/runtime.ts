@@ -244,7 +244,9 @@ export function startRuntime(
 				import.meta.env.VITE_AGENT_API_BASE || "/api",
 			location.origin
 		).href.replace( /\/$/, "" );
-		const buildInfo = own( createBuildInfo( apiBase, import.meta.env.SRO_CLIENT_REVISION ) );
+		const buildInfo = own(
+			createBuildInfo( apiBase, import.meta.env.SRO_CLIENT_REVISION, import.meta.env.SRO_CLIENT_SUBJECT )
+		);
 		const bugReport = own(
 			createBugReport( {
 				canvas,
@@ -841,7 +843,7 @@ export function startRuntime(
 						actors: drawn.actors,
 						draws: drawn.draws,
 						visibleGroups: renderer.worldStats().visibleGroups,
-						build: buildInfo.lines( now )
+						build: buildInfo.readout( now )
 					} );
 					for ( const name in stageTotals ) stageTotals[name] = 0;
 					stageFrames = 0;

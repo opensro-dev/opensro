@@ -9,7 +9,7 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { createBuildInfo, formatUptime, shortRevision } = await import(
+const { commitSubject, createBuildInfo, formatUptime, shortRevision } = await import(
 	"../../src/engine/runtime/build-info/build-info.ts"
 );
 const REVISION = "0123456789abcdef0123456789abcdef01234567";
@@ -63,21 +63,32 @@ test("only a git revision is shown, abbreviated", () => {
 	}
 });
 
-test("the server line appears once the Agent answers and its uptime keeps counting", async () => {
+test("commit subjects are one line and bounded", () => {
+	assert.equal( commitSubject( "Fix  the\nchip " ), "Fix the chip" );
+	assert.equal( commitSubject( "x".repeat( 300 ) ).length, 200 );
+	for ( const value of [ undefined, null, 7 ] ) assert.equal( commitSubject( value ), "" );
+});
+
+test("both builds show with their uptimes and subjects, and the server keeps counting", async () => {
+	const answer = { ok: true, build: { revision: REVISION, subject: "Server change", uptimeSeconds: 60 } };
 	await withFetch(
-		() =>
-			Promise.resolve(
-				new Response( JSON.stringify( { ok: true, build: { revision: REVISION, uptimeSeconds: 60 } } ) )
-			),
+		() => Promise.resolve( new Response( JSON.stringify( answer ) ) ),
 		async ( { requests, advance, now } ) => {
-			const info = createBuildInfo( "/api", "fedcba9876543210" );
-			assert.deepEqual( info.lines( now() ), [ "client fedcba9" ] );
+			const info = createBuildInfo( "/api", "fedcba9876543210", "Client change" );
+			advance( 5000 );
+			assert.deepEqual( info.readout( now() ), {
+				lines: [ "client fedcba9 up 5s" ],
+				detail: "client fedcba9: Client change"
+			} );
 			await settle();
 			assert.equal( requests.length, 1 );
 			assert.equal( requests[0].url, "/api/title/build" );
 			assert.equal( requests[0].init.credentials, "omit" );
 			advance( 125_000 );
-			assert.deepEqual( info.lines( now() ), [ "client fedcba9", "server 0123456 up 3m 05s" ] );
+			assert.deepEqual( info.readout( now() ), {
+				lines: [ "client fedcba9 up 2m 10s", "server 0123456 up 3m 05s" ],
+				detail: "client fedcba9: Client change\nserver 0123456: Server change"
+			} );
 			assert.equal( requests.length, 1, "an answered build is not asked again" );
 			info.dispose();
 		}
@@ -86,14 +97,14 @@ test("the server line appears once the Agent answers and its uptime keeps counti
 
 test("an unknown build is left out and asked again only after the retry delay", async () => {
 	await withFetch( () => Promise.reject( new TypeError( "offline" ) ), async ( { requests, advance, now } ) => {
-		const info = createBuildInfo( "/api", undefined );
-		assert.deepEqual( info.lines( now() ), [] );
+		const info = createBuildInfo( "/api", undefined, undefined );
+		assert.deepEqual( info.readout( now() ), { lines: [], detail: "" } );
 		await settle();
 		advance( 1000 );
-		assert.deepEqual( info.lines( now() ), [] );
+		assert.deepEqual( info.readout( now() ).lines, [] );
 		assert.equal( requests.length, 1 );
 		advance( 30_000 );
-		info.lines( now() );
+		info.readout( now() );
 		assert.equal( requests.length, 2 );
 		info.dispose();
 	} );
@@ -106,10 +117,10 @@ test("an Agent built without a revision stamp shows no server line", async () =>
 				new Response( JSON.stringify( { ok: true, build: { revision: "", uptimeSeconds: 5 } } ) )
 			),
 		async ( { now } ) => {
-			const info = createBuildInfo( "/api", undefined );
-			info.lines( now() );
+			const info = createBuildInfo( "/api", undefined, undefined );
+			info.readout( now() );
 			await settle();
-			assert.deepEqual( info.lines( now() ), [] );
+			assert.deepEqual( info.readout( now() ).lines, [] );
 			info.dispose();
 		}
 	);
