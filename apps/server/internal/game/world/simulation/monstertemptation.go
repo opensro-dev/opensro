@@ -97,7 +97,7 @@ func (ops *MonsterMoverOps) acquireTemptationFoe(divisionID string, instance mon
 		return nil, nil, false
 	}
 	mustMoverTransition(&mover, monster.MoverEventAggroAcquired, foe.Gid)
-	if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0); planned {
+	if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, live, foe); planned {
 		ops.adoptMonsterAttack(&mover, plan)
 		if frames, targeted, handled := ops.tryMonsterAttack(divisionID, instance, tactics, mover, foes, nowMs); handled {
 			return frames, targeted, true

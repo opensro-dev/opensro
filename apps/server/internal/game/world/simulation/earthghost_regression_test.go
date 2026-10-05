@@ -52,7 +52,7 @@ func earthGhostFixture(t *testing.T) (*MonsterMoverOps, monster.Instance, player
 	if !s.ArmRetaliation(monsterTestDivision, actor.Gid, target.Gid) {
 		t.Fatal("retaliation failed")
 	}
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) { return data.Skill, true }
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) { return data.Skill, true }
 	return ops, actor, target
 }
 

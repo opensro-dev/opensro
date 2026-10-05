@@ -30,7 +30,7 @@ func TestRejectedSegmentCannotPublishGoalOrChannel(t *testing.T) {
 func TestRetaliationDuringAdmittedAttackPreservesCastAndCooldown(t *testing.T) {
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
 	ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(1))
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		return MonsterAttackPlan{SkillID: 1, Reach: 50, CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}
 	ops.BasicAttack = func(string, monster.Instance, uint32, uint32, int64) MonsterAttackResult {
@@ -72,7 +72,7 @@ func TestRejectedArrivalCannotPublishCorrection(t *testing.T) {
 func TestRejectedAttackPlanCannotApplyDamageOrPublishCorrection(t *testing.T) {
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
 	ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(1))
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
 		ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(2))
 		return MonsterAttackPlan{SkillID: 1, Reach: 50, CooldownMs: 1000, ActionLifecycleMs: 600}, true
 	}

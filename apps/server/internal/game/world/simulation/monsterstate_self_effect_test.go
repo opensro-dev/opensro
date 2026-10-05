@@ -24,10 +24,10 @@ func TestConditionalSelectionOrderRefusalEntropyAndArchiveIsolation(t *testing.T
 	draws := 0
 	ops := MonsterMoverOps{Monsters: s, Rand: func() float64 { draws++; return .4 }}
 	calls := []uint32{}
-	ops.AttackPlan = func(_ monster.Instance, id uint32, sample float64) (MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(_ monster.Instance, id uint32, pick AttackPick) (MonsterAttackPlan, bool) {
 		calls = append(calls, id)
 		if id == 22 {
-			if sample != 0 {
+			if pick.Sample != 0 {
 				t.Fatal("conditional choice entropy")
 			}
 			return MonsterAttackPlan{SkillID: 22, SelfEffect: true, CooldownMs: 2500, ActionLifecycleMs: 2000}, true
@@ -38,12 +38,12 @@ func TestConditionalSelectionOrderRefusalEntropyAndArchiveIsolation(t *testing.T
 		return MonsterAttackPlan{SkillID: 99, Reach: 10, CooldownMs: 1000, ActionLifecycleMs: 500}, true
 	}
 	// Existing active selection bypasses both conditions and choice entropy.
-	ops.selectMonsterAttack("conditional", m, 99)
+	ops.selectMonsterAttack("conditional", m, 99, monster.Pose{}, playerPose{})
 	live, _ := s.Get("conditional", m.Gid)
 	if live.ConditionalUsed != 0 || draws != 0 {
 		t.Fatal("retained selection consumed a condition")
 	}
-	p, ok := ops.selectMonsterAttack("conditional", m, 0)
+	p, ok := ops.selectMonsterAttack("conditional", m, 0, monster.Pose{}, playerPose{})
 	if !ok || p.SkillID != 22 || draws != 0 {
 		t.Fatal("default-slot order", p, draws)
 	}
@@ -53,20 +53,20 @@ func TestConditionalSelectionOrderRefusalEntropyAndArchiveIsolation(t *testing.T
 		t.Fatal("adoption must draw once")
 	}
 	for range 3 {
-		retained, _ := ops.selectMonsterAttack("conditional", m, 22)
+		retained, _ := ops.selectMonsterAttack("conditional", m, 22, monster.Pose{}, playerPose{})
 		ops.adoptMonsterAttack(&mover, retained)
 	}
 	if draws != 1 {
 		t.Fatal("retained skill redrew jitter")
 	}
-	if _, ok := ops.selectMonsterAttack("conditional", m, 0); ok {
+	if _, ok := ops.selectMonsterAttack("conditional", m, 0, monster.Pose{}, playerPose{}); ok {
 		t.Fatal("refused condition replaced with ordinary attack")
 	}
 	live, _ = s.Get("conditional", m.Gid)
 	if live.ConditionalUsed != 3 {
 		t.Fatal("condition consumption lost", live.ConditionalUsed)
 	}
-	p, ok = ops.selectMonsterAttack("conditional", m, 0)
+	p, ok = ops.selectMonsterAttack("conditional", m, 0, monster.Pose{}, playerPose{})
 	if !ok || p.SkillID != 99 || draws != 2 {
 		t.Fatal("ordinary fallback after consumed conditions", p, draws)
 	}

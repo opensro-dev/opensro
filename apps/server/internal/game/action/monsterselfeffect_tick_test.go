@@ -55,7 +55,7 @@ func TestRetiredSummonBuffReachesViewerAfterSeveralShownTicks(t *testing.T) {
 	}
 	rt := &Runtime{Monsters: s}
 	ops := &simulation.MonsterMoverOps{Monsters: s, Rand: func() float64 { return 0 }}
-	ops.AttackPlan = func(monster.Instance, uint32, float64) (simulation.MonsterAttackPlan, bool) {
+	ops.AttackPlan = func(monster.Instance, uint32, simulation.AttackPick) (simulation.MonsterAttackPlan, bool) {
 		return simulation.MonsterAttackPlan{}, false
 	}
 	lease, ok := s.ObjectPopulation("summon", parent.Gid)
