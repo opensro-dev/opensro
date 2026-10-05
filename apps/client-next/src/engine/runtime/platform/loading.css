@@ -895,3 +895,99 @@ sent or dismissed. The replay's capture <video> is never visible.
 	background: #6b5320;
 	border-color: #cba85e;
 }
+
+/*
+First-login tour (onboarding.ts). Above every other overlay: while a step
+is up the page is dimmed except for a lit window around one element, and
+clicks stop at the tour.
+*/
+
+.sro-tour {
+	position: fixed;
+	z-index: 1010;
+	inset: 0;
+	pointer-events: auto;
+	color: #e9dfc4;
+	font: 13px/1.45 Arial, sans-serif;
+}
+
+.sro-tour[hidden] {
+	display: none;
+}
+
+.sro-tour__spot {
+	position: fixed;
+	border: 1px solid rgba(232, 196, 110, 0.9);
+	border-radius: 4px;
+	box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.72), 0 0 12px rgba(232, 196, 110, 0.55);
+	pointer-events: none;
+}
+
+.sro-tour__arrow {
+	position: fixed;
+	width: 0;
+	height: 0;
+	margin-left: -9px;
+	border-left: 9px solid transparent;
+	border-right: 9px solid transparent;
+	pointer-events: none;
+}
+
+.sro-tour__arrow[data-side="below"] {
+	border-bottom: 14px solid #e8c46e;
+}
+
+.sro-tour__arrow[data-side="above"] {
+	border-top: 14px solid #e8c46e;
+}
+
+.sro-tour__bubble {
+	position: fixed;
+	box-sizing: border-box;
+	width: 300px;
+	max-width: calc(100vw - 16px);
+	padding: 12px 14px 10px;
+	border: 1px solid rgba(232, 196, 110, 0.75);
+	border-radius: 4px;
+	background: rgba(14, 16, 20, 0.96);
+	box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+}
+
+.sro-tour__title {
+	margin: 0 0 6px;
+	color: #e8c46e;
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.sro-tour__text {
+	margin: 0 0 10px;
+}
+
+.sro-tour__actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.sro-tour__actions button {
+	padding: 3px 12px;
+	border: 1px solid rgba(232, 196, 110, 0.55);
+	border-radius: 3px;
+	background: rgba(40, 34, 22, 0.9);
+	color: #e9dfc4;
+	font: inherit;
+	cursor: pointer;
+}
+
+.sro-tour__actions .sro-tour__skip {
+	border-color: transparent;
+	background: transparent;
+	color: #a99f88;
+}
+
+.sro-tour__actions button:hover,
+.sro-tour__actions button:focus-visible {
+	border-color: #e8c46e;
+	color: #fff;
+}

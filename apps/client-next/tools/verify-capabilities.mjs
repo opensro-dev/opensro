@@ -48,6 +48,7 @@ const pipelines = runtime + "renderer/device/pipelines.ts",
 const ui = runtime + "renderer/device/ui.ts", uiBridge = runtime + "platform/ui/ui.ts";
 const flares = runtime + "renderer/device/flares.ts";
 const bugReport = runtime + "bug-report/bug-report.ts",
+	onboarding = runtime + "onboarding/onboarding.ts",
 	bugRecorder = runtime + "bug-report/recorder.ts",
 	bugDialog = runtime + "bug-report/dialog.ts",
 	bugTrimmer = runtime + "bug-report/trimmer.ts",
@@ -81,7 +82,7 @@ export const rules = {
 	mapAsync: [ timing ],
 	getMappedRange: [ timing ],
 	Audio: [ runtime + "audio/music/music.ts" ],
-	createElement: [ uiBridge, runtime + "platform/ui/cursor.ts", bugRecorder, bugDialog, bugTrimmer ],
+	createElement: [ uiBridge, runtime + "platform/ui/cursor.ts", bugRecorder, bugDialog, bugTrimmer, onboarding ],
 	// The picking mask readback, shared by the renderer and the asset worker.
 	OffscreenCanvas: [ "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder ],
 	AudioContext: [ runtime + "audio/audio.ts" ],
@@ -137,9 +138,16 @@ export const rules = {
 		bugDialog,
 		bugTrimmer,
 		bugTranscode,
-		bugJournal
+		bugJournal,
+		onboarding
 	],
-	fetch: [ runtime + "simulation/worker/session/http/http.ts", runtime + "assets/worker/loader.ts", bugReport ],
+	fetch: [
+		runtime + "simulation/worker/session/http/http.ts",
+		runtime + "assets/worker/loader.ts",
+		bugReport,
+		// The Agent's one GET /title/onboarding: whether the tour runs.
+		onboarding
+	],
 	WebSocket: [ runtime + "simulation/worker/network/network.ts" ],
 	WebTransport: [],
 	Worker: [ runtime + "simulation/host.ts", runtime + "assets/assets.ts" ]

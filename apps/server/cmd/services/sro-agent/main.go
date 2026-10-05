@@ -25,6 +25,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/agent/bugreport"
+	"opensro.online/server/internal/agent/onboarding"
 	"opensro.online/server/internal/agent/server"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
@@ -119,6 +120,7 @@ func main() {
 		AllowedOrigins:          splitCSV(os.Getenv(envOrigins)),
 		Readiness:               ready,
 		BugReports:              bugReports,
+		OnboardingOff:           !onboarding.FromEnv(os.Getenv),
 	})
 	if err != nil {
 		log.Fatalf("agent: construction: %v", err)

@@ -29,6 +29,7 @@ func TestBrowserRoutesRefuseAnotherReleaseProtocol(t *testing.T) {
 	f := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
 	routes := []struct{ method, path string }{
 		{http.MethodGet, "/title/servers"},
+		{http.MethodGet, onboardingPath},
 		{http.MethodPost, "/title/login"},
 		{http.MethodPost, "/title/session"},
 		{http.MethodPost, "/title/logout"},

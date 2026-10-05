@@ -1825,6 +1825,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/ui/onboarding-steps.ts",
+			"provider": "src/engine/runtime/onboarding/onboarding.ts",
+			"functions": [
+				"onScreen"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/bug-report/bug-report.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
@@ -2094,7 +2101,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "b5c2cd72103ab2fe50aedab15c2498d34f8254dfbedbbe6ede7720c3c550f09b",
+			"sourceSha256": "0ecbeb5441cef36b0609408e537e1991573d1123ddd83f0ff207e7fb96d49d50",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

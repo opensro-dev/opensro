@@ -94,6 +94,12 @@ variable "bug_report_max_bytes" {
   default = "10485760"
 }
 
+# The client's first-login tour of the port's additions; "0" hides it.
+variable "onboarding" {
+  type    = string
+  default = "1"
+}
+
 variable "cpu" {
   type    = number
   default = 500
@@ -204,6 +210,7 @@ job "sro-agent" {
         SRO_RELEASE_ID                    = var.release_id
         SRO_BUG_REPORT_REPLAY_DEFAULT     = var.bug_report_replay_default
         SRO_BUG_REPORT_MAX_BYTES          = var.bug_report_max_bytes
+        SRO_ONBOARDING                    = var.onboarding
       }
 
       template {

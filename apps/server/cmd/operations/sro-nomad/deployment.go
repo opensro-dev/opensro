@@ -24,6 +24,7 @@ import (
 	"unicode/utf8"
 
 	"opensro.online/server/internal/agent/bugreport"
+	"opensro.online/server/internal/agent/onboarding"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
 	"opensro.online/server/internal/data/store"
@@ -68,7 +69,9 @@ type deployment struct {
 	GMCharacters   string
 	BetaMastery    string
 	// PartyMasteries comes from the deployer's SRO_PARTY_MASTERIES.
-	PartyMasteries  bool
+	PartyMasteries bool
+	// Onboarding comes from the deployer's SRO_ONBOARDING.
+	Onboarding      bool
 	TransportCert   string
 	TransportKey    string
 	TransportTLSID  string
@@ -377,6 +380,7 @@ func resolveDeployment(
 		GMCharacters:    gmCharacters,
 		BetaMastery:     betaMastery,
 		PartyMasteries:  party.MasteriesFromEnv(),
+		Onboarding:      onboarding.FromEnv(os.Getenv),
 		TransportCert:   transportCert,
 		TransportKey:    transportKey,
 		TransportTLSID:  transportTLSID,
@@ -622,6 +626,7 @@ func (deployment *deployment) agentVariables() map[string]any {
 			deployment.BugReports.MaxBytes,
 			10,
 		),
+		"onboarding": boolEnvValue(deployment.Onboarding),
 	})
 }
 

@@ -31,6 +31,7 @@ import { createAssets } from "./assets/assets";
 import { createReleaseWatch } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
+import { createOnboarding } from "./onboarding/onboarding";
 import { createBugReport } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
@@ -243,6 +244,7 @@ export function startRuntime(
 				import.meta.env.VITE_AGENT_API_BASE || "/api",
 			location.origin
 		).href.replace( /\/$/, "" );
+		const onboarding = own( createOnboarding( apiBase ) );
 		const bugReport = own(
 			createBugReport( {
 				canvas,
@@ -764,6 +766,7 @@ export function startRuntime(
 					// before their first play (worker/install.ts). Runs once per worker.
 					assets.install( new URL( BACKGROUND_INSTALL_LIST, location.origin ).href );
 				}
+				onboarding.step( now, worldReady && sessionState?.phase === "world" && !loadingVisible );
 				// Check for a newer release when the title opens or the connection
 				// drops (the moments a refresh costs the player nothing), and when
 				// the tab comes back into view.
