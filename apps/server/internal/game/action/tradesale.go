@@ -129,6 +129,11 @@ func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc 
 		}
 		credit = int64(uint32(unit) * uint32(item.Quantity))
 	default:
+		// Version-scope inference: v1.188 4C8E20 clears trade safety and
+		// emits 34D5 here. v1.150 75AF59 consumes only the special-shop
+		// mode byte, without the later safety limits/counters, and its
+		// client has no 34D5 instruction operand or safety UI symbols.
+		// This port therefore has no later-version safety state to reset.
 		quote, found := rt.Commerce.TradeQuotations[[2]uint32{npc.RefObjID, item.RefObjID}]
 		if !found || quote.Lower != quote.Upper {
 			return 0, 0, false

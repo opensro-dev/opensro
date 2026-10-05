@@ -64,6 +64,33 @@ func TestFortressStateSurvivesReopen(t *testing.T) {
 
 /*
 ================
+TestFortressTaxStateSurvivesReopen
+================
+*/
+func TestFortressTaxStateSurvivesReopen(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	want := domain.FortressRecord{FortressID: 1, GuildID: 41, TaxRate: -20, TaxGold: 12345}
+	if err := s.Fortresses().SaveFortress(testDivision, want); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []domain.FortressRecord{
+		{FortressID: 1, TaxRate: -21}, {FortressID: 1, TaxRate: 21}, {FortressID: 1, TaxGold: -1},
+	} {
+		if err := s.Fortresses().SaveFortress(testDivision, invalid); err == nil {
+			t.Fatalf("invalid tax accepted: %+v", invalid)
+		}
+	}
+	s.Close()
+	s = openTest(t, dir, newTestClock())
+	rows, _, err := s.Fortresses().FortressState(testDivision)
+	if err != nil || len(rows) != 1 || rows[0] != want {
+		t.Fatalf("tax state after reopen: %+v, %v", rows, err)
+	}
+}
+
+/*
+================
 TestLayout5AuthorityGainsTheFortressTables
 
 A schema 16 authority still at layout 5 upgrades to layout 6 with empty
