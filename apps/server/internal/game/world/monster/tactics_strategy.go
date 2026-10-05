@@ -8,6 +8,11 @@ from its tactics row. Most rows get the ordinary callbacks; the row's flags
 and three hard-coded tactics IDs replace the acquisition and target-check
 slots. This file names those choices so the AI legs can ask for them.
 
+DiversionBasis, DiversionKeepBasis and KeepDistance (row +0x28, +0x4C,
++0x70) are loaded but no SR_GameServer code reads them back from a CTactics
+row (a scan of 500000..600000 for loads through +0x2C), so the port
+leaves them unread too.
+
 ===========================================================================
 */
 
