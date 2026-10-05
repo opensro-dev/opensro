@@ -25,6 +25,11 @@ const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
 const context = { country: 0, abnormal: 0 }, word = category => 0xec | (category << 11);
+/*
+================
+fixture
+================
+*/
 function fixture( quantity = 3 ) {
 	return {
 		inventorySlotCount: 45,
@@ -133,6 +138,7 @@ test("gameplay publishes receipt timers and automatic use observes the same owne
 		}
 	} );
 	g.seed( local );
+	g.receive( { opcode: 0x33a6, payload: Uint8Array.of( 1, 0, 0, 0, 0, 0, 2, 10, 0, 0, 0 ) }, 0 );
 	g.step( 0, local );
 	assert.equal( sent.length, 1 );
 	g.receive( { opcode: 0xb5bd, payload: receipt( 14, 2, 2 ) }, 10 );
@@ -162,4 +168,50 @@ test("inventory shares category sweep and expiry but native countdown digits are
 	}
 	assert.deepEqual( inventoryItemCooldownQuads( rows, 0x8ec, 600, r, clip ), [], "MP cooldown does not shade HP" );
 	assert.deepEqual( inventoryItemCooldownQuads( [], 0x10ec, 600, r, clip ), [] );
+});
+
+test("every companion and cure category starts on success and blocks only its lane", () => {
+	const families = [
+		[ 1, 4, 4, 1000 ],
+		[ 1, 5, 5, 1000 ],
+		[ 1, 7, 6, 1000 ],
+		[ 1, 9, 7, 1000 ],
+		[ 2, 1, 13, 20000 ],
+		[ 2, 6, 14, 1000 ],
+		[ 2, 7, 15, 1000 ]
+	];
+	for ( const [group, subtype, category, durationMs] of families ) {
+		const tid = 0x6c | group << 7 | subtype << 11;
+		assert.equal( p.potionCategory( tid ), category );
+		for ( const country of [ 0, 1 ] ) {
+			assert.equal( p.potionCooldownMs( category, {}, country, 0x600000 ), durationMs );
+		}
+		const owner = createInventory( () => {} );
+		owner.bootstrap( {
+			refItemSnapshot: [ { refObjId: 1, typeFlags: tid } ],
+			equipItems: [ { refObjId: 1, slot: 13, body: [ 1, 0, 0, 0, 3, 0 ] } ]
+		} );
+		owner.receive( 0xb5bd, Uint8Array.of( 1, 13, 2, 0, tid & 255, tid >>> 8 ), 100, context );
+		assert.deepEqual( owner.state().itemCooldowns, [ { category, startedAtMs: 100, durationMs } ] );
+		assert.equal( owner.use( 13, 100 + durationMs - 1 ), null );
+		assert.equal( p.itemCooldown( owner.state().itemCooldowns, tid, 100 + durationMs ), undefined );
+		assert.equal( p.itemCooldown( owner.state().itemCooldowns, word( 1 ), 100 ), undefined );
+	}
+	for ( const subtype of [ 0, 6, 8, 10, 31 ] ) assert.equal( p.potionCategory( word( subtype ) ), null );
+});
+
+test("published unlimited potions acknowledge once without spending or bypassing cooldown", () => {
+	const owner = createInventory( () => {} ), unlimited = { ...context, unlimitedItems: [ 2 ] };
+	owner.bootstrap( fixture() );
+	owner.use( 14, 0 );
+	assert.throws( () => owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 10, context ), /Stale/ );
+	owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 10, unlimited );
+	assert.equal( owner.state().inventory.find( item => item.slot === 14 )?.quantity, 3 );
+	assert.equal( owner.state().inventoryPending, false );
+	assert.deepEqual( owner.state().itemCooldowns, [ { category: 2, startedAtMs: 10, durationMs: 1000 } ] );
+	assert.equal( owner.use( 14, 1009 ), null );
+	assert.throws( () => owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 500, unlimited ), /Stale/ );
+	owner.use( 16, 1010 );
+	assert.throws( () => owner.receive( 0xb5bd, receipt( 16, 3, 2 ), 1011, unlimited ), /Stale/ );
+	assert.throws( () => owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 1011, unlimited ), /Stale/ );
 });

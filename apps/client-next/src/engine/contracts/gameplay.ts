@@ -279,6 +279,8 @@ export type GameplayCommand =
 		readonly regionId: number;
 		readonly bundle: unknown;
 	}
+	| { readonly kind: "auto-potion-input"; readonly blocked: boolean; readonly itemMallOpen?: boolean; }
+	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
 	| { readonly kind: "npc-close"; }
@@ -516,6 +518,8 @@ export interface GameplayState {
 	readonly skills?: readonly number[];
 	readonly quickSlots?: readonly import("@/engine/foundation/gameplay/quickslots").QuickSlot[];
 	readonly cosRecords?: readonly CosRecord[];
+	readonly selectedCosGid?: number;
+	readonly cosStatusRecords?: readonly CosRecord[];
 	readonly worldClock?: WorldClockSeed;
 	readonly questMarkers?: readonly QuestMarker[];
 	readonly completedQuests?: readonly number[];

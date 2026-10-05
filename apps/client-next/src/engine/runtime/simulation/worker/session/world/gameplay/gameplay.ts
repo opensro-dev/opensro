@@ -9,6 +9,11 @@ commands and cannot bypass actor eligibility.
 
 ===========================================================================
 */
+import {
+	autoPotionTarget,
+	autoPotionTargetNotice,
+	createCosSelection
+} from "@/engine/foundation/gameplay/cos-item-use";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
 import { createStorageRoom, isWarehouseTicket } from "@/engine/foundation/gameplay/storage-room";
@@ -50,6 +55,7 @@ import {
 import { skillNotice } from "@/engine/foundation/gameplay/skill-notices";
 import { returnScrollCast, type ReturnScrollCast } from "@/engine/foundation/gameplay/return-scroll";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
+import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
@@ -80,9 +86,10 @@ import {
 	autoPotionSettings,
 	autoPotionSave,
 	autoPotionEntry,
-	autoPotionDelay,
-	autoPotionEligible,
-	autoPotionActive,
+	emptyAutoPotionTimer,
+	checkAutoPotionTimer,
+	autoPotionChannelChanged,
+	type AutoPotionTimer,
 	autoPotionItemSlot,
 	type AutoPotionFacts
 } from "@/engine/foundation/gameplay/auto-potion";
@@ -207,6 +214,8 @@ const SKILL_ANSWER_SLACK_MS = 500;
 // B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
 const ACTION_STATE_ARM = 1;
 const QUEUED_COMMANDS = 2;
+const ITEM_NOTICE_CATEGORY = 1;
+const ITEM_INTERACTION_REFUSAL = 0x35;
 
 /*
 ================
@@ -259,9 +268,14 @@ export function createGameplay(
 	let warnings = [ false, false ];
 	let options = initialGameOptions();
 	let eligibility = { gm: false, pcRoomEvent: false };
+	let autoPotionInputBlocked = false, autoPotionItemMallOpen = false;
 	let autoPotion = autoPotionBootstrap( {} );
 	let potionFacts: AutoPotionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
-	const potionDue: [number | null, number | null, number | null] = [ null, null, null ];
+	const potionTimers: [AutoPotionTimer, AutoPotionTimer, AutoPotionTimer] = [
+		emptyAutoPotionTimer(),
+		emptyAutoPotionTimer(),
+		emptyAutoPotionTimer()
+	];
 	const guideSummons = new Map<number, number>();
 	let guide: GameplayState["guide"];
 	let academy: GameplayState["academy"];
@@ -474,6 +488,7 @@ fails; retry persistence without restoring stale slot occupancy.
 	let cosError: string | null = null;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
+	const cosSelection = createCosSelection();
 	let activeCos: GameplayState["activeCos"], cosResult: GameplayState["cosResult"];
 	// 6E6150 keys a kind-3 row by its item id, so distinct items stack.
 	let cosWindows: readonly CosItemWindow[] = [];
@@ -488,6 +503,57 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The NPC warehouse (storage-room.ts).
 	const storage = createStorageRoom( send );
 	let previousLockedQuestNotice = "";
+	/*
+================
+checkAutomaticPotion
+
+All automatic attempts enter the same inventory transaction and category
+reuse gate as manual activation. Recovery completion is server-owned.
+================
+	*/
+	function checkAutomaticPotion( kind: 0 | 1 | 2, now: number, event: "vitals" | "timer" ) {
+		const result = checkAutoPotionTimer( potionTimers[kind], {
+			kind,
+			settings: autoPotion,
+			facts: potionFacts,
+			now,
+			event
+		} );
+		potionTimers[kind] = result.timer;
+		if ( !result.use || autoPotionInputBlocked ) return;
+		const entry = autoPotionEntry( [ autoPotion.hp, autoPotion.mp, autoPotion.cure ][kind]! );
+		const binding = bindings.quickSlots.find( row => row.slot === entry.slot );
+		const slot = binding ? autoPotionItemSlot( binding, inventory.state().inventory ) : null;
+		// 561D50 checks the NPC interaction latch (69F870 includes storage)
+		// and the return-delay control. The retry timer itself stays armed.
+		if ( slot === null ) return;
+		if ( autoPotionItemMallOpen || returnScroll || inventory.state().shop || storage.state() ) {
+			const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, ITEM_INTERACTION_REFUSAL );
+			if ( notice ) api.notice( notice );
+			return;
+		}
+		const item = inventory.state().inventory.find( row => row.slot === slot )!;
+		if ( itemCooldown( inventory.state().itemCooldowns, item.typeFlags, now ) ) return;
+		const context = autoPotionTarget(
+			item.typeFlags,
+			[ ...cosRecords.values() ],
+			cosSelection.selected(),
+			targeting.state().target ?? 0
+		);
+		if ( !context ) {
+			const notice = autoPotionTargetNotice(
+				item.typeFlags,
+				[ ...cosRecords.values() ],
+				cosSelection.selected()
+			);
+			if ( notice ) api.notice( notice );
+			return;
+		}
+		if ( inventory.state().inventoryPending ) return;
+		inventory.use( slot, now, context );
+		dirty = true;
+	}
+
 	let localGid = 0, revision = 0, dirty = false, protocol = 0, localCountry: number | undefined;
 	/*
 ================
@@ -605,7 +671,9 @@ selected entities, cooldowns or world-entry state.
 		eligibility = { gm: false, pcRoomEvent: false };
 		autoPotion = autoPotionBootstrap( {} );
 		potionFacts = { alive: false, hp: 0, mp: 0, maxHp: 0, maxMp: 0, abnormal: 0 };
-		potionDue.fill( null );
+		potionTimers.fill( emptyAutoPotionTimer() );
+		autoPotionInputBlocked = false;
+		autoPotionItemMallOpen = false;
 		selectionDecal = null;
 		uniqueRefs = uniqueReferences( {} );
 		gmItems.clear();
@@ -644,6 +712,7 @@ selected entities, cooldowns or world-entry state.
 		localCountry = undefined;
 		job = noJob();
 		cosRecords.clear();
+		cosSelection.reset();
 		cosRefs.clear();
 		cosItemRefs.clear();
 		cosItemCaps.clear();
@@ -724,7 +793,9 @@ packets own subsequent mutations; bootstrap owns only initial state.
 				if ( flag !== undefined && typeof flag !== "boolean" ) throw Error( "Invalid entry eligibility" );
 			}
 			eligibility = { gm: identity?.gmPrivilege === true, pcRoomEvent: identity?.pcRoomEvent === true };
-			potionDue.fill( null );
+			potionTimers.fill( emptyAutoPotionTimer() );
+			autoPotionInputBlocked = false;
+			autoPotionItemMallOpen = false;
 			const pc =
 				(value as { character?: { hp?: number; mp?: number; maxHp?: number; maxMp?: number; }; }).character;
 			entryVitals = { hp: pc?.hp, mp: pc?.mp, maxHp: pc?.maxHp, maxMp: pc?.maxMp };
@@ -809,6 +880,7 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			cosResult = undefined;
 			cosError = null;
 			cosRecords.clear();
+			cosSelection.reset();
 			cosRefs.clear();
 			cosItemRefs.clear();
 			cosItemCaps.clear();
@@ -892,6 +964,7 @@ Bind the admitted local actor and initialize its authoritative movement.
 		*/
 		seed( entity: EntityState ) {
 			localCountry = entity.countryByte9c;
+			potionFacts = { ...potionFacts, alive: ((entity.appearanceState?.[0] ?? 1) & 1) !== 0 };
 			job = entity.localJob ?? noJob();
 			if ( localGid !== entity.gid ) {
 				localGid = entity.gid;
@@ -1234,10 +1307,17 @@ state here before a command can claim a native wire conversation.
 				} );
 			}
 			if ( command.kind === "auto-potion-save" ) {
-				const next = autoPotionSettings( command.settings ), frame = autoPotionSave( next );
+				const next = autoPotionSettings( command.settings );
+				const changed = ([ 0, 1, 2 ] as const).map( kind =>
+					autoPotionChannelChanged( autoPotion, next, kind )
+				);
+				if ( !changed.some( Boolean ) && next.timing === autoPotion.timing ) return null;
+				const frame = autoPotionSave( next );
 				send( frame );
 				autoPotion = next;
-				potionDue.fill( null );
+				for ( const kind of [ 0, 1, 2 ] as const ) {
+					if ( changed[kind] ) potionTimers[kind] = { ...potionTimers[kind], active: false };
+				}
 				return frame;
 			}
 			if ( command.kind === "guide-event" ) {
@@ -1411,14 +1491,14 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "cos-clean" ) {
 				// CICCos_ExecuteActionCommand (6A2350) case 5: a riding mount or a
-				// transport (record class 0/1, bands 1/2) is retired with 0x7618
+				// transport (class 0/1; quest band 6 also defaults to class 0) uses 0x7618
 				// [u32 gid] (6FF800); a guild soldier (class 4, band 5) with an
 				// empty 0x7458 (6FE850). Pets leave through cancellation instead.
 				const record = cosRecords.get( command.gid );
 				// A riding mount spawns without an owner GID (as cos-ride allows);
 				// the owner's own record set proves it is ours.
 				if (
-					!record || ![ 1, 2, 5 ].includes( record.band ) || entity?.gid !== record.gid ||
+					!record || ![ 1, 2, 5, 6 ].includes( record.band ) || entity?.gid !== record.gid ||
 					entity.kind !== "cos" || (record.band !== 1 && entity.ownerGid !== localGid) ||
 					entity.refObjId !== record.refObjId
 				) throw Error( "No owned COS to clean" );
@@ -1665,10 +1745,21 @@ state here before a command can claim a native wire conversation.
 				) throw Error( "Insufficient gold" );
 				return inventory.dropGold( command.amount, now );
 			}
+			if ( command.kind === "auto-potion-input" ) {
+				autoPotionInputBlocked = command.blocked;
+				autoPotionItemMallOpen = command.itemMallOpen ?? false;
+				return null;
+			}
+			if ( command.kind === "cos-select" ) {
+				cosSelection.select( command.gid, cosRecords );
+				dirty = true;
+				return null;
+			}
 			if ( command.kind === "item-use" ) {
 				return inventory.use( command.slot, now, {
 					records: [ ...cosRecords.values() ],
-					selectedGid: command.companionGid,
+					selectedGid: command.companionGid ?? (cosSelection.selected() || undefined),
+					targetGid: targeting.state().target ?? 0,
 					revivalSlot: command.revivalSlot,
 					summonerSlot: command.summonerSlot,
 					skin: command.skin,
@@ -2405,6 +2496,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					inventory.bindCompanion( record );
 					cosRecords.set( record.gid, record );
+					cosSelection.add( record, cosRecords );
 					if ( record.band === 1 || record.band === 2 ) activeCos = record;
 					dirty = true;
 					return true;
@@ -2500,6 +2592,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true ) === localGid
 				) {
 					movement.life( frame.payload[5] as 1 | 2, now );
+					potionFacts = { ...potionFacts, alive: (frame.payload[5]! & 1) !== 0 };
 					dirty = true;
 				}
 				if (
@@ -2527,6 +2620,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				// 0x3691 zero pair or the 0x3369/0x366A reset sweep (6E6270).
 				if ( frame.opcode === 0x36ab && frame.payload.length === 4 ) {
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true );
+					cosSelection.remove( gid, cosRecords );
 					cosRecords.delete( gid );
 					if ( selectionDecal?.kind === "target" && selectionDecal.gid === gid ) selectionDecal = null;
 					if ( activeCos?.gid === gid ) {
@@ -2652,10 +2746,35 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				const item = inventory.receive( frame.opcode, frame.payload, now, {
 						country: localCountry,
-						abnormal: potionFacts.abnormal
+						abnormal: potionFacts.abnormal,
+						unlimitedItems
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				if (
+					fight && frame.opcode === 0x33a6 &&
+					new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
+							0,
+							true
+						) === localGid
+				) {
+					const vital = combat.state().vitals.find( row => row.gid === localGid )!;
+					// 77A080 processes HP, MP, then abnormal state. Inactive
+					// channels can attempt use here; armed channels wait for Tick.
+					if ( frame.payload[6]! & 1 ) {
+						potionFacts = { ...potionFacts, hp: vital.hp ?? potionFacts.hp };
+						checkAutomaticPotion( 0, now, "vitals" );
+					}
+					if ( frame.payload[6]! & 2 ) {
+						potionFacts = { ...potionFacts, mp: vital.mp ?? potionFacts.mp };
+						checkAutomaticPotion( 1, now, "vitals" );
+					}
+					if ( frame.payload[6]! & 4 ) {
+						potionFacts = { ...potionFacts, abnormal: vital.abnormal ?? potionFacts.abnormal };
+						checkAutomaticPotion( 2, now, "vitals" );
+					}
+				}
+
 				// B245 [2, code]: the server refused the targeted command at the
 				// press, before touching movement (an empty MP pool is 0x3004).
 				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) movement.castRefused( now );
@@ -2876,7 +2995,7 @@ before take assembles the presentation snapshot.
 			const vital = combat.state().vitals.find( v => v.gid === localGid );
 			potionFacts = {
 				...potionFacts,
-				alive: !!local && local.appearanceState?.[0] !== 2 && (vital?.hp ?? potionFacts.hp) > 0,
+				alive: !!local && ((local.appearanceState?.[0] ?? 1) & 1) !== 0,
 				hp: vital?.hp ?? potionFacts.hp,
 				mp: vital?.mp ?? potionFacts.mp,
 				abnormal: vital?.abnormal ?? potionFacts.abnormal
@@ -2892,24 +3011,8 @@ before take assembles the presentation snapshot.
 				) play( "SND_ALARM", now );
 			}
 			warnings = local ? low : [ false, false ];
-			for ( const kind of [ 0, 1, 2 ] as const ) {
-				const entry = autoPotionEntry( [ autoPotion.hp, autoPotion.mp, autoPotion.cure ][kind]! );
-				if ( !autoPotionActive( kind, entry, potionFacts ) ) {
-					potionDue[kind] = null;
-					continue;
-				}
-				if ( potionDue[kind] !== null && now < potionDue[kind]! ) continue;
-				potionDue[kind] = now + autoPotionDelay( autoPotion );
-				if ( !autoPotionEligible( kind, entry, potionFacts ) ) continue;
-				const binding = bindings.quickSlots.find( row => row.slot === entry.slot ),
-					slot = binding ? autoPotionItemSlot( binding, inventory.state().inventory ) : null;
-				if (
-					slot === null || inventory.state().inventoryPending ||
-					!inventory.state().inventory.some( row => row.slot === slot )
-				) continue;
-				inventory.use( slot, now, { records: [ ...cosRecords.values() ] } );
-				dirty = true;
-			}
+			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
+
 			const combatChanged = combat.step( now ), inventoryChanged = inventory.step( now );
 			const trained = training.step( now ), moved = movement.step( now ), targeted = targeting.step( now );
 			dirty = combatChanged || inventoryChanged || trained || chat.step( now ) || moved || targeted || dirty;
@@ -2923,6 +3026,7 @@ die
 			combat.cancelGuided( gid, now );
 			if ( gid === localGid ) {
 				movement.life( 2, now );
+				potionFacts = { ...potionFacts, alive: false };
 				selectionDecal = null;
 				dirty = true;
 			}
@@ -3041,6 +3145,8 @@ The published plane when something changed since the last take, else null.
 				fortress,
 				skillCatalog: catalog,
 				progression,
+				selectedCosGid: cosSelection.selected(),
+				cosStatusRecords: cosSelection.statusRecords( cosRecords ),
 				cosRecords: [ ...cosRecords.values() ].map( record => {
 					const v = c.vitals.find( row => row.gid === record.gid );
 					return {
@@ -3107,7 +3213,9 @@ World transfer retires spatial work while retaining character/session data.
 				};
 			}
 			warnings = [ false, false ];
-			potionDue.fill( null );
+			potionTimers.fill( emptyAutoPotionTimer() );
+			autoPotionInputBlocked = false;
+			autoPotionItemMallOpen = false;
 			potionFacts = { ...potionFacts, alive: false };
 			selectionDecal = null;
 			social = withoutResurrection( { ...social, invitation: null } );
@@ -3122,6 +3230,7 @@ World transfer retires spatial work while retaining character/session data.
 			cosResult = undefined;
 			cosError = null;
 			cosRecords.clear();
+			cosSelection.reset();
 			dirty = true;
 		},
 		/*

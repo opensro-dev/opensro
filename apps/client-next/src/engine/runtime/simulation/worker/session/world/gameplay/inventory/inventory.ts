@@ -13,8 +13,8 @@ import { createMall } from "./mall/mall";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 import {
 	itemCooldown,
-	recoveryCategory,
-	recoveryCooldownMs,
+	potionCategory,
+	potionCooldownMs,
 	type ItemCooldown
 } from "@/engine/foundation/gameplay/item-cooldowns";
 import {
@@ -1130,7 +1130,12 @@ use
 receive
 ================
 		*/
-		receive( op: number, p: Uint8Array, now = 0, recovery?: { country: number | undefined; abnormal: number; } ) {
+		receive(
+			op: number,
+			p: Uint8Array,
+			now = 0,
+			recovery?: { country: number | undefined; abnormal: number; unlimitedItems?: readonly number[]; }
+		) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
 			if ( op === 15 ) {
 				const items = mall.projection( p );
@@ -1486,17 +1491,21 @@ receive
 				if ( !item || item.typeFlags !== v.getUint16( 4, true ) ) {
 					throw new Error( "Stale item use result" );
 				}
-				const category = recoveryCategory( item.typeFlags );
+				const category = potionCategory( item.typeFlags );
 				if ( category ) {
-					if ( quantity !== item.quantity - 1 ) throw Error( "Stale recovery item use result" );
+					// The server's published unlimited-item extension acknowledges use
+					// without spending a stack. It still requires this pending request.
+					const unlimited = quantity === item.quantity &&
+						recovery?.unlimitedItems?.includes( item.refObjId ) &&
+						pending?.opcode === op && pending.source === n;
+					if ( !unlimited && quantity !== item.quantity - 1 ) throw Error( "Stale recovery item use result" );
 					// Read the reference before last-stack removal; failed receipts never reach here.
 					{
-						if ( recovery?.country === undefined ) throw Error( "Missing recovery cooldown country" );
-						const durationMs = recoveryCooldownMs(
+						const durationMs = potionCooldownMs(
 							category,
 							tooltipRefs.get( item.refObjId )?.fields ?? {},
-							recovery.country,
-							recovery.abnormal
+							recovery?.country,
+							recovery?.abnormal ?? 0
 						);
 						itemCooldowns = [ ...itemCooldowns.filter( row => row.category !== category ), {
 							category,
@@ -1644,8 +1653,7 @@ state
 				equipmentSlotCount,
 				inventory: published ?? (published = [ ...slots.values() ].map( present )),
 				itemFlashes,
-				inventoryPending: pending !== null || mall.pending() || alchemy.state().pending ||
-					[ "rolling", "waiting" ].includes( gacha.state().phase ),
+				inventoryPending: busy(),
 				error
 			};
 		},

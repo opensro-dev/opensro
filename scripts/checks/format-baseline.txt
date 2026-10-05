@@ -71,7 +71,6 @@ apps/client-next/src/engine/foundation/audio/options.ts
 apps/client-next/src/engine/foundation/gameplay/abnormal-snapshot.ts
 apps/client-next/src/engine/foundation/gameplay/academy-notices.ts
 apps/client-next/src/engine/foundation/gameplay/academy.ts
-apps/client-next/src/engine/foundation/gameplay/auto-potion.ts
 apps/client-next/src/engine/foundation/gameplay/buff-slots.ts
 apps/client-next/src/engine/foundation/gameplay/cast-displacement.ts
 apps/client-next/src/engine/foundation/gameplay/cast-results.ts
@@ -93,7 +92,6 @@ apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/hunting.ts
 apps/client-next/src/engine/foundation/gameplay/inventory-notices.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
-apps/client-next/src/engine/foundation/gameplay/item-cooldowns.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
 apps/client-next/src/engine/foundation/gameplay/name-color.ts
@@ -312,7 +310,6 @@ apps/client-next/tests/browser/follow-camera.test.mjs
 apps/client-next/tests/browser/font-guide-regression.test.mjs
 apps/client-next/tests/browser/fortress-appearance.test.mjs
 apps/client-next/tests/browser/foundation.test.mjs
-apps/client-next/tests/browser/game-options.test.mjs
 apps/client-next/tests/browser/geometry.test.mjs
 apps/client-next/tests/browser/glb-compression.test.mjs
 apps/client-next/tests/browser/gm-item-live.test.mjs

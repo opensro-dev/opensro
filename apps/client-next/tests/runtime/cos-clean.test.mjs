@@ -42,7 +42,7 @@ function owned( band, tidWord ) {
 	const gameplay = createGameplay( frame => sent.push( frame ) );
 	gameplay.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord } ] } );
 	gameplay.seed( LOCAL );
-	const RECORD_BYTES = { 1: 17, 2: 21, 3: 39, 4: 28 };
+	const RECORD_BYTES = { 1: 17, 2: 21, 3: 39, 4: 28, 6: 17 };
 	const record = new Uint8Array( RECORD_BYTES[band] );
 	const view = new DataView( record.buffer );
 	view.setUint32( 0, 2, true );
@@ -53,8 +53,8 @@ function owned( band, tidWord ) {
 	return { gameplay, sent, cos };
 }
 
-test("Clean retires a riding mount or a transport with 0x7618", () => {
-	for ( const [band, tid] of [ [ 1, 0x09c6 ], [ 2, 0x11c6 ] ] ) {
+test("Clean requests retirement of riding, transport and default-class quest companions", () => {
+	for ( const [band, tid] of [ [ 1, 0x09c6 ], [ 2, 0x11c6 ], [ 6, 0x31c6 ] ] ) {
 		const { gameplay, sent, cos } = owned( band, tid );
 		gameplay.command( { kind: "cos-clean", gid: 2 }, 1, cos, LOCAL );
 		assert.deepEqual( sent, [ { opcode: 0x7618, payload: Uint8Array.of( 2, 0, 0, 0 ) } ], `band ${band}` );
