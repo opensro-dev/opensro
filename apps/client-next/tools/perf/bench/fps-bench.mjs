@@ -80,6 +80,24 @@ const LOCATIONS = [ {
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
 	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]";
 
+// Units the character may stand from where a sample expects it (the boot
+// fixture start, or its place before a revive) before the sample is rejected.
+const REVIVE_TOLERANCE = 50;
+
+/*
+================
+localPose
+
+The local character's region and position, or null before it is placed.
+================
+*/
+function localPose( page ) {
+	return page.evaluate( () => {
+		const pose = globalThis.__benchRuntime.gameplay().pose;
+		return pose ? { regionId: pose.regionId, x: pose.x, z: pose.z } : null;
+	} );
+}
+
 /*
 ================
 row
@@ -135,6 +153,13 @@ async function session( options, location, results ) {
 		shadowDetail: options.shadowDetail
 	} );
 	try {
+		// A stale or replaced session can boot outside the scene; every
+		// scenario of this location would then measure the wrong place.
+		const booted = await localPose( client.page ), start = location.fixture.start;
+		if (
+			!booted || booted.regionId !== start.regionId ||
+			Math.hypot( booted.x - start.x, booted.z - start.z ) > REVIVE_TOLERANCE
+		) throw Error( `${location.name}: the character booted outside the scene (${JSON.stringify( booted )})` );
 		const captures = await createCaptures( client.page, {
 			dir: options.out,
 			cpu: options.cpu,
@@ -143,7 +168,15 @@ async function session( options, location, results ) {
 		} );
 		for ( const name of location.scenarios ) {
 			if ( !options.only.includes( name ) ) continue;
+			const before = await localPose( client.page );
 			await revive( client.page );
+			const after = await localPose( client.page );
+			// A revive at the resurrection point (choice 2) can move the
+			// character out of the scene; such a sample measures elsewhere.
+			if (
+				!before || !after || before.regionId !== after.regionId ||
+				Math.hypot( before.x - after.x, before.z - after.z ) > REVIVE_TOLERANCE
+			) throw Error( `${location.name}/${name}: the character is not where the scene expects after revive` );
 			const [ms, input] = await drive( client.page, name, location, options.seconds * 1000 );
 			await captures.start();
 			const started = Date.now();
