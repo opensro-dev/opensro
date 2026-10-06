@@ -32,6 +32,7 @@ for ( const refresh of [ 60, 120, 144, 240 ] ) {
 
 test("stalls discard expired deadlines and never replay a burst", () => {
 	const pacing = createFramePacing();
+	pacing.setFrameLimit( 60 );
 	assert.equal( pacing.admit( 0, true ), true );
 	assert.equal( pacing.admit( 1000, true ), true );
 	assert.equal( pacing.admit( 1004, true ), false );
@@ -41,6 +42,7 @@ test("stalls discard expired deadlines and never replay a burst", () => {
 
 test("hidden maintenance and limit changes do not delay foreground recovery", () => {
 	const pacing = createFramePacing();
+	pacing.setFrameLimit( 60 );
 	pacing.admit( 0, true );
 	assert.equal( pacing.admit( 2, false ), true );
 	assert.equal( pacing.admit( 3, true ), true );
@@ -51,19 +53,43 @@ test("hidden maintenance and limit changes do not delay foreground recovery", ()
 	assert.equal( pacing.admit( 13.4, true ), true );
 });
 
-test("saved native video banks migrate to 60 FPS and preserve explicit limits", () => {
+test("saved native video banks follow display refresh by default and preserve explicit limits", () => {
 	const defaults = defaultVideoOptions();
-	assert.equal( defaults.frameLimit, 60 );
+	assert.equal( defaults.frameLimit, 0 );
 	const { frameLimit, ...legacy } = defaults;
-	assert.equal( videoOptions( legacy ).frameLimit, 60 );
+	assert.equal( videoOptions( legacy ).frameLimit, 0 );
 	for ( const limit of [ 60, 120, 240, 0 ] ) {
 		const saved = videoOptions( JSON.parse( JSON.stringify( { ...legacy, frameLimit: limit } ) ) );
 		assert.equal( saved.frameLimit, limit );
 		assert.deepEqual( saved.records, legacy.records );
 		assert.equal( changeVideo( saved, 2, 3 ).frameLimit, limit );
-		assert.equal( resetVideoRecord( saved ).frameLimit, 60 );
+		assert.equal( resetVideoRecord( saved ).frameLimit, 0 );
 	}
 	for ( const invalid of [ -1, 59, 120.5, NaN, "60", null ] ) {
 		assert.throws( () => videoOptions( { ...legacy, frameLimit: invalid } ), /Invalid frame limit/ );
 	}
+});
+
+/*
+================
+displayRefreshDefault
+
+No display-frequency estimate is needed: admit every callback supplied by
+RAF, including a change of monitors and an irregular refresh interval.
+================
+*/
+test("default pacing follows every display callback across monitor changes", () => {
+	const pacing = createFramePacing();
+	let now = 0;
+	for ( const hz of [ 60, 144, 240, 360, 59.94 ] ) {
+		for ( let tick = 0; tick < 120; tick++ ) {
+			now += 1000 / hz;
+			assert.equal( pacing.admit( now, true ), true, `${hz} Hz frame ${tick}` );
+		}
+	}
+	pacing.setFrameLimit( 60 );
+	pacing.admit( now, true );
+	assert.equal( pacing.admit( now + 1, true ), false );
+	pacing.setFrameLimit();
+	assert.equal( pacing.admit( now + 2, true ), true );
 });

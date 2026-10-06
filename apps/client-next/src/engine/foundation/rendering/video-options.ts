@@ -14,7 +14,8 @@ displayScale). It shrinks only when the page is smaller than the mode.
 // true restores sphere reflections, actor ambient .6 and temporary hit lighting.
 // This build switch takes precedence over the saved Metal Detail option.
 export const NATIVE_CHARACTER_LIGHTING = false;
-export const DEFAULT_FRAME_LIMIT = 60;
+// Zero follows requestAnimationFrame at the current display refresh rate.
+export const DEFAULT_FRAME_LIMIT = 0;
 /*
 ================
 frameLimits

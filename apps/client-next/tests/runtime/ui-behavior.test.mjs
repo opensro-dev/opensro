@@ -2745,6 +2745,7 @@ test("frame limit uses the video draft and survives Apply, Cancel and defaults",
 		f.ui.event( { kind: "activate", id: "option-video-combo:-3" } );
 		result = f.ui.step( f.state, 1600 ) ?? result;
 		assert.equal( result.controls.filter( c => c.id.startsWith( "option-video-choice:-3:" ) ).length, 4 );
+		assert.equal( result.controls.find( c => c.id === "option-video-choice:-3:3" ).label, "Display refresh rate" );
 		f.ui.event( { kind: "activate", id: "option-video-choice:-3:1" } );
 		assert.equal( saved.length, 0 );
 		f.ui.event( { kind: "activate", id: "option-apply" } );
@@ -2755,7 +2756,7 @@ test("frame limit uses the video draft and survives Apply, Cancel and defaults",
 		f.ui.event( { kind: "activate", id: "open-window:Option" } );
 		f.ui.event( { kind: "activate", id: "option-default" } );
 		f.ui.event( { kind: "activate", id: "option-ok" } );
-		assert.equal( saved[1].frameLimit, 60 );
+		assert.equal( saved[1].frameLimit, 0 );
 	} finally {
 		f.dispose();
 	}

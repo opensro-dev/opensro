@@ -8896,7 +8896,7 @@ export function createUi(
 							rows = [ ...videoRows(), {
 								slot: VIDEO_FRAME_LIMIT_SLOT,
 								key: "Frame rate",
-								entries: frameLimits().map( fps => fps ? `${fps} FPS` : "Uncapped" ),
+								entries: frameLimits().map( fps => fps ? `${fps} FPS` : "Display refresh rate" ),
 								supported: true
 							} ],
 							combos: {
