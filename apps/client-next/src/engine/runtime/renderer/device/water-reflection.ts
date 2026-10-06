@@ -8,10 +8,10 @@ already recorded for the same frame. Capture bindings never sample the target.
 
 ===========================================================================
 */
-import { WATER_REFLECTION_SIZE } from "@/engine/foundation/rendering/water-reflection";
+import { WATER_REFLECTION_SIZE, waterTextureProjection } from "@/engine/foundation/rendering/water-reflection";
 import type { GeometryDraw } from "../internal/gpu-contract";
 import type { Retire } from "./retirement";
-const UNIFORM_BYTES = 96;
+const UNIFORM_BYTES = 112;
 
 /*
 ================
@@ -74,6 +74,7 @@ export function createWaterReflection( device: GPUDevice, format: GPUTextureForm
 					s = Math.fround( Math.sin( angle ) );
 				values.set( [ c * .03999999910593033, s * -.03999999910593033, s * .03999999910593033, c ], 20 );
 				values.set( matrix );
+				values.set( waterTextureProjection( above ), 24 );
 				values[16] = height;
 				values[17] = above ? 1 : -1;
 				values[18] = 1;

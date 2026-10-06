@@ -197,7 +197,8 @@ export function createGeometryResources(
         waterReflection
 
         Capture variants share geometry and palettes, but use an independent
-        bind group and reversed winding. Water never appears in its own image.
+        bind group. The native orbit camera preserves handedness; 8BA130 selects
+        D3DCULL_CCW (clockwise fronts). Water never appears in its own image.
         ================
         */
 		waterReflection(
@@ -230,7 +231,7 @@ export function createGeometryResources(
 				if ( !meta || meta.water || draw.deferredParticle ) continue;
 				let cached = reflectedBindings.get( draw );
 				if ( !cached || cached.source !== draw.binding ) {
-					const pipeline = pipelines( { ...meta.state, mirror: true } );
+					const pipeline = pipelines( meta.state );
 					const binding = geometryBinding(
 						meta.uniform,
 						geometryBuffers.get( draw )![3]!,

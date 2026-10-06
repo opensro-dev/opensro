@@ -1568,7 +1568,7 @@ export function createWorldRenderer(
 			const waterHeight = reflectionWater?.center[1];
 			const reflectionMatrix = waterHeight === undefined ?
 				undefined :
-				waterReflectionMatrix( matrix, waterHeight );
+				waterReflectionMatrix( matrix, waterHeight, localCamera.eye[1] >= waterHeight );
 			const reflectionFrustum = reflectionMatrix ? prepareViewFrustum( reflectionMatrix ) : undefined;
 			const viewChanged = reflectWater || lastReflection !== reflectWater || !lastView ||
 				!matrix.every( ( v, i ) => v === lastView![i] ) || !lastEye ||
