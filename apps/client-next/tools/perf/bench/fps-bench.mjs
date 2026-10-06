@@ -120,14 +120,15 @@ async function serverUptimeMinutes() {
 ================
 sceneAlive
 
-How many of the scene's monsters are still alive anywhere in view.
+The scene's monsters still alive anywhere in view (gids). The residue
+check: wider than the fight radius, so one that wandered off still counts.
 ================
 */
 function sceneAlive( page, scene ) {
 	return page.evaluate( gids => {
 		const ids = new Set( gids );
 		return globalThis.__benchRuntime.entities().filter( e => ids.has( e.gid ) && e.appearanceState?.[0] !== 2 )
-			.length;
+			.map( e => e.gid );
 	}, scene.gids );
 }
 
@@ -280,16 +281,21 @@ async function session( options, location, results ) {
 		await captures.finish();
 	} finally {
 		// Residue is reported for rejected windows too: GM monsters outlive them.
+		// A run that leaves any (or cannot tell) fails, and its artifact says so.
 		if ( scene ) {
-			const left = await clearCombat( client.page, scene ).catch( () => sceneAlive( client.page, scene ) )
-				.catch( () => null );
+			await clearCombat( client.page, scene ).catch( () => null );
+			const left = await sceneAlive( client.page, scene ).catch( () => null );
+			const residue = { codename: scene.codename, loaded: scene.count, alive: left?.length ?? null, gids: left };
+			for ( const result of results ) {
+				if ( result.name.startsWith( `${location.name}/` ) ) result.residue = residue;
+			}
+			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
+			if ( residue.alive !== 0 ) process.exitCode = 1;
 			console.log(
-				left === 0 ?
+				residue.alive === 0 ?
 					`  combat residue: none; all ${scene.count} GM-loaded ${scene.codename} were fought down` :
-					`  combat residue: ${
-						left ?? "unknown"
-					} of ${scene.count} GM-loaded ${scene.codename} still alive; ` +
-					"restart the GameWorld (announce it first) before other measurements"
+					`  combat residue: ${residue.alive ?? "unknown"} of ${scene.count} GM-loaded ${scene.codename} ` +
+					"still alive; restart the GameWorld (announce it first) before other measurements"
 			);
 		}
 		await closeClient( client );

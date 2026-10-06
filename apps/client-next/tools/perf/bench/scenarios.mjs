@@ -382,8 +382,9 @@ clearCombat
 
 Fights the GM-loaded scene to the end. Those monsters have no respawning
 nest and nothing else despawns them, so a session that leaves them alive
-changes every later measurement on the shared server. Returns how many
-are still alive when the bound runs out.
+changes every later measurement on the shared server. Stops when none is
+left inside the fight radius or the bound runs out; the caller counts the
+residue.
 ================
 */
 export async function clearCombat( page, scene ) {
@@ -396,7 +397,6 @@ export async function clearCombat( page, scene ) {
 		await strike( page, scene.gids, turn );
 		await page.waitForTimeout( 700 );
 	}
-	return living();
 }
 
 /*
