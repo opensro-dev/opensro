@@ -1,4 +1,4 @@
-# SOX presentation — BUG-057
+# SOX presentation â€” BUG-057
 
 The main inventory and equipment painter omitted the existing animated slot
 overlays. Other item controls already called that owner. The shared painter
@@ -64,8 +64,39 @@ with one, two and three populated moving BAN paths. Each path has 30 position
 and 30 rotation samples. Empty controller tables are not missing motion:
 the populated tables are in the render programs.
 
-No equipped-effect runtime defect was established in this pass. The effect
-programs, strength, colors, placement and animation were not tuned by eye.
+A subsequent Binary Ninja audit established an equipped-effect defect:
+`SetBANRot` mode 2 replaced the element matrix instead of composing it with
+its parent. Ordinary `SetRotation` mode 2 had the same omission. The worker
+also dropped their flags and schedules from its executable command list,
+then the graph applied BAN position/rotation tables after all other commands.
+
+The fix emits these commands in source order with their flags, schedules and
+individual tables. Runtime orientation modes retain parent/sibling bases;
+BAN position selects its authored element/parent/sibling basis and origin.
+Constant rotation and BAN accumulation retain their distinct operand orders.
+No effect strength, color or texture was tuned by eye.
+
+Native evidence checked in this follow-up:
+
+- `AFE210` emits BAN rotation opcodes `0x0F + flags`; `AFE360` emits position
+  opcodes `0x2B + flags` (assembly checked).
+- `AF4581..AF45BC` copies a BAN frame then multiplies by the parent matrix;
+  `AF44B1..AF44E1` does the same for constant rotation mode 2.
+- `AF4559` accumulates BAN rotation in the opposite operand order from the
+  constant rotation branch at `AF448A`. `878A40` confirms the in-place product.
+- `AF521B` uses the element matrix for BAN position mode 4; dispatcher case
+  `0x32` uses the parent matrix and position for mode 7.
+- Previously unnamed frame accessors `AF1F90` and `735290` were investigated
+  and labeled `EffectMatrixFrames_CheckedAt` and `EffectVectorFrames_CheckedAt`.
+  Both labels were verified in saved client BNDB snapshot 392.
+
+The published rare-effect census contains 49 BAN rotation commands, all mode
+2, and 49 BAN position commands, all mode 7. The entire effect catalog contains
+188 BAN rotations in mode 2, 187 BAN positions in mode 7 and one in mode 4.
+The regression suite decodes every published `system/system_rare*` effect and
+checks that its executable rotation/BAN command order and flags survive.
+Rotated-parent, noncommuting-matrix, command-order and delayed-command tests
+exercise the runtime rather than only checking that animation tables exist.
 
 ## Verification
 
@@ -95,8 +126,8 @@ Local diagnostic artifacts are under `.state/sox-visuals/`, including
 `sox-browser-report.json`, `sox-tooltip-live.png`, `sparkle-0.png` through
 `sparkle-3.png`, and `equipped-a.png` through `equipped-c.png`.
 
-This establishes the specified UI fixes and authored-effect selection and
-lifecycle. It does not establish pixel-for-pixel agreement with a running
+This establishes the specified UI fixes, authored-effect selection and
+lifecycle, and the corrected orientation/position command semantics. It does not establish pixel-for-pixel agreement with a running
 original client. User visual confirmation remains pending. The final live
 probe ran at `http://localhost:5180/`, served from `codex/sox-visual-parity`
 in the isolated worktree, without restarting the game services.

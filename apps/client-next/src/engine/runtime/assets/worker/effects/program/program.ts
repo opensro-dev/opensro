@@ -394,8 +394,8 @@ export function createEffectPrograms() {
 				if ( !isLeafAnchor ) {
 					duration = Math.max( duration, life + (births.at( -1 ) ?? 0) / catalog!.framesPerSecond );
 				}
-				const table = ( name: string, width: number ): number[][] => {
-					const value = node.renderProgram.find( op => op.name === name )?.parameter?.value;
+				const table = ( name: string, width: number, selected?: Operation ): number[][] => {
+					const value = (selected ?? node.renderProgram.find( op => op.name === name ))?.parameter?.value;
 					if ( value === undefined ) {
 						return [];
 					}
@@ -416,7 +416,23 @@ export function createEffectPrograms() {
 					banPositions = table( "SetBANPos", 3 ),
 					banRotations = table( "SetBANRot", 16 );
 				const emitterIndex = particleGraph.length;
-				const commands = node.renderProgram.flatMap( op => {
+				const commands = node.renderProgram.flatMap<NonNullable<ParticleEmitter["commands"]>[number]>( op => {
+					if ( isLeafAnchor ) return [];
+					const flags = op.flags ?? 0;
+					if ( op.name === "SetBANRot" || op.name === "SetRotation" || op.name === "SetRotationMat" ) {
+						const frames = particleCommandFrames( op, node.globalData.totalFrames );
+						if ( !frames.length ) return [];
+						if ( flags < 0 || flags > 3 ) throw Error( "Unsupported effect orientation mode" );
+						const rotations = op.name === "SetBANRot" ?
+							table( op.name, 16, op ) :
+							[ Array.from( particleRotation( op.parameter! ) ) ];
+						return [ { name: op.name, frames, flags, rotations, program: {} } ];
+					}
+					if ( op.name === "SetBANPos" ) {
+						const frames = particleCommandFrames( op, node.globalData.totalFrames );
+						if ( flags < 0 || flags > 11 ) throw Error( "Unsupported effect position mode" );
+						return [ { name: op.name, frames, flags, positions: table( op.name, 3, op ), program: {} } ];
+					}
 					const command = particleProgram( [ op ], node.globalData.parameters, node.globalData.totalFrames );
 					return command ?
 						[ {
