@@ -43,6 +43,7 @@ export async function installFaults( page ) {
 			// Stall windows (worker performance.now) and what each frame waited.
 			holdUntil: { rx: 0, tx: 0 },
 			log: [],
+			logged: 0,
 			transport: null
 		};
 		const OriginalSocket = WebSocket;
@@ -78,6 +79,7 @@ export async function installFaults( page ) {
 							new Uint8Array( bytes ) :
 							new Uint8Array( bytes.buffer, bytes.byteOffset, bytes.byteLength ));
 						link.log.push( {
+							seq: ++link.logged,
 							direction,
 							opcode: view && view.byteLength >= 2 ? view[0] | (view[1] << 8) : null,
 							bytes: view ? view.byteLength : null,
@@ -129,23 +131,27 @@ export function holdStream( page, direction, ms ) {
 faultLog
 
 The transport in use and every held frame's direction, opcode, size and
-actual wait (frames that were not held are not logged).
+actual wait (frames that were not held are not logged). Entries carry a
+running seq; after keeps only those logged since an earlier logged count,
+so one lane's record never includes another's.
 ================
 */
-export function faultLog( page ) {
+export function faultLog( page, after = 0 ) {
 	const worker = page.workers().find( row => row.url().includes( "/simulation/worker/" ) );
-	return worker.evaluate( () => ({
+	return worker.evaluate( after => ({
 		transport: globalThis.__recoveryLink.transport,
-		held: globalThis.__recoveryLink.log
-	}) );
+		logged: globalThis.__recoveryLink.logged,
+		held: globalThis.__recoveryLink.log.filter( entry => entry.seq > after )
+	}), after );
 }
 
 /*
 ================
 stallServer
 
-Both directions held over the same window: the command reaches the server
-late and its reply comes late. A delayed-command surrogate for a late tick
+The command is held for ms and the downlink for twice that, so the reply
+to the released command is itself held: a request and its answer both
+late. A delayed-command surrogate for a late tick
 or blocked handler, not a paused tick (server AI and movement keep
 advancing meanwhile). A downlink-only holdStream( "rx" ) is network delay,
 where the server applies the command on time. Label runs network-delay or
@@ -154,11 +160,11 @@ bidirectional-delay.
 */
 export function stallServer( page, ms ) {
 	const worker = page.workers().find( row => row.url().includes( "/simulation/worker/" ) );
-	// One evaluation, so both directions share the same window.
+	// One evaluation, so both windows start together.
 	return worker.evaluate( ms => {
 		const link = globalThis.__recoveryLink, until = performance.now() + ms;
 		link.holdUntil.tx = Math.max( link.holdUntil.tx, until );
-		link.holdUntil.rx = Math.max( link.holdUntil.rx, until );
+		link.holdUntil.rx = Math.max( link.holdUntil.rx, until + ms );
 		return until;
 	}, ms );
 }

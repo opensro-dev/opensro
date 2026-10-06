@@ -41,6 +41,8 @@ const OBSERVATORY_URL = process.env.SRO_BENCH_OBSERVATORY ??
 	"http://127.0.0.1:8791/internal/diagnostics/observatory";
 const OBSERVATORY_CACHE_MS = 2000;
 const SERVER_POSE_TOLERANCE = 1;
+// The client's movement command (movement.ts OP_PREDICTED_MOVE).
+const OP_PREDICTED_MOVE = 0x0009;
 const METRICS_URL = process.env.SRO_BENCH_TRANSPORT_METRICS ?? "http://127.0.0.1:8788/transport/metrics";
 const ANCHOR_TIMEOUT_MS = 15000;
 
@@ -228,6 +230,7 @@ async function run( options ) {
 			const drive = async more => {
 				if ( STALL_LANES.includes( lane ) ) {
 					result.timing = { before: await transportMetrics() };
+					faultMark = (await faultLog( page )).logged;
 					result.stalls = await stallTurns( page, lane, CHARACTER );
 					while ( more() ) await page.waitForTimeout( 50 );
 					return;
@@ -246,6 +249,7 @@ async function run( options ) {
 			};
 			await captures.start();
 			const result = {};
+			let faultMark = 0;
 			Object.assign( result, await measure( page, lane, STALL_LANES.includes( lane ) ? 90000 : 7000, drive ) );
 			await captures.stop( lane );
 			await captures.finish();
@@ -257,7 +261,7 @@ async function run( options ) {
 			}
 			result.transport = await worker.evaluate( () => ({ ...globalThis.__recoveryLink, log: undefined }) );
 			if ( STALL_LANES.includes( lane ) ) {
-				result.faults = await faultLog( page );
+				result.faults = await faultLog( page, faultMark );
 				result.timing.after = await transportMetrics();
 				// Settle past the snapshot cache, then compare the server's own pose.
 				await page.waitForTimeout( OBSERVATORY_CACHE_MS + 1000 );
@@ -289,7 +293,15 @@ async function run( options ) {
 					)
 				);
 				assert.equal( result.faults.transport, "websocket", "the stall ran on the client's real WebSocket" );
-				assert.ok( result.faults.held.length > 0, "the stall held real frames" );
+				// Only this lane's holds count; the log runs across lanes.
+				const held = direction => result.faults.held.filter( entry => entry.direction === direction );
+				assert.ok( held( "rx" ).length > 0, "the stall held real downlink frames" );
+				if ( lane === "bidirectional-delay" ) {
+					assert.ok(
+						held( "tx" ).some( entry => entry.opcode === OP_PREDICTED_MOVE ),
+						"the bidirectional stall held a movement command"
+					);
+				}
 				assert.equal( server.regionId, local.logical.regionId, JSON.stringify( result.serverPose ) );
 				// y is recorded, not asserted: whether the server's y is the wire Y
 				// or a surface height is still open.
