@@ -75,6 +75,7 @@ type residentSkill struct {
 	DirectOffensePinned     bool
 	OffensiveStagePinned    bool
 	StatusCast              bool
+	CreatureStatusCast      bool
 	AreaBurst               bool
 	FixedDamage             SkillFixedDamage
 	LifeSteal               SkillLifeSteal
@@ -188,6 +189,7 @@ func compactSkill(row SkillRow) residentSkill {
 		DirectOffensePinned:     row.DirectOffensePinned,
 		OffensiveStagePinned:    row.OffensiveStagePinned,
 		StatusCast:              row.StatusCast,
+		CreatureStatusCast:      row.CreatureStatusCast,
 		AreaBurst:               row.AreaBurst,
 		FixedDamage:             row.FixedDamage,
 		LifeSteal:               row.LifeSteal,
@@ -304,6 +306,7 @@ func (r residentSkill) value() SkillRow {
 		DirectOffensePinned:     r.DirectOffensePinned,
 		OffensiveStagePinned:    r.OffensiveStagePinned,
 		StatusCast:              r.StatusCast,
+		CreatureStatusCast:      r.CreatureStatusCast,
 		AreaBurst:               r.AreaBurst,
 		FixedDamage:             r.FixedDamage,
 		LifeSteal:               r.LifeSteal,

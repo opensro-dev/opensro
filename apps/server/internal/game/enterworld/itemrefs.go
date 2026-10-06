@@ -246,7 +246,7 @@ func (t *TextdataItems) load() {
 	// Retained pets advance to later characterdata rows. Their item still
 	// names the initial row, so publish the whole supported pet family.
 	for code, ref := range t.charactersByCodename {
-		if ref.TidWord&0x7fe == 0x1c6 && (ref.TidWord>>11 == 3 || ref.TidWord>>11 == 4) {
+		if ref.TidWord&0x7fe == 0x1c6 && (ref.TidWord>>11 == 3 || ref.TidWord>>11 == 4 || ref.TidWord>>11 == 5) {
 			summonable[code] = struct{}{}
 		}
 	}
@@ -352,6 +352,7 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 		RefObjID:                   uint32(refObjID),
 		TidWord:                    tidWord,
 		Codename:                   strings.TrimSpace(fields[2]),
+		GroupCodename:              strings.TrimSpace(fields[4]),
 		NextCodename:               characterNextCodename(fields[6]),
 		NameStrID:                  nameStrID,
 		Name:                       names[nameStrID],

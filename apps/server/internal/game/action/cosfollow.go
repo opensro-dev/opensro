@@ -36,7 +36,7 @@ func (rt *Runtime) handleCosFollowCommand(division string, c *enterworld.Charact
 		return OpResult{}
 	}
 	// AI event 0x1A (CAIState_OnOwnerFollowOrder 559600): leave BATTLE.
-	state.combat = nil
+	rt.cancelPetCombat(petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: gid}, state, rt.Now().UnixMilli())
 	result := OpResult{}
 	if state.pickup != nil {
 		result = finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))

@@ -56,6 +56,8 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(opJobWithdrawRequest, rt.hubHandler(hub, rt.HandleJobWithdraw))
 	hub.Handle(opJobAliasRequest, rt.hubHandler(hub, rt.HandleJobAlias))
 	hub.Handle(opGuildLevelUpRequest, rt.hubHandler(hub, rt.HandleGuildLevelUp))
+	hub.Handle(opMercenaryAttribute, rt.hubHandler(hub, rt.HandleMercenaryAttribute))
+	hub.Handle(opMercenaryDismiss, rt.hubHandler(hub, rt.HandleMercenaryDismiss))
 	hub.Handle(opGuildMasterLeave, rt.hubHandler(hub, rt.HandleGuildMasterLeave))
 	hub.Handle(opGuildCompensation, rt.hubHandler(hub, rt.HandleGuildCompensation))
 	hub.Handle(opGuildCompensationPay, rt.hubHandler(hub, rt.HandleGuildCompensationClaim))

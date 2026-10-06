@@ -12,6 +12,7 @@ commands and cannot bypass actor eligibility.
 // CGInterface_ExecuteActionCommand 695420: 1000 + 6 asks the selected
 // player to trade.
 const ACTION_EXCHANGE = 1006;
+import { guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import {
 	ACTION_FORTRESS_RETURN,
@@ -1626,7 +1627,14 @@ state here before a command can claim a native wire conversation.
 				// transport (class 0/1; quest band 6 also defaults to class 0) uses 0x7618
 				// [u32 gid] (6FF800); a guild soldier (class 4, band 5) with an
 				// empty 0x7458 (6FE850). Pets leave through cancellation instead.
-				const record = cosRecords.get( command.gid );
+				const cleanedGid = command.gid, record = cosRecords.get( cleanedGid );
+				// 6FE850 dismisses the owned group even when its representative
+				// actor has died or left the visible entity set.
+				if (
+					cosSelection.statusRecords( cosRecords ).some( row => row.gid === cleanedGid && row.band === 5 )
+				) {
+					return sendFrame( { opcode: 0x7458, payload: new Uint8Array( 0 ) } );
+				}
 				// A riding mount spawns without an owner GID (as cos-ride allows);
 				// the owner's own record set proves it is ours.
 				if (
@@ -1634,7 +1642,6 @@ state here before a command can claim a native wire conversation.
 					entity.kind !== "cos" || (record.band !== 1 && entity.ownerGid !== localGid) ||
 					entity.refObjId !== record.refObjId
 				) throw Error( "No owned COS to clean" );
-				if ( record.band === 5 ) return sendFrame( { opcode: 0x7458, payload: new Uint8Array( 0 ) } );
 				const payload = new Uint8Array( 4 );
 				new DataView( payload.buffer ).setUint32( 0, record.gid, true );
 				return sendFrame( { opcode: 0x7618, payload } );
@@ -1662,6 +1669,20 @@ state here before a command can claim a native wire conversation.
 				// The worker may retire a prompt before its queued UI click arrives.
 				if ( command.kind === "social-consent" && !social.invitation ) return null;
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
+				if ( command.kind === "guild-soldier-attribute" ) {
+					const key = guildSoldierRefusal( social.guild?.flags ?? 0, command.attribute );
+					if ( key ) {
+						notices = [ ...notices.slice( -99 ), {
+							key,
+							value: 0,
+							nativeType: 0,
+							banner: true,
+							sequence: ++noticeSequence
+						} ];
+						dirty = true;
+						return null;
+					}
+				}
 				const request = socialRequest( social, command as SocialCommand );
 				send( request );
 				if ( command.kind === "guild-war-declare" ) social = { ...social, warPending: 1 };

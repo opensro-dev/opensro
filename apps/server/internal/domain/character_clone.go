@@ -65,6 +65,10 @@ func cloneCharacter(source *Character) *Character {
 	}
 	clone.World = cloneCharacterWorld(source.World)
 	clone.ActiveCOS = CloneCOS(source.ActiveCOS)
+	clone.Mercenaries = cloneSlice(source.Mercenaries)
+	for i, soldier := range clone.Mercenaries {
+		clone.Mercenaries[i] = CloneCOS(soldier)
+	}
 	clone.CapturedCOS = CloneCOS(source.CapturedCOS)
 	clone.PetSkillWindows = cloneSlice(source.PetSkillWindows)
 	clone.ParamJobs = cloneSlice(source.ParamJobs)

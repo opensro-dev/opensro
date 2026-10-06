@@ -340,10 +340,8 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 				rewardActionPinned = rewardActionPinned && ok
 				koRecoverMs, ok = columnUint32(cols, colKORecoverMs)
 				rewardActionPinned = rewardActionPinned && ok
-				for i := range defaultSkillIDs {
-					defaultSkillIDs[i], ok = columnUint32(cols, colDefaultSkill1+i)
-					rewardActionPinned = rewardActionPinned && ok
-				}
+				defaultSkillIDs, ok = characterDefaultSkills(cols)
+				rewardActionPinned = rewardActionPinned && ok
 			}
 			nameStrID := strings.TrimSpace(cols[colNameStrID])
 			displayName := names[nameStrID]

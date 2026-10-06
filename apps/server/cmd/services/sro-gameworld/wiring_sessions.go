@@ -112,6 +112,7 @@ func (game *gameplayPlane) worldBound(
 			guildID = *character.GuildID
 		}
 		cooldown = action.FortressReturnCooldownFrames(character, game.items.Now().UnixMilli())
+		cooldown = append(cooldown, action.MercenaryCooldownFrames(character, game.items.Now().UnixMilli())...)
 	})
 	game.siege.WorldBound(session, guildID)
 	cooldown = append(cooldown, game.items.FortressHolderFrames(divisionID, character)...)

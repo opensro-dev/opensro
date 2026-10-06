@@ -1248,6 +1248,21 @@ receive
 			recovery?: { country: number | undefined; abnormal: number; unlimitedItems?: readonly number[]; }
 		) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
+			// 766E30: owner timed job (2, 4) restores the soldier-scroll lane.
+			// A successful receipt alone does not create this category timer.
+			if ( op === 0x3792 && p[0] === 2 && p[1] === 4 ) {
+				if ( p.length !== 6 ) throw Error( "Invalid guild soldier cooldown" );
+				const seconds = new DataView( p.buffer, p.byteOffset, p.byteLength ).getInt32( 2, true );
+				if ( seconds > 0 ) {
+					itemCooldowns = [ ...itemCooldowns.filter( row => row.category !== 30 ), {
+						category: 30,
+						startedAtMs: now,
+						durationMs: seconds * 1000
+					} ];
+					published = null;
+				}
+				return true;
+			}
 			if ( op === 15 ) {
 				const items = mall.projection( p );
 				if ( items !== undefined ) {

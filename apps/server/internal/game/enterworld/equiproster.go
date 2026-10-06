@@ -181,6 +181,8 @@ type CharacterRef struct {
 	RefObjID   uint32
 	TidWord    uint16
 	Codename   string
+	// Characterdata column 4 groups the level rows used by guild scrolls.
+	GroupCodename string
 	// NextCodename is column 6: the reference an attack pet becomes at its
 	// next level (CGObjAttackCOS_AdvanceLevelAndReference walks it, 4D6210).
 	NextCodename               string

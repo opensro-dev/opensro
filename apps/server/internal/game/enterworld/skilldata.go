@@ -200,6 +200,8 @@ type SkillRow struct {
 	// StatusCast marks a damage-free hostile status program (skillstatuscast.go):
 	// its single impact is a zero-damage record that only rolls statuses.
 	StatusCast bool
+	// CreatureStatusCast is the complete damage-free program admitted for NPC/COS AI.
+	CreatureStatusCast bool
 	// AreaBurst marks an untargeted caster-centred attack (skillareaburst.go):
 	// no target, its victims are the hostile monsters around the caster.
 	AreaBurst bool

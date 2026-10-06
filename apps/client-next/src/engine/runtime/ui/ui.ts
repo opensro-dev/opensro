@@ -192,7 +192,13 @@ import {
 	avatarPartSymbol,
 	grantableAvatarPart
 } from "@/engine/foundation/gameplay/avatar-magic-option";
-import { guildLevelUpPrice, guildManagerRows, MASTER_RELEASE_VOTE } from "@/engine/foundation/gameplay/guild-manager";
+import {
+	guildLevelUpPrice,
+	guildManagerRows,
+	guildSoldierRows,
+	guildSoldierPrompt,
+	MASTER_RELEASE_VOTE
+} from "@/engine/foundation/gameplay/guild-manager";
 import { noticeText } from "@/engine/foundation/ui/notice-text";
 import {
 	JOB_ALIAS_CHECK,
@@ -1873,6 +1879,17 @@ export function createUi(
 				focus = null;
 				composing = false;
 				dirty = true;
+			}
+			return;
+		}
+		if ( id.startsWith( "npc-guild-soldier:" ) && guildManagerHud.soldiers() ) {
+			const conversation = view.gameplay?.npcConversation;
+			if ( conversation?.phase === "menu" ) {
+				sendGameplay( {
+					kind: "guild-soldier-attribute",
+					gid: conversation.gid,
+					attribute: Number( id.slice( "npc-guild-soldier:".length ) )
+				} );
 			}
 			return;
 		}
@@ -5590,6 +5607,12 @@ export function createUi(
 			}
 			const guideNeeded = next.session?.phase === "world";
 			if ( guideResources.step( guideNeeded ) ) dirty = true;
+			guildManagerHud.observeSoldiers(
+				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu" ?
+					next.gameplay.npcConversation.gid :
+					undefined,
+				next.gameplay?.social?.soldierAttributeSequence ?? 0
+			);
 			if ( npcPanel.observe( next.session?.phase === "world" ? next.gameplay?.npcConversation : undefined ) ) {
 				dirty = true;
 			}
@@ -11231,7 +11254,9 @@ export function createUi(
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
-						prompt: fortressStaffHud.target() ?
+						prompt: guildManagerHud.soldiers() ?
+							guildSoldierPrompt( game.social?.guild?.flags ?? 0, copy ) :
+							fortressStaffHud.target() ?
 							copy( "UIIT_STT_FORT_MANAGER_HIRE" ) :
 							target?.kind === "teleport" ?
 							target.name :
@@ -11242,6 +11267,9 @@ export function createUi(
 						canFortressOfficial: !!(capabilities & 0x800000),
 						canFortressManager: !!(capabilities & 0x400000),
 						canFortressHire: !!(capabilities & 0x400000) && fortressStaffView().holder,
+						guildSoldierRows: guildManagerHud.soldiers() ?
+							guildSoldierRows().map( row => ({ id: row.id, label: copy( row.symbol ) }) ) :
+							null,
 						fortressStaffRows: fortressStaffHud.target() ?
 							[ [ 1, "BATTLEAIDE" ], [ 2, "SMITH" ], [ 4, "TRAINER" ] ].map( ( [flag, name] ) => ({
 								id: "npc-fortress-hire:" + flag,

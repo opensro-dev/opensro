@@ -118,6 +118,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		rt.advancePetSkillWindows(nowMs)
 		rt.advanceParamJobs(nowMs)
 		rt.advancePKRecords()
+		rt.advanceMercenaryCooldowns(nowMs)
 		out = append(out, rt.advancePendingPickups(nowMs)...)
 		rt.advanceBodyRestores(nowMs)
 		rt.advanceCompoundJobs(nowMs)

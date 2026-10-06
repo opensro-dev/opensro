@@ -26,7 +26,7 @@ ItemCooldown
 ================
 */
 export interface ItemCooldown {
-	readonly category: PotionCategory | 18;
+	readonly category: PotionCategory | 18 | 30;
 	readonly group?: number;
 	readonly refObjId?: number;
 	readonly startedAtMs: number;
@@ -62,7 +62,8 @@ export function itemCooldown(
 	now: number
 ): ItemCooldown | undefined {
 	const typeFlags = typeof target === "number" ? target : target.typeFlags;
-	const category = potionCategory( typeFlags );
+	// 766E30 / 565400: all guild-soldier scrolls share category 30.
+	const category = typeFlags === 0xe6c ? 30 : potionCategory( typeFlags );
 	const group = typeof target === "number" ? 0 : target.tooltip?.fields.useCooldownGroup524 ?? 0;
 	return rows.find( row =>
 		now < row.startedAtMs + row.durationMs &&

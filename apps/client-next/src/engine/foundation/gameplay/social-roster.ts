@@ -1,3 +1,5 @@
+import type { GuildWarTerms } from "./guild-war";
+
 /*
 ===========================================================================
 
@@ -98,4 +100,66 @@ export interface GuildWar {
 	readonly word3c: number;
 	readonly ending?: boolean;
 	readonly clockAt?: number;
+}
+
+/*
+================
+SocialState
+================
+*/
+export interface SocialState {
+	readonly soldierAttributeSequence?: number;
+	readonly wars?: readonly GuildWar[];
+	readonly warPending?: 0 | 1 | 2;
+	readonly warCountdown?: { readonly remaining: number; readonly nextAt: number; };
+	readonly warResult?: {
+		readonly key: string;
+		readonly additionalKey?: string;
+		readonly names: readonly string[];
+		readonly sequence: number;
+	};
+	readonly roleUpdates?: readonly { name: string; role: number; }[];
+	readonly crestUpdates?: readonly {
+		name: string;
+		guildId?: number;
+		crest?: number;
+		allianceId?: number;
+		allianceCrest?: number;
+	}[];
+	readonly localName: string;
+	readonly self: number;
+	readonly leader: number;
+	readonly options: number;
+	readonly members: readonly PartyMember[];
+	readonly guild: Guild | null;
+	readonly alliances?: readonly {
+		id: number;
+		name: string;
+		level: number;
+		master: string;
+		model: number;
+		flags: number;
+	}[];
+	readonly allianceMaster?: number;
+	readonly allianceCrests?: readonly [number, number];
+	readonly invitation: {
+		readonly type: 1 | 2 | 3 | 5 | 6 | 10;
+		readonly war?: GuildWarTerms;
+		readonly options?: number;
+		readonly gid: number;
+	} | null;
+	// The open resurrection question (0x3393 type 4, box kind 4); its gid is
+	// the caster. It has its own slot so it never displaces an invitation
+	// and no invitation displaces it.
+	readonly resurrection?: { readonly gid: number; readonly mutation?: boolean; };
+	// Native war-proposal replies reach the same system-message board as the
+	// fortress announcements. The gameplay owner drains this each frame.
+	readonly notice?: import("./system-notices").SystemNotice;
+	// Diagnostic state, not player-facing invented text. These native bodies
+	// require a formatted message/modal owner beyond the constant dispatcher.
+	readonly unresolvedNotice?: { readonly category: number; readonly code: number; };
+	// The war compensation the guild manager quoted (0xB140 [1][u32]); the
+	// claim box (5D4050) asks before 0x73F7 collects it.
+	readonly compensation?: number;
+	readonly error: string | null;
 }

@@ -46,10 +46,31 @@ createGuildManagerHud
 ================
 */
 export function createGuildManagerHud() {
+	let soldierNpc: number | undefined, soldierSequence = 0;
 	let ask: GuildManagerAsk | null = null,
 		field: GuildManagerField | null = null,
 		vote: { readonly remainingMs: number; } | null = null;
 	return {
+		/*
+        ================
+        observeSoldiers
+
+        766D30 and 5E4710 refresh the visible NPC talk window on a new delta.
+        ================
+        */
+		observeSoldiers( npc: number | undefined, sequence: number ) {
+			if ( soldierNpc !== npc ) soldierNpc = undefined;
+			if ( sequence !== soldierSequence ) soldierNpc = npc;
+			soldierSequence = sequence;
+		},
+		/*
+        ================
+        soldiers
+        ================
+        */
+		soldiers() {
+			return soldierNpc !== undefined;
+		},
 		/*
 		================
 		ask

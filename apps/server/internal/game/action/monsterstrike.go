@@ -186,17 +186,32 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 	if err != nil {
 		return out
 	}
+	var displacement *playerDisplacement
+	displaceAt := -1
+	remainingHP := pet.CurrentHP
 	var records []abnormal.Record
 	var formulas []combat.Result
-	for range skill.Attack.ImpactCount {
-		formula, resolveErr := rt.resolveCombat(criticalActor{division: divisionID, monster: instance.Gid}, skill, in.attacker, defender)
+	for range creatureImpactCount(skill) {
+		formula, resolveErr := rt.resolveCreatureImpact(criticalActor{division: divisionID, monster: instance.Gid}, skill, in.attacker, defender)
 		formula = scaleAreaDamage(formula, in.percent)
-		if resolveErr != nil || formula.Damage == 0 && !formula.Blocked {
+		if resolveErr != nil || formula.Damage == 0 && !formula.Blocked && !skill.CreatureStatusCast {
 			return out
 		}
 		formulas = append(formulas, formula)
 		if formula.Blocked {
 			continue // 5905FB: no damage and no status roll
+		}
+		remainingHP -= min(remainingHP, formula.Damage)
+		if remainingHP > 0 && displacement == nil {
+			var err error
+			displacement, err = rt.planActorDisplacement(displacementRoll{division: divisionID, actor: criticalActor{division: divisionID, monster: instance.Gid}, from: in.origin(), skill: skill, at: pose, now: nowMs},
+				displacementTarget{flags: ref.Parameters.Knockdown, recovery: ref.Parameters.KORecoverMs, level: ref.Level, allowed: rt.cosDisplaceable(divisionID, owner, pet, nowMs)})
+			if err != nil {
+				return out
+			}
+			if displacement != nil {
+				displaceAt = len(formulas) - 1
+			}
 		}
 		rolled, rollErr := rt.rollMonsterOnCOS(cosAbnormalRoll{division: divisionID, caster: instance,
 			params: &skill.Abnormal, target: ownerBlock})
@@ -228,6 +243,15 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 				Fatal: strike.fatal, Blocked: formula.Blocked, ResultFlags: formula.ResultFlags})
 			if strike.fatal {
 				break
+			}
+		}
+		if !strike.fatal && displacement != nil && displaceAt < len(strike.impacts) {
+			if point, ok := rt.commitCOSDisplacement(ownerBlock, displacement); ok {
+				if displacement.down {
+					strike.impacts[displaceAt].Knockdown = point
+				} else {
+					strike.impacts[displaceAt].Knockback = point
+				}
 			}
 		}
 		remaining = live.CurrentHP

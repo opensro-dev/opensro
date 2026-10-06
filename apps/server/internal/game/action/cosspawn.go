@@ -47,7 +47,7 @@ The caller holds the division lock, never petMu, across geometry admission.
 */
 func (rt *Runtime) companionAdmissionSpawn(pet *enterworld.CharacterCOS, centre simulation.Spawn) simulation.Spawn {
 	ref, found := rt.cosReference(pet)
-	if !found || ref.TidWord>>11 < 3 || ref.TidWord>>11 > 4 {
+	if !found || ref.TidWord>>11 < 3 || ref.TidWord>>11 > 5 {
 		return centre
 	}
 	roll := rt.CompanionRoll

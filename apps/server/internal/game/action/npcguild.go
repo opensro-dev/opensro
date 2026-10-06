@@ -172,12 +172,8 @@ func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Charact
 	code := uint8(0)
 	var master, heir domain.GuildMemberRecord
 	blockedByFortress := c.GuildID != nil && rt.Fortresses != nil && rt.Fortresses.GuildInWar(division, *c.GuildID)
-	snapshot, refusal := store.UpdateGuildAs(division, c.ID, "guild-master-leave", domain.GuildAuthorization{LeaderOnly: true},
+	snapshot, refusal := store.UpdateGuildAs(division, c.ID, "guild-master-leave", domain.GuildAuthorization{},
 		func(record domain.GuildRecord, members []domain.GuildMemberRecord) (domain.GuildRecord, []domain.GuildMemberRecord, bool) {
-			if blockedByFortress {
-				code = guildMasterFortressWar
-				return record, members, false
-			}
 			from, to := -1, -1
 			for index, member := range members {
 				if member.CharID == c.ID {
@@ -188,11 +184,23 @@ func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Charact
 				}
 			}
 			switch {
-			case to < 0:
-				code = guild.GuildErrMemberNotFound
-				return record, members, false
 			case to == from:
 				code = guildNpcRefused
+				return record, members, false
+			case record.Vote != nil || members[from].Grade != 0:
+				code = guild.GuildErrPermissionDenied
+				return record, members, false
+			}
+			if blockedByFortress {
+				code = guildMasterFortressWar
+				return record, members, false
+			}
+			if c.MercenarySummonUntilMs != 0 {
+				code = guildMasterMercenaryCooldown
+				return record, members, false
+			}
+			if to < 0 {
+				code = guild.GuildErrMemberNotFound
 				return record, members, false
 			}
 			next := append([]domain.GuildMemberRecord(nil), members...)

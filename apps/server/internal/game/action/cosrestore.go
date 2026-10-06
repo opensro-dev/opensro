@@ -83,6 +83,17 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 				changed = true
 			}
 		}
+		kept := make([]*enterworld.CharacterCOS, 0, len(c.Mercenaries))
+		for _, soldier := range c.Mercenaries {
+			ref, valid := rt.cosReference(soldier)
+			if !valid || ref.TidWord>>11 != 5 || !c.OwnsMercenaryID(soldier.GID) || soldier.CurrentHP == 0 || !soldier.Summoned || soldier.RentalExpiresAtUnix <= now {
+				changed = true
+				continue
+			}
+			changed = soldier.RefreshRentalTimes(now) || changed
+			kept = append(kept, soldier)
+		}
+		c.Mercenaries = kept
 		pet := c.ActiveCOS
 		if pet == nil || !pet.Summoned || pet.CurrentHP == 0 {
 			return changed

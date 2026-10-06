@@ -112,9 +112,35 @@ projection, never by modifying or erasing the abnormal-state owner.
 ================
 */
 func Parameter(id uint16, base float32, satiety uint16, block *abnormal.Block) (float32, error) {
+	return projectParameter(parameterInput{id: id, base: base, satiety: satiety, block: block})
+}
+
+/*
+================
+parameterInput
+================
+*/
+type parameterInput struct {
+	id         uint16
+	base       float32
+	satiety    uint16
+	attributes uint8
+	block      *abnormal.Block
+}
+
+/*
+================
+projectParameter
+
+Guild attributes and abnormal writes share one native keeper evaluation.
+================
+*/
+func projectParameter(in parameterInput) (float32, error) {
+	id, base, satiety, block := in.id, in.base, in.satiety, in.block
+	channel, attribute := mercenaryModifier(id, in.attributes)
 	hungry := satiety < HungrySatiety && HungryParameter(id)
 	touched := block != nil && block.Touches(id)
-	if !hungry && !touched {
+	if !hungry && !touched && !attribute {
 		return base, nil
 	}
 	definition, exists := paramkeeper.NativeDefinition(id)
@@ -127,6 +153,11 @@ func Parameter(id uint16, base float32, satiety uint16, block *abnormal.Block) (
 	}
 	if _, err = element.Apply(paramkeeper.Flat, 0, base); err != nil {
 		return 0, err
+	}
+	if attribute {
+		if _, err = element.Apply(channel, mercenaryAttributeSource, mercenaryAttributeAmount); err != nil {
+			return 0, err
+		}
 	}
 	if hungry {
 		if _, err = element.Apply(paramkeeper.FactorProduct, 0, hungryFactor); err != nil {

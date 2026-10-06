@@ -29,6 +29,7 @@ and parameter reads that include self effects (combat stats).
 type MonsterAbnormalContext interface {
 	SourceExists(division string, gid uint32, name string) bool
 	SourceDead(division string, gid uint32, name string) bool
+	SourceCreditGID(division string, gid uint32, name string) uint32
 	Roll(division string, owner, key uint32, chance int32) bool
 	Param(instance monster.Instance, id uint16) float32
 	RetiresSkill(skillID uint32, all bool) bool
@@ -56,6 +57,7 @@ MonsterAbnormalHit
 type MonsterAbnormalHit struct {
 	Status     abnormal.Status
 	SourceGID  uint32
+	CreditGID  uint32
 	SourceName string
 	Credited   bool
 	Damage     uint32
@@ -407,7 +409,7 @@ func (o *monsterAbnormalOwner) Hit(source uint32, credited bool, damage uint32, 
 	if !o.Alive() || damage == 0 || credited && source == o.instance.Gid {
 		return
 	}
-	hit := MonsterAbnormalHit{Status: status, SourceGID: source, SourceName: o.names[source], Credited: credited, Damage: damage, Reason: reason}
+	hit := MonsterAbnormalHit{Status: status, SourceGID: source, SourceName: o.names[source], CreditGID: o.sources[source].CreditGID, Credited: credited, Damage: damage, Reason: reason}
 	o.fx.Hits = append(o.fx.Hits, hit)
 	o.instance.CurrentHP -= min(o.instance.CurrentHP, damage)
 }
@@ -640,7 +642,7 @@ func (s *MonsterState) CommitAbnormalUpdate(plan MonsterAbnormalPlan, now int64)
 		}
 		credit := uint32(0)
 		if hit.Credited {
-			credit = hit.SourceGID
+			credit = hit.CreditGID
 		}
 		state.recordContribution(plan.GID, credit, hit.Damage)
 		debit := min(next.CurrentHP, hit.Damage)

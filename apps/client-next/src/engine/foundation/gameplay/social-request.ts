@@ -91,6 +91,7 @@ export type SocialCommand =
 		vote: number;
 		option: number;
 	}
+	| { kind: "guild-soldier-attribute"; gid: number; attribute: number; }
 	| UnionCommand
 	| GuildWarCommand;
 
@@ -270,6 +271,11 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 				"guild-compensation-claim": 0x73f7,
 				"guild-release": 0x76dc
 			}[c.kind];
+			break;
+		case "guild-soldier-attribute":
+			u32( c.gid );
+			u8( c.attribute );
+			opcode = 0x7322;
 			break;
 		case "guild-master-leave":
 			u32( c.gid );

@@ -133,6 +133,11 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/guild-manager.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": ["copy"]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/npc-talk.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [

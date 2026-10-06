@@ -42,7 +42,7 @@ function owned( band, tidWord ) {
 	const gameplay = createGameplay( frame => sent.push( frame ) );
 	gameplay.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord } ] } );
 	gameplay.seed( LOCAL );
-	const RECORD_BYTES = { 1: 17, 2: 21, 3: 39, 4: 28, 6: 17 };
+	const RECORD_BYTES = { 1: 17, 2: 21, 3: 39, 4: 28, 5: 17, 6: 17 };
 	const record = new Uint8Array( RECORD_BYTES[band] );
 	const view = new DataView( record.buffer );
 	view.setUint32( 0, 2, true );
@@ -107,4 +107,24 @@ test("an attack pet attacks the selected monster with 0x769E tag 2", () => {
 	const pickup = owned( 4, 0x21c6 );
 	assert.throws( () => pickup.gameplay.command( { kind: "cos-pet-attack", gid: 40, pet: 2 }, 1, monster, LOCAL ) );
 	assert.equal( pickup.sent.length, 0, "a pickup pet does not attack" );
+});
+
+/*
+================
+Guild-soldier dismissal uses the private owner record, without a live actor.
+================
+*/
+test("guild soldiers can be dismissed after their representative disappears", () => {
+	const { gameplay, sent } = owned( 5, 0x29c6 );
+	const second = new Uint8Array( 17 );
+	const row = new DataView( second.buffer );
+	row.setUint32( 0, 3, true );
+	row.setUint32( 4, 9, true );
+	row.setUint32( 8, 100, true );
+	gameplay.receive( { opcode: 0x3158, payload: second }, 0 );
+	gameplay.receive( { opcode: 0x36ab, payload: Uint8Array.of( 2, 0, 0, 0 ) }, 1 );
+	gameplay.command( { kind: "cos-clean", gid: 2 }, 1, undefined, LOCAL );
+	assert.deepEqual( sent, [ { opcode: 0x7458, payload: new Uint8Array( 0 ) } ] );
+	assert.throws( () => gameplay.command( { kind: "cos-clean", gid: 99 }, 2, undefined, LOCAL ), /owned COS/ );
+	assert.equal( sent.length, 1 );
 });

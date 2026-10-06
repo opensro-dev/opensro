@@ -109,3 +109,45 @@ export function guildLevelUpPrice( level: number ): { readonly gp: number; reado
 	}
 	return undefined;
 }
+
+/*
+================
+guildSoldierRows
+
+5D9800 exposes four attributes and reset; tolerance is display-only.
+================
+*/
+export function guildSoldierRows() {
+	return [ "DEFENSE", "ATTACK", "HIT", "HEALTH", "INITIALIZE" ].map( ( name, i ) => ({
+		id: "npc-guild-soldier:" + (i === 4 ? 0 : 1 << i),
+		symbol: "UIIT_CTL_GUILD_SOLDIER_ABILITY_" + name
+	}) );
+}
+
+/*
+================
+guildSoldierPrompt
+================
+*/
+export function guildSoldierPrompt( flags: number, copy: ( key: string ) => string ): string {
+	const names = [ "DEFENSE", "ATTACK", "HIT", "HEALTH", "TOLERANCE" ]
+		.filter( ( _, i ) => flags & (1 << i) ).map( name => copy( "UIIT_MSG_GUILD_SOLDIER_ABILITY_" + name ) );
+	const key = [ "ZERO", "ONE", "TWO" ][names.length];
+	if ( !key ) return "";
+	let index = 0;
+	return copy( "UIIT_MSG_GUILD_SOLDIER_ABILITY_" + key ).replace( /%s/g, () => names[index++] ?? "" );
+}
+
+/*
+================
+guildSoldierRefusal
+
+5DA1B0 case 29 checks reset, duplicate, then the two-attribute limit.
+================
+*/
+export function guildSoldierRefusal( flags: number, attribute: number ): string | undefined {
+	if ( attribute === 0 ) return flags === 0 ? "UIIT_MSG_GUILD_SOLDIER_ABILITY_INITIALIZE_ERROR" : undefined;
+	if ( flags & attribute ) return "UIIT_MSG_GUILD_SOLDIER_ABILITY_SELECT_ERROR";
+	if ( [ 1, 2, 4, 8, 16 ].filter( bit => flags & bit ).length >= 2 ) return "UIIT_MSG_GUILD_SOLDIER_ABILITY_OVER";
+	return undefined;
+}

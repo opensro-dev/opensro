@@ -115,6 +115,7 @@ test("votes open, close and name the outcome", () => {
 });
 
 test("the compensation quote waits for the claim box", () => {
+	/** @type {import("../../src/engine/foundation/gameplay/social.ts").SocialState} */
 	let state = { ...emptySocial( "Master" ), guild };
 	state = packet( state, 0xb140, Uint8Array.of( 1, ...u32( 70000 ) ) );
 	assert.equal( state.compensation, 70000 );
@@ -163,4 +164,45 @@ test("a warehouse in another member's hands releases the room", () => {
 	const state = packet( { ...emptySocial( "Master" ), guild }, 0xb515, Uint8Array.of( 2, 0x48, 3, 0, 65, 66, 67 ) );
 	assert.equal( state.notice.key, "UIIT_MSG_GUILD_WAREHOUSE_USE" );
 	assert.deepEqual( state.notice.arguments, [ "ABC" ] );
+});
+
+/*
+================
+Soldier attribute wire and visible-menu lifetime
+================
+*/
+test("soldier attribute deltas preserve flags and refresh only an already visible NPC", async () => {
+	const { createGuildManagerHud } = await import( "../../src/engine/runtime/ui/hud/guild-manager-hud.ts" );
+	const { guildSoldierRows, guildSoldierRefusal, guildSoldierPrompt } = await import(
+		"../../src/engine/foundation/gameplay/guild-manager.ts"
+	);
+	/** @type {import("../../src/engine/foundation/gameplay/social.ts").SocialState} */
+	let state = { ...emptySocial( "Master" ), guild };
+	const hud = createGuildManagerHud();
+	hud.observeSoldiers( 4001, 0 );
+	assert.equal( hud.soldiers(), false );
+	const request = socialRequest( state, { kind: "guild-soldier-attribute", gid: 4001, attribute: 8 } );
+	assert.equal( request.opcode, 0x7322 );
+	assert.deepEqual( [ ...request.payload ], [ ...u32( 4001 ), 8 ] );
+	state = packet( state, 0xb322, new Uint8Array( [ 1, 8 ] ) );
+	assert.equal( state.guild?.flags, 8 );
+	hud.observeSoldiers( 4001, state.soldierAttributeSequence ?? 0 );
+	assert.equal( hud.soldiers(), true );
+	state = packet( state, 0x3b29, new Uint8Array( [ 5, 64, 2 ] ) );
+	assert.equal( state.guild?.flags, 10 );
+	assert.equal( state.soldierAttributeSequence, 2 );
+	assert.equal( guildSoldierRefusal( 10, 2 ), "UIIT_MSG_GUILD_SOLDIER_ABILITY_SELECT_ERROR" );
+	assert.equal( guildSoldierRefusal( 10, 4 ), "UIIT_MSG_GUILD_SOLDIER_ABILITY_OVER" );
+	assert.equal( guildSoldierRefusal( 10, 0 ), undefined );
+	state = packet( state, 0xb322, new Uint8Array( [ 1, 0 ] ) );
+	assert.equal( state.guild?.flags, 0 );
+	hud.observeSoldiers( undefined, state.soldierAttributeSequence ?? 0 );
+	hud.observeSoldiers( 4001, state.soldierAttributeSequence ?? 0 );
+	assert.equal( hud.soldiers(), false );
+	assert.equal( guildSoldierRefusal( 0, 0 ), "UIIT_MSG_GUILD_SOLDIER_ABILITY_INITIALIZE_ERROR" );
+	assert.deepEqual(
+		guildSoldierRows().map( row => row.id ),
+		[ 1, 2, 4, 8, 0 ].map( bit => "npc-guild-soldier:" + bit )
+	);
+	assert.equal( guildSoldierPrompt( 0, key => key ), "UIIT_MSG_GUILD_SOLDIER_ABILITY_ZERO" );
 });

@@ -107,6 +107,10 @@ func (rt *Runtime) recordSkillHostility(division string, target uint32, events [
 	for _, gid := range gids {
 		character := rt.findCharacterByGid(division, gid)
 		if character == nil {
+			if candidate, ok := rt.companionOpponentCandidate(division, instance, gid, from, now); ok {
+				candidates[gid] = candidate
+				continue
+			}
 			// A monster in a Temptation fight (temptation.go).
 			if candidate, ok := rt.temptedOpponentCandidate(division, instance, gid, from, now); ok {
 				candidates[gid] = candidate
@@ -121,4 +125,28 @@ func (rt *Runtime) recordSkillHostility(division string, target uint32, events [
 		candidates[gid] = monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, to), ActorDistance: monster.NativeActorDistance(pose, monster.Pose{RegionID: to.RegionID, X: to.X, Y: to.Y, Z: to.Z})}
 	}
 	rt.Monsters.RecordHostilitySequence(division, target, events, candidates, now)
+}
+
+/*
+================
+companionOpponentCandidate
+
+A COS hit names the COS in the opponent ledger. Resolve its admitted world
+presentation, leaving reward attribution on the separate damage-credit path.
+================
+*/
+func (rt *Runtime) companionOpponentCandidate(division string, attacker monster.Instance, gid uint32, from simulation.Spawn, now int64) (monster.OpponentCandidate, bool) {
+	owner := rt.characterByCosGID(division, gid)
+	if owner == nil {
+		return monster.OpponentCandidate{}, false
+	}
+	for _, pet := range rt.companionTargets(division, enterworld.ObjectIDForCharacter(owner), now) {
+		if pet.Gid != gid || !monster.AllowsTargetStatus(attacker.Ref.TidWord, attacker.Nest.NativeTacticsFlags, pet.NativeBodyStatus) {
+			continue
+		}
+		pose := monster.Pose{RegionID: pet.Pose.RegionID, X: pet.Pose.X, Y: pet.Pose.Y, Z: pet.Pose.Z}
+		origin := monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}
+		return monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, pet.Pose), ActorDistance: monster.NativeActorDistance(origin, pose)}, true
+	}
+	return monster.OpponentCandidate{}, false
 }

@@ -94,6 +94,11 @@ func (c *Character) Companions() []*CharacterCOS {
 			pets = append(pets, pet)
 		}
 	}
+	for _, soldier := range c.Mercenaries {
+		if soldier != nil {
+			pets = append(pets, soldier)
+		}
+	}
 	if c.CapturedCOS != nil {
 		pets = append(pets, c.CapturedCOS)
 	}

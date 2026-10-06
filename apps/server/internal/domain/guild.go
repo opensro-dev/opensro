@@ -10,7 +10,7 @@ package domain
 // GuildRecord is one persisted guild row: the guild-level half of the
 // client's 0x32C4 guild-info block (fold sub_826610). Field widths mirror
 // the pinned wire layout - u8 level, u32 GP, u32 crest parameter, the
-// unpinned u8 at +0x10 carried verbatim as Byte10.
+// mercenary attribute byte at +0x10 (v1.150 766D30), retained as Byte10.
 //
 // Guilds deliberately do NOT live on any Character record: a guild is a
 // cross-character entity, so it persists in the authority store's guilds /

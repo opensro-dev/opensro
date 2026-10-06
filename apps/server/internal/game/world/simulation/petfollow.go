@@ -205,3 +205,18 @@ petSamePlane
 func petSamePlane(a, b uint16) bool {
 	return worldgeom.SamePlane(a, b) && (!worldgeom.IsDungeonRegion(a) || a == b)
 }
+
+/*
+================
+Displace
+
+A committed hit relocates the same mover and retires its previous segment.
+The cast result carries the position to observers.
+================
+*/
+func (p *PetFollower) Displace(pose Spawn, now int64) {
+	p.world.Spawn = pose
+	p.world.MoveSegment = nil
+	p.lastTick, p.clockStarted = now, true
+	p.revision++
+}

@@ -54,6 +54,7 @@ const (
 	itemUsePremiumTicket
 	itemUseSkillTimeTicket
 	itemUseStructureRepair
+	itemUseMercenary
 )
 
 /*
@@ -67,6 +68,9 @@ active native handler before inventory consumption can be authorized.
 func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref == nil {
 		return itemUseUnsupported
+	}
+	if ref.TypeIDs == [4]int64{3, 3, 12, 1} {
+		return itemUseMercenary
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
 		return itemUseQuestTool

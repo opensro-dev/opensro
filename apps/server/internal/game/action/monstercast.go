@@ -184,6 +184,17 @@ sweep still owns the one closing publication to the caster's observers.
 ================
 */
 func (rt *Runtime) cancelCompanionCasts(division string, c *enterworld.Character, gid uint32) {
+	rt.petMu.Lock()
+	victims := make(map[petOwnerKey]*petSession)
+	for key, state := range rt.petSessions {
+		if key.division == division && state.combat != nil && (key.gid == gid || state.combat.target == gid) {
+			victims[key] = state
+		}
+	}
+	rt.petMu.Unlock()
+	for key, state := range victims {
+		rt.cancelPetCombat(key, state, rt.Now().UnixMilli())
+	}
 	// GIDs identify a family, not an item lifetime. A different summoner can
 	// reuse both the slot and its initial generation before the next tick.
 	// Keep the cast bracket until the normal sweep publishes its cancellation.

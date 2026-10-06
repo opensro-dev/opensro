@@ -5,7 +5,7 @@ playerdisplacement.go - a struck player knocked down or back
 
 SkillCombat_CalculateHitOutcome rolls a hit's displacement on any victim,
 a player as much as a monster. A knockdown needs
-SkillCombat_AllowsDisplacementOutcome (58E520): the model's RefObjChar
+SkillCombat_AllowsDisplacementOutcome (58E540): the model's RefObjChar
 flag bit 0, not already down (motion 8) or in motion 0x12, not seated
 (motion 4), not riding (state +0xE), no standing wall (+0xC0C). Its chance
 is Formulae_CalculateStatusEffectProbability (40FC30, combat.KnockdownChance)
@@ -97,20 +97,46 @@ func (rt *Runtime) planPlayerDisplacement(r displacementRoll) (*playerDisplaceme
 	if !ok {
 		return nil, nil
 	}
+	return rt.planActorDisplacement(r, displacementTarget{flags: flags, recovery: recovery, level: levelByte(r.victim),
+		allowed: rt.playerDisplaceable(r.division, r.victim, r.now)})
+}
+
+/*
+================
+displacementTarget
+
+A creature uses its own authored flags and level, never its owner's model.
+================
+*/
+type displacementTarget struct {
+	flags    uint32
+	recovery uint32
+	level    uint8
+	allowed  bool
+}
+
+/*
+================
+planActorDisplacement
+
+58E540/58FF7A/590157 share the roll and displacement for every actor class.
+================
+*/
+func (rt *Runtime) planActorDisplacement(r displacementRoll, target displacementTarget) (*playerDisplacement, error) {
 	to := monster.Pose{RegionID: r.at.RegionID, X: r.at.X, Y: r.at.Y, Z: r.at.Z}
-	if r.skill.Knockdown.Present && flags&displacementFlagKnockdown != 0 && rt.playerDisplaceable(r.division, r.victim, r.now) {
-		chance := uint32(combat.KnockdownChance(r.skill.Knockdown.Rank, r.skill.Knockdown.Chance, levelByte(r.victim)))
+	if r.skill.Knockdown.Present && target.flags&displacementFlagKnockdown != 0 && target.allowed {
+		chance := uint32(combat.KnockdownChance(r.skill.Knockdown.Rank, r.skill.Knockdown.Chance, target.level))
 		proc, err := rt.effectOutcome(r.actor, knockdownRollKey|(r.skill.ID&0xffffff), chance)
 		if err != nil {
 			return nil, err
 		}
 		if proc {
-			plan := knockdownConsequence(r.from, to, recovery, r.skill.ActionDurationMs, r.now)
+			plan := knockdownConsequence(r.from, to, target.recovery, r.skill.ActionDurationMs, r.now)
 			pose := simulation.Spawn{RegionID: plan.Pose.RegionID, X: plan.Pose.X, Y: plan.Pose.Y, Z: plan.Pose.Z}
 			return &playerDisplacement{pose: pose, untilMs: plan.UntilMs, down: true}, nil
 		}
 	}
-	if r.skill.Knockback.Present && int32(r.skill.Knockback.Chance) > 0 && flags&displacementFlagKnockback != 0 {
+	if r.skill.Knockback.Present && int32(r.skill.Knockback.Chance) > 0 && target.flags&displacementFlagKnockback != 0 {
 		proc, err := rt.effectOutcome(r.actor, knockbackRollKey|(r.skill.ID&0xffffff), r.skill.Knockback.Chance)
 		if err != nil {
 			return nil, err
@@ -128,7 +154,7 @@ func (rt *Runtime) planPlayerDisplacement(r displacementRoll) (*playerDisplaceme
 ================
 playerDisplaceable
 
-58E520 for a player victim.
+58E540 for a player victim.
 ================
 */
 func (rt *Runtime) playerDisplaceable(division string, victim *enterworld.Character, now int64) bool {

@@ -270,6 +270,11 @@ type Character struct {
 	// this identity in the same character transaction; later 0x769E commands
 	// must match this exact GID and never trust a client-proposed vehicle.
 	ActiveCOS *CharacterCOS `json:"activeCos,omitempty"`
+	// Guild soldiers are character-owned rows, independent of the consumed
+	// scroll. 4FA430 restores their remaining calendar leases.
+	Mercenaries []*CharacterCOS `json:"mercenaries,omitempty"`
+	// Owner timed job (2, 4), created by 4FB0FC for 1,200 seconds.
+	MercenarySummonUntilMs int64 `json:"mercenarySummonUntilMs,omitempty"`
 	// CapturedCOS is a capture-escort quest's captured monster (TypeID
 	// 1/2/3/6, client 692260): runtime-only, never persisted. The quest
 	// record keeps the capture; a relog either re-summons it or fails it.
@@ -573,6 +578,8 @@ Owned companion state; its inventory commits with the owning character.
 ================
 */
 type CharacterCOS struct {
+	// The installed 4D9850 source, refreshed by the guild owner on a purchase.
+	MercenaryAttributes    uint8         `json:"mercenaryAttributes,omitempty"`
 	SummonGeneration       uint64        `json:"summonGeneration,omitempty"`
 	RentalExpiresAtUnix    int64         `json:"rentalExpiresAtUnix,omitempty"`
 	RentalRemainingSeconds int32         `json:"rentalRemainingSeconds,omitempty"`

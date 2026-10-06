@@ -91,6 +91,9 @@ func cosParameter(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, bl
 		satiety = pet.Satiety
 	}
 	value, err := companion.Parameter(id, base, satiety, block)
+	if pet != nil && ref != nil && ref.TidWord>>11 == 5 {
+		value, err = companion.MercenaryParameter(id, base, pet.MercenaryAttributes, block)
+	}
 	if err != nil {
 		log.WithError(err).WithField("param", id).Error("COS abnormal parameter projection failed")
 		return 0
@@ -110,6 +113,14 @@ func cosCombatStats(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, 
 	base := ref.Parameters
 	base.RefObjID, base.Codename, base.Level = ref.RefObjID, ref.Codename, pet.Level
 	stats, err := combat.MonsterInstanceStats(monster.Instance{Ref: base, Abnormal: block})
+	if err == nil && ref.TidWord>>11 == 5 {
+		stats.EvasionRate = float64(cosParameter(ref, pet, block, 9))
+		stats.HitRate = float64(cosParameter(ref, pet, block, 11))
+		stats.PhysicalBasicRate = float64(cosParameter(ref, pet, block, 0x80))
+		stats.PhysicalSkillRate = float64(cosParameter(ref, pet, block, 0x81))
+		stats.MagicalBasicRate = float64(cosParameter(ref, pet, block, 0x82))
+		stats.MagicalSkillRate = float64(cosParameter(ref, pet, block, 0x83))
+	}
 	if err != nil || ref.TidWord>>11 != 3 {
 		return stats, err
 	}
