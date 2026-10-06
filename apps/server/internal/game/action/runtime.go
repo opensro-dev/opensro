@@ -30,6 +30,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/simulation"
@@ -145,7 +146,9 @@ type Runtime struct {
 	Fortresses *fortress.Authority
 	// Unions is the guild union authority the fortress war asks for the
 	// holder's allies (fortress_allies.go).
-	Unions *union.Authority
+	Unions       *union.Authority
+	GuildWars    *guildwar.Authority
+	GuildWarKill func(division string, combat domain.GuildWarCombat, nowMs int64)
 	// Guilds is the persisted guild topology the fortress official reads
 	// (level, members, master).
 	Guilds enterworld.GuildStore

@@ -29,6 +29,7 @@ import (
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/community"
 	"opensro.online/server/internal/game/social/guild"
+	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/match"
 	"opensro.online/server/internal/game/social/mentor"
 	"opensro.online/server/internal/game/social/party"
@@ -60,6 +61,7 @@ type gameplayPlane struct {
 	parties       *party.Runtime
 	guildInvites  *guild.InviteRuntime
 	unions        *guild.UnionRuntime
+	guildWars     *guild.WarRuntime
 	mentorInvites *mentor.InviteRuntime
 	matches       *match.Runtime
 	siege         *siege.Lane
@@ -202,6 +204,17 @@ func newGameplayPlane(
 	movementRuntime.Unions = unionAuthority
 	movementRuntime.Stalls = items.Stalls
 	unions := guild.NewUnionRuntime(deps, presence, unionAuthority, items.Fortresses)
+	warAuthority, err := guildwar.New(ownedShard.ID, deps.GuildWars)
+	if err != nil {
+		return nil, err
+	}
+	guildWars := guild.NewWarRuntime(deps, presence, unions, warAuthority)
+	items.GuildWars = warAuthority
+	items.GuildWarKill = guildWars.RecordKill
+	guildWars.Near = items.GuildWarMastersNear
+	guildWars.InFortress = items.GuildWarMasterInFortress
+	unions.GuildWars = warAuthority
+
 	communitySeeds := community.SeedFramesFunc(presence, deps.Letters)
 	deps.CommunitySeedFramesFor = func(
 		divisionID string,
@@ -210,6 +223,9 @@ func newGameplayPlane(
 		frames := communitySeeds(divisionID, character)
 		frames = guild.AppendSeedFrame(frames, deps.Guilds, presence, divisionID, character)
 		if frame, ok := unions.SeedFrame(divisionID, character); ok {
+			frames = append(frames, frame)
+		}
+		if frame, ok := guildWars.SeedFrame(divisionID, character); ok {
 			frames = append(frames, frame)
 		}
 		return frames
@@ -254,6 +270,7 @@ func newGameplayPlane(
 	guildInvites.Unions = unions
 	mentorInvites := mentor.NewInviteRuntime(deps, presence)
 	connectInvitationLanes(parties, guildInvites, unions, mentorInvites, items)
+	connectWarInvitations(warInvitationLanes{parties: parties, guilds: guildInvites, unions: unions, mentors: mentorInvites, items: items, wars: guildWars})
 
 	matches := match.NewRuntime(deps, presence)
 	matches.MemberCountFor = func(divisionID, characterName string) int {
@@ -305,6 +322,7 @@ func newGameplayPlane(
 		parties:       parties,
 		guildInvites:  guildInvites,
 		unions:        unions,
+		guildWars:     guildWars,
 		mentorInvites: mentorInvites,
 		matches:       matches,
 		siege:         siegeRuntime,
@@ -577,6 +595,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.parties.Register(hub)
 	guild.Register(hub, game.deps, game.presence, game.items, game.unions)
 	game.unions.Register(hub)
+	game.guildWars.Register(hub)
 	game.guildInvites.Register(hub)
 	game.mentorInvites.Register(hub)
 	return nil

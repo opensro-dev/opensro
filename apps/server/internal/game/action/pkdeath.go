@@ -43,9 +43,10 @@ The object that dealt the fatal damage. Zero: no killer.
 ================
 */
 type deathKiller struct {
-	monster *monster.Instance
-	player  *enterworld.Character
-	siege   bool
+	monster      *monster.Instance
+	player       *enterworld.Character
+	siege        bool
+	strikerLevel int64
 }
 
 /*

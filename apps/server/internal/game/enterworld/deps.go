@@ -135,6 +135,7 @@ type Deps struct {
 
 	Letters       LetterStore
 	Guilds        GuildStore
+	GuildWars     domain.GuildWarStore
 	TrainingCamps TrainingCampStore
 	// Fortresses keeps fortress occupation and the war's requests.
 	Fortresses FortressStore

@@ -36,7 +36,7 @@ Focused tests exercise actual fatal attacks, duplicate attacks against a corpse,
 
 Nineteen newly encountered server helpers were named and their symbols verified in saved Binary Ninja snapshot 444. The native review parent has separate client/server snapshot evidence and original-x86 resistance execution evidence.
 
-This is a bounded subsystem port. It is not a live original-client/original-server comparison or whole-program machine-equivalence proof. Fortress staff hiring/holder flags and the existing guild-war owner gap remain separate full-game work; they are not silently counted as complete here. No renderer, onboarding, password-manager or other non-native feature is included.
+This is a bounded subsystem port. It is not a live original-client/original-server comparison or whole-program machine-equivalence proof. Staff hiring and holder flags are covered by the follow-up below. The guild-war authority is covered by `guild-war-native.md`. No renderer, onboarding, password-manager or other non-native feature is included.
 
 
 ## Staff and holder flags follow-up
@@ -60,5 +60,5 @@ failure with no debit, durable reopen, selected-manager wire admission, capture,
 private holder delivery, target retirement and confirmation invalidation. The
 13 source gates and 11 client gates passed during this follow-up; the transaction
 abort test and manager wire test were additionally run after that full pass.
-Guild-war ownership is being implemented separately and is not covered by these
-staff checks.
+Guild-war ownership has its own implementation and verification record in
+`guild-war-native.md`; it is not covered by these staff checks.

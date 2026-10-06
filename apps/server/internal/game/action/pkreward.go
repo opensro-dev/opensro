@@ -15,8 +15,8 @@ CGObjPC_EnterBattleOnAttack, keeps the books by the kill's kind:
   - job (1): job EXP (Formulae_CalculateJobKillExp 4103E0), shared by the
     killer's party (CGObjPC_DistributeJobKillExp 5BD7F0), then EXP of
     leveldata +0x1c of the lower level, three times over;
-  - guild war (5): CGuildMgr_ProcessGuildWarKill, which has no owner in
-    the port until guild war lands (pkrelation.go never yields kind 5).
+  - guild war (5): the guild-war authority receives the fatal combat
+    facts after the character door, then commits guild and member scores.
 
 Everything but the party's job shares commits inside the fatal hit's
 door; a share commits in its member's own door after it.

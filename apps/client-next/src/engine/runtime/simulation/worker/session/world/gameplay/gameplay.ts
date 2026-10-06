@@ -12,6 +12,7 @@ commands and cannot bypass actor eligibility.
 // CGInterface_ExecuteActionCommand 695420: 1000 + 6 asks the selected
 // player to trade.
 const ACTION_EXCHANGE = 1006;
+import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import {
 	ACTION_FORTRESS_RETURN,
 	FORTRESS_PORTAL_NOTICE_CATEGORY,
@@ -1663,6 +1664,7 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
 				const request = socialRequest( social, command as SocialCommand );
 				send( request );
+				if ( command.kind === "guild-war-declare" ) social = { ...social, warPending: 1 };
 				if ( command.kind === "social-consent" ) social = { ...social, invitation: null };
 				if ( command.kind === "resurrection-consent" ) social = withoutResurrection( social );
 				return request;
@@ -2629,7 +2631,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					if ( ![ 0xb095, 0xb34a, 0xb2db ].includes( frame.opcode ) ) return true;
 				}
-				const nextSocial = socialPacket( social, frame, { country: localCountry } );
+				const nextSocial = socialPacket( social, frame, { country: localCountry, now } );
 				if ( nextSocial ) {
 					if ( nextSocial.members.length && !social.members.length ) guide = queueGuide( guide, [ 10 ] );
 					if ( nextSocial.notice ) {
@@ -3209,6 +3211,14 @@ before take assembles the presentation snapshot.
 ================
 		*/
 		step( now: number, local?: EntityState ) {
+			const warNext = advanceGuildWarClock( social, now );
+			if ( warNext !== social ) {
+				if ( warNext.notice ) {
+					notices = [ ...notices.slice( -99 ), { ...warNext.notice, sequence: ++noticeSequence } ];
+				}
+				social = { ...warNext, notice: undefined };
+				dirty = true;
+			}
 			flushBindingRepairs();
 			const fortressNext = advanceFortressCountdowns( fortress, now );
 			if ( fortressNext !== fortress ) {

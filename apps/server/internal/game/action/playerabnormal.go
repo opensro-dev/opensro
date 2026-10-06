@@ -14,6 +14,7 @@ package action
 
 import (
 	"math"
+	"opensro.online/server/internal/domain"
 	"strings"
 	"sync"
 
@@ -226,6 +227,7 @@ type playerAbnormalOwner struct {
 	deathTarget  []wire.Frame
 	deathKiller  *enterworld.Character
 	deathKill    playerKill
+	warCombat    domain.GuildWarCombat
 	endedEffects []statuseffect.Effect
 	endedPublic  []wire.Frame
 	endedActor   []wire.Frame
@@ -522,6 +524,7 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 		o.fatal = true
 		o.deathKiller = o.sources[source].killer.player
 		killer := o.sources[source].killer
+		o.warCombat = o.rt.prepareGuildWarCombat(o.division, o.c, killer)
 		o.deathKill = playerKill{kind: o.rt.deathKind(o.division, o.c, killer), victimLevel: rewardLevel(o.c)}
 		o.deathEffects, o.deathTarget = o.rt.settlePlayerDeathInDoor(o.division, o.c, o.sources[source].killer, o.now)
 	}
@@ -746,7 +749,8 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 	}
 	if o.fatal {
 		rt.recordFortressDeath(division, c, o.deathKiller, o.now)
-		if o.deathKiller != nil && o.deathKill.kind == pk.DeathSpecialWorld {
+		rt.publishGuildWarCombat(division, o.warCombat, o.now)
+		if o.deathKiller != nil && (o.deathKill.kind == pk.DeathSpecialWorld || o.deathKill.kind == pk.DeathGuildWar) {
 			killer := rt.findCharacterByGid(division, enterworld.ObjectIDForCharacter(o.deathKiller))
 			if killer != nil {
 				var actor, public []wire.Frame

@@ -144,6 +144,8 @@ import {
 	FORTRESS_SCHEDULE_ROWS
 } from "./hud/fortress-war-hud";
 import { createUnionHud } from "./hud/union-hud";
+import { createGuildWarHud } from "./hud/guild-war-hud";
+import { guildWarRequest, warScoreLimits, WAR_MAX_STAKE, WAR_UNLIMITED } from "@/engine/foundation/gameplay/guild-war";
 import { createExchangeHud } from "./hud/exchange-hud";
 import {
 	createStallHud,
@@ -682,6 +684,7 @@ export function createUi(
 	const fortressScheduleHud = createFortressScheduleHud();
 	const fortressStaffHud = createFortressStaffHud();
 	const unionHud = createUnionHud();
+	const guildWarHud = createGuildWarHud();
 	const exchangeHud = createExchangeHud();
 	const stallHud = createStallHud();
 	const grantPowerHud = createGrantPowerHud();
@@ -1131,6 +1134,7 @@ export function createUi(
 		confirmAbandon = false;
 		confirmSocial = "";
 		unionHud.reset();
+		guildWarHud.reset();
 		grantPowerHud.close();
 		if ( next !== "Guild tools" ) socialMember = 0;
 		socialPage = 0;
@@ -1845,7 +1849,7 @@ export function createUi(
 		}
 		if ( id.startsWith( "npc-guild:" ) ) {
 			// 5DA1B0 cases 0x12..0x1D: the guild manager's rows (guild-manager.ts).
-			const conversation = view.gameplay?.npcConversation, social = view.gameplay?.social;
+			const conversation = view.gameplay?.npcConversation, social = view?.gameplay?.social;
 			if ( !conversation || conversation.phase !== "menu" ) return;
 			const npc = conversation.gid, row = id.slice( 10 );
 			if ( row === "create" || row === "master-leave" ) {
@@ -2237,7 +2241,7 @@ export function createUi(
 		else if ( id === "gacha-roll" ) sendGameplay( { kind: "gacha-roll", entry: gachaEntry, slot: gachaSlot } );
 		else if ( id === "process-next" ) processPage++;
 		else if ( id === "process-prev" ) processPage = Math.max( 0, processPage - 1 );
-		else if ( id === "invite-accept" || id === "invite-refuse" ) {
+		else if ( id === "invite-accept" || id === "invite-refuse" || id === "invite-close" ) {
 			sendGameplay( { kind: "social-consent", accept: id === "invite-accept" } );
 		} else if ( id === "resurrection-accept" || id === "resurrection-refuse" ) {
 			sendGameplay( { kind: "resurrection-consent", accept: id === "resurrection-accept" } );
@@ -2364,6 +2368,42 @@ export function createUi(
 			const slot = Number( id.slice( 12 ) );
 			if ( view.gameplay?.exchange?.own.some( row => row.slot === slot ) ) {
 				sendGameplay( { kind: "exchange-take", slot } );
+			}
+		} else if ( id.startsWith( "war-" ) ) {
+			const state = guildWarHud.state(), social = view?.gameplay?.social;
+			if (
+				id === "war-scroll-up" || id === "war-scroll-down" || id === "war-members-up" ||
+				id === "war-members-down" || id === "war-combo-up" || id === "war-combo-down"
+			) {
+				const target = id.startsWith( "war-combo" ) ?
+					"combo" :
+					id.startsWith( "war-members" ) ?
+					"members" :
+					"enemies";
+				const count = target === "combo" ?
+					[ 8, 32, 25, 7 ][state.combo - 23] ?? 0 :
+					target === "members" ?
+					social?.guild?.members.length ?? 0 :
+					social?.wars?.length ?? 0;
+				guildWarHud.scroll(
+					target,
+					id.endsWith( "up" ) ? -1 : 1,
+					count,
+					target === "combo" ? state.combo === 23 ? 8 : 7 : target === "members" ? 3 : guildTab === 2 ? 6 : 9
+				);
+			} else {
+				if ( id === "war-confirm" && state.mode === "input" && social ) {
+					try {
+						guildWarRequest( social, { kind: "guild-war-declare", terms: state.terms } );
+					} catch {
+						return;
+					}
+					if ( state.terms.period === 0 ) return;
+				}
+				const command = guildWarHud.command( id === "war-close" ? "war-cancel" : id, social );
+				if ( command ) sendGameplay( command );
+				if ( id === "war-declare" ) focusAndSelect( "war-name", 0, state.draft.name.length );
+				if ( id === "war-money-open" ) focusAndSelect( "war-money", 0, String( state.draft.stake ).length );
 			}
 		} else if ( id === "union-sort:name" || id === "union-sort:level" ) {
 			unionHud.sortBy( id === "union-sort:name" ? "name" : "level" );
@@ -3905,9 +3945,30 @@ export function createUi(
 				) return;
 				if ( "id" in event && event.id !== null && !controls.some( c => c.id === event.id ) ) return;
 			}
+			if ( event.kind === "scroll" && controls.some( c => c.id === "war-combo-thumb" ) ) {
+				const state = guildWarHud.state();
+				guildWarHud.scroll(
+					"combo",
+					Math.sign( event.delta ),
+					[ 8, 32, 25, 7 ][state.combo - 23] ?? 0,
+					state.combo === 23 ? 8 : 7
+				);
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "scroll" && panel === "Guild" ) {
 				if ( grantPowerHud.isOpen() ) grantPowerHud.scroll( Math.sign( event.delta ) );
-				else socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
+				else if ( guildTab === 2 || guildTab === 1 && guildWarHud.state().relation === 1 ) {
+					const state = guildWarHud.state(), social = view?.gameplay?.social;
+					const memberControl = controls.find( c => c.id === "war-members-up" );
+					const members = !!memberControl && event.y >= memberControl.rect[1] - 16;
+					guildWarHud.scroll(
+						members ? "members" : "enemies",
+						Math.sign( event.delta ),
+						members ? social?.guild?.members.length ?? 0 : social?.wars?.length ?? 0,
+						members ? 3 : guildTab === 2 ? 6 : 9
+					);
+				} else socialPage = Math.max( 0, socialPage + Math.sign( event.delta ) );
 				dirty = true;
 				return;
 			}
@@ -4533,6 +4594,41 @@ export function createUi(
 				}
 			}
 			if (
+				event.kind === "drag" &&
+				[ "war-scroll-thumb", "war-members-thumb", "war-combo-thumb" ].includes( event.id ) &&
+				controls.some( c => c.id === event.id )
+			) {
+				const state = guildWarHud.state(), social = view?.gameplay?.social;
+				const target = event.id === "war-combo-thumb" ?
+					"combo" :
+					event.id === "war-members-thumb" ?
+					"members" :
+					"enemies";
+				const count = target === "combo" ?
+					[ 8, 32, 25, 7 ][state.combo - 23] ?? 0 :
+					target === "members" ?
+					social?.guild?.members.length ?? 0 :
+					social?.wars?.length ?? 0;
+				const visible = target === "combo" ?
+					(state.combo === 23 ? 8 : 7) :
+					target === "members" ?
+					3 :
+					guildTab === 2 ?
+					6 :
+					9;
+				const travel = target === "combo" ?
+					visible * 18 - 48 :
+					target === "members" ?
+					24 :
+					guildTab === 2 ?
+					93 :
+					159;
+				guildWarHud.scroll( target, event.dy * Math.max( 0, count - visible ) / travel, count, visible );
+				dirty = true;
+				return;
+			}
+
+			if (
 				event.kind === "drag" && event.id === "potion-combo-thumb" && panel === "Auto Potion" && potionCombo &&
 				controls.some( c => c.id === event.id && !c.disabled )
 			) {
@@ -5147,7 +5243,9 @@ export function createUi(
 				else if ( event.id === "social-amount" ) socialAmount = event.value;
 				else if ( event.id === STALL_CHAT_TEXT ) stallHud.typeChat( event.value );
 				else if ( event.id === STALL_PROMPT_TEXT ) stallHud.type( "text", event.value );
-				else if ( event.id === STALL_PROMPT_QUANTITY ) stallHud.type( "quantity", event.value );
+				else if ( event.id === "war-name" || event.id === "war-money" ) {
+					guildWarHud.type( event.id, event.value, Number( view?.gameplay?.progression?.gold ?? 0 ) );
+				} else if ( event.id === STALL_PROMPT_QUANTITY ) stallHud.type( "quantity", event.value );
 				else if ( event.id === STALL_PROMPT_PRICE ) stallHud.type( "price", event.value );
 				else if ( event.id === "exchange-gold" ) {
 					exchangeHud.type( event.value, Number( view?.gameplay?.progression?.gold ?? 0 ) );
@@ -5795,6 +5893,7 @@ export function createUi(
 					roster = [];
 				}
 				if ( phase !== "world" && !retainedWorld ) {
+					guildWarHud.reset( true );
 					windowPlacement.reset();
 					itemMall.reset();
 					carriedShortcut = null;
@@ -12401,6 +12500,138 @@ export function createUi(
 						] as const
 					) authoredLabeledButton( at( id ), gx, gy, action, hudCopy( at( id ).text ), !allowed );
 				}
+				/*
+				================
+				guildWarPage
+
+				600120's hostile guild list and the authored war-score page share
+				selection. Unknown enemy details remain native unknown labels.
+				================
+				*/
+				function guildWarPage( scores: boolean, gx: number, gy: number ) {
+					const page = hudData?.windows[scores ? "ifguildwar" : "ifhostileguild"];
+					if ( !page ) return;
+					guildWarHud.reconcile( game?.social );
+					const state = guildWarHud.state(),
+						social = game?.social,
+						rows = guildWarHud.order( social?.wars ?? [] );
+					const selected = rows.find( row => row.id === state.selected );
+					const at = ( id: number ) => Object.values( page ).find( n => n.id === id )!;
+					const put = ( id: number, value: string ) => {
+						if ( at( id ) ) authoredText( at( id ), gx, gy, value );
+					};
+					nativePage( page, gx, gy, scores ? [ 30, 60, 61, 62 ] : [ 33, 34, 51, 52 ] );
+					const count = scores ? 6 : 9, first = Math.min( state.offset, Math.max( 0, rows.length - count ) );
+					for ( let i = 0; i < count; i++ ) {
+						const row = rows[first + i],
+							r: UiRect = scores ?
+								[ gx + 11, gy + 33 + i * 23, 144, 24 ] :
+								[ gx + 236, gy + 35 + i * 23, 177, 24 ];
+						if ( row ) {
+							if ( row.id === state.selected ) rect( r, [ .25, .3, .35, .6 ] );
+							quads.push( ...text.quads( row.name, [ r[0] + 6, r[1] + 7, r[2] - 12, 14 ], r, white ) );
+							controls.push( {
+								id: "war-select:" + row.id,
+								label: row.name,
+								rect: r,
+								kind: "button",
+								selected: row.id === state.selected
+							} );
+						}
+					}
+					const scroll = chatScrollbar(
+						"war-scroll",
+						scores ? [ gx + 155, gy + 48, 16, 93 ] : [ gx + 413, gy + 51, 16, 159 ],
+						rows.length,
+						count,
+						Math.max( 0, rows.length - count - first ),
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...scroll.paths );
+					quads.push( ...scroll.quads );
+					controls.push( ...scroll.controls );
+					if ( !scores ) {
+						for ( const id of selected ? [ 12, 13, 14, 15 ] : [ 12 ] ) put( id, hudCopy( at( id ).text ) );
+						if ( selected ) {
+							put( 17, selected.name );
+							for ( const id of [ 20, 21 ] ) put( id, hudCopy( "UIIT_CTL_GUILD_DONOTKNOW" ) );
+						} else put( 22, hudCopy( at( 22 ).text ) );
+						for ( const id of [ 33, 34 ] ) {
+							authoredLabeledButton( at( id ), gx, gy, "war-sort:" + id, hudCopy( at( id ).text ) );
+						}
+						const master = social?.guild?.members.find( m => m.id === social.self )?.grade === 0;
+						authoredLabeledButton( at( 51 ), gx, gy, "war-declare", hudCopy( at( 51 ).text ), !master );
+						authoredLabeledButton(
+							at( 52 ),
+							gx,
+							gy,
+							"war-surrender",
+							hudCopy( at( 52 ).text ),
+							!master || !selected || !!selected.ending
+						);
+						return;
+					}
+					for ( const id of [ 30, 60, 61, 62 ] ) {
+						authoredLabeledButton(
+							at( id ),
+							gx,
+							gy,
+							id === 30 ? "war-sort" : "war-contribution-sort:" + id,
+							hudCopy( at( id ).text )
+						);
+					}
+					for ( const id of [ 90, 91, 92, 93, 100, 101, 102 ] ) put( id, hudCopy( at( id ).text ) );
+					if ( selected ) {
+						put( 95, selected.name );
+						put( 96, String( selected.localScore ) );
+						put( 97, String( selected.enemyScore ) );
+						put(
+							105,
+							selected.type === 0 ?
+								hudCopy( "UIIT_CTL_GUILDWAR_UNLIMITED" ) :
+								String( warScoreLimits()[selected.type] ?? 0 )
+						);
+						put( 106, selected.word38.toLocaleString( "en-US" ) + " " + hudCopy( "UIIT_STT_GOLD" ) );
+						put(
+							107,
+							selected.word3c === WAR_UNLIMITED ?
+								hudCopy( "UIIT_CTL_GUILDWAR_UNLIMITED" ) :
+								[
+									Math.trunc( (selected.word3c | 0) / 3600 ),
+									Math.trunc( ((selected.word3c | 0) % 3600) / 60 ),
+									(selected.word3c | 0) % 60
+								].map( n => String( n ).padStart( 2, "0" ) ).join( " : " )
+						);
+					} else put( 108, hudCopy( at( 108 ).text ) );
+					const members = guildWarHud.members( social?.guild?.members ?? [] );
+					members.slice( state.contributionOffset, state.contributionOffset + 3 ).forEach( ( row, i ) => {
+						const y = gy + 211 + i * 23;
+						for (
+							const [value, x, width] of [ [ row.name, gx + 17, 162 ], [
+								String( row.rank ),
+								gx + 187,
+								52
+							], [ String( row.warScore ?? 0 ), gx + 244, 151 ] ] as const
+						) quads.push( ...text.quads( value, [ x, y, width, 14 ], full, white ) );
+					} );
+					const memberScroll = chatScrollbar(
+						"war-members",
+						[ gx + 414, gy + 220, 16, 24 ],
+						members.length,
+						3,
+						Math.max( 0, members.length - 3 - state.contributionOffset ),
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...memberScroll.paths );
+					quads.push( ...memberScroll.quads );
+					controls.push( ...memberScroll.controls );
+				}
 				if ( (panel === "Guild" || panel === "Guild tools") && hudData ) {
 					const admission = beginWindow(),
 						root = hudData.root.GDR_COMMUNITY!,
@@ -12429,7 +12660,7 @@ export function createUi(
 							[ px + 15 + i * 75, py + 39, 72, 24 ],
 							guildTab === i,
 							"com_long_tab",
-							![ 0, 1, 4 ].includes( i )
+							![ 0, 1, 2, 4 ].includes( i )
 						)
 					);
 					authoredChrome(
@@ -12438,7 +12669,39 @@ export function createUi(
 						py
 					);
 					if ( guildTab === 1 && hudData.windows.ifallianceguild && hudData.windows.ifallianceguildslot ) {
-						unionPage( hudData.windows.ifallianceguild, hudData.windows.ifallianceguildslot, gx, gy );
+						const relations = hudData.windows.ifguildrelations!;
+						nativePage( relations, gx, gy, [ 9, 10 ] );
+						for (
+							const [i, symbol] of [ "UIIT_STT_GUILD_RESPECT_ALLY", "UIIT_STT_GUILD_RESPECT_WAR" ]
+								.entries()
+						) {
+							const selected = guildWarHud.state().relation === i;
+							const r: UiRect = [ gx + 12 + i * 76, gy + 5, 76, 28 ];
+							image( r, ROOT + "interface/guild/gil_subj_tab_" + (selected ? "on" : "off") + ".png" );
+							quads.push(
+								...text.quads( hudCopy( symbol ), [ r[0], r[1] + 8, r[2], 14 ], full, white, {
+									hAlign: 1
+								} )
+							);
+							controls.push( {
+								id: "war-relation:" + i,
+								label: hudCopy( symbol ),
+								rect: r,
+								kind: "button",
+								selected
+							} );
+						}
+						if ( guildWarHud.state().relation === 0 ) {
+							unionPage(
+								hudData.windows.ifallianceguild,
+								hudData.windows.ifallianceguildslot,
+								gx + 6,
+								gy + 29
+							);
+						} else guildWarPage( false, gx + 6, gy + 29 );
+					} else if ( guildTab === 2 ) {
+						nativePage( hudData.windows.ifwarstate!, gx, gy );
+						guildWarPage( true, gx + 6, gy + 29 );
 					} else {
 						// 5EA9D0 creates Create before the subsequent resource sections. Their
 						// insertion lists reverse within a section, not across constructor calls.
@@ -13540,7 +13803,7 @@ export function createUi(
 				endWindow( admission );
 			}
 			if (
-				game?.social?.invitation && worldVisible &&
+				game?.social?.invitation && game.social.invitation.type !== 10 && worldVisible &&
 				(game.social.invitation.type !== 5 && game.social.invitation.type !== 6 ||
 					next.entities.some( e => e.gid === game.social!.invitation!.gid && e.guildName ))
 			) {
@@ -14250,6 +14513,210 @@ export function createUi(
 				}
 				endWindow( [ admission[0], 0, 0, admission[3] ], "modal:" + panel );
 			}
+			guildWarHud.reconcile( game?.social );
+			const warDialog = guildWarHud.state(), warInvite = game?.social?.invitation?.war;
+			if ( worldVisible && hud.data() && (warDialog.mode !== "closed" || warInvite) ) {
+				const input = !warInvite && warDialog.mode === "input",
+					surrender = !warInvite && warDialog.mode === "surrender";
+				const terms = warInvite ?? warDialog.terms,
+					width = surrender ? 308 : 350,
+					height = surrender ? 148 : input ? 257 : 222;
+				const x = Math.floor( (w - width) / 2 ), y = Math.floor( (h - height) / 2 );
+				const layout = hud.data()!
+					.windows[warInvite ? "ifguildwaragree" : input ? "ifguildwarrequest" : "ifguildwarconfirm"]!;
+				const at = ( id: number ) => Object.values( layout ).find( n => n.id === id )!;
+				const put = ( id: number, value: string ) => {
+					if ( at( id ) ) authoredText( at( id ), x, y, value );
+				};
+				const unlimited = hudCopy( "UIIT_CTL_GUILDWAR_UNLIMITED" );
+				const choice = ( id: number, value: number ) =>
+					id === 23 ?
+						value === 0 ? unlimited : String( warScoreLimits()[value] ) :
+						value === [ 31, 24, 6 ][id - 24] ?
+						unlimited :
+						String( id === 26 ? value * 10 : value ) + " " +
+						hudCopy( id === 24 ? "PARAM_DAY" : id === 25 ? "UIIT_STT_HOUR" : "UIIT_STT_MINUTE" );
+				controls = [];
+				blocks = [ full ];
+				if ( surrender ) {
+					const box = guildProposalLayout( w, h ),
+						enemy = game?.social?.wars?.find( row => row.id === warDialog.selected )?.name ?? "";
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+						...frameRing(
+							box.frame,
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push(
+						...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), box.title, full, white, { hAlign: 1 } ),
+						...text.quads(
+							hudCopy( "UIIT_MSG_GUILDWAR_SANCTION_ENDWAR_01" ).replace( "%s", () => enemy ),
+							box.name,
+							full,
+							white,
+							{ hAlign: 1 }
+						),
+						...text.quads( hudCopy( "UIIT_MSG_GUILDWAR_SANCTION_ENDWAR_02" ), box.question, full, white, {
+							hAlign: 1
+						} )
+					);
+					button(
+						"war-confirm",
+						hudCopy( "UIIT_CTL_YES" ),
+						...box.accept.slice( 0, 3 ) as [number, number, number]
+					);
+					button(
+						"war-cancel",
+						hudCopy( "UIIT_CTL_NO" ),
+						...box.refuse.slice( 0, 3 ) as [number, number, number]
+					);
+				} else {
+					const root = hud.data()!.root.GDR_REQUEST_GUILDWAR!;
+					nativeFrame(
+						{
+							...root,
+							texture: ROOT + "interface/messagebox/msgbox2_window_",
+							rect: [ 0, 0, width, height ]
+						},
+						x,
+						y,
+						hudCopy(
+							warInvite ? "UIIT_STT_AGREEMENT_BOX" : input ? "UIIT_STT_INPUT_BOX" : "UIIT_STT_CONFIRM_BOX"
+						),
+						warInvite ? "invite-close" : "war-close"
+					);
+					nativePage( layout, x, y, [ 5, 6, 10, 11, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 40, 55, 56 ] );
+					if ( input ) {
+						for ( const id of [ 10, 29, 30, 31, 32, 56 ] ) {
+							if ( at( id ) ) put( id, hudCopy( at( id ).text ) );
+						}
+						put( 40, String( terms.stake ) );
+						partyEdit( at( 55 ), x, y, "war-name", warDialog.draft.name, 12 );
+						authoredButton( at( 28 ), x, y, "war-money-open", hudCopy( "UIIT_STT_AMOUNT_MONEY" ) );
+						const values = [
+							warDialog.draft.scoreIndex,
+							warDialog.draft.days,
+							warDialog.draft.hours,
+							warDialog.draft.minutes
+						];
+						for ( const [i, value] of values.entries() ) {
+							comboBox(
+								authoredRect( at( 23 + i ), x, y ),
+								"war-combo:" + (23 + i),
+								choice( 23 + i, value ),
+								choice( 23 + i, value )
+							);
+						}
+					} else {
+						for ( const id of [ 11, 27, 28, 29, 30 ] ) put( id, hudCopy( at( id ).text ) );
+						put( 10, hudCopy( at( 10 ).text ).replace( "%s", () => terms.name ) );
+						for ( const id of [ 23, 24, 25, 26 ] ) authoredChrome( at( id ), x, y );
+						put( 31, choice( 23, terms.scoreIndex ) );
+						put( 40, String( terms.stake ) );
+						put(
+							32,
+							terms.period >= WAR_UNLIMITED ?
+								unlimited :
+								[
+									choice( 24, terms.period >>> 10 & 31 ),
+									choice( 25, terms.period >>> 15 & 31 ),
+									choice( 26, (terms.period >>> 20 & 63) / 10 )
+								].join( " " )
+						);
+					}
+					authoredLabeledButton(
+						at( 5 ),
+						x,
+						y,
+						warInvite ? "invite-accept" : "war-confirm",
+						hudCopy( at( 5 ).text ),
+						warInvite ?
+							Number( game?.progression?.gold ?? 0 ) < terms.stake :
+							input &&
+							(terms.period === 0 || terms.name.length < 2 || terms.name === game?.social?.guild?.name ||
+								terms.stake > WAR_MAX_STAKE)
+					);
+					authoredLabeledButton(
+						at( 6 ),
+						x,
+						y,
+						warInvite ? "invite-refuse" : "war-cancel",
+						hudCopy( at( 6 ).text )
+					);
+					if ( input && warDialog.combo ) {
+						const id = warDialog.combo,
+							count = [ 8, 32, 25, 7 ][id - 23]!,
+							visible = id === 23 ? 8 : 7,
+							first = Math.min( warDialog.comboOffset, count - visible );
+						const r = authoredRect( at( id ), x, y ),
+							list: UiRect = [ r[0], r[1] + 20, r[2], visible * 18 ];
+						rect( list, [ 0, 0, 0, 1 ] );
+						blocks.push( list );
+						for ( let i = 0; i < visible; i++ ) {
+							const value = first + i,
+								cell: UiRect = [ list[0], list[1] + i * 18, list[2] - (count > visible ? 16 : 0), 18 ];
+							quads.push( ...text.quads( choice( id, value ), cell, cell, white ) );
+							controls.push( {
+								id: "war-choice:" + value,
+								label: choice( id, value ),
+								rect: cell,
+								kind: "button"
+							} );
+						}
+						if ( count > visible ) {
+							const scroll = chatScrollbar(
+								"war-combo",
+								[ list[0] + list[2] - 16, list[1] + 16, 16, list[3] - 48 ],
+								count,
+								visible,
+								count - visible - first,
+								resources.size,
+								full,
+								hover,
+								pressed
+							);
+							paths.push( ...scroll.paths );
+							quads.push( ...scroll.quads );
+							controls.push( ...scroll.controls );
+						}
+					}
+				}
+			}
+			if ( worldVisible && warDialog.result ) {
+				const result = warDialog.result,
+					value = noticeText( hudCopy, { key: result.key, value: 0, arguments: result.names } ) +
+						(result.additionalKey ? "\n" + hudCopy( result.additionalKey ) : "");
+				const box = noticeDialog( w, h, value, value => text.run( value ).width );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						box.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					)
+				);
+				quads.push( ...text.quads( hudCopy( "UIIT_STT_EVENTGUIDE" ), box.title, full, white, { hAlign: 1 } ) );
+				for ( const [i, line] of box.lines.entries() ) {
+					quads.push(
+						...text.quads( line, [ box.body[0], box.body[1] + i * 23, box.body[2], 23 ], full, white, {
+							hAlign: 1
+						} )
+					);
+				}
+				button(
+					"war-result-close",
+					hudCopy( "UIIT_CTL_CONFIRM" ),
+					...box.confirm.slice( 0, 3 ) as [number, number, number]
+				);
+			}
 			const unionAsk = unionHud.question();
 			if ( worldVisible && unionAsk ) {
 				// 5F7670: the union's question box over the MsgBoxINIF geometry.
@@ -14948,7 +15415,12 @@ export function createUi(
 				);
 				button( "split-cancel", hudCopy( "UIIT_CTL_CANCEL" ), x + 151, y + 143, 76, false, false, 6 );
 			}
-			if ( worldVisible && goldDialog && (panel === "Inventory" || panel === "Storage") ) {
+			if (
+				worldVisible &&
+				(warDialog.money !== null || goldDialog && (panel === "Inventory" || panel === "Storage"))
+			) {
+				const amount = warDialog.money ?? goldAmount,
+					inputId = warDialog.money !== null ? "war-money" : "gold-amount";
 				const layout = messageBox( w, h, 308, 148 ), [x, y] = layout.frame;
 				controls = [];
 				blocks = [ full ];
@@ -14986,27 +15458,27 @@ export function createUi(
 				);
 				const edit: UiRect = [ x + 128, y + 71, 107, 14 ];
 				controls.push( {
-					id: "gold-amount",
+					id: inputId,
 					label: hudCopy( "UIIT_STT_AMOUNT_MONEY" ),
 					kind: "text",
-					value: goldAmount,
+					value: amount,
 					rect: edit,
 					maxLength: 20
 				} );
 				quads.push(
-					...text.quads( goldAmount, [ edit[0], edit[1], edit[2] - 2, edit[3] ], edit, white, {
+					...text.quads( amount, [ edit[0], edit[1], edit[2] - 2, edit[3] ], edit, white, {
 						hAlign: 2,
 						vAlign: 0,
 						overflow: "clip"
 					} )
 				);
-				if ( focus === "gold-amount" ) {
-					const width = text.run( goldAmount ).width,
-						start = Math.min( selection[0] ?? 0, selection[1] ?? 0, goldAmount.length ),
-						end = Math.min( Math.max( selection[0] ?? 0, selection[1] ?? 0 ), goldAmount.length ),
+				if ( focus === inputId ) {
+					const width = text.run( amount ).width,
+						start = Math.min( selection[0] ?? 0, selection[1] ?? 0, amount.length ),
+						end = Math.min( Math.max( selection[0] ?? 0, selection[1] ?? 0 ), amount.length ),
 						left = edit[0] + edit[2] - 2 - width,
-						before = text.run( goldAmount.slice( 0, start ) ).width,
-						through = text.run( goldAmount.slice( 0, end ) ).width;
+						before = text.run( amount.slice( 0, start ) ).width,
+						through = text.run( amount.slice( 0, end ) ).width;
 					if ( end > start ) {
 						rect(
 							[ left + before, edit[1], through - before, 14 ],
@@ -15018,8 +15490,21 @@ export function createUi(
 					}
 					if ( caretVisible ) rect( [ left + through, edit[1], 2, 14 ], white, "", [ 0, 0, 1, 1 ], edit );
 				}
-				button( "drop-gold", hudCopy( "UIIT_CTL_CONFIRM" ), x + 123, y + 101, 76, !!game?.inventoryPending );
-				button( "gold-cancel", hudCopy( "UIIT_CTL_CANCEL" ), x + 203, y + 101, 76 );
+				button(
+					warDialog.money !== null ? "war-money-ok" : "drop-gold",
+					hudCopy( "UIIT_CTL_CONFIRM" ),
+					x + 123,
+					y + 101,
+					76,
+					!!game?.inventoryPending
+				);
+				button(
+					warDialog.money !== null ? "war-money-cancel" : "gold-cancel",
+					hudCopy( "UIIT_CTL_CANCEL" ),
+					x + 203,
+					y + 101,
+					76
+				);
 			}
 			const stallBox = stallHud.prompt(), stallPage = hud.data()?.windows.ifstall;
 			if ( worldVisible && stallBox && game?.stall && stallPage ) {

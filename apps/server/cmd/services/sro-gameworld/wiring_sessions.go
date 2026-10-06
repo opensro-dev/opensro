@@ -101,6 +101,7 @@ func (game *gameplayPlane) worldBound(
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)
 	game.unions.DropPendingInvite(divisionID, character.Name)
+	game.guildWars.DropPendingInvite(divisionID, character.Name)
 	game.items.AbandonExchange(divisionID, character.Name)
 	game.items.AbandonStall(divisionID, character.Name)
 	game.mentorInvites.WorldBound(session, divisionID, character)
@@ -132,6 +133,7 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session) {
 	game.matches.SessionClosed(session)
 	game.guildInvites.SessionClosed(session)
 	game.unions.SessionClosed(session)
+	game.guildWars.SessionClosed(session)
 	game.mentorInvites.SessionClosed(session)
 
 	character, divisionID, bound := enterworld.SessionCharacter(game.deps, session)

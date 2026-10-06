@@ -18,6 +18,7 @@ differ.
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
@@ -66,6 +67,7 @@ type playerStruck struct {
 	// before is the victim's HP ahead of each impact (a drain's cap).
 	before        []uint32
 	fatal, struck bool
+	warCombat     domain.GuildWarCombat
 	killer        *enterworld.Character
 	// mpSpent is what dgmp (5A13FE) took from MP; mp is the MP it left.
 	mpSpent, mp      uint32
@@ -208,6 +210,7 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		}
 	}
 	if out.fatal {
+		out.warCombat = rt.prepareGuildWarCombat(s.division, c, s.killer)
 		out.deathEffects, out.deathProgression = rt.settlePlayerDeathInDoor(s.division, c, s.killer, s.now)
 		out.owner = rt.clearPlayerAbnormalInDoor(s.division, c, s.now)
 	} else {
@@ -243,6 +246,7 @@ func (rt *Runtime) playerStruckFrames(division string, victim *enterworld.Charac
 	public = append(public, struck.withdrawn...)
 	if struck.fatal {
 		rt.recordFortressDeath(division, victim, struck.killer, now)
+		rt.publishGuildWarCombat(division, struck.warCombat, now)
 		if rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
 			// Native death retires effects before publishing the life change.
 			// Enqueue under the action lock, before a rebirth/new application

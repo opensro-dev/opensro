@@ -112,10 +112,10 @@ test("war proposal replies reach the message board and never repeat or block the
 	}
 	const refusal = packet( base, 0x3b29, [ 0x32, 0, ...str( "Enemy" ) ] );
 	assert.deepEqual( refusal.notice, { key: "UIIT_MSG_GUILDWAR_WARREFUSAL", value: 0, text: "Enemy" } );
-	const timeout = packet( base, 0x3b29, [ 0x32, 2, ...str( "Enemy" ) ] );
+	const timeout = packet( { ...base, warPending: 1 }, 0x3b29, [ 0x32, 2, ...str( "Enemy" ) ] );
 	assert.equal( timeout.notice.key, "UIIT_MSG_GUILDWARERR_REQUISITION_TIME_OUT" );
-	// The native suggestion dialog has no owner here; it must still parse.
-	assert.equal( packet( base, 0x3b29, [ 0x32, 3 ] ).notice, undefined );
+	// Result three opens the native two-line suggestion modal.
+	assert.equal( packet( base, 0x3b29, [ 0x32, 3 ] ).warResult?.additionalKey, "UIIT_MSG_GUILDWAR_SUGGESTIONS_02" );
 	assert.equal( packet( base, 0x3b29, [ 0x32, 7 ] ).notice, undefined );
 	assert.throws( () => packet( base, 0x3b29, [ 0x32, 0 ] ), /Truncated/ );
 	assert.equal( packet( refusal, 0x3b29, [ 0x32, 3 ] ).notice, undefined, "a drained notice never repeats" );
@@ -306,7 +306,7 @@ test("the kind-3 item window decodes, counts down and takes the two-bar slot", a
 		"a summoner without a window has no slot"
 	);
 	// 6E6E00 reads Param1 as SECONDS: ITEM_MALL_PET_SKILL_COLD carries 1800,
-	// labelled 사용시간(초), a 30-minute usage window. No scaling belongs here.
+	// labelled ì‚¬ìš©ì‹œê°„(ì´ˆ), a 30-minute usage window. No scaling belongs here.
 	assert.equal(
 		cosTimerBars( { itemRefObjId: 1, remainingSec: 1800, packedExtra: 0, receivedAtMs: 0 }, {
 			durationSec: 1800,
