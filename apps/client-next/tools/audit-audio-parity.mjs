@@ -22,7 +22,8 @@ import { itemSoundSource } from "./generate-item-sounds.mjs";
 import { gameRoot } from "../../../scripts/build/world/paths.mjs";
 export const root = path.resolve( import.meta.dirname, ".." );
 const hash = b => createHash( "sha256" ).update( b ).digest( "hex" );
-const read = p => fs.readFileSync( path.join( root, p ) );
+// resolve, not join: the asset paths are absolute (CLIENT_PUBLIC_ROOT).
+const read = p => fs.readFileSync( path.resolve( root, p ) );
 const json = p => JSON.parse( read( p ) );
 const publicRoot = CLIENT_PUBLIC_ROOT;
 const norm = s => s.replaceAll( "\\", "/" ).toUpperCase();

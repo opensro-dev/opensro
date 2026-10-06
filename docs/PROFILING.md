@@ -73,6 +73,13 @@ Useful options:
 | `--cpu` | A CPU profile per scenario |
 | `--counts` | WebGPU commands per frame (draws, bundles, buffer writes, submits); slows the frame, so read only its counts |
 | `--trace` | A Chrome trace per location (main thread, workers, GPU process) |
+| `--paced` | Retain the browser's display pacing |
+| `--frame-limit 60` | Exercise the player's 60 FPS limit; also accepts 120, 240 or 0 (the default, uncapped) |
+| `--cpu-rate 4` | Apply Chrome CPU throttling after world warm-up |
+
+For the default player setting, use `--paced --frame-limit 60`. Frame limits
+and CPU rates are recorded in the result JSON. Keep the default uncapped run
+for throughput comparisons; a capped acceptance run does not measure the 500 FPS goal.
 
 Captures go to `temp/artifacts/fps-bench/<location>-<scenario>.*`.
 
