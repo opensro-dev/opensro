@@ -23,6 +23,7 @@ import { sightMode, type SightMode } from "@/engine/foundation/rendering/camera-
 import { initialAudioOptions, audioOptions, type AudioOptions } from "@/engine/foundation/audio/options";
 import { cameraWheelDelta } from "@/engine/foundation/rendering/camera-wheel";
 import { createTouchCamera, type TouchCameraOutput } from "@/engine/foundation/rendering/touch-camera";
+import { experimentalOptions, type ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
 import { createUiBridge } from "./ui/ui";
 import { createCursor } from "./ui/cursor";
@@ -92,6 +93,15 @@ export function createPlatform(
 		status.value = "Chatting blocks could not be restored: " + String( error );
 	}
 	onUi( { kind: "chat-blocks", value: localBlocks } );
+	const experimentalKey = "sro:v1150:experimental-options:1";
+	let experimental = experimentalOptions();
+	try {
+		const stored = localStorage.getItem( experimentalKey );
+		if ( stored !== null ) experimental = experimentalOptions( JSON.parse( stored ) );
+	} catch ( error ) {
+		status.value = "Experimental options could not be restored: " + String( error );
+	}
+	onUi( { kind: "experimental-preferences", value: experimental } );
 	const preferenceKey = "sro:v1150:game-options:1";
 	let preferences = initialGameOptions();
 	try {
@@ -448,6 +458,16 @@ export function createPlatform(
 	const viewport = { width: 1, height: 1 };
 	return {
 		displayScale,
+		/*
+		================
+		saveExperimentalOptions
+		================
+		*/
+		saveExperimentalOptions( value: ExperimentalOptions ) {
+			const next = experimentalOptions( value );
+			localStorage.setItem( experimentalKey, JSON.stringify( next ) );
+			onUi( { kind: "experimental-preferences", value: next } );
+		},
 		/*
 		================
 		saveVideoOptions

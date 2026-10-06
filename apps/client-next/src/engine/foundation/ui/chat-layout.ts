@@ -33,6 +33,7 @@ export interface ChatLayoutInput {
 	tab: number;
 	input: string;
 	lines: readonly ChatLine[];
+	chatTimestamps?: boolean;
 	welcome: string;
 	copy: ( key: string ) => string;
 	size: ( path: string ) => readonly [number, number] | undefined;
@@ -198,7 +199,7 @@ button
 				kind: line.recipient ? "button" : "region",
 				rect: r,
 				whisperTarget: line.recipient,
-				helpText: chatLineTime( line.sentAt ) || undefined
+				helpText: state.chatTimestamps ? chatLineTime( line.sentAt ) || undefined : undefined
 			} );
 			if ( hover === id ) {
 				quads.push( {

@@ -3,6 +3,7 @@
   "root": "src/engine/runtime/runtime.ts",
   "bootstrap": "src/bootstrap.ts",
   "modules": {
+    "src/engine/runtime/ui/hud/experimental-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/action-session.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/characters/mall-preview.ts": "src/engine/runtime/characters/characters.ts",

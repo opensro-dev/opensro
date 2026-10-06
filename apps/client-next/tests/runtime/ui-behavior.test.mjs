@@ -1128,22 +1128,23 @@ test("a new inventory icon keeps the previous popup visible and navigation avail
 	}
 });
 
-test("retail System menu replaces fallback actions with four compact authored controls", () => {
+test("System menu inserts Experimental below Options using the authored buttons", () => {
 	const f = uiFixture();
 	try {
 		for ( let t = 0; t < 1200; t += 100 ) f.ui.step( f.state, t );
 		f.ui.event( { kind: "key", code: "Escape" } );
 		const scene = f.ui.step( f.state, 1300 );
 		const buttons = scene.controls.filter( c =>
-			[ "open-window:Option", "open-window:Game Guide", "system-restart", "system-exit" ].includes( c.id )
+			[
+				"open-window:Option",
+				"open-window:Experimental",
+				"open-window:Game Guide",
+				"system-restart",
+				"system-exit"
+			].includes( c.id )
 		);
-		assert.deepEqual( buttons.map( c => c.label ), [ "Option", "Help", "Restart", "Exit" ] );
-		assert.deepEqual( buttons.map( c => c.rect ), [ [ 724, 402, 152, 24 ], [ 724, 436, 152, 24 ], [
-			724,
-			470,
-			152,
-			24
-		], [ 724, 504, 152, 24 ] ] );
+		assert.deepEqual( buttons.map( c => c.label ), [ "Option", "Experimental", "Help", "Restart", "Exit" ] );
+		assert.deepEqual( buttons.map( c => c.rect ), [ 385, 419, 453, 487, 521 ].map( y => [ 724, y, 152, 24 ] ) );
 		assert.ok( !scene.controls.some( c => c.id === "disconnect" || c.id === "logout" ) );
 		f.ui.event( { kind: "activate", id: "system-restart" } );
 		const restarted = f.ui.step( f.state, 1400 );

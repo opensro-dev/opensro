@@ -26,6 +26,7 @@ test(
 			);
 			await page.evaluate( async () => {
 				localStorage.removeItem( "sro:v1150:game-options:1" );
+				localStorage.removeItem( "sro:v1150:experimental-options:1" );
 				const entry = Array.from( document.scripts ).find( s =>
 					s.src && new URL( s.src ).pathname === "/src/bootstrap.ts"
 				);
@@ -83,7 +84,14 @@ test(
 					() => {},
 					() => 1,
 					() => 0,
-					value => platform.saveGameOptions( value )
+					value => platform.saveGameOptions( value ),
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					{ saveExperimental: value => platform.saveExperimentalOptions( value ) }
 				);
 				platform = createPlatform(
 					document.querySelector( "canvas" ),
@@ -151,6 +159,76 @@ test(
 				await page.locator( '[data-ui-id="' + id + '"]' ).click();
 				await page.evaluate( () => flagFixture.draw() );
 			};
+			await mkdir( "temp/artifacts/experimental-options", { recursive: true } );
+			await draw( "option-video-record:0" );
+			await page.screenshot( { path: "temp/artifacts/experimental-options/video-graphics-1.png" } );
+			await click( "option-video-record:1" );
+			await draw( "option-video-record:1" );
+			await page.screenshot( { path: "temp/artifacts/experimental-options/video-graphics-2.png" } );
+			await click( "option-cancel" );
+			await page.keyboard.press( "Escape" );
+			await draw( "open-window:Experimental" );
+			const menuRows = await page.locator(
+				'[data-ui-id="open-window:Option"], [data-ui-id="open-window:Experimental"]'
+			).evaluateAll( rows => rows.map( row => row.getBoundingClientRect().y ) );
+			assert.equal( menuRows[1] - menuRows[0], 34 );
+			await page.screenshot( { path: "temp/artifacts/experimental-options/escape-menu.png" } );
+			await click( "open-window:Experimental" );
+			await draw( "experimental-chat-timestamps" );
+			assert.equal(
+				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
+				"false"
+			);
+			await page.screenshot( { path: "temp/artifacts/experimental-options/experimental.png" } );
+			await click( "experimental-chat-timestamps" );
+			await click( "experimental-cancel" );
+			assert.equal(
+				await page.evaluate( () => localStorage.getItem( "sro:v1150:experimental-options:1" ) ),
+				null
+			);
+			await page.keyboard.press( "Escape" );
+			await click( "open-window:Experimental" );
+			await draw( "experimental-chat-timestamps" );
+			assert.equal(
+				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
+				"false"
+			);
+			await click( "experimental-chat-timestamps" );
+			await click( "experimental-confirm" );
+			assert.deepEqual(
+				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ) ),
+				{ chatTimestamps: true }
+			);
+			await page.keyboard.press( "Escape" );
+			await click( "open-window:Experimental" );
+			await draw( "experimental-chat-timestamps" );
+			assert.equal(
+				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
+				"true"
+			);
+			await click( "experimental-default" );
+			await page.keyboard.press( "Escape" );
+			await page.evaluate( () => {
+				flagFixture.draw();
+				flagFixture.ui.event( { kind: "activate", id: "open-window:Experimental" } );
+				flagFixture.draw();
+			} );
+			await draw( "experimental-chat-timestamps" );
+			assert.equal(
+				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
+				"true",
+				"Escape discards the Default draft"
+			);
+			await click( "experimental-default" );
+			await click( "experimental-confirm" );
+			assert.deepEqual(
+				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ) ),
+				{ chatTimestamps: false }
+			);
+			await page.evaluate( () => {
+				flagFixture.ui.event( { kind: "activate", id: "open-window:Option" } );
+				flagFixture.draw();
+			} );
 			await click( "option-tab:4" );
 			await draw( "option-toggle:ownName" );
 			await mkdir( "temp/artifacts/login-flags", { recursive: true } );
