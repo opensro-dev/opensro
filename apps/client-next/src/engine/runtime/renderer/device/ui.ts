@@ -166,7 +166,9 @@ fs
 	const sampler = device.createSampler( { magFilter: "linear", minFilter: "linear" } );
 	const nearestSampler = device.createSampler( { magFilter: "nearest", minFilter: "nearest" } );
 	const textures = new Map<string, { texture: GPUTexture; width: number; height: number; }>();
-	const bindings = new Map<string, Map<string, GPUBindGroup>>();
+	// texture -> mask -> one bind group per sampler. Nested maps, not a joined
+	// key: the per-quad lookup builds no string.
+	const bindings = new Map<string, Map<string, { linear?: GPUBindGroup; nearest?: GPUBindGroup; }>>();
 	const packed: (UiQuad | undefined)[] = [];
 	// The glyph a packed record holds (-1 or unused for a plain quad).
 	const packedGlyph: number[] = [];
@@ -304,8 +306,13 @@ fs
 					textureBindings = new Map();
 					bindings.set( quad.texture, textureBindings );
 				}
-				const bindingKey = (quad.sampling ?? "linear") + "\0" + maskKey;
-				let binding = textureBindings.get( bindingKey );
+				let maskBindings = textureBindings.get( maskKey );
+				if ( !maskBindings ) {
+					maskBindings = {};
+					textureBindings.set( maskKey, maskBindings );
+				}
+				const sampling = quad.sampling ?? "linear";
+				let binding = maskBindings[sampling];
 				if ( !binding ) {
 					binding = device.createBindGroup( {
 						layout: pipeline!.getBindGroupLayout( 0 ),
@@ -317,7 +324,7 @@ fs
 							{ binding: 4, resource: mask.texture.createView() }
 						]
 					} );
-					textureBindings.set( bindingKey, binding );
+					maskBindings[sampling] = binding;
 				}
 				// UiQuad is an immutable publication. Projected labels replace only their
 				// own records; retained HUD records keep the already packed GPU bytes. A

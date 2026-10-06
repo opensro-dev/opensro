@@ -54,6 +54,10 @@ export function createUiAssets(
 	let disposed = false;
 	let wanted = new Set<string>();
 	let previousPaths: readonly string[] = [], settled = false;
+	// The array the caller last handed in. The UI builds a fresh demand array
+	// whenever its layout runs and passes the same one on the frames between,
+	// so the same array again is the same demand and skips the walk.
+	let previousArray: readonly string[] | null = null;
 	// Counts removals from `loaded`. Between two removals the resident set only
 	// grows, so a list found fully resident stays so until the count moves.
 	let evictions = 0;
@@ -119,12 +123,21 @@ export function createUiAssets(
 		/*
 		================
 		step
+
+		paths is the frame's whole demand. Contract: a caller never changes an
+		array after handing it in; new demand comes as a new array. The same
+		array again is therefore the same demand and skips the walk; any other
+		array is compared by content, and is frozen as it is adopted.
 		================
 		*/
 		step( paths: readonly string[], now: number ) {
 			if ( disposed ) return false;
+			// Enforce the contract: an adopted array cannot change afterwards
+			// (strict-mode code that tries throws), so the identity check below
+			// can never miss demand. Once per new array, on layout frames only.
+			if ( paths !== previousArray ) Object.freeze( paths );
 			let demandChanged = paths.length !== previousPaths.length;
-			if ( !demandChanged ) {
+			if ( !demandChanged && paths !== previousArray ) {
 				for ( let i = 0; i < paths.length; i++ ) {
 					if ( paths[i] !== previousPaths[i] ) {
 						demandChanged = true;
@@ -132,6 +145,7 @@ export function createUiAssets(
 					}
 				}
 			}
+			previousArray = paths;
 			if ( !demandChanged && settled ) return false;
 			if ( demandChanged ) {
 				previousPaths = [ ...paths ];
@@ -275,6 +289,7 @@ export function createUiAssets(
 			if ( disposed ) return;
 			disposed = true;
 			previousPaths = [];
+			previousArray = null;
 			settled = false;
 			const errors: unknown[] = [];
 			for ( const id of pending.values() ) {

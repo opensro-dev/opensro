@@ -154,7 +154,6 @@ apps/client-next/src/engine/foundation/ui/guild-crest.ts
 apps/client-next/src/engine/foundation/ui/helper-bubble.ts
 apps/client-next/src/engine/foundation/ui/hit-test.ts
 apps/client-next/src/engine/foundation/ui/hud-readouts.ts
-apps/client-next/src/engine/foundation/ui/icon.ts
 apps/client-next/src/engine/foundation/ui/input-options.ts
 apps/client-next/src/engine/foundation/ui/inventory-layout.ts
 apps/client-next/src/engine/foundation/ui/item-equipment-overlay.ts

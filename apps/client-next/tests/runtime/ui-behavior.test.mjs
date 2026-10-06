@@ -64,6 +64,35 @@ function assetFixture() {
 	const resources = createUiAssets( assets, ( ...args ) => published.push( args ), "https://fixture.invalid/" );
 	return { assets, resources, requests, results, cancelled, published };
 }
+/*
+================
+UI demand compares by content across arrays
+
+The UI hands the same demand array back on frames without a layout, and a
+fresh one after each layout. A fresh array of the same length that names a
+different image must still be noticed; the same contents in a fresh array
+must not reload anything.
+================
+*/
+test("UI demand is compared by content, whichever array carries it", () => {
+	const f = assetFixture();
+	f.resources.step( [ "/a.png", "/b.png" ], 0 );
+	assert.deepEqual( f.requests.length, 2 );
+	f.results.set( 1, { kind: "image", image: { width: 1, height: 1 } } );
+	f.results.set( 2, { kind: "image", image: { width: 1, height: 1 } } );
+	const settled = [ "/a.png", "/b.png" ];
+	f.resources.step( settled, 1 );
+	assert.equal( f.resources.step( settled, 2 ), false, "the same array again is the same demand" );
+	assert.equal(
+		f.resources.step( [ "/a.png", "/b.png" ], 3 ),
+		false,
+		"equal contents in a new array change nothing"
+	);
+	assert.throws( () => settled.push( "/late.png" ), TypeError, "an adopted demand array cannot change" );
+	f.resources.step( [ "/a.png", "/c.png" ], 4 );
+	assert.equal( f.requests.length, 3, "a same-length demand naming a new image requests it" );
+	assert.match( f.requests[2], /c\.png$/ );
+});
 test("UI textures recover with backoff, release demand and cannot restart after disposal", () => {
 	const f = assetFixture(), paths = [ "/button.png" ];
 	f.resources.step( paths, 0 );
