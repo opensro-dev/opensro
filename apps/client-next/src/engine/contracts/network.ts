@@ -70,3 +70,7 @@ export interface NetworkFailure {
 export const INCIDENT_DUMP_BYTES = 512;
 // The Agent's bound on the message length.
 export const INCIDENT_MESSAGE_LENGTH = 500;
+
+// A missing movement receipt invalidates prediction; the session must resume
+// through fresh server state without replaying the unacknowledged command.
+export const MOVEMENT_RECEIPT_TIMEOUT = "movement_receipt_timeout";

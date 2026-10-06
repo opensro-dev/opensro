@@ -14,6 +14,8 @@ server's walk every 500 ms (directionDrift).
 
 ===========================================================================
 */
+import { MOVEMENT_RECEIPT_TIMEOUT } from "@/engine/contracts/network";
+
 import { positionSkillGoal } from "@/engine/foundation/gameplay/position-skill";
 import type { NavOwner, NavOwnerSpan } from "@/engine/foundation/navigation/dungeon-ownership";
 import {
@@ -43,6 +45,8 @@ import {
 } from "@/engine/foundation/gameplay/direction-movement";
 const ENDPOINT_EPSILON = .01;
 const DUNGEON_HEIGHT_EPSILON = 2;
+const MOVEMENT_RECEIPT_TIMEOUT_MS = 10000;
+
 // Opcode of the replacement client's predicted-movement envelope
 // (transport.OpPredictedMove): [u8 1|2][u32 id] then the native body.
 const OP_PREDICTED_MOVE = 9;
@@ -1239,8 +1243,14 @@ step
 ================
 		*/
 		step( now: number ) {
-			if ( pending.size && now - pending.values().next().value!.sent > 10000 ) {
-				throw new Error( "Movement receipt timed out; resynchronize session" );
+			const oldest = pending.entries().next().value;
+			if ( oldest && now - oldest[1].sent > MOVEMENT_RECEIPT_TIMEOUT_MS ) {
+				throw new Error(
+					`Movement receipt timed out: command ${oldest[0]}, age ${
+						now - oldest[1].sent
+					} ms, pending ${pending.size}`,
+					{ cause: MOVEMENT_RECEIPT_TIMEOUT }
+				);
 			}
 			// No settle came: the server is still walking. Rejoin its path.
 			if ( castHold && now >= castHold.until ) rejoinServerWalk( now, false );

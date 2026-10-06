@@ -1755,3 +1755,87 @@ test("travel waits for presentation but a later incomplete travel gets a fresh n
 	world.step( 40009 );
 	assert.equal( world.status().error, "World connection timed out" );
 });
+
+for ( const queuedReceipt of [ true, false ] ) {
+	test(`movement after a CPU stall: queued receipt ${queuedReceipt}`, async t => {
+		const sockets = socketHarness( t ), incidents = [];
+		const world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) );
+		t.after( () => world.dispose() );
+		const entry = { ...bootstrap, simulationProtocolVersion: 1 };
+		world.enter( "fixture", "shard", "http://localhost:9000" );
+		await settle();
+		world.step( 1 );
+		const first = sockets[0];
+		first.onopen();
+		first.receive( 2, welcome() );
+		world.step( 2 );
+		await settle();
+		world.step( 3 );
+		first.receive( 7, entered( entry ) );
+		for ( const row of rows ) first.receive( row.opcode, row.payload );
+		first.receive( 0x32a6, Uint8Array.of( 123, 0, 0, 0, 0, 0, 0, 0 ) );
+		world.step( 4 );
+		flush( world );
+		world.step( 5 );
+		world.ready();
+		const destination = { ...bootstrap.localPlayerEntry.startProfile, x: 10 };
+		world.command( { kind: "move", destination } );
+		const sent = first.sent.at( -1 ).slice();
+		if ( queuedReceipt ) {
+			first.receive(
+				10,
+				Buffer.from( JSON.stringify( {
+					v: 1,
+					id: 1,
+					gid: 123,
+					accepted: true,
+					serverTimeMs: 6,
+					world: { spawn: destination }
+				} ) )
+			);
+		}
+		if ( !queuedReceipt ) {
+			world.step( 10005 );
+			assert.equal( world.status().phase, "world", "deadline is strictly greater than ten seconds" );
+		}
+		world.step( 12006 );
+		if ( queuedReceipt ) {
+			assert.equal( world.status().phase, "world", "drain delivered receipts before checking their deadline" );
+			assert.deepEqual( incidents, [] );
+			return;
+		}
+		assert.equal( world.status().phase, "reconnecting" );
+		assert.equal( incidents.length, 1 );
+		assert.equal( incidents[0].code, "movement_receipt_timeout" );
+		assert.equal( incidents[0].category, "unknown" );
+		assert.match( incidents[0].message, /command 1, age 12001 ms, pending 1/ );
+		assert.ok( incidents[0].stack );
+		assert.throws( () => world.command( { kind: "move", destination } ), /not ready/ );
+		world.step( 12256 );
+		await settle();
+		world.step( 12257 );
+		const second = sockets[1];
+		second.onopen();
+		second.receive( 2, welcome( true ) );
+		world.step( 12258 );
+		await settle();
+		world.step( 12259 );
+		second.receive( 7, entered( entry ) );
+		for ( const row of rows ) second.receive( row.opcode, row.payload );
+		second.receive( 0x32a6, Uint8Array.of( 123, 0, 0, 0, 0, 0, 0, 0 ) );
+		world.step( 12260 );
+		let batch;
+		while ( (batch = world.take()) ) world.ack( batch.sequence );
+		world.step( 12261 );
+		world.ready();
+		assert.equal( world.status().phase, "world" );
+		assert.equal(
+			second.sent.some( packet => Buffer.from( packet ).equals( Buffer.from( sent ) ) ),
+			false,
+			"resume must never replay the timed-out movement"
+		);
+		world.step( 30000 );
+		assert.equal( world.status().phase, "world", "fresh bootstrap retires the old pending queue" );
+		assert.equal( incidents.length, 1 );
+	});
+}

@@ -16,6 +16,7 @@ import { createDeparture } from "./departure";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
 import {
 	type ClientIncident,
+	MOVEMENT_RECEIPT_TIMEOUT,
 	type NetworkFailure,
 	INCIDENT_DUMP_BYTES,
 	INCIDENT_MESSAGE_LENGTH,
@@ -48,7 +49,7 @@ export function createWorldSession(
 	reportIncident: ( incident: ClientIncident ) => void
 ) {
 	let failure: string | null = null, epoch = 0, disposed = false, controller: AbortController | null = null;
-	let diagnosticSession = "", disconnectMessage = "", incidentID = "";
+	let diagnosticSession = "", disconnectMessage = "", incidentID = "", failureCode = "";
 	/*
 ================
 onNetworkFailure
@@ -56,6 +57,7 @@ onNetworkFailure
 	*/
 	function onNetworkFailure( error: string, frame?: WireFrame, reason?: NetworkFailure ) {
 		failure = error;
+		failureCode = reason?.code ?? "";
 		disconnectMessage = reason?.message ?? "A game error interrupted your session.";
 		if ( reason?.category === "expected" ) {
 			incidentID = "";
@@ -172,6 +174,7 @@ connect
 		boundThisTransport = false;
 		resumedTransport = false;
 		failure = null;
+		failureCode = "";
 		disconnectMessage = "";
 		incidentID = "";
 		lastError = undefined;
@@ -494,10 +497,14 @@ step
 					departure.step( now );
 					core.step( now );
 				} catch ( error ) {
+					const receiptTimeout = error instanceof Error && error.cause === MOVEMENT_RECEIPT_TIMEOUT;
 					onNetworkFailure( String( error ), undefined, {
-						category: "software",
-						code: "simulation_failed",
-						message: "A game error interrupted your session."
+						category: receiptTimeout ? "unknown" : "software",
+						code: receiptTimeout ? MOVEMENT_RECEIPT_TIMEOUT : "simulation_failed",
+						message: receiptTimeout ?
+							"Movement synchronization timed out. Please reconnect." :
+							"A game error interrupted your session.",
+						stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
 					} );
 				}
 			}
@@ -529,14 +536,16 @@ step
 				deadline = 0;
 				// Only a previously bound, resumable session retries automatically.
 				// Native gameplay commands are never replayed by this owner.
+				// A receipt deadline can expire while the host CPU is stalled.
+				// Reuse admission/resume to replace stale prediction with server state.
 				if (
 					hasWorld && resume && (attempt === 0 || now - reconnectSince < RESUME_GRACE_MS) &&
-					[
+					(failureCode === MOVEMENT_RECEIPT_TIMEOUT || [
 						"Transport connection closed",
 						"Transport connection failed",
 						"World connection timed out",
 						"Admission request failed"
-					].includes( error )
+					].includes( error ))
 				) {
 					if ( attempt === 0 ) reconnectSince = now;
 					retryAt = now + Math.min( RECONNECT_DELAY_MS * 2 ** attempt++, MAX_RECONNECT_DELAY_MS );
