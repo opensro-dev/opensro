@@ -1107,6 +1107,11 @@ export function createUi(
 		};
 	}
 
+	/*
+	================
+	setPanel
+	================
+	*/
 	function setPanel( next: string, intent: "open" | "toggle" | "select" | "warm" = "open" ) {
 		// An unseen warm build (window-warm.ts) switches the drawn window only:
 		// no enter/leave hooks, sounds or transient resets.
@@ -1123,6 +1128,7 @@ export function createUi(
 			return false;
 		}
 		shopOpenRequest = null;
+		if ( next !== "Shop" ) repairHud.reset();
 		if ( next !== SKIN_PANEL ) skinHud.close();
 		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
 		if ( next !== FORTRESS_SCHEDULE_PANEL ) fortressScheduleHud.close();
@@ -3078,7 +3084,12 @@ export function createUi(
 			// nothing needs it.
 			if ( id === "shop-repair:GDR_STORE_BTN_REPAIR" ) {
 				if ( repairHud.armed() ) repairHud.disarm();
-				else repairHud.arm();
+				else {
+					carriedItem = null;
+					carriedShortcut = null;
+					inventorySlot = -1;
+					repairHud.arm();
+				}
 			} else {
 				const cost = repairAllCost( view.gameplay?.inventory ?? [] );
 				if ( cost ) repairHud.ask( cost );
@@ -3771,10 +3782,22 @@ export function createUi(
 				}
 				if ( event.kind !== "hover" ) return;
 			}
-			if ( repairHud.armed() && event.kind === "key" && event.code === "Escape" ) {
-				repairHud.disarm();
-				dirty = true;
-				return;
+			if ( repairHud.armed() ) {
+				// 564046 checks the cursor mode before right-button item use.
+				if ( event.kind === "right-activate" || event.kind === "key" && event.code === "Escape" ) {
+					repairHud.disarm();
+					dirty = true;
+					return;
+				}
+				// 5672D1..5672DD branches on cursor mode before CTRL/SHIFT/ALT or pickup.
+				if ( event.kind === "activate" && event.id.startsWith( "slot:" ) ) {
+					if ( controls.some( c => c.id === event.id && !c.disabled ) ) activate( event.id );
+					return;
+				}
+				if (
+					(event.kind === "drag" || event.kind === "drag-end" || event.kind === "double-activate") &&
+					ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) )
+				) return;
 			}
 			if ( cosHud.cleanConfirm() !== null ) {
 				if (
@@ -5416,6 +5439,14 @@ export function createUi(
 		*/
 		step( next: UiView, now = 0, probe?: UiFrameProbe ): UiSemantics | null {
 			quickslotTime = next.simulationTimeMs ?? now;
+			if (
+				(repairHud.armed() || repairHud.confirmCost() !== null) &&
+				(next.session?.phase !== "world" || next.travel || !next.gameplay?.shop ||
+					next.gameplay.shop.npc !== next.gameplay.target || next.gameplay.shop.error)
+			) {
+				repairHud.reset();
+				dirty = true;
+			}
 			if ( disposed ) return null;
 			// 0x366A reset -> CGInterface_CloseTransientWindowsOnReset (685400) destroys
 			// the ItemMall section. A world transfer starting is that reset here.
@@ -6743,8 +6774,8 @@ export function createUi(
 					disabled,
 					selected,
 					rightActivate: !!item && (id.startsWith( "slot:" ) || id.startsWith( "storage-slot:" )),
-					draggable: !!item,
-					carry: !!item && ITEM_SLOT_PREFIXES.some( prefix => id.startsWith( prefix ) )
+					draggable: !!item && !repairHud.armed(),
+					carry: !repairHud.armed() && !!item && ITEM_SLOT_PREFIXES.some( prefix => id.startsWith( prefix ) )
 				} );
 				itemCount( item, r );
 			}
@@ -9833,9 +9864,9 @@ export function createUi(
 							// native slots stay enabled, so hover and tooltips keep working.
 							disabled: !enabled,
 							selected: inventorySlot === slot,
-							rightActivate: !!item,
-							draggable: !!item,
-							carry: !!item
+							rightActivate: !!item || repairHud.armed(),
+							draggable: !!item && !repairHud.armed(),
+							carry: !repairHud.armed() && !!item
 						} );
 						if ( enabled && item ) {
 							for (
@@ -9933,9 +9964,9 @@ export function createUi(
 								kind: "button",
 								// 699359 drops moves while one is pending; avatar slots stay enabled.
 								disabled: false,
-								rightActivate: !!item,
-								draggable: !!item,
-								carry: !!item
+								rightActivate: !!item || repairHud.armed(),
+								draggable: !!item && !repairHud.armed(),
+								carry: !repairHud.armed() && !!item
 							} );
 						}
 					}
