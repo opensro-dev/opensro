@@ -19,6 +19,33 @@ and an open stall closes for modification without asking.
 */
 import type { StallCommand, StallListing, StallState } from "@/engine/foundation/gameplay/stall";
 
+// CIFStallSlot_UpdateContents 0x5B0500 and Clear 0x5B06F0 select these backplates.
+export const STALL_SLOT_IMAGES = {
+	occupied: "/assets/images/Media_extracted/interface/stall/stl_slot_02.png",
+	empty: "/assets/images/Media_extracted/interface/stall/stl_slot_05.png"
+} as const;
+
+// CIFStall_SetTradingState uses byte alpha 128 for a visitor's closed stall.
+const CLOSED_VISITOR_SLOT_ALPHA = 128 / 255;
+
+/*
+================
+stallTradingPresentation
+
+Native 0x5A2140 selects both status resources and the owner/visitor gates.
+The resource file's unpadded icon name is replaced before the window paints.
+================
+*/
+export function stallTradingPresentation( owner: boolean, open: boolean ) {
+	return {
+		icon: "/assets/images/Media_extracted/interface/stall/stl_condition_icon_" + (open ? "01" : "02") + ".png",
+		status: open ? "UIIT_STT_TRADING_NOW" : "UIIT_STT_STALL_MODIFYING",
+		toggle: open ? "UIIT_STT_END_STALL" : "UIIT_STT_START_STALL",
+		canModify: owner && !open,
+		slotAlpha: !owner && !open ? CLOSED_VISITOR_SLOT_ALPHA : 1
+	};
+}
+
 // The stall's text fields hold at most 64 characters (stallRequest wstr).
 export const STALL_TEXT_LIMIT = 64;
 // A chat line holds at most 100 UTF-16 units (ChatMessageMaxWideChars).

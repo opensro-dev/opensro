@@ -26,6 +26,7 @@ test( "service close and cancel controls survive real DOM publication and clicks
 		await page.goto( new URL( "/tests/browser/fixtures/ui-bridge.html", CLIENT_NEXT_BASE_URL ).href );
 		const results = await page.evaluate( async () => {
 			const { createUi } = await import( "/src/engine/runtime/ui/ui.ts" );
+			const { emptyStall } = await import( "/src/engine/foundation/gameplay/stall.ts" );
 			const { createAssets } = await import( "/src/engine/runtime/assets/assets.ts" );
 			const { createUiBridge } = await import( "/src/engine/runtime/platform/ui/ui.ts" );
 			const canvas = document.querySelector( "canvas" );
@@ -33,8 +34,8 @@ test( "service close and cancel controls survive real DOM publication and clicks
 			canvas.width = innerWidth;
 			canvas.height = innerHeight;
 			const results = [];
-			for ( const panel of [ "magic-option", "skin", "exchange" ] ) {
-				for ( const action of [ "close", "cancel" ] ) {
+			for ( const panel of [ "magic-option", "skin", "exchange", "stall" ] ) {
+				for ( const action of panel === "stall" ? [ "close", "leave" ] : [ "close", "cancel" ] ) {
 					const assets = createAssets(), commands = [];
 					const ui = createUi(
 						assets,
@@ -111,6 +112,16 @@ test( "service close and cancel controls survive real DOM publication and clicks
 								}
 							} );
 						}
+						if ( panel === "stall" ) {
+							Object.assign( state.gameplay, {
+								stall: {
+									...emptyStall(),
+									phase: action === "close" ? "owner" : "visitor",
+									owner: action === "close" ? 1 : 2,
+									open: action === "leave"
+								}
+							} );
+						}
 						let skinOpened = false, semantics;
 						const deadline = performance.now() + 15000;
 						while ( performance.now() < deadline ) {
@@ -122,7 +133,11 @@ test( "service close and cancel controls survive real DOM publication and clicks
 								ui.event( { kind: "double-activate", id: "slot:13" } );
 								skinOpened = true;
 							}
-							if ( semantics?.controls.some( control => control.id === `${panel}-cancel` ) ) break;
+							if (
+								semantics?.controls.some( control =>
+									control.id === `${panel}-${panel === "stall" ? action : "cancel"}`
+								)
+							) break;
 							await new Promise( resolve => setTimeout( resolve, 25 ) );
 						}
 						const ids = semantics?.controls.map( control => control.id ) ?? [];
@@ -149,13 +164,23 @@ test( "service close and cancel controls survive real DOM publication and clicks
 		for ( const result of results ) {
 			assert.equal( result.error, null, `${result.panel}-${result.action}` );
 			assert.equal( new Set( result.ids ).size, result.ids.length );
-			assert.ok( result.ids.includes( `${result.panel}-close` ) );
-			assert.ok( result.ids.includes( `${result.panel}-cancel` ) );
+			if ( result.panel === "stall" ) {
+				assert.ok( result.ids.includes( `stall-${result.action}` ) );
+			} else {
+				assert.ok( result.ids.includes( `${result.panel}-close` ) );
+				assert.ok( result.ids.includes( `${result.panel}-cancel` ) );
+			}
 			assert.deepEqual(
 				result.commands,
 				result.panel === "skin" ? [] : [ {
 					kind: "gameplay",
-					command: { kind: result.panel === "exchange" ? "exchange-cancel" : "magic-option-close" }
+					command: {
+						kind: result.panel === "stall" ?
+							`stall-${result.action}` :
+							result.panel === "exchange" ?
+							"exchange-cancel" :
+							"magic-option-close"
+					}
 				} ]
 			);
 		}

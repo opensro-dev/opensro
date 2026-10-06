@@ -132,10 +132,6 @@ for ( const service of [ "exchange", "stall", "stall-net" ] ) {
 		assert.ok( semantics );
 		assert.equal( semantics.controls.filter( control => control.id === "main-popup-drag" ).length, 1 );
 		assert.ok( !semantics.controls.some( control => control.id === `${service}-close` ), "service remains cold" );
-		// This case proves isolation while the stall is withheld. Its retail
-		// catalogue also references an unavailable condition icon, so warm
-		// admission is covered here only for exchange and the stall network.
-		if ( service === "stall" ) return;
 		held = false;
 		for ( let i = 32; i < 48; i++ ) semantics = f.ui.step( f.state, i * 100 ) ?? semantics;
 		assert.ok( semantics );

@@ -682,6 +682,12 @@ export const runtimeCifImageReferences = [
 	"interface/guild/gil_subj_button12.ddj",
 	"interface/guild/gil_subj_button12_focus.ddj",
 	"interface/guild/gil_subj_button12_press.ddj",
+	// CIFStall_SetTradingState @0x5A2277 / 0x5A23F7 overrides resinfo id 15.
+	"interface/stall/stl_condition_icon_01.ddj",
+	"interface/stall/stl_condition_icon_02.ddj",
+	// CIFStallSlot_UpdateContents / Clear @0x5B0609 / 0x5B07F8.
+	"interface/stall/stl_slot_02.ddj",
+	"interface/stall/stl_slot_05.ddj",
 	"interface/stall/stl_condition.ddj",
 	"interface/stall/stl_condition_focus.ddj",
 	"interface/stall/stl_condition_press.ddj",

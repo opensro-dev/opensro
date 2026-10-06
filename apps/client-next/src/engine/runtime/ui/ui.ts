@@ -162,6 +162,8 @@ import {
 	STALL_CHAT_LIMIT,
 	STALL_PROMPT_SIZE,
 	STALL_TEXT_LIMIT,
+	STALL_SLOT_IMAGES,
+	stallTradingPresentation,
 	type StallNetworkSort,
 	type StallPrompt
 } from "./hud/stall-hud";
@@ -12423,9 +12425,13 @@ export function createUi(
 						part = ( id: number ) => Object.values( cell ).find( n => n.id === id )!,
 						owner = state.phase === "owner",
 						keeper = next.entities.find( e => e.gid === state.owner ),
-						title = owner ? state.title : keeper?.titleText ?? "";
+						title = owner ? state.title : keeper?.titleText ?? "",
+						presentation = stallTradingPresentation( owner, state.open );
 					nativeFrame( root, px, py, hudCopy( root.text ), owner ? "stall-close" : "stall-leave" );
-					nativePage( page, px, py, [ 3, 4, 5, 6, 14 ] );
+					// 0x5A2277/0x5A23F7 replace the invalid authored icon; never request it.
+					nativePage( page, px, py, [ 3, 4, 5, 6, 14, 15 ] );
+					authoredImage( at( 15 ), px, py, presentation.icon );
+					authoredImage( at( 14 ), px, py );
 					// The chat module (3): the latest stall lines over the input row.
 					const box = authoredRect( at( 3 ), px, py ),
 						rows = Math.max( 0, Math.floor( box[3] / STALL_CHAT_ROW ) - 1 ),
@@ -12460,15 +12466,15 @@ export function createUi(
 						at( 14 ),
 						px,
 						py,
-						hudCopy( state.open ? "UIIT_STT_STALL_CONDITION_START" : "UIIT_STT_STALL_CONDITION_END" )
+						hudCopy( presentation.status )
 					);
 					if ( owner ) {
-						authoredButton(
+						authoredLabeledButton(
 							at( 4 ),
 							px,
 							py,
 							"stall-trading",
-							hudCopy( state.open ? "UIIT_STT_END_STALL" : "UIIT_STT_START_STALL" )
+							hudCopy( presentation.toggle )
 						);
 						authoredButton(
 							at( 5 ),
@@ -12486,17 +12492,27 @@ export function createUi(
 							oy = py + display[1] + Math.floor( slot / 2 ) * STALL_CELL_PITCH_Y,
 							offer = state.offers.find( row => row.slot === slot ),
 							r = authoredRect( part( 1 ), ox, oy );
+						const background = offer ? STALL_SLOT_IMAGES.occupied : STALL_SLOT_IMAGES.empty;
+						paths.push( background );
+						const backgroundSize = resources.size( background );
+						if ( backgroundSize ) image( [ ox, oy, backgroundSize[0], backgroundSize[1] ], background );
 						nativePage( cell, ox, oy, [ 2, 3, 4, 5 ] );
 						const icon = offer ? iconPath( offer.item.icon ) : null;
 						if ( offer && icon ) {
-							image( r, icon );
+							image( r, icon, [ 1, 1, 1, presentation.slotAlpha ] );
 							itemEffects( "stall-slot:" + slot, offer.item, r );
 							itemCount( offer.item, r );
 						}
 						if ( offer ) {
 							authoredText( part( 2 ), ox, oy, offer.item.name ?? "" );
-							authoredText( part( 3 ), ox, oy, String( offer.quantity ) );
-							authoredText( part( 4 ), ox, oy, String( offer.price ) );
+							authoredText( part( 3 ), ox, oy, `${offer.quantity} ${hudCopy( "UIIT_STT_UNIT" )}` );
+							const price = moneyPresentation( String( offer.price ) );
+							authoredText(
+								{ ...part( 4 ), color: price.color },
+								ox,
+								oy,
+								`${price.text} ${hudCopy( "UIIT_STT_GOLD" )}`
+							);
 						}
 						controls.push( {
 							id: "stall-slot:" + slot,
@@ -12506,13 +12522,14 @@ export function createUi(
 							disabled: owner ? state.open : !state.open || !offer,
 							draggable: owner && !state.open && !!offer
 						} );
-						if ( owner && !state.open && offer ) {
+						if ( offer ) {
 							authoredButton(
 								part( 5 ),
 								ox,
 								oy,
 								"stall-modify:" + slot,
-								hudCopy( "UIIT_STT_STALL_MODIFYING" )
+								hudCopy( "UIIT_STT_TOGGLE_STORE_PRICE_CHANGE" ),
+								!presentation.canModify
 							);
 						}
 					}
