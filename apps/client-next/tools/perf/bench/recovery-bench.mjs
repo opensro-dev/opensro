@@ -19,6 +19,7 @@ import { openClient, closeClient, createCaptures, measure, revive } from "../cor
 import { parseOptions } from "../core/report.mjs";
 import { walk } from "./scenarios.mjs";
 import { createCrowd } from "../core/crowd.mjs";
+import { waitForMovementSettlement } from "../core/movement-settlement.mjs";
 
 import { installFaults, holdStream, stallServer, faultLog } from "../core/transport-faults.mjs";
 
@@ -110,14 +111,13 @@ returns that state. A fixed wait cannot tell a slow settle from a settled
 one, and the observatory comparison is only meaningful after it.
 ================
 */
-async function settle( page ) {
-	const until = Date.now() + SETTLE_TIMEOUT_MS;
-	while ( Date.now() < until ) {
-		const state = await movementState( page );
-		if ( !state.moving && state.pendingMoves === 0 ) return state;
-		await page.waitForTimeout( 50 );
-	}
-	throw Error( "movement did not settle" );
+function settle( page, afterRevision ) {
+	return waitForMovementSettlement( {
+		read: () => movementState( page ),
+		pause: ms => page.waitForTimeout( ms ),
+		timeoutMs: SETTLE_TIMEOUT_MS,
+		afterRevision
+	} );
 }
 
 /*
@@ -130,10 +130,12 @@ open ground instead of drifting into an edge.
 ================
 */
 async function returnToAnchor( page, anchor ) {
-	await page.evaluate( destination => {
-		globalThis.__benchRuntime.session( { kind: "gameplay", command: { kind: "move", destination } } );
+	const beforeRevision = await page.evaluate( destination => {
+		const root = globalThis.__benchRuntime, revision = root.gameplay().movementRevision;
+		root.session( { kind: "gameplay", command: { kind: "move", destination } } );
+		return revision;
 	}, anchor );
-	const { pose } = await settle( page );
+	const { pose } = await settle( page, beforeRevision );
 	assert.equal( pose.regionId, anchor.regionId, "the anchor return left the lane's region" );
 	assert.ok(
 		Math.hypot( pose.x - Math.trunc( anchor.x ), pose.z - Math.trunc( anchor.z ) ) <= ANCHOR_TOLERANCE,
@@ -230,6 +232,7 @@ async function stallSteps( page, { lane, name, stall, legs, anchor, steps, recor
 				y: server.y - client.pose.y
 			} );
 			await record( steps );
+			assertStep( lane, steps.at( -1 ) );
 			if ( crowdNames.length ) assertCrowd( steps.at( -1 ).crowd );
 		}
 	}
@@ -287,6 +290,10 @@ function assertStep( lane, step ) {
 		`${label}: every crowd peer must remain online and alive`
 	);
 	assert.ok( step.server.capturedAtMs > step.settledAtMs, `${label}: the server snapshot predates the settle` );
+	assert.ok(
+		step.xz <= SETTLED_POSE_TOLERANCE && Math.abs( step.y ) <= SETTLED_POSE_TOLERANCE,
+		`${label}: settled client and server poses differ: ${JSON.stringify( step )}`
+	);
 	if ( step.ms === 0 ) return;
 	const held = ( direction, opcode ) =>
 		step.held.some( entry => entry.direction === direction && entry.opcode === opcode );
@@ -548,13 +555,11 @@ async function run( options ) {
 					)
 				);
 				assert.equal( result.faults.transport, "websocket", "the stall ran on the client's real WebSocket" );
-				for ( const step of result.stalls ) assertStep( lane, step );
-				for ( const step of [ ...result.stalls, result.serverPose ] ) {
-					assert.ok(
-						step.xz <= SETTLED_POSE_TOLERANCE && Math.abs( step.y ) <= SETTLED_POSE_TOLERANCE,
-						`settled client and server poses differ: ${JSON.stringify( step )}`
-					);
-				}
+				assert.ok(
+					result.serverPose.xz <= SETTLED_POSE_TOLERANCE &&
+						Math.abs( result.serverPose.y ) <= SETTLED_POSE_TOLERANCE,
+					`settled client and server poses differ: ${JSON.stringify( result.serverPose )}`
+				);
 			}
 			assert.ok(
 				result.transport.rx > 0 && result.transport.tx > 0,
