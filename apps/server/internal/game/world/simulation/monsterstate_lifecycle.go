@@ -492,7 +492,6 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	}
 	instance.CurrentHP = instance.EffectiveMaxHP()
 	state.instances.set(gid, instance)
-	state.lastSpawnMs = nowMs
 	armLifetimeLocked(state, instance, nowMs)
 	if instance.Rarity()&15 == 3 {
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(5, ref.RefObjID, ""))
