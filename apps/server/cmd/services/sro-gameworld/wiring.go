@@ -270,11 +270,15 @@ func newGameWorldApplication(
 		return nil, fmt.Errorf("GameWorld control API: %w", err)
 	}
 	application.shardID = ownedShard.ID
+	// The listener also serves the liveness check (/transport/healthz), so it
+	// starts now; only readiness, and with it admission, waits in Run.
+	if err := ts.Start(); err != nil {
+		return nil, fmt.Errorf("transport: %w", err)
+	}
 
 	if err := startupContext.Err(); err != nil {
 		return nil, fmt.Errorf("startup cancelled: %w", err)
 	}
-	// The transport listener and readiness open in Run, after the boot fill.
 	return application, nil
 }
 
@@ -301,15 +305,15 @@ func configuredAgentURL() (string, error) {
 ================
 admit
 
-Opens the shard to players once the monster population's boot fill has
-settled: the first population passes place every nest's monsters (tens of
-thousands of spawns, each with ground placement), and those ticks run for
-hundreds of milliseconds. Until then the transport does not listen and
-readiness stays closed, so no session (fresh or resuming with a still-valid
-admission token) attaches into stalled ticks. INFERENCE: the native
-GameServer finishes loading its worlds before it accepts clients; the
-port's equivalent boundary is this one. bootFillLimit is liveness only: a
-population that never settles opens with a warning instead of never.
+Opens readiness once the monster population's boot fill has settled. The
+first population passes place every nest's monsters (tens of thousands of
+spawns, each with ground placement), and those ticks run for hundreds of
+milliseconds. Readiness gates admission-token minting and readyz, so no
+new session starts into those ticks; the transport listener is already up
+because it also answers the liveness check. INFERENCE: the native
+GameServer finishes loading its worlds before it accepts clients; this is
+the port's equivalent boundary. bootFillLimit is liveness only, well under
+the job's healthy_deadline: a fill that never settles opens with a warning.
 ================
 */
 func (application *gameWorldApplication) admit(ctx context.Context) error {
@@ -326,13 +330,13 @@ func (application *gameWorldApplication) admit(ctx context.Context) error {
 			time.Since(started).Round(time.Millisecond),
 		)
 	}
-	return admitWhenSettled(ctx, admission{
+	admitWhenSettled(ctx, admission{
 		settled: settled,
-		start:   application.transport.Start,
 		open:    open,
 		poll:    simulation.DefaultTickInterval,
 		limit:   bootFillLimit,
 	})
+	return nil
 }
 
 /*
@@ -344,7 +348,6 @@ What admitWhenSettled needs, as plain functions so the order is testable.
 */
 type admission struct {
 	settled     func() bool
-	start       func() error
 	open        func()
 	poll, limit time.Duration
 }
@@ -353,26 +356,20 @@ type admission struct {
 ================
 admitWhenSettled
 
-Waits for the boot fill (or its bound), then starts the transport and
-opens readiness, in that order. A run cancelled before the start never
-starts or opens: Run is about to drain.
+Waits for the boot fill (or its bound), then opens readiness. A run
+cancelled before that never opens: Run is about to drain.
 ================
 */
-func admitWhenSettled(ctx context.Context, a admission) error {
+func admitWhenSettled(ctx context.Context, a admission) {
 	if !awaitBootFill(ctx, a.settled, a.poll, a.limit) && ctx.Err() == nil {
 		log.Warnf("shard: monster population still filling after %s; admitting players anyway", a.limit)
 	}
-	// Cancellation is a normal end of the run here, not an admission error.
 	select {
 	case <-ctx.Done():
-		return nil
+		return
 	default:
 	}
-	if err := a.start(); err != nil {
-		return fmt.Errorf("transport: %w", err)
-	}
 	a.open()
-	return nil
 }
 
 /*

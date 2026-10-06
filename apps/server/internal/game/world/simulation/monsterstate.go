@@ -35,11 +35,12 @@ type divisionMonsterState struct {
 	behavior        behaviorQueue
 	lease           instance.Lease
 	lastDensityMs   int64
-	// populationTickMs is the last AdvancePopulation pass over this world (0
-	// before the first) and lastSpawnMs its last nest spawn: together they
-	// say when the boot fill has settled (PopulationSettled).
-	populationTickMs int64
-	lastSpawnMs      int64
+	// Boot fill bookkeeping (PopulationSettled). spawns counts placed nest
+	// spawns; fillPending holds every materialized nest outside a hive and
+	// every hive until its first callback visit that places nothing.
+	populationTicked bool
+	spawns           uint64
+	fillPending      map[populationFillKey]struct{}
 	contributions    map[uint32]map[uint32]uint32 // victim -> credited actor -> damage argument
 	abnormalActive   map[uint32]struct{}          // active-only abnormal tick index; blocks live on instances
 	aiEvents         map[uint32][]monsterAIEvent  // fear/confusion tactics events awaiting the behavior step
@@ -393,7 +394,7 @@ func (s *MonsterState) AdvancePopulation(nowMs int64) {
 			s.sampleHiveDensity(state, snapshot, nowMs)
 		}
 		s.runDueHiveTicks(state, nowMs)
-		state.populationTickMs = nowMs
+		state.populationTicked = true
 		s.mu.Unlock()
 	}
 }
@@ -402,13 +403,13 @@ func (s *MonsterState) AdvancePopulation(nowMs int64) {
 ================
 MonsterState.PopulationSettled
 
-The division's boot fill is over: every population of it has COMPLETED a
-population pass at least one native nest tick (monster.NestHiveTickMs)
-after its last nest spawn, so the pass that ran the next due nest ticks
-placed nothing. Judged on completed passes only: a due tick that has not
-run yet cannot read as settled. A nest whose placement keeps failing
-places nothing, so it never holds this open. A division with no
-population is settled.
+The division's boot fill is over: every population of it has run a
+population pass, and every nest and hive materialized so far has had a
+callback visit that placed nothing (it was at its target, its timer was
+still waiting, or its placement was rejected). The test is per callback
+unit and sticky, so the respawn churn of a live world, which places
+something somewhere in nearly every nest tick, cannot hold it open. A
+division with no population is settled.
 ================
 */
 func (s *MonsterState) PopulationSettled(division string) bool {
@@ -422,7 +423,7 @@ func (s *MonsterState) PopulationSettled(division string) bool {
 		if state == nil {
 			continue
 		}
-		if state.populationTickMs == 0 || state.populationTickMs-state.lastSpawnMs < monster.NestHiveTickMs {
+		if !state.populationTicked || len(state.fillPending) > 0 {
 			return false
 		}
 	}

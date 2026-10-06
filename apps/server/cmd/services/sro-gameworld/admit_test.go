@@ -10,7 +10,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 )
@@ -47,39 +46,30 @@ func TestAwaitBootFillOpensOnSettleAndAtTheBound(t *testing.T) {
 
 /*
 ================
-TestAdmissionStartsThenOpensAndNeverAfterCancel
+TestAdmissionOpensOnceAndNeverAfterCancel
 
-The transport starts before readiness opens; a start failure opens
-nothing; a run cancelled between the settle check and the start starts and
-opens nothing (Run then drains a transport that never listened).
+A settled fill opens readiness once; a run cancelled inside the settle
+check opens nothing (Run then drains).
 ================
 */
-func TestAdmissionStartsThenOpensAndNeverAfterCancel(t *testing.T) {
-	var order []string
-	record := func(step string) func() { return func() { order = append(order, step) } }
+func TestAdmissionOpensOnceAndNeverAfterCancel(t *testing.T) {
+	opened := 0
 	base := admission{
 		settled: func() bool { return true },
-		start:   func() error { record("start")(); return nil },
-		open:    record("open"),
+		open:    func() { opened++ },
 		poll:    time.Millisecond,
 		limit:   time.Minute,
 	}
-	if err := admitWhenSettled(context.Background(), base); err != nil || len(order) != 2 || order[0] != "start" || order[1] != "open" {
-		t.Fatalf("admission order %v err %v", order, err)
+	admitWhenSettled(context.Background(), base)
+	if opened != 1 {
+		t.Fatalf("opened %d times, want 1", opened)
 	}
-
-	order = nil
-	failing := base
-	failing.start = func() error { return errors.New("listen failed") }
-	if err := admitWhenSettled(context.Background(), failing); err == nil || len(order) != 0 {
-		t.Fatalf("a failed start returned %v and ran %v", err, order)
-	}
-
-	order = nil
+	opened = 0
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelled := base
 	cancelled.settled = func() bool { cancel(); return true }
-	if err := admitWhenSettled(ctx, cancelled); err != nil || len(order) != 0 {
-		t.Fatalf("a run cancelled at the settle check returned %v and ran %v", err, order)
+	admitWhenSettled(ctx, cancelled)
+	if opened != 0 {
+		t.Fatal("a run cancelled at the settle check opened readiness")
 	}
 }

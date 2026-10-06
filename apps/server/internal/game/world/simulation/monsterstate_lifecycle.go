@@ -270,6 +270,10 @@ func (s *MonsterState) materializeNest(state *divisionMonsterState, index int, n
 	n := s.newNestRuntime(index)
 	state.nests[index] = n
 	s.scheduleNest(state, index)
+	// A hive member is visited as its hive, which materializeHive awaits.
+	if s.template.Nests[index].HiveKey == "" {
+		state.awaitFill(populationFillKey{nest: index}, n.scheduled, nowMs)
+	}
 }
 
 /*
@@ -288,6 +292,54 @@ func (s *MonsterState) materializeHive(state *divisionMonsterState, key string, 
 		state.nests[index] = s.newNestRuntime(index)
 	}
 	s.scheduleHive(state, key)
+	state.awaitFill(populationFillKey{hive: key}, h.scheduled, nowMs)
+}
+
+/*
+================
+populationFillKey
+
+One callback unit of the boot fill: a hive, or a nest outside any hive.
+================
+*/
+type populationFillKey struct {
+	hive string
+	nest int
+}
+
+/*
+================
+divisionMonsterState.awaitFill
+
+A unit joins the fill only when its first visit is due within the next
+native nest tick. One with nothing to place is never scheduled (0), and
+one first due later (a long spawn timer: uniques wait tens of minutes)
+places nothing while the world loads, so neither holds readiness.
+================
+*/
+func (state *divisionMonsterState) awaitFill(key populationFillKey, dueMs, nowMs int64) {
+	if dueMs == 0 || dueMs > nowMs+monster.NestHiveTickMs {
+		return
+	}
+	if state.fillPending == nil {
+		state.fillPending = make(map[populationFillKey]struct{})
+	}
+	state.fillPending[key] = struct{}{}
+}
+
+/*
+================
+divisionMonsterState.visitedFill
+
+A callback visit ended. It settles its unit when it placed nothing, or
+when the unit was not rescheduled (a full overwrite hive, or one with no
+eligible member, is not visited again and has nothing left to fill).
+================
+*/
+func (state *divisionMonsterState) visitedFill(key populationFillKey, spawnsBefore uint64, rescheduled bool) {
+	if state.spawns == spawnsBefore || !rescheduled {
+		delete(state.fillPending, key)
+	}
 }
 
 /*
@@ -357,11 +409,13 @@ func (s *MonsterState) runDueHiveTicks(state *divisionMonsterState, nowMs int64)
 				continue
 			}
 			h.scheduled = 0
+			spawns := state.spawns
 			if s.template.Nests[s.template.HiveNestIndexAt(tick.group.hive, 0)].HiveMaxCount == 0 {
 				s.tickOrdinaryHive(state, tick.group.hive, nowMs)
 			} else {
 				s.tickOverwriteHive(state, tick.group.hive, nowMs)
 			}
+			state.visitedFill(populationFillKey{hive: tick.group.hive}, spawns, h.scheduled != 0)
 			continue
 		}
 		n := state.nests[tick.group.nest]
@@ -369,7 +423,9 @@ func (s *MonsterState) runDueHiveTicks(state *divisionMonsterState, nowMs int64)
 			continue
 		}
 		n.scheduled = 0
+		spawns := state.spawns
 		s.tickNest(state, tick.group.nest, nowMs)
+		state.visitedFill(populationFillKey{nest: tick.group.nest}, spawns, n.scheduled != 0)
 	}
 }
 
@@ -492,7 +548,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	}
 	instance.CurrentHP = instance.EffectiveMaxHP()
 	state.instances.set(gid, instance)
-	state.lastSpawnMs = nowMs
+	state.spawns++
 	armLifetimeLocked(state, instance, nowMs)
 	if instance.Rarity()&15 == 3 {
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(5, ref.RefObjID, ""))
