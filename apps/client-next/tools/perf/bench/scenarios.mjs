@@ -227,10 +227,8 @@ export async function cross( page, fixture ) {
 // monsters appear on the GM's point (SR_GameServer 520A40) and fight there.
 const COMBAT_RADIUS = 150;
 const COMBAT_LOAD_TIMEOUT_MS = 15000;
-// Bound on fighting the scene down after the window; past it, restart instead.
-const COMBAT_CLEAR_TIMEOUT_MS = 180000;
-const COMBAT_TURN_MS = 700;
-const COMBAT_SAMPLE_MS = 100;
+// A window needs this many accepted damaging casts of its own to count as combat.
+const MIN_COMBAT_CASTS = 2;
 
 /*
 ================
@@ -380,48 +378,14 @@ function strike( page, gids, turn ) {
 
 /*
 ================
-deathsInView
-
-The scene gids the client is showing dead right now: positive evidence of
-a kill, which a monster that merely left view range never gives.
+localAlive
 ================
 */
-function deathsInView( page, gids ) {
-	return page.evaluate( gids => {
-		const ids = new Set( gids );
-		return globalThis.__benchRuntime.entities().filter( e => ids.has( e.gid ) && e.appearanceState?.[0] === 2 )
-			.map( e => e.gid );
-	}, gids );
-}
-
-/*
-================
-clearCombat
-
-Fights the GM-loaded scene to the end. Those monsters have no respawning
-nest and nothing else despawns them, so a session that leaves them alive
-changes every later measurement on the shared server. Stops when none is
-left inside the fight radius or the bound runs out, and returns the gids
-it saw die; the caller decides the residue.
-================
-*/
-export async function clearCombat( page, scene ) {
-	const dead = new Set();
-	const living = async () => {
-		const alive = new Set( (await sceneMonsters( page )).map( m => m.gid ) );
-		return scene.gids.filter( gid => alive.has( gid ) ).length;
-	};
-	const until = Date.now() + COMBAT_CLEAR_TIMEOUT_MS;
-	for ( let turn = 0; Date.now() < until && await living() > 0; turn++ ) {
-		await strike( page, scene.gids, turn );
-		// Sample through the turn: a corpse leaves view soon after it falls.
-		for ( let wait = 0; wait < COMBAT_TURN_MS; wait += COMBAT_SAMPLE_MS ) {
-			for ( const gid of await deathsInView( page, scene.gids ) ) dead.add( gid );
-			await page.waitForTimeout( COMBAT_SAMPLE_MS );
-		}
-	}
-	for ( const gid of await deathsInView( page, scene.gids ) ) dead.add( gid );
-	return [ ...dead ];
+function localAlive( page ) {
+	return page.evaluate( () => {
+		const game = globalThis.__benchRuntime.gameplay();
+		return (game.vitals?.find( v => v.gid === game.localGid )?.hp ?? 0) > 0;
+	} );
 }
 
 /*
@@ -451,6 +415,8 @@ export async function combat( page, more, scene ) {
 		// Sample while waiting: a short cast can leave the view between turns.
 		while ( more() && Date.now() - turnStart < 700 ) {
 			for ( const cast of await castEvidence( page ) ) latest.set( cast.token, cast );
+			// A dead or dying character is not combat load; the window is rejected.
+			if ( !await localAlive( page ) ) throw Error( "the character died during the combat window" );
 			await page.waitForTimeout( 20 );
 		}
 	}
@@ -478,8 +444,10 @@ export async function combat( page, more, scene ) {
 			`incoming casts ${evidence.incomingCasts}, incoming damage ${evidence.incomingDamage}, ` +
 			`alive ${evidence.alive}/${scene.count}, ambient ${scene.ambient}`
 	);
-	if ( !evidence.acceptedCasts || evidence.damage <= 0 ) {
-		throw Error( "the combat window had no accepted, damaging cast" );
+	if ( evidence.acceptedCasts < MIN_COMBAT_CASTS || evidence.damage <= 0 ) {
+		throw Error(
+			`the combat window had ${evidence.acceptedCasts} accepted casts (want ${MIN_COMBAT_CASTS}) and ${evidence.damage} damage`
+		);
 	}
 	if ( scene.vulnerable && evidence.incomingDamage <= 0 ) {
 		throw Error( "the vulnerable combat window took no incoming damage" );

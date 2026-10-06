@@ -46,7 +46,7 @@ import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMov
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
-import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, clearCombat } from "./scenarios.mjs";
+import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat } from "./scenarios.mjs";
 
 const GOAL_FPS = 500;
 const CROSS_LIMIT_MS = 30000;
@@ -138,18 +138,35 @@ function sceneAlive( page, scene ) {
 
 /*
 ================
+sceneDead
+
+The scene gids the client shows dead (life state 2): positive evidence of
+a kill, which a monster that only left view range never gives.
+================
+*/
+function sceneDead( page, scene ) {
+	return page.evaluate( gids => {
+		const ids = new Set( gids );
+		return globalThis.__benchRuntime.entities().filter( e => ids.has( e.gid ) && e.appearanceState?.[0] === 2 )
+			.map( e => e.gid );
+	}, scene.gids );
+}
+
+/*
+================
 recordResidue
 
-Fights the scene down, then decides what is left from three sources: the
-deaths the client saw (proof of a kill), the GameWorld's monster list, and
-the client's view. A gid alive in either, or absent from a truncated server
+Decides what the session left from three sources: the deaths the client
+shows (native life state 2), the GameWorld's monster list, and the
+client's view. GM-loaded monsters have no nest, so anything alive stays
+until a restart. A gid alive in either, or absent from a truncated server
 list without a seen death, is residue and fails the run. The record goes
 to its own artifact (a rejected window has no result row) and onto each of
 the location's results.
 ================
 */
 async function recordResidue( page, scene, location, results, options ) {
-	const dead = new Set( await clearCombat( page, scene ).catch( () => [] ) );
+	const dead = new Set( await sceneDead( page, scene ) );
 	const inView = new Set( await sceneAlive( page, scene ) );
 	const server = await serverMonsters();
 	const alive = [], unknown = [];
@@ -170,7 +187,7 @@ async function recordResidue( page, scene, location, results, options ) {
 	if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 	console.log(
 		!alive.length && !unknown.length ?
-			`  combat residue: none; all ${scene.count} GM-loaded ${scene.codename} were seen to die or are gone from the server` :
+			`  combat residue: none; all ${scene.count} GM-loaded ${scene.codename} are dead or gone from the server` :
 			`  combat residue: ${alive.length} alive, ${unknown.length} unknown of ${scene.count} GM-loaded ` +
 			`${scene.codename}; restart the GameWorld (announce it first) before other measurements`
 	);
@@ -181,7 +198,7 @@ async function recordResidue( page, scene, location, results, options ) {
 serverMonsters
 
 The GameWorld's own monster list (the local observatory), read after its
-snapshot cache has turned over so it postdates the fight-down.
+snapshot cache has turned over so it postdates the window.
 ================
 */
 async function serverMonsters() {
