@@ -126,3 +126,46 @@ func TestSlowDivisionIsNamed(t *testing.T) {
 		t.Fatalf("slow divisions = %+v", timing.SlowDivisions)
 	}
 }
+
+/*
+================
+TestStepTimerNamesSlowSteps
+
+Only steps at or above the threshold are reported, a panicking step is
+still reported, and the zero value just runs the step.
+================
+*/
+func TestStepTimerNamesSlowSteps(t *testing.T) {
+	clock := time.UnixMilli(0)
+	advance := time.Duration(0)
+	var slow []SlowHookTiming
+	steps := StepTimer{
+		Now: func() time.Time { return clock },
+		Slow: func(name string, elapsed time.Duration) {
+			slow = append(slow, SlowHookTiming{Name: name, Elapsed: elapsed})
+		},
+	}
+	run := func(name string, elapsed time.Duration) {
+		advance = elapsed
+		steps.Time(name, func() { clock = clock.Add(advance) })
+	}
+	run("fast", 10*time.Millisecond)
+	run("slow", 150*time.Millisecond)
+	func() {
+		defer func() { _ = recover() }()
+		steps.Time("panics", func() {
+			clock = clock.Add(SlowHookThreshold)
+			panic("step failed")
+		})
+	}()
+	if len(slow) != 2 || slow[0] != (SlowHookTiming{Name: "slow", Elapsed: 150 * time.Millisecond}) ||
+		slow[1].Name != "panics" {
+		t.Fatalf("slow steps = %+v", slow)
+	}
+	ran := false
+	var zero StepTimer
+	zero.Time("unwired", func() { ran = true })
+	if !ran {
+		t.Fatal("the zero StepTimer did not run its step")
+	}
+}

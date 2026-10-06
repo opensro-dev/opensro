@@ -42,6 +42,10 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 	// rows have Patrol=false; this also prevents the old three-fixture ticker
 	// from broadcasting movements for objects production never spawned.
 	var ticker *simulation.Ticker
+	// A slow action tick names its sub-step on /transport/metrics slow_hooks.
+	game.items.Steps.Slow = func(name string, elapsed time.Duration) {
+		game.hub.RecordSlowStep("action.TickHook/"+name, elapsed)
+	}
 	ticker = worldsession.NewTicker(
 		game.hub,
 		game.items.NpcRoster,

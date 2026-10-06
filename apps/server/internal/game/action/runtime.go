@@ -80,6 +80,8 @@ type Runtime struct {
 	Ground            *grounditem.Registry
 	Pending           *grounditem.PendingTracker
 	Worlds            *simulation.WorldStore
+	// Steps names TickHook's slow sub-steps (wired to the transport metrics).
+	Steps             simulation.StepTimer
 	SkillObjects      skillobject.Registry
 	CanPlaceQuestTrap func(*enterworld.Character, string) ([]wire.Frame, bool)
 	CaptureQuestTrap  func(*enterworld.Character, string, string, func() bool) ([]wire.Frame, bool)

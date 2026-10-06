@@ -40,3 +40,32 @@ func TestTimingHistogramsBucketHandlersPhasesAndSlowHooks(t *testing.T) {
 		t.Fatalf("slow hooks = %+v", m.SlowHooks)
 	}
 }
+
+/*
+================
+TestSlowStepsRecordWhenTheyHappened
+
+A slow step lands beside the hooks with its first and last wall time and
+tick number, so a cluster right after start reads differently from a stall
+that recurs.
+================
+*/
+func TestSlowStepsRecordWhenTheyHappened(t *testing.T) {
+	hub := newHub(testCfg())
+	const step = "action.TickHook/AdvancePopulation"
+	for range 3 {
+		hub.RecordTickDuration(time.Millisecond, 100*time.Millisecond)
+	}
+	hub.RecordSlowStep(step, 150*time.Millisecond)
+	for range 2 {
+		hub.RecordTickDuration(time.Millisecond, 100*time.Millisecond)
+	}
+	hub.RecordSlowStep(step, 340*time.Millisecond)
+	slow := hub.Metrics().SlowHooks[step]
+	if slow.Count != 2 || slow.MaxMs != 340 || slow.FirstTick != 3 || slow.LastTick != 5 {
+		t.Fatalf("slow step = %+v", slow)
+	}
+	if slow.FirstAt.IsZero() || slow.LastAt.Before(slow.FirstAt) {
+		t.Fatalf("slow step times = %v .. %v", slow.FirstAt, slow.LastAt)
+	}
+}

@@ -144,6 +144,12 @@ SlowHookStats
 type SlowHookStats struct {
 	Count uint64  `json:"count"`
 	MaxMs float64 `json:"max_ms"`
+	// When it was first and last slow, by wall clock and by tick_count, so
+	// a boot-time cluster can be told from a recurring stall.
+	FirstAt   time.Time `json:"first_at"`
+	LastAt    time.Time `json:"last_at"`
+	FirstTick uint64    `json:"first_tick"`
+	LastTick  uint64    `json:"last_tick"`
 }
 
 /*
@@ -181,14 +187,15 @@ func (t *timingStats) recordHandler(opcode uint16, elapsed time.Duration) {
 countSlow
 ================
 */
-func countSlow(into map[string]*SlowHookStats, slow []SlowHook) {
+func countSlow(into map[string]*SlowHookStats, slow []SlowHook, at time.Time, tick uint64) {
 	for _, hook := range slow {
 		stats := into[hook.Name]
 		if stats == nil {
-			stats = &SlowHookStats{}
+			stats = &SlowHookStats{FirstAt: at, FirstTick: tick}
 			into[hook.Name] = stats
 		}
 		stats.Count++
+		stats.LastAt, stats.LastTick = at, tick
 		if ms := float64(hook.Elapsed) / float64(time.Millisecond); ms > stats.MaxMs {
 			stats.MaxMs = ms
 		}
@@ -210,13 +217,54 @@ func (h *Hub) RecordTickPhases(phases TickPhases) {
 	if len(phases.SlowHooks) == 0 && len(phases.SlowDivisions) == 0 {
 		return
 	}
+	at, tick := time.Now(), h.tickCount()
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.ensureSlow()
+	countSlow(t.slow, phases.SlowHooks, at, tick)
+	countSlow(t.slowDiv, phases.SlowDivisions, at, tick)
+}
+
+/*
+================
+RecordSlowStep
+
+A named step inside a hook (simulation.StepTimer) that ran at or above the
+slow threshold. It lands in slow_hooks beside the hook that contains it.
+================
+*/
+func (h *Hub) RecordSlowStep(name string, elapsed time.Duration) {
+	t := &h.metrics.timing
+	at, tick := time.Now(), h.tickCount()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.ensureSlow()
+	countSlow(t.slow, []SlowHook{{Name: name, Elapsed: elapsed}}, at, tick)
+}
+
+/*
+================
+timingStats.ensureSlow
+================
+*/
+func (t *timingStats) ensureSlow() {
 	if t.slow == nil {
 		t.slow, t.slowDiv = make(map[string]*SlowHookStats), make(map[string]*SlowHookStats)
 	}
-	countSlow(t.slow, phases.SlowHooks)
-	countSlow(t.slowDiv, phases.SlowDivisions)
+}
+
+/*
+================
+Hub.tickCount
+
+The ticks recorded so far; a slow sample's position in the server's life.
+================
+*/
+func (h *Hub) tickCount() uint64 {
+	t := &h.metrics.ticks
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.count
 }
 
 /*

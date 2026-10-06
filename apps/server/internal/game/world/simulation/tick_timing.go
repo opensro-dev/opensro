@@ -53,6 +53,47 @@ type TickTiming struct {
 
 /*
 ================
+StepTimer
+
+Names the slow steps inside one hook that owns many subsystems (the action
+runtime's TickHook runs ~45): the hook's own slow_hooks entry says that it
+was slow, the steps say where. The zero value times against the wall clock
+and reports nothing. Written and read only on the tick goroutine.
+================
+*/
+type StepTimer struct {
+	Now  func() time.Time
+	Slow func(name string, elapsed time.Duration)
+}
+
+/*
+================
+StepTimer.Time
+
+Runs one step and reports it at or above SlowHookThreshold, including when
+it panics (the hook's recover boundary is the ticker's).
+================
+*/
+func (s *StepTimer) Time(name string, run func()) {
+	if s.Slow == nil {
+		run()
+		return
+	}
+	now := s.Now
+	if now == nil {
+		now = time.Now
+	}
+	started := now()
+	defer func() {
+		if elapsed := now().Sub(started); elapsed >= SlowHookThreshold {
+			s.Slow(name, elapsed)
+		}
+	}()
+	run()
+}
+
+/*
+================
 tickClock
 
 Coordinator-owned: written and read only by the goroutine running the tick.

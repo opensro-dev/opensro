@@ -48,31 +48,38 @@ TickHook
 Owns gameplay lifecycles on one simulation clock. Linked attack pulses settle
 before abnormal-state updates, allowing their newly applied statuses to enter
 the same actor update without another health authority.
+Each step runs under rt.Steps, so a slow tick names the subsystem that
+held it rather than only this hook.
 ================
 */
 func (rt *Runtime) TickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
-		rt.advanceResidentRegions(nowMs)
-		if rt.AdvanceQuestCalendar != nil {
-			rt.AdvanceQuestCalendar(nowMs)
+		step := rt.Steps.Time
+		var out []simulation.DivisionFrames
+		frames := func(name string, advance func(int64) []simulation.DivisionFrames) {
+			step(name, func() { out = append(out, advance(nowMs)...) })
 		}
-		rt.advanceDepartures(nowMs)
-		rt.advanceReturnScrolls(nowMs)
-		rt.advanceJobDresses(nowMs)
-		rt.advanceFortressPhases(nowMs)
-		fortressFrames := rt.drainStructureDeaths(nowMs)
-		rt.advanceFortressStructures(nowMs)
-		rt.advanceGuildVotes(nowMs)
+		step("advanceResidentRegions", func() { rt.advanceResidentRegions(nowMs) })
+		if rt.AdvanceQuestCalendar != nil {
+			step("AdvanceQuestCalendar", func() { rt.AdvanceQuestCalendar(nowMs) })
+		}
+		step("advanceDepartures", func() { rt.advanceDepartures(nowMs) })
+		step("advanceReturnScrolls", func() { rt.advanceReturnScrolls(nowMs) })
+		step("advanceJobDresses", func() { rt.advanceJobDresses(nowMs) })
+		step("advanceFortressPhases", func() { rt.advanceFortressPhases(nowMs) })
+		frames("drainStructureDeaths", rt.drainStructureDeaths)
+		step("advanceFortressStructures", func() { rt.advanceFortressStructures(nowMs) })
+		step("advanceGuildVotes", func() { rt.advanceGuildVotes(nowMs) })
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
-		rt.drainMonsterDefeats(nowMs)
+		step("drainMonsterDefeats", func() { rt.drainMonsterDefeats(nowMs) })
 		if rt.Monsters != nil {
-			rt.Monsters.ExpireMonsterLifetimes(nowMs)
+			step("ExpireMonsterLifetimes", func() { rt.Monsters.ExpireMonsterLifetimes(nowMs) })
 		}
-		rt.retireMonsterCriticals()
+		step("retireMonsterCriticals", rt.retireMonsterCriticals)
 		if rt.Monsters != nil {
-			rt.Monsters.AdvancePopulation(nowMs)
+			step("AdvancePopulation", func() { rt.Monsters.AdvancePopulation(nowMs) })
 		}
 		// One tick is one action-owner transaction. Snapshot the actors that
 		// own an open B245 bracket before closing due brackets, then exclude
@@ -81,50 +88,53 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// flush and supersede the retained engage before a later tick admits
 		// another B245. Closing and reopening in this same turn kept client
 		// motion-state 2 continuously owned and could strand click movement.
-		openActionOwners := rt.openSkillCastOwnerSnapshot()
-		out := append(fortressFrames, rt.advanceBerserk(nowMs)...)
-		out = append(out, rt.advancePlayerAggressions(nowMs)...)
-		out = append(out, rt.advanceBattleStates(nowMs)...)
-		out = append(out, rt.drainSkillFinalizes(nowMs)...)
-		out = append(out, rt.advanceProjectileCasts(nowMs)...)
+		var openActionOwners map[string]bool
+		step("openSkillCastOwnerSnapshot", func() { openActionOwners = rt.openSkillCastOwnerSnapshot() })
+		frames("advanceBerserk", rt.advanceBerserk)
+		frames("advancePlayerAggressions", rt.advancePlayerAggressions)
+		frames("advanceBattleStates", rt.advanceBattleStates)
+		frames("drainSkillFinalizes", rt.drainSkillFinalizes)
+		frames("advanceProjectileCasts", rt.advanceProjectileCasts)
 		// A cancel-active-effect request only clears the server effect's live
 		// flag. Character-effect retirement and its counted instance teardown
 		// broadcast are a distinct update phase in retail (v1.188 sub_5a0100 ->
 		// sub_59ecd0 / B072; v1.150 client opcode B6A0).
-		rt.checkpointOnlineSkillJobs(nowMs)
-		rt.advanceLinkedEffects(nowMs)
-		out = append(out, rt.advancePartyAuras(nowMs)...)
-		out = append(out, rt.advanceWalls(nowMs)...)
-		out = append(out, rt.advancePeriodicEffects(nowMs)...)
-		out = append(out, rt.advanceHawks(nowMs)...)
-		out = append(out, rt.advancePulseAreas(nowMs)...)
+		step("checkpointOnlineSkillJobs", func() { rt.checkpointOnlineSkillJobs(nowMs) })
+		step("advanceLinkedEffects", func() { rt.advanceLinkedEffects(nowMs) })
+		frames("advancePartyAuras", rt.advancePartyAuras)
+		frames("advanceWalls", rt.advanceWalls)
+		frames("advancePeriodicEffects", rt.advancePeriodicEffects)
+		frames("advanceHawks", rt.advanceHawks)
+		frames("advancePulseAreas", rt.advancePulseAreas)
 		// A heal over time pulses before expiry: its last pulse lands on
 		// the instant its effect's duration is reached.
-		out = append(out, rt.advanceHealsOverTime(nowMs)...)
-		rt.effects.Expire(nowMs)
-		out = append(out, rt.drainStoppedCharacterEffects()...)
+		frames("advanceHealsOverTime", rt.advanceHealsOverTime)
+		step("effects.Expire", func() { rt.effects.Expire(nowMs) })
+		step("drainStoppedCharacterEffects", func() { out = append(out, rt.drainStoppedCharacterEffects()...) })
 		// 4A4390 per actor: expiry, damage over time, detonation, mask.
-		out = append(out, rt.advanceMonsterAbnormals(nowMs)...)
-		out = append(out, rt.drainMonsterLegRecipients()...)
-		out = append(out, rt.advancePlayerAbnormals(nowMs)...)
-		out = append(out, rt.advanceCosAbnormals(nowMs)...)
-		out = append(out, rt.advanceQueuedActionSessions(nowMs)...)
-		out = append(out, rt.advanceBasicAttackIntents(nowMs, openActionOwners)...)
-		out = append(out, rt.advanceNaturalRecovery(nowMs)...)
-		out = append(out, rt.advancePets(nowMs)...)
+		frames("advanceMonsterAbnormals", rt.advanceMonsterAbnormals)
+		step("drainMonsterLegRecipients", func() { out = append(out, rt.drainMonsterLegRecipients()...) })
+		frames("advancePlayerAbnormals", rt.advancePlayerAbnormals)
+		frames("advanceCosAbnormals", rt.advanceCosAbnormals)
+		frames("advanceQueuedActionSessions", rt.advanceQueuedActionSessions)
+		step("advanceBasicAttackIntents", func() {
+			out = append(out, rt.advanceBasicAttackIntents(nowMs, openActionOwners)...)
+		})
+		frames("advanceNaturalRecovery", rt.advanceNaturalRecovery)
+		frames("advancePets", rt.advancePets)
 		// 60C684 after the pets: a fired caravan reads the transport's
 		// cargo and live position as this tick left them.
-		rt.advanceCaravans(nowMs)
-		rt.advancePetSkillWindows(nowMs)
-		rt.advanceParamJobs(nowMs)
-		rt.advancePKRecords()
-		rt.advanceMercenaryCooldowns(nowMs)
-		out = append(out, rt.advancePendingPickups(nowMs)...)
-		rt.advanceBodyRestores(nowMs)
-		rt.advanceCompoundJobs(nowMs)
-		out = append(out, rt.ReleaseExpiredOwnership(nowMs)...)
-		out = append(out, rt.SweepExpired(nowMs)...)
-		out = append(out, rt.retireActionSessions()...)
+		step("advanceCaravans", func() { rt.advanceCaravans(nowMs) })
+		step("advancePetSkillWindows", func() { rt.advancePetSkillWindows(nowMs) })
+		step("advanceParamJobs", func() { rt.advanceParamJobs(nowMs) })
+		step("advancePKRecords", rt.advancePKRecords)
+		step("advanceMercenaryCooldowns", func() { rt.advanceMercenaryCooldowns(nowMs) })
+		frames("advancePendingPickups", rt.advancePendingPickups)
+		step("advanceBodyRestores", func() { rt.advanceBodyRestores(nowMs) })
+		step("advanceCompoundJobs", func() { rt.advanceCompoundJobs(nowMs) })
+		frames("ReleaseExpiredOwnership", rt.ReleaseExpiredOwnership)
+		frames("SweepExpired", rt.SweepExpired)
+		step("retireActionSessions", func() { out = append(out, rt.retireActionSessions()...) })
 		return coalesceDivisionFrames(out)
 	}
 }
