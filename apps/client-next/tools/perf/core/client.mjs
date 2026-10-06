@@ -65,6 +65,10 @@ function instrument( { counts, spans } ) {
 			sample.path = game?.movementPath;
 			const actor = root?.characterActors().find( actor => actor.gid === game?.localGid );
 			if ( actor ) sample.body = { pose: { ...actor.pose }, clip: actor.clip, mountedOn: actor.mountedOn };
+			if ( actor?.mountedOn ) {
+				const mount = root.characterActors().find( row => row.gid === actor.mountedOn );
+				if ( mount ) sample.mount = { pose: { ...mount.pose }, gid: mount.gid, height: mount.height };
+			}
 			rows.push( sample );
 			if ( rows.length > 4096 ) rows.splice( 0, 1024 );
 		},

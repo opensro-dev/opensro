@@ -111,6 +111,8 @@ export interface ParticleStream extends ParticlePresentation {
 	readonly owners: (ParticleHistory | undefined)[];
 	readonly ticks: Float64Array;
 	readonly origins: Float64Array;
+	readonly liveCounts: Uint32Array;
+	readonly extents: Uint32Array;
 	readonly work: Float64Array;
 	readonly basis: Float64Array;
 	// Live particles the last frame drew (the frame probe's count).
@@ -156,6 +158,8 @@ export function createParticleStream( model: CharacterModel, index: number, rows
 		owners: new Array( rows ).fill( undefined ),
 		ticks: new Float64Array( rows ).fill( NaN ),
 		origins: new Float64Array( rows ).fill( NaN ),
+		liveCounts: new Uint32Array( rows ),
+		extents: new Uint32Array( rows ),
 		work: new Float64Array( ROTATION_WORK ),
 		basis: new Float64Array( 9 ),
 		live: 0
@@ -184,21 +188,30 @@ function writeGraphRow( stream: ParticleStream, index: number, history: Particle
 	const graph = history.graph!, base = index * stream.slots;
 	const elements = graph.elements[stream.primitive.particleEmitter!]!;
 	if ( elements.length > stream.slots ) throw Error( "Particle graph outside its emission capacity" );
-	let live = 0;
-	for ( let b = 0; b < elements.length; b++ ) if ( elements[b]?.alive ) live++;
-	stream.live += live;
 	if (
 		stream.owners[index] === history && stream.ticks[index] === graph.frame && stream.origins[index] === origin
-	) return;
-	for ( let b = 0; b < stream.slots; b++ ) {
-		const element = elements[b];
-		if ( element?.alive ) writeGraphRecord( stream.records, base + b, element, stream.work );
-		else hideRecord( stream.records, base + b );
+	) {
+		stream.live += stream.liveCounts[index]!;
+		return;
 	}
+	// Initial upload clears the full allocation. Later ticks need only the used
+	// prefix, including the previous owner's tail when membership or time resets.
+	const extent = Math.max( elements.length, stream.extents[index]! );
+	let live = 0;
+	for ( let b = 0; b < extent; b++ ) {
+		const element = elements[b];
+		if ( element?.alive ) {
+			writeGraphRecord( stream.records, base + b, element, stream.work );
+			live++;
+		} else hideRecord( stream.records, base + b );
+	}
+	stream.live += live;
+	stream.liveCounts[index] = live;
+	stream.extents[index] = elements.length;
 	stream.owners[index] = history;
 	stream.ticks[index] = graph.frame;
 	stream.origins[index] = origin;
-	markDirty( stream, base, base + stream.slots );
+	if ( extent ) markDirty( stream, base, base + extent );
 }
 
 /*

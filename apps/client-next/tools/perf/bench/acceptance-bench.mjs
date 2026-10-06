@@ -15,7 +15,7 @@ import { openClient, closeClient, createCaptures, measure } from "../core/client
 import { createCrowd } from "../core/crowd.mjs";
 import { installFaults } from "../core/transport-faults.mjs";
 import { parseOptions } from "../core/report.mjs";
-import { walk, keepGoing } from "./scenarios.mjs";
+import { walk, keepGoing, cross } from "./scenarios.mjs";
 
 /*
 ================
@@ -37,7 +37,16 @@ async function run( options ) {
 	} );
 	let crowd;
 	const { page } = client;
-	const results = { cpuRate: options.cpuRate, scenarios: [], peers: [] };
+	const results = { cpuRate: options.cpuRate, scenarios: [], peers: [], errors: [] };
+	page.on( "pageerror", error => {
+		results.errors.push( String( error ) );
+		if ( results.errors.length > 64 ) results.errors.shift();
+	} );
+	page.on( "console", message => {
+		if ( message.type() !== "error" ) return;
+		results.errors.push( message.text() );
+		if ( results.errors.length > 64 ) results.errors.shift();
+	} );
 	try {
 		await mkdir( options.out, { recursive: true } );
 		results.scratch = await page.evaluate( () => {
@@ -102,19 +111,27 @@ async function run( options ) {
 				);
 			}
 			console.log( "[acceptance] authored field slope with transport jitter" );
+			// Previous oscillating walks can finish anywhere on their last leg.
+			// The certified slope route starts at the fixture, not that arbitrary point.
+			const approachSlope = await cross( page, { destination: fixture.start } );
+			await approachSlope( () => true );
 			results.scenarios.push(
 				await measure( page, "slope-jitter", 12000, async more => {
 					await page.evaluate( destination =>
 						__benchRuntime.session( {
 							kind: "gameplay",
-							command: { kind: "move", destination }
+							command: {
+								kind: "move",
+								destination: { ...__benchRuntime.gameplay().pose, ...destination }
+							}
 						} ), fixture.destination );
 					await keepGoing( page, more );
 					const end = await page.evaluate( () => __benchRuntime.gameplay().pose );
+					results.slopeEnd = end;
 					assert.equal( end.regionId, fixture.destination.regionId );
 					assert.ok(
 						Math.hypot( end.x - fixture.destination.x, end.z - fixture.destination.z ) < 8,
-						"live slope movement reaches the authored destination"
+						`live slope movement reaches the authored destination: ${JSON.stringify( end )}`
 					);
 				} )
 			);
@@ -157,6 +174,19 @@ async function run( options ) {
 		}
 	} catch ( error ) {
 		results.failure = String( error );
+		results.failureState = await page.evaluate( () => {
+			const game = __benchRuntime.gameplay();
+			return {
+				session: __benchRuntime.sessionState(),
+				pose: game?.pose,
+				path: game?.movementPath,
+				transition: game?.movementTransition,
+				vital: game?.vitals?.find( row => row.gid === game.localGid ),
+				status: document.querySelector( "output" )?.textContent,
+				movement: globalThis.__benchMovement
+			};
+		} ).catch( () => null );
+		await page.screenshot( { path: `${options.out}/failure.png` } ).catch( () => {} );
 		throw error;
 	} finally {
 		await writeFile( `${options.out}/results.json`, JSON.stringify( results, null, 2 ) );

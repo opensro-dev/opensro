@@ -73,6 +73,13 @@ async function admitEffects( { count, match, width, height, counts } ) {
 			const original = prototype[name];
 			prototype[name] = function( ...args ) {
 				add( key, 1 );
+				if ( name === "writeBuffer" ) {
+					const data = args[2], elementBytes = data.BYTES_PER_ELEMENT ?? 1;
+					const bytes = args[4] === undefined ?
+						data.byteLength - (args[3] ?? 0) * elementBytes :
+						args[4] * elementBytes;
+					add( "uploaded bytes", bytes );
+				}
 				return original.apply( this, args );
 			};
 		};

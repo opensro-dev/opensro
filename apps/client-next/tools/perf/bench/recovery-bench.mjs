@@ -12,8 +12,6 @@ world connection; the production entry and message delivery stay untouched.
 */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
-import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
 import { parseOptions } from "../core/report.mjs";
@@ -21,61 +19,7 @@ import { walk } from "./scenarios.mjs";
 
 import { installFaults } from "../core/transport-faults.mjs";
 
-/*
-================
-captureVideo
-
-CDP captures actual presented frames. Their timestamps preserve freezes in
-the review video instead of speeding up a stalled run.
-================
-*/
-async function captureVideo( page, dir ) {
-	const cdp = await page.context().newCDPSession( page ), frames = [], writes = [];
-	await mkdir( dir, { recursive: true } );
-	cdp.on( "Page.screencastFrame", event => {
-		void cdp.send( "Page.screencastFrameAck", { sessionId: event.sessionId } );
-		if ( frames.length >= 300 ) return;
-		const name = `frame-${String( frames.length ).padStart( 4, "0" )}.jpg`;
-		frames.push( { name, at: event.metadata.timestamp } );
-		writes.push( writeFile( `${dir}/${name}`, Buffer.from( event.data, "base64" ) ) );
-	} );
-	await cdp.send( "Page.startScreencast", {
-		format: "jpeg",
-		quality: 75,
-		maxWidth: 960,
-		maxHeight: 540,
-		everyNthFrame: 12
-	} );
-	return async () => {
-		await cdp.send( "Page.stopScreencast" );
-		await Promise.all( writes );
-		await cdp.detach();
-		assert.ok( frames.length > 2, "capture must contain actual displayed frames" );
-		const list = frames.map( ( frame, i ) =>
-			`file '${frame.name}'\nduration ${Math.max( .001, (frames[i + 1]?.at ?? frame.at + .05) - frame.at )}`
-		).join( "\n" );
-		await writeFile( `${dir}/frames.txt`, list + "\n" );
-		const encoded = spawnSync( process.env.SRO_PROBE_FFMPEG ?? "ffmpeg", [
-			"-y",
-			"-loglevel",
-			"error",
-			"-f",
-			"concat",
-			"-safe",
-			"0",
-			"-i",
-			"frames.txt",
-			"-fps_mode",
-			"vfr",
-			"-c:v",
-			"libx264",
-			"-pix_fmt",
-			"yuv420p",
-			"recovery.mp4"
-		], { cwd: resolve( dir ), encoding: "utf8" } );
-		assert.equal( encoded.status, 0, encoded.stderr || String( encoded.error ) );
-	};
-}
+import { captureVisual } from "../core/visual-capture.mjs";
 
 /*
 ================
@@ -110,11 +54,12 @@ async function run( options ) {
 				cpu: true,
 				trace: options.trace ? `${options.out}/${lane}.json` : null
 			} );
-			const stopVideo = options.video && lane === "main" ?
-				await captureVideo( page, `${options.out}/video` ) :
-				null;
-			await captures.start();
-			const result = await measure( page, lane, 7000, async more => {
+			/*
+			================
+			drive
+			================
+			*/
+			const drive = async more => {
 				const moving = walk( page, more );
 				if ( lane !== "transport" ) {
 					for ( const gap of [ 50, 100, 150, 300, 1000 ] ) {
@@ -126,10 +71,17 @@ async function run( options ) {
 					}
 				}
 				await moving;
-			} );
+			};
+			await captures.start();
+			const result = await measure( page, lane, 7000, drive );
 			await captures.stop( lane );
 			await captures.finish();
-			if ( stopVideo ) await stopVideo();
+			if ( options.video && lane === "main" ) {
+				result.visual = await captureVisual( page, `${options.out}/video`, async () => {
+					const start = Date.now();
+					await drive( () => Date.now() - start < 7000 );
+				} );
+			}
 			result.transport = await worker.evaluate( () => ({ ...globalThis.__recoveryLink }) );
 			assert.ok(
 				result.transport.rx > 0 && result.transport.tx > 0,
