@@ -2420,8 +2420,8 @@ export function createUi(
 		} else if ( id === "stall-net-buy" ) {
 			const row = stallHud.network().row;
 			if ( row >= 0 && view.gameplay?.stall?.network.rows[row] ) openStallPrompt( { kind: "network-buy", row } );
-		} else if ( id === "exchange-confirm" || id === "exchange-cancel" ) {
-			sendGameplay( { kind: id } );
+		} else if ( id === "exchange-confirm" || id === "exchange-cancel" || id === "exchange-close" ) {
+			sendGameplay( { kind: id === "exchange-close" ? "exchange-cancel" : id } );
 		} else if ( id === "exchange-gold-set" ) {
 			sendGameplay( { kind: "exchange-gold", amount: Number( exchangeHud.gold() || 0 ) } );
 		} else if ( id.startsWith( "exchange-my:" ) ) {
@@ -3107,7 +3107,7 @@ export function createUi(
 			const fortress = Number( id.slice( "fortress-war-slot:".length ) ),
 				slot = fortressWarView()?.slots.find( r => r.fortress === fortress );
 			if ( slot?.enabled ) fortressWarHud.ask( slot.question, fortress );
-		} else if ( id === "skin-cancel" ) {
+		} else if ( id === "skin-cancel" || id === "skin-close" ) {
 			setPanel( "" );
 		} else if ( id === "skin-confirm" ) {
 			const open = skinHud.state(), choice = skinHud.choice();
@@ -3223,7 +3223,7 @@ export function createUi(
 		} else if ( id === "magic-option-confirm" ) {
 			const codename = magicOptionHud.state().codename;
 			if ( codename ) sendGameplay( { kind: "magic-option-grant", codename } );
-		} else if ( id === "magic-option-cancel" ) setPanel( "" );
+		} else if ( id === "magic-option-cancel" || id === "magic-option-close" ) setPanel( "" );
 		else if ( id === "storage-open" && view.gameplay?.target ) {
 			if ( !canLeavePanel() ) return;
 			sendGameplay( { kind: "storage-open", gid: view.gameplay.target } );
@@ -11881,7 +11881,8 @@ export function createUi(
 						options = grant.parts.find( p => p.part === part )?.options ?? [],
 						choice = magicOptionHud.state(),
 						busy = !!game?.inventoryPending || grant.phase !== "idle";
-					nativeFrame( root, px, py, hudCopy( root.text ), "magic-option-cancel" );
+					// Frame close and authored Cancel are separate native controls with one action.
+					nativeFrame( root, px, py, hudCopy( root.text ), "magic-option-close" );
 					nativePage( layout, px, py, [ 5, 6, 8, 9, 40, 41, 42, 43, 44 ] );
 					const slot = at( 8 );
 					if ( slot ) nativeItem( "magic-option-slot", item, authoredRect( slot, px, py ), busy );
@@ -11975,7 +11976,7 @@ export function createUi(
 							root.rect[2],
 							root.rect[3]
 						] );
-					nativeFrame( root, px, py, hudCopy( "UIIT_PAG_CHAR_SKIN_CHANGE" ), "skin-cancel" );
+					nativeFrame( root, px, py, hudCopy( "UIIT_PAG_CHAR_SKIN_CHANGE" ), "skin-close" );
 					// The sex buttons, sliders, rotate and confirm controls are live.
 					nativePage( layout, px, py, [ 17, 18, 31, 32, 33, 34, 35, 41, 42, 43, 71, 72, 73, 100 ] );
 					for (
@@ -12307,7 +12308,7 @@ export function createUi(
 						px,
 						py,
 						hudCopy( root.text ) + (partner ? " - " + partner.name : ""),
-						"exchange-cancel"
+						"exchange-close"
 					);
 					nativePage( page, px, py, [ 11, 12, 15 ] );
 					for ( const id of [ 13, 14 ] ) authoredText( at( id ), px, py, hudCopy( at( id ).text ) );
@@ -12359,7 +12360,7 @@ export function createUi(
 						state.approved || state.ownLocked && !state.theirLocked
 					);
 					authoredLabeledButton( at( 12 ), px, py, "exchange-cancel", hudCopy( at( 12 ).text ) );
-					endWindow( admission );
+					endWindow( admission, "service:Exchange" );
 				}
 				exchangeWindow();
 				/*
@@ -12486,7 +12487,7 @@ export function createUi(
 							);
 						}
 					}
-					endWindow( admission );
+					endWindow( admission, "service:Stall" );
 				}
 				stallWindow();
 				/*
@@ -12670,7 +12671,7 @@ export function createUi(
 							controls.push( { id: "stall-net-choice:" + i, label: value, rect: entry, kind: "button" } );
 						}
 					}
-					endWindow( admission );
+					endWindow( admission, "service:Stall network" );
 				}
 				stallNetworkWindow();
 				/*

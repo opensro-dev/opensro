@@ -26,7 +26,8 @@ const factories = {
 	renderer: "createRenderer",
 	simulation: "createSimulationHost",
 	release: "createReleaseWatch",
-	"bug-report": "createBugReport"
+	"bug-report": "createBugReport",
+	"build-info": "createBuildInfo"
 };
 const compiled = await build( {
 	entryPoints: [ "src/engine/runtime/runtime.ts" ],
@@ -36,6 +37,8 @@ const compiled = await build( {
 	write: false,
 	define: {
 		"import.meta.env.DEV": "false",
+		"import.meta.env.SRO_CLIENT_REVISION": "undefined",
+		"import.meta.env.SRO_CLIENT_SUBJECT": "undefined",
 		"import.meta.env.VITE_AGENT_API_BASE": "undefined",
 		"import.meta.url": JSON.stringify( "http://localhost/runtime.ts" )
 	},
