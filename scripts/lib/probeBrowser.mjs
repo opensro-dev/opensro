@@ -30,6 +30,10 @@ launchBackgroundBrowser
 Playwright's normal connection emulates focus in every page. Its supported
 CDP noDefaults connection preserves real visibility in the default context.
 The owned server keeps profile cleanup and process shutdown with the launcher.
+Its temporary CDP endpoint is available only on loopback for the probe's lifetime.
+Start from a visible page so an already-occluded window cannot masquerade as a
+successful tab transition. Tab-only tests may explicitly disable Windows native
+occlusion through extraBrowserArgs; the launcher preserves that policy by default.
 ================
 */
 async function launchBackgroundBrowser( launchOptions, pageOptions ) {
@@ -64,6 +68,14 @@ async function launchBackgroundBrowser( launchOptions, pageOptions ) {
 		if ( !context ) throw Error( "Background browser has no default context" );
 		const page = context.pages()[0] ?? await context.newPage();
 		await page.setViewportSize( pageOptions.viewport );
+		await page.bringToFront();
+		if ( await page.evaluate( () => document.visibilityState ) !== "visible" ) {
+			throw Error(
+				"Background scheduling probe requires an initially visible page; " +
+					"check window occlusion or explicitly isolate tab visibility with " +
+					"--disable-features=CalculateNativeWinOcclusion"
+			);
+		}
 		const disconnect = browser.close.bind( browser );
 		/*
 		================
@@ -84,13 +96,10 @@ async function launchBackgroundBrowser( launchOptions, pageOptions ) {
 	}
 }
 
-/*
-================
-launchProbeBrowser
-================
-*/
-
 /**
+ * ================
+ * launchProbeBrowser
+ *
  * Launch the standard probe browser: system Chrome, isolated profile, the
  * headless GPU flags every existing harness uses. `headed` is for local
  * debugging (e.g. PROFILE_HEADED=1).
@@ -108,6 +117,7 @@ launchProbeBrowser
  *   executablePath?: string,
  *   userDataDir?: string
  * }} [options]
+ * ================
  */
 export async function launchProbeBrowser( {
 	headed = false,
@@ -142,6 +152,7 @@ export async function launchProbeBrowser( {
 		...(deviceScaleFactor === undefined ? {} : { deviceScaleFactor })
 	};
 	if ( backgroundThrottling ) {
+		if ( !headed ) throw Error( "Background scheduling probes require a headed browser" );
 		if ( userDataDir || deviceScaleFactor !== undefined ) {
 			throw Error( "Background scheduling probes require a fresh profile and native device scale" );
 		}
