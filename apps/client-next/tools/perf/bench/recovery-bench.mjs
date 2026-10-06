@@ -154,11 +154,29 @@ observatory cache has turned over, the client's movement state beside the
 server's pose.
 ================
 */
-async function stallTurns( page, lane, name ) {
+async function stallTurns( page, lane, name, record ) {
 	const stall = lane === "bidirectional-delay" ? ms => stallServer( page, ms ) : ms => holdStream( page, "rx", ms );
 	const legs = lane === "edge-delay" ? STALL_LEGS.edge : STALL_LEGS.open;
 	const steps = [];
 	const anchor = (await movementState( page )).pose;
+	try {
+		await stallSteps( page, { lane, name, stall, legs, anchor, steps, record } );
+	} catch ( error ) {
+		// The incident is the evidence: keep what led up to it.
+		await record( steps, String( error?.stack ?? error ) );
+		throw error;
+	}
+	return steps;
+}
+
+/*
+================
+stallSteps
+
+The step loop of stallTurns; each completed step is recorded at once.
+================
+*/
+async function stallSteps( page, { lane, name, stall, legs, anchor, steps, record } ) {
 	for ( const ms of STALL_MS ) {
 		for ( const action of [ "turn", "stop" ] ) {
 			await returnToAnchor( page, anchor );
@@ -189,9 +207,9 @@ async function stallTurns( page, lane, name ) {
 				xz: Math.hypot( server.x - client.pose.x, server.z - client.pose.z ),
 				y: server.y - client.pose.y
 			} );
+			await record( steps );
 		}
 	}
-	return steps;
 }
 
 /*
@@ -205,18 +223,13 @@ after the snapshot cache has turned over so it postdates the settle.
 async function serverPose( name ) {
 	const response = await fetch( OBSERVATORY_URL, { headers: { "X-SRO-Local-Diagnostics": "1" } } );
 	assert.ok( response.ok, `observatory ${response.status}` );
-	const player = (await response.json()).players.find( row => row.name.toLowerCase() === name.toLowerCase() );
+	const body = await response.json();
+	const player = body.players.find( row => row.name.toLowerCase() === name.toLowerCase() );
 	assert.ok( player, `the GameWorld reports no online ${name}` );
-	// The body carries no capture time; the snapshot is at most the cache age old.
-	const fetchedAtMs = Date.now();
-	return {
-		regionId: player.region,
-		x: player.x,
-		y: player.y,
-		z: player.z,
-		capturedAfterMs: fetchedAtMs - OBSERVATORY_CACHE_MS,
-		fetchedAtMs
-	};
+	// capturedAt carries 100 ns digits; Date.parse wants milliseconds.
+	const capturedAtMs = Date.parse( body.capturedAt.replace( /(\.\d{3})\d+/, "$1" ) );
+	assert.ok( Number.isFinite( capturedAtMs ), `observatory capturedAt ${body.capturedAt}` );
+	return { regionId: player.region, x: player.x, y: player.y, z: player.z, capturedAtMs, fetchedAtMs: Date.now() };
 }
 
 /*
@@ -232,6 +245,7 @@ function assertStep( lane, step ) {
 	const label = `${lane} ${step.ms} ms ${step.action}`;
 	assert.equal( step.server.regionId, step.client.pose.regionId, `${label}: regions differ` );
 	assert.ok( !step.client.moving && step.client.pendingMoves === 0, `${label}: not settled` );
+	assert.ok( step.server.capturedAtMs > step.settledAtMs, `${label}: the server snapshot predates the settle` );
 	if ( step.ms === 0 ) return;
 	const held = ( direction, opcode ) =>
 		step.held.some( entry => entry.direction === direction && entry.opcode === opcode );
@@ -283,7 +297,11 @@ async function run( options ) {
 				if ( STALL_LANES.includes( lane ) ) {
 					result.timing = { before: await transportMetrics() };
 					faultMark = (await faultLog( page )).logged;
-					result.stalls = await stallTurns( page, lane, CHARACTER );
+					result.stalls = await stallTurns( page, lane, CHARACTER, ( stalls, error ) =>
+						writeFile(
+							`${options.out}/stall-${lane}.json`,
+							JSON.stringify( { lane, partial: true, error, stalls }, null, 2 )
+						) );
 					while ( more() ) await page.waitForTimeout( 50 );
 					return;
 				}
