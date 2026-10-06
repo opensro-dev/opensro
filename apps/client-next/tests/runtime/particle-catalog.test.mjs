@@ -28,13 +28,16 @@ test("stone keeps its native source-colour blend pair and temptation retains loo
 	assert.equal( temptation.particleGraph.filter( e => e.loop ).length, 2 );
 	assert.ok( temptation.particleGraph.filter( e => e.loop ).every( e => e.frames === 20 ) );
 });
-test("every effect in the full published catalog decodes", () => {
+test("every published effect decodes with native fog exclusion", () => {
 	// battle/status_bad_sleep.efp carries the only SetSpherePos flag 0 (0x37),
 	// whose native scratch input is ported by its intent (particle-program.ts).
 	const decoder = createEffectPrograms(), catalog = JSON.parse( new TextDecoder().decode( bytes ) ), failures = [];
 	for ( const path of Object.keys( catalog.effects ) ) {
 		try {
-			decoder.decode( bytes, path );
+			const { model } = decoder.decode( bytes, path );
+			for ( const primitive of model.primitives ) {
+				assert.equal( primitive.geometry.material.fogDisabled, true, path );
+			}
 		} catch ( error ) {
 			failures.push( { path, error: error.message } );
 		}

@@ -359,7 +359,6 @@ apps/client-next/tests/browser/river-fire-force.test.mjs
 apps/client-next/tests/browser/runtime-errors.test.mjs
 apps/client-next/tests/browser/samarkand-shop-live.test.mjs
 apps/client-next/tests/browser/scenery-material.test.mjs
-apps/client-next/tests/browser/scenery-particles.test.mjs
 apps/client-next/tests/browser/session-refresh.test.mjs
 apps/client-next/tests/browser/skill-activation-live.test.mjs
 apps/client-next/tests/browser/skill-combat-live.test.mjs

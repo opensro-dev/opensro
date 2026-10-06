@@ -632,6 +632,8 @@ export function createEffectPrograms() {
 									blendPair,
 									doubleSided: resource.backFaceType === 1,
 									unlit: true,
+									// B153F0..B153F9 disables D3DRS_FOGENABLE for every EFP draw.
+									fogDisabled: true,
 									textureStage: {
 										colorOp: resource.srcTextureOp,
 										colorArg1: resource.srcTextureArg1,
