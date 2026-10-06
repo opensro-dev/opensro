@@ -257,12 +257,13 @@ export async function openClient(
 		shadowDetail = 0,
 		videoOptions = undefined,
 		headed = false,
+		backgroundThrottling = false,
 		beforeLogin = undefined
 	} = {}
 ) {
 	process.env.SRO_PROBE_UNLOCK_FPS = uncapped ? "1" : "0";
 	await resetMissionMovementFixture( { characterName: CHARACTER, fixture, timeoutMs: 60000 } );
-	const { browser, page } = await launchProbeBrowser( { headed } );
+	const { browser, page } = await launchProbeBrowser( { headed, backgroundThrottling } );
 	try {
 		await page.addInitScript(
 			options => {

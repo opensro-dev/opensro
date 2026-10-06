@@ -525,7 +525,6 @@ scripts/clean_release_workspace.mjs
 scripts/lib/clipOracleWalkPlane.mjs
 scripts/lib/missionMovementFixture.mjs
 scripts/lib/npcAnimationContactMarkers.mjs
-scripts/lib/probeBrowser.mjs
 scripts/lib/probeCharacter.mjs
 scripts/lib/probeEndpoints.mjs
 scripts/lib/probeTransportProtocol.mjs
