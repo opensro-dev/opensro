@@ -36,7 +36,17 @@ test("finite particle populations reject malformed schedules and cumulative expa
 	assert.throws( () => particleBirthFrames( { ...emitter, rate: 100, limit: 100 }, 20, 10 ), /population budget/ );
 	assert.throws( () => particleBirthFrames( emitter, 1201 ), /schedule budget/ );
 });
+/*
+================
+identity
+================
+*/
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
+/*
+================
+fixture
+================
+*/
 function fixture( frames = true ) {
 	const c = createCharacters(), matrices = [], colors = [], opacities = [], reference = createParticleReference();
 	let uploads = 0, releases = 0;
@@ -125,6 +135,20 @@ function fixture( frames = true ) {
 		}
 	};
 }
+test("particle batches retain GPU storage while retired rows become empty and replacements get fresh births", () => {
+	const f = fixture();
+	for ( const gids of [ [ 1, 2, 3 ], [ 1, 2, 3, 4 ], [ 1, 2, 3 ], [ 1, 2, 3, 5 ] ] ) {
+		f.step( gids.map( gid => f.actor( gid, 0, gid * 10 ) ) );
+		const positions = [];
+		for ( let offset = 12; offset < f.matrices.length; offset += 16 ) positions.push( f.matrices[offset] );
+		assert.deepEqual( positions, gids.map( gid => gid * 10 ) );
+		assert.equal( f.uploads, 1, "membership changes inside a capacity band must retain the draw" );
+		assert.equal( f.releases, 0 );
+	}
+	f.step( [] );
+	assert.equal( f.releases, 1 );
+});
+
 test("arrival stops new births while existing particles retain transforms, fade packing and natural expiration", () => {
 	const f = fixture();
 	f.step( [ f.actor( -2, 0, 5 ) ] );

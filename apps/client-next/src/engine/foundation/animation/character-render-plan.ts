@@ -23,10 +23,10 @@ export function createCharacterRenderPlan( model: CharacterModel ) {
 	const clips = new Map<string, CharacterClip>();
 	for ( const clip of model.clips ) if ( !clips.has( clip.name ) ) clips.set( clip.name, clip );
 	const emission = model.primitives.some( p => p.emission ),
-		exactCapacity = model.primitives.some( p => p.emission || p.ribbon );
+		exactCapacity = model.primitives.some( p => p.ribbon );
 	// Ordinary power-of-two batches have a fixed allocation plus a per-slot cost.
-	// Store two scalars instead of a model-by-actor table. Effects have irregular
-	// emitter capacities, so retain their original bounded calculation.
+	// Store two scalars instead of a model-by-actor table. Emitted slots scale
+	// with the padded actor capacity too. Ribbons retain their exact capacity.
 	const one = exactCapacity ? 0 : characterBatchBytes( model, 1 ),
 		two = exactCapacity ? 0 : characterBatchBytes( model, 2 ),
 		base = one * 2 - two,

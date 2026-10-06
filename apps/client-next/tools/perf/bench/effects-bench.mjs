@@ -5,6 +5,7 @@ effects-bench.mjs - frame rate of many skill effects, without a server
 
   node tools/perf/bench/effects-bench.mjs [--count N] [--seconds S]
                                           [--match REGEX] [--size WxH]
+                                          [--warmup S] [--cpu-rate N]
                                           [--cpu] [--heap] [--counts] [--out DIR]
 
 Renders count published effect programs (those whose name matches) at
@@ -26,9 +27,10 @@ import { launchProbeBrowser } from "../../../../../scripts/lib/probeBrowser.mjs"
 import { CLIENT_NEXT_BASE_URL } from "../../../../../scripts/lib/probeEndpoints.mjs";
 import { parseOptions } from "../core/report.mjs";
 import { createCaptures } from "../core/client.mjs";
+import { writeFile } from "node:fs/promises";
 
 const USAGE =
-	"effects-bench.mjs [--count N] [--seconds S] [--match REGEX] [--size WxH] [--cpu] [--heap] [--counts] [--out DIR]";
+	"effects-bench.mjs [--count N] [--seconds S] [--warmup S] [--cpu-rate N] [--match REGEX] [--size WxH] [--cpu] [--heap] [--counts] [--out DIR]";
 
 /*
 ================
@@ -148,22 +150,33 @@ Page side: loops the admitted effects for seconds and returns the frame
 statistics, then releases the scene.
 ================
 */
-async function measureEffects( seconds ) {
+async function measureEffects( { seconds, warmup } ) {
 	const { renderer, resources, assets, actors, probe, tally, ready, width, height } = globalThis.__effectsBench;
 	try {
-		const frames = [], main = [];
+		const frames = [], main = [], cpu = [], readback = [];
+		const admitted = performance.now();
+		while ( performance.now() - admitted < warmup * 1000 ) {
+			await new Promise( requestAnimationFrame );
+			const time = (performance.now() - admitted) / 1000;
+			renderer.setCharacterActors( actors( time ) );
+			await renderer.frame( { width, height }, time );
+			if ( renderer.error() ) throw Error( renderer.error() );
+		}
 		const started = performance.now();
 		let last = started;
 		for ( const key in tally ) delete tally[key];
 		let measured = 0;
 		while ( performance.now() - started < seconds * 1000 ) {
 			await new Promise( requestAnimationFrame );
-			const now = performance.now(), time = (now - started) / 1000;
+			const now = performance.now(), time = (now - admitted) / 1000;
 			frames.push( now - last );
 			last = now;
 			renderer.setCharacterActors( actors( time ) );
-			renderer.frame( { width, height }, time, undefined, probe );
-			main.push( performance.now() - now );
+			await renderer.frame( { width, height }, time, undefined, probe );
+			const elapsed = performance.now() - now, waiting = renderer.readbackWaitMs();
+			main.push( elapsed );
+			readback.push( waiting );
+			cpu.push( Math.max( 0, elapsed - waiting ) );
 			measured++;
 			if ( renderer.error() ) throw Error( renderer.error() );
 		}
@@ -177,6 +190,8 @@ async function measureEffects( seconds ) {
 			p50: sorted[Math.floor( sorted.length * .5 )],
 			p99: sorted[Math.floor( sorted.length * .99 )],
 			main: mean( main.slice( 2 ) ),
+			cpuMain: mean( cpu.slice( 2 ) ),
+			readback: mean( readback.slice( 2 ) ),
 			draws: renderer.characterStats().draws,
 			counts
 		};
@@ -192,16 +207,23 @@ const options = parseOptions(
 	{
 		count: 36,
 		seconds: 5,
+		warmup: 5,
 		match: "^skill/",
 		size: "1600x900",
 		cpu: false,
 		heap: false,
 		counts: false,
+		cpuRate: 1,
 		out: "temp/artifacts/effects-bench"
 	},
 	USAGE
 );
 const [width, height] = options.size.split( "x" ).map( Number );
+if (
+	!Number.isFinite( options.cpuRate ) || options.cpuRate < 1 ||
+	!Number.isFinite( options.warmup ) || options.warmup < 0 ||
+	!Number.isFinite( options.seconds ) || options.seconds <= 0
+) throw Error( "Invalid effects benchmark timing" );
 process.env.SRO_PROBE_UNLOCK_FPS = "1";
 const { browser, page } = await launchProbeBrowser();
 try {
@@ -215,10 +237,29 @@ try {
 		height,
 		counts: options.counts
 	} );
+	if ( options.cpuRate !== 1 ) {
+		const cdp = await page.context().newCDPSession( page );
+		await cdp.send( "Emulation.setCPUThrottlingRate", { rate: options.cpuRate } );
+	}
 	const captures = await createCaptures( page, { dir: options.out, cpu: options.cpu, heap: options.heap } );
 	await captures.start();
-	const result = await page.evaluate( measureEffects, options.seconds );
+	console.log( `[effects] ${options.warmup}s warmup, ${options.seconds}s measurement, CPU rate ${options.cpuRate}` );
+	const result = await page.evaluate( measureEffects, { seconds: options.seconds, warmup: options.warmup } );
 	await captures.stop( "effects" );
+	await captures.finish();
+	await writeFile(
+		`${options.out}/results.json`,
+		JSON.stringify(
+			{
+				...result,
+				cpuRate: options.cpuRate,
+				warmup: options.warmup,
+				seconds: options.seconds
+			},
+			null,
+			2
+		)
+	);
 	console.log(
 		`${CLIENT_NEXT_BASE_URL}  ${result.effects} effects  ${result.fps.toFixed( 0 )} fps  frame p50 ${
 			result.p50.toFixed( 2 )

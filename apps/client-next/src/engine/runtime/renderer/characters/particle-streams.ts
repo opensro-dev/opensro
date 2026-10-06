@@ -302,7 +302,23 @@ Start a frame: no particles counted yet, and the view mode's camera basis
 from view (the world view matrix the billboards face).
 ================
 */
-export function beginParticleFrame( stream: ParticleStream, view: Float32Array | undefined ): void {
+export function beginParticleFrame(
+	stream: ParticleStream,
+	view: Float32Array | undefined,
+	activeRows = stream.rows
+): void {
+	if ( !Number.isInteger( activeRows ) || activeRows < 0 || activeRows > stream.rows ) {
+		throw Error( "Particle rows outside retained capacity" );
+	}
+	// Retained capacity must never keep a retired actor visible. Empty records
+	// produce zero matrices in the existing GPU pass, including opaque effects.
+	for ( let row = activeRows; row < stream.rows; row++ ) {
+		if ( !stream.owners[row] ) continue;
+		const first = row * stream.slots, end = first + stream.slots;
+		for ( let slot = first; slot < end; slot++ ) hideRecord( stream.records, slot );
+		stream.owners[row] = undefined;
+		markDirty( stream, first, end );
+	}
 	stream.live = 0;
 	const mode = stream.primitive.billboard;
 	if ( mode !== "camera" && mode !== "y" ) return;

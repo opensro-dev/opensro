@@ -83,9 +83,9 @@ Charge retained batch capacity rather than only this frame's visible population.
 */
 export function characterBatchBytes( model: CharacterModel, count: number ): number {
 	if ( !count ) return 0;
-	// Ordinary mesh batches retain a power-of-two capacity across visibility
-	// changes. Charge CPU palettes and GPU bones for that capacity too.
-	if ( !model.primitives.some( p => p.emission || p.ribbon ) ) count = 2 ** Math.ceil( Math.log2( count ) );
+	// Mesh and particle batches retain capacity across membership changes.
+	// Reserve unused particle slots too; ribbons retain exact-sized strips.
+	if ( !model.primitives.some( p => p.ribbon ) ) count = 2 ** Math.ceil( Math.log2( count ) );
 	// Reserve bounded pose indices/revisions and per-binding offsets as well.
 	// Palette storage below deliberately charges the unshared worst case.
 	return count * (72 + 64) + model.primitives.reduce( ( bytes, primitive ) => {

@@ -77,11 +77,21 @@ export interface ParticleEmitter {
 	readonly rotations: readonly (readonly number[])[];
 }
 
+/*
+================
+ParticleGroup
+================
+*/
 interface ParticleGroup {
 	readonly parent: ParticleElement;
 	total: number;
 }
 
+/*
+================
+ParticleElement
+================
+*/
 export interface ParticleElement {
 	serial: number;
 	born: number;
@@ -110,6 +120,10 @@ no module holds mutable state.
 ================
 */
 interface ParticleGraphScratch {
+	readonly siblingEmitters: ReadonlySet<ParticleEmitter>;
+	readonly ordered: ParticleElement[];
+	readonly siblings: Map<ParticleElement, ParticleElement | undefined>;
+	readonly latest: Map<ParticleElement, ParticleElement>;
 	readonly matrix: Float32Array;
 	readonly inverse: Float32Array;
 	readonly previous: Float32Array;
@@ -120,6 +134,11 @@ interface ParticleGraphScratch {
 	readonly motion: Map<ParticleEmitter, ParticleProgram>;
 }
 
+/*
+================
+ParticleGraphState
+================
+*/
 export interface ParticleGraphState {
 	serial: number;
 	frame: number;
@@ -134,6 +153,41 @@ export interface ParticleGraphState {
 
 // A2E980: whole 50 ms effect ticks.
 const TICKS_PER_SECOND = 20;
+
+/*
+================
+programNeedsSibling
+
+Only sibling-relative commands consume the predecessor. Avoid building
+an index for ordinary independent particles; their random cursor and
+command execution remain unchanged.
+================
+*/
+function programNeedsSibling( program: ParticleProgram | undefined ): boolean {
+	if ( !program ) return false;
+	if ( program.coneFlags === 3 || program.coneForceFlags === 3 ) return true;
+	if ( program.sphere && program.sphereFlags === SPHERE_POS_SIBLING ) return true;
+	return program.vectors?.some( command =>
+		command.name === "SetPosition" ?
+			command.flags % 3 === 2 || command.flags >= 9 :
+			command.flags === 3
+	) ?? false;
+}
+
+/*
+================
+needsSibling
+================
+*/
+function needsSibling( def: ParticleEmitter ): boolean {
+	if ( !def.emission ) return false;
+	if ( programNeedsSibling( def.program ) ) return true;
+	return def.commands?.some( command => {
+		const flags = command.flags ?? 0;
+		return !!command.rotations && flags === 3 ||
+			!!command.positions && (flags % 3 === 2 || flags >= 9) || programNeedsSibling( command.program );
+	} ) ?? false;
+}
 
 // ============================================================================
 
@@ -487,6 +541,10 @@ export function createParticleGraph( graph: readonly ParticleEmitter[], index: n
 		groups: graph.map( d => d.parent < 0 ? new Map( [ [ root, { parent: root, total: 0 } ] ] ) : new Map() ),
 		root,
 		scratch: {
+			siblingEmitters: new Set( graph.filter( needsSibling ) ),
+			ordered: [],
+			siblings: new Map(),
+			latest: new Map(),
 			matrix: identity(),
 			inverse: identity(),
 			previous: identity(),
@@ -596,6 +654,7 @@ export function advanceParticleGraph(
 		}
 		for ( let n = 0; n < graph.length; n++ ) {
 			const def = graph[n]!, rows = elements[n]!, births = history.births[n]!;
+			const indexedSiblings = scratch.siblingEmitters.has( def );
 			if ( def.emission && tick / TICKS_PER_SECOND < stop ) {
 				for ( const group of history.groups[n]!.values() ) {
 					if ( !group.parent.alive ) continue;
@@ -620,6 +679,21 @@ export function advanceParticleGraph(
 					}
 				}
 			}
+			if ( indexedSiblings ) {
+				// Slots are recycled; serials alone retain birth order. Emission
+				// births occur on the current tick, so earlier serials cannot have
+				// a later birth. Resolve predecessors once, preserving references
+				// to their evolving state while the original slot order executes.
+				scratch.ordered.length = 0;
+				scratch.siblings.clear();
+				scratch.latest.clear();
+				for ( const element of rows ) if ( element?.alive ) scratch.ordered.push( element );
+				scratch.ordered.sort( ( a, b ) => a.serial - b.serial );
+				for ( const element of scratch.ordered ) {
+					scratch.siblings.set( element, scratch.latest.get( element.parent ) );
+					scratch.latest.set( element.parent, element );
+				}
+			}
 			for ( let b = 0; b < births.length; b++ ) {
 				const birth = births[b]!,
 					elapsed = tick - birth,
@@ -635,16 +709,12 @@ export function advanceParticleGraph(
 				let element = rows[b];
 				const keptMatrix = def.keepMatrix && !!element;
 				if ( keptMatrix ) scratch.previous.set( element!.matrix );
-				// The old sorted list was consumed only at its final element. Select the
-				// same greatest serial directly, including later equal-serial entries.
 				let sibling: ParticleElement | undefined;
 				if ( def.emission ) {
-					for ( let s = 0; s < rows.length; s++ ) {
-						const e = rows[s];
-						if (
-							e && e !== element && e.alive && e.parent === parent && e.born <= birth &&
-							(!element || e.serial < element.serial) && (!sibling || e.serial >= sibling.serial)
-						) sibling = e;
+					if ( indexedSiblings ) {
+						sibling = element ?
+							scratch.siblings.get( element ) :
+							scratch.latest.get( parent );
 					}
 				} else if ( b > 0 && def.parents[b - 1] === def.parents[b] ) sibling = rows[b - 1];
 				if ( !element ) {
@@ -676,6 +746,7 @@ export function advanceParticleGraph(
 						parent
 					};
 					rows[b] = element;
+					if ( indexedSiblings ) scratch.latest.set( parent, element );
 					parent.children++;
 					for ( let child = 0; child < graph.length; child++ ) {
 						if ( graph[child]!.parent === n && graph[child]!.emission ) {

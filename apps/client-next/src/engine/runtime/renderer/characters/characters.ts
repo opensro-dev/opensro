@@ -1707,7 +1707,7 @@ export function createCharacters() {
 								)
 							),
 						particles: model.primitives.map( ( p, index ) =>
-							p.emission && !p.ribbon ? createParticleStream( model, index, rows.length ) : undefined
+							p.emission && !p.ribbon ? createParticleStream( model, index, capacity ) : undefined
 						),
 						appearances: model.primitives.map( p =>
 							!p.emission && (p.materialFrames || rows[0]!.materialTint) ?
@@ -2000,7 +2000,7 @@ export function createCharacters() {
 					if ( particles ) {
 						// Ticks stay native (20 Hz) and the GPU pass draws them at
 						// the display rate (particle-streams.ts).
-						beginParticleFrame( particles, view );
+						beginParticleFrame( particles, view, rows.length );
 						for ( let i = 0; i < rows.length; i++ ) {
 							const actor = rows[i]!;
 							particleRow.actor = actor;
