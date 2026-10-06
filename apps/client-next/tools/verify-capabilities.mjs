@@ -48,6 +48,7 @@ const pipelines = runtime + "renderer/device/pipelines.ts",
 const ui = runtime + "renderer/device/ui.ts", uiBridge = runtime + "platform/ui/ui.ts";
 const flares = runtime + "renderer/device/flares.ts";
 const bugReport = runtime + "bug-report/bug-report.ts",
+	buildInfo = runtime + "build-info/build-info.ts",
 	bugRecorder = runtime + "bug-report/recorder.ts",
 	bugDialog = runtime + "bug-report/dialog.ts",
 	bugTrimmer = runtime + "bug-report/trimmer.ts",
@@ -81,7 +82,14 @@ export const rules = {
 	mapAsync: [ timing ],
 	getMappedRange: [ timing ],
 	Audio: [ runtime + "audio/music/music.ts" ],
-	createElement: [ uiBridge, runtime + "platform/ui/cursor.ts", bugRecorder, bugDialog, bugTrimmer ],
+	createElement: [
+		runtime + "platform/telemetry.ts",
+		uiBridge,
+		runtime + "platform/ui/cursor.ts",
+		bugRecorder,
+		bugDialog,
+		bugTrimmer
+	],
 	// The picking mask readback, shared by the renderer and the asset worker.
 	OffscreenCanvas: [ "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder ],
 	AudioContext: [ runtime + "audio/audio.ts" ],
@@ -129,6 +137,7 @@ export const rules = {
 	configure: [ surface, device, bugRecorder, bugTranscode ],
 	unconfigure: [ surface ],
 	addEventListener: [
+		runtime + "platform/telemetry.ts",
 		runtime + "platform/platform.ts",
 		device,
 		uiBridge,
@@ -139,7 +148,13 @@ export const rules = {
 		bugTranscode,
 		bugJournal
 	],
-	fetch: [ runtime + "simulation/worker/session/http/http.ts", runtime + "assets/worker/loader.ts", bugReport ],
+	fetch: [
+		runtime + "simulation/worker/session/http/http.ts",
+		runtime + "assets/worker/loader.ts",
+		bugReport,
+		// The Agent's one GET /title/build for the FPS chip.
+		buildInfo
+	],
 	WebSocket: [ runtime + "simulation/worker/network/network.ts" ],
 	WebTransport: [],
 	Worker: [ runtime + "simulation/host.ts", runtime + "assets/assets.ts" ]

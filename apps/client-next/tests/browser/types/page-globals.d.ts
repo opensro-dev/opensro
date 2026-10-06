@@ -109,3 +109,7 @@ declare var sessionProbeRuntime: any;
 declare var special: any;
 
 declare var warFixture: any;
+
+interface Window {
+	sroDebug?: { setDiagnostics( enabled: boolean ): boolean; };
+}

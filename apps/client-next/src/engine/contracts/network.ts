@@ -20,6 +20,7 @@ NetworkOwner
 ================
 */
 export interface NetworkOwner {
+	pingMs(): number | null;
 	connect( url: string, admission: string, resume?: Uint8Array ): void;
 	send( frame: WireFrame ): void;
 	// False retains this frame and its successors while admission awaits data.

@@ -93,6 +93,7 @@ onNetworkFailure
 		} );
 	}
 	const network = createNetwork( onNetworkFailure );
+	let pingMs: number | null = null;
 	const core = createWorldCore( network.send );
 	const departure = createDeparture( network.send, core.notice );
 	let completedDeparture: 1 | 2 | 0 = 0;
@@ -483,6 +484,11 @@ step
 				references = { kind: "idle" };
 			}
 			if ( !failure ) network.drain( receive );
+			const nextPing = !failure && phase === "world" ? network.pingMs() : null;
+			if ( nextPing !== pingMs ) {
+				pingMs = nextPing;
+				revision++;
+			}
 			if ( phase === "world" && !failure ) {
 				try {
 					departure.step( now );
@@ -559,6 +565,7 @@ status
 				incidentID,
 				character,
 				entities: core.count(),
+				pingMs,
 				attempt
 			};
 		},

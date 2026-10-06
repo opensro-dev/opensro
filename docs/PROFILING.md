@@ -5,6 +5,32 @@ tools live in `apps/client-next/tools/perf`; run them from
 `apps/client-next` with the dev server and the local server cluster up
 (see [GETTING_STARTED.md](GETTING_STARTED.md)).
 
+## In-game developer diagnostics
+
+The ordinary minimap FPS icon shows only FPS and gameplay ping. To reveal the
+separate `</>` developer icon beside it, run this in the browser console:
+
+```js
+sroDebug.setDiagnostics(true)
+```
+
+The preference is stored locally for that browser and site. The icon survives
+reloads, but its panel starts closed. `sroDebug.setDiagnostics(false)` closes
+and hides it and remembers that choice. If storage is blocked, the command
+still works for the current tab. This grants no server privileges.
+
+The developer panel shows average/p95 frame and CPU times, rendering counts,
+client and Agent revisions, commit subjects, and uptime. Agent means the HTTP
+Agent process, not a claim about the separate GameWorld build. While the panel
+is open and the tab is visible, build information refreshes every 60 seconds;
+reopening or reconnecting requests an earlier refresh with a short throttle.
+Requests time out after 10 seconds, failures retry after 30 seconds, and old
+information is marked stale. A missing endpoint shows unavailable.
+
+Ping uses an opaque echo on the active gameplay WebSocket every five seconds.
+It expires after 15 seconds without a reply and clears when disconnected;
+`— ms` means no current measurement. The display does not use HTTP timing.
+
 ## The target
 
 The client renders a 25-year-old game. Every scenario below should run at

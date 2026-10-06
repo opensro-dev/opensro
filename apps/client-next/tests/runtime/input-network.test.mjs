@@ -361,3 +361,48 @@ test("heading-locked camera stays behind the player through a complete turn", ()
 		assert.ok( alongHeading < -.999, "camera eye must stay in the rear hemisphere" );
 	}
 });
+
+/*
+================
+Gameplay ping lifecycle
+================
+*/
+test("gameplay ping matches echo tokens, expires and resets on reconnect", t => {
+	const sockets = socketHarness( t );
+	const failures = [];
+	const network = createNetwork( error => failures.push( error ) );
+	let clock = 100;
+	t.mock.method( performance, "now", () => clock );
+	network.connect( "ws://localhost/world", "ticket" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( welcome() );
+	assert.equal( network.pingMs(), null );
+	const ping = socket.sent.at( -1 );
+	assert.equal( ping[0], 3 );
+	const wrong = ping.slice();
+	wrong[0] = 4;
+	wrong[2] ^= 1;
+	clock += 42;
+	socket.receive( wrong );
+	assert.equal( network.pingMs(), null );
+	const pong = ping.slice();
+	pong[0] = 4;
+	socket.receive( pong );
+	assert.equal( network.pingMs(), 42 );
+	clock += 5;
+	socket.receive( pong );
+	assert.equal( network.pingMs(), 42 );
+	clock += 15000;
+	assert.equal( network.pingMs(), null );
+	network.disconnect();
+	assert.equal( network.pingMs(), null );
+	network.connect( "ws://localhost/world", "ticket" );
+	sockets[1].onopen();
+	sockets[1].receive( welcome() );
+	assert.equal( network.pingMs(), null );
+	sockets[1].receive( pong );
+	assert.equal( network.pingMs(), null );
+	network.dispose();
+	assert.deepEqual( failures, [] );
+});

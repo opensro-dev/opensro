@@ -146,10 +146,12 @@
     "src/engine/runtime/audio/preparation.ts": "src/engine/runtime/audio/audio.ts",
     "src/engine/runtime/ui/hud/item-mall.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/bug-report/bug-report.ts": "src/engine/runtime/runtime.ts",
+    "src/engine/runtime/build-info/build-info.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/frame-work.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/frame-pacing.ts": "src/engine/runtime/runtime.ts"
   },
   "internals": {
+    "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",
     "src/engine/runtime/runtime-errors.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/frame-probes.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/renderer/device/pipelines.ts": "src/engine/runtime/renderer/device/device.ts",

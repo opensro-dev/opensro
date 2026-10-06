@@ -31,6 +31,7 @@ import { createAssets } from "./assets/assets";
 import { createReleaseWatch } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
+import { createBuildInfo } from "./build-info/build-info";
 import { createBugReport } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
@@ -248,6 +249,9 @@ export function startRuntime(
 				import.meta.env.VITE_AGENT_API_BASE || "/api",
 			location.origin
 		).href.replace( /\/$/, "" );
+		const buildInfo = own(
+			createBuildInfo( apiBase, import.meta.env.SRO_CLIENT_REVISION, import.meta.env.SRO_CLIENT_SUBJECT )
+		);
 		const bugReport = own(
 			createBugReport( {
 				canvas,
@@ -905,7 +909,9 @@ export function startRuntime(
 						p95CpuMs: percentile( cpuHistory, 0.95 ),
 						actors: drawn.actors,
 						draws: drawn.draws,
-						visibleGroups: renderer.worldStats().visibleGroups
+						visibleGroups: renderer.worldStats().visibleGroups,
+						pingMs: sessionState?.phase === "world" ? sessionState.pingMs : null,
+						build: buildInfo.readout( now, platform.diagnosticsActive(), sessionState?.phase )
 					} );
 					for ( const name in stageTotals ) stageTotals[name] = 0;
 					stageFrames = 0;

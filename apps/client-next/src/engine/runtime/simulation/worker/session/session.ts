@@ -202,6 +202,7 @@ publishWorld
 			phase: value.phase,
 			character: value.character,
 			entityCount: value.entities,
+			pingMs: value.pingMs,
 			error: value.error,
 			disconnectMessage: value.disconnectMessage,
 			incidentID: value.incidentID,
