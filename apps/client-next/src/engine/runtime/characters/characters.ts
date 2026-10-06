@@ -192,6 +192,26 @@ const GOLD_DROP_MODELS = [
 
 /*
 ================
+ActionInput
+
+Only changes to these values request an action transition. Retain the values
+instead of allocating and serializing the same key for every rendered actor.
+================
+*/
+interface ActionInput {
+	readonly dead: boolean;
+	readonly sitting: boolean;
+	readonly mountedOn: number;
+	readonly movementMode: number | undefined;
+	readonly requestedMoving: boolean;
+	readonly movementRevision: number;
+	readonly posture: string;
+	readonly waiting: boolean;
+	readonly casting: boolean;
+}
+
+/*
+================
 createCharacterPresentation
 
 Own character catalog admission and actor assembly across the dock, creation
@@ -338,7 +358,7 @@ export function createCharacterPresentation(
 			actionRevision?: number;
 			actionMode?: number;
 			actionMask?: number;
-			actionInput?: string;
+			actionInput?: ActionInput;
 			actionHeight?: { from: number; to: number; at: number; };
 			dead?: boolean;
 			sitting?: boolean;
@@ -1830,12 +1850,20 @@ export function createCharacterPresentation(
 			// Sample sockets from the admitted models at the current mechanical pose
 			// and authored callback cursor; flight ownership precedes hit feedback.
 			// The press's prediction is a cast of its own until the server adopts it.
-			const effectGameplay = gameplay?.castPrediction ?
-				{ ...gameplay, casts: [ ...gameplay.casts, gameplay.castPrediction ] } :
+			const effectGameplay = gameplay && (drawnLocal || gameplay.castPrediction) ?
+				{
+					localGid: gameplay.localGid,
+					pose: drawnLocal ?? gameplay.pose,
+					casts: gameplay.castPrediction ? [ ...gameplay.casts, gameplay.castPrediction ] : gameplay.casts,
+					vitals: gameplay.vitals,
+					questMarkers: gameplay.questMarkers,
+					inventory: gameplay.inventory,
+					attachedEffects: gameplay.attachedEffects
+				} :
 				gameplay;
 			const effectActors = effects.step(
 				effectEntities,
-				effectGameplay && drawnLocal ? { ...effectGameplay, pose: drawnLocal } : effectGameplay,
+				effectGameplay,
 				seconds,
 				resources.ready,
 				resources.duration,
@@ -2598,22 +2626,19 @@ export function createCharacterPresentation(
 						activePosture?.kind === "down" ?
 						0x10 :
 						(waiting ? 0 : 8 | (moving ? 0x200 : 0x100)) | (cast ? 4 : 0);
-					const input = [
-						dead,
-						sitting,
-						entity.mountedOn ?? 0,
-						entity.movementMode,
-						requestedMoving,
-						movementRevision,
-						activePosture?.kind ?? "",
-						waiting,
-						!!cast
-					].join( ":" );
+					const previousInput = state.actionInput;
+					const inputChanged = !previousInput || previousInput.dead !== dead ||
+						previousInput.sitting !== sitting || previousInput.mountedOn !== (entity.mountedOn ?? 0) ||
+						previousInput.movementMode !== entity.movementMode ||
+						previousInput.requestedMoving !== requestedMoving ||
+						previousInput.movementRevision !== movementRevision ||
+						previousInput.posture !== (activePosture?.kind ?? "") ||
+						previousInput.waiting !== waiting || previousInput.casting !== !!cast;
 					const commands: Parameters<typeof transitionActionStates>[2][number][] = [];
 					let mask = state.actionMask ?? derivedMask;
 					if ( !dead ) mask &= ~2;
 					mask = (mask & ~4) | (cast ? 4 : 0);
-					if ( state.actionInput !== undefined && state.actionInput !== input ) {
+					if ( previousInput && inputChanged ) {
 						if ( dead || activePosture?.kind === "down" || entity.mountedOn ) mask = derivedMask;
 						else if ( sitting ) commands.push( { kind: "enter", state: 6 } );
 						else if ( waiting ) commands.push( { kind: "leave", state: 3 } );
@@ -2638,7 +2663,19 @@ export function createCharacterPresentation(
 					);
 					state.actionRevision = movementRevision;
 					state.actionMask = refresh.mask;
-					state.actionInput = input;
+					if ( inputChanged ) {
+						state.actionInput = {
+							dead,
+							sitting,
+							mountedOn: entity.mountedOn ?? 0,
+							movementMode: entity.movementMode,
+							requestedMoving,
+							movementRevision,
+							posture: activePosture?.kind ?? "",
+							waiting,
+							casting: !!cast
+						};
+					}
 					state.actionMode = entity.movementMode;
 					if (
 						requestedMoving && refresh.effects.some( e => e.kind === "leave" && e.state === 9 ) &&
