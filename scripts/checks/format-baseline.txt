@@ -78,7 +78,6 @@ apps/client-next/src/engine/foundation/gameplay/event-environment.ts
 apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
 apps/client-next/src/engine/foundation/gameplay/gacha-catalog.ts
 apps/client-next/src/engine/foundation/gameplay/game-options.ts
-apps/client-next/src/engine/foundation/gameplay/gm-command.ts
 apps/client-next/src/engine/foundation/gameplay/ground-item.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/hunting.ts
