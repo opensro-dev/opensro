@@ -175,6 +175,7 @@ export interface CharacterFrameProbe {
 // The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
 // table CCDB10: none = 0, RT_FIXED = 1, RT_DUMMY = 2).
 const RIDER_ON_SADDLE = 0;
+const PROTECTED_ANIMATION_DISTANCE = 300;
 const RIDE_COPIES_RIDER = 2;
 
 const GOLD_DROP_MODELS = [
@@ -214,6 +215,7 @@ export function createCharacterPresentation(
 	}
 ) {
 	let probe: CharacterFrameProbe | undefined;
+	let frameWork: import("@/engine/contracts/runtime").FrameWork | undefined;
 	// One id index per published catalogue, as GlobalDataManager keeps it.
 	let concealmentCatalog: readonly import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata[] | undefined,
 		concealmentLookup: SkillLookup = skillLookup( undefined );
@@ -616,6 +618,14 @@ export function createCharacterPresentation(
 	return {
 		/*
 		================
+		frameWork
+		================
+		*/
+		frameWork( work: import("@/engine/contracts/runtime").FrameWork ) {
+			frameWork = work;
+		},
+		/*
+		================
 		mallOutfit / mallPreviewState
 		================
 		*/
@@ -794,15 +804,26 @@ export function createCharacterPresentation(
 			// Timed samples draw on the frame clock: the local player from its
 			// movement owner, every other character from its stepped path.
 			// Entity rows and the local movement state publish the same four fields.
-			type Sampled = Pick<EntityState, "poseAtMs" | "moving" | "movementPath" | "movementRevision">;
+			type Sampled = Pick<
+				EntityState,
+				"poseAtMs" | "moving" | "movementPath" | "movementRevision" | "movementTransition"
+			>;
 			const samples = new Map<number, import("./pose-presentation").SampleInput>();
 			const sample = ( gid: number, source: Sampled ) => {
 				if ( source.poseAtMs === undefined ) return;
 				samples.set( gid, {
 					atMs: source.poseAtMs,
 					revision: source.movementRevision ?? 0,
-					moving: !!source.moving,
-					...(source.movementPath ? { to: source.movementPath.to } : {})
+					moving: !!source.moving && source.movementTransition?.pathEligible !== false,
+					transition: source.movementTransition,
+					...(source.movementPath ?
+						{
+							from: source.movementTransition?.pathEligible === false ?
+								undefined :
+								source.movementPath.from,
+							to: source.movementPath.to
+						} :
+						{})
 				} );
 			};
 			for ( const entity of entities ) if ( !localMover( entity.gid ) ) sample( entity.gid, entity );
@@ -3042,7 +3063,16 @@ export function createCharacterPresentation(
 								resource.modifierSelectors ?? []
 							) :
 							undefined,
-						animationLod: { fraction: entityLod.fraction( entity.gid ), crowded: entityLod.crowded() },
+						animationLod: {
+							fraction: entityLod.fraction( entity.gid ),
+							crowded: entityLod.crowded(),
+							// Dispatch and gameplay run above even when a distant skeleton
+							// reuses its last sample. Protect combat and the whole ride.
+							optional: !localMover( entity.gid ) && !entity.mountedOn && !cast && !dead &&
+								entity.gid !== gameplay?.target && entity.gid !== gameplay?.targetPending &&
+								entityLod.distance( entity.gid ) > PROTECTED_ANIMATION_DISTANCE &&
+								!gameplay?.casts.some( cast => cast.target === entity.gid )
+						},
 						blindable: blindableCharacter( entity, gameplay?.localGid ),
 						groundItem: !!entity.groundItem,
 						previewClip: resource.clips.includes( armedIdle ) ? armedIdle : "stand",
@@ -3472,7 +3502,7 @@ export function createCharacterPresentation(
 					seconds,
 					resources.ready,
 					CHARACTER_ACTORS - next.size,
-					gid => entityLod.fraction( gid )
+					gid => frameWork?.level() && next.get( gid )?.animationLod?.optional ? 1 : entityLod.fraction( gid )
 				)
 			) next.set( actor.gid, actor );
 			for ( const holder of animationHolders ) holder.actor = next.get( holder.actor.gid )!;

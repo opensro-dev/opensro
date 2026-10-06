@@ -34,6 +34,7 @@ import { createPlatform } from "./platform/platform";
 import { createBugReport } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
+import { createFrameWork } from "./frame-work";
 import { createRenderer } from "./renderer/renderer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
@@ -120,6 +121,7 @@ export function startRuntime(
 			createAudio( assets, new URL( "/", import.meta.url ).href, random, Math.trunc( performance.now() ) >>> 0 )
 		);
 		const input = createInput();
+		const frameWork = createFrameWork();
 		const simulation = own( createSimulationHost() );
 		const renderer = own(
 			createRenderer( canvas, random, audio.enqueue, diagnostics )
@@ -430,6 +432,7 @@ export function startRuntime(
 		);
 		let releasePhase: string | undefined;
 		let simulationTimeMs = 0;
+		let workerDebtMs = 0;
 		const frameHistory: number[] = [], cpuHistory: number[] = [];
 		let lastFrameAt = 0, lastTelemetry = 0;
 		const stageTotals: Record<string, number> = {};
@@ -485,6 +488,10 @@ export function startRuntime(
 			// Whichever of RAF and a hidden delivery ran this frame, retire the other.
 			frameToken++;
 			const cpuStart = performance.now();
+			frameWork.begin( now, globalThis.document?.visibilityState !== "hidden" );
+			renderer.setFrameWork?.( frameWork );
+			characters.frameWork( frameWork );
+			let waitMs = 0;
 			frameId++;
 			stageAt = cpuStart;
 			frameProbe()?.begin( frameId );
@@ -532,6 +539,7 @@ export function startRuntime(
 				}
 				const snapshot = simulation.poll();
 				if ( snapshot ) {
+					workerDebtMs = snapshot.clock?.debtMs ?? 0;
 					latestSequence = snapshot.sequence;
 					simulationTimeMs = snapshot.timeMs;
 					acceptedInput = snapshot.acceptedInputSequence;
@@ -671,6 +679,20 @@ export function startRuntime(
 				// behind the drawn body's turning yaw (+0x88, written per step by
 				// 86CBA0), not the logical heading, which snaps on each click.
 				const cameraFollow = characters.cameraTarget();
+				const movement = presentation.gameplay();
+				if ( movement?.pose ) {
+					frameProbe()?.movement?.( {
+						atMs: now,
+						workerAtMs: movement.poseAtMs ?? simulationTimeMs,
+						workerDebtMs,
+						revision: movement.movementRevision ?? 0,
+						transition: movement.movementTransition,
+						logical: movement.pose,
+						displayed: cameraFollow?.pose ?? null,
+						pending: movement.pendingMoves,
+						acknowledged: movement.acknowledgedMove
+					} );
+				}
 				world.step(
 					[ "loading-world", "world" ].includes( frontendState.phase ) ?
 						presentation.gameplay()?.pose ?? null :
@@ -776,7 +798,10 @@ export function startRuntime(
 				markStage( "ui" );
 				renderer.setDamageText( characters.damageText() );
 				const rendered = renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() );
-				if ( rendered ) await rendered;
+				if ( rendered ) {
+					await rendered;
+				}
+				waitMs = renderer.readbackWaitMs?.() ?? 0;
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );
 				renderer.setTeleportGates( worldPresented ? presentation.entities() : [] );
@@ -819,11 +844,17 @@ export function startRuntime(
 				// frame cost; the callback span is this runtime's share of it.
 				if ( lastFrameAt ) sample( frameHistory, now - lastFrameAt );
 				lastFrameAt = now;
-				sample( cpuHistory, performance.now() - cpuStart );
+				const cpuMs = performance.now() - cpuStart - waitMs;
+				sample( cpuHistory, cpuMs );
+				frameWork.recordCpu( cpuMs );
+				frameProbe()?.characterCount( "cpu-ms", cpuMs );
+				frameProbe()?.characterCount( "readback-wait-ms", waitMs );
+				frameProbe()?.characterCount( "cosmetic-level", frameWork.level() );
 				if ( frameHistory.length && now - lastTelemetry >= TELEMETRY_INTERVAL_MS ) {
 					lastTelemetry = now;
 					const frameMs = average( frameHistory ), drawn = renderer.characterStats();
 					platform.presentTelemetry( {
+						overload: frameWork.stats(),
 						frameId,
 						stages: diagnostics.stages ?
 							Object.fromEntries(

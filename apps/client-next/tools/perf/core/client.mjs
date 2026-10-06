@@ -47,8 +47,23 @@ function instrument( { counts, spans } ) {
 		tally[key] = (tally[key] ?? 0) + value;
 	};
 	globalThis.__benchRows = [];
+	globalThis.__benchMovement = [];
 	globalThis.__benchTally = tally;
 	globalThis.__worldProbeFrameProfiler = {
+		/*
+		================
+		movement
+		================
+		*/
+		movement( sample ) {
+			const rows = globalThis.__benchMovement;
+			const root = globalThis.__benchRuntime, game = root?.gameplay();
+			sample.path = game?.movementPath;
+			const actor = root?.characterActors().find( actor => actor.gid === game?.localGid );
+			if ( actor ) sample.body = { pose: { ...actor.pose }, clip: actor.clip, mountedOn: actor.mountedOn };
+			rows.push( sample );
+			if ( rows.length > 4096 ) rows.splice( 0, 1024 );
+		},
 		detailBegin( stage ) {
 			if ( spans ) opened[stage] = now();
 		},
@@ -99,6 +114,7 @@ function instrument( { counts, spans } ) {
 		},
 		end() {
 			globalThis.__benchRows.push( [ now() - frameStart, worldEnd - worldStart, { ...tally } ] );
+			if ( globalThis.__benchRows.length > 16384 ) globalThis.__benchRows.splice( 0, 4096 );
 		}
 	};
 	if ( !counts ) return;
@@ -136,6 +152,7 @@ main-thread frame and world time.
 export async function measure( page, name, ms, drive ) {
 	await page.evaluate( () => {
 		globalThis.__benchRows.length = 0;
+		globalThis.__benchMovement.length = 0;
 		globalThis.__benchIntervals = [];
 		globalThis.__benchLoop = true;
 		let last = performance.now();
@@ -148,9 +165,13 @@ export async function measure( page, name, ms, drive ) {
 	} );
 	const started = Date.now();
 	await drive( () => Date.now() - started < ms );
-	const [intervals, rows] = await page.evaluate( () => {
+	const [intervals, rows, movement] = await page.evaluate( () => {
 		globalThis.__benchLoop = false;
-		return [ globalThis.__benchIntervals.slice( 2 ), globalThis.__benchRows.slice( 2 ) ];
+		return [
+			globalThis.__benchIntervals.slice( 2 ),
+			globalThis.__benchRows.slice( 2 ),
+			globalThis.__benchMovement
+		];
 	} );
 	const sorted = [ ...intervals ].sort( ( a, b ) => a - b ), at = q => sorted[Math.floor( (sorted.length - 1) * q )];
 	const mean = list => list.reduce( ( a, b ) => a + b, 0 ) / Math.max( 1, list.length );
@@ -162,10 +183,13 @@ export async function measure( page, name, ms, drive ) {
 		frames: intervals.length,
 		fps: 1000 / mean( intervals ),
 		p50: at( .5 ),
+		p95: at( .95 ),
 		p99: at( .99 ),
 		max: sorted.at( -1 ),
 		main: mean( rows.map( r => r[0] ) ),
 		world: mean( rows.map( r => r[1] ) ),
+		callbacksOver50Ms: rows.filter( r => (r[2]["cpu-ms"] ?? r[0]) > 50 ).length,
+		movement,
 		counts: tally
 	};
 }
@@ -179,7 +203,7 @@ corpse measures nothing. Revives it in place (rebirth choice 2) and waits
 for health.
 ================
 */
-async function revive( page ) {
+export async function revive( page ) {
 	const alive = () =>
 		page.evaluate( () => {
 			const game = globalThis.__benchRuntime.gameplay();
@@ -206,18 +230,32 @@ browser and page; close the browser when done. counts and spans are
 instrument's options.
 ================
 */
-export async function openClient( fixture, { counts = false, spans = false } = {} ) {
-	process.env.SRO_PROBE_UNLOCK_FPS = "1";
+export async function openClient(
+	fixture,
+	{ counts = false, spans = false, uncapped = true, cpuRate = 1, beforeLogin = undefined } = {}
+) {
+	process.env.SRO_PROBE_UNLOCK_FPS = uncapped ? "1" : "0";
 	await resetMissionMovementFixture( { characterName: CHARACTER, fixture, timeoutMs: 60000 } );
 	const { browser, page } = await launchProbeBrowser();
 	try {
 		await page.addInitScript( instrument, { counts, spans } );
-		await bootPlayableSession( page, CHARACTER );
+		await bootPlayableSession( page, CHARACTER, beforeLogin );
 		await page.evaluate( () => globalThis.__benchRuntime = globalThis.__playableRuntime );
 		await page.setViewportSize( VIEWPORT );
 		await revive( page );
 		await page.waitForTimeout( SETTLE_MS );
+		if ( cpuRate !== 1 ) {
+			const cdp = await page.context().newCDPSession( page );
+			await cdp.send( "Emulation.setCPUThrottlingRate", { rate: cpuRate } );
+		}
 	} catch ( error ) {
+		console.error(
+			"Client boot evidence:",
+			await page.evaluate( () => ({
+				status: document.querySelector( "output" )?.textContent,
+				session: globalThis.__playableRuntime?.sessionState()?.phase
+			}) ).catch( () => null )
+		);
 		await browser.close();
 		throw error;
 	}
@@ -295,11 +333,7 @@ export async function createCaptures( page, { dir = null, cpu = false, heap = fa
 		*/
 		async finish() {
 			if ( !tracing ) return;
-			const captured = await tracing.stop();
-			await writeFile(
-				trace,
-				JSON.stringify( { traceEvents: captured.traceEvents, metadata: captured.metadata } )
-			);
+			await tracing.stop( { rawOutputPath: trace } );
 		}
 	};
 }
