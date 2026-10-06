@@ -44,7 +44,10 @@ const SERVER_POSE_TOLERANCE = 1;
 // The client's movement command (movement.ts OP_PREDICTED_MOVE).
 const OP_PREDICTED_MOVE = 0x0009;
 const METRICS_URL = process.env.SRO_BENCH_TRANSPORT_METRICS ?? "http://127.0.0.1:8788/transport/metrics";
-const ANCHOR_TIMEOUT_MS = 15000;
+const SETTLE_TIMEOUT_MS = 15000;
+const SETTLE_MARGIN_MS = 250;
+// The server's movement answer (movement.ts receipt).
+const OP_PREDICTED_MOVE_RESULT = 0x000a;
 
 /*
 ================
@@ -86,23 +89,42 @@ function movementState( page ) {
 
 /*
 ================
+settle
+
+Polls until the worker has no move in flight and no receipt pending, then
+returns that state. A fixed wait cannot tell a slow settle from a settled
+one, and the observatory comparison is only meaningful after it.
+================
+*/
+async function settle( page ) {
+	const until = Date.now() + SETTLE_TIMEOUT_MS;
+	while ( Date.now() < until ) {
+		const state = await movementState( page );
+		if ( !state.moving && state.pendingMoves === 0 ) return state;
+		await page.waitForTimeout( 50 );
+	}
+	throw Error( "movement did not settle" );
+}
+
+/*
+================
 returnToAnchor
 
-Walks back to the lane's start point and waits until the move is settled, so
-every step starts on the same open ground instead of drifting into an edge.
+Walks back to the lane's start point and requires arrival on its wire
+(truncated) position in the same region, so every step starts on the same
+open ground instead of drifting into an edge.
 ================
 */
 async function returnToAnchor( page, anchor ) {
 	await page.evaluate( destination => {
 		globalThis.__benchRuntime.session( { kind: "gameplay", command: { kind: "move", destination } } );
 	}, anchor );
-	const until = Date.now() + ANCHOR_TIMEOUT_MS;
-	while ( Date.now() < until ) {
-		await page.waitForTimeout( 100 );
-		const state = await movementState( page );
-		if ( !state.moving && state.pendingMoves === 0 ) return;
-	}
-	throw Error( "the character did not return to the stall anchor" );
+	const { pose } = await settle( page );
+	assert.equal( pose.regionId, anchor.regionId, "the anchor return left the lane's region" );
+	assert.ok(
+		Math.hypot( pose.x - Math.trunc( anchor.x ), pose.z - Math.trunc( anchor.z ) ) <= SERVER_POSE_TOLERANCE,
+		`the character did not reach the stall anchor: ${JSON.stringify( { pose, anchor } )}`
+	);
 }
 
 /*
@@ -142,10 +164,16 @@ async function stallTurns( page, lane, name ) {
 			await returnToAnchor( page, anchor );
 			await moveTo( page, legs.approach );
 			await page.waitForTimeout( 400 );
+			const mark = (await faultLog( page )).logged;
 			if ( ms > 0 ) await stall( ms );
 			await page.waitForTimeout( Math.round( ms / 3 ) );
 			const requested = await moveTo( page, action === "turn" ? legs.turn : { x: 0, z: 0 } );
-			await page.waitForTimeout( ms + 900 + OBSERVATORY_CACHE_MS );
+			// Past every hold (bidirectional holds the downlink for 2 ms), then settled,
+			// then past the observatory cache so its snapshot postdates the settle.
+			await page.waitForTimeout( 2 * ms );
+			const settledAtMs = (await settle( page )).atMs;
+			await page.waitForTimeout( OBSERVATORY_CACHE_MS + SETTLE_MARGIN_MS );
+			const held = (await faultLog( page, mark )).held;
 			const client = await movementState( page );
 			const server = await serverPose( name );
 			steps.push( {
@@ -154,6 +182,8 @@ async function stallTurns( page, lane, name ) {
 				requested,
 				// movement.ts truncates the 0x7738 destination to integer region units.
 				wire: { x: Math.trunc( requested.x ), y: Math.trunc( requested.y ), z: Math.trunc( requested.z ) },
+				settledAtMs,
+				held,
 				client,
 				server,
 				xz: Math.hypot( server.x - client.pose.x, server.z - client.pose.z ),
@@ -187,6 +217,28 @@ async function serverPose( name ) {
 		capturedAfterMs: fetchedAtMs - OBSERVATORY_CACHE_MS,
 		fetchedAtMs
 	};
+}
+
+/*
+================
+assertStep
+
+One settled step: same region, nothing in flight, and, for a nonzero hold,
+proof that this step's own frames were delayed - the move answer on the
+downlink and, in the bidirectional lane, the move command on the uplink.
+================
+*/
+function assertStep( lane, step ) {
+	const label = `${lane} ${step.ms} ms ${step.action}`;
+	assert.equal( step.server.regionId, step.client.pose.regionId, `${label}: regions differ` );
+	assert.ok( !step.client.moving && step.client.pendingMoves === 0, `${label}: not settled` );
+	if ( step.ms === 0 ) return;
+	const held = ( direction, opcode ) =>
+		step.held.some( entry => entry.direction === direction && entry.opcode === opcode );
+	assert.ok( held( "rx", OP_PREDICTED_MOVE_RESULT ), `${label}: no move answer was held` );
+	if ( lane === "bidirectional-delay" ) {
+		assert.ok( held( "tx", OP_PREDICTED_MOVE ), `${label}: no move command was held` );
+	}
 }
 
 /*
@@ -293,27 +345,7 @@ async function run( options ) {
 					)
 				);
 				assert.equal( result.faults.transport, "websocket", "the stall ran on the client's real WebSocket" );
-				// Only this lane's holds count; the log runs across lanes.
-				const held = direction => result.faults.held.filter( entry => entry.direction === direction );
-				assert.ok( held( "rx" ).length > 0, "the stall held real downlink frames" );
-				if ( lane === "bidirectional-delay" ) {
-					assert.ok(
-						held( "tx" ).some( entry => entry.opcode === OP_PREDICTED_MOVE ),
-						"the bidirectional stall held a movement command"
-					);
-				}
-				assert.equal( server.regionId, local.logical.regionId, JSON.stringify( result.serverPose ) );
-				// y is recorded, not asserted: whether the server's y is the wire Y
-				// or a surface height is still open.
-				if ( lane === "edge-delay" ) {
-					// An edge lane whose walks all arrived never touched the edge.
-					assert.ok(
-						result.stalls.some( step =>
-							Math.hypot( step.client.pose.x - step.wire.x, step.client.pose.z - step.wire.z ) > 1
-						),
-						"the edge lane was never blocked"
-					);
-				}
+				for ( const step of result.stalls ) assertStep( lane, step );
 				for ( const step of [ ...result.stalls, result.serverPose ] ) {
 					assert.ok(
 						step.xz <= SERVER_POSE_TOLERANCE,
