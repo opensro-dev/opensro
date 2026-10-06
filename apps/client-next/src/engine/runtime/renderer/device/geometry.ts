@@ -80,7 +80,7 @@ export function createGeometryResources(
 	const reflectedBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
 	const geometryBuffers = new Map<GeometryDraw, GPUBuffer[]>();
 	// Released draws and their release records (releasedDraw).
-	const releasedDraws = new WeakMap<GeometryDraw, import("../internal/gpu-contract").DrawRelease>();
+	const releasedDraws = new WeakMap<GeometryDraw, { atMs: number; error: Error; }>();
 	// Every buffer is labelled: a validation error names the resource it rejects.
 	const worldUniform = created.createBuffer( {
 		label: "geometry-world",
@@ -874,7 +874,8 @@ export function createGeometryResources(
 		================
 		*/
 		releasedDraw( draw: GeometryDraw ) {
-			return releasedDraws.get( draw );
+			const released = releasedDraws.get( draw );
+			return released ? { atMs: released.atMs, stack: released.error.stack ?? "" } : undefined;
 		},
 		/*
 		================
@@ -887,7 +888,9 @@ export function createGeometryResources(
 			if ( !releasedDraws.has( draw ) ) {
 				releasedDraws.set( draw, {
 					atMs: performance.now(),
-					stack: new Error( "geometry release" ).stack ?? ""
+					// Preserve the releasing call site, but format its stack only if a
+					// stale draw is actually reported. Region retirement releases many.
+					error: new Error( "geometry release" )
 				} );
 			}
 			shadows?.forget( draw );

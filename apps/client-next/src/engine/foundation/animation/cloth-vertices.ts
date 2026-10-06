@@ -22,6 +22,7 @@ export function createClothVertices( primitive: { geometry: Geometry; cloth?: Cl
 	const simulation = createCloth( data, mesh.positions );
 	const anchors = new Float32Array( mesh.positions.length );
 	const vertices = packGeometryVertices( mesh );
+	const skinned = !!mesh.joints && !!mesh.weights;
 	let lastTime: number | undefined;
 	return {
 		/*
@@ -37,7 +38,12 @@ export function createClothVertices( primitive: { geometry: Geometry; cloth?: Cl
 			enabled: boolean,
 			motion: { direction: readonly number[]; speed: number; }
 		) {
-			for ( let i = 0; i < mesh.positions.length / 3; i++ ) {
+			// Unskinned meshes have immutable model-space anchors. Option changes
+			// still reset the simulation below, using those original anchors.
+			for ( let i = 0; (skinned || lastTime === undefined) && i < mesh.positions.length / 3; i++ ) {
+				// Once initialized, free vertices belong to the simulation. Their
+				// skeleton anchors and normals are unused until animation is disabled.
+				if ( enabled && lastTime !== undefined && data.pins[i] === 0 ) continue;
 				for ( let axis = 0; axis < 3; axis++ ) {
 					let position = 0, normal = 0;
 					if ( mesh.joints && mesh.weights ) {

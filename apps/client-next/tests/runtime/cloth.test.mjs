@@ -130,3 +130,74 @@ test("cloth admission rejects invalid indices, duplicate order and nonfinite for
 	}
 	assert.deepEqual( clothData( fixture(), 2 ), fixture() );
 });
+
+test("animated cloth matches fully skinned anchors through motion, stalls and option changes", () => {
+	for ( const pin of [ 1, 2 ] ) {
+		const data = fixture( { pins: [ pin, 0 ], constraints: [ [ 0, 1, 1 ] ] } );
+		const geometry = {
+			positions: rest,
+			indices: new Uint32Array( [ 0, 1, 0 ] ),
+			transform: identity(),
+			joints: new Uint32Array( 8 ),
+			weights: new Float32Array( [ 1, 0, 0, 0, 1, 0, 0, 0 ] )
+		};
+		let actualRandom = 0, expectedRandom = 0, seconds = 0;
+		const primitive = { geometry, cloth: data };
+		const skin = createClothVertices( primitive, () => 0 );
+		const actual = createClothVertices( primitive, () => actualRandom++ );
+		const expected = createCloth( data, rest );
+		const anchors = new Float32Array( rest.length );
+		const motion = { direction: [ 1, 0, 1 ], speed: .6 };
+		for ( let frame = 0; frame < 60; frame++ ) {
+			const before = seconds;
+			seconds += [ 0, .016, .05, .1, .3, 1 ][frame % 6];
+			const enabled = frame % 11 < 8, palette = identity();
+			palette[12] = Math.sin( frame );
+			palette[13] = Math.cos( frame );
+			palette[0] = palette[5] = frame % 2 ? 1.2 : 1;
+			const skinned = skin.update( palette, seconds, false, motion );
+			for ( let vertex = 0; vertex < 2; vertex++ ) {
+				anchors.set( skinned.subarray( vertex * 14, vertex * 14 + 3 ), vertex * 3 );
+			}
+			const positions = expected.advance( {
+				anchors,
+				deltaMs: frame === 0 ? 0 : Math.trunc( seconds * 1000 ) - Math.trunc( before * 1000 ),
+				enabled,
+				...motion,
+				random: () => expectedRandom++
+			} );
+			const result = actual.update( palette, seconds, enabled, motion );
+			for ( let vertex = 0; vertex < 2; vertex++ ) {
+				assert.deepEqual(
+					result.subarray( vertex * 14, vertex * 14 + 3 ),
+					positions.subarray( vertex * 3, vertex * 3 + 3 )
+				);
+				if ( !enabled || vertex === 0 || frame === 0 ) {
+					assert.deepEqual(
+						result.subarray( vertex * 14 + 3, vertex * 14 + 6 ),
+						skinned.subarray( vertex * 14 + 3, vertex * 14 + 6 )
+					);
+				}
+			}
+			assert.equal( actualRandom, expectedRandom );
+		}
+	}
+});
+
+test("unskinned cloth restores immutable anchors after animated motion", () => {
+	const geometry = {
+		positions: rest,
+		indices: new Uint32Array( [ 0, 1, 0 ] ),
+		transform: identity()
+	};
+	const cloth = createClothVertices( { geometry, cloth: fixture() }, () => 1 );
+	const palette = new Float32Array( 0 ), motion = { direction: [ 0, 0, 1 ], speed: 0 };
+	cloth.update( palette, 0, true, motion );
+	assert.ok( cloth.update( palette, .1, true, motion )[15] < 0 );
+	const restored = cloth.update( palette, .2, false, motion );
+	assert.deepEqual( restored.subarray( 0, 3 ), rest.subarray( 0, 3 ) );
+	assert.deepEqual( restored.subarray( 14, 17 ), rest.subarray( 3, 6 ) );
+	assert.deepEqual( restored.subarray( 17, 20 ), Float32Array.of( 0, 1, 0 ) );
+	assert.equal( cloth.update( palette, .2, true, motion )[15], 0 );
+	assert.ok( cloth.update( palette, .3, true, motion )[15] < 0 );
+});
