@@ -29,10 +29,10 @@ received-to-shot interval increase from 416 ms before the replacement to
 The successful capture reported no page errors or caught exceptions. An
 initial post-restart login timeout is excluded from gameplay evidence.
 
-The wider skill-column/handler audit is still in progress. Missing column
-constants are not by themselves missing features: other parsers own targets,
-encoded parameters, UI placement and descriptions. This timing correction
-does not establish equivalence for all those owners.
+The skill-column/handler follow-up below records the additional fixes and
+metadata decisions. Missing column constants are not by themselves missing
+features: other parsers own targets, encoded parameters, UI placement and
+descriptions. These checks do not establish whole-program equivalence.
 
 ## Column and handler follow-up
 
@@ -198,8 +198,8 @@ match the port's pose and natural-exit envelopes. Tests cover status apply and
 clear publication, entry values, mounted routing, malformed updates, despawn
 and replacement, plus preserving an existing installation across a rate update.
 The full server gate (including race and lint), all 11 client gates and 13
-source gates passed. This follow-up has not yet been exercised against the
-running local server binary; the Vite client serves the current source.
+source gates passed. The final local build was exercised by the connected verification below.
+The Vite client serves this isolated worktree.
 
 ## Phase ownership and replacement
 
@@ -255,5 +255,59 @@ Evidence establishes the investigated control-flow rules and tested numerical
 cases, not bit-exact equivalence for every arbitrary frame sequence. Tiny
 native float remainders at zero weight are tolerated by the oracle comparison.
 An original-client/original-server visual comparison remains unperformed.
-The localhost Vite client serves these changes; the running local server binary
-has not been restarted with the preceding action-speed publication changes.
+The localhost Vite client and local Nomad gameworld both include these changes.
+The final build identity and connected evidence are recorded below.
+
+## Final connected verification (2026-10-06)
+
+The local Nomad gameworld ran source commit `980a5f9f`, executable SHA-256
+`5fa27b880a8f9818c5cc5be188799267c9a20a5675090c44fd6e55b0f67877a4`.
+CodexProbe walked through Jangan's south gate using normal movement commands
+and selected living Mangyang through viewport clicks. The character had
+upgraded Anti Devil to 952; obsolete-rank requests are excluded.
+
+[The compact capture](evidence/skill-timing-20261006.json) retains both cast
+identities, native protocol frames, receive/release times and one-shot layer
+samples. The full local capture is `.state/sox-visuals/cast-timing-final-verified.json`;
+its SHA-256 is recorded in the compact capture.
+
+- Anti Devil 952: 124 samples, 992 ms between received cast and shot, successful
+  505-damage fatal result. READY and SHOT both held cursor zero during entry
+  (9 and 10 sampled partial-weight frames respectively).
+- Cold Wave 1152: 314 samples including ordinary approach into range, 96 ms
+  between received cast and shot, successful zero-damage status-skill result.
+  Its one-shot held cursor zero during entry in 8 sampled partial-weight frames.
+- Both remained in world throughout; no page errors or caught exceptions.
+  Worker-level WebSocket capture retained 219 frames, including both requests,
+  accepted casts and releases. Earlier disconnected attempts are excluded.
+- Fresh `SRO_NATIVE_ACTION_ORACLE=1` action-schedule and cast-motion-census
+  execution passed all 15 tests, including all 277 authored player phase clips.
+
+The metadata follow-up inspected 28 consumers of the extended-info lookup
+wrappers (`7EFE50` and codename lookup `7E0690`), in addition to the earlier
+52 direct-getter callers. Their apparent +68/+80 accesses were stack locals.
+An executable-section offset scan also checked direct +6FC/+714/+788 access
+and +694 interior-pointer construction; within the skill-record owners these
+are parsing, construction, destruction or the getter, not another timer or
+board dimension. Newly followed codename lookup, adjacent-rank linkage,
+original-name resolution, use-requirement formatting and container helpers
+were labeled. Client snapshot 405 was read back and verified.
+
+The decision for columns 10/15/58 remains no additional runtime behavior in
+this v1.150 port. That is a documented inference from the traced consumers,
+not a proof against every possible alias or indirect call in the executable.
+
+## Original executable comparison prerequisite
+
+The existing setup was located at `../server/native-go-server/Start-Local.ps1`.
+Its README and `server.go` agree: it supports the original client's login,
+world entry, population display and walking, but has no combat, skill learning,
+or learned attack skills. Unsupported gameplay packets receive no fabricated
+reply. `../server/native-server-reimplementation` is an incomplete C++
+reconstruction, not an available original game-server deployment.
+
+Consequently that setup cannot currently produce an original-client skill
+capture. A combat-capable native-compatible server is required for a renderer
+comparison; original-server timing additionally requires the original server.
+The original-byte animation oracle is available and passed, but must not be
+reported as an original-client/original-server visual comparison.

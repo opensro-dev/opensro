@@ -1,0 +1,268 @@
+{
+  "date": "2026-10-06",
+  "sourceCommit": "980a5f9ff4e69f40da85bc7c927966efe447b387",
+  "serverSha256": "5fa27b880a8f9818c5cc5be188799267c9a20a5675090c44fd6e55b0f67877a4",
+  "character": "CodexProbe",
+  "rawCaptureSha256": "d23409ce1c3503e22031efb68825ca6ceb2bfcabb5a0e25bdecc366c136c6aef",
+  "pageErrors": [],
+  "caughtExceptions": [],
+  "runs": [
+    {
+      "skillId": 952,
+      "targetGid": 442004,
+      "targetName": "Mangyang",
+      "connectedEverySample": true,
+      "sampleCount": 124,
+      "receivedToShotMs": 992,
+      "cast": {
+        "token": 27,
+        "caster": 100005,
+        "target": 442004,
+        "skill": 952,
+        "damage": 505,
+        "fatal": true,
+        "impacts": [
+          {
+            "type": 0,
+            "damage": 505,
+            "flags": 1,
+            "fatal": true,
+            "secondaryAmount": 0,
+            "stage": 0
+          }
+        ],
+        "results": [
+          {
+            "target": 442004,
+            "impacts": [
+              {
+                "type": 0,
+                "damage": 505,
+                "flags": 1,
+                "fatal": true,
+                "secondaryAmount": 0,
+                "stage": 0
+              }
+            ]
+          }
+        ],
+        "resultStageCount": 1,
+        "receivedAtMs": 28128,
+        "shotAtMs": 29120,
+        "cancellationRequestedAtMs": 29712,
+        "cancelledAtMs": 29712
+      },
+      "oneShotLayers": [
+        {
+          "clip": "native:bow:40",
+          "first": {
+            "sampleAtMs": 65.79999995231628,
+            "clip": "native:bow:40",
+            "time": 0,
+            "loop": false,
+            "rate": 1,
+            "weight": 0.16349999999999199,
+            "lane": "event",
+            "activation": {
+              "started": 29.1993
+            }
+          },
+          "last": {
+            "sampleAtMs": 1081.2999999523163,
+            "clip": "native:bow:40",
+            "time": 0.665,
+            "loop": false,
+            "rate": 1,
+            "weight": 0.057499999999999996,
+            "lane": "event",
+            "activation": {
+              "started": 29.1993
+            }
+          },
+          "entryHoldSamples": 9
+        },
+        {
+          "clip": "native:bow:120",
+          "first": {
+            "sampleAtMs": 1047.3999999761581,
+            "clip": "native:bow:120",
+            "time": 0,
+            "loop": false,
+            "rate": 1,
+            "weight": 0.14299999999998647,
+            "lane": "event",
+            "activation": {
+              "started": 30.191900000000004
+            }
+          },
+          "last": {
+            "sampleAtMs": 1797.8999999761581,
+            "clip": "native:bow:120",
+            "time": 0.532,
+            "loop": false,
+            "rate": 1,
+            "weight": 0.04450000000000731,
+            "lane": "event",
+            "activation": {
+              "started": 30.191900000000004
+            }
+          },
+          "entryHoldSamples": 10
+        }
+      ]
+    },
+    {
+      "skillId": 1152,
+      "targetGid": 448027,
+      "targetName": "Mangyang",
+      "connectedEverySample": true,
+      "sampleCount": 314,
+      "receivedToShotMs": 96,
+      "cast": {
+        "token": 28,
+        "caster": 100005,
+        "target": 448027,
+        "skill": 1152,
+        "damage": 0,
+        "fatal": false,
+        "impacts": [
+          {
+            "type": 0,
+            "damage": 0,
+            "flags": 1,
+            "fatal": false,
+            "secondaryAmount": 0
+          }
+        ],
+        "results": [
+          {
+            "target": 448027,
+            "impacts": [
+              {
+                "type": 0,
+                "damage": 0,
+                "flags": 1,
+                "fatal": false,
+                "secondaryAmount": 0
+              }
+            ]
+          }
+        ],
+        "resultStageCount": 1,
+        "receivedAtMs": 44016,
+        "shotAtMs": 44112,
+        "cancellationRequestedAtMs": 45008,
+        "cancelledAtMs": 45008
+      },
+      "oneShotLayers": [
+        {
+          "clip": "native:default:27",
+          "first": {
+            "sampleAtMs": 3717.7000000476837,
+            "clip": "native:default:27",
+            "time": 0,
+            "loop": false,
+            "rate": 1,
+            "weight": 0.2050000000000196,
+            "lane": "event",
+            "activation": {
+              "started": 45.0899
+            }
+          },
+          "last": {
+            "sampleAtMs": 4843.800000011921,
+            "clip": "native:default:27",
+            "time": 0.9920999999999963,
+            "loop": false,
+            "rate": 1,
+            "weight": 0.0024999999999999467,
+            "lane": "event",
+            "activation": {
+              "started": 45.0899
+            }
+          },
+          "entryHoldSamples": 8
+        }
+      ]
+    }
+  ],
+  "combatFrames": [
+    {
+      "direction": "sent",
+      "cdpMonotonicSeconds": 409923.773686,
+      "opcode": "0x72cd",
+      "hex": "cd720104b80300000194be0600"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409923.78061,
+      "opcode": "0xb2cd",
+      "hex": "cdb20101"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409924.77152,
+      "opcode": "0xb505",
+      "hex": "05b5011b00000094be060001010194be06008001f9010000000000"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409925.367119,
+      "opcode": "0xb505",
+      "hex": "05b502001b000000"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409925.367297,
+      "opcode": "0xb2cd",
+      "hex": "cdb20201"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409925.465768,
+      "opcode": "0xb2cd",
+      "hex": "cdb20200"
+    },
+    {
+      "direction": "sent",
+      "cdpMonotonicSeconds": 409936.018377,
+      "opcode": "0x72cd",
+      "hex": "cd72010480040000011bd60600"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409936.022946,
+      "opcode": "0xb2cd",
+      "hex": "cdb20101"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409939.666524,
+      "opcode": "0x3453",
+      "hex": "53341bd6060000004843"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409939.763843,
+      "opcode": "0xb505",
+      "hex": "05b5011c0000001bd6060000"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409940.664145,
+      "opcode": "0xb505",
+      "hex": "05b502001c000000"
+    },
+    {
+      "direction": "received",
+      "cdpMonotonicSeconds": 409940.6643,
+      "opcode": "0xb2cd",
+      "hex": "cdb20200"
+    }
+  ],
+  "limits": [
+    "Browser transport and scheduling contribute to observed timestamps.",
+    "Original bytes were executed by the separate action-schedule oracle; this is not a capture of the original client renderer.",
+    "The installed native-go-server is a walking sandbox without combat or learned attack skills. No original-client/original-server skill comparison is claimed."
+  ]
+}
