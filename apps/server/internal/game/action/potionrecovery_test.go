@@ -144,3 +144,64 @@ func TestPotionReuseCanPrecedeFinalRecoveryPulse(t *testing.T) {
 		t.Fatalf("two five-pulse potions lost or duplicated credit: HP %d", enterworld.CurrentHP(c))
 	}
 }
+
+/*
+================
+TestPotionQueuePreservesSameResidentAndRejectsStaleRetirement
+
+A same-session scene admission keeps the actor's queue. A delayed close
+from the replaced transport must not clear the replacement actor's queue.
+================
+*/
+func TestPotionQueuePreservesSameResidentAndRejectsStaleRetirement(t *testing.T) {
+	for _, transition := range []string{"same-session-entry", "old-session-close"} {
+		t.Run(transition, func(t *testing.T) {
+			c, items, body := recoveryFixture(1)
+			items["ITEM_ETC_HP_POTION_01"].RecoveryHP = 20
+			rt, clock := newTestRuntime(c, items)
+			// wiring_sessions.go binds actor ownership before recovery. That
+			// owner rejects the displaced transport's late close notification.
+			rt.BindPetSession(testDivision, c, 2)
+			rt.BindRecoverySession(testDivision, c, 2)
+			rt.HandleItemUse(testDivision, c, body)
+			if transition == "same-session-entry" {
+				rt.BindRecoverySession(testDivision, c, 2)
+			} else {
+				rt.ForgetCharacterSession(testDivision, c.Name, 1)
+			}
+			clock.Advance(time.Second)
+			rt.recoverPotionResident(recoveryKey{testDivision, strings.ToLower(c.Name)}, clock.NowMs())
+			if enterworld.CurrentHP(c) != 9 {
+				t.Fatalf("%s lost the current resident's pulse: %d", transition, enterworld.CurrentHP(c))
+			}
+		})
+	}
+}
+
+/*
+================
+TestPotionQueueOverdueTicksAdvanceOnePulsePerHostUpdate
+================
+*/
+func TestPotionQueueOverdueTicksAdvanceOnePulsePerHostUpdate(t *testing.T) {
+	c, items, body := recoveryFixture(1)
+	items["ITEM_ETC_HP_POTION_01"].RecoveryHP = 20
+	rt, clock := newTestRuntime(c, items)
+	rt.BindRecoverySession(testDivision, c, 1)
+	rt.HandleItemUse(testDivision, c, body)
+	key := recoveryKey{testDivision, strings.ToLower(c.Name)}
+	clock.Advance(10 * time.Second)
+	rt.recoverPotionResident(key, clock.NowMs())
+	if enterworld.CurrentHP(c) != 9 {
+		t.Fatal("late update caught up more than one queued pulse")
+	}
+	rt.recoverPotionResident(key, clock.NowMs())
+	if enterworld.CurrentHP(c) != 9 {
+		t.Fatal("same host timestamp replayed a pulse")
+	}
+	clock.Advance(time.Millisecond)
+	rt.recoverPotionResident(key, clock.NowMs())
+	if enterworld.CurrentHP(c) != 13 {
+		t.Fatal("overdue timer lost its phase")
+	}
+}

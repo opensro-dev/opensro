@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+register.go - register
+
+===========================================================================
+*/
 package guild
 
 import (
@@ -44,6 +51,11 @@ type GuildManagers interface {
 	GuildManagerInRange(divisionID string, actor *enterworld.Character, gid uint32) bool
 }
 
+/*
+================
+Register
+================
+*/
 func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers GuildManagers, unions *UnionRuntime) {
 	hub.Handle(OpGuildCreateRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
@@ -143,6 +155,9 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 		}
 		guildID := characterGuild(actor)
 		outcome := HandleBreak(deps, divisionID, actor, payload)
+		if outcome.Refusal != "" && outcome.AckPayload != nil {
+			_ = s.Send(OpGuildBreakAck, outcome.AckPayload)
+		}
 		if outcome.Refusal != "" {
 			log.Debugf("guild: 0x766E (break) refused for %s: %s", actor.Name, outcome.Refusal)
 			return
@@ -218,6 +233,11 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 
 // sendToOnlineMembers pushes one prebuilt frame to the live session of
 // every named member (presence-targeted; offline names simply miss).
+/*
+================
+sendToOnlineMembers
+================
+*/
 func sendToOnlineMembers(presence Presence, divisionID string, names []string, payload []byte) {
 	if presence == nil {
 		return

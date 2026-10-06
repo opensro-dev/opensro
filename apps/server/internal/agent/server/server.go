@@ -28,6 +28,7 @@ import (
 	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/agent/bugreport"
 	"opensro.online/server/internal/cluster/shard"
+	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/security/workload"
@@ -62,6 +63,8 @@ Config
 ================
 */
 type Config struct {
+	History                 *history.Journal
+	HistoryHandler          http.Handler
 	Accounts                AccountAuthority
 	Catalog                 *shard.Catalog
 	Directory               *shard.Directory
@@ -82,6 +85,8 @@ Server
 ================
 */
 type Server struct {
+	history                 *history.Journal
+	historyHandler          http.Handler
 	accounts                AccountAuthority
 	catalog                 *shard.Catalog
 	directory               *shard.Directory
@@ -99,6 +104,8 @@ type Server struct {
 	passwordFailures passwordFailures
 	readiness        *readiness.Gate
 	bugReports       *bugreport.Service
+	// startedAt is when this Agent was built, for /title/build's uptime.
+	startedAt time.Time
 }
 
 /*
@@ -150,6 +157,8 @@ func New(config Config) (*Server, error) {
 		origins[origin] = true
 	}
 	return &Server{
+		history:                 config.History,
+		historyHandler:          config.HistoryHandler,
 		accounts:                config.Accounts,
 		catalog:                 config.Catalog,
 		directory:               config.Directory,
@@ -165,6 +174,7 @@ func New(config Config) (*Server, error) {
 		incidentReports:         newLoginLimiter(now),
 		readiness:               config.Readiness,
 		bugReports:              config.BugReports,
+		startedAt:               now(),
 	}, nil
 }
 
@@ -175,6 +185,9 @@ Handler
 */
 func (server *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	if server.historyHandler != nil {
+		mux.Handle(history.Path, server.historyHandler)
+	}
 	mux.HandleFunc(readiness.PathHealth, readiness.HealthHandler)
 	mux.HandleFunc(readiness.PathReady, server.handleReady)
 	// Browser routes answer only the release protocol this build speaks
@@ -194,6 +207,7 @@ func (server *Server) Handler() http.Handler {
 	mux.Handle("/title/logout", browser(http.HandlerFunc(server.handleBrowserLogout)))
 	mux.Handle("/title/character-select", browser(http.HandlerFunc(server.handleBrowserCharacterSelect)))
 	mux.Handle(bugReportPath, browser(server.requireRunning(http.HandlerFunc(server.handleBugReport))))
+	mux.Handle(buildPath, browser(http.HandlerFunc(server.handleBuild)))
 	mux.Handle(clientIncidentPath, browser(http.HandlerFunc(server.handleClientIncident)))
 	mux.HandleFunc("/internal/cluster/shards/heartbeat", server.handleHeartbeat)
 	mux.HandleFunc("/internal/cluster/shards/release", server.handleLeaseRelease)

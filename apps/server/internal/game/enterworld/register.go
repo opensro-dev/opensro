@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+register.go - service state and lifecycle integration
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -21,12 +28,22 @@ const EnterWorldBlobVersion = 1
 // {"v":1,"bootstrap":<envelope minus packets>}. The packets do NOT ride the
 // blob - after the result frame they arrive as ordinary native frames in
 // order, which is the whole point of the transport cutover.
+/*
+================
+enterWorldBlob
+================
+*/
 type enterWorldBlob struct {
 	V         int             `json:"v"`
 	Bootstrap json.RawMessage `json:"bootstrap"`
 }
 
 // EnterWorldBlob renders the versioned blob for one bootstrap result.
+/*
+================
+EnterWorldBlob
+================
+*/
 func EnterWorldBlob(result *BootstrapResult) ([]byte, error) {
 	envelope, err := json.Marshal(result)
 	if err != nil {
@@ -67,6 +84,11 @@ func EnterWorldBlob(result *BootstrapResult) ([]byte, error) {
 
 // browserEntryPayload is shared by first entry and resident-world replacement.
 // The browser consumes this projection, not the native character chunk schema.
+/*
+================
+browserEntryPayload
+================
+*/
 func browserEntryPayload(result *BootstrapResult, references *BrowserReferences) ([]byte, error) {
 	var blob []byte
 	var err error
@@ -83,6 +105,11 @@ func browserEntryPayload(result *BootstrapResult, references *BrowserReferences)
 
 // EnterWorldOutcome is HandleEnterWorld's transport-agnostic answer: the
 // encoded 0x0007 payload plus the native frames to push after it, in order.
+/*
+================
+EnterWorldOutcome
+================
+*/
 type EnterWorldOutcome struct {
 	OK bool
 	// DivisionID/CharacterName are the resolved session identity bind
@@ -100,7 +127,21 @@ type EnterWorldOutcome struct {
 // HandleEnterWorld runs the enter-world bind over a decoded-or-raw
 // OpEnterWorld payload. Pure with respect to the transport: the Hub glue in
 // RegisterEnterWorld only moves the outcome onto the session.
+/*
+================
+HandleEnterWorld
+================
+*/
 func HandleEnterWorld(deps *Deps, payload []byte) EnterWorldOutcome {
+	return handleEnterWorldWithDiagnostics(deps, payload, "")
+}
+
+/*
+================
+handleEnterWorldWithDiagnostics
+================
+*/
+func handleEnterWorldWithDiagnostics(deps *Deps, payload []byte, session string) EnterWorldOutcome {
 	decoded, err := transport.DecodeEnterWorld(payload)
 	if err != nil {
 		failure := Failure(nativeErrorInvalidRequest, "malformedEnterWorld")
@@ -113,6 +154,7 @@ func HandleEnterWorld(deps *Deps, payload []byte) EnterWorldOutcome {
 	if result.NativeResult != 1 {
 		return enterWorldFailureOutcome(result)
 	}
+	result.DiagnosticSessionID = session
 	resultPayload, err := browserEntryPayload(result, deps.BrowserReferences)
 	if err != nil {
 		failure := Failure(nativeErrorInvalidRequest, "blobEncodeFailed")
@@ -152,6 +194,11 @@ func HandleEnterWorld(deps *Deps, payload []byte) EnterWorldOutcome {
 	}
 }
 
+/*
+================
+enterWorldFailureOutcome
+================
+*/
 func enterWorldFailureOutcome(result *BootstrapResult) EnterWorldOutcome {
 	blob, err := EnterWorldBlob(result)
 	if err != nil {
@@ -169,6 +216,11 @@ func enterWorldFailureOutcome(result *BootstrapResult) EnterWorldOutcome {
 }
 
 // packetBytes re-arms a JSON-shaped packet payload for the wire.
+/*
+================
+packetBytes
+================
+*/
 func packetBytes(p Packet) []byte {
 	out := make([]byte, len(p.Payload))
 	for index, value := range p.Payload {
@@ -184,6 +236,11 @@ func packetBytes(p Packet) []byte {
 // Mission-tick visibility is deliberately NOT installed here: the client has
 // not announced 0x3012 game-ready yet, so a peer 0x30D7 could overtake scene
 // admission and then be suppressed forever by the ticker's shown set.
+/*
+================
+RegisterEnterWorld
+================
+*/
 func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 	hub.Handle(transport.OpEnterWorld, func(s *transport.Session, _ uint16, payload []byte) {
 		s.BeginSceneAdmission()
@@ -208,7 +265,7 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 				return nil
 			}
 		}
-		outcome := HandleEnterWorld(&admission, payload)
+		outcome := handleEnterWorldWithDiagnostics(&admission, payload, s.DiagnosticSessionID())
 		if outcome.OK {
 			// Bind identity BEFORE the result frame so any handler racing
 			// on another frame already sees the bound character.
@@ -252,6 +309,11 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 // SessionCharacter resolves the session's bound character through the
 // enter-world identity keys. GO-2/GO-3 handlers should use this rather than
 // trusting client-supplied names on later frames.
+/*
+================
+SessionCharacter
+================
+*/
 func SessionCharacter(source CharacterSource, s *transport.Session) (*Character, string, bool) {
 	divisionID, characterName, ok := s.CharacterBinding()
 	if !ok || source == nil {
@@ -269,6 +331,11 @@ func SessionCharacter(source CharacterSource, s *transport.Session) (*Character,
 // game clock, 0x343C maximum/base stats, and 0x33A6 current vitals refresh for
 // the bound character. No bound character means no packets (the Node side
 // answers an empty packet list).
+/*
+================
+HandleGameReady
+================
+*/
 func HandleGameReady(character *Character, stats wire.BaseStats) []Packet {
 	if character == nil {
 		return nil
@@ -305,6 +372,11 @@ const OpcodeGameReady uint16 = 0x3012
 // becomes visible to the simulation ticker. Send() is a FIFO reliable enqueue;
 // installing WorldBound after those enqueues guarantees every later peer
 // spawn is ordered behind the complete enter-world and game-ready bursts.
+/*
+================
+RegisterGameReady
+================
+*/
 func RegisterGameReady(hub *transport.Hub, deps *Deps) {
 	hub.Handle(OpcodeGameReady, func(s *transport.Session, _ uint16, _ []byte) {
 		reentry := s.FinishSceneReentry() && s.WorldReady()
@@ -357,6 +429,11 @@ func RegisterGameReady(hub *transport.Hub, deps *Deps) {
 }
 
 // Register wires every bootstrap-lane handler onto the hub.
+/*
+================
+Register
+================
+*/
 func Register(hub *transport.Hub, deps *Deps) {
 	RegisterEnterWorld(hub, deps)
 	RegisterGameReady(hub, deps)
@@ -370,6 +447,11 @@ func Register(hub *transport.Hub, deps *Deps) {
 // present in the authority store wins; anything else (the audit scripts'
 // numeric 0, an empty value) lands on the catalog default shard, or
 // domain.DefaultDivisionID when no catalog is available.
+/*
+================
+DevResolveDivisionID
+================
+*/
 func DevResolveDivisionID(
 	source CharacterSource,
 	allowedShardIDs []string,
@@ -398,6 +480,11 @@ func DevResolveDivisionID(
 	}
 }
 
+/*
+================
+devShardPolicy
+================
+*/
 type devShardPolicy struct {
 	allowedIDs []string
 	defaultID  string

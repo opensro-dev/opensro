@@ -156,6 +156,7 @@ func BuildItemBody(row WireItem) []byte {
 		quantity = 0xffff
 	}
 	return wire.ItemBody{
+		TradeOwner:        row.TradeOwner,
 		RefObjID:          refObjID,
 		TypeFlags:         row.TypeFlags,
 		Plus:              uint8(plus),
@@ -522,7 +523,11 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	}
 	writer.F32(walk) // +0x24c walk-speed source
 	writer.F32(run)  // +0x250 run-speed source
-	writer.F32(100)  // +0x4d8 scale source (FLOAT load; see Node comment)
+	actionSpeed := entry.ActionSpeed
+	if actionSpeed <= 0 {
+		actionSpeed = 100
+	}
+	writer.F32(actionSpeed) // +0x4d8 action-speed denominator
 	writer.U8(uint8(len(entry.SpawnSkills)))
 	for _, skill := range entry.SpawnSkills {
 		writer.U32(skill.ID)

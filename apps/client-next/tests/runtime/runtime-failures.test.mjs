@@ -97,6 +97,7 @@ dispose
 	} );
 	owners.renderer.setCharacterPreview = () => {};
 	owners.renderer.setSelectionDecal = () => {};
+	Object.assign( owners.characters, { frameWork() {} } );
 	Object.assign( owners.platform, {
 		report: value => reports.push( value ),
 		runningEntry: () => null,

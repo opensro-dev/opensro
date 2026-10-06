@@ -103,10 +103,9 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 				}
 			}
 			// 595542..59568F: reat raises flat status reduction 0x91+i.
-			for i := uint16(0); i < 6; i++ {
-				if p.Reat.Mask&(1<<i) != 0 {
-					writes = append(writes, paramkeeper.Write{Parameter: 0x91 + i, Channel: paramkeeper.Flat, Source: source, Value: float32(p.Reat.Value)})
-				}
+			for _, w := range StatusReductionWrites(p.Reat) {
+				w.Source = source
+				writes = append(writes, w)
 			}
 			// 594AC0 at 0x595DFD..0x595EFA: br raises the flat block rate of
 			// each lane its mask selects. BlockChance reads those lanes with no
@@ -165,7 +164,7 @@ learnedStatusResistance
 
 The CSkillManager status-resistance buckets real fills (59DF20): each
 masked status's bucket keys its flats by grade. StatusResistance_Read
-(5999E0) reports the lowest grade and the first flat filed under it; no
+(5999E0) reports the highest unsigned grade and its highest unsigned flat; no
 v1.150 source fills the percent side. Eligibility is 59F0E0's, as for
 every other passive contribution.
 ==================
@@ -192,16 +191,7 @@ func learnedStatusResistance(c *domain.Character, skills enterworld.SkillDataSou
 			selected.Reqi.Present && ReqiRefusal(c, items, selected.Reqi) != 0 {
 			continue
 		}
-		for _, source := range abnormal.Sources {
-			if source.Resist < 0 || rs.Mask&source.Status.Bit() == 0 {
-				continue
-			}
-			bucket := &out[source.Resist]
-			if !filed[source.Resist] || int32(rs.Grade) < bucket.Grade {
-				bucket.Grade, bucket.Flat = int32(rs.Grade), int32(rs.Flat)
-				filed[source.Resist] = true
-			}
-		}
+		FileStatusResistance(&out, &filed, rs)
 	}
 	return out
 }

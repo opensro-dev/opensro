@@ -103,6 +103,32 @@ export interface Pose {
 	readonly z: number;
 	readonly angle: number;
 }
+
+/*
+================
+MovementTransition
+
+Navigation owns permission to glide. A relocation generation survives
+coalesced publications so a teleport cannot look like an ordinary receipt.
+================
+*/
+export interface MovementTransition {
+	readonly logicalDistance?: number;
+	readonly relocation: number;
+	readonly reason:
+		| "spawn"
+		| "input"
+		| "correction"
+		| "receipt"
+		| "native"
+		| "cast"
+		| "displacement"
+		| "death"
+		| "clear";
+	readonly eligible: boolean;
+	readonly pathEligible?: boolean;
+	readonly corridor?: { readonly from: Pose; readonly to: Pose; };
+}
 /*
 ================
 ChatLine
@@ -166,6 +192,8 @@ export type GameplayCommand =
 	// The fortress official (fortress.ts): the application window's status,
 	// then an application or withdrawal for one fortress.
 	| { readonly kind: "fortress-war-status"; readonly gid: number; }
+	| { readonly kind: "fortress-staff"; readonly gid: number; readonly fortress: number; readonly flag?: number; }
+	| { readonly kind: "fortress-schedule"; readonly gid: number; readonly fortress: number; }
 	| {
 		readonly kind: "fortress-war-apply";
 		readonly gid: number;
@@ -590,6 +618,17 @@ export interface GameplayState {
 	readonly pose: Pose | null;
 	readonly movementPath?: { readonly from: import("./gameplay").Pose; readonly to: import("./gameplay").Pose; };
 	readonly movementRevision?: number;
+	readonly movementTransition?: MovementTransition;
+	readonly movementDiagnostics?: {
+		readonly total: number;
+		readonly recent: readonly {
+			readonly revision: number;
+			readonly source: string;
+			readonly distance: number;
+			readonly before: Pose;
+			readonly after: Pose;
+		}[];
+	};
 	readonly moving?: boolean;
 	/** Simulation time (ms) at which pose was sampled; ClockSample.originMs maps it to wall time. */
 	readonly poseAtMs?: number;

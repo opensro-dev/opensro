@@ -198,7 +198,7 @@ test("the predicted action starts at the press and the server's cast continues i
 	step( 2.4 );
 	assert.equal( layer()?.clip, "ready01" );
 	assert.ok( layer().time > before, `the action restarted: ${before} -> ${layer().time}` );
-	assert.ok( Math.abs( layer().time - 0.4 ) < 1e-6, "the clock is not the prediction's: " + layer().time );
+	assert.ok( Math.abs( layer().time - 0.2 ) < 1e-6, "the clock is not the prediction's: " + layer().time );
 	assert.equal( p.error(), null );
 	p.dispose();
 });

@@ -84,6 +84,7 @@ func PlanItemDrop(dropped inventory.Item, dropCount uint16, at simulation.Spawn,
 	point, y, heading := placementFor(at)
 	return grounditem.Item{
 		RecordID:          dropped.RecordID,
+		TradeOwner:        dropped.TradeOwner,
 		RefObjID:          dropped.RefObjID,
 		Codename:          dropped.Codename,
 		TypeFlags:         dropped.TypeFlags,

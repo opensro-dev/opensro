@@ -174,7 +174,11 @@ test("network rejects oversized ingress and send backpressure instead of silentl
 
 test("server goodbye preserves its reason and drains accepted packets before ending", t => {
 	const sockets = socketHarness( t ), failures = [], seen = [];
-	const network = createNetwork( e => failures.push( e ) );
+	const reasons = [];
+	const network = createNetwork( ( e, _frame, reason ) => {
+		failures.push( e );
+		reasons.push( reason );
+	} );
 	network.connect( "ws://localhost/transport", "ticket" );
 	const socket = sockets[0];
 	socket.onopen();
@@ -193,6 +197,8 @@ test("server goodbye preserves its reason and drains accepted packets before end
 	} );
 	assert.deepEqual( seen, [ 2, 256 ] );
 	assert.deepEqual( failures, [ "Server ended transport session: shutdown (5)" ] );
+	assert.equal( reasons[0].category, "expected" );
+	assert.equal( reasons[0].code, "server_bye_5" );
 	network.dispose();
 });
 
@@ -319,7 +325,7 @@ test("native V blind action is held, rebindable, and released on focus loss", ()
 });
 test("a frame the consumer cannot apply ends the session and names that frame for the incident report", t => {
 	const sockets = socketHarness( t ), failures = [];
-	const network = createNetwork( ( error, frame ) => failures.push( { error, frame } ) );
+	const network = createNetwork( ( error, frame, reason ) => failures.push( { error, frame, reason } ) );
 	network.connect( "ws://localhost/transport", "abc" );
 	const socket = sockets[0];
 	socket.onopen();
@@ -332,6 +338,54 @@ test("a frame the consumer cannot apply ends the session and names that frame fo
 	assert.equal( failures.length, 1 );
 	assert.match( failures[0].error, /^Packet application failed: Error: Invalid movement speed channels$/ );
 	assert.equal( failures[0].frame.opcode, 0x376f );
+	assert.equal( failures[0].reason.category, "software" );
+	assert.equal( failures[0].reason.code, "packet_application_failed" );
+	assert.match( failures[0].reason.stack, /Invalid movement speed channels/ );
 	assert.deepEqual( [ ...failures[0].frame.payload ], [ 1, 2, 3 ] );
 	assert.ok( socket.closed );
+});
+
+/*
+================
+Gameplay ping lifecycle
+================
+*/
+test("gameplay ping matches echo tokens, expires and resets on reconnect", t => {
+	const sockets = socketHarness( t );
+	const failures = [];
+	const network = createNetwork( error => failures.push( error ) );
+	let clock = 100;
+	t.mock.method( performance, "now", () => clock );
+	network.connect( "ws://localhost/world", "ticket" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( welcome() );
+	assert.equal( network.pingMs(), null );
+	const ping = socket.sent.at( -1 );
+	assert.equal( ping[0], 3 );
+	const wrong = ping.slice();
+	wrong[0] = 4;
+	wrong[2] ^= 1;
+	clock += 42;
+	socket.receive( wrong );
+	assert.equal( network.pingMs(), null );
+	const pong = ping.slice();
+	pong[0] = 4;
+	socket.receive( pong );
+	assert.equal( network.pingMs(), 42 );
+	clock += 5;
+	socket.receive( pong );
+	assert.equal( network.pingMs(), 42 );
+	clock += 15000;
+	assert.equal( network.pingMs(), null );
+	network.disconnect();
+	assert.equal( network.pingMs(), null );
+	network.connect( "ws://localhost/world", "ticket" );
+	sockets[1].onopen();
+	sockets[1].receive( welcome() );
+	assert.equal( network.pingMs(), null );
+	sockets[1].receive( pong );
+	assert.equal( network.pingMs(), null );
+	network.dispose();
+	assert.deepEqual( failures, [] );
 });

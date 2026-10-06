@@ -14,6 +14,54 @@ npm start         # http://localhost:5190
 
 ## Views
 
+- **Session history:** `/history.html` searches durable login, connection,
+  reconnect, disconnect, incident and server-log records. Choose Agent for
+  authentication and client reports, or a shard for world time and transport
+  events. A session link follows the same boot-qualified identifier across
+  services. Search an account to see connected minutes and last login/seen
+  dates; no identity filter means no personal time total.
+
+### Durable history setup
+
+Agent stores `history.sqlite` beside its shard directory state file
+(`SRO_AGENT_DIRECTORY_STATE_PATH`, normally `.state/agent/shard-leases.json`).
+Each GameWorld stores its journal beside its character authority. Collection
+starts with this release; older sessions cannot be reconstructed from it.
+
+Put an operator token of at least 32 characters in `operator-token` beside
+each journal before starting the service. The Observatory's existing
+`operatorTokenFile` config supplies the GameWorld credential. Set
+`agentOperatorTokenFile` when Agent uses a separate token, and optionally
+`agentURL` (default `http://127.0.0.1:8787`). Only literal loopback HTTP
+service URLs are accepted. The existing console edge authentication also
+protects history. Tokens are never sent to the browser.
+
+Connected time means an attached, world-ready character, excluding reconnect
+grace and character selection. Per-account totals merge overlapping sessions
+within a service. They are not AFK-adjusted playtime, and totals from multiple
+shards should not be added as a unique wall-clock total. Active intervals are
+checkpointed every 15 seconds. After a crash, unfinished sessions end at their
+last checkpoint and are marked estimated. Raw events retain up to 90 days or
+200,000 records per service; session summaries and intervals persist. The
+page displays pruning, queued records, dropped records and database failures.
+Disk-full or queue-overflow conditions therefore cannot masquerade as a
+complete timeline. Back up SQLite with its backup API or stop the service
+before copying its database; copying a live WAL database alone is incomplete.
+
+The collector preserves original failures and later close events separately.
+Unknown closures stay unknown; a timeout does not prove a player's internet
+failed. Client-supplied fields are labelled `client_reported`, while account
+identity comes from authenticated admission. Invalid login names remain
+unverified `claimedAccount` fields. Logs index bounded messages and a selected
+set of context fields; credentials and packet bodies are not indexed.
+
+Incident reports retry four times while the page remains open, with the same
+reference. A successful receipt follows a database commit. Refreshing or
+closing the page ends pending retries. The game exposes delivery status and
+adds the incident reference to manual bug-report context. The history page
+can refresh every 15 seconds and export its current evidence; it does not
+send Discord messages or operate an external paging service.
+
 - **Overview:** online players, resident population, living uniques, outdoor
   density atlas, tick-duration history, persistence and transport health.
 - **Players:** online characters with level, health, mana and coordinates.

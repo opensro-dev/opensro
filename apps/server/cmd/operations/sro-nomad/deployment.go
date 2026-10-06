@@ -12,6 +12,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/url"
@@ -24,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	"opensro.online/server/internal/agent/bugreport"
+	agentserver "opensro.online/server/internal/agent/server"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
 	"opensro.online/server/internal/data/store"
@@ -548,7 +550,7 @@ buildBinaries
 */
 func (deployment *deployment) buildBinaries(ctx context.Context) error {
 	commands := [][]string{
-		{"build", "-o", binaryName("agent"), "./cmd/services/sro-agent"},
+		{"build", "-o", binaryName("agent"), agentLinkFlags(ctx, deployment.ModuleRoot), "./cmd/services/sro-agent"},
 		{"build", "-o", binaryName("gameworld"), "./cmd/services/sro-gameworld"},
 	}
 	for _, arguments := range commands {
@@ -565,6 +567,26 @@ func (deployment *deployment) buildBinaries(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+/*
+================
+agentLinkFlags
+
+Stamps the commit subject into the Agent for GET /title/build. Base64
+keeps quotes and spaces in the subject from breaking -ldflags; outside a
+git checkout the stamp is empty.
+================
+*/
+func agentLinkFlags(ctx context.Context, moduleRoot string) string {
+	command := exec.CommandContext(ctx, "git", "log", "-1", "--format=%s")
+	command.Dir = moduleRoot
+	subject, err := command.Output()
+	if err != nil {
+		subject = nil
+	}
+	encoded := base64.StdEncoding.EncodeToString(bytes.TrimSpace(subject))
+	return "-ldflags=-X " + agentserver.BuildSubjectSymbol + "=" + encoded
 }
 
 /*

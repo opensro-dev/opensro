@@ -139,8 +139,8 @@ func (c monsterAbnormalContext) Param(instance monster.Instance, id uint16) floa
 		return float32(instance.WalkSpeed())
 	case id == 0x18:
 		return float32(instance.RunSpeed())
-	case id == 0x8c:
-		base = 100
+	case id == actionSpeedParameter:
+		return float32(instance.ActionSpeed())
 	case id >= 0x1b && id <= 0x20:
 		// The reference loader already converts authored columns to keeper
 		// order. Swapping again gives burn the shock resistance and vice versa.
@@ -233,8 +233,8 @@ func (r *abnormalRandom) Rand() int32 {
 rollPlayerOnMonster
 
 rollPlayerOnMonster ports 590680 for a player's hit on a monster target.
-Temptation's Confusion is then dropped on a monster it cannot affect
-(untemptableConfusion, the owner's rule).
+Confusion eligibility belongs to target admission (58D2F2); 590680 does
+not discard a successful roll by monster type or grade.
 ================
 */
 func (rt *Runtime) rollPlayerOnMonster(division string, c *enterworld.Character, params *abnormal.SkillParams, target monster.Instance) ([]abnormal.Record, error) {
@@ -268,7 +268,7 @@ func (rt *Runtime) rollPlayerOnMonster(division string, c *enterworld.Character,
 		in.TargetResist[i] = float32(target.Ref.ElementResist[i])
 	}
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, character: c.Name}}
-	records := untemptableConfusion(target, abnormal.Roll(in, random))
+	records := abnormal.Roll(in, random)
 	return records, random.err
 }
 
@@ -297,7 +297,8 @@ func (rt *Runtime) monsterAbnormalFrames(division string, instance monster.Insta
 		frames = append(frames, wire.Frame{Opcode: 0xB2F5, Payload: simulation.MonsterCorrectionPayload(instance.Gid, *effects.Halted)})
 	}
 	if effects.SpeedChanged {
-		frames = append(frames, wire.Frame{Opcode: 0x376F, Payload: simulation.MonsterSpeedPayload(instance)})
+		frames = append(frames, wire.Frame{Opcode: 0x376F, Payload: simulation.MonsterSpeedPayload(instance)},
+			wire.ActionSpeedFrame(instance.Gid, float32(instance.ActionSpeed())))
 	}
 	if effects.MaskChanged {
 		frames = append(frames, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.MonsterAbnormalPayload(instance)})

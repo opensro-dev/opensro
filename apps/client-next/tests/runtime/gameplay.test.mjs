@@ -241,7 +241,12 @@ test("rebirth remains retryable after silence and still gates local life and lev
 test("inventory icons survive baseline, reference replacement, item movement and reset", () => {
 	const owner = createInventory( () => {} );
 	owner.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ],
+		refItemSnapshot: [ {
+			refObjId: 1,
+			typeFlags: 0x6c,
+			icon: "item/etc/hp_potion_01.ddj",
+			nativeFields: { maxStack: 50 }
+		} ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	assert.equal( owner.state().inventory[0].icon, "item/etc/hp_potion_01.ddj" );
@@ -252,7 +257,7 @@ test("inventory icons survive baseline, reference replacement, item movement and
 	assert.equal( owner.state().inventory[0].icon, "item/etc/hp_potion_02.ddj" );
 	owner.clear();
 	owner.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 1 ) } ]
 	} );
 	assert.equal( owner.state().inventory[0].icon, undefined );
@@ -506,7 +511,7 @@ function item( ref, quantity ) {
 test("gold pickup grants are decoded without touching bag slots or acknowledging another transaction", () => {
 	const heard = [], inv = createInventory( () => {}, cue => heard.push( cue ) );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	inv.move( 13, 14, 10, 100 );
@@ -523,7 +528,7 @@ test("gold pickup grants are decoded without touching bag slots or acknowledging
 test("unrelated pickup cannot acknowledge a move and timed-out transactions cannot be retried", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	inv.move( 13, 14, 10, 100 );
@@ -555,7 +560,7 @@ test("rejected transport submission leaves movement, inventory and targeting ava
 	m.seed( pose );
 	m.navigation( pose.regionId, bundle() );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	assert.throws( () => m.request( { ...pose, x: 100 }, 0 ), /backpressure/ );
@@ -580,7 +585,7 @@ test("gameplay reset publishes no inventory or pending command from the old worl
 	const { createGameplay } = await load( "gameplay" );
 	const game = createGameplay( () => {} );
 	game.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	game.seed( { ...pose, gid: 7, heading: 0 } );
@@ -596,7 +601,7 @@ test("gameplay reset publishes no inventory or pending command from the old worl
 test("inventory remains authoritative through split, rejected use and absolute consume", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	inv.move( 13, 14, 4 );
@@ -614,7 +619,7 @@ test("inventory remains authoritative through split, rejected use and absolute c
 test("invalid multi-transfer cannot commit the valid prefix", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	assert.throws(
@@ -879,7 +884,7 @@ test("ground drops serialize with all inventory commands and await their own res
 	inv.bootstrap( {
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	assert.throws( () => inv.drop( 7 ) );
@@ -913,7 +918,7 @@ test("ground drops serialize with all inventory commands and await their own res
 test("native sale consumes only its authoritative quantity and never acknowledges a pending move", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	const sale = Uint8Array.of( 1, 9, 13, 3, 0, 17, 0, 0, 0, 0 );
@@ -938,7 +943,7 @@ test("COS sale reaches the live COS owner and preserves player inventory", async
 	const { createGameplay } = await load( "gameplay" ), game = createGameplay( () => {} );
 	game.bootstrap( {
 		refObjSnapshot: [ { refObjId: 102, kind: "cos", tidWord: (2 << 11) | 0x1c6 } ],
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	game.seed( { ...pose, gid: 7, heading: 0 } );
@@ -1183,6 +1188,22 @@ test("one decal is published with native target categories, ground replacement a
 	assert.equal( moved.target, 8 );
 	game.resetWorld();
 	assert.equal( game.take().selectionDecal, null );
+	game.dispose();
+});
+
+test("the local player selects itself from its portrait, and nothing else is aimed at it", async () => {
+	const { createGameplay } = await load( "gameplay" ), sent = [], game = createGameplay( f => sent.push( f ) );
+	const self = { ...pose, gid: 7, kind: "local-player" };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( { ...pose, gid: 7, heading: 0 } );
+	game.command( { kind: "select", gid: 7 }, 0, self );
+	const requests = sent.map( f => [ f.opcode, new DataView( f.payload.buffer ).getUint32( 0, true ) ] );
+	assert.deepEqual( requests, [] );
+	assert.equal( game.skillTarget(), 7 );
+	const state = game.take();
+	assert.equal( state.target, 7 );
+	assert.deepEqual( state.selectionDecal, { kind: "target", gid: 7, slot: 2 } );
+	assert.throws( () => game.command( { kind: "attack", gid: 7 }, 1, self ), /local player/ );
 	game.dispose();
 });
 
@@ -1607,4 +1628,26 @@ test("a targeted command refused during a server walk never disturbs the walk", 
 	game.step( 4016, local );
 	assert.ok( Math.abs( (game.take()?.pose?.x ?? previous) - 260 ) < 1e-6, "arrived at " + previous );
 	game.dispose();
+});
+
+/*
+================
+Portrait selection while a grant is pending
+================
+*/
+test("portrait selection stays local while the previous target grant retains its identity", () => {
+	const sent = [], target = createTargeting( frame => sent.push( frame ) );
+	target.select( 9, 0, "monster" );
+	target.select( 7, 1, "local-player" );
+	assert.equal( sent.length, 1 );
+	assert.equal( target.state().target, 7 );
+	assert.equal( target.selectionIntent(), 7 );
+	const grant = Buffer.alloc( 11 );
+	grant[0] = 1;
+	grant.writeUInt32LE( 9, 1 );
+	target.receive( 0xb45a, grant );
+	assert.equal( target.state().target, 9 );
+	assert.equal( target.selectionIntent(), 9 );
+	target.clear();
+	assert.equal( target.selectionIntent(), 0 );
 });

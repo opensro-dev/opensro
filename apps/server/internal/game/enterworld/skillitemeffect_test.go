@@ -89,3 +89,29 @@ func TestTimedItemCompilerRefusesIncompletePrograms(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestTimedItemCompilerOwnsCompoundMovementLifecycle
+================
+*/
+func TestTimedItemCompilerOwnsCompoundMovementLifecycle(t *testing.T) {
+	for _, tag := range []uint32{tagTimedHaste, tagTimedOverride, tagTimedIndependent} {
+		fields, row := itemEffectFields(itemEffectOwnerJob, itemEffectDuration, 10000, tag, 20, itemEffectHP, 0, 20, itemEffectDamage, 10, 10, itemEffectAbsorb, 15, 10)
+		row.MovementModifier = encodedMovementModifier(fields)
+		if row.MovementModifier.Supported {
+			t.Fatal("partial movement compiler accepted compound before complete owner")
+		}
+		parseSkillTimedEffect(fields, &row)
+		if !row.TimedEffect.Pinned || !row.TimedJobExecutable() || !row.MovementModifier.Supported || row.MovementModifier.Percent != 20 {
+			t.Fatalf("compound not installed %+v", row.MovementModifier)
+		}
+		fields[90] = "1936945013" // ssou has no executable block in this producer.
+		row.MovementModifier = encodedMovementModifier(fields)
+		row.TimedEffect = SkillTimedEffect{}
+		parseSkillTimedEffect(fields, &row)
+		if row.TimedEffect.Pinned || row.MovementModifier.Supported {
+			t.Fatal("unsupported companion operation admitted")
+		}
+	}
+}

@@ -98,11 +98,17 @@ export interface Viewport {
 }
 /** One published sample of the frame owner's own timing, for the FPS chip. */
 export interface FrameTelemetry {
+	readonly overload?: {
+		readonly level: number;
+		readonly longFrames: number;
+		readonly recent: readonly { readonly atMs: number; readonly cpuMs: number; readonly level: number; }[];
+	};
 	readonly frameId?: number;
 	readonly stages?: Readonly<Record<string, number>>;
 	readonly gpu?: GpuTimingStats & { readonly enabled: boolean; };
 	/** Frames per second averaged over the sampling window. */
 	readonly fps: number;
+	readonly pingMs?: number | null;
 	/** Wall time between presented frames: window average and 95th percentile. */
 	readonly frameMs: number;
 	readonly p95FrameMs: number;
@@ -112,6 +118,8 @@ export interface FrameTelemetry {
 	readonly actors: number;
 	readonly draws: number;
 	readonly visibleGroups: number;
+	/** The client and server builds, one line each when known, and their commit subjects (build-info.ts). */
+	readonly build: { readonly lines: readonly string[]; readonly detail: string; };
 }
 /*
 ================
@@ -141,6 +149,7 @@ export interface Platform extends Disposable {
 	visibilityReturned(): boolean;
 	presentUpdate( newer: boolean ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
+	diagnosticsActive(): boolean;
 	/** The canvas CSS size, observed rather than read (no forced layout). */
 	canvasSize(): { readonly width: number; readonly height: number; };
 	readViewport(): Viewport;
@@ -156,6 +165,8 @@ The runtime grants scene and resource commands without exposing device ownership
 ================
 */
 export interface Renderer extends Disposable {
+	setFrameWork?( work: FrameWork ): void;
+	readbackWaitMs?(): number;
 	scenery(): import("./scenery").SceneryPresentation | null;
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
 	videoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;
@@ -234,6 +245,19 @@ export interface Renderer extends Disposable {
 	frame( viewport: Viewport, timeSeconds?: number, frameId?: number, probe?: RenderFrameProbe ): void | Promise<void>;
 	phase(): RuntimePhase;
 	error(): string | null;
+}
+
+/*
+================
+FrameWork
+
+One runtime-owned optional budget is shared by all presentation consumers.
+================
+*/
+export interface FrameWork {
+	level(): number;
+	remaining(): number;
+	spend( ms: number ): void;
 }
 /*
 ================

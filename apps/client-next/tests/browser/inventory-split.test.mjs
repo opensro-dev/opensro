@@ -197,9 +197,11 @@ test( "native split dialog receives real Shift-click, displays authored geometry
 		await page.mouse.up();
 		await page.evaluate( () => inventoryFixture.draw() );
 		assert.deepEqual( await page.evaluate( () => inventoryFixture.commands ), [
+			{ kind: "gameplay", command: { kind: "auto-potion-input", blocked: true, itemMallOpen: false } },
 			{ kind: "gameplay", command: { kind: "quickslot-set", binding: { slot: 41, kind: 0x4a, payload: 4001 } } },
-			{ kind: "gameplay", command: { kind: "quickslot-set", binding: { slot: 42, kind: 0x4a, payload: 4000 } } }
-		], "real pointer drag swaps both extended bindings and never activates either action" );
+			{ kind: "gameplay", command: { kind: "quickslot-set", binding: { slot: 42, kind: 0x4a, payload: 4000 } } },
+			{ kind: "gameplay", command: { kind: "auto-potion-input", blocked: false, itemMallOpen: false } }
+		], "drag brackets auto-potion input and swaps bindings without activating either action" );
 		await page.evaluate( () => inventoryFixture.dispose() );
 	} finally {
 		await browser.close();

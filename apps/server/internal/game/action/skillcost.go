@@ -181,13 +181,16 @@ type skillCharge struct{ mp, hp int64 }
 ================
 preparedExecutionHPCost
 
-preparedExecutionHPCost is 58312C..5831A9: the flat word plus the percent
-of CURRENT HP (the admission used maximum HP), truncated.
+The flat word plus the percent of CURRENT HP (admission uses maximum HP).
+Persistent 58312C divides on x87 before multiplying. Instant 58682F and
+projectile 5857B0 instead wrap a signed 32-bit product before dividing by 100;
+the same prepared-cost arithmetic owns MP. HP never applies the MP rate.
 ================
 */
 func (rt *Runtime) preparedExecutionHPCost(division string, c *enterworld.Character, skill enterworld.SkillRow) int64 {
 	_, _, currentHP, _ := rt.playerKeeperVitals(division, c)
-	return int64(skill.Consumption.HP) + vitalPercent(currentHP, uint32(skill.Consumption.HPPercent))
+	return int64(combat.PreparedCost(uint32(currentHP), uint32(skill.Consumption.HP),
+		skill.Consumption.HPPercent, skill.TimedEffect.Pinned, false, 0))
 }
 
 /*
@@ -252,7 +255,7 @@ CHARGING
 ================
 commitOffensivePhaseCost
 
-commitOffensivePhaseCost charges a phase: a released cast pays MP only,
+commitOffensivePhaseCost charges HP and MP: a released cast pays its snapshot,
 a fresh cast also starts its cooldown.
 ================
 */

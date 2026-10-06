@@ -66,10 +66,13 @@ func validateOffensiveSequence(source SkillDataSource, rootID uint32) ([]SkillRo
 		if !valid || lifetime == 0 && !row.PositionEffect.Charge {
 			return nil, false
 		}
-		if len(sequence) > 0 && (!row.ChainSub || row.Consumption.HP != 0 || row.Consumption.MP != 0 ||
-			row.Consumption.HPPercent != 0 || row.Consumption.MPPercent != 0 || !row.Consumption.Pinned) {
+		// 4AECE7..4AED02 resolves the next row and returns to state 2;
+		// 4AEB11 validates its resources and 5867DC prepares its own charge.
+		// A linked stage need not repeat the root's resource amounts.
+		if len(sequence) > 0 && (!row.ChainSub || !row.Consumption.Pinned) {
 			return nil, false
 		}
+
 		seen[row.ID] = true
 		sequence = append(sequence, row)
 		if row.ChainNext == 0 {

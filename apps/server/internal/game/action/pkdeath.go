@@ -43,8 +43,10 @@ The object that dealt the fatal damage. Zero: no killer.
 ================
 */
 type deathKiller struct {
-	monster *monster.Instance
-	player  *enterworld.Character
+	monster      *monster.Instance
+	player       *enterworld.Character
+	siege        bool
+	strikerLevel int64
 }
 
 /*
@@ -58,6 +60,9 @@ classified by playerKillKind.
 ================
 */
 func (rt *Runtime) deathKind(division string, victim *enterworld.Character, killer deathKiller) pk.DeathKind {
+	if killer.siege {
+		return pk.DeathSpecialWorld
+	}
 	switch {
 	case killer.monster != nil:
 		m := killer.monster
@@ -107,6 +112,14 @@ func (rt *Runtime) settleDeathCostInDoor(division string, c *enterworld.Characte
 	level := uint8(min(rewardLevel(c), 0xff))
 	kept := float32(paramJobPercent(c, paramDeathExpKept, now))
 	switch {
+	case kind == pk.DeathSpecialWorld:
+		// 4E6D60 has ordinary rates, one-fifth cap, no SP/drop/PK relief.
+		rule, ok := pk.DeathLoss(pk.DeathPlayer, level, 0, killer.player != nil, false)
+		if ok && rt.ApplyDeathPenalty != nil {
+			frames, _ := rt.ApplyDeathPenalty(c, pk.DeathPenalty{Rule: rule, SpecialWorld: true, ReductionPercent: kept})
+			cost.actor = append(cost.actor, frames...)
+		}
+		return cost
 	case kind == pk.DeathJob:
 		// 4E6820 reads the killer object's level, a monster's or a player's.
 		killerLevel := uint8(0)

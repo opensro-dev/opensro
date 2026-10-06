@@ -17,10 +17,12 @@ import { createSessionDecoder } from "./decode/decode";
 import { createSessionHttp } from "./http/http";
 import type { SessionOwner, SessionState } from "@/engine/contracts/session";
 import type { ClientIncident } from "@/engine/contracts/network";
-import { RELEASE_PROTOCOL } from "@/engine/foundation/release/protocol";
 
 // How long a failure report may take; it never holds up the session ending.
 const INCIDENT_TIMEOUT_MS = 5000;
+const INCIDENT_QUEUE_LIMIT = 8;
+const INCIDENT_MAX_ATTEMPTS = 4;
+const INCIDENT_RETRY_MS = 6000;
 const RELEASE_OUTDATED_MESSAGE = "A newer version of the game is available. Refresh the page to continue.";
 /*
 ================
@@ -78,20 +80,61 @@ mintWorldToken
 			}
 		);
 	}
+	const incidentQueue: Array<
+		{ body: ClientIncident; apiBase: string; token: string; attempts: number; next: number; }
+	> = [];
+	let incidentSending = false;
+	const incidentDelivery = new Map<string, "pending" | "sent" | "failed">();
 	/*
 ================
 reportIncident
 
-Fire and forget: the session is already ending, and a report that cannot
-be delivered must not delay or change that.
+Bounded retries retain the reporting identity. Reports never block gameplay.
 ================
 	*/
 	function reportIncident( incident: ClientIncident ) {
 		if ( !identity ) return;
-		const body = { ...incident, build: String( RELEASE_PROTOCOL ) };
-		http.incident( identity.apiBase, identity.token, body, AbortSignal.timeout( INCIDENT_TIMEOUT_MS ) ).catch(
-			() => {}
-		);
+		if ( incidentQueue.length >= INCIDENT_QUEUE_LIMIT ) return;
+		const build = new URL( import.meta.url ).pathname.split( "/" ).at( -1 )?.slice( 0, 64 ) ?? "development";
+		incidentQueue.push( {
+			body: { ...incident, build },
+			apiBase: identity.apiBase,
+			token: identity.token,
+			attempts: 0,
+			next: 0
+		} );
+		if ( incident.id ) incidentDelivery.set( incident.id, "pending" );
+		flushIncidents();
+	}
+	/*
+================
+flushIncidents
+================
+	*/
+	function flushIncidents() {
+		const report = incidentQueue[0];
+		if ( disposed || incidentSending || !report || report.next > performance.now() ) return;
+		incidentSending = true;
+		report.attempts++;
+		http.incident( report.apiBase, report.token, report.body, AbortSignal.timeout( INCIDENT_TIMEOUT_MS ) ).then(
+			result => {
+				const receipt = result.body as { ok?: boolean; id?: string; };
+				return result.httpOk && receipt?.ok === true && receipt.id === report.body.id;
+			},
+			() => false
+		).then( delivered => {
+			incidentSending = false;
+			if ( disposed ) return;
+			if ( delivered || report.attempts >= INCIDENT_MAX_ATTEMPTS ) {
+				incidentQueue.shift();
+				if ( report.body.id ) incidentDelivery.set( report.body.id, delivered ? "sent" : "failed" );
+				if ( incidentDelivery.size > 32 ) incidentDelivery.delete( incidentDelivery.keys().next().value! );
+			} else report.next = performance.now() + INCIDENT_RETRY_MS * 2 ** (report.attempts - 1);
+			if ( scope === "world" ) publishWorld();
+			else if ( state.incidentID === report.body.id ) {
+				publish( { ...state, incidentDelivery: incidentDelivery.get( report.body.id! ) } );
+			}
+		} );
 	}
 	const world = createWorldSession( mintWorldToken, http.references, reportIncident );
 	let worldRevision = 0;
@@ -145,7 +188,10 @@ publishWorld
 				phase: "character-select",
 				restoringWorld: false,
 				character: undefined,
-				error: value.error
+				error: value.error,
+				disconnectMessage: value.disconnectMessage,
+				incidentID: value.incidentID,
+				incidentDelivery: incidentDelivery.get( value.incidentID )
 			} );
 			return;
 		}
@@ -156,7 +202,11 @@ publishWorld
 			phase: value.phase,
 			character: value.character,
 			entityCount: value.entities,
+			pingMs: value.pingMs,
 			error: value.error,
+			disconnectMessage: value.disconnectMessage,
+			incidentID: value.incidentID,
+			incidentDelivery: incidentDelivery.get( value.incidentID ),
 			divisionId: identity?.divisionId,
 			characters: state.characters
 		} );
@@ -491,6 +541,7 @@ baseUrl
 				return null;
 			}
 			world.step( now );
+			flushIncidents();
 			const departure = world.takeDeparture();
 			if ( departure && identity ) {
 				cancelTitleRequest();

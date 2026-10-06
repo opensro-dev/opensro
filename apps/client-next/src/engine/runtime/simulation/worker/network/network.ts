@@ -11,19 +11,29 @@ failure names that frame so it can be reported (session.ts).
 ===========================================================================
 */
 import { createCodec } from "./codec/codec";
-import type { NetworkOwner, WireFrame } from "@/engine/contracts/network";
+import type { NetworkOwner, WireFrame, NetworkFailure } from "@/engine/contracts/network";
+
+const PING_INTERVAL_MS = 5000;
+const PING_STALE_MS = 15000;
+const PING_TOKEN_BYTES = 4;
+const PING_BACKLOG_LIMIT = 65536;
 
 /*
 ================
 createNetwork
 ================
 */
-export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) => void ): NetworkOwner {
+export function createNetwork(
+	onFailure: ( error: string, frame?: WireFrame, reason?: NetworkFailure ) => void
+): NetworkOwner {
 	const codec = createCodec();
 	let socket: WebSocket | null = null, epoch = 0, disposed = false, welcomed = false;
 	let bytes = 0;
+	let pingToken = 0, pendingPing = false, pingSentAt = -Infinity, pingReceivedAt = -Infinity;
+	let measuredPing: number | null = null;
 	const inbox: WireFrame[] = [];
 	let ended: string | null = null;
+	let endReason: NetworkFailure | undefined;
 	/*
 	================
 	disconnect
@@ -32,9 +42,13 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 	function disconnect() {
 		epoch++;
 		welcomed = false;
+		pendingPing = false;
+		pingSentAt = pingReceivedAt = -Infinity;
+		measuredPing = null;
 		bytes = 0;
 		inbox.length = 0;
 		ended = null;
+		endReason = undefined;
 		const previous = socket;
 		socket = null;
 		if ( previous ) {
@@ -53,19 +67,29 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 	frame is the frame being applied when the failure happened, if any.
 	================
 	*/
-	function fail( message: string, frame?: WireFrame ) {
+	function fail( message: string, frame?: WireFrame, reason?: NetworkFailure ) {
 		disconnect();
-		onFailure( message, frame );
+		onFailure(
+			message,
+			frame,
+			reason ??
+				{
+					category: "software",
+					code: frame ? "packet_application_failed" : "transport_protocol_failed",
+					message: "A game error interrupted your session."
+				}
+		);
 	}
 	/*
 	================
 	end
 	================
 	*/
-	function end( message: string ) {
+	function end( message: string, reason: NetworkFailure ) {
 		// A completion packet and socket close can arrive before the same tick.
 		// Preserve admitted FIFO entries until their consumer has seen them.
 		ended = message;
+		endReason = reason;
 		const previous = socket;
 		socket = null;
 		if ( previous ) {
@@ -94,6 +118,27 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 	}
 	return {
 		disconnect,
+		/*
+  ================
+  pingMs
+
+  Uses the existing transport echo on the gameplay socket (server OpPing).
+  No HTTP estimate or clock synchronization. A sample expires and is never
+  carried across a socket generation. One tiny probe per five seconds.
+  ================
+  */
+		pingMs() {
+			if ( !socket || !welcomed || socket.readyState !== WebSocket.OPEN ) return null;
+			const now = performance.now();
+			if ( now - pingSentAt >= PING_INTERVAL_MS && socket.bufferedAmount < PING_BACKLOG_LIMIT ) {
+				const payload = new Uint8Array( PING_TOKEN_BYTES );
+				new DataView( payload.buffer ).setUint32( 0, ++pingToken, true );
+				pingSentAt = now;
+				pendingPing = true;
+				send( { opcode: 3, payload } );
+			}
+			return now - pingReceivedAt < PING_STALE_MS ? measuredPing : null;
+		},
 		enterWorld( division, character, token ) {
 			if ( !welcomed ) throw new Error( "Transport handshake incomplete" );
 			send( codec.enterWorld( division, character, token ) );
@@ -145,7 +190,18 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 								"server busy",
 								"unauthorized"
 							];
-						end( `Server ended transport session: ${names[reason] ?? "unknown"} (${reason})` );
+						const expected = [ 0, 5, 6, 8 ].includes( reason );
+						const messages: Record<number, string> = {
+							0: "Your session ended.",
+							5: "The server is restarting.",
+							6: "This session was replaced by another login.",
+							8: "Your session authorization ended."
+						};
+						end( `Server ended transport session: ${names[reason] ?? "unknown"} (${reason})`, {
+							category: expected ? "expected" : "unknown",
+							code: `server_bye_${reason}`,
+							message: messages[reason] ?? "The server ended your connection."
+						} );
 						return;
 					}
 					if ( !welcomed ) {
@@ -164,6 +220,21 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 						send( { opcode: 4, payload: frame.payload } );
 						return;
 					}
+					if ( frame.opcode === 4 ) {
+						if ( frame.payload.length > 64 ) throw new Error( "Oversized transport pong" );
+						if (
+							pendingPing && frame.payload.length === PING_TOKEN_BYTES &&
+							new DataView( frame.payload.buffer, frame.payload.byteOffset, PING_TOKEN_BYTES ).getUint32(
+									0,
+									true
+								) === (pingToken >>> 0)
+						) {
+							pingReceivedAt = performance.now();
+							measuredPing = Math.max( 0, Math.round( pingReceivedAt - pingSentAt ) );
+							pendingPing = false;
+						}
+						return;
+					}
 					if ( inbox.length >= 4096 || bytes + event.data.byteLength > (16 << 20) ) {
 						throw new Error( "Transport inbound backlog exceeded" );
 					}
@@ -175,12 +246,20 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 			};
 			current.onerror = () => {
 				if ( active() ) {
-					fail( "Transport connection failed" );
+					fail( "Transport connection failed", undefined, {
+						category: "connection",
+						code: "connection_failed",
+						message: "Connection lost. Please reconnect."
+					} );
 				}
 			};
 			current.onclose = () => {
 				if ( active() ) {
-					end( "Transport connection closed" );
+					end( "Transport connection closed", {
+						category: "unknown",
+						code: "connection_closed",
+						message: "Connection lost. The cause is unknown."
+					} );
 				}
 			};
 		},
@@ -205,9 +284,17 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 				}
 				inbox.splice( 0, consumed );
 				bytes = inbox.reduce( ( total, frame ) => total + frame.payload.byteLength + 2, 0 );
-				if ( !inbox.length && ended ) fail( ended );
+				if ( !inbox.length && ended ) fail( ended, undefined, endReason );
 			} catch ( error ) {
-				fail( `Packet application failed: ${String( error )}`, current );
+				const unsupported = error instanceof Error && error.cause === "unsupported_feature";
+				fail( `Packet application failed: ${String( error )}`, current, {
+					category: "software",
+					code: unsupported ? "unsupported_feature" : "packet_application_failed",
+					message: unsupported ?
+						"An unsupported game operation interrupted your session." :
+						"A game error interrupted your session.",
+					stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+				} );
 			}
 		},
 		dispose() {

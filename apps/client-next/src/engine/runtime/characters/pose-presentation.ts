@@ -15,7 +15,7 @@ delivery interval between samples instead.
 
 Small jumps between consecutive models of a sampled character (a server
 correction when a cast or pickup stops the player, a leg turn, a monster's
-halt) become a visual offset that decays in CORRECTION_TAU_SECONDS, so the
+halt) become a bounded critically damped correction, so the
 body and the camera glide instead of snapping. This smoothing is
 presentation only and a deliberate deviation from the original client,
 which snaps; logical poses stay authoritative.
@@ -28,18 +28,20 @@ import { REGION_SIZE, interpolateMovement, poseDistance } from "@/engine/foundat
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
-// A discontinuity is a teleport, not motion: no interpolation or smoothing.
+// Legacy publishers without transition metadata retain their distance guard.
 const DISCONTINUITY_DISTANCE = 192;
 // Samples further apart than this do not define a velocity.
 const MAX_SAMPLE_GAP_SECONDS = 0.25;
 // Bounded extrapolation: a stalled worker parks a walker, never runs it on.
 const MAX_EXTRAPOLATION_SECONDS = 0.1;
 // Correction offsets decay with this time constant (about 95% gone in 0.2 s).
-const CORRECTION_TAU_SECONDS = 0.07;
+const CORRECTION_FREQUENCY = 30;
+const MAX_RECOVERY_STEP_SECONDS = 0.033;
 // Offsets smaller than this are spent.
 const MIN_CORRECTION_DISTANCE = 0.01;
-// Offsets larger than this are real relocations and snap.
+// Legacy publishers cannot validate large cosmetic offsets against navigation.
 const MAX_CORRECTION_DISTANCE = 96;
+const MAX_RECOVERY_PATHS = 4;
 
 /*
 ================
@@ -57,6 +59,7 @@ interface Track {
 	angle: number;
 	moving: boolean;
 	settled?: Pose;
+	displayed?: Pose;
 }
 
 /*
@@ -81,11 +84,15 @@ A character drawn on the frame clock from its timed samples.
 ================
 */
 interface SampleTrack {
+	paths: { from: Pose; to: Pose; }[];
 	previous?: Sample;
 	latest: Sample;
 	moving: boolean;
 	to?: Pose;
 	offset: [number, number, number];
+	velocity: [number, number, number];
+	displayed: Pose;
+	relocation: number;
 	last: number;
 	angle: number;
 }
@@ -109,7 +116,61 @@ export interface SampleInput {
 	readonly atMs: number;
 	readonly revision: number;
 	readonly moving: boolean;
+	readonly from?: Pose;
 	readonly to?: Pose;
+	readonly transition?: import("@/engine/contracts/gameplay").MovementTransition;
+}
+
+/*
+================
+recover
+
+Exact critically damped integration. Project velocity into the remaining
+correction so a new opposite receipt cannot send the body past either end.
+Frozen wall time never consumes a transition that was not displayed.
+================
+*/
+function recover( row: SampleTrack, seconds: number ) {
+	const dt = Math.min( MAX_RECOVERY_STEP_SECONDS, seconds );
+	const decay = Math.exp( -CORRECTION_FREQUENCY * dt );
+	for ( let axis = 0; axis < 3; axis++ ) {
+		const x = row.offset[axis]!;
+		const v = x === 0 ?
+			0 :
+			Math.sign( x ) *
+			Math.max( -CORRECTION_FREQUENCY * Math.abs( x ), Math.min( 0, Math.sign( x ) * row.velocity[axis]! ) );
+		const c = v + CORRECTION_FREQUENCY * x;
+		row.offset[axis] = (x + c * dt) * decay;
+		row.velocity[axis] = (v - CORRECTION_FREQUENCY * c * dt) * decay;
+	}
+	if ( hypot3( ...row.offset ) < MIN_CORRECTION_DISTANCE ) {
+		row.offset = [ 0, 0, 0 ];
+		row.velocity = [ 0, 0, 0 ];
+	}
+}
+
+/*
+================
+onCorridor
+
+A straight admitted chord includes height: smoothing cannot cut a corner,
+cross a wall, or switch between overlapping floors. Navigation owns the
+chord; presentation can only move along it.
+================
+*/
+function onCorridor( pose: Pose, from: Pose, to: Pose, walking = false ) {
+	const span = worldVector( to, from ), point = worldVector( pose, from );
+	if ( !span || !point ) return false;
+	// A walk's navigation proof follows terrain and owner spans, not the
+	// straight height chord between its distant endpoints. Comparing that
+	// chord to a sampled terrain height falsely rejects ordinary hills.
+	// Corrections themselves still require the complete admitted 3D chord.
+	if ( walking ) span[1] = point[1] = 0;
+	const length2 = span[0] ** 2 + span[1] ** 2 + span[2] ** 2;
+	const t = length2 ?
+		Math.max( 0, Math.min( 1, (point[0] * span[0] + point[1] * span[1] + point[2] * span[2]) / length2 ) ) :
+		0;
+	return hypot3( point[0] - span[0] * t, point[1] - span[1] * t, point[2] - span[2] * t ) <= MIN_CORRECTION_DISTANCE;
 }
 
 /*
@@ -235,25 +296,32 @@ export function createPosePresentation() {
 	function sampledPose( gid: number, input: SampleInput, target: Pose, now: number ): Pose {
 		const at = (originMs! + input.atMs) / 1000;
 		let row = tracks.get( gid );
+		const relocation = input.transition?.relocation ?? 0;
+		const revisionChanged = row && input.revision !== row.latest.revision;
+		const stalled = row && now - row.last > MAX_SAMPLE_GAP_SECONDS;
+		const recoverySeconds = row ? Math.max( 0, now - row.last ) : 0;
+		const recovering = row && hypot3( ...row.offset ) > 0;
 		if (
-			!row || now < row.last || now - row.last > MAX_SAMPLE_GAP_SECONDS ||
-			discontinuity( row.latest.pose, target )
+			!row || now < row.last || row.relocation !== relocation ||
+			(revisionChanged && input.transition?.eligible === false) ||
+			(input.transition ? !worldVector( row.latest.pose, target ) : discontinuity( row.latest.pose, target ))
 		) {
 			row = {
+				paths: [],
 				latest: { pose: { ...target }, at, revision: input.revision },
 				moving: input.moving,
 				to: input.to,
 				offset: [ 0, 0, 0 ],
+				velocity: [ 0, 0, 0 ],
+				displayed: { ...target },
+				relocation,
 				last: now,
 				angle: target.angle
 			};
 			tracks.set( gid, row );
 		} else if ( now !== row.last ) {
-			const decay = Math.exp( -(now - row.last) / CORRECTION_TAU_SECONDS );
-			row.offset = [ row.offset[0] * decay, row.offset[1] * decay, row.offset[2] * decay ];
-			if ( hypot3( row.offset[0], row.offset[1], row.offset[2] ) < MIN_CORRECTION_DISTANCE ) {
-				row.offset = [ 0, 0, 0 ];
-			}
+			if ( !revisionChanged ) recover( row, now - row.last );
+			if ( stalled ) row.previous = undefined;
 			row.angle = turn( row.angle, target.angle, now - row.last );
 			row.last = now;
 		}
@@ -261,28 +329,65 @@ export function createPosePresentation() {
 		const changed = at !== row.latest.at || input.revision !== row.latest.revision ||
 			latest.regionId !== target.regionId || latest.x !== target.x || latest.y !== target.y ||
 			latest.z !== target.z;
-		if ( changed || row.moving !== input.moving || row.to !== input.to ) {
-			const before = sampledModel( row, now );
+		if ( changed || stalled || row.moving !== input.moving || row.to !== input.to ) {
+			const preserveDisplay = stalled || revisionChanged && input.transition?.reason !== "input";
+			const before = preserveDisplay ? row.displayed : displace( sampledModel( row, now ), row.offset );
 			if ( changed ) {
 				// Keep the previous sample only when this one is strictly newer
 				// and on the same walk; a correction at the same time, or any
 				// re-anchor, replaces the model outright and its jump becomes
 				// the decaying offset below.
-				row.previous = at > row.latest.at && input.revision === row.latest.revision ? row.latest : undefined;
+				row.previous = !stalled && at > row.latest.at && input.revision === row.latest.revision ?
+					row.latest :
+					undefined;
 				row.latest = { pose: { ...target }, at, revision: input.revision };
 			}
 			row.moving = input.moving;
 			row.to = input.to;
 			const jump = worldVector( before, sampledModel( row, now ) );
-			if ( jump ) row.offset = [ row.offset[0] + jump[0], row.offset[1] + jump[1], row.offset[2] + jump[2] ];
-			if ( !jump || hypot3( row.offset[0], row.offset[1], row.offset[2] ) > MAX_CORRECTION_DISTANCE ) {
+			if ( jump ) row.offset = jump;
+			if ( !jump || !input.transition && hypot3( ...row.offset ) > MAX_CORRECTION_DISTANCE ) {
 				row.offset = [ 0, 0, 0 ];
+				row.velocity = [ 0, 0, 0 ];
 			}
 		}
-		const drawn = displace( sampledModel( row, now ), row.offset );
+		// Retarget the existing trajectory rather than parking it on every
+		// receipt. A first correction starts at the displayed pose; subsequent
+		// receipts still spend this frame's bounded recovery step and velocity.
+		if ( revisionChanged && recovering && !stalled ) recover( row, recoverySeconds );
+		const model = sampledModel( row, now );
+		if ( input.from && input.to ) {
+			const path = row.paths[row.paths.length - 1];
+			if (
+				!path || poseDistance( path.from, input.from ) > MIN_CORRECTION_DISTANCE ||
+				poseDistance( path.to, input.to ) > MIN_CORRECTION_DISTANCE
+			) {
+				row.paths.push( { from: input.from, to: input.to } );
+				if ( row.paths.length > MAX_RECOVERY_PATHS ) row.paths.shift();
+			}
+		}
+		let drawn = displace( model, row.offset );
+		const corridor = input.transition?.corridor;
+		if (
+			input.transition && hypot3( ...row.offset ) > 0 &&
+			!(corridor && onCorridor( drawn, corridor.from, corridor.to ) &&
+				onCorridor( model, corridor.from, corridor.to )) &&
+			!row.paths.some( path =>
+				onCorridor( drawn, path.from, path.to, true ) &&
+				onCorridor( model, path.from, path.to, true )
+			)
+		) {
+			row.offset = [ 0, 0, 0 ];
+			row.velocity = [ 0, 0, 0 ];
+			drawn = model;
+		}
+		// Retain the path behind a rebased receipt only while it still carries
+		// visible recovery. This cannot grow with a long session or cut a turn.
+		if ( hypot3( ...row.offset ) === 0 && row.paths.length > 1 ) row.paths.splice( 0, row.paths.length - 1 );
 		// Pose carries a native heading word. Keep sub-word precision internally,
 		// but do not pass fractional words to the model's strict angle decoder.
-		return { ...drawn, angle: Math.round( row.angle ) % 65536 };
+		row.displayed = { ...drawn, angle: Math.round( row.angle ) % 65536 };
+		return { ...row.displayed };
 	}
 
 	return {
@@ -342,7 +447,7 @@ export function createPosePresentation() {
 				return { ...row.settled };
 			}
 			if ( row ) row.settled = undefined;
-			if ( !row || now < row.last || now - row.last > .25 || discontinuity( row.target, target ) ) {
+			if ( !row || now < row.last || discontinuity( row.target, target ) ) {
 				row = {
 					from: { ...target },
 					target: { ...target },
@@ -354,6 +459,10 @@ export function createPosePresentation() {
 				};
 				rows.set( gid, row );
 			} else {
+				if ( now - row.last > MAX_SAMPLE_GAP_SECONDS && row.displayed && !settledTranslation ) {
+					row.from = row.displayed;
+					row.at = now;
+				}
 				row.angle = turn( row.angle, target.angle, now - row.last );
 				row.last = now;
 				if (
@@ -374,6 +483,7 @@ export function createPosePresentation() {
 			// Pose carries a native heading word. Keep sub-word precision internally,
 			// but do not pass fractional words to the model's strict angle decoder.
 			const output = { ...result, angle: Math.round( row.angle ) % 65536 };
+			row.displayed = { ...output };
 			if ( now - row.at >= row.duration && row.angle === target.angle ) row.settled = { ...output };
 			return output;
 		},

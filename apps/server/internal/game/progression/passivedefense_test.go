@@ -19,6 +19,11 @@ import (
 	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestDefensePassiveAllRanksLearnAndStoreRestore
+================
+*/
 func TestDefensePassiveAllRanksLearnAndStoreRestore(t *testing.T) {
 	licensed.RequireGameData(t)
 	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))
@@ -33,6 +38,10 @@ func TestDefensePassiveAllRanksLearnAndStoreRestore(t *testing.T) {
 	}{{"SKILL_CH_COLD_PASSIVE_A", 9, 273, 0}, {"SKILL_EU_WARRIOR_SHIELDP_DEFENSE_A", 15, 513, 7}, {"SKILL_EU_WARRIOR_FRENZYA_DEFENSE_A", 14, 513, 9}} {
 		t.Run(family.name, func(t *testing.T) {
 			seed := testCharacter()
+			if family.mastery == 513 {
+				seed.ModelCodename = "CHAR_EU_MAN_ADVENTURER"
+				seed.RaceIndex = int64Ptr(enterworld.RaceEurope)
+			}
 			seed.Level = int64Ptr(90)
 			seed.MaxLevel = int64Ptr(90)
 			seed.SkillPoints = int64Ptr(1000000)
@@ -153,6 +162,11 @@ func TestDefensePassiveAllRanksLearnAndStoreRestore(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDefenseLearnInvalidStatsDoesNotSpendOrPublish
+================
+*/
 func TestDefenseLearnInvalidStatsDoesNotSpendOrPublish(t *testing.T) {
 	licensed.RequireGameData(t)
 	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))

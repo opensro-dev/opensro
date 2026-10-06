@@ -90,7 +90,12 @@ import type { PresentationRandom } from "@/engine/contracts/presentation-random"
 import { createOrbs } from "./orbs/orbs";
 import { advanceCharacterFade, type CharacterFade } from "@/engine/foundation/animation/character-fade";
 import { spawnFadeAlpha, spawnFadeKind } from "@/engine/foundation/animation/spawn-fade";
-import { advanceAction, actionLayers, type ActionSchedule } from "@/engine/foundation/animation/action-schedule";
+import {
+	advanceAction,
+	actionLayers,
+	reconcileActionInstallations,
+	type ActionSchedule
+} from "@/engine/foundation/animation/action-schedule";
 import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill-motion-resolve";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
 import { createCharacterSelection } from "@/engine/foundation/animation/character-selection";
@@ -175,6 +180,7 @@ export interface CharacterFrameProbe {
 // The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
 // table CCDB10: none = 0, RT_FIXED = 1, RT_DUMMY = 2).
 const RIDER_ON_SADDLE = 0;
+const PROTECTED_ANIMATION_DISTANCE = 300;
 const RIDE_COPIES_RIDER = 2;
 
 const GOLD_DROP_MODELS = [
@@ -214,6 +220,7 @@ export function createCharacterPresentation(
 	}
 ) {
 	let probe: CharacterFrameProbe | undefined;
+	let frameWork: import("@/engine/contracts/runtime").FrameWork | undefined;
 	// One id index per published catalogue, as GlobalDataManager keeps it.
 	let concealmentCatalog: readonly import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata[] | undefined,
 		concealmentLookup: SkillLookup = skillLookup( undefined );
@@ -616,6 +623,14 @@ export function createCharacterPresentation(
 	return {
 		/*
 		================
+		frameWork
+		================
+		*/
+		frameWork( work: import("@/engine/contracts/runtime").FrameWork ) {
+			frameWork = work;
+		},
+		/*
+		================
 		mallOutfit / mallPreviewState
 		================
 		*/
@@ -794,15 +809,26 @@ export function createCharacterPresentation(
 			// Timed samples draw on the frame clock: the local player from its
 			// movement owner, every other character from its stepped path.
 			// Entity rows and the local movement state publish the same four fields.
-			type Sampled = Pick<EntityState, "poseAtMs" | "moving" | "movementPath" | "movementRevision">;
+			type Sampled = Pick<
+				EntityState,
+				"poseAtMs" | "moving" | "movementPath" | "movementRevision" | "movementTransition"
+			>;
 			const samples = new Map<number, import("./pose-presentation").SampleInput>();
 			const sample = ( gid: number, source: Sampled ) => {
 				if ( source.poseAtMs === undefined ) return;
 				samples.set( gid, {
 					atMs: source.poseAtMs,
 					revision: source.movementRevision ?? 0,
-					moving: !!source.moving,
-					...(source.movementPath ? { to: source.movementPath.to } : {})
+					moving: !!source.moving && source.movementTransition?.pathEligible !== false,
+					transition: source.movementTransition,
+					...(source.movementPath ?
+						{
+							from: source.movementTransition?.pathEligible === false ?
+								undefined :
+								source.movementPath.from,
+							to: source.movementPath.to
+						} :
+						{})
 				} );
 			};
 			for ( const entity of entities ) if ( !localMover( entity.gid ) ) sample( entity.gid, entity );
@@ -1521,6 +1547,7 @@ export function createCharacterPresentation(
 			}
 
 			const actionLayersByActor = new Map<number, import("@/engine/contracts/character").CharacterLayer[]>();
+			const waitingActors = new Set<number>();
 			// Warm learned motions through the character resource owner. BANs
 			// stay shared by body/role; no per-cast mesh or texture rebuild.
 			if ( local ) {
@@ -1549,10 +1576,19 @@ export function createCharacterPresentation(
 			// server's cast that adopts it takes it over below.
 			const predictionToken = gameplay?.castPrediction?.token;
 			const adopting = new Set( (gameplay?.casts ?? []).map( cast => cast.predictedToken ) );
-			for ( const token of actionClocks.keys() ) {
-				if ( !castTokens.has( token ) && token !== predictionToken && !adopting.has( token ) ) {
-					actionClocks.delete( token );
+			for ( const [token, clock] of actionClocks ) {
+				if ( castTokens.has( token ) || token === predictionToken || adopting.has( token ) ) continue;
+				const entity = clock.caster === undefined ? undefined : entitiesByGid.get( clock.caster );
+				if ( entity && entity.appearanceState?.[0] !== 2 && !health?.dead( entity.gid ) ) {
+					// Model-owned installations outlive the skill decoration. Stop
+					// its WAIT/SHOT once, retaining READY's native natural exit.
+					advanceAction( clock, seconds, undefined, clock.cancelledAt ?? seconds );
+					const layers = actionLayers( clock, seconds );
+					if ( layers.length ) {
+						continue;
+					}
 				}
+				actionClocks.delete( token );
 			}
 			for ( const token of predictedEvents.keys() ) {
 				if ( token !== predictionToken && !adopting.has( token ) ) predictedEvents.delete( token );
@@ -1686,6 +1722,7 @@ export function createCharacterPresentation(
 						Math.max( 0, simulationMs - cast.receivedAtMs ) / 1000 :
 						0;
 					clock = {
+						caster: cast.caster,
 						started: seconds - age,
 						previous: 0,
 						phases: phases as ActionSchedule["phases"],
@@ -1718,10 +1755,12 @@ export function createCharacterPresentation(
 				const cancelledAt = stopAt !== undefined ?
 					seconds + (stopAt - (simulationMs ?? seconds * 1000)) / 1000 :
 					undefined;
+				clock.animationRate = entity.animationRate ?? 1;
 				const events = [
 					...adopted.map( event => ({ ...event, adopted: true }) ),
 					...advanceAction( clock, seconds, shotAt, cancelledAt ).events
 				];
+				if ( clock.phases[1] && clock.cancelledAt === undefined ) waitingActors.add( entity.gid );
 				const attackKind = clock.phases[2]?.clip.startsWith( "native:" ) ?
 					Number( clock.phases[2].clip.split( ":" )[2] ) :
 					({ attack1: 2, attack2: 5, attack3: 16, attack4: 17 } as Record<string, number>)[
@@ -1739,16 +1778,13 @@ export function createCharacterPresentation(
 					] );
 				}
 				for ( const event of presented ) triggers.push( { cast, ...event, attackKind } );
-				if ( cast.token === predictionToken ) {
-					actionLayersByActor.set( cast.caster, [
-						...actionLayers( clock, seconds ),
-						...(actionLayersByActor.get( cast.caster ) ?? [])
-					] );
-					continue;
-				}
-				actionLayersByActor.set( cast.caster, [
+			}
+			reconcileActionInstallations( actionClocks.values() );
+			for ( const clock of actionClocks.values() ) {
+				if ( clock.caster === undefined ) continue;
+				actionLayersByActor.set( clock.caster, [
 					...actionLayers( clock, seconds ),
-					...(actionLayersByActor.get( cast.caster ) ?? [])
+					...(actionLayersByActor.get( clock.caster ) ?? [])
 				] );
 			}
 			if ( damageTexts.length ) damageTexts = damageTexts.filter( row => seconds - row.started <= 3 );
@@ -2554,13 +2590,14 @@ export function createCharacterPresentation(
 						moving = false;
 					}
 					const activePosture = idleStates.get( entity.gid )?.posture;
+					const waiting = !dead && waitingActors.has( entity.gid );
 					const derivedMask = dead ?
 						2 :
 						sitting ?
 						0x40 :
 						activePosture?.kind === "down" ?
 						0x10 :
-						8 | (moving ? 0x200 : 0x100) | (cast ? 4 : 0);
+						(waiting ? 0 : 8 | (moving ? 0x200 : 0x100)) | (cast ? 4 : 0);
 					const input = [
 						dead,
 						sitting,
@@ -2569,6 +2606,7 @@ export function createCharacterPresentation(
 						requestedMoving,
 						movementRevision,
 						activePosture?.kind ?? "",
+						waiting,
 						!!cast
 					].join( ":" );
 					const commands: Parameters<typeof transitionActionStates>[2][number][] = [];
@@ -2578,6 +2616,7 @@ export function createCharacterPresentation(
 					if ( state.actionInput !== undefined && state.actionInput !== input ) {
 						if ( dead || activePosture?.kind === "down" || entity.mountedOn ) mask = derivedMask;
 						else if ( sitting ) commands.push( { kind: "enter", state: 6 } );
+						else if ( waiting ) commands.push( { kind: "leave", state: 3 } );
 						else {
 							if ( !(mask & 8) ) commands.push( { kind: "enter", state: 3 } );
 							if ( moving ) {
@@ -2812,7 +2851,12 @@ export function createCharacterPresentation(
 						}
 					}
 					const previousLocomotion = state.locomotion;
-					state.locomotion = changeLocomotion( state.locomotion, clip, looping, seconds, baseRole );
+					// 8E06E0 leaves base state 3 when WAIT is installed; 8E5B80
+					// then exits idle/movement. Keep their existing exit envelopes.
+					state.locomotion = waiting ?
+						state.locomotion ?? changeLocomotion( undefined, "", true, seconds, baseRole ) :
+						changeLocomotion( state.locomotion, clip, looping, seconds, baseRole );
+					if ( !waiting && previousLocomotion?.clip === "" ) state.locomotion.enter = .2;
 					if ( previousLocomotion !== state.locomotion ) {
 						state.locomotion.rate = baseRole === "run" || baseRole === "walk" ? entryRate : 1;
 						// 777F60 mounts and 85E930 dismounts with PlayAnimation(0,0,0,0,1,1):
@@ -3042,7 +3086,16 @@ export function createCharacterPresentation(
 								resource.modifierSelectors ?? []
 							) :
 							undefined,
-						animationLod: { fraction: entityLod.fraction( entity.gid ), crowded: entityLod.crowded() },
+						animationLod: {
+							fraction: entityLod.fraction( entity.gid ),
+							crowded: entityLod.crowded(),
+							// Dispatch and gameplay run above even when a distant skeleton
+							// reuses its last sample. Protect combat and the whole ride.
+							optional: !localMover( entity.gid ) && !entity.mountedOn && !cast && !dead &&
+								entity.gid !== gameplay?.target && entity.gid !== gameplay?.targetPending &&
+								entityLod.distance( entity.gid ) > PROTECTED_ANIMATION_DISTANCE &&
+								!gameplay?.casts.some( cast => cast.target === entity.gid )
+						},
 						blindable: blindableCharacter( entity, gameplay?.localGid ),
 						groundItem: !!entity.groundItem,
 						previewClip: resource.clips.includes( armedIdle ) ? armedIdle : "stand",
@@ -3073,7 +3126,13 @@ export function createCharacterPresentation(
 							yaw: characterHeadingYaw( renderPose.angle )
 						},
 						clip,
-						layers: posture || layers.length > 1 || state.locomotion.outgoing.length ? layers : undefined,
+						// A single WAIT/SHOT layer can differ from the base clip. Only
+						// collapse a full-weight timed layer that the base fields reproduce.
+						layers: posture || layers.length !== 1 || layers[0]!.clip !== clip ||
+								layers[0]!.loop !== looping || layers[0]!.weight !== 1 || layers[0]!.lane === "event" ||
+								state.locomotion.outgoing.length ?
+							layers :
+							undefined,
 						time: layers.length === 1 && layers[0]!.clip === clip ?
 							layers[0]!.time :
 							seconds - state.started,
@@ -3472,7 +3531,7 @@ export function createCharacterPresentation(
 					seconds,
 					resources.ready,
 					CHARACTER_ACTORS - next.size,
-					gid => entityLod.fraction( gid )
+					gid => frameWork?.level() && next.get( gid )?.animationLod?.optional ? 1 : entityLod.fraction( gid )
 				)
 			) next.set( actor.gid, actor );
 			for ( const holder of animationHolders ) holder.actor = next.get( holder.actor.gid )!;

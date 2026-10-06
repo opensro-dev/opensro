@@ -86,6 +86,9 @@ func (rt *Runtime) hostilePlayerRelation(division string, caster, target *enterw
 	if aCape != 0 && bCape != 0 || aJob != 0 && bJob != 0 {
 		return rt.hostilePlayerEquipment(caster, target)
 	}
+	if rt.guildsAtWar(division, caster, target) {
+		return true
+	}
 	if caster.Level == nil || target.Level == nil || *caster.Level < playerCombatMinimumLevel || *target.Level < playerCombatMinimumLevel {
 		return false
 	}
@@ -148,7 +151,7 @@ func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *en
 	if aggressionWeight == 1 {
 		return 0x3009
 	}
-	if rt.hostilePlayerEquipment(caster, target) {
+	if rt.hostilePlayerEquipment(caster, target) || rt.guildsAtWar(division, caster, target) {
 		return 0
 	}
 	if caster.Aggressions[enterworld.ObjectIDForCharacter(target)] != 0 {

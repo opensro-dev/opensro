@@ -78,3 +78,14 @@ func (rt *Runtime) companionAdmissionSpawn(pet *enterworld.CharacterCOS, centre 
 	}
 	return candidate
 }
+
+/*
+================
+EntryCompanionActionSpeed
+
+Same-session world re-entry retains the companion's abnormal keeper.
+================
+*/
+func (rt *Runtime) EntryCompanionActionSpeed(division string, character *enterworld.Character, pet *enterworld.CharacterCOS) float32 {
+	return cosParameter(nil, pet, rt.cosAbnormal(division, character.Name, pet.GID), actionSpeedParameter)
+}
