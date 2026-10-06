@@ -106,6 +106,7 @@ function movementState( page ) {
 			moving: game.moving,
 			movementPath: game.movementPath,
 			movementRevision: game.movementRevision,
+			movementDiagnostics: game.movementDiagnostics,
 			worldClock: game.worldClock,
 			hp: game.vitals?.find( row => row.gid === game.localGid )?.hp
 		};
@@ -430,7 +431,7 @@ async function run( options ) {
 	}
 	await mkdir( options.out, { recursive: true } );
 	const client = await openClient( fixture, {
-		spans: true,
+		spans: options.spans,
 		uncapped: false,
 		cpuRate: options.cpuRate,
 		beforeLogin: installFaults
@@ -492,7 +493,7 @@ async function run( options ) {
 			}, lane === "transport" ? 100 : 0 );
 			const captures = await createCaptures( page, {
 				dir: options.out,
-				cpu: true,
+				cpu: options.cpu,
 				trace: options.trace ? `${options.out}/${lane}.json` : null
 			} );
 			/*
@@ -536,6 +537,7 @@ async function run( options ) {
 				assertCrowd( result.crowdBefore );
 			}
 			let faultMark = 0;
+			const journalStart = await page.evaluate( () => globalThis.sroDebug.dumpMovement().capturedAtMs );
 			await page.evaluate( () => globalThis.__recoveryContinuity.reset() );
 			try {
 				Object.assign(
@@ -548,9 +550,28 @@ async function run( options ) {
 					`${options.out}/continuity-${lane}.json`,
 					JSON.stringify( result.continuity, null, 2 )
 				);
+				result.workerMovement = await page.evaluate( since => {
+					const dump = globalThis.sroDebug.dumpMovement();
+					return {
+						...dump,
+						windowStartMs: since,
+						events: dump.events.filter( event => event.atMs >= since )
+					};
+				}, journalStart );
+				await writeFile(
+					`${options.out}/worker-movement-${lane}.json`,
+					JSON.stringify( result.workerMovement, null, 2 )
+				);
 			}
 			assert.equal( result.continuity.invalidSpeed, 0, "continuity requires observed movement speeds" );
 			assert.equal( result.continuity.invalidTime, 0, "continuity requires increasing frame timestamps" );
+			for ( const channel of Object.values( result.continuity.channels ) ) {
+				assert.ok(
+					channel.pairs > 50 && channel.stationaryPairs > 0,
+					"continuity requires movement and stationary coverage"
+				);
+				assert.equal( channel.missing, 0, "continuity must observe every pose channel" );
+			}
 			await captures.stop( lane );
 			await captures.finish();
 			if ( crowd ) {
@@ -684,6 +705,8 @@ await run( parseOptions(
 	process.argv.slice( 2 ),
 	{
 		cpuRate: 1,
+		cpu: false,
+		spans: false,
 		scene: "field",
 		out: "temp/artifacts/recovery",
 		trace: false,
@@ -694,5 +717,5 @@ await run( parseOptions(
 		only: [ "main", "worker", "transport", ...STALL_LANES ]
 	},
 	"recovery-bench.mjs [--cpu-rate 4] [--out DIR] [--only main,worker,transport,network-delay,bidirectional-delay] " +
-		"[--trace] [--video] [--scene field|town] [--peers N --provisioning-url URL --token-path PATH]"
+		"[--cpu] [--spans] [--trace] [--video] [--scene field|town] [--peers N --provisioning-url URL --token-path PATH]"
 ) );

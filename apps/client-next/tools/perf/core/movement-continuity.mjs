@@ -26,7 +26,7 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 	if ( !probe?.movement ) throw Error( "continuity requires the existing movement observer" );
 	if ( root.__recoveryContinuity ) throw Error( "continuity observer already installed" );
 	const original = probe.movement;
-	const REGION_SIZE = 1920, MAX_EVENTS = 32, LONG_FRAME_MS = 250;
+	const REGION_SIZE = 1920, MAX_EVENTS = 32, MAX_CHANNEL_EVENTS = 8, LONG_FRAME_MS = 250;
 	const names = [ "logical", "displayed", "body" ];
 	let summary, previous, active = false;
 
@@ -59,7 +59,8 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 				maxLongFrameExcessXZ: 0,
 				longFrameExcessFramesXZ: 0,
 				maxDeltaDifferenceXZ: 0,
-				deltaDifferenceFramesXZ: 0
+				deltaDifferenceFramesXZ: 0,
+				excessEvents: []
 			} ] ) ),
 			events: []
 		};
@@ -87,7 +88,9 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 	*/
 	probe.movement = function observe( sample ) {
 		original.call( probe, sample );
-		if ( !active ) return;
+		// measure() closes this window before serializing its large frame tail.
+		// That transfer is harness overhead, not another measured game frame.
+		if ( !active || root.__benchLoop === false ) return;
 		summary.frames++;
 		const game = root.__benchRuntime.gameplay();
 		const entity = root.__benchRuntime.entities().find( row => row.gid === game.localGid );
@@ -99,6 +102,7 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 		}
 		const current = {
 			atMs: sample.atMs,
+			workerAtMs: sample.workerAtMs,
 			speed,
 			revision: sample.revision,
 			stationary: game.moving === false && game.pendingMoves === 0,
@@ -149,10 +153,12 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 						if ( deltaDifferenceXZ > threshold ) channel.deltaDifferenceFramesXZ++;
 					}
 					if ( excessXYZ > threshold || deltaDifferenceXZ > threshold ) {
-						summary.events.push( {
+						const event = {
 							channel: name,
 							atMs: current.atMs,
 							dtMs: dt,
+							workerAtMs: current.workerAtMs,
+							workerBeforeMs: previous.workerAtMs,
 							expected,
 							xz,
 							xyz,
@@ -165,7 +171,15 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 							revisionBefore: previous.revision,
 							revision: current.revision,
 							transition: sample.transition ? { ...sample.transition } : null
-						} );
+						};
+						summary.events.push( event );
+						if ( excessXYZ > threshold ) {
+							channel.excessEvents.push( event );
+							channel.excessEvents.sort( ( a, b ) => b.excessXYZ - a.excessXYZ );
+							if ( channel.excessEvents.length > MAX_CHANNEL_EVENTS ) {
+								channel.excessEvents.length = MAX_CHANNEL_EVENTS;
+							}
+						}
 						summary.events.sort( ( a, b ) =>
 							Math.max( b.excessXYZ, b.deltaDifferenceXZ ?? 0 ) -
 							Math.max( a.excessXYZ, a.deltaDifferenceXZ ?? 0 )

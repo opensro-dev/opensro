@@ -88,6 +88,7 @@ test("event storage is bounded and reset and stop delimit separate windows", () 
 	const f = fixture();
 	for ( let i = 0; i < 100; i++ ) f.frame( i * 10, i * 10 );
 	assert.equal( f.read().events.length, 32 );
+	assert.equal( f.read().channels.body.excessEvents.length, 8 );
 	assert.equal( f.read().channels.body.excessFramesXZ, 99 );
 	f.target.__recoveryContinuity.reset();
 	f.frame( 2000, 0 );
@@ -132,4 +133,34 @@ test("a long frame cannot hide displayed divergence inside its speed budget", ()
 	assert.equal( result.channels.displayed.maxDeltaDifferenceXZ, 10 );
 	assert.equal( result.channels.body.deltaDifferenceFramesXZ, 1 );
 	assert.equal( result.events[0].deltaDifferenceXZ, 10 );
+});
+
+test("closing the measurement window excludes artifact serialization stalls", () => {
+	const f = fixture();
+	f.target.__benchLoop = true;
+	f.frame( 0, 0 );
+	f.frame( 10, 0.5 );
+	f.target.__benchLoop = false;
+	f.frame( 3000, 50 );
+	assert.equal( f.read().frames, 2 );
+	assert.equal( f.read().longFrames, 0 );
+	assert.equal( f.read().maxDtMs, 10 );
+});
+
+test("logical publication jumps cannot evict a visible excess witness", () => {
+	const f = fixture();
+	f.frame( 0, 0 );
+	f.frame( 10, 2 );
+	for ( let i = 2; i < 100; i++ ) {
+		f.target.__worldProbeFrameProfiler.movement( {
+			atMs: i * 10,
+			revision: 1,
+			logical: { regionId: 25000, x: i * 100, y: 0, z: 0 },
+			displayed: { regionId: 25000, x: 2, y: 0, z: 0 }
+		} );
+	}
+	const events = f.read().channels.body.excessEvents;
+	assert.equal( events.length, 1 );
+	assert.equal( events[0].atMs, 10 );
+	assert.equal( events[0].excessXZ, 1.5 );
 });
