@@ -77,10 +77,11 @@ moveTo
 */
 function moveTo( page, offset ) {
 	return page.evaluate( offset => {
-		const root = globalThis.__benchRuntime, pose = root.gameplay().pose;
+		const root = globalThis.__benchRuntime, game = root.gameplay(), pose = game.pose;
 		const destination = { ...pose, x: pose.x + offset.x, z: pose.z + offset.z };
+		const beforeRevision = game.movementRevision;
 		root.session( { kind: "gameplay", command: { kind: "move", destination } } );
-		return destination;
+		return { destination, beforeRevision };
 	}, offset );
 }
 
@@ -216,11 +217,13 @@ async function stallSteps( page, { lane, name, stall, legs, anchor, steps, recor
 			const mark = (await faultLog( page )).logged;
 			if ( ms > 0 ) await stall( ms );
 			await page.waitForTimeout( Math.round( ms / 3 ) );
-			const requested = await moveTo( page, action === "turn" ? legs.turn : { x: 0, z: 0 } );
+			const command = await moveTo( page, action === "turn" ? legs.turn : { x: 0, z: 0 } );
+			const requested = command.destination;
 			// Past every hold (bidirectional holds the downlink for 2 ms), then settled,
 			// then past the observatory cache so its snapshot postdates the settle.
 			await page.waitForTimeout( 2 * ms );
-			const settledAtMs = (await settle( page )).atMs;
+			const settled = await settle( page, command.beforeRevision );
+			const settledAtMs = settled.atMs;
 			await page.waitForTimeout( OBSERVATORY_CACHE_MS + SETTLE_MARGIN_MS );
 			const held = (await faultLog( page, mark )).held;
 			const client = await movementState( page );
@@ -229,6 +232,8 @@ async function stallSteps( page, { lane, name, stall, legs, anchor, steps, recor
 				ms,
 				action,
 				requested,
+				beforeRevision: command.beforeRevision,
+				settled,
 				// movement.ts truncates the 0x7738 destination to integer region units.
 				wire: { x: Math.trunc( requested.x ), y: Math.trunc( requested.y ), z: Math.trunc( requested.z ) },
 				settledAtMs,
