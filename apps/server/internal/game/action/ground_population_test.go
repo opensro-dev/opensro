@@ -61,7 +61,7 @@ func TestGroundPickupCannotUsePartyOwnershipAcrossWorlds(t *testing.T) {
 	}
 	before := goldOf(c)
 	result := rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: drop.Gid}.Encode())
-	assertOpcodes(t, result.Frames, wire.OpActionState, wire.OpItemMoveResponse)
+	assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpActionState)
 	if goldOf(c) != before {
 		t.Fatal("cross-world pickup credited gold")
 	}

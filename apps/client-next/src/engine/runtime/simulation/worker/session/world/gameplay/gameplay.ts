@@ -565,7 +565,15 @@ reuse gate as manual activation. Recovery completion is server-owned.
 		// 561D50 checks the NPC interaction latch (69F870 includes storage)
 		// and the return-delay control. The retry timer itself stays armed.
 		if ( slot === null ) return;
-		if ( autoPotionItemMallOpen || returnScroll || inventory.state().shop || storage.state() ) {
+		// 561E57..561E6B tests the visible stall control, including the owner
+		// editing a closed stall and a visitor. Naming and network are separate windows.
+		const stallVisible = inventory.stallPhase() === "owner" || inventory.stallPhase() === "visitor";
+		// 69B040 reads the active interaction latch, not retained shop data.
+		// The catalog survives close/release/despawn so the same merchant can reopen.
+		const conversation = npcConversation.state();
+		const shopActive = conversation.phase !== "closed" &&
+			conversation.gid === targeting.state().target && inventory.state().shop?.npc === conversation.gid;
+		if ( stallVisible || autoPotionItemMallOpen || returnScroll || shopActive || storage.state() ) {
 			const notice = constantNativeNotice( ITEM_NOTICE_CATEGORY, ITEM_INTERACTION_REFUSAL );
 			if ( notice ) api.notice( notice );
 			return;
@@ -1194,6 +1202,16 @@ state here before a command can claim a native wire conversation.
 				return null;
 			}
 			if ( command.kind === "return-cancel" ) {
+				if ( localGid && returnScroll?.skillId ) {
+					// 6FFFE9 passes zero for the optional instance; the delay cancel
+					// button addresses the repair skill, unlike a buff-icon click.
+					const payload = new Uint8Array( 7 );
+					payload[0] = 1;
+					payload[1] = 5;
+					const view = new DataView( payload.buffer );
+					view.setUint32( 2, returnScroll.skillId, true );
+					return sendFrame( { opcode: 0x72cd, payload } );
+				}
 				return localGid && returnScroll ?
 					sendFrame( { opcode: 0x72dd, payload: new Uint8Array( 0 ) } ) :
 					null;
@@ -3038,6 +3056,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				// press, before touching movement (an empty MP pool is 0x3004).
 				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) movement.castRefused( now );
 				if ( item && cast ) returnScroll = cast;
+				if ( returnScroll?.skillId && (fight || item && cast) ) {
+					const effect = combat.state().attachedEffects.find( row =>
+						row.gid === localGid && row.skill === returnScroll?.skillId && row.subject
+					);
+					if ( effect ) returnScroll = { ...returnScroll, token: effect.token };
+					if ( frame.opcode === 0xb6a0 && returnScroll.token && !effect ) returnScroll = undefined;
+				}
 				// A spent warehouse ticket opens the room on the player's own gid.
 				if ( item && used && localGid && isWarehouseTicket( used.typeFlags ) ) {
 					storage.open( localGid );
@@ -3133,7 +3158,13 @@ Packet handling must not depend on which HUD panel is currently open.
 						inventoryBefore,
 						inventoryAfter,
 						moves,
-						{ country: localCountry, progression, maxHp: potionFacts.maxHp, maxMp: potionFacts.maxMp },
+						{
+							inventorySlotCount: inventory.state().inventorySlotCount,
+							country: localCountry,
+							progression,
+							maxHp: potionFacts.maxHp,
+							maxMp: potionFacts.maxMp
+						},
 						frame.opcode === 0xb5bd && frame.payload[0] === 1
 					);
 					for ( let i = 0; i < next.length; i++ ) {
@@ -3271,6 +3302,13 @@ before take assembles the presentation snapshot.
 				) play( "SND_ALARM", now );
 			}
 			warnings = local ? low : [ false, false ];
+			if (
+				returnScroll?.skillId &&
+				(!potionFacts.alive || now >= returnScroll.startedAtMs + returnScroll.durationMs)
+			) {
+				returnScroll = undefined;
+				dirty = true;
+			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
 
 			const combatChanged = combat.step( now ), inventoryChanged = inventory.step( now );

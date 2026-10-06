@@ -19,7 +19,13 @@ import (
 
 // residentSkill shares immutable descriptors while retaining detached SkillRow reads.
 // TextdataSkills is the only writer, before its sync.Once publication boundary.
+/*
+================
+residentSkill
+================
+*/
 type residentSkill struct {
+	StructureRepair         SkillStructureRepair
 	PositionEffect          SkillPositionEffect
 	Replacement             unique.Handle[statuseffect.ReplacementDescriptor]
 	ReplacementPinned       bool
@@ -123,8 +129,14 @@ type residentSkill struct {
 	VoluntaryCancelBlocked  bool
 }
 
+/*
+================
+compactSkill
+================
+*/
 func compactSkill(row SkillRow) residentSkill {
 	return residentSkill{
+		StructureRepair:         row.StructureRepair,
 		PositionEffect:          row.PositionEffect,
 		Replacement:             unique.Make(row.Replacement),
 		ReplacementPinned:       row.ReplacementPinned,
@@ -230,8 +242,15 @@ func compactSkill(row SkillRow) residentSkill {
 		VoluntaryCancelBlocked:  row.VoluntaryCancelBlocked,
 	}
 }
+
+/*
+================
+value
+================
+*/
 func (r residentSkill) value() SkillRow {
 	return SkillRow{
+		StructureRepair:         r.StructureRepair,
 		PositionEffect:          r.PositionEffect,
 		Replacement:             r.Replacement.Value(),
 		ReplacementPinned:       r.ReplacementPinned,
@@ -338,17 +357,33 @@ func (r residentSkill) value() SkillRow {
 	}
 }
 
+/*
+================
+skillStorage
+================
+*/
 type skillStorage struct {
 	hot     map[uint32]residentSkill
 	archive *recordcache.Cache[SkillRow]
 }
 
+/*
+================
+set
+================
+*/
 func (s *skillStorage) set(id uint32, row SkillRow) {
 	if s.hot == nil {
 		s.hot = make(map[uint32]residentSkill)
 	}
 	s.hot[id] = compactSkill(row)
 }
+
+/*
+================
+lookup
+================
+*/
 func (s *skillStorage) lookup(id uint32) (SkillRow, bool) {
 	if s.archive != nil {
 		return s.archive.Get(id)
@@ -359,7 +394,19 @@ func (s *skillStorage) lookup(id uint32) (SkillRow, bool) {
 	}
 	return r.value(), true
 }
+
+/*
+================
+get
+================
+*/
 func (s *skillStorage) get(id uint32) SkillRow { r, _ := s.lookup(id); return r }
+
+/*
+================
+values
+================
+*/
 func (s *skillStorage) values() iter.Seq2[uint32, SkillRow] {
 	return func(yield func(uint32, SkillRow) bool) {
 		if s.archive != nil {
@@ -378,7 +425,19 @@ func (s *skillStorage) values() iter.Seq2[uint32, SkillRow] {
 		}
 	}
 }
+
+/*
+================
+SkillByID
+================
+*/
 func (s skillStorage) SkillByID(id uint32) (SkillRow, bool) { return s.lookup(id) }
+
+/*
+================
+SkillByCodename
+================
+*/
 func (s skillStorage) SkillByCodename(name string) (SkillRow, bool) {
 	for _, r := range s.values() {
 		if r.Codename == name {
@@ -388,6 +447,11 @@ func (s skillStorage) SkillByCodename(name string) (SkillRow, bool) {
 	return SkillRow{}, false
 }
 
+/*
+================
+len
+================
+*/
 func (s *skillStorage) len() int {
 	if s.archive != nil {
 		return s.archive.Len()

@@ -1,14 +1,6 @@
 /*
 ===========================================================================
 
-inventory.ts - authoritative inventory packets and pending item operations
-
-===========================================================================
-*/
-import { sameStackIdentity } from "@/engine/foundation/gameplay/container-transfer";
-/*
-===========================================================================
-
 inventory.ts - inventory authority publications and serialized item commands
 
 Owns player and avatar slots, reference projections and pending native moves.
@@ -17,6 +9,7 @@ Child owners handle process-specific state while this owner commits item rows.
 ===========================================================================
 */
 import { cosItemUseTail, type CosItemUseContext } from "@/engine/foundation/gameplay/cos-item-use";
+import { planContainerMove, sameStackIdentity, stackable } from "@/engine/foundation/gameplay/container-transfer";
 import { createMall } from "./mall/mall";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 import {
@@ -310,30 +303,27 @@ transfer
 		if ( !a ) {
 			throw new Error( "Inventory result references empty source" );
 		}
-		const stack = (a.typeFlags & 0x60) === 0x60;
 		// Equipment moves swap whole records, including ammunition. Only bag-to-bag
 		// moves may split/merge counts; companion moves obey the same rule.
-		if (
-			stack && source >= (equipmentSlotCount ?? 13) && destination >= (equipmentSlotCount ?? 13) &&
-			(!b || sameStackIdentity( a, b ))
-		) {
-			if ( quantity < 1 || quantity > a.quantity || (b?.quantity ?? 0) + quantity > 65535 ) {
-				throw new Error( "Invalid inventory stack transfer" );
-			}
-			next.set( destination, { ...a, slot: destination, quantity: (b?.quantity ?? 0) + quantity } );
-			if ( quantity === a.quantity ) {
-				next.delete( source );
-			} else {
-				next.set( source, { ...a, quantity: a.quantity - quantity } );
-			}
-		} else {
-			next.set( destination, { ...a, slot: destination } );
-			if ( b ) {
-				next.set( source, { ...b, slot: source } );
-			} else {
-				next.delete( source );
-			}
+		if ( source >= (equipmentSlotCount ?? 13) && destination >= (equipmentSlotCount ?? 13) ) {
+			// 756A60 uses full counts for occupied stacks; the echoed wire quantity
+			// only selects a split into an empty slot. The reference owns the cap.
+			const cap = tooltipRefs.get( a.refObjId )?.fields.maxStack;
+			const caps = new Map<number, number>();
+			if ( cap !== undefined ) caps.set( a.refObjId, cap );
+			const rows = planContainerMove(
+				[ ...next.values() ],
+				{ source, destination, quantity },
+				caps,
+				"inventory"
+			);
+			next.clear();
+			for ( const row of rows ) next.set( row.slot, row );
+			return;
 		}
+		next.set( destination, { ...a, slot: destination } );
+		if ( b ) next.set( source, { ...b, slot: source } );
+		else next.delete( source );
 	}
 	return {
 		/*
@@ -1587,14 +1577,17 @@ receive
 			const moveCues: { item: InventoryItem; warn: boolean; }[] = [];
 			const applyMove = ( source: number, destination: number, quantity: number ) => {
 				const a = next.get( source ), b = next.get( destination );
-				const stacking = !!a && (a.typeFlags & 0x60) === 0x60 && source >= (equipmentSlotCount ?? 13) &&
-					destination >= (equipmentSlotCount ?? 13) && (!b || sameStackIdentity( a, b ));
+				// 757652 reads destination +68 (plus), not +7C (count). Preserve
+				// that native flag: 574800 always moves source bindings, while this
+				// flag keeps destination bindings attached to the destination control.
+				const keepDestination = !!a && !!b && source >= (equipmentSlotCount ?? 13) &&
+					destination >= (equipmentSlotCount ?? 13) && stackable( a ) && sameStackIdentity( a, b ) &&
+					a.quantity + b.plus <= (tooltipRefs.get( a.refObjId )?.fields.maxStack ?? 0);
 				transfer( next, source, destination, quantity );
 				committedMoves.push( {
 					source,
 					destination,
-					sourceRemains: stacking && next.has( source ),
-					destinationMoves: !stacking && !!b
+					destinationMoves: !!b && !keepDestination
 				} );
 				const item = next.get( destination )!;
 				moveCues.push( {
@@ -1612,13 +1605,16 @@ receive
 					throw new Error( "Stale item use result" );
 				}
 				const category = potionCategory( item.typeFlags );
-				if ( category ) {
+				const potionFamily = (item.typeFlags & 0x7fe) === 0xec || (item.typeFlags & 0x7fe) === 0x16c;
+				if ( potionFamily ) {
 					// The server's published unlimited-item extension acknowledges use
 					// without spending a stack. It still requires this pending request.
 					const unlimited = quantity === item.quantity &&
 						recovery?.unlimitedItems?.includes( item.refObjId ) &&
 						pending?.opcode === op && pending.source === n;
 					if ( !unlimited && quantity !== item.quantity - 1 ) throw Error( "Stale recovery item use result" );
+				}
+				if ( category ) {
 					// Read the reference before last-stack removal; failed receipts never reach here.
 					{
 						const durationMs = potionCooldownMs(
@@ -1633,6 +1629,25 @@ receive
 							durationMs
 						} ];
 					}
+				}
+				// 755F02 registers authored cooldowns separately from potion lanes.
+				const fields = tooltipRefs.get( item.refObjId )?.fields ?? {};
+				const durationMs = fields.useCooldownDuration528 ?? 0;
+				if ( durationMs > 0 ) {
+					const group = fields.useCooldownGroup524 ?? 0;
+					itemCooldowns = [
+						...itemCooldowns.filter( row =>
+							row.category !== 18 ||
+							(group ? row.group !== group : !!row.group || row.refObjId !== item.refObjId)
+						),
+						{
+							category: 18,
+							group,
+							refObjId: item.refObjId,
+							startedAtMs: now,
+							durationMs
+						}
+					];
 				}
 				if ( quantity ) {
 					next.set( n, { ...item, quantity } );
