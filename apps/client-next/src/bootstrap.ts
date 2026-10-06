@@ -30,8 +30,7 @@ function diagnosticsFromQuery() {
 		gpuAnimation: query.get( "gpu-animation" ) !== "0",
 		stages: query.get( "frame-stages" ) === "1",
 		gpuTiming: query.get( "gpu-timing" ) === "1",
-		hoverPicking: query.get( "hover-picking" ) !== "0",
-		postProcessing: query.get( "post-processing" ) !== "0"
+		hoverPicking: query.get( "hover-picking" ) !== "0"
 	};
 }
 

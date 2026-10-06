@@ -174,6 +174,24 @@ test(
 			assert.equal( menuRows[1] - menuRows[0], 34 );
 			await page.screenshot( { path: "temp/artifacts/experimental-options/escape-menu.png" } );
 			await click( "open-window:Experimental" );
+			// Video is the first tab; every stage is off, which is the native frame.
+			for (
+				const id of [
+					"experimental-post-processing",
+					"experimental-anisotropic-filtering",
+					"experimental-height-fog",
+					"experimental-water-reflection",
+					"experimental-garment-sheen"
+				]
+			) {
+				await draw( id );
+				assert.equal(
+					await page.locator( '[data-ui-id="' + id + '"]' ).getAttribute( "aria-pressed" ),
+					"false"
+				);
+			}
+			await page.screenshot( { path: "temp/artifacts/experimental-options/experimental-video.png" } );
+			await click( "experimental-tab:1" );
 			await draw( "experimental-chat-timestamps" );
 			assert.equal(
 				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
@@ -181,12 +199,15 @@ test(
 			);
 			await page.screenshot( { path: "temp/artifacts/experimental-options/experimental.png" } );
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
+			await click( "experimental-tab:2" );
+			await page.screenshot( { path: "temp/artifacts/experimental-options/experimental-developer.png" } );
 			await click( "experimental-developer-diagnostics" );
 			assert.equal(
 				await page.locator( "#developer-toggle" ).isVisible(),
 				false,
 				"draft must not enable diagnostics"
 			);
+			await click( "experimental-tab:1" );
 			await click( "experimental-chat-timestamps" );
 			await click( "experimental-cancel" );
 			assert.equal(
@@ -195,18 +216,21 @@ test(
 			);
 			await page.keyboard.press( "Escape" );
 			await click( "open-window:Experimental" );
+			await click( "experimental-tab:1" );
 			await draw( "experimental-chat-timestamps" );
 			assert.equal(
 				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
 				"false"
 			);
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
+			await click( "experimental-tab:2" );
 			await click( "experimental-developer-diagnostics" );
 			assert.equal(
 				await page.locator( "#developer-toggle" ).isVisible(),
 				false,
 				"draft must not enable diagnostics"
 			);
+			await click( "experimental-tab:1" );
 			await click( "experimental-chat-timestamps" );
 			await click( "experimental-confirm" );
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), true );
@@ -230,10 +254,19 @@ test(
 
 			assert.deepEqual(
 				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ) ),
-				{ chatTimestamps: true, developerDiagnostics: true }
+				{
+					chatTimestamps: true,
+					developerDiagnostics: true,
+					postProcessing: false,
+					anisotropicFiltering: false,
+					heightFog: false,
+					waterReflection: false,
+					garmentSheen: false
+				}
 			);
 			await page.keyboard.press( "Escape" );
 			await click( "open-window:Experimental" );
+			await click( "experimental-tab:1" );
 			await draw( "experimental-chat-timestamps" );
 			assert.equal(
 				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
@@ -246,6 +279,7 @@ test(
 				flagFixture.ui.event( { kind: "activate", id: "open-window:Experimental" } );
 				flagFixture.draw();
 			} );
+			await click( "experimental-tab:1" );
 			await draw( "experimental-chat-timestamps" );
 			assert.equal(
 				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
@@ -256,7 +290,15 @@ test(
 			await click( "experimental-confirm" );
 			assert.deepEqual(
 				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ) ),
-				{ chatTimestamps: false, developerDiagnostics: false }
+				{
+					chatTimestamps: false,
+					developerDiagnostics: false,
+					postProcessing: false,
+					anisotropicFiltering: false,
+					heightFog: false,
+					waterReflection: false,
+					garmentSheen: false
+				}
 			);
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
 			assert.equal( await page.locator( "#developer-readout" ).isVisible(), false );

@@ -60,6 +60,7 @@ export interface DeviceOwner extends Disposable {
 		depth: GPUTextureView
 	): Promise<readonly boolean[]>;
 	textureOptions( filtered: boolean, detail: number ): void;
+	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	bloom( width: number, height: number, enabled: boolean ): BloomDraw | undefined;
 	gpuTiming(): GpuTimingStats | null;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;

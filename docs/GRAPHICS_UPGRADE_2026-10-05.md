@@ -5,9 +5,18 @@ with a typography guard, adaptive sharpen, vibrance/contrast grade, output
 dither), exp2 height fog, water fresnel, garment sheen. A sixth change on
 the asset side ships the world's block textures as authored. The renderer is
 a faithful 2005 D3D9 reconstruction, so every stage here is a deliberate,
-documented deviation - and each one is tuned, or reverted, through the
-named constants in its owning file. Nothing here changes a data format,
-a pipeline variant count or the render-bundle structure.
+documented deviation - and each one is tuned through the named constants in
+its owning file. Nothing here changes a data format, a pipeline variant count
+or the render-bundle structure.
+
+**Every renderer stage is an opt-in under Experimental > Video, off by
+default.** Off is the native 2005 frame: the plain swapchain copy, retail
+samplers (`maxAnisotropy: 1`), D3DFOG_LINEAR, flat water and no sheen. The
+preferences are saved with the other Experimental options; the renderer
+switches the presentation pass and the samplers at run time, and the shader
+stages read `env.stages` (x height fog, y water reflection, z garment sheen).
+The asset-side block textures (section 6) keep the authored pixels and are
+not a toggle.
 
 ## 1. Anisotropic filtering x16
 
@@ -59,10 +68,9 @@ pass instead of under it - is a frame-order change through
 Wiring: `device.ts` owns the pass and calls it from
 `ColorTarget.present()`; the renderer retains the offscreen frame every
 frame it is enabled (`renderer.ts`, `postProcessing || deferred query`).
-On by default (`?post-processing=0` on the page URL disables it);
-`createDevice()`'s own default stays disabled so device-level tests
-keep exercising the byte-exact copy path. Cost: one fullscreen triangle
-plus the offscreen frame texture the deferred-particle path already
+Off by default: Experimental > Video > Anti-aliasing and color grade turns it
+on. The page URL no longer carries a switch. Cost when on: one fullscreen
+triangle plus the offscreen frame texture the deferred-particle path already
 allocates.
 
 Regression cover: `apps/client-next/tests/browser/finish.test.mjs` -

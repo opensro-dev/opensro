@@ -35,11 +35,15 @@ export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 	destination: D3DBLEND_INVSRCALPHA
 } );
 
-// Fog shape - a deliberate deviation from the retail D3DFOG_LINEAR the
+// Experimental video stages (Experimental > Video). Each is off by
+// default, which is the native frame; env.stages carries the switches
+// (x height fog, y water reflection, z garment sheen).
+//
+// Height fog - a deliberate deviation from the retail D3DFOG_LINEAR the
 // native client authored (sub_4dc920 start/end): the same start/end
-// uniforms now drive an exp2 falloff with a height term and a horizon
-// tint, which keeps the mid-range clear, softens the horizon and lets
-// peaks rise out of the haze. The retail ramp is one formula away.
+// uniforms drive an exp2 falloff with a height term and a horizon tint,
+// which keeps the mid-range clear, softens the horizon and lets peaks
+// rise out of the haze. Off, the retail linear ramp and colours stand.
 const FOG_EXP2_REACH = 2.5; // exp2 factor reaches 1 - 1/255 at the fog end
 const FOG_HEIGHT_FALLOFF = 0.004; // fog density e-folds 250 m above the eye
 const FOG_SKY_TINT = 0.3; // global fog colour blended toward the horizon colour
@@ -60,6 +64,9 @@ const WATER_WAVE_SLOPE = 1; // wave-frame slope weight in the reflection lookup
 // forward (surface to eye), exact at the frame centre.
 const SHEEN_POWER = 24; // highlight tightness
 const SHEEN_STRENGTH = 0.5; // gloss gain on the lit term
+
+// Anisotropic filtering - the experimental sampler level; retail is 1.
+const ANISOTROPY = 16;
 
 /*
 ================
@@ -221,7 +228,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 		primitive: { topology: "triangle-list" }
 	} );
 	const environmentStruct =
-		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f}`;
+		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,stages:vec4f}`;
 	const skyShader = created.createShaderModule( {
 		code: environmentStruct + `
 @group(0) @binding(0) var<uniform> env:Environment;
@@ -404,8 +411,8 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  }
  // AEF8E0: option texture * packed TFACTOR (MODULATE/2X), then ADD base.
  if(material.equipmentColor.w>0.0){lit=clamp(tex.rgb+clamp(equipment*material.equipmentColor.rgb*material.equipmentColor.w,vec3f(0),vec3f(1)),vec3f(0),vec3f(1));}
- // Authored garment gloss from the opaque DXT3 alpha.
- if(material.reflection.z>0.5&&input.opacity>=1.0){
+ // Authored garment gloss from the opaque DXT3 alpha (experimental).
+ if(material.reflection.z>0.5&&env.stages.z>0.5&&input.opacity>=1.0){
   let halfVec=normalize(vec3f(0.70710678,0.70710678,0)-env.forward.xyz);
   let gloss=pow(max(0.0,dot(normalize(input.normal),halfVec)),${SHEEN_POWER});
   lit=clamp(lit+tex.a*gloss*${SHEEN_STRENGTH}*env.diffuse.rgb,vec3f(0),vec3f(1));
@@ -414,8 +421,8 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  // Fresnel-weighted sky reflection on animated water. The reflected ray
  // sees zenith when the eye looks down, horizon when grazing; the wave
  // frame's slope shimmers the lookup between the two.
- var waterShading=vec3f(1);
- if(animated){
+ var waterShading=clamp(env.water.rgb,vec3f(0),vec3f(1));
+ if(animated&&env.stages.y>0.5){
   let slope=(tex.rg-vec2f(0.5))*${WATER_WAVE_SLOPE};
   let cosTheta=clamp((env.settings.w-input.worldY)/max(input.viewZ,1.0),0.05,1.0);
   let fresnel=${WATER_FRESNEL}+(1.0-${WATER_FRESNEL})*pow(1.0-cosTheta,5.0);
@@ -424,20 +431,23 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  }
  let fogSource=select(env.fog,material.localFog,material.policy.y>0.5);
  let fogEnd=select(env.settings.x,material.localFogSettings.x,material.policy.y>0.5);
- // Exp2 with height falloff: no fog before the authored start, 1-1/255 at
- // the end, and the density e-folds above the eye so peaks clear the haze.
- var fog=0.0;
- if((env.settings.y>0.5||material.policy.y>0.5)&&material.policy.x<0.5){
+ // Native D3DFOG_LINEAR between the authored start and end.
+ let fogApplies=(env.settings.y>0.5||material.policy.y>0.5)&&material.policy.x<0.5;
+ var fog=select(0.0,clamp((input.viewZ-fogSource.w)/max(0.001,fogEnd-fogSource.w),0,1),fogApplies);
+ var fogColor=fogSource.rgb;var terrainFogColor=env.terrainFog.rgb;
+ if(env.stages.x>0.5){
+  // Height fog (experimental): exp2 with no fog before the authored start,
+  // 1-1/255 at the end, the density e-folding above the eye so peaks clear
+  // the haze. The global fog takes the horizon tint; local fog volumes keep
+  // their authored colour, and both fog targets tint identically so the
+  // distant terrain band's colour match keeps its seam behaviour.
   let density=${FOG_EXP2_REACH}/max(0.001,fogEnd-fogSource.w);
   let height=exp(-max(0.0,input.worldY-env.settings.w)*${FOG_HEIGHT_FALLOFF});
   let d=max(0.0,input.viewZ-fogSource.w)*density*height;
-  fog=1.0-exp(-d*d);
+  fog=select(0.0,1.0-exp(-d*d),fogApplies);
+  fogColor=select(fogSource.rgb,mix(fogSource.rgb,env.horizon.rgb,${FOG_SKY_TINT}),material.policy.y<0.5);
+  terrainFogColor=mix(env.terrainFog.rgb,env.horizon.rgb,${FOG_SKY_TINT});
  }
- // The global fog takes the horizon tint; local fog volumes keep their
- // authored colour. Both fog targets tint identically so the distant
- // terrain band's colour match keeps its existing seam behaviour.
- let fogColor=select(fogSource.rgb,mix(fogSource.rgb,env.horizon.rgb,${FOG_SKY_TINT}),material.policy.y<0.5);
- let terrainFogColor=mix(env.terrainFog.rgb,env.horizon.rgb,${FOG_SKY_TINT});
  if(material.skin.y>0.5){return vec4f(mix(clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1)),terrainFogColor,fog),1);}
  return vec4f(mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog),select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5));
 }`
@@ -488,15 +498,14 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 			} )
 		)
 	);
-	// Retail 87cbc0 sets MIN/MAG/MIP to LINEAR (2) with no anisotropic filter.
-	// Modernization, not native parity: 16x anisotropy keeps ground and wall
-	// texels sharp at grazing angles at no measurable frame cost; the retail
-	// look is one sampler constant away (maxAnisotropy 1).
+	// Retail 87cbc0 sets MIN/MAG/MIP to LINEAR (2) with no anisotropic filter;
+	// these defaults are that. Experimental > Video > Anisotropic filtering
+	// swaps in the ANISOTROPY samplers below (geometry textureOptions).
 	const worldSampler = created.createSampler( {
 		minFilter: "linear",
 		magFilter: "linear",
 		mipmapFilter: "linear",
-		maxAnisotropy: 16,
+		maxAnisotropy: 1,
 		addressModeU: "repeat",
 		addressModeV: "repeat"
 	} );
@@ -504,7 +513,15 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 		minFilter: "linear",
 		magFilter: "linear",
 		mipmapFilter: "linear",
-		maxAnisotropy: 16,
+		maxAnisotropy: 1,
+		addressModeU: "clamp-to-edge",
+		addressModeV: "clamp-to-edge"
+	} );
+	const anisotropicLightmapSampler = created.createSampler( {
+		minFilter: "linear",
+		magFilter: "linear",
+		mipmapFilter: "linear",
+		maxAnisotropy: ANISOTROPY,
 		addressModeU: "clamp-to-edge",
 		addressModeV: "clamp-to-edge"
 	} );
@@ -516,20 +533,30 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 		The world texture sampler for the filtering and detail options.
 		================
 		*/
-		worldSampling( filtered: boolean, detail: number ) {
+		worldSampling( filtered: boolean, detail: number, anisotropic = false ) {
 			return created.createSampler( {
 				minFilter: filtered ? "linear" : "nearest",
 				magFilter: filtered ? "linear" : "nearest",
 				mipmapFilter: filtered ? "linear" : "nearest",
 				// Anisotropy needs all-linear filters, so only the filtered
-				// (option ON) path requests it; the retail default stays 1.
-				maxAnisotropy: filtered ? 16 : 1,
+				// path takes the experimental stage; the retail value is 1.
+				maxAnisotropy: filtered && anisotropic ? ANISOTROPY : 1,
 				lodMinClamp: 2 - detail,
 				addressModeU: "repeat",
 				addressModeV: "repeat"
 			} );
 		},
 		lightmapSampler,
+		/*
+		================
+		lightmapSampling
+
+		The clamped (lightmap and decal) sampler for the anisotropy stage.
+		================
+		*/
+		lightmapSampling( anisotropic: boolean ) {
+			return anisotropic ? anisotropicLightmapSampler : lightmapSampler;
+		},
 		sky: () => skyPipeline!,
 		mips: () => mipPipeline!,
 		image: () => pipeline!,

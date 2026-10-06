@@ -403,7 +403,6 @@ apps/client-next/tests/oracles/legacy/packages/wip-bridge/src/navmesh/navmeshWir
 apps/client-next/tests/runtime/authored-animation-bindings.test.mjs
 apps/client-next/tests/runtime/character-info.test.mjs
 apps/client-next/tests/runtime/pose-dirty.test.mjs
-apps/client-next/tests/runtime/renderer-diagnostics.test.mjs
 apps/client-next/tests/runtime/snapshot-age.test.mjs
 apps/client-next/tests/runtime/ui-cleanup.test.mjs
 apps/client-next/tests/runtime/weather-publication.test.mjs

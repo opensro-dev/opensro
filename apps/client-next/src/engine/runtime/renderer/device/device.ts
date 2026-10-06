@@ -22,7 +22,10 @@ import { createRetirement } from "./retirement";
 import type { RuntimePhase } from "@/engine/contracts/runtime";
 
 const DEFAULT_TEXTURE_DETAIL = 2;
-const ENVIRONMENT_UNIFORM_BYTES = 336;
+// The environment block (336 bytes) and the experimental video stages
+// vec4 after it (Environment.stages: height fog, water, sheen).
+const ENVIRONMENT_BLOCK_BYTES = 336;
+const ENVIRONMENT_UNIFORM_BYTES = ENVIRONMENT_BLOCK_BYTES + 16;
 const FULLSCREEN_VERTEX_COUNT = 6;
 
 /*
@@ -32,8 +35,12 @@ createDevice
 Initialize one device generation and grant checked capabilities after its pipelines are ready.
 ================
 */
-export function createDevice( timingEnabled = false, gpuAnimationEnabled = true, finishEnabled = false ): DeviceOwner {
+export function createDevice( timingEnabled = false, gpuAnimationEnabled = true ): DeviceOwner {
 	let textureFiltered = true, textureDetail = DEFAULT_TEXTURE_DETAIL;
+	// Experimental > Video. All off is the native frame: the plain copy to the
+	// swapchain, retail samplers and env.stages zero.
+	let finishEnabled = false, anisotropic = false;
+	const stages = new Float32Array( 4 );
 	let timing: ReturnType<typeof createGpuTiming> | null = null;
 	let phase: RuntimePhase = "starting", failure: string | null = null, device: GPUDevice | null = null;
 	let environmentBuffer: GPUBuffer | null = null,
@@ -345,7 +352,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				gpuAnimationEnabled ? createGpuAnimationResources( created, retirement.retire ) : undefined,
 				navigator.gpu.getPreferredCanvasFormat(),
 				createParticlePresentation( created, retirement.retire ),
-				retirement.retire
+				retirement.retire,
+				pipelines.lightmapSampling
 			);
 			ui = createUiResources( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
@@ -377,7 +385,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 						} )
 					};
 					phase = "running";
-					geometry!.textureOptions( textureFiltered, textureDetail );
+					geometry!.textureOptions( textureFiltered, textureDetail, anisotropic );
 				}
 			} ).catch( fail );
 		} ).catch( fail );
@@ -437,7 +445,23 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		textureOptions( filtered, detail ) {
 			textureFiltered = filtered;
 			textureDetail = detail;
-			if ( phase === "running" ) geometry?.textureOptions( filtered, detail );
+			if ( phase === "running" ) geometry?.textureOptions( filtered, detail, anisotropic );
+		},
+
+		/*
+		================
+		experimentalVideo
+
+		Experimental > Video: the presentation pass, the anisotropic samplers
+		and the shader stages. Retained across startup like textureOptions.
+		================
+		*/
+		experimentalVideo( value ) {
+			finishEnabled = value.postProcessing;
+			stages.set( [ value.heightFog ? 1 : 0, value.waterReflection ? 1 : 0, value.garmentSheen ? 1 : 0, 0 ] );
+			if ( anisotropic === value.anisotropicFiltering ) return;
+			anisotropic = value.anisotropicFiltering;
+			if ( phase === "running" ) geometry?.textureOptions( textureFiltered, textureDetail, anisotropic );
 		},
 
 		/*
@@ -515,6 +539,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 					environment.byteOffset,
 					environment.byteLength
 				);
+				device!.queue.writeBuffer( environmentBuffer!, ENVIRONMENT_BLOCK_BYTES, stages );
 			}
 		},
 		/*
