@@ -9026,19 +9026,15 @@ export function createUi(
 					const tile = { ...layout.GDR_OPTION_BGTILE!, rect: geometry.tile as unknown as UiRect };
 					authoredChrome( tile, px, py );
 					const tabs = [ "VIDEO", "AUDIO", "CAMERA", "INPUT", "GAME" ];
-					// 5C9D7B..5C9E04: content insets (0,9,0,6), font 0, format 0.
+					// 5C9D7B sets (0,9,0,6) insets; 53FB10 changes format flags, not alignment.
+					// CTextBoard 5404AF/5404BB keeps both axes centered.
 					for ( let i = 0; i < 5; i++ ) {
-						const selected = optionTab === i, caption = hudCopy( "UIIT_CTL_MENU_" + tabs[i] + "SET" );
-						const r: UiRect = [ px + 40 + i * 62, py + 40, 60, 24 ];
-						image( r, ROOT + "interface/ifcommon/com_tab_" + (selected ? "on" : "off") + ".png" );
-						controls.push( { id: "option-tab:" + i, label: caption, rect: r, kind: "button", selected } );
-						quads.push(
-							...text.quads( caption, [ r[0], r[1] + 9, r[2], r[3] - 15 ], full, white, {
-								fontIndex: 0,
-								fontStyle: selected ? 2 : 0,
-								hAlign: 1,
-								vAlign: 0
-							} )
+						nativeTab(
+							"option-tab:" + i,
+							hudCopy( "UIIT_CTL_MENU_" + tabs[i] + "SET" ),
+							[ px + 40 + i * 62, py + 40, 60, 24 ],
+							optionTab === i,
+							{ family: "com_tab", client: [ 0, 9, 0, 6 ] }
 						);
 					}
 					for (

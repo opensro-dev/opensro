@@ -2640,6 +2640,26 @@ test("Options resizes all five pages without moving the window origin", () => {
 			);
 			assert.equal( result.controls.some( c => c.id === "option-apply" ), tab === 0 );
 			assert.deepEqual( result.controls.find( c => c.id === "option-tab:0" ).rect.slice( 0, 2 ), [ 647, 283 ] );
+			// Native 5404BB centers the font board inside the nine-pixel tab client height.
+			for ( const control of result.controls.filter( c => c.id.startsWith( "option-tab:" ) ) ) {
+				const face = control.selected ? fontAtlas.fonts["0"].styles["2"] : fontAtlas.fonts["0"];
+				const glyph = face.glyphs[control.label.codePointAt( 0 )];
+				const uv = [
+					glyph.x / fontAtlas.atlasWidth,
+					glyph.y / fontAtlas.atlasHeight,
+					glyph.width / fontAtlas.atlasWidth,
+					glyph.height / fontAtlas.atlasHeight
+				];
+				const ink = f.scenes.at( -1 ).quads.find( q =>
+					q.texture === fontAtlas.image &&
+					q.rect[0] >= control.rect[0] && q.rect[0] < control.rect[0] + control.rect[2] &&
+					q.rect[1] >= control.rect[1] && q.rect[1] < control.rect[1] + control.rect[3] &&
+					q.uv.every( ( value, i ) => value === uv[i] )
+				);
+				assert.ok( ink, control.label + " renders its native glyph" );
+				const baseline = control.rect[1] + 9 + Math.floor( (9 - (face.recordHeight + 5)) / 2 ) + face.ascent;
+				assert.equal( ink.rect[1], baseline - glyph.originY, control.label + " stays vertically centered" );
+			}
 			if ( tab === 0 ) {
 				assert.deepEqual( result.controls.find( c => c.id === "option-video-up" ).rect, [ 945, 415, 16, 16 ] );
 				assert.deepEqual( result.controls.find( c => c.id === "option-video-down" ).rect, [
