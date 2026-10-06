@@ -322,11 +322,16 @@ func (application *gameWorldApplication) admit(ctx context.Context) error {
 		population := application.population
 		return population == nil || population.PopulationSettled(application.shardID)
 	}
-	open := func() {
+	open := func(settled bool) {
 		application.readiness.Open()
+		fill := "population settled"
+		if !settled {
+			fill = "population NOT settled; admitted at the bound"
+		}
 		log.Infof(
-			"shard: GameWorld %q owns state and transport under its Agent lease (population settled in %s)",
+			"shard: GameWorld %q owns state and transport under its Agent lease (%s after %s)",
 			application.shardID,
+			fill,
 			time.Since(started).Round(time.Millisecond),
 		)
 	}
@@ -348,7 +353,7 @@ What admitWhenSettled needs, as plain functions so the order is testable.
 */
 type admission struct {
 	settled     func() bool
-	open        func()
+	open        func(settled bool)
 	poll, limit time.Duration
 }
 
@@ -356,12 +361,14 @@ type admission struct {
 ================
 admitWhenSettled
 
-Waits for the boot fill (or its bound), then opens readiness. A run
-cancelled before that never opens: Run is about to drain.
+Waits for the boot fill (or its bound), then opens readiness and says
+which it was. A run cancelled before that never opens: Run is about to
+drain.
 ================
 */
 func admitWhenSettled(ctx context.Context, a admission) {
-	if !awaitBootFill(ctx, a.settled, a.poll, a.limit) && ctx.Err() == nil {
+	settled := awaitBootFill(ctx, a.settled, a.poll, a.limit)
+	if !settled && ctx.Err() == nil {
 		log.Warnf("shard: monster population still filling after %s; admitting players anyway", a.limit)
 	}
 	select {
@@ -369,7 +376,7 @@ func admitWhenSettled(ctx context.Context, a admission) {
 		return
 	default:
 	}
-	a.open()
+	a.open(settled)
 }
 
 /*

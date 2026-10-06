@@ -48,21 +48,30 @@ func TestAwaitBootFillOpensOnSettleAndAtTheBound(t *testing.T) {
 ================
 TestAdmissionOpensOnceAndNeverAfterCancel
 
-A settled fill opens readiness once; a run cancelled inside the settle
-check opens nothing (Run then drains).
+A settled fill opens readiness once and reports settled; the bound opens
+it reporting NOT settled; a run cancelled inside the settle check opens
+nothing (Run then drains).
 ================
 */
 func TestAdmissionOpensOnceAndNeverAfterCancel(t *testing.T) {
-	opened := 0
+	opened, reported := 0, []bool{}
 	base := admission{
 		settled: func() bool { return true },
-		open:    func() { opened++ },
+		open:    func(settled bool) { opened++; reported = append(reported, settled) },
 		poll:    time.Millisecond,
 		limit:   time.Minute,
 	}
 	admitWhenSettled(context.Background(), base)
-	if opened != 1 {
-		t.Fatalf("opened %d times, want 1", opened)
+	if opened != 1 || !reported[0] {
+		t.Fatalf("opened %d times reporting %v, want once and settled", opened, reported)
+	}
+	// At the bound it still opens, and says the fill had NOT settled.
+	unsettled := base
+	unsettled.settled = func() bool { return false }
+	unsettled.limit = 5 * time.Millisecond
+	admitWhenSettled(context.Background(), unsettled)
+	if opened != 2 || reported[1] {
+		t.Fatalf("bound path opened %d times reporting %v, want a second open reporting unsettled", opened, reported)
 	}
 	opened = 0
 	ctx, cancel := context.WithCancel(context.Background())
