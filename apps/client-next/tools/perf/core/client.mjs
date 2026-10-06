@@ -42,12 +42,14 @@ a profiler's overhead.
 function instrument( { counts, spans } ) {
 	const now = () => performance.now();
 	let frameStart = 0, worldStart = 0, worldEnd = 0, frameMark = 0, renderMark = 0, characterMark = 0;
+	let displayed;
 	const tally = {}, opened = {};
 	const add = ( key, value ) => {
 		tally[key] = (tally[key] ?? 0) + value;
 	};
 	globalThis.__benchRows = [];
 	globalThis.__benchMovement = [];
+	globalThis.__benchInputs = [];
 	globalThis.__benchTally = tally;
 	globalThis.__worldProbeFrameProfiler = {
 		/*
@@ -56,6 +58,7 @@ function instrument( { counts, spans } ) {
 		================
 		*/
 		movement( sample ) {
+			displayed = sample;
 			const rows = globalThis.__benchMovement;
 			const root = globalThis.__benchRuntime, game = root?.gameplay();
 			sample.path = game?.movementPath;
@@ -102,6 +105,7 @@ function instrument( { counts, spans } ) {
 			worldEnd = now();
 		},
 		begin() {
+			displayed = undefined;
 			frameStart = frameMark = now();
 			worldStart = worldEnd = 0;
 			for ( const key in tally ) tally[key] = 0;
@@ -113,6 +117,7 @@ function instrument( { counts, spans } ) {
 			frameMark = at;
 		},
 		end() {
+			if ( displayed ) displayed.presentedAtMs = now();
 			globalThis.__benchRows.push( [ now() - frameStart, worldEnd - worldStart, { ...tally } ] );
 			if ( globalThis.__benchRows.length > 16384 ) globalThis.__benchRows.splice( 0, 4096 );
 		}
@@ -153,6 +158,7 @@ export async function measure( page, name, ms, drive ) {
 	await page.evaluate( () => {
 		globalThis.__benchRows.length = 0;
 		globalThis.__benchMovement.length = 0;
+		globalThis.__benchInputs.length = 0;
 		globalThis.__benchIntervals = [];
 		globalThis.__benchLoop = true;
 		let last = performance.now();
@@ -165,12 +171,13 @@ export async function measure( page, name, ms, drive ) {
 	} );
 	const started = Date.now();
 	await drive( () => Date.now() - started < ms );
-	const [intervals, rows, movement] = await page.evaluate( () => {
+	const [intervals, rows, movement, inputs] = await page.evaluate( () => {
 		globalThis.__benchLoop = false;
 		return [
 			globalThis.__benchIntervals.slice( 2 ),
 			globalThis.__benchRows.slice( 2 ),
-			globalThis.__benchMovement
+			globalThis.__benchMovement,
+			globalThis.__benchInputs
 		];
 	} );
 	const sorted = [ ...intervals ].sort( ( a, b ) => a - b ), at = q => sorted[Math.floor( (sorted.length - 1) * q )];
@@ -190,6 +197,7 @@ export async function measure( page, name, ms, drive ) {
 		world: mean( rows.map( r => r[1] ) ),
 		callbacksOver50Ms: rows.filter( r => (r[2]["cpu-ms"] ?? r[0]) > 50 ).length,
 		movement,
+		inputs,
 		counts: tally
 	};
 }
