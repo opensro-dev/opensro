@@ -230,6 +230,7 @@ type Runtime struct {
 	CompanionRoll           combat.Roll32767
 	SpawnRegionAvailable    func(uint16) bool
 	ConstrainCompanionSpawn func(simulation.Spawn, simulation.Spawn) simulation.Spawn
+	CompanionSurfaceHeight  func(uint16, float64, float64, float64) (float64, bool)
 
 	// DropRoll is independent from combat formula randomness. Reference-drop
 	// generation and the post-generation player/level admission gate consume

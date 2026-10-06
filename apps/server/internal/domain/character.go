@@ -578,6 +578,9 @@ Owned companion state; its inventory commits with the owning character.
 ================
 */
 type CharacterCOS struct {
+	// Runtime source-zero movement multiplier installed by 548A30.
+	FollowRunFactor float32 `json:"-"`
+	FollowRunSet    bool    `json:"-"`
 	// The installed 4D9850 source, refreshed by the guild owner on a purchase.
 	MercenaryAttributes    uint8         `json:"mercenaryAttributes,omitempty"`
 	SummonGeneration       uint64        `json:"summonGeneration,omitempty"`

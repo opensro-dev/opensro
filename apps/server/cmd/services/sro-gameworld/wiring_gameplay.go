@@ -123,6 +123,7 @@ func newGameplayPlane(
 	deps.EntryActionSpeed = items.EntryActionSpeed
 	deps.EntryCompanionActionSpeed = items.EntryCompanionActionSpeed
 	deps.EntryCompanionSpawn = items.EntryCompanionSpawn
+	deps.EntryCompanionMovementSpeeds = items.EntryCompanionMovementSpeeds
 	if err := items.ConfigureAlchemy(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("alchemy catalogue: %w", err)
 	}
@@ -178,6 +179,7 @@ func newGameplayPlane(
 	items.ConstrainMovement = movementRuntime.ConstrainMovement
 	items.SpawnRegionAvailable = water.SpawnRegionAvailable
 	items.ConstrainCompanionSpawn = water.ConstrainCompanionSpawn
+	items.CompanionSurfaceHeight = water.WalkableSpawnHeightAt
 	items.ConstrainWalk = movementRuntime.ConstrainMovementFrom
 	items.LineOfSight = movementRuntime.LineOfSight
 	items.ResolveNavOwner = water.ResolveNavOwner
@@ -432,7 +434,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.ConstrainMovement == nil {
 		return fmt.Errorf("action: pickup movement constraint is required")
 	}
-	if game.items.SpawnRegionAvailable == nil || game.items.ConstrainCompanionSpawn == nil {
+	if game.items.SpawnRegionAvailable == nil || game.items.ConstrainCompanionSpawn == nil || game.items.CompanionSurfaceHeight == nil {
 		return fmt.Errorf("action: companion region and collision admission are required")
 	}
 

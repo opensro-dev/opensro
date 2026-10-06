@@ -378,14 +378,18 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 			if ref.TidWord>>11 == domain.MercenaryBand {
 				ownerName, holdType, pvpState = mercenaryGuildName, DressedJob(character), character.PVPState()
 			}
+			walk, run := ref.WalkSpeed, ref.RunSpeed
+			if deps.EntryCompanionMovementSpeeds != nil {
+				walk, run = deps.EntryCompanionMovementSpeeds(divisionID, character, cos)
+			}
 			spawnPayload := wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
 				BodyStatus: cos.NativeBodyStatus,
 				Band:       uint8(ref.TidWord >> 11),
 				RefObjID:   cos.RefObjID,
 				Gid:        cos.GID,
 				Position:   position,
-				Walk:       ref.WalkSpeed,
-				Run:        ref.RunSpeed,
+				Walk:       walk,
+				Run:        run,
 				Scale:      actionSpeed,
 				Name:       name,
 				OwnerName:  ownerName, HoldType: holdType, PvpState: pvpState,

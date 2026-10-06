@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -37,6 +38,12 @@ petSession
 ================
 */
 type petSession struct {
+	formationBattle  bool
+	formationActive  bool
+	relocatedAtMs    int64
+	formationSlots   monster.ApproachSlots
+	formationSlot    int
+	formationTimers  *monster.AITimeManager
 	displacement     *playerDisplacement
 	mercenaryPenalty mercenaryPenaltyClock
 	satiety          companion.SatietyClock
@@ -207,6 +214,12 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	if state == nil {
 		return nil
 	}
+	following := false
+	defer func() {
+		if !following {
+			rt.releasePetFormation(key, state)
+		}
+	}()
 	generation := state.generation
 	defer func() {
 		if state.pickup != nil && (state.follower == nil || generation != state.generation || nowMs >= state.pickupDeadline) {
@@ -300,6 +313,10 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 			frames = append(frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 		}
 		return frames
+	}
+	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {
+		following = true
+		return rt.advanceOwnerFormation(petCombatStep{key: key, state: state, snapshot: snapshot, pet: cos, ref: ref, run: run, constraint: constraint, nowMs: nowMs})
 	}
 	return state.follower.Advance(owner, float64(run), nowMs, constraint)
 }
@@ -425,6 +442,9 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: cosParameter(ref, cos, block, movementWalkParameter), Run: cosParameter(ref, cos, block, movementRunParameter),
 			Scale: cosParameter(ref, cos, block, actionSpeedParameter), Name: name, OwnerName: c.Name, OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
+	if state.relocatedAtMs != 0 && now-state.relocatedAtMs <= petAppearWindowMs {
+		result.Row.State = 7
+	}
 	if block != nil && block.Mask != 0 {
 		result.AbnormalVitals = abnormalVitalsPayload(cos.GID, block)
 	}
@@ -473,7 +493,8 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 		rt.petMu.Unlock()
 		return old
 	}
-	state := &petSession{session: owner.session, ready: owner.ready, character: owner.character, transportCOS: pet, refObjID: pet.RefObjID}
+	owner.formationSlots.Release(pet.GID)
+	state := &petSession{formationSlot: -1, session: owner.session, ready: owner.ready, character: owner.character, transportCOS: pet, refObjID: pet.RefObjID}
 	if old != nil {
 		state.generation = old.generation + 1
 	}
@@ -497,6 +518,10 @@ relocateReturningPet
 func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character, destination simulation.Spawn) map[petOwnerKey]petSession {
 	rt.petMu.Lock()
 	previous := make(map[petOwnerKey]petSession)
+	ownerKey := petOwnerKey{division: division, name: strings.ToLower(c.Name)}
+	if owner := rt.petSessions[ownerKey]; owner != nil {
+		previous[ownerKey] = *owner
+	}
 	keys := make([]petOwnerKey, 0)
 	for key, state := range rt.petSessions {
 		if key.division != division || key.name != strings.ToLower(c.Name) || key.gid == 0 || state.character != c {
@@ -512,6 +537,7 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		state := rt.petSessions[key]
 		rt.petMu.Unlock()
 		rt.cancelPetCombat(key, state, rt.Now().UnixMilli())
+		rt.releasePetFormation(key, state)
 		state.pickup = nil
 		state.pickupCommand = false
 		state.public = nil

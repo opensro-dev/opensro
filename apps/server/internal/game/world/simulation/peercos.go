@@ -168,3 +168,12 @@ func (t *Ticker) runPeerCOSVisibility(state *divisionTickState, nowMs int64, ses
 		}
 	}
 }
+
+/*
+================
+SpawnFrames
+
+Owner-side relocation uses the same complete spawn as first peer visibility.
+================
+*/
+func (p PeerCOS) SpawnFrames(nowMs int64) []Frame { return p.frames(nowMs, true) }

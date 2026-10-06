@@ -157,11 +157,19 @@ type petCombatStep struct {
 advancePetCombat
 ================
 */
-func (rt *Runtime) advancePetCombat(step petCombatStep) ([]simulation.Frame, bool) {
+func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Frame, handled bool) {
 	rt.acquireMercenaryTarget(step)
 	intent := step.state.combat
 	if intent == nil || step.ref.TidWord>>11 != attackPetBand && step.ref.TidWord>>11 != domain.MercenaryBand {
 		return nil, false
+	}
+	if step.ref.TidWord>>11 == domain.MercenaryBand || step.ref.TidWord>>11 == attackPetBand {
+		rt.advanceCompanionBattleFollowTimer(step)
+	}
+	if step.run < step.ref.RunSpeed {
+		speedFrames := rt.setCompanionFollowSpeed(step, 100)
+		step.run = cosParameter(step.ref, step.pet, rt.cosAbnormal(step.key.division, step.snapshot.Name, step.pet.GID), movementRunParameter)
+		defer func() { frames = append(speedFrames, frames...) }()
 	}
 	target, ok := rt.resolvePetCombatTarget(step, intent.target)
 	if !ok || target.player != nil && step.ref.TidWord>>11 != domain.MercenaryBand && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0 {
@@ -205,7 +213,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) ([]simulation.Frame, boo
 	if intent.castToken == 0 && !spacing.Contains(at, targetAt) {
 		return step.state.follower.Approach(targetAt, float64(step.run), step.nowMs, spacing.StandOffRadius(), step.constraint), true
 	}
-	frames := step.state.follower.Stop(step.nowMs)
+	frames = step.state.follower.Stop(step.nowMs)
 	if intent.castToken == 0 && step.nowMs < intent.nextAttackMs {
 		return frames, true
 	}

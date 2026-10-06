@@ -44,6 +44,7 @@ func newPetCombatRuntime(t *testing.T, monsterHP uint32, band uint16) (*Runtime,
 	skills[2] = skill
 	rt.Now = clock.Now
 	rt.CombatRoll = func() (uint32, error) { return 0, nil }
+	rt.CompanionSurfaceHeight = func(_ uint16, _ float64, y float64, _ float64) (float64, bool) { return y, true }
 	rt.ConstrainMovement = func(_ string, _, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
 	rt.BindPetSession(testDivision, c, 1)
 	rt.TickHook()(clock.NowMs())

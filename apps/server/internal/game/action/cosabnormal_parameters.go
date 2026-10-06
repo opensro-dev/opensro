@@ -94,6 +94,9 @@ func cosParameter(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, bl
 	if pet != nil && ref != nil && ref.TidWord>>11 == 5 {
 		value, err = companion.MercenaryParameter(id, base, pet.MercenaryAttributes, block)
 	}
+	if pet != nil && pet.FollowRunSet && id == movementRunParameter {
+		value, err = companion.FollowRunParameter(base, pet.FollowRunFactor, true, block)
+	}
 	if err != nil {
 		log.WithError(err).WithField("param", id).Error("COS abnormal parameter projection failed")
 		return 0

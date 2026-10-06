@@ -164,6 +164,7 @@ TestCosFreezeStopsFollowerAndBlocksFurtherMovement
 func TestCosFreezeStopsFollowerAndBlocksFurtherMovement(t *testing.T) {
 	rt, clock, character, source := newCombatTestRuntime(t, 100)
 	equipCombatTestPet(t, rt, character, 4)
+	rt.CompanionSurfaceHeight = func(_ uint16, _ float64, y float64, _ float64) (float64, bool) { return y, true }
 	rt.ConstrainMovement = func(_ string, _, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
 	rt.BindPetSession(testDivision, character, 1)
 	now := clock.NowMs()
@@ -171,7 +172,7 @@ func TestCosFreezeStopsFollowerAndBlocksFurtherMovement(t *testing.T) {
 	rt.Worlds.Update(simulation.WorldKey(testDivision, character.Name),
 		func() simulation.WorldState { return simulation.SeedWorldState(character) },
 		func(world *simulation.WorldState) { world.Spawn.X += 200 })
-	rt.advancePets(now + 1)
+	rt.advancePets(now + 100)
 	before := rt.PetPresentation(testDivision, character.Name)
 	if before == nil || before.World.MoveSegment == nil {
 		t.Fatal("fixture pet did not start moving")

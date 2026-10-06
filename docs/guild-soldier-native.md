@@ -71,9 +71,27 @@ Cold status application, preparation/release identity, timer origin and companio
 displacement. Client tests cover wire decoding, flags, submenu lifetime,
 representative-group dismissal and the owner cooldown display.
 
-The runtime uses the existing companion following and navigation implementation.
-Exact native formation slots, steering and the complete AI callback graph are
-not established by these tests. Flag-event worlds and the original free-PVP
-transition owner are broader port dependencies, not proved by the normal-world
-and fortress-world enemy predicates. No live original-client/original-server
+Guild soldiers now use the owner-follow callback at `549F80`, with owner-local
+CPositioner slots (`555340`/`555460`), retained full-formation indices, the
+three-body-radius spacing rule (`5400C0`), surface probes and rounding (`55E090`),
+and the 30-unit/5-degree/100-unit steering decisions. `548A30` supplies the
+80-unit catch-up speed rule through the existing parameter keeper. Follow
+entry uses the 100 ms timer and retains the battle movement timer across
+re-entry. Death, dismissal and completion release reservations. Distant
+relocation replaces visibility with native reason 7; reconnect and peer spawns
+read the same movement parameters.
+
+The checked-in native fixtures execute 384 original `549F80` steering cases and
+432 original `55E090` placement cases, with bit-exact Go comparisons. The
+steering fixture injects timer results, the formation goal and command sinks;
+the placement fixture injects effective reach and navigation responses. They
+execute the original vector math and CRT, not a reconstructed oracle.
+`apps/server/internal/game/world/monster/testdata/generate_owner_follow.py`
+reproduces both captures from the licensed executable and records its SHA-256. These
+are bounded comparisons; the complete AI callback graph is not established.
+Attack and pickup pets use the same slot owner and follow callback, so a
+simultaneous summon competes for the same eight reservations.
+Flag-event worlds and the original free-PVP transition owner remain broader
+port dependencies, not proved by the normal-world and fortress-world enemy
+predicates. No live original-client/original-server
 comparison or whole-program machine-equivalence claim is made.

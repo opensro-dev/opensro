@@ -185,6 +185,7 @@ func (rt *Runtime) retireCosRuntime(division string, c *enterworld.Character, gi
 	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: gid}]
 	rt.petMu.Unlock()
 	if state != nil {
+		rt.releasePetFormation(petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: gid}, state)
 		if state.pickup != nil {
 			pending := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
 			frames = append(frames, pending.Frames...)

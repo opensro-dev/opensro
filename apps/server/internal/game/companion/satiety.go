@@ -121,6 +121,8 @@ parameterInput
 ================
 */
 type parameterInput struct {
+	runFactor  float32
+	runSet     bool
 	id         uint16
 	base       float32
 	satiety    uint16
@@ -140,7 +142,7 @@ func projectParameter(in parameterInput) (float32, error) {
 	channel, attribute := mercenaryModifier(id, in.attributes)
 	hungry := satiety < HungrySatiety && HungryParameter(id)
 	touched := block != nil && block.Touches(id)
-	if !hungry && !touched && !attribute {
+	if !hungry && !touched && !attribute && !in.runSet {
 		return base, nil
 	}
 	definition, exists := paramkeeper.NativeDefinition(id)
@@ -159,6 +161,11 @@ func projectParameter(in parameterInput) (float32, error) {
 			return 0, err
 		}
 	}
+	if in.runSet {
+		if _, err = element.Apply(paramkeeper.FactorProduct, 0, in.runFactor); err != nil {
+			return 0, err
+		}
+	}
 	if hungry {
 		if _, err = element.Apply(paramkeeper.FactorProduct, 0, hungryFactor); err != nil {
 			return 0, err
@@ -170,4 +177,15 @@ func projectParameter(in parameterInput) (float32, error) {
 		}
 	}
 	return element.Value()
+}
+
+/*
+================
+FollowRunParameter
+
+Source-zero channel 3 combines with abnormal speed factors in one keeper.
+================
+*/
+func FollowRunParameter(base, factor float32, installed bool, block *abnormal.Block) (float32, error) {
+	return projectParameter(parameterInput{id: 0x18, base: base, satiety: MaximumSatiety, block: block, runFactor: factor, runSet: installed})
 }
