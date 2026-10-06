@@ -11,6 +11,7 @@ Never change those statuses merely because this audit passes.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -21,7 +22,7 @@ import { clientV150ResinfoRoot } from "../../../scripts/build/world/paths.mjs";
 
 const app = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const retail = clientV150ResinfoRoot;
-const published = path.resolve( app, "../../.generated/client-public/assets" );
+const published = CLIENT_PUBLIC_ROOT + "/assets";
 const hash = bytes => createHash( "sha256" ).update( bytes ).digest( "hex" );
 const names = (await readdir( retail )).filter( name =>
 	/^if(?:_npc(?:talk|window)|quest\w*|store|gameguide|ggmenu|mainpopup|messagebox)\.txt$/i.test( name )

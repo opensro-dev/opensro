@@ -1,6 +1,9 @@
 from pathlib import Path
-import json,hashlib
-base=Path(__file__).resolve().parents[1]/'../../.generated/client-public/assets/data'
+import json,hashlib,sys
+# The published tree comes from scripts/sro_paths.py (SRO_GENERATED_ROOT aware).
+sys.path.insert(0,str(Path(__file__).resolve().parents[3]/'scripts'))
+from sro_paths import PUBLIC_ROOT
+base=PUBLIC_ROOT/'assets'/'data'
 source=base/'skillData.json';mastery=base/'skillMasteryData.json'
 a=json.loads(source.read_text(encoding='utf-8'));b=json.loads(mastery.read_text(encoding='utf-8'))
 chain_targets=set()

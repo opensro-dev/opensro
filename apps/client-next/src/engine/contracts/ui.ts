@@ -190,6 +190,10 @@ export type UiEvent =
 	| { kind: "input-preferences"; value: import("@/engine/foundation/ui/input-options").InputOptions; }
 	| { kind: "camera-preferences"; value: import("@/engine/foundation/rendering/camera-options").SightMode; }
 	| { kind: "audio-preferences"; value: import("@/engine/foundation/audio/options").AudioOptions; }
+	| {
+		kind: "experimental-preferences";
+		value: import("@/engine/foundation/ui/experimental-options").ExperimentalOptions;
+	}
 	| { kind: "preferences"; value: import("@/engine/foundation/gameplay/game-options").GameOptions; }
 	| { kind: "drag-end"; id: string; x: number; y: number; }
 	// The bridge abandoned the drag or click-carry that `id` started.

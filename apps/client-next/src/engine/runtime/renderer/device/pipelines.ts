@@ -35,6 +35,39 @@ export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 	destination: D3DBLEND_INVSRCALPHA
 } );
 
+// Experimental video stages (Experimental > Video). Each is off by
+// default, which is the native frame; env.stages carries the switches
+// (x height fog, y water reflection, z garment sheen).
+//
+// Height fog - a deliberate deviation from the retail D3DFOG_LINEAR the
+// native client authored (sub_4dc920 start/end): the same start/end
+// uniforms drive an exp2 falloff with a height term and a horizon tint,
+// which keeps the mid-range clear, softens the horizon and lets peaks
+// rise out of the haze. Off, the retail linear ramp and colours stand.
+const FOG_EXP2_REACH = 2.5; // exp2 factor reaches 1 - 1/255 at the fog end
+const FOG_HEIGHT_FALLOFF = 0.004; // fog density e-folds 250 m above the eye
+const FOG_SKY_TINT = 0.3; // global fog colour blended toward the horizon colour
+
+// Water shading - the 30 authored wave frames (water1XX, x/y slope
+// offsets around 0.5) ship and animate as texture array layers but the
+// flat unlit water path never sampled them. Fresnel against a
+// horizon-tinted sky reflection now uses them: the surface is horizontal,
+// so the eye height over view depth carries the view angle and no camera
+// uniform is needed. The flat authored look is this block.
+const WATER_FRESNEL = 0.02; // F0 base reflectance of a water surface
+const WATER_WAVE_SLOPE = 1; // wave-frame slope weight in the reflection lookup
+
+// Garment sheen - opaque DXT3 character parts author gloss in the alpha
+// channel (jmxAssetIO: CPrimMtrl bit 0x200 off means alpha is not
+// coverage). A Blinn-Phong term against the fixed 45-degree sun the
+// diffuse lighting already uses; the view vector is the reversed camera
+// forward (surface to eye), exact at the frame centre.
+const SHEEN_POWER = 24; // highlight tightness
+const SHEEN_STRENGTH = 0.5; // gloss gain on the lit term
+
+// Anisotropic filtering - the experimental sampler level; retail is 1.
+const ANISOTROPY = 16;
+
 /*
 ================
 blendFactor
@@ -195,7 +228,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 		primitive: { topology: "triangle-list" }
 	} );
 	const environmentStruct =
-		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f}`;
+		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,stages:vec4f}`;
 	const skyShader = created.createShaderModule( {
 		code: environmentStruct + `
 @group(0) @binding(0) var<uniform> env:Environment;
@@ -263,11 +296,11 @@ struct SkinVertex {joints:vec4u,weights:vec4f}
 @group(0) @binding(6) var<storage,read> skinVertices:array<SkinVertex>;
 @group(0) @binding(7) var<storage,read> bones:array<mat4x4f>;
 @group(0) @binding(8) var sphereMap:texture_2d_array<f32>;
-struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f}
+struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1) normal:vec3f,@location(2) color:vec4f,@location(3) maskUV:vec2f,@location(4) viewZ:f32,@location(5) objectLighting:vec3f,@location(6) @interpolate(flat) opacity:f32,@location(7) worldXZ:vec2f,@location(8) @interpolate(flat) materialTint:vec3f,@location(9) sphereUV:vec2f,@location(10) equipmentUV:vec2f,@location(11) worldY:f32}
 @vertex fn vs(@location(0) position:vec3f,@location(1) normal:vec3f,@location(2) uv:vec2f,@location(3) color:vec4f,@location(4) maskUV:vec2f,@builtin(instance_index) i:u32,@builtin(vertex_index) vertex:u32)->Out {
  var o:Out;let instance=instances[i].matrix;o.opacity=instances[i].opacity.x;var p=vec4f(position,1);var n=vec4f(normal,0);
  if(material.skin.x!=0){let v=skinVertices[vertex];let base=select(select(i*u32(abs(material.skin.x)),0u,material.skin.x<0),u32(instances[i].opacity.y),instances[i].opacity.z>0);let skin=bones[base+v.joints.x]*v.weights.x+bones[base+v.joints.y]*v.weights.y+bones[base+v.joints.z]*v.weights.z+bones[base+v.joints.w]*v.weights.w;p=skin*p;n=skin*n;}
- o.worldXZ=(instance*p).xz;o.position=transform*instance*p;o.normal=(instance*n).xyz;let movingUV=vec2f(dot(vec3f(uv,1),material.uvU.xyz),dot(vec3f(uv,1),material.uvV.xyz));o.uv=(movingUV*material.window.xy+material.window.zw)*instances[i].window.xy+instances[i].window.zw;o.materialTint=select(vec3f(1),instances[i].color.rgb,material.policy.w>0.5);o.color=color*select(instances[i].color,vec4f(1,1,1,instances[i].color.a),material.policy.w>0.5);o.maskUV=maskUV;o.viewZ=o.position.w;
+ o.worldXZ=(instance*p).xz;o.worldY=(instance*p).y;o.position=transform*instance*p;o.normal=(instance*n).xyz;let movingUV=vec2f(dot(vec3f(uv,1),material.uvU.xyz),dot(vec3f(uv,1),material.uvV.xyz));o.uv=(movingUV*material.window.xy+material.window.zw)*instances[i].window.xy+instances[i].window.zw;o.materialTint=select(vec3f(1),instances[i].color.rgb,material.policy.w>0.5);o.color=color*select(instances[i].color,vec4f(1,1,1,instances[i].color.a),material.policy.w>0.5);o.maskUV=maskUV;o.viewZ=o.position.w;
  // Native vs_1_1 oD0: light and saturate each vertex before interpolation.
  var lightingNormal=n.xyz;
  // Data.pk2 vss2.c normalizes the blended normal; vss0.c does not.
@@ -276,7 +309,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1)
  // native shader SPEC adds .5 after transforming, without renormalizing.
  o.equipmentUV=uv+material.equipmentUV.xy;
  o.sphereUV=vec2f(0);
- if(nativeCharacterLighting&&material.reflection.x>0.5&&env.reflection.w>0.5){
+ if(material.reflection.x>0.5&&env.reflection.w>0.5){
   let reflectionNormal=(instance*vec4f(lightingNormal,0)).xyz;
   let cameraRight=normalize(vec3f(transform[0].x,transform[1].x,transform[2].x));
   let cameraUp=normalize(vec3f(transform[0].y,transform[1].y,transform[2].y));
@@ -315,7 +348,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1)
  var reflected=vec3f(0);var equipment=vec3f(0);
  if(material.equipmentColor.w>0.0){equipment=textureSample(sphereMap,textureSampler,input.equipmentUV,0).rgb;}
  // Keep implicit-derivative sampling behind uniform gates, before varying exits.
- if(nativeCharacterLighting&&material.reflection.x>0.5&&env.reflection.w>0.5){reflected=textureSample(sphereMap,textureSampler,input.sphereUV,0).rgb;}
+ if(material.reflection.x>0.5&&env.reflection.w>0.5){reflected=textureSample(sphereMap,textureSampler,input.sphereUV,0).rgb;}
  let layer=select(u32(env.settings.z),u32(env.lunar.x),material.skin.w==4.0);let tex=textureSample(albedo,textureSampler,input.uv,i32(layer%textureNumLayers(albedo)));
  if(material.skin.w>0){let k=material.skin.w;
   if(k==1||k==2){return input.color;}
@@ -367,7 +400,7 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  var lit=select(clamp(select(tex.rgb*input.color.rgb*surfaceLight,unlitColor,material.options.y>0.5)*material.options.w,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0);
  // AEE6D0: stage0 sphere*TFACTOR; stage1 base+base.a*current;
  // stage2 MODULATE2X with saturated vertex diffuse. Opacity gates RGB only.
- if(nativeCharacterLighting&&material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
+ if(material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
   // 85A9E0 sets temporary renderer light1 (C39094+64 -> A5A7F0).
   // It does not set the model's +1E4 reflection override (A89560).
   // Neither ordinary hit lights nor SCT_MAT replace this factor.
@@ -378,12 +411,45 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  }
  // AEF8E0: option texture * packed TFACTOR (MODULATE/2X), then ADD base.
  if(material.equipmentColor.w>0.0){lit=clamp(tex.rgb+clamp(equipment*material.equipmentColor.rgb*material.equipmentColor.w,vec3f(0),vec3f(1)),vec3f(0),vec3f(1));}
+ // Authored garment gloss from the opaque DXT3 alpha (experimental).
+ if(material.reflection.z>0.5&&env.stages.z>0.5&&input.opacity>=1.0){
+  let halfVec=normalize(vec3f(0.70710678,0.70710678,0)-env.forward.xyz);
+  let gloss=pow(max(0.0,dot(normalize(input.normal),halfVec)),${SHEEN_POWER});
+  lit=clamp(lit+tex.a*gloss*${SHEEN_STRENGTH}*env.diffuse.rgb,vec3f(0),vec3f(1));
+ }
  let animated=material.skin.z>0.5;
+ // Fresnel-weighted sky reflection on animated water. The reflected ray
+ // sees zenith when the eye looks down, horizon when grazing; the wave
+ // frame's slope shimmers the lookup between the two.
+ var waterShading=clamp(env.water.rgb,vec3f(0),vec3f(1));
+ if(animated&&env.stages.y>0.5){
+  let slope=(tex.rg-vec2f(0.5))*${WATER_WAVE_SLOPE};
+  let cosTheta=clamp((env.settings.w-input.worldY)/max(input.viewZ,1.0),0.05,1.0);
+  let fresnel=${WATER_FRESNEL}+(1.0-${WATER_FRESNEL})*pow(1.0-cosTheta,5.0);
+  let skyColor=mix(env.horizon.rgb,env.zenith.rgb,clamp(cosTheta+slope.y,0.0,1.0));
+  waterShading=clamp(env.water.rgb,vec3f(0),vec3f(1))*(1.0-fresnel)+skyColor*fresnel;
+ }
  let fogSource=select(env.fog,material.localFog,material.policy.y>0.5);
  let fogEnd=select(env.settings.x,material.localFogSettings.x,material.policy.y>0.5);
- let fog=select(0.0,clamp((input.viewZ-fogSource.w)/max(0.001,fogEnd-fogSource.w),0,1),(env.settings.y>0.5||material.policy.y>0.5)&&material.policy.x<0.5);
- if(material.skin.y>0.5){return vec4f(mix(clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1)),env.terrainFog.rgb,fog),1);}
- return vec4f(mix(lit*select(vec3f(1),clamp(env.water.rgb,vec3f(0),vec3f(1)),animated),select(fogSource.rgb,env.terrainFog.rgb,material.options.z>0.5),fog),select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5));
+ // Native D3DFOG_LINEAR between the authored start and end.
+ let fogApplies=(env.settings.y>0.5||material.policy.y>0.5)&&material.policy.x<0.5;
+ var fog=select(0.0,clamp((input.viewZ-fogSource.w)/max(0.001,fogEnd-fogSource.w),0,1),fogApplies);
+ var fogColor=fogSource.rgb;var terrainFogColor=env.terrainFog.rgb;
+ if(env.stages.x>0.5){
+  // Height fog (experimental): exp2 with no fog before the authored start,
+  // 1-1/255 at the end, the density e-folding above the eye so peaks clear
+  // the haze. The global fog takes the horizon tint; local fog volumes keep
+  // their authored colour, and both fog targets tint identically so the
+  // distant terrain band's colour match keeps its seam behaviour.
+  let density=${FOG_EXP2_REACH}/max(0.001,fogEnd-fogSource.w);
+  let height=exp(-max(0.0,input.worldY-env.settings.w)*${FOG_HEIGHT_FALLOFF});
+  let d=max(0.0,input.viewZ-fogSource.w)*density*height;
+  fog=select(0.0,1.0-exp(-d*d),fogApplies);
+  fogColor=select(fogSource.rgb,mix(fogSource.rgb,env.horizon.rgb,${FOG_SKY_TINT}),material.policy.y<0.5);
+  terrainFogColor=mix(env.terrainFog.rgb,env.horizon.rgb,${FOG_SKY_TINT});
+ }
+ if(material.skin.y>0.5){return vec4f(mix(clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1)),terrainFogColor,fog),1);}
+ return vec4f(mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog),select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5));
 }`
 	} );
 	/*
@@ -432,7 +498,9 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 			} )
 		)
 	);
-	// Retail 87cbc0 sets MIN/MAG/MIP to LINEAR (2); no anisotropic filter.
+	// Retail 87cbc0 sets MIN/MAG/MIP to LINEAR (2) with no anisotropic filter;
+	// these defaults are that. Experimental > Video > Anisotropic filtering
+	// swaps in the ANISOTROPY samplers below (geometry textureOptions).
 	const worldSampler = created.createSampler( {
 		minFilter: "linear",
 		magFilter: "linear",
@@ -445,6 +513,15 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 		minFilter: "linear",
 		magFilter: "linear",
 		mipmapFilter: "linear",
+		maxAnisotropy: 1,
+		addressModeU: "clamp-to-edge",
+		addressModeV: "clamp-to-edge"
+	} );
+	const anisotropicLightmapSampler = created.createSampler( {
+		minFilter: "linear",
+		magFilter: "linear",
+		mipmapFilter: "linear",
+		maxAnisotropy: ANISOTROPY,
 		addressModeU: "clamp-to-edge",
 		addressModeV: "clamp-to-edge"
 	} );
@@ -456,17 +533,30 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 		The world texture sampler for the filtering and detail options.
 		================
 		*/
-		worldSampling( filtered: boolean, detail: number ) {
+		worldSampling( filtered: boolean, detail: number, anisotropic = false ) {
 			return created.createSampler( {
 				minFilter: filtered ? "linear" : "nearest",
 				magFilter: filtered ? "linear" : "nearest",
 				mipmapFilter: filtered ? "linear" : "nearest",
+				// Anisotropy needs all-linear filters, so only the filtered
+				// path takes the experimental stage; the retail value is 1.
+				maxAnisotropy: filtered && anisotropic ? ANISOTROPY : 1,
 				lodMinClamp: 2 - detail,
 				addressModeU: "repeat",
 				addressModeV: "repeat"
 			} );
 		},
 		lightmapSampler,
+		/*
+		================
+		lightmapSampling
+
+		The clamped (lightmap and decal) sampler for the anisotropy stage.
+		================
+		*/
+		lightmapSampling( anisotropic: boolean ) {
+			return anisotropic ? anisotropicLightmapSampler : lightmapSampler;
+		},
 		sky: () => skyPipeline!,
 		mips: () => mipPipeline!,
 		image: () => pipeline!,

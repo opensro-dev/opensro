@@ -825,7 +825,8 @@
 				"callback:createUi:13",
 				"callback:createUi:14",
 				"callback:createUi:15",
-				"callback:createUi:16"
+				"callback:createUi:16",
+				"saveExperimental"
 			]
 		},
 		{
@@ -2161,7 +2162,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "1fff5ae78154653b95d046c161014481a5725a6643983d62970fe18ad12a5d8a",
+			"sourceSha256": "eb4517665c87f423f240c78219c572c29f4fd8ebe556c245f6ac7d0176792f11",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

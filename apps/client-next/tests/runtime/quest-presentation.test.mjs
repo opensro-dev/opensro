@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -84,7 +85,7 @@ test("all content-kind bytes choose native status and both-child color without m
 
 test("every published objective format stays inside the supported native grammar", () => {
 	const { textEntries } = JSON.parse(
-		readFileSync( "../../.generated/client-public/assets/data/questData.json", "utf8" )
+		readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" )
 	);
 	let formatted = 0;
 	for ( const [key, value] of Object.entries( textEntries ) ) {

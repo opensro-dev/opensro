@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -16,7 +17,7 @@ import assert from "node:assert/strict";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
-const fontBytes = readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json" ),
+const fontBytes = readFileSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json" ),
 	fontAtlas = JSON.parse( fontBytes );
 /*
 ================
@@ -356,7 +357,7 @@ function uiFixture(
 				const id = ++nextId, path = decodeURIComponent( new URL( url ).pathname );
 				requested.push( path );
 				try {
-					const bytes = readFileSync( "../../.generated/client-public" + path );
+					const bytes = readFileSync( CLIENT_PUBLIC_ROOT + path );
 					if ( path.endsWith( ".json" ) || path.endsWith( ".txt" ) ) pending.set( id, bytes );
 					else if ( path.endsWith( ".png" ) ) {
 						pending.set( id, {
@@ -667,7 +668,7 @@ test("quest objectives repaint native progress, per-node status and color after 
 	const f = uiFixture(), quests = createQuests( () => {} );
 	const captures = [],
 		subLayout = JSON.parse(
-			readFileSync( "../../.generated/client-public/assets/cif/layouts/ifquestslotsub.json", "utf8" )
+			readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifquestslotsub.json", "utf8" )
 		)
 			.controlsByName;
 	const symbol = "SN_CON_QNO_CH_SOLDIER_EA1_1";
@@ -681,7 +682,7 @@ test("quest objectives repaint native progress, per-node status and color after 
 		targetIds: []
 	};
 	const strings =
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) ).entries;
 	/*
 	================
 	update
@@ -1128,22 +1129,23 @@ test("a new inventory icon keeps the previous popup visible and navigation avail
 	}
 });
 
-test("retail System menu replaces fallback actions with four compact authored controls", () => {
+test("System menu inserts Experimental below Options using the authored buttons", () => {
 	const f = uiFixture();
 	try {
 		for ( let t = 0; t < 1200; t += 100 ) f.ui.step( f.state, t );
 		f.ui.event( { kind: "key", code: "Escape" } );
 		const scene = f.ui.step( f.state, 1300 );
 		const buttons = scene.controls.filter( c =>
-			[ "open-window:Option", "open-window:Game Guide", "system-restart", "system-exit" ].includes( c.id )
+			[
+				"open-window:Option",
+				"open-window:Experimental",
+				"open-window:Game Guide",
+				"system-restart",
+				"system-exit"
+			].includes( c.id )
 		);
-		assert.deepEqual( buttons.map( c => c.label ), [ "Option", "Help", "Restart", "Exit" ] );
-		assert.deepEqual( buttons.map( c => c.rect ), [ [ 724, 402, 152, 24 ], [ 724, 436, 152, 24 ], [
-			724,
-			470,
-			152,
-			24
-		], [ 724, 504, 152, 24 ] ] );
+		assert.deepEqual( buttons.map( c => c.label ), [ "Option", "Experimental", "Help", "Restart", "Exit" ] );
+		assert.deepEqual( buttons.map( c => c.rect ), [ 385, 419, 453, 487, 521 ].map( y => [ 724, y, 152, 24 ] ) );
 		assert.ok( !scene.controls.some( c => c.id === "disconnect" || c.id === "logout" ) );
 		f.ui.event( { kind: "activate", id: "system-restart" } );
 		const restarted = f.ui.step( f.state, 1400 );
@@ -2639,6 +2641,26 @@ test("Options resizes all five pages without moving the window origin", () => {
 			);
 			assert.equal( result.controls.some( c => c.id === "option-apply" ), tab === 0 );
 			assert.deepEqual( result.controls.find( c => c.id === "option-tab:0" ).rect.slice( 0, 2 ), [ 647, 283 ] );
+			// Native 5404BB centers the font board inside the nine-pixel tab client height.
+			for ( const control of result.controls.filter( c => c.id.startsWith( "option-tab:" ) ) ) {
+				const face = control.selected ? fontAtlas.fonts["0"].styles["2"] : fontAtlas.fonts["0"];
+				const glyph = face.glyphs[control.label.codePointAt( 0 )];
+				const uv = [
+					glyph.x / fontAtlas.atlasWidth,
+					glyph.y / fontAtlas.atlasHeight,
+					glyph.width / fontAtlas.atlasWidth,
+					glyph.height / fontAtlas.atlasHeight
+				];
+				const ink = f.scenes.at( -1 ).quads.find( q =>
+					q.texture === fontAtlas.image &&
+					q.rect[0] >= control.rect[0] && q.rect[0] < control.rect[0] + control.rect[2] &&
+					q.rect[1] >= control.rect[1] && q.rect[1] < control.rect[1] + control.rect[3] &&
+					q.uv.every( ( value, i ) => value === uv[i] )
+				);
+				assert.ok( ink, control.label + " renders its native glyph" );
+				const baseline = control.rect[1] + 9 + Math.floor( (9 - (face.recordHeight + 5)) / 2 ) + face.ascent;
+				assert.equal( ink.rect[1], baseline - glyph.originY, control.label + " stays vertically centered" );
+			}
 			if ( tab === 0 ) {
 				assert.deepEqual( result.controls.find( c => c.id === "option-video-up" ).rect, [ 945, 415, 16, 16 ] );
 				assert.deepEqual( result.controls.find( c => c.id === "option-video-down" ).rect, [
@@ -3381,7 +3403,7 @@ test("retail extended quickslot layouts, fixed bindings, locks and bottom-bar ac
 		click( "ext-open" );
 		for ( const path of f.requested.filter( path => path.includes( "/quick_slot/" ) ) ) {
 			assert.doesNotThrow(
-				() => readFileSync( "../../.generated/client-public" + path ),
+				() => readFileSync( CLIENT_PUBLIC_ROOT + path ),
 				"Quickslot requests only published authored textures: " + path
 			);
 		}

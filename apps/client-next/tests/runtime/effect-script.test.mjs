@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -41,7 +42,7 @@ test("retail signed rotation selects weapon fallback; positive and axis-band val
 	assert.deepEqual( effectScript( [ "SCT_ARROW" ] ), { kind: "arrow" } );
 });
 test("published stage decoding retains lifecycle controls and negative fade sentinels", () => {
-	const bytes = readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json" ),
+	const bytes = readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json" ),
 		raw = JSON.parse( bytes ),
 		decoded = createEffectDecoder().decode( bytes );
 	let negative = 0, kills = 0;
@@ -65,7 +66,7 @@ test("published stage decoding retains lifecycle controls and negative fade sent
 
 test("real sword stage waits for native anchor metadata, renders at the target anchor, and reports other script branches explicitly", () => {
 	const catalog = createEffectDecoder().decode(
-		readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json" )
+		readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json" )
 	);
 	let id = 0;
 	const jobs = new Map();

@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -36,7 +37,7 @@ test("reagents preserve every existing alchemy operation without a synthetic mod
 test("constructor admission excludes dormant pages and auxiliary Guild dialogs", () => {
 	const read = name =>
 		decodeAuthoredLayout(
-			JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/" + name + ".json", "utf8" ) ),
+			JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/" + name + ".json", "utf8" ) ),
 			nativeWindowSections( name )
 		);
 	const guild = read( "ifguild" );

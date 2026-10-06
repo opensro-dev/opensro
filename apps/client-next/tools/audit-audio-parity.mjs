@@ -10,6 +10,7 @@ claim: native edges it cannot see stay open rather than being assumed.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -23,7 +24,7 @@ export const root = path.resolve( import.meta.dirname, ".." );
 const hash = b => createHash( "sha256" ).update( b ).digest( "hex" );
 const read = p => fs.readFileSync( path.join( root, p ) );
 const json = p => JSON.parse( read( p ) );
-const publicRoot = path.resolve( root, "../../.generated/client-public" );
+const publicRoot = CLIENT_PUBLIC_ROOT;
 const norm = s => s.replaceAll( "\\", "/" ).toUpperCase();
 
 /*
@@ -132,9 +133,9 @@ export async function audit(
 ) {
 	const native = json( "../../scripts/build/reference/native-audio-surface.json" ),
 		oracle = json( "tests/fixtures/native/item-sound-selector-cases.json" );
-	const catalogBytes = read( "../../.generated/client-public/assets/audio/effectsound.json" ),
+	const catalogBytes = read( CLIENT_PUBLIC_ROOT + "/assets/audio/effectsound.json" ),
 		catalog = JSON.parse( catalogBytes ),
-		animation = json( "../../.generated/client-public/assets/anim/manifest.json" );
+		animation = json( CLIENT_PUBLIC_ROOT + "/assets/anim/manifest.json" );
 	const { createUiSoundCatalog } = await load( "foundation/ui/sound-catalog.ts" );
 	const { itemSoundCategory } = await load( "foundation/audio/item-sounds.ts" );
 	const sourceCandidates = [], inputs = {}, issues = [];
@@ -203,11 +204,11 @@ export async function audit(
 	const resources = [];
 	for (
 		const file of [
-			"../../.generated/client-public/assets/skill/effectRecords.json",
-			"../../.generated/client-public/assets/effects/programs.json",
-			"../../.generated/client-public/assets/audio/effectenvsnd.json",
-			"../../.generated/client-public/assets/audio/skilleffectsound.json",
-			"../../.generated/client-public/assets/audio/catalog.json"
+			CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json",
+			CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json",
+			CLIENT_PUBLIC_ROOT + "/assets/audio/effectenvsnd.json",
+			CLIENT_PUBLIC_ROOT + "/assets/audio/skilleffectsound.json",
+			CLIENT_PUBLIC_ROOT + "/assets/audio/catalog.json"
 		]
 	) {
 		const bytes = read( file );
@@ -249,7 +250,7 @@ export async function audit(
 				status: closed.has( r.va ) ? "declared-regression-not-run" : "unresolved-or-separately-evidenced"
 			}) )
 		);
-	const pack = json( "../../.generated/client-public/assets/packs/manifest.json" ),
+	const pack = json( CLIENT_PUBLIC_ROOT + "/assets/packs/manifest.json" ),
 		packed = new Set( pack.assets.map( r => r.path ) );
 	const directFiles = native.strings.filter( s => /^prim[\\/]snd[\\/].+\.wav$/i.test( s.value ) ).map( s => {
 		const publicPath = "/assets/audio/sfx/" + s.value.replaceAll( "\\", "/" ).toLowerCase();

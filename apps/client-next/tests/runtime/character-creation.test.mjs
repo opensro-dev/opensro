@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -70,7 +71,7 @@ test("warning captures identity, rejects duplicate submits and stale results, an
 function creation() {
 	const sounds = [],
 		commands = [],
-		bytes = readFileSync( "../../.generated/client-public/assets/textdata/abusefilter.txt" );
+		bytes = readFileSync( CLIENT_PUBLIC_ROOT + "/assets/textdata/abusefilter.txt" );
 	let requested = false;
 	const assets = {
 		available: () => 4,
@@ -239,7 +240,7 @@ test("creation starter items follow the native weapon and protector rules", () =
 test("all creation figures and equipment resolve to published native preview resources", () => {
 	const catalog = readPublishedAssetJsonSync(
 		"/assets/char/roster.json",
-		path.join( root, "../../.generated/client-public" )
+		CLIENT_PUBLIC_ROOT
 	);
 	const models = Object.values( catalog.models ), itemIds = createItemCodenameIndex( catalog.dress );
 	for ( const race of [ 0, 1 ] ) {

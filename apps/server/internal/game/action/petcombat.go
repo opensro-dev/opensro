@@ -343,7 +343,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 		if err != nil {
 			return petStrikeResult{}, false
 		}
-		formulas = append(formulas, scaleAreaDamage(formula, step.percent))
+		formulas = append(formulas, combat.FinishImpact(formula, combat.ImpactTail{Percent: step.percent, Attack: skill.Attack.Present}))
 	}
 	if len(formulas) == 0 {
 		return petStrikeResult{}, false
@@ -426,7 +426,8 @@ func (rt *Runtime) petStrikePlayer(step petCombatStep, target combatTarget, skil
 	if !rt.planPlayerStrike(&hit.strike,
 		func(wall *enterworld.SkillWall) (combat.WallOutcome, error) {
 			out, err := rt.resolveCreatureImpactBehindWall(actor, skill, attacker, defender, wall)
-			out.Defender = scaleAreaDamage(out.Defender, step.percent)
+			out.Defender = combat.FinishImpact(out.Defender, combat.ImpactTail{Percent: step.percent, Attack: skill.Attack.Present,
+				Covered: out.Covered})
 			out.Absorbed = uint32(uint64(out.Absorbed) * step.percent / fullAreaPercent)
 			return out, err
 		},

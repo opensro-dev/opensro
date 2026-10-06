@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -84,7 +85,7 @@ test("relative cone velocity flags 2 transforms velocity by emitter orientation 
 });
 test("published derived rotation and cone parameters use authored inputs rather than serialized scratch", async () => {
 	const { particleRotation, particleCone } = await load( "animation/particle-rotation.ts" );
-	const catalog = JSON.parse( readFileSync( "../../.generated/client-public/assets/effects/programs.json", "utf8" ) ),
+	const catalog = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json", "utf8" ) ),
 		counts = { AxisVector4: 0, RotVector: 0, AngleVector1: 0 };
 	function visit( node ) {
 		for ( const op of node.renderProgram ?? [] ) {

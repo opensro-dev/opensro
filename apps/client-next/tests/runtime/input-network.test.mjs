@@ -235,7 +235,7 @@ test("native sight modes constrain pitch, follow heading and preserve free yaw",
 	assert.ok( input.camera().pitch > pitch );
 	assert.equal( input.camera( 2 ).yaw, .2 );
 	input.sight( 1 );
-	assert.equal( input.camera( 2 ).yaw, Math.fround( 1.5700000524520874 - 2 + 1.5707963705062866 ) );
+	assert.equal( input.camera( 2 ).yaw, Math.fround( 1.5700000524520874 - 2 + 1.5707963705062866 ) - Math.PI );
 	const followed = input.camera().yaw;
 	input.sight( 0 );
 	assert.equal( input.camera( 0 ).yaw, followed );
@@ -343,6 +343,23 @@ test("a frame the consumer cannot apply ends the session and names that frame fo
 	assert.match( failures[0].reason.stack, /Invalid movement speed channels/ );
 	assert.deepEqual( [ ...failures[0].frame.payload ], [ 1, 2, 3 ] );
 	assert.ok( socket.closed );
+});
+
+/*
+================
+third-person rear hemisphere
+================
+*/
+test("heading-locked camera stays behind the player through a complete turn", () => {
+	const input = createInput();
+	input.sight( 1 );
+	for ( let i = 0; i < 16; i++ ) {
+		const bearing = i * Math.PI / 8;
+		const camera = input.camera( (bearing + Math.PI / 2) % (2 * Math.PI) );
+		const alongHeading = Math.sin( camera.yaw ) * Math.cos( bearing ) +
+			Math.cos( camera.yaw ) * Math.sin( bearing );
+		assert.ok( alongHeading < -.999, "camera eye must stay in the rear hemisphere" );
+	}
 });
 
 /*

@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import "../helpers/native-source-loader.mjs";
@@ -23,7 +24,7 @@ const { createChat } = await import( "../../src/engine/runtime/simulation/worker
 	{ decodeQuest } = await import( "../../src/engine/foundation/gameplay/quest.ts" );
 
 test("login quest owner preserves every published reference and resets stale requests without a supported-ID list", async () => {
-	const catalog = JSON.parse( await readFile( "../../.generated/client-public/assets/data/questData.json", "utf8" ) );
+	const catalog = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" ) );
 	const ids = [ ...new Set( catalog.rows.map( line => Number( line.split( "\t" )[0] ) ) ) ];
 	assert.ok( ids.length > 200, "exercise the full published catalog, not starter fixtures" );
 	// These are serialization fixtures, not claims about each quest script. The

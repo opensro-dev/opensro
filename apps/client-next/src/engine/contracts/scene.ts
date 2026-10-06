@@ -36,6 +36,10 @@ export interface WorldMaterial {
 	readonly groundDecal?: boolean;
 	readonly ambient?: readonly [number, number, number];
 	readonly textureAlpha?: boolean;
+	/** Opaque DXT3 garment: the authored alpha channel is sheen, not
+	 * coverage (jmxAssetIO, CPrimMtrl bit 0x200 off); the geometry shader
+	 * reads tex.a as a Blinn-Phong gloss weight. */
+	readonly sheenAlpha?: boolean;
 	readonly fog?: {
 		readonly color: number;
 		readonly nearPlane: number;

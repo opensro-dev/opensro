@@ -3,15 +3,26 @@
 
 telemetry.ts - compact player FPS/ping and opt-in developer diagnostics
 
-The console preference reveals a separate icon, never developer data in the
-player readout. Only icon visibility persists; panels start closed. This is
+The Experimental preference reveals a separate icon, never developer data in
+the player readout. Only icon visibility persists; panels start closed. This is
 a local presentation preference, not server authorization.
 
 ===========================================================================
 */
 import type { FrameTelemetry } from "@/engine/contracts/runtime";
 
-const STORAGE_KEY = "sro.developerDiagnostics";
+/*
+================
+TelemetryOptions
+
+Platform owns persistence; the console follows the same preference path as
+Experimental Confirm. Applying a preference never opens the panel.
+================
+*/
+interface TelemetryOptions {
+	readonly enabled: boolean;
+	readonly onChange: ( enabled: boolean ) => void;
+}
 
 /*
 ================
@@ -32,7 +43,7 @@ declare global {
 createTelemetry
 ================
 */
-export function createTelemetry() {
+export function createTelemetry( options: TelemetryOptions ) {
 	const lifetime = new AbortController();
 	const chip = document.getElementById( "fps-chip" );
 	const fpsToggle = document.getElementById( "fps-toggle" );
@@ -48,11 +59,8 @@ export function createTelemetry() {
 	readout.className = "sro-fps-chip__readout sro-developer-readout";
 	readout.setAttribute( "role", "region" );
 	readout.setAttribute( "aria-label", "Developer diagnostics" );
-	let enabled = false;
+	let enabled = options.enabled;
 	let latest: FrameTelemetry | null = null;
-	try {
-		enabled = localStorage.getItem( STORAGE_KEY ) === "true";
-	} catch { /* Storage may be disabled. */ }
 	chip?.insertBefore( toggle, fpsToggle );
 	chip?.append( readout );
 
@@ -84,7 +92,9 @@ export function createTelemetry() {
 	function present( sample: FrameTelemetry ) {
 		latest = sample;
 		const ping = sample.pingMs == null ? "—" : String( Math.round( sample.pingMs ) );
-		if ( fpsReadout && !fpsReadout.hidden ) fpsReadout.textContent = `${Math.round( sample.fps )} FPS · ${ping} ms`;
+		if ( fpsReadout && !fpsReadout.hidden ) {
+			fpsReadout.textContent = `${Math.round( sample.fps )} FPS · ${ping} ms`;
+		}
 		if ( !enabled || readout.hidden ) return;
 		const ms = ( value: number ) => `${value.toFixed( value < 10 ? 1 : 0 )} ms`;
 		readout.textContent = [
@@ -110,16 +120,23 @@ export function createTelemetry() {
 			setExpanded( true, false );
 			readout.textContent = "";
 		}
-		try {
-			localStorage.setItem( STORAGE_KEY, String( enabled ) );
-		} catch { /* Current tab still works. */ }
 		return enabled;
 	}
 	setExpanded( false, false );
 	setExpanded( true, false );
 	toggle.hidden = !enabled;
 	const previous = window.sroDebug;
-	const consoleApi = { setDiagnostics };
+	const consoleApi = {
+		/*
+		================
+		setDiagnostics
+		================
+		*/
+		setDiagnostics( value: boolean ) {
+			options.onChange( value === true );
+			return enabled;
+		}
+	};
 	window.sroDebug = consoleApi;
 	fpsToggle?.addEventListener( "click", () => {
 		const expanded = !!fpsReadout?.hidden;
@@ -134,6 +151,7 @@ export function createTelemetry() {
 		if ( latest ) present( latest );
 	}, { signal: lifetime.signal } );
 	return {
+		setDiagnostics,
 		present,
 		active: () => enabled && !readout.hidden && !document.hidden,
 		/*

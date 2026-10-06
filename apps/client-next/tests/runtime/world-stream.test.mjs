@@ -46,9 +46,9 @@ function scene( r, bundle ) {
 fixture
 ================
 */
-function fixture() {
+function fixture( options = {} ) {
 	let id = 0;
-	const ready = new Map(), requests = [], cancelled = [];
+	const ready = new Map(), requests = [], cancelled = [], textures = [];
 	const world = createWorldRenderer();
 	let camera;
 	const assets = {
@@ -82,7 +82,7 @@ function fixture() {
 							center: [ 0, 0, 0 ],
 							radius: 10000,
 							material: {
-								texture: `/assets/${region}.png`,
+								texture: `/assets/${region}${options.blockTextures ? ".texture" : ".png"}`,
 								color: [ 1, 1, 1, 1 ],
 								alphaCutoff: 0,
 								blend: false,
@@ -105,6 +105,16 @@ function fixture() {
 					id: key,
 					image: { width: 1, height: 1, close() {} }
 				} );
+			} else if ( String( url ).endsWith( ".texture" ) ) {
+				// A published NTX1 container: opaque DXT1 red, one block per mip level.
+				const block = new Uint8Array( 8 );
+				new DataView( block.buffer ).setUint16( 0, 0xf800, true );
+				const bytes = new Uint8Array( 20 + 3 * block.length ), view = new DataView( bytes.buffer );
+				[ 0x3158544e, 4, 4, 0x31545844, 3 ].forEach( ( value, index ) =>
+					view.setUint32( index * 4, value, true )
+				);
+				for ( let level = 0; level < 3; level++ ) bytes.set( block, 20 + level * block.length );
+				ready.set( key, { kind: "bytes", id: key, buffer: bytes.buffer } );
 			} else {ready.set( key, {
 					kind: "bytes",
 					id: key,
@@ -153,7 +163,10 @@ function fixture() {
 		cancelWorldUpdate: () => world.cancelPending(),
 		setWorld: scene => world.scene( scene ),
 		adoptWorld: lease => world.adopt( lease ),
-		setWorldTexture: ( path, image ) => world.texture( path, image ),
+		setWorldTexture( path, image ) {
+			textures.push( { path, image } );
+			world.texture( path, image );
+		},
 		neededWorldTextures: () => world.neededTextures(),
 		worldStats: () => world.stats(),
 		/*
@@ -177,7 +190,7 @@ function fixture() {
 		world.prepare( { upload: data => ({ data }), release() {} }, { upload: () => ({}), release() {} }, 1 );
 		assert.equal( stream.error(), null );
 	}
-	return { stream, world, step, requests, cancelled, ready, camera: () => camera };
+	return { stream, world, step, requests, cancelled, ready, textures, camera: () => camera };
 }
 test("stream revisits an evicted region and finishes its texture transaction", () => {
 	const f = fixture();
@@ -185,6 +198,15 @@ test("stream revisits an evicted region and finishes its texture transaction", (
 	assert.equal( f.requests.filter( r => r.url.endsWith( "/1.png" ) ).length, 2 );
 	assert.equal( f.world.stats().pendingTextures, 0 );
 	assert.equal( f.world.stats().visibleGroups, 1 );
+});
+test("published block textures decode to native GPU resources through the stream", () => {
+	const f = fixture( { blockTextures: true } );
+	for ( let i = 0; i < 5; i++ ) f.step( 1 );
+	const set = f.textures.find( t => t.path === "/assets/1.texture" );
+	assert.ok( set, "the block container is requested and admitted" );
+	assert.equal( set.image.format, "bc1-rgba-unorm" );
+	assert.equal( set.image.levels.length, 3 );
+	assert.equal( f.world.stats().pendingTextures, 0 );
 });
 test("reset cancels outstanding jobs and permits a fresh world transaction", () => {
 	const f = fixture();

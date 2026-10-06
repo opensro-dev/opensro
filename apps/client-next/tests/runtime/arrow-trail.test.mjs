@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -20,8 +21,8 @@ const { createPresentationRandom } = await import( "../../src/engine/runtime/ran
 const { createEffectDecoder } = await import( "../../src/engine/runtime/assets/worker/effects/effects.ts" );
 const { projectileBasis } = await import( "../../src/engine/foundation/animation/moving-stage.ts" );
 const reference = JSON.parse( readFileSync( "tests/fixtures/native/arrow-reference.json", "utf8" ) );
-const manifest = JSON.parse( readFileSync( "../../.generated/client-public/assets/skillfx/manifest.json", "utf8" ) );
-const raw = JSON.parse( readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json", "utf8" ) );
+const manifest = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skillfx/manifest.json", "utf8" ) );
+const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json", "utf8" ) );
 const catalog = createEffectDecoder().decode( new TextEncoder().encode( JSON.stringify( raw ) ) );
 const stage = {
 	resource: "arrow.bsr",

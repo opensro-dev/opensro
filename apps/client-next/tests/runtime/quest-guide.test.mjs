@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { isPlaceholderText, loadEnglishCompletions } from "../../../../scripts/build/shared/englishCompletions.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
@@ -52,7 +53,7 @@ const children = rows => rows.filter( r => r.depth === 1 );
 
 test("raw guide projection matches native capture; published captions apply explicit localization corrections", async () => {
 	const native = JSON.parse( await readFile( "tests/fixtures/quest-guide-retail.json", "utf8" ) );
-	const data = JSON.parse( await readFile( "../../.generated/client-public/assets/data/questData.json", "utf8" ) );
+	const data = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" ) );
 	assert.equal( native.binarySha256, "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a" );
 	assert.deepEqual( data.guideRecords, native.records );
 	// This oracle comes from ReadProcessMemory of the hash-bound original client.
@@ -107,7 +108,7 @@ test("guide title completions fill only untranslated cells and never shadow ship
 	assert.equal( entries.OTHER, "0" );
 });
 test("quest dictionary groups carry corrected English region titles, never 0 or blank", async () => {
-	const load = async p => JSON.parse( await readFile( "../../.generated/client-public/assets/" + p, "utf8" ) );
+	const load = async p => JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/" + p, "utf8" ) );
 	const [guide, quests] = await Promise.all( [
 		load( "data/event-guide-catalog.json" ),
 		load( "data/questData.json" )
@@ -216,7 +217,7 @@ test("matching uses content symbols, keeps first collected record, and retains e
 	assert.deepEqual( questGuideRows( c, 246, [], [] ).map( r => r.depth ), [ 0 ], "native uint8 level + 10 wraps" );
 });
 test("retail catalog admits every authored quest article with full body and correct dependency direction", async () => {
-	const load = async p => JSON.parse( await readFile( "../../.generated/client-public/assets/" + p, "utf8" ) );
+	const load = async p => JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/" + p, "utf8" ) );
 	const [guide, quests, help] = await Promise.all( [
 		load( "data/event-guide-catalog.json" ),
 		load( "data/questData.json" ),

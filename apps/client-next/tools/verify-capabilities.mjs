@@ -57,12 +57,14 @@ const bugReport = runtime + "bug-report/bug-report.ts",
 const thunder = runtime + "renderer/device/thunder.ts";
 const timing = runtime + "renderer/device/timing.ts";
 const bloom = runtime + "renderer/device/bloom.ts";
+const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 const particles = runtime + "renderer/device/particles.ts";
 const deviceInternals = [
 	bloom,
+	finish,
 	device,
 	pipelines,
 	images,
@@ -270,6 +272,22 @@ for (
 		"beginRenderPass"
 	]
 ) rules[name].push( bloom );
+// The presentation pass owns its encoder and submission, like the particle
+// query: it runs after the frame submit, from ColorTarget.present.
+for (
+	const name of [
+		"createShaderModule",
+		"createRenderPipeline",
+		"createSampler",
+		"createBindGroup",
+		"createBindGroupLayout",
+		"createPipelineLayout",
+		"createCommandEncoder",
+		"beginRenderPass",
+		"submit",
+		"finish"
+	]
+) rules[name].push( finish );
 rules.createBuffer.push( timing );
 for (
 	const name of [

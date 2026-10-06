@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -26,7 +27,7 @@ const { createCharacterResources, assetRequestBudget, readBytes, createEffectDec
 };
 
 test("published EasyFX closure fits the actual character-resource request and decodes melee hits", async () => {
-	const bytes = await readFile( "../../.generated/client-public/assets/effects/programs.json" ), requests = [];
+	const bytes = await readFile( CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json" ), requests = [];
 	const owner = createCharacterResources(
 		{
 			available: () => 1,

@@ -296,6 +296,7 @@ func (rt *Runtime) applyPeriodicPulse(effect linkedpulse.Effect, c, snapshot *en
 	if err != nil {
 		return OpResult{}
 	}
+	formula = combat.FinishImpact(formula, combat.ImpactTail{Attack: skill.Attack.Present})
 	hit, ok := rt.commitCreditedMonsterHit(effect.Division, c, snapshot, skill, target, formula, "linked-skill-kill", now)
 	if !ok {
 		return OpResult{}

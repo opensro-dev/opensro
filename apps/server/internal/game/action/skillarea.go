@@ -126,6 +126,7 @@ func (rt *Runtime) planAreaVictims(in areaPlanInput) (areaStrikePlan, bool) {
 			if in.skill.LifeSteal.Present {
 				// 58F4B5: the percent rides into 40F750, after its HP cap.
 				formula := lifeStealResult(in.lifeStealBase, in.attacker, defender, target.CurrentHP, uint32(percent))
+				formula = combat.FinishImpact(formula, combat.ImpactTail{PercentApplied: true, Attack: in.skill.Attack.Present})
 				total += uint64(formula.Damage)
 				plan.formulas = append(plan.formulas, formula)
 				continue
@@ -134,7 +135,7 @@ func (rt *Runtime) planAreaVictims(in areaPlanInput) (areaStrikePlan, bool) {
 			if err != nil {
 				return areaStrikePlan{}, false
 			}
-			formula.Damage = uint32(uint64(formula.Damage) * percent / fullAreaPercent)
+			formula = combat.FinishImpact(formula, combat.ImpactTail{Percent: percent, Attack: in.skill.Attack.Present})
 			total += uint64(formula.Damage)
 			plan.formulas = append(plan.formulas, formula)
 		}

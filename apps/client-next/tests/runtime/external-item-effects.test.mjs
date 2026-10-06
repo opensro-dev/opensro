@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,7 +23,7 @@ const { createPresentationRandom } = await import( "../../src/engine/runtime/ran
 const { createEntities } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/entities/entities.ts"
 );
-const read = p => readFileSync( "../../.generated/client-public/assets/" + p );
+const read = p => readFileSync( CLIENT_PUBLIC_ROOT + "/assets/" + p );
 const decoder = createEffectDecoder(),
 	named = decoder.decode( read( "skill/namedEffectRecords.json" ) ),
 	catalog = decoder.decode( read( "skill/effectRecords.json" ) );

@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -30,7 +31,7 @@ The glyph quads a laid-out line stands for: its text run expanded.
 const glyphQuads = ( ...args ) => expandTextRuns( titleText( ...args ) );
 
 const atlas = JSON.parse(
-	await readFile( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf8" )
+	await readFile( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json", "utf8" )
 );
 const rect = [ 10, 20, 100, 41 ], clip = [ 0, 0, 200, 200 ], color = [ 1, 1, 1, 1 ];
 

@@ -133,6 +133,8 @@ import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
+import { createExperimentalHud, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
+import type { ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
@@ -465,7 +467,7 @@ import {
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
 import { textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
-import { systemMenu } from "@/engine/foundation/ui/system-menu";
+import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
 import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
 import { guideTokens } from "@/engine/foundation/ui/guide-content";
 import type { AssetOwner } from "@/engine/contracts/assets";
@@ -519,6 +521,18 @@ export interface UiFrameProbe {
 	detailBegin( stage: string ): void;
 	detailEnd( stage: string ): void;
 }
+/*
+================
+UiExtensions
+
+Browser-only integrations are grouped separately from native preferences.
+================
+*/
+export interface UiExtensions {
+	bugReport?: BugReportControl | null;
+	saveExperimental?: ( value: ExperimentalOptions ) => void;
+}
+
 // Sole owner of UI navigation, focus projection and pending UI intent. Gameplay is read-only.
 /*
 ================
@@ -543,8 +557,10 @@ export function createUi(
 	saveVideo: ( value: VideoOptions ) => void = () => {},
 	saveBlocks: ( value: readonly string[] ) => void = () => {},
 	saveQuickslots: ( value: ExtendedQuickslotOptions ) => void = () => {},
-	bugReport: BugReportControl | null = null
+	extensions: UiExtensions = {}
 ) {
+	const bugReport = extensions.bugReport;
+	const experimental = createExperimentalHud();
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
 	let consoleRows: string[] = [], consoleHistory: string[] = [], consoleHistoryIndex = 0;
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
@@ -1188,6 +1204,7 @@ export function createUi(
 		panel = next;
 		if ( isMainPopupPage( next ) ) rememberedMainPopup = next;
 		// Enter hooks are shared by sidebar, menu, keyboard and contextual links.
+		if ( next === "Experimental" ) experimental.open();
 		if ( next === "Option" ) {
 			videoDraft = videoOptions( video );
 			videoScroll = 0;
@@ -1682,6 +1699,18 @@ export function createUi(
 	================
 	*/
 	function activate( id: string ) {
+		if ( panel === "Experimental" && id.startsWith( "experimental-" ) ) {
+			const row = EXPERIMENTAL_TABS.flatMap( tab => tab.rows ).find( candidate => candidate.id === id );
+			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
+			else if ( row ) experimental.toggle( row.key );
+			else if ( id === "experimental-default" ) experimental.reset();
+			else if ( id === "experimental-confirm" ) {
+				extensions.saveExperimental?.( experimental.confirm() );
+				setPanel( "" );
+			} else if ( id === "experimental-cancel" ) setPanel( "" );
+			dirty = true;
+			return;
+		}
 		if ( id.startsWith( "cos-status:" ) ) {
 			cosHud.select( Number( id.slice( 11 ) ) );
 			sendGameplay( { kind: "cos-select", gid: cosHud.selected() } );
@@ -4274,6 +4303,11 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "experimental-preferences" ) {
+				experimental.restore( event.value );
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "preferences" ) {
 				const previous = options;
 				options = gameOptions( event.value );
@@ -4838,7 +4872,10 @@ export function createUi(
 			}
 			if ( event.kind === "drag" && event.id === "system-drag" && panel === "System" ) {
 				systemX = Math.max( 0, Math.min( (view?.width ?? 214) - 214, (systemX ?? 0) + event.dx ) );
-				systemY = Math.max( 0, Math.min( (view?.height ?? 212) - 212, (systemY ?? 0) + event.dy ) );
+				systemY = Math.max(
+					0,
+					Math.min( (view?.height ?? SYSTEM_MENU_HEIGHT) - SYSTEM_MENU_HEIGHT, (systemY ?? 0) + event.dy )
+				);
 				dirty = true;
 				return;
 			}
@@ -6593,8 +6630,13 @@ export function createUi(
 			================
 			*/
 			function authoredChrome( node: AuthoredControl, ox: number, oy: number ) {
+				// CIFScrollManager inherits CIFFrame (6F3830), but some resources omit its skin.
+				if ( node.type === "CIFScrollManager" && !node.texture ) return;
 				const r = authoredRect( node, ox, oy );
-				if ( node.type === "CIFFrame" || node.type === "CIFSubFrame" || node.type === "CIF_NPCTalk" ) {
+				if (
+					node.type === "CIFFrame" || node.type === "CIFSubFrame" || node.type === "CIF_NPCTalk" ||
+					node.type === "CIFScrollManager"
+				) {
 					paths.push( ...PARTS.map( p => node.texture + p + ".png" ) );
 					quads.push(
 						...frameRing(
@@ -6709,14 +6751,24 @@ export function createUi(
 				caption: string,
 				r: UiRect,
 				selected: boolean,
-				family = "com_long_tab",
-				disabled = false
+				style: { family: string; disabled?: boolean; client?: UiRect; }
 			) {
+				const { family, disabled = false, client = [ 0, 0, 0, 0 ] } = style;
+				const content: UiRect = [
+					r[0] + client[0],
+					r[1] + client[1],
+					r[2] - client[0] - client[2],
+					r[3] - client[1] - client[3]
+				];
 				const path = ROOT + "interface/ifcommon/" + family + (selected ? "_on" : "_off") + ".png";
 				image( r, path );
 				controls.push( { id, label: caption, rect: r, kind: "button", selected, disabled } );
 				quads.push(
-					...text.quads( caption, r, full, white, { hAlign: 1, vAlign: 1, fontStyle: selected ? 2 : 0 } )
+					...text.quads( caption, content, full, white, {
+						hAlign: 1,
+						vAlign: 1,
+						fontStyle: selected ? 2 : 0
+					} )
 				);
 			}
 			equipmentWarningVisible = false;
@@ -7665,6 +7717,7 @@ export function createUi(
 						key,
 						() =>
 							chatLayout( {
+								chatTimestamps: experimental.state().saved.chatTimestamps,
 								layout: hudData.chat,
 								width: w,
 								height: h,
@@ -8548,7 +8601,8 @@ export function createUi(
 				}
 				if ( panel === "System" && hudData ) {
 					const admission = beginWindow();
-					const sx = systemX ?? Math.trunc( (w - 214) / 2 ), sy = systemY ?? Math.trunc( (h - 212) / 2 );
+					const sx = systemX ?? Math.trunc( (w - 214) / 2 ),
+						sy = systemY ?? Math.trunc( (h - SYSTEM_MENU_HEIGHT) / 2 );
 					systemX = sx;
 					systemY = sy;
 					const authored = hudData.windows.ifsystemwnd!,
@@ -8589,14 +8643,20 @@ export function createUi(
 					);
 					closeButton( sx + 188, sy + 10 );
 					for ( const node of layout.buttons ) {
-						const id = node.id === 10 ?
+						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : node.id === 10 ?
 							"open-window:Option" :
 							node.id === 11 ?
 							"open-window:Game Guide" :
 							node.id === 13 ?
 							"system-restart" :
 							"system-exit";
-						authoredLabeledButton( node, sx, sy, id, hudCopy( node.text ) );
+						authoredLabeledButton(
+							node,
+							sx,
+							sy,
+							id,
+							node.id === EXPERIMENTAL_MENU_ID ? "Experimental" : hudCopy( node.text )
+						);
 					}
 					endWindow( admission );
 				}
@@ -8876,6 +8936,104 @@ export function createUi(
 					}
 					endWindow( admission );
 				}
+				if ( panel === "Experimental" && hudData ) {
+					const admission = beginWindow();
+					// Options-style tabs over one framed list: a header naming the tab,
+					// then one checkbox row per preference, its help line below it.
+					// The window grows with the selected tab, as CIFOption::OnTab does.
+					const { tab, draft } = experimental.state(), page = EXPERIMENTAL_TABS[tab]!;
+					const rowPitch = 46, listTop = 98, width = 386;
+					const listHeight = page.rows.length * rowPitch + 12, height = listTop + listHeight + 50;
+					const [px, py] = windowOrigin( "Experimental", [
+						(w - width) / 2,
+						(h - height) / 2,
+						width,
+						height
+					] );
+					const layout = hudData.windows.ifoption!, slot = hudData.windows.ifgameoptionslot!;
+					windowBox( "Experimental", px, py, width, height );
+					closeButton( px + width - 26, py + 10 );
+					const tabWidth = 62, tabStart = (width - (EXPERIMENTAL_TABS.length * tabWidth - 2)) / 2;
+					for ( let i = 0; i < EXPERIMENTAL_TABS.length; i++ ) {
+						nativeTab(
+							"experimental-tab:" + i,
+							EXPERIMENTAL_TABS[i]!.title,
+							[ px + tabStart + i * tabWidth, py + 40, 60, 24 ],
+							tab === i,
+							{ family: "com_tab", client: [ 0, 9, 0, 6 ] }
+						);
+					}
+					authoredChrome( { ...layout.GDR_OPTION_BGTILE!, rect: [ 27, 78, 332, height - 140 ] }, px, py );
+					authoredChrome(
+						{ ...layout.GDR_OPTION_WND_GAME!, type: "CIFFrame", rect: [ 11, 62, 364, height - 108 ] },
+						px,
+						py
+					);
+					// Browser-only section reuses the native Set Game header and inset frame.
+					const section = hudData.windows.ifoption_game!.GDR_GAME_OPTION_TAB_1!;
+					authoredImage( { ...section, rect: [ 25, 70, 196, 28 ] }, px, py );
+					authoredText( { ...section, rect: [ 25, 70, 196, 28 ] }, px, py, page.title );
+					authoredChrome(
+						{
+							...hudData.windows.ifoption_game!.GDR_GAME_OPTION_SCROLLMANAGER_1!,
+							rect: [ 25, listTop, 336, listHeight ]
+						},
+						px,
+						py
+					);
+					for ( let i = 0; i < page.rows.length; i++ ) {
+						const row = page.rows[i]!, top = listTop + 8 + i * rowPitch, enabled = draft[row.key];
+						authoredText(
+							{
+								...slot.GDR_GAME_OPTION_SLOT_STA1!,
+								rect: [ 39, top + 4, 270, 16 ],
+								client: [ 0, 2, 0, 0 ]
+							},
+							px,
+							py,
+							row.label
+						);
+						image(
+							[ px + 331, py + top + 4, 16, 16 ],
+							ROOT + "interface/ifcommon/com_checkbutton_" + (enabled ? "on" : "off") + ".png"
+						);
+						controls.push( {
+							id: row.id,
+							label: row.label,
+							kind: "button",
+							rect: [ px + 35, py + top, 316, 40 ],
+							selected: enabled
+						} );
+						authoredText(
+							{
+								...slot.GDR_GAME_OPTION_SLOT_STA1!,
+								rect: [ 39, top + 22, 304, 16 ],
+								client: [ 0, 0, 0, 0 ],
+								color: [ 180 / 255, 180 / 255, 180 / 255, 1 ]
+							},
+							px,
+							py,
+							row.description
+						);
+					}
+					for (
+						const [index, key, id] of [ [ 0, "DEF", "default" ], [ 1, "OK", "confirm" ], [
+							2,
+							"CANC",
+							"cancel"
+						] ] as const
+					) {
+						const node = layout["GDR_OPTION_BTN_" + key]!;
+						authoredLabeledButton(
+							{ ...node, rect: [ 52 + index * 103, height - 34, ...node.size ] },
+							px,
+							py,
+							"experimental-" + id,
+							hudCopy( node.text )
+						);
+					}
+					endWindow( admission );
+				}
 				if ( panel === "Option" && hudData ) {
 					const admission = beginWindow();
 					// CIFOption::OnTab 5C92A0 changes height, background and button positions.
@@ -8914,13 +9072,15 @@ export function createUi(
 					const tile = { ...layout.GDR_OPTION_BGTILE!, rect: geometry.tile as unknown as UiRect };
 					authoredChrome( tile, px, py );
 					const tabs = [ "VIDEO", "AUDIO", "CAMERA", "INPUT", "GAME" ];
+					// 5C9D7B sets (0,9,0,6) insets; 53FB10 changes format flags, not alignment.
+					// CTextBoard 5404AF/5404BB keeps both axes centered.
 					for ( let i = 0; i < 5; i++ ) {
 						nativeTab(
 							"option-tab:" + i,
 							hudCopy( "UIIT_CTL_MENU_" + tabs[i] + "SET" ),
 							[ px + 40 + i * 62, py + 40, 60, 24 ],
 							optionTab === i,
-							"com_tab"
+							{ family: "com_tab", client: [ 0, 9, 0, 6 ] }
 						);
 					}
 					for (
@@ -8949,7 +9109,13 @@ export function createUi(
 						host = Object.values( layout ).find( node => node.id === 10 + optionTab )!;
 					authoredChrome( { ...host, type: "CIFFrame" }, px, py );
 					if ( optionTab !== 4 ) {
-						for ( const node of authoredPaintOrder( page ) ) authoredChrome( node, ox, oy );
+						for ( const node of authoredPaintOrder( page ) ) {
+							authoredChrome(
+								node,
+								ox,
+								oy
+							);
+						}
 					}
 					if ( optionTab === 0 ) {
 						const manager = page.GDR_OPT_VIDEO_DETAIL_OPT!,
@@ -9250,6 +9416,7 @@ export function createUi(
 						for ( const group of [ 0, 1 ] as const ) {
 							const tab = gameLayout["GDR_GAME_OPTION_TAB_" + (group + 1)]!,
 								manager = gameLayout["GDR_GAME_OPTION_SCROLLMANAGER_" + (group + 1)]!;
+							authoredChrome( { ...manager, type: "CIFFrame" }, ox, oy );
 							authoredImage( tab, ox, oy );
 							authoredText( tab, ox, oy, hudCopy( tab.text ) );
 							const bounds = authoredRect( manager, ox, oy );
@@ -9294,21 +9461,29 @@ export function createUi(
 								paths.push( skin );
 								if ( resources.has( skin ) ) rect( [ sx, sy, 156, 28 ], white, skin );
 								paths.push( path );
-								if ( resources.has( path ) ) rect( r, row.disabled ? [ .5, .5, .5, 1 ] : white, path );
 								const caption = row.key === BUG_REPLAY_OPTION ? BUG_REPLAY_LABEL : hudCopy( row.text );
-								quads.push(
-									...text.quads(
-										caption,
-										[
-											sx + labelNode.rect[0],
-											sy + labelNode.rect[1] + labelNode.client[1],
-											112,
-											16
-										],
-										[ sx + labelNode.rect[0], sy, 112, 28 ],
-										row.disabled ? [ .5, .5, .5, 1 ] : white
-									)
+								// 5C8810 keeps the authored label bounds and enables style 5 bit 1.
+								// 780EA0 draws that shadow at (+1,+1) in black before the glyph.
+								const labelRect = authoredClientRect( labelNode, sx, sy );
+								const labelColor = row.disabled ? [ .5, .5, .5, 1 ] as const : labelNode.color;
+								const style = {
+									fontIndex: labelNode.fontIndex,
+									hAlign: labelNode.hAlign,
+									vAlign: labelNode.vAlign
+								};
+								const labelQuads = text.quads( caption, labelRect, full, labelColor, style ).map(
+									q => ({ ...q, textLayout: undefined })
 								);
+								quads.push(
+									...labelQuads.map( q => ({
+										...q,
+										rect: [ q.rect[0] + 1, q.rect[1] + 1, q.rect[2], q.rect[3] ] as UiRect,
+										color: [ 0, 0, 0, labelColor[3] ] as const
+									}) ),
+									...labelQuads
+								);
+								// Resource child order paints the checkbox after its label.
+								if ( resources.has( path ) ) rect( r, row.disabled ? [ .5, .5, .5, 1 ] : white, path );
 								controls.push( {
 									id: row.key === "beginner" ?
 										"option-beginner" :
@@ -9869,7 +10044,7 @@ export function createUi(
 							hudCopy( page ? "UIIT_STT_INVENTORY_EXTENSION_TEB" : "UIIT_CTL_BELOINGING" ),
 							[ bx + 4 + 62 * page, by - 23, 60, 24 ],
 							page === inventoryPage,
-							"com_tab"
+							{ family: "com_tab" }
 						);
 					}
 					/*
@@ -10053,7 +10228,13 @@ export function createUi(
 					mainPopup( "Actions", popup );
 					const page = hudData.windows.ifaction!,
 						actionLocal = next.entities.find( e => e.gid === game?.localGid );
-					for ( const node of authoredPaintOrder( page ) ) authoredChrome( node, ox, oy );
+					for ( const node of authoredPaintOrder( page ) ) {
+						authoredChrome(
+							node,
+							ox,
+							oy
+						);
+					}
 					for ( const action of hudData.actions ) {
 						const node = Object.values( page ).find( n =>
 							n.type === "CIFSlotWithHelp" && n.id === action.slot
@@ -10158,7 +10339,7 @@ export function createUi(
 							hudCopy( available.find( m => m.tab === tab )!.tabName ),
 							[ ox + 4 + 62 * i, oy - 23, 60, 24 ],
 							tab === skillTab,
-							"com_tab"
+							{ family: "com_tab" }
 						);
 					}
 					const active = available.filter( m => m.tab === skillTab );
@@ -10422,7 +10603,13 @@ export function createUi(
 						sub = hudData.windows.ifquestslotsub!,
 						blank = hudData.windows.ifquestslot!;
 					mainPopup( "Quests", popup );
-					for ( const node of authoredPaintOrder( page ) ) authoredChrome( node, ox, oy );
+					for ( const node of authoredPaintOrder( page ) ) {
+						authoredChrome(
+							node,
+							ox,
+							oy
+						);
+					}
 					const rows: (readonly [NonNullable<NonNullable<typeof game>["quests"]>[number], number])[] = [];
 					for ( const q of game?.quests ?? [] ) {
 						rows.push( [ q, -1 ] );
@@ -11340,8 +11527,8 @@ export function createUi(
 							),
 							[ px + 16 + i * 56, py + 38, 56, 24 ],
 							tabs[i] === shopTab,
-							"com_short_tab",
-							busy
+							// 5B22B3: shop content insets are 4, 4, 7, 4.
+							{ family: "com_short_tab", disabled: busy, client: [ 4, 4, 7, 4 ] }
 						);
 					}
 					for ( let i = 0; i < 30; i++ ) {
@@ -11915,8 +12102,13 @@ export function createUi(
 							hudCopy( key ),
 							[ px + 18 + i * 78, py + 44, 72, 24 ],
 							cosTab === i,
-							"com_long_tab",
-							panel === "Shop" || (i === 1 ? !record?.inventory : i === 2 ? record?.band !== 4 : false)
+							// 6A1404: companion tabs have an asymmetric left inset.
+							{
+								family: "com_long_tab",
+								client: [ 3, 6, 6, 0 ],
+								disabled: panel === "Shop" ||
+									(i === 1 ? !record?.inventory : i === 2 ? record?.band !== 4 : false)
+							}
 						)
 					);
 					const ox = px + 12,
@@ -12772,8 +12964,8 @@ export function createUi(
 							hudCopy( key ),
 							[ px + 15 + i * 75, py + 39, 72, 24 ],
 							guildTab === i,
-							"com_long_tab",
-							![ 0, 1, 2, 4 ].includes( i )
+							// 5DFCF0: community tab content starts five pixels down.
+							{ family: "com_long_tab", client: [ 6, 5, 6, 0 ], disabled: ![ 0, 1, 2, 4 ].includes( i ) }
 						)
 					);
 					authoredChrome(

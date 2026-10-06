@@ -26,7 +26,7 @@ from pathlib import Path
 from PIL import Image
 
 from rebuild_lock import generated_assets_lock
-from sro_paths import EXTRACTED_ROOT, GAME_ROOT, REPO_ROOT
+from sro_paths import EXTRACTED_ROOT, GAME_ROOT, GENERATED_ROOT
 
 
 SOURCE_ROOTS = [
@@ -35,8 +35,8 @@ SOURCE_ROOTS = [
     "Media_extracted",
     "Particles_extracted",
 ]
-OUTPUT_ROOT = REPO_ROOT / ".generated" / "intermediate" / "images"
-MANIFEST_PATH = REPO_ROOT / ".generated" / "intermediate" / "image-manifest.csv"
+OUTPUT_ROOT = GENERATED_ROOT / "intermediate" / "images"
+MANIFEST_PATH = GENERATED_ROOT / "intermediate" / "image-manifest.csv"
 SUPPORTED_EXTENSIONS = {".ddj", ".tga", ".dat"}
 
 
@@ -104,7 +104,7 @@ def main() -> int:
                 )
 
     if failed:
-        failure_path = REPO_ROOT / ".generated" / "intermediate" / "image-conversion-failures.txt"
+        failure_path = GENERATED_ROOT / "intermediate" / "image-conversion-failures.txt"
         with failure_path.open("w", encoding="utf-8") as failure_file:
             for asset, error in failed:
                 failure_file.write(f"{asset.relative.as_posix()}: {error}\n")

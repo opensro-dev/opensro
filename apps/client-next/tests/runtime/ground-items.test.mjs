@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -462,12 +463,12 @@ test("pickup claims persist for a live character and release when the claimant l
 test("every published drop material uses the shared native cutoff while opaque materials stay opaque", async () => {
 	const { readFile } = await import( "node:fs/promises" ),
 		manifest = JSON.parse(
-			await readFile( "../../.generated/client-public/assets/itemdrop/manifest.json", "utf8" )
+			await readFile( CLIENT_PUBLIC_ROOT + "/assets/itemdrop/manifest.json", "utf8" )
 		);
 	let masked = 0, opaque = 0;
 	for ( const [name, row] of Object.entries( manifest.models ) ) {
 		assert.ok( row.glb, name + " must have its authored model" );
-		const b = await readFile( "../../.generated/client-public" + row.glb ),
+		const b = await readFile( CLIENT_PUBLIC_ROOT + row.glb ),
 			j = JSON.parse( b.subarray( 20, 20 + b.readUInt32LE( 12 ) ) );
 		for ( const material of j.materials ?? [] ) {
 			if ( material.alphaMode === "MASK" ) {

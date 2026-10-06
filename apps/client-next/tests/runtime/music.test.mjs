@@ -371,3 +371,33 @@ test("scene reset fades the old stream and admits title only after completion", 
 	assert.ok( f.requests.at( -1 ).endsWith( "maintheme_cut.mp3" ) );
 	f.music.dispose();
 });
+
+/*
+================
+zero endpoint
+================
+*/
+test("every audio slider has a silent zero endpoint and an audible positive range", async () => {
+	const { audioAmplitude } = await import( "../../src/engine/foundation/audio/options.ts" );
+	assert.equal( audioAmplitude( 0, false ), 0 );
+	for ( let level = 1; level <= 100; level++ ) {
+		assert.ok( audioAmplitude( level, false ) > 0 );
+		assert.equal( audioAmplitude( level, true ), 0 );
+	}
+	assert.equal( audioAmplitude( 100, false ), 1 );
+});
+
+test("muting during a region fade never restores a nonzero music gain", async t => {
+	const f = fixture( t ), media = worldTrack( f );
+	await settle();
+	media.currentTime = 10;
+	f.music.regional( field, 0 );
+	assert.equal( f.music.status(), "fading" );
+	f.music.volume( 0 );
+	for ( let i = 1; i <= 6; i++ ) {
+		media.currentTime = 10 + i * .25;
+		f.music.step();
+		assert.equal( media.volume, 0 );
+	}
+	f.music.dispose();
+});

@@ -16,6 +16,7 @@ up between full builds.
 ===========================================================================
 */
 
+import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import { ASSET_SCHEMA } from "./assetSchema.mjs";
 import { prepareAssetDelivery } from "./assetDelivery.mjs";
 import { validatePackedFontAtlases } from "./assetPackPublication.mjs";
@@ -43,7 +44,7 @@ import { baselinePacksOf, planPackLayout, packSlotOf } from "./assetPackLayout.m
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, "..", ".." );
-const publicRoot = path.join( rebuildRoot, ".generated", "client-public" );
+const publicRoot = CLIENT_PUBLIC_ROOT;
 const packsRoot = path.join( publicRoot, "assets", "packs" );
 
 export const DEFAULT_ASSET_PACK_TARGET_BYTES = 50 * 1024 * 1024;

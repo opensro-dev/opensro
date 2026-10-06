@@ -8,13 +8,14 @@ bitmap; routing and catalog publication stay consistent across encodings.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { verifyOutdoorPayloadContracts } from "../helpers/outdoorRegionPayloadCheck.mjs";
 import { dataExtractedRoot } from "../../build/world/paths.mjs";
@@ -141,7 +142,7 @@ test("global index gives every sector an independent source frame and bundle pat
 
 test("published retail routing has a renderable independent payload for every enabled sector", async () => {
 	const publishedIndexText = await readFile(
-		new URL( "../../../.generated/client-public/assets/world/outdoor/world-regions.json", import.meta.url ),
+		CLIENT_PUBLIC_ROOT + "/assets/world/outdoor/world-regions.json",
 		"utf8"
 	);
 	const publishedIndex = JSON.parse( publishedIndexText );
@@ -154,7 +155,7 @@ test("published retail routing has a renderable independent payload for every en
 	);
 
 	const objectIndexText = await readFile(
-		new URL( "../../../.generated/client-public/assets/world/outdoor/object-resources.json", import.meta.url ),
+		CLIENT_PUBLIC_ROOT + "/assets/world/outdoor/object-resources.json",
 		"utf8"
 	);
 	const objectIndex = JSON.parse( objectIndexText );
@@ -203,7 +204,7 @@ test("published retail routing has a renderable independent payload for every en
 	// still verified on every run; only re-parsing byte-identical payloads is
 	// skipped.
 	const verdict = await verifyOutdoorPayloadContracts( {
-		publicRoot: fileURLToPath( new URL( "../../../.generated/client-public", import.meta.url ) ),
+		publicRoot: CLIENT_PUBLIC_ROOT,
 		regions: publishedIndex.regions.map( ( region ) => ({
 			id: region.id,
 			bundlePublicPath: region.bundlePublicPath
@@ -344,10 +345,7 @@ publicAssetUrl
 ================
 */
 function publicAssetUrl( publicPath ) {
-	return new URL(
-		`../../../.generated/client-public/${publicPath.replace( /^\/+/, "" )}`,
-		import.meta.url
-	);
+	return pathToFileURL( path.join( CLIENT_PUBLIC_ROOT, publicPath.replace( /^\/+/, "" ) ) );
 }
 
 /**

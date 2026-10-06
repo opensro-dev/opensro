@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -16,7 +17,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../../../scripts/lib/publishedAsset.mjs";
-const publicRoot = path.resolve( root, "../../.generated/client-public" );
+const publicRoot = CLIENT_PUBLIC_ROOT;
 const bytes = asset => readPublishedAssetBytesSync( asset, publicRoot );
 const json = asset => readPublishedAssetJsonSync( asset, publicRoot );
 async function load( file ) {

@@ -25,6 +25,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
 const clipCoordEps = 1e-9
@@ -351,7 +352,10 @@ movement mutex in production, so this bounds the added per-move cost.
 ================
 */
 func BenchmarkClipMovementPathWarm(b *testing.B) {
-	root := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "client-public")
+	root, err := licensed.ClientPublicRoot()
+	if err != nil {
+		b.Fatal(err)
+	}
 	if _, err := os.Stat(filepath.Join(root, "assets", "world", "world-region-catalog.json")); err != nil {
 		b.Skipf("real client assets not present (%v)", err)
 	}
@@ -375,7 +379,10 @@ on the real Constantinople harbor bridge.
 ================
 */
 func BenchmarkClipMovementPathWarmBridge(b *testing.B) {
-	root := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "client-public")
+	root, err := licensed.ClientPublicRoot()
+	if err != nil {
+		b.Fatal(err)
+	}
 	if _, err := os.Stat(filepath.Join(root, "assets", "world", "world-region-catalog.json")); err != nil {
 		b.Skipf("real client assets not present (%v)", err)
 	}

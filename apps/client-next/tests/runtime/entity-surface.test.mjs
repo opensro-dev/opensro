@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,7 +23,7 @@ const { createNavigation } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
 );
 const { createNavigationResources } = await import( "../../src/engine/runtime/assets/worker/navigation/navigation.ts" );
-const bytes = p => assetBytes( p, "../../.generated/client-public" );
+const bytes = p => assetBytes( p, CLIENT_PUBLIC_ROOT );
 const product = await createNavigationResources().resolve(
 	bytes( "/assets/world/outdoor/regions/region-61a8.json" ),
 	0x61a8,

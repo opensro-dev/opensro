@@ -14,6 +14,7 @@ Needs the full asset build (.generated/client-public).
 ===========================================================================
 */
 
+import { CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -34,7 +35,7 @@ import { collectPackGarbage } from "../../build/assetPackGarbage.mjs";
 import { collectDedicatedModelGroups } from "../../build/assetPackOwnership.mjs";
 import { loadEnglishCompletions } from "../../build/shared/englishCompletions.mjs";
 
-const publicRoot = path.resolve( ".generated/client-public" );
+const publicRoot = CLIENT_PUBLIC_ROOT;
 const webManifestPath = path.join( publicRoot, "assets/manifest.json" );
 const packManifestPath = path.join( publicRoot, "assets/packs/manifest.json" );
 const uiPreloadManifestPath = path.join( publicRoot, "assets/ui/preload-images.json" );

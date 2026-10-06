@@ -9,6 +9,7 @@ The ordinary socket is a negative control, never a rewritten served module.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -25,7 +26,7 @@ test(
 	"published male and female berserk hair covers the head instead of attaching sideways",
 	{ timeout: 120000 },
 	async () => {
-		const root = path.resolve( "../../.generated/client-public" );
+		const root = CLIENT_PUBLIC_ROOT;
 		const roster = readPublishedAssetJsonSync( "/assets/char/roster.json", root );
 		const directory = "temp/artifacts/compound-hair";
 		await mkdir( directory, { recursive: true } );

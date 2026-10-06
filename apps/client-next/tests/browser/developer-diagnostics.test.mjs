@@ -118,3 +118,39 @@ test( "console opt-in works when local storage is blocked", { timeout: 60000 }, 
 		await browser.close();
 	}
 } );
+
+/*
+================
+Legacy console preference migration
+================
+*/
+test( "legacy opt-in migrates without overriding an explicit Experimental choice", { timeout: 90000 }, async () => {
+	const { browser, page } = await launchProbeBrowser();
+	try {
+		await page.addInitScript( () => localStorage.setItem( "sro.developerDiagnostics", "true" ) );
+		await page.goto( CLIENT_NEXT_BASE_URL );
+		await ready( page );
+		assert.equal( await page.locator( "#developer-toggle" ).isVisible(), true );
+		assert.equal( await page.locator( "#developer-readout" ).isVisible(), false );
+		await page.evaluate( () => window.sroDebug?.setDiagnostics( false ) );
+		assert.equal( await page.evaluate( () => localStorage.getItem( "sro.developerDiagnostics" ) ), null );
+		assert.deepEqual(
+			await page.evaluate( () =>
+				JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ?? "null" )
+			),
+			{
+				chatTimestamps: false,
+				developerDiagnostics: false
+			}
+		);
+		await page.reload();
+		await ready( page );
+		assert.equal(
+			await page.locator( "#developer-toggle" ).isVisible(),
+			false,
+			"canonical off wins even when a legacy key remains"
+		);
+	} finally {
+		await browser.close();
+	}
+} );

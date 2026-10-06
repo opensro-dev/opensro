@@ -135,6 +135,7 @@ export interface Platform extends Disposable {
 	saveSightMode( value: import("@/engine/foundation/rendering/camera-options").SightMode ): void;
 	saveAudioOptions( value: import("@/engine/foundation/audio/options").AudioOptions ): void;
 	saveChatBlocks( value: readonly string[] ): void;
+	saveExperimentalOptions( value: import("@/engine/foundation/ui/experimental-options").ExperimentalOptions ): void;
 	saveGameOptions( value: import("@/engine/foundation/gameplay/game-options").GameOptions ): void;
 	presentWorldCursor( cursor: import("@/engine/foundation/ui/world-cursor").WorldCursor ): void;
 	readonly canvas: HTMLCanvasElement;
@@ -170,6 +171,7 @@ export interface Renderer extends Disposable {
 	scenery(): import("./scenery").SceneryPresentation | null;
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
 	videoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;
+	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	setSelectionDecal(
 		value: { readonly pose: import("./gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; } | null
 	): void;

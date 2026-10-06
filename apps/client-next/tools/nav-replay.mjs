@@ -16,6 +16,7 @@ Usage (from apps/client-next):
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
 import "../tests/helpers/native-source-loader.mjs";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -34,7 +35,7 @@ const option = ( name, fallback ) => {
 const movesPath = args.find( ( arg ) =>
 	!arg.startsWith( "--" ) && args[args.indexOf( arg ) - 1]?.startsWith( "--" ) !== true
 );
-const publicRoot = path.resolve( option( "--public", "../../.generated/client-public" ) );
+const publicRoot = path.resolve( option( "--public", CLIENT_PUBLIC_ROOT ) );
 const tolerance = Number( option( "--tolerance", "1" ) );
 if ( !movesPath ) throw new Error( "usage: node tools/nav-replay.mjs <moves.json> [--public <root>] [--tolerance 1]" );
 

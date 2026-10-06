@@ -18,12 +18,12 @@ exportGlb.mjs - character model container and authored texture publication
 // adapter in the client. Keep native yaw state raw; do not add per-screen
 // 180-degree fixes.
 
+import { clientPublicPath } from "../../lib/generatedRoot.mjs";
 import fs from "node:fs";
 import { readCharacterTexture } from "../shared/nativeCharacterTextures.mjs";
 import { applyCharacterMaterialState } from "../shared/characterMaterialState.mjs";
 import { embedCharacterEnvironment } from "../shared/characterEnvironment.mjs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { assembleAvatar } from "./buildAvatar.mjs";
 import { compileBanTimeline } from "./compileBanTimeline.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
@@ -677,22 +677,10 @@ export function avatarToGlb( avatar ) {
 // ---- CLI ----
 if ( isMainScript( import.meta.url ) ) {
 	const target = process.argv[2] ?? "res/char/europe/europeman_adventurer.bsr";
-	const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 	// Output mirrors the native data layout: res/char/europe/<name>.bsr -> assets/char/europe/<name>.glb
 	const baseName = path.basename( target ).replace( /\.bsr$/i, "" );
 	const region = target.replaceAll( "\\", "/" ).match( /char\/([^/]+)\// )?.[1] ?? "europe";
-	const publicOut = path.resolve(
-		scriptDir,
-		"..",
-		"..",
-		"..",
-		".generated",
-		"client-public",
-		"assets",
-		"char",
-		region,
-		`${baseName}.glb`
-	);
+	const publicOut = clientPublicPath( "assets", "char", region, `${baseName}.glb` );
 	const out = process.argv[3] ?? publicOut;
 	fs.mkdirSync( path.dirname( out ), { recursive: true } );
 	const avatar = await assembleAvatar( target );

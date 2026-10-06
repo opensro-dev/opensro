@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -1438,8 +1439,7 @@ test("proved InitSpawn activation event occurs once after admission, including r
 });
 
 test("Tomb Stone projectiles capture live local target at launch, never its spawn row", () => {
-	const record =
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json", "utf8" ) )["173"];
+	const record = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json", "utf8" ) )["173"];
 	const catalog = createEffectDecoder().decode( encode( { "173": record } ) );
 	let id = 0;
 	const jobs = new Map();
