@@ -54,9 +54,8 @@ export function createUiAssets(
 	let disposed = false;
 	let wanted = new Set<string>();
 	let previousPaths: readonly string[] = [], settled = false;
-	// The array the caller last handed in. The UI builds a fresh demand array
-	// whenever its layout runs and passes the same one on the frames between,
-	// so the same array again is the same demand and skips the walk.
+	// The array the caller last handed in; with Object.isFrozen it proves an
+	// unchanged demand without reading it.
 	let previousArray: readonly string[] | null = null;
 	// Counts removals from `loaded`. Between two removals the resident set only
 	// grows, so a list found fully resident stays so until the count moves.
@@ -124,17 +123,18 @@ export function createUiAssets(
 		================
 		step
 
-		paths is the frame's whole demand. Contract: a caller never changes an
-		array after handing it in; new demand comes as a new array. The same
-		array again is therefore the same demand and skips the walk; any other
-		array is compared by content. The UI freezes each demand array when it
-		publishes it (ui.ts), which enforces this.
+		paths is the frame's whole demand. A caller may edit an array in place
+		between steps; that is noticed. A caller that publishes a frozen array
+		(the UI does, at the end of each layout) lets an unchanged frame skip
+		the walk, because a frozen array cannot have changed.
 		================
 		*/
 		step( paths: readonly string[], now: number ) {
 			if ( disposed ) return false;
 			let demandChanged = paths.length !== previousPaths.length;
-			if ( !demandChanged && paths !== previousArray ) {
+			// A frozen array handed in again cannot have changed; any other array,
+			// including the same one edited in place, is compared by content.
+			if ( !demandChanged && !(paths === previousArray && Object.isFrozen( paths )) ) {
 				for ( let i = 0; i < paths.length; i++ ) {
 					if ( paths[i] !== previousPaths[i] ) {
 						demandChanged = true;

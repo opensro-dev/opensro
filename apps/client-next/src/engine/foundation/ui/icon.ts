@@ -4,10 +4,11 @@
 icon.ts - native icon metadata to a served image path
 
 Native icon paths are relative to Media/icon; metadata never escapes it.
-The UI asks for the same few hundred icons on every layout, so resolved
-paths are remembered: the lowercase, validation and concatenation run once
+iconPath is the pure resolution. An owner that resolves the same icons on
+every layout (the UI) creates its own remembering resolver with
+createIconPaths: the lowercase, validation and concatenation then run once
 per icon, and every later call returns the string built then instead of
-building an equal one, which the engine can compare and hash without
+building an equal one, which the engine compares and hashes without
 rereading its characters.
 
 ===========================================================================
@@ -18,15 +19,13 @@ const ICON_ROOT = "/assets/images/Media_extracted/icon/";
 // against unbounded metadata, after which resolution starts over.
 const MAX_REMEMBERED_ICONS = 8192;
 
-const resolved = new Map<string, string | null>();
-
 /*
 ================
-resolveIconPath
+iconPath
 ================
 */
-function resolveIconPath( value: string ): string | null {
-	if ( value.toLowerCase() === "xxx" ) return null;
+export function iconPath( value: string | undefined ): string | null {
+	if ( !value || value.toLowerCase() === "xxx" ) return null;
 	const path = value.replaceAll( "\\", "/" ).toLowerCase();
 	if (
 		!/^[a-z0-9_/-]+\.ddj$/.test( path ) || path.startsWith( "/" ) ||
@@ -37,16 +36,21 @@ function resolveIconPath( value: string ): string | null {
 
 /*
 ================
-iconPath
+createIconPaths
+
+A remembering iconPath owned by its caller.
 ================
 */
-export function iconPath( value: string | undefined ): string | null {
-	if ( !value ) return null;
-	let path = resolved.get( value );
-	if ( path === undefined ) {
-		if ( resolved.size >= MAX_REMEMBERED_ICONS ) resolved.clear();
-		path = resolveIconPath( value );
-		resolved.set( value, path );
-	}
-	return path;
+export function createIconPaths(): ( value: string | undefined ) => string | null {
+	const resolved = new Map<string, string | null>();
+	return value => {
+		if ( !value ) return null;
+		let path = resolved.get( value );
+		if ( path === undefined ) {
+			if ( resolved.size >= MAX_REMEMBERED_ICONS ) resolved.clear();
+			path = iconPath( value );
+			resolved.set( value, path );
+		}
+		return path;
+	};
 }

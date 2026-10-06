@@ -430,7 +430,7 @@ import {
 	TRACE_ACTION_ID
 } from "@/engine/foundation/gameplay/quickslots";
 import { itemActivation } from "@/engine/foundation/gameplay/item-activation";
-import { iconPath } from "@/engine/foundation/ui/icon";
+import { createIconPaths } from "@/engine/foundation/ui/icon";
 import { createLocalization } from "./localization/localization";
 import { createTitleUi } from "./title/title";
 import { serverListRefreshDue, titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
@@ -1020,6 +1020,8 @@ export function createUi(
 		rosterRequested = false,
 		lastPhase = "",
 		message = "";
+	// The UI resolves the same icons on every layout; its resolver remembers them.
+	const iconPath = createIconPaths();
 	let controls: UiControl[] = [], blocks: UiRect[] = [], paths: string[] = [];
 	const white = [ 1, 1, 1, 1 ] as const, gold = [ .94, .85, .63, 1 ] as const;
 	// CGWndListHost::LayoutScrollbar 6F3620: content insets also govern the scrollbar.
@@ -17238,8 +17240,8 @@ export function createUi(
 				const path = iconPath( item.icon );
 				if ( path ) paths.push( path );
 			}
-			// Publication: the demand is final for this layout. resources.step skips
-			// re-reading an array it has seen, so the array must never change now.
+			// Publication: the demand is final for this layout. Frozen, it lets
+			// resources.step skip re-reading it on the frames until the next layout.
 			Object.freeze( paths );
 			dirty = resources.step( paths, now );
 			if ( dirty ) layoutResourcesRevision++;

@@ -68,10 +68,10 @@ function assetFixture() {
 ================
 UI demand compares by content across arrays
 
-The UI hands the same demand array back on frames without a layout, and a
-fresh one after each layout. A fresh array of the same length that names a
-different image must still be noticed; the same contents in a fresh array
-must not reload anything.
+The UI publishes a frozen demand array per layout and hands it back on the
+frames between. A fresh array of the same length that names a different
+image must still be noticed; the same contents in a fresh array must not
+reload anything. (In-place edits of an unfrozen array are covered below.)
 ================
 */
 test("UI demand is compared by content, whichever array carries it", () => {
@@ -80,9 +80,9 @@ test("UI demand is compared by content, whichever array carries it", () => {
 	assert.deepEqual( f.requests.length, 2 );
 	f.results.set( 1, { kind: "image", image: { width: 1, height: 1 } } );
 	f.results.set( 2, { kind: "image", image: { width: 1, height: 1 } } );
-	const settled = [ "/a.png", "/b.png" ];
+	const settled = Object.freeze( [ "/a.png", "/b.png" ] );
 	f.resources.step( settled, 1 );
-	assert.equal( f.resources.step( settled, 2 ), false, "the same array again is the same demand" );
+	assert.equal( f.resources.step( settled, 2 ), false, "the same frozen array again is the same demand" );
 	assert.equal(
 		f.resources.step( [ "/a.png", "/b.png" ], 3 ),
 		false,
