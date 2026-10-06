@@ -250,7 +250,14 @@ test("a draw released or regrown after it is recorded outlives that frame's subm
 	] );
 });
 
-test("the renderer keeps its frame open until the submit: a resized depth target dies after it", async t => {
+/*
+================
+rendererOnStrictGpu
+
+A renderer over the strict GPU, its navigator restored after the test.
+================
+*/
+function rendererOnStrictGpu( t ) {
 	const gpu = createStrictGpu();
 	const original = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
 	Object.defineProperty( globalThis, "navigator", {
@@ -271,17 +278,58 @@ test("the renderer keeps its frame open until the submit: a resized depth target
 		unconfigure() {},
 		getCurrentTexture: () => ({ createView: () => ({}) })
 	};
-	const renderer = createRenderer( { getContext: () => context } );
+	return { gpu, renderer: createRenderer( { getContext: () => context } ) };
+}
+
+/*
+================
+resizeLog
+
+Run one frame, then a resized one, and return what the resized frame
+submitted and destroyed.
+================
+*/
+async function resizeLog( gpu, renderer ) {
+	renderer.setImage( { width: 16, height: 16, close() {} } );
+	await new Promise( resolve => setImmediate( resolve ) );
+	renderer.frame( { width: 100, height: 100 } );
+	assert.equal( renderer.phase(), "running", renderer.error() );
+	gpu.log.length = 0;
+	// The resize replaces the depth target while this frame is preparing.
+	renderer.frame( { width: 200, height: 200 } );
+	assert.equal( renderer.phase(), "running", renderer.error() );
+	return [ ...gpu.log ];
+}
+
+test("the renderer keeps its frame open until the submit: a resized depth target dies after it", async t => {
+	const { gpu, renderer } = rendererOnStrictGpu( t );
 	try {
-		renderer.setImage( { width: 16, height: 16, close() {} } );
-		await new Promise( resolve => setImmediate( resolve ) );
-		renderer.frame( { width: 100, height: 100 } );
-		assert.equal( renderer.phase(), "running", renderer.error() );
-		gpu.log.length = 0;
-		// The resize replaces the depth target while this frame is preparing.
-		renderer.frame( { width: 200, height: 200 } );
-		assert.equal( renderer.phase(), "running", renderer.error() );
-		assert.deepEqual( gpu.log, [ "submit sro-frame", "destroy surface-depth" ] );
+		// Native: the frame is copied to the swapchain, no presentation pass.
+		assert.deepEqual( await resizeLog( gpu, renderer ), [ "submit sro-frame", "destroy surface-depth" ] );
+	} finally {
+		renderer.dispose();
+	}
+	assert.equal( gpu.live(), 0, "disposal destroys everything, the retired included" );
+});
+
+test("the experimental presentation pass publishes the offscreen frame and retires it after the submit", async t => {
+	const { gpu, renderer } = rendererOnStrictGpu( t );
+	try {
+		renderer.experimentalVideo( {
+			postProcessing: true,
+			anisotropicFiltering: false,
+			heightFog: false,
+			waterReflection: false,
+			garmentSheen: false
+		} );
+		// The frame submits, the presentation pass publishes the retained
+		// offscreen copy, then the resize retires that copy and the old depth.
+		assert.deepEqual( await resizeLog( gpu, renderer ), [
+			"submit sro-frame",
+			"submit presentation-finish",
+			"destroy deferred-frame-color",
+			"destroy surface-depth"
+		] );
 	} finally {
 		renderer.dispose();
 	}

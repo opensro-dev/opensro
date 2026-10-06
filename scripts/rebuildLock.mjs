@@ -15,6 +15,7 @@ import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { GENERATED_ROOT } from "./lib/generatedRoot.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, ".." );
@@ -363,9 +364,10 @@ rebuildLockDirectory
 async function rebuildLockDirectory( name ) {
 	let root = locksRoot;
 	if ( name === GENERATED_ASSETS_LOCK_NAME ) {
-		// Junction aliases must contend with the publisher in the owning checkout.
-		// Keep the existing location for ordinary checkouts and Python publishers.
-		let generated = path.join( rebuildRoot, ".generated" );
+		// The lock lives beside the tree it guards: a worktree that reads the main
+		// checkout's build (SRO_GENERATED_ROOT, or a junction) contends with its
+		// publisher instead of locking an empty tree of its own.
+		let generated = GENERATED_ROOT;
 		try {
 			generated = await realpath( generated );
 		} catch ( error ) {

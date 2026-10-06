@@ -10,6 +10,7 @@ same window definitions and localized strings used by the running client.
 ===========================================================================
 */
 
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -21,7 +22,7 @@ const { emptySocial } = await import( "../../src/engine/foundation/gameplay/soci
 const WARM_FRAMES = 24;
 const FRAME_MS = 100;
 const fontAtlas = JSON.parse(
-	readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf8" )
+	readFileSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json", "utf8" )
 );
 
 /*
@@ -158,7 +159,7 @@ function createFixture( held = [] ) {
 	/** @param {number} id @param {string} path */
 	function load( id, path ) {
 		try {
-			const bytes = readFileSync( "../../.generated/client-public" + path );
+			const bytes = readFileSync( CLIENT_PUBLIC_ROOT + path );
 			if ( path.endsWith( ".png" ) ) {
 				pending.set( id, {
 					kind: "image",

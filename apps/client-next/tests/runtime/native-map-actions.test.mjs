@@ -10,12 +10,13 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
-const asset = p => JSON.parse( readFileSync( "../../.generated/client-public/assets/" + p, "utf8" ) );
+const asset = p => JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/" + p, "utf8" ) );
 const { decodeMapLabels, decodeMapIcons, worldMapPresentation, worldMapDemand, worldMapPages } = await import(
 	"../../src/engine/foundation/ui/world-map.ts"
 );
@@ -45,7 +46,7 @@ test("retail action records occupy the authored group/index slots", () => {
 		);
 		assert.ok(
 			existsSync(
-				"../../.generated/client-public/assets/images/Media_extracted/icon/" +
+				CLIENT_PUBLIC_ROOT + "/assets/images/Media_extracted/icon/" +
 					row.icon.replace( /\.ddj$/i, ".png" )
 			),
 			row.icon

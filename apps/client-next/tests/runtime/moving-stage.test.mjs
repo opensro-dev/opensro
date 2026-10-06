@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -285,7 +286,7 @@ test("zero fade sentinel stops emission; negative sentinel removes the entire re
 	}
 });
 test("published 88 plain splash and 96 radial stages admit; arrow scripts admit", () => {
-	const raw = JSON.parse( readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json", "utf8" ) ),
+	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json", "utf8" ) ),
 		catalog = createEffectDecoder().decode( new TextEncoder().encode( JSON.stringify( raw ) ) );
 	let splash = 0, option = 0;
 	for ( const record of Object.values( catalog ) ) {

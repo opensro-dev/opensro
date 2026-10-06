@@ -98,6 +98,34 @@ func checkedGameData() ([]string, error) {
 	return checkMissing, checkErr
 }
 
+// GeneratedRootEnv names a shared generated tree; scripts/lib/generatedRoot.mjs
+// owns the rule for the scripts and the client, this is its Go side.
+const GeneratedRootEnv = "SRO_GENERATED_ROOT"
+
+/*
+==================
+ClientPublicRoot
+
+The published client tree: client-public under SRO_GENERATED_ROOT when it is
+set (it must be absolute, as for the scripts), else this checkout's own
+.generated/client-public. A worktree then reads the main checkout's build
+with no junction.
+==================
+*/
+func ClientPublicRoot() (string, error) {
+	if root := os.Getenv(GeneratedRootEnv); root != "" {
+		if !filepath.IsAbs(root) {
+			return "", fmt.Errorf("%s must be an absolute path, not %q", GeneratedRootEnv, root)
+		}
+		return filepath.Join(root, "client-public"), nil
+	}
+	repository, err := repositoryRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(repository, ".generated", "client-public"), nil
+}
+
 /*
 ==================
 missingGameData
@@ -119,10 +147,14 @@ func missingGameData() ([]string, error) {
 	if projection == "" {
 		projection = filepath.Join(repository, "apps", "server", ".generated", "game-data", "1.150", "server", "manifest.json")
 	}
+	publicRoot, err := ClientPublicRoot()
+	if err != nil {
+		return nil, err
+	}
 	required := []string{
 		projection,
 		filepath.Join(gameRoot, "extracted", "Media_extracted"),
-		filepath.Join(repository, ".generated", "client-public", "assets", "packs", "manifest.json"),
+		filepath.Join(publicRoot, "assets", "packs", "manifest.json"),
 	}
 	var missing []string
 	for _, path := range required {

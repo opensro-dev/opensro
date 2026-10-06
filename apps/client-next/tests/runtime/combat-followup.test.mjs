@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -83,18 +84,18 @@ test("native grade chooses material slots independently of motion and enlargemen
 	assert.ok( existsSync( convertedTexturePath( "prim/mtrl/mob/oasis/redeyeghost_champ.ddj" ) ) );
 });
 test("published champion GLB changes material images while retaining identical animations and geometry", () => {
-	const m = JSON.parse( readFileSync( "../../.generated/client-public/assets/npc/manifest.json", "utf8" ) );
+	const m = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/npc/manifest.json", "utf8" ) );
 	const row = m.models.MOB_CH_CHAKJI;
 	assert.equal( row.materialKind, 0 );
 	const json = p => {
-		const b = readFileSync( "../../.generated/client-public" + p );
+		const b = readFileSync( CLIENT_PUBLIC_ROOT + p );
 		return JSON.parse( b.subarray( 20, 20 + b.readUInt32LE( 12 ) ) );
 	};
 	const normal = json( row.glb ), champion = json( row.materialVariants[2] );
 	assert.deepEqual( normal.animations, champion.animations );
 	assert.deepEqual( normal.meshes, champion.meshes );
 	const imageBytes = ( p, j ) => {
-		const b = readFileSync( "../../.generated/client-public" + p ), start = 28 + b.readUInt32LE( 12 );
+		const b = readFileSync( CLIENT_PUBLIC_ROOT + p ), start = 28 + b.readUInt32LE( 12 );
 		return j.images.map( i => {
 			const v = j.bufferViews[i.bufferView];
 			return b.subarray( start + (v.byteOffset ?? 0), start + (v.byteOffset ?? 0) + v.byteLength );
@@ -103,7 +104,7 @@ test("published champion GLB changes material images while retaining identical a
 	assert.notDeepEqual( imageBytes( row.glb, normal ), imageBytes( row.materialVariants[2], champion ) );
 	for ( const r of Object.values( m.models ) ) {
 		for ( const file of Object.values( r.materialVariants ?? {} ) ) {
-			assert.ok( existsSync( "../../.generated/client-public" + file ), file );
+			assert.ok( existsSync( CLIENT_PUBLIC_ROOT + file ), file );
 		}
 	}
 });

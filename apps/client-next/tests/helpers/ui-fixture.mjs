@@ -8,13 +8,14 @@ identities, including panels exercised by otherwise unrelated UI tests.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "./native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 const { createUi } = await import( "../../src/engine/runtime/ui/ui.ts" );
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 export const fontAtlas = JSON.parse(
-	readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf-8" )
+	readFileSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json", "utf-8" )
 );
 /*
 ================
@@ -53,7 +54,7 @@ export function uiFixture(
 				const id = ++nextId, path = decodeURIComponent( new URL( url ).pathname );
 				requested.push( path );
 				try {
-					const bytes = readFileSync( "../../.generated/client-public" + path );
+					const bytes = readFileSync( CLIENT_PUBLIC_ROOT + path );
 					if ( path.endsWith( ".json" ) || path.endsWith( ".txt" ) ) pending.set( id, bytes );
 					else if ( path.endsWith( ".png" ) ) {
 						pending.set( id, {

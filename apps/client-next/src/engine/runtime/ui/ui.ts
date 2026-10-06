@@ -133,7 +133,7 @@ import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
-import { createExperimentalHud } from "./hud/experimental-hud";
+import { createExperimentalHud, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import type { ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
@@ -1694,8 +1694,9 @@ export function createUi(
 	*/
 	function activate( id: string ) {
 		if ( panel === "Experimental" && id.startsWith( "experimental-" ) ) {
-			if ( id === "experimental-chat-timestamps" ) experimental.toggleChatTimestamps();
-			else if ( id === "experimental-developer-diagnostics" ) experimental.toggleDeveloperDiagnostics();
+			const row = EXPERIMENTAL_TABS.flatMap( tab => tab.rows ).find( candidate => candidate.id === id );
+			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
+			else if ( row ) experimental.toggle( row.key );
 			else if ( id === "experimental-default" ) experimental.reset();
 			else if ( id === "experimental-confirm" ) {
 				extensions.saveExperimental?.( experimental.confirm() );
@@ -8914,7 +8915,12 @@ export function createUi(
 				}
 				if ( panel === "Experimental" && hudData ) {
 					const admission = beginWindow();
-					const width = 386, height = 316;
+					// Options-style tabs over one framed list: a header naming the tab,
+					// then one checkbox row per preference, its help line below it.
+					// The window grows with the selected tab, as CIFOption::OnTab does.
+					const { tab, draft } = experimental.state(), page = EXPERIMENTAL_TABS[tab]!;
+					const rowPitch = 46, listTop = 98, width = 386;
+					const listHeight = page.rows.length * rowPitch + 12, height = listTop + listHeight + 50;
 					const [px, py] = windowOrigin( "Experimental", [
 						(w - width) / 2,
 						(h - height) / 2,
@@ -8924,72 +8930,67 @@ export function createUi(
 					const layout = hudData.windows.ifoption!, slot = hudData.windows.ifgameoptionslot!;
 					windowBox( "Experimental", px, py, width, height );
 					closeButton( px + width - 26, py + 10 );
-					authoredChrome( { ...layout.GDR_OPTION_BGTILE!, rect: [ 27, 50, 332, 216 ] }, px, py );
+					const tabWidth = 62, tabStart = (width - (EXPERIMENTAL_TABS.length * tabWidth - 2)) / 2;
+					for ( let i = 0; i < EXPERIMENTAL_TABS.length; i++ ) {
+						nativeTab(
+							"experimental-tab:" + i,
+							EXPERIMENTAL_TABS[i]!.title,
+							[ px + tabStart + i * tabWidth, py + 40, 60, 24 ],
+							tab === i,
+							{ family: "com_tab", client: [ 0, 9, 0, 6 ] }
+						);
+					}
+					authoredChrome( { ...layout.GDR_OPTION_BGTILE!, rect: [ 27, 78, 332, height - 140 ] }, px, py );
 					authoredChrome(
-						{ ...layout.GDR_OPTION_WND_GAME!, type: "CIFFrame", rect: [ 11, 34, 364, 248 ] },
+						{ ...layout.GDR_OPTION_WND_GAME!, type: "CIFFrame", rect: [ 11, 62, 364, height - 108 ] },
 						px,
 						py
 					);
 					// Browser-only section reuses the native Set Game header and inset frame.
 					const section = hudData.windows.ifoption_game!.GDR_GAME_OPTION_TAB_1!;
-					for (
-						const [offset, title, key, id, label, description] of [
-							[
-								0,
-								"Chat",
-								"chatTimestamps",
-								"experimental-chat-timestamps",
-								"Chat timestamps",
-								"Show message time on hover."
-							],
-							[
-								112,
-								"Developer",
-								"developerDiagnostics",
-								"experimental-developer-diagnostics",
-								"Developer diagnostics",
-								"Show a diagnostics icon beside FPS."
-							]
-						] as const
-					) {
-						authoredImage( { ...section, rect: [ 25, 43, 196, 28 ] }, px, py + offset );
-						authoredText( { ...section, rect: [ 25, 43, 196, 28 ] }, px, py + offset, title );
-						authoredChrome(
+					authoredImage( { ...section, rect: [ 25, 70, 196, 28 ] }, px, py );
+					authoredText( { ...section, rect: [ 25, 70, 196, 28 ] }, px, py, page.title );
+					authoredChrome(
+						{
+							...hudData.windows.ifoption_game!.GDR_GAME_OPTION_SCROLLMANAGER_1!,
+							rect: [ 25, listTop, 336, listHeight ]
+						},
+						px,
+						py
+					);
+					for ( let i = 0; i < page.rows.length; i++ ) {
+						const row = page.rows[i]!, top = listTop + 8 + i * rowPitch, enabled = draft[row.key];
+						authoredText(
 							{
-								...hudData.windows.ifoption_game!.GDR_GAME_OPTION_SCROLLMANAGER_1!,
-								rect: [ 25, 70, 336, 78 ]
+								...slot.GDR_GAME_OPTION_SLOT_STA1!,
+								rect: [ 39, top + 4, 270, 16 ],
+								client: [ 0, 2, 0, 0 ]
 							},
 							px,
-							py + offset
-						);
-						const enabled = experimental.state().draft[key];
-						authoredText(
-							{ ...slot.GDR_GAME_OPTION_SLOT_STA1!, rect: [ 39, 82, 270, 16 ], client: [ 0, 2, 0, 0 ] },
-							px,
-							py + offset,
-							label
+							py,
+							row.label
 						);
 						image(
-							[ px + 331, py + offset + 82, 16, 16 ],
+							[ px + 331, py + top + 4, 16, 16 ],
 							ROOT + "interface/ifcommon/com_checkbutton_" + (enabled ? "on" : "off") + ".png"
 						);
 						controls.push( {
-							id,
-							label,
+							id: row.id,
+							label: row.label,
 							kind: "button",
-							rect: [ px + 35, py + offset + 78, 316, 28 ],
+							rect: [ px + 35, py + top, 316, 40 ],
 							selected: enabled
 						} );
 						authoredText(
 							{
 								...slot.GDR_GAME_OPTION_SLOT_STA1!,
-								rect: [ 39, 113, 304, 16 ],
+								rect: [ 39, top + 22, 304, 16 ],
 								client: [ 0, 0, 0, 0 ],
 								color: [ 180 / 255, 180 / 255, 180 / 255, 1 ]
 							},
 							px,
-							py + offset,
-							description
+							py,
+							row.description
 						);
 					}
 					for (

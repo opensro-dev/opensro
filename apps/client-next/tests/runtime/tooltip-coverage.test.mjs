@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -26,7 +27,7 @@ const { createInventory } = await import(
 const { shopCatalog } = await import( "../../src/engine/foundation/gameplay/commerce.ts" );
 const { itemTooltipRecovery } = await import( "../../src/engine/foundation/ui/item-tooltip-recovery.ts" );
 const { itemTooltip } = await import( "../../src/engine/foundation/ui/item-tooltip.ts" );
-const json = path => JSON.parse( readFileSync( "../../.generated/client-public/assets/" + path, "utf8" ) );
+const json = path => JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/" + path, "utf8" ) );
 const strings = { ...json( "text/textdataname.en.json" ).entries, ...json( "text/textuisystem.en.json" ).entries },
 	text = key => strings[key] ?? "";
 test("avatar help distinguishes dress attachment permission and magic capacity without equipment degree", () => {
@@ -150,7 +151,7 @@ test("every published mastery and skill-group description has authored help and 
 			const native = JSON.parse( readFileSync( "tests/fixtures/tooltip-retail-text.json", "utf8" ) );
 			assert.equal( native.texts[g.name], "", g.name + " must have native empty-cell evidence" );
 		}
-		const path = "../../.generated/client-public/assets/images/Media_extracted/icon/" +
+		const path = CLIENT_PUBLIC_ROOT + "/assets/images/Media_extracted/icon/" +
 			g.icon.replace( /^icon[\\/]/i, "" ).replaceAll( "\\", "/" ).replace( ".ddj", "_focus.png" );
 		assert.ok( existsSync( path ), path );
 	}

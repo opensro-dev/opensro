@@ -8,6 +8,7 @@ The native clock rules apply to all resolved clips, not a list of examples.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,7 +23,7 @@ asset
 */
 function asset( name ) {
 	return JSON.parse(
-		new TextDecoder().decode( readPublishedAssetBytesSync( name, "../../.generated/client-public" ) )
+		new TextDecoder().decode( readPublishedAssetBytesSync( name, CLIENT_PUBLIC_ROOT ) )
 	);
 }
 

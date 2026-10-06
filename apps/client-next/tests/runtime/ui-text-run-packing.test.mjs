@@ -10,6 +10,7 @@ ranges it writes for the same scene expanded into glyph quads
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -111,7 +112,7 @@ test("text runs pack byte-identical records and draws to their expanded glyph qu
 			owner.texture( id, { data: new Uint8ClampedArray( 16 ), width: 2, height: 2, colorSpace: "srgb" } );
 		}
 	}
-	const atlas = readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json" );
+	const atlas = readFileSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json" );
 	const text = createUiText( {
 		available: () => 1,
 		request: () => 1,

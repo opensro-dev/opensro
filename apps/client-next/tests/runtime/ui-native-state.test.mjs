@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { isPlaceholderText, loadEnglishCompletions } from "../../../../scripts/build/shared/englishCompletions.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
@@ -24,7 +25,7 @@ const { buttonAccess, buttonTextColor } = await import( "../../src/engine/founda
 const { titleStatusKey, titleStatusMessage } = await import( "../../src/engine/foundation/ui/title-status.ts" );
 const { titleTextBox } = await import( "../../src/engine/foundation/rendering/ui-glyphs.ts" );
 const { createTitleUi } = await import( "../../src/engine/runtime/ui/title/title.ts" );
-const assets = "../../.generated/client-public/assets",
+const assets = CLIENT_PUBLIC_ROOT + "/assets",
 	read = async path => JSON.parse( await readFile( assets + path, "utf8" ) );
 const atlas = await read( "/fonts/native-ui-font-atlas.json" ),
 	catalog = (await read( "/text/textuisystem.en.json" )).entries;

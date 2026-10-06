@@ -25,13 +25,13 @@ from pathlib import Path
 
 import pefile
 
-from sro_paths import GAME_ROOT, REPO_ROOT
+from sro_paths import GAME_ROOT, PUBLIC_ROOT
 
 RT_CURSOR = 1
 RT_GROUP_CURSOR = 12
 
 CLIENT_EXE = GAME_ROOT / "SRO_Client.exe"
-OUT_DIR = REPO_ROOT / ".generated" / "client-public" / "assets" / "cursors"
+OUT_DIR = PUBLIC_ROOT / "assets" / "cursors"
 
 
 # ================

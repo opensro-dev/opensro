@@ -9,6 +9,7 @@ recorded hashes and accepted by the production model decoder.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -20,7 +21,7 @@ import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../.
 import { equipmentModelFiles, hwanModelFiles } from "../../../../scripts/build/assetPackOwnership.mjs";
 
 const entry = "src/engine/runtime/assets/worker/model/model.ts";
-const publicRoot = path.resolve( "../../.generated/client-public" );
+const publicRoot = CLIENT_PUBLIC_ROOT;
 const createModelDecoder = await loadModelDecoder( [] );
 
 /*

@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { getTask } from "./registry.mjs";
 import { resolveProcessCommand } from "./processCommand.mjs";
 import { runSuite } from "../test/runSuite.mjs";
+import { assertRealNodeModules } from "./workspaceGuard.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, "..", ".." );
@@ -28,6 +29,8 @@ runTask
 ================
 */
 export async function runTask( name, forwardedArgs = [], stack = [] ) {
+	// Once, before the outermost task: never let pnpm work through a link.
+	if ( stack.length === 0 ) assertRealNodeModules();
 	const task = getTask( name );
 	if ( !task ) {
 		throw new Error( `Unknown task "${name}"` );

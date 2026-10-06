@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -25,9 +26,9 @@ const { createEffectDecoder } = await load( "src/engine/runtime/assets/worker/ef
 const { createCharacterEffects } = await load( "src/engine/runtime/characters/effects/effects.ts", "owner" );
 const { createPresentationRandom } = await load( "src/engine/runtime/random/random.ts", "random" );
 const encode = v => new TextEncoder().encode( JSON.stringify( v ) );
-const programs = await readFile( "../../.generated/client-public/assets/effects/programs.json" );
-const records = await readFile( "../../.generated/client-public/assets/skill/effectRecords.json" );
-const manifest = await readFile( "../../.generated/client-public/assets/skillfx/manifest.json" );
+const programs = await readFile( CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json" );
+const records = await readFile( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json" );
+const manifest = await readFile( CLIENT_PUBLIC_ROOT + "/assets/skillfx/manifest.json" );
 
 test("retail helper EFP compiles all three plates and its rotation without a substitute icon", () => {
 	const { model, imagePaths } = createEffectPrograms().decode( programs, "system/system_helpermark.efp" );

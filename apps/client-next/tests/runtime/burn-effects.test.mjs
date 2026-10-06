@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -32,8 +33,8 @@ const packet = ( gid, hp, abnormal ) => {
 };
 test("real burn vitals drive named EFP, native tint, cold admission, death and scope retirement", () => {
 	const decode = createEffectDecoder(),
-		named = decode.decode( readFileSync( "../../.generated/client-public/assets/skill/namedEffectRecords.json" ) ),
-		catalog = decode.decode( readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json" ) );
+		named = decode.decode( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/namedEffectRecords.json" ) ),
+		catalog = decode.decode( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json" ) );
 	let serial = 0;
 	const jobs = new Map();
 	const owner = createCharacterEffects(
@@ -99,8 +100,8 @@ test("real burn vitals drive named EFP, native tint, cold admission, death and s
 });
 test("freeze, sleep and stun start from the abnormal mask and a cleared mask removes them", () => {
 	const decode = createEffectDecoder(),
-		named = decode.decode( readFileSync( "../../.generated/client-public/assets/skill/namedEffectRecords.json" ) ),
-		catalog = decode.decode( readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json" ) );
+		named = decode.decode( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/namedEffectRecords.json" ) ),
+		catalog = decode.decode( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json" ) );
 	let serial = 0;
 	const jobs = new Map();
 	const owner = createCharacterEffects(
@@ -207,8 +208,8 @@ test("freeze, sleep and stun start from the abnormal mask and a cleared mask rem
 });
 test("a cleared tint resets the material while the other status decoration stays", () => {
 	const decode = createEffectDecoder(),
-		named = decode.decode( readFileSync( "../../.generated/client-public/assets/skill/namedEffectRecords.json" ) ),
-		catalog = decode.decode( readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json" ) );
+		named = decode.decode( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/namedEffectRecords.json" ) ),
+		catalog = decode.decode( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json" ) );
 	let serial = 0;
 	const jobs = new Map();
 	const owner = createCharacterEffects(

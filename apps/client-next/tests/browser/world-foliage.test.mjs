@@ -10,6 +10,7 @@ the low-alpha canopy fragments the export hint would keep.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -19,7 +20,7 @@ import { CLIENT_NEXT_BASE_URL } from "../../../../scripts/lib/probeEndpoints.mjs
 import { holdProbeRuntime } from "./helpers/hold-runtime.mjs";
 
 test( "animated maple uses native material admission instead of GLB export hints", { timeout: 60000 }, async () => {
-	const root = "../../.generated/client-public", read = p => JSON.parse( readFileSync( root + p, "utf8" ) );
+	const root = CLIENT_PUBLIC_ROOT, read = p => JSON.parse( readFileSync( root + p, "utf8" ) );
 	const index = read( "/assets/world/outdoor/object-resources.json" ),
 		ref = index.bsr.find( r => r.objectId === 425 );
 	const entry = {

@@ -4,8 +4,9 @@
 generatedAssetLock.test.mjs - publication and verification across worktrees
 
 Real child processes use copied, unmodified Node and Python lock owners.
-Synthetic junctions exercise the same shared generated tree as local worktrees
-without reading or modifying licensed assets or another process's locks.
+Synthetic junctions and SRO_GENERATED_ROOT redirects exercise the same shared
+generated tree as local worktrees without reading or modifying licensed assets
+or another process's locks.
 
 ===========================================================================
 */
@@ -19,7 +20,10 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const SCRIPTS_ROOT = fileURLToPath( new URL( "../../", import.meta.url ) );
-const LOCK_ENV = [ "SRO_REBUILD_LOCK_NAME", "SRO_REBUILD_LOCK_TOKEN", "SRO_REBUILD_LOCK_DIR" ];
+// The caller's generated-root override would point every child at the real tree.
+const LOCK_ENV = [ "SRO_REBUILD_LOCK_NAME", "SRO_REBUILD_LOCK_TOKEN", "SRO_REBUILD_LOCK_DIR", "SRO_GENERATED_ROOT" ];
+// The lock owners and the generated-root owners they resolve the tree through.
+const LOCK_SOURCES = [ "rebuildLock.mjs", "rebuild_lock.py", "sro_paths.py", "lib/generatedRoot.mjs" ];
 const NODE_DRIVER = `
 const { withGeneratedAssetsLock } = await import('./scripts/rebuildLock.mjs');
 await withGeneratedAssetsLock('test reader or publisher', async () => {
@@ -60,9 +64,10 @@ async function fixture( t ) {
 	const owner = path.join( root, "owner" );
 	const alias = path.join( root, "alias" );
 	const separate = path.join( root, "separate" );
-	for ( const checkout of [ owner, alias, separate ] ) {
-		await mkdir( path.join( checkout, "scripts" ), { recursive: true } );
-		for ( const name of [ "rebuildLock.mjs", "rebuild_lock.py" ] ) {
+	const redirected = path.join( root, "redirected" );
+	for ( const checkout of [ owner, alias, separate, redirected ] ) {
+		await mkdir( path.join( checkout, "scripts", "lib" ), { recursive: true } );
+		for ( const name of LOCK_SOURCES ) {
 			await copyFile( path.join( SCRIPTS_ROOT, name ), path.join( checkout, "scripts", name ) );
 		}
 	}
@@ -74,6 +79,7 @@ async function fixture( t ) {
 		owner,
 		alias,
 		separate,
+		redirected,
 		children,
 		lockDir: path.join( owner, ".state/locks/generated-assets.lock" )
 	};
@@ -126,6 +132,21 @@ async function entered( child ) {
 
 for ( const holderLanguage of [ "node", "python" ] ) {
 	for ( const readerLanguage of [ "node", "python" ] ) {
+		test(`${holderLanguage} publisher blocks ${readerLanguage} verification through SRO_GENERATED_ROOT`, async ( t ) => {
+			const f = await fixture( t );
+			const holder = start( f, { cwd: f.owner, language: holderLanguage, env: { HOLD: "1" } } );
+			await entered( holder );
+			const shared = { SRO_GENERATED_ROOT: path.join( f.owner, ".generated" ) };
+			const reader = start( f, { cwd: f.redirected, language: readerLanguage, env: shared } );
+			assert.notEqual( await reader.finished, 0, reader.output );
+			assert.match( reader.output, /timed out waiting/ );
+			holder.stdin.end( "\n" );
+			assert.equal( await holder.finished, 0, holder.output );
+			const nextReader = start( f, { cwd: f.redirected, language: readerLanguage, env: shared } );
+			assert.equal( await nextReader.finished, 0, nextReader.output );
+			assert.match( nextReader.output, /ENTERED/ );
+		});
+
 		test(`${holderLanguage} publisher blocks ${readerLanguage} verification through a junction`, async ( t ) => {
 			const f = await fixture( t );
 			const holder = start( f, { cwd: f.owner, language: holderLanguage, env: { HOLD: "1" } } );

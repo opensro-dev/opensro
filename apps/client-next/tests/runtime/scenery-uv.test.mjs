@@ -4,6 +4,7 @@ scenery-uv.test.mjs - missing retail UVs must not reject valid world geometry
 Exercises publication, legacy GLB admission and static JSON scenery together.
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -138,7 +139,7 @@ test("static JSON and animated GLB scenery share the same missing UV policy", ()
 	assert.deepEqual( mesh.uvs, [ null, 0.25, 0.75, null, -0.5, 2 ], "source resource remains immutable" );
 });
 
-const publicRoot = path.join( root, "../../.generated/client-public" );
+const publicRoot = CLIENT_PUBLIC_ROOT;
 test( "all three published boat resources decode from unchanged verified packs", {
 	skip: !existsSync( path.join( publicRoot, "assets/packs/manifest.json" ) )
 }, () => {

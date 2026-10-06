@@ -9,6 +9,7 @@ and archives the packs it superseded.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "./lib/generatedRoot.mjs";
 import { mergeAssetPackGroupUpdates, publishAssetPackManifest } from "./build/assetPackPublication.mjs";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -25,7 +26,7 @@ import { archiveGeneratedArtifact } from "./build/artifacts/generatedArtifactArc
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, ".." );
-const publicRoot = path.join( rebuildRoot, ".generated", "client-public" );
+const publicRoot = CLIENT_PUBLIC_ROOT;
 const assetsRoot = path.join( publicRoot, "assets" );
 const packsRoot = path.join( assetsRoot, "packs" );
 // This sub-index is a real content-addressed build cache. It deliberately

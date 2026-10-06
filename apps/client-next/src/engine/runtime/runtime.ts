@@ -16,6 +16,7 @@ import { nativeHeadingYaw } from "@/engine/foundation/math/angles";
 import { createRuntimeErrors } from "./runtime-errors";
 import { createPresentationRandom } from "./random/random";
 import { worldCursor } from "@/engine/foundation/ui/world-cursor";
+import { experimentalVideo } from "@/engine/foundation/ui/experimental-options";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
 import type { WorldClickInput } from "@/engine/contracts/input";
@@ -172,6 +173,9 @@ export function startRuntime(
 				input.blindBinding( event.value.keys[30]! );
 			}
 			if ( event.kind === "camera-preferences" ) input.sight( event.value );
+			if ( event.kind === "experimental-preferences" ) {
+				renderer.experimentalVideo( experimentalVideo( event.value ) );
+			}
 			if ( event.kind === "audio-preferences" ) audio.options( event.value );
 			if ( event.kind === "chat-blocks" ) simulation.session( { kind: "chat-blocks", value: event.value } );
 			if ( event.kind === "preferences" ) {

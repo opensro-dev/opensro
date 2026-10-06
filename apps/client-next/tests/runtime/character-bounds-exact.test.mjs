@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -129,7 +130,7 @@ test("published Mangnyang envelope contains every skinned vertex across every cl
 		decoder.decode(
 			readPublishedAssetBytesSync(
 				"/assets/npc/mob/china/mangnyang.glb",
-				path.resolve( "../../.generated/client-public" )
+				CLIENT_PUBLIC_ROOT
 			)
 		)
 	);

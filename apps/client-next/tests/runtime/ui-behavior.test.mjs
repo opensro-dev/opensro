@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -527,7 +528,7 @@ test("quest objectives repaint native progress, per-node status and color after 
 	const f = uiFixture(), quests = createQuests( () => {} );
 	const captures = [],
 		subLayout = JSON.parse(
-			readFileSync( "../../.generated/client-public/assets/cif/layouts/ifquestslotsub.json", "utf8" )
+			readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifquestslotsub.json", "utf8" )
 		)
 			.controlsByName;
 	const symbol = "SN_CON_QNO_CH_SOLDIER_EA1_1";
@@ -541,7 +542,7 @@ test("quest objectives repaint native progress, per-node status and color after 
 		targetIds: []
 	};
 	const strings =
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) ).entries;
 	/*
 	================
 	update
@@ -3262,7 +3263,7 @@ test("retail extended quickslot layouts, fixed bindings, locks and bottom-bar ac
 		click( "ext-open" );
 		for ( const path of f.requested.filter( path => path.includes( "/quick_slot/" ) ) ) {
 			assert.doesNotThrow(
-				() => readFileSync( "../../.generated/client-public" + path ),
+				() => readFileSync( CLIENT_PUBLIC_ROOT + path ),
 				"Quickslot requests only published authored textures: " + path
 			);
 		}

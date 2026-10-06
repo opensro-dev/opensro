@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -23,9 +24,9 @@ const { createCharacterSounds } = await load( "runtime/characters/sounds/sounds"
 test("retail pickup cue selects ITEM once for any picker, without positional attenuation", () => {
 	const heard = [], sounds = createCharacterSounds( e => heard.push( e ) );
 	const catalog = JSON.parse(
-		readFileSync( "../../.generated/client-public/assets/audio/effectsound.json", "utf8" )
+		readFileSync( CLIENT_PUBLIC_ROOT + "/assets/audio/effectsound.json", "utf8" )
 	);
-	const manifest = JSON.parse( readFileSync( "../../.generated/client-public/assets/anim/manifest.json", "utf8" ) );
+	const manifest = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/anim/manifest.json", "utf8" ) );
 	sounds.catalog( catalog.rules );
 	const pick = manifest.models.CHAR_CH_MAN_ADVENTURER.pick;
 	sounds.advance(
@@ -68,7 +69,7 @@ test("retail pickup cue selects ITEM once for any picker, without positional att
 test("Manyang authored attack cues select only their physical attack rows", () => {
 	const heard = [],
 		sounds = createCharacterSounds( e => heard.push( e ) ),
-		catalog = JSON.parse( readFileSync( "../../.generated/client-public/assets/audio/effectsound.json", "utf8" ) );
+		catalog = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/audio/effectsound.json", "utf8" ) );
 	sounds.catalog( catalog.rules );
 	for ( const [n, expected] of [ [ 1, "battswordhit2n.wav" ], [ 2, "bataxehit2n.wav" ] ] ) {
 		const skill = "MSKILL_CH_MANGNYANG_ATTACK0" + n;
@@ -182,7 +183,7 @@ test("buff retirement uses the published positional cue without a variant RNG dr
 });
 test("published Jangan surface and player animation select authored movement sounds", () => {
 	const bundle = JSON.parse(
-			readFileSync( "../../.generated/client-public/assets/world/outdoor/regions/region-61a8.json", "utf8" )
+			readFileSync( CLIENT_PUBLIC_ROOT + "/assets/world/outdoor/regions/region-61a8.json", "utf8" )
 		),
 		terrain = decodeSoundTerrain( bundle );
 	assert.ok( terrain.length > 0 );
@@ -197,9 +198,9 @@ test("published Jangan surface and player animation select authored movement sou
 	assert.equal( sampleSoundTerrain( [], {} ), undefined );
 	const heard = [], sounds = createCharacterSounds( e => heard.push( e ), () => 0 );
 	sounds.catalog(
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/audio/effectsound.json", "utf8" ) ).rules
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/audio/effectsound.json", "utf8" ) ).rules
 	);
-	const run = JSON.parse( readFileSync( "../../.generated/client-public/assets/anim/manifest.json", "utf8" ) ).models
+	const run = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/anim/manifest.json", "utf8" ) ).models
 		.CHAR_CH_MAN_ADVENTURER.run;
 	sounds.advance(
 		1,

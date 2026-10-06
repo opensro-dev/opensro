@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -1383,7 +1384,7 @@ test("published gecko starts at the walk-on pose, never at the stand pose, acros
 		{ createCharacterPose } = await load( "src/engine/foundation/animation/animation-pose.ts" ),
 		{ oneShotLayers } = await load( "src/engine/foundation/animation/one-shot-layers.ts" );
 	const decoder = createModelDecoder(),
-		bytes = await readFile( "../../.generated/client-public/assets/character-select/interface_lizard.glb" ),
+		bytes = await readFile( CLIENT_PUBLIC_ROOT + "/assets/character-select/interface_lizard.glb" ),
 		m = decoder.character( decoder.decode( bytes ) ),
 		pose = createCharacterPose( m ),
 		reference = createCharacterPose( m ),
@@ -1412,7 +1413,7 @@ test("customization prepares both genders and swaps every figure without a new r
 	const { initialCreation, creationLoadout, creationRange } = await load(
 		"src/engine/foundation/ui/character-create.ts"
 	);
-	const roster = readFileSync( "../../.generated/client-public/assets/char/roster.json" ),
+	const roster = readFileSync( CLIENT_PUBLIC_ROOT + "/assets/char/roster.json" ),
 		pending = new Map(),
 		requests = [];
 	let serial = 0, allow = false, actors = [];

@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -119,10 +120,10 @@ test("unmapped region preserves active native layers; world exit clears them wit
 	f.audio.dispose();
 });
 test("published catalogs admit all profiles without losing missing-resource rows", async () => {
-	const raw = JSON.parse( await readFile( "../../.generated/client-public/assets/audio/effectenvsnd.json", "utf8" ) ),
+	const raw = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/audio/effectenvsnd.json", "utf8" ) ),
 		profiles = decodeAmbientProfiles( raw ),
 		regions = decodeAudioRegions(
-			JSON.parse( await readFile( "../../.generated/client-public/assets/audio/regioninfo.json", "utf8" ) )
+			JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/audio/regioninfo.json", "utf8" ) )
 		);
 	assert.equal( profiles.length, raw.profiles.length );
 	assert.ok( profiles.flatMap( p => [ ...p.day, ...p.night ] ).some( l => l.path === null ) );
@@ -178,7 +179,7 @@ test("native region rectangles override ALL, use inclusive endpoints and preserv
 
 test("published Jangan boundary follows native RECT before town ALL", async () => {
 	const regions = decodeAudioRegions(
-		JSON.parse( await readFile( "../../.generated/client-public/assets/audio/regioninfo.json", "utf8" ) )
+		JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/audio/regioninfo.json", "utf8" ) )
 	);
 	assert.equal( ambientProfileName( regions, { ...pose, regionId: 169 | (97 << 8), x: 1720, z: 1000 } ), "장안필드" );
 	assert.equal( ambientProfileName( regions, { ...pose, regionId: 169 | (97 << 8), x: 1721, z: 1000 } ), "장안" );

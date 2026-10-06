@@ -345,14 +345,15 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	}
 	for range skill.Attack.ImpactCount {
 		if skill.LifeSteal.Present {
-			formulas = append(formulas, lifeStealResult(stealBase, attacker, defender, target.CurrentHP, fullAreaPercent))
+			steal := lifeStealResult(stealBase, attacker, defender, target.CurrentHP, fullAreaPercent)
+			formulas = append(formulas, combat.FinishImpact(steal, combat.ImpactTail{PercentApplied: true, Attack: skill.Attack.Present}))
 			continue
 		}
 		formula, resolveErr := rt.resolvePlayerImpact(divisionID, snapshot.Name, skill, attacker, defender, nowMs, false)
 		if resolveErr != nil {
 			return OpResult{}, skillCastRefused
 		}
-		formulas = append(formulas, formula)
+		formulas = append(formulas, combat.FinishImpact(formula, combat.ImpactTail{Attack: skill.Attack.Present}))
 	}
 	if len(formulas) == 0 {
 		return OpResult{}, skillCastRefused

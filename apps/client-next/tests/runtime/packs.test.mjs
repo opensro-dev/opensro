@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -57,7 +58,7 @@ function fixture( assetPath = "/assets/a.bin" ) {
 }
 test("published manifest is admitted without importing the old runtime", () => {
 	const manifest = JSON.parse(
-		fs.readFileSync( path.join( root, "../../.generated/client-public/assets/packs/manifest.json" ), "utf8" )
+		fs.readFileSync( CLIENT_PUBLIC_ROOT + "/assets/packs/manifest.json", "utf8" )
 	);
 	const index = createPackIndex().manifest( manifest );
 	assert.equal( index.assets.size, manifest.assets.length );

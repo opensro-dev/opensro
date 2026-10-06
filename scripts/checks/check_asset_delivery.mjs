@@ -16,6 +16,7 @@ fresh clone and CI verify every payload.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import { validateAssetDelivery } from "../build/assetDelivery.mjs";
 import { validatePackedFontAtlases } from "../build/assetPackPublication.mjs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -26,7 +27,7 @@ import { promisify } from "node:util";
 import { readPublishedAssetBytesSync } from "../lib/publishedAsset.mjs";
 
 const root = path.resolve( import.meta.dirname, "../.." ),
-	publicRoot = path.join( root, ".generated/client-public" ),
+	publicRoot = CLIENT_PUBLIC_ROOT,
 	recordPath = path.join( root, ".state", "n", "asset-delivery-verified.json" ),
 	decode = promisify( gunzip );
 const RECORD_FORMAT = 1;

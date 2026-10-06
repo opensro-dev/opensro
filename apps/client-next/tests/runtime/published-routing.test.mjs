@@ -1,3 +1,4 @@
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -140,7 +141,7 @@ for ( const hook of [ "configureServer", "configurePreviewServer" ] ) {
 		const root = fs.mkdtempSync( path.join( os.tmpdir(), "next-glb-http-" ) );
 		t.after( () => fs.rmSync( root, { recursive: true, force: true } ) );
 		fs.mkdirSync( path.join( root, "assets" ) );
-		const original = fs.readFileSync( "../../.generated/client-public/assets/char/china/chinaman_monk.glb" ),
+		const original = fs.readFileSync( CLIENT_PUBLIC_ROOT + "/assets/char/china/chinaman_monk.glb" ),
 			target = path.join( root, "assets/model.glb" );
 		fs.writeFileSync( target, original );
 		fs.writeFileSync( path.join( root, "assets/image.png" ), Buffer.from( [ 1, 2, 3 ] ) );

@@ -10,12 +10,18 @@ loaded once, lazily, and a failed load is retried on the next request.
 
 ===========================================================================
 */
+import { clientPublicPath, generatedPath } from "../../../scripts/lib/generatedRoot.mjs";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-const REPOSITORY_URL = new URL( "../../../", import.meta.url );
-export const ITEM_CATALOG_URL = new URL( ".generated/observatory/items.json", REPOSITORY_URL );
-const ITEM_NAMES_URL = new URL( ".generated/client-public/assets/text/textdataname.en.json", REPOSITORY_URL );
-const ITEM_ICON_ROOT_URL = new URL( ".generated/client-public/assets/images/Media_extracted/icon/", REPOSITORY_URL );
+// file: URLs into the generated tree (scripts/lib/generatedRoot.mjs). The icon
+// root keeps its trailing separator: icon paths resolve against it.
+export const ITEM_CATALOG_URL = pathToFileURL( generatedPath( "observatory", "items.json" ) );
+const ITEM_NAMES_URL = pathToFileURL( clientPublicPath( "assets", "text", "textdataname.en.json" ) );
+const ITEM_ICON_ROOT_URL = pathToFileURL(
+	clientPublicPath( "assets", "images", "Media_extracted", "icon" ) + path.sep
+);
 const CATALOG_VERSION = 1;
 const MAX_CATALOG_ITEMS = 65536;
 

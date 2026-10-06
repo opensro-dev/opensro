@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -24,7 +25,7 @@ const { decodeAuthoredLayout, authoredPaintOrder } = await import(
 const oracle = JSON.parse( readFileSync( "tests/fixtures/native/native-menu-geometry.json", "utf8" ) );
 
 test("later native section creation paints above earlier frames, preserving each section order", () => {
-	const raw = JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifskill.json", "utf8" ) );
+	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifskill.json", "utf8" ) );
 	const layout = decodeAuthoredLayout( raw, [ "Create", "MainSkillWnd" ] ),
 		order = authoredPaintOrder( layout ).map( n => n.name );
 	assert.deepEqual(
@@ -35,7 +36,7 @@ test("later native section creation paints above earlier frames, preserving each
 	);
 	assert.ok( order.indexOf( "GDR_SKILL_FRAME" ) < order.indexOf( "GDR_SKILL_BOTTOM_BOX" ) );
 	const guild = decodeAuthoredLayout(
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifguild.json", "utf8" ) ),
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifguild.json", "utf8" ) ),
 		[ "Create", "GuildInfo", "NotifySubBox", "MemberView", "Command", "SortBtn" ]
 	);
 	const groups = authoredPaintOrder( guild ).map( n => n.creationSection );
@@ -77,7 +78,7 @@ test("every published stretch window matches native texture slots, UVs and bound
 });
 test("switching pages restores native authored origins and shared backing visibility", () => {
 	const raw = JSON.parse(
-			readFileSync( "../../.generated/client-public/assets/cif/layouts/ifmainpopup.json", "utf8" )
+			readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifmainpopup.json", "utf8" )
 		),
 		layout = decodeAuthoredLayout( raw );
 	const rows = [ "Inventory", "Actions", "Skills", "Character", "Party", "Quests", "Inventory" ].map( p =>

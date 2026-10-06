@@ -11,6 +11,7 @@ the msch blocks of the full decode.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -18,7 +19,7 @@ import { readFileSync } from "node:fs";
 const { createTooltipSkillDecoder, decodeTooltipSkills, tooltipAppearanceReferences } = await import(
 	"../../src/engine/foundation/ui/skill-tooltip-catalog.ts"
 );
-const source = JSON.parse( readFileSync( "../../.generated/client-public/assets/data/skillData.json", "utf8" ) );
+const source = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/skillData.json", "utf8" ) );
 const whole = decodeTooltipSkills( source );
 
 test("a stepped decode publishes nothing early, then the whole decode's catalogue", () => {
@@ -67,7 +68,7 @@ test("appearance references equal the msch blocks of the full decode and share i
 test("each skill data owner gets its own published file; the references come from this decoder", () => {
 	// buildSkillDataAsset.mjs: one 15 MB file used to be parsed by the HUD, audio
 	// and character owners alike. Each now reads only its own plane.
-	const read = name => JSON.parse( readFileSync( "../../.generated/client-public/assets/data/" + name, "utf8" ) );
+	const read = name => JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/" + name, "utf8" ) );
 	const audio = read( "skillAudioData.json" ), action = read( "characterActionData.json" );
 	for (
 		const moved of [
