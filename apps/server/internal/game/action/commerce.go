@@ -91,6 +91,7 @@ shopProjection
 ================
 */
 type shopProjection struct {
+	CosGID     uint32                `json:"cosGid,omitempty"`
 	SaleQuotes []shopSaleQuote       `json:"saleQuotes"`
 	Tabs       []shopTabPresentation `json:"tabs"`
 	Version    int                   `json:"version"`
@@ -119,7 +120,7 @@ func (rt *Runtime) commerceNpc(division string, c *enterworld.Character, gid uin
 		return simulation.NpcDef{}, false
 	}
 	npc, ok := rt.npcForCurrentViewer(division, c, gid)
-	if !ok || npc.TalkFlags&simulation.NpcTalkFlagShop == 0 || !npc.AuthoredSpawn || npc.Patrol {
+	if !ok || npc.TalkFlags&(simulation.NpcTalkFlagShop|simulation.NpcTalkFlagSpecialTrade) == 0 || !npc.AuthoredSpawn || npc.Patrol {
 		return npc, false
 	}
 	return npc, true
@@ -158,6 +159,9 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 		p.Error = "Select a nearby merchant"
 	} else {
 		p.Name = npc.Name
+		if npc.TalkFlags&simulation.NpcTalkFlagSpecialTrade != 0 && snapshot.ActiveCOS != nil && snapshot.ActiveCOS.Summoned {
+			p.CosGID = snapshot.ActiveCOS.GID
+		}
 		for _, group := range npc.NpcTalkStoreGroups {
 			for _, tab := range group.Tabs {
 				if len(p.Tabs) < 256 {
@@ -166,7 +170,7 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 			}
 		}
 		p.Buyback = rt.buybackOffers(rt.characterSnapshot(division, c), npc.RefObjID)
-		p.SaleQuotes = rt.shopSaleQuotes(division, snapshot, npc.RefObjID)
+		p.SaleQuotes = rt.shopSaleQuotes(division, snapshot, npc)
 		tax := rt.commerceTax(division, npc.RefObjID, snapshot)
 		rt.eachShopOffer(npc, func(tab uint8, o commerce.Offer) {
 			price, valid := offerUnitPrice(o, tax)
@@ -228,7 +232,8 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	// refusal names the native cause of an uncommitted trade; the silent
 	// generic code covers requests the retail client cannot compose.
 	refusal := wire.ErrCodeInvalidRequest
-	committed := rt.deps.Update(c, "shop-transaction", func() bool {
+	roster := rt.commerceRoster(division, c)
+	committed := rt.deps.SettleTrade(roster.members, "shop-transaction", func(pool *domain.TradeRewardPool) bool {
 		if c.DeletePending {
 			return false
 		}
@@ -246,6 +251,9 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 
 		balance := goldOf(c)
 		var response []byte
+		var payouts []tradePayout
+		var weeklyCredit uint64
+		settledPool := *pool
 		buyback, nextID := c.Buyback, c.BuybackNext
 		switch q.MovementType {
 		case wire.MoveTypeShopBuy:
@@ -275,9 +283,26 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				refusal = wire.ErrCodeNotEnoughGold
 				return false
 			}
-			contents := offer.Contents
+			contents := append([]commerce.Content(nil), offer.Contents...)
 			if len(contents) == 0 {
 				contents = []commerce.Content{{Ref: offer.Ref, Stack: offer.Stack}}
+			}
+			// INFERENCE from 490930/490230's owner checks: seed purchased goods
+			// with the buyer's original job alias,
+			// including when another holder later picks them up. Set it before
+			// GrantPackage chooses a merge destination, on a private template.
+			for index := range contents {
+				if contents[index].Ref != nil && inventory.IsTradeGoods(contents[index].Ref.TypeFlags()) {
+					contents[index].TradeOwner = c.Job.Alias
+					// INFERENCE: a newly materialized stack follows the same
+					// special-merchant, quest and active-transport admission
+					// as 617F70, with the buyer as its initial owner.
+					item := inventory.Item{TypeFlags: contents[index].Ref.TypeFlags(), TradeOwner: c.Job.Alias}
+					if code := rt.tradeAdmission(division, c, npc, item); code != 0 {
+						refusal = code
+						return false
+					}
+				}
 			}
 			capacity := uint16(inventory.BagSlotEnd - inventory.EquipmentSlotEnd)
 			if container != nil {
@@ -307,14 +332,42 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if !admitted || !inventory.IsEtcStackableTypeFlags(item.TypeFlags) && q.Quantity != 1 {
 				return false
 			}
-			price, restore, priced := commerce.SalePrices(ref, item.MagicOptions, rt.Commerce.Magic, rt.commerceTax(division, npc.RefObjID, c))
-			if !priced {
+			if code := rt.tradeAdmission(division, c, npc, item); code != 0 {
+				refusal = code
 				return false
 			}
-			if q.Quantity == 0 || price > math.MaxInt64/uint64(q.Quantity) || restore > math.MaxInt64/uint64(q.Quantity) {
+			if q.Quantity == 0 || q.Quantity > item.Quantity {
+				return false
+			}
+			price, restore, priced := commerce.SalePrices(ref, item.MagicOptions, rt.Commerce.Magic, rt.commerceTax(division, npc.RefObjID, c))
+			if !priced || price > math.MaxInt64/uint64(q.Quantity) || restore > math.MaxInt64/uint64(q.Quantity) {
 				return false
 			}
 			credit := price * uint64(q.Quantity)
+			if inventory.IsTradeGoods(item.TypeFlags) {
+				part := item
+				part.Quantity = q.Quantity
+				var profit int64
+				credit, profit, priced = rt.tradeSaleValue(division, c, npc, part)
+				if !priced {
+					return false
+				}
+				payouts = rt.tradeRewards(division, c, roster, commerce.TradeRewardInput{Credit: int64(credit), Profit: profit})
+				for _, payout := range payouts {
+					if payout.Gold < 0 || uint64(payout.Gold) > math.MaxInt64-goldOf(payout.character) {
+						return false
+					}
+				}
+				if profit > 0 {
+					weeklyCredit = credit
+					// 465220 routes the same ten-percent contribution to the
+					// shard's hunter pool for traders or thief pool for thieves.
+					if !settledPool.Credit(c.Job.Type, int64(float64(credit)*0.1)) {
+						return false
+					}
+				}
+				credit = uint64(payouts[0].Gold)
+			}
 			if credit > math.MaxInt64-balance {
 				return false
 			}
@@ -359,7 +412,24 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		if q.MovementType == wire.MoveTypeShopSell {
 			frames = append(frames, rt.buybackFrame(c, q.NpcGID, npc.RefObjID, 0, nil, ""))
 		}
-		result = OpResult{Frames: frames, Broadcast: broadcasts}
+		var recipients []RecipientFrames
+		for _, payout := range payouts {
+			if payout.character.ID != c.ID {
+				setGold(payout.character, goldOf(payout.character)+uint64(payout.Gold))
+			}
+			experience, _ := rt.addJobExperience(payout.character, payout.Experience)
+			if payout.character.ID == c.ID {
+				frames = append(frames, experience...)
+			} else {
+				private := append([]wire.Frame{goldFrame(payout.character)}, experience...)
+				recipients = append(recipients, RecipientFrames{CharacterID: payout.character.ID, Frames: private})
+			}
+		}
+		if weeklyCredit > 0 && c.Job.Type == domain.JobTrader {
+			c.Job.WeeklyReward = commerce.AddWeeklyTradeReward(c.Job.WeeklyReward, int32(float64(weeklyCredit)*0.1))
+		}
+		*pool = settledPool
+		result = OpResult{Frames: frames, Broadcast: broadcasts, Recipients: recipients}
 		return true
 	})
 	if !committed {

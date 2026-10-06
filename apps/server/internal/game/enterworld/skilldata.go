@@ -130,6 +130,7 @@ SkillRow is one skilldata record's learn-plane fields.
 ================
 */
 type SkillRow struct {
+	StructureRepair SkillStructureRepair
 	// Validated replacement inputs, independent from executable admission.
 	// A refusal is retained instead of treating a malformed program as neutral.
 	Replacement        statuseffect.ReplacementDescriptor
@@ -775,6 +776,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				row.ReplacementRefusal = err.Error()
 			}
 			row.InstantSelfEffectPinned = row.Imbue.Pinned || instantMovementSkill(fields, row)
+			row.StructureRepair = compileStructureRepair(fields, row)
 			parseSkillTimedEffect(fields, &row)
 			parseSkillConcealment(fields, &row)
 			if row.Concealment.Pinned && row.Concealment.Hide {

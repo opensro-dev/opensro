@@ -216,6 +216,7 @@ func newBootstrapDependencies(
 		return authorityStore.UpdateCharacter(character, label, update)
 	}
 	deps.UpdateCharacters = authorityStore.UpdateCharacters
+	deps.UpdateTrade = authorityStore.UpdateTrade
 	deps.ReadCharacter = func(divisionID string, read func()) {
 		authorityStore.ReadState(read)
 	}

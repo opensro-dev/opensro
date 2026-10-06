@@ -15,6 +15,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { createHash } from "node:crypto";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( "src/engine/" + file + ".ts" ).href );
 }
@@ -25,6 +30,11 @@ const { createAudio } = await load( "runtime/audio/audio" );
 const { createPresentationRandom } = await load( "runtime/random/random" );
 const { itemSoundCategory, equipDurabilityWarning } = await load( "foundation/audio/item-sounds" );
 const { createItemSoundCatalog } = await load( "foundation/audio/item-sound-catalog" );
+/*
+================
+body
+================
+*/
 const body = ( id, flags, durability = 50, quantity = 1 ) => {
 	const p = Buffer.alloc( (flags & 0x60) === 0x60 ? 6 : 18 );
 	p.writeUInt32LE( id );
@@ -32,16 +42,35 @@ const body = ( id, flags, durability = 50, quantity = 1 ) => {
 	else p.writeUInt32LE( durability >>> 0, 13 );
 	return [ ...p ];
 };
+/*
+================
+row
+================
+*/
 const row = ( slot, id, flags, durability = 50, quantity = 1 ) => ({
 	slot,
 	refObjId: id,
 	body: body( id, flags, durability, quantity )
 });
+/*
+================
+move
+================
+*/
 const move = ( a, b, n = 1, extra = [] ) => Uint8Array.of( 1, 0, a, b, n & 255, n >>> 8, extra.length / 5, ...extra );
 const sword = 0x132c, robe = 0x18ac, potion = 0x8ec;
+/*
+================
+fixture
+================
+*/
 function fixture(
 	items,
-	refs = [ { refObjId: 1, typeFlags: sword }, { refObjId: 2, typeFlags: robe }, { refObjId: 3, typeFlags: potion } ]
+	refs = [ { refObjId: 1, typeFlags: sword }, { refObjId: 2, typeFlags: robe }, {
+		refObjId: 3,
+		typeFlags: potion,
+		nativeFields: { maxStack: 50 }
+	} ]
 ) {
 	return {
 		inventorySlotCount: 45,
@@ -88,7 +117,7 @@ test("accepted bag moves, splits, merges, swaps, equip and unequip use the post-
 		owner.receive( 0xb06d, p );
 	}
 	assert.deepEqual( sounds.map( c => c.typeFlags ), [ sword, sword, sword, potion, potion ] );
-	assert.equal( owner.state().inventory.find( i => i.slot === 16 ).quantity, 3 );
+	assert.equal( owner.state().inventory.find( i => i.slot === 16 ).quantity, 10 );
 	owner.state();
 	assert.equal( sounds.length, 5, "snapshots cannot replay occurrences" );
 });

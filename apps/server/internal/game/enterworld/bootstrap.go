@@ -621,6 +621,7 @@ func (c *refItemCollector) finish() []RefItemRow {
 			continue
 		}
 		c.rows[i].DescriptionSymbol = item.DescriptionSymbol
+		c.rows[i].NativeFields = ItemUseNativeFields(item, c.deps.Skills)
 		if characters == nil || item.AssociatedCharacterCodename == "" {
 			continue
 		}

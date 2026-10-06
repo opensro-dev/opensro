@@ -97,7 +97,7 @@ TestImportedQuotationRowsRemainDistinctAndPriceable
 ================
 */
 func TestImportedQuotationRowsRemainDistinctAndPriceable(t *testing.T) {
-	data, err := os.ReadFile("testdata/item-quotations.json")
+	data, err := os.ReadFile(".generated/item-quotations.json")
 	if err != nil {
 		t.Fatal(err)
 	}

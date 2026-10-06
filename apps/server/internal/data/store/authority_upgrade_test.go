@@ -19,6 +19,53 @@ import (
 
 /*
 ================
+TestTradeUpgradePreservesExistingFortressTablesAndRecords
+================
+*/
+func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	c := seededCharacter()
+	if err := s.CreateCharacter(testDivision, "trader-account", c); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Fortresses().SaveFortress(testDivision, domain.FortressRecord{FortressID: 1, GuildID: 71}); err != nil {
+		t.Fatal(err)
+	}
+	var before string
+	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preTradeRewardVersion)
+	backup, err := UpgradeAuthority(dir, true)
+	if err != nil || backup == "" {
+		t.Fatalf("upgrade %q: %v", backup, err)
+	}
+	old, err := connectDB(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	if _, err := loadDB(old, preTradeRewardVersion, CurrentLayoutVersion); err != nil {
+		t.Fatal(err)
+	}
+	s = openTest(t, dir, newTestClock())
+	var after string
+	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatal("schema-only upgrade rewrote the character")
+	}
+	fortresses, _, err := s.Fortresses().FortressState(testDivision)
+	if err != nil || len(fortresses) != 1 || fortresses[0].GuildID != 71 {
+		t.Fatalf("fortress records %+v: %v", fortresses, err)
+	}
+}
+
+/*
+================
 dropFortressTables
 
 Removes layout 6's fortress and union tables from a current test

@@ -5,6 +5,7 @@ fortress.go - the persisted fortress state
 
 The shard rows a fortress war leaves behind: who occupies each fortress
 and who holds it during a war (_SiegeFortress GuildID and TempGuildID),
+its signed tax rate and accumulated tax gold,
 the guilds registered for the coming war (_SiegeFortressRequest), and the
 structures standing on its event zones with their hit points and state
 (_SiegeFortressStruct). They are cross-character state, so they live in
@@ -27,6 +28,8 @@ type FortressRecord struct {
 	GuildID       int64                  `json:"guildId,omitempty"`
 	TempGuildID   int64                  `json:"tempGuildId,omitempty"`
 	BattleRecords []FortressBattleRecord `json:"battleRecords,omitempty"`
+	TaxRate int16 `json:"taxRate,omitempty"`
+	TaxGold int64 `json:"taxGold,omitempty"`
 }
 
 /*

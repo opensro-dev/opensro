@@ -16,6 +16,33 @@ const { fortressServiceRequest, fortressServiceReply } = await import(
 	"../../src/engine/foundation/gameplay/fortress-services.ts"
 );
 const { fortressBootstrap, fortressPacket } = await import( "../../src/engine/foundation/gameplay/fortress.ts" );
+const { createFortressScheduleHud } = await import( "../../src/engine/runtime/ui/hud/fortress-war-hud.ts" );
+
+test("schedule window admits only fresh successful replies for its selected manager", () => {
+	const hud = createFortressScheduleHud(), state = fortressBootstrap( {} );
+	const answer = fortressPacket( state, reply( "0501" + "0000".repeat( 16 ) + "00" ) );
+	assert.ok( answer );
+	hud.request( 7, answer.serviceSequence ?? 0 );
+	hud.observe( answer, 7 );
+	assert.equal( hud.isOpen(), false );
+	const next = fortressPacket( answer, reply( "0501" + "0000".repeat( 16 ) + "00" ) );
+	assert.ok( next );
+	hud.observe( next, 7 );
+	assert.equal( hud.isOpen(), true );
+	hud.page( 1, 20 );
+	assert.equal( hud.offset(), 7 );
+	hud.page( 1, 20 );
+	assert.equal( hud.offset(), 13 );
+	hud.observe( next, 8 );
+	assert.equal( hud.isOpen(), false );
+	hud.request( 7, next.serviceSequence ?? 0 );
+	const refusal = fortressPacket( next, reply( "050203" ) );
+	assert.ok( refusal );
+	hud.observe( refusal, 7 );
+	assert.equal( hud.isOpen(), false );
+	hud.close();
+	assert.equal( hud.offset(), 0 );
+});
 
 /*
 ================
@@ -142,7 +169,7 @@ test("all native response bodies decode without borrowing previous fields", () =
 		[ "170140302010", { reference: 0x10203040 } ],
 		[ "180108070605014030201064000000", {
 			fortress: 0x05060708,
-			structures: [ { reference: 0x10203040, hp: 100 } ]
+			structures: [ { reference: 0x10203040, remainingMinutes: 100 } ]
 		} ]
 	];
 	for ( const [hex, fields] of rows ) {

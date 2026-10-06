@@ -132,3 +132,77 @@ test("native return gauge remains visible at completion with authored geometry a
 		}
 	}
 });
+
+/*
+================
+repairFixture
+
+The inner skill publishes its source before the outer item success. Bind
+that already-installed identity when the last kit leaves the inventory.
+================
+*/
+function repairFixture() {
+	const sent = [], game = createGameplay( f => sent.push( f ) );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		refItemSnapshot: [ {
+			refObjId: 61,
+			typeFlags: 0x50ec,
+			name: "Repair Kit",
+			nativeFields: {
+				useSkillId: 20507,
+				useSkillDurationMs: 12000,
+				useCooldownGroup524: 242,
+				useCooldownDuration528: 600000
+			}
+		} ],
+		refSkillSnapshot: [ {
+			id: 20507,
+			group: 819,
+			level: 1,
+			status: true,
+			effectRider: false,
+			effectDurationMs: 12000
+		} ],
+		equipItems: [ { refObjId: 61, slot: 13, body: [ 61, 0, 0, 0, 1, 0 ] } ]
+	} );
+	game.seed( { ...pose, gid: 7, heading: 0 } );
+	game.take();
+	game.command( { kind: "item-use", slot: 13 }, 100 );
+	assert.deepEqual( sent.at( -1 ), { opcode: 0x75bd, payload: Uint8Array.of( 13, 0xec, 0x50, 0, 0, 0, 0 ) } );
+	game.receive( { opcode: 0xb5ed, payload: Uint8Array.of( 27, 80, 0, 0, 99, 0, 0, 0, 8, 0, 0, 0, 0, 0 ) }, 101 );
+	game.receive( { opcode: 0xb5bd, payload: Uint8Array.of( 1, 13, 0, 0, 0xec, 0x50 ) }, 101 );
+	return { game, sent };
+}
+
+test("repair delay binds the preceding source, survives last-stack removal and cancels by skill identity", () => {
+	const { game, sent } = repairFixture();
+	assert.deepEqual( game.take().returnScroll, {
+		refObjId: 61,
+		name: "Repair Kit",
+		startedAtMs: 101,
+		durationMs: 12000,
+		skillId: 20507,
+		token: 99
+	} );
+	game.command( { kind: "return-cancel" }, 102 );
+	assert.deepEqual( sent.at( -1 ), { opcode: 0x72cd, payload: Uint8Array.of( 1, 5, 27, 80, 0, 0, 0 ) } );
+	game.receive( { opcode: 0xb6a0, payload: Uint8Array.of( 1, 98, 0, 0, 0 ) }, 103 );
+	assert.ok( game.take().returnScroll );
+	game.receive( { opcode: 0xb6a0, payload: Uint8Array.of( 1, 99, 0, 0, 0 ) }, 104 );
+	assert.equal( game.take().returnScroll, undefined );
+	game.dispose();
+});
+
+test("repair delay clears on world reset and local death", () => {
+	for ( const transition of [ "reset", "death" ] ) {
+		const { game } = repairFixture();
+		if ( transition === "reset" ) game.resetWorld();
+		else {
+			game.die( 7, 102 );
+			game.step( 103 );
+		}
+		assert.equal( game.take().returnScroll, undefined );
+		game.dispose();
+	}
+});

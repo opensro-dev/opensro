@@ -97,9 +97,7 @@ apps/client-next/src/engine/foundation/gameplay/peer-appearance.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
 apps/client-next/src/engine/foundation/gameplay/position-skill.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts
-apps/client-next/src/engine/foundation/gameplay/quickslot-inventory.ts
 apps/client-next/src/engine/foundation/gameplay/recall-appointment.ts
-apps/client-next/src/engine/foundation/gameplay/return-scroll.ts
 apps/client-next/src/engine/foundation/gameplay/skill-notices.ts
 apps/client-next/src/engine/foundation/gameplay/spawn-skills.ts
 apps/client-next/src/engine/foundation/gameplay/system-notices.ts
@@ -191,7 +189,6 @@ apps/client-next/src/engine/foundation/ui/quest-guide.ts
 apps/client-next/src/engine/foundation/ui/quest-presentation.ts
 apps/client-next/src/engine/foundation/ui/quest-time.ts
 apps/client-next/src/engine/foundation/ui/quick-status.ts
-apps/client-next/src/engine/foundation/ui/quickslot-cooldown.ts
 apps/client-next/src/engine/foundation/ui/rebirth-dialog.ts
 apps/client-next/src/engine/foundation/ui/resource-error.ts
 apps/client-next/src/engine/foundation/ui/retained-layout.ts
