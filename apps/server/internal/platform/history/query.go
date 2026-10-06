@@ -88,17 +88,34 @@ func where(f Filter) (string, []any) {
 		parts = append(parts, "(account=? COLLATE NOCASE OR (kind='login_refused' AND json_extract(data,'$.fields.claimedAccount')=? COLLATE NOCASE))")
 		args = append(args, f.Account, f.Account)
 	}
-	for _, pair := range [][2]string{{"character", f.Character}, {"session", f.Session}, {"id", f.Incident}, {"category", f.Category}, {"kind", f.Kind}} {
-		if pair[1] != "" {
-			parts = append(parts, pair[0]+" = ? COLLATE NOCASE")
-			args = append(args, pair[1])
-		}
+	// Keep SQL identifiers separate from request values; only arguments carry input.
+	if f.Character != "" {
+		parts = append(parts, "character = ? COLLATE NOCASE")
+		args = append(args, f.Character)
 	}
-	for _, pair := range [][2]string{{"build", f.Build}, {"opcode", f.Opcode}} {
-		if pair[1] != "" {
-			parts = append(parts, "json_extract(data,'$."+pair[0]+"') = ?")
-			args = append(args, pair[1])
-		}
+	if f.Session != "" {
+		parts = append(parts, "session = ? COLLATE NOCASE")
+		args = append(args, f.Session)
+	}
+	if f.Incident != "" {
+		parts = append(parts, "id = ? COLLATE NOCASE")
+		args = append(args, f.Incident)
+	}
+	if f.Category != "" {
+		parts = append(parts, "category = ? COLLATE NOCASE")
+		args = append(args, f.Category)
+	}
+	if f.Kind != "" {
+		parts = append(parts, "kind = ? COLLATE NOCASE")
+		args = append(args, f.Kind)
+	}
+	if f.Build != "" {
+		parts = append(parts, "json_extract(data,'$.build') = ?")
+		args = append(args, f.Build)
+	}
+	if f.Opcode != "" {
+		parts = append(parts, "json_extract(data,'$.opcode') = ?")
+		args = append(args, f.Opcode)
 	}
 	if f.Search != "" {
 		parts = append(parts, "instr(lower(json_extract(data,'$.message')),lower(?))>0")
