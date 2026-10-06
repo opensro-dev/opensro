@@ -65,6 +65,18 @@ import { characterHeadingYaw, nativeHeadingYaw, radians, type Radians } from "@/
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 import { SYSTEM_CAPTURE_MARK } from "@/engine/contracts/orb";
+/*
+================
+EffectGameplay
+
+Effects consume these state channels. A drawn local pose or predicted cast
+does not require copying unrelated inventory windows, guild or quest state.
+================
+*/
+type EffectGameplay = Pick<
+	GameplayState,
+	"localGid" | "pose" | "casts" | "vitals" | "questMarkers" | "inventory" | "attachedEffects"
+>;
 // TID4 6 in the COS type word: the captured quest monster.
 const CAPTURED_MONSTER_TYPE = 6 << 11;
 /*
@@ -855,7 +867,7 @@ export function createCharacterEffects(
 		*/
 		step(
 			entities: readonly EntityState[],
-			gameplay: GameplayState | null,
+			gameplay: EffectGameplay | null,
 			now: number,
 			resourceReady: ( path: string ) => boolean,
 			duration: ( path: string, clip: string ) => number,

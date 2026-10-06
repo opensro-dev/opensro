@@ -43,19 +43,22 @@ With spans, the probe also times the runtime's own stage marks (as
 a profiler's overhead.
 ================
 */
-function instrument( { counts, spans } ) {
-	const now = () => performance.now();
+export function instrument( { counts, spans, target = globalThis } ) {
+	const LONG_FRAME_MS = 50, MAX_LONG_FRAMES = 32;
+	const now = () => target.performance.now();
 	let frameStart = 0, worldStart = 0, worldEnd = 0, frameMark = 0, renderMark = 0, characterMark = 0;
+	let measuring = null, intervalMs;
 	let displayed;
 	const tally = {}, opened = {};
 	const add = ( key, value ) => {
 		tally[key] = (tally[key] ?? 0) + value;
 	};
-	globalThis.__benchRows = [];
-	globalThis.__benchMovement = [];
-	globalThis.__benchInputs = [];
-	globalThis.__benchTally = tally;
-	globalThis.__worldProbeFrameProfiler = {
+	target.__benchRows = [];
+	target.__benchMovement = [];
+	target.__benchInputs = [];
+	target.__benchTally = tally;
+	target.__benchLongFrames = { callbacks: 0, intervals: 0, frames: [] };
+	target.__worldProbeFrameProfiler = {
 		/*
 		================
 		movement
@@ -63,8 +66,8 @@ function instrument( { counts, spans } ) {
 		*/
 		movement( sample ) {
 			displayed = sample;
-			const rows = globalThis.__benchMovement;
-			const root = globalThis.__benchRuntime, game = root?.gameplay();
+			const rows = target.__benchMovement;
+			const root = target.__benchRuntime, game = root?.gameplay();
 			sample.path = game?.movementPath;
 			const actor = root?.characterActors().find( actor => actor.gid === game?.localGid );
 			if ( actor ) sample.body = { pose: { ...actor.pose }, clip: actor.clip, mountedOn: actor.mountedOn };
@@ -123,11 +126,14 @@ function instrument( { counts, spans } ) {
 		begin() {
 			displayed = undefined;
 			frameStart = frameMark = now();
-			if ( globalThis.__benchLoop ) {
-				if ( globalThis.__benchLastFrame !== undefined ) {
-					globalThis.__benchIntervals.push( frameStart - globalThis.__benchLastFrame );
+			measuring = target.__benchLoop === true ? target.__benchLongFrames : null;
+			intervalMs = undefined;
+			if ( measuring ) {
+				if ( target.__benchLastFrame !== undefined ) {
+					intervalMs = frameStart - target.__benchLastFrame;
+					target.__benchIntervals.push( intervalMs );
 				}
-				globalThis.__benchLastFrame = frameStart;
+				target.__benchLastFrame = frameStart;
 			}
 			worldStart = worldEnd = 0;
 			for ( const key in tally ) tally[key] = 0;
@@ -139,9 +145,31 @@ function instrument( { counts, spans } ) {
 			frameMark = at;
 		},
 		end() {
-			if ( displayed ) displayed.presentedAtMs = now();
-			globalThis.__benchRows.push( [ now() - frameStart, worldEnd - worldStart, { ...tally } ] );
-			if ( globalThis.__benchRows.length > 16384 ) globalThis.__benchRows.splice( 0, 4096 );
+			const endedAtMs = now(), elapsedMs = endedAtMs - frameStart, counts = { ...tally };
+			if ( displayed ) displayed.presentedAtMs = endedAtMs;
+			target.__benchRows.push( [ elapsedMs, worldEnd - worldStart, counts ] );
+			if ( target.__benchRows.length > 16384 ) target.__benchRows.splice( 0, 4096 );
+			if ( !measuring || target.__benchLoop !== true || measuring !== target.__benchLongFrames ) return;
+			const cpuMs = counts["cpu-ms"] ?? elapsedMs, evidence = measuring;
+			const slowCallback = cpuMs > LONG_FRAME_MS, slowInterval = intervalMs > LONG_FRAME_MS;
+			if ( slowCallback ) evidence.callbacks++;
+			if ( slowInterval ) evidence.intervals++;
+			// Preserve opening incidents even when the ordinary frame tail rolls over.
+			// CPU work and displayed interval differ when scheduling or readback stalls.
+			if ( (slowCallback || slowInterval) && evidence.frames.length < MAX_LONG_FRAMES ) {
+				evidence.frames.push( {
+					atMs: frameStart,
+					endedAtMs,
+					elapsedMs,
+					intervalMs,
+					cpuMs,
+					worldMs: worldEnd - worldStart,
+					revision: displayed?.revision,
+					workerAtMs: displayed?.workerAtMs,
+					workerDebtMs: displayed?.workerDebtMs,
+					counts
+				} );
+			}
 		}
 	};
 	if ( !counts ) return;
@@ -155,16 +183,16 @@ function instrument( { counts, spans } ) {
 			};
 		}
 	};
-	wrap( globalThis.GPURenderPassEncoder?.prototype, [ "draw", "drawIndexed" ], "pass draws" );
-	wrap( globalThis.GPURenderPassEncoder?.prototype, [ "executeBundles" ] );
-	wrap( globalThis.GPURenderPassEncoder?.prototype, [ "setBindGroup" ], "pass bind groups" );
-	wrap( globalThis.GPURenderBundleEncoder?.prototype, [ "draw", "drawIndexed" ], "bundle draws recorded" );
-	wrap( globalThis.GPUDevice?.prototype, [ "createRenderBundleEncoder" ], "bundles recorded" );
-	wrap( globalThis.GPUQueue?.prototype, [ "writeBuffer" ] );
-	wrap( globalThis.GPUQueue?.prototype, [ "writeTexture" ] );
-	wrap( globalThis.GPUQueue?.prototype, [ "submit" ] );
-	wrap( globalThis.GPUDevice?.prototype, [ "createBindGroup", "createBuffer", "createCommandEncoder" ] );
-	wrap( globalThis.GPUCommandEncoder?.prototype, [ "beginRenderPass", "beginComputePass" ], "passes" );
+	wrap( target.GPURenderPassEncoder?.prototype, [ "draw", "drawIndexed" ], "pass draws" );
+	wrap( target.GPURenderPassEncoder?.prototype, [ "executeBundles" ] );
+	wrap( target.GPURenderPassEncoder?.prototype, [ "setBindGroup" ], "pass bind groups" );
+	wrap( target.GPURenderBundleEncoder?.prototype, [ "draw", "drawIndexed" ], "bundle draws recorded" );
+	wrap( target.GPUDevice?.prototype, [ "createRenderBundleEncoder" ], "bundles recorded" );
+	wrap( target.GPUQueue?.prototype, [ "writeBuffer" ] );
+	wrap( target.GPUQueue?.prototype, [ "writeTexture" ] );
+	wrap( target.GPUQueue?.prototype, [ "submit" ] );
+	wrap( target.GPUDevice?.prototype, [ "createBindGroup", "createBuffer", "createCommandEncoder" ] );
+	wrap( target.GPUCommandEncoder?.prototype, [ "beginRenderPass", "beginComputePass" ], "passes" );
 }
 
 /*
@@ -181,19 +209,22 @@ export async function measure( page, name, ms, drive ) {
 		globalThis.__benchRows.length = 0;
 		globalThis.__benchMovement.length = 0;
 		globalThis.__benchInputs.length = 0;
+		globalThis.__benchLongFrames = { callbacks: 0, intervals: 0, frames: [] };
 		globalThis.__benchIntervals = [];
 		globalThis.__benchLoop = true;
 		globalThis.__benchLastFrame = undefined;
 	} );
 	const started = Date.now();
 	await drive( () => Date.now() - started < ms );
-	const [intervals, rows, movement, inputs] = await page.evaluate( () => {
+	const [intervals, rows, movement, inputs, longFrames, timeOriginMs] = await page.evaluate( () => {
 		globalThis.__benchLoop = false;
 		return [
 			globalThis.__benchIntervals.slice( 2 ),
 			globalThis.__benchRows.slice( 2 ),
 			globalThis.__benchMovement,
-			globalThis.__benchInputs
+			globalThis.__benchInputs,
+			globalThis.__benchLongFrames,
+			performance.timeOrigin
 		];
 	} );
 	const sorted = [ ...intervals ].sort( ( a, b ) => a - b ), at = q => sorted[Math.floor( (sorted.length - 1) * q )];
@@ -203,6 +234,7 @@ export async function measure( page, name, ms, drive ) {
 	for ( const key in tally ) tally[key] = Number( (tally[key] / Math.max( 1, rows.length )).toFixed( 2 ) );
 	return {
 		name,
+		timeOriginMs,
 		frames: intervals.length,
 		fps: 1000 / mean( intervals ),
 		p50: at( .5 ),
@@ -211,7 +243,10 @@ export async function measure( page, name, ms, drive ) {
 		max: sorted.at( -1 ),
 		main: mean( rows.map( r => r[0] ) ),
 		world: mean( rows.map( r => r[1] ) ),
-		callbacksOver50Ms: rows.filter( r => (r[2]["cpu-ms"] ?? r[0]) > 50 ).length,
+		// Incidents cover the full window even when average timings use the frame tail.
+		callbacksOver50Ms: longFrames.callbacks,
+		intervalsOver50Ms: longFrames.intervals,
+		longFrames: longFrames.frames,
 		movement,
 		inputs,
 		counts: tally
