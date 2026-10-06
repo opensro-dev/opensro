@@ -176,6 +176,10 @@ func (rt *Runtime) promoteFortressBattle(division string, c *enterworld.Characte
 		}
 		frames, ok := rt.commitCharacterEffect(division, c, row, token, statuseffect.StateActive, false, EffectPresentation{Phase: 2}, now)
 		public = append(public, frames...)
+		if ok {
+			// Attached effects carry tokens, not the owner's new HP/stat projection.
+			private = append(private, rt.gaugeDropFrames(division, c, true, true, true)...)
+		}
 		applied = ok
 		return ok || len(public) != 0 || len(private) != 0
 	})

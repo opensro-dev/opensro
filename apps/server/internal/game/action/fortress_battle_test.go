@@ -8,6 +8,7 @@ fortress_battle_test.go - combat, party and rank lifecycle integration
 package action
 
 import (
+	"bytes"
 	"encoding/binary"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
@@ -170,8 +171,19 @@ func TestFortressRankSkillsReplaceAndWarEndRetires(t *testing.T) {
 	c.GuildID = &guild
 	rt.Fortresses.Occupy(testDivision, id, guild)
 	var notices int
+	var lastStats []byte
+	rt.PushDivisionPeerFrames = func(_, _ string, frames []wire.Frame) {
+		for _, f := range frames {
+			if f.Opcode == wire.OpBaseStats {
+				t.Fatal("private rank stats leaked to peers")
+			}
+		}
+	}
 	rt.PushCharacterFrames = func(_, name string, frames []wire.Frame) {
 		for _, f := range frames {
+			if f.Opcode == wire.OpBaseStats {
+				lastStats = append([]byte(nil), f.Payload...)
+			}
 			if f.Opcode == opFortressWarState && len(f.Payload) > 0 && f.Payload[0] == 14 {
 				notices++
 			}
@@ -204,6 +216,10 @@ func TestFortressRankSkillsReplaceAndWarEndRetires(t *testing.T) {
 		if expected > 0 && rankEffects != 1 {
 			t.Fatalf("rank %d effects %d", expected, rankEffects)
 		}
+	}
+	stats, err := rt.PlayerBaseStats(testDivision, c)
+	if err != nil || !bytes.Equal(lastStats, stats.Encode()) {
+		t.Fatalf("rank did not publish final private stats: %v", err)
 	}
 	if notices != 6 {
 		t.Fatalf("rank notices %d", notices)
