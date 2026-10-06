@@ -381,8 +381,21 @@ async function session( options, location, results ) {
 			try {
 				await recordResidue( client.page, scene, location, results, options );
 			} catch ( error ) {
+				// The check itself failed: every loaded gid is unknown, and the
+				// record still lands so the restart decision has an artifact.
 				process.exitCode = 1;
 				console.log( `  combat residue: unknown (${error?.message ?? error})` );
+				const residue = {
+					codename: scene.codename,
+					loaded: scene.count,
+					alive: [],
+					unknown: scene.gids,
+					unaccounted: scene.count - scene.gids.length,
+					error: String( error?.message ?? error )
+				};
+				await mkdir( options.out, { recursive: true } ).catch( () => {} );
+				await writeFile( `${options.out}/${location.name}-residue.json`, JSON.stringify( residue, null, 2 ) )
+					.catch( () => {} );
 			}
 		}
 		await closeClient( client );
