@@ -13,6 +13,10 @@ samples late or in bursts therefore no longer slow a walk down and then
 fast-forward it. Characters without sample times bridge the observed
 delivery interval between samples instead.
 
+The worker's admitted leg duration supplies horizontal velocity until the
+second sample arrives. Coalescing a click and its receipt must not invent a
+stationary frame while waiting to rediscover velocity from two positions.
+
 Small jumps between consecutive models of a sampled character (a server
 correction when a cast or pickup stops the player, a leg turn, a monster's
 halt) become a bounded critically damped correction, so the
@@ -89,6 +93,8 @@ interface SampleTrack {
 	latest: Sample;
 	moving: boolean;
 	to?: Pose;
+	pathVelocity?: readonly [number, number];
+	durationMs?: number;
 	offset: [number, number, number];
 	velocity: [number, number, number];
 	displayed: Pose;
@@ -118,6 +124,7 @@ export interface SampleInput {
 	readonly moving: boolean;
 	readonly from?: Pose;
 	readonly to?: Pose;
+	readonly durationMs?: number;
 	readonly transition?: import("@/engine/contracts/gameplay").MovementTransition;
 }
 
@@ -282,16 +289,30 @@ of the last two samples. Walking is piecewise linear at constant speed, so
 within a leg this is exact; the leg end bounds it.
 ================
 */
-function sampledModel( row: SampleTrack, now: number ): Pose {
+function sampledModel( row: SampleTrack, now: number, confirmedAt = row.latest.at ): Pose {
 	const latest = row.latest, previous = row.previous;
-	if ( !row.moving || !previous ) return latest.pose;
+	const maximumAhead = MAX_EXTRAPOLATION_SECONDS + Math.max( 0, confirmedAt - latest.at );
+	if ( !row.moving ) return latest.pose;
+	if ( !previous && row.pathVelocity ) {
+		const [vx, vz] = row.pathVelocity, speed = hypot2( vx, vz );
+		if ( !speed ) return latest.pose;
+		let ahead = Math.min( maximumAhead, Math.max( 0, now - latest.at ) );
+		if ( row.to ) {
+			const rest = worldVector( row.to, latest.pose );
+			if ( rest ) ahead = Math.min( ahead, hypot2( rest[0], rest[2] ) / speed );
+		}
+		// Only sampled ground heights define a vertical tangent. A distant
+		// leg endpoint cannot predict the terrain between its two ends.
+		return ahead ? displace( latest.pose, [ vx * ahead, 0, vz * ahead ] ) : latest.pose;
+	}
+	if ( !previous ) return latest.pose;
 	const gap = latest.at - previous.at;
 	if ( gap <= 0 || gap > MAX_SAMPLE_GAP_SECONDS ) return latest.pose;
 	const span = worldVector( latest.pose, previous.pose );
 	if ( !span ) return latest.pose;
 	const stepped = hypot2( span[0], span[2] );
 	if ( stepped === 0 ) return latest.pose;
-	let ahead = Math.min( MAX_EXTRAPOLATION_SECONDS, Math.max( 0, now - latest.at ) ) / gap;
+	let ahead = Math.min( maximumAhead, Math.max( 0, now - latest.at ) ) / gap;
 	if ( row.to ) {
 		const rest = worldVector( row.to, latest.pose );
 		if ( rest ) ahead = Math.min( ahead, hypot2( rest[0], rest[2] ) / stepped );
@@ -301,6 +322,23 @@ function sampledModel( row: SampleTrack, now: number ): Pose {
 		...displace( latest.pose, [ span[0] * ahead, span[1] * ahead, span[2] * ahead ] ),
 		angle: latest.pose.angle
 	};
+}
+
+/*
+================
+pathVelocity
+
+A coalesced click and receipt may be the first published sample of a walk.
+Its admitted leg already defines horizontal velocity; waiting for a second
+publication invents a pause and a later catch-up. Infinite duration is the
+native zero-speed hold, so its velocity is zero.
+================
+*/
+function pathVelocity( input: SampleInput ): readonly [number, number] | undefined {
+	if ( !input.from || !input.to || !(input.durationMs! > 0) ) return undefined;
+	const span = worldVector( input.to, input.from );
+	if ( !span ) return undefined;
+	return [ span[0] * 1000 / input.durationMs!, span[2] * 1000 / input.durationMs! ];
 }
 
 /*
@@ -330,6 +368,7 @@ export function createPosePresentation() {
 		const revisionChanged = row && input.revision !== row.latest.revision;
 		const stalled = row && now - row.last > MAX_SAMPLE_GAP_SECONDS;
 		const recoverySeconds = row ? Math.max( 0, now - row.last ) : 0;
+		const previousFrameAt = row?.last;
 		const recovering = row && hypot3( ...row.offset ) > 0;
 		if (
 			!row || now < row.last || row.relocation !== relocation ||
@@ -341,6 +380,8 @@ export function createPosePresentation() {
 				latest: { pose: { ...target }, at, revision: input.revision },
 				moving: input.moving,
 				to: input.to,
+				pathVelocity: pathVelocity( input ),
+				durationMs: input.durationMs,
 				offset: [ 0, 0, 0 ],
 				velocity: [ 0, 0, 0 ],
 				displayed: { ...target },
@@ -359,9 +400,18 @@ export function createPosePresentation() {
 		const changed = at !== row.latest.at || input.revision !== row.latest.revision ||
 			latest.regionId !== target.regionId || latest.x !== target.x || latest.y !== target.y ||
 			latest.z !== target.z;
-		if ( changed || stalled || row.moving !== input.moving || row.to !== input.to ) {
+		const timingChanged = row.durationMs !== input.durationMs;
+		if ( changed || stalled || timingChanged || row.moving !== input.moving || row.to !== input.to ) {
 			const preserveDisplay = stalled || revisionChanged && input.transition?.reason !== "input";
-			const before = preserveDisplay ? row.displayed : displace( sampledModel( row, now ), row.offset );
+			// A fresh publication after a main-frame gap confirms the intervening
+			// leg. Do not manufacture a parked interval inside that unseen gap.
+			// If an earlier displayed frame already reached the prediction bound,
+			// keep normal recovery: a worker stall really was visible to the user.
+			const continuing = !stalled && !revisionChanged && at > row.latest.at &&
+				previousFrameAt !== undefined && previousFrameAt - row.latest.at <= MAX_EXTRAPOLATION_SECONDS;
+			const before = preserveDisplay ?
+				row.displayed :
+				displace( sampledModel( row, now, continuing ? at : undefined ), row.offset );
 			if ( changed ) {
 				// Keep the previous sample only when this one is strictly newer
 				// and on the same walk; a correction at the same time, or any
@@ -374,6 +424,9 @@ export function createPosePresentation() {
 			}
 			row.moving = input.moving;
 			row.to = input.to;
+			if ( timingChanged ) row.previous = undefined;
+			row.durationMs = input.durationMs;
+			row.pathVelocity = pathVelocity( input );
 			const jump = worldVector( before, sampledModel( row, now ) );
 			if ( jump ) row.offset = jump;
 			if ( !jump || !input.transition && hypot3( ...row.offset ) > MAX_CORRECTION_DISTANCE ) {

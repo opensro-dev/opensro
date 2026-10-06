@@ -25,7 +25,7 @@ const TO = { ...FROM, x: 200 };
 publish
 ================
 */
-function publish( presentation, state ) {
+function publish( presentation, state, timed = true ) {
 	presentation.samples(
 		new Map( [ [ 7, {
 			atMs: state.poseAtMs,
@@ -33,12 +33,13 @@ function publish( presentation, state ) {
 			moving: state.moving,
 			from: state.movementPath?.from,
 			to: state.movementPath?.to,
+			durationMs: timed ? state.movementPath?.durationMs : undefined,
 			transition: state.movementTransition
 		} ] ] )
 	);
 }
 
-test("a coalesced click and accepted receipt retain the admitted path behind the new anchor", () => {
+test("an untimed coalesced click and accepted receipt retain the admitted path behind the new anchor", () => {
 	const movement = createMovement( () => {} ), navigation = product(), presentation = createPosePresentation();
 	navigation.objects = [];
 	movement.seed( FROM );
@@ -65,7 +66,7 @@ test("a coalesced click and accepted receipt retain the admitted path behind the
 	assert.ok( state.pose && state.movementPath );
 	assert.deepEqual( state.pose, predicted, "the receipt preserves the logical pose" );
 	assert.ok( Math.abs( state.movementPath.from.x - 100.8 ) < 1e-9, "the logical walk remains rebased" );
-	publish( presentation, state );
+	publish( presentation, state, false );
 	assert.equal(
 		presentation.pose( 7, state.pose, .02 ).x,
 		FROM.x,

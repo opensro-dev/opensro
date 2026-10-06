@@ -1348,7 +1348,9 @@ state
 			return {
 				navigationRequestId,
 				navigationFailure,
-				movementPath: segment ? { from: segment.from, to: segment.to } : undefined,
+				movementPath: segment ?
+					{ from: segment.from, to: segment.to, durationMs: segment.duration } :
+					undefined,
 				movementRevision,
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },

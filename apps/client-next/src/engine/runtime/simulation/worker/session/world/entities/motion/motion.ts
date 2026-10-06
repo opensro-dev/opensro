@@ -112,18 +112,21 @@ Retail 0x775CB0 calls source reseed (0x86D9D0), without the halt
 			const reference = segment?.previous ??
 				{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 			const resolved = resolve( entity.gid, pose, reference );
+			let path: EntityState["movementPath"] = segment ? { from: resolved, to: segment.to } : entity.movementPath;
 			if ( segment && !segment.fixedTiming ) {
+				const durationMs = duration( resolved, segment.to, entity );
 				active.set( entity.gid, {
 					...segment,
 					from: resolved,
 					previous: resolved,
 					start: now,
-					duration: duration( resolved, segment.to, entity )
+					duration: durationMs
 				} );
+				path = { from: resolved, to: segment.to, durationMs };
 			}
 			return {
 				...update( entity.gid, resolved, !!segment || !!entity.moving ),
-				movementPath: segment ? { from: resolved, to: segment.to } : entity.movementPath
+				movementPath: path
 			};
 		},
 		/*
@@ -235,17 +238,19 @@ receive
 			const decoded = decodeNativeMovement( p, current );
 			// A source-less angular acknowledgement changes nothing in motion.
 			if ( decoded.kind === "keep" ) {
-				return previous ? { from: previous.from, to: previous.to } : { from: published, to: published };
+				return previous ?
+					{ from: previous.from, to: previous.to, durationMs: previous.duration } :
+					{ from: published, to: published };
 			}
 			const from = resolve( entity.gid, decoded.from, previous?.previous ?? published );
 			if ( decoded.kind === "direction" ) {
 				const leg = directionLeg( entity, from, decoded.heading!, now );
 				active.set( entity.gid, leg );
-				return { from, to: leg.to };
+				return { from, to: leg.to, durationMs: leg.duration };
 			}
-			const to = decoded.to;
-			active.set( entity.gid, { from, to, start: now, duration: duration( from, to, entity ) } );
-			return { from, to };
+			const to = decoded.to, durationMs = duration( from, to, entity );
+			active.set( entity.gid, { from, to, start: now, duration: durationMs } );
+			return { from, to, durationMs };
 		},
 		/*
 ================
@@ -263,7 +268,11 @@ idle mover turns where it stands. A destination walk keeps its own facing.
 				const pose = resolve( entity.gid, sample( segment, now ), segment.previous ?? segment.from );
 				const leg = directionLeg( entity, pose, heading, now );
 				active.set( entity.gid, leg );
-				return { ...update( entity.gid, pose, true ), heading, movementPath: { from: pose, to: leg.to } };
+				return {
+					...update( entity.gid, pose, true ),
+					heading,
+					movementPath: { from: pose, to: leg.to, durationMs: leg.duration }
+				};
 			}
 			if ( segment ) return null;
 			return {
@@ -345,7 +354,7 @@ step
 				segment.previous = pose;
 				changed.push( {
 					...update( gid, pose, now < segment.start + segment.duration ),
-					movementPath: { from: segment.from, to: segment.to },
+					movementPath: { from: segment.from, to: segment.to, durationMs: segment.duration },
 					// Presentation draws the path on the frame clock from sample times.
 					poseAtMs: now
 				} );

@@ -106,6 +106,21 @@ export interface Pose {
 
 /*
 ================
+MovementPath
+
+The worker's admitted leg. Its duration includes receipt reconciliation and
+speed changes; presentation must not replace it with the nominal run speed.
+Older untimed publishers retain sample-based presentation.
+================
+*/
+export interface MovementPath {
+	readonly from: Pose;
+	readonly to: Pose;
+	readonly durationMs?: number;
+}
+
+/*
+================
 MovementTransition
 
 Navigation owns permission to glide. A relocation generation survives
@@ -625,7 +640,7 @@ export interface GameplayState {
 	readonly revision: number;
 	readonly localGid: number;
 	readonly pose: Pose | null;
-	readonly movementPath?: { readonly from: import("./gameplay").Pose; readonly to: import("./gameplay").Pose; };
+	readonly movementPath?: MovementPath;
 	readonly movementRevision?: number;
 	readonly movementTransition?: MovementTransition;
 	readonly movementDiagnostics?: {

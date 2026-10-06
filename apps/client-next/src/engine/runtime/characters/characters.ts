@@ -826,7 +826,8 @@ export function createCharacterPresentation(
 							from: source.movementTransition?.pathEligible === false ?
 								undefined :
 								source.movementPath.from,
-							to: source.movementPath.to
+							to: source.movementPath.to,
+							durationMs: source.movementPath.durationMs
 						} :
 						{})
 				} );

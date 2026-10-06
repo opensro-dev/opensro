@@ -8,7 +8,7 @@ rendering lifetimes and must not infer gameplay state from loaded models.
 
 ===========================================================================
 */
-import type { Pose, GameplayState } from "./gameplay";
+import type { Pose, GameplayState, MovementPath } from "./gameplay";
 import type { CombatPresentationEvent } from "./effective-hp";
 import type { VisualFeedback } from "./orb";
 import type { ItemSoundRequest } from "./audio";
@@ -134,7 +134,7 @@ export interface EntityState {
 	// SYSTEM_CAPTURE_MARK in this character's state-decoration slot.
 	readonly captureMark?: boolean;
 	readonly mountedOn?: number;
-	readonly movementPath?: { readonly from: Pose; readonly to: Pose; };
+	readonly movementPath?: MovementPath;
 	readonly movementRevision?: number;
 	readonly movementTransition?: import("./gameplay").MovementTransition;
 	readonly moving?: boolean;
