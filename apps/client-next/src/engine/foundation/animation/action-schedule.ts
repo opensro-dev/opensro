@@ -35,6 +35,9 @@ export interface ActionSchedule {
 	started: number;
 	previous: number;
 	entered: boolean;
+	// The actor rate changes independently; an installation captures it once.
+	animationRate?: number;
+	phaseRate?: number;
 	cancelledAt?: number;
 	activation?: AnimationActivation;
 	outgoing?: {
@@ -42,6 +45,7 @@ export interface ActionSchedule {
 		started: number;
 		stopped: number;
 		loop: boolean;
+		rate: number;
 		activation: AnimationActivation;
 	}[];
 }
@@ -53,8 +57,8 @@ AE0890..AE0905 consumes the entry countdown before integrating a one-shot
 cursor. The cyclic WAIT cursor advances during its blend (AE05D0).
 ================
 */
-function actionPhaseTime( age: number, loop: boolean ): number {
-	return Math.max( 0, (age * 1000 - (loop ? 0 : ACTION_BLEND_MS)) / 1000 );
+function actionPhaseTime( age: number, loop: boolean, rate = 1 ): number {
+	return Math.max( 0, (age * 1000 - (loop ? 0 : ACTION_BLEND_MS)) * rate / 1000 );
 }
 
 /*
@@ -64,8 +68,8 @@ actionSampleTime
 ADF3A0 clamps one-shot sampling to length - 1, including its natural exit.
 ================
 */
-function actionSampleTime( phase: ActionPhase, age: number, loop: boolean ): number {
-	const cursor = actionPhaseTime( age, loop );
+function actionSampleTime( phase: ActionPhase, age: number, loop: boolean, rate = 1 ): number {
+	const cursor = actionPhaseTime( age, loop, rate );
 	return loop ? cursor : Math.min( cursor, (phase.definition.durationMs - 1) / 1000 );
 }
 
@@ -85,7 +89,7 @@ export function actionLayers( clock: ActionSchedule, now: number ): CharacterLay
 		if ( weight > 0 ) {
 			layers.push( {
 				clip: phase.clip,
-				time: actionSampleTime( phase, age, clock.phase === 1 ),
+				time: actionSampleTime( phase, age, clock.phase === 1, clock.phaseRate ),
 				loop: clock.phase === 1,
 				weight,
 				lane: "event",
@@ -99,7 +103,7 @@ export function actionLayers( clock: ActionSchedule, now: number ): CharacterLay
 		if ( weight ) {
 			layers.push( {
 				clip: row.phase.clip,
-				time: actionSampleTime( row.phase, now - row.started, row.loop ),
+				time: actionSampleTime( row.phase, now - row.started, row.loop, row.rate ),
 				loop: row.loop,
 				weight,
 				lane: "event",
@@ -131,6 +135,7 @@ export function advanceAction( clock: ActionSchedule, now: number, shotAt?: numb
 			started: clock.started,
 			stopped,
 			loop: clock.phase === 1,
+			rate: clock.phaseRate ?? 1,
 			activation: clock.activation ??= animationActivation( clock.started )
 		} );
 	}
@@ -139,7 +144,7 @@ export function advanceAction( clock: ActionSchedule, now: number, shotAt?: numb
 			events,
 			phase: clock.phases[clock.phase],
 			loop: false,
-			time: actionPhaseTime( clock.cancelledAt - clock.started, clock.phase === 1 )
+			time: actionPhaseTime( clock.cancelledAt - clock.started, clock.phase === 1, clock.phaseRate )
 		};
 	}
 	const cancel = cancelledAt !== undefined && cancelledAt <= now ? cancelledAt : undefined;
@@ -152,12 +157,13 @@ export function advanceAction( clock: ActionSchedule, now: number, shotAt?: numb
 			undefined;
 		const until = release ?? now;
 		if ( !clock.entered ) {
+			clock.phaseRate = clock.animationRate ?? 1;
 			events.push( { phase: name, event: 0, at: clock.started } );
 			clock.entered = true;
 		}
 		if ( phase && clock.phase !== 1 ) {
 			const cursor = actionCursor(
-				actionPhaseTime( until - clock.started, false ) * 1000,
+				actionPhaseTime( until - clock.started, false, clock.phaseRate ) * 1000,
 				phase.definition.durationMs
 			);
 			const marks = phase.definition.trackEvents.filter( row => row.eventCode === 1 );
@@ -172,20 +178,26 @@ export function advanceAction( clock: ActionSchedule, now: number, shotAt?: numb
 				events.push( {
 					phase: name,
 					event,
-					at: clock.started + (ACTION_BLEND_MS + marks[event - 1]!.cursorMs) / 1000
+					at: clock.started + (ACTION_BLEND_MS + marks[event - 1]!.cursorMs / (clock.phaseRate ?? 1)) / 1000
 				} );
 			}
 			clock.previous = cursor;
 			if ( cursor < phase.definition.durationMs && release === undefined ) break;
 		} else if ( phase && release === undefined ) break;
 		if ( phase ) {
-			retire( phase, release ?? clock.started + (ACTION_BLEND_MS + phase.definition.durationMs) / 1000 );
+			retire(
+				phase,
+				release ??
+					clock.started + (ACTION_BLEND_MS + phase.definition.durationMs / (clock.phaseRate ?? 1)) / 1000
+			);
 		}
 		if ( release !== undefined ) {
 			clock.phase = 2;
 			clock.started = release;
 		} else {
-			if ( phase ) clock.started += (ACTION_BLEND_MS + phase.definition.durationMs) / 1000;
+			if ( phase ) {
+				clock.started += (ACTION_BLEND_MS + phase.definition.durationMs / (clock.phaseRate ?? 1)) / 1000;
+			}
 			clock.phase++;
 		}
 		clock.previous = 0;
@@ -201,6 +213,6 @@ export function advanceAction( clock: ActionSchedule, now: number, shotAt?: numb
 		events,
 		phase,
 		loop: clock.phase === 1,
-		time: phase ? actionPhaseTime( now - clock.started, clock.phase === 1 ) : 0
+		time: phase ? actionPhaseTime( now - clock.started, clock.phase === 1, clock.phaseRate ) : 0
 	};
 }

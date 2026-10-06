@@ -92,7 +92,6 @@ apps/client-next/src/engine/foundation/gameplay/name-color.ts
 apps/client-next/src/engine/foundation/gameplay/native-notice.ts
 apps/client-next/src/engine/foundation/gameplay/npc-dialogue.ts
 apps/client-next/src/engine/foundation/gameplay/party-notices.ts
-apps/client-next/src/engine/foundation/gameplay/peer-appearance.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
 apps/client-next/src/engine/foundation/gameplay/position-skill.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts

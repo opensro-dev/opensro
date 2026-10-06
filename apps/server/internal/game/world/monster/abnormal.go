@@ -90,3 +90,15 @@ RunSpeed
 func (i Instance) RunSpeed() float64 {
 	return i.effectiveSpeed(0x18, i.gradeSpeed(i.Ref.RunSpeed))
 }
+
+/*
+================
+ActionSpeed
+
+4CF51D seeds parameter 8C to 100; 4AA530 publishes its effective value.
+The authored reference scalar is not the live keeper after status changes.
+================
+*/
+func (i Instance) ActionSpeed() float64 {
+	return i.effectiveSpeed(0x8c, 100)
+}

@@ -50,11 +50,32 @@ after the exit blend settled. Source gates passed (13; unchanged server
 checks cached), client gates passed (11), and the original-byte fixture and
 presenter tests passed. These are scoped checks, not whole-client parity.
 
+## Action-speed publication and installation capture
+
+The client now retains the reciprocal action speed from player and shared
+character spawn rows, local bootstrap and packet 0x3453. The latter routes a
+rider GID through the active mount, as 775EB0 does. READY and SHOT capture the
+actor rate when installed; later updates do not retime existing clips. Entry
+and natural-exit blends remain wall-clock intervals.
+
+Server 4AA530 publishes parameter 8C as a GID and float denominator (v1.188
+opcode 3200, v1.150 opcode 3453). Frostbite and slow callbacks call both the
+movement and action-speed publishers. The port now does so for players, COS
+and monsters, and projects the same value into local, companion and remote
+scope-entry snapshots. New hooks are wired in sro-gameworld.
+
+Original-byte captures include half-speed and double-speed one-shots. They
+match the port's pose and natural-exit envelopes. Tests cover status apply and
+clear publication, entry values, mounted routing, malformed updates, despawn
+and replacement, plus preserving an existing installation across a rate update.
+The full server gate (including race and lint), all 11 client gates and 13
+source gates passed. This follow-up has not yet been exercised against the
+running local server binary; the Vite client serves the current source.
+
 ## Audit still open
 
 The entry-hold repair is established. Adjacent native branches require
 separate closure: WAIT installation begins alongside READY rather than
-only on READY completion; per-character animation speed comes from the
-spawn denominator and packet 0x3453; release/cancellation must preserve the
+only on READY completion; release/cancellation must preserve the
 native ownership of already-installed animations. Do not claim those
 branches are covered merely because the entry-hold tests pass.

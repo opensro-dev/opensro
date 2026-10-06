@@ -212,7 +212,7 @@ test("skill pose clocks match original one-shot execution across entry and natur
 		const p = phase( "shot" );
 		p.definition.durationMs = row.durationMs;
 		p.definition.trackEvents = [];
-		const c = clock( [ null, null, p ] );
+		const c = { ...clock( [ null, null, p ] ), animationRate: row.rate ?? 1 };
 		advanceAction( c, 0 );
 		for ( const frame of row.frames ) {
 			const at = frame.elapsedMs / 1000;
@@ -228,4 +228,19 @@ test("skill pose clocks match original one-shot execution across entry and natur
 			assert.equal( c.phase === 3, frame.mode === 5, `completion at ${frame.elapsedMs}` );
 		}
 	}
+});
+
+test("new installations capture action speed without scaling the entry blend or retiming an old clip", () => {
+	const c = { ...clock( [ phase( "ready" ), phase( "wait" ), phase( "shot" ) ] ), animationRate: .5 };
+	advanceAction( c, 0 );
+	assert.equal( actionLayers( c, .1 )[0].time, 0 );
+	assert.equal( actionLayers( c, .1 )[0].weight, .5 );
+	assert.equal( actionLayers( c, .6 )[0].time, .2 );
+	c.animationRate = 1;
+	assert.deepEqual( advanceAction( c, .603 ).events, [ { phase: "READY", event: 1, at: .6 } ] );
+	assert.equal( actionLayers( c, .8 )[0].time, .3 );
+	advanceAction( c, 1, 1 );
+	assert.equal( actionLayers( c, 1.1 )[0].time, 0 );
+	assert.deepEqual( advanceAction( c, 1.403, 1 ).events, [ { phase: "SHOT", event: 1, at: 1.4 } ] );
+	assert.ok( Math.abs( actionLayers( c, 1.6 )[0].time - .4 ) < 1e-9 );
 });

@@ -51,6 +51,7 @@ function createPeer() {
 	payload[25] = 3;
 	payload.writeFloatLE( 20, 32 );
 	payload.writeFloatLE( SPEED, 36 );
+	payload.writeFloatLE( 100, 40 );
 	payload[45] = 1;
 	owner.receive( { opcode: 0x30d7, payload }, 0 );
 	flush( owner );
@@ -127,6 +128,7 @@ test("a rider's movement moves its mount (CCharactor_GetActiveMoverEntity 0x85E0
 	spawn[25] = 3;
 	spawn.writeFloatLE( 20, 32 );
 	spawn.writeFloatLE( SPEED, 36 );
+	spawn.writeFloatLE( 100, 40 );
 	spawn[45] = 1;
 	owner.receive( { opcode: 0x30d7, payload: spawn }, 0 );
 	owner.receive( { opcode: 0xb4b5, payload: Buffer.from( [ 1, GID, 0, 0, 0, 1, MOUNT, 0, 0, 0 ] ) }, 0 );

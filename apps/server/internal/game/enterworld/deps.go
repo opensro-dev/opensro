@@ -70,15 +70,17 @@ type Deps struct {
 	PrepareEntry         func(divisionID, characterName string) error
 	EntryPopulationLease func(divisionID, characterName string) (instance.Lease, bool)
 	// Pure quest projection on the detached entry snapshot; never grants items.
-	NormalizeEntryQuests   func(character *Character) error
-	AdmitCharacterSession  func(divisionID, characterName string, session uint64) error
-	RetireCharacterSession func(divisionID, characterName string, session uint64)
-	EntryMovementSpeeds    func(divisionID, characterName string) (float32, float32)
-	EntryCompanionSpawn    func(string, *Character, *CharacterCOS) simulation.Spawn
-	EntrySkills            func(divisionID, characterName string) []EntrySkill
-	ObjectListRows         func(divisionID string, character *Character, entry *LocalPlayerEntry) []Packet
-	MonsterState           *simulation.MonsterState
-	RefObjSnapshot         func() []RefObjRow
+	NormalizeEntryQuests      func(character *Character) error
+	AdmitCharacterSession     func(divisionID, characterName string, session uint64) error
+	RetireCharacterSession    func(divisionID, characterName string, session uint64)
+	EntryActionSpeed          func(divisionID, characterName string) float32
+	EntryCompanionActionSpeed func(division string, character *Character, pet *CharacterCOS) float32
+	EntryMovementSpeeds       func(divisionID, characterName string) (float32, float32)
+	EntryCompanionSpawn       func(string, *Character, *CharacterCOS) simulation.Spawn
+	EntrySkills               func(divisionID, characterName string) []EntrySkill
+	ObjectListRows            func(divisionID string, character *Character, entry *LocalPlayerEntry) []Packet
+	MonsterState              *simulation.MonsterState
+	RefObjSnapshot            func() []RefObjRow
 	// ExtraRefItemCodenames names the division-dependent item references a
 	// login carries (the ground). StaticRefItemCodenames names the fixed set
 	// every viewer needs; it is published once in BrowserReferences.

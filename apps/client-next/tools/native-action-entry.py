@@ -31,6 +31,7 @@ RESET = 0xAE00C0
 TRANSITIONS = 0xADF310
 ADVANCE = 0xAE07E0
 GET_CURSOR = 0xADF3A0
+SET_RATE = 0xADF030
 
 
 # ================
@@ -106,6 +107,7 @@ def capture(pe, case):
     put(vtable + 0xC, GET_CURSOR)
     call(RESET)
     call(TRANSITIONS, (case["enterMs"], case["exitMs"]))
+    call(SET_RATE, (struct.unpack("<I", struct.pack("<f", case.get("rate", 1)))[0],))
     elapsed = 0
     frames = []
     for delta in case["steps"]:

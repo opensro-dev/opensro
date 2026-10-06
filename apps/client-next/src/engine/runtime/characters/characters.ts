@@ -1718,6 +1718,7 @@ export function createCharacterPresentation(
 				const cancelledAt = stopAt !== undefined ?
 					seconds + (stopAt - (simulationMs ?? seconds * 1000)) / 1000 :
 					undefined;
+				clock.animationRate = entity.animationRate ?? 1;
 				const events = [
 					...adopted.map( event => ({ ...event, adopted: true }) ),
 					...advanceAction( clock, seconds, shotAt, cancelledAt ).events
