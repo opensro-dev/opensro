@@ -140,6 +140,9 @@ func tickPhaseObserver(hub *transport.Hub) func(simulation.TickTiming) {
 		for _, hook := range timing.SlowHooks {
 			phases.SlowHooks = append(phases.SlowHooks, transport.SlowHook{Name: hook.Name, Elapsed: hook.Elapsed})
 		}
+		for _, division := range timing.SlowDivisions {
+			phases.SlowDivisions = append(phases.SlowDivisions, transport.SlowHook{Name: division.Name, Elapsed: division.Elapsed})
+		}
 		hub.RecordTickPhases(phases)
 	}
 }

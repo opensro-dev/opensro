@@ -131,6 +131,8 @@ type Metrics struct {
 	HandlerMs   map[string]Histogram     `json:"handler_ms"`
 	TickPhaseMs map[string]Histogram     `json:"tick_phase_ms"`
 	SlowHooks   map[string]SlowHookStats `json:"slow_hooks"`
+	// Divisions whose own work in a tick ran >= 100 ms, by division ID.
+	SlowDivisions map[string]SlowHookStats `json:"slow_divisions"`
 }
 
 // Metrics snapshots the counters and the current live-session count.

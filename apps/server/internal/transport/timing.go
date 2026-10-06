@@ -18,51 +18,105 @@ package transport
 
 import (
 	"fmt"
+	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // Upper bounds of the histogram buckets; one more bucket holds the rest.
-var timingBucketsMs = [...]float64{16, 50, 100, 250, 1000}
+const (
+	timingBucket0Ms = 16
+	timingBucket1Ms = 50
+	timingBucket2Ms = 100
+	timingBucket3Ms = 250
+	timingBucket4Ms = 1000
+	timingBuckets   = 6
+)
 
 /*
 ================
 Histogram
 
 Counts per bucket (<=16, <=50, <=100, <=250, <=1000, >1000 ms) and the
-largest sample.
+largest sample; the snapshot form served on /transport/metrics.
 ================
 */
 type Histogram struct {
-	Buckets [len(timingBucketsMs) + 1]uint64 `json:"buckets"`
-	MaxMs   float64                          `json:"max_ms"`
+	Buckets [timingBuckets]uint64 `json:"buckets"`
+	MaxMs   float64               `json:"max_ms"`
 }
 
 /*
 ================
-Histogram.add
+liveHistogram
+
+The recording form: atomic counters, so recording on every inbound frame
+takes no lock. maxBits holds the largest sample's float64 bits.
 ================
 */
-func (h *Histogram) add(elapsed time.Duration) {
+type liveHistogram struct {
+	buckets [timingBuckets]atomic.Uint64
+	maxBits atomic.Uint64
+}
+
+/*
+================
+timingBucket
+================
+*/
+func timingBucket(ms float64) int {
+	switch {
+	case ms <= timingBucket0Ms:
+		return 0
+	case ms <= timingBucket1Ms:
+		return 1
+	case ms <= timingBucket2Ms:
+		return 2
+	case ms <= timingBucket3Ms:
+		return 3
+	case ms <= timingBucket4Ms:
+		return 4
+	}
+	return timingBuckets - 1
+}
+
+/*
+================
+liveHistogram.add
+================
+*/
+func (h *liveHistogram) add(elapsed time.Duration) {
 	ms := float64(elapsed) / float64(time.Millisecond)
-	slot := len(timingBucketsMs)
-	for i, bound := range timingBucketsMs {
-		if ms <= bound {
-			slot = i
-			break
+	h.buckets[timingBucket(ms)].Add(1)
+	for {
+		old := h.maxBits.Load()
+		if ms <= math.Float64frombits(old) || h.maxBits.CompareAndSwap(old, math.Float64bits(ms)) {
+			return
 		}
 	}
-	h.Buckets[slot]++
-	if ms > h.MaxMs {
-		h.MaxMs = ms
+}
+
+/*
+================
+liveHistogram.snapshot
+================
+*/
+func (h *liveHistogram) snapshot() Histogram {
+	var out Histogram
+	for i := range h.buckets {
+		out.Buckets[i] = h.buckets[i].Load()
 	}
+	out.MaxMs = math.Float64frombits(h.maxBits.Load())
+	return out
 }
 
 /*
 ================
 SlowHook
 
-One tick hook the simulation ticker reported as slow (>= 100 ms).
+One tick hook or division the simulation ticker reported as slow
+(>= 100 ms).
 ================
 */
 type SlowHook struct {
@@ -79,7 +133,7 @@ One tick's phase durations as the simulation ticker measured them.
 */
 type TickPhases struct {
 	BeforeHooks, Divisions, Hooks, Total time.Duration
-	SlowHooks                            []SlowHook
+	SlowHooks, SlowDivisions             []SlowHook
 }
 
 /*
@@ -96,15 +150,17 @@ type SlowHookStats struct {
 ================
 timingStats
 
-Recorded at most once per frame and once per 100 ms tick; one mutex keeps
-each snapshot coherent.
+Handler histograms are created once per opcode (sync.Map) and then
+recorded without a lock; tick phases are fixed. Slow hooks and divisions
+are rare and take the mutex.
 ================
 */
 type timingStats struct {
-	mu        sync.Mutex
-	handlers  map[uint16]*Histogram
-	phases    [4]Histogram
-	slowHooks map[string]*SlowHookStats
+	handlers sync.Map // uint16 -> *liveHistogram
+	phases   [4]liveHistogram
+	mu       sync.Mutex
+	slow     map[string]*SlowHookStats
+	slowDiv  map[string]*SlowHookStats
 }
 
 /*
@@ -113,17 +169,30 @@ timingStats.recordHandler
 ================
 */
 func (t *timingStats) recordHandler(opcode uint16, elapsed time.Duration) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.handlers == nil {
-		t.handlers = make(map[uint16]*Histogram)
+	h, ok := t.handlers.Load(opcode)
+	if !ok {
+		h, _ = t.handlers.LoadOrStore(opcode, &liveHistogram{})
 	}
-	h := t.handlers[opcode]
-	if h == nil {
-		h = &Histogram{}
-		t.handlers[opcode] = h
+	h.(*liveHistogram).add(elapsed)
+}
+
+/*
+================
+countSlow
+================
+*/
+func countSlow(into map[string]*SlowHookStats, slow []SlowHook) {
+	for _, hook := range slow {
+		stats := into[hook.Name]
+		if stats == nil {
+			stats = &SlowHookStats{}
+			into[hook.Name] = stats
+		}
+		stats.Count++
+		if ms := float64(hook.Elapsed) / float64(time.Millisecond); ms > stats.MaxMs {
+			stats.MaxMs = ms
+		}
 	}
-	h.add(elapsed)
 }
 
 /*
@@ -135,25 +204,19 @@ The simulation ticker's per-tick seam (wired by worldsession.NewTicker).
 */
 func (h *Hub) RecordTickPhases(phases TickPhases) {
 	t := &h.metrics.timing
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	for i, elapsed := range [4]time.Duration{phases.BeforeHooks, phases.Divisions, phases.Hooks, phases.Total} {
 		t.phases[i].add(elapsed)
 	}
-	if len(phases.SlowHooks) > 0 && t.slowHooks == nil {
-		t.slowHooks = make(map[string]*SlowHookStats)
+	if len(phases.SlowHooks) == 0 && len(phases.SlowDivisions) == 0 {
+		return
 	}
-	for _, hook := range phases.SlowHooks {
-		stats := t.slowHooks[hook.Name]
-		if stats == nil {
-			stats = &SlowHookStats{}
-			t.slowHooks[hook.Name] = stats
-		}
-		stats.Count++
-		if ms := float64(hook.Elapsed) / float64(time.Millisecond); ms > stats.MaxMs {
-			stats.MaxMs = ms
-		}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.slow == nil {
+		t.slow, t.slowDiv = make(map[string]*SlowHookStats), make(map[string]*SlowHookStats)
 	}
+	countSlow(t.slow, phases.SlowHooks)
+	countSlow(t.slowDiv, phases.SlowDivisions)
 }
 
 /*
@@ -162,17 +225,23 @@ timingStats.snapshotInto
 ================
 */
 func (t *timingStats) snapshotInto(m *Metrics) {
+	m.HandlerMs = make(map[string]Histogram)
+	t.handlers.Range(func(key, value any) bool {
+		m.HandlerMs[fmt.Sprintf("0x%04X", key.(uint16))] = value.(*liveHistogram).snapshot()
+		return true
+	})
+	m.TickPhaseMs = map[string]Histogram{
+		"before_hooks": t.phases[0].snapshot(), "divisions": t.phases[1].snapshot(),
+		"hooks": t.phases[2].snapshot(), "total": t.phases[3].snapshot(),
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	m.HandlerMs = make(map[string]Histogram, len(t.handlers))
-	for opcode, h := range t.handlers {
-		m.HandlerMs[fmt.Sprintf("0x%04X", opcode)] = *h
-	}
-	m.TickPhaseMs = map[string]Histogram{
-		"before_hooks": t.phases[0], "divisions": t.phases[1], "hooks": t.phases[2], "total": t.phases[3],
-	}
-	m.SlowHooks = make(map[string]SlowHookStats, len(t.slowHooks))
-	for name, stats := range t.slowHooks {
+	m.SlowHooks = make(map[string]SlowHookStats, len(t.slow))
+	for name, stats := range t.slow {
 		m.SlowHooks[name] = *stats
+	}
+	m.SlowDivisions = make(map[string]SlowHookStats, len(t.slowDiv))
+	for name, stats := range t.slowDiv {
+		m.SlowDivisions[name] = *stats
 	}
 }

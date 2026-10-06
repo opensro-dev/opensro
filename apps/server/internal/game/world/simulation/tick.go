@@ -439,18 +439,18 @@ func (t *Ticker) RunTick(nowMs int64) {
 	defer recoverTickPanic("tick")
 	t.watch.begin(time.Now())
 	defer t.watch.end()
-	t.clock.begin(time.Now())
+	t.clock.begin(t.timingNow())
 	defer t.observePhases()
 
 	tick, work := t.prepareTick()
 	t.runHookList(t.BeforeHooks, nowMs, work)
 	t.watch.phase.Store(tickPhaseDivisions)
-	t.clock.beforeHooksEnd = time.Now()
+	t.clock.enterDivisions(t.timingNow())
 	for _, division := range work {
 		t.runDivision(division, tick, nowMs)
 	}
 	t.watch.phase.Store(tickPhaseHooks)
-	t.clock.divisionsEnd = time.Now()
+	t.clock.enterHooks(t.timingNow())
 	t.runHooks(nowMs, work)
 }
 
@@ -463,13 +463,13 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	defer recoverTickPanic("scheduled tick")
 	t.watch.begin(time.Now())
 	defer t.watch.end()
-	t.clock.begin(time.Now())
+	t.clock.begin(t.timingNow())
 	defer t.observePhases()
 
 	tick, work := t.prepareTick()
 	t.runHookList(t.BeforeHooks, nowMs, work)
 	t.watch.phase.Store(tickPhaseDivisions)
-	t.clock.beforeHooksEnd = time.Now()
+	t.clock.enterDivisions(t.timingNow())
 	batches := make([]shardTickBatch, len(inboxes))
 	for i := range batches {
 		batches[i] = shardTickBatch{tick: tick, nowMs: nowMs, done: make(chan struct{})}
@@ -499,7 +499,7 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	}
 	if ctx.Err() == nil {
 		t.watch.phase.Store(tickPhaseHooks)
-		t.clock.divisionsEnd = time.Now()
+		t.clock.enterHooks(t.timingNow())
 		t.runHooks(nowMs, work)
 	}
 }
@@ -620,6 +620,8 @@ runDivision
 */
 func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	defer recoverTickPanic("division " + work.divisionID)
+	started := t.timingNow()
+	defer func() { t.clock.timeDivision(work.divisionID, t.timingNow().Sub(started)) }()
 
 	live := make(map[string]bool, len(work.sessions))
 	for _, session := range work.sessions {
@@ -659,65 +661,77 @@ func (t *Ticker) runHookList(hooks []TickHook, nowMs int64, work []divisionTickW
 			defer recoverTickPanic("hook")
 			t.watch.enterHook(hook)
 			defer t.watch.leaveHook()
-			var produced []DivisionFrames
-			t.clock.timeHook(hook, func() { produced = hook(nowMs) })
-			for _, routed := range produced {
-				if len(routed.Frames) == 0 {
+			// The hook's routing and pushes below are part of its time.
+			t.clock.timeHook(hook, t.timingNow, func() {
+				t.routeHookFrames(hook(nowMs), work)
+			})
+		}()
+	}
+}
+
+/*
+================
+routeHookFrames
+
+Delivers one hook's routed frames to sessions or divisions.
+================
+*/
+func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionTickWork) {
+	for _, routed := range routedFrames {
+		if len(routed.Frames) == 0 {
+			continue
+		}
+		if routed.OnlyCharacterID != 0 {
+			if routed.ExceptSessionID != "" || routed.SourceGID != 0 {
+				continue
+			}
+			for _, division := range work {
+				if division.divisionID != routed.DivisionID {
 					continue
 				}
-				if routed.OnlyCharacterID != 0 {
-					if routed.ExceptSessionID != "" || routed.SourceGID != 0 {
+				for _, session := range division.sessions {
+					if session.CharacterID == routed.OnlyCharacterID {
+						t.Push.PushToSession(session.SessionID, routed.Frames)
+						break
+					}
+				}
+				break
+			}
+			continue
+		}
+		if routed.SourceGID != 0 {
+			for _, division := range work {
+				if division.divisionID != routed.DivisionID {
+					continue
+				}
+				for _, viewer := range division.sessions {
+					if viewer.SessionID == routed.ExceptSessionID {
 						continue
 					}
-					for _, division := range work {
-						if division.divisionID != routed.DivisionID {
-							continue
-						}
-						for _, session := range division.sessions {
-							if session.CharacterID == routed.OnlyCharacterID {
-								t.Push.PushToSession(session.SessionID, routed.Frames)
+					peer := PlayerObjectID(viewer.CharacterID) == routed.SourceGID || division.state.shownPeers[viewer.SessionID][routed.SourceGID]
+					published := false
+					if routed.SourceGID > domain.GroundItemGIDBase && routed.SourceGID <= domain.GroundItemGIDLimit {
+						for _, gid := range viewer.PublishedObjects {
+							if gid == routed.SourceGID {
+								published = true
 								break
 							}
 						}
-						break
 					}
-					continue
-				}
-				if routed.SourceGID != 0 {
-					for _, division := range work {
-						if division.divisionID != routed.DivisionID {
-							continue
-						}
-						for _, viewer := range division.sessions {
-							if viewer.SessionID == routed.ExceptSessionID {
-								continue
-							}
-							peer := PlayerObjectID(viewer.CharacterID) == routed.SourceGID || division.state.shownPeers[viewer.SessionID][routed.SourceGID]
-							published := false
-							if routed.SourceGID > domain.GroundItemGIDBase && routed.SourceGID <= domain.GroundItemGIDLimit {
-								for _, gid := range viewer.PublishedObjects {
-									if gid == routed.SourceGID {
-										published = true
-										break
-									}
-								}
-							}
-							_, cos := division.state.shownCOS[viewer.SessionID][routed.SourceGID]
-							monster := false
-							if ops := division.state.monsters; ops != nil {
-								monster = ops.shownMonsters[viewer.SessionID][routed.SourceGID]
-							}
-							if peer || published || cos || monster {
-								t.Push.PushToSession(viewer.SessionID, routed.Frames)
-							}
-						}
-						break
+					_, cos := division.state.shownCOS[viewer.SessionID][routed.SourceGID]
+					monster := false
+					if ops := division.state.monsters; ops != nil {
+						monster = ops.shownMonsters[viewer.SessionID][routed.SourceGID]
 					}
-					continue
+					if peer || published || cos || monster {
+						t.Push.PushToSession(viewer.SessionID, routed.Frames)
+					}
 				}
-				t.Push.PushToDivision(routed.DivisionID, routed.Frames, routed.ExceptSessionID)
+				break
 			}
-		}()
+			continue
+		}
+		t.Push.PushToDivision(routed.DivisionID, routed.Frames, routed.ExceptSessionID)
 	}
 }
 
