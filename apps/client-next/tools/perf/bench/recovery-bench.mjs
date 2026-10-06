@@ -41,6 +41,8 @@ const OBSERVATORY_URL = process.env.SRO_BENCH_OBSERVATORY ??
 	"http://127.0.0.1:8791/internal/diagnostics/observatory";
 const OBSERVATORY_CACHE_MS = 2000;
 const SERVER_POSE_TOLERANCE = 1;
+// Wire Y rounds to integer units; a larger gap is another surface.
+const SERVER_POSE_Y_TOLERANCE = 1;
 // The client's movement command (movement.ts OP_PREDICTED_MOVE).
 const OP_PREDICTED_MOVE = 0x0009;
 const METRICS_URL = process.env.SRO_BENCH_TRANSPORT_METRICS ?? "http://127.0.0.1:8788/transport/metrics";
@@ -162,8 +164,15 @@ async function stallTurns( page, lane, name, record ) {
 	try {
 		await stallSteps( page, { lane, name, stall, legs, anchor, steps, record } );
 	} catch ( error ) {
-		// The incident is the evidence: keep what led up to it.
-		await record( steps, String( error?.stack ?? error ) );
+		// The incident is the evidence: keep what led up to it and the live
+		// state it left, as far as the page still answers.
+		const incident = {
+			error: String( error?.stack ?? error ),
+			client: await movementState( page ).catch( failure => String( failure ) ),
+			server: await serverPose( name ).catch( failure => String( failure ) ),
+			faults: await faultLog( page ).catch( failure => String( failure ) )
+		};
+		await record( steps, incident );
 		throw error;
 	}
 	return steps;
@@ -297,10 +306,10 @@ async function run( options ) {
 				if ( STALL_LANES.includes( lane ) ) {
 					result.timing = { before: await transportMetrics() };
 					faultMark = (await faultLog( page )).logged;
-					result.stalls = await stallTurns( page, lane, CHARACTER, ( stalls, error ) =>
+					result.stalls = await stallTurns( page, lane, CHARACTER, ( stalls, incident ) =>
 						writeFile(
 							`${options.out}/stall-${lane}.json`,
-							JSON.stringify( { lane, partial: true, error, stalls }, null, 2 )
+							JSON.stringify( { lane, partial: true, incident, stalls }, null, 2 )
 						) );
 					while ( more() ) await page.waitForTimeout( 50 );
 					return;
@@ -366,7 +375,7 @@ async function run( options ) {
 				for ( const step of result.stalls ) assertStep( lane, step );
 				for ( const step of [ ...result.stalls, result.serverPose ] ) {
 					assert.ok(
-						step.xz <= SERVER_POSE_TOLERANCE,
+						step.xz <= SERVER_POSE_TOLERANCE && Math.abs( step.y ) <= SERVER_POSE_Y_TOLERANCE,
 						`settled client and server poses differ: ${JSON.stringify( step )}`
 					);
 				}
