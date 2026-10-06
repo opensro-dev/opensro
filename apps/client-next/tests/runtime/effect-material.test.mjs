@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -168,7 +169,7 @@ test("resource-less material stages replace one model register; destroying an ol
 });
 test("all seven published material stages and the HWAN state effect admit with native scale modes", () => {
 	const catalog = createEffectDecoder().decode(
-		readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json" )
+		readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json" )
 	);
 	for ( const skill of [ 10268, 10269, 10270, 10271, 10272, 10275 ] ) {
 		const f = fixture( catalog );

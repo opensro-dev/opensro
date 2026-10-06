@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { isPlaceholderText, loadEnglishCompletions } from "../../../../scripts/build/shared/englishCompletions.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
@@ -123,7 +124,7 @@ test("automatic guide scan preserves native precedence and novice-region edges",
 });
 test("published event articles parse without dropping native images, colors or emphasis", async () => {
 	const data = JSON.parse(
-		await readFile( "../../.generated/client-public/assets/data/event-guide-catalog.json", "utf8" )
+		await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/event-guide-catalog.json", "utf8" )
 	);
 	const nativeQuest = readLocalizedTextDataRowsSync( path.join( textDataDir, "texthelp.txt" ) ).find( row =>
 		row[1] === "SRO_GGW_EVE_QUEST"
@@ -176,7 +177,7 @@ test("published guide resource batch admits completely", async () => {
 		"cif/layouts/ifggmenu.json"
 	];
 	const buffers = await Promise.all( paths.map( async p => {
-		const b = await readFile( "../../.generated/client-public/assets/" + p );
+		const b = await readFile( CLIENT_PUBLIC_ROOT + "/assets/" + p );
 		return b.buffer.slice( b.byteOffset, b.byteOffset + b.byteLength );
 	} ) );
 	let id = 0;
@@ -222,7 +223,7 @@ cancel
 	// This extracted media's English European fields are empty. Editing notes
 	// from another column must never become guide text or trigger a seen ack.
 	const source = JSON.parse(
-		await readFile( "../../.generated/client-public/assets/data/event-guide-catalog.json", "utf8" )
+		await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/event-guide-catalog.json", "utf8" )
 	);
 	for ( const id of [ 1, 3, 13 ] ) {
 		assert.equal(
@@ -242,7 +243,7 @@ cancel
 test("general guide menu carries the completed guild title with no unrenderable rows", async () => {
 	const [guide, help] = await Promise.all(
 		[ "data/event-guide-catalog.json", "text/texthelp.en.json" ].map( async p =>
-			JSON.parse( await readFile( "../../.generated/client-public/assets/" + p, "utf8" ) )
+			JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/" + p, "utf8" ) )
 		)
 	);
 	const articles = generalGuideArticles( guide, help.entries );

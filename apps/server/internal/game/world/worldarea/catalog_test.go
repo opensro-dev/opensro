@@ -5,10 +5,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
 func TestLiveAuthoredAreaCatalogPinsManyangLabContract(t *testing.T) {
-	publicRoot := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "client-public")
+	publicRoot, err := licensed.ClientPublicRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(filepath.Join(publicRoot, filepath.FromSlash(CatalogPublicPath))); err != nil {
 		t.Skipf("client public assets unavailable: %v", err)
 	}

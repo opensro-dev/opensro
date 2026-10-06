@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -21,8 +22,7 @@ const { createGameplay } = await import(
 );
 const { createHudMessages } = await import( "../../src/engine/runtime/ui/hud/messages.ts" );
 const { createUniqueBanner } = await import( "../../src/engine/runtime/ui/hud/unique-banner.ts" );
-const copy =
-	JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
+const copy = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) ).entries;
 test("skill failures preserve all native channels and silent bytes", () => {
 	const notice = ( c, country = 0, war = false, pk = false ) =>
 		skillNotice( 0xb245, Uint8Array.of( 2, c ), country, war, pk );

@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -28,22 +29,22 @@ const { decodeAuthoredLayout, authoredRect } = await import( "../../src/engine/f
 const { createHudResources } = await import( "../../src/engine/runtime/ui/hud/resources.ts" );
 const { hotbarSlot } = await import( "../../src/engine/foundation/gameplay/quickslots.ts" );
 const atlas = JSON.parse(
-	readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf8" )
+	readFileSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json", "utf8" )
 );
 const layout = JSON.parse(
-	readFileSync( "../../.generated/client-public/assets/cif/layouts/ifsystemwnd.json", "utf8" )
+	readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifsystemwnd.json", "utf8" )
 );
 
 test("HUD admission retains native atlas UVs and natural-size controls, rejects malformed input", () => {
 	const raw = JSON.parse(
-			readFileSync( "../../.generated/client-public/assets/cif/layouts/ginterface.json", "utf8" )
+			readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ginterface.json", "utf8" )
 		),
 		decoded = decodeAuthoredLayout( raw );
 	assert.deepEqual( decoded.GDR_PLAYER_MINI_INFO.uv, [ .723633, 0, .930664 - .723633, .136719 ] );
 	raw.controlsByName.GDR_PLAYER_MINI_INFO.rect.width = 999;
 	assert.equal( decoded.GDR_PLAYER_MINI_INFO.rect[2], 212, "admitted layout owns its snapshot" );
 	const bar = decodeAuthoredLayout(
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifunderbar.json", "utf8" ) )
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifunderbar.json", "utf8" ) )
 	);
 	assert.deepEqual( authoredRect( bar.GDR_DECORATE_3, 112, 716 ), [ 789, 676, ...bar.GDR_DECORATE_3.size ] );
 	raw.controlsByName.GDR_PLAYER_MINI_INFO.properties.UV_LT.value.x = "bad";
@@ -108,14 +109,14 @@ test("new published popup resources prepare automatically without a runtime file
 		request( url ) {
 			const path = decodeURIComponent( new URL( url ).pathname );
 			if ( !path.endsWith( ".json" ) ) {
-				const bytes = readFileSync( "../../.generated/client-public" + path );
+				const bytes = readFileSync( CLIENT_PUBLIC_ROOT + path );
 				jobs.set( ++serial, {
 					kind: "bytes",
 					buffer: bytes.buffer.slice( bytes.byteOffset, bytes.byteOffset + bytes.byteLength )
 				} );
 				return serial;
 			}
-			const raw = JSON.parse( readFileSync( "../../.generated/client-public" + path, "utf8" ) );
+			const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + path, "utf8" ) );
 			if ( path.endsWith( "/ifmainpopup.json" ) ) {
 				raw.resourcesByDdjPath["new-control.ddj"] = { publicPath: future };
 			}
@@ -175,7 +176,7 @@ test("normal-tile projection covers its interior exactly without scaling source 
 
 test("party popup uses native runtime positions and natural option artwork with client insets", () => {
 	const png = readFileSync(
-		"../../.generated/client-public/assets/images/Media_extracted/interface/messagebox/msgbox_blackbox.png"
+		CLIENT_PUBLIC_ROOT + "/assets/images/Media_extracted/interface/messagebox/msgbox_blackbox.png"
 	);
 	const size = [ png.readUInt32BE( 16 ), png.readUInt32BE( 20 ) ], p = partyProposalLayout( 1200, 900, size );
 	assert.deepEqual( p.frame, [ 450, 362, 300, 176 ] );
@@ -184,9 +185,8 @@ test("party popup uses native runtime positions and natural option artwork with 
 	assert.deepEqual( p.refuse, [ 602, 501, 76, 24 ] );
 	assert.deepEqual( p.options[0].image, [ 494, 455, ...size ] );
 	assert.deepEqual( p.options[0].text, [ 497, 462, size[0] - 6, size[1] - 13 ] );
-	const authored =
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifmessagebox.json", "utf8" ) )
-			.sections.find( s => s.name === "MsgBoxINIF" ).nodes;
+	const authored = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifmessagebox.json", "utf8" ) )
+		.sections.find( s => s.name === "MsgBoxINIF" ).nodes;
 	assert.equal( p.name[2], authored.find( n => n.id === 1 ).rect.width );
 	assert.equal( p.question[2], authored.find( n => n.id === 2 ).rect.width );
 	assert.deepEqual( partyProposalLayout( 1200, 900, undefined ).options, [] );
@@ -347,7 +347,7 @@ test("empty and partially filled party/academy pages retain every authored slot"
 		const [name, type] of [ [ "ifpartymatch", "CIFPartyMatchSlot" ], [ "ifmentormatch", "CIFMentorMatchSlot" ] ]
 	) {
 		const layout = decodeAuthoredLayout(
-			JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/" + name + ".json", "utf8" ) )
+			JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/" + name + ".json", "utf8" ) )
 		);
 		const empty = matchingSlots( layout, type, [], 100, 200 ),
 			filled = matchingSlots( layout, type, [ { id: 7 } ], 100, 200 );
@@ -371,7 +371,7 @@ test("Academy and matching title bars cover their middle without stretching the 
 	assert.equal( defined( out.quads.at( -1 ) ).uv[2], 14 / 24 );
 });
 test("Skills selects Create and MainSkillWnd without importing Withdrawal overrides", () => {
-	const raw = JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifskill.json", "utf8" ) );
+	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifskill.json", "utf8" ) );
 	const main = decodeAuthoredLayout( raw, [ "Create", "MainSkillWnd" ] );
 	assert.deepEqual( main.GDR_SKILL_BG.rect, [ 27, 12, 319, 17 ] );
 	assert.ok( main.GDR_SKILL_BOTTOM_BOX.texture.endsWith( "/skill/skl_wnd_box.png" ) );
@@ -381,7 +381,7 @@ test("Skills selects Create and MainSkillWnd without importing Withdrawal overri
 
 const { decodeQuestPresentation } = await import( "../../src/engine/foundation/ui/quest-presentation.ts" );
 test("quest presentation uses the quest catalog, reward symbols and byte-joined warning variant", () => {
-	const raw = JSON.parse( readFileSync( "../../.generated/client-public/assets/data/questData.json", "utf8" ) ),
+	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" ) ),
 		catalog = decodeQuestPresentation( raw ),
 		row = raw.rows.find( r => r.startsWith( "3\t" ) ).split( "\t" );
 	assert.equal( catalog.records[3].title, raw.textEntries[row[2]] );

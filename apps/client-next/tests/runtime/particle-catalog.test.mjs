@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -18,7 +19,7 @@ import { readFile } from "node:fs/promises";
 const { createEffectPrograms } = await import(
 	sourceFileUrl( "src/engine/runtime/assets/worker/effects/program/program.ts" ).href
 );
-const bytes = new Uint8Array( await readFile( "../../.generated/client-public/assets/effects/programs.json" ) );
+const bytes = new Uint8Array( await readFile( CLIENT_PUBLIC_ROOT + "/assets/effects/programs.json" ) );
 test("stone keeps its native source-colour blend pair and temptation retains loop identity", () => {
 	const decoder = createEffectPrograms(),
 		stone = decoder.decode( bytes, "battle/status_bad_stone_on.efp" ).model,

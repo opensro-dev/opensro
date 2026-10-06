@@ -10,6 +10,7 @@ mark fallback, while measurement and painting agree on glyph advances.
 ===========================================================================
 */
 
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -19,7 +20,7 @@ const { titleText } = await import( "../../src/engine/foundation/rendering/ui-gl
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { createChat } = await import( "../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts" );
 const atlas = JSON.parse(
-	readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf8" )
+	readFileSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json", "utf8" )
 );
 const LATIN_SAMPLE = "ÇçĞğİıÖöŞşÜüÀéñŁłŒœŽž";
 

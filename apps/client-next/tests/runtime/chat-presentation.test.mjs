@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -19,8 +20,7 @@ const { composeChat, selectChatTab, chatLineColor, chatLineText, chatFeedbackTex
 );
 const { textLines } = await import( "../../src/engine/foundation/ui/text-lines.ts" );
 const { createChat } = await import( "../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts" );
-const catalog =
-	JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
+const catalog = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) ).entries;
 test("tabs seed markers without rewriting drafts; the actual prefix owns routing", () => {
 	for ( const [tab, marker, channel] of [ [ 0, "", 1 ], [ 1, "#", 4 ], [ 2, "@", 5 ], [ 3, "%", 11 ] ] ) {
 		assert.equal( selectChatTab( "", tab ), marker );

@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -26,7 +27,7 @@ const { interactionApproach, interactionApproachTransition } = await import(
 	"../../src/engine/foundation/gameplay/interaction-approach.ts"
 );
 test("primary portal menu resolves selected reference and authored destination IDs", () => {
-	const raw = JSON.parse( readFileSync( "../../.generated/client-public/assets/data/teleportData.json", "utf8" ) ),
+	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/teleportData.json", "utf8" ) ),
 		catalog = decodePortalCatalog( raw );
 	assert.equal( catalog.links.length, 85 );
 	const text = {
@@ -371,7 +372,7 @@ test("an NPC is selected inside 240 units and approached to 240 from farther awa
 });
 test("native I64 fee strings resolve the full integer format and shared tax calculation", () => {
 	const catalog = decodePortalCatalog(
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/data/teleportData.json", "utf8" ) )
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/teleportData.json", "utf8" ) )
 	);
 	const rows = portalMenu( catalog, 2011, key => key === "UIIT_CTL_TELEPORT_RESULT" ? "%s %I64d" : key, 10 );
 	assert.ok( rows.some( row => row.label.endsWith( " 550" ) ) );

@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -82,7 +83,7 @@ test("published camera tracks match native-backed reference samples", () => {
 	for (
 		const asset of [ "/assets/title/constantinople/manifest.json", "/assets/character-select/world-manifest.json" ]
 	) {
-		const manifest = readPublishedAssetJsonSync( asset, path.resolve( root, "../../.generated/client-public" ) );
+		const manifest = readPublishedAssetJsonSync( asset, CLIENT_PUBLIC_ROOT );
 		for ( const keys of [ manifest.camera, manifest.createCamera ].filter( Boolean ) ) {
 			for ( let time = 0; time <= keys.at( -1 ).timeSeconds; time += .03125 ) {
 				const actual = sampleFrontendCamera( keys, time ), expected = reference( keys, time );
@@ -207,7 +208,7 @@ const { previewIdle } = await load( "src/engine/foundation/animation/preview-idl
 test("all published preview models resolve native weapon idle inheritance and seated state", () => {
 	const roster = readPublishedAssetJsonSync(
 		"/assets/char/roster.json",
-		path.resolve( root, "../../.generated/client-public" )
+		CLIENT_PUBLIC_ROOT
 	);
 	const sets = [
 		"default",

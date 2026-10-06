@@ -37,6 +37,9 @@ const compiled = await build( {
 	define: {
 		"import.meta.env.DEV": "false",
 		"import.meta.env.VITE_AGENT_API_BASE": "undefined",
+		// tools/build-metadata.mjs stamps these in a real build; the fixture has none.
+		"import.meta.env.SRO_CLIENT_REVISION": "undefined",
+		"import.meta.env.SRO_CLIENT_SUBJECT": "undefined",
 		"import.meta.url": JSON.stringify( "http://localhost/runtime.ts" )
 	},
 	plugins: [ {

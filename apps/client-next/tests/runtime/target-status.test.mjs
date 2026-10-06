@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -32,7 +33,7 @@ const layouts = Object.fromEntries(
 				name,
 				decodeAuthoredLayout(
 					JSON.parse(
-						await readFile( "../../.generated/client-public/assets/cif/layouts/" + name + ".json", "utf8" )
+						await readFile( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/" + name + ".json", "utf8" )
 					)
 				)
 			]

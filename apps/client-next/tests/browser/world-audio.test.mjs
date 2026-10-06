@@ -9,6 +9,7 @@ asset owner. Needs the published assets and the extraction.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
@@ -22,13 +23,11 @@ import { dataExtractedRoot } from "../../../../scripts/build/world/paths.mjs";
 test( "published movement, Manyang and Jangan ambience WAVs decode intact through the production asset owner", {
 	timeout: 90000
 }, async () => {
-	const rules =
-		JSON.parse( await readFile( "../../.generated/client-public/assets/audio/effectsound.json", "utf8" ) ).rules;
-	const profiles =
-		JSON.parse( await readFile( "../../.generated/client-public/assets/audio/effectenvsnd.json", "utf8" ) )
-			.profiles;
+	const rules = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/audio/effectsound.json", "utf8" ) ).rules;
+	const profiles = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/audio/effectenvsnd.json", "utf8" ) )
+		.profiles;
 	const regions =
-		JSON.parse( await readFile( "../../.generated/client-public/assets/audio/regioninfo.json", "utf8" ) ).regions;
+		JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/audio/regioninfo.json", "utf8" ) ).regions;
 	const names = regions.filter( r => r.entries.some( e => e.sectorX === 168 && e.sectorY === 97 ) ).map( r =>
 		r.name
 	);

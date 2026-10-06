@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -43,12 +44,10 @@ function packet( kind, id, killer = "asd2" ) {
 
 test("every shipped unique reference resolves appearance and death text without a visible entity", async () => {
 	const dir = path.join( serverGameDataRoot, "textdata" );
-	const names =
-		JSON.parse( await readFile( "../../.generated/client-public/assets/text/textdataname.en.json", "utf8" ) )
-			.entries;
-	const copy =
-		JSON.parse( await readFile( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) )
-			.entries;
+	const names = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/text/textdataname.en.json", "utf8" ) )
+		.entries;
+	const copy = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) )
+		.entries;
 	const rows = [];
 	for ( const file of (await readdir( dir )).filter( f => /^characterdata_.*\.txt$/.test( f ) ) ) {
 		for (

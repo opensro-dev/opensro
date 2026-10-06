@@ -1,3 +1,4 @@
+import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -5,127 +6,126 @@ import { toPublicPath as toPublicAssetPath } from "./shared/assetPaths.mjs";
 import { listFiles, pathExists as exists } from "./shared/fsUtils.mjs";
 import { readJsonOrUndefined, writeJsonIfChanged } from "./shared/jsonOut.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const rebuildRoot = path.resolve(scriptDir, "..", "..");
-const publicRoot = path.join(rebuildRoot, ".generated", "client-public");
-const assetsRoot = path.join(publicRoot, "assets");
-const imageRoot = path.join(assetsRoot, "images");
-const preloadManifestPath = path.join(assetsRoot, "ui", "preload-images.json");
+const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
+const rebuildRoot = path.resolve( scriptDir, "..", ".." );
+const publicRoot = CLIENT_PUBLIC_ROOT;
+const assetsRoot = path.join( publicRoot, "assets" );
+const imageRoot = path.join( assetsRoot, "images" );
+const preloadManifestPath = path.join( assetsRoot, "ui", "preload-images.json" );
 
 const INTERACTIVE_IMAGE_PATTERN = /_(focus|press|disable)\.png$/i;
 const NATIVE_INTERFACE_PATH_SEGMENT = "/media_extracted/interface/";
 const REASON_PRIORITY = {
-  "interactive-state": 3,
-  "native-interface": 2,
-  "interactive-normal": 1
+	"interactive-state": 3,
+	"native-interface": 2,
+	"interactive-normal": 1
 };
 
-export async function buildUiImagePreloadManifest(options = {}) {
-  const root = options.imageRoot ?? imageRoot;
-  const targetPath = options.targetPath ?? preloadManifestPath;
-  const rootPublic = options.publicRoot ?? derivePublicRootFromImageRoot(root);
-  const images = await collectUiPreloadImages(root, rootPublic);
+export async function buildUiImagePreloadManifest( options = {} ) {
+	const root = options.imageRoot ?? imageRoot;
+	const targetPath = options.targetPath ?? preloadManifestPath;
+	const rootPublic = options.publicRoot ?? derivePublicRootFromImageRoot( root );
+	const images = await collectUiPreloadImages( root, rootPublic );
 
-  // Keep the previous timestamp when the manifest is otherwise unchanged so the written
-  // bytes (and the downstream sidecar/pack caches keyed on this file's mtime) stay stable.
-  const existing = await readJsonOrUndefined(targetPath);
-  const stampNeutral = (value) => JSON.stringify({ ...value, generatedAt: 0 });
-  const manifest = {
-    format: "sro-image-preload-manifest",
-    version: 1,
-    generatedAt: new Date().toISOString(),
-    images
-  };
-  if (existing && stampNeutral(existing) === stampNeutral(manifest)) {
-    manifest.generatedAt = existing.generatedAt;
-  }
+	// Keep the previous timestamp when the manifest is otherwise unchanged so the written
+	// bytes (and the downstream sidecar/pack caches keyed on this file's mtime) stay stable.
+	const existing = await readJsonOrUndefined( targetPath );
+	const stampNeutral = ( value ) => JSON.stringify( { ...value, generatedAt: 0 } );
+	const manifest = {
+		format: "sro-image-preload-manifest",
+		version: 1,
+		generatedAt: new Date().toISOString(),
+		images
+	};
+	if ( existing && stampNeutral( existing ) === stampNeutral( manifest ) ) {
+		manifest.generatedAt = existing.generatedAt;
+	}
 
-  await writeJsonIfChanged(targetPath, manifest);
+	await writeJsonIfChanged( targetPath, manifest );
 
-  return {
-    publicPath: "/assets/ui/preload-images.json",
-    outputPath: targetPath,
-    imageCount: images.length,
-    totalBytes: images.reduce((sum, image) => sum + image.bytes, 0),
-    images
-  };
+	return {
+		publicPath: "/assets/ui/preload-images.json",
+		outputPath: targetPath,
+		imageCount: images.length,
+		totalBytes: images.reduce( ( sum, image ) => sum + image.bytes, 0 ),
+		images
+	};
 }
 
-async function collectUiPreloadImages(root, rootPublic) {
-  const pngFiles = await listFiles(root, { extensions: [".png"] });
-  const stateFiles = pngFiles.filter((filePath) => INTERACTIVE_IMAGE_PATTERN.test(filePath));
-  const byPath = new Map();
+async function collectUiPreloadImages( root, rootPublic ) {
+	const pngFiles = await listFiles( root, { extensions: [ ".png" ] } );
+	const stateFiles = pngFiles.filter( ( filePath ) => INTERACTIVE_IMAGE_PATTERN.test( filePath ) );
+	const byPath = new Map();
 
-  for (const pngFile of pngFiles) {
-    if (isNativeInterfaceImage(pngFile)) {
-      await addImage(byPath, pngFile, rootPublic, "native-interface");
-    }
-  }
+	for ( const pngFile of pngFiles ) {
+		if ( isNativeInterfaceImage( pngFile ) ) {
+			await addImage( byPath, pngFile, rootPublic, "native-interface" );
+		}
+	}
 
-  for (const stateFile of stateFiles) {
-    await addImage(byPath, stateFile, rootPublic, "interactive-state");
+	for ( const stateFile of stateFiles ) {
+		await addImage( byPath, stateFile, rootPublic, "interactive-state" );
 
-    const normalFile = stateFile.replace(INTERACTIVE_IMAGE_PATTERN, ".png");
-    if (await exists(normalFile)) {
-      await addImage(byPath, normalFile, rootPublic, "interactive-normal");
-    }
-  }
+		const normalFile = stateFile.replace( INTERACTIVE_IMAGE_PATTERN, ".png" );
+		if ( await exists( normalFile ) ) {
+			await addImage( byPath, normalFile, rootPublic, "interactive-normal" );
+		}
+	}
 
-  return [...byPath.values()].sort(comparePreloadImages);
+	return [ ...byPath.values() ].sort( comparePreloadImages );
 }
 
-async function addImage(byPath, filePath, rootPublic, reason) {
-  const publicPath = toPublicAssetPath(filePath, rootPublic);
-  const existing = byPath.get(publicPath);
-  if (existing) {
-    if (REASON_PRIORITY[reason] > REASON_PRIORITY[existing.reason]) {
-      existing.reason = reason;
-    }
-    return;
-  }
+async function addImage( byPath, filePath, rootPublic, reason ) {
+	const publicPath = toPublicAssetPath( filePath, rootPublic );
+	const existing = byPath.get( publicPath );
+	if ( existing ) {
+		if ( REASON_PRIORITY[reason] > REASON_PRIORITY[existing.reason] ) {
+			existing.reason = reason;
+		}
+		return;
+	}
 
-  byPath.set(publicPath, {
-    path: publicPath,
-    bytes: (await stat(filePath)).size,
-    reason
-  });
+	byPath.set( publicPath, {
+		path: publicPath,
+		bytes: (await stat( filePath )).size,
+		reason
+	} );
 }
 
-function isNativeInterfaceImage(filePath) {
-  return filePath.replaceAll("\\", "/").toLowerCase().includes(NATIVE_INTERFACE_PATH_SEGMENT);
+function isNativeInterfaceImage( filePath ) {
+	return filePath.replaceAll( "\\", "/" ).toLowerCase().includes( NATIVE_INTERFACE_PATH_SEGMENT );
 }
 
+function derivePublicRootFromImageRoot( root ) {
+	const resolvedRoot = path.resolve( root );
+	const marker = `${path.sep}assets${path.sep}images`;
+	const markerIndex = resolvedRoot.toLowerCase().lastIndexOf( marker.toLowerCase() );
+	if ( markerIndex >= 0 ) {
+		return resolvedRoot.slice( 0, markerIndex );
+	}
 
-function derivePublicRootFromImageRoot(root) {
-  const resolvedRoot = path.resolve(root);
-  const marker = `${path.sep}assets${path.sep}images`;
-  const markerIndex = resolvedRoot.toLowerCase().lastIndexOf(marker.toLowerCase());
-  if (markerIndex >= 0) {
-    return resolvedRoot.slice(0, markerIndex);
-  }
-
-  return publicRoot;
+	return publicRoot;
 }
 
-function comparePreloadImages(left, right) {
-  const leftBase = preloadSortBase(left.path);
-  const rightBase = preloadSortBase(right.path);
-  const baseOrder = leftBase.localeCompare(rightBase);
-  if (baseOrder !== 0) {
-    return baseOrder;
-  }
+function comparePreloadImages( left, right ) {
+	const leftBase = preloadSortBase( left.path );
+	const rightBase = preloadSortBase( right.path );
+	const baseOrder = leftBase.localeCompare( rightBase );
+	if ( baseOrder !== 0 ) {
+		return baseOrder;
+	}
 
-  return preloadStateOrder(left.path) - preloadStateOrder(right.path);
+	return preloadStateOrder( left.path ) - preloadStateOrder( right.path );
 }
 
-function preloadSortBase(publicPath) {
-  return publicPath.replace(INTERACTIVE_IMAGE_PATTERN, ".png");
+function preloadSortBase( publicPath ) {
+	return publicPath.replace( INTERACTIVE_IMAGE_PATTERN, ".png" );
 }
 
-function preloadStateOrder(publicPath) {
-  const match = /_(focus|press|disable)\.png$/i.exec(publicPath);
-  if (!match) return 0;
-  if (match[1].toLowerCase() === "focus") return 1;
-  if (match[1].toLowerCase() === "press") return 2;
-  return 3;
+function preloadStateOrder( publicPath ) {
+	const match = /_(focus|press|disable)\.png$/i.exec( publicPath );
+	if ( !match ) return 0;
+	if ( match[1].toLowerCase() === "focus" ) return 1;
+	if ( match[1].toLowerCase() === "press" ) return 2;
+	return 3;
 }

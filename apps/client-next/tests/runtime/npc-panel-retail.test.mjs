@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -23,10 +24,10 @@ const { createNpcConversation } = await import(
 const { decodeAuthoredLayout } = await import( "../../src/engine/foundation/ui/authored-layout.ts" );
 const { textBoxParagraphs } = await import( "../../src/engine/foundation/ui/text-lines.ts" );
 const layout = decodeAuthoredLayout(
-	JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/if_npctalk.json", "utf8" ) )
+	JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/if_npctalk.json", "utf8" ) )
 );
 const atlas = JSON.parse(
-	readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf8" )
+	readFileSync( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json", "utf8" )
 );
 const measure = text =>
 	Array.from( text, c => (atlas.fonts[0].glyphs[c.codePointAt( 0 )] ?? atlas.fonts[0].glyphs[63]).advanceX ).reduce(

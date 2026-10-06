@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -169,7 +170,7 @@ test("native message type and explicit color survive retention and wrapping", as
 	const { readFileSync } = await import( "node:fs" );
 	const { decodeAuthoredLayout } = await load( "foundation/ui/authored-layout.ts" );
 	const layout = decodeAuthoredLayout(
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifsystemmessage.json", "utf8" ) )
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifsystemmessage.json", "utf8" ) )
 	);
 	const owner = createHudMessages( () => 0 ),
 		notices = [ { sequence: 1, key: "guide", value: 0, nativeType: 6 }, {
@@ -211,7 +212,7 @@ test("chat hover draws native text-width highlight and clears on exit", async ()
 	const { readFileSync } = await import( "node:fs" );
 	const { decodeAuthoredLayout } = await load( "foundation/ui/authored-layout.ts" );
 	const layout = decodeAuthoredLayout(
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifchatviewer.json", "utf8" ) )
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifchatviewer.json", "utf8" ) )
 	);
 	const draw = hover =>
 		chatLayout( {

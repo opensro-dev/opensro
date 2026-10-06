@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -310,7 +311,7 @@ test("unique marker keeps its 12px artwork readable alongside 8px ordinary dots"
 
 test("all outdoor region grids request only retail artwork, including every edge and hole", async () => {
 	const catalog = JSON.parse(
-			await readFile( "../../.generated/client-public/assets/data/mission-dungeon-minimap.json", "utf8" )
+			await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/mission-dungeon-minimap.json", "utf8" )
 		),
 		art = minimapArt( catalog ),
 		seen = new Set();
@@ -354,7 +355,7 @@ test("minimap catalog commits complete coverage atomically and disposes pending 
 	const owner = createMinimapResources( assets, "https://fixture.invalid" );
 	owner.step( false, true );
 	assert.equal( owner.art(), undefined );
-	const catalog = await readFile( "../../.generated/client-public/assets/data/mission-dungeon-minimap.json" );
+	const catalog = await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/mission-dungeon-minimap.json" );
 	result = { kind: "bytes", buffer: Uint8Array.from( catalog ).buffer };
 	assert.equal( owner.step( false, true ), true );
 	assert.ok( defined( owner.art() ).size > 0 );

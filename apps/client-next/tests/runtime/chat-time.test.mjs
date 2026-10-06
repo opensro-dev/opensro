@@ -9,6 +9,7 @@ nothing.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
@@ -78,7 +79,7 @@ test("a line from an earlier day also names its date; one from today does not", 
 
 test("a chat row publishes its line's time as hover text, and a line without one publishes none", () => {
 	const layout = decodeAuthoredLayout(
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifchatviewer.json", "utf8" ) )
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifchatviewer.json", "utf8" ) )
 	);
 	const draw = ( lines, chatTimestamps = false ) =>
 		chatLayout( {

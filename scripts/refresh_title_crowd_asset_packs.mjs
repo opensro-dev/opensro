@@ -8,6 +8,7 @@ its loose authority (the roster), then archives the packs they superseded.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "./lib/generatedRoot.mjs";
 import { mergeAssetPackGroupUpdates, publishAssetPackManifest } from "./build/assetPackPublication.mjs";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -23,7 +24,7 @@ import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, ".." );
-const publicRoot = path.join( rebuildRoot, ".generated", "client-public" );
+const publicRoot = CLIENT_PUBLIC_ROOT;
 const packsRoot = path.join( publicRoot, "assets", "packs" );
 const packManifestPath = path.join( packsRoot, "manifest.json" );
 const refreshRoot = path.join( packsRoot, "incremental", "title-crowd" );

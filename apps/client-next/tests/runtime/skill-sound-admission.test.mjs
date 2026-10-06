@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -32,7 +33,7 @@ test("unrequested cyclic overrides cannot abort admission; requested cycles stil
 
 test("complete published skill table admits and requested roots match uncached traversal", async () => {
 	const data = JSON.parse(
-		await readFile( "../../.generated/client-public/assets/data/skillAudioData.json", "utf8" )
+		await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/skillAudioData.json", "utf8" )
 	);
 	const rows = data.skillAudioRows,
 		lookup = skillSoundRoots( rows ),

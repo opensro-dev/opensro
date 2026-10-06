@@ -1,3 +1,4 @@
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -54,7 +55,7 @@ test("native baseline alpha bypasses and culling remain independent", () => {
 });
 
 test("all published character parts retain their own native material and modifier contract", async () => {
-	const publicRoot = path.join( root, "../../.generated/client-public" );
+	const publicRoot = CLIENT_PUBLIC_ROOT;
 	const roster = readPublishedAssetJsonSync( "/assets/char/roster.json", publicRoot );
 	const bindings = await characterMaterialBindings( roster );
 	// Collected independently of the binder: every GLB path the roster names.
