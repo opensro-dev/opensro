@@ -902,7 +902,8 @@ sent or dismissed. The replay's capture <video> is never visible.
 /* Developer diagnostics are a separate, console-enabled neighbor of FPS. */
 #developer-toggle { width: 24px; }
 .sro-developer-readout {
-	width: min(420px, calc(100vw - var(--telemetry-right, 8px) - 8px));
+	width: max-content;
+	max-width: min(280px, calc(100vw - var(--telemetry-right, 8px) - 8px));
 	max-height: min(480px, calc(100vh - var(--telemetry-top, 8px) - 32px));
 	overflow: auto;
 	box-sizing: border-box;
