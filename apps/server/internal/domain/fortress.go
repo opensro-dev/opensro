@@ -28,9 +28,9 @@ type FortressRecord struct {
 	FortressID    uint32                 `json:"fortressId"`
 	GuildID       int64                  `json:"guildId,omitempty"`
 	TempGuildID   int64                  `json:"tempGuildId,omitempty"`
-	BattleRecords []FortressBattleRecord `json:"battleRecords,omitempty"`
 	TaxRate       int16                  `json:"taxRate,omitempty"`
 	TaxGold       int64                  `json:"taxGold,omitempty"`
+	BattleRecords []FortressBattleRecord `json:"battleRecords,omitempty"`
 }
 
 /*

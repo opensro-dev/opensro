@@ -31,7 +31,7 @@ func TestCrossbowProgramAdmission(t *testing.T) {
 			fields[0], fields[16] = "1", "400"
 			copy(fields[69:], []string{"6386804", "6", "51", "34", "42", "1", "1668182893", "4", "2", "1", "29301", "150"})
 			row := SkillRow{CombatPinned: true, TimingPinned: true, ActionRangePinned: true, TargetRequired: true,
-				ProjectileSpeed: 400, RequiredWeaponKinds: [2]uint8{12, 255}, Attack: SkillAttack{Present: true, ImpactCount: 1}}
+				ProjectileSpeed: 400, ActionHandler: SkillActionProjectile, RequiredWeaponKinds: [2]uint8{12, 255}, Attack: SkillAttack{Present: true, ImpactCount: 1}}
 			switch mode {
 			case "area-count":
 				fields[78] = "3"

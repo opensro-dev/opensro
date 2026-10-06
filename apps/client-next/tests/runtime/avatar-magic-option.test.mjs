@@ -85,7 +85,8 @@ test("553980 formats stat options plain and rate options with a percent", () => 
 		"PARAM_AVATAR_MDIA 1% UIIT_STT_PROBABILITY"
 	);
 	assert.deepEqual( itemTooltipMagic( hat( 14, [ String( 1n << 32n | 246n ) ] ), text ), [
-		{ value: "PARAM_STR 1 PARAM_INCREASE", color: 0xff00eaff }
+		// 55C4D4: the avatar formatter's result also uses style 3 (bold).
+		{ value: "PARAM_STR 1 PARAM_INCREASE", color: 0xff00eaff, strong: true }
 	] );
 });
 

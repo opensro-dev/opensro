@@ -219,10 +219,15 @@ pulseStructureRepair
 this feature set have no heal amplification or recovery-reduction modifiers.
 ================
 */
-func (rt *Runtime) pulseStructureRepair(effect linkedpulse.Effect, skill enterworld.SkillRow, target monster.Instance) OpResult {
+func (rt *Runtime) pulseStructureRepair(effect linkedpulse.Effect, skill enterworld.SkillRow, target monster.Instance, now int64) OpResult {
 	amount := uint32(float64(int32(target.EffectiveMaxHP())) * float64(skill.StructureRepair.HPPercent) / 100)
 	healed, ok := rt.Monsters.HealStructure(effect.Division, target.Gid, amount)
-	if !ok || healed.CurrentHP == target.CurrentHP {
+	if !ok {
+		return OpResult{}
+	}
+	rt.publishSkillHealingThreat(skillHealingThreat{division: effect.Division, caster: effect.SourceGID,
+		recipient: target.Gid, category: skill.Category, amount: int64(amount)}, now)
+	if healed.CurrentHP == target.CurrentHP {
 		return OpResult{}
 	}
 	frame := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(target.Gid, 0x40, healed.CurrentHP)}

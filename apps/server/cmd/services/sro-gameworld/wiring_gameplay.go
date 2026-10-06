@@ -120,6 +120,8 @@ func newGameplayPlane(
 	deps.EntryPopulationLease = items.EntryPopulationLease
 	deps.EntrySkills = items.EntrySkills
 	deps.EntryMovementSpeeds = items.EntryMovementSpeeds
+	deps.EntryActionSpeed = items.EntryActionSpeed
+	deps.EntryCompanionActionSpeed = items.EntryCompanionActionSpeed
 	deps.EntryCompanionSpawn = items.EntryCompanionSpawn
 	if err := items.ConfigureAlchemy(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("alchemy catalogue: %w", err)
@@ -191,6 +193,7 @@ func newGameplayPlane(
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.CompanionPresentations = items.CompanionPresentations
 	movementRuntime.SpawnSkills = items.EntrySkills
+	movementRuntime.ActionSpeed = items.EntryActionSpeed
 	deps.SpawnTerrainHeight = water.TerrainHeightAt
 	deps.SpawnSurfaceHeight = water.WalkableSpawnHeightAt
 	deps.RelocateStrandedSpawn = water.RelocateStrandedSpawn

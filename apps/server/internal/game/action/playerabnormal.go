@@ -714,6 +714,7 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 	}
 	if o.speedChanged {
 		out.public = append(out.public, rt.refreshMovementEffects(division, c, o.now)...)
+		out.public = append(out.public, wire.ActionSpeedFrame(gid, o.Param(actionSpeedParameter)))
 	}
 	if o.statsChanged {
 		if stats, err := rt.PlayerBaseStats(division, c); err == nil {

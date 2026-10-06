@@ -27,7 +27,7 @@ func TestFortressStateSurvivesReopen(t *testing.T) {
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	door := s.Fortresses()
-	saved := domain.FortressRecord{FortressID: 1, GuildID: 7, TempGuildID: 9,
+	saved := domain.FortressRecord{FortressID: 1, GuildID: 7, TempGuildID: 9, TaxRate: 20, TaxGold: 45678,
 		BattleRecords: []domain.FortressBattleRecord{{CharacterID: 7, Kills: 151, Deaths: 21, Rank: 6, RankAtMs: 123456}}}
 	if err := door.SaveFortress(testDivision, saved); err != nil {
 		t.Fatal(err)

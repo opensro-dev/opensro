@@ -160,7 +160,7 @@ func (rt *Runtime) advanceHealsOverTime(now int64) []simulation.DivisionFrames {
 		}
 		if now-heal.lastPulseMs >= heal.periodMs {
 			heal.lastPulseMs = now
-			out = append(out, rt.pulseHealOverTime(heal)...)
+			out = append(out, rt.pulseHealOverTime(heal, now)...)
 		}
 		kept = append(kept, heal)
 	}
@@ -178,7 +178,7 @@ like a cast heal; the recipient alone receives its 0x33A6. A dead recipient
 is left untouched by applySkillRecovery.
 ==================
 */
-func (rt *Runtime) pulseHealOverTime(heal healOverTime) []simulation.DivisionFrames {
+func (rt *Runtime) pulseHealOverTime(heal healOverTime, now int64) []simulation.DivisionFrames {
 	who := rt.findCharacter(heal.division, heal.recipientName)
 	skill, known := rt.deps.SkillData().SkillByID(heal.skillID)
 	if who == nil || !known {
@@ -186,14 +186,19 @@ func (rt *Runtime) pulseHealOverTime(heal healOverTime) []simulation.DivisionFra
 	}
 
 	var frame wire.Frame
+	healingThreat := makeSkillHealingThreat(heal.division, heal.caster, who, skill)
 	healed := rt.deps.Update(who, "heal-over-time-pulse", func() bool {
 		hp, mp, ok := rt.skillHealAmounts(heal.division, who, heal.caster, skill, healCast)
 		if !ok {
 			return false
 		}
+		healingThreat.amount = hp + mp
 		frame, ok = rt.applySkillRecovery(heal.division, who, hp, mp)
 		return ok
 	})
+	if healed {
+		rt.publishSkillHealingThreat(healingThreat, now)
+	}
 	if !healed || frame.Opcode == 0 {
 		return nil
 	}

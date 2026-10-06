@@ -14,7 +14,6 @@ apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/contracts/scenery.ts
 apps/client-next/src/engine/contracts/simulation.ts
 apps/client-next/src/engine/foundation/animation/action-refresh.ts
-apps/client-next/src/engine/foundation/animation/action-schedule.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
 apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
@@ -93,7 +92,6 @@ apps/client-next/src/engine/foundation/gameplay/name-color.ts
 apps/client-next/src/engine/foundation/gameplay/native-notice.ts
 apps/client-next/src/engine/foundation/gameplay/npc-dialogue.ts
 apps/client-next/src/engine/foundation/gameplay/party-notices.ts
-apps/client-next/src/engine/foundation/gameplay/peer-appearance.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
 apps/client-next/src/engine/foundation/gameplay/position-skill.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts
@@ -166,7 +164,6 @@ apps/client-next/src/engine/foundation/ui/input-options.ts
 apps/client-next/src/engine/foundation/ui/inventory-layout.ts
 apps/client-next/src/engine/foundation/ui/item-equipment-overlay.ts
 apps/client-next/src/engine/foundation/ui/item-tooltip-recovery.ts
-apps/client-next/src/engine/foundation/ui/item-tooltip.ts
 apps/client-next/src/engine/foundation/ui/loading-presentation.ts
 apps/client-next/src/engine/foundation/ui/main-popup.ts
 apps/client-next/src/engine/foundation/ui/mastery-tooltip.ts
@@ -257,7 +254,6 @@ apps/client-next/tests/browser/absorption-orbs.test.mjs
 apps/client-next/tests/browser/action-refresh.test.mjs
 apps/client-next/tests/browser/asset-delivery.test.mjs
 apps/client-next/tests/browser/attached-effect-wire.test.mjs
-apps/client-next/tests/browser/attack-blend.test.mjs
 apps/client-next/tests/browser/audio-loop.test.mjs
 apps/client-next/tests/browser/background-resume.test.mjs
 apps/client-next/tests/browser/baroi-moving-target.test.mjs

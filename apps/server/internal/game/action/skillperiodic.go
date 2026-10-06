@@ -277,7 +277,7 @@ HP door. It does not admit a new cast, charge resources or test cast range.
 func (rt *Runtime) applyPeriodicPulse(effect linkedpulse.Effect, c, snapshot *enterworld.Character, target monster.Instance, now int64) OpResult {
 	skill, known := rt.deps.SkillData().SkillByID(effect.SkillID)
 	if known && effect.StructureRepair && skill.StructureRepair.Pinned {
-		return rt.pulseStructureRepair(effect, skill, target)
+		return rt.pulseStructureRepair(effect, skill, target, now)
 	}
 	if !known || !skill.TimedEffect.Periodic.Pinned {
 		return OpResult{}
