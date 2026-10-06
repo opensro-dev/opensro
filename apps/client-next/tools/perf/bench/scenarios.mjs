@@ -227,6 +227,8 @@ export async function cross( page, fixture ) {
 // monsters appear on the GM's point (SR_GameServer 520A40) and fight there.
 const COMBAT_RADIUS = 150;
 const COMBAT_LOAD_TIMEOUT_MS = 15000;
+// Bound on fighting the scene down after the window; past it, restart instead.
+const COMBAT_CLEAR_TIMEOUT_MS = 180000;
 
 /*
 ================
@@ -349,6 +351,56 @@ function damageTo( cast, keep ) {
 
 /*
 ================
+strike
+
+One combat turn: the next skill and a basic attack on the nearest living
+monster of gids.
+================
+*/
+function strike( page, gids, turn ) {
+	return page.evaluate( ( { turn, gids } ) => {
+		const root = globalThis.__benchRuntime, game = root.gameplay(), ids = new Set( gids );
+		const world = e => [ (e.regionId & 255) * 1920 + e.x, (e.regionId >>> 8) * 1920 + e.z ];
+		const here = world( game.pose );
+		const target = root.entities().filter( e => ids.has( e.gid ) && e.appearanceState?.[0] !== 2 ).map(
+			e => ({ gid: e.gid, d: Math.hypot( world( e )[0] - here[0], world( e )[1] - here[1] ) })
+		).sort( ( a, b ) => a.d - b.d )[0];
+		const skills = (game.skills ?? []).map( s => s.id ?? s ).filter( id => Number.isInteger( id ) );
+		if ( target && skills.length ) {
+			root.session( {
+				kind: "gameplay",
+				command: { kind: "skill", skillId: skills[turn % skills.length], gid: target.gid }
+			} );
+		}
+		if ( target ) root.session( { kind: "gameplay", command: { kind: "attack", gid: target.gid } } );
+	}, { turn, gids } );
+}
+
+/*
+================
+clearCombat
+
+Fights the GM-loaded scene to the end. Those monsters have no respawning
+nest and nothing else despawns them, so a session that leaves them alive
+changes every later measurement on the shared server. Returns how many
+are still alive when the bound runs out.
+================
+*/
+export async function clearCombat( page, scene ) {
+	const living = async () => {
+		const alive = new Set( (await sceneMonsters( page )).map( m => m.gid ) );
+		return scene.gids.filter( gid => alive.has( gid ) ).length;
+	};
+	const until = Date.now() + COMBAT_CLEAR_TIMEOUT_MS;
+	for ( let turn = 0; Date.now() < until && await living() > 0; turn++ ) {
+		await strike( page, scene.gids, turn );
+		await page.waitForTimeout( 700 );
+	}
+	return living();
+}
+
+/*
+================
 combat
 
 fight against the loaded scene only. Evidence is measured against the cast
@@ -368,22 +420,7 @@ export async function combat( page, more, scene ) {
 	const baseline = new Map( (await castEvidence( page )).map( c => [ c.token, c ] ) );
 	let turns = 0;
 	for ( let turn = 0; more(); turn++ ) {
-		await page.evaluate( ( { turn, gids } ) => {
-			const root = globalThis.__benchRuntime, game = root.gameplay(), ids = new Set( gids );
-			const world = e => [ (e.regionId & 255) * 1920 + e.x, (e.regionId >>> 8) * 1920 + e.z ];
-			const here = world( game.pose );
-			const target = root.entities().filter( e => ids.has( e.gid ) && e.appearanceState?.[0] !== 2 ).map(
-				e => ({ gid: e.gid, d: Math.hypot( world( e )[0] - here[0], world( e )[1] - here[1] ) })
-			).sort( ( a, b ) => a.d - b.d )[0];
-			const skills = (game.skills ?? []).map( s => s.id ?? s ).filter( id => Number.isInteger( id ) );
-			if ( target && skills.length ) {
-				root.session( {
-					kind: "gameplay",
-					command: { kind: "skill", skillId: skills[turn % skills.length], gid: target.gid }
-				} );
-			}
-			if ( target ) root.session( { kind: "gameplay", command: { kind: "attack", gid: target.gid } } );
-		}, { turn, gids: scene.gids } );
+		await strike( page, scene.gids, turn );
 		turns++;
 		const turnStart = Date.now();
 		// Sample while waiting: a short cast can leave the view between turns.

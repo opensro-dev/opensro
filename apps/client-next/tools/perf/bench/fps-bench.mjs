@@ -46,7 +46,7 @@ import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMov
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
-import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat } from "./scenarios.mjs";
+import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, clearCombat } from "./scenarios.mjs";
 
 const GOAL_FPS = 500;
 const CROSS_LIMIT_MS = 30000;
@@ -281,9 +281,14 @@ async function session( options, location, results ) {
 	} finally {
 		// Residue is reported for rejected windows too: GM monsters outlive them.
 		if ( scene ) {
-			const left = await sceneAlive( client.page, scene ).catch( () => null );
+			const left = await clearCombat( client.page, scene ).catch( () => sceneAlive( client.page, scene ) )
+				.catch( () => null );
 			console.log(
-				`  combat residue: ${left ?? "unknown"} of ${scene.count} GM-loaded ${scene.codename} still alive; ` +
+				left === 0 ?
+					`  combat residue: none; all ${scene.count} GM-loaded ${scene.codename} were fought down` :
+					`  combat residue: ${
+						left ?? "unknown"
+					} of ${scene.count} GM-loaded ${scene.codename} still alive; ` +
 					"restart the GameWorld (announce it first) before other measurements"
 			);
 		}
