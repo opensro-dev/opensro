@@ -4,7 +4,7 @@
 population_settled_world_test.go - the real world's boot fill settles
 
 Runs the shipped monster template (every nest and hive of the 1.150
-server data) through population passes on a simulated 100 ms clock and
+server data, through gamedatatest) through population passes on a simulated 100 ms clock and
 requires PopulationSettled within the GameWorld's admission bound. The
 single-nest test could not show that a whole-world rule never settles;
 this one would have.
@@ -15,12 +15,11 @@ this one would have.
 package simulation
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 )
 
 const (
@@ -41,11 +40,7 @@ TestRealWorldBootFillSettlesInsideTheBound
 ================
 */
 func TestRealWorldBootFillSettlesInsideTheBound(t *testing.T) {
-	root := os.Getenv("SRO_SERVER_GAME_DATA_ROOT")
-	if root == "" {
-		t.Skip("set SRO_SERVER_GAME_DATA_ROOT to the server game data for the whole-world fill")
-	}
-	template := monster.LoadTemplate(filepath.Join(root, "textdata"))
+	template := monster.LoadTemplate(gamedatatest.TextdataDir(t))
 	if len(template.Nests) < 1000 {
 		t.Fatalf("loaded %d nests; not the shipped world", len(template.Nests))
 	}
