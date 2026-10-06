@@ -26,7 +26,14 @@ import { captureVisual } from "../core/visual-capture.mjs";
 // reply comes late). The latter is a delayed-command surrogate for a late
 // tick or blocked handler, NOT proof of a paused tick: server AI and
 // existing movement keep advancing while the bytes are held.
-const STALL_LANES = [ "network-delay", "bidirectional-delay" ];
+const STALL_LANES = [ "network-delay", "bidirectional-delay", "edge-delay" ];
+// Legs per lane, relative to the pose at each leg. Open lanes walk free
+// ground; the edge lane walks into the anchor's +z boundary (z~620 in
+// 0x6E4B) and turns along it, where clipping must agree on a partial move.
+const STALL_LEGS = {
+	open: { approach: { x: 120, z: 0 }, turn: { x: -120, z: 60 } },
+	edge: { approach: { x: 0, z: 120 }, turn: { x: 120, z: 120 } }
+};
 const STALL_MS = [ 0, 150, 300, 600 ];
 const CHARACTER = process.env.SRO_PROBE_CHARACTER ?? "asd2";
 // The GameWorld's local operator snapshot (two-second capture cache).
@@ -125,16 +132,17 @@ server's pose.
 */
 async function stallTurns( page, lane, name ) {
 	const stall = lane === "bidirectional-delay" ? ms => stallServer( page, ms ) : ms => holdStream( page, "rx", ms );
+	const legs = lane === "edge-delay" ? STALL_LEGS.edge : STALL_LEGS.open;
 	const steps = [];
 	const anchor = (await movementState( page )).pose;
 	for ( const ms of STALL_MS ) {
 		for ( const action of [ "turn", "stop" ] ) {
 			await returnToAnchor( page, anchor );
-			await moveTo( page, { x: 120, z: 0 } );
+			await moveTo( page, legs.approach );
 			await page.waitForTimeout( 400 );
 			if ( ms > 0 ) await stall( ms );
 			await page.waitForTimeout( Math.round( ms / 3 ) );
-			const requested = await moveTo( page, action === "turn" ? { x: -120, z: 60 } : { x: 0, z: 0 } );
+			const requested = await moveTo( page, action === "turn" ? legs.turn : { x: 0, z: 0 } );
 			await page.waitForTimeout( ms + 900 + OBSERVATORY_CACHE_MS );
 			const client = await movementState( page );
 			const server = await serverPose( name );
@@ -285,6 +293,15 @@ async function run( options ) {
 				assert.equal( server.regionId, local.logical.regionId, JSON.stringify( result.serverPose ) );
 				// y is recorded, not asserted: whether the server's y is the wire Y
 				// or a surface height is still open.
+				if ( lane === "edge-delay" ) {
+					// An edge lane whose walks all arrived never touched the edge.
+					assert.ok(
+						result.stalls.some( step =>
+							Math.hypot( step.client.pose.x - step.wire.x, step.client.pose.z - step.wire.z ) > 1
+						),
+						"the edge lane was never blocked"
+					);
+				}
 				for ( const step of [ ...result.stalls, result.serverPose ] ) {
 					assert.ok(
 						step.xz <= SERVER_POSE_TOLERANCE,
