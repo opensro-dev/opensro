@@ -266,12 +266,10 @@ type SkillRow struct {
 	// lowest id in all 401 shipped chain sets). Computed after load, not
 	// a column.
 	ChainSub bool
-	// ActionCastingTimeMs is column 12 / CSkillData info+0x70. Retail
-	// authors monster attacks as two adjacent phases: time from action start
-	// to the contact boundary, followed by ActionDurationMs recovery. The
-	// action actor owns both phases; dropping this first column closes B505
-	// before the BSR contact event for rows such as Movia's 1077+923 ms and
-	// 1394+606 ms attacks.
+	// ActionCastingTimeMs is the server's normalized release interval, columns
+	// 11 + 12. SkillGlobal_LoadReferenceData (5894E3/5894E6) folds preparation
+	// into casting once before any execution handler reads refSkill+74. The
+	// following ActionDurationMs is recovery, not the complete action lifetime.
 	// ActionCastingTimePinned distinguishes a legitimate zero from a malformed
 	// or missing cell.
 	ActionCastingTimeMs     uint32
@@ -406,41 +404,42 @@ type SkillDataSource interface {
 // Column indices (0-based over the full 118-column row; see the header
 // comment for the parser-offset derivation and use-site pins).
 const (
-	skilldataColID             = 1
-	skilldataColGroup          = 2
-	skilldataColCodename       = 3
-	skilldataColLevel          = 7
-	skilldataColChainNext      = 9
-	skilldataColActionCasting  = 12
-	skilldataColActionDuration = 13
-	skilldataColCoolTimeMs     = 14
-	skilldataColActionRange    = 21
-	skilldataColReqMastery1    = 34
-	skilldataColReqMastery2    = 35
-	skilldataColReqMasteryLv1  = 36
-	skilldataColReqMasteryLv2  = 37
-	skilldataColReqStr         = 38
-	skilldataColReqInt         = 39
-	skilldataColReqGroup1      = 40
-	skilldataColReqGroup2      = 41
-	skilldataColReqGroup3      = 42
-	skilldataColReqGroupLv1    = 43
-	skilldataColReqGroupLv2    = 44
-	skilldataColReqGroupLv3    = 45
-	skilldataColReqSP          = 46
-	skilldataColTargetRequired = 22
-	skilldataColWeaponKind1    = 50
-	skilldataColWeaponKind2    = 51
-	skilldataColAIWeight       = 66
-	skilldataColActionHandler  = 68
-	skilldataColPrimaryTag     = 69
-	skilldataColAttackFlags    = 70
-	skilldataColAttackPercent  = 71
-	skilldataColAttackMin      = 72
-	skilldataColAttackMax      = 73
-	skilldataColAttackValue5   = 74
-	skilldataColEncodedTail    = 69
-	skilldataMinColumns        = 47
+	skilldataColID              = 1
+	skilldataColGroup           = 2
+	skilldataColCodename        = 3
+	skilldataColLevel           = 7
+	skilldataColChainNext       = 9
+	skilldataColActionPreparing = 11
+	skilldataColActionCasting   = 12
+	skilldataColActionDuration  = 13
+	skilldataColCoolTimeMs      = 14
+	skilldataColActionRange     = 21
+	skilldataColReqMastery1     = 34
+	skilldataColReqMastery2     = 35
+	skilldataColReqMasteryLv1   = 36
+	skilldataColReqMasteryLv2   = 37
+	skilldataColReqStr          = 38
+	skilldataColReqInt          = 39
+	skilldataColReqGroup1       = 40
+	skilldataColReqGroup2       = 41
+	skilldataColReqGroup3       = 42
+	skilldataColReqGroupLv1     = 43
+	skilldataColReqGroupLv2     = 44
+	skilldataColReqGroupLv3     = 45
+	skilldataColReqSP           = 46
+	skilldataColTargetRequired  = 22
+	skilldataColWeaponKind1     = 50
+	skilldataColWeaponKind2     = 51
+	skilldataColAIWeight        = 66
+	skilldataColActionHandler   = 68
+	skilldataColPrimaryTag      = 69
+	skilldataColAttackFlags     = 70
+	skilldataColAttackPercent   = 71
+	skilldataColAttackMin       = 72
+	skilldataColAttackMax       = 73
+	skilldataColAttackValue5    = 74
+	skilldataColEncodedTail     = 69
+	skilldataMinColumns         = 47
 )
 
 // little-endian "att\0", as stored in the numeric skilldata parameter cell.
@@ -670,8 +669,12 @@ func (t *TextdataSkills) parse(shards []string) {
 			}
 			if actionCasting, ok := textdataInt(fields[skilldataColActionCasting]); ok &&
 				actionCasting >= 0 && actionCasting <= 0xffffffff {
-				row.ActionCastingTimeMs = uint32(actionCasting)
-				row.ActionCastingTimePinned = true
+				if preparing, valid := textdataInt(fields[skilldataColActionPreparing]); valid &&
+					preparing >= 0 && preparing <= 0xffffffff {
+					// Native ADD is a dword operation, including its wrap semantics.
+					row.ActionCastingTimeMs = uint32(preparing) + uint32(actionCasting)
+					row.ActionCastingTimePinned = true
+				}
 			}
 			// Flight metadata is shared by player and monster cast owners. Never
 			// hide it behind parseSkillOffense's player-only eligibility gates:

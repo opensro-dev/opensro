@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+skilldata_test.go - skill reference admission and native timing normalization
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -10,6 +17,11 @@ import (
 // syntheticSkillRow builds one 118-column tab row with poison values in
 // every cell the loader must NOT read (so a shifted column index fails
 // loudly), and the given values in the pinned learn-plane cells.
+/*
+================
+syntheticSkillRow
+================
+*/
 func syntheticSkillRow(cells map[int]string) string {
 	fields := make([]string, 118)
 	for i := range fields {
@@ -29,6 +41,11 @@ func syntheticSkillRow(cells map[int]string) string {
 
 // The learn plane rests on these column indices; they are pinned here
 // against a synthetic shard whose every other cell is a poison value.
+/*
+================
+TestTextdataSkillsReadsThePinnedColumns
+================
+*/
 func TestTextdataSkillsReadsThePinnedColumns(t *testing.T) {
 	dir := t.TempDir()
 	// The index file names the shard, like the shipped skilldata.txt.
@@ -43,7 +60,7 @@ func TestTextdataSkillsReadsThePinnedColumns(t *testing.T) {
 	// their levels, 38/39 reqStr/Int, 40..42 prereq groups, 43..45 their
 	// levels, 46 SP).
 	shard := syntheticSkillRow(map[int]string{
-		1: "4", 2: "175", 3: "SYN_ROOT_01", 7: "1", 9: "9001", 12: "175", 13: "1200", 14: "1350", 18: "33554432",
+		1: "4", 2: "175", 3: "SYN_ROOT_01", 7: "1", 9: "9001", 11: "50", 12: "175", 13: "1200", 14: "1350", 18: "33554432",
 		34: "257", 35: "0",
 		36: "27", 37: "0",
 		38: "0", 39: "0",
@@ -77,15 +94,15 @@ func TestTextdataSkillsReadsThePinnedColumns(t *testing.T) {
 	if row.Group != 175 || row.Level != 1 || row.SPCost != 117 {
 		t.Fatalf("row 4 = %+v, want grp 175 lvl 1 sp 117 (a column moved?)", row)
 	}
-	if !row.ActionCastingTimePinned || row.ActionCastingTimeMs != 175 ||
+	if !row.ActionCastingTimePinned || row.ActionCastingTimeMs != 225 ||
 		!row.ActionDurationPinned || row.ActionDurationMs != 1200 ||
 		!row.TimingPinned || row.CoolTimeMs != 1350 {
-		t.Fatalf("row 4 action timing = cast %d/%v duration %d/%v reuse %d/%v, want 175+1200/1350 pinned",
+		t.Fatalf("row 4 action timing = cast %d/%v duration %d/%v reuse %d/%v, want 50+175+1200/1350 pinned",
 			row.ActionCastingTimeMs, row.ActionCastingTimePinned,
 			row.ActionDurationMs, row.ActionDurationPinned, row.CoolTimeMs, row.TimingPinned)
 	}
-	if lifecycleMs, pinned := row.ActionLifecycleMs(); !pinned || lifecycleMs != 1375 {
-		t.Fatalf("row 4 action lifecycle = %d/%v, want 1375ms pinned", lifecycleMs, pinned)
+	if lifecycleMs, pinned := row.ActionLifecycleMs(); !pinned || lifecycleMs != 1425 {
+		t.Fatalf("row 4 action lifecycle = %d/%v, want 1425ms pinned", lifecycleMs, pinned)
 	}
 	if row.Masteries[0] != (SkillRequirement{ID: 257, Level: 27}) || row.Masteries[1] != (SkillRequirement{}) {
 		t.Fatalf("row 4 masteries = %+v, want 257@27 + none", row.Masteries)
@@ -145,6 +162,11 @@ func TestTextdataSkillsReadsThePinnedColumns(t *testing.T) {
 
 // A missing table remains fail-closed for direct lookups, while Load exposes
 // the readiness failure to the production composition root.
+/*
+================
+TestTextdataSkillsDegradesWhenAbsent
+================
+*/
 func TestTextdataSkillsDegradesWhenAbsent(t *testing.T) {
 	skills := NewTextdataSkills(filepath.Join(t.TempDir(), "missing-textdata"))
 
@@ -159,6 +181,11 @@ func TestTextdataSkillsDegradesWhenAbsent(t *testing.T) {
 	}
 }
 
+/*
+================
+TestTextdataSkillsKeepsMalformedMultiImpactRowsOutOfCombatWithoutDroppingCatalogData
+================
+*/
 func TestTextdataSkillsKeepsMalformedMultiImpactRowsOutOfCombatWithoutDroppingCatalogData(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "skilldata.txt"), []byte("shard_a.txt\n"), 0o644); err != nil {
@@ -207,6 +234,11 @@ func TestTextdataSkillsKeepsMalformedMultiImpactRowsOutOfCombatWithoutDroppingCa
 // shifts the requirement/cost columns, the learn gates would silently
 // enforce garbage, so known shipped rows are asserted here (the values
 // were read straight off skilldata_5000.txt).
+/*
+================
+TestTextdataSkillsMatchesShippedRows
+================
+*/
 func TestTextdataSkillsMatchesShippedRows(t *testing.T) {
 	t.Parallel()
 	skills := sharedShippedSkills(t)

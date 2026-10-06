@@ -59,6 +59,11 @@ func learnShipped(t *testing.T, rt *Runtime, c *enterworld.Character, id uint32)
 
 // concealmentFixture is the combat fixture out of battle (58DF20 refuses a
 // hide in battle) with the given rows learned.
+/*
+================
+concealmentFixture
+================
+*/
 func concealmentFixture(t *testing.T, ids ...uint32) (*Runtime, *fakeClock, *enterworld.Character) {
 	t.Helper()
 	rt, clock, c, _ := newCombatTestRuntime(t, 100000)
@@ -69,10 +74,20 @@ func concealmentFixture(t *testing.T, ids ...uint32) (*Runtime, *fakeClock, *ent
 	return rt, clock, c
 }
 
+/*
+================
+castSelf
+================
+*/
 func castSelf(rt *Runtime, c *enterworld.Character, id uint32) OpResult {
 	return rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: id}.Encode())
 }
 
+/*
+================
+worldSpeeds
+================
+*/
 func worldSpeeds(rt *Runtime, c *enterworld.Character) (float32, float32) {
 	w := rt.Worlds.Snapshot(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
 	return w.MovementSpeeds()
@@ -271,11 +286,13 @@ A dtt row installs on the caster only, with no body status.
 ==================
 */
 func TestSightIsTheCastersOwn(t *testing.T) {
-	rt, _, c := concealmentFixture(t, rogueDetectID)
+	rt, clock, c := concealmentFixture(t, rogueDetectID)
 	other := nearbyCharacter(rt, c, 11, "other", 10)
 	if r := castSelf(rt, c, rogueDetectID); r.DiagnosticRefusal != "" {
 		t.Fatal(r.DiagnosticRefusal)
 	}
+	skill, _ := rt.deps.SkillData().SkillByID(rogueDetectID)
+	rt.advanceProjectileCasts(clock.NowMs() + int64(skill.ActionCastingTimeMs) + 1)
 	if !hasSkillEffect(rt, c.Name, rogueDetectID) || hasSkillEffect(rt, other.Name, rogueDetectID) || c.NativeBodyStatus != 0 {
 		t.Fatal("dtt did not stay the caster's own")
 	}

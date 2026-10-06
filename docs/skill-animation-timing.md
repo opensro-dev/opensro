@@ -1,5 +1,39 @@
 # Skill animation timing audit
 
+## Server preparation correction (2026-10-06)
+
+The earlier visual repairs below did not establish complete cast timing.
+The server loader has an additional normalization step that the port omitted:
+`SkillGlobal_LoadReferenceData` reads preparation from reference `+70` at
+`5894E3` and adds it into casting at `+74` at `5894E6`. This runs for every
+loaded reference, before parameter indexing. Runtime handlers therefore read
+columns **11 + 12**, not raw column 12. The addition wraps as a 32-bit integer.
+
+The shared server loader now performs that addition once per loaded row.
+Action lifecycle, player/support casts, monster casts and the published action
+duration consume the normalized field through their existing owners. Anti
+Devil 951 now releases after 970 ms (670 + 300), with 530 ms recovery, instead
+of releasing after 300 ms. This supersedes the earlier implication that the
+unchanged server release times were correct.
+
+The authored census checks all 27,835 rows; 4,297 have nonzero preparation.
+Tests cover the strict release boundary, repeated loads, zero preparation,
+preparation-only rows, integer wrapping and malformed timing values. The full
+server gate passed, including race checks, followed by all 13 source gates.
+Binary Ninja server snapshot 447 contains the normalization annotation.
+
+The isolated build was installed into the local Nomad gameworld, preserving
+its authority database. A connected CodexProbe capture observed Anti Devil's
+received-to-shot interval increase from 416 ms before the replacement to
+992 ms afterward (browser timestamps include scheduling and transport).
+The successful capture reported no page errors or caught exceptions. An
+initial post-restart login timeout is excluded from gameplay evidence.
+
+The wider skill-column/handler audit is still in progress. Missing column
+constants are not by themselves missing features: other parsers own targets,
+encoded parameters, UI placement and descriptions. This timing correction
+does not establish equivalence for all those owners.
+
 The v1.150 client holds a one-shot animation at its first pose during the
 entry blend. The webport previously advanced its pose, sound and stage-key
 cursors during that interval. Both the Anti Devil Bow READY/SHOT clips and

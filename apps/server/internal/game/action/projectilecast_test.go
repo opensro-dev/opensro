@@ -63,7 +63,7 @@ func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 	if c.OffensiveSkillCooldowns[skill.Group] != wantCooldown {
 		t.Fatal("cooldown not registered at acceptance")
 	}
-	for _, at := range []int64{now, now + 299, now + 300} {
+	for _, at := range []int64{now, now + 300, now + 969, now + 970} {
 		if got := rt.advanceProjectileCasts(at); len(got) != 0 {
 			t.Fatalf("early release at %d: %+v", at-now, got)
 		}
@@ -74,7 +74,7 @@ func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 	if _, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now+300); decision != skillCastDeferred {
 		t.Fatal("duplicate preparation accepted")
 	}
-	frames := rt.advanceProjectileCasts(now + 301)
+	frames := rt.advanceProjectileCasts(now + 971)
 	if c.OffensiveSkillCooldowns[skill.Group] != wantCooldown {
 		t.Fatal("release restarted cooldown")
 	}
@@ -218,7 +218,7 @@ func TestCriticalArrowRepeatedCastConsumesLastArrowOnlyOnce(t *testing.T) {
 		if decision != skillCastAccepted {
 			t.Fatal("repeat refused", shot)
 		}
-		out := rt.advanceProjectileCasts(at + 301)
+		out := rt.advanceProjectileCasts(at + 971)
 		if len(out) != 2 || out[0].Frames[0].Payload[17] != 1 {
 			t.Fatal("normal result not serialized", out)
 		}
