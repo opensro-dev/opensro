@@ -52,3 +52,34 @@ wake
 	wake( 1200 );
 	assert.deepEqual( received, [ "begin", "body", "end", "new socket" ] );
 });
+
+test("a stall holds the whole direction and releases it in order at its end", () => {
+	let now = 0, next = 0;
+	const timers = new Map(), received = [];
+	const queue = createDelayedDelivery( {
+		now: () => now,
+		schedule( callback, delay ) {
+			timers.set( ++next, { callback, delay } );
+			return next;
+		},
+		cancel: id => timers.delete( id )
+	} );
+	// installFaults delays each frame by max(latency, holdUntil - now): a
+	// stall ending at 300 ms holds every frame that arrives before it.
+	const holdUntil = 300,
+		arrive = ( at, label ) => {
+			now = at;
+			queue.push( Math.max( 0, holdUntil - now ), () => received.push( label ) );
+		};
+	arrive( 10, "move-result" );
+	arrive( 120, "combat" );
+	arrive( 290, "hp" );
+	now = 299;
+	const [id, task] = [ ...timers ][0];
+	assert.ok( task.delay >= 290, "nothing is due before the stall ends" );
+	timers.delete( id );
+	now = 300;
+	task.callback();
+	assert.deepEqual( received, [ "move-result", "combat", "hp" ], "released in arrival order" );
+	assert.equal( timers.size, 0 );
+});

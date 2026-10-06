@@ -3,7 +3,11 @@
 
 transport-faults.mjs - bounded faults on actual authenticated WebSocket traffic
 
-Used by the recovery and acceptance harnesses before world admission.
+Used by the recovery and acceptance harnesses before world admission. Two
+fault shapes share one FIFO queue per direction: a steady latency (delay,
+jitter) and a stall (holdStream), which holds the whole direction until a
+time and then releases it in order - a late server tick or handler delays
+everything behind it, so a stall never reorders frames.
 
 ===========================================================================
 */
@@ -35,12 +39,18 @@ export async function installFaults( page ) {
 			ready: 0,
 			pending: 0,
 			peak: 0,
-			closes: []
+			closes: [],
+			// Stall windows (worker performance.now) and what each frame waited.
+			holdUntil: { rx: 0, tx: 0 },
+			log: [],
+			transport: null
 		};
 		const OriginalSocket = WebSocket;
 		globalThis.WebSocket = class extends OriginalSocket {
 			constructor( ...args ) {
 				super( ...args );
+				const url = new URL( this.url );
+				link.transport = url.protocol === "ws:" || url.protocol === "wss:" ? "websocket" : url.protocol;
 				this.addEventListener( "close", event => {
 					link.pending -= this.queues.rx.clear() + this.queues.tx.clear();
 					link.closes.push( { code: event.code, reason: event.reason, clean: event.wasClean } );
@@ -48,22 +58,35 @@ export async function installFaults( page ) {
 				} );
 			}
 			queues = { rx: createDelayedDelivery( clock ), tx: createDelayedDelivery( clock ) };
-			schedule( direction, deliver ) {
+			schedule( direction, deliver, bytes ) {
 				link[direction]++;
-				if ( !link.delay && !link.pending ) {
+				const queuedAt = performance.now(), hold = link.holdUntil[direction] - queuedAt;
+				if ( !link.delay && !link.pending && hold <= 0 ) {
 					deliver();
 					return;
 				}
 				if ( link.pending >= 512 ) throw Error( "Recovery harness transport queue exceeded" );
 				link.pending++;
 				link.peak = Math.max( link.peak, link.pending );
-				this.queues[direction].push( link.delay + (link[direction] % 3) * link.jitter, () => {
+				const delay = Math.max( link.delay + (link[direction] % 3) * link.jitter, hold );
+				this.queues[direction].push( delay, () => {
 					link.pending--;
-					if ( this.readyState === OriginalSocket.OPEN ) deliver();
+					if ( this.readyState !== OriginalSocket.OPEN ) return;
+					deliver();
+					if ( hold > 0 ) {
+						const view = bytes && new Uint8Array( bytes instanceof ArrayBuffer ? bytes : bytes.buffer );
+						link.log.push( {
+							direction,
+							opcode: view && view.byteLength >= 2 ? view[0] | (view[1] << 8) : null,
+							bytes: view ? view.byteLength : null,
+							heldMs: performance.now() - queuedAt
+						} );
+						if ( link.log.length > 4096 ) link.log.shift();
+					}
 				} );
 			}
 			set onmessage( handler ) {
-				super.onmessage = event => this.schedule( "rx", () => handler.call( this, event ) );
+				super.onmessage = event => this.schedule( "rx", () => handler.call( this, event ), event.data );
 			}
 			send( bytes ) {
 				this.schedule( "tx", () => {
@@ -74,8 +97,66 @@ export async function installFaults( page ) {
 						new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength ).getUint16( 0, true ) ===
 							WORLD_READY_OPCODE
 					) link.ready++;
-				} );
+				}, bytes );
 			}
 		};
 	} );
+}
+
+/*
+================
+holdStream
+
+Stalls one whole direction for ms from now ("rx" server to client, "tx"
+client to server); frames arriving meanwhile are released in order when the
+hold ends. Returns the hold's end on the worker's clock.
+================
+*/
+export function holdStream( page, direction, ms ) {
+	assert.ok( direction === "rx" || direction === "tx", "hold direction is rx or tx" );
+	const worker = page.workers().find( row => row.url().includes( "/simulation/worker/" ) );
+	return worker.evaluate( ( { direction, ms } ) => {
+		const link = globalThis.__recoveryLink;
+		link.holdUntil[direction] = Math.max( link.holdUntil[direction], performance.now() + ms );
+		return link.holdUntil[direction];
+	}, { direction, ms } );
+}
+
+/*
+================
+faultLog
+
+The transport in use and every held frame's direction, opcode, size and
+actual wait (frames that were not held are not logged).
+================
+*/
+export function faultLog( page ) {
+	const worker = page.workers().find( row => row.url().includes( "/simulation/worker/" ) );
+	return worker.evaluate( () => ({
+		transport: globalThis.__recoveryLink.transport,
+		held: globalThis.__recoveryLink.log
+	}) );
+}
+
+/*
+================
+stallServer
+
+Both directions held over the same window: the command reaches the server
+late and its reply comes late. A delayed-command surrogate for a late tick
+or blocked handler, not a paused tick (server AI and movement keep
+advancing meanwhile). A downlink-only holdStream( "rx" ) is network delay,
+where the server applies the command on time. Label runs network-delay or
+bidirectional-delay.
+================
+*/
+export function stallServer( page, ms ) {
+	const worker = page.workers().find( row => row.url().includes( "/simulation/worker/" ) );
+	// One evaluation, so both directions share the same window.
+	return worker.evaluate( ms => {
+		const link = globalThis.__recoveryLink, until = performance.now() + ms;
+		link.holdUntil.tx = Math.max( link.holdUntil.tx, until );
+		link.holdUntil.rx = Math.max( link.holdUntil.rx, until );
+		return until;
+	}, ms );
 }

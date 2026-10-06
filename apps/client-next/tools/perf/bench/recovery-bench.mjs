@@ -17,9 +17,77 @@ import { openClient, closeClient, createCaptures, measure, revive } from "../cor
 import { parseOptions } from "../core/report.mjs";
 import { walk } from "./scenarios.mjs";
 
-import { installFaults } from "../core/transport-faults.mjs";
+import { installFaults, holdStream, stallServer, faultLog } from "../core/transport-faults.mjs";
 
 import { captureVisual } from "../core/visual-capture.mjs";
+
+// The stall lanes: a late downlink (the server applied the command on time)
+// and a bidirectional delay (the command reaches the server late and its
+// reply comes late). The latter is a delayed-command surrogate for a late
+// tick or blocked handler, NOT proof of a paused tick: server AI and
+// existing movement keep advancing while the bytes are held.
+const STALL_LANES = [ "network-delay", "bidirectional-delay" ];
+const STALL_MS = [ 150, 300, 600 ];
+// The GameWorld's local operator snapshot (two-second capture cache).
+const OBSERVATORY_URL = process.env.SRO_BENCH_OBSERVATORY ??
+	"http://127.0.0.1:8791/internal/diagnostics/observatory";
+const OBSERVATORY_CACHE_MS = 2000;
+const SERVER_POSE_TOLERANCE = 1;
+
+/*
+================
+moveTo
+================
+*/
+function moveTo( page, offset ) {
+	return page.evaluate( offset => {
+		const root = globalThis.__benchRuntime, pose = root.gameplay().pose;
+		const destination = { ...pose, x: pose.x + offset.x, z: pose.z + offset.z };
+		root.session( { kind: "gameplay", command: { kind: "move", destination } } );
+	}, offset );
+}
+
+/*
+================
+stallTurns
+
+For each stall length: start a walk, open the stall, and send a sharp turn
+or a stop a third of the way into it, then let it release and settle. The
+turn or stop is the command the coordinator saw answered wrong.
+================
+*/
+async function stallTurns( page, lane ) {
+	const stall = lane === "bidirectional-delay" ? ms => stallServer( page, ms ) : ms => holdStream( page, "rx", ms );
+	const steps = [];
+	for ( const ms of STALL_MS ) {
+		for ( const action of [ "turn", "stop" ] ) {
+			await moveTo( page, { x: 120, z: 0 } );
+			await page.waitForTimeout( 400 );
+			await stall( ms );
+			await page.waitForTimeout( Math.round( ms / 3 ) );
+			await (action === "turn" ? moveTo( page, { x: -120, z: 60 } ) : moveTo( page, { x: 0, z: 0 } ));
+			steps.push( { ms, action } );
+			await page.waitForTimeout( ms + 900 );
+		}
+	}
+	return steps;
+}
+
+/*
+================
+serverPose
+
+The named character's live pose as the GameWorld itself reports it, read
+after the snapshot cache has turned over so it postdates the settle.
+================
+*/
+async function serverPose( name ) {
+	const response = await fetch( OBSERVATORY_URL, { headers: { "X-SRO-Local-Diagnostics": "1" } } );
+	assert.ok( response.ok, `observatory ${response.status}` );
+	const player = (await response.json()).players.find( row => row.name.toLowerCase() === name.toLowerCase() );
+	assert.ok( player, `the GameWorld reports no online ${name}` );
+	return { regionId: player.region, x: player.x, y: player.y, z: player.z };
+}
 
 /*
 ================
@@ -42,7 +110,7 @@ async function run( options ) {
 		assert.ok( worker, "instrumented simulation worker must exist" );
 		await mkdir( options.out, { recursive: true } );
 		const results = [];
-		for ( const lane of [ "main", "worker", "transport" ] ) {
+		for ( const lane of [ "main", "worker", "transport", ...STALL_LANES ] ) {
 			if ( !options.only.includes( lane ) ) continue;
 			await revive( page );
 			await worker.evaluate( delay => {
@@ -60,6 +128,11 @@ async function run( options ) {
 			================
 			*/
 			const drive = async more => {
+				if ( STALL_LANES.includes( lane ) ) {
+					result.stalls = await stallTurns( page, lane );
+					while ( more() ) await page.waitForTimeout( 50 );
+					return;
+				}
 				const moving = walk( page, more );
 				if ( lane !== "transport" ) {
 					for ( const gap of [ 50, 100, 150, 300, 1000 ] ) {
@@ -73,7 +146,8 @@ async function run( options ) {
 				await moving;
 			};
 			await captures.start();
-			const result = await measure( page, lane, 7000, drive );
+			const result = {};
+			Object.assign( result, await measure( page, lane, STALL_LANES.includes( lane ) ? 14000 : 7000, drive ) );
 			await captures.stop( lane );
 			await captures.finish();
 			if ( options.video && lane === "main" ) {
@@ -82,7 +156,22 @@ async function run( options ) {
 					await drive( () => Date.now() - start < 7000 );
 				} );
 			}
-			result.transport = await worker.evaluate( () => ({ ...globalThis.__recoveryLink }) );
+			result.transport = await worker.evaluate( () => ({ ...globalThis.__recoveryLink, log: undefined }) );
+			if ( STALL_LANES.includes( lane ) ) {
+				result.faults = await faultLog( page );
+				assert.equal( result.faults.transport, "websocket", "the stall ran on the client's real WebSocket" );
+				assert.ok( result.faults.held.length > 0, "the stall held real frames" );
+				// Settle past the snapshot cache, then compare the server's own pose.
+				await page.waitForTimeout( OBSERVATORY_CACHE_MS + 1000 );
+				const client = await page.evaluate( () => globalThis.__benchRuntime.gameplay().pose );
+				const server = await serverPose( process.env.SRO_PROBE_CHARACTER ?? "asd2" );
+				result.serverPose = { client, server };
+				assert.equal( server.regionId, client.regionId, JSON.stringify( result.serverPose ) );
+				assert.ok(
+					Math.hypot( server.x - client.x, server.z - client.z ) <= SERVER_POSE_TOLERANCE,
+					`settled client and server poses differ: ${JSON.stringify( result.serverPose )}`
+				);
+			}
 			assert.ok(
 				result.transport.rx > 0 && result.transport.tx > 0,
 				"real WebSocket traffic must cross the fault injector"
@@ -132,10 +221,15 @@ async function run( options ) {
 	}
 }
 
-await run( parseOptions( process.argv.slice( 2 ), {
-	cpuRate: 1,
-	out: "temp/artifacts/recovery",
-	trace: false,
-	video: false,
-	only: [ "main", "worker", "transport" ]
-}, "recovery-bench.mjs [--cpu-rate 4] [--out DIR] [--only main,worker,transport] [--trace] [--video]" ) );
+await run( parseOptions(
+	process.argv.slice( 2 ),
+	{
+		cpuRate: 1,
+		out: "temp/artifacts/recovery",
+		trace: false,
+		video: false,
+		only: [ "main", "worker", "transport", ...STALL_LANES ]
+	},
+	"recovery-bench.mjs [--cpu-rate 4] [--out DIR] [--only main,worker,transport,network-delay,bidirectional-delay] " +
+		"[--trace] [--video]"
+) );
